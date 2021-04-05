@@ -66,9 +66,6 @@ def test_import_from_datadir(fn):
 def test_simulation_export_import(tmp_path):
     """Try subsequent export and import to pickle."""
     sim_params = {
-        'logging_params': {
-            'skip_setup': True,
-        },
         'model_class':
         'XXZChain',
         'model_params': {

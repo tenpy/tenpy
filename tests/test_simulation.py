@@ -3,13 +3,13 @@
 
 import copy
 import numpy as np
+import sys
 
 import tenpy
 from tenpy.algorithms.algorithm import Algorithm
 from tenpy.simulations.simulation import *
 from tenpy.simulations.ground_state_search import GroundStateSearch
 from tenpy.simulations.time_evolution import RealTimeEvolution
-from tenpy.tools.misc import find_subclass
 
 import pytest
 
@@ -23,6 +23,9 @@ class DummyAlgorithm(Algorithm):
         self.evolved_time = self.options.get('start_time', 0.)
         init_env_data = {} if resume_data is None else resume_data['init_env_data']
         self.env = DummyEnv(**init_env_data)
+        if not hasattr(self.psi, "dummy_counter"):
+            self.psi.dummy_counter = 0  # note: doesn't get saved!
+            # But good enough to check `run_seq_simulations`
 
     def run(self):
         N_steps = self.options.get('N_steps', 5)
@@ -31,6 +34,7 @@ class DummyAlgorithm(Algorithm):
         for i in range(N_steps):
             self.evolved_time += dt
             self.checkpoint.emit(self)
+        self.psi.dummy_counter += 1
         return None, self.psi
 
     def get_resume_data(self):
@@ -134,6 +138,26 @@ def test_Simulation_resume(tmp_path):
         assert np.all(r['measurements']['measurement_index'] == np.arange(2))
 
 
+def test_sequential_simulation(tmp_path):
+    sim_params = copy.deepcopy(simulation_params)
+    sim_params['directory'] = tmp_path
+    sim_params['output_filename'] = 'data.pkl'
+    sim_params['sequential'] = {
+        'recursive_keys': ['algorithm_params.dt'],
+        'value_lists': [[0.5, 0.3, 0.2]]
+    }
+
+    results = run_seq_simulations(**sim_params)
+
+    psi = results['psi']
+    assert psi.dummy_counter == 3  # should have called Simulation.run 3 times on same psi
+    # (this breaks if collect_results_in_memory is used, because dummy_counter isn't copied in
+    # psi.copy()!)
+    assert (tmp_path / 'data_dt_0.5.pkl').exists()
+    assert (tmp_path / 'data_dt_0.3.pkl').exists()
+    assert (tmp_path / 'data_dt_0.2.pkl').exists()
+
+
 groundstate_params = copy.deepcopy(simulation_params)
 
 
@@ -171,20 +195,22 @@ def test_RealTimeEvolution():
     assert meas['dummy_value'] == [None] + [sim_params['algorithm_params']['N_steps']**2] * (N - 1)
 
 
-def test_output_filename_form_dict():
+def test_output_filename_from_dict():
     options = copy.deepcopy(simulation_params)
     assert output_filename_from_dict(options) == 'result.h5', "hard-coded default values changed"
     assert output_filename_from_dict(options, suffix='.pkl') == 'result.pkl'
-    fn = output_filename_from_dict(options, {'algorithm_params/dt': 'dt_{0:.2f}'})
+    fn = output_filename_from_dict(options, {'algorithm_params.dt': 'dt_{0:.2f}'})
     assert fn == 'result_dt_0.50.h5'
     fn = output_filename_from_dict(options, {
-        'algorithm_params/dt': 'dt_{0:.2f}',
-        'model_params/L': 'L_{0:d}'
+        'algorithm_params.dt': 'dt_{0:.2f}',
+        'model_params.L': 'L_{0:d}'
     })
     assert fn == 'result_dt_0.50_L_4.h5'
     # re-ordered parts
+    parts_order = ['model_params.L', 'algorithm_params.dt'] if sys.version_info < (3, 7) else None
     fn = output_filename_from_dict(options, {
-        'model_params/L': 'L_{0:d}',
-        'algorithm_params/dt': 'dt_{0:.2f}'
-    })
+        'model_params.L': 'L_{0:d}',
+        'algorithm_params.dt': 'dt_{0:.2f}'
+    },
+                                   parts_order=parts_order)
     assert fn == 'result_L_4_dt_0.50.h5'

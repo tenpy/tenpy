@@ -190,6 +190,7 @@ class Sweep(Algorithm):
             init_env_data : dict
                 Dictionary as returned by ``self.env.get_initialization_data()`` from
                 :meth:`~tenpy.networks.mpo.MPOEnvironment.get_initialization_data`.
+                Deprecated.
             orthogonal_to : list of :class:`~tenpy.networks.mps.MPS`
                 List of other matrix product states to orthogonalize against.
                 Works only for finite systems.

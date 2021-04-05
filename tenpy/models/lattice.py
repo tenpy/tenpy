@@ -2305,19 +2305,17 @@ def get_lattice(lattice_name):
 
     Parameters
     ----------
-    lattice_name : str
+    lattice_name : str | type
         Name of a :class:`Lattice` class defined in the module :mod:`~tenpy.models.lattice`,
         for example ``"Chain", "Square", "Honeycomb", ...``.
+        Alternatively, instead of the name directly the class itself can be given.
 
     Returns
     -------
     LatticeClass : :class:`Lattice`
         The lattice class (type, not instance) specified by `lattice_name`.
     """
-    LatticeClass = find_subclass(Lattice, lattice_name)
-    if LatticeClass is None:
-        raise ValueError("No Lattice of the given name {0!r} found!".format(lattice_name))
-    return LatticeClass
+    return find_subclass(Lattice, lattice_name)
 
 
 def get_order(shape, snake_winding, priority=None):

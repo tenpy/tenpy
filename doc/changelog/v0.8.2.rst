@@ -3,4 +3,4 @@
 
 This is another very minor fix-up of :doc:`/changelog/v0.8.0`.
 
-To allow fixing the logging setup of tests, it adds a global default value for :cfg:option:`logging.skip_setup`.
+To allow fixing the logging setup of tests, it adds a global default value for :cfg:option:`log.skip_setup`.

@@ -21,7 +21,7 @@ from . import networks
 from . import models
 from . import simulations
 from . import version  # needs to be after linalg!
-from .simulations.simulation import run_simulation, resume_from_checkpoint
+from .simulations.simulation import run_simulation, resume_from_checkpoint, run_seq_simulations
 
 #: hard-coded version string
 __version__ = version.version
@@ -31,7 +31,7 @@ __full_version__ = version.full_version
 
 __all__ = [
     "algorithms", "linalg", "models", "networks", "simulations", "tools", "version", "show_config",
-    "run_simulation", "resume_from_checkpoint", "console_main"
+    "run_simulation", "resume_from_checkpoint", "run_seq_simulations", "console_main"
 ]
 
 
@@ -46,8 +46,8 @@ def show_config():
 def console_main():
     """Command line interface.
 
-
-    See also :func:`run_simulation` for the python interface running a simulation.
+    For the python interface see :func:`~tenpy.simulations.simulation.run_simulation` and
+    :func:`~tenpy.simulations.simulation.run_seq_simulations`.
 
     When tenpy is installed correctly via pip/conda, a command line script called ``tenpy-run``
     is set up, which calls this function, i.e., you can do the following in the terminal::
@@ -90,7 +90,10 @@ def console_main():
         raise ValueError("No options supplied! Check your command line arguments!")
     if 'output_filename' not in options:
         raise ValueError("No output filename specified - refuse to run without saving anything!")
-    run_simulation(args.sim_class, **options)
+    if 'sequential' not in options:
+        run_simulation(args.sim_class, **options)
+    else:
+        run_seq_simulations(simulation_class_name=args.sim_class, **options)
 
 
 def _setup_arg_parser(width=None):
@@ -113,7 +116,7 @@ def _setup_arg_parser(width=None):
 
     Further, you can overwrite one or multiple options of the parameters file:
 
-        tenpy-run my_params.yml -o output_filename '"output.h5"' -o model_params/Jz 2.
+        tenpy-run my_params.yml -o output_filename '"rerun_Jz_2.h5"' -o model_params.Jz 2.
 
     Note that string values for the options require double quotes on the command line.
     """)
@@ -142,7 +145,7 @@ def _setup_arg_parser(width=None):
                         help="A yaml (*.yml) file with the simulation parameters/options.")
     opt_help = textwrap.dedent("""\
         Allows overwriting some options from the yaml files.
-        KEY can be recursive separated by ``/``, e.g. ``algorithm_params/trunc_params/chi``.
+        KEY can be recursive separated by `.`, e.g. ``algorithm_params.trunc_params.chi``.
         VALUE is initialized by python's ``eval(VALUE)`` with `np`, `scipy` and `tenpy` defined.
         Thus ``'1.2'`` and ``'2.*np.pi*1.j/6'`` or ``'np.linspace(0., 1., 6)'`` will work if you
         include the quotes on the command line to ensure that the VALUE is passed as a single

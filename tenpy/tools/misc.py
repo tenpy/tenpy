@@ -517,19 +517,34 @@ def find_subclass(base_class, subclass_name):
     ----------
     base_class : class
         The base class of which `subclass_name` is supposed to be a subclass.
-    subclass_name : str
-        Name of the class to be found.
+    subclass_name : str | type
+        The name (str) of the class to be found.
+        Alternatively, if a type is given, it is directly returned. In that case, a warning is
+        raised if it is not a subclass of `base_class`.
 
     Returns
     -------
-    subclass : None | class
+    subclass : class
         Class with name `subclass_name` which is a subclass of the `base_class`.
         None, if no subclass of the given name is found.
+
+    Raises
+    ------
+    ValueError: When no or multiple subclasses of `base_class` exists with that `subclass_name`.
     """
+    if not isinstance(subclass_name, str):
+        subclass = subclass_name
+        if not isinstance(subclass, type):
+            raise TypeError("expect a str or class for `subclass_name`, got " + repr(subclass))
+        if not issubclass(subclass, base_class):
+            # still allow it: might intend duck-typing. However, a warning should be raised!
+            warnings.warn(f"find_subclass: {subclass!r} is not subclass of {base_class!r}")
+        return subclass
     found = set()
     _find_subclass_recursion(base_class, subclass_name, found, set())
     if len(found) == 0:
-        return None
+        raise ValueError(f"No subclass of {base_class.__name__} called {subclass_name!r} defined. "
+                         "Maybe missing an import of a file with a custom class definition?")
     elif len(found) == 1:
         return found.pop()
     else:
@@ -547,7 +562,7 @@ def _find_subclass_recursion(base_class, name_to_find, found, checked):
         checked.add(subcls)
 
 
-def get_recursive(nested_data, recursive_key, separator="/"):
+def get_recursive(nested_data, recursive_key, separator="."):
     """Extract specific value from a nested data structure.
 
     Parameters
@@ -563,7 +578,7 @@ def get_recursive(nested_data, recursive_key, separator="/"):
     Returns
     -------
     entry :
-        For example, ``recursive_key="/some/sub/key"`` will result in extracing
+        For example, ``recursive_key="some.sub.key"`` will result in extracing
         ``nested_data["some"]["sub"]["key"]``.
 
     See also
@@ -580,7 +595,7 @@ def get_recursive(nested_data, recursive_key, separator="/"):
     return nested_data
 
 
-def set_recursive(nested_data, recursive_key, value, separator="/", insert_dicts=False):
+def set_recursive(nested_data, recursive_key, value, separator=".", insert_dicts=False):
     """Same as :func:`get_recursive`, but set the data entry to `value`."""
     if recursive_key.startswith(separator):
         recursive_key = recursive_key[len(separator):]
@@ -592,7 +607,7 @@ def set_recursive(nested_data, recursive_key, value, separator="/", insert_dicts
     nested_data[subkeys[-1]] = value
 
 
-def update_recursive(nested_data, update_data, separator="/", insert_dicts=True):
+def update_recursive(nested_data, update_data, separator=".", insert_dicts=True):
     """Wrapper around :func:`set_recursive` to allow updating multiple values at once.
 
     It simply calls :func:`set_recursive` for each ``recursive_key, value in update_data.items()``.
@@ -601,7 +616,7 @@ def update_recursive(nested_data, update_data, separator="/", insert_dicts=True)
         set_recursive(nested_data, k, v, separator, insert_dicts)
 
 
-def flatten(mapping, separator='/'):
+def flatten(mapping, separator='.'):
     """Obtain a flat dictionary with all key/value pairs of a nested data structure.
 
     Parameters
@@ -626,9 +641,9 @@ def flatten(mapping, separator='/'):
     >>> flat = flatten(sample_data)
     >>> for k in sorted(flat):
     ...     print(repr(k), ':', flat[k])
-    'some/nested/entry' : 100
-    'some/nested/structure' : 200
-    'some/subkey' : 10
+    'some.nested.entry' : 100
+    'some.nested.structure' : 200
+    'some.subkey' : 10
     'topentry' : 1
 
 
@@ -650,11 +665,21 @@ def flatten(mapping, separator='/'):
     return result
 
 
-#: default value for :cfg:option:`logging.skip_setup`
+#: default value for :cfg:option:`log.skip_setup`
 skip_logging_setup = False
 
 
-def setup_logging(options={}, output_filename=None):
+def setup_logging(options=None,
+                  output_filename=None,
+                  *,
+                  filename=None,
+                  to_stdout="INFO",
+                  to_file="INFO",
+                  format="%(levelname)-8s: %(message)s",
+                  logger_levels={},
+                  dict_config=None,
+                  capture_warnings=None,
+                  skip_setup=None):
     """Configure the :mod:`logging` module.
 
     The default logging setup is given by the following equivalent `dict_config`
@@ -691,19 +716,23 @@ def setup_logging(options={}, output_filename=None):
         We **remove** any previously configured logging handlers.
         This is to handle the case when this function is called multiple times,
         e.g., because you run multiple :class:`~tenpy.simulations.simulation.Simulation`
-        classes sequentially.
+        classes sequentially (e.g., :func:`~tenpy.simulations.simulation.run_seq_simulations`).
+
+    .. deprecated :: 0.9.0
+        The arguments were previously collected in a dicitonary `options`.
+        Now they should be given directly as keyword arguments.
 
     Parameters
     ----------
-    options : dict
-        Parameters as described below.
+    **kwargs :
+        Keyword arguments as described in the options below.
     output_filename : None | str
-        The filename where results are saved. The `filename` for the log-file defaults to
-        this, but replecing the extension with ``.log``.
+        The filename for where results are saved. The :cfg:option:`log.filename` for the
+        log-file defaults to this, but replacing the extension with ``.log``.
 
     Options
     -------
-    .. cfg:config :: logging
+    .. cfg:config :: log
 
         skip_setup: bool
             If True, don't change anything in the logging setup; just return.
@@ -736,23 +765,21 @@ def setup_logging(options={}, output_filename=None):
             Whether to call :func:`logging.captureWarnings` to include the warnings into the log.
     """
     import logging.config
-    if output_filename is None:
-        default_log_fn = None
-    else:
-        root, ext = os.path.splitext(output_filename)
-        assert ext != 'log'
-        default_log_fn = root + '.log'
-    log_fn = options.get('filename', default_log_fn)
-    to_stdout = options.get('to_stdout', "INFO")
-    to_file = options.get('to_file', "INFO")
-    log_format = options.get('format', "%(levelname)-8s: %(message)s")
-    logger_levels = options.get('logger_levels', {})
-    conf = options.get('dict_config', None)
-    capture_warnings = options.get('capture_warnings', conf is not None
-                                   or bool(to_stdout or to_file))
-    if options.get('skip_setup', skip_logging_setup):
+    if options is not None:
+        warnings.warn("Give logging parameters directly as keyword arguments!", FutureWarning, 2)
+        locals().update(**options)
+    if filename is None:
+        if output_filename is not None:
+            root, ext = os.path.splitext(output_filename)
+            assert ext != '.log'
+            filename = root + '.log'
+    if capture_warnings is None:
+        capture_warnings = dict_config is not None or to_stdout or to_file
+    if skip_setup is None:
+        skip_setup = skip_logging_setup
+    if skip_setup:
         return
-    if conf is None:
+    if dict_config is None:
         handlers = {}
         if to_stdout:
             handlers['to_stdout'] = {
@@ -761,23 +788,23 @@ def setup_logging(options={}, output_filename=None):
                 'formatter': 'custom',
                 'stream': 'ext://sys.stdout',
             }
-        if to_file and log_fn is not None:
+        if to_file and filename is not None:
             handlers['to_file'] = {
                 'class': 'logging.FileHandler',
                 'level': to_file,
                 'formatter': 'custom',
-                'filename': log_fn,
+                'filename': filename,
                 'mode': 'a',
             }
             if not to_stdout:
                 cwd = os.getcwd()
-                print(f"now logging to {cwd!r}/{log_fn!r}")
-        conf = {
+                print(f"now logging to {cwd!s}/{filename!s}")
+        dict_config = {
             'version': 1,  # mandatory
             'disable_existing_loggers': False,
             'formatters': {
                 'custom': {
-                    'format': log_format
+                    'format': format,
                 }
             },
             'handlers': handlers,
@@ -789,13 +816,13 @@ def setup_logging(options={}, output_filename=None):
         }
         for name, level in logger_levels.items():
             if name == 'root':
-                conf['root']['level'] = level
+                dict_config['root']['level'] = level
             else:
-                conf['loggers'].setdefault(name, {})['level'] = level
+                dict_config['loggers'].setdefault(name, {})['level'] = level
     else:
-        conf.setdefault('disable_existing_loggers', False)
+        dict_config.setdefault('disable_existing_loggers', False)
     # note: dictConfig cleans up previously existing handlers etc
-    logging.config.dictConfig(conf)
+    logging.config.dictConfig(dict_config)
     if capture_warnings:
         logging.captureWarnings(True)
 

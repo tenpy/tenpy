@@ -36,7 +36,7 @@ If you have a working conda package manager, you can install the numpy build aga
     conda install mkl mkl-devel numpy scipy 
 
 The ``mkl-devel`` package is required for linking against MKL, i.e. for compiling the Cython code.
-As outlined in :doc:`/doc/install/conda`, on Linux/Mac you also need to pin blas to use MKL with the following line, **if you use the `conda-forge` channel**::
+As outlined in :doc:`/install/conda`, on Linux/Mac you also need to pin blas to use MKL with the following line, **if you use the `conda-forge` channel**::
 
     conda install "libblas=*=*mkl"
 

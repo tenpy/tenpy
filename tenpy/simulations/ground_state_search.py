@@ -33,7 +33,8 @@ class GroundStateSearch(Simulation):
         .. cfg:configoptions :: GroundStateSearch
 
             save_stats : bool
-                Whether to include the
+                Whether to include the `sweep_stats` and `update_stats` of the engine into the
+                output.
         """
         super().init_algorithm(**kwargs)
         if self.options.get("save_stats", True):

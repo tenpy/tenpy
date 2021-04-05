@@ -10,7 +10,7 @@ to start off with a new one based on the ``environment.yml`` file.
 If you want to continue using the existing conda environment, you need to ``conda install mkl-devel`` before compilation. *Additionally*, when you use the ``conda-forge`` channel of conda, you should pin blas to use MKL by ``conda install libblas=*=*mkl``.
 
 Another great reason to update are **simulation classes** and a console script `tenpy-run` to allow running and even resuming a simulation when it aborted!
-See :doc:`/intro/simulation` for details.
+See :doc:`/intro/simulations` for details.
 
 Further, there is a big change in **verbosity**: we switched to using Python's default :mod:`logging` mechanism. 
 This implies that by default you don't get any output besides error messages and warning any more, at least not in pre-`simulation` setups.

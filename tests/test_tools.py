@@ -5,11 +5,11 @@ import logging
 import numpy as np
 import numpy.testing as npt
 import itertools as it
-import tenpy.tools as tools
+import tenpy
+from tenpy import tools
 import warnings
 import pytest
 import os.path
-import tenpy
 import sys
 
 
@@ -211,8 +211,8 @@ def test_find_subclass():
     SimpleLattice = tenpy.models.lattice.SimpleLattice  # direct sublcass of Lattice
     Square = tenpy.models.lattice.Square  # sublcass of SimpleLattice -> recursion necessary
 
-    unknown_found = tools.misc.find_subclass(BaseCls, 'UnknownSubclass')
-    assert unknown_found is None
+    with pytest.raises(ValueError):
+        tools.misc.find_subclass(BaseCls, 'UnknownSubclass')
     simple_found = tools.misc.find_subclass(BaseCls, 'SimpleLattice')
     assert simple_found is SimpleLattice
     square_found = tools.misc.find_subclass(BaseCls, 'Square')
@@ -221,14 +221,14 @@ def test_find_subclass():
 
 def test_get_set_recursive():
     data = {'some': {'nested': {'data': 123, 'other': 456}, 'parts': 789}}
-    assert tools.misc.get_recursive(data, 'some/nested/data') == 123
-    assert tools.misc.get_recursive(data, '/some/nested/data') == 123
-    tools.misc.set_recursive(data, 'some/nested/data', 321)
+    assert tools.misc.get_recursive(data, 'some.nested.data') == 123
+    assert tools.misc.get_recursive(data, '.some.nested.data') == 123
+    tools.misc.set_recursive(data, 'some.nested.data', 321)
     assert tools.misc.get_recursive(data, 'some:nested:data', ':') == 321
     tools.misc.set_recursive(data, ':some:parts', 987, ':')
-    assert tools.misc.get_recursive(data, 'some/parts') == 987
+    assert tools.misc.get_recursive(data, 'some.parts') == 987
     flat_data = tools.misc.flatten(data)
-    assert flat_data == {'some/nested/data': 321, 'some/nested/other': 456, 'some/parts': 987}
+    assert flat_data == {'some.nested.data': 321, 'some.nested.other': 456, 'some.parts': 987}
 
 
 @pytest.mark.skip(reason="interferes with pytest logging setup")

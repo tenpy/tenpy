@@ -1,8 +1,8 @@
 Troubleshooting and FAQ
 =======================
 
-I updated to a new version and now I get and error/warning.
-    Take a look at the section "Backwards incomptatible changes" in :doc:`/changelog` of the corresponding versions
+I updated to a new version and now I get an error/warning.
+    Take a look at the section "Backwards incomptatible changes" in the :doc:`/releases` of the corresponding versions
     since when you updated.
 
 Where did all the output go?
@@ -23,7 +23,7 @@ Why is TeNPy not respecting MKL_NUM_THREADS?
     On linux, check whether you have installed a pip version of numpy or scipy in $HOME/.local/lib/python3.*
     Those packages do not use MKL - you would need to install numpy and scipy from conda.
     If you use the `conda-forge` channel as recommended in the installation, also make sure that you select
-    the BLAS provided by MKL, see the note in :doc:`install/conda.rst`.
+    the BLAS provided by MKL, see the note in :doc:`/install/conda`.
 
 
 I get an error when ...
@@ -37,4 +37,4 @@ I get a warning about ...
 ... an unused parameter.
     Make sure that you don't have a typo and that it is in the right parameter set!
     Also, check the logging output whether the parameter was actually used.
-    For further details, see :doc:`intro/options`
+    For further details, see :doc:`/intro/options`

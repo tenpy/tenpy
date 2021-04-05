@@ -89,7 +89,7 @@ class Algorithm:
         When the simulation aborts, you can resume it using this saved data with::
 
             eng = AlgorithmClass(psi, model, options, resume_data=resume_data)
-            eng.resume_run(resume_data)
+            eng.resume_run()
 
         An algorithm which doesn't support this should override `resume_run` to raise an Error.
 
