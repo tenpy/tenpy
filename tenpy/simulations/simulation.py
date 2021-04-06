@@ -1090,7 +1090,7 @@ def output_filename_from_dict(options,
         else:
             parts_order = parts.keys()  # dictionaries are ordered, so use that order
     else:
-        assert set(order) == set(parts.keys())
+        assert set(parts_order) == set(parts.keys())
     for recursive_key in parts_order:
         format_str = parts[recursive_key]
         if not format_str:

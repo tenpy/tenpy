@@ -207,10 +207,17 @@ def test_output_filename_from_dict():
     })
     assert fn == 'result_dt_0.50_L_4.h5'
     # re-ordered parts
-    parts_order = ['model_params.L', 'algorithm_params.dt'] if sys.version_info < (3, 7) else None
+    parts_order = ['model_params.L', 'algorithm_params.dt']
     fn = output_filename_from_dict(options, {
         'model_params.L': 'L_{0:d}',
         'algorithm_params.dt': 'dt_{0:.2f}'
     },
                                    parts_order=parts_order)
     assert fn == 'result_L_4_dt_0.50.h5'
+    if not sys.version_info < (3, 7):
+        # should also work without specifying the parts_order for python >= 3.7
+        fn = output_filename_from_dict(options, {
+            'model_params.L': 'L_{0:d}',
+            'algorithm_params.dt': 'dt_{0:.2f}'
+        })
+        assert fn == 'result_L_4_dt_0.50.h5'
