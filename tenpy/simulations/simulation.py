@@ -1034,7 +1034,6 @@ def output_filename_from_dict(options,
     This function helps to keep the length of the output filename at a sane level
     while ensuring (hopefully) sufficient uniqueness.
 
-
     Parameters
     ----------
     options : (nested) dict
@@ -1048,9 +1047,10 @@ def output_filename_from_dict(options,
         First and last part of the filename.
     joint : str
         Individual filename parts (except the suffix) are joined by this string.
-    parts_order : None | list of str
+    parts_order : None | list of keys
         Optionally, an explicit order for the keys of `parts`.
-        By default (None), just the keys of `parts`; before python 3.7 alphabetically sorted.
+        By default (None), just the keys of `parts`, i.e. the order in which they appear in the
+        dictionary; before python 3.7 (where the order is not defined) alphabetically sorted.
     separator : str
         Separator for :func:`~tenpy.tools.misc.get_recursive`.
 
@@ -1081,12 +1081,21 @@ def output_filename_from_dict(options,
     ...         'algorithm_params.dt': 'dt_{0:.3f}',
     ...         'model_params.Ly': 'Ly_{0:d}'})
     'result_dt_0.010_Ly_4.h5'
+    >>> output_filename_from_dict(options, parts={
+    ...         'algorithm_params.dt': 'dt_{0:.3f}',
+    ...         ('model_params.Lx', 'model_params.Ly'): '{0:d}x{1:d}'})
+    'result_dt_0.010_3x4.h5'
+    >>> output_filename_from_dict(options, parts={
+    ...         'algorithm_params.dt': '_dt_{0:.3f}',
+    ...         'model_params.Lx': '_{0:d}',
+    ...         'model_params.Ly': 'x{0:d}'}, joint='')
+    'result_dt_0.010_3x4.h5'
     """
     formatted_parts = [prefix]
     if parts_order is None:
         if sys.version_info < (3, 7):
             # dictionaries are not ordered -> sort keys alphabetically
-            parts_order = sorted(parts.keys())
+            parts_order = sorted(parts.keys(), key=lambda x: x[0] if isinstance(x, tuple) else x)
         else:
             parts_order = parts.keys()  # dictionaries are ordered, so use that order
     else:
@@ -1095,7 +1104,9 @@ def output_filename_from_dict(options,
         format_str = parts[recursive_key]
         if not format_str:
             continue
-        val = get_recursive(options, recursive_key, separator)
-        part = format_str.format(val)
+        if not isinstance(recursive_key, tuple):
+            recursive_key = (recursive_key, )
+        vals = [get_recursive(options, r_key, separator) for r_key in recursive_key]
+        part = format_str.format(*vals)
         formatted_parts.append(part)
     return joint.join(formatted_parts) + suffix

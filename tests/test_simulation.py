@@ -220,4 +220,12 @@ def test_output_filename_from_dict():
             'model_params.L': 'L_{0:d}',
             'algorithm_params.dt': 'dt_{0:.2f}'
         })
-        assert fn == 'result_L_4_dt_0.50.h5'
+    assert fn == 'result_L_4_dt_0.50.h5'
+    options = {'alg': {'dt': 0.5}, 'model': {'Lx': 3, 'Ly': 4}, 'other': 'ignored'}
+    fn = output_filename_from_dict(options,
+                                   parts={
+                                       'alg.dt': 'dt_{0:.2f}',
+                                       ('model.Lx', 'model.Ly'): '{0:d}x{1:d}'
+                                   },
+                                   parts_order=['alg.dt', ('model.Lx', 'model.Ly')])
+    assert fn == 'result_dt_0.50_3x4.h5'

@@ -18,7 +18,7 @@ Added
 - :func:`tenpy.simulations.simulation.run_sequential_simulations`
 
 Changed
-^^^^^^
+^^^^^^^
 - :func:`tenpy.tools.misc.find_subclass` now directly raises an error if no subclass with that name is found.
 - Renamed the `logging_params` to `log_params`.
 
