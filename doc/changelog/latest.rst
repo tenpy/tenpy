@@ -21,6 +21,8 @@ Changed
 ^^^^^^^
 - :func:`tenpy.tools.misc.find_subclass` now directly raises an error if no subclass with that name is found.
 - Renamed the `logging_params` to `log_params`.
+- :func:`tenpy.simulations.measurement.correlation_length` now supports a `unit` keyword.
+  If it is not given explicitly, a warning is raised.
 
 Fixed
 ^^^^^

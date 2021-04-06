@@ -1250,7 +1250,7 @@ class MPS:
         self.sites = sites
         self._B = Bs
         self._S = Ss
-        self.grouped = self.grouped // n0
+        self.grouped = max(self.grouped // n0, 1)
         self.form = [self._valid_forms['B']] * len(sites)
         self.test_sanity()
         return trunc_err
@@ -2847,7 +2847,7 @@ class MPS:
             where `L_x` is the number of lattice spacings in the infinite direction within the
             MPS unit cell, e.g. the number of "rings" of a cylinder in the MPS unit cell.
             To get to these units, divide the returned `xi` by the number of sites within a "ring",
-            for a lattice given in :attr:`~tenpy.networks.lattice.N_sites_per_ring`.
+            for a lattice given in :attr:`~tenpy.models.lattice.Lattice.N_sites_per_ring`.
 
         Parameters
         ----------
@@ -2865,7 +2865,7 @@ class MPS:
         xi : float | 1D array
             If `target`=1, return just the correlation length,
             otherwise an array of the `target` largest correlation lengths.
-            It is measured in units of a single lattice spacing in the MPS language,
+            It is measured in units of a single spacing between sites in the MPS language,
             see the warning above.
         """
         assert (not self.finite)
