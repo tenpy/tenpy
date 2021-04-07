@@ -27,3 +27,5 @@ Changed
 Fixed
 ^^^^^
 - Use logging in simulation only after calling :func:`~tenpy.tools.misc.setup_logging`.
+- Missing ``+ h.c.`` in :meth:`tenpy.networks.mpo.MPOEnvironment.full_contraction` when `H.explicit_plus_hc` was True.
+  This caused wrong energies being reported during DMRG when `explicit_plus_hc` was used.

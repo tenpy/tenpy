@@ -1893,7 +1893,10 @@ class MPOEnvironment(MPSEnvironment):
         S_ket = self.ket.get_SR(i0)
         LP = self.bra._scale_axis_B(LP, S_ket, form_diff=1., axis_B='vR', cutoff=0.)
         RP = self.get_RP(i0, store=False)
-        return npc.inner(LP, RP, axes=[['vR*', 'wR', 'vR'], ['vL*', 'wL', 'vL']], do_conj=False)
+        res = npc.inner(LP, RP, axes=[['vR*', 'wR', 'vR'], ['vL*', 'wL', 'vL']], do_conj=False)
+        if self.H.explicit_plus_hc:
+            res = res + np.conj(res)
+        return res
 
     def expectation_value(self, ops, sites=None, axes=None):
         """(doesn't make sense)"""
