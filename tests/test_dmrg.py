@@ -201,18 +201,16 @@ def test_dmrg_excited(eps=1.e-12):
     ov = npc.inner(psi_ED[0], ED.mps_to_full(psi0), 'range', do_conj=True)
     assert abs(abs(ov) - 1.) < eps  # unique groundstate: finite size gap!
     # second DMRG run for first excited state
-    dmrg_pars['orthogonal_to'] = [psi0]
     psi1 = mps.MPS.from_product_state(M.lat.mps_sites(), [0] * L, bc=bc)
-    eng1 = dmrg.TwoSiteDMRGEngine(psi1, M, dmrg_pars)
+    eng1 = dmrg.TwoSiteDMRGEngine(psi1, M, dmrg_pars, orthogonal_to=[psi0])
     E1, psi1 = eng1.run()
     assert abs((E1 - ED.E[1]) / ED.E[1]) < eps
     ov = npc.inner(psi_ED[1], ED.mps_to_full(psi1), 'range', do_conj=True)
     assert abs(abs(ov) - 1.) < eps  # unique groundstate: finite size gap!
     # and a third one to check with 2 eigenstates
-    dmrg_pars['orthogonal_to'] = [psi0, psi1]
     # note: different intitial state necessary, otherwise H is 0
     psi2 = mps.MPS.from_singlets(psi0.sites[0], L, [(0, 1), (2, 3), (4, 5), (6, 7)], bc=bc)
-    eng2 = dmrg.TwoSiteDMRGEngine(psi2, M, dmrg_pars)
+    eng2 = dmrg.TwoSiteDMRGEngine(psi2, M, dmrg_pars, orthogonal_to=[psi0, psi1])
     E2, psi2 = eng2.run()
     print(E2)
     assert abs((E2 - ED.E[2]) / ED.E[2]) < eps

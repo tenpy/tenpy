@@ -62,6 +62,8 @@ class Sweep(Algorithm):
         By default (``None``) ignored. If a `dict`, it should contain the data returned by
         :meth:`get_resume_data` when intending to continue/resume an interrupted run,
         in particular `'init_env_data'`.
+    orthogonal_to : None | list of :class:`~tenpy.networks.mps.MPS`
+        States to orthogonalize against, see :meth:`init_env`.
 
     Options
     -------
@@ -119,7 +121,7 @@ class Sweep(Algorithm):
         A dictionary to gradually increase the `chi_max` parameter of `trunc_params`.
         See :cfg:option:`Sweep.chi_list`
     """
-    def __init__(self, psi, model, options, *, resume_data=None):
+    def __init__(self, psi, model, options, *, orthogonal_to=None, resume_data=None):
         if not hasattr(self, "EffectiveH"):
             raise NotImplementedError("Subclass needs to set EffectiveH")
         super().__init__(psi, model, options, resume_data=resume_data)
@@ -132,7 +134,7 @@ class Sweep(Algorithm):
 
         self.env = None
         self.ortho_to_envs = []
-        self.init_env(model, resume_data=resume_data)
+        self.init_env(model, resume_data=resume_data, orthogonal_to=orthogonal_to)
         self.i0 = 0
         self.move_right = True
         self.update_LP_RP = (True, False)
@@ -146,6 +148,8 @@ class Sweep(Algorithm):
         data = super().get_resume_data()
         data['init_env_data'] = self.env.get_initialization_data()
         data['sweeps'] = self.sweeps
+        if len(self.ortho_to_envs) > 0:
+            data['orthogonal_to'] = [e.ket for e in self.ortho_to_envs]
         return data
 
     @property
@@ -159,7 +163,7 @@ class Sweep(Algorithm):
         """
         return self.EffectiveH.length
 
-    def init_env(self, model=None, resume_data=None):
+    def init_env(self, model=None, resume_data=None, orthogonal_to=None):
         """(Re-)initialize the environment.
 
         This function is useful to (re-)start a Sweep with a slightly different
@@ -174,6 +178,14 @@ class Sweep(Algorithm):
             If ``None``, keep the model used before.
         resume_data : None | dict
             Given when resuming a simulation, as returned by :meth:`get_resume_data`.
+        orthogonal_to : None | list of :class:`~tenpy.networks.mps.MPS`
+            List of other matrix product states to orthogonalize against.
+            Works only for finite or segment MPS; for infinite MPS it must be `None`.
+            This can be used to find (a few) excited states as follows.
+            First, run DMRG to find the ground state,
+            and then run DMRG again while orthogonalizing against the ground state,
+            which yields the first excited state (in the same symmetry sector), and so on.
+            Note that `resume_data['orthogonal_to']` takes precedence over the argument.
 
         Options
         -------
@@ -192,13 +204,8 @@ class Sweep(Algorithm):
                 :meth:`~tenpy.networks.mpo.MPOEnvironment.get_initialization_data`.
                 Deprecated.
             orthogonal_to : list of :class:`~tenpy.networks.mps.MPS`
-                List of other matrix product states to orthogonalize against.
-                Works only for finite systems.
-                This parameter can be used to find (a few) excited states as
-                follows. First, run DMRG to find the ground state and then
-                run DMRG again while orthogonalizing against the ground state,
-                which yields the first excited state (in the same symmetry
-                sector), and so on.
+                Deprecated in favor of the `orthogonal_to` function argument (forwarded from the
+                class argument) with the same effect.
             start_env : int
                 Number of sweeps to be performed without optimization to update
                 the environment.
@@ -244,8 +251,16 @@ class Sweep(Algorithm):
         self.env = MPOEnvironment(self.psi, H, self.psi, **init_env_data)
 
         # (re)initialize ortho_to_envs
-        orthogonal_to = self.options.get('orthogonal_to', [])
-        if len(orthogonal_to) > 0:
+        if 'orthogonal_to' in self.options:
+            warnings.warn(
+                "Deprecated `orthogonal_to` in dmrg options: instead give "
+                "`orthogonal_to` as keyword to the Algorithm class.", FutureWarning)
+            assert orthogonal_to is None
+            orthogonal_to = self.options['orthogonal_to']
+        if 'orthogonal_to' in resume_data:
+            orthogonal_to = resume_data['orthogonal_to']  # precedence for resume_data!
+
+        if orthogonal_to:
             if not self.finite:
                 raise ValueError("Can't orthogonalize for infinite MPS: overlap not well defined.")
             self.ortho_to_envs = [MPSEnvironment(self.psi, ortho) for ortho in orthogonal_to]
@@ -890,10 +905,11 @@ class VariationalCompression(Sweep):
             self.psi.norm *= max(self.renormalize)
         return TruncationError(max_trunc_err, 1. - 2. * max_trunc_err)
 
-    def init_env(self, _, resume_data=None):
+    def init_env(self, _, resume_data=None, orthogonal_to=None):
         """Initialize the environment.
 
-        The first argument is not used and only there for compatibility with the Sweep class.
+        The first argument and `orthogonal_to` are not used and only there for compatibility with
+        the Sweep class.
         The second argument is the `resume_data` passed during initialization, as returned by
         :meth:`get_resume_data`.
         """
@@ -1030,7 +1046,7 @@ class VariationalApplyMPO(VariationalCompression):
         Sweep.__init__(self, psi, U_MPO, options, resume_data=resume_data)
         self.renormalize = [None] * (psi.L - int(psi.finite))
 
-    def init_env(self, U_MPO, resume_data=None):
+    def init_env(self, U_MPO, resume_data=None, orthogonal_to=None):
         """Initialize the environment.
 
         Parameters
@@ -1038,8 +1054,9 @@ class VariationalApplyMPO(VariationalCompression):
         U_MPO : :class:`~tenpy.networks.mpo.MPO`
             The MPO to be applied to the sate.
         resume_data : dict
-            May contain in
-
+            May contain `init_env_data`.
+        orthogonal_to :
+            Ignored.
         """
         if resume_data is None:
             resume_data = {}
