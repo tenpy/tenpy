@@ -55,7 +55,7 @@ __all__ = [
 ]
 
 
-def run(psi, model, options):
+def run(psi, model, options, **kwargs):
     r"""Run the DMRG algorithm to find the ground state of the given model.
 
     Parameters
@@ -66,6 +66,9 @@ def run(psi, model, options):
         The model representing the Hamiltonian for which we want to find the ground state.
     options : dict
         Further optional parameters as described in :cfg:config:`DMRGEngine`.
+    **kwargs :
+        Further keyword arguments for the algorithm classes :class:`TwoSiteDMRGEngine` or
+        :class:`SingleSiteDMRGEngine`.
 
     Returns
     -------
@@ -87,9 +90,9 @@ def run(psi, model, options):
     options = asConfig(options, 'DMRG')
     active_sites = options.get('active_sites', 2)
     if active_sites == 1:
-        engine = SingleSiteDMRGEngine(psi, model, options)
+        engine = SingleSiteDMRGEngine(psi, model, options, **kwargs)
     elif active_sites == 2:
-        engine = TwoSiteDMRGEngine(psi, model, options)
+        engine = TwoSiteDMRGEngine(psi, model, options, **kwargs)
     else:
         raise ValueError("For DMRG, can only use 1 or 2 active sites, not {}".format(active_sites))
     E, _ = engine.run()
