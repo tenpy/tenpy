@@ -117,7 +117,11 @@ def setup_cython_extension():
         return []
     # see tenpy/tools/optimization.py for details on "TENPY_OPTIMIZE"
     TENPY_OPTIMIZE = int(os.getenv('TENPY_OPTIMIZE', 1))
-    include_dirs = [numpy.get_include(), os.getenv('INCLUDE')]
+    include_dirs = [numpy.get_include()]
+    OSincludes=os.getenv('INCLUDE')        
+    if OSincludes is not None:
+        print ("adding further INCLUDE paths from environment: ",OSincludes)
+        include_dirs.append(OSincludes)
     libs = []
     lib_dirs = []
 
@@ -142,7 +146,6 @@ def setup_cython_extension():
 
     # compile time flags (#DEF ...)
     comp_flags = {'TENPY_OPTIMIZE': TENPY_OPTIMIZE}
-
     ext_modules = cythonize(extensions,
                             compiler_directives=comp_direct,
                             compile_time_env=comp_flags)
