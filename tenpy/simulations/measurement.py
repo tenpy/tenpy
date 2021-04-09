@@ -9,6 +9,8 @@ the measurement results into the `results` dictionary taken as argument.
 """
 # Copyright 2020-2021 TeNPy Developers, GNU GPLv3
 
+import warnings
+
 __all__ = [
     'measurement_index', 'bond_dimension', 'bond_energies', 'energy_MPO', 'entropy',
     'onsite_expectation_value', 'correlation_length', 'evolved_time'
