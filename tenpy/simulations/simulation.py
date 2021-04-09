@@ -580,8 +580,9 @@ class Simulation:
                 raise Skip("simulation output filename already exists: " + str(fn))
             if not overwrite_output and not self.loaded_from_checkpoint:
                 # adjust output filename to avoid overwriting stuff
+                root, ext = os.path.splitext(out_fn)
                 for i in range(1, 100):
-                    new_out_fn = out_fn.with_suffix('_' + str(i) + out_fn.suffix)
+                    new_out_fn = Path(root + '_' + str(i) + ext)
                     if not new_out_fn.exists():
                         break
                 else:
