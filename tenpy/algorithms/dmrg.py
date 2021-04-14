@@ -40,7 +40,6 @@ logger = logging.getLogger(__name__)
 
 from ..linalg import np_conserved as npc
 from ..networks.mps import MPSEnvironment
-from ..networks.mpo import MPOEnvironment
 from ..linalg.lanczos import lanczos, lanczos_arpack
 from .truncation import truncate, svd_theta
 from ..tools.params import asConfig
@@ -126,8 +125,6 @@ class Mixer:
 
     Parameters
     ----------
-    env : :class:`~tenpy.networks.mpo.MPOEnvironment`
-        Environment for contraction ``<psi|H|psi>`` for later
     options : dict
         Optional parameters as described in the following table.
         see :cfg:config:`Mixer`

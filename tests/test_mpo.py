@@ -170,13 +170,11 @@ def test_MPOEnvironment():
     env.get_LP(3, True)
     env.get_RP(0, True)
     env.test_sanity()
-    E_old = None
+    E_exact = -0.825
     for i in range(4):
         E = env.full_contraction(i)  # should be one
         print("total energy for contraction at site ", i, ": E =", E)
-        if E_old is not None:
-            assert (abs(E - E_old) < 1.e-14)
-        E_old = E
+        assert (abs(E - E_exact) < 1.e-14)
 
 
 def test_MPO_hermitian():

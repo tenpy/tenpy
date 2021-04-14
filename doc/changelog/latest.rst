@@ -17,6 +17,10 @@ Backwards incompatible changes
 Added
 ^^^^^
 - :func:`tenpy.simulations.simulation.run_sequential_simulations`
+- :meth:`tenpy.networks.mps.MPSEnvironment.init_LP` and :meth:`~tenpy.networks.mps.MPSEnvironment.init_RP`, and
+  :meth:`tenpy.networks.mpo.MPOEnvironment.init_LP` and :meth:`~tenpy.networks.mpo.MPOEnvironment.init_RP` additionally
+  support the argument `start_env_sites`, which can now be part of the `init_env_data`.
+  This allows to converge MPO environments from scratch, given only the MPO and MPS.
 
 Changed
 ^^^^^^^
@@ -30,3 +34,4 @@ Fixed
 - Use logging in simulation only after calling :func:`~tenpy.tools.misc.setup_logging`.
 - Missing ``+ h.c.`` in :meth:`tenpy.networks.mpo.MPOEnvironment.full_contraction` when `H.explicit_plus_hc` was True.
   This caused wrong energies being reported during DMRG when `explicit_plus_hc` was used.
+- :issue:`99` and :issue:`113` by allowing to reinitialize the environment from scratch.

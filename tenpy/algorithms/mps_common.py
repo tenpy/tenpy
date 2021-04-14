@@ -207,8 +207,7 @@ class Sweep(Algorithm):
                 Deprecated in favor of the `orthogonal_to` function argument (forwarded from the
                 class argument) with the same effect.
             start_env : int
-                Number of sweeps to be performed without optimization to update
-                the environment.
+                Number of sweeps to be performed without optimization to update the environment.
 
         Raises
         ------
@@ -222,23 +221,15 @@ class Sweep(Algorithm):
         if 'init_env_data' in self.options:
             warnings.warn("put init_env_data in resume_data instead of options!", FutureWarning)
             resume_data.setdefault('init_env_data', self.options['init_env_data'])
-        if self.env is None or self.psi.bc == 'finite':
-            init_env_data = resume_data.get("init_env_data", {})
-        else:  # re-initialize
-            compatible = True
-            if model is not None:
-                try:
-                    H.get_W(0).get_leg('wL').test_equal(self.env.H.get_W(0).get_leg('wL'))
-                except ValueError:
-                    compatible = False
-                    warnings.warn("The leg of the new model is incompatible with the previous one."
-                                  "Rebuild environment from scratch.")
-            if compatible:
-                init_env_data = self.env.get_initialization_data()
-            else:
-                init_env_data = resume_data.get("init_env_data", {})
-            if self.options.get('chi_list', None) is not None:
-                warnings.warn("Re-using environment with `chi_list` set! Do you want this?")
+        init_env_data = {}
+        if self.env is not None and self.psi.bc != 'finite':
+            # reuse previous environments.
+            # if legs are incompatible, MPOEnvironment.init_first_LP_last_RP will regenerate
+            init_env_data = self.env.get_initialization_data()
+        init_env_data = resume_data.get('init_env_data', init_env_data)
+        if not self.psi.finite and init_env_data and \
+                self.options.get('chi_list', None) is not None:
+            warnings.warn("Re-using environment with `chi_list` set! Do you want this?")
         replaced = [('LP', 'init_LP'), ('LP_age', 'age_LP'), ('RP', 'init_RP'),
                     ('RP_age', 'age_RP')]
         if any([key_old in self.options for key_old, _ in replaced]):
@@ -873,6 +864,8 @@ class VariationalCompression(Sweep):
             Truncation parameters as described in :cfg:config:`truncation`.
         N_sweeps : int
             Number of sweeps to perform.
+        start_env_sites : int
+            Number of sites to contract for the inital LP/RP environment in case of infinte MPS.
 
     Attributes
     ----------
@@ -905,39 +898,25 @@ class VariationalCompression(Sweep):
             self.psi.norm *= max(self.renormalize)
         return TruncationError(max_trunc_err, 1. - 2. * max_trunc_err)
 
-    def init_env(self, _, resume_data=None, orthogonal_to=None):
+    def init_env(self, _=None, resume_data=None, orthogonal_to=None):
         """Initialize the environment.
 
-        The first argument and `orthogonal_to` are not used and only there for compatibility with
-        the Sweep class.
-        The second argument is the `resume_data` passed during initialization, as returned by
-        :meth:`get_resume_data`.
+        Parameters
+        ----------
+        _, orthogonal_to :
+            Ignored, only there for compatibility with the :class:`Sweep` class.
+        resume_data : dict
+            May contain `init_env_data`.
         """
         if resume_data is None:
             resume_data = {}
         init_env_data = resume_data.get("init_env_data", {})
         old_psi = self.psi.copy()
+        start_env_sites = self.options.get('start_env_sites', 2)
+        if start_env_sites is not None and not self.psi.finite:
+            init_env_data['start_env_sites'] = start_env_sites
         self.env = MPSEnvironment(self.psi, old_psi, **init_env_data)
-        if (not self.psi.finite and 'init_LP' not in init_env_data
-                and 'init_RP' not in init_env_data):
-            start_env_sites = self.options.get("start_env_sites", 0)
-            self._init_env_from_start_env_sites(start_env_sites)
         self.reset_stats()
-
-    def _init_env_from_start_env_sites(self, start_env_sites):
-        """initialize LP[0] and RP[L-1] to already include `start_env_sites` sites."""
-        if start_env_sites is None or start_env_sites == 0 or start_env_sites == np.inf:
-            return
-        env = self.env
-        L = env.L
-        LP = env.init_LP(-start_env_sites)
-        for i in range(-start_env_sites, 0):
-            LP = env._contract_LP(i, LP)
-        env.set_LP(0, LP, age=start_env_sites)
-        RP = env.init_RP(L - 1 + start_env_sites)
-        for i in range(L - 1 + start_env_sites, L - 1, -1):
-            RP = env._contract_RP(i, RP)
-        env.set_RP(L - 1, RP, age=start_env_sites)
 
     def update_local(self, _, optimize=True):
         """Perform local update.
@@ -1062,10 +1041,10 @@ class VariationalApplyMPO(VariationalCompression):
             resume_data = {}
         init_env_data = resume_data.get("init_env_data", {})
         old_psi = self.psi.copy()
+        start_env_sites = self.options.get("start_env_sites", None)
+        if start_env_sites is not None:
+            init_env_data['start_env_sites'] = start_env_sites
         self.env = MPOEnvironment(self.psi, U_MPO, old_psi, **init_env_data)
-        if not self.psi.finite:
-            start_env_sites = self.options.get("start_env_sites", 1)
-            self._init_env_from_start_env_sites(start_env_sites)
         self.reset_stats()
 
     def update_local(self, _, optimize=True):

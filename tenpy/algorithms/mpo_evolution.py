@@ -75,7 +75,6 @@ class ExpMPOEvolution(TimeEvolutionAlgorithm):
         self.trunc_err = options.get('start_trunc_err', TruncationError())
         self._U_MPO = None
         self._U_param = {}
-        options.setdefault('start_env_sites', model.H_MPO.max_range)
 
     def run(self):
         """Run the real-time evolution with the W_I/W_II approximation.  """

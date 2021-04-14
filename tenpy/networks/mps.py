@@ -3459,7 +3459,7 @@ class MPS:
         if i < 0:
             i += self.L
         if i >= self.L or i < 0:
-            raise ValueError("i = {0:d} out of bounds for finite MPS".format(i))
+            raise KeyError("i = {0:d} out of bounds for finite MPS".format(i))
         return i
 
     def _parse_form(self, form):
@@ -3796,14 +3796,10 @@ class MPSEnvironment:
         The MPS on which the local operator acts.
         Stored in place, without making copies.
         If ``None``, use `bra`.
-    init_LP : ``None`` | :class:`~tenpy.linalg.np_conserved.Array`
-        Initial very left part ``LP``. If ``None``, build trivial one with :meth:`init_LP`.
-    init_RP : ``None`` | :class:`~tenpy.linalg.np_conserved.Array`
-        Initial very right part ``RP``. If ``None``, build trivial one with :meth:`init_RP`.
-    age_LP : int
-        The number of physical sites involved into the contraction yielding `firstLP`.
-    age_RP : int
-        The number of physical sites involved into the contraction yielding `lastRP`.
+    **init_env_data :
+        Further keyword arguments with initializaiton data, as returned by
+        :meth:`get_initialization_data`.
+        See :meth:`initialize_first_LP_last_RP` for details on these parameters.
 
     Attributes
     ----------
@@ -3833,7 +3829,7 @@ class MPSEnvironment:
         ``_RP_age[i]`` stores the number of physical sites invovled into the contraction
         network which yields ``self._RP[i]``.
     """
-    def __init__(self, bra, ket, init_LP=None, init_RP=None, age_LP=0, age_RP=0):
+    def __init__(self, bra, ket, **init_env_data):
         if ket is None:
             ket = bra
         if ket is not bra:
@@ -3842,19 +3838,59 @@ class MPSEnvironment:
         self.ket = ket
         self.dtype = np.find_common_type([bra.dtype, ket.dtype], [])
         self.L = L = lcm(bra.L, ket.L)
-        self._finite = bra.finite
+        self._finite = self.ket.finite  # just for _to_valid_index
         self._LP = [None] * L
         self._RP = [None] * L
         self._LP_age = [None] * L
         self._RP_age = [None] * L
-        self._finite = self.ket.finite  # just for _to_valid_index
-        if init_LP is None:
-            init_LP = self.init_LP(0)
-        self.set_LP(0, init_LP, age=age_LP)
-        if init_RP is None:
-            init_RP = self.init_RP(L - 1)
-        self.set_RP(L - 1, init_RP, age=age_RP)
+        self.init_first_LP_last_RP(**init_env_data)
         self.test_sanity()
+
+    def init_first_LP_last_RP(self,
+                              init_LP=None,
+                              init_RP=None,
+                              age_LP=0,
+                              age_RP=0,
+                              start_env_sites=0):
+        """Reinitial first LP and last RP from the given data.
+
+        Parameters
+        ----------
+        init_LP : ``None`` | :class:`~tenpy.linalg.np_conserved.Array`
+            Initial very left part ``LP``. If ``None``, build one with :meth`init_LP`.
+        init_RP : ``None`` | :class:`~tenpy.linalg.np_conserved.Array`
+            Initial very right part ``RP``. If ``None``, build one with :meth:`init_RP`.
+        age_LP : int
+            The number of physical sites involved into the contraction of `init_LP`.
+        age_RP : int
+            The number of physical sites involved into the contraction of `init_RP`.
+        start_env_sites : int
+            If `init_LP` and `init_RP` are not specified, contract each `start_env_sites` for them.
+        """
+        if init_LP is not None:
+            try:
+                i0 = -start_env_sites
+                init_LP.get_leg('vR').test_contractible(self.ket.get_theta(i0, 1).get_leg('vL'))
+                init_LP.get_leg('vR*').test_equal(self.bra.get_theta(i0, 1).get_leg('vL'))
+            except ValueError:
+                warnings.warn("dropping `init_LP` with incompatible legs")
+                init_LP = None
+        if init_RP is not None:
+            try:
+                j0 = self.L - 1 + start_env_sites
+                init_RP.get_leg('vL').test_contractible(self.ket.get_theta(j0).get_leg('vR'))
+                init_RP.get_leg('vL*').test_equal(self.bra.get_theta(j0).get_leg('vR'))
+            except ValueError:
+                warnings.warn("dropping `init_RP` with incompatible legs")
+                init_RP = None
+        if init_LP is None:
+            init_LP = self.init_LP(0, start_env_sites)
+            age_LP = start_env_sites
+        if init_RP is None:
+            init_RP = self.init_RP(self.L - 1, start_env_sites)
+            age_RP = start_env_sites
+        self.set_LP(0, init_LP, age=age_LP)
+        self.set_RP(self.L - 1, init_RP, age=age_RP)
 
     def test_sanity(self):
         """Sanity check, raises ValueErrors, if something is wrong."""
@@ -3867,42 +3903,56 @@ class MPSEnvironment:
         assert any([LP is not None for LP in self._LP])
         assert any([RP is not None for RP in self._RP])
 
-    def init_LP(self, i):
+    def init_LP(self, i, start_env_sites=0):
         """Build initial left part ``LP``.
+
+        If `bra` and `ket` are the same and in left canonical form, this is the environment
+        you get contracting he overlaps from the left infinity up to bond left of site `i`.
 
         Parameters
         ----------
         i : int
             Build ``LP`` left of site `i`.
+        start_env_sites : int
+            How many sites to contract to converge the `init_LP`; the initial `age_LP`.
 
         Returns
         -------
         init_LP : :class:`~tenpy.linalg.np_conserved.Array`
             Identity contractible with the `vL` leg of ``ket.get_B(i)``, labels ``'vR*', 'vR'``.
         """
-        leg_ket = self.ket.get_B(i, None).get_leg('vL')
-        leg_bra = self.bra.get_B(i, None).get_leg('vL')
+        leg_ket = self.ket.get_B(i - start_env_sites, None).get_leg('vL')
+        leg_bra = self.bra.get_B(i - start_env_sites, None).get_leg('vL')
         leg_ket.test_equal(leg_bra)
         init_LP = npc.diag(1., leg_ket, dtype=self.dtype, labels=['vR*', 'vR'])
+        for j in range(i - start_env_sites, i):
+            init_LP = self._contract_LP(j, init_LP)
         return init_LP
 
-    def init_RP(self, i):
+    def init_RP(self, i, start_env_sites=0):
         """Build initial right part ``RP`` for an MPS/MPOEnvironment.
+
+        If `bra` and `ket` are the same and in right canonical form, this is the environment
+        you get contracting from the right infinity up to bond right of site `i`.
 
         Parameters
         ----------
         i : int
             Build ``RP`` right of site `i`.
+        start_env_sites : int
+            How many sites to contract to converge the `init_RP`; the initial `age_RP`.
 
         Returns
         -------
         init_RP : :class:`~tenpy.linalg.np_conserved.Array`
             Identity contractible with the `vR` leg of ``ket.get_B(i)``, labels ``'vL*', 'vL'``.
         """
-        leg_ket = self.ket.get_B(i, None).get_leg('vR')
-        leg_bra = self.bra.get_B(i, None).get_leg('vR')
+        leg_ket = self.ket.get_B(i + start_env_sites, None).get_leg('vR')
+        leg_bra = self.bra.get_B(i + start_env_sites, None).get_leg('vR')
         leg_ket.test_equal(leg_bra)
         init_RP = npc.diag(1., leg_ket, dtype=self.dtype, labels=['vL*', 'vL'])
+        for j in range(i + start_env_sites, i, -1):
+            init_RP = self._contract_RP(j, init_RP)
         return init_RP
 
     def get_LP(self, i, store=True):
@@ -4161,7 +4211,7 @@ class MPSEnvironment:
         if i < 0:
             i += self.L
         if i >= self.L or i < 0:
-            raise ValueError("i = {0:d} out of bounds for MPSEnvironment".format(i))
+            raise KeyError("i = {0:d} out of bounds for MPSEnvironment".format(i))
         return i
 
 

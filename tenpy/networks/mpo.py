@@ -589,7 +589,7 @@ class MPO:
             # TODO: could sort by charges.
             U.append(W_II)
         Id = [0] * (self.L + 1)
-        return MPO(self.sites, U, self.bc, Id, Id)
+        return MPO(self.sites, U, self.bc, Id, Id, max_range=self.max_range)
 
     def expectation_value(self, psi, tol=1.e-10, max_range=100):
         """Calculate ``<psi|self|psi>/<psi|psi>``.
@@ -620,8 +620,8 @@ class MPO:
             For an infinite MPS: the density per site.
         """
         if psi.finite:
-            return MPOEnvironment(psi, self, psi).full_contraction(0)
-        env = MPOEnvironment(psi, self, psi)
+            return MPOEnvironment(psi, self, psi, start_env_sites=0).full_contraction(0)
+        env = MPOEnvironment(psi, self, psi, start_env_sites=0)
         L = self.L
         LP0 = env.init_LP(0)
         masks_L_no_IdL = []
@@ -821,7 +821,7 @@ class MPO:
         options : dict
             See above.
         """
-        options = asConfig(options, "MPO_apply")
+        options = asConfig(options, "ApplyMPO")
         method = options['compression_method']
         trunc_params = options.subconfig('trunc_params')
         if method == 'SVD':
@@ -1012,7 +1012,7 @@ class MPO:
         if i < 0:
             i += self.L
         if i >= self.L or i < 0:
-            raise ValueError("i = {0:d} out of bounds for finite MPO".format(i))
+            raise KeyError("i = {0:d} out of bounds for finite MPO".format(i))
         return i
 
     @staticmethod
@@ -1716,23 +1716,17 @@ class MPOEnvironment(MPSEnvironment):
         Should have 'IdL' and 'IdR' set on the first and last bond.
     ket : :class:`~tenpy.networks.mpo.MPS`
         The MPS on which `H` acts. May be identical with `bra`.
-    init_LP : ``None`` | :class:`~tenpy.linalg.np_conserved.Array`
-        Initial very left part ``LP``. If ``None``, build trivial one with
-        :meth`init_LP`.
-    init_RP : ``None`` | :class:`~tenpy.linalg.np_conserved.Array`
-        Initial very right part ``RP``. If ``None``, build trivial one with
-        :meth:`init_RP`.
-    age_LP : int
-        The number of physical sites involved into the contraction yielding `firstLP`.
-    age_RP : int
-        The number of physical sites involved into the contraction yielding `lastRP`.
+    **init_env_data :
+        Further keyword arguments with initializaiton data, as returned by
+        :meth:`get_initialization_data`.
+        See :meth:`initialize_first_LP_last_RP` for details on these parameters.
 
     Attributes
     ----------
     H : :class:`~tenpy.networks.mpo.MPO`
         The MPO sandwiched between `bra` and `ket`.
     """
-    def __init__(self, bra, H, ket, init_LP=None, init_RP=None, age_LP=0, age_RP=0):
+    def __init__(self, bra, H, ket, **init_env_data):
         if ket is None:
             ket = bra
         if ket is not bra:
@@ -1747,13 +1741,52 @@ class MPOEnvironment(MPSEnvironment):
         self._RP = [None] * L
         self._LP_age = [None] * L
         self._RP_age = [None] * L
-        if init_LP is None:
-            init_LP = self.init_LP(0)
-        self.set_LP(0, init_LP, age=age_LP)
-        if init_RP is None:
-            init_RP = self.init_RP(L - 1)
-        self.set_RP(L - 1, init_RP, age=age_RP)
+        self.init_first_LP_last_RP(**init_env_data)
         self.test_sanity()
+
+    def init_first_LP_last_RP(self,
+                              init_LP=None,
+                              init_RP=None,
+                              age_LP=0,
+                              age_RP=0,
+                              start_env_sites=None):
+        """Reinitial first LP and last RP from the given data.
+
+        Parameters
+        ----------
+        init_LP : ``None`` | :class:`~tenpy.linalg.np_conserved.Array`
+            Initial very left part ``LP``. If ``None``, build one with :meth`init_LP`.
+        init_RP : ``None`` | :class:`~tenpy.linalg.np_conserved.Array`
+            Initial very right part ``RP``. If ``None``, build one with :meth:`init_RP`.
+        age_LP : int
+            The number of physical sites involved into the contraction of `init_LP`.
+        age_RP : int
+            The number of physical sites involved into the contraction of `init_RP`.
+        start_env_sites : int | None
+            None defaults to 0 for finite MPS, else to min(L, H.max_range).
+        """
+        if start_env_sites is None:
+            start_env_sites = 0 if self._finite else self.H.max_range
+            if start_env_sites is None or start_env_sites > self.L:
+                warnings.warn("reducing default `start_env_sites` to L")
+                start_env_sites = self.L
+        if self._finite and start_env_sites != 0:
+            warnings.warn("setting `start_env_sites` to 0 for finite MPS")
+            start_env_sites = 0
+        if init_LP is not None:
+            try:
+                init_LP.get_leg('wR').test_contractible(self.H.get_W(0).get_leg('wL'))
+            except ValueError:
+                warnings.warn("dropping `init_LP` with incompatible legs")
+                init_LP = None
+        if init_RP is not None:
+            try:
+                j = self.L - 1
+                init_RP.get_leg('wL').test_contractible(self.H.get_W(j).get_leg('wR'))
+            except ValueError:
+                warnings.warn("dropping `init_RP` with incompatible legs")
+                init_RP = None
+        super().init_first_LP_last_RP(init_LP, init_RP, age_LP, age_RP, start_env_sites)
 
     def test_sanity(self):
         """Sanity check, raises ValueErrors, if something is wrong."""
@@ -1765,46 +1798,79 @@ class MPOEnvironment(MPSEnvironment):
         assert any([LP is not None for LP in self._LP])
         assert any([RP is not None for RP in self._RP])
 
-    def init_LP(self, i):
-        """Build initial left part ``LP``.
+    def init_LP(self, i, start_env_sites=0):
+        r"""Build an initial left part ``LP``.
+
+        For `start_env_sites` > 0, make the assumptions that `bra` is the same as `ket`
+        and in canonical form, and that H is a Hamiltonian with the following block-form
+        (up to a permutation of MPO indices; this is the case for any model defined in TeNPy),
+
+        .. math ::
+
+            W = \begin{pmatrix} 1 & C & D  \\
+                                0 & A & B  \\
+                                0 & 0 & 1  \end{pmatrix}
+
+        Given that, we can converge the environment even in the thermodynamic limit:
+        ``LP[IdL, :, :]`` just contains the energy for the left part of the Hamiltonian,
+        contributing just a constant we can ignore (since we only look at relative energies)
+        ``LP[IdR, :, :] = eye(:, :)`` is just the MPS environment.
+        The remaining part is the harder one: we need to converge $C + CA + CAA + CAAA + ... $
+        sandwiched between the MPS. However, H often has finite range,
+        which makes `A` nil-potent, such that we only need to contract the environment a few times
+        from the left.
+
+        .. todo ::
+            Right now, for infinite/long range it just limits the number of iterations.
+            In general, we could calculate the exact $X = C + CA + CAA +...$ with the
+            geometric series by solving the set of linear equation $ X(1-A) = C$ for X,
+            (and analogously $(1-A)X = B$ for the right environment `RP`).
 
         Parameters
         ----------
         i : int
             Build ``LP`` left of site `i`.
+        start_env_sites : int
+            How many sites to contract to converge the `init_LP`; the initial `age_LP`.
 
         Returns
         -------
         init_LP : :class:`~tenpy.linalg.np_conserved.Array`
-            Identity contractible with the `vL` leg of ``.ket.get_B(i)``,
-            multiplied with a unit vector nonzero in ``H.IdL[i]``,
-            with labels ``'vR*', 'wR', 'vR'``.
+            Environment left of site `i` with labels ``'vR*', 'wR', 'vR'``.
         """
-        init_LP = super().init_LP(i)
-        leg_mpo = self.H.get_W(i).get_leg('wL').conj()
-        IdL = self.H.get_IdL(i)
+        i0 = i - start_env_sites
+        IdL = self.H.get_IdL(i0)
+        assert IdL is not None
+        init_LP = super().init_LP(i0, 0)
+        leg_mpo = self.H.get_W(i0).get_leg('wL').conj()
         init_LP = init_LP.add_leg(leg_mpo, IdL, axis=1, label='wR')
+        for j in range(i0, i):
+            init_LP = self._contract_LP(j, init_LP)
         return init_LP
 
-    def init_RP(self, i):
+    def init_RP(self, i, start_env_sites=0):
         """Build initial right part ``RP`` for an MPS/MPOEnvironment.
 
         Parameters
         ----------
         i : int
             Build ``RP`` right of site `i`.
+        start_env_sites : int
+            How many sites to contract to converge the `init_RP`; the initial `age_RP`.
 
         Returns
         -------
         init_RP : :class:`~tenpy.linalg.np_conserved.Array`
-            Identity contractible with the `vR` leg of ``self.get_B(i)``,
-            multiplied with a unit vector nonzero in ``H.IdR[i]``,
-            with labels ``'vL*', 'wL', 'vL'``.
+            Environment right of site `i` with labels ``'vL*', 'wL', 'vL'``.
         """
-        init_RP = super().init_RP(i)
-        leg_mpo = self.H.get_W(i).get_leg('wR').conj()
-        IdR = self.H.get_IdR(i)
+        i0 = i + start_env_sites
+        IdR = self.H.get_IdR(i0)
+        assert IdR is not None
+        init_RP = super().init_RP(i0, 0)
+        leg_mpo = self.H.get_W(i0).get_leg('wR').conj()
         init_RP = init_RP.add_leg(leg_mpo, IdR, axis=1, label='wL')
+        for j in range(i0, i, -1):
+            init_RP = self._contract_RP(j, init_RP)
         return init_RP
 
     def get_LP(self, i, store=True):
