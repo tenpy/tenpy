@@ -823,9 +823,11 @@ class DMRGEngine(Sweep):
         # parameters for lanczos
         p_tol_to_trunc = options.get('P_tol_to_trunc', 0.05)
         if p_tol_to_trunc is not None:
-            p_tol_min = max(1.e-30,
-                            self.trunc_params.silent_get('svd_min', 0.)**2 * p_tol_to_trunc,
-                            self.trunc_params.silent_get('trunc_cut', 0.)**2 * p_tol_to_trunc)
+            svd_min = self.trunc_params.silent_get('svd_min', 0.)
+            svd_min = 0. if svd_min is None else svd_min
+            trunc_cut = self.trunc_params.silent_get('trunc_cut', 0.)
+            trunc_cut = 0. if trunc_cut is None else trunc_cut
+            p_tol_min = max(1.e-30, svd_min**2 * p_tol_to_trunc, trunc_cut**2 * p_tol_to_trunc)
             p_tol_min = options.get('P_tol_min', p_tol_min)
             p_tol_max = options.get('P_tol_max', 1.e-4)
         e_tol_to_trunc = options.get('E_tol_to_trunc', None)
