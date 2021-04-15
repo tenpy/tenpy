@@ -28,10 +28,13 @@ Changed
 - Renamed the `logging_params` to `log_params`.
 - :func:`tenpy.simulations.measurement.correlation_length` now supports a `unit` keyword.
   If it is not given explicitly, a warning is raised.
+- :func:`tenpy.networks.mps.MPS.canonical_form` now supports an argument `envs_to_update` to allow keeping
+  MPS/MPOEnvironments consistent.
 
 Fixed
 ^^^^^
 - Use logging in simulation only after calling :func:`~tenpy.tools.misc.setup_logging`.
 - Missing ``+ h.c.`` in :meth:`tenpy.networks.mpo.MPOEnvironment.full_contraction` when `H.explicit_plus_hc` was True.
   This caused wrong energies being reported during DMRG when `explicit_plus_hc` was used.
-- :issue:`99` and :issue:`113` by allowing to reinitialize the environment from scratch.
+- :issue:`99` and :issue:`113` by allowing to either reinitialize the environment from scratch, 
+  and/or to updating the environments in psi.canonical_form().

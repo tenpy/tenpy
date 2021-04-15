@@ -144,6 +144,10 @@ class Sweep(Algorithm):
         warnings.warn("renamed self.engine_params -> self.options", FutureWarning, stacklevel=2)
         return self.options
 
+    @property
+    def _all_envs(self):
+        return [self.env] + self.ortho_to_envs
+
     def get_resume_data(self):
         data = super().get_resume_data()
         data['init_env_data'] = self.env.get_initialization_data()

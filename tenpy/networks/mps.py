@@ -2636,17 +2636,17 @@ class MPS:
             err[i, 1] = npc.norm(rho_R - rho_R2)
         return err
 
-    def canonical_form(self, renormalize=True):
+    def canonical_form(self, renormalize=True, envs_to_update=None):
         """Bring self into canonical 'B' form, (re-)calculate singular values.
 
         Simply calls :meth:`canonical_form_finite` or :meth:`canonical_form_infinite`.
         """
         if self.finite:
-            return self.canonical_form_finite(renormalize)
+            return self.canonical_form_finite(renormalize, envs_to_update=envs_to_update)
         else:
-            self.canonical_form_infinite(renormalize)
+            return self.canonical_form_infinite(renormalize, envs_to_update=envs_to_update)
 
-    def canonical_form_finite(self, renormalize=True, cutoff=0.):
+    def canonical_form_finite(self, renormalize=True, cutoff=0., envs_to_update=None):
         """Bring a finite (or segment) MPS into canonical form (in place).
 
         If any site is in :attr:`form` ``None``, it does *not* use any of the singular values `S`
@@ -2664,6 +2664,8 @@ class MPS:
             Whether a change in the norm should be discarded or used to update :attr:`norm`.
         cutoff : float | None
             Cutoff of singular values used in the SVDs.
+        envs_to_update : None | list of :class:`MPSEnvironment`
+            Clear the environments; for segment also update the left/rightmost LP/RP.
 
         Returns
         -------
@@ -2716,6 +2718,8 @@ class MPS:
             S /= np.linalg.norm(S)
             self.set_SR(L - 1, S)
             M = U.scale_axis(S, 1).split_legs(0)
+        else:
+            VR_segment = None
         # sweep from right to left, calculating all the singular values
         U, S, V = npc.svd(M.combine_legs(['vR'] + self._p_label, qconj=-1),
                           cutoff=cutoff,
@@ -2737,12 +2741,33 @@ class MPS:
         if self.bc == 'finite':
             assert len(S) == 1
             self._B[0] *= U[0, 0]  # just a trivial phase factor, but better keep it
-        # done. Discard the U for segment bc, although it might be a non-trivial unitary.
-        # and just re-shuffling of the states left for 'segment' bc)
+        # done with getting to canonical form
+        if envs_to_update is not None:
+            VR = VR_segment
+            for env in envs_to_update:
+                update_ket = env.ket is self
+                update_bra = env.bra is self
+                if not (update_ket or update_bra):
+                    raise ValueError("called `psi.canonical_from_finite(..., envs_to_update), "
+                                     "but (one of) the environment doesn't contain that `psi`")
+                env.clear()
+                if self.bc == 'segment':
+                    LP = env.get_LP(0)
+                    if update_ket:
+                        LP = np.tensordot(LP, U, axes=['vR', 'vL'])
+                    if update_bra:
+                        LP = np.tensordot(np.conj(U), LP, axes=['vL*', 'vR*'])
+                    env.set_LP(0, LP, env.get_LP_age(0))
+                    RP = env.get_RP(env.L - 1)
+                    if update_ket:
+                        RP = np.tensordot(VR, RP, axes=['vR', 'vL'])
+                    if update_bra:
+                        RP = np.tensordot(RP, np.conj(VR), axes=['vL*', 'vR'])
+                    env.set_RP(env.L - 1, RP, env.get_RP_age(env.L - 1))
         if self.bc == 'segment':
             return U, VR_segment
 
-    def canonical_form_infinite(self, renormalize=True, tol_xi=1.e6):
+    def canonical_form_infinite(self, renormalize=True, tol_xi=1.e6, envs_to_update=None):
         """Bring an infinite MPS into canonical form (in place).
 
         If any site is in :attr:`form` ``None``, it does *not* use any of the singular values `S`.
@@ -2768,9 +2793,23 @@ class MPS:
         tol_xi : float
             Raise an error if the correlation length is larger than that
             (which indicates a degenerate "cat" state, e.g., for spontaneous symmetry breaking).
+        envs_to_update : None | list
+            Ignored if `None`. A given list may contain :class:`MPSEnvironment` or
+            :class:`~tenpy.networks.mpo.MPOEnvironment` which need to be kept consistent.
+            Each of the
+
+        Returns
+        -------
+        gauge_changes : list
+            Only returned if `envs_to_update` is not None; use `envs_to_update=[]` to return it
+            without updating any environments.
+            Such that ``Zl, Xr = gauge_change[i]`` contains the gauge change on bond (i-1, i),
+            where we updated ``A[i-1] A[i] -> A[i-1] Zl inv(Zl) A[i]`` and
+            ``B[i-1] B[i] -> B[i-1] inv(Xr) Xr B[i]`` for tensors in A/B canonical form.
         """
         assert not self.finite
-        i1 = np.argmin(self.chi)  # start at this bond
+        L = self.L
+        i1 = np.argmin(self.chi) % L  # start at this bond
         if any([(f is None) for f in self.form]):
             # ignore any 'S' and canonical form, just state that we are in 'B' form
             self.form = self._parse_form('B')
@@ -2779,8 +2818,14 @@ class MPS:
             # was in canonical form before; bring back into canonical form
             # -> make sure we don't use multiple S on one bond in our definition of the MPS
             self.convert_form('B')
-        L = self.L
         Wr_list = [None] * L  # right eigenvectors of TM on each bond after ..._correct_right
+
+        if envs_to_update is not None:
+            old_S = self._S[:]  # copy the old singular values
+            gauge_changes = [[] for i in range(L)]
+        else:
+            old_S = None
+            gauge_changes = None
 
         # phase 1: bring bond (i1-1, i1) in canonical form
         # find dominant right eigenvector
@@ -2789,26 +2834,37 @@ class MPS:
         if not renormalize:
             self.norm *= np.sqrt(norm)
         # make Gr diagonal to Wr
-        Wr, Gl = self._canonical_form_correct_right(i1, Gr, return_Gl_guess=True)
+        Wr, Kl, Kr = self._canonical_form_correct_right(i1, Gr)
+        if envs_to_update is not None:
+            gauge_changes[i1].append((Kl, Kr))
+        # guess for Gl
+        Gl = npc.tensordot(Kr.scale_axis(self.get_SL(i1)**2, 1), Kl, axes=['vR', 'vL'])
+        Gl.iset_leg_labels(['vR*', 'vR'])
         # find dominant left eigenvector
         norm, Gl = self._canonical_form_dominant_gram_matrix(i1, True, tol_xi, Gl)
         if abs(1. - norm) > 1.e-13:
-            warnings.warn("Although we renormalized the TransferMatrix, "
-                          "the largest eigenvalue is not 1")  # (this shouldn't happen)
+            logger.warn("Although we renormalized the TransferMatrix, "
+                        "the largest eigenvalue is not 1")  # (this shouldn't happen)
         self._B[i1] /= np.sqrt(norm)  # correct norm again
         if not renormalize:
             self.norm *= np.sqrt(norm)
         # bring bond to canonical form
-        Gl, Wr = self._canonical_form_correct_left(i1, Gl, Wr)
+        Gl, Yl, Yr = self._canonical_form_correct_left(i1, Gl, Wr)
+        Wr = np.ones(Yr.legs[0].ind_len, np.float64)
+        if envs_to_update is not None:
+            gauge_changes[i1].append((Yl, Yr))
         # now the bond (i1-1,i1) is in canonical form
+        Wr_list[i1] = Wr  # diag(Wr) is right eigenvector on bond (i1-1, i1)
 
         # phase 2: sweep from right to left; find other right eigenvectors and make them diagonal
-        Wr_list[i1] = Wr  # diag(Wr) is right eigenvector on bond (i1-1, i1)
         for j1 in range(i1 - 1, i1 - L, -1):
             B1 = self.get_B(j1, 'B')
             axes = [self._p_label + ['vR'], self._get_p_label('*') + ['vR*']]
             Gr = npc.tensordot(B1.scale_axis(Wr, 'vR'), B1.conj(), axes=axes)
-            Wr_list[j1 % L] = Wr = self._canonical_form_correct_right(j1, Gr)
+            Wr, Kl, Kr = self._canonical_form_correct_right(j1, Gr)
+            Wr_list[j1 % L] = Wr
+            if envs_to_update is not None:
+                gauge_changes[j1 % L].append((Kl, Kr))
 
         # phase 3: sweep from left to right; find other left eigenvectors,
         # bring each bond into canonical form
@@ -2820,7 +2876,52 @@ class MPS:
                 npc.tensordot(Gl, B1, axes=['vR', 'vL']),
                 axes=[self._get_p_label('*') + ['vL*'], self._p_label + ['vR*']])
             # axes=[['p*', 'vL*'], ['p', 'vR*']])
-            Gl, Wr = self._canonical_form_correct_left(j1, Gl, Wr_list[j1 % L])
+            Gl, Yl, Yr = self._canonical_form_correct_left(j1, Gl, Wr_list[j1 % L])
+            if envs_to_update is not None:
+                gauge_changes[j1 % L].append((Yl, Yr))
+
+        # finally, update the environments if needed
+        return self._canonical_form_infinite_update_envs(envs_to_update, gauge_changes, old_S, i1)
+
+    def _canonical_form_infinite_update_envs(self, envs_to_update, gauge_changes, old_S, i1):
+        if envs_to_update is None:
+            return None
+        L = self.L
+        for i in range(L):
+            (Kl, Kr), (Yl, Yr) = gauge_changes[i]
+            Xl = npc.tensordot(Kl, Yl, axes=['vR', 'vL'])
+            Xr = npc.tensordot(Yr, Kr, axes=['vR', 'vL'])
+            # we changed B[i-1] B[i] -> B[i-1] Xl Xr B[i+1]
+            # hence we need to multiply
+            # RP[vR,vR*] -> Xr RP Xr.conj().
+            # however, LP contains A tensors only, so we need to account for that with S:
+            # LP[vL*,vL] -> Zl.conj() LP Zl with  Zl = S_old Xl inv(S_new)
+            Zl = Xl.iscale_axis(old_S[i], 'vL').iscale_axis(1. / self.get_SL(i), 'vR')
+            gauge_changes[i] = (Zl, Xr)
+        for env in envs_to_update:
+            update_ket = (self is env.ket)
+            update_bra = (self is env.bra)
+            if not (update_ket or update_bra):
+                raise ValueError("called `psi.canonical_from_infinite(..., envs_to_update), "
+                                 "but (one of) the environment doesn't contain that `psi`")
+            for j1 in range(i1, i1 - env.L, -1):
+                Zl, Xr = gauge_changes[j1 % L]
+                if env.has_LP(j1):
+                    LP = env.get_LP(j1)
+                    if update_ket:
+                        LP = npc.tensordot(LP, Zl, axes=['vR', 'vL'])
+                    if update_bra:
+                        LP = npc.tensordot(Zl.conj(), LP, axes=['vL*', 'vR*'])
+                    env.set_LP(j1, LP, env.get_LP_age(j1))
+                j0 = j1 - 1
+                if env.has_RP(j0):
+                    RP = env.get_RP(j0)
+                    if update_ket:
+                        RP = npc.tensordot(Xr, RP, axes=['vR', 'vL'])
+                    if update_bra:
+                        RP = npc.tensordot(RP, Xr.conj(), axes=['vL*', 'vR*'])
+                    env.set_RP(j0, RP, env.get_RP_age(j0))
+        return gauge_changes
 
     def correlation_length(self, target=1, tol_ev0=1.e-8, charge_sector=0):
         r"""Calculate the correlation length by diagonalizing the transfer matrix.
@@ -2882,10 +2983,8 @@ class MPS:
             assert abs(E0[0]) > abs(E[0]), "dominant eigenvector in zero charge sector?"
             E = np.array([E0[0]] + list(E))
         if abs(E[0] - 1.) > tol_ev0:
-            warnings.warn(
-                "Correlation length: largest eigenvalue not one. "
-                "Not in canonical form/normalized?",
-                stacklevel=2)
+            logger.warn("Correlation length: largest eigenvalue not one. "
+                        "Not in canonical form/normalized?")
         if len(E) < 2:
             return 0.  # only a single eigenvector: zero correlation length
         if target == 1:
@@ -3343,8 +3442,8 @@ class MPS:
         # the resulting vector should be sUs up to a scaling.
         ov, sUs = TM.eigenvectors(num_ev=self._transfermatrix_keep)
         if np.abs(ov[0]) < 0.9:
-            warnings.warn("compute_K: psi is not eigenvector of permutation/translation in y!"
-                          f"expected |o| = 1., got |o| = {abs(ov[0]):.3e}\n")
+            logger.warn("compute_K: psi is not eigenvector of permutation/translation in y!"
+                        f"expected |o| = 1., got |o| = {abs(ov[0]):.3e}\n")
 
         logger.info("compute_K: overlap %.5f, |o| = 1. - %.e5., trunc_err.eps=%.3e", ov[0],
                     1. - np.abs(ov[0]), trunc_err.eps)
@@ -3647,11 +3746,7 @@ class MPS:
             G.iunary_blockwise(np.real)
         return eta, G  # G has legs vL, vL* or vR, vR*
 
-    def _canonical_form_correct_right(self,
-                                      i1,
-                                      Gr,
-                                      return_Gl_guess=False,
-                                      eps=2. * np.finfo(np.double).eps):
+    def _canonical_form_correct_right(self, i1, Gr, eps=2. * np.finfo(np.double).eps):
         """Given the right gram matrix Gr, updated the bond (i0, i1), where i0 = i1 - 1.
 
         Diagonalise Gr = X^H Wr X and update
@@ -3660,7 +3755,6 @@ class MPS:
         If `Wr` has (almost) zero entries, reduce the bond dimension at the given bond.
         Then ``Gr -> Wr``.
         Return Wr normalized to ``sum(Wr) = chi``.
-        If `return_Gl_guess`, return also ``Gl_guess = X S[i1]**2 X^H``.
         """
         Gr.itranspose(['vL', 'vL*'])
         W, XH = npc.eigh(Gr)  # -> XH has legs vL vL* = vL vR
@@ -3681,10 +3775,7 @@ class MPS:
         i0 = i1 - 1
         self.set_B(i0, npc.tensordot(self.get_B(i0), Kl, axes=['vR', 'vL']))
         self.set_B(i1, npc.tensordot(Kr, self.get_B(i1), axes=['vR', 'vL']))
-        if return_Gl_guess:
-            guess = npc.tensordot(Kr.scale_axis(self.get_SL(i1)**2, 1), Kl, axes=['vR', 'vL'])
-            return W, guess.iset_leg_labels(['vR*', 'vR'])
-        return W
+        return W, Kl, Kr
 
     def _canonical_form_correct_left(self, i1, Gl, Wr, eps=2. * np.finfo(np.double).eps):
         """Bring into canonical form on bond (i0, i1) where i0= i1 - 1.
@@ -3726,7 +3817,7 @@ class MPS:
         Gl = npc.tensordot(Yl.conj(), Gl, axes=['vL*', 'vR*'])  # labels 'vR*', 'vR'
         Gl /= npc.trace(Gl)
         # Gl is diag(S**2) up to numerical errors...
-        return Gl, np.ones(Yr.legs[0].ind_len, np.float64)
+        return Gl, Yl, Yr
 
     def _gauge_compatible_vL_vR(self, other):
         """If necessary, gauge total charge of `other` to match the vL, vR legs of self."""
@@ -4016,7 +4107,7 @@ class MPSEnvironment:
         -------
         RP_i : :class:`~tenpy.linalg.np_conserved.Array`
             Contraction of everything left of site `i`,
-            with labels ``'vL*', 'vL'`` for `bra`, `ket`.
+            with labels ``'vL', 'vL*'`` for `ket`, `bra`.
         """
         # find nearest available RP to the right.
         for i0 in range(i, i + self.L):
@@ -4068,6 +4159,21 @@ class MPSEnvironment:
         i = self._to_valid_index(i)
         self._RP[i] = None
         self._RP_age[i] = None
+
+    def clear(self):
+        """Delete all partial contractions except the left-most `LP` and right-most `RP`."""
+        self._LP[1:] = [None] * (self.L - 1)
+        self._LP_age[1:] = [None] * (self.L - 1)
+        self._RP[:-1] = [None] * (self.L - 1)
+        self._RP_age[:-1] = [None] * (self.L - 1)
+
+    def has_LP(self, i):
+        """Return True if `LP` left of site `i` is stored."""
+        return self._LP[self._to_valid_index(i)] is not None
+
+    def has_RP(self, i):
+        """Return True if `RP` right of site `i` is stored."""
+        return self._RP[self._to_valid_index(i)] is not None
 
     def get_initialization_data(self):
         """Return data for (re-)initialization.

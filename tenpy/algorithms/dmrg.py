@@ -728,7 +728,7 @@ class DMRGEngine(Sweep):
             self.DefaultMixer = DensityMatrixMixer
         else:
             self.DefaultMixer = SingleSiteMixer
-
+        self.diag_method = options.get('diag_method', 'default')
         super().__init__(psi, model, options, **kwargs)
 
     @property
@@ -845,13 +845,11 @@ class DMRGEngine(Sweep):
         max_E_err = options.get('max_E_err', 1.e-8)
         max_S_err = options.get('max_S_err', 1.e-5)
         max_seconds = 3600 * options.get('max_hours', 24 * 365)
-        norm_tol = options.get('norm_tol', 1.e-5)
         if not self.finite:
             update_env = options.get('update_env', N_sweeps_check // 2)
-            norm_tol_iter = options.get('norm_tol_iter', 5)
         E_old, S_old = np.nan, np.mean(self.psi.entanglement_entropy())  # initial dummy values
         E, Delta_E, Delta_S = 1., 1., 1.
-        self.diag_method = options.get('diag_method', 'default')
+        self.diag_method = options['diag_method']
 
         self.mixer_activate()
         # loop over sweeps
@@ -954,26 +952,39 @@ class DMRGEngine(Sweep):
 
         # clean up from mixer
         self.mixer_cleanup()
+
+        self._canonicalize(True)
+        logger.info("DMRG finished after %d sweeps, max chi=%d", self.sweeps, max(self.psi.chi))
+        return E, self.psi
+
+    def _canonicalize(self, warn=False):
         # update environment until norm_tol is reached
-        if norm_tol is not None and norm_err > norm_tol:
+        if self.mixer is not None:
+            return
+        norm_err = np.linalg.norm(self.psi.norm_test())
+        norm_tol = self.options.get('norm_tol', 1.e-5)
+        if not self.finite:
+            update_env = self.options['update_env']
+            norm_tol_iter = self.options.get('norm_tol_iter', 5)
+        if norm_tol is None or norm_err < norm_tol:
+            return
+        if warn:
             logger.warn(
                 "final DMRG state not in canonical form up to "
                 "norm_tol=%.2e: norm_err=%.2e", norm_tol, norm_err)
-            if self.finite:
-                self.psi.canonical_form()
+        if self.finite:
+            self.psi.canonical_form(envs_to_update=self._all_envs)
+        else:
+            for _ in range(norm_tol_iter):
+                self.environment_sweeps(update_env)
+                norm_err = np.linalg.norm(self.psi.norm_test())
+                if norm_err <= norm_tol:
+                    break
             else:
-                for _ in range(norm_tol_iter):
-                    self.environment_sweeps(update_env)
-                    norm_err = np.linalg.norm(self.psi.norm_test())
-                    if norm_err <= norm_tol:
-                        break
-                else:
-                    logger.warn(
-                        "norm_err=%.2e still too high after environment_sweeps, "
-                        "call psi.canonical_form()", norm_err)
-                    self.psi.canonical_form()
-        logger.info("DMRG finished after %d sweeps, max chi=%d", self.sweeps, max(self.psi.chi))
-        return E, self.psi
+                logger.warn(
+                    "norm_err=%.2e still too high after environment_sweeps, "
+                    "call psi.canonical_form()", norm_err)
+                self.psi.canonical_form(envs_to_update=self._all_envs)
 
     def reset_stats(self, resume_data=None):
         """Reset the statistics, useful if you want to start a new sweep run.
