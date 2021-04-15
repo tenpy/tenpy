@@ -3867,17 +3867,16 @@ class MPSEnvironment:
         """
         if init_LP is not None:
             try:
-                i0 = -start_env_sites
-                init_LP.get_leg('vR').test_contractible(self.ket.get_theta(i0, 1).get_leg('vL'))
-                init_LP.get_leg('vR*').test_equal(self.bra.get_theta(i0, 1).get_leg('vL'))
+                init_LP.get_leg('vR').test_contractible(self.ket.get_theta(0, 1).get_leg('vL'))
+                init_LP.get_leg('vR*').test_equal(self.bra.get_theta(0, 1).get_leg('vL'))
             except ValueError:
                 logger.warn("dropping `init_LP` with incompatible legs")
                 init_LP = None
         if init_RP is not None:
             try:
-                j0 = self.L - 1 + start_env_sites
-                init_RP.get_leg('vL').test_contractible(self.ket.get_theta(j0).get_leg('vR'))
-                init_RP.get_leg('vL*').test_equal(self.bra.get_theta(j0).get_leg('vR'))
+                j = self.L - 1
+                init_RP.get_leg('vL').test_contractible(self.ket.get_theta(j, 1).get_leg('vR'))
+                init_RP.get_leg('vL*').test_equal(self.bra.get_theta(j, 1).get_leg('vR'))
             except ValueError:
                 logger.warn("dropping `init_RP` with incompatible legs")
                 init_RP = None
