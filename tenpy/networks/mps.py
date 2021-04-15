@@ -3668,10 +3668,9 @@ class MPS:
             W = -W  # should actually never happen:  we initially normalize tr(Gr) = chi > 0
         # discard small values on order of machine precision
         proj = (W > eps)
-        if np.count_nonzero(proj) < len(W):
+        if np.count_nonzero(proj) < len(W) * 0.9:
             # project into non-degenerate subspace, reducing the bond dimensions!
-            warnings.warn("canonical_form_infinite: project to smaller bond dimension",
-                          stacklevel=3)
+            logger.warn("canonical_form_infinite: project to significantly smaller bond dimension")
             XH.iproject(proj, axes=1)
             W = W[proj]
         norm = len(W) / np.sum(W)
@@ -3710,10 +3709,9 @@ class MPS:
         s_norm = 1.
         # discard small values on order of machine precision
         proj = (S2 > eps)
-        if np.count_nonzero(proj) < len(S2):
+        if np.count_nonzero(proj) < len(S2) * 0.9:
             # project into non-degenerate subspace, reducing the bond dimensions!
-            warnings.warn("canonical_form_infinite: project to smaller bond dimension",
-                          stacklevel=2)
+            logger.warn("canonical_form_infinite: project to significantly smaller bond dimension")
             YH.iproject(proj, axes=1)
             S2 = S2[proj]
             s_norm = np.sqrt(np.sum(S2))
@@ -3873,7 +3871,7 @@ class MPSEnvironment:
                 init_LP.get_leg('vR').test_contractible(self.ket.get_theta(i0, 1).get_leg('vL'))
                 init_LP.get_leg('vR*').test_equal(self.bra.get_theta(i0, 1).get_leg('vL'))
             except ValueError:
-                warnings.warn("dropping `init_LP` with incompatible legs")
+                logger.warn("dropping `init_LP` with incompatible legs")
                 init_LP = None
         if init_RP is not None:
             try:
@@ -3881,7 +3879,7 @@ class MPSEnvironment:
                 init_RP.get_leg('vL').test_contractible(self.ket.get_theta(j0).get_leg('vR'))
                 init_RP.get_leg('vL*').test_equal(self.bra.get_theta(j0).get_leg('vR'))
             except ValueError:
-                warnings.warn("dropping `init_RP` with incompatible legs")
+                logger.warn("dropping `init_RP` with incompatible legs")
                 init_RP = None
         if init_LP is None:
             init_LP = self.init_LP(0, start_env_sites)
