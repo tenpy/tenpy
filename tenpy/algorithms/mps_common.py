@@ -148,12 +148,13 @@ class Sweep(Algorithm):
     def _all_envs(self):
         return [self.env] + self.ortho_to_envs
 
-    def get_resume_data(self):
-        data = super().get_resume_data()
+    def get_resume_data(self, sequential_simulations=False):
+        data = super().get_resume_data(sequential_simulations)
         data['init_env_data'] = self.env.get_initialization_data()
-        data['sweeps'] = self.sweeps
-        if len(self.ortho_to_envs) > 0:
-            data['orthogonal_to'] = [e.ket for e in self.ortho_to_envs]
+        if not sequential_simulations:
+            data['sweeps'] = self.sweeps
+            if len(self.ortho_to_envs) > 0:
+                data['orthogonal_to'] = [e.ket for e in self.ortho_to_envs]
         return data
 
     @property

@@ -30,6 +30,7 @@ Changed
   If it is not given explicitly, a warning is raised.
 - :func:`tenpy.networks.mps.MPS.canonical_form` now supports an argument `envs_to_update` to allow keeping
   MPS/MPOEnvironments consistent.
+- keyword argument `sequential_simulations` for :meth:`tenpy.algorithms.algorithm.Algorithm.get_resume_data`.
 
 Fixed
 ^^^^^

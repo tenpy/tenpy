@@ -81,7 +81,7 @@ class Algorithm:
         """
         self.run()
 
-    def get_resume_data(self):
+    def get_resume_data(self, sequential_simulations=False):
         """Return necessary data to resume a :meth:`run` interrupted at a checkpoint.
 
         At a :attr:`checkpoint`, you can save :attr:`psi`, :attr:`model` and :attr:`options`
@@ -92,6 +92,14 @@ class Algorithm:
             eng.resume_run()
 
         An algorithm which doesn't support this should override `resume_run` to raise an Error.
+
+        Parameters
+        ----------
+        sequential_simulations : bool
+            If True, return only the data for re-initializing a sequential simulation run,
+            where we "adiabatically" follow the evolution of a ground state (for variational
+            algorithms), or do series of quenches (for time evolution algorithms);
+            see :func:`~tenpy.simulations.simulation.run_seq_simulations`.
 
         Returns
         -------
@@ -149,8 +157,8 @@ class TimeEvolutionAlgorithm(Algorithm):
         if resume_data is not None:
             self.evolved_time = resume_data['evolved_time']
 
-    def get_resume_data(self):
-        data = super().get_resume_data()
+    def get_resume_data(self, sequential_simulations=False):
+        data = super().get_resume_data(sequential_simulations)
         data['evolved_time'] = self.evolved_time
         return data
 

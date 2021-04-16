@@ -283,7 +283,7 @@ class Simulation:
             self.psi = self.results['psi']
         self.init_state()  # does (almost) nothing if self.psi is already initialized
 
-        self.init_algorithm()  # automatically reads out results['resume_data']
+        self.init_algorithm()  # automatically reads out and del's ``self.results['resume_data']``
 
         # the relevant part from init_measurements(), but don't make a measurement
         self._connect_measurements()
@@ -848,7 +848,7 @@ def resume_from_checkpoint(*,
     if 'sequential' in options:
         sequential = options['sequential']
         sequential['index'] += 1
-        resume_data = results.get('resume_data', {})
+        resume_data = sim.get_resume_data(sequential_simulations=True)
         resume_data['psi'] = sim.psi
         del sim  # free memory
         return run_seq_simulations(sequential,
@@ -957,11 +957,12 @@ def run_seq_simulations(sequential,
         simulation_class_kwargs = {}
 
     # try to create varying output filenames
-
-    if simulation_params.get('output_filename', True) is not None:  # do we save to file?
+    # do we save to file at all?
+    if simulation_params.get('output_filename', None) is not None or \
+            simulation_params.get('output_filename_params', None) is not None:
         if 'output_filename' not in recursive_keys and 'directory' not in recursive_keys:
             # need to update the output_filename for each simulation
-            output_filename_params = simulation_params.setdefault('output_filename_params', {})
+            output_filename_params = simulation_params.get('output_filename_params', {})
             output_filename = simulation_params.get('output_filename', None)
             if output_filename is not None:
                 output_filename = os.fspath(output_filename)
@@ -974,8 +975,7 @@ def run_seq_simulations(sequential,
                 if k not in parts and v:
                     parts[k] = v
             simulation_params['output_filename_params'] = output_filename_params
-    else:
-        # we don't save results to files
+    else:  # we don't save results to files
         if not collect_results_in_memory:
             raise ValueError("Refuse to run without producing output")
     if collect_results_in_memory:
@@ -1008,7 +1008,7 @@ def run_seq_simulations(sequential,
         if collect_results_in_memory:
             all_results.append(results)
         # save results for the next simulation
-        resume_data = results['resume_data']
+        resume_data = sim.engine.get_resume_data(sequential_simulations=True)
         resume_data['psi'] = sim.psi
         del sim  # but free memory to avoid too many copies (e.g. the whole environment)
         if index + 1 < N_sims:

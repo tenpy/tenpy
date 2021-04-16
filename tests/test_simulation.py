@@ -37,8 +37,8 @@ class DummyAlgorithm(Algorithm):
         self.psi.dummy_counter += 1
         return None, self.psi
 
-    def get_resume_data(self):
-        data = super().get_resume_data()
+    def get_resume_data(self, sequential_simulation=False):
+        data = super().get_resume_data(sequential_simulation=False)
         data['init_env_data'] = self.env.get_initialization_data()
         return data
 
