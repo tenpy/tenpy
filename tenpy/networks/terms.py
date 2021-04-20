@@ -992,15 +992,34 @@ class MultiCouplingTerms(CouplingTerms):
         return strength, ijkl, ops, new_op_str
 
     def max_range(self):
-        #return NotImplementedError
         """Determine the maximal range in :attr:`coupling_terms`.
         Returns
         -------
         max_range : int
             The maximum of ``j - i`` for the `i`, `j` occuring in a term of :attr:`coupling_terms`.
         """
-        d0L, d0R = self.coupling_terms
-        return max(d0R.keys())-min(d0L.keys())
+        dL = self._max_range(self.coupling_terms[0], None, {})
+        dR = self._max_range(self.coupling_terms[1], None, {})
+        assert sorted(list(dL.keys())) == sorted(list(dR.keys()))
+        ranges = [dR[i] - dL[i] for i in dL.keys()]
+        return max(ranges)
+    
+    def _max_range(self, d0, i_idx=None, dict_i={}):
+        #recursive funvtion to find max_range
+        #dict_i[counter] = i (most outer index in coupling_terms left or right)
+        if i_idx is None:
+            for i, d1 in d0.items():
+                dict_i = self._max_range(d1, i, dict_i)
+        else:
+            for key, d2 in d0.items():
+                for j, d3 in d2.items():
+                    if isinstance(d3, dict):
+                        dict_i = self._max_range(d3, i_idx, dict_i)
+                    else:
+                        #j is counter
+                        dict_i[j] = i_idx
+
+        return dict_i
     
     def add_to_graph(self, graph):
         """Add terms from :attr:`coupling_terms` to an MPOGraph.
@@ -1061,10 +1080,60 @@ class MultiCouplingTerms(CouplingTerms):
                             label_3 = graph.add_string(switchLR+1, _i, label, op_string_ij)
                             graph.add(switchLR+1, label_2, label_3, op_string_ij, strength, skip_existing=False)
         
-    def remove_zeros(self, tol_zero=1.e-15, _d0=None):
-        #not implemented yet
-        return
-        #raise NotImplementedError
+    def remove_zeros(self, tol_zero=1.e-15):
+        """Remove entries close to 0 from :attr:`coupling_terms`.
+        Parameters
+        ----------
+        tol_zero : float
+            Entries in :attr:`coupling_terms` with `strength` < `tol_zero` are considered to be
+            zero and removed.
+        """
+        del_list = self._remove_zeros_left(tol_zero)
+        self._remove_zeros_right(del_list)
+    
+    def _remove_zeros_left(self, tol_zero, _d0=None, del_list=[]):
+        if _d0 is None:
+            _d0 = self.coupling_terms[0]
+            for i, d1 in list(_d0.items()):
+                del_list = self._remove_zeros_left(tol_zero, d1, del_list)
+                if len(d1) == 0:
+                    del _d0[i]
+        else:
+            for key, d2 in list(_d0.items()):
+                for j, d3 in list(d2.items()):
+                    if isinstance(d3, dict):
+                        del_list = self._remove_zeros_left(tol_zero, d3, del_list)
+                        if len(d3) == 0:
+                            del d2[j]
+                    else:
+                        #d3 is strength
+                        if abs(d3) < tol_zero:
+                            del d2[j]
+                            del_list.append(j) #delete coupling later in right dictionary
+                if len(d2) == 0:
+                    del _d0[key]
+        return del_list
+    
+    def _remove_zeros_right(self, del_list, _d0=None):
+        if _d0 is None:
+            _d0 = self.coupling_terms[1]
+            for i, d1 in list(_d0.items()):
+                self._remove_zeros_right(del_list, d1)
+                if len(d1) == 0:
+                    del _d0[i]
+        else:
+            for key, d2 in list(_d0.items()):
+                for j, d3 in list(d2.items()):
+                    if isinstance(d3, dict):
+                        self._remove_zeros_right(del_list, d3)
+                        if len(d3) == 0:
+                            del d2[j]
+                    else:
+                        #check if coupling is in delete list
+                        if j in del_list:
+                            del d2[j]
+                if len(d2) == 0:
+                    del _d0[key]
 
     def to_TermList(self):
         raise NotImplementedError
@@ -1127,23 +1196,24 @@ class MultiCouplingTerms(CouplingTerms):
                     else:  #exit recursion
                         self_d1[new_counter[j]] = other_d1[j] # = switchLR
 
-    def _test_terms(self, sites, d0=None):
-        raise NotImplementedError
+    def _test_terms(self, sites):
+        self._test_terms_recursive(sites, self.coupling_terms[0]) #test left dictionary
+        self._test_terms_recursive(sites, self.coupling_terms[1]) #test right dictionary
+                        
+    def _test_terms_recursive(self, sites, d0, i0=None):
         N_sites = len(sites)
-        if d0 is None:
-            d0 = self.coupling_terms
-        for i, d1 in d0.items():
-            site_i = sites[i % N_sites]
-            for key, d2 in d1.items():
-                if isinstance(key, tuple):  # further couplings
-                    op_i, opstring_ij = key
-                    if not site_i.valid_opname(op_i):
+        if i0 is None: #begin recursion
+            for i, d1 in d0.items():
+                self._test_terms_recursive(sites, d1, i)
+        else:
+            site_i = sites[i0 % N_sites]
+            for key, d2 in d0.items():
+                op_i, opstring_ij = key
+                if not site_i.valid_opname(op_i):
                         raise ValueError("Operator {op!r} not in site".format(op=op_i))
-                    self._test_terms(sites, d2)  # recursive!
-                else:  # last term of the coupling
-                    op_i = key
-                    if not site_i.valid_opname(op_i):
-                        raise ValueError("Operator {op!r} not in site".format(op=op_i))
+                for j, d3 in d2.items():
+                    if isinstance(d3, dict):
+                        self._test_terms_recursive(sites, d3, j)
 
 
 class ExponentiallyDecayingTerms(Hdf5Exportable):
