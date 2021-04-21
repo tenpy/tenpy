@@ -859,9 +859,9 @@ class MultiCouplingTerms(CouplingTerms):
     def __init__(self, L):
         assert L > 0
         self.L = L
-        self.coupling_terms = (dict(),dict()) #left and right dictionary
-        self.counter = -1 #counts the number of couplings, use negative numbers to avoid confusion with site numbering
-        
+        self.coupling_terms = (dict(), dict())  #left and right dictionary
+        self.counter = -1  #counts the number of couplings, use negative numbers to avoid confusion with site numbering
+
     def add_multi_coupling_term(self, strength, ijkl, ops_ijkl, op_string="Id", switchLR=None):
         """Add a multi-site coupling term.
         Parameters
@@ -893,26 +893,26 @@ class MultiCouplingTerms(CouplingTerms):
             if not i < j:
                 raise ValueError("Need i < j < k < ...")
         if switchLR is None:
-            switchLR = (ijkl[0]+ijkl[-1])//2
+            switchLR = (ijkl[0] + ijkl[-1]) // 2
         assert switchLR < ijkl[-1]
         # create nested structures from the left and right
         # left = {ijkl[0]: {(ops_ijkl[0], op_string[0]):
         #            {ijkl[1]: {(ops_ijkl[1], op_string[1]):
         #                      ...
-        #                          {ijkl[n]: {(ops_ijkl[n],  op_string[n]): 
+        #                          {ijkl[n]: {(ops_ijkl[n],  op_string[n]):
         #                                            {counter: strength}}}
         #            }         }
         # }         }
         # right = {ijkl[-1]: {(ops_ijkl[-1], op_string[-1]):
         #            {ijkl[-2]: {(ops_ijkl[-2], op_string[-2]):
         #                       ...
-        #                           {ijkl[m]: {(ops_ijkl[m],  op_string[m]): 
+        #                           {ijkl[m]: {(ops_ijkl[m],  op_string[m]):
         #                                             {counter: switchLR}}}
         #            }         }
         # }         }
         #n is the last index such that ijkl[n] <= switchLR.
         #m is the first index such that ijkl[m] > switchLR
-        
+
         d0L, d0R = self.coupling_terms
         #add left terms
         for i, op, op_str in zip(ijkl, ops_ijkl, op_string):
@@ -926,11 +926,11 @@ class MultiCouplingTerms(CouplingTerms):
             if i > switchLR:
                 d1R = d0R.setdefault(i, dict())
                 d0R = d1R.setdefault((op, op_str), dict())
-                
+
         if switchLR < ijkl[-1]:
             d0R[self.counter] = switchLR
         self.counter -= 1
-        
+
     def multi_coupling_term_handle_JW(self, strength, term, sites, op_string=None):
         """Helping function to call before :meth:`add_multi_coupling_term`.
         Handle/figure out Jordan-Wigner strings if needed.
@@ -1010,9 +1010,9 @@ class MultiCouplingTerms(CouplingTerms):
         assert sorted(list(dL.keys())) == sorted(list(dR.keys()))
         ranges = [dR[i] - dL[i] for i in dL.keys()]
         return max(ranges)
-    
+
     def _max_range(self, d0, i_idx=None, dict_i={}):
-        #recursive funvtion to find max_range
+        #recursive function to find max_range
         #dict_i[counter] = i (most outer index in coupling_terms left or right)
         if i_idx is None:
             for i, d1 in d0.items():
@@ -1027,7 +1027,7 @@ class MultiCouplingTerms(CouplingTerms):
                         dict_i[j] = i_idx
 
         return dict_i
-    
+
     def add_to_graph(self, graph):
         """Add terms from :attr:`coupling_terms` to an MPOGraph.
         Parameters
@@ -1036,7 +1036,7 @@ class MultiCouplingTerms(CouplingTerms):
             The graph into which the terms from :attr:`coupling_terms` should be added.
         """
         assert self.L == graph.L
-        connect = self._add_from_left(graph) #returns a dictionary to connect left and right graph
+        connect = self._add_from_left(graph)  #returns a dictionary to connect left and right graph
         self._add_from_right(graph, connect)
 
     def _add_from_left(self, graph, _i=None, _d1=None, _label_left=None, connect={}):
@@ -1075,18 +1075,30 @@ class MultiCouplingTerms(CouplingTerms):
                         graph.add(_i, label, _label_right, op_i, 1., skip_existing=True)
                         label_j = graph.add_string(j, _i, label, op_string_ij)
                         self._add_from_right(graph, connect, j, d3, label_j)
-                    else: #exit recursion
+                    else:  #exit recursion
                         strength, label_left = connect[j]
-                        switchLR = d3 #from the construction of the coupling_terms
-                        if _i == switchLR+1:
-                            label_2 = graph.add_string(label_left[-3], _i, label_left, op_string_ij)
-                            graph.add(_i, label_2, _label_right, op_i, strength, skip_existing=False)
+                        switchLR = d3  #from the construction of the coupling_terms
+                        if _i == switchLR + 1:
+                            label_2 = graph.add_string(label_left[-3], _i, label_left,
+                                                       op_string_ij)
+                            graph.add(_i,
+                                      label_2,
+                                      _label_right,
+                                      op_i,
+                                      strength,
+                                      skip_existing=False)
                         else:
                             graph.add(_i, label, _label_right, op_i, 1., skip_existing=True)
-                            label_2 = graph.add_string(label_left[-3], switchLR+1, label_left, op_string_ij)
-                            label_3 = graph.add_string(switchLR+1, _i, label, op_string_ij)
-                            graph.add(switchLR+1, label_2, label_3, op_string_ij, strength, skip_existing=False)
-        
+                            label_2 = graph.add_string(label_left[-3], switchLR + 1, label_left,
+                                                       op_string_ij)
+                            label_3 = graph.add_string(switchLR + 1, _i, label, op_string_ij)
+                            graph.add(switchLR + 1,
+                                      label_2,
+                                      label_3,
+                                      op_string_ij,
+                                      strength,
+                                      skip_existing=False)
+
     def remove_zeros(self, tol_zero=1.e-15):
         """Remove entries close to 0 from :attr:`coupling_terms`.
         Parameters
@@ -1097,7 +1109,7 @@ class MultiCouplingTerms(CouplingTerms):
         """
         del_list = self._remove_zeros_left(tol_zero)
         self._remove_zeros_right(del_list)
-    
+
     def _remove_zeros_left(self, tol_zero, _d0=None, del_list=[]):
         if _d0 is None:
             _d0 = self.coupling_terms[0]
@@ -1116,11 +1128,11 @@ class MultiCouplingTerms(CouplingTerms):
                         #d3 is strength
                         if abs(d3) < tol_zero:
                             del d2[j]
-                            del_list.append(j) #delete coupling later in right dictionary
+                            del_list.append(j)  #delete coupling later in right dictionary
                 if len(d2) == 0:
                     del _d0[key]
         return del_list
-    
+
     def _remove_zeros_right(self, del_list, _d0=None):
         if _d0 is None:
             _d0 = self.coupling_terms[1]
@@ -1143,7 +1155,36 @@ class MultiCouplingTerms(CouplingTerms):
                     del _d0[key]
 
     def to_TermList(self):
-        raise NotImplementedError
+        """Convert :attr:`coupling_terms` into a :class:`TermList`.
+        Returns
+        -------
+        term_list : :class:`TermList`
+            Representation of the terms as a list of terms.
+        """
+        dL = self._to_TermList(self.coupling_terms[0], None, None, {})  #left dictionary of lists
+        dR = self._to_TermList(self.coupling_terms[1], None, None, {})  #right dictionary of lists
+        assert sorted(list(dL.keys())) == sorted(list(dR.keys()))
+        terms = [dL[i][0] + dR[i][0][::-1] for i in reversed(sorted(list(dL.keys())))]
+        strength = [dL[i][1] for i in reversed(sorted(list(dL.keys())))]
+        return TermList(terms, strength)
+
+    def _to_TermList(self, d0, term0=None, i0=None, term_dict={}):
+        #recursive function to find TermList
+        #term_dict[counter] = ([('A',i) ...], strength[i])
+        if term0 is None:
+            for i, d1 in d0.items():
+                term_dict = self._to_TermList(d1, [], i, term_dict)
+        else:
+            for key, d2 in d0.items():
+                opname_i, op_str = key
+                term1 = term0 + [(opname_i, i0)]
+                for j, d3 in d2.items():
+                    if isinstance(d3, dict):
+                        term_dict = self._to_TermList(d3, term1, j, term_dict)
+                    else:
+                        #j is counter, d3 is strength
+                        term_dict[j] = (term1, d3)
+        return term_dict
 
     def __iadd__(self, other):
         if not isinstance(other, CouplingTerms):
@@ -1156,21 +1197,18 @@ class MultiCouplingTerms(CouplingTerms):
                 for op_i, d1 in d0.items():
                     for j, d2 in d1.items():
                         for op_j, strength in d2.items():
-                            ijkl = [i,j]
+                            ijkl = [i, j]
                             ops_ijkl = [op_i[0], op_j]
                             self.add_multi_coupling_term(strength, ijkl, ops_ijkl, op_i[1])
-        else: # add multi coupling to the left and right dictionaries  
+        else:  # add multi coupling to the left and right dictionaries
             nc = self._iadd_multi_left(self.coupling_terms[0], other.coupling_terms[0])
             self._iadd_multi_right(self.coupling_terms[1], other.coupling_terms[1], nc)
         return self
 
-    def _to_TermList(self, terms, strength, term0, d0):
-        raise NotImplementedError
-        
     def _iadd_multi_left(self, self_d0, other_d0, new_counter=None):
         #add terms in the left dictionary
-        if new_counter is None: #begin recursion
-            new_counter = {} #new_counter[other_counter] = new counter in self
+        if new_counter is None:  #begin recursion
+            new_counter = {}  #new_counter[other_counter] = new counter in self
             for i, other_d1 in other_d0.items():
                 self_d1 = self_d0.setdefault(i, dict())
                 new_counter = self._iadd_multi_left(self_d1, other_d1, new_counter)
@@ -1180,16 +1218,17 @@ class MultiCouplingTerms(CouplingTerms):
                 for j, other_d2 in other_d1.items():
                     if isinstance(other_d2, dict):  # further nesting
                         self_d2 = self_d1.setdefault(j, dict())
-                        new_counter = self._iadd_multi_left(self_d2, other_d2, new_counter)  #recursive
+                        new_counter = self._iadd_multi_left(self_d2, other_d2,
+                                                            new_counter)  #recursive
                     else:  #exit recurison
-                        self_d1[self.counter] = other_d1[j] # = strength
+                        self_d1[self.counter] = other_d1[j]  # = strength
                         new_counter[j] = self.counter
                         self.counter -= 1
         return new_counter
-    
+
     def _iadd_multi_right(self, self_d0, other_d0, new_counter, recursion=False):
         #add terms in the right dictionary
-        if not recursion: #begin recursion
+        if not recursion:  #begin recursion
             for i, other_d1 in other_d0.items():
                 self_d1 = self_d0.setdefault(i, dict())
                 self._iadd_multi_right(self_d1, other_d1, new_counter, True)
@@ -1201,15 +1240,15 @@ class MultiCouplingTerms(CouplingTerms):
                         self_d2 = self_d1.setdefault(j, dict())
                         self._iadd_multi_right(self_d2, other_d2, new_counter, True)  #recursive
                     else:  #exit recursion
-                        self_d1[new_counter[j]] = other_d1[j] # = switchLR
+                        self_d1[new_counter[j]] = other_d1[j]  # = switchLR
 
     def _test_terms(self, sites):
-        self._test_terms_recursive(sites, self.coupling_terms[0]) #test left dictionary
-        self._test_terms_recursive(sites, self.coupling_terms[1]) #test right dictionary
-                        
+        self._test_terms_recursive(sites, self.coupling_terms[0])  #test left dictionary
+        self._test_terms_recursive(sites, self.coupling_terms[1])  #test right dictionary
+
     def _test_terms_recursive(self, sites, d0, i0=None):
         N_sites = len(sites)
-        if i0 is None: #begin recursion
+        if i0 is None:  #begin recursion
             for i, d1 in d0.items():
                 self._test_terms_recursive(sites, d1, i)
         else:
@@ -1217,7 +1256,7 @@ class MultiCouplingTerms(CouplingTerms):
             for key, d2 in d0.items():
                 op_i, opstring_ij = key
                 if not site_i.valid_opname(op_i):
-                        raise ValueError("Operator {op!r} not in site".format(op=op_i))
+                    raise ValueError("Operator {op!r} not in site".format(op=op_i))
                 for j, d3 in d2.items():
                     if isinstance(d3, dict):
                         self._test_terms_recursive(sites, d3, j)
