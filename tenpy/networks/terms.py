@@ -829,24 +829,28 @@ class MultiCouplingTerms(CouplingTerms):
     L : int
         Number of sites.
     counter: int
-        Counts the number of couplings, start with L to avoid confusion with site numbering.
+        Counts the number of couplings, use negative numbers to avoid confusion with site numbering.
     coupling_terms : dict of dict
         Nested dictionaries of the following form for left and right::
             
         left = {ijkl[0]: {(ops_ijkl[0], op_string[0]):
                     {ijkl[1]: {(ops_ijkl[1], op_string[1]):
                               ...
-                                  {ijkl[switchLR]: {(ops_ijkl[switchLR],  op_string[switchLR]): 
+                                  {ijkl[n]: {(ops_ijkl[n],  op_string[n]): 
                                                     {counter: strength}}}
                     }         }
          }         }
          right = {ijkl[-1]: {(ops_ijkl[-1], op_string[-1]):
                     {ijkl[-2]: {(ops_ijkl[-2], op_string[-2]):
                                ...
-                                   {ijkl[switchLR+1]: {(ops_ijkl[switchLR+1],  op_string[switchLR+1]): 
+                                   {ijkl[m]: {(ops_ijkl[m],  op_string[m]): 
                                                      {counter: switchLR}}}
                     }         }
          }         }
+        switchLR indicates the site where we switch from building the coupling from the left to building the
+        coupling from the right.
+        n is the last index such that ijkl[n] <= switchLR.
+        m is the first index such that ijkl[m] > switchLR.
         For a M-site coupling, this involves a nesting depth of ``2*M`` dictionaries.
         Note that always ``i < j < k < ... < l``, but entries with ``j,k,l >= L``
         are allowed for the case of ``bc_MPS == 'infinite'``, when they indicate couplings
@@ -856,7 +860,7 @@ class MultiCouplingTerms(CouplingTerms):
         assert L > 0
         self.L = L
         self.coupling_terms = (dict(),dict()) #left and right dictionary
-        self.counter = L #counts the number of couplings, start with L to avoid confusion with site numbering
+        self.counter = -1 #counts the number of couplings, use negative numbers to avoid confusion with site numbering
         
     def add_multi_coupling_term(self, strength, ijkl, ops_ijkl, op_string="Id", switchLR=None):
         """Add a multi-site coupling term.
@@ -894,18 +898,21 @@ class MultiCouplingTerms(CouplingTerms):
         # create nested structures from the left and right
         # left = {ijkl[0]: {(ops_ijkl[0], op_string[0]):
         #            {ijkl[1]: {(ops_ijkl[1], op_string[1]):
-        #                       ...
-        #                           {ijkl[switchLR]: {(ops_ijkl[switchLR],  op_string[switchLR]): 
-        #                                             {counter: strength}}
+        #                      ...
+        #                          {ijkl[n]: {(ops_ijkl[n],  op_string[n]): 
+        #                                            {counter: strength}}}
         #            }         }
         # }         }
         # right = {ijkl[-1]: {(ops_ijkl[-1], op_string[-1]):
         #            {ijkl[-2]: {(ops_ijkl[-2], op_string[-2]):
         #                       ...
-        #                           {ijkl[switchLR+1]: {(ops_ijkl[switchLR+1],  op_string[switchLR+1]): 
-        #                                             {counter: switchLR}}
+        #                           {ijkl[m]: {(ops_ijkl[m],  op_string[m]): 
+        #                                             {counter: switchLR}}}
         #            }         }
         # }         }
+        #n is the last index such that ijkl[n] <= switchLR.
+        #m is the first index such that ijkl[m] > switchLR
+        
         d0L, d0R = self.coupling_terms
         #add left terms
         for i, op, op_str in zip(ijkl, ops_ijkl, op_string):
@@ -922,7 +929,7 @@ class MultiCouplingTerms(CouplingTerms):
                 
         if switchLR < ijkl[-1]:
             d0R[self.counter] = switchLR
-        self.counter += 1
+        self.counter -= 1
         
     def multi_coupling_term_handle_JW(self, strength, term, sites, op_string=None):
         """Helping function to call before :meth:`add_multi_coupling_term`.
@@ -1177,7 +1184,7 @@ class MultiCouplingTerms(CouplingTerms):
                     else:  #exit recurison
                         self_d1[self.counter] = other_d1[j] # = strength
                         new_counter[j] = self.counter
-                        self.counter += 1
+                        self.counter -= 1
         return new_counter
     
     def _iadd_multi_right(self, self_d0, other_d0, new_counter, recursion=False):
