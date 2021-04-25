@@ -30,7 +30,7 @@ logger = logging.getLogger(__name__)
 
 from ..linalg import np_conserved as npc
 from .truncation import svd_theta, TruncationError
-from ..networks.mps import MPSEnvironment
+from ..networks.mps import MPSEnvironment, MPS
 from ..networks.mpo import MPOEnvironment
 from ..linalg.sparse import NpcLinearOperator, SumNpcLinearOperator, OrthogonalNpcLinearOperator
 from .algorithm import Algorithm
@@ -62,7 +62,7 @@ class Sweep(Algorithm):
         By default (``None``) ignored. If a `dict`, it should contain the data returned by
         :meth:`get_resume_data` when intending to continue/resume an interrupted run,
         in particular `'init_env_data'`.
-    orthogonal_to : None | list of :class:`~tenpy.networks.mps.MPS`
+    orthogonal_to : None | list of :class:`~tenpy.networks.mps.MPS` | list of dict
         States to orthogonalize against, see :meth:`init_env`.
 
     Options
@@ -183,14 +183,18 @@ class Sweep(Algorithm):
             If ``None``, keep the model used before.
         resume_data : None | dict
             Given when resuming a simulation, as returned by :meth:`get_resume_data`.
-        orthogonal_to : None | list of :class:`~tenpy.networks.mps.MPS`
+        orthogonal_to : None | list of :class:`~tenpy.networks.mps.MPS` | list of dict
             List of other matrix product states to orthogonalize against.
+            Instead of just the state, you can specify a dict with the state as `ket`
+            and further keyword arguments for initializing the
+            :class:`~tenpy.networks.mps.MPSEnvironment`; the :attr:`psi` to be optimized is
+            used as `bra`.
             Works only for finite or segment MPS; for infinite MPS it must be `None`.
             This can be used to find (a few) excited states as follows.
             First, run DMRG to find the ground state,
             and then run DMRG again while orthogonalizing against the ground state,
             which yields the first excited state (in the same symmetry sector), and so on.
-            Note that `resume_data['orthogonal_to']` takes precedence over the argument.
+            Note that ``resume_data['orthogonal_to']`` takes precedence over the argument.
 
         Options
         -------
@@ -207,7 +211,7 @@ class Sweep(Algorithm):
             init_env_data : dict
                 Dictionary as returned by ``self.env.get_initialization_data()`` from
                 :meth:`~tenpy.networks.mpo.MPOEnvironment.get_initialization_data`.
-                Deprecated.
+                Deprecated, use the `resume_data` function/class argument instead.
             orthogonal_to : list of :class:`~tenpy.networks.mps.MPS`
                 Deprecated in favor of the `orthogonal_to` function argument (forwarded from the
                 class argument) with the same effect.
@@ -259,7 +263,12 @@ class Sweep(Algorithm):
         if orthogonal_to:
             if not self.finite:
                 raise ValueError("Can't orthogonalize for infinite MPS: overlap not well defined.")
-            self.ortho_to_envs = [MPSEnvironment(self.psi, ortho) for ortho in orthogonal_to]
+            self.ortho_to_envs = []
+            for ortho in orthogonal_to:
+                if isinstance(ortho, dict):
+                    self.ortho_to_envs.append(MPSEnvironment(self.psi, **ortho))
+                else:
+                    self.ortho_to_envs.append(MPSEnvironment(self.psi, ortho))
 
         self.reset_stats(resume_data)
 
