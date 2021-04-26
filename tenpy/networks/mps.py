@@ -1262,11 +1262,57 @@ class MPS:
 
         Returns
         -------
-        new MPS object with bunched sites.
+        grouped_MPS :
+            New MPS object with bunched sites.
         """
         groupedMPS = self.copy()
         groupedMPS.group_sites(n=blocklen)
         return groupedMPS
+
+    def extract_segment(self, first=0, last=None, enlarge=None):
+        """Extract an segment from a finite or infinite MPS.
+
+        Parameters
+        ----------
+        first, last : int
+            The first and last site to *include* into the segment.
+            `last` defaults to :attr:`L` - 1, i.e., the MPS unit cell for infinite MPS.
+        enlarge : int
+            Instead of specifying the `first` and `last` site, you can specify
+            by how much to enlarge the MPS unit cell.
+
+        Returns
+        -------
+        psi_segment : :class:`MPS`
+            MPS with 'segment' boundary conditions for the sites ``first:last+1``.
+        first, last : int
+            The `first` and `last` values used. Useful for extracting environment data
+            from :meth:`MPOEnvironment.get_initialization_data`.
+
+        See also
+        --------
+        tenpy.networks.mpo.MPO.extract_segment : similar method for MPO.
+        """
+        L = self.L
+        if enlarge is not None:
+            if self.finite:
+                raise ValueError("only possible for infinite MPS")
+            if last is not None or first != 0:
+                raise ValueError("specifiy either `first`+`last` or `enlarge`!")
+            assert enlarge > 0
+            last = enlarge * L - 1
+        if last is None:
+            last = L - 1
+        if first >= last:
+            raise ValueError(f"need first < last, got {first}, {last}")
+        sites = [self.sites[i % L] for i in range(first, last + 1)]
+        B = [self.get_B(i) for i in range(first, last + 1)]
+        S = [self.get_SL(i) for i in range(first, last + 1)]
+        S.append(self.get_SR(last))
+        # note: __init__ makes deep copies of B, S
+        cp = self.__class__(sites, B, S, 'segment', 'B', self.norm)
+        cp.grouped = self.grouped
+        return cp, first, last
 
     def get_total_charge(self, only_physical_legs=False):
         """Calculate and return the `qtotal` of the whole MPS (when contracted).
@@ -2754,15 +2800,15 @@ class MPS:
                 if self.bc == 'segment':
                     LP = env.get_LP(0)
                     if update_ket:
-                        LP = np.tensordot(LP, U, axes=['vR', 'vL'])
+                        LP = npc.tensordot(LP, U, axes=['vR', 'vL'])
                     if update_bra:
-                        LP = np.tensordot(np.conj(U), LP, axes=['vL*', 'vR*'])
+                        LP = npc.tensordot(U.conj(), LP, axes=['vL*', 'vR*'])
                     env.set_LP(0, LP, env.get_LP_age(0))
                     RP = env.get_RP(env.L - 1)
                     if update_ket:
-                        RP = np.tensordot(VR, RP, axes=['vR', 'vL'])
+                        RP = npc.tensordot(VR, RP, axes=['vR', 'vL'])
                     if update_bra:
-                        RP = np.tensordot(RP, np.conj(VR), axes=['vL*', 'vR'])
+                        RP = npc.tensordot(RP, VR.conj(), axes=['vL*', 'vR*'])
                     env.set_RP(env.L - 1, RP, env.get_RP_age(env.L - 1))
         if self.bc == 'segment':
             return U, VR_segment
@@ -2964,7 +3010,7 @@ class MPS:
         Returns
         -------
         xi : float | 1D array
-            If `target`=1, return just the correlation length,
+            If `target` = 1, return just the correlation length,
             otherwise an array of the `target` largest correlation lengths.
             It is measured in units of a single spacing between sites in the MPS language,
             see the warning above.
@@ -3972,9 +4018,13 @@ class MPSEnvironment:
                 logger.warn("dropping `init_RP` with incompatible legs")
                 init_RP = None
         if init_LP is None:
+            if self.ket.bc == 'segment' or self.bra.bc == 'segment':
+                raise ValueError("segment: you need to specify the LP/RP environments!")
             init_LP = self.init_LP(0, start_env_sites)
             age_LP = start_env_sites
         if init_RP is None:
+            if self.ket.bc == 'segment' or self.bra.bc == 'segment':
+                raise ValueError("segment: you need to specify the LP/RP environments!")
             init_RP = self.init_RP(self.L - 1, start_env_sites)
             age_RP = start_env_sites
         self.set_LP(0, init_LP, age=age_LP)
@@ -4175,24 +4225,33 @@ class MPSEnvironment:
         """Return True if `RP` right of site `i` is stored."""
         return self._RP[self._to_valid_index(i)] is not None
 
-    def get_initialization_data(self):
-        """Return data for (re-)initialization.
+    def get_initialization_data(self, first=0, last=None):
+        """Return data for (re-)initialization of the environment.
 
-        The returned parameters are collected in a dictionary with the following names.
+        Parameters
+        ----------
+        first, last : int
+            The first and last site, to the left and right of which we should return the
+            environments.  Defaults to 0 and :attr:`L` - 1.
 
         Returns
         -------
-        init_LP, init_RP : :class:`~tenpy.linalg.np_conserved.Array`
-            `LP` on the left of site `0` and `RP` on the right of site ``L-1``, which can be
-            used as `init_LP` and `init_RP` for the initialization of a new environment.
-        age_LP, age_RP : int
-            The number of physical sites involved into the contraction yielding `init_LP` and
-            `init_RP`, respectively.
+        init_env_data : dict
+            A dictionary with the following entries.
+
+            init_LP, init_RP : :class:`~tenpy.linalg.np_conserved.Array`
+                `LP` on the left of site `first` and `RP` on the right of site `last`, which can be
+                used as `init_LP` and `init_RP` for the initialization of a new environment.
+            age_LP, age_RP : int
+                The number of physical sites involved into the contraction yielding `init_LP` and
+                `init_RP`, respectively.
         """
-        L = self.ket.L
-        data = {'init_LP': self.get_LP(0, True), 'init_RP': self.get_RP(L - 1, True)}
-        data['age_LP'] = self.get_LP_age(0)
-        data['age_RP'] = self.get_RP_age(L - 1)
+        L = self.L
+        if last is None:
+            last = self.L - 1
+        data = {'init_LP': self.get_LP(first, True), 'init_RP': self.get_RP(last, True)}
+        data['age_LP'] = self.get_LP_age(first)
+        data['age_RP'] = self.get_RP_age(last)
         return data
 
     def full_contraction(self, i0):

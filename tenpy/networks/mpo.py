@@ -425,6 +425,29 @@ class MPO:
         self.sites = grouped_sites
         self.grouped = self.grouped * n
 
+    def extract_segment(self, first, last):
+        """Extract a segment from the MPO.
+
+        Parameters
+        ----------
+        first, last : int
+            The first and last site to *include* into the segment.
+
+        See also
+        --------
+        tenpy.networks.mps.MPS.extract_segment : similar method for MPS.
+        """
+        L = self.L
+        sites = [self.sites[i % L] for i in range(first, last + 1)]
+        W = [self.get_W(i) for i in range(first, last + 1)]
+        IdL = [self.IdL[i % L] for i in range(first, last + 1)]
+        IdL.append(self.IdL[last % L + 1])
+        IdR = [self.IdR[i % L] for i in range(first, last + 1)]
+        IdR.append(self.IdR[last % L + 1])
+        cp = self.__class__(sites, Ws, 'infinite', IdL, IdR, self.max_range, self.explicit_plus_hc)
+        cp.grouped = self.grouped
+        return cp
+
     def sort_legcharges(self):
         """Sort virtual legs by charges. In place.
 
@@ -622,6 +645,10 @@ class MPO:
             For an infinite MPS: the density per site.
         """
         if psi.finite:
+            if psi.bc == 'segment':
+                warnings.warn("MPO.expectation_value(psi) with segment psi needs environments! "
+                              "Can only estimate value completely ignoring contributions "
+                              "across segment boundaries!")
             return MPOEnvironment(psi, self, psi, start_env_sites=0).full_contraction(0)
         env = MPOEnvironment(psi, self, psi, start_env_sites=0)
         L = self.L
@@ -1022,14 +1049,13 @@ class MPO:
         """parse the IdL or IdR argument of __init__"""
         if Id is None:
             return [None] * (L + 1)
-        else:
-            try:
-                Id = list(Id)
-                if len(Id) != L + 1:
-                    raise ValueError("expected list with L+1={0:d} entries".format(L + 1))
-                return Id
-            except TypeError:
-                return [Id] * (L + 1)
+        try:
+            Id = list(Id)
+        except TypeError:
+            return [Id] * (L + 1)
+        if len(Id) != L + 1:
+            raise ValueError("expected list with L+1={0:d} entries".format(L + 1))
+        return Id
 
     def __add__(self, other):
         """Return an MPO representing `self + other`.
