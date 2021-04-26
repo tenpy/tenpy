@@ -3,7 +3,7 @@
 The XXZ chain is contained in the more general :class:`~tenpy.models.spins.SpinChain`; the idea of
 this module is more to serve as a pedagogical example for a model.
 """
-# Copyright 2018-2020 TeNPy Developers, GNU GPLv3
+# Copyright 2018-2021 TeNPy Developers, GNU GPLv3
 
 import numpy as np
 
@@ -80,7 +80,8 @@ class XXZChain(CouplingModel, NearestNeighborModel, MPOModel):
         # (u is always 0 as we have only one site in the unit cell)
         self.add_onsite(-hz, 0, 'Sz')
         self.add_coupling(Jxx * 0.5, 0, 'Sp', 0, 'Sm', 1, plus_hc=True)
-        # instead of plus_hc=True, we could explicitly add the h.c. term with:
+        # the `plus_hc=True` adds the h.c. term
+        # see also the examples tenpy.models.model.CouplingModel.add_coupling
         self.add_coupling(Jz, 0, 'Sz', 0, 'Sz', 1)
         # 7) initialize H_MPO
         MPOModel.__init__(self, lat, self.calc_H_MPO())
@@ -99,10 +100,8 @@ class XXZChain2(CouplingMPOModel, NearestNeighborModel):
     model_params : dict | :class:`~tenpy.tools.params.Config`
         See :cfg:config:`XXZChain`
     """
-    def __init__(self, model_params):
-        model_params = asConfig(model_params, "XXZChain2")
-        model_params.setdefault('lattice', "Chain")
-        CouplingMPOModel.__init__(self, model_params)
+    default_lattice = "Chain"
+    force_default_lattice = True
 
     def init_sites(self, model_params):
         return SpinHalfSite(conserve='Sz')  # use predefined Site

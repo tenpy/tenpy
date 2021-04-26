@@ -11,7 +11,7 @@ Call this file with arguments, e.g,::
 Afterwards, you can plot the produced files::
     python benchmark.py -p tensordot_*_benchmark_*.txt
 """
-# Copyright 2018-2020 TeNPy Developers, GNU GPLv3
+# Copyright 2018-2021 TeNPy Developers, GNU GPLv3
 
 from __future__ import print_function  # (backwards compatibility to python 2)
 

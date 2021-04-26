@@ -3,8 +3,10 @@
 This example code evaluate the central charge of the transverse field Ising model using IDMRG.
 The expected value for the central charge c = 1/2. The code always recycle the environment from
 the previous simulation, which can be seen at the "age".
+
+For the theoretical background why :math:`S = c/6 log(xi)`, see :cite:`pollmann2009`.
 """
-# Copyright 2018-2020 TeNPy Developers, GNU GPLv3
+# Copyright 2018-2021 TeNPy Developers, GNU GPLv3
 
 import numpy as np
 import tenpy
@@ -15,7 +17,7 @@ from tenpy.algorithms import dmrg
 
 
 def example_DMRG_tf_ising_infinite_S_xi_scaling(g):
-    model_params = dict(L=2, J=1., g=g, bc_MPS='infinite', conserve='best', verbose=0)
+    model_params = dict(L=2, J=1., g=g, bc_MPS='infinite', conserve='best')
     M = TFIChain(model_params)
     product_state = ["up"] * M.lat.N_sites
     psi = MPS.from_product_state(M.lat.mps_sites(), product_state, bc=M.lat.bc_MPS)
@@ -30,7 +32,6 @@ def example_DMRG_tf_ising_infinite_S_xi_scaling(g):
         'max_E_err': 1.e-9,
         'max_S_err': 1.e-6,
         'update_env': 0,
-        'verbose': 0
     }
 
     chi_list = np.arange(7, 31, 2)
@@ -51,7 +52,8 @@ def example_DMRG_tf_ising_infinite_S_xi_scaling(g):
         psi.canonical_form()
 
         ##   Calculating bond entropy and correlation length  ##
-        s_list.append(np.mean(psi.entanglement_entropy()))
+        s_list.append(psi.entanglement_entropy()[0])
+        # the bond 0 is between MPS unit cells and hence sensible even for 2D lattices.
         xi_list.append(psi.correlation_length())
 
         print(chi,
@@ -108,5 +110,7 @@ def fit_plot_central_charge(s_list, xi_list, filename):
 
 
 if __name__ == "__main__":
+    import logging
+    logging.basicConfig(level=logging.INFO)
     s_list, xi_list = example_DMRG_tf_ising_infinite_S_xi_scaling(g=1)
     fit_plot_central_charge(s_list, xi_list, "central_charge_ising.pdf")

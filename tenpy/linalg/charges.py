@@ -19,7 +19,7 @@ For further details, see the definition of :func:`~tenpy.tools.optimization.use_
 
 .. autodata:: QTYPE
 """
-# Copyright 2018-2020 TeNPy Developers, GNU GPLv3
+# Copyright 2018-2021 TeNPy Developers, GNU GPLv3
 
 import numpy as np
 import copy
@@ -37,7 +37,7 @@ QTYPE = np.int_
 
 
 class ChargeInfo:
-    """Meta-data about the charge of a tensor.
+    r"""Meta-data about the charge of a tensor.
 
     Saves info about the nature of the charge of a tensor.
     Provides :meth:`make_valid` for taking modulo `m`.
@@ -49,8 +49,9 @@ class ChargeInfo:
     ----------
     mod : iterable of QTYPE
         The len gives the number of charges, `qnumber`.
-        For each charge one entry `m`: the charge is conserved modulo `m`.
-        Defaults to trivial, i.e., no charge.
+        Each entry is a positive integer, where
+        1 implies a :math:`U(1)` charge and `N`>1 implies a :math:`Z_N` symmetry.
+        Defaults to "trivial", i.e., no charge.
     names : list of str
         Descriptive names for the charges.  Defaults to ``['']*qnumber``.
 
@@ -237,7 +238,7 @@ class ChargeInfo:
     def mod(self):
         """Modulo how much each of the charges is taken.
 
-        1 for a :math:`U(1)` charge, N for a :math:`Z_N` symmetry.
+        Entries are 1 for a :math:`U(1)` charge, and N for a :math:`Z_N` symmetry.
         """
         # The property makes `mod` readonly.
         return self._mod
@@ -288,6 +289,8 @@ class ChargeInfo:
         """Compare self.mod and self.names for equality, ignore missing names."""
         if self is other:
             return True
+        if self.qnumber != other.qnumber:
+            return False
         if not np.all(self.mod == other.mod):
             return False
         for l, r in zip(self.names, other.names):
@@ -1587,6 +1590,7 @@ def _find_row_differences(qflat):
     return np.nonzero(diff)[0]  # get the indices of True-values
 
 
+@use_cython
 def _map_blocks(blocksizes):
     """Create an index array mapping 1D blocks of given sizes to a new array.
 

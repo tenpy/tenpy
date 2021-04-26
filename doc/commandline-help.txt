@@ -1,0 +1,46 @@
+usage: tenpy-run [-h] [--import-module MODULE] [--sim-class SIM_CLASS] [--option KEY VALUE]
+                 [--version]
+                 [parameters_file]
+
+Command line interface to run a TeNPy simulation.
+
+positional arguments:
+    parameters_file
+        A yaml (*.yml) file with the simulation parameters/options.
+
+optional arguments:
+    -h, --help
+        show this help message and exit
+    --import-module MODULE, -i MODULE
+        Import the given python MODULE before setting up the simulation. This is useful if the
+        module contains user-defined subclasses. Use python-style names like `numpy` without the
+        .py ending.
+    --sim-class SIM_CLASS, -c SIM_CLASS
+        selects the Simulation (sub)class, e.g. 'GroundStateSearch' (default) or
+        'RealTimeEvolution'.
+    --option KEY VALUE, -o KEY VALUE
+        Allows overwriting some options from the yaml files. KEY can be recursive separated by
+        `.`, e.g. ``algorithm_params.trunc_params.chi``. VALUE is initialized by python's
+        ``eval(VALUE)`` with `np`, `scipy` and `tenpy` defined. Thus ``'1.2'`` and
+        ``'2.*np.pi*1.j/6'`` or ``'np.linspace(0., 1., 6)'`` will work if you include the quotes
+        on the command line to ensure that the VALUE is passed as a single argument.
+    --version, -v
+        show program's version number and exit
+
+Examples
+--------
+
+In the simplest case, you just give a single yaml file with all the parameters as argument:
+
+    tenpy-run my_params.yml
+
+If you implemented a custom simulation class called ``MyGreatSimulation`` in a
+file ``my_simulations.py``, you can use it like this:
+
+    tenpy-run -i my_simulations -c MyGreatSimulation my_params.yml
+
+Further, you can overwrite one or multiple options of the parameters file:
+
+    tenpy-run my_params.yml -o output_filename '"rerun_Jz_2.h5"' -o model_params.Jz 2.
+
+Note that string values for the options require double quotes on the command line.

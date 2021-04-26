@@ -1,11 +1,12 @@
 """Bosonic and fermionic Haldane models."""
-# Copyright 2019-2020 TeNPy Developers, GNU GPLv3
+# Copyright 2019-2021 TeNPy Developers, GNU GPLv3
 
 import numpy as np
 
-from tenpy.models.model import CouplingMPOModel
-from tenpy.tools.params import asConfig
-from tenpy.networks.site import BosonSite, FermionSite
+from .model import CouplingMPOModel
+from ..tools.params import asConfig
+from ..networks.site import BosonSite, FermionSite
+from .lattice import Honeycomb
 
 __all__ = ['BosonicHaldaneModel', 'FermionicHaldaneModel']
 
@@ -27,7 +28,7 @@ class BosonicHaldaneModel(CouplingMPOModel):
     :math:`t_{\langle\langle ij \rangle\rangle}=t_2 e^{\pm\mathrm{i}\phi} \in \mathbb{C}`
     respectively, where :math:`\pm\phi` is the phase acquired by a boson hopping between atoms
     in the same sublattice with a sign given by the direction of the hopping.
-    This Hamiltonian is translated from [Grushin2015]_.
+    This Hamiltonian is translated from :cite:`grushin2015`.
 
     Parameters
     ----------
@@ -46,10 +47,8 @@ class BosonicHaldaneModel(CouplingMPOModel):
             Hopping, interaction and chemical potential as defined for the Hamiltonian above.
             The default value for t2 is chosen to achieve the optimal band flatness ratio.
     """
-    def __init__(self, model_params):
-        model_params = asConfig(model_params, self.__class__.__name__)
-        model_params.setdefault('lattice', 'Honeycomb')
-        CouplingMPOModel.__init__(self, model_params)
+    default_lattice = Honeycomb
+    force_default_lattice = True
 
     def init_sites(self, model_params):
         conserve = model_params.get('conserve', 'N')
@@ -96,7 +95,7 @@ class FermionicHaldaneModel(CouplingMPOModel):
     :math:`t_{\langle\langle ij \rangle\rangle}=t_2 e^{\pm\mathrm{i}\phi} \in \mathbb{C}`
     respectively, where :math:`\pm\phi` is the phase acquired by an electron hopping
     between atoms in the same sublattice with a sign
-    given by the direction of the hopping. This Hamiltonian is described in [Grushin2015]_.
+    given by the direction of the hopping. This Hamiltonian is described in :cite:`grushin2015`.
 
     .. warning ::
         Using the Jordan-Wigner string (``JW``) is crucial to get correct results!
@@ -120,10 +119,8 @@ class FermionicHaldaneModel(CouplingMPOModel):
             The default value for t2 is chosen to achieve the optimal band flatness ratio.
 
     """
-    def __init__(self, model_params):
-        model_params = asConfig(model_params, self.__class__.__name__)
-        model_params.setdefault('lattice', 'Honeycomb')
-        CouplingMPOModel.__init__(self, model_params)
+    default_lattice = Honeycomb
+    force_default_lattice = True
 
     def init_sites(self, model_params):
         conserve = model_params.get('conserve', 'N')

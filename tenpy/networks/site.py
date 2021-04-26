@@ -2,19 +2,20 @@
 
 The :class:`Site` is the prototype, read it's docstring.
 """
-# Copyright 2018-2020 TeNPy Developers, GNU GPLv3
+# Copyright 2018-2021 TeNPy Developers, GNU GPLv3
 
 import numpy as np
 import itertools
 import copy
+import warnings
 
 from ..linalg import np_conserved as npc
 from ..tools.misc import inverse_permutation
 from ..tools.hdf5_io import Hdf5Exportable
 
 __all__ = [
-    'Site', 'GroupedSite', 'group_sites', 'multi_sites_combine_charges', 'SpinHalfSite',
-    'SpinSite', 'FermionSite', 'SpinHalfFermionSite', 'BosonSite'
+    'Site', 'GroupedSite', 'group_sites', 'set_common_charges', 'multi_sites_combine_charges',
+    'SpinHalfSite', 'SpinSite', 'FermionSite', 'SpinHalfFermionSite', 'BosonSite'
 ]
 
 
@@ -84,16 +85,16 @@ class Site(Hdf5Exportable):
     >>> Sp = [[0, 1.], [0, 0]]
     >>> Sm = [[0, 0], [1., 0]]
     >>> Sz = [[0.5, 0], [0, -0.5]]
-    >>> site = Site(ch, ['up', 'down'], Splus=Sp, Sminus=Sm, Sz=Sz)
+    >>> site = tenpy.networks.site.Site(ch, ['up', 'down'], Splus=Sp, Sminus=Sm, Sz=Sz)
     >>> print(site.Splus.to_ndarray())
-    array([[ 0.,  1.],
-           [ 0.,  0.]])
+    [[0. 1.]
+     [0. 0.]]
     >>> print(site.get_op('Sminus').to_ndarray())
-    array([[ 0.,  0.],
-           [ 1.,  0.]])
+    [[0. 0.]
+     [1. 0.]]
     >>> print(site.get_op('Splus Sminus').to_ndarray())
-    array([[ 1.,  0.],
-           [ 0.,  0.]])
+    [[1. 0.]
+     [0. 0.]]
     """
     def __init__(self, leg, state_labels=None, **site_ops):
         self.leg = leg
@@ -432,7 +433,38 @@ class Site(Hdf5Exportable):
             A valid operator name
             Operatorname representing the product of operators in `names`.
         """
+        if len(names) == 0:
+            return 'Id'
         return ' '.join(names)
+
+    def multiply_operators(self, operators):
+        """Multiply local operators (possibly given by their names) together.
+
+        Parameters
+        ----------
+        operators : list of {str | :class:`~tenpy.linalg.np_conserved.Array`}
+            List of valid operator names (to be translated with :meth:`get_op`) or
+            directly on-site operators in the form of npc arrays with ``'p', 'p*'`` label.
+            The operators are multiplied left-to-right.
+
+        Returns
+        -------
+        combined_operator : :class:`~tenpy.linalg.np_conserved.Array`
+            The product of the given `operators` in a left-to-right multiplication following the
+            usual mathematical convention. For example, if ``operators=['Sz', 'Sp', 'Sx']``,
+            the final operator is equivalent to ``site.get_op('Sz Sp Sx')``, with the ``'Sx'``
+            operator acting first on any physical state.
+        """
+        if len(operators) == 0:
+            return self.Id
+        op = operators[0]
+        if isinstance(op, str):
+            op = self.get_op(op)
+        for next_op in operators[1:]:
+            if isinstance(next_op, str):
+                next_op = self.get_op(next_op)
+            op = npc.tensordot(op, next_op, axes=['p*', 'p'])
+        return op
 
     def __repr__(self):
         """Debug representation of self."""
@@ -472,6 +504,7 @@ class GroupedSite(Site):
         ``'independent'`` means that the `sites` have possibly different `ChargeInfo`,
         and the charges are conserved separately, i.e., we have `n_sites` conserved charges.
         For ``'drop'``, we drop any charges, such that the remaining legcharges are trivial.
+        For more complex situations, you can call :func:`multi_sites_combine_charges` beforehand.
 
     Attributes
     ----------
@@ -485,11 +518,11 @@ class GroupedSite(Site):
     def __init__(self, sites, labels=None, charges='same'):
         self.n_sites = n_sites = len(sites)
         self.sites = sites
-        self.labels = labels
         self.charges = charges
         assert n_sites > 0
         if labels is None:
             labels = [str(i) for i in range(n_sites)]
+        self.labels = labels
         if charges == 'same':
             pass  # nothing to do
         elif charges == 'drop':
@@ -612,12 +645,287 @@ def group_sites(sites, n=2, labels=None, charges='same'):
     return grouped_sites
 
 
+def set_common_charges(sites, new_charges='same', new_names=None, new_mod=None):
+    r"""Adjust the charges of the given sites *in place* such that they can be used together.
+
+    Before we can contract operators (and tensors) corresponding to different :class:`Site`
+    instances, we first need to define the overall conserved charges, i.e., we need to merge the
+    :class:`~tenpy.linalg.charges.ChargeInfo` of them to a single, global `chinfo` and adjust
+    the charges of the physical legs. That's what this function does.
+
+    A typical place to do this would be in :meth:`tenpy.models.model.CouplingMPOModel.init_sites`.
+
+    (This function replaces the now deprecated :func:`mutli_sites_combine_charges`.)
+
+    Parameters
+    ----------
+    sites : list of :class:`Site`
+        The sites to be combined. The sites are modified **in place**.
+    new_charges : ``'same'`` | ``'drop'`` | ``'independent'`` |  list of list of tuple
+        Defines the new, common charges in terms of the old ones.
+
+        list of lists of tuple
+            If a list is given, each entry `new_charge` of the list defines one new charge,
+            i.e. the new number of charges is ``qnumber=len(new_charges)``.
+            Each entry `new_charge` of the outer list is itself a list of 3-tuples,
+            ``new_charge = [(factor, site_index, old_charge_index), ...]``.
+            where the value of the new charge is the sum of `factor` times the value of the old
+            charge, (specified by the `site_index` and the `old_charge_index` within that site),
+            and the sum runs over all entries in that list `new_charge`.
+            `old_charge_index` can be an integer (=the index) or a string (=the name) of the
+            charge in the corresponding ``sites[site_index].leg.chinfo``.
+        ``'same'``
+            defaults to charges with the same name to match, and charges with different
+            names to be independently conserved (see example below);
+            ``None``-set names are considered different.
+        ``'drop'``
+            Drop/remove all charges, equivalent to ``new_charges=[]``.
+        ``'independent'``
+            For the case that the charges of the different sites are independent and individually
+            conserved, even if they have the same name.
+    new_names : list of str
+        Names for each of the new charges. Defaults to name of the first old charge specified.
+    new_mod : list of int
+        :attr:`~tenpy.linalg.charges.ChargeInfo.mod` for the new charges, one entry for each list
+        in `new_charges`. Defaults to the `mod` of the old charges, if not specified otherwise.
+
+    Returns
+    -------
+    perms : list of ndarray
+        For each site the permutation performed on the physical leg to sort by charges.
+
+    Examples
+    --------
+    When we just initialize some sites, they will in general have different charges.
+    For example, we could have a :class:`SpinHalfFermionSite` a spin-1 :class:`SpinSite`.
+    For reference, let's also print the names and values of the charges.
+
+    .. doctest :: set_common_charges
+        :options: +NORMALIZE_WHITESPACE
+
+        >>> from tenpy.networks.site import *
+        >>> ferm = SpinHalfFermionSite(cons_N='N', cons_Sz='Sz')
+        >>> ferm.leg.chinfo.names
+        ['N', '2*Sz']
+        >>> print(ferm.leg.to_qflat())
+        [[ 1 -1]
+         [ 0  0]
+         [ 2  0]
+         [ 1  1]]
+        >>> spin = SpinSite(1.0, conserve='Sz')
+        >>> spin.leg.chinfo.names
+        ['2*Sz']
+        >>> print(spin.leg.to_qflat())
+        [[-2]
+         [ 0]
+         [ 2]]
+
+    With the default ``new_charges='same'``, this function will combine charges with the same name,
+    and hence we will have two conserved quantities, namley
+    the fermion particle number
+    ``'N' = N_{up_fermions} + N_{down-fermions}``,
+    and the total Sz spin
+    ``'2*Sz' = N_{up-fermions} + N_{up-spins} - N_{down-fermions} - N_{down-spins}``.
+    In this case, there will only appear an extra column of zeros for the charges of the spin leg.
+
+    .. doctest :: set_common_charges
+        :options: +NORMALIZE_WHITESPACE
+
+        >>> set_common_charges([ferm, spin], new_charges='same')
+        [array([0, 1, 2, 3]), array([0, 1, 2])]
+        >>> ferm.leg.chinfo.names
+        ['N', '2*Sz']
+        >>> print(ferm.leg.to_qflat())  # didn't change (except making a copy)
+        [[ 1 -1]
+         [ 0  0]
+         [ 2  0]
+         [ 1  1]]
+        >>> spin.leg.chinfo.names   # additional 'N' chargename
+        ['N', '2*Sz']
+        >>> print(spin.leg.to_qflat())  # additional column of zeros for the 'N' charge
+        [[ 0 -2]
+         [ 0  0]
+         [ 0  2]]
+
+    With ``new_charges='independent'``, we preserve the charges of the old sites individually.
+    In this example, we get 3 conserved quantities, namely the fermion particle number
+    ``'N_ferm' = N_{up_fermions} + N_{down-fermions}``,
+    and the fermionic Sz spin ``'2*Sz_ferm' = N_{up-fermions} - N_{down-fermions}``
+    and the Sz spin of the `spin` sites, ``'2*Sz_spin' = N_{up-spins} - N_{down-spins}``.
+    (We give the charges new names for clearer distinction.)
+    Corresponding zero columns are added to the LegCharges.
+
+    .. doctest :: set_common_charges
+        :options: +NORMALIZE_WHITESPACE
+
+        >>> ferm = SpinHalfFermionSite(cons_N='N', cons_Sz='Sz')
+        >>> spin = SpinSite(1.0, conserve='Sz')
+        >>> set_common_charges([ferm, spin], new_charges='independent',
+        ...                    new_names=['N_ferm', '2*Sz_ferm', '2*Sz_spin'])
+        [array([0, 1, 2, 3]), array([0, 1, 2])]
+        >>> print(ferm.leg.to_qflat())  # didn't change (except making a copy)
+        [[ 1 -1  0]
+         [ 0  0  0]
+         [ 2  0  0]
+         [ 1  1  0]]
+        >>> print(spin.leg.to_qflat())  # additional column of zeros for the 'N' charge
+        [[ 0  0 -2]
+         [ 0  0  0]
+         [ 0  0  2]]
+
+    With the full specification of the `new_charges` through a list of list of tuples,
+    you can create new charges as linear combinations of the charges of the individual sites.
+    For example, the `SpinHalfFermionSite` is essentially the product of two `FermionSite`, one for
+    the up electrons, and one for the down electrons. The ``'2*Sz'`` charge of the
+    `SpinHalfFermionSite` is then equivalent to the difference of individual particle numbers,
+    ``'2*Sz' = N_{up} - N_{down}``.
+
+    .. doctest :: set_common_charges
+        :options: +NORMALIZE_WHITESPACE
+
+        >>> f_up = FermionSite(conserve='N')
+        >>> f_down = FermionSite(conserve='N')
+        >>> print(f_up.leg.to_qflat())
+        [[0]
+         [1]]
+        >>> print(f_down.leg.to_qflat())
+        [[0]
+         [1]]
+        >>> f_down.state_labels
+        {'empty': 0, 'full': 1}
+        >>> set_common_charges([f_up, f_down],
+        ...                    new_charges=[[(1, 0, 'N'), ( 1, 1, 'N')],
+        ...                                 [(1, 0, 'N'), (-1, 1, 'N')]],
+        ...                    new_names=['N_tot', '2*Sz=(N_up-N_down)'])
+        [array([0, 1]), array([1, 0])]
+        >>> f_down.state_labels  # sorting charges caused permutation of local states
+        {'empty': 1, 'full': 0}
+        >>> print(f_up.leg.to_qflat())
+        [[0 0]
+         [1 1]]
+        >>> print(f_down.leg.to_qflat()) # top row = full, bottom row=empty
+        [[ 1 -1]
+         [ 0  0]]
+
+    Another example could be that you have both fermions and bosons,
+    and that you have terms :math:`c_i c_j b^\dagger_k + c^\dagger_i c^\dagger_j b_k`,
+    where two fermions can merge into a pair forming a boson.
+    In this case, neither the fermion number nor the boson number is preserved individually,
+    but the combination ``N_{fermions} + 2 * N_{bosons}`` is preserved.
+
+    .. doctest :: set_common_charges
+        :options: +NORMALIZE_WHITESPACE
+
+        >>> ferm = FermionSite(conserve='N')
+        >>> bos = BosonSite(Nmax=3, conserve='N')
+        >>> set_common_charges([ferm, bos], [[(1, 0, 'N'), (2, 1, 'N')]], ['N_f + 2 N_b'])
+        [array([0, 1]), array([0, 1, 2, 3])]
+
+    Finally, it can sometimes be convenient to change the charges of the
+    The ``new_charges='drop'`` or ``new_charges=[]`` option is a quick way to remove any charges.
+
+    .. doctest :: set_common_charges
+        :options: +NORMALIZE_WHITESPACE
+
+        >>> ferm = SpinHalfFermionSite(cons_N='N', cons_Sz='Sz')
+        >>> spin = SpinSite(1.0, conserve='Sz')
+        >>> set_common_charges([ferm, spin], new_charges='drop')
+        [array([0, 1, 2, 3]), array([0, 1, 2])]
+        >>> assert ferm.leg.chinfo.qnumber == spin.leg.chinfo.qnumber == 0  # trivial: no charges
+    """
+    for s, site in enumerate(sites):
+        for site2 in enumerate(sites[s + 1:]):
+            if site2 is site:
+                raise ValueError("`sites` contains the same object multiple times. Make copies!")
+    old_chinfos = [site.leg.chinfo for site in sites]
+    if isinstance(new_charges, str):
+        if new_charges == 'same':
+            new_charges = []
+            name_to_new_idx = {}
+            for s, site in enumerate(sites):
+                chinfo = site.leg.chinfo
+                for i, n in enumerate(chinfo.names):
+                    if n is None:
+                        new_charges.append([(1, s, i)])  #independent charge
+                    else:
+                        if n not in name_to_new_idx:
+                            name_to_new_idx[n] = len(new_charges)
+                            new_charges.append([(1, s, i)])
+                        else:
+                            new_charges[name_to_new_idx[n]].append((1, s, i))
+        elif new_charges == 'drop':
+            new_charges = []
+        elif new_charges == 'independent':
+            new_charges = [[(1, s, i)] for s, site in enumerate(sites)
+                           for i in range(site.leg.chinfo.qnumber)]
+        else:
+            raise ValueError("unknown option for new_charges: " + repr(new_charges))
+    else:
+        # parse new_charges argument: translate old_charge_idx names to indices and error check
+        new_charges = list(new_charges)  # copy: need to modify elements
+        for i, new_charge in enumerate(new_charges):
+            new_charges[i] = new_charge = list(new_charge)  # copy before modification
+            assert len(new_charge) > 0
+            for j, (factor, s, old_idx) in enumerate(new_charge):
+                if isinstance(old_idx, str):
+                    old_idx = old_chinfos[s].names.index(old_idx)
+                    new_charge[j] = (factor, s, old_idx)
+                if not 0 <= old_idx < old_chinfos[s].qnumber:
+                    raise ValueError("wrong `site_index` or `old_charge_index` in new_charges")
+    # setup new `chinfo`
+    qnumber = len(new_charges)
+    if new_names is None:
+        new_names = [old_chinfos[lst[0][1]].names[lst[0][2]] for lst in new_charges]
+    assert len(new_names) == qnumber
+    if new_mod is None:
+        new_mod = [old_chinfos[lst[0][1]].mod[lst[0][2]] for lst in new_charges]
+        for i, new_charge in enumerate(new_charges):
+            for (_, s, oi) in new_charge:
+                if old_chinfos[s].mod[oi] != new_mod[i]:
+                    # (this is only tested if new_mod isn't set explicitly)
+                    raise ValueError("Charges which get combined have different `mod` nature!")
+    assert len(new_mod) == qnumber
+    new_chinfo = npc.ChargeInfo(new_mod, new_names)
+
+    # define the new leg charges and update the sites
+    perms = []
+    for new_s, site in enumerate(sites):
+        old_qflat = site.leg.to_qflat()
+        # determine new leg charges
+        new_qflat = np.zeros((site.leg.ind_len, qnumber), old_qflat.dtype)
+        for new_i, new_charge in enumerate(new_charges):
+            for factor, old_s, old_i in new_charge:
+                if old_s == new_s:
+                    old_qflat_i = factor * old_qflat[:, old_i]
+                    if old_qflat_i.dtype != new_qflat.dtype:
+                        unrounded_old_qflat_i = old_qflat_i
+                        old_qflat_i = np.array(np.rint(old_qflat_i), dtype=new_qflat.dtype)
+                        if np.any(np.abs(old_qflat_i - unrounded_old_qflat_i) > 1.e-5):
+                            raise ValueError("float `factor` causes non-integer charges")
+                    new_qflat[:, new_i] += old_qflat_i
+        # update the site with the new charges
+        leg_unsorted = npc.LegCharge.from_qflat(new_chinfo, new_qflat, site.leg.qconj)
+        perm_qind, leg = leg_unsorted.sort()
+        perm_flat = leg_unsorted.perm_flat_from_perm_qind(perm_qind)
+        perms.append(perm_flat)
+        site.change_charge(leg, perm_flat)
+    return perms
+
+
 def multi_sites_combine_charges(sites, same_charges=[]):
     """Adjust the charges of the given sites (in place) such that they can be used together.
 
     When we want to contract tensors corresponding to different :class:`Site` instances,
     these sites need to share a single :class:`~tenpy.linalg.charges.ChargeInfo`.
     This function adjusts the charges of these sites such that they can be used together.
+
+    .. deprecated :: 0.7.3
+        Deprecated in favore of the new, more powerful
+        :func:`~tenpy.networks.site.set_common_charges`.
+        Be aware of the slightly different argument structure though, namely that
+        this function keeps charges not included in `same_charges`, whereas you need
+        to include them explicitly into the `new_charges` argument of `set_common_charges`.
+
 
     Parameters
     ----------
@@ -636,28 +944,40 @@ def multi_sites_combine_charges(sites, same_charges=[]):
 
     Examples
     --------
-    >>> ferm = SpinHalfFermionSite(cons_N='N', cons_Sz='Sz')
-    >>> spin = SpinSite(1.0, 'Sz')
-    >>> ferm.leg.chinfo is spin.leg.chinfo
-    False
-    >>> print(spin.leg)
-    +1
-    0 [[-1]
-    1  [ 1]]
-    2
-    >>> multi_sites_combine_charges([ferm, spin], same_charges=[[(0, 'Sz'), (1, 0)]])
-    [array([0, 1, 2, 3]), array([0, 1])]
-    >>> # no permutations where needed
-    >>> ferm.leg.chinfo is spin.leg.chinfo
-    True
-    >> ferm.leg.chinfo.names
-    ['N', 'Sz']
-    >>> print(spin.leg)
-    +1
-    0 [[ 0 -1]
-    1  [ 0  1]]
-    2
+    .. doctest :: multi_sites_combine_charges
+        :options: +NORMALIZE_WHITESPACE
+
+        >>> from tenpy.networks.site import *
+        >>> ferm = SpinHalfFermionSite(cons_N='N', cons_Sz='Sz')
+        >>> spin = SpinSite(1.0, 'Sz')
+        >>> ferm.leg.chinfo is spin.leg.chinfo
+        False
+        >>> print(spin.leg)
+         +1
+        0 [[-2]
+        1  [ 0]
+        2  [ 2]]
+        3
+        >>> multi_sites_combine_charges([ferm, spin], same_charges=[[(0, 1), (1, 0)]])
+        [array([0, 1, 2, 3]), array([0, 1, 2])]
+        >>> # no permutations where needed
+        >>> ferm.leg.chinfo is spin.leg.chinfo
+        True
+        >>> ferm.leg.chinfo.names
+        ['N', '2*Sz']
+        >>> print(spin.leg)
+         +1
+        0 [[ 0 -2]
+        1  [ 0  0]
+        2  [ 0  2]]
+        3
     """
+    warnings.warn(
+        "multi_sites_combine_charges is deprecated! \n"
+        "Use `set_common_charges` instead, but watch out: "
+        "the argument structure is not equivalent!",
+        FutureWarning,
+        stacklevel=2)
     # parse same_charges argument
     same_charges = list(same_charges)  # need to modify elements...
     same_charges_flat = []
@@ -763,7 +1083,7 @@ class SpinHalfSite(Site):
         else:
             ops.update(Sx=Sx, Sy=Sy)
             if conserve == 'parity':
-                chinfo = npc.ChargeInfo([2], ['parity'])
+                chinfo = npc.ChargeInfo([2], ['parity_Sz'])
                 leg = npc.LegCharge.from_qflat(chinfo, [1, 0])  # ([1, -1] would need ``qmod=[4]``)
             else:
                 leg = npc.LegCharge.from_trivial(2)
@@ -852,11 +1172,11 @@ class SpinSite(Site):
         ops = dict(Sp=Sp, Sm=Sm, Sz=Sz)
         if conserve == 'Sz':
             chinfo = npc.ChargeInfo([1], ['2*Sz'])
-            leg = npc.LegCharge.from_qflat(chinfo, np.array(2 * Sz_diag, dtype=np.int))
+            leg = npc.LegCharge.from_qflat(chinfo, np.array(2 * Sz_diag, dtype=np.int64))
         else:
             ops.update(Sx=Sx, Sy=Sy)
             if conserve == 'parity':
-                chinfo = npc.ChargeInfo([2], ['parity'])
+                chinfo = npc.ChargeInfo([2], ['parity_Sz'])
                 leg = npc.LegCharge.from_qflat(chinfo, np.mod(np.arange(d), 2))
             else:
                 leg = npc.LegCharge.from_trivial(d)
@@ -929,7 +1249,7 @@ class FermionSite(Site):
             chinfo = npc.ChargeInfo([1], ['N'])
             leg = npc.LegCharge.from_qflat(chinfo, [0, 1])
         elif conserve == 'parity':
-            chinfo = npc.ChargeInfo([2], ['parity'])
+            chinfo = npc.ChargeInfo([2], ['parity_N'])
             leg = npc.LegCharge.from_qflat(chinfo, [0, 1])
         else:
             leg = npc.LegCharge.from_trivial(2)
@@ -1005,9 +1325,6 @@ class SpinHalfFermionSite(Site):
     ``None``      ``None``      []      --
     ============= ============= ======= =======================================
 
-    .. todo ::
-        Check if Jordan-Wigner strings for 4x4 operators are correct.
-
     Parameters
     ----------
     cons_N : ``'N' | 'parity' | None``
@@ -1034,8 +1351,8 @@ class SpinHalfFermionSite(Site):
         d = 4
         states = ['empty', 'up', 'down', 'full']
         # 0) Build the operators.
-        Nu_diag = np.array([0., 1., 0., 1.], dtype=np.float)
-        Nd_diag = np.array([0., 0., 1., 1.], dtype=np.float)
+        Nu_diag = np.array([0., 1., 0., 1.], dtype=np.float64)
+        Nd_diag = np.array([0., 0., 1., 1.], dtype=np.float64)
         Nu = np.diag(Nu_diag)
         Nd = np.diag(Nd_diag)
         Ntot = np.diag(Nu_diag + Nd_diag)
@@ -1078,21 +1395,20 @@ class SpinHalfFermionSite(Site):
             qmod.append(1)
             charges.append([0, 1, 1, 2])
         elif cons_N == 'parity':
-            qnames.append('N')
+            qnames.append('parity_N')
             qmod.append(2)
             charges.append([0, 1, 1, 0])
         if cons_Sz == 'Sz':
-            qnames.append('Sz')
+            qnames.append('2*Sz')
             qmod.append(1)
             charges.append([0, 1, -1, 0])
             del ops['Sx']
             del ops['Sy']
         elif cons_Sz == 'parity':
-            qnames.append('Sz')
-            qmod.append(4)  # difference between up and down is 2!
-            charges.append([0, 1, 3, 0])  # == [0, 1, -1, 0] mod 4
+            qnames.append('parity_Sz')
+            qmod.append(2)  # the charge is (2*Sz) % 2
+            charges.append([0, 1, 1, 0])  # == [0, 1, -1, 0] mod 4
             # chosen s.t. Cu, Cd have well-defined charges!
-
         if len(qmod) == 0:
             leg = npc.LegCharge.from_trivial(d)
         else:
@@ -1176,12 +1492,12 @@ class BosonSite(Site):
         states = [str(n) for n in range(0, dim)]
         if dim < 2:
             raise ValueError("local dimension should be larger than 1....")
-        B = np.zeros([dim, dim], dtype=np.float)  # destruction/annihilation operator
+        B = np.zeros([dim, dim], dtype=np.float64)  # destruction/annihilation operator
         for n in range(1, dim):
             B[n - 1, n] = np.sqrt(n)
         Bd = np.transpose(B)  # .conj() wouldn't do anything
         # Note: np.dot(Bd, B) has numerical roundoff errors of eps~=4.4e-16.
-        Ndiag = np.arange(dim, dtype=np.float)
+        Ndiag = np.arange(dim, dtype=np.float64)
         N = np.diag(Ndiag)
         NN = np.diag(Ndiag**2)
         dN = np.diag(Ndiag - filling)
@@ -1192,7 +1508,7 @@ class BosonSite(Site):
             chinfo = npc.ChargeInfo([1], ['N'])
             leg = npc.LegCharge.from_qflat(chinfo, range(dim))
         elif conserve == 'parity':
-            chinfo = npc.ChargeInfo([2], ['parity'])
+            chinfo = npc.ChargeInfo([2], ['parity_N'])
             leg_unsorted = npc.LegCharge.from_qflat(chinfo, [i % 2 for i in range(dim)])
             # sort by charges
             perm_qind, leg = leg_unsorted.sort()

@@ -7,7 +7,7 @@
     Long term: implement different lattices.
     Long term: implement variable hopping strengths Jx, Jy.
 """
-# Copyright 2018-2020 TeNPy Developers, GNU GPLv3
+# Copyright 2018-2021 TeNPy Developers, GNU GPLv3
 
 import numpy as np
 import warnings
@@ -154,28 +154,15 @@ class HofstadterFermions(CouplingMPOModel):
             magnetic unit cell. See :func:`gauge_hopping` for details.
 
     """
+    default_lattice = Square
+    force_default_lattice = True
+
     def init_sites(self, model_params):
         conserve = model_params.get('conserve', 'N')
         filling = model_params.get('filling', (1, 8))
         filling = filling[0] / filling[1]
         site = FermionSite(conserve=conserve, filling=filling)
         return site
-
-    def init_lattice(self, model_params):
-        bc_MPS = model_params.get('bc_MPS', 'infinite')
-        order = model_params.get('order', 'default')
-        site = self.init_sites(model_params)
-        Lx = model_params.get('Lx', 3)
-        Ly = model_params.get('Ly', 4)
-        bc_x = 'periodic' if bc_MPS == 'infinite' else 'open'
-        bc_x = model_params.get('bc_x', bc_x)
-        bc_y = model_params.get('bc_y', 'cylinder')
-        assert bc_y in ['cylinder', 'ladder']
-        bc_y = 'periodic' if bc_y == 'cylinder' else 'open'
-        if bc_MPS == 'infinite' and bc_x == 'open':
-            raise ValueError("You need to use 'periodic' `bc_x` for infinite systems!")
-        lat = Square(Lx, Ly, site, order=order, bc=[bc_x, bc_y], bc_MPS=bc_MPS)
-        return lat
 
     def init_terms(self, model_params):
         Lx = self.lat.shape[0]
@@ -246,6 +233,9 @@ class HofstadterBosons(CouplingMPOModel):
             Choice of the gauge used for the magnetic field. This changes the
             magnetic unit cell.
     """
+    default_lattice = Square
+    force_default_lattice = True
+
     def init_sites(self, model_params):
         Nmax = model_params.get('Nmax', 3)
         conserve = model_params.get('conserve', 'N')
@@ -253,22 +243,6 @@ class HofstadterBosons(CouplingMPOModel):
         filling = filling[0] / filling[1]
         site = BosonSite(Nmax=Nmax, conserve=conserve, filling=filling)
         return site
-
-    def init_lattice(self, model_params):
-        bc_MPS = model_params.get('bc_MPS', 'infinite')
-        order = model_params.get('order', 'default')
-        site = self.init_sites(model_params)
-        Lx = model_params.get('Lx', 4)
-        Ly = model_params.get('Ly', 6)
-        bc_x = 'periodic' if bc_MPS == 'infinite' else 'open'  # Next line needs default
-        bc_x = model_params.get('bc_x', bc_x)
-        bc_y = model_params.get('bc_y', 'cylinder')
-        assert bc_y in ['cylinder', 'ladder']
-        bc_y = 'periodic' if bc_y == 'cylinder' else 'open'
-        if bc_MPS == 'infinite' and bc_x == 'open':
-            raise ValueError("You need to use 'periodic' `bc_x` for infinite systems!")
-        lat = Square(Lx, Ly, site, order=order, bc=[bc_x, bc_y], bc_MPS=bc_MPS)
-        return lat
 
     def init_terms(self, model_params):
         Lx = self.lat.shape[0]

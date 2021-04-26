@@ -1,5 +1,5 @@
 """A collection of tests for (classes in) :module:`tenpy.networks.mpo`."""
-# Copyright 2018-2020 TeNPy Developers, GNU GPLv3
+# Copyright 2018-2021 TeNPy Developers, GNU GPLv3
 
 import numpy as np
 import numpy.testing as npt
@@ -170,13 +170,11 @@ def test_MPOEnvironment():
     env.get_LP(3, True)
     env.get_RP(0, True)
     env.test_sanity()
-    E_old = None
+    E_exact = -0.825
     for i in range(4):
         E = env.full_contraction(i)  # should be one
         print("total energy for contraction at site ", i, ": E =", E)
-        if E_old is not None:
-            assert (abs(E - E_old) < 1.e-14)
-        E_old = E
+        assert (abs(E - E_exact) < 1.e-14)
 
 
 def test_MPO_hermitian():
@@ -184,20 +182,20 @@ def test_MPO_hermitian():
     ot = OnsiteTerms(4)
     ct = CouplingTerms(4)
     ct.add_coupling_term(1., 2, 3, 'Sm', 'Sp')
-    H = mpo.MPOGraph.from_terms(ot, ct, [s] * 4, 'infinite').build_MPO()
+    H = mpo.MPOGraph.from_terms((ot, ct), [s] * 4, 'infinite').build_MPO()
     assert not H.is_hermitian()
     assert H.is_equal(H)
     ct.add_coupling_term(1., 2, 3, 'Sp', 'Sm')
-    H = mpo.MPOGraph.from_terms(ot, ct, [s] * 4, 'infinite').build_MPO()
+    H = mpo.MPOGraph.from_terms((ot, ct), [s] * 4, 'infinite').build_MPO()
     assert H.is_hermitian()
     assert H.is_equal(H)
 
     ct.add_coupling_term(1., 3, 18, 'Sm', 'Sp')
-    H = mpo.MPOGraph.from_terms(ot, ct, [s] * 4, 'infinite').build_MPO()
+    H = mpo.MPOGraph.from_terms((ot, ct), [s] * 4, 'infinite').build_MPO()
     assert not H.is_hermitian()
     assert H.is_equal(H)
     ct.add_coupling_term(1., 3, 18, 'Sp', 'Sm')
-    H = mpo.MPOGraph.from_terms(ot, ct, [s] * 4, 'infinite').build_MPO()
+    H = mpo.MPOGraph.from_terms((ot, ct), [s] * 4, 'infinite').build_MPO()
     assert H.is_hermitian()
     assert H.is_equal(H)
 
@@ -212,13 +210,13 @@ def test_MPO_addition():
         ct1.add_coupling_term(2., 2, 3, 'Sp', 'Sm')
         ct1.add_coupling_term(2., 1, 2, 'Sz', 'Sz')
         ot1.add_onsite_term(3., 1, 'Sz')
-        H1 = mpo.MPOGraph.from_terms(ot1, ct1, [s] * 4, bc).build_MPO()
+        H1 = mpo.MPOGraph.from_terms((ot1, ct1), [s] * 4, bc).build_MPO()
         ot2 = OnsiteTerms(4)
         ct2 = CouplingTerms(4)
         ct2.add_coupling_term(4., 0, 2, 'Sz', 'Sz')
         ct2.add_coupling_term(4., 1, 2, 'Sz', 'Sz')
         ot2.add_onsite_term(5., 1, 'Sz')
-        H2 = mpo.MPOGraph.from_terms(ot2, ct2, [s] * 4, bc).build_MPO()
+        H2 = mpo.MPOGraph.from_terms((ot2, ct2), [s] * 4, bc).build_MPO()
         H12_sum = H1 + H2
         ot12 = OnsiteTerms(4)
         ot12 += ot1
@@ -226,7 +224,7 @@ def test_MPO_addition():
         ct12 = CouplingTerms(4)
         ct12 += ct1
         ct12 += ct2
-        H12 = mpo.MPOGraph.from_terms(ot12, ct12, [s] * 4, bc).build_MPO()
+        H12 = mpo.MPOGraph.from_terms((ot12, ct12), [s] * 4, bc).build_MPO()
         assert H12.is_equal(H12_sum)
 
 
@@ -241,7 +239,7 @@ def test_MPO_expectation_value():
     ct.add_coupling_term(1., 2, 3, 'Sz', 'Sz')  # -> 0.
     ct.add_coupling_term(1.5, 1, 3, 'Sz', 'Sz')  # -> 1.5*(-0.25)
     ct.add_coupling_term(2.5, 0, 6, 'Sz', 'Sz')  # -> 2.5*0.25
-    H = mpo.MPOGraph.from_terms(ot, ct, [s] * 4, 'infinite').build_MPO()
+    H = mpo.MPOGraph.from_terms((ot, ct), [s] * 4, 'infinite').build_MPO()
     ev = H.expectation_value(psi1)
     desired_ev = (0.1 * 0.5 + 0.2 * 0. + 1. * 0. + 1.5 * -0.25 + 2.5 * 0.25) / H.L
     assert abs(ev - desired_ev) < 1.e-8

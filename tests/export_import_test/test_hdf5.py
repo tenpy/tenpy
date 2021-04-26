@@ -5,16 +5,12 @@ import os
 import pickle
 import pytest
 import warnings
-import tempfile
 from tenpy.tools import hdf5_io
 import numpy as np
 
-datadir_hdf5 = [f for f in io_test.datadir_files if f.endswith('.hdf5')]
+h5py = pytest.importorskip('h5py')
 
-try:
-    import h5py
-except ImportError:
-    h5py = None
+datadir_hdf5 = [f for f in io_test.datadir_files if f.endswith('.hdf5')]
 
 
 def export_to_datadir():
@@ -24,20 +20,20 @@ def export_to_datadir():
         hdf5_io.save_to_hdf5(f, data)
 
 
-@pytest.mark.skipif(h5py is None, reason="h5py not available")
-def test_hdf5_export_import():
+@pytest.mark.filterwarnings(r'ignore:Hdf5Saver.* object of type.*:UserWarning')
+def test_hdf5_export_import(tmp_path):
     """Try subsequent export and import to pickle."""
     data = io_test.gen_example_data()
-    with tempfile.TemporaryDirectory() as tdir:
-        filename = 'test.hdf5'
-        with h5py.File(os.path.join(tdir, filename), 'w') as f:
-            hdf5_io.save_to_hdf5(f, data)
-        with h5py.File(os.path.join(tdir, filename), 'r') as f:
-            data_imported = hdf5_io.load_from_hdf5(f)
+    io_test.assert_event_handler_example_works(data)  #if this fails, it's not import/export
+    filename = tmp_path / 'test.hdf5'
+    with h5py.File(str(filename), 'w') as f:
+        hdf5_io.save_to_hdf5(f, data)
+    with h5py.File(str(filename), 'r') as f:
+        data_imported = hdf5_io.load_from_hdf5(f)
     io_test.assert_equal_data(data_imported, data)
+    io_test.assert_event_handler_example_works(data_imported)
 
 
-@pytest.mark.skipif(h5py is None, reason="h5py not available")
 @pytest.mark.parametrize('fn', datadir_hdf5)
 def test_import_from_datadir(fn):
     print("import ", fn)
@@ -51,6 +47,7 @@ def test_import_from_datadir(fn):
     else:
         data_expected = io_test.gen_example_data('0.4.0')
     io_test.assert_equal_data(data, data_expected)
+    io_test.assert_event_handler_example_works(data)
 
 
 if __name__ == "__main__":

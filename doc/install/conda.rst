@@ -5,6 +5,7 @@ We provide a package for the [conda]_ package manager in the `conda-forge` chann
 
     conda install --channel=conda-forge physics-tenpy
 
+
 Following the recommondation of `conda-forge <https://conda-forge.org/docs/user/introduction.html>`_, you can also make
 conda-forge the default channel as follows::
 
@@ -13,6 +14,21 @@ conda-forge the default channel as follows::
 
 If you have done this, you don't need to specify the ``--channel=conda-forge`` explicitly.
 
+.. note ::
+
+    The `numpy` package provided by the `conda-forge` channel by default uses openblas on linux. 
+    As outlined in the `conda forge docs <https://conda-forge.org/docs/maintainer/knowledge_base.html#switching-blas-implementation>`_, 
+    you can switch to MKL using::
+
+        conda install "libblas=*=*mkl"
+
+.. warning ::
+
+    If you use the `conda-forge` channe and don't pin BLAS to the MKL version as outlined in the above version,
+    but nevertheless have mkl-devel installed during compilation of TeNPy, this can have *crazy* effects on the number
+    of threads used: `numpy` will call openblas and open up ``$OMP_NUM_THREADS - 1`` new threads, 
+    while MKL called from tenpy will open another ``$MKL_NUM_THREADS - 1`` threads, making it very hard to control the
+    number of threads used!
 
 Moreover, it is actually recommended to create a separate environment. 
 To create a conda environment with the name `tenpy`, where the TeNPy package (called `physics-tenpy`) is installed::

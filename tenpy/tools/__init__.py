@@ -11,6 +11,7 @@ Common to all tools is that they are not just useful for a single algorithm but 
 
     hdf5_io
     params
+    events
     misc
     math
     fit
@@ -18,10 +19,19 @@ Common to all tools is that they are not just useful for a single algorithm but 
     process
     optimization
 """
-# Copyright 2018-2020 TeNPy Developers, GNU GPLv3
+# Copyright 2018-2021 TeNPy Developers, GNU GPLv3
 
-from . import fit, hdf5_io, math, misc, params, process, string, optimization, cache
+from . import events, fit, hdf5_io, math, misc, params, process, string, optimization, cache
 
 __all__ = [
-    'fit', 'hdf5_io', 'math', 'misc', 'params', 'process', 'string', 'optimization', 'cache'
+    'events',
+    'fit',
+    'hdf5_io',
+    'math',
+    'misc',
+    'params',
+    'process',
+    'string',
+    'optimization',
+    'cache',
 ]

@@ -1,5 +1,5 @@
 """Toy code implementing the transverse-field ising model."""
-# Copyright 2018-2020 TeNPy Developers, GNU GPLv3
+# Copyright 2018-2021 TeNPy Developers, GNU GPLv3
 
 import numpy as np
 
@@ -77,7 +77,7 @@ class TFIModel:
         """
         w_list = []
         for i in range(self.L):
-            w = np.zeros((3, 3, self.d, self.d), dtype=np.float)
+            w = np.zeros((3, 3, self.d, self.d), dtype=float)
             w[0, 0] = w[2, 2] = self.id
             w[0, 1] = self.sigmax
             w[0, 2] = -self.g * self.sigmaz

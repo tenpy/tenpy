@@ -9,7 +9,7 @@ behaving like objects from these libraries.
     
     If you created a [conda]_ environment with ``conda env create -f environment.yml``, all the extra requirements below
     should already be installed :)
-    (However, a ``pip install -r requirements.txt`` does not install them.)
+    (However, a ``pip install -r requirements.txt`` does not install all of them.)
 
 Matplotlib
 ^^^^^^^^^^
@@ -31,9 +31,14 @@ Simply follow the (straight-forward) instructions of the web page for the instal
 After a successfull installation, if you run ``python`` interactively, the first output line should 
 state the python version and contain ``Anaconda`` or ``Intel Corporation``, respectively.
 
-If you have a working conda package manager, you can install the numpy build against mkl with::
+If you have a working conda package manager, you can install the numpy build against MKL with::
 
-    conda install mkl numpy scipy
+    conda install mkl mkl-devel numpy scipy 
+
+The ``mkl-devel`` package is required for linking against MKL, i.e. for compiling the Cython code.
+As outlined in :doc:`/install/conda`, on Linux/Mac you also need to pin blas to use MKL with the following line, **if you use the `conda-forge` channel**::
+
+    conda install "libblas=*=*mkl"
 
 .. note ::
     
@@ -42,6 +47,32 @@ If you have a working conda package manager, you can install the numpy build aga
     By default, MKL uses all the available CPUs, which might be in stark contrast than what you required from the
     cluster. The easiest way to set the used threads is using the environment variable `MKL_NUM_THREADS` (or `OMP_NUM_THREADS`).
     For a dynamic change of the used threads, you might want to look at :mod:`~tenpy.tools.process`.
+
+
+
+.. _linkingMKL:
+
+Compile linking agains MKL
+--------------------------
+When you compile the Cython files of TeNPy, you have the option to explicilty link against MKL, such
+that e.g. :func:`tenpy.linalg.np_conserved.tensordot` is guaranteed to call the corresponding `dgemm` or `zgemm`
+function in the BLAS from MKL.
+To link against MKL, the MKL library *including the headers* must be available during the compilation of TeNPy's Cython
+files. If you have the MKL library installed, you can export the environemnt variable `MKLROOT` to point to the
+root folder.
+Alternatively, TeNPy will recognise if you are in an active conda environment and have the `mkl` *and* `mkl-devel` conda
+packages installed during compilation. In this case, it will link against the MKL provided as conda package.
+
+:func:`tenpy.show_config` indicates whether you linked successfully against MKL::
+
+    >>> import tenpy
+    >>> tenpy.show_config()
+    tenpy 0.7.2.dev130+76c5b7f (compiled with HAVE_MKL),
+    git revision 76c5b7fe46df3e2241d85c47cbced3400caad05a using
+    python 3.9.1 | packaged by conda-forge | (default, Jan 10 2021, 02:55:42) 
+    [GCC 9.3.0]
+    numpy 1.19.5, scipy 1.6.0
+
 
 HDF5 file format support
 ^^^^^^^^^^^^^^^^^^^^^^^^
@@ -55,6 +86,6 @@ The :class:`tenpy.tools.params.Config` class supports reading and writing YAML f
 `pyyaml`; ``pip install pyyaml``.
 
 Tests
------
+^^^^^
 To run the tests, you need to install `pytest <http://pytest.org>`_, which you can for example do with ``pip install pytest``.
 For information how to run the tests, see :doc:`/install/test`.

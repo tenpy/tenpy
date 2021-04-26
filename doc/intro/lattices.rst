@@ -136,7 +136,7 @@ In the second row, we directly draw lines between all sites connected by nearest
     from tenpy.models import lattice
 
     Lx, Ly = 4, 3
-    fig, axes = plt.subplots(2, 3, True, True, figsize=(7, 4))
+    fig, axes = plt.subplots(2, 3, sharex=True, sharey=True, figsize=(7, 4))
 
     for i, shift in enumerate([1, 0, -1]):
         ax1, ax2 = axes[:, i]
@@ -169,7 +169,7 @@ wich are not included into any hexagonal. The following example shows how to rem
     from tenpy.models import lattice
 
     Lx, Ly = 3, 3
-    fig, axes = plt.subplots(1, 2, True, True, figsize=(6, 4))
+    fig, axes = plt.subplots(1, 2, sharex=True, sharey=True, figsize=(6, 4))
 
     reg_lat = lattice.Honeycomb(Lx=Lx, Ly=Ly, sites=None, bc='open')
     irr_lat = lattice.IrregularLattice(reg_lat, remove=[[0, 0, 0], [-1, -1, 1]])

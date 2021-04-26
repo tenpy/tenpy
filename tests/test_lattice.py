@@ -1,5 +1,5 @@
 """A collection of tests for tenpy.models.lattice."""
-# Copyright 2018-2020 TeNPy Developers, GNU GPLv3
+# Copyright 2018-2021 TeNPy Developers, GNU GPLv3
 
 from tenpy.models import lattice
 import tenpy.linalg.np_conserved as npc
@@ -109,8 +109,44 @@ def test_IrregularLattice():
         npt.assert_equal(m_ji[sort, 0], np.array(expect['j']))
 
 
+def test_HelicalLattice():
+    s = None
+    honey = lattice.Honeycomb(2, 3, s, bc=['periodic', -1], bc_MPS='infinite', order='Cstyle')
+    hel = lattice.HelicalLattice(honey, 2)
+    strength = np.array([[1.5, 2.5, 1.5], [2.5, 1.5, 2.5]])
+
+    def assert_same(i1, j1, s1, ij2, s2):
+        """check that coupling and multi_coupling agree up to sorting order"""
+        assert len(i1) == len(ij2)
+        sort1 = np.lexsort(np.stack([i1, j1]))
+        sort2 = np.lexsort(ij2.T)
+        for a, b in zip(sort1, sort2):
+            assert (i1[a], j1[a]) == tuple(ij2[b])
+            assert s1[a] == s2[b]
+
+    i, j, s = hel.possible_couplings(0, 1, [0, 0], strength)
+    ijm, sm = hel.possible_multi_couplings([('X', [0, 0], 0), ('X', [0, 0], 1)], strength)
+    assert np.all(i == [0, 2]) and np.all(j == [1, 3])
+    assert np.all(s == [1.5, 2.5])
+    assert_same(i, j, s, ijm, sm)
+
+    i, j, s = hel.possible_couplings(0, 0, [1, 0], strength)
+    ijm, sm = hel.possible_multi_couplings([('X', [0, 0], 0), ('X', [1, 0], 0)], strength)
+    assert np.all(i == [0, 2]) and np.all(j == [6, 8])
+    assert np.all(s == [1.5, 2.5])
+    assert_same(i, j, s, ijm, sm)
+
+    i, j, s = hel.possible_couplings(0, 0, [-1, 1], strength)
+    assert np.all(i == [4, 6]) and np.all(j == [0, 2])
+    assert np.all(s == [2.5, 1.5])  # swapped!
+    ijm, sm = hel.possible_multi_couplings([('X', [0, 0], 0), ('X', [-1, 1], 0)], strength)
+    assert_same(i, j, s, ijm, sm)
+    ijm, sm = hel.possible_multi_couplings([('X', [1, 0], 0), ('X', [0, 1], 0)], strength)
+    assert_same(i, j, s, ijm, sm)
+
+
 def test_number_nn():
-    s = site.SpinHalfSite('Sz')
+    s = None
     chain = lattice.Chain(2, s)
     assert chain.count_neighbors() == 2
     assert chain.count_neighbors(key='next_nearest_neighbors') == 2
@@ -132,6 +168,44 @@ def test_number_nn():
     for u in [0, 1, 2]:
         assert kag.count_neighbors(u) == 4
         assert kag.count_neighbors(u, key='next_nearest_neighbors') == 4
+
+
+def pairs_with_reversed(coupling_pairs):
+    res = set([])
+    for u1, u2, dx in coupling_pairs:
+        res.add((u1, u2, tuple(dx)))
+        res.add((u2, u1, tuple(-dx)))
+    return res
+
+
+def test_pairs():
+    lattices = [
+        lattice.Chain(2, None),
+        lattice.Ladder(2, None),
+        lattice.Square(2, 2, None),
+        lattice.Triangular(2, 2, None),
+        lattice.Honeycomb(2, 2, None),
+        lattice.Kagome(2, 2, None)
+    ]
+    for lat in lattices:
+        print(lat.__class__.__name__)
+        found_dist_pairs = lat.find_coupling_pairs(5, 3.)
+        dists = sorted(found_dist_pairs.keys())
+        for i, name in enumerate([
+                'nearest_neighbors', 'next_nearest_neighbors', 'next_next_nearest_neighbors',
+                'fourth_nearest_neighbors', 'fifth_nearest_neighbors'
+        ]):
+            if name not in lat.pairs:
+                assert i > 2  # all of them should define up to next_next_nearest_neighbors
+                continue
+            print(name)
+            defined_pairs = lat.pairs[name]
+            found_pairs = found_dist_pairs[dists[i]]
+            assert len(defined_pairs) == len(found_pairs)
+            defined_pairs = pairs_with_reversed(defined_pairs)
+            found_pairs = pairs_with_reversed(found_pairs)
+            assert defined_pairs == found_pairs
+    # done
 
 
 def test_lattice_order():
@@ -171,6 +245,12 @@ def test_lattice_order():
                              [0, 1, 2], [0, 2, 0], [0, 2, 2],
                              [1, 0, 1], [1, 1, 1], [1, 2, 1], [1, 0, 0], [1, 0, 2], [1, 1, 0],
                              [1, 1, 2], [1, 2, 0], [1, 2, 2]])
+    npt.assert_equal(kag.order, order_kag_gr)
+    kag = lattice.Kagome(2, 4, s, order=('grouped', [[0], [2, 1]], [1, 0, 2]))
+    order_kag_gr = np.array([[0, 0, 0], [1, 0, 0], [0, 0, 2], [0, 0, 1], [1, 0, 2], [1, 0, 1],
+                             [0, 1, 0], [1, 1, 0], [0, 1, 2], [0, 1, 1], [1, 1, 2], [1, 1, 1],
+                             [0, 2, 0], [1, 2, 0], [0, 2, 2], [0, 2, 1], [1, 2, 2], [1, 2, 1],
+                             [0, 3, 0], [1, 3, 0], [0, 3, 2], [0, 3, 1], [1, 3, 2], [1, 3, 1]])
     npt.assert_equal(kag.order, order_kag_gr)
     # yapf: enable
 

@@ -41,17 +41,18 @@ is the discarded part (orthogonal to the kept part) and the
     There might be other sources of error as well, for example TEBD has also an discretisation
     error depending on the chosen time step.
 """
-# Copyright 2018-2020 TeNPy Developers, GNU GPLv3
+# Copyright 2018-2021 TeNPy Developers, GNU GPLv3
 
 import numpy as np
 from ..linalg import np_conserved as npc
+from ..tools.hdf5_io import Hdf5Exportable
 import warnings
 from ..tools.params import asConfig
 
 __all__ = ['TruncationError', 'truncate', 'svd_theta']
 
 
-class TruncationError:
+class TruncationError(Hdf5Exportable):
     r"""Class representing a truncation error.
 
     The default initialization represents "no truncation".
@@ -77,11 +78,6 @@ class TruncationError:
         This is probably the quantity you are actually interested in.
         Takes into account the factor 2 explained in the section on Errors in the
         `TEBD Wikipedia article <https://en.wikipedia.org/wiki/Time-evolving_block_decimation>`.
-
-    Examples
-    --------
-    >>> TE = TruncationError()
-    >>> TE += tebd.time_evolution(...)  # add `eps`, multiply `ov`
     """
     def __init__(self, eps=0., ov=1.):
         self.eps = eps
@@ -158,12 +154,12 @@ def truncate(S, options):
             Keep at least `chi_min` Schmidt values.
         degeneracy_tol: float
             Don't cut between neighboring Schmidt values with
-            ``|log(S[i]/S[j])| < symmetry_tol``, or equivalently
-            ``|S[i] - S[j]|/S[j] < exp(symmetry_tol) - 1 ~= symmetry_tol``
-            for small `symmetry_tol`.
+            ``|log(S[i]/S[j])| < degeneracy_tol``, or equivalently
+            ``|S[i] - S[j]|/S[j] < exp(degeneracy_tol) - 1 ~= degeneracy_tol``
+            for small `degeneracy_tol`.
             In other words, keep either both `i` and `j` or none, if the
             Schmidt values are degenerate with a relative error smaller
-            than `symmetry_tol`, which we expect to happen in the case
+            than `degeneracy_tol`, which we expect to happen in the case
             of symmetries.
         svd_min : float
             Discard all small Schmidt values ``S[i] < svd_min``.
@@ -217,18 +213,18 @@ def truncate(S, options):
     piv = np.argsort(logS)  # sort *ascending*.
     logS = logS[piv]
     # goal: find an index 'cut' such that we keep piv[cut:], i.e. cut between `cut-1` and `cut`.
-    good = np.ones(len(piv), dtype=np.bool)  # good[cut] = (is `cut` a good choice?)
+    good = np.ones(len(piv), dtype=np.bool_)  # good[cut] = (is `cut` a good choice?)
     # we choose the smallest 'good' cut.
 
     if chi_max is not None:
         # keep at most chi_max values
-        good2 = np.zeros(len(piv), dtype=np.bool)
+        good2 = np.zeros(len(piv), dtype=np.bool_)
         good2[-chi_max:] = True
         good = _combine_constraints(good, good2, "chi_max")
 
     if chi_min is not None and chi_min > 1:
         # keep at most chi_max values
-        good2 = np.ones(len(piv), dtype=np.bool)
+        good2 = np.ones(len(piv), dtype=np.bool_)
         good2[-chi_min + 1:] = False
         good = _combine_constraints(good, good2, "chi_min")
 
@@ -236,7 +232,7 @@ def truncate(S, options):
         # don't cut between values (cut-1, cut) with ``log(S[cut]/S[cut-1]) < deg_tol``
         # this is equivalent to
         # ``(S[cut] - S[cut-1])/S[cut-1] < exp(deg_tol) - 1 = deg_tol + O(deg_tol^2)``
-        good2 = np.empty(len(piv), np.bool)
+        good2 = np.empty(len(piv), np.bool_)
         good2[0] = True
         good2[1:] = np.greater_equal(logS[1:] - logS[:-1], deg_tol)
         good = _combine_constraints(good, good2, "degeneracy_tol")
@@ -251,7 +247,7 @@ def truncate(S, options):
         good = _combine_constraints(good, good2, "trunc_cut")
 
     cut = np.nonzero(good)[0][0]  # smallest possible cut: keep as many S as allowed
-    mask = np.zeros(len(S), dtype=np.bool)
+    mask = np.zeros(len(S), dtype=np.bool_)
     np.put(mask, piv[cut:], True)
     norm_new = np.linalg.norm(S[mask])
     return mask, norm_new, TruncationError.from_S(S[np.logical_not(mask)]),

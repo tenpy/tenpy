@@ -18,34 +18,36 @@ effective Hamiltonians mentioned above. Currently, effective Hamiltonians for
 The :class:`VariationalCompression` and :class:`VariationalApplyMPO`
 implemented here also directly use the :class:`Sweep` class.
 
-.. todo ::
-    Rebuild TDVP engine as subclasses of sweep.
 """
-# Copyright 2018-2020 TeNPy Developers, GNU GPLv3
+# Copyright 2018-2021 TeNPy Developers, GNU GPLv3
 
 import numpy as np
 import time
 import warnings
 import copy
+import logging
+logger = logging.getLogger(__name__)
 
 from ..linalg import np_conserved as npc
 from .truncation import svd_theta, TruncationError
-from ..networks.mps import MPSEnvironment
+from ..networks.mps import MPSEnvironment, MPS
 from ..networks.mpo import MPOEnvironment
 from ..linalg.sparse import NpcLinearOperator, SumNpcLinearOperator, OrthogonalNpcLinearOperator
-from ..tools.params import asConfig
+from .algorithm import Algorithm
 
 __all__ = [
     'Sweep', 'EffectiveH', 'OneSiteH', 'TwoSiteH', 'VariationalCompression', 'VariationalApplyMPO'
 ]
 
 
-class Sweep:
+class Sweep(Algorithm):
     r"""Prototype class for a 'sweeping' algorithm.
 
     This is a superclass, intended to cover common procedures in all algorithms that 'sweep'. This
-    includes DMRG, TDVP, etc. Only DMRG is currently implemented in this way.
+    includes DMRG, TDVP, etc.
 
+    .. todo ::
+        TDVP is currently not implemented with the sweep class.
 
     Parameters
     ----------
@@ -55,10 +57,18 @@ class Sweep:
         The model representing the Hamiltonian for which we want to find the ground state.
     options : dict
         Further optional configuration parameters.
+    resume_data : None | dict
+        Can only be passed as keyword argument.
+        By default (``None``) ignored. If a `dict`, it should contain the data returned by
+        :meth:`get_resume_data` when intending to continue/resume an interrupted run,
+        in particular `'init_env_data'`.
+    orthogonal_to : None | list of :class:`~tenpy.networks.mps.MPS` | list of dict
+        States to orthogonalize against, see :meth:`init_env`.
 
     Options
     -------
     .. cfg:config :: Sweep
+        :include: Algorithm
 
         combine : bool
             Whether to combine legs into pipes. This combines the virtual and
@@ -67,16 +77,15 @@ class Sweep:
             calculating charge combinations in the contractions, but one
             :meth:`matvec` is formally more expensive,
             :math:`O(2 d^3 \chi^3 D)`.
-        lanczos_params : :class:`Config`
-            Lanczos parameters as described in
-            :func:`~tenpy.linalg.lanczos.lanczos`
-        trunc_params : dict
-            Truncation parameters as described in :cfg:config:`truncation`.
-        verbose : bool | int
-            Level of verbosity (i.e. how much status information to print); higher=more output.
+        lanczos_params : dict
+            Lanczos parameters as described in :cfg:config:`Lanczos`.
 
     Attributes
     ----------
+    EffectiveH : class
+        Class attribute; a sublcass of :class:`~tenpy.algorithms.mps_common.EffectiveH`.
+        It's length attribute determines how many sites are optimized/updated at once,
+        see also :attr:`n_optimize`.
     options: :class:`~tenpy.tools.params.Config`
         Optional parameters.
     E_trunc_list : list
@@ -98,7 +107,7 @@ class Sweep:
         If a simulation runs out of time (`time.time() - start_time > max_seconds`), the run will
         terminate with `shelve = True`.
     sweeps : int
-        The number of sweeps already performed. (Useful for re-start).
+        The number of sweeps already performed.
     time0 : float
         Time marker for the start of the run.
     trunc_err_list : list
@@ -108,23 +117,24 @@ class Sweep:
         Whether it is necessary to update the `LP` and `RP`.
         The latter are chosen such that the environment is growing for infinite systems, but
         we only keep the minimal number of environment tensors in memory (inside :attr:`env`).
+    chi_list : dict | ``None``
+        A dictionary to gradually increase the `chi_max` parameter of `trunc_params`.
+        See :cfg:option:`Sweep.chi_list`
     """
-    def __init__(self, psi, model, options):
+    def __init__(self, psi, model, options, *, orthogonal_to=None, resume_data=None):
         if not hasattr(self, "EffectiveH"):
             raise NotImplementedError("Subclass needs to set EffectiveH")
-        self.options = options = asConfig(options, "Sweep")
-        self.psi = psi
-        self.verbose = options.verbose
+        super().__init__(psi, model, options, resume_data=resume_data)
+        options = self.options
 
         self.combine = options.get('combine', False)
         self.finite = self.psi.finite
 
         self.lanczos_params = options.subconfig('lanczos_params')
-        self.trunc_params = options.subconfig('trunc_params')
 
         self.env = None
         self.ortho_to_envs = []
-        self.init_env(model)
+        self.init_env(model, resume_data=resume_data, orthogonal_to=orthogonal_to)
         self.i0 = 0
         self.move_right = True
         self.update_LP_RP = (True, False)
@@ -134,7 +144,31 @@ class Sweep:
         warnings.warn("renamed self.engine_params -> self.options", FutureWarning, stacklevel=2)
         return self.options
 
-    def init_env(self, model=None):
+    @property
+    def _all_envs(self):
+        return [self.env] + self.ortho_to_envs
+
+    def get_resume_data(self, sequential_simulations=False):
+        data = super().get_resume_data(sequential_simulations)
+        data['init_env_data'] = self.env.get_initialization_data()
+        if not sequential_simulations:
+            data['sweeps'] = self.sweeps
+            if len(self.ortho_to_envs) > 0:
+                data['orthogonal_to'] = [e.ket for e in self.ortho_to_envs]
+        return data
+
+    @property
+    def n_optimize(self):
+        """the number of sites to be optimized over at once.
+
+        Indirectly set by the class attribute :attr:`EffectiveH` and it's `length`.
+        For example, :class:`~tenpy.algorithms.dmrg.TwoSiteDMRGEngine` uses the
+        :class:`~tenpy.algorithms.mps_common.TwoSiteH` and hence has ``n_optimize=2``,
+        while the :class:`~tenpy.algorithms.dmrg.SingleSiteDMRGEngine` has ``n_optimize=1``.
+        """
+        return self.EffectiveH.length
+
+    def init_env(self, model=None, resume_data=None, orthogonal_to=None):
         """(Re-)initialize the environment.
 
         This function is useful to (re-)start a Sweep with a slightly different
@@ -147,6 +181,20 @@ class Sweep:
         model : :class:`~tenpy.models.MPOModel`
             The model representing the Hamiltonian for which we want to find the ground state.
             If ``None``, keep the model used before.
+        resume_data : None | dict
+            Given when resuming a simulation, as returned by :meth:`get_resume_data`.
+        orthogonal_to : None | list of :class:`~tenpy.networks.mps.MPS` | list of dict
+            List of other matrix product states to orthogonalize against.
+            Instead of just the state, you can specify a dict with the state as `ket`
+            and further keyword arguments for initializing the
+            :class:`~tenpy.networks.mps.MPSEnvironment`; the :attr:`psi` to be optimized is
+            used as `bra`.
+            Works only for finite or segment MPS; for infinite MPS it must be `None`.
+            This can be used to find (a few) excited states as follows.
+            First, run DMRG to find the ground state,
+            and then run DMRG again while orthogonalizing against the ground state,
+            which yields the first excited state (in the same symmetry sector), and so on.
+            Note that ``resume_data['orthogonal_to']`` takes precedence over the argument.
 
         Options
         -------
@@ -154,22 +202,21 @@ class Sweep:
             Options `LP`, `LP_age`, `RP` and `RP_age` are now collected in a dictionary
             `init_env_data` with different keys `init_LP`, `init_RP`, `age_LP`, `age_RP`
 
+        .. deprecated :: 0.8.0
+            Instead of passing the `init_env_data` as a option, it should be passed
+            as dict entry of `resume_data`.
+
         .. cfg:configoptions :: Sweep
 
             init_env_data : dict
                 Dictionary as returned by ``self.env.get_initialization_data()`` from
                 :meth:`~tenpy.networks.mpo.MPOEnvironment.get_initialization_data`.
-            orthogonal_to : list of :class:`~tenpy.networks.mps.MPSEnvironment`
-                List of other matrix product states to orthogonalize against.
-                Works only for finite systems.
-                This parameter can be used to find (a few) excited states as
-                follows. First, run DMRG to find the ground state and then
-                run DMRG again while orthogonalizing against the ground state,
-                which yields the first excited state (in the same symmetry
-                sector), and so on.
+                Deprecated, use the `resume_data` function/class argument instead.
+            orthogonal_to : list of :class:`~tenpy.networks.mps.MPS`
+                Deprecated in favor of the `orthogonal_to` function argument (forwarded from the
+                class argument) with the same effect.
             start_env : int
-                Number of sweeps to be performed without optimization to update
-                the environment.
+                Number of sweeps to be performed without optimization to update the environment.
 
         Raises
         ------
@@ -178,23 +225,20 @@ class Sweep:
             those of hte old model.
         """
         H = model.H_MPO if model is not None else self.env.H
-        if self.env is None or self.psi.bc == 'finite':
-            init_env_data = self.options.get("init_env_data", {})
-        else:  # re-initialize
-            compatible = True
-            if model is not None:
-                try:
-                    H.get_W(0).get_leg('wL').test_equal(self.env.H.get_W(0).get_leg('wL'))
-                except ValueError:
-                    compatible = False
-                    warnings.warn("The leg of the new model is incompatible with the previous one."
-                                  "Rebuild environment from scratch.")
-            if compatible:
-                init_env_data = self.env.get_initialization_data()
-            else:
-                init_env_data = self.options.get("init_env_data", {})
-            if self.options.get('chi_list', None) is not None:
-                warnings.warn("Re-using environment with `chi_list` set! Do you want this?")
+        if resume_data is None:
+            resume_data = {}
+        if 'init_env_data' in self.options:
+            warnings.warn("put init_env_data in resume_data instead of options!", FutureWarning)
+            resume_data.setdefault('init_env_data', self.options['init_env_data'])
+        init_env_data = {}
+        if self.env is not None and self.psi.bc != 'finite':
+            # reuse previous environments.
+            # if legs are incompatible, MPOEnvironment.init_first_LP_last_RP will regenerate
+            init_env_data = self.env.get_initialization_data()
+        init_env_data = resume_data.get('init_env_data', init_env_data)
+        if not self.psi.finite and init_env_data and \
+                self.options.get('chi_list', None) is not None:
+            warnings.warn("Re-using environment with `chi_list` set! Do you want this?")
         replaced = [('LP', 'init_LP'), ('LP_age', 'age_LP'), ('RP', 'init_RP'),
                     ('RP_age', 'age_RP')]
         if any([key_old in self.options for key_old, _ in replaced]):
@@ -207,11 +251,24 @@ class Sweep:
         self.env = MPOEnvironment(self.psi, H, self.psi, **init_env_data)
 
         # (re)initialize ortho_to_envs
-        orthogonal_to = self.options.get('orthogonal_to', [])
-        if len(orthogonal_to) > 0:
+        if 'orthogonal_to' in self.options:
+            warnings.warn(
+                "Deprecated `orthogonal_to` in dmrg options: instead give "
+                "`orthogonal_to` as keyword to the Algorithm class.", FutureWarning)
+            assert orthogonal_to is None
+            orthogonal_to = self.options['orthogonal_to']
+        if 'orthogonal_to' in resume_data:
+            orthogonal_to = resume_data['orthogonal_to']  # precedence for resume_data!
+
+        if orthogonal_to:
             if not self.finite:
                 raise ValueError("Can't orthogonalize for infinite MPS: overlap not well defined.")
-            self.ortho_to_envs = [MPSEnvironment(self.psi, ortho) for ortho in orthogonal_to]
+            self.ortho_to_envs = []
+            for ortho in orthogonal_to:
+                if isinstance(ortho, dict):
+                    self.ortho_to_envs.append(MPSEnvironment(self.psi, **ortho))
+                else:
+                    self.ortho_to_envs.append(MPSEnvironment(self.psi, ortho))
 
         if self.options.get("cache_env", False):
             import h5py
@@ -224,16 +281,14 @@ class Sweep:
                 env._LP = cache.make_ListCache(env._LP, "/ortho_{0:d}/LP".format(i))
                 env._RP = cache.make_ListCache(env._RP, "/ortho_{0:d}/RP".format(i))
 
-        self.reset_stats()
+        self.reset_stats(resume_data)
 
         # initial sweeps of the environment (without mixer)
         if not self.finite:
-            if self.verbose >= 1:
-                print("Initial sweeps...")
             start_env = self.options.get('start_env', 1)
             self.environment_sweeps(start_env)
 
-    def reset_stats(self):
+    def reset_stats(self, resume_data=None):
         """Reset the statistics. Useful if you want to start a new Sweep run.
 
         This method is expected to be overwritten by subclass, and should then define
@@ -244,16 +299,25 @@ class Sweep:
 
             sweep_0 : int
                 Number of sweeps that have already been performed.
-
+            chi_list : None | dict(int -> int)
+                By default (``None``) this feature is disabled.
+                A dict allows to gradually increase the `chi_max`.
+                An entry `at_sweep: chi` states that starting from sweep `at_sweep`,
+                the value `chi` is to be used for ``trunc_params['chi_max']``.
+                For example ``chi_list={0: 50, 20: 100}`` uses ``chi_max=50`` for the first
+                20 sweeps and ``chi_max=100`` afterwards.
         """
         self.sweeps = self.options.get('sweep_0', 0)
+        if resume_data is not None and 'sweeps' in resume_data:
+            self.sweeps = resume_data['sweeps']
         self.shelve = False
         self.chi_list = self.options.get('chi_list', None)
         if self.chi_list is not None:
-            chi_max = self.chi_list[max([k for k in self.chi_list.keys() if k <= self.sweeps])]
-            self.trunc_params['chi_max'] = chi_max
-            if self.verbose >= 1:
-                print("Setting chi_max =", chi_max)
+            done = [k for k in self.chi_list.keys() if k < self.sweeps]
+            if len(done) > 0:
+                chi_max = self.chi_list[max(done)]
+                self.trunc_params['chi_max'] = chi_max
+                logger.info("Setting chi_max=%d", chi_max)
         self.time0 = time.time()
 
     def environment_sweeps(self, N_sweeps):
@@ -266,14 +330,9 @@ class Sweep:
         """
         if N_sweeps <= 0:
             return
-        if self.verbose >= 1:
-            print("Updating environment")
+        logger.info("start environment_sweep")
         for k in range(N_sweeps):
             self.sweep(optimize=False)
-            if self.verbose >= 1:
-                print('.', end='', flush=True)
-        if self.verbose >= 1:
-            print("", flush=True)  # end line
 
     def sweep(self, optimize=True):
         """One 'sweep' of a sweeper algorithm.
@@ -298,14 +357,19 @@ class Sweep:
         self.trunc_err_list = []
         schedule = self.get_sweep_schedule()
 
+        if optimize and self.chi_list is not None:
+            new_chi_max = self.chi_list.get(self.sweeps, None)
+            if new_chi_max is not None:
+                logger.info("Setting chi_max=%d", new_chi_max)
+                self.trunc_params['chi_max'] = new_chi_max
+
         # the actual sweep
         for i0, move_right, update_LP_RP in schedule:
             self.i0 = i0
             self.move_right = move_right
             self.update_LP_RP = update_LP_RP
             update_LP, update_RP = update_LP_RP
-            if self.verbose >= 10:
-                print("in sweep: i0 =", i0)
+            logger.debug("in sweep: i0 =%d", i0)
             # --------- the main work --------------
             theta = self.prepare_update()
             update_data = self.update_local(theta, optimize=optimize)
@@ -321,12 +385,6 @@ class Sweep:
 
         if optimize:  # count optimization sweeps
             self.sweeps += 1
-            if self.chi_list is not None:
-                new_chi_max = self.chi_list.get(self.sweeps, None)
-                if new_chi_max is not None:
-                    self.trunc_params['chi_max'] = new_chi_max
-                    if self.verbose >= 1:
-                        print("Setting chi_max =", new_chi_max)
         return np.max(self.trunc_err_list)
 
     def get_sweep_schedule(self):
@@ -793,8 +851,8 @@ class TwoSiteH(EffectiveH):
         adj.W0 = self.W0.conj().ireplace_labels(['wL*', 'wR*'], ['wL', 'wR'])
         adj.W1 = self.W1.conj().ireplace_labels(['wL*', 'wR*'], ['wL', 'wR'])
         if self.combine:
-            adj.LHeff = self.LHeff.conj().ireplace_labels('wR*', 'wR')
-            adj.RHeff = self.RHeff.conj().ireplace_labels('wL*', 'wL')
+            adj.LHeff = self.LHeff.conj().ireplace_label('wR*', 'wR')
+            adj.RHeff = self.RHeff.conj().ireplace_label('wL*', 'wL')
         for key in ['LP', 'RP', 'W0', 'W1']:
             getattr(adj, key).itranspose(getattr(self, key).get_leg_labels())
         if self.combine:
@@ -817,6 +875,10 @@ class VariationalCompression(Sweep):
         The state to be compressed.
     options : dict
         See :cfg:config:`VariationalCompression`.
+    resume_data : None | dict
+        By default (``None``) ignored. If a `dict`, it should contain the data returned by
+        :meth:`get_resume_data` when intending to continue/resume an interrupted run,
+        in particular `'init_env_data'`.
 
     Options
     -------
@@ -827,6 +889,8 @@ class VariationalCompression(Sweep):
             Truncation parameters as described in :cfg:config:`truncation`.
         N_sweeps : int
             Number of sweeps to perform.
+        start_env_sites : int
+            Number of sites to contract for the inital LP/RP environment in case of infinte MPS.
 
     Attributes
     ----------
@@ -835,10 +899,9 @@ class VariationalCompression(Sweep):
     """
     EffectiveH = TwoSiteH
 
-    def __init__(self, psi, options):
-        self.options = asConfig(options, "VariationalCompression")
+    def __init__(self, psi, options, resume_data=None):
+        super().__init__(psi, None, options, resume_data=resume_data)
         self.renormalize = []
-        Sweep.__init__(self, psi, None, self.options)
 
     def run(self):
         """Run the compression.
@@ -860,34 +923,25 @@ class VariationalCompression(Sweep):
             self.psi.norm *= max(self.renormalize)
         return TruncationError(max_trunc_err, 1. - 2. * max_trunc_err)
 
-    def init_env(self, _):
+    def init_env(self, _=None, resume_data=None, orthogonal_to=None):
         """Initialize the environment.
 
-        The argument is not used and only there for compatibility with the Sweep class.
+        Parameters
+        ----------
+        _, orthogonal_to :
+            Ignored, only there for compatibility with the :class:`Sweep` class.
+        resume_data : dict
+            May contain `init_env_data`.
         """
-        init_env_data = self.options.get("init_env_data", {})
+        if resume_data is None:
+            resume_data = {}
+        init_env_data = resume_data.get("init_env_data", {})
         old_psi = self.psi.copy()
+        start_env_sites = self.options.get('start_env_sites', 2)
+        if start_env_sites is not None and not self.psi.finite:
+            init_env_data['start_env_sites'] = start_env_sites
         self.env = MPSEnvironment(self.psi, old_psi, **init_env_data)
-        if (not self.psi.finite and 'init_LP' not in init_env_data
-                and 'init_RP' not in init_env_data):
-            start_env_sites = self.options.get("start_env_sites", 0)
-            self._init_env_from_start_env_sites(start_env_sites)
         self.reset_stats()
-
-    def _init_env_from_start_env_sites(self, start_env_sites):
-        """initialize LP[0] and RP[L-1] to already include `start_env_sites` sites."""
-        if start_env_sites is None or start_env_sites == 0 or start_env_sites == np.inf:
-            return
-        env = self.env
-        L = env.L
-        LP = env.init_LP(-start_env_sites)
-        for i in range(-start_env_sites, 0):
-            LP = env._contract_LP(i, LP)
-        env.set_LP(0, LP, age=start_env_sites)
-        RP = env.init_RP(L - 1 + start_env_sites)
-        for i in range(L - 1 + start_env_sites, L - 1, -1):
-            RP = env._contract_RP(i, RP)
-        env.set_RP(L - 1, RP, age=start_env_sites)
 
     def update_local(self, _, optimize=True):
         """Perform local update.
@@ -906,6 +960,7 @@ class VariationalCompression(Sweep):
         return self.update_new_psi(th)
 
     def update_new_psi(self, theta):
+        """Given a new two-site wave function `theta`, split it and save it in :attr:`psi`."""
         i0 = self.i0
         new_psi = self.psi
         qtotal_i0 = new_psi.get_B(i0, form=None).qtotal
@@ -950,7 +1005,7 @@ class VariationalApplyMPO(VariationalCompression):
     Here `LP` and `RP` are the environments with partial contractions,
     see also :class:`~tenpy.networks.mpo.MPOEnvironment`.
     This algorithms sweeps through the sites, updating 2 `N` tensors in each :meth:`update_local`,
-    say on sites `i0` and `i1`=`i0`+1. We need to maximize:
+    say on sites `i0` and `i1` = `i0` +1. We need to maximize::
 
         |     .-------M[i0]---M[i1]---.
         |     |       |       |       |
@@ -971,8 +1026,14 @@ class VariationalApplyMPO(VariationalCompression):
     ----------
     psi : :class:`~tenpy.networks.mps.MPS`
         The state to which
+    U_MPO : :class:`~tenpy.networks.mpo.MPO`
+        MPO to be applied to the state.
     options : dict
         See :cfg:config:`VariationalCompression`.
+    resume_data : None | dict
+        By default (``None``) ignored. If a `dict`, it should contain the data returned by
+        :meth:`get_resume_data` when intending to continue/resume an interrupted run,
+        in particular `'init_env_data'`.
 
     Options
     -------
@@ -985,25 +1046,30 @@ class VariationalApplyMPO(VariationalCompression):
     renormalize : list
         Used to keep track of renormalization in the last sweep for `psi.norm`.
     """
-    def __init__(self, psi, U_MPO, options):
-        self.options = asConfig(options, "VariationalApplyMPO")
+    def __init__(self, psi, U_MPO, options, resume_data=None):
+        Sweep.__init__(self, psi, U_MPO, options, resume_data=resume_data)
         self.renormalize = [None] * (psi.L - int(psi.finite))
-        Sweep.__init__(self, psi, U_MPO, self.options)
 
-    def init_env(self, U_MPO):
+    def init_env(self, U_MPO, resume_data=None, orthogonal_to=None):
         """Initialize the environment.
 
         Parameters
         ----------
         U_MPO : :class:`~tenpy.networks.mpo.MPO`
             The MPO to be applied to the sate.
+        resume_data : dict
+            May contain `init_env_data`.
+        orthogonal_to :
+            Ignored.
         """
-        init_env_data = self.options.get("init_env_data", {})
+        if resume_data is None:
+            resume_data = {}
+        init_env_data = resume_data.get("init_env_data", {})
         old_psi = self.psi.copy()
+        start_env_sites = self.options.get("start_env_sites", None)
+        if start_env_sites is not None:
+            init_env_data['start_env_sites'] = start_env_sites
         self.env = MPOEnvironment(self.psi, U_MPO, old_psi, **init_env_data)
-        if not self.psi.finite:
-            start_env_sites = self.options.get("start_env_sites", 1)
-            self._init_env_from_start_env_sites(start_env_sites)
         self.reset_stats()
 
     def update_local(self, _, optimize=True):

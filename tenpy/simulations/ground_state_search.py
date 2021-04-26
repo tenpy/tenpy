@@ -1,0 +1,49 @@
+"""Simulations for ground state searches."""
+# Copyright 2020-2021 TeNPy Developers, GNU GPLv3
+
+from . import simulation
+from .simulation import *
+
+__all__ = simulation.__all__ + ['GroundStateSearch']
+
+
+class GroundStateSearch(Simulation):
+    """Simutions for variational ground state searches.
+
+    Parameters
+    ----------
+    options : dict-like
+        The simulation parameters. Ideally, these options should be enough to fully specify all
+        parameters of a simulation to ensure reproducibility.
+
+    Options
+    -------
+    .. cfg:config :: GroundStateSearch
+        :include: Simulation
+
+    """
+    default_algorithm = 'TwoSiteDMRGEngine'
+    default_measurements = Simulation.default_measurements + []
+
+    def init_algorithm(self, **kwargs):
+        """Initialize the algorithm.
+
+        Options
+        -------
+        .. cfg:configoptions :: GroundStateSearch
+
+            save_stats : bool
+                Whether to include the `sweep_stats` and `update_stats` of the engine into the
+                output.
+        """
+        super().init_algorithm(**kwargs)
+        if self.options.get("save_stats", True):
+            for name in ['sweep_stats', 'update_stats']:
+                stats = getattr(self.engine, name, None)
+                if stats is not None:
+                    self.results[name] = stats
+
+    def run_algorithm(self):
+        """Run the algorithm. Calls ``self.engine.run()``."""
+        E, psi = self.engine.run()
+        self.results['energy'] = E

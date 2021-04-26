@@ -2,6 +2,8 @@ r"""Test several time evolution methods and compare to exact expectation values
 
 Setup is a time evolution with TFI Model starting from a spin polarized state.
 """
+# Copyright 2020-2021 TeNPy Developers, GNU GPLv3
+
 import numpy as np
 import scipy.linalg as LA
 import numpy.testing as npt
@@ -67,7 +69,7 @@ def test_ExpMPOEvolution(bc_MPS, approximation, compression, g=1.5):
     if bc_MPS == 'infinite':
         psiTEBD = psi.copy()
         TEBD_params = {'dt': dt, 'N_steps': 1}
-        EngTEBD = tebd.Engine(psiTEBD, M, TEBD_params)
+        EngTEBD = tebd.TEBDEngine(psiTEBD, M, TEBD_params)
         for i in range(30):
             EngTEBD.run()
             psi = eng.run()
@@ -212,11 +214,11 @@ def test_time_methods(algorithm):
         }
     }
     if algorithm == 'TEBD':
-        eng = tebd.Engine(psi, M, params)
+        eng = tebd.TEBDEngine(psi, M, params)
     elif algorithm == 'TDVP':
         params['active_sites'] = 2
         del params['order']
-        eng = tdvp.Engine(psi, M, params)
+        eng = tdvp.TDVPEngine(psi, M, params)
     elif algorithm == 'ExpMPO':
         params['compression_method'] = 'SVD'
         del params['order']

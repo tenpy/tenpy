@@ -2,7 +2,7 @@
 
 .. autodata:: LeviCivita3
 """
-# Copyright 2018-2020 TeNPy Developers, GNU GPLv3
+# Copyright 2018-2021 TeNPy Developers, GNU GPLv3
 
 import numpy as np
 import warnings
@@ -213,8 +213,9 @@ def perm_sign(p):
 
     Examples
     --------
-    >>> for p in itertools.permutations(range(3))]):
-    ...      print('{p!s}: {sign!s}'.format(p=p, sign=perm_sign(p)))
+    >>> import itertools
+    >>> for p in itertools.permutations(range(3)):
+    ...      print('{p!s}: {sign!s}'.format(p=p, sign=tenpy.tools.math.perm_sign(p)))
     (0, 1, 2): 1
     (0, 2, 1): -1
     (1, 0, 2): -1

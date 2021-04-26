@@ -1,5 +1,5 @@
 """A collection of tests for tenpy.linalg.lanczos."""
-# Copyright 2018-2020 TeNPy Developers, GNU GPLv3
+# Copyright 2018-2021 TeNPy Developers, GNU GPLv3
 
 import tenpy.linalg.np_conserved as npc
 import numpy as np
@@ -16,9 +16,9 @@ ch = npc.ChargeInfo([2])
 def test_gramschmidt(n=30, k=5, tol=1.e-15):
     leg = gen_random_legcharge(ch, n)
     vecs_old = [npc.Array.from_func(np.random.random, [leg], shape_kw='size') for i in range(k)]
-    vecs_new, _ = lanczos.gram_schmidt(vecs_old, rcond=0., verbose=1)
+    vecs_new, _ = lanczos.gram_schmidt(vecs_old, rcond=0.)
     assert all([v == w for v, w in zip(vecs_new, vecs_old)])
-    vecs_new, _ = lanczos.gram_schmidt(vecs_old, rcond=tol, verbose=1)
+    vecs_new, _ = lanczos.gram_schmidt(vecs_old, rcond=tol)
     vecs = [v.to_ndarray() for v in vecs_new]
     ovs = np.zeros((k, k))
     for i, v in enumerate(vecs):
@@ -41,7 +41,7 @@ def test_lanczos_gs(n, N_cache, tol=5.e-14):
     H_Op = H  # use `matvec` of the array
     psi_init = npc.Array.from_func(np.random.random, [leg], qtotal=qtotal)
 
-    E0, psi0, N = lanczos.lanczos(H_Op, psi_init, {'verbose': 1, 'N_cache': N_cache})
+    E0, psi0, N = lanczos.lanczos(H_Op, psi_init, {'N_cache': N_cache})
     print("full spectrum:", E_flat)
     print("E0 = {E0:.14f} vs exact {E0_flat:.14f}".format(E0=E0, E0_flat=E0_flat))
     print("|E0-E0_flat| / |E0_flat| =", abs((E0 - E0_flat) / E0_flat))
@@ -55,7 +55,7 @@ def test_lanczos_gs(n, N_cache, tol=5.e-14):
     assert (abs(1. - abs(ov)) < tol)
 
     print("version with arpack")
-    E0a, psi0a = lanczos.lanczos_arpack(H_Op, psi_init, {'verbose': 1})
+    E0a, psi0a = lanczos.lanczos_arpack(H_Op, psi_init, {})
     print("E0a = {E0a:.14f} vs exact {E0_flat:.14f}".format(E0a=E0a, E0_flat=E0_flat))
     print("|E0a-E0_flat| / |E0_flat| =", abs((E0a - E0_flat) / E0_flat))
     psi0a_H_psi0a = npc.inner(psi0a, npc.tensordot(H, psi0a, axes=[1, 0]), 'range', do_conj=True)
@@ -75,7 +75,7 @@ def test_lanczos_gs(n, N_cache, tol=5.e-14):
             continue  # not in same charge sector
         print("--- excited state #", len(orthogonal_to))
         ortho_to = [psi.copy() for psi in orthogonal_to]  # (gets modified inplace)
-        lanczos_params = {'verbose': 1, 'reortho': True}
+        lanczos_params = {'reortho': True}
         if E1_flat > -0.01:
             lanczos_params['E_shift'] = -2. * E1_flat - 0.2
         E1, psi1, N = lanczos.lanczos(sparse.OrthogonalNpcLinearOperator(H_Op, ortho_to), psi_init,
@@ -108,13 +108,15 @@ def test_lanczos_evolve(n, N_cache, tol=5.e-14):
     H_Op = H  # use `matvec` of the array
     qtotal = leg.to_qflat()[0]
     psi_init = npc.Array.from_func(np.random.random, [leg], qtotal=qtotal)
-    psi_init /= npc.norm(psi_init)
+    #psi_init /= npc.norm(psi_init) # not necessary
     psi_init_flat = psi_init.to_ndarray()
-    lanc = lanczos.LanczosEvolution(H_Op, psi_init, {'verbose': 1, 'N_cache': N_cache})
-    for delta in [-0.1j, 0.1j, 1.j]:  #, 0.1, 1.]:
+    lanc = lanczos.LanczosEvolution(H_Op, psi_init, {'N_cache': N_cache})
+    for delta in [-0.1j, 0.1j, 1.j, 0.1, 1.]:
         psi_final_flat = expm(H_flat * delta).dot(psi_init_flat)
-        psi_final, N = lanc.run(delta)
-        ov = np.inner(psi_final.to_ndarray().conj(), psi_final_flat)
-        ov /= np.linalg.norm(psi_final_flat)
-        print("<psi1|psi1_flat>/norm=", ov)
-        assert (abs(1. - abs(ov)) < tol)
+        norm = np.linalg.norm(psi_final_flat)
+        psi_final, N = lanc.run(delta, normalize=False)
+        diff = np.linalg.norm(psi_final.to_ndarray() - psi_final_flat)
+        print("norm(|psi_final> - |psi_final_flat>)/norm = ", diff / norm)  # should be 1.
+        assert diff / norm < tol
+        psi_final2, N = lanc.run(delta, normalize=True)
+        assert npc.norm(psi_final / norm - psi_final2) < tol

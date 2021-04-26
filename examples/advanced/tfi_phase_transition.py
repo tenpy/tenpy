@@ -4,7 +4,7 @@ This example uses DMRG to find the ground state of the transverse field Ising mo
 through the phase transition by changing the field `g`.
 It plots a few observables in the end.
 """
-# Copyright 2018-2020 TeNPy Developers, GNU GPLv3
+# Copyright 2018-2021 TeNPy Developers, GNU GPLv3
 
 import numpy as np
 
@@ -17,7 +17,7 @@ import matplotlib.pyplot as plt
 def run(gs):
     print("running for gs = ", gs)
     L = 2
-    model_params = dict(L=L, J=1., g=gs[0], bc_MPS='infinite', conserve=None, verbose=0)
+    model_params = dict(L=L, J=1., g=gs[0], bc_MPS='infinite', conserve=None)
     chi = 100
     dmrg_params = {
         'trunc_params': {
@@ -30,7 +30,6 @@ def run(gs):
         'max_E_err': 0.0001,
         'max_S_err': 0.0001,
         'max_sweeps': 100,  # NOTE: this is not enough to fully converge at the critical point!
-        'verbose': 1,
         'mixer': False
     }
 

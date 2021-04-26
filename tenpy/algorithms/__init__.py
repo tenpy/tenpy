@@ -5,6 +5,7 @@
 .. autosummary::
     :toctree: .
 
+    algorithm
     truncation
     tebd
     mps_common
@@ -15,12 +16,13 @@
     network_contractor
     exact_diag
 """
-# Copyright 2018-2020 TeNPy Developers, GNU GPLv3
+# Copyright 2018-2021 TeNPy Developers, GNU GPLv3
 
-from . import truncation, dmrg, disentangler, mps_common, tebd, tdvp, exact_diag, purification, \
-    network_contractor, mpo_evolution
+from . import algorithm, truncation, dmrg, disentangler, mps_common, tebd, tdvp, exact_diag, \
+    purification, network_contractor, mpo_evolution
 
 __all__ = [
+    "algorithm",
     "truncation",
     "dmrg",
     "mps_common",

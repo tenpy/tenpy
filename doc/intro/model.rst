@@ -78,10 +78,10 @@ The full Hilbert space is a tensor product of the local Hilbert space on each si
 
     The :class:`~tenpy.linalg.charges.LegCharge` of all involved sites need to have a common
     :class:`~tenpy.linalg.np_conserved.ChargeInfo` in order to allow the contraction of tensors acting on the various sites.
-    This can be ensured with the function :func:`~tenpy.networks.site.multi_sites_combine_charges`.
+    This can be ensured with the function :func:`~tenpy.networks.site.set_common_charges`.
 
 
-An example where :func:`~tenpy.networks.site.multi_sites_combine_charges` is needed would be a coupling of different
+An example where :func:`~tenpy.networks.site.set_common_charges` is needed would be a coupling of different
 types of sites, e.g., when a tight binding chain of fermions is coupled to some local spin degrees of freedom.
 Another use case of this function would be a model with a $U(1)$ symmetry involving only half the sites, say :math:`\sum_{i=0}^{L/2} n_{2i}`.
 
@@ -119,7 +119,7 @@ The CouplingModel: general structure
 ------------------------------------
 
 The :class:`~tenpy.models.model.CouplingModel` provides a general, quite abstract way to specify a Hamiltonian
-of two-site couplings on a given lattice.
+of couplings on a given lattice.
 Once initialized, its methods :meth:`~tenpy.models.CouplingModel.add_onsite` and
 :meth:`~tenpy.models.model.CouplingModel.add_coupling` allow to add onsite and coupling terms repeated over the different
 unit cells of the lattice.
@@ -148,7 +148,7 @@ In the initialization method ``__init__(self, ...)`` of this class you can then 
 
 4. Initialize the lattice (or if you got the lattice as a parameter, set the sites in the unit cell).
 5. Initialize the :class:`~tenpy.models.model.CouplingModel` with ``CouplingModel.__init__(self, lat)``.
-6. Use :meth:`~tenpy.models.CouplingModel.add_onsite` and :meth:`~tenpy.models.model.CouplingModel.add_coupling`
+6. Use :meth:`~tenpy.models.model.CouplingModel.add_onsite` and :meth:`~tenpy.models.model.CouplingModel.add_coupling`
    to add all terms of the Hamiltonian. Here, the :attr:`~tenpy.models.lattice.Lattice.pairs` of the lattice
    can come in handy, for example::
 
@@ -182,12 +182,13 @@ In the initialization method ``__init__(self, ...)`` of this class you can then 
    so you should only subclass the :class:`~tenpy.models.model.NearestNeighborModel` if the lattice is a simple
    :class:`~tenpy.models.lattice.Chain`.
 
-The :class:`~tenpy.models.model.CouplingModel` works for Hamiltonians which are a sum of terms involving at most two sites.
-The generalization :class:`~tenpy.models.model.MultiCouplingModel` can be used for Hamlitonians with
-coupling terms acting on more than 2 sites at once. Follow the exact same steps in the initialization, and just use the
-:meth:`~tenpy.models.model.MultiCouplingModel.add_multi_coupling` instead or in addition to the
-:meth:`~tenpy.models.model.CouplingModel.add_coupling`.
-A prototypical example is the exactly solvable :class:`~tenpy.models.toric_code.ToricCode`.
+.. note ::
+
+    The method :meth:`~tenpy.models.model.CouplingModel.add_coupling` works only for terms involving operators on 2
+    sites. If you have couplings involving more than two sites, you can use the
+    :meth:`~tenpy.models.model.CouplingModel.add_multi_coupling` instead.
+    A prototypical example is the exactly solvable :class:`~tenpy.models.toric_code.ToricCode`.
+
 
 The code of the module :mod:`tenpy.models.xxz_chain` is included below as an illustrative example how to implement a
 Model. The implementation of the :class:`~tenpy.models.xxz_chain.XXZChain` directly follows the steps
@@ -198,13 +199,16 @@ The :class:`~tenpy.models.xxz_chain.XXZChain2` implements the very same model, b
 
 .. literalinclude:: /../tenpy/models/xxz_chain.py
 
-The easy easy way: the CouplingMPOModel
----------------------------------------
+The easiest way: the CouplingMPOModel
+-------------------------------------
 Since many of the basic steps above are always the same, we don't need to repeat them all the time.
 So we have yet another class helping to structure the initialization of models: the :class:`~tenpy.models.model.CouplingMPOModel`.
 The general structure of this class is like this::
 
     class CouplingMPOModel(CouplingModel,MPOModel):
+        default_lattice = "Chain"
+        "
+
         def __init__(self, model_param):
             # ... follows the basic steps 1-8 using the methods
             lat = self.init_lattice(self, model_param)  # for step 4
@@ -213,12 +217,18 @@ The general structure of this class is like this::
             # ...
 
         def init_sites(self, model_param):
-            # You should overwrite this
+            # You should overwrite this in most cases to ensure
+            # getting the site(s) and charge conservation you want
+            site = SpinSite(...)  # or FermionSite, BosonSite, ...
+            return site  # (or tuple of sites)
 
         def init_lattice(self, model_param):
             sites = self.init_sites(self, model_param) # for steps 1-3
+            # and then read out the class attribute `default_lattice`,
             # initialize an arbitrary pre-defined lattice
             # using model_params['lattice']
+            # and enure it's the default lattice if the class attribute
+            # `force_default_lattice` is True.
 
         def init_terms(self, model_param):
             # does nothing.
@@ -235,7 +245,7 @@ Steps 5,7,8 and calls to the `init_...` methods for the other steps are done aut
 
 The :class:`~tenpy.models.xxz_chain.XXZChain` and :class:`~tenpy.models.xxz_chain.XXZChain2` work only with the
 :class:`~tenpy.models.lattice.Chain` as lattice, since they are derived from the :class:`~tenpy.models.model.NearestNeighborModel`.
-This allows to use them for TEBD in 1D (yeah!), but we can't get the MPO for DMRG on a e.g. a :class:`~tenpy.models.lattice.Square`
+This allows to use them for TEBD in 1D (yeah!), but we can't get the MPO for DMRG on (for example) a :class:`~tenpy.models.lattice.Square`
 lattice cylinder - although it's intuitively clear, what the Hamiltonian there should be: just put the nearest-neighbor
 coupling on each bond of the 2D lattice.
 
@@ -262,7 +272,7 @@ As most physical Hamiltonians are Hermitian, these Hamiltonians are fully determ
 
 is fully determined by the term :math:`c^{\dagger}_i c_j` if we demand that Hermitian conjugates are included automatically.
 In TeNPy, whenever you add a coupling using :meth:`~tenpy.models.model.CouplingModel.add_onsite`,
-:meth:`~tenpy.models.model.CouplingModel.add_coupling()`, or :meth:`~tenpy.models.model.MultiCouplingModel.add_multi_coupling()`,
+:meth:`~tenpy.models.model.CouplingModel.add_coupling()`, or :meth:`~tenpy.models.model.CouplingModel.add_multi_coupling()`,
 you can use the optional argument `plus_hc` to automatically create and add the Hermitian conjugate of that coupling term - as shown above.
 
 Additionally, in an MPO, explicitly adding both a non-Hermitian term and its conjugate increases the bond dimension of the MPO, which increases the memory requirements of the :class:`~tenpy.networks.mpo.MPOEnvironment`.
@@ -274,7 +284,7 @@ Instead of adding the conjugate terms explicitly, you can set a flag `explicit_p
 
 .. note ::
 
-    The model flag `explicit_plus_hc` should be used in conjunction with the flag `plus_hc` in :meth:`~tenpy.models.model.CouplingModel.add_coupling()` or :meth:`~tenpy.models.model.MultiCouplingModel.add_multi_coupling()`.
+    The model flag `explicit_plus_hc` should be used in conjunction with the flag `plus_hc` in :meth:`~tenpy.models.model.CouplingModel.add_coupling()` or :meth:`~tenpy.models.model.CouplingModel.add_multi_coupling()`.
     If `plus_hc` is `False` while `explicit_plus_hc` is `True` the MPO bond dimension will not be reduced, but you will still pay the additional computational cost of computing the Hermitian conjugate at runtime.
 
 Thus, we end up with several use cases, depending on your preferences. 
@@ -293,6 +303,62 @@ Finally, if you wanted a reduction in MPO bond dimension, you would need to set 
     self.add_coupling(-J, u1, 'Cd', u2, 'C', dx, plus_hc=True)
 
 
+Non-uniform terms and couplings
+-------------------------------
+The CouplingModel-methods :meth:`~tenpy.models.model.CouplingModel.add_onsite`, :meth:`~tenpy.models.model.CouplingModel.add_coupling`, 
+and :meth:`~tenpy.models.model.CouplingModel.add_multi_coupling` add a sum over a "couplig" term shifted by lattice
+vectors. However, some models are not that "uniform" over the whole lattice.
+
+First of all, you might have some local term that gets added only at one specific location in the lattice.
+You can add such a term for example with :meth:`~tenpy.models.model.CouplingModel.add_local_term`.
+
+Second, if you have irregular lattices, take a look at the corresponding section in :doc:`/intro/lattices`.
+
+Finally, note that the argument `strength` for the `add_onsite`, `add_coupling`, and `add_multi_coupling` methods 
+can not only be a numpy scalar, but also a (numpy) array.
+In general, the sum performed by the methods runs over the given term 
+shifted by lattice vectors *as far as possible to still fit the term into the lattice*. 
+
+For the :meth:`~tenpy.models.model.CouplingModel.add_onsite` case this criterion is simple: there is exactly one site in each lattice unit cell with the `u` specified as separate argument, so the correct shape for the `strength` array is simply given by :attr:`~tenpy.models.lattice.Lattice.Ls`.
+For example, if you want the defacto standard model studied for many-body localization, a Heisenberg chain with random , uniform onsite field :math:`h^z_i \in [-W, W]`,
+
+.. math ::
+
+    H = J \sum_{i=0}^{L-1} \vec{S}_i \cdot \vec{S}_{i+1} - \sum_{i=0}^{L} h^z_i S^z_i
+
+you can use the :class:`~tenpy.models.spins.SpinChain` with the following model parameters::
+
+    L = 30 # or whatever you like...
+    W = 5.  # MBL transition at W_c ~= 3.5 J
+    model_params = {
+        'L': L,
+        'Jx': 1., 'Jy': 1., 'Jz': 1.,
+        'hz': 2.*W*(np.random.random(L) - 0.5),  # random values in [-W, W], shape (L,)
+        'conserve': 'best',
+    }
+    M = tenpy.models.spins.SpinChain(model_params)
+
+For :meth:`~tenpy.models.model.CouplingModel.add_coupling` and :meth:`~tenpy.models.model.CouplingModel.add_multi_coupling`,
+things become a little bit more complicated, and the correct shape of the `strength` array depends not only on the :attr:`~tenpy.models.lattice.Lattice.Ls`
+but also on the boundary conditions of the lattice. Given a term, you can call
+:meth:`~tenpy.models.lattice.Lattice.coupling_shape` and :meth:`~tenpy.models.lattice.Lattice.multi_coupling_shape` to find out the correct shape for `strength`.
+To avoid any ambiguity, the shape of the `strength` always has to fit, at least after a tiling performed by :func:`~tenpy.tools.misc.to_array`.
+
+For example, consider the Su-Schrieffer-Heeger model, a spin-less :class:`~tenpy.models.fermions.FermionChain` with hopping strength alternating between two values, say `t1` and `t2`.
+You can generete this model for example like this::
+    
+    L = 30 # or whatever you like...
+    t1, t2 = 0.5, 1.5
+    t_array = np.array([(t1 if i % 2 == 0 else t2) for i in range(L-1)])
+    model_params = {
+        'L': L,
+        't': t_array,
+        'V': 0., 'mu': 0.,  # just free fermions, but you can generalize...
+        'conserve': 'best'
+    }
+    M = tenpy.models.fermions.FermionChain(model_params)
+
+
 Some random remarks on models
 -----------------------------
 
@@ -300,10 +366,12 @@ Some random remarks on models
 - Of course, an MPO is all you need to initialize a :class:`~tenpy.models.model.MPOModel` to be used for DMRG; you don't have to use the :class:`~tenpy.models.model.CouplingModel`
   or :class:`~tenpy.models.model.CouplingMPOModel`.
   For example an exponentially decaying long-range interactions are not supported by the coupling model but straight-forward to include to an MPO, as demonstrated in the example ``examples/mpo_exponentially_decaying.py``.
+- If you want to debug or double check that the you added the correct terms to a :class:`~tenpy.models.model.CouplingMPOModel`,
+  you can print the terms with ``print(M.all_coupling_terms().to_TermList())``. This will 
 - If the model of your interest contains Fermions, you should read the :doc:`/intro/JordanWigner`.
 - We suggest writing the model to take a single parameter dictionary for the initialization,
   as the :class:`~tenpy.models.model.CouplingMPOModel` does.
-  The CouplingMPOModel converts the dictionary to a dict-like 
+  The :class:`~tenpy.models.model.CouplingMPOModel` converts the dictionary to a dict-like 
   :class:`~tenpy.tools.params.Config` with some additional features before passing it on to the `init_lattice`,
   `init_site`, ... methods.
   It is recommended to read out providing default values with ``model_params.get("key", default_value)``, 

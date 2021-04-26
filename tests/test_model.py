@@ -1,6 +1,7 @@
 """A collection of tests for (classes in) :mod:`tenpy.models.model`."""
-# Copyright 2018-2020 TeNPy Developers, GNU GPLv3
+# Copyright 2018-2021 TeNPy Developers, GNU GPLv3
 
+import warnings
 import itertools
 
 from tenpy.models import model, lattice
@@ -23,10 +24,7 @@ __all__ = ["check_model_sanity", "check_general_model"]
 def check_model_sanity(M, hermitian=True):
     """call M.test_sanity() for all different subclasses of M."""
     if isinstance(M, model.CouplingModel):
-        if isinstance(M, model.MultiCouplingModel):
-            model.MultiCouplingModel.test_sanity(M)
-        else:
-            model.CouplingModel.test_sanity(M)
+        model.CouplingModel.test_sanity(M)
     if isinstance(M, model.NearestNeighborModel):
         model.NearestNeighborModel.test_sanity(M)
         if hermitian:
@@ -119,10 +117,10 @@ def test_ext_flux():
                 npt.assert_array_almost_equal_nulp(strength_hop_y_2, np.conj(expect_y_2), 10)
 
 
-def test_MultiCouplingModel_shift(Lx=3, Ly=3, shift=1):
+def test_CouplingModel_shift(Lx=3, Ly=3, shift=1):
     bc = ['periodic', shift]
     spin_half_square = lattice.Square(Lx, Ly, spin_half_site, bc=bc, bc_MPS='infinite')
-    M = model.MultiCouplingModel(spin_half_square)
+    M = model.CouplingModel(spin_half_square)
     M.add_coupling(1.2, 0, 'Sz', 0, 'Sz', [1, 0])
     M.add_multi_coupling(0.8, [('Sz', [0, 0], 0), ('Sz', [0, 1], 0), ('Sz', [1, 0], 0)])
     M.test_sanity()
@@ -160,11 +158,11 @@ def test_CouplingModel_explicit():
     Id, JW, N = fermion_site.Id, fermion_site.JW, fermion_site.N
     Cd, C = fermion_site.Cd, fermion_site.C
     CdJW = Cd.matvec(JW)  # = Cd
-    CJW = C.matvec(JW)  # = -C
+    JWC = JW.matvec(C)  # = C
     # yapf: disable
-    W0_ex = [[Id,   CJW,  CdJW, N,    None, None, None, None, None, N*0.125],
-             [None, None, None, None, None, None, None, None, None, Cd*-1.5],
+    W0_ex = [[Id,   CdJW, JWC,  N,    None, None, None, None, None, N*0.125],
              [None, None, None, None, None, None, None, None, None, C*1.5],
+             [None, None, None, None, None, None, None, None, None, Cd*1.5],
              [None, None, None, None, Id,   None, None, None, None, None],
              [None, None, None, None, None, Id,   None, None, None, None],
              [None, None, None, None, None, None, JW,   None, None, None],
@@ -172,14 +170,14 @@ def test_CouplingModel_explicit():
              [None, None, None, None, None, None, None, None, Id,   None],
              [None, None, None, None, None, None, None, None, None, N*4.0],
              [None, None, None, None, None, None, None, None, None, Id]]
-    W1_ex = [[Id,   None, None, None, None, CJW,  CdJW, N,    None, N*0.125],
-             [None, JW,   None, None, None, None, None, None, None, Cd*-0.5],
-             [None, None, JW,   None, None, None, None, None, None, C*0.5],
+    W1_ex = [[Id,   None, None, None, None, CdJW, JWC,  N,    None, N*0.125],
+             [None, JW,   None, None, None, None, None, None, None, C*0.5],
+             [None, None, JW,   None, None, None, None, None, None, Cd*0.5],
              [None, None, None, Id,   None, None, None, None, None, None],
              [None, None, None, None, Id,   None, None, None, None, None],
              [None, None, None, None, None, None, None, None, None, N*4.0],
-             [None, None, None, None, None, None, None, None, None, Cd*-1.5],
              [None, None, None, None, None, None, None, None, None, C*1.5],
+             [None, None, None, None, None, None, None, None, None, Cd*1.5],
              [None, None, None, None, None, None, None, None, Id,   None],
              [None, None, None, None, None, None, None, None, None, Id]]
 
@@ -191,10 +189,10 @@ def test_CouplingModel_explicit():
 
 
 @pytest.mark.parametrize("use_plus_hc, JW", [(False, 'JW'), (False, None), (True, None)])
-def test_MultiCouplingModel_explicit(use_plus_hc, JW):
+def test_CouplingModel_multi_couplings_explicit(use_plus_hc, JW):
     fermion_lat_cyl = lattice.Square(1, 2, fermion_site, bc='periodic', bc_MPS='infinite')
-    M = model.MultiCouplingModel(fermion_lat_cyl)
-    # create a wired fermionic model with 3-body interactions
+    M = model.CouplingModel(fermion_lat_cyl)
+    # create a weird fermionic model with 3-body interactions
     M.add_onsite(0.125, 0, 'N')
     M.add_coupling(0.25, 0, 'Cd', 0, 'C', (0, 1), plus_hc=use_plus_hc)
     M.add_coupling(1.5, 0, 'Cd', 0, 'C', (1, 0), JW, plus_hc=use_plus_hc)
@@ -203,7 +201,7 @@ def test_MultiCouplingModel_explicit(use_plus_hc, JW):
         M.add_coupling(1.5, 0, 'Cd', 0, 'C', (-1, 0), JW)
     # multi_coupling with a full unit cell inbetween the operators!
     M.add_multi_coupling(4., [('N', (0, 0), 0), ('N', (-2, -1), 0)])
-    # some wired mediated hopping along the diagonal
+    # some weird mediated hopping along the diagonal
     M.add_multi_coupling(1.125, [('N', (0, 0), 0), ('Cd', (0, 1), 0), ('C', (1, 0), 0)])
     H_mpo = M.calc_H_MPO()
     W0_new = H_mpo.get_W(0)
@@ -211,14 +209,35 @@ def test_MultiCouplingModel_explicit(use_plus_hc, JW):
     Id, JW, N = fermion_site.Id, fermion_site.JW, fermion_site.N
     Cd, C = fermion_site.Cd, fermion_site.C
     CdJW = Cd.matvec(JW)  # = Cd
-    CJW = C.matvec(JW)  # = -C
+    JWC = JW.matvec(C)  # = C
     NJW = N.matvec(JW)
-    # print(M.H_MPO_graph._build_grids())
     # yapf: disable
-    W0_ex = [[Id,   CJW,  CdJW, None, N,    None, None, None, None, None, N*0.125],
-             [None, None, None, None, None, None, None, None, None, None, Cd*-1.5],
+    # XXX
+    self = M
+    ot = self.all_onsite_terms()
+    ot.remove_zeros(1.e-12)
+    ct = self.all_coupling_terms()
+    ct.remove_zeros(1.e-12)
+    edt = self.exp_decaying_terms
+
+    #H_MPO_graph = tenpy.networks.mpo.MPOGraph.from_terms((ot, ct, edt), self.lat.mps_sites(), self.lat.bc_MPS)
+    #H_MPO_graph._set_ordered_states()
+    #from pprint import pprint
+    #pprint(H_MPO_graph._ordered_states)
+    # 0.50000 * Cd JW_0 C_1 +
+    # 1.12500 * Cd JW_0 N JW_1 C_3 +
+    # 1.50000 * Cd JW_0 C_2 +
+    # 0.50000 * JW C_0 Cd_1 +
+    # 1.50000 * JW C_0 Cd_2 +
+    # 1.12500 * N_0 Cd JW_1 C_2 +
+    # 4.00000 * N_0 N_5 +
+    # 1.50000 * Cd JW_1 C_3 +
+    # 1.50000 * JW C_1 Cd_3 +
+    # 4.00000 * N_1 N_4
+    W0_ex = [[Id,   CdJW, None,  JWC, N,    None, None, None, None, None, N*0.125],
              [None, None, None, None, None, None, None, None, None, None, C*1.5],
-             [None, None, None, JW,   None, None, None, None, None, None, None],
+             [None, None,  JW,  None, None, None, None, None, None, None, None],
+             [None, None, None, None, None, None, None, None, None, None, Cd*1.5],
              [None, None, None, None, None, Id,   None, None, None, None, None],
              [None, None, None, None, None, None, None, None, None, None, C*1.125],
              [None, None, None, None, None, None, Id,   None, None, None, None],
@@ -227,15 +246,15 @@ def test_MultiCouplingModel_explicit(use_plus_hc, JW):
              [None, None, None, None, None, None, None, None, None, Id,   None],
              [None, None, None, None, None, None, None, None, None, None, N*4.0],
              [None, None, None, None, None, None, None, None, None, None, Id]]
-    W1_ex = [[Id,   None, None, None, None, None, None, CJW,  CdJW, N,    None, N*0.125],
-             [None, JW,   None, None, None, None, None, None, None, None, None, Cd*-0.5],
-             [None, None, JW,   NJW,  None, None, None, None, None, None, None, C*0.5],
+    W1_ex = [[Id,   None, None, None, None, None, None, CdJW, JWC,  N,    None, N*0.125],
+             [None, JW,   NJW,  None, None, None, None, None, None, None, None, C*0.5],
              [None, None, None, None, None, None, None, None, None, None, None, C*1.125],
+             [None, None, None, JW,   None, None, None, None, None, None, None, Cd*0.5],
              [None, None, None, None, Id,   CdJW, None, None, None, None, None, None],
              [None, None, None, None, None, None, Id,   None, None, None, None, None],
              [None, None, None, None, None, None, None, None, None, None, None, N*4.0],
-             [None, None, None, None, None, None, None, None, None, None, None, Cd*-1.5],
              [None, None, None, None, None, None, None, None, None, None, None, C*1.5],
+             [None, None, None, None, None, None, None, None, None, None, None, Cd*1.5],
              [None, None, None, None, None, None, None, None, None, None, Id,   None],
              [None, None, None, None, None, None, None, None, None, None, None, Id]]
     # yapf: enable
@@ -245,7 +264,7 @@ def test_MultiCouplingModel_explicit(use_plus_hc, JW):
     assert npc.norm(W1_new - W1_ex) == 0.  # coupling constants: no rounding errors
 
 
-class MyMod(model.CouplingMPOModel, model.NearestNeighborModel, model.MultiCouplingModel):
+class MyMod(model.CouplingMPOModel, model.NearestNeighborModel):
     def init_sites(self, model_params):
         conserve = model_params.get('conserve', 'parity')
         return tenpy.networks.site.SpinHalfSite(conserve)
@@ -323,36 +342,66 @@ def test_model_plus_hc(L=6):
     params['explicit_plus_hc'] = True
     m3 = MyMod(params)
     nu = np.random.random(L)
-    m1.add_onsite(nu, 0, 'Sp', plus_hc=True)
-    m2.add_onsite(nu, 0, 'Sp', plus_hc=True)
-    m3.add_onsite(nu, 0, 'Sp', plus_hc=True)
+    with pytest.warns(UserWarning) as record:
+        m1.add_onsite(nu, 0, 'Sp')
+        m1.add_onsite(nu, 0, 'Sm')
+        m2.add_onsite(nu, 0, 'Sp', plus_hc=True)
+        m3.add_onsite(nu, 0, 'Sp', plus_hc=True)
+    assert len(record) > 0
+    for w in record:
+        assert str(w.message).startswith("Adding terms to the CouplingMPOModel")
     t = np.random.random(L - 1)
-    m1.add_coupling(t, 0, 'Sp', 0, 'Sm', 1)
-    m1.add_coupling(t, 0, 'Sp', 0, 'Sm', -1)
-    m2.add_coupling(t, 0, 'Sp', 0, 'Sm', 1, plus_hc=True)
-    m3.add_coupling(t, 0, 'Sp', 0, 'Sm', 1, plus_hc=True)
+    with pytest.warns(UserWarning) as record:
+        m1.add_coupling(t, 0, 'Sp', 0, 'Sm', 1)
+        m1.add_coupling(t, 0, 'Sp', 0, 'Sm', -1)
+        m2.add_coupling(t, 0, 'Sp', 0, 'Sm', 1, plus_hc=True)
+        m3.add_coupling(t, 0, 'Sp', 0, 'Sm', 1, plus_hc=True)
+    assert len(record) > 0
+    for w in record:
+        assert str(w.message).startswith("Adding terms to the CouplingMPOModel")
     t2 = np.random.random(L - 1)
-    m1.add_multi_coupling(t2, [('Sp', [+1], 0), ('Sm', [0], 0), ('Sz', [0], 0)])
-    m1.add_multi_coupling(t2, [('Sz', [0], 0), ('Sp', [0], 0), ('Sm', [+1], 0)])
-    m2.add_multi_coupling(t2, [('Sp', [+1], 0), ('Sm', [0], 0), ('Sz', [0], 0)], plus_hc=True)
-    m3.add_multi_coupling(t2, [('Sp', [+1], 0), ('Sm', [0], 0), ('Sz', [0], 0)], plus_hc=True)
-    for m in [m1, m2, m3]:
-        # added extra terms: need to re-calculate H_bond and H_MPO
-        m.H_bond = m.calc_H_bond()
-        m.H_MPO = m.calc_H_MPO()
-    assert m1.H_MPO.is_hermitian()
-    assert m2.H_MPO.is_hermitian()
-    assert not m3.H_MPO.is_hermitian()
-    assert m3.H_MPO.chi[3] == m3.H_MPO.chi[2] - 1  # check for smaller MPO bond dimension
-    ED1 = ExactDiag(m1)
-    ED2 = ExactDiag(m2)
-    ED3 = ExactDiag(m3)
-    for ED in [ED1, ED2, ED3]:
-        ED.build_full_H_from_bonds()
-    assert ED1.full_H == ED2.full_H
-    assert ED1.full_H == ED3.full_H
-    for ED in [ED1, ED2, ED3]:
-        ED.full_H = None
-        ED.build_full_H_from_mpo()
-    assert ED1.full_H == ED2.full_H
-    assert ED1.full_H == ED3.full_H
+    with pytest.warns(UserWarning) as record:
+        m1.add_multi_coupling(t2, [('Sp', [+1], 0), ('Sm', [0], 0), ('Sz', [0], 0)])
+        m1.add_multi_coupling(t2, [('Sz', [0], 0), ('Sp', [0], 0), ('Sm', [+1], 0)])
+        m2.add_multi_coupling(t2, [('Sp', [+1], 0), ('Sm', [0], 0), ('Sz', [0], 0)], plus_hc=True)
+        m3.add_multi_coupling(t2, [('Sp', [+1], 0), ('Sm', [0], 0), ('Sz', [0], 0)], plus_hc=True)
+    assert len(record) > 0
+    for w in record:
+        assert str(w.message).startswith("Adding terms to the CouplingMPOModel")
+
+    def compare(m1, m2, m3, use_bonds=True):
+        for m in [m1, m2, m3]:
+            # added extra terms: need to re-calculate H_bond and H_MPO
+            if use_bonds:
+                m.H_bond = m.calc_H_bond()
+            m.H_MPO = m.calc_H_MPO()
+        assert m1.H_MPO.is_hermitian()
+        assert m2.H_MPO.is_hermitian()
+        assert not m3.H_MPO.is_hermitian()
+        assert m3.H_MPO.chi[3] == m3.H_MPO.chi[2] - 1  # check for smaller MPO bond dimension
+        ED1 = ExactDiag(m1)
+        ED2 = ExactDiag(m2)
+        ED3 = ExactDiag(m3)
+        if use_bonds:
+            for ED in [ED1, ED2, ED3]:
+                ED.build_full_H_from_bonds()
+            assert ED1.full_H == ED2.full_H
+            assert ED1.full_H == ED3.full_H
+        for ED in [ED1, ED2, ED3]:
+            ED.full_H = None
+            ED.build_full_H_from_mpo()
+        assert ED1.full_H == ED2.full_H
+        assert ED1.full_H == ED3.full_H
+
+    compare(m1, m2, m3, use_bonds=True)
+
+    with pytest.warns(UserWarning) as record:
+        m1.add_exponentially_decaying_coupling(0.25, 0.5, 'Sp', 'Sz')
+        m1.add_exponentially_decaying_coupling(0.25, 0.5, 'Sm', 'Sz')
+        m2.add_exponentially_decaying_coupling(0.25, 0.5, 'Sp', 'Sz', plus_hc=True)
+        m3.add_exponentially_decaying_coupling(0.25, 0.5, 'Sp', 'Sz', plus_hc=True)
+    assert len(record) > 0
+    for w in record:
+        assert str(w.message).startswith("Adding terms to the CouplingMPOModel")
+
+    compare(m1, m2, m3, use_bonds=False)

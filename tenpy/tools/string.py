@@ -1,6 +1,6 @@
 """Tools for handling strings."""
 
-# Copyright 2018-2020 TeNPy Developers, GNU GPLv3
+# Copyright 2018-2021 TeNPy Developers, GNU GPLv3
 
 __all__ = ['is_non_string_iterable', 'vert_join', 'to_mathematica_lists']
 
@@ -37,12 +37,13 @@ def vert_join(strlist, valign='t', halign='l', delim=' '):
 
     Examples
     --------
-    >>> print vert_join(['a\nsample\nmultiline\nstring', str(np.arange(9).reshape(3, 3))],
-    ...                 delim=' | ')
+    >>> from tenpy.tools.string import vert_join
+    >>> print(vert_join(['a\nsample\nmultiline\nstring', str(np.arange(9).reshape(3, 3))],
+    ...                 delim=' | '))  # doctest: +NORMALIZE_WHITESPACE
     a         | [[0 1 2]
     sample    |  [3 4 5]
     multiline |  [6 7 8]]
-    string
+    string    |
     """
     # expand tabs, split to newlines
     strlist = [str(s).expandtabs().split('\n') for s in strlist]

@@ -4,7 +4,7 @@ Call this file with arguments, e.g:     python singlerun.py -m tensordot_npc ten
 -s 20 -S 50 -q 1 1
 """
 
-# Copyright 2018-2020 TeNPy Developers, GNU GPLv3
+# Copyright 2018-2021 TeNPy Developers, GNU GPLv3
 
 import numpy as np
 import cProfile

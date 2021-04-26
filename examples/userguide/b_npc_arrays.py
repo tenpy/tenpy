@@ -1,5 +1,5 @@
 """Explicit definition of charges and spin-1/2 operators."""
-# Copyright 2019-2020 TeNPy Developers, GNU GPLv3
+# Copyright 2019-2021 TeNPy Developers, GNU GPLv3
 
 import tenpy.linalg.np_conserved as npc
 

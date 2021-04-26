@@ -1,21 +1,25 @@
-Tensor Network Python (TeNPy)
-=============================
+TeNPy: Tensor Network Python
+----------------------------
 
 .. image:: https://img.shields.io/github/last-commit/tenpy/tenpy
     :alt: GitHub last commit
     :target: https://github.com/tenpy/tenpy
 .. image:: https://readthedocs.org/projects/tenpy/badge/?version=latest
-    :alt: Documentation Status
-    :target: https://tenpy.readthedocs.io/en/latest/?badge=latest
-.. image:: https://travis-ci.org/tenpy/tenpy.svg?branch=master
+    :alt: Documentation
+    :target: https://tenpy.readthedocs.io/en/latest/
+.. image:: https://github.com/tenpy/tenpy/workflows/pytest/badge.svg
     :alt: Build
-    :target: https://travis-ci.org/tenpy/tenpy
+    :target: https://github.com/tenpy/tenpy/actions/
 .. image:: https://img.shields.io/github/issues/tenpy/tenpy
     :alt: GitHub issues
     :target: https://github.com/tenpy/tenpy/issues
+.. image:: https://img.shields.io/conda/vn/conda-forge/physics-tenpy
+    :alt: conda
+    :target: https://anaconda.org/conda-forge/physics-tenpy
 .. image:: https://img.shields.io/pypi/v/physics-tenpy
     :alt: PyPi
     :target: https://pypi.org/project/physics-tenpy/
+
 
 TeNPy (short for 'Tensor Network Python') is a Python library for the simulation of strongly correlated quantum systems with tensor networks.
 
@@ -35,7 +39,7 @@ How to read the documentation
 -----------------------------
 The **documentation is available online** at https://tenpy.readthedocs.io/.
 The documentation is roughly split in two parts: on one hand the full "reference" containing the documentation of all functions,
-classes, methods, etc., and on the other hand the "user guide" containing some introductions and additional explanations.
+classes, methods, etc., and on the other hand the "user guide" containing some `introductions <https://tenpy.readthedocs.io/en/latest/introductions.html>`_ with additional explanations and `examples <https://tenpy.readthedocs.io/en/latest/examples.html>`_.
 
 The documentation is based on Python's docstrings, and some additional ``*.rst`` files located in the folder `doc/` of the repository.
 All documentation is formated as `reStructuredText <http://www.sphinx-doc.org/en/stable/rest.html>`_,
@@ -80,6 +84,8 @@ The corresponding BibTex Entry would be the following (the ``\url{...}`` require
         eprint={1805.00055},
         note={Code available from \url{https://github.com/tenpy/tenpy}},
     }
+
+To keep us motivated, you can also include your work into the list of `papers using TeNPy <https://tenpy.readthedocs.io/en/latest/papers_using_tenpy.html>`_.
 
 
 Acknowledgment

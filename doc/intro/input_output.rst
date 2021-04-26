@@ -57,7 +57,7 @@ Moreover, pickle requires to load the whole file at once, which might be unneces
 or even lead to memory problems if you have more data on disk than fits into RAM.
 
 Hence, we support saving to `HDF5 <https://portal.hdfgroup.org/display/HDF5/HDF5>`_ files as an alternative.
-The `h5py <http://docs.h5py.org>`_ package provides a dictionary-like interface for the file/group objects with
+The `h5py <https://docs.h5py.org>`_ package provides a dictionary-like interface for the file/group objects with
 numpy-like data sets, and is quite easy to use. 
 If you don't know about HDF5, read the :ref:`quickstart <h5py:quick>` of the `h5py`_ documentation (and this guide).
 
@@ -81,6 +81,11 @@ The usage is very similar to pickle::
         data = hdf5_io.load_from_hdf5(f)
         # or for partial reading:
         pars = hdf5_io.load_from_hdf5(f, "/parameters")
+
+.. warning ::
+    Like loading a pickle file, loading data from a manipulated HDF5 file with the functions
+    described has the potential to cause arbitrary code execution.
+    Only load data from trusted sources!
 
 
 .. note ::
@@ -121,12 +126,6 @@ Guidelines of the format:
    such that ``/c`` and ``/d`` are the same HDF5 dataset/group.
    Also avoid the copies during the loading, i.e., the loaded dictionary should again have two references to a single object `large_obj`.
    This is also necessary to allow saving and loading of objects with cyclic references.
-7. Loading a dataset should be (fairly) secure and not execute arbitrary python code (even if the dataset was manipulated),
-   as it is the case for pickle.
-
-   *Disclaimer*: I'm not an security expert, so I can't guarantee that...
-   Also, loading a HDF5 file can import other python modules, so importing
-   a manipulated file is not secure if you downloaded a malicious python file as well.
 
 
 The full format specification is given by the what the code in :mod:`~tenpy.tools.hdf5_io` does...

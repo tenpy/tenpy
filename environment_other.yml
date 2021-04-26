@@ -1,0 +1,14 @@
+name: tenpy
+dependencies:
+  - python>=3.6
+  - numpy>=1.13
+  - scipy>=0.18
+  - cython>=0.29
+  - mkl
+  - mkl-devel
+  - bottleneck
+  - pip
+  - setuptools>=30.3.0
+  - h5py
+  - pyyaml
+  - pytest

@@ -1,5 +1,5 @@
 """Initialization of sites, MPS and MPO."""
-# Copyright 2019-2020 TeNPy Developers, GNU GPLv3
+# Copyright 2019-2021 TeNPy Developers, GNU GPLv3
 
 from tenpy.networks.site import SpinHalfSite
 from tenpy.networks.mps import MPS

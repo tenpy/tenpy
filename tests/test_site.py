@@ -1,5 +1,5 @@
 """A collection of tests for :mod:`tenpy.models.site`."""
-# Copyright 2018-2020 TeNPy Developers, GNU GPLv3
+# Copyright 2018-2021 TeNPy Developers, GNU GPLv3
 
 import numpy as np
 import numpy.testing as npt
@@ -246,15 +246,17 @@ def test_boson_site():
         check_same_operators(sites)
 
 
-def test_multi_sites_combine_charges():
+def test_set_common_charges():
     spin = site.SpinSite(0.5, 'Sz')
     spin1 = site.SpinSite(1, 'Sz')
     ferm = site.SpinHalfFermionSite(cons_N='N', cons_Sz='Sz')
+    boson = site.BosonSite(2, 'N')
     spin_ops = {op_name: get_site_op_flat(spin, op_name) for op_name in spin.opnames}
     spin1_ops = {op_name: get_site_op_flat(spin1, op_name) for op_name in spin1.opnames}
     ferm_ops = {op_name: get_site_op_flat(ferm, op_name) for op_name in ferm.opnames}
-    site.multi_sites_combine_charges([spin, ferm])
-    assert tuple(spin.leg.chinfo.names) == ('2*Sz', 'N', 'Sz')
+    boson_ops = {op_name: get_site_op_flat(boson, op_name) for op_name in boson.opnames}
+    site.set_common_charges([spin, ferm])
+    assert tuple(spin.leg.chinfo.names) == ('2*Sz', 'N')
     spin.test_sanity()
     ferm.test_sanity()
     for op_name, op_flat in spin_ops.items():
@@ -266,8 +268,8 @@ def test_multi_sites_combine_charges():
 
     spin = site.SpinSite(0.5, 'Sz')
     ferm = site.SpinHalfFermionSite(cons_N='N', cons_Sz='Sz')
-    site.multi_sites_combine_charges([ferm, spin], same_charges=[[(0, 'Sz'), (1, '2*Sz')]])
-    assert tuple(ferm.leg.chinfo.names) == ('N', 'Sz')
+    site.set_common_charges([ferm, spin], new_charges=[[(1, 0, '2*Sz'), (1, 1, '2*Sz')]])
+    assert tuple(ferm.leg.chinfo.names) == ('2*Sz', )
     spin.test_sanity()
     ferm.test_sanity()
     for op_name, op_flat in spin_ops.items():
@@ -281,11 +283,17 @@ def test_multi_sites_combine_charges():
     ferm = site.SpinHalfFermionSite(cons_N='N', cons_Sz='Sz')
     spin = site.SpinSite(0.5, 'Sz')
     spin1 = site.SpinSite(1, 'Sz')
-    site.multi_sites_combine_charges([ferm, spin1, spin], same_charges=[[(0, 'Sz'), (2, '2*Sz')]])
-    assert tuple(ferm.leg.chinfo.names) == ('N', 'Sz', '2*Sz')
+    boson = site.BosonSite(2, 'N')
+
+    site.set_common_charges([ferm, spin1, spin, boson],
+                            new_charges=[[(1, 0, '2*Sz'), (1, 2, '2*Sz')],
+                                         [(2, 0, 'N'), (1, 3, 'N')], [(0.5, 1, '2*Sz')]],
+                            new_names=['2*(Sz_f + Sz_spin-half)', '2*N_f+N_b', 'Sz_spin-1'])
+    assert tuple(ferm.leg.chinfo.names) == ('2*(Sz_f + Sz_spin-half)', '2*N_f+N_b', 'Sz_spin-1')
     spin.test_sanity()
     ferm.test_sanity()
     spin1.test_sanity()
+    boson.test_sanity()
     for op_name, op_flat in spin_ops.items():
         op_flat2 = get_site_op_flat(spin, op_name)
         npt.assert_equal(op_flat, op_flat2)
@@ -294,4 +302,7 @@ def test_multi_sites_combine_charges():
         npt.assert_equal(op_flat, op_flat2)
     for op_name, op_flat in spin1_ops.items():
         op_flat2 = get_site_op_flat(spin1, op_name)
+        npt.assert_equal(op_flat, op_flat2)
+    for op_name, op_flat in boson_ops.items():
+        op_flat2 = get_site_op_flat(boson, op_name)
         npt.assert_equal(op_flat, op_flat2)

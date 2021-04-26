@@ -1,5 +1,5 @@
 """A collection of tests for tenpy.linalg.charges."""
-# Copyright 2018-2020 TeNPy Developers, GNU GPLv3
+# Copyright 2018-2021 TeNPy Developers, GNU GPLv3
 
 import tenpy.linalg.charges as charges
 import numpy as np

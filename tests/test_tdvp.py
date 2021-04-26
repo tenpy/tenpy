@@ -1,5 +1,5 @@
 #!/usr/bin/python2
-# Copyright 2019-2020 TeNPy Developers, GNU GPLv3
+# Copyright 2019-2021 TeNPy Developers, GNU GPLv3
 import numpy as np
 import copy
 import pickle
@@ -116,8 +116,8 @@ def test_tdvp():
     }
 
     psi_tdvp2 = copy.deepcopy(psi)
-    engine = tebd.Engine(psi, heisenberg, tebd_params)
-    tdvp_engine = tdvp.Engine(psi_tdvp2, heisenberg, tdvp_params)
+    engine = tebd.TEBDEngine(psi, heisenberg, tebd_params)
+    tdvp_engine = tdvp.TDVPEngine(psi_tdvp2, heisenberg, tdvp_params)
     engine.run()
     tdvp_engine.run_two_sites(N_steps)
     ov = psi.overlap(psi_tdvp2)
@@ -130,7 +130,7 @@ def test_tdvp():
 
     # test that the initial conditions are the same
 
-    tdvp_engine = tdvp.Engine(psi, heisenberg, tdvp_params)
+    tdvp_engine = tdvp.TDVPEngine(psi, heisenberg, tdvp_params)
     psit_compare = []
     for i in range(L):
         B_tmp = psi.get_B(i).transpose(['p', 'vL', 'vR']).to_ndarray()
@@ -143,7 +143,7 @@ def test_tdvp():
         'dt': delta_t,
         'N_steps': 1,
     }
-    tdvp_engine = tdvp.Engine(psi, heisenberg, tdvp_params)
+    tdvp_engine = tdvp.TDVPEngine(psi, heisenberg, tdvp_params)
     for t in range(10):
         tdvp_engine.run_one_site(N_steps=1)
         psit_compare, Rp_list, spectrum = tdvp_numpy.tdvp(psit_compare,
