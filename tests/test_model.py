@@ -125,13 +125,14 @@ def test_CouplingModel_shift(Lx=3, Ly=3, shift=1):
     bc = ['periodic', shift]
     spin_half_square = lattice.Square(Lx, Ly, spin_half_site, bc=bc, bc_MPS='infinite')
     M = model.CouplingModel(spin_half_square)
-    M.add_coupling(1.2, 0, 'Sz', 0, 'Sz', [1, 0])
+    #M.add_coupling(1.2, 0, 'Sz', 0, 'Sz', [1, 0])
     M.add_multi_coupling(0.8, [('Sz', [0, 0], 0), ('Sz', [0, 1], 0), ('Sz', [1, 0], 0)])
     M.test_sanity()
     H = M.calc_H_MPO()
     dims = [W.shape[0] for W in H._W]
     # check translation invariance of the MPO: at least the dimensions should fit
     # (the states are differently ordered, so the matrices differ!)
+    print(dims)
     for i in range(1, Lx):
         assert dims[:Lx] == dims[i * Lx:(i + 1) * Lx]
 
@@ -238,32 +239,33 @@ def test_CouplingModel_multi_couplings_explicit(use_plus_hc, JW):
     # 1.50000 * Cd JW_1 C_3 +
     # 1.50000 * JW C_1 Cd_3 +
     # 4.00000 * N_1 N_4
-    W0_ex = [[Id,   CdJW, None,  JWC, N,    None, None, None, None, None, N*0.125],
-             [None, None, None, None, None, None, None, None, None, None, C*1.5],
-             [None, None,  JW,  None, None, None, None, None, None, None, None],
-             [None, None, None, None, None, None, None, None, None, None, Cd*1.5],
-             [None, None, None, None, None, Id,   None, None, None, None, None],
-             [None, None, None, None, None, None, None, None, None, None, C*1.125],
-             [None, None, None, None, None, None, Id,   None, None, None, None],
-             [None, None, None, None, None, None, None, JW,   None, None, None],
-             [None, None, None, None, None, None, None, None, JW,   None, None],
-             [None, None, None, None, None, None, None, None, None, Id,   None],
-             [None, None, None, None, None, None, None, None, None, None, N*4.0],
-             [None, None, None, None, None, None, None, None, None, None, Id]]
-    W1_ex = [[Id,   None, None, None, None, None, None, CdJW, JWC,  N,    None, N*0.125],
+    W0_ex = [[Id,   CdJW, JWC,  N,    None, None, None, None, None,     None, N*0.125],
+             [None, None, None, None, None, None, None, None, None,     None, C*1.5],
+             [None, None, None, None, None, None, None, None, JW*1.125, None, None],
+             [None, None, None, None, None, None, None, None, None,     None, Cd*1.5],
+             [None, None, None, None, Id,   None, None, None, None,     None, None],
+             [None, None, None, None, None, None, None, None, None,     None, C*1.125],
+             [None, None, None, None, None, JW,   None, None, None,     None, None],
+             [None, None, None, None, None, None, JW,   None, None,     None, None],
+             [None, None, None, None, None, None, None, Id,   None,     None, None],
+             [None, None, None, None, None, None, None, None, None,     None, N],
+             [None, None, None, None, None, None, None, None, None,     Id,   None],
+             [None, None, None, None, None, None, None, None, None,     None, Id]]
+    W1_ex = [[Id,   None, None, None, None, None, CdJW, JWC,  N,    None, None, N*0.125],
              [None, JW,   NJW,  None, None, None, None, None, None, None, None, C*0.5],
-             [None, None, None, None, None, None, None, None, None, None, None, C*1.125],
              [None, None, None, JW,   None, None, None, None, None, None, None, Cd*0.5],
              [None, None, None, None, Id,   CdJW, None, None, None, None, None, None],
-             [None, None, None, None, None, None, Id,   None, None, None, None, None],
-             [None, None, None, None, None, None, None, None, None, None, None, N*4.0],
+             [None, None, None, None, None, None, None, None, None, None, Id*4., None],
              [None, None, None, None, None, None, None, None, None, None, None, C*1.5],
              [None, None, None, None, None, None, None, None, None, None, None, Cd*1.5],
-             [None, None, None, None, None, None, None, None, None, None, Id,   None],
+             [None, None, None, None, None, None, None, None, None, Id*4., None, None],
+             [None, None, None, None, None, None, None, None, None, None, None, C],
+             [None, None, None, None, None, None, None, None, None, None, None, N],
              [None, None, None, None, None, None, None, None, None, None, None, Id]]
     # yapf: enable
     W0_ex = npc.grid_outer(W0_ex, W0_new.legs[:2])
     W1_ex = npc.grid_outer(W1_ex, W1_new.legs[:2])
+
     assert npc.norm(W0_new - W0_ex) == 0.  # coupling constants: no rounding errors
     assert npc.norm(W1_new - W1_ex) == 0.  # coupling constants: no rounding errors
 

@@ -998,6 +998,30 @@ class MultiCouplingTerms(CouplingTerms):
             new_op_str.pop()  # created one entry too much
         return strength, ijkl, ops, new_op_str
 
+    def add_coupling_term(self, strength, i, j, op_i, op_j, op_string='Id', switchLR=None):
+        """Add a two-site coupling term on given MPS sites.
+
+        Parameters
+        ----------
+        strength : float
+            The strength of the coupling term.
+        i, j : int
+            The MPS indices of the two sites on which the operator acts.
+            We require ``0 <= i < N_sites``  and ``i < j``, i.e., `op_i` acts "left" of `op_j`.
+            If j >= N_sites, it indicates couplings between unit cells of an infinite MPS.
+        op1, op2 : str
+            Names of the involved operators.
+        op_string : str
+            The operator to be inserted between `i` and `j`.
+        """
+        if not 0 <= i < self.L:
+            raise ValueError("We need 0 <= i < N_sites, got i={i:d}".format(i=i))
+        if not i < j:
+            raise ValueError("need i < j")
+        ijkl = [i, j]
+        ops_ijkl = [op_i, op_j]
+        self.add_multi_coupling_term(strength, ijkl, ops_ijkl, op_string, switchLR)
+
     def max_range(self):
         """Determine the maximal range in :attr:`coupling_terms`.
         Returns
@@ -1047,7 +1071,7 @@ class MultiCouplingTerms(CouplingTerms):
             for key, d2 in _d1.items():
                 op_i, op_string_ij = key
                 if isinstance(_label_left, str) and _label_left == 'IdL':
-                    label = (_i, op_i, op_string_ij)
+                    label = (_i, op_i, "l" + op_string_ij)
                 else:
                     label = _label_left + (_i, op_i, op_string_ij)
                 graph.add(_i, _label_left, label, op_i, 1., skip_existing=True)
@@ -1067,7 +1091,7 @@ class MultiCouplingTerms(CouplingTerms):
             for key, d2 in _d1.items():
                 op_i, op_string_ij = key
                 if isinstance(_label_right, str) and _label_right == 'IdR':
-                    label = (_i, op_i, op_string_ij)
+                    label = (_i, op_i, "r" + op_string_ij)
                 else:
                     label = _label_right + (_i, op_i, op_string_ij)
                 for j, d3 in d2.items():
@@ -1185,6 +1209,48 @@ class MultiCouplingTerms(CouplingTerms):
                         #j is counter, d3 is strength
                         term_dict[j] = (term1, d3)
         return term_dict
+
+    def to_nn_bond_Arrays(self, sites):
+        """Convert the :attr:`coupling_terms` into Arrays on nearest neighbor bonds.
+        Parameters
+        ----------
+        sites : list of :class:`~tenpy.networks.site.Site`
+            Defines the local Hilbert space for each site.
+            Used to translate the operator names into :class:`~tenpy.linalg.np_conserved.Array`.
+        Returns
+        -------
+        H_bond : list of {:class:`~tenpy.linalg.np_conserved.Array` | None}
+            The :attr:`coupling_terms` rewritten as ``sum_i H_bond[i]`` for MPS indices ``i``.
+            ``H_bond[i]`` acts on sites ``(i-1, i)``, ``None`` represents 0.
+            Legs of each ``H_bond[i]`` are ``['p0', 'p0*', 'p1', 'p1*']``.
+        """
+        N_sites = self.L
+        if len(sites) != N_sites:
+            raise ValueError("incompatible length")
+        H_bond = [None] * N_sites
+        for i, d1l in self.coupling_terms[0].items():
+            j = (i + 1) % N_sites
+            site_i = sites[i]
+            site_j = sites[j]
+            H = H_bond[j]
+            for (op1, op_str), d2 in d1l.items():
+                if not all([j2 < 0 for j2 in d2.keys()]):
+                    #only counter must appear as a key here
+                    raise ValueError("MultiCouplingTerms: this is not nearest neighbor!")
+                if not (i + 1) in self.coupling_terms[1].keys():
+                    raise ValueError(
+                        "Coupling from site {i:d} is not nearest neighbor!".format(i=i))
+                for (op2, op_str2), d3 in self.coupling_terms[1][i + 1].items():
+                    for c in d3.keys():
+                        assert c < 0  #only counter can appear
+                        if c in d2.keys():
+                            strength = d2[c]
+                            H_add = strength * npc.outer(site_i.get_op(op1), site_j.get_op(op2))
+                            H = add_with_None_0(H, H_add)
+            if H is not None:
+                H.iset_leg_labels(['p0', 'p0*', 'p1', 'p1*'])
+            H_bond[j] = H
+        return H_bond
 
     def __iadd__(self, other):
         if not isinstance(other, CouplingTerms):

@@ -88,9 +88,16 @@ def test_MPOGraph_term_conversion():
     prefactors[3:3] = [3.]
     term_list = TermList(terms, prefactors)
     g3 = mpo.MPOGraph.from_term_list(term_list, [spin_half] * L, 'infinite')
-    g1.add(1, (0, 'Sp', 'Id'), (0, 'Sp', 'Id', 1, 'Sz', 'Id'), 'Sz', 1.)
-    g1.add(2, (0, 'Sp', 'Id', 1, 'Sz', 'Id'), 'IdR', 'Sm', 3.)
-    assert g1.graph == g3.graph
+    g4 = mpo.MPOGraph([spin_half] * L, 'infinite')
+    g4.test_sanity()
+    for i in range(L):
+        g4.add(i, 'IdL', 'IdR', 'Sz', 0.5)
+        g4.add(i, 'IdL', (i, 'Sp', 'lId'), 'Sp', 1.)
+        g4.add(i + 1, (i, 'Sp', 'lId'), 'IdR', 'Sm', 1.5)
+    g4.add_missing_IdL_IdR()
+    g4.add(1, (0, 'Sp', 'lId'), (0, 'Sp', 'lId', 1, 'Sz', 'Id'), 'Sz', 1.)
+    g4.add(2, (0, 'Sp', 'lId', 1, 'Sz', 'Id'), 'IdR', 'Sm', 3.)
+    assert g4.graph == g3.graph
 
 
 def test_MPO_conversion():
@@ -127,12 +134,12 @@ def test_MPO_conversion():
         ],
         [
             ['Id', None, None],  # site 2
-            [None, 'Id', None],
+            [None, [('Id', 11.0)], None],
             [None, None, 'Id']
         ],
         [
             ['Id', None],  # site 3
-            [None, [('X_3', 11.0)]],
+            [None, 'X_3'],
             [None, 'Id']
         ],
         [
@@ -144,13 +151,14 @@ def test_MPO_conversion():
             [None, None, 'Id']
         ],
         [
-            [None, 'Y_6', None],  # site 6
-            ['Id', None, None],
+            # site 6
+            [None, [('Y_6', 103.0)], None],
+            [[('Id', 102.5)], [('Id', 101.0)], None],
             [None, None, 'Id']
         ],
         [
-            [[('Y_7', 101.0), ('X_7', 102.5)]],  # site 7
-            [[('Y_7', 103.0)]],
+            ['X_7'],  # site 7
+            ['Y_7'],
             ['Id']
         ]
     ]
