@@ -48,7 +48,7 @@ logger = logging.getLogger(__name__)
 from .algorithm import TimeEvolutionAlgorithm
 from ..linalg import np_conserved as npc
 from .truncation import svd_theta, TruncationError
-from ..linalg.random_matrix import CUE
+from ..linalg import random_matrix
 
 __all__ = ['TEBDEngine', 'Engine', 'RandomUnitaryEvolution']
 
@@ -641,6 +641,7 @@ class RandomUnitaryEvolution(TEBDEngine):
             Truncation parameters as described in :cfg:config:`truncate`
 
 
+
     Examples
     --------
     One can initialize a "random" state with total Sz = L//2 as follows:
@@ -666,7 +667,7 @@ class RandomUnitaryEvolution(TEBDEngine):
 
     .. doctest :: RandomUnitaryEvolution
 
-        >>> psi2 = MPS.from_product_state([spin_half]*L, [0]*L, bc='finite')  # all spins up
+        >>> psi2 = MPS.from_product_state([spin_half]*L, ["up"]*L, bc='finite')  # all spins up
         >>> print(psi2.chi)
         [1, 1, 1, 1, 1, 1, 1]
         >>> eng2 = RandomUnitaryEvolution(psi2, options)
@@ -700,7 +701,27 @@ class RandomUnitaryEvolution(TEBDEngine):
             })
 
     def calc_U(self):
-        """Draw new random two-site unitaries replacing the usual `U` of TEBD."""
+        """Draw new random two-site unitaries replacing the usual `U` of TEBD.
+
+
+        .. cfg:configoptions :: RandomUnitaryEvolution
+
+            distribution_func : str | function
+                Function or name for one of the matrix ensembles in
+                :mod:`~tenpy.linalg.random_matrix` which generates unitaries (or a subset of them).
+                To be used as `func` for generating unitaries with
+                :meth:`~tenpy.linalg.np_conserved.Array.from_func_square`, i.e. the `U` still
+                preserves the charge block structure!
+            distribution_func_kwargs : dict
+                Extra keyword arguments for `distribution_func`.
+        """
+        func = self.options.get('distribution_func', "CUE")
+        if isinstance(func, str):
+            if func not in ["CUE", "CRE", "COE", "O_close_1", "U_close_1"]:
+                raise ValueError("distribution_func should generate unitaries")
+            func = getattr(random_matrix, func, None)
+            assert func is not None
+        func_kwargs = self.options.get('distribution_func_kwargs', {})
         sites = self.psi.sites
         L = len(sites)
         U_bonds = []
@@ -711,7 +732,8 @@ class RandomUnitaryEvolution(TEBDEngine):
                 leg_L = sites[i - 1].leg
                 leg_R = sites[i].leg
                 pipe = npc.LegPipe([leg_L, leg_R])
-                U = npc.Array.from_func_square(CUE, pipe).split_legs()
+                U = npc.Array.from_func_square(func, pipe, func_kwargs=func_kwargs)
+                U = U.split_legs()
                 U.iset_leg_labels(['p0', 'p1', 'p0*', 'p1*'])
                 U_bonds.append(U)
         self._U = [U_bonds]
