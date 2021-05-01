@@ -19,7 +19,7 @@ except ImportError:
 __all__ = ["Hdf5CacheFile", "CachedList"]
 
 
-class Hdf5CacheFile(h5py.File):
+class Hdf5CacheFile:
     """Temporary HDF5 file that gets deleted when cleared out of Memory."""
     def __init__(self, filename="cache.h5"):
         self.h5file = h5py.File(filename, 'w')
@@ -37,7 +37,7 @@ class Hdf5CacheFile(h5py.File):
 class CachedList(collections.abc.Sequence):
     """List-like container caching data to disc instead of keeping it in RAM.
 
-    Instance of this class can replace lists.
+    Instances of this class can replace lists.
 
     Parameters
     ----------
@@ -56,7 +56,7 @@ class CachedList(collections.abc.Sequence):
         Hdf5 file/group to save the data in.
     keystring : str
         Template for `keys`.
-    keys : List[str]
+    keys : list of str
         Keys for the different data sets.
     saver : :class:`~tenpy.tools.hdf_io.Hdf5Saver`
         Loading class.

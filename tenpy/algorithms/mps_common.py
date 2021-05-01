@@ -36,15 +36,22 @@ from ..linalg.sparse import NpcLinearOperator, SumNpcLinearOperator, OrthogonalN
 from .algorithm import Algorithm
 
 __all__ = [
-    'Sweep', 'EffectiveH', 'OneSiteH', 'TwoSiteH', 'VariationalCompression', 'VariationalApplyMPO'
+    'Sweep',
+    'EffectiveH',
+    'OneSiteH',
+    'TwoSiteH',
+    'DummyTwoSiteH',
+    'VariationalCompression',
+    'VariationalApplyMPO',
 ]
 
 
 class Sweep(Algorithm):
     r"""Prototype class for a 'sweeping' algorithm.
 
-    This is a superclass, intended to cover common procedures in all algorithms that 'sweep'. This
-    includes DMRG, TDVP, etc.
+    This is a base class, intended to cover common procedures in all algorithms that 'sweep'
+    left-right over the MPS (for infinite MPS: over the MPS unit cell).
+    Examples for such algorithms are DMRG, TDVP, and variational compression.
 
     .. todo ::
         TDVP is currently not implemented with the sweep class.
@@ -61,7 +68,7 @@ class Sweep(Algorithm):
         Can only be passed as keyword argument.
         By default (``None``) ignored. If a `dict`, it should contain the data returned by
         :meth:`get_resume_data` when intending to continue/resume an interrupted run,
-        in particular `'init_env_data'`.
+        in particular ``'init_env_data'``.
     orthogonal_to : None | list of :class:`~tenpy.networks.mps.MPS` | list of dict
         States to orthogonalize against, see :meth:`init_env`.
 
@@ -100,6 +107,9 @@ class Sweep(Algorithm):
     move_right : bool
         Only set during sweep.
         Whether the next `i0` of the sweep will be right or left of the current one.
+    update_LP_RP : (bool, bool)
+        Only set during a sweep, see :meth:`get_sweep_schedule`.
+        Indicates whether it is necessary to update the `LP` and `RP` in :meth:`update_env`.
     ortho_to_envs : list of :class:`~tenpy.networks.mps.MPSEnvironment`
         List of environments ``<psi|psi_ortho>``, where `psi_ortho` is an MPS to orthogonalize
         against.
@@ -108,15 +118,12 @@ class Sweep(Algorithm):
         terminate with `shelve = True`.
     sweeps : int
         The number of sweeps already performed.
+    S_inv_cutoff : float
+        Cutoff for singular values when taking inverses of them is required.
     time0 : float
         Time marker for the start of the run.
     trunc_err_list : list
-        List of truncation errors.
-    update_LP_RP : (bool, bool)
-        Only set during a sweep.
-        Whether it is necessary to update the `LP` and `RP`.
-        The latter are chosen such that the environment is growing for infinite systems, but
-        we only keep the minimal number of environment tensors in memory (inside :attr:`env`).
+        List of truncation errors from the last sweep.
     chi_list : dict | ``None``
         A dictionary to gradually increase the `chi_max` parameter of `trunc_params`.
         See :cfg:option:`Sweep.chi_list`
@@ -129,7 +136,7 @@ class Sweep(Algorithm):
 
         self.combine = options.get('combine', False)
         self.finite = self.psi.finite
-
+        self.S_inv_cutoff = 1.e-15
         self.lanczos_params = options.subconfig('lanczos_params')
 
         self.env = None
@@ -138,6 +145,7 @@ class Sweep(Algorithm):
         self.i0 = 0
         self.move_right = True
         self.update_LP_RP = (True, False)
+        print('initialized  sweep')
 
     @property
     def engine_params(self):
@@ -159,7 +167,7 @@ class Sweep(Algorithm):
 
     @property
     def n_optimize(self):
-        """the number of sites to be optimized over at once.
+        """The number of sites to be optimized at once.
 
         Indirectly set by the class attribute :attr:`EffectiveH` and it's `length`.
         For example, :class:`~tenpy.algorithms.dmrg.TwoSiteDMRGEngine` uses the
@@ -172,8 +180,8 @@ class Sweep(Algorithm):
         """(Re-)initialize the environment.
 
         This function is useful to (re-)start a Sweep with a slightly different
-        model or different (engine) parameters. Note that we assume that we
-        still have the same `psi`.
+        model or different (engine) parameters.
+        Note that we assume that we still have the same `psi`.
         Calls :meth:`reset_stats`.
 
         Parameters
@@ -183,6 +191,8 @@ class Sweep(Algorithm):
             If ``None``, keep the model used before.
         resume_data : None | dict
             Given when resuming a simulation, as returned by :meth:`get_resume_data`.
+            Can contain another dict under the key `init_env_data`; the contents of
+            `init_env_data` get passed as keyword arguments to the environment initializaiton.
         orthogonal_to : None | list of :class:`~tenpy.networks.mps.MPS` | list of dict
             List of other matrix product states to orthogonalize against.
             Instead of just the state, you can specify a dict with the state as `ket`
@@ -225,6 +235,7 @@ class Sweep(Algorithm):
             those of hte old model.
         """
         H = model.H_MPO if model is not None else self.env.H
+        # extract `init_env_data` from options or previous env
         if resume_data is None:
             resume_data = {}
         if 'init_env_data' in self.options:
@@ -248,8 +259,30 @@ class Sweep(Algorithm):
                 if key_old in self.options:
                     init_env_data[key_new] = self.options[key_old]
 
+        # actually initialize the environment
         self.env = MPOEnvironment(self.psi, H, self.psi, **init_env_data)
 
+        self._init_ortho_to_envs(orthogonal_to, resume_data)
+
+        if self.options.get("cache_env", False):
+            import h5py
+            from ..tools.cache import Hdf5CacheFile
+            fn = self.options.get("cache_env_filename", "cache.h5")
+            self.env.cache = cache = Hdf5CacheFile(fn)
+            self.env._LP = cache.make_ListCache(self.env._LP, "/env/LP")
+            self.env._RP = cache.make_ListCache(self.env._RP, "/env/RP")
+            for i, env in enumerate(self.ortho_to_envs):
+                env._LP = cache.make_ListCache(env._LP, "/ortho_{0:d}/LP".format(i))
+                env._RP = cache.make_ListCache(env._RP, "/ortho_{0:d}/RP".format(i))
+
+        self.reset_stats(resume_data)
+
+        # initial sweeps of the environment (without mixer)
+        if not self.finite:
+            start_env = self.options.get('start_env', 1)
+            self.environment_sweeps(start_env)
+
+    def _init_ortho_to_envs(self, orthogonal_to, resume_data):
         # (re)initialize ortho_to_envs
         if 'orthogonal_to' in self.options:
             warnings.warn(
@@ -269,24 +302,7 @@ class Sweep(Algorithm):
                     self.ortho_to_envs.append(MPSEnvironment(self.psi, **ortho))
                 else:
                     self.ortho_to_envs.append(MPSEnvironment(self.psi, ortho))
-
-        if self.options.get("cache_env", False):
-            import h5py
-            from ..tools.cache import Hdf5CacheFile
-            fn = self.options.get("cache_env_filename", "cache.h5")
-            self.cache = cache = Hdf5CacheFile(fn)
-            self.env._LP = cache.make_ListCache(self.env._LP, "/env/LP")
-            self.env._RP = cache.make_ListCache(self.env._RP, "/env/RP")
-            for i, env in enumerate(self.ortho_to_envs):
-                env._LP = cache.make_ListCache(env._LP, "/ortho_{0:d}/LP".format(i))
-                env._RP = cache.make_ListCache(env._RP, "/ortho_{0:d}/RP".format(i))
-
-        self.reset_stats(resume_data)
-
-        # initial sweeps of the environment (without mixer)
-        if not self.finite:
-            start_env = self.options.get('start_env', 1)
-            self.environment_sweeps(start_env)
+        # done
 
     def reset_stats(self, resume_data=None):
         """Reset the statistics. Useful if you want to start a new Sweep run.
@@ -295,10 +311,21 @@ class Sweep(Algorithm):
         self.update_stats and self.sweep_stats dicts consistent with the statistics generated by
         the algorithm particular to that subclass.
 
-        .. cfg:configoptions :: Sweep
+        Parameters
+        ----------
+        resume_data : dict
+            Given when resuming a simulation, as returned by :meth:`get_resume_data`.
+            Here, we read out the `sweeps`.
 
+        Options
+        -------
+        .. deprecated : 0.9
             sweep_0 : int
                 Number of sweeps that have already been performed.
+                Pass as ``resume_data['sweeps']`` instead.
+
+        .. cfg:configoptions :: Sweep
+
             chi_list : None | dict(int -> int)
                 By default (``None``) this feature is disabled.
                 A dict allows to gradually increase the `chi_max`.
@@ -307,7 +334,11 @@ class Sweep(Algorithm):
                 For example ``chi_list={0: 50, 20: 100}`` uses ``chi_max=50`` for the first
                 20 sweeps and ``chi_max=100`` afterwards.
         """
-        self.sweeps = self.options.get('sweep_0', 0)
+        self.sweeps = 0
+        if 'sweep_0' in self.options:
+            warnings.warn("Deprecated sweep_0 option: set as resume_data['sweep'] instead.",
+                          FutureWarning)
+            self.sweeps = self.options['sweep_0']
         if resume_data is not None and 'sweeps' in resume_data:
             self.sweeps = resume_data['sweeps']
         self.shelve = False
@@ -368,20 +399,13 @@ class Sweep(Algorithm):
             self.i0 = i0
             self.move_right = move_right
             self.update_LP_RP = update_LP_RP
-            update_LP, update_RP = update_LP_RP
             logger.debug("in sweep: i0 =%d", i0)
             # --------- the main work --------------
             theta = self.prepare_update()
             update_data = self.update_local(theta, optimize=optimize)
-            if update_LP:
-                self.update_LP(update_data['U'])  # (requires updated B)
-                for o_env in self.ortho_to_envs:
-                    o_env.get_LP(i0 + 1, store=True)
-            if update_RP:
-                self.update_RP(update_data['VH'])
-                for o_env in self.ortho_to_envs:
-                    o_env.get_RP(i0, store=True)
-            self.post_update_local(update_data)
+            self.update_env(**update_data)
+            self.post_update_local(**update_data)
+            self.free_no_longer_needed_envs()
 
         if optimize:  # count optimization sweeps
             self.sweeps += 1
@@ -390,8 +414,7 @@ class Sweep(Algorithm):
     def get_sweep_schedule(self):
         """Define the schedule of the sweep.
 
-        One 'sweep' is a full sequence from the leftmost site to the right and
-        back. Only those `LP` and `RP` that can be used later should be updated.
+        One 'sweep' is a full sequence from the leftmost site to the right and back.
 
         Returns
         -------
@@ -400,45 +423,54 @@ class Sweep(Algorithm):
             where `i0` is the leftmost of the ``self.EffectiveH.length`` sites to be updated in
             :meth:`update_local`, `move_right` indicates whether the next `i0` in the schedule is
             rigth (`True`) of the current one, and `update_LP`, `update_RP` indicate
-            whether it is necessary to update the `LP` and `RP`.
-            The latter are chosen such that the environment is growing for infinite systems, but
-            we only keep the minimal number of environment tensors in memory.
+            whether it is necessary to update the `LP` and `RP` of the environments.
         """
+        # warning: only those `LP` and `RP` that can/will be used later again should be set to True
+        # otherwise, the assumptions in :meth:`free_no_longer_needed_envs` will not hold,
+        # and you need to update that method as well!
         L = self.psi.L
+        n = self.EffectiveH.length
         if self.finite:
-            n = self.EffectiveH.length
             assert L >= n
             i0s = list(range(0, L - n)) + list(range(L - n, 0, -1))
             move_right = [True] * (L - n) + [False] * (L - n)
             update_LP_RP = [[True, False]] * (L - n) + [[False, True]] * (L - n)
-        else:
+        elif n == 2:
             assert L >= 2
             i0s = list(range(0, L)) + list(range(L, 0, -1))
             move_right = [True] * L + [False] * L
             update_LP_RP = [[True, True]] * 2 + [[True, False]] * (L-2) + \
                            [[True, True]] * 2 + [[False, True]] * (L-2)
+        elif n == 1:
+            i0s = list(range(0, L)) + list(range(L, 0, -1))
+            move_right = [True] * L + [False] * L
+            update_LP_RP = [[True, True]] + [[True, False]] * (L-1) + \
+                           [[True, True]] + [[False, True]] * (L-1)
+        else:
+            assert False, "n_optimize is neither 1 nor 2!?"
         return zip(i0s, move_right, update_LP_RP)
 
     def prepare_update(self):
-        """Prepare everything algorithm-specific to perform a local update."""
-        pass  # should usually be overridden by subclassed
+        """Prepare `self` for calling :meth:`update_local`.
 
-    def update_local(self, theta, **kwargs):
-        """Perform algorithm-specific local update."""
-        raise NotImplementedError("needs to be overridden by subclass")
-
-    def post_update_local(self, update_data):
-        """Algorithm-specific actions to be taken after local update.
-
-        An example would be to collect statistics.
+        Returns
+        -------
+        theta : :class:`~tenpy.linalg.np_conserved.Array`
+            Current best guess for the ground state, which is to be optimized.
+            Labels are ``'vL', 'p0', 'p1', 'vR'``, or combined versions of it (if `self.combine`).
+            For single-site DMRG, the ``'p1'`` label is missing.
         """
-        self.trunc_err_list.append(update_data['err'].eps)
+        self.make_eff_H()  # self.eff_H represents tensors LP, W0, RP
+        # make theta
+        theta = self.psi.get_theta(self.i0, n=self.n_optimize, cutoff=self.S_inv_cutoff)
+        theta = self.eff_H.combine_theta(theta)
+        return theta
 
     def make_eff_H(self):
         """Create new instance of `self.EffectiveH` at `self.i0` and set it to `self.eff_H`."""
         self.eff_H = self.EffectiveH(self.env, self.i0, self.combine, self.move_right)
         # note: this order of wrapping is most effective.
-        if self.env.H.explicit_plus_hc:
+        if hasattr(self.env, 'H') and self.env.H.explicit_plus_hc:
             self.eff_H = SumNpcLinearOperator(self.eff_H, self.eff_H.adjoint())
         if len(self.ortho_to_envs) > 0:
             ortho_vecs = []
@@ -457,11 +489,114 @@ class Sweep(Algorithm):
                 ortho_vecs.append(theta)
             self.eff_H = OrthogonalNpcLinearOperator(self.eff_H, ortho_vecs)
 
-    def update_LP(self, _):
-        self.env.get_LP(self.i0 + 1, store=True)
+    def update_local(self, theta, **kwargs):
+        """Perform algorithm-specific local update.
 
-    def update_RP(self, _):
-        self.env.get_RP(self.i0, store=True)
+        For two-site algorithms with :attr:`n_optimize` = 2, this always optimizes the
+        sites :attr:`i0` and `i0` + 1.
+        For single-site algorithms, the effective H only acts on site `i0`, but afterwards it
+        also updates the bond to the *right* if :attr:`move_right` is True,
+        or the bond to the left if :attr:`move_right` is False.
+        Since the svd for truncation gives tensors to be multiplied into the tensors on both sides
+        of the bond, *tensors of two sites are updated even for single-site algorithms:
+        when right-moving, site `i0` + 1 is also updated; site `i0` - 1 when left-moving.
+
+        Parameters
+        ----------
+        theta : :class:`~tenpy.linalg.np_conserved.Array`
+            Local single- or two-site wave function, as returned by :meth:`prepare_update`.
+
+        Returns
+        -------
+        update_data : dict
+            Data to be processed by :meth:`post_update_local`, e.g. containing the truncation
+            error as `err`.
+            If :attr:`combine` is set, it should also contain the `U` and `VH` from the SVD.
+        """
+        raise NotImplementedError("needs to be overridden by subclass")
+
+    def update_env(self, **update_data):
+        """Update the left and right environments after an update of the state.
+
+        Parameters
+        ----------
+        **update_data :
+            Whatever is returned by :meth:`update_local`.
+            Can be used to optimized
+        """
+        i_L, i_R = self._update_env_inds()  # left and right updated sites
+        all_envs = self._all_envs
+        for env in all_envs:
+            # clean up the updated center bond
+            env.del_LP(i_R)
+            env.del_RP(i_L)
+        # possibly recalculated updated center bonds
+        update_LP, update_RP = self.update_LP_RP
+        combine = self.combine
+        if update_LP:
+            self.eff_H.update_LP(self.env, i_R, update_data['U'])  # possibly optimized
+            for env in self.ortho_to_envs:
+                env.get_LP(i_R, store=True)
+        if update_RP:
+            self.eff_H.update_RP(self.env, i_L, update_data['VH'])  # possibly optimized
+            for env in self.ortho_to_envs:
+                env.get_RP(i_L, store=True)
+
+    def _update_env_inds(self):
+        n = self.n_optimize  # = 1 or 2
+        move_right = self.move_right
+        if n == 2 or move_right:
+            i_L = self.i0
+            i_R = self.i0 + 1
+        else:  # n == 1 and left moving
+            i_L = self.i0 - 1
+            i_R = self.i0
+        return i_L, i_R
+
+    def post_update_local(self, err, **update_data):
+        """Algorithm-specific actions to be taken after local update.
+
+        An example would be to collect statistics.
+        """
+        self.trunc_err_list.append(err.eps)
+
+    def free_no_longer_needed_envs(self):
+        """Remove no longer needed environments after an update.
+
+        This allows to minimize the number of environments to be kept.
+        For large MPO bond dimensions, these environments are by far the biggest part in memory,
+        so this is a valuable optimiztion to reduce memory requirements.
+        """
+        i_L, i_R = self._update_env_inds()  # left and right updated site
+        # envs between `i_L` and `i_R` where already deleted and updated in `update_env`
+        i0 = self.i0
+        n = self.n_optimize
+        update_LP, update_RP = self.update_LP_RP
+        all_envs = self._all_envs
+        if n == 2:
+            if update_RP:
+                # growing right environment: will update (i_L-1, i_L) in future
+                # so current LP[i_L] is useless
+                for env in all_envs:
+                    env.del_LP(i_L)
+            if update_LP:
+                # growing left environment: will update (i_R, i_R + 1) in future
+                # so current RP[i_R] is useless
+                for env in all_envs:
+                    env.del_RP(i_R)
+            return  # n = 2 finished
+        # here n = 1
+        if self.move_right and update_RP:
+            # will update site i_L coming from the left in the future
+            # so current LP[i_L] is useless
+            for env in all_envs:
+                env.del_LP(i_L)
+        elif not self.move_right and update_LP:
+            # will update site i_R coming from the right in the future
+            # so current RP[i_R] is useless
+            for env in all_envs:
+                env.del_RP(i_R)
+        # done
 
 
 class EffectiveH(NpcLinearOperator):
@@ -527,6 +662,40 @@ class EffectiveH(NpcLinearOperator):
             Wave function with labels as given by `self.acts_on`.
         """
         raise NotImplementedError("This function should be implemented in derived classes")
+
+    def update_LP(self, env, i, U=None):
+        """Equivalent to ``env.get_LP(i, store=True)``; optimized for `combine`.
+
+        Parameters
+        ----------
+        env : :class:`~tenpy.networks.mpo.MPOEnvironment`
+            The same environment as given during class initialization.
+        i : int
+            We update the part left of site `i`.
+            Can optimize if `i` == :attr:`i0` and :attr:`combine` is True.
+        U : None | :class:`~tenpy.linalg.np_conserved.Array`
+            The tensor on the left-most site `self` acts on, with combined legs after SVD.
+            Only used if trying to optimize.
+        """
+        # non-optimized case
+        env.get_LP(i, store=True)
+
+    def update_RP(self, env, i, VH=None):
+        """Equivalent to ``env.get_RP(i, store=True)``; optimized for `combine`.
+
+        Parameters
+        ----------
+        env : :class:`~tenpy.networks.mpo.MPOEnvironment`
+            The same environment as given during class initialization.
+        i : int
+            We update the part right of site `i`.
+            Can optimize if `i` == :attr:`i0` + 2 - :attr:`length` and :attr:`combine` is True.
+        U : None | :class:`~tenpy.linalg.np_conserved.Array`
+            The tensor on the right-most site `self` acts on, with combined legs after SVD.
+            Only used if trying to optimize.
+        """
+        # non-optimized case
+        env.get_RP(i, store=True)
 
 
 class OneSiteH(EffectiveH):
@@ -698,6 +867,24 @@ class OneSiteH(EffectiveH):
                 getattr(adj, key).itranspose(getattr(self, key).get_leg_labels())
         return adj
 
+    def update_LP(self, env, i, U=None):
+        if self.combine and self.move_right:
+            # i = i0 + 1
+            LP = npc.tensordot(self.LHeff, U, axes=['(vR.p0*)', '(vL.p0)'])
+            LP = npc.tensordot(U.conj(), LP, axes=['(vL*.p0*)', '(vR*.p0)'])
+            env.set_LP(i, LP, age=env.get_LP_age(i - 1) + 1)
+        else:
+            env.get_LP(i, store=True)
+
+    def update_RP(self, env, i, VH=None):
+        if self.combine and not self.move_right:
+            # i = i0 - 1
+            RP = npc.tensordot(VH, self.RHeff, axes=['(p0.vR)', '(p0*.vL)'])
+            RP = npc.tensordot(RP, VH.conj(), axes=['(p0.vL*)', '(p0*.vR*)'])
+            env.set_RP(i, RP, age=env.get_RP_age(i + 1) + 1)
+        else:
+            env.get_RP(i, store=True)
+
 
 class TwoSiteH(EffectiveH):
     r"""Class defining the two-site effective Hamiltonian for Lanczos.
@@ -726,6 +913,7 @@ class TwoSiteH(EffectiveH):
         contractions, but one :meth:`matvec` is formally more expensive, :math:`O(2 d^3 \chi^3 D)`.
     move_right : bool
         Whether the the sweep is moving right or left for the next update.
+        Ignored for the :class:`TwoSiteH`.
 
     Attributes
     ----------
@@ -860,6 +1048,38 @@ class TwoSiteH(EffectiveH):
                 getattr(adj, key).itranspose(getattr(self, key).get_leg_labels())
         return adj
 
+    def update_LP(self, env, i, U=None):
+        # i == i0 + 1
+        if self.combine:
+            LP = npc.tensordot(self.LHeff, U, axes=['(vR.p0*)', '(vL.p0)'])
+            LP = npc.tensordot(U.conj(), LP, axes=['(vL*.p0*)', '(vR*.p0)'])
+            env.set_LP(i, LP, age=env.get_LP_age(i - 1) + 1)
+        else:
+            env.get_LP(i, store=True)
+
+    def update_RP(self, env, i, VH=None):
+        # i = i0
+        if self.combine:
+            RP = npc.tensordot(VH, self.RHeff, axes=['(p1.vR)', '(p1*.vL)'])
+            RP = npc.tensordot(RP, VH.conj(), axes=['(p1.vL*)', '(p1*.vR*)'])
+            env.set_RP(i, RP, age=env.get_RP_age(i + 1) + 1)
+        else:
+            env.get_RP(i, store=True)
+
+
+class DummyTwoSiteH(EffectiveH):
+    """A dummy replacement for :meth:`TwoSiteH` with similar methods but no actual MPO.
+
+    This allows to base the :class:`VariationalCompression` on the :class:`Sweep` class.
+    """
+    length = 2
+
+    def __init__(self, *args, **kwargs):
+        pass
+
+    def combine_theta(self, theta):
+        return theta
+
 
 class VariationalCompression(Sweep):
     """Variational compression of an MPS (in place).
@@ -867,7 +1087,7 @@ class VariationalCompression(Sweep):
     To compress an MPS `psi`, use ``VariationalCompression(psi, options).run()``.
 
     The algorithm is the same as described in :class:`VariationalApplyMPO`,
-    except that we dont have an MPO in the networks - one can think of the MPO being trivial.
+    except that we don't have an MPO in the networks - one can think of the MPO being trivial.
 
     Parameters
     ----------
@@ -890,14 +1110,14 @@ class VariationalCompression(Sweep):
         N_sweeps : int
             Number of sweeps to perform.
         start_env_sites : int
-            Number of sites to contract for the inital LP/RP environment in case of infinte MPS.
+            Number of sites to contract for the inital LP/RP environment in case of infinite MPS.
 
     Attributes
     ----------
     renormalize : list
         Used to keep track of renormalization in the last sweep for `psi.norm`.
     """
-    EffectiveH = TwoSiteH
+    EffectiveH = DummyTwoSiteH
 
     def __init__(self, psi, options, resume_data=None):
         super().__init__(psi, None, options, resume_data=resume_data)
@@ -923,12 +1143,12 @@ class VariationalCompression(Sweep):
             self.psi.norm *= max(self.renormalize)
         return TruncationError(max_trunc_err, 1. - 2. * max_trunc_err)
 
-    def init_env(self, _=None, resume_data=None, orthogonal_to=None):
+    def init_env(self, model=None, resume_data=None, orthogonal_to=None):
         """Initialize the environment.
 
         Parameters
         ----------
-        _, orthogonal_to :
+        model, orthogonal_to :
             Ignored, only there for compatibility with the :class:`Sweep` class.
         resume_data : dict
             May contain `init_env_data`.
@@ -941,7 +1161,11 @@ class VariationalCompression(Sweep):
         if start_env_sites is not None and not self.psi.finite:
             init_env_data['start_env_sites'] = start_env_sites
         self.env = MPSEnvironment(self.psi, old_psi, **init_env_data)
+        self._init_ortho_to_envs(orthogonal_to, resume_data)
         self.reset_stats()
+
+    #  def prepare_update(self):
+    #      return self.env.ket.get_theta(self.i0, n=self.n_optimize)  # ket is old psi
 
     def update_local(self, _, optimize=True):
         """Perform local update.
@@ -975,13 +1199,6 @@ class VariationalCompression(Sweep):
         new_psi.set_B(i0, B0, form='A')  # left-canonical
         new_psi.set_B(i0 + 1, B1, form='B')  # right-canonical
         new_psi.set_SR(i0, S)
-        # the old stored environments are now invalid
-        # => delete them to ensure that they get calculated again in :meth:`update_LP` / RP
-        for o_env in self.ortho_to_envs:
-            o_env.del_LP(i0 + 1)
-            o_env.del_RP(i0)
-        self.env.del_LP(i0 + 1)
-        self.env.del_RP(i0)
         return {'U': U, 'VH': VH, 'err': err}
 
 
@@ -1046,6 +1263,8 @@ class VariationalApplyMPO(VariationalCompression):
     renormalize : list
         Used to keep track of renormalization in the last sweep for `psi.norm`.
     """
+    EffectiveH = TwoSiteH
+
     def __init__(self, psi, U_MPO, options, resume_data=None):
         Sweep.__init__(self, psi, U_MPO, options, resume_data=resume_data)
         self.renormalize = [None] * (psi.L - int(psi.finite))
@@ -1071,6 +1290,10 @@ class VariationalApplyMPO(VariationalCompression):
             init_env_data['start_env_sites'] = start_env_sites
         self.env = MPOEnvironment(self.psi, U_MPO, old_psi, **init_env_data)
         self.reset_stats()
+
+    #  def prepare_update(self):
+    #      # revert the override in MPSCompression
+    #      return Sweep.prepare_update(self)
 
     def update_local(self, _, optimize=True):
         """Perform local update.
