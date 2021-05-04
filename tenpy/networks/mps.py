@@ -4018,13 +4018,9 @@ class MPSEnvironment:
                 logger.warn("dropping `init_RP` with incompatible legs")
                 init_RP = None
         if init_LP is None:
-            if self.ket.bc == 'segment' or self.bra.bc == 'segment':
-                raise ValueError("segment: you need to specify the LP/RP environments!")
             init_LP = self.init_LP(0, start_env_sites)
             age_LP = start_env_sites
         if init_RP is None:
-            if self.ket.bc == 'segment' or self.bra.bc == 'segment':
-                raise ValueError("segment: you need to specify the LP/RP environments!")
             init_RP = self.init_RP(self.L - 1, start_env_sites)
             age_RP = start_env_sites
         self.set_LP(0, init_LP, age=age_LP)

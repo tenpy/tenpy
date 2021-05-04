@@ -444,7 +444,7 @@ class MPO:
         IdL.append(self.IdL[last % L + 1])
         IdR = [self.IdR[i % L] for i in range(first, last + 1)]
         IdR.append(self.IdR[last % L + 1])
-        cp = self.__class__(sites, Ws, 'infinite', IdL, IdR, self.max_range, self.explicit_plus_hc)
+        cp = self.__class__(sites, W, 'segment', IdL, IdR, self.max_range, self.explicit_plus_hc)
         cp.grouped = self.grouped
         return cp
 
