@@ -3809,9 +3809,10 @@ class MPS:
             W = -W  # should actually never happen:  we initially normalize tr(Gr) = chi > 0
         # discard small values on order of machine precision
         proj = (W > eps)
-        if np.count_nonzero(proj) < len(W) * 0.9:
+        if np.count_nonzero(proj) < len(W):
             # project into non-degenerate subspace, reducing the bond dimensions!
-            logger.warn("canonical_form_infinite: project to significantly smaller bond dimension")
+            if np.count_nonzero(proj) < len(W) * 0.9:
+                logger.warn("canonical_form_infinite: project to significantly smaller chi")
             XH.iproject(proj, axes=1)
             W = W[proj]
         norm = len(W) / np.sum(W)
@@ -3847,9 +3848,10 @@ class MPS:
         s_norm = 1.
         # discard small values on order of machine precision
         proj = (S2 > eps)
-        if np.count_nonzero(proj) < len(S2) * 0.9:
+        if np.count_nonzero(proj) < len(S2):
             # project into non-degenerate subspace, reducing the bond dimensions!
-            logger.warn("canonical_form_infinite: project to significantly smaller bond dimension")
+            if np.count_nonzero(proj) < len(W) * 0.9:
+                logger.warn("canonical_form_infinite: project to significantly smaller chi")
             YH.iproject(proj, axes=1)
             S2 = S2[proj]
             s_norm = np.sqrt(np.sum(S2))
