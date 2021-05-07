@@ -58,17 +58,8 @@ class Sweep(Algorithm):
 
     Parameters
     ----------
-    psi : :class:`~tenpy.networks.mps.MPS`
-        Initial guess for the ground state, which is to be optimized in-place.
-    model : :class:`~tenpy.models.MPOModel`
-        The model representing the Hamiltonian for which we want to find the ground state.
-    options : dict
-        Further optional configuration parameters.
-    resume_data : None | dict
-        Can only be passed as keyword argument.
-        By default (``None``) ignored. If a `dict`, it should contain the data returned by
-        :meth:`get_resume_data` when intending to continue/resume an interrupted run,
-        in particular ``'init_env_data'``.
+    psi, model, options, **kwargs:
+        Other parameters as described in :class:`~tenpy.algorithms.algorithm.Algorithm`.
     orthogonal_to : None | list of :class:`~tenpy.networks.mps.MPS` | list of dict
         States to orthogonalize against, see :meth:`init_env`.
 
@@ -93,8 +84,6 @@ class Sweep(Algorithm):
         Class attribute; a sublcass of :class:`~tenpy.algorithms.mps_common.EffectiveH`.
         It's length attribute determines how many sites are optimized/updated at once,
         see also :attr:`n_optimize`.
-    options: :class:`~tenpy.tools.params.Config`
-        Optional parameters.
     E_trunc_list : list
         List of truncation energies throughout a sweep.
     env : :class:`~tenpy.networks.mpo.MPOEnvironment`
@@ -128,10 +117,10 @@ class Sweep(Algorithm):
         A dictionary to gradually increase the `chi_max` parameter of `trunc_params`.
         See :cfg:option:`Sweep.chi_list`
     """
-    def __init__(self, psi, model, options, *, orthogonal_to=None, resume_data=None):
+    def __init__(self, psi, model, options, *, orthogonal_to=None, **kwargs):
         if not hasattr(self, "EffectiveH"):
             raise NotImplementedError("Subclass needs to set EffectiveH")
-        super().__init__(psi, model, options, resume_data=resume_data)
+        super().__init__(psi, model, options, **kwargs)
         options = self.options
 
         self.combine = options.get('combine', False)
@@ -141,7 +130,7 @@ class Sweep(Algorithm):
 
         self.env = None
         self.ortho_to_envs = []
-        self.init_env(model, resume_data=resume_data, orthogonal_to=orthogonal_to)
+        self.init_env(model, resume_data=self.resume_data, orthogonal_to=orthogonal_to)
         self.i0 = 0
         self.move_right = True
         self.update_LP_RP = (True, False)
@@ -260,20 +249,9 @@ class Sweep(Algorithm):
                     init_env_data[key_new] = self.options[key_old]
 
         # actually initialize the environment
-        self.env = MPOEnvironment(self.psi, H, self.psi, **init_env_data)
-
+        cache = self.cache.create_subcache('env')
+        self.env = MPOEnvironment(self.psi, H, self.psi, cache=cache, **init_env_data)
         self._init_ortho_to_envs(orthogonal_to, resume_data)
-
-        if self.options.get("cache_env", False):
-            import h5py
-            from ..tools.cache import Hdf5CacheFile
-            fn = self.options.get("cache_env_filename", "cache.h5")
-            self.env.cache = cache = Hdf5CacheFile(fn)
-            self.env._LP = cache.make_ListCache(self.env._LP, "/env/LP")
-            self.env._RP = cache.make_ListCache(self.env._RP, "/env/RP")
-            for i, env in enumerate(self.ortho_to_envs):
-                env._LP = cache.make_ListCache(env._LP, "/ortho_{0:d}/LP".format(i))
-                env._RP = cache.make_ListCache(env._RP, "/ortho_{0:d}/RP".format(i))
 
         self.reset_stats(resume_data)
 
@@ -297,11 +275,12 @@ class Sweep(Algorithm):
             if not self.finite:
                 raise ValueError("Can't orthogonalize for infinite MPS: overlap not well defined.")
             self.ortho_to_envs = []
-            for ortho in orthogonal_to:
+            for i, ortho in enumerate(orthogonal_to):
+                cache = self.cache.create_subcache(f"ortho_{i:d}")
                 if isinstance(ortho, dict):
-                    self.ortho_to_envs.append(MPSEnvironment(self.psi, **ortho))
+                    self.ortho_to_envs.append(MPSEnvironment(self.psi, **ortho, cache=cache))
                 else:
-                    self.ortho_to_envs.append(MPSEnvironment(self.psi, ortho))
+                    self.ortho_to_envs.append(MPSEnvironment(self.psi, ortho, cache=cache))
         # done
 
     def reset_stats(self, resume_data=None):
@@ -399,6 +378,7 @@ class Sweep(Algorithm):
             self.i0 = i0
             self.move_right = move_right
             self.update_LP_RP = update_LP_RP
+            self._cache_optimize()
             logger.debug("in sweep: i0 =%d", i0)
             # --------- the main work --------------
             theta = self.prepare_update()
@@ -450,6 +430,37 @@ class Sweep(Algorithm):
             assert False, "n_optimize is neither 1 nor 2!?"
         return zip(i0s, move_right, update_LP_RP)
 
+    def _cache_optimize(self):
+        """call ``env.cache_optimize`` to preload next env tensors and avoid unncessary reads."""
+        i0 = self.i0
+        move_right = self.move_right
+        if self.n_optimize == 2:
+            kwargs = {
+                'short_term_LP': [i0, i0 + 1],
+                'short_term_RP': [i0, i0 + 1],
+            }
+            if move_right:
+                kwargs['preload_RP'] = i0 + 2
+            else:
+                kwargs['preload_LP'] = i0 - 1
+        elif self.n_optimize == 1:
+            if move_right:
+                kwargs = {
+                    'short_term_LP': [i0, i0 + 1],
+                    'short_term_RP': [i0],
+                    'preload_RP': i0 + 1,
+                }
+            else:
+                kwargs = {
+                    'short_term_LP': [i0],
+                    'short_term_RP': [i0 - 1, i0],
+                    'preload_LP': i0 - 1,
+                }
+        else:
+            raise ValueError(f"unexpected `n_optimize` = {self.n_optimize!r}")
+        for env in self._all_envs:
+            env.cache_optimize(**kwargs)
+
     def prepare_update(self):
         """Prepare `self` for calling :meth:`update_local`.
 
@@ -498,7 +509,7 @@ class Sweep(Algorithm):
         also updates the bond to the *right* if :attr:`move_right` is True,
         or the bond to the left if :attr:`move_right` is False.
         Since the svd for truncation gives tensors to be multiplied into the tensors on both sides
-        of the bond, *tensors of two sites are updated even for single-site algorithms:
+        of the bond, tensors of two sites are updated even for single-site algorithms:
         when right-moving, site `i0` + 1 is also updated; site `i0` - 1 when left-moving.
 
         Parameters
@@ -860,11 +871,11 @@ class OneSiteH(EffectiveH):
         if self.combine:
             adj.LHeff = self.LHeff.conj().ireplace_label('wR*', 'wR')
             adj.RHeff = self.RHeff.conj().ireplace_label('wL*', 'wL')
-        for key in ['LP', 'RP', 'W0', 'W1']:
-            getattr(adj, key).itranspose(getattr(self, key).get_leg_labels())
+        tensors = ['LP', 'RP', 'W0']
         if self.combine:
-            for key in ['LHeff', 'RHeff']:
-                getattr(adj, key).itranspose(getattr(self, key).get_leg_labels())
+            tensors.extend(['LHeff', 'RHeff'])
+        for key in tensors:
+            getattr(adj, key).itranspose(getattr(self, key).get_leg_labels())
         return adj
 
     def update_LP(self, env, i, U=None):
@@ -1041,11 +1052,11 @@ class TwoSiteH(EffectiveH):
         if self.combine:
             adj.LHeff = self.LHeff.conj().ireplace_label('wR*', 'wR')
             adj.RHeff = self.RHeff.conj().ireplace_label('wL*', 'wL')
-        for key in ['LP', 'RP', 'W0', 'W1']:
-            getattr(adj, key).itranspose(getattr(self, key).get_leg_labels())
+        tensors = ['LP', 'RP', 'W0', 'W1']
         if self.combine:
-            for key in ['LHeff', 'RHeff']:
-                getattr(adj, key).itranspose(getattr(self, key).get_leg_labels())
+            tensors.extend(['LHeff', 'RHeff'])
+        for key in tensors:
+            getattr(adj, key).itranspose(getattr(self, key).get_leg_labels())
         return adj
 
     def update_LP(self, env, i, U=None):
@@ -1160,12 +1171,10 @@ class VariationalCompression(Sweep):
         start_env_sites = self.options.get('start_env_sites', 2)
         if start_env_sites is not None and not self.psi.finite:
             init_env_data['start_env_sites'] = start_env_sites
-        self.env = MPSEnvironment(self.psi, old_psi, **init_env_data)
+        cache = self.cache.create_subcache('env')
+        self.env = MPSEnvironment(self.psi, old_psi, cache=cache, **init_env_data)
         self._init_ortho_to_envs(orthogonal_to, resume_data)
         self.reset_stats()
-
-    #  def prepare_update(self):
-    #      return self.env.ket.get_theta(self.i0, n=self.n_optimize)  # ket is old psi
 
     def update_local(self, _, optimize=True):
         """Perform local update.
@@ -1247,10 +1256,8 @@ class VariationalApplyMPO(VariationalCompression):
         MPO to be applied to the state.
     options : dict
         See :cfg:config:`VariationalCompression`.
-    resume_data : None | dict
-        By default (``None``) ignored. If a `dict`, it should contain the data returned by
-        :meth:`get_resume_data` when intending to continue/resume an interrupted run,
-        in particular `'init_env_data'`.
+    **kwargs :
+        Further keyword arguments as described in the :class:`Sweep` class.
 
     Options
     -------
@@ -1265,8 +1272,8 @@ class VariationalApplyMPO(VariationalCompression):
     """
     EffectiveH = TwoSiteH
 
-    def __init__(self, psi, U_MPO, options, resume_data=None):
-        Sweep.__init__(self, psi, U_MPO, options, resume_data=resume_data)
+    def __init__(self, psi, U_MPO, options, **kwargs):
+        Sweep.__init__(self, psi, U_MPO, options, **kwargs)
         self.renormalize = [None] * (psi.L - int(psi.finite))
 
     def init_env(self, U_MPO, resume_data=None, orthogonal_to=None):
@@ -1290,10 +1297,6 @@ class VariationalApplyMPO(VariationalCompression):
             init_env_data['start_env_sites'] = start_env_sites
         self.env = MPOEnvironment(self.psi, U_MPO, old_psi, **init_env_data)
         self.reset_stats()
-
-    #  def prepare_update(self):
-    #      # revert the override in MPSCompression
-    #      return Sweep.prepare_update(self)
 
     def update_local(self, _, optimize=True):
         """Perform local update.

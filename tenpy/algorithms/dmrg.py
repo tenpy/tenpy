@@ -980,6 +980,9 @@ class DMRGEngine(Sweep):
                 logger.warn(
                     "norm_err=%.2e still too high after environment_sweeps, "
                     "call psi.canonical_form()", norm_err)
+                for env in self._all_envs:
+                    self.env.cache_optimize([0], [env.L - 1])
+                    self.env.clear()  # only keep initialization data
                 self.psi.canonical_form(envs_to_update=self._all_envs)
 
     def reset_stats(self, resume_data=None):

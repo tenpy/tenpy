@@ -18,6 +18,7 @@ Common to all tools is that they are not just useful for a single algorithm but 
     string
     process
     optimization
+    cache
 """
 # Copyright 2018-2021 TeNPy Developers, GNU GPLv3
 

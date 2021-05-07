@@ -1754,23 +1754,10 @@ class MPOEnvironment(MPSEnvironment):
     H : :class:`~tenpy.networks.mpo.MPO`
         The MPO sandwiched between `bra` and `ket`.
     """
-    def __init__(self, bra, H, ket, **init_env_data):
-        if ket is None:
-            ket = bra
-        if ket is not bra:
-            ket._gauge_compatible_vL_vR(bra)  # ensure matching charges
-        self.bra = bra
-        self.ket = ket
+    def __init__(self, bra, H, ket, cache=None, **init_env_data):
         self.H = H
-        self.L = L = lcm(lcm(bra.L, ket.L), H.L)
-        self._finite = bra.finite
+        super().__init__(bra, ket, cache, **init_env_data)
         self.dtype = np.find_common_type([bra.dtype, ket.dtype, H.dtype], [])
-        self._LP = [None] * L
-        self._RP = [None] * L
-        self._LP_age = [None] * L
-        self._RP_age = [None] * L
-        self.init_first_LP_last_RP(**init_env_data)
-        self.test_sanity()
 
     def init_first_LP_last_RP(self,
                               init_LP=None,
@@ -1819,12 +1806,12 @@ class MPOEnvironment(MPSEnvironment):
     def test_sanity(self):
         """Sanity check, raises ValueErrors, if something is wrong."""
         assert (self.bra.finite == self.ket.finite == self.H.finite == self._finite)
-        # check that the network is contractable
+        # check that the physical legs are contractable
         for b_s, H_s, k_s in zip(self.bra.sites, self.H.sites, self.ket.sites):
             b_s.leg.test_equal(k_s.leg)
             b_s.leg.test_equal(H_s.leg)
-        assert any([LP is not None for LP in self._LP])
-        assert any([RP is not None for RP in self._RP])
+        assert any(key in self.cache for key in self._LP_keys)
+        assert any(key in self.cache for key in self._RP_keys)
 
     def init_LP(self, i, start_env_sites=0):
         r"""Build an initial left part ``LP``.

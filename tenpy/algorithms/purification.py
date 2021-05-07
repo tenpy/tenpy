@@ -85,16 +85,7 @@ class PurificationTEBD(tebd.TEBDEngine):
     .. deprecated :: 0.6.0
         Renamed parameter/attribute `TEBD_params` to :attr:`options`.
 
-
-    Parameters
-    ----------
-    psi : :class:`~tenpy.networs.purification_mps.PurificationMPS`
-        Initial state to be time evolved. Modified in place.
-    model : :class:`~tenpy.models.NearestNeighborModel`
-        The model representing the Hamiltonian for which we want to find the ground state.
-    options : dict
-        Further optional parameters as described in the following table.
-        See :func:`run` and :func:`run_GS` for more details.
+    Parameters are the same as for :class:`~tenpy.algorithms.algorithm.Algorithm`.
 
     Options
     -------
@@ -117,8 +108,8 @@ class PurificationTEBD(tebd.TEBDEngine):
         Same index strucuture as `self._U`: for each two-site U of the physical time evolution
         the disentangler from the last application. Initialized to identities.
     """
-    def __init__(self, psi, model, options):
-        super().__init__(psi, model, options)
+    def __init__(self, psi, model, options, **kwargs):
+        super().__init__(psi, model, options, **kwargs)
         self._disent_iterations = np.zeros(psi.L)
         self._guess_U_disent = None  # will be set in calc_U
         method = self.options.get('disentangle', None)

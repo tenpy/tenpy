@@ -25,6 +25,7 @@ from ..models.model import Model
 from ..algorithms.algorithm import Algorithm
 from ..networks.mps import InitialStateBuilder
 from ..tools import hdf5_io
+from ..tools.cache import DictCache
 from ..tools.params import asConfig
 from ..tools.events import EventHandler
 from ..tools.misc import find_subclass, update_recursive, get_recursive, set_recursive
@@ -125,6 +126,8 @@ class Simulation:
             When you want to pass this as argument to another simulation,
             you need to include the state, ``resume_data['psi'] = results['psi']``.
 
+    cache : :class:`~tenpy.tools.cache.DictCache`
+        Cache that can be used by algorithms.
     measurement_event : :class:`~tenpy.tools.events.EventHandler`
         An event that gets emitted each time when measurements should be performed.
         The callback functions should take :attr:`psi`, the simulation class itself,
@@ -203,13 +206,18 @@ class Simulation:
                 self.model = resume_data['model']
             self.results['resume_data'] = resume_data
         self.options.touch('sequential')  # added by :func:`run_seq_simulations` for completeness
+        self.cache = DictCache()
 
     def __enter__(self):
+        self.init_cache()
         return self
 
     def __exit__(self, exc_type, exc_value, traceback):
         if exc_type is not None:
             self.logger.exception("simulation abort with the following exception")
+        self.cache.close()
+        if exc_type is not None:
+            self.cache = DictCache()
         self.options.warn_unused(True)
 
     @property
@@ -312,6 +320,27 @@ class Simulation:
         self.logger.info('finished simulation (resume_)run\n' + "=" * 80)
         self.options.warn_unused(True)
         return results
+
+    def init_cache(self):
+        """Initialize the :attr:`cache` from the options.
+
+        This method is only called when the simulation
+
+        Options
+        -------
+        .. cfg:configoptions :: Simulation
+
+            cache_class : str
+                Class or name of a subclass of :class:`~tenpy.tools.cache.DictCache`.
+            cache_params : dict
+                Dictionary with parameters for the cache, see :cfg:config:`DictCache`.
+        """
+        if not isinstance(self.cache, DictCache):
+            raise ValueError("init_cache called twice: already have nontrivial cache")
+        cache_class_name = self.options.get("cache_class", 'DictCache')
+        CacheClass = find_subclass(DictCache, cache_class_name)
+        params = self.options.subconfig('cache_params')
+        self.cache = CacheClass.open(params)
 
     def init_model(self):
         """Initialize a :attr:`model` from the model parameters.
@@ -754,7 +783,6 @@ class Skip(ValueError):
 
 def run_simulation(simulation_class_name='GroundStateSearch',
                    simulation_class_kwargs=None,
-                   return_simulation=False,
                    **simulation_params):
     """Run the simulation with a simulation class.
 
@@ -774,18 +802,13 @@ def run_simulation(simulation_class_name='GroundStateSearch',
     results : dict
         The results of the Simulation, i.e., what
         :meth:`tenpy.simulations.simulation.Simulation.run()` returned.
-    sim : :class:`Simulation`
-        Only returned if `return_simulation` is True; in this case the simulation instance.
     """
     SimClass = find_subclass(Simulation, simulation_class_name)
     if simulation_class_kwargs is None:
         simulation_class_kwargs = {}
     with SimClass(simulation_params, **simulation_class_kwargs) as sim:
         results = sim.run()
-    if return_simulation:
-        return results, sim
-    else:
-        return results
+    return results
 
 
 def resume_from_checkpoint(*,
@@ -845,21 +868,17 @@ def resume_from_checkpoint(*,
     if update_sim_params is not None:
         update_recursive(options, update_sim_params)
 
-    try:
-        sim = SimClass.from_saved_checkpoint(checkpoint_results=checkpoint_results,
-                                             **simulation_class_kwargs)
+    with SimClass.from_saved_checkpoint(checkpoint_results=checkpoint_results,
+                                        **simulation_class_kwargs) as sim:
         results = sim.resume_run()
-    except:
-        # include the traceback into the log
-        # this might cause a duplicated traceback if logging to std out is on,
-        # but that's probably better than having no error messages in the log.
-        Simulation.logger.exception("simulation abort with the following exception")
-        raise  # raise the same error again
+        if 'sequential' in options:
+            sequential = options['sequential']
+            sequential['index'] += 1
+            resume_data = sim.engine.get_resume_data(sequential_simulations=True)
+            resume_data['psi'] = sim.psi
     if 'sequential' in options:
-        sequential = options['sequential']
-        sequential['index'] += 1
-        resume_data = sim.get_resume_data(sequential_simulations=True)
-        resume_data['psi'] = sim.psi
+        # note: it is important to exit the with ... as sim`` statement before continuing
+        # to free memory and cache
         del sim  # free memory
         return run_seq_simulations(sequential,
                                    SimClass,
@@ -1008,11 +1027,11 @@ def run_seq_simulations(sequential,
         with SimClass(sim_params, **simulation_class_kwargs) as sim:
             results = sim.run()
 
-        if collect_results_in_memory:
-            all_results.append(results)
-        # save results for the next simulation
-        resume_data = sim.engine.get_resume_data(sequential_simulations=True)
-        resume_data['psi'] = sim.psi
+            if collect_results_in_memory:
+                all_results.append(results)
+            # save results for the next simulation
+            resume_data = sim.engine.get_resume_data(sequential_simulations=True)
+            resume_data['psi'] = sim.psi
         del sim  # but free memory to avoid too many copies (e.g. the whole environment)
         if index + 1 < N_sims:
             del results

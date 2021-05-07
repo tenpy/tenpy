@@ -5,6 +5,7 @@ import warnings
 
 from ..tools.events import EventHandler
 from ..tools.params import asConfig
+from ..tools.cache import DictCache
 
 __all__ = ['Algorithm', 'TimeEvolutionAlgorithm']
 
@@ -27,6 +28,9 @@ class Algorithm:
         Can only be passed as keyword argument.
         By default (``None``) ignored. If a `dict`, it should contain the data returned by
         :meth:`get_resume_data` when intending to continue/resume an interrupted run.
+    cache : None | :class:`DictCache` | subclass
+        The cache to be used to reduce memory usage.
+        None defaults to a new :class:`DictCache` which keeps everything in RAM.
 
     Options
     -------
@@ -47,13 +51,20 @@ class Algorithm:
         An event that the algorithm emits at regular intervalls when it is in a
         "well defined" step, where an intermediate status report, measurements and/or
         interrupting and saving to disk for later resume make sense.
+    cache : :class:`DictCache` or subclass
+        The cache to be used.
     """
-    def __init__(self, psi, model, options, *, resume_data=None):
+    def __init__(self, psi, model, options, *, resume_data=None, cache=None):
         self.options = asConfig(options, self.__class__.__name__)
         self.trunc_params = self.options.subconfig('trunc_params')
         self.psi = psi
         self.model = model
+        if resume_data is None:
+            resume_data = {}
         self.resume_data = resume_data
+        if cache is None:
+            cache = DictCache()
+        self.cache = cache
         self.checkpoint = EventHandler("algorithm")
 
     @property
@@ -113,20 +124,7 @@ class Algorithm:
 class TimeEvolutionAlgorithm(Algorithm):
     """Common interface for (real) time evolution algorithms.
 
-    Parameters
-    ----------
-    psi :
-        Tensor network to be updated by the algorithm.
-    model : :class:`~tenpy.models.model.Model` | None
-        Model with the representation of the hamiltonian suitable for the algorithm.
-        None for algorithms which don't require a model.
-    options : dict-like
-        Optional parameters for the algorithm.
-        In the online documentation, you can find the correct set of options in the
-        :ref:`cfg-config-index`.
-    resume_data : None | dict
-        By default (``None``) ignored. If a `dict`, it should contain the data returned by
-        :meth:`get_resume_data` when intending to continue/resume an interrupted run.
+    Parameters are the same as for :class:`Algorithm`.
 
     Options
     -------
@@ -151,11 +149,11 @@ class TimeEvolutionAlgorithm(Algorithm):
         Not that the real-part of `t` is increasing for a real-time evolution,
         while the imaginary-part of `t` is *decreasing* for a imaginary time evolution.
     """
-    def __init__(self, psi, model, options, *, resume_data=None):
-        super().__init__(psi, model, options, resume_data=resume_data)
+    def __init__(self, psi, model, options, **kwargs):
+        super().__init__(psi, model, options, **kwargs)
         self.evolved_time = self.options.get('start_time', 0.)
-        if resume_data is not None:
-            self.evolved_time = resume_data['evolved_time']
+        if self.resume_data:
+            self.evolved_time = self.resume_data['evolved_time']
 
     def get_resume_data(self, sequential_simulations=False):
         data = super().get_resume_data(sequential_simulations)

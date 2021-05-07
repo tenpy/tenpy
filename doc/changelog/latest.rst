@@ -25,6 +25,9 @@ Added
   :meth:`tenpy.networks.mpo.MPOEnvironment.init_LP` and :meth:`~tenpy.networks.mpo.MPOEnvironment.init_RP` additionally
   support the argument `start_env_sites`, which can now be part of the `init_env_data`.
   This allows to converge MPO environments from scratch, given only the MPO and MPS.
+- Caching with the :mod:`tenpy.tools.cache.DictCache`, :mod:`tenpy.tools.cache.PickleCache`, and :mod:`tenpy.tools.cache.Hdf5Cache` to reduce memory requirements.
+  In that context, the keyword argument `cache` was added to the :class:`~tenpy.algorithms.algorithm.Algorithm` base class.
+
 
 Changed
 ^^^^^^^

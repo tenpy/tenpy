@@ -56,18 +56,10 @@ __all__ = ['TEBDEngine', 'Engine', 'RandomUnitaryEvolution']
 class TEBDEngine(TimeEvolutionAlgorithm):
     """Time Evolving Block Decimation (TEBD) algorithm.
 
+    Parameters are the same as for :class:`~tenpy.algorithms.algorithm.Algorithm`.
+
     .. deprecated :: 0.6.0
         Renamed parameter/attribute `TEBD_params` to :attr:`options`.
-
-
-    Parameters
-    ----------
-    psi : :class:`~tenpy.networks.mps.MPS`
-        Initial state to be time evolved. Modified in place.
-    model : :class:`~tenpy.models.model.NearestNeighborModel`
-        The model representing the Hamiltonian for which we want to find the ground state.
-    options : dict
-        Further optional parameters as described below.
 
     Options
     -------
@@ -618,17 +610,12 @@ class RandomUnitaryEvolution(TEBDEngine):
     These unitaries are drawn according to the Haar measure on unitaries obeying the conservation
     laws dictated by the conserved charges. If no charge is preserved, this distribution is called
     circular unitary ensemble (CUE), see :func:`~tenpy.linalg.random_matrix.CUE`.
+    The distribution can be changed through the
+    :cfg:option:`RandomUnitaryEvolution.distribution_function`.
 
     On one hand, such an evolution is of interest in recent research (see eg. :arxiv:`1710.09827`).
     On the other hand, it also comes in handy to "randomize" an initial state, e.g. for DMRG.
     Note that the entanglement grows very quickly, choose the truncation paramters accordingly!
-
-    Parameters
-    ----------
-    psi : :class:`~tenpy.networs.mps.MPS`
-        Initial state to be time evolved. Modified in place.
-    options : dict
-        See below for details.
 
     Options
     -------
@@ -639,8 +626,6 @@ class RandomUnitaryEvolution(TEBDEngine):
             Number of two-site unitaries to be applied on each bond.
         trunc_params : dict
             Truncation parameters as described in :cfg:config:`truncate`
-
-
 
     Examples
     --------
@@ -676,8 +661,8 @@ class RandomUnitaryEvolution(TEBDEngine):
         [1, 1, 1, 1, 1, 1, 1]
 
     """
-    def __init__(self, psi, options):
-        TEBDEngine.__init__(self, psi, None, options)
+    def __init__(self, psi, options, **kwargs):
+        TEBDEngine.__init__(self, psi, None, options, **kwargs)
 
     def run(self):
         """Time evolution with TEBD and random two-site unitaries."""
