@@ -1178,8 +1178,8 @@ def make_W_II(t, A, B, C, D):
             w = expm(h)  #Exponentiate in the extended Hilbert space
             w = w.reshape((2, 2, d, 2, 2, d))
             w = w[:, :, :, 0, 0, :]
-            W[1 + r, 1 +
-              c, :, :] = w[1, 1]  #This part now extracts relevant parts according to Eqn 11
+            W[1 + r,
+              1 + c, :, :] = w[1, 1]  #This part now extracts relevant parts according to Eqn 11
             if c == 0:
                 W[1 + r, 0] = w[1, 0]
             if r == 0:
@@ -2041,10 +2041,13 @@ def _mpo_graph_state_order(key):
     For standard TeNPy MPOs we expect keys of the form
     ``'IdL'``, ``'IdR'``, ``(i, op_i, opstr)`` and recursively ``key + (j, op_j, opstr)``,
     (Note that op_j can be opstr if ``j-i >= L``.)
+    For multi coupling terms keys have the form ``("left",i, op_i, opstr)``
 
     The goal is to ensure that standard TeNPy MPOs yield an upper-right W for the MPO.
     """
     if isinstance(key, tuple):
+        if isinstance(key[0], str):
+            return key[1:]
         return key
     if isinstance(key, str):
         if key == 'IdL':  # should be first

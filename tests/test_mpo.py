@@ -92,11 +92,11 @@ def test_MPOGraph_term_conversion():
     g4.test_sanity()
     for i in range(L):
         g4.add(i, 'IdL', 'IdR', 'Sz', 0.5)
-        g4.add(i, 'IdL', (i, 'Sp', 'lId'), 'Sp', 1.)
-        g4.add(i + 1, (i, 'Sp', 'lId'), 'IdR', 'Sm', 1.5)
+        g4.add(i, 'IdL', ("left", i, 'Sp', 'Id'), 'Sp', 1.)
+        g4.add(i + 1, ("left", i, 'Sp', 'Id'), 'IdR', 'Sm', 1.5)
     g4.add_missing_IdL_IdR()
-    g4.add(1, (0, 'Sp', 'lId'), (0, 'Sp', 'lId', 1, 'Sz', 'Id'), 'Sz', 1.)
-    g4.add(2, (0, 'Sp', 'lId', 1, 'Sz', 'Id'), 'IdR', 'Sm', 3.)
+    g4.add(1, ("left", 0, 'Sp', 'Id'), ("left", 0, 'Sp', 'Id', 1, 'Sz', 'Id'), 'Sz', 1.)
+    g4.add(2, ("left", 0, 'Sp', 'Id', 1, 'Sz', 'Id'), 'IdR', 'Sm', 3.)
     assert g4.graph == g3.graph
 
 

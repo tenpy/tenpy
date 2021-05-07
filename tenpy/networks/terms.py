@@ -1071,7 +1071,7 @@ class MultiCouplingTerms(CouplingTerms):
             for key, d2 in _d1.items():
                 op_i, op_string_ij = key
                 if isinstance(_label_left, str) and _label_left == 'IdL':
-                    label = (_i, op_i, "l" + op_string_ij)
+                    label = ("left", _i, op_i, op_string_ij)
                 else:
                     label = _label_left + (_i, op_i, op_string_ij)
                 graph.add(_i, _label_left, label, op_i, 1., skip_existing=True)
@@ -1091,7 +1091,7 @@ class MultiCouplingTerms(CouplingTerms):
             for key, d2 in _d1.items():
                 op_i, op_string_ij = key
                 if isinstance(_label_right, str) and _label_right == 'IdR':
-                    label = (_i, op_i, "r" + op_string_ij)
+                    label = ("right", _i, op_i, op_string_ij)
                 else:
                     label = _label_right + (_i, op_i, op_string_ij)
                 for j, d3 in d2.items():
