@@ -13,6 +13,10 @@ Backwards incompatible changes
 - change default separator for :func:`tenpy.tools.misc.get_recursive`, :func:`~tenpy.tools.misc.set_recursive`, :func:`~tenpy.tools.misc.update_recursive`, and
   :func:`~tenpy.tools.misc.flatten` to ``'.'`` instead of ``'/'``.
 - replace the `orthogonal_to` option of :class:`tenpy.algorithms.mps_common.Sweep` by an `orthogonal_to` keyword argument for the class and it's :meth:`~tenpy.algorithms.mps_common.Sweep.init_env`.
+- deprecated options:
+  - `sweep_0` for sweep classes; use `sweeps` in the `resume_data` instead.
+- Support context-manager-style setup for Simulation classes
+
 
 Added
 ^^^^^
@@ -21,6 +25,9 @@ Added
   :meth:`tenpy.networks.mpo.MPOEnvironment.init_LP` and :meth:`~tenpy.networks.mpo.MPOEnvironment.init_RP` additionally
   support the argument `start_env_sites`, which can now be part of the `init_env_data`.
   This allows to converge MPO environments from scratch, given only the MPO and MPS.
+- Caching with the :mod:`tenpy.tools.cache.DictCache`, :mod:`tenpy.tools.cache.PickleCache`, and :mod:`tenpy.tools.cache.Hdf5Cache` to reduce memory requirements.
+  In that context, the keyword argument `cache` was added to the :class:`~tenpy.algorithms.algorithm.Algorithm` base class.
+
 
 Changed
 ^^^^^^^

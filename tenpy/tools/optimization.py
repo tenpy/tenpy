@@ -106,7 +106,6 @@ The value is set in the first call of :func:`use_cython`.
 """
 
 
-
 class OptimizationFlag(IntEnum):
     """Options for the global 'optimization level' used for dynamical optimizations.
 

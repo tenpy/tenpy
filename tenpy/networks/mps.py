@@ -88,6 +88,7 @@ from .site import GroupedSite, group_sites
 from ..tools.misc import to_iterable, to_array, get_recursive
 from ..tools.math import lcm, speigs, entropy
 from ..tools.params import asConfig
+from ..tools.cache import DictCache
 from ..tools import hdf5_io
 from ..algorithms.truncation import TruncationError, svd_theta
 
@@ -3910,7 +3911,7 @@ class MPSEnvironment:
     To avoid recalculations of the whole network e.g. in the DMRG sweeps,
     we store the contractions up to some site index in this class.
     For ``bc='finite','segment'``, the very left and right part ``LP[0]`` and
-    ``RP[-1]`` are trivial and don't change,
+    ``RP[L-1]`` are trivial and don't change,
     but for ``bc='infinite'`` they are might be updated
     (by inserting another unit cell to the left/right).
 
@@ -3931,6 +3932,8 @@ class MPSEnvironment:
         The MPS on which the local operator acts.
         Stored in place, without making copies.
         If ``None``, use `bra`.
+    cache : :class:`~tenpy.tools.cache.DictCache` | None
+        Cache in which the tensors should be saved. If ``None``, a new `DictCache` is generated.
     **init_env_data :
         Further keyword arguments with initializaiton data, as returned by
         :meth:`get_initialization_data`.
@@ -3947,7 +3950,11 @@ class MPSEnvironment:
         The data type.
     _finite : bool
         Whether the boundary conditions of the MPS are finite.
-    _LP : list of {``None`` | :class:`~tenpy.linalg.np_conserved.Array`}
+    cache : :class:`~tenpy.tools.cache.DictCache`
+        Cache containing saving the environment tensors.
+    _LP_keys, _RP_keys : list of str
+        Map indices to keys for the :attr:`cache`.
+    _LP : list of {``None`` | }
         Left parts of the environment, len `L`.
         ``LP[i]`` contains the contraction strictly left of site `i`
         (or ``None``, if we don't have it calculated).
@@ -3958,13 +3965,13 @@ class MPSEnvironment:
     _LP_age : list of int | ``None``
         Used for book-keeping, how large the DMRG system grew:
         ``_LP_age[i]`` stores the number of physical sites invovled into the contraction
-        network which yields ``self._LP[i]``.
+        network which yields ``self.get_LP(i)``.
     _RP_age : list of int | ``None``
         Used for book-keeping, how large the DMRG system grew:
         ``_RP_age[i]`` stores the number of physical sites invovled into the contraction
         network which yields ``self._RP[i]``.
     """
-    def __init__(self, bra, ket, **init_env_data):
+    def __init__(self, bra, ket, cache=None, **init_env_data):
         if ket is None:
             ket = bra
         if ket is not bra:
@@ -3973,11 +3980,19 @@ class MPSEnvironment:
         self.ket = ket
         self.dtype = np.find_common_type([bra.dtype, ket.dtype], [])
         self.L = L = lcm(bra.L, ket.L)
+        if hasattr(self, 'H'):
+            self.L = L = lcm(self.H.L, L)
         self._finite = self.ket.finite  # just for _to_valid_index
-        self._LP = [None] * L
-        self._RP = [None] * L
+        self._LP_keys = ['LP_{0:d}'.format(i) for i in range(L)]
+        self._RP_keys = ['RP_{0:d}'.format(i) for i in range(L)]
         self._LP_age = [None] * L
         self._RP_age = [None] * L
+        if cache is None:
+            cache = DictCache()
+        self.cache = cache
+        if not self.cache.dummy_cache and L < 8:
+            warnings.warn("non-trivial cache for short-length environment: "
+                          "Much overhead for a little RAM saving. Necessary?")
         self.init_first_LP_last_RP(**init_env_data)
         self.test_sanity()
 
@@ -4029,13 +4044,8 @@ class MPSEnvironment:
     def test_sanity(self):
         """Sanity check, raises ValueErrors, if something is wrong."""
         assert (self.bra.finite == self.ket.finite == self._finite)
-        # check that the network is contractible
-        for i in range(self.L):
-            b_s = self.bra.sites[i % self.bra.L]
-            k_s = self.ket.sites[i % self.ket.L]
-            b_s.leg.test_equal(k_s.leg)
-        assert any([LP is not None for LP in self._LP])
-        assert any([RP is not None for RP in self._RP])
+        assert any(key in self.cache for key in self._LP_keys)
+        assert any(key in self.cache for key in self._RP_keys)
 
     def init_LP(self, i, start_env_sites=0):
         """Build initial left part ``LP``.
@@ -4116,17 +4126,19 @@ class MPSEnvironment:
         """
         # find nearest available LP to the left.
         for i0 in range(i, i - self.L, -1):
-            LP = self._LP[self._to_valid_index(i0)]
+            key = self._LP_keys[self._to_valid_index(i0)]
+            LP = self.cache.get(key, None)
             if LP is not None:
                 break
             # (for finite, LP[0] should always be set, so we should abort at latest with i0=0)
         else:  # no break called
             raise ValueError("No left part in the system???")
-        age_i0 = self.get_LP_age(i0)
+        age = self.get_LP_age(i0)
         for j in range(i0, i):
             LP = self._contract_LP(j, LP)
+            age = age + 1
             if store:
-                self.set_LP(j + 1, LP, age=age_i0 + j - i0 + 1)
+                self.set_LP(j + 1, LP, age=age)
         return LP
 
     def get_RP(self, i, store=True):
@@ -4157,15 +4169,19 @@ class MPSEnvironment:
         """
         # find nearest available RP to the right.
         for i0 in range(i, i + self.L):
-            RP = self._RP[self._to_valid_index(i0)]
+            key = self._RP_keys[self._to_valid_index(i0)]
+            RP = self.cache.get(key, None)
             if RP is not None:
                 break
             # (for finite, RP[-1] should always be set, so we should abort at latest with i0=L-1)
-        age_i0 = self.get_RP_age(i0)
+        else:  # no break called
+            raise ValueError("No right part in the system???")
+        age = self.get_RP_age(i0)
         for j in range(i0, i, -1):
             RP = self._contract_RP(j, RP)
+            age = age + 1
             if store:
-                self.set_RP(j - 1, RP, age=age_i0 + i0 - j + 1)
+                self.set_RP(j - 1, RP, age=age)
         return RP
 
     def get_LP_age(self, i):
@@ -4185,41 +4201,67 @@ class MPSEnvironment:
     def set_LP(self, i, LP, age):
         """Store part to the left of site `i`."""
         i = self._to_valid_index(i)
-        self._LP[i] = LP
+        self.cache[self._LP_keys[i]] = LP
         self._LP_age[i] = age
 
     def set_RP(self, i, RP, age):
         """Store part to the right of site `i`."""
         i = self._to_valid_index(i)
-        self._RP[i] = RP
+        self.cache[self._RP_keys[i]] = RP
         self._RP_age[i] = age
 
     def del_LP(self, i):
         """Delete stored part strictly to the left of site `i`."""
         i = self._to_valid_index(i)
-        self._LP[i] = None
+        del self.cache[self._LP_keys[i]]
         self._LP_age[i] = None
 
     def del_RP(self, i):
-        """Delete storde part scrictly to the right of site `i`."""
+        """Delete stored part scrictly to the right of site `i`."""
         i = self._to_valid_index(i)
-        self._RP[i] = None
+        del self.cache[self._RP_keys[i]]
         self._RP_age[i] = None
 
     def clear(self):
         """Delete all partial contractions except the left-most `LP` and right-most `RP`."""
-        self._LP[1:] = [None] * (self.L - 1)
+        for key in self._LP_keys[1:] + self._RP_keys[:-1]:
+            if key in self.cache:
+                del self.cache[key]
         self._LP_age[1:] = [None] * (self.L - 1)
-        self._RP[:-1] = [None] * (self.L - 1)
         self._RP_age[:-1] = [None] * (self.L - 1)
 
     def has_LP(self, i):
         """Return True if `LP` left of site `i` is stored."""
-        return self._LP[self._to_valid_index(i)] is not None
+        return self._LP_keys[self._to_valid_index(i)] in self.cache
 
     def has_RP(self, i):
         """Return True if `RP` right of site `i` is stored."""
-        return self._RP[self._to_valid_index(i)] is not None
+        return self._RP_keys[self._to_valid_index(i)] in self.cache
+
+    def cache_optimize(self, short_term_LP=[], short_term_RP=[], preload_LP=None, preload_RP=None):
+        """Update `short_term_keys` for the cache and possibly preload tensors.
+
+        Parameters
+        ----------
+        short_term_LP, short_term_RP : list of int
+            `i` indices for :meth:`get_LP` and :meth:`get_RP`, respectively, for which a repeated
+            look-up could happen, i.e., for which tensors should be kept in RAM until the next
+            call to this function.
+        preload_LP, preload_RP : int | None
+            If not None, preload the tensors for the corrsponding :meth:`get_LP` and :meth:`get_RP`
+            call, respectively, from disk.
+        """
+        LP_keys = self._LP_keys
+        RP_keys = self._RP_keys
+        preload = []
+        if preload_LP is not None:
+            preload.append(LP_keys[self._to_valid_index(preload_LP)])
+        if preload_RP is not None:
+            preload.append(RP_keys[self._to_valid_index(preload_RP)])
+        self.cache.set_short_term_keys(*(LP_keys[self._to_valid_index(i)] for i in short_term_LP),
+                                       *(RP_keys[self._to_valid_index(i)] for i in short_term_RP),
+                                       *preload)
+        self.cache.preload(*preload)
 
     def get_initialization_data(self, first=0, last=None):
         """Return data for (re-)initialization of the environment.
@@ -4347,7 +4389,7 @@ class MPSEnvironment:
         return np.real_if_close(np.array(E)) * self.bra.norm * self.ket.norm
 
     def _contract_LP(self, i, LP):
-        """Contract LP with the tensors on site `i` to form ``self._LP[i+1]``"""
+        """Contract LP with the tensors on site `i` to form ``self.get_LP(i+1)``"""
         LP = npc.tensordot(LP, self.ket.get_B(i, form='A'), axes=('vR', 'vL'))
         axes = (self.ket._get_p_label('*') + ['vL*'], self.ket._p_label + ['vR*'])
         # for a ususal MPS, axes = (['p*', 'vL*'], ['p', 'vR*'])
@@ -4355,7 +4397,7 @@ class MPSEnvironment:
         return LP  # labels 'vR*', 'vR'
 
     def _contract_RP(self, i, RP):
-        """Contract RP with the tensors on site `i` to form ``self._RP[i-1]``"""
+        """Contract RP with the tensors on site `i` to form ``self.get_RP(i-1)``"""
         RP = npc.tensordot(self.ket.get_B(i, form='B'), RP, axes=('vR', 'vL'))
         axes = (self.ket._p_label + ['vL*'], self.ket._get_p_label('*') + ['vR*'])
         # for a ususal MPS, axes = (['p', 'vL*'], ['p*', 'vR*'])

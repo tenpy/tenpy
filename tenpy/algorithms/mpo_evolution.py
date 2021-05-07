@@ -24,15 +24,7 @@ class ExpMPOEvolution(TimeEvolutionAlgorithm):
     :meth:`~tenpy.networks.mpo.MPO.make_U_I` and :meth:`~tenpy.networks.mpo.MPO.make_U_II`.
     This class uses it for real-time evolution.
 
-    Parameters
-    ----------
-    psi : :class:`~tenpy.networks.mps.MPS`
-        Initial state to be time evolved. Modified in place.
-    model : :class:`~tenpy.models.model.MPOModel`
-        The model representing the Hamiltonian which we want to
-        time evolve psi with.
-    options : dict
-        Further optional parameters are described in :cfg:config:`ExpMPOEvolution`.
+    Parameters are the same as for :class:`~tenpy.algorithms.algorithm.Algorithm`.
 
     Options
     -------
@@ -68,8 +60,8 @@ class ExpMPOEvolution(TimeEvolutionAlgorithm):
         A dictionary containing the information of the latest created `_U`.
         We won't recalculate `_U` if those parameters didn't change.
     """
-    def __init__(self, psi, model, options):
-        super().__init__(psi, model, options)
+    def __init__(self, psi, model, options, **kwargs):
+        super().__init__(psi, model, options, **kwargs)
         options = self.options
         self.evolved_time = options.get('start_time', 0.)
         self.trunc_err = options.get('start_trunc_err', TruncationError())
