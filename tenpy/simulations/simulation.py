@@ -44,6 +44,15 @@ __all__ = [
 class Simulation:
     """Base class for simulations.
 
+    The prefered way to run simulations is in a `with` statement, which allows us to redirect
+    error messages to the log files, timely warn about unused parameters and to properly close any
+    open files. In other words, use the simulation class like this::
+
+        with Simulation(options, ...) as sim:
+            results = sim.run()
+
+    The wrappers :func:`run_simulation` and :func:`run_seq_simulations` do that.
+
     Parameters
     ----------
     options : dict-like
@@ -130,7 +139,6 @@ class Simulation:
         Time of the last call to :meth:`save_results`, initialized to startup time.
     loaded_from_checkpoint : bool
         True when the simulation is loaded with :meth:`from_saved_checkpoint`.
-
     """
     #: name of the default algorithm `engine` class
     default_algorithm = 'TwoSiteDMRGEngine'
@@ -195,6 +203,14 @@ class Simulation:
                 self.model = resume_data['model']
             self.results['resume_data'] = resume_data
         self.options.touch('sequential')  # added by :func:`run_seq_simulations` for completeness
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        if exc_type is not None:
+            self.logger.exception("simulation abort with the following exception")
+        self.options.warn_unused(True)
 
     @property
     def verbose(self):
@@ -755,25 +771,19 @@ def run_simulation(simulation_class_name='GroundStateSearch',
 
     Returns
     -------
-    results : dict | :class:`Simulation`
-        If `return_simulation` is True directly the simulation class.
-        Else the results from running the simulation, i.e.,
-        what :meth:`~tenpy.simulations.simulation.Simulation.run()` returned.
+    results : dict
+        The results of the Simulation, i.e., what
+        :meth:`tenpy.simulations.simulation.Simulation.run()` returned.
+    sim : :class:`Simulation`
+        Only returned if `return_simulation` is True; in this case the simulation instance.
     """
     SimClass = find_subclass(Simulation, simulation_class_name)
     if simulation_class_kwargs is None:
         simulation_class_kwargs = {}
-    try:
-        sim = SimClass(simulation_params, **simulation_class_kwargs)
+    with SimClass(simulation_params, **simulation_class_kwargs) as sim:
         results = sim.run()
-    except:
-        # include the traceback into the log
-        # this might cause a duplicated traceback if logging to std out is on,
-        # but that's probably better than having no error messages in the log.
-        Simulation.logger.exception("simulation abort with the following exception")
-        raise  # raise the same error again
     if return_simulation:
-        return sim
+        return results, sim
     else:
         return results
 
@@ -995,15 +1005,8 @@ def run_seq_simulations(sequential,
         if resume_data is not None:
             simulation_class_kwargs['resume_data'] = resume_data
 
-        try:
-            sim = SimClass(sim_params, **simulation_class_kwargs)
-            results = sim.run()  # --------- the actual run ----
-        except:
-            # include the traceback into the log
-            # this might cause a duplicated traceback if logging to std out is on,
-            # but that's probably better than having no error messages in the log.
-            Simulation.logger.exception("simulation abort with the following exception")
-            raise  # raise the same error again
+        with SimClass(sim_params, **simulation_class_kwargs) as sim:
+            results = sim.run()
 
         if collect_results_in_memory:
             all_results.append(results)

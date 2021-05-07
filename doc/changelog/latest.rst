@@ -15,6 +15,7 @@ Backwards incompatible changes
 - replace the `orthogonal_to` option of :class:`tenpy.algorithms.mps_common.Sweep` by an `orthogonal_to` keyword argument for the class and it's :meth:`~tenpy.algorithms.mps_common.Sweep.init_env`.
 - deprecated options:
   - `sweep_0` for sweep classes; use `sweeps` in the `resume_data` instead.
+- Support context-manager-style setup for Simulation classes
 
 
 Added
