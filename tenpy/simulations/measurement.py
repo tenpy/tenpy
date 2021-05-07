@@ -124,6 +124,7 @@ def correlation_length(results, psi, simulation, key='correlation_length', unit=
     unit : ``'MPS_sites' | 'MPS_sites_ungrouped' | 'lattice_rings'``
         The unit in which the correlation length is returned, see the warning in
         :meth:`~tenpy.networks.mps.MPS.correlation_length`.
+
         MPS_sites :
             Units of the current MPS site
         MPS_sites_ungrouped :
@@ -136,6 +137,7 @@ def correlation_length(results, psi, simulation, key='correlation_length', unit=
             In units of lattice spacings for correlations along the cylinder axis (for periodic
             boundary conditions along y) or along ``lattice.basis[0]`` (for "ladders" with open
             bboundary conditions).
+
     **kwargs :
         Further keywoard arguments given to :meth:`~tenpy.networks.mps.MPS.correlation_length`.
     """

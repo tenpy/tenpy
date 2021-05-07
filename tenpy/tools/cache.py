@@ -41,22 +41,32 @@ class DictCache(collections.abc.MutableMapping):
     --------
     The cache has as dict-like interface accepting strings (acceptable as file names) as keys.
 
-    >>> cache = DictCache()
-    >>> cache['a'] = 1
-    >>> cache['b'] = 2
-    >>> assert cache['a'] == 1
-    >>> assert cache.get('b') == 2
-    >>> "b" in cache
-    True
-    >>> "c" in cache
-    False
-    >>> assert cache.get('c', default=None) is None
+    .. testsetup :: DictCache
+
+        from tenpy.tools.cache import *
+
+    .. doctest :: DictCache
+
+        >>> cache = DictCache()
+        >>> cache['a'] = 1
+        >>> cache['b'] = 2
+        >>> assert cache['a'] == 1
+        >>> assert cache.get('b') == 2
+        >>> "b" in cache
+        True
+        >>> "c" in cache
+        False
+        >>> assert cache.get('c', default=None) is None
 
     Subclasses need to create a file, so you can use it as a context manager in a with statement
 
-    >>> with PickleCache.open(dict(directory="temp_cache", delete=True)) as cache:
-    ...     cache['a'] = 1  # use as before
-    ... # cache.close() was called here, don't use the cache anymore
+    .. doctest :: DictCache
+
+        >>> with PickleCache.open(dict(directory="temp_cache", delete=True)) as cache:
+        ...     cache['a'] = 1  # use as before
+        ... # cache.close() was called here, don't use the cache anymore
+        >>> import os
+        >>> assert not os.path.exists('temp_cache')
     """
     #: if True, the class actually keeps everything in RAM instead of saving things to disk
     dummy_cache = True
