@@ -479,6 +479,43 @@ def test_expectation_value_multisite():
     npt.assert_almost_equal(ev, [-0.5, 0., -1., 0., -0.5])
 
 
+def test_sample_measurements(eps=1.e-14, seed=5):
+    spin_half = site.SpinHalfSite()
+    u, d = spin_half.state_indices(['up', 'down'])
+    spin_half.add_op('Pup', spin_half.Sz + 0.5 * spin_half.Id)
+    psi = mps.MPS.from_singlets(spin_half, 6, [(0, 1), (2, 5)], lonely=[3, 4], bc='finite')
+    rng = np.random.default_rng(seed)
+    for i in range(4):
+        sigmas, weight = psi.sample_measurements(3, 4, rng=rng)
+        assert tuple(sigmas) == (u, u)
+        assert abs(weight - 1) < eps
+        sigmas, weight = psi.sample_measurements(0, 1, rng=rng)
+        assert sigmas[0] == 1 - sigmas[1]
+        print(sigmas)
+        assert abs(weight - 0.5**0.5) < eps
+        sigmas, weight = psi.sample_measurements(rng=rng)
+        print(sigmas)
+        assert sigmas[0] == 1 - sigmas[1]
+        assert sigmas[2] == 1 - sigmas[5]
+        sign = (+1 if sigmas[0] == u else -1) * (+1 if sigmas[2] == u else -1)
+        print(sign, weight)
+        assert abs(weight - 0.5 * sign) < eps
+        sigmas, weight = psi.sample_measurements(ops=['Sz', 'Pup'], rng=rng)
+        print(sigmas)
+        assert sigmas[4] == 0.5  # Sz
+        assert sigmas[3] == 1  # Pup
+
+    spin_half = site.SpinHalfSite(conserve=None)
+    assert tuple(spin_half.state_indices(['up', 'down'])) == (0, 1)
+    x_basis = np.array([[1., 1], [1, -1]]) * 0.5**0.5
+    psi = mps.MPS.from_product_state([spin_half] * 4, [x_basis[0], x_basis[1], 0, 1])
+    for i in range(4):
+        sigmas, weight = psi.sample_measurements(ops=['Sigmax', 'Sx', 'Sz', 'Sigmaz'])
+        print(sigmas)
+        npt.assert_allclose(sigmas, [1., -0.5, 0.5, -1.])
+        assert abs(abs(weight) - 1.) < eps
+
+
 @pytest.mark.parametrize('method', ['SVD', 'variational'])
 def test_mps_compress(method, eps=1.e-13):
     # Test compression of a sum of a state with itself
@@ -542,4 +579,4 @@ def test_InitialStateBuilder():
 
 
 if __name__ == "__main__":
-    test_correlation_function()
+    test_sample_measurements()

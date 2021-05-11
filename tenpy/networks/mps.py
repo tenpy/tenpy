@@ -2638,6 +2638,98 @@ class MPS:
             result.append(res)
         return np.real_if_close(result)
 
+    def sample_measurements(self,
+                            first_site=0,
+                            last_site=None,
+                            ops=None,
+                            rng=None,
+                            norm_tol=1.e-12):
+        """Sample measurement results in the computational basis.
+
+        This function samples projective measurements on a continguous range of sites,
+        tracing out the remaining sites.
+
+        Note that for infinite boundary conditions, the probablility of sampling
+        a set of `sigmas` is **not** ``|psi.overlap(MPS.from_product_state(sigmas, ...))|^2``,
+        because the latter would poject to the set `sigmas` on *each* (translated) MPS unit cell,
+        while this function is only projecting to them in a *single* MPS unit cell.
+
+        Parameters
+        ----------
+        first_site, last_site : int
+            Take measurements on the sites in ``range(first_site, last_site + 1)``.
+            `last_site` defaults to :attr:`L` - 1.
+        ops : list of str
+            If not None, sample in the eigenbasis of
+            ``self.sites[i].get_op(ops[(i - first_site) % len(ops)])`` and directly return the
+            corresponding eigenvalue in `sigmas`.
+        rng : :class:`numpy.random.Generator`
+            The random number generator; if None, a new `numpy.random.default_rng()` is generated.
+        norm_tol : float
+            Tolerance
+
+        Returns
+        -------
+        sigmas : list of int | list of float
+            On each site the index of the local basis that was measured,
+            as specified in the corrsponding :class:`~tenpy.networks.site.Site` in :attr:`sites`.
+            Note that this can change depending on whether/what charges you conserve!
+            Explicitly specifying the measurement operator will avoid that issue.
+        weight : float
+            The weight ``sqrt(trace(|psi><psi|sigmas...><sigmas...|))``, i.e.,
+            the probability of measuring ``|sigmas...>`` is ``weigth**2``.
+            For a finite system where we sample all sites (i.e., the trace over the compliment of
+            the sites is trivial), this is the actual overlap ``<sigmas...|psi>``
+            including the phase.
+        """
+        if tuple(self._p_label) != ('p', ):
+            raise NotImplementedError("Only works for a single physical 'p' leg")
+        if last_site is None:
+            last_site = self.L - 1
+        if rng is None:
+            rng = np.random.default_rng()
+        sigmas = []
+        total_weight = 1.
+        theta = self.get_theta(first_site, n=1).replace_label('p0', 'p')
+        for i in range(first_site, last_site + 1):
+            # theta = wave function in basis vL [sigmas...] p vR
+            # where the `sigmas` are already fixed to the measurement results
+            i0 = self._to_valid_index(i)
+            site = self.sites[i0]
+            if ops is not None:
+                op_name = ops[(i - first_site) % len(ops)]
+                op = site.get_op(op_name).transpose(['p', 'p*'])
+                if npc.norm(op - op.conj().transpose()) > 1.e-13:
+                    raise ValueError(f"measurement operator {op_name!r} not hermitian")
+                W, V = npc.eigh(op)
+                theta = npc.tensordot(V.conj(), theta, axes=['p*', 'p']).replace_label('eig*', 'p')
+            else:
+                W = np.arange(site.dim)
+            # perform a projective measurement:
+            # trace out rest except site `i`
+            rho = npc.tensordot(theta.conj(), theta, [['vL*', 'vR*'], ['vL', 'vR']])
+            # probabilities p(sigma) = <sigma|rho|sigma>
+            rho_diag = np.abs(np.diag(rho.to_ndarray()))  # abs: real dtype & roundoff err
+            if abs(np.sum(rho_diag) - 1.) > norm_tol:
+                raise ValueError("not normalized to `norm_tol`")
+            rho_diag /= np.sum(rho_diag)
+            sigma = rng.choice(site.dim, p=rho_diag)  # randomly select index from probabilities
+            sigmas.append(W[sigma])
+            theta = theta.take_slice(sigma, 'p')  # project to sigma in theta for remaining rho
+            weight = npc.norm(theta)
+            total_weight *= weight
+            if i != last_site:
+                # attach next site to sigma
+                theta = theta / npc.norm(theta)
+                B = self.get_B(i + 1)
+                theta = npc.tensordot(theta, B, axes=['vR', 'vL'])
+                # B is right-canonical -> theta still normalized
+            elif self.bc == 'finite' and first_site == 0 and last_site == self.L - 1:
+                assert theta.shape == (1, 1)
+                # already divided by norm, so only include the phase now
+                total_weight = total_weight * theta[0, 0] / weight
+        return sigmas, total_weight
+
     def norm_test(self):
         """Check that self is in canonical form.
 

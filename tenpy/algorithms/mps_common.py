@@ -134,7 +134,6 @@ class Sweep(Algorithm):
         self.i0 = 0
         self.move_right = True
         self.update_LP_RP = (True, False)
-        print('initialized  sweep')
 
     @property
     def engine_params(self):
