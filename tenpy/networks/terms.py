@@ -1090,10 +1090,11 @@ class MultiCouplingTerms(CouplingTerms):
         else:
             for key, d2 in _d1.items():
                 op_i, op_string_ij = key
+                i_label = _i % self.L  #right label has to start in first unit cell
                 if isinstance(_label_right, str) and _label_right == 'IdR':
-                    label = ("right", _i, op_i, op_string_ij)
+                    label = ("right", i_label, op_i, op_string_ij)
                 else:
-                    label = _label_right + (_i, op_i, op_string_ij)
+                    label = _label_right + (i_label, op_i, op_string_ij)
                 for j, d3 in d2.items():
                     if isinstance(d3, dict):  # further nesting
                         graph.add(_i, label, _label_right, op_i, 1., skip_existing=True)

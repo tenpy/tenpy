@@ -2046,8 +2046,10 @@ def _mpo_graph_state_order(key):
     The goal is to ensure that standard TeNPy MPOs yield an upper-right W for the MPO.
     """
     if isinstance(key, tuple):
-        if isinstance(key[0], str):
-            return key[1:]
+        if key[0] == "left":  #left states first
+            return (-0.2, ) + key[1:]
+        elif key[0] == "right":  #right states afterwards
+            return (-0.1, ) + key[1:]
         return key
     if isinstance(key, str):
         if key == 'IdL':  # should be first

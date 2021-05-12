@@ -125,16 +125,15 @@ def test_CouplingModel_shift(Lx=3, Ly=3, shift=1):
     bc = ['periodic', shift]
     spin_half_square = lattice.Square(Lx, Ly, spin_half_site, bc=bc, bc_MPS='infinite')
     M = model.CouplingModel(spin_half_square)
-    #M.add_coupling(1.2, 0, 'Sz', 0, 'Sz', [1, 0])
+    M.add_coupling(1.2, 0, 'Sz', 0, 'Sz', [1, 0])
     M.add_multi_coupling(0.8, [('Sz', [0, 0], 0), ('Sz', [0, 1], 0), ('Sz', [1, 0], 0)])
     M.test_sanity()
     H = M.calc_H_MPO()
     dims = [W.shape[0] for W in H._W]
     # check translation invariance of the MPO: at least the dimensions should fit
     # (the states are differently ordered, so the matrices differ!)
-    print(dims)
     for i in range(1, Lx):
-        assert dims[:Lx] == dims[i * Lx:(i + 1) * Lx]
+        assert dims[:Ly] == dims[i * Ly:(i + 1) * Ly]
 
 
 def test_CouplingModel_fermions():
