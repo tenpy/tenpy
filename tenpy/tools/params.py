@@ -222,7 +222,9 @@ class Config(MutableMapping):
         recursive : bool
             If True, check the values of `self` for other :class:`Config` and warn in them as well.
         """
-        unused = self.unused
+        unused = getattr(self, 'unused', None)
+        if unused is None:
+            return
         if len(unused) > 0:
             if len(unused) > 1:
                 msg = "unused options for config {name!s}:\n{keys!s}"

@@ -391,8 +391,8 @@ class Hdf5Cache(DictCache):
         assert "/" not in name
         if name in self.h5gr:
             import h5py
-            assert isinstance(h5gr[name], h5py.Group)
-            del h5gr[name]
+            assert isinstance(self.h5gr[name], h5py.Group)
+            del self.h5gr[name]
         return Hdf5Cache(self.h5gr.create_group(name))
 
     def _load_long_term(self, key):

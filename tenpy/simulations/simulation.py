@@ -210,12 +210,14 @@ class Simulation:
 
     def __enter__(self):
         self.init_cache()
+        self.cache = self.cache.__enter__()  # start cache context
         return self
 
     def __exit__(self, exc_type, exc_value, traceback):
         if exc_type is not None:
-            self.logger.exception("simulation abort with the following exception")
-        self.cache.close()
+            self.logger.exception("simulation abort with the following exception",
+                                  exc_info=(exc_type, exc_value, traceback))
+        self.cache.__exit__(exc_type, exc_value, traceback)  # exit cache context
         if exc_type is not None:
             self.cache = DictCache()
         self.options.warn_unused(True)
