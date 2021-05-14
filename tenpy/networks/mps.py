@@ -2630,7 +2630,7 @@ class MPS:
             res = 0.
             for ops_R, need_JW, strength in zip(all_ops_R, need_JW_R, term_list_R.strength):
                 CR = self._corr_ops_RP(ops_R, j)
-                key = (need_JW, ) + tuple(-CR.qtotal)
+                key = (need_JW, ) + tuple(self.chinfo.make_valid(-CR.qtotal))
                 CL = CLs.get(key, None)
                 if CL is None:
                     continue  # nothing to pair up with
