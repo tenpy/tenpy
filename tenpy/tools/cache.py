@@ -12,42 +12,75 @@ this is easiest done through a ``with`` statement, see the example in :class:`Di
 import pickle
 import shutil
 import tempfile
+import threading
+import queue
+import functools
+import sys
+import collections
+import os
+import pathlib
 import logging
 logger = logging.getLogger(__name__)
 
 from .misc import find_subclass
 from .hdf5_io import load_from_hdf5, save_to_hdf5
-import collections
-import os
-import pathlib
 from .params import asConfig
 
-__all__ = ["DictCache", "PickleCache", "Hdf5Cache"]
+__all__ = [
+    "DictCache", "CacheFile", "Storage", "PickleStorage", "Hdf5Storage", "WorkerDied", "Worker",
+    "ThreadedStorage"
+]
 
 
 class DictCache(collections.abc.MutableMapping):
-    """Cache with dict-like interface keeping everything in RAM.
+    """Cache with dict-like interface.
 
-    This class has a dict-like interface to allow storing data; it just keeps everything in RAM
-    (actually in a dict).
-    However, it also serves as a base class for :class:`PickleCache` and :class:`Hdf5Cache`,
-    which allow to save data that isn't needed for a while (e.g. environments for DMRG) to disk,
-    in order to free RAM. :meth:`set_short_term_keys` allows to define which keys should
-    nevertheless (in addition to saving them to disk) be kept in RAM until the next updating call
-    to :meth:`set_short_term_keys` in order to avoid unnecessary read/write cycles.
+    The idea of the Cache is to save data that isn't needed for a while in a long-term
+    :class:`Storage` container in order to free RAM.
+    While the default :class:`Storage` is just an interface around a plain dictionary and hence
+    actually *does* keep everything in RAM, this class is designed to handle also the case of
+    other storage classes like the :class:`PickleCache` or :class:`Hdf5Cache`.
+    To avoid unnecessary read-write cycles, it keeps some values in a "short-term" cache in
+    memory, see :meth:`set_short_term_keys`.
+
+    Using the :meth:`preload` method allows to generalize to the :class:`ThreadedDictCache`,
+    which can save/load data in parallel without blocking the main thread excution while waiting
+    for disk input/output.
+
+    .. note ::
+        To allow a proper closing of opened storage, it is highly recommended to use the
+        :class:`DictCache` as a context manager in a ``with`` statement, see :func:`open`.
+
+    Parameters
+    ----------
+    storage : :class:`Storage`
+        Container for saving the data long-term.
+
+    Attributes
+    ----------
+    long_term_storage : :class:`Storage`
+        The storage passed during initialization.
+    long_term_keys : set
+        Keys of `long_term_storage` for which we have data.
+    short_term_cache : dict
+        Dictionary for keeping a "short-term" memory of the keys in `short_term_keys`.
+    short_term_keys : set
+        Keys for which data should be kept in `short_term_cache`.
 
 
     Examples
     --------
-    The cache has as dict-like interface accepting strings (acceptable as file names) as keys.
+    The :class:`DictCache` has as dict-like interface accepting strings as keys.
+    The keys should be acceptable as filenames and not contain "/".
 
     .. testsetup :: DictCache
 
         from tenpy.tools.cache import *
+        import os
 
     .. doctest :: DictCache
 
-        >>> cache = DictCache()
+        >>> cache = DictCache(Storage())
         >>> cache['a'] = 1
         >>> cache['b'] = 2
         >>> assert cache['a'] == 1
@@ -58,70 +91,26 @@ class DictCache(collections.abc.MutableMapping):
         False
         >>> assert cache.get('c', default=None) is None
 
-    Subclasses need to create a file, so you can use it as a context manager in a with statement
-
-    .. doctest :: DictCache
-
-        >>> with PickleCache.open(dict(directory="temp_cache", delete=True)) as cache:
-        ...     cache['a'] = 1  # use as before
-        ... # cache.close() was called here, don't use the cache anymore
-        >>> import os
-        >>> assert not os.path.exists('temp_cache')
     """
-    #: if True, the class actually keeps everything in RAM instead of saving things to disk
-    dummy_cache = True
-
-    def __init__(self):
-        self._long_term_keys = set([])
-        self._short_term_cache = {}
-        self._short_term_keys = set([])
-        self._long_term_cache = {}
-        self._delete_directory = None
-        self._delete_file = None
+    def __init__(self, storage):
+        self.long_term_storage = storage
+        self.long_term_keys = set()
+        self.short_term_cache = {}
+        self.short_term_keys = set()
 
     @classmethod
-    def open(cls, options):
-        """Interface for opening the necessary file/create directory and creating a class instance.
-
-        For the :class:`DictCache`, this is a trivial method just initializing it,
-        but for the :class:`Hdf5Cache` or :class:`PickleCache` it creates an Hdf5 file / directory
-        where data can be saved to disk.
-
-        .. warning ::
-            Make sure that you call the :meth:`close` again after opening a cache in order to make
-            sure that the temporary data on disk gets removed again.
-            One way to ensure this is to use the class in a ``with`` statement::
-
-                with Hdf5Cache.open('cache_filename.h5') as cache:
-                    cache['my_data'] = (1, 2, 3)
-                    assert cache['my_data'] == (1, 2, 3)
-                # cache is closed again here, don't use it anymore
-
-        Options
-        -------
-        The :class:`DictCache` takes no options, but for compatibility with subclasses,
-        it accepts options as a dictionary.
-
-        .. cfg:config :: DictCache
-
-        Parameters
-        ----------
-        options : dict-like
-            Completely ignored for a :class:`DictCache`.
-        """
-        return cls()
-
-    def close(self):
-        self._long_term_cache.clear()
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, exc_type, exc_value, traceback):
-        self.close()
+    def trivial(cls):
+        """Create a trivial storage that keeps everything in RAM."""
+        return cls(Storage.open())
 
     def create_subcache(self, name):
-        """Create another instance of the same class as `self` based on the same disk resource.
+        """Create another :class:`DictCache` based on the same storage resource.
+
+        Uses :meth:`Storage.subcontainer` to create another storage container for a new
+        :class:`DictCache`. The data is still *completely* owned by the top-most
+        :class:`Storage` (in turn owned by the :class:`CacheFile`).
+        Hence, closing the parent :class:`CacheFile` will close all :class:`DictCache` instances
+        generated with `create_subcache`; accessing the data is no longer possible afterwards.
 
         Parameters
         ----------
@@ -134,54 +123,49 @@ class DictCache(collections.abc.MutableMapping):
         cache : :class:`DictCache`
             Another class instance of the same type as `self`.
         """
-        return DictCache()
+        return DictCache(self.long_term_storage.subcontainer(name))
 
     def get(self, key, default=None):
         """Same as ``self[key]``, but return `default` if `key` is not in `self`."""
-        if key not in self._long_term_keys:
+        if key not in self.long_term_keys:
             return default
         return self.__getitem__(key)
 
     def __getitem__(self, key):
-        if key in self._short_term_cache:
-            return self._short_term_cache[key]
-        logger.debug("Cache._load_long_term(%r)", key)
-        data = self._load_long_term(key)
-        if key in self._short_term_keys:
-            self._short_term_cache[key] = data
+        if key in self.short_term_cache:
+            return self.short_term_cache[key]
+        if key not in self.long_term_keys:
+            raise KeyError(f"{key!r} not existent in cache")
+        logger.debug("Cache.long_term_storage.load(%r)", key)
+        data = self.long_term_storage.load(key)
+        if key in self.short_term_keys:
+            self.short_term_cache[key] = data
         return data
 
-    def _load_long_term(self, key):
-        """Interface for loading ``self[key]`` from disk in subclasses."""
-        return self._long_term_cache[key]
-
     def __setitem__(self, key, val):
-        self._long_term_keys.add(key)
-        logger.debug("Cache._save_long_term(%r)", key)
-        self._save_long_term(key, val)
-        if key in self._short_term_keys:
-            self._short_term_cache[key] = val
-
-    def _save_long_term(self, key, val):
-        """Interface for saving ``self[key]`` to disk in subclasses."""
-        self._long_term_cache[key] = val
+        self.long_term_keys.add(key)
+        logger.debug("Cache.long_term_storage.save(%r)", key)
+        self.long_term_storage.save(key, val)
+        if key in self.short_term_keys:
+            self.short_term_cache[key] = val
 
     def __delitem__(self, key):
-        if key in self._long_term_keys:
-            self._long_term_keys.remove(key)
-            self._del_long_term(key)
-
-    def _del_long_term(self, key):
-        del self._long_term_cache[key]
+        if key in self.long_term_keys:
+            self.long_term_keys.remove(key)
+            self.long_term_storage.delete(key)
 
     def __contains__(self, key):
-        return key in self._long_term_keys
+        return key in self.long_term_keys
 
     def __iter__(self):
-        return iter(self._long_term_keys)
+        return iter(self.long_term_keys)
 
     def __len__(self):
-        return len(self._long_term_keys)
+        return len(self.long_term_keys)
+
+    def __bool__(self):
+        """Whether the cache is open and ready for read/write."""
+        return bool(self.long_term_storage)
 
     def set_short_term_keys(self, *keys):
         """Set keys for data which should be kept in RAM for a while.
@@ -190,15 +174,15 @@ class DictCache(collections.abc.MutableMapping):
         This method allows to specify keys the data of which should be kept in RAM after setting/
         reading, until the keys are updated with the next call to :meth:`set_short_term_keys`.
         The data is still *written* to disk in each ``self[key] = data``,
-        but subsequent *reading* ``data = self[key]`` will be fast for the given keys.
+        but (subsequent) *reading* ``data = self[key]`` will be fast for the given keys.
 
         Parameters
         ----------
         *keys : str
             The keys for which data should be kept in RAM for quick short-term lookup.
         """
-        self._short_term_keys = keys = set(keys)
-        sc = self._short_term_cache
+        self.short_term_keys = keys = set(keys)
+        sc = self.short_term_cache
         for key in list(sc.keys()):
             if key not in keys:
                 del sc[key]
@@ -209,54 +193,190 @@ class DictCache(collections.abc.MutableMapping):
         Parameters
         ----------
         *keys : str
-            The keys which should be pre-loaded.
+            The keys which should be pre-loaded. Are added to the :attr:`short_term_keys`.
         raise_missing : bool
             Whether to raise a KeyError if a given key does not exist in `self`.
         """
         for key in keys:
-            self._short_term_keys.add(key)
+            self.short_term_keys.add(key)
         for key in keys:
-            if key not in self._short_term_cache:
-                if key in self._long_term_keys:
-                    logger.debug("Cache._load_long_term(%r) in preload", key)
-                    self._short_term_cache[key] = self._load_long_term(key)
-                elif raise_missing:
-                    raise KeyError("trying to preload missing key")
-        # done
+            if key not in self.long_term_keys:
+                if raise_missing:
+                    raise KeyError("trying to preload missing entry " + repr(key))
+            else:
+                self.long_term_storage.preload(key)
 
 
-class PickleCache(DictCache):
-    """Version of :class:`DictCache` which saves long-term data on disk with :mod:`pickle`.
+class CacheFile(DictCache):
+    """Subclass of :class:`DictCache` to handle opening and closing resources.
+
+    You should open this class with the :meth:`open` method (or :meth:`trivial`),
+    and make sure that you call :meth:`close` after usage.
+    The easiest way to ensure this is to use a ``with`` statement, see :meth:`open`.
+    """
+    @classmethod
+    def open(cls, storage_class="Storage", use_threading=False, delete=True, **storage_kwargs):
+        """Interface for opening a :class:`Storage` and creating a :class:`DictCache` from it.
+
+        .. warning ::
+            Make sure that you call the :meth:`close` method of the returned :class:`CacheFile`
+            to close opened files and clean up temporary files/directories.
+            One way to ensure this is to use the class in a ``with`` statement like this::
+
+                with CacheFile.open() as cache:
+                    cache['my_data'] = (1, 2, 3)
+                    assert cache['my_data'] == (1, 2, 3)
+                # cache is closed again here, don't use it anymore
+
+        Parameters
+        ----------
+        storage_class : str
+            Name for a subclass of :class:`Storage` to define how data is saved.
+        use_threading : bool
+            If True, use the :class:`ThreadedStorage` wrapper for thread-parallel disk I/O.
+            In that case, you *need* to use the cache in a `with` statement (or manually call
+            :meth:`__enter__` and :meth:`__exit__`).
+        delete : bool
+            If True, delete the opened file/directory after closing the cache.
+        **storage_kwargs :
+            Further keyword arguments given to the :meth:`Storage.open` method of the
+            `storage_class`.
+        """
+        StorageClass = find_subclass(Storage, storage_class)
+        storage = StorageClass.open(delete=delete, **storage_kwargs)
+        if use_threading:
+            storage = ThreadedStorage.open(storage)
+        return CacheFile(storage)
+
+    def close(self):
+        """Close the associated storage container and shut down."""
+        self.long_term_storage.close()
+        self.short_term_cache.clear()
+
+    def __enter__(self):
+        self.long_term_storage = self.long_term_storage.__enter__()
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        self.long_term_storage.__exit__(exc_type, exc, tb)
+        self.short_term_cache.clear()
+
+
+class Storage:
+    """A container interface for saving data to disk.
+
+    Subclasses implement different methods for :meth:`save` and :meth:`load`.
+    The vanilla :class:`Storage` class is "trivial" in the sense that it actually doesn't save
+    the data to disk, but keeps explicit references in RAM.
+    """
+    #: Whether the storage is actually kept in memory, instead of saving to disk.
+    trivial = True
+
+    def __init__(self):
+        self._opened = True  # check this with bool(self)
+        self._owns_resources = False
+        self._subcontainers = []
+
+    @classmethod
+    def open(cls, delete=None):
+        res = cls()
+        res._owns_resources = True
+        res.data = {}
+        return res
+
+    def close(self):
+        """Close opened files, free memory and clean up temporary files/directories."""
+        self._common_close()
+        if self._owns_resources:
+            self.data.clear()
+
+    def _common_close(self):
+        if not self._opened:
+            raise ValueError("storage was already closed")
+        self._opened = False
+        for storage in self._subcontainers:
+            storage.close()
+
+    def __bool__(self):
+        """Indicator whether the file is open"""
+        return self._opened
+
+    def subcontainer(self, name):
+        """Create another instance of the same class saving in a subdirectory/subgroup.
+
+        This method allows multiple :class:`DictCache` instance re-using open resources.
+        Subcontainers will explcitly be closed when any of the parent containers (on which
+        `subcontainer()` was called) is closed.
+        """
+        if not self._opened:
+            raise ValueError("Trying to access closed storage")
+        res = Storage.open()
+        self._subcontainers.append(res)
+        return res
+
+    def load(self, key):
+        """Interface for loading data from disk in subclasses."""
+        if not self._opened:
+            raise ValueError("Trying to access closed storage")
+        return self.data[key]
+
+    def save(self, key, val):
+        """Interface for saving data to disk in subclasses."""
+        if not self._opened:
+            raise ValueError("Trying to access closed storage")
+        self.data[key] = val
+
+    def delete(self, key):
+        """Interface for cleaning up a previously saved data from disk in subclasses."""
+        if not self._opened:
+            raise ValueError("Trying to access closed storage")
+        del self.data[key]
+
+    def preload(self, key):
+        """Interface for preloading data into the given dictionary `into`.
+
+        Only overriden in :class:`ThreadedStorage` for thread-parallelized pre-loading;
+        in other cases it does nothing.
+        """
+        if not self._opened:
+            raise ValueError("Trying to access closed storage")
+        pass
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        self.close()
+
+
+class PickleStorage(Storage):
+    """Subclass of :class:`Storage` which saves long-term data on disk with :mod:`pickle`.
 
     Parameters
     ----------
     directory : path-like
         An existing directory within which pickle files will be saved for each `key`.
     """
-    dummy_cache = False
+    trivial = False
 
     def __init__(self, directory):
         super().__init__()
-        self._long_term_cache = pathlib.Path(directory)
-        self._subdirs = set([])
+        self.directory = pathlib.Path(directory)
+        self._delete_directory = None
+        self._opened = self.directory.is_dir()
 
     @classmethod
-    def open(cls, options):
+    def open(cls, directory=None, delete=True):
         """Create a directory and use it to initialize a :class:`PickleCache`.
 
-        Options
-        -------
-        .. cfg:config : PickleCache
-
-            directory : path-like | None
-                Name of a directory to be created, in which pickle files will be stored for
-                each `key`.
-                If `None`, create a temporary directory with :mod:`tempfile` tools.
-            delete : bool
-                Whether to automatically remove the directory when closing the cache.
+        Parameters
+        ----------
+        directory : path-like | None
+            Name of a directory to be created, in which pickle files will be stored.
+            If `None`, create a temporary directory with :mod:`tempfile` tools.
+        delete : bool
+            Whether to automatically remove the directory in :meth:`close`.
         """
-        options = asConfig(options, "PickleCache")
-        directory = options.get("directory", None)
         if directory is None:
             directory = tempfile.mkdtemp(prefix='tenpy_PickleCache')
             exist_ok = True
@@ -266,94 +386,93 @@ class PickleCache(DictCache):
         logger.info("PickleCache: create directory %s", directory)
         directory.mkdir(exist_ok=exist_ok)
         res = cls(directory)
-        if options.get("delete", True):
+        res._owns_resources = True
+        if delete:
             res._delete_directory = directory.absolute()
         return res
 
     def close(self):
-        delete_dir = self._delete_directory
-        if delete_dir is not None:
-            self._delete_directory = None
-            logger.info("PickleCache: cleanup/remove directory %s", delete_dir)
-            shutil.rmtree(delete_dir)
+        self._common_close()
+        if self._owns_resources:
+            delete_dir = self._delete_directory
+            if delete_dir is not None:
+                logger.info("PickleStorage: cleanup/remove directory %s", delete_dir)
+                shutil.rmtree(delete_dir)
 
-    def create_subcache(self, name):
-        subdir = self._long_term_cache / name
-        if name in self._subdirs:
-            # should exists already, clean up
-            assert subdir.exists()
-            shutil.rmtree(subdir)
-        self._subdirs.add(name)
+    def subcontainer(self, name):
+        if not self._opened:
+            raise ValueError("Trying to access closed storage")
+        subdir = self.directory / name
+        if subdir.exists():
+            raise ValueError("Subcontainer with that name already exists")
         subdir.mkdir(exist_ok=False)
-        return PickleCache(subdir)
+        res = PickleStorage(subdir)
+        self._subcontainers.append(res)
+        return res
 
-    def _load_long_term(self, key):
-        key = key + '.pkl'
-        with open(self._long_term_cache / key, 'rb') as f:
+    def load(self, key):
+        if not self._opened:
+            raise ValueError("Trying to access closed storage")
+        with open(self.directory / (key + '.pkl'), 'rb') as f:
             data = pickle.load(f)
         return data
 
-    def _save_long_term(self, key, value):
-        key = key + '.pkl'
-        with open(self._long_term_cache / key, 'wb') as f:
+    def save(self, key, value):
+        if not self._opened:
+            raise ValueError("Trying to access closed storage")
+        with open(self.directory / (key + '.pkl'), 'wb') as f:
             pickle.dump(value, f)
 
-    def _del_long_term(self, key):
-        fn = self._long_term_cache / key
+    def delete(self, key):
+        if not self._opened:
+            raise ValueError("Trying to access closed storage")
+        fn = self.directory / (key + '.pkl')
         if fn.exists():
-            fn.remove()
+            fn.unlink()
 
 
-class Hdf5Cache(DictCache):
-    """Version of :class:`DictCache` which saves long-term data on disk with :mod:`h5py`.
+class Hdf5Storage(Storage):
+    """Subclass of :class:`Storage` which saves long-term data on disk with :mod:`h5py`.
 
     Parameters
     ----------
     h5group : :class:`Group`
         The hdf5 group in which data will be saved using
         :func:`~tenpy.tools.hdf5_io.save_to_hdf5` under the specified keys.
-
     """
-    dummy_cache = False
+    trivial = False
 
     def __init__(self, h5group):
         super().__init__()
         self.h5gr = h5group
-        self._file_obj = None
-        self._close = False  # whether to close the h5gr.file in :meth:`close`
+        self._delete_directory = None
+        self._delete_file = None
 
     @classmethod
-    def open(cls, options):
+    def open(cls, filename=None, subgroup=None, mode="w-", delete=True):
         """Create an hdf5 file and use it to initialize an :class:`Hdf5Cache`.
 
-        Options
-        -------
-        .. cfg:config : Hdf5Cache
-
-            filename : path-like | None
-                Filename of the Hdf5 file to be created.
-                If `None`, create a temporary file with :mod:`tempfile` tools.
-            delete : bool
-                Whether to automatically remove the corresponding file when closing the cache.
-            mode : str
-                Filemode for opening the Hdf5 file.
+        Parameters
+        ----------
+        filename : path-like | None
+            Filename of the Hdf5 file to be created.
+            If `None`, create a temporary file with :mod:`tempfile` tools.
+        mode : str
+            Filemode for opening the Hdf5 file.
+        delete : bool
+            Whether to automatically remove the corresponding file when closing the cache.
         """
-        options = asConfig(options, "Hdf5Cache")
         import h5py
-        filename = options.get("filename", None)
-        mode = options.get("mode", "w-")
-        subgroup = options.get("subgroup", None)
-        delete = options.get("delete", True)
         if filename is None:
             # h5py supports file-like objects, but this gives a python overhead for I/O.
             # hence h5py doc recommends using a temporary directory
             # and creating an hdf5 file inside that
             directory = tempfile.mkdtemp(prefix='tenpy_Hdf5Cache')
-            logger.info("Hdf5Cache: created temporary directory %s", directory)
+            logger.info("create temporary cache directory %s", directory)
             filename = os.path.join(directory, "cache.h5")
         else:
             directory = None
-            logger.info("Hdf5Cache: create temporary file %s", filename)
+            logger.info("create temporary cache file %s", filename)
         f = h5py.File(filename, mode=mode)
         if subgroup is not None:
             if subgroup in f:
@@ -361,46 +480,250 @@ class Hdf5Cache(DictCache):
             else:
                 f = f.create_group(subgroup)
         res = cls(f)
+        res._owns_resources = True
         if delete:
             if directory is not None:
                 # created temp directory -> need to clean that up!
                 res._delete_directory = os.path.abspath(directory)
             else:
                 res._delete_file = os.path.abspath(filename)
-        res._close = True
         return res
 
     def close(self):
-        if self._close:
-            f = self.h5gr.file
-            if f:
-                f.close()
-            # else: already closed, c.f. h5py documentation
+        self._common_close()
+        if not self._owns_resources:
+            return
+        f = self.h5gr.file
+        if f:  # not yet closed by other function
+            f.close()
         delete_file = self._delete_file
         if delete_file is not None:
-            self._delete_file = None
-            logger.info("Hdf5Cache: cleanup/remove file %s", delete_file)
+            logger.info("cleanup/remove cache file %s", delete_file)
             os.remove(delete_file)
         delete_dir = self._delete_directory
         if delete_dir is not None:
-            self._delete_directory = None
-            logger.info("Hdf5Cache: cleanup/remove temp directory %s", delete_dir)
+            logger.info("cleanup/remove cache directory %s", delete_dir)
             shutil.rmtree(delete_dir)
 
-    def create_subcache(self, name):
-        assert "/" not in name
+    def subcontainer(self, name):
+        if not self._opened:
+            raise ValueError("Trying to access closed storage")
         if name in self.h5gr:
-            import h5py
-            assert isinstance(self.h5gr[name], h5py.Group)
-            del self.h5gr[name]
-        return Hdf5Cache(self.h5gr.create_group(name))
+            raise ValueError("Subcontainer with that name already exists")
+        res = Hdf5Storage(self.h5gr.create_group(name))
+        return res
 
-    def _load_long_term(self, key):
+    def load(self, key):
+        if not self._opened:
+            raise ValueError("Trying to access closed storage")
         return load_from_hdf5(self.h5gr, key)
 
-    def _save_long_term(self, key, value):
+    def save(self, key, value):
+        if not self._opened:
+            raise ValueError("Trying to access closed storage")
         save_to_hdf5(self.h5gr, value, key)
 
-    def _del_long_term(self, key):
+    def delete(self, key):
+        if not self._opened:
+            raise ValueError("Trying to access closed storage")
         if key in self.h5gr:
             del self.h5gr[key]
+
+
+class WorkerDied(Exception):
+    """Exception thrown if the main thread detects that the worker subthread died."""
+    pass
+
+
+class Worker:
+    """Manager for a worker thread"""
+
+    name = "tenpy cache"
+
+    def __init__(self, max_queue_size=0):
+        self.tasks = queue.Queue(maxsize=max_queue_size)
+        self.exit = threading.Event()  # set by both threads to tell each other to terminate
+        self.worker_exception = None
+        self.worker_thread = threading.Thread(target=self.run, name=self.name)
+        self._entered = False
+
+    def __enter__(self):
+        if self._entered:
+            raise ValueError("Can't reuse Worker multiple times!")
+        self._entered = True
+        self.worker_thread.start()
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        if self.worker_thread.is_alive():
+            # no error occured in subthread, terminate it gracefully
+            self.exit.set()
+            self.worker_thread.join()
+
+    def run(self):
+        """Main function for worker thread."""
+        logger.info("%s thread starting", self.name)
+        try:
+            while True:
+                if self.exit.is_set():  # main thread wants to finish
+                    logger.info("%s thread finishes", self.name)
+                    return
+                try:
+                    task = self.tasks.get(timeout=1.)
+                except queue.Empty:  # hit timeout
+                    continue
+                try:
+                    fct, args, kwargs, return_dict, return_key = task
+                    logger.debug("task for %s thread: %s, return=%s", self.name, fct.__qualname__,
+                                 return_dict is not None)
+                    res = fct(*args, **kwargs)
+                    if return_dict is not None:
+                        return_dict[return_key] = res
+                finally:
+                    self.tasks.task_done()
+        except:
+            self.exit.set()
+            logger.exception("%s thread dies with following exception", self.name)
+        finally:
+            # drain the queue such that Queue.join() doesn't block
+            while not self.tasks.empty():
+                self.tasks.get()
+                self.tasks.task_done()
+        logger.info("%s thread terminates after exception", self.name)
+
+    def _test_worker_alive(self):
+        """Check wether worker thread is still alive."""
+        if not self._entered:
+            raise ValueError("Worker needs to be started in `with` statement.")
+        if self.exit.is_set() or not self.worker_thread.is_alive():
+            raise WorkerDied(self.name + ": either exception occured or close() was called.")
+
+    def put_task(self, fct, *args, return_dict=None, return_key=None, **kwargs):
+        """Add a task to be done by the worker.
+
+        The worker will eventually do::
+
+            res = fct(*args, **kwargs)
+            if return_dict is not None:
+                return_dict[return_key] = res
+
+        It is unclear at which exact moment this happens, but after :meth:`join_tasks` was called,
+        it is guaranteed to be done (or an exception was raised that the workder died).
+        """
+        task = (fct, args, kwargs, return_dict, return_key)
+        while True:
+            self._test_worker_alive()
+            try:
+                self.tasks.put(task, timeout=1.)
+                return
+            except queue.Full:  # hit timeout
+                continue
+
+    def join_tasks(self):
+        """Block until all worker tasks are finished."""
+        self._test_worker_alive()
+        self.tasks.join()
+        self._test_worker_alive()
+
+
+class ThreadedStorage(Storage):
+    """Wrapper around a :class:`Storage` (or subclass) with thread-parallelization.
+
+    Parameters
+    ----------
+    worker : :class:`Group`
+        The hdf5 group in which data will be saved using
+        :func:`~tenpy.tools.hdf5_io.save_to_hdf5` under the specified keys.
+    disk_storage : :class:`Storage`
+        Instance of one of the other storage classes to wrap around.
+    """
+    def __init__(self, worker, disk_storage):
+        if disk_storage.trivial:
+            raise ValueError("ThreadedStorage with trivial `disk_storage` doesn't make sense")
+        super().__init__()
+        self.worker = worker
+        self.disk_storage = disk_storage
+        self.trivial = disk_storage.trivial
+        self._loaded = {}
+        self._waiting_for_load = set()
+
+    @classmethod
+    def open(cls, disk_storage):
+        """Setup and start a :class:`Worker` subthread.
+
+        Parameters
+        ----------
+        disk_storage : :class:`Storage`
+            Instance with methods for the actual disk I/O handling.
+        """
+        worker = Worker()
+        worker = worker.__enter__()
+        res = cls(worker, disk_storage)
+        res._owns_resources = True
+        return res
+
+    def close(self):
+        self._common_close()
+        if not self._owns_resources:
+            return
+        self.worker.__exit__(None, None, None)
+        self.disk_storage.close()
+        self._loaded.clear()
+        self._waiting_for_load.clear()
+
+    def __exit__(self, exc_type, exc, tb):
+        # same as self.close(), but pass on exception to worker.__exit__
+        self._common_close()
+        if not self._owns_resources:
+            return
+        self.worker.__exit__(exc_type, exc, tb)
+        self.disk_storage.close()
+        self._loaded.clear()
+        self._waiting_for_load.clear()
+
+    def subcontainer(self, name):
+        # share the *same* worker subthread, but different save/load methods from subcontainer
+        return ThreadedStorage(self.worker, self.disk_storage.subcontainer(name))
+
+    def __bool__(self):
+        return bool(self.disk_storage) and self.worker.worker_thread.is_alive()
+
+    def load(self, key):
+        if key not in self._loaded and key not in self._waiting_for_load:
+            logger.debug("ThreadedStorage.load %s", key)
+            self._waiting_for_load.add(key)
+            self.worker.put_task(self.disk_storage.load,
+                                 key,
+                                 return_dict=self._loaded,
+                                 return_key=key)
+        else:
+            logger.debug("ThreadedStorage.load %s (have pre-loaded)", key)
+        assert key in self._waiting_for_load
+        if key not in self._loaded:
+            self.worker.join_tasks()  # wait for the tasks to finish loading
+        assert key in self._loaded
+        val = self._loaded[key]
+        self._waiting_for_load.remove(key)
+        del self._loaded[key]
+        return val
+
+    def preload(self, key):
+        logger.debug("ThreadedStorage.preload %s", key)
+        if key in self._waiting_for_load or key in self._loaded:
+            return
+        self._waiting_for_load.add(key)
+        self.worker.put_task(self.disk_storage.load, key, return_dict=self._loaded, return_key=key)
+
+    def save(self, key, value):
+        logger.debug("ThreadedStorage.save %s", key)
+        if key in self._waiting_for_load:
+            # overwriting a preloaded but not yet returned value
+            # need to wait for the preload to finish to avoid that the preload overrides results
+            self.worker.join_tasks()
+            assert key in self._loaded
+            self._loaded[key] = value  # overwrite with new value
+            # now we're in a valid preloaded state again with the new val already loaded!
+        self.worker.put_task(self.disk_storage.save, key, value)
+
+    def delete(self, key):
+        self.worker.put_task(self.disk_storage.delete, key)

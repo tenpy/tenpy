@@ -4045,7 +4045,7 @@ class MPSEnvironment:
     _finite : bool
         Whether the boundary conditions of the MPS are finite.
     cache : :class:`~tenpy.tools.cache.DictCache`
-        Cache containing saving the environment tensors.
+        Cache for saving the environment tensors.
     _LP_keys, _RP_keys : list of str
         Map indices to keys for the :attr:`cache`.
     _LP : list of {``None`` | }
@@ -4082,9 +4082,9 @@ class MPSEnvironment:
         self._LP_age = [None] * L
         self._RP_age = [None] * L
         if cache is None:
-            cache = DictCache()
+            cache = DictCache.trivial()
         self.cache = cache
-        if not self.cache.dummy_cache and L < 8:
+        if not self.cache.long_term_storage.trivial and L < 8:
             warnings.warn("non-trivial cache for short-length environment: "
                           "Much overhead for a little RAM saving. Necessary?")
         self.init_first_LP_last_RP(**init_env_data)

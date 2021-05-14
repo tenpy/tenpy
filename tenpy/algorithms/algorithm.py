@@ -28,9 +28,9 @@ class Algorithm:
         Can only be passed as keyword argument.
         By default (``None``) ignored. If a `dict`, it should contain the data returned by
         :meth:`get_resume_data` when intending to continue/resume an interrupted run.
-    cache : None | :class:`DictCache` | subclass
+    cache : None | :class:`DictCache`
         The cache to be used to reduce memory usage.
-        None defaults to a new :class:`DictCache` which keeps everything in RAM.
+        None defaults to a new, trivial :class:`DictCache` which keeps everything in RAM.
 
     Options
     -------
@@ -63,7 +63,7 @@ class Algorithm:
             resume_data = {}
         self.resume_data = resume_data
         if cache is None:
-            cache = DictCache()
+            cache = DictCache.trivial()
         self.cache = cache
         self.checkpoint = EventHandler("algorithm")
 

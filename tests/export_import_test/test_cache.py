@@ -6,7 +6,7 @@ import tempfile
 import os
 import pytest
 
-from tenpy.tools.cache import Hdf5Cache, PickleCache, DictCache
+from tenpy.tools.cache import CacheFile
 
 try:
     import h5py
@@ -14,10 +14,10 @@ except ImportError:
     h5py = None
 
 
-def test_DictCache(CacheClass=DictCache, **kwargs):
+def test_DictCache(**kwargs):
     data = dict([(f"x{i:d}", np.arange(i + 5)) for i in range(5)])
     datasub = dict([(f"x{i:d}", np.ones(i + 1)) for i in range(5)])  # same keys, different values
-    with CacheClass.open(kwargs) as cache:
+    with CacheFile.open(**kwargs) as cache:
         for k in ['filename', 'directory']:
             if k in kwargs and kwargs[k] is not None:
                 assert os.path.exists(kwargs[k])
@@ -30,14 +30,14 @@ def test_DictCache(CacheClass=DictCache, **kwargs):
             loaded = cache[key]
             npt.assert_equal(loaded, data[key])
         cache["x1"] = data["x1"]
-        with cache.create_subcache("subcache") as sub:
-            sub.set_short_term_keys("x4")
-            keys = ["x1", "x0", "x4"]
-            for key in keys:
-                sub[key] = datasub[key]
-            for key in reversed(keys):
-                loaded = sub[key]
-                npt.assert_equal(loaded, datasub[key])
+        sub = cache.create_subcache("subcache")
+        sub.set_short_term_keys("x4")
+        keys = ["x1", "x0", "x4"]
+        for key in keys:
+            sub[key] = datasub[key]
+        for key in reversed(keys):
+            loaded = sub[key]
+            npt.assert_equal(loaded, datasub[key])
         del cache["x0"]
         assert "x0" not in cache
         assert "x1" in cache
@@ -55,12 +55,15 @@ def test_DictCache(CacheClass=DictCache, **kwargs):
 def test_Hdf5Cache():
     with tempfile.TemporaryDirectory() as tdir:
         filename = os.path.join(tdir, 'tmp_Hdf5Cache.h5')
-        test_DictCache(CacheClass=Hdf5Cache, filename=filename)
-    test_DictCache(CacheClass=Hdf5Cache)  # path = None -> tempfile use in tenpy.tools.cache
+        test_DictCache(storage_class="Hdf5Storage", filename=filename)
+    test_DictCache(storage_class="Hdf5Storage")  # path = None -> tempfile use in tenpy.tools.cache
+    test_DictCache(storage_class="Hdf5Storage", use_threading=True)
 
 
 def test_PickleCache():
     with tempfile.TemporaryDirectory() as tdir:
         subdir = os.path.join(tdir, 'tmp_PickleCache')
-        test_DictCache(CacheClass=PickleCache, directory=subdir)
-    test_DictCache(CacheClass=PickleCache)  # path = None -> tempfile use in tenpy.tools.cache
+        test_DictCache(storage_class="PickleStorage", directory=subdir)
+    test_DictCache(
+        storage_class="PickleStorage")  # path = None -> tempfile use in tenpy.tools.cache
+    test_DictCache(storage_class="PickleStorage", use_threading=True)

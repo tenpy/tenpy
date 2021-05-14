@@ -25,7 +25,7 @@ from ..models.model import Model
 from ..algorithms.algorithm import Algorithm
 from ..networks.mps import InitialStateBuilder
 from ..tools import hdf5_io
-from ..tools.cache import DictCache
+from ..tools.cache import CacheFile
 from ..tools.params import asConfig
 from ..tools.events import EventHandler
 from ..tools.misc import find_subclass, update_recursive, get_recursive, set_recursive
@@ -206,7 +206,7 @@ class Simulation:
                 self.model = resume_data['model']
             self.results['resume_data'] = resume_data
         self.options.touch('sequential')  # added by :func:`run_seq_simulations` for completeness
-        self.cache = DictCache()
+        self.cache = CacheFile.open()
 
     def __enter__(self):
         self.init_cache()
@@ -214,12 +214,10 @@ class Simulation:
         return self
 
     def __exit__(self, exc_type, exc_value, traceback):
+        self.cache.__exit__(exc_type, exc_value, traceback)  # exit cache context
         if exc_type is not None:
             self.logger.exception("simulation abort with the following exception",
                                   exc_info=(exc_type, exc_value, traceback))
-        self.cache.__exit__(exc_type, exc_value, traceback)  # exit cache context
-        if exc_type is not None:
-            self.cache = DictCache()
         self.options.warn_unused(True)
 
     @property
@@ -326,23 +324,24 @@ class Simulation:
     def init_cache(self):
         """Initialize the :attr:`cache` from the options.
 
-        This method is only called when the simulation
+        This method is only called automatically when the simulation is used in a
+        ``with ...`` statement.
+        This is the case if you use :func:`run_simulation`, etc.
 
         Options
         -------
         .. cfg:configoptions :: Simulation
 
-            cache_class : str
-                Class or name of a subclass of :class:`~tenpy.tools.cache.DictCache`.
             cache_params : dict
-                Dictionary with parameters for the cache, see :cfg:config:`DictCache`.
+                Dictionary with parameters for the cache, see
+                :meth:`~tenpy.tools.cache.CacheFile.open`.
         """
-        if not isinstance(self.cache, DictCache):
-            raise ValueError("init_cache called twice: already have nontrivial cache")
-        cache_class_name = self.options.get("cache_class", 'DictCache')
-        CacheClass = find_subclass(DictCache, cache_class_name)
-        params = self.options.subconfig('cache_params')
-        self.cache = CacheClass.open(params)
+        self.cache.close()
+        self.logger.info("initialize new cache")
+        cache_params = self.options.get("cache_params", {})
+        self.cache = CacheFile.open(**cache_params)
+        # note: can't use a `with self.cache` statement, but emulate it:
+        # self.__enter__() calls self.cache = self.cache.__enter__()
 
     def init_model(self):
         """Initialize a :attr:`model` from the model parameters.
