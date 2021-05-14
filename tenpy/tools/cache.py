@@ -12,10 +12,6 @@ this is easiest done through a ``with`` statement, see the example in :class:`Di
 import pickle
 import shutil
 import tempfile
-import threading
-import queue
-import functools
-import sys
 import collections
 import os
 import pathlib
@@ -23,13 +19,11 @@ import logging
 logger = logging.getLogger(__name__)
 
 from .misc import find_subclass
+from .thread import Worker
 from .hdf5_io import load_from_hdf5, save_to_hdf5
 from .params import asConfig
 
-__all__ = [
-    "DictCache", "CacheFile", "Storage", "PickleStorage", "Hdf5Storage", "WorkerDied", "Worker",
-    "ThreadedStorage"
-]
+__all__ = ["DictCache", "CacheFile", "Storage", "PickleStorage", "Hdf5Storage", "ThreadedStorage"]
 
 
 class DictCache(collections.abc.MutableMapping):
@@ -80,7 +74,7 @@ class DictCache(collections.abc.MutableMapping):
 
     .. doctest :: DictCache
 
-        >>> cache = DictCache(Storage())
+        >>> cache = DictCache.trivial()
         >>> cache['a'] = 1
         >>> cache['b'] = 2
         >>> assert cache['a'] == 1
@@ -223,7 +217,7 @@ class CacheFile(DictCache):
             to close opened files and clean up temporary files/directories.
             One way to ensure this is to use the class in a ``with`` statement like this::
 
-                with CacheFile.open() as cache:
+                with CacheFile.open(...) as cache:
                     cache['my_data'] = (1, 2, 3)
                     assert cache['my_data'] == (1, 2, 3)
                 # cache is closed again here, don't use it anymore
@@ -528,102 +522,6 @@ class Hdf5Storage(Storage):
             raise ValueError("Trying to access closed storage")
         if key in self.h5gr:
             del self.h5gr[key]
-
-
-class WorkerDied(Exception):
-    """Exception thrown if the main thread detects that the worker subthread died."""
-    pass
-
-
-class Worker:
-    """Manager for a worker thread"""
-
-    name = "tenpy cache"
-
-    def __init__(self, max_queue_size=0):
-        self.tasks = queue.Queue(maxsize=max_queue_size)
-        self.exit = threading.Event()  # set by both threads to tell each other to terminate
-        self.worker_exception = None
-        self.worker_thread = threading.Thread(target=self.run, name=self.name)
-        self._entered = False
-
-    def __enter__(self):
-        if self._entered:
-            raise ValueError("Can't reuse Worker multiple times!")
-        self._entered = True
-        self.worker_thread.start()
-        return self
-
-    def __exit__(self, exc_type, exc, tb):
-        if self.worker_thread.is_alive():
-            # no error occured in subthread, terminate it gracefully
-            self.exit.set()
-            self.worker_thread.join()
-
-    def run(self):
-        """Main function for worker thread."""
-        logger.info("%s thread starting", self.name)
-        try:
-            while True:
-                if self.exit.is_set():  # main thread wants to finish
-                    logger.info("%s thread finishes", self.name)
-                    return
-                try:
-                    task = self.tasks.get(timeout=1.)
-                except queue.Empty:  # hit timeout
-                    continue
-                try:
-                    fct, args, kwargs, return_dict, return_key = task
-                    logger.debug("task for %s thread: %s, return=%s", self.name, fct.__qualname__,
-                                 return_dict is not None)
-                    res = fct(*args, **kwargs)
-                    if return_dict is not None:
-                        return_dict[return_key] = res
-                finally:
-                    self.tasks.task_done()
-        except:
-            self.exit.set()
-            logger.exception("%s thread dies with following exception", self.name)
-        finally:
-            # drain the queue such that Queue.join() doesn't block
-            while not self.tasks.empty():
-                self.tasks.get()
-                self.tasks.task_done()
-        logger.info("%s thread terminates after exception", self.name)
-
-    def _test_worker_alive(self):
-        """Check wether worker thread is still alive."""
-        if not self._entered:
-            raise ValueError("Worker needs to be started in `with` statement.")
-        if self.exit.is_set() or not self.worker_thread.is_alive():
-            raise WorkerDied(self.name + ": either exception occured or close() was called.")
-
-    def put_task(self, fct, *args, return_dict=None, return_key=None, **kwargs):
-        """Add a task to be done by the worker.
-
-        The worker will eventually do::
-
-            res = fct(*args, **kwargs)
-            if return_dict is not None:
-                return_dict[return_key] = res
-
-        It is unclear at which exact moment this happens, but after :meth:`join_tasks` was called,
-        it is guaranteed to be done (or an exception was raised that the workder died).
-        """
-        task = (fct, args, kwargs, return_dict, return_key)
-        while True:
-            self._test_worker_alive()
-            try:
-                self.tasks.put(task, timeout=1.)
-                return
-            except queue.Full:  # hit timeout
-                continue
-
-    def join_tasks(self):
-        """Block until all worker tasks are finished."""
-        self._test_worker_alive()
-        self.tasks.join()
-        self._test_worker_alive()
 
 
 class ThreadedStorage(Storage):
