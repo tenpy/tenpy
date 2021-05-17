@@ -627,7 +627,7 @@ class Simulation:
         if out_fn.exists():
             if skip_if_exists:
                 # self.options.touch(*self.options.unused)
-                raise Skip("simulation output filename already exists: " + str(fn))
+                raise Skip("simulation output filename already exists", out_fn)
             if not overwrite_output and not self.loaded_from_checkpoint:
                 # adjust output filename to avoid overwriting stuff
                 root, ext = os.path.splitext(out_fn)
@@ -782,8 +782,19 @@ class Simulation:
 
 
 class Skip(ValueError):
-    """Error raised if simulation output already exists."""
-    pass
+    """Error raised if simulation output already exists.
+
+    Parameters
+    ----------
+    msg : str
+        Error message.
+    filename : str
+        Filename of the existing output file due to which the simulation is skipped.
+    """
+    def __init__(self, msg, filename):
+        filename = str(filename)
+        super().__init__(msg + '\n' + filename)
+        self.filename = filename
 
 
 def run_simulation(simulation_class_name='GroundStateSearch',
@@ -862,7 +873,7 @@ def resume_from_checkpoint(*,
     if checkpoint_results is None:
         raise ValueError("you need to pass `filename` or `checkpoint_results`")
     if checkpoint_results['finished_run']:
-        raise Skip("Simulation already finished")
+        raise Skip("Simulation already finished", filename)
     sim_class_mod = checkpoint_results['version_info']['simulation_module']
     sim_class_name = checkpoint_results['version_info']['simulation_class']
     SimClass = hdf5_io.find_global(sim_class_mod, sim_class_name)
@@ -1031,7 +1042,6 @@ def run_seq_simulations(sequential,
 
         with SimClass(sim_params, **simulation_class_kwargs) as sim:
             results = sim.run()
-
             if collect_results_in_memory:
                 all_results.append(results)
             # save results for the next simulation
