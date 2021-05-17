@@ -2233,8 +2233,8 @@ class MPS:
 
         .. warning ::
             This function is only evaluating correlation functions by moving right, and hence
-            can be inefficient if you try to vary the left and while fixing the right end.
-            In that case, you might be better of (=faster evaluation) by using
+            can be inefficient if you try to vary the left end while fixing the right end.
+            In that case, you might be better off (=faster evaluation) by using
             :meth:`term_correlation_function_left` with a small for loop over the right indices.
 
         Parameters
@@ -2323,7 +2323,7 @@ class MPS:
             >>> p_state = ['empty', 'full'] * 3
             >>> psi = tenpy.networks.mps.MPS.from_product_state([fermion]*6, p_state, "finite")
             >>> CdC = psi.correlation_function("Cd", "C")  # optionally: use `hermitian=True`
-            >>> psi.correlation_function("C", "Cd")[1, 2] == -CdC[1, 2]
+            >>> psi.correlation_function("C", "Cd")[1, 2] == -CdC[2, 1]
             True
             >>> np.all(np.diag(CdC) == psi.expectation_value("Cd C"))  # "Cd C" is equivalent to "N"
             True
@@ -3942,7 +3942,7 @@ class MPS:
         proj = (S2 > eps)
         if np.count_nonzero(proj) < len(S2):
             # project into non-degenerate subspace, reducing the bond dimensions!
-            if np.count_nonzero(proj) < len(Wr) * 0.9:
+            if np.count_nonzero(proj) < len(S2) * 0.9:
                 logger.warn("canonical_form_infinite: project to significantly smaller chi")
             YH.iproject(proj, axes=1)
             S2 = S2[proj]

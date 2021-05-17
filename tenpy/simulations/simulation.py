@@ -328,6 +328,10 @@ class Simulation:
         ``with ...`` statement.
         This is the case if you use :func:`run_simulation`, etc.
 
+        .. todo :
+            add threshold parameter to allow using the cache only when the estimated memory
+            size goes beyond some limit. How to estimate memory requirements?
+
         Options
         -------
         .. cfg:configoptions :: Simulation
