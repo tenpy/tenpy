@@ -3942,7 +3942,7 @@ class MPS:
         proj = (S2 > eps)
         if np.count_nonzero(proj) < len(S2):
             # project into non-degenerate subspace, reducing the bond dimensions!
-            if np.count_nonzero(proj) < len(W) * 0.9:
+            if np.count_nonzero(proj) < len(Wr) * 0.9:
                 logger.warn("canonical_form_infinite: project to significantly smaller chi")
             YH.iproject(proj, axes=1)
             S2 = S2[proj]
