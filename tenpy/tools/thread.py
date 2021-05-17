@@ -53,8 +53,8 @@ class Worker:
         ...    # go do something else, then add another task
         ...    worker.put_task(work_to_be_done, a=3, b=4, return_dict=results, return_key="3+4")
         ...    # "2+2" might be in results, but doesn't have to be yet
-        ...    worker.join_tasks()  # blocks until all the tasks have been done
-        ...    assert "3+4" in worker   # now we got all results
+        ...    worker.join_tasks()  # block/wait until all the tasks have been done
+        ...    assert "3+4" in results   # now we can be sure that we got all results
         >>> results
         {'2+2': 4, '3+4': 7}
     """
