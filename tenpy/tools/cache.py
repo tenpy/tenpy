@@ -209,7 +209,12 @@ class CacheFile(DictCache):
     The easiest way to ensure this is to use a ``with`` statement, see :meth:`open`.
     """
     @classmethod
-    def open(cls, storage_class="Storage", use_threading=False, delete=True, **storage_kwargs):
+    def open(cls,
+             storage_class="Storage",
+             use_threading=False,
+             delete=True,
+             max_queue_size=2,
+             **storage_kwargs):
         """Interface for opening a :class:`Storage` and creating a :class:`DictCache` from it.
 
         .. warning ::
@@ -232,6 +237,9 @@ class CacheFile(DictCache):
             :meth:`__enter__` and :meth:`__exit__`).
         delete : bool
             If True, delete the opened file/directory after closing the cache.
+        max_queue_size : int
+            Only used for `use_threading`. Needs to be positive to limit the number of
+            environments kept in RAM in case the disk is much slower then the actual update.
         **storage_kwargs :
             Further keyword arguments given to the :meth:`Storage.open` method of the
             `storage_class`.
@@ -239,7 +247,7 @@ class CacheFile(DictCache):
         StorageClass = find_subclass(Storage, storage_class)
         storage = StorageClass.open(delete=delete, **storage_kwargs)
         if use_threading:
-            storage = ThreadedStorage.open(storage)
+            storage = ThreadedStorage.open(storage, max_queue_size=max_queue_size)
         return CacheFile(storage)
 
     def close(self):
@@ -546,7 +554,7 @@ class ThreadedStorage(Storage):
         self._waiting_for_load = set()
 
     @classmethod
-    def open(cls, disk_storage):
+    def open(cls, disk_storage, max_queue_size=2):
         """Setup and start a :class:`Worker` subthread.
 
         Parameters
@@ -554,7 +562,7 @@ class ThreadedStorage(Storage):
         disk_storage : :class:`Storage`
             Instance with methods for the actual disk I/O handling.
         """
-        worker = Worker()
+        worker = Worker(max_queue_size=max_queue_size)
         worker = worker.__enter__()
         res = cls(worker, disk_storage)
         res._owns_resources = True
