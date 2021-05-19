@@ -10,6 +10,7 @@ this is easiest done through a ``with`` statement, see the example in :class:`Di
 # Copyright 2021 TeNPy Developers, GNU GPLv3
 
 import pickle
+import numpy as np
 import shutil
 import tempfile
 import collections
@@ -361,6 +362,9 @@ class PickleStorage(Storage):
     """
     trivial = False
 
+    #: filename extension
+    extension = '.pkl'
+
     def __init__(self, directory):
         super().__init__()
         self.directory = pathlib.Path(directory)
@@ -380,12 +384,12 @@ class PickleStorage(Storage):
             Whether to automatically remove the directory in :meth:`close`.
         """
         if directory is None:
-            directory = tempfile.mkdtemp(prefix='tenpy_PickleCache')
+            directory = tempfile.mkdtemp(prefix='tenpy_cache_' + cls.__name__)
             exist_ok = True
         else:
             exist_ok = False
         directory = pathlib.Path(directory)
-        logger.info("PickleCache: create directory %s", directory)
+        logger.info("%s: create directory %s", cls.__name__, directory)
         directory.mkdir(exist_ok=exist_ok)
         res = cls(directory)
         res._owns_resources = True
@@ -398,7 +402,7 @@ class PickleStorage(Storage):
         if self._owns_resources:
             delete_dir = self._delete_directory
             if delete_dir is not None:
-                logger.info("PickleStorage: cleanup/remove directory %s", delete_dir)
+                logger.info("%s: cleanup/remove directory %s", self.__class__.__name__, delete_dir)
                 shutil.rmtree(delete_dir)
 
     def subcontainer(self, name):
@@ -415,22 +419,45 @@ class PickleStorage(Storage):
     def load(self, key):
         if not self._opened:
             raise ValueError("Trying to access closed storage")
-        with open(self.directory / (key + '.pkl'), 'rb') as f:
+        with open(self.directory / (key + self.extension), 'rb') as f:
             data = pickle.load(f)
         return data
 
     def save(self, key, value):
         if not self._opened:
             raise ValueError("Trying to access closed storage")
-        with open(self.directory / (key + '.pkl'), 'wb') as f:
+        with open(self.directory / (key + self.extension), 'wb') as f:
             pickle.dump(value, f)
 
     def delete(self, key):
         if not self._opened:
             raise ValueError("Trying to access closed storage")
-        fn = self.directory / (key + '.pkl')
+        fn = self.directory / (key + self.extension)
         if fn.exists():
             fn.unlink()
+
+
+class _NumpyStorage(PickleStorage):
+    """Subclass of :class:`Storage` which saves long-term data on disk with :func:`numpy.save`.
+
+    This class can **only** accept numpy arrays as arguments.
+
+    Parameters
+    ----------
+    directory : path-like
+        An existing directory within which numpy files will be saved for each `key`.
+    """
+    extension = '.npy'
+
+    def load(self, key):
+        if not self._opened:
+            raise ValueError("Trying to access closed storage")
+        return np.load(self.directory / (key + self.extension))
+
+    def save(self, key, value):
+        if not self._opened:
+            raise ValueError("Trying to access closed storage")
+        return np.save(self.directory / (key + self.extension), value)
 
 
 class Hdf5Storage(Storage):
