@@ -847,6 +847,7 @@ class DMRGEngine(Sweep):
         self.diag_method = options['diag_method']
 
         self.mixer_activate()
+        is_first_sweep = True
         # loop over sweeps
         while True:
             loop_start_time = time.time()
@@ -866,6 +867,8 @@ class DMRGEngine(Sweep):
                 self.shelve = True
                 logger.warn("DMRG: maximum time limit reached. Shelve simulation.")
                 break
+            if not is_first_sweep:
+                self.checkpoint.emit(self)
             # --------- the main work --------------
             logger.info('Running sweep with optimization')
             for i in range(N_sweeps_check - 1):
@@ -944,7 +947,7 @@ class DMRGEngine(Sweep):
                     'chi': self.psi.chi if self.psi.L < 40 else max(self.psi.chi),
                     'sep': "=" * 80,
                 })
-            self.checkpoint.emit(self)
+            is_first_sweep = False
 
         # clean up from mixer
         self.mixer_cleanup()
@@ -969,7 +972,8 @@ class DMRGEngine(Sweep):
                 "final DMRG state not in canonical form up to "
                 "norm_tol=%.2e: norm_err=%.2e", norm_tol, norm_err)
         if self.finite:
-            self.psi.canonical_form(envs_to_update=self._all_envs)
+            self._resume_psi = self.psi.copy()
+            self.psi.canonical_form()
         else:
             for _ in range(norm_tol_iter):
                 self.environment_sweeps(update_env)
@@ -980,10 +984,8 @@ class DMRGEngine(Sweep):
                 logger.warn(
                     "norm_err=%.2e still too high after environment_sweeps, "
                     "call psi.canonical_form()", norm_err)
-                for env in self._all_envs:
-                    self.env.cache_optimize([0], [env.L - 1])
-                    self.env.clear()  # only keep initialization data
-                self.psi.canonical_form(envs_to_update=self._all_envs)
+                self._resume_psi = self.psi.copy()
+                self.psi.canonical_form()
 
     def reset_stats(self, resume_data=None):
         """Reset the statistics, useful if you want to start a new sweep run.

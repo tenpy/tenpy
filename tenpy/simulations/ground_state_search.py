@@ -44,6 +44,9 @@ class GroundStateSearch(Simulation):
                     self.results[name] = stats
 
     def run_algorithm(self):
-        """Run the algorithm. Calls ``self.engine.run()``."""
         E, psi = self.engine.run()
+        self.results['energy'] = E
+
+    def resume_run_algorithm(self):
+        E, psi = self.engine.resume_run()
         self.results['energy'] = E

@@ -362,6 +362,7 @@ class Sweep(Algorithm):
         max_trunc_err : float
             Maximal truncation error introduced.
         """
+        self._resume_psi = None  # if we had a separate _resume_psi previously, it's now invalid!
         self.E_trunc_list = []
         self.trunc_err_list = []
         schedule = self.get_sweep_schedule()

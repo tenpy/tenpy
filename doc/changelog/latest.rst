@@ -43,6 +43,8 @@ Changed
 
 Fixed
 ^^^^^
+- Always return `psi` in the :meth:`tenpy.algorithms.algorithm.Algorithm.get_resume_data`.
+  Optionally, this can be a copy, e.g. if `psi.canonical_form` needs to be called at the end of the algorithm, which would render the environments invalid.
 - Use logging in simulation only after calling :func:`~tenpy.tools.misc.setup_logging`.
 - Missing ``+ h.c.`` in :meth:`tenpy.networks.mpo.MPOEnvironment.full_contraction` when `H.explicit_plus_hc` was True.
   This caused wrong energies being reported during DMRG when `explicit_plus_hc` was used.

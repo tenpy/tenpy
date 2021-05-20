@@ -65,8 +65,6 @@ class Simulation:
     resume_data : None | dict
         Ignored if None. If a dictionary, it should contain the data for resuming the simulation,
         ``results['resume_data']`` (see :attr:`results`).
-        *Additionally*, it should contain the state, i.e., include
-        ``resume_data['psi'] = results['psi']``. (Optionally, it can also include the model.)
         Note that the dict is cleared after readout to allow freeing memory.
 
     Options
@@ -123,8 +121,7 @@ class Simulation:
             the most up to date `resume_data` from
             :meth:`~tenpy.algorithms.algorithm.Algorithm.get_resume_data`.
             Only included if :cfg:option:`Simultion.save_resume_data` is True.
-            When you want to pass this as argument to another simulation,
-            you need to include the state, ``resume_data['psi'] = results['psi']``.
+            Note that this contains anoter (reference or even copy of) `psi`.
 
     cache : :class:`~tenpy.tools.cache.DictCache`
         Cache that can be used by algorithms.
@@ -690,6 +687,7 @@ class Simulation:
         backup_filename = self._backup_filename
         if output_filename is None:
             return results  # don't save to disk
+        start_time = time.time()
 
         if output_filename.exists():
             # keep a single backup, previous backups are overwritten.
@@ -700,7 +698,7 @@ class Simulation:
             else:
                 output_filename.unlink()  # remove
 
-        self.logger.info("saving results to disk")  # save results to disk
+        # actually save the results to disk
         hdf5_io.save(results, output_filename)
 
         if backup_filename is not None and backup_filename.exists():
@@ -708,6 +706,7 @@ class Simulation:
             backup_filename.unlink()
 
         self._last_save = time.time()
+        self.logger.info("saving results to disk; took %.1fs", self._last_save - start_time)
         return results
 
     def prepare_results_for_save(self):
@@ -775,8 +774,9 @@ class Simulation:
             time_to_save = time.time() - now
             if time_to_save > 0.1 * save_every > 0.:
                 save_every = 20 * time_to_save
-                warnings.warn("Saving took longer than 10% of `save_every_x_seconds`."
-                              "Increase the latter to {0:.1f}".format(save_every))
+                self.logger.warn(
+                    "Saving took longer than 10%% of `save_every_x_seconds`. "
+                    "Increase the latter to %.1f", save_every)
                 self.options['save_every_x_seconds'] = save_every
         # done
 
@@ -891,7 +891,6 @@ def resume_from_checkpoint(*,
             sequential = options['sequential']
             sequential['index'] += 1
             resume_data = sim.engine.get_resume_data(sequential_simulations=True)
-            resume_data['psi'] = sim.psi
     if 'sequential' in options:
         # note: it is important to exit the with ... as sim`` statement before continuing
         # to free memory and cache
@@ -1046,7 +1045,6 @@ def run_seq_simulations(sequential,
                 all_results.append(results)
             # save results for the next simulation
             resume_data = sim.engine.get_resume_data(sequential_simulations=True)
-            resume_data['psi'] = sim.psi
         del sim  # but free memory to avoid too many copies (e.g. the whole environment)
         if index + 1 < N_sims:
             del results

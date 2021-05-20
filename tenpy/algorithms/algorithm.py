@@ -28,6 +28,7 @@ class Algorithm:
         Can only be passed as keyword argument.
         By default (``None``) ignored. If a `dict`, it should contain the data returned by
         :meth:`get_resume_data` when intending to continue/resume an interrupted run.
+        If it contains `psi`, this takes precedence over the argument `psi`.
     cache : None | :class:`DictCache`
         The cache to be used to reduce memory usage.
         None defaults to a new, trivial :class:`DictCache` which keeps everything in RAM.
@@ -53,6 +54,8 @@ class Algorithm:
         interrupting and saving to disk for later resume make sense.
     cache : :class:`DictCache` or subclass
         The cache to be used.
+    _resume_psi :
+        Possibly a copy of `psi` to be used for :meth:`get_resume_data`.
     """
     def __init__(self, psi, model, options, *, resume_data=None, cache=None):
         self.options = asConfig(options, self.__class__.__name__)
@@ -61,11 +64,14 @@ class Algorithm:
         self.model = model
         if resume_data is None:
             resume_data = {}
+        elif 'psi' in resume_data:
+            self.psi = resume_data['psi']
         self.resume_data = resume_data
         if cache is None:
             cache = DictCache.trivial()
         self.cache = cache
         self.checkpoint = EventHandler("algorithm")
+        self._resume_psi = None
 
     @property
     def verbose(self):
@@ -90,6 +96,9 @@ class Algorithm:
         Since most algorithms just have a while loop with break conditions,
         the default behaviour implemented here is to just call :meth:`run`.
         """
+        if self._resume_psi is not None:
+            self.psi = self._resume_psi
+            self._resume_psi = None
         self.run()
 
     def get_resume_data(self, sequential_simulations=False):
@@ -117,8 +126,13 @@ class Algorithm:
         resume_data : dict
             Dictionary with necessary data (apart from copies of `psi`, `model`, `options`)
             that allows to continue the simulation from where we are now.
+            It might contain explicit copies of
         """
-        return {}
+        psi = self._resume_psi
+        if psi is not None:
+            return {'psi': psi}
+        else:
+            return {'psi': self.psi}
 
 
 class TimeEvolutionAlgorithm(Algorithm):
