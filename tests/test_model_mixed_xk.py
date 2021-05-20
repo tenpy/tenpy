@@ -105,14 +105,14 @@ def test_mixed_hubbard():
             'svd_min': 1.e-10
         },
     }
-    product_state = [[['full'], ['empty'], ['full']], [['full'], ['empty'],
-                                                       ['empty']]]  # half filling
+    product_state = [[['full'], ['empty'], ['full']],
+                     [['full'], ['empty'], ['empty']]]  #yapf: disable
     psi = MPS.from_lat_product_state(M.lat, product_state)
     info = dmrg.run(psi, M, dmrg_params)
     E_real = info['E']
 
-    #measure particle number and Cd C correlators
-    N_real = M.lat.mps2lat_values(psi.expectation_value('Sz'))
+    #measure Sz onsite and SpSm correlators
+    Sz_real = M.lat.mps2lat_values(psi.expectation_value('Sz'))
     SpSm_real = M.lat.mps2lat_values(psi.correlation_function('Sp', 'Sm')[0, :])
 
     #mixed space
@@ -127,19 +127,19 @@ def test_mixed_hubbard():
     info = dmrg.run(psi_xk, M2, dmrg_params)  # the main work...
     E_mixed = info['E']
 
-    #measure particle number and Cd C correlators
-    N_mixed = np.zeros((Lx, Ly), dtype='complex')
+    #measure Sz onsite and SpSm correlators
+    Sz_mixed = np.zeros((Lx, Ly), dtype='complex')
     SpSm_mixed = np.zeros((Lx, Ly), dtype='complex')
     Sp = np.array([[0, 1], [0, 0]])
     Sm = np.array([[0, 0], [1, 0]])
     Sz = np.array([[1, 0], [0, -1]]) * 0.5
     for i in range(Lx):
         for j in range(Ly):
-            terms_N = M2.real_to_mixed_onsite(Sz, (i, j))
-            N_mixed[i, j] = psi_xk.expectation_value_terms_sum(terms_N)[0]
+            terms_Sz = M2.real_to_mixed_onsite(Sz, (i, j))
+            Sz_mixed[i, j] = psi_xk.expectation_value_terms_sum(terms_Sz)[0]
             terms_SpSm = M2.real_to_mixed_two_site(Sp, (0, 0), Sm, (i, j))
             SpSm_mixed[i, j] = psi_xk.expectation_value_terms_sum(terms_SpSm)[0]
 
     assert np.abs(E_real - E_mixed) < 1e-7
-    assert np.all(np.abs(N_real - N_mixed) < 1e-7)
+    assert np.all(np.abs(Sz_real - Sz_mixed) < 1e-7)
     assert np.all(np.abs(SpSm_real - SpSm_mixed) < 1e-7)

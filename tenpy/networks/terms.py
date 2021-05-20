@@ -1038,9 +1038,8 @@ class MultiCouplingTerms(CouplingTerms):
     def _max_range(self, d0, i_idx=None, dict_i=None):
         #recursive function to find max_range
         #dict_i[counter] = i (most outer index in coupling_terms left or right)
-        if dict_i == None:
-            dict_i = {}
         if i_idx is None:
+            dict_i = {}
             for i, d1 in d0.items():
                 dict_i = self._max_range(d1, i, dict_i)
         else:
@@ -1065,8 +1064,9 @@ class MultiCouplingTerms(CouplingTerms):
         connect = self._add_from_left(graph)  #returns a dictionary to connect left and right graph
         self._add_from_right(graph, connect)
 
-    def _add_from_left(self, graph, _i=None, _d1=None, _label_left=None, connect={}):
+    def _add_from_left(self, graph, _i=None, _d1=None, _label_left=None, connect=None):
         if _i is None:  # beginning of recursion
+            connect = {}
             for i, d1 in self.coupling_terms[0].items():
                 connect = self._add_from_left(graph, i, d1, 'IdL', connect)
         else:
@@ -1138,9 +1138,8 @@ class MultiCouplingTerms(CouplingTerms):
         self._remove_zeros_right(del_list)
 
     def _remove_zeros_left(self, tol_zero, _d0=None, del_list=None):
-        if del_list == None:
-            del_list = []
         if _d0 is None:
+            del_list = []
             _d0 = self.coupling_terms[0]
             for i, d1 in list(_d0.items()):
                 del_list = self._remove_zeros_left(tol_zero, d1, del_list)
@@ -1190,17 +1189,18 @@ class MultiCouplingTerms(CouplingTerms):
         term_list : :class:`TermList`
             Representation of the terms as a list of terms.
         """
-        dL = self._to_TermList(self.coupling_terms[0], None, None, {})  #left dictionary of lists
-        dR = self._to_TermList(self.coupling_terms[1], None, None, {})  #right dictionary of lists
+        dL = self._to_TermList(self.coupling_terms[0])  #left dictionary of lists
+        dR = self._to_TermList(self.coupling_terms[1])  #right dictionary of lists
         assert sorted(list(dL.keys())) == sorted(list(dR.keys()))
         terms = [dL[i][0] + dR[i][0][::-1] for i in reversed(sorted(list(dL.keys())))]
         strength = [dL[i][1] for i in reversed(sorted(list(dL.keys())))]
         return TermList(terms, strength)
 
-    def _to_TermList(self, d0, term0=None, i0=None, term_dict={}):
+    def _to_TermList(self, d0, term0=None, i0=None, term_dict=None):
         #recursive function to find TermList
         #term_dict[counter] = ([('A',i) ...], strength[i])
         if term0 is None:
+            term_dict = {}
             for i, d1 in d0.items():
                 term_dict = self._to_TermList(d1, [], i, term_dict)
         else:
