@@ -1029,15 +1029,17 @@ class MultiCouplingTerms(CouplingTerms):
         max_range : int
             The maximum of ``j - i`` for the `i`, `j` occuring in a term of :attr:`coupling_terms`.
         """
-        dL = self._max_range(self.coupling_terms[0], None, {})
-        dR = self._max_range(self.coupling_terms[1], None, {})
+        dL = self._max_range(self.coupling_terms[0])
+        dR = self._max_range(self.coupling_terms[1])
         assert sorted(list(dL.keys())) == sorted(list(dR.keys()))
         ranges = [dR[i] - dL[i] for i in dL.keys()]
         return max(ranges)
 
-    def _max_range(self, d0, i_idx=None, dict_i={}):
+    def _max_range(self, d0, i_idx=None, dict_i=None):
         #recursive function to find max_range
         #dict_i[counter] = i (most outer index in coupling_terms left or right)
+        if dict_i == None:
+            dict_i = {}
         if i_idx is None:
             for i, d1 in d0.items():
                 dict_i = self._max_range(d1, i, dict_i)
@@ -1135,7 +1137,9 @@ class MultiCouplingTerms(CouplingTerms):
         del_list = self._remove_zeros_left(tol_zero)
         self._remove_zeros_right(del_list)
 
-    def _remove_zeros_left(self, tol_zero, _d0=None, del_list=[]):
+    def _remove_zeros_left(self, tol_zero, _d0=None, del_list=None):
+        if del_list == None:
+            del_list = []
         if _d0 is None:
             _d0 = self.coupling_terms[0]
             for i, d1 in list(_d0.items()):

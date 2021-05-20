@@ -526,6 +526,7 @@ class MixedXKModel(CouplingMPOModel):
         xk_lat = self.lat
         N_orb = xk_lat.N_orb
         Ly = xk_lat.Ly
+        conserve_k = 'ky' in xk_lat.site(0).leg.chinfo.names
         x, y = A_coord
         A = np.asarray(A)
         if A.shape != (N_orb, N_orb):
@@ -541,6 +542,9 @@ class MixedXKModel(CouplingMPOModel):
                     u2 = xk_lat.get_u(k2, l2)
                     i2 = xk_lat.lat2mps_idx((x, u2))
                     fourier_coeff = xk_lat.get_exp_ik((k1 - k2) * y) / Ly
+                    if conserve_k and (k1 - k2) % Ly != 0:
+                        #only keep terms with momentum conservation
+                        continue
                     strengths.append(coeff * fourier_coeff)
                     terms.append([('Cd', i1), ('C', i2)])
         return TermList(terms, strengths)
@@ -602,6 +606,7 @@ class MixedXKModel(CouplingMPOModel):
         xk_lat = self.lat
         N_orb = xk_lat.N_orb
         Ly = xk_lat.Ly
+        conserve_k = 'ky' in xk_lat.site(0).leg.chinfo.names
         terms = []
         strengths = []
         xx_ind = np.repeat([x for x, y in rs_coords], 2)
@@ -613,12 +618,15 @@ class MixedXKModel(CouplingMPOModel):
             coeff = np.prod([op_i[l_i] for op_i, l_i in zip(orbital_coeffs, l_ind)])
             for k_ind in it.product(range(Ly), repeat=num_c_cd):
                 # k_ind = [k1, k2, k3, k4, ...]
+                if conserve_k and (sum(k_ind[::2]) - sum(k_ind[1::2])) % Ly != 0:
+                    #only keep terms with momentum conservation
+                    continue
                 kdiff_y = sum([(k1 - k2) * y for k1, k2, y in zip(k_ind[::2], k_ind[1::2], y_ind)])
                 fourier_coeff = xk_lat.get_exp_ik(kdiff_y) / Ly**num_ops
                 strengths.append(coeff * fourier_coeff)
                 u_ind = xk_lat.get_u(np.array(k_ind), np.array(l_ind).flatten())
-                i_ind = xk_lat.lat2mps_idx(np.hstack([xx_ind[:, np.newaxis],
-                                                      u_ind[:, np.newaxis]]))
+                i_ind = xk_lat.lat2mps_idx(np.hstack([xx_ind[:, np.newaxis], u_ind[:,
+                                                                                   np.newaxis]]))
                 # i_ind = MPS index for combination (x,k,l) of each operator
                 terms.append(list(zip(ops, i_ind)))  # [('Cd', i1), ('C', i2), ...]
         return TermList(terms, strengths)
@@ -660,6 +668,7 @@ class MixedXKModel(CouplingMPOModel):
         xk_lat = self.lat
         N_orb = xk_lat.N_orb
         Ly = xk_lat.Ly
+        conserve_k = 'ky' in xk_lat.site(0).leg.chinfo.names
         terms = []
         strengths = []
         x_ind = np.array([x for x, y in rs_coords])
@@ -669,6 +678,9 @@ class MixedXKModel(CouplingMPOModel):
         for k_ind in it.product(range(Ly), repeat=num_ops):
             # k_ind = [k1, k2, k3, k4, ...]
             k_ind = np.array(k_ind)
+            if conserve_k and (np.sum(k_ind * k_sign)) % Ly != 0:
+                #only keep terms with momentum conservation
+                continue
             k_y = np.sum(k_ind * k_sign * y_ind)
             fourier_coeff = xk_lat.get_exp_ik(k_y) / Ly**(num_ops / 2.)
             for coeff, l_ind in coeff_orbitals:
