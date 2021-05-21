@@ -2775,15 +2775,16 @@ class MPS:
             err[i, 1] = npc.norm(rho_R - rho_R2)
         return err
 
-    def canonical_form(self, renormalize=True, envs_to_update=None):
+    def canonical_form(self, **kwargs):
         """Bring self into canonical 'B' form, (re-)calculate singular values.
 
         Simply calls :meth:`canonical_form_finite` or :meth:`canonical_form_infinite`.
+        Keyword arguments are passed on to the corrsponding specialized versions.
         """
         if self.finite:
-            return self.canonical_form_finite(renormalize, envs_to_update=envs_to_update)
+            return self.canonical_form_finite(**kwargs)
         else:
-            return self.canonical_form_infinite(renormalize, envs_to_update=envs_to_update)
+            return self.canonical_form_infinite(**kwargs)
 
     def canonical_form_finite(self, renormalize=True, cutoff=0., envs_to_update=None):
         """Bring a finite (or segment) MPS into canonical form (in place).
@@ -2881,7 +2882,7 @@ class MPS:
             assert len(S) == 1
             self._B[0] *= U[0, 0]  # just a trivial phase factor, but better keep it
         # done with getting to canonical form
-        if envs_to_update is not None:
+        if envs_to_update is not None and self.bc == 'segment':
             VR = VR_segment
             for env in envs_to_update:
                 update_ket = env.ket is self
@@ -2906,7 +2907,7 @@ class MPS:
         if self.bc == 'segment':
             return U, VR_segment
 
-    def canonical_form_infinite(self, renormalize=True, tol_xi=1.e6, envs_to_update=None):
+    def canonical_form_infinite(self, renormalize=True, tol_xi=1.e6):
         """Bring an infinite MPS into canonical form (in place).
 
         If any site is in :attr:`form` ``None``, it does *not* use any of the singular values `S`.
@@ -2932,19 +2933,6 @@ class MPS:
         tol_xi : float
             Raise an error if the correlation length is larger than that
             (which indicates a degenerate "cat" state, e.g., for spontaneous symmetry breaking).
-        envs_to_update : None | list
-            Ignored if `None`. A given list may contain :class:`MPSEnvironment` or
-            :class:`~tenpy.networks.mpo.MPOEnvironment` which need to be kept consistent.
-            Each of the
-
-        Returns
-        -------
-        gauge_changes : list
-            Only returned if `envs_to_update` is not None; use `envs_to_update=[]` to return it
-            without updating any environments.
-            Such that ``Zl, Xr = gauge_change[i]`` contains the gauge change on bond (i-1, i),
-            where we updated ``A[i-1] A[i] -> A[i-1] Zl inv(Zl) A[i]`` and
-            ``B[i-1] B[i] -> B[i-1] inv(Xr) Xr B[i]`` for tensors in A/B canonical form.
         """
         assert not self.finite
         L = self.L
@@ -2959,13 +2947,6 @@ class MPS:
             self.convert_form('B')
         Wr_list = [None] * L  # right eigenvectors of TM on each bond after ..._correct_right
 
-        if envs_to_update is not None:
-            old_S = self._S[:]  # copy the old singular values
-            gauge_changes = [[] for i in range(L)]
-        else:
-            old_S = None
-            gauge_changes = None
-
         # phase 1: bring bond (i1-1, i1) in canonical form
         # find dominant right eigenvector
         norm, Gr = self._canonical_form_dominant_gram_matrix(i1, False, tol_xi)
@@ -2974,8 +2955,6 @@ class MPS:
             self.norm *= np.sqrt(norm)
         # make Gr diagonal to Wr
         Wr, Kl, Kr = self._canonical_form_correct_right(i1, Gr)
-        if envs_to_update is not None:
-            gauge_changes[i1].append((Kl, Kr))
         # guess for Gl
         Gl = npc.tensordot(Kr.scale_axis(self.get_SL(i1)**2, 1), Kl, axes=['vR', 'vL'])
         Gl.iset_leg_labels(['vR*', 'vR'])
@@ -2990,8 +2969,6 @@ class MPS:
         # bring bond to canonical form
         Gl, Yl, Yr = self._canonical_form_correct_left(i1, Gl, Wr)
         Wr = np.ones(Yr.legs[0].ind_len, np.float64)
-        if envs_to_update is not None:
-            gauge_changes[i1].append((Yl, Yr))
         # now the bond (i1-1,i1) is in canonical form
         Wr_list[i1] = Wr  # diag(Wr) is right eigenvector on bond (i1-1, i1)
 
@@ -3002,8 +2979,6 @@ class MPS:
             Gr = npc.tensordot(B1.scale_axis(Wr, 'vR'), B1.conj(), axes=axes)
             Wr, Kl, Kr = self._canonical_form_correct_right(j1, Gr)
             Wr_list[j1 % L] = Wr
-            if envs_to_update is not None:
-                gauge_changes[j1 % L].append((Kl, Kr))
 
         # phase 3: sweep from left to right; find other left eigenvectors,
         # bring each bond into canonical form
@@ -3016,51 +2991,7 @@ class MPS:
                 axes=[self._get_p_label('*') + ['vL*'], self._p_label + ['vR*']])
             # axes=[['p*', 'vL*'], ['p', 'vR*']])
             Gl, Yl, Yr = self._canonical_form_correct_left(j1, Gl, Wr_list[j1 % L])
-            if envs_to_update is not None:
-                gauge_changes[j1 % L].append((Yl, Yr))
-
-        # finally, update the environments if needed
-        return self._canonical_form_infinite_update_envs(envs_to_update, gauge_changes, old_S, i1)
-
-    def _canonical_form_infinite_update_envs(self, envs_to_update, gauge_changes, old_S, i1):
-        if envs_to_update is None:
-            return None
-        L = self.L
-        for i in range(L):
-            (Kl, Kr), (Yl, Yr) = gauge_changes[i]
-            Xl = npc.tensordot(Kl, Yl, axes=['vR', 'vL'])
-            Xr = npc.tensordot(Yr, Kr, axes=['vR', 'vL'])
-            # we changed B[i-1] B[i] -> B[i-1] Xl Xr B[i+1]
-            # hence we need to multiply
-            # RP[vR,vR*] -> Xr RP Xr.conj().
-            # however, LP contains A tensors only, so we need to account for that with S:
-            # LP[vL*,vL] -> Zl.conj() LP Zl with  Zl = S_old Xl inv(S_new)
-            Zl = Xl.iscale_axis(old_S[i], 'vL').iscale_axis(1. / self.get_SL(i), 'vR')
-            gauge_changes[i] = (Zl, Xr)
-        for env in envs_to_update:
-            update_ket = (self is env.ket)
-            update_bra = (self is env.bra)
-            if not (update_ket or update_bra):
-                raise ValueError("called `psi.canonical_from_infinite(..., envs_to_update), "
-                                 "but (one of) the environment doesn't contain that `psi`")
-            for j1 in range(i1, i1 - env.L, -1):
-                Zl, Xr = gauge_changes[j1 % L]
-                if env.has_LP(j1):
-                    LP = env.get_LP(j1)
-                    if update_ket:
-                        LP = npc.tensordot(LP, Zl, axes=['vR', 'vL'])
-                    if update_bra:
-                        LP = npc.tensordot(Zl.conj(), LP, axes=['vL*', 'vR*'])
-                    env.set_LP(j1, LP, env.get_LP_age(j1))
-                j0 = j1 - 1
-                if env.has_RP(j0):
-                    RP = env.get_RP(j0)
-                    if update_ket:
-                        RP = npc.tensordot(Xr, RP, axes=['vR', 'vL'])
-                    if update_bra:
-                        RP = npc.tensordot(RP, Xr.conj(), axes=['vL*', 'vR*'])
-                    env.set_RP(j0, RP, env.get_RP_age(j0))
-        return gauge_changes
+        # done
 
     def correlation_length(self, target=1, tol_ev0=1.e-8, charge_sector=0):
         r"""Calculate the correlation length by diagonalizing the transfer matrix.
@@ -3248,7 +3179,7 @@ class MPS:
             for j in range(n - 1):
                 self.set_SR(i + j, split_th._S[j + 1])
         if not unitary:
-            self.canonical_form(renormalize)
+            self.canonical_form(renormalize=renormalize)
 
     def apply_product_op(self, ops, unitary=None, renormalize=False):
         """Apply a (global) product of local onsite operators to `self`.
@@ -3293,7 +3224,7 @@ class MPS:
             # actually apply the operator at site i
             self._B[i] = npc.tensordot(op, self._B[i], axes=['p*', 'p'])
         if not unitary:
-            self.canonical_form(renormalize)
+            self.canonical_form(renormalize=renormalize)
 
     def swap_sites(self, i, swap_op='auto', trunc_par=None):
         r"""Swap the two neighboring sites `i` and `i+1` (inplace).
