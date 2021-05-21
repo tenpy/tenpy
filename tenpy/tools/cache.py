@@ -412,7 +412,7 @@ class PickleStorage(Storage):
         if subdir.exists():
             raise ValueError("Subcontainer with that name already exists")
         subdir.mkdir(exist_ok=False)
-        res = PickleStorage(subdir)
+        res = self.__class__(subdir)
         self._subcontainers.append(res)
         return res
 
@@ -440,7 +440,7 @@ class PickleStorage(Storage):
 class _NumpyStorage(PickleStorage):
     """Subclass of :class:`Storage` which saves long-term data on disk with :func:`numpy.save`.
 
-    This class can **only** accept numpy arrays as arguments.
+    This class can **only** accept numpy arrays to be stored.
 
     Parameters
     ----------
@@ -457,7 +457,56 @@ class _NumpyStorage(PickleStorage):
     def save(self, key, value):
         if not self._opened:
             raise ValueError("Trying to access closed storage")
-        return np.save(self.directory / (key + self.extension), value)
+        np.save(self.directory / (key + self.extension), value)
+
+
+class _NpcArrayStorage(PickleStorage):
+    """Subclass of :class:`Storage` which saves long-term data on disk with :func:`numpy.save`.
+
+    This class can **only** accept :class:`~tenpy.linalg.np_conserve.Array` objects to be stored.
+    It does so by keeping the "metadata" like charges in RAM and only stores the actual dense
+    tensors.
+
+    Parameters
+    ----------
+    directory : path-like
+        An existing directory within which numpy files will be saved for each `key`.
+    """
+
+    extension = '.npy'
+
+    def __init__(self, directory):
+        super().__init__(directory)
+        self._array_except_data = {}
+
+    def load(self, key):
+        if not self._opened:
+            raise ValueError("Trying to access closed storage")
+        value = self._array_except_data[key].copy(deep=False)
+        N = value._data
+        data = value._data = []
+        with open(self.directory / (key + self.extension), 'rb') as f:
+            value._qdata = np.load(f)
+            for _ in range(N):
+                data.append(np.load(f))
+        return value
+
+    def save(self, key, value):
+        if not self._opened:
+            raise ValueError("Trying to access closed storage")
+        value = value.copy(deep=False)
+        data = value._data
+        N = value._data = len(data)  # replace _data attribute with just the length
+        with open(self.directory / (key + self.extension), 'wb') as f:
+            np.save(f, value._qdata)
+            for T in data:
+                np.save(f, T)
+        value._qdata = None
+        self._array_except_data[key] = value
+
+    def delete(self, key):
+        super().delete(key)
+        del self._array_except_data[key]
 
 
 class Hdf5Storage(Storage):
