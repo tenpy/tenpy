@@ -283,8 +283,6 @@ class Array:
             cp._qdata = self._qdata.copy('C')
             cp.qtotal = self.qtotal.copy()
             # even deep copies share legs & chinfo (!)
-        else:
-            cp._data = self._data[:]
         return cp
 
     def __getstate__(self):
