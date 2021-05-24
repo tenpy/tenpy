@@ -372,7 +372,7 @@ class PickleStorage(Storage):
         self._opened = self.directory.is_dir()
 
     @classmethod
-    def open(cls, directory=None, delete=True):
+    def open(cls, directory=None, tmpdir=None, delete=True):
         """Create a directory and use it to initialize a :class:`PickleCache`.
 
         Parameters
@@ -380,11 +380,14 @@ class PickleStorage(Storage):
         directory : path-like | None
             Name of a directory to be created, in which pickle files will be stored.
             If `None`, create a temporary directory with :mod:`tempfile` tools.
+        tmpdir : path-like | None
+            Only used if `directory` is None. Used as base `dir` for :func:`tempfile.mkdtemp`,
+            i.e., a temporary directory is created within this path.
         delete : bool
             Whether to automatically remove the directory in :meth:`close`.
         """
         if directory is None:
-            directory = tempfile.mkdtemp(prefix='tenpy_cache_' + cls.__name__)
+            directory = tempfile.mkdtemp(prefix='tenpy_cache_' + cls.__name__, dir=tmpdir)
             exist_ok = True
         else:
             exist_ok = False
