@@ -439,6 +439,7 @@ class Simulation:
             # up to date resume_data is added in :meth:`prepare_results_for_save`
             self.results['resume_data'].clear()
             del self.results['resume_data']
+        kwargs.setdefault('cache', self.cache)
         params = self.options.subconfig('algorithm_params')
         self.engine = AlgorithmClass(self.psi, self.model, params, **kwargs)
         self.engine.checkpoint.connect(self.save_at_checkpoint)
