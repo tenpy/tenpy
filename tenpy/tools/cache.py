@@ -351,6 +351,10 @@ class Storage:
     def __exit__(self, exc_type, exc, tb):
         self.close()
 
+    def __repr__(self):
+        closed = "" if self._opened else ", closed"
+        return f"<{self.__class__.__name__} in RAM{closed}>"
+
 
 class PickleStorage(Storage):
     """Subclass of :class:`Storage` which saves long-term data on disk with :mod:`pickle`.
@@ -438,6 +442,10 @@ class PickleStorage(Storage):
         fn = self.directory / (key + self.extension)
         if fn.exists():
             fn.unlink()
+
+    def __repr__(self):
+        closed = "" if self._opened else ", closed"
+        return f"<{self.__class__.__name__} at {self.directory!s}{closed}>"
 
 
 class _NumpyStorage(PickleStorage):
@@ -530,7 +538,7 @@ class Hdf5Storage(Storage):
         self._delete_file = None
 
     @classmethod
-    def open(cls, filename=None, subgroup=None, mode="w-", delete=True):
+    def open(cls, filename=None, subgroup=None, mode="w-", delete=True, tmpdir=None):
         """Create an hdf5 file and use it to initialize an :class:`Hdf5Cache`.
 
         Parameters
@@ -538,6 +546,9 @@ class Hdf5Storage(Storage):
         filename : path-like | None
             Filename of the Hdf5 file to be created.
             If `None`, create a temporary file with :mod:`tempfile` tools.
+        tmpdir : path-like | None
+            Only used if `filename` is None. Used as base `dir` for :func:`tempfile.mkdtemp`,
+            i.e., a temporary directory is created within this path, and inside that the hdf5 file.
         mode : str
             Filemode for opening the Hdf5 file.
         delete : bool
@@ -548,7 +559,7 @@ class Hdf5Storage(Storage):
             # h5py supports file-like objects, but this gives a python overhead for I/O.
             # hence h5py doc recommends using a temporary directory
             # and creating an hdf5 file inside that
-            directory = tempfile.mkdtemp(prefix='tenpy_Hdf5Cache')
+            directory = tempfile.mkdtemp(prefix='tenpy_Hdf5Cache', dir=tmpdir)
             logger.info("create temporary cache directory %s", directory)
             filename = os.path.join(directory, "cache.h5")
         else:
@@ -609,6 +620,12 @@ class Hdf5Storage(Storage):
             raise ValueError("Trying to access closed storage")
         if key in self.h5gr:
             del self.h5gr[key]
+
+    def __repr__(self):
+        if self._opened:
+            return f"<Hdf5Storage in {self.h5gr.file.filename!s}[{self.h5gr.name!r}]>"
+        else:
+            return "<Hdf5Storage, closed>"
 
 
 class ThreadedStorage(Storage):
