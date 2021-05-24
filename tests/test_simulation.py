@@ -17,7 +17,7 @@ tenpy.tools.misc.skip_logging_setup = True  # skip logging setup
 
 
 class DummyAlgorithm(Algorithm):
-    def __init__(self, psi, model, options, *, resume_data=None):
+    def __init__(self, psi, model, options, *, resume_data=None, cache=None):
         super().__init__(psi, model, options, resume_data=resume_data)
         self.dummy_value = None
         self.evolved_time = self.options.get('start_time', 0.)
