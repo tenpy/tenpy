@@ -44,6 +44,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 from ..linalg import np_conserved as npc
+from ..linalg.sparse import FlatLinearOperator
 from .site import group_sites, Site
 from ..tools.string import vert_join
 from .mps import MPS as _MPS  # only for MPS._valid_bc
@@ -54,7 +55,9 @@ from ..tools.math import lcm
 from ..tools.params import asConfig
 from ..algorithms.truncation import TruncationError, svd_theta
 
-__all__ = ['MPO', 'make_W_II', 'MPOGraph', 'MPOEnvironment', 'grid_insert_ops']
+__all__ = [
+    'MPO', 'make_W_II', 'MPOGraph', 'MPOEnvironment', 'MPOTransferMatrix', 'grid_insert_ops'
+]
 
 
 class MPO:
@@ -1765,7 +1768,7 @@ class MPOEnvironment(MPSEnvironment):
                               age_LP=0,
                               age_RP=0,
                               start_env_sites=None):
-        """Reinitial first LP and last RP from the given data.
+        """(Re)initialize first LP and last RP from the given data.
 
         Parameters
         ----------
@@ -2002,6 +2005,210 @@ class MPOEnvironment(MPSEnvironment):
         # for a ususal MPS, axes = (['p', 'vL*'], ['p*', 'vR*'])
         RP = npc.tensordot(RP, self.bra.get_B(i, form='B').conj(), axes=axes)
         return RP  # labels 'vL', 'wL', 'vL*'
+
+
+class MPOTransferMatrix:
+    """Transfermatrix of a Hamiltonian-like MPO sandwiched between canonicalized MPS.
+
+    Given an MPS in canonical form, this class helps to find the correct initial MPO environment
+    on the left or right by diagonalizing the transfer matrix.
+    This is only needed for *infinite* range Hamiltonians; for finite range you can just use
+    :meth:`MPOEnvironment.init_first_LP_last_RP` with ``start_env_sites=H.max_range``.
+    This class **assumes** that `H` is the sum of local terms such that the transfer matrix has
+    a Jordan Block form when the MPO leg is divided into :attr:`MPO.IdL`, :attr:`MPO.IdR` and the
+    rest.
+
+    Parameters
+    ----------
+    H : :class:`~tenpy.networks.mpo.MPO`
+        The MPO sandwiched between `psi`.
+        Should have 'IdL' and 'IdR'.
+    psi : :class:`~tenpy.networks.mps.MPS`
+        The MPS to project on. Should be given in usual 'ket' form;
+        we call `conj()` on the matrices directly.
+    transpose : bool
+        Wheter `self.matvec` acts on `RP` (``False``) or `LP` (``True``).
+
+    Attributes
+    ----------
+    transpose : bool
+        Wheter `self.matvec` acts on `RP` (``True``) or `LP` (``False``).
+    dtype :
+        Common dtype of `H` and `psi`.
+    IdL, IdR : int
+        Indices of the MPO leg between unit cells, where only identities are to the left/right.
+    _M, _M_conj, _W : list of :class:`~tenpy.linalg.np_conserved.Array`
+        Tensors to be contracted into `vec` in :meth:`matvec`.
+    guess : :class:`~tenpy.linalg.np_conserved.Array`
+        Initial guess as npc Array.
+    flat_linop : :class:`~tenpy.linalg.sparse.FlatLinearOperator`
+        Wrapper to allow calling scipy sparse functions.
+    flat_guess :
+        Initial guess suitable for `flat_linop` in non-tenpy form.
+    """
+    def __init__(self, H, psi, transpose=False):
+        if psi.finite or H.bc != 'infinite':
+            raise ValueError("Only makes sense for infinite MPS")
+        if H.max_range < np.inf:
+            warnings.warn("MPO.init_first_LP_last_RP would be more efficient...")
+        if H.L != psi.L:
+            raise ValueError("Non-matching L")
+        self.L = H.L
+        if np.linalg.norm(psi.norm_test()) > 1.e-10:
+            raise ValueError("psi should be in canonical form!")
+        if psi._p_label != ['p']:
+            raise NotImplementedError("What would the MPO act on...?")
+        self.dtype = dtype = np.promote_types(psi.dtype, H.dtype)
+        self.transpose = transpose
+        self._M = []
+        self._M_conj = []
+        self._W = []
+        self.IdL = H.get_IdL(0)
+        self.IdR = H.get_IdR(-1)  # on bond between MPS unit cells
+        if self.IdL is None or self.IdR is None:
+            raise ValueError("MPO needs to have structure with IdL/IdR")
+        vL = psi.get_B(0, None).get_leg('vL')
+        vR = vL.conj()
+        wL = H.get_W(0).get_leg('wL')
+        wR = wL.conj()
+        S2 = psi.get_SL(0)**2
+        self._chi0 = vL.ind_len
+        if not transpose:  # right to left
+            # vec: vL wL vL*
+            for i in reversed(range(self.L)):
+                # optimize: transpose arrays to mostly avoid it in matvec
+                B = psi.get_B(i, 'B').astype(dtype, False)
+                self._M.append(B.transpose(['vL', 'p', 'vR']))
+                self._W.append(H.get_W(i).transpose(['p*', 'wR', 'p', 'wL']).astype(dtype, False))
+                self._M_conj.append(B.conj().itranspose(['vR*', 'p*', 'vL*']))
+            eye_R = npc.diag(1., vL, dtype=dtype, labels=['vL', 'vL*'])
+            self.guess = eye_R.add_leg(wL, self.IdR, axis=1, label='wL')  # vL wL vL*
+            self.proj = eye_R.add_leg(wL, self.IdL, axis=1, label='wL')  # vL wL vL*
+            rho = npc.diag(S2, vR, labels=['vR', 'vR*'])
+            self.proj_rho = rho.add_leg(wR, self.IdL, axis=1, label='wR')  # vR wR vR*
+        else:  # left to right
+            # vec: vR* wR vR
+            for i in range(self.L):
+                A = psi.get_B(i, 'A').astype(dtype, False)
+                self._M.append(A.transpose(['vL', 'p', 'vR']))
+                self._W.append(H.get_W(i).transpose(['wR', 'p', 'wL', 'p*']).astype(dtype, False))
+                self._M_conj.append(A.conj().itranspose(['vR*', 'p*', 'vL*']))
+            eye_L = npc.diag(1., vR.conj(), dtype=dtype, labels=['vR*', 'vR'])
+            self.guess = eye_L.add_leg(wR, self.IdL, axis=1, label='wR')  # vR* wR vR
+            self.proj = eye_L.add_leg(wR, self.IdR, axis=1, label='wR')  # vR* wR vR
+            rho = npc.diag(S2, vL.conj(), labels=['vL*', 'vL'])
+            self.proj_rho = rho.add_leg(wL, self.IdR, axis=1, label='wL')  # vL* wL vL
+        self.flat_linop, self.flat_guess = FlatLinearOperator.from_guess_with_pipe(self.matvec,
+                                                                                   self.guess,
+                                                                                   dtype=dtype)
+
+    def matvec(self, vec, project=True):
+        """One matvec-operation.
+
+        Paramters
+        ---------
+        project : bool
+            If True, project away the trace of the "IdL" part (transpose=False)
+            or "IdR" part (transpose=True), respectively, to transform the Jordan-Block structure
+            into something that is translation invariant.
+        """
+        if not self.transpose:  # right to left
+            vec.itranspose(['vL', 'wL', 'vL*'])  # shouldn't do anything
+            for Bc, W, B in zip(self._M_conj, self._W, self._M):
+                # vec: vL wL vL*
+                vec = npc.tensordot(B, vec, axes=['vR', 'vL'])  # vL p wL vL*
+                vec = npc.tensordot(vec, W, axes=[['p', 'wL'], ['p*', 'wR']])  # vL vL* p wL
+                vec = npc.tensordot(vec, Bc, axes=[['vL*', 'p'], ['vR*', 'p*']])  # vL wL vL*
+            if project:
+                # vec.itranspose(['vL', 'wL', 'vL*'])  # alreayd is in that order
+                E = npc.inner(vec, self.proj_rho, axes=[['vL', 'wL', 'vL*'], ['vR', 'wR', 'vR*']])
+                vec -= self.proj * E
+        else:
+            vec.itranspose(['vR*', 'wR', 'vR'])  # shouldn't do anything
+            for Ac, W, A in zip(self._M_conj, self._W, self._M):
+                vec = npc.tensordot(vec, A, axes=['vR', 'vL'])  # vR* wR p vR
+                vec = npc.tensordot(W, vec, axes=[['wL', 'p*'], ['wR', 'p']])  # wR p vR* vR
+                vec = npc.tensordot(Ac, vec, axes=[['p*', 'vL*'], ['p', 'vR*']])  # vR* wR vR
+            if project:
+                E = npc.inner(vec, self.proj_rho, axes=[['vR*', 'wR', 'vR'], ['vL*', 'wL', 'vL']])
+                vec -= self.proj * E
+        return vec
+
+    def dominant_eigenvector(self, **kwargs):
+        """Find dominant eigenvector of self using :mod:`scipy.sparse`.
+
+        Parameters
+        ----------
+        **kwargs :
+            Keyword arguments for :meth:`~tenpy.linalg.sparse.FlatLinearOperator.eigenvectors`.
+
+        Returns
+        -------
+        val : float
+            Eigenvalue for the transfer matrix; should be (very) close to 1.
+        vec :
+            Eigenvector to be used as initial LP/RP for an :class:`MPOEnvironment`.
+        """
+        if 'v0_npc' not in kwargs:
+            kwargs.setdefault('v0', self.flat_guess)
+        vals, vecs = self.flat_linop.eigenvectors(**kwargs)
+        val = vals[0]
+        v0 = vecs[0]
+        v0 = v0.split_legs()
+        norm = npc.inner(self.guess, v0, axes='range', do_conj=True) / self._chi0
+        return val, v0 / norm
+
+    def energy(self, dom_vec):
+        """Given the dominant eigenvector, calculate the energy per MPS site.
+
+        **Assumes** that `dominant_vec` is the result of :meth:`dominant_eigenvector`.
+
+        Returns
+        -------
+        energy : float
+            Energy per site of the MPS.
+        """
+        vec = self.matvec(dom_vec, project=False)
+        if not self.transpose:
+            E = npc.inner(vec, self.proj_rho, axes=[['vL', 'wL', 'vL*'], ['vR', 'wR', 'vR*']])
+        else:
+            E = npc.inner(vec, self.proj_rho, axes=[['vR*', 'wR', 'vR'], ['vL*', 'wL', 'vL']])
+        return E / self.L
+
+    @classmethod
+    def find_init_LP_RP(cls, H, psi, calc_E=False, tol_ev0=1.e-8):
+        """Find the initial LP and RP.
+
+        Parameters
+        ----------
+        H, psi :
+            MPO and MPS, see class docstring.
+        calc_E : bool
+            Wether to calculate and return the energy.
+
+        Returns
+        -------
+        init_env_data : dict
+            Dictionary with `init_LP` and `init_RP` that can be given to :class:`MPOEnvironment`.
+        E : float
+            Energy per site. Only returned if `calc_E` is True.
+        """
+        # first right to left
+        envs, Es = [], []
+        for transpose in [False, True]:
+            TM = cls(H, psi, transpose=transpose)
+            val, vec = TM.dominant_eigenvector()
+            if abs(1. - val) > tol_ev0:
+                logger.warn("MPOTransferMatrix eigenvalue not 1: got 1. - %.3e", 1. - val)
+            envs.append(vec)
+            if calc_E and transpose:
+                E = TM.energy(vec)
+            del TM
+        init_env_data = {'init_LP': envs[1], 'init_RP': envs[0]}
+        if calc_E:
+            return E, init_env_data
+        # else:
+        return init_env_data
 
 
 def grid_insert_ops(site, grid):

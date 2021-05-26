@@ -4027,7 +4027,7 @@ class MPSEnvironment:
                               age_LP=0,
                               age_RP=0,
                               start_env_sites=0):
-        """Reinitial first LP and last RP from the given data.
+        """(Re)initialize first LP and last RP from the given data.
 
         Parameters
         ----------
