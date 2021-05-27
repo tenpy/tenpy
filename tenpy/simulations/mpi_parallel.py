@@ -60,8 +60,8 @@ class ParallelPlusHcLinOp(NpcLinearOperatorWrapper):
 
 
 class ParallelDMRGPlusHc:
-    def __init__(self, psi, model, options, *, comm, **kwargs):
-        self.comm_plus_hc = comm
+    def __init__(self, psi, model, options, *, comm_plus_hc, **kwargs):
+        self.comm_plus_hc = comm_plus_hc
         # TODO: how to handle for multiple parallel layers?
         super().__init__(psi, model, options, **kwargs)
 
@@ -105,10 +105,9 @@ class ParallelDMRGSim(GroundStateSearch):
         self.comm_plus_hc.Free()
         super().__delete__()
 
-    def _init_algorithm(self, AlgorithmClass, **kwargs):
-        params = self.options.subconfig('algorithm_params')
-        kwargs['comm'] = self.comm_plus_hc
-        self.engine = AlgorithmClass(self.psi, self.model, params, **kwargs)
+    def init_algorithm(self, **kwargs):
+        kwargs.setdefault('comm_plus_hc', self.comm_plus_hc)
+        super().init_algorithm(**kwargs)
 
     def init_model(self):
         super().init_model()
