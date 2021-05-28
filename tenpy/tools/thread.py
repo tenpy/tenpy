@@ -58,12 +58,12 @@ class Worker:
         >>> results
         {'2+2': 4, '3+4': 7}
     """
-    def __init__(self, name="tenpy worker", max_queue_size=0):
+    def __init__(self, name="tenpy worker", max_queue_size=0, daemon=None):
         self.name = name
         self.tasks = queue.Queue(maxsize=max_queue_size)
         self.exit = threading.Event()  # set by both threads to tell each other to terminate
         self.worker_exception = None
-        self.worker_thread = threading.Thread(target=self.run, name=name)
+        self.worker_thread = threading.Thread(target=self.run, name=name, daemon=daemon)
         self._entered = False
 
     def __enter__(self):

@@ -484,21 +484,25 @@ class Sweep(Algorithm):
         if hasattr(self.env, 'H') and self.env.H.explicit_plus_hc:
             self.eff_H = SumNpcLinearOperator(self.eff_H, self.eff_H.adjoint())
         if len(self.ortho_to_envs) > 0:
-            ortho_vecs = []
-            i0 = self.i0
-            for o_env in self.ortho_to_envs:
-                # environments are of form <psi|ortho>
-                theta = o_env.ket.get_theta(i0, n=self.eff_H.length)
-                LP = o_env.get_LP(i0, store=True)
-                RP = o_env.get_RP(i0 + self.eff_H.length - 1, store=True)
-                theta = npc.tensordot(LP, theta, axes=('vR', 'vL'))
-                theta = npc.tensordot(theta, RP, axes=('vR', 'vL'))
-                theta.ireplace_labels(['vR*', 'vL*'], ['vL', 'vR'])
-                if self.eff_H.combine:
-                    theta = self.eff_H.combine_theta(theta)
-                theta.itranspose(self.eff_H.acts_on)
-                ortho_vecs.append(theta)
-            self.eff_H = OrthogonalNpcLinearOperator(self.eff_H, ortho_vecs)
+            self._wrap_ortho_eff_H()
+
+    def _wrap_ortho_eff_H(self):
+        assert len(self.ortho_to_envs) > 0
+        ortho_vecs = []
+        i0 = self.i0
+        for o_env in self.ortho_to_envs:
+            # environments are of form <psi|ortho>
+            theta = o_env.ket.get_theta(i0, n=self.eff_H.length)
+            LP = o_env.get_LP(i0, store=True)
+            RP = o_env.get_RP(i0 + self.eff_H.length - 1, store=True)
+            theta = npc.tensordot(LP, theta, axes=('vR', 'vL'))
+            theta = npc.tensordot(theta, RP, axes=('vR', 'vL'))
+            theta.ireplace_labels(['vR*', 'vL*'], ['vL', 'vR'])
+            if self.eff_H.combine:
+                theta = self.eff_H.combine_theta(theta)
+            theta.itranspose(self.eff_H.acts_on)
+            ortho_vecs.append(theta)
+        self.eff_H = OrthogonalNpcLinearOperator(self.eff_H, ortho_vecs)
 
     def update_local(self, theta, **kwargs):
         """Perform algorithm-specific local update.
