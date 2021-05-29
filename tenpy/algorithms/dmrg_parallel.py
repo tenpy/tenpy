@@ -42,13 +42,22 @@ class TwoSiteHThreadPlusHC(TwoSiteH):
         theta.ireplace_labels(['(vR*.p0)', '(p1.vL*)'], ['(vL.p0)', '(p1.vR)'])
         return theta
 
+    def to_matrix(self):
+        mat = super().to_matrix()
+        mat_hc = mat.conj().itranspose()
+        mat_hc.iset_leg_labels(mat.get_leg_labels())
+        return mat + mat_hc
+
+    def adjoint(self):
+        return self
+
 
 class DMRGThreadPlusHC(TwoSiteDMRGEngine):
 
     EffectiveH = TwoSiteHThreadPlusHC
 
     def __init__(self, psi, model, options, **kwargs):
-        self._plus_hc_worker = Worker("EffectiveHPlusHC worker", max_queue_size=1, daemon=True)
+        self._plus_hc_worker = Worker("EffectiveHPlusHC worker", max_queue_size=1, daemon=False)
         super().__init__(psi, model, options, **kwargs)
 
     def make_eff_H(self):
