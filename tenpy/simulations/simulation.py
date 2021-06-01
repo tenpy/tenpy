@@ -325,18 +325,23 @@ class Simulation:
         ``with ...`` statement.
         This is the case if you use :func:`run_simulation`, etc.
 
-        .. todo :
-            add threshold parameter to allow using the cache only when the estimated memory
-            size goes beyond some limit. How to estimate memory requirements?
-
         Options
         -------
         .. cfg:configoptions :: Simulation
 
+            cache_threshold_chi : int
+                If the `algorithm_params.trunc_params.chi_max` in :attr:`options` is smaller than
+                this threshold, do not initialize a (non-trivial) cache.
             cache_params : dict
                 Dictionary with parameters for the cache, see
                 :meth:`~tenpy.tools.cache.CacheFile.open`.
+
         """
+        cache_threshold_chi = self.options.get("cache_threshold_chi", 2000)
+        chi = get_recursive(self.options, "algorithm_params.trunc_params.chi_max", default=None)
+        if chi is not None and chi < cache_threshold_chi:
+            self.cache = CacheFile.open()  # default = keep in RAM.
+            return
         self.cache.close()
         self.logger.info("initialize new cache")
         cache_params = self.options.get("cache_params", {})
