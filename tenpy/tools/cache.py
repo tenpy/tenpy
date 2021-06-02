@@ -16,6 +16,7 @@ import tempfile
 import collections
 import os
 import pathlib
+import warnings
 import logging
 logger = logging.getLogger(__name__)
 
@@ -232,6 +233,8 @@ class CacheFile(DictCache):
         ----------
         storage_class : str
             Name for a subclass of :class:`Storage` to define how data is saved.
+            Use just :class:`Storage` to keep things in RAM, or, e.g., :class:`PickleStorage`
+            to actually save things to disk.
         use_threading : bool
             If True, use the :class:`ThreadedStorage` wrapper for thread-parallel disk I/O.
             In that case, you *need* to use the cache in a `with` statement (or manually call
@@ -523,6 +526,12 @@ class _NpcArrayStorage(PickleStorage):
 class Hdf5Storage(Storage):
     """Subclass of :class:`Storage` which saves long-term data on disk with :mod:`h5py`.
 
+    .. warning ::
+        Some benchmarks that I ran when implementing this indicate that :class:`PickleStorage`
+        has a much lower overhead than the :class:`Hdf5Storage`.
+        Unless you have benchmarks indicated the opposite,
+        I highly recommend sticking to :class:`PickleStorage`.
+
     Parameters
     ----------
     h5group : :class:`Group`
@@ -554,6 +563,7 @@ class Hdf5Storage(Storage):
         delete : bool
             Whether to automatically remove the corresponding file when closing the cache.
         """
+        warnings.warn("Benchmarks suggest that PickleStorage is faster than Hdf5Storage")
         import h5py
         if filename is None:
             # h5py supports file-like objects, but this gives a python overhead for I/O.

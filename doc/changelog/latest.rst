@@ -11,7 +11,8 @@ Changelog
 Backwards incompatible changes
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 - change default separator for :func:`tenpy.tools.misc.get_recursive`, :func:`~tenpy.tools.misc.set_recursive`, :func:`~tenpy.tools.misc.update_recursive`, and
-  :func:`~tenpy.tools.misc.flatten` to ``'.'`` instead of ``'/'``.
+  :func:`~tenpy.tools.misc.flatten` to ``'.'`` instead of ``'/'``. 
+  Also, :func:`~tenpy.tools.misc.get_recursive` now supports a `default` argument.
 - replace the `orthogonal_to` option of :class:`tenpy.algorithms.mps_common.Sweep` by an `orthogonal_to` keyword argument for the class and it's :meth:`~tenpy.algorithms.mps_common.Sweep.init_env`.
 - deprecated options:
   - `sweep_0` for sweep classes; use `sweeps` in the `resume_data` instead.
