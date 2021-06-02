@@ -210,17 +210,32 @@ class Config(MutableMapping):
     def __del__(self):
         self.warn_unused()
 
-    def warn_unused(self):
-        """Warn about so-far unused options.
+    def warn_unused(self, recursive=False):
+        """Warn about (so far) unused options.
 
-        This can help to detect typos in the option keys."""
-        unused = self.unused
+        This can help to detect typos in the option keys.
+        It is automatically called upon deletion of `self`,
+        but this might be a bit later than you intended.
+
+        Parameters
+        ----------
+        recursive : bool
+            If True, check the values of `self` for other :class:`Config` and warn in them as well.
+        """
+        unused = getattr(self, 'unused', None)
+        if unused is None:
+            return
         if len(unused) > 0:
             if len(unused) > 1:
                 msg = "unused options for config {name!s}:\n{keys!s}"
             else:
                 msg = "unused option {keys!s} for config {name!s}\n"
             warnings.warn(msg.format(keys=sorted(unused), name=self.name))
+            self.unused.clear()  # don't warn twice about the same parameters
+        if recursive:
+            for val in self.options.values():
+                if isinstance(val, Config):
+                    val.warn_unused(True)
 
     def keys(self):
         return self.options.keys()

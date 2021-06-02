@@ -1,6 +1,4 @@
 name: tenpy
-channels:
-  - conda-forge
 dependencies:
   - python>=3.6
   - numpy>=1.13
@@ -8,7 +6,6 @@ dependencies:
   - cython>=0.29
   - mkl
   - mkl-devel
-  - libblas=*=*mkl  # pin BLAS to use MKL
   - bottleneck
   - pip
   - setuptools>=30.3.0

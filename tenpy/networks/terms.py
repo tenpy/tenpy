@@ -43,7 +43,7 @@ class TermList(Hdf5Exportable):
         of an operator name and a site `i` it acts on.
         For Fermions, the order is the order in the mathematic sense, i.e., the right-most/last
         operator in the list acts last.
-    strengths : (list of) float/complex
+    strength : (list of) float/complex
         For each term in `terms` an associated prefactor or strength.
         A single number holds for all terms equally.
 
@@ -52,7 +52,7 @@ class TermList(Hdf5Exportable):
     terms : list of list of (str, int)
         List of terms where each `term` is a tuple ``(opname, i)`` of an operator name and a site
         `i` it acts on.
-    strengths : 1D ndarray
+    strength : 1D ndarray
         For each term in `terms` an associated prefactor or strength.
 
     Examples
@@ -215,6 +215,18 @@ class TermList(Hdf5Exportable):
             self.terms[idx], overall_sign = order_combine_term(term, sites)
             self.strength[idx] *= overall_sign
         # TODO: could sort terms and combine duplicates
+
+    def limits(self):
+        """Return the left-most site and right-most site any operator acts on."""
+        all_i = []
+        for term in self.terms:
+            all_i.extend([i for _, i in term])
+        return min(all_i), max(all_i)
+
+    def shift(self, i0):
+        """Return a copy where `i0` is added to all indices `i` in :attr:`terms`."""
+        shifted_terms = [[(op, i + i0) for op, i in term] for term in self.terms]
+        return TermList(shifted_terms, self.strength)
 
 
 def order_combine_term(term, sites):

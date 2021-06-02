@@ -41,13 +41,9 @@ class TDVPEngine(TimeEvolutionAlgorithm):
 
     Parameters
     ----------
-    psi : :class:`~tenpy.networks.mps.MPS`
-        Initial state to be time evolved. Modified in place.
-    model : :class:`~tenpy.models.model.MPOModel`
-        The model representing the Hamiltonian for which we want to find the ground state.
-    options : dict
-        Further optional parameters as described in the following table.
-    environment :  :class:'~tenpy.networks.mpo.MPOEnvironment` | None
+    psi, model, options, **kwargs:
+        Same as for :class:`~tenpy.algorithms.algorithm.Algorithm`.
+    environment :
         Initial environment. If ``None`` (default), it will be calculated at the beginning.
 
     Options
@@ -78,8 +74,8 @@ class TDVPEngine(TimeEvolutionAlgorithm):
     lanczos_options : :class:`~tenpy.tools.params.Config`
         Options passed on to :class:`~tenpy.linalg.lanczos.LanczosEvolution`.
     """
-    def __init__(self, psi, model, options, environment=None):
-        TimeEvolutionAlgorithm.__init__(self, psi, model, options)
+    def __init__(self, psi, model, options, environment=None, **kwargs):
+        TimeEvolutionAlgorithm.__init__(self, psi, model, options, **kwargs)
         options = self.options
         if model.H_MPO.explicit_plus_hc:
             raise NotImplementedError("TDVP does not respect 'MPO.explicit_plus_hc' flag")
@@ -456,10 +452,10 @@ class Engine(TDVPEngine):
     .. deprecated : v0.8.0
         Renamed the `Engine` to `TDVPEngine` to have unique algorithm class names.
     """
-    def __init__(self, psi, model, options):
+    def __init__(self, psi, model, options, **kwargs):
         msg = "Renamed `Engine` class to `TDVPEngine`."
         warnings.warn(msg, category=FutureWarning, stacklevel=2)
-        TDVPEngine.__init__(self, psi, model, options)
+        TDVPEngine.__init__(self, psi, model, options, **kwargs)
 
 
 class H0_mixed:

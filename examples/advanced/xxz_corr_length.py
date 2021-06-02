@@ -17,7 +17,7 @@ import matplotlib.pyplot as plt
 
 def run(Jzs):
     L = 2
-    model_params = dict(L=L, Jx=1., Jy=1., Jz=Jzs[0], bc_MPS='infinite', conserve='Sz', verbose=0)
+    model_params = dict(L=L, Jx=1., Jy=1., Jz=Jzs[0], bc_MPS='infinite', conserve='Sz')
     chi = 300
     dmrg_params = {
         'trunc_params': {
@@ -29,7 +29,6 @@ def run(Jzs):
         'start_env': 20,
         'max_E_err': 0.0001,
         'max_S_err': 0.0001,
-        'verbose': 1,
         'mixer': False
     }
 
@@ -41,7 +40,7 @@ def run(Jzs):
     corr_length = []
     for Jz in Jzs:
         print("-" * 80)
-        print("Jz =", Jz)
+        print("Jz = {Jz:.4f}".format(Jz))
         print("-" * 80)
         model_params['Jz'] = Jz
         M = SpinChain(model_params)

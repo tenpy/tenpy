@@ -9,6 +9,8 @@ the measurement results into the `results` dictionary taken as argument.
 """
 # Copyright 2020-2021 TeNPy Developers, GNU GPLv3
 
+import warnings
+
 __all__ = [
     'measurement_index', 'bond_dimension', 'bond_energies', 'energy_MPO', 'entropy',
     'onsite_expectation_value', 'correlation_length', 'evolved_time'
@@ -112,24 +114,59 @@ def onsite_expectation_value(results, psi, simulation, opname, key=None):
     results[key] = exp_vals
 
 
-def correlation_length(results, psi, simulation, key='correlation_length', **kwargs):
+def correlation_length(results, psi, simulation, key='correlation_length', unit=None, **kwargs):
     """Measure the correlaiton of an infinite MPS.
 
     Parameters
     ----------
     results, psi, simulation, key:
         See :func:`~tenpy.simulation.measurement.measurement_index`.
+    unit : ``'MPS_sites' | 'MPS_sites_ungrouped' | 'lattice_rings'``
+        The unit in which the correlation length is returned, see the warning in
+        :meth:`~tenpy.networks.mps.MPS.correlation_length`.
+
+        MPS_sites :
+            Units of the current MPS site
+        MPS_sites_ungrouped :
+            If `psi` is an MPS upon which :meth:`~tenpy.networks.mps.MPS.group_sites` was called,
+            this is in units of the ungrouped sites.
+        lattice_rings :
+            In units of lattice "rings" around the cylinder, for correlations along the
+            ``lattice.basis[0]``.
+        lattice_spacing :
+            In units of lattice spacings for correlations along the cylinder axis (for periodic
+            boundary conditions along y) or along ``lattice.basis[0]`` (for "ladders" with open
+            bboundary conditions).
+
     **kwargs :
         Further keywoard arguments given to :meth:`~tenpy.networks.mps.MPS.correlation_length`.
     """
     corr = psi.correlation_length(**kwargs)
+    if unit is None:
+        warnings.warn(
+            "`unit` for correlation_length not specified."
+            "Defaults now to `MPS_sites`, but might change. Specify it explicitly!", FutureWarning)
+        unit = 'MPS_sites'
+    if unit == 'MPS_sites':
+        pass
+    elif unit == 'MPS_sites_ungrouped':
+        corr = corr * psi.grouped
+    elif unit == 'lattice_rings':
+        lat = simulation.model.lattice
+        if lat.N_sites_per_ring is None:
+            raise ValueError("lattice doesn't define N_sites_per_ring")
+        corr = corr * psi.grouped / lat.N_sites_per_ring
+    elif unit == 'latitce_spacing':
+        raise NotImplementedError("TODO")
+    else:
+        raise ValueError("can't understand unit=" + repr(unit))
     results[key] = corr
 
 
 def evolved_time(results, psi, simulation, key='evolved_time'):
     """Measure the time evolved by the engine, ``engine.evolved_time``.
 
-    See e.g. :attr:`tenpy.algorithms.tebd.TEBDEngine.evolved_time`.
+    "Measures' :attr:`tenpy.algorithms.algorithm.TimeEvolutionAlgorithm.evolved_time`.
 
     Parameters
     ----------

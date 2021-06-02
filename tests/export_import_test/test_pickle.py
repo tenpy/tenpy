@@ -5,11 +5,11 @@ import os
 import pickle
 import pytest
 import warnings
-import tempfile
 import time
 
 import tenpy
 
+tenpy.tools.misc.skip_logging_setup = True  # skip logging setup
 datadir_pkl = [f for f in io_test.datadir_files if f.endswith('.pkl')]
 
 
@@ -34,16 +34,15 @@ def export_to_datadir():
     # done
 
 
-def test_pickle():
+def test_pickle(tmp_path):
     """Try subsequent export and import to pickle."""
     data = io_test.gen_example_data()
     io_test.assert_event_handler_example_works(data)  #if this fails, it's not import/export
-    with tempfile.TemporaryDirectory() as tdir:
-        filename = 'test.pkl'
-        with open(os.path.join(tdir, filename), 'wb') as f:
-            pickle.dump(data, f)
-        with open(os.path.join(tdir, filename), 'rb') as f:
-            data_imported = pickle.load(f)
+    filename = tmp_path / 'test.pkl'
+    with filename.open('wb') as f:
+        pickle.dump(data, f)
+    with filename.open('rb') as f:
+        data_imported = pickle.load(f)
     io_test.assert_equal_data(data_imported, data)
     io_test.assert_event_handler_example_works(data_imported)
 
@@ -64,7 +63,7 @@ def test_import_from_datadir(fn):
     io_test.assert_event_handler_example_works(data)
 
 
-def test_simulation_export_import():
+def test_simulation_export_import(tmp_path):
     """Try subsequent export and import to pickle."""
     sim_params = {
         'model_class':
@@ -89,17 +88,16 @@ def test_simulation_export_import():
             }),
         ],
     }
-    with tempfile.TemporaryDirectory() as tdir:
-        sim_params['directory'] = tdir  # go into temporary directory to avoid leaving data behind
-        sim_params['output_filename'] = filename = 'my_results.pkl'
-        sim = tenpy.simulations.simulation.Simulation(sim_params)
-        data_direct = sim.run()
-        with open(os.path.join(tdir, filename), 'rb') as f:
-            data_imported = pickle.load(f)
-        assert 'psi' in data_direct
-        assert '<Sz>' in data_direct['measurements']
-        io_test.assert_equal_data(data_imported, data_direct)
-        #TODO test shelving and resuming the simulation
+    sim_params['directory'] = tmp_path  # go into temporary directory to avoid leaving data behind
+    sim_params['output_filename'] = filename = 'my_results.pkl'
+    sim = tenpy.simulations.simulation.Simulation(sim_params)
+    data_direct = sim.run()
+    with (tmp_path / filename).open('rb') as f:
+        data_imported = pickle.load(f)
+    assert 'psi' in data_direct
+    assert '<Sz>' in data_direct['measurements']
+    io_test.assert_equal_data(data_imported, data_direct)
+    #TODO test shelving and resuming the simulation
 
 
 if __name__ == "__main__":

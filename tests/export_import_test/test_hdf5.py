@@ -5,7 +5,6 @@ import os
 import pickle
 import pytest
 import warnings
-import tempfile
 from tenpy.tools import hdf5_io
 import numpy as np
 
@@ -22,16 +21,15 @@ def export_to_datadir():
 
 
 @pytest.mark.filterwarnings(r'ignore:Hdf5Saver.* object of type.*:UserWarning')
-def test_hdf5_export_import():
+def test_hdf5_export_import(tmp_path):
     """Try subsequent export and import to pickle."""
     data = io_test.gen_example_data()
     io_test.assert_event_handler_example_works(data)  #if this fails, it's not import/export
-    with tempfile.TemporaryDirectory() as tdir:
-        filename = 'test.hdf5'
-        with h5py.File(os.path.join(tdir, filename), 'w') as f:
-            hdf5_io.save_to_hdf5(f, data)
-        with h5py.File(os.path.join(tdir, filename), 'r') as f:
-            data_imported = hdf5_io.load_from_hdf5(f)
+    filename = tmp_path / 'test.hdf5'
+    with h5py.File(str(filename), 'w') as f:
+        hdf5_io.save_to_hdf5(f, data)
+    with h5py.File(str(filename), 'r') as f:
+        data_imported = hdf5_io.load_from_hdf5(f)
     io_test.assert_equal_data(data_imported, data)
     io_test.assert_event_handler_example_works(data_imported)
 

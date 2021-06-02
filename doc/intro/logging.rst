@@ -62,10 +62,10 @@ Moreover, you can easily adjust the log levels with simple parameters, for examp
 
 .. code-block :: yaml
 
-    logging_params:
+    log_params:
         to_stdout:     # nothing in yaml -> None in python => no logging to stdout
         to_file: INFO
-        log_levels:
+        logger_levels:
             tenpy.tools.params : WARNING  # suppres INFO/DEBUG output for any logging of parameters
 
 Of course, you can also explicilty call the :func:`~tenpy.tools.misc.setup_logging` yourself, if you don't use the `Simulation` classes::

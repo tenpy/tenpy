@@ -1,4 +1,4 @@
-# Copyright 2018-2020 TeNPy Developers, GNU GPLv3
+# Copyright 2018-2021 TeNPy Developers, GNU GPLv3
 from setuptools import setup, find_packages
 from setuptools import Extension
 import numpy
@@ -12,9 +12,7 @@ if not sys.version_info >= (3, 6):
 
 # hardcode version for people without git
 
-MAJOR = 0
-MINOR = 7
-MICRO = 2
+MAJOR, MINOR, MICRO = 0, 8, 4
 RELEASED = False
 VERSION = '{0:d}.{1:d}.{2:d}'.format(MAJOR, MINOR, MICRO)
 
@@ -79,7 +77,7 @@ def write_version_py(full_version, git_rev, filename='tenpy/_version.py'):
     content = """\
 # THIS FILE IS GENERATED FROM setup.py
 # thus, it contains the version during compilation
-# Copyright 2018-2020 TeNPy Developers, GNU GPLv3
+# Copyright 2018-2021 TeNPy Developers, GNU GPLv3
 version = '{version!s}'
 short_version = 'v' + version
 released = {released!s}
@@ -151,7 +149,7 @@ def setup_cython_extension():
     cython_macros['HAVE_MKL'] = HAVE_MKL
     if HAVE_MKL:
         libs.extend(['mkl_rt', 'pthread', 'iomp5'])
-        if os.getenv("MKL_INTERFACE_LAYER", "ILP64").startswith("ILP64"):
+        if os.getenv("MKL_INTERFACE_LAYER", "LP64").startswith("ILP64"):
             print("using MKL interface layer ILP64 with 64-bit indices")
             macros.append(('MKL_ILP64', None))  # compile with 64-bit indices
             cython_macros['MKL_INTERFACE_LAYER'] = 1

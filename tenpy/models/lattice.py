@@ -992,7 +992,7 @@ class Lattice:
             if strength is None:
                 return [], [], np.zeros([0, self.dim]), coupling_shape
             else:
-                return [], [], []
+                return [], [], np.array([])
         Ls = np.array(self.Ls)
         mps_i, lat_i = self.mps_lat_idx_fix_u(u1)
         lat_j_shifted = lat_i + dx
@@ -1107,7 +1107,7 @@ class Lattice:
             if strength is None:
                 return [], [], coupling_shape
             else:
-                return [], []
+                return [], np.array([])
         lat_indices = np.indices(coupling_shape).reshape([1, self.dim, -1]).transpose([2, 0, 1])
         lat_ijkl_shifted = lat_indices + (dx - shift_lat_indices)
         lat_ijkl = np.mod(lat_ijkl_shifted, Ls)
@@ -2305,19 +2305,17 @@ def get_lattice(lattice_name):
 
     Parameters
     ----------
-    lattice_name : str
+    lattice_name : str | type
         Name of a :class:`Lattice` class defined in the module :mod:`~tenpy.models.lattice`,
         for example ``"Chain", "Square", "Honeycomb", ...``.
+        Alternatively, instead of the name directly the class itself can be given.
 
     Returns
     -------
     LatticeClass : :class:`Lattice`
         The lattice class (type, not instance) specified by `lattice_name`.
     """
-    LatticeClass = find_subclass(Lattice, lattice_name)
-    if LatticeClass is None:
-        raise ValueError("No Lattice of the given name {0!r} found!".format(lattice_name))
-    return LatticeClass
+    return find_subclass(Lattice, lattice_name)
 
 
 def get_order(shape, snake_winding, priority=None):

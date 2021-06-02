@@ -3,24 +3,29 @@
 
 import copy
 import numpy as np
+import sys
 
 import tenpy
 from tenpy.algorithms.algorithm import Algorithm
-from tenpy.simulations.simulation import Simulation, resume_from_checkpoint
+from tenpy.simulations.simulation import *
 from tenpy.simulations.ground_state_search import GroundStateSearch
 from tenpy.simulations.time_evolution import RealTimeEvolution
-from tenpy.tools.misc import find_subclass
 
 import pytest
 
+tenpy.tools.misc.skip_logging_setup = True  # skip logging setup
+
 
 class DummyAlgorithm(Algorithm):
-    def __init__(self, psi, model, options, *, resume_data=None):
+    def __init__(self, psi, model, options, *, resume_data=None, cache=None):
         super().__init__(psi, model, options, resume_data=resume_data)
         self.dummy_value = None
         self.evolved_time = self.options.get('start_time', 0.)
         init_env_data = {} if resume_data is None else resume_data['init_env_data']
         self.env = DummyEnv(**init_env_data)
+        if not hasattr(self.psi, "dummy_counter"):
+            self.psi.dummy_counter = 0  # note: doesn't get saved!
+            # But good enough to check `run_seq_simulations`
 
     def run(self):
         N_steps = self.options.get('N_steps', 5)
@@ -29,10 +34,11 @@ class DummyAlgorithm(Algorithm):
         for i in range(N_steps):
             self.evolved_time += dt
             self.checkpoint.emit(self)
+        self.psi.dummy_counter += 1
         return None, self.psi
 
-    def get_resume_data(self):
-        data = super().get_resume_data()
+    def get_resume_data(self, sequential_simulations=False):
+        data = super().get_resume_data(sequential_simulations=False)
         data['init_env_data'] = self.env.get_initialization_data()
         return data
 
@@ -65,9 +71,6 @@ def dummy_measurement(results, psi, simulation):
 
 
 simulation_params = {
-    'logging_params': {
-        'skip_setup': True
-    },
     'model_class':
     'XXZChain',
     'model_params': {
@@ -92,9 +95,9 @@ simulation_params = {
 }
 
 
-def test_Simulation(tmpdir):
+def test_Simulation(tmp_path):
     sim_params = copy.deepcopy(simulation_params)
-    sim_params['directory'] = tmpdir
+    sim_params['directory'] = tmp_path
     sim_params['output_filename'] = 'data.pkl'
     sim = Simulation(sim_params)
     results = sim.run()  # should do exactly two measurements: one before and one after eng.run()
@@ -104,12 +107,12 @@ def test_Simulation(tmpdir):
     # expect two measurements: once in `init_measurements` and in `final_measurement`.
     assert np.all(meas['measurement_index'] == np.arange(2))
     assert meas['dummy_value'] == [None, sim_params['algorithm_params']['N_steps']**2]
-    assert (tmpdir / sim_params['output_filename']).exists()
+    assert (tmp_path / sim_params['output_filename']).exists()
 
 
-def test_Simulation_resume(tmpdir):
+def test_Simulation_resume(tmp_path):
     sim_params = copy.deepcopy(simulation_params)
-    sim_params['directory'] = tmpdir
+    sim_params['directory'] = tmp_path
     sim_params['output_filename'] = 'data.pkl'
     # this should raise an error *after* saving the checkpoint
     sim_params['connect_algorithm_checkpoint'] = [(__name__, 'raise_SimulationStop', {}, -1)]
@@ -122,7 +125,8 @@ def test_Simulation_resume(tmpdir):
     assert not checkpoint_results['finished_run']
     # try resuming with `resume_from_checkpoint`
     update_sim_params = {'connect_algorithm_checkpoint': []}
-    res = resume_from_checkpoint(filename=tmpdir / 'data.pkl', update_sim_params=update_sim_params)
+    res = resume_from_checkpoint(filename=tmp_path / 'data.pkl',
+                                 update_sim_params=update_sim_params)
 
     # alternatively, resume from the checkpoint results we have
     checkpoint_results['simulation_parameters']['connect_algorithm_checkpoint'] = []
@@ -132,6 +136,26 @@ def test_Simulation_resume(tmpdir):
     for r in [res, res2]:
         assert r['finished_run']
         assert np.all(r['measurements']['measurement_index'] == np.arange(2))
+
+
+def test_sequential_simulation(tmp_path):
+    sim_params = copy.deepcopy(simulation_params)
+    sim_params['directory'] = tmp_path
+    sim_params['output_filename'] = 'data.pkl'
+    sim_params['sequential'] = {
+        'recursive_keys': ['algorithm_params.dt'],
+        'value_lists': [[0.5, 0.3, 0.2]]
+    }
+
+    results = run_seq_simulations(**sim_params)
+
+    psi = results['psi']
+    assert psi.dummy_counter == 3  # should have called Simulation.run 3 times on same psi
+    # (this breaks if collect_results_in_memory is used, because dummy_counter isn't copied in
+    # psi.copy()!)
+    assert (tmp_path / 'data_dt_0.5.pkl').exists()
+    assert (tmp_path / 'data_dt_0.3.pkl').exists()
+    assert (tmp_path / 'data_dt_0.2.pkl').exists()
 
 
 groundstate_params = copy.deepcopy(simulation_params)
@@ -169,3 +193,39 @@ def test_RealTimeEvolution():
     assert np.allclose(meas['evolved_time'], expected_times)
     assert np.all(meas['measurement_index'] == np.arange(N))
     assert meas['dummy_value'] == [None] + [sim_params['algorithm_params']['N_steps']**2] * (N - 1)
+
+
+def test_output_filename_from_dict():
+    options = copy.deepcopy(simulation_params)
+    assert output_filename_from_dict(options) == 'result.h5', "hard-coded default values changed"
+    assert output_filename_from_dict(options, suffix='.pkl') == 'result.pkl'
+    fn = output_filename_from_dict(options, {'algorithm_params.dt': 'dt_{0:.2f}'})
+    assert fn == 'result_dt_0.50.h5'
+    fn = output_filename_from_dict(options, {
+        'algorithm_params.dt': 'dt_{0:.2f}',
+        'model_params.L': 'L_{0:d}'
+    })
+    assert fn == 'result_dt_0.50_L_4.h5'
+    # re-ordered parts
+    parts_order = ['model_params.L', 'algorithm_params.dt']
+    fn = output_filename_from_dict(options, {
+        'model_params.L': 'L_{0:d}',
+        'algorithm_params.dt': 'dt_{0:.2f}'
+    },
+                                   parts_order=parts_order)
+    assert fn == 'result_L_4_dt_0.50.h5'
+    if not sys.version_info < (3, 7):
+        # should also work without specifying the parts_order for python >= 3.7
+        fn = output_filename_from_dict(options, {
+            'model_params.L': 'L_{0:d}',
+            'algorithm_params.dt': 'dt_{0:.2f}'
+        })
+    assert fn == 'result_L_4_dt_0.50.h5'
+    options = {'alg': {'dt': 0.5}, 'model': {'Lx': 3, 'Ly': 4}, 'other': 'ignored'}
+    fn = output_filename_from_dict(options,
+                                   parts={
+                                       'alg.dt': 'dt_{0:.2f}',
+                                       ('model.Lx', 'model.Ly'): '{0:d}x{1:d}'
+                                   },
+                                   parts_order=['alg.dt', ('model.Lx', 'model.Ly')])
+    assert fn == 'result_dt_0.50_3x4.h5'

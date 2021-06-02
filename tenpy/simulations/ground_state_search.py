@@ -33,7 +33,8 @@ class GroundStateSearch(Simulation):
         .. cfg:configoptions :: GroundStateSearch
 
             save_stats : bool
-                Whether to include the
+                Whether to include the `sweep_stats` and `update_stats` of the engine into the
+                output.
         """
         super().init_algorithm(**kwargs)
         if self.options.get("save_stats", True):
@@ -43,6 +44,9 @@ class GroundStateSearch(Simulation):
                     self.results[name] = stats
 
     def run_algorithm(self):
-        """Run the algorithm. Calls ``self.engine.run()``."""
         E, psi = self.engine.run()
+        self.results['energy'] = E
+
+    def resume_run_algorithm(self):
+        E, psi = self.engine.resume_run()
         self.results['energy'] = E

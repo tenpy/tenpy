@@ -1,0 +1,9 @@
+[v0.8.1] - 2021-03-23
+=====================
+
+This is only a very minor fix-up of :doc:`/changelog/v0.8.0`.
+
+Despite adding :meth:`tenpy.networks.mps.MPS.term_list_correlation_function_right`, it only contains minor fixes:
+
+- the Simulation class didn't function under windows; some tests were failing.
+- dtype issues for :meth:`tenpy.models.model.CouplingModel.add_coupling`

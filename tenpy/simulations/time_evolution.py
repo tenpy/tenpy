@@ -44,7 +44,7 @@ class RealTimeEvolution(Simulation):
             if np.real(self.engine.evolved_time) >= self.final_time:
                 break
             self.engine.run()
-            # TODO: call engine checkpoint?
+            # TODO: call engine.checkpoint.emit() ?
             self.make_measurements()
 
     def final_measurements(self):

@@ -18,11 +18,24 @@ Common to all tools is that they are not just useful for a single algorithm but 
     string
     process
     optimization
+    cache
+    thread
 """
 # Copyright 2018-2021 TeNPy Developers, GNU GPLv3
 
-from . import events, fit, hdf5_io, math, misc, params, process, string, optimization
+from . import (events, fit, hdf5_io, math, misc, params, process, string, optimization, cache,
+               thread)
 
 __all__ = [
-    'events', 'fit', 'hdf5_io', 'math', 'misc', 'params', 'process', 'string', 'optimization'
+    'events',
+    'fit',
+    'hdf5_io',
+    'math',
+    'misc',
+    'params',
+    'process',
+    'string',
+    'optimization',
+    'cache',
+    'thread',
 ]

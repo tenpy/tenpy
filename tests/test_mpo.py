@@ -170,13 +170,11 @@ def test_MPOEnvironment():
     env.get_LP(3, True)
     env.get_RP(0, True)
     env.test_sanity()
-    E_old = None
+    E_exact = -0.825
     for i in range(4):
         E = env.full_contraction(i)  # should be one
         print("total energy for contraction at site ", i, ": E =", E)
-        if E_old is not None:
-            assert (abs(E - E_old) < 1.e-14)
-        E_old = E
+        assert (abs(E - E_exact) < 1.e-14)
 
 
 def test_MPO_hermitian():
@@ -318,3 +316,30 @@ def test_apply_mpo(method):
     H.apply(psi3, options)
     Eapply3 = psi3.overlap(psi)
     assert abs(Eexp - Eapply3) < 1e-5
+
+
+def test_MPOTransferMatrix(eps=1.e-13):
+    s = spin_half
+    # exponential decay in Sz term to make it harder
+    gamma = 0.5
+    grid = [[s.Id, s.Sp, s.Sm, s.Sz, 0. * s.Id],
+            [None, None, None, None, 0.5*s.Sm],
+            [None, None, None, None, 0.5*s.Sp],
+            [None, None, None, gamma*s.Id, s.Sz],
+            [None, None, None, None, s.Id]]  # yapf: disable
+    H = mpo.MPO.from_grids([s] * 2, [grid] * 2, 'infinite', 0, 4, max_range=np.inf)
+    state = ['up', 'down']
+    psi = mps.MPS.from_product_state([s] * 2, state, bc='infinite')
+    # Sp/Sm gives zero, only Sz part contributes
+    # <up down ...| Sz (gamma Id)^n Sz |up down> = -0.25 * \sum_{n=0}^\infty (-gamma)^n
+    exact_E = -0.25 * 1. / (1. - (-gamma))  # per site!
+    for transpose in [False, True]:
+        print(f"transpose={transpose!s}")
+        TM = mpo.MPOTransferMatrix(H, psi, transpose=transpose)
+        TM.matvec(TM.guess, project=False)
+        TM.matvec(TM.guess, project=True)
+        val, vec = TM.dominant_eigenvector()
+        assert abs(val - 1.) < eps
+        E0 = TM.energy(vec)
+        print(E0, exact_E)
+        assert abs(E0 - exact_E) < eps
