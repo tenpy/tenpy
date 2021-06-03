@@ -2961,8 +2961,8 @@ class MPS:
         # find dominant left eigenvector
         norm, Gl = self._canonical_form_dominant_gram_matrix(i1, True, tol_xi, Gl)
         if abs(1. - norm) > 1.e-13:
-            logger.warn("Although we renormalized the TransferMatrix, "
-                        "the largest eigenvalue is not 1")  # (this shouldn't happen)
+            logger.warning("Although we renormalized the TransferMatrix, "
+                           "the largest eigenvalue is not 1")  # (this shouldn't happen)
         self._B[i1] /= np.sqrt(norm)  # correct norm again
         if not renormalize:
             self.norm *= np.sqrt(norm)
@@ -3053,8 +3053,8 @@ class MPS:
             assert abs(E0[0]) > abs(E[0]), "dominant eigenvector in zero charge sector?"
             E = np.array([E0[0]] + list(E))
         if abs(E[0] - 1.) > tol_ev0:
-            logger.warn("Correlation length: largest eigenvalue not one. "
-                        "Not in canonical form/normalized?")
+            logger.warning("Correlation length: largest eigenvalue not one. "
+                           "Not in canonical form/normalized?")
         if len(E) < 2:
             return 0.  # only a single eigenvector: zero correlation length
         if target == 1:
@@ -3504,7 +3504,7 @@ class MPS:
         # re-check canonical form
         norm_err = np.linalg.norm(psi_t.norm_test())
         if norm_err > canonicalize:
-            logger.warn("norm_error=%.10f after permutation: ==> canonicalize", norm_err)
+            logger.warning("norm_error=%.10f after permutation: ==> canonicalize", norm_err)
         psi_t.convert_form('B')
         TM = TransferMatrix(self, psi_t, transpose=True, charge_sector=0)
         # Find left dominant eigenvector of this mixed transfer matrix.
@@ -3512,8 +3512,8 @@ class MPS:
         # the resulting vector should be sUs up to a scaling.
         ov, sUs = TM.eigenvectors(num_ev=self._transfermatrix_keep)
         if np.abs(ov[0]) < 0.9:
-            logger.warn("compute_K: psi is not eigenvector of permutation/translation in y!"
-                        f"expected |o| = 1., got |o| = {abs(ov[0]):.3e}\n")
+            logger.warning("compute_K: psi is not eigenvector of permutation/translation in y!"
+                           f"expected |o| = 1., got |o| = {abs(ov[0]):.3e}\n")
 
         logger.info("compute_K: overlap %.5f, |o| = 1. - %.e5., trunc_err.eps=%.3e", ov[0],
                     1. - np.abs(ov[0]), trunc_err.eps)
@@ -3835,7 +3835,7 @@ class MPS:
         if np.count_nonzero(proj) < len(W):
             # project into non-degenerate subspace, reducing the bond dimensions!
             if np.count_nonzero(proj) < len(W) * 0.9:
-                logger.warn("canonical_form_infinite: project to significantly smaller chi")
+                logger.warning("canonical_form_infinite: project to significantly smaller chi")
             XH.iproject(proj, axes=1)
             W = W[proj]
         norm = len(W) / np.sum(W)
@@ -3874,7 +3874,7 @@ class MPS:
         if np.count_nonzero(proj) < len(S2):
             # project into non-degenerate subspace, reducing the bond dimensions!
             if np.count_nonzero(proj) < len(S2) * 0.9:
-                logger.warn("canonical_form_infinite: project to significantly smaller chi")
+                logger.warning("canonical_form_infinite: project to significantly smaller chi")
             YH.iproject(proj, axes=1)
             S2 = S2[proj]
             s_norm = np.sqrt(np.sum(S2))
@@ -4047,7 +4047,7 @@ class MPSEnvironment:
                 init_LP.get_leg('vR').test_contractible(self.ket.get_theta(0, 1).get_leg('vL'))
                 init_LP.get_leg('vR*').test_equal(self.bra.get_theta(0, 1).get_leg('vL'))
             except ValueError:
-                logger.warn("dropping `init_LP` with incompatible legs")
+                logger.warning("dropping `init_LP` with incompatible legs")
                 init_LP = None
         if init_RP is not None:
             try:
@@ -4055,7 +4055,7 @@ class MPSEnvironment:
                 init_RP.get_leg('vL').test_contractible(self.ket.get_theta(j, 1).get_leg('vR'))
                 init_RP.get_leg('vL*').test_equal(self.bra.get_theta(j, 1).get_leg('vR'))
             except ValueError:
-                logger.warn("dropping `init_RP` with incompatible legs")
+                logger.warning("dropping `init_RP` with incompatible legs")
                 init_RP = None
         if init_LP is None:
             init_LP = self.init_LP(0, start_env_sites)

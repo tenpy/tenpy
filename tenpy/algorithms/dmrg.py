@@ -865,7 +865,7 @@ class DMRGEngine(Sweep):
                     self.S_inv_cutoff = 1.e-15
             if loop_start_time - start_time > max_seconds:
                 self.shelve = True
-                logger.warn("DMRG: maximum time limit reached. Shelve simulation.")
+                logger.warning("DMRG: maximum time limit reached. Shelve simulation.")
                 break
             if not is_first_sweep:
                 self.checkpoint.emit(self)
@@ -968,7 +968,7 @@ class DMRGEngine(Sweep):
         if norm_tol is None or norm_err < norm_tol:
             return
         if warn:
-            logger.warn(
+            logger.warning(
                 "final DMRG state not in canonical form up to "
                 "norm_tol=%.2e: norm_err=%.2e", norm_tol, norm_err)
         if self.finite:
@@ -981,7 +981,7 @@ class DMRGEngine(Sweep):
                 if norm_err <= norm_tol:
                     break
             else:
-                logger.warn(
+                logger.warning(
                     "norm_err=%.2e still too high after environment_sweeps, "
                     "call psi.canonical_form()", norm_err)
                 self._resume_psi = self.psi.copy()

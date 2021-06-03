@@ -6,7 +6,7 @@ Instead, we use Python's :mod:`logging` module to allow fine-grained redirecting
 
 Of course, when you get an error message, you should be concerned to find out what it is about and how to fix it. 
 (If you believe it is a bug, `report <https://github.com/tenpy/tenpy/issues/new/choose>`_ it.)
-Warnings can be reported either using ``warnings.warn(...)`` or with the logging mechanism ``logger.warn(...)``.
+Warnings can be reported either using ``warnings.warn(...)`` or with the logging mechanism ``logger.warning(...)``.
 The former is used for warnings about things in your setup that you *should* fix.
 The latter give you notifications about bad things that can happen in calculations, e.g. bad conditioning of a matrix, but there
 is not much you can do about it. Those warnings indicate that you should take your results with a grain of salt and carefully double-check them.
@@ -111,11 +111,11 @@ but it's actually straight-forward, and just requires at most two steps.
         n_steps = do_calculation()
         if something_bad_happened():
             # the user can't do anything about it
-            logger.warn("Something bad happend")
+            logger.warning("Something bad happend")
         logger.info("calculation finished after %d steps", n_steps)
 
     You can use `printf-formatting <https://docs.python.org/3/library/stdtypes.html#printf-style-string-formatting>`_
-    for the arguments of ``logger.debug(...), logger.info(...), logger.warn(...)``, as illustrated in the last line.
+    for the arguments of ``logger.debug(...), logger.info(...), logger.warning(...)``, as illustrated in the last line.
 
 In summary, instead of just ``print("do X")`` statements, use ``self.logger.info("do X")`` inside TeNPy classes, or just
 ``logger.info("do X")`` for the module-wide logger, which you can initialize right at the top of your file with the import

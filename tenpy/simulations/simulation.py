@@ -780,7 +780,7 @@ class Simulation:
             time_to_save = time.time() - now
             if time_to_save > 0.1 * save_every > 0.:
                 save_every = 20 * time_to_save
-                self.logger.warn(
+                self.logger.warning(
                     "Saving took longer than 10%% of `save_every_x_seconds`. "
                     "Increase the latter to %.1f", save_every)
                 self.options['save_every_x_seconds'] = save_every
