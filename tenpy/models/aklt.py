@@ -6,6 +6,7 @@ This class thus serves as an example how this can be done in more gen
 The XXZ chain is contained in the more general :class:`~tenpy.models.spins.SpinChain`; the idea of
 this module is more to serve as a pedagogical example for a model.
 """
+# Copyright 2021 TeNPy Developers, GNU GPLv3
 
 import tenpy.linalg.np_conserved as npc
 from tenpy.networks.site import SpinSite, kron

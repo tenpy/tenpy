@@ -15,7 +15,7 @@ from ..tools.hdf5_io import Hdf5Exportable
 
 __all__ = [
     'Site', 'GroupedSite', 'group_sites', 'set_common_charges', 'multi_sites_combine_charges',
-    'SpinHalfSite', 'SpinSite', 'FermionSite', 'SpinHalfFermionSite', 'BosonSite'
+    'SpinHalfSite', 'SpinSite', 'FermionSite', 'SpinHalfFermionSite', 'BosonSite', 'kron'
 ]
 
 
