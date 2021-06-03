@@ -1532,3 +1532,22 @@ class BosonSite(Site):
         return "BosonSite({N:d}, {c!r}, {f:f})".format(N=self.Nmax,
                                                        c=self.conserve,
                                                        f=self.filling)
+
+
+def kron(op0, op1):
+    """Kronecker product of two local operators.
+
+    Parameters
+    ----------
+    op0, op1 : :class:`~tenpy.linalg.np_conserved.Array`
+        Local operators with labels ``'p', 'p*'`` as defined in :class:`Site`.
+
+    Returns
+    -------
+    op0_op1 : :class:`~tenpy.linalg.np_conserved.Array`
+        Outer product of `op0` with `op1` with combined legs ``'(p0.p1)', '(p0*.p1*)'``.
+    """
+    op = npc.outer(op0.replace_labels(['p', 'p*'], ['p0', 'p0*']),
+                   op1.replace_labels(['p', 'p*'], ['p1', 'p1*']))
+    op = op.combine_legs([['p0', 'p1'], ['p0*', 'p1*']], qconj=[+1, -1])
+    return op
