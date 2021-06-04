@@ -2837,8 +2837,6 @@ class MPS:
             # we actually had a canonical form before, so we should *not* ignore the 'S'
             M = self.get_B(0, form='Th')
             form = 'B'  # for other 'M'
-        if self.bc == 'segment':
-            M.iscale_axis(self.get_SL(0), axis='vL')
         Q, R = npc.qr(M.combine_legs(['vL'] + self._p_label), inner_labels=['vR', 'vL'])
         # Q = unitary, R has to be multiplied to the right
         self.set_B(0, Q.split_legs(0), form='A')
@@ -2848,7 +2846,7 @@ class MPS:
             Q, R = npc.qr(M.combine_legs(['vL'] + self._p_label), inner_labels=['vR', 'vL'])
             # Q is unitary, i.e. left canonical, R has to be multiplied to the right
             self.set_B(i, Q.split_legs(0), form='A')
-        M = self.get_B(L - 1, None)
+        M = self.get_B(L - 1, form)
         M = npc.tensordot(R, M, axes=['vR', 'vL'])
         if self.bc == 'segment':
             # also neet to calculate new singular values on the very right
