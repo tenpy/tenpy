@@ -31,6 +31,7 @@ Added
   In that context, the keyword argument `cache` was added to the :class:`~tenpy.algorithms.algorithm.Algorithm` base class.
 - :meth:`tenpy.networks.mps.MPS.sample_measurements`.
 - equality test for :class:`~tenpy.linalg.charges.LegCharge`.
+- MPS with segment boundaries now keep track of unitaries at the boundaries in :attr:`~tenpy.networks.mps.MPS.segment_boundaries`.
 
 
 Changed
