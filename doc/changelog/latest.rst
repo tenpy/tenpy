@@ -30,6 +30,7 @@ Added
 - Caching with the :mod:`tenpy.tools.cache.DictCache`, :mod:`tenpy.tools.cache.PickleCache`, and :mod:`tenpy.tools.cache.Hdf5Cache` to reduce memory requirements.
   In that context, the keyword argument `cache` was added to the :class:`~tenpy.algorithms.algorithm.Algorithm` base class.
 - :meth:`tenpy.networks.mps.MPS.sample_measurements`.
+- equality test for :class:`~tenpy.linalg.charges.LegCharge`.
 
 
 Changed
