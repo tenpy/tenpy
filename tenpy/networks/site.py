@@ -1534,20 +1534,30 @@ class BosonSite(Site):
                                                        f=self.filling)
 
 
-def kron(op0, op1):
-    """Kronecker product of two local operators.
+def kron(*ops, group=True):
+    """Kronecker product of two or more local operators.
 
     Parameters
     ----------
-    op0, op1 : :class:`~tenpy.linalg.np_conserved.Array`
+    *ops : :class:`~tenpy.linalg.np_conserved.Array`
         Local operators with labels ``'p', 'p*'`` as defined in :class:`Site`.
+    group : bool
+        Whether to combine the in/outgoing legs.
 
     Returns
     -------
-    op0_op1 : :class:`~tenpy.linalg.np_conserved.Array`
-        Outer product of `op0` with `op1` with combined legs ``'(p0.p1)', '(p0*.p1*)'``.
+    product : :class:`~tenpy.linalg.np_conserved.Array`
+        Outer product of the `ops`, with legs ``'p0', 'p0*', 'p1', 'p1*', ...`` (grouped=False)
+        or combined legs ``'(p0.p1...)', '(p0*.p1*...)'`` (grouped=True).
     """
-    op = npc.outer(op0.replace_labels(['p', 'p*'], ['p0', 'p0*']),
-                   op1.replace_labels(['p', 'p*'], ['p1', 'p1*']))
-    op = op.combine_legs([['p0', 'p1'], ['p0*', 'p1*']], qconj=[+1, -1])
-    return op
+    if len(ops) <= 1:
+        raise ValueError("need at least 2 ops")
+    product = npc.outer(ops[0].replace_labels(['p', 'p*'], ['p0', 'p0*']),
+                        ops[1].replace_labels(['p', 'p*'], ['p1', 'p1*']))
+    for i in range(2, len(ops)):
+        op = ops[i].replace_labels(['p', 'p*'], [f"p{i:d}", f"p{i:d}*"])
+        product = npc.outer(product, op)
+    if group:
+        labels = [[f"p{i:d}" for i in range(len(ops))], [f"p{i:d}*" for i in range(len(ops))]]
+        product = product.combine_legs(labels, qconj=[+1, -1])
+    return product

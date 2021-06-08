@@ -19,7 +19,7 @@ class AKLTChain(NearestNeighborModel, MPOModel):
     r"""A simple implementation of the AKLT model.
 
     Here we define the Hamiltonian on a chain of S=1 spins as originally defined by
-    Affleck, Kennedy, Lieb, Tasaki in :cite`affleck1987`, but
+    Affleck, Kennedy, Lieb, Tasaki in :cite:`affleck1987`, but
     dropping the constant parts of 1/3 per bond and rescaling with a factor of 2,
     such that we expect a ground state energy of ``E_0 = - (L-1) 2/3 * J``.
 
