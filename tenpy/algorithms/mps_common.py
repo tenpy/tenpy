@@ -1143,6 +1143,10 @@ class VariationalCompression(Sweep):
 
         The state :attr:`psi` is compressed in place.
 
+        .. warning ::
+            Call this function directly after initializing the class, without modifying `psi`
+            inbetween. A copy of :attr:`psi` is made during :meth:`init_env`!
+
         Returns
         -------
         max_trunc_err : :class:`~tenpy.algorithms.truncation.TruncationError`
