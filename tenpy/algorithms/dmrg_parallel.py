@@ -22,13 +22,13 @@ class TwoSiteHThreadPlusHC(TwoSiteH):
     """
     def __init__(self, *args, plus_hc_worker=None, **kwargs):
         super().__init__(*args, **kwargs)
-        assert plus_hc_worker is not None
         self._plus_hc_worker = plus_hc_worker
         if not self.combine:
             raise NotImplementedError("works only with combine=True")
         self.RHeff_for_hc = self.RHeff.transpose(['(p1*.vL)', '(p1.vL*)', 'wL'])
 
     def matvec(self, theta):
+        assert self._plus_hc_worker is not None
         res = {}
         self._plus_hc_worker.put_task(self.matvec_hc, theta, return_dict=res, return_key="theta")
         theta = super().matvec(theta)
@@ -68,7 +68,6 @@ class DMRGThreadPlusHC(TwoSiteDMRGEngine):
         super().__init__(psi, model, options, **kwargs)
 
     def make_eff_H(self):
-        assert self._plus_hc_worker is not None  # expect this function to be called from `run()`
         assert self.env.H.explicit_plus_hc
         self.eff_H = self.EffectiveH(self.env,
                                      self.i0,
