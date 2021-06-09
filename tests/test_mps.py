@@ -574,8 +574,21 @@ def test_InitialStateBuilder():
             'product_state': [['up'], ['down']],
             'check_filling': 0.5,
             'full_empty': ['up', 'down'],
-        }).run()
+        }, model_dtype=np.float64).run()
+    assert psi4.dtype == np.float64
     assert abs(psi4.overlap(psi1)) < 0.1  # randomizing should definitely lead to small overlap!
+    psi5 = mps.InitialStateBuilder(
+        lat, {
+            'method': 'randomized',
+            'randomized_from_method': 'lat_product_state',
+            'randomize_close_1': True,
+            'randomize_params': {'N_steps': 2},
+            'product_state': [['up'], ['down']],
+            'check_filling': 0.5,
+            'full_empty': ['up', 'down'],
+        }, model_dtype=np.complex128).run()
+    assert psi5.dtype == np.complex128
+    assert abs(psi5.overlap(psi1)) > 0.1  # randomizing should definitely lead to small overlap!
 
 
 if __name__ == "__main__":

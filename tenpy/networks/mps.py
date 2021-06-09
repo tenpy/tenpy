@@ -3248,6 +3248,38 @@ class MPS:
         if not unitary:
             self.canonical_form(renormalize=renormalize)
 
+    def perturb(self, randomize_params=None, close_1=True, canonicalize=None):
+        """Locally perturb the state a little bit.
+
+        Parameters
+        ----------
+        randomize_params : dict
+            Parameters for the :class:`~tenpy.algorithms.tebd.RandomUnitaryEvolution`.
+        close_1 : bool
+            Select the default :cfg:option:`RandomUnitaryEvolution.distribution_func` to be used,
+            if `close_1` is True, use :func:`~tenpy.linalg.random_matrix.U_close_1` for complex and
+            :func:`~tenpy.linalg.random_matrix.O_close_1` for real MPS;
+            for `close_1` False use :func:`~tenpy.linalg.random_matrix.CUE` or
+            :func:`~tenpy.linalg.random_matrix.CRE`, respectively.
+        canonicalize : bool
+            Wether to call `psi.canonical_from in the end. Defaults to ``not close_1``.
+        """
+        from ..algorithms.tebd import RandomUnitaryEvolution
+        if randomize_params is None:
+            randomize_params = {}
+        if close_1:
+            func = 'U_close_1' if self.dtype.kind == 'c' else 'O_close_1'
+        else:
+            func = 'CUE' if self.dtype.kind == 'c' else 'CRE'
+        randomize_params.setdefault('distribution_func', func)
+        eng = RandomUnitaryEvolution(self, randomize_params)
+        eng.run()
+        if canonicalize is None:
+            canonicalize = not close_1
+        if canonicalize:
+            self.canonical_form()
+        # done
+
     def swap_sites(self, i, swap_op='auto', trunc_par=None):
         r"""Swap the two neighboring sites `i` and `i+1` (inplace).
 
@@ -5052,14 +5084,11 @@ class InitialStateBuilder:
         method_name = self.options['randomized_from_method']
         method = getattr(self, method_name)
         psi = method()
-        canonicalize = self.options.get('randomize_canonicalize', True)
-        from ..algorithms.tebd import RandomUnitaryEvolution
+        close_1 = self.options.get('randomize_close_1', False)
+        canonicalize = self.options.get('randomize_canonicalize', not close_1)
         params = {'N_steps': 10, 'trunc_params': {'chi_max': 100}}
-        params = self.options.subconfig('randomize_params', params)
-        eng = RandomUnitaryEvolution(psi, params)
-        eng.run()
-        if canonicalize:
-            psi.canonical_form()
+        params = self.options.subconfig('randomize_params', {})
+        psi.perturb(params, close_1=close_1, canonicalize=canonicalize)
         return psi
 
 

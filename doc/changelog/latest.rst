@@ -43,7 +43,10 @@ Changed
 - :func:`tenpy.networks.mps.MPS.canonical_form` now supports an argument `envs_to_update` to allow keeping
   MPS/MPOEnvironments consistent.
 - keyword argument `sequential_simulations` for :meth:`tenpy.algorithms.algorithm.Algorithm.get_resume_data`.
-- allow to select the distribution of the generated `U` for the :class:`~tenpy.algorithms.tebd.RandomUnitaryEvolution`.
+- Allow to select the distribution of the generated `U` for the :class:`~tenpy.algorithms.tebd.RandomUnitaryEvolution`.
+  For randomly perturbing an MPS in :meth:`~tenpy.networks.mps.InitialStateBuilder.randomized` or the new
+  :meth:`~tenpy.networks.mps.MPS.perturb`, select the distribution suitable to preserve the dtype of the MPS.
+
 
 Fixed
 ^^^^^
