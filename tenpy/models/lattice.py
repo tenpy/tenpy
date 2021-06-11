@@ -1798,7 +1798,12 @@ class HelicalLattice(Lattice):
                 or self.regular_lattice.N_cells % (self._N_cells * factor) != 0):
             self.regular_lattice.enlarge_mps_unit_cell(factor)
         self._N_cells = factor * self._N_cells
-        super().enlarge_mps_unit_cell()
+
+        self._set_Ls(self.regular_lattice.Ls)
+        order_reg = self.regular_lattice.order
+        self._order = self._ordering_helical(order_reg)
+        self.test_sanity()
+ 
 
     # strategy for possible_[multi_]couplings:
     # since everything is translation invariant along the MPS, we can just extract it
