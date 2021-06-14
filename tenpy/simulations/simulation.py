@@ -118,7 +118,7 @@ class Simulation:
         resume_data : dict
             Additional data for resuming the algorithm run.
             Not part of `self.results`, but only added in :meth:`prepare_results_for_save` with
-            the most up to date `resume_data` from
+            the most up-to-date `resume_data` from
             :meth:`~tenpy.algorithms.algorithm.Algorithm.get_resume_data`.
             Only included if :cfg:option:`Simultion.save_resume_data` is True.
             Note that this contains anoter (reference or even copy of) `psi`.
@@ -365,10 +365,10 @@ class Simulation:
                 corresponding `model_class`.
         """
         model_class_name = self.options["model_class"]  # no default value!
-        ModelClass = find_subclass(Model, model_class_name)
         if hasattr(self, 'model'):
             self.options.touch('model_params')
             return  # skip actually regenerating the model
+        ModelClass = find_subclass(Model, model_class_name)
         params = self.options.subconfig('model_params')
         self.model = ModelClass(params)
 

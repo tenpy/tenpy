@@ -32,6 +32,7 @@ Added
 - :meth:`tenpy.networks.mps.MPS.sample_measurements`.
 - equality test for :class:`~tenpy.linalg.charges.LegCharge`.
 - MPS with segment boundaries now keep track of unitaries at the boundaries in :attr:`~tenpy.networks.mps.MPS.segment_boundaries`.
+- :class:`~tenpy.simulations.simulation.OrthogonalExcitations` simulation class.
 
 
 Changed

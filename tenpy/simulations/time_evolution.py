@@ -47,6 +47,9 @@ class RealTimeEvolution(Simulation):
             # TODO: call engine.checkpoint.emit() ?
             self.make_measurements()
 
+    def resume_run_algorithm(self):
+        self.run_algorithm()
+
     def final_measurements(self):
         """Do nothing.
 
