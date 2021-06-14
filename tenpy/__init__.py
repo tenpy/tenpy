@@ -90,10 +90,11 @@ def console_main():
         raise ValueError("No options supplied! Check your command line arguments!")
     if 'output_filename' not in options and 'output_filename_params' not in options:
         raise ValueError("No output filename specified - refuse to run without saving anything!")
+    sim_class = options.pop('simulation_class_name', args.sim_class)
     if 'sequential' not in options:
-        run_simulation(args.sim_class, **options)
+        run_simulation(sim_class, **options)
     else:
-        run_seq_simulations(simulation_class_name=args.sim_class, **options)
+        run_seq_simulations(simulation_class_name=sim_class, **options)
 
 
 def _setup_arg_parser(width=None):
