@@ -1803,7 +1803,6 @@ class HelicalLattice(Lattice):
         order_reg = self.regular_lattice.order
         self._order = self._ordering_helical(order_reg)
         self.test_sanity()
-        print('TESTING')
  
 
     # strategy for possible_[multi_]couplings:
