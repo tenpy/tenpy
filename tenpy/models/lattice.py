@@ -1803,6 +1803,7 @@ class HelicalLattice(Lattice):
         order_reg = self.regular_lattice.order
         self._order = self._ordering_helical(order_reg)
         self.test_sanity()
+        print('TESTING')
  
 
     # strategy for possible_[multi_]couplings:
@@ -1851,7 +1852,7 @@ class HelicalLattice(Lattice):
                 strength_compare = strength_vals[keep_cell]
             else:
                 assert np.all(mps_ijkl[keep_cell] - cell_start == ijkl_compare)
-                if np.any(strength_vals[keep_cell] != strength_compare):
+                if not np.all(np.abs(strength_vals[keep_cell] - strength_compare) < 1e-10):
                     raise ValueError("Not translation invariant: can't use HelicalLattice")
 
     # most plot_* functions work, except:
