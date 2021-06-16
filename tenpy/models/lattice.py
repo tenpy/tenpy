@@ -1798,7 +1798,12 @@ class HelicalLattice(Lattice):
                 or self.regular_lattice.N_cells % (self._N_cells * factor) != 0):
             self.regular_lattice.enlarge_mps_unit_cell(factor)
         self._N_cells = factor * self._N_cells
-        super().enlarge_mps_unit_cell()
+
+        self._set_Ls(self.regular_lattice.Ls)
+        order_reg = self.regular_lattice.order
+        self._order = self._ordering_helical(order_reg)
+        self.test_sanity()
+ 
 
     # strategy for possible_[multi_]couplings:
     # since everything is translation invariant along the MPS, we can just extract it
@@ -1846,7 +1851,7 @@ class HelicalLattice(Lattice):
                 strength_compare = strength_vals[keep_cell]
             else:
                 assert np.all(mps_ijkl[keep_cell] - cell_start == ijkl_compare)
-                if np.any(strength_vals[keep_cell] != strength_compare):
+                if not np.all(np.abs(strength_vals[keep_cell] - strength_compare) < 1e-10):
                     raise ValueError("Not translation invariant: can't use HelicalLattice")
 
     # most plot_* functions work, except:
