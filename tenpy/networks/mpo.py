@@ -408,7 +408,7 @@ class MPO:
             grouped_sites = group_sites(self.sites, n, charges='same')
         else:
             assert grouped_sites[0].n_sites == n
-        if self.max_range is not None:
+        if self.max_range is not None and self.max_range != np.inf:
             min_n = max(min([gs.n_sites for gs in grouped_sites]), 1)
             self.max_range = int(np.ceil(self.max_range / min_n))
         Ws = []
