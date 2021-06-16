@@ -1770,7 +1770,6 @@ class HelicalLattice(Lattice):
             mps_fix_u = np.nonzero(order_[:, -1] == u)[0]
             self._mps_fix_u.append(mps_fix_u)
         self._mps_fix_u = tuple(self._mps_fix_u)
-        _, counts = np.unique(order_[:, 0], return_counts=True)
 
     # the regular lattice has the same order for the MPS,
     # only the division into unit cells is different
@@ -1801,9 +1800,9 @@ class HelicalLattice(Lattice):
 
         self._set_Ls(self.regular_lattice.Ls)
         order_reg = self.regular_lattice.order
-        self._order = self._ordering_helical(order_reg)
+        self.order = self._ordering_helical(order_reg)  # use property setter
         self.test_sanity()
- 
+
 
     # strategy for possible_[multi_]couplings:
     # since everything is translation invariant along the MPS, we can just extract it

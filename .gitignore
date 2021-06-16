@@ -8,6 +8,7 @@
 ._*
 .eggs
 *.egg-info
+.vscode
 __pycache__
 playground
 build
