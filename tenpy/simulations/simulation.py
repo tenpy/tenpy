@@ -24,6 +24,7 @@ import copy
 from ..models.model import Model
 from ..algorithms.algorithm import Algorithm
 from ..networks.mps import InitialStateBuilder
+from ..models.model import NearestNeighborModel
 from ..tools import hdf5_io
 from ..tools.cache import CacheFile
 from ..tools.params import asConfig
@@ -139,6 +140,11 @@ class Simulation:
         Time of the last call to :meth:`save_results`, initialized to startup time.
     loaded_from_checkpoint : bool
         True when the simulation is loaded with :meth:`from_saved_checkpoint`.
+    grouped : int
+        By how many sites we grouped in :meth:`group_sites_for_algorithm`.
+    model_ungrouped :
+        Only set if `grouped` > 1. In that case, :attr:`model` is the modified/grouped model,
+        and `model_ungrouped` is the original ungrouped model.
     """
     #: name of the default algorithm `engine` class
     default_algorithm = 'TwoSiteDMRGEngine'
@@ -204,6 +210,7 @@ class Simulation:
             self.results['resume_data'] = resume_data
         self.options.touch('sequential')  # added by :func:`run_seq_simulations` for completeness
         self.cache = CacheFile.open()
+        self.grouped = 1
 
     def __enter__(self):
         self.init_cache()
@@ -237,11 +244,13 @@ class Simulation:
                           "You should probably call `resume_run()` instead!")
         self.init_model()
         self.init_state()
+        self.group_sites_for_algorithm()
         self.init_algorithm()
         self.init_measurements()
 
         self.run_algorithm()
 
+        self.group_split()
         self.final_measurements()
         self.results['finished_run'] = True
         results = self.save_results()
@@ -303,7 +312,7 @@ class Simulation:
                 raise ValueError("psi not saved in the results: can't resume!")
             self.psi = self.results['psi']
         self.init_state()  # does (almost) nothing if self.psi is already initialized
-
+        self.group_sites_for_algorithm()
         self.init_algorithm()  # automatically reads out and del's ``self.results['resume_data']``
 
         # the relevant part from init_measurements(), but don't make a measurement
@@ -311,6 +320,7 @@ class Simulation:
         self.options.touch('measure_initial')
 
         self.resume_run_algorithm()  # continue with the actual algorithm
+        self.group_split()
         self.final_measurements()
         self.results['finished_run'] = True
         results = self.save_results()
@@ -402,6 +412,42 @@ class Simulation:
             self.options.touch('initial_state_builder_class', 'initial_state_params')
         if self.options.get('save_psi', True):
             self.results['psi'] = self.psi
+
+    def group_sites_for_algorithm(self):
+        """Coarse-grain the model and state for the algorithm.
+
+        Options
+        -------
+        .. cfg:configoptions :: Simulation
+
+            group_sites : int
+                How many sites to group. 1 means no grouping.
+            group_to_NearestNeighborModel : bool
+                If True, convert the grouped model to a
+                :class:`~tenpy.models.model.NearestNeighborModel`.
+                Use this if you want to run TEBD with a model that was originally next-nearest
+                neighbor.
+        """
+        self.model_ungrouped = copy.copy(self.model)
+        group_sites = self.grouped = self.options.get("group_sites", 1)
+        to_NN = self.options.get("group_to_NearestNeighborModel", False)
+        if group_sites < 1:
+            raise ValueError("invalid `group_sites` = " + str(group_sites))
+        if group_sites > 1:
+            if not self.loaded_from_checkpoint or self.psi.grouped < group_sites:
+                self.psi.group_sites(group_sites)
+            self.model_ungrouped = copy.copy(self.model)
+            self.model.group_sites(group_sites)
+            if to_NN:
+                self.model = NearestNeighborModel.from_MPOModel(self.model)
+
+    def group_split(self):
+        """Split sites of psi that were grouped in  :meth:`group_sites_for_algorithm`."""
+        if self.grouped > 1:
+            self.psi.group_split(self.options['algorithm_params']['trunc_params'])
+            self.model = self.model_ungrouped
+            del self.model_ungrouped
+            self.grouped = 1
 
     def init_algorithm(self, **kwargs):
         """Initialize the algorithm.
@@ -516,12 +562,16 @@ class Simulation:
         results : dict
             The results from calling the measurement functions.
         """
-        # TODO: save-guard measurements with try-except?
+        # TODO: safe-guard measurements with try-except?
         # in case of a failed measurement, we should raise the exception at the end of the
         # simulation?
         results = {}
+        if self.grouped > 1:
+            psi = self.psi.copy()
+            psi.group_split(self.options['algorithm_params']['trunc_params'])
+
         returned = self.measurement_event.emit(results=results, simulation=self, psi=self.psi)
-        # still save the values returned
+        # check for returned values, although there shouldn't be any
         returned = [entry for entry in returned if entry is not None]
         if len(returned) > 0:
             msg = ("Some measurement function returned a value instead of writing to `results`.\n"

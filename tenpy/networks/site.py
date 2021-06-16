@@ -504,7 +504,7 @@ class GroupedSite(Site):
         ``'independent'`` means that the `sites` have possibly different `ChargeInfo`,
         and the charges are conserved separately, i.e., we have `n_sites` conserved charges.
         For ``'drop'``, we drop any charges, such that the remaining legcharges are trivial.
-        For more complex situations, you can call :func:`multi_sites_combine_charges` beforehand.
+        For more complex situations, you can call :func:`set_common_charges` beforehand.
 
     Attributes
     ----------
@@ -628,7 +628,7 @@ def group_sites(sites, n=2, labels=None, charges='same'):
     n : int
         We group each `n` consecutive sites from `sites` together in a :class:`GroupedSite`.
     labels, charges :
-        See :class:`GroupedSites`.
+        See :class:`GroupedSite`.
 
     Returns
     -------

@@ -1278,9 +1278,12 @@ class MPS:
         return trunc_err
 
     def get_grouped_mps(self, blocklen):
-        r"""contract blocklen subsequent tensors into a single one and return result as a new MPS.
+        r"""Like :meth:`group_sites`, but make a copy.
 
-        blocklen = number of subsequent sites to be combined.
+        Parameters
+        ----------
+        blocklen: int
+            Number of subsequent sites to be combined; `n` in :meth:`group_sites`.
 
         Returns
         -------

@@ -40,6 +40,7 @@ import numpy as np
 from scipy.linalg import expm
 import warnings
 import sys
+import copy
 import logging
 logger = logging.getLogger(__name__)
 
@@ -136,6 +137,10 @@ class MPO:
         self.max_range = max_range
         self.explicit_plus_hc = explicit_plus_hc
         self.test_sanity()
+
+    def copy(self):
+        """Make a shallow copy of `self`."""
+        return copy.copy(self)
 
     def save_hdf5(self, hdf5_saver, h5gr, subpath):
         """Export `self` into a HDF5 file.

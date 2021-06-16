@@ -33,6 +33,7 @@ Added
 - equality test for :class:`~tenpy.linalg.charges.LegCharge`.
 - MPS with segment boundaries now keep track of unitaries at the boundaries in :attr:`~tenpy.networks.mps.MPS.segment_boundaries`.
 - :class:`~tenpy.simulations.simulation.OrthogonalExcitations` simulation class.
+- :cfg:configoption:`Simulation.group_sites` for the simultion class.
 
 
 Changed
