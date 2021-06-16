@@ -415,6 +415,16 @@ class MPS:
         else:
             raise ValueError("wrong dimension of `p_state`. Expected {d:d}-dimensional array of "
                              "(string, int, or 1D array)".format(d=lat.dim + 1))
+        from ..models.lattice import HelicalLattice
+        if isinstance(lat, HelicalLattice):
+            order = lat.regular_lattice.order
+            for start in range(0, lat.regular_lattice.N_sites, lat.N_sites):
+                shifted_inds = tuple(order[start:start + lat.N_sites, :].T)
+                if p_state.ndim == len(lat.shape) + 1:
+                    shifted_inds = shifted_inds + (slice(None), )
+                shifted_p_state_flat = p_state[shifted_inds]
+                if not np.all(p_state_flat == shifted_p_state_flat):
+                    raise ValueError("`p_state` not translation invariant w.r.t. HelicalLattice")
         return cls.from_product_state(lat.mps_sites(), p_state_flat, **kwargs)
 
     @classmethod

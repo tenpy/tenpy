@@ -1820,7 +1820,7 @@ class HelicalLattice(Lattice):
         else:
             mps_i, mps_j, strength_vals = reg.possible_couplings(u1, u2, dx, strength)
             # we can actually check that everything is translation invariant!
-            self._check_translation_invariance(np.stack([mps_i, mps_j]).T, strength_vals)
+            self._check_transl_invar_strength(np.stack([mps_i, mps_j]).T, strength_vals)
             keep = (np.min([mps_i, mps_j], axis=0) < self.N_sites)
             return mps_i[keep], mps_j[keep], strength_vals[keep]
 
@@ -1833,11 +1833,11 @@ class HelicalLattice(Lattice):
         else:
             mps_ijkl, strength_vals = reg.possible_multi_couplings(ops, strength)
             # we can actually check that everything is translation invariant!
-            self._check_translation_invariance(mps_ijkl, strength_vals)
+            self._check_transl_invar_strength(mps_ijkl, strength_vals)
             keep = (np.min(mps_ijkl, axis=1) < self.N_sites)
             return mps_ijkl[keep, :], strength_vals[keep]
 
-    def _check_translation_invariance(self, mps_ijkl, strength_vals):
+    def _check_transl_invar_strength(self, mps_ijkl, strength_vals):
         sort = np.lexsort(mps_ijkl.T)
         mps_ijkl = mps_ijkl[sort]
         strength_vals = strength_vals[sort]
