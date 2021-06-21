@@ -667,7 +667,7 @@ class FlatLinearOperator(ScipyLinearOperator):
                     qtotal = self.leg.get_charge(qi)
                     vecs[j] = npc.Array.from_ndarray(A[:, j], **from_ndarray_args, qtotal=qtotal)
                 else:
-                    used_blocks = {}
+                    used_blocks = set()
                     for j in degenerate:
                         vec = A[:, j]
                         block_norms = [
