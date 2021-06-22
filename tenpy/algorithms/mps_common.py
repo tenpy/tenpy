@@ -273,6 +273,7 @@ class Sweep(Algorithm):
         if orthogonal_to:
             if not self.finite:
                 raise ValueError("Can't orthogonalize for infinite MPS: overlap not well defined.")
+            logger.info("got %d states to orthogonalize against", len(orthogonal_to))
             self.ortho_to_envs = []
             for i, ortho in enumerate(orthogonal_to):
                 cache = self.cache.create_subcache(f"ortho_{i:d}")
@@ -411,7 +412,7 @@ class Sweep(Algorithm):
         L = self.psi.L
         n = self.EffectiveH.length
         if self.finite:
-            assert L >= n
+            assert L > n
             i0s = list(range(0, L - n)) + list(range(L - n, 0, -1))
             move_right = [True] * (L - n) + [False] * (L - n)
             update_LP_RP = [[True, False]] * (L - n) + [[False, True]] * (L - n)

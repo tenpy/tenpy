@@ -1294,42 +1294,20 @@ class MPS:
         groupedMPS.group_sites(n=blocklen)
         return groupedMPS
 
-    def extract_segment(self, first=0, last=None, enlarge=None):
+    def extract_segment(self, first, last):
         """Extract an segment from a finite or infinite MPS.
 
         Parameters
         ----------
         first, last : int
             The first and last site to *include* into the segment.
-            `last` defaults to :attr:`L` - 1, i.e., the MPS unit cell for infinite MPS.
-        enlarge : int
-            Instead of specifying the `first` and `last` site, you can specify
-            by how much to enlarge the MPS unit cell.
 
         Returns
         -------
         psi_segment : :class:`MPS`
-            MPS with 'segment' boundary conditions for the sites ``first:last+1``.
-        first, last : int
-            The `first` and `last` values used. Useful for extracting environment data
-            from :meth:`MPOEnvironment.get_initialization_data`.
-
-        See also
-        --------
-        tenpy.networks.mpo.MPO.extract_segment : similar method for MPO.
+            Copy of self with 'segment' boundary conditions.
         """
         L = self.L
-        if enlarge is not None:
-            if self.finite:
-                raise ValueError("only possible for infinite MPS")
-            if last is not None or first != 0:
-                raise ValueError("specifiy either `first`+`last` or `enlarge`!")
-            assert enlarge > 0
-            last = enlarge * L - 1
-        if last is None:
-            last = L - 1
-        if first >= last:
-            raise ValueError(f"need first < last, got {first}, {last}")
         sites = [self.sites[i % L] for i in range(first, last + 1)]
         B = [self.get_B(i) for i in range(first, last + 1)]
         S = [self.get_SL(i) for i in range(first, last + 1)]
@@ -1337,7 +1315,7 @@ class MPS:
         # note: __init__ makes deep copies of B, S
         cp = self.__class__(sites, B, S, 'segment', 'B', self.norm)
         cp.grouped = self.grouped
-        return cp, first, last
+        return cp
 
     def get_total_charge(self, only_physical_legs=False):
         """Calculate and return the `qtotal` of the whole MPS (when contracted).
@@ -3262,7 +3240,7 @@ class MPS:
             self.canonical_form(renormalize=renormalize)
 
     def perturb(self, randomize_params=None, close_1=True, canonicalize=None):
-        """Locally perturb the state a little bit.
+        """Locally perturb the state a little bit; in place.
 
         Parameters
         ----------
@@ -4825,7 +4803,7 @@ class InitialStateBuilder:
 
     def __init__(self, lattice, options, model_dtype=np.float64):
         self.lattice = lattice
-        self.options = asConfig(options, 'init_state_params')
+        self.options = asConfig(options, self.__class__.__name__)
         self.model_dtype = model_dtype
 
     def run(self):
@@ -4844,7 +4822,7 @@ class InitialStateBuilder:
         if method is None:
             raise ValueError(f"initial state 'method'={method_name!r} not recognized in " +
                              self.__class__.__name__)
-        self.logger.info("calling InitialStateBuilder.%s()", method_name)
+        self.logger.info("calling %s.%s()", self.__class__.__name__, method_name)
         psi = method()
         self.check_total_charge(psi)
         return psi

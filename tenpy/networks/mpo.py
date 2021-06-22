@@ -441,6 +441,11 @@ class MPO:
         first, last : int
             The first and last site to *include* into the segment.
 
+        Returns
+        -------
+        cp : :class:`MPO`
+            A `copy` of self with "segment" boundary conditions.
+
         See also
         --------
         tenpy.networks.mps.MPS.extract_segment : similar method for MPS.
@@ -1809,6 +1814,8 @@ class MPOEnvironment(MPSEnvironment):
             except ValueError:
                 logger.warning("dropping `init_RP` with incompatible MPO legs")
                 init_RP = None
+        if self.ket.bc == 'segment' and (init_LP is None or init_RP is None):
+            raise ValueError("Environments with segment b.c. need explicit environments!")
         super().init_first_LP_last_RP(init_LP, init_RP, age_LP, age_RP, start_env_sites)
 
     def test_sanity(self):
@@ -2054,8 +2061,6 @@ class MPOTransferMatrix:
     def __init__(self, H, psi, transpose=False):
         if psi.finite or H.bc != 'infinite':
             raise ValueError("Only makes sense for infinite MPS")
-        if H.max_range < np.inf:
-            warnings.warn("MPO.init_first_LP_last_RP would be more efficient...")
         if H.L != psi.L:
             raise ValueError("Non-matching L")
         self.L = H.L
@@ -2181,7 +2186,7 @@ class MPOTransferMatrix:
         return E / self.L
 
     @classmethod
-    def find_init_LP_RP(cls, H, psi, calc_E=False, tol_ev0=1.e-8):
+    def find_init_LP_RP(cls, H, psi, first=0, last=None, calc_E=False, tol_ev0=1.e-8):
         """Find the initial LP and RP.
 
         Parameters
@@ -2210,6 +2215,13 @@ class MPOTransferMatrix:
                 E = TM.energy(vec)
             del TM
         init_env_data = {'init_LP': envs[1], 'init_RP': envs[0]}
+        if first != 0 or last is not None:
+            env = MPOEnvironment(psi, H, psi, **init_env_data)
+            L = env.L
+            if first % L != 0:
+                init_env_data['init_LP'] = env.get_LP(first, store=False)
+            if last % L != L - 1:
+                init_env_data['init_RP'] = env.get_RP(last, store=False)
         if calc_E:
             return E, init_env_data
         # else:

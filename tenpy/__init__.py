@@ -43,7 +43,7 @@ def show_config():
     print(version.version_summary)
 
 
-def console_main():
+def console_main(*command_line_args):
     """Command line interface.
 
     For the python interface see :func:`~tenpy.simulations.simulation.run_simulation` and
@@ -67,7 +67,7 @@ def console_main():
     import importlib
     parser = _setup_arg_parser()
 
-    args = parser.parse_args()
+    args = parser.parse_args(args=command_line_args if command_line_args else None)
     # import extra modules
     context = {'tenpy': globals(), 'np': np, 'scipy': scipy}
     if args.import_module:

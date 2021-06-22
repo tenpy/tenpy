@@ -33,6 +33,7 @@ import numpy as np
 import warnings
 import inspect
 from functools import wraps
+import copy
 import logging
 logger = logging.getLogger(__name__)
 
@@ -88,6 +89,28 @@ class Model(Hdf5Exportable):
             # Model.__init__() got called before
             if self.lat is not lattice:  # expect the *same instance*!
                 raise ValueError("Model.__init__() called with different lattice instances.")
+
+    def copy(self):
+        """Shallow copy of self."""
+        cp = copy.copy(self)
+        return cp
+
+    def extract_segment(self, first=0, last=None, enlarge=None):
+        """Return a (shallow) copy with extracted segment of MPS.
+
+        Parameters
+        ----------
+        first, last, enlarge : int
+            See :meth:`~tenpy.models.lattice.Lattice.extract_segment`.
+
+        Returns
+        -------
+        cp : :class:`Model`
+            A shallow copy of `self` with MPO and lattice extracted for the segment.
+        """
+        cp = self.copy()
+        cp.lat = self.lat.extract_segment(first, last, enlarge)
+        return cp
 
     def enlarge_mps_unit_cell(self, factor=2):
         """Repeat the unit cell for infinite MPS boundary conditions; in place.
@@ -259,6 +282,14 @@ class NearestNeighborModel(Model):
             return psi.expectation_value(self.H_bond, axes=(['p0', 'p1'], ['p0*', 'p1*']))
         # else
         return psi.expectation_value(self.H_bond[1:], axes=(['p0', 'p1'], ['p0*', 'p1*']))
+
+    def extract_segment(self, *args, **kwargs):
+        cp = super().extract_segment(*args, **kwargs)
+        first, last = cp.lat.segment_first_last
+        H_bond = self.H_bond
+        L = len(H_bond)
+        cp.H_bond = [H_bond[i % L] for i in range(first, last + 1)]
+        return cp
 
     def enlarge_mps_unit_cell(self, factor=2):
         """Repeat the unit cell for infinite MPS boundary conditions; in place.
@@ -483,9 +514,20 @@ class MPOModel(Model):
         MPOModel.test_sanity(self)
         # like self.test_sanity(), but use the version defined below even for derived class
 
+    def copy(self):
+        cp = super().copy()
+        cp.H_MPO = self.H_MPO.copy()
+        return cp
+
     def test_sanity(self):
         if self.H_MPO.sites != self.lat.mps_sites():
             raise ValueError("lattice incompatible with H_MPO.sites")
+
+    def extract_segment(self, *args, **kwargs):
+        cp = super().extract_segment(*args, **kwargs)
+        first, last = cp.lat.segment_first_last
+        cp.H_MPO = self.H_MPO.extract_segment(first, last)
+        return cp
 
     def enlarge_mps_unit_cell(self, factor=2):
         """Repeat the unit cell for infinite MPS boundary conditions; in place.
