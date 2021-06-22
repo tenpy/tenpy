@@ -17,13 +17,18 @@ How can I set the number of threads TeNPy is using?
     Using for example an ``export OMP_NUM_THREADS=4`` should limit it to 4 threads under usual setups,
     but you might also want to ``export MKL_NUM_THREADS=4`` instead, if you are sure that you are using MKL.
 
-
 Why is TeNPy not respecting MKL_NUM_THREADS?
     It might be that it is not using MKL.
     On linux, check whether you have installed a pip version of numpy or scipy in $HOME/.local/lib/python3.*
     Those packages do not use MKL - you would need to install numpy and scipy from conda.
     If you use the `conda-forge` channel as recommended in the installation, also make sure that you select
     the BLAS provided by MKL, see the note in :doc:`/install/conda`.
+
+How can I double check the installed TeNPy version?
+    You can call :func:`tenpy.show_config` to print details about the installed tenpy version.
+    If you have multiple TeNPy/Python versions on your computer, 
+    just calling ``print(tenpy)`` after an ``import tenpy`` will print the path of the used tenpy and can thus help
+    you identify which of the TeNPy installations you use.
 
 
 I get an error when ...

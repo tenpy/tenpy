@@ -4,8 +4,10 @@
 from tenpy.models import lattice
 import tenpy.linalg.np_conserved as npc
 from tenpy.networks import site
+from tenpy.networks.mps import MPS
 import numpy as np
 import numpy.testing as npt
+import pytest
 
 from random_test import gen_random_legcharge
 
@@ -110,7 +112,7 @@ def test_IrregularLattice():
 
 
 def test_HelicalLattice():
-    s = None
+    s = site.SpinHalfSite()
     honey = lattice.Honeycomb(2, 3, s, bc=['periodic', -1], bc_MPS='infinite', order='Cstyle')
     hel = lattice.HelicalLattice(honey, 2)
     strength = np.array([[1.5, 2.5, 1.5], [2.5, 1.5, 2.5]])
@@ -143,6 +145,14 @@ def test_HelicalLattice():
     assert_same(i, j, s, ijm, sm)
     ijm, sm = hel.possible_multi_couplings([('X', [1, 0], 0), ('X', [0, 1], 0)], strength)
     assert_same(i, j, s, ijm, sm)
+
+    # test that MPS.from_lat_product_state checks translation invariance
+    p_state = [[['up', 'down'], ['down', 'down'], ['up', 'down']],
+               [['down', 'down'], ['up', 'down'], ['down', 'down']]]
+    psi = MPS.from_lat_product_state(hel, p_state)
+    p_state[0][2] = ['down', 'down']
+    with pytest.raises(ValueError, match='.* not translation invariant .*'):
+        psi = MPS.from_lat_product_state(hel, p_state)
 
 
 def test_number_nn():

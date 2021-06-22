@@ -160,7 +160,7 @@ def O_close_1(size, a=0.01):
     size : tuple
         ``(n, n)``, where `n` is the dimension of the output matrix.
     a : float
-        Parameter determining how close the result is on `O`;
+        Parameter determining how close the result is to the identity;
         :math:`\lim_{a \rightarrow 0} <|O-E|>_a = 0`` (where `E` is the identity).
 
     Returns
@@ -187,7 +187,7 @@ def U_close_1(size, a=0.01):
         ``(n, n)``, where `n` is the dimension of the output matrix.
     a : float
         Parameter determining how close the result is to the identity.
-        :math:`\lim_{a \rightarrow 0} <|O-E|>_a = 0`` (where `E` is the identity).
+        :math:`\lim_{a \rightarrow 0} <|U-E|>_a = 0`` (where `E` is the identity).
 
     Returns
     -------

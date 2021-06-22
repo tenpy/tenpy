@@ -133,6 +133,9 @@ class MPS:
         Ignored for (normalized) :meth:`expectation_value`, but important for :meth:`overlap`.
     grouped : int
         Number of sites grouped together, see :meth:`group_sites`.
+    segment_boundaries : tuple of :class:`~tenpy.linalg.np_conserved.Array` | (None, None)
+        Only defined for 'segment' `bc` if :meth:`canonical_form_finite` has been called.
+        If defined, it contains the `U_L` and `V_R` that would be returned by that function.
     _B : list of :class:`npc.Array`
         The 'matrices' of the MPS. Labels are ``vL, vR, p`` (in any order).
         We recommend using :meth:`get_B` and :meth:`set_B`, which will take care of the different
@@ -185,6 +188,7 @@ class MPS:
         self.bc = bc  # one of ``'finite', 'periodic', 'segment'``.
         self.norm = norm
         self.grouped = 1
+        self.segment_boundaries = (None, None)
 
         # make copies of Bs and SVs
         self._B = [B.astype(dtype, copy=True).itranspose(self._B_labels) for B in Bs]
@@ -241,6 +245,7 @@ class MPS:
         cp = self.__class__(self.sites, self._B, self._S, self.bc, self.form, self.norm)
         cp.grouped = self.grouped
         cp._transfermatrix_keep = self._transfermatrix_keep
+        cp.segment_boundaries = self.segment_boundaries
         return cp
 
     def save_hdf5(self, hdf5_saver, h5gr, subpath):
@@ -274,6 +279,8 @@ class MPS:
         hdf5_saver.save(self.bc, subpath + "boundary_condition")
         hdf5_saver.save(np.array(self.form), subpath + "canonical_form")
         hdf5_saver.save(self.chinfo, subpath + "chinfo")
+        segment_boundaries = getattr(self, "segment_boundaries", (None, None))
+        hdf5_saver.save(self.segment_boundaries, subpath + "segment_boundaries")
         h5gr.attrs["norm"] = self.norm
         h5gr.attrs["grouped"] = self.grouped
         h5gr.attrs["transfermatrix_keep"] = self._transfermatrix_keep
@@ -315,6 +322,10 @@ class MPS:
         obj._transfermatrix_keep = hdf5_loader.get_attr(h5gr, "transfermatrix_keep")
         obj.chinfo = hdf5_loader.load(subpath + "chinfo")
         obj.dtype = np.find_common_type([B.dtype for B in obj._B], [])
+        if "segment_boundaries" in h5gr:
+            obj.segment_boundaries = hdf5_loader.load(subpath + "segment_boundaries")
+        else:
+            obj.segment_boundaries = (None, None)
         obj.test_sanity()
         return obj
 
@@ -404,6 +415,16 @@ class MPS:
         else:
             raise ValueError("wrong dimension of `p_state`. Expected {d:d}-dimensional array of "
                              "(string, int, or 1D array)".format(d=lat.dim + 1))
+        from ..models.lattice import HelicalLattice
+        if isinstance(lat, HelicalLattice):
+            order = lat.regular_lattice.order
+            for start in range(0, lat.regular_lattice.N_sites, lat.N_sites):
+                shifted_inds = tuple(order[start:start + lat.N_sites, :].T)
+                if p_state.ndim == len(lat.shape) + 1:
+                    shifted_inds = shifted_inds + (slice(None), )
+                shifted_p_state_flat = p_state[shifted_inds]
+                if not np.all(p_state_flat == shifted_p_state_flat):
+                    raise ValueError("`p_state` not translation invariant w.r.t. HelicalLattice")
         return cls.from_product_state(lat.mps_sites(), p_state_flat, **kwargs)
 
     @classmethod
@@ -1257,9 +1278,12 @@ class MPS:
         return trunc_err
 
     def get_grouped_mps(self, blocklen):
-        r"""contract blocklen subsequent tensors into a single one and return result as a new MPS.
+        r"""Like :meth:`group_sites`, but make a copy.
 
-        blocklen = number of subsequent sites to be combined.
+        Parameters
+        ----------
+        blocklen: int
+            Number of subsequent sites to be combined; `n` in :meth:`group_sites`.
 
         Returns
         -------
@@ -1318,6 +1342,8 @@ class MPS:
     def get_total_charge(self, only_physical_legs=False):
         """Calculate and return the `qtotal` of the whole MPS (when contracted).
 
+        If set, the :attr:`segment_boundaries` are included (unless `only_physical_legs` is True).
+
         Parameters
         ----------
         only_physical_legs : bool
@@ -1331,7 +1357,12 @@ class MPS:
         qtotal : charges
             The sum of the `qtotal` of the individual `B` tensors.
         """
-        qtotal = np.sum([B.qtotal for B in self._B], axis=0)
+        tensors = self._B
+        U, V = self.segment_boundaries
+        if U is not None:
+            assert V is not None
+            tensors = tensors + [U, V]
+        qtotal = np.sum([B.qtotal for B in tensors], axis=0)
         if only_physical_legs:
             if self.bc != 'finite':
                 raise ValueError("`only_physical_legs` not supported for bc=" + repr(self.bc))
@@ -1349,16 +1380,18 @@ class MPS:
             (which :meth:`get_total_charge` will return afterwards).
             By default (``None``), use 0 charges, unless vL_leg and vR_leg are specified, in which
             case we adjust the total charge to match these legs.
-        vL_leg : None | LegCharge
-            Desired new virtual leg on the very left. Needs to have the same block strucuture as
-            current leg, but can have shifted charge entries.
-        vR_leg : None | LegCharge
-            Desired new virtual leg on the very right. Needs to have the same block strucuture as
-            current leg, but can have shifted charge entries.
-            Should be `vL_leg.conj()` for infinite MPS, if `qtotal` is not given.
+        vL_leg, vR_leg: None | LegCharge
+            Desired new virtual leg on the very left and right.
+            Needs to have the same block strucuture as the current legs, but can have shifted
+            charge entries.
+            For infinite MPS, we need `vL_leg` to be the conjugate leg of `vR_leg`.
+            For segment MPS, these legs are the *outer-most* legs, possibly including the
+            :attr:`segment_boundaries`.
         """
         if self.chinfo.qnumber == 0:
             return
+        if self.segment_boundaries[0] is not None:
+            raise NotImplementedError("could be implemented.... do you need this?")
         if vL_leg is not None:
             vL_chdiff = vL_leg.get_charge(0) - self._B[0].get_leg('vL').get_charge(0)
         if vR_leg is not None:
@@ -2837,8 +2870,6 @@ class MPS:
             # we actually had a canonical form before, so we should *not* ignore the 'S'
             M = self.get_B(0, form='Th')
             form = 'B'  # for other 'M'
-        if self.bc == 'segment':
-            M.iscale_axis(self.get_SL(0), axis='vL')
         Q, R = npc.qr(M.combine_legs(['vL'] + self._p_label), inner_labels=['vR', 'vL'])
         # Q = unitary, R has to be multiplied to the right
         self.set_B(0, Q.split_legs(0), form='A')
@@ -2848,7 +2879,7 @@ class MPS:
             Q, R = npc.qr(M.combine_legs(['vL'] + self._p_label), inner_labels=['vR', 'vL'])
             # Q is unitary, i.e. left canonical, R has to be multiplied to the right
             self.set_B(i, Q.split_legs(0), form='A')
-        M = self.get_B(L - 1, None)
+        M = self.get_B(L - 1, form)
         M = npc.tensordot(R, M, axes=['vR', 'vL'])
         if self.bc == 'segment':
             # also neet to calculate new singular values on the very right
@@ -2905,6 +2936,13 @@ class MPS:
                         RP = npc.tensordot(RP, VR.conj(), axes=['vL*', 'vR*'])
                     env.set_RP(env.L - 1, RP, env.get_RP_age(env.L - 1))
         if self.bc == 'segment':
+            old_UL, old_VR = self.segment_boundaries
+            if old_UL is not None:
+                new_UL = npc.tensordot(old_UL, U, axes=['vR', 'vL'])
+                new_VR = npc.tensordot(VR_segment, old_VR, axes=['vR', 'vL'])
+                self.segment_boundaries = (new_UL, new_VR)
+            else:
+                self.segment_boundaries = (U, VR_segment)
             return U, VR_segment
 
     def canonical_form_infinite(self, renormalize=True, tol_xi=1.e6):
@@ -2961,8 +2999,8 @@ class MPS:
         # find dominant left eigenvector
         norm, Gl = self._canonical_form_dominant_gram_matrix(i1, True, tol_xi, Gl)
         if abs(1. - norm) > 1.e-13:
-            logger.warn("Although we renormalized the TransferMatrix, "
-                        "the largest eigenvalue is not 1")  # (this shouldn't happen)
+            logger.warning("Although we renormalized the TransferMatrix, "
+                           "the largest eigenvalue is not 1")  # (this shouldn't happen)
         self._B[i1] /= np.sqrt(norm)  # correct norm again
         if not renormalize:
             self.norm *= np.sqrt(norm)
@@ -3053,8 +3091,8 @@ class MPS:
             assert abs(E0[0]) > abs(E[0]), "dominant eigenvector in zero charge sector?"
             E = np.array([E0[0]] + list(E))
         if abs(E[0] - 1.) > tol_ev0:
-            logger.warn("Correlation length: largest eigenvalue not one. "
-                        "Not in canonical form/normalized?")
+            logger.warning("Correlation length: largest eigenvalue not one. "
+                           "Not in canonical form/normalized?")
         if len(E) < 2:
             return 0.  # only a single eigenvector: zero correlation length
         if target == 1:
@@ -3085,44 +3123,41 @@ class MPS:
         sum : :class:`MPS`
             An MPS representing ``alpha|self> + beta |other>``.
             Has same total charge as `self`.
-        U_L, V_R : :class:`~tenpy.linalg.np_conserved.Array`
-            Only returned for ``'segment'`` boundary conditions.
-            The unitaries defining the new left and right Schmidt states in terms of the old ones,
-            with legs ``'vL', 'vR'``.
         """
         L = self.L
         assert (other.L == L and L >= 2)  # (if you need this, generalize this function...)
         assert self.finite
+        assert self.bc == other.bc
         self._gauge_compatible_vL_vR(other)
         legs = ['vL', 'vR'] + self._p_label
         # alpha and beta appear only on the first site
         alpha = alpha * self.norm
         beta = beta * other.norm
-        Bs = [
-            npc.grid_concat(
-                [[alpha * self.get_B(0).transpose(legs), beta * other.get_B(0).transpose(legs)]],
-                axes=[0, 1])
-        ]
+        theta_self = self.get_B(0, 'Th').transpose(legs)
+        theta_other = other.get_B(0, 'Th').transpose(legs)
+        last_B_self = self.get_B(L - 1).transpose(legs)
+        last_B_other = other.get_B(L - 1).transpose(legs)
+        U, V = self.segment_boundaries
+        if U is not None:
+            theta_self = npc.tensordot(U, theta_self, axes=['vR', 'vL']).transpose(legs)
+            last_B_self = npc.tensordot(last_B_self, V, axes=['vR', 'vL']).transpose(legs)
+        U, V = other.segment_boundaries
+        if U is not None:
+            theta_other = npc.tensordot(U, theta_other, axes=['vR', 'vL']).transpose(legs)
+            last_B_other = npc.tensordot(last_B_other, V, axes=['vR', 'vL']).transpose(legs)
+        Bs = [npc.grid_concat([[alpha * theta_self, beta * theta_other]], axes=[0, 1])]
         for i in range(1, L - 1):
             B1 = self.get_B(i).transpose(legs)
             B2 = other.get_B(i).transpose(legs)
             grid = [[B1, npc.zeros([B1.get_leg('vL'), B2.get_leg('vR')] + B1.legs[2:])],
                     [npc.zeros([B2.get_leg('vL'), B1.get_leg('vR')] + B1.legs[2:]), B2]]
             Bs.append(npc.grid_concat(grid, [0, 1]))
-        Bs.append(
-            npc.grid_concat(
-                [[self.get_B(L - 1).transpose(legs)], [other.get_B(L - 1).transpose(legs)]],
-                axes=[0, 1]))
-
-        Ss = [np.ones(1)] + [np.ones(B.shape[1]) for B in Bs]
-        psi = self.__class__(self.sites, Bs, Ss, 'finite', form=None)  # new class instance
+        Bs.append(npc.grid_concat([[last_B_self], [last_B_other]], axes=[0, 1]))
+        Ss = [np.ones(Bs[0].shape[0])] + [np.ones(B.shape[1]) for B in Bs]
+        psi = self.__class__(self.sites, Bs, Ss, self.bc, form=None)  # new class instance
         # bring to canonical form, calculate Ss
-        if self.bc == 'segment':
-            U_L, V_R = psi.canonical_form_finite(renormalize=False, cutoff=cutoff)
-            return psi, U_L, V_R
-        else:
-            psi.canonical_form_finite(renormalize=False, cutoff=cutoff)
-            return psi
+        psi.canonical_form_finite(renormalize=False, cutoff=cutoff)
+        return psi
 
     def apply_local_op(self, i, op, unitary=None, renormalize=False, cutoff=1.e-13):
         """Apply a local (one or multi-site) operator to `self`.
@@ -3225,6 +3260,38 @@ class MPS:
             self._B[i] = npc.tensordot(op, self._B[i], axes=['p*', 'p'])
         if not unitary:
             self.canonical_form(renormalize=renormalize)
+
+    def perturb(self, randomize_params=None, close_1=True, canonicalize=None):
+        """Locally perturb the state a little bit.
+
+        Parameters
+        ----------
+        randomize_params : dict
+            Parameters for the :class:`~tenpy.algorithms.tebd.RandomUnitaryEvolution`.
+        close_1 : bool
+            Select the default :cfg:option:`RandomUnitaryEvolution.distribution_func` to be used,
+            if `close_1` is True, use :func:`~tenpy.linalg.random_matrix.U_close_1` for complex and
+            :func:`~tenpy.linalg.random_matrix.O_close_1` for real MPS;
+            for `close_1` False use :func:`~tenpy.linalg.random_matrix.CUE` or
+            :func:`~tenpy.linalg.random_matrix.CRE`, respectively.
+        canonicalize : bool
+            Wether to call `psi.canonical_from in the end. Defaults to ``not close_1``.
+        """
+        from ..algorithms.tebd import RandomUnitaryEvolution
+        if randomize_params is None:
+            randomize_params = {}
+        if close_1:
+            func = 'U_close_1' if self.dtype.kind == 'c' else 'O_close_1'
+        else:
+            func = 'CUE' if self.dtype.kind == 'c' else 'CRE'
+        randomize_params.setdefault('distribution_func', func)
+        eng = RandomUnitaryEvolution(self, randomize_params)
+        eng.run()
+        if canonicalize is None:
+            canonicalize = not close_1
+        if canonicalize:
+            self.canonical_form()
+        # done
 
     def swap_sites(self, i, swap_op='auto', trunc_par=None):
         r"""Swap the two neighboring sites `i` and `i+1` (inplace).
@@ -3504,7 +3571,7 @@ class MPS:
         # re-check canonical form
         norm_err = np.linalg.norm(psi_t.norm_test())
         if norm_err > canonicalize:
-            logger.warn("norm_error=%.10f after permutation: ==> canonicalize", norm_err)
+            logger.warning("norm_error=%.10f after permutation: ==> canonicalize", norm_err)
         psi_t.convert_form('B')
         TM = TransferMatrix(self, psi_t, transpose=True, charge_sector=0)
         # Find left dominant eigenvector of this mixed transfer matrix.
@@ -3512,8 +3579,8 @@ class MPS:
         # the resulting vector should be sUs up to a scaling.
         ov, sUs = TM.eigenvectors(num_ev=self._transfermatrix_keep)
         if np.abs(ov[0]) < 0.9:
-            logger.warn("compute_K: psi is not eigenvector of permutation/translation in y!"
-                        f"expected |o| = 1., got |o| = {abs(ov[0]):.3e}\n")
+            logger.warning("compute_K: psi is not eigenvector of permutation/translation in y!"
+                           f"expected |o| = 1., got |o| = {abs(ov[0]):.3e}\n")
 
         logger.info("compute_K: overlap %.5f, |o| = 1. - %.e5., trunc_err.eps=%.3e", ov[0],
                     1. - np.abs(ov[0]), trunc_err.eps)
@@ -3835,7 +3902,7 @@ class MPS:
         if np.count_nonzero(proj) < len(W):
             # project into non-degenerate subspace, reducing the bond dimensions!
             if np.count_nonzero(proj) < len(W) * 0.9:
-                logger.warn("canonical_form_infinite: project to significantly smaller chi")
+                logger.warning("canonical_form_infinite: project to significantly smaller chi")
             XH.iproject(proj, axes=1)
             W = W[proj]
         norm = len(W) / np.sum(W)
@@ -3874,7 +3941,7 @@ class MPS:
         if np.count_nonzero(proj) < len(S2):
             # project into non-degenerate subspace, reducing the bond dimensions!
             if np.count_nonzero(proj) < len(S2) * 0.9:
-                logger.warn("canonical_form_infinite: project to significantly smaller chi")
+                logger.warning("canonical_form_infinite: project to significantly smaller chi")
             YH.iproject(proj, axes=1)
             S2 = S2[proj]
             s_norm = np.sqrt(np.sum(S2))
@@ -3896,17 +3963,20 @@ class MPS:
         if self.chinfo.qnumber == 0:
             return
         from tenpy.tools import optimization
-        need_gauge = False
-        with optimization.temporary_level(optimization.OptimizationFlag.default):
-            try:
-                other._B[0].get_leg('vL').test_equal(self._B[0].get_leg('vL'))
-                other._B[-1].get_leg('vR').test_equal(self._B[-1].get_leg('vR'))
-            except ValueError:
-                need_gauge = True
+        need_gauge = any(self.get_total_charge() != other.get_total_charge())
         if need_gauge:
-            other.gauge_total_charge(None, self._B[0].get_leg('vL'), self._B[-1].get_leg('vR'))
-        if any(self.get_total_charge() != other.get_total_charge()):
-            raise ValueError("self and other have different total charges!")
+            vL, vR = self._outer_virtual_legs()
+            other.gauge_total_charge(None, vL, vR)
+
+    def _outer_virtual_legs(self):
+        U, V = self.segment_boundaries
+        if U is not None:
+            vL = U.get_leg('vL')
+            vR = V.get_leg('vR')
+        else:
+            vL = self._B[0].get_leg('vL')
+            vR = self._B[-1].get_leg('vR')
+        return vL, vR
 
 
 class MPSEnvironment:
@@ -4042,27 +4112,38 @@ class MPSEnvironment:
         start_env_sites : int
             If `init_LP` and `init_RP` are not specified, contract each `start_env_sites` for them.
         """
+        vL_ket, vR_ket = self.ket._outer_virtual_legs()
+        vL_bra, vR_bra = self.bra._outer_virtual_legs()
+        ket_U, ket_V = self.ket.segment_boundaries
+        bra_U, bra_V = self.bra.segment_boundaries
         if init_LP is not None:
-            try:
-                init_LP.get_leg('vR').test_contractible(self.ket.get_theta(0, 1).get_leg('vL'))
-                init_LP.get_leg('vR*').test_equal(self.bra.get_theta(0, 1).get_leg('vL'))
-            except ValueError:
-                logger.warn("dropping `init_LP` with incompatible legs")
+            compatible = (init_LP.get_leg('vR') == vL_ket.conj()
+                          and init_LP.get_leg('vR*') == vL_bra)
+            if not compatible:
+                logger.warning("dropping `init_LP` with incompatible MPS legs")
                 init_LP = None
         if init_RP is not None:
-            try:
-                j = self.L - 1
-                init_RP.get_leg('vL').test_contractible(self.ket.get_theta(j, 1).get_leg('vR'))
-                init_RP.get_leg('vL*').test_equal(self.bra.get_theta(j, 1).get_leg('vR'))
-            except ValueError:
-                logger.warn("dropping `init_RP` with incompatible legs")
+            compatible = (init_RP.get_leg('vL') == vR_ket.conj()
+                          and init_RP.get_leg('vL*') == vR_bra)
+            if not compatible:
+                logger.warning("dropping `init_RP` with incompatible MPS legs")
                 init_RP = None
         if init_LP is None:
             init_LP = self.init_LP(0, start_env_sites)
             age_LP = start_env_sites
+        else:
+            if ket_U is not None:
+                init_LP = npc.tensordot(init_LP, ket_U, axes=['vR', 'vL'])
+            if bra_U is not None:
+                init_LP = npc.tensordot(bra_U.conj(), init_LP, axes=['vL*', 'vR*'])
         if init_RP is None:
             init_RP = self.init_RP(self.L - 1, start_env_sites)
             age_RP = start_env_sites
+        else:
+            if ket_V is not None:
+                init_RP = npc.tensordot(ket_V, init_RP, axes=['vR', 'vL'])
+            if bra_V is not None:
+                init_RP = npc.tensordot(init_RP, bra_V.conj(), axes=['vL*', 'vR*'])
         self.set_LP(0, init_LP, age=age_LP)
         self.set_RP(self.L - 1, init_RP, age=age_RP)
 
@@ -4078,6 +4159,9 @@ class MPSEnvironment:
         If `bra` and `ket` are the same and in left canonical form, this is the environment
         you get contracting he overlaps from the left infinity up to bond left of site `i`.
 
+        For segment MPS, the :attr:`~tenpy.networks.mps.MPS.segment_boundaries` are read out
+        (if set).
+
         Parameters
         ----------
         i : int
@@ -4090,6 +4174,17 @@ class MPSEnvironment:
         init_LP : :class:`~tenpy.linalg.np_conserved.Array`
             Identity contractible with the `vL` leg of ``ket.get_B(i)``, labels ``'vR*', 'vR'``.
         """
+        if self.ket.bc == "segment" and self.bra is not self.ket:
+            U_bra, V_bra = self.bra.segment_boundaries
+            U_ket, V_ket = self.ket.segment_boundaries
+            if U_bra is not None or U_ket is not None:
+                if U_bra is not None and U_ket is not None:
+                    init_LP = npc.tensordot(U_bra.conj(), U_ket, axes=['vL*', 'vL'])
+                elif U_bra is not None:
+                    init_LP = U_bra.conj().ireplace_label('vL*', 'vR')
+                else:
+                    init_LP = U_ket.replace_label('vL', 'vR*')
+                return init_LP
         leg_ket = self.ket.get_B(i - start_env_sites, None).get_leg('vL')
         leg_bra = self.bra.get_B(i - start_env_sites, None).get_leg('vL')
         leg_ket.test_equal(leg_bra)
@@ -4104,6 +4199,9 @@ class MPSEnvironment:
         If `bra` and `ket` are the same and in right canonical form, this is the environment
         you get contracting from the right infinity up to bond right of site `i`.
 
+        For segment MPS, the :attr:`~tenpy.networks.mps.MPS.segment_boundaries` are read out
+        (if set).
+
         Parameters
         ----------
         i : int
@@ -4116,6 +4214,17 @@ class MPSEnvironment:
         init_RP : :class:`~tenpy.linalg.np_conserved.Array`
             Identity contractible with the `vR` leg of ``ket.get_B(i)``, labels ``'vL*', 'vL'``.
         """
+        if self.ket.bc == "segment" and self.bra is not self.ket:
+            U_bra, V_bra = self.bra.segment_boundaries
+            U_ket, V_ket = self.ket.segment_boundaries
+            if V_bra is not None or V_ket is not None:
+                if V_bra is not None and V_ket is not None:
+                    init_RP = npc.tensordot(V_bra.conj(), V_ket, axes=['vR*', 'vR'])
+                elif V_bra is not None:
+                    init_RP = V_bra.conj().ireplace_label('vR*', 'vL')
+                else:
+                    init_RP = V_ket.replace_label('vR', 'vL*')
+                return init_RP
         leg_ket = self.ket.get_B(i + start_env_sites, None).get_leg('vR')
         leg_bra = self.bra.get_B(i + start_env_sites, None).get_leg('vR')
         leg_ket.test_equal(leg_bra)
@@ -4988,14 +5097,11 @@ class InitialStateBuilder:
         method_name = self.options['randomized_from_method']
         method = getattr(self, method_name)
         psi = method()
-        canonicalize = self.options.get('randomize_canonicalize', True)
-        from ..algorithms.tebd import RandomUnitaryEvolution
+        close_1 = self.options.get('randomize_close_1', False)
+        canonicalize = self.options.get('randomize_canonicalize', not close_1)
         params = {'N_steps': 10, 'trunc_params': {'chi_max': 100}}
-        params = self.options.subconfig('randomize_params', params)
-        eng = RandomUnitaryEvolution(psi, params)
-        eng.run()
-        if canonicalize:
-            psi.canonical_form()
+        params = self.options.subconfig('randomize_params', {})
+        psi.perturb(params, close_1=close_1, canonicalize=canonicalize)
         return psi
 
 

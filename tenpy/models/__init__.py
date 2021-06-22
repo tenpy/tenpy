@@ -21,6 +21,7 @@ All other modules in this folder contain model classes derived from these base c
 
     tf_ising
     xxz_chain
+    aklt
     spins
     spins_nnn
     fermions_spinless
@@ -34,7 +35,7 @@ All other modules in this folder contain model classes derived from these base c
 from . import lattice, model
 from . import tf_ising, xxz_chain, spins, spins_nnn
 from . import fermions_spinless, hubbard, hofstadter, haldane
-from . import toric_code
+from . import toric_code, aklt
 
 __all__ = [
     'lattice', 'model', 'tf_ising', 'xxz_chain', 'spins', 'spins_nnn', 'fermions_spinless',

@@ -24,6 +24,7 @@ import copy
 from ..models.model import Model
 from ..algorithms.algorithm import Algorithm
 from ..networks.mps import InitialStateBuilder
+from ..models.model import NearestNeighborModel
 from ..tools import hdf5_io
 from ..tools.cache import CacheFile
 from ..tools.params import asConfig
@@ -118,7 +119,7 @@ class Simulation:
         resume_data : dict
             Additional data for resuming the algorithm run.
             Not part of `self.results`, but only added in :meth:`prepare_results_for_save` with
-            the most up to date `resume_data` from
+            the most up-to-date `resume_data` from
             :meth:`~tenpy.algorithms.algorithm.Algorithm.get_resume_data`.
             Only included if :cfg:option:`Simultion.save_resume_data` is True.
             Note that this contains anoter (reference or even copy of) `psi`.
@@ -139,6 +140,11 @@ class Simulation:
         Time of the last call to :meth:`save_results`, initialized to startup time.
     loaded_from_checkpoint : bool
         True when the simulation is loaded with :meth:`from_saved_checkpoint`.
+    grouped : int
+        By how many sites we grouped in :meth:`group_sites_for_algorithm`.
+    model_ungrouped :
+        Only set if `grouped` > 1. In that case, :attr:`model` is the modified/grouped model,
+        and `model_ungrouped` is the original ungrouped model.
     """
     #: name of the default algorithm `engine` class
     default_algorithm = 'TwoSiteDMRGEngine'
@@ -204,6 +210,7 @@ class Simulation:
             self.results['resume_data'] = resume_data
         self.options.touch('sequential')  # added by :func:`run_seq_simulations` for completeness
         self.cache = CacheFile.open()
+        self.grouped = 1
 
     def __enter__(self):
         self.init_cache()
@@ -237,11 +244,13 @@ class Simulation:
                           "You should probably call `resume_run()` instead!")
         self.init_model()
         self.init_state()
+        self.group_sites_for_algorithm()
         self.init_algorithm()
         self.init_measurements()
 
         self.run_algorithm()
 
+        self.group_split()
         self.final_measurements()
         self.results['finished_run'] = True
         results = self.save_results()
@@ -303,7 +312,7 @@ class Simulation:
                 raise ValueError("psi not saved in the results: can't resume!")
             self.psi = self.results['psi']
         self.init_state()  # does (almost) nothing if self.psi is already initialized
-
+        self.group_sites_for_algorithm()
         self.init_algorithm()  # automatically reads out and del's ``self.results['resume_data']``
 
         # the relevant part from init_measurements(), but don't make a measurement
@@ -311,6 +320,7 @@ class Simulation:
         self.options.touch('measure_initial')
 
         self.resume_run_algorithm()  # continue with the actual algorithm
+        self.group_split()
         self.final_measurements()
         self.results['finished_run'] = True
         results = self.save_results()
@@ -325,21 +335,26 @@ class Simulation:
         ``with ...`` statement.
         This is the case if you use :func:`run_simulation`, etc.
 
-        .. todo :
-            add threshold parameter to allow using the cache only when the estimated memory
-            size goes beyond some limit. How to estimate memory requirements?
-
         Options
         -------
         .. cfg:configoptions :: Simulation
 
+            cache_threshold_chi : int
+                If the `algorithm_params.trunc_params.chi_max` in :attr:`options` is smaller than
+                this threshold, do not initialize a (non-trivial) cache.
             cache_params : dict
                 Dictionary with parameters for the cache, see
                 :meth:`~tenpy.tools.cache.CacheFile.open`.
+
         """
+        cache_threshold_chi = self.options.get("cache_threshold_chi", 2000)
+        cache_params = self.options.get("cache_params", {})
+        chi = get_recursive(self.options, "algorithm_params.trunc_params.chi_max", default=None)
+        if chi is not None and chi < cache_threshold_chi:
+            self.cache = CacheFile.open()  # default = keep in RAM.
+            return
         self.cache.close()
         self.logger.info("initialize new cache")
-        cache_params = self.options.get("cache_params", {})
         self.cache = CacheFile.open(**cache_params)
         # note: can't use a `with self.cache` statement, but emulate it:
         # self.__enter__() calls self.cache = self.cache.__enter__()
@@ -360,10 +375,10 @@ class Simulation:
                 corresponding `model_class`.
         """
         model_class_name = self.options["model_class"]  # no default value!
-        ModelClass = find_subclass(Model, model_class_name)
         if hasattr(self, 'model'):
             self.options.touch('model_params')
             return  # skip actually regenerating the model
+        ModelClass = find_subclass(Model, model_class_name)
         params = self.options.subconfig('model_params')
         self.model = ModelClass(params)
 
@@ -397,6 +412,42 @@ class Simulation:
             self.options.touch('initial_state_builder_class', 'initial_state_params')
         if self.options.get('save_psi', True):
             self.results['psi'] = self.psi
+
+    def group_sites_for_algorithm(self):
+        """Coarse-grain the model and state for the algorithm.
+
+        Options
+        -------
+        .. cfg:configoptions :: Simulation
+
+            group_sites : int
+                How many sites to group. 1 means no grouping.
+            group_to_NearestNeighborModel : bool
+                If True, convert the grouped model to a
+                :class:`~tenpy.models.model.NearestNeighborModel`.
+                Use this if you want to run TEBD with a model that was originally next-nearest
+                neighbor.
+        """
+        self.model_ungrouped = copy.copy(self.model)
+        group_sites = self.grouped = self.options.get("group_sites", 1)
+        to_NN = self.options.get("group_to_NearestNeighborModel", False)
+        if group_sites < 1:
+            raise ValueError("invalid `group_sites` = " + str(group_sites))
+        if group_sites > 1:
+            if not self.loaded_from_checkpoint or self.psi.grouped < group_sites:
+                self.psi.group_sites(group_sites)
+            self.model_ungrouped = copy.copy(self.model)
+            self.model.group_sites(group_sites)
+            if to_NN:
+                self.model = NearestNeighborModel.from_MPOModel(self.model)
+
+    def group_split(self):
+        """Split sites of psi that were grouped in  :meth:`group_sites_for_algorithm`."""
+        if self.grouped > 1:
+            self.psi.group_split(self.options['algorithm_params']['trunc_params'])
+            self.model = self.model_ungrouped
+            del self.model_ungrouped
+            self.grouped = 1
 
     def init_algorithm(self, **kwargs):
         """Initialize the algorithm.
@@ -511,12 +562,16 @@ class Simulation:
         results : dict
             The results from calling the measurement functions.
         """
-        # TODO: save-guard measurements with try-except?
+        # TODO: safe-guard measurements with try-except?
         # in case of a failed measurement, we should raise the exception at the end of the
         # simulation?
         results = {}
+        if self.grouped > 1:
+            psi = self.psi.copy()
+            psi.group_split(self.options['algorithm_params']['trunc_params'])
+
         returned = self.measurement_event.emit(results=results, simulation=self, psi=self.psi)
-        # still save the values returned
+        # check for returned values, although there shouldn't be any
         returned = [entry for entry in returned if entry is not None]
         if len(returned) > 0:
             msg = ("Some measurement function returned a value instead of writing to `results`.\n"
@@ -775,7 +830,7 @@ class Simulation:
             time_to_save = time.time() - now
             if time_to_save > 0.1 * save_every > 0.:
                 save_every = 20 * time_to_save
-                self.logger.warn(
+                self.logger.warning(
                     "Saving took longer than 10%% of `save_every_x_seconds`. "
                     "Increase the latter to %.1f", save_every)
                 self.options['save_every_x_seconds'] = save_every

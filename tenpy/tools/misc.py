@@ -297,7 +297,7 @@ def zero_if_close(a, tol=1.e-15):
     a : ndarray
         numpy array to be rounded
     tol : float
-        the threashold which values to consider as '0'.
+        the threshold which values to consider as '0'.
     """
     if a.dtype == np.complex128 or a.dtype == np.complex64:
         ar = np.choose(np.abs(a.real) < tol, [a.real, np.zeros(a.shape)])
@@ -562,7 +562,10 @@ def _find_subclass_recursion(base_class, name_to_find, found, checked):
         checked.add(subcls)
 
 
-def get_recursive(nested_data, recursive_key, separator="."):
+_UNSET = object()  # sentinel
+
+
+def get_recursive(nested_data, recursive_key, separator=".", default=_UNSET):
     """Extract specific value from a nested data structure.
 
     Parameters
@@ -574,6 +577,9 @@ def get_recursive(nested_data, recursive_key, separator="."):
         A leading `separator` is ignored.
     separator : str
         Separator for splitting `recursive_key` into subkeys.
+    default :
+        If not specified, the function raises a `KeyError` if the recursive_key is invalid.
+        If given, return this value when any of the nested dicts does not contain the subkey.
 
     Returns
     -------
@@ -591,6 +597,8 @@ def get_recursive(nested_data, recursive_key, separator="."):
     if not recursive_key:
         return nested_data  # return the original data if recursive_key is just "/"
     for subkey in recursive_key.split(separator):
+        if default is not _UNSET and subkey not in nested_data:
+            return default
         nested_data = nested_data[subkey]
     return nested_data
 

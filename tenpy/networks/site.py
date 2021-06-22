@@ -15,7 +15,7 @@ from ..tools.hdf5_io import Hdf5Exportable
 
 __all__ = [
     'Site', 'GroupedSite', 'group_sites', 'set_common_charges', 'multi_sites_combine_charges',
-    'SpinHalfSite', 'SpinSite', 'FermionSite', 'SpinHalfFermionSite', 'BosonSite'
+    'SpinHalfSite', 'SpinSite', 'FermionSite', 'SpinHalfFermionSite', 'BosonSite', 'kron'
 ]
 
 
@@ -504,7 +504,7 @@ class GroupedSite(Site):
         ``'independent'`` means that the `sites` have possibly different `ChargeInfo`,
         and the charges are conserved separately, i.e., we have `n_sites` conserved charges.
         For ``'drop'``, we drop any charges, such that the remaining legcharges are trivial.
-        For more complex situations, you can call :func:`multi_sites_combine_charges` beforehand.
+        For more complex situations, you can call :func:`set_common_charges` beforehand.
 
     Attributes
     ----------
@@ -628,7 +628,7 @@ def group_sites(sites, n=2, labels=None, charges='same'):
     n : int
         We group each `n` consecutive sites from `sites` together in a :class:`GroupedSite`.
     labels, charges :
-        See :class:`GroupedSites`.
+        See :class:`GroupedSite`.
 
     Returns
     -------
@@ -1532,3 +1532,32 @@ class BosonSite(Site):
         return "BosonSite({N:d}, {c!r}, {f:f})".format(N=self.Nmax,
                                                        c=self.conserve,
                                                        f=self.filling)
+
+
+def kron(*ops, group=True):
+    """Kronecker product of two or more local operators.
+
+    Parameters
+    ----------
+    *ops : :class:`~tenpy.linalg.np_conserved.Array`
+        Local operators with labels ``'p', 'p*'`` as defined in :class:`Site`.
+    group : bool
+        Whether to combine the in/outgoing legs.
+
+    Returns
+    -------
+    product : :class:`~tenpy.linalg.np_conserved.Array`
+        Outer product of the `ops`, with legs ``'p0', 'p0*', 'p1', 'p1*', ...`` (grouped=False)
+        or combined legs ``'(p0.p1...)', '(p0*.p1*...)'`` (grouped=True).
+    """
+    if len(ops) <= 1:
+        raise ValueError("need at least 2 ops")
+    product = npc.outer(ops[0].replace_labels(['p', 'p*'], ['p0', 'p0*']),
+                        ops[1].replace_labels(['p', 'p*'], ['p1', 'p1*']))
+    for i in range(2, len(ops)):
+        op = ops[i].replace_labels(['p', 'p*'], [f"p{i:d}", f"p{i:d}*"])
+        product = npc.outer(product, op)
+    if group:
+        labels = [[f"p{i:d}" for i in range(len(ops))], [f"p{i:d}*" for i in range(len(ops))]]
+        product = product.combine_legs(labels, qconj=[+1, -1])
+    return product

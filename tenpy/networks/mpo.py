@@ -40,6 +40,7 @@ import numpy as np
 from scipy.linalg import expm
 import warnings
 import sys
+import copy
 import logging
 logger = logging.getLogger(__name__)
 
@@ -136,6 +137,10 @@ class MPO:
         self.max_range = max_range
         self.explicit_plus_hc = explicit_plus_hc
         self.test_sanity()
+
+    def copy(self):
+        """Make a shallow copy of `self`."""
+        return copy.copy(self)
 
     def save_hdf5(self, hdf5_saver, h5gr, subpath):
         """Export `self` into a HDF5 file.
@@ -403,7 +408,7 @@ class MPO:
             grouped_sites = group_sites(self.sites, n, charges='same')
         else:
             assert grouped_sites[0].n_sites == n
-        if self.max_range is not None:
+        if self.max_range is not None and self.max_range != np.inf:
             min_n = max(min([gs.n_sites for gs in grouped_sites]), 1)
             self.max_range = int(np.ceil(self.max_range / min_n))
         Ws = []
@@ -1786,7 +1791,7 @@ class MPOEnvironment(MPSEnvironment):
         if start_env_sites is None:
             start_env_sites = 0 if self._finite else self.H.max_range
             if start_env_sites is None or start_env_sites > self.L:
-                logger.warn("reducing default `start_env_sites` to L")
+                logger.warning("reducing default `start_env_sites` to L")
                 start_env_sites = self.L
         if self._finite and start_env_sites != 0:
             warnings.warn("setting `start_env_sites` to 0 for finite MPS")
@@ -1795,14 +1800,14 @@ class MPOEnvironment(MPSEnvironment):
             try:
                 init_LP.get_leg('wR').test_contractible(self.H.get_W(0).get_leg('wL'))
             except ValueError:
-                logger.warn("dropping `init_LP` with incompatible legs")
+                logger.warning("dropping `init_LP` with incompatible MPO legs")
                 init_LP = None
         if init_RP is not None:
             try:
                 j = self.L - 1
                 init_RP.get_leg('wL').test_contractible(self.H.get_W(j).get_leg('wR'))
             except ValueError:
-                logger.warn("dropping `init_RP` with incompatible legs")
+                logger.warning("dropping `init_RP` with incompatible MPO legs")
                 init_RP = None
         super().init_first_LP_last_RP(init_LP, init_RP, age_LP, age_RP, start_env_sites)
 
@@ -2199,7 +2204,7 @@ class MPOTransferMatrix:
             TM = cls(H, psi, transpose=transpose)
             val, vec = TM.dominant_eigenvector()
             if abs(1. - val) > tol_ev0:
-                logger.warn("MPOTransferMatrix eigenvalue not 1: got 1. - %.3e", 1. - val)
+                logger.warning("MPOTransferMatrix eigenvalue not 1: got 1. - %.3e", 1. - val)
             envs.append(vec)
             if calc_E and transpose:
                 E = TM.energy(vec)

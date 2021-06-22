@@ -5,6 +5,7 @@ import numpy.testing as npt
 import tempfile
 import os
 import pytest
+import warnings
 
 from tenpy.tools.cache import CacheFile
 
@@ -53,17 +54,18 @@ def test_DictCache(**kwargs):
 
 @pytest.mark.skipif(h5py is None, reason="h5py not available")
 def test_Hdf5Cache():
-    with tempfile.TemporaryDirectory() as tdir:
-        filename = os.path.join(tdir, 'tmp_Hdf5Cache.h5')
-        test_DictCache(storage_class="Hdf5Storage", filename=filename)
-    test_DictCache(storage_class="Hdf5Storage")  # path = None -> tempfile use in tenpy.tools.cache
-    test_DictCache(storage_class="Hdf5Storage", use_threading=True)
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore', UserWarning)  # disable warngings temporarily
+        with tempfile.TemporaryDirectory() as tdir:
+            filename = os.path.join(tdir, 'tmp_Hdf5Cache.h5')
+            test_DictCache(storage_class="Hdf5Storage", filename=filename)
+        test_DictCache(storage_class="Hdf5Storage")  # path = None -> tempfile in tenpy.tools.cache
+        test_DictCache(storage_class="Hdf5Storage", use_threading=True)
 
 
 def test_PickleCache():
     with tempfile.TemporaryDirectory() as tdir:
         subdir = os.path.join(tdir, 'tmp_PickleCache')
         test_DictCache(storage_class="PickleStorage", directory=subdir)
-    test_DictCache(
-        storage_class="PickleStorage")  # path = None -> tempfile use in tenpy.tools.cache
+    test_DictCache(storage_class="PickleStorage")  # path = None -> tempfile in tenpy.tools.cache
     test_DictCache(storage_class="PickleStorage", use_threading=True)

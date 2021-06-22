@@ -525,6 +525,7 @@ class MPOModel(Model):
             The sites grouped together.
         """
         grouped_sites = super().group_sites(n, grouped_sites)
+        self.H_MPO = self.H_MPO.copy()
         self.H_MPO.group_sites(n, grouped_sites)
         return grouped_sites
 

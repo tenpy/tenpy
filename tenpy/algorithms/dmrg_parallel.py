@@ -1,7 +1,7 @@
 """Parallelized version of DMRG.
 
 .. warning ::
-    This module is still under active development.
+    This module is still under active development. Use with care!
 """
 # Copyright 2021 TeNPy Developers, GNU GPLv3
 
@@ -15,15 +15,20 @@ __all__ = ["DMRGThreadPlusHC", "TwoSiteHThreadPlusHC"]
 
 
 class TwoSiteHThreadPlusHC(TwoSiteH):
+    """Version of `TwoSiteH` that parallelizes matvec with threads.
+
+    Using threads instead of e.g. MPI parallelization means we don't need to make explicit copies
+    of (at least one of) the environment tensors and communication is much cheaper.
+    """
     def __init__(self, *args, plus_hc_worker=None, **kwargs):
         super().__init__(*args, **kwargs)
-        assert plus_hc_worker is not None
         self._plus_hc_worker = plus_hc_worker
         if not self.combine:
             raise NotImplementedError("works only with combine=True")
         self.RHeff_for_hc = self.RHeff.transpose(['(p1*.vL)', '(p1.vL*)', 'wL'])
 
     def matvec(self, theta):
+        assert self._plus_hc_worker is not None
         res = {}
         self._plus_hc_worker.put_task(self.matvec_hc, theta, return_dict=res, return_key="theta")
         theta = super().matvec(theta)
@@ -57,12 +62,13 @@ class DMRGThreadPlusHC(TwoSiteDMRGEngine):
     EffectiveH = TwoSiteHThreadPlusHC
 
     def __init__(self, psi, model, options, **kwargs):
-        self._plus_hc_worker = Worker("EffectiveHPlusHC worker", max_queue_size=1, daemon=False)
+        self._plus_hc_worker = None
+        if not model.H_MPO.explicit_plus_hc:
+            raise ValueError("works only with `explicit_plus_hc` set!")
         super().__init__(psi, model, options, **kwargs)
 
     def make_eff_H(self):
         assert self.env.H.explicit_plus_hc
-        assert self._plus_hc_worker is not None
         self.eff_H = self.EffectiveH(self.env,
                                      self.i0,
                                      self.combine,
@@ -72,6 +78,9 @@ class DMRGThreadPlusHC(TwoSiteDMRGEngine):
             self._wrap_ortho_eff_H()
 
     def run(self):
+        # re-initialize worker to allow calling `run()` multiple times
+        self._plus_hc_worker = Worker("EffectiveHPlusHC worker", max_queue_size=1, daemon=False)
         with self._plus_hc_worker:
             res = super().run()
+        self._plus_hc_worker = None
         return res

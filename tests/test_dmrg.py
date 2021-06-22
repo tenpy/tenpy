@@ -5,7 +5,7 @@ import itertools as it
 import tenpy.linalg.np_conserved as npc
 from tenpy.models.tf_ising import TFIChain
 from tenpy.models.spins import SpinChain
-from tenpy.algorithms import dmrg
+from tenpy.algorithms import dmrg, dmrg_parallel
 from tenpy.algorithms.exact_diag import ExactDiag
 from tenpy.networks import mps
 import pytest
@@ -270,5 +270,13 @@ def test_dmrg_explicit_plus_hc(tol=1.e-13):
     print(E1, E2, abs(E1 - E2))
     assert abs(E1 - E2) < tol
     ov = abs(psi1.overlap(psi2))
+    print("ov =", ov)
+    assert abs(ov - 1) < tol
+    dmrg_params['combine'] = True
+    psi3 = mps.MPS.from_product_state(M2.lat.mps_sites(), ['up', 'down'] * 6)
+    E3, psi3 = dmrg_parallel.DMRGThreadPlusHC(psi3, M2, dmrg_params).run()
+    print(E1, E3, abs(E1 - E3))
+    assert abs(E1 - E3) < tol
+    ov = abs(psi1.overlap(psi3))
     print("ov =", ov)
     assert abs(ov - 1) < tol

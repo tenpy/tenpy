@@ -1770,7 +1770,6 @@ class HelicalLattice(Lattice):
             mps_fix_u = np.nonzero(order_[:, -1] == u)[0]
             self._mps_fix_u.append(mps_fix_u)
         self._mps_fix_u = tuple(self._mps_fix_u)
-        _, counts = np.unique(order_[:, 0], return_counts=True)
 
     # the regular lattice has the same order for the MPS,
     # only the division into unit cells is different
@@ -1798,7 +1797,12 @@ class HelicalLattice(Lattice):
                 or self.regular_lattice.N_cells % (self._N_cells * factor) != 0):
             self.regular_lattice.enlarge_mps_unit_cell(factor)
         self._N_cells = factor * self._N_cells
-        super().enlarge_mps_unit_cell()
+
+        self._set_Ls(self.regular_lattice.Ls)
+        order_reg = self.regular_lattice.order
+        self.order = self._ordering_helical(order_reg)  # use property setter
+        self.test_sanity()
+
 
     # strategy for possible_[multi_]couplings:
     # since everything is translation invariant along the MPS, we can just extract it
@@ -1816,7 +1820,7 @@ class HelicalLattice(Lattice):
         else:
             mps_i, mps_j, strength_vals = reg.possible_couplings(u1, u2, dx, strength)
             # we can actually check that everything is translation invariant!
-            self._check_translation_invariance(np.stack([mps_i, mps_j]).T, strength_vals)
+            self._check_transl_invar_strength(np.stack([mps_i, mps_j]).T, strength_vals)
             keep = (np.min([mps_i, mps_j], axis=0) < self.N_sites)
             return mps_i[keep], mps_j[keep], strength_vals[keep]
 
@@ -1829,11 +1833,11 @@ class HelicalLattice(Lattice):
         else:
             mps_ijkl, strength_vals = reg.possible_multi_couplings(ops, strength)
             # we can actually check that everything is translation invariant!
-            self._check_translation_invariance(mps_ijkl, strength_vals)
+            self._check_transl_invar_strength(mps_ijkl, strength_vals)
             keep = (np.min(mps_ijkl, axis=1) < self.N_sites)
             return mps_ijkl[keep, :], strength_vals[keep]
 
-    def _check_translation_invariance(self, mps_ijkl, strength_vals):
+    def _check_transl_invar_strength(self, mps_ijkl, strength_vals):
         sort = np.lexsort(mps_ijkl.T)
         mps_ijkl = mps_ijkl[sort]
         strength_vals = strength_vals[sort]
@@ -1846,7 +1850,7 @@ class HelicalLattice(Lattice):
                 strength_compare = strength_vals[keep_cell]
             else:
                 assert np.all(mps_ijkl[keep_cell] - cell_start == ijkl_compare)
-                if np.any(strength_vals[keep_cell] != strength_compare):
+                if not np.all(np.abs(strength_vals[keep_cell] - strength_compare) < 1e-10):
                     raise ValueError("Not translation invariant: can't use HelicalLattice")
 
     # most plot_* functions work, except:
