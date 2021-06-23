@@ -248,8 +248,7 @@ class Sweep(Algorithm):
                     init_env_data[key_new] = self.options[key_old]
 
         # actually initialize the environment
-        cache = self.cache.create_subcache('env')
-        self.env = MPOEnvironment(self.psi, H, self.psi, cache=cache, **init_env_data)
+        self._init_MPO_env(H, init_env_data)
         self._init_ortho_to_envs(orthogonal_to, resume_data)
 
         self.reset_stats(resume_data)
@@ -258,6 +257,10 @@ class Sweep(Algorithm):
         if not self.finite:
             start_env = self.options.get('start_env', 1)
             self.environment_sweeps(start_env)
+
+    def _init_MPO_env(self, H, init_env_data):
+        cache = self.cache.create_subcache('env')
+        self.env = MPOEnvironment(self.psi, H, self.psi, cache=cache, **init_env_data)
 
     def _init_ortho_to_envs(self, orthogonal_to, resume_data):
         # (re)initialize ortho_to_envs

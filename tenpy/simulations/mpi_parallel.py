@@ -25,25 +25,38 @@ except ImportError:
 
 from ..linalg.sparse import NpcLinearOperatorWrapper
 from ..algorithms.dmrg import SingleSiteDMRGEngine, TwoSiteDMRGEngine
+from ..algorithms.mps_common import TwoSiteH
 from ..simulations.ground_state_search import GroundStateSearch
 from ..tools.misc import get_recursive
+from ..networks.mpo import MPOEnvironment
 
 __all__ = [
     'ReplicaAction', 'ParallelPlusHcNpcLinearOperator', 'ParallelTwoSiteDMRG', 'ParallelDMRGSim'
 ]
 
 
+def split_MPO_leg(leg, N_nodes):
+    # TODO: make this more clever
+    D = leg.ind_len
+    res = []
+    for i in range(N_nodes):
+        proj = np.zeros(D, dtype=bool)
+        proj[D//N *i : D// N * (i+1)] = True
+        res.append(proj)
+    return res
+
+
 class ReplicaAction(Enum):
     DONE = 0
-    RECV_H = 1
-    MATVEC = 2
+    DISTRIBUTE_H = 0
+    CALC_LHeff = 1
+    CALC_RHeff = 2
+    MATVEC = 3
 
 
-class ParallelPlusHcLinOp(NpcLinearOperatorWrapper):
-    def __init__(self, orig_operator, comm):
-        super().__init__(orig_operator)
+class ParallelTwoSiteH(TwoSiteH):
+    def __init__(self, , comm):
         self.comm = comm
-        assert self.comm.size == 2
         self.rank = self.comm.rank
         self.comm.bcast(ReplicaAction.RECV_H)
         self.comm.bcast(orig_operator)
@@ -59,28 +72,77 @@ class ParallelPlusHcLinOp(NpcLinearOperatorWrapper):
         return self.orig_operator.to_matrix() + self.orig_operator.adjoint().to_matrix()
 
 
-class ParallelDMRGPlusHc:
-    def __init__(self, psi, model, options, *, comm_plus_hc, **kwargs):
-        self.comm_plus_hc = comm_plus_hc
-        # TODO: how to handle for multiple parallel layers?
+class ParallelMPOEnvironment(MPOEnvironment):
+    """
+
+    The environment is completely distributed over the different nodes; each node only has its
+    fraction of the MPO wL/wR legs.
+    Only the main node initializes this class,
+    the other nodes save stuff in their :class:`NodeLocalData`.
+
+    """
+
+    def get_LP(self, i0):
+        # change this to return only the part for the main node
+        raise NotImplementedError("TODO")
+
+    def get_RP(self, i0):
+        # change this to return only the part for the main node
+        raise NotImplementedError("TODO")
+
+    def _contract_LP(self, i0):
+        raise NotImplementedError("TODO")
+
+    def _contract_RP(self, i0):
+        raise NotImplementedError("TODO")
+
+
+class ParallelTwoSiteDMRG:
+    def __init__(self, psi, model, options, *, comm_H, **kwargs):
+        self.comm_H = comm_H
+        self.main_node_local = NodeLocalData(self.comm_H.size)
         super().__init__(psi, model, options, **kwargs)
 
+
     def make_eff_H(self):
-        assert self.env.H.explicit_plus_hc
-        self.eff_H = self.EffectiveH(self.env, self.i0, self.combine, self.move_right)
-        # note: this order of wrapping is most effective.
-        self.eff_H = ParallelPlusHcLinOp(self.eff_H, self.comm_plus_hc)
+
+        self.eff_H = ParallelTwoSiteH(self.env, self.i0, self.combine, self.move_right, self.comm)
+
         if len(self.ortho_to_envs) > 0:
-            raise NotImplementedError("Not supported")
+            raise NotImplementedError("TODO: Not supported (yet)")
+
+    def _init_MPO_env(self, H, init_env_data):
+        self.comm_H.bcast(ReplicaAction.DISTRIBUTE_H)
+        self.comm_H.bcast(H)
+        # Initialize custom ParallelMPOEnvironment
+        cache = self.cache.create_subcache('env')
+        self.env = ParallelMPOEnvironment(self.psi, H, self.psi, cache=cache, **init_env_data)
 
 
-class ParallelSingleSiteDMRG(ParallelDMRGPlusHc, SingleSiteDMRGEngine):
-    # note: order is important: fixes MRO
-    pass
+class NodeLocalData:
+    def __init__(self, N_nodes):
+        # TODO initialize cache
+        self.N_nodes = N_nodes
+        pass
 
-
-class ParallelTwoSiteDMRG(ParallelDMRGPlusHc, TwoSiteDMRGEngine):
-    pass
+    def add_H(self, H):
+        self.H = H
+        N = self.N_nodes
+        self.W_blocks = []
+        for i in range(H.L):
+            W = H.get_W(i).copy()
+            projs_L = split_MPO_leg(W.get_leg('wL'), N)
+            projs_R = split_MPO_leg(W.get_leg('wR'), N)
+            blocks = []
+            for b_L in range(N):
+                row = []
+                for b_R in range(N):
+                    Wblock = W.iproject([projs_L[b_L], projs_R[b_R]], ['wL', 'wR'])
+                    if Wblock.norm() < 1.e-14:
+                        Wblock = None
+                    row.append(Wblock)
+                blocks.append(row)
+            self.W_blocks.append(blocks)
 
 
 class ParallelDMRGSim(GroundStateSearch):
@@ -88,45 +150,48 @@ class ParallelDMRGSim(GroundStateSearch):
     default_algorithm = "ParallelTwoSiteDMRG"
 
     def __init__(self, options, *, comm=None, **kwargs):
+        # TODO: generalize such that it works if we have sequential simulations
         if comm is None:
             comm = MPI.COMM_WORLD
-        self.comm_plus_hc = comm.Dup()
-        # TODO: for multiple parallel layers, split the communicator into groups.
-        if self.comm_plus_hc.size != 2:
-            warnings.warn(f"unexpected size of MPI communicator: {self.comm_plus_hc.size:d}")
-        if self.comm_plus_hc.rank == 0:
+        self.comm_H = comm.Dup()
+        if self.comm_H.rank == 0:
             super().__init__(options, **kwargs)
         else:
             # HACK: monkey-patch `[resume_]run` by `run_replica_plus_hc`
             self.run = self.resume_run = self.run_replica_plus_hc
             # don't __init__() to avoid locking files
+            self.node_local = NodeLocalData(self.comm_H.size)
 
     def __delete__(self):
-        self.comm_plus_hc.Free()
+        self.comm_H.Free()
         super().__delete__()
 
     def init_algorithm(self, **kwargs):
-        kwargs.setdefault('comm_plus_hc', self.comm_plus_hc)
+        kwargs.setdefault('comm_H', self.comm_H)
         super().init_algorithm(**kwargs)
 
     def init_model(self):
         super().init_model()
-        if not self.model.H_MPO.explicit_plus_hc:
-            raise ValueError("This MPI version needs the `explicit_plus_hc` flag!")
 
     def run(self):
         res = super().run()
-        self.comm_plus_hc.bcast(ReplicaAction.DONE)
+        self.comm_H.bcast(ReplicaAction.DONE)
         return res
 
     def run_replica_plus_hc(self):
         """Replacement for :meth:`run` used for replicas (as opposed to primary MPI process)."""
-        comm = self.comm_plus_hc
+        comm = self.comm_H
         self.effH = None
+        # TODO: initialize environment nevertheless
+        # TODO: initialize how MPO legs are split
         while True:
             action = comm.bcast(None)
             if action is ReplicaAction.DONE:  # allow to gracefully terminate
                 return
+            elif action is ReplicaAction.DISTRIBUTE_H:
+                H = comm.bcast(None)
+                self.node_local.add_H(H)
+                # TODO init cache etc
             elif action is ReplicaAction.RECV_H:
                 del self.effH
                 self.effH = comm.bcast(None)
@@ -142,5 +207,5 @@ class ParallelDMRGSim(GroundStateSearch):
 
     def resume_run(self):
         res = super().resume_run()
-        self.comm_plus_hc.bcast(ReplicaAction.DONE)
+        self.comm_H.bcast(ReplicaAction.DONE)
         return res
