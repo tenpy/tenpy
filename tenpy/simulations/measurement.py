@@ -13,7 +13,7 @@ import warnings
 
 __all__ = [
     'measurement_index', 'bond_dimension', 'bond_energies', 'energy_MPO', 'entropy',
-    'onsite_expectation_value', 'correlation_length', 'evolved_time'
+    'onsite_expectation_value', 'correlation_length', 'psi_method', 'evolved_time'
 ]
 
 
