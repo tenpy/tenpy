@@ -44,6 +44,8 @@ class RealTimeEvolution(Simulation):
             if np.real(self.engine.evolved_time) >= self.final_time:
                 break
             self.engine.run()
+            self.logger.info("reached time %.2f, max chi=%d", self.engine.evolved_time.real,
+                             max(self.psi.chi))
             # TODO: call engine.checkpoint.emit() ?
             self.make_measurements()
 
