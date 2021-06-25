@@ -14,7 +14,7 @@ import warnings
 
 __all__ = [
     'measurement_index', 'bond_dimension', 'bond_energies', 'energy_MPO', 'entropy',
-    'onsite_expectation_value', 'correlation_length', 'evolved_time'
+    'onsite_expectation_value', 'correlation_length', 'psi_method', 'evolved_time'
 ]
 
 
@@ -114,6 +114,8 @@ def onsite_expectation_value(results, psi, simulation, opname, key=None):
         if not isinstance(opname, str):
             raise ValueError("can't auto-determine key for operator " + repr(opname))
         key = "<{0!s}>".format(opname)
+    if key in results:
+        raise ValueError(f"key {key!r} already exists in results")
     exp_vals = psi.expectation_value(opname)
     lattice = simulation.model.lat
     exp_vals = lattice.mps2lat_values(exp_vals)
@@ -169,10 +171,30 @@ def correlation_length(results, psi, simulation, key='correlation_length', unit=
     results[key] = corr
 
 
+def psi_method(results, psi, simulation, method, key=None, **kwargs):
+    """General method to measure arbitrary method of psi with given additional kwargs.
+
+    Parameters
+    ----------
+    results, psi, simulation, key:
+        See :func:`~tenpy.simulation.measurement.measurement_index`.
+    method : str
+        Name of the method of `psi` to call. `key` defaults to this if not specified.
+    **kwargs :
+        further keyword arguments given to the method
+    """
+    if key is None:
+        key = method
+    if key in results:
+        raise ValueError(f"key {key!r} already exists in results")
+    method = getattr(psi, method)
+    results[key] = method(**kwargs)
+
+
 def evolved_time(results, psi, simulation, key='evolved_time'):
     """Measure the time evolved by the engine, ``engine.evolved_time``.
 
-    "Measures' :attr:`tenpy.algorithms.algorithm.TimeEvolutionAlgorithm.evolved_time`.
+    "Measures" :attr:`tenpy.algorithms.algorithm.TimeEvolutionAlgorithm.evolved_time`.
 
     Parameters
     ----------
