@@ -278,11 +278,10 @@ class Sweep(Algorithm):
                 raise ValueError("Can't orthogonalize for infinite MPS: overlap not well defined.")
             self.ortho_to_envs = []
             for i, ortho in enumerate(orthogonal_to):
-                cache = self.cache.create_subcache(f"ortho_{i:d}")
                 if isinstance(ortho, dict):
-                    self.ortho_to_envs.append(MPSEnvironment(self.psi, **ortho, cache=cache))
+                    self.ortho_to_envs.append(MPSEnvironment(self.psi, **ortho))
                 else:
-                    self.ortho_to_envs.append(MPSEnvironment(self.psi, ortho, cache=cache))
+                    self.ortho_to_envs.append(MPSEnvironment(self.psi, ortho))
         # done
 
     def reset_stats(self, resume_data=None):
