@@ -17,6 +17,7 @@ See also the :doc:`/intro/model` and :doc:`/intro/lattices`.
 import numpy as np
 import itertools
 import warnings
+import copy
 
 from ..networks.site import Site
 from ..tools.misc import (to_iterable, to_array, to_iterable_of_len, inverse_permutation,
@@ -132,6 +133,8 @@ class Lattice:
         for each site in the unit cell a vector giving its position within the unit cell.
     pairs : dict
         See above.
+    segement_first_last : tuple of int
+        The `first` and `last` MPS sites for "segment" :attr:`bc_MPS`; not set otherwise.
     _order : ndarray (N_sites, dim+1)
         The place where :attr:`order` is stored.
     _strides : ndarray (dim, )
@@ -229,6 +232,10 @@ class Lattice:
             assert np.all(
                 np.sum(self._order * self._strides, axis=1)[self._perm] == np.arange(self.N_sites))
 
+    def copy(self):
+        """Shallow copy of `self`."""
+        return copy.copy(self)
+
     def save_hdf5(self, hdf5_saver, h5gr, subpath):
         """Export `self` into a HDF5 file.
 
@@ -261,6 +268,10 @@ class Lattice:
         # not necessary for loading, but still usefull
         h5gr.attrs["dim"] = self.dim
         h5gr.attrs["N_sites"] = self.N_sites
+        if hasattr(self, 'segement_first_last'):
+            first, last = self.segment_first_last
+            h5gr.attrs['segment_first'] = first
+            h5gr.attrs['segment_last'] = last
 
     @classmethod
     def from_hdf5(cls, hdf5_loader, h5gr, subpath):
@@ -294,7 +305,10 @@ class Lattice:
         obj.bc_MPS = hdf5_loader.load(subpath + "boundary_condition_MPS")
         obj.order = hdf5_loader.load(subpath + "order_for_MPS")  # property setter!
         obj.pairs = hdf5_loader.load(subpath + "pairs")
-
+        if 'segment_first' in h5gr.attrs:
+            first = h5gr.attrs['segment_first']
+            last = h5gr.attrs['segment_last']
+            obj.segment_first_last = first, last
         obj.test_sanity()
         return obj
 
@@ -459,6 +473,51 @@ class Lattice:
             if not np.any(self.bc_shift != 0):
                 self.bc_shift = None
         self.bc = np.array(bc)
+
+    def extract_segment(self, first=0, last=None, enlarge=None):
+        """Extract a finite segment from an infinite/large system.
+
+        Parameters
+        ----------
+        first, last : int
+            The first and last site to *include* into the segment.
+            `last` defaults to :attr:`L` - 1, i.e., the MPS unit cell for infinite MPS.
+        enlarge : int
+            Instead of specifying the `first` and `last` site, you can specify this factor
+            by how much the MPS unit cell should be enlarged.
+
+        Returns
+        -------
+        copy : :class:`Lattice`
+            A copy of `self` with "segment" :attr:`bc_MPS` and :attr:`segment_first_last` set.
+        """
+        cp = self.copy()
+        L = cp.N_sites
+        assert first >= 0
+        if enlarge is not None:
+            if cp.bc_MPS != 'infinite':
+                raise ValueError("enlarge only possible for infinite MPS")
+            if last is not None or first != 0:
+                raise ValueError("specifiy either `first`+`last` or `enlarge`!")
+            assert enlarge > 0
+            last = enlarge * L - 1
+        elif last is None:
+            last = L - 1
+            enlarge = 1
+        else:
+            enlarge = last + 1 // L
+        assert enlarge > 0
+        if enlarge > 1:
+            cp.enlarge_mps_unit_cell(enlarge)
+        if first >= last:
+            raise ValueError(f"need first < last, got {first:d}, {last:d}")
+        if first > 0 or last < cp.N_sites - 1:
+            # take out some parts of the lattice
+            remove = list(range(0, first)) + list(range(last + 1, cp.N_sites))
+            cp = IrregularLattice(cp, remove=remove)
+        cp.bc_MPS = 'segment'
+        cp.segment_first_last = first, last
+        return cp
 
     def enlarge_mps_unit_cell(self, factor=2):
         """Repeat the unit cell for infinite MPS boundary conditions; in place.

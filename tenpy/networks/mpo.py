@@ -441,6 +441,11 @@ class MPO:
         first, last : int
             The first and last site to *include* into the segment.
 
+        Returns
+        -------
+        cp : :class:`MPO`
+            A `copy` of self with "segment" boundary conditions.
+
         See also
         --------
         tenpy.networks.mps.MPS.extract_segment : similar method for MPS.
@@ -1709,7 +1714,7 @@ class MPOGraph:
 class MPOEnvironment(MPSEnvironment):
     """Stores partial contractions of :math:`<bra|H|ket>` for an MPO `H`.
 
-    The network for a contraction :math:`<bra|H|ket>` of an MPO `H` bewteen two MPS looks like::
+    The network for a contraction :math:`<bra|H|ket>` of an MPO `H` between two MPS looks like::
 
         |     .------>-M[0]-->-M[1]-->-M[2]-->- ...  ->--.
         |     |        |       |       |                 |
@@ -1775,40 +1780,56 @@ class MPOEnvironment(MPSEnvironment):
                               start_env_sites=None):
         """(Re)initialize first LP and last RP from the given data.
 
+        If `init_LP` and `init_RP` are not given, we try to find sensible initial values.
+        Dummy environments can by built with :meth:`init_LP` and :meth:`init_RP`, especially
+        for **finite** MPS.
+
+        For **infinite** MPS, we try to converge the environments with one of two methods:
+
+        - If `start_env_sites` is given as an integer, contract that many sites into the
+          environment from the given `init_LP` and `init_RP` or new trivial environments built
+          with :meth:`init_LP` / :meth:`init_RP`.
+        - If `start_env_sites` is None, and :attr:`bra` is :attr:`ket`,
+          get `init_LP` and `init_RP` with :meth:`MPOTransferMatrix.find_init_LP_RP`.
+
         Parameters
         ----------
-        init_LP : ``None`` | :class:`~tenpy.linalg.np_conserved.Array`
-            Initial very left part ``LP``. If ``None``, build one with :meth`init_LP`.
-        init_RP : ``None`` | :class:`~tenpy.linalg.np_conserved.Array`
-            Initial very right part ``RP``. If ``None``, build one with :meth:`init_RP`.
-        age_LP : int
-            The number of physical sites involved into the contraction of `init_LP`.
-        age_RP : int
-            The number of physical sites involved into the contraction of `init_RP`.
+        init_LP, init_RP: ``None`` | :class:`~tenpy.linalg.np_conserved.Array`
+            Initial very left part ``LP`` and very right part ``RP``.
+            If ``None``, try to build (and converge) them as described above.
+        age_LP, age_RP : int
+            The number of physical sites involved into the contraction of `init_LP` and `init_RP`.
         start_env_sites : int | None
-            None defaults to 0 for finite MPS, else to min(L, H.max_range).
+            Number of sites over which to converge the environment for infinite systems.
+            See above.
         """
+        if not self._finite  and (init_LP is None or init_RP is None) and \
+                start_env_sites is None and self.bra is self.ket:
+            env_data = MPOTransferMatrix.find_init_LP_RP(self.H, self.ket, 0, self.L - 1)
+            init_LP = env_data['init_LP']
+            init_RP = env_data['init_RP']
+            start_env_sites = 0
         if start_env_sites is None:
-            start_env_sites = 0 if self._finite else self.H.max_range
-            if start_env_sites is None or start_env_sites > self.L:
-                logger.warning("reducing default `start_env_sites` to L")
-                start_env_sites = self.L
+            start_env_sites = 0 if self._finite else self.L
         if self._finite and start_env_sites != 0:
             warnings.warn("setting `start_env_sites` to 0 for finite MPS")
             start_env_sites = 0
         if init_LP is not None:
             try:
-                init_LP.get_leg('wR').test_contractible(self.H.get_W(0).get_leg('wL'))
+                i = -start_env_sites
+                init_LP.get_leg('wR').test_contractible(self.H.get_W(i).get_leg('wL'))
             except ValueError:
                 logger.warning("dropping `init_LP` with incompatible MPO legs")
                 init_LP = None
         if init_RP is not None:
             try:
-                j = self.L - 1
+                j = self.L - 1 + start_env_sites
                 init_RP.get_leg('wL').test_contractible(self.H.get_W(j).get_leg('wR'))
             except ValueError:
                 logger.warning("dropping `init_RP` with incompatible MPO legs")
                 init_RP = None
+        if self.ket.bc == 'segment' and (init_LP is None or init_RP is None):
+            raise ValueError("Environments with segment b.c. need explicit environments!")
         super().init_first_LP_last_RP(init_LP, init_RP, age_LP, age_RP, start_env_sites)
 
     def test_sanity(self):
@@ -2054,8 +2075,6 @@ class MPOTransferMatrix:
     def __init__(self, H, psi, transpose=False):
         if psi.finite or H.bc != 'infinite':
             raise ValueError("Only makes sense for infinite MPS")
-        if H.max_range < np.inf:
-            warnings.warn("MPO.init_first_LP_last_RP would be more efficient...")
         if H.L != psi.L:
             raise ValueError("Non-matching L")
         self.L = H.L
@@ -2181,7 +2200,7 @@ class MPOTransferMatrix:
         return E / self.L
 
     @classmethod
-    def find_init_LP_RP(cls, H, psi, calc_E=False, tol_ev0=1.e-8):
+    def find_init_LP_RP(cls, H, psi, first=0, last=None, calc_E=False, tol_ev0=1.e-8):
         """Find the initial LP and RP.
 
         Parameters
@@ -2210,6 +2229,13 @@ class MPOTransferMatrix:
                 E = TM.energy(vec)
             del TM
         init_env_data = {'init_LP': envs[1], 'init_RP': envs[0]}
+        if first != 0 or last is not None:
+            env = MPOEnvironment(psi, H, psi, **init_env_data)
+            L = env.L
+            if first % L != 0:
+                init_env_data['init_LP'] = env.get_LP(first, store=False)
+            if last % L != L - 1:
+                init_env_data['init_RP'] = env.get_RP(last, store=False)
         if calc_E:
             return E, init_env_data
         # else:

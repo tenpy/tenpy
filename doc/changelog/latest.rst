@@ -25,8 +25,8 @@ Added
 - :meth:`tenpy.networks.mps.MPSEnvironment.init_LP` and :meth:`~tenpy.networks.mps.MPSEnvironment.init_RP`, and
   :meth:`tenpy.networks.mpo.MPOEnvironment.init_LP` and :meth:`~tenpy.networks.mpo.MPOEnvironment.init_RP` additionally
   support the argument `start_env_sites`, which can now be part of the `init_env_data`.
-  This allows to converge MPO environments from scratch, given only the MPO and MPS.
-  For infinite range MPOs, the :class:`tenpy.networks.mpo.MPOTransferMatrix` was added.
+  This allows to converge MPO environments from scratch, given only the MPO and MPS, with a power-method.
+  The :class:`tenpy.networks.mpo.MPOTransferMatrix` was added for converging environments from scratch with Arnoldi.
 - Caching with the :mod:`tenpy.tools.cache.DictCache`, :mod:`tenpy.tools.cache.PickleCache`, and :mod:`tenpy.tools.cache.Hdf5Cache` to reduce memory requirements.
   In that context, the keyword argument `cache` was added to the :class:`~tenpy.algorithms.algorithm.Algorithm` base class.
 - :meth:`tenpy.networks.mps.MPS.sample_measurements`.
@@ -34,6 +34,7 @@ Added
 - MPS with segment boundaries now keep track of unitaries at the boundaries in :attr:`~tenpy.networks.mps.MPS.segment_boundaries`.
 - :class:`~tenpy.simulations.simulation.OrthogonalExcitations` simulation class.
 - :cfg:configoption:`Simulation.group_sites` for the simultion class.
+- `extract_segment` method for model, lattice and MPS/MPO classes.
 
 
 Changed

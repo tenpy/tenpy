@@ -54,6 +54,8 @@ class Algorithm:
         interrupting and saving to disk for later resume make sense.
     cache : :class:`DictCache` or subclass
         The cache to be used.
+    resume_data : dict
+        Data gvien as parameter `resume_data` and/or to be returned by :meth:`get_resume_data`.
     _resume_psi :
         Possibly a copy of `psi` to be used for :meth:`get_resume_data`.
     """
@@ -126,7 +128,7 @@ class Algorithm:
         resume_data : dict
             Dictionary with necessary data (apart from copies of `psi`, `model`, `options`)
             that allows to continue the simulation from where we are now.
-            It might contain explicit copies of
+            It might contain an explicit copy of `psi`.
         """
         psi = self._resume_psi
         if psi is not None:

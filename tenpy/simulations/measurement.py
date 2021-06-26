@@ -9,6 +9,7 @@ the measurement results into the `results` dictionary taken as argument.
 """
 # Copyright 2020-2021 TeNPy Developers, GNU GPLv3
 
+from ..networks.mpo import MPOEnvironment
 import warnings
 
 __all__ = [
@@ -73,7 +74,12 @@ def energy_MPO(results, psi, simulation, key='energy_MPO'):
     results, psi, simulation, key :
         See :func:`~tenpy.simulation.measurement.measurement_index`.
     """
-    results[key] = simulation.model.H_MPO.expectation_value(psi)
+    if psi.bc == 'segment':
+        init_env_data = simulation.init_env_data
+        E = MPOEnvironment(psi, simulation.model.H_MPO, psi, **init_env_data).full_contraction(0)
+        results[key] = E - simulation.results['ground_state_energy']
+    else:
+        results[key] = simulation.model.H_MPO.expectation_value(psi)
 
 
 def entropy(results, psi, simulation, key='entropy'):

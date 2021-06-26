@@ -276,6 +276,7 @@ class Sweep(Algorithm):
         if orthogonal_to:
             if not self.finite:
                 raise ValueError("Can't orthogonalize for infinite MPS: overlap not well defined.")
+            logger.info("got %d states to orthogonalize against", len(orthogonal_to))
             self.ortho_to_envs = []
             for i, ortho in enumerate(orthogonal_to):
                 if isinstance(ortho, dict):
@@ -413,7 +414,7 @@ class Sweep(Algorithm):
         L = self.psi.L
         n = self.EffectiveH.length
         if self.finite:
-            assert L >= n
+            assert L > n
             i0s = list(range(0, L - n)) + list(range(L - n, 0, -1))
             move_right = [True] * (L - n) + [False] * (L - n)
             update_LP_RP = [[True, False]] * (L - n) + [[False, True]] * (L - n)
@@ -1302,9 +1303,12 @@ class VariationalApplyMPO(VariationalCompression):
             resume_data = {}
         init_env_data = resume_data.get("init_env_data", {})
         old_psi = self.psi.copy()
-        start_env_sites = self.options.get("start_env_sites", None)
+        start_env_sites = 0 if self.psi.finite else self.psi.L
+        start_env_sites = self.options.get("start_env_sites", start_env_sites)
         if start_env_sites is not None:
             init_env_data['start_env_sites'] = start_env_sites
+        # note: we need explicit `start_env_sites` since `bra` != `ket`, so we can't converge
+        # with MPOTransferMatrix.find_init_LP_RP
         self.env = MPOEnvironment(self.psi, U_MPO, old_psi, **init_env_data)
         self.reset_stats()
 
