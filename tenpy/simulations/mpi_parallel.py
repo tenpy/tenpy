@@ -16,6 +16,9 @@ which needs to be installed when you want to use classes in this module.
 
 import warnings
 from enum import Enum
+from enum import auto as enum_auto
+import numpy as np
+
 
 try:
     from mpi4py import MPI
@@ -43,17 +46,18 @@ def split_MPO_leg(leg, N_nodes):
     res = []
     for i in range(N_nodes):
         proj = np.zeros(D, dtype=bool)
-        proj[D//N *i : D// N * (i+1)] = True
+        proj[D//N_nodes *i : D// N_nodes * (i+1)] = True
         res.append(proj)
     return res
 
 
 class ReplicaAction(Enum):
-    DONE = 0
-    DISTRIBUTE_H = 1
-    CALC_LHeff = 2
-    CALC_RHeff = 3
-    MATVEC = 4
+    DONE = enum_auto()
+    DISTRIBUTE_H = enum_auto()
+    SCATTER_DA = enum_auto()
+    CALC_LHeff = enum_auto()
+    CALC_RHeff = enum_auto()
+    MATVEC = enum_auto()
 
 
 class ParallelTwoSiteH(TwoSiteH):
@@ -65,7 +69,7 @@ class ParallelTwoSiteH(TwoSiteH):
         super().__init__(env, i0, combine, move_right)
 
     def matvec(self, theta):
-        self.comm.bcast(ReplicaAction.MATVEC)
+        self.comm.bcast((ReplicaAction.MATVEC, theta))
         self.comm.bcast(theta)
         theta = self.orig_operator.matvec(theta)
         theta = self.comm.reduce(theta, op=MPI.SUM)
@@ -82,18 +86,25 @@ class DistributedArray:
     """Represents a npc Array which is distributed over the MPI nodes.
 
     Each node only saves a fraction `local_part` of the actual represented Tensor.
+
+    Needs to be pickle-able!
     """
-    def __init__(self, key, local_part, comm):
+    def __init__(self, key):
         self.key = key
-        self.local_part = local_part
-        self.comm = comm
+
+    def get_local_part(self, node_local_data):
+        assert "W" not in self.key
+        return node_local_data.cache[self.key]
 
     @classmethod
-    def from_scatter(cls, all_parts, node_local):
+    def from_scatter(cls, all_parts, node_local, key):
+        assert "W" not in key
         comm = node_local.comm
         assert len(all_parts) == comm.size
+        comm.bcast((ReplicaAction.SCATTER_DA, key))
         local_part = comm.scatter(all_parts, root=0)
-
+        node_local.cache[key] = local_part
+        return cls(key)
 
 
 
@@ -112,20 +123,20 @@ class ParallelMPOEnvironment(MPOEnvironment):
     def __init__(self, node_local, bra, H, ket, cache=None, **init_env_data):
         self.node_local = node_local
         comm_H = self.node_local.comm
-        comm_H.bcast(ReplicaAction.DISTRIBUTE_H)
-        comm_H.bcast(H)
+        comm_H.bcast((ReplicaAction.DISTRIBUTE_H, H))
         self.node_local.add_H(H)
 
-        super().__init__(*args, **kwargs)
+        super().__init__(bra, H, ket, cache, **init_env_data)
 
 
-    def get_LP(self, i):
+    def get_LP(self, i, store=True):
         """Returns only the part for the main node"""
+        assert store, "TODO: necessary to fix this? right now we always store!"
         # find nearest available LP to the left.
         for i0 in range(i, i - self.L, -1):
             key = self._LP_keys[self._to_valid_index(i0)]
-            LP = self.cache.get(key, None)
-            if LP is not None:
+            if key in self.cache:
+                LP = DistributedArray(key)
                 break
             # (for finite, LP[0] should always be set, so we should abort at latest with i0=0)
         else:  # no break called
@@ -133,47 +144,87 @@ class ParallelMPOEnvironment(MPOEnvironment):
         # communicate to other nodes to
         age = self.get_LP_age(i0)
         for j in range(i0, i):
-            LP = self._contract_LP(j, LP)
+            LP = self._contract_LP(j, LP)  # TODO: store keyword for _contract_LP/RP?
             age = age + 1
             if store:
                 self.set_LP(j + 1, LP, age=age)
         return LP
-        #  LP = super().get_LP(i0)
-        # TODO XXX
-        return DistributedArray("LP_{i:d}")
 
-    def get_RP(self, i0):
-        # change this to return only the part for the main node
-        raise NotImplementedError("TODO")
-
+    def get_RP(self, i, store=True):
+        """Returns only the part for the main node"""
+        assert store, "TODO: necessary to fix this? right now we always store!"
+        # find nearest available RP to the left.
+        for i0 in range(i, i + self.L):
+            key = self._RP_keys[self._to_valid_index(i0)]
+            if key in self.cache:
+                RP = DistributedArray(key)
+                break
+        else:  # no break called
+            raise ValueError("No left part in the system???")
+        # communicate to other nodes to
+        age = self.get_RP_age(i0)
+        for j in range(i0, i, -1):
+            RP = self._contract_RP(j, RP)
+            age = age + 1
+            if store:
+                self.set_RP(j - 1, RP, age=age)
+        return RP
 
     def set_LP(self, i, LP, age):
-        # later on: `LP` is a DistributedArray
-        if isinstance(LP, DistributedArray):
-            # during the DMRG run
-            raise NotImplementedError("TODO")
-        else:
+        if not isinstance(LP, DistributedArray):
             # during __init__: `LP` is what's loaded/generated from `init_LP`
             proj = self.node_local.projs_L[i]
-            splits = [LP.project(p, axes='wR') for p in proj]
-            comm = self.node_local.comm
-            comm.bcast(ReplicaAction.INIT_LP)
-            my_part = DistributedArray.from_scatter(splits, comm)
-            my_new_part = attach_W_to_LP(my_part, self.node_local)
-            super().set_LP(i, LP, age)
-            # split LP into N_nodes part and scatter
+            splits = []
+            for p in proj:
+                LP_part = LP.copy()
+                LP_part.iproject(p, axes='wR')
+                splits.append(LP_part)
+            LP = DistributedArray.from_scatter(splits, self.node_local, self._LP_keys[i])
+            # from_scatter already puts local part in cache
+        else:
+            # we got a DistributedArray, so this is already in cache!
+            assert self._LP_keys[i] in self.cache
+        i = self._to_valid_index(i)
+        self._LP_age[i] = age
 
-    def _contract_LP(self, i0):
+    def set_RP(self, i, RP, age):
+        if not isinstance(RP, DistributedArray):
+            # during __init__: `RP` is what's loaded/generated from `init_RP`
+            proj = self.node_local.projs_L[(i+1) % len(self.node_local.projs_L)]
+            splits = []
+            for p in proj:
+                RP_part = RP.copy()
+                RP_part.iproject(p, axes='wL')
+                splits.append(RP_part)
+            RP = DistributedArray.from_scatter(splits, self.node_local, self._RP_keys[i])
+            # from_scatter already puts local part in cache
+        else:
+            # we got a DistributedArray, so this is already in cache!
+            assert self._RP_keys[i] in self.cache
+        i = self._to_valid_index(i)
+        self._RP_age[i] = age
+
+    def _contract_LP(self, i, LP):
         """Now also immediately save LP"""
         #     i0         A
         #  LP W  ->   LP W  W
         #                A*
 
+        raise NotImplementedError("TODO")  # TODO continue here :)
+        LP = npc.tensordot(LP, self.ket.get_B(i, form='A'), axes=('vR', 'vL'))
+        axes = (self.ket._get_p_label('*') + ['vL*'], self.ket._p_label + ['vR*'])
+        # for a ususal MPS, axes = (['p*', 'vL*'], ['p', 'vR*'])
+        LP = npc.tensordot(self.bra.get_B(i, form='A').conj(), LP, axes=axes)
+        return LP  # labels 'vR*', 'vR'
 
+    def _contract_RP(self, i, RP):
         raise NotImplementedError("TODO")
+        RP = npc.tensordot(self.ket.get_B(i, form='B'), RP, axes=('vR', 'vL'))
+        axes = (self.ket._p_label + ['vL*'], self.ket._get_p_label('*') + ['vR*'])
+        # for a ususal MPS, axes = (['p', 'vL*'], ['p*', 'vR*'])
+        RP = npc.tensordot(RP, self.bra.get_B(i, form='B').conj(), axes=axes)
+        return RP  # labels 'vL', 'vL*'
 
-    def _contract_RP(self, i0):
-        raise NotImplementedError("TODO")
 
 
 class ParallelTwoSiteDMRG(TwoSiteDMRGEngine):
@@ -194,7 +245,8 @@ class ParallelTwoSiteDMRG(TwoSiteDMRGEngine):
 
     def _init_MPO_env(self, H, init_env_data):
         # Initialize custom ParallelMPOEnvironment
-        cache = self.cache.create_subcache('env')
+        cache = self.main_node_local.cache
+        # TODO: don't use separte cache for MPSEnvironment, only use it for the MPOEnvironment
         self.env = ParallelMPOEnvironment(self.main_node_local,
                                           self.psi, H, self.psi, cache=cache, **init_env_data)
 
@@ -213,18 +265,21 @@ class NodeLocalData:
         self.projs_L = []
         for i in range(H.L):
             W = H.get_W(i).copy()
-            projs_L = split_MPO_leg(W.get_leg('wL'), N)
-            projs_R = split_MPO_leg(W.get_leg('wR'), N)
+            self.projs_L.append(split_MPO_leg(W.get_leg('wL'), N))
+        for i in range(H.L):
+            W = H.get_W(i).copy()
+            projs_L = self.projs_L[i]
+            projs_R = self.projs_L[(i+1) % H.L]
             blocks = []
             for b_L in range(N):
                 row = []
                 for b_R in range(N):
-                    Wblock = W.iproject([projs_L[b_L], projs_R[b_R]], ['wL', 'wR'])
+                    Wblock = W.copy()
+                    Wblock.iproject([projs_L[b_L], projs_R[b_R]], ['wL', 'wR'])
                     if Wblock.norm() < 1.e-14:
                         Wblock = None
                     row.append(Wblock)
                 blocks.append(row)
-            self.projs_L.append(projs_L)
             self.W_blocks.append(blocks)
 
 
@@ -241,9 +296,9 @@ class ParallelDMRGSim(GroundStateSearch):
         if self.comm_H.rank == 0:
             super().__init__(options, **kwargs)
         else:
-            # HACK: monkey-patch `[resume_]run` by `run_replica_plus_hc`
+            # HACK: monkey-patch `[resume_]run` by `replica_run`
             self.options = asConfig(options, "replica node sim_params")
-            self.run = self.resume_run = self.run_replica_plus_hc
+            self.run = self.resume_run = self.replica_run
             # don't __init__() to avoid locking files
             # but allow to use context __enter__ and __exit__ to initialize cache
             self.cache = CacheFile.open()
@@ -262,10 +317,10 @@ class ParallelDMRGSim(GroundStateSearch):
     def run(self):
         res = super().run()
         print("main is done")
-        self.comm_H.bcast(ReplicaAction.DONE)
+        self.comm_H.bcast((ReplicaAction.DONE, None))
         return res
 
-    def run_replica_plus_hc(self):
+    def replica_run(self):
         """Replacement for :meth:`run` used for replicas (as opposed to primary MPI process)."""
         comm = self.comm_H
         self.effH = None
@@ -273,26 +328,24 @@ class ParallelDMRGSim(GroundStateSearch):
         # TODO: initialize environment nevertheless
         # TODO: initialize how MPO legs are split
         while True:
-            action = comm.bcast(None)
+            action, meta = comm.bcast(None)
             print(f"replic {comm.rank:d} got action {action!s}")
             if action is ReplicaAction.DONE:  # allow to gracefully terminate
                 print("finish")
                 return
             elif action is ReplicaAction.DISTRIBUTE_H:
-                H = comm.bcast(None)
+                H = meta
                 self.node_local.add_H(H)
                 # TODO init cache etc
-            elif action is ReplicaAction.RECV_H:
-                del self.effH
-                self.effH = comm.bcast(None)
-                self.effH = self.effH.adjoint()
             elif action is ReplicaAction.MATVEC:
-                theta = comm.bcast(None)
+                theta = meta
                 theta = self.effH.matvec(theta)
                 comm.reduce(theta, op=MPI.SUM)
                 del theta
-            elif action is ReplicaAction.INIT_LP:
+            elif action is ReplicaAction.SCATTER_DA:
+                key = meta
                 local_part = comm.scatter(None, root=0)
+                self.node_local.cache[key] = local_part
 
             else:
                 raise ValueError("recieved invalid action: " + repr(action))
