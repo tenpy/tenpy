@@ -1,4 +1,4 @@
-"""Parallelization with MPI.
+"""Parallelization with MPI by splitting the MPO bond amongst several nodes.
 
 This module implements parallelization of DMRG with the MPI framework [MPI]_.
 It's based on the python interface of `mpi4py <https://mpi4py.readthedocs.io/>`_,
@@ -42,6 +42,7 @@ __all__ = [
 
 
 def split_MPO_leg(leg, N_nodes):
+    ''' Split MPO leg indices as evenly as possible amongst N_nodes nodes.'''
     # TODO: make this more clever
     D = leg.ind_len
     res = []
@@ -115,6 +116,9 @@ class DistributedArray:
 
     @classmethod
     def from_scatter(cls, all_parts, node_local, key, in_cache=True):
+        '''Scatter all_parts array to each node and instruct recipient node to save either in cashe 
+        (for parts that will be saved to disk) or in the node_local.distributed dictionary 
+        (for parts that will only be used once).'''
         comm = node_local.comm
         assert len(all_parts) == comm.size
         comm.bcast((ReplicaAction.SCATTER_DA, (key, in_cache)))
@@ -124,6 +128,7 @@ class DistributedArray:
         return res
 
     def gather(self):
+        '''Gather all parts of distributed array to the root node.'''
         comm = self.node_local.comm
         comm.bcast((ReplicaAction.GATHER_DA, (self.key, self.in_cache)))
         all_data = comm.gather(self.local_part, root=0)
@@ -139,7 +144,7 @@ class ParallelMPOEnvironment(MPOEnvironment):
     Only the main node initializes this class,
     the other nodes save stuff in their :class:`NodeLocalData`.
 
-    Compared to the usual MPOEnvironment, we actually only save the
+    NOT TRUE ANY MORE - Compared to the usual MPOEnvironment, we actually only save the
     ``LP--W`` contractions which already include the W on the next site to the right
     (or left for `RP`).
     """
@@ -153,7 +158,7 @@ class ParallelMPOEnvironment(MPOEnvironment):
         assert bra is ket, "could be generalized...."
 
     def get_LP(self, i, store=True):
-        """Returns only the part for the main node"""
+        """Returns DistributedArray containing the part for the main node"""
         assert store, "TODO: necessary to fix this? right now we always store!"
         # find nearest available LP to the left.
         for i0 in range(i, i - self.L, -1):
@@ -164,7 +169,7 @@ class ParallelMPOEnvironment(MPOEnvironment):
             # (for finite, LP[0] should always be set, so we should abort at latest with i0=0)
         else:  # no break called
             raise ValueError("No left part in the system???")
-        # communicate to other nodes to
+        # Contract the found env with MPO and MPS tensors to get the desired env
         age = self.get_LP_age(i0)
         for j in range(i0, i):
             LP = self._contract_LP(j, LP)  # TODO: store keyword for _contract_LP/RP?
@@ -174,17 +179,17 @@ class ParallelMPOEnvironment(MPOEnvironment):
         return LP
 
     def get_RP(self, i, store=True):
-        """Returns only the part for the main node"""
+        """Returns DistributedArray containing the part for the main node"""
         assert store, "TODO: necessary to fix this? right now we always store!"
-        # find nearest available RP to the left.
+        # find nearest available RP to the right.
         for i0 in range(i, i + self.L):
             key = self._RP_keys[self._to_valid_index(i0)]
             if key in self.cache:
                 RP = DistributedArray(key, self.node_local, True)
                 break
         else:  # no break called
-            raise ValueError("No left part in the system???")
-        # communicate to other nodes to
+            raise ValueError("No right part in the system???")
+        # Contract the found env with MPO and MPS tensors to get the desired env
         age = self.get_RP_age(i0)
         for j in range(i0, i, -1):
             RP = self._contract_RP(j, RP)
@@ -194,9 +199,9 @@ class ParallelMPOEnvironment(MPOEnvironment):
         return RP
 
     def set_LP(self, i, LP, age):
-        if not isinstance(LP, DistributedArray):
+        if not isinstance(LP, DistributedArray): # This should only happen upon initialization
             # during __init__: `LP` is what's loaded/generated from `init_LP`
-            proj = self.node_local.projs_L[i]
+            proj = self.node_local.projs_L[i] # At site i, how the left MPO leg is split.
             splits = []
             for p in proj:
                 LP_part = LP.copy()
@@ -211,9 +216,9 @@ class ParallelMPOEnvironment(MPOEnvironment):
         self._LP_age[i] = age
 
     def set_RP(self, i, RP, age):
-        if not isinstance(RP, DistributedArray):
+        if not isinstance(RP, DistributedArray): # This should only happen upon initialization
             # during __init__: `RP` is what's loaded/generated from `init_RP`
-            proj = self.node_local.projs_L[(i+1) % len(self.node_local.projs_L)]
+            proj = self.node_local.projs_L[(i+1) % len(self.node_local.projs_L)] # At site i + 1, how the left MPO leg is split, which is the right MPO leg of site i.
             splits = []
             for p in proj:
                 RP_part = RP.copy()
@@ -233,18 +238,35 @@ class ParallelMPOEnvironment(MPOEnvironment):
         #  LP W  ->   LP W  W
         #                A*
         assert isinstance(LP, DistributedArray)
-
-        raise NotImplementedError("TODO")  # TODO continue here :)
-        LP = npc.tensordot(LP, self.ket.get_B(i, form='A'), axes=('vR', 'vL'))
-        axes = (self.ket._get_p_label('*') + ['vL*'], self.ket._p_label + ['vR*'])
-        # for a ususal MPS, axes = (['p*', 'vL*'], ['p', 'vR*'])
-        LP = npc.tensordot(self.bra.get_B(i, form='A').conj(), LP, axes=axes)
-        return LP  # labels 'vR*', 'vR'
+        LP_W =  self._contract_LP_W_dumb(i, LP)
+        return self._attach_A_to_LP_W(i, LP_W)
 
     def _contract_RP(self, i, RP):
         assert isinstance(RP, DistributedArray)
         W_RP =  self._contract_W_RP_dumb(i, RP)
         return self._attach_B_to_W_RP(i, W_RP)
+    
+    def _contract_LP_W_dumb(self, i, LP):
+        LP_parts = LP.gather()
+        W_block = self.node_local.W_blocks[i % self.L] # Get blocks of W[i], the MPO tensor at site i.
+        W_block_T = list(map(list, zip(*W_block))) # Originaly stored as list of rows; switch to list of columns
+        LP_W = []
+        for b_R, col in enumerate(W_block_T):
+            block = None  # contraction of W_RP in row i
+            for b_L, W in enumerate(col):
+                if W is None:
+                    continue
+                Wb = npc.tensordot(W, LP_parts[b_L], ['wL', 'wR'])
+                if block is None:
+                    block = Wb
+                else:
+                    block = block + Wb
+            assert block is not None
+            #pipeR = block.make_pipe(['p', 'vL*'], qconj=-1)
+            pipeL = block.make_pipe(['vR*', 'p'], qconj=+1) # TODO : is this the correct sign for qconj?
+            block = block.combine_legs([['p', 'vR*'], ['p*', 'vR']], pipes=[pipeL, pipeL.conj()])
+            LP_W.append(block)
+        return DistributedArray.from_scatter(LP_W, self.node_local, "LP_W", False)
 
     def _contract_W_RP_dumb(self, i, RP):
         RP_parts = RP.gather()
@@ -267,6 +289,19 @@ class ParallelMPOEnvironment(MPOEnvironment):
             W_RP.append(block)
         return DistributedArray.from_scatter(W_RP, self.node_local, "W_RP", False)
 
+    def _attach_A_to_LP_W(self, i, LP_W):
+        comm = self.node_local.comm
+        A = self.ket.get_B(i, "A")
+        new_key = self._LP_keys[(i+1) % self.L]
+        comm.bcast((ReplicaAction.ATTACH_A, (LP_W.key, new_key, A)))
+        local_part = LP_W.local_part
+        A = A.combine_legs(['p', 'vL'], pipes=local_part.get_leg('(p.vR*)'))
+        local_part = npc.tensordot(A, local_part, axes=['(p.vL)', '(p*.vR)'])
+        local_part = npc.tensordot(A.conj(), local_part, axes=['(p*.vL*)', '(p.vR*)'])
+        res = DistributedArray(new_key, self.node_local, True)
+        res.local_part = local_part
+        return res
+    
     def _attach_B_to_W_RP(self, i, W_RP):
         comm = self.node_local.comm
         B = self.ket.get_B(i, "B")
@@ -417,6 +452,13 @@ class ParallelDMRGSim(GroundStateSearch):
                 B = B.combine_legs(['p', 'vR'], pipes=local_part.get_leg('(p.vL*)'))
                 local_part = npc.tensordot(B, local_part, axes=['(p.vR)', '(p*.vL)'])
                 local_part = npc.tensordot(B.conj(), local_part, axes=['(p*.vR*)', '(p.vL*)'])
+                self.node_local.cache[new_key] = local_part
+            elif action is ReplicaAction.ATTACH_A:
+                (old_key, new_key, A) = meta
+                local_part = self.node_local.distributed[old_key]
+                A = A.combine_legs(['p', 'vL'], pipes=local_part.get_leg('(p.vR*)'))
+                local_part = npc.tensordot(A, local_part, axes=['(p.vL)', '(p*.vR)'])
+                local_part = npc.tensordot(A.conj(), local_part, axes=['(p*.vL*)', '(p.vR*)'])
                 self.node_local.cache[new_key] = local_part
             else:
                 raise ValueError("recieved invalid action: " + repr(action))
