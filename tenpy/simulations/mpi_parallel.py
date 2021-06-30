@@ -74,16 +74,33 @@ class ParallelTwoSiteH(TwoSiteH):
         self.env = env # TODO is this legal?
         self.i0 = i0
         # TODO: this fails due to LP/RP.get_leg(...) for self.N
-        # I don't think we want to do this inherited init, since the inherited class assumes that we have an LP, RP, w0, w1
-        super().__init__(env, i0, combine, move_right)
-    
+        # I don't think we want to do this inherited init, since the inherited class assumes that LP and RP are arrays and not distributed arrays.
+        #super().__init__(env, i0, combine, move_right)
+        self.dist_LP = env.get_LP(i0)
+        self.dist_RP = env.get_RP(i0 + 1)
+        self.LP = self.dist_LP.node_local.cache[self.dist_LP.key]  # LP and RP are the actual arrays (for now; TODO check with Johannes)
+        self.RP = self.dist_RP.node_local.cache[self.dist_RP.key]
+        self.W0 = env.H.get_W(i0).replace_labels(['p', 'p*'], ['p0', 'p0*'])
+        # 'wL', 'wR', 'p0', 'p0*'
+        self.W1 = env.H.get_W(i0 + 1).replace_labels(['p', 'p*'], ['p1', 'p1*'])
+        # 'wL', 'wR', 'p1', 'p1*'
+        self.dtype = env.H.dtype
+        self.combine = combine
+        self.N = (self.LP.get_leg('vR').ind_len * self.W0.get_leg('p0').ind_len *
+                  self.W1.get_leg('p1').ind_len * self.RP.get_leg('vL').ind_len)
+        if combine:
+            self.combine_Heff()
+        
+        
     def combine_Heff(self):
-        self.LHeff = self.env._contract_LP_W_dumb(self.i0, self.LP)
-        self.pipeL = self.LHeff.get_leg('(p0.vR*)')
-        self.RHeff = self.env._contract_W_RP_dumb(self.i0+1, self.RP)
+        self.dist_LHeff = self.env._contract_LP_W_dumb(self.i0, self.dist_LP)
+        self.LHeff = self.dist_LHeff.node_local.distributed["LP_W"]
+        self.pipeL = self.LHeff.get_leg('(vR*.p0)')
+        self.dist_RHeff = self.env._contract_W_RP_dumb(self.i0+1, self.dist_RP)
+        self.RHeff = self.dist_RHeff.node_local.distributed["W_RP"]
         self.pipeR = self.RHeff.get_leg('(p1.vL*)')
         self.acts_on = ['(vL.p0)', '(p1.vR)']
-        
+    
     def matvec(self, theta):
         # I think theta is already combined.
         self.comm.bcast((ReplicaAction.MATVEC, theta))
@@ -96,7 +113,7 @@ class ParallelTwoSiteH(TwoSiteH):
         theta.ireplace_labels(['(vR*.p0)', '(p1.vL*)'], ['(vL.p0)', '(p1.vR)'])
         theta = self.comm.reduce(theta, op=MPI.SUM)
         return theta
-    
+        '''
         raise NotImplementedError('Need to write Matvec')
 
         self.comm.bcast((ReplicaAction.MATVEC, theta))
@@ -104,15 +121,19 @@ class ParallelTwoSiteH(TwoSiteH):
         theta = self.orig_operator.matvec(theta)
         theta = self.comm.reduce(theta, op=MPI.SUM)
         return theta
-
-    def to_matrix(self):
-        return self.orig_operator.to_matrix() + self.orig_operator.adjoint().to_matrix()
+        '''
+    #def to_matrix(self):
+    #    return self.orig_operator.to_matrix() + self.orig_operator.adjoint().to_matrix()
 
     def update_LP(self, env, i, U=None):
-        raise ValueError('Should this be called?')
+        assert self.combine
+        env._attach_A_to_LP_W(i, self.dist_LHeff, A=U)
+        #raise ValueError('Should this be called?')
 
     def update_RP(self, env, i, VH=None):
-        raise ValueError('Should this be called?')
+        assert self.combine
+        env._attach_B_to_W_RP(i, self.dist_RHeff, B=VH)
+        #raise ValueError('Should this be called?')
 
 
 class DistributedArray:
@@ -144,12 +165,14 @@ class DistributedArray:
     def __getstate__(self):
         raise ValueError("Never pickle/copy this!")
     
+    '''
     def get_leg(self, label):
         if self.in_cache:
             return self.node_local.cache[self.key].get_leg(label)
         else:
             return self.node_local.distributed[self.key].get_leg(label)
-        
+    '''
+    
     @classmethod
     def from_scatter(cls, all_parts, node_local, key, in_cache=True):
         '''Scatter all_parts array to each node and instruct recipient node to save either in cashe 
@@ -195,7 +218,11 @@ class ParallelMPOEnvironment(MPOEnvironment):
 
     def get_LP(self, i, store=True):
         """Returns DistributedArray containing the part for the main node"""
-        assert store, "TODO: necessary to fix this? right now we always store!"
+        #assert store, "TODO: necessary to fix this? right now we always store!" # JOHANNES HELP ME
+        '''
+        File "/home/sajant/tenpy_private/tenpy/networks/mpo.py", line 1998, in full_contraction
+        LP = self.get_LP(i0 + 1, store=False)
+        '''
         # find nearest available LP to the left.
         for i0 in range(i, i - self.L, -1):
             key = self._LP_keys[self._to_valid_index(i0)]
@@ -216,7 +243,11 @@ class ParallelMPOEnvironment(MPOEnvironment):
 
     def get_RP(self, i, store=True):
         """Returns DistributedArray containing the part for the main node"""
-        assert store, "TODO: necessary to fix this? right now we always store!"
+        #assert store, "TODO: necessary to fix this? right now we always store!" # JOHANNES HELP ME
+        '''
+        File "/home/sajant/tenpy_private/tenpy/networks/mpo.py", line 1998, in full_contraction
+        LP = self.get_LP(i0 + 1, store=False)
+        '''
         # find nearest available RP to the right.
         for i0 in range(i, i + self.L):
             key = self._RP_keys[self._to_valid_index(i0)]
@@ -299,8 +330,8 @@ class ParallelMPOEnvironment(MPOEnvironment):
                     block = block + Wb
             assert block is not None
             #pipeR = block.make_pipe(['p', 'vL*'], qconj=-1)
-            pipeL = block.make_pipe(['p0', 'vR*'], qconj=+1)
-            block = block.combine_legs([['p0', 'vR*'], ['p0*', 'vR']], pipes=[pipeL, pipeL.conj()], new_axes=[0, 2]) # vR*.p, wR, vR.p*
+            pipeL = block.make_pipe(['vR*', 'p0'], qconj=+1)
+            block = block.combine_legs([['vR*', 'p0'], ['vR', 'p0*']], pipes=[pipeL, pipeL.conj()], new_axes=[0, 2]) # vR*.p, wR, vR.p*
             LP_W.append(block)
         return DistributedArray.from_scatter(LP_W, self.node_local, "LP_W", False) # TODO - doesn't this create a new LP_W distributed array each time?
 
@@ -325,26 +356,36 @@ class ParallelMPOEnvironment(MPOEnvironment):
             W_RP.append(block)
         return DistributedArray.from_scatter(W_RP, self.node_local, "W_RP", False)
 
-    def _attach_A_to_LP_W(self, i, LP_W):
+    def _attach_A_to_LP_W(self, i, LP_W, A=None):
         comm = self.node_local.comm
-        A = self.ket.get_B(i, "A").replace_labels(['p'], ['p0'])
-        new_key = self._LP_keys[(i+1) % self.L]
-        comm.bcast((ReplicaAction.ATTACH_A, (LP_W.key, new_key, A)))
         local_part = LP_W.local_part
-        A = A.combine_legs(['p0', 'vL'], pipes=local_part.get_leg('(p0.vR*)'))
-        local_part = npc.tensordot(A, local_part, axes=['(p0.vL)', '(p0*.vR)'])
-        local_part = npc.tensordot(A.conj(), local_part, axes=['(p0*.vL*)', '(p0.vR*)'])
+        if A is None:
+            A = self.ket.get_B(i, "A").replace_labels(['p'], ['p0'])
+        if A.ndim == 3:
+            A = A.combine_legs(['vL', 'p0'], pipes=local_part.get_leg('(vR*.p0)'))
+        elif A.ndim != 2:
+            raise ValueError("'A' tensor has neither 2 nor 3 legs")
+        
+        new_key = self._LP_keys[(i+1) % self.L]
+        comm.bcast((ReplicaAction.ATTACH_A, (LP_W.key, new_key, A))) # Broadcast A with legs combined
+        local_part = npc.tensordot(A, local_part, axes=['(vL.p0)', '(vR.p0*)'])
+        local_part = npc.tensordot(A.conj(), local_part, axes=['(vL*.p0*)', '(vR*.p0)'])
         res = DistributedArray(new_key, self.node_local, True)
         res.local_part = local_part
         return res
     
-    def _attach_B_to_W_RP(self, i, W_RP):
+    def _attach_B_to_W_RP(self, i, W_RP, B=None):
         comm = self.node_local.comm
-        B = self.ket.get_B(i, "B").replace_labels(['p'], ['p1'])
-        new_key = self._RP_keys[(i-1) % self.L]
-        comm.bcast((ReplicaAction.ATTACH_B, (W_RP.key, new_key, B)))
         local_part = W_RP.local_part
-        B = B.combine_legs(['p1', 'vR'], pipes=local_part.get_leg('(p1.vL*)'))
+        if B is None:
+            B = self.ket.get_B(i, "B").replace_labels(['p'], ['p1'])
+        if B.ndim == 3:
+            B = B.combine_legs(['p1', 'vR'], pipes=local_part.get_leg('(p1.vL*)'))
+        elif B.ndim != 2:
+            raise ValueError("'B' tensor has neither 2 nor 3 legs")
+            
+        new_key = self._RP_keys[(i-1) % self.L]
+        comm.bcast((ReplicaAction.ATTACH_B, (W_RP.key, new_key, B))) # Broadcast B with legs combined
         local_part = npc.tensordot(B, local_part, axes=['(p1.vR)', '(p1*.vL)'])
         local_part = npc.tensordot(B.conj(), local_part, axes=['(p1*.vR*)', '(p1.vL*)'])
         res = DistributedArray(new_key, self.node_local, True)
@@ -490,16 +531,16 @@ class ParallelDMRGSim(GroundStateSearch):
             elif action is ReplicaAction.ATTACH_B:
                 (old_key, new_key, B) = meta
                 local_part = self.node_local.distributed[old_key]
-                B = B.combine_legs(['p1', 'vR'], pipes=local_part.get_leg('(p1.vL*)'))
+                #B = B.combine_legs(['p1', 'vR'], pipes=local_part.get_leg('(p1.vL*)'))
                 local_part = npc.tensordot(B, local_part, axes=['(p1.vR)', '(p1*.vL)'])
                 local_part = npc.tensordot(B.conj(), local_part, axes=['(p1*.vR*)', '(p1.vL*)'])
                 self.node_local.cache[new_key] = local_part
             elif action is ReplicaAction.ATTACH_A:
                 (old_key, new_key, A) = meta
-                local_part = self.node_local.distributed[old_key]                
-                A = A.combine_legs(['p0', 'vL'], pipes=local_part.get_leg('(p0.vR*)'))
-                local_part = npc.tensordot(A, local_part, axes=['(p0.vL)', '(p0*.vR)'])
-                local_part = npc.tensordot(A.conj(), local_part, axes=['(p0*.vL*)', '(p0.vR*)'])
+                local_part = self.node_local.distributed[old_key]
+                #A = A.combine_legs(['vL', 'p0'], pipes=local_part.get_leg('(vR*.p0)'))
+                local_part = npc.tensordot(A, local_part, axes=['(vL.p0)', '(vR.p0*)'])
+                local_part = npc.tensordot(A.conj(), local_part, axes=['(vL*.p0*)', '(vR*.p0)'])
                 self.node_local.cache[new_key] = local_part
             else:
                 raise ValueError("recieved invalid action: " + repr(action))
