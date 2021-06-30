@@ -44,6 +44,10 @@ class RealTimeEvolution(Simulation):
             if np.real(self.engine.evolved_time) >= self.final_time:
                 break
             self.engine.run()
+            # for time-dependent H (TimeDependentExpMPOEvolution) the engine can re-init the model;
+            # use it for the measurements....
+            self.model = self.engine.model
+
             self.logger.info("reached time %.2f, max chi=%d", self.engine.evolved_time.real,
                              max(self.psi.chi))
             # TODO: call engine.checkpoint.emit() ?

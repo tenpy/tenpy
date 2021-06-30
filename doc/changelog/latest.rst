@@ -35,6 +35,7 @@ Added
 - :class:`~tenpy.simulations.simulation.OrthogonalExcitations` simulation class.
 - :cfg:configoption:`Simulation.group_sites` for the simultion class.
 - `extract_segment` method for model, lattice and MPS/MPO classes.
+- :class:`~tenpy.algorithms.mpo_evolution.TimeDependentExpMPOEvolution` for time-dependent hamiltonians.
 
 
 Changed

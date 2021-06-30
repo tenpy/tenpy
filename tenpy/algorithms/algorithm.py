@@ -165,6 +165,8 @@ class TimeEvolutionAlgorithm(Algorithm):
         Not that the real-part of `t` is increasing for a real-time evolution,
         while the imaginary-part of `t` is *decreasing* for a imaginary time evolution.
     """
+    time_dependent_H = False  #: whether the algorithm supports time-dependent H
+
     def __init__(self, psi, model, options, **kwargs):
         super().__init__(psi, model, options, **kwargs)
         self.evolved_time = self.options.get('start_time', 0.)
