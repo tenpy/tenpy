@@ -13,7 +13,7 @@ from ..linalg import np_conserved as npc
 from .truncation import TruncationError
 from ..tools.params import asConfig
 
-__all__ = ['ExpMPOEvolution']
+__all__ = ['ExpMPOEvolution', 'TimeDependentExpMPOEvolution']
 
 
 class ExpMPOEvolution(TimeEvolutionAlgorithm):
