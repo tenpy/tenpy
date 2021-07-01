@@ -12,6 +12,7 @@ The classes provided here provide a structure for the whole setup of simulations
     ground_state_search
     time_evolution
     mpi_parallel
+    mpi_parallel_actions
 
 """
 # Copyright 2020-2021 TeNPy Developers, GNU GPLv3
