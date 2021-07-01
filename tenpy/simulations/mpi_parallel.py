@@ -84,8 +84,13 @@ class ParallelTwoSiteH(TwoSiteH):
                           (theta, LHeff.key, RHeff.key))
 
     def to_matrix(self):
-        return action.run(action.effh_to_matrix, self.LHeff.node_local,
-                          (self.LHeff.key, self.RHeff.key))
+        mat = action.run(action.effh_to_matrix, self.LHeff.node_local,
+                         (self.LHeff.key, self.RHeff.key))
+        if self.LHeff.node_local.H.explicit_plus_hc:
+            mat_hc = mat.conj().itranspose()
+            mat_hc.iset_leg_labels(mat.get_leg_labels())
+            mat = mat + mat_hc
+        return mat
 
     def update_LP(self, env, i, U=None):
         assert i == self.i0 + 1

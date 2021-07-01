@@ -31,9 +31,19 @@ def distribute_H(node_local, on_main, H):
 def matvec(node_local, on_main, theta, LH_key, RH_key):
     LHeff = node_local.distributed[LH_key]
     RHeff = node_local.distributed[RH_key]
+
+    if node_local.H.explicit_plus_hc:
+        theta_hc = theta.conj()  # copy!
+        theta_hc = npc.tensordot(theta_hc, LHeff, axes=['(vL*.p0*)', '(vR*.p0)'])
+        theta_hc = npc.tensordot(RHeff, theta_hc,
+                                 axes=[['(p1.vL*)', 'wL'], ['(p1*.vR*)', 'wR']])
+        theta_hc.iconj().itranspose()
+        theta_hc.ireplace_labels(['(vR*.p0)', '(p1.vL*)'], ['(vL.p0)', '(p1.vR)'])
     theta = npc.tensordot(LHeff, theta, axes=['(vR.p0*)', '(vL.p0)'])
     theta = npc.tensordot(theta, RHeff, axes=[['wR', '(p1.vR)'], ['wL', '(p1*.vL)']])
     theta.ireplace_labels(['(vR*.p0)', '(p1.vL*)'], ['(vL.p0)', '(p1.vR)'])
+    if node_local.H.explicit_plus_hc:
+        theta = theta + theta_hc
     return node_local.comm.reduce(theta, op=MPI.SUM)
 
 def effh_to_matrix(node_local, on_main, LH_key, RH_key):
@@ -93,4 +103,6 @@ def full_contraction(node_local, on_main, case, LP_key, LP_ic, RP_key, RP_ic, th
     else:
         assert False
     full_contr = npc.inner(LP, RP, [['vR*', 'wR', 'vR'], ['vL*', 'wL', 'vL']], do_conj=False)
+    if node_local.H.explicit_plus_hc:
+        full_contr = full_contr + full_contr.conj()
     return node_local.comm.reduce(full_contr, op=MPI.SUM)
