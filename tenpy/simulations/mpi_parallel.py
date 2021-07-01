@@ -47,17 +47,14 @@ def split_MPO_leg(leg, N_nodes):
     res = []
     for i in range(N_nodes):
         proj = np.zeros(D, dtype=bool)
-        proj[D//N_nodes *i : D// N_nodes * (i+1)] = True
+        proj[(D*i)//N_nodes: (D*(i+1))// N_nodes] = True
         res.append(proj)
     return res
 
 
 class ParallelTwoSiteH(TwoSiteH):
-    def __init__(self, env, i0, combine=True, move_right=True, comm=None):
-        assert comm is not None
+    def __init__(self, env, i0, combine=True, move_right=True):
         assert combine, 'not implemented for other case'
-        self.comm = comm
-        self.rank = self.comm.rank
         # super().__init__(env, i0, combine, move_right)
         self.i0 = i0
         self.LP = env.get_LP(i0)
@@ -373,17 +370,29 @@ class ParallelMPOEnvironment(MPOEnvironment):
         return res
 
 
+    def get_initialization_data(self, first=0, last=None):
+        data = super().get_initialization_data(first, last)
+        data['init_LP'] = data['init_LP'].gather()
+        data['init_RP'] = data['init_RP'].gather()
+        return data
+
+
 class ParallelTwoSiteDMRG(TwoSiteDMRGEngine):
     def __init__(self, psi, model, options, *, comm_H, **kwargs):
         options.setdefault('combine', True)
         self.comm_H = comm_H
         self.main_node_local = NodeLocalData(self.comm_H, kwargs['cache'])
         super().__init__(psi, model, options, **kwargs)
+        #  self._plus_hc_worker = None
+        #  self.use_threading_plus_hc = self.options.get('thread_pluc_hc',
+        #                                                model.H_MPO.explicit_plus_hc)
+        #  if self.use_threading_plus_hc and not model.H_MPO.explicit_plus_hc:
+        #      raise ValueError("can't use threading+hc if the model doesn't have explicit_plus_hc.")
 
 
     def make_eff_H(self):
         assert self.combine
-        self.eff_H = ParallelTwoSiteH(self.env, self.i0, True, self.move_right, self.comm_H)
+        self.eff_H = ParallelTwoSiteH(self.env, self.i0, True, self.move_right)
 
         if len(self.ortho_to_envs) > 0:
             raise NotImplementedError("TODO: Not supported (yet)")
@@ -398,7 +407,6 @@ class ParallelTwoSiteDMRG(TwoSiteDMRGEngine):
 
 class NodeLocalData:
     def __init__(self, comm, cache):
-        # TODO initialize cache
         self.comm = comm
         i = comm.rank
         self.cache = cache
@@ -478,7 +486,6 @@ class ParallelDMRGSim(GroundStateSearch):
         action.replica_main(node_local)
         # TODO: initialize environment nevertheless
         # TODO: initialize how MPO legs are split
-
         # done
 
     def resume_run(self):
