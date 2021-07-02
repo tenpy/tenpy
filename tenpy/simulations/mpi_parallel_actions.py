@@ -124,3 +124,12 @@ def full_contraction(node_local, on_main, case, LP_key, LP_ic, RP_key, RP_ic, th
     if node_local.H.explicit_plus_hc:
         full_contr = full_contr + full_contr.conj()
     return node_local.comm.reduce(full_contr, op=MPI.SUM)
+
+
+def cache_optimize(node_local, on_main, short_term_keys, preload):
+    node_local.cache.set_short_term_keys(*short_term_keys, *preload)
+    node_local.cache.preload(*preload)
+
+def cache_del(node_local, on_main, *keys):
+    for key in keys:
+        del node_local.cache[key]

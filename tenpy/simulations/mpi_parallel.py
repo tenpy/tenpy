@@ -31,7 +31,7 @@ from ..algorithms.dmrg import SingleSiteDMRGEngine, TwoSiteDMRGEngine
 from ..algorithms.mps_common import TwoSiteH
 from ..simulations.ground_state_search import GroundStateSearch
 from ..tools.params import asConfig
-from ..tools.misc import get_recursive, transpose_list_list
+from ..tools.misc import get_recursive, set_recursive, transpose_list_list
 from ..tools.thread import Worker
 from ..tools.cache import CacheFile
 from ..networks.mpo import MPOEnvironment
@@ -133,21 +133,22 @@ class DistributedArray:
             self.node_local.distributed[self.key] = local_part
 
     def __getstate__(self):
-        raise ValueError("Never pickle/copy this!")
+        raise ValueError("Never pickle/copy/save this!")
 
     @classmethod
     def from_scatter(cls, all_parts, node_local, key, in_cache=True):
-        '''Scatter all_parts array to each node and instruct recipient node to save either in cashe
-        (for parts that will be saved to disk) or in the node_local.distributed dictionary
-        (for parts that will only be used once).'''
-        assert len(all_parts) == node_local.comm.size
+        """initialize DsitrubtedArray from all parts on the main node.
 
+        Scatter all_parts array to each node and instruct recipient node to save either in cache
+        (for parts that will be saved to disk) or in the node_local.distributed dictionary
+        (for parts that will only be used once)."""
+        assert len(all_parts) == node_local.comm.size
         action.run(action.scatter_distr_array, node_local, (key, in_cache), all_parts)
         res = cls(key, node_local, in_cache)
         return res
 
     def gather(self):
-        '''Gather all parts of distributed array to the root node.'''
+        """Gather all parts of distributed array to the root node."""
         return action.run(action.gather_distr_array, self.node_local, (self.key, self.in_cache))
 
 
@@ -156,12 +157,10 @@ class ParallelMPOEnvironment(MPOEnvironment):
 
     The environment is completely distributed over the different nodes; each node only has its
     fraction of the MPO wL/wR legs.
-    Only the main node initializes this class,
+    Only the main node initializes this class.
+    :meth:`get_RP` and :meth:`set_RP` return/expect a :class:`DistributedArray` representing the
+    and saves instances of :class:`DistributedArray`
     the other nodes save stuff in their :class:`NodeLocalData`.
-
-    NOT TRUE ANY MORE - Compared to the usual MPOEnvironment, we actually only save the
-    ``LP--W`` contractions which already include the W on the next site to the right
-    (or left for `RP`).
     """
     def __init__(self, node_local, bra, H, ket, cache=None, **init_env_data):
         self.node_local = node_local
@@ -173,11 +172,7 @@ class ParallelMPOEnvironment(MPOEnvironment):
 
     def get_LP(self, i, store=True):
         """Returns DistributedArray containing the part for the main node"""
-        assert store, "TODO: necessary to fix this? right now we always store!" # JOHANNES HELP ME
-        '''
-        File "/home/sajant/tenpy_private/tenpy/networks/mpo.py", line 1998, in full_contraction
-        LP = self.get_LP(i0 + 1, store=False)
-        '''
+        assert store, "necessary to fix this? right now we always store..."
         # find nearest available LP to the left.
         for i0 in range(i, i - self.L, -1):
             key = self._LP_keys[self._to_valid_index(i0)]
@@ -190,7 +185,7 @@ class ParallelMPOEnvironment(MPOEnvironment):
         # Contract the found env with MPO and MPS tensors to get the desired env
         age = self.get_LP_age(i0)
         for j in range(i0, i):
-            LP = self._contract_LP(j, LP)  # TODO: store keyword for _contract_LP/RP?
+            LP = self._contract_LP(j, LP)
             age = age + 1
             if store:
                 self.set_LP(j + 1, LP, age=age)
@@ -198,11 +193,7 @@ class ParallelMPOEnvironment(MPOEnvironment):
 
     def get_RP(self, i, store=True):
         """Returns DistributedArray containing the part for the main node"""
-        #assert store, "TODO: necessary to fix this? right now we always store!" # JOHANNES HELP ME
-        '''
-        File "/home/sajant/tenpy_private/tenpy/networks/mpo.py", line 1998, in full_contraction
-        LP = self.get_LP(i0 + 1, store=False)
-        '''
+        assert store, "necessary to fix this? right now we always store..."
         # find nearest available RP to the right.
         for i0 in range(i, i + self.L):
             key = self._RP_keys[self._to_valid_index(i0)]
@@ -254,10 +245,29 @@ class ParallelMPOEnvironment(MPOEnvironment):
             assert self._RP_keys[i] in self.cache
         self._RP_age[i] = age
 
+    def del_LP(self, i):
+        """Delete stored part strictly to the left of site `i`."""
+        i = self._to_valid_index(i)
+        action.run(action.cache_del, self.node_local, (self._LP_keys[i], ))
+        self._LP_age[i] = None
+
+    def del_RP(self, i):
+        """Delete stored part scrictly to the right of site `i`."""
+        i = self._to_valid_index(i)
+        action.run(action.cache_del, self.node_local, (self._RP_keys[i], ))
+        self._RP_age[i] = None
+
+    def clear(self):
+        """Delete all partial contractions except the left-most `LP` and right-most `RP`."""
+        keys = [key for key in self._LP_keys[1:] + self._RP_keys[:-1] if key in self.cache]
+        action.run(action.cache_del, self.node_local, keys)
+        self._LP_age[1:] = [None] * (self.L - 1)
+        self._RP_age[:-1] = [None] * (self.L - 1)
+
     def full_contraction(self, i0):
         eff_H = getattr(self, "_eff_H", None)   # HACK to have access to previous envs
         if eff_H is None or i0 != eff_H.i0:
-            raise NotImplementedError("TODO needed?")
+            raise NotImplementedError("this shouldn't be needed for DMRG")
         i1 = i0 + 1
         meta = []
         if self.has_LP(i1):
@@ -376,12 +386,26 @@ class ParallelMPOEnvironment(MPOEnvironment):
         res = DistributedArray(new_key, self.node_local, True)
         return res
 
-
     def get_initialization_data(self, first=0, last=None):
         data = super().get_initialization_data(first, last)
         data['init_LP'] = data['init_LP'].gather()
         data['init_RP'] = data['init_RP'].gather()
         return data
+
+    def cache_optimize(self, short_term_LP=[], short_term_RP=[], preload_LP=None, preload_RP=None):
+        # need to update cache on all nodes
+        LP_keys = self._LP_keys
+        RP_keys = self._RP_keys
+        preload = []
+        if preload_LP is not None:
+            preload.append(LP_keys[self._to_valid_index(preload_LP)])
+        if preload_RP is not None:
+            preload.append(RP_keys[self._to_valid_index(preload_RP)])
+
+        short_term_keys = tuple([LP_keys[self._to_valid_index(i)] for i in short_term_LP] +
+                                [RP_keys[self._to_valid_index(i)] for i in short_term_RP])
+
+        action.run(action.cache_optimize, self.node_local, (short_term_keys, preload))
 
 
 class ParallelTwoSiteDMRG(TwoSiteDMRGEngine):
@@ -412,6 +436,7 @@ class ParallelTwoSiteDMRG(TwoSiteDMRGEngine):
     def run(self):
         # re-initialize worker to allow calling `run()` multiple times
         if self.use_threading_plus_hc:
+            print("using a worker on rank ", self.comm_H.rank)
             worker = Worker("EffectiveHPlusHC worker", max_queue_size=1, daemon=False)
             self.main_node_local.worker = worker
             with worker:
@@ -469,13 +494,14 @@ class ParallelDMRGSim(GroundStateSearch):
         # TODO: generalize such that it works if we have sequential simulations
         if comm is None:
             comm = MPI.COMM_WORLD
-        self.comm_H = comm.Dup()
+        self.comm_H = comm
         print("MPI rank %d reporting for duty" % comm.rank)
         if self.comm_H.rank == 0:
             super().__init__(options, **kwargs)
         else:
+            # TODO: how to safely log? should replica create a separate log file?
+            self.options = options  # don't convert to options to avoid unused warnings#, "replica node sim_params")
             # HACK: monkey-patch `[resume_]run` by `replica_run`
-            self.options = asConfig(options, "replica node sim_params")
             self.run = self.resume_run = self.replica_run
             # don't __init__() to avoid locking files
             # but allow to use context __enter__ and __exit__ to initialize cache
@@ -485,12 +511,31 @@ class ParallelDMRGSim(GroundStateSearch):
         self.comm_H.Free()
         super().__delete__()
 
+    def init_cache(self):
+        # make sure we have a unique dir/file for each rank
+        directory = get_recursive(self.options, 'cache_params.directory', default=None)
+        filename = get_recursive(self.options, 'cache_params.filename', default=None)
+        if filename is not None or directory is not None:
+            if filename is not None:
+                filename = filename + f"_rank_{self.comm_H.rank:2d}"
+                set_recursive(self.options, 'cache_params.filename', filename)
+            if directory is not None:
+                directory = directory + f"_rank_{self.comm_H.rank:2d}"
+                set_recursive(self.options, 'cache_params.directory', directory)
+        super().init_cache()
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        # Simulation.__enter__ is fine for all ranks
+        self.cache.__exit__(exc_type, exc_value, traceback)
+        if exc_type is not None and self.comm_H.rank == 0:
+            self.logger.exception("simulation abort with the following exception",
+                                  exc_info=(exc_type, exc_value, traceback))
+        if self.comm_H.rank == 0:
+            self.options.warn_unused(True)
+
     def init_algorithm(self, **kwargs):
         kwargs.setdefault('comm_H', self.comm_H)
         super().init_algorithm(**kwargs)
-
-    def init_model(self):
-        super().init_model()
 
     def run(self):
         res = super().run()
