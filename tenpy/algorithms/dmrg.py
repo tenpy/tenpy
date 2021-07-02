@@ -1124,7 +1124,7 @@ class DMRGEngine(Sweep):
         i0 = self.i0
         E_trunc = None
         if self._meas_E_trunc or E0 is None:
-            E_trunc = self.env.full_contraction(i0 + 1).real  # uses updated LP/RP (if calculated)
+            E_trunc = self.env.full_contraction(i0).real  # uses updated LP/RP (if calculated)
             if E0 is None:
                 E0 = E_trunc
             E_trunc = E_trunc - E0

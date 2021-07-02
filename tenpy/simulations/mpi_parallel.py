@@ -32,6 +32,7 @@ from ..algorithms.mps_common import TwoSiteH
 from ..simulations.ground_state_search import GroundStateSearch
 from ..tools.params import asConfig
 from ..tools.misc import get_recursive, transpose_list_list
+from ..tools.thread import Worker
 from ..tools.cache import CacheFile
 from ..networks.mpo import MPOEnvironment
 
@@ -220,6 +221,7 @@ class ParallelMPOEnvironment(MPOEnvironment):
         return RP
 
     def set_LP(self, i, LP, age):
+        i = self._to_valid_index(i)
         if not isinstance(LP, DistributedArray): # This should only happen upon initialization
             # during __init__: `LP` is what's loaded/generated from `init_LP`
             proj = self.node_local.projs_L[i] # At site i, how the left MPO leg is split.
@@ -233,10 +235,10 @@ class ParallelMPOEnvironment(MPOEnvironment):
         else:
             # we got a DistributedArray, so this is already in cache!
             assert self._LP_keys[i] in self.cache
-        i = self._to_valid_index(i)
         self._LP_age[i] = age
 
     def set_RP(self, i, RP, age):
+        i = self._to_valid_index(i)
         if not isinstance(RP, DistributedArray): # This should only happen upon initialization
             # during __init__: `RP` is what's loaded/generated from `init_RP`
             proj = self.node_local.projs_L[(i+1) % len(self.node_local.projs_L)] # At site i + 1, how the left MPO leg is split, which is the right MPO leg of site i.
@@ -250,33 +252,33 @@ class ParallelMPOEnvironment(MPOEnvironment):
         else:
             # we got a DistributedArray, so this is already in cache!
             assert self._RP_keys[i] in self.cache
-        i = self._to_valid_index(i)
         self._RP_age[i] = age
 
     def full_contraction(self, i0):
         eff_H = getattr(self, "_eff_H", None)   # HACK to have access to previous envs
-        if eff_H is None or i0 != eff_H.i0 + 1:
+        if eff_H is None or i0 != eff_H.i0:
             raise NotImplementedError("TODO needed?")
+        i1 = i0 + 1
         meta = []
-        if self.has_LP(i0):
-            LP = self.get_LP(i0)
-            if self.has_RP(i0 - 1):
+        if self.has_LP(i1):
+            LP = self.get_LP(i1)
+            if self.has_RP(i0):
                 case = 0b11
-                RP = self.get_RP(i0 - 1)
+                RP = self.get_RP(i0)
                 S_ket = self.ket.get_SR(i0)
                 meta = (case, LP.key, LP.in_cache, RP.key, RP.in_cache, S_ket)
             else:
                 case = 0b10
                 RHeff = eff_H.RHeff
-                theta = self.ket.get_theta(i0, 1).replace_label('p0', 'p1')
+                theta = self.ket.get_theta(i1, 1).replace_label('p0', 'p1')
                 theta = theta.combine_legs(['p1', 'vR'], pipes=eff_H.pipeR)
                 meta = (case, LP.key, LP.in_cache, RHeff.key, RHeff.in_cache, theta)
         else:
             LHeff = eff_H.LHeff
-            if self.has_RP(i0 - 1):
+            if self.has_RP(i0):
                 case = 0b01
-                RP = self.get_RP(i0 - 1)
-                theta = self.ket.get_theta(i0 - 1, 1)
+                RP = self.get_RP(i0)
+                theta = self.ket.get_theta(i0, 1)
                 theta = theta.combine_legs(['vL', 'p0'], pipes=eff_H.pipeL)
                 meta = (case, LHeff.key, LHeff.in_cache, RP.key, RP.in_cache, theta)
             else: # case = 0b00
@@ -388,19 +390,17 @@ class ParallelTwoSiteDMRG(TwoSiteDMRGEngine):
         self.comm_H = comm_H
         self.main_node_local = NodeLocalData(self.comm_H, kwargs['cache'])
         super().__init__(psi, model, options, **kwargs)
-        #  self._plus_hc_worker = None
-        #  self.use_threading_plus_hc = self.options.get('thread_pluc_hc',
-        #                                                model.H_MPO.explicit_plus_hc)
-        #  if self.use_threading_plus_hc and not model.H_MPO.explicit_plus_hc:
-        #      raise ValueError("can't use threading+hc if the model doesn't have explicit_plus_hc.")
+        self._plus_hc_worker = None
+        self.use_threading_plus_hc = self.options.get('thread_plus_hc', False)
+        if self.use_threading_plus_hc and not model.H_MPO.explicit_plus_hc:
+            raise ValueError("can't use threading+hc if the model doesn't have explicit_plus_hc.")
 
 
     def make_eff_H(self):
         assert self.combine
         self.eff_H = ParallelTwoSiteH(self.env, self.i0, True, self.move_right)
-
         if len(self.ortho_to_envs) > 0:
-            raise NotImplementedError("TODO: Not supported (yet)")
+            self._wrap_ortho_eff_H()
 
     def _init_MPO_env(self, H, init_env_data):
         # Initialize custom ParallelMPOEnvironment
@@ -409,6 +409,18 @@ class ParallelTwoSiteDMRG(TwoSiteDMRGEngine):
         self.env = ParallelMPOEnvironment(self.main_node_local,
                                           self.psi, H, self.psi, cache=cache, **init_env_data)
 
+    def run(self):
+        # re-initialize worker to allow calling `run()` multiple times
+        if self.use_threading_plus_hc:
+            worker = Worker("EffectiveHPlusHC worker", max_queue_size=1, daemon=False)
+            self.main_node_local.worker = worker
+            with worker:
+                res = super().run()
+            self.main_node_local.worker = None
+        else:
+            self.main_node_local.worker = None
+            res = super().run()
+        return res
 
 class NodeLocalData:
     def __init__(self, comm, cache):
@@ -443,7 +455,7 @@ class NodeLocalData:
                     print(row)
                     print(W.to_ndarray())
                     print(projs_L, projs_R)
-                    assert False
+                    #  assert False
 
             self.W_blocks.append(blocks)
 
@@ -488,9 +500,17 @@ class ParallelDMRGSim(GroundStateSearch):
     def replica_run(self):
         """Replacement for :meth:`run` used for replicas (as opposed to primary MPI process)."""
         node_local = NodeLocalData(self.comm_H, self.cache)  # cache is initialized node-local
-        action.replica_main(node_local)
-        # TODO: initialize environment nevertheless
-        # TODO: initialize how MPO legs are split
+        use_threading_plus_hc = get_recursive(self.options, 'algorithm_params.thread_plus_hc',
+                                              default=False)
+        if use_threading_plus_hc:
+            print("using a worker on rank ", self.comm_H.rank)
+            worker = Worker("EffectiveHPlusHC worker", max_queue_size=1, daemon=False)
+            node_local.worker = worker
+            with worker:
+                action.replica_main(node_local)
+        else:
+            node_local.worker = None
+            action.replica_main(node_local)
         # done
 
     def resume_run(self):

@@ -31,20 +31,38 @@ def distribute_H(node_local, on_main, H):
 def matvec(node_local, on_main, theta, LH_key, RH_key):
     LHeff = node_local.distributed[LH_key]
     RHeff = node_local.distributed[RH_key]
-
+    worker = node_local.worker
     if node_local.H.explicit_plus_hc:
-        theta_hc = theta.conj()  # copy!
-        theta_hc = npc.tensordot(theta_hc, LHeff, axes=['(vL*.p0*)', '(vR*.p0)'])
-        theta_hc = npc.tensordot(RHeff, theta_hc,
-                                 axes=[['(p1.vL*)', 'wL'], ['(p1*.vR*)', 'wR']])
-        theta_hc.iconj().itranspose()
-        theta_hc.ireplace_labels(['(vR*.p0)', '(p1.vL*)'], ['(vL.p0)', '(p1.vR)'])
+        if worker is None:
+            theta_hc = matvec_hc(LHeff, theta, RHeff)
+        else:
+            res = {}
+            worker.put_task(matvec_hc, LHeff, theta, RHeff, return_dict=res, return_key="theta_hc")
+    theta = matvec_plain(LHeff, theta, RHeff)
+    if node_local.H.explicit_plus_hc:
+        if worker is not None:
+            worker.join_tasks()
+            theta_hc = res['theta_hc']
+        theta = theta + theta_hc
+    return node_local.comm.reduce(theta, op=MPI.SUM)
+
+
+def matvec_plain(LHeff, theta, RHeff):
     theta = npc.tensordot(LHeff, theta, axes=['(vR.p0*)', '(vL.p0)'])
     theta = npc.tensordot(theta, RHeff, axes=[['wR', '(p1.vR)'], ['wL', '(p1*.vL)']])
     theta.ireplace_labels(['(vR*.p0)', '(p1.vL*)'], ['(vL.p0)', '(p1.vR)'])
-    if node_local.H.explicit_plus_hc:
-        theta = theta + theta_hc
-    return node_local.comm.reduce(theta, op=MPI.SUM)
+    return theta
+
+
+def matvec_hc(LHeff, theta, RHeff):
+    theta = theta.conj()  # copy!
+    theta = npc.tensordot(theta, LHeff, axes=['(vL*.p0*)', '(vR*.p0)'])
+    theta = npc.tensordot(RHeff, theta,
+                                axes=[['(p1.vL*)', 'wL'], ['(p1*.vR*)', 'wR']])
+    theta.iconj().itranspose()
+    theta.ireplace_labels(['(vR*.p0)', '(p1.vL*)'], ['(vL.p0)', '(p1.vR)'])
+    return theta
+
 
 def effh_to_matrix(node_local, on_main, LH_key, RH_key):
     LHeff = node_local.distributed[LH_key]
