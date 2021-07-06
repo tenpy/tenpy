@@ -16,7 +16,7 @@ Backwards incompatible changes
 - replace the `orthogonal_to` option of :class:`tenpy.algorithms.mps_common.Sweep` by an `orthogonal_to` keyword argument for the class and it's :meth:`~tenpy.algorithms.mps_common.Sweep.init_env`.
 - deprecated options:
   - `sweep_0` for sweep classes; use `sweeps` in the `resume_data` instead.
-- Support context-manager-style setup for Simulation classes
+- Require context-manager-style setup for Simulation classes.
 
 
 Added
@@ -54,11 +54,13 @@ Changed
 
 Fixed
 ^^^^^
+- (!) Missing ``+ h.c.`` in :meth:`tenpy.networks.mpo.MPOEnvironment.full_contraction` when `H.explicit_plus_hc` was True.
+  This caused wrong energies being reported during DMRG when `explicit_plus_hc` was used.
+- (!) The DMRG mixers didn't respect/handle the `explicit_plus_hc` of MPOs correctly. This might have lead to an
+  insufficient subspace expandsion.
 - Always return `psi` in the :meth:`tenpy.algorithms.algorithm.Algorithm.get_resume_data`.
   Optionally, this can be a copy, e.g. if `psi.canonical_form` needs to be called at the end of the algorithm, which would render the environments invalid.
 - Use logging in simulation only after calling :func:`~tenpy.tools.misc.setup_logging`.
-- Missing ``+ h.c.`` in :meth:`tenpy.networks.mpo.MPOEnvironment.full_contraction` when `H.explicit_plus_hc` was True.
-  This caused wrong energies being reported during DMRG when `explicit_plus_hc` was used.
 - :issue:`99` and :issue:`113` by allowing to either reinitialize the environment from scratch, 
   and/or to updating the environments in psi.canonical_form().
 - :issue:`137` additional error check for :meth:`~tenpy.networks.mps.MPS.from_lat_product_state` with

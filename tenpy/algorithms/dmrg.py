@@ -252,6 +252,9 @@ class SingleSiteMixer(Mixer):
         err : :class:`~tenpy.algorithms.truncation.TruncationError`
             The truncation error introduced.
         """
+        # TODO: rewrite this significantly to make sure that U/VH have the required orthogonality
+        # conditions!
+        # in other words: don't subspace expand next_B, but only a new tensor that is used for S!
         theta, next_B = self.subspace_expand(engine, theta, i0, move_right, next_B)
         qtotal_LR = [theta.qtotal, None] if move_right else [None, theta.qtotal]
         U, S, VH, err, _ = svd_theta(theta,
@@ -295,7 +298,9 @@ class SingleSiteMixer(Mixer):
         eff_H = engine.eff_H
         if not engine.combine:  # Need to get Heff's even if combine=False
             eff_H.combine_Heff()
-
+        if engine.env.H.explicit_plus_hc:
+            # TODO explicit_plus_hc
+            raise NotImplementedError("TODO")
         if move_right:  # theta has legs (vL.p0), vR
             LHeff = eff_H.LHeff
             expand = npc.tensordot(LHeff, theta, axes=['(vR.p0*)', '(vL.p0)'])
@@ -424,7 +429,7 @@ class DensityMatrixMixer(Mixer):
         U.iproject(keep_L, axes='vR')  # in place
         U = U.gauge_total_charge(1, engine.psi.get_B(i0, form=None).qtotal)
         # rho_R ~=  theta^T theta^* = V^* S U^T U* S V^T = V^* S S V^T  (for mixer -> 0)
-        # Thus, rho_L V^* = V^* S S, i.e. columns of V^* are eigenvectors of rho_L
+        # Thus, rho_R V^* = V^* S S, i.e. columns of V^* are eigenvectors of rho_R
         val_R, Vc = npc.eigh(rho_R)
         Vc.legs[1] = Vc.legs[1].to_LegCharge()
         Vc.iset_leg_labels(['(p1.vR)', 'vL'])
@@ -494,13 +499,25 @@ class DensityMatrixMixer(Mixer):
         rho = npc.tensordot(LHeff, theta, axes=['(vR.p0*)', '(vL.p0)']).split_legs('(p1.vR)')
         rho_c = rho.conj()
         H1 = H.get_W(i0 + 1).replace_labels(['p', 'p*'], ['p1', 'p1*'])
-        mixer_xR, add_separate_Id = self.get_xR(H1.get_leg('wR'), H.get_IdL(i0 + 2),
-                                                H.get_IdR(i0 + 1))
-        H1m = npc.tensordot(H1, mixer_xR, axes=['wR', 'wL'])
+
+        # construct mixer_xR
+        wR_leg =  H1.get_leg('wR')
+        Id_L, Id_R = H.get_IdL(i0 + 2), H.get_IdR(i0 + 1)
+        xR = self.amplitude * np.ones(wR_leg.ind_len, dtype=float)
+        add_separate_Id = Id_L is None
+        if not add_separate_Id:
+            xR[Id_L] = 1. if not H.explicit_plus_hc else 0.5
+        if Id_R is not None:
+            xR[Id_R] = 0.
+        xR = npc.diag(xR, wR_leg, labels=['wL*', 'wL'])
+        # contract the network
+        H1m = npc.tensordot(H1, xR, axes=['wR', 'wL'])
         H1m = npc.tensordot(H1m, H1.conj(), axes=[['p1', 'wL*'], ['p1*', 'wR*']])
         rho = npc.tensordot(rho, H1m, axes=[['wR', 'p1'], ['wL', 'p1*']])
         rho = npc.tensordot(rho, rho_c, axes=(['p1', 'wL*', 'vR'], ['p1*', 'wR*', 'vR*']))
         rho.ireplace_labels(['(vR*.p0)', '(vR.p0*)'], ['(vL.p0)', '(vL*.p0*)'])
+        if H.explicit_plus_hc:
+            rho = rho + rho.conj().itranspose()
         if add_separate_Id:
             rho = rho + npc.tensordot(theta, theta.conj(), axes=['(p1.vR)', '(p1*.vR*)'])
         return rho
@@ -557,8 +574,19 @@ class DensityMatrixMixer(Mixer):
         rho_c = rho.conj()
 
         H0 = H.get_W(i0).replace_labels(['p', 'p*'], ['p0', 'p0*'])
-        mixer_xL, add_separate_Id = self.get_xL(H0.get_leg('wL'), H.get_IdL(i0), H.get_IdR(i0 - 1))
-        H0m = npc.tensordot(mixer_xL, H0, axes=['wR', 'wL'])
+
+        # construct xL
+        wL_leg = H0.get_leg('wL')
+        IdL, IdR = H.get_IdL(i0), H.get_IdR(i0 - 1)
+        xL = self.amplitude * np.ones(wL_leg.ind_len, dtype=float)
+        add_separate_Id = IdR is None
+        if not add_separate_Id:
+            xL[IdR] = 1. if not H.explicit_plus_hc else 0.5
+        if IdL is not None:
+            xL[IdL] = 0.
+        xL = npc.diag(xL, wL_leg, labels=['wR*', 'wR'])
+        # contract network
+        H0m = npc.tensordot(xL, H0, axes=['wR', 'wL'])
         H0m = npc.tensordot(H0m, H0.conj(), axes=[['wR*', 'p0'], ['wL*', 'p0*']])
         rho = npc.tensordot(H0m, rho, axes=[['p0*', 'wR'], ['p0', 'wL']])
         rho = npc.tensordot(rho, rho_c, axes=(['p0', 'wR*', 'vL'], ['p0*', 'wL*', 'vL*']))
@@ -566,66 +594,6 @@ class DensityMatrixMixer(Mixer):
         if add_separate_Id:
             rho = rho + npc.tensordot(theta, theta.conj(), axes=['(vL.p0)', '(vL*.p0*)'])
         return rho
-
-    def get_xR(self, wR_leg, Id_L, Id_R):
-        """Generate the coupling of the MPO legs for the reduced density matrix.
-
-        Parameters
-        ----------
-        wR_leg : :class:`~tenpy.linalg.charges.LegCharge`
-            LegCharge to be connected to.
-        IdL : int | ``None``
-            Index within the leg for which the MPO has only identities to the left.
-        IdR : int | ``None``
-            Index within the leg for which the MPO has only identities to the right.
-
-        Returns
-        -------
-        mixed_xR : :class:`~tenpy.linalg.np_conserved.Array`
-            Connection of the MPOs on the right for the reduced density matrix `rhoL`.
-            Labels ``('wL', 'wL*')``.
-        add_separate_Id : bool
-            If Id_L is ``None``, we can't include the identity into `mixed_xR`,
-            so it has to be added directly in :meth:`mix_rho_L`.
-        """
-        x = self.amplitude * np.ones(wR_leg.ind_len, dtype=float)
-        separate_Id = Id_L is None
-        if not separate_Id:
-            x[Id_L] = 1.
-        if Id_R is not None:
-            x[Id_R] = 0.
-        x = npc.diag(x, wR_leg, labels=['wL*', 'wL'])
-        return x, separate_Id
-
-    def get_xL(self, wL_leg, Id_L, Id_R):
-        """Generate the coupling of the MPO legs for the reduced density matrix.
-
-        Parameters
-        ----------
-        wL_leg : :class:`~tenpy.linalg.charges.LegCharge`
-            LegCharge to be connected to.
-        Id_L : int | ``None``
-            Index within the leg for which the MPO has only identities to the left.
-        Id_R : int | ``None``
-            Index within the leg for which the MPO has only identities to the right.
-
-        Returns
-        -------
-        mixed_xL : :class:`~tenpy.linalg.np_conserved.Array`
-            Connection of the MPOs on the left for the reduced density matrix `rhoR`.
-            Labels ``('wR', 'wR*')``.
-        add_separate_Id : bool
-            If Id_R is ``None``, we can't include the identity into `mixed_xL`,
-            so it has to be added directly in :meth:`mix_rho_R`.
-        """
-        x = self.amplitude * np.ones(wL_leg.ind_len, dtype=float)
-        separate_Id = Id_R is None
-        if not separate_Id:
-            x[Id_R] = 1.
-        if Id_L is not None:
-            x[Id_L] = 0.
-        x = npc.diag(x, wL_leg, labels=['wR*', 'wR'])
-        return x, separate_Id
 
 
 class DMRGEngine(Sweep):
@@ -1124,6 +1092,7 @@ class DMRGEngine(Sweep):
         i0 = self.i0
         E_trunc = None
         if self._meas_E_trunc or E0 is None:
+            # TODO: i0 vs i0-1 for single site moving left/right
             E_trunc = self.env.full_contraction(i0).real  # uses updated LP/RP (if calculated)
             if E0 is None:
                 E0 = E_trunc
