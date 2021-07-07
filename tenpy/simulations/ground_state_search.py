@@ -151,7 +151,9 @@ class OrthogonalExcitations(GroundStateSearch):
         data = hdf5_io.load(gs_fn)
         data_options = data['simulation_parameters']
         # get model from ground_state data
-        for key in ['model_class', 'model_params']:
+        for key in data_options.keys():
+            if not isinstance(key, str) or not key.startswith('model'):
+                continue
             if key not in self.options and key in data_options:
                 self.options[key] = data_options[key]
         self.init_model()
@@ -175,8 +177,15 @@ class OrthogonalExcitations(GroundStateSearch):
             self.results['ground_state_energy'] = E0
         else:
             self.results['ground_state_energy'] = data['energy']
-        # TODO: allow to change charge sector?!
-        self.orthogonal_to = [psi0]
+        if self.results['ground_state_energy'] > 0:
+            raise ValueError("need negative ground state energy!")
+        self.ground_state = psi0
+        apply_local_op = self.options.get("apply_local_op", None)
+        if apply_local_op is not None:
+            self.ground_state.apply_local_op(**apply_local_op)
+            self.orthogonal_to = []
+        else:
+            self.orthogonal_to = [psi0]
 
     def init_state(self):
         """Initialize the state.
@@ -221,6 +230,9 @@ class OrthogonalExcitations(GroundStateSearch):
             # save in list of excitations
             if len(self.excitations) >= N_excitations:
                 break
+
+            if E > 0:
+                raise ValueError("need negative energy for excited states!")
 
             self.make_measurements()
             self.init_state()  # initialize a new state to be optimized
@@ -274,19 +286,22 @@ class ExcitationInitialState(InitialStateBuilder):
 
     def from_orthogonal(self):
         use_highest = self.options.get('use_highest_excitation', True)
-        if use_highest:
-            psi = self.sim.orthogonal_to[-1]
+        if len(self.sim.orthogonal_to) == 0:
+            psi = self.sim.ground_state
         else:
-            psi = self.sim.orthogonal_to[0]
-        if isinstance(psi, dict):
-            psi = psi['ket']
+            if use_highest:
+                psi = self.sim.orthogonal_to[-1]
+            else:
+                psi = self.sim.ground_state
+            if isinstance(psi, dict):
+                psi = psi['ket']
         psi = psi.copy() # make a copy!
 
         return self._perturb(psi)
 
     def _perturb(self, psi):
         randomize_params = self.options.subconfig('randomize_params')
-        psi.perturb(randomize_params, close_1=True)
+        psi.perturb(randomize_params, close_1=True)  # TODO: option!?
         return psi
 
     def from_file(self):
