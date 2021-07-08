@@ -27,7 +27,8 @@ except ImportError:
 
 from ..linalg import np_conserved as npc
 from ..linalg.sparse import NpcLinearOperatorWrapper
-from ..algorithms.dmrg import SingleSiteDMRGEngine, TwoSiteDMRGEngine
+from ..algorithms.truncation import truncate
+from ..algorithms.dmrg import SingleSiteDMRGEngine, TwoSiteDMRGEngine, Mixer
 from ..algorithms.mps_common import TwoSiteH
 from ..simulations.ground_state_search import GroundStateSearch
 from ..tools.params import asConfig
@@ -51,6 +52,15 @@ def split_MPO_leg(leg, N_nodes):
         proj[(D*i)//N_nodes: (D*(i+1))// N_nodes] = True
         res.append(proj)
     return res
+
+
+def index_in_blocks(block_projs, index):
+    if index is None:
+        return (-1, None)
+    for j, proj in enumerate(block_projs):
+        if proj[index]:
+            return (j, np.sum(proj[:index]))  # (block index,  index within block)
+    assert False, "None of block_projs has `index` True"
 
 
 class ParallelTwoSiteH(TwoSiteH):
@@ -408,7 +418,65 @@ class ParallelMPOEnvironment(MPOEnvironment):
         action.run(action.cache_optimize, self.node_local, (short_term_keys, preload))
 
 
+class ParallelDensityMatrixMixer(Mixer):
+    def perturb_svd(self, engine, theta, i0, update_LP, update_RP):
+        rho_L, rho_R = self.mix_rho(engine, theta, i0, update_LP, update_RP)
+        # TODO: remainder is copy-pasted from DensityMatrixMixer.perturb_svd ....
+        rho_L.itranspose(['(vL.p0)', '(vL*.p0*)'])  # just to be sure of the order
+        rho_R.itranspose(['(p1.vR)', '(p1*.vR*)'])  # just to be sure of the order
+
+        # consider the SVD `theta = U S V^H` (with real, diagonal S>0)
+        # rho_L ~=  theta theta^H = U S V^H V S U^H = U S S U^H  (for mixer -> 0)
+        # Thus, rho_L U = U S S, i.e. columns of U are the eigenvectors of rho_L,
+        # eigenvalues are S^2.
+        val_L, U = npc.eigh(rho_L)
+        U.legs[1] = U.legs[1].to_LegCharge()  # explicit conversion: avoid warning in `iproject`
+        U.iset_leg_labels(['(vL.p0)', 'vR'])
+        val_L[val_L < 0.] = 0.  # for stability reasons
+        val_L /= np.sum(val_L)
+        keep_L, _, errL = truncate(np.sqrt(val_L), engine.trunc_params)
+        U.iproject(keep_L, axes='vR')  # in place
+        U = U.gauge_total_charge(1, engine.psi.get_B(i0, form=None).qtotal)
+        # rho_R ~=  theta^T theta^* = V^* S U^T U* S V^T = V^* S S V^T  (for mixer -> 0)
+        # Thus, rho_R V^* = V^* S S, i.e. columns of V^* are eigenvectors of rho_R
+        val_R, Vc = npc.eigh(rho_R)
+        Vc.legs[1] = Vc.legs[1].to_LegCharge()
+        Vc.iset_leg_labels(['(p1.vR)', 'vL'])
+        VH = Vc.itranspose(['vL', '(p1.vR)'])
+        val_R[val_R < 0.] = 0.  # for stability reasons
+        val_R /= np.sum(val_R)
+        keep_R, _, err_R = truncate(np.sqrt(val_R), engine.trunc_params)
+        VH.iproject(keep_R, axes='vL')
+        VH = VH.gauge_total_charge(0, engine.psi.get_B(i0 + 1, form=None).qtotal)
+
+        # calculate S = U^H theta V
+        theta = npc.tensordot(U.conj(), theta, axes=['(vL*.p0*)', '(vL.p0)'])  # axes 0, 0
+        theta = npc.tensordot(theta, VH.conj(), axes=['(p1.vR)', '(p1*.vR*)'])  # axes 1, 1
+        theta.ireplace_labels(['vR*', 'vL*'], ['vL', 'vR'])  # for left/right
+        # normalize `S` (as in svd_theta) to avoid blowing up numbers
+        theta /= np.linalg.norm(npc.svd(theta, compute_uv=False))
+        return U, theta, VH, errL + err_R
+
+    def mix_rho(self, engine, theta, i0, update_LP, update_RP):
+        assert update_LP or update_RP
+        LHeff = engine.eff_H.LHeff
+        RHeff = engine.eff_H.RHeff
+        data = (theta, i0, self.amplitude, update_LP, update_RP, LHeff.key, RHeff.key)
+        rho_LR = action.run(action.mix_rho, engine.main_node_local, data)
+        if update_LP and update_RP:
+            rho_L, rho_R = rho_LR
+        elif update_LP:
+            rho_L = rho_LR
+            rho_R = npc.tensordot(theta, theta.conj(), axes=[['(vL.p0)'], ['(vL*.p0*)']])
+        elif update_RP:
+            rho_R = rho_LR
+            rho_L = npc.tensordot(theta, theta.conj(), axes=['(p1.vR)', '(p1*.vR*)'])
+        return rho_L, rho_R
+
+
 class ParallelTwoSiteDMRG(TwoSiteDMRGEngine):
+    DefaultMixer = ParallelDensityMatrixMixer
+
     def __init__(self, psi, model, options, *, comm_H, **kwargs):
         options.setdefault('combine', True)
         self.comm_H = comm_H
@@ -429,7 +497,6 @@ class ParallelTwoSiteDMRG(TwoSiteDMRGEngine):
     def _init_MPO_env(self, H, init_env_data):
         # Initialize custom ParallelMPOEnvironment
         cache = self.main_node_local.cache
-        # TODO: don't use separte cache for MPSEnvironment, only use it for the MPOEnvironment
         self.env = ParallelMPOEnvironment(self.main_node_local,
                                           self.psi, H, self.psi, cache=cache, **init_env_data)
 
@@ -447,6 +514,7 @@ class ParallelTwoSiteDMRG(TwoSiteDMRGEngine):
             res = super().run()
         return res
 
+
 class NodeLocalData:
     def __init__(self, comm, cache):
         self.comm = comm
@@ -458,10 +526,17 @@ class NodeLocalData:
         self.H = H
         N = self.comm.size
         self.W_blocks = [] # index: site
-        self.projs_L = []
+        self.projs_L = []  # index: bond s.t. projs_L[i] is on bond left of site i
+        self.IdLR_blocks = []  # index: bond left of site i
+        self.local_MPO_chi = []  # index: bond left of site i
         for i in range(H.L):
             W = H.get_W(i).copy()
-            self.projs_L.append(split_MPO_leg(W.get_leg('wL'), N))
+            projs = split_MPO_leg(W.get_leg('wL'), N)
+            self.projs_L.append(projs)
+            self.local_MPO_chi.append(np.sum(projs[self.comm.rank]))
+            IdL, IdR = H.IdL[i], H.IdR[i]
+            IdLR = (index_in_blocks(projs, IdL), index_in_blocks(projs, IdR))
+            self.IdLR_blocks.append(IdLR)
         for i in range(H.L):
             W = H.get_W(i).copy()
             projs_L = self.projs_L[i]
@@ -484,7 +559,6 @@ class NodeLocalData:
 
             self.W_blocks.append(blocks)
 
-# TODO Mixer!?!?
 
 class ParallelDMRGSim(GroundStateSearch):
 
@@ -499,17 +573,11 @@ class ParallelDMRGSim(GroundStateSearch):
         if self.comm_H.rank == 0:
             super().__init__(options, **kwargs)
         else:
+            # don't __init__() to avoid locking other files
             # TODO: how to safely log? should replica create a separate log file?
-            self.options = options  # don't convert to options to avoid unused warnings#, "replica node sim_params")
-            # HACK: monkey-patch `[resume_]run` by `replica_run`
-            self.run = self.resume_run = self.replica_run
-            # don't __init__() to avoid locking files
+            self.options = options  # don't convert to options to avoid unused warnings
             # but allow to use context __enter__ and __exit__ to initialize cache
             self.cache = CacheFile.open()
-
-    def __delete__(self):
-        self.comm_H.Free()
-        super().__delete__()
 
     def init_cache(self):
         # make sure we have a unique dir/file for each rank
@@ -538,9 +606,20 @@ class ParallelDMRGSim(GroundStateSearch):
         super().init_algorithm(**kwargs)
 
     def run(self):
-        res = super().run()
-        self.comm_H.bcast((action.DONE, None))
-        return res
+        if self.comm_H.rank == 0:
+            res = super().run()
+            self.comm_H.bcast((action.DONE, None))
+            return res
+        else:
+            self.replica_run()
+
+    def resume_run(self):
+        if self.comm_H.rank == 0:
+            res = super().resume_run()
+            self.comm_H.bcast((action.DONE, None))
+            return res
+        else:
+            self.replica_run()
 
     def replica_run(self):
         """Replacement for :meth:`run` used for replicas (as opposed to primary MPI process)."""
@@ -557,8 +636,3 @@ class ParallelDMRGSim(GroundStateSearch):
             node_local.worker = None
             action.replica_main(node_local)
         # done
-
-    def resume_run(self):
-        res = super().resume_run()
-        self.comm_H.bcast((action.DONE, None))
-        return res

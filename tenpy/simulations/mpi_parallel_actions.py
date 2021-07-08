@@ -1,6 +1,7 @@
 # Copyright 2021 TeNPy Developers, GNU GPLv3
 
 from ..linalg import np_conserved as npc
+import numpy as np
 
 try:
     from mpi4py import MPI
@@ -10,10 +11,12 @@ except ImportError:
 
 DONE = None  # sentinel to say that the worker should finishj
 
+
 def run(action, node_local, meta, on_main=None):
     """Special action to call other actions"""
     node_local.comm.bcast((action, meta))
     return action(node_local, on_main, *meta)
+
 
 def replica_main(node_local):
     while True:
@@ -23,6 +26,7 @@ def replica_main(node_local):
             print("MPI rank %d signing off" % node_local.comm.rank)
             return
         action(node_local, None, *meta)
+
 
 def distribute_H(node_local, on_main, H):
     node_local.add_H(H)
@@ -126,9 +130,53 @@ def full_contraction(node_local, on_main, case, LP_key, LP_ic, RP_key, RP_ic, th
     return node_local.comm.reduce(full_contr, op=MPI.SUM)
 
 
+def mix_rho(node_local, on_main, theta, i0, amplitude, update_LP, update_RP, LH_key, RH_key):
+    comm = node_local.comm
+    # b_IdL = block with IdL; IdL_b = index of IdL inside block
+    i1 = (i0 + 1) % node_local.H.L
+    (b_IdL, IdL_b), (b_IdR, IdR_b) = node_local.IdLR_blocks[i1]
+    D = node_local.local_MPO_chi[i1]
+    mix_L = np.full((D, ), amplitude)
+    mix_R = np.full((D, ), amplitude)
+    if b_IdL == comm.rank:
+        mix_L[IdL_b] = 1.
+        mix_R[IdL_b] = 0.
+    if b_IdR == comm.rank:
+        mix_L[IdR_b] = 0.
+        mix_R[IdR_b] = 1.
+    # TODO: optimize to minimize transpose
+    if node_local.H.explicit_plus_hc:
+        raise NotImplementedError("TODO respect the explicit_plus_hc flag!")
+    if update_LP:
+        LHeff = node_local.distributed[LH_key]
+        rho_L = npc.tensordot(LHeff, theta, axes=['(vR.p0*)', '(vL.p0)'])
+        rho_L.ireplace_label('(vR*.p0)', '(vL.p0)')
+        rho_L_c = rho_L.conj()
+        rho_L.iscale_axis(mix_L, 'wR')
+        rho_L = npc.tensordot(rho_L, rho_L_c, axes=[['wR', '(p1.vR)'], ['wR*', '(p1*.vR*)']])
+        rho_L = comm.reduce(rho_L, op=MPI.SUM)
+    if update_RP:
+        RHeff = node_local.distributed[RH_key]
+        rho_R = npc.tensordot(theta, RHeff, axes=['(p1.vR)', '(p1*.vL)'])
+        rho_R.ireplace_label('(p1.vL*)', '(p1.vR)')
+        rho_R_c = rho_R.conj()
+        rho_R.iscale_axis(mix_R, 'wL')
+        rho_R = npc.tensordot(rho_R, rho_R_c, axes=[['(vL.p0)', 'wL'], ['(vL*.p0*)', 'wL*']])
+        rho_R = comm.reduce(rho_R, op=MPI.SUM)
+    if comm.rank == 0 and (b_IdL == -1 or b_IdR == -1):  # IdL/IdR is None
+        raise NotImplementedError("TODO: add explicit identities to rho_L/rho_R")
+    if update_LP and update_RP:
+        return rho_L, rho_R
+    elif update_LP:
+        return rho_L
+    else:
+        return rho_R
+
+
 def cache_optimize(node_local, on_main, short_term_keys, preload):
     node_local.cache.set_short_term_keys(*short_term_keys, *preload)
     node_local.cache.preload(*preload)
+
 
 def cache_del(node_local, on_main, *keys):
     for key in keys:
