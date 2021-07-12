@@ -813,20 +813,19 @@ class OneSiteH(EffectiveH):
         In a move to the right, we need LHeff. In a move to the left, we need RHeff. Both contain
         the same W.
         """
-        # Always compute both L/R, because we might need them. Could change later.
-        LHeff = npc.tensordot(self.LP, self.W0, axes=['wR', 'wL'])
-        self.pipeL = pipeL = LHeff.make_pipe(['vR*', 'p0'], qconj=+1)
-        self.LHeff = LHeff.combine_legs([['vR*', 'p0'], ['vR', 'p0*']],
-                                        pipes=[pipeL, pipeL.conj()],
-                                        new_axes=[0, 2])
-        RHeff = npc.tensordot(self.W0, self.RP, axes=['wR', 'wL'])
-        self.pipeR = pipeR = RHeff.make_pipe(['p0', 'vL*'], qconj=-1)
-        self.RHeff = RHeff.combine_legs([['p0', 'vL*'], ['p0*', 'vL']],
-                                        pipes=[pipeR, pipeR.conj()],
-                                        new_axes=[-1, 0])
         if self.move_right:
+            LHeff = npc.tensordot(self.LP, self.W0, axes=['wR', 'wL'])
+            self.pipeL = pipeL = LHeff.make_pipe(['vR*', 'p0'], qconj=+1)
+            self.LHeff = LHeff.combine_legs([['vR*', 'p0'], ['vR', 'p0*']],
+                                            pipes=[pipeL, pipeL.conj()],
+                                            new_axes=[0, 2])
             self.acts_on = ['(vL.p0)', 'vR']
         else:
+            RHeff = npc.tensordot(self.W0, self.RP, axes=['wR', 'wL'])
+            self.pipeR = pipeR = RHeff.make_pipe(['p0', 'vL*'], qconj=-1)
+            self.RHeff = RHeff.combine_legs([['p0', 'vL*'], ['p0*', 'vL']],
+                                            pipes=[pipeR, pipeR.conj()],
+                                            new_axes=[2, 0])
             self.acts_on = ['vL', '(p0.vR)']
 
     def combine_theta(self, theta):
@@ -835,12 +834,12 @@ class OneSiteH(EffectiveH):
         Parameters
         ----------
         theta : :class:`~tenpy.linalg.np_conserved.Array`
-            Wave function with labels ``'vL', 'p0', 'p1', 'vR'``
+            Wave function with labels ``'vL', 'p0', 'vR'``
 
         Returns
         -------
         theta : :class:`~tenpy.linalg.np_conserved.Array`
-            Wave function with labels ``'vL', 'p0', 'p1', 'vR'``
+            Wave function with labels ``'(vL.p0)', 'vR'``
         """
         if self.combine:
             if self.move_right:
@@ -996,22 +995,31 @@ class TwoSiteH(EffectiveH):
         # This is where we would truncate. Separate mode from combine?
         return theta
 
-    def combine_Heff(self):
+    def combine_Heff(self, left=True, right=True):
         """Combine LP and RP with W to form LHeff and RHeff.
 
         Combine LP with W0 and RP with W1 to get the effective parts of the Hamiltonian with piped
         legs.
+
+        Parameters
+        ----------
+        left, right : bool
+            The mixer might need only one of LHeff/RHeff after the Lanczos optimization even for
+            `combine=True`.
+            These flags allow to calculate them specifically.
         """
-        LHeff = npc.tensordot(self.LP, self.W0, axes=['wR', 'wL'])
-        self.pipeL = pipeL = LHeff.make_pipe(['vR*', 'p0'], qconj=+1)
-        self.LHeff = LHeff.combine_legs([['vR*', 'p0'], ['vR', 'p0*']],
-                                        pipes=[pipeL, pipeL.conj()],
-                                        new_axes=[0, 2])
-        RHeff = npc.tensordot(self.RP, self.W1, axes=['wL', 'wR'])
-        self.pipeR = pipeR = RHeff.make_pipe(['p1', 'vL*'], qconj=-1)
-        self.RHeff = RHeff.combine_legs([['p1', 'vL*'], ['p1*', 'vL']],
-                                        pipes=[pipeR, pipeR.conj()],
-                                        new_axes=[2, 1])
+        if left:
+            LHeff = npc.tensordot(self.LP, self.W0, axes=['wR', 'wL'])
+            self.pipeL = pipeL = LHeff.make_pipe(['vR*', 'p0'], qconj=+1)
+            self.LHeff = LHeff.combine_legs([['vR*', 'p0'], ['vR', 'p0*']],
+                                            pipes=[pipeL, pipeL.conj()],
+                                            new_axes=[0, 2])
+        if right:
+            RHeff = npc.tensordot(self.RP, self.W1, axes=['wL', 'wR'])
+            self.pipeR = pipeR = RHeff.make_pipe(['p1', 'vL*'], qconj=-1)
+            self.RHeff = RHeff.combine_legs([['p1', 'vL*'], ['p1*', 'vL']],
+                                            pipes=[pipeR, pipeR.conj()],
+                                            new_axes=[2, 1])
         self.acts_on = ['(vL.p0)', '(p1.vR)']  # overwrites class attribute!
 
     def combine_theta(self, theta):

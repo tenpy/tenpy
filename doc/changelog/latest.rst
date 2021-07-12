@@ -50,6 +50,7 @@ Changed
 - Allow to select the distribution of the generated `U` for the :class:`~tenpy.algorithms.tebd.RandomUnitaryEvolution`.
   For randomly perturbing an MPS in :meth:`~tenpy.networks.mps.InitialStateBuilder.randomized` or the new
   :meth:`~tenpy.networks.mps.MPS.perturb`, select the distribution suitable to preserve the dtype of the MPS.
+- Rewriting of the :class:`~tenpy.algorithms.dmrg.DensityMatrixMixer`.
 
 
 Fixed
