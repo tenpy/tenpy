@@ -252,6 +252,9 @@ class SingleSiteMixer(Mixer):
         err : :class:`~tenpy.algorithms.truncation.TruncationError`
             The truncation error introduced.
         """
+        # TODO: rewrite this significantly to make sure that U/VH have the required orthogonality
+        # conditions!
+        # in other words: don't subspace expand next_B, but only a new tensor that is used for S!
         theta, next_B = self.subspace_expand(engine, theta, i0, move_right, next_B)
         qtotal_LR = [theta.qtotal, None] if move_right else [None, theta.qtotal]
         U, S, VH, err, _ = svd_theta(theta,
@@ -295,7 +298,9 @@ class SingleSiteMixer(Mixer):
         eff_H = engine.eff_H
         if not engine.combine:  # Need to get Heff's even if combine=False
             eff_H.combine_Heff()
-
+        if engine.env.H.explicit_plus_hc:
+            # TODO explicit_plus_hc
+            raise NotImplementedError("TODO")
         if move_right:  # theta has legs (vL.p0), vR
             LHeff = eff_H.LHeff
             expand = npc.tensordot(LHeff, theta, axes=['(vR.p0*)', '(vL.p0)'])
@@ -405,12 +410,19 @@ class DensityMatrixMixer(Mixer):
         err : :class:`~tenpy.algorithms.truncation.TruncationError`
             The truncation error introduced.
         """
-        rho_L = self.mix_rho_L(engine, theta, i0, update_LP)
-        # don't mix left parts, when we're going to the right
-        rho_L.itranspose(['(vL.p0)', '(vL*.p0*)'])  # just to be sure of the order
-        rho_R = self.mix_rho_R(engine, theta, i0, update_RP)
-        rho_R.itranspose(['(p1.vR)', '(p1*.vR*)'])  # just to be sure of the order
+        rho_L, rho_R = self.mix_rho(engine, theta, i0, update_LP, update_RP)
+        return self.svd_from_rho(engine, rho_L, rho_R, theta, i0)
 
+    def svd_from_rho(self, engine, rho_L, rho_R, theta, i0):
+        r"""Diagonalize ``rho_L, rho_R`` to rewrite `theta` as ``U S V`` with canonical U/V.
+
+        If `rho_L` and `rho_R` were the actual density matrices of `theta`, this function
+        just performs an SVD by diagonalizing `rho_L` with U and `rho_R` with `VH` and then
+        rewriting `theta == U (U^\dagger theta VH^\dagger VH) = U S V``.
+        Since the actual `rho_L` and `rho_R` passed as arguments are perturbed by `mix_rho`
+        """
+        rho_L.itranspose(['(vL.p0)', '(vL*.p0*)'])  # just to be sure of the order
+        rho_R.itranspose(['(p1.vR)', '(p1*.vR*)'])  # just to be sure of the order
         # consider the SVD `theta = U S V^H` (with real, diagonal S>0)
         # rho_L ~=  theta theta^H = U S V^H V S U^H = U S S U^H  (for mixer -> 0)
         # Thus, rho_L U = U S S, i.e. columns of U are the eigenvectors of rho_L,
@@ -424,7 +436,7 @@ class DensityMatrixMixer(Mixer):
         U.iproject(keep_L, axes='vR')  # in place
         U = U.gauge_total_charge(1, engine.psi.get_B(i0, form=None).qtotal)
         # rho_R ~=  theta^T theta^* = V^* S U^T U* S V^T = V^* S S V^T  (for mixer -> 0)
-        # Thus, rho_L V^* = V^* S S, i.e. columns of V^* are eigenvectors of rho_L
+        # Thus, rho_R V^* = V^* S S, i.e. columns of V^* are eigenvectors of rho_R
         val_R, Vc = npc.eigh(rho_R)
         Vc.legs[1] = Vc.legs[1].to_LegCharge()
         Vc.iset_leg_labels(['(p1.vR)', 'vL'])
@@ -443,22 +455,34 @@ class DensityMatrixMixer(Mixer):
         theta /= np.linalg.norm(npc.svd(theta, compute_uv=False))
         return U, theta, VH, errL + err_R
 
-    def mix_rho_L(self, engine, theta, i0, mix_enabled):
-        """Calculated mixed reduced density matrix for left site.
+    def mix_rho(self, engine, theta, i0, update_LP, update_RP):
+        r"""Calculated reduced density matrices of theta with a perturbation by the mixer.
 
-        Pictorially::
+        The perturbation is
 
-            |     mix_enabled=False           mix_enabled=True
+        .. math ::
+
+            rho_L = tr_R(|\theta><\theta|)
+            \rightarrow  tr_R(|\theta><\theta|) + a \sum_l h_l tr_R(|\theta><\theta|) h_l^\dagger
+
+        where `a` is the (small) perturbation :attr:`amplitude` and `h_l` are the left parts of
+        the Hamiltonian going accross the center bond (i0, i0+1).
+
+        Pictorially, the left density matrix `rho_L` is given by::
+
+            |     update_LP=False           update_LP=True
             |
-            |    .---theta---.            .---theta-------.
-            |    |   |   |   |            |   |   |       |
-            |            |   |           LP---H0--H1--.   |
-            |    |   |   |   |            |   |   |   |   |
-            |    .---theta*--.                    |   xR  |
-            |                             |   |   |   |   |
-            |                            LP*--H0*-H1*-.   |
-            |                             |   |   |       |
-            |                             .---theta*------.
+            |    .---theta---.            .---theta----.
+            |    |   |   |   |            |   |    \   |
+            |            |   |           LP---H0-.  \  |
+            |    |   |   |   |            |   |   \  | |
+            |    .---theta*--.                  mixL | |
+            |                             |   |   /  | |
+            |                            LP*--H0*-  /  |
+            |                             |   |    /   |
+            |                             .---theta*---.
+
+        The right density matrix `rho_R` is mirrored accordingly.
 
         Parameters
         ----------
@@ -467,165 +491,61 @@ class DensityMatrixMixer(Mixer):
         theta : :class:`~tenpy.linalg.np_conserved.Array`
             Ground state of the effective Hamiltonian, prepared for svd.
         i0 : int
-            Site index; `theta` lives on ``i0, i0+1``.
-        mix_enabled : bool
-            Whether we should perturb the density matrix.
+            Site index; `theta` lives on sites ``i0, i0+1``.
+        update_LP, update_RP : bool
+            Whether to perturb `rho_L` and `rho_R`, respectively.
+            (At least one of them is True when the mixer is enabled.)
 
         Returns
         -------
-        rho_L : :class:`~tenpy.linalg.np_conserved.Array`
+        rho_L, rho_R : :class:`~tenpy.linalg.np_conserved.Array`
             A (hermitian) square array with labels ``'(vL.p0)', '(vL*.p0*)'``,
-            Mainly the reduced density matrix of the left part, but with some additional mixing.
+            or ``'(p1.vR)', '(p1*.vR*)'``, respectively.
+
         """
-        if not mix_enabled:
-            return npc.tensordot(theta, theta.conj(), axes=['(p1.vR)', '(p1*.vR*)'])
         H = engine.env.H
-        try:
-            LHeff = engine.LHeff
-        except AttributeError:
-            # TODO: needed?
-            H0 = H.get_W(i0).replace_labels(['p', 'p*'], ['p0', 'p0*'])
-            LP = engine.env.get_LP(i0, store=False)
-            LHeff = npc.tensordot(LP, H0, axes=['wR', 'wL'])
-            pipeL = theta.get_leg('(vL.p0)')
-            LHeff = LHeff.combine_legs([['vR*', 'p0'], ['vR', 'p0*']],
-                                       pipes=[pipeL, pipeL.conj()],
-                                       new_axes=[0, -1])
-        rho = npc.tensordot(LHeff, theta, axes=['(vR.p0*)', '(vL.p0)']).split_legs('(p1.vR)')
-        rho_c = rho.conj()
-        H1 = H.get_W(i0 + 1).replace_labels(['p', 'p*'], ['p1', 'p1*'])
-        mixer_xR, add_separate_Id = self.get_xR(H1.get_leg('wR'), H.get_IdL(i0 + 2),
-                                                H.get_IdR(i0 + 1))
-        H1m = npc.tensordot(H1, mixer_xR, axes=['wR', 'wL'])
-        H1m = npc.tensordot(H1m, H1.conj(), axes=[['p1', 'wL*'], ['p1*', 'wR*']])
-        rho = npc.tensordot(rho, H1m, axes=[['wR', 'p1'], ['wL', 'p1*']])
-        rho = npc.tensordot(rho, rho_c, axes=(['p1', 'wL*', 'vR'], ['p1*', 'wR*', 'vR*']))
-        rho.ireplace_labels(['(vR*.p0)', '(vR.p0*)'], ['(vL.p0)', '(vL*.p0*)'])
-        if add_separate_Id:
-            rho = rho + npc.tensordot(theta, theta.conj(), axes=['(p1.vR)', '(p1*.vR*)'])
-        return rho
+        eff_H = engine.eff_H
+        if not eff_H.combine:
+            # HACK: make sure needed `eff_H.LHeff` and `eff_H.RHeff` exist
+            eff_H.combine_Heff(update_LP, update_RP)
+            # alternatively, we could implement the non-combined contraction below
+        # get mix_L, mix_R amplitudes on center bond
+        chi_MPO = H.get_W(i0).get_leg('wR').ind_len
+        IdL, IdR = H.get_IdL(i0 + 1), H.get_IdR(i0)
+        mix_L = np.full((chi_MPO, ), self.amplitude)
+        mix_R = np.full((chi_MPO, ), self.amplitude)
+        if IdL is not None:
+            mix_L[IdL] = 1.
+            mix_R[IdL] = 0.
+        if IdR is not None:
+            mix_L[IdR] = 0.
+            mix_R[IdR] = 1.
 
-    def mix_rho_R(self, engine, theta, i0, mix_enabled):
-        """Calculated mixed reduced density matrix for left site.
-
-        Pictorially::
-
-            |     mix_enabled=False           mix_enabled=True
-            |
-            |    .---theta---.           .------theta---.
-            |    |   |   |   |           |      |   |   |
-            |    |   |                   |   .--H0--H1--RP
-            |    |   |   |   |           |   |  |   |   |
-            |    .---theta*--.           |  wL  |
-            |                            |   |  |   |   |
-            |                            |   .--H0*-H1*-RP*
-            |                            |      |   |   |
-            |                            .------theta*--.
-
-        Parameters
-        ----------
-        engine : :class:`DMRGEngine`
-            The DMRG engine calling the mixer.
-        theta : :class:`~tenpy.linalg.np_conserved.Array`
-            Ground state of the effective Hamiltonian, prepared for svd.
-        i0 : int
-            Site index; `theta` lives on ``i0, i0+1``.
-        mix_enabled : bool
-            Whether we should perturb the density matrix.
-
-        Returns
-        -------
-        rho_R : :class:`~tenpy.linalg.np_conserved.Array`
-            A (hermitian) square array with labels ``'(p1.vR)', '(p1*.vR*)'``.
-            Mainly the reduced density matrix of the right part, but with some additional mixing.
-        """
-        if not mix_enabled:
-            return npc.tensordot(theta, theta.conj(), axes=[['(vL.p0)'], ['(vL*.p0*)']])
-        H = engine.env.H
-
-        try:
-            RHeff = engine.RHeff
-        except AttributeError:
-            H1 = H.get_W(i0 + 1).replace_labels(['p', 'p*'], ['p1', 'p1*'])
-            RP = engine.env.get_RP(i0 + 1, store=False)
-            RHeff = npc.tensordot(RP, H1, axes=['wL', 'wR'])
-            pipeR = theta.get_leg('(p1.vR)')
-            RHeff = RHeff.combine_legs([['p1', 'vL*'], ['p1*', 'vL']],
-                                       pipes=[pipeR, pipeR.conj()],
-                                       new_axes=[-1, 0])
-        rho = npc.tensordot(RHeff, theta, axes=['(p1*.vL)', '(p1.vR)']).split_legs('(vL.p0)')
-        rho_c = rho.conj()
-
-        H0 = H.get_W(i0).replace_labels(['p', 'p*'], ['p0', 'p0*'])
-        mixer_xL, add_separate_Id = self.get_xL(H0.get_leg('wL'), H.get_IdL(i0), H.get_IdR(i0 - 1))
-        H0m = npc.tensordot(mixer_xL, H0, axes=['wR', 'wL'])
-        H0m = npc.tensordot(H0m, H0.conj(), axes=[['wR*', 'p0'], ['wL*', 'p0*']])
-        rho = npc.tensordot(H0m, rho, axes=[['p0*', 'wR'], ['p0', 'wL']])
-        rho = npc.tensordot(rho, rho_c, axes=(['p0', 'wR*', 'vL'], ['p0*', 'wL*', 'vL*']))
-        rho.ireplace_labels(['(p1.vL*)', '(p1*.vL)'], ['(p1.vR)', '(p1*.vR*)'])
-        if add_separate_Id:
-            rho = rho + npc.tensordot(theta, theta.conj(), axes=['(vL.p0)', '(vL*.p0*)'])
-        return rho
-
-    def get_xR(self, wR_leg, Id_L, Id_R):
-        """Generate the coupling of the MPO legs for the reduced density matrix.
-
-        Parameters
-        ----------
-        wR_leg : :class:`~tenpy.linalg.charges.LegCharge`
-            LegCharge to be connected to.
-        IdL : int | ``None``
-            Index within the leg for which the MPO has only identities to the left.
-        IdR : int | ``None``
-            Index within the leg for which the MPO has only identities to the right.
-
-        Returns
-        -------
-        mixed_xR : :class:`~tenpy.linalg.np_conserved.Array`
-            Connection of the MPOs on the right for the reduced density matrix `rhoL`.
-            Labels ``('wL', 'wL*')``.
-        add_separate_Id : bool
-            If Id_L is ``None``, we can't include the identity into `mixed_xR`,
-            so it has to be added directly in :meth:`mix_rho_L`.
-        """
-        x = self.amplitude * np.ones(wR_leg.ind_len, dtype=float)
-        separate_Id = Id_L is None
-        if not separate_Id:
-            x[Id_L] = 1.
-        if Id_R is not None:
-            x[Id_R] = 0.
-        x = npc.diag(x, wR_leg, labels=['wL*', 'wL'])
-        return x, separate_Id
-
-    def get_xL(self, wL_leg, Id_L, Id_R):
-        """Generate the coupling of the MPO legs for the reduced density matrix.
-
-        Parameters
-        ----------
-        wL_leg : :class:`~tenpy.linalg.charges.LegCharge`
-            LegCharge to be connected to.
-        Id_L : int | ``None``
-            Index within the leg for which the MPO has only identities to the left.
-        Id_R : int | ``None``
-            Index within the leg for which the MPO has only identities to the right.
-
-        Returns
-        -------
-        mixed_xL : :class:`~tenpy.linalg.np_conserved.Array`
-            Connection of the MPOs on the left for the reduced density matrix `rhoR`.
-            Labels ``('wR', 'wR*')``.
-        add_separate_Id : bool
-            If Id_R is ``None``, we can't include the identity into `mixed_xL`,
-            so it has to be added directly in :meth:`mix_rho_R`.
-        """
-        x = self.amplitude * np.ones(wL_leg.ind_len, dtype=float)
-        separate_Id = Id_R is None
-        if not separate_Id:
-            x[Id_R] = 1.
-        if Id_L is not None:
-            x[Id_L] = 0.
-        x = npc.diag(x, wL_leg, labels=['wR*', 'wR'])
-        return x, separate_Id
+        if update_LP:
+            rho_L = npc.tensordot(eff_H.LHeff, theta, axes=['(vR.p0*)', '(vL.p0)'])
+            rho_L.ireplace_label('(vR*.p0)', '(vL.p0)')
+            rho_c = rho_L.conj()
+            rho_L.iscale_axis(mix_L, 'wR')
+            rho_L = npc.tensordot(rho_L, rho_c, axes=[['wR', '(p1.vR)'], ['wR*', '(p1*.vR*)']])
+            if H.explicit_plus_hc:
+                rho_L = rho_L + rho_L.conj().itranspose()
+            if IdL is None:  # can't set mix_L[IdL] = 1.
+                rho_L = rho_L + npc.tensordot(theta, theta.conj(), axes=['(p1.vR)', '(p1*.vR*)'])
+        else:
+            rho_L = npc.tensordot(theta, theta.conj(), axes=['(p1.vR)', '(p1*.vR*)'])
+        if update_RP:
+            rho_R = npc.tensordot(theta, eff_H.RHeff, axes=['(p1.vR)', '(p1*.vL)'])
+            rho_R.ireplace_label('(p1.vL*)', '(p1.vR)')
+            rho_c = rho_R.conj()
+            rho_R.iscale_axis(mix_R, 'wL')
+            rho_R = npc.tensordot(rho_c, rho_R, axes=[['wL*', '(vL*.p0*)'], ['wL', '(vL.p0)']])
+            if H.explicit_plus_hc:
+                rho_R = rho_R + rho_R.conj().itranspose()
+            if IdR is None:
+                rho_R = rho_R + npc.tensordot(theta.conj(), theta, axes=['(vL*.p0*)', '(vL.p0)'])
+        else:
+            rho_R = npc.tensordot(theta.conj(), theta, axes=['(vL*.p0*)', '(vL.p0)'])
+        return rho_L, rho_R
 
 
 class DMRGEngine(Sweep):
@@ -1124,7 +1044,8 @@ class DMRGEngine(Sweep):
         i0 = self.i0
         E_trunc = None
         if self._meas_E_trunc or E0 is None:
-            E_trunc = self.env.full_contraction(i0).real  # uses updated LP/RP (if calculated)
+            i = i0 if self.n_optimize == 2 or self.move_right else i0 - 1
+            E_trunc = self.env.full_contraction(i).real  # uses updated LP/RP (if calculated)
             if E0 is None:
                 E0 = E_trunc
             E_trunc = E_trunc - E0
@@ -1668,6 +1589,7 @@ class SingleSiteDMRGEngine(DMRGEngine):
         else:  # we have a mixer
             U, S, VH, err = self.mixer.perturb_svd(self, theta, self.i0, self.move_right, next_B)
             # Enforce normalization:
+            # TODO change this
             if self.move_right:
                 VH = VH.combine_legs(['p', 'vR'], qconj=-1)
                 U_VH, S_VH, VH = npc.svd(VH, inner_labels=['vR', 'vL'])

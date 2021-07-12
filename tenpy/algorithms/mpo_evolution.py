@@ -13,7 +13,7 @@ from ..linalg import np_conserved as npc
 from .truncation import TruncationError
 from ..tools.params import asConfig
 
-__all__ = ['ExpMPOEvolution']
+__all__ = ['ExpMPOEvolution', 'TimeDependentExpMPOEvolution']
 
 
 class ExpMPOEvolution(TimeEvolutionAlgorithm):
@@ -129,10 +129,70 @@ class ExpMPOEvolution(TimeEvolutionAlgorithm):
         """
         trunc_err = TruncationError()
 
-        for _ in np.arange(N_steps):
+        for _ in range(N_steps):
             for U_MPO in self._U_MPO:
                 trunc_err += U_MPO.apply(self.psi, self.options)
         self.evolved_time = self.evolved_time + N_steps * self._U_param['dt']
         self.trunc_err = self.trunc_err + trunc_err  # not += : make a copy!
         # (this is done to avoid problems of users storing self.trunc_err after each `update`)
         return trunc_err
+
+
+class TimeDependentExpMPOEvolution(ExpMPOEvolution):
+    """Variant of :class:`ExpMPOEvolution` that can handle time-dependent hamiltonians.
+
+    As of now, it only supports first :cfg:option:`ExpMPOEvolution.order` with a very basic
+    implementation, that just reinitializes the model after each time evolution steps with an
+    updated model parameter `time` set to :attr:`evolved_time`.
+    The model class should read that parameter.
+
+    .. todo ::
+        This is still under development and lacks rigorous tests.
+    """
+    time_dependent_H = True
+
+    def run(self):
+        N_steps = self.options.get('N_steps', 1)
+        self.update(N_steps)
+        return self.psi
+
+    def update(self, N_steps):
+        dt = self.options.get('dt', 0.01)
+        approximation = self.options.get('approximation', 'II')
+        order = self.options.get('order', 1)
+
+        trunc_err = TruncationError()
+        for _ in range(N_steps):
+            self.calc_U(dt, order, approximation)
+            for U_MPO in self._U_MPO:
+                trunc_err += U_MPO.apply(self.psi, self.options)
+            self.evolved_time = self.evolved_time + dt
+            self.model = self.reinit_model()  # use the updated model for the next measurement!
+        self.trunc_err = self.trunc_err + trunc_err  # not += : make a copy!
+        # (this is done to avoid problems of users storing self.trunc_err after each `update`)
+        return trunc_err
+
+    def calc_U(self, dt, order, approximation):
+        U_param = dict(dt=dt, order=order, approximation=approximation, time=self.evolved_time)
+        if self._U_param == U_param:
+            return  # nothing to do: _U is cached
+        self._U_param = U_param
+        logger.info("Calculate U for %s", U_param)
+
+        if order != 1:
+            raise NotImplementedError("order > 1 with time-dependent H requires re-derivation")
+        U_MPO = self.model.H_MPO.make_U(dt * -1j, approximation=approximation)
+        self._U_MPO = [U_MPO]
+
+    def reinit_model(self):
+        """Re-initialize a new model at current time.
+
+        Returns
+        -------
+        model :
+            New instance of the model initialized at ``model_params['time'] = self.evolved_time``.
+        """
+        cls = self.model.__class__
+        model_params = self.model.options  # if you get an error, set this in your custom model
+        model_params['time'] = self.evolved_time
+        return cls(model_params)
