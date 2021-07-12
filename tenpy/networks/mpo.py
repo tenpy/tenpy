@@ -1631,14 +1631,13 @@ class MPOGraph:
         if infinite:
             charges[-1] = charges[0]  # bond is identical
         
-        def travel_q_LR_iter(i, keyL):
+        def travel_q_LR(i, keyL):
             """Transport charges from left to right through the MPO graph.
 
             Inspect graph edges on site `i` starting on the left with `keyL` and add charges
             for all connections to the right.
             Originally we recursively transported charges from there, but now this is done
             iteratively to avoid the maximum recursion limit in python for large systems."""
-            max_checks = 0  # How many items are ever entered into the queue
             stack = []
             stack.append((i, keyL))
             while len(stack):
@@ -1659,11 +1658,8 @@ class MPOGraph:
                         ch_r[r] = qL_Wq + op_qtotal  # solve chargerule for q_right
                         if infinite or i + 1 < L:
                             edge_stack.append(((i + 1) % L, keyR))
-                            max_checks += 1
                 stack = edge_stack + stack
-            return max_checks
-        max_checks = travel_q_LR_iter(0, 'IdL')
-        print(max_checks)
+        travel_q_LR(0, 'IdL')
 
         # now we can still have unknown edges in the case of "dead ends" in the MPO graph.
 
@@ -1696,7 +1692,9 @@ class MPOGraph:
         if not infinite and any([ch is None for ch in charges[-1]]):
             raise ValueError("can't determine all charges on the very right leg of the MPO!")
 
-        for _ in range(max_checks):  # recursion limit would be hit in travel_q_LR first!
+        max_checks = 1000  # Hard-coded since for a properly set-up MPO graph, this loop will
+        # terminate after one iteration
+        for _ in range(max_checks):
             repeat = False
             for i in reversed(range(L)):
                 ch = charges[i]
