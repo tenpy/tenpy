@@ -28,7 +28,7 @@ except ImportError:
 from ..linalg import np_conserved as npc
 from ..linalg.sparse import NpcLinearOperatorWrapper
 from ..algorithms.truncation import truncate
-from ..algorithms.dmrg import SingleSiteDMRGEngine, TwoSiteDMRGEngine, Mixer
+from ..algorithms.dmrg import SingleSiteDMRGEngine, TwoSiteDMRGEngine, DensityMatrixMixer
 from ..algorithms.mps_common import TwoSiteH
 from ..simulations.ground_state_search import GroundStateSearch
 from ..tools.params import asConfig
@@ -418,59 +418,15 @@ class ParallelMPOEnvironment(MPOEnvironment):
         action.run(action.cache_optimize, self.node_local, (short_term_keys, preload))
 
 
-class ParallelDensityMatrixMixer(Mixer):
-    def perturb_svd(self, engine, theta, i0, update_LP, update_RP):
-        rho_L, rho_R = self.mix_rho(engine, theta, i0, update_LP, update_RP)
-        # TODO: remainder is copy-pasted from DensityMatrixMixer.perturb_svd ....
-        rho_L.itranspose(['(vL.p0)', '(vL*.p0*)'])  # just to be sure of the order
-        rho_R.itranspose(['(p1.vR)', '(p1*.vR*)'])  # just to be sure of the order
 
-        # consider the SVD `theta = U S V^H` (with real, diagonal S>0)
-        # rho_L ~=  theta theta^H = U S V^H V S U^H = U S S U^H  (for mixer -> 0)
-        # Thus, rho_L U = U S S, i.e. columns of U are the eigenvectors of rho_L,
-        # eigenvalues are S^2.
-        val_L, U = npc.eigh(rho_L)
-        U.legs[1] = U.legs[1].to_LegCharge()  # explicit conversion: avoid warning in `iproject`
-        U.iset_leg_labels(['(vL.p0)', 'vR'])
-        val_L[val_L < 0.] = 0.  # for stability reasons
-        val_L /= np.sum(val_L)
-        keep_L, _, errL = truncate(np.sqrt(val_L), engine.trunc_params)
-        U.iproject(keep_L, axes='vR')  # in place
-        U = U.gauge_total_charge(1, engine.psi.get_B(i0, form=None).qtotal)
-        # rho_R ~=  theta^T theta^* = V^* S U^T U* S V^T = V^* S S V^T  (for mixer -> 0)
-        # Thus, rho_R V^* = V^* S S, i.e. columns of V^* are eigenvectors of rho_R
-        val_R, Vc = npc.eigh(rho_R)
-        Vc.legs[1] = Vc.legs[1].to_LegCharge()
-        Vc.iset_leg_labels(['(p1.vR)', 'vL'])
-        VH = Vc.itranspose(['vL', '(p1.vR)'])
-        val_R[val_R < 0.] = 0.  # for stability reasons
-        val_R /= np.sum(val_R)
-        keep_R, _, err_R = truncate(np.sqrt(val_R), engine.trunc_params)
-        VH.iproject(keep_R, axes='vL')
-        VH = VH.gauge_total_charge(0, engine.psi.get_B(i0 + 1, form=None).qtotal)
-
-        # calculate S = U^H theta V
-        theta = npc.tensordot(U.conj(), theta, axes=['(vL*.p0*)', '(vL.p0)'])  # axes 0, 0
-        theta = npc.tensordot(theta, VH.conj(), axes=['(p1.vR)', '(p1*.vR*)'])  # axes 1, 1
-        theta.ireplace_labels(['vR*', 'vL*'], ['vL', 'vR'])  # for left/right
-        # normalize `S` (as in svd_theta) to avoid blowing up numbers
-        theta /= np.linalg.norm(npc.svd(theta, compute_uv=False))
-        return U, theta, VH, errL + err_R
-
+class ParallelDensityMatrixMixer(DensityMatrixMixer):
+    # TODO: merge updated TeNPy such that this works!
     def mix_rho(self, engine, theta, i0, update_LP, update_RP):
         assert update_LP or update_RP
         LHeff = engine.eff_H.LHeff
         RHeff = engine.eff_H.RHeff
         data = (theta, i0, self.amplitude, update_LP, update_RP, LHeff.key, RHeff.key)
-        rho_LR = action.run(action.mix_rho, engine.main_node_local, data)
-        if update_LP and update_RP:
-            rho_L, rho_R = rho_LR
-        elif update_LP:
-            rho_L = rho_LR
-            rho_R = npc.tensordot(theta, theta.conj(), axes=[['(vL.p0)'], ['(vL*.p0*)']])
-        elif update_RP:
-            rho_R = rho_LR
-            rho_L = npc.tensordot(theta, theta.conj(), axes=['(p1.vR)', '(p1*.vR*)'])
+        rho_L, rho_R = action.run(action.mix_rho, engine.main_node_local, data)
         return rho_L, rho_R
 
 

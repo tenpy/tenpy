@@ -21,9 +21,8 @@ def run(action, node_local, meta, on_main=None):
 def replica_main(node_local):
     while True:
         action, meta = node_local.comm.bcast(None)
-        # TODO: make all of those functions to limit the scope of local variables!
         if action is DONE:  # allow to gracefully terminate
-            print("MPI rank %d signing off" % node_local.comm.rank)
+            print(f"MPI rank {node_local.comm.rank:d} signing off")
             return
         action(node_local, None, *meta)
 
@@ -139,14 +138,12 @@ def mix_rho(node_local, on_main, theta, i0, amplitude, update_LP, update_RP, LH_
     mix_L = np.full((D, ), amplitude)
     mix_R = np.full((D, ), amplitude)
     if b_IdL == comm.rank:
-        mix_L[IdL_b] = 1.
+        mix_L[IdL_b] = 1. if not node_local.H.explicit_plus_hc else 0.5
         mix_R[IdL_b] = 0.
     if b_IdR == comm.rank:
         mix_L[IdR_b] = 0.
-        mix_R[IdR_b] = 1.
+        mix_R[IdR_b] = 1. if not node_local.H.explicit_plus_hc else 0.5
     # TODO: optimize to minimize transpose
-    if node_local.H.explicit_plus_hc:
-        raise NotImplementedError("TODO respect the explicit_plus_hc flag!")
     if update_LP:
         LHeff = node_local.distributed[LH_key]
         rho_L = npc.tensordot(LHeff, theta, axes=['(vR.p0*)', '(vL.p0)'])
@@ -155,6 +152,16 @@ def mix_rho(node_local, on_main, theta, i0, amplitude, update_LP, update_RP, LH_
         rho_L.iscale_axis(mix_L, 'wR')
         rho_L = npc.tensordot(rho_L, rho_L_c, axes=[['wR', '(p1.vR)'], ['wR*', '(p1*.vR*)']])
         rho_L = comm.reduce(rho_L, op=MPI.SUM)
+        if comm.rank == 0:
+            if node_local.H.explicit_plus_hc:
+                rho_L = rho_L + rho_L.conj().itranspose()
+            if b_IdL == -1:
+                rho_L = rho_L + npc.tensordot(theta, theta.conj(), axes=['(p1.vR)', '(p1*.vR*)'])
+    elif comm.rank == 0:
+        rho_L = npc.tensordot(theta, theta.conj(), axes=['(p1.vR)', '(p1*.vR*)'])
+    else:
+        rho_L = None
+
     if update_RP:
         RHeff = node_local.distributed[RH_key]
         rho_R = npc.tensordot(theta, RHeff, axes=['(p1.vR)', '(p1*.vL)'])
@@ -163,14 +170,16 @@ def mix_rho(node_local, on_main, theta, i0, amplitude, update_LP, update_RP, LH_
         rho_R.iscale_axis(mix_R, 'wL')
         rho_R = npc.tensordot(rho_R, rho_R_c, axes=[['(vL.p0)', 'wL'], ['(vL*.p0*)', 'wL*']])
         rho_R = comm.reduce(rho_R, op=MPI.SUM)
-    if comm.rank == 0 and (b_IdL == -1 or b_IdR == -1):  # IdL/IdR is None
-        raise NotImplementedError("TODO: add explicit identities to rho_L/rho_R")
-    if update_LP and update_RP:
-        return rho_L, rho_R
-    elif update_LP:
-        return rho_L
+        if comm.rank == 0:
+            if node_local.H.explicit_plus_hc:
+                rho_R = rho_R + rho_R.conj().itranspose()
+            if b_IdR == -1:
+                rho_R = rho_R + npc.tensordot(theta, theta.conj(), axes=['(p1.vR)', '(p1*.vR*)'])
+    elif comm.rank == 0:
+        rho_R = npc.tensordot(theta, theta.conj(), axes=[['(vL.p0)'], ['(vL*.p0*)']])
     else:
-        return rho_R
+        rho_R = None
+    return rho_L, rho_R
 
 
 def cache_optimize(node_local, on_main, short_term_keys, preload):
