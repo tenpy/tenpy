@@ -51,6 +51,9 @@ Changed
   For randomly perturbing an MPS in :meth:`~tenpy.networks.mps.InitialStateBuilder.randomized` or the new
   :meth:`~tenpy.networks.mps.MPS.perturb`, select the distribution suitable to preserve the dtype of the MPS.
 - Rewriting of the :class:`~tenpy.algorithms.dmrg.DensityMatrixMixer`.
+- Generalize `conserve` argument of the :class:`~tenpy.networks.site.Site` subclasses, e.g. :class:`~tenpy.networks.site.SpinHalfSite`,
+  to handle `None` and `False` the same way as a string ``'None'``. The string is the new, documented way to disable charge
+  conservation.
 
 
 Fixed
