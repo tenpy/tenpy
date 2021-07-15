@@ -148,7 +148,7 @@ html_context = {
     "conf_py_path":
     "/doc/",  # Path in the checkout to the docs root
     "css_files": [
-        "_static/custom_highlight.css",  # to highlight targets
+        "_static/custom.css",  # to highlight targets
         "_static/copybutton.css",  # somehow this didn't get included otherwise
     ],
 }

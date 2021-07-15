@@ -80,6 +80,9 @@
             "schollwoeck2011",
             "barthel2020"
         ],
+        "reference/tenpy.models.aklt.AKLTChain": [
+            "affleck1987"
+        ],
         "reference/tenpy.models.fermions_spinless.FermionChain": [
             "resta1998"
         ],

@@ -2129,8 +2129,8 @@ class MPOTransferMatrix:
     def matvec(self, vec, project=True):
         """One matvec-operation.
 
-        Paramters
-        ---------
+        Parameters
+        ----------
         project : bool
             If True, project away the trace of the "IdL" part (transpose=False)
             or "IdR" part (transpose=True), respectively, to transform the Jordan-Block structure
