@@ -11,7 +11,7 @@ If this module was not compiled and could not be imported, a warning is issued.
 # Copyright 2018-2021 TeNPy Developers, GNU GPLv3
 
 DEF DEBUG_PRINT = 0  # set this to 1 for debug output (e.g. benchmark timings within the functions)
-DEF USE_MKL_GEMM_BATCH = 0 # whether to use ?gemm_batch function of MKL
+DEF USE_MKL_GEMM_BATCH = 1 # whether to use ?gemm_batch function of MKL
 # the following are defined in `setup.py`, but you might wish to overwrite them here explicitly.
 # DEF HAVE_MKL = 0  # whether to import cblas from mkl
 # DEF MKL_INTERFACE_LAYER = 0  # MKL_LP64=0 for using MKL_LP64 with 32-bit indices,
@@ -162,7 +162,7 @@ cdef class CblasGemmBatch:
         vector[vector[void_ptr]] As
         vector[vector[void_ptr]] Bs
         vector[vector[void_ptr]] Cs
-        vector[int] trans
+        vector[CBLAS_TRANSPOSE] trans
         vector[BLAS_INT] int_ones
         vector[double] double_ones
         vector[double] double_zeros
@@ -180,7 +180,7 @@ cdef class CblasGemmBatch:
         self.Cs = vector[vector[void_ptr]]()
         # reserve constants for 64 blocks: enough in most cases
         cdef int R = 64
-        self.trans = vector[int](R, CblasNoTrans)
+        self.trans = vector[CBLAS_TRANSPOSE](R, CblasNoTrans)
         self.int_ones = vector[BLAS_INT](R, 1)
         self.double_ones = vector[double](R, 1.)
         self.double_zeros = vector[double](R, 0.)
@@ -227,7 +227,7 @@ cdef class CblasGemmBatch:
             self.complex_zeros.resize(batch_size, 0.)
             self.int_ones.resize(batch_size, 1)
         cdef:
-            int * trans = & self.trans[0]
+            CBLAS_TRANSPOSE * trans = & self.trans[0]
             BLAS_INT * int_ones = & self.int_ones[0]
             double * double_ones = & self.double_ones[0]
             double * double_zeros = & self.double_zeros[0]
