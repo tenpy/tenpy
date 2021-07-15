@@ -1630,29 +1630,35 @@ class MPOGraph:
         charges[0][states[0]['IdL']] = chinfo.make_valid(None)  # default charge = 0.
         if infinite:
             charges[-1] = charges[0]  # bond is identical
-
+        
         def travel_q_LR(i, keyL):
             """Transport charges from left to right through the MPO graph.
 
             Inspect graph edges on site `i` starting on the left with `keyL` and add charges
             for all connections to the right.
-            Recursively transport charges from there."""
-            l = states[i][keyL]
-            site = sites[i]
-            st_r = states[i + 1]
-            ch_r = charges[i + 1]
-            # charge rule: q_left - q_right + op_qtotal = Ws_qtotal
-            qL_Wq = charges[i][l] - Ws_qtotal[i]  # q_left - Ws_qtotal
-            edges = self.graph[i][keyL]
-            for keyR, ops in edges.items():
-                r = st_r[keyR]
-                qR = ch_r[r]
-                if qR is None:
-                    op_qtotal = site.get_op(ops[0][0]).qtotal
-                    ch_r[r] = qL_Wq + op_qtotal  # solve chargerule for q_right
-                    if infinite or i + 1 < L:
-                        travel_q_LR((i + 1) % L, keyR)
-
+            Originally we recursively transported charges from there, but now this is done
+            iteratively to avoid the maximum recursion limit in python for large systems."""
+            stack = []
+            stack.append((i, keyL))
+            while len(stack):
+                i, keyL = stack.pop(-1)  # We are replacing system stack with one of our own
+                l = states[i][keyL]
+                site = sites[i]
+                st_r = states[i + 1]
+                ch_r = charges[i + 1]
+                # charge rule: q_left - q_right + op_qtotal = Ws_qtotal
+                qL_Wq = charges[i][l] - Ws_qtotal[i]  # q_left - Ws_qtotal
+                edges = self.graph[i][keyL]
+                edge_stack = []
+                for keyR, ops in edges.items():
+                    r = st_r[keyR]
+                    qR = ch_r[r]
+                    if qR is None:
+                        op_qtotal = site.get_op(ops[0][0]).qtotal
+                        ch_r[r] = qL_Wq + op_qtotal  # solve chargerule for q_right
+                        if infinite or i + 1 < L:
+                            edge_stack.append(((i + 1) % L, keyR))
+                stack = edge_stack + stack
         travel_q_LR(0, 'IdL')
 
         # now we can still have unknown edges in the case of "dead ends" in the MPO graph.
@@ -1686,8 +1692,9 @@ class MPOGraph:
         if not infinite and any([ch is None for ch in charges[-1]]):
             raise ValueError("can't determine all charges on the very right leg of the MPO!")
 
-        max_checks = sys.getrecursionlimit()  # I don't expect interactions with larger range...
-        for _ in range(max_checks):  # recursion limit would be hit in travel_q_LR first!
+        max_checks = 1000  # Hard-coded since for a properly set-up MPO graph, this loop will
+        # terminate after one iteration
+        for _ in range(max_checks):
             repeat = False
             for i in reversed(range(L)):
                 ch = charges[i]
