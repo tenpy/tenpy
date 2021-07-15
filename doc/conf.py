@@ -87,8 +87,14 @@ exclude_patterns = [
 def create_example_stubs():
     """create stub files for examples and toycodes to include them in the documentation."""
     folders = {
-        'examples': os.listdir(os.path.join(REPO_PREFIX, 'examples')),
-        'toycodes': os.listdir(os.path.join(REPO_PREFIX, 'toycodes'))
+        'examples':
+        os.listdir(os.path.join(REPO_PREFIX, 'examples')),
+        os.path.join('examples', 'advanced'):
+        os.listdir(os.path.join(REPO_PREFIX, 'examples', 'advanced')),
+        os.path.join('examples', 'chern_insulators'):
+        os.listdir(os.path.join(REPO_PREFIX, 'examples', 'chern_insulators')),
+        'toycodes':
+        os.listdir(os.path.join(REPO_PREFIX, 'toycodes'))
     }
     for key, files in folders.items():
         outdir = os.path.join(os.path.dirname(__file__), key)

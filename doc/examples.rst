@@ -29,6 +29,15 @@ You need to install TeNPy to call them (see :doc:`/INSTALL`), but you can copy t
 
     examples/*
 
+A bit more elaborate examples from the subfolders in ``examples/*`` are included in this list:
+
+.. toctree::
+    :glob:
+
+    examples/advanced/*
+    examples/chern_insulators/*
+
+
 Jupyter Notebooks
 -----------------
 
