@@ -7,8 +7,8 @@ ELSE:
 cdef extern from "mkl.h" nogil:
     # see $CONDA_PREFIX/include/mkl_cblas.h
 
-    enum CBLAS_TRANSPOSE: CblasNoTrans, CblasTrans, CblasConjTrans
-    enum CBLAS_LAYOUT: CblasRowMajor, CblasColMajor
+    ctypedef enum CBLAS_TRANSPOSE: CblasNoTrans, CblasTrans, CblasConjTrans
+    ctypedef enum CBLAS_LAYOUT: CblasRowMajor, CblasColMajor
 
     int mkl_set_interface_layer(int required_interface)
 
