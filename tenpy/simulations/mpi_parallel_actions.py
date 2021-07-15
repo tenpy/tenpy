@@ -2,6 +2,7 @@
 
 from ..linalg import np_conserved as npc
 import numpy as np
+import copy
 
 try:
     from mpi4py import MPI
@@ -88,6 +89,86 @@ def gather_distr_array(node_local, on_main, key, in_cache):
     local_part = node_local.cache[key] if in_cache else node_local.distributed[key]
     return node_local.comm.gather(local_part)
 
+def attach_LP_to_W(node_local, on_main, i, old_key, new_key):
+    assert on_main is None
+    comm = node_local.comm
+    my_env = node_local.cache[old_key]
+    received_env = None
+    Lheff = None
+    rank = comm.rank
+    L = node_local.H.L
+
+    interactions = reverse_interactions(node_local.jobs[i % L])
+    commands = generate_instructions(interactions, comm.size)
+    for cycle in commands:
+        my_commands = cycle[rank]
+        for order in my_commands:
+            if order[0] == 'self_contract':
+                Wb = npc.tensordot(my_env, node_local.W_blocks[i % L][comm.rank][comm.rank], ['wR', 'wL']).replace_labels(['p', 'p*'], ['p0', 'p0*'])
+                if Lheff is None:
+                    Lheff = Wb
+                else:
+                    Lheff += Wb
+            elif order[0] == 'recv':
+                src, tag = order[1], order[2]
+                received_env = comm.recv(src, tag)
+                Wb = npc.tensordot(received_env, node_local.W_blocks[i % L][src][comm.rank], ['wR', 'wL']).replace_labels(['p', 'p*'], ['p0', 'p0*'])
+                if Lheff is None:
+                    Lheff = Wb
+                else:
+                    Lheff += Wb
+            elif order[0] == 'send':
+                dest, tag = order[1], order[2]
+                comm.send(my_env, dest, tag)
+            else:
+                raiseValueError('Unexpected order for Lheff contraction.')
+        comm.Barrier()  # Synchronize nodes after each cycle. # TODO is barrier necessary? Probs not since calls are blocking.
+
+    if Lheff is not None:
+        pipeL = block.make_pipe(['vR*', 'p0'], qconj=+1)
+        Lheff = Lheff.combine_legs([['vR*', 'p0'], ['vR', 'p0*']], pipes=[pipeL, pipeL.conj()], new_axes=[0, 2]) # vR*.p, wR, vR.p*
+    node_local.distributed[new_key] = Lheff
+
+def attach_W_to_RP(node_local, on_main, i, old_key, new_key):
+    assert on_main is None
+    comm = node_local.comm
+    my_env = node_local.cache[old_key]
+    received_env = None
+    Rheff = None
+    rank = comm.rank
+    L = node_local.H.L
+
+    interactions = node_local.jobs[i % L]
+    commands = generate_instructions(interactions, comm.size)
+    for cycle in commands:
+        my_commands = cycle[rank]
+        for order in my_commands:
+            if order[0] == 'self_contract':
+                Wb = npc.tensordot(node_local.W_blocks[i % L][comm.rank][comm.rank], my_env, ['wR', 'wL']).replace_labels(['p', 'p*'], ['p1', 'p1*'])
+                if Rheff is None:
+                    Rheff = Wb
+                else:
+                    Rheff += Wb
+            elif order[0] == 'recv':
+                src, tag = order[1], order[2]
+                received_env = comm.recv(src, tag)
+                Wb = npc.tensordot(node_local.W_blocks[i % L][comm.rank][src], received_env, ['wR', 'wL']).replace_labels(['p', 'p*'], ['p1', 'p1*'])
+                if Rheff is None:
+                    Rheff = Wb
+                else:
+                    Rheff += Wb
+            elif order[0] == 'send':
+                dest, tag = order[1], order[2]
+                comm.send(my_env, dest, tag)
+            else:
+                raiseValueError('Unexpected order for Rheff contraction.')
+        comm.Barrier()  # Synchronize nodes after each cycle.
+
+    if Rheff is not None:
+        pipeR = Rheff.make_pipe(['p1', 'vL*'], qconj=-1)
+        #  for Left: pipeL = block.make_pipe(['vR*', 'p'], qconj=+1)
+        Rheff = Rheff.combine_legs([['p1', 'vL*'], ['p1*', 'vL']], pipes=[pipeR, pipeR.conj()], new_axes=[2, 1])
+    node_local.distributed[new_key] = Rheff
 
 def attach_B(node_local, on_main, old_key, new_key, B):
     local_part = node_local.distributed[old_key]
@@ -190,3 +271,63 @@ def cache_optimize(node_local, on_main, short_term_keys, preload):
 def cache_del(node_local, on_main, *keys):
     for key in keys:
         del node_local.cache[key]
+
+def reverse_interactions(interactions):
+    """
+    interactions will be a list of lists, with the sublists containing tuples (i,j) such that node i
+    needs the environment of node j. These tuples were made for attaching W - R, so we want to reverse
+    them for attaching L - W.
+    """
+
+    return [[(y,x) for (x,y) in row] for row in interactions]
+
+def generate_instructions(interactions, Nnodes):
+    """
+    Given interactions, we want to generate instructions of which node sends its environment to which
+    other nodes. We need to make sure that we do not get stuck in any deadlocks as sending and receiving
+    calls may be blocking.
+    """
+    instructions = []
+    interactions = copy.deepcopy(interactions)
+    def len_list_list(list_list):
+        return np.sum([len(x) for x in list_list])
+
+    while len_list_list(interactions):
+        send = []
+        receive = []
+        round_instructions = []
+
+        for i in range(Nnodes):
+            assert i not in receive
+
+            row_interactions = interactions[i]
+            for j, inter in enumerate(row_interactions):
+                assert inter[0] == i    # Ensure that node i is receiving environment in this interaction.
+                if inter[1] not in send:
+                    round_instructions.append(inter)
+                    send.append(inter[1])
+                    receive.append(inter[0])
+                    row_interactions.remove(j)
+                    break
+
+            if i not in receive and len(row_interactions):
+                inter = row_interactions[0]
+                assert inter[0] == i    # Ensure that node i is receiving environment in this interaction.
+                round_instructions.append(inter)
+                send.append(inter[1])
+                receive.append(inter[0])
+                row_interactions.remove(0)
+        instructions.append(round_instructions)     # Each node receives at most one environment.
+    # We now have commands separated into rounds. We need to get specific orders for each node.
+    commands = []
+    for sync in instructions:
+        orders = [[] for i in range(Nnodes)]    # One set of orders per node, per round.
+        for job in sync:
+            if job[0] == job[1]:    # No need to send data
+                orders[job[0]].append(("self_contract", None))
+            else:
+                orders[job[0]].append(('recv', job[1], int(str(job[0]) + str(job[1]))))
+                orders[job[1]].append(('send', job[0], int(str(job[0]) + str(job[1]))))
+        commands.append(orders)
+
+    return commands

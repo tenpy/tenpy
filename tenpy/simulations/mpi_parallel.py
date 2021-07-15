@@ -82,9 +82,9 @@ class ParallelTwoSiteH(TwoSiteH):
         env._eff_H = self # HACK to give env.full_contraction access to LHeff, RHeff, i0
 
     def combine_Heff(self, i0, env):
-        self.LHeff = env._contract_LP_W_dumb(i0, self.LP)
+        self.LHeff = env._contract_LP_W(i0, self.LP, dumb=True)
         self.pipeL = self.LHeff.local_part.get_leg('(vR*.p0)')
-        self.RHeff = env._contract_W_RP_dumb(i0+1, self.RP)
+        self.RHeff = env._contract_W_RP(i0+1, self.RP, dumb=True)
         self.pipeR = self.RHeff.local_part.get_leg('(p1.vL*)')
         self.acts_on = ['(vL.p0)', '(p1.vR)']
 
@@ -315,13 +315,25 @@ class ParallelMPOEnvironment(MPOEnvironment):
         #  |         |  |       |  |
         #  .-        .-         .- A*-
         assert isinstance(LP, DistributedArray)
-        LP_W =  self._contract_LP_W_dumb(i, LP)
+        LP_W =  self._contract_LP_W(i, LP, dumb=True)
         return self._attach_A_to_LP_W(i, LP_W)
 
     def _contract_RP(self, i, RP):
         assert isinstance(RP, DistributedArray)
-        W_RP =  self._contract_W_RP_dumb(i, RP)
+        W_RP =  self._contract_W_RP(i, RP, dumb=True)
         return self._attach_B_to_W_RP(i, W_RP)
+
+    def _contract_LP_W(self, i, LP, dumb=False):
+        return self._contract_LP_W_row_sparse(i, LP) if not dumb else self._contract_LP_W_dumb(i, LP)
+
+    def _contract_W_RP(self, i, RP, dumb=False):
+        return self._contract_W_RP_row_sparse(i, RP) if not dumb else self._contract_W_RP_dumb(i, RP)
+
+    def _contract_LP_W_row_sparse(self, i, LP):
+        raise NotImplementedError()
+
+    def _contract_W_RP_row_sparse(self, i, RP):
+        raise NotImplementedError()
 
     def _contract_LP_W_dumb(self, i, LP):
         LP_parts = LP.gather()
@@ -338,7 +350,7 @@ class ParallelMPOEnvironment(MPOEnvironment):
                     block = Wb
                 else:
                     block = block + Wb
-            assert block is not None
+            assert block is not None        # I think this will be an issue for finite DMRG and many nodes.
             #pipeR = block.make_pipe(['p', 'vL*'], qconj=-1)
             pipeL = block.make_pipe(['vR*', 'p0'], qconj=+1)
             block = block.combine_legs([['vR*', 'p0'], ['vR', 'p0*']], pipes=[pipeL, pipeL.conj()], new_axes=[0, 2]) # vR*.p, wR, vR.p*
@@ -359,7 +371,7 @@ class ParallelMPOEnvironment(MPOEnvironment):
                     block = Wb
                 else:
                     block = block + Wb
-            assert block is not None
+            assert block is not None        # I think this will be an issue for finite DMRG and many nodes.
             pipeR = block.make_pipe(['p1', 'vL*'], qconj=-1)
             #  for Left: pipeL = block.make_pipe(['vR*', 'p'], qconj=+1)
             block = block.combine_legs([['p1', 'vL*'], ['p1*', 'vL']], pipes=[pipeR, pipeR.conj()], new_axes=[2, 1])
@@ -481,10 +493,13 @@ class NodeLocalData:
     def add_H(self, H):
         self.H = H
         N = self.comm.size
-        self.W_blocks = [] # index: site
-        self.projs_L = []  # index: bond s.t. projs_L[i] is on bond left of site i
-        self.IdLR_blocks = []  # index: bond left of site i
-        self.local_MPO_chi = []  # index: bond left of site i
+        self.W_blocks = []  # index: site
+        self.projs_L = []   # index: bond s.t. projs_L[i] is on bond left of site i
+        self.IdLR_blocks = []   # index: bond left of site i
+        self.local_MPO_chi = [] # index: bond left of site i
+        self.jobs = []      # For eash site, list of list of tuples (i,j) such that
+        # node i must receive environment j when attaching W tensor to right environment.
+
         for i in range(H.L):
             W = H.get_W(i).copy()
             projs = split_MPO_leg(W.get_leg('wL'), N)
@@ -498,24 +513,31 @@ class NodeLocalData:
             projs_L = self.projs_L[i]
             projs_R = self.projs_L[(i+1) % H.L]
             blocks = []
+            site_jobs = []
             for b_L in range(N):
                 row = []
+                row_jobs = []
                 for b_R in range(N):
                     Wblock = W.copy()
                     Wblock.iproject([projs_L[b_L], projs_R[b_R]], ['wL', 'wR'])
                     if Wblock.norm() < 1.e-14:
                         Wblock = None
+                    else:       # MPO block is not None, so we must do something with it.
+                        row_jobs.append((b_L, b_R))
                     row.append(Wblock)
                 blocks.append(row)
+                site_jobs.append(row_jobs)
                 if all([b is None for b in row]):
                     print(row)
                     print(W.to_ndarray())
                     print(projs_L, projs_R)
                     #  assert False
-
+            self.jobs.append(site_jobs)
             self.W_blocks.append(blocks)
 
-
+        print(self.jobs[0])
+        print(action.reverse_interactions(self.jobs[0]))
+        #exit(0)
 class ParallelDMRGSim(GroundStateSearch):
 
     default_algorithm = "ParallelTwoSiteDMRG"
