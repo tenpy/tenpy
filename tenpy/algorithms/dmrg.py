@@ -218,7 +218,7 @@ class SingleSiteMixer(Mixer):
 
     Performs a subspace expansion following :cite:`hubig2015`.
     """
-    def perturb_svd(self, engine, theta, i0, move_right, next_B):
+    def perturb_svd(self, engine, theta, i0, move_right):
         """Mix extra terms to theta and perform an SVD.
 
         We calculate the left and right reduced density matrix using the mixer
@@ -373,9 +373,48 @@ class TwoSiteMixer(SingleSiteMixer):
 
 
 class DensityMatrixMixer(Mixer):
-    """Mixer based on density matrices.
+    r"""Mixer based on density matrices.
 
     This mixer constructs density matrices as described in the original paper :cite:`white2005`.
+
+    The mixer interjects at the svd ``theta = U S VH`` with ``U-> A[i0]`` and `VH -> B[i0+1]``
+    being the new tensors in the MPS.
+    Given `theta`, one way to get the `U` is to calculate and diagonalize the reduced
+    density matrices ``rho_L = tr_R |theta><theta|``,  and similarly diagonalize `rho_R` for `VH`.
+
+    Withe the mixer, we perturb the `rho_L` when the left environment needs to be updated (i.e.,
+    we're moving to the right), and similarly perturb `rho_R` when updating the right environment.
+    Note that for iDMRG there are cases where both `rho_R` and `rho_L` are perturbed.
+
+    The perturbation of `rho_L` is
+
+    .. math ::
+
+        rho_L = tr_R(|\theta><\theta|)
+        \rightarrow  tr_R(|\theta><\theta|) + a \sum_l h_l tr_R(|\theta><\theta|) h_l^\dagger
+
+    where `a` is the (small) perturbation :attr:`amplitude` and `h_l` are the left parts of
+    the Hamiltonian going accross the center bond (i0, i0+1).
+
+    Pictorially, the left density matrix `rho_L` is given by::
+
+        |     update_LP=False           update_LP=True
+        |
+        |    .---theta---.            .---theta----.
+        |    |   |   |   |            |   |    \   |
+        |            |   |           LP---H0-.  \  |
+        |    |   |   |   |            |   |   \  | |
+        |    .---theta*--.                  mixL | |
+        |                             |   |   /  | |
+        |                            LP*--H0*-  /  |
+        |                             |   |    /   |
+        |                             .---theta*---.
+
+    Here, the `mixL` is a diagonal matrix with mostly the :attr:`amplitude` on the diagonal,
+    except for the `IdL` and `IdR` indices of the MPO, which are 1. and 0., respectively.
+
+    The right density matrix `rho_R` is mirrored accordingly.
+
     """
     def perturb_svd(self, engine, theta, i0, update_LP, update_RP):
         """Mix extra terms to theta and perform an SVD.
@@ -394,9 +433,9 @@ class DensityMatrixMixer(Mixer):
         i0 : int
             Site index; `theta` lives on ``i0, i0+1``.
         update_LP : bool
-            Whether to calculate the next ``env.LP[i0+1]``.
+            Whether to calculate the next ``env.LP[i0+1]``, i.e. whether to perturb `rho_L`.
         update_RP : bool
-            Whether to calculate the next ``env.RP[i0]``.
+            Whether to calculate the next ``env.RP[i0]``, i.e., whether to perturb `rho_R`.
 
         Returns
         -------
@@ -457,32 +496,6 @@ class DensityMatrixMixer(Mixer):
 
     def mix_rho(self, engine, theta, i0, update_LP, update_RP):
         r"""Calculated reduced density matrices of theta with a perturbation by the mixer.
-
-        The perturbation is
-
-        .. math ::
-
-            rho_L = tr_R(|\theta><\theta|)
-            \rightarrow  tr_R(|\theta><\theta|) + a \sum_l h_l tr_R(|\theta><\theta|) h_l^\dagger
-
-        where `a` is the (small) perturbation :attr:`amplitude` and `h_l` are the left parts of
-        the Hamiltonian going accross the center bond (i0, i0+1).
-
-        Pictorially, the left density matrix `rho_L` is given by::
-
-            |     update_LP=False           update_LP=True
-            |
-            |    .---theta---.            .---theta----.
-            |    |   |   |   |            |   |    \   |
-            |            |   |           LP---H0-.  \  |
-            |    |   |   |   |            |   |   \  | |
-            |    .---theta*--.                  mixL | |
-            |                             |   |   /  | |
-            |                            LP*--H0*-  /  |
-            |                             |   |    /   |
-            |                             .---theta*---.
-
-        The right density matrix `rho_R` is mirrored accordingly.
 
         Parameters
         ----------
@@ -1533,20 +1546,23 @@ class SingleSiteDMRGEngine(DMRGEngine):
 
         The goal is to split theta and truncate it. For a move to the right::
 
-            |   -- theta -- next_B --    ==>    -- U -- S -- VH -- next_B --
-            |        |      |                      |               |
+            |             -- theta -- next_B --   ==>    -- U -- S -- VH --
+            |                  |        |                   |         |
 
         For a move to the left::
 
-            |   -- next_B -- theta -- ==>    -- next_B -- U -- S -- VH --
-            |      |         |                  |                   |
+            |   -- next_A -- theta --   ==>    -- U -- S -- VH --
+            |        |         |                  |         |
 
-        The `VH` for right-move or `U` for left-move is absorebed into the `next_B`.
+        Note that `theta` lives on the same site :attr:`i0` in both cases,
+        but the sites of `next_A` and `next_B` depend on whether we move right or left.
+        The returned `U` and `VH` have always the same labels with ``'p0'/'p1'`` on the left/right
+        of these two sites.
 
         Without a mixer, this is done by a simple svd and truncation of Schmidt values of theta
-        followed by the absorption of VH/U.
+        followed by the absorption of `VH` into `next_B` (`U` into `next_A`).
 
-        With a mixer, the state is perturbed before the SVD.
+        With a mixer, the state/density matrix is perturbed before the SVD.
         The details of the perturbation are defined by the :class:`Mixer` class.
 
         Parameters
@@ -1554,53 +1570,78 @@ class SingleSiteDMRGEngine(DMRGEngine):
         theta : :class:`~tenpy.linalg.np_conserved.Array`
             The optimized wave function, prepared for svd with :meth:`prepare_svd`,
             i.e. with combined legs.
-        nextB : :class:`~tenpy.linalg.np_conserved.Array`
-            MPS tensor at the site that will be visited next.
 
         Returns
         -------
         U : :class:`~tenpy.linalg.np_conserved.Array`
-            Left-canonical part of `theta`. Labels ``'(vL.p0)', 'vR'``.
+            Left-canonical part of `theta`. Labels ``'(vL.p0)', 'vR'``
         S : 1D ndarray | 2D :class:`~tenpy.linalg.np_conserved.Array`
             Without mixer just the singluar values of the array; with mixer it might be a general
             matrix with labels ``'vL', 'vR'``; see comment above.
         VH : :class:`~tenpy.linalg.np_conserved.Array`
-            Right-canonical part of `theta`. Labels ``'vL', '(p0.vR)'``.
+            Right-canonical part of `theta`. Labels ``'vL', '(p1.vR)'``.
         err : :class:`~tenpy.algorithms.truncation.TruncationError`
             The truncation error introduced.
         """
         if self.move_right:
-            next_B = self.env.bra.get_B(self.i0 + 1, form='B')
+            i1 = (self.i0 + 1) % self.L
+            next_B = self.psi.get_B(self.i0 + 1, form='B')
+            next_B = next_B.combine_legs(['p', 'vR'], qconj=-1, new_axes=1)
         else:
-            next_B = self.env.bra.get_B(self.i0 - 1, form='A')
+            i1 = (self.i0 - 1) % self.L
+            next_A = self.psi.get_B(self.i0 - 1, form='A')
+            next_A = next_A.combine_legs(['vL', 'p'], qconj=1, new_axes=0)
         # get qtotal_LR from i0
         if self.mixer is None:
-            # simple case: real svd, defined elsewhere.
+            # "simple" case: real svd, defined elsewhere.
+            # however, here we keep everything strictly single-site, such that the bond dimension
+            # and considered subspace can't grow!
+
+            # first, double check whether the next_B/A might be not strictly an isometry
+            if self.move_right:
+                if self.psi.form[i1] != (0., 1.):
+                    # required inverse of S to get next_B; enforce that next_B is right-canonical
+                    # ensure that next_B is right-canonical
+                    # Note: we can't do this with a mixer, because this svd would project away
+                    # the subspace expansion!
+                    U, S, next_B = npc.svd(next_B, qtotal_LR=[None, next_B.qtotal],
+                                           inner_label=['vR', 'vL'])
+                    theta = npc.tensordot(theta, U.iscale_axis(S, 'vR'), ['vR', 'vL'])
+            else:
+                if self.psi.form[i1] != (1., 0.):
+                    next_A, S, VH = npc.svd(next_A, qtotal_LR=[next_A.qtotal, None],
+                                            inner_label=['vR', 'vL'])
+                    theta = npc.tensordot(VH.iscale_axis(S, 'vL'), theta, ['vR', 'vL'])
+            # now do the actual SVD with truncation
             qtotal = [theta.qtotal, None] if self.move_right else [None, theta.qtotal]
             U, S, VH, err, _ = svd_theta(theta,
                                          self.trunc_params,
                                          qtotal_LR=qtotal,
                                          inner_labels=['vR', 'vL'])
+            # and absorb the VH/U into next_* and adjust physical labels
             if self.move_right:
-                VH = npc.tensordot(VH, next_B, axes=['vR', 'vL'])
+                VH = npc.tensordot(VH, next_B, ['vR', 'vL'])
+                VH.ireplace_label('(p.vR)', '(p1.vR)')
             else:
-                U = npc.tensordot(next_B, U, axes=['vR', 'vL'])
-            return U, S, VH, err
+                U = npc.tensordot(next_A, U, ['vR', 'vL'])
+                U.ireplace_label('(vL.p)', '(vL.p0)')
+                VH.ireplace_label('(p0.vR)', '(p1.vR)')
         else:  # we have a mixer
-            U, S, VH, err = self.mixer.perturb_svd(self, theta, self.i0, self.move_right, next_B)
-            # Enforce normalization:
-            # TODO change this
+            # TODO: fix this!!!
+            raise NotImplementedError("TODO work in progress")
+        # TODO: is it a good idea to have same call structure as with Two-Site mixer?
+        # would need extra care with assumptions about engine.eff_H in Mixer,
+        # in particular which site that acts on...
             if self.move_right:
-                VH = VH.combine_legs(['p', 'vR'], qconj=-1)
-                U_VH, S_VH, VH = npc.svd(VH, inner_labels=['vR', 'vL'])
-                VH = VH.split_legs('(p.vR)')
-                S = U_VH.iscale_axis(S, 'vL').iscale_axis(S_VH, 'vR')
+                next_B.ireplace_label('(p.vR)', '(p1.vR)')
+                theta = npc.tensordot(theta, next_B, axes=['vR', 'vL'])
             else:
-                U = U.combine_legs(['vL', 'p'], qconj=+1)
-                U, S_U, VH_U = npc.svd(U, inner_labels=['vR', 'vL'])
-                U = U.split_legs(['(vL.p)'])
-                S = VH_U.iscale_axis(S_U, 'vL').iscale_axis(S, 'vR')
-            return U, S, VH, err
+                next_B.ireplace_label('(vL.p)', '(vL.p0)')
+                theta.ireplace_label('(p0.vR)', '(p1.vR)')
+                theta = npc.tensordot(theta, next_B, axes=['vR', 'vL'])
+            update_LP, update_RP = self.update_LP_RP
+            U, S, VH, err = self.mixer.perturb_svd(self, theta, self.i0, update_LP, update_RP)
+        return U, S, VH, err
 
     def set_B(self, U, S, VH):
         """Update the MPS with the ``U, S, VH`` returned by `self.mixed_svd`.
@@ -1614,13 +1655,14 @@ class SingleSiteDMRGEngine(DMRGEngine):
             Without a mixer just the singular values, with enabled `mixer` a 2D array.
         """
         i0 = self.i0
+        i1 = i0 + 1 if self.move_right else i0 - 1
+        B0 = U.split_legs(['(vL.p0)']).replace_label('p0', 'p')
+        B1 = VH.split_legs(['(p1.vR)']).replace_label('p1', 'p')
         if self.move_right:
-            B0 = U.split_legs(['(vL.p0)']).replace_label('p0', 'p')
             self.psi.set_B(i0, B0, form='A')  # left-canonical
             self.psi.set_B(i0 + 1, VH, form='B')  # right-canonical
             self.psi.set_SR(i0, S)
         else:
-            B1 = VH.split_legs(['(p0.vR)']).replace_label('p0', 'p')
             self.psi.set_B(i0 - 1, U, form='A')  # left-canonical
             self.psi.set_B(i0, B1, form='B')  # right-canonical
             self.psi.set_SL(i0, S)
