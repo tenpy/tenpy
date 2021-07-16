@@ -41,6 +41,9 @@ __all__ = [
     'ParallelPlusHcNpcLinearOperator', 'ParallelTwoSiteDMRG', 'ParallelDMRGSim'
 ]
 
+DUMB=False      # Flag to choose between dumb (single node) contraction
+                # to Effective environments or row sparse parallel version.
+
 """
 def split_MPO_leg(leg, N_nodes):
     ''' Split MPO leg indices as evenly as possible amongst N_nodes nodes.'''
@@ -99,9 +102,9 @@ class ParallelTwoSiteH(TwoSiteH):
         env._eff_H = self # HACK to give env.full_contraction access to LHeff, RHeff, i0
 
     def combine_Heff(self, i0, env):
-        self.LHeff = env._contract_LP_W(i0, self.LP, dumb=True)
+        self.LHeff = env._contract_LP_W(i0, self.LP, dumb=DUMB)
         self.pipeL = self.LHeff.local_part.get_leg('(vR*.p0)')
-        self.RHeff = env._contract_W_RP(i0+1, self.RP, dumb=True)
+        self.RHeff = env._contract_W_RP(i0+1, self.RP, dumb=DUMB)
         self.pipeR = self.RHeff.local_part.get_leg('(p1.vL*)')
         self.acts_on = ['(vL.p0)', '(p1.vR)']
 
@@ -332,12 +335,12 @@ class ParallelMPOEnvironment(MPOEnvironment):
         #  |         |  |       |  |
         #  .-        .-         .- A*-
         assert isinstance(LP, DistributedArray)
-        LP_W =  self._contract_LP_W(i, LP, dumb=True)
+        LP_W =  self._contract_LP_W(i, LP, dumb=DUMB)
         return self._attach_A_to_LP_W(i, LP_W)
 
     def _contract_RP(self, i, RP):
         assert isinstance(RP, DistributedArray)
-        W_RP =  self._contract_W_RP(i, RP, dumb=True)
+        W_RP =  self._contract_W_RP(i, RP, dumb=DUMB)
         return self._attach_B_to_W_RP(i, W_RP)
 
     def _contract_LP_W(self, i, LP, dumb=False):
@@ -347,12 +350,12 @@ class ParallelMPOEnvironment(MPOEnvironment):
         return self._contract_W_RP_row_sparse(i, RP) if not dumb else self._contract_W_RP_dumb(i, RP)
 
     def _contract_LP_W_row_sparse(self, i, LP):
-        action.run(action.effh_to_matrix, self.LHeff.node_local,
-                   (self.LHeff.key, self.RHeff.key))
-        raise NotImplementedError()
+        action.run(action.attach_LP_to_W, self.node_local, (i, LP.key, "LP_W"), None)
+        return DistributedArray("LP_W", self.node_local, False)
 
     def _contract_W_RP_row_sparse(self, i, RP):
-        raise NotImplementedError()
+        action.run(action.attach_W_to_RP, self.node_local, (i, RP.key, "W_RP"), None)
+        return DistributedArray("W_RP", self.node_local, False)
 
     def _contract_LP_W_dumb(self, i, LP):
         LP_parts = LP.gather()
