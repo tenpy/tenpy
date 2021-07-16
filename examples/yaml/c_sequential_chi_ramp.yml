@@ -1,0 +1,31 @@
+#!/usr/bin/env -S python -m tenpy 
+
+simulation_class : GroundStateSearch
+
+directory: results
+output_filename : c_sequential_chi_ramp.h5
+
+output_filename_params : 
+    prefix: groundstate
+    parts:
+        model_params.Jz: "Jz_{0:.2f}"
+        # note: chi_max is added automatically!
+    suffix: .h5
+
+model_class :  SpinChain
+model_params :
+    L : 32
+    bc_MPS : finite
+
+initial_state_params:
+    method : lat_product_state
+    product_state : [[up], [down]]
+
+algorithm_class: TwoSiteDMRGEngine
+algorithm_params:
+    trunc_params:
+       chi_max: [50, 100, 200]  # this is a list of the various paramters
+
+sequential:
+    recursive_keys:
+        - algorithm_params.trunc_params.chi_max
