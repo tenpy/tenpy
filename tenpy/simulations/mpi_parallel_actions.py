@@ -10,8 +10,20 @@ except ImportError:
     pass  # error/warning in mpi_parallel.py
 
 
-DONE = None  # sentinel to say that the worker should finishj
+DONE = None  # sentinel to say that the worker should finish
 
+def sum_none(A, B, C):
+    assert C is None    # TODO, why do we need a third argument?
+    if A is not None and B is not None:
+        return A + B
+    elif A is not None:
+        return A
+    elif B is not None:
+        return B
+    else:
+        return None
+
+MPI_SUM_NONE = MPI.Op.Create(sum_none, commute=False)
 
 def run(action, node_local, meta, on_main=None):
     """Special action to call other actions"""
@@ -35,20 +47,25 @@ def distribute_H(node_local, on_main, H):
 def matvec(node_local, on_main, theta, LH_key, RH_key):
     LHeff = node_local.distributed[LH_key]
     RHeff = node_local.distributed[RH_key]
-    worker = node_local.worker
-    if node_local.H.explicit_plus_hc:
-        if worker is None:
-            theta_hc = matvec_hc(LHeff, theta, RHeff)
-        else:
-            res = {}
-            worker.put_task(matvec_hc, LHeff, theta, RHeff, return_dict=res, return_key="theta_hc")
-    theta = matvec_plain(LHeff, theta, RHeff)
-    if node_local.H.explicit_plus_hc:
-        if worker is not None:
-            worker.join_tasks()
-            theta_hc = res['theta_hc']
-        theta = theta + theta_hc
-    return node_local.comm.reduce(theta, op=MPI.SUM)
+    if LHeff is None or RHeff is None:
+        assert LHeff is RHeff
+        theta = None
+    else:
+        worker = node_local.worker
+        if node_local.H.explicit_plus_hc:
+            if worker is None:
+                theta_hc = matvec_hc(LHeff, theta, RHeff)
+            else:
+                res = {}
+                worker.put_task(matvec_hc, LHeff, theta, RHeff, return_dict=res, return_key="theta_hc")
+        theta = matvec_plain(LHeff, theta, RHeff)
+        if node_local.H.explicit_plus_hc:
+            if worker is not None:
+                worker.join_tasks()
+                theta_hc = res['theta_hc']
+            theta = theta + theta_hc
+    #return node_local.comm.reduce(theta, op=MPI.SUM)
+    return node_local.comm.reduce(theta, op=MPI_SUM_NONE)
 
 
 def matvec_plain(LHeff, theta, RHeff):
@@ -71,10 +88,14 @@ def matvec_hc(LHeff, theta, RHeff):
 def effh_to_matrix(node_local, on_main, LH_key, RH_key):
     LHeff = node_local.distributed[LH_key]
     RHeff = node_local.distributed[RH_key]
-    contr = npc.tensordot(LHeff, RHeff, axes=['wR', 'wL'])
-    contr = contr.combine_legs([['(vR*.p0)', '(p1.vL*)'], ['(vR.p0*)', '(p1*.vL)']],
+    if LHeff is not None and RHeff is not None:
+        contr = npc.tensordot(LHeff, RHeff, axes=['wR', 'wL'])
+        contr = contr.combine_legs([['(vR*.p0)', '(p1.vL*)'], ['(vR.p0*)', '(p1*.vL)']],
                                 qconj=[+1, -1])
-    return node_local.comm.reduce(contr, op=MPI.SUM)
+    else:
+        contr = None
+    #return node_local.comm.reduce(contr, op=MPI.SUM)
+    return node_local.comm.reduce(contr, op=MPI_SUM_NONE)
 
 
 def scatter_distr_array(node_local, on_main, key, in_cache):
@@ -94,7 +115,7 @@ def attach_LP_to_W(node_local, on_main, i, old_key, new_key):
     comm = node_local.comm
     my_env = node_local.cache[old_key]
     received_env = None
-    Lheff = None
+    LHeff = None
     rank = comm.rank
     L = node_local.H.L
 
@@ -105,36 +126,36 @@ def attach_LP_to_W(node_local, on_main, i, old_key, new_key):
         for order in my_commands:
             if order[0] == 'self_contract':
                 Wb = npc.tensordot(my_env, node_local.W_blocks[i % L][comm.rank][comm.rank], ['wR', 'wL']).replace_labels(['p', 'p*'], ['p0', 'p0*'])
-                if Lheff is None:
-                    Lheff = Wb
+                if LHeff is None:
+                    LHeff = Wb
                 else:
-                    Lheff += Wb
+                    LHeff += Wb
             elif order[0] == 'recv':
                 src, tag = order[1], order[2]
                 received_env = comm.recv(src, tag)
                 Wb = npc.tensordot(received_env, node_local.W_blocks[i % L][src][comm.rank], ['wR', 'wL']).replace_labels(['p', 'p*'], ['p0', 'p0*'])
-                if Lheff is None:
-                    Lheff = Wb
+                if LHeff is None:
+                    LHeff = Wb
                 else:
-                    Lheff += Wb
+                    LHeff += Wb
             elif order[0] == 'send':
                 dest, tag = order[1], order[2]
                 comm.send(my_env, dest, tag)
             else:
-                raiseValueError('Unexpected order for Lheff contraction.')
+                raiseValueError('Unexpected order for LHeff contraction.')
         comm.Barrier()  # Synchronize nodes after each cycle. # TODO is barrier necessary? Probs not since calls are blocking.
 
-    if Lheff is not None:
-        pipeL = block.make_pipe(['vR*', 'p0'], qconj=+1)
-        Lheff = Lheff.combine_legs([['vR*', 'p0'], ['vR', 'p0*']], pipes=[pipeL, pipeL.conj()], new_axes=[0, 2]) # vR*.p, wR, vR.p*
-    node_local.distributed[new_key] = Lheff
+    assert LHeff is not None
+    pipeL = block.make_pipe(['vR*', 'p0'], qconj=+1)
+    LHeff = LHeff.combine_legs([['vR*', 'p0'], ['vR', 'p0*']], pipes=[pipeL, pipeL.conj()], new_axes=[0, 2]) # vR*.p, wR, vR.p*
+    node_local.distributed[new_key] = LHeff
 
 def attach_W_to_RP(node_local, on_main, i, old_key, new_key):
     assert on_main is None
     comm = node_local.comm
     my_env = node_local.cache[old_key]
     received_env = None
-    Rheff = None
+    RHeff = None
     rank = comm.rank
     L = node_local.H.L
 
@@ -145,69 +166,74 @@ def attach_W_to_RP(node_local, on_main, i, old_key, new_key):
         for order in my_commands:
             if order[0] == 'self_contract':
                 Wb = npc.tensordot(node_local.W_blocks[i % L][comm.rank][comm.rank], my_env, ['wR', 'wL']).replace_labels(['p', 'p*'], ['p1', 'p1*'])
-                if Rheff is None:
-                    Rheff = Wb
+                if RHeff is None:
+                    RHeff = Wb
                 else:
-                    Rheff += Wb
+                    RHeff += Wb
             elif order[0] == 'recv':
                 src, tag = order[1], order[2]
                 received_env = comm.recv(src, tag)
                 Wb = npc.tensordot(node_local.W_blocks[i % L][comm.rank][src], received_env, ['wR', 'wL']).replace_labels(['p', 'p*'], ['p1', 'p1*'])
-                if Rheff is None:
-                    Rheff = Wb
+                if RHeff is None:
+                    RHeff = Wb
                 else:
-                    Rheff += Wb
+                    RHeff += Wb
             elif order[0] == 'send':
                 dest, tag = order[1], order[2]
                 comm.send(my_env, dest, tag)
             else:
-                raiseValueError('Unexpected order for Rheff contraction.')
+                raiseValueError('Unexpected order for RHeff contraction.')
         comm.Barrier()  # Synchronize nodes after each cycle.
-
-    if Rheff is not None:
-        pipeR = Rheff.make_pipe(['p1', 'vL*'], qconj=-1)
-        #  for Left: pipeL = block.make_pipe(['vR*', 'p'], qconj=+1)
-        Rheff = Rheff.combine_legs([['p1', 'vL*'], ['p1*', 'vL']], pipes=[pipeR, pipeR.conj()], new_axes=[2, 1])
-    node_local.distributed[new_key] = Rheff
+    assert RHeff is not None
+    pipeR = RHeff.make_pipe(['p1', 'vL*'], qconj=-1)
+    RHeff = RHeff.combine_legs([['p1', 'vL*'], ['p1*', 'vL']], pipes=[pipeR, pipeR.conj()], new_axes=[2, 1])
+    node_local.distributed[new_key] = RHeff
 
 def attach_B(node_local, on_main, old_key, new_key, B):
     local_part = node_local.distributed[old_key]
+    if local_part is not None:
     #B = B.combine_legs(['p1', 'vR'], pipes=local_part.get_leg('(p1.vL*)'))
-    local_part = npc.tensordot(B, local_part, axes=['(p1.vR)', '(p1*.vL)'])
-    local_part = npc.tensordot(B.conj(), local_part, axes=['(p1*.vR*)', '(p1.vL*)'])
+        local_part = npc.tensordot(B, local_part, axes=['(p1.vR)', '(p1*.vL)'])
+        local_part = npc.tensordot(B.conj(), local_part, axes=['(p1*.vR*)', '(p1.vL*)'])
     node_local.cache[new_key] = local_part
 
 
 def attach_A(node_local, on_main, old_key, new_key, A):
     local_part = node_local.distributed[old_key]
+    if local_part is not None:
     #A = A.combine_legs(['vL', 'p0'], pipes=local_part.get_leg('(vR*.p0)'))
-    local_part = npc.tensordot(A, local_part, axes=['(vL.p0)', '(vR.p0*)'])
-    local_part = npc.tensordot(A.conj(), local_part, axes=['(vL*.p0*)', '(vR*.p0)'])
+        local_part = npc.tensordot(A, local_part, axes=['(vL.p0)', '(vR.p0*)'])
+        local_part = npc.tensordot(A.conj(), local_part, axes=['(vL*.p0*)', '(vR*.p0)'])
     node_local.cache[new_key] = local_part
 
 
 def full_contraction(node_local, on_main, case, LP_key, LP_ic, RP_key, RP_ic, theta):
     LP = node_local.cache[LP_key] if LP_ic else node_local.distributed[LP_key]
     RP = node_local.cache[RP_key] if RP_ic else node_local.distributed[RP_key]
-    if case == 0b11:
-        if isinstance(theta, npc.Array):
-            LP = npc.tensordot(LP, theta, axes=['vR', 'vL'])
-            LP = npc.tensordot(theta.conj(), LP, axes=['vL*', 'vR*'])
-        else:
-            S = theta  # S is real, so no conj() needed
-            LP = LP.scale_axis(S, 'vR').scale_axis(S, 'vR*')
-    elif case == 0b10:
-        RP = npc.tensordot(theta, RP, axes=['(p1.vR)', '(p1*.vL)'])
-        RP = npc.tensordot(RP, theta.conj(), axes=['(p1.vL*)', '(p1*.vR*)'])
-    elif case == 0b01:
-        LP = npc.tensordot(LP, theta, axes=['(vR.p0*)', '(vL.p0)'])
-        LP = npc.tensordot(theta.conj(), LP, axes=['(vL*.p0*)', '(vR*.p0)'])
+    full_contr = None
+    if LP is None or RP is None:
+        assert LP is RP
     else:
-        assert False
-    full_contr = npc.inner(LP, RP, [['vR*', 'wR', 'vR'], ['vL*', 'wL', 'vL']], do_conj=False)
-    if node_local.H.explicit_plus_hc:
-        full_contr = full_contr + full_contr.conj()
-    return node_local.comm.reduce(full_contr, op=MPI.SUM)
+        if case == 0b11:
+            if isinstance(theta, npc.Array):
+                LP = npc.tensordot(LP, theta, axes=['vR', 'vL'])
+                LP = npc.tensordot(theta.conj(), LP, axes=['vL*', 'vR*'])
+            else:
+                S = theta  # S is real, so no conj() needed
+                LP = LP.scale_axis(S, 'vR').scale_axis(S, 'vR*')
+        elif case == 0b10:
+            RP = npc.tensordot(theta, RP, axes=['(p1.vR)', '(p1*.vL)'])
+            RP = npc.tensordot(RP, theta.conj(), axes=['(p1.vL*)', '(p1*.vR*)'])
+        elif case == 0b01:
+            LP = npc.tensordot(LP, theta, axes=['(vR.p0*)', '(vL.p0)'])
+            LP = npc.tensordot(theta.conj(), LP, axes=['(vL*.p0*)', '(vR*.p0)'])
+        else:
+            assert False
+        full_contr = npc.inner(LP, RP, [['vR*', 'wR', 'vR'], ['vL*', 'wL', 'vL']], do_conj=False)
+        if node_local.H.explicit_plus_hc:
+            full_contr = full_contr + full_contr.conj()
+    #return node_local.comm.reduce(full_contr, op=MPI.SUM)
+    return node_local.comm.reduce(full_contr, op=MPI_SUM_NONE)
 
 
 def mix_rho(node_local, on_main, theta, i0, amplitude, update_LP, update_RP, LH_key, RH_key):

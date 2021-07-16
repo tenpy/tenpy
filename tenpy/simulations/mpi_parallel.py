@@ -41,7 +41,7 @@ __all__ = [
     'ParallelPlusHcNpcLinearOperator', 'ParallelTwoSiteDMRG', 'ParallelDMRGSim'
 ]
 
-
+"""
 def split_MPO_leg(leg, N_nodes):
     ''' Split MPO leg indices as evenly as possible amongst N_nodes nodes.'''
     # TODO: make this more clever
@@ -52,7 +52,24 @@ def split_MPO_leg(leg, N_nodes):
         proj[(D*i)//N_nodes: (D*(i+1))// N_nodes] = True
         res.append(proj)
     return res
+"""
 
+def split_MPO_leg(leg, N_nodes):
+    ''' Split MPO leg indices as evenly as possible amongst N_nodes nodes. Ensure that lower
+    numbered legs have legs.'''
+    # TODO: make this more clever
+    D = leg.ind_len
+    remaining = D
+    running = 0
+    res = []
+    for i in range(N_nodes):
+        proj = np.zeros(D, dtype=bool)
+        assigned = int(np.ceil(remaining / (N_nodes - i)))
+        proj[running: running + assigned] = True
+        res.append(proj)
+        remaining -= assigned
+        running += assigned
+    return res
 
 def index_in_blocks(block_projs, index):
     if index is None:
@@ -330,6 +347,8 @@ class ParallelMPOEnvironment(MPOEnvironment):
         return self._contract_W_RP_row_sparse(i, RP) if not dumb else self._contract_W_RP_dumb(i, RP)
 
     def _contract_LP_W_row_sparse(self, i, LP):
+        action.run(action.effh_to_matrix, self.LHeff.node_local,
+                   (self.LHeff.key, self.RHeff.key))
         raise NotImplementedError()
 
     def _contract_W_RP_row_sparse(self, i, RP):
@@ -350,10 +369,10 @@ class ParallelMPOEnvironment(MPOEnvironment):
                     block = Wb
                 else:
                     block = block + Wb
-            assert block is not None        # I think this will be an issue for finite DMRG and many nodes.
+            if block is not None:        # I think this will be an issue for finite DMRG and many nodes.
             #pipeR = block.make_pipe(['p', 'vL*'], qconj=-1)
-            pipeL = block.make_pipe(['vR*', 'p0'], qconj=+1)
-            block = block.combine_legs([['vR*', 'p0'], ['vR', 'p0*']], pipes=[pipeL, pipeL.conj()], new_axes=[0, 2]) # vR*.p, wR, vR.p*
+                pipeL = block.make_pipe(['vR*', 'p0'], qconj=+1)
+                block = block.combine_legs([['vR*', 'p0'], ['vR', 'p0*']], pipes=[pipeL, pipeL.conj()], new_axes=[0, 2]) # vR*.p, wR, vR.p*
             LP_W.append(block)
         return DistributedArray.from_scatter(LP_W, self.node_local, "LP_W", False)
 
@@ -371,10 +390,9 @@ class ParallelMPOEnvironment(MPOEnvironment):
                     block = Wb
                 else:
                     block = block + Wb
-            assert block is not None        # I think this will be an issue for finite DMRG and many nodes.
-            pipeR = block.make_pipe(['p1', 'vL*'], qconj=-1)
-            #  for Left: pipeL = block.make_pipe(['vR*', 'p'], qconj=+1)
-            block = block.combine_legs([['p1', 'vL*'], ['p1*', 'vL']], pipes=[pipeR, pipeR.conj()], new_axes=[2, 1])
+            if block is not None:        # I think this will be an issue for finite DMRG and many nodes.
+                pipeR = block.make_pipe(['p1', 'vL*'], qconj=-1)
+                block = block.combine_legs([['p1', 'vL*'], ['p1*', 'vL']], pipes=[pipeR, pipeR.conj()], new_axes=[2, 1])
             W_RP.append(block)
         return DistributedArray.from_scatter(W_RP, self.node_local, "W_RP", False)
 
@@ -527,16 +545,19 @@ class NodeLocalData:
                     row.append(Wblock)
                 blocks.append(row)
                 site_jobs.append(row_jobs)
+                '''
                 if all([b is None for b in row]):
+                    print('EMPTY ROW')
                     print(row)
                     print(W.to_ndarray())
                     print(projs_L, projs_R)
                     #  assert False
+                '''
             self.jobs.append(site_jobs)
             self.W_blocks.append(blocks)
 
-        print(self.jobs[0])
-        print(action.reverse_interactions(self.jobs[0]))
+        #print(self.jobs[0])
+        #print(action.reverse_interactions(self.jobs[0]))
         #exit(0)
 class ParallelDMRGSim(GroundStateSearch):
 
