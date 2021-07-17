@@ -253,12 +253,15 @@ def mix_rho(node_local, on_main, theta, i0, amplitude, update_LP, update_RP, LH_
     # TODO: optimize to minimize transpose
     if update_LP:
         LHeff = node_local.distributed[LH_key]
-        rho_L = npc.tensordot(LHeff, theta, axes=['(vR.p0*)', '(vL.p0)'])
-        rho_L.ireplace_label('(vR*.p0)', '(vL.p0)')
-        rho_L_c = rho_L.conj()
-        rho_L.iscale_axis(mix_L, 'wR')
-        rho_L = npc.tensordot(rho_L, rho_L_c, axes=[['wR', '(p1.vR)'], ['wR*', '(p1*.vR*)']])
-        rho_L = comm.reduce(rho_L, op=MPI.SUM)
+        if LHeff is None:
+            rho_L = None
+        else:
+            rho_L = npc.tensordot(LHeff, theta, axes=['(vR.p0*)', '(vL.p0)'])
+            rho_L.ireplace_label('(vR*.p0)', '(vL.p0)')
+            rho_L_c = rho_L.conj()
+            rho_L.iscale_axis(mix_L, 'wR')
+            rho_L = npc.tensordot(rho_L, rho_L_c, axes=[['wR', '(p1.vR)'], ['wR*', '(p1*.vR*)']])
+        rho_L = comm.reduce(rho_L, op=MPI_SUM_NONE)
         if comm.rank == 0:
             if node_local.H.explicit_plus_hc:
                 rho_L = rho_L + rho_L.conj().itranspose()
@@ -271,12 +274,15 @@ def mix_rho(node_local, on_main, theta, i0, amplitude, update_LP, update_RP, LH_
 
     if update_RP:
         RHeff = node_local.distributed[RH_key]
-        rho_R = npc.tensordot(theta, RHeff, axes=['(p1.vR)', '(p1*.vL)'])
-        rho_R.ireplace_label('(p1.vL*)', '(p1.vR)')
-        rho_R_c = rho_R.conj()
-        rho_R.iscale_axis(mix_R, 'wL')
-        rho_R = npc.tensordot(rho_R, rho_R_c, axes=[['(vL.p0)', 'wL'], ['(vL*.p0*)', 'wL*']])
-        rho_R = comm.reduce(rho_R, op=MPI.SUM)
+        if RHeff is None:
+            rho_R = None
+        else:
+            rho_R = npc.tensordot(theta, RHeff, axes=['(p1.vR)', '(p1*.vL)'])
+            rho_R.ireplace_label('(p1.vL*)', '(p1.vR)')
+            rho_R_c = rho_R.conj()
+            rho_R.iscale_axis(mix_R, 'wL')
+            rho_R = npc.tensordot(rho_R, rho_R_c, axes=[['(vL.p0)', 'wL'], ['(vL*.p0*)', 'wL*']])
+        rho_R = comm.reduce(rho_R, op=MPI_SUM_NONE)
         if comm.rank == 0:
             if node_local.H.explicit_plus_hc:
                 rho_R = rho_R + rho_R.conj().itranspose()
