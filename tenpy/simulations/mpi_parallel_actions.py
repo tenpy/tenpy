@@ -12,18 +12,16 @@ except ImportError:
 
 DONE = None  # sentinel to say that the worker should finish
 
-def sum_none(A, B, C):
-    assert C is None    # TODO, why do we need a third argument?
-    if A is not None and B is not None:
-        return A + B
-    elif A is not None:
-        return A
-    elif B is not None:
+def sum_none(A, B, _=None):
+    assert _ is None  # konly needed for compatiblity with mpi4py
+    if A is None:
         return B
-    else:
-        return None
+    if B is None:
+        return A
+    return A + B
 
-MPI_SUM_NONE = MPI.Op.Create(sum_none, commute=False)
+MPI_SUM_NONE = MPI.Op.Create(sum_none, commute=True)
+
 
 def run(action, node_local, meta, on_main=None):
     """Special action to call other actions"""
@@ -64,7 +62,6 @@ def matvec(node_local, on_main, theta, LH_key, RH_key):
                 worker.join_tasks()
                 theta_hc = res['theta_hc']
             theta = theta + theta_hc
-    #return node_local.comm.reduce(theta, op=MPI.SUM)
     return node_local.comm.reduce(theta, op=MPI_SUM_NONE)
 
 
@@ -91,10 +88,9 @@ def effh_to_matrix(node_local, on_main, LH_key, RH_key):
     if LHeff is not None and RHeff is not None:
         contr = npc.tensordot(LHeff, RHeff, axes=['wR', 'wL'])
         contr = contr.combine_legs([['(vR*.p0)', '(p1.vL*)'], ['(vR.p0*)', '(p1*.vL)']],
-                                qconj=[+1, -1])
+                                   qconj=[+1, -1])
     else:
         contr = None
-    #return node_local.comm.reduce(contr, op=MPI.SUM)
     return node_local.comm.reduce(contr, op=MPI_SUM_NONE)
 
 
@@ -110,84 +106,116 @@ def gather_distr_array(node_local, on_main, key, in_cache):
     local_part = node_local.cache[key] if in_cache else node_local.distributed[key]
     return node_local.comm.gather(local_part)
 
-def attach_LP_to_W(node_local, on_main, i, old_key, new_key):
+
+def sparse_comm_schedule(W_block, on_node=None):
+    """Find schedule for multiplying W_block with RP.
+
+    Returns
+    -------
+    schedule : list of list of (int, int)
+    """
+    N = len(W_block)  # number of nodes
+    nonzero_inds = [[c for c, W in enumerate(row) if W is not None] for row in W_block]
+    schedule = []
+    while any(len(inds) > 0 for inds in nonzero_inds):
+        comms = [] # (dest, source)
+        # which node needs to communicate with whom this round?
+        # try to balance sends/recieves on each node with greedy minimization
+        comms_on_node = np.zeros(N, int)
+        for dest, needs_from in enumerate(nonzero_inds):
+            if len(needs_from) == 0:
+                continue
+            i = np.argmin([comms_on_node[i] for i in needs_from])
+            source = needs_from.pop(i)
+            if dest != source:
+                comms_on_node[dest] += 1
+                comms_on_node[source] += 1
+            comms.append((dest, source))
+        # now sort those communications such that they can happen in parallel as much as possible
+        # for example [(0, 1), (1, 2), (2, 3), (3, 0)] => [(0, 1), (2, 3), (1, 2), (3, 0)]
+        comms_sorted = []
+        delay_on_node = np.zeros(N, int)
+        while comms:
+            delay = [max(delay_on_node[t], delay_on_node[s]) for (t, s) in comms]
+            i = np.argmin(delay)
+            t, s = comms.pop(i)
+            if t != s:
+                delay_on_node[t] = delay_on_node[s] = delay[i] + 1
+            comms_sorted.append((t, s))
+        if on_node is not None:
+            comms_sorted = [(t, s) for (t, s) in comms_sorted if t == on_node or s == on_node]
+        schedule.append(comms_sorted)
+    return schedule
+
+
+def contract_LP_W_sparse(node_local, on_main, i, old_key, new_key):
     assert on_main is None
     comm = node_local.comm
-    my_env = node_local.cache[old_key]
-    received_env = None
+    my_LP = node_local.cache[old_key]
     LHeff = None
     rank = comm.rank
-    L = node_local.H.L
-
-    interactions = reverse_interactions(node_local.jobs[i % L])
-    commands = generate_instructions(interactions, comm.size)
-    for cycle in commands:
-        my_commands = cycle[rank]
-        for order in my_commands:
-            if order[0] == 'self_contract':
-                Wb = npc.tensordot(my_env, node_local.W_blocks[i % L][comm.rank][comm.rank], ['wR', 'wL']).replace_labels(['p', 'p*'], ['p0', 'p0*'])
-                if LHeff is None:
-                    LHeff = Wb
+    i = i % node_local.H.L
+    W = node_local.W_blocks[i]
+    for cycle in node_local.sparse_comm_schedule[i][0]:
+        received_LP = None
+        # first communicate everything
+        for dest, source in cycle:
+            tag = dest * 10000 + source
+            if dest == rank:
+                assert received_LP is None  # shouldn't receive 2 envs per cycle
+                if source == rank:
+                    received_LP = my_LP  # no communication necessary
                 else:
-                    LHeff += Wb
-            elif order[0] == 'recv':
-                src, tag = order[1], order[2]
-                received_env = comm.recv(source=src, tag=tag)
-                Wb = npc.tensordot(received_env, node_local.W_blocks[i % L][src][comm.rank], ['wR', 'wL']).replace_labels(['p', 'p*'], ['p0', 'p0*'])
-                if LHeff is None:
-                    LHeff = Wb
-                else:
-                    LHeff += Wb
-            elif order[0] == 'send':
-                dest, tag = order[1], order[2]
-                comm.send(my_env, dest=dest, tag=tag)
+                    received_LP = comm.recv(source=source, tag=tag)
+                Wb = W[source][dest].replace_labels(['p', 'p*'], ['p0', 'p0*'])
+            elif source == rank:
+                comm.send(my_LP, dest=dest, tag=tag)
             else:
-                raiseValueError('Unexpected order for LHeff contraction.')
-        comm.Barrier()  # Synchronize nodes after each cycle. # TODO is barrier necessary? Probs not since calls are blocking.
-
+                assert False, f"Invalid cycle on node {rank:d}: {cycle!r}"
+        # now every node (which has work left) received one part
+        if received_LP is not None:
+            LHeff = sum_none(LHeff, npc.tensordot(received_LP, Wb, ['wR', 'wL']))
+        comm.Barrier()  # TODO: probably not needed?
     if LHeff is not None:
         pipeL = LHeff.make_pipe(['vR*', 'p0'], qconj=+1)
         LHeff = LHeff.combine_legs([['vR*', 'p0'], ['vR', 'p0*']], pipes=[pipeL, pipeL.conj()], new_axes=[0, 2]) # vR*.p, wR, vR.p*
     node_local.distributed[new_key] = LHeff
 
-def attach_W_to_RP(node_local, on_main, i, old_key, new_key):
+
+def contract_W_RP_sparse(node_local, on_main, i, old_key, new_key):
     assert on_main is None
     comm = node_local.comm
-    my_env = node_local.cache[old_key]
-    received_env = None
+    my_RP = node_local.cache[old_key]
     RHeff = None
     rank = comm.rank
-    L = node_local.H.L
-
-    interactions = node_local.jobs[i % L]
-    commands = generate_instructions(interactions, comm.size)
-    for cycle in commands:
-        my_commands = cycle[rank]
-        for order in my_commands:
-            if order[0] == 'self_contract':
-                Wb = npc.tensordot(node_local.W_blocks[i % L][comm.rank][comm.rank], my_env, ['wR', 'wL']).replace_labels(['p', 'p*'], ['p1', 'p1*'])
-                if RHeff is None:
-                    RHeff = Wb
+    i = i % node_local.H.L
+    W = node_local.W_blocks[i]
+    for cycle in node_local.sparse_comm_schedule[i][1]:
+        received_RP = None
+        # first communicate everything
+        for dest, source in cycle:
+            tag = dest * 10000 + source
+            if dest == rank:
+                assert received_RP is None  # shouldn't receive 2 envs per cycle
+                if source == rank:
+                    received_RP = my_RP  # no communication necessary
                 else:
-                    RHeff += Wb
-            elif order[0] == 'recv':
-                src, tag = order[1], order[2]
-                received_env = comm.recv(source=src, tag=tag)
-                Wb = npc.tensordot(node_local.W_blocks[i % L][comm.rank][src], received_env, ['wR', 'wL']).replace_labels(['p', 'p*'], ['p1', 'p1*'])
-                if RHeff is None:
-                    RHeff = Wb
-                else:
-                    RHeff += Wb
-            elif order[0] == 'send':
-                dest, tag = order[1], order[2]
-                comm.send(my_env, dest=dest, tag=tag)
+                    received_RP = comm.recv(source=source, tag=tag)
+                Wb = W[dest][source].replace_labels(['p', 'p*'], ['p1', 'p1*'])
+            elif source == rank:
+                comm.send(my_RP, dest=dest, tag=tag)
             else:
-                raiseValueError('Unexpected order for RHeff contraction.')
-        comm.Barrier()  # Synchronize nodes after each cycle.
+                assert False, f"Invalid cycle on node {rank:d}: {cycle!r}"
+        # now every node (which has work left) received one part
+        if received_RP is not None:
+            RHeff = sum_none(RHeff, npc.tensordot(Wb, received_RP, ['wR', 'wL']))
+        comm.Barrier()  # TODO: probably not needed?
     if RHeff is not None:
+        # TODO: is it faster to combine legs before addition?
         pipeR = RHeff.make_pipe(['p1', 'vL*'], qconj=-1)
         RHeff = RHeff.combine_legs([['p1', 'vL*'], ['p1*', 'vL']], pipes=[pipeR, pipeR.conj()], new_axes=[2, 1])
     node_local.distributed[new_key] = RHeff
+
 
 def attach_B(node_local, on_main, old_key, new_key, B):
     local_part = node_local.distributed[old_key]
@@ -210,8 +238,8 @@ def attach_A(node_local, on_main, old_key, new_key, A):
 def full_contraction(node_local, on_main, case, LP_key, LP_ic, RP_key, RP_ic, theta):
     LP = node_local.cache[LP_key] if LP_ic else node_local.distributed[LP_key]
     RP = node_local.cache[RP_key] if RP_ic else node_local.distributed[RP_key]
-    full_contr = None
     if LP is None or RP is None:
+        full_contr = None
         assert LP is RP
     else:
         if case == 0b11:
@@ -232,7 +260,6 @@ def full_contraction(node_local, on_main, case, LP_key, LP_ic, RP_key, RP_ic, th
         full_contr = npc.inner(LP, RP, [['vR*', 'wR', 'vR'], ['vL*', 'wL', 'vL']], do_conj=False)
         if node_local.H.explicit_plus_hc:
             full_contr = full_contr + full_contr.conj()
-    #return node_local.comm.reduce(full_contr, op=MPI.SUM)
     return node_local.comm.reduce(full_contr, op=MPI_SUM_NONE)
 
 
@@ -304,6 +331,7 @@ def cache_del(node_local, on_main, *keys):
     for key in keys:
         del node_local.cache[key]
 
+
 def reverse_interactions(interactions):
     """
     interactions will be a list of lists, with the sublists containing tuples (i,j) such that node i
@@ -331,7 +359,7 @@ def generate_instructions(interactions, Nnodes):
     instructions = []
     interactions = copy.deepcopy(interactions)
     def len_list_list(list_list):
-        return np.sum([len(x) for x in list_list])
+        return sum(len(x) for x in list_list)
 
     while len_list_list(interactions):
         send = []

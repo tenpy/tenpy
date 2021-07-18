@@ -41,25 +41,16 @@ __all__ = [
     'ParallelPlusHcNpcLinearOperator', 'ParallelTwoSiteDMRG', 'ParallelDMRGSim'
 ]
 
-DUMB=False      # Flag to choose between dumb (single node) contraction
-                # to Effective environments or row sparse parallel version.
+#: flag to select contraction method for attaching W to LP/RP, which requires much communication
+CONTRACT_W = "sparse"
+EPSILON = 1.e-14
 
-"""
-def split_MPO_leg(leg, N_nodes):
-    ''' Split MPO leg indices as evenly as possible amongst N_nodes nodes.'''
-    # TODO: make this more clever
-    D = leg.ind_len
-    res = []
-    for i in range(N_nodes):
-        proj = np.zeros(D, dtype=bool)
-        proj[(D*i)//N_nodes: (D*(i+1))// N_nodes] = True
-        res.append(proj)
-    return res
-"""
 
 def split_MPO_leg(leg, N_nodes):
-    ''' Split MPO leg indices as evenly as possible amongst N_nodes nodes. Ensure that lower
-    numbered legs have legs.'''
+    """Split MPO leg indices as evenly as possible amongst N_nodes nodes.
+
+    Ensure that lower numbered legs have legs.
+    """
     # TODO: make this more clever
     D = leg.ind_len
     remaining = D
@@ -72,7 +63,9 @@ def split_MPO_leg(leg, N_nodes):
         res.append(proj)
         remaining -= assigned
         running += assigned
+    assert running == D
     return res
+
 
 def index_in_blocks(block_projs, index):
     if index is None:
@@ -96,15 +89,16 @@ class ParallelTwoSiteH(TwoSiteH):
         # 'wL', 'wR', 'p1', 'p1*'
         self.dtype = env.H.dtype
         self.combine = combine
-        self.N = (self.LP.local_part.get_leg('vR').ind_len * self.W0.get_leg('p0').ind_len *
-                  self.W1.get_leg('p1').ind_len * self.RP.local_part.get_leg('vL').ind_len)
+        if self.LP.local_part is not None and self.RP.local_part is not None:
+            self.N = (self.LP.local_part.get_leg('vR').ind_len * self.W0.get_leg('p0').ind_len *
+                      self.W1.get_leg('p1').ind_len * self.RP.local_part.get_leg('vL').ind_len)
         self.combine_Heff(i0, env)
         env._eff_H = self # HACK to give env.full_contraction access to LHeff, RHeff, i0
 
     def combine_Heff(self, i0, env):
-        self.LHeff = env._contract_LP_W(i0, self.LP, dumb=DUMB)
+        self.LHeff = env._contract_LP_W(i0, self.LP)
         self.pipeL = self.LHeff.local_part.get_leg('(vR*.p0)')
-        self.RHeff = env._contract_W_RP(i0+1, self.RP, dumb=DUMB)
+        self.RHeff = env._contract_W_RP(i0+1, self.RP)
         self.pipeR = self.RHeff.local_part.get_leg('(p1.vL*)')
         self.acts_on = ['(vL.p0)', '(p1.vR)']
 
@@ -183,14 +177,11 @@ class DistributedArray:
 
 
 class ParallelMPOEnvironment(MPOEnvironment):
-    """
+    """MPOEnvironment where each node only has its fraction of the MPO wL/wR legs.
 
-    The environment is completely distributed over the different nodes; each node only has its
-    fraction of the MPO wL/wR legs.
     Only the main node initializes this class.
-    :meth:`get_RP` and :meth:`set_RP` return/expect a :class:`DistributedArray` representing the
-    and saves instances of :class:`DistributedArray`
-    the other nodes save stuff in their :class:`NodeLocalData`.
+    The other nodes save tensors in their :class:`NodeLocalData`.
+    :meth:`get_RP` and :meth:`set_RP` return/expect a :class:`DistributedArray`.
     """
     def __init__(self, node_local, bra, H, ket, cache=None, **init_env_data):
         self.node_local = node_local
@@ -250,6 +241,8 @@ class ParallelMPOEnvironment(MPOEnvironment):
             for p in proj:
                 LP_part = LP.copy()
                 LP_part.iproject(p, axes='wR')
+                if LP_part.norm() < EPSILON:
+                    LP_part = None
                 splits.append(LP_part)
             LP = DistributedArray.from_scatter(splits, self.node_local, self._LP_keys[i], True)
             # from_scatter already puts local part in cache
@@ -262,11 +255,13 @@ class ParallelMPOEnvironment(MPOEnvironment):
         i = self._to_valid_index(i)
         if not isinstance(RP, DistributedArray): # This should only happen upon initialization
             # during __init__: `RP` is what's loaded/generated from `init_RP`
-            proj = self.node_local.projs_L[(i+1) % len(self.node_local.projs_L)] # At site i + 1, how the left MPO leg is split, which is the right MPO leg of site i.
+            proj = self.node_local.projs_L[(i+1) % len(self.node_local.projs_L)]
             splits = []
             for p in proj:
                 RP_part = RP.copy()
                 RP_part.iproject(p, axes='wL')
+                if RP_part.norm() < EPSILON:
+                    RP_part = None
                 splits.append(RP_part)
             RP = DistributedArray.from_scatter(splits, self.node_local, self._RP_keys[i], True)
             # from_scatter already puts local part in cache
@@ -328,76 +323,73 @@ class ParallelMPOEnvironment(MPOEnvironment):
 
     def _contract_LP(self, i, LP):
         """Now also immediately save LP"""
-        #          site i0
+        #          site i
         #  .-        .-         .- A--
         #  |         |  |       |  |
         #  LP-   ->  LP-W- ->   LP-W--
         #  |         |  |       |  |
         #  .-        .-         .- A*-
         assert isinstance(LP, DistributedArray)
-        LP_W =  self._contract_LP_W(i, LP, dumb=DUMB)
+        LP_W =  self._contract_LP_W(i, LP)
         return self._attach_A_to_LP_W(i, LP_W)
 
     def _contract_RP(self, i, RP):
         assert isinstance(RP, DistributedArray)
-        W_RP =  self._contract_W_RP(i, RP, dumb=DUMB)
+        W_RP =  self._contract_W_RP(i, RP)
         return self._attach_B_to_W_RP(i, W_RP)
 
-    def _contract_LP_W(self, i, LP, dumb=False):
-        return self._contract_LP_W_row_sparse(i, LP) if not dumb else self._contract_LP_W_dumb(i, LP)
+    if CONTRACT_W == "sparse":
+        def _contract_LP_W(self, i, LP):
+            action.run(action.contract_LP_W_sparse, self.node_local, (i, LP.key, "LP_W"), None)
+            return DistributedArray("LP_W", self.node_local, False)
 
-    def _contract_W_RP(self, i, RP, dumb=False):
-        return self._contract_W_RP_row_sparse(i, RP) if not dumb else self._contract_W_RP_dumb(i, RP)
+        def _contract_W_RP(self, i, RP):
+            action.run(action.contract_W_RP_sparse, self.node_local, (i, RP.key, "W_RP"), None)
+            return DistributedArray("W_RP", self.node_local, False)
 
-    def _contract_LP_W_row_sparse(self, i, LP):
-        action.run(action.attach_LP_to_W, self.node_local, (i, LP.key, "LP_W"), None)
-        return DistributedArray("LP_W", self.node_local, False)
+    elif CONTRACT_W == "dumb":
+        def _contract_LP_W(self, i, LP):
+            LP_parts = LP.gather()
+            W_block = self.node_local.W_blocks[i % self.L] # Get blocks of W[i], the MPO tensor at site i.
+            W_block_T = transpose_list_list(W_block)
+            LP_W = []
+            for b_R, col in enumerate(W_block_T):
+                block = None  # contraction of W_RP in row i
+                for b_L, W in enumerate(col):
+                    if W is None:
+                        continue
+                    Wb = npc.tensordot(LP_parts[b_L], W, ['wR', 'wL']).replace_labels(['p', 'p*'], ['p0', 'p0*'])
+                    if block is None:
+                        block = Wb
+                    else:
+                        block = block + Wb
+                if block is not None:    # I think this will be an issue for finite DMRG and many nodes.  # TODO: is this fixed?
+                    pipeL = block.make_pipe(['vR*', 'p0'], qconj=+1)
+                    block = block.combine_legs([['vR*', 'p0'], ['vR', 'p0*']], pipes=[pipeL, pipeL.conj()], new_axes=[0, 2]) # vR*.p, wR, vR.p*
+                LP_W.append(block)
+            return DistributedArray.from_scatter(LP_W, self.node_local, "LP_W", False)
 
-    def _contract_W_RP_row_sparse(self, i, RP):
-        action.run(action.attach_W_to_RP, self.node_local, (i, RP.key, "W_RP"), None)
-        return DistributedArray("W_RP", self.node_local, False)
-
-    def _contract_LP_W_dumb(self, i, LP):
-        LP_parts = LP.gather()
-        W_block = self.node_local.W_blocks[i % self.L] # Get blocks of W[i], the MPO tensor at site i.
-        W_block_T = transpose_list_list(W_block)
-        LP_W = []
-        for b_R, col in enumerate(W_block_T):
-            block = None  # contraction of W_RP in row i
-            for b_L, W in enumerate(col):
-                if W is None:
-                    continue
-                Wb = npc.tensordot(LP_parts[b_L], W, ['wR', 'wL']).replace_labels(['p', 'p*'], ['p0', 'p0*'])
-                if block is None:
-                    block = Wb
-                else:
-                    block = block + Wb
-            if block is not None:        # I think this will be an issue for finite DMRG and many nodes.
-            #pipeR = block.make_pipe(['p', 'vL*'], qconj=-1)
-                pipeL = block.make_pipe(['vR*', 'p0'], qconj=+1)
-                block = block.combine_legs([['vR*', 'p0'], ['vR', 'p0*']], pipes=[pipeL, pipeL.conj()], new_axes=[0, 2]) # vR*.p, wR, vR.p*
-            LP_W.append(block)
-        return DistributedArray.from_scatter(LP_W, self.node_local, "LP_W", False)
-
-    def _contract_W_RP_dumb(self, i, RP):
-        RP_parts = RP.gather()
-        W_block = self.node_local.W_blocks[i % self.L]
-        W_RP = []
-        for b_L, row in enumerate(W_block):
-            block = None  # contraction of W_RP in row i
-            for b_R, W in enumerate(row):
-                if W is None:
-                    continue
-                Wb = npc.tensordot(W, RP_parts[b_R], ['wR', 'wL']).replace_labels(['p', 'p*'], ['p1', 'p1*'])
-                if block is None:
-                    block = Wb
-                else:
-                    block = block + Wb
-            if block is not None:        # I think this will be an issue for finite DMRG and many nodes.
-                pipeR = block.make_pipe(['p1', 'vL*'], qconj=-1)
-                block = block.combine_legs([['p1', 'vL*'], ['p1*', 'vL']], pipes=[pipeR, pipeR.conj()], new_axes=[2, 1])
-            W_RP.append(block)
-        return DistributedArray.from_scatter(W_RP, self.node_local, "W_RP", False)
+        def _contract_W_RP(self, i, RP):
+            RP_parts = RP.gather()
+            W_block = self.node_local.W_blocks[i % self.L]
+            W_RP = []
+            for b_L, row in enumerate(W_block):
+                block = None  # contraction of W_RP in row i
+                for b_R, W in enumerate(row):
+                    if W is None:
+                        continue
+                    Wb = npc.tensordot(W, RP_parts[b_R], ['wR', 'wL']).replace_labels(['p', 'p*'], ['p1', 'p1*'])
+                    if block is None:
+                        block = Wb
+                    else:
+                        block = block + Wb
+                if block is not None:        # I think this will be an issue for finite DMRG and many nodes.  # TODO ?
+                    pipeR = block.make_pipe(['p1', 'vL*'], qconj=-1)
+                    block = block.combine_legs([['p1', 'vL*'], ['p1*', 'vL']], pipes=[pipeR, pipeR.conj()], new_axes=[2, 1])
+                W_RP.append(block)
+            return DistributedArray.from_scatter(W_RP, self.node_local, "W_RP", False)
+    else:
+        raise ValueError("invalid CONTRACT_W = " + repr(CONTRACT_W))
 
     def _attach_A_to_LP_W(self, i, LP_W, A=None):
         comm = self.node_local.comm
@@ -451,9 +443,7 @@ class ParallelMPOEnvironment(MPOEnvironment):
         action.run(action.cache_optimize, self.node_local, (short_term_keys, preload))
 
 
-
 class ParallelDensityMatrixMixer(DensityMatrixMixer):
-    # TODO: merge updated TeNPy such that this works!
     def mix_rho(self, engine, theta, i0, update_LP, update_RP):
         assert update_LP or update_RP
         LHeff = engine.eff_H.LHeff
@@ -505,6 +495,30 @@ class ParallelTwoSiteDMRG(TwoSiteDMRGEngine):
 
 
 class NodeLocalData:
+    """Data local to each node.
+
+    Attributes
+    ----------
+    comm : MPI_Comm
+        MPI Communicator.
+    cache : :class:`~tenpy.tools.cache.DictCache`
+        Local cache exclusive to the node.
+    distributed : dict
+        Additional node-local "cache" for things to be kept in RAM only.
+    projs : list of list of numpy arrays
+        For each MPO bond (index `i` left of site `i`) the projection arrays splitting the leg
+        over the different nodes.
+    IdLR_blocks : list of tuple of tuple
+        For each bond the MPO the :meth:`index_in_blocks` of `IdL`, `IdR`.
+    local_MPO_chi : list of int
+        Local part of the MPO bond dimension on each bond.
+    W_blocks : list of list of list of {None, Array}
+        For each site the matrix W split by node blocks, with `None` enties for zero blocks.
+    sparse_comm_schedule : list of (schedule_L, schedule_R)
+        For each site the :func:`~tenpy.simulations.mpi_parallel_actions.sparse_comm_schedule`
+        for attaching ``W_blocks[i]`` to the neighboring LP/RP.
+        See e.g., :func:`~tenpy.simulations.mpi_parallel_actions.contract_W_RP_sparse`.
+    """
     def __init__(self, comm, cache):
         self.comm = comm
         i = comm.rank
@@ -514,54 +528,43 @@ class NodeLocalData:
     def add_H(self, H):
         self.H = H
         N = self.comm.size
-        self.W_blocks = []  # index: site
-        self.projs_L = []   # index: bond s.t. projs_L[i] is on bond left of site i
-        self.IdLR_blocks = []   # index: bond left of site i
-        self.local_MPO_chi = [] # index: bond left of site i
-        self.jobs = []      # For eash site, list of list of tuples (i,j) such that
-        # node i must receive environment j when attaching W tensor to right environment.
-
-        for i in range(H.L):
-            W = H.get_W(i).copy()
-            projs = split_MPO_leg(W.get_leg('wL'), N)
+        self.W_blocks = []
+        self.projs_L = []
+        self.IdLR_blocks = []
+        self.local_MPO_chi = []
+        self.sparse_comm_schedule = []
+        for bond in range(H.L if not H.finite else H.L + 1):
+            if bond != H.L:
+                leg = H.get_W(bond).get_leg('wL')
+            else:
+                leg = H.get_W(H.L - 1).get_leg('wR')
+            projs = split_MPO_leg(leg, N)
             self.projs_L.append(projs)
             self.local_MPO_chi.append(np.sum(projs[self.comm.rank]))
-            IdL, IdR = H.IdL[i], H.IdR[i]
+            IdL, IdR = H.IdL[bond], H.IdR[bond]
             IdLR = (index_in_blocks(projs, IdL), index_in_blocks(projs, IdR))
             self.IdLR_blocks.append(IdLR)
         for i in range(H.L):
-            W = H.get_W(i).copy()
+            W = H.get_W(i)
             projs_L = self.projs_L[i]
             projs_R = self.projs_L[(i+1) % H.L]
             blocks = []
-            site_jobs = []
             for b_L in range(N):
                 row = []
-                row_jobs = []
                 for b_R in range(N):
                     Wblock = W.copy()
                     Wblock.iproject([projs_L[b_L], projs_R[b_R]], ['wL', 'wR'])
-                    if Wblock.norm() < 1.e-14:
+                    if Wblock.norm() < EPSILON:
                         Wblock = None
-                    else:       # MPO block is not None, so we must do something with it.
-                        row_jobs.append((b_L, b_R))
                     row.append(Wblock)
+                # note: for (MPO bond dim) < N (which is legit for finite at the boundaries),
+                # some rows/columns of Wblock can be all None.
                 blocks.append(row)
-                site_jobs.append(row_jobs)
-                '''
-                if all([b is None for b in row]):
-                    print('EMPTY ROW')
-                    print(row)
-                    print(W.to_ndarray())
-                    print(projs_L, projs_R)
-                    #  assert False
-                '''
-            self.jobs.append(site_jobs)
             self.W_blocks.append(blocks)
+            schedule_RP = action.sparse_comm_schedule(blocks, self.comm.rank)
+            schedule_LP = action.sparse_comm_schedule(transpose_list_list(blocks), self.comm.rank)
+            self.sparse_comm_schedule.append((schedule_LP, schedule_RP))
 
-        #print(self.jobs[0])
-        #print(action.reverse_interactions(self.jobs[0]))
-        #exit(0)
 class ParallelDMRGSim(GroundStateSearch):
 
     default_algorithm = "ParallelTwoSiteDMRG"
@@ -576,7 +579,7 @@ class ParallelDMRGSim(GroundStateSearch):
             super().__init__(options, **kwargs)
         else:
             # don't __init__() to avoid locking other files
-            # TODO: how to safely log? should replica create a separate log file?
+            # consequence: logging doesn't work on replicas; fall back to print if necessary!
             self.options = options  # don't convert to options to avoid unused warnings
             # but allow to use context __enter__ and __exit__ to initialize cache
             self.cache = CacheFile.open()
