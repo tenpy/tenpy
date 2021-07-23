@@ -537,7 +537,6 @@ class Sweep(Algorithm):
         ----------
         **update_data :
             Whatever is returned by :meth:`update_local`.
-            Can be used to optimized
         """
         i_L, i_R = self._update_env_inds()  # left and right updated sites
         all_envs = self._all_envs
@@ -633,7 +632,7 @@ class EffectiveH(NpcLinearOperator):
     env : :class:`~tenpy.networks.mpo.MPOEnvironment`
         Environment for contraction ``<psi|H|psi>``.
     i0 : int
-        Index of the active site if length=1, or of the left-most active site if length>1.
+        Index of left-most site it acts on.
     combine : bool, optional
         Whether to combine legs into pipes as far as possible. This reduces the overhead of
         calculating charge combinations in the contractions.
@@ -644,6 +643,8 @@ class EffectiveH(NpcLinearOperator):
     ----------
     length : int
         Number of (MPS) sites the effective hamiltonian covers. NB: Class attribute.
+    i0 : int
+        Index of left-most site it acts on.
     dtype : np.dtype
         The data type of the involved arrays.
     N : int
@@ -762,6 +763,7 @@ class OneSiteH(EffectiveH):
     acts_on = ['vL', 'p0', 'vR']
 
     def __init__(self, env, i0, combine=False, move_right=True):
+        self.i0 = i0
         self.LP = env.get_LP(i0)
         self.RP = env.get_RP(i0)
         self.W0 = env.H.get_W(i0).replace_labels(['p', 'p*'], ['p0', 'p0*'])
@@ -771,7 +773,7 @@ class OneSiteH(EffectiveH):
         self.N = (self.LP.get_leg('vR').ind_len * self.W0.get_leg('p0').ind_len *
                   self.RP.get_leg('vL').ind_len)
         if combine:
-            self.combine_Heff()
+            self.combine_Heff(env)
 
     def matvec(self, theta):
         """Apply the effective Hamiltonian to `theta`.
@@ -807,25 +809,24 @@ class OneSiteH(EffectiveH):
         theta.itranspose(labels)  # if necessary, transpose
         return theta
 
-    def combine_Heff(self):
+    def combine_Heff(self, env):
         """Combine LP and RP with W to form LHeff and RHeff, depending on the direction.
 
         In a move to the right, we need LHeff. In a move to the left, we need RHeff. Both contain
         the same W.
+
+        Parameters
+        ----------
+        env : :class:`~tenpy.networks.mpo.MPOEnvironment`
+            Environment for contraction ``<psi|H|psi>``.
         """
         if self.move_right:
-            LHeff = npc.tensordot(self.LP, self.W0, axes=['wR', 'wL'])
-            self.pipeL = pipeL = LHeff.make_pipe(['vR*', 'p0'], qconj=+1)
-            self.LHeff = LHeff.combine_legs([['vR*', 'p0'], ['vR', 'p0*']],
-                                            pipes=[pipeL, pipeL.conj()],
-                                            new_axes=[0, 2])
+            self.LHeff = env._contract_LHeff(self.i0, 'p0')
+            self.pipeL = self.LHeff.get_leg('(vR*.p0)')
             self.acts_on = ['(vL.p0)', 'vR']
         else:
-            RHeff = npc.tensordot(self.W0, self.RP, axes=['wR', 'wL'])
-            self.pipeR = pipeR = RHeff.make_pipe(['p0', 'vL*'], qconj=-1)
-            self.RHeff = RHeff.combine_legs([['p0', 'vL*'], ['p0*', 'vL']],
-                                            pipes=[pipeR, pipeR.conj()],
-                                            new_axes=[2, 0])
+            self.RHeff = env._contract_RHeff(self.i0, 'p0')
+            self.pipeR = self.RHeff.get_leg('(p0.vL*)')
             self.acts_on = ['vL', '(p0.vR)']
 
     def combine_theta(self, theta):
@@ -883,18 +884,18 @@ class OneSiteH(EffectiveH):
 
     def update_LP(self, env, i, U=None):
         if self.combine and self.move_right:
-            # i = i0 + 1
-            LP = npc.tensordot(self.LHeff, U, axes=['(vR.p0*)', '(vL.p0)'])
-            LP = npc.tensordot(U.conj(), LP, axes=['(vL*.p0*)', '(vR*.p0)'])
+            assert i == self.i0 + 1 # TODO: hit this in single-site?!?
+            LP = npc.tensordot(self.LHeff, U, axes=['(vR.p0*)', '(vL.p)'])
+            LP = npc.tensordot(U.conj(), LP, axes=['(vL*.p*)', '(vR*.p0)'])
             env.set_LP(i, LP, age=env.get_LP_age(i - 1) + 1)
         else:
             env.get_LP(i, store=True)
 
     def update_RP(self, env, i, VH=None):
         if self.combine and not self.move_right:
-            # i = i0 - 1
-            RP = npc.tensordot(VH, self.RHeff, axes=['(p0.vR)', '(p0*.vL)'])
-            RP = npc.tensordot(RP, VH.conj(), axes=['(p0.vL*)', '(p0*.vR*)'])
+            assert i == self.i0 - 1
+            RP = npc.tensordot(VH, self.RHeff, axes=['(p.vR)', '(p0*.vL)'])
+            RP = npc.tensordot(RP, VH.conj(), axes=['(p0.vL*)', '(p*.vR*)'])
             env.set_RP(i, RP, age=env.get_RP_age(i + 1) + 1)
         else:
             env.get_RP(i, store=True)
@@ -919,7 +920,7 @@ class TwoSiteH(EffectiveH):
     env : :class:`~tenpy.networks.mpo.MPOEnvironment`
         Environment for contraction ``<psi|H|psi>``.
     i0 : int
-        Index of the active site if length=1, or of the left-most active site if length>1.
+        Left-most site of the MPS it acts on.
     combine : bool
         Whether to combine legs into pipes. This combines the virtual and
         physical leg for the left site (when moving right) or right side (when moving left)
@@ -931,6 +932,8 @@ class TwoSiteH(EffectiveH):
 
     Attributes
     ----------
+    i0 : int
+        Left-most site of the MPS it acts on.
     combine : bool
         Whether to combine legs into pipes. This combines the virtual and
         physical leg for the left site and right site into pipes. This reduces
@@ -954,6 +957,7 @@ class TwoSiteH(EffectiveH):
     acts_on = ['vL', 'p0', 'p1', 'vR']
 
     def __init__(self, env, i0, combine=False, move_right=True):
+        self.i0 = i0
         self.LP = env.get_LP(i0)
         self.RP = env.get_RP(i0 + 1)
         self.W0 = env.H.get_W(i0).replace_labels(['p', 'p*'], ['p0', 'p0*'])
@@ -965,7 +969,7 @@ class TwoSiteH(EffectiveH):
         self.N = (self.LP.get_leg('vR').ind_len * self.W0.get_leg('p0').ind_len *
                   self.W1.get_leg('p1').ind_len * self.RP.get_leg('vL').ind_len)
         if combine:
-            self.combine_Heff()
+            self.combine_Heff(env)
 
     def matvec(self, theta):
         """Apply the effective Hamiltonian to `theta`.
@@ -995,7 +999,7 @@ class TwoSiteH(EffectiveH):
         # This is where we would truncate. Separate mode from combine?
         return theta
 
-    def combine_Heff(self, left=True, right=True):
+    def combine_Heff(self, env, left=True, right=True):
         """Combine LP and RP with W to form LHeff and RHeff.
 
         Combine LP with W0 and RP with W1 to get the effective parts of the Hamiltonian with piped
@@ -1003,23 +1007,19 @@ class TwoSiteH(EffectiveH):
 
         Parameters
         ----------
+        env : :class:`~tenpy.networks.mpo.MPOEnvironment`
+            Environment for contraction ``<psi|H|psi>``.
         left, right : bool
             The mixer might need only one of LHeff/RHeff after the Lanczos optimization even for
             `combine=True`.
             These flags allow to calculate them specifically.
         """
         if left:
-            LHeff = npc.tensordot(self.LP, self.W0, axes=['wR', 'wL'])
-            self.pipeL = pipeL = LHeff.make_pipe(['vR*', 'p0'], qconj=+1)
-            self.LHeff = LHeff.combine_legs([['vR*', 'p0'], ['vR', 'p0*']],
-                                            pipes=[pipeL, pipeL.conj()],
-                                            new_axes=[0, 2])
+            self.LHeff = env._contract_LHeff(self.i0, 'p0')
+            self.pipeL = self.LHeff.get_leg('(vR*.p0)')
         if right:
-            RHeff = npc.tensordot(self.RP, self.W1, axes=['wL', 'wR'])
-            self.pipeR = pipeR = RHeff.make_pipe(['p1', 'vL*'], qconj=-1)
-            self.RHeff = RHeff.combine_legs([['p1', 'vL*'], ['p1*', 'vL']],
-                                            pipes=[pipeR, pipeR.conj()],
-                                            new_axes=[2, 1])
+            self.RHeff = env._contract_RHeff(self.i0 + 1, 'p1')
+            self.pipeR = self.RHeff.get_leg('(p1.vL*)')
         self.acts_on = ['(vL.p0)', '(p1.vR)']  # overwrites class attribute!
 
     def combine_theta(self, theta):
@@ -1072,19 +1072,19 @@ class TwoSiteH(EffectiveH):
         return adj
 
     def update_LP(self, env, i, U=None):
-        # i == i0 + 1
         if self.combine:
-            LP = npc.tensordot(self.LHeff, U, axes=['(vR.p0*)', '(vL.p0)'])
-            LP = npc.tensordot(U.conj(), LP, axes=['(vL*.p0*)', '(vR*.p0)'])
+            assert i == self.i0 + 1
+            LP = npc.tensordot(self.LHeff, U, axes=['(vR.p0*)', '(vL.p)'])
+            LP = npc.tensordot(U.conj(), LP, axes=['(vL*.p*)', '(vR*.p0)'])
             env.set_LP(i, LP, age=env.get_LP_age(i - 1) + 1)
         else:
             env.get_LP(i, store=True)
 
     def update_RP(self, env, i, VH=None):
-        # i = i0
         if self.combine:
-            RP = npc.tensordot(VH, self.RHeff, axes=['(p1.vR)', '(p1*.vL)'])
-            RP = npc.tensordot(RP, VH.conj(), axes=['(p1.vL*)', '(p1*.vR*)'])
+            assert i == self.i0
+            RP = npc.tensordot(VH, self.RHeff, axes=['(p.vR)', '(p1*.vL)'])
+            RP = npc.tensordot(RP, VH.conj(), axes=['(p1.vL*)', '(p*.vR*)'])
             env.set_RP(i, RP, age=env.get_RP_age(i + 1) + 1)
         else:
             env.get_RP(i, store=True)
@@ -1219,8 +1219,10 @@ class VariationalCompression(Sweep):
                                                inner_labels=['vR', 'vL'])
         self.renormalize.append(renormalize)
         # TODO: up to the `renormalize`, we could use `new_psi.set_svd_theta`.
-        B0 = U.split_legs(['(vL.p0)']).replace_label('p0', 'p')
-        B1 = VH.split_legs(['(p1.vR)']).replace_label('p1', 'p')
+        U.ireplace_label('(vL.p0)', '(vL.p)')
+        VH.ireplace_label('(p1.vR)', '(p.vR)')
+        B0 = U.split_legs(['(vL.p)'])
+        B1 = VH.split_legs(['(p.vR)'])
         new_psi.set_B(i0, B0, form='A')  # left-canonical
         new_psi.set_B(i0 + 1, B1, form='B')  # right-canonical
         new_psi.set_SR(i0, S)

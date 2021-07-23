@@ -17,6 +17,8 @@ Backwards incompatible changes
 - deprecated options:
   - `sweep_0` for sweep classes; use `sweeps` in the `resume_data` instead.
 - Require context-manager-style setup for Simulation classes.
+- Replace the `SingleSiteMixer` and `TwoSiteMixer` with the :class:`~tenpy.algorithms.dmrg.SubspaceExpansion`; major
+  rewriting of the mixer code.
 
 
 Added

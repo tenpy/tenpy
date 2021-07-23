@@ -358,7 +358,7 @@ class MPO:
 
         May be ``None``.
         """
-        i = self._to_valid_index(i)
+        i = self._to_valid_index(i, bond=True)
         return self.IdL[i]
 
     def get_IdR(self, i):
@@ -366,7 +366,7 @@ class MPO:
 
         May be ``None``.
         """
-        i = self._to_valid_index(i)
+        i = self._to_valid_index(i, bond=True)
         return self.IdR[i + 1]
 
     def enlarge_mps_unit_cell(self, factor=2):
@@ -1047,13 +1047,13 @@ class MPO:
         # where the legs are trivial - otherwise it would give 0 or even raise an error!
         return npc.trace(singlesitempo.get_W(0), axes=[['wL'], ['wR']])
 
-    def _to_valid_index(self, i):
+    def _to_valid_index(self, i, bond=False):
         """Make sure `i` is a valid index (depending on `self.bc`)."""
         if not self.finite:
             return i % self.L
         if i < 0:
             i += self.L
-        if i >= self.L or i < 0:
+        if i >= self.L + int(bond) or i < 0:
             raise KeyError("i = {0:d} out of bounds for finite MPO".format(i))
         return i
 
@@ -2031,6 +2031,29 @@ class MPOEnvironment(MPSEnvironment):
         # for a ususal MPS, axes = (['p', 'vL*'], ['p*', 'vR*'])
         RP = npc.tensordot(RP, self.bra.get_B(i, form='B').conj(), axes=axes)
         return RP  # labels 'vL', 'wL', 'vL*'
+
+    def _contract_LHeff(self, i, label_p='p0', pipe=None):
+        LP = self.get_LP(i)
+        p, ps = label_p, label_p + '*'
+        W = self.H.get_W(i).replace_labels(['p', 'p*'], [p, ps])
+        LHeff = npc.tensordot(LP, W, axes=['wR', 'wL'])
+        if pipe is None:
+            pipe = LHeff.make_pipe(['vR*', p], qconj=+1)
+
+        LHeff = LHeff.combine_legs([['vR*', p], ['vR', ps]], pipes=[pipe, pipe.conj()],
+                                   new_axes=[0, 2])
+        return LHeff
+
+    def _contract_RHeff(self, i, label_p='p1', pipe=None):
+        RP = self.get_RP(i)
+        p, ps = label_p, label_p + '*'
+        W = self.H.get_W(i).replace_labels(['p', 'p*'], [p, ps])
+        RHeff = npc.tensordot(W, RP, axes=['wR', 'wL'])
+        if pipe is None:
+            pipe = RHeff.make_pipe([p, 'vL*'], qconj=-1)
+        RHeff = RHeff.combine_legs([[p, 'vL*'], [ps, 'vL']], pipes=[pipe, pipe.conj()],
+                                   new_axes=[2, 1])
+        return RHeff
 
 
 class MPOTransferMatrix:
