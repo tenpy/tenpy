@@ -1996,12 +1996,18 @@ class MPOEnvironment(MPSEnvironment):
             LP = self._contract_LP(i0, LP)
         else:
             LP = self.get_LP(i0 + 1, store=False)
-        # multiply with `S`: a bit of a hack: use 'private' MPS._scale_axis_B
+
+        # multiply with `S` on bra and ket side
         S_bra = self.bra.get_SR(i0).conj()
-        LP = self.bra._scale_axis_B(LP, S_bra, form_diff=1., axis_B='vR*', cutoff=0.)
-        # cutoff is not used for form_diff = 1
+        if isinstance(S_bra, npc.Array):
+            LP = npc.tensordot(S_bra, LP, axes=['vL*', 'vR*'])
+        else:
+            LP = LP.scale_axis(S_bra, 'vR*')
         S_ket = self.ket.get_SR(i0)
-        LP = self.bra._scale_axis_B(LP, S_ket, form_diff=1., axis_B='vR', cutoff=0.)
+        if isinstance(S_ket, npc.Array):
+            LP = npc.tensordot(LP, S_ket, axes=['vR', 'vL'])
+        else:
+            LP = LP.scale_axis(S_ket, 'vR')
         RP = self.get_RP(i0, store=False)
         res = npc.inner(LP, RP, axes=[['vR*', 'wR', 'vR'], ['vL*', 'wL', 'vL']], do_conj=False)
         if self.H.explicit_plus_hc:

@@ -1306,9 +1306,6 @@ class DMRGEngine(Sweep):
                     Mixer_class = find_subclass(Mixer, Mixer_class)
             mixer_params = self.options.subconfig('mixer_params')
             self.mixer = Mixer_class(mixer_params)
-            if self.n_optimize == 2 and self.mixer.update_sites == 1:
-                # note: SingleSiteDMRG supports mixer.update_sites == 2
-                raise ValueError("Two-site DMRG does not support mixer with update_sites=1")
             self.S_inv_cutoff = 1.e-8
 
     def mixer_cleanup(self):
@@ -1443,21 +1440,21 @@ class TwoSiteDMRGEngine(DMRGEngine):
             The truncation error introduced.
         """
         i0 = self.i0
-        # get qtotal_LR from i0
-        if self.mixer is None:
+        update_LP, update_RP = self.update_LP_RP
+        mixer = self.mixer
+        if mixer is None:
             # simple case: real svd, defined elsewhere.
             qtotal_i0 = self.env.bra.get_B(i0, form=None).qtotal
             U, S, VH, err, _ = svd_theta(theta,
                                          self.trunc_params,
                                          qtotal_LR=[qtotal_i0, None],
                                          inner_labels=['vR', 'vL'])
-        elif self.mixer.update_sites == 2:
-            update_LP, update_RP = self.update_LP_RP
+        elif mixer.update_sites == 2:
             U, S, VH, err = self.mixer.perturb_svd(self, theta, self.i0, update_LP, update_RP)
-        elif self.mixer.update_sites == 1:
+        elif mixer.update_sites == 1:
             if update_LP and update_RP:
                 # sub-space expand left site by treating p1 as part of vR leg
-                theta_L = theta.replace_label('(p1.vR)', 'vR'),
+                theta_L = theta.replace_label('(p1.vR)', 'vR')
                 U, _, _, err_L = mixer.perturb_svd(self, theta_L, self.i0, True)
                 U = U.gauge_total_charge(1, self.psi.get_B(i0, form=None).qtotal)
                 # sub-space expand right site by treating p0 as part of vL leg
@@ -1466,11 +1463,12 @@ class TwoSiteDMRGEngine(DMRGEngine):
                 VH = VH.gauge_total_charge(0, self.psi.get_B(i0 + 1, form=None).qtotal)
                 # calculate S = U^H theta V
                 theta = npc.tensordot(U.conj(), theta, axes=['(vL*.p0*)', '(vL.p0)'])
-                theta = npc.tensordot(theta, VH.conj(), axes=['(p1.vR)', '(p1*.vR*)'])
+                theta = npc.tensordot(theta, VH.conj(), axes=['(p1.vR)', '(p0*.vR*)'])
                 theta.ireplace_labels(['vR*', 'vL*'], ['vL', 'vR'])
                 theta /= np.linalg.norm(npc.svd(theta, compute_uv=False))
                 S = theta
                 err = err_L + err_R
+                VH.ireplace_label('(p0.vR)', '(p1.vR)')
             elif update_LP:
                 # sub-space expand left site by treating p1 as part of vR leg
                 theta.ireplace_label('(p1.vR)', 'vR')
@@ -1483,6 +1481,7 @@ class TwoSiteDMRGEngine(DMRGEngine):
                 U, S, VH, err = mixer.perturb_svd(self, theta, self.i0 + 1, False)
                 # note: U not isometry, but we don't update_LP
                 U.ireplace_label('vL', '(vL.p0)')
+                VH.ireplace_label('(p0.vR)', '(p1.vR)')
             else:
                 assert False
         else:
@@ -1691,24 +1690,32 @@ class SingleSiteDMRGEngine(DMRGEngine):
                 # note: if update_RP, the `next_B` is a right-canonical B from the MPS.
                 # Hence we *did* a subspace expansion on it, during the update when we put it
                 # into the MPS.
-                VH.iscale_axis(S, 'vL')
-                S, VH = VH, next_B
+                if isinstance(S, npc.Array):
+                    S = npc.tensordot(S, VH, ['vR', 'vL'])
+                else:
+                    S = VH.iscale_axis(S, 'vL')
+                VH = next_B
                 U.ireplace_label('(vL.p0)', '(vL.p)')
             else:
-                U.iscale_axis(S, 'vR')
-                U, S = next_A, U
+                if isinstance(S, npc.Array):
+                    S = npc.tensordot(U, S, ['vR', 'vL'])
+                else:
+                    S = U.iscale_axis(S, 'vR')
+                U = next_A
                 VH.ireplace_label('(p0.vR)', '(p.vR)')
         elif mixer.update_sites == 2:
             # two-site mixer -> just use two-site theta
             if self.move_right:
                 next_B.ireplace_label('(p.vR)', '(p1.vR)')
                 theta = npc.tensordot(theta, next_B, axes=['vR', 'vL'])
+                i0 = self.i0
             else:
-                next_B.ireplace_label('(vL.p)', '(vL.p0)')
+                next_A.ireplace_label('(vL.p)', '(vL.p0)')
                 theta.ireplace_label('(p0.vR)', '(p1.vR)')
-                theta = npc.tensordot(theta, next_B, axes=['vR', 'vL'])
+                theta = npc.tensordot(next_A, theta, axes=['vR', 'vL'])
+                i0 = self.i0 - 1
             # and do usual mixer
-            U, S, VH, err = mixer.perturb_svd(self, theta, self.i0, update_LP, update_RP)
+            U, S, VH, err = mixer.perturb_svd(self, theta, i0, update_LP, update_RP)
             U.ireplace_label('(vL.p0)', '(vL.p)')
             VH.ireplace_label('(p1.vR)', '(p.vR)')
         else:
