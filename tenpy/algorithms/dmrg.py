@@ -48,9 +48,19 @@ from ..tools.process import memory_usage
 from .mps_common import Sweep, OneSiteH, TwoSiteH
 
 __all__ = [
-    'run', 'DMRGEngine', 'SingleSiteDMRGEngine', 'TwoSiteDMRGEngine', 'Mixer', 'SubspaceExpansion',
-    'DensityMatrixMixer', 'chi_list', 'full_diag_effH',
-    'SingleSiteMixer', 'TwoSiteMixer', 'EngineCombine', 'EngineFracture',
+    'run',
+    'DMRGEngine',
+    'SingleSiteDMRGEngine',
+    'TwoSiteDMRGEngine',
+    'Mixer',
+    'SubspaceExpansion',
+    'DensityMatrixMixer',
+    'chi_list',
+    'full_diag_effH',
+    'SingleSiteMixer',
+    'TwoSiteMixer',
+    'EngineCombine',
+    'EngineFracture',
 ]
 
 
@@ -348,9 +358,9 @@ class SubspaceExpansion(Mixer):
                 IdL = 0  # of the new, concatenated leg.
             theta_expand = theta_expand.combine_legs(['wR', 'vR'], qconj=-1)
             U, S, VH, err, _ = svd_theta(theta_expand,
-                                        engine.trunc_params,
-                                        qtotal_LR=[theta.qtotal, None],
-                                        inner_labels=['vR', 'vL'])
+                                         engine.trunc_params,
+                                         qtotal_LR=[theta.qtotal, None],
+                                         inner_labels=['vR', 'vL'])
             VH = VH.split_legs('(wR.vR)')
             VH = VH.take_slice(IdL, 'wR')  # project back such that U-S-VH is original theta
         else:  # move left
@@ -1669,7 +1679,9 @@ class SingleSiteDMRGEngine(DMRGEngine):
 
         if mixer is None:
             qtotal = [theta.qtotal, None] if move_right else [None, theta.qtotal]
-            U, S, VH, err, _ = svd_theta(theta, self.trunc_params, qtotal_LR=qtotal,
+            U, S, VH, err, _ = svd_theta(theta,
+                                         self.trunc_params,
+                                         qtotal_LR=qtotal,
                                          inner_labels=['vR', 'vL'])
             # absorb VH/U into next_B/next_A for right/left move
             if move_right:

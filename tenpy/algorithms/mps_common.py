@@ -884,7 +884,7 @@ class OneSiteH(EffectiveH):
 
     def update_LP(self, env, i, U=None):
         if self.combine and self.move_right:
-            assert i == self.i0 + 1 # TODO: hit this in single-site?!?
+            assert i == self.i0 + 1  # TODO: hit this in single-site?!?
             LP = npc.tensordot(self.LHeff, U, axes=['(vR.p0*)', '(vL.p)'])
             LP = npc.tensordot(U.conj(), LP, axes=['(vL*.p*)', '(vR*.p0)'])
             env.set_LP(i, LP, age=env.get_LP_age(i - 1) + 1)

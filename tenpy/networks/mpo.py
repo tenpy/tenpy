@@ -2046,7 +2046,8 @@ class MPOEnvironment(MPSEnvironment):
         if pipe is None:
             pipe = LHeff.make_pipe(['vR*', p], qconj=+1)
 
-        LHeff = LHeff.combine_legs([['vR*', p], ['vR', ps]], pipes=[pipe, pipe.conj()],
+        LHeff = LHeff.combine_legs([['vR*', p], ['vR', ps]],
+                                   pipes=[pipe, pipe.conj()],
                                    new_axes=[0, 2])
         return LHeff
 
@@ -2057,7 +2058,8 @@ class MPOEnvironment(MPSEnvironment):
         RHeff = npc.tensordot(W, RP, axes=['wR', 'wL'])
         if pipe is None:
             pipe = RHeff.make_pipe([p, 'vL*'], qconj=-1)
-        RHeff = RHeff.combine_legs([[p, 'vL*'], [ps, 'vL']], pipes=[pipe, pipe.conj()],
+        RHeff = RHeff.combine_legs([[p, 'vL*'], [ps, 'vL']],
+                                   pipes=[pipe, pipe.conj()],
                                    new_axes=[2, 1])
         return RHeff
 

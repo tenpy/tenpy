@@ -11,8 +11,9 @@ from ..networks.mps import InitialStateBuilder
 from ..tools.misc import find_subclass
 from ..tools.params import asConfig
 
-__all__ = simulation.__all__ + ['GroundStateSearch', 'OrthogonalExcitations',
-                                'ExcitationInitialState']
+__all__ = simulation.__all__ + [
+    'GroundStateSearch', 'OrthogonalExcitations', 'ExcitationInitialState'
+]
 
 
 class GroundStateSearch(Simulation):
@@ -213,7 +214,7 @@ class OrthogonalExcitations(GroundStateSearch):
             E, psi = self.engine.run()
 
             self.results['excitation_energies'].append(E - ground_state_energy)
-            self.logger.info("excitation energy: %.14f \n%s", E - ground_state_energy, "+"*80)
+            self.logger.info("excitation energy: %.14f \n%s", E - ground_state_energy, "+" * 80)
             if np.linalg.norm(psi.norm_test()) > self.options.get('orthogonal_norm_tol', 1.e-12):
                 psi.canonical_form()
             self.excitations.append(psi)
@@ -280,7 +281,7 @@ class ExcitationInitialState(InitialStateBuilder):
             psi = self.sim.orthogonal_to[0]
         if isinstance(psi, dict):
             psi = psi['ket']
-        psi = psi.copy() # make a copy!
+        psi = psi.copy()  # make a copy!
 
         return self._perturb(psi)
 
