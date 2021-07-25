@@ -1055,12 +1055,12 @@ class SpinHalfSite(Site):
     ============== ====  ============================
     ``'Sz'``       [1]   ``Sx, Sy, Sigmax, Sigmay``
     ``'parity'``   [2]   --
-    ``None``       []    --
+    ``'None'``     []    --
     ============== ====  ============================
 
     Parameters
     ----------
-    conserve : str
+    conserve : str | None
         Defines what is conserved, see table above.
 
     Attributes
@@ -1069,7 +1069,9 @@ class SpinHalfSite(Site):
         Defines what is conserved, see table above.
     """
     def __init__(self, conserve='Sz'):
-        if conserve not in ['Sz', 'parity', None]:
+        if not conserve:
+            conserve = 'None'
+        if conserve not in ['Sz', 'parity', 'None']:
             raise ValueError("invalid `conserve`: " + repr(conserve))
         Sx = [[0., 0.5], [0.5, 0.]]
         Sy = [[0., -0.5j], [+0.5j, 0.]]
@@ -1125,9 +1127,9 @@ class SpinSite(Site):
     ============== ====  ============================
     `conserve`     qmod  *excluded* onsite operators
     ============== ====  ============================
-    ``'Sz'``       [1]   ``Sx, Sy``
+    ``'Sz'``       [1]   ``Sx, Sy, Sigmax, Sigmay``
     ``'parity'``   [2]   --
-    ``None``       []    --
+    ``'None'``     []    --
     ============== ====  ============================
 
     Parameters
@@ -1143,7 +1145,9 @@ class SpinSite(Site):
         Defines what is conserved, see table above.
     """
     def __init__(self, S=0.5, conserve='Sz'):
-        if conserve not in ['Sz', 'parity', None]:
+        if not conserve:
+            conserve = 'None'
+        if conserve not in ['Sz', 'parity', 'None']:
             raise ValueError("invalid `conserve`: " + repr(conserve))
         self.S = S = float(S)
         d = 2 * S + 1
@@ -1218,7 +1222,7 @@ class FermionSite(Site):
     ============== ====  ===============================
     ``'N'``        [1]   --
     ``'parity'``   [2]   --
-    ``None``       []    --
+    ``'None'``     []    --
     ============== ====  ===============================
 
     Parameters
@@ -1236,7 +1240,9 @@ class FermionSite(Site):
         Average filling. Used to define ``dN``.
     """
     def __init__(self, conserve='N', filling=0.5):
-        if conserve not in ['N', 'parity', None]:
+        if not conserve:
+            conserve = 'None'
+        if conserve not in ['N', 'parity', 'None']:
             raise ValueError("invalid `conserve`: " + repr(conserve))
         JW = np.array([[1., 0.], [0., -1.]])
         C = np.array([[0., 1.], [0., 0.]])
@@ -1344,9 +1350,13 @@ class SpinHalfFermionSite(Site):
         Average filling. Used to define ``dN``.
     """
     def __init__(self, cons_N='N', cons_Sz='Sz', filling=1.):
-        if cons_N not in ['N', 'parity', None]:
+        if not cons_N:
+            cons_N = 'None'
+        if cons_N not in ['N', 'parity', 'None']:
             raise ValueError("invalid `cons_N`: " + repr(cons_N))
-        if cons_Sz not in ['Sz', 'parity', None]:
+        if not cons_Sz:
+            cons_Sz = 'None'
+        if cons_Sz not in ['Sz', 'parity', 'None']:
             raise ValueError("invalid `cons_Sz`: " + repr(cons_Sz))
         d = 4
         states = ['empty', 'up', 'down', 'full']
@@ -1465,7 +1475,7 @@ class BosonSite(Site):
     ============== ====  ==================================
     ``'N'``        [1]   --
     ``'parity'``   [2]   --
-    ``None``       []    --
+    ``'None'``     []    --
     ============== ====  ==================================
 
     Parameters
@@ -1486,7 +1496,9 @@ class BosonSite(Site):
         Average filling. Used to define ``dN``.
     """
     def __init__(self, Nmax=1, conserve='N', filling=0.):
-        if conserve not in ['N', 'parity', None]:
+        if not conserve:
+            conserve = 'None'
+        if conserve not in ['N', 'parity', 'None']:
             raise ValueError("invalid `conserve`: " + repr(conserve))
         dim = Nmax + 1
         states = [str(n) for n in range(0, dim)]

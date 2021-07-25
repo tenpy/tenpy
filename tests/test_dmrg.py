@@ -59,10 +59,10 @@ def test_dmrg(bc_MPS, combine, mixer, n, g=1.2):
         },
         'max_E_err': 1.e-12,
         'max_S_err': 1.e-8,
-        'N_sweeps_check': 4,
+        'N_sweeps_check': 4 if bc_MPS == 'infinite' else 1,
         'mixer_params': {
-            'disable_after': 15,
-            'amplitude': 1.e-5
+            'disable_after': 10,
+            'amplitude': 1.e-7,
         },
         'trunc_params': {
             'svd_min': 1.e-10,
@@ -86,9 +86,9 @@ def test_dmrg(bc_MPS, combine, mixer, n, g=1.2):
         ov = npc.inner(psi_ED, ED.mps_to_full(psi), 'range', do_conj=True)
         print("E_DMRG={Edmrg:.14f} vs E_exact={Eex:.14f}".format(Edmrg=res['E'], Eex=E_ED))
         print("compare with ED: overlap = ", abs(ov)**2)
-        assert abs(abs(ov) - 1.) < 1.e-10  # unique groundstate: finite size gap!
+        assert abs(abs(ov) - 1.) < 1.e-8  # unique groundstate: finite size gap!
         var = M.H_MPO.variance(psi)
-        assert var < 1.e-10
+        assert var < 1.e-8
     else:
         # compare exact solution for transverse field Ising model
         Edmrg = res['E']
@@ -160,6 +160,7 @@ def test_dmrg_diag_method(engine, diag_method, tol=1.e-6):
     print("setting diag_method = ", dmrg_pars['diag_method'])
     eng = DMRGEng(psi_Sz_4.copy(), M, dmrg_pars)
     E0, psi0 = eng.run()
+    eng.options['lanczos_params'].touch('P_tol')
     print("E0 = {0:.15f}".format(E0))
     assert abs(E_ED - E0) < tol
     ov = npc.inner(psi_ED, ED.mps_to_full(psi0), 'range', do_conj=True)

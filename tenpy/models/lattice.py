@@ -1862,7 +1862,6 @@ class HelicalLattice(Lattice):
         self.order = self._ordering_helical(order_reg)  # use property setter
         self.test_sanity()
 
-
     # strategy for possible_[multi_]couplings:
     # since everything is translation invariant along the MPS, we can just extract it
     # from the couplings of the larger lattice
