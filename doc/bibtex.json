@@ -39,10 +39,7 @@
             "white2005",
             "hubig2015"
         ],
-        "reference/tenpy.algorithms.dmrg.SingleSiteMixer": [
-            "hubig2015"
-        ],
-        "reference/tenpy.algorithms.dmrg.TwoSiteMixer": [
+        "reference/tenpy.algorithms.dmrg.SubspaceExpansion": [
             "hubig2015"
         ],
         "reference/tenpy.algorithms.mpo_evolution.ExpMPOEvolution": [

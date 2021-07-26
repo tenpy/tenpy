@@ -38,6 +38,16 @@ A bit more elaborate examples from the subfolders in ``examples/*`` are included
     examples/chern_insulators/*
 
 
+YAML config examples
+--------------------
+We also have abunch of example config files that can be used for standard simulations, see :doc:`/intro/simulations`.
+
+.. toctree::
+    :glob:
+
+    examples/yaml/*
+
+
 Jupyter Notebooks
 -----------------
 
