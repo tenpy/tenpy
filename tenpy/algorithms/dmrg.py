@@ -43,6 +43,7 @@ from ..networks.mps import MPSEnvironment
 from ..linalg.lanczos import lanczos, lanczos_arpack
 from .truncation import truncate, svd_theta
 from ..tools.params import asConfig
+from ..tools.math import entropy
 from ..tools.misc import find_subclass
 from ..tools.process import memory_usage
 from .mps_common import Sweep, OneSiteH, TwoSiteH
@@ -198,31 +199,8 @@ class Mixer:
     def perturb_svd(self, engine, theta, i0, update_LP, update_RP):
         """Perturb the wave function and perform an SVD with truncation.
 
-        Parameters
-        ----------
-        engine : :class:`DMRGEngine`
-            The DMRG engine calling the mixer.
-        theta : :class:`~tenpy.linalg.np_conserved.Array`
-            The optimized wave function, prepared for svd.
-        i0 : int
-            Site index; `theta` lives on ``i0:i0+update_sites``.
-            Note that this might be different from the ``engine.eff_H.i0``
-        update_LP : bool
-            Whether to calculate the next ``env.LP[i0+1]``.
-        update_RP : bool
-            Whether to calculate the next ``env.RP[i0]``.
-
-        Returns
-        -------
-        U : :class:`~tenpy.linalg.np_conserved.Array`
-            Left-canonical part of `theta`. Labels ``'(vL.p0)', 'vR'``.
-        S : 1D ndarray | 2D :class:`~tenpy.linalg.np_conserved.Array`
-            Without mixer just the singluar values of the array; with mixer it might be a general
-            matrix; see comment above.
-        VH : :class:`~tenpy.linalg.np_conserved.Array`
-            Right-canonical part of `theta`. Labels ``'vL', '(p1.vR)'``.
-        err : :class:`~tenpy.algorithms.truncation.TruncationError`
-            The truncation error introduced.
+        The call structure is slightly different depending on :attr:`update_sites`;
+        see :meth:`SubspaceExpansion.perturb_svd` and :meth:`DensityMatrixMixer.perturb_svd`.
         """
         raise NotImplementedError("This function should be implemented in derived classes")
 
@@ -327,6 +305,8 @@ class SubspaceExpansion(Mixer):
             (Perturbed) singular values on the new bond.
         err : :class:`~tenpy.algorithms.truncation.TruncationError`
             The truncation error introduced.
+        S_approx : ndarray
+            Same as `S`.
         """
         bond = i0 if move_right else i0 - 1
         mix_L, mix_R, IdL, IdR, explicit_plus_hc = self._mix_LR(engine.env.H, bond, sqrt=True)
@@ -394,7 +374,7 @@ class SubspaceExpansion(Mixer):
                                          inner_labels=['vR', 'vL'])
             U = U.split_legs('(vL.wL)')
             U = U.take_slice(IdR, 'wL')  # project back such that U-S-VH is original theta
-        return U, S, VH, err
+        return U, S, VH, err, S
 
 
 class SingleSiteMixer(SubspaceExpansion):
@@ -492,13 +472,14 @@ class DensityMatrixMixer(Mixer):
         -------
         U : :class:`~tenpy.linalg.np_conserved.Array`
             Left-canonical part of `theta`. Labels ``'(vL.p0)', 'vR'``.
-        S : 1D ndarray | 2D :class:`~tenpy.linalg.np_conserved.Array`
-            Without mixer just the singluar values of the array; with mixer it might be a general
-            matrix; see comment above.
+        S : 2D :class:`~tenpy.linalg.np_conserved.Array`
+            General center matrix such that ``theta = U.S.VH``
         VH : :class:`~tenpy.linalg.np_conserved.Array`
             Right-canonical part of `theta`. Labels ``'vL', '(p1.vR)'``.
         err : :class:`~tenpy.algorithms.truncation.TruncationError`
             The truncation error introduced.
+        S_a : 1D ndarray
+            Approximation of the actual singular values of `theta`.
         """
         rho_L, rho_R = self.mix_rho(engine, theta, i0, update_LP, update_RP)
         return self.svd_from_rho(engine, rho_L, rho_R, theta, i0)
@@ -510,6 +491,11 @@ class DensityMatrixMixer(Mixer):
         just performs an SVD by diagonalizing `rho_L` with U and `rho_R` with `VH` and then
         rewriting `theta == U (U^\dagger theta VH^\dagger VH) = U S V``.
         Since the actual `rho_L` and `rho_R` passed as arguments are perturbed by `mix_rho`
+
+        Returns
+        -------
+        U, S, VH, err, S_a:
+            As defined in :meth:`perturb_svd`.
         """
         rho_L.itranspose(['(vL.p0)', '(vL*.p0*)'])  # just to be sure of the order
         rho_R.itranspose(['(p1.vR)', '(p1*.vR*)'])  # just to be sure of the order
@@ -522,7 +508,8 @@ class DensityMatrixMixer(Mixer):
         U.iset_leg_labels(['(vL.p0)', 'vR'])
         val_L[val_L < 0.] = 0.  # for stability reasons
         val_L /= np.sum(val_L)
-        keep_L, _, err_L = truncate(np.sqrt(val_L), engine.trunc_params)
+        S_a = np.sqrt(val_L)
+        keep_L, _, err_L = truncate(S_a, engine.trunc_params)
         U.iproject(keep_L, axes='vR')  # in place
         U = U.gauge_total_charge(1, engine.psi.get_B(i0, form=None).qtotal)
         # rho_R ~=  theta^T theta^* = V^* S U^T U* S V^T = V^* S S V^T  (for mixer -> 0)
@@ -542,8 +529,9 @@ class DensityMatrixMixer(Mixer):
         theta = npc.tensordot(theta, VH.conj(), axes=['(p1.vR)', '(p1*.vR*)'])  # axes 1, 1
         theta.ireplace_labels(['vR*', 'vL*'], ['vL', 'vR'])
         # normalize `S` (as in svd_theta) to avoid blowing up numbers
-        theta /= np.linalg.norm(npc.svd(theta, compute_uv=False))
-        return U, theta, VH, err_L + err_R
+        theta /= theta.norm()  # norm(singular values) = norm(whole array)
+        S_a = S_a[keep_L]
+        return U, theta, VH, err_L + err_R, S_a
 
     def mix_rho(self, engine, theta, i0, update_LP, update_RP):
         r"""Calculated reduced density matrices of theta with a perturbation by the mixer.
@@ -676,7 +664,9 @@ class DMRGEngine(Sweep):
         ------------- -------------------------------------------------------------------
         E             The energy *before* truncation (as calculated by Lanczos).
         ------------- -------------------------------------------------------------------
-        S             Maximum entanglement entropy.
+        S             Mean entanglement entropy (over bonds).
+        ------------- -------------------------------------------------------------------
+        max_S         Max entanglement entropy (over bonds).
         ------------- -------------------------------------------------------------------
         time          Wallclock time evolved since :attr:`time0` (in seconds).
         ------------- -------------------------------------------------------------------
@@ -688,6 +678,11 @@ class DMRGEngine(Sweep):
         ------------- -------------------------------------------------------------------
         norm_err      Error of canonical form ``np.linalg.norm(psi.norm_test())``.
         ============= ===================================================================
+
+    _entropy_approx : list of {None, 1D array}
+        While the mixer is on, the `S` stored in the MPS is a non-diagonal 2D array.
+        To check convergence, we use the approximate singular values based on which we truncated
+        instead to calculate the entanglement entropy and store it inside this list.
     """
     EffectiveH = None
     DefaultMixer = None
@@ -696,6 +691,7 @@ class DMRGEngine(Sweep):
         options = asConfig(options, self.__class__.__name__)
         self.mixer = None
         self.diag_method = options.get('diag_method', 'default')
+        self._entropy_approx = [None] * psi.L  # always left of a given site
         super().__init__(psi, model, options, **kwargs)
 
     @property
@@ -862,16 +858,12 @@ class DMRGEngine(Sweep):
                 self.environment_sweeps(update_env)
 
             # update values for checking the convergence
-            try:
-                S = self.psi.entanglement_entropy()
-                max_S = max(S)
-                S = np.mean(S)
-                Delta_S = (S - S_old) / N_sweeps_check
-            except ValueError:
-                # with a mixer, psi._S can be 2D arrays s.t. entanglement_entropy() fails
-                S = np.nan
-                max_S = np.nan
-                Delta_S = 0.
+            entropy_bonds = self._entropy_approx
+            if self.finite:
+                entropy_bonds = entropy_bonds[1:]
+            max_S = max(entropy_bonds)
+            S = sum(entropy_bonds) / len(entropy_bonds)  # mean
+            Delta_S = (S - S_old) / N_sweeps_check
             S_old = S
             if not self.finite:  # iDMRG: need energy density
                 Es = self.update_stats['E_total']
@@ -890,6 +882,7 @@ class DMRGEngine(Sweep):
             self.sweep_stats['N_updates'].append(len(self.update_stats['i0']))
             self.sweep_stats['E'].append(E)
             self.sweep_stats['S'].append(S)
+            self.sweep_stats['max_S'].append(max_S)
             self.sweep_stats['time'].append(time.time() - start_time)
             self.sweep_stats['max_trunc_err'].append(max_trunc_err)
             self.sweep_stats['max_E_trunc'].append(max_E_trunc)
@@ -990,6 +983,7 @@ class DMRGEngine(Sweep):
             'N_updates': [],
             'E': [],
             'S': [],
+            'max_S': [],
             'time': [],
             'max_trunc_err': [],
             'max_E_trunc': [],
@@ -1069,7 +1063,8 @@ class DMRGEngine(Sweep):
         else:
             E0, N, ov_change = None, 0, 0.
         theta = self.prepare_svd(theta)
-        U, S, VH, err = self.mixed_svd(theta)
+        U, S, VH, err, S_approx = self.mixed_svd(theta)
+        self._entropy_approx[(i0 + n_opt - 1) % self.psi.L] = entropy(S_approx)
         self.set_B(U, S, VH)
         update_data = {
             'E0': E0,
@@ -1448,6 +1443,9 @@ class TwoSiteDMRGEngine(DMRGEngine):
             Right-canonical part of `theta`. Labels ``'vL', '(p.vR)'``.
         err : :class:`~tenpy.algorithms.truncation.TruncationError`
             The truncation error introduced.
+        S_approx : ndarray
+            Just the `S` if a 1D ndarray, or an approximation of the correct S (which was used for
+            truncation) in case `S` is 2D Array.
         """
         i0 = self.i0
         update_LP, update_RP = self.update_LP_RP
@@ -1459,17 +1457,18 @@ class TwoSiteDMRGEngine(DMRGEngine):
                                          self.trunc_params,
                                          qtotal_LR=[qtotal_i0, None],
                                          inner_labels=['vR', 'vL'])
+            S_a = S
         elif mixer.update_sites == 2:
-            U, S, VH, err = self.mixer.perturb_svd(self, theta, self.i0, update_LP, update_RP)
+            U, S, VH, err, S_a = mixer.perturb_svd(self, theta, self.i0, update_LP, update_RP)
         elif mixer.update_sites == 1:
             if update_LP and update_RP:
                 # sub-space expand left site by treating p1 as part of vR leg
                 theta_L = theta.replace_label('(p1.vR)', 'vR')
-                U, _, _, err_L = mixer.perturb_svd(self, theta_L, self.i0, True)
+                U, _, _, err_L, S_a = mixer.perturb_svd(self, theta_L, self.i0, True)
                 U = U.gauge_total_charge(1, self.psi.get_B(i0, form=None).qtotal)
                 # sub-space expand right site by treating p0 as part of vL leg
                 theta_R = theta.replace_labels(['(vL.p0)', '(p1.vR)'], ['vL', '(p0.vR)'])
-                _, _, VH, err_R = mixer.perturb_svd(self, theta_R, self.i0 + 1, False)
+                _, _, VH, err_R, S_a = mixer.perturb_svd(self, theta_R, self.i0 + 1, False)
                 VH = VH.gauge_total_charge(0, self.psi.get_B(i0 + 1, form=None).qtotal)
                 # calculate S = U^H theta V
                 theta = npc.tensordot(U.conj(), theta, axes=['(vL*.p0*)', '(vL.p0)'])
@@ -1482,13 +1481,13 @@ class TwoSiteDMRGEngine(DMRGEngine):
             elif update_LP:
                 # sub-space expand left site by treating p1 as part of vR leg
                 theta.ireplace_label('(p1.vR)', 'vR')
-                U, S, VH, err = mixer.perturb_svd(self, theta, self.i0, True)
+                U, S, VH, err, S_a = mixer.perturb_svd(self, theta, self.i0, True)
                 # note: VH is not isometry, but we don't update_RP
                 VH.ireplace_label('vR', '(p1.vR)')
             elif update_RP:
                 # sub-space expand right site by treating p0 as part of vL leg
                 theta.ireplace_labels(['(vL.p0)', '(p1.vR)'], ['vL', '(p0.vR)'])
-                U, S, VH, err = mixer.perturb_svd(self, theta, self.i0 + 1, False)
+                U, S, VH, err, S_a = mixer.perturb_svd(self, theta, self.i0 + 1, False)
                 # note: U not isometry, but we don't update_LP
                 U.ireplace_label('vL', '(vL.p0)')
                 VH.ireplace_label('(p0.vR)', '(p1.vR)')
@@ -1498,7 +1497,7 @@ class TwoSiteDMRGEngine(DMRGEngine):
             assert False, "mixer acting on wired number of sites"
         U.ireplace_label('(vL.p0)', '(vL.p)')
         VH.ireplace_label('(p1.vR)', '(p.vR)')
-        return U, S, VH, err
+        return U, S, VH, err, S_a
 
     def set_B(self, U, S, VH):
         """Update the MPS with the ``U, S, VH`` returned by `self.mixed_svd`.
@@ -1660,6 +1659,9 @@ class SingleSiteDMRGEngine(DMRGEngine):
             Right-canonical part of `theta`. Labels ``'vL', '(p.vR)'``.
         err : :class:`~tenpy.algorithms.truncation.TruncationError`
             The truncation error introduced.
+        S_approx : ndarray
+            Just the `S` if a 1D ndarray, or an approximation of the correct S (which was used for
+            truncation) in case `S` is 2D Array.
         """
         mixer = self.mixer
         move_right = self.move_right
@@ -1683,6 +1685,7 @@ class SingleSiteDMRGEngine(DMRGEngine):
                                          self.trunc_params,
                                          qtotal_LR=qtotal,
                                          inner_labels=['vR', 'vL'])
+            S_a = S
             # absorb VH/U into next_B/next_A for right/left move
             if move_right:
                 # VH is at most truncation, so VH-next_B is still right-canonical,
@@ -1696,7 +1699,7 @@ class SingleSiteDMRGEngine(DMRGEngine):
                 VH.ireplace_label('(p0.vR)', '(p.vR)')
         elif mixer.update_sites == 1:
             # single-site mixer
-            U, S, VH, err = mixer.perturb_svd(self, theta, self.i0, move_right)
+            U, S, VH, err, S_a = mixer.perturb_svd(self, theta, self.i0, move_right)
             # absorb VH/U into S
             if move_right:
                 # note: if update_RP, the `next_B` is a right-canonical B from the MPS.
@@ -1727,12 +1730,12 @@ class SingleSiteDMRGEngine(DMRGEngine):
                 theta = npc.tensordot(next_A, theta, axes=['vR', 'vL'])
                 i0 = self.i0 - 1
             # and do usual mixer
-            U, S, VH, err = mixer.perturb_svd(self, theta, i0, update_LP, update_RP)
+            U, S, VH, err, S_a = mixer.perturb_svd(self, theta, i0, update_LP, update_RP)
             U.ireplace_label('(vL.p0)', '(vL.p)')
             VH.ireplace_label('(p1.vR)', '(p.vR)')
         else:
             assert False
-        return U, S, VH, err
+        return U, S, VH, err, S_a
 
     def set_B(self, U, S, VH):
         """Update the MPS with the ``U, S, VH`` returned by `self.mixed_svd`.
