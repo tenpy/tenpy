@@ -35,7 +35,7 @@ class AKLTChain(NearestNeighborModel, MPOModel):
 
         # lattice
         bc_MPS = model_params.get('bc_MPS', 'finite')
-        bc = 'periodic' if bc_MPS == 'infinite' else 'open'
+        bc = 'open' if bc_MPS == 'finite' else 'periodic'
         lat = Chain(L, site, bc=bc, bc_MPS=bc_MPS)
 
         Sp, Sm, Sz = site.Sp, site.Sm, site.Sz

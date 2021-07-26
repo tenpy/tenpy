@@ -200,7 +200,7 @@ class NearestNeighborModel(Model):
                 break
         else:
             raise ValueError("All H_bond are `None`!")
-        if self.lat.bc_MPS != 'infinite':
+        if self.lat.bc_MPS == 'finite':
             assert self.H_bond[0] is None
         NearestNeighborModel.test_sanity(self)
         # like self.test_sanity(), but use the version defined below even for derived class
@@ -591,7 +591,7 @@ class MPOModel(Model):
         """
         H_MPO = self.H_MPO
         sites = H_MPO.sites
-        finite = H_MPO.finite
+        finite = (H_MPO.bc == 'finite')
         L = H_MPO.L
         Ws = [H_MPO.get_W(i, copy=True) for i in range(L)]
         # Copy of Ws: we set everything to zero, which we take out and add to H_bond, such that
@@ -1520,7 +1520,7 @@ class CouplingModel(Model):
             raise ValueError("Can't `calc_H_bond` with non-empty `exp_decaying_terms`.")
 
         sites = self.lat.mps_sites()
-        finite = (self.lat.bc_MPS != 'infinite')
+        finite = (self.lat.bc_MPS == 'finite')
 
         ct = self.all_coupling_terms()
         ct.remove_zeros(tol_zero)
@@ -1856,10 +1856,10 @@ class CouplingMPOModel(CouplingModel, MPOModel):
             bc_MPS = model_params.get('bc_MPS', 'finite')
             order = model_params.get('order', 'default')
             sites = self.init_sites(model_params)
-            bc_x = 'periodic' if bc_MPS == 'infinite' else 'open'
+            bc_x = 'open' if bc_MPS == 'finite' else 'periodic'
             bc_x = model_params.get('bc_x', bc_x)
-            if bc_MPS == 'infinite' and bc_x == 'open':
-                raise ValueError("You need to use 'periodic' `bc_x` for infinite systems!")
+            if bc_MPS != 'finite' and bc_x == 'open':
+                raise ValueError("You need to use 'periodic' `bc_x` for infinite/segment systems!")
             if LatticeClass.dim == 1:  # 1D lattice
                 L = model_params.get('L', 2)
                 # 4) lattice
