@@ -25,13 +25,20 @@ MPI_SUM_NONE = MPI.Op.Create(sum_none, commute=True)
 
 def run(action, node_local, meta, on_main=None):
     """Special action to call other actions"""
-    node_local.comm.bcast((action, meta))
+    if action is DONE:
+        action_name = "DONE"
+    else:
+        assert action.__module__ == __name__
+        action_name = action.__name__
+    assert globals()[action_name] is action
+    node_local.comm.bcast((action_name, meta))
     return action(node_local, on_main, *meta)
 
 
 def replica_main(node_local):
     while True:
-        action, meta = node_local.comm.bcast(None)
+        action_name, meta = node_local.comm.bcast(None)
+        action = globals()[action_name]
         if action is DONE:  # allow to gracefully terminate
             print(f"MPI rank {node_local.comm.rank:d} signing off")
             return
@@ -46,7 +53,7 @@ def matvec(node_local, on_main, theta, LH_key, RH_key):
     LHeff = node_local.distributed[LH_key]
     RHeff = node_local.distributed[RH_key]
     if LHeff is None or RHeff is None:
-        assert LHeff is RHeff
+        # (can be that only one of them is None...)
         theta = None
     else:
         worker = node_local.worker
