@@ -38,10 +38,11 @@ def run(action, node_local, meta, on_main=None):
 def replica_main(node_local):
     while True:
         action_name, meta = node_local.comm.bcast(None)
-        action = globals()[action_name]
-        if action is DONE:  # allow to gracefully terminate
+        if action_name is DONE or action_name == "DONE":
+            # allow to gracefully terminate
             print(f"MPI rank {node_local.comm.rank:d} signing off")
             return
+        action = globals()[action_name]
         action(node_local, None, *meta)
 
 
