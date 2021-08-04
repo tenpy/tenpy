@@ -423,8 +423,9 @@ class ParallelMPOEnvironment(MPOEnvironment):
 
     def get_initialization_data(self, first=0, last=None):
         data = super().get_initialization_data(first, last)
-        data['init_LP'] = data['init_LP'].gather()
-        data['init_RP'] = data['init_RP'].gather()
+        for key, axis in [('init_LP', 'wR'), ('init_RP', 'wL')]:
+            gathered = data[key].gather()
+            data[key] = npc.concatenate(gathered, axis=axis)
         return data
 
     def cache_optimize(self, short_term_LP=[], short_term_RP=[], preload_LP=None, preload_RP=None):
