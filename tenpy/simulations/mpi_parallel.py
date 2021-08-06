@@ -614,16 +614,20 @@ class ParallelDMRGSim(GroundStateSearch):
 
     def run(self):
         if self.comm_H.rank == 0:
-            res = super().run()
-            self.comm_H.bcast((action.DONE, None))
+            try:
+                res = super().run()
+            finally:
+                self.comm_H.bcast((action.DONE, None))
             return res
         else:
             self.replica_run()
 
     def resume_run(self):
         if self.comm_H.rank == 0:
-            res = super().resume_run()
-            self.comm_H.bcast((action.DONE, None))
+            try:
+                res = super().resume_run()
+            finally:
+                self.comm_H.bcast((action.DONE, None))
             return res
         else:
             self.replica_run()
