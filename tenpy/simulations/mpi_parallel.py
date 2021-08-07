@@ -584,6 +584,7 @@ class ParallelDMRGSim(GroundStateSearch):
                 super().__init__(options, **kwargs)
             except Skip:
                 self.comm_H.bcast((action.DONE, None))
+                raise
         else:
             # don't __init__() to avoid locking other files
             # consequence: logging doesn't work on replicas; fall back to print if necessary!
