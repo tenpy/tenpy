@@ -1,0 +1,21 @@
+#!/usr/bin/env -S python -m tenpy 
+
+simulation_class : GroundStateSearch
+
+directory: results
+output_filename : b_minimal_dmrg.h5
+
+model_class :  SpinChain
+model_params :
+    L : 32
+    bc_MPS : finite
+
+initial_state_params:
+    method : lat_product_state
+    product_state : [[up], [down]]
+
+algorithm_class: TwoSiteDMRGEngine
+algorithm_params:
+    trunc_params:
+        svd_min: 1.e-8
+        chi_max: 50

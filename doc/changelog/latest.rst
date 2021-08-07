@@ -17,6 +17,8 @@ Backwards incompatible changes
 - deprecated options:
   - `sweep_0` for sweep classes; use `sweeps` in the `resume_data` instead.
 - Require context-manager-style setup for Simulation classes.
+- Replace the `SingleSiteMixer` and `TwoSiteMixer` with the :class:`~tenpy.algorithms.dmrg.SubspaceExpansion`; major
+  rewriting of the mixer code.
 
 
 Added
@@ -33,7 +35,7 @@ Added
 - equality test for :class:`~tenpy.linalg.charges.LegCharge`.
 - MPS with segment boundaries now keep track of unitaries at the boundaries in :attr:`~tenpy.networks.mps.MPS.segment_boundaries`.
 - :class:`~tenpy.simulations.simulation.OrthogonalExcitations` simulation class.
-- :cfg:configoption:`Simulation.group_sites` for the simultion class.
+- :cfg:option:`Simulation.group_sites` for the simultion class.
 - `extract_segment` method for model, lattice and MPS/MPO classes.
 - :class:`~tenpy.algorithms.mpo_evolution.TimeDependentExpMPOEvolution` for time-dependent hamiltonians.
 

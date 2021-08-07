@@ -220,9 +220,9 @@ class Lattice:
             raise ValueError("Different space dimensions of `basis` and `unit_cell_positions`")
         if self.bc_MPS not in MPS._valid_bc:
             raise ValueError("invalid MPS boundary conditions")
-        if self.bc[0] and self.bc_MPS == 'infinite':
+        if self.bc[0] and self.bc_MPS != 'finite':
             raise ValueError("Need periodic boundary conditions along the x-direction "
-                             "for 'infinite' `bc_MPS`")
+                             "for 'infinite' and 'segment' `bc_MPS`")
         if not isinstance(self, (IrregularLattice, HelicalLattice)):
             assert self.N_sites == np.prod(self.shape)
             # if one of the following assert fails,
@@ -516,6 +516,11 @@ class Lattice:
             remove = list(range(0, first)) + list(range(last + 1, cp.N_sites))
             cp = IrregularLattice(cp, remove=remove)
         cp.bc_MPS = 'segment'
+        if self.bc_MPS == 'finite':
+            # need to switch to periodic along infinite direction
+            bc = self.boundary_conditions
+            bc[0] = 'periodic'
+            cp.boundary_conditions = bc
         cp.segment_first_last = first, last
         return cp
 
@@ -593,9 +598,10 @@ class Lattice:
         lat_idx : array
             First dimensions like `i`, last dimension has len `dim`+1 and contains the lattice
             indices ``(x_0, ..., x_{dim-1}, u)`` corresponding to `i`.
-            For `i` accross the MPS unit cell and "infinite" `bc_MPS`, we shift `x_0` accordingly.
+            For `i` accross the MPS unit cell and "infinite" or "segment" `bc_MPS`,
+            we shift `x_0` accordingly.
         """
-        if self.bc_MPS == 'infinite':
+        if self.bc_MPS != 'finite':
             # allow `i` outsit of MPS unit cell for bc_MPS infinite
             i0 = i
             i = np.mod(i, self.N_sites)
@@ -614,8 +620,8 @@ class Lattice:
         lat_idx : array_like [..., dim+1]
             The last dimension corresponds to lattice indices ``(x_0, ..., x_{D-1}, u)``.
             All lattice indices should be positive and smaller than the corresponding entry in
-            ``self.shape``. Exception: for "infinite" `bc_MPS`, an `x_0` outside indicates shifts
-            accross the boundary.
+            ``self.shape``. Exception: for "infinite" or "segment" `bc_MPS`,
+            an `x_0` outside indicates shifts accross the boundary.
 
         Returns
         -------
@@ -624,12 +630,12 @@ class Lattice:
             Has the same shape as `lat_idx` without the last dimension.
         """
         idx = self._asvalid_latidx(lat_idx)
-        if self.bc_MPS == 'infinite':
+        if self.bc_MPS != 'finite':
             i_shift = idx[..., 0] - np.mod(idx[..., 0], self.N_rings)
             idx[..., 0] -= i_shift
         i = np.sum(np.mod(idx, self.shape) * self._strides, axis=-1)  # before permutation
         i = np.take(self._perm, i)  # after permutation
-        if self.bc_MPS == 'infinite':
+        if self.bc_MPS != 'finite':
             i += i_shift * self.N_sites // self.N_rings
             # N_sites_per_ring might not be set for IrregularLattice
         return i
@@ -1067,7 +1073,7 @@ class Lattice:
         lat_j = lat_j[keep]
         lat_j_shifted = lat_j_shifted[keep]
         mps_j = self.lat2mps_idx(np.concatenate([lat_j, [[u2]] * len(lat_j)], axis=1))
-        if self.bc_MPS == 'infinite':
+        if self.bc_MPS != 'finite':
             # shift j by whole MPS unit cells for couplings along the infinite direction
             # N_sites_per_ring might not be set for IrregularLattice
             mps_j_shift = (lat_j_shifted[:, 0] - lat_j[:, 0]) * self.N_sites // self.N_rings
@@ -1179,7 +1185,7 @@ class Lattice:
         lat_ijkl = lat_ijkl[keep, :, :]
         u = np.broadcast_to(u, lat_ijkl.shape[:2] + (1, ))
         mps_ijkl = self.lat2mps_idx(np.concatenate([lat_ijkl, u], axis=2))
-        if self.bc_MPS == 'infinite':
+        if self.bc_MPS != 'finite':
             # shift by whole MPS unit cells for couplings along the infinite direction
             # N_sites_per_ring might not be set for IrregularLattice
             mps_ijkl += ((lat_ijkl_shifted[keep, :, 0] - lat_ijkl[:, :, 0]) * self.N_sites //
@@ -1861,7 +1867,6 @@ class HelicalLattice(Lattice):
         order_reg = self.regular_lattice.order
         self.order = self._ordering_helical(order_reg)  # use property setter
         self.test_sanity()
-
 
     # strategy for possible_[multi_]couplings:
     # since everything is translation invariant along the MPS, we can just extract it

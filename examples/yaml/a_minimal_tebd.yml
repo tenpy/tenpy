@@ -1,0 +1,24 @@
+#!/usr/bin/env -S python -m tenpy 
+
+simulation_class : RealTimeEvolution
+
+directory: results
+output_filename : a_minimal_tebd.h5
+
+model_class :  SpinChain
+model_params :
+    L : 32
+    bc_MPS : finite
+
+initial_state_params:
+    method : lat_product_state
+    product_state : [[up], [down]]
+
+algorithm_class: TEBDEngine
+algorithm_params:
+    trunc_params:
+        chi_max: 120
+    dt : 0.05
+    N_steps : 2
+
+final_time :  1.

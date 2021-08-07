@@ -3945,8 +3945,7 @@ def qr(a, mode='reduced', inner_labels=[None, None], cutoff=None):
     -------
     q : :class:`Array`
         If `mode` is 'complete', a unitary matrix.
-        For `mode` 'reduced' such thatOtherwise such that
-        :math:`q^{*}_{j,i} q_{j,k} = \delta_{i,k}`
+        For `mode` 'reduced' an isometry such that :math:`q^{*}_{j,i} q_{j,k} = \delta_{i,k}`.
     r : :class:`Array`
         Upper triangular matrix if both legs of A are sorted by charges;
         Otherwise a simple transposition (performed when sorting by charges) brings it to

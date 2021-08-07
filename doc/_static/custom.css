@@ -4,3 +4,6 @@ dt:target {
 dl.config table td p {
        margin: 0px !important;
 }
+.wy-nav-content {
+   max-width: none;
+}

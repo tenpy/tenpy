@@ -86,22 +86,26 @@ exclude_patterns = [
 
 def create_example_stubs():
     """create stub files for examples and toycodes to include them in the documentation."""
-    folders = {
-        'examples': os.listdir(os.path.join(REPO_PREFIX, 'examples')),
-        'toycodes': os.listdir(os.path.join(REPO_PREFIX, 'toycodes'))
-    }
-    for key, files in folders.items():
-        outdir = os.path.join(os.path.dirname(__file__), key)
+    folders =[(['examples'], '.py', []),
+              (['examples', 'advanced'], '.py', []),
+              (['examples', 'chern_insulators'], '.py', []),
+              (['toycodes'], '.py', []),
+              (['examples', 'yaml'], '.yml', []),
+             ]
+    for subfolders, extension, excludes in folders:
+        outdir = os.path.join(os.path.dirname(__file__), *subfolders)
         if not os.path.isdir(outdir):
             os.mkdir(outdir)
-        files = sorted([fn for fn in files if fn.endswith('.py')])
+        files = os.listdir(os.path.join(REPO_PREFIX, *subfolders))
+        files = sorted([fn for fn in files if fn.endswith(extension) and fn not in excludes])
         for fn in files:
             outfile = os.path.join(outdir, os.path.splitext(fn)[0] + '.rst')
             if os.path.exists(outfile):
                 continue
-            sentence = ("`on github <{base}/blob/main/{key!s}/{fn!s}>`_.")
-            sentence = sentence.format(key=key, fn=fn, base=GITHUBBASE)
-            include = '.. literalinclude:: /../{key!s}/{fn!s}'.format(key=key, fn=fn)
+            dirs = '/'.join(subfolders)
+            sentence = ("`on github <{base}/blob/main/{dirs!s}/{fn!s}>`_.")
+            sentence = sentence.format(dirs=dirs, fn=fn, base=GITHUBBASE)
+            include = '.. literalinclude:: /../{dirs!s}/{fn!s}'.format(dirs=dirs, fn=fn)
             text = '\n'.join([fn, '=' * len(fn), '', sentence, '', include, ''])
             with open(outfile, 'w') as f:
                 f.write(text)
@@ -148,7 +152,7 @@ html_context = {
     "conf_py_path":
     "/doc/",  # Path in the checkout to the docs root
     "css_files": [
-        "_static/custom_highlight.css",  # to highlight targets
+        "_static/custom.css",  # to highlight targets
         "_static/copybutton.css",  # somehow this didn't get included otherwise
     ],
 }

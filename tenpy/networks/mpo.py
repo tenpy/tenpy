@@ -358,7 +358,7 @@ class MPO:
 
         May be ``None``.
         """
-        i = self._to_valid_index(i)
+        i = self._to_valid_index(i, bond=True)
         return self.IdL[i]
 
     def get_IdR(self, i):
@@ -366,7 +366,7 @@ class MPO:
 
         May be ``None``.
         """
-        i = self._to_valid_index(i)
+        i = self._to_valid_index(i, bond=True)
         return self.IdR[i + 1]
 
     def enlarge_mps_unit_cell(self, factor=2):
@@ -1047,13 +1047,13 @@ class MPO:
         # where the legs are trivial - otherwise it would give 0 or even raise an error!
         return npc.trace(singlesitempo.get_W(0), axes=[['wL'], ['wR']])
 
-    def _to_valid_index(self, i):
+    def _to_valid_index(self, i, bond=False):
         """Make sure `i` is a valid index (depending on `self.bc`)."""
         if not self.finite:
             return i % self.L
         if i < 0:
             i += self.L
-        if i >= self.L or i < 0:
+        if i >= self.L + int(bond) or i < 0:
             raise KeyError("i = {0:d} out of bounds for finite MPO".format(i))
         return i
 
@@ -1630,29 +1630,35 @@ class MPOGraph:
         charges[0][states[0]['IdL']] = chinfo.make_valid(None)  # default charge = 0.
         if infinite:
             charges[-1] = charges[0]  # bond is identical
-
+        
         def travel_q_LR(i, keyL):
             """Transport charges from left to right through the MPO graph.
 
             Inspect graph edges on site `i` starting on the left with `keyL` and add charges
             for all connections to the right.
-            Recursively transport charges from there."""
-            l = states[i][keyL]
-            site = sites[i]
-            st_r = states[i + 1]
-            ch_r = charges[i + 1]
-            # charge rule: q_left - q_right + op_qtotal = Ws_qtotal
-            qL_Wq = charges[i][l] - Ws_qtotal[i]  # q_left - Ws_qtotal
-            edges = self.graph[i][keyL]
-            for keyR, ops in edges.items():
-                r = st_r[keyR]
-                qR = ch_r[r]
-                if qR is None:
-                    op_qtotal = site.get_op(ops[0][0]).qtotal
-                    ch_r[r] = qL_Wq + op_qtotal  # solve chargerule for q_right
-                    if infinite or i + 1 < L:
-                        travel_q_LR((i + 1) % L, keyR)
-
+            Originally we recursively transported charges from there, but now this is done
+            iteratively to avoid the maximum recursion limit in python for large systems."""
+            stack = []
+            stack.append((i, keyL))
+            while len(stack):
+                i, keyL = stack.pop(-1)  # We are replacing system stack with one of our own
+                l = states[i][keyL]
+                site = sites[i]
+                st_r = states[i + 1]
+                ch_r = charges[i + 1]
+                # charge rule: q_left - q_right + op_qtotal = Ws_qtotal
+                qL_Wq = charges[i][l] - Ws_qtotal[i]  # q_left - Ws_qtotal
+                edges = self.graph[i][keyL]
+                edge_stack = []
+                for keyR, ops in edges.items():
+                    r = st_r[keyR]
+                    qR = ch_r[r]
+                    if qR is None:
+                        op_qtotal = site.get_op(ops[0][0]).qtotal
+                        ch_r[r] = qL_Wq + op_qtotal  # solve chargerule for q_right
+                        if infinite or i + 1 < L:
+                            edge_stack.append(((i + 1) % L, keyR))
+                stack = edge_stack + stack
         travel_q_LR(0, 'IdL')
 
         # now we can still have unknown edges in the case of "dead ends" in the MPO graph.
@@ -1686,8 +1692,9 @@ class MPOGraph:
         if not infinite and any([ch is None for ch in charges[-1]]):
             raise ValueError("can't determine all charges on the very right leg of the MPO!")
 
-        max_checks = sys.getrecursionlimit()  # I don't expect interactions with larger range...
-        for _ in range(max_checks):  # recursion limit would be hit in travel_q_LR first!
+        max_checks = 1000  # Hard-coded since for a properly set-up MPO graph, this loop will
+        # terminate after one iteration
+        for _ in range(max_checks):
             repeat = False
             for i in reversed(range(L)):
                 ch = charges[i]
@@ -1996,12 +2003,18 @@ class MPOEnvironment(MPSEnvironment):
             LP = self._contract_LP(i0, LP)
         else:
             LP = self.get_LP(i0 + 1, store=False)
-        # multiply with `S`: a bit of a hack: use 'private' MPS._scale_axis_B
+
+        # multiply with `S` on bra and ket side
         S_bra = self.bra.get_SR(i0).conj()
-        LP = self.bra._scale_axis_B(LP, S_bra, form_diff=1., axis_B='vR*', cutoff=0.)
-        # cutoff is not used for form_diff = 1
+        if isinstance(S_bra, npc.Array):
+            LP = npc.tensordot(S_bra, LP, axes=['vL*', 'vR*'])
+        else:
+            LP = LP.scale_axis(S_bra, 'vR*')
         S_ket = self.ket.get_SR(i0)
-        LP = self.bra._scale_axis_B(LP, S_ket, form_diff=1., axis_B='vR', cutoff=0.)
+        if isinstance(S_ket, npc.Array):
+            LP = npc.tensordot(LP, S_ket, axes=['vR', 'vL'])
+        else:
+            LP = LP.scale_axis(S_ket, 'vR')
         RP = self.get_RP(i0, store=False)
         res = npc.inner(LP, RP, axes=[['vR*', 'wR', 'vR'], ['vL*', 'wL', 'vL']], do_conj=False)
         if self.H.explicit_plus_hc:
@@ -2031,6 +2044,31 @@ class MPOEnvironment(MPSEnvironment):
         # for a ususal MPS, axes = (['p', 'vL*'], ['p*', 'vR*'])
         RP = npc.tensordot(RP, self.bra.get_B(i, form='B').conj(), axes=axes)
         return RP  # labels 'vL', 'wL', 'vL*'
+
+    def _contract_LHeff(self, i, label_p='p0', pipe=None):
+        LP = self.get_LP(i)
+        p, ps = label_p, label_p + '*'
+        W = self.H.get_W(i).replace_labels(['p', 'p*'], [p, ps])
+        LHeff = npc.tensordot(LP, W, axes=['wR', 'wL'])
+        if pipe is None:
+            pipe = LHeff.make_pipe(['vR*', p], qconj=+1)
+
+        LHeff = LHeff.combine_legs([['vR*', p], ['vR', ps]],
+                                   pipes=[pipe, pipe.conj()],
+                                   new_axes=[0, 2])
+        return LHeff
+
+    def _contract_RHeff(self, i, label_p='p1', pipe=None):
+        RP = self.get_RP(i)
+        p, ps = label_p, label_p + '*'
+        W = self.H.get_W(i).replace_labels(['p', 'p*'], [p, ps])
+        RHeff = npc.tensordot(W, RP, axes=['wR', 'wL'])
+        if pipe is None:
+            pipe = RHeff.make_pipe([p, 'vL*'], qconj=-1)
+        RHeff = RHeff.combine_legs([[p, 'vL*'], [ps, 'vL']],
+                                   pipes=[pipe, pipe.conj()],
+                                   new_axes=[2, 1])
+        return RHeff
 
 
 class MPOTransferMatrix:
@@ -2129,8 +2167,8 @@ class MPOTransferMatrix:
     def matvec(self, vec, project=True):
         """One matvec-operation.
 
-        Paramters
-        ---------
+        Parameters
+        ----------
         project : bool
             If True, project away the trace of the "IdL" part (transpose=False)
             or "IdR" part (transpose=True), respectively, to transform the Jordan-Block structure

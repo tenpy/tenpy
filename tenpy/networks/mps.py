@@ -119,7 +119,7 @@ class MPS:
         Defines the local Hilbert space for each site.
     bc : {'finite', 'segment', 'infinite'}
         Boundary conditions as described in above table.
-    form : list of {``None`` | tuple(float, float)}
+    form : list of {``None``, tuple(float, float)}
         Describes the canonical form on each site.
         ``None`` means non-canonical form.
         For ``form = (nuL, nuR)``, the stored ``_B[i]`` are
@@ -140,12 +140,15 @@ class MPS:
         The 'matrices' of the MPS. Labels are ``vL, vR, p`` (in any order).
         We recommend using :meth:`get_B` and :meth:`set_B`, which will take care of the different
         canonical forms.
-    _S : list of (``None`` | 1D array)
+    _S : list of {``None``, 1D array, :class:`~tenpy.linalg.np_conserved.Array}
         The singular values on each virtual bond, length ``L+1``.
         May be ``None`` if the MPS is not in canonical form.
         Otherwise, ``_S[i]`` is to the left of ``_B[i]``.
         We recommend using :meth:`get_SL`, :meth:`get_SR`, :meth:`set_SL`, :meth:`set_SR`, which
         takes proper care of the boundary conditions.
+        Sometimes (e.g. during DMRG with an enabled mixer), entries may temporarily be
+        a non-diagonal :class:`tenpy.linalg.np_conserved.Array` to be inserted between the
+        left canonical 'A' tensors on the left and rigth-canonical _B[i] on the right.
     _valid_forms : dict
         Class attribute.
         Mapping for canonical forms to a tuple ``(nuL, nuR)`` indicating that
@@ -4396,7 +4399,6 @@ class MPSEnvironment:
                 The number of physical sites involved into the contraction yielding `init_LP` and
                 `init_RP`, respectively.
         """
-        L = self.L
         if last is None:
             last = self.L - 1
         data = {'init_LP': self.get_LP(first, True), 'init_RP': self.get_RP(last, True)}
@@ -4425,12 +4427,17 @@ class MPSEnvironment:
             LP = self._contract_LP(i0, LP)
         else:
             LP = self.get_LP(i0 + 1, store=False)
-        # multiply with `S`: a bit of a hack: use 'private' MPS._scale_axis_B
+        # multiply with `S` on bra and ket side
         S_bra = self.bra.get_SR(i0).conj()
-        LP = self.bra._scale_axis_B(LP, S_bra, form_diff=1., axis_B='vR*', cutoff=0.)
-        # cutoff is not used for form_diff = 1
+        if isinstance(S_bra, npc.Array):
+            LP = npc.tensordot(S_bra, LP, axes=['vL*', 'vR*'])
+        else:
+            LP = LP.scale_axis(S_bra, 'vR*')
         S_ket = self.ket.get_SR(i0)
-        LP = self.bra._scale_axis_B(LP, S_ket, form_diff=1., axis_B='vR', cutoff=0.)
+        if isinstance(S_ket, npc.Array):
+            LP = npc.tensordot(LP, S_ket, axes=['vR', 'vL'])
+        else:
+            LP = LP.scale_axis(S_ket, 'vR')
         RP = self.get_RP(i0, store=False)
         contr = npc.inner(LP, RP, axes=[['vR*', 'vR'], ['vL*', 'vL']], do_conj=False)
         return contr * self.bra.norm * self.ket.norm

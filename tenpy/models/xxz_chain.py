@@ -72,7 +72,7 @@ class XXZChain(CouplingModel, NearestNeighborModel, MPOModel):
             # replacing steps 1-3)
             site = SpinHalfSite(conserve='Sz')
         # 4) lattice
-        bc = 'periodic' if bc_MPS == 'infinite' else 'open'
+        bc = 'open' if bc_MPS == 'finite' else 'periodic'
         lat = Chain(L, site, bc=bc, bc_MPS=bc_MPS)
         # 5) initialize CouplingModel
         CouplingModel.__init__(self, lat)

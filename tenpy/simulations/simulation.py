@@ -545,6 +545,7 @@ class Simulation:
 
     def make_measurements(self):
         """Perform measurements and merge the results into ``self.results['measurements']``."""
+        self.logger.info("make measurements")
         results = self.perform_measurements()
         previous_results = self.results.get('measurements', None)
         if previous_results is None:
