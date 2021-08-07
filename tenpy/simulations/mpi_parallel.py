@@ -16,6 +16,7 @@ which needs to be installed when you want to use classes in this module.
 
 import warnings
 import numpy as np
+import os
 
 from . import mpi_parallel_actions as action
 
@@ -583,6 +584,9 @@ class ParallelDMRGSim(GroundStateSearch):
             # don't __init__() to avoid locking other files
             # consequence: logging doesn't work on replicas; fall back to print if necessary!
             self.options = options  # don't convert to options to avoid unused warnings
+            cwd = self.options.get("directory", None)
+            if cwd is not None:
+                os.chdir(cwd)  # needed fore relative cache filenames
             # but allow to use context __enter__ and __exit__ to initialize cache
             self.cache = CacheFile.open()
 
@@ -592,10 +596,10 @@ class ParallelDMRGSim(GroundStateSearch):
         filename = get_recursive(self.options, 'cache_params.filename', default=None)
         if filename is not None or directory is not None:
             if filename is not None:
-                filename = filename + f"_rank_{self.comm_H.rank:2d}"
+                filename = filename + f"_rank_{self.comm_H.rank:02d}"
                 set_recursive(self.options, 'cache_params.filename', filename)
             if directory is not None:
-                directory = directory + f"_rank_{self.comm_H.rank:2d}"
+                directory = directory + f"_rank_{self.comm_H.rank:02d}"
                 set_recursive(self.options, 'cache_params.directory', directory)
         super().init_cache()
 
