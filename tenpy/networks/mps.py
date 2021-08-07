@@ -4399,7 +4399,6 @@ class MPSEnvironment:
                 The number of physical sites involved into the contraction yielding `init_LP` and
                 `init_RP`, respectively.
         """
-        L = self.L
         if last is None:
             last = self.L - 1
         data = {'init_LP': self.get_LP(first, True), 'init_RP': self.get_RP(last, True)}
