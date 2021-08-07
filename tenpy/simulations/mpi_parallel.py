@@ -31,7 +31,8 @@ from ..linalg.sparse import NpcLinearOperatorWrapper
 from ..algorithms.truncation import truncate
 from ..algorithms.dmrg import SingleSiteDMRGEngine, TwoSiteDMRGEngine, DensityMatrixMixer
 from ..algorithms.mps_common import TwoSiteH
-from ..simulations.ground_state_search import GroundStateSearch
+from .ground_state_search import GroundStateSearch
+from .simulation import Skip
 from ..tools.params import asConfig
 from ..tools.misc import get_recursive, set_recursive, transpose_list_list
 from ..tools.thread import Worker
@@ -579,7 +580,10 @@ class ParallelDMRGSim(GroundStateSearch):
         self.comm_H = comm
         print("MPI rank %d reporting for duty" % comm.rank)
         if self.comm_H.rank == 0:
-            super().__init__(options, **kwargs)
+            try:
+                super().__init__(options, **kwargs)
+            except Skip:
+                self.comm_H.bcast((action.DONE, None))
         else:
             # don't __init__() to avoid locking other files
             # consequence: logging doesn't work on replicas; fall back to print if necessary!
@@ -618,20 +622,16 @@ class ParallelDMRGSim(GroundStateSearch):
 
     def run(self):
         if self.comm_H.rank == 0:
-            try:
-                res = super().run()
-            finally:
-                self.comm_H.bcast((action.DONE, None))
+            res = super().run()
+            self.comm_H.bcast((action.DONE, None))
             return res
         else:
             self.replica_run()
 
     def resume_run(self):
         if self.comm_H.rank == 0:
-            try:
-                res = super().resume_run()
-            finally:
-                self.comm_H.bcast((action.DONE, None))
+            res = super().resume_run()
+            self.comm_H.bcast((action.DONE, None))
             return res
         else:
             self.replica_run()
