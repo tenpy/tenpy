@@ -397,9 +397,9 @@ class ParallelMPOEnvironment(MPOEnvironment):
         comm = self.node_local.comm
         local_part = LP_W.local_part
         if A is None:
-            A = self.ket.get_B(i, "A").replace_labels(['p'], ['p0'])
+            A = self.ket.get_B(i, "A")
         if A.ndim == 3:
-            A = A.combine_legs(['vL', 'p0'], pipes=local_part.get_leg('(vR*.p0)'))
+            A = A.combine_legs(['vL', 'p'], pipes=local_part.get_leg('(vR*.p0)'))
         elif A.ndim != 2:
             raise ValueError("'A' tensor has neither 2 nor 3 legs")
 
@@ -412,9 +412,9 @@ class ParallelMPOEnvironment(MPOEnvironment):
         comm = self.node_local.comm
         local_part = W_RP.local_part
         if B is None:
-            B = self.ket.get_B(i, "B").replace_labels(['p'], ['p1'])
+            B = self.ket.get_B(i, "B")
         if B.ndim == 3:
-            B = B.combine_legs(['p1', 'vR'], pipes=local_part.get_leg('(p1.vL*)'))
+            B = B.combine_legs(['p', 'vR'], pipes=local_part.get_leg('(p1.vL*)'))
         elif B.ndim != 2:
             raise ValueError("'B' tensor has neither 2 nor 3 legs")
 

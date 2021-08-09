@@ -228,18 +228,16 @@ def contract_W_RP_sparse(node_local, on_main, i, old_key, new_key):
 def attach_B(node_local, on_main, old_key, new_key, B):
     local_part = node_local.distributed[old_key]
     if local_part is not None:
-    #B = B.combine_legs(['p1', 'vR'], pipes=local_part.get_leg('(p1.vL*)'))
-        local_part = npc.tensordot(B, local_part, axes=['(p1.vR)', '(p1*.vL)'])
-        local_part = npc.tensordot(B.conj(), local_part, axes=['(p1*.vR*)', '(p1.vL*)'])
+        local_part = npc.tensordot(B, local_part, axes=['(p.vR)', '(p1*.vL)'])
+        local_part = npc.tensordot(local_part, B.conj(), axes=['(p1.vL*)', '(p*.vR*)'])
     node_local.cache[new_key] = local_part
 
 
 def attach_A(node_local, on_main, old_key, new_key, A):
     local_part = node_local.distributed[old_key]
     if local_part is not None:
-    #A = A.combine_legs(['vL', 'p0'], pipes=local_part.get_leg('(vR*.p0)'))
-        local_part = npc.tensordot(A, local_part, axes=['(vL.p0)', '(vR.p0*)'])
-        local_part = npc.tensordot(A.conj(), local_part, axes=['(vL*.p0*)', '(vR*.p0)'])
+        local_part = npc.tensordot(local_part, A, axes=['(vR.p0*)', '(vL.p)'])
+        local_part = npc.tensordot(A.conj(), local_part, axes=['(vL*.p*)', '(vR*.p0)'])
     node_local.cache[new_key] = local_part
 
 
