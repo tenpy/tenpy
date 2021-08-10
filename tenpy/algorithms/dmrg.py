@@ -1064,7 +1064,7 @@ class DMRGEngine(Sweep):
             E0, N, ov_change = None, 0, 0.
         theta = self.prepare_svd(theta)
         U, S, VH, err, S_approx = self.mixed_svd(theta)
-        self._entropy_approx[(i0 + n_opt - 1) % self.psi.L] = entropy(S_approx)
+        self._entropy_approx[(i0 + n_opt - 1) % self.psi.L] = entropy(S_approx**2)
         self.set_B(U, S, VH)
         update_data = {
             'E0': E0,
