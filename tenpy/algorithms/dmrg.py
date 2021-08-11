@@ -856,10 +856,13 @@ class DMRGEngine(Sweep):
             if p_tol_to_trunc is not None and max_trunc_err > p_tol_min:
                 P_tol = max(p_tol_min, min(p_tol_max, max_trunc_err * p_tol_to_trunc))
                 self.lanczos_params['P_tol'] = P_tol
+                self.lanczos_params.touch('P_tol')  # don't warn about unused P_tol, since
+                # the optimization might not even use the normal lanczos function.
                 logger.debug("set lanczos_params['P_tol'] = %.2e", P_tol)
             if e_tol_to_trunc is not None and max_E_trunc > e_tol_min:
                 E_tol = max(e_tol_min, min(e_tol_max, max_E_trunc * e_tol_to_trunc))
                 self.lanczos_params['E_tol'] = E_tol
+                self.lanczos_params.touch('E_tol')
                 logger.debug("set lanczos_params['E_tol'] = %.2e", E_tol)
             # update environment
             if not self.finite:
