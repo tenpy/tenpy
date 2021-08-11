@@ -129,15 +129,19 @@ class Mixer:
     A good strategy is to choose an initially significant amplitude and let it decay until
     the perturbation becomes completely irrelevant and the mixer gets disabled.
 
-    This original idea of the mixer was introduced in :cite:`white2005`.
-    :cite:`hubig2015` discusses the mixer and provides an improved version.
-
+    This original idea of the mixer was introduced in :cite:`white2005`, implemented as
+    :class:`DensityMatrixMixer`.
+    More recently, :cite:`hubig2015` discussed the mixer and provided an improved version
+    based on an svd, which turns out to give the same results up to numerical errors;
+    it's implemented as the :class:`SubspaceExpansion`.
 
     Parameters
     ----------
     options : dict
         Optional parameters as described in the following table.
         see :cfg:config:`Mixer`
+    sweep_activated : int
+        The first sweep where the mixer was activated; `disable_after` is relative to that.
 
     Options
     -------
@@ -158,12 +162,14 @@ class Mixer:
     decay : float
         Factor by which `amplitude` is divided after each sweep.
     disable_after : int
-        The number of sweeps after which the mixer should be disabled.
+        The number of sweeps after which the mixer should be disabled, relative to `disable_after`.
+        Note that DMRG might repeatedly activate the mixer if you gradually increase `chi` with
+        a :cfg:configoption`DMRGEngine.chi_list`.
     """
     #: how many sites the `theta` in `perturb_svd` should have
     update_sites = 2
 
-    def __init__(self, options):
+    def __init__(self, options, sweep_activated):
         self.options = options = asConfig(options, 'Mixer')
         self.amplitude = options.get('amplitude', 1.e-5)
         assert self.amplitude <= 1.
@@ -172,6 +178,7 @@ class Mixer:
         if self.decay == 1.:
             warnings.warn("Mixer with decay=1. doesn't decay")
         self.disable_after = options.get('disable_after', 15)
+        self.sweep_activated = sweep_activated
 
     def update_amplitude(self, sweeps):
         """Update the amplitude, possibly disable the mixer.
@@ -188,7 +195,8 @@ class Mixer:
             should be disabled.
         """
         self.amplitude /= self.decay
-        if sweeps >= self.disable_after or self.amplitude <= np.finfo('float').eps:
+        if (sweeps >= self.disable_after + self.sweep_activated
+            or self.amplitude <= np.finfo('float').eps):
             logger.info("disable mixer after %(sweeps)d sweeps, final amplitude %(amp).2e", {
                 'sweeps': sweeps,
                 'amp': self.amplitude
@@ -1005,6 +1013,14 @@ class DMRGEngine(Sweep):
         meas_E_trunc : bool, optional
             Whether to measure truncation energies.
 
+        Options
+        -------
+        .. cfg:configoptions :: DMRGEngine
+
+            chi_list_reactivates_mixer : bool
+                If True, the mixer is reset/reactivated each time the bond dimension growths
+                due to :cfg:option:`DMRGEngine.chi_list`.
+
         Returns
         -------
         max_trunc_err : float
@@ -1015,6 +1031,12 @@ class DMRGEngine(Sweep):
         """
         # wrapper around tenpy.algorithms.mps_common.Sweep.sweep()
         self._meas_E_trunc = meas_E_trunc
+        if (self.options.get('chi_list_reactivates_mixer', True)
+            and optimize and self.chi_list is not None):
+            new_chi_max = self.chi_list.get(self.sweeps, None)
+            if new_chi_max is not None:
+                # growing the bond dimension with chi_list, so we should also reactivate the mixer
+                self.mixer_activate()
         res = super().sweep(optimize)
         if optimize:
             # update mixer
@@ -1310,8 +1332,11 @@ class DMRGEngine(Sweep):
                 else:
                     Mixer_class = find_subclass(Mixer, Mixer_class)
             mixer_params = self.options.subconfig('mixer_params')
-            self.mixer = Mixer_class(mixer_params)
+            self.mixer = Mixer_class(mixer_params, self.sweeps)
             self.S_inv_cutoff = 1.e-8
+            logger.info("activate %s with initial amplitude %.1e",
+                        Mixer_class.__name__,
+                        self.mixer.amplitude)
 
     def mixer_cleanup(self):
         """Cleanup the effects of a mixer.

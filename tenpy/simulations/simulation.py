@@ -868,7 +868,7 @@ def run_simulation(simulation_class_name='GroundStateSearch',
         A dictionary of keyword-arguments to be used for the initializing the simulation.
     **simulation_params :
         Further keyword arguments as documented in the corresponding simulation class,
-        see :cfg:config`Simulation`.
+        see :cfg:config:`Simulation`.
 
     Returns
     -------

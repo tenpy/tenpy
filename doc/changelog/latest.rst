@@ -19,6 +19,8 @@ Backwards incompatible changes
 - Require context-manager-style setup for Simulation classes.
 - Replace the `SingleSiteMixer` and `TwoSiteMixer` with the :class:`~tenpy.algorithms.dmrg.SubspaceExpansion`; major
   rewriting of the mixer code.
+  Further, we now reactivate/reset the :class:`~tenpy.algorithms.dmrg.Mixer` whenever growing the bond dimension due to `chi_list` in DMRG.
+  The new option :cfg:option:`DMRGEngine.chi_list_reactivates_mixer` allows to disable this.
 
 
 Added
