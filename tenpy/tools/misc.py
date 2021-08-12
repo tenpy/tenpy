@@ -6,6 +6,7 @@ import numpy as np
 from .optimization import bottleneck
 from .process import omp_set_nthreads
 from .params import Config
+from collections.abc import Mapping
 import random
 import os.path
 import itertools
@@ -622,6 +623,61 @@ def update_recursive(nested_data, update_data, separator=".", insert_dicts=True)
     """
     for k, v in update_data.items():
         set_recursive(nested_data, k, v, separator, insert_dicts)
+
+def merge_recursive(*nested_data, conflict='error', path=None):
+    """Merge nested dictionaries `nested1` and `nested2`.
+
+    Parameters
+    ----------
+    *nested_data: dict of dict
+        Nested dictionaries that should be merged.
+    path: list of str
+        Path inside the nesting for useful error message
+    conflict: "error" | "first" | "last"
+        How to handle conflicts: raise an error (if the values are different),
+        or just give priority to the first or last `nested_data` that still has a value,
+        even if they are different.
+
+    Returns
+    -------
+    merged: dict of dict
+        A single nested dictionary with the keys/values of the `nested_data` merged.
+        Dictionary values appearing in multiple of the `nested_data` get merged recursively.
+    """
+    if len(nested_data) == 0:
+        raise ValueError("need at least one nested_data")
+    elif len(nested_data) == 1:
+        return nested_data
+    elif len(nested_data) > 2:
+        merged = nested_data[0]
+        for to_merge in nested_data[1:]:
+            merged = merge_recursive(merged, to_merge, conflict=conflict, path=path)
+        return merged
+    nested1, nested2 = nested_data
+    if path is None:
+        path = []
+    merged = nested1.copy()
+    for key, val2 in nested2.items():
+        if key in merged:
+            val1 = merged[key]
+            if isinstance(val1, Mapping) and isinstance(val2, Mapping):
+                merged[key] = merge_recursive(val1, val2,
+                                              conflict=conflict,
+                                              path=path + [repr(key)])
+            else:
+                if conflict == 'error':
+                    if val1 != val2:
+                        path = ':'.join(path + [repr(key)])
+                        msg = '\n'.join([f"Conflict with different values at {path}; we got:",
+                                         repr(val1), repr(val2)])
+                        raise ValueError(msg)
+                elif conflict == 'first':
+                    pass
+                elif conflict == 'last':
+                    merged[key] = val2
+        else:
+            merged[key] = val2
+    return merged
 
 
 def flatten(mapping, separator='.'):
