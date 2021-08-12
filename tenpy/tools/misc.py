@@ -17,8 +17,8 @@ __all__ = [
     'to_iterable', 'to_iterable_of_len', 'to_array', 'anynan', 'argsort', 'lexsort',
     'inverse_permutation', 'list_to_dict_list', 'atleast_2d_pad', 'transpose_list_list',
     'zero_if_close', 'pad', 'any_nonzero', 'add_with_None_0', 'chi_list', 'group_by_degeneracy',
-    'get_close', 'find_subclass', 'get_recursive', 'set_recursive', 'update_recursive', 'flatten',
-    'setup_logging', 'build_initial_state', 'setup_executable'
+    'get_close', 'find_subclass', 'get_recursive', 'set_recursive', 'update_recursive',
+    'merge_recursive', 'flatten', 'setup_logging', 'build_initial_state', 'setup_executable'
 ]
 
 
