@@ -647,7 +647,7 @@ def merge_recursive(*nested_data, conflict='error', path=None):
     if len(nested_data) == 0:
         raise ValueError("need at least one nested_data")
     elif len(nested_data) == 1:
-        return nested_data
+        return nested_data[0]
     elif len(nested_data) > 2:
         merged = nested_data[0]
         for to_merge in nested_data[1:]:
