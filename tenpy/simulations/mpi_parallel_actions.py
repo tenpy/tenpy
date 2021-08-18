@@ -246,7 +246,7 @@ def full_contraction(node_local, on_main, case, LP_key, LP_ic, RP_key, RP_ic, th
     RP = node_local.cache[RP_key] if RP_ic else node_local.distributed[RP_key]
     if LP is None or RP is None:
         full_contr = None
-        assert LP is RP
+        # note: can happen that only one is None
     else:
         if case == 0b11:
             if isinstance(theta, npc.Array):
