@@ -90,11 +90,16 @@ def console_main(*command_line_args):
         raise ValueError("No options supplied! Check your command line arguments!")
     if 'output_filename' not in options and 'output_filename_params' not in options:
         raise ValueError("No output filename specified - refuse to run without saving anything!")
-    sim_class = options.pop('simulation_class_name', args.sim_class)
+    if args.sim_class is not None:  # non-default
+        if 'simulation_class_name' in options:
+            warnings.warn('command line overrides deprecated `simulation_class_name` parameter',
+                          FutureWarning)
+            del options['simulation_class_name']
+        options['simulation_class'] = args.sim_class
     if 'sequential' not in options:
-        run_simulation(sim_class, **options)
+        run_simulation(**options)
     else:
-        run_seq_simulations(simulation_class_name=sim_class, **options)
+        run_seq_simulations(**options)
 
 
 def _setup_arg_parser(width=None):
@@ -138,7 +143,7 @@ def _setup_arg_parser(width=None):
                         "Use python-style names like `numpy` without the .py ending.")
     parser.add_argument('--sim-class',
                         '-c',
-                        default='GroundStateSearch',
+                        default=None,
                         help="selects the Simulation (sub)class, "
                         "e.g. 'GroundStateSearch' (default) or 'RealTimeEvolution'.")
     parser.add_argument('parameters_file',

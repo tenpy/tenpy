@@ -23,6 +23,8 @@ Backwards incompatible changes
   rewriting of the mixer code.
   Further, we now reactivate/reset the :class:`~tenpy.algorithms.dmrg.Mixer` whenever growing the bond dimension due to `chi_list` in DMRG.
   The new option :cfg:option:`DMRGEngine.chi_list_reactivates_mixer` allows to disable this.
+- Renamed the `simulation_class_name` argument/parameter to `simulation_class` of :func:`~tenpy.simulations.simulation.run_simulation` 
+  for more consistency with remaining simulation parameters.
 
 
 Added
