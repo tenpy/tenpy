@@ -108,7 +108,6 @@ def gen_example_data(version=tenpy.version.full_version):
         event_handler.connect(dummy_function)
         event_handler.connect(dummy.dummy_append)
         data['event_handler'] = event_handler
-        data['version'] = version
     return data
 
 
