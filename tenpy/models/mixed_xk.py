@@ -1,6 +1,8 @@
 r"""Basic model for DMRG with mixed real- and momentum-space representation.
 
-This module provides classes for DMRG of fermions in a mixed real- and momentum-space basis.
+This module provides classes for DMRG of fermions in a mixed real- and momentum-space basis,
+as described in [motruk2016].
+
 We consider infinite cylinders in real-space along the cylinder axis,
 but transform to momentum space around the cylinder.
 The DMRG unit cell consists of `N_rings` "rings" on they cylinder with a given x-coordinate `i`.

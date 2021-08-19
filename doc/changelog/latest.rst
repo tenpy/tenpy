@@ -5,6 +5,8 @@ Release Notes
 -------------
 TODO: Summarize the most important changes
 
+Many thanks to Wilhelm Kadow for great work on the mixed real- and momentum-space representation for models!
+
 Changelog
 ---------
 
@@ -25,6 +27,7 @@ Backwards incompatible changes
 
 Added
 ^^^^^
+- :class:`tenpy.models.mixed_xk.MixedXKLattice` and :class:`tenpy.models.mixed_xk.MixedXKModel` for models in mixed real- and momentum space representation on a cylinder.
 - :func:`tenpy.simulations.simulation.run_sequential_simulations`
 - :meth:`tenpy.networks.mps.MPSEnvironment.init_LP` and :meth:`~tenpy.networks.mps.MPSEnvironment.init_RP`, and
   :meth:`tenpy.networks.mpo.MPOEnvironment.init_LP` and :meth:`~tenpy.networks.mpo.MPOEnvironment.init_RP` additionally
