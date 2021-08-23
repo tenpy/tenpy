@@ -756,7 +756,7 @@ class Simulation:
                 output_filename.unlink()  # remove
 
         # actually save the results to disk
-        hdf5_io.save(results, output_filename)
+        self._save_to_file(results, output_filename)
 
         if backup_filename is not None and backup_filename.exists():
             # successfully saved, so we can safely remove the old backup
@@ -765,6 +765,9 @@ class Simulation:
         self._last_save = time.time()
         self.logger.info("saving results to disk; took %.1fs", self._last_save - start_time)
         return results
+
+    def _save_to_file(self, results, output_filename):
+        hdf5_io.save(results, output_filename)
 
     def prepare_results_for_save(self):
         """Bring the `results` into a state suitable for saving.
