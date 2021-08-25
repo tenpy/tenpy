@@ -756,7 +756,7 @@ class Simulation:
                 output_filename.unlink()  # remove
 
         # actually save the results to disk
-        hdf5_io.save(results, output_filename)
+        self._save_to_file(results, output_filename)
 
         if backup_filename is not None and backup_filename.exists():
             # successfully saved, so we can safely remove the old backup
@@ -765,6 +765,9 @@ class Simulation:
         self._last_save = time.time()
         self.logger.info("saving results to disk; took %.1fs", self._last_save - start_time)
         return results
+
+    def _save_to_file(self, results, output_filename):
+        hdf5_io.save(results, output_filename)
 
     def prepare_results_for_save(self):
         """Bring the `results` into a state suitable for saving.
@@ -853,22 +856,28 @@ class Skip(ValueError):
         super().__init__(msg + '\n' + filename)
         self.filename = filename
 
+_deprecated_not_set = object()
 
-def run_simulation(simulation_class_name='GroundStateSearch',
+def run_simulation(simulation_class='GroundStateSearch',
                    simulation_class_kwargs=None,
+                   *,
+                   simulation_class_name=_deprecated_not_set,
                    **simulation_params):
     """Run the simulation with a simulation class.
 
+    .. deprecated :: 0.9.0
+        The `simulation_class_name` argument has been renamed to just `simulation_class`.
+
     Parameters
     ----------
-    simulation_class_name : str
+    simulation_class : str
         The name of a (sub)class of :class:`~tenpy.simulations.simulations.Simulation`
         to be used for running the simulation.
     simulation_class_kwargs : dict | None
         A dictionary of keyword-arguments to be used for the initializing the simulation.
     **simulation_params :
         Further keyword arguments as documented in the corresponding simulation class,
-        see :cfg:config`Simulation`.
+        see :cfg:config:`Simulation`.
 
     Returns
     -------
@@ -876,7 +885,12 @@ def run_simulation(simulation_class_name='GroundStateSearch',
         The results of the Simulation, i.e., what
         :meth:`tenpy.simulations.simulation.Simulation.run()` returned.
     """
-    SimClass = find_subclass(Simulation, simulation_class_name)
+    if simulation_class_name is not _deprecated_not_set:
+        assert simulation_class == 'GroundStateSearch'
+        warnings.warn("The `simulation_class_name` argument has been renamed to `simulation_class`"
+                      " for more consistency with remaining parameters.", FutureWarning)
+        simulation_class = simulation_class_name
+    SimClass = find_subclass(Simulation, simulation_class)
     if simulation_class_kwargs is None:
         simulation_class_kwargs = {}
     with SimClass(simulation_params, **simulation_class_kwargs) as sim:
@@ -961,9 +975,10 @@ def resume_from_checkpoint(*,
 
 
 def run_seq_simulations(sequential,
-                        simulation_class_name='GroundStateSearch',
+                        simulation_class='GroundStateSearch',
                         simulation_class_kwargs=None,
                         *,
+                        simulation_class_name=_deprecated_not_set,
                         resume_data=None,
                         collect_results_in_memory=False,
                         **simulation_params):
@@ -1019,7 +1034,7 @@ def run_seq_simulations(sequential,
         If False (default), just save the results to the corresponding output files.
         If True, collect the results by keeping *copies* of psi and all simulation results
         *in memory*. (This can kill your available RAM quickly!)
-    simulation_class_name : str
+    simulation_class : str
     simulation_class_kwargs : dict | None
     **simulation_params :
         Further arguments as in :func:`run_simulation`.
@@ -1053,7 +1068,13 @@ def run_seq_simulations(sequential,
     else:
         N_sims = 1
 
-    SimClass = find_subclass(Simulation, simulation_class_name)
+    if simulation_class_name is not _deprecated_not_set:
+        assert simulation_class == 'GroundStateSearch'
+        warnings.warn("The `simulation_class_name` argument has been renamed to `simulation_class`"
+                      " for more consistency with remaining parameters.", FutureWarning)
+        simulation_class = simulation_class_name
+
+    SimClass = find_subclass(Simulation, simulation_class)
     if simulation_class_kwargs is None:
         simulation_class_kwargs = {}
 

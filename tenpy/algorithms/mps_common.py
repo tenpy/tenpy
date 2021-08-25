@@ -613,6 +613,7 @@ class Sweep(Algorithm):
             # so current RP[i_R] is useless
             for env in all_envs:
                 env.del_RP(i_R)
+        self.eff_H = None  # free references to environments held by eff_H
         # done
 
 

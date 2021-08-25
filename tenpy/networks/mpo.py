@@ -1219,8 +1219,8 @@ def make_W_II(t, A, B, C, D):
             w = expm(h)  #Exponentiate in the extended Hilbert space
             w = w.reshape((2, 2, d, 2, 2, d))
             w = w[:, :, :, 0, 0, :]
-            W[1 + r, 1 +
-              c, :, :] = w[1, 1]  #This part now extracts relevant parts according to Eqn 11
+            W[1 + r,
+              1 + c, :, :] = w[1, 1]  #This part now extracts relevant parts according to Eqn 11
             if c == 0:
                 W[1 + r, 0] = w[1, 0]
             if r == 0:
@@ -1630,7 +1630,7 @@ class MPOGraph:
         charges[0][states[0]['IdL']] = chinfo.make_valid(None)  # default charge = 0.
         if infinite:
             charges[-1] = charges[0]  # bond is identical
-        
+
         def travel_q_LR(i, keyL):
             """Transport charges from left to right through the MPO graph.
 
@@ -1821,6 +1821,12 @@ class MPOEnvironment(MPSEnvironment):
         if self._finite and start_env_sites != 0:
             warnings.warn("setting `start_env_sites` to 0 for finite MPS")
             start_env_sites = 0
+        init_LP, init_RP = self._check_compatible_legs(init_LP, init_RP, start_env_sites)
+        if self.ket.bc == 'segment' and (init_LP is None or init_RP is None):
+            raise ValueError("Environments with segment b.c. need explicit environments!")
+        super().init_first_LP_last_RP(init_LP, init_RP, age_LP, age_RP, start_env_sites)
+
+    def _check_compatible_legs(self, init_LP, init_RP, start_env_sites):
         if init_LP is not None:
             try:
                 i = -start_env_sites
@@ -1835,9 +1841,8 @@ class MPOEnvironment(MPSEnvironment):
             except ValueError:
                 logger.warning("dropping `init_RP` with incompatible MPO legs")
                 init_RP = None
-        if self.ket.bc == 'segment' and (init_LP is None or init_RP is None):
-            raise ValueError("Environments with segment b.c. need explicit environments!")
-        super().init_first_LP_last_RP(init_LP, init_RP, age_LP, age_RP, start_env_sites)
+        return super()._check_compatible_legs(init_LP, init_RP, start_env_sites)
+
 
     def test_sanity(self):
         """Sanity check, raises ValueErrors, if something is wrong."""
@@ -2401,10 +2406,15 @@ def _mpo_graph_state_order(key):
     For standard TeNPy MPOs we expect keys of the form
     ``'IdL'``, ``'IdR'``, ``(i, op_i, opstr)`` and recursively ``key + (j, op_j, opstr)``,
     (Note that op_j can be opstr if ``j-i >= L``.)
+    For multi coupling terms keys have the form ``("left",i, op_i, opstr)``
 
     The goal is to ensure that standard TeNPy MPOs yield an upper-right W for the MPO.
     """
     if isinstance(key, tuple):
+        if key[0] == "left":  #left states first
+            return (-0.2, ) + key[1:]
+        elif key[0] == "right":  #right states afterwards
+            return (-0.1, ) + key[1:]
         return key
     if isinstance(key, str):
         if key == 'IdL':  # should be first

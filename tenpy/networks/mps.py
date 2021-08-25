@@ -4093,22 +4093,9 @@ class MPSEnvironment:
         start_env_sites : int
             If `init_LP` and `init_RP` are not specified, contract each `start_env_sites` for them.
         """
-        vL_ket, vR_ket = self.ket._outer_virtual_legs()
-        vL_bra, vR_bra = self.bra._outer_virtual_legs()
+        init_LP, init_RP = self._check_compatible_legs(init_LP, init_RP, start_env_sites)
         ket_U, ket_V = self.ket.segment_boundaries
         bra_U, bra_V = self.bra.segment_boundaries
-        if init_LP is not None:
-            compatible = (init_LP.get_leg('vR') == vL_ket.conj()
-                          and init_LP.get_leg('vR*') == vL_bra)
-            if not compatible:
-                logger.warning("dropping `init_LP` with incompatible MPS legs")
-                init_LP = None
-        if init_RP is not None:
-            compatible = (init_RP.get_leg('vL') == vR_ket.conj()
-                          and init_RP.get_leg('vL*') == vR_bra)
-            if not compatible:
-                logger.warning("dropping `init_RP` with incompatible MPS legs")
-                init_RP = None
         if init_LP is None:
             init_LP = self.init_LP(0, start_env_sites)
             age_LP = start_env_sites
@@ -4133,6 +4120,30 @@ class MPSEnvironment:
         assert (self.bra.finite == self.ket.finite == self._finite)
         assert any(key in self.cache for key in self._LP_keys)
         assert any(key in self.cache for key in self._RP_keys)
+
+    def _check_compatible_legs(self, init_LP, init_RP, start_env_sites):
+        if init_LP is not None or init_RP is not None:
+            if start_env_sites == 0:
+                vL_ket, vR_ket = self.ket._outer_virtual_legs()
+                vL_bra, vR_bra = self.bra._outer_virtual_legs()
+            else:
+                vL_ket = self.ket.get_B(-start_env_sites, 'A').get_leg('vL')
+                vL_bra = self.bra.get_B(-start_env_sites, 'A').get_leg('vL')
+                vR_ket = self.ket.get_B(self.L + start_env_sites, 'B').get_leg('vR')
+                vR_bra = self.bra.get_B(self.L + start_env_sites, 'B').get_leg('vR')
+        if init_LP is not None:
+            compatible = (init_LP.get_leg('vR') == vL_ket.conj()
+                          and init_LP.get_leg('vR*') == vL_bra)
+            if not compatible:
+                logger.warning("dropping `init_LP` with incompatible MPS legs")
+                init_LP = None
+        if init_RP is not None:
+            compatible = (init_RP.get_leg('vL') == vR_ket.conj()
+                          and init_RP.get_leg('vL*') == vR_bra)
+            if not compatible:
+                logger.warning("dropping `init_RP` with incompatible MPS legs")
+                init_RP = None
+        return init_LP, init_RP
 
     def init_LP(self, i, start_env_sites=0):
         """Build initial left part ``LP``.

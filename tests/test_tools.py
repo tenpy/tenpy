@@ -231,6 +231,37 @@ def test_get_set_recursive():
     assert flat_data == {'some.nested.data': 321, 'some.nested.other': 456, 'some.parts': 987}
 
 
+def test_merge_recursive():
+    data1 = {'some': {'nested': {'data': 123, 'other': 456},
+                      'conflict': 'first'},
+             'only': 1}
+    data2 = {'some': {'different': {'x': 234, 'y': 567},
+                      'conflict': 'second'},
+             'extra': 2}
+    data3 = {'some': {'yet another': {'a': 1, 'b': 2},
+                      'conflict': 'third'},
+             'foo': 3}
+
+    with pytest.raises(ValueError) as excinfo:
+        merged = tools.misc.merge_recursive(data1, data2, data3)
+    assert "'some':'conflict'" in str(excinfo.value)
+    merged_first = tools.misc.merge_recursive(data1, data2, data3, conflict='first')
+    expected_merged = {
+        'some': {'nested': {'data': 123, 'other': 456},
+                 'conflict': 'first',
+                 'different': {'x': 234, 'y': 567},
+                 'yet another': {'a': 1, 'b': 2},
+                 },
+        'only': 1,
+        'extra': 2,
+        'foo': 3,
+    }
+    assert merged_first == expected_merged
+    expected_merged['some']['conflict'] = 'third'
+    merged_last = tools.misc.merge_recursive(data1, data2, data3, conflict='last')
+    assert merged_last == expected_merged
+
+
 @pytest.mark.skip(reason="interferes with pytest logging setup")
 def test_logging_setup(tmp_path, capsys):
     import logging.config

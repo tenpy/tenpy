@@ -5,6 +5,8 @@ Release Notes
 -------------
 TODO: Summarize the most important changes
 
+Many thanks to Wilhelm Kadow for great work on the mixed real- and momentum-space representation for models!
+
 Changelog
 ---------
 
@@ -19,10 +21,15 @@ Backwards incompatible changes
 - Require context-manager-style setup for Simulation classes.
 - Replace the `SingleSiteMixer` and `TwoSiteMixer` with the :class:`~tenpy.algorithms.dmrg.SubspaceExpansion`; major
   rewriting of the mixer code.
+  Further, we now reactivate/reset the :class:`~tenpy.algorithms.dmrg.Mixer` whenever growing the bond dimension due to `chi_list` in DMRG.
+  The new option :cfg:option:`DMRGEngine.chi_list_reactivates_mixer` allows to disable this.
+- Renamed the `simulation_class_name` argument/parameter to `simulation_class` of :func:`~tenpy.simulations.simulation.run_simulation` 
+  for more consistency with remaining simulation parameters.
 
 
 Added
 ^^^^^
+- :class:`tenpy.models.mixed_xk.MixedXKLattice` and :class:`tenpy.models.mixed_xk.MixedXKModel` for models in mixed real- and momentum space representation on a cylinder.
 - :func:`tenpy.simulations.simulation.run_sequential_simulations`
 - :meth:`tenpy.networks.mps.MPSEnvironment.init_LP` and :meth:`~tenpy.networks.mps.MPSEnvironment.init_RP`, and
   :meth:`tenpy.networks.mpo.MPOEnvironment.init_LP` and :meth:`~tenpy.networks.mpo.MPOEnvironment.init_RP` additionally
@@ -38,6 +45,7 @@ Added
 - :cfg:option:`Simulation.group_sites` for the simultion class.
 - `extract_segment` method for model, lattice and MPS/MPO classes.
 - :class:`~tenpy.algorithms.mpo_evolution.TimeDependentExpMPOEvolution` for time-dependent hamiltonians.
+- :func:`tenpy.tools.misc.merge_recursive` to merge nested parameter dictionaries.
 
 
 Changed

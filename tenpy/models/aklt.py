@@ -14,6 +14,8 @@ from tenpy.models.lattice import Chain
 from tenpy.models.model import NearestNeighborModel, MPOModel
 from tenpy.tools.params import asConfig
 
+__all__ = ['AKLTChain']
+
 
 class AKLTChain(NearestNeighborModel, MPOModel):
     r"""A simple implementation of the AKLT model.
