@@ -1630,7 +1630,7 @@ class MPOGraph:
         charges[0][states[0]['IdL']] = chinfo.make_valid(None)  # default charge = 0.
         if infinite:
             charges[-1] = charges[0]  # bond is identical
-        
+
         def travel_q_LR(i, keyL):
             """Transport charges from left to right through the MPO graph.
 
@@ -1821,6 +1821,12 @@ class MPOEnvironment(MPSEnvironment):
         if self._finite and start_env_sites != 0:
             warnings.warn("setting `start_env_sites` to 0 for finite MPS")
             start_env_sites = 0
+        init_LP, init_RP = self._check_compatible_legs(init_LP, init_RP, start_env_sites)
+        if self.ket.bc == 'segment' and (init_LP is None or init_RP is None):
+            raise ValueError("Environments with segment b.c. need explicit environments!")
+        super().init_first_LP_last_RP(init_LP, init_RP, age_LP, age_RP, start_env_sites)
+
+    def _check_compatible_legs(self, init_LP, init_RP, start_env_sites):
         if init_LP is not None:
             try:
                 i = -start_env_sites
@@ -1835,9 +1841,8 @@ class MPOEnvironment(MPSEnvironment):
             except ValueError:
                 logger.warning("dropping `init_RP` with incompatible MPO legs")
                 init_RP = None
-        if self.ket.bc == 'segment' and (init_LP is None or init_RP is None):
-            raise ValueError("Environments with segment b.c. need explicit environments!")
-        super().init_first_LP_last_RP(init_LP, init_RP, age_LP, age_RP, start_env_sites)
+        return super()._check_compatible_legs(init_LP, init_RP, start_env_sites)
+
 
     def test_sanity(self):
         """Sanity check, raises ValueErrors, if something is wrong."""
