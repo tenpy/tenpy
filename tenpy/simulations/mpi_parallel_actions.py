@@ -1,6 +1,5 @@
 # Copyright 2021 TeNPy Developers, GNU GPLv3
 
-from ..linalg import np_conserved as npc
 import numpy as np
 import copy
 
@@ -9,11 +8,13 @@ try:
 except ImportError:
     pass  # error/warning in mpi_parallel.py
 
+from ..linalg import np_conserved as npc
+from ..tools.hdf5_io import save_to_hdf5, load_from_hdf5
 
 DONE = None  # sentinel to say that the worker should finish
 
 def sum_none(A, B, _=None):
-    assert _ is None  # konly needed for compatiblity with mpi4py
+    assert _ is None  # only needed for compatiblity with mpi4py
     if A is None:
         return B
     if B is None:
@@ -74,6 +75,7 @@ def matvec(node_local, on_main, theta, LH_key, RH_key):
 
 
 def matvec_plain(LHeff, theta, RHeff):
+    """Not an action, but a helper function called from `matvec`."""
     theta = npc.tensordot(LHeff, theta, axes=['(vR.p0*)', '(vL.p0)'])
     theta = npc.tensordot(theta, RHeff, axes=[['wR', '(p1.vR)'], ['wL', '(p1*.vL)']])
     theta.ireplace_labels(['(vR*.p0)', '(p1.vL*)'], ['(vL.p0)', '(p1.vR)'])
@@ -81,6 +83,7 @@ def matvec_plain(LHeff, theta, RHeff):
 
 
 def matvec_hc(LHeff, theta, RHeff):
+    """Not an action, but a helper function called from `matvec`."""
     theta = theta.conj()  # copy!
     theta = npc.tensordot(theta, LHeff, axes=['(vL*.p0*)', '(vR*.p0)'])
     theta = npc.tensordot(RHeff, theta,
@@ -115,8 +118,62 @@ def gather_distr_array(node_local, on_main, key, in_cache):
     return node_local.comm.gather(local_part)
 
 
+def distr_array_save_hdf5(node_local, on_main, key, in_cache, filename_template, hdf5_key):
+    fn = filename_template.format(mpirank=node_local.comm.rank)
+    f = getattr(node_local, 'hdf5_export_file', None)
+    if f is None:
+        import h5py
+        f = h5py.File(fn, 'w')
+        node_local.hdf5_export_file = f
+    else:
+        assert f.filename == fn
+
+    local_part = node_local.cache[key] if in_cache else node_local.distributed[key]
+    save_to_hdf5(f, local_part, hdf5_key)
+
+def distr_array_keep_alive(node_local, on_main, key, in_cache):
+    # generate *global* class attribute
+    if hasattr(node_local.__class__, '_keep_alive'):
+        keep_alive = node_local.__class__._keep_alive
+    else:
+        node_local.__class__._keep_alive = keep_alive = {}
+    keep_alive[key] = node_local.cache[key] if in_cache else node_local.distributed[key]
+
+
+def distr_array_load_hdf5(node_local, on_main, key, in_cache, filename_template, hdf5_key):
+    if filename_template is not None:
+        fn = filename_template.format(mpirank=node_local.comm.rank)
+        f = getattr(node_local, 'hdf5_import_file', None)
+        if f is None:
+            import h5py
+            f = h5py.File(fn, 'r')
+            print("put {fn!r} on node {ndoe_local.comm.rank!d}")
+            node_local.hdf5_import_file = f
+        else:
+            assert f.filename == fn
+
+        local_part = load_from_hdf5(f, hdf5_key)
+    else:
+        # in sequential simulations after `DistributedArray._keep_alive_beyond_cache()`
+        local_part = node_local.__class__._keep_alive.pop(key)
+        if not len(node_local.__class__._keep_alive) > 0:
+            del node_local.__class__._keep_alive
+    if in_cache:
+        node_local.cache[key] = local_part
+    else:
+        node_local.distributed[key] = key
+
+
+def node_local_close_hdf5_file(node_local, on_main, attr_name):
+    f = getattr(node_local, attr_name, None)
+    if f is not None:
+        f.close()
+        delattr(node_local, attr_name)
+
 def sparse_comm_schedule(W_block, on_node=None):
     """Find schedule for multiplying W_block with RP.
+
+    Not an action, but a helper function called by `NodeLocalData.add_H` (from distribute_H)
 
     Returns
     -------

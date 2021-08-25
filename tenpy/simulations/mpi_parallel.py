@@ -33,10 +33,12 @@ from ..algorithms.dmrg import SingleSiteDMRGEngine, TwoSiteDMRGEngine, DensityMa
 from ..algorithms.mps_common import TwoSiteH
 from .ground_state_search import GroundStateSearch
 from .simulation import Skip
+from .simulation import resume_from_checkpoint as _simulation_resume_from_checkpoint
 from ..tools.params import asConfig
 from ..tools.misc import get_recursive, set_recursive, transpose_list_list
 from ..tools.thread import Worker
 from ..tools.cache import CacheFile
+from ..tools import hdf5_io
 from ..networks.mpo import MPOEnvironment
 
 __all__ = [
@@ -94,6 +96,8 @@ class ParallelTwoSiteH(TwoSiteH):
         if self.LP.local_part is not None and self.RP.local_part is not None:
             self.N = (self.LP.local_part.get_leg('vR').ind_len * self.W0.get_leg('p0').ind_len *
                       self.W1.get_leg('p1').ind_len * self.RP.local_part.get_leg('vL').ind_len)
+        else:
+            self.N = 0
         self.combine_Heff(i0, env)
         env._eff_H = self # HACK to give env.full_contraction access to LHeff, RHeff, i0
 
@@ -137,7 +141,8 @@ class DistributedArray:
 
     Each node only saves a fraction `local_part` of the actual represented Tensor.
 
-    Never pickle/save this!
+    We explicitly disallow to pickle this class! However, we allow to export to hdf5,
+    which will generate one HDF5 file per node, see :meth:`save_hdf5`.
     """
     def __init__(self, key, node_local, in_cache):
         self.key = key
@@ -177,6 +182,84 @@ class DistributedArray:
         """Gather all parts of distributed array to the root node."""
         return action.run(action.gather_distr_array, self.node_local, (self.key, self.in_cache))
 
+    def save_hdf5(self, hdf5_saver, h5gr, subpath):
+        """Export the distributed Array to Hdf5.
+
+        Very limited functionality: have to have the *same* splitting into different MPI
+        ranks (in particular: same MPI size) upon re-loading!
+
+        Hdf5 in general supports writing from multiple MPI threads to a single file, but
+        (at least regarding h5py) it seems to be limited to parallely writing a single dataset;
+        all MPI threads need to write the same group structure. This is not what we want here...
+
+        Hence, we keep it simple and just open one HDF5 file per MPI rank.
+        The filenames are taken to be the same as the main Hdf5 file, except ending with
+        "_mpi_{rank}.h5". Note that
+        :func:`~tenpy.simulations.mpi_parallel_actions.node_local_close_hdf5_file` needs to be
+        called after finishing the safe.
+        """
+        filename, ext = os.path.splitext(h5gr.file.filename)
+        filename_template = filename + '_mpirank_{mpirank:d}' + ext
+        hdf5_saver.save(filename_template, subpath + "filename_template")
+        hdf5_saver.save(filename_template, subpath + "subpath")
+        h5gr.attrs["mpi_size"] = self.node_local.comm.size
+        h5gr.attrs["in_cache"] = self.in_cache
+        h5gr.attrs["key"] = self.key
+        action.run(action.distr_array_save_hdf5,
+                   self.node_local,
+                   (self.key, self.in_cache, filename_template, subpath))
+
+    def _keep_alive_beyond_cache(self):
+        """Copy local_part into a node-local but python-global class dictionary.
+
+        Same strucuture as `from_hdf5` such that :meth:`finish_load_from_hdf5` puts the local_part
+        back into the (new) cache.
+        """
+        self._unfinished_load = True
+        self._mpi_size = self.node_local.comm.size
+        self._subpath = self.key
+        self._filename_template = None  # this tells action.distr_array_load_hdf5 to not use HDF5
+        action.run(action.distr_array_keep_alive, self.node_local, (self.key, self.in_cache))
+
+    @classmethod
+    def from_hdf5(cls, hdf5_loader, h5gr, subpath):
+        """*Partially* load instance from a HDF5 file.
+
+        Initializes the class, but does *not* load `node_local` data.
+
+        To finish initialization of the DistributedArray, one needs to explicitly call
+        :meth:`finish_load_from_hdf5` with the `node_local` data, which is when we will actually
+        load the distributed data.
+        """
+        res = cls(key=hdf5_loader.get_attr(h5gr, "key"),
+                  node_local=None,
+                  in_cache=hdf5_loader.get_attr(h5gr, "in_cache"))
+        res._filename_template = hdf5_loader.load(subpath + "filename_template")
+        res._subpath = hdf5_loader.load(subpath + "subpath")
+        res._mpi_size = hdf5_loader.get_attr(h5gr, "mpi_size")
+        res._unfinished_load = True
+        return res
+
+    def finish_load_from_hdf5(self, node_local):
+        """Finish loading the distributed array.
+
+        Note that :func:`~tenpy.simulations.mpi_parallel_actions.node_local_close_hdf5_file`
+        needs to be called after all calls to this method.
+        """
+        self.node_local = node_local
+        if not getattr(self, '_unfinished_load', False):
+            return  # nothing to do
+        if self._mpi_size != node_local.comm.size:
+            # note: if necessary, we can generalize to allow at least distribution over more nodes
+            raise NotImplementedError("loading from hdf5 with different MPI rank size!")
+        action.run(action.distr_array_load_hdf5,
+                   self.node_local,
+                   (self.key, self.in_cache, self._filename_template, self._subpath))
+        del self._filename_template
+        del self._subpath
+        del self._mpi_size
+        del self._unfinished_load
+
 
 class ParallelMPOEnvironment(MPOEnvironment):
     """MPOEnvironment where each node only has its fraction of the MPO wL/wR legs.
@@ -192,6 +275,13 @@ class ParallelMPOEnvironment(MPOEnvironment):
         super().__init__(bra, H, ket, cache, **init_env_data)
         assert self.L == bra.L == ket.L == H.L
         assert bra is ket, "could be generalized...."
+
+    def _check_compatible_legs(self, init_LP, init_RP, start_env_sites):
+        if isinstance(init_LP, DistributedArray):
+            assert isinstance(init_RP, DistributedArray)
+            # TODO: might be a good idea to check the compatibility nevertheless?!
+            return init_LP, init_RP
+        return super()._check_compatible_legs(init_LP, init_RP, start_env_sites)
 
     def get_LP(self, i, store=True):
         """Returns DistributedArray containing the part for the main node"""
@@ -423,14 +513,6 @@ class ParallelMPOEnvironment(MPOEnvironment):
         res = DistributedArray(new_key, self.node_local, True)
         return res
 
-    def get_initialization_data(self, first=0, last=None):
-        data = super().get_initialization_data(first, last)
-        for key, axis in [('init_LP', 'wR'), ('init_RP', 'wL')]:
-            gathered = npc.concatenate(data[key].gather(), axis=axis)
-            perm, gathered = gathered.sort_legcharge(sort=False, bunch=True)
-            data[key] = gathered
-        return data
-
     def cache_optimize(self, short_term_LP=[], short_term_RP=[], preload_LP=None, preload_RP=None):
         # need to update cache on all nodes
         LP_keys = self._LP_keys
@@ -478,10 +560,46 @@ class ParallelTwoSiteDMRG(TwoSiteDMRGEngine):
             self._wrap_ortho_eff_H()
 
     def _init_MPO_env(self, H, init_env_data):
+        # finish loading DistributedArray from hdf5 if not done yet.
+        for key in ['init_LP', 'init_RP']:
+            if key in init_env_data:
+                T = init_env_data[key]
+                if isinstance(T, DistributedArray):
+                    T.finish_load_from_hdf5(self.main_node_local)
+        action.run(action.node_local_close_hdf5_file,  # does nothing if no file was opened
+                   self.main_node_local,
+                   ("hdf5_import_file", ))
+
         # Initialize custom ParallelMPOEnvironment
         cache = self.main_node_local.cache
         self.env = ParallelMPOEnvironment(self.main_node_local,
                                           self.psi, H, self.psi, cache=cache, **init_env_data)
+
+    def get_resume_data(self, sequential_simulations=False):
+        data = super().get_resume_data(sequential_simulations)
+        save_init_env_data = self.options.get('save_init_env_data', 'per_node')
+        if 'init_LP' not in data.get('init_env_data', {}):
+            return data
+        # data['init_env_data']['init_LP'] and 'init_RP' are DistributedArray
+        if save_init_env_data == 'gather':
+            for key, axis in [('init_LP', 'wR'), ('init_RP', 'wL')]:
+                gathered = npc.concatenate(data[key].gather(), axis=axis)
+                perm, gathered = gathered.sort_legcharge(sort=False, bunch=True)
+                data['init_env_data'][key] = gathered
+        elif save_init_env_data == 'per_node':
+            if sequential_simulations:
+                # the cache for the next sequential simulation is going to be different!
+                # -> need to preserve just the init_LP/init_RP cache data
+                data['init_env_data']['init_LP']._keep_alive_beyond_cache()
+                data['init_env_data']['init_RP']._keep_alive_beyond_cache()
+            else:
+                pass  # already in correct form
+        elif save_init_env_data == 'drop' or not save_env_data:
+            del data['init_env_data']['init_LP']
+            del data['init_env_data']['init_RP']
+        else:
+            raise ValueError(f"don't understand option save_init_env_data={save_init_env_data!r}")
+        return data
 
     def run(self):
         # re-initialize worker to allow calling `run()` multiple times
@@ -523,6 +641,7 @@ class NodeLocalData:
         for attaching ``W_blocks[i]`` to the neighboring LP/RP.
         See e.g., :func:`~tenpy.simulations.mpi_parallel_actions.contract_W_RP_sparse`.
     """
+
     def __init__(self, comm, cache):
         self.comm = comm
         i = comm.rank
@@ -574,7 +693,6 @@ class ParallelDMRGSim(GroundStateSearch):
     default_algorithm = "ParallelTwoSiteDMRG"
 
     def __init__(self, options, *, comm=None, **kwargs):
-        # TODO: generalize such that it works if we have sequential simulations
         if comm is None:
             comm = MPI.COMM_WORLD
         self.comm_H = comm
@@ -652,3 +770,10 @@ class ParallelDMRGSim(GroundStateSearch):
             node_local.worker = None
             action.replica_main(node_local)
         # done
+
+    def _save_to_file(self, results, output_filename):
+        super()._save_to_file(results, output_filename)
+        # close any remaining node_local open hdf5 files (opened by DistributedArray.save_hdf5)
+        action.run(action.node_local_close_hdf5_file,
+                   self.engine.main_node_local,
+                   ("hdf5_export_file", ))
