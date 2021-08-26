@@ -30,6 +30,7 @@ from ..linalg import np_conserved as npc
 from ..linalg.sparse import NpcLinearOperatorWrapper
 from ..algorithms.truncation import truncate
 from ..algorithms.dmrg import SingleSiteDMRGEngine, TwoSiteDMRGEngine, DensityMatrixMixer
+from ..algorithms.algorithm import Algorithm
 from ..algorithms.mps_common import TwoSiteH
 from .ground_state_search import GroundStateSearch
 from .simulation import Skip
@@ -40,10 +41,6 @@ from ..tools.thread import Worker
 from ..tools.cache import CacheFile
 from ..tools import hdf5_io
 from ..networks.mpo import MPOEnvironment
-
-__all__ = [
-    'ParallelPlusHcNpcLinearOperator', 'ParallelTwoSiteDMRG', 'ParallelDMRGSim'
-]
 
 #: flag to select contraction method for attaching W to LP/RP, which requires much communication
 CONTRACT_W = "sparse"
@@ -78,6 +75,21 @@ def index_in_blocks(block_projs, index):
         if proj[index]:
             return (j, np.sum(proj[:index]))  # (block index,  index within block)
     assert False, "None of block_projs has `index` True"
+
+
+class _DummyAlgorithm(Algorithm):
+    """Replacement for actual algorithms on the replica nodes.
+
+    This one is only used on replica nodes to make sure
+    :func:`~tenpy.simulations.simulation.run_simulation` and
+    :func:`~tenpy.simulations.simulation.run_seq_simulations` work without an error on the replica
+    nodes.
+    """
+    def __init__(self, *args, **kwargs):
+        pass
+
+    def get_resume_data(self, *args, **kwargs):
+        return {}
 
 
 class ParallelTwoSiteH(TwoSiteH):
@@ -552,7 +564,6 @@ class ParallelTwoSiteDMRG(TwoSiteDMRGEngine):
         if self.use_threading_plus_hc and not model.H_MPO.explicit_plus_hc:
             raise ValueError("can't use threading+hc if the model doesn't have explicit_plus_hc.")
 
-
     def make_eff_H(self):
         assert self.combine
         self.eff_H = ParallelTwoSiteH(self.env, self.i0, True, self.move_right)
@@ -767,7 +778,9 @@ class ParallelDMRGSim(GroundStateSearch):
         else:
             node_local.worker = None
             action.replica_main(node_local)
-        # done
+
+        # HACK: make sure that `run_sequential_simulations` still works with dummy
+        self.engine = _DummyAlgorithm()
 
     def _save_to_file(self, results, output_filename):
         super()._save_to_file(results, output_filename)
