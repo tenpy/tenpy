@@ -21,6 +21,7 @@ from . import networks
 from . import models
 from . import simulations
 from . import version  # needs to be after linalg!
+# don't import mpi_parallel: it imports mpi4py, which has side effects!
 from .simulations.simulation import run_simulation, resume_from_checkpoint, run_seq_simulations
 
 #: hard-coded version string

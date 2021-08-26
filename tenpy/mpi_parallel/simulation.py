@@ -7,10 +7,10 @@ which needs to be installed when you want to use classes in this module.
 .. note ::
     This module is not imported by default, since just importing mpi4py already initializes MPI.
     Hence, if you want to use it, you need to explicitly call
-    ``import tenpy.simulation.mpi_parallel`` in your python script.
+    ``import tenpy.mpi_parallel`` in your python script.
 
 .. warning ::
-    This module is still under active development.
+    MPI parallelization is still under active development.
 """
 # Copyright 2021 TeNPy Developers, GNU GPLv3
 
@@ -32,9 +32,9 @@ from ..algorithms.truncation import truncate
 from ..algorithms.dmrg import SingleSiteDMRGEngine, TwoSiteDMRGEngine, DensityMatrixMixer
 from ..algorithms.algorithm import Algorithm
 from ..algorithms.mps_common import TwoSiteH
-from .ground_state_search import GroundStateSearch
-from .simulation import Skip
-from .simulation import resume_from_checkpoint as _simulation_resume_from_checkpoint
+from ..simulations.ground_state_search import GroundStateSearch
+from ..simulations.simulation import Skip
+from ..simulations.simulation import resume_from_checkpoint as _simulation_resume_from_checkpoint
 from ..tools.params import asConfig
 from ..tools.misc import get_recursive, set_recursive, transpose_list_list
 from ..tools.thread import Worker
