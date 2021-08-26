@@ -40,9 +40,7 @@ def replica_main(node_local):
     while True:
         action_name, meta = node_local.comm.bcast(None)
         if action_name is DONE or action_name == "DONE":
-            # allow to gracefully terminate
-            print(f"MPI rank {node_local.comm.rank:d} signing off")
-            return
+            return  # gracefully terminate
         action = globals()[action_name]
         action(node_local, None, *meta)
 
@@ -147,7 +145,6 @@ def distr_array_load_hdf5(node_local, on_main, key, in_cache, filename_template,
         if f is None:
             import h5py
             f = h5py.File(fn, 'r')
-            print("put {fn!r} on node {ndoe_local.comm.rank!d}")
             node_local.hdf5_import_file = f
         else:
             assert f.filename == fn
@@ -156,12 +153,12 @@ def distr_array_load_hdf5(node_local, on_main, key, in_cache, filename_template,
     else:
         # in sequential simulations after `DistributedArray._keep_alive_beyond_cache()`
         local_part = node_local.__class__._keep_alive.pop(key)
-        if not len(node_local.__class__._keep_alive) > 0:
+        if len(node_local.__class__._keep_alive) == 0:
             del node_local.__class__._keep_alive
     if in_cache:
         node_local.cache[key] = local_part
     else:
-        node_local.distributed[key] = key
+        node_local.distributed[key] = local_part
 
 
 def node_local_close_hdf5_file(node_local, on_main, attr_name):
