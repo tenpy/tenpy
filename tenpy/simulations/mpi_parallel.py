@@ -18,7 +18,7 @@ import warnings
 import numpy as np
 import os
 
-from . import mpi_parallel_actions as action
+from . import mpi_parallel_actions as actions
 
 try:
     from mpi4py import MPI
@@ -44,108 +44,6 @@ from ..networks.mpo import MPOEnvironment
 
 #: flag to select contraction method for attaching W to LP/RP, which requires much communication
 CONTRACT_W = "sparse"
-EPSILON = 1.e-14
-
-
-def split_MPO_leg(leg, N_nodes):
-    """Split MPO leg indices as evenly as possible amongst N_nodes nodes.
-
-    Ensure that lower numbered legs have legs.
-    """
-    # TODO: make this more clever
-    D = leg.ind_len
-    remaining = D
-    running = 0
-    res = []
-    for i in range(N_nodes):
-        proj = np.zeros(D, dtype=bool)
-        assigned = int(np.ceil(remaining / (N_nodes - i)))
-        proj[running: running + assigned] = True
-        res.append(proj)
-        remaining -= assigned
-        running += assigned
-    assert running == D
-    return res
-
-
-def index_in_blocks(block_projs, index):
-    if index is None:
-        return (-1, None)
-    for j, proj in enumerate(block_projs):
-        if proj[index]:
-            return (j, np.sum(proj[:index]))  # (block index,  index within block)
-    assert False, "None of block_projs has `index` True"
-
-
-class _DummyAlgorithm(Algorithm):
-    """Replacement for actual algorithms on the replica nodes.
-
-    This one is only used on replica nodes to make sure
-    :func:`~tenpy.simulations.simulation.run_simulation` and
-    :func:`~tenpy.simulations.simulation.run_seq_simulations` work without an error on the replica
-    nodes.
-    """
-    def __init__(self, *args, **kwargs):
-        pass
-
-    def get_resume_data(self, *args, **kwargs):
-        return {}
-
-
-class ParallelTwoSiteH(TwoSiteH):
-    def __init__(self, env, i0, combine=True, move_right=True):
-        assert combine, 'not implemented for other case'
-        # super().__init__(env, i0, combine, move_right)
-        self.i0 = i0
-        self.LP = env.get_LP(i0)
-        self.RP = env.get_RP(i0 + 1)
-        self.W0 = env.H.get_W(i0).replace_labels(['p', 'p*'], ['p0', 'p0*'])
-        # 'wL', 'wR', 'p0', 'p0*'
-        self.W1 = env.H.get_W(i0 + 1).replace_labels(['p', 'p*'], ['p1', 'p1*'])
-        # 'wL', 'wR', 'p1', 'p1*'
-        self.dtype = env.H.dtype
-        self.combine = combine
-        if self.LP.local_part is not None and self.RP.local_part is not None:
-            self.N = (self.LP.local_part.get_leg('vR').ind_len * self.W0.get_leg('p0').ind_len *
-                      self.W1.get_leg('p1').ind_len * self.RP.local_part.get_leg('vL').ind_len)
-        else:
-            self.N = 0
-        self.combine_Heff(i0, env)
-        env._eff_H = self # HACK to give env.full_contraction access to LHeff, RHeff, i0
-
-    def combine_Heff(self, i0, env):
-        self.LHeff = env._contract_LP_W(i0, self.LP)
-        self.pipeL = self.LHeff.local_part.get_leg('(vR*.p0)')
-        self.RHeff = env._contract_W_RP(i0+1, self.RP)
-        self.pipeR = self.RHeff.local_part.get_leg('(p1.vL*)')
-        self.acts_on = ['(vL.p0)', '(p1.vR)']
-
-    def matvec(self, theta):
-        LHeff = self.LHeff
-        RHeff = self.RHeff
-        return action.run(action.matvec, LHeff.node_local,
-                          (theta, LHeff.key, RHeff.key))
-
-    def to_matrix(self):
-        mat = action.run(action.effh_to_matrix, self.LHeff.node_local,
-                         (self.LHeff.key, self.RHeff.key))
-        if self.LHeff.node_local.H.explicit_plus_hc:
-            mat_hc = mat.conj().itranspose()
-            mat_hc.iset_leg_labels(mat.get_leg_labels())
-            mat = mat + mat_hc
-        return mat
-
-    def update_LP(self, env, i, U=None):
-        assert i == self.i0 + 1
-        assert self.combine
-        LP = env._attach_A_to_LP_W(i - 1, self.LHeff, A=U)
-        env.set_LP(i, LP, age=env.get_LP_age(i - 1) + 1)
-
-    def update_RP(self, env, i, VH=None):
-        assert self.combine
-        assert i == self.i0
-        RP = env._attach_B_to_W_RP(i + 1, self.RHeff, B=VH)
-        env.set_RP(i, RP, age=env.get_RP_age(i + 1) + 1)
 
 
 class DistributedArray:
@@ -186,13 +84,13 @@ class DistributedArray:
         (for parts that will be saved to disk) or in the node_local.distributed dictionary
         (for parts that will only be used once)."""
         assert len(all_parts) == node_local.comm.size
-        action.run(action.scatter_distr_array, node_local, (key, in_cache), all_parts)
+        actions.run(actions.distr_array_scatter, node_local, (key, in_cache), all_parts)
         res = cls(key, node_local, in_cache)
         return res
 
     def gather(self):
         """Gather all parts of distributed array to the root node."""
-        return action.run(action.gather_distr_array, self.node_local, (self.key, self.in_cache))
+        return actions.run(actions.distr_array_gather, self.node_local, (self.key, self.in_cache))
 
     def save_hdf5(self, hdf5_saver, h5gr, subpath):
         """Export the distributed Array to Hdf5.
@@ -217,9 +115,9 @@ class DistributedArray:
         h5gr.attrs["mpi_size"] = self.node_local.comm.size
         h5gr.attrs["in_cache"] = self.in_cache
         h5gr.attrs["key"] = self.key
-        action.run(action.distr_array_save_hdf5,
-                   self.node_local,
-                   (self.key, self.in_cache, filename_template, subpath))
+        actions.run(actions.distr_array_save_hdf5,
+                    self.node_local,
+                    (self.key, self.in_cache, filename_template, subpath))
 
     def _keep_alive_beyond_cache(self):
         """Copy local_part into a node-local but python-global class dictionary.
@@ -230,8 +128,8 @@ class DistributedArray:
         self._unfinished_load = True
         self._mpi_size = self.node_local.comm.size
         self._subpath = self.key
-        self._filename_template = None  # this tells action.distr_array_load_hdf5 to not use HDF5
-        action.run(action.distr_array_keep_alive, self.node_local, (self.key, self.in_cache))
+        self._filename_template = None  # this tells actions.distr_array_load_hdf5 to not use HDF5
+        actions.run(actions.distr_array_keep_alive, self.node_local, (self.key, self.in_cache))
 
     @classmethod
     def from_hdf5(cls, hdf5_loader, h5gr, subpath):
@@ -264,13 +162,119 @@ class DistributedArray:
         if self._mpi_size != node_local.comm.size:
             # note: if necessary, we can generalize to allow at least distribution over more nodes
             raise NotImplementedError("loading from hdf5 with different MPI rank size!")
-        action.run(action.distr_array_load_hdf5,
-                   self.node_local,
-                   (self.key, self.in_cache, self._filename_template, self._subpath))
+        actions.run(actions.distr_array_load_hdf5,
+                    self.node_local,
+                    (self.key, self.in_cache, self._filename_template, self._subpath))
         del self._filename_template
         del self._subpath
         del self._mpi_size
         del self._unfinished_load
+
+
+class NodeLocalData:
+    """Data local to each node.
+
+    Attributes
+    ----------
+    comm : MPI_Comm
+        MPI Communicator.
+    cache : :class:`~tenpy.tools.cache.DictCache`
+        Local cache exclusive to the node.
+    distributed : dict
+        Additional node-local "cache" for things to be kept in RAM only.
+    projs : list of list of numpy arrays
+        For each MPO bond (index `i` left of site `i`) the projection arrays splitting the leg
+        over the different nodes.
+    IdLR_blocks : list of tuple of tuple
+        For each bond the MPO the :meth:`index_in_blocks` of `IdL`, `IdR`.
+    local_MPO_chi : list of int
+        Local part of the MPO bond dimension on each bond.
+    W_blocks : list of list of list of {None, Array}
+        For each site the matrix W split by node blocks, with `None` enties for zero blocks.
+    sparse_comm_schedule : list of (schedule_L, schedule_R)
+        For each site the :func:`~tenpy.simulations.mpi_parallel_actions.sparse_comm_schedule`
+        for attaching ``W_blocks[i]`` to the neighboring LP/RP.
+        See e.g., :func:`~tenpy.simulations.mpi_parallel_actions.contract_W_RP_sparse`.
+    """
+
+    def __init__(self, comm, cache):
+        self.comm = comm
+        i = comm.rank
+        self.cache = cache
+        self.distributed = {}  # data from DistributedArray that is not in_cache
+        # other class attributes are only added once we have H
+        # in `actions.distribute_H`
+
+# -------
+
+class _DummyAlgorithm(Algorithm):
+    """Replacement for actual algorithms on the replica nodes.
+
+    This one is only used on replica nodes to make sure
+    :func:`~tenpy.simulations.simulation.run_simulation` and
+    :func:`~tenpy.simulations.simulation.run_seq_simulations` work without an error on the replica
+    nodes.
+    """
+    def __init__(self, *args, **kwargs):
+        pass
+
+    def get_resume_data(self, *args, **kwargs):
+        return {}
+
+class ParallelTwoSiteH(TwoSiteH):
+    def __init__(self, env, i0, combine=True, move_right=True):
+        assert combine, 'not implemented for other case'
+        # super().__init__(env, i0, combine, move_right)
+        self.i0 = i0
+        self.LP = env.get_LP(i0)
+        self.RP = env.get_RP(i0 + 1)
+        self.W0 = env.H.get_W(i0).replace_labels(['p', 'p*'], ['p0', 'p0*'])
+        # 'wL', 'wR', 'p0', 'p0*'
+        self.W1 = env.H.get_W(i0 + 1).replace_labels(['p', 'p*'], ['p1', 'p1*'])
+        # 'wL', 'wR', 'p1', 'p1*'
+        self.dtype = env.H.dtype
+        self.combine = combine
+        if self.LP.local_part is not None and self.RP.local_part is not None:
+            self.N = (self.LP.local_part.get_leg('vR').ind_len * self.W0.get_leg('p0').ind_len *
+                      self.W1.get_leg('p1').ind_len * self.RP.local_part.get_leg('vL').ind_len)
+        else:
+            self.N = 0
+        self.combine_Heff(i0, env)
+        env._eff_H = self # HACK to give env.full_contraction access to LHeff, RHeff, i0
+
+    def combine_Heff(self, i0, env):
+        self.LHeff = env._contract_LP_W(i0, self.LP)
+        self.pipeL = self.LHeff.local_part.get_leg('(vR*.p0)')
+        self.RHeff = env._contract_W_RP(i0+1, self.RP)
+        self.pipeR = self.RHeff.local_part.get_leg('(p1.vL*)')
+        self.acts_on = ['(vL.p0)', '(p1.vR)']
+
+    def matvec(self, theta):
+        LHeff = self.LHeff
+        RHeff = self.RHeff
+        return actions.run(actions.matvec, LHeff.node_local,
+                           (theta, LHeff.key, RHeff.key))
+
+    def to_matrix(self):
+        mat = actions.run(actions.effh_to_matrix, self.LHeff.node_local,
+                          (self.LHeff.key, self.RHeff.key))
+        if self.LHeff.node_local.H.explicit_plus_hc:
+            mat_hc = mat.conj().itranspose()
+            mat_hc.iset_leg_labels(mat.get_leg_labels())
+            mat = mat + mat_hc
+        return mat
+
+    def update_LP(self, env, i, U=None):
+        assert i == self.i0 + 1
+        assert self.combine
+        LP = env._attach_A_to_LP_W(i - 1, self.LHeff, A=U)
+        env.set_LP(i, LP, age=env.get_LP_age(i - 1) + 1)
+
+    def update_RP(self, env, i, VH=None):
+        assert self.combine
+        assert i == self.i0
+        RP = env._attach_B_to_W_RP(i + 1, self.RHeff, B=VH)
+        env.set_RP(i, RP, age=env.get_RP_age(i + 1) + 1)
 
 
 class ParallelMPOEnvironment(MPOEnvironment):
@@ -283,7 +287,7 @@ class ParallelMPOEnvironment(MPOEnvironment):
     def __init__(self, node_local, bra, H, ket, cache=None, **init_env_data):
         self.node_local = node_local
         comm_H = self.node_local.comm
-        action.run(action.distribute_H, node_local, (H, ))
+        actions.run(actions.distribute_H, node_local, (H, ))
         super().__init__(bra, H, ket, cache, **init_env_data)
         assert self.L == bra.L == ket.L == H.L
         assert bra is ket, "could be generalized...."
@@ -345,13 +349,13 @@ class ParallelMPOEnvironment(MPOEnvironment):
             for p in proj:
                 LP_part = LP.copy()
                 LP_part.iproject(p, axes='wR')
-                if LP_part.norm() < EPSILON:
+                if LP_part.norm() < actions.EPSILON:
                     LP_part = None
                 splits.append(LP_part)
             LP = DistributedArray.from_scatter(splits, self.node_local, self._LP_keys[i], True)
             # from_scatter already puts local part in cache
         else:
-            # we got a DistributedArray, so this is already in cache!
+            # we got a DistributedArray, so this should already be in cache!
             assert self._LP_keys[i] in self.cache
         self._LP_age[i] = age
 
@@ -364,32 +368,32 @@ class ParallelMPOEnvironment(MPOEnvironment):
             for p in proj:
                 RP_part = RP.copy()
                 RP_part.iproject(p, axes='wL')
-                if RP_part.norm() < EPSILON:
+                if RP_part.norm() < actions.EPSILON:
                     RP_part = None
                 splits.append(RP_part)
             RP = DistributedArray.from_scatter(splits, self.node_local, self._RP_keys[i], True)
             # from_scatter already puts local part in cache
         else:
-            # we got a DistributedArray, so this is already in cache!
+            # we got a DistributedArray, so this should already be in cache!
             assert self._RP_keys[i] in self.cache
         self._RP_age[i] = age
 
     def del_LP(self, i):
         """Delete stored part strictly to the left of site `i`."""
         i = self._to_valid_index(i)
-        action.run(action.cache_del, self.node_local, (self._LP_keys[i], ))
+        actions.run(actions.cache_del, self.node_local, (self._LP_keys[i], ))
         self._LP_age[i] = None
 
     def del_RP(self, i):
         """Delete stored part scrictly to the right of site `i`."""
         i = self._to_valid_index(i)
-        action.run(action.cache_del, self.node_local, (self._RP_keys[i], ))
+        actions.run(actions.cache_del, self.node_local, (self._RP_keys[i], ))
         self._RP_age[i] = None
 
     def clear(self):
         """Delete all partial contractions except the left-most `LP` and right-most `RP`."""
         keys = [key for key in self._LP_keys[1:] + self._RP_keys[:-1] if key in self.cache]
-        action.run(action.cache_del, self.node_local, keys)
+        actions.run(actions.cache_del, self.node_local, keys)
         self._LP_age[1:] = [None] * (self.L - 1)
         self._RP_age[:-1] = [None] * (self.L - 1)
 
@@ -422,7 +426,7 @@ class ParallelMPOEnvironment(MPOEnvironment):
                 meta = (case, LHeff.key, LHeff.in_cache, RP.key, RP.in_cache, theta)
             else: # case = 0b00
                 assert False, "Not needed!?"
-        res = action.run(action.full_contraction, self.node_local, meta)
+        res = actions.run(actions.full_contraction, self.node_local, meta)
         return res
 
     def _contract_LP(self, i, LP):
@@ -444,11 +448,11 @@ class ParallelMPOEnvironment(MPOEnvironment):
 
     if CONTRACT_W == "sparse":
         def _contract_LP_W(self, i, LP):
-            action.run(action.contract_LP_W_sparse, self.node_local, (i, LP.key, "LP_W"), None)
+            actions.run(actions.contract_LP_W_sparse, self.node_local, (i, LP.key, "LP_W"), None)
             return DistributedArray("LP_W", self.node_local, False)
 
         def _contract_W_RP(self, i, RP):
-            action.run(action.contract_W_RP_sparse, self.node_local, (i, RP.key, "W_RP"), None)
+            actions.run(actions.contract_W_RP_sparse, self.node_local, (i, RP.key, "W_RP"), None)
             return DistributedArray("W_RP", self.node_local, False)
 
     elif CONTRACT_W == "dumb":
@@ -506,7 +510,7 @@ class ParallelMPOEnvironment(MPOEnvironment):
             raise ValueError("'A' tensor has neither 2 nor 3 legs")
 
         new_key = self._LP_keys[(i+1) % self.L]
-        action.run(action.attach_A, self.node_local, (LP_W.key, new_key, A))
+        actions.run(actions.attach_A, self.node_local, (LP_W.key, new_key, A))
         res = DistributedArray(new_key, self.node_local, True)
         return res
 
@@ -521,7 +525,7 @@ class ParallelMPOEnvironment(MPOEnvironment):
             raise ValueError("'B' tensor has neither 2 nor 3 legs")
 
         new_key = self._RP_keys[(i-1) % self.L]
-        action.run(action.attach_B, self.node_local, (W_RP.key, new_key, B))
+        actions.run(actions.attach_B, self.node_local, (W_RP.key, new_key, B))
         res = DistributedArray(new_key, self.node_local, True)
         return res
 
@@ -538,7 +542,7 @@ class ParallelMPOEnvironment(MPOEnvironment):
         short_term_keys = tuple([LP_keys[self._to_valid_index(i)] for i in short_term_LP] +
                                 [RP_keys[self._to_valid_index(i)] for i in short_term_RP])
 
-        action.run(action.cache_optimize, self.node_local, (short_term_keys, preload))
+        actions.run(actions.cache_optimize, self.node_local, (short_term_keys, preload))
 
 
 class ParallelDensityMatrixMixer(DensityMatrixMixer):
@@ -547,7 +551,7 @@ class ParallelDensityMatrixMixer(DensityMatrixMixer):
         LHeff = engine.eff_H.LHeff
         RHeff = engine.eff_H.RHeff
         data = (theta, i0, self.amplitude, update_LP, update_RP, LHeff.key, RHeff.key)
-        rho_L, rho_R = action.run(action.mix_rho, engine.main_node_local, data)
+        rho_L, rho_R = actions.run(actions.mix_rho, engine.main_node_local, data)
         return rho_L, rho_R
 
 
@@ -577,7 +581,7 @@ class ParallelTwoSiteDMRG(TwoSiteDMRGEngine):
                 T = init_env_data[key]
                 if isinstance(T, DistributedArray):
                     T.finish_load_from_hdf5(self.main_node_local)
-        action.run(action.node_local_close_hdf5_file,  # does nothing if no file was opened
+        actions.run(actions.node_local_close_hdf5_file,  # does nothing if no file was opened
                    self.main_node_local,
                    ("hdf5_import_file", ))
 
@@ -627,80 +631,7 @@ class ParallelTwoSiteDMRG(TwoSiteDMRGEngine):
         return res
 
 
-class NodeLocalData:
-    """Data local to each node.
-
-    Attributes
-    ----------
-    comm : MPI_Comm
-        MPI Communicator.
-    cache : :class:`~tenpy.tools.cache.DictCache`
-        Local cache exclusive to the node.
-    distributed : dict
-        Additional node-local "cache" for things to be kept in RAM only.
-    projs : list of list of numpy arrays
-        For each MPO bond (index `i` left of site `i`) the projection arrays splitting the leg
-        over the different nodes.
-    IdLR_blocks : list of tuple of tuple
-        For each bond the MPO the :meth:`index_in_blocks` of `IdL`, `IdR`.
-    local_MPO_chi : list of int
-        Local part of the MPO bond dimension on each bond.
-    W_blocks : list of list of list of {None, Array}
-        For each site the matrix W split by node blocks, with `None` enties for zero blocks.
-    sparse_comm_schedule : list of (schedule_L, schedule_R)
-        For each site the :func:`~tenpy.simulations.mpi_parallel_actions.sparse_comm_schedule`
-        for attaching ``W_blocks[i]`` to the neighboring LP/RP.
-        See e.g., :func:`~tenpy.simulations.mpi_parallel_actions.contract_W_RP_sparse`.
-    """
-
-    def __init__(self, comm, cache):
-        self.comm = comm
-        i = comm.rank
-        self.cache = cache
-        self.distributed = {}  # data from DistributedArray that is not in_cache
-
-    def add_H(self, H):
-        self.H = H
-        N = self.comm.size
-        self.W_blocks = []
-        self.projs_L = []
-        self.IdLR_blocks = []
-        self.local_MPO_chi = []
-        self.sparse_comm_schedule = []
-        for bond in range(H.L if not H.finite else H.L + 1):
-            if bond != H.L:
-                leg = H.get_W(bond).get_leg('wL')
-            else:
-                leg = H.get_W(H.L - 1).get_leg('wR')
-            projs = split_MPO_leg(leg, N)
-            self.projs_L.append(projs)
-            self.local_MPO_chi.append(np.sum(projs[self.comm.rank]))
-            IdL, IdR = H.IdL[bond], H.IdR[bond]
-            IdLR = (index_in_blocks(projs, IdL), index_in_blocks(projs, IdR))
-            self.IdLR_blocks.append(IdLR)
-        for i in range(H.L):
-            W = H.get_W(i)
-            projs_L = self.projs_L[i]
-            projs_R = self.projs_L[(i+1) % H.L]
-            blocks = []
-            for b_L in range(N):
-                row = []
-                for b_R in range(N):
-                    Wblock = W.copy()
-                    Wblock.iproject([projs_L[b_L], projs_R[b_R]], ['wL', 'wR'])
-                    if Wblock.norm() < EPSILON:
-                        Wblock = None
-                    row.append(Wblock)
-                # note: for (MPO bond dim) < N (which is legit for finite at the boundaries),
-                # some rows/columns of Wblock can be all None.
-                blocks.append(row)
-            self.W_blocks.append(blocks)
-            schedule_RP = action.sparse_comm_schedule(blocks, self.comm.rank)
-            schedule_LP = action.sparse_comm_schedule(transpose_list_list(blocks), self.comm.rank)
-            self.sparse_comm_schedule.append((schedule_LP, schedule_RP))
-
 class ParallelDMRGSim(GroundStateSearch):
-
     default_algorithm = "ParallelTwoSiteDMRG"
 
     def __init__(self, options, *, comm=None, **kwargs):
@@ -712,7 +643,7 @@ class ParallelDMRGSim(GroundStateSearch):
             try:
                 super().__init__(options, **kwargs)
             except Skip:
-                self.comm_H.bcast((action.DONE, None))
+                self.comm_H.bcast((actions.DONE, None))
                 raise
         else:
             # don't __init__() to avoid locking other files
@@ -745,7 +676,8 @@ class ParallelDMRGSim(GroundStateSearch):
                                   exc_info=(exc_type, exc_value, traceback))
         if self.comm_H.rank == 0:
             self.options.warn_unused(True)
-            self.comm_H.bcast((action.DONE, None))
+            if exc_type is None:
+                self.comm_H.bcast((actions.DONE, None))
         print(f"MPI rank {self.comm_H.rank:d} signing off")
 
     def init_algorithm(self, **kwargs):
@@ -754,7 +686,7 @@ class ParallelDMRGSim(GroundStateSearch):
 
     def run(self):
         if self.comm_H.rank == 0:
-            return super().run()
+            return super().run()  # actions.DONE
         else:
             self.replica_run()
 
@@ -774,10 +706,10 @@ class ParallelDMRGSim(GroundStateSearch):
             worker = Worker("EffectiveHPlusHC worker", max_queue_size=1, daemon=False)
             node_local.worker = worker
             with worker:
-                action.replica_main(node_local)
+                actions.replica_main(node_local)
         else:
             node_local.worker = None
-            action.replica_main(node_local)
+            actions.replica_main(node_local)
 
         # HACK: make sure that `run_sequential_simulations` still works with dummy
         self.engine = _DummyAlgorithm()
@@ -785,6 +717,6 @@ class ParallelDMRGSim(GroundStateSearch):
     def _save_to_file(self, results, output_filename):
         super()._save_to_file(results, output_filename)
         # close any remaining node_local open hdf5 files (opened by DistributedArray.save_hdf5)
-        action.run(action.node_local_close_hdf5_file,
+        actions.run(actions.node_local_close_hdf5_file,
                    self.engine.main_node_local,
                    ("hdf5_export_file", ))

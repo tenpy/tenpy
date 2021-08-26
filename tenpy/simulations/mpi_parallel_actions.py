@@ -10,8 +10,12 @@ except ImportError:
 
 from ..linalg import np_conserved as npc
 from ..tools.hdf5_io import save_to_hdf5, load_from_hdf5
+from ..tools.misc import transpose_list_list
 
 DONE = None  # sentinel to say that the worker should finish
+
+#: blocks/arrays with norm smaller than EPSILON are dropped.
+EPSILON = 1.e-14
 
 def sum_none(A, B, _=None):
     assert _ is None  # only needed for compatiblity with mpi4py
@@ -25,7 +29,11 @@ MPI_SUM_NONE = MPI.Op.Create(sum_none, commute=True)
 
 
 def run(action, node_local, meta, on_main=None):
-    """Special action to call other actions"""
+    """Special action to call other actions.
+
+    Calling ``action.run(action.some_function, node_local, ...)`` will execute `some_function`
+    (which needs to be a function in this module) on all nodes.
+    """
     if action is DONE:
         action_name = "DONE"
     else:
@@ -37,6 +45,12 @@ def run(action, node_local, meta, on_main=None):
 
 
 def replica_main(node_local):
+    """The main loop for replica nodes.
+
+    They wait for the main node to call ``action.run(action.some_function, ...)``
+    and then execute that function.
+    The loop terminates when the main node broadcasts `DONE` as action.
+    """
     while True:
         action_name, meta = node_local.comm.bcast(None)
         if action_name is DONE or action_name == "DONE":
@@ -46,7 +60,119 @@ def replica_main(node_local):
 
 
 def distribute_H(node_local, on_main, H):
-    node_local.add_H(H)
+    """Distribute and split H and prepare communication schedules."""
+    node_local.H = H
+    comm = node_local.comm
+    N = comm.size
+    node_local.W_blocks = []
+    node_local.projs_L = []
+    node_local.IdLR_blocks = []
+    node_local.local_MPO_chi = []
+    node_local.sparse_comm_schedule = []
+    for bond in range(H.L if not H.finite else H.L + 1):
+        if bond != H.L:
+            leg = H.get_W(bond).get_leg('wL')
+        else:
+            leg = H.get_W(H.L - 1).get_leg('wR')
+        projs = split_MPO_leg(leg, N)
+        node_local.projs_L.append(projs)
+        node_local.local_MPO_chi.append(np.sum(projs[comm.rank]))
+        IdL, IdR = H.IdL[bond], H.IdR[bond]
+        IdLR = (index_in_blocks(projs, IdL), index_in_blocks(projs, IdR))
+        node_local.IdLR_blocks.append(IdLR)
+    for i in range(H.L):
+        W = H.get_W(i)
+        projs_L = node_local.projs_L[i]
+        projs_R = node_local.projs_L[(i+1) % H.L]
+        blocks = []
+        for b_L in range(N):
+            row = []
+            for b_R in range(N):
+                Wblock = W.copy()
+                Wblock.iproject([projs_L[b_L], projs_R[b_R]], ['wL', 'wR'])
+                if Wblock.norm() < EPSILON:
+                    Wblock = None
+                row.append(Wblock)
+            # note: for (MPO bond dim) < N (which is legit for finite at the boundaries),
+            # some rows/columns of Wblock can be all None.
+            blocks.append(row)
+        node_local.W_blocks.append(blocks)
+        schedule_RP = build_sparse_comm_schedule(blocks, comm.rank)
+        schedule_LP = build_sparse_comm_schedule(transpose_list_list(blocks), comm.rank)
+        node_local.sparse_comm_schedule.append((schedule_LP, schedule_RP))
+
+
+def split_MPO_leg(leg, N_nodes):
+    """Split MPO leg indices as evenly as possible amongst N_nodes nodes.
+
+    Ensure that lower numbered legs have legs.
+    """
+    # TODO: make this more clever
+    D = leg.ind_len
+    remaining = D
+    running = 0
+    res = []
+    for i in range(N_nodes):
+        proj = np.zeros(D, dtype=bool)
+        assigned = int(np.ceil(remaining / (N_nodes - i)))
+        proj[running: running + assigned] = True
+        res.append(proj)
+        remaining -= assigned
+        running += assigned
+    assert running == D
+    return res
+
+
+def index_in_blocks(block_projs, index):
+    if index is None:
+        return (-1, None)
+    for j, proj in enumerate(block_projs):
+        if proj[index]:
+            return (j, np.sum(proj[:index]))  # (block index,  index within block)
+    assert False, "None of block_projs has `index` True"
+
+
+def build_sparse_comm_schedule(W_block, on_node=None):
+    """Find schedule for multiplying W_block with RP.
+
+    Not an action, but a helper function called by `distribute_H`
+
+    Returns
+    -------
+    schedule : list of list of (int, int)
+    """
+    N = len(W_block)  # number of nodes
+    nonzero_inds = [[c for c, W in enumerate(row) if W is not None] for row in W_block]
+    schedule = []
+    while any(len(inds) > 0 for inds in nonzero_inds):
+        comms = [] # (dest, source)
+        # which node needs to communicate with whom this round?
+        # try to balance sends/recieves on each node with greedy minimization
+        comms_on_node = np.zeros(N, int)
+        for dest, needs_from in enumerate(nonzero_inds):
+            if len(needs_from) == 0:
+                continue
+            i = np.argmin([comms_on_node[i] for i in needs_from])
+            source = needs_from.pop(i)
+            if dest != source:
+                comms_on_node[dest] += 1
+                comms_on_node[source] += 1
+            comms.append((dest, source))
+        # now sort those communications such that they can happen in parallel as much as possible
+        # for example [(0, 1), (1, 2), (2, 3), (3, 0)] => [(0, 1), (2, 3), (1, 2), (3, 0)]
+        comms_sorted = []
+        delay_on_node = np.zeros(N, int)
+        while comms:
+            delay = [max(delay_on_node[t], delay_on_node[s]) for (t, s) in comms]
+            i = np.argmin(delay)
+            t, s = comms.pop(i)
+            if t != s:
+                delay_on_node[t] = delay_on_node[s] = delay[i] + 1
+            comms_sorted.append((t, s))
+        if on_node is not None:
+            comms_sorted = [(t, s) for (t, s) in comms_sorted if t == on_node or s == on_node]
+        schedule.append(comms_sorted)
+    return schedule
 
 
 def matvec(node_local, on_main, theta, LH_key, RH_key):
@@ -103,7 +229,7 @@ def effh_to_matrix(node_local, on_main, LH_key, RH_key):
     return node_local.comm.reduce(contr, op=MPI_SUM_NONE)
 
 
-def scatter_distr_array(node_local, on_main, key, in_cache):
+def distr_array_scatter(node_local, on_main, key, in_cache):
     local_part = node_local.comm.scatter(on_main)
     if in_cache:
         node_local.cache[key] = local_part
@@ -111,7 +237,7 @@ def scatter_distr_array(node_local, on_main, key, in_cache):
         node_local.distributed[key] = local_part
 
 
-def gather_distr_array(node_local, on_main, key, in_cache):
+def distr_array_gather(node_local, on_main, key, in_cache):
     local_part = node_local.cache[key] if in_cache else node_local.distributed[key]
     return node_local.comm.gather(local_part)
 
@@ -130,6 +256,7 @@ def distr_array_save_hdf5(node_local, on_main, key, in_cache, filename_template,
     save_to_hdf5(f, local_part, hdf5_key)
 
 def distr_array_keep_alive(node_local, on_main, key, in_cache):
+    """Get reference to the `DistributedArray.local_part` that survives deleting the cache."""
     # generate *global* class attribute
     if hasattr(node_local.__class__, '_keep_alive'):
         keep_alive = node_local.__class__._keep_alive
@@ -166,48 +293,6 @@ def node_local_close_hdf5_file(node_local, on_main, attr_name):
     if f is not None:
         f.close()
         delattr(node_local, attr_name)
-
-def sparse_comm_schedule(W_block, on_node=None):
-    """Find schedule for multiplying W_block with RP.
-
-    Not an action, but a helper function called by `NodeLocalData.add_H` (from distribute_H)
-
-    Returns
-    -------
-    schedule : list of list of (int, int)
-    """
-    N = len(W_block)  # number of nodes
-    nonzero_inds = [[c for c, W in enumerate(row) if W is not None] for row in W_block]
-    schedule = []
-    while any(len(inds) > 0 for inds in nonzero_inds):
-        comms = [] # (dest, source)
-        # which node needs to communicate with whom this round?
-        # try to balance sends/recieves on each node with greedy minimization
-        comms_on_node = np.zeros(N, int)
-        for dest, needs_from in enumerate(nonzero_inds):
-            if len(needs_from) == 0:
-                continue
-            i = np.argmin([comms_on_node[i] for i in needs_from])
-            source = needs_from.pop(i)
-            if dest != source:
-                comms_on_node[dest] += 1
-                comms_on_node[source] += 1
-            comms.append((dest, source))
-        # now sort those communications such that they can happen in parallel as much as possible
-        # for example [(0, 1), (1, 2), (2, 3), (3, 0)] => [(0, 1), (2, 3), (1, 2), (3, 0)]
-        comms_sorted = []
-        delay_on_node = np.zeros(N, int)
-        while comms:
-            delay = [max(delay_on_node[t], delay_on_node[s]) for (t, s) in comms]
-            i = np.argmin(delay)
-            t, s = comms.pop(i)
-            if t != s:
-                delay_on_node[t] = delay_on_node[s] = delay[i] + 1
-            comms_sorted.append((t, s))
-        if on_node is not None:
-            comms_sorted = [(t, s) for (t, s) in comms_sorted if t == on_node or s == on_node]
-        schedule.append(comms_sorted)
-    return schedule
 
 
 def contract_LP_W_sparse(node_local, on_main, i, old_key, new_key):
