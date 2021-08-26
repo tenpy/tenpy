@@ -1832,14 +1832,14 @@ class MPOEnvironment(MPSEnvironment):
                 i = -start_env_sites
                 init_LP.get_leg('wR').test_contractible(self.H.get_W(i).get_leg('wL'))
             except ValueError:
-                logger.warning("dropping `init_LP` with incompatible MPO legs")
+                warning.warn("dropping `init_LP` with incompatible MPO legs")
                 init_LP = None
         if init_RP is not None:
             try:
                 j = self.L - 1 + start_env_sites
                 init_RP.get_leg('wL').test_contractible(self.H.get_W(j).get_leg('wR'))
             except ValueError:
-                logger.warning("dropping `init_RP` with incompatible MPO legs")
+                warning.warn("dropping `init_RP` with incompatible MPO legs")
                 init_RP = None
         return super()._check_compatible_legs(init_LP, init_RP, start_env_sites)
 
