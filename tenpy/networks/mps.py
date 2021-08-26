@@ -4129,19 +4129,19 @@ class MPSEnvironment:
             else:
                 vL_ket = self.ket.get_B(-start_env_sites, 'A').get_leg('vL')
                 vL_bra = self.bra.get_B(-start_env_sites, 'A').get_leg('vL')
-                vR_ket = self.ket.get_B(self.L + start_env_sites, 'B').get_leg('vR')
-                vR_bra = self.bra.get_B(self.L + start_env_sites, 'B').get_leg('vR')
+                vR_ket = self.ket.get_B(self.L - 1 + start_env_sites, 'B').get_leg('vR')
+                vR_bra = self.bra.get_B(self.L - 1 + start_env_sites, 'B').get_leg('vR')
         if init_LP is not None:
             compatible = (init_LP.get_leg('vR') == vL_ket.conj()
                           and init_LP.get_leg('vR*') == vL_bra)
             if not compatible:
-                logger.warning("dropping `init_LP` with incompatible MPS legs")
+                warnings.warn("dropping `init_LP` with incompatible MPS legs")
                 init_LP = None
         if init_RP is not None:
             compatible = (init_RP.get_leg('vL') == vR_ket.conj()
                           and init_RP.get_leg('vL*') == vR_bra)
             if not compatible:
-                logger.warning("dropping `init_RP` with incompatible MPS legs")
+                warnings.warn("dropping `init_RP` with incompatible MPS legs")
                 init_RP = None
         return init_LP, init_RP
 
