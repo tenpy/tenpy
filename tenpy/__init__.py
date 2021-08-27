@@ -9,6 +9,7 @@ and yet powerful enough for day-to-day research.
 # Copyright 2018-2021 TeNPy Developers, GNU GPLv3
 # This file marks this directory as a python package.
 
+import warnings
 import logging
 logger = logging.getLogger(__name__)  # main logger for tenpy
 
