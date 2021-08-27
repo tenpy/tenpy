@@ -129,7 +129,7 @@ def node_local_close_hdf5_file(node_local, on_main, attr_name):
         delattr(node_local, attr_name)
 
 
-def distribute_H(node_local, on_main, H):
+def distribute_H(node_local, on_main, H, mpi_split_params):
     """Distribute and split H and prepare communication schedules."""
     node_local.H = H
     comm = node_local.comm
@@ -144,7 +144,7 @@ def distribute_H(node_local, on_main, H):
             leg = H.get_W(bond).get_leg('wL')
         else:
             leg = H.get_W(H.L - 1).get_leg('wR')
-        projs = helpers.split_MPO_leg(leg, N)
+        projs = helpers.split_MPO_leg(leg, N, mpi_split_params)
         node_local.projs_L.append(projs)
         node_local.local_MPO_chi.append(np.sum(projs[comm.rank]))
         IdL, IdR = H.IdL[bond], H.IdR[bond]

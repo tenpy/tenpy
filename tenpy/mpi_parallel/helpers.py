@@ -18,25 +18,114 @@ def sum_none(A, B, _=None):
     return A + B
 
 
-def split_MPO_leg(leg, N_nodes):
+def split_MPO_leg(leg, N_nodes, mpi_split_params):
     """Split MPO leg indices as evenly as possible amongst N_nodes nodes.
 
-    Ensure that lower numbered legs have legs.
+    Options
+    -------
+    .. cfg:config: mpi_split_params
+
+        method : str
+            How to split. One of the following options.
+
+            uniform:
+                Split the leg into equal-sized blocks, ignoring any charge structure.
+            Z_charge_values:
+                Split by the charge values of a Z_{N_nodes} charge.
+                You need to specify the `Z_charge` as well.
+            block_size:
+                Distribute by sizes of the charge blocks from large to small giving to
+                whichever node has least total so far.
+            two-step:
+                Use a string ``'first-second'``, e.g. ``'Z_charge_values-block_size'``,
+                to split the leg into `N_nodes_first` subsectors with the `first` method,
+                and then split each subsector again with the `second` method.
+        Z_charge: str | int
+            Name or index of the charge for `Z_charge_values` in the
+            :class:`~tenpy.linalg.np_conserved.ChargeInfo`. Needs to have `mod` equal to `N_nodes`.
+        N_nodes_first: int
+            `N_nodes` for the first method of `two-step`.
+            We require `N_nodes` to be a multiple of `N_nodes_first`.
+
+    Parameters
+    ----------
+    leg : :class:`~tenpy.linalg.charges.LegCharge`
+        The leg to be split.
+    N_nodes : int
+        Into how many parts we need to split it.
+    mpi_split_params : dict
+        Options to determine how to split, see above.
+    method :
+        One of the following methods for splitting the leg.
+
+    **kwargs :
+        Possibly extra keyword arguments depending on `method`.
     """
-    # TODO: make this more clever
     D = leg.ind_len
-    remaining = D
-    running = 0
-    res = []
-    for i in range(N_nodes):
-        proj = np.zeros(D, dtype=bool)
-        assigned = int(np.ceil(remaining / (N_nodes - i)))
-        proj[running: running + assigned] = True
-        res.append(proj)
-        remaining -= assigned
-        running += assigned
-    assert running == D
+    method = mpi_split_params.get('method', 'uniform')
+    if method == 'uniform':
+        remaining = D
+        running = 0
+        res = []
+        for i in range(N_nodes):
+            proj = np.zeros(D, dtype=bool)
+            assigned = int(np.ceil(remaining / (N_nodes - i)))
+            proj[running: running + assigned] = True
+            res.append(proj)
+            remaining -= assigned
+            running += assigned
+        assert running == D
+    elif method == 'Z_charge_values':
+        charge = find_Z_charge(leg.chinfo, mpi_split_params.get('Z_charge', None))
+        if leg.chinfo.mod[charge] != N_nodes :
+            raise ValueError("Can't split Z_{leg.chinfo.mod[charge]:d} onto {N_nodes} nodes")
+        qflat = leg.to_qflat()[:, charge]
+        res = []
+        for i in range(N_nodes):
+            proj = np.zeros(D, dtype=bool)
+            proj[qflat == i] = True
+            res.append(proj)
+        return res
+    elif method == 'block_size':
+        sizes = leg.get_block_sizes()
+        slices = leg.slices
+        has_size = [0] * N_nodes
+        res = [np.zeros(D, dtype=bool) for _ in range(N_nodes)]
+        for block in np.argsort(sizes)[::-1]:
+            to_node = np.argmin(has_size)
+            res[to_node][leg.slices[block]: leg.slices[block + 1]] = True
+            has_size[to_node] += sizes[block]
+    elif '-' in method:
+        first_method, second_method = method.split('-')
+        N_nodes_first = mpi_split_params['N_nodes_first']
+        assert N_nodes % N_nodes_first == 0
+        N_nodes_second = N_nodes // N_nodes_first
+        mpi_split_params['method'] = first_method
+        projs_first = split_MPO_leg(leg, N_nodes_first, mpi_split_params)
+        mpi_split_params['method'] = second_method
+        res = []
+        for p_first in projs_first:
+            _, _, p_leg = leg.project(p_first)
+            projs_second = split_MPO_leg(p_leg, N_nodes_second, mpi_split_params)
+            for p_second in projs_second:
+                proj_full = np.zeros(D, dtype=bool)
+                proj_full[p_first] = p_second
+                res.append(proj_full)
+        mpi_split_params['method'] = method
+    else:
+        raise ValueError(f"Unknown method={method!r}")
     return res
+
+def find_Z_charge(chinfo, charge=None):
+    if charge is None:
+        if np.sum(chinfo.mod > 1) == 1:
+            charge = np.nonzero(chinfo.mod > 1)[0][0]
+        else:
+            raise ValueError("You need to specify the name of the `Z_charge`")
+    if isinstance(charge, str):
+        charge = chinfo.names.index(charge)
+    assert chinfo.mod[charge] > 1
+    return charge
 
 
 def index_in_blocks(block_projs, index):

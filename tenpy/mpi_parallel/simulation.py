@@ -96,13 +96,13 @@ class ParallelMPOEnvironment(MPOEnvironment):
     :meth:`get_RP` and :meth:`set_RP` return/expect a
     :class:`~tenpy.mpi_parallel.distributed.DistributedArray`.
     """
-    def __init__(self, node_local, bra, H, ket, cache=None, **init_env_data):
+    def __init__(self, node_local, mpi_split_params, bra, H, ket, cache=None, **init_env_data):
+        assert bra is ket, "could be generalized...."
         self.node_local = node_local
         comm_H = self.node_local.comm
-        actions.run(actions.distribute_H, node_local, (H, ))
+        actions.run(actions.distribute_H, node_local, (H, mpi_split_params))
         super().__init__(bra, H, ket, cache, **init_env_data)
         assert self.L == bra.L == ket.L == H.L
-        assert bra is ket, "could be generalized...."
 
     def _check_compatible_legs(self, init_LP, init_RP, start_env_sites):
         if isinstance(init_LP, DistributedArray):
@@ -368,6 +368,15 @@ class ParallelDensityMatrixMixer(DensityMatrixMixer):
 
 
 class ParallelTwoSiteDMRG(TwoSiteDMRGEngine):
+    """
+
+    Options
+    -------
+    thread_plus_hc: bool
+        Whether to use multi-threading to parallelize the matvec.
+    mpi_split_params : dict
+        Parameters for :func:`~tenpy.mpi_parallel.helpers.split_MPO_leg`.
+    """
     DefaultMixer = ParallelDensityMatrixMixer
 
     def __init__(self, psi, model, options, *, comm_H, **kwargs):
@@ -397,9 +406,11 @@ class ParallelTwoSiteDMRG(TwoSiteDMRGEngine):
                    self.main_node_local,
                    ("hdf5_import_file", ))
 
+        mpi_split_params = self.options.subconfig("mpi_split_params")  # see helpers.split_MPO_leg
+
         # Initialize custom ParallelMPOEnvironment
         cache = self.main_node_local.cache
-        self.env = ParallelMPOEnvironment(self.main_node_local,
+        self.env = ParallelMPOEnvironment(self.main_node_local, mpi_split_params,
                                           self.psi, H, self.psi, cache=cache, **init_env_data)
 
     def get_resume_data(self, sequential_simulations=False):
