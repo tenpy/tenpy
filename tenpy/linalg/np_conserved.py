@@ -492,7 +492,7 @@ class Array:
             We expect that `func` returns a flat array of the given `shape` convertible to `dtype`.
             If no `shape_kw` is given, it is called as
             ``func(shape, *func_args, **func_kwargs)``,
-            otherwise as ``func(*func_args, `shape_kw`=shape, **func_kwargs)``.
+            otherwise as ``func(*func_args, shape_kw=shape, **func_kwargs)``.
             `shape` is a tuple of int.
         legcharges : list of :class:`LegCharge`
             The leg charges for each of the legs. The :class:`ChargeInfo` is read out from it.
