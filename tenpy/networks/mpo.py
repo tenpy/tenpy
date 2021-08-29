@@ -2097,6 +2097,8 @@ class MPOTransferMatrix:
         we call `conj()` on the matrices directly.
     transpose : bool
         Wheter `self.matvec` acts on `RP` (``False``) or `LP` (``True``).
+    guess : :class:`~tenpy.linalg.np_conserved.Array`
+        Initial guess for the converged environment.
 
     Attributes
     ----------
@@ -2115,7 +2117,7 @@ class MPOTransferMatrix:
     flat_guess :
         Initial guess suitable for `flat_linop` in non-tenpy form.
     """
-    def __init__(self, H, psi, transpose=False):
+    def __init__(self, H, psi, transpose=False, guess=None):
         if psi.finite or H.bc != 'infinite':
             raise ValueError("Only makes sense for infinite MPS")
         if H.L != psi.L:
@@ -2134,12 +2136,9 @@ class MPOTransferMatrix:
         self.IdR = H.get_IdR(-1)  # on bond between MPS unit cells
         if self.IdL is None or self.IdR is None:
             raise ValueError("MPO needs to have structure with IdL/IdR")
-        vL = psi.get_B(0, None).get_leg('vL')
-        vR = vL.conj()
         wL = H.get_W(0).get_leg('wL')
         wR = wL.conj()
         S2 = psi.get_SL(0)**2
-        self._chi0 = vL.ind_len
         if not transpose:  # right to left
             # vec: vL wL vL*
             for i in reversed(range(self.L)):
@@ -2148,8 +2147,20 @@ class MPOTransferMatrix:
                 self._M.append(B.transpose(['vL', 'p', 'vR']))
                 self._W.append(H.get_W(i).transpose(['p*', 'wR', 'p', 'wL']).astype(dtype, False))
                 self._M_conj.append(B.conj().itranspose(['vR*', 'p*', 'vL*']))
-            eye_R = npc.diag(1., vL, dtype=dtype, labels=['vL', 'vL*'])
-            self.guess = eye_R.add_leg(wL, self.IdR, axis=1, label='wL')  # vL wL vL*
+            vR = self._M[0].get_leg('vR')
+            self._chi0 = vR.ind_len
+            eye_R = npc.diag(1., vR.conj(), dtype=dtype, labels=['vL', 'vL*'])
+            if guess is not None:
+                guess.itranspose(['vL', 'wL', 'vL*'])
+                try:
+                    guess.get_leg('wL').test_equal(wL)
+                    guess.get_leg('vL').test_contractible(vR)
+                    guess.get_leg('vL*').test_equal(vR)
+                except ValueError:
+                    logger.warning("dropping guess for MPOTransferMatrix with incompatible legs")
+                    guess = None
+            if guess is None:
+                guess = eye_R.add_leg(wL, self.IdR, axis=1, label='wL')  # vL wL vL*
             self.proj = eye_R.add_leg(wL, self.IdL, axis=1, label='wL')  # vL wL vL*
             rho = npc.diag(S2, vR, labels=['vR', 'vR*'])
             self.proj_rho = rho.add_leg(wR, self.IdL, axis=1, label='wR')  # vR wR vR*
@@ -2160,11 +2171,24 @@ class MPOTransferMatrix:
                 self._M.append(A.transpose(['vL', 'p', 'vR']))
                 self._W.append(H.get_W(i).transpose(['wR', 'p', 'wL', 'p*']).astype(dtype, False))
                 self._M_conj.append(A.conj().itranspose(['vR*', 'p*', 'vL*']))
-            eye_L = npc.diag(1., vR.conj(), dtype=dtype, labels=['vR*', 'vR'])
-            self.guess = eye_L.add_leg(wR, self.IdL, axis=1, label='wR')  # vR* wR vR
+            vL = self._M[0].get_leg('vL')
+            self._chi0 = vL.ind_len
+            eye_L = npc.diag(1., vL, dtype=dtype, labels=['vR*', 'vR'])
+            if guess is not None:
+                guess.itranspose(['vR*', 'wR', 'vR'])
+                try:
+                    guess.get_leg('wR').test_equal(wR)
+                    guess.get_leg('vR').test_contractible(vL)
+                    guess.get_leg('vR*').test_equal(vL)
+                except ValueError:
+                    logger.warning("dropping guess for MPOTransferMatrix with incompatible legs")
+                    guess = None
+            if guess is None:
+                guess = eye_L.add_leg(wR, self.IdL, axis=1, label='wR')  # vR* wR vR
             self.proj = eye_L.add_leg(wR, self.IdR, axis=1, label='wR')  # vR* wR vR
             rho = npc.diag(S2, vL.conj(), labels=['vL*', 'vL'])
             self.proj_rho = rho.add_leg(wL, self.IdR, axis=1, label='wL')  # vL* wL vL
+        self.guess = guess
         self.flat_linop, self.flat_guess = FlatLinearOperator.from_guess_with_pipe(self.matvec,
                                                                                    self.guess,
                                                                                    dtype=dtype)
@@ -2243,15 +2267,33 @@ class MPOTransferMatrix:
         return E / self.L
 
     @classmethod
-    def find_init_LP_RP(cls, H, psi, first=0, last=None, calc_E=False, tol_ev0=1.e-8):
+    def find_init_LP_RP(cls,
+                        H,
+                        psi,
+                        first=0,
+                        last=None,
+                        guess_init_env_data=None,
+                        calc_E=False,
+                        tol_ev0=1.e-8,
+                        **kwargs):
         """Find the initial LP and RP.
 
         Parameters
         ----------
         H, psi :
             MPO and MPS, see class docstring.
+        first, last : int
+            Indices to the left/right of which to extract the environments.
         calc_E : bool
             Wether to calculate and return the energy.
+        tol_ev0 : float
+            Tolerance to trigg a warning about non-unit eigenvalue.
+        guess : None | dict
+            Possible `init_env_data` with the guess/result of DMRG updates.
+            If some legs are incompatible, trigger a warning and ignore.
+        **kwargs :
+            Further keyword arguments for
+            :meth:`~tenpy.linalg.sparse.FlatLinearOperator.eigenvectors`.
 
         Returns
         -------
@@ -2261,20 +2303,24 @@ class MPOTransferMatrix:
             Energy per site. Only returned if `calc_E` is True.
         """
         # first right to left
-        envs, Es = [], []
+        envs = []
+        if guess_init_env_data is None:
+            guess_init_env_data = {}
         for transpose in [False, True]:
-            TM = cls(H, psi, transpose=transpose)
-            val, vec = TM.dominant_eigenvector()
+            guess = guess_init_env_data.get('init_LP' if transpose else 'init_RP', None)
+            TM = cls(H, psi, transpose=transpose, guess=guess)
+            val, vec = TM.dominant_eigenvector(**kwargs)
             if abs(1. - val) > tol_ev0:
                 logger.warning("MPOTransferMatrix eigenvalue not 1: got 1. - %.3e", 1. - val)
             envs.append(vec)
             if calc_E and transpose:
                 E = TM.energy(vec)
             del TM
-        init_env_data = {'init_LP': envs[1], 'init_RP': envs[0]}
-        if first != 0 or last is not None:
+        init_env_data = {'init_LP': envs[1], 'init_RP': envs[0],
+                         'age_LP': 0, 'age_RP': 0}
+        L = H.L
+        if first != 0 or last is not None and last % L != L - 1:
             env = MPOEnvironment(psi, H, psi, **init_env_data)
-            L = env.L
             if first % L != 0:
                 init_env_data['init_LP'] = env.get_LP(first, store=False)
             if last % L != L - 1:
