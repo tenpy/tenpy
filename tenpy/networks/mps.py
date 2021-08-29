@@ -4910,7 +4910,7 @@ class InitialStateBuilder:
         return psi
 
     def mps_product_state(self, p_state=None):
-        """Initialize from a lattice product state.
+        """Initialize from a product state.
 
         See :meth:`MPS.from_product_state` for details.
 

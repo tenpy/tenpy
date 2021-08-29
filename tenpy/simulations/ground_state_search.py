@@ -2,6 +2,7 @@
 # Copyright 2020-2021 TeNPy Developers, GNU GPLv3
 
 import numpy as np
+from pathlib import Path
 
 from . import simulation
 from ..tools import hdf5_io
@@ -15,7 +16,10 @@ from ..tools.misc import find_subclass
 from ..tools.params import asConfig
 
 __all__ = simulation.__all__ + [
-    'GroundStateSearch', 'OrthogonalExcitations', 'ExcitationInitialState'
+    'GroundStateSearch',
+    'OrthogonalExcitations',
+    'ExcitationInitialState',
+    'PrepareOrthogonalExcitations',
 ]
 
 
@@ -68,12 +72,18 @@ class GroundStateSearch(Simulation):
 class OrthogonalExcitations(GroundStateSearch):
     """Find excitations by another GroundStateSearch orthogalizing against previous states.
 
-    .. note ::
-        If you want to find the first excitation in *another* symmetry sector than the ground
-        state, you can just run the :class:`GroundStateSearch` search again with an initial state
-        in the desired symmetry sector. Charge conservation then forces DMRG (or whatever algorithm
-        you use) to stay in that symmetry sector.
+    If the ground state is an infinite MPS, it is converted to `segment` boundary conditions
+    at the beginning of this simulation.
 
+    For finite systems, the first algorithm (say DMRG) run when switching the charge sector
+    can be replaced by a normal DMRG run with a different intial state (in the desired sector).
+    For infinite systems, the conversion to segment boundary conditions leads to a *different*
+    state! Using the 'segment' boundary conditions, this class can e.g. study a single spin flip
+    excitation in the background of the ground state, localized by the segment environments.
+
+    Note that the segment environments are *soft* boundaries: the spin flip can be outside the
+    segment where we vary the MPS tensors, as far as it contained in the Schmidt states of the
+    original ground state.
 
     Parameters
     ----------
@@ -87,7 +97,7 @@ class OrthogonalExcitations(GroundStateSearch):
 
         N_excitations : int
             Number of excitations to find.
-            Don't make this too big, we need that many algorithm runs!
+            Don't make this too big, it's gonna perform that many algorithm runs!
 
     Attributes
     ----------
@@ -109,8 +119,6 @@ class OrthogonalExcitations(GroundStateSearch):
             excitations : list
                 Tensor network states representing the excitations.
                 Only defined if :cfg:option:`Simulation.save_psi` is True.
-
-
     """
     def __init__(self, options, *, orthogonal_to=None, **kwargs):
         super().__init__(options, **kwargs)
@@ -138,6 +146,12 @@ class OrthogonalExcitations(GroundStateSearch):
     def init_orthogonal_from_groundstate(self):
         """Initialize :attr:`orthogonal_to` from the ground state.
 
+        Load the ground state.
+        If the ground state is infinite, call :meth:`extract_segment_from_infinite`.
+
+        An empty :attr:`orthogonal_to` indicates that we will :meth:`switch_charge_sector`
+        in the first :meth:`init_algorithm` call.
+
         Options
         -------
         .. cfg:configoptions :: OrthogonalExcitations
@@ -158,6 +172,11 @@ class OrthogonalExcitations(GroundStateSearch):
                 If given, change the charge sector of the exciations compared to the ground state.
                 Alternative to `apply_local_op` where we run a small zero-site diagonalization on
                 the left-most bond in the desired charge sector to update the state.
+
+        Returns
+        -------
+        data : dict
+            The data loaded from :cfg:option:`OrthogonalExcitations.ground_state_filename`.
         """
         gs_fn = self.options['ground_state_filename']
         data = hdf5_io.load(gs_fn)
@@ -170,16 +189,17 @@ class OrthogonalExcitations(GroundStateSearch):
                 self.options[key] = data_options[key]
         self.init_model()
 
-        psi0 = data['psi']
-        env_data = data.get('resume_data', {}).get('init_env_data', {})
+        self.ground_state = psi0 = data['psi']
+        resume_data = data.get('resume_data', {})
         if np.linalg.norm(psi0.norm_test()) > self.options.get('orthogonal_norm_tol', 1.e-12):
+            self.logger.info("call psi.canonicalf_form() on ground state")
             psi0.canonical_form()
         if psi0.bc == 'infinite':
-            psi0, env_data = self.extract_segment_from_infinite(psi0, self.model, env_data)
-            self.init_env_data = env_data
+            self.extract_segment_from_infinite(psi0, self.model, resume_data)
         else:
+            self.init_env_data = resume_data.get('init_env_data', {})
+            self.ground_state_infinite = None
             self.results['ground_state_energy'] = data['energy']
-        self.ground_state = psi0
 
         apply_local_op = self.options.get("apply_local_op", None)
         switch_charge_sector = self.options.get("switch_charge_sector", None)
@@ -190,19 +210,39 @@ class OrthogonalExcitations(GroundStateSearch):
             # we will switch charge sector
             self.orthogonal_to = []  # so we don't need to orthognalize against original g.s.
             # optimization: delay calculation of the reference ground_state_energy
-            # until self.switch_charge_sector() called from self.init_algorithm()
+            # until self.switch_charge_sector() is called by self.init_algorithm()
+        return data
 
-    def extract_segment_from_infinite(self, psi0_inf, model_inf, init_env_data):
-        """Extract a finite segment from the infinite model/state."""
+    def extract_segment_from_infinite(self, psi0_inf, model_inf, resume_data):
+        """Extract a finite segment from the infinite model/state.
+
+        Parameters
+        ----------
+        psi0_inf : :class:`~tenpy.networks.mps.MPS`
+            Original ground state with infinite boundary conditions.
+        model_inf : :class:`~tenpy.models.model.MPOModel`
+            Original infinite model.
+        resume_data : dict
+            Possibly contains `init_env_data` with environments.
+        """
         enlarge = self.options.get('segment_enlarge', None)
         first = self.options.get('segment_first', 0)
         last = self.options.get('segment_last', None)
         self.model = model_inf.extract_segment(first, last, enlarge)
         first, last = self.model.lat.segment_first_last
-        psi0 = psi0_inf.extract_segment(first, last)
-        # TODO: possibly have a good guess for init_LP/RP in init_env_data!
-        env_data = MPOTransferMatrix.find_init_LP_RP(model_inf.H_MPO, psi0_inf, first, last)
-        return psi0, env_data
+        if resume_data.get('converged_environments', False):
+            self.logger.info("use converged environments from ground state file")
+            env_data = resume_data['init_env_data']
+            psi0_inf = resume_data.get('psi', psi0_inf)
+        else:
+            self.logger.info("converge environments with MPOTransferMatrix")
+            guess_init_env_data = resume_data.get('init_env_data', None)
+            H = model_inf.H_MPO
+            env_data = MPOTransferMatrix.find_init_LP_RP(H, psi0_inf, first, last,
+                                                         guess_init_env_data)
+        self.init_env_data = env_data
+        self.ground_state_infinite = psi0_inf
+        self.ground_state = psi0_inf.extract_segment(first, last)
 
     def init_state(self):
         """Initialize the state.
@@ -215,8 +255,7 @@ class OrthogonalExcitations(GroundStateSearch):
                 The initial state parameters, :cfg:config:`ExcitationInitialState` defined below.
 
         """
-        # TODO bad idea to override self.psi if from checkpoint?
-        if len(self.orthogonal_to) == 0:
+        if len(self.orthogonal_to) == 0 and not self.loaded_from_checkpoint:
             self.psi = self.ground_state  # will switch charge sector in init_algorithm()
             if self.options.get('save_psi', True):
                 self.results['psi'] = self.psi
@@ -303,8 +342,9 @@ class OrthogonalExcitations(GroundStateSearch):
             E, psi = self.engine.run()
 
             self.results['excitation_energies'].append(E - ground_state_energy)
-            self.logger.info("excitation energy: %.14f \n%s", E - ground_state_energy, "+" * 80)
+            self.logger.info("excitation energy: %.14f", E - ground_state_energy)
             if np.linalg.norm(psi.norm_test()) > self.options.get('orthogonal_norm_tol', 1.e-12):
+                self.logger.info("call psi.canonical_form() on excitation")
                 psi.canonical_form()
             self.excitations.append(psi)
             self.orthogonal_to.append(psi)
@@ -316,6 +356,8 @@ class OrthogonalExcitations(GroundStateSearch):
                 raise ValueError("need negative energy for excited states!")
 
             self.make_measurements()
+            self.logger.info("got %d excitations so far, proceeed to next excitation.\n%s",
+                             len(self.excitations), "+" * 80)
             self.init_state()  # initialize a new state to be optimized
             self.init_algorithm()
         # done
@@ -327,8 +369,8 @@ class OrthogonalExcitations(GroundStateSearch):
         results = super().prepare_results_for_save()
         if 'resume_data' in results:
             results['resume_data']['excitations'] = self.excitations
-            # TODO: further data?!
         return results
+
 
 class ExcitationInitialState(InitialStateBuilder):
     """InitialStateBuilder for :class:`OrthogonalExcitations`.
@@ -381,3 +423,43 @@ class ExcitationInitialState(InitialStateBuilder):
         close_1 = self.options.get('randomize_close_1', True)
         psi.perturb(randomize_params, close_1=close_1, canonicalize=False)
         return psi
+
+
+class PrepareOrthogonalExcitations(OrthogonalExcitations):
+    """Variant of :class:`OrthogonalExcitations` that prepares environment of the ground state.
+
+    The :class:`OrthogonalExcitations` simulation class requires a file with the ground state.
+    Before it can start the algorithm run, it tries to carefully bring the inital ground state
+    into canonical form and converge the environments.
+
+    This simulation class performs only this first step and writes the result
+    **back into the orginal ground state file** under the "resume_data".
+
+    """
+
+    def fix_output_filenames(self):
+        out_fn = Path(self.options['ground_state_filename'])  # convert to Path
+        self.output_filename = out_fn
+        self._backup_filename = self.get_backup_filename(out_fn)
+
+    def prepare_results_for_save(self):
+        return self.results  # don't copy
+
+    def run(self):
+        data = self.init_orthogonal_from_groundstate()
+        # put converged environments/state back into data
+        self.results = data  # save the data we loaded from the ground state!
+        resume_data = data.setdefault('resume_data', {})
+        init_env_data = resume_data.setdefault('init_env_data', {})
+        init_env_data.update(self.init_env_data)
+        resume_data['converged_environments'] = True
+        data['psi'] = resume_data['psi']
+
+        self.results = data
+        self.logger.info("write converged environments back to ground state file")
+        self.save_results()  # safely overwrite old file
+
+
+
+        # TODO: write back to file
+        return self.results
