@@ -86,12 +86,13 @@ exclude_patterns = [
 
 def create_example_stubs():
     """create stub files for examples and toycodes to include them in the documentation."""
-    folders =[(['examples'], '.py', []),
-              (['examples', 'advanced'], '.py', []),
-              (['examples', 'chern_insulators'], '.py', []),
-              (['toycodes'], '.py', []),
-              (['examples', 'yaml'], '.yml', []),
-             ]
+    folders = [
+        (['examples'], '.py', []),
+        (['examples', 'advanced'], '.py', []),
+        (['examples', 'chern_insulators'], '.py', []),
+        (['toycodes'], '.py', []),
+        (['examples', 'yaml'], '.yml', []),
+    ]
     for subfolders, extension, excludes in folders:
         outdir = os.path.join(os.path.dirname(__file__), *subfolders)
         if not os.path.isdir(outdir):

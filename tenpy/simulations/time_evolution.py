@@ -38,7 +38,10 @@ class RealTimeEvolution(Simulation):
         self.final_time = self.options['final_time'] - 1.e-10  # subtract eps: roundoff errors
 
     def run_algorithm(self):
-        """Run the algorithm. Calls ``self.engine.run()`` and :meth:`make_measurements`."""
+        """Run the algorithm.
+
+        Calls ``self.engine.run()`` and :meth:`make_measurements`.
+        """
         # TODO: more fine-grained/custom break criteria?
         while True:
             if np.real(self.engine.evolved_time) >= self.final_time:

@@ -16,7 +16,9 @@ from ..tools.misc import find_subclass
 from ..tools.params import asConfig
 
 __all__ = simulation.__all__ + [
-    'GroundStateSearch', 'OrthogonalExcitations', 'ExcitationInitialState',
+    'GroundStateSearch',
+    'OrthogonalExcitations',
+    'ExcitationInitialState',
 ]
 
 
@@ -33,7 +35,6 @@ class GroundStateSearch(Simulation):
     -------
     .. cfg:config :: GroundStateSearch
         :include: Simulation
-
     """
     default_algorithm = 'TwoSiteDMRGEngine'
     default_measurements = Simulation.default_measurements + []
@@ -61,7 +62,10 @@ class GroundStateSearch(Simulation):
         self.results['energy'] = E
 
     def resume_run_algorithm(self):
-        """Run the algorithm. Calls ``self.engine.run()``."""
+        """Run the algorithm.
+
+        Calls ``self.engine.run()``.
+        """
         E, psi = self.engine.resume_run()
         self.results['energy'] = E
 
@@ -291,7 +295,6 @@ class OrthogonalExcitations(GroundStateSearch):
 
             initial_state_params : dict
                 The initial state parameters, :cfg:config:`ExcitationInitialState` defined below.
-
         """
         if len(self.orthogonal_to) == 0 and not self.loaded_from_checkpoint:
             self.psi = self.ground_state  # will switch charge sector in init_algorithm()
@@ -321,9 +324,7 @@ class OrthogonalExcitations(GroundStateSearch):
             self.switch_charge_sector()
 
     def switch_charge_sector(self):
-        """Change the charge sector of :attr:`psi` in place.
-
-        """
+        """Change the charge sector of :attr:`psi` in place."""
         if self.psi.chinfo.qnumber == 0:
             raise ValuerError("can't switch charge sector with trivial charges!")
         self.logger.info("switch charge sector of the ground state "
@@ -349,13 +350,12 @@ class OrthogonalExcitations(GroundStateSearch):
             RP = env._contract_RP(0, env.get_RP(0, store=True))  # saves the environments!
             self.results['ground_state_energy'] = env.full_contraction(0)
             for i in range(1, self.engine.n_optimize):
-                env.del_LP(i) # but we might have gotten more than we need
+                env.del_LP(i)  # but we might have gotten more than we need
             H0 = ZeroSiteH.from_LP_RP(LP, RP)
             if self.model.H_MPO.explicit_plus_hc:
                 H0 = SumNpcLinearOperator(H0, H0.adjoint())
             vL, vR = LP.get_leg('vR').conj(), RP.get_leg('vL').conj()
-            th0 = npc.Array.from_func(np.ones,
-                                      [vL, vR],
+            th0 = npc.Array.from_func(np.ones, [vL, vR],
                                       dtype=self.psi.dtype,
                                       qtotal=switch_charge_sector,
                                       labels=['vL', 'vR'])
@@ -453,7 +453,7 @@ class ExcitationInitialState(InitialStateBuilder):
             psi = self.sim.ground_state
         if isinstance(psi, dict):
             psi = psi['ket']
-        psi = psi.copy() # make a copy!
+        psi = psi.copy()  # make a copy!
         return self._perturb(psi)
 
     def _perturb(self, psi):

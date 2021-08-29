@@ -345,7 +345,6 @@ class Simulation:
             cache_params : dict
                 Dictionary with parameters for the cache, see
                 :meth:`~tenpy.tools.cache.CacheFile.open`.
-
         """
         cache_threshold_chi = self.options.get("cache_threshold_chi", 2000)
         cache_params = self.options.get("cache_params", {})
@@ -535,11 +534,17 @@ class Simulation:
             self.measurement_event.connect_by_name(*entry)
 
     def run_algorithm(self):
-        """Run the algorithm. Calls ``self.engine.run()``."""
+        """Run the algorithm.
+
+        Calls ``self.engine.run()``.
+        """
         self.engine.run()
 
     def resume_run_algorithm(self):
-        """Resume running the algorithm. Calls ``self.engine.resume_run()``."""
+        """Resume running the algorithm.
+
+        Calls ``self.engine.resume_run()``.
+        """
         # usual algorithms have a loop with break conditions, which we can just resume
         self.engine.resume_run()
 
@@ -860,7 +865,9 @@ class Skip(ValueError):
         super().__init__(msg + '\n' + filename)
         self.filename = filename
 
+
 _deprecated_not_set = object()
+
 
 def run_simulation(simulation_class='GroundStateSearch',
                    simulation_class_kwargs=None,
@@ -891,8 +898,9 @@ def run_simulation(simulation_class='GroundStateSearch',
     """
     if simulation_class_name is not _deprecated_not_set:
         assert simulation_class == 'GroundStateSearch'
-        warnings.warn("The `simulation_class_name` argument has been renamed to `simulation_class`"
-                      " for more consistency with remaining parameters.", FutureWarning)
+        warnings.warn(
+            "The `simulation_class_name` argument has been renamed to `simulation_class`"
+            " for more consistency with remaining parameters.", FutureWarning)
         simulation_class = simulation_class_name
     SimClass = find_subclass(Simulation, simulation_class)
     if simulation_class_kwargs is None:
@@ -939,7 +947,6 @@ def resume_from_checkpoint(*,
     directory during initialization. Hence, either resume the simulation from the same directory
     where you originally started, or update the :cfg:option:`Simulation.directory`
     (and :cfg:option`Simulation.output_filename`) parameter with `update_sim_params`.
-
     """
     if filename is not None:
         if checkpoint_results is not None:
@@ -1074,8 +1081,9 @@ def run_seq_simulations(sequential,
 
     if simulation_class_name is not _deprecated_not_set:
         assert simulation_class == 'GroundStateSearch'
-        warnings.warn("The `simulation_class_name` argument has been renamed to `simulation_class`"
-                      " for more consistency with remaining parameters.", FutureWarning)
+        warnings.warn(
+            "The `simulation_class_name` argument has been renamed to `simulation_class`"
+            " for more consistency with remaining parameters.", FutureWarning)
         simulation_class = simulation_class_name
 
     SimClass = find_subclass(Simulation, simulation_class)

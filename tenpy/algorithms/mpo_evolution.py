@@ -69,7 +69,7 @@ class ExpMPOEvolution(TimeEvolutionAlgorithm):
         self._U_param = {}
 
     def run(self):
-        """Run the real-time evolution with the W_I/W_II approximation.  """
+        """Run the real-time evolution with the W_I/W_II approximation."""
         dt = self.options.get('dt', 0.01)
         N_steps = self.options.get('N_steps', 1)
         approximation = self.options.get('approximation', 'II')

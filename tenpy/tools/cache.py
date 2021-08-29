@@ -86,7 +86,6 @@ class DictCache(collections.abc.MutableMapping):
         >>> "c" in cache
         False
         >>> assert cache.get('c', default=None) is None
-
     """
     def __init__(self, storage):
         self.long_term_storage = storage
@@ -304,7 +303,7 @@ class Storage:
             storage.close()
 
     def __bool__(self):
-        """Indicator whether the file is open"""
+        """Indicator whether the file is open."""
         return self._opened
 
     def subcontainer(self, name):

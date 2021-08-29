@@ -97,8 +97,7 @@ class TDVPEngine(TimeEvolutionAlgorithm):
         return self.options
 
     def run(self):
-        """(Real-)time evolution with TDVP.
-        """
+        """(Real-)time evolution with TDVP."""
         active_sites = self.options.get('active_sites', 2)
         if active_sites == 1:
             self.run_one_site(self.N_steps)

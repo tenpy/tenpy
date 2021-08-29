@@ -196,7 +196,7 @@ class Mixer:
         """
         self.amplitude /= self.decay
         if (sweeps >= self.disable_after + self.sweep_activated
-            or self.amplitude <= np.finfo('float').eps):
+                or self.amplitude <= np.finfo('float').eps):
             logger.info("disable mixer after %(sweeps)d sweeps, final amplitude %(amp).2e", {
                 'sweeps': sweeps,
                 'amp': self.amplitude
@@ -786,7 +786,6 @@ class DMRGEngine(Sweep):
                 Number of sweeps without bond optimizaiton to update the
                 environment for infinite boundary conditions,
                 performed every `N_sweeps_check` sweeps.
-
         """
         options = self.options
         start_time = self.time0
@@ -1034,8 +1033,8 @@ class DMRGEngine(Sweep):
         """
         # wrapper around tenpy.algorithms.mps_common.Sweep.sweep()
         self._meas_E_trunc = meas_E_trunc
-        if (self.options.get('chi_list_reactivates_mixer', True)
-            and optimize and self.chi_list is not None):
+        if (self.options.get('chi_list_reactivates_mixer', True) and optimize
+                and self.chi_list is not None):
             new_chi_max = self.chi_list.get(self.sweeps, None)
             if new_chi_max is not None:
                 # growing the bond dimension with chi_list, so we should also reactivate the mixer
@@ -1320,7 +1319,6 @@ class DMRGEngine(Sweep):
                 but :class:`SingleSiteDMRGEngine` supports both single-site and two-site mixers.
             mixer_params : dict
                 Mixer parameters as described in :cfg:config:`Mixer`.
-
         """
         default = True if isinstance(self, SingleSiteDMRGEngine) else None
         Mixer_class = self.options.get('mixer', default)
@@ -1337,8 +1335,7 @@ class DMRGEngine(Sweep):
             mixer_params = self.options.subconfig('mixer_params')
             self.mixer = Mixer_class(mixer_params, self.sweeps)
             self.S_inv_cutoff = 1.e-8
-            logger.info("activate %s with initial amplitude %.1e",
-                        Mixer_class.__name__,
+            logger.info("activate %s with initial amplitude %.1e", Mixer_class.__name__,
                         self.mixer.amplitude)
 
     def mixer_cleanup(self):

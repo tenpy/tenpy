@@ -1219,8 +1219,7 @@ def make_W_II(t, A, B, C, D):
             w = expm(h)  #Exponentiate in the extended Hilbert space
             w = w.reshape((2, 2, d, 2, 2, d))
             w = w[:, :, :, 0, 0, :]
-            W[1 + r,
-              1 + c, :, :] = w[1, 1]  #This part now extracts relevant parts according to Eqn 11
+            W[1 + r, 1 + c, :, :] = w[1, 1]  # extracts relevant parts according to Eqn 11
             if c == 0:
                 W[1 + r, 0] = w[1, 0]
             if r == 0:
@@ -1637,7 +1636,8 @@ class MPOGraph:
             Inspect graph edges on site `i` starting on the left with `keyL` and add charges
             for all connections to the right.
             Originally we recursively transported charges from there, but now this is done
-            iteratively to avoid the maximum recursion limit in python for large systems."""
+            iteratively to avoid the maximum recursion limit in python for large systems.
+            """
             stack = []
             stack.append((i, keyL))
             while len(stack):
@@ -1659,6 +1659,7 @@ class MPOGraph:
                         if infinite or i + 1 < L:
                             edge_stack.append(((i + 1) % L, keyR))
                 stack = edge_stack + stack
+
         travel_q_LR(0, 'IdL')
 
         # now we can still have unknown edges in the case of "dead ends" in the MPO graph.
@@ -1842,7 +1843,6 @@ class MPOEnvironment(MPSEnvironment):
                 warning.warn("dropping `init_RP` with incompatible MPO legs")
                 init_RP = None
         return super()._check_compatible_legs(init_LP, init_RP, start_env_sites)
-
 
     def test_sanity(self):
         """Sanity check, raises ValueErrors, if something is wrong."""
@@ -2316,8 +2316,7 @@ class MPOTransferMatrix:
             if calc_E and transpose:
                 E = TM.energy(vec)
             del TM
-        init_env_data = {'init_LP': envs[1], 'init_RP': envs[0],
-                         'age_LP': 0, 'age_RP': 0}
+        init_env_data = {'init_LP': envs[1], 'init_RP': envs[0], 'age_LP': 0, 'age_RP': 0}
         L = H.L
         if first != 0 or last is not None and last % L != L - 1:
             env = MPOEnvironment(psi, H, psi, **init_env_data)

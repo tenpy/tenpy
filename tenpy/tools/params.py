@@ -508,7 +508,6 @@ def get_parameter(params, key, default, descr, asarray=False):
     parameter 'dt'=0.02 for TEBD
     parameter 'order'=1 (default) for TEBD
     calc U with dt = 0.02 and order = 1
-
     """
     msg = ("Old-style parameter dictionaries are deprecated in favor of `Config` class objects. "
            "Use `Config` methods to read out parameters. "

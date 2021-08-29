@@ -103,7 +103,6 @@ class EventHandler:
         high_priority call: iteration 3
         my_listener called: iteration 3 with data 12
         another_one called: iteration 3
-
     """
     def __init__(self, arg_descr=None):
         self.arg_descr = arg_descr

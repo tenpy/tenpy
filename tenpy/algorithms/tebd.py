@@ -659,7 +659,6 @@ class RandomUnitaryEvolution(TEBDEngine):
         >>> eng2.run()  # random unitaries respect Sz conservation -> we stay in all-up sector
         >>> print(psi2.chi)  # still a product state, not really random!!!
         [1, 1, 1, 1, 1, 1, 1]
-
     """
     def __init__(self, psi, options, **kwargs):
         TEBDEngine.__init__(self, psi, None, options, **kwargs)
@@ -687,7 +686,6 @@ class RandomUnitaryEvolution(TEBDEngine):
 
     def calc_U(self):
         """Draw new random two-site unitaries replacing the usual `U` of TEBD.
-
 
         .. cfg:configoptions :: RandomUnitaryEvolution
 

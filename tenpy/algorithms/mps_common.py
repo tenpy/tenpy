@@ -17,7 +17,6 @@ effective Hamiltonians mentioned above. Currently, effective Hamiltonians for
 
 The :class:`VariationalCompression` and :class:`VariationalApplyMPO`
 implemented here also directly use the :class:`Sweep` class.
-
 """
 # Copyright 2018-2021 TeNPy Developers, GNU GPLv3
 

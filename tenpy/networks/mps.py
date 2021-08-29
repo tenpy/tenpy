@@ -4498,7 +4498,6 @@ class MPSEnvironment:
         exp_vals : 1D ndarray
             Expectation values, ``exp_vals[i] = <bra|ops[i]|ket>``, where ``ops[i]`` acts on
             site(s) ``j, j+1, ..., j+{n-1}`` with ``j=sites[i]``.
-
         """
         ops, sites, n, (op_ax_p, op_ax_pstar) = self.ket._expectation_value_args(ops, sites, axes)
         ax_p = ['p' + str(k) for k in range(n)]

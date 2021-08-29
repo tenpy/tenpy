@@ -71,7 +71,8 @@ class NpcLinearOperator:
         """Return the hermitian conjugate of `self`
 
         If `self` is hermitian, subclasses *can* choose to implement this to define
-        the adjoint operator of `self`."""
+        the adjoint operator of `self`.
+        """
         raise NotImplementedError("No adjoint defined")
 
 
@@ -126,7 +127,8 @@ class NpcLinearOperatorWrapper:
         """Return the hermitian conjugate of `self`.
 
         If `self` is hermitian, subclasses *can* choose to implement this to define
-        the adjoint operator of `self`."""
+        the adjoint operator of `self`.
+        """
         raise NotImplementedError("This function should be implemented in derived classes")
 
 

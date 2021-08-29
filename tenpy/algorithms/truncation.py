@@ -186,7 +186,6 @@ def truncate(S, options):
         Useful for re-normalization.
     err : :class:`TruncationError`
         The error of the represented state which is introduced due to the truncation.
-
     """
     options = asConfig(options, "truncation")
     # by default, only truncate values which are much closer to zero than machine precision.
