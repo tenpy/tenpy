@@ -16,10 +16,7 @@ from ..tools.misc import find_subclass
 from ..tools.params import asConfig
 
 __all__ = simulation.__all__ + [
-    'GroundStateSearch',
-    'OrthogonalExcitations',
-    'ExcitationInitialState',
-    'PrepareOrthogonalExcitations',
+    'GroundStateSearch', 'OrthogonalExcitations', 'ExcitationInitialState',
 ]
 
 
@@ -156,7 +153,7 @@ class OrthogonalExcitations(GroundStateSearch):
         -------
         .. cfg:configoptions :: OrthogonalExcitations
 
-            groundstate_filename :
+            ground_state_filename :
                 File from which the ground state should be loaded.
             orthogonal_norm_tol : float
                 Tolerance how large :meth:`~tenpy.networks.mps.MPS.norm_err` may be for states
@@ -172,6 +169,13 @@ class OrthogonalExcitations(GroundStateSearch):
                 If given, change the charge sector of the exciations compared to the ground state.
                 Alternative to `apply_local_op` where we run a small zero-site diagonalization on
                 the left-most bond in the desired charge sector to update the state.
+            write_back_converged_ground_state_environments : bool
+                Only used for infinite ground states, indicating that we should write converged
+                environments of the ground state back to `ground_state_filename`.
+                This is an optimization if you intend to run another `OrthogonalExcitations`
+                simulation in the future with the same `ground_state_filename`.
+                (However, it is not faster when the simulations run at the same time; instead it
+                might even lead to errors!)
 
         Returns
         -------
@@ -196,6 +200,8 @@ class OrthogonalExcitations(GroundStateSearch):
             psi0.canonical_form()
         if psi0.bc == 'infinite':
             self.extract_segment_from_infinite(psi0, self.model, resume_data)
+            if self.options.get('write_back_converged_ground_state_environments', False):
+                self.write_converged_environments(data, gs_fn)
         else:
             self.init_env_data = resume_data.get('init_env_data', {})
             self.ground_state_infinite = None
@@ -243,6 +249,38 @@ class OrthogonalExcitations(GroundStateSearch):
         self.init_env_data = env_data
         self.ground_state_infinite = psi0_inf
         self.ground_state = psi0_inf.extract_segment(first, last)
+
+    def write_converged_environments(self, gs_data, gs_fn):
+        """Write converged environments back into the file with the ground state.
+
+        Parameters
+        ----------
+        gs_data : dict
+            Data loaded from the ground state file.
+        gs_fn : str
+            Filename where to save `gs_data`.
+        """
+        if not self.init_env_data:
+            raise ValueError("Didn't converge new environments!")
+        orig_fn = self.output_filename
+        orig_backup_fn = self._backup_filename
+        try:
+            self.output_filename = Path(gs_fn)
+            self._backup_filename = self.get_backup_filename(self.output_filename)
+
+            resume_data = gs_data.setdefault('resume_data', {})
+            init_env_data = resume_data.setdefault('init_env_data', {})
+            init_env_data.update(self.init_env_data)
+            if resume_data.get('converged_environments', False):
+                raise ValueError(f"{gs_fn!s} already has converged environments!")
+            resume_data['converged_environments'] = True
+            resume_data['psi'] = gs_data['psi']
+
+            self.logger.info("write converged environments back to ground state file")
+            self.save_results(gs_data)  # safely overwrite old file
+        finally:
+            self.output_filename = orig_fn
+            self._backup_filename = orig_backup_fn
 
     def init_state(self):
         """Initialize the state.
@@ -423,43 +461,3 @@ class ExcitationInitialState(InitialStateBuilder):
         close_1 = self.options.get('randomize_close_1', True)
         psi.perturb(randomize_params, close_1=close_1, canonicalize=False)
         return psi
-
-
-class PrepareOrthogonalExcitations(OrthogonalExcitations):
-    """Variant of :class:`OrthogonalExcitations` that prepares environment of the ground state.
-
-    The :class:`OrthogonalExcitations` simulation class requires a file with the ground state.
-    Before it can start the algorithm run, it tries to carefully bring the inital ground state
-    into canonical form and converge the environments.
-
-    This simulation class performs only this first step and writes the result
-    **back into the orginal ground state file** under the "resume_data".
-
-    """
-
-    def fix_output_filenames(self):
-        out_fn = Path(self.options['ground_state_filename'])  # convert to Path
-        self.output_filename = out_fn
-        self._backup_filename = self.get_backup_filename(out_fn)
-
-    def prepare_results_for_save(self):
-        return self.results  # don't copy
-
-    def run(self):
-        data = self.init_orthogonal_from_groundstate()
-        # put converged environments/state back into data
-        self.results = data  # save the data we loaded from the ground state!
-        resume_data = data.setdefault('resume_data', {})
-        init_env_data = resume_data.setdefault('init_env_data', {})
-        init_env_data.update(self.init_env_data)
-        resume_data['converged_environments'] = True
-        data['psi'] = resume_data['psi']
-
-        self.results = data
-        self.logger.info("write converged environments back to ground state file")
-        self.save_results()  # safely overwrite old file
-
-
-
-        # TODO: write back to file
-        return self.results

@@ -729,16 +729,20 @@ class Simulation:
         else:
             return None
 
-    def save_results(self):
+    def save_results(self, results=None):
         """Save the :attr:`results` to an output file.
 
         Performs a "safe" overwrite of :attr:`output_filename` by first moving the old file
         to :attr:`_backup_filename`, then writing the new file, and finally removing the backup.
 
-        Calls :meth:`prepare_results_for_save` to allow last-minute adjustments to the saved
-        :attr:`results`.
+        Parameters
+        ----------
+        results : dict | None
+            The results to be safed. If not specified, call :meth:`prepare_results_for_save`
+            to allow last-minute adjustments to the saved :attr:`results`.
         """
-        results = self.prepare_results_for_save()
+        if results is None:
+            results = self.prepare_results_for_save()
 
         output_filename = self.output_filename
         backup_filename = self._backup_filename
