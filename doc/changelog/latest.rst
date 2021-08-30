@@ -41,7 +41,7 @@ Added
 - :meth:`tenpy.networks.mps.MPS.sample_measurements`.
 - equality test for :class:`~tenpy.linalg.charges.LegCharge`.
 - MPS with segment boundaries now keep track of unitaries at the boundaries in :attr:`~tenpy.networks.mps.MPS.segment_boundaries`.
-- :class:`~tenpy.simulations.simulation.OrthogonalExcitations` simulation class.
+- :class:`~tenpy.simulations.simulation.OrthogonalExcitations` simulation class for finding excited states with DMRG.
 - :cfg:option:`Simulation.group_sites` for the simultion class.
 - `extract_segment` method for model, lattice and MPS/MPO classes.
 - :class:`~tenpy.algorithms.mpo_evolution.TimeDependentExpMPOEvolution` for time-dependent hamiltonians.

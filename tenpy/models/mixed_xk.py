@@ -320,8 +320,8 @@ class MixedXKLattice(Lattice):
         return A_res.reshape(A_res_reshape)
 
     def mps2lat_values_masked_k(self, A, axes=-1, mps_inds=None, include_u=None):
-        """Like :meth:`Lattice.mps2lat_values_masked`, but introduce `k` as separate lattice index.
-        """
+        """Like :meth:`Lattice.mps2lat_values_masked`, but introduce `k` as separate lattice
+        index."""
         A_res = self.mps2lat_values_masked(A, axes, mps_inds, include_u)
         changed_axes = sorted([(ax + A.ndim if ax < 0 else ax) for ax in axes])
         A_res_u_axes = []
@@ -627,8 +627,8 @@ class MixedXKModel(CouplingMPOModel):
                 fourier_coeff = xk_lat.get_exp_ik(kdiff_y) / Ly**num_ops
                 strengths.append(coeff * fourier_coeff)
                 u_ind = xk_lat.get_u(np.array(k_ind), np.array(l_ind).flatten())
-                i_ind = xk_lat.lat2mps_idx(np.hstack([xx_ind[:, np.newaxis], u_ind[:,
-                                                                                   np.newaxis]]))
+                i_ind = xk_lat.lat2mps_idx(np.hstack([xx_ind[:, np.newaxis],
+                                                      u_ind[:, np.newaxis]]))
                 # i_ind = MPS index for combination (x,k,l) of each operator
                 terms.append(list(zip(ops, i_ind)))  # [('Cd', i1), ('C', i2), ...]
         return TermList(terms, strengths)
@@ -660,7 +660,6 @@ class MixedXKModel(CouplingMPOModel):
         -------
         terms : :class:`~tenpy.networks.terms.TermList`
             Terms representing the correlation function in x-k-space.
-
         """
         num_ops = len(ops)
         assert num_ops == len(rs_coords)

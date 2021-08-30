@@ -1,5 +1,4 @@
-"""Algorithms for using Purification.
-"""
+"""Algorithms for using Purification."""
 
 # Copyright 2019-2021 TeNPy Developers, GNU GPLv3
 

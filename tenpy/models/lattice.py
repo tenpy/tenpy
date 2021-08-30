@@ -748,7 +748,6 @@ class Lattice:
             (10, 3)
             >>> np.all(A_res[:, :, u] == A_u_res[:, :])
             True
-
         """
         axes = to_iterable(axes)
         if len(axes) > 1:
@@ -1538,7 +1537,6 @@ class IrregularLattice(Lattice):
         ...                            add_unit_cell=['S'])
         >>> irr_lat.mps_sites()
         ['F', 'F', 'S', 'F', 'F']
-
     """
     _REMOVED = -123456  # value in self._perm indicating removed sites.
 
@@ -1735,7 +1733,6 @@ class HelicalLattice(Lattice):
     N_unit_cells : int
         Number of *lattice* unit cells to include into the MPS unit cell.
         The total number of sites will be ``N_unit_cells * len(regular_lattice.unit_cell)``.
-
     """
     _REMOVED = IrregularLattice._REMOVED
 
@@ -2281,7 +2278,6 @@ class Honeycomb(Lattice):
                 ax.set_xlim(-1)
                 ax.set_ylim(-1)
             plt.show()
-
         """
         if isinstance(order, str):
             if order == "default":

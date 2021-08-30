@@ -4275,7 +4275,7 @@ class MPSEnvironment:
 
             |     'vL'  ->---M[i+1]-- ... --M[L-1]----.
             |                |              |         |
-            |                |              |         RP[-1]
+            |                |              |         RP[L-1]
             |                |              |         |
             |     'vL*' -<---N[i+1]*- ... --N[L-1]*---.
 
@@ -4498,7 +4498,6 @@ class MPSEnvironment:
         exp_vals : 1D ndarray
             Expectation values, ``exp_vals[i] = <bra|ops[i]|ket>``, where ``ops[i]`` acts on
             site(s) ``j, j+1, ..., j+{n-1}`` with ``j=sites[i]``.
-
         """
         ops, sites, n, (op_ax_p, op_ax_pstar) = self.ket._expectation_value_args(ops, sites, axes)
         ax_p = ['p' + str(k) for k in range(n)]
@@ -4910,7 +4909,7 @@ class InitialStateBuilder:
         return psi
 
     def mps_product_state(self, p_state=None):
-        """Initialize from a lattice product state.
+        """Initialize from a product state.
 
         See :meth:`MPS.from_product_state` for details.
 

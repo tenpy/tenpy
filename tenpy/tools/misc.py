@@ -465,7 +465,6 @@ def group_by_degeneracy(E, *args, subset=None, cutoff=1.e-12):
     [(0, 2), (1, 4), (3, 6), (5,)]
     >>> group_by_degeneracy(E, k, cutoff=0.001)  # k and E need to be close
     [(0,), (1, 4), (2,), (3,), (5,), (6,)]
-
     """
     assert cutoff >= 0.
     E = np.asarray(E)
@@ -624,6 +623,7 @@ def update_recursive(nested_data, update_data, separator=".", insert_dicts=True)
     for k, v in update_data.items():
         set_recursive(nested_data, k, v, separator, insert_dicts)
 
+
 def merge_recursive(*nested_data, conflict='error', path=None):
     """Merge nested dictionaries `nested1` and `nested2`.
 
@@ -661,15 +661,19 @@ def merge_recursive(*nested_data, conflict='error', path=None):
         if key in merged:
             val1 = merged[key]
             if isinstance(val1, Mapping) and isinstance(val2, Mapping):
-                merged[key] = merge_recursive(val1, val2,
+                merged[key] = merge_recursive(val1,
+                                              val2,
                                               conflict=conflict,
                                               path=path + [repr(key)])
             else:
                 if conflict == 'error':
                     if val1 != val2:
                         path = ':'.join(path + [repr(key)])
-                        msg = '\n'.join([f"Conflict with different values at {path}; we got:",
-                                         repr(val1), repr(val2)])
+                        msg = '\n'.join([
+                            f"Conflict with different values at {path}; we got:",
+                            repr(val1),
+                            repr(val2)
+                        ])
                         raise ValueError(msg)
                 elif conflict == 'first':
                     pass

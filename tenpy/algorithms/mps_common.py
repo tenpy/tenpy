@@ -17,7 +17,6 @@ effective Hamiltonians mentioned above. Currently, effective Hamiltonians for
 
 The :class:`VariationalCompression` and :class:`VariationalApplyMPO`
 implemented here also directly use the :class:`Sweep` class.
-
 """
 # Copyright 2018-2021 TeNPy Developers, GNU GPLv3
 
@@ -40,6 +39,7 @@ __all__ = [
     'EffectiveH',
     'OneSiteH',
     'TwoSiteH',
+    'ZeroSiteH',
     'DummyTwoSiteH',
     'VariationalCompression',
     'VariationalApplyMPO',
@@ -1092,6 +1092,97 @@ class TwoSiteH(EffectiveH):
             env.set_RP(i, RP, age=env.get_RP_age(i + 1) + 1)
         else:
             env.get_RP(i, store=True)
+
+
+class ZeroSiteH(EffectiveH):
+    r"""Class defining the zero-site effective Hamiltonian for Lanczos.
+
+    The effective zero-site Hamiltonian looks like this::
+
+            |        .---    ---.
+            |        |          |
+            |       LP----------RP
+            |        |          |
+            |        .---    ---.
+
+
+    Note that this class has less funcitonality than the :class:`OneSiteH` and :class:`TwoSiteH`.
+
+    Parameters
+    ----------
+    env : :class:`~tenpy.networks.mpo.MPOEnvironment`
+        Environment for contraction ``<psi|H|psi>``.
+    i0 : int
+        Site index such that `LP` is everything strictly left of `i0`.
+
+    Attributes
+    ----------
+    length : int
+        Number of (MPS) sites the effective hamiltonian covers.
+    acts_on : list of str
+        Labels of the state on which `self` acts. NB: class attribute.
+        Overwritten by normal attribute, if `combine`.
+    combine, move_right : bool
+        See above.
+    LHeff, RHeff : :class:`~tenpy.linalg.np_conserved.Array`
+        Only set if :attr:`combine`, and only one of them depending on :attr:`move_right`.
+        If `move_right` was True, `LHeff` is set with labels ``'(vR*.p0)', 'wR', '(vR.p0*)'``
+        for bra, MPO, ket; otherwise `RHeff` is set with labels ``'(p0*.vL)', 'wL', '(p0, vL*)'``
+    LP, W0, RP : :class:`~tenpy.linalg.np_conserved.Array`
+        Tensors making up the network of `self`.
+    """
+    length = 0
+    acts_on = ['vL', 'vR']
+
+    def __init__(self, env, i0):
+        self.i0 = i0
+        self.LP = env.get_LP(i0)
+        self.RP = env.get_RP(i0)
+        self.dtype = env.H.dtype
+        self.N = self.LP.get_leg('vR').ind_len * self.RP.get_leg('vL').ind_len
+
+    @classmethod
+    def from_LP_RP(cls, LP, RP, i0=0):
+        self = cls.__new__(cls)
+        self.i0 = i0
+        self.LP = LP.itranspose(['vR*', 'wR', 'vR'])
+        self.RP = RP.itranspose(['wL', 'vL', 'vL*'])
+        self.dtype = LP.dtype
+        self.N = LP.get_leg('vR').ind_len * RP.get_leg('vL').ind_len
+        return self
+
+    def matvec(self, theta):
+        """Apply the effective Hamiltonian to `theta`.
+
+        Parameters
+        ----------
+        theta : :class:`~tenpy.linalg.np_conserved.Array`
+            Labels: ``vL, vR``.
+
+        Returns
+        -------
+        theta :class:`~tenpy.linalg.np_conserved.Array`
+            Product of `theta` and the effective Hamiltonian.
+        """
+        labels = theta.get_leg_labels()
+        theta = npc.tensordot(self.LP, theta, axes=['vR', 'vL'])
+        theta = npc.tensordot(theta, self.RP, axes=[['wR', 'vR'], ['wL', 'vL']])
+        theta.ireplace_labels(['vR*', 'vL*'], ['vL', 'vR'])
+        theta.itranspose(labels)  # if necessary, transpose
+        return theta
+
+    def to_matrix(self):
+        """Contract `self` to a matrix."""
+        contr = npc.tensordot(self.LP, self.RP, axes=['wR', 'wL'])
+        contr = contr.combine_legs([['vR*', 'vL*'], ['vR', 'vL']], qconj=[+1, -1])
+        return contr
+
+    def adjoint(self):
+        """Return the hermitian conjugate of `self`."""
+        adj = copy.copy(self)
+        adj.LP = self.LP.conj().ireplace_label('wR*', 'wR').itranspose(self.LP.get_leg_labels())
+        adj.RP = self.RP.conj().ireplace_label('wL*', 'wL').itranspose(self.RP.get_leg_labels())
+        return adj
 
 
 class DummyTwoSiteH(EffectiveH):

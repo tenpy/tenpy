@@ -1841,7 +1841,6 @@ class CouplingMPOModel(CouplingModel, MPOModel):
                 *not* use "periodic" boundary conditions.
                 (The MPS is still "open", so this will introduce long-range
                 couplings between the first and last sites of the MPS!)
-
         """
         lat = model_params.get('lattice', self.default_lattice)
         if isinstance(lat, str):
