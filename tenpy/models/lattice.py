@@ -1854,7 +1854,15 @@ class HelicalLattice(Lattice):
         return self.regular_lattice.mps2lat_values_masked(*args, **kwargs)
 
     def enlarge_mps_unit_cell(self, factor=2):
-        # doc: see Lattice
+        """Repeat the unit cell for infinite MPS boundary conditions; in place.
+
+        Parameters
+        ----------
+        factor : int
+            Enlarge the number of sites in the MPS unit cell by this factor.
+            We only enlarge the shape (and the underlying :attr:`regular_lattice`)
+            if the new number of sites wouldn't fit into it any more.
+        """
         if (self._N_cells * factor > self.regular_lattice.N_cells
                 or self.regular_lattice.N_cells % (self._N_cells * factor) != 0):
             self.regular_lattice.enlarge_mps_unit_cell(factor)
