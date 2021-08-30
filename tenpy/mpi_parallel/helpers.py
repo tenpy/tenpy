@@ -29,7 +29,11 @@ def split_MPO_leg(leg, N_nodes, mpi_split_params):
             How to split. One of the following options.
 
             uniform:
-                Split the leg into equal-sized blocks, ignoring any charge structure.
+                Split the leg into equal-sized slices, ignoring any charge structure.
+                This is the only method that works without charge conservation!
+            block_slices:
+                Divide leg into roughly equal-sized slices, but cut only between charge blocks
+                already existing in the `leg`.
             Z_charge_values:
                 Split by the charge values of a Z_{N_nodes} charge.
                 You need to specify the `Z_charge` as well.
@@ -75,6 +79,20 @@ def split_MPO_leg(leg, N_nodes, mpi_split_params):
             remaining -= assigned
             running += assigned
         assert running == D
+        return res
+    elif method == 'block_slices':
+        slices = leg.slices
+        running = 0
+        res = []
+        for i in range(N_nodes):
+            proj = np.zeros(D, dtype=bool)
+            next_cut = running + int(np.ceil((D - running) / (N_nodes - i)))
+            next_cut = slices[np.argmin(np.abs(slices - next_cut))]
+            proj[running:next_cut] = True
+            res.append(proj)
+            running = next_cut
+        assert running == D
+        return res
     elif method == 'Z_charge_values':
         charge = find_Z_charge(leg.chinfo, mpi_split_params.get('Z_charge', None))
         if leg.chinfo.mod[charge] != N_nodes :
@@ -95,6 +113,7 @@ def split_MPO_leg(leg, N_nodes, mpi_split_params):
             to_node = np.argmin(has_size)
             res[to_node][leg.slices[block]: leg.slices[block + 1]] = True
             has_size[to_node] += sizes[block]
+        return res
     elif '-' in method:
         first_method, second_method = method.split('-')
         N_nodes_first = mpi_split_params['N_nodes_first']
@@ -112,9 +131,9 @@ def split_MPO_leg(leg, N_nodes, mpi_split_params):
                 proj_full[p_first] = p_second
                 res.append(proj_full)
         mpi_split_params['method'] = method
+        return res
     else:
         raise ValueError(f"Unknown method={method!r}")
-    return res
 
 def find_Z_charge(chinfo, charge=None):
     if charge is None:
