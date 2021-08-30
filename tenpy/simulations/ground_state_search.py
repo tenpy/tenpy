@@ -371,9 +371,15 @@ class OrthogonalExcitations(GroundStateSearch):
     def run_algorithm(self):
         N_excitations = self.options.get("N_excitations", 1)
         ground_state_energy = self.results['ground_state_energy']
-        if ground_state_energy > 0:
+        if ground_state_energy > - 1.e-7:
             # the orthogonal projection does not lead to a different ground state!
-            raise ValueError("need negative ground state energy!")
+            lanczos_params = self.engine.lancozs_params
+            if self.engine.diag_method != 'lanczos' or \
+                    ground_state_energy + 0.5 * lanczos_params.get('E_shift', 0.) > 0:
+                # the factor of 0.5 is somewhat arbitrary, to ensure that
+                # also excitations have energy < 0
+                raise ValueError("You need to set use diag_method='lanczos' and small enough "
+                                 f"lanczos_params['E_shift'] < {-2.* ground_state_energy:.2f}")
 
         while len(self.excitations) < N_excitations:
 
@@ -389,9 +395,6 @@ class OrthogonalExcitations(GroundStateSearch):
             # save in list of excitations
             if len(self.excitations) >= N_excitations:
                 break
-
-            if E > 0:
-                raise ValueError("need negative energy for excited states!")
 
             self.make_measurements()
             self.logger.info("got %d excitations so far, proceeed to next excitation.\n%s",

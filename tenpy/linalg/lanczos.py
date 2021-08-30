@@ -91,11 +91,11 @@ class LanczosGroundState:
         E_shift : float
             Shift the energy (=eigenvalues) by that amount *during* the Lanczos run by using the
             :class:`~tenpy.linalg.sparse.ShiftNpcLinearOperator`.
-            Since the Lanczos algorithm finds extremal eigenvalues, this can help convergence.
-            Moreover, if the :class:`~tenpy.linalg.sparse.OrthogonalNpcLinearOperator` is used,
-            the orthogonal vectors are *exact* eigenvectors with eigenvalue 0,
-            so you have to ensure that the energy is smaller than zero to avoid getting those.
             The ground state energy `E0` returned by :meth:`run` is made independent of the shift.
+            This option is useful if the :class:`~tenpy.linalg.sparse.OrthogonalNpcLinearOperator`
+            is used: the orthogonal vectors are *exact* eigenvectors with eigenvalue 0 independent
+            of the shift, so you can use it to ensure that the energy is smaller than zero
+            to avoid getting those.
 
     Attributes
     ----------
