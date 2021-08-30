@@ -2150,8 +2150,11 @@ class MPOTransferMatrix:
             vR = self._M[0].get_leg('vR')
             self._chi0 = vR.ind_len
             eye_R = npc.diag(1., vR.conj(), dtype=dtype, labels=['vL', 'vL*'])
+            self._E_shift = eye_R.add_leg(wL, self.IdL, axis=1, label='wL')  # vL wL vL*
+            self._proj_norm = eye_R.add_leg(wL, self.IdR, axis=1, label='wL').conj()  # vL* wL* vL
+            rho = npc.diag(S2, vR, labels=['vR', 'vR*'])
+            self._proj_rho = rho.add_leg(wR, self.IdL, axis=1, label='wR')  # vR wR vR*
             if guess is not None:
-                guess.itranspose(['vL', 'wL', 'vL*'])
                 try:
                     guess.get_leg('wL').test_equal(wL)
                     guess.get_leg('vL').test_contractible(vR)
@@ -2161,9 +2164,10 @@ class MPOTransferMatrix:
                     guess = None
             if guess is None:
                 guess = eye_R.add_leg(wL, self.IdR, axis=1, label='wL')  # vL wL vL*
-            self.proj = eye_R.add_leg(wL, self.IdL, axis=1, label='wL')  # vL wL vL*
-            rho = npc.diag(S2, vR, labels=['vR', 'vR*'])
-            self.proj_rho = rho.add_leg(wR, self.IdL, axis=1, label='wR')  # vR wR vR*
+                # no need to _project: E = 0
+            else:
+                guess = guess.transpose(['vL', 'wL', 'vL*'])  # copy!
+                self._project(guess)
         else:  # left to right
             # vec: vR* wR vR
             for i in range(self.L):
@@ -2174,8 +2178,11 @@ class MPOTransferMatrix:
             vL = self._M[0].get_leg('vL')
             self._chi0 = vL.ind_len
             eye_L = npc.diag(1., vL, dtype=dtype, labels=['vR*', 'vR'])
+            self._E_shift = eye_L.add_leg(wR, self.IdR, axis=1, label='wR')  # vR* wR vR
+            self._proj_norm = eye_L.add_leg(wR, self.IdL, axis=1, label='wR').conj()  # vR wR* vR*
+            rho = npc.diag(S2, vL.conj(), labels=['vL*', 'vL'])
+            self._proj_rho = rho.add_leg(wL, self.IdR, axis=1, label='wL')  # vL* wL vL
             if guess is not None:
-                guess.itranspose(['vR*', 'wR', 'vR'])
                 try:
                     guess.get_leg('wR').test_equal(wR)
                     guess.get_leg('vR').test_contractible(vL)
@@ -2185,9 +2192,9 @@ class MPOTransferMatrix:
                     guess = None
             if guess is None:
                 guess = eye_L.add_leg(wR, self.IdL, axis=1, label='wR')  # vR* wR vR
-            self.proj = eye_L.add_leg(wR, self.IdR, axis=1, label='wR')  # vR* wR vR
-            rho = npc.diag(S2, vL.conj(), labels=['vL*', 'vL'])
-            self.proj_rho = rho.add_leg(wL, self.IdR, axis=1, label='wL')  # vL* wL vL
+            else:
+                guess = guess.transpose(['vR*', 'wR', 'vR'])  # copy!
+                self._project(guess)
         self.guess = guess
         self.flat_linop, self.flat_guess = FlatLinearOperator.from_guess_with_pipe(self.matvec,
                                                                                    self.guess,
@@ -2210,20 +2217,27 @@ class MPOTransferMatrix:
                 vec = npc.tensordot(B, vec, axes=['vR', 'vL'])  # vL p wL vL*
                 vec = npc.tensordot(vec, W, axes=[['p', 'wL'], ['p*', 'wR']])  # vL vL* p wL
                 vec = npc.tensordot(vec, Bc, axes=[['vL*', 'p'], ['vR*', 'p*']])  # vL wL vL*
-            if project:
-                # vec.itranspose(['vL', 'wL', 'vL*'])  # alreayd is in that order
-                E = npc.inner(vec, self.proj_rho, axes=[['vL', 'wL', 'vL*'], ['vR', 'wR', 'vR*']])
-                vec -= self.proj * E
         else:
             vec.itranspose(['vR*', 'wR', 'vR'])  # shouldn't do anything
             for Ac, W, A in zip(self._M_conj, self._W, self._M):
                 vec = npc.tensordot(vec, A, axes=['vR', 'vL'])  # vR* wR p vR
                 vec = npc.tensordot(W, vec, axes=[['wL', 'p*'], ['wR', 'p']])  # wR p vR* vR
                 vec = npc.tensordot(Ac, vec, axes=[['p*', 'vL*'], ['p', 'vR*']])  # vR* wR vR
-            if project:
-                E = npc.inner(vec, self.proj_rho, axes=[['vR*', 'wR', 'vR'], ['vL*', 'wL', 'vL']])
-                vec -= self.proj * E
+        if project:
+            self._project(vec)
         return vec
+
+    def _project(self, vec):
+        """Project out additive energy part from vec."""
+        if not self.transpose:
+            vec.itranspose(['vL', 'wL', 'vL*'])  # shouldn't do anything
+            # vec.itranspose(['vL', 'wL', 'vL*'])  # alreayd is in that order
+            E = npc.inner(vec, self._proj_rho, axes=[['vL', 'wL', 'vL*'], ['vR', 'wR', 'vR*']])
+            vec -= self._E_shift * E
+        else:
+            vec.itranspose(['vR*', 'wR', 'vR'])  # shouldn't do anything
+            E = npc.inner(vec, self._proj_rho, axes=[['vR*', 'wR', 'vR'], ['vL*', 'wL', 'vL']])
+            vec -= self._E_shift * E
 
     def dominant_eigenvector(self, **kwargs):
         """Find dominant eigenvector of self using :mod:`scipy.sparse`.
@@ -2246,7 +2260,7 @@ class MPOTransferMatrix:
         val = vals[0]
         v0 = vecs[0]
         v0 = v0.split_legs()
-        norm = npc.inner(self.guess, v0, axes='range', do_conj=True) / self._chi0
+        norm = npc.inner(self._proj_norm, v0, axes='range', do_conj=False) / self._chi0
         return val, v0 / norm
 
     def energy(self, dom_vec):
@@ -2257,13 +2271,13 @@ class MPOTransferMatrix:
         Returns
         -------
         energy : float
-            Energy per site of the MPS.
+            Energy *per site* of the MPS.
         """
         vec = self.matvec(dom_vec, project=False)
         if not self.transpose:
-            E = npc.inner(vec, self.proj_rho, axes=[['vL', 'wL', 'vL*'], ['vR', 'wR', 'vR*']])
+            E = npc.inner(vec, self._proj_rho, axes=[['vL', 'wL', 'vL*'], ['vR', 'wR', 'vR*']])
         else:
-            E = npc.inner(vec, self.proj_rho, axes=[['vR*', 'wR', 'vR'], ['vL*', 'wL', 'vL']])
+            E = npc.inner(vec, self._proj_rho, axes=[['vR*', 'wR', 'vR'], ['vL*', 'wL', 'vL']])
         return E / self.L
 
     @classmethod

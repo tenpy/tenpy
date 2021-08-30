@@ -331,16 +331,18 @@ def test_MPOTransferMatrix(eps=1.e-13):
     # exponential decay in Sz term to make it harder
     gamma = 0.5
     grid = [[s.Id, s.Sp, s.Sm, s.Sz, 0. * s.Id],
-            [None, None, None, None, 0.5*s.Sm],
-            [None, None, None, None, 0.5*s.Sp],
-            [None, None, None, gamma*s.Id, s.Sz],
+            [None, None, None, None, 0.0*s.Sm],
+            [None, None, None, None, 0.0*s.Sp],
+            [None, None, None, gamma*s.Id, 1.*s.Sz],
             [None, None, None, None, s.Id]]  # yapf: disable
-    H = mpo.MPO.from_grids([s] * 2, [grid] * 2, 'infinite', 0, 4, max_range=np.inf)
-    state = ['up', 'down']
-    psi = mps.MPS.from_product_state([s] * 2, state, bc='infinite')
-    # Sp/Sm gives zero, only Sz part contributes
-    # <up down ...| Sz (gamma Id)^n Sz |up down> = -0.25 * \sum_{n=0}^\infty (-gamma)^n
-    exact_E = -0.25 * 1. / (1. - (-gamma))  # per site!
+    H = mpo.MPO.from_grids([s] * 3, [grid] * 3, 'infinite', 0, 4, max_range=np.inf)
+    psi = mps.MPS.from_singlets(s, 3, [(0, 1)], lonely=[2], bc='infinite')
+    psi.roll_mps_unit_cell(-1)  # -> nontrivial chi at the cut between unit cells
+    exact_E = ((-0.25 - 0.25) *0.  # singlet <0.5*Sp_i Sm_{i+1}> = 0.25 = <0.5*Sm_i Sp_{i+1}>
+               - 0.25  # singlet <Sz_i Sz_{i+1}>
+               + 1.*(0.25 * gamma**2 / (1. - gamma**3)))  # exponentially decaying "lonely" states
+    # lonely: <Sz_{i} gamma gamma Sz_{i+2}
+    exact_E = exact_E / psi.L  # energy per site
     for transpose in [False, True]:
         print(f"transpose={transpose!s}")
         TM = mpo.MPOTransferMatrix(H, psi, transpose=transpose)
@@ -351,3 +353,9 @@ def test_MPOTransferMatrix(eps=1.e-13):
         E0 = TM.energy(vec)
         print(E0, exact_E)
         assert abs(E0 - exact_E) < eps
+        if not transpose:
+            vec.itranspose(['vL', 'wL', 'vL*'])
+            assert (vec[:, 4, :] - npc.eye_like(vec, 0)).norm() < eps
+        else:
+            vec.itranspose(['vR*', 'wR', 'vR'])
+            assert (vec[:, 0, :] - npc.eye_like(vec, 0)).norm() < eps

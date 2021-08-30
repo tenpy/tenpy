@@ -186,6 +186,7 @@ class OrthogonalExcitations(GroundStateSearch):
         data : dict
             The data loaded from :cfg:option:`OrthogonalExcitations.ground_state_filename`.
         """
+        # TODO: allow to pass ground state data as kwargs to sim instead!
         gs_fn = self.options['ground_state_filename']
         data = hdf5_io.load(gs_fn)
         data_options = data['simulation_parameters']
@@ -359,7 +360,7 @@ class OrthogonalExcitations(GroundStateSearch):
                                       dtype=self.psi.dtype,
                                       qtotal=switch_charge_sector,
                                       labels=['vL', 'vR'])
-            lanczos_params = self.options.subconfig('algorithm_params').subconfig('lanczos_params')
+            lanczos_params = self.engine.lanczos_params
             _, th0, _ = lanczos.LanczosGroundState(H0, th0, lanczos_params).run()
             th0 = npc.tensordot(th0, self.psi.get_B(0, 'B'), axes=['vR', 'vL'])
             self.psi.set_B(0, th0, form='Th')
@@ -371,6 +372,7 @@ class OrthogonalExcitations(GroundStateSearch):
     def run_algorithm(self):
         N_excitations = self.options.get("N_excitations", 1)
         ground_state_energy = self.results['ground_state_energy']
+        self.logger.info("reference ground state energy: %.14f", ground_state_energy)
         if ground_state_energy > - 1.e-7:
             # the orthogonal projection does not lead to a different ground state!
             lanczos_params = self.engine.lancozs_params
