@@ -421,7 +421,7 @@ class ParallelTwoSiteDMRG(TwoSiteDMRGEngine):
         # data['init_env_data']['init_LP'] and 'init_RP' are DistributedArray
         if save_init_env_data == 'gather':
             for key, axis in [('init_LP', 'wR'), ('init_RP', 'wL')]:
-                gathered = npc.concatenate(data[key].gather(), axis=axis)
+                gathered = npc.concatenate(data['init_env_data'][key].gather(), axis=axis)
                 perm, gathered = gathered.sort_legcharge(sort=False, bunch=True)
                 data['init_env_data'][key] = gathered
         elif save_init_env_data == 'per_node':
