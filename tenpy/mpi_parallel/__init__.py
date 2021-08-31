@@ -21,6 +21,6 @@ which needs to be installed when you want to use classes in this module.
 """
 # Copyright 2021 TeNPy Developers, GNU GPLv3
 
-from . import helpers, actions, simulation
+from . import helpers, actions, distributed, simulation
 
-__all__ = ["helpers", "actions", "simulation"]
+__all__ = ["helpers", "actions", "distributed", "simulation"]

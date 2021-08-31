@@ -70,7 +70,7 @@ class DistributedArray:
         filename, ext = os.path.splitext(h5gr.file.filename)
         filename_template = filename + '_mpirank_{mpirank:d}' + ext
         hdf5_saver.save(filename_template, subpath + "filename_template")
-        hdf5_saver.save(filename_template, subpath + "subpath")
+        hdf5_saver.save(subpath, subpath + "subpath")
         h5gr.attrs["mpi_size"] = self.node_local.comm.size
         h5gr.attrs["in_cache"] = self.in_cache
         h5gr.attrs["key"] = self.key
