@@ -20,6 +20,12 @@ implemented here also directly use the :class:`Sweep` class.
 """
 # Copyright 2018-2021 TeNPy Developers, GNU GPLv3
 
+from .algorithm import Algorithm
+from ..linalg.sparse import NpcLinearOperator, SumNpcLinearOperator, OrthogonalNpcLinearOperator
+from ..networks.mpo import MPOEnvironment
+from ..networks.mps import MPSEnvironment, MPS
+from .truncation import svd_theta, TruncationError
+from ..linalg import np_conserved as npc
 import numpy as np
 import time
 import warnings
@@ -27,12 +33,6 @@ import copy
 import logging
 logger = logging.getLogger(__name__)
 
-from ..linalg import np_conserved as npc
-from .truncation import svd_theta, TruncationError
-from ..networks.mps import MPSEnvironment, MPS
-from ..networks.mpo import MPOEnvironment
-from ..linalg.sparse import NpcLinearOperator, SumNpcLinearOperator, OrthogonalNpcLinearOperator
-from .algorithm import Algorithm
 
 __all__ = [
     'Sweep',
@@ -117,6 +117,7 @@ class Sweep(Algorithm):
         A dictionary to gradually increase the `chi_max` parameter of `trunc_params`.
         See :cfg:option:`Sweep.chi_list`
     """
+
     def __init__(self, psi, model, options, *, orthogonal_to=None, **kwargs):
         if not hasattr(self, "EffectiveH"):
             raise NotImplementedError("Subclass needs to set EffectiveH")
@@ -137,7 +138,8 @@ class Sweep(Algorithm):
 
     @property
     def engine_params(self):
-        warnings.warn("renamed self.engine_params -> self.options", FutureWarning, stacklevel=2)
+        warnings.warn("renamed self.engine_params -> self.options",
+                      FutureWarning, stacklevel=2)
         return self.options
 
     @property
@@ -227,7 +229,8 @@ class Sweep(Algorithm):
         if resume_data is None:
             resume_data = {}
         if 'init_env_data' in self.options:
-            warnings.warn("put init_env_data in resume_data instead of options!", FutureWarning)
+            warnings.warn(
+                "put init_env_data in resume_data instead of options!", FutureWarning)
             resume_data.setdefault('init_env_data', self.options['init_env_data'])
         init_env_data = {}
         if self.env is not None and self.psi.bc != 'finite':
@@ -272,7 +275,8 @@ class Sweep(Algorithm):
 
         if orthogonal_to:
             if not self.finite:
-                raise ValueError("Can't orthogonalize for infinite MPS: overlap not well defined.")
+                raise ValueError(
+                    "Can't orthogonalize for infinite MPS: overlap not well defined.")
             logger.info("got %d states to orthogonalize against", len(orthogonal_to))
             self.ortho_to_envs = []
             for i, ortho in enumerate(orthogonal_to):
@@ -663,7 +667,8 @@ class EffectiveH(NpcLinearOperator):
     acts_on = None
 
     def __init__(self, env, i0, combine=False, move_right=True):
-        raise NotImplementedError("This function should be implemented in derived classes")
+        raise NotImplementedError(
+            "This function should be implemented in derived classes")
 
     def combine_theta(self, theta):
         """Combine the legs of `theta`, such that it fits to how we combined the legs of `self`.
@@ -678,7 +683,8 @@ class EffectiveH(NpcLinearOperator):
         theta : :class:`~tenpy.linalg.np_conserved.Array`
             Wave function with labels as given by `self.acts_on`.
         """
-        raise NotImplementedError("This function should be implemented in derived classes")
+        raise NotImplementedError(
+            "This function should be implemented in derived classes")
 
     def update_LP(self, env, i, U=None):
         """Equivalent to ``env.get_LP(i, store=True)``; optimized for `combine`.
@@ -864,7 +870,8 @@ class OneSiteH(EffectiveH):
         else:
             contr = npc.tensordot(self.LP, self.W0, axes=['wR', 'wL'])
             contr = npc.tensordot(contr, self.RP, axes=['wR', 'wL'])
-            contr = contr.combine_legs([['vR*', 'p0', 'vL*'], ['vR', 'p0*', 'vL']], qconj=[+1, -1])
+            contr = contr.combine_legs(
+                [['vR*', 'p0', 'vL*'], ['vR', 'p0*', 'vL']], qconj=[+1, -1])
         return contr
 
     def adjoint(self):
@@ -988,7 +995,8 @@ class TwoSiteH(EffectiveH):
         labels = theta.get_leg_labels()
         if self.combine:
             theta = npc.tensordot(self.LHeff, theta, axes=['(vR.p0*)', '(vL.p0)'])
-            theta = npc.tensordot(theta, self.RHeff, axes=[['wR', '(p1.vR)'], ['wL', '(p1*.vL)']])
+            theta = npc.tensordot(theta, self.RHeff, axes=[
+                                  ['wR', '(p1.vR)'], ['wL', '(p1*.vL)']])
             theta.ireplace_labels(['(vR*.p0)', '(p1.vL*)'], ['(vL.p0)', '(p1.vR)'])
         else:
             theta = npc.tensordot(self.LP, theta, axes=['vR', 'vL'])
@@ -1134,7 +1142,7 @@ class ZeroSiteH(EffectiveH):
     def __init__(self, env, i0):
         self.i0 = i0
         self.LP = env.get_LP(i0)
-        self.RP = env.get_RP(i0)
+        self.RP = env.get_RP(i0-1)
         self.dtype = env.H.dtype
         self.N = self.LP.get_leg('vR').ind_len * self.RP.get_leg('vL').ind_len
 
