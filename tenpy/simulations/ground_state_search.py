@@ -211,13 +211,17 @@ class OrthogonalExcitations(GroundStateSearch):
         else:
             self.init_env_data = resume_data.get('init_env_data', {})
             self.ground_state_infinite = None
-            self.results['ground_state_energy'] = data['energy']
+            self.results['ground_state_energy'] = data['energy']       # BLG_DMRG states do not have an 'energy' key, but we won't be doing finite BLG_DMRG
 
         apply_local_op = self.options.get("apply_local_op", None)
         switch_charge_sector = self.options.get("switch_charge_sector", None)
         if apply_local_op is None and switch_charge_sector is None:
             self.orthogonal_to = [self.ground_state]
-            self.results['ground_state_energy'] = E0
+            # This is not correct; it should be energy of the entire segment, not just the ground state energy per site
+            # self.results['ground_state_energy'] = data['E_dmrg'] #E0    # SAJANT, 09/08/21 - I don't think I want to do this since the energy is being calculated somehow anyway.
+            #if psi0.bc == 'infinite':
+            #    temp_env = MPOEnvironment(psi0, self.model.H_MPO, psi0, **self.init_env_data)
+            #    self.results['ground_state_energy'] = temp_env.full_contraction(0)
         else:
             # we will switch charge sector
             self.orthogonal_to = []  # so we don't need to orthognalize against original g.s.
@@ -332,7 +336,12 @@ class OrthogonalExcitations(GroundStateSearch):
 
         if len(self.orthogonal_to) == 0:
             self.switch_charge_sector()
-
+        
+        # Sajant, 09/08/2021 - get ground state energy via full contraction if it doesn't exist
+        if 'ground_state_energy' not in self.results.keys():
+            self.results['ground_state_energy'] = self.engine.env.full_contraction(0)
+            print("Getting GS energy since it was not in 'results' dictionary before.")
+            
     def switch_charge_sector(self):
         """Change the charge sector of :attr:`psi` in place."""
         if self.psi.chinfo.qnumber == 0:
@@ -458,7 +467,14 @@ class ExcitationInitialState(InitialStateBuilder):
         self.sim = sim
         self.options = asConfig(options, self.__class__.__name__)
         self.options.setdefault('method', 'from_orthogonal')
-        super().__init__(sim.model.lat, options, sim.model.dtype)
+        #File "/global/home/users/sajant/BLG_DMRG/TeNPy/tenpy/simulations/ground_state_search.py", line 464, in __init__                                    
+        #super().__init__(sim.model.lat, options, sim.model.dtype)                                                                                        
+        #AttributeError: 'MoireModel' object has no attribute 'dtype'
+        try:            # SAJANT, 09/08/21
+            model_dtype = sim.model.dtype
+        except:
+            model_dtype = np.complex128
+        super().__init__(sim.model.lat, options, model_dtype) #sim.model.dtype)
 
     def from_orthogonal(self):
         if self.options.get('use_highest_excitation', True):
