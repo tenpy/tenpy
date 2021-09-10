@@ -393,14 +393,20 @@ class OrthogonalExcitations(GroundStateSearch):
         self.logger.info("reference ground state energy: %.14f", ground_state_energy)
         if ground_state_energy > - 1.e-7:
             # the orthogonal projection does not lead to a different ground state!
-            lanczos_params = self.engine.lancozs_params
+            lanczos_params = self.engine.lanczos_params
+            if self.engine.diag_method == 'default': # SAJANT, 09/09/21
+                self.engine.diag_method = 'lanczos'
+            
+            print(self.engine.diag_method)
+            print(ground_state_energy + 0.5 * lanczos_params.get('E_shift', 0.))
             if self.engine.diag_method != 'lanczos' or \
                     ground_state_energy + 0.5 * lanczos_params.get('E_shift', 0.) > 0:
                 # the factor of 0.5 is somewhat arbitrary, to ensure that
                 # also excitations have energy < 0
+                print("lanczos_params['E_shift']:", lanczos_params['E_shift'])
                 raise ValueError("You need to set use diag_method='lanczos' and small enough "
                                  f"lanczos_params['E_shift'] < {-2.* ground_state_energy:.2f}")
-
+            
         while len(self.excitations) < N_excitations:
 
             E, psi = self.engine.run()
