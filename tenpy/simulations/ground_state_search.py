@@ -338,6 +338,7 @@ class OrthogonalExcitations(GroundStateSearch):
             self.switch_charge_sector()
         
         # Sajant, 09/08/2021 - get ground state energy via full contraction if it doesn't exist
+        # This only occurs when we are orthogonalizing against the ground state (no switch_charge_sector 
         if 'ground_state_energy' not in self.results.keys():
             self.results['ground_state_energy'] = self.engine.env.full_contraction(0)
             print("Getting GS energy since it was not in 'results' dictionary before.")
@@ -350,13 +351,16 @@ class OrthogonalExcitations(GroundStateSearch):
                          "[contracts environments from right]")
         apply_local_op = self.options.get("apply_local_op", None)
         switch_charge_sector = self.options.get("switch_charge_sector", None)
+        site = self.options.get("switch_charge_sector_site", 0)
         qtotal_before = self.psi.get_total_charge()
+        self.logger.info("Charges of the original segment: %r", list(qtotal_before))
+
         env = self.engine.env
         if apply_local_op is not None:
             if switch_charge_sector is not None:
                 raise ValueError("give only one of `switch_charge_sector` and `apply_local_op`")
             self.results['ground_state_energy'] = env.full_contraction(0)
-            for i in range(0, apply_local_op['i'] - 1):
+            for i in range(0, apply_local_op['i'] - 1): # TODO shouldn't we delete RP(i-1)
                 env.del_RP(i)
             for i in range(apply_local_op['i'] + 1, env.L):
                 env.del_LP(i)
@@ -365,10 +369,11 @@ class OrthogonalExcitations(GroundStateSearch):
         else:
             assert switch_charge_sector is not None
             # get the correct environments on site 0
-            LP = env.get_LP(0)
-            RP = env._contract_RP(0, env.get_RP(0, store=True))  # saves the environments!
-            self.results['ground_state_energy'] = env.full_contraction(0)
-            for i in range(1, self.engine.n_optimize):
+            # SAJANT, 09/15/2021 - Change 0 -> site so that we can insert in the middle of the segment
+            LP = env.get_LP(site)
+            RP = env._contract_RP(site, env.get_RP(site, store=True))  # saves the environments!
+            self.results['ground_state_energy'] = env.full_contraction(site)
+            for i in range(site + 1, site + self.engine.n_optimize):      # SAJANT, 09/15/2021 - what do I delete when site!=0? I just shift the range by site.
                 env.del_LP(i)  # but we might have gotten more than we need
             H0 = ZeroSiteH.from_LP_RP(LP, RP)
             if self.model.H_MPO.explicit_plus_hc:
@@ -380,12 +385,12 @@ class OrthogonalExcitations(GroundStateSearch):
                                       labels=['vL', 'vR'])
             lanczos_params = self.engine.lanczos_params
             _, th0, _ = lanczos.LanczosGroundState(H0, th0, lanczos_params).run()
-            th0 = npc.tensordot(th0, self.psi.get_B(0, 'B'), axes=['vR', 'vL'])
-            self.psi.set_B(0, th0, form='Th')
+            th0 = npc.tensordot(th0, self.psi.get_B(site, 'B'), axes=['vR', 'vL'])
+            self.psi.set_B(site, th0, form='Th')
         qtotal_after = self.psi.get_total_charge()
         qtotal_diff = self.psi.chinfo.make_valid(qtotal_after - qtotal_before)
         self.logger.info("changed charge by %r compared to previous state", list(qtotal_diff))
-        assert not np.all(qtotal_diff == 0)
+        # assert not np.all(qtotal_diff == 0)
 
     def run_algorithm(self):
         N_excitations = self.options.get("N_excitations", 1)
