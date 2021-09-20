@@ -643,6 +643,7 @@ class TopologicalExcitations(OrthogonalExcitations):
         
         """
         # Remove ambiguity in charge from the environment
+        # THIS CURRENTLY DOES NOT WORK BUT NEEDS TO.
         LP = env.get_LP(site)
         RP = env._contract_RP(site, env.get_RP(site, store=True))  # saves the environments!
         for i in range(site + 1, site + self.engine.n_optimize):      # SAJANT, 09/15/2021 - what do I delete when site!=0? I just shift the range by site.
@@ -658,8 +659,13 @@ class TopologicalExcitations(OrthogonalExcitations):
 
         S2 = self.psi.get_SL(site)**2
         self.logger.info("S2 on bond left of site 0: %r", S2)
-        
+
+        # Need to wait left and right legs by s^2 to get bar(Q_L) and bar(Q_R).
         vL_bar = np.dot(vL_charges, S2)
+        
+        # We need a tensor that is non-zero only when Q = (Q^i_L - bar(Q_L)) + (Q^i_R - bar(Q_R))
+        # Q is the the charge we insert. For now I intend for this to be a trivial set of charges since we can change the charges below.
+        
         th0 = npc.Array.from_func(np.ones, [vL, vR],
                                   dtype=self.psi.dtype,
                                   qtotal=switch_charge_sector,
