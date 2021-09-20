@@ -342,7 +342,7 @@ class OrthogonalExcitations(GroundStateSearch):
         # This only occurs when we are orthogonalizing against the ground state (no switch_charge_sector 
         if 'ground_state_energy' not in self.results.keys():
             self.results['ground_state_energy'] = self.engine.env.full_contraction(0)
-            print("Getting GS energy since it was not in 'results' dictionary before.")
+            print("Getting GS energy since it was not in 'results' dictionary before.")       
             
     def switch_charge_sector(self):
         """Change the charge sector of :attr:`psi` in place."""
@@ -515,7 +515,7 @@ class TopologicalExcitations(OrthogonalExcitations):
             psi0_R.canonical_form()
         assert psi0_R.bc == psi0_L.bc == 'infinite', 'Topological excitations require segment DMRG, so infinite boundary conditions.'
 
-        write_back = self.extract_segment_from_infinite(psi0_L, psi0_R, self.model_left, self.model_right, resume_data)
+        write_back = self.extract_segment_from_infinite(psi0_L, psi0_R, self.model_left_inf, self.model_right_inf, resume_data)
         if write_back:
             self.write_converged_environments(left_data, right_data, left_fn, right_fn)
 
@@ -541,17 +541,17 @@ class TopologicalExcitations(OrthogonalExcitations):
         """
         for dir in ['left', 'right']:
             model_class_name = self.options["model_class"][dir]  # no default value!
-            if hasattr(self, 'model' + '_' + dir):
+            if hasattr(self, 'model' + '_' + dir + '_inf'):
                 self.options.subconfig('model_params').touch(dir)
                 return  # skip actually regenerating the model
             ModelClass = find_subclass(Model, model_class_name)
             params = self.options.subconfig('model_params').subconfig(dir)
             if dir == 'left':
-                self.model_left = ModelClass(params)
+                self.model_left_inf = ModelClass(params)
             else:
-                self.model_right = ModelClass(params)
+                self.model_right_inf = ModelClass(params)
         #self.model = self.model_right
-    
+        
     def extract_segment_from_infinite(self, psi0_L_inf, psi0_R_inf, model_L_inf, model_R_inf, resume_data):
         """Extract a finite segment from the infinite model/state.
 
@@ -597,7 +597,8 @@ class TopologicalExcitations(OrthogonalExcitations):
             
             env_data_mixed = {'init_LP': env_data_L['init_LP'], 'init_RP': env_data_R['init_RP'], 'age_LP': 0, 'age_RP': 0}
         self.init_env_data = env_data_mixed
-        self.ground_state_infinite = self.ground_state_infinite_right = psi0_R_inf
+        #self.ground_state_infinite = self.ground_state_infinite_right = psi0_R_inf
+        #self.ground_state_infinite = psi0_R_inf
         self.ground_state = self.ground_state_right = psi0_R_inf.extract_segment(first, last)
         #self.ground_state_infinite_left = psi0_L_inf
         self.ground_state_left = psi0_L_inf.extract_segment(first, last)
@@ -615,21 +616,15 @@ class TopologicalExcitations(OrthogonalExcitations):
             Filename where to save `gs_data`.
         """
         raise NotImplementedError("TODO")
-    
-    def switch_charge_sector(self):
-        """Change the charge sector of :attr:`psi` in place."""
+        
+    def glue_charge_sector(self):
+        """Fix charge ambiguity of gluing together tensors from left and right ground states.."""
         if self.psi.chinfo.qnumber == 0:
-            raise ValueError("can't switch charge sector with trivial charges!")
-        self.logger.info("switch charge sector of the ground state "
+            raise ValueError("can't glue charge sector with trivial charges!")
+        self.logger.info("Glue charge sector of the ground state "
                          "[contracts environments from right]")
-        apply_local_op = self.options.get("apply_local_op", None)
-        switch_charge_sector = self.options.get("switch_charge_sector", None)
         site = self.options.get("switch_charge_sector_site", 0)
-        qtotal_before = self.psi.get_total_charge()
-        self.logger.info("Charges of the original segment: %r", list(qtotal_before))
-        vacuum_charge_sector = [0 for a in list(qtotal_before)]
-        self.logger.info("Charges of the original segment: %r", list(qtotal_before))
-
+        
         # Calculate energy of "vacuum" segment
         # [TODO] optimize this by using E_L = E_L^0 + epsilon*L where E_L^0 = LP_L * s^2 * RP_L
         env_left_BC = MPOEnvironment(self.ground_state_left, self.model_left.H_MPO, self.ground_state_left, **self.init_env_data_L)
@@ -640,8 +635,6 @@ class TopologicalExcitations(OrthogonalExcitations):
         self.results['ground_state_energy'] = (E_L + E_R)/2
 
         env = self.engine.env
-        
-        """
         # Remove ambiguity in charge from the environment
         # THIS CURRENTLY DOES NOT WORK BUT NEEDS TO.
         LP = env.get_LP(site)
@@ -651,36 +644,60 @@ class TopologicalExcitations(OrthogonalExcitations):
         H0 = ZeroSiteH.from_LP_RP(LP, RP)
         if self.model.H_MPO.explicit_plus_hc:
             H0 = SumNpcLinearOperator(H0, H0.adjoint())
-        vL, vR = LP.get_leg('vR'), RP.get_leg('vL')
-        vL_charges = vL.to_qflat()
-        self.logger.info("Left Charges: %r", vL_charges)
-        vR_charges = vR.to_qflat()
-        self.logger.info("Right Charges: %r", vR_charges)
+        vL, vR = LP.get_leg('vR').conj(), RP.get_leg('vL').conj()
+        
+        Q_bar_L = self.ground_state_infinite_left.average_charge(0)
+        for i in range(1, self.ground_state_infinite_left.L):
+            Q_bar_L += self.ground_state_infinite_left.average_charge(i)
+        Q_bar_L = vL.chinfo.make_valid(np.around(Q_bar_L))
+        self.logger.info("Charge of left BC, averaged over site and unit cell: %r", Q_bar_L)
+        
+        
+        Q_bar_R = self.ground_state_infinite_right.average_charge(0)
+        for i in range(1, self.ground_state_infinite_right.L):
+            Q_bar_R += self.ground_state_infinite_right.average_charge(i)
+        Q_bar_R = vR.chinfo.make_valid(-1 * np.around(Q_bar_R))
+        self.logger.info("Charge of right BC, averaged over site and unit cell: %r", -1*Q_bar_R)
 
-        S2 = self.psi.get_SL(site)**2
-        self.logger.info("S2 on bond left of site 0: %r", S2)
+        desired_Q = list(vL.chinfo.make_valid(Q_bar_L + Q_bar_R))
+        self.logger.info("Desired gluing charge: %r", desired_Q)
 
-        # Need to weight left and right legs by s^2 to get bar(Q_L) and bar(Q_R).
-        # Need to sum over all bonds in the unit cell of the original infinite unit cells of left and right BCs.
-        vL_bar = np.dot(vL_charges, S2)
-        vR_bar = ...
         
         # We need a tensor that is non-zero only when Q = (Q^i_L - bar(Q_L)) + (Q^i_R - bar(Q_R))
         # Q is the the charge we insert. For now I intend for this to be a trivial set of charges since we can change the charges below.
         
         th0 = npc.Array.from_func(np.ones, [vL, vR],
                                   dtype=self.psi.dtype,
-                                  qtotal=vL_bar + vR_bar,
+                                  qtotal=Q_bar_L + Q_bar_R,
                                   labels=['vL', 'vR'])
         lanczos_params = self.engine.lanczos_params
         _, th0, _ = lanczos.LanczosGroundState(H0, th0, lanczos_params).run()
         th0 = npc.tensordot(th0, self.psi.get_B(site, 'B'), axes=['vR', 'vL'])
         self.psi.set_B(site, th0, form='Th')
-        """
+    
+    def switch_charge_sector(self):
+        """Change the charge sector of :attr:`psi` in place."""
+        
+        self.glue_charge_sector()
+        apply_local_op = self.options.get("apply_local_op", None)
+        switch_charge_sector = self.options.get("switch_charge_sector", None)
+        if apply_local_op is None and switch_charge_sector is None:
+            return
+        
+        if self.psi.chinfo.qnumber == 0:
+            raise ValueError("can't switch charge sector with trivial charges!")
+        self.logger.info("switch charge sector of the ground state "
+                         "[contracts environments from right]")
+        site = self.options.get("switch_charge_sector_site", 0)
+        qtotal_before = self.psi.get_total_charge()
+        self.logger.info("Charges of the original segment: %r", list(qtotal_before))
+
+        env = self.engine.env
+        
         if apply_local_op is not None:
             if switch_charge_sector is not None:
                 raise ValueError("give only one of `switch_charge_sector` and `apply_local_op`")
-            self.results['ground_state_energy'] = env.full_contraction(0)
+            #self.results['ground_state_energy'] = env.full_contraction(0)
             for i in range(0, apply_local_op['i'] - 1): # TODO shouldn't we delete RP(i-1)
                 env.del_RP(i)
             for i in range(apply_local_op['i'] + 1, env.L):
@@ -693,7 +710,7 @@ class TopologicalExcitations(OrthogonalExcitations):
             # SAJANT, 09/15/2021 - Change 0 -> site so that we can insert in the middle of the segment
             LP = env.get_LP(site)
             RP = env._contract_RP(site, env.get_RP(site, store=True))  # saves the environments!
-            self.results['ground_state_energy'] = env.full_contraction(site)
+            #self.results['ground_state_energy'] = env.full_contraction(site)
             for i in range(site + 1, site + self.engine.n_optimize):      # SAJANT, 09/15/2021 - what do I delete when site!=0? I just shift the range by site.
                 env.del_LP(i)  # but we might have gotten more than we need
             H0 = ZeroSiteH.from_LP_RP(LP, RP)
