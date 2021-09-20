@@ -79,3 +79,4 @@ Fixed
   and/or to updating the environments in psi.canonical_form().
 - :issue:`137` additional error check for :meth:`~tenpy.networks.mps.MPS.from_lat_product_state` with
   :class:`~tenpy.models.lattice.HelicalLattice`.
+- Missing return in :meth:`~tenpy.algorithms.Algorithm.resume_run` broke simulation resume for DMRG.

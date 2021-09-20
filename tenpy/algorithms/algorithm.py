@@ -101,7 +101,7 @@ class Algorithm:
         if self._resume_psi is not None:
             self.psi = self._resume_psi
             self._resume_psi = None
-        self.run()
+        return self.run()
 
     def get_resume_data(self, sequential_simulations=False):
         """Return necessary data to resume a :meth:`run` interrupted at a checkpoint.
