@@ -8,6 +8,7 @@ from . import simulation
 from ..tools import hdf5_io
 from .simulation import *
 from ..linalg import np_conserved as npc
+from ..models.model import Model
 from ..networks.mpo import MPOEnvironment, MPOTransferMatrix
 from ..networks.mps import InitialStateBuilder
 from ..algorithms.mps_common import ZeroSiteH
@@ -390,7 +391,7 @@ class OrthogonalExcitations(GroundStateSearch):
         qtotal_after = self.psi.get_total_charge()
         qtotal_diff = self.psi.chinfo.make_valid(qtotal_after - qtotal_before)
         self.logger.info("changed charge by %r compared to previous state", list(qtotal_diff))
-        # assert not np.all(qtotal_diff == 0)
+        assert not np.all(qtotal_diff == 0)
 
     def run_algorithm(self):
         N_excitations = self.options.get("N_excitations", 1)
@@ -401,11 +402,12 @@ class OrthogonalExcitations(GroundStateSearch):
             lanczos_params = self.engine.lanczos_params
             if self.engine.diag_method == 'default': # SAJANT, 09/09/21
                 self.engine.diag_method = 'lanczos'
-            
-            print(self.engine.diag_method)
-            print(ground_state_energy + 0.5 * lanczos_params.get('E_shift', 0.))
+            self.logger.info('Lanczos Params: %r', lanczos_params)
+            E_shift = lanczos_params.get('E_shift', 0.) #lanczos_params['E_shift'] if lanczos_params['E_shift'] is not None else 0
+            self.logger.info("Shifted ground state energy: %.14f", ground_state_energy + 0.5 * E_shift)
+
             if self.engine.diag_method != 'lanczos' or \
-                    ground_state_energy + 0.5 * lanczos_params.get('E_shift', 0.) > 0:
+                    ground_state_energy + 0.5 * E_shift > 0:
                 # the factor of 0.5 is somewhat arbitrary, to ensure that
                 # also excitations have energy < 0
                 print("lanczos_params['E_shift']:", lanczos_params['E_shift'])
@@ -443,7 +445,266 @@ class OrthogonalExcitations(GroundStateSearch):
             results['resume_data']['excitations'] = self.excitations
         return results
 
+class TopologicalExcitations(OrthogonalExcitations):
+    def init_orthogonal_from_groundstate(self):
+        """Initialize :attr:`orthogonal_to` from the ground state.
 
+        Load the ground state.
+        If the ground state is infinite, call :meth:`extract_segment_from_infinite`.
+
+        An empty :attr:`orthogonal_to` indicates that we will :meth:`switch_charge_sector`
+        in the first :meth:`init_algorithm` call.
+
+        Options
+        -------
+        .. cfg:configoptions :: OrthogonalExcitations
+
+            ground_state_filename :
+                File from which the ground state should be loaded.
+            orthogonal_norm_tol : float
+                Tolerance how large :meth:`~tenpy.networks.mps.MPS.norm_err` may be for states
+                to be added to :attr:`orthogonal_to`.
+            segment_enlarge, segment_first, segment_last : int | None
+                Only for initially infinite ground states.
+                Arguments for :meth:`~tenpy.models.lattice.Lattice.extract_segment`.
+            apply_local_op: dict | None
+                If not `None`, apply :meth:`~tenpy.networks.mps.MPS.apply_local_op` with given
+                keyword arguments to change the charge sector compared to the ground state.
+                Alternatively, use `switch_charge_sector`.
+            switch_charge_sector : list of int | None
+                If given, change the charge sector of the exciations compared to the ground state.
+                Alternative to `apply_local_op` where we run a small zero-site diagonalization on
+                the left-most bond in the desired charge sector to update the state.
+            write_back_converged_ground_state_environments : bool
+                Only used for infinite ground states, indicating that we should write converged
+                environments of the ground state back to `ground_state_filename`.
+                This is an optimization if you intend to run another `OrthogonalExcitations`
+                simulation in the future with the same `ground_state_filename`.
+                (However, it is not faster when the simulations run at the same time; instead it
+                might even lead to errors!)
+
+        Returns
+        -------
+        data : dict
+            The data loaded from :cfg:option:`OrthogonalExcitations.ground_state_filename`.
+        """
+        # TODO: allow to pass ground state data as kwargs to sim instead!
+        left_fn = self.options['left_BC_filename']
+        right_fn = self.options['right_BC_filename']
+        left_data = hdf5_io.load(left_fn)
+        right_data = hdf5_io.load(right_fn)
+        left_data_options = left_data['simulation_parameters']
+        right_data_options = right_data['simulation_parameters']
+        # get model from ground_state data
+        for keyL, keyR in zip(left_data_options.keys(), right_data_options.keys()):
+            assert keyL == keyR, 'Left and right models must have the same keys.'
+            if not isinstance(keyL, str) or not keyL.startswith('model'):
+                continue
+            if keyL not in self.options:
+                self.options[keyL] = {}
+                self.options[keyL]['left'] = left_data_options[keyL]
+                self.options[keyR]['right'] = right_data_options[keyR]
+        self.init_model() 
+        # FOR NOW (09/17/2021), WE ASSUME LEFT AND RIGHT MODELS ARE THE SAME
+
+        self.ground_state_infinite_right = psi0_R = right_data['psi'] # Use right BC psi since these should be in B form already.
+        self.ground_state_infinite_left = psi0_L = left_data['psi']
+        resume_data = right_data.get('resume_data', {})
+        if np.linalg.norm(psi0_R.norm_test()) > self.options.get('orthogonal_norm_tol', 1.e-12):
+            self.logger.info("call psi.canonicalf_form() on ground state")
+            psi0_R.canonical_form()
+        assert psi0_R.bc == psi0_L.bc == 'infinite', 'Topological excitations require segment DMRG, so infinite boundary conditions.'
+
+        write_back = self.extract_segment_from_infinite(psi0_L, psi0_R, self.model_left, self.model_right, resume_data)
+        if write_back:
+            self.write_converged_environments(left_data, right_data, left_fn, right_fn)
+
+        apply_local_op = self.options.get("apply_local_op", None)
+        switch_charge_sector = self.options.get("switch_charge_sector", None)
+        
+        #assert apply_local_op is switch_charge_sector is None, "For the moment we only search for domain wall that interpolates between the two BCs."
+        
+        self.orthogonal_to = []
+        return right_data
+    
+    def init_model(self):
+        """Initialize a :attr:`model` from the model parameters.
+        Skips initialization if :attr:`model` is already set.
+        Options
+        -------
+        .. cfg:configoptions :: Simulation
+            model_class : str | class
+                Mandatory. Class or name of a subclass of :class:`~tenpy.models.model.Model`.
+            model_params : dict
+                Dictionary with parameters for the model; see the documentation of the
+                corresponding `model_class`.
+        """
+        for dir in ['left', 'right']:
+            model_class_name = self.options["model_class"][dir]  # no default value!
+            if hasattr(self, 'model' + '_' + dir):
+                self.options.subconfig('model_params').touch(dir)
+                return  # skip actually regenerating the model
+            ModelClass = find_subclass(Model, model_class_name)
+            params = self.options.subconfig('model_params').subconfig(dir)
+            if dir == 'left':
+                self.model_left = ModelClass(params)
+            else:
+                self.model_right = ModelClass(params)
+        #self.model = self.model_right
+    
+    def extract_segment_from_infinite(self, psi0_L_inf, psi0_R_inf, model_L_inf, model_R_inf, resume_data):
+        """Extract a finite segment from the infinite model/state.
+
+        Parameters
+        ----------
+        psi0_inf : :class:`~tenpy.networks.mps.MPS`
+            Original ground state with infinite boundary conditions.
+        model_inf : :class:`~tenpy.models.model.MPOModel`
+            Original infinite model.
+        resume_data : dict
+            Possibly contains `init_env_data` with environments.
+
+        Returns
+        -------
+        write_back : bool
+            Whether we should call :meth:`write_converged_environments`.
+        """
+        enlarge = self.options.get('segment_enlarge', None)
+        first = self.options.get('segment_first', 0)
+        last = self.options.get('segment_last', None)
+        self.model_right = model_R_inf.extract_segment(first, last, enlarge) 
+        self.model_left = model_L_inf.extract_segment(first, last, enlarge)
+        self.model = self.model_right # TODO: using right BCs model for the segment; Different model all-together?
+        first, last = self.model.lat.segment_first_last
+        write_back = self.options.get('write_back_converged_ground_state_environments', False)
+        if resume_data.get('converged_environments', False):
+            self.logger.info("use converged environments from ground state file")
+            env_data = resume_data['init_env_data']
+            psi0_inf = resume_data.get('psi', psi0_inf)
+            write_back = False
+        else:
+            self.logger.info("converge environments with MPOTransferMatrix")
+            guess_init_env_data = resume_data.get('init_env_data', None)
+            H_R = model_R_inf.H_MPO
+            env_data_R = MPOTransferMatrix.find_init_LP_RP(H_R, psi0_R_inf, first, last,
+                                                         guess_init_env_data)
+            self.init_env_data_R = env_data_R
+            
+            H_L = model_L_inf.H_MPO
+            env_data_L = MPOTransferMatrix.find_init_LP_RP(H_L, psi0_L_inf, first, last,
+                                                         guess_init_env_data)
+            self.init_env_data_L = env_data_L
+            
+            env_data_mixed = {'init_LP': env_data_L['init_LP'], 'init_RP': env_data_R['init_RP'], 'age_LP': 0, 'age_RP': 0}
+        self.init_env_data = env_data_mixed
+        self.ground_state_infinite = self.ground_state_infinite_right = psi0_R_inf
+        self.ground_state = self.ground_state_right = psi0_R_inf.extract_segment(first, last)
+        self.ground_state_infinite_left = psi0_L_inf
+        self.ground_state_left = psi0_L_inf.extract_segment(first, last)
+        
+        return write_back
+
+    def write_converged_environments(self, left_data, right_data, left_fn, right_fn):
+        """Write converged environments back into the file with the ground state.
+
+        Parameters
+        ----------
+        gs_data : dict
+            Data loaded from the ground state file.
+        gs_fn : str
+            Filename where to save `gs_data`.
+        """
+        raise NotImplementedError("TODO")
+    
+    def switch_charge_sector(self):
+        """Change the charge sector of :attr:`psi` in place."""
+        if self.psi.chinfo.qnumber == 0:
+            raise ValueError("can't switch charge sector with trivial charges!")
+        self.logger.info("switch charge sector of the ground state "
+                         "[contracts environments from right]")
+        apply_local_op = self.options.get("apply_local_op", None)
+        switch_charge_sector = self.options.get("switch_charge_sector", None)
+        site = self.options.get("switch_charge_sector_site", 0)
+        qtotal_before = self.psi.get_total_charge()
+        self.logger.info("Charges of the original segment: %r", list(qtotal_before))
+        vacuum_charge_sector = [0 for a in list(qtotal_before)]
+        self.logger.info("Charges of the original segment: %r", list(qtotal_before))
+
+        # Calculate energy of "vacuum" segment
+        # [TODO] optimize this by using E_L = E_L^0 + epsilon*L where E_L^0 = LP_L * s^2 * RP_L
+        env_left_BC = MPOEnvironment(self.ground_state_left, self.model_left.H_MPO, self.ground_state_left, **self.init_env_data_L)
+        E_L = env_left_BC.full_contraction(0)
+        env_right_BC = MPOEnvironment(self.ground_state_right, self.model_right.H_MPO, self.ground_state_right, **self.init_env_data_R)
+        E_R = env_right_BC.full_contraction(0)
+        assert np.isclose(E_L, E_R)
+        self.results['ground_state_energy'] = (E_L + E_R)/2
+
+        env = self.engine.env
+        
+        """
+        # Remove ambiguity in charge from the environment
+        LP = env.get_LP(site)
+        RP = env._contract_RP(site, env.get_RP(site, store=True))  # saves the environments!
+        for i in range(site + 1, site + self.engine.n_optimize):      # SAJANT, 09/15/2021 - what do I delete when site!=0? I just shift the range by site.
+            env.del_LP(i)  # but we might have gotten more than we need
+        H0 = ZeroSiteH.from_LP_RP(LP, RP)
+        if self.model.H_MPO.explicit_plus_hc:
+            H0 = SumNpcLinearOperator(H0, H0.adjoint())
+        vL, vR = LP.get_leg('vR'), RP.get_leg('vL')
+        vL_charges = vL.to_qflat()
+        self.logger.info("Left Charges: %r", vL_charges)
+        vR_charges = vR.to_qflat()
+        self.logger.info("Right Charges: %r", vR_charges)
+
+        S2 = self.psi.get_SL(site)**2
+        self.logger.info("S2 on bond left of site 0: %r", S2)
+        
+        vL_bar = np.dot(vL_charges, S2)
+        th0 = npc.Array.from_func(np.ones, [vL, vR],
+                                  dtype=self.psi.dtype,
+                                  qtotal=switch_charge_sector,
+                                  labels=['vL', 'vR'])
+        lanczos_params = self.engine.lanczos_params
+        _, th0, _ = lanczos.LanczosGroundState(H0, th0, lanczos_params).run()
+        th0 = npc.tensordot(th0, self.psi.get_B(site, 'B'), axes=['vR', 'vL'])
+        self.psi.set_B(site, th0, form='Th')
+        """
+        if apply_local_op is not None:
+            if switch_charge_sector is not None:
+                raise ValueError("give only one of `switch_charge_sector` and `apply_local_op`")
+            self.results['ground_state_energy'] = env.full_contraction(0)
+            for i in range(0, apply_local_op['i'] - 1): # TODO shouldn't we delete RP(i-1)
+                env.del_RP(i)
+            for i in range(apply_local_op['i'] + 1, env.L):
+                env.del_LP(i)
+            apply_local_op['unitary'] = True  # no need to call psi.canonical_form
+            self.psi.apply_local_op(**apply_local_op)
+        else:
+            assert switch_charge_sector is not None
+            # get the correct environments on site 0
+            # SAJANT, 09/15/2021 - Change 0 -> site so that we can insert in the middle of the segment
+            LP = env.get_LP(site)
+            RP = env._contract_RP(site, env.get_RP(site, store=True))  # saves the environments!
+            self.results['ground_state_energy'] = env.full_contraction(site)
+            for i in range(site + 1, site + self.engine.n_optimize):      # SAJANT, 09/15/2021 - what do I delete when site!=0? I just shift the range by site.
+                env.del_LP(i)  # but we might have gotten more than we need
+            H0 = ZeroSiteH.from_LP_RP(LP, RP)
+            if self.model.H_MPO.explicit_plus_hc:
+                H0 = SumNpcLinearOperator(H0, H0.adjoint())
+            vL, vR = LP.get_leg('vR').conj(), RP.get_leg('vL').conj()
+            th0 = npc.Array.from_func(np.ones, [vL, vR],
+                                      dtype=self.psi.dtype,
+                                      qtotal=switch_charge_sector,
+                                      labels=['vL', 'vR'])
+            lanczos_params = self.engine.lanczos_params
+            _, th0, _ = lanczos.LanczosGroundState(H0, th0, lanczos_params).run()
+            th0 = npc.tensordot(th0, self.psi.get_B(site, 'B'), axes=['vR', 'vL'])
+            self.psi.set_B(site, th0, form='Th')
+        qtotal_after = self.psi.get_total_charge()
+        qtotal_diff = self.psi.chinfo.make_valid(qtotal_after - qtotal_before)
+        self.logger.info("changed charge by %r compared to previous state", list(qtotal_diff))
+        # assert not np.all(qtotal_diff == 0)
+    
 class ExcitationInitialState(InitialStateBuilder):
     """InitialStateBuilder for :class:`OrthogonalExcitations`.
 
