@@ -599,7 +599,7 @@ class TopologicalExcitations(OrthogonalExcitations):
         self.init_env_data = env_data_mixed
         self.ground_state_infinite = self.ground_state_infinite_right = psi0_R_inf
         self.ground_state = self.ground_state_right = psi0_R_inf.extract_segment(first, last)
-        self.ground_state_infinite_left = psi0_L_inf
+        #self.ground_state_infinite_left = psi0_L_inf
         self.ground_state_left = psi0_L_inf.extract_segment(first, last)
         
         return write_back
@@ -660,15 +660,17 @@ class TopologicalExcitations(OrthogonalExcitations):
         S2 = self.psi.get_SL(site)**2
         self.logger.info("S2 on bond left of site 0: %r", S2)
 
-        # Need to wait left and right legs by s^2 to get bar(Q_L) and bar(Q_R).
+        # Need to weight left and right legs by s^2 to get bar(Q_L) and bar(Q_R).
+        # Need to sum over all bonds in the unit cell of the original infinite unit cells of left and right BCs.
         vL_bar = np.dot(vL_charges, S2)
+        vR_bar = ...
         
         # We need a tensor that is non-zero only when Q = (Q^i_L - bar(Q_L)) + (Q^i_R - bar(Q_R))
         # Q is the the charge we insert. For now I intend for this to be a trivial set of charges since we can change the charges below.
         
         th0 = npc.Array.from_func(np.ones, [vL, vR],
                                   dtype=self.psi.dtype,
-                                  qtotal=switch_charge_sector,
+                                  qtotal=vL_bar + vR_bar,
                                   labels=['vL', 'vR'])
         lanczos_params = self.engine.lanczos_params
         _, th0, _ = lanczos.LanczosGroundState(H0, th0, lanczos_params).run()
