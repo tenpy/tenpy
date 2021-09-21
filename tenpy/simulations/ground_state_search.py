@@ -10,7 +10,7 @@ from .simulation import *
 from ..linalg import np_conserved as npc
 from ..models.model import Model
 from ..networks.mpo import MPOEnvironment, MPOTransferMatrix
-from ..networks.mps import InitialStateBuilder
+from ..networks.mps import MPS, InitialStateBuilder
 from ..algorithms.mps_common import ZeroSiteH
 from ..linalg import lanczos
 from ..linalg.sparse import SumNpcLinearOperator
@@ -515,7 +515,7 @@ class TopologicalExcitations(OrthogonalExcitations):
             psi0_R.canonical_form()
         assert psi0_R.bc == psi0_L.bc == 'infinite', 'Topological excitations require segment DMRG, so infinite boundary conditions.'
 
-        write_back = self.extract_segment_from_infinite(psi0_L, psi0_R, self.model_left_inf, self.model_right_inf, resume_data)
+        write_back = self.extract_segment_from_infinite(resume_data)
         if write_back:
             self.write_converged_environments(left_data, right_data, left_fn, right_fn)
 
@@ -552,7 +552,7 @@ class TopologicalExcitations(OrthogonalExcitations):
                 self.model_right_inf = ModelClass(params)
         #self.model = self.model_right
         
-    def extract_segment_from_infinite(self, psi0_L_inf, psi0_R_inf, model_L_inf, model_R_inf, resume_data):
+    def extract_segment_from_infinite(self, resume_data):
         """Extract a finite segment from the infinite model/state.
 
         Parameters
@@ -569,9 +569,13 @@ class TopologicalExcitations(OrthogonalExcitations):
         write_back : bool
             Whether we should call :meth:`write_converged_environments`.
         """
+        
+        psi0_L_inf, psi0_R_inf, model_L_inf, model_R_inf = self.ground_state_infinite_left, self.ground_state_infinite_right, \
+                                                            self.model_left_inf, self.model_right_inf
         enlarge = self.options.get('segment_enlarge', None)
         first = self.options.get('segment_first', 0)
         last = self.options.get('segment_last', None)
+        #self.logger.info("first, last: %d %d", first, last)
         self.model_right = model_R_inf.extract_segment(first, last, enlarge) 
         self.model_left = model_L_inf.extract_segment(first, last, enlarge)
         self.model = self.model_right # TODO: using right BCs model for the segment; Different model all-together?
@@ -601,9 +605,44 @@ class TopologicalExcitations(OrthogonalExcitations):
         #self.ground_state_infinite = psi0_R_inf
         self.ground_state = self.ground_state_right = psi0_R_inf.extract_segment(first, last)
         #self.ground_state_infinite_left = psi0_L_inf
-        self.ground_state_left = psi0_L_inf.extract_segment(first, last)
+        self.ground_state_left, self.boundary = self.extract_segment_mixed_BC(first, last) #psi0_L_inf.extract_segment(first, last)
         
         return write_back
+    
+    def extract_segment_mixed_BC(self, first, last):
+        lL = self.ground_state_infinite_left.L
+        rL = self.ground_state_infinite_right.L
+        assert rL == lL, "Ground state boundary conditions must have the same unit cell length."
+        gsl = self.ground_state_infinite_left
+        gsr = self.ground_state_infinite_right
+        self.logger.info
+        num_segments = (last+1 - first) // lL
+        lsegments = num_segments // 2
+        rsegments = num_segments - lsegments
+        lfirst = first
+        llast = lsegments * lL - 1
+        rfirst = llast + 1
+        rlast = last
+        assert (rlast + 1 - rfirst) // rL == rsegments 
+        
+        self.logger.info("lfirst, llast, rfirst, rlast: %d, %d, %d, %d", lfirst, llast, rfirst, rlast)
+        self.logger.info("first, last: %d %d", first, last)
+        self.logger.info("seg_L, seg_R: %d %d", lsegments, rsegments)
+        
+        l_sites = [gsl.sites[i % lL] for i in range(lfirst, llast + 1)]
+        lB = [gsl.get_B(i) for i in range(lfirst, llast + 1)]
+        lS = [gsl.get_SL(i) for i in range(lfirst, llast + 1)]
+        #lS.append(gsl.get_SR(llast))
+        
+        r_sites = [gsr.sites[i % lL] for i in range(rfirst, rlast + 1)]
+        rB = [gsr.get_B(i) for i in range(rfirst, rlast + 1)]
+        rS = [gsr.get_SL(i) for i in range(rfirst, rlast + 1)]
+        rS.append(gsr.get_SR(rlast))
+        
+        # note: __init__ makes deep copies of B, S
+        cp = MPS(l_sites + r_sites, lB + rB, lS + rS, 'segment', 'B', gsl.norm)
+        cp.grouped = gsl.grouped
+        return cp, rfirst
 
     def write_converged_environments(self, left_data, right_data, left_fn, right_fn):
         """Write converged environments back into the file with the ground state.
@@ -637,9 +676,9 @@ class TopologicalExcitations(OrthogonalExcitations):
         env = self.engine.env
         # Remove ambiguity in charge from the environment
         # THIS CURRENTLY DOES NOT WORK BUT NEEDS TO.
-        LP = env.get_LP(site)
-        RP = env._contract_RP(site, env.get_RP(site, store=True))  # saves the environments!
-        for i in range(site + 1, site + self.engine.n_optimize):      # SAJANT, 09/15/2021 - what do I delete when site!=0? I just shift the range by site.
+        LP = env.get_LP(self.boundary)
+        RP = env._contract_RP(self.boundary, env.get_RP(self.boundary, store=True))  # saves the environments!
+        for i in range(self.boundary + 1, self.boundary + self.engine.n_optimize):      # SAJANT, 09/15/2021 - what do I delete when site!=0? I just shift the range by site.
             env.del_LP(i)  # but we might have gotten more than we need
         H0 = ZeroSiteH.from_LP_RP(LP, RP)
         if self.model.H_MPO.explicit_plus_hc:
@@ -649,14 +688,14 @@ class TopologicalExcitations(OrthogonalExcitations):
         Q_bar_L = self.ground_state_infinite_left.average_charge(0)
         for i in range(1, self.ground_state_infinite_left.L):
             Q_bar_L += self.ground_state_infinite_left.average_charge(i)
-        Q_bar_L = vL.chinfo.make_valid(np.around(Q_bar_L))
+        Q_bar_L = vL.chinfo.make_valid(np.around(Q_bar_L / self.ground_state_infinite_left.L))
         self.logger.info("Charge of left BC, averaged over site and unit cell: %r", Q_bar_L)
         
         
         Q_bar_R = self.ground_state_infinite_right.average_charge(0)
         for i in range(1, self.ground_state_infinite_right.L):
             Q_bar_R += self.ground_state_infinite_right.average_charge(i)
-        Q_bar_R = vR.chinfo.make_valid(-1 * np.around(Q_bar_R))
+        Q_bar_R = vR.chinfo.make_valid(-1 * np.around(Q_bar_R / self.ground_state_infinite_right.L))
         self.logger.info("Charge of right BC, averaged over site and unit cell: %r", -1*Q_bar_R)
 
         desired_Q = list(vL.chinfo.make_valid(Q_bar_L + Q_bar_R))
@@ -668,12 +707,12 @@ class TopologicalExcitations(OrthogonalExcitations):
         
         th0 = npc.Array.from_func(np.ones, [vL, vR],
                                   dtype=self.psi.dtype,
-                                  qtotal=Q_bar_L + Q_bar_R,
+                                  qtotal=desired_Q,
                                   labels=['vL', 'vR'])
         lanczos_params = self.engine.lanczos_params
         _, th0, _ = lanczos.LanczosGroundState(H0, th0, lanczos_params).run()
-        th0 = npc.tensordot(th0, self.psi.get_B(site, 'B'), axes=['vR', 'vL'])
-        self.psi.set_B(site, th0, form='Th')
+        th0 = npc.tensordot(th0, self.psi.get_B(self.boundary, 'B'), axes=['vR', 'vL'])
+        self.psi.set_B(self.boundary, th0, form='Th')
     
     def switch_charge_sector(self):
         """Change the charge sector of :attr:`psi` in place."""
@@ -688,7 +727,7 @@ class TopologicalExcitations(OrthogonalExcitations):
             raise ValueError("can't switch charge sector with trivial charges!")
         self.logger.info("switch charge sector of the ground state "
                          "[contracts environments from right]")
-        site = self.options.get("switch_charge_sector_site", 0)
+        site = self.options.get("switch_charge_sector_site", self.boundary)
         qtotal_before = self.psi.get_total_charge()
         self.logger.info("Charges of the original segment: %r", list(qtotal_before))
 
