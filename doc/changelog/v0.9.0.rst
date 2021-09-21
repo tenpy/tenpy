@@ -3,15 +3,21 @@
 
 Release Notes
 -------------
-TODO: Summarize the most important changes
+It's been a while, so we have a bunch of new features, in particular quite some progress with the simulation classes.
+The DMRG mixer has been rewritten, and the setup for orthogonal excitations with DMRG has been adjusted a bit.
+If you already used the simulation class setup, watch out for the renaming of the ``simultion_class(_name)`` and the
+change of the default separater for recursive keys.
+Apart form that, there are not major incompatibilities compared to v0.8.4
 
-Many thanks to Wilhelm Kadow for great work on the mixed real- and momentum-space representation for models!
+Special thanks go to Wilhelm Kadow for great work on the mixed real- and momentum-space representation for models!
 
 Changelog
 ---------
 
 Backwards incompatible changes
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+- Renamed the `simulation_class_name` argument/parameter to `simulation_class` of :func:`~tenpy.simulations.simulation.run_simulation` 
+  for more consistency with remaining simulation parameters.
 - change default separator for :func:`tenpy.tools.misc.get_recursive`, :func:`~tenpy.tools.misc.set_recursive`, :func:`~tenpy.tools.misc.update_recursive`, and
   :func:`~tenpy.tools.misc.flatten` to ``'.'`` instead of ``'/'``. 
   Also, :func:`~tenpy.tools.misc.get_recursive` now supports a `default` argument.
@@ -23,8 +29,6 @@ Backwards incompatible changes
   rewriting of the mixer code.
   Further, we now reactivate/reset the :class:`~tenpy.algorithms.dmrg.Mixer` whenever growing the bond dimension due to `chi_list` in DMRG.
   The new option :cfg:option:`DMRGEngine.chi_list_reactivates_mixer` allows to disable this.
-- Renamed the `simulation_class_name` argument/parameter to `simulation_class` of :func:`~tenpy.simulations.simulation.run_simulation` 
-  for more consistency with remaining simulation parameters.
 
 
 Added

@@ -12,8 +12,8 @@ if not sys.version_info >= (3, 6):
 
 # hardcode version for people without git
 
-MAJOR, MINOR, MICRO = 0, 8, 4
-RELEASED = False
+MAJOR, MINOR, MICRO = 0, 9, 0
+RELEASED = True
 VERSION = '{0:d}.{1:d}.{2:d}'.format(MAJOR, MINOR, MICRO)
 
 #  Before updating a version, make sure that *all* tests run successfully!
