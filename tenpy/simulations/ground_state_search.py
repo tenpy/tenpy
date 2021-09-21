@@ -250,6 +250,8 @@ class OrthogonalExcitations(GroundStateSearch):
         enlarge = self.options.get('segment_enlarge', None)
         first = self.options.get('segment_first', 0)
         last = self.options.get('segment_last', None)
+        self.boundary = enlarge // 2 * psi0_inf.L   # Bond at the middle of the segment, aligned with a cylinder ring
+
         self.model = model_inf.extract_segment(first, last, enlarge)
         first, last = self.model.lat.segment_first_last
         write_back = self.options.get('write_back_converged_ground_state_environments', False)
@@ -361,7 +363,8 @@ class OrthogonalExcitations(GroundStateSearch):
                          "[contracts environments from right]")
         apply_local_op = self.options.get("apply_local_op", None)
         switch_charge_sector = self.options.get("switch_charge_sector", None)
-        site = self.options.get("switch_charge_sector_site", 0)
+        site = self.options.get("switch_charge_sector_site", self.boundary)
+        self.logger.info("Changing charge to the left of site: %d", site)
         qtotal_before = self.psi.get_total_charge()
         self.logger.info("Charges of the original segment: %r", list(qtotal_before))
 
@@ -620,9 +623,10 @@ class TopologicalExcitations(OrthogonalExcitations):
         self.init_env_data = env_data_mixed
         #self.ground_state_infinite = self.ground_state_infinite_right = psi0_R_inf
         #self.ground_state_infinite = psi0_R_inf
-        self.ground_state = self.ground_state_right = psi0_R_inf.extract_segment(first, last)
+        self.ground_state, self.boundary = self.extract_segment_mixed_BC(first, last)
+        self.ground_state_right = psi0_R_inf.extract_segment(first, last)
         #self.ground_state_infinite_left = psi0_L_inf
-        self.ground_state_left, self.boundary = self.extract_segment_mixed_BC(first, last) #psi0_L_inf.extract_segment(first, last)
+        self.ground_state_left = psi0_L_inf.extract_segment(first, last)
         
         return write_back
     
@@ -694,7 +698,6 @@ class TopologicalExcitations(OrthogonalExcitations):
 
         env = self.engine.env
         # Remove ambiguity in charge from the environment
-        # THIS CURRENTLY DOES NOT WORK BUT NEEDS TO.
         LP = env.get_LP(self.boundary)
         RP = env._contract_RP(self.boundary, env.get_RP(self.boundary, store=True))  # saves the environments!
         for i in range(self.boundary + 1, self.boundary + self.engine.n_optimize):      # SAJANT, 09/15/2021 - what do I delete when site!=0? I just shift the range by site.
@@ -750,6 +753,7 @@ class TopologicalExcitations(OrthogonalExcitations):
         self.logger.info("switch charge sector of the ground state "
                          "[contracts environments from right]")
         site = self.options.get("switch_charge_sector_site", self.boundary)
+        self.logger.info("Changing charge to the left of site: %d", site)
         qtotal_before = self.psi.get_total_charge()
         self.logger.info("Charges of the original segment: %r", list(qtotal_before))
 
