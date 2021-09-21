@@ -20,6 +20,7 @@ from ..tools.params import asConfig
 __all__ = simulation.__all__ + [
     'GroundStateSearch',
     'OrthogonalExcitations',
+    'TopologicalExcitations',
     'ExcitationInitialState',
 ]
 
@@ -474,8 +475,10 @@ class TopologicalExcitations(OrthogonalExcitations):
         -------
         .. cfg:configoptions :: OrthogonalExcitations
 
-            ground_state_filename :
-                File from which the ground state should be loaded.
+            left_BC_filename :
+                File from which the ground state for left boundary should be loaded.
+            right_BC_filename :
+                File from which the ground state for right boundary should be loaded.
             orthogonal_norm_tol : float
                 Tolerance how large :meth:`~tenpy.networks.mps.MPS.norm_err` may be for states
                 to be added to :attr:`orthogonal_to`.
@@ -605,13 +608,13 @@ class TopologicalExcitations(OrthogonalExcitations):
             self.logger.info("converge environments with MPOTransferMatrix")
             guess_init_env_data = resume_data.get('init_env_data', None)
             H_R = model_R_inf.H_MPO
-            env_data_R = MPOTransferMatrix.find_init_LP_RP(H_R, psi0_R_inf, first, last,
-                                                         guess_init_env_data)
+            self.eps_R, self.E0_R, env_data_R = MPOTransferMatrix.find_init_LP_RP(H_R, psi0_R_inf, first, last,
+                                                         guess_init_env_data, calc_E=True)
             self.init_env_data_R = env_data_R
             
             H_L = model_L_inf.H_MPO
-            env_data_L = MPOTransferMatrix.find_init_LP_RP(H_L, psi0_L_inf, first, last,
-                                                         guess_init_env_data)
+            self.eps_L, self.E0_L, env_data_L = MPOTransferMatrix.find_init_LP_RP(H_L, psi0_L_inf, first, last,
+                                                         guess_init_env_data, calc_E=True)
             self.init_env_data_L = env_data_L
             
             env_data_mixed = {
@@ -687,14 +690,23 @@ class TopologicalExcitations(OrthogonalExcitations):
         # [TODO] optimize this by using E_L = E_L^0 + epsilon*L where E_L^0 = LP_L * s^2 * RP_L
         env_left_BC = MPOEnvironment(self.ground_state_left, self.model_left.H_MPO, self.ground_state_left, **self.init_env_data_L)
         E_L = env_left_BC.full_contraction(0)
+        E_L_2 = self.E0_L + self.eps_L * self.ground_state_left.L
         # print("Kwargs:")
         # print(self.init_env_data_L)
         env_right_BC = MPOEnvironment(self.ground_state_right, self.model_right.H_MPO, self.ground_state_right, **self.init_env_data_R)
         E_R = env_right_BC.full_contraction(0)
+        E_R_2 = self.E0_R + self.eps_R * self.ground_state_right.L
+        
+        self.logger.info("EL, ER, EL2, ER2: %.14f, %.14f, %.14f, %.14f", E_L, E_R, E_L_2, E_R_2)
+        self.logger.info("epsilon_L, epsilon_R, E0_L, E0_R: %.14f, %.14f, %.14f, %.14f", self.eps_L, self.eps_R, self.E0_L, self.E0_R)
+        
         assert np.isclose(E_L, E_R)
+        assert np.isclose(E_L_2, E_R_2)
+        assert np.isclose(E_L, E_R_2)
+
         # print("E_L",E_L)
         # print("E_R",E_R)
-        self.results['ground_state_energy'] = (E_L + E_R)/2
+        self.results['ground_state_energy'] = (E_L_2 + E_R_2)/2
 
         env = self.engine.env
         # Remove ambiguity in charge from the environment

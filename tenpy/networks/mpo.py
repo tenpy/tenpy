@@ -2318,6 +2318,7 @@ class MPOTransferMatrix:
         """
         # first right to left
         envs = []
+        Es = []
         if guess_init_env_data is None:
             guess_init_env_data = {}
         for transpose in [False, True]:
@@ -2327,9 +2328,10 @@ class MPOTransferMatrix:
             if abs(1. - val) > tol_ev0:
                 logger.warning("MPOTransferMatrix eigenvalue not 1: got 1. - %.3e", 1. - val)
             envs.append(vec)
-            if calc_E and transpose:
-                E = TM.energy(vec)
+            if calc_E:
+                Es.append(TM.energy(vec))
             del TM
+        assert np.isclose(Es[0], Es[1]), "Left and right energy density must be close."
         init_env_data = {'init_LP': envs[1], 'init_RP': envs[0], 'age_LP': 0, 'age_RP': 0}
         L = H.L
         if first != 0 or last is not None and last % L != L - 1:
@@ -2339,7 +2341,14 @@ class MPOTransferMatrix:
             if last % L != L - 1:
                 init_env_data['init_RP'] = env.get_RP(last, store=False)
         if calc_E:
-            return E, init_env_data
+            SL = psi.get_SL(0)
+            vL, vR = init_env_data['init_LP'].get_leg('vR').conj(), init_env_data['init_RP'].get_leg('vL').conj()
+            SL = npc.diag(SL, vL, labels=['vL', 'vR'])
+            E0 = npc.tensordot(init_env_data['init_LP'], SL, axes=(['vR'], ['vL']))
+            E0 = npc.tensordot(E0, SL.conj(), axes=(['vR*'], ['vL*']))
+            E0 = npc.tensordot(E0, init_env_data['init_RP'], axes=(['vR', 'wR', 'vR*'], ['vL', 'wL', 'vL*']))
+            # E0 = LP * s^2 * RP on site 0
+            return Es[0], E0, init_env_data
         # else:
         return init_env_data
 
