@@ -334,7 +334,8 @@ class OrthogonalExcitations(GroundStateSearch):
         resume_data = kwargs.setdefault('resume_data', {})
         resume_data['init_env_data'] = self.init_env_data
         super().init_algorithm(**kwargs)
-
+        # print("kwargs:")
+        # print(kwargs)
         if len(self.orthogonal_to) == 0:
             self.switch_charge_sector()
         
@@ -342,12 +343,20 @@ class OrthogonalExcitations(GroundStateSearch):
         # This only occurs when we are orthogonalizing against the ground state (no switch_charge_sector 
         if 'ground_state_energy' not in self.results.keys():
             self.results['ground_state_energy'] = self.engine.env.full_contraction(0)
-            print("Getting GS energy since it was not in 'results' dictionary before.")       
+            # print(vars(self.engine.env))
+            # print(self.results['ground_state_energy'])
+            print("Getting GS energy since it was not in 'results' dictionary before.")  
+
+            # env_test = MPOEnvironment(self.ground_state, self.model.H_MPO, self.ground_state, **self.init_env_data)
+            # print(vars(env_test))
+            # E = env_test.full_contraction(0)
+            # print(E)
+                 
             
     def switch_charge_sector(self):
         """Change the charge sector of :attr:`psi` in place."""
         if self.psi.chinfo.qnumber == 0:
-            raise ValuerError("can't switch charge sector with trivial charges!")
+            raise ValueError("can't switch charge sector with trivial charges!")
         self.logger.info("switch charge sector of the ground state "
                          "[contracts environments from right]")
         apply_local_op = self.options.get("apply_local_op", None)
@@ -403,7 +412,10 @@ class OrthogonalExcitations(GroundStateSearch):
             if self.engine.diag_method == 'default': # SAJANT, 09/09/21
                 self.engine.diag_method = 'lanczos'
             self.logger.info('Lanczos Params: %r', lanczos_params)
-            E_shift = lanczos_params.get('E_shift', 0.) #lanczos_params['E_shift'] if lanczos_params['E_shift'] is not None else 0
+            # E_shift = lanczos_params.get('E_shift', 0.) #lanczos_params['E_shift'] if lanczos_params['E_shift'] is not None else 0
+            E_shift = lanczos_params['E_shift'] if lanczos_params['E_shift'] is not None else 0
+
+            print("E_shift", E_shift)
             self.logger.info("Shifted ground state energy: %.14f", ground_state_energy + 0.5 * E_shift)
 
             if self.engine.diag_method != 'lanczos' or \
@@ -595,7 +607,12 @@ class TopologicalExcitations(OrthogonalExcitations):
                                                          guess_init_env_data)
             self.init_env_data_L = env_data_L
             
-            env_data_mixed = {'init_LP': env_data_L['init_LP'], 'init_RP': env_data_R['init_RP'], 'age_LP': 0, 'age_RP': 0}
+            env_data_mixed = {
+                'init_LP': env_data_L['init_LP'],
+                'init_RP': env_data_R['init_RP'],
+                'age_LP': 0,
+                'age_RP': 0
+                }
         self.init_env_data = env_data_mixed
         #self.ground_state_infinite = self.ground_state_infinite_right = psi0_R_inf
         #self.ground_state_infinite = psi0_R_inf
@@ -619,8 +636,6 @@ class TopologicalExcitations(OrthogonalExcitations):
         
     def glue_charge_sector(self):
         """Fix charge ambiguity of gluing together tensors from left and right ground states.."""
-        if self.psi.chinfo.qnumber == 0:
-            raise ValueError("can't glue charge sector with trivial charges!")
         self.logger.info("Glue charge sector of the ground state "
                          "[contracts environments from right]")
         site = self.options.get("switch_charge_sector_site", 0)
@@ -629,9 +644,13 @@ class TopologicalExcitations(OrthogonalExcitations):
         # [TODO] optimize this by using E_L = E_L^0 + epsilon*L where E_L^0 = LP_L * s^2 * RP_L
         env_left_BC = MPOEnvironment(self.ground_state_left, self.model_left.H_MPO, self.ground_state_left, **self.init_env_data_L)
         E_L = env_left_BC.full_contraction(0)
+        # print("Kwargs:")
+        # print(self.init_env_data_L)
         env_right_BC = MPOEnvironment(self.ground_state_right, self.model_right.H_MPO, self.ground_state_right, **self.init_env_data_R)
         E_R = env_right_BC.full_contraction(0)
         assert np.isclose(E_L, E_R)
+        # print("E_L",E_L)
+        # print("E_R",E_R)
         self.results['ground_state_energy'] = (E_L + E_R)/2
 
         env = self.engine.env
@@ -646,20 +665,24 @@ class TopologicalExcitations(OrthogonalExcitations):
             H0 = SumNpcLinearOperator(H0, H0.adjoint())
         vL, vR = LP.get_leg('vR').conj(), RP.get_leg('vL').conj()
         
-        Q_bar_L = self.ground_state_infinite_left.average_charge(0)
-        for i in range(1, self.ground_state_infinite_left.L):
-            Q_bar_L += self.ground_state_infinite_left.average_charge(i)
-        Q_bar_L = vL.chinfo.make_valid(np.around(Q_bar_L))
-        self.logger.info("Charge of left BC, averaged over site and unit cell: %r", Q_bar_L)
-        
-        
-        Q_bar_R = self.ground_state_infinite_right.average_charge(0)
-        for i in range(1, self.ground_state_infinite_right.L):
-            Q_bar_R += self.ground_state_infinite_right.average_charge(i)
-        Q_bar_R = vR.chinfo.make_valid(-1 * np.around(Q_bar_R))
-        self.logger.info("Charge of right BC, averaged over site and unit cell: %r", -1*Q_bar_R)
 
-        desired_Q = list(vL.chinfo.make_valid(Q_bar_L + Q_bar_R))
+        if self.psi.chinfo.qnumber == 0:
+            desired_Q = None
+        else:
+            Q_bar_L = self.ground_state_infinite_left.average_charge(0)
+            for i in range(1, self.ground_state_infinite_left.L):
+                Q_bar_L += self.ground_state_infinite_left.average_charge(i)
+            Q_bar_L = vL.chinfo.make_valid(np.around(Q_bar_L))
+            self.logger.info("Charge of left BC, averaged over site and unit cell: %r", Q_bar_L)
+            
+            
+            Q_bar_R = self.ground_state_infinite_right.average_charge(0)
+            for i in range(1, self.ground_state_infinite_right.L):
+                Q_bar_R += self.ground_state_infinite_right.average_charge(i)
+            Q_bar_R = vR.chinfo.make_valid(-1 * np.around(Q_bar_R))
+            self.logger.info("Charge of right BC, averaged over site and unit cell: %r", -1*Q_bar_R)
+
+            desired_Q = list(vL.chinfo.make_valid(Q_bar_L + Q_bar_R))
         self.logger.info("Desired gluing charge: %r", desired_Q)
 
         
@@ -668,7 +691,7 @@ class TopologicalExcitations(OrthogonalExcitations):
         
         th0 = npc.Array.from_func(np.ones, [vL, vR],
                                   dtype=self.psi.dtype,
-                                  qtotal=Q_bar_L + Q_bar_R,
+                                  qtotal=desired_Q,
                                   labels=['vL', 'vR'])
         lanczos_params = self.engine.lanczos_params
         _, th0, _ = lanczos.LanczosGroundState(H0, th0, lanczos_params).run()
