@@ -2331,7 +2331,8 @@ class MPOTransferMatrix:
             if calc_E:
                 Es.append(TM.energy(vec))
             del TM
-        assert np.isclose(Es[0], Es[1]), "Left and right energy density must be close."
+        if calc_E:
+            assert np.isclose(Es[0], Es[1]), "Left and right energy density must be close."
         init_env_data = {'init_LP': envs[1], 'init_RP': envs[0], 'age_LP': 0, 'age_RP': 0}
         L = H.L
         if first != 0 or last is not None and last % L != L - 1:
