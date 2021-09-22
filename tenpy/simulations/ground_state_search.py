@@ -349,12 +349,6 @@ class OrthogonalExcitations(GroundStateSearch):
             # print(vars(self.engine.env))
             # print(self.results['ground_state_energy'])
             print("Getting GS energy since it was not in 'results' dictionary before.")  
-
-            # env_test = MPOEnvironment(self.ground_state, self.model.H_MPO, self.ground_state, **self.init_env_data)
-            # print(vars(env_test))
-            # E = env_test.full_contraction(0)
-            # print(E)
-                 
             
     def switch_charge_sector(self):
         """Change the charge sector of :attr:`psi` in place."""
@@ -373,7 +367,7 @@ class OrthogonalExcitations(GroundStateSearch):
         if apply_local_op is not None:
             if switch_charge_sector is not None:
                 raise ValueError("give only one of `switch_charge_sector` and `apply_local_op`")
-            self.results['ground_state_energy'] = env.full_contraction(0)
+            self.results['ground_state_energy'] = env.full_contraction(apply_local_op['i'])
             for i in range(0, apply_local_op['i'] - 1): # TODO shouldn't we delete RP(i-1)
                 env.del_RP(i)
             for i in range(apply_local_op['i'] + 1, env.L):
@@ -415,7 +409,7 @@ class OrthogonalExcitations(GroundStateSearch):
             lanczos_params = self.engine.lanczos_params
             if self.engine.diag_method == 'default': # SAJANT, 09/09/21
                 self.engine.diag_method = 'lanczos'
-            self.logger.info('Lanczos Params: %r', lanczos_params)
+            self.logger.info('Lanczos Params in run_algorithm: %r', lanczos_params)
             # E_shift = lanczos_params.get('E_shift', 0.) #lanczos_params['E_shift'] if lanczos_params['E_shift'] is not None else 0
             E_shift = lanczos_params['E_shift'] if lanczos_params['E_shift'] is not None else 0
 
@@ -845,7 +839,7 @@ class TopologicalExcitations(OrthogonalExcitations):
     def switch_charge_sector(self):
         """Change the charge sector of :attr:`psi` in place."""
         
-        #self.glue_charge_sector()
+        self.glue_charge_sector()
         apply_local_op = self.options.get("apply_local_op", None)
         switch_charge_sector = self.options.get("switch_charge_sector", None)
         if apply_local_op is None and switch_charge_sector is None:
