@@ -626,11 +626,11 @@ class TopologicalExcitations(OrthogonalExcitations):
         self.init_env_data = env_data_mixed
         #self.ground_state_infinite = self.ground_state_infinite_right = psi0_R_inf
         #self.ground_state_infinite = psi0_R_inf
-        self.ground_state, self.boundary = self.extract_segment_mixed_BC(first, last)
         self.ground_state_right = psi0_R_inf.extract_segment(first, last)
         #self.ground_state_infinite_left = psi0_L_inf
         self.ground_state_left = psi0_L_inf.extract_segment(first, last)
-        
+        self.ground_state, self.boundary = self.extract_segment_mixed_BC_v2(first, last)
+
         return write_back
     
     def extract_segment_mixed_BC(self, first, last):
@@ -667,6 +667,95 @@ class TopologicalExcitations(OrthogonalExcitations):
         cp = MPS(l_sites + r_sites, lB + rB, lS + rS, 'segment', 'B', gsl.norm)
         cp.grouped = gsl.grouped
         return cp, rfirst
+    
+    def extract_segment_mixed_BC_v2(self, first, last):
+        lL = self.ground_state_infinite_left.L
+        rL = self.ground_state_infinite_right.L
+        assert rL == lL, "Ground state boundary conditions must have the same unit cell length."
+        gsl = self.ground_state_infinite_left
+        gsr = self.ground_state_infinite_right
+        self.logger.info
+        num_segments = (last+1 - first) // lL
+        lsegments = num_segments // 2
+        rsegments = num_segments - lsegments
+        lfirst = first
+        llast = lsegments * lL - 1
+        rfirst = llast + 1
+        rlast = last
+        assert (rlast + 1 - rfirst) // rL == rsegments 
+        
+        self.logger.info("lfirst, llast, rfirst, rlast: %d, %d, %d, %d", lfirst, llast, rfirst, rlast)
+        self.logger.info("first, last: %d %d", first, last)
+        self.logger.info("seg_L, seg_R: %d %d", lsegments, rsegments)
+        
+        l_sites = [gsl.sites[i % lL] for i in range(lfirst, llast + 1)]
+        lB = [gsl.get_B(i) for i in range(lfirst, llast + 1)]
+        lS = [gsl.get_SL(i) for i in range(lfirst, llast + 1)]
+        lS.append(gsl.get_SR(llast))
+        left_segment = MPS(l_sites, lB, lS, 'segment', 'B', gsl.norm)
+        
+        r_sites = [gsr.sites[i % lL] for i in range(rfirst, rlast + 1)]
+        rB = [gsr.get_B(i) for i in range(rfirst, rlast + 1)]
+        rS = [gsr.get_SL(i) for i in range(rfirst, rlast + 1)]
+        rS.append(gsr.get_SR(rlast))
+        right_segment = MPS(r_sites, rB, rS, 'segment', 'B', gsr.norm)
+        
+        ##################### BIG OL HACK #####################
+        # [TODO] Double check on how first and last should be used when we are offsetting the unit cell
+        left_half_model = self.model_left_inf.extract_segment(first, None, lsegments)
+        right_half_model = self.model_right_inf.extract_segment(first, None, rsegments)
+
+        env_left_BC = MPOEnvironment(left_segment, left_half_model.H_MPO, left_segment, **self.init_env_data_L)
+        env_right_BC = MPOEnvironment(right_segment, right_half_model.H_MPO, right_segment, **self.init_env_data_R)
+        LP = env_left_BC._contract_LP(llast, env_left_BC.get_LP(llast, store=False))
+        RP = env_right_BC._contract_RP(0, env_right_BC.get_RP(0, store=False))  # saves the environments!
+        #for i in range(self.boundary + 1, self.boundary + self.engine.n_optimize):      # SAJANT, 09/15/2021 - what do I delete when site!=0? I just shift the range by site.
+        #    env.del_LP(i)  # but we might have gotten more than we need
+        H0 = ZeroSiteH.from_LP_RP(LP, RP)
+        if self.model.H_MPO.explicit_plus_hc:
+            H0 = SumNpcLinearOperator(H0, H0.adjoint())
+        vL, vR = LP.get_leg('vR').conj(), RP.get_leg('vL').conj()
+        
+        if left_segment.chinfo.qnumber == 0:    # Handles the case of no charge-conservation
+            desired_Q = None
+        else:
+            Q_bar_L = self.ground_state_infinite_left.average_charge(0)
+            for i in range(1, self.ground_state_infinite_left.L):
+                Q_bar_L += self.ground_state_infinite_left.average_charge(i)
+            Q_bar_L = vL.chinfo.make_valid(np.around(Q_bar_L / self.ground_state_infinite_left.L))
+            self.logger.info("Charge of left BC, averaged over site and unit cell: %r", Q_bar_L)
+            
+            Q_bar_R = self.ground_state_infinite_right.average_charge(0)
+            for i in range(1, self.ground_state_infinite_right.L):
+                Q_bar_R += self.ground_state_infinite_right.average_charge(i)
+            Q_bar_R = vR.chinfo.make_valid(-1 * np.around(Q_bar_R / self.ground_state_infinite_right.L))
+            self.logger.info("Charge of right BC, averaged over site and unit cell: %r", -1*Q_bar_R)
+
+            desired_Q = list(vL.chinfo.make_valid(Q_bar_L + Q_bar_R))
+        self.logger.info("Desired gluing charge: %r", desired_Q)
+
+        # We need a tensor that is non-zero only when Q = (Q^i_L - bar(Q_L)) + (Q^i_R - bar(Q_R))
+        # Q is the the charge we insert. For now I intend for this to be a trivial set of charges since we can change the charges below.
+        
+        th0 = npc.Array.from_func(np.ones, [vL, vR],
+                                  dtype=left_segment.dtype,
+                                  qtotal=desired_Q,
+                                  labels=['vL', 'vR'])
+        #lanczos_params = self.engine.lanczos_params # May not exist yet
+        lanczos_params = self.options.get("lanczos_params", {}) # See if lanczos_params is in yaml, if not use empty dictionary
+        _, th0, _ = lanczos.LanczosGroundState(H0, th0, lanczos_params).run()
+        th0 = npc.tensordot(th0, right_segment.get_B(0, 'B'), axes=['vR', 'vL'])
+        right_segment.set_B(0, th0, form='Th')
+        rB[0] = right_segment.get_B(0)
+        rS[0] = right_segment.get_SL(0)
+        lS = lS[0:-1] # Remove last singular values from list of singular values in A part of segment.
+        ##################### BIG OL HACK #####################
+
+        # note: __init__ makes deep copies of B, S
+        cp = MPS(l_sites + r_sites, lB + rB, lS + rS, 'segment', 'B', gsl.norm)
+        cp.grouped = gsl.grouped
+        return cp, rfirst
+
 
     def write_converged_environments(self, left_data, right_data, left_fn, right_fn):
         """Write converged environments back into the file with the ground state.
@@ -684,7 +773,7 @@ class TopologicalExcitations(OrthogonalExcitations):
         """Fix charge ambiguity of gluing together tensors from left and right ground states.."""
         self.logger.info("Glue charge sector of the ground state "
                          "[contracts environments from right]")
-        site = self.options.get("switch_charge_sector_site", 0)
+        #site = self.options.get("switch_charge_sector_site", 0)
         
         # Calculate energy of "vacuum" segment
         # [TODO] optimize this by using E_L = E_L^0 + epsilon*L where E_L^0 = LP_L * s^2 * RP_L
@@ -707,7 +796,9 @@ class TopologicalExcitations(OrthogonalExcitations):
         # print("E_L",E_L)
         # print("E_R",E_R)
         self.results['ground_state_energy'] = (E_L_2 + E_R_2)/2
-
+        return 
+    
+    
         env = self.engine.env
         # Remove ambiguity in charge from the environment
         LP = env.get_LP(self.boundary)
@@ -754,7 +845,7 @@ class TopologicalExcitations(OrthogonalExcitations):
     def switch_charge_sector(self):
         """Change the charge sector of :attr:`psi` in place."""
         
-        self.glue_charge_sector()
+        #self.glue_charge_sector()
         apply_local_op = self.options.get("apply_local_op", None)
         switch_charge_sector = self.options.get("switch_charge_sector", None)
         if apply_local_op is None and switch_charge_sector is None:
