@@ -13,10 +13,7 @@ Much of the code is very similar as in DMRG, also based on the class :class:`~te
 .. warning ::
     The interface changed compared to the previous version. Using :class:`TDVPEngine`
     will result in a error. Use :class:`SingleSiteTDVPEngine` or :class:`TwoSiteTDVPEngine` instead.
-
-.. todo ::
-    SingleSiteTDVPEngine is not working correctly
-
+    
 .. todo ::
     extend code to infinite MPS
     
@@ -34,8 +31,8 @@ import numpy as np
 import time
 import warnings
 import logging
-logger = logging.getLogger(__name__)
 
+logger = logging.getLogger(__name__)
 
 __all__ = ['TDVPEngine', 'SingleSiteTDVPEngine', 'TwoSiteTDVPEngine']
 
@@ -76,7 +73,9 @@ class TDVPEngine(TimeEvolutionAlgorithm, Sweep):
     EffectiveH = None
 
     def __init__(self, psi, model, options, **kwargs):
-        # not sure if we really need this
+        if self.__class__.__name__ == 'TDVPEngine':
+            raise NameError('TDVP interfaced changed.' +
+                            ' Use SingleSiteTDVPEngine or TwoSiteTDVPEngine instead')
         if psi.bc != 'finite':
             raise NotImplementedError("Only finite TDVP is implemented")
         assert psi.bc == model.lat.bc_MPS
@@ -91,6 +90,10 @@ class TDVPEngine(TimeEvolutionAlgorithm, Sweep):
 
         Sold = np.mean(self.psi.entanglement_entropy())
         start_time = time.time()
+
+        if self.dt.imag != 0 and self.evolved_time == 0:
+            logger.warning('For imaginary time evolution canonical form might not be conserved. ' +
+                           'Call psi.canonical_form() before measurements.')
 
         self.update(N_steps)
 
@@ -176,15 +179,13 @@ class TwoSiteTDVPEngine(TDVPEngine):
         self.lanczos_options = self.options.subconfig('lanczos_options')
 
         i0 = self.i0
-        if i0 == self.psi.L-2:  # instead of updating this twice, we can double the time
-            dt2 = 2*dt
+        if i0 == self.psi.L - 2:  # instead of updating this twice, we can double the time
+            dt2 = 2 * dt
         else:
             dt2 = dt
         # update two-site wavefunction
-        theta, N = LanczosEvolution(
-            self.eff_H, theta, self.lanczos_options).run(-0.5j*dt2)
-        theta = theta.combine_legs([['vL', 'p0'], ['p1', 'vR']],
-                                   new_axes=[0, 1], qconj=[+1, -1])
+        theta, N = LanczosEvolution(self.eff_H, theta, self.lanczos_options).run(-0.5j * dt2)
+        theta = theta.combine_legs([['vL', 'p0'], ['p1', 'vR']], new_axes=[0, 1], qconj=[+1, -1])
         qtotal_i0 = self.env.bra.get_B(i0, form=None).qtotal
         U, S, VH, err, _ = svd_theta(theta,
                                      self.trunc_params,
@@ -196,27 +197,23 @@ class TwoSiteTDVPEngine(TDVPEngine):
         self.psi.set_B(i0, B0, form='A')  # left-canonical
         self.psi.set_B(i0 + 1, B1, form='B')  # right-canonical
         self.psi.set_SR(i0, S)
-        if self.move_right and i0 != self.psi.L-2:  # right moving update
-            self.eff_H.update_LP(self.env, i0+1, U)
-            self.one_site_update(i0+1, theta)
+        if self.move_right and i0 != self.psi.L - 2:  # right moving update
+            self.env.del_LP(i0 + 1)
+            self.eff_H.update_LP(self.env, i0 + 1, U)
+            self.one_site_update(i0 + 1, theta)
         elif (not self.move_right) and i0 != 0:  # left moving update
+            self.env.del_RP(i0)
             self.eff_H.update_RP(self.env, i0, VH)
             self.one_site_update(i0, theta)
 
-        update_data = {
-            'err': err,
-            'N': N,
-            'U': U,
-            'VH': VH
-        }
+        update_data = {'err': err, 'N': N, 'U': U, 'VH': VH}
         return update_data
 
     def one_site_update(self, i, theta):
         H1 = OneSiteH(self.env, i)
         theta = self.psi.get_theta(i, n=1, cutoff=self.S_inv_cutoff)
         theta = H1.combine_theta(theta)
-        theta, _ = LanczosEvolution(
-            H1, theta, self.lanczos_options).run(0.5j*self.dt)
+        theta, _ = LanczosEvolution(H1, theta, self.lanczos_options).run(0.5j * self.dt)
         self.psi.set_B(i, theta.replace_label('p0', 'p'), form='Th')
 
 
@@ -262,35 +259,28 @@ class SingleSiteTDVPEngine(TDVPEngine):
         return zip(i0s, move_right, update_LP_RP)
 
     def update_env(self, **update_data):
-        if self.i0 == 0 and not self.move_right:
-            # need to overwrite this special case because of the sweep_schedule
-            # maybe need to do something different here?
-            pass
-        else:
-            super().update_env(**update_data)
+        """ delete no longer needed environments """
+        if self.i0 != self.psi.L - 1 and self.move_right:
+            self.env.del_RP(self.i0)
+        elif self.i0 != 0 and not self.move_right:
+            self.env.del_LP(self.i0)
 
     def update_local(self, theta, **kwargs):
         dt = self.dt
         self.lanczos_options = self.options.subconfig('lanczos_options')
 
         i0 = self.i0
-        if i0 == self.psi.L-1:  # instead of updating this twice, we can double the time
-            dt2 = 2*dt
+        if i0 == self.psi.L - 1:  # instead of updating this twice, we can double the time
+            dt2 = 2 * dt
         else:
             dt2 = dt
         # update one-site wavefunction
-        theta, N = LanczosEvolution(
-            self.eff_H, theta, self.lanczos_options).run(-0.5j*dt2)
+        theta, N = LanczosEvolution(self.eff_H, theta, self.lanczos_options).run(-0.5j * dt2)
         if self.move_right:
-            U, VH, err = self.right_moving_update(i0, theta)
+            err = self.right_moving_update(i0, theta)
         else:  # left moving
-            U, VH, err = self.left_moving_update(i0, theta)
-        update_data = {
-            'err': err,
-            'N': N,
-            'U': U,
-            'VH': VH
-        }
+            err = self.left_moving_update(i0, theta)
+        update_data = {'err': err, 'N': N, 'U': None, 'VH': None}
         return update_data
 
     def right_moving_update(self, i0, theta):
@@ -301,20 +291,25 @@ class SingleSiteTDVPEngine(TDVPEngine):
                                      qtotal_LR=qtotal,
                                      inner_labels=['vR', 'vL'])
 
-        B0 = U.split_legs(['(vL.p0)']).replace_label('p0', 'p')
-        self.psi.set_B(i0, B0, form='A')  # left-canonical
+        A0 = U.split_legs(['(vL.p0)']).replace_label('p0', 'p')
+        self.psi.set_B(i0, A0, form='A')  # left-canonical
         self.psi.set_SR(i0, S)
-        if i0 != self.psi.L-1:
+        if i0 != self.psi.L - 1:
+            self.env.del_LP(i0 + 1)
+            self.eff_H.update_LP(self.env, i0 + 1, U)
+            theta = VH.iscale_axis(S, 'vL')
+            theta, H0 = self.zero_site_update(i0 + 1, theta)
+            U2, S2, VH2 = npc.svd(theta, inner_labels=['vR', 'vL'])  # no truncation
+            A0 = npc.tensordot(A0, U2, ['vR', 'vL'])
+            self.psi.set_B(i0, A0, form='A')
+            LP = npc.tensordot(H0.LP, U2, ['vR', 'vL'])
+            LP = npc.tensordot(U2.conj(), LP, ['vL*', 'vR*'])
+            self.env.set_LP(i0 + 1, LP, self.env.get_LP_age(i0) + 1)
             next_B = self.env.bra.get_B(i0 + 1, form='B')
-            VH = npc.tensordot(VH, next_B, axes=['vR', 'vL'])
-            self.psi.set_B(i0 + 1, VH, form='B')  # right-canonical
-            self.eff_H.update_LP(self.env, i0+1, U)
-            self.eff_H.update_RP(self.env, i0, VH)
-            theta = self.zero_site_update(
-                i0+1, S, (U.get_leg('vR'), VH.get_leg('vL')))
-            theta_new = npc.tensordot(theta, VH, axes=['vR', 'vL'])
-            self.psi.set_B(i0 + 1, theta_new, form='Th')
-        return U, VH, err
+            next_B = npc.tensordot(VH2, next_B, axes=['vR', 'vL'])
+            self.psi.set_B(i0 + 1, next_B, form='B')  # right-canonical
+            self.psi.set_SR(i0, S2)
+        return err  # actually no truncation error for SingleSiteTDVP
 
     def left_moving_update(self, i0, theta):
         theta = theta.combine_legs(['p0', 'vR'], qconj=-1, new_axes=1)
@@ -328,26 +323,23 @@ class SingleSiteTDVPEngine(TDVPEngine):
         self.psi.set_B(i0, B1, form='B')  # right-canonical
         self.psi.set_SL(i0, S)
         if i0 != 0:
-            next_B = self.env.bra.get_B(self.i0 - 1, form='A')
-            U = npc.tensordot(next_B, U, axes=['vR', 'vL'])
-            self.psi.set_B(i0 - 1, U, form='A')  # left-canonical
-            self.eff_H.update_LP(self.env, i0, U)
-            self.eff_H.update_RP(self.env, i0-1, VH)
-            theta = self.zero_site_update(
-                i0, S, (U.get_leg('vR'), VH.get_leg('vL')))
-            theta_new = npc.tensordot(U, theta, axes=['vR', 'vL'])
-            self.psi.set_B(i0-1, theta_new, form='Th')
-        return U, VH, err
+            self.env.del_RP(i0 - 1)
+            self.eff_H.update_RP(self.env, i0 - 1, VH)
+            theta = U.iscale_axis(S, 'vR')
+            theta, H0 = self.zero_site_update(i0, theta)
+            U2, S2, VH2 = npc.svd(theta, inner_labels=['vR', 'vL'])  # no truncation
+            B1 = npc.tensordot(VH2, B1, ['vR', 'vL'])
+            self.psi.set_B(i0, B1, form='B')
+            RP = npc.tensordot(VH2, H0.RP, ['vR', 'vL'])
+            RP = npc.tensordot(RP, VH2.conj(), ['vL*', 'vR*'])
+            self.env.set_RP(i0 - 1, RP, self.env.get_RP_age(i0) + 1)
+            next_A = self.env.bra.get_B(i0 - 1, form='A')
+            next_A = npc.tensordot(next_A, U2, axes=['vR', 'vL'])
+            self.psi.set_B(i0 - 1, next_A, form='A')  # left-canonical
+            self.psi.set_SL(i0, S2)
+        return err  # actually no truncation error for SingleSiteTDVP
 
-    def zero_site_update(self, i, S, legs):
-        vR_U, vL_V = legs
+    def zero_site_update(self, i, theta):
         H0 = ZeroSiteH(self.env, i)
-        s_ndarray = np.diag(S)
-        s = npc.Array.from_ndarray(s_ndarray, [vR_U.conj(), vL_V.conj()],
-                                   dtype=None,
-                                   qtotal=None,
-                                   cutoff=None)
-        s.iset_leg_labels(['vL', 'vR'])
-        theta, _ = LanczosEvolution(
-            H0, s, self.lanczos_options).run(0.5j*self.dt)
-        return theta
+        theta, _ = LanczosEvolution(H0, theta, self.lanczos_options).run(0.5j * self.dt)
+        return theta, H0
