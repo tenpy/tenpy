@@ -593,7 +593,7 @@ class TopologicalExcitations(OrthogonalExcitations):
         self.model = self.model_right # TODO: using right BCs model for the segment; Different model all-together?
         first, last = self.model.lat.segment_first_last
         write_back = self.options.get('write_back_converged_ground_state_environments', False)
-        if False #resume_data.get('converged_environments', False):
+        if False: #resume_data.get('converged_environments', False):
             self.logger.info("use converged environments from ground state file")
             env_data = resume_data['init_env_data']
             psi0_inf = resume_data.get('psi', psi0_inf)
