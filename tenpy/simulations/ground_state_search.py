@@ -748,6 +748,7 @@ class TopologicalExcitations(OrthogonalExcitations):
         # note: __init__ makes deep copies of B, S
         cp = MPS(l_sites + r_sites, lB + rB, lS + rS, 'segment', 'B', gsl.norm)
         cp.grouped = gsl.grouped
+        cp.canonical_form_finite(cutoff=1e-15) #to strip out vanishing singular values at the interface
         return cp, rfirst
 
 
@@ -887,6 +888,7 @@ class TopologicalExcitations(OrthogonalExcitations):
             _, th0, _ = lanczos.LanczosGroundState(H0, th0, lanczos_params).run()
             th0 = npc.tensordot(th0, self.psi.get_B(site, 'B'), axes=['vR', 'vL'])
             self.psi.set_B(site, th0, form='Th')
+        self.psi.canonical_form_finite(cutoff=1e-15) #to strip out vanishing singular values at the interface
         qtotal_after = self.psi.get_total_charge()
         qtotal_diff = self.psi.chinfo.make_valid(qtotal_after - qtotal_before)
         self.logger.info("changed charge by %r compared to previous state", list(qtotal_diff))
