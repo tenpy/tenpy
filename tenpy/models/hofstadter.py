@@ -1,9 +1,6 @@
 """Cold atomic (Harper-)Hofstadter model on a strip or cylinder.
 
 .. todo ::
-    WARNING: These models are still under development and not yet tested for correctness.
-    Use at your own risk!
-    Replicate known results to confirm models work correctly.
     Long term: implement different lattices.
     Long term: implement variable hopping strengths Jx, Jy.
 """
