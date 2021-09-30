@@ -168,9 +168,9 @@ class OrthogonalExcitations(GroundStateSearch):
             segment_enlarge, segment_first, segment_last : int | None
                 Only for initially infinite ground states.
                 Arguments for :meth:`~tenpy.models.lattice.Lattice.extract_segment`.
-            apply_local_op: dict | None
+            apply_local_op: Array | None
                 If not `None`, apply :meth:`~tenpy.networks.mps.MPS.apply_local_op` with given
-                keyword arguments to change the charge sector compared to the ground state.
+                keyword arguments to change the charge sector compared to the ground state. Should have the form `apply_local_op should have the form [ site1,operator_string1,site2,operator_string2,...]`
                 Alternatively, use `switch_charge_sector`.
                 apply_local_op should have the form `[(site1,operator_string1),(site2,operator_string2),...]`
             switch_charge_sector : list of int | None
@@ -365,18 +365,23 @@ class OrthogonalExcitations(GroundStateSearch):
         self.logger.info("Charges of the original segment: %r", list(qtotal_before))
 
         env = self.engine.env
-        #apply_local_op should have the form [ (site1,operator_string1),(site2,operator_string2),...]
+        #apply_local_op should have the form [ site1,operator_string1,site2,operator_string2,...]
         if apply_local_op is not None:
+
+            local_ops = [(int(apply_local_op[i]),str(apply_local_op[i+1])) for i in range(0,len(apply_local_op),2)] 
+            self.logger.info("Applying local ops: %s" % str(local_ops))
+            site0 = local_ops[0][0]
             if switch_charge_sector is not None:
                 raise ValueError("give only one of `switch_charge_sector` and `apply_local_op`")
-            self.results['ground_state_energy'] = env.full_contraction(apply_local_op[0][0])
-            for i in range(0, apply_local_op['i'] - 1): # TODO shouldn't we delete RP(i-1)
+            self.results['ground_state_energy'] = env.full_contraction(site0)
+            for i in range(0, site0 - 1): # TODO shouldn't we delete RP(i-1)
                 env.del_RP(i)
-            for i in range(apply_local_op['i'] + 1, env.L):
+            for i in range(site0 + 1, env.L):
                 env.del_LP(i)
             #apply_local_op['unitary'] = True  # no need to call psi.canonical_form
-            for (site,op_string) in apply_local_op:
-                self.psi.apply_local_op(site,op_string,unitary=False)
+            for (site,op_string) in local_ops:
+                self.logger.info("Now applying: (%i, %s)"% (site, op_string))
+                self.psi.apply_local_op(site,op_string,unitary=True)
         else:
             assert switch_charge_sector is not None
             # get the correct environments on site 0
