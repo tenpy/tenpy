@@ -487,6 +487,8 @@ class TopologicalExcitations(OrthogonalExcitations):
             segment_enlarge, segment_first, segment_last : int | None
                 Only for initially infinite ground states.
                 Arguments for :meth:`~tenpy.models.lattice.Lattice.extract_segment`.
+            join_method: "average charge" | "most probable charge"
+                Governs how the segements are joined.
             apply_local_op: dict | None
                 If not `None`, apply :meth:`~tenpy.networks.mps.MPS.apply_local_op` with given
                 keyword arguments to change the charge sector compared to the ground state.
@@ -631,7 +633,8 @@ class TopologicalExcitations(OrthogonalExcitations):
         self.ground_state_right = psi0_R_inf.extract_segment(first, last)
         #self.ground_state_infinite_left = psi0_L_inf
         self.ground_state_left = psi0_L_inf.extract_segment(first, last)
-        self.ground_state, self.boundary = self.extract_segment_mixed_BC_v2(first, last)
+        self.join_method = self.options.get('join_method', "average charge")
+        self.ground_state, self.boundary = self.extract_segment_mixed_BC_v2(first, last, self.join_method)
 
         return write_back
     
@@ -670,7 +673,7 @@ class TopologicalExcitations(OrthogonalExcitations):
         cp.grouped = gsl.grouped
         return cp, rfirst
     
-    def extract_segment_mixed_BC_v2(self, first, last):
+    def extract_segment_mixed_BC_v2(self, first, last, join_method):
         lL = self.ground_state_infinite_left.L
         rL = self.ground_state_infinite_right.L
         assert rL == lL, "Ground state boundary conditions must have the same unit cell length."
@@ -701,6 +704,18 @@ class TopologicalExcitations(OrthogonalExcitations):
         rS = [gsr.get_SL(i) for i in range(rfirst, rlast + 1)]
         rS.append(gsr.get_SR(rlast))
         right_segment = MPS(r_sites, rB, rS, 'segment', 'B', gsr.norm)
+
+        #DEBUGGING, temporary
+        from ..tools.string import vert_join
+        self.logger.info("Left and right segment leg charges:")
+        left_boundary_tensor = left_segment.get_B(left_segment.L-1)
+        right_boundary_tensor = right_segment.get_B(0)
+
+        Lleg = left_boundary_tensor.get_leg('vR')
+        Rleg = right_boundary_tensor.get_leg('vL')
+
+        side_by_side = vert_join(["self\n" + str(Lleg), "other\n" + str(Rleg)], delim=' | ')
+        self.logger.info(side_by_side)
         
         ##################### BIG OL HACK #####################
         # [TODO] Double check on how first and last should be used when we are offsetting the unit cell
@@ -721,19 +736,37 @@ class TopologicalExcitations(OrthogonalExcitations):
         if left_segment.chinfo.qnumber == 0:    # Handles the case of no charge-conservation
             desired_Q = None
         else:
-            Q_bar_L = self.ground_state_infinite_left.average_charge(0)
-            for i in range(1, self.ground_state_infinite_left.L):
-                Q_bar_L += self.ground_state_infinite_left.average_charge(i)
-            Q_bar_L = vL.chinfo.make_valid(np.around(Q_bar_L / self.ground_state_infinite_left.L))
-            self.logger.info("Charge of left BC, averaged over site and unit cell: %r", Q_bar_L)
-            
-            Q_bar_R = self.ground_state_infinite_right.average_charge(0)
-            for i in range(1, self.ground_state_infinite_right.L):
-                Q_bar_R += self.ground_state_infinite_right.average_charge(i)
-            Q_bar_R = vR.chinfo.make_valid(-1 * np.around(Q_bar_R / self.ground_state_infinite_right.L))
-            self.logger.info("Charge of right BC, averaged over site and unit cell: %r", -1*Q_bar_R)
+            if join_method == "average charge":
+                Q_bar_L = self.ground_state_infinite_left.average_charge(0)
+                for i in range(1, self.ground_state_infinite_left.L):
+                    Q_bar_L += self.ground_state_infinite_left.average_charge(i)
+                Q_bar_L = vL.chinfo.make_valid(np.around(Q_bar_L / self.ground_state_infinite_left.L))
+                self.logger.info("Charge of left BC, averaged over site and unit cell: %r", Q_bar_L)
+                
+                Q_bar_R = self.ground_state_infinite_right.average_charge(0)
+                for i in range(1, self.ground_state_infinite_right.L):
+                    Q_bar_R += self.ground_state_infinite_right.average_charge(i)
+                Q_bar_R = vR.chinfo.make_valid(-1 * np.around(Q_bar_R / self.ground_state_infinite_right.L))
+                self.logger.info("Charge of right BC, averaged over site and unit cell: %r", -1*Q_bar_R)
+                desired_Q = list(vL.chinfo.make_valid(Q_bar_L + Q_bar_R))
+            elif join_method == "most probable charge":
+                posL = left_segment.L
+                posR = 0
+                QsL, psL = left_segment.probability_per_charge(posL)
+                QsR, psR = right_segment.probability_per_charge(posR)
 
-            desired_Q = list(vL.chinfo.make_valid(Q_bar_L + Q_bar_R))
+                self.logger.info(side_by_side)
+                side_by_side = vert_join(["left seg\n" + str(QsL), "prob\n" + str(np.array([psL]).T), "right seg\n" + str(QsR),"prob\n" +str(np.array([psR]).T)], delim=' | ')
+                self.logger.info(side_by_side)
+
+                Qmostprobable_L = QsL[np.argmax(psL)]
+                Qmostprobable_R = QsR[np.argmax(psR)]
+                self.logger.info("Most probable left:" + str(Qmostprobable_L))
+                self.logger.info("Most probable right:" + str(Qmostprobable_R))
+                desired_Q = list(vL.chinfo.make_valid(Qmostprobable_L + Qmostprobable_R))
+            else:
+                raise ValueError("Invalid `join_method` %s " % join_method)
+
         self.logger.info("Desired gluing charge: %r", desired_Q)
 
         # We need a tensor that is non-zero only when Q = (Q^i_L - bar(Q_L)) + (Q^i_R - bar(Q_R))
@@ -868,13 +901,19 @@ class TopologicalExcitations(OrthogonalExcitations):
         if apply_local_op is not None:
             if switch_charge_sector is not None:
                 raise ValueError("give only one of `switch_charge_sector` and `apply_local_op`")
-            #self.results['ground_state_energy'] = env.full_contraction(0)
-            for i in range(0, apply_local_op['i'] - 1): # TODO shouldn't we delete RP(i-1)
+            local_ops = [(int(apply_local_op[i]),str(apply_local_op[i+1])) for i in range(0,len(apply_local_op),2)] 
+            self.logger.info("Applying local ops: %s" % str(local_ops))
+            site0 = local_ops[0][0] if len(local_ops) > 0 else 1
+            self.results['ground_state_energy'] = env.full_contraction(site0)
+            for i in range(0, site0 - 1): # TODO shouldn't we delete RP(i-1)
                 env.del_RP(i)
-            for i in range(apply_local_op['i'] + 1, env.L):
+            for i in range(site0 + 1, env.L):
                 env.del_LP(i)
-            apply_local_op['unitary'] = True  # no need to call psi.canonical_form
-            self.psi.apply_local_op(**apply_local_op)
+            #apply_local_op['unitary'] = True  # no need to call psi.canonical_form
+            for (site,op_string) in local_ops:
+                self.logger.info("Now applying: (%i, %s)"% (site, op_string))
+                self.psi.apply_local_op(site,op_string,unitary=True)
+            self.psi.canonical_form_finite(envs_to_update=[env])
         else:
             assert switch_charge_sector is not None
             # get the correct environments on site 0
@@ -897,7 +936,7 @@ class TopologicalExcitations(OrthogonalExcitations):
             th0 = npc.tensordot(th0, self.psi.get_B(site, 'B'), axes=['vR', 'vL'])
             self.psi.set_B(site, th0, form='Th')
         self.psi.canonical_form_finite(cutoff=1e-15) #to strip out vanishing singular values at the interface
-        qtotal_after = self.psi.get_total_charge()
+        qtotal_after = self.psi.get_total_charge() 
         qtotal_diff = self.psi.chinfo.make_valid(qtotal_after - qtotal_before)
         self.logger.info("changed charge by %r compared to previous state", list(qtotal_diff))
         # assert not np.all(qtotal_diff == 0)
