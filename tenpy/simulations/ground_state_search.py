@@ -404,9 +404,9 @@ class OrthogonalExcitations(GroundStateSearch):
             th0 = npc.tensordot(th0, self.psi.get_B(site, 'B'), axes=['vR', 'vL'])
             self.psi.set_B(site, th0, form='Th')
         qtotal_after = self.psi.get_total_charge()
-        qtotal_diff = self.psi.chinfo.make_valid(qtotal_after - qtotal_before)
-        self.logger.info("changed charge by %r compared to previous state", list(qtotal_diff))
-        assert not np.all(qtotal_diff == 0)
+        self.qtotal_diff = self.psi.chinfo.make_valid(qtotal_after - qtotal_before)
+        self.logger.info("changed charge by %r compared to previous state", list(self.qtotal_diff))
+        assert not np.all(self.qtotal_diff == 0)
 
     def run_algorithm(self):
         N_excitations = self.options.get("N_excitations", 1)
