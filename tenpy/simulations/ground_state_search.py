@@ -372,7 +372,7 @@ class OrthogonalExcitations(GroundStateSearch):
             site0 = local_ops[0][0]
             if switch_charge_sector is not None:
                 raise ValueError("give only one of `switch_charge_sector` and `apply_local_op`")
-            #self.results['ground_state_energy'] = env.full_contraction(site0)
+            self.results['ground_state_energy'] = env.full_contraction(site0)
             for i in range(0, site0 - 1): # TODO shouldn't we delete RP(i-1)
                 env.del_RP(i)
             for i in range(site0 + 1, env.L):
