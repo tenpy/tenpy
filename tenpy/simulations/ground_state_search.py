@@ -367,13 +367,12 @@ class OrthogonalExcitations(GroundStateSearch):
         env = self.engine.env
         #apply_local_op should have the form [ site1,operator_string1,site2,operator_string2,...]
         if apply_local_op is not None:
-
             local_ops = [(int(apply_local_op[i]),str(apply_local_op[i+1])) for i in range(0,len(apply_local_op),2)] 
             self.logger.info("Applying local ops: %s" % str(local_ops))
             site0 = local_ops[0][0]
             if switch_charge_sector is not None:
                 raise ValueError("give only one of `switch_charge_sector` and `apply_local_op`")
-            self.results['ground_state_energy'] = env.full_contraction(site0)
+            #self.results['ground_state_energy'] = env.full_contraction(site0)
             for i in range(0, site0 - 1): # TODO shouldn't we delete RP(i-1)
                 env.del_RP(i)
             for i in range(site0 + 1, env.L):
@@ -382,6 +381,7 @@ class OrthogonalExcitations(GroundStateSearch):
             for (site,op_string) in local_ops:
                 self.logger.info("Now applying: (%i, %s)"% (site, op_string))
                 self.psi.apply_local_op(site,op_string,unitary=True)
+            self.psi.canonical_form_finite(envs_to_update=[env])
         else:
             assert switch_charge_sector is not None
             # get the correct environments on site 0
