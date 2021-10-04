@@ -101,13 +101,13 @@ class OrthogonalExcitations(GroundStateSearch):
 
         N_excitations : int
             Number of excitations to find.
-            Don't make this too big, it's gonna perform that many algorithm runs!
+            Don't make this too big, it's going to perform that many algorithm runs!
 
     Attributes
     ----------
     orthogonal_to : list
         States to orthogonalize against.
-    exctiations : list
+    excitations : list
         Tensor network states representing the excitations.
         The ground state in `orthogonal_to` is not included in the `excitations`.
         While being optimized, a state is saved as :attr:`psi` and not yet included in
@@ -373,10 +373,11 @@ class OrthogonalExcitations(GroundStateSearch):
             if switch_charge_sector is not None:
                 raise ValueError("give only one of `switch_charge_sector` and `apply_local_op`")
             self.results['ground_state_energy'] = env.full_contraction(site0)
-            for i in range(0, site0 - 1): # TODO shouldn't we delete RP(i-1)
-                env.del_RP(i)
-            for i in range(site0 + 1, env.L):
-                env.del_LP(i)
+            # for i in range(0, site0 - 1): # TODO shouldn't we delete RP(i-1)
+            #     env.del_RP(i)
+            # for i in range(site0 + 1, env.L):
+            #     env.del_LP(i)
+            env.clear() #should be equivalent to the above lines?
             #apply_local_op['unitary'] = True  # no need to call psi.canonical_form
             for (site,op_string) in local_ops:
                 self.logger.info("Now applying: (%i, %s)"% (site, op_string))
@@ -440,7 +441,8 @@ class OrthogonalExcitations(GroundStateSearch):
             self.logger.info("excitation energy: %.14f", E - ground_state_energy)
             if np.linalg.norm(psi.norm_test()) > self.options.get('orthogonal_norm_tol', 1.e-12):
                 self.logger.info("call psi.canonical_form() on excitation")
-                psi.canonical_form()
+                # psi.canonical_form()
+                psi.canonical_form_finite(envs_to_update=[self.engine.env])
             self.excitations.append(psi)
             self.orthogonal_to.append(psi)
             # save in list of excitations
@@ -909,16 +911,16 @@ class TopologicalExcitations(OrthogonalExcitations):
             local_ops = [(int(apply_local_op[i]),str(apply_local_op[i+1])) for i in range(0,len(apply_local_op),2)] 
             self.logger.info("Applying local ops: %s" % str(local_ops))
             site0 = local_ops[0][0] if len(local_ops) > 0 else 1
-            # self.results['ground_state_energy'] = env.full_contraction(site0) #pretty sure this is wrong, since we compute it earlier by a better way in `glue_charge_sectors`
-            for i in range(0, site0 - 1): # TODO shouldn't we delete RP(i-1)
-                env.del_RP(i)
-            for i in range(site0 + 1, env.L):
-                env.del_LP(i)
+            # # self.results['ground_state_energy'] = env.full_contraction(site0) #pretty sure this is wrong, since we compute it earlier by a better way in `glue_charge_sectors`
+            # for i in range(0, site0 - 1): # TODO shouldn't we delete RP(i-1)
+            #     env.del_RP(i)
+            # for i in range(site0 + 1, env.L):
+            #     env.del_LP(i)
+            env.clear()
             #apply_local_op['unitary'] = True  # no need to call psi.canonical_form
             for (site,op_string) in local_ops:
                 self.logger.info("Now applying: (%i, %s)"% (site, op_string))
-                self.psi.apply_local_op(site,op_string,unitary=True)
-            self.psi.canonical_form_finite(envs_to_update=[env])
+                self.psi.apply_local_op(site,op_string,unitary=True) #don't canonicalize in here, we call it below.
         else:
             assert switch_charge_sector is not None
             # get the correct environments on site 0
@@ -940,7 +942,7 @@ class TopologicalExcitations(OrthogonalExcitations):
             _, th0, _ = lanczos.LanczosGroundState(H0, th0, lanczos_params).run()
             th0 = npc.tensordot(th0, self.psi.get_B(site, 'B'), axes=['vR', 'vL'])
             self.psi.set_B(site, th0, form='Th')
-        self.psi.canonical_form_finite(cutoff=1e-15) #to strip out vanishing singular values at the interface
+        self.psi.canonical_form_finite(cutoff=1e-15,envs_to_update=[env]) #to strip out vanishing singular values at the interface
         qtotal_after = self.psi.get_total_charge() 
         qtotal_diff = self.psi.chinfo.make_valid(qtotal_after - qtotal_before)
         self.logger.info("changed charge by %r compared to previous state", list(qtotal_diff))
