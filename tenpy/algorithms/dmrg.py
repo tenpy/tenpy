@@ -1132,7 +1132,67 @@ class DMRGEngine(Sweep):
         self.update_stats['time'].append(time.time() - self.time0)
         self.trunc_err_list.append(err.eps)
         self.E_trunc_list.append(E_trunc)
+        
+        # In the case of segment DMRG, we want to update the singular values on the first and last
+        # bond so that norm error is calculated correctly.
 
+        psi = self.psi
+        L = psi.L
+        env = self.env
+        if psi.bc == 'segment':
+            if i0 == 0 and self.move_right: # Updating bond to the left of site 0
+                M = psi.get_B(0, 'Th')  # As
+                U, S, V = npc.svd(M.combine_legs(['vR'] + psi._p_label, qconj=-1),
+                                 cutoff=0,
+                                 inner_labels=['vR', 'vL'])
+
+                S = S / np.linalg.norm(S)
+                psi.set_SL(0, S)
+                psi.set_B(0, V.split_legs(1), form='B')
+
+                old_UL, old_VR = psi.segment_boundaries
+                new_UL = npc.tensordot(old_UL, U, axes=['vR', 'vL'])
+                psi.segment_boundaries = (new_UL, old_VR)
+
+                # Clear all calculate LPs, except for 0
+                for key in env._LP_keys[1:]:
+                    if key in env.cache:
+                        del env.cache[key]
+                env._LP_age[1:] = [None] * (L-1)
+                LP = env.get_LP(0)
+
+                assert psi is env.ket and psi is env.bra, "Environment must contain same MPS as engine."
+                LP = npc.tensordot(LP, U, axes=['vR', 'vL'])
+                LP = npc.tensordot(U.conj(), LP, axes=['vL*', 'vR*'])
+                env.set_LP(0, LP, env.get_LP_age(0))
+
+            elif i0 == psi.L - self.EffectiveH.length and not self.move_right:   # Updating bond to the right of site L-1
+                M = psi.get_B(psi.L - 1, 'Th') # sB
+                U, S, V = npc.svd(M.combine_legs(['vL'] + psi._p_label),
+                                 cutoff=0,
+                                 inner_labels=['vR', 'vL'])
+
+                S = S / np.linalg.norm(S)
+                psi.set_SR(psi.L-1, S)
+                psi.set_B(psi.L-1, U.split_legs(0), form='A')
+
+                old_UL, old_VR = psi.segment_boundaries
+                new_VR = npc.tensordot(V, old_VR, axes=['vR', 'vL'])
+                psi.segment_boundaries = (old_UL, new_VR)
+
+                # Clear all calculate LPs, except for 0
+                for key in env._RP_keys[:-1]:
+                    if key in env.cache:
+                        del env.cache[key]
+                env._RP_age[:-1] = [None] * (L-1)
+                RP = env.get_RP(L-1)
+
+                assert psi is env.ket and psi is env.bra, "Environment must contain same MPS as engine."
+                RP = npc.tensordot(V, RP, axes=['vR', 'vL'])
+                RP = npc.tensordot(RP, V.conj(), axes=['vL*', 'vR*'])
+                env.set_RP(L-1, RP, env.get_RP_age(L-1))
+                
+    
     def diag(self, theta_guess):
         """Diagonalize the effective Hamiltonian represented by self.
 
