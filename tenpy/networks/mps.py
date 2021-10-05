@@ -2866,6 +2866,7 @@ class MPS:
             # also neet to calculate new singular values on the very right
             U, S, VR_segment = npc.svd(M.combine_legs(['vL'] + self._p_label),
                                        cutoff=cutoff,
+                                       qtotal_LR=[M.qtotal, None],
                                        inner_labels=['vR', 'vL'])
             S /= np.linalg.norm(S)
             self.set_SR(L - 1, S)
@@ -2886,6 +2887,7 @@ class MPS:
             M = npc.tensordot(M, U.scale_axis(S, 'vR'), axes=['vR', 'vL'])
             U, S, V = npc.svd(M.combine_legs(['vR'] + self._p_label, qconj=-1),
                               cutoff=cutoff,
+                              qtotal_LR=[None, M.qtotal],
                               inner_labels=['vR', 'vL'])
             S = S / np.linalg.norm(S)  # normalize
             self.set_SL(i, S)
@@ -4413,6 +4415,7 @@ class MPSEnvironment:
         if last is None:
             last = self.L - 1
         data = {'init_LP': self.get_LP(first, True), 'init_RP': self.get_RP(last, True)}
+        # TODO: this should apply dagger of psi.segment_boundaries!
         data['age_LP'] = self.get_LP_age(first)
         data['age_RP'] = self.get_RP_age(last)
         return data

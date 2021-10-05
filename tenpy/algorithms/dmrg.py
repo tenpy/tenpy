@@ -1152,6 +1152,7 @@ class DMRGEngine(Sweep):
                 M = psi.get_B(0, 'Th')  # As
                 U, S, V = npc.svd(M.combine_legs(['vR'] + psi._p_label, qconj=-1),
                                  cutoff=0,
+                                 qtotal_LR=[None, M.qtotal],
                                  inner_labels=['vR', 'vL'])
 
                 S = S / np.linalg.norm(S)
@@ -1180,6 +1181,7 @@ class DMRGEngine(Sweep):
                 M = psi.get_B(psi.L - 1, 'Th') # sB
                 U, S, V = npc.svd(M.combine_legs(['vL'] + psi._p_label),
                                  cutoff=0,
+                                 qtotal_LR=[M.qtotal, None],
                                  inner_labels=['vR', 'vL'])
 
                 S = S / np.linalg.norm(S)
