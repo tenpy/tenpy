@@ -342,15 +342,15 @@ class OrthogonalExcitations(GroundStateSearch):
         # print(kwargs)
         if len(self.orthogonal_to) == 0:
             self.switch_charge_sector()
-        
+
         # Sajant, 09/08/2021 - get ground state energy via full contraction if it doesn't exist
-        # This only occurs when we are orthogonalizing against the ground state (no switch_charge_sector 
+        # This only occurs when we are orthogonalizing against the ground state (no switch_charge_sector
         if 'ground_state_energy' not in self.results.keys():
             self.results['ground_state_energy'] = self.engine.env.full_contraction(0)
             # print(vars(self.engine.env))
             # print(self.results['ground_state_energy'])
             print("Getting GS energy since it was not in 'results' dictionary before.")
-            
+
     def switch_charge_sector(self):
         """Change the charge sector of :attr:`psi` in place."""
         if self.psi.chinfo.qnumber == 0:
@@ -367,7 +367,7 @@ class OrthogonalExcitations(GroundStateSearch):
         env = self.engine.env
         #apply_local_op should have the form [ site1,operator_string1,site2,operator_string2,...]
         if apply_local_op is not None:
-            local_ops = [(int(apply_local_op[i]),str(apply_local_op[i+1])) for i in range(0,len(apply_local_op),2)] 
+            local_ops = [(int(apply_local_op[i]),str(apply_local_op[i+1])) for i in range(0,len(apply_local_op),2)]
             self.logger.info("Applying local ops: %s" % str(local_ops))
             site0 = local_ops[0][0]
             if switch_charge_sector is not None:
@@ -432,7 +432,7 @@ class OrthogonalExcitations(GroundStateSearch):
                 print("lanczos_params['E_shift']:", lanczos_params['E_shift'])
                 raise ValueError("You need to set use diag_method='lanczos' and small enough "
                                  f"lanczos_params['E_shift'] < {-2.* ground_state_energy:.2f}")
-            
+
         while len(self.excitations) < N_excitations:
 
             E, psi = self.engine.run()
@@ -464,6 +464,107 @@ class OrthogonalExcitations(GroundStateSearch):
         if 'resume_data' in results:
             results['resume_data']['excitations'] = self.excitations
         return results
+
+
+def expectation_value_outside_segment_right(psi_segment, psi_R, ops, N_unit_cells=1, sites=None, axes=None):
+    """Calculate expectation values outside of the segment to the right.
+
+    Parameters
+    ----------
+    psi_S :
+        Segment MPS.
+    psi_R :
+        Inifnite MPS on the right.
+    ops, sites, axes:
+        As for :meth:`~tenpy.networks.mps.MPS.expectation_value`.
+        `sites` should only have values > 0, with 0 being the first site on the right of the
+        segment.
+    """
+    # TODO move these functions to a different location in code?
+    # TODO rigorous tests
+    psi_S = psi_segment
+    assert psi_S.bc == 'segment'
+    ops, sites, n, (op_ax_p, op_ax_pstar) = psi_R._expectation_value_args(ops, sites, axes)
+    ax_p = ['p' + str(k) for k in range(n)]
+    ax_pstar = ['p' + str(k) + '*' for k in range(n)]
+    UL, VR = psi_S.segment_boundaries
+    S = psi_S.get_SR(psi_S.L - 1)
+    if VR is None:
+        rho = npc.diag(S**2,
+                        psi_S.get_B(psi_.L - 1, None).get_leg('vR'),
+                        labels=['vR', 'vR*'])
+    else:
+        rho = VR.scale_axis(S, 'vL')
+        rho = npc.tensordot(rho.conj(), rho, axes=['vL*', 'vL'])
+    E = []
+    k = 0
+    for i in sorted(sites):
+        assert k <= i
+        while k < i:
+            B = psi_R.get_B(k, form='B')
+            rho = npc.tensordot(rho, B, ['vR', 'vL'])
+            rho = npc.tensordot(B.conj(), rho, [['vL*', 'p*'] , ['vR*', 'p']])
+            k += 1
+        op = psi_R.get_op(ops, i)
+        op = op.replace_labels(op_ax_p + op_ax_pstar, ax_p + ax_pstar)
+        Bs = psi_R.get_B(i, form='B', label_p='0')
+        for k in range(1, n):
+            Bs = npc.tensordot(Bs, psi_R.get_B(i+k, 'B', label_p=str(k)), ['vR', 'vL'])
+        C = npc.tensordot(op, Bs, axes=[ax_pstar, ax_p])
+        C = npc.tensordot(rho, C, axes=['vR', 'vL'])
+        E.append(npc.inner(Bs.conj(), C, axes=[['vL*'] + ax_pstar + ['vR*'],
+                                                ['vR*'] + ax_p + ['vR']]))
+    return np.real_if_close(E)
+
+def expectation_value_outside_segment_left(psi_segment, psi_L, ops, N_unit_cells=1, sites=None, axes=None):
+    """Calculate expectation values outside of the segment to the right.
+
+    Parameters
+    ----------
+    psi_S :
+        Segment MPS.
+    psi_R :
+        Inifnite MPS on the right.
+    ops, sites, axes:
+        As for :meth:`~tenpy.networks.mps.MPS.expectation_value`.
+        `sites` should only have values < 0, with -1 being the first site on the left of the
+        segment.
+    """
+    psi_S = psi_segment
+    assert psi_S.bc == 'segment'
+    if sites is None:
+        sites = np.arange(-psi_L.L, 0)
+    ops, sites, n, (op_ax_p, op_ax_pstar) = psi_L._expectation_value_args(ops, sites, axes)
+    ax_p = ['p' + str(k) for k in range(n)]
+    ax_pstar = ['p' + str(k) + '*' for k in range(n)]
+    UL, VR = psi_S.segment_boundaries
+    S = psi_S.get_SL(0)
+    if UL is None:
+        rho = npc.diag(S**2,
+                       psi_S.get_B(0, None).get_leg('vL'),
+                       labels=['vL', 'vL*'])
+    else:
+        rho = UL.scale_axis(S, 'vR')
+        rho = npc.tensordot(rho, rho.conj(), axes=['vR', 'vR*'])
+    E = []
+    k = -1
+    for i in sorted(sites, reverse=True):
+        assert i <= k
+        while k > i:
+            A = psi_L.get_B(k, form='A')
+            rho = npc.tensordot(A, rho, ['vR', 'vL'])
+            rho = npc.tensordot(rho, A.conj(), [['p', 'vL*'] , ['p*', 'vR*']])
+            k -= 1
+        op = psi_L.get_op(ops, i)
+        op = op.replace_labels(op_ax_p + op_ax_pstar, ax_p + ax_pstar)
+        As = psi_L.get_B(i - (n-1), form='A', label_p='0')
+        for k in range(1, n):
+            As = npc.tensordot(As, psi_L.get_B(i - (n - 1) + k, 'A', label_p=str(k)), ['vR', 'vL'])
+        C = npc.tensordot(op, As, axes=[ax_pstar, ax_p])
+        C = npc.tensordot(C, rho, axes=['vR', 'vL'])
+        E.append(npc.inner(As.conj(), C, axes=[['vL*'] + ax_pstar + ['vR*'],
+                                                ['vL'] + ax_p + ['vL*']]))
+    return np.real_if_close(E)[::-1]
 
 class TopologicalExcitations(OrthogonalExcitations):
     def init_orthogonal_from_groundstate(self):
@@ -528,7 +629,7 @@ class TopologicalExcitations(OrthogonalExcitations):
                 self.options[keyL] = {}
                 self.options[keyL]['left'] = left_data_options[keyL]
                 self.options[keyR]['right'] = right_data_options[keyR]
-        self.init_model() 
+        self.init_model()
         # FOR NOW (09/17/2021), WE ASSUME LEFT AND RIGHT MODELS ARE THE SAME
 
         self.ground_state_infinite_right = psi0_R = right_data['psi'] # Use right BC psi since these should be in B form already.
@@ -545,12 +646,12 @@ class TopologicalExcitations(OrthogonalExcitations):
 
         apply_local_op = self.options.get("apply_local_op", None)
         switch_charge_sector = self.options.get("switch_charge_sector", None)
-        
+
         #assert apply_local_op is switch_charge_sector is None, "For the moment we only search for domain wall that interpolates between the two BCs."
-        
+
         self.orthogonal_to = []
         return right_data
-    
+
     def init_model(self):
         """Initialize a :attr:`model` from the model parameters.
         Skips initialization if :attr:`model` is already set.
@@ -575,7 +676,7 @@ class TopologicalExcitations(OrthogonalExcitations):
             else:
                 self.model_right_inf = ModelClass(params)
         #self.model = self.model_right
-        
+
     def extract_segment_from_infinite(self, resume_data):
         """Extract a finite segment from the infinite model/state.
 
@@ -593,14 +694,14 @@ class TopologicalExcitations(OrthogonalExcitations):
         write_back : bool
             Whether we should call :meth:`write_converged_environments`.
         """
-        
+
         psi0_L_inf, psi0_R_inf, model_L_inf, model_R_inf = self.ground_state_infinite_left, self.ground_state_infinite_right, \
                                                             self.model_left_inf, self.model_right_inf
         enlarge = self.options.get('segment_enlarge', None)
         first = self.options.get('segment_first', 0)
         last = self.options.get('segment_last', None)
         #self.logger.info("first, last: %d %d", first, last)
-        self.model_right = model_R_inf.extract_segment(first, last, enlarge) 
+        self.model_right = model_R_inf.extract_segment(first, last, enlarge)
         self.model_left = model_L_inf.extract_segment(first, last, enlarge)
         self.model = self.model_right # TODO: using right BCs model for the segment; Different model all-together?
         first, last = self.model.lat.segment_first_last
@@ -617,12 +718,12 @@ class TopologicalExcitations(OrthogonalExcitations):
             self.eps_R, self.E0_R, env_data_R = MPOTransferMatrix.find_init_LP_RP(H_R, psi0_R_inf, first, last,
                                                          guess_init_env_data, calc_E=True)
             self.init_env_data_R = env_data_R
-            
+
             H_L = model_L_inf.H_MPO
             self.eps_L, self.E0_L, env_data_L = MPOTransferMatrix.find_init_LP_RP(H_L, psi0_L_inf, first, last,
                                                          guess_init_env_data, calc_E=True)
             self.init_env_data_L = env_data_L
-            
+
             env_data_mixed = {
                 'init_LP': env_data_L['init_LP'],
                 'init_RP': env_data_R['init_RP'],
@@ -639,7 +740,7 @@ class TopologicalExcitations(OrthogonalExcitations):
         self.ground_state, self.boundary = self.extract_segment_mixed_BC_v2(first, last, self.join_method)
 
         return write_back
-    
+
     def extract_segment_mixed_BC(self, first, last):
         lL = self.ground_state_infinite_left.L
         rL = self.ground_state_infinite_right.L
@@ -654,27 +755,27 @@ class TopologicalExcitations(OrthogonalExcitations):
         llast = lsegments * lL - 1
         rfirst = llast + 1
         rlast = last
-        assert (rlast + 1 - rfirst) // rL == rsegments 
-        
+        assert (rlast + 1 - rfirst) // rL == rsegments
+
         self.logger.info("lfirst, llast, rfirst, rlast: %d, %d, %d, %d", lfirst, llast, rfirst, rlast)
         self.logger.info("first, last: %d %d", first, last)
         self.logger.info("seg_L, seg_R: %d %d", lsegments, rsegments)
-        
+
         l_sites = [gsl.sites[i % lL] for i in range(lfirst, llast + 1)]
         lB = [gsl.get_B(i) for i in range(lfirst, llast + 1)]
         lS = [gsl.get_SL(i) for i in range(lfirst, llast + 1)]
         #lS.append(gsl.get_SR(llast))
-        
+
         r_sites = [gsr.sites[i % lL] for i in range(rfirst, rlast + 1)]
         rB = [gsr.get_B(i) for i in range(rfirst, rlast + 1)]
         rS = [gsr.get_SL(i) for i in range(rfirst, rlast + 1)]
         rS.append(gsr.get_SR(rlast))
-        
+
         # note: __init__ makes deep copies of B, S
         cp = MPS(l_sites + r_sites, lB + rB, lS + rS, 'segment', 'B', gsl.norm)
         cp.grouped = gsl.grouped
         return cp, rfirst
-    
+
     def extract_segment_mixed_BC_v2(self, first, last, join_method):
         lL = self.ground_state_infinite_left.L
         rL = self.ground_state_infinite_right.L
@@ -689,18 +790,18 @@ class TopologicalExcitations(OrthogonalExcitations):
         llast = lsegments * lL - 1
         rfirst = llast + 1
         rlast = last
-        assert (rlast + 1 - rfirst) // rL == rsegments 
-        
+        assert (rlast + 1 - rfirst) // rL == rsegments
+
         self.logger.info("lfirst, llast, rfirst, rlast: %d, %d, %d, %d", lfirst, llast, rfirst, rlast)
         self.logger.info("first, last: %d %d", first, last)
         self.logger.info("seg_L, seg_R: %d %d", lsegments, rsegments)
-        
+
         l_sites = [gsl.sites[i % lL] for i in range(lfirst, llast + 1)]
         lB = [gsl.get_B(i) for i in range(lfirst, llast + 1)]
         lS = [gsl.get_SL(i) for i in range(lfirst, llast + 1)]
         lS.append(gsl.get_SR(llast))
         left_segment = MPS(l_sites, lB, lS, 'segment', 'B', gsl.norm)
-        
+
         r_sites = [gsr.sites[i % lL] for i in range(rfirst, rlast + 1)]
         rB = [gsr.get_B(i) for i in range(rfirst, rlast + 1)]
         rS = [gsr.get_SL(i) for i in range(rfirst, rlast + 1)]
@@ -718,7 +819,7 @@ class TopologicalExcitations(OrthogonalExcitations):
 
         side_by_side = vert_join(["self\n" + str(Lleg), "other\n" + str(Rleg)], delim=' | ')
         self.logger.info(side_by_side)
-        
+
         ##################### BIG OL HACK #####################
         # [TODO] Double check on how first and last should be used when we are offsetting the unit cell
         left_half_model = self.model_left_inf.extract_segment(first, None, lsegments)
@@ -734,7 +835,7 @@ class TopologicalExcitations(OrthogonalExcitations):
         if self.model.H_MPO.explicit_plus_hc:
             H0 = SumNpcLinearOperator(H0, H0.adjoint())
         vL, vR = LP.get_leg('vR').conj(), RP.get_leg('vL').conj()
-        
+
         if left_segment.chinfo.qnumber == 0:    # Handles the case of no charge-conservation
             desired_Q = None
         else:
@@ -744,7 +845,7 @@ class TopologicalExcitations(OrthogonalExcitations):
                     Q_bar_L += self.ground_state_infinite_left.average_charge(i)
                 Q_bar_L = vL.chinfo.make_valid(np.around(Q_bar_L / self.ground_state_infinite_left.L))
                 self.logger.info("Charge of left BC, averaged over site and unit cell: %r", Q_bar_L)
-                
+
                 Q_bar_R = self.ground_state_infinite_right.average_charge(0)
                 for i in range(1, self.ground_state_infinite_right.L):
                     Q_bar_R += self.ground_state_infinite_right.average_charge(i)
@@ -773,7 +874,7 @@ class TopologicalExcitations(OrthogonalExcitations):
 
         # We need a tensor that is non-zero only when Q = (Q^i_L - bar(Q_L)) + (Q^i_R - bar(Q_R))
         # Q is the the charge we insert. For now I intend for this to be a trivial set of charges since we can change the charges below.
-        
+
         th0 = npc.Array.from_func(np.ones, [vL, vR],
                                   dtype=left_segment.dtype,
                                   qtotal=desired_Q,
@@ -811,13 +912,13 @@ class TopologicalExcitations(OrthogonalExcitations):
             Filename where to save `gs_data`.
         """
         raise NotImplementedError("TODO")
-        
+
     def glue_charge_sector(self):
         """Fix charge ambiguity of gluing together tensors from left and right ground states.."""
         self.logger.info("Glue charge sector of the ground state "
                          "[contracts environments from right]")
         #site = self.options.get("switch_charge_sector_site", 0)
-        
+
         # Calculate energy of "vacuum" segment
         # [TODO] optimize this by using E_L = E_L^0 + epsilon*L where E_L^0 = LP_L * s^2 * RP_L
         env_left_BC = MPOEnvironment(self.ground_state_left, self.model_left.H_MPO, self.ground_state_left, **self.init_env_data_L)
@@ -828,10 +929,10 @@ class TopologicalExcitations(OrthogonalExcitations):
         env_right_BC = MPOEnvironment(self.ground_state_right, self.model_right.H_MPO, self.ground_state_right, **self.init_env_data_R)
         E_R = env_right_BC.full_contraction(0)
         E_R_2 = self.E0_R + self.eps_R * self.ground_state_right.L
-        
+
         self.logger.info("EL, ER, EL2, ER2: %.14f, %.14f, %.14f, %.14f", E_L, E_R, E_L_2, E_R_2)
         self.logger.info("epsilon_L, epsilon_R, E0_L, E0_R: %.14f, %.14f, %.14f, %.14f", self.eps_L, self.eps_R, self.E0_L, self.E0_R)
-        
+
         #assert np.isclose(E_L, E_R)
         #assert np.isclose(E_L_2, E_R_2)
         #assert np.isclose(E_L, E_R_2)
@@ -839,9 +940,9 @@ class TopologicalExcitations(OrthogonalExcitations):
         # print("E_L",E_L)
         # print("E_R",E_R)
         self.results['ground_state_energy'] = (E_L_2 + E_R_2)/2
-        return 
-    
-    
+        return
+
+
         env = self.engine.env
         # Remove ambiguity in charge from the environment
         LP = env.get_LP(self.boundary)
@@ -852,7 +953,7 @@ class TopologicalExcitations(OrthogonalExcitations):
         if self.model.H_MPO.explicit_plus_hc:
             H0 = SumNpcLinearOperator(H0, H0.adjoint())
         vL, vR = LP.get_leg('vR').conj(), RP.get_leg('vL').conj()
-        
+
         if self.psi.chinfo.qnumber == 0:    # Handles the case of no charge-conservation
             desired_Q = None
         else:
@@ -861,8 +962,8 @@ class TopologicalExcitations(OrthogonalExcitations):
                 Q_bar_L += self.ground_state_infinite_left.average_charge(i)
             Q_bar_L = vL.chinfo.make_valid(np.around(Q_bar_L / self.ground_state_infinite_left.L))
             self.logger.info("Charge of left BC, averaged over site and unit cell: %r", Q_bar_L)
-            
-            
+
+
             Q_bar_R = self.ground_state_infinite_right.average_charge(0)
             for i in range(1, self.ground_state_infinite_right.L):
                 Q_bar_R += self.ground_state_infinite_right.average_charge(i)
@@ -872,10 +973,10 @@ class TopologicalExcitations(OrthogonalExcitations):
             desired_Q = list(vL.chinfo.make_valid(Q_bar_L + Q_bar_R))
         self.logger.info("Desired gluing charge: %r", desired_Q)
 
-        
+
         # We need a tensor that is non-zero only when Q = (Q^i_L - bar(Q_L)) + (Q^i_R - bar(Q_R))
         # Q is the the charge we insert. For now I intend for this to be a trivial set of charges since we can change the charges below.
-        
+
         th0 = npc.Array.from_func(np.ones, [vL, vR],
                                   dtype=self.psi.dtype,
                                   qtotal=desired_Q,
@@ -884,16 +985,16 @@ class TopologicalExcitations(OrthogonalExcitations):
         _, th0, _ = lanczos.LanczosGroundState(H0, th0, lanczos_params).run()
         th0 = npc.tensordot(th0, self.psi.get_B(self.boundary, 'B'), axes=['vR', 'vL'])
         self.psi.set_B(self.boundary, th0, form='Th')
-    
+
     def switch_charge_sector(self):
         """Change the charge sector of :attr:`psi` in place."""
-        
+
         self.glue_charge_sector()
         apply_local_op = self.options.get("apply_local_op", None)
         switch_charge_sector = self.options.get("switch_charge_sector", None)
         if apply_local_op is None and switch_charge_sector is None:
             return
-        
+
         if self.psi.chinfo.qnumber == 0:
             raise ValueError("can't switch charge sector with trivial charges!")
         self.logger.info("switch charge sector of the ground state "
@@ -904,11 +1005,11 @@ class TopologicalExcitations(OrthogonalExcitations):
         self.logger.info("Charges of the original segment: %r", list(qtotal_before))
 
         env = self.engine.env
-        
+
         if apply_local_op is not None:
             if switch_charge_sector is not None:
                 raise ValueError("give only one of `switch_charge_sector` and `apply_local_op`")
-            local_ops = [(int(apply_local_op[i]),str(apply_local_op[i+1])) for i in range(0,len(apply_local_op),2)] 
+            local_ops = [(int(apply_local_op[i]),str(apply_local_op[i+1])) for i in range(0,len(apply_local_op),2)]
             self.logger.info("Applying local ops: %s" % str(local_ops))
             site0 = local_ops[0][0] if len(local_ops) > 0 else 1
             # # self.results['ground_state_energy'] = env.full_contraction(site0) #pretty sure this is wrong, since we compute it earlier by a better way in `glue_charge_sectors`
@@ -943,11 +1044,11 @@ class TopologicalExcitations(OrthogonalExcitations):
             th0 = npc.tensordot(th0, self.psi.get_B(site, 'B'), axes=['vR', 'vL'])
             self.psi.set_B(site, th0, form='Th')
         self.psi.canonical_form_finite(cutoff=1e-15,envs_to_update=[env]) #to strip out vanishing singular values at the interface
-        qtotal_after = self.psi.get_total_charge() 
+        qtotal_after = self.psi.get_total_charge()
         qtotal_diff = self.psi.chinfo.make_valid(qtotal_after - qtotal_before)
         self.logger.info("changed charge by %r compared to previous state", list(qtotal_diff))
         # assert not np.all(qtotal_diff == 0)
-    
+
 class ExcitationInitialState(InitialStateBuilder):
     """InitialStateBuilder for :class:`OrthogonalExcitations`.
 
@@ -982,8 +1083,8 @@ class ExcitationInitialState(InitialStateBuilder):
         self.sim = sim
         self.options = asConfig(options, self.__class__.__name__)
         self.options.setdefault('method', 'from_orthogonal')
-        #File "/global/home/users/sajant/BLG_DMRG/TeNPy/tenpy/simulations/ground_state_search.py", line 464, in __init__                                    
-        #super().__init__(sim.model.lat, options, sim.model.dtype)                                                                                        
+        #File "/global/home/users/sajant/BLG_DMRG/TeNPy/tenpy/simulations/ground_state_search.py", line 464, in __init__
+        #super().__init__(sim.model.lat, options, sim.model.dtype)
         #AttributeError: 'MoireModel' object has no attribute 'dtype'
         try:            # SAJANT, 09/08/21
             model_dtype = sim.model.dtype

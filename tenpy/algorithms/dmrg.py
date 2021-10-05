@@ -1135,7 +1135,9 @@ class DMRGEngine(Sweep):
         self.update_stats['time'].append(time.time() - self.time0)
         self.trunc_err_list.append(err.eps)
         self.E_trunc_list.append(E_trunc)
-        
+
+        # TODO move code below in it's on method `update_segment_boundaries`.
+        # TODO change from where it's called, see comment below: end of `update_local`?
         # In the case of segment DMRG, we want to update the singular values on the first and last
         # bond so that norm error is calculated correctly.
 
@@ -1144,6 +1146,9 @@ class DMRGEngine(Sweep):
         env = self.env
         if psi.bc == 'segment':
             if i0 == 0 and self.move_right: # Updating bond to the left of site 0
+                # TODO Johannes: think this through when a mixer is used.
+                # can we just update singular values and segment_boundaries, but keep tensors?
+                # at least in A form on the left?
                 M = psi.get_B(0, 'Th')  # As
                 U, S, V = npc.svd(M.combine_legs(['vR'] + psi._p_label, qconj=-1),
                                  cutoff=0,
@@ -1158,6 +1163,8 @@ class DMRGEngine(Sweep):
                 psi.segment_boundaries = (new_UL, old_VR)
 
                 # Clear all calculate LPs, except for 0
+                # TODO optimization: call this code from different method before the
+                # environment update to avoid unnecessary recalculations of envs.
                 for key in env._LP_keys[1:]:
                     if key in env.cache:
                         del env.cache[key]
@@ -1194,8 +1201,8 @@ class DMRGEngine(Sweep):
                 RP = npc.tensordot(V, RP, axes=['vR', 'vL'])
                 RP = npc.tensordot(RP, V.conj(), axes=['vL*', 'vR*'])
                 env.set_RP(L-1, RP, env.get_RP_age(L-1))
-                
-    
+
+
     def diag(self, theta_guess):
         """Diagonalize the effective Hamiltonian represented by self.
 
