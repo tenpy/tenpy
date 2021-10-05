@@ -948,7 +948,10 @@ class DMRGEngine(Sweep):
                 "norm_tol=%.2e: norm_err=%.2e", norm_tol, norm_err)
         if self.finite:
             self._resume_psi = self.psi.copy()
-            self.psi.canonical_form()
+            if self.psi.bc == 'segment':
+                self.psi.canonical_form(envs_to_update=[self.env])
+            else:
+                self.psi.canonical_form()
         else:
             for _ in range(norm_tol_iter):
                 self.environment_sweeps(update_env)

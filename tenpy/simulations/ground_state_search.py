@@ -382,7 +382,6 @@ class OrthogonalExcitations(GroundStateSearch):
             for (site,op_string) in local_ops:
                 self.logger.info("Now applying: (%i, %s)"% (site, op_string))
                 self.psi.apply_local_op(site,op_string,unitary=True)
-            self.psi.canonical_form_finite(envs_to_update=[env])
         else:
             assert switch_charge_sector is not None
             # get the correct environments on site 0
@@ -404,6 +403,7 @@ class OrthogonalExcitations(GroundStateSearch):
             _, th0, _ = lanczos.LanczosGroundState(H0, th0, lanczos_params).run()
             th0 = npc.tensordot(th0, self.psi.get_B(site, 'B'), axes=['vR', 'vL'])
             self.psi.set_B(site, th0, form='Th')
+        self.psi.canonical_form_finite(envs_to_update=[env])
         qtotal_after = self.psi.get_total_charge()
         self.qtotal_diff = self.psi.chinfo.make_valid(qtotal_after - qtotal_before)
         self.logger.info("changed charge by %r compared to previous state", list(self.qtotal_diff))
