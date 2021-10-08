@@ -369,7 +369,7 @@ class OrthogonalExcitations(GroundStateSearch):
         if apply_local_op is not None:
             local_ops = [(int(apply_local_op[i]),str(apply_local_op[i+1])) for i in range(0,len(apply_local_op),2)]
             self.logger.info("Applying local ops: %s" % str(local_ops))
-            site0 = local_ops[0][0]
+            site0 = local_ops[0][0] if len(local_ops) > 0 else 1
             if switch_charge_sector is not None:
                 raise ValueError("give only one of `switch_charge_sector` and `apply_local_op`")
             self.results['ground_state_energy'] = env.full_contraction(site0)
@@ -407,7 +407,7 @@ class OrthogonalExcitations(GroundStateSearch):
         qtotal_after = self.psi.get_total_charge()
         self.qtotal_diff = self.psi.chinfo.make_valid(qtotal_after - qtotal_before)
         self.logger.info("changed charge by %r compared to previous state", list(self.qtotal_diff))
-        assert not np.all(self.qtotal_diff == 0)
+        # assert not np.all(self.qtotal_diff == 0)
 
     def run_algorithm(self):
         N_excitations = self.options.get("N_excitations", 1)
@@ -1012,7 +1012,7 @@ class TopologicalExcitations(OrthogonalExcitations):
             local_ops = [(int(apply_local_op[i]),str(apply_local_op[i+1])) for i in range(0,len(apply_local_op),2)]
             self.logger.info("Applying local ops: %s" % str(local_ops))
             site0 = local_ops[0][0] if len(local_ops) > 0 else 1
-            # # self.results['ground_state_energy'] = env.full_contraction(site0) #pretty sure this is wrong, since we compute it earlier by a better way in `glue_charge_sectors`
+            # self.results['ground_state_energy'] = env.full_contraction(site0) #pretty sure this is wrong, since we compute it earlier by a better way in `glue_charge_sectors`
             # for i in range(0, site0 - 1): # TODO shouldn't we delete RP(i-1)
             #     env.del_RP(i)
             # for i in range(site0 + 1, env.L):
