@@ -1134,7 +1134,7 @@ class ZeroSiteH(EffectiveH):
     def __init__(self, env, i0):
         self.i0 = i0
         self.LP = env.get_LP(i0)
-        self.RP = env.get_RP(i0)
+        self.RP = env.get_RP(i0 - 1)
         self.dtype = env.H.dtype
         self.N = self.LP.get_leg('vR').ind_len * self.RP.get_leg('vL').ind_len
 
