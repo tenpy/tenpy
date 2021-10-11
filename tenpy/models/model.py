@@ -1812,7 +1812,8 @@ class CouplingMPOModel(CouplingModel, MPOModel):
                 The name of a lattice pre-defined in TeNPy to be initialized.
                 Alternatively, directly a subclass of :class:`Lattice` instead of the name.
                 Alternatively, a (possibly self-defined) :class:`Lattice` instance.
-                In the latter case, no further parameters are read out.
+                If an instance is given, none of the further options described here are read out,
+                since they are already given inside the lattice instance!
             bc_MPS : str
                 Boundary conditions for the MPS.
             order : str
@@ -1828,11 +1829,11 @@ class CouplingMPOModel(CouplingModel, MPOModel):
                 `Lx` is the number of "rings" in the infinite MPS unit cell,
                 while `Ly` gives the circumference around the cylinder or width of th the rung
                 for a ladder (depending on `bc_y`).
-            bc_y : str
-               ``"cylinder" | "ladder"``; only read out for 2D lattices.
-               The boundary conditions in y-direction.
-            bc_x : str
-                ``"open" | "periodic"``.
+            bc_y : ``"cylinder" | "ladder" | "open" | "periodic"``
+                The boundary conditions in y-direction.
+                Only read out for 2D lattices.
+                "cylinder" is equivalent to "periodic", "ladder" is equivalent to "open".
+            bc_x : ``"open" | "periodic"``.
                 Can be used to force "periodic" boundaries for the lattice,
                 i.e., for the couplings in the Hamiltonian, even if the MPS is finite.
                 Defaults to ``"open"`` for ``bc_MPS="finite"`` and
@@ -1867,8 +1868,11 @@ class CouplingMPOModel(CouplingModel, MPOModel):
                 Lx = model_params.get('Lx', 1)
                 Ly = model_params.get('Ly', 4)
                 bc_y = model_params.get('bc_y', 'cylinder')
-                assert bc_y in ['cylinder', 'ladder']
-                bc_y = 'periodic' if bc_y == 'cylinder' else 'open'
+                assert bc_y in ['cylinder', 'ladder', 'open', 'periodic']
+                if bc_y == 'cylinder':
+                    bc_y = 'periodic'
+                elif bc_y == 'ladder':
+                    bc_y = 'open'
                 lat = LatticeClass(Lx, Ly, sites, order=order, bc=[bc_x, bc_y], bc_MPS=bc_MPS)
             else:
                 raise ValueError("Can't auto-determine parameters for the lattice. "
