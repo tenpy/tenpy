@@ -22,4 +22,4 @@ Changed
 
 Fixed
 ^^^^^
-- nothing yet
+- :issue:`145` that :func:`~tenpy.networks.mpo.make_W_II` failed for MPOs with trivial virtual bonds.

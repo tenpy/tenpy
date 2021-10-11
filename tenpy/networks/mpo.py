@@ -1194,9 +1194,8 @@ def make_W_II(t, A, B, C, D):
         Blocks of the MPO tensor to be exponentiated, as defined in :cite:`zaletel2015`.
         Legs ``'wL', 'wR', 'p', 'p*'``; legs projected to a single IdL/IdR can be dropped.
     """
-
-    tB = t / np.sqrt(np.abs(t))  #spread time step across B, C
-    tC = np.sqrt(np.abs(t))
+    tC = np.sqrt(np.abs(t))  #spread time step across B, C
+    tB = t / tC
     d = D.shape[0]
 
     #The virtual size of W is  (1+Nr, 1+Nc)
@@ -1234,7 +1233,6 @@ def make_W_II(t, A, B, C, D):
             W[1 + r, 0] = w[1, 0]
             if r == 0:
                 W[0, 0] = w[0, 0]
-
     if Nr == 0:
         for c in range(Nc):
             h = np.kron(Bc, tC * C[c, :, :]) + t * np.kron(Id, D)
@@ -1245,8 +1243,7 @@ def make_W_II(t, A, B, C, D):
             if c == 0:
                 W[0, 0] = w[0, 0]
         if Nc == 0:
-            W = expm(t * D)
-
+            W = expm(t * D).reshape([1, 1, d, d])
     return W
 
 
