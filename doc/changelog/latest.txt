@@ -14,6 +14,7 @@ Backwards incompatible changes
 
 Added
 ^^^^^
+- wrappers for the helical and irregular lattice (removing sites) in :meth:`~tenpy.models.model.CouplingMPOModel.init_lattice`.
 - nothing yet
 
 Changed

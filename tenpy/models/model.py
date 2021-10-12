@@ -37,7 +37,7 @@ import copy
 import logging
 logger = logging.getLogger(__name__)
 
-from .lattice import get_lattice, Lattice, TrivialLattice
+from .lattice import get_lattice, Lattice, TrivialLattice, HelicalLattice, IrregularLattice
 from ..linalg import np_conserved as npc
 from ..linalg.charges import QTYPE, LegCharge
 from ..tools.misc import to_array, add_with_None_0
@@ -1842,6 +1842,13 @@ class CouplingMPOModel(CouplingModel, MPOModel):
                 *not* use "periodic" boundary conditions.
                 (The MPS is still "open", so this will introduce long-range
                 couplings between the first and last sites of the MPS!)
+            helical: ``None`` | int
+                If not ``None``, wrap the lattice into a
+                :class:`~tenpy.models.lattice.HelicalLattice` with the given int as `N_unit_cells`.
+            irregular_remove : ``None`` | 2D array
+                If not ``None``, wrap the lattice into a
+                :class:`~tenpy.models.lattice.IrregularLattice` removing the specified sites.
+                To add sites, you need to overwrite the `init_lattice` method in a custom model.
         """
         lat = model_params.get('lattice', self.default_lattice)
         if isinstance(lat, str):
@@ -1877,6 +1884,12 @@ class CouplingMPOModel(CouplingModel, MPOModel):
             else:
                 raise ValueError("Can't auto-determine parameters for the lattice. "
                                  "Overwrite the `init_lattice` in your model!")
+            helical = model_params.get('helical_lattice', None)
+            if helical is not None:
+                lat = HelicalLattice(lat, helical)
+            irregular_remove = model_params.get('irregular_remove', None)
+            if irregular_remove is not None:
+                lat = IrregularLattice(lat, remove=irregular_remove)
         # else: a lattice was already provided
         # now, `lat` is an instance of the LatticeClass
         assert isinstance(lat, Lattice)
