@@ -1140,7 +1140,7 @@ class DMRGEngine(Sweep):
         # TODO change from where it's called, see comment below: end of `update_local`?
         # In the case of segment DMRG, we want to update the singular values on the first and last
         # bond so that norm error is calculated correctly.
-
+        
         psi = self.psi
         L = psi.L
         env = self.env
@@ -1203,7 +1203,7 @@ class DMRGEngine(Sweep):
                 RP = npc.tensordot(V, RP, axes=['vR', 'vL'])
                 RP = npc.tensordot(RP, V.conj(), axes=['vL*', 'vR*'])
                 env.set_RP(L-1, RP, env.get_RP_age(L-1))
-
+        
 
     def diag(self, theta_guess):
         """Diagonalize the effective Hamiltonian represented by self.
