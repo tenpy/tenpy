@@ -419,7 +419,7 @@ class OrthogonalExcitations(GroundStateSearch):
         self.engine = TwoSiteDMRGEngine(self.psi, self.model, DMRG_params)
         self.psi.canonical_form_finite(envs_to_update=[self.engine.env])
         """
-        
+
     def run_algorithm(self):
         N_excitations = self.options.get("N_excitations", 1)
         ground_state_energy = self.results['ground_state_energy']
@@ -930,7 +930,7 @@ class TopologicalExcitations(OrthogonalExcitations):
             local_ops = [(int(apply_local_op[i]),str(apply_local_op[i+1])) for i in range(0,len(apply_local_op),2)]
             self.logger.info("Applying local ops: %s" % str(local_ops))
             site0 = local_ops[0][0] if len(local_ops) > 0 else 1
-            # # self.results['ground_state_energy'] = env.full_contraction(site0) #pretty sure this is wrong, since we compute it earlier by a better way in `glue_charge_sectors`
+            # self.results['ground_state_energy'] = env.full_contraction(site0) #pretty sure this is wrong, since we compute it earlier by a better way in `glue_charge_sectors`
             # for i in range(0, site0 - 1): # TODO shouldn't we delete RP(i-1)
             #     env.del_RP(i)
             # for i in range(site0 + 1, env.L):
