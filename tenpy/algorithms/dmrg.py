@@ -948,10 +948,7 @@ class DMRGEngine(Sweep):
                 "norm_tol=%.2e: norm_err=%.2e", norm_tol, norm_err)
         if self.finite:
             self._resume_psi = self.psi.copy()
-            if self.psi.bc == 'segment':
-                self.psi.canonical_form(envs_to_update=[self.env])
-            else:
-                self.psi.canonical_form()
+            self.psi.canonical_form(envs_to_update=self._all_envs)
         else:
             for _ in range(norm_tol_iter):
                 self.environment_sweeps(update_env)
@@ -1136,74 +1133,63 @@ class DMRGEngine(Sweep):
         self.trunc_err_list.append(err.eps)
         self.E_trunc_list.append(E_trunc)
 
-        # TODO move code below in it's on method `update_segment_boundaries`.
-        # TODO change from where it's called, see comment below: end of `update_local`?
-        # In the case of segment DMRG, we want to update the singular values on the first and last
-        # bond so that norm error is calculated correctly.
-        
+        if self.psi.bc == 'segment':
+            self.update_segment_boundaries()
+
+    def update_segment_boundaries(self):
+        """Update the singular values at the boundaries of the segment.
+
+        This method is called at the end of :meth:`post_update_local` for 'segment' boundary MPS.
+        It just updates the singular values on the very left/right end of the MPS segment.
+        """
         psi = self.psi
-        L = psi.L
-        env = self.env
-        if psi.bc == 'segment':
-            if i0 == 0 and self.move_right: # Updating bond to the left of site 0
-                # TODO Johannes: think this through when a mixer is used.
-                # can we just update singular values and segment_boundaries, but keep tensors?
-                # at least in A form on the left?
-                M = psi.get_B(0, 'Th')  # As
-                U, S, V = npc.svd(M.combine_legs(['vR'] + psi._p_label, qconj=-1),
-                                 cutoff=0,
-                                 qtotal_LR=[None, M.qtotal],
-                                 inner_labels=['vR', 'vL'])
+        if self.i0 == 0 and self.move_right:
+            # need to update bond to the left of site j=0
+            j = 0
+            A = psi.get_B(j, form='A')
+            th = psi.get_B(j, form='Th')
+            U, S, V = npc.svd(th.combine_legs(psi._p_label + ['vR'], qconj=-1),
+                              cutoff=0,
+                              qtotal_LR=[None, th.qtotal],
+                              inner_labels=['vR', 'vL'])
+            S = S / np.linalg.norm(S)
+            psi.set_SL(j, S)
+            A_new = npc.tensordot(U.conj().replace_label('vR*', 'vL'), A, ['vL*', 'vL'])
+            psi.set_B(j, A_new, form='A')
 
-                S = S / np.linalg.norm(S)
-                psi.set_SL(0, S)
-                psi.set_B(0, V.split_legs(1), form='B')
+            old_UL, old_VR = psi.segment_boundaries
+            new_UL = npc.tensordot(old_UL, U, axes=['vR', 'vL'])
+            psi.segment_boundaries = (new_UL, old_VR)
 
-                old_UL, old_VR = psi.segment_boundaries
-                new_UL = npc.tensordot(old_UL, U, axes=['vR', 'vL'])
-                psi.segment_boundaries = (new_UL, old_VR)
+            for env in self._all_envs:
+                update_ket = env.ket is psi
+                update_bra = env.bra is psi
+                env._update_gauge_LP(j, U, update_bra, update_ket)
+            # No need to clear the environments on the other bonds!
 
-                # Clear all calculate LPs, except for 0
-                # TODO optimization: call this code from different method before the
-                # environment update to avoid unnecessary recalculations of envs.
-                for key in env._LP_keys[1:]:
-                    if key in env.cache:
-                        del env.cache[key]
-                env._LP_age[1:] = [None] * (L-1)
-                LP = env.get_LP(0)
+        elif self.i0 == psi.L - self.EffectiveH.length and not self.move_right:
+            # need to update bond on the right of site j=L-1
+            j = psi.L - 1
+            B = psi.get_B(j, form='B')
+            th = psi.get_B(j, form='Th')
+            U, S, V = npc.svd(th.combine_legs(['vL'] + psi._p_label, qconj=+1),
+                              cutoff=0,
+                              qtotal_LR=[th.qtotal, None],
+                              inner_labels=['vR', 'vL'])
+            S = S / np.linalg.norm(S)
+            psi.set_SR(j, S)
+            B_new = npc.tensordot(B, V.conj().replace_label('vL*', 'vR'), ['vR', 'vR*'])
+            psi.set_B(j, B_new, form='B')
 
-                assert psi is env.ket and psi is env.bra, "Environment must contain same MPS as engine."
-                LP = npc.tensordot(LP, U, axes=['vR', 'vL'])
-                LP = npc.tensordot(U.conj(), LP, axes=['vL*', 'vR*'])
-                env.set_LP(0, LP, env.get_LP_age(0))
+            old_UL, old_VR = psi.segment_boundaries
+            new_VR = npc.tensordot(V, old_VR, axes=['vR', 'vL'])
+            psi.segment_boundaries = (old_UL, new_VR)
 
-            elif i0 == psi.L - self.EffectiveH.length and not self.move_right:   # Updating bond to the right of site L-1
-                M = psi.get_B(psi.L - 1, 'Th') # sB
-                U, S, V = npc.svd(M.combine_legs(['vL'] + psi._p_label),
-                                 cutoff=0,
-                                 qtotal_LR=[M.qtotal, None],
-                                 inner_labels=['vR', 'vL'])
-
-                S = S / np.linalg.norm(S)
-                psi.set_SR(psi.L-1, S)
-                psi.set_B(psi.L-1, U.split_legs(0), form='A')
-
-                old_UL, old_VR = psi.segment_boundaries
-                new_VR = npc.tensordot(V, old_VR, axes=['vR', 'vL'])
-                psi.segment_boundaries = (old_UL, new_VR)
-
-                # Clear all calculate LPs, except for 0
-                for key in env._RP_keys[:-1]:
-                    if key in env.cache:
-                        del env.cache[key]
-                env._RP_age[:-1] = [None] * (L-1)
-                RP = env.get_RP(L-1)
-
-                assert psi is env.ket and psi is env.bra, "Environment must contain same MPS as engine."
-                RP = npc.tensordot(V, RP, axes=['vR', 'vL'])
-                RP = npc.tensordot(RP, V.conj(), axes=['vL*', 'vR*'])
-                env.set_RP(L-1, RP, env.get_RP_age(L-1))
-        
+            for env in self._all_envs:
+                update_ket = env.ket is psi
+                update_bra = env.bra is psi
+                env._update_gauge_RP(j, V, update_bra, update_ket)
+            # No need to clear the environments on the other bonds!
 
     def diag(self, theta_guess):
         """Diagonalize the effective Hamiltonian represented by self.

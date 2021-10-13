@@ -2897,27 +2897,16 @@ class MPS:
             self._B[0] *= U[0, 0]  # just a trivial phase factor, but better keep it
         # done with getting to canonical form
         if envs_to_update is not None and self.bc == 'segment':
-            VR = VR_segment
             for env in envs_to_update:
                 update_ket = env.ket is self
                 update_bra = env.bra is self
                 if not (update_ket or update_bra):
-                    raise ValueError("called `psi.canonical_from_finite(..., envs_to_update), "
+                    raise ValueError("called `psi.canonical_form_finite(..., envs_to_update), "
                                      "but (one of) the environment doesn't contain that `psi`")
                 env.clear()
                 if self.bc == 'segment':
-                    LP = env.get_LP(0)
-                    if update_ket:
-                        LP = npc.tensordot(LP, U, axes=['vR', 'vL'])
-                    if update_bra:
-                        LP = npc.tensordot(U.conj(), LP, axes=['vL*', 'vR*'])
-                    env.set_LP(0, LP, env.get_LP_age(0))
-                    RP = env.get_RP(env.L - 1)
-                    if update_ket:
-                        RP = npc.tensordot(VR, RP, axes=['vR', 'vL'])
-                    if update_bra:
-                        RP = npc.tensordot(RP, VR.conj(), axes=['vL*', 'vR*'])
-                    env.set_RP(env.L - 1, RP, env.get_RP_age(env.L - 1))
+                    env._update_gauge_LP(0, U, update_bra, update_ket)
+                    env._update_gauge_RP(env.L - 1, VR_segment, update_bra, update_ket)
         if self.bc == 'segment':
             old_UL, old_VR = self.segment_boundaries
             if old_UL is not None:
@@ -4545,6 +4534,32 @@ class MPSEnvironment:
         if i >= self.L or i < 0:
             raise KeyError("i = {0:d} out of bounds for MPSEnvironment".format(i))
         return i
+
+    def _update_gauge_LP(self, i, U, update_bra, update_ket):
+        """Update LP[i] following the MPS gauge ``A[i-1] A[i] -> (A[i-1] U) (Udagger A[i])``."""
+        assert update_bra or update_ket
+        if not self.has_LP(i):
+            assert False # TODO
+            return
+        LP = self.get_LP(i)
+        if update_ket:
+            LP = npc.tensordot(LP, U, axes=['vR', 'vL'])
+        if update_bra:
+            LP = npc.tensordot(U.conj(), LP, axes=['vL*', 'vR*'])
+        self.set_LP(i, LP, self.get_LP_age(i))
+
+    def _update_gauge_RP(self, i, V, update_bra, update_ket):
+        """Update RP[i] following the MPS gauge ``B[i] B[i+1] -> (B[i] Vdagger) (V B[i+1])``."""
+        assert update_bra or update_ket
+        if not self.has_RP(i):
+            assert False # TODO
+            return
+        RP = self.get_RP(i)
+        if update_ket:
+            RP = npc.tensordot(V, RP, axes=['vR', 'vL'])
+        if update_bra:
+            RP = npc.tensordot(RP, V.conj(), axes=['vL*', 'vR*'])
+        self.set_RP(i, RP, self.get_RP_age(i))
 
 
 class TransferMatrix(sparse.NpcLinearOperator):
