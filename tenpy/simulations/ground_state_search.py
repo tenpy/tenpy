@@ -136,6 +136,7 @@ class OrthogonalExcitations(GroundStateSearch):
         self.orthogonal_to = orthogonal_to
         self.excitations = resume_data.get('excitations', [])
         self.results['excitation_energies'] = []
+        self.results['excitation_energies_MPO'] = []
         if self.options.get('save_psi', True):
             self.results['excitations'] = self.excitations
         self.init_env_data = {}
@@ -210,6 +211,7 @@ class OrthogonalExcitations(GroundStateSearch):
         if np.linalg.norm(psi0.norm_test()) > self.options.get('orthogonal_norm_tol', 1.e-12):
             self.logger.info("call psi.canonicalf_form() on ground state")
             psi0.canonical_form()
+            self.logger.info("yields chi = %r", psi0.chi)  #  TODO
         if psi0.bc == 'infinite':
             write_back = self.extract_segment_from_infinite(psi0, self.model, resume_data)
             if write_back:
@@ -253,7 +255,7 @@ class OrthogonalExcitations(GroundStateSearch):
         last = self.options.get('segment_last', None)
         self.boundary = enlarge // 2 * psi0_inf.L   # Bond at the middle of the segment, aligned with a cylinder ring
         # If it is not specified where to switch the charge sector, we default to self.boundary
-        
+
         self.model = model_inf.extract_segment(first, last, enlarge)
         first, last = self.model.lat.segment_first_last
         write_back = self.options.get('write_back_converged_ground_state_environments', False)
@@ -371,7 +373,7 @@ class OrthogonalExcitations(GroundStateSearch):
                 raise ValueError("give only one of `switch_charge_sector` and `apply_local_op`")
             local_ops = [(int(apply_local_op[i]),str(apply_local_op[i+1])) for i in range(0,len(apply_local_op),2)]
             self.logger.info("Applying local ops: %s" % str(local_ops))
-            site0 = local_ops[0][0]            
+            site0 = local_ops[0][0]
             self.results['ground_state_energy'] = env.full_contraction(site0)
             env.clear() # Clear out all LPs and RPs stored in full_contraction
             # [TODO] we really only want to clear out those left of site0 and right of site_{N-1}, where we are applying N operators to sites in order.
@@ -405,7 +407,7 @@ class OrthogonalExcitations(GroundStateSearch):
         self.qtotal_diff = self.psi.chinfo.make_valid(qtotal_after - qtotal_before)
         self.logger.info("changed charge by %r compared to previous state", list(self.qtotal_diff))
         assert not np.all(self.qtotal_diff == 0) # Sometimes we want to apply no charges and check that we get an excitation energy of 0.
-        
+
         """
         # [TODO] Code needed to group 4 (sublattice * valley) sites together
         self.logger.info("Grouping 4 sites together.")
@@ -413,7 +415,7 @@ class OrthogonalExcitations(GroundStateSearch):
         self.logger.info("Model length: %f", self.model.H_MPO.L)
         self.psi.group_sites(4, grouped_sites)
         self.logger.info("Psi length: %f", self.psi.L)
-        
+
         DMRG_params = copy.deepcopy(self.options['algorithm_params'])
         DMRG_params['init_env_data'] = self.init_env_data
         self.engine = TwoSiteDMRGEngine(self.psi, self.model, DMRG_params)
@@ -448,19 +450,20 @@ class OrthogonalExcitations(GroundStateSearch):
         while len(self.excitations) < N_excitations:
 
             E, psi = self.engine.run()
-
+            E_MPO = self.engine.full_contraction(0)
+            self.results['excitation_energies_MPO'].append(E_MPO - ground_state_energy)
             self.results['excitation_energies'].append(E - ground_state_energy)
             self.logger.info("excitation energy: %.14f", E - ground_state_energy)
             if np.linalg.norm(psi.norm_test()) > self.options.get('orthogonal_norm_tol', 1.e-12):
                 self.logger.info("call psi.canonical_form() on excitation")
                 # psi.canonical_form()
-                psi.canonical_form_finite(envs_to_update=[self.engine.env])
+                psi.canonical_form_finite(envs_to_update=[self.engine.env])  # TODO: don't update envs? Should be in psi.segment_boundaries
             self.excitations.append(psi)
             self.orthogonal_to.append(psi)
             # save in list of excitations
             if len(self.excitations) >= N_excitations:
                 break
-                
+
             self.make_measurements()
             self.logger.info("got %d excitations so far, proceeed to next excitation.\n%s",
                              len(self.excitations), "+" * 80)
@@ -504,7 +507,7 @@ def expectation_value_outside_segment_right(psi_segment, psi_R, ops, N_unit_cell
     S = psi_S.get_SR(psi_S.L - 1)
     if VR is None:
         rho = npc.diag(S**2,
-                        psi_S.get_B(psi_.L - 1, None).get_leg('vR'),
+                        psi_S.get_B(psi_S.L - 1, None).get_leg('vR'),
                         labels=['vR', 'vR*'])
     else:
         rho = VR.scale_axis(S, 'vL')
@@ -634,7 +637,7 @@ class TopologicalExcitations(OrthogonalExcitations):
         right_data = hdf5_io.load(right_fn)
         left_data_options = left_data['simulation_parameters']
         right_data_options = right_data['simulation_parameters']
-        
+
         # get model from ground_state data
         for keyL, keyR in zip(left_data_options.keys(), right_data_options.keys()):
             assert keyL == keyR, 'Left and right models must have the same keys.'
@@ -755,13 +758,13 @@ class TopologicalExcitations(OrthogonalExcitations):
 
     def extract_segment_mixed_BC(self, first, last):
         join_method = self.join_method = self.options.get('join_method', "average charge")
-        
+
         lL = self.ground_state_infinite_left.L
         rL = self.ground_state_infinite_right.L
         assert rL == lL, "Ground state boundary conditions must have the same unit cell length."
         gsl = self.ground_state_infinite_left
         gsr = self.ground_state_infinite_right
-        
+
         # Get boundary indices for left and right half of segment
         num_segments = (last+1 - first) // lL
         lsegments = num_segments // 2
@@ -775,7 +778,7 @@ class TopologicalExcitations(OrthogonalExcitations):
         self.logger.info("lfirst, llast, rfirst, rlast: %d, %d, %d, %d", lfirst, llast, rfirst, rlast)
         self.logger.info("first, last: %d %d", first, last)
         self.logger.info("seg_L, seg_R: %d %d", lsegments, rsegments)
-        
+
         # Building segment MPS on left half
         l_sites = [gsl.sites[i % lL] for i in range(lfirst, llast + 1)]
         lA = [gsl.get_B(i, 'A') for i in range(lfirst, llast + 1)]
@@ -783,7 +786,7 @@ class TopologicalExcitations(OrthogonalExcitations):
         lS = [gsl.get_SL(i) for i in range(lfirst, llast + 1)]
         lS.append(gsl.get_SR(llast))
         left_segment = MPS(l_sites, lA, lS, 'segment', 'A', gsl.norm)
-        
+
         # Building segment MPS on right half
         r_sites = [gsr.sites[i % rL] for i in range(rfirst, rlast + 1)]
         rB = [gsr.get_B(i) for i in range(rfirst, rlast + 1)]
@@ -841,7 +844,7 @@ class TopologicalExcitations(OrthogonalExcitations):
         self.logger.info("Desired gluing charge: %r", desired_Q)
 
         # We need a tensor that is non-zero only when Q = (Q^i_L - bar(Q_L)) + (Q^i_R - bar(Q_R))
-        # Q is the the charge we insert. Here we only do charge gluing to get a valid segment. 
+        # Q is the the charge we insert. Here we only do charge gluing to get a valid segment.
         # Changing charge sector is done below by basically identical code when the segment is already formed.
 
         th0 = npc.Array.from_func(np.ones, [vL, vR],
@@ -855,14 +858,14 @@ class TopologicalExcitations(OrthogonalExcitations):
         lA[llast] = left_segment.get_B(llast, 'A')
         right_segment.set_B(0, npc.tensordot(Vh, right_segment.get_B(0, 'B'), axes=['vR', 'vL']), form='B') # Put Vh B into first site of right segment
         right_segment.set_SL(0, s)
-        
+
         rB[0] = right_segment.get_B(0)
         rS[0] = right_segment.get_SL(0)
         lS = lS[0:-1] # Remove last singular values from list of singular values in A part of segment.
         ##################### BIG OL HACK #####################
 
         # note: __init__ makes deep copies of B, S
-        cp = MPS(l_sites + r_sites, lA + rB, lS + rS, 'segment', 
+        cp = MPS(l_sites + r_sites, lA + rB, lS + rS, 'segment',
                  ['A'] * (llast + 1 - lfirst) + ['B'] * (rlast + 1 - rfirst), gsl.norm)
         cp.grouped = gsl.grouped
         cp.canonical_form_finite(cutoff=1e-15) #to strip out vanishing singular values at the interface
@@ -902,7 +905,7 @@ class TopologicalExcitations(OrthogonalExcitations):
 
         self.results['ground_state_energy'] = (E_L + E_R)/2
         return
-    
+
 
     def switch_charge_sector(self):
         """Change the charge sector of :attr:`psi` in place."""
