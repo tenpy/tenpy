@@ -2135,8 +2135,15 @@ class MPOTransferMatrix:
             raise ValueError("MPO needs to have structure with IdL/IdR")
         wL = H.get_W(0).get_leg('wL')
         wR = wL.conj()
-        S2 = psi.get_SL(0)**2
+        S = psi.get_SL(0)
         if not transpose:  # right to left
+            vR = self._M[0].get_leg('vR')
+            if isinstance(S_ket, npc.Array):
+                S2 = npc.tensordot(S, S.conj, axes=['vL', 'vL*'])
+            else:
+                S2 = S**2
+                rho = npc.diag(S2, vR, labels=['vR', 'vR*'])
+            
             # vec: vL wL vL*
             for i in reversed(range(self.L)):
                 # optimize: transpose arrays to mostly avoid it in matvec
@@ -2149,7 +2156,6 @@ class MPOTransferMatrix:
             eye_R = npc.diag(1., vR.conj(), dtype=dtype, labels=['vL', 'vL*'])
             self._E_shift = eye_R.add_leg(wL, self.IdL, axis=1, label='wL')  # vL wL vL*
             self._proj_norm = eye_R.add_leg(wL, self.IdR, axis=1, label='wL').conj()  # vL* wL* vL
-            rho = npc.diag(S2, vR, labels=['vR', 'vR*'])
             self._proj_rho = rho.add_leg(wR, self.IdL, axis=1, label='wR')  # vR wR vR*
             if guess is not None:
                 try:
@@ -2166,6 +2172,13 @@ class MPOTransferMatrix:
                 guess = guess.transpose(['vL', 'wL', 'vL*'])  # copy!
                 self._project(guess)
         else:  # left to right
+            vL = self._M[0].get_leg('vL')
+            if isinstance(S_ket, npc.Array):
+                S2 = npc.tensordot(S.conj, S, axes=['vR*', 'vR'])
+            else:
+                S2 = S**2
+                rho = npc.diag(S2, vR, labels=['vL*', 'vL'])
+            
             # vec: vR* wR vR
             for i in range(self.L):
                 A = psi.get_B(i, 'A').astype(dtype, False)
@@ -2177,7 +2190,6 @@ class MPOTransferMatrix:
             eye_L = npc.diag(1., vL, dtype=dtype, labels=['vR*', 'vR'])
             self._E_shift = eye_L.add_leg(wR, self.IdR, axis=1, label='wR')  # vR* wR vR
             self._proj_norm = eye_L.add_leg(wR, self.IdL, axis=1, label='wR').conj()  # vR wR* vR*
-            rho = npc.diag(S2, vL.conj(), labels=['vL*', 'vL'])
             self._proj_rho = rho.add_leg(wL, self.IdR, axis=1, label='wL')  # vL* wL vL
             if guess is not None:
                 try:
