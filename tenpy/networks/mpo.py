@@ -2327,6 +2327,7 @@ class MPOTransferMatrix:
         """
         # first right to left
         envs = []
+        Es = []
         if guess_init_env_data is None:
             guess_init_env_data = {}
         for transpose in [False, True]:
@@ -2336,8 +2337,8 @@ class MPOTransferMatrix:
             if abs(1. - val) > tol_ev0:
                 logger.warning("MPOTransferMatrix eigenvalue not 1: got 1. - %.3e", 1. - val)
             envs.append(vec)
-            if calc_E and transpose:
-                E = TM.energy(vec)
+            if calc_E:
+                E.append(TM.energy(vec))
             del TM
         init_env_data = {'init_LP': envs[1], 'init_RP': envs[0], 'age_LP': 0, 'age_RP': 0}
         L = H.L
