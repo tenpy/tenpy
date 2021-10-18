@@ -634,22 +634,22 @@ class uMPS(MPS):
     def set_AL(self, i, AL):
         i = self._to_valid_index(i)
         self.dtype = np.find_common_type([self.dtype, AL.dtype], [])
-        self._AL[i] = AL.itranspose(self._p_labels)
+        self._AL[i] = AL.itranspose(self._B_labels)
         
     def set_AR(self, i, AR):
         i = self._to_valid_index(i)
         self.dtype = np.find_common_type([self.dtype, AR.dtype], [])
-        self._AR[i] = AR.itranspose(self._p_labels)
+        self._AR[i] = AR.itranspose(self._B_labels)
         
     def set_AC(self, i, AC):
         i = self._to_valid_index(i)
         self.dtype = np.find_common_type([self.dtype, AC.dtype], [])
-        self._AC[i] = AC.itranspose(self._p_labels)
+        self._AC[i] = AC.itranspose(self._B_labels)
     
     def set_C(self, i, C):
         i = self._to_valid_index(i)
         self.dtype = np.find_common_type([self.dtype, C.dtype], [])
-        self._C[i] = C.itranspose(self._p_labels)
+        self._C[i] = C.itranspose(self._C_labels)
     
     def set_svd_theta(self, i, theta, trunc_par=None, update_norm=False):
         raise NotImplementedError("Not valid for UMPS.")
@@ -766,7 +766,7 @@ class uMPS(MPS):
             for AC in self._AC[::-1]
         ]
         self._C = [
-            C.replace_labels(['vL', 'vR'], ['vR', 'vL']).transpose(self._p_labels)
+            C.replace_labels(['vL', 'vR'], ['vR', 'vL']).transpose(self._C_labels)
             for C in self._C[::-1]
         ]
         self.test_sanity()
@@ -854,7 +854,7 @@ class uMPS(MPS):
     
     def expectation_value(self, ops, sites=None, axes=None):
         assert self.valid_umps
-        return super().expectation_value(ops, sites=sitess, axes=axes)
+        return super().expectation_value(ops, sites=sites, axes=axes)
 
     def expectation_value_term(self, term, autoJW=True):
         assert self.valid_umps
@@ -953,7 +953,11 @@ class uMPS(MPS):
                                            rng=None,
                                            norm_tol=1.e-12)
     
-    #def norm_test(self)
+    def norm_test(self):
+        if not self.valid_umps:
+            return np.zeros((self.L, 2), dtype=float)
+        else:
+            return super().norm_test()
     
     def canonical_form(self, **kwargs):
         raise NotImplementedError("Not valid for UMPS.")

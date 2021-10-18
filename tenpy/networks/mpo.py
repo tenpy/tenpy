@@ -2100,7 +2100,7 @@ class MPOTransferMatrix:
     Attributes
     ----------
     transpose : bool
-        Wheter `self.matvec` acts on `RP` (``True``) or `LP` (``False``).
+        Wheter `self.matvec` acts on `RP` (``False``) or `LP` (``True``).
     dtype :
         Common dtype of `H` and `psi`.
     IdL, IdR : int
@@ -2137,9 +2137,9 @@ class MPOTransferMatrix:
         wR = wL.conj()
         S = psi.get_SL(0)
         if not transpose:  # right to left
-            vR = self._M[0].get_leg('vR')
-            if isinstance(S_ket, npc.Array):
-                S2 = npc.tensordot(S, S.conj, axes=['vL', 'vL*'])
+            vR = psi.get_B(0, 'B').get_leg('vR')
+            if isinstance(S, npc.Array):
+                rho = npc.tensordot(S, S.conj(), axes=['vL', 'vL*'])
             else:
                 S2 = S**2
                 rho = npc.diag(S2, vR, labels=['vR', 'vR*'])
@@ -2151,7 +2151,7 @@ class MPOTransferMatrix:
                 self._M.append(B.transpose(['vL', 'p', 'vR']))
                 self._W.append(H.get_W(i).transpose(['p*', 'wR', 'p', 'wL']).astype(dtype, False))
                 self._M_conj.append(B.conj().itranspose(['vR*', 'p*', 'vL*']))
-            vR = self._M[0].get_leg('vR')
+            #vR = self._M[0].get_leg('vR')
             self._chi0 = vR.ind_len
             eye_R = npc.diag(1., vR.conj(), dtype=dtype, labels=['vL', 'vL*'])
             self._E_shift = eye_R.add_leg(wL, self.IdL, axis=1, label='wL')  # vL wL vL*
@@ -2172,9 +2172,9 @@ class MPOTransferMatrix:
                 guess = guess.transpose(['vL', 'wL', 'vL*'])  # copy!
                 self._project(guess)
         else:  # left to right
-            vL = self._M[0].get_leg('vL')
-            if isinstance(S_ket, npc.Array):
-                S2 = npc.tensordot(S.conj, S, axes=['vR*', 'vR'])
+            vL = psi.get_B(0, 'A').get_leg('vL')
+            if isinstance(S, npc.Array):
+                rho = npc.tensordot(S.conj(), S, axes=['vR*', 'vR'])
             else:
                 S2 = S**2
                 rho = npc.diag(S2, vR, labels=['vL*', 'vL'])
@@ -2185,7 +2185,7 @@ class MPOTransferMatrix:
                 self._M.append(A.transpose(['vL', 'p', 'vR']))
                 self._W.append(H.get_W(i).transpose(['wR', 'p', 'wL', 'p*']).astype(dtype, False))
                 self._M_conj.append(A.conj().itranspose(['vR*', 'p*', 'vL*']))
-            vL = self._M[0].get_leg('vL')
+            #vL = self._M[0].get_leg('vL')
             self._chi0 = vL.ind_len
             eye_L = npc.diag(1., vL, dtype=dtype, labels=['vR*', 'vR'])
             self._E_shift = eye_L.add_leg(wR, self.IdR, axis=1, label='wR')  # vR* wR vR
@@ -2238,12 +2238,12 @@ class MPOTransferMatrix:
 
     def _project(self, vec):
         """Project out additive energy part from vec."""
-        if not self.transpose:
+        if not self.transpose: # Acts to the right, T * RP = RP + e_R * I
             vec.itranspose(['vL', 'wL', 'vL*'])  # shouldn't do anything
             # vec.itranspose(['vL', 'wL', 'vL*'])  # alreayd is in that order
             E = npc.inner(vec, self._proj_rho, axes=[['vL', 'wL', 'vL*'], ['vR', 'wR', 'vR*']])
             vec -= self._E_shift * E
-        else:
+        else: # Acts to the left, LP * T = LP + e_L * I
             vec.itranspose(['vR*', 'wR', 'vR'])  # shouldn't do anything
             E = npc.inner(vec, self._proj_rho, axes=[['vR*', 'wR', 'vR'], ['vL*', 'wL', 'vL']])
             vec -= self._E_shift * E
@@ -2338,7 +2338,7 @@ class MPOTransferMatrix:
                 logger.warning("MPOTransferMatrix eigenvalue not 1: got 1. - %.3e", 1. - val)
             envs.append(vec)
             if calc_E:
-                E.append(TM.energy(vec))
+                Es.append(TM.energy(vec))
             del TM
         init_env_data = {'init_LP': envs[1], 'init_RP': envs[0], 'age_LP': 0, 'age_RP': 0}
         L = H.L
@@ -2349,7 +2349,7 @@ class MPOTransferMatrix:
             if last % L != L - 1:
                 init_env_data['init_RP'] = env.get_RP(last, store=False)
         if calc_E:
-            return E, init_env_data
+            return Es, init_env_data
         # else:
         return init_env_data
 
