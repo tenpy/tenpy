@@ -2151,6 +2151,7 @@ class MPOTransferMatrix:
             self._chi0 = vR.ind_len
             eye_R = npc.diag(1., vR.conj(), dtype=dtype, labels=['vL', 'vL*'])
             self._E_shift = eye_R.add_leg(wL, self.IdL, axis=1, label='wL')  # vL wL vL*
+            self._proj_trace = self._E_shift.conj().iset_leg_labels(['vR', 'wR', 'vR*'])
             self._proj_norm = eye_R.add_leg(wL, self.IdR, axis=1, label='wL').conj()  # vL* wL* vL
             rho = npc.diag(S2, vR, labels=['vR', 'vR*'])
             self._proj_rho = rho.add_leg(wR, self.IdL, axis=1, label='wR')  # vR wR vR*
@@ -2179,6 +2180,7 @@ class MPOTransferMatrix:
             self._chi0 = vL.ind_len
             eye_L = npc.diag(1., vL, dtype=dtype, labels=['vR*', 'vR'])
             self._E_shift = eye_L.add_leg(wR, self.IdR, axis=1, label='wR')  # vR* wR vR
+            self._proj_trace = self._E_shift.conj().iset_leg_labels(['vL*', 'wL', 'vL'])
             self._proj_norm = eye_L.add_leg(wR, self.IdL, axis=1, label='wR').conj()  # vR wR* vR*
             rho = npc.diag(S2, vL.conj(), labels=['vL*', 'vL'])
             self._proj_rho = rho.add_leg(wL, self.IdR, axis=1, label='wL')  # vL* wL vL
@@ -2231,13 +2233,12 @@ class MPOTransferMatrix:
         """Project out additive energy part from vec."""
         if not self.transpose:
             vec.itranspose(['vL', 'wL', 'vL*'])  # shouldn't do anything
-            # vec.itranspose(['vL', 'wL', 'vL*'])  # alreayd is in that order
-            E = npc.inner(vec, self._proj_rho, axes=[['vL', 'wL', 'vL*'], ['vR', 'wR', 'vR*']])
-            vec -= self._E_shift * E
+            E = npc.inner(vec, self._proj_trace, axes=[['vL', 'wL', 'vL*'], ['vR', 'wR', 'vR*']])
+            vec -= self._E_shift * (E / self._chi0)
         else:
             vec.itranspose(['vR*', 'wR', 'vR'])  # shouldn't do anything
-            E = npc.inner(vec, self._proj_rho, axes=[['vR*', 'wR', 'vR'], ['vL*', 'wL', 'vL']])
-            vec -= self._E_shift * E
+            E = npc.inner(vec, self._proj_trace, axes=[['vR*', 'wR', 'vR'], ['vL*', 'wL', 'vL']])
+            vec -= self._E_shift * (E / self._chi0)
 
     def dominant_eigenvector(self, **kwargs):
         """Find dominant eigenvector of self using :mod:`scipy.sparse`.
@@ -2273,12 +2274,14 @@ class MPOTransferMatrix:
         energy : float
             Energy *per site* of the MPS.
         """
-        vec = self.matvec(dom_vec, project=False)
         if not self.transpose:
-            E = npc.inner(vec, self._proj_rho, axes=[['vL', 'wL', 'vL*'], ['vR', 'wR', 'vR*']])
+            axes= (['vL', 'wL', 'vL*'], ['vR', 'wR', 'vR*'])
         else:
-            E = npc.inner(vec, self._proj_rho, axes=[['vR*', 'wR', 'vR'], ['vL*', 'wL', 'vL']])
-        return E / self.L
+            axes= (['vR*', 'wR', 'vR'], ['vL*', 'wL', 'vL'])
+        E0 = npc.inner(dom_vec, self._proj_rho, axes)
+        vec = self.matvec(dom_vec, project=False)
+        E = npc.inner(vec, self._proj_rho, axes)
+        return (E - E0) / self.L
 
     @classmethod
     def find_init_LP_RP(cls,
@@ -2326,7 +2329,7 @@ class MPOTransferMatrix:
             TM = cls(H, psi, transpose=transpose, guess=guess)
             val, vec = TM.dominant_eigenvector(**kwargs)
             if abs(1. - val) > tol_ev0:
-                logger.warning("MPOTransferMatrix eigenvalue not 1: got 1. - %.3e", 1. - val)
+                logger.warning("MPOTransferMatrix eigenvalue not 1: got %s", val)
             envs.append(vec)
             if calc_E:
                 Es.append(TM.energy(vec))

@@ -4701,7 +4701,7 @@ class TransferMatrix(sparse.NpcLinearOperator):
             raise ValueError("TransferMatrix has non-zero qtotal for Z_N charges. "
                              "It can have valid eigenvectors, but they will break the Z_N charge. "
                              "To avoid that, you can enlarge the unit cell of the MPS "
-                             "by a factor of " + str(lcm(enlarge_factors)))
+                             "by a factor of " + str(enlarge_factors))
 
     def matvec(self, vec):
         """Given `vec` as an npc.Array, apply the transfer matrix.
