@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-# Copyright 2019-2020 TeNPy Developers, GNU GPLv3
+# Copyright 2019-2021 TeNPy Developers, GNU GPLv3
 #
 import sys
 import os
 import inspect
 import sphinx_rtd_theme
+import io
 
 # ensure parent folder is in sys.path to allow import of tenpy
 REPO_PREFIX = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
@@ -20,7 +21,7 @@ if not sys.version_info >= (3, 5):
 # don't use compiled version to avoid problems with doc-strings of compiled functions
 os.environ["TENPY_NO_CYTHON"] = "true"
 try:
-    import tenpy.version
+    import tenpy
 except:
     print("ERROR: can't import tenpy.")
     sys.exit(1)
@@ -80,25 +81,32 @@ exclude_patterns = [
     'sphinx_build', 'Thumbs.db', '.DS_Store', 'notebooks/README.rst', 'notebooks/_template.ipynb'
 ]
 
+# -- example stubs  -=-----------------------------------------------------
+
 
 def create_example_stubs():
     """create stub files for examples and toycodes to include them in the documentation."""
-    folders = {
-        'examples': os.listdir(os.path.join(REPO_PREFIX, 'examples')),
-        'toycodes': os.listdir(os.path.join(REPO_PREFIX, 'toycodes'))
-    }
-    for key, files in folders.items():
-        outdir = os.path.join(os.path.dirname(__file__), key)
+    folders = [
+        (['examples'], '.py', []),
+        (['examples', 'advanced'], '.py', []),
+        (['examples', 'chern_insulators'], '.py', []),
+        (['toycodes'], '.py', []),
+        (['examples', 'yaml'], '.yml', []),
+    ]
+    for subfolders, extension, excludes in folders:
+        outdir = os.path.join(os.path.dirname(__file__), *subfolders)
         if not os.path.isdir(outdir):
             os.mkdir(outdir)
-        files = sorted([fn for fn in files if fn.endswith('.py')])
+        files = os.listdir(os.path.join(REPO_PREFIX, *subfolders))
+        files = sorted([fn for fn in files if fn.endswith(extension) and fn not in excludes])
         for fn in files:
             outfile = os.path.join(outdir, os.path.splitext(fn)[0] + '.rst')
             if os.path.exists(outfile):
                 continue
-            sentence = ("`on github <{base}/tree/master/{key!s}/{fn!s}>`_.")
-            sentence = sentence.format(key=key, fn=fn, base=GITHUBBASE)
-            include = '.. literalinclude:: /../{key!s}/{fn!s}'.format(key=key, fn=fn)
+            dirs = '/'.join(subfolders)
+            sentence = ("`on github <{base}/blob/main/{dirs!s}/{fn!s}>`_.")
+            sentence = sentence.format(dirs=dirs, fn=fn, base=GITHUBBASE)
+            include = '.. literalinclude:: /../{dirs!s}/{fn!s}'.format(dirs=dirs, fn=fn)
             text = '\n'.join([fn, '=' * len(fn), '', sentence, '', include, ''])
             with open(outfile, 'w') as f:
                 f.write(text)
@@ -106,6 +114,22 @@ def create_example_stubs():
 
 
 create_example_stubs()
+
+# -- include output of command line help ----------------------------------
+
+
+def include_command_line_help():
+    parser = tenpy._setup_arg_parser(width=98)
+    parser.prog = 'tenpy-run'
+    help_text = parser.format_help()
+    # help_text = '\n'.join(['    ' + l for l in help_text.splitlines()])
+    fn = 'commandline-help.txt'
+    with open(fn, 'w') as f:
+        f.write(help_text)
+    tenpy.console_main.__doc__ = tenpy.console_main.__doc__ + '\n' '.. literalinclude:: /' + fn
+
+
+include_command_line_help()
 
 # -- Options for HTML output ----------------------------------------------
 
@@ -125,11 +149,11 @@ html_context = {
     "github_repo":
     "tenpy",  # Repo name
     "github_version":
-    "master",  # Version
+    "main",  # Version
     "conf_py_path":
     "/doc/",  # Path in the checkout to the docs root
     "css_files": [
-        "_static/custom_highlight.css",  # to highlight targets
+        "_static/custom.css",  # to highlight targets
         "_static/copybutton.css",  # somehow this didn't get included otherwise
     ],
 }
@@ -159,7 +183,7 @@ nbsphinx_prolog = r"""
 
     <div class="admonition note">
       This page was generated from
-      <a class="reference external" href="https://github.com/tenpy/tenpy_notebooks/tree/main/{{ docname|e }}">{{ docname|e }}</a>.
+      <a class="reference external" href="https://github.com/tenpy/tenpy_notebooks/blob/main/{{ docname|e }}">{{ docname|e }}</a>.
     </div>
 """
 
@@ -209,7 +233,7 @@ inheritance_graph_attrs = {
 # this makes  e.g. :class:`numpy.ndarray` work
 intersphinx_mapping = {
     'python': ('https://docs.python.org/3', None),
-    'numpy': ('https://docs.scipy.org/doc/numpy', None),
+    'numpy': ('https://numpy.org/doc/stable', None),
     'scipy': ('https://docs.scipy.org/doc/scipy/reference/', None),
     'matplotlib': ('https://matplotlib.org', None),
     'h5py': ('https://docs.h5py.org/en/stable/', None),
@@ -269,9 +293,9 @@ def linkcode_resolve(domain, info):
         return None
 
     if tenpy.version.released:
-        return "%s/tree/v%s/tenpy/%s%s" % (GITHUBBASE, tenpy.__version__, fn, linespec)
+        return "%s/blob/v%s/tenpy/%s%s" % (GITHUBBASE, tenpy.__version__, fn, linespec)
     else:
-        return "%s/tree/master/tenpy/%s%s" % (GITHUBBASE, fn, linespec)
+        return "%s/blob/main/tenpy/%s%s" % (GITHUBBASE, fn, linespec)
 
 
 # -- sphinx_cfg_options ---------------------------------------------------
@@ -281,6 +305,8 @@ cfg_options_parse_comma_sep_names = True
 cfg_options_always_include = ["Config"]
 
 # -- sphinxcontrib.bibtex -------------------------------------------------
+
+bibtex_bibfiles = ['literature.bib', 'papers_using_tenpy.bib']
 
 from pybtex.style.formatting.unsrt import Style as UnsrtStyle
 from pybtex.style.labels import BaseLabelStyle

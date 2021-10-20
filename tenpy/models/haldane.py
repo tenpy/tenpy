@@ -1,11 +1,12 @@
 """Bosonic and fermionic Haldane models."""
-# Copyright 2019-2020 TeNPy Developers, GNU GPLv3
+# Copyright 2019-2021 TeNPy Developers, GNU GPLv3
 
 import numpy as np
 
-from tenpy.models.model import CouplingMPOModel
-from tenpy.tools.params import asConfig
-from tenpy.networks.site import BosonSite, FermionSite
+from .model import CouplingMPOModel
+from ..tools.params import asConfig
+from ..networks.site import BosonSite, FermionSite
+from .lattice import Honeycomb
 
 __all__ = ['BosonicHaldaneModel', 'FermionicHaldaneModel']
 
@@ -46,10 +47,8 @@ class BosonicHaldaneModel(CouplingMPOModel):
             Hopping, interaction and chemical potential as defined for the Hamiltonian above.
             The default value for t2 is chosen to achieve the optimal band flatness ratio.
     """
-    def __init__(self, model_params):
-        model_params = asConfig(model_params, self.__class__.__name__)
-        model_params.setdefault('lattice', 'Honeycomb')
-        CouplingMPOModel.__init__(self, model_params)
+    default_lattice = Honeycomb
+    force_default_lattice = True
 
     def init_sites(self, model_params):
         conserve = model_params.get('conserve', 'N')
@@ -120,10 +119,8 @@ class FermionicHaldaneModel(CouplingMPOModel):
             The default value for t2 is chosen to achieve the optimal band flatness ratio.
 
     """
-    def __init__(self, model_params):
-        model_params = asConfig(model_params, self.__class__.__name__)
-        model_params.setdefault('lattice', 'Honeycomb')
-        CouplingMPOModel.__init__(self, model_params)
+    default_lattice = Honeycomb
+    force_default_lattice = True
 
     def init_sites(self, model_params):
         conserve = model_params.get('conserve', 'N')

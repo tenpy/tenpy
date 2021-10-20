@@ -1,5 +1,5 @@
 """Toy code implementing the transverse-field ising model."""
-# Copyright 2018-2020 TeNPy Developers, GNU GPLv3
+# Copyright 2018-2021 TeNPy Developers, GNU GPLv3
 
 import numpy as np
 
@@ -34,7 +34,7 @@ class TFIModel:
         in short ``i j i* j*``.
     H_mpo : lit of np.Array[ndim=4]
         The Hamiltonian written as an MPO.
-        Each ``H_mpo[i]`` has legs (virutal left, virtual right, physical out, physical in),
+        Each ``H_mpo[i]`` has legs (virtual left, virtual right, physical out, physical in),
         in short ``wL wR i i*``.
     """
     def __init__(self, L, J, g, bc='finite'):
@@ -77,7 +77,7 @@ class TFIModel:
         """
         w_list = []
         for i in range(self.L):
-            w = np.zeros((3, 3, self.d, self.d), dtype=np.float)
+            w = np.zeros((3, 3, self.d, self.d), dtype=float)
             w[0, 0] = w[2, 2] = self.id
             w[0, 1] = self.sigmax
             w[0, 2] = -self.g * self.sigmaz

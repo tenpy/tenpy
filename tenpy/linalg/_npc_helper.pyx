@@ -8,9 +8,15 @@ functions/classes defined here to overwrite those written in pure Python wheneve
 decorator ``@use_cython`` is used in other python files of tenpy.
 If this module was not compiled and could not be imported, a warning is issued.
 """
-# Copyright 2018-2020 TeNPy Developers, GNU GPLv3
+# Copyright 2018-2021 TeNPy Developers, GNU GPLv3
 
 DEF DEBUG_PRINT = 0  # set this to 1 for debug output (e.g. benchmark timings within the functions)
+DEF USE_MKL_GEMM_BATCH = 1 # whether to use ?gemm_batch function of MKL
+# the following are defined in `setup.py`, but you might wish to overwrite them here explicitly.
+# DEF HAVE_MKL = 0  # whether to import cblas from mkl
+# DEF MKL_INTERFACE_LAYER = 0  # MKL_LP64=0 for using MKL_LP64 with 32-bit indices,
+                               # MKL_ILP64=1 for using MKL_ILP64 with 64-bit indices
+
 
 # TODO memory leak if using the `np.ndarray[type, ndim=2]` variables with zero second dimension!!!
 # the same memory leak appears for memory views `type[:, :]`
@@ -18,6 +24,7 @@ DEF DEBUG_PRINT = 0  # set this to 1 for debug output (e.g. benchmark timings wi
 
 import numpy as np
 cimport numpy as np  # for clarity: replace with _np or np_ or c_np
+np.import_array()
 cimport cython
 from libcpp.vector cimport vector
 from libc.string cimport memcpy
@@ -30,16 +37,44 @@ IF DEBUG_PRINT:
     import time
 
 import scipy.linalg
-from scipy.linalg import blas as BLAS  # python interface to BLAS
-from scipy.linalg.cython_blas cimport (dgemm, zgemm, dgemv, zgemv,
-                                       ddot, zdotc, zdotu,
-                                       daxpy, zaxpy,
-                                       dscal, zscal, zdscal)
+from scipy.linalg.blas import find_best_blas_type
 
 from ..tools.misc import inverse_permutation, to_iterable
 from ..tools.optimization import optimize, OptimizationFlag
 
-np.import_array()
+
+IF HAVE_MKL:
+    from ._cblas_mkl cimport CblasRowMajor, CBLAS_TRANSPOSE, CblasNoTrans, MKL_INT, \
+            cblas_dscal, cblas_zdscal, cblas_zscal, cblas_daxpy, cblas_zaxpy, \
+            cblas_ddot, cblas_zdotu_sub, cblas_zdotc_sub, \
+            cblas_dgemm, cblas_zgemm, \
+            cblas_dgemm_batch, cblas_zgemm_batch, \
+            mkl_set_interface_layer
+    IF MKL_INTERFACE_LAYER:
+        # if compiled with -DMKL_ILP64, it's important to set the interface to avoid undefined
+        # behaviour, so we do this right away at module initialization:
+        mkl_set_interface_layer(MKL_INTERFACE_LAYER)
+        # in that way, we don't rely on a `export MKL_INTERFACE_LAYER="ILP64"` by the user.
+
+    ctypedef MKL_INT BLAS_INT
+    ctypedef np.complex_t complex_t
+    cdef extern from "mkl.h" nogil:
+        ctypedef complex_t MKL_Complex16
+ELSE:
+    from scipy.linalg.cython_blas cimport (dgemm, zgemm,
+            ddot, zdotc, zdotu, daxpy, zaxpy, dscal, zscal, zdscal)
+    ctypedef np.intp_t BLAS_INT  # should be able to hold matrix dimensions
+    cdef enum CBLAS_LAYOUT:
+        CblasRowMajor=101
+        CblasColMajor=102
+    cdef enum CBLAS_TRANSPOSE:
+        CblasNoTrans=111
+        CblasTrans=112
+        CblasConjTrans=113
+    ctypedef np.complex_t MKL_Complex16
+
+
+compiled_with_MKL = HAVE_MKL
 
 QTYPE = np.int_             # numpy dtype for the charges
 ctypedef np.int_t QTYPE_t   # compile time type for QTYPE
@@ -47,6 +82,13 @@ cdef int QTYPE_num = np.NPY_LONG # == np.dtype(QTYPE).num
 
 ctypedef np.intp_t intp_t   # compile time type for np.intp
 cdef int intp_num = np.NPY_INTP
+
+ctypedef void * void_ptr
+ctypedef np.complex128_t complex128_t
+
+ctypedef struct idx_tuple:
+    intp_t first
+    intp_t second
 
 # check that types are as expected
 assert QTYPE_num == np.dtype(QTYPE).num
@@ -62,9 +104,6 @@ assert sizeof(intp_t) == sizeof(np.npy_intp)  # shouldn't even compile otherwise
 _np_conserved = None  # tenpy.linalg.np_conserved
 _charges = None       # tenpy.linalg.charges
 
-ctypedef struct idx_tuple:
-    intp_t first
-    intp_t second
 
 # ################################# #
 # helper functions                  #
@@ -111,81 +150,172 @@ cpdef np.ndarray _make_stride(shape, bint cstyle=1):
     return res
 
 
-cdef void _batch_accumulate_gemm(vector[intp_t] batch_slices,
-                            vector[idx_tuple] batch_m_n,
-                            vector[idx_tuple] inds_contr,
-                            vector[intp_t] block_dim_a_contr,
-                            vector[void*] a_data_ptr,
-                            vector[void*] b_data_ptr,
-                            vector[void*] c_data_ptr,
-                            int dtype_num
-                            ) nogil:
-    cdef size_t b, batch_count = batch_m_n.size()
-    cdef intp_t x, batch_beg, batch_end,
-    cdef intp_t i, j, m, n, k
-    cdef idx_tuple i_j, m_n
+cdef class CblasGemmBatch:
+    # to be executed with cblas_dgemm_batch
+    # for A, B, C in zip(...):
+    #    C = dot(A, B) + beta C
+    # where A = m x k, B = k x n matrices
+    cdef:
+        vector[vector[BLAS_INT]] ms
+        vector[vector[BLAS_INT]] ks
+        vector[vector[BLAS_INT]] ns
+        vector[vector[void_ptr]] As
+        vector[vector[void_ptr]] Bs
+        vector[vector[void_ptr]] Cs
+        vector[CBLAS_TRANSPOSE] trans
+        vector[BLAS_INT] int_ones
+        vector[double] double_ones
+        vector[double] double_zeros
+        vector[complex128_t] complex_ones
+        vector[complex128_t] complex_zeros
+        bint is_real  # whether to use dgemm or zgemm
 
-    for b in range(batch_count): # TODO parallelize !?
-        m_n = batch_m_n[b]
-        m = m_n.first
-        n = m_n.second
-        batch_beg = batch_slices[b]
-        batch_end = batch_slices[b+1]
-        i_j = inds_contr[batch_beg]
-        i = i_j.first
-        j = i_j.second
-        k = block_dim_a_contr[i]
-        _blas_gemm(m, n, k, a_data_ptr[i], b_data_ptr[j], 0., c_data_ptr[b], dtype_num)
-        for x in range(batch_beg + 1, batch_end):
-            i_j = inds_contr[x]
-            i = i_j.first
-            j = i_j.second
-            k = block_dim_a_contr[i]
-            _blas_gemm(m, n, k, a_data_ptr[i], b_data_ptr[j], 1., c_data_ptr[b], dtype_num)
+    def __cinit__(self, int calc_dtype_num):
+        self.is_real = (calc_dtype_num == np.NPY_FLOAT64)
+        self.ms = vector[vector[BLAS_INT]]()
+        self.ks = vector[vector[BLAS_INT]]()
+        self.ns = vector[vector[BLAS_INT]]()
+        self.As = vector[vector[void_ptr]]()
+        self.Bs = vector[vector[void_ptr]]()
+        self.Cs = vector[vector[void_ptr]]()
+        # reserve constants for 64 blocks: enough in most cases
+        cdef int R = 64
+        self.trans = vector[CBLAS_TRANSPOSE](R, CblasNoTrans)
+        self.int_ones = vector[BLAS_INT](R, 1)
+        self.double_ones = vector[double](R, 1.)
+        self.double_zeros = vector[double](R, 0.)
+        self.complex_ones = vector[complex128_t](R, 1. + 0.j)
+        self.complex_zeros = vector[complex128_t](R, 0. + 0.j)
+
+    cdef append(self, unsigned int level, void * A, void * B, void * C, intp_t m, intp_t k, intp_t n):
+        """Store matrix pointers and sizes for matrix multiplications."""
+        while self.ms.size() <= level:
+            self.ms.push_back(vector[BLAS_INT]())
+            self.ks.push_back(vector[BLAS_INT]())
+            self.ns.push_back(vector[BLAS_INT]())
+            self.As.push_back(vector[void_ptr]())
+            self.Bs.push_back(vector[void_ptr]())
+            self.Cs.push_back(vector[void_ptr]())
+        self.ms[level].push_back(m)
+        self.ks[level].push_back(k)
+        self.ns[level].push_back(n)
+        self.As[level].push_back(A)
+        self.Bs[level].push_back(B)
+        self.Cs[level].push_back(C)
+
+    cdef void run(self) except *:
+        cdef int N_batches = self.ms.size()
+        if N_batches == 0:
+            return
+        cdef:
+            int level = 0
+            size_t batch_size = self.ms[0].size()
+            BLAS_INT * m
+            BLAS_INT * n
+            BLAS_INT * k
+            void ** A
+            void ** B
+            void ** C
+
+        # get pointers to constant arrays
+        if self.int_ones.size() <= batch_size:
+            # need to enlarge the constant arrays first
+            self.trans.resize(batch_size, CblasNoTrans)
+            self.double_ones.resize(batch_size, 1.)
+            self.double_zeros.resize(batch_size, 0.)
+            self.complex_ones.resize(batch_size, 1.)
+            self.complex_zeros.resize(batch_size, 0.)
+            self.int_ones.resize(batch_size, 1)
+        cdef:
+            CBLAS_TRANSPOSE * trans = & self.trans[0]
+            BLAS_INT * int_ones = & self.int_ones[0]
+            double * double_ones = & self.double_ones[0]
+            double * double_zeros = & self.double_zeros[0]
+            void * complex_ones = <void *> & self.complex_ones[0]
+            void * complex_zeros = <void *> & self.complex_zeros[0]
+            double * betas
+            void * complex_betas
+
+        while level < N_batches:
+            assert self.ms[level].size() <= batch_size   # batch size should only get smaller!
+            batch_size = self.ms[level].size()
+            assert batch_size > 0  # but always be positive
+
+            m = & self.ms[level][0]
+            k = & self.ks[level][0]
+            n = & self.ns[level][0]
+            A = & self.As[level][0]
+            B = & self.Bs[level][0]
+            C = & self.Cs[level][0]
+
+            with nogil:
+                if self.is_real:  # dtype_num == np.NPY_FLOAT64:
+                    if level == 0:
+                        betas = double_zeros
+                    else:
+                        betas = double_ones
+                    IF HAVE_MKL and USE_MKL_GEMM_BATCH:
+                        cblas_dgemm_batch(CblasRowMajor, trans, trans, m, n, k,
+                                double_ones, <const double **> A, k, <const double **> B, n,   # alpha, A, LDA, B, LDB
+                                betas, <double **> C, n, batch_size, int_ones)  # beta, C, LDC, group_count, group_size
+                    ELSE:
+                        # defined below
+                        dgemm_batch(m, n, k, double_ones, <double **> A, <double **> B, betas, <double **> C, batch_size)
+                else:  # dtype_num == np.NPY_COMPLEX128
+                    if level == 0:
+                        complex_betas = complex_zeros
+                    else:
+                        complex_betas = complex_ones
+                    IF HAVE_MKL and USE_MKL_GEMM_BATCH:
+                        cblas_zgemm_batch(CblasRowMajor, trans, trans, m, n, k,
+                                complex_ones, <const void **> A, k, <const void **> B, n,   # alpha, A, LDA, B, LDB
+                                complex_betas, C, n, batch_size, int_ones)  # beta, C, LDC, group_count, group_size
+                    ELSE:
+                        zgemm_batch(m, n, k, <complex128_t *> complex_ones, <complex128_t **> A, <complex128_t **> B, <complex128_t *> complex_betas, <complex128_t **> C, batch_size)
+            level += 1
+        # run finished
 
 
-cdef void _blas_gemm(int M, int N, int K, void* A, void* B, double beta, void* C,
-                     int dtype_num) nogil:
-    """use blas to calculate ``C = A.dot(B) + beta * C``, overwriting to C.
 
-    Assumes (!) that A, B, C are contiguous C-style matrices of dimensions MxK, KxN , MxN.
-    dtype_num should be the number of the data type, either np.NPY_FLOAT64 or np.NPY_COMPLEX128.
-    """
-    # HACK: We want ``C = A.dot(B)``, but this is equivalent to ``C.T = B.T.dot(A.T)``.
-    # reading a C-style matrix A of dimensions MxK as F-style Matrix with LDA=K yields A.T
-    # Thus we can use C-style A, B, C without transposing.
-    cdef char *no_tr = 'n'
-    cdef char *tr = 't'
-    cdef double alpha = 1.
-    cdef double complex alpha_complex = 1.
-    cdef double complex beta_complex = beta
-    if M == 1:
-        # matrix-vector
-        if dtype_num == np.NPY_FLOAT64:
-            dgemv(no_tr, &N, &K, &alpha, <double*> B, &N,
-                <double*> A, &M, &beta, <double*> C, &M)
-        else: # dtype_num == np.NPY_COMPLEX128
-            zgemv(no_tr, &N, &K, &alpha_complex, <double complex*> B, &N,
-                <double complex*> A, &M, &beta_complex, <double complex*> C, &M)
-    elif N == 1:
-        if dtype_num == np.NPY_FLOAT64:
-            dgemv(tr, &K, &M, &alpha, <double*> A, &K,
-                <double*> B, &N, &beta, <double*> C, &N)
-        else: # dtype_num == np.NPY_COMPLEX128
-            zgemv(tr, &K, &M, &alpha_complex, <double complex*> A, &K,
-                <double complex*> B, &N, &beta_complex, <double complex*> C, &N)
-    else:
-        # fortran call of dgemm(transa, transb, M, N, K, alpha, A, LDA, B, LDB, beta, C LDC)
-        # but switch A <-> B and M <-> N to transpose everything
-        if dtype_num == np.NPY_FLOAT64:
-            dgemm(no_tr, no_tr, &N, &M, &K, &alpha, <double*> B, &N,
-                <double*> A, &K, &beta, <double*> C, &N)
-        else: # dtype_num == np.NPY_COMPLEX128
-            zgemm(no_tr, no_tr, &N, &M, &K, &alpha_complex, <double complex*> B, &N,
-                <double complex*> A, &K, &beta_complex, <double complex*> C, &N)
+IF HAVE_MKL and USE_MKL_GEMM_BATCH:
+    pass # don't define dgemm_batch and zgemm_batch to avoid compiler warnings about unused functions
+ELSE:
+    cdef void dgemm_batch(BLAS_INT * m, BLAS_INT * n, BLAS_INT * k, double * alpha, double ** A, double ** B, double * beta, double ** C, int batch_size) nogil:
+        """Perform a batch of dgemm matrix multiplications.
+
+        Assumes that all matrices are stored C-contiguous.
+        """
+        cdef char *no_tr = 'n'
+        cdef int b
+        for b in range(batch_size):
+            IF HAVE_MKL:
+                cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, m[b], n[b], k[b], alpha[b], A[b], k[b], B[b], n[b], beta[b], C[b], n[b])
+            ELSE:
+                # C = A * B is equivalent to tr(C) = tr(B) * tr(A)
+                # Viewing C-contiguous matrix A[i,j] with LDA=dim(j) as fortran style causes "transpose" A[j,i] with LDA=dim(j)
+                dgemm(no_tr, no_tr, <int*> &n[b], <int*>&m[b], <int*>&k[b], &alpha[b], B[b], <int*> &n[b],
+                    A[b], <int*>&k[b], &beta[b], C[b], <int*>&n[b])
 
 
-cdef void _blas_inpl_add(int N, void* A, void* B, double complex prefactor, int dtype_num) nogil:
+    cdef void zgemm_batch(BLAS_INT * m, BLAS_INT * n, BLAS_INT * k, complex128_t* alpha, complex128_t ** A, complex128_t ** B, complex128_t * beta, complex128_t ** C, int batch_size) nogil:
+        """Perform a batch of zgemm matrix multiplications.
+
+        Assumes that all matrices are stored C-contiguous.
+        """
+        cdef char *no_tr = 'n'
+        cdef int b
+        for b in range(batch_size):
+            IF HAVE_MKL:
+                cblas_zgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, m[b], n[b], k[b], <MKL_Complex16*> &alpha[b], <MKL_Complex16*>A[b], k[b], <MKL_Complex16*>B[b], n[b], <MKL_Complex16*> &beta[b], <MKL_Complex16*>C[b], n[b])
+            ELSE:
+                # C = A * B is equivalent to tr(C) = tr(B) * tr(A)
+                # Viewing C-contiguous matrix A[i,j] with LDA=dim(j) as fortran style causes "transpose" A[j,i] with LDA=dim(j)
+                zgemm(no_tr, no_tr, <int*>&n[b], <int*>&m[b], <int*>&k[b], &alpha[b], B[b], <int*>&n[b],
+                    A[b], <int*>&k[b], &beta[b], C[b], <int*>&n[b])
+
+
+
+cdef void _blas_inpl_add(int N, void* A, void* B, complex128_t prefactor, int dtype_num) nogil:
     """Use blas for ``A += prefactor * B``.
 
     Assumes (!) that A, B are contiguous C-style matrices of dimensions MxK, KxN , MxN.
@@ -194,13 +324,20 @@ cdef void _blas_inpl_add(int N, void* A, void* B, double complex prefactor, int 
     """
     cdef double real_prefactor = prefactor.real
     cdef int one = 1
+    cdef void_ptr prefactor_ptr =  <void_ptr> & prefactor
     if dtype_num == np.NPY_FLOAT64:
-        daxpy(&N, &real_prefactor, <double*> B, &one, <double*> A, &one)
+        IF HAVE_MKL:
+            cblas_daxpy(N, real_prefactor, <const double*> B, 1, <double*> A, 1)
+        ELSE:
+            daxpy(&N, &real_prefactor, <double*> B, &one, <double*> A, &one)
     else: # dtype_num == np.NPY_COMPLEX128
-        zaxpy(&N, &prefactor, <double complex*> B, &one, <double complex*> A, &one)
+        IF HAVE_MKL:
+            cblas_zaxpy(N, <MKL_Complex16*> prefactor_ptr, <MKL_Complex16*> B, 1, <MKL_Complex16*> A, 1)
+        ELSE:
+            zaxpy(&N, &prefactor, <double complex*> B, &one, <double complex*> A, &one)
 
 
-cdef void _blas_inpl_scale(int N, void* A, double complex prefactor, int dtype_num) nogil:
+cdef void _blas_inpl_scale(int N, void* A, complex128_t prefactor, int dtype_num) nogil:
     """Use blas for ``A *= prefactor``.
 
     Assumes (!) that A is contiguous C-style matrices of dimensions N.
@@ -210,12 +347,21 @@ cdef void _blas_inpl_scale(int N, void* A, double complex prefactor, int dtype_n
     cdef double real_prefactor = prefactor.real
     cdef int one = 1
     if dtype_num == np.NPY_FLOAT64:
-        dscal(&N, &real_prefactor, <double*> A, &one)
+        IF HAVE_MKL:
+            cblas_dscal(N, real_prefactor, <double *> A, 1)
+        ELSE:
+            dscal(&N, &real_prefactor, <double*> A, &one)
     else: # dtype_num == np.NPY_COMPLEX128
         if prefactor.imag == 0.:
-            zdscal(&N, &real_prefactor, <double complex*> A, &one)
+            IF HAVE_MKL:
+                cblas_zdscal(N, real_prefactor, A, 1)
+            ELSE:
+                zdscal(&N, &real_prefactor, <double complex*> A, &one)
         else:
-            zscal(&N, &prefactor, <double complex*> A, &one)
+            IF HAVE_MKL:
+                cblas_zscal(N, &prefactor, A, 1)
+            ELSE:
+                zscal(&N, &prefactor, <double complex*> A, &one)
 
 
 
@@ -264,7 +410,7 @@ cdef void _sliced_strided_copy(char* dest_data, intp_t* dest_strides,
 def _find_calc_dtype(a_dtype, b_dtype):
     """return calc_dtype, res_dtype suitable for BLAS calculations."""
     res_dtype = np.find_common_type([a_dtype, b_dtype], [])
-    prefix, _, _ = BLAS.find_best_blas_type(dtype=res_dtype)
+    prefix, _, _ = find_best_blas_type(dtype=res_dtype)
     # always use 64-bit precision floating points
     if prefix == 's' or prefix == 'd':
         calc_dtype = np.dtype(np.float64)
@@ -348,13 +494,13 @@ def ChargeInfo_make_valid(self, charges=None):
         return _np_zeros_1D(qnumber, QTYPE_num)
     cdef np.ndarray charges_ = np.array(charges, dtype=QTYPE, copy=True, order="C")
     if charges_.ndim == 1:
-        assert (charges_.shape[0] == qnumber)
+        assert (charges_.shape[0] == qnumber), "qnumber of `charges` doesn't match chinfo.qnumber"
         if qnumber == 0:
             return _np_zeros_1D(qnumber, QTYPE_num)
         _make_valid_charges_1D(self._mod, charges_)
         return charges_
     elif charges_.ndim == 2:
-        assert (charges_.shape[1] == qnumber)
+        assert (charges_.shape[1] == qnumber), "qnumber of `charges` doesn't match chinfo.qnumber"
         if qnumber == 0:
             return _np_zeros_2D(charges_.shape[0], qnumber, QTYPE_num)
         _make_valid_charges_2D(self._mod, charges_)
@@ -737,7 +883,7 @@ def Array_iadd_prefactor_other(self, prefactor, other):
         self._data = [d.astype(calc_dtype) for d in self._data]
     if other.dtype.num != calc_dtype_num:
         other = other.astype(calc_dtype)
-    cdef double complex cplx_prefactor = calc_dtype.type(prefactor) # converts if needed
+    cdef complex128_t cplx_prefactor = calc_dtype.type(prefactor) # converts if needed
     if calc_dtype_num != np.NPY_FLOAT64 and calc_dtype_num != np.NPY_COMPLEX128:
         calc_dtype_num = -1 # don't use BLAS
     self._imake_contiguous()
@@ -831,7 +977,7 @@ def Array_iscale_prefactor(self, prefactor):
     if self.dtype.num != calc_dtype_num:
         self.dtype = calc_dtype
         self._data = [d.astype(calc_dtype) for d in self._data]
-    cdef double complex cplx_prefactor = calc_dtype.type(prefactor) # converts if needed
+    cdef complex128_t cplx_prefactor = calc_dtype.type(prefactor) # converts if needed
     if calc_dtype_num != np.NPY_FLOAT64 and calc_dtype_num != np.NPY_COMPLEX128:
         calc_dtype_num = -1 # don't use BLAS
     self._imake_contiguous()
@@ -892,7 +1038,7 @@ def _combine_legs_worker(self,
     pipes : list of :class:`LegPipe`
         All the correct output pipes, already generated.
     """
-    if DEBUG_PRINT:
+    IF DEBUG_PRINT:
         print("_combine_legs_worker: ", self.stored_blocks)
         t0 = time.time()
     cdef int npipes = len(combine_legs)
@@ -903,12 +1049,12 @@ def _combine_legs_worker(self,
     cdef list q_map_inds = [
         p._map_incoming_qind(self._qdata[:, cl]) for p, cl in zip(pipes, combine_legs)
     ]
-    if DEBUG_PRINT:
+    IF DEBUG_PRINT:
         t1 = time.time()
         print("q_map_inds", t1-t0)
         t0 = time.time()
     self._imake_contiguous()
-    if DEBUG_PRINT:
+    IF DEBUG_PRINT:
         t1 = time.time()
         print("imake_contiguous", t1-t0)
         t0 = time.time()
@@ -947,7 +1093,7 @@ def _combine_legs_worker(self,
     cdef intp_t[:, ::1] block_start_ = block_start
     cdef intp_t[:, ::1] block_shape_ = block_shape # faster
 
-    if DEBUG_PRINT:
+    IF DEBUG_PRINT:
         t1 = time.time()
         print("get new qdata", t1-t0)
         t0 = time.time()
@@ -976,7 +1122,7 @@ def _combine_legs_worker(self,
     res._data = data
     res._qdata = qdata
     res._qdata_sorted = True
-    if DEBUG_PRINT:
+    IF DEBUG_PRINT:
         t1 = time.time()
         print("reshape loop", t1-t0)
         t0 = time.time()
@@ -990,7 +1136,7 @@ def _split_legs_worker(self, list split_axes_, float cutoff):
 
     Called by :meth:`split_legs`. Assumes that the corresponding legs are LegPipes.
     """
-    if DEBUG_PRINT:
+    IF DEBUG_PRINT:
         print("_split_legs_worker: ", self.stored_blocks)
         t0 = time.time()
     # calculate mappings of axes
@@ -1024,12 +1170,12 @@ def _split_legs_worker(self, list split_axes_, float cutoff):
     if self_stored_blocks == 0:
         return res
 
-    if DEBUG_PRINT:
+    IF DEBUG_PRINT:
         t1 = time.time()
         print("setup", t1-t0)
         t0 = time.time()
     self._imake_contiguous()
-    if DEBUG_PRINT:
+    IF DEBUG_PRINT:
         t1 = time.time()
         print("imake_contiguous", t1-t0)
         t0 = time.time()
@@ -1069,7 +1215,7 @@ def _split_legs_worker(self, list split_axes_, float cutoff):
     for ax in range(res.rank):
         new_block_shapes[:, ax] = block_sizes[ax][new_qdata[:, ax]]
     old_block_shapes[:, nonsplit_axes] =  new_block_shapes[:, new_nonsplit_axes]
-    if DEBUG_PRINT:
+    IF DEBUG_PRINT:
         t1 = time.time()
         print("get shapes and new qdata", t1-t0)
         t0 = time.time()
@@ -1091,14 +1237,14 @@ def _split_legs_worker(self, list split_axes_, float cutoff):
         new_shape.ptr = &new_block_shapes[i, 0]
         new_data.append(np.PyArray_Newshape(new_block, &new_shape, np.NPY_CORDER))
 
-    if DEBUG_PRINT:
+    IF DEBUG_PRINT:
         t1 = time.time()
         print("split loop", t1-t0)
         t0 = time.time()
     res._qdata = new_qdata
     res._qdata_sorted = False
     res._data = new_data
-    if DEBUG_PRINT:
+    IF DEBUG_PRINT:
         t1 = time.time()
         print("finalize", t1-t0)
         t0 = time.time()
@@ -1142,7 +1288,7 @@ def _tensordot_transpose_axes(a, b, axes):
     if not optimize(OptimizationFlag.skip_arg_checks):
         for lega, legb in zip(a.legs[-axes:], b.legs[:axes]):
             lega.test_contractible(legb)
-    elif a.shape[-axes:] != b.shape[:axes]: # check at least the shape
+    elif axes > 0 and a.shape[-axes:] != b.shape[:axes]: # check at least the shape
         raise ValueError("Shape mismatch for tensordot")
     return a, b, axes
 
@@ -1151,7 +1297,7 @@ def _tensordot_transpose_axes(a, b, axes):
 cdef inline intp_t _iter_common_sorted_push(
         intp_t[::1] a, intp_t i_start, intp_t i_stop,
         intp_t[::1] b, intp_t j_start, intp_t j_stop,
-        vector[idx_tuple]* out) nogil:
+        vector[idx_tuple]& out) nogil:
     """Find indices ``i, j`` for which ``a[i] == b[j]`` and pushes these (i,j) into `out`.
 
     Replacement of `_iter_common_sorted`.
@@ -1177,7 +1323,7 @@ cdef inline intp_t _iter_common_sorted_push(
             #  yield i, j
             i_j.first = i
             i_j.second = j
-            out.push_back(i_j) # (equivalent to C's out->push_back)
+            out.push_back(i_j) # modifies output
             count += 1
             i += 1
             j += 1
@@ -1407,21 +1553,23 @@ def _tensordot_worker(a, b, int axes):
     is completely blocked by charge, the 'sum' over ``k`` will contain at most one term!
     """
     cdef QTYPE_t[::1] chinfo_mod = a.chinfo._mod
-    cdef intp_t qnumber = chinfo_mod.shape[0]
-    chinfo = a.chinfo
     cdef intp_t cut_a = a.rank - axes
     cdef intp_t cut_b = axes
     cdef intp_t b_rank = b.rank
     cdef intp_t res_rank = cut_a + b_rank - cut_b
-    if DEBUG_PRINT:
+    IF DEBUG_PRINT:
         print("a.stored_blocks", a.stored_blocks, "b.stored_blocks", b.stored_blocks)
         t0 = time.time()
     # determine calculation type and result type
     calc_dtype, res_dtype = _find_calc_dtype(a.dtype, b.dtype)
     cdef int calc_dtype_num = calc_dtype.num  # can be compared to np.NPY_FLOAT64/NPY_COMPLEX128
     if a.dtype.num != calc_dtype_num:
+        IF DEBUG_PRINT:
+            print("casting a.dtype from", a.dtype, "to", calc_dtype)
         a = a.astype(calc_dtype)
     if b.dtype.num != calc_dtype_num:
+        IF DEBUG_PRINT:
+            print("casting b.dtype from", a.dtype, "to", calc_dtype)
         b = b.astype(calc_dtype)
 
     cdef np.ndarray[QTYPE_t, ndim=1] qtotal = a.qtotal + b.qtotal
@@ -1470,7 +1618,7 @@ def _tensordot_worker(a, b, int axes):
     a_data_ptr.resize(len_a_data)
     b_data_ptr.resize(len_b_data)
     block_dim_a_contr.resize(len_a_data)
-    cdef intp_t row_a, col_b, k_contr, ax  # indices
+    cdef intp_t row_a, col_b, ax  # indices
     cdef intp_t m, n, k   # reshaped dimensions: a_block.shape = (m, k), b_block.shape = (k,n)
     # NB: increase a_shape_keep.shape[1] artificially by one to avoid the memory leak
     # the last column is never used
@@ -1480,15 +1628,15 @@ def _tensordot_worker(a, b, int axes):
     for row_a in range(n_rows_a):
         i = a_slices[row_a]
         block = <np.ndarray> a_data[i]
-        n = 1
+        m = 1
         for ax in range(cut_a):
             a_shape_keep[row_a, ax] = block.shape[ax]
-            n *= block.shape[ax]
-        block_dim_a_keep[row_a] = n
+            m *= block.shape[ax]
+        block_dim_a_keep[row_a] = m
         for j in range(a_slices[row_a], a_slices[row_a+1]):
             block = np.PyArray_GETCONTIGUOUS(a_data[j])
-            m = np.PyArray_SIZE(block) / n
-            block_dim_a_contr[j] = m  # needed for dgemm
+            k = np.PyArray_SIZE(block) / m
+            block_dim_a_contr[j] = k  # needed for dgemm
             a_data_ptr[j] = np.PyArray_DATA(block)
             a_data[j] = block  # important to keep the arrays of the pointers alive
     # NB: increase b_shape_keep.shape[1] artificially by one to avoid the memory leak
@@ -1530,16 +1678,18 @@ def _tensordot_worker(a, b, int axes):
     cdef list res_data = []
     cdef np.ndarray[intp_t, ndim=2] res_qdata = np.empty((res_max_n_blocks, res_rank), np.intp)
     cdef vector[idx_tuple] inds_contr
-    cdef vector[intp_t] batch_slices
-    cdef vector[idx_tuple] batch_m_n
-    cdef idx_tuple m_n
+    cdef idx_tuple i_j
+
+    cdef CblasGemmBatch gemm_batch = CblasGemmBatch(calc_dtype_num)
+
     cdef intp_t contr_count_batch=0, contr_count
     #  (for the size just estimate the maximal number of blocks to be contracted at once)
-    batch_slices.push_back(contr_count_batch)
+    cdef intp_t level
     cdef intp_t match0, match1
     cdef intp_t row_a_sort_idx
     cdef np.ndarray c_block
     cdef intp_t[::1] c_block_shape = _np_empty_1D(res_rank, intp_num)
+    cdef void * c_ptr
     cdef intp_t[:, ::1] a_qdata_keep_  # need them typed for fast copy in loop
     cdef intp_t[:, ::1] b_qdata_keep_
     # but have to avoid the memory leak in case one of them is fully contracted
@@ -1552,6 +1702,7 @@ def _tensordot_worker(a, b, int axes):
     else:
         b_qdata_keep_ = b_qdata_keep
 
+
     # the inner loop finding the blocks to be contracted
     for col_b in range(n_cols_b):  # columns of b
         match0 = match_rows[col_b, 0]
@@ -1560,28 +1711,35 @@ def _tensordot_worker(a, b, int axes):
             continue
         for ax in range(b_rank - cut_b):
             c_block_shape[cut_a + ax] = b_shape_keep[col_b, ax]
-        m_n.second = block_dim_b_keep[col_b]
+        n = block_dim_b_keep[col_b]
         for row_a_sort_idx in range(match0, match1):  # rows of a
             row_a = row_a_sort[row_a_sort_idx]
+            inds_contr.resize(0)
             # find common inner indices
             contr_count = _iter_common_sorted_push(a_qdata_contr, a_slices[row_a], a_slices[row_a+1],
                                                    b_qdata_contr, b_slices[col_b], b_slices[col_b+1],
-                                                   &inds_contr)
+                                                   inds_contr)
             if contr_count == 0:
                 continue  # no compatible blocks for given row_a, col_b
-            contr_count_batch += contr_count
-            batch_slices.push_back(contr_count_batch)
+            IF DEBUG_PRINT:
+                contr_count_batch += contr_count
+
             # we need to sum over inner indices
             # create output block
             for ax in range(cut_a):
                 c_block_shape[ax] = a_shape_keep[row_a, ax]
-            m_n.first = block_dim_a_keep[row_a]
-
+            m = block_dim_a_keep[row_a]
             c_block = _np_empty_ND(res_rank, &c_block_shape[0], calc_dtype_num)
-            c_data_ptr.push_back(np.PyArray_DATA(c_block))
-            batch_m_n.push_back(m_n)
+            c_ptr = np.PyArray_DATA(c_block)
 
-            # the actual contraction is done below in _batch_accumulate_gemm
+            for level in range(contr_count):
+                i_j = inds_contr[level]
+                i = i_j.first
+                j = i_j.second
+                k = block_dim_a_contr[i]
+                gemm_batch.append(level, a_data_ptr[i], b_data_ptr[j], c_ptr, m, k, n)
+            # the actual contraction is done below in gemm_batch.run()
+
 
             # Step 4) reshape back to tensors
             # c_block is already created in the correct shape, which is ignored by BLAS.
@@ -1598,20 +1756,14 @@ def _tensordot_worker(a, b, int axes):
         t0 = time.time()
 
     # Step 3.2) the actual matrix-matrix multiplications
-    with nogil:
-        _batch_accumulate_gemm(batch_slices,
-                               batch_m_n,
-                               inds_contr,
-                               block_dim_a_contr,
-                               a_data_ptr,
-                               b_data_ptr,
-                               c_data_ptr,
-                               calc_dtype_num)
+    # this is the expensive part!
+    gemm_batch.run()
+    # done!
 
     if DEBUG_PRINT:
         t1 = time.time()
         print("inner loop gemm", t1-t0)
-        print("had ", inds_contr.size(), "contractions into ", res_n_blocks, "new blocks")
+        print("had ", contr_count_batch, "contractions into ", res_n_blocks, "new blocks")
         t0 = time.time()
 
     if res_n_blocks != 0:
@@ -1676,13 +1828,15 @@ def _inner_worker(a, b, bint do_conj):
     cdef idx_tuple i_j
     cdef intp_t match, count
     count = _iter_common_sorted_push(a_qdata, 0, a_qdata.shape[0], b_qdata, 0, b_qdata.shape[0],
-                                     &inds_contr)
+                                     inds_contr)
     cdef int one = 1, size
     cdef np.ndarray a_block, b_bock
     cdef void *a_ptr
     cdef void *b_ptr
     cdef double sum_real = 0.
+    cdef double dot_real = 0.
     cdef double complex sum_complex = 0.
+    cdef double complex dot_product = 0.
     for match in range(count):
         i_j = inds_contr[match]
         i = i_j.first
@@ -1693,13 +1847,25 @@ def _inner_worker(a, b, bint do_conj):
         a_ptr = np.PyArray_DATA(a_block)
         b_ptr = np.PyArray_DATA(b_block)
         if calc_dtype_num == np.NPY_FLOAT64:
-            sum_real += ddot(&size, <double*> a_ptr, &one, <double*> b_ptr, &one)
+            IF HAVE_MKL:
+                dot_real = cblas_ddot(size, <const double*> a_ptr, one, <const double*> b_ptr, one)
+                sum_real += dot_real
+            ELSE:
+                sum_real += ddot(&size, <double*> a_ptr, &one, <double*> b_ptr, &one)
             #  res += calc_real
         else: # dtype_num == np.NPY_COMPLEX128
             if do_conj:
-                sum_complex += zdotc(&size, <double complex*> a_ptr, &one, <double complex*> b_ptr, &one)
+                IF HAVE_MKL:
+                    cblas_zdotc_sub(size, <const void*> a_ptr, 1, <const void*> b_ptr, 1, &dot_product)
+                    sum_complex += dot_product
+                ELSE:
+                    sum_complex += zdotc(&size, <double complex*> a_ptr, &one, <double complex*> b_ptr, &one)
             else:
-                sum_complex += zdotu(&size, <double complex*> a_ptr, &one, <double complex*> b_ptr, &one)
+                IF HAVE_MKL:
+                    cblas_zdotu_sub(size, <const void*> a_ptr, 1, <const void*> b_ptr, 1, &dot_product)
+                    sum_complex += dot_product
+                ELSE:
+                    sum_complex += zdotu(&size, <double complex*> a_ptr, &one, <double complex*> b_ptr, &one)
     if calc_dtype_num == np.NPY_FLOAT64:
         return res_dtype.type(sum_real)
     #  else: # dtype_num == np.NPY_COMPLEX128

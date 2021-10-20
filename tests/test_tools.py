@@ -1,12 +1,16 @@
 """A collection of tests for tenpy.tools submodules."""
-# Copyright 2018-2020 TeNPy Developers, GNU GPLv3
+# Copyright 2018-2021 TeNPy Developers, GNU GPLv3
 
+import logging
 import numpy as np
 import numpy.testing as npt
 import itertools as it
-import tenpy.tools as tools
+import tenpy
+from tenpy import tools
 import warnings
 import pytest
+import os.path
+import sys
 
 
 def test_inverse_permutation(N=10):
@@ -200,3 +204,91 @@ def test_approximate_sum_of_exp(N=100):
         err = np.sum(np.abs(f(x) - tools.fit.sum_of_exp(lam, pref, x)))
         print(n, f.__name__, err)
         assert err < max_err
+
+
+def test_find_subclass():
+    BaseCls = tenpy.models.lattice.Lattice
+    SimpleLattice = tenpy.models.lattice.SimpleLattice  # direct sublcass of Lattice
+    Square = tenpy.models.lattice.Square  # sublcass of SimpleLattice -> recursion necessary
+
+    with pytest.raises(ValueError):
+        tools.misc.find_subclass(BaseCls, 'UnknownSubclass')
+    simple_found = tools.misc.find_subclass(BaseCls, 'SimpleLattice')
+    assert simple_found is SimpleLattice
+    square_found = tools.misc.find_subclass(BaseCls, 'Square')
+    assert square_found is Square
+
+
+def test_get_set_recursive():
+    data = {'some': {'nested': {'data': 123, 'other': 456}, 'parts': 789}}
+    assert tools.misc.get_recursive(data, 'some.nested.data') == 123
+    assert tools.misc.get_recursive(data, '.some.nested.data') == 123
+    tools.misc.set_recursive(data, 'some.nested.data', 321)
+    assert tools.misc.get_recursive(data, 'some:nested:data', ':') == 321
+    tools.misc.set_recursive(data, ':some:parts', 987, ':')
+    assert tools.misc.get_recursive(data, 'some.parts') == 987
+    flat_data = tools.misc.flatten(data)
+    assert flat_data == {'some.nested.data': 321, 'some.nested.other': 456, 'some.parts': 987}
+
+
+def test_merge_recursive():
+    data1 = {'some': {'nested': {'data': 123, 'other': 456},
+                      'conflict': 'first'},
+             'only': 1}
+    data2 = {'some': {'different': {'x': 234, 'y': 567},
+                      'conflict': 'second'},
+             'extra': 2}
+    data3 = {'some': {'yet another': {'a': 1, 'b': 2},
+                      'conflict': 'third'},
+             'foo': 3}
+
+    with pytest.raises(ValueError) as excinfo:
+        merged = tools.misc.merge_recursive(data1, data2, data3)
+    assert "'some':'conflict'" in str(excinfo.value)
+    merged_first = tools.misc.merge_recursive(data1, data2, data3, conflict='first')
+    expected_merged = {
+        'some': {'nested': {'data': 123, 'other': 456},
+                 'conflict': 'first',
+                 'different': {'x': 234, 'y': 567},
+                 'yet another': {'a': 1, 'b': 2},
+                 },
+        'only': 1,
+        'extra': 2,
+        'foo': 3,
+    }
+    assert merged_first == expected_merged
+    expected_merged['some']['conflict'] = 'third'
+    merged_last = tools.misc.merge_recursive(data1, data2, data3, conflict='last')
+    assert merged_last == expected_merged
+
+
+@pytest.mark.skip(reason="interferes with pytest logging setup")
+def test_logging_setup(tmp_path, capsys):
+    import logging.config
+    logger = logging.getLogger('tenpy.test_logging')
+    root = logging.getLogger()
+    output_filename = tmp_path / 'output.pkl'
+    logging_params = {
+        'to_stdout': 'INFO',
+        'to_file': 'WARNING',
+        'skip_setup': False,
+    }
+    tools.misc.setup_logging(logging_params, output_filename)
+
+    test_message = "test %s message 12345"
+    logger.info(test_message, 'info')
+    logger.warning(test_message, 'warning')
+
+    # clean up loggers -> close file handlers (?)
+    logging.config.dictConfig({'version': 1, 'disable_existing_loggers': False})
+
+    assert os.path.exists(tmp_path / 'output.log')
+    with open(tmp_path / 'output.log', 'r') as f:
+        file_text = f.read()
+    assert test_message % 'warning' in file_text
+    assert test_message % 'info' not in file_text  # should have filtered that out
+
+    capture = capsys.readouterr()
+    stdout_text = capture.out
+    assert test_message % 'warning' in stdout_text
+    assert test_message % 'info' in stdout_text

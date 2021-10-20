@@ -10,7 +10,7 @@ The version is provided in the standard python format ``major.minor.revision`` a
 .. autodata :: full_version
 .. autodata :: version_summary
 """
-# Copyright 2018-2020 TeNPy Developers, GNU GPLv3
+# Copyright 2018-2021 TeNPy Developers, GNU GPLv3
 
 import sys
 import subprocess
@@ -22,7 +22,7 @@ __all__ = [
 
 # hard-coded version for people without git...
 #: current release version as a string
-version = '0.7.2'
+version = '0.9.0'
 
 #: whether this is a released version or modified
 released = False
@@ -31,11 +31,25 @@ released = False
 short_version = 'v' + version
 
 
-def _get_git_revision():
-    """get revision hash from git."""
+def _get_git_revision(cwd=None):
+    """Get revision hash from git.
+
+    Parameters
+    ----------
+    cwd : str | None
+        Directory contained in the git repository to be considered.
+        ``None`` defaults to the top directory of the used tenpy source code.
+
+    Returns
+    -------
+    revision : str
+        Revision hash of the git HEAD, i.e, the last git commit to which git compares everything.
+    """
+    if cwd is None:
+        cwd = os.path.dirname(os.path.abspath(__file__))
     try:
         rev = subprocess.check_output(['git', 'rev-parse', 'HEAD'],
-                                      cwd=os.path.dirname(os.path.abspath(__file__)),
+                                      cwd=cwd,
                                       stderr=subprocess.STDOUT).decode().strip()
     except:
         rev = "unknown"
@@ -73,7 +87,7 @@ full_version = _get_full_version()
 
 
 def _get_version_summary():
-    from .tools.optimization import have_cython_functions
+    from .tools.optimization import have_cython_functions, compiled_with_MKL
     import numpy
     import scipy
     import warnings
@@ -83,13 +97,16 @@ def _get_version_summary():
         if _version.version != version:
             raise ValueError("Version changed since installation/compilation")
         if have_cython_functions:
-            if git_revision != "unknown":
-                if _version.git_revision != "unknown" and _version.git_revision != git_revision:
-                    warnings.warn("TeNPy is compiled from different git "
-                                  "version than the current HEAD")
-                cython_info = "compiled from git rev. " + _version.git_revision
+            cython_info = "compiled"
+            if compiled_with_MKL:
+                cython_info = cython_info + " with HAVE_MKL"
             else:
-                cython_info = "compiled"
+                cython_info = cython_info + " without HAVE_MKL"
+            if _version.git_revision != "unknown":
+                if git_revision != "unknown" and _version.git_revision != git_revision:
+                    warnings.warn("TeNPy is compiled from different git "
+                                  "version than the current HEAD. Recompile!")
+                    cython_info = cython_info + " from git rev. " + _version.git_revision
         else:
             cython_info = "not compiled"
     except ImportError:

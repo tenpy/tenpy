@@ -13,7 +13,7 @@ which give their best to get and set the number of threads at runtime,
 while still being failsave if the shared OpenMP library is not found.  In the latter case,
 you might also try the equivalent :func:`mkl_get_nthreads` and :func:`mkl_set_nthreads`.
 """
-# Copyright 2018-2020 TeNPy Developers, GNU GPLv3
+# Copyright 2018-2021 TeNPy Developers, GNU GPLv3
 
 import warnings
 import ctypes
@@ -84,7 +84,7 @@ def load_omp_library(libs=["libiomp5.so","libiomp5.a","libiomp5.dylib",
             except OSError:
                 pass
     if _omp_lib is None:
-        warnings.warn("OpenMP library not found: can get/set nthreads")
+        warnings.warn("OpenMP library not found: can't get/set nthreads")
     return _omp_lib
 
 

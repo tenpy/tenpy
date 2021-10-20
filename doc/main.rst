@@ -21,8 +21,14 @@ Tenpy main module
 .. automodule:: tenpy
     :show-inheritance:
 
+
+.. autosummary::
+    :toctree: reference
+
+    run_simulation
+    console_main
+    show_config
+
 .. autodata:: __version__
 
 .. autodata:: __full_version__
-
-.. autofunction:: show_config

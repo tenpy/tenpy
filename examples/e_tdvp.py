@@ -4,7 +4,7 @@ As of now, we have TDVP only for finite systems. The call structure is quite sim
 difference is that we can run one-site TDVP or two-site TDVP. In the former, the bond dimension can
 not grow; the latter allows to grow the bond dimension and hence requires a truncation.
 """
-# Copyright 2019-2020 TeNPy Developers, GNU GPLv3
+# Copyright 2019-2021 TeNPy Developers, GNU GPLv3
 import numpy as np
 import tenpy.linalg.np_conserved as npc
 import tenpy.models.spins
@@ -50,7 +50,7 @@ def run_out_of_equilibrium():
             'trunc_cut': None
         }
     }
-    tdvp_engine = tdvp.Engine(psi, heisenberg, tdvp_params)
+    tdvp_engine = tdvp.TDVPEngine(psi, heisenberg, tdvp_params)
     times = []
     S_mid = []
     for i in range(30):
@@ -75,4 +75,6 @@ def run_out_of_equilibrium():
 
 
 if __name__ == "__main__":
+    import logging
+    logging.basicConfig(level=logging.INFO)
     run_out_of_equilibrium()

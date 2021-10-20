@@ -1,5 +1,5 @@
 """A collection of tests to check the functionality of algorithms.exact_diagonalization."""
-# Copyright 2018-2020 TeNPy Developers, GNU GPLv3
+# Copyright 2018-2021 TeNPy Developers, GNU GPLv3
 
 import tenpy.linalg.np_conserved as npc
 import numpy as np

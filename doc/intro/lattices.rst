@@ -110,7 +110,9 @@ Boundary conditions
 -------------------
 
 The :class:`~tenpy.models.lattice.Lattice` defines the **boundary conditions** `bc` in each direction. 
-It can be one of the usual ``'open'`` or ``'periodic'`` in each direcetion.
+It can be one of the usual ``'open'`` or ``'periodic'`` in each direcetion and will be used by the
+:class:`~tenpy.models.model.CouplingModel` to determine whether there should be added periodic couplings in the
+corresponding directions.
 
 On top of that, there is the `bc_MPS` boundary condition of the MPS, one of ``'finite', 'segment', 'infinite'``.
 For an ``'infinite'`` MPS, the whole lattice is repeated in the direction of the *first* basis vector of the lattice.

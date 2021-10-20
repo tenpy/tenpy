@@ -4,10 +4,13 @@ The :class:`EventHandler` is basically just holds a list of functions
 which can get called once a certain "event" happens.
 Examples are given in the class doc-string.
 """
-# Copyright 2020 TeNPy Developers, GNU GPLv3
+# Copyright 2020-2021 TeNPy Developers, GNU GPLv3
 
 from collections import namedtuple
 import warnings
+import functools
+
+from .hdf5_io import find_global
 
 __all__ = ['Listener', 'EventHandler']
 
@@ -100,12 +103,18 @@ class EventHandler:
         high_priority call: iteration 3
         my_listener called: iteration 3 with data 12
         another_one called: iteration 3
-
     """
     def __init__(self, arg_descr=None):
         self.arg_descr = arg_descr
         self.listeners = []
         self._id_counter = 0
+
+    def copy(self):
+        """Make a (shallow) copy."""
+        cp = EventHandler(self.arg_descr)
+        cp.listeners = self.listeners[:]
+        cp._id_counter = self._id_counter
+        return cp
 
     @property
     def id_of_last_connected(self):
@@ -150,13 +159,34 @@ class EventHandler:
         self.listeners.append(Listener(listener_id, callback, priority))
         return callback
 
+    def connect_by_name(self, module_name, func_name, kwargs=None, priority=0):
+        """Connect to a function given by the name in a module, optionally inserting arguments.
+
+        Parameters
+        ----------
+        module_name : str
+            The name of the module containing the function to be used. Gets imported.
+        func_name : str
+            The (qualified) name of the function inside the module.
+        kwargs : dict
+            Optional extra keyword-arguments to be given to the function.
+        priority : int
+            Higher priority indicates that the callback function should be called before other
+            possibly registered callback functions.
+        """
+        func = find_global(module_name, func_name)
+        if kwargs is not None:
+            func = functools.partial(func, **kwargs)
+        self.connect(func, priority)
+
     def disconnect(self, listener_id):
         """De-register a listener.
 
         Parameters
         ----------
         listener_id : int
-            The id of the listener returned by :meth:`connect`.
+            The id of the listener, as given by :attr:`id_of_last_connected`
+            right after calling :meth:`connect`.
         """
         for i, listener in enumerate(self.listeners):
             if listener.listener_id == 0:

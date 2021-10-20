@@ -1,5 +1,5 @@
 """To be used in the `-m` argument of benchmark.py."""
-# Copyright 2019-2020 TeNPy Developers, GNU GPLv3
+# Copyright 2019-2021 TeNPy Developers, GNU GPLv3
 
 import numpy as np
 import tenpy.linalg.np_conserved as npc
@@ -55,7 +55,7 @@ def setup_benchmark(mod_q=[1],
                     size=20,
                     legs=2,
                     select_frac=1.,
-                    dtype=np.float,
+                    dtype=np.float64,
                     **kwargs):
     """Returns ``a, b, axes`` for timing of ``npc.tensordot(a, b, axes)``
 

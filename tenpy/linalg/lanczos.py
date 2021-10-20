@@ -1,14 +1,17 @@
 """Lanczos algorithm for np_conserved arrays."""
-# Copyright 2018-2020 TeNPy Developers, GNU GPLv3
+# Copyright 2018-2021 TeNPy Developers, GNU GPLv3
 
-from . import np_conserved as npc
-from ..tools.params import asConfig
+import warnings
 import numpy as np
 from scipy.linalg import expm
 import scipy.sparse
 from .sparse import FlatHermitianOperator, OrthogonalNpcLinearOperator, ShiftNpcLinearOperator
+import logging
+logger = logging.getLogger(__name__)
+
+from . import np_conserved as npc
+from ..tools.params import asConfig
 from ..tools.math import speigsh
-import warnings
 
 __all__ = [
     'LanczosGroundState', 'LanczosEvolution', 'lanczos', 'lanczos_arpack', 'gram_schmidt',
@@ -42,8 +45,8 @@ class LanczosGroundState:
     psi0 : :class:`~tenpy.linalg.np_conserved.Array`
         The starting vector defining the Krylov basis.
         For finding the ground state, this should be the best guess available.
-        Note that it must not be a 1D "vector", we are fine with viewing higher-rank tensors
-        as vectors.
+        Note that it does not have to be a 1D "vector"; we are fine with viewing
+        higher-rank tensors as vectors.
     options : dict
         Further optional parameters as described in :cfg:config:`Lanczos`.
         The algorithm stops if *both* criteria for `e_tol` and `p_tol` are met
@@ -88,11 +91,11 @@ class LanczosGroundState:
         E_shift : float
             Shift the energy (=eigenvalues) by that amount *during* the Lanczos run by using the
             :class:`~tenpy.linalg.sparse.ShiftNpcLinearOperator`.
-            Since the Lanczos algorithm finds extremal eigenvalues, this can help convergence.
-            Moreover, if the :class:`~tenpy.linalg.sparse.OrthogonalNpcLinearOperator` is used,
-            the orthogonal vectors are *exact* eigenvectors with eigenvalue 0,
-            so you have to ensure that the energy is smaller than zero to avoid getting those.
             The ground state energy `E0` returned by :meth:`run` is made independent of the shift.
+            This option is useful if the :class:`~tenpy.linalg.sparse.OrthogonalNpcLinearOperator`
+            is used: the orthogonal vectors are *exact* eigenvectors with eigenvalue 0 independent
+            of the shift, so you can use it to ensure that the energy is smaller than zero
+            to avoid getting those.
 
     Attributes
     ----------
@@ -110,6 +113,8 @@ class LanczosGroundState:
         ``Es[n, :]`` contains the energies of ``_T[:n+1, :n+1]`` in step `n`.
     _T : ndarray, shape (N_max + 1, N_max +1)
         The tridiagonal matrix representing `H` in the orthonormalized Krylov basis.
+    _psi0_norm : float
+        Initial norm of the `psi0` passed.
     _cutoff : float
         See parameter `cutoff`.
     _cache : list of psi0-like vectors
@@ -128,6 +133,7 @@ class LanczosGroundState:
     def __init__(self, H, psi0, options, orthogonal_to=[]):
         self.H = H
         self.psi0 = psi0.copy()
+        self._psi0_norm = None
         self.options = options = asConfig(options, "Lanczos")
         self.N_min = options.get('N_min', 2)
         self.N_max = options.get('N_max', 20)
@@ -142,7 +148,6 @@ class LanczosGroundState:
         if self.N_min < 2:
             raise ValueError("Should perform at least 2 steps.")
         self._cutoff = options.get('cutoff', np.finfo(psi0.dtype).eps * 100)
-        self.verbose = options.verbose
         if self.E_shift is not None:
             if isinstance(self.H, OrthogonalNpcLinearOperator):
                 self.H.orig_operator = ShiftNpcLinearOperator(self.H.orig_operator, self.E_shift)
@@ -154,9 +159,9 @@ class LanczosGroundState:
             warnings.warn(msg, category=FutureWarning, stacklevel=2)
             self.H = OrthogonalNpcLinearOperator(self.H, orthogonal_to)
         self._cache = []
-        self.Es = np.zeros([self.N_max, self.N_max], dtype=np.float)
+        self.Es = np.zeros([self.N_max, self.N_max], dtype=np.float64)
         # First Lanczos iteration: Form tridiagonal form of A in the Krylov subspace, stored in T
-        self._T = np.zeros([self.N_max + 1, self.N_max + 1], dtype=np.float)
+        self._T = np.zeros([self.N_max + 1, self.N_max + 1], dtype=np.float64)
 
     def run(self):
         """Find the ground state of H.
@@ -172,15 +177,12 @@ class LanczosGroundState:
         """
         N = self._calc_T()
         E0 = self.Es[N - 1, 0]
-        if self.verbose >= 1:
-            if N > 1:
-                msg = "Lanczos N={0:d}, gap={1:.3e}, DeltaE0={2:.3e}, _result_krylov[-1]={3:.3e}"
-                print(
-                    msg.format(N, self.Es[N - 1, 1] - E0, self.Es[N - 2, 0] - E0,
-                               self._result_krylov[-1]))
-            else:
-                msg = "Lanczos N={0:d}, first alpha={1:.3e}, beta={2:.3e}"
-                print(msg.format(N, self._T[0, 0], self._T[0, 1]))
+        if N > 1:
+            logger.debug("Lanczos N=%d, gap=%.3e, DeltaE0=%.3e, _result_krylov[-1]=%.3e", N,
+                         self.Es[N - 1, 1] - E0, self.Es[N - 2, 0] - E0, self._result_krylov[-1])
+        else:
+            logger.debug("Lanczos N=%d, first alpha=%.3e, beta=%.3e", N, self._T[0, 0],
+                         self._T[0, 1])
         if self.E_shift is not None:
             E0 -= self.E_shift
         if N == 1:
@@ -195,6 +197,9 @@ class LanczosGroundState:
         T = self._T
         w = self.psi0  # initialize
         beta = npc.norm(w)
+        if self._psi0_norm is None:
+            # this is only needed for normalization in LanczosEvolution
+            self._psi0_norm = beta
         for k in range(self.N_max):
             w.iscale_prefactor(1. / beta)
             self._to_cache(w)
@@ -247,13 +252,11 @@ class LanczosGroundState:
             psif.iadd_prefactor_other(vf[k + 1], w)
         psif_norm = npc.norm(psif)
         if abs(1. - psif_norm) > 1.e-5:
-            warnings.warn("Poorly conditioned Lanczos!")
             # One reason can be that `H` is not Hermitian
             # Otherwise, the matrix (even if small) might be ill conditioned.
             # If you get this warning, you can try to set the parameters
             # `reortho`=True and `N_cache` >= `N_max`
-            if self.verbose > 1:
-                print("poorly conditioned Lanczos! |psi_0| = {0:f}".format(psif_norm))
+            logger.warning("poorly conditioned Lanczos! |psi_0| = %f", psif_norm)
         psif.iscale_prefactor(1. / psif_norm)
         return psif
 
@@ -269,7 +272,7 @@ class LanczosGroundState:
         T = self._T
         if k == 0:
             self.Es[0, 0] = T[0, 0]
-            self._result_krylov = np.ones(1, np.float)
+            self._result_krylov = np.ones(1, np.float64)
         else:
             # Diagonalize T
             E_T, v_T = np.linalg.eigh(T[:k + 1, :k + 1])
@@ -291,7 +294,7 @@ class LanczosEvolution(LanczosGroundState):
 
     It turns out that the Lanczos algorithm is also good for calculating the matrix exponential
     applied to the starting vector. Instead of diagonalizing the tri-diagonal `T` and taking the
-    ground state, we now calculate ``exp(delta T) e_0 in the Krylov ONB, where
+    ground state, we now calculate ``exp(delta T) e_0`` in the Krylov ONB, where
     ``e_0 = (1, 0, 0, ...)`` corresponds to ``psi0`` in the original basis.
 
     Parameters
@@ -321,8 +324,9 @@ class LanczosEvolution(LanczosGroundState):
     def __init__(self, H, psi0, options):
         super().__init__(H, psi0, options)
         self._result_norm = 1.
+        self.delta = None  # set in run()
 
-    def run(self, delta):
+    def run(self, delta, normalize=None):
         """Calculate ``expm(delta H).dot(psi0)`` using Lanczos.
 
         Parameters
@@ -330,6 +334,9 @@ class LanczosEvolution(LanczosGroundState):
         delta : float/complex
             Time step by which we should evolve psi0: prefactor of H in the exponential.
             Note that the complex `i` is *not* included!
+        normalize : bool
+            Whether to normalize the resulting state.
+            Defaults to ``np.real(delta) == 0``.
 
         Returns
         -------
@@ -342,35 +349,45 @@ class LanczosEvolution(LanczosGroundState):
         """
         self.delta = delta
         N = self._calc_T()
-        if self.verbose >= 1:
-            if N > 1:
-                msg = "Lanczos N={0:d}, |result_krylov[-1]|={1:.3e}"
-                print(msg.format(N, abs(self._result_krylov[-1])))
-            else:
-                msg = "Lanczos N={0:d}, first alpha={1:.3e}, beta={2:.3e}"
-                print(msg.format(N, self._T[0, 0], self._T[0, 1]))
+        if N > 1:
+            logger.debug("Lanczos N=%d, |result_krylov[-1]|=%.3e", N, abs(self._result_krylov[-1]))
+        else:
+            logger.debug("Lanczos N=%d, first alpha=%.3e, beta=%.3e", N, self._T[0, 0],
+                         self._T[0, 1])
         if N == 1:
-            result_full = self._result_krylov[0] * self.psi0
+            result_full = self._result_krylov[0] * self.psi0  # _result_krylov[0] is only a phase
         else:
             result_full = self._calc_result_full(N)
-        if delta.real != 0.:
-            return result_full * self._result_norm, N
+        # result_full is normalized at this point
+        if normalize is None:
+            normalize = np.real(delta) == 0.
+        if normalize:
+            return result_full, N
         # else:
-        return result_full, N
+        return (self._psi0_norm * self._result_norm) * result_full, N
 
     def _calc_result_krylov(self, k):
-        """calculate expm(delta T) e0 for T= _T[:k+1, :k+1]"""
+        """calculate ``expm(delta T).dot(e0)`` for ``T = _T[:k+1, :k+1]``"""
+
+        # self._result_krylov should be a normalized vector.
         T = self._T
         delta = self.delta
         if k == 0:
             E = T[0, 0]
             exp_dE = np.exp(delta * E)
-            self._result_norm = np.sqrt(np.abs(exp_dE))
-            self._result_krylov = np.ones(1, np.float) * (exp_dE / self._result_norm)
+            self._result_norm = np.abs(exp_dE)  # np.linalg.norm for individual element
+            self._result_krylov = np.array([exp_dE / self._result_norm])
         else:
-            e0 = np.zeros(k + 1, dtype=np.float)
-            e0[0] = 1.
-            exp_dT_e0 = expm(T[:k + 1, :k + 1] * delta).dot(e0)
+            #     e0 = np.zeros(k + 1, dtype=float)
+            #     e0[0] = 1.
+            #     exp_dT_e0 = expm(T[:k + 1, :k + 1] * delta).dot(e0)
+            # scipy.linalg.expm is using sparse tools; instead fully diagonalize
+            # given that T is hermitian, this is easy:
+            # H V = V diag(E)  -> H  = V E V^D
+            # exp(H*delta) e_0 = V diag(exp(E*delta)) V^D e_0
+            E_T, v_T = np.linalg.eigh(T[:k + 1, :k + 1])
+            exp_dT_e0 = np.dot(v_T, np.exp(E_T * delta) * np.conj(v_T[0, :]))
+
             self._result_norm = np.linalg.norm(exp_dT_e0)
             self._result_krylov = exp_dT_e0 / self._result_norm
 
@@ -441,7 +458,7 @@ def lanczos_arpack(H, psi, options={}, orthogonal_to=[]):
     return Es[0], psi0
 
 
-def gram_schmidt(vecs, rcond=1.e-14, verbose=0):
+def gram_schmidt(vecs, rcond=1.e-14, verbose=None):
     """In place Gram-Schmidt Orthogonalization and normalization for npc Arrays.
 
     Parameters
@@ -452,8 +469,6 @@ def gram_schmidt(vecs, rcond=1.e-14, verbose=0):
         if a norm < rcond, the entry is set to `None`.
     rcond : float
         Vectors of ``norm < rcond`` (after projecting out previous vectors) are discarded.
-    verbose : int
-        Print additional output if verbose >= 1.
 
     Returns
     -------
@@ -463,6 +478,8 @@ def gram_schmidt(vecs, rcond=1.e-14, verbose=0):
         For ``j >= i``, ``ov[j, i] = npc.inner(vecs[j], vecs[i], 'range', do_conj=True)``
         (where vecs[j] was orthogonalized to all ``vecs[k], k < i``).
     """
+    if verbose is not None:
+        warnings.warn("Dropped verbose argument", category=FutureWarning, stacklevel=2)
     k = len(vecs)
     ov = np.zeros((k, k), dtype=vecs[0].dtype)
     for j in range(k):
@@ -473,17 +490,8 @@ def gram_schmidt(vecs, rcond=1.e-14, verbose=0):
                 ov[j, i] = ov_ji = npc.inner(vecs[j], vecs[i], 'range', do_conj=True)
                 vecs[i].iadd_prefactor_other(-ov_ji, vecs[j])
         else:
-            if verbose >= 1:
-                print("GramSchmidt: Rank defficient", n)
             vecs[j] = None
     vecs = [q for q in vecs if q is not None]
-    if verbose >= 1:
-        k = len(vecs)
-        G = np.empty((k, k), dtype=vecs[0].dtype)
-        for i, v in enumerate(vecs):
-            for j, w in enumerate(vecs):
-                G[i, j] = npc.inner(v, w, 'range', do_conj=True)
-        print("GramSchmidt:", k, np.diag(ov), np.linalg.norm(G - np.eye(k)))
     return vecs, ov
 
 

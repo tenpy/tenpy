@@ -1,0 +1,106 @@
+[v0.8.0] - 2021-03-19
+=====================
+
+Release Notes
+-------------
+First of all: We have optimized the cython parts such that they can now link directly against MKL and have been optimized for the case of small blocks inside charge-conserved tensors.
+During compilation, TeNPy now checks whether MKL is available, and then directly links against it.
+This **changed the depencies**: in particular, when you created a conda environment for TeNPy, it is highly recommended
+to start off with a new one based on the ``environment.yml`` file.
+If you want to continue using the existing conda environment, you need to ``conda install mkl-devel`` before compilation. *Additionally*, when you use the ``conda-forge`` channel of conda, you should pin blas to use MKL by ``conda install libblas=*=*mkl``.
+
+Another great reason to update are **simulation classes** and a console script `tenpy-run` to allow running and even resuming a simulation when it aborted!
+See :doc:`/intro/simulations` for details.
+
+Further, there is a big change in **verbosity**: we switched to using Python's default :mod:`logging` mechanism. 
+This implies that by default you don't get any output besides error messages and warning any more, at least not in pre-`simulation` setups.
+See :doc:`/intro/logging` on how to get the output back, and what to change in your code.
+
+Finally, note that the default (stable) git branch was renamed from ``master`` to ``main``.
+
+Changelog
+---------
+
+Backwards incompatible changes
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+- Drop official support for Python 3.5.
+- :meth:`tenpy.linalg.np_conserved.from_ndarray`: raise `ValueError` instead of just a warning in case of the wrong
+  non-zero blocks. This behaviour can be switched back with the new argument `raise_wrong_sector`.
+- Argument `v0` of :meth:`tenpy.networks.mps.MPS.TransferMatrix.eigenvectors` is renamed to `v0_npc`; `v0` now serves for non-np_conserved guess.
+- Default parameters for lattice initialization in the following classes changed.
+  In particular, the `bc_MPS` parameter now defaults to 'finite'.
+
+  - :class:`tenpy.models.hofstadter.HofstadterFermions`
+  - :class:`tenpy.models.hofstadter.HofstadterBosons`
+  - :class:`tenpy.models.toric_code.ToricCode`
+
+- Renamed `tenpy.algorithms.tebd.Engine` to :class:`tenpy.algorithms.tebd.TEBDEngine` and
+  `tenpy.algorithms.tdvp.Engine` to :class:`tenpy.algorithms.tdvp.TDVPEngine` to have unique algorithm class-names.
+
+- When running, no longer print stuff by default. Instead, we use Python's `logging` mechanism.
+  To enable printing again, you need to configure the logging to print on "INFO" level (which is the default when
+  running from command line)
+
+  As part of this big change in the way verbosity is handled, there were many minor changes:
+  - rename `Config.print_if_verbose` to :meth:`~tenpy.tools.params.Config.log`
+  - deprecate the `verbose` class argument of the :class:`~tenpy.tools.params.Config`
+  - deprecate the `verbose` class attribute of all classes (if they had it).
+  - change argument names of :meth:`~tenpy.tools.params`.
+- Changed default parameter (actually in :doc:`/changelog/v0.8.4`), namely to 
+  use the :cfg:option:`DMRGEngine.mixer` for :class:`~tenpy.algorithms.dmrg.SingleSiteDMRG` by default.
+
+Added
+^^^^^
+- Simulation class :class:`~tenpy.simulation.simulation.Simulation` and subclasses as a new extra layer for handling the general setup.
+- Command line script ``tenpy-run`` and :func:`~tenpy.run_simulation` for setting up a simulation.
+- :meth:`~tenpy.networks.mps.MPS.entanglement_entropy_segment2`
+- :meth:`~tenpy.networks.mps.MPS.apply_product_op`
+- :meth:`tenpy.linalg.sparse.FlatLinearOperator.eigenvectors` and :meth:`~tenpy.linalg.sparse.FlatHermitianOperator.eigenvectors` to unify
+  code from :meth:`tenpy.networks.mps.TransferMatrix.eigenvectors` and :meth:`tenpy.linalg.lanczos.lanczos_arpack`.
+- :meth:`tenpy.tools.misc.group_by_degeneracy`
+- :meth:`tenpy.tools.fit.entropy_profile_from_CFT` and :meth:`tenpy.tools.fit.central_charge_from_S_profile`
+- :meth:`tenpy.networks.site.Site.multiply_operators` as a variant of :meth:`~tenpy.networks.site.Site.multiply_op_names` accepting both string and npc arrays.
+- :meth:`tenpy.tools.events.EventHandler` to simplify call-backs e.g. for measurement codes during an algorithms.
+- :func:`tenpy.tools.misc.find_subclass` to recursively find subclasses of a given base class by the name.
+  This function is now used e.g. to find lattice classes given the name, hence supporting user-defined lattices defined outside of TeNPy.
+- :func:`tenpy.tools.misc.get_recursive` and :func:`~tenpy.tools.misc.set_recursive` for nested data strucutres, e.g., parameters.
+- :func:`tenpy.tools.misc.flatten` to turn a nested data structure into a flat one.
+- :class:`tenpy.networks.mps.InitialStateBuilder` to simplify building various initial states.
+- Common base class :class:`tenpy.algorithms.Algorithm` for all algorithms.
+- Common base class :class:`tenpy.algorithms.TimeEvolutionAlgorithm` for time evolution algorithms.
+- :attr:`tenpy.models.lattice.Lattice.Lu` as a class attribute.
+- :meth:`tenpy.models.lattice.Lattice.find_coupling_pairs` to automatically find coupling pairs of 'nearest_neighbors' etc..
+- :class:`tenpy.models.lattice.HelicalLattice` allowing to have a much smaller MPS unit cell by shifting the boundary conditions around the cylinder.
+- :meth:`tenpy.networks.purification_mps.PurificationMPS.from_infiniteT_canonical` for a canonical ensemble.
+
+Changed
+^^^^^^^
+- For finite DMRG, :cfg:option:`DMRGEngine.N_sweeps_check` now defaults to 1 instead of 10 (which is still the default for infinite MPS).
+- Merge :meth:`tenpy.linalg.sparse.FlatLinearOperator.npc_to_flat_all_sectors` into :meth:`~tenpy.linalg.sparse.FlatLinearOperator.npc_to_flat`,
+  merge :meth:`tenpy.linalg.sparse.FlatLinearOperator.flat_to_npc_all_sectors` into :meth:`~tenpy.linalg.sparse.FlatLinearOperator.flat_to_npc`.
+- Change the ``chinfo.names`` of the specific :class:`~tenpy.networks.site.Site` classes to be more consistent and clear.
+- Add the more powerful :meth:`tenpy.networks.site.set_common_charges` to replace :meth:`tenpy.networks.site.multi_sites_combine_charges`.
+- Allow ``swap_op='autoInv'`` for :meth:`tenpy.networks.mps.MPS.swap_sites` and explain the idea of the `swap_op`.
+- The :meth:`tenpy.models.model.CouplingMPOModel.init_lattice` now respects new class attributes 
+  :attr:`~tenpy.models.model.CouplingMPOModel.default_lattice` and
+  :attr:`~tenpy.models.model.CouplingMPOModel.force_default_lattice`.
+- Support additional `priority` argument for :func:`~tenpy.models.lattice.get_order_grouped`, :issue:`122`.
+- Warn if one of the `add_*` methods of the CouplingMPOModel gets called after initialization.
+
+Fixed
+^^^^^
+- Sign error for the couplings of the :class:`tenpy.models.toric_code.ToricCode`.
+- The form of the eigenvectors returned by :meth:`tenpy.networks.mps.TransferMatrix.eigenvectors` 
+  was dependent on the `charge_sector` given in the initialization; we try to avoid this now (if possible).
+- The charge conserved by ``SpinHalfFermionSite(cons_Sz='parity')`` was weird.
+- Allow to pass npc Arrays as Arguments to :meth:`~tenpy.networks.mps.MPS.expectation_value_multi_sites` and
+  other correlation functions (:issue:`116`).
+- :mod:`tenpy.tools.hdf5_io` did not work with h5py version >= (3,0) due to a change in string encoding (:issue:`117`).
+- The overall phase for the returned `W` from :meth:`~tenpy.networks.mps.MPS.compute_K` was undefined.
+- :meth:`tenpy.networks.mpo.MPO.expectation_value` didn't work with max_range=0
+- The default `trunc_par` for :meth:`tenpy.networks.mps.MPS.swap_sites`, :meth:`~tenpy.networks.mps.MPS.permute_sites` and :meth:`~tenpy.networks.mps.MPS.compute_K` was leading to too small chi for intial MPS with small chi.
+- :issue:`120` Lattice with different sites in the unit cell.
+- Index offset in :meth:`tenpy.networks.mps.MPS.expectation_value_term` for the sites to be used.
+- :issue:`121` :meth:`tenpy.networks.mps.MPS.correlation_length` worked with `charge_sector=0`, but included additional divergent value with `charge_sector=[0]`.
+- Some MPS methods (correlation function, expectation value, ...) raised an error for negative site indices even for infinite MPS.
+- Warn if we add terms to a couplingMPOMOdel after initialization

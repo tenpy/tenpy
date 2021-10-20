@@ -1,5 +1,5 @@
 """Check for consistencies."""
-# Copyright 2019-2020 TeNPy Developers, GNU GPLv3
+# Copyright 2019-2021 TeNPy Developers, GNU GPLv3
 
 import tenpy
 import types

@@ -13,7 +13,7 @@ This might be used to obtain the spectrum, the ground state or highly excited st
     but just the ability to diagonalize the defined models for small system sizes
     without addional extra work.
 """
-# Copyright 2018-2020 TeNPy Developers, GNU GPLv3
+# Copyright 2018-2021 TeNPy Developers, GNU GPLv3
 
 import numpy as np
 import warnings
@@ -237,7 +237,7 @@ class ExactDiag:
         Returns
         -------
         psi : :class:`~tenpy.linalg.np_conserved.Array`
-            The MPO contracted along the virtual bonds.
+            The MPS contracted along the virtual bonds.
         """
         if mps.bc != 'finite':
             raise ValueError("Full diagonalization works only on finite systems")

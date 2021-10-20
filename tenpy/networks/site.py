@@ -2,7 +2,7 @@
 
 The :class:`Site` is the prototype, read it's docstring.
 """
-# Copyright 2018-2020 TeNPy Developers, GNU GPLv3
+# Copyright 2018-2021 TeNPy Developers, GNU GPLv3
 
 import numpy as np
 import itertools
@@ -15,7 +15,7 @@ from ..tools.hdf5_io import Hdf5Exportable
 
 __all__ = [
     'Site', 'GroupedSite', 'group_sites', 'set_common_charges', 'multi_sites_combine_charges',
-    'SpinHalfSite', 'SpinSite', 'FermionSite', 'SpinHalfFermionSite', 'BosonSite'
+    'SpinHalfSite', 'SpinSite', 'FermionSite', 'SpinHalfFermionSite', 'BosonSite', 'kron'
 ]
 
 
@@ -504,7 +504,7 @@ class GroupedSite(Site):
         ``'independent'`` means that the `sites` have possibly different `ChargeInfo`,
         and the charges are conserved separately, i.e., we have `n_sites` conserved charges.
         For ``'drop'``, we drop any charges, such that the remaining legcharges are trivial.
-        For more complex situations, you can call :func:`multi_sites_combine_charges` beforehand.
+        For more complex situations, you can call :func:`set_common_charges` beforehand.
 
     Attributes
     ----------
@@ -518,11 +518,11 @@ class GroupedSite(Site):
     def __init__(self, sites, labels=None, charges='same'):
         self.n_sites = n_sites = len(sites)
         self.sites = sites
-        self.labels = labels
         self.charges = charges
         assert n_sites > 0
         if labels is None:
             labels = [str(i) for i in range(n_sites)]
+        self.labels = labels
         if charges == 'same':
             pass  # nothing to do
         elif charges == 'drop':
@@ -628,7 +628,7 @@ def group_sites(sites, n=2, labels=None, charges='same'):
     n : int
         We group each `n` consecutive sites from `sites` together in a :class:`GroupedSite`.
     labels, charges :
-        See :class:`GroupedSites`.
+        See :class:`GroupedSite`.
 
     Returns
     -------
@@ -1055,12 +1055,12 @@ class SpinHalfSite(Site):
     ============== ====  ============================
     ``'Sz'``       [1]   ``Sx, Sy, Sigmax, Sigmay``
     ``'parity'``   [2]   --
-    ``None``       []    --
+    ``'None'``     []    --
     ============== ====  ============================
 
     Parameters
     ----------
-    conserve : str
+    conserve : str | None
         Defines what is conserved, see table above.
 
     Attributes
@@ -1069,7 +1069,9 @@ class SpinHalfSite(Site):
         Defines what is conserved, see table above.
     """
     def __init__(self, conserve='Sz'):
-        if conserve not in ['Sz', 'parity', None]:
+        if not conserve:
+            conserve = 'None'
+        if conserve not in ['Sz', 'parity', 'None']:
             raise ValueError("invalid `conserve`: " + repr(conserve))
         Sx = [[0., 0.5], [0.5, 0.]]
         Sy = [[0., -0.5j], [+0.5j, 0.]]
@@ -1125,9 +1127,9 @@ class SpinSite(Site):
     ============== ====  ============================
     `conserve`     qmod  *excluded* onsite operators
     ============== ====  ============================
-    ``'Sz'``       [1]   ``Sx, Sy``
+    ``'Sz'``       [1]   ``Sx, Sy, Sigmax, Sigmay``
     ``'parity'``   [2]   --
-    ``None``       []    --
+    ``'None'``     []    --
     ============== ====  ============================
 
     Parameters
@@ -1143,7 +1145,9 @@ class SpinSite(Site):
         Defines what is conserved, see table above.
     """
     def __init__(self, S=0.5, conserve='Sz'):
-        if conserve not in ['Sz', 'parity', None]:
+        if not conserve:
+            conserve = 'None'
+        if conserve not in ['Sz', 'parity', 'None']:
             raise ValueError("invalid `conserve`: " + repr(conserve))
         self.S = S = float(S)
         d = 2 * S + 1
@@ -1172,7 +1176,7 @@ class SpinSite(Site):
         ops = dict(Sp=Sp, Sm=Sm, Sz=Sz)
         if conserve == 'Sz':
             chinfo = npc.ChargeInfo([1], ['2*Sz'])
-            leg = npc.LegCharge.from_qflat(chinfo, np.array(2 * Sz_diag, dtype=np.int))
+            leg = npc.LegCharge.from_qflat(chinfo, np.array(2 * Sz_diag, dtype=np.int64))
         else:
             ops.update(Sx=Sx, Sy=Sy)
             if conserve == 'parity':
@@ -1218,7 +1222,7 @@ class FermionSite(Site):
     ============== ====  ===============================
     ``'N'``        [1]   --
     ``'parity'``   [2]   --
-    ``None``       []    --
+    ``'None'``     []    --
     ============== ====  ===============================
 
     Parameters
@@ -1236,7 +1240,9 @@ class FermionSite(Site):
         Average filling. Used to define ``dN``.
     """
     def __init__(self, conserve='N', filling=0.5):
-        if conserve not in ['N', 'parity', None]:
+        if not conserve:
+            conserve = 'None'
+        if conserve not in ['N', 'parity', 'None']:
             raise ValueError("invalid `conserve`: " + repr(conserve))
         JW = np.array([[1., 0.], [0., -1.]])
         C = np.array([[0., 1.], [0., 0.]])
@@ -1344,15 +1350,19 @@ class SpinHalfFermionSite(Site):
         Average filling. Used to define ``dN``.
     """
     def __init__(self, cons_N='N', cons_Sz='Sz', filling=1.):
-        if cons_N not in ['N', 'parity', None]:
+        if not cons_N:
+            cons_N = 'None'
+        if cons_N not in ['N', 'parity', 'None']:
             raise ValueError("invalid `cons_N`: " + repr(cons_N))
-        if cons_Sz not in ['Sz', 'parity', None]:
+        if not cons_Sz:
+            cons_Sz = 'None'
+        if cons_Sz not in ['Sz', 'parity', 'None']:
             raise ValueError("invalid `cons_Sz`: " + repr(cons_Sz))
         d = 4
         states = ['empty', 'up', 'down', 'full']
         # 0) Build the operators.
-        Nu_diag = np.array([0., 1., 0., 1.], dtype=np.float)
-        Nd_diag = np.array([0., 0., 1., 1.], dtype=np.float)
+        Nu_diag = np.array([0., 1., 0., 1.], dtype=np.float64)
+        Nd_diag = np.array([0., 0., 1., 1.], dtype=np.float64)
         Nu = np.diag(Nu_diag)
         Nd = np.diag(Nd_diag)
         Ntot = np.diag(Nu_diag + Nd_diag)
@@ -1465,7 +1475,7 @@ class BosonSite(Site):
     ============== ====  ==================================
     ``'N'``        [1]   --
     ``'parity'``   [2]   --
-    ``None``       []    --
+    ``'None'``     []    --
     ============== ====  ==================================
 
     Parameters
@@ -1486,18 +1496,20 @@ class BosonSite(Site):
         Average filling. Used to define ``dN``.
     """
     def __init__(self, Nmax=1, conserve='N', filling=0.):
-        if conserve not in ['N', 'parity', None]:
+        if not conserve:
+            conserve = 'None'
+        if conserve not in ['N', 'parity', 'None']:
             raise ValueError("invalid `conserve`: " + repr(conserve))
         dim = Nmax + 1
         states = [str(n) for n in range(0, dim)]
         if dim < 2:
             raise ValueError("local dimension should be larger than 1....")
-        B = np.zeros([dim, dim], dtype=np.float)  # destruction/annihilation operator
+        B = np.zeros([dim, dim], dtype=np.float64)  # destruction/annihilation operator
         for n in range(1, dim):
             B[n - 1, n] = np.sqrt(n)
         Bd = np.transpose(B)  # .conj() wouldn't do anything
         # Note: np.dot(Bd, B) has numerical roundoff errors of eps~=4.4e-16.
-        Ndiag = np.arange(dim, dtype=np.float)
+        Ndiag = np.arange(dim, dtype=np.float64)
         N = np.diag(Ndiag)
         NN = np.diag(Ndiag**2)
         dN = np.diag(Ndiag - filling)
@@ -1532,3 +1544,32 @@ class BosonSite(Site):
         return "BosonSite({N:d}, {c!r}, {f:f})".format(N=self.Nmax,
                                                        c=self.conserve,
                                                        f=self.filling)
+
+
+def kron(*ops, group=True):
+    """Kronecker product of two or more local operators.
+
+    Parameters
+    ----------
+    *ops : :class:`~tenpy.linalg.np_conserved.Array`
+        Local operators with labels ``'p', 'p*'`` as defined in :class:`Site`.
+    group : bool
+        Whether to combine the in/outgoing legs.
+
+    Returns
+    -------
+    product : :class:`~tenpy.linalg.np_conserved.Array`
+        Outer product of the `ops`, with legs ``'p0', 'p0*', 'p1', 'p1*', ...`` (grouped=False)
+        or combined legs ``'(p0.p1...)', '(p0*.p1*...)'`` (grouped=True).
+    """
+    if len(ops) <= 1:
+        raise ValueError("need at least 2 ops")
+    product = npc.outer(ops[0].replace_labels(['p', 'p*'], ['p0', 'p0*']),
+                        ops[1].replace_labels(['p', 'p*'], ['p1', 'p1*']))
+    for i in range(2, len(ops)):
+        op = ops[i].replace_labels(['p', 'p*'], [f"p{i:d}", f"p{i:d}*"])
+        product = npc.outer(product, op)
+    if group:
+        labels = [[f"p{i:d}" for i in range(len(ops))], [f"p{i:d}*" for i in range(len(ops))]]
+        product = product.combine_legs(labels, qconj=[+1, -1])
+    return product

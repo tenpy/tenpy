@@ -1,12 +1,14 @@
 """Miscellaneous tools, somewhat random mix yet often helpful."""
-# Copyright 2018-2020 TeNPy Developers, GNU GPLv3
+# Copyright 2018-2021 TeNPy Developers, GNU GPLv3
 
+import logging
 import numpy as np
 from .optimization import bottleneck
 from .process import omp_set_nthreads
 from .params import Config
+from collections.abc import Mapping
 import random
-import os
+import os.path
 import itertools
 import argparse
 import warnings
@@ -15,7 +17,8 @@ __all__ = [
     'to_iterable', 'to_iterable_of_len', 'to_array', 'anynan', 'argsort', 'lexsort',
     'inverse_permutation', 'list_to_dict_list', 'atleast_2d_pad', 'transpose_list_list',
     'zero_if_close', 'pad', 'any_nonzero', 'add_with_None_0', 'chi_list', 'group_by_degeneracy',
-    'build_initial_state', 'setup_executable'
+    'get_close', 'find_subclass', 'get_recursive', 'set_recursive', 'update_recursive',
+    'merge_recursive', 'flatten', 'setup_logging', 'build_initial_state', 'setup_executable'
 ]
 
 
@@ -48,7 +51,7 @@ def to_iterable_of_len(a, L):
     return a
 
 
-def to_array(a, shape=(None, )):
+def to_array(a, shape=(None, ), dtype=None):
     """Convert `a` to an numpy array and tile to matching dimension/shape.
 
     This function provides similar functionality as numpys broadcast, but not quite the same:
@@ -64,13 +67,15 @@ def to_array(a, shape=(None, )):
     shape : tuple of {None | int}
         The desired shape of the array. An entry ``None`` indicates arbitrary len >=1.
         For int entries, tile the array periodically to fit the len.
+    dtype :
+        Optionally specifies the data type.
 
     Returns
     -------
     a_array : ndarray
         A copy of `a` converted to a numpy ndarray of desired dimension and shape.
     """
-    a = np.array(a)  # copy
+    a = np.array(a, dtype=dtype)  # copy
     if a.ndim != len(shape):
         if a.size == 1:
             a = np.reshape(a, [1] * len(shape))
@@ -293,7 +298,7 @@ def zero_if_close(a, tol=1.e-15):
     a : ndarray
         numpy array to be rounded
     tol : float
-        the threashold which values to consider as '0'.
+        the threshold which values to consider as '0'.
     """
     if a.dtype == np.complex128 or a.dtype == np.complex64:
         ar = np.choose(np.abs(a.real) < tol, [a.real, np.zeros(a.shape)])
@@ -345,6 +350,10 @@ def pad(a, w_l=0, v_l=0, w_r=0, v_r=0, axis=0):
 
 def any_nonzero(params, keys, verbose_msg=None):
     """Check for any non-zero or non-equal entries in some parameters.
+
+    .. deprecated :: 0.8.0
+        This method will be removed in version 1.0.0.
+        Use :meth:`tenpy.toosl.params.Config.any_nonzero` instead.
 
     Parameters
     ----------
@@ -500,7 +509,6 @@ def group_by_degeneracy(E, *args, subset=None, cutoff=1.e-12):
     [(0, 2), (1, 4), (3, 6), (5,)]
     >>> group_by_degeneracy(E, k, cutoff=0.001)  # k and E need to be close
     [(0,), (1, 4), (2,), (3,), (5,), (6,)]
-
     """
     assert cutoff >= 0.
     E = np.asarray(E)
@@ -521,9 +529,419 @@ def group_by_degeneracy(E, *args, subset=None, cutoff=1.e-12):
     return groups
 
 
+def get_close(values, target, default=None, eps=1.e-13):
+    """Iterate through `values` and return first entry closer than `eps`.
+
+    Parameters
+    ----------
+    values : interable of float
+        Values to compare to.
+    target : float
+        Value to find.
+    default :
+        Returned if no value close to `target` is found.
+    eps : float
+        Tolerance what counts as "close", namely everything with ``abs(val-target) < eps``.
+
+    Returns
+    -------
+    value : float
+        An entry of `values`, if one close to `target` is found, otherwise `default`.
+    """
+    for v in values:
+        if abs(v - target) < eps:
+            return v
+    return default
+
+
+def find_subclass(base_class, subclass_name):
+    """For a given base class, recursively find the subclass with the given name.
+
+    Parameters
+    ----------
+    base_class : class
+        The base class of which `subclass_name` is supposed to be a subclass.
+    subclass_name : str | type
+        The name (str) of the class to be found.
+        Alternatively, if a type is given, it is directly returned. In that case, a warning is
+        raised if it is not a subclass of `base_class`.
+
+    Returns
+    -------
+    subclass : class
+        Class with name `subclass_name` which is a subclass of the `base_class`.
+        None, if no subclass of the given name is found.
+
+    Raises
+    ------
+    ValueError: When no or multiple subclasses of `base_class` exists with that `subclass_name`.
+    """
+    if not isinstance(subclass_name, str):
+        subclass = subclass_name
+        if not isinstance(subclass, type):
+            raise TypeError("expect a str or class for `subclass_name`, got " + repr(subclass))
+        if not issubclass(subclass, base_class):
+            # still allow it: might intend duck-typing. However, a warning should be raised!
+            warnings.warn(f"find_subclass: {subclass!r} is not subclass of {base_class!r}")
+        return subclass
+    found = set()
+    _find_subclass_recursion(base_class, subclass_name, found, set())
+    if len(found) == 0:
+        raise ValueError(f"No subclass of {base_class.__name__} called {subclass_name!r} defined. "
+                         "Maybe missing an import of a file with a custom class definition?")
+    elif len(found) == 1:
+        return found.pop()
+    else:
+        msg = f"There exist multiple subclasses of {base_class!r} with name {subclass_name!r}:"
+        raise ValueError('\n'.join([msg] + [repr(c) for c in found]))
+
+
+def _find_subclass_recursion(base_class, name_to_find, found, checked):
+    if base_class.__name__ == name_to_find:
+        found.add(base_class)
+    for subcls in base_class.__subclasses__():
+        if subcls in checked:
+            continue
+        _find_subclass_recursion(subcls, name_to_find, found, checked)
+        checked.add(subcls)
+
+
+_UNSET = object()  # sentinel
+
+
+def get_recursive(nested_data, recursive_key, separator=".", default=_UNSET):
+    """Extract specific value from a nested data structure.
+
+    Parameters
+    ----------
+    nested_data : dict of dict (-like)
+        Some nested data structure supporting a dict-like interface.
+    recursive_key : str
+        The key(-parts) to be extracted, separated by `separator`.
+        A leading `separator` is ignored.
+    separator : str
+        Separator for splitting `recursive_key` into subkeys.
+    default :
+        If not specified, the function raises a `KeyError` if the recursive_key is invalid.
+        If given, return this value when any of the nested dicts does not contain the subkey.
+
+    Returns
+    -------
+    entry :
+        For example, ``recursive_key="some.sub.key"`` will result in extracing
+        ``nested_data["some"]["sub"]["key"]``.
+
+    See also
+    --------
+    set_recursive : same for changing/setting a value.
+    flatten : Get a completely flat structure.
+    """
+    if recursive_key.startswith(separator):
+        recursive_key = recursive_key[len(separator):]
+    if not recursive_key:
+        return nested_data  # return the original data if recursive_key is just "/"
+    for subkey in recursive_key.split(separator):
+        if default is not _UNSET and subkey not in nested_data:
+            return default
+        nested_data = nested_data[subkey]
+    return nested_data
+
+
+def set_recursive(nested_data, recursive_key, value, separator=".", insert_dicts=False):
+    """Same as :func:`get_recursive`, but set the data entry to `value`."""
+    if recursive_key.startswith(separator):
+        recursive_key = recursive_key[len(separator):]
+    subkeys = recursive_key.split(separator)
+    for subkey in subkeys[:-1]:
+        if insert_dicts and subkey not in nested_data:
+            nested_data[subkey] = {}
+        nested_data = nested_data[subkey]
+    nested_data[subkeys[-1]] = value
+
+
+def update_recursive(nested_data, update_data, separator=".", insert_dicts=True):
+    """Wrapper around :func:`set_recursive` to allow updating multiple values at once.
+
+    It simply calls :func:`set_recursive` for each ``recursive_key, value in update_data.items()``.
+    """
+    for k, v in update_data.items():
+        set_recursive(nested_data, k, v, separator, insert_dicts)
+
+
+def merge_recursive(*nested_data, conflict='error', path=None):
+    """Merge nested dictionaries `nested1` and `nested2`.
+
+    Parameters
+    ----------
+    *nested_data: dict of dict
+        Nested dictionaries that should be merged.
+    path: list of str
+        Path inside the nesting for useful error message
+    conflict: "error" | "first" | "last"
+        How to handle conflicts: raise an error (if the values are different),
+        or just give priority to the first or last `nested_data` that still has a value,
+        even if they are different.
+
+    Returns
+    -------
+    merged: dict of dict
+        A single nested dictionary with the keys/values of the `nested_data` merged.
+        Dictionary values appearing in multiple of the `nested_data` get merged recursively.
+    """
+    if len(nested_data) == 0:
+        raise ValueError("need at least one nested_data")
+    elif len(nested_data) == 1:
+        return nested_data[0]
+    elif len(nested_data) > 2:
+        merged = nested_data[0]
+        for to_merge in nested_data[1:]:
+            merged = merge_recursive(merged, to_merge, conflict=conflict, path=path)
+        return merged
+    nested1, nested2 = nested_data
+    if path is None:
+        path = []
+    merged = nested1.copy()
+    for key, val2 in nested2.items():
+        if key in merged:
+            val1 = merged[key]
+            if isinstance(val1, Mapping) and isinstance(val2, Mapping):
+                merged[key] = merge_recursive(val1,
+                                              val2,
+                                              conflict=conflict,
+                                              path=path + [repr(key)])
+            else:
+                if conflict == 'error':
+                    if val1 != val2:
+                        path = ':'.join(path + [repr(key)])
+                        msg = '\n'.join([
+                            f"Conflict with different values at {path}; we got:",
+                            repr(val1),
+                            repr(val2)
+                        ])
+                        raise ValueError(msg)
+                elif conflict == 'first':
+                    pass
+                elif conflict == 'last':
+                    merged[key] = val2
+        else:
+            merged[key] = val2
+    return merged
+
+
+def flatten(mapping, separator='.'):
+    """Obtain a flat dictionary with all key/value pairs of a nested data structure.
+
+    Parameters
+    ----------
+    separator : str
+        Separator for merging keys to a single string.
+
+    Returns
+    -------
+    flat_config : dict
+        A single dictionary with all key-value pairs.
+
+    Examples
+    --------
+    .. testsetup ::
+
+        from tenpy.tools.misc import *
+
+    >>> sample_data = {'some': {'nested': {'entry': 100, 'structure': 200},
+    ...                         'subkey': 10},
+    ...                'topentry': 1}
+    >>> flat = flatten(sample_data)
+    >>> for k in sorted(flat):
+    ...     print(repr(k), ':', flat[k])
+    'some.nested.entry' : 100
+    'some.nested.structure' : 200
+    'some.subkey' : 10
+    'topentry' : 1
+
+
+    See also
+    --------
+    get_recursive : Useful to obtain a single entry from a nested data structure.
+    """
+    if isinstance(mapping, Config):
+        mapping = mapping.as_dict()
+    result = {}  #mapping.copy()
+    for k1, v1 in mapping.items():
+        if isinstance(v1, dict):
+            flat_submapping = flatten(v1, separator)
+            for k2, v2 in flat_submapping.items():
+                new_key = separator.join((k1, k2))
+                result[new_key] = v2
+        else:
+            result[k1] = v1
+    return result
+
+
+#: default value for :cfg:option:`log.skip_setup`
+skip_logging_setup = False
+
+
+def setup_logging(options=None,
+                  output_filename=None,
+                  *,
+                  filename=None,
+                  to_stdout="INFO",
+                  to_file="INFO",
+                  format="%(levelname)-8s: %(message)s",
+                  logger_levels={},
+                  dict_config=None,
+                  capture_warnings=None,
+                  skip_setup=None):
+    """Configure the :mod:`logging` module.
+
+    The default logging setup is given by the following equivalent `dict_config`
+    (here in [yaml]_ format for better readability).
+
+    ..
+        If you change the code block below, please also change the corresponding block
+        in :doc:`/intro/logging`.
+
+    .. code-block :: yaml
+
+        version: 1  # mandatory for logging config
+        disable_existing_loggers: False  # keep module-based loggers already defined!
+        formatters:
+            custom:
+                format: "%(levelname)-8s: %(message)s"   # options['format']
+        handlers:
+            to_stdout:
+                class: logging.StreamHandler
+                level: INFO         # options['to_stdout']
+                formatter: custom
+                stream: ext://sys.stdout
+            to_file:
+                class: logging.FileHandler
+                level: INFO         # options['to_file']
+                formatter: custom
+                filename: output_filename.log   # options['filename']
+                mode: a
+        root:
+            handlers: [to_stdout, to_file]
+            level: DEBUG
+
+    .. note ::
+        We **remove** any previously configured logging handlers.
+        This is to handle the case when this function is called multiple times,
+        e.g., because you run multiple :class:`~tenpy.simulations.simulation.Simulation`
+        classes sequentially (e.g., :func:`~tenpy.simulations.simulation.run_seq_simulations`).
+
+    .. deprecated :: 0.9.0
+        The arguments were previously collected in a dicitonary `options`.
+        Now they should be given directly as keyword arguments.
+
+    Parameters
+    ----------
+    **kwargs :
+        Keyword arguments as described in the options below.
+    output_filename : None | str
+        The filename for where results are saved. The :cfg:option:`log.filename` for the
+        log-file defaults to this, but replacing the extension with ``.log``.
+
+    Options
+    -------
+    .. cfg:config :: log
+
+        skip_setup: bool
+            If True, don't change anything in the logging setup; just return.
+            This is usefull for testing purposes, where `pytest` handles the logging setup.
+            All other options are ignored in this case.
+        to_stdout : None | ``"DEBUG" | "INFO" | "WARNING" | "ERROR" | "CRITICAL"``
+            If not None, print log with (at least) the given level to stdout.
+        to_file : None | ``"DEBUG" | "INFO" | "WARNING" | "ERROR" | "CRITICAL"``
+            If not None, save log with (at least) the given level to a file.
+            The filename is given by `filename`.
+        filename : str
+            Filename for the logfile.
+            It defaults  to `output_filename` with the extension replaced to ".log".
+            If ``None``, no log-file will be created, even with `to_file` set.
+        logger_levels : dict(str, str)
+            Set levels for certain loggers, e.g. ``{'tenpy.tools.params': 'WARNING'}`` to suppress
+            the parameter readouts logs.
+            The keys of this dictionary are logger names, which follow the module structure in
+            tenpy.
+            For example, setting the level for `tenpy.simulations` will change the level
+            for all loggers in any of those submodules, including the one provided as
+            ``Simluation.logger`` class attribute. Hence, all messages from Simulation class
+            methods calling ``self.logger.info(...)`` will be affected by that.
+        format : str
+            Formatting string, `fmt` argument of :class:`logging.config.Formatter`.
+        dict_config : dict
+            Alternatively, a full configuration dictionary for :mod:`logging.config.dictConfig`.
+            If used, all other options except `skip_setup` and `capture_warnings` are ignored.
+        capture_warnings : bool
+            Whether to call :func:`logging.captureWarnings` to include the warnings into the log.
+    """
+    import logging.config
+    if options is not None:
+        warnings.warn("Give logging parameters directly as keyword arguments!", FutureWarning, 2)
+        locals().update(**options)
+    if filename is None:
+        if output_filename is not None:
+            root, ext = os.path.splitext(output_filename)
+            assert ext != '.log'
+            filename = root + '.log'
+    if capture_warnings is None:
+        capture_warnings = dict_config is not None or to_stdout or to_file
+    if skip_setup is None:
+        skip_setup = skip_logging_setup
+    if skip_setup:
+        return
+    if dict_config is None:
+        handlers = {}
+        if to_stdout:
+            handlers['to_stdout'] = {
+                'class': 'logging.StreamHandler',
+                'level': to_stdout,
+                'formatter': 'custom',
+                'stream': 'ext://sys.stdout',
+            }
+        if to_file and filename is not None:
+            handlers['to_file'] = {
+                'class': 'logging.FileHandler',
+                'level': to_file,
+                'formatter': 'custom',
+                'filename': filename,
+                'mode': 'a',
+            }
+            if not to_stdout:
+                cwd = os.getcwd()
+                print(f"now logging to {cwd!s}/{filename!s}")
+        dict_config = {
+            'version': 1,  # mandatory
+            'disable_existing_loggers': False,
+            'formatters': {
+                'custom': {
+                    'format': format,
+                }
+            },
+            'handlers': handlers,
+            'root': {
+                'handlers': list(handlers.keys()),
+                'level': 'DEBUG'
+            },
+            'loggers': {},
+        }
+        for name, level in logger_levels.items():
+            if name == 'root':
+                dict_config['root']['level'] = level
+            else:
+                dict_config['loggers'].setdefault(name, {})['level'] = level
+    else:
+        dict_config.setdefault('disable_existing_loggers', False)
+    # note: dictConfig cleans up previously existing handlers etc
+    logging.config.dictConfig(dict_config)
+    if capture_warnings:
+        logging.captureWarnings(True)
+
+
 def build_initial_state(size, states, filling, mode='random', seed=None):
     warnings.warn(
-        "Deprecated: moved `build_initial_state` to `tenpy.networks.mps.build_initial_state`.",
+        "Deprecated `build_initial_state`: Use `tenpy.networks.mps.InitialStateBuilder` instead.",
         category=FutureWarning,
         stacklevel=2)
     from tenpy.networks import mps
@@ -532,6 +950,12 @@ def build_initial_state(size, states, filling, mode='random', seed=None):
 
 def setup_executable(mod, run_defaults, identifier_list=None, only_list_supplied=False):
     """Read command line arguments and turn into useable dicts.
+
+    .. warning ::
+
+        this is a deprecated interface. Use the :class:`~tenpy.simulations.simulation.Simulation`
+        interface in combination with :func:`~tenpy.console_main` instead.
+        You can invoce that from the command line as ``python -m tenpy ...``.
 
     Uses default values defined at:
     - model class for model_par
@@ -545,20 +969,29 @@ def setup_executable(mod, run_defaults, identifier_list=None, only_list_supplied
             - identifier, a static (class level) list or other iterable with the names of the parameters
               to be used in filename identifiers.
 
-    Args:
-        mod (model | dict): Model class (or instance) OR a dictionary containing model defaults
-        run_defaults (dict): default values for executable file parameters
-        identifier_list (iterable, optional) | Used only if mod is a dict. Contains the identifier
-                                                                                    variables
+    Parameters
+    ----------
+    mod : model | dict
+        Model class (or instance) OR a dictionary containing model defaults
+    run_defaults : dict
+        default values for executable file parameters
+    identifier_list : ieterable
+        Used only if mod is a dict. Contains the identifier variables
 
-    Returns:
-        model_par, sim_par, run_par (dicts) : containing all parameters.
-        args | namespace with raw arguments for some backwards compatibility with executables.
+    Returns
+    -------
+    model_par, sim_par, run_par : dict
+        containing all parameters.
+    args :
+        namespace with raw arguments for some backwards compatibility with executables.
     """
     warnings.warn(
         "Attention: `setup_executable` was developed for a previous version of tenpy and not all options may be operational.",
         category=FutureWarning,
         stacklevel=2)
+    warnings.warn("Deprecated: use `tenpy.run_simulation` and `tenpy.console_main` instead.",
+                  category=FutureWarning,
+                  stacklevel=2)
     parser = argparse.ArgumentParser()
 
     # These deal with backwards compatibility (supplying a model)

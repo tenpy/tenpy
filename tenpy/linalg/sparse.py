@@ -7,7 +7,7 @@ implementations of these algorithms (e.g., :mod:`~tenpy.linalg.lanczos`). Moreov
 :class:`FlatLinearOperator` allows to use all the scipy sparse methods by providing functionality
 to convert flat numpy arrays to and from np_conserved arrays.
 """
-# Copyright 2018-2020 TeNPy Developers, GNU GPLv3
+# Copyright 2018-2021 TeNPy Developers, GNU GPLv3
 
 import numpy as np
 from . import np_conserved as npc
@@ -71,7 +71,8 @@ class NpcLinearOperator:
         """Return the hermitian conjugate of `self`
 
         If `self` is hermitian, subclasses *can* choose to implement this to define
-        the adjoint operator of `self`."""
+        the adjoint operator of `self`.
+        """
         raise NotImplementedError("No adjoint defined")
 
 
@@ -126,7 +127,8 @@ class NpcLinearOperatorWrapper:
         """Return the hermitian conjugate of `self`.
 
         If `self` is hermitian, subclasses *can* choose to implement this to define
-        the adjoint operator of `self`."""
+        the adjoint operator of `self`.
+        """
         raise NotImplementedError("This function should be implemented in derived classes")
 
 
@@ -360,7 +362,7 @@ class FlatLinearOperator(ScipyLinearOperator):
         else:
             chi2 = self.leg.ind_len
             self.shape = (chi2, chi2)
-            self._mask = np.ones([chi2], dtype=np.bool)
+            self._mask = np.ones([chi2], dtype=np.bool_)
 
     def _matvec(self, vec):
         """Matvec operation acting on a numpy ndarray of the selected charge sector.
@@ -641,13 +643,13 @@ class FlatLinearOperator(ScipyLinearOperator):
                 try:
                     vecs[j] = npc.Array.from_ndarray(vec, **from_ndarray_args)
                 except ValueError as e:
-                    if not e.args[0].startswith(''):
+                    if not e.args[0].startswith('wrong sector'):
                         raise
                     multi_sectors.append(j)
             from_ndarray_args['raise_wrong_sector'] = False
             for degenerate in group_by_degeneracy(eta, cutoff=cutoff, subset=multi_sectors):
                 # really, we would need to diagonalize the charges within the subspace of
-                # degenerace eigenvectors of the transfermatrix.
+                # degenerate eigenvectors of the transfermatrix.
                 # However, we (might) only know a subset of the degenerate eigenvectors,
                 # and diagonalizing the charges in that subspace might not yield real
                 # charge eigenvectors (which is obvious if we have only one of them).
@@ -665,9 +667,9 @@ class FlatLinearOperator(ScipyLinearOperator):
                         for qi in range(self.leg.block_number)
                     ])
                     qtotal = self.leg.get_charge(qi)
-                    vecs[i] = npc.Array.from_ndarray(A[:, j], **from_ndarray_args, qtotal=qtotal)
+                    vecs[j] = npc.Array.from_ndarray(A[:, j], **from_ndarray_args, qtotal=qtotal)
                 else:
-                    used_blocks = {}
+                    used_blocks = set()
                     for j in degenerate:
                         vec = A[:, j]
                         block_norms = [
@@ -679,13 +681,13 @@ class FlatLinearOperator(ScipyLinearOperator):
                                 continue
                             used_blocks.add(qi)
                             qtotal = self.leg.get_charge(qi)
-                            vecs[i] = npc.Array.from_ndarray(vec,
+                            vecs[j] = npc.Array.from_ndarray(vec,
                                                              qtotal=qtotal,
                                                              **from_ndarray_args)
-                            vecs[i] /= npc.norm(vecs[i])
+                            vecs[j] /= npc.norm(vecs[j])
                             break
                         else:
-                            # didn't break, so didn't set vecs[i]
+                            # didn't break, so didn't set vecs[j]
                             # -> can't guarantee orthogonality to previous eigenvectors
                             msg = ("FlatLinearOperator.eigenvectors: can't project to definite "
                                    "charge block uniquely; would need to diagonalize again "

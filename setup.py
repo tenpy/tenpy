@@ -1,4 +1,4 @@
-# Copyright 2018-2020 TeNPy Developers, GNU GPLv3
+# Copyright 2018-2021 TeNPy Developers, GNU GPLv3
 from setuptools import setup, find_packages
 from setuptools import Extension
 import numpy
@@ -6,15 +6,13 @@ import sys
 import os
 import subprocess
 
-if not sys.version_info >= (3, 5):
+if not sys.version_info >= (3, 6):
     print("ERROR: old python version, the script got called by\n" + sys.version)
     sys.exit(1)
 
 # hardcode version for people without git
 
-MAJOR = 0
-MINOR = 7
-MICRO = 2
+MAJOR, MINOR, MICRO = 0, 9, 0
 RELEASED = False
 VERSION = '{0:d}.{1:d}.{2:d}'.format(MAJOR, MINOR, MICRO)
 
@@ -79,7 +77,7 @@ def write_version_py(full_version, git_rev, filename='tenpy/_version.py'):
     content = """\
 # THIS FILE IS GENERATED FROM setup.py
 # thus, it contains the version during compilation
-# Copyright 2018-2020 TeNPy Developers, GNU GPLv3
+# Copyright 2018-2021 TeNPy Developers, GNU GPLv3
 version = '{version!s}'
 short_version = 'v' + version
 released = {released!s}
@@ -115,8 +113,6 @@ def setup_cython_extension():
         from Cython.Build import cythonize
     except:
         return []
-    # see tenpy/tools/optimization.py for details on "TENPY_OPTIMIZE"
-    TENPY_OPTIMIZE = int(os.getenv('TENPY_OPTIMIZE', 1))
     include_dirs = [numpy.get_include()]
     OSincludes=os.getenv('INCLUDE')        
     if OSincludes is not None:
@@ -124,31 +120,61 @@ def setup_cython_extension():
         include_dirs.append(OSincludes)
     libs = []
     lib_dirs = []
-
-    extensions = [
-        Extension("*", ["tenpy/linalg/*.pyx"],
-                  include_dirs=include_dirs,
-                  libraries=libs,
-                  library_dirs=lib_dirs,
-                  language='c++')
-    ]
-
+    macros = []  # C/C++ mmacros, #DEF ... in C/C++ code.
+    cython_macros = {}  # Cython macros in .pyx files
     comp_direct = {  # compiler_directives
         'language_level': 3,  # use python 3
         'embedsignature': True,  # write function signature in doc-strings
     }
+
+    # see tenpy/tools/optimization.py for details on "TENPY_OPTIMIZE"
+    TENPY_OPTIMIZE = int(os.getenv("TENPY_OPTIMIZE", 1))
     if TENPY_OPTIMIZE > 1:
         comp_direct['initializedcheck'] = False
         comp_direct['boundscheck'] = False
     if TENPY_OPTIMIZE < 1:
         comp_direct['profile'] = True
         comp_direct['linetrace'] = True
+    HAVE_MKL = 0
+    MKL_DIR = os.getenv("MKL_DIR", os.getenv("MKLROOT", os.getenv("MKL_HOME", "")))
+    if MKL_DIR:
+        include_dirs.append(os.path.join(MKL_DIR, 'include'))
+        lib_dirs.append(os.path.join(MKL_DIR, 'lib', 'intel64'))
+        HAVE_MKL = 1
+    CONDA_PREFIX = os.getenv("CONDA_PREFIX")
+    if CONDA_PREFIX:
+        include_dirs.append(os.path.join(CONDA_PREFIX, 'include'))
+        lib_dirs.append(os.path.join(CONDA_PREFIX, 'lib'))
+        if not HAVE_MKL:
+            # check whether mkl-devel is installed
+            HAVE_MKL = int(os.path.exists(os.path.join(CONDA_PREFIX, 'include', 'mkl.h')))
+    HAVE_MKL = int(os.getenv("HAVE_MKL", HAVE_MKL))
+    print("compile with HAVE_MKL =", HAVE_MKL)
+    cython_macros['HAVE_MKL'] = HAVE_MKL
+    if HAVE_MKL:
+        libs.extend(['mkl_rt', 'pthread', 'iomp5'])
+        if os.getenv("MKL_INTERFACE_LAYER", "LP64").startswith("ILP64"):
+            print("using MKL interface layer ILP64 with 64-bit indices")
+            macros.append(('MKL_ILP64', None))  # compile with 64-bit indices
+            cython_macros['MKL_INTERFACE_LAYER'] = 1
+            # the 1 is the value of `MKL_INTERFACE_ILP64` in "mkl_service.h"
+            # we make sure to call mkl_set_interface_layer(MKL_INTERFACE_LAYER) in cython.
+        else:
+            print("using default MKL interface layer")
+            cython_macros['MKL_INTERFACE_LAYER'] = 0
+        # macros.append(('MKL_DIRECT_CALL', None))  # TODO: benchmark: helpfull?
 
-    # compile time flags (#DEF ...)
-    comp_flags = {'TENPY_OPTIMIZE': TENPY_OPTIMIZE}
+    extensions = [
+        Extension("*", ["tenpy/linalg/*.pyx"],
+                  include_dirs=include_dirs,
+                  libraries=libs,
+                  library_dirs=lib_dirs,
+                  define_macros=macros,
+                  language='c++')
+    ]
     ext_modules = cythonize(extensions,
                             compiler_directives=comp_direct,
-                            compile_time_env=comp_flags)
+                            compile_time_env=cython_macros)
     return ext_modules
 
 

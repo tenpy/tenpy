@@ -1,9 +1,10 @@
 """Bosonic and fermionic Hubbard models."""
-# Copyright 2019-2020 TeNPy Developers, GNU GPLv3
+# Copyright 2019-2021 TeNPy Developers, GNU GPLv3
 
 import numpy as np
 
 from .model import CouplingMPOModel, NearestNeighborModel
+from .lattice import Chain
 from ..tools.params import asConfig
 from ..networks.site import BosonSite, SpinHalfFermionSite
 
@@ -49,8 +50,7 @@ class BoseHubbardModel(CouplingMPOModel):
         conserve = model_params.get('conserve', 'N')
         if conserve == 'best':
             conserve = 'N'
-            if self.verbose >= 1.:
-                print(self.name + ": set conserve to", conserve)
+            self.logger.info("%s: set conserve to %s", self.name, conserve)
         site = BosonSite(Nmax=n_max, conserve=conserve, filling=filling)
         return site
 
@@ -146,7 +146,5 @@ class FermiHubbardChain(FermiHubbardModel, NearestNeighborModel):
 
     See the :class:`FermiHubbardModel` for the documentation of parameters.
     """
-    def __init__(self, model_params):
-        model_params = asConfig(model_params, self.__class__.__name__)
-        model_params.setdefault('lattice', "Chain")
-        CouplingMPOModel.__init__(self, model_params)
+    default_lattice = Chain
+    force_default_lattice = True

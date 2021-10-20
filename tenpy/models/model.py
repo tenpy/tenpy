@@ -27,12 +27,17 @@ as base class in (most of) the predefined models in TeNPy.
 
 See also the introduction in :doc:`/intro/model`.
 """
-# Copyright 2018-2020 TeNPy Developers, GNU GPLv3
+# Copyright 2018-2021 TeNPy Developers, GNU GPLv3
 
 import numpy as np
 import warnings
+import inspect
+from functools import wraps
+import copy
+import logging
+logger = logging.getLogger(__name__)
 
-from .lattice import get_lattice, Lattice, TrivialLattice
+from .lattice import get_lattice, Lattice, TrivialLattice, HelicalLattice, IrregularLattice
 from ..linalg import np_conserved as npc
 from ..linalg.charges import QTYPE, LegCharge
 from ..tools.misc import to_array, add_with_None_0
@@ -66,7 +71,12 @@ class Model(Hdf5Exportable):
     ----------
     lat : :class:`~tenpy.model.lattice.Lattice`
         The lattice defining the geometry and the local Hilbert space(s).
+    dtype : :class:`~numpy.dtype`
+        The data type of the Hamiltonian
     """
+    #: logging.Logger : An instance of a logger; see :doc:`/intro/logging`. NB: class attribute.
+    logger = logging.getLogger(__name__ + ".Model")
+
     def __init__(self, lattice):
         # NOTE: every subclass like CouplingModel, MPOModel, NearestNeighborModel calls this
         # __init__, so it gets called multiple times when a user implements e.g. a
@@ -74,10 +84,33 @@ class Model(Hdf5Exportable):
         if not hasattr(self, 'lat'):
             # first call: initialize everything
             self.lat = lattice
+            self.dtype = None
         else:
             # Model.__init__() got called before
             if self.lat is not lattice:  # expect the *same instance*!
                 raise ValueError("Model.__init__() called with different lattice instances.")
+
+    def copy(self):
+        """Shallow copy of self."""
+        cp = copy.copy(self)
+        return cp
+
+    def extract_segment(self, first=0, last=None, enlarge=None):
+        """Return a (shallow) copy with extracted segment of MPS.
+
+        Parameters
+        ----------
+        first, last, enlarge : int
+            See :meth:`~tenpy.models.lattice.Lattice.extract_segment`.
+
+        Returns
+        -------
+        cp : :class:`Model`
+            A shallow copy of `self` with MPO and lattice extracted for the segment.
+        """
+        cp = self.copy()
+        cp.lat = self.lat.extract_segment(first, last, enlarge)
+        return cp
 
     def enlarge_mps_unit_cell(self, factor=2):
         """Repeat the unit cell for infinite MPS boundary conditions; in place.
@@ -161,7 +194,13 @@ class NearestNeighborModel(Model):
     def __init__(self, lattice, H_bond):
         Model.__init__(self, lattice)
         self.H_bond = list(H_bond)
-        if self.lat.bc_MPS != 'infinite':
+        for Hb in H_bond:
+            if Hb is not None:
+                self.dtype = Hb.dtype
+                break
+        else:
+            raise ValueError("All H_bond are `None`!")
+        if self.lat.bc_MPS == 'finite':
             assert self.H_bond[0] is None
         NearestNeighborModel.test_sanity(self)
         # like self.test_sanity(), but use the version defined below even for derived class
@@ -190,7 +229,7 @@ class NearestNeighborModel(Model):
         .. doctest :: from_MPOModel
 
             >>> from tenpy.models.spins_nnn import SpinChainNNN2
-            >>> nnn_chain = SpinChainNNN2({'L': 20, 'verbose': 0})
+            >>> nnn_chain = SpinChainNNN2({'L': 20})
             >>> print(isinstance(nnn_chain, NearestNeighborModel))
             False
             >>> print("range before grouping:", nnn_chain.H_MPO.max_range)
@@ -243,6 +282,14 @@ class NearestNeighborModel(Model):
             return psi.expectation_value(self.H_bond, axes=(['p0', 'p1'], ['p0*', 'p1*']))
         # else
         return psi.expectation_value(self.H_bond[1:], axes=(['p0', 'p1'], ['p0*', 'p1*']))
+
+    def extract_segment(self, *args, **kwargs):
+        cp = super().extract_segment(*args, **kwargs)
+        first, last = cp.lat.segment_first_last
+        H_bond = self.H_bond
+        L = len(H_bond)
+        cp.H_bond = [H_bond[i % L] for i in range(first, last + 1)]
+        return cp
 
     def enlarge_mps_unit_cell(self, factor=2):
         """Repeat the unit cell for infinite MPS boundary conditions; in place.
@@ -450,9 +497,6 @@ class MPOModel(Model):
     Thus, instances of this class are suitable for MPO-based algorithms like DMRG
     :mod:`~tenpy.algorithms.dmrg` and MPO time evolution.
 
-    .. todo ::
-        implement MPO for time evolution...
-
     Parameters
     ----------
     H_MPO : :class:`~tenpy.networks.mpo.MPO`
@@ -470,9 +514,20 @@ class MPOModel(Model):
         MPOModel.test_sanity(self)
         # like self.test_sanity(), but use the version defined below even for derived class
 
+    def copy(self):
+        cp = super().copy()
+        cp.H_MPO = self.H_MPO.copy()
+        return cp
+
     def test_sanity(self):
         if self.H_MPO.sites != self.lat.mps_sites():
             raise ValueError("lattice incompatible with H_MPO.sites")
+
+    def extract_segment(self, *args, **kwargs):
+        cp = super().extract_segment(*args, **kwargs)
+        first, last = cp.lat.segment_first_last
+        cp.H_MPO = self.H_MPO.extract_segment(first, last)
+        return cp
 
     def enlarge_mps_unit_cell(self, factor=2):
         """Repeat the unit cell for infinite MPS boundary conditions; in place.
@@ -512,6 +567,7 @@ class MPOModel(Model):
             The sites grouped together.
         """
         grouped_sites = super().group_sites(n, grouped_sites)
+        self.H_MPO = self.H_MPO.copy()
         self.H_MPO.group_sites(n, grouped_sites)
         return grouped_sites
 
@@ -535,7 +591,7 @@ class MPOModel(Model):
         """
         H_MPO = self.H_MPO
         sites = H_MPO.sites
-        finite = H_MPO.finite
+        finite = (H_MPO.bc == 'finite')
         L = H_MPO.L
         Ws = [H_MPO.get_W(i, copy=True) for i in range(L)]
         # Copy of Ws: we set everything to zero, which we take out and add to H_bond, such that
@@ -841,7 +897,7 @@ class CouplingModel(Model):
 
         The coupling `strength` may vary spatially if the given `strength` is a numpy array.
         The correct shape of this array is the `coupling_shape` returned by
-        :meth:`tenpy.models.lattice.possible_couplings` and depends on the boundary
+        :meth:`tenpy.models.lattice.coupling_shape` and depends on the boundary
         conditions. The ``shift(...)`` depends on `dx`,
         and is chosen such that the first entry ``strength[0, 0, ...]`` of `strength`
         is the prefactor for the first possible coupling
@@ -901,11 +957,12 @@ class CouplingModel(Model):
 
         .. testsetup :: add_coupling
 
-            self = tenpy.models.hubbard.FermiHubbardChain(dict(L=4, verbose=0, cons_Sz=None))
+            self = tenpy.models.hubbard.FermiHubbardChain(dict(L=4, cons_Sz=None))
             # make it look like both a SpinChain and a FermionChain
             # Sz and Sx operator already exists
             site = self.lat.unit_cell[0]
             site.add_op('C',  site.Cdd, need_JW=True)  # 'Cd' already exists!
+            self.manually_call_init_H = True
 
         .. doctest :: add_coupling
 
@@ -956,7 +1013,7 @@ class CouplingModel(Model):
         --------
         add_onsite : Add terms acting on one site only.
         add_multi_coupling_term : for terms on more than two sites.
-        add_coupling_term : Add a single term without summing over :math:`vec{x}`.
+        add_coupling_term : Add a single term without summing over :math:`\vec{x}`.
         """
         dx = np.array(dx, np.intp).reshape([self.lat.dim])
         if not np.any(np.asarray(strength) != 0.):
@@ -985,40 +1042,37 @@ class CouplingModel(Model):
             raise ValueError("Jordan Wigner string without `str_on_first`")
         if np.all(dx == 0) and u1 == u2:
             raise ValueError("Coupling shouldn't be onsite!")
-        mps_i, mps_j, lat_indices, strength_shape = self.lat.possible_couplings(u1, u2, dx)
-        strength = to_array(strength, strength_shape)  # tile to correct shape
+        mps_i, mps_j, strength_vals = self.lat.possible_couplings(u1, u2, dx, strength)
         if self.explicit_plus_hc:
+            # we explicitly add the h.c. later ...
             if plus_hc:
-                plus_hc = False  # explicitly add the h.c. later; don't do it here.
+                plus_hc = False  # ... so there's no need to do it at the bottom of this function
+                # (this reduces the MPO bond dimension with `explicit_plus_hc=True`)
             else:
-                strength /= 2  # avoid double-counting this term: add the h.c. explicitly later on
+                strength_vals = strength_vals / 2.  # ... so we should avoid double-counting
         if category is None:
             category = "{op1}_i {op2}_j".format(op1=op1, op2=op2)
         ct = self.coupling_terms.setdefault(category, CouplingTerms(self.lat.N_sites))
         # loop to perform the sum over {x_0, x_1, ...}
-        for i, j, lat_idx in zip(mps_i, mps_j, lat_indices):
-            current_strength = strength[tuple(lat_idx)]
-            if current_strength == 0.:
-                continue
+        for i, j, current_strength in zip(mps_i, mps_j, strength_vals):
             # the following is roughly equivalent to
             # CouplingTerms.coupling_term_handle_JW, but also swaps i <-> j if necessary
             # and allows `str_on_first` being set explicitly
-            o1, o2 = op1, op2
-            site_i = site1
-            if j < i:  # ensure i <= j
-                # swap operators
-                i, j = j, i
-                if op_string == 'JW':
-                    current_strength = -current_strength  # swap sign
+            if i < j:
+                o1, o2 = op1, op2
+                if str_on_first and op_string != 'Id':
+                    o1 = site1.multiply_op_names([op1, op_string])  # op2 acts first!
+            else:  # i > j
+                # swap operators to ensure i <= j
                 if raise_op2_left:
                     raise ValueError("Op2 is left")
+                i, j = j, i
                 o1, o2 = op2, op1
-                site_i = site2
+                if str_on_first and op_string != 'Id':
+                    o1 = site2.multiply_op_names([op_string, op2])  # op2 acts first!
             # now we have always i < j and 0 <= i < N_sites
             # j >= N_sites indicates couplings between unit_cells of the infinite MPS.
             # o1 is the "left" operator; o2 is the "right" operator
-            if str_on_first and op_string != 'Id':
-                o1 = site_i.multiply_op_names([o1, op_string])
             ct.add_coupling_term(current_strength, i, j, o1, o2, op_string)
 
         if plus_hc:
@@ -1227,13 +1281,14 @@ class CouplingModel(Model):
             raise ValueError("Coupling shouldn't be purely onsite!")
 
         # prepare: figure out the necessary mps indices
-        mps_ijkl, lat_indices, strength_shape = self.lat.possible_multi_couplings(ops)
-        strength = to_array(strength, strength_shape)  # tile to correct shape
+        mps_ijkl, strength_vals = self.lat.possible_multi_couplings(ops, strength)
         if self.explicit_plus_hc:
+            # we explicitly add the h.c. later ...
             if plus_hc:
-                plus_hc = False  # explicitly add the h.c. later; don't do it here.
+                plus_hc = False  # ... so there's no need to do it at the bottom of this function
+                # (this reduces the MPO bond dimension with `explicit_plus_hc=True`)
             else:
-                strength /= 2  # avoid double-counting this term: add the h.c. explicitly later on
+                strength_vals = strength_vals / 2.  # ... so we should avoid double-counting
         if category is None:
             category = " ".join(
                 ["{op}_{i}".format(op=op, i=chr(ord('i') + m)) for m, op in enumerate(all_ops)])
@@ -1246,10 +1301,7 @@ class CouplingModel(Model):
         N_sites = self.lat.N_sites
         sites = self.lat.mps_sites()
         # loop to perform the sum over {x_0, x_1, ...}
-        for ijkl, i_lat in zip(mps_ijkl, lat_indices):
-            current_strength = strength[tuple(i_lat)]
-            if current_strength == 0.:
-                continue
+        for ijkl, current_strength in zip(mps_ijkl, strength_vals):
             term = list(zip(all_ops, ijkl))
             term, sign = order_combine_term(term, sites)
             args = ct.multi_coupling_term_handle_JW(current_strength * sign, term, sites,
@@ -1371,7 +1423,8 @@ class CouplingModel(Model):
 
         .. testsetup :: add_exponentially_decaying_coupling
 
-            self = tenpy.models.spins.SpinChain(dict(L=30, verbose=0))
+            self = tenpy.models.spins.SpinChain(dict(L=30))
+            self.manually_call_init_H = True
 
         .. doctest :: add_exponentially_decaying_coupling
 
@@ -1467,7 +1520,7 @@ class CouplingModel(Model):
             raise ValueError("Can't `calc_H_bond` with non-empty `exp_decaying_terms`.")
 
         sites = self.lat.mps_sites()
-        finite = (self.lat.bc_MPS != 'infinite')
+        finite = (self.lat.bc_MPS == 'finite')
 
         ct = self.all_coupling_terms()
         ct.remove_zeros(tol_zero)
@@ -1561,7 +1614,8 @@ class CouplingModel(Model):
 
         .. testsetup :: coupling_strength_add_ext_flux
 
-            self = tenpy.models.fermions_spinless.FermionModel(dict(lattice='Square', Lx=3, Ly=3, verbose=0))
+            self = tenpy.models.fermions_spinless.FermionModel(dict(lattice='Square', Lx=3, Ly=3))
+            self.manually_call_init_H = True
 
         .. doctest :: coupling_strength_add_ext_flux
 
@@ -1577,7 +1631,7 @@ class CouplingModel(Model):
         c_shape = self.lat.coupling_shape(dx)[0]
         strength = to_array(strength, c_shape)
         # make strength complex
-        complex_dtype = np.find_common_type([strength.dtype], [np.dtype(np.complex)])
+        complex_dtype = np.find_common_type([strength.dtype], [np.dtype('complex128')])
         strength = np.asarray(strength, complex_dtype)
         for ax in range(self.lat.dim):
             if self.lat.bc[ax]:  # open boundary conditions
@@ -1617,6 +1671,21 @@ class MultiCouplingModel(CouplingModel):
         msg = ("The `MultiCouplingModel` class is deprecated and has been merged into "
                "the `CouplingModel`. No need to subclass the `MultiCouplingModel` andymore!")
         warnings.warn(msg, DeprecationWarning, 2)
+
+
+def _warn_post_init_add(f):
+    @wraps(f)
+    def add_term_function(self, *args, **kwargs):
+        res = f(self, *args, **kwargs)
+        if hasattr(self, 'H_MPO') and not getattr(self, 'manually_call_init_H', False):
+            warnings.warn(
+                "Adding terms to the CouplingMPOModel after initialization. "
+                "Make sure you call `init_H_from_terms` again! "
+                "In that case, you can set `self.manually_call_init_H` to supress this warning.",
+                UserWarning, 2)
+        return res
+
+    return add_term_function
 
 
 class CouplingMPOModel(CouplingModel, MPOModel):
@@ -1662,11 +1731,21 @@ class CouplingMPOModel(CouplingModel, MPOModel):
     ----------
     name : str
         The (class-) name of the model, e.g. ``"XXZChain" or ``"SpinModel"``.
-    options: :class:`~tenpy.tools.params.Config`
+    options : :class:`~tenpy.tools.params.Config`
         Optional parameters.
-    verbose : int
-        Level of verbosity (i.e. how much status information to print); higher=more output.
+    manually_call_init_H : bool
+        Usually `False`. You can set this to true if you want to use one of the `add_*` methods
+        after initialization and made sure that you call `init_H_from_terms` after you have added
+        all the desired terms.
     """
+
+    #: class or str: The default lattice class or class name to be used in :meth:`init_lattice`.
+    default_lattice = "Chain"
+
+    #: bool: If True, :meth:`init_lattice` asserts that the initialized lattice
+    #: is (a subclass of) `default_lattice`
+    force_default_lattice = False
+
     def __init__(self, model_params):
         if getattr(self, "_called_CouplingMPOModel_init", False):
             # If we ignore this, the same terms get added to self multiple times.
@@ -1677,7 +1756,7 @@ class CouplingMPOModel(CouplingModel, MPOModel):
         self.name = self.__class__.__name__
         self.options = model_params = asConfig(model_params, self.name)
         self._called_CouplingMPOModel_init = True
-        self.verbose = model_params.get('verbose', 1)
+        self.manually_call_init_H = getattr(self, 'manually_call_init_H', False)
         explicit_plus_hc = model_params.get('explicit_plus_hc', False)
         # 1-4) initialize lattice
         lat = self.init_lattice(model_params)
@@ -1685,16 +1764,35 @@ class CouplingMPOModel(CouplingModel, MPOModel):
         CouplingModel.__init__(self, lat, explicit_plus_hc=explicit_plus_hc)
         # 6) add terms of the Hamiltonian
         self.init_terms(model_params)
-        # 7) initialize H_MPO
-        H_MPO = self.calc_H_MPO()
-        if model_params.get('sort_mpo_legs', False):
-            H_MPO.sort_legcharges()
-        MPOModel.__init__(self, lat, H_MPO)
-        if isinstance(self, NearestNeighborModel):
-            # 8) initialize H_bonds
-            NearestNeighborModel.__init__(self, lat, self.calc_H_bond())
-        # checks for misspelled parameters
+        # 7-8) initialize H_MPO, and H_bonds, if necessary
+        self.init_H_from_terms()
+        # finally checks for misspelled parameter names
         model_params.warn_unused()
+
+    @property
+    def verbose(self):
+        warnings.warn(
+            "verbose is deprecated, we're using logging now! \n"
+            "See https://tenpy.readthedocs.io/en/latest/intro/logging.html", FutureWarning, 2)
+        return self.options.get('verbose', 1.)
+
+    def init_H_from_terms(self):
+        """Initialize `H_MPO` (and `H_bond`) from the terms of the `CouplingModel`.
+
+        This function is called automatically during `CouplingMPOModel.__init__`.
+
+        If you use one of the `add_*` methods of the `CouplingModel` *after* initialization,
+        you will need to call `init_H_from_terms` in the end by yourself,
+        in order to update the `H_MPO` (and possibly `H_bond`) representations.
+        (You should get a warning about this... The way to avoid it is to initialize all the terms
+        in `init_terms` by defining your own model, as outlined in :doc:`/intro/model`.
+        """
+        H_MPO = self.calc_H_MPO()
+        if self.options.get('sort_mpo_legs', False):
+            H_MPO.sort_legcharges()
+        MPOModel.__init__(self, self.lat, H_MPO)
+        if isinstance(self, NearestNeighborModel):
+            NearestNeighborModel.__init__(self, self.lat, self.calc_H_bond())
 
     def init_lattice(self, model_params):
         """Initialize a lattice for the given model parameters.
@@ -1720,10 +1818,12 @@ class CouplingMPOModel(CouplingModel, MPOModel):
         -------
         .. cfg:configoptions :: CouplingMPOModel
 
-            lattice : str | Lattice
+            lattice : str | :class:`Lattice`
                 The name of a lattice pre-defined in TeNPy to be initialized.
-                Alternatively, a (possibly self-defined) Lattice instance.
-                In the latter case, no further parameters are read out.
+                Alternatively, directly a subclass of :class:`Lattice` instead of the name.
+                Alternatively, a (possibly self-defined) :class:`Lattice` instance.
+                If an instance is given, none of the further options described here are read out,
+                since they are already given inside the lattice instance!
             bc_MPS : str
                 Boundary conditions for the MPS.
             order : str
@@ -1739,11 +1839,11 @@ class CouplingMPOModel(CouplingModel, MPOModel):
                 `Lx` is the number of "rings" in the infinite MPS unit cell,
                 while `Ly` gives the circumference around the cylinder or width of th the rung
                 for a ladder (depending on `bc_y`).
-            bc_y : str
-               ``"cylinder" | "ladder"``; only read out for 2D lattices.
-               The boundary conditions in y-direction.
-            bc_x : str
-                ``"open" | "periodic"``.
+            bc_y : ``"cylinder" | "ladder" | "open" | "periodic"``
+                The boundary conditions in y-direction.
+                Only read out for 2D lattices.
+                "cylinder" is equivalent to "periodic", "ladder" is equivalent to "open".
+            bc_x : ``"open" | "periodic"``.
                 Can be used to force "periodic" boundaries for the lattice,
                 i.e., for the couplings in the Hamiltonian, even if the MPS is finite.
                 Defaults to ``"open"`` for ``bc_MPS="finite"`` and
@@ -1752,18 +1852,31 @@ class CouplingMPOModel(CouplingModel, MPOModel):
                 *not* use "periodic" boundary conditions.
                 (The MPS is still "open", so this will introduce long-range
                 couplings between the first and last sites of the MPS!)
-
+            helical: ``None`` | int
+                If not ``None``, wrap the lattice into a
+                :class:`~tenpy.models.lattice.HelicalLattice` with the given int as `N_unit_cells`.
+            irregular_remove : ``None`` | 2D array
+                If not ``None``, wrap the lattice into a
+                :class:`~tenpy.models.lattice.IrregularLattice` removing the specified sites.
+                To add sites, you need to overwrite the `init_lattice` method in a custom model.
         """
-        lat = model_params.get('lattice', "Chain")
+        lat = model_params.get('lattice', self.default_lattice)
         if isinstance(lat, str):
             LatticeClass = get_lattice(lattice_name=lat)
+            lat = None
+        elif inspect.isclass(lat) and issubclass(lat, Lattice):
+            LatticeClass = lat
+            lat = None
+        elif not isinstance(lat, Lattice):
+            raise ValueError("invalid type for model_params['lattice'], got " + repr(lat))
+        if lat is None:  # only provided LatticeClass
             bc_MPS = model_params.get('bc_MPS', 'finite')
             order = model_params.get('order', 'default')
             sites = self.init_sites(model_params)
-            bc_x = 'periodic' if bc_MPS == 'infinite' else 'open'
+            bc_x = 'open' if bc_MPS == 'finite' else 'periodic'
             bc_x = model_params.get('bc_x', bc_x)
-            if bc_MPS == 'infinite' and bc_x == 'open':
-                raise ValueError("You need to use 'periodic' `bc_x` for infinite systems!")
+            if bc_MPS != 'finite' and bc_x == 'open':
+                raise ValueError("You need to use 'periodic' `bc_x` for infinite/segment systems!")
             if LatticeClass.dim == 1:  # 1D lattice
                 L = model_params.get('L', 2)
                 # 4) lattice
@@ -1772,15 +1885,29 @@ class CouplingMPOModel(CouplingModel, MPOModel):
                 Lx = model_params.get('Lx', 1)
                 Ly = model_params.get('Ly', 4)
                 bc_y = model_params.get('bc_y', 'cylinder')
-                assert bc_y in ['cylinder', 'ladder']
-                bc_y = 'periodic' if bc_y == 'cylinder' else 'open'
+                assert bc_y in ['cylinder', 'ladder', 'open', 'periodic']
+                if bc_y == 'cylinder':
+                    bc_y = 'periodic'
+                elif bc_y == 'ladder':
+                    bc_y = 'open'
                 lat = LatticeClass(Lx, Ly, sites, order=order, bc=[bc_x, bc_y], bc_MPS=bc_MPS)
             else:
                 raise ValueError("Can't auto-determine parameters for the lattice. "
                                  "Overwrite the `init_lattice` in your model!")
-            # now, `lat` is an instance of the LatticeClass called `lattice_name`.
+            helical = model_params.get('helical_lattice', None)
+            if helical is not None:
+                lat = HelicalLattice(lat, helical)
+            irregular_remove = model_params.get('irregular_remove', None)
+            if irregular_remove is not None:
+                lat = IrregularLattice(lat, remove=irregular_remove)
         # else: a lattice was already provided
+        # now, `lat` is an instance of the LatticeClass
         assert isinstance(lat, Lattice)
+        if self.force_default_lattice:
+            DefaultLattice = self.default_lattice
+            if isinstance(DefaultLattice, str):
+                DefaultLattice = get_lattice(DefaultLattice)
+            assert isinstance(lat, DefaultLattice)
         return lat
 
     def init_sites(self, model_params):
@@ -1814,3 +1941,14 @@ class CouplingMPOModel(CouplingModel, MPOModel):
     def init_terms(self, model_params):
         """Add the onsite and coupling terms to the model; subclasses should implement this."""
         pass  # Do nothing. This allows to super().init_terms(model_params) in subclasses.
+
+    # decorate add_* methods to warn they get called after a finished initialization.
+    add_local_term = _warn_post_init_add(CouplingModel.add_local_term)
+    add_onsite = _warn_post_init_add(CouplingModel.add_onsite)
+    add_onsite_term = _warn_post_init_add(CouplingModel.add_onsite_term)
+    add_coupling = _warn_post_init_add(CouplingModel.add_coupling)
+    add_coupling_term = _warn_post_init_add(CouplingModel.add_coupling_term)
+    add_multi_coupling = _warn_post_init_add(CouplingModel.add_multi_coupling)
+    add_multi_coupling_term = _warn_post_init_add(CouplingModel.add_multi_coupling_term)
+    add_exponentially_decaying_coupling = _warn_post_init_add(
+        CouplingModel.add_exponentially_decaying_coupling)

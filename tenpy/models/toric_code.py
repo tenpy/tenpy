@@ -3,7 +3,7 @@
 As we put the model on a cylinder, the name "toric code" is a bit misleading, but it is the
 established name for this model...
 """
-# Copyright 2018-2020 TeNPy Developers, GNU GPLv3
+# Copyright 2018-2021 TeNPy Developers, GNU GPLv3
 
 import numpy as np
 
@@ -26,10 +26,12 @@ class DualSquare(Lattice):
 
         import matplotlib.pyplot as plt
         from tenpy.models.toric_code import DualSquare
+        from tenpy.models.lattice import Square
         plt.figure(figsize=(5, 5))
         ax = plt.gca()
         lat = DualSquare(4, 4, None, bc='periodic')
-        lat.plot_coupling(ax, linewidth=3.)
+        sq = Square(4, 4, None, bc='periodic')
+        sq.plot_coupling(ax, linewidth=3.)
         lat.plot_order(ax, linestyle=':')
         lat.plot_sites(ax)
         lat.plot_basis(ax, origin=-0.5*(lat.basis[0] + lat.basis[1]))
@@ -48,6 +50,8 @@ class DualSquare(Lattice):
         Additional keyword arguments given to the :class:`Lattice`.
         `basis`, `pos` and `pairs` are set accordingly.
     """
+    dim = 2  #: the dimension of the lattice
+
     def __init__(self, Lx, Ly, sites, **kwargs):
         sites = _parse_sites(sites, 2)
         basis = np.eye(2)
@@ -97,6 +101,10 @@ class ToricCode(CouplingMPOModel):
     All parameters are collected in a single dictionary `model_params`, which
     is turned into a :class:`~tenpy.tools.params.Config` object.
 
+    .. versionchanged :: 0.7.2-98
+        There was a bug that the terms for Jv and Jp were added with a positive instead of
+        a negative sign.
+
     Parameters
     ----------
     model_params : :class:`~tenpy.tools.params.Config`
@@ -111,7 +119,7 @@ class ToricCode(CouplingMPOModel):
             Dimension of the lattice, number of plaquettes around the cylinder.
         conserve : 'parity' | None
             What should be conserved. See :class:`~tenpy.networks.Site.SpinHalfSite`.
-        Jc, Jp : float | array
+        Jv, Jp : float | array
             Couplings as defined for the Hamiltonian above.
         order : str
             The order of the lattice sites in the lattice, see :class:`DualSquare`.
@@ -127,32 +135,21 @@ class ToricCode(CouplingMPOModel):
             The MPS is still "open", so this will introduce long-range couplings between the
             first and last sites of the MPS, and require **squared** MPS bond-dimensions.
     """
+    default_lattice = DualSquare
+    force_default_lattice = True
+
     def init_sites(self, model_params):
         conserve = model_params.get('conserve', 'parity')
         site = SpinHalfSite(conserve)
         return site
 
-    def init_lattice(self, model_params):
-        site = self.init_sites(model_params)
-        Lx = model_params.get('Lx', 2)
-        Ly = model_params.get('Ly', 2)
-        order = model_params.get('order', 'default')
-        bc_MPS = model_params.get('bc_MPS', 'infinite')
-        bc_x = 'periodic' if bc_MPS == 'infinite' else 'open'
-        bc_x = model_params.get('bc_x', bc_x)
-        bc_y = model_params.get('bc_y', 'periodic')
-        assert bc_y in ['open', 'periodic']
-        bc = [bc_x, bc_y]
-        lat = DualSquare(Lx, Ly, site, order=order, bc=bc, bc_MPS=bc_MPS)
-        return lat
-
     def init_terms(self, model_params):
-        Jv = model_params.get('Jv', 1.)
-        Jp = model_params.get('Jp', 1.)
+        Jv = np.asarray(model_params.get('Jv', 1.))
+        Jp = np.asarray(model_params.get('Jp', 1.))
         # vertex/star term
-        self.add_multi_coupling(Jv, [('Sigmax', [0, 0], 1), ('Sigmax', [0, 0], 0),
-                                     ('Sigmax', [-1, 0], 1), ('Sigmax', [0, -1], 0)])
+        self.add_multi_coupling(-Jv, [('Sigmax', [0, 0], 1), ('Sigmax', [0, 0], 0),
+                                      ('Sigmax', [-1, 0], 1), ('Sigmax', [0, -1], 0)])
         # plaquette term
-        self.add_multi_coupling(Jp, [('Sigmaz', [0, 0], 1), ('Sigmaz', [0, 0], 0),
-                                     ('Sigmaz', [0, 1], 1), ('Sigmaz', [1, 0], 0)])
+        self.add_multi_coupling(-Jp, [('Sigmaz', [0, 0], 1), ('Sigmaz', [0, 0], 0),
+                                      ('Sigmaz', [0, 1], 1), ('Sigmaz', [1, 0], 0)])
         # done

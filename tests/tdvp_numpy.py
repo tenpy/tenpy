@@ -2,7 +2,7 @@
 
 .. todo ::     Make this a nice toycode! For the test, use some pre-defined values.
 """
-# Copyright 2019-2020 TeNPy Developers, GNU GPLv3
+# Copyright 2019-2021 TeNPy Developers, GNU GPLv3
 
 from scipy.linalg import expm
 from scipy.sparse.linalg import expm_multiply
@@ -290,7 +290,7 @@ def MPO_XXZ(Jp, Jz, hz):
     sz = np.array([[0.5, 0.], [0., -0.5]])
     w_list = []
 
-    w = np.zeros((5, 5, 2, 2), dtype=np.float)
+    w = np.zeros((5, 5, 2, 2), dtype=np.float64)
     w[0, :4] = [s0, sp, sm, sz]
     w[0:, 4] = [hz * sz, Jp / 2. * sm, Jp / 2. * sp, Jz * sz, s0]
     return w

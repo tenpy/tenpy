@@ -1,11 +1,11 @@
 """A collection of tests for :module:`tenpy.networks.mps`."""
-# Copyright 2018-2020 TeNPy Developers, GNU GPLv3
+# Copyright 2018-2021 TeNPy Developers, GNU GPLv3
 
 import numpy as np
 import numpy.testing as npt
 import warnings
 from tenpy.models.xxz_chain import XXZChain
-from tenpy.models.lattice import Square
+from tenpy.models.lattice import Square, Chain, Honeycomb
 
 from tenpy.networks import mps, site
 from tenpy.networks.terms import TermList
@@ -45,7 +45,7 @@ def test_mps():
     p_state = ["up", "down"] * (L // 2)  # repeats entries L/2 times
     bloch_sphere_state = np.array([np.cos(theta / 2), np.exp(1.j * phi) * np.sin(theta / 2)])
     p_state[L // 2] = bloch_sphere_state  # replace one spin in center
-    psi = mps.MPS.from_product_state([site_triv] * L, p_state, bc='finite', dtype=np.complex)
+    psi = mps.MPS.from_product_state([site_triv] * L, p_state, bc='finite', dtype=complex)
     eval_z = psi.expectation_value("Sigmaz")
     eval_x = psi.expectation_value("Sigmax")
     assert (eval_z[L // 2] - np.cos(theta)) < 1.e-12
@@ -178,6 +178,17 @@ def test_charge_fluctuations():
 
 def test_mps_swap():
     L = 6
+    # starting from ordered pairs with infinite bc (the latter shouldn't make a difference).
+    pairs = [(0, 1), (2, 3), (4, 5)]
+    perm = rand_permutation(L)
+    pairs_perm = [(perm[i], perm[j]) for i, j in pairs]
+    psi = mps.MPS.from_singlets(spin_half, L, pairs, bc='infinite')
+    psi.permute_sites(perm)
+    psi_perm = mps.MPS.from_singlets(spin_half, L, pairs_perm, bc='finite')
+    print(psi.overlap(psi_perm), psi.norm_test())
+    assert abs(abs(psi.overlap(psi_perm)) - 1.) < 1.e-10
+
+    # now start from random pairs
     pairs = [(0, 3), (1, 5), (2, 4)]
     pairs_swap = [(0, 2), (1, 5), (3, 4)]
     print("singlet pairs: ", pairs)
@@ -191,7 +202,7 @@ def test_mps_swap():
     perm = rand_permutation(L)
     pairs_perm = [(perm[i], perm[j]) for i, j in pairs]
     psi_perm = mps.MPS.from_singlets(spin_half, L, pairs_perm, bc='finite')
-    psi.permute_sites(perm, verbose=2)
+    psi.permute_sites(perm)
     print(psi.overlap(psi_perm), psi.norm_test())
     assert abs(abs(psi.overlap(psi_perm)) - 1.) < 1.e-10
 
@@ -233,7 +244,7 @@ def test_compute_K():
     psi = mps.MPS.from_singlets(spin_half, 6, pairs, bc='infinite')
     psi.test_sanity()
     lat = Square(3, 2, spin_half, order='default', bc_MPS='infinite', bc='periodic')
-    U, W, q, ov, te = psi.compute_K(lat, verbose=100)
+    U, W, q, ov, te = psi.compute_K(lat)
     assert (ov == -1.)
     npt.assert_array_equal(W, [1.])
 
@@ -258,6 +269,26 @@ def test_canonical_form(bc):
     print("norm_test")
     print(psi.norm_test())
     assert np.max(psi.norm_test()) < 1.e-14
+
+
+@pytest.mark.parametrize("bc", ['finite', 'infinite'])
+def test_apply_op(bc, eps=1.e-13):
+    s = site.SpinHalfSite(None)
+    psi0 = mps.MPS.from_singlets(s, 3, [(0, 2)], lonely=[1], bc=bc, lonely_state='up')
+    psi1 = psi0.copy()
+    psi1.apply_local_op(1, 'Sigmax')  #unitary
+    psi1_expect = mps.MPS.from_singlets(s, 3, [(0, 2)], lonely=[1], bc=bc, lonely_state='down')
+    psi1 = psi0.copy()
+    psi1.apply_local_op(1, 'Sm')  #non-unitary
+    assert abs(psi1_expect.overlap(psi1) - 1.) < eps
+
+    psi2 = psi0.copy()
+    th = psi2.get_theta(0, 3).to_ndarray().reshape((8, ))
+    s2 = 0.5**0.5
+    assert np.linalg.norm(th - [0., s2, 0., 0., -s2, 0., 0, 0.]) < eps
+    psi2.apply_product_op(['Sigmax', 'Sm', 'Sigmax'])
+    th = psi2.get_theta(0, 3).to_ndarray().reshape((8, ))
+    assert np.linalg.norm(th - [0., 0., 0., -s2, 0., 0., s2, 0.]) < eps
 
 
 def test_enlarge_mps_unit_cell():
@@ -356,6 +387,12 @@ def test_expectation_value_term():
 
 def test_correlation_function():
     s = spin_half
+    Pup = s.Id.copy()
+    Pup[s.state_labels['down'], s.state_labels['down']] = 0.
+    Pdown = s.Id.copy()
+    Pdown[s.state_labels['up'], s.state_labels['up']] = 0.
+    s.add_op('Pup', Pup, need_JW=False, hc='Pup')
+    s.add_op('Pdown', Pdown, need_JW=False, hc='Pdown')
     psi1 = mps.MPS.from_singlets(s, 6, [(1, 3), (2, 5)], lonely=[0, 4], bc='finite')
     corr1 = psi1.correlation_function('Sz', 'Sz')
     corr1_exact = 0.25 * np.array([[ 1.,  0.,  0.,  0.,  1.,  0.],
@@ -378,6 +415,19 @@ def test_correlation_function():
     npt.assert_almost_equal(corr1[::-1], corr1_exact[:-1, 5])
     corr1 = psi1.term_correlation_function_left([('Sz', 1)], [('Sz', 1)], range(0, 4), 4)
     npt.assert_almost_equal(corr1[::-1], corr1_exact[1:-1, 5])
+
+    Sz = TermList([[('Pup', 0)], [('Pdown', 0)]], [0.5, -0.5])  # complicated way to write Sz
+    corr1 = psi1.term_list_correlation_function_right(Sz, Sz)
+    # check term_list_correlation_function_right for terms with different qtotal
+    npt.assert_almost_equal(corr1, corr1_exact[0, 1:])
+    Sx = TermList([[('Sp', 0)], [('Sm', 0)]], [0.5, +0.5])  # complicated way to write Sx_0
+    Sy = TermList([[('Sp', 1)], [('Sm', 1)]], [-0.5j, +0.5j])  # complicated way to write Sy_1
+    corrxx = psi1.term_list_correlation_function_right(Sx, Sx)
+    npt.assert_almost_equal(corrxx, np.zeros((5, )))  # Sx_0 gives 0
+    corrxx = psi1.term_list_correlation_function_right(Sx, Sx, 1)
+    npt.assert_almost_equal(corrxx, 0.25 * np.array([0., -1., 0., 0.]))
+    corrxy = psi1.term_list_correlation_function_right(Sx, Sy, 1, range(1, 5))
+    npt.assert_almost_equal(corrxy, np.zeros((4, )))
 
     # check fermionic signs
     fs = site.SpinHalfFermionSite()
@@ -404,6 +454,9 @@ def test_correlation_function():
     corr3_long = psi3.correlation_function('Cdu', 'Cu', [0], range(4, 11 * 4, 4)).flatten()
     corr3_long2 = psi3.term_correlation_function_right([('Cdu', 0)], [('Cu', 0)])
     npt.assert_array_almost_equal(corr3_long, corr3_long2)
+    term1 = TermList([[('Cdu', 0)]], [1.])
+    term2 = TermList([[('Cu', 0)], [('Ntot', -1)]], [1., 2.])  # N shouldn't contribute!
+    corr3_long3 = psi3.term_list_correlation_function_right(term1, term2)
 
 
 def test_expectation_value_multisite():
@@ -424,6 +477,43 @@ def test_expectation_value_multisite():
     env1 = mps.MPSEnvironment(psi1, psi)
     ev = env1.expectation_value(SpSm) / psi1.overlap(psi)  # normalize
     npt.assert_almost_equal(ev, [-0.5, 0., -1., 0., -0.5])
+
+
+def test_sample_measurements(eps=1.e-14, seed=5):
+    spin_half = site.SpinHalfSite()
+    u, d = spin_half.state_indices(['up', 'down'])
+    spin_half.add_op('Pup', spin_half.Sz + 0.5 * spin_half.Id)
+    psi = mps.MPS.from_singlets(spin_half, 6, [(0, 1), (2, 5)], lonely=[3, 4], bc='finite')
+    rng = np.random.default_rng(seed)
+    for i in range(4):
+        sigmas, weight = psi.sample_measurements(3, 4, rng=rng)
+        assert tuple(sigmas) == (u, u)
+        assert abs(weight - 1) < eps
+        sigmas, weight = psi.sample_measurements(0, 1, rng=rng)
+        assert sigmas[0] == 1 - sigmas[1]
+        print(sigmas)
+        assert abs(weight - 0.5**0.5) < eps
+        sigmas, weight = psi.sample_measurements(rng=rng)
+        print(sigmas)
+        assert sigmas[0] == 1 - sigmas[1]
+        assert sigmas[2] == 1 - sigmas[5]
+        sign = (+1 if sigmas[0] == u else -1) * (+1 if sigmas[2] == u else -1)
+        print(sign, weight)
+        assert abs(weight - 0.5 * sign) < eps
+        sigmas, weight = psi.sample_measurements(ops=['Sz', 'Pup'], rng=rng)
+        print(sigmas)
+        assert sigmas[4] == 0.5  # Sz
+        assert sigmas[3] == 1  # Pup
+
+    spin_half = site.SpinHalfSite(conserve=None)
+    assert tuple(spin_half.state_indices(['up', 'down'])) == (0, 1)
+    x_basis = np.array([[1., 1], [1, -1]]) * 0.5**0.5
+    psi = mps.MPS.from_product_state([spin_half] * 4, [x_basis[0], x_basis[1], 0, 1])
+    for i in range(4):
+        sigmas, weight = psi.sample_measurements(ops=['Sigmax', 'Sx', 'Sz', 'Sigmaz'])
+        print(sigmas)
+        npt.assert_allclose(sigmas, [1., -0.5, 0.5, -1.])
+        assert abs(abs(weight) - 1.) < eps
 
 
 @pytest.mark.parametrize('method', ['SVD', 'variational'])
@@ -447,5 +537,59 @@ def test_mps_compress(method, eps=1.e-13):
     assert (np.abs(psiSum2.overlap(psiOrth) - .5) < 1e-13)
 
 
+def test_InitialStateBuilder():
+    s0 = site.SpinHalfSite()
+    lat = Chain(10, s0, bc_MPS='finite')
+    psi1 = mps.InitialStateBuilder(
+        lat, {
+            'method': 'lat_product_state',
+            'product_state': [['up'], ['down']],
+            'check_filling': 0.5,
+            'full_empty': ['up', 'down'],
+        }).run()
+    psi1.test_sanity()
+    psi2 = mps.InitialStateBuilder(
+        lat, {
+            'method': 'mps_product_state',
+            'product_state': ['up', 'down'] * 5,
+            'check_filling': 0.5,
+            'full_empty': ['up', 'down'],
+        }).run()
+    psi2.test_sanity()
+    assert abs(psi1.overlap(psi2) - 1) < 1.e-14
+    psi3 = mps.InitialStateBuilder(
+        lat, {
+            'method': 'fill_where',
+            'full_empty': ('up', 'down'),
+            'fill_where': "x_ind % 2 == 0",
+            'check_filling': 0.5,
+            'full_empty': ['up', 'down'],
+        }).run()
+    psi3.test_sanity()
+    assert abs(psi1.overlap(psi3) - 1) < 1.e-14
+    psi4 = mps.InitialStateBuilder(
+        lat, {
+            'method': 'randomized',
+            'randomized_from_method': 'lat_product_state',
+            'product_state': [['up'], ['down']],
+            'check_filling': 0.5,
+            'full_empty': ['up', 'down'],
+        }, model_dtype=np.float64).run()
+    assert psi4.dtype == np.float64
+    assert abs(psi4.overlap(psi1)) < 0.1  # randomizing should definitely lead to small overlap!
+    psi5 = mps.InitialStateBuilder(
+        lat, {
+            'method': 'randomized',
+            'randomized_from_method': 'lat_product_state',
+            'randomize_close_1': True,
+            'randomize_params': {'N_steps': 2},
+            'product_state': [['up'], ['down']],
+            'check_filling': 0.5,
+            'full_empty': ['up', 'down'],
+        }, model_dtype=np.complex128).run()
+    assert psi5.dtype == np.complex128
+    assert abs(psi5.overlap(psi1)) > 0.1  # randomizing should definitely lead to small overlap!
+
+
 if __name__ == "__main__":
-    test_correlation_function()
+    test_sample_measurements()

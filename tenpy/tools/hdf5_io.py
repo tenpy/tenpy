@@ -66,7 +66,7 @@ Names for the ``ATTR_TYPE`` attribute:
     For memory caching with big MPO environments,
     we need a Hdf5Cacher clearing the memo's every now and then (triggered by what?).
 """
-# Copyright 2020 TeNPy Developers, GNU GPLv3
+# Copyright 2020-2021 TeNPy Developers, GNU GPLv3
 
 import pickle
 import gzip
@@ -75,11 +75,33 @@ import numpy as np
 import importlib
 import warnings
 import sys
+try:
+    from packaging.version import parse as parse_version
+except:
+    try:
+        from setuptools._vendor.packaging.version import parse as parse_version
+    except ImportError:
+
+        def parse_version(version_str):
+            return version_str.split('.')  # bad but better than nothing
+
+
+try:
+    import h5py
+    h5py_version = h5py.version.version_tuple
+except ImportError:
+    h5py_version = (0, 0)
 
 __all__ = [
-    'save', 'load', 'valid_hdf5_path_component', 'Hdf5FormatError', 'Hdf5ExportError',
-    'Hdf5ImportError', 'Hdf5Exportable', 'Hdf5Ignored', 'Hdf5Saver', 'Hdf5Loader', 'save_to_hdf5',
-    'load_from_hdf5'
+    'save', 'load', 'find_global', 'valid_hdf5_path_component', 'Hdf5FormatError',
+    'Hdf5ExportError', 'Hdf5ImportError', 'Hdf5Exportable', 'Hdf5Ignored', 'Hdf5Saver',
+    'Hdf5Loader', 'save_to_hdf5', 'load_from_hdf5', 'REPR_IGNORED', 'REPR_HDF5EXPORTABLE',
+    'REPR_REDUCE', 'REPR_ARRAY', 'REPR_INT', 'REPR_FLOAT', 'REPR_STR', 'REPR_COMPLEX',
+    'REPR_INT64', 'REPR_FLOAT64', 'REPR_COMPLEX128', 'REPR_INT32', 'REPR_FLOAT32',
+    'REPR_COMPLEX64', 'REPR_BOOL', 'REPR_NONE', 'REPR_RANGE', 'REPR_LIST', 'REPR_TUPLE',
+    'REPR_SET', 'REPR_DICT_GENERAL', 'REPR_DICT_SIMPLE', 'REPR_DTYPE', 'REPR_FUNCTION',
+    'REPR_CLASS', 'REPR_GLOBAL', 'TYPES_FOR_HDF5_DATASETS', 'ATTR_TYPE', 'ATTR_CLASS',
+    'ATTR_MODULE', 'ATTR_LEN', 'ATTR_FORMAT'
 ]
 
 
@@ -89,15 +111,15 @@ def save(data, filename, mode='w'):
     This function guesses the type of the file from the filename ending.
     Supported endings:
 
-    ======== ===============================
-    ending   description
-    ======== ===============================
-    .pkl     Pickle without compression
-    -------- -------------------------------
-    .pklz    Pickle with gzip compression.
-    -------- -------------------------------
-    .hdf5    Hdf5 file (using `h5py`).
-    ======== ===============================
+    ============ ===============================
+    ending       description
+    ============ ===============================
+    .pkl         Pickle without compression
+    ------------ -------------------------------
+    .pklz        Pickle with gzip compression.
+    ------------ -------------------------------
+    .hdf5, .h5   HDF5 file (using `h5py`).
+    ============ ===============================
 
     Parameters
     ----------
@@ -116,7 +138,6 @@ def save(data, filename, mode='w'):
         with gzip.open(filename, mode + 'b') as f:
             pickle.dump(data, f)
     elif filename.endswith('.hdf5') or filename.endswith('.h5'):
-        import h5py
         with h5py.File(filename, mode) as f:
             save_to_hdf5(f, data)
     else:
@@ -146,12 +167,28 @@ def load(filename):
         with gzip.open(filename, 'rb') as f:
             data = pickle.load(f)
     elif filename.endswith('.hdf5') or filename.endswith('.h5'):
-        import h5py
         with h5py.File(filename, 'r') as f:
             data = load_from_hdf5(f)
     else:
         raise ValueError("Don't recognise file ending of " + repr(filename))
     return data
+
+
+def find_global(module, qualified_name):
+    """Get the object of the `qualified_name` in a given python `module`.
+
+    Parameters
+    ----------
+    module : str
+        Name of the module containing the object. The module gets imported.
+    qualified_name : str
+        Name of the object to be retrieved. May contain dots if the object is part of a class etc.
+    """
+    mod = importlib.import_module(module)
+    obj = mod
+    for subpath in qualified_name.split('.'):
+        obj = getattr(obj, subpath)
+    return obj
 
 
 # =================================================================================
@@ -336,7 +373,7 @@ class Hdf5Ignored:
 
 
 class Hdf5Saver:
-    """Engine to save simple enough objects into a HDF5 file.
+    """Class to save simple enough objects into a HDF5 file.
 
     The intended use of this class is through :func:`save_to_hdf5`, which is simply an alias
     for ``Hdf5Saver(h5group).save(obj, path)``.
@@ -434,6 +471,10 @@ class Hdf5Saver:
             h5gr.attrs[ATTR_MODULE] = obj.__class__.__module__
             obj_save_hdf5(self, h5gr, subpath)  # should save the actual data
             return h5gr
+
+        warnings.warn(
+            "Hdf5Saver: object of type {t!r} without explicit HDF5 format; "
+            "fall back to pickle protocol".format(t=type(obj)), UserWarning)
 
         obj_reduce = getattr(obj, "__reduce__", None)
         if obj_reduce is not None:
@@ -655,7 +696,12 @@ class Hdf5Saver:
         self.save(obj.descr, subpath + 'descr')
         return h5gr
 
-    dispatch_save[np.dtype] = (save_dtype, REPR_DTYPE)
+    if parse_version(np.__version__) < parse_version('1.20.0'):
+        dispatch_save[np.dtype] = (save_dtype, REPR_DTYPE)
+    else:
+        # numpy version 1.20 introduced separate subclasses of dtype for the standard types
+        for t in np.dtype.__subclasses__():
+            dispatch_save[t] = (save_dtype, REPR_DTYPE)
 
     def save_ignored(self, obj, path, type_repr):
         """Don't save the Hdf5Ignored object; just return None."""
@@ -668,7 +714,7 @@ class Hdf5Saver:
         module = obj.__module__
         qualname = obj.__qualname__
         try:
-            obj2 = Hdf5Loader.find_global(module, qualname)
+            obj2 = find_global(module, qualname)
         except (ImportError, KeyError, AttributeError):
             raise Hdf5ExportError(
                 "Can't export `{0!r}`: it's not found as {1} in module {2}".format(
@@ -714,6 +760,10 @@ class Hdf5Loader:
         The HDF5 group (or file) where to save the data.
     ignore_unknown : bool
         Whether to just warn (True) or raise an Error (False) if a class to be loaded is not found.
+    exclude : list of str
+        List of paths (possibly relative to `h5group`) for objects to be excluded from loading.
+        References to the corresponding object are replaced by an instance of :class:`Hdf5Ignored`.
+        Of course, **this might break other functions** expecting correctly loaded data.
 
     Attributes
     ----------
@@ -734,10 +784,19 @@ class Hdf5Loader:
         The dictionary key is a h5py group- or dataset ``id``;
         the value is the loaded object. See :meth:`memorize_load`.
     """
-    def __init__(self, h5group, ignore_unknown=True):
+    def __init__(self, h5group, ignore_unknown=True, exclude=None):
         self.h5group = h5group
         self.ignore_unknown = ignore_unknown
         self.memo_load = {}
+        if exclude:
+            for path in exclude:
+                try:
+                    data = self.h5group[path]
+                except KeyError:
+                    warnings.warn(
+                        "can't exclude {0!r} from loading: not existent in h5group".format(path))
+                    continue
+                self.memorize_load(data, Hdf5Ignored(path))
 
     def load(self, path=None):
         """Load a Python :class:`object` from the dataset.
@@ -814,18 +873,6 @@ class Hdf5Loader:
             res = res.decode()
         return res
 
-    @staticmethod
-    def find_global(module, classname):
-        """Get the class of the qualified `classname` in a given python `module`.
-
-        Imports the module.
-        """
-        mod = importlib.import_module(module)
-        cls = mod
-        for subpath in classname.split('.'):
-            cls = getattr(cls, subpath)
-        return cls
-
     dispatch_load = {}
 
     # the methods below are used in the dispatch table
@@ -851,6 +898,17 @@ class Hdf5Loader:
 
     for _t, _type_repr in TYPES_FOR_HDF5_DATASETS:
         dispatch_load[_type_repr] = (load_dataset, _t)
+
+    def load_str(self, h5gr, type_info, subpath):
+        """Load a string from a h5py :class:`Dataset`."""
+        # `asstr()` is a new method for handling strings introduced in h5py version 3.0
+        # if asstr() is not used, the returned data is a raw bindary/ascii string.
+        obj = h5gr.asstr()[()]
+        self.memorize_load(h5gr, obj)
+        return obj
+
+    if h5py_version >= (3, 0):  # for older h5py versions, just read the dataset directly.
+        dispatch_load[REPR_STR] = (load_str, str)
 
     def load_list(self, h5gr, type_info, subpath):
         """Load a list."""
@@ -955,7 +1013,7 @@ class Hdf5Loader:
         module_name = self.get_attr(h5gr, ATTR_MODULE)
         class_name = self.get_attr(h5gr, ATTR_CLASS)
         try:
-            cls = self.find_global(module_name, class_name)
+            cls = find_global(module_name, class_name)
         except (ImportError, AttributeError):
             msg = "Can't import class {0!s} from {1!s}".format(class_name, module_name)
             if self.ignore_unknown:
@@ -978,7 +1036,7 @@ class Hdf5Loader:
         module_name = self.get_attr(h5gr, ATTR_MODULE)
         class_name = self.get_attr(h5gr, ATTR_CLASS)
         try:
-            obj = self.find_global(module_name, class_name)
+            obj = find_global(module_name, class_name)
         except (ImportError, AttributeError):
             msg = "Can't import global {0!s} from {1!s}".format(class_name, module_name)
             if self.ignore_unknown:
@@ -1068,7 +1126,7 @@ def save_to_hdf5(h5group, obj, path='/'):
     return Hdf5Saver(h5group).save(obj, path)
 
 
-def load_from_hdf5(h5group, path=None, ignore_unknown=True):
+def load_from_hdf5(h5group, path=None, ignore_unknown=True, exclude=None):
     """Load an object from hdf5 file or group.
 
     Roughly equivalent to ``obj = h5group[path][...]``, but handle more complicated objects saved
@@ -1085,10 +1143,17 @@ def load_from_hdf5(h5group, path=None, ignore_unknown=True):
         Path within `h5group` to be used for loading. Defaults to the `h5group` itself specified.
     ignore_unknown : bool
         Whether to just warn (True) or raise an Error (False) if a class to be loaded is not found.
+    exclude : list of str
+        List of paths (possibly relative to `h5group`) for objects to be excluded from loading.
+        References to the corresponding object are replaced by an instance of :class:`Hdf5Ignored`.
+        For example, you could load a saved dictionary
+        ``{'big_data': [...], 'small_data': small_data}`` with ``exclude=['/big_data']`` to get
+        ``{'big_data': Hdf5Ignored('/big_data'), 'small_data': small_data}``.
+        Of course, **this might break other functions** expecting correctly loaded data.
 
     Returns
     -------
     obj : object
         The Python object loaded from `h5group` (specified by `path`).
     """
-    return Hdf5Loader(h5group, ignore_unknown).load(path)
+    return Hdf5Loader(h5group, ignore_unknown, exclude).load(path)

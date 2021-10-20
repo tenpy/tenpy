@@ -7,7 +7,7 @@ generate the files, you can call the ``test_*.py`` files in this folder manually
 test_pickle.py``. This will generate the files with pre-defined data (see :func:`gen_example_data`)
 and the tenpy version in the filename.
 """
-# Copyright 2019-2020 TeNPy Developers, GNU GPLv3
+# Copyright 2019-2021 TeNPy Developers, GNU GPLv3
 
 import numpy as np
 import os
@@ -66,7 +66,7 @@ def gen_example_data(version=tenpy.version.full_version):
     if parse_version(version) >= parse_version('0.5.0.dev25'):
         psi = tenpy.networks.mps.MPS.from_singlets(s, 6, [(0, 3), (1, 2), (4, 5)])
         psi.test_sanity()
-        M = tenpy.models.tf_ising.TFIChain({'L': 3, 'bc_MPS': 'infinite', 'verbose': 0})
+        M = tenpy.models.tf_ising.TFIChain({'L': 3, 'bc_MPS': 'infinite'})
         data.update({
             'version':
             version,
@@ -108,7 +108,6 @@ def gen_example_data(version=tenpy.version.full_version):
         event_handler.connect(dummy_function)
         event_handler.connect(dummy.dummy_append)
         data['event_handler'] = event_handler
-        data['version'] = version
     return data
 
 

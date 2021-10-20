@@ -5,7 +5,7 @@ This module is just around for backwards compatibility.
 .. deprecated :: 0.7.0
     This module is just around for backwards compatibility.
 """
-# Copyright 2020 TeNPy Developers, GNU GPLv3
+# Copyright 2020-2021 TeNPy Developers, GNU GPLv3
 
 import warnings
 

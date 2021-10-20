@@ -5,6 +5,7 @@ recursive-include tests *.py
 
 include setup.py
 include setup.cfg
+include pytest.ini
 include requirements.txt
 include environment.yml
 include AUTHORS.txt

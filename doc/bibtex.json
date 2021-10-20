@@ -1,0 +1,184 @@
+{
+    "cited": {
+        "intro/npc": [
+            "singh2010",
+            "singh2011"
+        ],
+        "literature": [
+            "white1992",
+            "hauschild2018a",
+            "schollwoeck2011",
+            "orus2014",
+            "paeckel2019",
+            "eisert2013",
+            "verstraete2008",
+            "stoudenmire2012",
+            "cirac2009",
+            "white1993",
+            "vidal2004",
+            "white2005",
+            "hubig2015",
+            "mcculloch2008",
+            "singh2010",
+            "singh2011",
+            "haegeman2011",
+            "haegeman2016",
+            "zaletel2015",
+            "karrasch2013",
+            "vidal2007",
+            "pollmann2009"
+        ],
+        "reference/tenpy.algorithms.dmrg": [
+            "white1992",
+            "schollwoeck2011"
+        ],
+        "reference/tenpy.algorithms.dmrg.DensityMatrixMixer": [
+            "white2005"
+        ],
+        "reference/tenpy.algorithms.dmrg.Mixer": [
+            "white2005",
+            "hubig2015"
+        ],
+        "reference/tenpy.algorithms.dmrg.SubspaceExpansion": [
+            "hubig2015"
+        ],
+        "reference/tenpy.algorithms.mpo_evolution.ExpMPOEvolution": [
+            "zaletel2015"
+        ],
+        "reference/tenpy.algorithms.purification.PurificationTEBD": [
+            "suzuki1991",
+            "schollwoeck2011",
+            "barthel2020"
+        ],
+        "reference/tenpy.algorithms.purification.PurificationTEBD2": [
+            "suzuki1991",
+            "schollwoeck2011",
+            "barthel2020"
+        ],
+        "reference/tenpy.algorithms.tdvp": [
+            "haegeman2011",
+            "haegeman2016"
+        ],
+        "reference/tenpy.algorithms.tebd": [
+            "vidal2004"
+        ],
+        "reference/tenpy.algorithms.tebd.Engine": [
+            "suzuki1991",
+            "schollwoeck2011",
+            "barthel2020"
+        ],
+        "reference/tenpy.algorithms.tebd.RandomUnitaryEvolution": [
+            "suzuki1991",
+            "schollwoeck2011",
+            "barthel2020"
+        ],
+        "reference/tenpy.algorithms.tebd.TEBDEngine": [
+            "suzuki1991",
+            "schollwoeck2011",
+            "barthel2020"
+        ],
+        "reference/tenpy.models.aklt.AKLTChain": [
+            "affleck1987"
+        ],
+        "reference/tenpy.models.fermions_spinless.FermionChain": [
+            "resta1998"
+        ],
+        "reference/tenpy.models.fermions_spinless.FermionModel": [
+            "resta1998"
+        ],
+        "reference/tenpy.models.haldane.BosonicHaldaneModel": [
+            "grushin2015",
+            "resta1998"
+        ],
+        "reference/tenpy.models.haldane.FermionicHaldaneModel": [
+            "grushin2015",
+            "resta1998"
+        ],
+        "reference/tenpy.models.hofstadter.HofstadterBosons": [
+            "resta1998"
+        ],
+        "reference/tenpy.models.hofstadter.HofstadterFermions": [
+            "resta1998"
+        ],
+        "reference/tenpy.models.hubbard.BoseHubbardChain": [
+            "resta1998"
+        ],
+        "reference/tenpy.models.hubbard.BoseHubbardModel": [
+            "resta1998"
+        ],
+        "reference/tenpy.models.hubbard.FermiHubbardChain": [
+            "resta1998"
+        ],
+        "reference/tenpy.models.hubbard.FermiHubbardModel": [
+            "resta1998"
+        ],
+        "reference/tenpy.models.model.CouplingMPOModel": [
+            "resta1998"
+        ],
+        "reference/tenpy.models.model.CouplingModel": [
+            "resta1998"
+        ],
+        "reference/tenpy.models.model.MultiCouplingModel": [
+            "resta1998"
+        ],
+        "reference/tenpy.models.spins.SpinChain": [
+            "resta1998"
+        ],
+        "reference/tenpy.models.spins.SpinModel": [
+            "resta1998"
+        ],
+        "reference/tenpy.models.spins_nnn.SpinChainNNN": [
+            "resta1998"
+        ],
+        "reference/tenpy.models.spins_nnn.SpinChainNNN2": [
+            "resta1998"
+        ],
+        "reference/tenpy.models.tf_ising.TFIChain": [
+            "resta1998"
+        ],
+        "reference/tenpy.models.tf_ising.TFIModel": [
+            "resta1998"
+        ],
+        "reference/tenpy.models.toric_code.ToricCode": [
+            "resta1998"
+        ],
+        "reference/tenpy.models.xxz_chain.XXZChain": [
+            "resta1998"
+        ],
+        "reference/tenpy.models.xxz_chain.XXZChain2": [
+            "resta1998"
+        ],
+        "reference/tenpy.networks.mpo.MPO": [
+            "zaletel2015",
+            "stoudenmire2010"
+        ],
+        "reference/tenpy.networks.mpo.make_W_II": [
+            "zaletel2015"
+        ],
+        "reference/tenpy.networks.mps": [
+            "vidal2004",
+            "schollwoeck2011"
+        ],
+        "reference/tenpy.networks.mps.MPS": [
+            "shapourian2017",
+            "pollmann2012",
+            "cincio2013"
+        ],
+        "reference/tenpy.networks.purification_mps": [
+            "karrasch2013",
+            "hauschild2018",
+            "schollwoeck2011"
+        ],
+        "reference/tenpy.networks.purification_mps.PurificationMPS": [
+            "shapourian2017",
+            "pollmann2012",
+            "cincio2013"
+        ],
+        "reference/tenpy.tools.fit.entropy_profile_from_CFT": [
+            "calabrese2004"
+        ],
+        "reference/tenpy.tools.fit.fit_with_sum_of_exp": [
+            "murg2010"
+        ]
+    }
+}

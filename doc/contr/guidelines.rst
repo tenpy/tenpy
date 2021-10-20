@@ -7,7 +7,7 @@ However, these are just guidelines - it still helps if you contribute something,
 - Use a code style based on :pep:`8`.
   The git repo includes a config file ``.style.yapf`` for the python package `yapf <http://github.com/google/yapf>`_.
   `yapf` is a tool to auto-format code, e.g., by the command ``yapf -i some/file`` (-i for "in place").
-  We run yapf on a regular basis on the github master branch.
+  We run yapf on a regular basis on the github main branch.
   If your branch diverged, it might help to run yapf before merging.
 
   .. note ::
@@ -22,7 +22,7 @@ However, these are just guidelines - it still helps if you contribute something,
 
   The documentation uses `reStructuredText`. If you are new to `reStructuredText`, read this `introduction <http://www.sphinx-doc.org/en/stable/rest.html>`_.
   We use the `numpy` style for doc-strings (with the `napoleon <https://www.sphinx-doc.org/en/master/usage/extensions/napoleon.html>`_ extension to sphinx).
-  You can read abouth them in these `Instructions for the doc strings <http://github.com/numpy/numpy/blob/master/doc/HOWTO_DOCUMENT.rst.txt>`_.
+  You can read abouth them in these `Instructions for the doc strings <https://numpydoc.readthedocs.io/en/latest/format.html>`_.
   In addition, you can take a look at the following `example file <http://github.com/numpy/numpy/blob/master/doc/example.py>`_.
   Helpful hints on top of that::
 

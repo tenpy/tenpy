@@ -7,6 +7,7 @@ You are welcome to do any of the following things, all of them are very helpful!
 - Report bugs and problems, such that they can be fixed.
 - Implement new models.
 - Update and extend the documentation.
+- Provide examples of how to use TeNPy.
 - Give feedback on how you like TeNPy and what you would like to see improved.
 - Help fixing bugs.
 - Help fixing minor issues.

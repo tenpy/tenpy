@@ -21,7 +21,7 @@ so you propably won't need to import `charges` directly.
     lanczos
 
 """
-# Copyright 2018-2020 TeNPy Developers, GNU GPLv3
+# Copyright 2018-2021 TeNPy Developers, GNU GPLv3
 
 from . import charges, np_conserved, lanczos, random_matrix, sparse, svd_robust
 
@@ -43,7 +43,7 @@ def _patch_cython():
         (np.float64, np.complex128),
         (np.ones([1]).dtype, (1.j * np.ones([1])).dtype),
         (np.array(1.).dtype, np.array(1.j).dtype),
-        (np.array(1., dtype=np.float).dtype, np.array(1., dtype=np.complex).dtype),
+        (np.array(1., dtype=np.float64).dtype, np.array(1., dtype=np.complex128).dtype),
     ]
     types_ok = [
         _npc_helper._float_complex_are_64_bit(dt_float, dt_real)

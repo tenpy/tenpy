@@ -1,9 +1,11 @@
-"""Algorithms for using Purification.
-"""
+"""Algorithms for using Purification."""
 
-# Copyright 2019-2020 TeNPy Developers, GNU GPLv3
+# Copyright 2019-2021 TeNPy Developers, GNU GPLv3
 
 import numpy as np
+import logging
+logger = logging.getLogger(__name__)
+
 import tenpy.linalg.np_conserved as npc
 from . import tebd
 from ..tools.params import asConfig
@@ -76,22 +78,22 @@ class PurificationApplyMPO(VariationalApplyMPO):
         return {'U': U, 'VH': VH, 'err': err}
 
 
-class PurificationTEBD(tebd.Engine):
+class PurificationTEBD(tebd.TEBDEngine):
     r"""Time evolving block decimation (TEBD) for purification MPS.
 
     .. deprecated :: 0.6.0
         Renamed parameter/attribute `TEBD_params` to :attr:`options`.
 
-    Parameters
-    ----------
-    psi : :class:`~tenpy.networs.purification_mps.PurificationMPS`
-        Initial state to be time evolved. Modified in place.
-    model : :class:`~tenpy.models.NearestNeighborModel`
-        The model representing the Hamiltonian for which we want to find the ground state.
-    options : dict
-        Further optional parameters as described in the following table.
-        Use ``verbose=1`` to print the used parameters during runtime.
-        See :func:`run` and :func:`run_GS` for more details.
+    Parameters are the same as for :class:`~tenpy.algorithms.algorithm.Algorithm`.
+
+    Options
+    -------
+    .. cfg:config :: PurificationTEBD
+        :include: TEBDEngine
+
+        disentangle : None | str
+            Method for disentangling.
+            See :func:`~tenpy.algorithm.disentangler.get_disentangler`.
 
     Attributes
     ----------
@@ -105,8 +107,8 @@ class PurificationTEBD(tebd.Engine):
         Same index strucuture as `self._U`: for each two-site U of the physical time evolution
         the disentangler from the last application. Initialized to identities.
     """
-    def __init__(self, psi, model, options):
-        super().__init__(psi, model, asConfig(options, 'PurificationTEBD'))
+    def __init__(self, psi, model, options, **kwargs):
+        super().__init__(psi, model, options, **kwargs)
         self._disent_iterations = np.zeros(psi.L)
         self._guess_U_disent = None  # will be set in calc_U
         method = self.options.get('disentangle', None)
@@ -128,12 +130,12 @@ class PurificationTEBD(tebd.Engine):
         TrotterOrder = 2  # currently, imaginary time evolution works only for second order.
         self.calc_U(TrotterOrder, delta_t, type_evo='imag')
         self.update_imag(N_steps=int(beta / delta_t + 0.5))
-        if self.verbose >= 1:
-            E = np.average(self.model.bond_energies(self.psi))
-            S = np.average(self.psi.entanglement_entropy())
-            print("--> time={t:.6f}, E_bond={E:.10f}, S={S:.10f}".format(t=self.evolved_time,
-                                                                         E=E.real,
-                                                                         S=S.real))
+        logger.info(
+            "--> beta=%(beta).6f, E_bond=%(E).10f, max(S)=%(S).10f", {
+                'beta': -self.evolved_time.imag,
+                'E': np.average(self.model.bond_energies(self.psi)),
+                'S': np.max(self.psi.entanglement_entropy())
+            })
 
     @property
     def disent_iterations(self):
@@ -175,12 +177,11 @@ class PurificationTEBD(tebd.Engine):
             during this update step.
         """
         i0, i1 = i - 1, i
-        if self.verbose >= 30:
-            print("Update sites ({0:d}, {1:d})".format(i0, i1))
+        logger.debug("Update sites (%d, %d)", i0, i1)
         # Construct the theta matrix
         theta = self.psi.get_theta(i0, n=2)  # 'vL', 'vR', 'p0', 'p1', 'q0', 'q1'
         theta = npc.tensordot(U_bond, theta, axes=(['p0*', 'p1*'], ['p0', 'p1']))
-        # ##### new hook compared to tebd.Engine.calc_U
+        # ##### new hook compared to tebd.TEBDEngine.calc_U
         theta, U_disent = self.disentangle(theta)
         # ####
         theta = theta.combine_legs([('vL', 'p0', 'q0'), ('vR', 'p1', 'q1')], qconj=[+1, -1])
@@ -239,8 +240,7 @@ class PurificationTEBD(tebd.Engine):
             during this update step.
         """
         i0, i1 = i - 1, i
-        if self.verbose >= 100:
-            print("Update sites ({0:d}, {1:d})".format(i0, i1))
+        logger.debug("Update sites (%d, %d)", i0, i1)
         # Construct the theta matrix
         theta = self.psi.get_theta(i0, n=2)  # 'vL', 'vR', 'p0', 'q0', 'p1', 'q1'
         theta = npc.tensordot(U_bond, theta, axes=(['p0*', 'p1*'], ['p0', 'p1']))
@@ -305,9 +305,6 @@ class PurificationTEBD(tebd.Engine):
             sorted = np.argsort(mutinf)
             pair = coords[sorted[-1]]
         i, j = pair
-        #  for i, j in coords[sorted[-1:]]:
-        if self.verbose > 10:
-            print('disentangle global pair ' + repr((i, j)))
         self._disentangle_two_site(i, j)
         return i, j  # TODO
         # done
@@ -403,9 +400,6 @@ class PurificationTEBD(tebd.Engine):
         """swap sites (i-1, i) (if swap = True) """
         # very similar to update_bond
         i0, i1 = i - 1, i
-        if self.verbose >= 30:
-            print("Update sites ({0:d}, {1:d}), swap={2!s}, disentangle={3!s}".format(
-                i0, i1, swap, disentangle))
         # Construct the theta matrix
         theta = self.psi.get_theta(i0, n=2)  # 'vL', 'vR', 'p0', 'p1', 'q0', 'q1'
         if swap:
@@ -442,8 +436,8 @@ class PurificationTEBD2(PurificationTEBD):
     """Similar as PurificationTEBD, but perform sweeps instead of brickwall.
 
     Instead of the A-B pattern of even/odd bonds used in TEBD, perform sweeps similar as in DMRG
-    for real-time evolution (similar as :meth:`~tenpy.algorithms.tebd.Engine.update_imag` does for
-    imaginary time evolution).
+    for real-time evolution (similar as :meth:`~tenpy.algorithms.tebd.TEBDEngine.update_imag` does
+    for imaginary time evolution).
     """
     def update(self, N_steps):
         """Evolve by ``N_steps * U_param['dt']``.
@@ -498,11 +492,7 @@ class PurificationTEBD2(PurificationTEBD):
             sweep = range(self.psi.L - 1, 0, -1)
         for i_bond in sweep:
             if Us[i_bond] is None:
-                if self.verbose >= 10:
-                    print("Skip U_bond element:", i_bond)
                 continue  # handles finite vs. infinite boundary conditions
-            if self.verbose >= 10:
-                print("Apply U_bond element", i_bond)
             self._update_index = (U_idx_dt, i_bond)
             trunc_err += self.update_bond(i_bond, Us[i_bond])
         self._update_index = None

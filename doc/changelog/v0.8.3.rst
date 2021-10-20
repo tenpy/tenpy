@@ -1,0 +1,6 @@
+[v0.8.3] - 2021-03-29
+=====================
+
+This is another very minor fix-up of :doc:`/changelog/v0.8.0`.
+
+Like v0.8.1, it just tries to fix the tests to make building the conda packages work again.

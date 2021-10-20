@@ -19,7 +19,7 @@ For further details, see the definition of :func:`~tenpy.tools.optimization.use_
 
 .. autodata:: QTYPE
 """
-# Copyright 2018-2020 TeNPy Developers, GNU GPLv3
+# Copyright 2018-2021 TeNPy Developers, GNU GPLv3
 
 import numpy as np
 import copy
@@ -289,6 +289,8 @@ class ChargeInfo:
         """Compare self.mod and self.names for equality, ignore missing names."""
         if self is other:
             return True
+        if self.qnumber != other.qnumber:
+            return False
         if not np.all(self.mod == other.mod):
             return False
         for l, r in zip(self.names, other.names):
@@ -830,18 +832,25 @@ class LegCharge:
         """
         if optimize(OptimizationFlag.skip_arg_checks):
             return
+        if self != other:
+            side_by_side = vert_join(["self\n" + str(self), "other\n" + str(other)], delim=' | ')
+            raise ValueError("incompatible LegCharge\n" + side_by_side)
+
+    def __eq__(self, other):
+        """Bool check wether `self == other`"""
         if self.chinfo != other.chinfo:
-            raise ValueError(''.join(
-                ["incompatible ChargeInfo\n",
-                 str(self.chinfo),
-                 str(other.chinfo)]))
+            raise ValueError(f"incompatible ChargeInfo\n{self.chinfo!s}\n{other.chinfo!s}")
         if self.charges is other.charges and self.qconj == other.qconj and \
                 (self.slices is other.slices or np.all(self.slices == other.slices)):
-            return  # optimize: don't need to check all charges explicitly
+            return True  # optimize: don't need to check all charges explicitly
         if not np.array_equal(self.slices, other.slices) or \
                 not np.array_equal(self.charges * self.qconj, other.charges * other.qconj):
-            raise ValueError("incompatible LegCharge\n" +
-                             vert_join(["self\n" + str(self), "other\n" + str(other)], delim=' | '))
+            return False
+        return True
+
+    def __ne__(self, other):
+        r"""Define `self != other` as `not (self == other)`"""
+        return not self.__eq__(other)
 
     def get_block_sizes(self):
         """Return the sizes of the individual blocks.

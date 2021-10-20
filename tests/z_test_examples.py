@@ -3,7 +3,7 @@
 The files are only imported, so please protect example code from running with standard ``if
 __name__ == "__main__": ...`` clauses, if you want to demonstrate an interactive code.
 """
-# Copyright 2018-2020 TeNPy Developers, GNU GPLv3
+# Copyright 2018-2021 TeNPy Developers, GNU GPLv3
 
 import sys
 import os

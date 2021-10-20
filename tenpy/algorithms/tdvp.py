@@ -18,62 +18,53 @@ and the two-site algorithm which does allow the bond dimension to grow - but req
     we should have a general way to sweep through an MPS and updated one or two sites, used in both
     cases.
 """
-# Copyright 2019-2020 TeNPy Developers, GNU GPLv3
+# Copyright 2019-2021 TeNPy Developers, GNU GPLv3
 
 import numpy as np
+import warnings
+
+from .algorithm import TimeEvolutionAlgorithm
 from tenpy.networks.mpo import MPOEnvironment
 import tenpy.linalg.np_conserved as npc
 from tenpy.tools.params import asConfig
 from tenpy.linalg.lanczos import LanczosEvolution
 from tenpy.algorithms.truncation import svd_theta
 
-__all__ = ['Engine', 'H0_mixed', 'H1_mixed', 'H2_mixed']
+__all__ = ['TDVPEngine', 'Engine', 'H0_mixed', 'H1_mixed', 'H2_mixed']
 
 
-class Engine:
-    """Time dependent variational principle 'Engine'.
+class TDVPEngine(TimeEvolutionAlgorithm):
+    """Time dependent variational principle algorithm for MPS.
 
     .. deprecated :: 0.6.0
         Renamed parameter/attribute `TDVP_params` to :attr:`options`.
 
     Parameters
     ----------
-    psi : :class:`~tenpy.networks.mps.MPS`
-        Initial state to be time evolved. Modified in place.
-    model : :class:`~tenpy.models.model.MPOModel`
-        The model representing the Hamiltonian for which we want to find the ground state.
-    options : dict
-        Further optional parameters as described in the following table.
-        Use ``verbose>0`` to print the used parameters during runtime.
-    environment :  :class:'~tenpy.networks.mpo.MPOEnvironment` | None
+    psi, model, options, **kwargs:
+        Same as for :class:`~tenpy.algorithms.algorithm.Algorithm`.
+    environment :
         Initial environment. If ``None`` (default), it will be calculated at the beginning.
 
     Options
     -------
 
     .. cfg:config :: TDVP
+        :include: TimeEvolutionAlgorithm
 
         active_sites
             The number of active sites to be used for the time evolution.
             If set to 1, :meth:`run_one_site` is used. The bond dimension will not increase!
             If set to 2, :meth:`run_two_sites` is used.
-        start_time : float
-            Initial value for :attr:`evolved_time`
-        dt : float
-            Time step of the Trotter error
-        N_steps : int
-            Number of time steps `dt` to evolve.
         trunc_params : dict
             Truncation parameters as described in :func:`~tenpy.algorithms.truncation.truncate`
-        Lanczos : dict
+        lanczos_options : dict
             Lanczos options as described in :cfg:config:`Lanczos`.
 
     Attributes
     ----------
     options: dict
         Optional parameters.
-    verbose : int
-        Level of verbosity (i.e. how much status information to print); higher=more output.
     evolved_time : float | complex
         Indicating how long `psi` has been evolved, ``psi = exp(-i * evolved_time * H) psi(t=0)``.
     psi : :class:`~tenpy.networks.mps.MPS`
@@ -83,11 +74,11 @@ class Engine:
     lanczos_options : :class:`~tenpy.tools.params.Config`
         Options passed on to :class:`~tenpy.linalg.lanczos.LanczosEvolution`.
     """
-    def __init__(self, psi, model, options, environment=None):
+    def __init__(self, psi, model, options, environment=None, **kwargs):
+        TimeEvolutionAlgorithm.__init__(self, psi, model, options, **kwargs)
+        options = self.options
         if model.H_MPO.explicit_plus_hc:
             raise NotImplementedError("TDVP does not respect 'MPO.explicit_plus_hc' flag")
-        self.options = options = asConfig(options, "TDVP")
-        self.verbose = options.get('verbose', 1)
         self.lanczos_options = options.subconfig('lanczos_options')
         if environment is None:
             environment = MPOEnvironment(psi, model.H_MPO, psi)
@@ -96,10 +87,8 @@ class Engine:
         self.environment = environment
         if not psi.finite:
             raise ValueError("TDVP is only implemented for finite boundary conditions")
-        self.psi = psi
         self.L = self.psi.L
         self.dt = options.get('dt', 2)
-        self.trunc_params = options.subconfig('trunc_params', {})
         self.N_steps = options.get('N_steps', 10)
 
     @property
@@ -108,8 +97,7 @@ class Engine:
         return self.options
 
     def run(self):
-        """(Real-)time evolution with TDVP.
-        """
+        """(Real-)time evolution with TDVP."""
         active_sites = self.options.get('active_sites', 2)
         if active_sites == 1:
             self.run_one_site(self.N_steps)
@@ -455,6 +443,18 @@ class Engine:
         s_new, N_h0 = lanczos_h0.run(dt)
         s_new = s_new.split_legs(['(vL.vR)'])
         return s_new
+
+
+class Engine(TDVPEngine):
+    """Deprecated old name of :class:`TDVPEngine`.
+
+    .. deprecated : v0.8.0
+        Renamed the `Engine` to `TDVPEngine` to have unique algorithm class names.
+    """
+    def __init__(self, psi, model, options, **kwargs):
+        msg = "Renamed `Engine` class to `TDVPEngine`."
+        warnings.warn(msg, category=FutureWarning, stacklevel=2)
+        TDVPEngine.__init__(self, psi, model, options, **kwargs)
 
 
 class H0_mixed:

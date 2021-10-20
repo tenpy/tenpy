@@ -1,5 +1,5 @@
 """A collection of tests for (classes in) :module:`tenpy.networks.mpo`."""
-# Copyright 2018-2020 TeNPy Developers, GNU GPLv3
+# Copyright 2018-2021 TeNPy Developers, GNU GPLv3
 
 import numpy as np
 import numpy.testing as npt
@@ -88,9 +88,16 @@ def test_MPOGraph_term_conversion():
     prefactors[3:3] = [3.]
     term_list = TermList(terms, prefactors)
     g3 = mpo.MPOGraph.from_term_list(term_list, [spin_half] * L, 'infinite')
-    g1.add(1, (0, 'Sp', 'Id'), (0, 'Sp', 'Id', 1, 'Sz', 'Id'), 'Sz', 1.)
-    g1.add(2, (0, 'Sp', 'Id', 1, 'Sz', 'Id'), 'IdR', 'Sm', 3.)
-    assert g1.graph == g3.graph
+    g4 = mpo.MPOGraph([spin_half] * L, 'infinite')
+    g4.test_sanity()
+    for i in range(L):
+        g4.add(i, 'IdL', 'IdR', 'Sz', 0.5)
+        g4.add(i, 'IdL', ("left", i, 'Sp', 'Id'), 'Sp', 1.)
+        g4.add(i + 1, ("left", i, 'Sp', 'Id'), 'IdR', 'Sm', 1.5)
+    g4.add_missing_IdL_IdR()
+    g4.add(1, ("left", 0, 'Sp', 'Id'), ("left", 0, 'Sp', 'Id', 1, 'Sz', 'Id'), 'Sz', 1.)
+    g4.add(2, ("left", 0, 'Sp', 'Id', 1, 'Sz', 'Id'), 'IdR', 'Sm', 3.)
+    assert g4.graph == g3.graph
 
 
 def test_MPO_conversion():
@@ -127,12 +134,12 @@ def test_MPO_conversion():
         ],
         [
             ['Id', None, None],  # site 2
-            [None, 'Id', None],
+            [None, [('Id', 11.0)], None],
             [None, None, 'Id']
         ],
         [
             ['Id', None],  # site 3
-            [None, [('X_3', 11.0)]],
+            [None, 'X_3'],
             [None, 'Id']
         ],
         [
@@ -144,13 +151,14 @@ def test_MPO_conversion():
             [None, None, 'Id']
         ],
         [
-            [None, 'Y_6', None],  # site 6
-            ['Id', None, None],
+            # site 6
+            [None, [('Y_6', 103.0)], None],
+            [[('Id', 102.5)], [('Id', 101.0)], None],
             [None, None, 'Id']
         ],
         [
-            [[('Y_7', 101.0), ('X_7', 102.5)]],  # site 7
-            [[('Y_7', 103.0)]],
+            ['X_7'],  # site 7
+            ['Y_7'],
             ['Id']
         ]
     ]
@@ -170,13 +178,11 @@ def test_MPOEnvironment():
     env.get_LP(3, True)
     env.get_RP(0, True)
     env.test_sanity()
-    E_old = None
+    E_exact = -0.825
     for i in range(4):
         E = env.full_contraction(i)  # should be one
         print("total energy for contraction at site ", i, ": E =", E)
-        if E_old is not None:
-            assert (abs(E - E_old) < 1.e-14)
-        E_old = E
+        assert (abs(E - E_exact) < 1.e-14)
 
 
 def test_MPO_hermitian():
@@ -318,3 +324,38 @@ def test_apply_mpo(method):
     H.apply(psi3, options)
     Eapply3 = psi3.overlap(psi)
     assert abs(Eexp - Eapply3) < 1e-5
+
+
+def test_MPOTransferMatrix(eps=1.e-13):
+    s = spin_half
+    # exponential decay in Sz term to make it harder
+    gamma = 0.5
+    grid = [[s.Id, s.Sp, s.Sm, s.Sz, 0. * s.Id],
+            [None, None, None, None, 0.0*s.Sm],
+            [None, None, None, None, 0.0*s.Sp],
+            [None, None, None, gamma*s.Id, 1.*s.Sz],
+            [None, None, None, None, s.Id]]  # yapf: disable
+    H = mpo.MPO.from_grids([s] * 3, [grid] * 3, 'infinite', 0, 4, max_range=np.inf)
+    psi = mps.MPS.from_singlets(s, 3, [(0, 1)], lonely=[2], bc='infinite')
+    psi.roll_mps_unit_cell(-1)  # -> nontrivial chi at the cut between unit cells
+    exact_E = ((-0.25 - 0.25) *0.  # singlet <0.5*Sp_i Sm_{i+1}> = 0.25 = <0.5*Sm_i Sp_{i+1}>
+               - 0.25  # singlet <Sz_i Sz_{i+1}>
+               + 1.*(0.25 * gamma**2 / (1. - gamma**3)))  # exponentially decaying "lonely" states
+    # lonely: <Sz_{i} gamma gamma Sz_{i+2}
+    exact_E = exact_E / psi.L  # energy per site
+    for transpose in [False, True]:
+        print(f"transpose={transpose!s}")
+        TM = mpo.MPOTransferMatrix(H, psi, transpose=transpose)
+        TM.matvec(TM.guess, project=False)
+        TM.matvec(TM.guess, project=True)
+        val, vec = TM.dominant_eigenvector()
+        assert abs(val - 1.) < eps
+        E0 = TM.energy(vec)
+        print(E0, exact_E)
+        assert abs(E0 - exact_E) < eps
+        if not transpose:
+            vec.itranspose(['vL', 'wL', 'vL*'])
+            assert (vec[:, 4, :] - npc.eye_like(vec, 0)).norm() < eps
+        else:
+            vec.itranspose(['vR*', 'wR', 'vR'])
+            assert (vec[:, 0, :] - npc.eye_like(vec, 0)).norm() < eps
