@@ -3256,7 +3256,7 @@ class MPS:
         If S is just 1D (as usual, e.g. during TEBD), this function just performs
         ``B.scale_axis(S**form_diff, axis_B)``.
 
-        However, during the DMRG with mixer, S might acutally be a 2D matrix.
+        However, during the DMRG with mixer, S might actually be a 2D matrix.
         For ``form_diff = -1``, we need to calculate the inverse of S, more precisely the
         (Moore-Penrose) pseudo inverse, see :func:`~tenpy.linalg.np_conserved.pinv`.
         The cutoff is only used in that case.
@@ -3268,7 +3268,12 @@ class MPS:
         if not isinstance(S, npc.Array):
             # the usual case: S is a 1D array with singular values
             if form_diff != 1.:
-                S = S**form_diff
+                if (form_diff<0.0):
+                    S = (S+1e-15)**form_diff
+                else:
+                    S = S**form_diff
+                    #print ("Difficulties calculating power ",form_diff," of singular values ",S)
+                    
             return B.scale_axis(S, axis_B)
         else:
             # e.g. during DMRG with a DensityMatrixMixer

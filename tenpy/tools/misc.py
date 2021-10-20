@@ -556,7 +556,7 @@ def setup_executable(mod, run_defaults, identifier_list=None, only_list_supplied
         args | namespace with raw arguments for some backwards compatibility with executables.
     """
     warnings.warn(
-        "Deprecated: `setup_executable` is not configured and too specific for this version of tenpy.",
+        "Attention: `setup_executable` was developed for a previous version of tenpy and not all options may be operational.",
         category=FutureWarning,
         stacklevel=2)
     parser = argparse.ArgumentParser()

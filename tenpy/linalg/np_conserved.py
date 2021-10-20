@@ -93,6 +93,7 @@ from numbers import Integral
 # import public API from charges
 from .charges import ChargeInfo, LegCharge, LegPipe
 from . import charges  # for private functions
+from . import random_matrix  # for private functions
 from .svd_robust import svd as svd_flat
 
 from ..tools.misc import to_iterable, anynan, argsort, inverse_permutation, list_to_dict_list
@@ -4753,7 +4754,7 @@ def _orthogonalise_block(block, insert_random = True):
                 # column block[i] was a linear combination of columns block[:i-1]
                 # try a random vector instead:
                 if (insert_random):
-                    Bi = tenpy.linalg.random_matrix.standard_normal_complex(dimCol)
+                    Bi = random_matrix.standard_normal_complex(dimCol)
                     #np.reshape(np.random.normal(scale=1./np.sqrt(2.), size=[dimCol,2]).view(np.complex128), dimCol)
                 else:
                     Bi = np.zeros(dimCol)

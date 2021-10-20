@@ -436,25 +436,25 @@ class Sweep:
         	next_events = self.qramp_list.get(self.sweeps, None)
         if next_events is not None:
             # turn next_events into list of lists, if not already.
-            if len(next_events)>1:
-        	    if (type(next_events[0])!=type([])):
-        		    next_events=[next_events]
-            else:
-                next_events=[next_events]
-            for next_event in next_events:
-                if len(next_event)< 3: # allowing flexible syntax
-                	self._fill_event(next_event)
-                if type(next_event[2])==type(""):
-                    ops=next_event[2].split(',')
-                else:
-                    ops=[next_event[2]]
-                for op in ops:
+             if len(next_events)>1:
+                 if (type(next_events[0])!=type([])):
+                     next_events=[next_events]
+             else:
+                 next_events=[next_events]
+             for next_event in next_events:
+                 if len(next_event)< 3: # allowing flexible syntax
+                     self._fill_event(next_event)
+                 if type(next_event[2])==type(""):
+                     ops=next_event[2].split(',')
+                 else:
+                     ops=[next_event[2]]
+                 for op in ops:
                     terms.append(self._decode_i0_location(next_event[0], next_event[1], op))
-            terms.sort(key=lambda x: (x[1]==True)* x[0]+(x[1]==False)*(2*self.psi.L-x[0])) # make sure terms appear sorted in MPS order
+        terms.sort(key=lambda x: (x[1]==True)* x[0]+(x[1]==False)*(2*self.psi.L-x[0])) # make sure terms appear sorted in MPS order
         # add a dummy entry to the end of the list enabling to call next on iterator until last relevant element reached
+        if (self.verbose>=5 and len(terms)>0):
+            print ("qramp terms for sweep", self.sweeps," are: ",terms)
         terms.append([-1, True, 'None'])
-        if (self.verbose>=5):
-            print ("terms for sweep ", self.sweeps," are: ",terms)
         return zip(terms)
 
     def prepare_update(self):
