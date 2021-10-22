@@ -2117,7 +2117,7 @@ class MPOTransferMatrix:
     flat_guess :
         Initial guess suitable for `flat_linop` in non-tenpy form.
     """
-    def __init__(self, H, psi, transpose=False, guess=None):
+    def __init__(self, H, psi, transpose=False, guess=None, _subtraction_gauge='rho'):
         if psi.finite or H.bc != 'infinite':
             raise ValueError("Only makes sense for infinite MPS")
         if H.L != psi.L:
@@ -2148,27 +2148,13 @@ class MPOTransferMatrix:
                 self._W.append(H.get_W(i).transpose(['p*', 'wR', 'p', 'wL']).astype(dtype, False))
                 self._M_conj.append(B.conj().itranspose(['vR*', 'p*', 'vL*']))
             vR = self._M[0].get_leg('vR')
-            self._chi0 = vR.ind_len
+            self._chi0 = chi0 = vR.ind_len
             eye_R = npc.diag(1., vR.conj(), dtype=dtype, labels=['vL', 'vL*'])
             self._E_shift = eye_R.add_leg(wL, self.IdL, axis=1, label='wL')  # vL wL vL*
-            self._proj_trace = self._E_shift.conj().iset_leg_labels(['vR', 'wR', 'vR*'])
+            self._proj_trace = self._E_shift.conj().iset_leg_labels(['vR', 'wR', 'vR*']) / chi0
             self._proj_norm = eye_R.add_leg(wL, self.IdR, axis=1, label='wL').conj()  # vL* wL* vL
             rho = npc.diag(S2, vR, labels=['vR', 'vR*'])
             self._proj_rho = rho.add_leg(wR, self.IdL, axis=1, label='wR')  # vR wR vR*
-            if guess is not None:
-                try:
-                    guess.get_leg('wL').test_equal(wL)
-                    guess.get_leg('vL').test_contractible(vR)
-                    guess.get_leg('vL*').test_equal(vR)
-                except ValueError:
-                    logger.warning("dropping guess for MPOTransferMatrix with incompatible legs")
-                    guess = None
-            if guess is None:
-                guess = eye_R.add_leg(wL, self.IdR, axis=1, label='wL')  # vL wL vL*
-                # no need to _project: E = 0
-            else:
-                guess = guess.transpose(['vL', 'wL', 'vL*'])  # copy!
-                self._project(guess)
         else:  # left to right
             # vec: vR* wR vR
             for i in range(self.L):
@@ -2177,26 +2163,45 @@ class MPOTransferMatrix:
                 self._W.append(H.get_W(i).transpose(['wR', 'p', 'wL', 'p*']).astype(dtype, False))
                 self._M_conj.append(A.conj().itranspose(['vR*', 'p*', 'vL*']))
             vL = self._M[0].get_leg('vL')
-            self._chi0 = vL.ind_len
+            self._chi0 = chi0 = vL.ind_len
             eye_L = npc.diag(1., vL, dtype=dtype, labels=['vR*', 'vR'])
             self._E_shift = eye_L.add_leg(wR, self.IdR, axis=1, label='wR')  # vR* wR vR
-            self._proj_trace = self._E_shift.conj().iset_leg_labels(['vL*', 'wL', 'vL'])
+            self._proj_trace = self._E_shift.conj().iset_leg_labels(['vL*', 'wL', 'vL']) / chi0
             self._proj_norm = eye_L.add_leg(wR, self.IdL, axis=1, label='wR').conj()  # vR wR* vR*
             rho = npc.diag(S2, vL.conj(), labels=['vL*', 'vL'])
             self._proj_rho = rho.add_leg(wL, self.IdR, axis=1, label='wL')  # vL* wL vL
-            if guess is not None:
-                try:
+        if _subtraction_gauge == 'trace':
+            self._proj_subtr = self._proj_trace
+        elif _subtraction_gauge == 'rho':
+            self._proj_subtr = self._proj_rho
+        else:
+            raise ValueError(f"unknown _subtraction_gauge={_subtraction_gauge!r}")
+        # check guess for correctness
+        if guess is not None:
+            try:
+                if not transpose:
+                    guess.get_leg('wL').test_equal(wL)
+                    guess.get_leg('vL').test_contractible(vR)
+                    guess.get_leg('vL*').test_equal(vR)
+                else:
                     guess.get_leg('wR').test_equal(wR)
                     guess.get_leg('vR').test_contractible(vL)
                     guess.get_leg('vR*').test_equal(vL)
-                except ValueError:
-                    logger.warning("dropping guess for MPOTransferMatrix with incompatible legs")
-                    guess = None
-            if guess is None:
+            except ValueError:
+                logger.warning("dropping guess for MPOTransferMatrix with incompatible legs")
+                guess = None
+        if guess is None:
+            if not transpose:
+                guess = eye_R.add_leg(wL, self.IdR, axis=1, label='wL')  # vL wL vL*
+            else:
                 guess = eye_L.add_leg(wR, self.IdL, axis=1, label='wR')  # vR* wR vR
+            # no need to _project: E = 0
+        else:
+            if not transpose:
+                guess = guess.transpose(['vL', 'wL', 'vL*'])  # copy!
             else:
                 guess = guess.transpose(['vR*', 'wR', 'vR'])  # copy!
-                self._project(guess)
+            self._project(guess)
         self.guess = guess
         self.flat_linop, self.flat_guess = FlatLinearOperator.from_guess_with_pipe(self.matvec,
                                                                                    self.guess,
@@ -2233,12 +2238,12 @@ class MPOTransferMatrix:
         """Project out additive energy part from vec."""
         if not self.transpose:
             vec.itranspose(['vL', 'wL', 'vL*'])  # shouldn't do anything
-            E = npc.inner(vec, self._proj_trace, axes=[['vL', 'wL', 'vL*'], ['vR', 'wR', 'vR*']])
-            vec -= self._E_shift * (E / self._chi0)
+            E = npc.inner(vec, self._proj_subtr, axes=[['vL', 'wL', 'vL*'], ['vR', 'wR', 'vR*']])
+            vec -= self._E_shift * E
         else:
             vec.itranspose(['vR*', 'wR', 'vR'])  # shouldn't do anything
-            E = npc.inner(vec, self._proj_trace, axes=[['vR*', 'wR', 'vR'], ['vL*', 'wL', 'vL']])
-            vec -= self._E_shift * (E / self._chi0)
+            E = npc.inner(vec, self._proj_subtr, axes=[['vR*', 'wR', 'vR'], ['vL*', 'wL', 'vL']])
+            vec -= self._E_shift * E
 
     def dominant_eigenvector(self, **kwargs):
         """Find dominant eigenvector of self using :mod:`scipy.sparse`.
