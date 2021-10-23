@@ -158,29 +158,16 @@ class uMPS(MPS):
         :class:`~tenpy.networks.purification_mps.Purification_MPS` if just the number of physical
         legs changed.
     """
-    # Canonical form conventions: the saved B = s**nu[0]--Gamma--s**nu[1].
-    # For the canonical forms, ``nu[0] + nu[1] = 1``
-    _valid_forms = {
-        'A': (1., 0.),
-        'C': (0.5, 0.5),
-        'B': (0., 1.),
-        'G': (0., 0.),  # like Vidal's `Gamma`.
-        'Th': (1., 1.),
-        None: None,  # means 'not in any canonical form'
-    }
 
     # valid boundary conditions. Don't overwrite this!
     _valid_bc = ('infinite')
-    # the "physical" labels for each B
-    _p_label = ['p']
     # All labels of each tensor in _B (order is used!)
-    _B_labels = ['vL', 'p', 'vR']
     _C_labels = ['vL', 'vR']
     
     def __init__(self, sites, ALs, ARs, ACs, Cs, norm=1.):
         self.sites = list(sites)
         self.chinfo = self.sites[0].leg.chinfo
-        self.dtype = dtype = np.find_common_type([B.dtype for B in Bs], [])
+        self.dtype = dtype = np.find_common_type([AL.dtype for AL in ALs], [])
         self.form = [None] * len(ARs)
         self.bc = 'infinite'  # one of ``'finite', 'infinite', 'segment'``.
         self.norm = norm
@@ -226,7 +213,7 @@ class uMPS(MPS):
                 raise ValueError("AC has wrong labels {0!r}, expected {1!r}".format(
                     AC.get_leg_labels(), self._B_labels))
             AR.get_leg('vL').test_contractible(self._C[i].get_leg('vR'))
-            AR.get_leg('vL').test_contractible(AC.get_leg('vR'))
+            AR.get_leg('vL').test_contractible(self._AC[(i - 1) % self.L].get_leg('vR'))
             AL.get_leg('vR').test_contractible(self._C[(i + 1) % self.L].get_leg('vL'))
             AL.get_leg('vR').test_contractible(self._AC[(i + 1) % self.L].get_leg('vL'))
          
@@ -446,7 +433,7 @@ class uMPS(MPS):
             raise ValueError("Length of Cflat does not match number of sites.")
         ci = sites[0].leg.chinfo
         if legL is None:
-            legL = npc.LegCharge.from_qflat(ci, [ci.make_valid(None)] * C[0].shape[0])
+            legL = npc.LegCharge.from_qflat(ci, [ci.make_valid(None)] * Cflat[0].shape[0])
             legL = legL.bunch()[1]
         ALs = []
         ARs = []
@@ -489,17 +476,17 @@ class uMPS(MPS):
             AC.iset_leg_labels(['p', 'vL', 'vR'])
             ACs.append(AC)
 
-            legL = legs[-1].conj()  # prepare for next `i`
-        if bc == 'infinite':
-            # for an iMPS, the last leg has to match the first one.
-            # so we need to gauge `qtotal` of the last `B` such that the right leg matches.
-            # TODO Ask Johannes!
-            chdiff = ALs[-1].get_leg('vR').charges[0] - AL[0].get_leg('vL').charges[0]
-            ALs[-1] = ALs[-1].gauge_total_charge('vR', ci.make_valid(chdiff))
-            ACs[-1] = ACs[-1].gauge_total_charge('vR', ci.make_valid(chdiff))
-            
-            chdiff = ARs[-1].get_leg('vR').charges[0] - ARs[0].get_leg('vL').charges[0]
-            ARs[-1] = ARs[-1].gauge_total_charge('vR', ci.make_valid(chdiff))
+            legL = ALlegs[-1].conj()  # prepare for next `i`
+
+        # for an iMPS, the last leg has to match the first one.
+        # so we need to gauge `qtotal` of the last `B` such that the right leg matches.
+        # TODO Ask Johannes!
+        chdiff = ALs[-1].get_leg('vR').charges[0] - AL[0].get_leg('vL').charges[0]
+        ALs[-1] = ALs[-1].gauge_total_charge('vR', ci.make_valid(chdiff))
+        ACs[-1] = ACs[-1].gauge_total_charge('vR', ci.make_valid(chdiff))
+
+        chdiff = ARs[-1].get_leg('vR').charges[0] - ARs[0].get_leg('vL').charges[0]
+        ARs[-1] = ARs[-1].gauge_total_charge('vR', ci.make_valid(chdiff))
         return cls(sites, ALs, ARs, ACs, Cs)
     
     @classmethod
@@ -574,14 +561,16 @@ class uMPS(MPS):
         ------
         ValueError : if self is not in canoncial form and `form` is not None.
         """
-        if form=='A' or form==(1., 0.) or form=='AL':
+        if form is None:
+            return self.get_AR(i, copy=False, label_p=label_p)
+        elif form=='A' or form==(1., 0.) or form=='AL':
             return self.get_AL(i, copy=False, label_p=label_p)
         elif form=='B' or form==(0., 1.) or form=='AR':
             return self.get_AR(i, copy=False, label_p=label_p)
         elif form=='Th' or form==(1., 1.) or form=='AC':
             return self.get_AC(i, copy=False, label_p=label_p)
         else:
-            raise NotImplementedError("Form {0!r} is not valid for VUMPS.".format(list(form)))
+            raise NotImplementedError("Form {0!r} is not valid for VUMPS.".format(form))
             
     #@property
     #def nontrivial_bonds(self):
@@ -664,7 +653,7 @@ class uMPS(MPS):
         self.set_C(i, S)
 
     def set_SR(self, i, S):
-        self.set_C(i, S)
+        self.set_C(i+1, S)
         
     #def get_op(self, op_list, i):
 

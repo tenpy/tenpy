@@ -786,7 +786,7 @@ class OneSiteH(EffectiveH):
         self.W0 = W0.replace_labels(['p', 'p*'], ['p0', 'p0*'])
         self.dtype = LP.dtype
         self.combine = combine
-        assert move_right==False, "For VUMPS, we only move right"
+        assert move_right==True, "For VUMPS, we only move right"
         self.move_right = move_right
         self.N = (self.LP.get_leg('vR').ind_len * self.W0.get_leg('p0').ind_len *
                   self.RP.get_leg('vL').ind_len)

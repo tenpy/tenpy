@@ -2137,7 +2137,7 @@ class MPOTransferMatrix:
         wR = wL.conj()
         S = psi.get_SL(0)
         if not transpose:  # right to left
-            vR = psi.get_B(0, 'B').get_leg('vR')
+            vR = psi.get_B(psi.L-1, 'B').get_leg('vR')
             if isinstance(S, npc.Array):
                 rho = npc.tensordot(S, S.conj(), axes=['vL', 'vL*'])
             else:
@@ -2177,7 +2177,7 @@ class MPOTransferMatrix:
                 rho = npc.tensordot(S.conj(), S, axes=['vR*', 'vR'])
             else:
                 S2 = S**2
-                rho = npc.diag(S2, vR, labels=['vL*', 'vL'])
+                rho = npc.diag(S2, vL, labels=['vL*', 'vL'])
             
             # vec: vR* wR vR
             for i in range(self.L):
