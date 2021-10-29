@@ -819,34 +819,37 @@ class CouplingTerms(Hdf5Exportable):
 
 class MultiCouplingTerms(CouplingTerms):
     """Operator names, site indices and strengths representing general `M`-site coupling terms.
+
     Generalizes the :attr:`coupling_terms` of :class:`CouplingTerms` to `M`-site couplings.
     The structure of the nested dictionary :attr:`coupling_terms` is similar, but we allow
     an arbitrary recursion depth of the dictionary and build from the left and right
     simultaneously.
+
     Parameters
     ----------
     L : int
         Number of sites.
+
     Attributes
     ----------
     L : int
         Number of sites.
     counter: int
         Counts the number of couplings, use negative numbers to avoid confusion with site numbering.
-    coupling_terms : dict of dict
+    coupling_terms_left, coupling_terms_right : dict of dict
         Nested dictionaries of the following form for left and right::
-            
+
         left = {ijkl[0]: {(ops_ijkl[0], op_string[0]):
                     {ijkl[1]: {(ops_ijkl[1], op_string[1]):
                               ...
-                                  {ijkl[n]: {(ops_ijkl[n],  op_string[n]): 
+                                  {ijkl[n]: {(ops_ijkl[n],  op_string[n]):
                                                     {counter: strength}}}
                     }         }
          }         }
          right = {ijkl[-1]: {(ops_ijkl[-1], op_string[-1]):
                     {ijkl[-2]: {(ops_ijkl[-2], op_string[-2]):
                                ...
-                                   {ijkl[m]: {(ops_ijkl[m],  op_string[m]): 
+                                   {ijkl[m]: {(ops_ijkl[m],  op_string[m]):
                                                      {counter: switchLR}}}
                     }         }
          }         }
@@ -862,8 +865,9 @@ class MultiCouplingTerms(CouplingTerms):
     def __init__(self, L):
         assert L > 0
         self.L = L
-        self.coupling_terms = (dict(), dict())  #left and right dictionary
-        self.counter = -1  #counts the number of couplings, use negative numbers to avoid confusion with site numbering
+        self.coupling_terms_left = dict()
+        self.coupling_terms_right = dict()
+        self.counter = -1  # number of couplings; negative to avoid confusion
 
     def add_multi_coupling_term(self, strength, ijkl, ops_ijkl, op_string="Id", switchLR=None):
         """Add a multi-site coupling term.
@@ -916,7 +920,7 @@ class MultiCouplingTerms(CouplingTerms):
         #n is the last index such that ijkl[n] <= switchLR.
         #m is the first index such that ijkl[m] > switchLR
 
-        d0L, d0R = self.coupling_terms
+        d0L, d0R = self.coupling_terms_left, self.coupling_terms_right
         #add left terms
         for i, op, op_str in zip(ijkl, ops_ijkl, op_string):
             if i <= switchLR:
@@ -1032,8 +1036,8 @@ class MultiCouplingTerms(CouplingTerms):
         max_range : int
             The maximum of ``j - i`` for the `i`, `j` occuring in a term of :attr:`coupling_terms`.
         """
-        dL = self._max_range(self.coupling_terms[0])
-        dR = self._max_range(self.coupling_terms[1])
+        dL = self._max_range(self.coupling_terms_left)
+        dR = self._max_range(self.coupling_terms_right)
         assert sorted(list(dL.keys())) == sorted(list(dR.keys()))
         ranges = [dR[i] - dL[i] for i in dL.keys()]
         return max(ranges)
@@ -1070,7 +1074,7 @@ class MultiCouplingTerms(CouplingTerms):
     def _add_from_left(self, graph, _i=None, _d1=None, _label_left=None, connect=None):
         if _i is None:  # beginning of recursion
             connect = {}
-            for i, d1 in self.coupling_terms[0].items():
+            for i, d1 in self.coupling_terms_left.items():
                 connect = self._add_from_left(graph, i, d1, 'IdL', connect)
         else:
             for key, d2 in _d1.items():
@@ -1090,7 +1094,7 @@ class MultiCouplingTerms(CouplingTerms):
 
     def _add_from_right(self, graph, connect, _i=None, _d1=None, _label_right=None):
         if _i is None:  # beginning of recursion
-            for i, d1 in self.coupling_terms[1].items():
+            for i, d1 in self.coupling_terms_right.items():
                 self._add_from_right(graph, connect, i, d1, 'IdR')
         else:
             for key, d2 in _d1.items():
@@ -1143,7 +1147,7 @@ class MultiCouplingTerms(CouplingTerms):
     def _remove_zeros_left(self, tol_zero, _d0=None, del_list=None):
         if _d0 is None:
             del_list = []
-            _d0 = self.coupling_terms[0]
+            _d0 = self.coupling_terms_left
             for i, d1 in list(_d0.items()):
                 del_list = self._remove_zeros_left(tol_zero, d1, del_list)
                 if len(d1) == 0:
@@ -1166,7 +1170,7 @@ class MultiCouplingTerms(CouplingTerms):
 
     def _remove_zeros_right(self, del_list, _d0=None):
         if _d0 is None:
-            _d0 = self.coupling_terms[1]
+            _d0 = self.coupling_terms_right
             for i, d1 in list(_d0.items()):
                 self._remove_zeros_right(del_list, d1)
                 if len(d1) == 0:
@@ -1192,8 +1196,8 @@ class MultiCouplingTerms(CouplingTerms):
         term_list : :class:`TermList`
             Representation of the terms as a list of terms.
         """
-        dL = self._to_TermList(self.coupling_terms[0])  #left dictionary of lists
-        dR = self._to_TermList(self.coupling_terms[1])  #right dictionary of lists
+        dL = self._to_TermList(self.coupling_terms_left)  #left dictionary of lists
+        dR = self._to_TermList(self.coupling_terms_right)  #right dictionary of lists
         assert sorted(list(dL.keys())) == sorted(list(dR.keys()))
         terms = [dL[i][0] + dR[i][0][::-1] for i in reversed(sorted(list(dL.keys())))]
         strength = [dL[i][1] for i in reversed(sorted(list(dL.keys())))]
@@ -1220,11 +1224,13 @@ class MultiCouplingTerms(CouplingTerms):
 
     def to_nn_bond_Arrays(self, sites):
         """Convert the :attr:`coupling_terms` into Arrays on nearest neighbor bonds.
+
         Parameters
         ----------
         sites : list of :class:`~tenpy.networks.site.Site`
             Defines the local Hilbert space for each site.
             Used to translate the operator names into :class:`~tenpy.linalg.np_conserved.Array`.
+
         Returns
         -------
         H_bond : list of {:class:`~tenpy.linalg.np_conserved.Array` | None}
@@ -1236,7 +1242,7 @@ class MultiCouplingTerms(CouplingTerms):
         if len(sites) != N_sites:
             raise ValueError("incompatible length")
         H_bond = [None] * N_sites
-        for i, d1l in self.coupling_terms[0].items():
+        for i, d1l in self.coupling_terms_left.items():
             j = (i + 1) % N_sites
             site_i = sites[i]
             site_j = sites[j]
@@ -1245,10 +1251,10 @@ class MultiCouplingTerms(CouplingTerms):
                 if not all([j2 < 0 for j2 in d2.keys()]):
                     #only counter must appear as a key here
                     raise ValueError("MultiCouplingTerms: this is not nearest neighbor!")
-                if not (i + 1) in self.coupling_terms[1].keys():
+                if not (i + 1) in self.coupling_terms_right.keys():
                     raise ValueError(
                         "Coupling from site {i:d} is not nearest neighbor!".format(i=i))
-                for (op2, op_str2), d3 in self.coupling_terms[1][i + 1].items():
+                for (op2, op_str2), d3 in self.coupling_terms_right[i + 1].items():
                     for c in d3.keys():
                         assert c < 0  #only counter can appear
                         if c in d2.keys():
@@ -1275,8 +1281,8 @@ class MultiCouplingTerms(CouplingTerms):
                             ops_ijkl = [op_i[0], op_j]
                             self.add_multi_coupling_term(strength, ijkl, ops_ijkl, op_i[1])
         else:  # add multi coupling to the left and right dictionaries
-            nc = self._iadd_multi_left(self.coupling_terms[0], other.coupling_terms[0])
-            self._iadd_multi_right(self.coupling_terms[1], other.coupling_terms[1], nc)
+            nc = self._iadd_multi_left(self.coupling_terms_left, other.coupling_terms_left)
+            self._iadd_multi_right(self.coupling_terms_right, other.coupling_terms_right, nc)
         return self
 
     def _iadd_multi_left(self, self_d0, other_d0, new_counter=None):
@@ -1317,8 +1323,8 @@ class MultiCouplingTerms(CouplingTerms):
                         self_d1[new_counter[j]] = other_d1[j]  # = switchLR
 
     def _test_terms(self, sites):
-        self._test_terms_recursive(sites, self.coupling_terms[0])  #test left dictionary
-        self._test_terms_recursive(sites, self.coupling_terms[1])  #test right dictionary
+        self._test_terms_recursive(sites, self.coupling_terms_left)  #test left dictionary
+        self._test_terms_recursive(sites, self.coupling_terms_right)  #test right dictionary
 
     def _test_terms_recursive(self, sites, d0, i0=None):
         N_sites = len(sites)

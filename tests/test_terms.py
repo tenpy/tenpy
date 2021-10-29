@@ -112,34 +112,36 @@ def test_coupling_terms():
     for i, j in [(0, 1), (0, 3), (0, 2)]:  # exact same terms as c1
         mc.add_coupling_term(strength1[i, j], i, j, "X_{i:d}".format(i=i), "Y_{j:d}".format(j=j))
     #couplings now in left/ right structure from MultiCoupling
-    c_des = ({0: {('X_0', 'Id'): {-2: 0.125,
-                                  -3: 0.375,
-                                  -4: 0.25}},
-              2: {('X_2', 'Id'): {-1: 2.375}}},
-             {3: {('Y_3', 'Id'): {-1: 2,
-                                  -3: 1}},
-              1: {('Y_1', 'Id'): {-2: 0}},
-              2: {('Y_2', 'Id'): {-4: 1}}}) # yapf: disable
-    assert mc.coupling_terms == c_des
+    c_des_L = {0: {('X_0', 'Id'): {-2: 0.125,
+                                   -3: 0.375,
+                                   -4: 0.25}},
+               2: {('X_2', 'Id'): {-1: 2.375}}} # yapf: disable
+    c_des_R = {3: {('Y_3', 'Id'): {-1: 2,
+                                   -3: 1}},
+               1: {('Y_1', 'Id'): {-2: 0}},
+               2: {('Y_2', 'Id'): {-4: 1}}} # yapf: disable
+    assert mc.coupling_terms_left == c_des_L
+    assert mc.coupling_terms_right == c_des_R
     assert mc.max_range() == 3 - 0
     mc.add_multi_coupling_term(20., [0, 1, 3], ['X_0', 'Y_1', 'Y_3'], ['Id', 'Id'])
     mc.add_multi_coupling_term(30., [0, 1, 3], ['X_0', 'Y_1', 'Y_3'], ['S1', 'S2'])
     mc.add_multi_coupling_term(40., [1, 2, 3], ['X_1', 'Y_2', 'Y_3'], ['Id', 'Id'])
-    mc_des = ({0: {('X_0', 'Id'): {-2: 0.125,
-                                   -3: 0.375,
-                                   -4: 0.25,
-                                   1: {('Y_1', 'Id'): {-5: 20.}}},
-                   ('X_0', 'S1'): {1: {('Y_1', 'S2'): {-6: 30.}}}},
-               1: {('X_1', 'Id'): {2: {('Y_2', 'Id'): {-7: 40.}}}},
-               2: {('X_2', 'Id'): {-1: 2.375}}},
-              {3: {('Y_3', 'Id'): {-1: 2,
-                                   -3: 1,
-                                   -5: 1,
-                                   -7: 2},
-                   ('Y_3', 'S2'): {-6: 1}},
-               1: {('Y_1', 'Id'): {-2: 0}},
-               2: {('Y_2', 'Id'): {-4: 1}}}) # yapf: disable
-    assert mc.coupling_terms == mc_des
+    mc_des_L = {0: {('X_0', 'Id'): {-2: 0.125,
+                                    -3: 0.375,
+                                    -4: 0.25,
+                                    1: {('Y_1', 'Id'): {-5: 20.}}},
+                    ('X_0', 'S1'): {1: {('Y_1', 'S2'): {-6: 30.}}}},
+                1: {('X_1', 'Id'): {2: {('Y_2', 'Id'): {-7: 40.}}}},
+                2: {('X_2', 'Id'): {-1: 2.375}}} # yapf: disable
+    mc_des_R = {3: {('Y_3', 'Id'): {-1: 2,
+                                    -3: 1,
+                                    -5: 1,
+                                    -7: 2},
+                    ('Y_3', 'S2'): {-6: 1}},
+                1: {('Y_1', 'Id'): {-2: 0}},
+                2: {('Y_2', 'Id'): {-4: 1}}} # yapf: disable
+    assert mc.coupling_terms_left == mc_des_L
+    assert mc.coupling_terms_right == mc_des_R
     mc._test_terms(sites)
     # convert to TermList
     tl_mc = mc.to_TermList()
@@ -157,11 +159,12 @@ def test_coupling_terms():
     assert np.all(tl_mc.strength == [2.375, 0.125, 0.375, 0.25, 20., 30., 40.])
     ot, mc_conv = tl_mc.to_OnsiteTerms_CouplingTerms(sites)
     assert ot1.onsite_terms == [{}] * L
-    del (mc_des[0][0])[('X_0', 'S1')]  # conversion dropped the opstring names
-    del (mc_des[1][3])[('Y_3', 'S2')]
-    mc_des[0][0][('X_0', 'Id')][1][('Y_1', 'Id')][-6] = 30.  # add new term
-    mc_des[1][3][('Y_3', 'Id')][-6] = 1
-    assert mc_conv.coupling_terms == mc_des
+    del (mc_des_L[0])[('X_0', 'S1')]  # conversion dropped the opstring names
+    del (mc_des_R[3])[('Y_3', 'S2')]
+    mc_des_L[0][('X_0', 'Id')][1][('Y_1', 'Id')][-6] = 30.  # add new term
+    mc_des_R[3][('Y_3', 'Id')][-6] = 1
+    assert mc_conv.coupling_terms_left == mc_des_L
+    assert mc_conv.coupling_terms_right == mc_des_R
 
     # addition
     c2 = CouplingTerms(L)
@@ -176,32 +179,34 @@ def test_coupling_terms():
     assert c1.coupling_terms == c1_des
     c1._test_terms(sites)
     mc += c2
-    mc_des = ({0: {('X_0', 'Id'): {-2: 0.125,
-                                   -3: 0.375,
-                                   -4: 0.25,
-                                   -8: 0.125,
-                                   1: {('Y_1', 'Id'): {-5: 20.}}},
-                   ('X_0', 'S1'): {1: {('Y_1', 'S2'): {-6: 30.}}}},
-               1: {('X_1', 'Id'): {2: {('Y_2', 'Id'): {-7: 40.}},
-                                   -9: 1.25}},
-               2: {('X_2', 'Id'): {-1: 2.375}}},
-              {3: {('Y_3', 'Id'): {-1: 2,
-                                   -3: 1,
-                                   -5: 1,
-                                   -7: 2},
-                   ('Y_3', 'S2'): {-6: 1}},
-               1: {('Y_1', 'Id'): {-2: 0,
-                                   -8: 0}},
-               2: {('Y_2', 'Id'): {-4: 1,
-                                   -9: 1}}}) # yapf: disable
-    assert mc.coupling_terms == mc_des
+    mc_des_L = {0: {('X_0', 'Id'): {-2: 0.125,
+                                    -3: 0.375,
+                                    -4: 0.25,
+                                    -8: 0.125,
+                                    1: {('Y_1', 'Id'): {-5: 20.}}},
+                    ('X_0', 'S1'): {1: {('Y_1', 'S2'): {-6: 30.}}}},
+                1: {('X_1', 'Id'): {2: {('Y_2', 'Id'): {-7: 40.}},
+                                    -9: 1.25}},
+                2: {('X_2', 'Id'): {-1: 2.375}}} # yapf: disable
+    mc_des_R = {3: {('Y_3', 'Id'): {-1: 2,
+                                    -3: 1,
+                                    -5: 1,
+                                    -7: 2},
+                    ('Y_3', 'S2'): {-6: 1}},
+                1: {('Y_1', 'Id'): {-2: 0,
+                                    -8: 0}},
+                2: {('Y_2', 'Id'): {-4: 1,
+                                    -9: 1}}} # yapf: disable
+    assert mc.coupling_terms_left == mc_des_L
+    assert mc.coupling_terms_right == mc_des_R
     # coupling accross mps boundary
     mc.add_multi_coupling_term(0.05, [1, 3, 5], ['X_1', 'Y_3', 'Y_1'], ['STR', 'JW'])
     assert mc.max_range() == 5 - 1
     mc._test_terms(sites)
     # remove the last coupling again
     mc.remove_zeros(tol_zero=0.1)
-    assert mc.coupling_terms == mc_des
+    assert mc.coupling_terms_left == mc_des_L
+    assert mc.coupling_terms_right == mc_des_R
     assert mc.max_range() == 3 - 0
 
 
