@@ -368,7 +368,7 @@ Some random remarks on models
   For example an exponentially decaying long-range interactions are not supported by the coupling model but straight-forward to include to an MPO, as demonstrated in the example ``examples/mpo_exponentially_decaying.py``.
 - If you want to debug or double check that the you added the correct terms to a :class:`~tenpy.models.model.CouplingMPOModel`,
   you can print the coupling terms with ``print(M.all_coupling_terms().to_TermList())``, and the onsite terms with
-  ``print(M.all_coupling_terms().to_TermList())``. 
+  ``print(M.all_onsite_terms().to_TermList())``. 
   More specifically, you can take only the terms from some categories, e.g. for the :class:`~tenpy.models.tf_ising.TFIChain`, you could
   ``print(M.coupling_terms['Sigmax_i Sigmax_j'].to_TermList())``.
 - If the model of your interest contains Fermions, you should read the :doc:`/intro/JordanWigner`.
