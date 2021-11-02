@@ -1434,7 +1434,7 @@ class MPOGraph:
             if not skip_existing or not any([op == opname for op, _ in entry]):
                 entry.append((opname, strength))
 
-    def add_string(self, i, j, key, opname='Id', check_op=True, skip_existing=True):
+    def add_string_left_to_right(self, i, j, key, opname='Id', check_op=True, skip_existing=True):
         r"""Insert a bunch of edges for an 'operator string' into the graph.
 
         Terms like :math:`S^z_i S^z_j` actually stand for
@@ -1444,13 +1444,11 @@ class MPOGraph:
         Parameters
         ----------
         i, j: int
-            An edge is inserted on all bonds between `i` and `j`, `i < j`.
+            An edge is inserted on all sites between `i` and `j`, `i < j`.
             `j` can be larger than :attr:`L`, in which case the operators are supposed to act on
             different MPS unit cells.
-        key: hashable
-            The state at bond (i-1, i) to connect from and on bond (j-1, j) to connect to.
-            Also used for the intermediate states.
-            No operator is inserted on a site `i < k < j` if ``has_edge(k, key, key)``.
+        key: tuple
+            The key at bond (i+1, i) to connect from.
         opname : str
             Name of the operator to be used for the string.
             Useful for the Jordan-Wigner transformation to fermions.
@@ -1459,13 +1457,11 @@ class MPOGraph:
 
         Returns
         -------
-        label_j : hashable
-            The `key` on the left of site j to connect to. Usually the same as the parameter `key`,
-            except if ``j - i > self.L``, in which case we use the additional labels ``(key, 1)``,
-            ``(key, 2)``, ... to generate couplings over multiple unit cells.
+        key_i : tuple
+            The `key` on the right of site i we connected to.
         """
-        if j < i:
-            raise ValueError("j < i not allowed")
+        if j <= i:
+            raise ValueError("j <= i not allowed")
         keyL = keyR = key
         for k in range(i + 1, j):
             if (k - i) % self.L == 0:
@@ -1477,6 +1473,42 @@ class MPOGraph:
                 self.add(k, keyL, keyR, opname, 1., check_op=check_op, skip_existing=skip_existing)
             keyL = keyR
         return keyL
+
+    def add_string_right_to_left(self, j, i, key, opname='Id', check_op=True, skip_existing=True):
+        r"""Insert a bunch of edges for an 'operator string' into the graph.
+
+        Similar as :meth:`add_string_left_to_right`, but in the other direction.
+
+        Parameters
+        ----------
+        j, i: int
+            An edge is inserted on all sites between `i` and `j`, `i < j`.
+            Note the switched argument order compared to :meth:`add_string_left_to_right`.
+        key: tuple
+            The key at bond (j-1, j) to connect from.
+        opname : str
+            Name of the operator to be used for the string.
+            Useful for the Jordan-Wigner transformation to fermions.
+        skip_existing : bool
+            Whether existing graph nodes should be skipped.
+
+        Returns
+        -------
+        key_i : hashable
+            The `key` on the right of site i we connected to.
+        """
+        if j <= i:
+            raise ValueError("j <= i not allowed")
+        keyL = keyR = key
+        for k in range(j - 1, i, -1):
+            if (j - k) % self.L == 0:
+                # necessary to extend key because keyR is already in use at this bond
+                keyL = keyR + (k, opname, opname)
+            k = k % self.L
+            if not self.has_edge(k, keyL, keyR):
+                self.add(k, keyL, keyR, opname, 1., check_op=check_op, skip_existing=skip_existing)
+            keyR = keyL
+        return keyR
 
     def add_missing_IdL_IdR(self, insert_all_id=True):
         """Add missing identity ('Id') edges connecting ``'IdL'->'IdL' and ``'IdR'->'IdR'``.
@@ -2468,15 +2500,15 @@ def _mpo_graph_state_order(key):
     """
     if isinstance(key, tuple):
         if key[0] == "left":  #left states first
-            return (-0.2, ) + key[1:]
+            return (-1, len(key)) + key[1:]
         elif key[0] == "right":  #right states afterwards
-            return (-0.1, ) + key[1:]
+            return (1, -len(key)) + key[1:]
         return key
     if isinstance(key, str):
         if key == 'IdL':  # should be first
-            return (-2, )
+            return (-2,)
         if key == 'IdR':  # should be last
-            return (np.inf, )
-    # fallback: compare strings
-        return (-1, key)
-    return (-1, str(key))
+            return (2,)
+        # fallback: compare strings
+        return (0, key)
+    return (0, str(key))

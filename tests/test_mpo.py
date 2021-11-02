@@ -55,9 +55,9 @@ def test_MPOGraph():
             g.add(1, 'Sz0', 'IdR', 'Sz', 0.5)
             g.add(0, 'IdL', (0, 'Sp'), 'Sp', 0.3)
             g.add(1, (0, 'Sp'), 'IdR', 'Sm', 0.2)
-            if L > 2:
-                g.add_string(0, 3, (0, 'Sp'), 'Id')
-                g.add(3, (0, 'Sp'), 'IdR', 'Sm', 0.1)
+            if L > 2 or bc == 'infinite':
+                keyR = g.add_string_left_to_right(0, 3, (0, 'Sp'), 'Id')
+                g.add(3, keyR, 'IdR', 'Sm', 0.1)
             g.add_missing_IdL_IdR()
             g.test_sanity()
             print(repr(g))
@@ -74,8 +74,8 @@ def test_MPOGraph_term_conversion():
     g1.test_sanity()
     for i in range(L):
         g1.add(i, 'IdL', 'IdR', 'Sz', 0.5)
-        g1.add(i, 'IdL', (i, 'Sp', 'Id'), 'Sp', 1.)
-        g1.add(i + 1, (i, 'Sp', 'Id'), 'IdR', 'Sm', 1.5)
+        g1.add(i, 'IdL', ("left", i, 'Sp', 'Id'), 'Sp', 1.)
+        g1.add(i + 1, ("left", i, 'Sp', 'Id'), 'IdR', 'Sm', 1.5)
     g1.add_missing_IdL_IdR()
     terms = [[("Sz", i)] for i in range(L)]
     terms += [[("Sp", i), ("Sm", i + 1)] for i in range(L)]
@@ -95,8 +95,8 @@ def test_MPOGraph_term_conversion():
         g4.add(i, 'IdL', ("left", i, 'Sp', 'Id'), 'Sp', 1.)
         g4.add(i + 1, ("left", i, 'Sp', 'Id'), 'IdR', 'Sm', 1.5)
     g4.add_missing_IdL_IdR()
-    g4.add(1, ("left", 0, 'Sp', 'Id'), ("left", 0, 'Sp', 'Id', 1, 'Sz', 'Id'), 'Sz', 1.)
-    g4.add(2, ("left", 0, 'Sp', 'Id', 1, 'Sz', 'Id'), 'IdR', 'Sm', 3.)
+    g4.add(1, ("left", 0, 'Sp', 'Id'), ("right", 2, 'Sm', 'Id'), 'Sz', 3.)
+    g4.add(2, ("right", 2, 'Sm', 'Id'), 'IdR', 'Sm', 1.)
     assert g4.graph == g3.graph
 
 
