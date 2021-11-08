@@ -5099,7 +5099,7 @@ class InitialStateBuilder:
                 Parameters given to the :class:`~tenpy.algorithms.tebd.RandomUnitaryEvolution`.
                 In particular, you might want to set the `N_steps` and `trunc_params['chi_max']`.
                 The default is
-                ``{'N_steps': 10, 'trunc_params': {'chi_max': max(100, max(self.chi))}}``.
+                ``{'N_steps': 10, 'trunc_params': {'chi_max': max(100, max(psi.chi))}}``.
             randomize_canonicalize : bool
                 Whether to call :meth:`MPS.canonical_form` before returning the state.
         """
@@ -5108,7 +5108,7 @@ class InitialStateBuilder:
         psi = method()
         close_1 = self.options.get('randomize_close_1', False)
         canonicalize = self.options.get('randomize_canonicalize', not close_1)
-        params = {'N_steps': 10, 'trunc_params': {'chi_max': max(self.chi + [100])}}
+        params = {'N_steps': 10, 'trunc_params': {'chi_max': max(psi.chi + [100])}}
         params = self.options.subconfig('randomize_params', params)
         psi.perturb(params, close_1=close_1, canonicalize=canonicalize)
         return psi
