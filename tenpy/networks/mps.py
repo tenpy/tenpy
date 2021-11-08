@@ -216,27 +216,40 @@ class MPS:
             raise ValueError("wrong len of self._B")
         if len(self._S) != self.L + 1:
             raise ValueError("wrong len of self._S")
+        assert len(self.form) == self.L
+        for f in self.form:
+            if f is not None:
+                assert isinstance(f, tuple)
+                assert len(f) == 2
         for i, B in enumerate(self._B):
             if B.get_leg_labels() != self._B_labels:
                 raise ValueError("B has wrong labels {0!r}, expected {1!r}".format(
                     B.get_leg_labels(), self._B_labels))
-            if self._S[i].shape[-1] != B.get_leg('vL').ind_len or \
-                    self._S[i+1].shape[0] != B.get_leg('vR').ind_len:
-                raise ValueError("shape of B incompatible with len of singular values")
-            if not self.finite or i + 1 < self.L:
-                B2 = self._B[(i + 1) % self.L]
+            if len(self._S[i+1].shape) == 1:
+                if self._S[i].shape[-1] != B.get_leg('vL').ind_len or \
+                        self._S[i+1].shape[0] != B.get_leg('vR').ind_len:
+                    raise ValueError("shape of B incompatible with len of singular values")
+                if not self.finite or i + 1 < self.L:
+                    B2 = self._B[(i + 1) % self.L]
+                    B.get_leg('vR').test_contractible(B2.get_leg('vL'))
+            else:
+                assert len(self._S[i+1].shape) == 2 # special case during DMRG with mixer,
+                # important for simulation resume while mixer is on
+                # we should have a well-defined form everywhere
+                B = self.get_B(i, form='Th')
+                B2 = self.get_B(i+1, form='B')
+                # and be able to contract Th-B
                 B.get_leg('vR').test_contractible(B2.get_leg('vL'))
+                # (but not necessarily A-B, as we have it on the first bond at DMRG checkpoints)
+            form = self.form[i]
+            if form is not None:
+                nuL, nuR = form
         if self.bc == 'finite':
             if len(self._S[0]) != 1 or len(self._S[-1]) != 1:
                 raise ValueError("non-trivial outer bonds for finite MPS")
         elif self.bc == 'infinite':
             if np.any(self._S[self.L] != self._S[0]):
                 raise ValueError("iMPS with S[0] != S[L]")
-        assert len(self.form) == self.L
-        for f in self.form:
-            if f is not None:
-                assert isinstance(f, tuple)
-                assert len(f) == 2
 
     def copy(self):
         """Returns a copy of `self`.
@@ -5103,7 +5116,8 @@ class InitialStateBuilder:
             randomize_params : dict-like
                 Parameters given to the :class:`~tenpy.algorithms.tebd.RandomUnitaryEvolution`.
                 In particular, you might want to set the `N_steps` and `trunc_params['chi_max']`.
-                The default is {'N_steps': 10, 'trunc_params': {'chi_max': 100}}``.
+                The default is
+                ``{'N_steps': 10, 'trunc_params': {'chi_max': max(100, max(self.chi))}}``.
             randomize_canonicalize : bool
                 Whether to call :meth:`MPS.canonical_form` before returning the state.
         """
@@ -5112,8 +5126,8 @@ class InitialStateBuilder:
         psi = method()
         close_1 = self.options.get('randomize_close_1', False)
         canonicalize = self.options.get('randomize_canonicalize', not close_1)
-        params = {'N_steps': 10, 'trunc_params': {'chi_max': 100}}
-        params = self.options.subconfig('randomize_params', {})
+        params = {'N_steps': 10, 'trunc_params': {'chi_max': max(self.chi + [100])}}
+        params = self.options.subconfig('randomize_params', params)
         psi.perturb(params, close_1=close_1, canonicalize=canonicalize)
         return psi
 

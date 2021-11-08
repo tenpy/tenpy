@@ -627,6 +627,7 @@ class FlatLinearOperator(ScipyLinearOperator):
                 if k == max_num_ev:
                     raise
             kwargs['tol'] = max(max_tol, kwargs.get('tol', 0))
+        cutoff = max(cutoff, 10*kwargs.get('tol', 1.e-16))
         from_ndarray_args = dict(legcharges=[self.leg],
                                  cutoff=cutoff,
                                  labels=[self.vec_label],

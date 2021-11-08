@@ -34,7 +34,7 @@ class TFIModel:
         in short ``i j i* j*``.
     H_mpo : lit of np.Array[ndim=4]
         The Hamiltonian written as an MPO.
-        Each ``H_mpo[i]`` has legs (virutal left, virtual right, physical out, physical in),
+        Each ``H_mpo[i]`` has legs (virtual left, virtual right, physical out, physical in),
         in short ``wL wR i i*``.
     """
     def __init__(self, L, J, g, bc='finite'):

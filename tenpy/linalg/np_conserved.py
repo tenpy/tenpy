@@ -3203,7 +3203,7 @@ def detect_grid_outer_legcharge(grid, grid_legs, qtotal=None, qconj=1, bunch=Fal
 
 
 def detect_qtotal(flat_array, legcharges, cutoff=None):
-    """Returns the total charge (w.r.t `legs`) of first non-zero sector found in `flat_array`.
+    """Returns the total charge (w.r.t `legs`) of the sector with largest entry in `flat_array`.
 
     Parameters
     ----------
@@ -3212,8 +3212,8 @@ def detect_qtotal(flat_array, legcharges, cutoff=None):
     legcharges : list of :class:`LegCharge`
         For each leg the LegCharge.
     cutoff : float
-        Blocks with ``np.max(np.abs(block)) > cutoff`` are considered as zero.
-        Defaults to :data:`QCUTOFF`.
+        If the largest (absolute) value is smaller than that,
+        raise a warning and return zero charges.
 
     Returns
     -------
@@ -3227,15 +3227,15 @@ def detect_qtotal(flat_array, legcharges, cutoff=None):
     """
     if cutoff is None:
         cutoff = QCUTOFF
-    chinfo = legcharges[0].chinfo
+    inds_max = np.unravel_index(np.argmax(np.abs(flat_array)), flat_array.shape)
+    val_max = abs(flat_array[inds_max])
+    if val_max < cutoff:
+        warnings.warn("can't detect total charge: no entry larger than cutoff. Return 0 charge.",
+                    stacklevel=2)
+        return legcharges[0].chinfo.make_valid()
     test_array = zeros(legcharges)  # Array prototype with correct charges
-    for qindices in test_array._iter_all_blocks():
-        sl = test_array._get_block_slices(qindices)
-        if np.any(np.abs(flat_array[sl]) > cutoff):
-            return test_array._get_block_charge(qindices)
-    warnings.warn("can't detect total charge: no entry larger than cutoff. Return 0 charge.",
-                  stacklevel=2)
-    return chinfo.make_valid()
+    qindices = [leg.get_qindex(i)[0] for leg, i in zip(legcharges, inds_max)]
+    return test_array._get_block_charge(qindices)
 
 
 def detect_legcharge(flat_array, chargeinfo, legcharges, qtotal=None, qconj=+1, cutoff=None):

@@ -13,7 +13,9 @@ In fact, any simulation can be run from the command line, given only a parameter
 
 Of course, you should replace `SimulationClassName` with the class name of the simulation class you want to use, for
 example :class:`~tenpy.simulations.ground_state_search.GroundStateSearch` or
-:class:`~tenpy.simulations.time_evolution.RealTimeEvolution`. For more details, see :func:`tenpy.run_commandline`.
+:class:`~tenpy.simulations.time_evolution.RealTimeEvolution`. 
+For more details, see :func:`tenpy.console_main` for the command-line interface and :func:`tenpy.run_simulation` for the
+python interface.
 
 In some cases, this might not be enough, and you want to do some pre- or post-processing, or just do something a litte
 bit differently during the simulation. In that case, you can also define your own simulation class (as subclass of one
