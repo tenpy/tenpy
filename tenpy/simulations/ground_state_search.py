@@ -144,12 +144,12 @@ class OrthogonalExcitations(GroundStateSearch):
     def run(self):
         if self.orthogonal_to is None:
             self.init_orthogonal_from_groundstate()
-        super().run()
+        return super().run()
 
     def resume_run(self):
         if self.orthogonal_to is None:
             self.init_orthogonal_from_groundstate()
-        super().resume_run()
+        return super().resume_run()
 
     def init_orthogonal_from_groundstate(self):
         """Initialize :attr:`orthogonal_to` from the ground state.
@@ -173,10 +173,11 @@ class OrthogonalExcitations(GroundStateSearch):
                 Only for initially infinite ground states.
                 Arguments for :meth:`~tenpy.models.lattice.Lattice.extract_segment`.
             apply_local_op: Array | None
-                If not `None`, apply :meth:`~tenpy.networks.mps.MPS.apply_local_op` with given
-                keyword arguments to change the charge sector compared to the ground state. Should have the form `apply_local_op should have the form [ site1,operator_string1,site2,operator_string2,...]`
+                If not `None`, use :meth:`~tenpy.networks.mps.MPS.apply_local_op` to change
+                the charge sector compared to the ground state.
+                Should have the form  ``[site1, operator1, site2, operator2, ...]``.
+                with the operators given as strings (to be read out from the site class).
                 Alternatively, use `switch_charge_sector`.
-                apply_local_op should have the form `[(site1,operator_string1),(site2,operator_string2),...]`
             switch_charge_sector : list of int | None
                 If given, change the charge sector of the exciations compared to the ground state.
                 Alternative to `apply_local_op` where we run a small zero-site diagonalization on
@@ -450,8 +451,8 @@ class OrthogonalExcitations(GroundStateSearch):
         while len(self.excitations) < N_excitations:
 
             E, psi = self.engine.run()
-            E_MPO = self.engine.full_contraction(0)
-            self.results['excitation_energies_MPO'].append(E_MPO - ground_state_energy)
+            E_MPO = self.engine.env.full_contraction(0) # TODO: measure this while envs are still around?
+            self.results['excitation_energies_MPO'].append(E_MPO - ground_state_energy)  # TODO: should be almost the same?!
             self.results['excitation_energies'].append(E - ground_state_energy)
             self.logger.info("excitation energy: %.14f", E - ground_state_energy)
             if np.linalg.norm(psi.norm_test()) > self.options.get('orthogonal_norm_tol', 1.e-12):
@@ -883,6 +884,7 @@ class TopologicalExcitations(OrthogonalExcitations):
             Filename where to save `gs_data`.
         """
         raise NotImplementedError("TODO")
+        # make sure to avoid issues if the left file(name) is the same as the right!
 
     def ground_state_segment_energy(self):
         """Calculate the energy of the segment formed from tensors of one ground state or the other.
