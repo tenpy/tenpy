@@ -1155,7 +1155,8 @@ class CouplingModel(Model):
                            _deprecate_2=_DEPRECATED_ARG_NOT_SET,
                            op_string=None,
                            category=None,
-                           plus_hc=False):
+                           plus_hc=False,
+                           switchLR='middle_i'):
         r"""Add multi-site coupling terms to the Hamiltonian, summing over lattice sites.
 
         Represents couplings of the form
@@ -1210,6 +1211,9 @@ class CouplingModel(Model):
                 This is different from a plain ``'JW'``, which just applies a string on
                 *each* segment and gives wrong results e.g. for Cd-C-Cd-C terms!
 
+        switchLR : int | ``"middle_i" | "middle_op"``
+            See :meth:`~tenpy.networks.terms.MultiCouplingTerms.add_multi_coupling` for
+            details on possible choices.
         category : str
             Descriptive name used as key for :attr:`coupling_terms`.
             Defaults to a string of the form ``"{op0}_i {other_ops[0]}_j {other_ops[1]}_k ..."``.
@@ -1306,7 +1310,7 @@ class CouplingModel(Model):
             term, sign = order_combine_term(term, sites)
             args = ct.multi_coupling_term_handle_JW(current_strength * sign, term, sites,
                                                     op_string)
-            ct.add_multi_coupling_term(*args)
+            ct.add_multi_coupling_term(*args, switchLR=switchLR)
 
         # add h.c. term
         if plus_hc:
@@ -1316,7 +1320,8 @@ class CouplingModel(Model):
                                     hc_ops,
                                     op_string=op_string,
                                     category=category,
-                                    plus_hc=False)
+                                    plus_hc=False,
+                                    switchLR=switchLR)
         # done
 
     def add_multi_coupling_term(self,
@@ -1325,7 +1330,8 @@ class CouplingModel(Model):
                                 ops_ijkl,
                                 op_string,
                                 category=None,
-                                plus_hc=False):
+                                plus_hc=False,
+                                switchLR='middle_i'):
         """Add a general M-site coupling term on given MPS sites.
 
         Wrapper for ``self.coupling_terms[category].add_multi_coupling_term(...)``.
@@ -1353,6 +1359,9 @@ class CouplingModel(Model):
             Defaults to a string of the form ``"{op0}_i {op1}_j {op2}_k ..."``.
         plus_hc : bool
             If `True`, the hermitian conjugate of the term is added automatically.
+        switchLR : int | ``"middle_i" | "middle_op"``
+            See :meth:`~tenpy.networks.terms.MultiCouplingTerms.add_multi_coupling` for
+            details on possible choices.
         """
         if self.explicit_plus_hc:
             if plus_hc:
@@ -1369,7 +1378,7 @@ class CouplingModel(Model):
             self.coupling_terms[category] = new_ct = MultiCouplingTerms(self.lat.N_sites)
             new_ct += ct
             ct = new_ct
-        ct.add_multi_coupling_term(strength, ijkl, ops_ijkl, op_string)
+        ct.add_multi_coupling_term(strength, ijkl, ops_ijkl, op_string, switchLR)
         if plus_hc:
             sites_ijkl = [
                 self.lat.unit_cell[self.lat.order[i % self.lat.N_sites, -1]] for i in ijkl
@@ -1377,7 +1386,7 @@ class CouplingModel(Model):
             hc_ops = [site.get_hc_op_name(op) for site, op in zip(sites_ijkl, ops_ijkl)]
             # NB: op_string should be defined on all sites in the unit cell...
             hc_op_string = [site.get_hc_op_name(op) for site, op in zip(sites_ijkl, op_string)]
-            ct.add_multi_coupling_term(np.conj(strength), ijkl, ops_ijkl, op_string)
+            ct.add_multi_coupling_term(np.conj(strength), ijkl, ops_ijkl, op_string, switchLR)
 
     def add_exponentially_decaying_coupling(self,
                                             strength,
