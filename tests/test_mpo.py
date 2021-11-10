@@ -21,8 +21,10 @@ def test_MPO():
     for bc in mpo.MPO._valid_bc:
         for L in [4, 2, 1]:
             print(bc, ", L =", L)
-            grid = [[s.Id, s.Sp, s.Sm, s.Sz], [None, None, None, s.Sm], [None, None, None, s.Sp],
-                    [None, None, None, s.Id]]
+            grid = [[s.Id, s.Sp, s.Sm, s.Sz],
+                    [None, None, None, s.Sm],
+                    [None, None, None, s.Sp],
+                    [None, None, None, s.Id]]  # yapf: disable
             legW = npc.LegCharge.from_qflat(s.leg.chinfo, [[0], s.Sp.qtotal, s.Sm.qtotal, [0]])
             W = npc.grid_outer(grid, [legW, legW.conj()], grid_labels=['wL', 'wR'])
             Ws = [W] * L
@@ -39,6 +41,10 @@ def test_MPO():
             H.sort_legcharges()
             H.test_sanity()
             assert H.is_equal(H_copy)
+            assert H.prefactor(0, ['Sz']) == 1.
+            for i in range(L - 1):
+                assert H.prefactor(i, ['Sp', 'Sm']) == 1.
+                assert H.prefactor(i, ['Sz', 'Sz']) == 0.
         if L == 4:
             H2 = H.group_sites(n=2)
             H2.test_sanity()

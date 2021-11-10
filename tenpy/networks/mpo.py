@@ -50,8 +50,8 @@ from .site import group_sites, Site
 from ..tools.string import vert_join
 from .mps import MPS as _MPS  # only for MPS._valid_bc
 from .mps import MPSEnvironment
-from .terms import OnsiteTerms, CouplingTerms, MultiCouplingTerms
-from ..tools.misc import add_with_None_0
+from .terms import TermList, OnsiteTerms, CouplingTerms, MultiCouplingTerms
+from ..tools.misc import to_iterable, add_with_None_0
 from ..tools.math import lcm
 from ..tools.params import asConfig
 from ..algorithms.truncation import TruncationError, svd_theta
@@ -763,6 +763,123 @@ class MPO:
         contr = contr.take_slice([self.get_IdR(self.L - 1)] * 2, ['wR1', 'wR2'])
         contr = npc.trace(contr, 'vR', 'vR*')
         return np.real_if_close(contr - exp_val**2)
+
+    def prefactor(self, i, ops):
+        """Get prefactor for a given string of operators in self.
+
+        Parameters
+        ----------
+        i : int
+            First site with non-identity operator.
+        ops : list of str
+            String of operators for which the prefactor is to be determined;
+            the first entry is the name for the operator acting on site `i`,
+            second entry on site `i` + 1, etc.
+
+        Returns
+        -------
+        prefactor : float
+            The prefactor obtained from ``trace(dagger(ops), H) / norm``,
+            where ``norm = trace(dagger(ops), ops)``
+        """
+        ops = to_iterable(ops)
+        IdL = self.get_IdL(i)
+        IdR_final = self.get_IdR(i + len(ops) - 1)
+        if IdL is None or IdR_final is None:
+            return 0.
+        contr = None
+        for k, opname in enumerate(ops):
+            j = i + k
+            W = self.get_W(j)
+            if contr is None:
+                contr = W.take_slice(IdL, 'wL')
+            else:
+                proj = np.ones(contr.shape[0])
+                IdL = self.get_IdL(j)
+                IdR = self.get_IdR(j-1)
+                if IdL is not None:
+                    proj[IdL] = 0.
+                if IdR is not None:
+                    proj[IdR] = 0.
+                contr.iscale_axis(proj, 0)
+                contr = npc.tensordot(contr, W, axes=['wR', 'wL'])
+            site = self.sites[j % len(self.sites)]
+            op = site.get_op(opname)
+            op_norm = npc.tensordot(op.conj(), op, axes=[['p', 'p*'], ['p*', 'p']])
+            contr = npc.tensordot(op.conj(), contr, axes=[['p', 'p*'], ['p*', 'p']]) / op_norm
+        contr = contr[IdR_final]
+        return contr
+
+    def to_TermList(self, op_basis,
+                    start=None,
+                    max_range=None,
+                    cutoff=1.e-12,
+                    ignore=['Id', 'JW']):
+        if start is not None:
+            start = to_iterable(start)
+        else:
+            start = range(self.L)
+        L = self.L
+        if max_range is None:
+            max_range = 5 * L
+            if self.max_range is not None:
+                max_range = min(max_range, self.max_range)
+        if isinstance(op_basis[0], str):
+            op_basis = [op_basis]
+        all_terms = []
+        all_prefs = []
+        for i in start:
+            partial_L = [None] * self.get_W(i).get_leg('wL').ind_len
+            if self.get_IdL(i) is None:
+                continue
+            partial_L[self.get_IdL(i)] = [([], 1.)]
+            if self.finite:
+                max_range = min(max_range, L - i)
+            for k in range(max_range):
+                j = i + k
+                IdL = self.get_IdL(j)
+                IdR = self.get_IdR(j)
+                if IdR is None:
+                    IdR = -1  # not equal to positive index
+                site_j = self.sites[j % L]
+                W = self.get_W(j)
+                W = W.transpose(['wL', 'wR', 'p', 'p*'])
+                op_basis_j = op_basis[j % len(op_basis)]
+                partial_R = [None] * W.get_leg('wR').ind_len
+                if k > 0 and IdL is not None:
+                    partial_L[IdL] = None # drop terms not starting at `start`
+                for opname in op_basis_j:
+                    op = site_j.get_op(opname)
+                    op_dagger = op.conj().transpose()
+                    op_norm = npc.tensordot(op, op_dagger, axes=[['p', 'p*'], ['p*', 'p']])
+                    op_W = npc.tensordot(W, op_dagger, axes=[['p', 'p*'], ['p*', 'p']])
+                    op_W = op_W.to_ndarray() / op_norm
+                    op_W[np.abs(op_W) < cutoff] = 0.
+                    for x, y in zip(*np.nonzero(op_W)):
+                        if partial_L[x] is None:
+                            continue
+                        pref_j = op_W[x,y]
+                        if y == IdR:
+                            # finish terms
+                            for (term, pref) in partial_L[x]:
+                                if abs(pref * pref_j) < cutoff:
+                                    continue
+                                all_terms.append(term + [(opname, j)])
+                                all_prefs.append(pref * pref_j)
+                        else:
+                            if partial_R[y] is None:
+                                partial_R[y] = []
+                            new_partial = partial_R[y]
+                            if k > 0 and opname in ignore:
+                                for (term, pref) in partial_L[x]:
+                                    new_partial.append((term, pref * pref_j))
+                            else:
+                                for (term, pref) in partial_L[x]:
+                                    new_partial.append((term + [(opname, j)], pref * pref_j))
+                partial_L = partial_R
+                if all(t is None for t in partial_L):
+                    break
+        return TermList(all_terms, all_prefs)
 
     def dagger(self):
         """Return hermition conjugate copy of self."""
