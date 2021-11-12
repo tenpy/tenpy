@@ -1454,8 +1454,7 @@ class MPOGraph:
         from_term_list :
             equivalent for representation by :class:`~tenpy.networks.terms.TermList`.
         """
-        max_range = max([t.max_range() for t in terms])
-        graph = cls(sites, bc, max_range)
+        graph = cls(sites, bc, 0)
         for term in terms:
             term.add_to_graph(graph)
         graph.add_missing_IdL_IdR(insert_all_id)
