@@ -3980,6 +3980,7 @@ def qr(a, mode='reduced', inner_labels=[None, None], cutoff=None, pos_diag_R=Fal
             q1, q2 = qindices
             i0 = a_leg0.slices[q1]
             inner_leg_mask[i0:i0 + q_block.shape[1]] = True
+        #  else: assert q_block.shape[1] == q_block.shape[0]
     if mode != 'complete':
         # map qindices
         with warnings.catch_warnings():
@@ -3987,6 +3988,8 @@ def qr(a, mode='reduced', inner_labels=[None, None], cutoff=None, pos_diag_R=Fal
             map_qind, _, inner_leg = a_leg0.project(inner_leg_mask)
     else:
         inner_leg = a_leg0
+        if isinstance(inner_leg, charges.LegPipe):
+            inner_leg = inner_leg.to_LegCharge()
     q = Array([a_leg0, inner_leg.conj()], a.dtype)
     q._data = q_data
     q._qdata = a._qdata.copy()
@@ -3998,13 +4001,11 @@ def qr(a, mode='reduced', inner_labels=[None, None], cutoff=None, pos_diag_R=Fal
     if mode != 'complete':
         q._qdata[:, 1] = map_qind[q._qdata[:, 0]]
         r._qdata[:, 0] = q._qdata[:, 1]  # copy map_qind[q._qdata[:, 0]] from q
+    else:
+        q._qdata[:, 1] = q._qdata[:, 0]
     if len(piped_axes) > 0:  # revert the permutation in the axes
         if 0 in piped_axes:
-            if mode != 'complete':
-                q = q.split_legs(0)
-            else:
-                q = q.split_legs(0, 1)
-                r = r.split_legs(0)
+            q = q.split_legs(0)
         if 1 in piped_axes:
             r = r.split_legs(-1)
     q.iset_leg_labels([a_labels[0], label_Q])

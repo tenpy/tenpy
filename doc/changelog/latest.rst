@@ -27,3 +27,4 @@ Fixed
 - :issue:`145` that :func:`~tenpy.networks.mpo.make_W_II` failed for MPOs with trivial virtual bonds.
 - Make :func:`~tenpy.linalg.np_conserved.detect_qtotal` more stable: use the maximal entry instead of the first non-zero one.
 - :issue:`148` that generating MPOs with long-range couplings over multiple MPS unit cells and multi-couplings raised errors.
+- The :func:`~tenpy.linalg.np_conserved.qr` decomposition with ``mode='complete'`` sometimes returned wrong charges.

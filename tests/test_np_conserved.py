@@ -783,15 +783,17 @@ def test_expm(size=10):
 def test_qr():
     for shape in [(4, 4), (6, 8), (8, 6)]:
         for qtotal in [None, [1]]:
-            print("qtotal=", qtotal, "shape =", shape)
             A = random_Array(shape, chinfo3, qtotal=qtotal, sort=False)
             A_flat = A.to_ndarray()
-            q, r = npc.qr(A, 'reduced')
-            print(q._qdata)
-            q.test_sanity()
-            r.test_sanity()
-            qr = npc.tensordot(q, r, axes=1)
-            npt.assert_array_almost_equal_nulp(A_flat, qr.to_ndarray(), shape[0] * shape[1] * 100)
+            for mode in ['reduced', 'complete']:
+                print("qtotal=", qtotal, "shape=", shape, "mode=", mode)
+                q, r = npc.qr(A, mode=mode)
+                print(q._qdata)
+                q.test_sanity()
+                r.test_sanity()
+                qr = npc.tensordot(q, r, axes=1)
+                npt.assert_array_almost_equal_nulp(A_flat, qr.to_ndarray(),
+                                                   shape[0] * shape[1] * 100)
 
 
 def test_charge_detection():
