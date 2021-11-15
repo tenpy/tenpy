@@ -3923,7 +3923,7 @@ def expm(a):
     return res
 
 
-def qr(a, mode='reduced', inner_labels=[None, None], cutoff=None):
+def qr(a, mode='reduced', inner_labels=[None, None], cutoff=None, pos_diag_R=False):
     r"""Q-R decomposition of a matrix.
 
     Decomposition such that ``A == npc.tensordot(q, r, axes=1)`` up to numerical rounding errors.
@@ -3940,6 +3940,9 @@ def qr(a, mode='reduced', inner_labels=[None, None], cutoff=None):
     cutoff : ``None`` or float
         If not ``None``, discard linearly dependent vectors to given precision, which might
         reduce `K` of the 'reduced' mode even further.
+    pos_diag_R : bool
+        If True, ensure the uniqueness of the qr decomposition by imposing that the diagonal of R
+        is positive.
 
     Returns
     -------
@@ -3966,6 +3969,11 @@ def qr(a, mode='reduced', inner_labels=[None, None], cutoff=None):
             q_block, r_block = np.linalg.qr(block, mode)
         else:
             q_block, r_block = qr_li(block, cutoff)
+        if pos_diag_R:
+            r_diag = np.diag(r_block)
+            phase = r_diag / np.abs(r_diag)
+            q_block *= phase[np.newaxis, :]
+            r_block *= np.conj(phase)[:, np.newaxis]
         q_data.append(q_block)
         r_data.append(r_block)
         if mode != 'complete':
