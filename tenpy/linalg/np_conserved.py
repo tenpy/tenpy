@@ -3972,8 +3972,14 @@ def qr(a, mode='reduced', inner_labels=[None, None], cutoff=None, pos_diag_R=Fal
         if pos_diag_R:
             r_diag = np.diag(r_block)
             phase = r_diag / np.abs(r_diag)
-            q_block *= phase[np.newaxis, :]
-            r_block *= np.conj(phase)[:, np.newaxis]
+            K = len(r_diag)
+            if K < q_block.shape[1]:
+                q_block[:, :K] *= phase[np.newaxis, :]
+                r_block[:K, :] *= np.conj(phase)[:, np.newaxis]
+            else:  # equal
+                #  assert K == q_block.shape[1]
+                q_block *= phase[np.newaxis, :]
+                r_block *= np.conj(phase)[:, np.newaxis]
         q_data.append(q_block)
         r_data.append(r_block)
         if mode != 'complete':
