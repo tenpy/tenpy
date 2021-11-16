@@ -11,6 +11,7 @@ Changelog
 Backwards incompatible changes
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 - Adjusted default paramters of :meth:`tenpy.networks.mps.InitialStateBuilder.randomized` to be as documented with better ``chi_max``.
+- No longer return `ov` from :func:`tenpy.linalg.lanczos.gram_schmidt`.
 
 Added
 ^^^^^

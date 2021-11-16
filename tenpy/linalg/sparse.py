@@ -188,7 +188,7 @@ class OrthogonalNpcLinearOperator(NpcLinearOperatorWrapper):
                           stacklevel=2)
         super().__init__(orig_operator)
         from .lanczos import gram_schmidt
-        ortho_vecs, _ = gram_schmidt(ortho_vecs)
+        ortho_vecs = gram_schmidt(ortho_vecs)
         self.ortho_vecs = ortho_vecs
 
     def matvec(self, vec):

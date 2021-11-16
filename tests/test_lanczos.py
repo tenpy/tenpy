@@ -15,12 +15,13 @@ ch = npc.ChargeInfo([2])
 
 def test_gramschmidt(n=30, k=5, tol=1.e-15):
     leg = gen_random_legcharge(ch, n)
-    vecs_old = [npc.Array.from_func(np.random.random, [leg], shape_kw='size') for i in range(k)]
-    vecs_new, _ = lanczos.gram_schmidt(vecs_old, rcond=0.)
-    assert all([v == w for v, w in zip(vecs_new, vecs_old)])
-    vecs_new, _ = lanczos.gram_schmidt(vecs_old, rcond=tol)
+    vecs_old = [npc.Array.from_func(rmat.standard_normal_complex, [leg], shape_kw='size')
+                for i in range(k)]
+    vecs_new = lanczos.gram_schmidt(vecs_old, rcond=0.)
+    assert all([v is w for v, w in zip(vecs_new, vecs_old)])
+    vecs_new = lanczos.gram_schmidt(vecs_old, rcond=tol)
     vecs = [v.to_ndarray() for v in vecs_new]
-    ovs = np.zeros((k, k))
+    ovs = np.zeros((k, k), dtype=np.complex128)
     for i, v in enumerate(vecs):
         for j, w in enumerate(vecs):
             ovs[i, j] = np.inner(v.conj(), w)

@@ -461,6 +461,11 @@ def lanczos_arpack(H, psi, options={}, orthogonal_to=[]):
 def gram_schmidt(vecs, rcond=1.e-14, verbose=None):
     """In place Gram-Schmidt Orthogonalization and normalization for npc Arrays.
 
+    .. changed :: v0.9.1
+        Previously, this function return `vecs, ov` with `ov` being the overlaps
+        ``<vecs[i]|vecs[j]>``. The return value `ov` has been dropped now,
+        since it wasn't used anyways.
+
     Parameters
     ----------
     vecs : list of :class:`~tenpy.linalg.np_conserved.Array`
@@ -474,25 +479,19 @@ def gram_schmidt(vecs, rcond=1.e-14, verbose=None):
     -------
     vecs : list of Array
         The ortho-normalized vectors (without any ``None``).
-    ov : 2D Array
-        For ``j >= i``, ``ov[j, i] = npc.inner(vecs[j], vecs[i], 'range', do_conj=True)``
-        (where vecs[j] was orthogonalized to all ``vecs[k], k < i``).
     """
     if verbose is not None:
         warnings.warn("Dropped verbose argument", category=FutureWarning, stacklevel=2)
-    k = len(vecs)
-    ov = np.zeros((k, k), dtype=vecs[0].dtype)
-    for j in range(k):
-        n = ov[j, j] = npc.norm(vecs[j])
+    res = []
+    for vec in vecs:
+        for other in res:
+            ov = npc.inner(other, vec, 'range', do_conj=True)
+            vec.iadd_prefactor_other(-ov, other)
+        n = npc.norm(vec)
         if n > rcond:
-            vecs[j].iscale_prefactor(1. / n)
-            for i in range(j + 1, k):
-                ov[j, i] = ov_ji = npc.inner(vecs[j], vecs[i], 'range', do_conj=True)
-                vecs[i].iadd_prefactor_other(-ov_ji, vecs[j])
-        else:
-            vecs[j] = None
-    vecs = [q for q in vecs if q is not None]
-    return vecs, ov
+            vec.iscale_prefactor(1. / n)
+            res.append(vec)
+    return res
 
 
 def plot_stats(ax, Es):
