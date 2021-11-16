@@ -788,15 +788,19 @@ def test_qr():
             A_flat = A.to_ndarray()
             for qtotal_Q in [None, [1]]:
                 for mode in ['reduced', 'complete']:
-                    for pos in [False, True]:
-                        print(f"shape={shape!s} qtot_A={qtotal_A!s} qtot_Q={qtotal_Q!s}"
-                            f"mode={mode!s} pos_diag_R={pos!s}")
-                        q, r = npc.qr(A, mode=mode, pos_diag_R=pos, qtotal_Q=qtotal_Q)
-                        #  print(q._qdata)
-                        q.test_sanity()
-                        r.test_sanity()
-                        qr = npc.tensordot(q, r, axes=1)
-                        npt.assert_array_almost_equal_nulp(A_flat, qr.to_ndarray(), tol)
+                    for qconj in [+1, -1]:
+                        for pos in [False, True]:
+                            print(f"shape={shape!s} qtot_A={qtotal_A!s} qtot_Q={qtotal_Q!s}"
+                                  f"mode={mode!s} pos_diag_R={pos!s} inner_qconj={qconj:+d}")
+                            Q, R = npc.qr(A, mode=mode, pos_diag_R=pos, qtotal_Q=qtotal_Q,
+                                          inner_qconj=qconj)
+                            #  print(q._qdata)
+                            Q.test_sanity()
+                            R.test_sanity()
+                            assert np.all(Q.qtotal) == A.chinfo.make_valid(qtotal_Q)
+                            assert R.legs[0].qconj == qconj
+                            QR = npc.tensordot(Q, R, axes=1)
+                            npt.assert_array_almost_equal_nulp(A_flat, QR.to_ndarray(), tol)
 
 
 def test_charge_detection():

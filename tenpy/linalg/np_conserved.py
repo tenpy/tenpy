@@ -3563,7 +3563,7 @@ def svd(a,
         The first label corresponds to ``U.legs[1]``, the second to ``VH.legs[0]``.
     inner_qconj : {+1, -1}
         Direction of the charges for the new leg. Default +1.
-        The new LegCharge is constructed such that ``VH.legs[0].qconj = qconj``.
+        The new LegCharge is constructed such that ``VH.legs[0].qconj = inner_qconj``.
 
     Returns
     -------
@@ -3923,7 +3923,13 @@ def expm(a):
     return res
 
 
-def qr(a, mode='reduced', inner_labels=[None, None], cutoff=None, pos_diag_R=False, qtotal_Q=None):
+def qr(a,
+       mode='reduced',
+       inner_labels=[None, None],
+       cutoff=None,
+       pos_diag_R=False,
+       qtotal_Q=None,
+       inner_qconj=+1):
     r"""Q-R decomposition of a matrix.
 
     Decomposition such that ``A == npc.tensordot(Q, R, axes=1)`` up to numerical rounding errors.
@@ -3947,6 +3953,9 @@ def qr(a, mode='reduced', inner_labels=[None, None], cutoff=None, pos_diag_R=Fal
         Total charge for `Q`. ``None`` defaults to trivial charges.
         Use ``qtotal_Q=a.qtotal`` to get `R` with trivial charges,
         since ``a.qtotal = chinfo.make_valid(q.qtotal + r.qtotal)``.
+    inner_qconj : {+1, -1}
+        Direction of the charges for the new leg. Default +1.
+        The new LegCharge is constructed such that ``R.legs[0].qconj = inner_qconj``.
 
     Returns
     -------
@@ -4003,6 +4012,11 @@ def qr(a, mode='reduced', inner_labels=[None, None], cutoff=None, pos_diag_R=Fal
     if qtotal_Q is not None:
         qtotal_Q = a.chinfo.make_valid(qtotal_Q)  # convert to ndarray
         inner_leg.charges = a.chinfo.make_valid(inner_leg.charges - inner_leg.qconj * qtotal_Q)
+    if inner_leg.qconj != inner_qconj:
+        assert inner_qconj == -inner_leg.qconj
+        # absorb sign into charge values
+        inner_leg.charges = a.chinfo.make_valid(-inner_leg.charges)
+        inner_leg.qconj = inner_qconj
     q = Array([a_leg0, inner_leg.conj()], a.dtype, qtotal_Q)
     q._data = q_data
     q._qdata = a._qdata.copy()
