@@ -15,7 +15,7 @@ Backwards incompatible changes
 Added
 ^^^^^
 - Wrappers for the helical and irregular lattice (removing sites) in :meth:`~tenpy.models.model.CouplingMPOModel.init_lattice`.
-- Option `pos_diag_r` to make :func:`~tenpy.linalg.np_conserved.qr` unique.
+- Option `pos_diag_r` to make :func:`~tenpy.linalg.np_conserved.qr` unique, as well as `qtotal_Q`.
 
 Changed
 ^^^^^^^

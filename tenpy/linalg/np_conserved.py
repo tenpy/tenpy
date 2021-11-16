@@ -3923,10 +3923,10 @@ def expm(a):
     return res
 
 
-def qr(a, mode='reduced', inner_labels=[None, None], cutoff=None, pos_diag_R=False):
+def qr(a, mode='reduced', inner_labels=[None, None], cutoff=None, pos_diag_R=False, qtotal_Q=None):
     r"""Q-R decomposition of a matrix.
 
-    Decomposition such that ``A == npc.tensordot(q, r, axes=1)`` up to numerical rounding errors.
+    Decomposition such that ``A == npc.tensordot(Q, R, axes=1)`` up to numerical rounding errors.
 
     Parameters
     ----------
@@ -3943,13 +3943,17 @@ def qr(a, mode='reduced', inner_labels=[None, None], cutoff=None, pos_diag_R=Fal
     pos_diag_R : bool
         If True, ensure the uniqueness of the qr decomposition by imposing that the diagonal of R
         is positive.
+    qtotal_Q : None | charges
+        Total charge for `Q`. ``None`` defaults to trivial charges.
+        Use ``qtotal_Q=a.qtotal`` to get `R` with trivial charges,
+        since ``a.qtotal = chinfo.make_valid(q.qtotal + r.qtotal)``.
 
     Returns
     -------
-    q : :class:`Array`
+    Q : :class:`Array`
         If `mode` is 'complete', a unitary matrix.
         For `mode` 'reduced' an isometry such that :math:`q^{*}_{j,i} q_{j,k} = \delta_{i,k}`.
-    r : :class:`Array`
+    R : :class:`Array`
         Upper triangular matrix if both legs of A are sorted by charges;
         Otherwise a simple transposition (performed when sorting by charges) brings it to
         upper triangular form.
@@ -3993,14 +3997,17 @@ def qr(a, mode='reduced', inner_labels=[None, None], cutoff=None, pos_diag_R=Fal
             warnings.simplefilter("ignore")
             map_qind, _, inner_leg = a_leg0.project(inner_leg_mask)
     else:
-        inner_leg = a_leg0
+        inner_leg = a_leg0.copy()
         if isinstance(inner_leg, charges.LegPipe):
             inner_leg = inner_leg.to_LegCharge()
-    q = Array([a_leg0, inner_leg.conj()], a.dtype)
+    if qtotal_Q is not None:
+        qtotal_Q = a.chinfo.make_valid(qtotal_Q)  # convert to ndarray
+        inner_leg.charges = a.chinfo.make_valid(inner_leg.charges - inner_leg.qconj * qtotal_Q)
+    q = Array([a_leg0, inner_leg.conj()], a.dtype, qtotal_Q)
     q._data = q_data
     q._qdata = a._qdata.copy()
     q._qdata_sorted = False
-    r = Array([inner_leg, a.legs[1]], a.dtype, a.qtotal)
+    r = Array([inner_leg, a.legs[1]], a.dtype, a.chinfo.make_valid(a.qtotal - q.qtotal))
     r._data = r_data
     r._qdata = a._qdata.copy()
     r._qdata_sorted = False
