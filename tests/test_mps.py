@@ -576,7 +576,7 @@ def test_InitialStateBuilder():
             'full_empty': ['up', 'down'],
         }, model_dtype=np.float64).run()
     assert psi4.dtype == np.float64
-    assert abs(psi4.overlap(psi1)) < 0.1  # randomizing should definitely lead to small overlap!
+    assert abs(psi4.overlap(psi1) - 1) > 0.1  # randomizing should lead to small overlap!
     psi5 = mps.InitialStateBuilder(
         lat, {
             'method': 'randomized',
@@ -588,7 +588,7 @@ def test_InitialStateBuilder():
             'full_empty': ['up', 'down'],
         }, model_dtype=np.complex128).run()
     assert psi5.dtype == np.complex128
-    assert abs(psi5.overlap(psi1)) > 0.1  # randomizing should definitely lead to small overlap!
+    assert 1.e-8 < abs(psi5.overlap(psi1) - 1) < 0.1  # but here we randomize only a bit
 
 
 if __name__ == "__main__":

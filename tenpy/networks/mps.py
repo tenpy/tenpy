@@ -2162,10 +2162,6 @@ class MPS:
         However, for effiency, the term_list is converted to an MPO and the expectation value
         of the MPO is evaluated.
 
-        .. note ::
-            Due to the way MPO expectation values are evaluated for infinite systems,
-            it works only if all terms in the `term_list` start within the MPS unit cell.
-
         .. deprecated:: 0.4.0
             `prefactor` will be removed in version 1.0.0.
             Instead, directly give just ``TermList(term_list, prefactors)`` as argument.
@@ -2202,9 +2198,17 @@ class MPS:
             term_list = terms.TermList(term_list, prefactors)
         L = self.L
         if not self.finite:
-            for term in term_list.terms:
-                if not 0 <= min([i for _, i in term]) < L:
-                    raise ValueError("term doesn't start in MPS unit cell: " + repr(term))
+            copy = None
+            for a, term in enumerate(term_list.terms):
+                i_min = min([i for _, i in term])
+                if not 0 <= i_min < L:
+                    if copy is None:
+                        # make explicit copy to not modify exicisting term_list
+                        copy = terms.TermList(term_list.terms, term_list.prefactors)
+                    shift = i % L - i_min
+                    copy.terms[a] = [(op, i + shift) for op, i in term]
+            if copy is not None:
+                term_list = copy
         # conversion
         ot, ct = term_list.to_OnsiteTerms_CouplingTerms(self.sites)
         bc = 'finite' if self.finite else 'infinite'
