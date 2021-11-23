@@ -121,3 +121,43 @@ def test_lanczos_evolve(n, N_cache, tol=5.e-14):
         assert diff / norm < tol
         psi_final2, N = lanc.run(delta, normalize=True)
         assert npc.norm(psi_final / norm - psi_final2) < tol
+
+
+
+@pytest.mark.parametrize('n, which', [(10, 'LM'), (30, 'LM'), (30, 'SR'), (30, 'LR')])
+def test_arnoldi(n, which):
+    tol = 5.e-14 if n <= 20 else 1.e-10
+    # generate Hermitian test array
+    leg = gen_random_legcharge(ch, n)
+    # if looking for small/large real part, ensure hermitian H
+    func = rmat.GUE if which[-1] == 'R' else rmat.standard_normal_complex
+    H = npc.Array.from_func_square(func, leg)
+    H_flat = H.to_ndarray()
+    E_flat, psi_flat = np.linalg.eig(H_flat)
+    if which == 'LM':
+        i = np.argmax(np.abs(E_flat))
+    elif which == 'LR':
+        i = np.argmax(np.real(E_flat))
+    elif which == 'SR':
+        i = np.argmin(np.real(E_flat))
+    E0_flat, psi0_flat = E_flat[i], psi_flat[:, i]
+    qtotal = npc.detect_qtotal(psi0_flat, [leg])
+
+    H_Op = H  # use `matvec` of the array
+    psi_init = npc.Array.from_func(np.random.random, [leg], qtotal=qtotal)
+
+    eng = lanczos.Arnoldi(H_Op, psi_init, {'which': which, 'num_ev': 1, 'N_max': 20})
+    (E0,), (psi0,), N = eng.run()
+    print("full spectrum:", E_flat)
+    print("E0 = {E0:.14f} vs exact {E0_flat:.14f}".format(E0=E0, E0_flat=E0_flat))
+    print("|E0-E0_flat| / |E0_flat| =", abs((E0 - E0_flat) / E0_flat))
+    assert abs((E0 - E0_flat) / E0_flat) < tol
+    psi0_H_psi0 = npc.inner(psi0, npc.tensordot(H, psi0, axes=[1, 0]), 'range', do_conj=True)
+    print("<psi0|H|psi0> / E0 = 1. + ", psi0_H_psi0 / E0 - 1.)
+    assert (abs(psi0_H_psi0 / E0 - 1.) < tol)
+    print("<psi0_flat|H_flat|psi0_flat> / E0_flat = ", end=' ')
+    print(np.inner(psi0_flat.conj(), np.dot(H_flat, psi0_flat)) / E0_flat)
+    ov = np.inner(psi0.to_ndarray().conj(), psi0_flat)
+    print("|<psi0|psi0_flat>|=", abs(ov))
+    assert (abs(1. - abs(ov)) < tol)
+

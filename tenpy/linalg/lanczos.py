@@ -12,29 +12,29 @@ logger = logging.getLogger(__name__)
 from . import np_conserved as npc
 from ..tools.params import asConfig
 from ..tools.math import speigsh
+from ..tools.misc import argsort
 
 __all__ = [
-    'LanczosGroundState', 'LanczosEvolution', 'lanczos', 'lanczos_arpack', 'gram_schmidt',
-    'plot_stats'
+    'KrylovBased', 'Arnoldi', 'LanczosGroundState', 'LanczosEvolution', 'lanczos',
+    'lanczos_arpack', 'gram_schmidt', 'plot_stats'
 ]
 
 
-class LanczosGroundState:
-    r"""Lanczos algorithm working on npc arrays.
+class KrylovBased:
+    r"""Base class for iterativ algorithms building a Krylov basis with np_conserved arrays.
 
-    The Lanczos algorithm can finds extremal eigenvalues (in terms of magnitude) along with
-    the corresponding eigenvectors. It assumes that the linear operator `H` is hermitian.
-    Given a start vector `psi0`, it generates an orthonormal basis of the Krylov space,
-    in which `H` is a small tridiagonal matrix, and solves the eigenvalue problem there.
-    Finally, it transform the resulting ground state back into the original space.
+    Algorithms like :class:`LanczosGroundState` and `:class:`ArnoldiDiagonalize`
+    are based on iteratively building an orthonormal basis of the Krylov space spanned by
+    ``|psi0>, H|psi0>, H^2|psi0>, ... H^N |psi0>``, where `N` is the number of iterations
+    performed so far, and ``|psi0>`` is an initial guess and starting vector.
+    During that iteration, the projection of `H` into the Krylov space is built, where it can
+    be solved effectively (with `H` being just a N by N matrix), yielding the "Ritz" eigenvalues/
+    eigenvectors. Finally, the solution can be translated back into the orginal space using the
+    basis.
 
-    .. deprecated :: 0.6.0
-        Renamed parameter/attribute `params` to :attr:`options`.
-
-    .. deprecated :: 0.6.0
-        Going to remove the `orthogonal_to` argument.
-        Instead, replace H with `OrthogonalNpcLinearOperator(H, orthogonal_to)`
-        using the :class:`~tenpy.linalg.sparse.OrthogonalNpcLinearOperator`.
+    An important strategy is also to (implicitly) restart the algorithm after some number of steps.
+    This is **not** done here: when we use these classes, we usually have an explicit outer loop
+    performed until convergence, e.g., the "sweeps" in DMRG.
 
     Parameters
     ----------
@@ -51,43 +51,24 @@ class LanczosGroundState:
         Further optional parameters as described in :cfg:config:`Lanczos`.
         The algorithm stops if *both* criteria for `e_tol` and `p_tol` are met
         or if the maximum number of steps was reached.
-    orthogonal_to : list of :class:`~tenpy.linalg.np_conserved.Array`
-        Vectors (same tensor structure as psi) against which Lanczos will orthogonalize,
-        ensuring that the result is perpendicular to them.
-        (Assumes that the smallest eigenvalue is smaller than 0, which should *always* be the
-        case if you want to find ground states with Lanczos!)
 
     Options
     -------
-    .. cfg:config :: Lanczos
+    .. cfg:config :: KrylovBased
 
         N_min : int
             Minimum number of steps to perform.
         N_max : int
             Maximum number of steps to perform.
-        E_tol : float
-            Stop if energy difference per step < `E_tol`
         P_tol : float
             Tolerance for the error estimate from the Ritz Residual,
             stop if ``(RitzRes/gap)**2 < P_tol``
         min_gap : float
             Lower cutoff for the gap estimate used in the P_tol criterion.
-        N_cache : int
-            The maximum number of `psi` to keep in memory during the first iteration.
-            By default, we keep all states (up to N_max).
-            Set this to a number >= 2 if you are short on memory.
-            The penalty is that one needs another Lanczos iteration to
-            determine the ground state in the end, i.e., runtime is large.
-        reortho : bool
-            For poorly conditioned matrices, one can quickly loose orthogonality of the
-            generated Krylov basis.
-            If `reortho` is True, we re-orthogonalize against all the
-            vectors kept in cache to avoid that problem.
         cutoff : float
-            Cutoff to abort if `beta` (= norm of next vector in Krylov basis before normalizing)
-            is too small.
-            This is necessary if the rank of `H` is smaller than `N_max` -
-            then we get a complete basis of the Krylov space, and `beta` will be zero.
+            Cutoff to abort if the norm of the new krylov vecotr is too small.
+            This is necessary if the rank of `H` is smaller than `N_max`, but it's *not* the error
+            tolerance for final values!
         E_shift : float
             Shift the energy (=eigenvalues) by that amount *during* the Lanczos run by using the
             :class:`~tenpy.linalg.sparse.ShiftNpcLinearOperator`.
@@ -102,49 +83,47 @@ class LanczosGroundState:
     options : :class:`~tenpy.tools.params.Config`
         Optional parameters.
     H : :class:`~tenpy.linalg.sparse.NpcLinearOperator`-like
-        The hermitian linear operator.
+        The linear operator used for building the Krylov space.
     psi0 : :class:`~tenpy.linalg.np_conserved.Array`
-        The starting vector.
-    orthogonal_to : list of :class:`~tenpy.linalg.np_conserved.Array`
-        Vectors to orthogonalize against.
-    N_min, N_max, E_tol, P_tol, N_cache, reortho:
-        Parameters as described above.
+        The starting vector; normalized copy.
+    N_min, N_max, P_tol, min_gap, _cutoff, E_shift:
+        Parameters as described in the options.
     Es : ndarray, shape(N_max, N_max)
-        ``Es[n, :]`` contains the energies of ``_T[:n+1, :n+1]`` in step `n`.
-    _T : ndarray, shape (N_max + 1, N_max +1)
-        The tridiagonal matrix representing `H` in the orthonormalized Krylov basis.
+        ``Es[n, :]`` contains the energies of ``_h_krylov[:n+1, :n+1]`` in step `n`.
+    _h_krylov : ndarray, shape (N_max + 1, N_max +1)
+        The matrix representing `H` projected onto the orthonormalized Krylov basis.
     _psi0_norm : float
-        Initial norm of the `psi0` passed.
-    _cutoff : float
-        See parameter `cutoff`.
+        Initial norm of the `psi0` parameter. Note that ``self.psi0`` gets normalized.
     _cache : list of psi0-like vectors
         The ONB of the Krylov space generated during the iteration.
-        FIFO (first in first out) cache of at most N_cache vectors.
+        FIFO (first in first out) cache of at most `N_cache` vectors.
     _result_krylov : ndarray
-        Result in the ONB of the Krylov space: ground state of `_T`.
+        Result in the ONB of the Krylov space, e.g. the ground state of `_h_krylov`.
+        What exactly this is depends on the subclass.
 
     Notes
     -----
-    I have computed the Ritz residual `RitzRes` according to
+    The Ritz residual `RitzRes` is computed according to
     http://web.eecs.utk.edu/~dongarra/etemplates/node103.html#estimate_residual.
     Given the gap, the Ritz residual gives a bound on the error in the wavefunction,
     ``err < (RitzRes/gap)**2``. The gap is estimated from the full Lanczos spectrum.
     """
+
+    _dtype_h_krylov = np.complex128
+    _dtype_E = np.complex128
+
     def __init__(self, H, psi0, options, orthogonal_to=[]):
         self.H = H
         self.psi0 = psi0.copy()
         self._psi0_norm = None
-        self.options = options = asConfig(options, "Lanczos")
+        self.options = options = asConfig(options, self.__class__.__name__)
         self.N_min = options.get('N_min', 2)
         self.N_max = options.get('N_max', 20)
-        self.E_tol = options.get('E_tol', np.inf)
+        self.N_cache = self.N_max
         self.P_tol = options.get('P_tol', 1.e-14)
-        self.N_cache = options.get('N_cache', self.N_max)
         self.min_gap = options.get('min_gap', 1.e-12)
         self.reortho = options.get('reortho', False)
         self.E_shift = options.get('E_shift', None)
-        if self.N_cache < 2:
-            raise ValueError("Need to cache at least two vectors.")
         if self.N_min < 2:
             raise ValueError("Should perform at least 2 steps.")
         self._cutoff = options.get('cutoff', np.finfo(psi0.dtype).eps * 100)
@@ -153,71 +132,15 @@ class LanczosGroundState:
                 self.H.orig_operator = ShiftNpcLinearOperator(self.H.orig_operator, self.E_shift)
             else:
                 self.H = ShiftNpcLinearOperator(self.H, self.E_shift)
-        if len(orthogonal_to) > 0:
-            msg = ("Lanczos argument `orthogonal_to` is deprecated and will be removed.\n"
-                   "Instead, replace `H` with  `OrthogonalNpcLinearOperator(H, orthogonal_to)`.")
-            warnings.warn(msg, category=FutureWarning, stacklevel=2)
-            self.H = OrthogonalNpcLinearOperator(self.H, orthogonal_to)
         self._cache = []
-        self.Es = np.zeros([self.N_max, self.N_max], dtype=np.float64)
-        # First Lanczos iteration: Form tridiagonal form of A in the Krylov subspace, stored in T
-        self._T = np.zeros([self.N_max + 1, self.N_max + 1], dtype=np.float64)
+        self.Es = np.zeros([self.N_max, self.N_max], dtype=self._dtype_E)
+        self._h_krylov = np.zeros([self.N_max + 1, self.N_max + 1], dtype=self._dtype_h_krylov)
 
     def run(self):
-        """Find the ground state of H.
+        raise NotImplementedError("subclasses should implement this")
 
-        Returns
-        -------
-        E0 : float
-            Ground state energy (estimate).
-        psi0 : :class:`~tenpy.linalg.np_conserved.Array`
-            Ground state vector (estimate).
-        N : int
-            Used dimension of the Krylov space, i.e., how many iterations where performed.
-        """
-        N = self._calc_T()
-        E0 = self.Es[N - 1, 0]
-        if N > 1:
-            logger.debug("Lanczos N=%d, gap=%.3e, DeltaE0=%.3e, _result_krylov[-1]=%.3e", N,
-                         self.Es[N - 1, 1] - E0, self.Es[N - 2, 0] - E0, self._result_krylov[-1])
-        else:
-            logger.debug("Lanczos N=%d, first alpha=%.3e, beta=%.3e", N, self._T[0, 0],
-                         self._T[0, 1])
-        if self.E_shift is not None:
-            E0 -= self.E_shift
-        if N == 1:
-            return E0, self.psi0.copy(), N  # no better estimate available
-        return E0, self._calc_result_full(N), N
-
-    def _calc_T(self):
-        """Build the tridiagonal matrix `_T`.
-
-        Returns the number of steps performed.
-        """
-        T = self._T
-        w = self.psi0  # initialize
-        beta = npc.norm(w)
-        if self._psi0_norm is None:
-            # this is only needed for normalization in LanczosEvolution
-            self._psi0_norm = beta
-        for k in range(self.N_max):
-            w.iscale_prefactor(1. / beta)
-            self._to_cache(w)
-            w = self.H.matvec(w)
-            alpha = np.real(npc.inner(w, self._cache[-1], axes='range', do_conj=True)).item()
-            T[k, k] = alpha
-            self._calc_result_krylov(k)
-            w.iadd_prefactor_other(-alpha, self._cache[-1])
-            if self.reortho:
-                for c in self._cache[:-1]:
-                    w.iadd_prefactor_other(-npc.inner(c, w, axes='range', do_conj=True), c)
-            elif k > 0:
-                w.iadd_prefactor_other(-beta, self._cache[-2])
-            beta = npc.norm(w)
-            T[k, k + 1] = T[k + 1, k] = beta  # needed for the next step and convergence criteria
-            if abs(beta) < self._cutoff or (k + 1 >= self.N_min and self._converged(k)):
-                break
-        return k + 1
+    def _build_krylov(self):
+        raise NotImplementedError("subclasses should implement this")
 
     def _calc_result_full(self, N):
         """Transform self._result_krylov from the Krylov ONB to the original (npc) basis.
@@ -235,66 +158,312 @@ class LanczosGroundState:
         # other vectors are not cached, so we need to restart the Lanczos iteration.
         self._cache = []  # free memory: we need at least two more vectors
 
-        T = self._T
-        w = self.psi0  # initialize
-        for k in range(0, N - len_cache - 1):
-            self._to_cache(w)
-            w = self.H.matvec(w)
-            alpha = T[k, k]
-            w.iadd_prefactor_other(-alpha, self._cache[-1])
-            if self.reortho:
-                for c in self._cache[:-1]:
-                    w.iadd_prefactor_other(-npc.inner(c, w, 'range', do_conj=True), c)
-            elif k > 0:
-                w.iadd_prefactor_other(-beta, self._cache[-2])
-            beta = T[k, k + 1]  # = norm(w)
-            w.iscale_prefactor(1. / beta)
-            psif.iadd_prefactor_other(vf[k + 1], w)
+        self._rebuild_krylov_for_result_full(psif, N - len_cache - 1)
+
         psif_norm = npc.norm(psif)
         if abs(1. - psif_norm) > 1.e-5:
             # One reason can be that `H` is not Hermitian
             # Otherwise, the matrix (even if small) might be ill conditioned.
             # If you get this warning, you can try to set the parameters
             # `reortho`=True and `N_cache` >= `N_max`
-            logger.warning("poorly conditioned Lanczos! |psi_0| = %f", psif_norm)
+            logger.warning("poorly conditioned H matrix in KrylovBased! |psi_0| = %f", psif_norm)
         psif.iscale_prefactor(1. / psif_norm)
         return psif
 
     def _to_cache(self, psi):
-        """add psi to cache, keep at most N_cache."""
+        """add psi to cache, keep at most self.N_cache."""
         cache = self._cache
         cache.append(psi)
         if len(cache) > self.N_cache:
             cache.pop(0)  # remove *first* entry
 
     def _calc_result_krylov(self, k):
-        """calculate ground state of _T[:k+1, :k+1]"""
-        T = self._T
+        raise NotImplementedError("subclasses should implement this")
+
+
+class Arnoldi(KrylovBased):
+    """Arnoldi method for diagonalizing square, non-hermitian/symmetric matrices.
+
+    Generalization of :class:`LanczosGroundState`, allowing general, square matrices.
+
+    Options
+    -------
+    .. cfg:config :: Arnoldi
+        :include: KrylovBased
+
+        which : ``'LM' | 'LR' | 'SR'``
+            Determines which (extremal) eigenvalues to look for, name
+            largest magnitude (in absolute value, ``'LM'``), or
+            largest or smallest real part (``'LR'`` and ``'SR'``, respectively).
+        num_ev : int
+            Number of eigenvectors to look for/return in `run`.
+
+    """
+    def __init__(self, H, psi0, options):
+        super().__init__(H, psi0, options)
+        self.E_tol = self.options.get('E_tol', np.inf)
+        self.which = self.options.get('which', 'LM')
+        self.num_ev = self.options.get('num_ev', 1)  # number of desired eigenvectors
+
+    def run(self):
+        """Find the ground state of H.
+
+        Returns
+        -------
+        E0s : numpy array
+            Best eigenvalue estimates, :cfg:option:`Arnoldi.num_ev` entries,
+            sorted according to :cfg:option:`Arnoldi.which`.
+        psis : list of :class:`~tenpy.linalg.np_conserved.Array`
+            Corresponding best eigenvectors (estimates).
+        N : int
+            Used dimension of the Krylov space, i.e., how many iterations where performed.
+        """
+        assert self.N_cache >= self.N_max
+        N = self._build_krylov()
+        E0 = self.Es[N - 1, :self.num_ev]
+        if self.E_shift is not None:
+            E0 = E0 - self.E_shift
+        if N == 1:
+            return E0, [self.psi0.copy()], N  # no better estimate available
+        return E0, self._calc_result_full(N), N
+
+    def _build_krylov(self):
+        """Build the Krylov space and the projection of H into it.
+
+        Returns the number of steps performed.
+        """
+        h = self._h_krylov
+        w = self.psi0  # initialize
+        norm = npc.norm(w)
+        for k in range(self.N_max):
+            w.iscale_prefactor(1. / norm)
+            self._to_cache(w)
+            w = self.H.matvec(w)
+            for i, v_i in enumerate(self._cache):
+                h[i, k] = ov = npc.inner(v_i, w, axes='range', do_conj=True)
+                w.iadd_prefactor_other(-ov, v_i)
+            h[k + 1, k] = norm = npc.norm(w)
+            self._calc_result_krylov(k)
+            if norm < self._cutoff or (k + 1 >= self.N_min and self._converged(k)):
+                break
+        return k + 1
+
+    def _calc_result_krylov(self, k):
+        """calculate ground state of _h_krylov[:k+1, :k+1]"""
+        h = self._h_krylov
         if k == 0:
-            self.Es[0, 0] = T[0, 0]
-            self._result_krylov = np.ones(1, np.float64)
+            self.Es[0, 0] = h[0, 0]
+            self._result_krylov = np.ones([1, 1], self._dtype_h_krylov)
         else:
-            # Diagonalize T
-            E_T, v_T = np.linalg.eigh(T[:k + 1, :k + 1])
-            self.Es[k, :k + 1] = E_T
-            self._result_krylov = v_T[:, 0]  # ground state of _T
+            # Diagonalize h
+            E_kr, v_kr = np.linalg.eig(h[:k + 1, :k + 1]) # not hermitian!
+            sort = argsort(E_kr, self.which)
+            self.Es[k, :k + 1] = E_kr[sort]
+            self._result_krylov = v_kr[:, sort]  # ground state of _h_krylov
+
+    def _calc_result_full(self, N):
+        """Transform self._result_krylov from the Krylov ONB to the original (npc) basis.
+
+        Construct the result ``psi_f = sum_k  _result_krylov[k] psi[k]``, where ``psi[k]``
+        is the k-th vector of the ONB of the Krylov space generated during the iteration.
+        """
+        psis = []
+        for i in range(min(N, self.num_ev)):
+            vf = self._result_krylov[:, i]
+            vf = np.real_if_close(vf)  # try to convert to real:
+            # e.g. the dominant eigenvectors of the MPS transfermatrix should be equivalent to
+            # the power method, which will be purely real for H.dtype=float, even if there might
+            # be other eigenvectors which are complex
+            assert N == len(vf) > 1
+            krylov_basis = self._cache
+            assert len(krylov_basis) >= N
+            psi = vf[0] * krylov_basis[0]  # copy!
+            # and the last len_cache vectors have been cached
+            for k in range(1, N):
+                psi.iadd_prefactor_other(vf[k], krylov_basis[k])
+
+            psi_norm = npc.norm(psi)
+            if abs(1. - psi_norm) > 1.e-5:
+                # One reason can be that `H` is not Hermitian
+                # Otherwise, the matrix (even if small) might be ill conditioned.
+                # If you get this warning, you can try to set the parameters
+                # `reortho`=True and `N_cache` >= `N_max`
+                logger.warning("poorly conditioned H matrix in Arnoldi! |psi| = %f", psi_norm)
+            psi.iscale_prefactor(1. / psi_norm)
+            psis.append(psi)
+        return psis
+
+    def _to_cache(self, psi):
+        """add psi to cache, keep at most self.N_cache."""
+        cache = self._cache
+        cache.append(psi)
+        assert len(cache) <= self.N_cache
+
+    def _converged(self, k):
+        v0 = self._result_krylov[:, 0]
+        E = self.Es[k, :]  # current energies
+        RitzRes = abs(v0[k - 1]) * self._h_krylov[k + 1, k]
+        gap = max(min([np.min(np.abs(E[i+1:] - E[i])) for i in range(self.num_ev)]), self.min_gap)
+        P_err = (RitzRes / gap)**2
+        Delta_E0 = self.Es[k - 1, 0] - E[0]
+        return P_err < self.P_tol and Delta_E0 < self.E_tol
+
+
+class LanczosGroundState(KrylovBased):
+    """Lanczos algorithm to find the ground state.
+
+    **Assumes** that `H` is hermitian.
+
+    .. deprecated :: 0.6.0
+        Renamed attribute `params` to :attr:`options`.
+
+    .. deprecated :: 0.6.0
+        Going to remove the `orthogonal_to` argument.
+        Instead, replace H with ``OrthogonalNpcLinearOperator(H, orthogonal_to)``
+        using the :class:`~tenpy.linalg.sparse.OrthogonalNpcLinearOperator`.
+
+
+    Options
+    -------
+    .. cfg:config :: LanczosGroundState
+        :include: KrylovBased
+
+        E_tol : float
+            Stop if energy difference per step < `E_tol`
+        N_cache : int
+            The maximum number of `psi` to keep in memory during the first iteration.
+            By default, we keep all states (up to N_max).
+            Set this to a number >= 2 if you are short on memory.
+            The penalty is that one needs another Lanczos iteration to
+            determine the ground state in the end, i.e., runtime is large.
+        reortho : bool
+            For poorly conditioned matrices, one can quickly loose orthogonality of the
+            generated Krylov basis.
+            If `reortho` is True, we re-orthogonalize against all the
+            vectors kept in cache to avoid that problem.
+
+
+    """
+
+    _dtype_h_krylov = np.float64
+    _dtype_E = np.float64
+
+    def __init__(self, H, psi0, options, orthogonal_to=[]):
+        super().__init__(H, psi0, options)
+        self.E_tol = self.options.get('E_tol', np.inf)
+        self.N_cache = self.options.get('N_cache', self.N_max)
+        if self.N_cache < 2:
+            raise ValueError("Need to cache at least two vectors.")
+        if len(orthogonal_to) > 0:
+            msg = ("Lanczos argument `orthogonal_to` is deprecated and will be removed.\n"
+                   "Instead, replace `H` with  `OrthogonalNpcLinearOperator(H, orthogonal_to)`.")
+            warnings.warn(msg, category=FutureWarning, stacklevel=2)
+            self.H = OrthogonalNpcLinearOperator(self.H, orthogonal_to)
+
+    def run(self):
+        """Find the ground state of H.
+
+        Returns
+        -------
+        E0 : float
+            Ground state energy (estimate).
+        psi0 : :class:`~tenpy.linalg.np_conserved.Array`
+            Ground state vector (estimate).
+        N : int
+            Used dimension of the Krylov space, i.e., how many iterations where performed.
+        """
+        N = self._build_krylov()
+        E0 = self.Es[N - 1, 0]
+        if N > 1:
+            logger.debug("Lanczos N=%d, gap=%.3e, DeltaE0=%.3e, _result_krylov[-1]=%.3e", N,
+                         self.Es[N - 1, 1] - E0, self.Es[N - 2, 0] - E0, self._result_krylov[-1])
+        else:
+            logger.debug("Lanczos N=%d, first alpha=%.3e, beta=%.3e", N, self._h_krylov[0, 0],
+                         self._h_krylov[0, 1])
+        if self.E_shift is not None:
+            E0 -= self.E_shift
+        if N == 1:
+            return E0, self.psi0.copy(), N  # no better estimate available
+        return E0, self._calc_result_full(N), N
+
+
+    def _build_krylov(self):
+        """Build the Krylov space and the projection of H into it.
+
+        Returns the number of steps performed.
+        """
+        h = self._h_krylov
+        w = self.psi0  # initialize
+        beta = npc.norm(w)
+        if self._psi0_norm is None:
+            # this is only needed for normalization in LanczosEvolution
+            self._psi0_norm = beta
+        for k in range(self.N_max):
+            w.iscale_prefactor(1. / beta)
+            self._to_cache(w)
+            w = self.H.matvec(w)
+            alpha = np.real(npc.inner(w, self._cache[-1], axes='range', do_conj=True)).item()
+            h[k, k] = alpha
+            self._calc_result_krylov(k)
+            w.iadd_prefactor_other(-alpha, self._cache[-1])
+            if self.reortho:
+                for c in self._cache[:-1]:
+                    w.iadd_prefactor_other(-npc.inner(c, w, axes='range', do_conj=True), c)
+            elif k > 0:
+                w.iadd_prefactor_other(-beta, self._cache[-2])
+            beta = npc.norm(w)
+            h[k, k + 1] = h[k + 1, k] = beta  # needed for the next step and convergence criteria
+            if abs(beta) < self._cutoff or (k + 1 >= self.N_min and self._converged(k)):
+                break
+        return k + 1
 
     def _converged(self, k):
         v0 = self._result_krylov
         E = self.Es[k, :]  # current energies
-        RitzRes = abs(v0[k - 1]) * self._T[k, k + 1]
+        RitzRes = abs(v0[k - 1]) * self._h_krylov[k, k + 1]
         gap = max(E[1] - E[0], self.min_gap)
         P_err = (RitzRes / gap)**2
         Delta_E0 = self.Es[k - 1, 0] - E[0]
         return P_err < self.P_tol and Delta_E0 < self.E_tol
+
+    def _rebuild_krylov_for_result_full(self, psif, N_max):
+        vf = self._result_krylov
+        h = self._h_krylov
+        w = self.psi0  # initialize
+        for k in range(0, N_max):
+            self._to_cache(w)
+            w = self.H.matvec(w)
+            alpha = h[k, k]
+            w.iadd_prefactor_other(-alpha, self._cache[-1])
+            if self.reortho:
+                for c in self._cache[:-1]:
+                    w.iadd_prefactor_other(-npc.inner(c, w, 'range', do_conj=True), c)
+            elif k > 0:
+                w.iadd_prefactor_other(-beta, self._cache[-2])
+            beta = h[k, k + 1]  # = norm(w)
+            w.iscale_prefactor(1. / beta)
+            psif.iadd_prefactor_other(vf[k + 1], w)
+        # continue in _calc_result_full
+
+    def _calc_result_krylov(self, k):
+        """calculate ground state of _h_krylov[:k+1, :k+1]"""
+        h = self._h_krylov
+        if k == 0:
+            self.Es[0, 0] = h[0, 0]
+            self._result_krylov = np.ones(1, np.float64)
+        else:
+            # Diagonalize h
+            E_kr, v_kr = np.linalg.eigh(h[:k + 1, :k + 1])
+            self.Es[k, :k + 1] = E_kr
+            self._result_krylov = v_kr[:, 0]  # ground state of _h_krylov
 
 
 class LanczosEvolution(LanczosGroundState):
     """Calculate :math:`exp(delta H) |psi0>` using Lanczos.
 
     It turns out that the Lanczos algorithm is also good for calculating the matrix exponential
-    applied to the starting vector. Instead of diagonalizing the tri-diagonal `T` and taking the
-    ground state, we now calculate ``exp(delta T) e_0`` in the Krylov ONB, where
+    applied to the starting vector. Instead of diagonalizing the tri-diagonal `h` and taking the
+    ground state, we now calculate ``exp(delta h) e_0`` in the Krylov ONB, where
     ``e_0 = (1, 0, 0, ...)`` corresponds to ``psi0`` in the original basis.
 
     Parameters
@@ -307,7 +476,7 @@ class LanczosEvolution(LanczosGroundState):
     Options
     -------
     .. cfg:config :: LanczosEvolution
-        :include: Lanczos
+        :include: LanczosGroundState
 
         E_tol :
             Ignored.
@@ -348,12 +517,12 @@ class LanczosEvolution(LanczosGroundState):
             Krylov space dimension used.
         """
         self.delta = delta
-        N = self._calc_T()
+        N = self._build_krylov()
         if N > 1:
             logger.debug("Lanczos N=%d, |result_krylov[-1]|=%.3e", N, abs(self._result_krylov[-1]))
         else:
-            logger.debug("Lanczos N=%d, first alpha=%.3e, beta=%.3e", N, self._T[0, 0],
-                         self._T[0, 1])
+            logger.debug("Lanczos N=%d, first alpha=%.3e, beta=%.3e", N, self._h_krylov[0, 0],
+                         self._h_krylov[0, 1])
         if N == 1:
             result_full = self._result_krylov[0] * self.psi0  # _result_krylov[0] is only a phase
         else:
@@ -367,29 +536,29 @@ class LanczosEvolution(LanczosGroundState):
         return (self._psi0_norm * self._result_norm) * result_full, N
 
     def _calc_result_krylov(self, k):
-        """calculate ``expm(delta T).dot(e0)`` for ``T = _T[:k+1, :k+1]``"""
+        """calculate ``expm(delta h).dot(e0)`` for ``h = _h_krylov[:k+1, :k+1]``"""
 
         # self._result_krylov should be a normalized vector.
-        T = self._T
+        h = self._h_krylov
         delta = self.delta
         if k == 0:
-            E = T[0, 0]
+            E = h[0, 0]
             exp_dE = np.exp(delta * E)
             self._result_norm = np.abs(exp_dE)  # np.linalg.norm for individual element
             self._result_krylov = np.array([exp_dE / self._result_norm])
         else:
             #     e0 = np.zeros(k + 1, dtype=float)
             #     e0[0] = 1.
-            #     exp_dT_e0 = expm(T[:k + 1, :k + 1] * delta).dot(e0)
+            #     exp_dH_e0 = expm(_h_krylov[:k + 1, :k + 1] * delta).dot(e0)
             # scipy.linalg.expm is using sparse tools; instead fully diagonalize
-            # given that T is hermitian, this is easy:
+            # given that h is hermitian, this is easy:
             # H V = V diag(E)  -> H  = V E V^D
             # exp(H*delta) e_0 = V diag(exp(E*delta)) V^D e_0
-            E_T, v_T = np.linalg.eigh(T[:k + 1, :k + 1])
-            exp_dT_e0 = np.dot(v_T, np.exp(E_T * delta) * np.conj(v_T[0, :]))
+            E_kr, v_kr = np.linalg.eigh(h[:k + 1, :k + 1])
+            exp_dH_e0 = np.dot(v_kr, np.exp(E_kr * delta) * np.conj(v_kr[0, :]))
 
-            self._result_norm = np.linalg.norm(exp_dT_e0)
-            self._result_krylov = exp_dT_e0 / self._result_norm
+            self._result_norm = np.linalg.norm(exp_dH_e0)
+            self._result_krylov = exp_dH_e0 / self._result_norm
 
     def _converged(self, k):
         return np.abs(self._result_krylov[k]) < self.P_tol
