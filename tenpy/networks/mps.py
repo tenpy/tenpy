@@ -3466,7 +3466,7 @@ class MPS:
         # Works nicely for permutations like [1,2,3,0,6,7,8,5] (swapping the 0 and 5 around).
         # For [ 2 3 4 5 6 7 0 1], it splits 0 and 1 apart (first swapping the 0 down, then the 1)
         if trunc_par is None:
-            trunc_par = asConfig({}, 'trunc_params')
+            trunc_par = asConfig({'chi_max': max(100, max(self.chi))}, 'trunc_params')
         trunc_err = TruncationError()
         num_swaps = 0
         i = 0
