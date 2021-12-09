@@ -741,8 +741,8 @@ class DMRGEngine(Sweep):
                 See `E_tol_to_trunc`
             max_E_err : float
                 Convergence if the change of the energy in each step
-                satisfies ``-Delta E / max(|E|, 1) < max_E_err``. Note that
-                this is also satisfied if ``Delta E > 0``,
+                satisfies ``|Delta E / max(E, 1)| < max_E_err``. Note that
+                this might be satisfied even if ``Delta E > 0``,
                 i.e., if the energy increases (due to truncation).
             max_hours : float
                 If the DMRG took longer (measured in wall-clock time),
@@ -829,7 +829,7 @@ class DMRGEngine(Sweep):
             # check convergence criteria
             if self.sweeps >= max_sweeps:
                 break
-            if (self.sweeps > min_sweeps and -Delta_E < max_E_err * max(abs(E), 1.)
+            if (self.sweeps > min_sweeps and abs(Delta_E / max(E, 1.)) < max_E_err
                     and abs(Delta_S) < max_S_err):
                 if self.mixer is None:
                     break
