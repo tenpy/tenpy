@@ -237,11 +237,12 @@ class OneSiteVUMPSEngine(Sweep):
         #E0_2, theta0_2 = lanczos_arpack(H0_2, C2, lanczos_options)
         #E1, theta1 = lanczos_arpack(H1, AC, lanczos_options)
         #N0_1 = N0_2 = N1 = 0
-        lanczos_options = {'N_max': 1000, 'cutoff': 1.e-16, 'P_tol': 1.e-16}
+        #lanczos_options = {'N_max': 1000, 'cutoff': 1.e-16, 'P_tol': 1.e-16}
+        lanczos_options = self.options.subconfig('lanczos_options')
         E0_1, theta0_1, N0_1 = LanczosGroundState(H0_1, C1, lanczos_options).run()
         E0_2, theta0_2, N0_2 = LanczosGroundState(H0_2, C2, lanczos_options).run()
         E1, theta1, N1 = LanczosGroundState(H1, AC, lanczos_options).run()
-        #print(N0_1, N0_2, N1)
+        print(N0_1, N0_2, N1)
         
         """
         Updating number of Lanczos iterations, activate orthogonalize against
