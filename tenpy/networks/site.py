@@ -8,10 +8,12 @@ import numpy as np
 import itertools
 import copy
 import warnings
+import multiprocessing
 
 from ..linalg import np_conserved as npc
 from ..tools.misc import inverse_permutation
 from ..tools.hdf5_io import Hdf5Exportable
+from ..tools.process import mkl_get_nthreads, omp_get_nthreads
 
 __all__ = [
     'Site', 'GroupedSite', 'group_sites', 'set_common_charges', 'multi_sites_combine_charges',
@@ -107,8 +109,7 @@ class Site(Hdf5Exportable):
         self.need_JW_string = set(['JW'])
         self.hc_ops = {}
         self.add_op('Id', npc.diag(1., self.leg), hc='Id')
-        for name, op in site_ops.items():
-            self.add_op(name, op)
+        self.add_ops(site_ops)
         if not hasattr(self, 'perm'):  # default permutation for the local states
             self.perm = np.arange(self.dim)
         if 'JW' not in self.opnames:
@@ -141,14 +142,16 @@ class Site(Hdf5Exportable):
             state_labels = self.state_labels.copy()
             for label in state_labels:
                 self.state_labels[label] = inv_perm[state_labels[label]]
+        ops = {}
         for opname in self.opnames.copy():
             op = self.get_op(opname).to_ndarray()
             self.opnames.remove(opname)
             delattr(self, opname)
             if permute is not None:
                 op = op[np.ix_(permute, permute)]
-            # need_JW and hc_ops are still set
-            self.add_op(opname, op, need_JW=False, hc=False)
+            ops[opname] = op
+        # need_JW and hc_ops are still set
+        self.add_ops(ops, hc=False)
         # done
 
     def test_sanity(self):
@@ -251,6 +254,39 @@ class Site(Hdf5Exportable):
             self.hc_ops[name] = hc
         if name == 'JW':
             self.JW_exponent = np.angle(np.real_if_close(np.diag(op.to_ndarray()))) / np.pi
+
+    def add_ops(self, ops, hc=None):
+        """Add multiple one on-site operators.
+
+        The, possibly computationally expensive,
+        :meth:`~tenpy.linalg.np_conserved.Array.from_ndarray` 
+        calls are parallelized.
+
+        Parameters
+        ----------
+        ops : dict of (np.ndarray | :class:`~tenpy.linalg.np_conserved.Array`).
+            A dict whose keys and values are, respectively, the name and the matrix 
+            representation of a local operator.
+            Dense numpy array values are automatically converted to
+            :class:`~tenpy.linalg.np_conserved.Array` in parallel.
+            LegCharges have to be ``[leg, leg.conj()]``.
+            We set labels ``'p', 'p*'``.
+        hc : None | False
+            If ``None``, update :attr:`hc_ops` indentifying eventual conjugates of `ops`.
+            If ``False``, disable adding entries to :attr:`hc_ops`.
+        """
+        names = list(ops)
+        ops = [ops[k] for k in names]
+        not_npc = [not isinstance(op, npc.Array) for op in ops]
+        nproc = max(omp_get_nthreads(), mkl_get_nthreads())
+        if sum(not_npc) > 1 and (nproc < 0 or nproc > 1):
+            legs = [self.leg, self.leg.conj()]
+            args = ((ops[i], legs) for i, b in enumerate(not_npc) if b)
+            with multiprocessing.Pool(nproc if nproc > 0 else None) as pool:
+                res = iter(pool.starmap(npc.Array.from_ndarray, args))
+            ops = [next(res) if b else ops[i] for i, b in enumerate(not_npc)]
+        for name, op in zip(names, ops):
+            self.add_op(name, op, hc=hc)
 
     def rename_op(self, old_name, new_name):
         """Rename an added operator.
@@ -469,7 +505,6 @@ class Site(Hdf5Exportable):
     def __repr__(self):
         """Debug representation of self."""
         return "<Site, d={dim:d}, ops={ops!r}>".format(dim=self.dim, ops=self.opnames)
-
 
 class GroupedSite(Site):
     """Group two or more :class:`Site` into a larger one.
