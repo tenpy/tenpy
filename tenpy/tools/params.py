@@ -210,6 +210,10 @@ class Config(MutableMapping):
     def __del__(self):
         self.warn_unused()
 
+    def __ior__(self, other):
+        self.update(other)
+        return self
+
     def warn_unused(self, recursive=False):
         """Warn about (so far) unused options.
 
