@@ -24,6 +24,7 @@ import numpy as np
 import time
 import warnings
 import copy
+import itertools
 import logging
 logger = logging.getLogger(__name__)
 
@@ -1227,11 +1228,11 @@ class VariationalCompression(Sweep):
             Truncation parameters as described in :cfg:config:`truncation`.
         min_sweeps, max_sweeps : int
             Minimum and maximum number of sweeps to perform for the compression.
-        tol_compression_diff: float
+        tol_theta_diff: float | None
             Stop after less than `max_sweeps` sweeps if the 1-site wave function changed by less
-            than this value, ``1.-|<psi_old|psi_new>| < tol_compression_diff``, where
-            psi_old/new are projected onto a single site and Schmidt states to the left/right.
-            (It doesn't stop if the truncation induced incompatible legs.)
+            than this value, ``1.-|<theta_old|theta_new>| < tol_theta_diff``, where
+            theta_old/new are two-site wave functions during the sweep to the left.
+            ``None`` disables this convergence check, always performing `max_sweeps` sweeps.
         start_env_sites : int
             Number of sites to contract for the inital LP/RP environment in case of infinite MPS.
 
@@ -1245,7 +1246,7 @@ class VariationalCompression(Sweep):
     def __init__(self, psi, options, resume_data=None):
         super().__init__(psi, None, options, resume_data=resume_data)
         self.renormalize = []
-        self._convergence_diff = [1.]
+        self._theta_diff = []
 
     def run(self):
         """Run the compression.
@@ -1261,25 +1262,26 @@ class VariationalCompression(Sweep):
         max_trunc_err : :class:`~tenpy.algorithms.truncation.TruncationError`
             The maximal truncation error of a two-site wave function.
         """
-        self.options.deprecated_alias("N_sweeps", "max_N_sweeps",
+        self.options.deprecated_alias("N_sweeps", "max_sweeps",
                                       "Also check out the other new convergence parameters "
-                                      "min_N_sweeps and tol_compression_diff!")
+                                      "min_N_sweeps and tol_theta_diff!")
         max_sweeps = self.options.get("max_sweeps", 2)
         min_sweeps = self.options.get("min_sweeps", 1)
-        tol_compression_diff = self.options.get("tol_compression_diff", 1.e-10)
+        tol_diff = self._tol_theta_diff = self.options.get("tol_theta_diff", 1.e-8)
+        if min_sweeps == max_sweeps and tol_diff is not None:
+            warnings.warn("VariationalCompression with min_sweeps=max_sweeps: "
+                          "we recommend to set tol_theta_diff=None to avoid overhead")
 
-        self._convergence_diff = [1.]
         for i in range(max_sweeps):
-            if i >= min_sweeps and max(self._convergence_diff) < tol_compression_diff:
-                break
             self.renormalize = []
-            self._convergence_diff = []
+            self._theta_diff = []
             max_trunc_err = self.sweep()
-            #  print(f"after sweep {i:d}: convergence_diff= " + ' '.join([f"{e:.3e}" for e in self._convergence_diff]))
-            #  print(f"after sweep {i:d}: convergence_diff= {max(self._convergence_diff):.2e}")
-            #  import ipdb; ipdb.set_trace() # TODO XXX
-
-
+            if i + 1 >= min_sweeps and tol_diff is not None:
+                max_diff = max(self._theta_diff[-(self.psi.L - self.n_optimize):])
+                if max_diff < tol_diff:
+                    logger.debug("break VariationalCompression after %d sweeps "
+                                "with theta_diff=%.2e", i + 1, max_diff)
+                    break
         if self.psi.finite:
             self.psi.norm *= max(self.renormalize)
         return TruncationError(max_trunc_err, 1. - 2. * max_trunc_err)
@@ -1306,6 +1308,17 @@ class VariationalCompression(Sweep):
         self._init_ortho_to_envs(orthogonal_to, resume_data)
         self.reset_stats()
 
+    def get_sweep_schedule(self):
+        """Define the schedule of the sweep.
+
+        Compared to :meth:`~tenpy.algorithms.mps_common.Sweep.get_sweep_schedule`, we add one
+        extra update at the end with i0=0 (which is the same as the first update of the sweep).
+        This is done to ensure proper convergence after each sweep, even if that implies that
+        the site 0 is then updated twice per sweep.
+        """
+        extra = (0, True, [False, False])
+        return itertools.chain(super().get_sweep_schedule(), [extra])
+
     def update_local(self, _, optimize=True):
         """Perform local update.
 
@@ -1322,12 +1335,12 @@ class VariationalCompression(Sweep):
         th = th.combine_legs([['vL', 'p0'], ['p1', 'vR']], qconj=[+1, -1])
         return self.update_new_psi(th)
 
-    def update_new_psi(self, theta_new):
+    def update_new_psi(self, theta):
         """Given a new two-site wave function `theta`, split it and save it in :attr:`psi`."""
         i0 = self.i0
         new_psi = self.psi
         old_A0 = new_psi.get_B(i0, form='A')
-        U, S, VH, err, renormalize = svd_theta(theta_new,
+        U, S, VH, err, renormalize = svd_theta(theta,
                                                self.trunc_params,
                                                qtotal_LR=[old_A0.qtotal, None],
                                                inner_labels=['vR', 'vL'])
@@ -1337,26 +1350,18 @@ class VariationalCompression(Sweep):
         B1 = VH.split_legs(['(p.vR)'])
         self.renormalize.append(renormalize)
         # first compare to old best guess to check convergence of the sweeps
-        #  theta_new_trunc = npc.tensordot(A0.scale_axis(S, 'vR'), B1, ['vR', 'vL'])
-        #  theta_new_trunc.iset_leg_labels(['vL', 'p0', 'p1', 'vR'])
-        #  theta_old = new_psi.get_theta(i0)
-        #  ov = npc.inner(theta_new_trunc, theta_old, do_conj=True, axes='labels')
-        if old_A0.get_leg('vL') == A0.get_leg('vL') and old_A0.get_leg('vR') == A0.get_leg('vR'):
-            old_S = new_psi.get_SR(i0)
-            ov = npc.inner(old_A0.scale_axis(old_S, 'vR'), A0.scale_axis(S, 'vR'), do_conj=True,
-                           axes='labels')
-        else:
-            # in general, we should find the maximal overlap with a possible isometries on virtual
-            # legs, but that's hard....
-            # Here, we just say that we don't stop (early) after a sweep where leg charges changed.
-            ov = 0.
-        convergence_diff = 1. - abs(ov)
-        self._convergence_diff.append(convergence_diff)
+        if self._tol_theta_diff is not None and self.update_LP_RP[0] == False:
+            theta_old = new_psi.get_theta(i0)
+            theta_new_trunc = npc.tensordot(A0.scale_axis(S, 'vR'), B1, ['vR', 'vL'])
+            theta_new_trunc.iset_leg_labels(['vL', 'p0', 'p1', 'vR'])
+            ov = npc.inner(theta_new_trunc, theta_old, do_conj=True, axes='labels')
+            theta_diff = 1. - abs(ov)
+            self._theta_diff.append(theta_diff)
         # now set the new tensors to the MPS
         new_psi.set_B(i0, A0, form='A')  # left-canonical
         new_psi.set_B(i0 + 1, B1, form='B')  # right-canonical
         new_psi.set_SR(i0, S)
-        return {'U': U, 'VH': VH, 'err': err, 'convergence_diff': convergence_diff}
+        return {'U': U, 'VH': VH, 'err': err}
 
 
 class VariationalApplyMPO(VariationalCompression):
