@@ -47,7 +47,8 @@ def test_ExpMPOEvolution(bc_MPS, approximation, compression, g=1.5):
         'approximation': approximation,
         'compression_method': compression,
         'trunc_params': {
-            'chi_max': 30
+            'chi_max': 30,
+            'svd_min': 1.e-8
         }
     }
     eng = mpo_evolution.ExpMPOEvolution(psi, M, options)
@@ -242,5 +243,3 @@ def test_time_methods(algorithm):
     npt.assert_almost_equal(np.array(mag)[:-1, :], m_exact, 4)
     npt.assert_almost_equal(np.array(szsz)[:-1, :, :], szsz_exact, 4)
     npt.assert_almost_equal(np.array(spsm)[:-1, :], spsm_exact, 4)
-
-    # TODO add infinite MPS possible?

@@ -518,13 +518,15 @@ def test_sample_measurements(eps=1.e-14, seed=5):
 
 @pytest.mark.parametrize('method', ['SVD', 'variational'])
 def test_mps_compress(method, eps=1.e-13):
-    # Test compression of a sum of a state with itself
+    # Test VariationalCompression and MPS.compress_svd of a sum of a state with itself or
+    # orthogonal state.
     L = 5
     sites = [site.SpinHalfSite(conserve=None) for i in range(L)]
     plus_x = np.array([1., 1.]) / np.sqrt(2)
     minus_x = np.array([1., -1.]) / np.sqrt(2)
     psi = mps.MPS.from_product_state(sites, [plus_x for i in range(L)], bc='finite')
-    psiOrth = mps.MPS.from_product_state(sites, [minus_x for i in range(L)], bc='finite')
+    orth_state = [plus_x, minus_x, np.array([1., 0.]), plus_x, plus_x]
+    psiOrth = mps.MPS.from_product_state(sites, orth_state, bc='finite')
     options = {'compression_method': method, 'trunc_params': {'chi_max': 30}}
     psiSum = psi.add(psi, .5, .5)
     psiSum.compress(options)
