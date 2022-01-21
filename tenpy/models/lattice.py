@@ -1706,7 +1706,7 @@ class HelicalLattice(Lattice):
         import matplotlib.pyplot as plt
         from mpl_toolkits.mplot3d import Axes3D
         fig = plt.figure(figsize=(7, 5))
-        ax = fig.axes(projection='3d')
+        ax = fig.add_subplot(projection='3d')
         Lx, Ly, r = 6, 6, 1.
         x = np.arange(0., Lx - 0.001, 1./Ly)
         theta = 2*np.pi* x - np.pi/6.
