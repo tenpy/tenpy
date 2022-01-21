@@ -21,6 +21,7 @@ Added
 - Wrappers for the helical and irregular lattice (removing sites) in :meth:`~tenpy.models.model.CouplingMPOModel.init_lattice`.
 - Options `pos_diag_r`, `qtotal_Q` and `qconj_inner` for :func:`~tenpy.linalg.np_conserved.qr`.
 - :class:`tenpy.linalg.lanczos.Arnoldi` (and common base class :class:`~tenpy.linalg.lanczos.KrylovBased` with :class:`~tenpy.linalg.lanczos.LanczosGroundState`).
+- Allow to pass and merge multiple parameter files to ``tenpy-run`` from the command line.
 
 Changed
 ^^^^^^^
