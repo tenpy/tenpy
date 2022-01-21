@@ -83,6 +83,7 @@ PEPS are for example reviewed in :cite:`verstraete2008`, :cite:`eisert2013` and 
 :cite:`cirac2020` is a recent, broad review of MPS and MPS with a focus on analytical theorems.
 :cite:`stoudenmire2012` reviews the use of DMRG for 2D systems.
 :cite:`cirac2009` discusses the different groups of tensor network states.
+:cite:`vanderstraeten2019` is a great review on tangent space methods for infinite, uniform MPS.
 
 
 Algorithm developments
