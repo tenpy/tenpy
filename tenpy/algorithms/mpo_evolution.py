@@ -153,6 +153,8 @@ class TimeDependentExpMPOEvolution(ExpMPOEvolution):
 
     def run(self):
         N_steps = self.options.get('N_steps', 1)
+        if self.model.options['time'] != self.evolved_time:  # for non-trivial start_time
+            self.model = self.reinit_model()
         self.update(N_steps)
         return self.psi
 
