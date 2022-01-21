@@ -140,7 +140,7 @@ class MPS:
         The 'matrices' of the MPS. Labels are ``vL, vR, p`` (in any order).
         We recommend using :meth:`get_B` and :meth:`set_B`, which will take care of the different
         canonical forms.
-    _S : list of {``None``, 1D array, :class:`~tenpy.linalg.np_conserved.Array}
+    _S : list of {``None``, 1D array, :class:`~tenpy.linalg.np_conserved.Array`}
         The singular values on each virtual bond, length ``L+1``.
         May be ``None`` if the MPS is not in canonical form.
         Otherwise, ``_S[i]`` is to the left of ``_B[i]``.

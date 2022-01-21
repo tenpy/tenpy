@@ -31,6 +31,9 @@ We have split example notebooks into [TeNPyNotebooks]_ to keep the git history o
     Online documentation, https://tenpy.readthedocs.io/
 .. [TeNPyForum]
     Community forum for discussions, FAQ and announcements, https://tenpy.johannes-hauschild.de
+.. [TeNPyProjectTemplate]
+    Template git repository for custom projects with a simplified setup for running many simulations on a cluster,
+    https://github.com/tenpy/project_template
 
 Software-related
 ----------------

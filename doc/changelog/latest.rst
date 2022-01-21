@@ -22,6 +22,7 @@ Added
 - Options `pos_diag_r`, `qtotal_Q` and `qconj_inner` for :func:`~tenpy.linalg.np_conserved.qr`.
 - :class:`tenpy.linalg.lanczos.Arnoldi` (and common base class :class:`~tenpy.linalg.lanczos.KrylovBased` with :class:`~tenpy.linalg.lanczos.LanczosGroundState`).
 - Allow to pass and merge multiple parameter files to ``tenpy-run`` from the command line.
+- Greatly expanded userguide on :doc:`/intro/simulations` and added more parameter examples.
 
 Changed
 ^^^^^^^

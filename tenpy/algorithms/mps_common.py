@@ -1205,8 +1205,8 @@ class VariationalCompression(Sweep):
     The algorithm is the same as described in :class:`VariationalApplyMPO`,
     except that we don't have an MPO in the networks - one can think of the MPO being trivial.
 
-    .. changed :: 0.9.1
-        Renamed the optoin `N_sweeps` to `max_N_sweeps`
+    .. deprecated :: 0.9.1
+        Renamed the optoin `N_sweeps` to `max_sweeps`.
 
     Parameters
     ----------

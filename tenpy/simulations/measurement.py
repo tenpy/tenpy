@@ -4,8 +4,7 @@ All measurement functions provided in this module support the interface used by 
 class, i.e. they take the parameters documented in :func:`measurement_index` and write
 the measurement results into the `results` dictionary taken as argument.
 
-.. todo ::
-    test, provide more.
+As explained in :doc:`/intro/simulations`, you can easily add custom measurement functions.
 """
 # Copyright 2020-2021 TeNPy Developers, GNU GPLv3
 
@@ -21,8 +20,10 @@ __all__ = [
 def measurement_index(results, psi, simulation, key='measurement_index'):
     """'Measure' the index of how many mearuements have been performed so far.
 
-    The parameter description below also documents the common interface of all measurement
-    functions, that can be registered to simulations.
+    The parameter description below documents the common interface of all measurement
+    functions that can be registered to simulations.
+
+    See :doc:`/intro/simulations` for the general setup using measurements.
 
     Parameters
     ----------

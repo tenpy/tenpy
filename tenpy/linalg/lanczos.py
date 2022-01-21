@@ -630,7 +630,7 @@ def lanczos_arpack(H, psi, options={}, orthogonal_to=[]):
 def gram_schmidt(vecs, rcond=1.e-14, verbose=None):
     """In place Gram-Schmidt Orthogonalization and normalization for npc Arrays.
 
-    .. changed :: v0.9.1
+    .. deprecated :: 0.9.1
         Previously, this function return `vecs, ov` with `ov` being the overlaps
         ``<vecs[i]|vecs[j]>``. The return value `ov` has been dropped now,
         since it wasn't used anyways.

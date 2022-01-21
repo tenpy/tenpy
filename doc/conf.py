@@ -88,6 +88,7 @@ def create_example_stubs():
     """create stub files for examples and toycodes to include them in the documentation."""
     folders = [
         (['examples'], '.py', []),
+        (['examples'], '.yml', []),
         (['examples', 'advanced'], '.py', []),
         (['examples', 'chern_insulators'], '.py', []),
         (['toycodes'], '.py', []),
