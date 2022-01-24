@@ -1056,7 +1056,7 @@ class DMRGEngine(Sweep):
         theta : :class:`~tenpy.linalg.np_conserved.Array`
             Initial guess for the ground state of the effective Hamiltonian.
         optimize : bool
-            Wheter we actually optimize to find the ground state of the effective Hamiltonian.
+            Whether we actually optimize to find the ground state of the effective Hamiltonian.
             (If False, just update the environments).
 
         Returns
