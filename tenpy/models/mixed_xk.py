@@ -1,7 +1,7 @@
 r"""Basic model for DMRG with mixed real- and momentum-space representation.
 
 This module provides classes for DMRG of fermions in a mixed real- and momentum-space basis,
-as described in [motruk2016].
+as described in :cite:`motruk2016`.
 
 We consider infinite cylinders in real-space along the cylinder axis,
 but transform to momentum space around the cylinder.
@@ -12,7 +12,7 @@ a unique creation/annihilation operator in second quantization.
 We will also refer to the orbitals as "site"; they will be represented
 by the 2-dimensional Hilbert space of a :class:`~tenpy.networks.site.FermionSite`.
 
-The real-space operators :math:`c^{(\dagger)}_{i,j,l)` are index by
+The real-space operators :math:`c^{(\dagger)}_{i,j,l}` are index by
 x-coordinate :math:`x = 0, ... , N_{rings}-1` along the cylinder axis,
 y-coordinate :math:`y = 0, ..., L_y` around the cylinder,
 and orbital :math:`l = 0, ... N_{orb}`.
@@ -29,7 +29,7 @@ We transform them into momentum space with the convention (for all :math:`x,l` i
 
 
 We use the indices ``k = 0, ... Ly-1`` and define the actual momentum as
-:math:`k_y = 2 \pi i / L_y * k` for :math: `k <= Ly/2` and
+:math:`k_y = 2 \pi i / L_y * k` for :math:`k \leq Ly/2` and
 and shift to :math:`k_y = 2 \pi i * (k-L_y) / L_y ` for :math:`k > Ly/2` such that
 :math:`k_y \in (-\pi, pi]`.
 The momenta fullfill the usual relations
@@ -93,6 +93,8 @@ class MixedXKLattice(Lattice):
     .. warning ::
         Using the Jordan-Wigner string (``JW``) is crucial to get correct results!
         See :doc:`/intro/JordanWigner` for details.
+
+    See :mod:`tenpy.models.mixed_xk` for the mappings between x,k and x,y.
 
     Parameters
     ----------
