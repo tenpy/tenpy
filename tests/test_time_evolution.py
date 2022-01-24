@@ -69,7 +69,7 @@ def test_ExpMPOEvolution(bc_MPS, approximation, compression, g=1.5):
 
     if bc_MPS == 'infinite':
         psiTEBD = psi.copy()
-        TEBD_params = {'dt': dt, 'N_steps': 1}
+        TEBD_params = {'dt': dt, 'N_steps': 1, 'trunc_params': options['trunc_params']}
         EngTEBD = tebd.TEBDEngine(psiTEBD, M, TEBD_params)
         for i in range(30):
             EngTEBD.run()
