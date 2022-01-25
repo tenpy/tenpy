@@ -2810,13 +2810,13 @@ class MPS:
     def canonical_form(self, **kwargs):
         """Bring self into canonical 'B' form, (re-)calculate singular values.
 
-        Simply calls :meth:`canonical_form_finite` or :meth:`canonical_form_infinite`.
+        Simply calls :meth:`canonical_form_finite` or :meth:`canonical_form_infinite2`.
         Keyword arguments are passed on to the corrsponding specialized versions.
         """
         if self.finite:
             return self.canonical_form_finite(**kwargs)
         else:
-            return self.canonical_form_infinite(**kwargs)
+            return self.canonical_form_infinite2(**kwargs)
 
     def canonical_form_finite(self, renormalize=True, cutoff=0., envs_to_update=None):
         """Bring a finite (or segment) MPS into canonical form (in place).
@@ -2944,7 +2944,13 @@ class MPS:
                 self.segment_boundaries = (U, VR_segment)
             return U, VR_segment
 
-    def canonical_form_infinite(self, renormalize=True, tol_xi=1.e6):
+    def canonical_form_infinite(self, **kwargs):
+        """Deprecated wrapper around :meth:`canonical_form_infinite1`."""
+        warnings.warn("There are different implementations of `canonical_form_infinite` now. "
+                      "Select one explicitly!", FutureWarning, stacklevel=2)
+        self.canonical_form_infinite1(**kwargs)
+
+    def canonical_form_infinite1(self, renormalize=True, tol_xi=1.e6):
         """Bring an infinite MPS into canonical form (in place).
 
         If any site is in :attr:`form` ``None``, it does *not* use any of the singular values `S`.
@@ -3049,7 +3055,7 @@ class MPS:
         """
         assert not self.finite
         if arnoldi_params is None:
-            arnoldi_params = {}
+            arnoldi_params = asConfig({}, 'arnoldi_params')
         if any([(f is None) for f in self.form]):
             # ignore any 'S' and canonical form, just state that we are in 'B' form
             self.form = self._parse_form('B')

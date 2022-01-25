@@ -250,7 +250,7 @@ def test_compute_K():
 
 
 @pytest.mark.parametrize("bc, method", [('finite', 'canonical_form_finite'),
-                                        ('infinite', 'canonical_form_infinite'),
+                                        ('infinite', 'canonical_form_infinite1'),
                                         ('infinite', 'canonical_form_infinite2')])
 def test_canonical_form(bc, method):
     psi = random_MPS(8, 2, 6, form=None, bc=bc)
