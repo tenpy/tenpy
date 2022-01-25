@@ -34,10 +34,12 @@ def test_ExpMPOEvolution(bc_MPS, approximation, compression, g=1.5):
         L = 6
     else:
         L = 2
-    model_pars = dict(L=L, Jx=0., Jy=0., Jz=-4., hx=2. * g, bc_MPS=bc_MPS, conserve=None)
+    #  model_pars = dict(L=L, Jx=0., Jy=0., Jz=-4., hx=2. * g, bc_MPS=bc_MPS, conserve=None)
+    #  state = ([[1 / np.sqrt(2), -1 / np.sqrt(2)]] * L)  # pointing in (-x)-direction
+    #  state = ['up'] * L  # pointing in (-z)-direction
+    model_pars = dict(L=L, Jx=1., Jy=1., Jz=1., hz=0.2, bc_MPS=bc_MPS, conserve='best')
+    state = ['up', 'down'] * (L//2)  # Neel
     M = SpinChain(model_pars)
-    state = ([[1 / np.sqrt(2), -1 / np.sqrt(2)]] * L)  # pointing in (-x)-direction
-    state = ['up'] * L  # pointing in (-z)-direction
     psi = MPS.from_product_state(M.lat.mps_sites(), state, bc=bc_MPS)
 
     options = {
@@ -69,15 +71,14 @@ def test_ExpMPOEvolution(bc_MPS, approximation, compression, g=1.5):
 
     if bc_MPS == 'infinite':
         psiTEBD = psi.copy()
-        TEBD_params = {'dt': dt, 'N_steps': 1, 'trunc_params': options['trunc_params']}
+        TEBD_params = {'dt': dt, 'order': 2, 'N_steps': 1, 'trunc_params': options['trunc_params']}
         EngTEBD = tebd.TEBDEngine(psiTEBD, M, TEBD_params)
         for i in range(30):
             EngTEBD.run()
             psi = eng.run()
-            print(psi.norm)
-            print(np.abs(psi.overlap(psiTEBD) - 1))
-            #This test fails
-            assert (abs(abs(psi.overlap(psiTEBD)) - 1) < 1e-2)
+            #  print(psi.norm)
+            print(abs(abs(psi.overlap(psiTEBD)) - 1), abs(psi.overlap(psiTEBD) - 1))
+            assert (abs(abs(psi.overlap(psiTEBD)) - 1) < 1e-4)
 
 
 def fermion_TFI_H(L, g=1.5, J=1.):

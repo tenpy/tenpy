@@ -52,6 +52,7 @@ from ..tools.params import asConfig
 __all__ = ['TruncationError', 'truncate', 'svd_theta']
 
 
+
 class TruncationError(Hdf5Exportable):
     r"""Class representing a truncation error.
 
@@ -324,3 +325,12 @@ def _combine_constraints(good1, good2, warn):
         return res
     warnings.warn("truncation: can't satisfy constraint for " + warn, stacklevel=3)
     return good1
+
+
+# truncation parameter for truncating svd values at machine precision
+# excluding 0. and negative S values only
+_machine_prec_trunc_par = asConfig({'svd_min': np.finfo(np.float64).eps,
+                                    'trunc_cut': None,
+                                    'chi_max': None},
+                                   'machine_prec_trunc_params')
+_machine_prec_trunc_par.unused.clear()
