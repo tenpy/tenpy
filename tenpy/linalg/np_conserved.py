@@ -2809,7 +2809,7 @@ class Array:
             "Arrays with same labels in different order. Transpose intended?"
             " We will transpose in the future!",
             category=FutureWarning,
-            stacklevel=3)
+            stacklevel=2)
         return self
         # TODO: do this for the next release
         return self.transpose(other_labels)

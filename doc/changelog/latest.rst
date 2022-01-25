@@ -30,6 +30,7 @@ Changed
   as part of the fix for :issue:`148`. Added similar :meth:`~tenpy.networks.mpo.MPOGraph.add_string_left_to_right`.
 - Automatically shift terms in :meth:`~tenpy.networks.mps.MPS.expectation_value_terms_sum` to start in the MPS unit cell for infinite MPS.
 - Possible ordering='folded' for the :class:`~tenpy.models.lattice.Ladder`.
+- Enhanced implementation of :meth:`~tenpy.networks.mps.MPS.canonical_form_infinite2` to replace :meth:`~tenpy.networks.mps.MPS.canonical_form_infinite`.
 
 Fixed
 ^^^^^

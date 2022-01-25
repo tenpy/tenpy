@@ -249,8 +249,10 @@ def test_compute_K():
     npt.assert_array_equal(W, [1.])
 
 
-@pytest.mark.parametrize("bc", ['finite', 'infinite'])
-def test_canonical_form(bc):
+@pytest.mark.parametrize("bc, method", [('finite', 'canonical_form_finite'),
+                                        ('infinite', 'canonical_form_infinite'),
+                                        ('infinite', 'canonical_form_infinite2')])
+def test_canonical_form(bc, method):
     psi = random_MPS(8, 2, 6, form=None, bc=bc)
     psi2 = psi.copy()
     norm = np.sqrt(psi2.overlap(psi2, ignore_form=True))
@@ -259,7 +261,8 @@ def test_canonical_form(bc):
     norm2 = psi.overlap(psi2, ignore_form=True)
     print("norm2 =", norm2)
     assert abs(norm2 - norm) < 1.e-14 * norm
-    psi.canonical_form(renormalize=False)
+    meth = getattr(psi, method)
+    meth(renormalize=False)  # psi.canonical_form_[infinite[2]]()
     psi.test_sanity()
     assert abs(psi.norm - norm) < 1.e-14 * norm
     psi.norm = 1.  # normalized psi
@@ -269,6 +272,12 @@ def test_canonical_form(bc):
     print("norm_test")
     print(psi.norm_test())
     assert np.max(psi.norm_test()) < 1.e-14
+    psi3 = psi.copy()
+    # call canonical_form again, it shouldn't do anything now
+    meth(renormalize=True)
+    psi.test_sanity()
+    ov = psi.overlap(psi3)
+    assert abs(ov - 1.) < 1.e-14
 
 
 @pytest.mark.parametrize("bc", ['finite', 'infinite'])
