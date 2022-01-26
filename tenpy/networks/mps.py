@@ -3036,7 +3036,7 @@ class MPS:
             Gl, Yl, Yr = self._canonical_form_correct_left(j1, Gl, Wr_list[j1 % L])
         # done
 
-    def canonical_form_infinite2(self, renormalize=True, tol=1.e-12, arnoldi_params=None,
+    def canonical_form_infinite2(self, renormalize=True, tol=1.e-15, arnoldi_params=None,
                                  cutoff=1.e-15):
         """Convert infinite MPS to canonical form.
 
@@ -3054,6 +3054,7 @@ class MPS:
             Truncation cutoff for small singular values.
         """
         assert not self.finite
+        assert cutoff <= tol
         if arnoldi_params is None:
             arnoldi_params = asConfig({}, 'arnoldi_params')
         if any([(f is None) for f in self.form]):
@@ -3077,27 +3078,23 @@ class MPS:
         # but not yet diagonal S
         C.itranspose(['vL', 'vR'])
         U, S, V = npc.svd(C, cutoff=cutoff, inner_labels=['vR', 'vL'])
-        self.set_SL(0, S)
         # now S V new_Bs V^d = U^d C new_Bs V^d = U^d new_As C V^d = U^d new_As U S
         # so V new_Bs V^d is right-canonical with diagonal S on bond (-1, 0)
         # and U^d new_As U is left-canonical with diagonal S on bond (-1, 0)
+        # we could update self._Bs here, but we overwrite them in the following loop
         new_As[0] = npc.tensordot(U.conj().ireplace_label('vR*', 'vL'),
                                   new_As[0],
                                   axes=['vL*', 'vL'])
-        #  new_As[-1] = npc.tensordot(new_As[-1], U, axes=['vR', 'vL'])
-        #  self._B[0] = npc.tensordot(V, self._B[0], axes=['vR', 'vL'])
-        #  self._B[-1] = npc.tensordot(self._B[-1], V.conj(),
-        #                               axes=['vR', 'vR*']).ireplace_label('vL*', 'vR'))
-        # and we can get remaining S with a bunch of SVDs
+        #  new_As[-1] = npc.tensordot(new_As[-1], U, axes=['vR', 'vL']) # is done in loop below
+        # get S with a bunch of SVDs
         for i in reversed(range(len(new_As))):
             th = npc.tensordot(new_As[i], U.scale_axis(S, 'vR'), axes=['vR', 'vL'])
             th = th.combine_legs(self._p_label + ['vR'], new_axes=1)
             U, S, V = npc.svd(th, cutoff=cutoff, inner_labels=['vR', 'vL'])
             self._B[i] = V.split_legs()
             self.set_SL(i, S)
-        assert npc.norm(U.scale_axis(S, 'vR') - U.scale_axis(S, 'vL')) < tol
+        # note: we included SVD on i=0; else the virtual leg (-1, 0) might not even be sorted
         self._B[-1] = npc.tensordot(self._B[-1], U, axes=['vR', 'vL'])
-
 
     def _canonical_form_left_orthogonalize(self, L, tol, arnoldi_params):
         while True:
