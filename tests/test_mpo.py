@@ -330,16 +330,18 @@ def test_MPOTransferMatrix(eps=1.e-13):
     s = spin_half
     # exponential decay in Sz term to make it harder
     gamma = 0.5
-    grid = [[s.Id, s.Sp, s.Sm, s.Sz, 0. * s.Id],
-            [None, None, None, None, 0.0*s.Sm],
-            [None, None, None, None, 0.0*s.Sp],
-            [None, None, None, gamma*s.Id, 1.*s.Sz],
+    Jxy, Jz = 4., 1.
+    hz = 0.
+    grid = [[s.Id, s.Sp, s.Sm, s.Sz, hz * s.Sz],
+            [None, None, None, None, Jxy*0.5*s.Sm],
+            [None, None, None, None, Jxy*0.5*s.Sp],
+            [None, None, None, gamma*s.Id, Jz*s.Sz],
             [None, None, None, None, s.Id]]  # yapf: disable
     H = mpo.MPO.from_grids([s] * 3, [grid] * 3, 'infinite', 0, 4, max_range=np.inf)
     psi = mps.MPS.from_singlets(s, 3, [(0, 1)], lonely=[2], bc='infinite')
     psi.roll_mps_unit_cell(-1)  # -> nontrivial chi at the cut between unit cells
-    exact_E = ((-0.25 - 0.25) *0.  # singlet <0.5*Sp_i Sm_{i+1}> = 0.25 = <0.5*Sm_i Sp_{i+1}>
-               - 0.25  # singlet <Sz_i Sz_{i+1}>
+    exact_E = ((-0.25 - 0.25) * Jxy  # singlet <0.5*Sp_i Sm_{i+1}> = 0.25 = <0.5*Sm_i Sp_{i+1}>
+               - 0.25 * Jz   # singlet <Sz_i Sz_{i+1}>
                + 1.*(0.25 * gamma**2 / (1. - gamma**3)))  # exponentially decaying "lonely" states
     # lonely: <Sz_{i} gamma gamma Sz_{i+2}
     exact_E = exact_E / psi.L  # energy per site
@@ -359,3 +361,28 @@ def test_MPOTransferMatrix(eps=1.e-13):
         else:
             vec.itranspose(['vR*', 'wR', 'vR'])
             assert (vec[:, 0, :] - npc.eye_like(vec, 0)).norm() < eps
+    # get non-trivial psi
+    psi.perturb({'N_steps': 10, 'trunc_params': {'chi_max': 3 , 'svd_min': 1.e-14}},
+                close_1=False,
+                canonicalize=False)
+    psi.canonical_form_infinite2()
+    # now find eigenvector again
+    # and check TM |vec> = |vec> + val * |v0>
+    # with |v0> = eye(chi) * IdL/IdR
+    for transpose in [False, True]:
+        print(f"transpose={transpose!s}")
+        TM = mpo.MPOTransferMatrix(H, psi, transpose=transpose)
+        val, vec = TM.dominant_eigenvector()
+        E0 = TM.energy(vec)
+        assert abs(val - 1.) < eps
+        if not transpose:
+            vec.itranspose(['vL', 'wL', 'vL*'])
+            assert (vec[:, 4, :] - npc.eye_like(vec, 0)).norm() < eps
+            v0 = npc.eye_like(vec, 0, labels=['vL', 'vL*']).add_leg(vec.get_leg('wL'), 0, 1, 'wL')
+        else:
+            vec.itranspose(['vR*', 'wR', 'vR'])
+            assert (vec[:, 0, :] - npc.eye_like(vec, 0)).norm() < eps
+            v0 = npc.eye_like(vec, 0, labels=['vR*', 'vR']).add_leg(vec.get_leg('wR'), 4, 1, 'wR')
+        TM_vec = TM.matvec(vec, project=False)
+        TM_vec.itranspose(vec.get_leg_labels())
+        assert (TM_vec  - (vec + E0 * 3 * v0)).norm() < eps
