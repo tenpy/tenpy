@@ -2123,6 +2123,7 @@ class MPOTransferMatrix:
         if H.L != psi.L:
             raise ValueError("Non-matching L")
         self.L = H.L
+        self.explicit_plus_hc = H.explicit_plus_hc
         if np.linalg.norm(psi.norm_test()) > 1.e-10:
             raise ValueError("psi should be in canonical form!")
         if psi._p_label != ['p']:
@@ -2264,7 +2265,17 @@ class MPOTransferMatrix:
             E = npc.inner(vec, self.proj_rho, axes=[['vL', 'wL', 'vL*'], ['vR', 'wR', 'vR*']])
         else:
             E = npc.inner(vec, self.proj_rho, axes=[['vR*', 'wR', 'vR'], ['vL*', 'wL', 'vL']])
-        return E / self.L
+        E = E / self.L
+
+        if np.isclose(np.imag(E), 0):
+            E = np.real(E)
+        
+        print(self.explicit_plus_hc)
+        
+        if self.explicit_plus_hc:
+            E *= 2
+
+        return E
 
     @classmethod
     def find_init_LP_RP(cls,
