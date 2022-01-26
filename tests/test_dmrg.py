@@ -257,16 +257,17 @@ def test_chi_list():
 
 
 @pytest.mark.slow
-def test_dmrg_explicit_plus_hc(tol=1.e-13):
-    model_params = dict(L=12, Jx=1., Jy=1., Jz=1.25, hz=5.125)
-    dmrg_params = dict(N_sweeps_check=2, mixer=False)
+@pytest.mark.parametrize("N, bc_MPS", [(6, 'finite'), (2, 'infinite')])
+def test_dmrg_explicit_plus_hc(N, bc_MPS, tol=1.e-13, bc='finite'):
+    model_params = dict(L=2*N, Jx=1., Jy=1., Jz=2.5, hz=5.125, bc_MPS=bc_MPS)
+    dmrg_params = dict(N_sweeps_check=2, mixer=True, trunc_params={'chi_max': 50})
     M1 = SpinChain(model_params)
     model_params['explicit_plus_hc'] = True
     M2 = SpinChain(model_params)
     assert M2.H_MPO.explicit_plus_hc
-    psi1 = mps.MPS.from_product_state(M1.lat.mps_sites(), ['up', 'down'] * 6)
+    psi1 = mps.MPS.from_product_state(M1.lat.mps_sites(), ['up', 'down'] * N, bc=bc_MPS)
     E1, psi1 = dmrg.TwoSiteDMRGEngine(psi1, M1, dmrg_params).run()
-    psi2 = mps.MPS.from_product_state(M2.lat.mps_sites(), ['up', 'down'] * 6)
+    psi2 = mps.MPS.from_product_state(M2.lat.mps_sites(), ['up', 'down'] * N, bc=bc_MPS)
     E2, psi2 = dmrg.TwoSiteDMRGEngine(psi2, M2, dmrg_params).run()
     print(E1, E2, abs(E1 - E2))
     assert abs(E1 - E2) < tol
@@ -274,7 +275,7 @@ def test_dmrg_explicit_plus_hc(tol=1.e-13):
     print("ov =", ov)
     assert abs(ov - 1) < tol
     dmrg_params['combine'] = True
-    psi3 = mps.MPS.from_product_state(M2.lat.mps_sites(), ['up', 'down'] * 6)
+    psi3 = mps.MPS.from_product_state(M2.lat.mps_sites(), ['up', 'down'] * N, bc=bc_MPS)
     E3, psi3 = dmrg_parallel.DMRGThreadPlusHC(psi3, M2, dmrg_params).run()
     print(E1, E3, abs(E1 - E3))
     assert abs(E1 - E3) < tol

@@ -915,7 +915,8 @@ class MultiCouplingTerms(CouplingTerms):
         """
         return self._max_range
 
-    def add_multi_coupling_term(self, strength, ijkl, ops_ijkl, op_string="Id", switchLR=None):
+    def add_multi_coupling_term(self, strength, ijkl, ops_ijkl, op_string="Id",
+                                switchLR='middle_i'):
         """Add a multi-site coupling term.
 
         Parameters
@@ -923,20 +924,31 @@ class MultiCouplingTerms(CouplingTerms):
         strength : float
             The strength of the coupling term.
         ijkl : list of int
-            The MPS indices of the sites on which the operators acts. With `i, j, k, ... = ijkl`,
+            The MPS indices of the sites on which the operators acts. With ``i, j, k, ... = ijkl``,
             we require that they are ordered ascending, ``i < j < k < ...`` and
             that ``0 <= i < N_sites``.
             Inidces >= N_sites indicate couplings between different unit cells of an infinite MPS.
         ops_ijkl : list of str
-            Names of the involved operators on sites `i, j, k, ...`.
+            Names of the involved operators on sites ``i, j, k, ...``.
         op_string : (list of) str
             Names of the operator to be inserted between the operators,
-            e.g., op_string[0] is inserted between `i` and `j`.
+            e.g., ``op_string[0]`` is inserted between `i` and `j`.
             A single name holds for all in-between segments.
-        switchLR: int
+        switchLR: int | ``'middle_i'`` | ``'middle_op'``
             The site where we switch from building the coupling from the left to building the
             coupling from the right for an efficient MPO representation.
-            Default is ``(ijkl[0] + ijkl[-1] + 1) // 2``
+            This has implications for the final MPO bond dimension, but the optimal value depends
+            on what other terms there are in the Hamiltonian. We therefore provide a few
+            heurisitic choices that can be given as the following strings.
+
+            middle_i :
+                The overall middle index ``(ijkl[0] + ijkl[-1] + 1) // 2``, the default choice.
+                Somewhat reasonable if we don't know anything about the terms,
+                but often not optimal
+            middle_op :
+                The index of the middle operator ``ijkl[len(ijkl) // 2]``.
+                This is for example a good choice if you have combinations
+                ``A[i] B[i+1] C[i+j] + A[i] B[i+j-1] C[i+j]`` for large `j` and various `B`.
         """
         L = self.L
         if len(ijkl) < 2:
@@ -948,7 +960,12 @@ class MultiCouplingTerms(CouplingTerms):
             if not i < j:
                 raise ValueError("Need i < j < k < ...")
         if switchLR is None:
-            switchLR = (ijkl[0] + ijkl[-1] + 1) // 2
+            switchLR = 'middle_i'
+        if isinstance(switchLR, str):
+            if switchLR == 'middle_i':
+                switchLR = (ijkl[0] + ijkl[-1] + 1) // 2
+            elif switchLR == 'middle_op':
+                switchLR = ijkl[len(ijkl) // 2]
         assert 0 <= ijkl[0] <= switchLR <= ijkl[-1] and ijkl[0] < L
         # find op_switch
         for n, i in enumerate(ijkl):
@@ -1001,6 +1018,7 @@ class MultiCouplingTerms(CouplingTerms):
 
     def multi_coupling_term_handle_JW(self, strength, term, sites, op_string=None):
         """Helping function to call before :meth:`add_multi_coupling_term`.
+
         Handle/figure out Jordan-Wigner strings if needed.
 
         Parameters
@@ -1018,6 +1036,7 @@ class MultiCouplingTerms(CouplingTerms):
         op_string : None | str
             Operator name to be used as operator string *between* the operators, or ``None`` if the
             Jordan Wigner string should be figured out.
+
             .. warning ::
                 ``None`` figures out for each segment between the operators, whether a
                 Jordan-Wigner string is needed.
@@ -1159,11 +1178,12 @@ class MultiCouplingTerms(CouplingTerms):
 
     def remove_zeros(self, tol_zero=1.e-15):
         """Remove entries close to 0 from :attr:`coupling_terms`.
+
         Parameters
         ----------
         tol_zero : float
-            Entries in :attr:`coupling_terms` with `strength` < `tol_zero` are considered to be
-            zero and removed.
+            Entries in :attr:`terms_left` and :attr:`terms_right`
+            with `strength` < `tol_zero` are considered to be zero and removed.
         """
         assert self._max_range is not None
         for c, connection in enumerate(self.connections):

@@ -9,12 +9,12 @@ If you are new to TeNPy, read the :doc:`intro/overview`.
     :maxdepth: 1
 
     intro/overview
-    intro/npc
-    intro/model
     intro/simulations
+    intro/model
     intro/lattices
+    intro/input_output
     intro/logging
     intro/options
-    intro/input_output
+    intro/npc
     intro/JordanWigner
     intro/dmrg-protocol

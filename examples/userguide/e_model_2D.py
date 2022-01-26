@@ -1,5 +1,4 @@
 """Initialization of the Heisenberg model on a kagome lattice."""
-# Copyright 2019-2021 TeNPy Developers, GNU GPLv3
 
 from tenpy.models.spins import SpinModel
 

@@ -1,0 +1,52 @@
+#!/usr/bin/env -S python -m tenpy -i model_custom 
+# requires that `model_custom.py` can be imported.
+
+simulation_class : GroundStateSearch
+
+directory: results
+output_filename_params:
+    prefix: dmrg
+    parts:
+        algorithm_params.trunc_params.chi_max: 'chi_{0:04d}'
+        model_params.B: 'B_{0:.1f}'
+        model_params.D: 'D_{0:.1f}'
+    suffix: .h5
+# skip_if_output_exists: True
+# overwrite_output: True
+save_every_x_seconds: 1800
+# save_psi: False  # don't save full wave function - less disk space, but can't resume/redo measurements!
+
+log_params:
+    to_stdout: WARNING  # always check this output - empty is good
+    to_file: INFO
+
+model_class : AnisotropicSpin1Chain
+model_params :
+    L: 2
+    bc_MPS: infinite
+    J: 1.
+    B: 0.
+    D: 1.5
+
+initial_state_params:
+    method : lat_product_state
+    product_state : [[up], [down]]
+
+algorithm_class: TwoSiteDMRGEngine
+algorithm_params:
+    trunc_params:
+        svd_min: 1.e-8
+        chi_max: 100
+
+connect_measurements: 
+  - - tenpy.simulations.measurement
+    - onsite_expectation_value
+    - opname: Sz
+  - - tenpy.simulations.measurement
+    - psi_method
+    - method: correlation_function
+      key: '<Sp_i Sm_j>'
+      ops1: Sp
+      ops2: Sm
+  - - model_custom  # module where function is defined
+    - pollmann_turner_inversion

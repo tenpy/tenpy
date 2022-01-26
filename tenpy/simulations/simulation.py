@@ -1,13 +1,11 @@
 """This module contains base classes for simulations.
 
-The :class:`Simulation` class tries to put everything need for a simulation in a structured form
+The :class:`Simulation` class tries to put everything needed for a simulation in a structured form
 and collects task like initializing the tensor network state, model and algorithm classes,
 running the actual algorithm, possibly performing measurements and saving the results.
 
-
-.. todo ::
-    provide examples,
-    give user guide
+See :doc:`/intro/simulations` for an overview and
+:doc:`/examples` for a list of example parameter yaml files.
 """
 # Copyright 2020-2021 TeNPy Developers, GNU GPLv3
 
@@ -167,6 +165,8 @@ class Simulation:
         self.options = options  # delay conversion to Config: avoid logging before setup_logging
         cwd = self.options.setdefault("directory", None)
         if cwd is not None:
+            if not os.path.exists(cwd):
+                os.mkdir(cwd)
             os.chdir(cwd)
         self.fix_output_filenames()
         if setup_logging:
@@ -685,7 +685,7 @@ class Simulation:
 
         if out_fn.exists():
             if skip_if_exists:
-                # self.options.touch(*self.options.unused)
+                # no need to touch options: not yet converted to config
                 raise Skip("simulation output filename already exists", out_fn)
             if not overwrite_output and not self.loaded_from_checkpoint:
                 # adjust output filename to avoid overwriting stuff

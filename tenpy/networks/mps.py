@@ -84,13 +84,14 @@ logger = logging.getLogger(__name__)
 
 from ..linalg import np_conserved as npc
 from ..linalg import sparse
+from ..linalg.lanczos import Arnoldi
 from .site import GroupedSite, group_sites
 from ..tools.misc import to_iterable, to_array, get_recursive
 from ..tools.math import lcm, speigs, entropy
 from ..tools.params import asConfig
 from ..tools.cache import DictCache
 from ..tools import hdf5_io
-from ..algorithms.truncation import TruncationError, svd_theta
+from ..algorithms.truncation import TruncationError, svd_theta, _machine_prec_trunc_par
 
 __all__ = ['MPS', 'MPSEnvironment', 'TransferMatrix', 'InitialStateBuilder', 'build_initial_state']
 
@@ -140,7 +141,7 @@ class MPS:
         The 'matrices' of the MPS. Labels are ``vL, vR, p`` (in any order).
         We recommend using :meth:`get_B` and :meth:`set_B`, which will take care of the different
         canonical forms.
-    _S : list of {``None``, 1D array, :class:`~tenpy.linalg.np_conserved.Array}
+    _S : list of {``None``, 1D array, :class:`~tenpy.linalg.np_conserved.Array`}
         The singular values on each virtual bond, length ``L+1``.
         May be ``None`` if the MPS is not in canonical form.
         Otherwise, ``_S[i]`` is to the left of ``_B[i]``.
@@ -152,7 +153,7 @@ class MPS:
     _valid_forms : dict
         Class attribute.
         Mapping for canonical forms to a tuple ``(nuL, nuR)`` indicating that
-        ``self._Bs[i] = s[i]**nuL -- Gamma[i] -- s[i]**nuR`` is saved.
+        ``self._B[i] = s[i]**nuL -- Gamma[i] -- s[i]**nuR`` is saved.
     _valid_bc : tuple of str
         Class attribute. Possible valid boundary conditions.
     _transfermatrix_keep : int
@@ -1596,7 +1597,7 @@ class MPS:
         Parameters
         ----------
         by_charge : bool
-            Wheter we should sort the spectrum on each bond by the possible charges.
+            Whether we should sort the spectrum on each bond by the possible charges.
 
         Returns
         -------
@@ -2162,10 +2163,6 @@ class MPS:
         However, for effiency, the term_list is converted to an MPO and the expectation value
         of the MPO is evaluated.
 
-        .. note ::
-            Due to the way MPO expectation values are evaluated for infinite systems,
-            it works only if all terms in the `term_list` start within the MPS unit cell.
-
         .. deprecated:: 0.4.0
             `prefactor` will be removed in version 1.0.0.
             Instead, directly give just ``TermList(term_list, prefactors)`` as argument.
@@ -2202,9 +2199,17 @@ class MPS:
             term_list = terms.TermList(term_list, prefactors)
         L = self.L
         if not self.finite:
-            for term in term_list.terms:
-                if not 0 <= min([i for _, i in term]) < L:
-                    raise ValueError("term doesn't start in MPS unit cell: " + repr(term))
+            copy = None
+            for a, term in enumerate(term_list.terms):
+                i_min = min([i for _, i in term])
+                if not 0 <= i_min < L:
+                    if copy is None:
+                        # make explicit copy to not modify exicisting term_list
+                        copy = terms.TermList(term_list.terms, term_list.prefactors)
+                    shift = i % L - i_min
+                    copy.terms[a] = [(op, i + shift) for op, i in term]
+            if copy is not None:
+                term_list = copy
         # conversion
         ot, ct = term_list.to_OnsiteTerms_CouplingTerms(self.sites)
         bc = 'finite' if self.finite else 'infinite'
@@ -2805,13 +2810,13 @@ class MPS:
     def canonical_form(self, **kwargs):
         """Bring self into canonical 'B' form, (re-)calculate singular values.
 
-        Simply calls :meth:`canonical_form_finite` or :meth:`canonical_form_infinite`.
+        Simply calls :meth:`canonical_form_finite` or :meth:`canonical_form_infinite2`.
         Keyword arguments are passed on to the corrsponding specialized versions.
         """
         if self.finite:
             return self.canonical_form_finite(**kwargs)
         else:
-            return self.canonical_form_infinite(**kwargs)
+            return self.canonical_form_infinite2(**kwargs)
 
     def canonical_form_finite(self, renormalize=True, cutoff=0., envs_to_update=None):
         """Bring a finite (or segment) MPS into canonical form (in place).
@@ -2930,7 +2935,13 @@ class MPS:
                 self.segment_boundaries = (U, VR_segment)
             return U, VR_segment
 
-    def canonical_form_infinite(self, renormalize=True, tol_xi=1.e6):
+    def canonical_form_infinite(self, **kwargs):
+        """Deprecated wrapper around :meth:`canonical_form_infinite1`."""
+        warnings.warn("There are different implementations of `canonical_form_infinite` now. "
+                      "Select one explicitly!", FutureWarning, stacklevel=2)
+        self.canonical_form_infinite1(**kwargs)
+
+    def canonical_form_infinite1(self, renormalize=True, tol_xi=1.e6):
         """Bring an infinite MPS into canonical form (in place).
 
         If any site is in :attr:`form` ``None``, it does *not* use any of the singular values `S`.
@@ -3015,6 +3026,147 @@ class MPS:
             # axes=[['p*', 'vL*'], ['p', 'vR*']])
             Gl, Yl, Yr = self._canonical_form_correct_left(j1, Gl, Wr_list[j1 % L])
         # done
+
+    def canonical_form_infinite2(self, renormalize=True, tol=1.e-12, arnoldi_params=None,
+                                 cutoff=1.e-15):
+        """Convert infinite MPS to canonical form.
+
+        Implementation following Algorithm 1,2 in :cite:`vanderstraeten2019`.
+
+        Parameters
+        ----------
+        renormalize: bool
+            Whether a change in the norm should be discarded or used to update :attr:`norm`.
+        tol : float
+            Precision down to which the state should be in canonical form.
+        arnoldi_params : dict
+            Parameters for :class:`~tenpy.linalg.lanczos.Arnoldi`.
+        cutoff :
+            Truncation cutoff for small singular values.
+        """
+        assert not self.finite
+        if arnoldi_params is None:
+            arnoldi_params = asConfig({}, 'arnoldi_params')
+        if any([(f is None) for f in self.form]):
+            # ignore any 'S' and canonical form, just state that we are in 'B' form
+            self.form = self._parse_form('B')
+            self._S[0] = np.ones(self.chi[0], dtype=np.float64)  # later used for C_guess
+        else:
+            # was in canonical form before; bring back into canonical form
+            # -> make sure we don't use multiple S on one bond in our definition of the MPS
+            self.convert_form('B')
+        # self._B holds original B
+        R_guess = npc.diag(1., self._B[0].get_leg('vL'), labels=['vL', 'vR'])
+        new_Bs, _, norm = self._canonical_form_right_orthogonalize(R_guess, tol, arnoldi_params)
+        if not renormalize:
+            self.norm *= norm
+        # now we have old_Bs R = R new_Bs with right-orthonormal new_Bs
+        self._B = new_Bs
+        C_guess = npc.diag(self.get_SL(0), self._B[0].get_leg('vL'), labels=['vL', 'vR'])
+        new_As, C, _ = self._canonical_form_left_orthogonalize(R_guess, tol, arnoldi_params)
+        # now we have C new_Bs = new_As C with left and right-orthonormal A/B
+        # but not yet diagonal S
+        C.itranspose(['vL', 'vR'])
+        U, S, V = npc.svd(C, cutoff=cutoff, inner_labels=['vR', 'vL'])
+        self.set_SL(0, S)
+        # now S V new_Bs V^d = U^d C new_Bs V^d = U^d new_As C V^d = U^d new_As U S
+        # so V new_Bs V^d is right-canonical with diagonal S on bond (-1, 0)
+        # and U^d new_As U is left-canonical with diagonal S on bond (-1, 0)
+        new_As[0] = npc.tensordot(U.conj().ireplace_label('vR*', 'vL'),
+                                  new_As[0],
+                                  axes=['vL*', 'vL'])
+        #  new_As[-1] = npc.tensordot(new_As[-1], U, axes=['vR', 'vL'])
+        #  self._B[0] = npc.tensordot(V, self._B[0], axes=['vR', 'vL'])
+        #  self._B[-1] = npc.tensordot(self._B[-1], V.conj(),
+        #                               axes=['vR', 'vR*']).ireplace_label('vL*', 'vR'))
+        # and we can get remaining S with a bunch of SVDs
+        for i in reversed(range(len(new_As))):
+            th = npc.tensordot(new_As[i], U.scale_axis(S, 'vR'), axes=['vR', 'vL'])
+            th = th.combine_legs(self._p_label + ['vR'], new_axes=1)
+            U, S, V = npc.svd(th, cutoff=cutoff, inner_labels=['vR', 'vL'])
+            self._B[i] = V.split_legs()
+            self.set_SL(i, S)
+        assert npc.norm(U.scale_axis(S, 'vR') - U.scale_axis(S, 'vL')) < tol
+        self._B[-1] = npc.tensordot(self._B[-1], U, axes=['vR', 'vL'])
+
+
+    def _canonical_form_left_orthogonalize(self, L, tol, arnoldi_params):
+        while True:
+            L /= npc.norm(L)
+            L_old = L
+            new_As, L = self._canonical_form_qr_L2R(L)
+            norm = npc.norm(L)
+            L /= norm
+            L.itranspose(L_old.get_leg_labels())
+            err = npc.norm(L - L_old)
+            if err <= tol :
+                break
+            # get better guess for L with Arnoldi
+            arnoldi_params['E_tol'] = err/10.
+            TM = TransferMatrix.from_Ns_Ms(new_As, self._B, transpose=True)
+            L.ireplace_label('vL', 'vR*')
+            E, Ls, N = Arnoldi(TM, L, arnoldi_params).run()
+            L = Ls[0]
+            L.ireplace_label('vR*', 'vL')
+            # again QR to get positive diagonal part of L, in same way as in _canonical_form_qr_L2R
+            _, L = npc.qr(L.itranspose(['vL', 'vR']),
+                          inner_labels=['vR', 'vL'],
+                          pos_diag_R=True,
+                          inner_qconj=+1)
+        return new_As, L, norm
+
+    def _canonical_form_right_orthogonalize(self, R, tol, arnoldi_params):
+        while True:
+            R /= npc.norm(R)
+            R_old = R
+            new_Bs, R = self._canonical_form_qr_R2L(R)
+            norm = npc.norm(R)
+            R /= norm
+            R.itranspose(R_old.get_leg_labels())
+            err = npc.norm(R - R_old)
+            if err <= tol :
+                break
+            #  _, R = self._canonical_form_arnoldi(new_Bs, R, err/10.)
+            TM = TransferMatrix.from_Ns_Ms(new_Bs, self._B, transpose=False)
+            R.ireplace_label('vR', 'vL*')
+            arnoldi_params['E_tol'] = err/10.
+            E, Rs, N = Arnoldi(TM, R, arnoldi_params).run()
+            R = Rs[0]
+            R.ireplace_label('vL*', 'vR')
+            # again QR to get positive diagonal part of R, in same way as in _canonical_form_qr_R2L
+            _, R = npc.qr(R.itranspose(['vR', 'vL']),
+                          inner_labels=['vL', 'vR'],
+                          pos_diag_R=True,
+                          inner_qconj=-1)
+        return new_Bs, R, norm
+
+    def _canonical_form_qr_L2R(self, L):
+        """QR-decompose ``L B[0] B[1] ... B[-1] -> Qs[0]... Qs[-1] L`` for Bs in ``self._B``."""
+        Qs = [None] * self.L
+        for i in range(self.L):
+            LB = npc.tensordot(L, self._B[i], axes=['vR', 'vL'])
+            LB = LB.combine_legs(['vL'] + self._p_label, new_axes=0, qconj=+1)
+            Q, L = npc.qr(LB,
+                          inner_labels=['vR', 'vL'],
+                          pos_diag_R=True,
+                          qtotal_Q=LB.qtotal,
+                          inner_qconj=+1)
+            Qs[i] = Q.split_legs()
+        return Qs, L
+
+    def _canonical_form_qr_R2L(self, R):
+        """QR-decompose ``B[0] B[1] ... B[-1] R -> R Qs[0]... Qs[-1]`` for Bs in ``self._B``."""
+        Qs = [None] * self.L
+        for i in reversed(range(self.L)):
+            BR = npc.tensordot(self._B[i], R, axes=['vR', 'vL'])
+            BR = BR.combine_legs(self._p_label + ['vR'], new_axes=0, qconj=-1)
+            Q, R = npc.qr(BR,
+                          inner_labels=['vL', 'vR'],
+                          pos_diag_R=True,
+                          qtotal_Q=BR.qtotal,
+                          inner_qconj=-1)
+            Qs[i] = Q.split_legs()
+        return Qs, R
 
     def correlation_length(self, target=1, tol_ev0=1.e-8, charge_sector=0):
         r"""Calculate the correlation length by diagonalizing the transfer matrix.
@@ -3453,7 +3605,7 @@ class MPS:
         # Works nicely for permutations like [1,2,3,0,6,7,8,5] (swapping the 0 and 5 around).
         # For [ 2 3 4 5 6 7 0 1], it splits 0 and 1 apart (first swapping the 0 down, then the 1)
         if trunc_par is None:
-            trunc_par = asConfig({}, 'trunc_params')
+            trunc_par = asConfig({'chi_max': max(100, max(self.chi))}, 'trunc_params')
         trunc_err = TruncationError()
         num_swaps = 0
         i = 0
@@ -3664,7 +3816,7 @@ class MPS:
             for i in range(self.L):
                 theta = self.get_theta(i, n=2)
                 theta = theta.combine_legs([['vL', 'p0'], ['p1', 'vR']], qconj=[+1, -1])
-                self.set_svd_theta(i, theta, update_norm=False)
+                self.set_svd_theta(i, theta, _machine_prec_trunc_par, update_norm=False)
             for i in range(self.L - 1, -1, -1):
                 theta = self.get_theta(i, n=2)
                 theta = theta.combine_legs([['vL', 'p0'], ['p1', 'vR']], qconj=[+1, -1])
@@ -4246,7 +4398,7 @@ class MPSEnvironment:
         i : int
             The returned `LP` will contain the contraction *strictly* left of site `i`.
         store : bool
-            Wheter to store the calculated `LP` in `self` (``True``) or discard them (``False``).
+            Whether to store the calculated `LP` in `self` (``True``) or discard them (``False``).
 
         Returns
         -------
@@ -4289,7 +4441,7 @@ class MPSEnvironment:
         i : int
             The returned `RP` will contain the contraction *strictly* right of site `i`.
         store : bool
-            Wheter to store the calculated `RP` in `self` (``True``) or discard them (``False``).
+            Whether to store the calculated `RP` in `self` (``True``) or discard them (``False``).
 
         Returns
         -------
@@ -4590,7 +4742,7 @@ class TransferMatrix(sparse.NpcLinearOperator):
         |       |      |             |
         |    ---N[j]*--N[j+1]* ... --N[j+L]*--
 
-    Here the `M` denotes the matrices of the bra and `N` the ones of the ket, respectively.
+    Here the `N` denotes the matrices of the bra and `M` the ones of the ket, respectively.
     To view it as a `matrix`, we combine the left and right indices to pipes::
 
         |  (vL.vL*) ->-TM->- (vR.vR*)   acting on  (vL.vL*) ->-RP
@@ -4612,7 +4764,7 @@ class TransferMatrix(sparse.NpcLinearOperator):
         We start the `M` of the ket at site `shift_ket` (i.e. the `i` in the above network).
         ``None`` is deprecated, default will be changed to 0 in the future.
     transpose : bool
-        Wheter `self.matvec` acts on `RP` (``False``) or `LP` (``True``).
+        Whether `self.matvec` acts on `RP` (``False``) or `LP` (``True``).
     charge_sector : None | charges | ``0``
         Selects the charge sector of the vector onto which the Linear operator acts.
         ``None`` stands for *all* sectors, ``0`` stands for the zero-charge sector.
@@ -4631,7 +4783,7 @@ class TransferMatrix(sparse.NpcLinearOperator):
     shift_ket : int | None
         We start the `M` of the ket at site `shift_ket`. ``None`` defaults to `shift_bra`.
     transpose : bool
-        Wheter `self.matvec` acts on `RP` (``True``) or `LP` (``False``).
+        Whether `self.matvec` acts on `RP` (``True``) or `LP` (``False``).
     qtotal : charges
         Total charge of the transfer matrix (which is gauged away in matvec).
     form : tuple(float, float) | None
@@ -4656,7 +4808,9 @@ class TransferMatrix(sparse.NpcLinearOperator):
                  transpose=False,
                  charge_sector=0,
                  form='B'):
-        L = self.L = lcm(bra.L, ket.L)
+        L = lcm(bra.L, ket.L)
+        if ket.chinfo != bra.chinfo:
+            raise ValueError("incompatible charges")
         if shift_ket is None:
             if shift_bra != 0:
                 warnings.warn("default for shift_ket will change to 0. Specify both explicitly!",
@@ -4664,57 +4818,79 @@ class TransferMatrix(sparse.NpcLinearOperator):
             shift_ket = shift_bra
         self.shift_bra = shift_bra
         self.shift_ket = shift_ket
-        self.transpose = transpose
-        if ket.chinfo != bra.chinfo:
-            raise ValueError("incompatible charges")
+        assert ket._p_label == bra._p_label
         form = ket._to_valid_form(form)
-        self._p_label = p = ket._p_label  # for ususal MPS just ['p']
-        assert p == bra._p_label
-        self._pstar_label = pstar = ket._get_p_label('*')  # ['p*']
+        ket_M = [ket.get_B(i, form=form) for i in range(shift_ket, shift_ket + L)]
+        bra_N = [bra.get_B(i, form=form) for i in range(shift_bra, shift_bra + L)]
+
+        self._init_from_Ns_Ms(bra_N, ket_M, transpose, charge_sector, ket._p_label, not ket.finite)
+
+    def _init_from_Ns_Ms(self, bra_N, ket_M, transpose, charge_sector, p_label, infinite=True):
+        """Initialize directly from N and M.
+
+        bra_N and ket_M are *not* reversed for transpose=False, i.e. ordered left to right.
+        """
+        self.L = len(bra_N)
+        assert len(ket_M) == self.L
+        self.transpose = transpose
+        self._p_label = p = p_label  # for ususal MPS just ['p']
+        self._pstar_label = pstar = [lbl + '*' for lbl in self._p_label]
         if not transpose:  # right to left
             label = '(vL.vL*)'  # what we act on
             label_split = ['vL', 'vL*']
-            M = self._ket_M = [
-                ket.get_B(i, form=form).itranspose(['vL'] + p + ['vR'])
-                for i in reversed(range(shift_ket, shift_ket + L))
-            ]
-            N = self._bra_N = [
-                bra.get_B(i, form=form).conj().itranspose(pstar + ['vR*', 'vL*'])
-                for i in reversed(range(shift_bra, shift_bra + L))
-            ]
+            M = self._ket_M = [B.itranspose(['vL'] + p + ['vR']) for B in reversed(ket_M)]
+            N = self._bra_N = [B.conj().itranspose(pstar + ['vR*', 'vL*'])
+                               for B in reversed(bra_N)]
             pipe = npc.LegPipe([M[0].get_leg('vR'), N[0].get_leg('vR*')], qconj=-1).conj()
         else:  # left to right
             label = '(vR*.vR)'  # mathematically more natural
             label_split = ['vR*', 'vR']
-            M = self._ket_M = [
-                ket.get_B(i, form=form).itranspose(['vL'] + p + ['vR'])
-                for i in range(shift_ket, shift_ket + L)
-            ]
-            N = self._bra_N = [
-                bra.get_B(i, form=form).conj().itranspose(['vR*', 'vL*'] + pstar)
-                for i in range(shift_bra, shift_bra + L)
-            ]
+            M = self._ket_M = [B.itranspose(['vL'] + p + ['vR']) for B in ket_M]
+            N = self._bra_N = [B.conj().itranspose(['vR*', 'vL*'] + pstar) for B in bra_N]
             pipe = npc.LegPipe([N[0].get_leg('vL*'), M[0].get_leg('vL')], qconj=+1).conj()
-        dtype = np.promote_types(bra.dtype, ket.dtype)
+        dtype = np.promote_types(M[0].dtype, N[0].dtype)
         self.pipe = pipe
         self.label_split = label_split
         self.flat_linop = sparse.FlatLinearOperator(self.matvec, pipe, dtype, charge_sector, label)
-        self.qtotal = bra.chinfo.make_valid(np.sum([B.qtotal for B in M + N], axis=0))
-        if not ket.finite and np.any(self.qtotal != 0):
+        chinfo = M[0].chinfo
+        self.qtotal = chinfo.make_valid(np.sum([B.qtotal for B in M + N], axis=0))
+        if infinite and np.any(self.qtotal != 0):
             # for non-zero U(1) qtotal, we can immediately say that `self` is nilpotent.
             # In contrast, nonzero Z_N qtotal does not imply that, since the transfer-matrix
             # doesn't have to be hermitian: it could be circulant, with arbitrary eigenvalues!
             # The eigenvectors will *not* conserve the charge in this case!
             enlarge_factors = []
             for i in np.nonzero(self.qtotal)[0]:
-                if ket.chinfo.mod[i] == 1:  # U(1) qtotal
+                if chinfo.mod[i] == 1:  # U(1) qtotal
                     raise ValueError("TransferMatrix is nil-potent due to charges")
-                enlarge_factors.append(ket.chinfo.mod[i])  # get N of Z_N charge
-
+                enlarge_factors.append(chinfo.mod[i])  # get N of Z_N charge
             raise ValueError("TransferMatrix has non-zero qtotal for Z_N charges. "
                              "It can have valid eigenvectors, but they will break the Z_N charge. "
                              "To avoid that, you can enlarge the unit cell of the MPS "
                              "by a factor of " + str(enlarge_factors))
+
+    @classmethod
+    def from_Ns_Ms(cls, bra_N, ket_M, transpose=False, charge_sector=0, p_label=['p']):
+        """Initialize a TransferMatrix directly from the MPS tensors.
+
+        Parameters
+        ----------
+        bra_N, ket_M : list of :class:`~tenpy.linalg.np_conserved.Array`
+            Plain tensors of the bra and ket, in a list going left to right,
+            the bra not conjugated.
+        transpose : bool
+            Whether `self.matvec` acts on `RP` (``False``) or `LP` (``True``).
+        charge_sector : None | charges | ``0``
+            Selects the charge sector of the vector onto which the Linear operator acts.
+            ``None`` stands for *all* sectors, ``0`` stands for the zero-charge sector.
+            Defaults to ``0``, i.e., **assumes** the dominant eigenvector is in charge sector 0.
+        p_label : list of str
+            Physical label(s) of the tensors.
+        """
+        self = cls.__new__(cls)
+        self.shift_bra = self.shift_ket = 0
+        self._init_from_Ns_Ms(bra_N, ket_M, transpose, charge_sector, p_label)
+        return self
 
     def matvec(self, vec):
         """Given `vec` as an npc.Array, apply the transfer matrix.
@@ -4736,6 +4912,7 @@ class TransferMatrix(sparse.NpcLinearOperator):
         if self.label_split[0] not in vec._labels:
             vec = vec.split_legs(0)
             pipe = self.pipe
+        orig_labels = vec.get_leg_labels()
         # vec.itranspose(self.label_split)  # ['vL', 'vL*'] or ['vR*', 'vR']
         qtotal = vec.qtotal
         legs = vec.legs
@@ -4750,7 +4927,9 @@ class TransferMatrix(sparse.NpcLinearOperator):
             for N, M in zip(self._bra_N, self._ket_M):
                 vec = npc.tensordot(vec, M, axes=['vR', 'vL'])
                 vec = npc.tensordot(N, vec, axes=contract)  # [['vL*', 'p*'], ['vR*', 'p']])
-        if pipe is not None:
+        if pipe is None:
+            vec.itranspose(orig_labels)  # make sure we have the same labels/order as before
+        else:
             vec = vec.combine_legs(self.label_split, pipes=pipe)
         return vec
 

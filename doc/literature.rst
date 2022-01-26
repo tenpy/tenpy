@@ -31,6 +31,9 @@ We have split example notebooks into [TeNPyNotebooks]_ to keep the git history o
     Online documentation, https://tenpy.readthedocs.io/
 .. [TeNPyForum]
     Community forum for discussions, FAQ and announcements, https://tenpy.johannes-hauschild.de
+.. [TeNPyProjectTemplate]
+    Template git repository for custom projects with a simplified setup for running many simulations on a cluster,
+    https://github.com/tenpy/project_template
 
 Software-related
 ----------------
@@ -77,8 +80,10 @@ Our [TeNPyNotes]_ are a shorter summary of the important concepts, similar as :c
 :cite:`paeckel2019` is a very good, recent review focusing on time evolution with MPS.
 The lecture notes of :cite:`eisert2013` explain the area law as motivation for tensor networks very well.
 PEPS are for example reviewed in :cite:`verstraete2008`, :cite:`eisert2013` and :cite:`orus2014`.
+:cite:`cirac2020` is a recent, broad review of MPS and MPS with a focus on analytical theorems.
 :cite:`stoudenmire2012` reviews the use of DMRG for 2D systems.
 :cite:`cirac2009` discusses the different groups of tensor network states.
+:cite:`vanderstraeten2019` is a great review on tangent space methods for infinite, uniform MPS.
 
 
 Algorithm developments

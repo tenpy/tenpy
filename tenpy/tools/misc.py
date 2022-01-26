@@ -632,7 +632,7 @@ def merge_recursive(*nested_data, conflict='error', path=None):
     *nested_data: dict of dict
         Nested dictionaries that should be merged.
     path: list of str
-        Path inside the nesting for useful error message
+        Path inside the nesting for useful error message.
     conflict: "error" | "first" | "last"
         How to handle conflicts: raise an error (if the values are different),
         or just give priority to the first or last `nested_data` that still has a value,
