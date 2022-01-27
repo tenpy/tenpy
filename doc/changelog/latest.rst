@@ -23,6 +23,7 @@ Added
 - :class:`tenpy.linalg.lanczos.Arnoldi` (and common base class :class:`~tenpy.linalg.lanczos.KrylovBased` with :class:`~tenpy.linalg.lanczos.LanczosGroundState`).
 - Allow to pass and merge multiple parameter files to ``tenpy-run`` from the command line.
 - Greatly expanded userguide on :doc:`/intro/simulations` and added more parameter examples.
+- Option `preserve_norm` for :class:`~tenpy.algorithms.mpo_evolution.ExpMPOEvolution`.
 
 Changed
 ^^^^^^^

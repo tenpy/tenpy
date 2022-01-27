@@ -42,7 +42,7 @@ class ExpMPOEvolution(TimeEvolutionAlgorithm):
             Order of the algorithm. The total error up to time `t` scales as ``O(t*dt^order)``.
             Implemented are order = 1 and order = 2.
         preserve_norm : bool
-        Whether the state will be normalized to its initial norm after each time step.
+            Whether the state will be normalized to its initial norm after each time step.
 
     Attributes
     ----------
