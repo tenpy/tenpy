@@ -121,7 +121,8 @@ class Lattice:
         Boundary conditions of the couplings in each direction of the lattice,
         translated into a bool array with the global `bc_choices`.
     bc_shift : None | ndarray(int)
-        The shift in x-direction when going around periodic boundaries in other directions.
+        The shift in x-direction when going around periodic boundaries in other directions;
+        entries for [y, z, ...]; length is `dim` - 1
     bc_MPS : 'finite' | 'segment' | 'infinite'
         Boundary conditions for an MPS/MPO living on the ordered lattice.
         If the system is ``'infinite'``, the infinite direction is always along the first basis
@@ -449,8 +450,9 @@ class Lattice:
         bc = [bc_choices_reverse[bc] for bc in self.bc]
         if self.bc_shift is not None:
             for i, shift in enumerate(self.bc_shift):
-                assert bc[i + 1] == "periodic"
-                bc[i + 1] = int(shift)
+                if shift != 0:
+                    assert bc[i + 1] == "periodic"
+                    bc[i + 1] = int(shift)
         return bc
 
     @boundary_conditions.setter
