@@ -1615,7 +1615,7 @@ class IrregularLattice(Lattice):
         )
         self.order = self._ordering_irreg(regular_lattice.order)
         self.position_disorder = regular_lattice.position_disorder
-        if self.position_disorder is None:
+        if self.position_disorder is not None:
             if len(add_unit_cell) > 0:
                 raise ValueError("Don't know how to extend `position_disorder`. "
                                  "Add disorder explicitly only to the IrregularLattice.")
