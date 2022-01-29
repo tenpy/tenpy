@@ -285,7 +285,7 @@ def test_canonical_form(bc, method):
             c = npc.tensordot(A, A.conj(), axes=[['vL', 'p'], ['vL*', 'p*']])
             A_err = (c - npc.diag(1., c.legs[0])).norm()
             print(A_err)
-            assert A_err < 1.e-14
+            assert A_err < 1.e-13
 
 @pytest.mark.parametrize("bc", ['finite', 'infinite'])
 def test_apply_op(bc, eps=1.e-13):

@@ -326,7 +326,7 @@ class Lattice:
             first = h5gr.attrs['segment_first']
             last = h5gr.attrs['segment_last']
             obj.segment_first_last = first, last
-        if position_disorder in h5gr:
+        if "position_disorder" in h5gr:
             obj.position_disorder = hdf5_loader.load(subpath + "position_disorder")
         else:
             obj.position_disorder = None
