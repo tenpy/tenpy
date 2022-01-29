@@ -132,6 +132,15 @@ class Lattice:
         direction `i`.
     unit_cell_positions : ndarray, shape (len(unit_cell), Dim)
         for each site in the unit cell a vector giving its position within the unit cell.
+    position_disorder : ``None`` | ndarray
+        If ``None`` (default) the lattice positions are regular.
+        If not None, this array specifies a shift of each site relative to the regular lattice,
+        possibly introducing a disorder of each site.
+        It is *only* used by :meth:`position` (e.g. when plotting lattice sites)
+        and :meth:`distance`. To use this, you can set the `position_disorder` in a model,
+        and then read out and use the :meth:`distance` to possibly rescale the couling strengths.
+        The correct shape  is ``Ls[0], Ls[1], ..., len(unit_cell), Dim``, where `Dim` is the same
+        dimension as for the `unit_cell_positions` and `basis`.
     pairs : dict
         See above.
     segement_first_last : tuple of int
@@ -174,6 +183,7 @@ class Lattice:
         self.basis = np.array(basis)
         self.boundary_conditions = bc  # property setter for self.bc and self.bc_shift
         self.bc_MPS = bc_MPS
+        self.position_disorder = None  # no disorder by default
         # calculate order for MPS
         self.order = self.ordering(order)
         # uses attribute setter to calculte _mps2lat_vals_idx_fix_u etc and lat2mps
@@ -232,6 +242,8 @@ class Lattice:
             # rows of `order` unique and _perm correct?
             assert np.all(
                 np.sum(self._order * self._strides, axis=1)[self._perm] == np.arange(self.N_sites))
+        if self.position_disorder is not None:
+            assert self.position_disorder.shape == self.shape + (self.basis.shape[-1], )
 
     def copy(self):
         """Shallow copy of `self`."""
@@ -273,6 +285,10 @@ class Lattice:
             first, last = self.segment_first_last
             h5gr.attrs['segment_first'] = first
             h5gr.attrs['segment_last'] = last
+        position_disorder = getattr(self, 'position_disorder', None)
+        if position_disorder is not None:
+            hdf5_saver.save(self.position_disorder, subpath + "position_disorder")
+
 
     @classmethod
     def from_hdf5(cls, hdf5_loader, h5gr, subpath):
@@ -310,6 +326,10 @@ class Lattice:
             first = h5gr.attrs['segment_first']
             last = h5gr.attrs['segment_last']
             obj.segment_first_last = first, last
+        if position_disorder in h5gr:
+            obj.position_disorder = hdf5_loader.load(subpath + "position_disorder")
+        else:
+            obj.position_disorder = None
         obj.test_sanity()
         return obj
 
@@ -565,13 +585,21 @@ class Lattice:
 
         Returns
         -------
-        pos : ndarray, ``(..., dim)``
+        pos : ndarray, ``(..., Dim)``
             The position of the lattice sites specified by `lat_idx` in real-space.
+            If :attr:`position_disorder` is non-trivial, it can shift the positions!
         """
         idx = self._asvalid_latidx(lat_idx)
         res = np.take(self.unit_cell_positions, idx[..., -1], axis=0)
         for i in range(self.dim):
             res += idx[..., i, np.newaxis] * self.basis[i]
+        if self.position_disorder is not None:
+            if self.bc_shift is not None:
+                raise NotImplementedError("we don't handle non-trivial bc_shift"
+                                          "in combination with positional disorder")
+            idx = np.mod(idx, self.shape)
+            idx_pos = tuple(idx[..., i] for i in range(idx.shape[-1])) + (slice(None, None), )
+            res += self.position_disorder[idx_pos]
         return res
 
     def site(self, i):
@@ -941,6 +969,21 @@ class Lattice:
         vec_dist = self.unit_cell_positions[u2] - self.unit_cell_positions[u1]
         for ax in range(self.dim):
             vec_dist = vec_dist + dx[..., ax, np.newaxis] * self.basis[ax]
+        if self.position_disorder is not None:
+            if self.bc_shift is not None:
+                raise NotImplementedError("we don't handle non-trivial bc_shift"
+                                          "in combination with positional disorder")
+            shape, shift = self.coupling_shape(dx)
+            slices_i = []
+            slices_j = []
+            for L, Lc, s, d in zip(self.Ls, shape, shift, dx):
+                slices_i.append(np.arange(-s, -s + Lc) % L)
+                slices_j.append(np.arange(-s + d, -s + d + Lc) % L)
+            lat_i = tuple(np.meshgrid(*slices_i, indexing='ij', sparse=True))
+            lat_j = tuple(np.meshgrid(*slices_j, indexing='ij', sparse=True))
+            disorder_i = self.position_disorder[lat_i + (u1, )]
+            disorder_j = self.position_disorder[lat_j + (u2, )]
+            vec_dist = disorder_j - disorder_i + vec_dist
         return np.linalg.norm(vec_dist, axis=-1)
 
     def find_coupling_pairs(self, max_dx=3, cutoff=None, eps=1.e-10):
@@ -1571,6 +1614,11 @@ class IrregularLattice(Lattice):
             pairs=regular_lattice.pairs,
         )
         self.order = self._ordering_irreg(regular_lattice.order)
+        self.position_disorder = regular_lattice.position_disorder
+        if self.position_disorder is None:
+            if len(add_unit_cell) > 0:
+                raise ValueError("Don't know how to extend `position_disorder`. "
+                                 "Add disorder explicitly only to the IrregularLattice.")
         # done
 
     def save_hdf5(self, hdf5_saver, h5gr, subpath):

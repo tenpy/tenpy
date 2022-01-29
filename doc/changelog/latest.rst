@@ -24,6 +24,7 @@ Added
 - Allow to pass and merge multiple parameter files to ``tenpy-run`` from the command line.
 - Greatly expanded userguide on :doc:`/intro/simulations` and added more parameter examples.
 - Option `preserve_norm` for :class:`~tenpy.algorithms.mpo_evolution.ExpMPOEvolution`.
+- Allow non-trivial :attr:`~tenpy.models.lattice.Lattice.position_disorder` for lattices.
 
 Changed
 ^^^^^^^
