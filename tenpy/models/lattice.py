@@ -962,9 +962,18 @@ class Lattice:
 
         Returns
         -------
-        distance : float
+        distance : float | ndarray
             The distance between site at lattice indices ``[x, y, u1]`` and
             ``[x + dx[0], y + dx[1], u2]``, **ignoring** any boundary effects.
+            In case of non-trivial :attr:`position_disorder`, an array is returned. This array
+            is compatible with the shape/indexing required for
+            :meth:`~tenpy.models.CouplingModel.add_coupling`.
+            For example to add a Z-Z interaction of strength `J/r` with r the distance,
+            you can do something like this in :meth:`~tenpy.models.CoulingModel.init_terms`:
+
+                for u1, u2, dx in self.lat.pairs['nearest_neighbors']:
+                    dist = self.lat.distance(u1, u2, dx)
+                    self.add_coupling(J/dist, u1, 'Sz', u2, 'Sz', dx)
         """
         vec_dist = self.unit_cell_positions[u2] - self.unit_cell_positions[u1]
         for ax in range(self.dim):
