@@ -633,6 +633,7 @@ class Lattice:
         """
         idx = self._asvalid_latidx(lat_idx)
         if self.bc_MPS != 'finite':
+            idx = idx.copy()
             i_shift = idx[..., 0] - np.mod(idx[..., 0], self.N_rings)
             idx[..., 0] -= i_shift
         i = np.sum(np.mod(idx, self.shape) * self._strides, axis=-1)  # before permutation
