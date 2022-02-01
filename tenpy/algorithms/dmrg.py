@@ -948,7 +948,7 @@ class DMRGEngine(Sweep):
             norm_tol_iter = self.options.get('norm_tol_iter', 5)
         if norm_tol is None or (norm_err < norm_tol and norm_err < norm_tol_final):
             return
-        if warn:
+        if warn and norm_err > norm_tol:
             logger.warning(
                 "final DMRG state not in canonical form up to "
                 "norm_tol=%.2e: norm_err=%.2e", norm_tol, norm_err)
