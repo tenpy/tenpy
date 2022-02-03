@@ -94,7 +94,7 @@ def entropy(results, psi, simulation, key='entropy'):
     results['entropy'] = psi.entanglement_entropy()
 
 
-def onsite_expectation_value(results, psi, simulation, opname, key=None):
+def onsite_expectation_value(results, psi, simulation, opname, key=None, fix_u=None, **kwargs):
     """Measure expectation values of an onsite operator.
 
     The resulting array of measurements is indexed by *lattice* indices ``(x, y, u)``
@@ -110,16 +110,25 @@ def onsite_expectation_value(results, psi, simulation, opname, key=None):
     opname : str
         The operator to be measured.
         Passed on to :meth:`~tenpy.networks.mps.MPS.expectation_value`.
+    fix_u : None | int
+        Select a (lattice) unit cell index to restrict measurements to.
     """
     if key is None:
         if not isinstance(opname, str):
             raise ValueError("can't auto-determine key for operator " + repr(opname))
-        key = "<{0!s}>".format(opname)
+        key = f"<{opname}>"
     if key in results:
         raise ValueError(f"key {key!r} already exists in results")
-    exp_vals = psi.expectation_value(opname)
     lattice = simulation.model.lat
-    exp_vals = lattice.mps2lat_values(exp_vals)
+    if fix_u is not None:
+        kwargs['sites'] = lattice.mps_idx_fix_u(fix_u)
+    exp_vals = psi.expectation_value(opname, **kwargs)
+    assert exp_vals.ndim == 1  # here exp_vals is given in MPS indices i
+    # now reshape/reorder to index (x, y, u)
+    if fix_u is None and 'sites' in kwargs:
+        exp_vals = lattice.mps2lat_values_masked(exp_vals, mps_inds=kwargs['sites'])
+    else:
+        exp_vals = lattice.mps2lat_values(exp_vals, u=fix_u)
     results[key] = exp_vals
 
 

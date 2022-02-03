@@ -179,7 +179,7 @@ class Simulation:
                 log_params = self.options['logging_params']
             setup_logging_(**log_params, output_filename=self.output_filename)
         # now that we have logging running, catch up with log messages
-        self.logger.info("simulation class %s", self.__class__.__name__)
+        self.logger.info("new simulation\n%s\n%s\n%s", "=" * 80, self.__class__.__name__, "=" * 80)
         self.options = asConfig(self.options, self.__class__.__name__)
         self.options.touch('directory', 'output_filename', 'output_filename_params',
                            'overwrite_output', 'skip_if_output_exists', 'safe_write', 'log_params',
