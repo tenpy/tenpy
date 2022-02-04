@@ -26,6 +26,7 @@ Added
 - Option `preserve_norm` for :class:`~tenpy.algorithms.mpo_evolution.ExpMPOEvolution`.
 - Allow non-trivial :attr:`~tenpy.models.lattice.Lattice.position_disorder` for lattices.
 - Option `fix_u` for :func:`~tenpy.simulations.measurement.onsite_expectation_value`.
+- Lattice :attr:`~tenpy.models.lattice.Lattice.cylinder_axis`.
 
 Changed
 ^^^^^^^

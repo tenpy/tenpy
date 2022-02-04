@@ -496,6 +496,27 @@ class Lattice:
                 self.bc_shift = None
         self.bc = np.array(bc)
 
+    @property
+    def cylinder_axis(self):
+        """Direction of the cylinder axis.
+
+        For an infinite cylinder (`bc_MPS='infinite' and ``boundary_conditions[1] == 'open'``),
+        this property gives the direction of the cylinder axis, in the same coordinates as the
+        :attr:`basis`, as a normalized vector.
+        For a 1D lattice or for open boundary conditions along y, it's just along ``basis[0]``.
+        """
+        if self.dim == 1 or self.boundary_conditions[1] == 'open':
+            return self.basis[0] / np.linalg.norm(self.basis[0])
+        if self.dim != 2:
+            raise NotImplementedError("Might not even have cylinder axis...")
+        periodicity = self.Ls[1] * self.basis[1]
+        if self.bc_shift is not None:
+            periodicity += self.bc_shift[0] * self.basis[0]
+        if len(periodicity) != 2:
+            raise ValueError("non-2D basis, can't define cylinder axis")
+        cylinder_axis = np.array([periodicity[1], - periodicity[0]])
+        return cylinder_axis / np.linalg.norm(cylinder_axis)
+
     def extract_segment(self, first=0, last=None, enlarge=None):
         """Extract a finite segment from an infinite/large system.
 
