@@ -152,9 +152,9 @@ def correlation_length(results, psi, simulation, key='correlation_length', unit=
             In units of lattice "rings" around the cylinder, for correlations along the
             ``lattice.basis[0]``.
         lattice_spacing :
-            In units of lattice spacings for correlations along the cylinder axis (for periodic
-            boundary conditions along y) or along ``lattice.basis[0]`` (for "ladders" with open
-            bboundary conditions).
+            In units of lattice spacings (as defined by the lattice basis vectors!)
+            for correlations, along the cylinder axis (for periodic boundary conditions along y)
+            or along ``lattice.basis[0]`` (for "ladders" with open boundary conditions).
 
     **kwargs :
         Further keywoard arguments given to :meth:`~tenpy.networks.mps.MPS.correlation_length`.
@@ -174,8 +174,11 @@ def correlation_length(results, psi, simulation, key='correlation_length', unit=
         if lat.N_sites_per_ring is None:
             raise ValueError("lattice doesn't define N_sites_per_ring")
         corr = corr * psi.grouped / lat.N_sites_per_ring
-    elif unit == 'latitce_spacing':
-        raise NotImplementedError("TODO")
+    elif unit == 'lattice_spacing':
+        lat = simulation.model.lattice
+        if lat.N_sites_per_ring is None:
+            raise ValueError("lattice doesn't define N_sites_per_ring")
+        corr = corr * psi.grouped / lat.N_sites_per_ring / np.inner(lat.basis[0], lat.cylinder_axis)
     else:
         raise ValueError("can't understand unit=" + repr(unit))
     results[key] = corr
