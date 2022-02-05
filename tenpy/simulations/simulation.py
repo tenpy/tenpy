@@ -82,6 +82,8 @@ class Simulation:
             If not ``None``, initialize the (legacy) numpy random generator with the given seed.
             **Note** that models have their own :attr:`~tenpy.models.model.Model.rng` with
             a separate (default) :cfg:option:`CouplingMPOModel.random_seed` in the `model_params`.
+            If this `random_seed` is set, we call
+            ``model_params('random_seed', random_seed + 123456)``
         sequential : dict
             Parameters for running simulations sequentially, see :cfg:config:`sequential`.
             Ignored by the simulation itself, but used by :func:`run_seq_simulations` and
@@ -197,6 +199,7 @@ class Simulation:
                               "Depending on where you use random numbers, "
                               "this might or might not be what you want!")
             np.random.seed(random_seed)
+            self.options.subconfig('model_params').setdefault('random_seed', random_seed + 123456)
         self.results = {
             'simulation_parameters': self.options,
             'version_info': self.get_version_info(),
