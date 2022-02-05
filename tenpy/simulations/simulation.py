@@ -79,7 +79,9 @@ class Simulation:
             Otherwise, if the file already exists we try to replace
             ``filename.ext`` with ``filename_01.ext`` (and further increasing numbers).
         random_seed : int | None
-            If not ``None``, initialize the numpy random generator with the given seed.
+            If not ``None``, initialize the (legacy) numpy random generator with the given seed.
+            **Note** that models have their own :attr:`~tenpy.models.model.Model.rng` with
+            a separate (default) :cfg:option:`CouplingMPOModel.random_seed` in the `model_params`.
         sequential : dict
             Parameters for running simulations sequentially, see :cfg:config:`sequential`.
             Ignored by the simulation itself, but used by :func:`run_seq_simulations` and
