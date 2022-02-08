@@ -445,3 +445,65 @@ def test_model_plus_hc(L=6):
         assert str(w.message).startswith("Adding terms to the CouplingMPOModel")
 
     compare(m1, m2, m3, use_bonds=False)
+
+
+class DisorderedLatticeModel(model.CouplingMPOModel):
+    def init_sites(self, model_params):
+        conserve = model_params.get('conserve', 'parity')
+        return tenpy.networks.site.SpinHalfSite(conserve)
+
+    def init_lattice(self, model_params):
+        lat = super().init_lattice(model_params)
+        sigma = model_params.get('disorder_sigma', 0.1)
+        shape = lat.shape + (lat.basis.shape[-1], )
+        lat.position_disorder = np.random.normal(scale=sigma, size=shape)
+        return lat
+
+    def init_terms(self, model_params):
+        J = model_params.get('J', 1.)
+        for u1, u2, dx in self.lat.pairs['nearest_neighbors']:
+            dist = self.lat.distance(u1, u2, dx)
+            self.add_coupling(J/dist, u1, 'Sz', u2, 'Sz', dx)
+        for u1, u2, dx in self.lat.pairs['next_nearest_neighbors']:
+            dist = self.lat.distance(u1, u2, dx)
+            self.add_coupling(J/dist, u1, 'Sx', u2, 'Sx', dx)
+
+@pytest.mark.parametrize("bc", ['open', 'periodic'])
+def test_disordered_lattice_model(bc, J=2.):
+    model_params = {
+        'lattice': 'Kagome',
+        'Lx': 2,
+        'Ly': 3,
+        'bc_y': bc,
+        'bc_x': bc,
+        'bc_MPS': 'finite' if bc == 'open' else 'infinite',
+        'disorder_sigma': 0.1,
+        'J': J,
+    }
+    M = DisorderedLatticeModel(model_params)
+    terms = M.all_coupling_terms().to_TermList()
+    for i, j, op, need_pbc in [([0, 0, 0], [0, 0, 1], 'Sz', False),
+                               ([1, 0, 0], [0, 0, 1], 'Sz', False),
+                               ([1, 0, 2], [0, 1, 1], 'Sz', False),
+                               ([0, 0, 1], [0, 1, 0], 'Sx', False),
+                               ([1, 1, 2], [0, 2, 0], 'Sx', False),
+                               ([0, 2, 2], [1, 2, 0], 'Sx', False),
+                               ([0, 2, 2], [1, 2, 0], 'Sx', False),
+                               ([1, 0, 1], [2, 0, 0], 'Sz', True),
+                               ([1, 1, 1], [2, 0, 2], 'Sz', True),
+                               ([1, 2, 2], [1, 3, 0], 'Sz', True),
+                               ]:
+        if need_pbc and bc == 'open':
+            continue
+        ij = np.array([i, j])
+        mps_i, mps_j = M.lat.lat2mps_idx(ij)
+        pos_i, pos_j  = M.lat.position(ij)
+        dist = np.linalg.norm(pos_i - pos_j)
+        if need_pbc:
+            dist = min(dist, np.linalg.norm(pos_i - pos_j + M.lat.basis[1] * M.lat.Ls[1]))
+        try:
+            idx = terms.terms.index([(op, mps_i), (op, mps_j)])
+        except ValueError:
+            idx = terms.terms.index([(op, mps_j), (op, mps_i)])
+        assert abs(terms.strength[idx] - J/dist) < 1.e-14
+

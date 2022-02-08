@@ -271,14 +271,21 @@ def test_canonical_form(bc, method):
     assert abs(ov - 1.) < 1.e-14
     print("norm_test")
     print(psi.norm_test())
-    assert np.max(psi.norm_test()) < 1.e-14
+    assert np.max(psi.norm_test()) < 1.e-14  # SB = AS to good precision
     psi3 = psi.copy()
     # call canonical_form again, it shouldn't do anything now
     meth(renormalize=True)
     psi.test_sanity()
     ov = psi.overlap(psi3)
     assert abs(ov - 1.) < 1.e-14
-
+    if method in ['canonical_form_finite', 'canonical_form_infinite2']:
+        # check that A = SB S^-1 is orthonormal
+        for i in range(psi.L):
+            A = psi.get_B(i, 'A')
+            c = npc.tensordot(A, A.conj(), axes=[['vL', 'p'], ['vL*', 'p*']])
+            A_err = (c - npc.diag(1., c.legs[0])).norm()
+            print(A_err)
+            assert A_err < 1.e-13
 
 @pytest.mark.parametrize("bc", ['finite', 'infinite'])
 def test_apply_op(bc, eps=1.e-13):

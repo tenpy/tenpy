@@ -6,6 +6,7 @@ import numpy as np
 import time
 from scipy.linalg import expm
 import logging
+
 logger = logging.getLogger(__name__)
 
 from .algorithm import TimeEvolutionAlgorithm
@@ -40,6 +41,8 @@ class ExpMPOEvolution(TimeEvolutionAlgorithm):
         order : int
             Order of the algorithm. The total error up to time `t` scales as ``O(t*dt^order)``.
             Implemented are order = 1 and order = 2.
+        preserve_norm : bool
+            Whether the state will be normalized to its initial norm after each time step.
 
     Attributes
     ----------
@@ -74,10 +77,23 @@ class ExpMPOEvolution(TimeEvolutionAlgorithm):
         N_steps = self.options.get('N_steps', 1)
         approximation = self.options.get('approximation', 'II')
         order = self.options.get('order', 2)
+        preserve_norm = self.options.get('preserve_norm', None)
+
+        # preserve the norm for real time evolution
+        if preserve_norm is None:
+            if np.iscomplex(dt):
+                preserve_norm = False
+            else:
+                preserve_norm = True
+        if preserve_norm:
+            old_norm = self.psi.norm
 
         self.calc_U(dt, order, approximation)
 
         self.update(N_steps)
+
+        if preserve_norm:
+            self.psi.norm = old_norm
 
         return self.psi
 
@@ -162,6 +178,16 @@ class TimeDependentExpMPOEvolution(ExpMPOEvolution):
         dt = self.options.get('dt', 0.01)
         approximation = self.options.get('approximation', 'II')
         order = self.options.get('order', 1)
+        preserve_norm = self.options.get('preserve_norm', None)
+
+        # preserve the norm for real time evolution
+        if preserve_norm is None:
+            if np.iscomplex(dt):
+                preserve_norm = False
+            else:
+                preserve_norm = True
+        if preserve_norm:
+            old_norm = self.psi.norm
 
         trunc_err = TruncationError()
         for _ in range(N_steps):
@@ -170,6 +196,8 @@ class TimeDependentExpMPOEvolution(ExpMPOEvolution):
                 trunc_err += U_MPO.apply(self.psi, self.options)
             self.evolved_time = self.evolved_time + dt
             self.model = self.reinit_model()  # use the updated model for the next measurement!
+        if preserve_norm:
+            self.psi.norm = old_norm
         self.trunc_err = self.trunc_err + trunc_err  # not += : make a copy!
         # (this is done to avoid problems of users storing self.trunc_err after each `update`)
         return trunc_err

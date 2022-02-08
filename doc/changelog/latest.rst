@@ -23,6 +23,11 @@ Added
 - :class:`tenpy.linalg.lanczos.Arnoldi` (and common base class :class:`~tenpy.linalg.lanczos.KrylovBased` with :class:`~tenpy.linalg.lanczos.LanczosGroundState`).
 - Allow to pass and merge multiple parameter files to ``tenpy-run`` from the command line.
 - Greatly expanded userguide on :doc:`/intro/simulations` and added more parameter examples.
+- Option `preserve_norm` for :class:`~tenpy.algorithms.mpo_evolution.ExpMPOEvolution`.
+- Allow non-trivial :attr:`~tenpy.models.lattice.Lattice.position_disorder` for lattices.
+- Option `fix_u` for :func:`~tenpy.simulations.measurement.onsite_expectation_value`.
+- Lattice :attr:`~tenpy.models.lattice.Lattice.cylinder_axis`.
+- Random number generator :attr:`~tenpy.models.model.Model.rng` for models.
 
 Changed
 ^^^^^^^
@@ -40,3 +45,4 @@ Fixed
 - The :func:`~tenpy.linalg.np_conserved.qr` decomposition with ``mode='complete'`` sometimes returned wrong charges.
 - Adjust default `trunc_params` of :func:`~tenpy.networks.mps.MPS.compute_K` and :func:`~tenpy.networks.mps.MPS.permute_sites` to avoid too severe truncation.
 - (!) Non-trivial `start_time` parameter caused wrong evolution in :class:`~tenpy.algorithms.mpo_evolution.TimeDependentExpMPOEvolution`.
+- Make sure that :meth:`~tenpy.models.lattice.lat2mps_idx` doesn't modify arguments in place.

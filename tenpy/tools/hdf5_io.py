@@ -41,6 +41,7 @@ Names for the ``ATTR_TYPE`` attribute:
 
 .. autodata:: REPR_ARRAY
 .. autodata:: REPR_INT
+.. autodata:: REPR_INT_AS_STR
 .. autodata:: REPR_FLOAT
 .. autodata:: REPR_STR
 .. autodata:: REPR_COMPLEX
@@ -61,10 +62,6 @@ Names for the ``ATTR_TYPE`` attribute:
 .. autodata:: REPR_IGNORED
 
 .. autodata:: TYPES_FOR_HDF5_DATASETS
-
-.. todo ::
-    For memory caching with big MPO environments,
-    we need a Hdf5Cacher clearing the memo's every now and then (triggered by what?).
 """
 # Copyright 2020-2021 TeNPy Developers, GNU GPLv3
 
@@ -96,8 +93,8 @@ __all__ = [
     'save', 'load', 'find_global', 'valid_hdf5_path_component', 'Hdf5FormatError',
     'Hdf5ExportError', 'Hdf5ImportError', 'Hdf5Exportable', 'Hdf5Ignored', 'Hdf5Saver',
     'Hdf5Loader', 'save_to_hdf5', 'load_from_hdf5', 'REPR_IGNORED', 'REPR_HDF5EXPORTABLE',
-    'REPR_REDUCE', 'REPR_ARRAY', 'REPR_INT', 'REPR_FLOAT', 'REPR_STR', 'REPR_COMPLEX',
-    'REPR_INT64', 'REPR_FLOAT64', 'REPR_COMPLEX128', 'REPR_INT32', 'REPR_FLOAT32',
+    'REPR_REDUCE', 'REPR_ARRAY', 'REPR_INT', 'REPR_INT_AS_STR', 'REPR_FLOAT', 'REPR_STR',
+    'REPR_COMPLEX', 'REPR_INT64', 'REPR_FLOAT64', 'REPR_COMPLEX128', 'REPR_INT32', 'REPR_FLOAT32',
     'REPR_COMPLEX64', 'REPR_BOOL', 'REPR_NONE', 'REPR_RANGE', 'REPR_LIST', 'REPR_TUPLE',
     'REPR_SET', 'REPR_DICT_GENERAL', 'REPR_DICT_SIMPLE', 'REPR_DTYPE', 'REPR_FUNCTION',
     'REPR_CLASS', 'REPR_GLOBAL', 'TYPES_FOR_HDF5_DATASETS', 'ATTR_TYPE', 'ATTR_CLASS',
@@ -204,6 +201,7 @@ REPR_REDUCE = "reduce"  #: saved object had a __reduce__ method according to pic
 
 REPR_ARRAY = "array"  #: saved object represents a numpy array
 REPR_INT = "int"  #: saved object represents a (python) int
+REPR_INT_AS_STR = "int_as_str"  #: saved object represents int > 2^64 as (base-10) string
 REPR_FLOAT = "float"  #: saved object represents a (python) float
 REPR_STR = "str"  #: saved object represents a (python unicode) string
 REPR_COMPLEX = "complex"  #: saved object represents a complex number
@@ -590,7 +588,16 @@ class Hdf5Saver:
 
     def save_dataset(self, obj, path, type_repr):
         """Save `obj` as a hdf5 dataset; in dispatch table."""
-        self.h5group[path] = obj  # save as dataset
+        try:
+            self.h5group[path] = obj  # save as dataset
+        except TypeError as e:
+            # special handling for ints > 2**64
+            if type_repr != REPR_INT or "no native HDF5 equivalent" not in e.args[0]:
+                raise
+            # convert int to str that can easily be saved
+            obj = str(obj)
+            type_repr = REPR_INT_AS_STR
+            self.h5group[path] = obj
         h5gr = self.h5group[path]
         h5gr.attrs[ATTR_TYPE] = type_repr
         self.memorize_save(h5gr, obj)
@@ -909,6 +916,18 @@ class Hdf5Loader:
 
     if h5py_version >= (3, 0):  # for older h5py versions, just read the dataset directly.
         dispatch_load[REPR_STR] = (load_str, str)
+
+    def load_converted_to_str(self, h5gr, type_info, subpath):
+        """Load objects converted to string during save, in particular int > 2^64."""
+        if h5py_version >= (3, 0):
+            obj = h5gr.asstr()[()]
+        else:
+            obj = str(h5gr[()])
+        obj = type_info(obj)
+        self.memorize_load(h5gr, obj)
+        return obj
+
+    dispatch_load[REPR_INT_AS_STR] = (load_converted_to_str, int)
 
     def load_list(self, h5gr, type_info, subpath):
         """Load a list."""

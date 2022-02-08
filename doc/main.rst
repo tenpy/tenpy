@@ -26,6 +26,8 @@ Tenpy main module
     :toctree: reference
 
     run_simulation
+    resume_from_checkpoint
+    run_seq_simulations
     console_main
     show_config
 

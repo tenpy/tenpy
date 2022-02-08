@@ -79,7 +79,11 @@ class Simulation:
             Otherwise, if the file already exists we try to replace
             ``filename.ext`` with ``filename_01.ext`` (and further increasing numbers).
         random_seed : int | None
-            If not ``None``, initialize the numpy random generator with the given seed.
+            If not ``None``, initialize the (legacy) numpy random generator with the given seed.
+            **Note** that models have their own :attr:`~tenpy.models.model.Model.rng` with
+            a separate (default) :cfg:option:`CouplingMPOModel.random_seed` in the `model_params`.
+            If this `random_seed` is set, we call
+            ``model_params('random_seed', random_seed + 123456)``
         sequential : dict
             Parameters for running simulations sequentially, see :cfg:config:`sequential`.
             Ignored by the simulation itself, but used by :func:`run_seq_simulations` and
@@ -179,7 +183,7 @@ class Simulation:
                 log_params = self.options['logging_params']
             setup_logging_(**log_params, output_filename=self.output_filename)
         # now that we have logging running, catch up with log messages
-        self.logger.info("simulation class %s", self.__class__.__name__)
+        self.logger.info("new simulation\n%s\n%s\n%s", "=" * 80, self.__class__.__name__, "=" * 80)
         self.options = asConfig(self.options, self.__class__.__name__)
         self.options.touch('directory', 'output_filename', 'output_filename_params',
                            'overwrite_output', 'skip_if_output_exists', 'safe_write', 'log_params',
@@ -195,6 +199,7 @@ class Simulation:
                               "Depending on where you use random numbers, "
                               "this might or might not be what you want!")
             np.random.seed(random_seed)
+            self.options.subconfig('model_params').setdefault('random_seed', random_seed + 123456)
         self.results = {
             'simulation_parameters': self.options,
             'version_info': self.get_version_info(),
