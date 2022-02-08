@@ -236,21 +236,27 @@ def test_MPO_addition():
         assert H12.is_equal(H12_sum)
 
 
-def test_MPO_expectation_value():
+def test_MPO_expectation_value(tol=1.e-15):
     s = spin_half
     psi1 = mps.MPS.from_singlets(s, 6, [(1, 3), (2, 5)], lonely=[0, 4], bc='infinite')
     psi1.test_sanity()
-    ot = OnsiteTerms(4)
-    ot.add_onsite_term(0.1, 0, 'Sz')  # -> 0.5
-    ot.add_onsite_term(0.2, 3, 'Sz')  # -> 0.
+    ot = OnsiteTerms(4) # H.L != psi.L, consider L = lcm(4, 6) = 12
+    ot.add_onsite_term(0.1, 0, 'Sz')  # -> 0.5 * 2 (sites 0, 4, not 8)
+    ot.add_onsite_term(0.2, 3, 'Sz')  # -> 0.  (not sites 4, 7, 11)
     ct = CouplingTerms(4)  # note: ct.L != psi1.L
-    ct.add_coupling_term(1., 2, 3, 'Sz', 'Sz')  # -> 0.
-    ct.add_coupling_term(1.5, 1, 3, 'Sz', 'Sz')  # -> 1.5*(-0.25)
-    ct.add_coupling_term(2.5, 0, 6, 'Sz', 'Sz')  # -> 2.5*0.25
+    ct.add_coupling_term(1., 2, 3, 'Sz', 'Sz')  # -> 0. (not 2-3, 6-7, 10-11)
+    ct.add_coupling_term(1.5, 1, 3, 'Sz', 'Sz')  # -> 1.5*(-0.25) (1-3, not 5-7, not 9-11)
+    ct.add_coupling_term(2.5, 0, 6, 'Sz', 'Sz')  # -> 2.5*0.25*3 (0-6, 4-10, not 8-14)
     H = mpo.MPOGraph.from_terms((ot, ct), [s] * 4, 'infinite').build_MPO()
-    ev = H.expectation_value(psi1)
-    desired_ev = (0.1 * 0.5 + 0.2 * 0. + 1. * 0. + 1.5 * -0.25 + 2.5 * 0.25) / H.L
-    assert abs(ev - desired_ev) < 1.e-8
+    desired_ev = (0.1 * 0.5 * 2 + 0.2 * 0. + 1. * 0. + 1.5 * -0.25 + 2.5 * 0.25 * 2) / 12
+    ev_power = H.expectation_value_power(psi1, tol=tol)
+    assert abs(ev_power - desired_ev) < tol
+    ev_TM = H.expectation_value_TM(psi1, tol=tol)
+    assert abs(ev_TM - desired_ev) < tol
+    ev = H.expectation_value(psi1, tol)
+    assert abs(ev - desired_ev) < tol
+
+    # now with exponentially decaying term
     grid = [
         [s.Id, s.Sz, 3 * s.Sz],
         [None, 0.1 * s.Id, s.Sz],
@@ -258,19 +264,28 @@ def test_MPO_expectation_value():
     ]
     L = 1
     exp_dec_H = mpo.MPO.from_grids([s] * L, [grid] * L, bc='infinite', IdL=0, IdR=2)
-    ev = exp_dec_H.expectation_value(psi1)
-    desired_ev = 3 * 0.5 + 0.25 * 0.1**(4 - 1) + 0.25 * 0.1**(6 - 1) + 0.25 * 0.1**(
-        10 - 1)  # values > 1.e-15
-    assert abs(ev - desired_ev) < 1.e-15
-    L = 3
+    desired_ev = (3 * 0.5 * 2 + # Sz onsite
+                  0.25 * (0.1**3 + 0.1**5 + 0.1**9 + 0.1**11 + 0.1**15 +  # Z_0 Z_i
+                          0.1**1 + 0.1**5 + 0.1**7 + 0.1**11 + 0.1**13) +  # Z_4 Z_i
+                  -0.25 * (0.1**1 +  # Z_1 Z_3
+                           0.1**2)  # Z_2 Z_4
+                  + 0.  # other sites
+                  ) / 6.  # values > 1.e-15
+    ev_power = exp_dec_H.expectation_value_power(psi1, tol=tol)
+    ev_TM = exp_dec_H.expectation_value_TM(psi1, tol=tol)
+    assert abs(ev_power - desired_ev) < tol
+    assert abs(ev_TM - desired_ev) < tol
+    ev = exp_dec_H.expectation_value(psi1, tol=tol)
+    assert abs(ev - desired_ev) < tol
+    L = 3  # should give exactly the same answer!
     exp_dec_H = mpo.MPO.from_grids([s] * L, [grid] * L, bc='infinite', IdL=0, IdR=2)
-    ev = exp_dec_H.expectation_value(psi1)
-    desired_ev = (
-        desired_ev +  # first site
-        3 * 0. - 0.25 * 0.1**(3 - 1 - 1) +  # second site
-        3 * 0. - 0.25 * 0.1**(5 - 2 - 1)) / 3.
-    print("ev = ", ev, "desired", desired_ev)
-    assert abs(ev - desired_ev) < 1.e-14
+    ev_power = exp_dec_H.expectation_value_power(psi1, tol=tol)
+    ev_TM = exp_dec_H.expectation_value_TM(psi1, tol=tol)
+    assert abs(ev_power - desired_ev) < tol
+    assert abs(ev_TM - desired_ev) < tol
+    ev = exp_dec_H.expectation_value(psi1, tol=tol)
+    assert abs(ev - desired_ev) < tol
+
 
 
 def test_MPO_var(L=8, tol=1.e-13):

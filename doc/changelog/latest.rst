@@ -36,6 +36,8 @@ Changed
 - Automatically shift terms in :meth:`~tenpy.networks.mps.MPS.expectation_value_terms_sum` to start in the MPS unit cell for infinite MPS.
 - Possible ordering='folded' for the :class:`~tenpy.models.lattice.Ladder`.
 - Enhanced implementation of :meth:`~tenpy.networks.mps.MPS.canonical_form_infinite2` to replace :meth:`~tenpy.networks.mps.MPS.canonical_form_infinite`.
+- Split up :meth:`tenpy.networks.mpo.MPO.expectation_value` into :meth:`~tenpy.networks.mpo.MPO.expectation_value_finite`
+  and :meth:`~tenpy.networks.mpo.MPO.expectation_value_power` and add :meth:`tenpy.networks.mpo.MPO.expectation_value_TM`
 
 Fixed
 ^^^^^
@@ -46,3 +48,4 @@ Fixed
 - Adjust default `trunc_params` of :func:`~tenpy.networks.mps.MPS.compute_K` and :func:`~tenpy.networks.mps.MPS.permute_sites` to avoid too severe truncation.
 - (!) Non-trivial `start_time` parameter caused wrong evolution in :class:`~tenpy.algorithms.mpo_evolution.TimeDependentExpMPOEvolution`.
 - Make sure that :meth:`~tenpy.models.lattice.lat2mps_idx` doesn't modify arguments in place.
+- The power-method :meth:`tenpy.networks.mpo.MPO.expectation_value` did not work correctly for ``H.L != psi.L``.
