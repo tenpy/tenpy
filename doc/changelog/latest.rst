@@ -49,3 +49,4 @@ Fixed
 - (!) Non-trivial `start_time` parameter caused wrong evolution in :class:`~tenpy.algorithms.mpo_evolution.TimeDependentExpMPOEvolution`.
 - Make sure that :meth:`~tenpy.models.lattice.lat2mps_idx` doesn't modify arguments in place.
 - The power-method :meth:`tenpy.networks.mpo.MPO.expectation_value` did not work correctly for ``H.L != psi.L``.
+- :meth:`~tenpy.models.model.CouplingModel.add_local_term` did not work with `plus_hc=True`.
