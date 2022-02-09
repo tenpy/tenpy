@@ -407,7 +407,8 @@ class Array:
                      qtotal=None,
                      cutoff=None,
                      labels=None,
-                     raise_wrong_sector=True):
+                     raise_wrong_sector=True,
+                     warn_wrong_sector=True):
         """convert a flat (numpy) ndarray to an Array.
 
         Parameters
@@ -461,8 +462,9 @@ class Array:
             elif np.any(np.abs(data_flat[sl]) > cutoff):
                 if raise_wrong_sector:
                     raise ValueError("wrong sector with non-zero entries")
-                warnings.warn("flat array has non-zero entries in blocks incompatible with charge",
-                              stacklevel=2)
+                if warn_wrong_sector:
+                    warnings.warn("flat array has non-zero entries in blocks "
+                                  "incompatible with charge",  stacklevel=2)
         res._data = data
         res._qdata = np.array(qdata, dtype=np.intp, order='C').reshape((len(qdata), res.rank))
         res._qdata_sorted = True

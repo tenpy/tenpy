@@ -564,7 +564,7 @@ class FlatLinearOperator(ScipyLinearOperator):
                      which='LM',
                      v0=None,
                      v0_npc=None,
-                     cutoff=1.e-12,
+                     cutoff=1.e-10,
                      hermitian=False,
                      **kwargs):
         """Find (dominant) eigenvector(s) of self using :func:`scipy.sparse.linalg.eigs`.
@@ -636,70 +636,46 @@ class FlatLinearOperator(ScipyLinearOperator):
         if self._charge_sector is not None:
             vecs = [self.flat_to_npc(A[:, j]) for j in range(A.shape[1])]
         else:
-            k = A.shape[1]
-            vecs = [None] * k
-            multi_sectors = []
-            for j in range(k):
-                vec = A[:, j]
-                try:
-                    vecs[j] = npc.Array.from_ndarray(vec, **from_ndarray_args)
-                except ValueError as e:
-                    if not e.args[0].startswith('wrong sector'):
-                        raise
-                    multi_sectors.append(j)
+            # need to convert to flat arrays,
+            # but eigenvectors A[:, i] might not have well-defined charges because
+            # they can be arbitrarily rotated in degenerate subspaces.
+            # To make things worse, we only have `k` of them which might cut a degenerate subspace
+            # and we are not even aware of it.
+            # Luckily, within degenerat subspaces we know we can just project into a given charge
+            # sector, and get an (numerically) exact eigenstate of both charge and `self`!
+            # The tricky thing is to ensure we have enough orthogonal states left!
+
+            # strategy: only project into charge sectors with maximal weight,
+            # and re-orthogonalize other remaining eigenvectors in the degenerate subspace
+            # after projection
+
             from_ndarray_args['raise_wrong_sector'] = False
-            for degenerate in group_by_degeneracy(eta, cutoff=cutoff, subset=multi_sectors):
-                # really, we would need to diagonalize the charges within the subspace of
-                # degenerate eigenvectors of the transfermatrix.
-                # However, we (might) only know a subset of the degenerate eigenvectors,
-                # and diagonalizing the charges in that subspace might not yield real
-                # charge eigenvectors (which is obvious if we have only one of them).
-                # Instead we just project onto different blocks:
-                # within a block it will for sure be an eigenvector of both the charge
-                # and the transfer matrix!
-                # This can fail, however, if there are less non-zero blocks than eigenvectors,
-                # in which case we don't return an array with definite charge but with an
-                # additional `charge` leg.
-                if len(degenerate) == 1:
-                    # degenerate eigenvalues but we didn't find enough eigenvectors to see that
-                    j = degenerate[0]
-                    qi = np.argmax([
-                        np.linalg.norm(vec[self.leg.get_slice(qi)])
-                        for qi in range(self.leg.block_number)
-                    ])
-                    qtotal = self.leg.get_charge(qi)
-                    vecs[j] = npc.Array.from_ndarray(A[:, j], **from_ndarray_args, qtotal=qtotal)
-                else:
-                    used_blocks = set()
-                    for j in degenerate:
-                        vec = A[:, j]
-                        block_norms = [
-                            np.linalg.norm(vec[self.leg.get_slice(qi)])
-                            for qi in range(self.leg.block_number)
-                        ]
-                        for qi in np.argsort(block_norms):
-                            if qi in used_blocks or block_norms[qi] < cutoff:
-                                continue
-                            used_blocks.add(qi)
-                            qtotal = self.leg.get_charge(qi)
-                            vecs[j] = npc.Array.from_ndarray(vec,
-                                                             qtotal=qtotal,
-                                                             **from_ndarray_args)
-                            vecs[j] /= npc.norm(vecs[j])
-                            break
-                        else:
-                            # didn't break, so didn't set vecs[j]
-                            # -> can't guarantee orthogonality to previous eigenvectors
-                            msg = ("FlatLinearOperator.eigenvectors: can't project to definite "
-                                   "charge block uniquely; would need to diagonalize again "
-                                   "with given `charge_sector`.\n"
-                                   "Will return eigenvector with extra `charge` leg instead, "
-                                   "which might not be orthogonal to other eigenvectors.")
-                            warnings.warn(msg, stacklevel=2)
-                            vecs[j] = self.flat_to_npc(vec)
-                            for qi in range(self.leg.used_block_number):
-                                if block_norms[qi] > cutoff:
-                                    used_blocks.add(qi)
+            from_ndarray_args['warn_wrong_sector'] = False
+            vecs = [None] * A.shape[1]
+
+            leg = self.leg
+            # first find degenerate groups
+            for degenerate in group_by_degeneracy(eta, cutoff=cutoff):
+                degenerate = list(degenerate)
+                for _ in range(len(degenerate)):
+                    # find sector with maximal weight amongst all degenerate vectors
+                    sector_norms = np.array([[np.linalg.norm(A[leg.get_slice(qi), j])
+                                              for j in degenerate]
+                                             for qi in range(leg.block_number)])
+                    max_qi, max_j = np.unravel_index(np.argmax(sector_norms, axis=None),
+                                                      sector_norms.shape)
+                    j = degenerate[max_j]
+                    # project vector `j` into the maximal charge sector
+                    vecs[j] = npc.Array.from_ndarray(A[:, j], **from_ndarray_args)
+                    vecs[j] /= vecs[j].norm()  # renormalize
+                    degenerate.remove(j)
+                    A[:, j] = vecs[j].to_ndarray()
+                    for i in degenerate:
+                        # gram-schmidt reorthogonalize other degenerate states against this one
+                        A[:, i] -= A[:, j] * np.inner(np.conj(A[:, j]), A[:, i])
+                        A[:, i] /= np.linalg.norm(A[:, i])
+                        # -> within degenerate subspace of `self`, this is still an eigenvector
+            # done
         perm = argsort(eta, which)
         return np.array(eta)[perm], [vecs[j] for j in perm]
 
