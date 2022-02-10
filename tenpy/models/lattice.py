@@ -557,6 +557,7 @@ class Lattice:
         if first > 0 or last < cp.N_sites - 1:
             # take out some parts of the lattice
             remove = list(range(0, first)) + list(range(last + 1, cp.N_sites))
+            remove = cp.mps2lat_idx(remove)
             cp = IrregularLattice(cp, remove=remove)
         cp.bc_MPS = 'segment'
         if self.bc_MPS == 'finite':

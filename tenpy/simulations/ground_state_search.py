@@ -254,7 +254,10 @@ class OrthogonalExcitations(GroundStateSearch):
         enlarge = self.options.get('segment_enlarge', None)
         first = self.options.get('segment_first', 0)
         last = self.options.get('segment_last', None)
-        self.boundary = enlarge // 2 * psi0_inf.L   # Bond at the middle of the segment, aligned with a cylinder ring
+        if enlarge != None:
+            self.boundary = enlarge // 2 * psi0_inf.L   # Bond at the middle of the segment, aligned with a cylinder ring
+        else: 
+            self.boundary = first + (last-first)//2
         # If it is not specified where to switch the charge sector, we default to self.boundary
 
         self.model = model_inf.extract_segment(first, last, enlarge)
