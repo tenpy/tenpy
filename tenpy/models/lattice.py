@@ -144,7 +144,8 @@ class Lattice:
     pairs : dict
         See above.
     segement_first_last : tuple of int
-        The `first` and `last` MPS sites for "segment" :attr:`bc_MPS`; not set otherwise.
+        The `first` and `last` MPS sites of the original lattice for "segment" :attr:`bc_MPS`;
+        not set otherwise.
     _order : ndarray (N_sites, dim+1)
         The place where :attr:`order` is stored.
     _strides : ndarray (dim, )

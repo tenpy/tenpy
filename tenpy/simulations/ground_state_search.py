@@ -254,9 +254,9 @@ class OrthogonalExcitations(GroundStateSearch):
         enlarge = self.options.get('segment_enlarge', None)
         first = self.options.get('segment_first', 0)
         last = self.options.get('segment_last', None)
-        if enlarge != None:
+        if enlarge is not None:
             self.boundary = enlarge // 2 * psi0_inf.L   # Bond at the middle of the segment, aligned with a cylinder ring
-        else: 
+        else:
             self.boundary = first + (last-first)//2
         # If it is not specified where to switch the charge sector, we default to self.boundary
 
@@ -485,8 +485,7 @@ class OrthogonalExcitations(GroundStateSearch):
         return results
 
 
-    #[TODO] N_unit_cells is not used
-def expectation_value_outside_segment_right(psi_segment, psi_R, ops, N_unit_cells=1, sites=None, axes=None):
+def expectation_value_outside_segment_right(psi_segment, psi_R, ops, lat_segment, sites=None, axes=None):
     """Calculate expectation values outside of the segment to the right.
 
     Parameters
@@ -495,15 +494,24 @@ def expectation_value_outside_segment_right(psi_segment, psi_R, ops, N_unit_cell
         Segment MPS.
     psi_R :
         Inifnite MPS on the right.
+    lat_segment : :class:`~tenpy.models.lattice.Lattice`
+        The lattice of the segment MPS. In particular, it should have `segment_first_last`
     ops, sites, axes:
         As for :meth:`~tenpy.networks.mps.MPS.expectation_value`.
         `sites` should only have values > 0, with 0 being the first site on the right of the
-        segment.
+        segment. If `ops` is non-uniform, it is indexed as for `psi_R`.
     """
     # TODO move these functions to a different location in code?
     # TODO rigorous tests
     psi_S = psi_segment
     assert psi_S.bc == 'segment'
+    first, last = lat_segment.segment_first_last
+    assert psi_S.L == last - first + 1
+    shift = last + 1 # = first + psi_S.L = index in `sites` relative to MPS index of psi_R
+    if sites is None:
+        # one MPS unit cell plus partially filled if non-trivial `last`
+        sites = np.arange(psi_R.L + (psi_R.L - last + 1 % psi_R.L if last % psi_R.L else 0))
+    sites = [i + shift for i in sites]
     ops, sites, n, (op_ax_p, op_ax_pstar) = psi_R._expectation_value_args(ops, sites, axes)
     ax_p = ['p' + str(k) for k in range(n)]
     ax_pstar = ['p' + str(k) + '*' for k in range(n)]
@@ -517,7 +525,7 @@ def expectation_value_outside_segment_right(psi_segment, psi_R, ops, N_unit_cell
         rho = VR.scale_axis(S, 'vL')
         rho = npc.tensordot(rho.conj(), rho, axes=['vL*', 'vL'])
     E = []
-    k = 0
+    k = shift  # starting on that site
     for i in sorted(sites):
         assert k <= i
         while k < i:
@@ -536,8 +544,8 @@ def expectation_value_outside_segment_right(psi_segment, psi_R, ops, N_unit_cell
                                                 ['vR*'] + ax_p + ['vR']]))
     return np.real_if_close(E)
 
-    #[TODO] N_unit_cells is not used
-def expectation_value_outside_segment_left(psi_segment, psi_L, ops, N_unit_cells=1, sites=None, axes=None):
+
+def expectation_value_outside_segment_left(psi_segment, psi_L, ops, segment_lat1, sites=None, axes=None):
     """Calculate expectation values outside of the segment to the right.
 
     Parameters
@@ -549,12 +557,17 @@ def expectation_value_outside_segment_left(psi_segment, psi_L, ops, N_unit_cells
     ops, sites, axes:
         As for :meth:`~tenpy.networks.mps.MPS.expectation_value`.
         `sites` should only have values < 0, with -1 being the first site on the left of the
-        segment.
+        segment. If `ops` is non-uniform, it is indexed as for `psi_L`.
     """
     psi_S = psi_segment
     assert psi_S.bc == 'segment'
+    first, last = lat_segment.segment_first_last
+    assert psi_S.L == last - first + 1
+    shift = first  # = index in `sites` relative to MPS index of psi_R
     if sites is None:
-        sites = np.arange(-psi_L.L, 0)
+        # one MPS unit cell plus partially filled if non-trivial `first`
+        sites = np.arange(-psi_L.L - (first if first % psi_L.L else 0), 0)
+    sites = [i + shift for i in sites]
     ops, sites, n, (op_ax_p, op_ax_pstar) = psi_L._expectation_value_args(ops, sites, axes)
     ax_p = ['p' + str(k) for k in range(n)]
     ax_pstar = ['p' + str(k) + '*' for k in range(n)]
@@ -568,7 +581,7 @@ def expectation_value_outside_segment_left(psi_segment, psi_L, ops, N_unit_cells
         rho = UL.scale_axis(S, 'vR')
         rho = npc.tensordot(rho, rho.conj(), axes=['vR', 'vR*'])
     E = []
-    k = -1
+    k = shift -1
     for i in sorted(sites, reverse=True):
         assert i <= k
         while k > i:
@@ -585,7 +598,7 @@ def expectation_value_outside_segment_left(psi_segment, psi_L, ops, N_unit_cells
         C = npc.tensordot(C, rho, axes=['vR', 'vL'])
         E.append(npc.inner(As.conj(), C, axes=[['vL*'] + ax_pstar + ['vR*'],
                                                 ['vL'] + ax_p + ['vL*']]))
-    return np.real_if_close(E)[::-1]
+    return np.real_if_close(reversed(E))
 
 class TopologicalExcitations(OrthogonalExcitations):
     def init_orthogonal_from_groundstate(self):
