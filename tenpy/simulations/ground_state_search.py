@@ -254,6 +254,7 @@ class OrthogonalExcitations(GroundStateSearch):
         enlarge = self.options.get('segment_enlarge', None)
         first = self.options.get('segment_first', 0)
         last = self.options.get('segment_last', None)
+
         if enlarge is not None:
             self.boundary = enlarge // 2 * psi0_inf.L   # Bond at the middle of the segment, aligned with a cylinder ring
         else:
@@ -545,7 +546,7 @@ def expectation_value_outside_segment_right(psi_segment, psi_R, ops, lat_segment
     return np.real_if_close(E)
 
 
-def expectation_value_outside_segment_left(psi_segment, psi_L, ops, segment_lat1, sites=None, axes=None):
+def expectation_value_outside_segment_left(psi_segment, psi_L, ops, lat_segment, sites=None, axes=None):
     """Calculate expectation values outside of the segment to the right.
 
     Parameters
@@ -598,7 +599,7 @@ def expectation_value_outside_segment_left(psi_segment, psi_L, ops, segment_lat1
         C = npc.tensordot(C, rho, axes=['vR', 'vL'])
         E.append(npc.inner(As.conj(), C, axes=[['vL*'] + ax_pstar + ['vR*'],
                                                 ['vL'] + ax_p + ['vL*']]))
-    return np.real_if_close(reversed(E))
+    return np.real_if_close(E[::-1])
 
 class TopologicalExcitations(OrthogonalExcitations):
     def init_orthogonal_from_groundstate(self):
