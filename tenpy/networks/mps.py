@@ -262,7 +262,7 @@ class MPS:
         cp = self.__class__(self.sites, self._B, self._S, self.bc, self.form, self.norm)
         cp.grouped = self.grouped
         cp._transfermatrix_keep = self._transfermatrix_keep
-        cp.segment_boundaries = self.segment_boundaries
+        cp.segment_boundaries = getattr(self, "segment_boundaries", (None, None))
         return cp
 
     def save_hdf5(self, hdf5_saver, h5gr, subpath):
