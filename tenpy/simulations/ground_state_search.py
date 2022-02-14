@@ -506,7 +506,11 @@ def expectation_value_outside_segment_right(psi_segment, psi_R, ops, lat_segment
     # TODO rigorous tests
     psi_S = psi_segment
     assert psi_S.bc == 'segment'
-    first, last = lat_segment.segment_first_last
+    if hasattr(lat_segment,"segment_first_last"):
+        first, last = lat_segment.segment_first_last
+    else:
+        first = 0
+        last = lat_segment.N_sites - 1
     assert psi_S.L == last - first + 1
     shift = last + 1 # = first + psi_S.L = index in `sites` relative to MPS index of psi_R
     if sites is None:
