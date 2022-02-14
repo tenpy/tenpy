@@ -29,6 +29,7 @@ Added
 - Lattice :attr:`~tenpy.models.lattice.Lattice.cylinder_axis`.
 - Random number generator :attr:`~tenpy.models.model.Model.rng` for models.
 - :meth:`~tenpy.models.aklt.AKLTChain.psi_AKLT` for the exact MPS ground state of (spin-1/2) AKLT chain.
+- :func:`~tenpy.simulations.simulation.init_simulation` and :func:`~tenpy.simulations.simulation.init_simulation_from_checkpoint` for debugging or post-simulation measurement.
 
 Changed
 ^^^^^^^
