@@ -815,6 +815,38 @@ class MPO:
                     max_range=None,
                     cutoff=1.e-12,
                     ignore=['Id', 'JW']):
+        """Obtain a `TermList` represented by self.
+
+        This function is meant for debugging MPOs to make sure they have the terms one expects.
+        Be aware of pitfalls with operator orthonormality, e.g. for fermions
+        ``N = 0.5 * (Id + JW)`` might not appear as you expect due to `ignore`.
+
+
+        Parameters
+        ----------
+        op_basis : (list of) list of str
+            Local basis of operators in which to represent all terms of `self`,
+            e.g. ``['Id', 'Sx', 'Sy', 'Sz']`` for spin-1/2 or ``['Id', 'JW', 'C', 'Cd']`` for
+            fermions. Should be orthogonal with respect to the operator product
+            ``<A|B> = tr(A^dagger B)``.
+        start : (list of) int
+            Extract terms starting on that/these sites, going to the right, i.e. the left-most
+            index within each term is in `start`.
+            If ``None``, take all terms starting in ``range(L)``, i.e. one MPS unit cell for
+            infinite systems.
+        cutoff : float
+            Drop terms with prefactors (roughly) smaller than that.
+            Stricktly speaking, it might also drop larger terms if the term has larger weight on
+            the right (in the MPO) than on the left.
+        ignore : list of str
+            Filter terms to not contain these operator names when they're not the left/rightmost
+            operators in a term.
+
+        Returns
+        -------
+        term_list : :class:`~tenpy.networks.terms.TermList`
+            The terms in `self` with left-most index in `start`.
+        """
         if start is not None:
             start = to_iterable(start)
         else:
