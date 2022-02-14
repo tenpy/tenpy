@@ -418,7 +418,7 @@ def test_model_plus_hc(L=6):
         assert m1.H_MPO.is_hermitian()
         assert m2.H_MPO.is_hermitian()
         assert not m3.H_MPO.is_hermitian()
-        assert m3.H_MPO.chi[3] == m3.H_MPO.chi[2] - 1  # check for smaller MPO bond dimension
+        assert m3.H_MPO.chi[3] < m2.H_MPO.chi[3]   # check for smaller MPO bond dimension
         ED1 = ExactDiag(m1)
         ED2 = ExactDiag(m2)
         ED3 = ExactDiag(m3)
@@ -434,6 +434,25 @@ def test_model_plus_hc(L=6):
         assert ED1.full_H == ED3.full_H
 
     compare(m1, m2, m3, use_bonds=True)
+
+    with pytest.warns(UserWarning) as record:
+        m1.add_local_term(-1.5j, [('Sp', [1, 0])])
+        m1.add_local_term(+1.5j, [('Sm', [1, 0])])
+        m2.add_local_term(-1.5j, [('Sp', [1, 0])], plus_hc=True)
+        m3.add_local_term(-1.5j, [('Sp', [1, 0])], plus_hc=True)
+        m1.add_local_term(-0.5j, [('Sp', [0, 0]), ('Sm', [2, 0])])
+        m1.add_local_term(+0.5j, [('Sp', [2, 0]), ('Sm', [0, 0])])
+        m2.add_local_term(-0.5j, [('Sp', [0, 0]), ('Sm', [2, 0])], plus_hc=True)
+        m3.add_local_term(-0.5j, [('Sp', [0, 0]), ('Sm', [2, 0])], plus_hc=True)
+        m1.add_local_term(2.5, [('Sp', [4, 0]), ('Sz', [3, 0]), ('Sm', [5, 0])])
+        m1.add_local_term(2.5, [('Sm', [4, 0]), ('Sz', [3, 0]), ('Sp', [5, 0])])
+        m2.add_local_term(2.5, [('Sp', [4, 0]), ('Sz', [3, 0]), ('Sm', [5, 0])], plus_hc=True)
+        m3.add_local_term(2.5, [('Sp', [4, 0]), ('Sz', [3, 0]), ('Sm', [5, 0])], plus_hc=True)
+    assert len(record) > 0
+    for w in record:
+        assert str(w.message).startswith("Adding terms to the CouplingMPOModel")
+
+    compare(m1, m2, m3, use_bonds=False)
 
     with pytest.warns(UserWarning) as record:
         m1.add_exponentially_decaying_coupling(0.25, 0.5, 'Sp', 'Sz')

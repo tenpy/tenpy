@@ -28,6 +28,8 @@ Added
 - Option `fix_u` for :func:`~tenpy.simulations.measurement.onsite_expectation_value`.
 - Lattice :attr:`~tenpy.models.lattice.Lattice.cylinder_axis`.
 - Random number generator :attr:`~tenpy.models.model.Model.rng` for models.
+- :meth:`~tenpy.models.aklt.AKLTChain.psi_AKLT` for the exact MPS ground state of (spin-1/2) AKLT chain.
+- :func:`~tenpy.simulations.simulation.init_simulation` and :func:`~tenpy.simulations.simulation.init_simulation_from_checkpoint` for debugging or post-simulation measurement.
 
 Changed
 ^^^^^^^
@@ -36,6 +38,8 @@ Changed
 - Automatically shift terms in :meth:`~tenpy.networks.mps.MPS.expectation_value_terms_sum` to start in the MPS unit cell for infinite MPS.
 - Possible ordering='folded' for the :class:`~tenpy.models.lattice.Ladder`.
 - Enhanced implementation of :meth:`~tenpy.networks.mps.MPS.canonical_form_infinite2` to replace :meth:`~tenpy.networks.mps.MPS.canonical_form_infinite`.
+- Split up :meth:`tenpy.networks.mpo.MPO.expectation_value` into :meth:`~tenpy.networks.mpo.MPO.expectation_value_finite`
+  and :meth:`~tenpy.networks.mpo.MPO.expectation_value_power` and add :meth:`tenpy.networks.mpo.MPO.expectation_value_TM`
 
 Fixed
 ^^^^^
@@ -46,3 +50,6 @@ Fixed
 - Adjust default `trunc_params` of :func:`~tenpy.networks.mps.MPS.compute_K` and :func:`~tenpy.networks.mps.MPS.permute_sites` to avoid too severe truncation.
 - (!) Non-trivial `start_time` parameter caused wrong evolution in :class:`~tenpy.algorithms.mpo_evolution.TimeDependentExpMPOEvolution`.
 - Make sure that :meth:`~tenpy.models.lattice.lat2mps_idx` doesn't modify arguments in place.
+- The power-method :meth:`tenpy.networks.mpo.MPO.expectation_value` did not work correctly for ``H.L != psi.L``.
+- :meth:`~tenpy.models.model.CouplingModel.add_local_term` did not work with `plus_hc=True`.
+- :meth:`~tenpy.linalg.sparse.FlatLinearOperator.eigenvectors` did not always return orthogonal eigenvectors with well-defined charges

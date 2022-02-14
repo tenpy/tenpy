@@ -40,10 +40,12 @@ Names for the ``ATTR_TYPE`` attribute:
 .. autodata:: REPR_HDF5EXPORTABLE
 
 .. autodata:: REPR_ARRAY
+.. autodata:: REPR_MASKED_ARRAY
 .. autodata:: REPR_INT
 .. autodata:: REPR_INT_AS_STR
 .. autodata:: REPR_FLOAT
 .. autodata:: REPR_STR
+.. autodata:: REPR_BYTES
 .. autodata:: REPR_COMPLEX
 .. autodata:: REPR_INT64
 .. autodata:: REPR_FLOAT64
@@ -199,11 +201,13 @@ REPR_HDF5EXPORTABLE = "instance"
 
 REPR_REDUCE = "reduce"  #: saved object had a __reduce__ method according to pickle protocol
 
-REPR_ARRAY = "array"  #: saved object represents a numpy array
+REPR_ARRAY = "array"  #: saved object represents a (numpy) array
+REPR_MASKED_ARRAY = "masked_array"  #: saved object represents a masked (numpy) array
 REPR_INT = "int"  #: saved object represents a (python) int
 REPR_INT_AS_STR = "int_as_str"  #: saved object represents int > 2^64 as (base-10) string
 REPR_FLOAT = "float"  #: saved object represents a (python) float
 REPR_STR = "str"  #: saved object represents a (python unicode) string
+REPR_BYTES = "bytes"  #: saved object represents a string of bytes without any encoding
 REPR_COMPLEX = "complex"  #: saved object represents a complex number
 REPR_INT64 = "np.int64"  #: saved object represents a np.int64
 REPR_FLOAT64 = "np.float64"  #: saved object represents a np.float64
@@ -232,6 +236,7 @@ TYPES_FOR_HDF5_DATASETS = tuple([
     (int, REPR_INT),
     (float, REPR_FLOAT),
     (str, REPR_STR),
+    (bytes, REPR_BYTES),
     (complex, REPR_COMPLEX),
     (np.int64, REPR_INT64),
     (np.float64, REPR_FLOAT64),
@@ -606,6 +611,30 @@ class Hdf5Saver:
     for _t, _type_repr in TYPES_FOR_HDF5_DATASETS:
         dispatch_save[_t] = (save_dataset, _type_repr)
 
+    def save_masked_array(self, obj, path, type_repr):
+        """Save a (numpy) masked array."""
+        filled = obj.filled()
+        fill_value = obj.fill_value
+        if np.any((filled == fill_value) == obj.mask):
+            # there are elements in `obj` that are `fill_value`, so need to save
+            # data and mask separately
+            h5gr, subpath = self.create_group_for_obj(path, obj)
+            h5gr['data'] = obj.data
+            h5gr['mask'] = obj.mask
+            h5gr.attrs['saved_mask'] = True
+        else:
+            # fill_value + data is enough to recover the masked array
+            # directly save as dataset
+            self.h5group[path] = filled
+            h5gr = self.h5group[path]
+            h5gr.attrs['saved_mask'] = False
+            self.memorize_save(h5gr, obj)
+        h5gr.attrs[ATTR_TYPE] = type_repr
+        h5gr.attrs['fill_value'] = fill_value
+        return h5gr
+
+    dispatch_save[np.ma.MaskedArray] = (save_masked_array, REPR_MASKED_ARRAY)
+
     def save_iterable(self, obj, path, type_repr):
         """Save an iterable `obj` like a list, tuple or set; in dispatch table."""
         h5gr, subpath = self.create_group_for_obj(path, obj)
@@ -928,6 +957,22 @@ class Hdf5Loader:
         return obj
 
     dispatch_load[REPR_INT_AS_STR] = (load_converted_to_str, int)
+
+    def load_masked_array(self, h5gr, type_info, subpath):
+        """Load a masked array."""
+        fill_value = self.get_attr(h5gr, 'fill_value')
+        saved_mask = self.get_attr(h5gr, 'saved_mask')
+        if saved_mask:
+            data = h5gr['data'][()]
+            mask = h5gr['mask'][()]
+            obj = np.ma.MaskedArray(data, mask=mask, fill_value=fill_value)
+        else:
+            filled = h5gr[()]
+            obj = np.ma.masked_equal(filled, fill_value, copy=False)
+        self.memorize_load(h5gr, obj)
+        return obj
+
+    dispatch_load[REPR_MASKED_ARRAY] = (load_masked_array, REPR_MASKED_ARRAY)
 
     def load_list(self, h5gr, type_info, subpath):
         """Load a list."""

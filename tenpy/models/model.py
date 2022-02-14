@@ -821,6 +821,8 @@ class CouplingModel(Model):
         if category is None:
             category = "local " + " ".join([op for op, i in term])
         sites = self.lat.mps_sites()
+        term, sign = order_combine_term(term, sites)
+        strength = strength * sign
         N = len(sites)
         if len(term) == 1:
             ot = self.onsite_terms.setdefault(category, OnsiteTerms(N))
@@ -844,7 +846,8 @@ class CouplingModel(Model):
         else:
             raise ValueError("empty term!")
         if plus_hc:
-            hc_term = [(sites[i % N].get_hc_op_name(op), i) for op, i in reversed(term)]
+            hc_term = [(sites[i % N].get_hc_op_name(op), self.lat.mps2lat_idx(i))
+                       for op, i in reversed(term)]
             self.add_local_term(np.conj(strength), hc_term, category, plus_hc=False)
 
     def add_onsite(self, strength, u, opname, category=None, plus_hc=False):

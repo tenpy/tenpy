@@ -752,12 +752,12 @@ class TopologicalExcitations(OrthogonalExcitations):
             self.logger.info("converge environments with MPOTransferMatrix")
             guess_init_env_data = resume_data.get('init_env_data', None)
             H_R = model_R_inf.H_MPO
-            self.eps_R, self.E0_R, env_data_R = MPOTransferMatrix.find_init_LP_RP(H_R, psi0_R_inf, first, last,
+            env_data_R, self.eps_R, self.E0_R = MPOTransferMatrix.find_init_LP_RP(H_R, psi0_R_inf, first, last,
                                                          guess_init_env_data, calc_E=True)
             self.init_env_data_R = env_data_R
 
             H_L = model_L_inf.H_MPO
-            self.eps_L, self.E0_L, env_data_L = MPOTransferMatrix.find_init_LP_RP(H_L, psi0_L_inf, first, last,
+            env_data_L, self.eps_L, self.E0_L = MPOTransferMatrix.find_init_LP_RP(H_L, psi0_L_inf, first, last,
                                                          guess_init_env_data, calc_E=True)
             self.init_env_data_L = env_data_L
 
