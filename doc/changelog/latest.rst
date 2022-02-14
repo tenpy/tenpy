@@ -28,6 +28,7 @@ Added
 - Option `fix_u` for :func:`~tenpy.simulations.measurement.onsite_expectation_value`.
 - Lattice :attr:`~tenpy.models.lattice.Lattice.cylinder_axis`.
 - Random number generator :attr:`~tenpy.models.model.Model.rng` for models.
+- :meth:`~tenpy.models.aklt.AKLTChain.psi_AKLT` for the exact MPS ground state of (spin-1/2) AKLT chain.
 
 Changed
 ^^^^^^^
