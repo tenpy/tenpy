@@ -549,7 +549,7 @@ class Lattice:
             last = L - 1
             enlarge = 1
         else:
-            enlarge = last + 1 // L
+            enlarge = last // L + 1
         assert enlarge > 0
         if enlarge > 1:
             cp.enlarge_mps_unit_cell(enlarge)
