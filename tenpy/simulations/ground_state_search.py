@@ -23,6 +23,8 @@ import copy
 __all__ = simulation.__all__ + [
     'GroundStateSearch',
     'OrthogonalExcitations',
+    'expectation_value_outside_segment_left',
+    'expectation_value_outside_segment_right',
     'TopologicalExcitations',
     'ExcitationInitialState',
 ]
@@ -89,7 +91,7 @@ class OrthogonalExcitations(GroundStateSearch):
     excitation in the background of the ground state, localized by the segment environments.
 
     Note that the segment environments are *soft* boundaries: the spin flip can be outside the
-    segment where we vary the MPS tensors, as far as it contained in the Schmidt states of the
+    segment where we vary the MPS tensors, as far as it is contained in the Schmidt states of the
     original ground state.
 
     Parameters
@@ -115,6 +117,10 @@ class OrthogonalExcitations(GroundStateSearch):
         The ground state in `orthogonal_to` is not included in the `excitations`.
         While being optimized, a state is saved as :attr:`psi` and not yet included in
         `excitations`.
+    model_orig : :class:`~tenpy.models.model.Model`
+        The original model before extracting the segment.
+    ground_state_orig, ground_state_segment : :class:`~tenpy.networks.mps.MPS`
+        The original ground state before and after extracting the segment.
     init_env_data : dict
         Initialization data for the :class:`~tenpy.networks.mpo.MPOEnvironment`.
         Passed to the algorithm class.
@@ -126,6 +132,9 @@ class OrthogonalExcitations(GroundStateSearch):
             excitations : list
                 Tensor network states representing the excitations.
                 Only defined if :cfg:option:`Simulation.save_psi` is True.
+
+    _boundary : int
+        Default for :cfg:configoption:`OrthogonalExcitations.switch_charge_sector_site`
     """
     def __init__(self, options, *, orthogonal_to=None, **kwargs):
         super().__init__(options, **kwargs)
@@ -154,8 +163,8 @@ class OrthogonalExcitations(GroundStateSearch):
     def init_orthogonal_from_groundstate(self):
         """Initialize :attr:`orthogonal_to` from the ground state.
 
-        Load the ground state.
-        If the ground state is infinite, call :meth:`extract_segment_from_infinite`.
+        Load the ground state and initialize the model from it.
+        Calls :meth:`extract_segment`.
 
         An empty :attr:`orthogonal_to` indicates that we will :meth:`switch_charge_sector`
         in the first :meth:`init_algorithm` call.
@@ -163,16 +172,16 @@ class OrthogonalExcitations(GroundStateSearch):
         Options
         -------
         .. cfg:configoptions :: OrthogonalExcitations
+            segment_enlarge, segment_first, segment_last : int | None
+                Arguments for :meth:`~tenpy.models.lattice.Lattice.extract_segment`.
+                `segment_englarge` is only used for initially infinite ground states.
 
             ground_state_filename :
                 File from which the ground state should be loaded.
             orthogonal_norm_tol : float
                 Tolerance how large :meth:`~tenpy.networks.mps.MPS.norm_err` may be for states
                 to be added to :attr:`orthogonal_to`.
-            segment_enlarge, segment_first, segment_last : int | None
-                Only for initially infinite ground states.
-                Arguments for :meth:`~tenpy.models.lattice.Lattice.extract_segment`.
-            apply_local_op: Array | None
+            apply_local_op: list | None
                 If not `None`, use :meth:`~tenpy.networks.mps.MPS.apply_local_op` to change
                 the charge sector compared to the ground state.
                 Should have the form  ``[site1, operator1, site2, operator2, ...]``.
@@ -182,13 +191,8 @@ class OrthogonalExcitations(GroundStateSearch):
                 If given, change the charge sector of the exciations compared to the ground state.
                 Alternative to `apply_local_op` where we run a small zero-site diagonalization on
                 the left-most bond in the desired charge sector to update the state.
-            write_back_converged_ground_state_environments : bool
-                Only used for infinite ground states, indicating that we should write converged
-                environments of the ground state back to `ground_state_filename`.
-                This is an optimization if you intend to run another `OrthogonalExcitations`
-                simulation in the future with the same `ground_state_filename`.
-                (However, it is not faster when the simulations run at the same time; instead it
-                might even lead to errors!)
+            switch_charge_sector_site: int
+                To the left of which site we switch charge sector.
 
         Returns
         -------
@@ -199,70 +203,86 @@ class OrthogonalExcitations(GroundStateSearch):
         gs_fn = self.options['ground_state_filename']
         data = hdf5_io.load(gs_fn)
         data_options = data['simulation_parameters']
-        # get model from ground_state data
+        # get model_class and model_params from ground state data
         for key in data_options.keys():
             if not isinstance(key, str) or not key.startswith('model'):
                 continue
             if key not in self.options:
                 self.options[key] = data_options[key]
         self.init_model()
+        self.model_orig = self.model
 
-        self.ground_state = psi0 = data['psi']
+        self.ground_state_orig = psi0 = data['psi']
         resume_data = data.get('resume_data', {})
         if np.linalg.norm(psi0.norm_test()) > self.options.get('orthogonal_norm_tol', 1.e-12):
             self.logger.info("call psi.canonicalf_form() on ground state")
             psi0.canonical_form()
-            self.logger.info("yields chi = %r", psi0.chi)  #  TODO
-        if psi0.bc == 'infinite':
-            write_back = self.extract_segment_from_infinite(psi0, self.model, resume_data)
-            if write_back:
-                self.write_converged_environments(data, gs_fn)
-        else:
-            self.boundary = 0
-            self.init_env_data = resume_data.get('init_env_data', {})
-            self.ground_state_infinite = None
-            self.results['ground_state_energy'] = data['energy']       # BLG_DMRG states do not have an 'energy' key, but we won't be doing finite BLG_DMRG
+
+        write_back = self.extract_segment(psi0, self.model, resume_data)
+        if write_back:
+            self.write_back_environments(data, gs_fn)
 
         apply_local_op = self.options.get("apply_local_op", None)
         switch_charge_sector = self.options.get("switch_charge_sector", None)
         # [TODO] Ground state segment energy needs to be calculated in both cases. Can we do it at the same time?
         if apply_local_op is None and switch_charge_sector is None:
-            self.orthogonal_to = [self.ground_state]
-            # Need to calculate energy of ground state segment still! To do this, we need an MPO environment.
+            self.orthogonal_to = [self.ground_state_seg]
+            # Need to calculate energy of ground state segment still!
+            # To do this, we need an MPO environment, so we delay until `switch_charge_sector`
         else:
             # we will switch charge sector
             self.orthogonal_to = []  # so we don't need to orthognalize against original g.s.
         return data
 
-    def extract_segment_from_infinite(self, psi0_inf, model_inf, resume_data):
-        """Extract a finite segment from the infinite model/state.
+    def extract_segment(self, psi0_orig, model_orig, resume_data):
+        """Extract a finite segment from the original model and state.
+
+        In case the original state is already finite, we might still extract a sub-segment
+        (if `segment_first` and/or `segment_last` are given) or just use the full system.
+
+        Options
+        -------
+        .. cfg:configoptions :: OrthogonalExcitations
+
+            segment_enlarge, segment_first, segment_last : int | None
+                Arguments for :meth:`~tenpy.models.lattice.Lattice.extract_segment`.
+                `segment_englarge` is only used for initially infinite ground states.
+            write_back_converged_ground_state_environments : bool
+                Only used for infinite ground states, indicating that we should write converged
+                environments of the ground state back to `ground_state_filename`.
+                This is an optimization if you intend to run another `OrthogonalExcitations`
+                simulation in the future with the same `ground_state_filename`.
+                (However, it is not faster when the simulations run at the same time; instead it
+                might even lead to errors!)
 
         Parameters
         ----------
-        psi0_inf : :class:`~tenpy.networks.mps.MPS`
-            Original ground state with infinite boundary conditions.
-        model_inf : :class:`~tenpy.models.model.MPOModel`
-            Original infinite model.
+        psi0_orig : :class:`~tenpy.networks.mps.MPS`
+            Original ground state.
+        model_orig : :class:`~tenpy.models.model.MPOModel`
+            Original model.
         resume_data : dict
             Possibly contains `init_env_data` with environments.
 
         Returns
         -------
         write_back : bool
-            Whether we should call :meth:`write_converged_environments`.
+            Whether :meth:`write_back_environments` should be called.
         """
+        if psi0_orig.bc == 'infinite':
+            write_back = self._extract_segment_from_infinite(psi0_orig, model_orig, resume_data)
+        else:
+            write_back = self._extract_segment_from_finite(psi0_orig, model_orig)
+        return write_back
+
+    def _extract_segment_from_infinite(self, psi0_inf, model_inf, resume_data):
         enlarge = self.options.get('segment_enlarge', None)
         first = self.options.get('segment_first', 0)
         last = self.options.get('segment_last', None)
 
-        if enlarge is not None:
-            self.boundary = enlarge // 2 * psi0_inf.L   # Bond at the middle of the segment, aligned with a cylinder ring
-        else:
-            self.boundary = first + (last-first)//2
-        # If it is not specified where to switch the charge sector, we default to self.boundary
-
         self.model = model_inf.extract_segment(first, last, enlarge)
         first, last = self.model.lat.segment_first_last
+
         write_back = self.options.get('write_back_converged_ground_state_environments', False)
         if resume_data.get('converged_environments', False):
             self.logger.info("use converged environments from ground state file")
@@ -276,11 +296,27 @@ class OrthogonalExcitations(GroundStateSearch):
             env_data = MPOTransferMatrix.find_init_LP_RP(H, psi0_inf, first, last,
                                                          guess_init_env_data)
         self.init_env_data = env_data
-        self.ground_state_infinite = psi0_inf
         self.ground_state = psi0_inf.extract_segment(first, last)
         return write_back
 
-    def write_converged_environments(self, gs_data, gs_fn):
+    def _extract_segment_from_finite(self, psi0_fin, model_fin):
+        first = self.options.get('segment_first', 0)
+        last = self.options.get('segment_last', None)
+        if first != 0 or last is not None:
+            self.model = model_fin.extract_segment(first, last)
+            first, last = self.model.lat.segment_first_last
+            self.ground_state = psi0_fin.extract_segment(first, last)
+            env = MPOEnvironment(psi0_fin, self.model_orig.H_MPO, psi0_fin)
+            self.init_env_data = env.get_initialization_data(first, last)
+        else:
+            last = psi0_fin.L - 1
+            self.model = model_fin
+            self.model.lat.segment_first_last = (first, last)  # simplifies measurements etc
+            self.ground_state = psi0_fin
+            self.init_env_data = {}
+        return False
+
+    def write_back_environments(self, gs_data, gs_fn):
         """Write converged environments back into the file with the ground state.
 
         Parameters
@@ -290,8 +326,7 @@ class OrthogonalExcitations(GroundStateSearch):
         gs_fn : str
             Filename where to save `gs_data`.
         """
-        if not self.init_env_data:
-            raise ValueError("Didn't converge new environments!")
+        assert self.init_env_data, "should have been defined by extract_segment()"
         orig_fn = self.output_filename
         orig_backup_fn = self._backup_filename
         try:
@@ -304,7 +339,7 @@ class OrthogonalExcitations(GroundStateSearch):
             if resume_data.get('converged_environments', False):
                 raise ValueError(f"{gs_fn!s} already has converged environments!")
             resume_data['converged_environments'] = True
-            resume_data['psi'] = gs_data['psi']
+            resume_data['psi'] = gs_data['psi']  # maybe called psi.canonical_form() on this
 
             self.logger.info("write converged environments back to ground state file")
             self.save_results(gs_data)  # safely overwrite old file
@@ -358,21 +393,30 @@ class OrthogonalExcitations(GroundStateSearch):
             self.psi.canonical_form_finite(envs_to_update=[self.engine.env])
             print("Getting GS energy since it was not in 'results' dictionary before.")
 
+    def group_sites_for_algorithm(self):
+        super().group_sites_for_algorithm()
+        if self.grouped > 1:
+            raise NotImplementedError("TODO")
+            # TODO adjust indexing of things like `switch_charge_sector_site`
+            # and `apply_local_op`.
+            # TODO what else?
+
     def switch_charge_sector(self):
         """Change the charge sector of :attr:`psi` in place."""
         if self.psi.chinfo.qnumber == 0:
             raise ValueError("can't switch charge sector with trivial charges!")
-        self.logger.info("switch charge sector of the ground state "
-                         "[contracts environments from right]")
+        self.logger.info("switch charge sector of the ground state [contracts environments]")
         apply_local_op = self.options.get("apply_local_op", None)
         switch_charge_sector = self.options.get("switch_charge_sector", None)
-        site = self.options.get("switch_charge_sector_site", self.boundary)
+        # switch_charge_sector_site defaults to the center of the segment
+        site = self.options.get("switch_charge_sector_site", self.psi.L // 2)
         self.logger.info("Changing charge to the left of site: %d", site)
         qtotal_before = self.psi.get_total_charge()
         self.logger.info("Charges of the original segment: %r", list(qtotal_before))
 
         env = self.engine.env
-        #apply_local_op should have the form [ site1,operator_string1,site2,operator_string2,...]
+        #apply_local_op should have the form [site1,operator_string1,site2,operator_string2,...]
+        # TODO: handle shift due to `first/last` for `site1`, `site2`, ...
         if apply_local_op is not None:
             if switch_charge_sector is not None:
                 raise ValueError("give only one of `switch_charge_sector` and `apply_local_op`")
@@ -380,19 +424,16 @@ class OrthogonalExcitations(GroundStateSearch):
             self.logger.info("Applying local ops: %s" % str(local_ops))
             site0 = local_ops[0][0]
             self.results['ground_state_energy'] = env.full_contraction(site0)
-            env.clear() # Clear out all LPs and RPs stored in full_contraction
-            # [TODO] we really only want to clear out those left of site0 and right of site_{N-1}, where we are applying N operators to sites in order.
-            for (site,op_string) in local_ops:
-                self.logger.info("Now applying: (%i, %s)"% (site, op_string))
-                self.psi.apply_local_op(site,op_string,unitary=True)
+            env.clear() # Clear out all LPs and RPs
+            for site, op_string in local_ops:
+                # explicitly set unitary=True since we call psi.canonical_form below
+                self.psi.apply_local_op(site, op_string, unitary=True)
         else:
             assert switch_charge_sector is not None
-            # Change 0 -> site so that we can insert in the middle of the segment
-            LP = env.get_LP(site)
-            RP = env._contract_RP(site, env.get_RP(site, store=True))  # saves the environments!
+            LP = env.get_LP(site, store=False)
+            RP = env._contract_RP(site, env.get_RP(site, store=False))
+            # no need to save the environments: will anyways call `psi.canonical_form_finite()`.
             self.results['ground_state_energy'] = env.full_contraction(site)
-            for i in range(site + 1, site + self.engine.n_optimize):      # SAJANT, 09/15/2021 - what do I delete when site!=0? I just shift the range by site to include any LPs right of site that are touched by local updates; the env gets cleared in canonical_form anyway below.
-                env.del_LP(i)  # but we might have gotten more than we need
             H0 = ZeroSiteH.from_LP_RP(LP, RP)
             if self.model.H_MPO.explicit_plus_hc:
                 H0 = SumNpcLinearOperator(H0, H0.adjoint())
@@ -411,7 +452,7 @@ class OrthogonalExcitations(GroundStateSearch):
         qtotal_after = self.psi.get_total_charge()
         self.qtotal_diff = self.psi.chinfo.make_valid(qtotal_after - qtotal_before)
         self.logger.info("changed charge by %r compared to previous state", list(self.qtotal_diff))
-        assert not np.all(self.qtotal_diff == 0) # Sometimes we want to apply no charges and check that we get an excitation energy of 0.
+        #assert not np.all(self.qtotal_diff == 0) # Sometimes we want to apply no charges and check that we get an excitation energy of 0.
 
         """
         # [TODO] Code needed to group 4 (sublattice * valley) sites together
@@ -477,6 +518,7 @@ class OrthogonalExcitations(GroundStateSearch):
         # done
 
     def resume_run_algorithm(self):
+        """Not Implemented"""
         raise NotImplementedError("TODO")
 
     def prepare_results_for_save(self):
@@ -601,6 +643,7 @@ def expectation_value_outside_segment_left(psi_segment, psi_L, ops, lat_segment,
                                                 ['vL'] + ax_p + ['vL*']]))
     return np.real_if_close(E[::-1])
 
+
 class TopologicalExcitations(OrthogonalExcitations):
     def init_orthogonal_from_groundstate(self):
         """Initialize :attr:`orthogonal_to` from the ground state.
@@ -692,7 +735,9 @@ class TopologicalExcitations(OrthogonalExcitations):
 
     def init_model(self):
         """Initialize a :attr:`model` from the model parameters.
+
         Skips initialization if :attr:`model` is already set.
+
         Options
         -------
         .. cfg:configoptions :: Simulation
@@ -702,6 +747,7 @@ class TopologicalExcitations(OrthogonalExcitations):
                 Dictionary with parameters for the model; see the documentation of the
                 corresponding `model_class`.
         """
+        # TODO: does this make sense???? should have the same model on left and right!
         for dir in ['left', 'right']:
             model_class_name = self.options["model_class"][dir]  # no default value!
             if hasattr(self, 'model' + '_' + dir + '_inf'):
@@ -770,7 +816,7 @@ class TopologicalExcitations(OrthogonalExcitations):
         self.init_env_data = env_data_mixed
         self.ground_state_right = psi0_R_inf.extract_segment(first, last) # I am not sure either of these are acutally used.
         self.ground_state_left = psi0_L_inf.extract_segment(first, last) # I am not sure either of these are acutally used.
-        self.ground_state, self.boundary = self.extract_segment_mixed_BC(first, last)
+        self.ground_state, self._boundary = self.extract_segment_mixed_BC(first, last)
 
         return write_back
 
@@ -939,7 +985,7 @@ class TopologicalExcitations(OrthogonalExcitations):
             raise ValueError("can't switch charge sector with trivial charges!")
         self.logger.info("switch charge sector of the ground state "
                          "[contracts environments from rinit_algorithmight]")
-        site = self.options.get("switch_charge_sector_site", self.boundary)
+        site = self.options.get("switch_charge_sector_site", self._boundary)
         self.logger.info("Changing charge to the left of site: %d", site)
         qtotal_before = self.psi.get_total_charge()
         self.logger.info("Charges of the original segment: %r", list(qtotal_before))

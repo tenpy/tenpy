@@ -4572,10 +4572,32 @@ class MPSEnvironment:
         """
         if last is None:
             last = self.L - 1
-        data = {'init_LP': self.get_LP(first, True), 'init_RP': self.get_RP(last, True)}
-        # TODO: this should apply dagger of psi.segment_boundaries!
-        data['age_LP'] = self.get_LP_age(first)
-        data['age_RP'] = self.get_RP_age(last)
+        LP = self.get_LP(first, True)
+        RP = self.get_RP(last, True)
+        # possibly apply dagger of segment_boundaries to make sure it's possible to re-initialize
+        bra_U, bra_V = self.bra.segment_boundaries
+        ket_U, ket_V = self.ket.segment_boundaries
+        if first == 0:
+            if ket_U is not None:
+                LP = npc.tensordot(LP, ket_U.conj(), axes=['vR', 'vR*'])
+                LP.ireplace_label('vL*', 'vR')
+            if bra_U is not None:
+                LP = npc.tensordot(bra_U, LP, axes=['vR', 'vR*'])
+                LP.ireplace_label('vL', 'vR*')
+        if last == self.ket.L - 1:
+            if ket_V is not None:
+                RP = npc.tensordot(ket_V.conj(), RP, axes=['vL*', 'vL'])
+                RP.ireplace_label('vR*', 'vL')
+        if last == self.bra.L - 1:
+            if bra_V is not None:
+                RP = npc.tensordot(RP, bra_V, axes=['vL*', 'vL'])
+                RP.ireplace_label('vR', 'vL*')
+        data = {
+            'init_LP': LP,
+            'age_LP': self.get_LP_age(first),
+            'init_RP': RP,
+            'age_RP': self.get_RP_age(last),
+        }
         return data
 
     def full_contraction(self, i0):

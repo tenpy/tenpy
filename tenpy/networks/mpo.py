@@ -1584,6 +1584,7 @@ class MPOGraph:
         graph = cls(sites, bc, 0)
         for term in terms:
             term.add_to_graph(graph)
+            # add_to_graph increases `max_range` as necessary
         graph.add_missing_IdL_IdR(insert_all_id)
         return graph
 
@@ -2040,7 +2041,7 @@ class MPOEnvironment(MPSEnvironment):
     **init_env_data :
         Further keyword arguments with initializaiton data, as returned by
         :meth:`get_initialization_data`.
-        See :meth:`initialize_first_LP_last_RP` for details on these parameters.
+        See :meth:`init_first_LP_last_RP` for details on these parameters.
 
     Attributes
     ----------
@@ -2597,6 +2598,8 @@ class MPOTransferMatrix:
             Dictionary with `init_LP` and `init_RP` that can be given to :class:`MPOEnvironment`.
         E : float
             Energy per site. Only returned if `calc_E` is True.
+        eps : float
+            The contraction of ``<LP |SS|RP>`` for the environment
         """
         # first right to left
         envs = []
@@ -2621,10 +2624,12 @@ class MPOTransferMatrix:
             if last % L != L - 1:
                 init_env_data['init_RP'] = env.get_RP(last, store=False)
         if calc_E:
+            # TODO: this doesn't work for non-default first/last!?
             SL = psi.get_SL(0)
-            vL, vR = init_env_data['init_LP'].get_leg('vR').conj(), init_env_data['init_RP'].get_leg('vL').conj()
+            RP, LP = envs
+            vL, vR = LP.get_leg('vR').conj(), RP.get_leg('vL').conj()
             SL = npc.diag(SL, vL, labels=['vL', 'vR'])
-            E0 = npc.tensordot(init_env_data['init_LP'], SL, axes=(['vR'], ['vL']))
+            E0 = npc.tensordot(vL, SL, axes=(['vR'], ['vL']))
             E0 = npc.tensordot(E0, SL.conj(), axes=(['vR*'], ['vL*']))
             E0 = npc.tensordot(E0, init_env_data['init_RP'], axes=(['vR', 'wR', 'vR*'], ['vL', 'wL', 'vL*']))
             # E0 = LP * s^2 * RP on site 0
