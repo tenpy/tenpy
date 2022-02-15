@@ -3340,9 +3340,13 @@ class MPS:
         if n == 1:
             opB = npc.tensordot(op, self._B[i], axes=['p*', 'p'])
             self.set_B(i, opB, self.form[i])
+            if opB.norm() < 1.e-12:
+                raise ValueError(f"Applying the operator {op!s} on site {i:d} destroys state!")
         else:
             th = self.get_theta(i, n)
             th = npc.tensordot(op, th, axes=[pstar, p])
+            if th.norm() < 1.e-12:
+                raise ValueError(f"Applying the operator {op!s} on site {i:d} destroys state!")
             # use MPS.from_full to split the sites
             split_th = self.from_full(self.sites[i:i + n], th, None, cutoff, False, 'segment',
                                       (self.get_SL(i), self.get_SR(i + n - 1)))
@@ -4704,7 +4708,6 @@ class MPSEnvironment:
         """Update LP[i] following the MPS gauge ``A[i-1] A[i] -> (A[i-1] U) (Udagger A[i])``."""
         assert update_bra or update_ket
         if not self.has_LP(i):
-            assert False # TODO
             return
         LP = self.get_LP(i)
         if update_ket:
@@ -4717,7 +4720,6 @@ class MPSEnvironment:
         """Update RP[i] following the MPS gauge ``B[i] B[i+1] -> (B[i] Vdagger) (V B[i+1])``."""
         assert update_bra or update_ket
         if not self.has_RP(i):
-            assert False # TODO
             return
         RP = self.get_RP(i)
         if update_ket:
