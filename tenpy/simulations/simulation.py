@@ -48,12 +48,15 @@ class Simulation:
 
     The prefered way to run simulations is in a `with` statement, which allows us to redirect
     error messages to the log files, timely warn about unused parameters and to properly close any
-    open files. In other words, use the simulation class like this::
+    open (cache) files. In other words, use the simulation class like this::
 
         with Simulation(options, ...) as sim:
             results = sim.run()
 
     The wrappers :func:`run_simulation` and :func:`run_seq_simulations` do that.
+
+    The other, expected way to run the simulation is "resuming" from a checkpoint of an
+    interrupted simulation run, for which you can use :func:`resume_from_checkpoint`.
 
     Parameters
     ----------
