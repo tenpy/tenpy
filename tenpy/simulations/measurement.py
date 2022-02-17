@@ -19,13 +19,18 @@ __all__ = [
 ]
 
 
-def measurement_index(results, psi, simulation, key='measurement_index'):
+def measurement_index(results, psi, model, simulation, key='measurement_index'):
     """'Measure' the index of how many mearuements have been performed so far.
 
     The parameter description below documents the common interface of all measurement
     functions that can be registered to simulations.
 
     See :doc:`/intro/simulations` for the general setup using measurements.
+
+    .. versionadded:: 0.10.0
+
+        The `model` parameter is new! Any measurement function for simulations now has to accept
+        this as keyword argument!
 
     Parameters
     ----------
@@ -34,7 +39,11 @@ def measurement_index(results, psi, simulation, key='measurement_index'):
         Instead of returning the result, the output should be written into this dictionary
         under an appropriate key (or multiple keys, if applicable).
     psi :
-        Tensor network state to be measured. Shorthand for ``simulation.psi``.
+    model :
+        Tensor network state and matching model (with same sites/indexing) to be measured.
+        Usually shorthand for ``simulation.psi`` and ``simulation.model``, respectively,
+        but can be different, e.g., when grouping sites.
+        See :meth:`~tenpy.simulations.simulation.Simulation.get_measurement_psi_model`.
     simulation : :class:`~tenpy.simulations.simulation.Simulation`
         The simulation class. This gives also access to the `model`, algorithm `engine`, etc.
     key : str
@@ -47,29 +56,29 @@ def measurement_index(results, psi, simulation, key='measurement_index'):
     results[key] = index
 
 
-def bond_dimension(results, psi, simulation, key='bond_dimension'):
+def bond_dimension(results, psi, model, simulation, key='bond_dimension'):
     """'Measure' the bond dimension of an MPS.
 
     Parameters
     ----------
-    results, psi, simulation, key :
+    results, psi, model, simulation, key :
         See :func:`~tenpy.simulation.measurement.measurement_index`.
     """
     results[key] = psi.chi
 
 
-def bond_energies(results, psi, simulation, key='bond_energies'):
+def bond_energies(results, psi, model, simulation, key='bond_energies'):
     """Measure the energy of an MPS.
 
     Parameters
     ----------
-    results, psi, simulation, key :
+    results, psi, model, simulation, key :
         See :func:`~tenpy.simulation.measurement.measurement_index`.
     """
     results[key] = simulation.model.bond_energies(psi)
 
 
-def simulation_parameter(results, psi, simulation, recursive_key, key=None, **kwargs):
+def simulation_parameter(results, psi, model, simulation, recursive_key, key=None, **kwargs):
     """Dummy meausurement of a simulation parameter.
 
     This can be useful e.g. if you have a time-dependent hamiltonian parameter.
@@ -88,14 +97,15 @@ def simulation_parameter(results, psi, simulation, recursive_key, key=None, **kw
     results[key] = get_recursive(simulation.options, recursive_key, **kwargs)
 
 
-def energy_MPO(results, psi, simulation, key='energy_MPO'):
+def energy_MPO(results, psi, model, simulation, key='energy_MPO'):
     """Measure the energy of an MPS by evaluating the MPS expectation value.
 
     Parameters
     ----------
-    results, psi, simulation, key :
+    results, psi, model, simulation, key :
         See :func:`~tenpy.simulation.measurement.measurement_index`.
     """
+    psi = simulation.psi  # take original psi, possibly grouped, but compatible with model
     if psi.bc == 'segment':
         init_env_data = simulation.init_env_data
         E = MPOEnvironment(psi, simulation.model.H_MPO, psi, **init_env_data).full_contraction(0)
@@ -104,7 +114,7 @@ def energy_MPO(results, psi, simulation, key='energy_MPO'):
         results[key] = simulation.model.H_MPO.expectation_value(psi)
 
 
-def entropy(results, psi, simulation, key='entropy'):
+def entropy(results, psi, model, simulation, key='entropy'):
     """Measure the entropy at all bonds of an MPS.
 
     Parameters
@@ -115,7 +125,8 @@ def entropy(results, psi, simulation, key='entropy'):
     results['entropy'] = psi.entanglement_entropy()
 
 
-def onsite_expectation_value(results, psi, simulation, opname, key=None, fix_u=None, **kwargs):
+def onsite_expectation_value(results, psi, model, simulation, opname, key=None, fix_u=None,
+                             **kwargs):
     """Measure expectation values of an onsite operator.
 
     The resulting array of measurements is indexed by *lattice* indices ``(x, y, u)``
@@ -126,7 +137,7 @@ def onsite_expectation_value(results, psi, simulation, opname, key=None, fix_u=N
 
     Parameters
     ----------
-    results, psi, simulation, key:
+    results, psi, model, simulation, key:
         See :func:`~tenpy.simulation.measurement.measurement_index`.
     opname : str
         The operator to be measured.
@@ -140,7 +151,7 @@ def onsite_expectation_value(results, psi, simulation, opname, key=None, fix_u=N
         key = f"<{opname}>"
     if key in results:
         raise ValueError(f"key {key!r} already exists in results")
-    lattice = simulation.model.lat
+    lattice = model.lat
     if fix_u is not None:
         kwargs['sites'] = lattice.mps_idx_fix_u(fix_u)
     exp_vals = psi.expectation_value(opname, **kwargs)
@@ -153,12 +164,12 @@ def onsite_expectation_value(results, psi, simulation, opname, key=None, fix_u=N
     results[key] = exp_vals
 
 
-def correlation_length(results, psi, simulation, key='correlation_length', unit=None, **kwargs):
+def correlation_length(results, psi, model, simulation, key='correlation_length', unit=None, **kwargs):
     """Measure the correlaiton of an infinite MPS.
 
     Parameters
     ----------
-    results, psi, simulation, key:
+    results, psi, model, simulation, key:
         See :func:`~tenpy.simulation.measurement.measurement_index`.
     unit : ``'MPS_sites' | 'MPS_sites_ungrouped' | 'lattice_rings'``
         The unit in which the correlation length is returned, see the warning in
@@ -191,12 +202,12 @@ def correlation_length(results, psi, simulation, key='correlation_length', unit=
     elif unit == 'MPS_sites_ungrouped':
         corr = corr * psi.grouped
     elif unit == 'lattice_rings':
-        lat = simulation.model.lattice
+        lat = model.lattice
         if lat.N_sites_per_ring is None:
             raise ValueError("lattice doesn't define N_sites_per_ring")
         corr = corr * psi.grouped / lat.N_sites_per_ring
     elif unit == 'lattice_spacing':
-        lat = simulation.model.lattice
+        lat = model.lattice
         if lat.N_sites_per_ring is None:
             raise ValueError("lattice doesn't define N_sites_per_ring")
         corr = corr * psi.grouped / lat.N_sites_per_ring / np.inner(lat.basis[0], lat.cylinder_axis)
@@ -205,7 +216,7 @@ def correlation_length(results, psi, simulation, key='correlation_length', unit=
     results[key] = corr
 
 
-def psi_method(results, psi, simulation, method, key=None, **kwargs):
+def psi_method(results, psi, model, simulation, method, key=None, **kwargs):
     """Generic function to measure arbitrary method of psi with given additional kwargs.
 
     Instead of using `tenpy.simulations.measurement.psi_method` as a measurement function,
@@ -243,7 +254,7 @@ def psi_method(results, psi, simulation, method, key=None, **kwargs):
 
     Parameters
     ----------
-    results, psi, simulation, key:
+    results, psi, model, simulation, key:
         See :func:`~tenpy.simulation.measurement.measurement_index`.
     method : str
         Name of the method of `psi` to call. `key` defaults to this if not specified.
@@ -254,10 +265,10 @@ def psi_method(results, psi, simulation, method, key=None, **kwargs):
     _psi_method_deprecated_msg = '\n'.join([line[4:] for line in
                                             psi_method.__doc__.splitlines()[2:32]])
     warnings.warn(_psi_method_deprecated_msg, FutureWarning)
-    _psi_method_wrapper(results, psi, simulation, method, key=key, **kwargs)
+    _psi_method_wrapper(results, psi, model, simulation, method, key=key, **kwargs)
 
 
-def _psi_method_wrapper(results, psi, simulation, method, key=None, **kwargs):
+def _psi_method_wrapper(results, psi, model, simulation, method, key=None, **kwargs):
     """Wrapper function to allow measuring psi methods.
 
     This function is used in :meth:`tenpy.simulations.Simulation._connect_measurements_method`
@@ -272,7 +283,7 @@ def _psi_method_wrapper(results, psi, simulation, method, key=None, **kwargs):
     results[key] = method(**kwargs)
 
 
-def _simulation_method_wrapper(results, psi, simulation, method, key, **kwargs):
+def _simulation_method_wrapper(results, psi, model, simulation, method, key, **kwargs):
     """Wrapper function to allow measuring psi methods.
 
     This function is used in :meth:`tenpy.simulations.Simulation._connect_measurements_method`
@@ -284,14 +295,14 @@ def _simulation_method_wrapper(results, psi, simulation, method, key, **kwargs):
     results[key] = method(psi=psi, **kwargs)
 
 
-def evolved_time(results, psi, simulation, key='evolved_time'):
+def evolved_time(results, psi, model, simulation, key='evolved_time'):
     """Measure the time evolved by the engine, ``engine.evolved_time``.
 
     "Measures" :attr:`tenpy.algorithms.algorithm.TimeEvolutionAlgorithm.evolved_time`.
 
     Parameters
     ----------
-    results, psi, simulation, key:
+    results, psi, model, simulation, key:
         See :func:`~tenpy.simulation.measurement.measurement_index`.
     """
     results[key] = simulation.engine.evolved_time
