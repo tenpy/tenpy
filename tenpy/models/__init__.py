@@ -21,14 +21,15 @@ All other modules in this folder contain model classes derived from these base c
 
     tf_ising
     xxz_chain
-    aklt
     spins
     spins_nnn
     fermions_spinless
     hubbard
+    aklt
     hofstadter
     haldane
     toric_code
+    mixed_xk
 """
 # Copyright 2018-2021 TeNPy Developers, GNU GPLv3
 

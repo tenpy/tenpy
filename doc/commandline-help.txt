@@ -1,12 +1,13 @@
-usage: tenpy-run [-h] [--import-module MODULE] [--sim-class SIM_CLASS] [--option KEY VALUE]
-                 [--version]
-                 [parameters_file]
+usage: tenpy-run [-h] [--import-module MODULE] [--sim-class SIM_CLASS] [--merge MERGE]
+                 [--option KEY VALUE] [--version]
+                 [parameters_file ...]
 
 Command line interface to run a TeNPy simulation.
 
 positional arguments:
     parameters_file
-        A yaml (*.yml) file with the simulation parameters/options.
+        Yaml (*.yml) file with the simulation parameters/options. Multiple files get merged
+        according to MERGE; see tenpy.tools.misc.merge_recursive for details.
 
 optional arguments:
     -h, --help
@@ -18,6 +19,9 @@ optional arguments:
     --sim-class SIM_CLASS, -c SIM_CLASS
         selects the Simulation (sub)class, e.g. 'GroundStateSearch' (default) or
         'RealTimeEvolution'.
+    --merge MERGE, -m MERGE
+        Selects how to merge conflicts in case of multiple yaml files. Options are 'error',
+        'first' or 'last'.
     --option KEY VALUE, -o KEY VALUE
         Allows overwriting some options from the yaml files. KEY can be recursive separated by
         `.`, e.g. ``algorithm_params.trunc_params.chi``. VALUE is initialized by python's

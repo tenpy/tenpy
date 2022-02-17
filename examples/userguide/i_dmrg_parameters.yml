@@ -1,0 +1,20 @@
+simulation_class: GroundStateSearch
+
+output_filename: results.h5
+
+model_class:  SpinChain
+model_params:
+    L: 32
+    bc_MPS: finite
+    Jz: 1.
+
+initial_state_params:
+    method: lat_product_state
+    product_state: [[up], [down]]
+
+algorithm_class: TwoSiteDMRGEngine
+algorithm_params:
+    trunc_params:
+        svd_min: 1.e-10
+        chi_max: 100
+    mixer: True

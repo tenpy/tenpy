@@ -249,8 +249,10 @@ def test_compute_K():
     npt.assert_array_equal(W, [1.])
 
 
-@pytest.mark.parametrize("bc", ['finite', 'infinite'])
-def test_canonical_form(bc):
+@pytest.mark.parametrize("bc, method", [('finite', 'canonical_form_finite'),
+                                        ('infinite', 'canonical_form_infinite1'),
+                                        ('infinite', 'canonical_form_infinite2')])
+def test_canonical_form(bc, method):
     psi = random_MPS(8, 2, 6, form=None, bc=bc)
     psi2 = psi.copy()
     norm = np.sqrt(psi2.overlap(psi2, ignore_form=True))
@@ -259,7 +261,8 @@ def test_canonical_form(bc):
     norm2 = psi.overlap(psi2, ignore_form=True)
     print("norm2 =", norm2)
     assert abs(norm2 - norm) < 1.e-14 * norm
-    psi.canonical_form(renormalize=False)
+    meth = getattr(psi, method)
+    meth(renormalize=False)  # psi.canonical_form_[infinite[2]]()
     psi.test_sanity()
     assert abs(psi.norm - norm) < 1.e-14 * norm
     psi.norm = 1.  # normalized psi
@@ -268,8 +271,21 @@ def test_canonical_form(bc):
     assert abs(ov - 1.) < 1.e-14
     print("norm_test")
     print(psi.norm_test())
-    assert np.max(psi.norm_test()) < 1.e-14
-
+    assert np.max(psi.norm_test()) < 1.e-14  # SB = AS to good precision
+    psi3 = psi.copy()
+    # call canonical_form again, it shouldn't do anything now
+    meth(renormalize=True)
+    psi.test_sanity()
+    ov = psi.overlap(psi3)
+    assert abs(ov - 1.) < 1.e-14
+    if method in ['canonical_form_finite', 'canonical_form_infinite2']:
+        # check that A = SB S^-1 is orthonormal
+        for i in range(psi.L):
+            A = psi.get_B(i, 'A')
+            c = npc.tensordot(A, A.conj(), axes=[['vL', 'p'], ['vL*', 'p*']])
+            A_err = (c - npc.diag(1., c.legs[0])).norm()
+            print(A_err)
+            assert A_err < 1.e-13
 
 @pytest.mark.parametrize("bc", ['finite', 'infinite'])
 def test_apply_op(bc, eps=1.e-13):
@@ -518,13 +534,15 @@ def test_sample_measurements(eps=1.e-14, seed=5):
 
 @pytest.mark.parametrize('method', ['SVD', 'variational'])
 def test_mps_compress(method, eps=1.e-13):
-    # Test compression of a sum of a state with itself
+    # Test VariationalCompression and MPS.compress_svd of a sum of a state with itself or
+    # orthogonal state.
     L = 5
     sites = [site.SpinHalfSite(conserve=None) for i in range(L)]
     plus_x = np.array([1., 1.]) / np.sqrt(2)
     minus_x = np.array([1., -1.]) / np.sqrt(2)
     psi = mps.MPS.from_product_state(sites, [plus_x for i in range(L)], bc='finite')
-    psiOrth = mps.MPS.from_product_state(sites, [minus_x for i in range(L)], bc='finite')
+    orth_state = [plus_x, minus_x, np.array([1., 0.]), plus_x, plus_x]
+    psiOrth = mps.MPS.from_product_state(sites, orth_state, bc='finite')
     options = {'compression_method': method, 'trunc_params': {'chi_max': 30}}
     psiSum = psi.add(psi, .5, .5)
     psiSum.compress(options)
@@ -576,7 +594,7 @@ def test_InitialStateBuilder():
             'full_empty': ['up', 'down'],
         }, model_dtype=np.float64).run()
     assert psi4.dtype == np.float64
-    assert abs(psi4.overlap(psi1)) < 0.1  # randomizing should definitely lead to small overlap!
+    assert abs(psi4.overlap(psi1) - 1) > 0.1  # randomizing should lead to small overlap!
     psi5 = mps.InitialStateBuilder(
         lat, {
             'method': 'randomized',
@@ -588,7 +606,7 @@ def test_InitialStateBuilder():
             'full_empty': ['up', 'down'],
         }, model_dtype=np.complex128).run()
     assert psi5.dtype == np.complex128
-    assert abs(psi5.overlap(psi1)) > 0.1  # randomizing should definitely lead to small overlap!
+    assert 1.e-8 < abs(psi5.overlap(psi1) - 1) < 0.1  # but here we randomize only a bit
 
 
 if __name__ == "__main__":

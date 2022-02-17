@@ -187,7 +187,8 @@ class PurificationMPS(MPS):
     def from_infiniteT_canonical(cls, sites, charge_sector, form='B', dtype=np.float64):
         """Initial state corresponding to *canonical* infinite-temperature ensemble.
 
-        Works only for finite boundary conditions, following the idea outlined in [barthel2016]_.
+        Works only for finite boundary conditions, following the idea outlined in
+        :cite:`barthel2016`.
         However, we just put trivial charges on the ancilla legs,
         and do *not* double the number of charges as suggested in that paper - there's no need to.
 

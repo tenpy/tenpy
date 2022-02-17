@@ -63,18 +63,20 @@ class PurificationApplyMPO(VariationalApplyMPO):
                                                inner_labels=['vR', 'vL'])
         self.renormalize.append(renormalize)
         # TODO: up to the `renormalize`, we could use `new_psi.set_svd_theta`.
-        B0 = U.split_legs(['(vL.p0.q0)']).replace_labels(['p0', 'q0'], ['p', 'q'])
-        B1 = VH.split_legs(['(p1.q1.vR)']).replace_labels(['p1', 'q1'], ['p', 'q'])
-        new_psi.set_B(i0, B0, form='A')  # left-canonical
+        A0 = U.split_legs(['(vL.p0.q0)'])
+        B1 = VH.split_legs(['(p1.q1.vR)'])
+        # first compare to old best guess to check convergence of the sweeps
+        if self._tol_theta_diff is not None and self.update_LP_RP[0] == False:
+            theta_old = new_psi.get_theta(i0)
+            theta_new_trunc = npc.tensordot(A0.scale_axis(S, 'vR'), B1, ['vR', 'vL'])
+            ov = npc.inner(theta_new_trunc, theta_old, do_conj=True, axes='labels')
+            theta_diff = 1. - abs(ov)
+            self._theta_diff.append(theta_diff)
+        A0.ireplace_labels(['p0', 'q0'], ['p', 'q'])
+        B1.ireplace_labels(['p1', 'q1'], ['p', 'q'])
+        new_psi.set_B(i0, A0, form='A')  # left-canonical
         new_psi.set_B(i0 + 1, B1, form='B')  # right-canonical
         new_psi.set_SR(i0, S)
-        # the old stored environments are now invalid
-        # => delete them to ensure that they get calculated again in :meth:`update_LP` / RP
-        for o_env in self.ortho_to_envs:
-            o_env.del_LP(i0 + 1)
-            o_env.del_RP(i0)
-        self.env.del_LP(i0 + 1)
-        self.env.del_RP(i0)
         return {'U': U, 'VH': VH, 'err': err}
 
 

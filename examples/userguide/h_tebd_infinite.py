@@ -1,5 +1,4 @@
 """Call of (infinite) TEBD."""
-# Copyright 2019-2021 TeNPy Developers, GNU GPLv3
 
 from tenpy.networks.mps import MPS
 from tenpy.models.tf_ising import TFIChain

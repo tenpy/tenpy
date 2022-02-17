@@ -1,7 +1,7 @@
 r"""Basic model for DMRG with mixed real- and momentum-space representation.
 
 This module provides classes for DMRG of fermions in a mixed real- and momentum-space basis,
-as described in [motruk2016].
+as described in :cite:`motruk2016`.
 
 We consider infinite cylinders in real-space along the cylinder axis,
 but transform to momentum space around the cylinder.
@@ -10,9 +10,9 @@ Inside each ring, we consider `Ly` repetitions of `N_orb` independent fermionic 
 the cylinder. Each orbital is one fermionic state that can be occupied or empty and corresponds to
 a unique creation/annihilation operator in second quantization.
 We will also refer to the orbitals as "site"; they will be represented
-by the 2-dimensional Hilbert space of a :class:`~tenpy.networks.site.FermionSite`
+by the 2-dimensional Hilbert space of a :class:`~tenpy.networks.site.FermionSite`.
 
-The real-space operators :math:`c^{(\dagger)}_{i,j,l)` are index by
+The real-space operators :math:`c^{(\dagger)}_{i,j,l}` are index by
 x-coordinate :math:`x = 0, ... , N_{rings}-1` along the cylinder axis,
 y-coordinate :math:`y = 0, ..., L_y` around the cylinder,
 and orbital :math:`l = 0, ... N_{orb}`.
@@ -29,7 +29,7 @@ We transform them into momentum space with the convention (for all :math:`x,l` i
 
 
 We use the indices ``k = 0, ... Ly-1`` and define the actual momentum as
-:math:`k_y = 2 \pi i / L_y * k` for :math: `k <= Ly/2` and
+:math:`k_y = 2 \pi i / L_y * k` for :math:`k \leq Ly/2` and
 and shift to :math:`k_y = 2 \pi i * (k-L_y) / L_y ` for :math:`k > Ly/2` such that
 :math:`k_y \in (-\pi, pi]`.
 The momenta fullfill the usual relations
@@ -55,6 +55,12 @@ Note that the sites in the DMRG "snake" might be shuffled once more due to the
 `ring_order` parameter, ultimately given in the lattice attribute
 :attr:`~tenpy.models.lattice.Lattice.order`.
 The Jordan-Wigner strings follow the *final* DMRG snake.
+
+.. note ::
+
+    It is *not* obvious how to generalize this to (hard-core) bosons, since the lack of the Pauli
+    exclusion principle implies a possibly large occupation on single k modes, i.e., hard-core
+    bosons in x-y-space don't map to hard-core bosons in x-k-space!
 """
 # Copyright 2021 TeNPy Developers, GNU GPLv3
 
@@ -86,7 +92,9 @@ class MixedXKLattice(Lattice):
 
     .. warning ::
         Using the Jordan-Wigner string (``JW``) is crucial to get correct results!
-        See :doc:`../intro_JordanWigner` for details.
+        See :doc:`/intro/JordanWigner` for details.
+
+    See :mod:`tenpy.models.mixed_xk` for the mappings between x,k and x,y.
 
     Parameters
     ----------
@@ -95,7 +103,7 @@ class MixedXKLattice(Lattice):
     Ly : int
         The circumference of the cylinder: the number of possible `k` values.
     N_orb: int
-        Number of orbitals. A single 'ring' of the cylinder contains ``N_orb*Ly` sites.
+        Number of orbitals. A single 'ring' of the cylinder contains ``N_orb*Ly`` sites.
     sites : list of :class:`~tenpy.networks.site.Site`
         The sites making up the unit cell, in the order specified by ring_order.
     ring_order : 1D array, len Ly*N_orb
@@ -114,8 +122,8 @@ class MixedXKLattice(Lattice):
     Ly : int
         The circumference of the cylinder: the number of possible `k` values.
     N_orb: int
-        Number of orbitals. A single 'ring' of the cylinder contains ``N_orb*Ly` sites.
-    ring_order : 1D array, len Ly*N_orb
+        Number of orbitals. A single 'ring' of the cylinder contains ``N_orb*Ly`` sites.
+    ring_order : 1D array, len ``Ly*N_orb``
         Gives the order of the sites within a ring for the DMRG snake;
         sites are labeled by the index ``u = k*N_orb + l`` of the :attr:`unit_cell`.
         Defaults to ``np.arange(Ly*N_orb)``.
@@ -185,10 +193,10 @@ class MixedXKLattice(Lattice):
         Ly : int
             The circumference of the cylinder: the number of possible `k` values.
         N_orb: int
-            Number of orbitals. A single 'ring' of the cylinder contains ``N_orb*Ly` sites.
+            Number of orbitals. A single 'ring' of the cylinder contains ``N_orb*Ly`` sites.
         chinfo : :class:`~tenpy.linalg.charges.ChargeInfo`
-            The nature of the charges.
-            If `conserve_k` is True, the charge ``"ky"`` for the momentum around the cylinder is added.
+            The nature of the charges. If `conserve_k` is True, the charge ``"ky"`` for the
+            momentum around the cylinder is added.
         charges : array_like of shape (N_orb, chinfo.qnumber)
             For each of the oribals the value of each charges (except ``"ky"``),
             when the orbital is occupied.
@@ -475,6 +483,7 @@ class MixedXKModel(CouplingMPOModel):
         ----------
         couplings : ndarray, shape (Ly, N_orb, Ly, N_orb, Ly, N_orb, Ly, N_orb)
             ``couplings[k1, j1, k2, j2, k3, j3, k4, j4]`` is the prefactor for a term
+
             .. math ::
                 \sum_i A_{i,k1,j1} B_{i,k2,j2} C_{i+dx,k3,j3} D_{i+dx,k4,j4}
 

@@ -1,2 +1,5 @@
 *.pdf
 *.pkl
+results
+*.h5
+*.log

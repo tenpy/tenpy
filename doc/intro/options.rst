@@ -1,38 +1,19 @@
 Parameters and options
 ======================
 
-(We use `parameter` and `option` synonymously.)
+(We use `parameter` and `option` synonymously. See also the section on parameters in :doc:`/intro/simulations`.
 
 Standard simulations in TeNPy can be defined by just set of options collected in a dictionary (possibly containing
 other parameter dictionaries).
 It can be convenient to represent these options in a [yaml]_ file, say ``parameters.yml``, which might look like this:
 
-.. code-block :: yaml
-
-    output_filename : params_output.h5
-    overwrite_output : True
-    model_class :  SpinChain
-    model_params :
-        L : 14
-        bc_MPS : finite
-
-    initial_state_params:
-        method : lat_product_state
-        product_state : [[up], [down]]
-
-    algorithm_class: TwoSiteDMRG
-    algorithm_params:
-        trunc_params:
-            chi_max: 120
-            svd_min: 1e.-8
-        max_sweeps: 10
-        mixer : True
-
+.. literalinclude:: /../examples/userguide/i_dmrg_parameters.yml
 
 Note that the default values and even the allowed/used option names often depend on other parameters.
 For example, the `model_class` parameter above given to a :class:`~tenpy.simulations.Simulation` selects a model class,
 and diffent model classes might have completely different parameters.
-This gives you freedom to define your own parameters when you implement a model, but it also makes it a little bit harder to keep track of allowed values.
+This gives you freedom to easily define your own parameters when you implement a model, 
+but it also makes it a little bit harder to keep track of allowed values.
 
 In the TeNPy documentation, we use the ``Options`` sections of doc-strings to define parameters that are read out.
 Each documented parameter is attributed to one set of parameters, called "config", and managed in a :class:`~tenpy.tools.params.Config` class at runtime.
@@ -47,7 +28,11 @@ the default is used, and with INFO log-level, if it is non-default). Moreover, t
 dictionary. Hence, it will contain the *full set of all used parameters*, default and non-default, at the end of a
 simulation, e.g., in the `sim_params` of the `results` returned by :meth:`tenpy.simulations.Simulation.run`.
 
-You can find a **list of all the different configs** in the :ref:`cfg-config-index`, and a **list of all parameters** in :ref:`cfg-option-index`.
+.. note ::
 
-If you add extra options to your configuration that TeNPy doesn't read out by the end of the simulation, it will issue a warning. 
-Getting such a warnings is an indicator for a typo in your configuration, or an option being in the wrong config dictionary.
+    You can find a **list of all the different configs** in the :ref:`cfg-config-index`, and a **list of all parameters** in :ref:`cfg-option-index`.
+
+.. note ::
+
+    If you add extra options to your configuration that TeNPy doesn't read out by the end of the simulation, it will (usually) issue a warning.
+    Getting such a warnings is an indicator for a typo in your configuration, or an option being in the wrong config dictionary.
