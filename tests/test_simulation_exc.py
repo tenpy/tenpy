@@ -61,6 +61,7 @@ def test_OrthogonalExcitations(tmp_path, switch, group, eps=1.e-10, N_exc=3):
         'initial_state_params': {'method': 'lat_product_state',
                                  'product_state' : [['up']]},
         'algorithm_params': {'trunc_params': {'chi_max': 30, 'svd_min': 1.e-8}},
+        'group_sites': group,
     }
     data_gs = tenpy.run_simulation(**sim_params_gs)
     E_DMRG_gs = data_gs['energy']
@@ -76,24 +77,25 @@ def test_OrthogonalExcitations(tmp_path, switch, group, eps=1.e-10, N_exc=3):
         'ground_state_filename': fn_gs,
         'N_excitations': N_exc,
         'algorithm_params':  {'trunc_params': {'chi_max': 30, 'svd_min': 1.e-8},
-                              'diag_method': 'ED_block'},
+                              #  'diag_method': 'ED_block'
+                              },
 
     }
     sim_params_exc.update(**switch)
 
+    # run excitations
     data_exc = tenpy.run_simulation(**sim_params_exc)
 
     E_DMRG_exc = data_exc['excitation_energies']
-
     ovs = [npc.inner(psi_ED, ED.mps_to_full(psi_DMRG), 'range', do_conj=True)
-           for psi_ED, psi_DMRG in zip(psi_ED_exc, data_exc['excitations'])
-           ]
+           for psi_ED, psi_DMRG in zip(psi_ED_exc, data_exc['excitations'])]
     for E_DMRG, E_ED, ov in zip(E_DMRG_exc, E_ED_exc, ovs):
         print(f"E_ED={E_ED:.10f}, E_DMRG={E_DMRG:.10f}: 1-|<psi_ED|psi_DMRG>|={1-abs(ov):.3e}")
-
-    print(E_DMRG_exc - E_ED_exc)
-
     np.testing.assert_allclose(E_DMRG_exc, E_ED_exc)
-
     #  assert False
 
+
+if __name__ == "__main__":
+    import tempfile
+    with tempfile.TemporaryDirectory() as tmpdir:
+        test_OrthogonalExcitations(tmpdir, {'switch_charge_sector': [1]}, 2)

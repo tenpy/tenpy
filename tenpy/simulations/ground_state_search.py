@@ -380,7 +380,7 @@ class OrthogonalExcitations(GroundStateSearch):
         """
         if modified_psi0:
             self.logger.info("Calculate reference energy by contracting environments")
-            env = MPOEnvironment(psi0_seg, self.model, psi0_seg, **self.init_env_data)
+            env = MPOEnvironment(psi0_seg, self.model.H_MPO, psi0_seg, **self.init_env_data)
             E = env.full_contraction(0)
         else:
             E = gs_data['energy']
@@ -479,13 +479,7 @@ class OrthogonalExcitations(GroundStateSearch):
         resume_data['init_env_data'] = self.init_env_data
         super().init_algorithm(**kwargs)
 
-    def group_sites_for_algorithm(self):
-        super().group_sites_for_algorithm()
-        if self.grouped > 1:
-            raise NotImplementedError("TODO")
-            # TODO adjust indexing of things like `switch_charge_sector_site`
-            # and `apply_local_op`.
-            # TODO what else?
+    # group_sites_for_algorithm should be fine!
 
     def switch_charge_sector(self, psi0_seg):
         """Change the charge sector of `psi0_seg` and obtain `initial_state_seg`.
@@ -538,19 +532,6 @@ class OrthogonalExcitations(GroundStateSearch):
         self.logger.info("changed charge by %r compared to previous state", list(qtotal_diff))
         return psi, qtotal_diff
 
-        """
-        # [TODO] Code needed to group 4 (sublattice * valley) sites together
-        self.logger.info("Grouping 4 sites together.")
-        grouped_sites = self.model.group_sites(4)
-        self.logger.info("Model length: %f", self.model.H_MPO.L)
-        self.psi.group_sites(4, grouped_sites)
-        self.logger.info("Psi length: %f", self.psi.L)
-
-        DMRG_params = copy.deepcopy(self.options['algorithm_params'])
-        DMRG_params['init_env_data'] = self.init_env_data
-        self.engine = TwoSiteDMRGEngine(self.psi, self.model, DMRG_params)
-        self.psi.canonical_form_finite(envs_to_update=[self.engine.env])
-        """
 
     def _apply_local_op(self, psi, apply_local_op):
         #apply_local_op should have the form
@@ -593,7 +574,6 @@ class OrthogonalExcitations(GroundStateSearch):
                                   dtype=psi.dtype,
                                   qtotal=qtotal_change,
                                   labels=['vL', 'vR'])
-        # TODO: no lancozs params yet
         lanczos_params = self.options.subconfig('algorithm_params').subconfig('lanczos_params')
         _, th0, _ = lanczos.LanczosGroundState(H0, th0, lanczos_params).run()
         U, s, Vh = npc.svd(th0, inner_labels=['vR', 'vL'])
@@ -627,10 +607,10 @@ class OrthogonalExcitations(GroundStateSearch):
                 raise ValueError("You need to set use diag_method='lanczos' and small enough "
                                  f"lanczos_params['E_shift'] < {-2.* ground_state_energy:.2f}")
 
+        # loop over excitations
         while len(self.excitations) < N_excitations:
 
             E, psi = self.engine.run()
-            assert psi is self.psi
             E_MPO = self.engine.env.full_contraction(0) # TODO: measure this while envs are still around?
             self.results['excitation_energies_MPO'].append(E_MPO - ground_state_energy)  # TODO: should be almost the same?!
             self.results['excitation_energies'].append(E - ground_state_energy)
@@ -638,8 +618,10 @@ class OrthogonalExcitations(GroundStateSearch):
             if np.linalg.norm(psi.norm_test()) > self.options.get('orthogonal_norm_tol', 1.e-12):
                 self.logger.info("call psi.canonical_form() on excitation")
                 psi.canonical_form_finite(envs_to_update=[self.engine.env])
-            self.excitations.append(psi)  # save in list of excitations
-            self.orthogonal_to.append(psi)
+            self.orthogonal_to.append(psi)  # in `orthogonal_to` we need the grouped, segment psi
+            # but in `excitations` we want the "original", ungrouped, measurement psi
+            psi_meas, _ = self.get_measurement_psi_model(psi, self.model)
+            self.excitations.append(psi_meas)  # save in list of excitations
             if len(self.excitations) >= N_excitations:
                 break
 
@@ -659,6 +641,38 @@ class OrthogonalExcitations(GroundStateSearch):
         if 'resume_data' in results:
             results['resume_data']['excitations'] = self.excitations
         return results
+
+
+    def get_measurement_psi_model(self, psi, model):
+        """Get psi for measurements.
+
+        Sometimes, the `psi` we want to use for measurements is different from the one the
+        algorithm actually acts on.
+        Here, we split sites, if they were grouped in :meth:`group_sites_for_algorithm`.
+
+        Parameters
+        ----------
+        psi :
+            Tensor network; initially just ``self.psi``.
+            The method should make a copy before modification.
+        model :
+            Model matching `psi` (in terms of indexing, MPS order, grouped sites, ...)
+            Initially just ``self.model``.
+
+        Returns
+        -------
+        psi :
+            The psi suitable as argument for generic measurement functions.
+        model :
+            Model matching `psi` (in terms of indexing, MPS order, grouped sites, ...)
+        """
+        psi, model = super().get_measurement_psi_model(psi, model)  # ungroup if necessary
+
+        # TODO: extract measurement psi on *enlarged* segment
+        # removing special cases for first/last
+        # and allowing measurments outside of the segment with *usual* onsite_expectation_value etc
+
+        return psi, model
 
 
 def expectation_value_outside_segment_right(psi_segment, psi_R, ops, lat_segment, sites=None, axes=None):
