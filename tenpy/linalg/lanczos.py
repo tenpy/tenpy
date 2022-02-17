@@ -180,7 +180,114 @@ class KrylovBased:
     def _calc_result_krylov(self, k):
         raise NotImplementedError("subclasses should implement this")
 
-
+        
+class GMRES():
+    def __init__(self, A, x, b, options):
+        self.options = options = asConfig(options, self.__class__.__name__)
+        self.N_min = options.get('N_min', 5)
+        self.N_max = options.get('N_max', 20)
+        self.restart = options.get('restart', 20)
+        self.res = self.options.get('res', 1.e-12)
+        self.A = A.copy()
+        self.b = b.copy()
+        self.x = x.copy() # Initial guess
+        self.rs = [self.b.copy()]
+        self.rs[0] = self.rs[0].iadd_prefactor_other(-1, self.A.matvec(self.x)) # residuals
+        self.b_norm = npc.norm(self.b)
+        self.total_error = [[npc.norm(self.rs[0]) / self.b_norm]]
+        self.total_iters = []
+        self.r_norm = npc.norm(self.rs[0])
+        self.qs = [self.rs[0].copy()]
+        self.qs[0].iscale_prefactor(1./self.r_norm)
+        
+        self.sine = np.zeros(self.N_max)
+        self.cosine = np.zeros(self.N_max)
+        self.e1 = npc.Array.from_ndarray_trivial(np.zeros(self.N_max+1))
+        self.e1[0] = 1
+        self.e1.iscale_prefactor(self.r_norm)
+        
+        self.H = npc.Array.from_ndarray_trivial(np.zeros((self.N_max+1, self.N_max)))
+        
+    def run(self):
+        for _ in range(self.restart):
+            converged=False
+            for k in range(0,self.N_max):
+                self.arnoldi(k)
+                self.apply_givens_rotation(k)
+                self.e1[k+1] = -self.sine[k] * self.e1[k]
+                self.e1[k] = self.cosine[k] * self.e1[k]
+                error = np.abs(self.e1[k+1]) / self.b_norm # The residual is just the last element of $\beta$ vector (see Wikipedia) since $y$ is found exactly.
+                self.total_error[-1].append(error)
+                if error < self.res and k >= self.N_min:
+                    converged=True
+                    break
+            self.total_iters.append(k+1)
+            self.backsolve(k+1)
+            Q_mat = npc.concatenate(self.qs[:k+1], axis=1)
+            for i in range(k+1):
+                self.x.iadd_prefactor_other(self.y[i], self.qs[i])
+            if not converged:
+                self.reset()
+        
+        return self.x, npc.norm(self.A.matvec(self.x) - self.b) / self.b_norm, self.total_error, self.total_iters
+    
+    def arnoldi(self, k):
+        # Iterative build orthogonal Krylov subspace and $H$ matrix.
+        q = self.A.matvec(self.qs[-1])
+        for i in range(k+1):
+            self.H[i,k] = npc.inner(q, self.qs[i], axes='range', do_conj=True)
+            q.iadd_prefactor_other(-self.H[i,k], self.qs[i])
+        self.H[k+1,k] = npc.norm(q)
+        q.iscale_prefactor(1./self.H[k+1,k])
+        self.qs.append(q)
+    
+    def apply_givens_rotation(self, k):
+        # Apply rotation to $H$ so that it becomes upper triangular.
+        for i in range(k):
+            temp = self.cosine[i] * self.H[i,k] + self.sine[i] * self.H[i+1,k]
+            self.H[i+1,k] = -self.sine[i] * self.H[i,k] + self.cosine[i] * self.H[i+1,k]
+            self.H[i,k] = temp
+        
+        self.givens_rotation(k)
+        self.H[k,k] = self.cosine[k] * self.H[k,k] + self.sine[k] * self.H[k+1,k]
+        self.H[k+1,k] = 0
+    
+    def givens_rotation(self, k):
+        # Find cosine and sine such that the element below the diagonal of kth column of $H$ is removed.
+        v1, v2 = self.H[k,k], self.H[k+1,k]
+        t = np.sqrt(v1**2 + v2**2)
+        self.cosine[k] = v1 / t
+        self.sine[k] = v2 / t
+        
+    def backsolve(self, k):
+        # $H$ is now a diagonal matrix; backsolve to find $y$ exactly.
+        H = self.H[:k,:k]
+        e2 = self.e1[:k]
+        #e2[np.abs(e2.to_ndarray()) < 1.e-14] = 0 # N_max should be less than the size of A.
+        self.y = npc.Array.from_ndarray_trivial(np.ones(k))
+        for i in range(k-1,-1,-1):
+            self.y[i] = e2[i]
+            for j in range(i+1,k):
+                self.y[i] -= H[i,j]*self.y[j]
+            self.y[i] /= H[i,i]
+            
+    def reset(self):
+        # Restart GMRES algorithm using current $x$ as initial guess.
+        self.rs.append(self.b.copy())
+        self.rs[-1] = self.rs[-1].iadd_prefactor_other(-1, self.A.matvec(self.x)) # residuals
+        self.total_error.append([npc.norm(self.rs[-1]) / self.b_norm])
+        self.r_norm = npc.norm(self.rs[-1])
+        self.qs = [self.rs[-1].copy()]
+        self.qs[-1].iscale_prefactor(1./self.r_norm)
+        
+        self.sine = np.zeros(self.N_max)
+        self.cosine = np.zeros(self.N_max)
+        self.e1 = npc.Array.from_ndarray_trivial(np.zeros(self.N_max+1))
+        self.e1[0] = 1
+        self.e1.iscale_prefactor(self.r_norm)
+        
+        self.H = npc.Array.from_ndarray_trivial(np.zeros((self.N_max+1, self.N_max)))
+        
 class Arnoldi(KrylovBased):
     """Arnoldi method for diagonalizing square, non-hermitian/symmetric matrices.
 
