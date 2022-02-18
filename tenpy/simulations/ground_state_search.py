@@ -378,7 +378,7 @@ class OrthogonalExcitations(GroundStateSearch):
             Whether ``gs_data['psi']`` was modified (in place!) to ensure canonical form.
             In that case, we better get a new, precises reference energy estimate.
         """
-        if modified_psi0:
+        if modified_psi0 or 'energy' not in gs_data:
             self.logger.info("Calculate reference energy by contracting environments")
             env = MPOEnvironment(psi0_seg, self.model.H_MPO, psi0_seg, **self.init_env_data)
             E = env.full_contraction(0)
