@@ -1350,6 +1350,144 @@ class MPS:
                 cp.segment_boundaries = (U_L, V_R)
         return cp
 
+    def extract_enlarged_segment(self,
+                                 psi_left,
+                                 psi_right,
+                                 first,
+                                 last,
+                                 add_unitcells,
+                                 cutoff=1.e-14):
+        """Extract an enlarged segment from an initially smaller segment MPS.
+
+        With :meth:`extract_segment`, we obtain a segment MPS on a small subsystem, or "segment"
+        of the original system. Yet, such an MPS still has (limited) access to the outside of the
+        segment through the Schmidt states to the left and right. While they are given by the
+        original states from which we extracted the segment, we can still change local expectation
+        values there by adjusting the weights of the Schmidt values.
+
+        Given `self` as the segment MPS and the original background MPS containing the information
+        about the Schmidt states, this function allows to define an MPS on an enlarged segment.
+        This is particularaly usefull to evaluate expectation values outside of the original
+        segment.
+
+        Parameters
+        ----------
+        psi_left, psi_right : :class:`~tenpy.networks.mps.MPS`
+            Original background MPS to the left and right of `self`.
+            May be the same if you're not looking at
+            :class:`~tenpy.simulations.ground_state_search.TopologicalExcitations`.
+        first, last : int
+            The first and last site of the segment that `self` is defined on, in the indexing of the
+            original `psi_left` and `psi_right`.
+        add_unitcells : int | (int, int)
+            How many unit cells (multiples of `psi_left/right.L`) to add to the left and right.
+            A single value is used for both directions.
+            Note that we also "complete" the unit cells to the left/right even for
+            `add_unitcells`=0. For initially finite MPS with non-trivial `first, last`, this
+            yields the state on the full finite system.
+        cutoff : float
+            Cutoff used for QR/SVDs in :meth:`canonical_form_finite`.
+
+        Returns
+        -------
+        psi_large_seg : :class:`~tenpy.networks.mps.MPS`
+            MPS in enlarged segment.
+        new_first, new_last :
+            New first and last site of the enlarge segment used for `psi_large_seg`. As `first`,`last`,
+            this is indexed with respect to the "original" MPSs `psi_left` and `psi_right`.
+        """
+        # get new_first and new_last
+        add_unitcells = to_iterable(add_unitcells)
+        if len(add_unitcells) == 1:
+            add_L = add_R = add_unitcells[0]
+        elif len(add_unitcells) == 2:
+            add_L, add_R = add_unitcells
+        else:
+            raise ValueError(f"need 1 or 2 entries in add_unitcells={add_unitcells!r}")
+        new_first = int(- add_L * psi_left.L)
+        new_last = max(psi_right.L - 1, last)
+        if not psi_right.finite:
+            # extend to full unit cell to the right if not yet full
+            new_last = new_last - (new_last % psi_right.L) + psi_right.L - 1
+            new_last = int(new_last + add_R * psi_right.L)
+        if not new_first <= first < last <= new_last:
+            raise ValueError("expected new_first <= first < last <= new_last, but got "
+                            f"{new_first} {first} {last} {new_last}")
+        if new_first < 0 and psi_left.finite or psi_right.finite and new_last >= psi_right.L:
+            raise ValueError("Trying to extend segment outside of finite state")
+
+        if new_first == first and new_last == last:
+            # nothing to do.  finite bc is okay in this case
+            return self, new_first, new_last
+
+        if self.bc != 'segment':
+            raise ValueError("only works for segment MPS!")
+
+        # first, last, new_first, new_last are "original" i-indices
+        # i = index in original (non-segment) state
+        # j = i - first = index in self
+        # k = i - new_first = index in final psi_meas = index in Bs/Ss.
+        # B[i - new_first] = B[k] where 0 <= k < new_L for new_first <= i <= new_last
+        new_L = new_last - new_first + 1
+
+        sites = [None] * new_L # indexed by site k
+        Bs = [None] * new_L
+        forms = ['B'] * new_L
+        Ss = [None] * (new_L + 1) # indexed by bond left of site k
+
+        # get A and left S from psi_left
+        for i in range(new_first, first):
+            k = i - new_first
+            sites[k] = psi_left.sites[i % psi_left.L]
+            Bs[k] = psi_left.get_B(i, 'A')
+            forms[k] = 'A'
+            # needs to be "A" form to ensure we use the S value when going from psi_left to seg
+            Ss[k] = psi_left.get_SL(i)
+        # get B and both left/right S from self
+        for i in range(first, last + 1):
+            j = i - first
+            k = i - new_first
+            sites[k] = self.sites[j]
+            Bs[k] = self.get_B(j, 'B')
+            Ss[k] = self.get_SL(j)
+        Ss[last + 1 - new_first] = self.get_SR(last - first)
+        # get all B and right S from psi_right
+        for i in range(last + 1, new_last + 1):
+            k = i - new_first
+            sites[k] = psi_right.sites[i % psi_right.L]
+            Bs[k] = psi_right.get_B(i, 'B') # needs to be in "B" form!
+            Ss[k + 1] = psi_right.get_SR(i)
+
+        # handle segment_boundaries
+        U_L, V_R = self.segment_boundaries
+        if U_L is not None and new_first < first:
+            k = first - 1 - new_first
+            Bs[k] = npc.tensordot(Bs[k], U_L, axes=['vR', 'vL'])
+        if V_R is not None and last < new_last:
+            k = last + 1 - new_first
+            Bs[k] = npc.tensordot(V_R, Bs[k], axes=['vR', 'vL'])
+
+        # initialize MPS
+        bc = 'segment'
+        if (psi_left.bc == 'finite' and new_first == 0 and
+            psi_right.bc == 'finite' and new_last == psi_right.L - 1):
+            bc = 'finite'
+
+        psi_new = MPS(sites, Bs, Ss, bc=bc, form=forms)
+        psi_new.canonical_form_finite(cutoff=cutoff)  # important: call canonical form
+        # this propagates the S from the orthogonality center in the segment to the outer parts
+
+        # handle segment boundaries, remaining cases
+        if new_first == first or new_last == last:
+            U_L_new, V_R_new = psi_new.segment_boundaries
+            if U_L is not None and new_first == first:
+                U_L_new = npc.tensordot(U_L, U_L_new, axes=['vR', 'vL'])
+            if V_R is not None and new_last == last:
+                V_R_new = npc.tensordot(V_R_new, V_R, axes=['vR', 'vL'])
+            psi_new.segment_boundaries = (U_L, V_R)
+
+        return psi_new, new_first, new_last
+
     def get_total_charge(self, only_physical_legs=False):
         """Calculate and return the `qtotal` of the whole MPS (when contracted).
 
