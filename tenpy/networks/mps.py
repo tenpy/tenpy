@@ -1335,6 +1335,19 @@ class MPS:
         # note: __init__ makes deep copies of B, S
         cp = self.__class__(sites, B, S, 'segment', 'B', self.norm)
         cp.grouped = self.grouped
+        if self.bc == 'segment':
+            U_L, V_R = self.segment_boundaries
+            if U_L is not None or V_R is not None:
+                if first != 0:
+                    U_L = None
+                if last != self.L - 1:
+                    V_R = None
+            if U_L is not None or V_R is not None:
+                if U_L is None:
+                    U_L = npc.eye_like(B[0], 'vL', labels=['vL', 'vR'])
+                if V_R is None:
+                    V_R = npc.eye_like(B[-1], 'vR', labels=['vR', 'vL']).itranspose()
+                cp.segment_boundaries = (U_L, V_R)
         return cp
 
     def get_total_charge(self, only_physical_legs=False):
