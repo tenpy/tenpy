@@ -15,7 +15,7 @@ from ..algorithms.mps_common import ZeroSiteH
 from ..algorithms.dmrg import TwoSiteDMRGEngine
 from ..linalg import lanczos
 from ..linalg.sparse import SumNpcLinearOperator
-from ..tools.misc import find_subclass
+from ..tools.misc import find_subclass, to_iterable
 from ..tools.params import asConfig
 
 import copy
@@ -140,12 +140,17 @@ class OrthogonalExcitations(GroundStateSearch):
         In addition to :attr:`~tenpy.simulations.simulation.Simulation.results`, it contains
 
             ground_state_energy : float
-                Reference energy for the ground state.
+                Reference energy on the segment for the ground state up to an overall constant.
+                Note that this is not just ``energy_density * L`` even for an originally
+                translation invariant, infinite system, since terms crossing the boundaries
+                need to be accounted for on both sides of the segment,
+                and there can be an overall additive constant in the environments.
             excitations : list
                 Tensor network states representing the excitations.
                 Only defined if :cfg:option:`Simulation.save_psi` is True.
             excitation_energies : list of float
                 Energies of the excited states *above* the reference `ground_state_energy`.
+                These are well-defined, physical energies!
             segment_first_last : (int, int)
                 First and last site of the segment extracted from the ground state.
                 For finite MPS, this is usually just ``0, L-1``.
@@ -232,9 +237,6 @@ class OrthogonalExcitations(GroundStateSearch):
         if np.linalg.norm(psi0.norm_test()) > self.options.get('orthogonal_norm_tol', 1.e-12):
             self.logger.info("call psi.canonical_form() on ground state")
             psi0.canonical_form()
-            modified_psi0 = True
-        else:
-            modified_psi0 = False
 
         # extract segments if necessary; get `init_env_data`.
         resume_data = gs_data.get('resume_data', {})
@@ -243,8 +245,8 @@ class OrthogonalExcitations(GroundStateSearch):
             self.write_back_environments(gs_data, gs_fn)
         self.results['segment_first_last'] = self.model.lat.segment_first_last
 
-        # here, self.ground_state_seg is the *unperturbed* ground state in the segment!
-        self.get_reference_energy(psi0_seg, gs_data, modified_psi0)
+        # here, psi0_seg is the *unperturbed* ground state in the segment!
+        self.get_reference_energy(psi0_seg)
 
         # switch_charge_sector defines `self.initial_state_seg`
         self.initial_state_seg, self.qtotal_diff = self.switch_charge_sector(psi0_seg)
@@ -362,28 +364,22 @@ class OrthogonalExcitations(GroundStateSearch):
             self.init_env_data = {}
         return ground_state_seg, False
 
-    def get_reference_energy(self, psi0_seg, gs_data, modified_psi0):
+    def get_reference_energy(self, psi0_seg):
         """Obtain ground state reference energy.
 
-        The excitation energy is the contraction of the `MPOEnvionment` on the segment, with the
-        environments defined in :attr:`init_env_data`.
+        Excitation energies are full contractions of the MPOEnvironment with the environments
+        defined in :attr:`init_env_data`.
+        Hence, the reference energy is also the contraction of the `MPOEnvionment` on the segment.
 
         Parameters
         ----------
         psi0_seg : :class:`~tenpy.networks.msp.MPS`
-            Ground state MPS on the segment.
-        gs_data : dict
-            Data loaded from the ground state file.
-        modified_psi0 : bool
-            Whether ``gs_data['psi']`` was modified (in place!) to ensure canonical form.
-            In that case, we better get a new, precises reference energy estimate.
+            Ground state MPS on the segment, matching :attr:`init_env_data`.
         """
-        if modified_psi0 or 'energy' not in gs_data:
-            self.logger.info("Calculate reference energy by contracting environments")
-            env = MPOEnvironment(psi0_seg, self.model.H_MPO, psi0_seg, **self.init_env_data)
-            E = env.full_contraction(0)
-        else:
-            E = gs_data['energy']
+        # can't just use gs_data['energy'], since this is just energy density for infinite MPS
+        self.logger.info("Calculate reference energy by contracting environments")
+        env = MPOEnvironment(psi0_seg, self.model.H_MPO, psi0_seg, **self.init_env_data)
+        E = env.full_contraction(0)
         self.results['ground_state_energy'] = E
         return E
 
@@ -665,13 +661,33 @@ class OrthogonalExcitations(GroundStateSearch):
             The psi suitable as argument for generic measurement functions.
         model :
             Model matching `psi` (in terms of indexing, MPS order, grouped sites, ...)
+
+        Options
+        -------
+        .. cfg:configoptions :: OrthogonalExcitations
+
+            measure_add_unitcells : int | (int, int) | None
+                It can be a single value (default=0), or two separate values for left/right.
+                For ``bc_MPS='finite'`` in the :attr`model_orig`, only 0 is allowed.
+                `None` disables the feature, but this may cause measurment functions/results to
+                have unexpected (or possibly wrong, if not accounted for) indexing.
         """
         psi, model = super().get_measurement_psi_model(psi, model)  # ungroup if necessary
 
-        # TODO: extract measurement psi on *enlarged* segment
-        # removing special cases for first/last
-        # and allowing measurments outside of the segment with *usual* onsite_expectation_value etc
-
+        measure_add_unitcells = self.options.get('measure_add_unitcells', 0)
+        if measure_add_unitcells is not None:
+            first, last = self.results['segment_first_last']
+            psi, meas_first, meas_last = psi.extract_enlarged_segment(self.ground_state_orig,
+                                                                      self.ground_state_orig,
+                                                                      first,
+                                                                      last,
+                                                                      measure_add_unitcells)
+            key = 'measure_segment_first_last'
+            if key not in self.results:
+                self.results[key] = (meas_first, meas_last)
+            else:
+                assert self.results[key] == (meas_first, meas_last)
+            model  = self.model_orig.extract_segment(meas_first, meas_last)
         return psi, model
 
 
