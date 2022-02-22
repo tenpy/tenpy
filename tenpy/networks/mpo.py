@@ -2454,7 +2454,6 @@ class MPOTransferMatrix:
         """
         # first right to left
         envs = []
-        Es = []
         if guess_init_env_data is None:
             guess_init_env_data = {}
         for transpose in [False, True]:
@@ -2476,7 +2475,7 @@ class MPOTransferMatrix:
             if last % L != L - 1:
                 init_env_data['init_RP'] = env.get_RP(last, store=False)
         if calc_E:
-            return Es, init_env_data
+            return E, init_env_data
         # else:
         return init_env_data
 

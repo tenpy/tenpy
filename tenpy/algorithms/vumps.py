@@ -168,8 +168,8 @@ class OneSiteVUMPSEngine(Sweep):
         
         Es, boundary_env_data = MPOTransferMatrix.find_init_LP_RP(H, self.psi, calc_E=True, guess_init_env_data=self.guess_init_env_data) # E is already the energy density.
         self.env = MPOEnvironment(psi, H, psi, **boundary_env_data)
-        self.transfer_matrix_energy = (Es[1], Es[0])
-        
+        self.transfer_matrix_energy = Es
+
         self.make_eff_H()
         theta = self.psi.get_theta(i0, n=self.n_optimize, cutoff=self.S_inv_cutoff) #n_optimize will be 1
         assert self.eff_H1.combine == False
@@ -258,8 +258,8 @@ class OneSiteVUMPSEngine(Sweep):
         self._entropy_approx[i0 % self.psi.L] = entropy_1
         self._entropy_approx[(i0+1) % self.psi.L] = entropy_2
         update_data = {
-            'e_L': self.transfer_matrix_energy[0],
-            'e_R': self.transfer_matrix_energy[1],
+            'e_L': self.transfer_matrix_energy,
+            'e_R': 0,
             'eps_L': eps_L,
             'eps_R': eps_R,
             'e_C1': E0_1,
