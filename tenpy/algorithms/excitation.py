@@ -21,19 +21,24 @@ from ..algorithms.algorithm import Algorithm
 #from vumps_utils import *
 
 # Generalize this to a unit cell?
-def TR_general(A, B, R, W=None):
-    temp = npc.tensordot(A, R, axes=(['vR'], ['vL']))
-    if W is not None:
-        temp = npc.tensordot(W, temp, axes=(['wR', 'p*'], ['wL', 'p']))
-    temp = npc.tensordot(B.conj(), temp, axes=(['vR*', 'p*'], ['vL*', 'p']))
-    return temp.itranspose(['vL', 'wL', 'vL*'])
+def TR_general(As, Bs, R, Ws=None):
+    temp = R.copy()
+    for i in reversed(range(len(As))):
+        temp = npc.tensordot(Bs[i].conj(), temp, axes=(['vR*'], ['vL*']))
+        if Ws is not None:
+            temp = npc.tensordot(Ws[i], temp, axes=(['wR', 'p'], ['wL', 'p*']))
+        temp = npc.tensordot(As[i], temp, axes=(['vR', 'p'], ['vL', 'p*']))
+    return temp
 
-def LT_general(A, B, L, W=None):
-    temp = npc.tensordot(L, A, axes=(['vR'], ['vL']))
-    if W is not None:
-        temp = npc.tensordot(temp, W, axes=(['wR', 'p'], ['wL', 'p*']))
-    temp = npc.tensordot(temp, B.conj(), axes=(['vR*', 'p'], ['vL*', 'p*']))
-    return temp.itranspose(['vR*', 'wR', 'vR'])
+def LT_general(As, Bs, L, Ws=None):
+    temp = L.copy()
+    for i in range(len(As)):
+        temp = npc.tensordot(temp, Bs[i].conj(), axes=(['vR*'], ['vL*']))
+        if Ws is not None:
+            temp = npc.tensordot(temp, Ws[i], axes=(['wR', 'p*'], ['wL', 'p']))
+        temp = npc.tensordot(temp, As[i], axes=(['vR', 'p*'], ['vL', 'p']))
+        #temp.itranspose(['vR*', 'wR', 'vR'])
+    return temp
 
 def construct_orthogonal(orig_AL):
         chi = orig_AL.get_leg('vL').ind_len
@@ -52,26 +57,27 @@ class PlaneWaveExcitations(Algorithm):
         #options = asConfig(options, self.__class__.__name__)
         super().__init__(psi, model, options, **kwargs)
         
-        assert self.psi.L == 1
-        assert self.model.H_MPO.L == 1
+        assert self.psi.L == self.model.H_MPO.L
+        self.L = self.psi.L
         
-        self.AL = self.psi.get_AL(0) #[self.psi.get_AL(i) for i in range(self.psi.L)][0]
-        self.AR = self.psi.get_AR(0) #[self.psi.get_AR(i) for i in range(self.psi.L)][0]
-        self.AC = self.psi.get_AC(0) #[self.psi.get_AC(i) for i in range(self.psi.L)][0]
-        self.C = self.psi.get_C(0) #[self.psi.get_C(i) for i in range(self.psi.L)][0] # C on the left
+        self.ALs = [self.psi.get_AL(i) for i in range(self.L)]
+        self.ARs = [self.psi.get_AR(i) for i in range(self.L)]
+        self.ACs = [self.psi.get_AC(i) for i in range(self.L)]
+        self.Cs = [self.psi.get_C(i) for i in range(self.L)] # C on the left
         self.H = self.model.H_MPO
+        self.Ws = [self.H.get_W(i) for i in range(self.L)]
         self.IdL = self.H.get_IdL(0)
         self.IdR = self.H.get_IdR(-1)
         #self.guess_init_env_data = options.get('init_data', {'init_RP': npc.tensordot(self.C, self.C.conj(), axes=(['vR', 'vL*'])) ,
         #                                                    'init_LP': npc.tensordot(self.C.conj(), self.C, axes=(['vR*', 'vR']))})
         self.guess_init_env_data = options.get('init_data',None)
-        self.dW = self.H.get_W(0).get_leg('wR').ind_len # [TODO] this assumes a single site
-        self.chi = self.AL.get_leg('vL').ind_len
+        self.dW = self.Ws[0].get_leg('wR').ind_len # [TODO] this assumes a single site
+        self.chi = self.ALs[0].get_leg('vL').ind_len
         
         # Construct VL, needed to parametrize - B - as - VL - X -
         #                                       |        |
         # Use prescription under Eq. 85 in Tangent Space lecture notes.
-        self.VL, _ = construct_orthogonal(self.AL) 
+        self.VLs = [construct_orthogonal(self.ALs[i])[0] for i in range(self.L)]
         
         # Get left and right generalized eigenvalues
         boundary_env_data, self.energy_density, _ = MPOTransferMatrix.find_init_LP_RP(self.H, self.psi, calc_E=True, subtraction_gauge='rho', guess_init_env_data=self.guess_init_env_data)
@@ -90,55 +96,62 @@ class PlaneWaveExcitations(Algorithm):
         # Tw[Al,AR]
         self.l_LR = npc.Array.zeros_like(self.LW).itranspose(['vR*','wR', 'vR']) # [TODO] check default ordering to potentially remove transpose
         # Original ordering of boundary vectors ['vR*', 'wR', 'vR']
-        self.l_LR[:,self.IdR,:] = self.C.conj().transpose(['vR*', 'vL*'])
+        self.l_LR[:,self.IdR,:] = self.Cs[0].conj().transpose(['vR*', 'vL*'])
         
         #wL = self.H.get(0).get_leg('wL')
         #wR = wL.conj()
         #self.l_LR = self.C.conj().add_leg(wR, self.IdR, axis=1, label='wR'
         
-        self.CRW = npc.tensordot(self.C, self.RW, axes=(['vR'], ['vL'])) # ['vR','wR', 'vR*']
-        self.LWCc= npc.tensordot(self.LW, self.C.conj(), axes=(['vR*'], ['vL*'])) # ['vL*','wL', 'vL']
+        self.CRW = npc.tensordot(self.Cs[0], self.RW, axes=(['vR'], ['vL'])) # ['vR','wR', 'vR*']
+        self.LWCc= npc.tensordot(self.LW, self.Cs[0].conj(), axes=(['vR*'], ['vL*'])) # ['vL*','wL', 'vL']
         self.r_LR = npc.Array.zeros_like(self.RW) # ['vR','wR', 'vR*']
-        self.r_LR[:,self.IdL,:] = self.C
+        self.r_LR[:,self.IdL,:] = self.Cs[0]
         
         # tTr (l_LR * CRW) = tTr (C C^\dag) = 1 usually
         self.CRW = self.CRW / npc.tensordot(self.l_LR, self.CRW, axes=(['wR', 'vR', 'vR*'], ['wL', 'vL', 'vL*']))
         
         # LWCc -> LWCc / self.e_LR
         self.LWCc = self.LWCc / npc.tensordot(self.LWCc, self.CRW, axes=(['wR', 'vR', 'vR*'], ['wL', 'vL', 'vL*']))
-        print('l_LR * CRW', npc.tensordot(self.l_LR, self.CRW, axes=(['wR', 'vR', 'vR*'], ['wL', 'vL', 'vL*'])))
-        print('LWCc * CRW', npc.tensordot(self.LWCc, self.CRW, axes=(['wR', 'vR', 'vR*'], ['wL', 'vL', 'vL*'])))
-        print('LWCc * r_LR', npc.tensordot(self.LWCc, self.r_LR, axes=(['wR', 'vR', 'vR*'], ['wL', 'vL', 'vL*'])))
+        #print('l_LR * CRW', npc.tensordot(self.l_LR, self.CRW, axes=(['wR', 'vR', 'vR*'], ['wL', 'vL', 'vL*'])))
+        #print('LWCc * CRW', npc.tensordot(self.LWCc, self.CRW, axes=(['wR', 'vR', 'vR*'], ['wL', 'vL', 'vL*'])))
+        #print('LWCc * r_LR', npc.tensordot(self.LWCc, self.r_LR, axes=(['wR', 'vR', 'vR*'], ['wL', 'vL', 'vL*'])))
         self.r_LR = self.r_LR / npc.tensordot(self.LWCc, self.r_LR, axes=(['wR', 'vR', 'vR*'], ['wL', 'vL', 'vL*'])) # Dividing by E_C, GS eigenvalue of HC
-        print('l_LR * CRW', npc.tensordot(self.l_LR, self.CRW, axes=(['wR', 'vR', 'vR*'], ['wL', 'vL', 'vL*'])))
-        print('LWCc * CRW', npc.tensordot(self.LWCc, self.CRW, axes=(['wR', 'vR', 'vR*'], ['wL', 'vL', 'vL*'])))
-        print('LWCc * r_LR', npc.tensordot(self.LWCc, self.r_LR, axes=(['wR', 'vR', 'vR*'], ['wL', 'vL', 'vL*'])))
-        Tr = TR_general(self.AL, self.AR, self.CRW, W=self.H.get_W(0))
-        
+        #print('l_LR * CRW', npc.tensordot(self.l_LR, self.CRW, axes=(['wR', 'vR', 'vR*'], ['wL', 'vL', 'vL*'])))
+        #print('LWCc * CRW', npc.tensordot(self.LWCc, self.CRW, axes=(['wR', 'vR', 'vR*'], ['wL', 'vL', 'vL*'])))
+        #print('LWCc * r_LR', npc.tensordot(self.LWCc, self.r_LR, axes=(['wR', 'vR', 'vR*'], ['wL', 'vL', 'vL*'])))
+        Tr = TR_general(self.ALs, self.ARs, self.CRW, Ws=self.Ws)
         #Should be energy density / E_C
         self.e_LR = (Tr - self.CRW)[0,self.IdL,0]/self.r_LR[0,self.IdL,0] # tTr( LWCc * CRW) for original tensors
         
         # Tw[AR,AL]
         self.r_RL = npc.Array.zeros_like(self.RW).itranspose(['vL', 'wL', 'vL*']) # [TODO] check default ordering to potentially remove transpose
         # Original ordering of boundary vectors ['vL','wL', 'vL*']
-        self.r_RL[:,self.IdL,:] = self.C.conj().transpose(['vR*', 'vL*'])
-        self.LWC = npc.tensordot(self.LW, self.C, axes=(['vR'], ['vL']))
-        self.CcRW= npc.tensordot(self.RW, self.C.conj(), axes=(['vL*'], ['vR*']))
+        self.r_RL[:,self.IdL,:] = self.Cs[0].conj().transpose(['vR*', 'vL*'])
+        self.LWC = npc.tensordot(self.LW, self.Cs[0], axes=(['vR'], ['vL']))
+        self.CcRW= npc.tensordot(self.RW, self.Cs[0].conj(), axes=(['vL*'], ['vR*']))
         self.l_RL = npc.Array.zeros_like(self.LW)
-        self.l_RL[:,self.IdR,:] = self.C
+        self.l_RL[:,self.IdR,:] = self.Cs[0]
         self.LWC = self.LWC / npc.tensordot(self.LWC, self.r_RL, axes=(['wR', 'vR', 'vR*'], ['wL', 'vL', 'vL*']))
         self.CcRW = self.CcRW / npc.tensordot(self.LWC, self.CcRW, axes=(['wR', 'vR', 'vR*'], ['wL', 'vL', 'vL*']))
         self.l_RL = self.l_RL / npc.tensordot(self.l_RL, self.CcRW, axes=(['wR', 'vR', 'vR*'], ['wL', 'vL', 'vL*']))
-        lT = LT_general(self.AR, self.AL, self.LWC, W=self.H.get_W(0))
+        lT = LT_general(self.ARs, self.ALs, self.LWC, Ws=self.Ws)
 
         #Should be energy density / E_C
         self.e_RL = (lT - self.LWC)[0,self.IdR,0]/self.l_RL[0,self.IdR,0]
         
-        self.aligned_H = self.Aligned_Effective_H(self.VL, self.LW, self.RW, self.H.get_W(0))
+        self.aligned_H = [self.Aligned_Effective_H(self.VLs[i], 
+                                                   LT_general(self.ALs[:i], self.ALs[:i], self.LW, Ws=self.Ws[:i]),
+                                                   TR_general(self.ARs[i+1:], self.ARs[i+1:], self.RW, Ws=self.Ws[i+1:]),
+                                                   self.Ws[i]) for i in range(self.L)]
         
-        temp = LT_general(self.VL, self.AC, self.LW, W=self.H.get_W(0))
-        temp = npc.tensordot(temp, self.RW, axes=(['wR', 'vR*'], ['wL', 'vL*']))
-        print('Strange Cancellation Term:', npc.norm(temp))
+        strange = []
+        for i in range(self.L):
+            temp_L = LT_general(self.ALs[:i], self.ALs[:i], self.LW, Ws=self.Ws[:i])
+            temp_R = TR_general(self.ARs[i+1:], self.ARs[i+1:], self.RW, Ws=self.Ws[i+1:])
+            temp = LT_general([self.VLs[i]], [self.ACs[i]], temp_L, Ws=[self.Ws[i]])
+            temp = npc.tensordot(temp, temp_R, axes=(['wR', 'vR*'], ['wL', 'vL*']))
+            strange.append(npc.norm(temp))
+        print('Strange Cancellation Term:', strange)
         
         if 1 >= 1:
             print("-"*20, "initializing excitation", "-"*20)
@@ -150,13 +163,13 @@ class PlaneWaveExcitations(Algorithm):
             print("R norm:", npc.norm(self.RW))
             print("LR:", npc.tensordot(self.LW, self.RW, axes=(['vR*', 'wR', 'vR'],['vL*', 'wL', 'vL'])))
 
-            lT  = LT_general(self.AL, self.AR, self.l_LR, W=self.H.get_W(0))  
-            Tr  = TR_general(self.AL, self.AR, self.r_LR, W=self.H.get_W(0))
+            lT  = LT_general(self.ALs, self.ARs, self.l_LR, Ws=self.Ws)  
+            Tr  = TR_general(self.ALs, self.ARs, self.r_LR, Ws=self.Ws)
             print("LR norm(l-lT):", npc.norm(self.l_LR-lT))
             print("LR norm(r-Tr):", npc.norm(self.r_LR-Tr))
             
-            lT  = LT_general(self.AR, self.AL, self.l_RL, W=self.H.get_W(0))  
-            Tr  = TR_general(self.AR, self.AL, self.r_RL, W=self.H.get_W(0))
+            lT  = LT_general(self.ARs, self.ALs, self.l_RL, Ws=self.Ws)  
+            Tr  = TR_general(self.ARs, self.ALs, self.r_RL, Ws=self.Ws)
             print("RL norm(l-lT):", npc.norm(self.l_RL-lT))
             print("RL norm(r-Tr):", npc.norm(self.r_RL-Tr))
 
@@ -178,23 +191,23 @@ class PlaneWaveExcitations(Algorithm):
             print("l*rr:", npc.tensordot(self.l_RL, self.CcRW,axes=(['vR*', 'wR', 'vR'],['vL*', 'wL', 'vL'])))
             print("ll*rr:", npc.tensordot(self.LWC, self.CcRW,axes=(['vR*', 'wR', 'vR'],['vL*', 'wL', 'vL'])))
             print("ll*r:", npc.tensordot(self.LWC, self.r_RL,axes=(['vR*', 'wR', 'vR'],['vL*', 'wL', 'vL'])))
-            print("e_RL:", self.e_RL)
+            print("e_RL:", self.e_RL)    
         
-    
-        
-    def infinite_sum_TLR(self, X, p):
+    def infinite_sum_TLR(self, X, p, i):
         tol = self.options.get('tol', 1.e-10)
         sum_method = self.options.get('sum_method', 'explicit')
-        B = npc.tensordot(self.VL, X, axes=(['vR'], ['vL']))
-        R = TR_general(B, self.AR, self.RW, W=self.H.get_W(0))
+        B = npc.tensordot(self.VLs[i], X, axes=(['vR'], ['vL']))
+        R = TR_general([B] + self.ARs[i+1:], self.ARs[i:], self.RW, Ws=self.Ws[i:])
+        R = TR_general(self.ALs[0:i], self.ARs[0:i], R, Ws=self.Ws[0:i])
         
         if sum_method=='explicit':
-            R_sum = R = TR_general(B, self.AR, self.RW, W=self.H.get_W(0))
+            R_sum = R 
             for _ in range(100):
-                R = np.exp(-1.0j * p) * TR_general(self.AL, self.AR, R, W=self.H.get_W(0))
+                R = np.exp(-1.0j * p * self.L) * TR_general(self.ALs, self.ARs, R, Ws=self.Ws)
                 R_sum.iadd_prefactor_other(1., R)
             return R_sum
         elif 'GMRES' in sum_method:
+            assert False
             class helper_matvec(NpcLinearOperator):
                 def __init__ (self, excit, AL, AR, W, sum_method):
                     self.AL = AL
@@ -220,19 +233,21 @@ class PlaneWaveExcitations(Algorithm):
             
             
         
-    def infinite_sum_TRL(self, X, p):
+    def infinite_sum_TRL(self, X, p, i):
         tol = self.options.get('tol', 1.e-10)
         sum_method = self.options.get('sum_method', 'explicit')
-        B = npc.tensordot(self.VL, X, axes=(['vR'], ['vL']))
-        L = LT_general(B, self.AL, self.LW, W=self.H.get_W(0))
+        B = npc.tensordot(self.VLs[i], X, axes=(['vR'], ['vL']))
+        L = LT_general(self.ALs[:i] + [B], self.ALs[:i+1], self.LW, Ws=self.Ws[:i+1])
+        L = LT_general(self.ARs[i+1:], self.ALs[i+1:], L, Ws=self.Ws[i+1:])
         
         if sum_method=='explicit':
             L_sum = L
             for _ in range(100):
-                L = np.exp(1.0j * p) * LT_general(self.AR, self.AL, L, W=self.H.get_W(0))
+                L = np.exp(1.0j * p * self.L) * LT_general(self.ARs, self.ALs, L, Ws=self.Ws)
                 L_sum.iadd_prefactor_other(1., L)
             return L_sum
         elif 'GMRES' in sum_method:
+            assert False
             class helper_matvec(NpcLinearOperator):
                 def __init__ (self, excit, AL, AR, W, sum_method):
                     self.AL = AL
@@ -266,42 +281,49 @@ class PlaneWaveExcitations(Algorithm):
         
         def matvec(self, vec):
             B = npc.tensordot(self.VL, vec, axes=(['vR'], ['vL']))
-            X_out = LT_general(B, self.VL, self.LW, W=self.W)
+            X_out = LT_general([B], [self.VL], self.LW, Ws=[self.W])
             X_out = npc.tensordot(X_out, self.RW, axes=(['vR', 'wR'], ['vL', 'wL']))
             X_out.ireplace_labels(['vR*', 'vL*'], ['vL', 'vR'])
             
             return X_out
     
     class Unaligned_Effective_H(NpcLinearOperator):
-        def __init__(self, outer, AL, AR, VL, LW, RW, W, p):
-            self.AL = AL
-            self.AR = AR
-            self.VL = VL
+        def __init__(self, outer, ALs, ARs, VLs, LW, RW, Ws, p, i):
+            self.ALs = ALs
+            self.ARs = ARs
+            self.VLs = VLs
             self.LW = LW
             self.RW = RW
-            self.W = W
+            self.Ws = Ws
             self.p = p
             self.outer = outer
+            self.i = i
             
         def matvec(self, vec):
-            X_out_left = self.outer.infinite_sum_TLR(vec, self.p)
-            LW_VL = LT_general(self.AL, self.VL, self.LW, W=self.W)
-            X_out_left = np.exp(-1.0j*self.p) * npc.tensordot(LW_VL, X_out_left, axes=(['vR', 'wR'], ['vL', 'wL']))
+            X_out_left = self.outer.infinite_sum_TLR(vec, self.p, self.i)
+            X_out_left = TR_general(self.ALs[self.i+1:], self.ARs[self.i+1:], X_out_left, Ws=self.Ws[self.i+1:])
+            LW_VL = LT_general(self.ALs[:self.i+1], self.ALs[:self.i] + [self.VLs[self.i]], self.LW, Ws=self.Ws[:self.i+1])
+            X_out_left = np.exp(-1.0j*self.p*self.outer.L) * npc.tensordot(LW_VL, X_out_left, axes=(['vR', 'wR'], ['vL', 'wL']))
             X_out_left.ireplace_labels(['vR*', 'vL*'], ['vL', 'vR'])
             
-            X_out_right = self.outer.infinite_sum_TRL(vec, self.p)
-            X_out_right = LT_general(self.AR, self.VL, X_out_right, W=self.W)
-            X_out_right = np.exp(1.0j*self.p) * npc.tensordot(X_out_right, self.RW, axes=(['vR', 'wR'], ['vL', 'wL']))
+            X_out_right = self.outer.infinite_sum_TRL(vec, self.p, self.i)
+            X_out_right = LT_general(self.ARs[:self.i+1], self.ALs[:self.i] + [self.VLs[self.i]], X_out_right, Ws=self.Ws[:self.i+1])
+            T_RW = TR_general(self.ARs[self.i+1:], self.ARs[self.i+1:], self.RW, Ws=self.Ws[self.i+1:])
+            X_out_right = np.exp(1.0j*self.p*self.outer.L) * npc.tensordot(X_out_right, T_RW, axes=(['vR', 'wR'], ['vL', 'wL']))
             X_out_right.ireplace_labels(['vR*', 'vL*'], ['vL', 'vR'])
                         
             return X_out_left + X_out_right
 
     def diagonalize(self, p, n_bands=1):
-        self.unaligned_H = self.Unaligned_Effective_H(self, self.AL, self.AR, self.VL, self.LW, self.RW, self.H.get_W(0), p)
-        effective_H = SumNpcLinearOperator(self.aligned_H, self.unaligned_H)
+        Es = []
+        Xs = []
+        for i in range(self.L):
+            self.unaligned_H = self.Unaligned_Effective_H(self, self.ALs, self.ARs, self.VLs, self.LW, self.RW, self.Ws, p, i)
+            effective_H = SumNpcLinearOperator(self.aligned_H[i], self.unaligned_H)
         
-        lanczos_options = self.options.subconfig('lanczos_options')
-        E, theta, N = LanczosGroundState(effective_H, npc.Array.from_ndarray_trivial(np.eye(10)).iset_leg_labels(['vL', 'vR']), lanczos_options).run()
-        
-        return E, theta
+            lanczos_options = self.options.subconfig('lanczos_options')
+            E, X, N = LanczosGroundState(effective_H, npc.Array.from_ndarray_trivial(np.eye(10)).iset_leg_labels(['vL', 'vR']), lanczos_options).run()
+            Es.append(E)
+            Xs.append(X)
+        return Es, Xs
         
