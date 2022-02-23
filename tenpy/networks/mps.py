@@ -2177,7 +2177,7 @@ class MPS:
         JW_from_right : bool | None
             If set to True, a JW-string is coming in from the right. Corresponding `JW` operators
             are added to `ops`.
-            If `None`, use
+            If `None`, use `True` for odd number of operators which need Jordan-Wigner strings.
 
         Returns
         -------
@@ -2987,7 +2987,8 @@ class MPS:
         Parameters
         ----------
         renormalize: bool
-            Whether a change in the norm should be discarded or used to update :attr:`norm`.
+            Whether a change in the norm should be discarded (True),
+            or used to update :attr:`norm` (False).
         cutoff : float | None
             Cutoff of singular values used in the SVDs.
         envs_to_update : None | list of :class:`MPSEnvironment`
@@ -3476,6 +3477,8 @@ class MPS:
         """
         i = self._to_valid_index(i)
         if isinstance(op, str):
+            if self.sites[i].op_needs_JW(op):
+                raise ValueError("Can't apply single operator that needs Jordan-Wigner string!")
             op = self.sites[i].get_op(op)
         n = op.rank // 2  # same as int(rank/2)
         if n == 1:
@@ -3518,7 +3521,11 @@ class MPS:
         intermediate calls to :meth:`canonical_form` inside the loop::
 
             for i, op in enumerate(ops):
-                self.apply_local_op(i, op, unitary, renormalize, cutoff)
+                self.apply_local_op(i, op, unitary, renormalize)
+
+        .. warning ::
+            This function does *not* automatically add Jordan-Wigner strings!
+            For correct handling of fermions, use :meth:`apply_local_term` instead.
 
         Parameters
         ----------
@@ -3551,6 +3558,48 @@ class MPS:
             # actually apply the operator at site i
             self._B[i] = npc.tensordot(op, self._B[i], axes=['p*', 'p'])
         if not unitary:
+            self.canonical_form(renormalize=renormalize)
+
+    def apply_local_term(self,
+                         term,
+                         autoJW=True,
+                         i_offset=0,
+                         canonicalize=True,
+                         renormalize=False):
+        """Similar as :meth:`apply_local_op`, but for a whole `term` acting on multiple sites.
+
+        Note that this destroys the canonical form if the local operator is non-unitary.
+        Therefore, this function calls :meth:`canonical_form` by default.
+
+        Parameters
+        ----------
+        term : list of (str, int)
+            List of tuples ``op, i`` where `i` is the MPS index of the site the operator
+            named `op` acts on.
+            The order inside `term` determines the order in which they act
+            (in the mathematical convention: the last operator in `term` is right-most,
+            so it acts first on a ket).
+        autoJW : bool
+            If True (default), automatically insert Jordan Wigner strings for Fermions as needed.
+        i_offset : int
+            Offset to be added to the site-indices in the `term`.
+        canonicalize : bool
+            Whether to call :meth:`canonical_form` with the `renormalize` argument in the end.
+        renormalize : bool
+            Whether a change in the norm should be discarded (True),
+            or used to update :attr:`norm` (False).
+            Ignored if ``canonicalize=False``.
+        """
+        ops, i_min, has_extra_JW = self._term_to_ops_list(term, autoJW, i_offset, False)
+        if has_extra_JW:
+            raise ValueError("term has extra Jordan-Wigner string on the left!")
+        for j, op in enumerate(ops):
+            i = self._to_valid_index(j + i_min)  # i_min includes i_offset!
+            opB = npc.tensordot(op, self._B[i], axes=['p*', 'p'])
+            self.set_B(i, opB, self.form[i])
+            if opB.norm() < 1.e-12:
+                raise ValueError(f"Applying the operator {op!s} on site {i:d} destroys state!")
+        if canonicalize:
             self.canonical_form(renormalize=renormalize)
 
     def perturb(self, randomize_params=None, close_1=True, canonicalize=None):

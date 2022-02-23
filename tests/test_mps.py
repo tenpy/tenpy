@@ -294,9 +294,17 @@ def test_apply_op(bc, eps=1.e-13):
     psi1 = psi0.copy()
     psi1.apply_local_op(1, 'Sigmax')  #unitary
     psi1_expect = mps.MPS.from_singlets(s, 3, [(0, 2)], lonely=[1], bc=bc, lonely_state='down')
+    assert abs(psi1_expect.overlap(psi1) - 1.) < eps
     psi1 = psi0.copy()
     psi1.apply_local_op(1, 'Sm')  #non-unitary
     assert abs(psi1_expect.overlap(psi1) - 1.) < eps
+
+    psi1 = psi0.copy()
+    psi1.apply_local_term([('Sigmax', 1)])
+    assert abs(psi1_expect.overlap(psi1) - 1.) < eps
+    psi1 = psi0.copy()
+    psi1.apply_local_term([('Sigmax', 0), ('Sigmax', 2)])  #unitary
+    assert abs(1. - (- psi0.overlap(psi1))) < eps  # expect  -1 * |psi0>
 
     psi2 = psi0.copy()
     th = psi2.get_theta(0, 3).to_ndarray().reshape((8, ))
