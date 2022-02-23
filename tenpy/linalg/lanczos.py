@@ -186,9 +186,9 @@ class GMRES():
         self.options = options = asConfig(options, self.__class__.__name__)
         self.N_min = options.get('N_min', 5)
         self.N_max = options.get('N_max', 20)
-        self.restart = options.get('restart', 20)
-        self.res = self.options.get('res', 1.e-12)
-        self.A = A.copy()
+        self.restart = options.get('restart', 10)
+        self.res = self.options.get('res', 1.e-8)
+        self.A = A
         self.b = b.copy()
         self.x = x.copy() # Initial guess
         self.rs = [self.b.copy()]
@@ -228,6 +228,8 @@ class GMRES():
                 self.x.iadd_prefactor_other(self.y[i], self.qs[i])
             if not converged:
                 self.reset()
+            else:
+                break
         
         return self.x, npc.norm(self.A.matvec(self.x) - self.b) / self.b_norm, self.total_error, self.total_iters
     

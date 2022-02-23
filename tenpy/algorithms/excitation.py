@@ -194,6 +194,31 @@ class PlaneWaveExcitations(Algorithm):
                 R = np.exp(-1.0j * p) * TR_general(self.AL, self.AR, R, W=self.H.get_W(0))
                 R_sum.iadd_prefactor_other(1., R)
             return R_sum
+        elif 'GMRES' in sum_method:
+            class helper_matvec(NpcLinearOperator):
+                def __init__ (self, excit, AL, AR, W, sum_method):
+                    self.AL = AL
+                    self.AR = AR
+                    self.W = W
+                    self.sum_method = sum_method
+                    self.excit = excit
+                def matvec(self, vec):
+                    Tr = TR_general(self.AL, self.AR, vec, W=self.W)
+                    if 'reg' in self.sum_method:
+                        lr = npc.tensordot(self.excit.l_LR, vec, axes=(['vR', 'wR', 'vR*'], ['vL', 'wL', 'vL*']))
+                        llr = npc.tensordot(self.excit.LWCc, vec, axes=(['vR', 'wR', 'vR*'], ['vL', 'wL', 'vL*']))
+                        T1_r = self.excit.r_LR * ((self.excit.e_LR-1) * lr + llr) + self.excit.CRW * lr
+                        Tr = Tr - T1_r
+                    return vec - np.exp(-1.0j * p) * Tr
+                
+            tm_op = helper_matvec(self, self.AL, self.AR, self.H.get_W(0), sum_method)
+            GMRES_options = self.options.subconfig('GMRES_options')
+            R_sum, _, _, _ = GMRES(tm_op, npc.Array.zeros_like(R), R, GMRES_options).run()
+            return R_sum
+        else:
+            raise ValueError('Sum method', sum_method, 'not recognized!')
+            
+            
         
     def infinite_sum_TRL(self, X, p):
         tol = self.options.get('tol', 1.e-10)
@@ -207,6 +232,30 @@ class PlaneWaveExcitations(Algorithm):
                 L = np.exp(1.0j * p) * LT_general(self.AR, self.AL, L, W=self.H.get_W(0))
                 L_sum.iadd_prefactor_other(1., L)
             return L_sum
+        elif 'GMRES' in sum_method:
+            class helper_matvec(NpcLinearOperator):
+                def __init__ (self, excit, AL, AR, W, sum_method):
+                    self.AL = AL
+                    self.AR = AR
+                    self.W = W
+                    self.sum_method = sum_method
+                    self.excit = excit
+                    
+                def matvec(self, vec):
+                    lT = LT_general(self.AR, self.AL, vec, W=self.W)
+                    if 'reg' in self.sum_method:
+                        lr = npc.tensordot(vec, self.excit.r_RL, axes=(['vR', 'wR', 'vR*'], ['vL', 'wL', 'vL*']))
+                        lrr = npc.tensordot(vec, self.excit.CcRW, axes=(['vR', 'wR', 'vR*'], ['vL', 'wL', 'vL*']))
+                        T1_l = self.excit.l_RL * ((self.excit.e_RL-1) * lr + lrr) + self.excit.LWC * lr
+                        lT = lT - T1_l
+                    return vec - np.exp(1.0j * p) * lT
+        
+            tm_op = helper_matvec(self, self.AL, self.AR, self.H.get_W(0), sum_method)
+            GMRES_options = self.options.subconfig('GMRES_options')
+            L_sum, _, _, _ = GMRES(tm_op, npc.Array.zeros_like(L), L, GMRES_options).run()
+            return L_sum
+        else:
+            raise ValueError('Sum method', sum_method, 'not recognized!')       
         
     class Aligned_Effective_H(NpcLinearOperator):
         def __init__(self, VL, LW, RW, W):
