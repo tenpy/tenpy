@@ -35,6 +35,18 @@ def LT_general(A, B, L, W=None):
     temp = npc.tensordot(temp, B.conj(), axes=(['vR*', 'p'], ['vL*', 'p*']))
     return temp.itranspose(['vR*', 'wR', 'vR'])
 
+def construct_orthogonal(orig_AL):
+        chi = orig_AL.get_leg('vL').ind_len
+        AL = orig_AL.combine_legs(['vL', 'p'], qconj=[+1])
+        Q, R = npc.qr(AL, mode='complete', inner_labels=['vR', 'vL'])
+        n_rows = R.shape[1]
+        V_grouped = Q[:,chi:] # [TODO] Karthik did this differently, but I think this is right?
+        X = R[chi:,:]
+        VL = V_grouped.split_legs()
+
+        assert npc.norm(npc.tensordot(VL, orig_AL.conj(), axes=(['vL', 'p'], ['vL*', 'p*']))) < 1.e-14
+        return VL, X
+    
 class PlaneWaveExcitations(Algorithm):
     def __init__(self, psi, model, options, **kwargs):
         #options = asConfig(options, self.__class__.__name__)
@@ -43,10 +55,10 @@ class PlaneWaveExcitations(Algorithm):
         assert self.psi.L == 1
         assert self.model.H_MPO.L == 1
         
-        self.ALs = [self.psi.get_AL(i) for i in range(self.psi.L)]
-        self.AR = [self.psi.get_AR(i) for i in range(self.psi.L)]
-        self.AC = [self.psi.get_AC(i) for i in range(self.psi.L)]
-        self.C = [self.psi.get_C(i) for i in range(self.psi.L)] # C on the left
+        self.AL = self.psi.get_AL(0) #[self.psi.get_AL(i) for i in range(self.psi.L)][0]
+        self.AR = self.psi.get_AR(0) #[self.psi.get_AR(i) for i in range(self.psi.L)][0]
+        self.AC = self.psi.get_AC(0) #[self.psi.get_AC(i) for i in range(self.psi.L)][0]
+        self.C = self.psi.get_C(0) #[self.psi.get_C(i) for i in range(self.psi.L)][0] # C on the left
         self.H = self.model.H_MPO
         self.IdL = self.H.get_IdL(0)
         self.IdR = self.H.get_IdR(-1)
@@ -59,7 +71,7 @@ class PlaneWaveExcitations(Algorithm):
         # Construct VL, needed to parametrize - B - as - VL - X -
         #                                       |        |
         # Use prescription under Eq. 85 in Tangent Space lecture notes.
-        self.construct_orthogonal() 
+        self.VL, _ = construct_orthogonal(self.AL) 
         
         # Get left and right generalized eigenvalues
         boundary_env_data, self.energy_density, _ = MPOTransferMatrix.find_init_LP_RP(self.H, self.psi, calc_E=True, subtraction_gauge='rho', guess_init_env_data=self.guess_init_env_data)
@@ -121,7 +133,6 @@ class PlaneWaveExcitations(Algorithm):
 
         #Should be energy density / E_C
         self.e_RL = (lT - self.LWC)[0,self.IdR,0]/self.l_RL[0,self.IdR,0]
-        self.construct_orthogonal()
         
         self.aligned_H = self.Aligned_Effective_H(self.VL, self.LW, self.RW, self.H.get_W(0))
         
@@ -169,16 +180,7 @@ class PlaneWaveExcitations(Algorithm):
             print("ll*r:", npc.tensordot(self.LWC, self.r_RL,axes=(['vR*', 'wR', 'vR'],['vL*', 'wL', 'vL'])))
             print("e_RL:", self.e_RL)
         
-    def construct_orthogonal(self):
-        AL = self.AL
-        #chi = AL.get_leg['vL'].ind_len
-        AL = AL.combine_legs(['vL', 'p'], qconj=[+1])
-        Q, R = npc.qr(AL, mode='complete', inner_labels=['vR', 'vL'])
-        n_rows = R.shape[1]
-        V_grouped = Q[:,self.chi:] # [TODO] Karthik did this differently, but I think this is right?
-        self.VL = V_grouped.split_legs()
-
-        assert npc.norm(npc.tensordot(self.VL, self.AL.conj(), axes=(['vL', 'p'], ['vL*', 'p*']))) < 1.e-14
+    
         
     def infinite_sum_TLR(self, X, p):
         tol = self.options.get('tol', 1.e-10)
@@ -250,7 +252,7 @@ class PlaneWaveExcitations(Algorithm):
         effective_H = SumNpcLinearOperator(self.aligned_H, self.unaligned_H)
         
         lanczos_options = self.options.subconfig('lanczos_options')
-        E, theta, N = LanczosGroundState(effective_H, npc.Array.from_ndarray_trivial(np.random.rand(10,10), labels=['vL', 'vR']), lanczos_options).run()
+        E, theta, N = LanczosGroundState(effective_H, npc.Array.from_ndarray_trivial(np.eye(10)).iset_leg_labels(['vL', 'vR']), lanczos_options).run()
         
         return E, theta
         
