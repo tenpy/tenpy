@@ -1,6 +1,6 @@
 """Event handler.
 
-The :class:`EventHandler` is basically just holds a list of functions
+The :class:`EventHandler` just holds a list of functions
 which can get called once a certain "event" happens.
 Examples are given in the class doc-string.
 """
@@ -219,6 +219,5 @@ class EventHandler:
         return None
 
     def _prepare_emit(self):
-        # TODO: logging?
         # sort listeners: highest priority first
         self.listeners = sorted(self.listeners, key=lambda listener: -listener.priority)

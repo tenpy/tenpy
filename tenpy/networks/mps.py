@@ -2987,6 +2987,7 @@ class MPS:
             # also neet to calculate new singular values on the very right
             U, S, VR_segment = npc.svd(M.combine_legs(['vL'] + self._p_label),
                                        cutoff=cutoff,
+                                       qtotal_LR=[M.qtotal, None],
                                        inner_labels=['vR', 'vL'])
             S /= np.linalg.norm(S)
             self.set_SR(L - 1, S)
@@ -3007,6 +3008,7 @@ class MPS:
             M = npc.tensordot(M, U.scale_axis(S, 'vR'), axes=['vR', 'vL'])
             U, S, V = npc.svd(M.combine_legs(['vR'] + self._p_label, qconj=-1),
                               cutoff=cutoff,
+                              qtotal_LR=[None, M.qtotal],
                               inner_labels=['vR', 'vL'])
             S = S / np.linalg.norm(S)  # normalize
             self.set_SL(i, S)
@@ -3016,27 +3018,16 @@ class MPS:
             self._B[0] *= U[0, 0]  # just a trivial phase factor, but better keep it
         # done with getting to canonical form
         if envs_to_update is not None and self.bc == 'segment':
-            VR = VR_segment
             for env in envs_to_update:
                 update_ket = env.ket is self
                 update_bra = env.bra is self
                 if not (update_ket or update_bra):
-                    raise ValueError("called `psi.canonical_from_finite(..., envs_to_update), "
+                    raise ValueError("called `psi.canonical_form_finite(..., envs_to_update), "
                                      "but (one of) the environment doesn't contain that `psi`")
                 env.clear()
                 if self.bc == 'segment':
-                    LP = env.get_LP(0)
-                    if update_ket:
-                        LP = npc.tensordot(LP, U, axes=['vR', 'vL'])
-                    if update_bra:
-                        LP = npc.tensordot(U.conj(), LP, axes=['vL*', 'vR*'])
-                    env.set_LP(0, LP, env.get_LP_age(0))
-                    RP = env.get_RP(env.L - 1)
-                    if update_ket:
-                        RP = npc.tensordot(VR, RP, axes=['vR', 'vL'])
-                    if update_bra:
-                        RP = npc.tensordot(RP, VR.conj(), axes=['vL*', 'vR*'])
-                    env.set_RP(env.L - 1, RP, env.get_RP_age(env.L - 1))
+                    env._update_gauge_LP(0, U, update_bra, update_ket)
+                    env._update_gauge_RP(env.L - 1, VR_segment, update_bra, update_ket)
         if self.bc == 'segment':
             old_UL, old_VR = self.segment_boundaries
             if old_UL is not None:
@@ -3449,9 +3440,13 @@ class MPS:
         if n == 1:
             opB = npc.tensordot(op, self._B[i], axes=['p*', 'p'])
             self.set_B(i, opB, self.form[i])
+            if opB.norm() < 1.e-12:
+                raise ValueError(f"Applying the operator {op!s} on site {i:d} destroys state!")
         else:
             th = self.get_theta(i, n)
             th = npc.tensordot(op, th, axes=[pstar, p])
+            if th.norm() < 1.e-12:
+                raise ValueError(f"Applying the operator {op!s} on site {i:d} destroys state!")
             # use MPS.from_full to split the sites
             split_th = self.from_full(self.sites[i:i + n], th, None, cutoff, False, 'segment',
                                       (self.get_SL(i), self.get_SR(i + n - 1)))
@@ -4677,9 +4672,32 @@ class MPSEnvironment:
         """
         if last is None:
             last = self.L - 1
-        data = {'init_LP': self.get_LP(first, True), 'init_RP': self.get_RP(last, True)}
-        data['age_LP'] = self.get_LP_age(first)
-        data['age_RP'] = self.get_RP_age(last)
+        LP = self.get_LP(first, True)
+        RP = self.get_RP(last, True)
+        # possibly apply dagger of segment_boundaries to make sure it's possible to re-initialize
+        bra_U, bra_V = self.bra.segment_boundaries
+        ket_U, ket_V = self.ket.segment_boundaries
+        if first == 0:
+            if ket_U is not None:
+                LP = npc.tensordot(LP, ket_U.conj(), axes=['vR', 'vR*'])
+                LP.ireplace_label('vL*', 'vR')
+            if bra_U is not None:
+                LP = npc.tensordot(bra_U, LP, axes=['vR', 'vR*'])
+                LP.ireplace_label('vL', 'vR*')
+        if last == self.ket.L - 1:
+            if ket_V is not None:
+                RP = npc.tensordot(ket_V.conj(), RP, axes=['vL*', 'vL'])
+                RP.ireplace_label('vR*', 'vL')
+        if last == self.bra.L - 1:
+            if bra_V is not None:
+                RP = npc.tensordot(RP, bra_V, axes=['vL*', 'vL'])
+                RP.ireplace_label('vR', 'vL*')
+        data = {
+            'init_LP': LP,
+            'age_LP': self.get_LP_age(first),
+            'init_RP': RP,
+            'age_RP': self.get_RP_age(last),
+        }
         return data
 
     def full_contraction(self, i0):
@@ -4807,6 +4825,30 @@ class MPSEnvironment:
         if i >= self.L or i < 0:
             raise KeyError("i = {0:d} out of bounds for MPSEnvironment".format(i))
         return i
+
+    def _update_gauge_LP(self, i, U, update_bra, update_ket):
+        """Update LP[i] following the MPS gauge ``A[i-1] A[i] -> (A[i-1] U) (Udagger A[i])``."""
+        assert update_bra or update_ket
+        if not self.has_LP(i):
+            return
+        LP = self.get_LP(i)
+        if update_ket:
+            LP = npc.tensordot(LP, U, axes=['vR', 'vL'])
+        if update_bra:
+            LP = npc.tensordot(U.conj(), LP, axes=['vL*', 'vR*'])
+        self.set_LP(i, LP, self.get_LP_age(i))
+
+    def _update_gauge_RP(self, i, V, update_bra, update_ket):
+        """Update RP[i] following the MPS gauge ``B[i] B[i+1] -> (B[i] Vdagger) (V B[i+1])``."""
+        assert update_bra or update_ket
+        if not self.has_RP(i):
+            return
+        RP = self.get_RP(i)
+        if update_ket:
+            RP = npc.tensordot(V, RP, axes=['vR', 'vL'])
+        if update_bra:
+            RP = npc.tensordot(RP, V.conj(), axes=['vL*', 'vR*'])
+        self.set_RP(i, RP, self.get_RP_age(i))
 
 
 class TransferMatrix(sparse.NpcLinearOperator):
@@ -4949,7 +4991,7 @@ class TransferMatrix(sparse.NpcLinearOperator):
             raise ValueError("TransferMatrix has non-zero qtotal for Z_N charges. "
                              "It can have valid eigenvectors, but they will break the Z_N charge. "
                              "To avoid that, you can enlarge the unit cell of the MPS "
-                             "by a factor of " + str(lcm(enlarge_factors)))
+                             "by a factor of " + str(enlarge_factors))
 
     @classmethod
     def from_Ns_Ms(cls, bra_N, ket_M, transpose=False, charge_sector=0, p_label=['p']):

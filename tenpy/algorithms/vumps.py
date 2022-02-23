@@ -166,7 +166,7 @@ class OneSiteVUMPSEngine(Sweep):
         H = self.model.H_MPO
         psi = self.psi
         
-        Es, boundary_env_data = MPOTransferMatrix.find_init_LP_RP(H, self.psi, calc_E=True, guess_init_env_data=self.guess_init_env_data) # E is already the energy density.
+        boundary_env_data, Es, _ = MPOTransferMatrix.find_init_LP_RP(H, self.psi, calc_E=True, guess_init_env_data=self.guess_init_env_data) # E is already the energy density.
         self.env = MPOEnvironment(psi, H, psi, **boundary_env_data)
         self.transfer_matrix_energy = Es
 

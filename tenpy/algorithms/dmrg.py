@@ -1141,6 +1141,64 @@ class DMRGEngine(Sweep):
         self.trunc_err_list.append(err.eps)
         self.E_trunc_list.append(E_trunc)
 
+        if self.psi.bc == 'segment':
+            self.update_segment_boundaries()
+
+    def update_segment_boundaries(self):
+        """Update the singular values at the boundaries of the segment.
+
+        This method is called at the end of :meth:`post_update_local` for 'segment' boundary MPS.
+        It just updates the singular values on the very left/right end of the MPS segment.
+        """
+        psi = self.psi
+        if self.i0 == 0 and self.move_right:
+            # need to update bond to the left of site j=0
+            j = 0
+            A = psi.get_B(j, form='A')
+            th = psi.get_B(j, form='Th')
+            U, S, V = npc.svd(th.combine_legs(psi._p_label + ['vR'], qconj=-1),
+                              cutoff=0,
+                              qtotal_LR=[None, th.qtotal],
+                              inner_labels=['vR', 'vL'])
+            S = S / np.linalg.norm(S)
+            psi.set_SL(j, S)
+            A_new = npc.tensordot(U.conj().replace_label('vR*', 'vL'), A, ['vL*', 'vL'])
+            psi.set_B(j, A_new, form='A')
+
+            old_UL, old_VR = psi.segment_boundaries
+            new_UL = npc.tensordot(old_UL, U, axes=['vR', 'vL'])
+            psi.segment_boundaries = (new_UL, old_VR)
+
+            for env in self._all_envs:
+                update_ket = env.ket is psi
+                update_bra = env.bra is psi
+                env._update_gauge_LP(j, U, update_bra, update_ket)
+            # No need to clear the environments on the other bonds!
+
+        elif self.i0 == psi.L - self.EffectiveH.length and not self.move_right:
+            # need to update bond on the right of site j=L-1
+            j = psi.L - 1
+            B = psi.get_B(j, form='B')
+            th = psi.get_B(j, form='Th')
+            U, S, V = npc.svd(th.combine_legs(['vL'] + psi._p_label, qconj=+1),
+                              cutoff=0,
+                              qtotal_LR=[th.qtotal, None],
+                              inner_labels=['vR', 'vL'])
+            S = S / np.linalg.norm(S)
+            psi.set_SR(j, S)
+            B_new = npc.tensordot(B, V.conj().replace_label('vL*', 'vR'), ['vR', 'vR*'])
+            psi.set_B(j, B_new, form='B')
+
+            old_UL, old_VR = psi.segment_boundaries
+            new_VR = npc.tensordot(V, old_VR, axes=['vR', 'vL'])
+            psi.segment_boundaries = (old_UL, new_VR)
+
+            for env in self._all_envs:
+                update_ket = env.ket is psi
+                update_bra = env.bra is psi
+                env._update_gauge_RP(j, V, update_bra, update_ket)
+            # No need to clear the environments on the other bonds!
+
     def diag(self, theta_guess):
         """Diagonalize the effective Hamiltonian represented by self.
 
