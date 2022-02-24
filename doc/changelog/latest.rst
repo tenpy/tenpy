@@ -37,6 +37,8 @@ Added
 - :meth:`~tenpy.networks.mps.MPS.extract_enlarged_segment` to simplify measurements outside the segment with segment DMRG.
 - :meth:`~tenpy.networks.mps.MPS.apply_local_term` to correctly handle Jordan-Wigner strings.
 - :func:`~tenpy.simulations.simulation.init_simulation` and :func:`~tenpy.simulations.simulation.init_simulation_from_checkpoint` for debugging or post-simulation measurement.
+- :meth:`tenpy.networks.site.Site.charge_to_JW_sign` and :attr:`~tenpy.networks.site.Site.charge_to_JW_parity` to allow
+  :meth:`~tenpy.networks.mps.MPS.apply_local_op` with a fermionic operator on an MPS.
 
 Changed
 ^^^^^^^
