@@ -510,7 +510,8 @@ class Site(Hdf5Exportable):
         """
         charge_to_JW_parity = getattr(self, 'charge_to_JW_parity', None)
         if charge_to_JW_parity is not None:
-            parity = np.mod(np.sum(np.asarray(charges) * charge_to_JW_parity, axis=-1), 2)
+            charges = self.leg.chinfo.make_valid(charges)
+            parity = np.mod(np.sum(charges * charge_to_JW_parity, axis=-1), 2)
             # parity has values in [0, 1]
             return 1. - 2. * parity  # values +/- 1, same as (-1)**parity
         raise ValueError("`charge_to_JW_parity` not defined!")

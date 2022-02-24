@@ -1094,7 +1094,7 @@ class MPS:
             self.set_B(i, new_B, form=new_form)
 
     def increase_L(self, new_L=None):
-        """Modify `self` inplace to enlarge the MPS unit cell; in place.
+        """Modify `self` inplace to enlarge the MPS unit cell.
 
         .. deprecated :: 0.5.1
             This method will be removed in version 1.0.0.
@@ -1520,7 +1520,7 @@ class MPS:
         return self.chinfo.make_valid(qtotal)
 
     def gauge_total_charge(self, qtotal=None, vL_leg=None, vR_leg=None):
-        """Gauge the legcharges of the virtual bonds such that the MPS has a total `qtotal`.
+        """Gauge the legcharges of the virtual bonds s.t. MPS has given `qtotal`; in place.
 
         Parameters
         ----------
@@ -1990,6 +1990,8 @@ class MPS:
             For an infinite MPS, ``<self|other>`` is the overlap per unit cell, i.e.,
             the largest eigenvalue of the TransferMatrix.
         """
+        if self.bc != other.bc:
+            raise ValueError("can't take overlap between MPS with differen bc")
         if self.finite:
             if ignore_form:
                 # Use TransferMatrix with option to ignore the form
@@ -2962,7 +2964,7 @@ class MPS:
         return err
 
     def canonical_form(self, **kwargs):
-        """Bring self into canonical 'B' form, (re-)calculate singular values.
+        """Bring self into canonical 'B' form, (re-)calculate singular values; in place.
 
         Simply calls :meth:`canonical_form_finite` or :meth:`canonical_form_infinite2`.
         Keyword arguments are passed on to the corrsponding specialized versions.
@@ -2973,7 +2975,7 @@ class MPS:
             return self.canonical_form_infinite2(**kwargs)
 
     def canonical_form_finite(self, renormalize=True, cutoff=0., envs_to_update=None):
-        """Bring a finite (or segment) MPS into canonical form (in place).
+        """Bring a finite (or segment) MPS into canonical form; in place.
 
         If any site is in :attr:`form` ``None``, it does *not* use any of the singular values `S`
         (for 'finite' boundary conditions, or only the very left `S` for 'segment' b.c.).
@@ -3097,7 +3099,7 @@ class MPS:
         self.canonical_form_infinite1(**kwargs)
 
     def canonical_form_infinite1(self, renormalize=True, tol_xi=1.e6):
-        """Bring an infinite MPS into canonical form (in place).
+        """Bring an infinite MPS into canonical form; in place.
 
         If any site is in :attr:`form` ``None``, it does *not* use any of the singular values `S`.
         If all sites have a `form`, it respects the `form` to ensure
@@ -3184,7 +3186,7 @@ class MPS:
 
     def canonical_form_infinite2(self, renormalize=True, tol=1.e-15, arnoldi_params=None,
                                  cutoff=1.e-15):
-        """Convert infinite MPS to canonical form.
+        """Convert infinite MPS to canonical form; in place.
 
         Implementation following Algorithm 1,2 in :cite:`vanderstraeten2019`.
 
@@ -3449,7 +3451,7 @@ class MPS:
         return psi
 
     def apply_local_op(self, i, op, unitary=None, renormalize=False, cutoff=1.e-13):
-        """Apply a local (one or multi-site) operator to `self`.
+        """Apply a local (one or multi-site) operator to `self`. In place.
 
         Note that this destroys the canonical form if the local operator is non-unitary.
         Therefore, this function calls :meth:`canonical_form` if necessary.
@@ -3478,7 +3480,11 @@ class MPS:
         i = self._to_valid_index(i)
         if isinstance(op, str):
             if self.sites[i].op_needs_JW(op):
-                raise ValueError("Can't apply single operator that needs Jordan-Wigner string!")
+                try:
+                    self.apply_JW_string_to_left(i)
+                except ValueError as e:
+                    raise ValueError(f"Would need JW string for operator {op!r}, "
+                                     "but can't extract JW signs from the charges") from e
             op = self.sites[i].get_op(op)
         n = op.rank // 2  # same as int(rank/2)
         if n == 1:
@@ -3511,8 +3517,29 @@ class MPS:
         if not unitary:
             self.canonical_form(renormalize=renormalize)
 
+    def apply_JW_string_to_left(self, i):
+        """Apply a Jordan-Wigner string to left of site `i` on the virtual MPS level. In place.
+
+        If we conserve the (parity of the) total fermion particle number, each Schmidt state
+        ``|alpha>`` on a given bond (here left of site `i`) has a well-defined parity number,
+        so we can simply transform ``|alpha> --> (-1)**parity[alpha] |alpha>``.
+        The corresponding signs ``(-1)**parity[alpha]`` are extracted by
+        :meth:`~tenpy.networks.site.Site.charge_to_JW_signs`.
+
+        .. warning ::
+
+            We may loose an overall, global minus sign in the case that some `B` tensors have
+            non-trivial `qtotal`!
+        """
+        i = self._to_valid_index(i)
+        B = self._B[i]
+        leg = B.get_leg('vL')
+        charges = leg.to_qflat() #  note: sign doesn't matter since -x % 2 == x % 2
+        JW_signs = self.sites[i].charge_to_JW_signs(charges)
+        B.iscale_axis(JW_signs, 'vL')
+
     def apply_product_op(self, ops, unitary=None, renormalize=False):
-        """Apply a (global) product of local onsite operators to `self`.
+        """Apply a (global) product of local onsite operators to `self`. In place.
 
         Note that this destroys the canonical form if any local operator is non-unitary.
         Therefore, this function calls :meth:`canonical_form` if necessary.
@@ -3592,6 +3619,11 @@ class MPS:
         """
         ops, i_min, has_extra_JW = self._term_to_ops_list(term, autoJW, i_offset, False)
         if has_extra_JW:
+            try:
+                self.apply_JW_string_to_left(i_min)
+            except ValueError as e:
+                raise ValueError(f"Would need JW string for term {term!r}, "
+                                 "but can't extract JW signs from the charges") from e
             raise ValueError("term has extra Jordan-Wigner string on the left!")
         for j, op in enumerate(ops):
             i = self._to_valid_index(j + i_min)  # i_min includes i_offset!
@@ -3635,7 +3667,7 @@ class MPS:
         # done
 
     def swap_sites(self, i, swap_op='auto', trunc_par=None):
-        r"""Swap the two neighboring sites `i` and `i+1` (inplace).
+        r"""Swap the two neighboring sites `i` and `i+1`; in place.
 
         Exchange two neighboring sites: form theta, 'swap' the physical legs and split
         with an svd. While the 'swap' is just a transposition/relabeling for bosons, one needs to
@@ -3779,7 +3811,7 @@ class MPS:
         return err
 
     def permute_sites(self, perm, swap_op='auto', trunc_par=None, verbose=None):
-        """Applies the permutation perm to the state (inplace).
+        """Applies the permutation perm to the state; in place.
 
         .. deprecated :: 0.8.0
             Drop / ignore `verbose` argument, never print something.
@@ -3954,7 +3986,7 @@ class MPS:
         return "\n".join(res)
 
     def compress(self, options):
-        """Compresss an MPS.
+        """Compresss an MPS; in place.
 
         Options
         -------
@@ -3967,6 +3999,11 @@ class MPS:
                 For the `SVD` compression, `trunc_params` is the only other option used.
             trunc_params : dict
                 Truncation parameters as described in :cfg:config:`truncation`.
+
+        Returns
+        -------
+        max_trunc_err : :class:`~tenpy.algorithms.truncation.TruncationError`
+            The maximal truncation error of a two-site wave function.
         """
         options = asConfig(options, "MPS_compress")
         method = options['compression_method']

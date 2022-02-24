@@ -530,23 +530,18 @@ class OrthogonalExcitations(GroundStateSearch):
 
 
     def _apply_local_op(self, psi, apply_local_op):
-        #apply_local_op should have the form
-        # [site1, op1, site2, op2, ...]
+        #apply_local_op should have the form [site1, op1, site2, op2, ...]
         assert len(apply_local_op) % 2 == 0
         self.logger.info("apply local operators (to switch charge sector)")
         first, last = self.results['segment_first_last']
-        # ==================================================================================================
-        # TODO: JORDAN WIGNER STRINGS?!?
-        # ==================================================================================================
-        for i, op in zip(apply_local_op[-2::-2], apply_local_op[-1::-2]):
-            # TODO: lattice index instead?
+        term = list(zip(apply_local_op[-1::-2], apply_local_op[-2::-2]))  # [(op, site), ...]
+        for op, i in term:
             j = int(i)  # error for apply_local_op=["Sz", i, ...] instead of [i, "Sz", ...]
             j = j - first  # convert from original MPS index to segment MPS index
             if not 0 <= j < psi.L:
                 raise ValueError(f"specified site {j:d} in segment = {i:d} in original MPS"
-                                 "is not in segment!")
-            # explicitly set unitary=True since we call psi.canonical_form later anyways
-            psi.apply_local_op(j, op, unitary=True)
+                                 "is not in segment [{first:d}, {last:d}]!")
+        psi.apply_local_term(term, i_offset=-first, canonicalize=False)
 
     def _switch_charge_sector_with_glue(self, psi, qtotal_change):
         if psi.chinfo.qnumber == 0:

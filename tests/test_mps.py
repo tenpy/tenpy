@@ -184,7 +184,7 @@ def test_mps_swap():
     pairs_perm = [(perm[i], perm[j]) for i, j in pairs]
     psi = mps.MPS.from_singlets(spin_half, L, pairs, bc='infinite')
     psi.permute_sites(perm)
-    psi_perm = mps.MPS.from_singlets(spin_half, L, pairs_perm, bc='finite')
+    psi_perm = mps.MPS.from_singlets(spin_half, L, pairs_perm, bc='infinite')
     print(psi.overlap(psi_perm), psi.norm_test())
     assert abs(abs(psi.overlap(psi_perm)) - 1.) < 1.e-10
 
@@ -313,6 +313,20 @@ def test_apply_op(bc, eps=1.e-13):
     psi2.apply_product_op(['Sigmax', 'Sm', 'Sigmax'])
     th = psi2.get_theta(0, 3).to_ndarray().reshape((8, ))
     assert np.linalg.norm(th - [0., 0., 0., -s2, 0., 0., s2, 0.]) < eps
+
+    f = site.FermionSite('N')
+    psi3 = mps.MPS.from_singlets(f, 3, [(0, 2)], 'full', 'empty',
+                                 lonely=[1], lonely_state='full', bc=bc)
+    ov1 = psi3.overlap(mps.MPS.from_product_state([f]*3, ['full', 'full', 'empty'], bc=bc))
+    ov2 = psi3.overlap(mps.MPS.from_product_state([f]*3, ['empty', 'full', 'full'], bc=bc))
+    assert abs(ov1 - s2) < eps
+    assert abs(ov2 - (-s2)) < eps
+    psi3.apply_local_op(1, 'C', unitary=True) # no need to canonicalize here
+    # Jordan-Wigner should imply a relative sign in the singlet!
+    ov1 = psi3.overlap(mps.MPS.from_product_state([f]*3, ['full', 'empty', 'empty'], bc=bc))
+    ov2 = psi3.overlap(mps.MPS.from_product_state([f]*3, ['full', 'empty', 'empty'], bc=bc))
+    assert abs(ov1 - (-s2)) < eps
+    assert abs(ov2 - (-s2)) < eps
 
 
 def test_enlarge_mps_unit_cell():
