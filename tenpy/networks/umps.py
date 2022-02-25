@@ -942,8 +942,8 @@ class uMPS(MPS):
                                            rng=None,
                                            norm_tol=1.e-12)
     
-    def norm_test(self):
-        if not self.valid_umps:
+    def norm_test(self, force=False):
+        if not force and not self.valid_umps:
             return np.zeros((self.L, 2), dtype=float)
         else:
             return super().norm_test()

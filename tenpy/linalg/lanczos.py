@@ -126,7 +126,7 @@ class KrylovBased:
         self.E_shift = options.get('E_shift', None)
         if self.N_min < 2:
             raise ValueError("Should perform at least 2 steps.")
-        self._cutoff = options.get('cutoff', np.finfo(psi0.dtype).eps * 100)
+        self._cutoff = options.get('cutoff', np.finfo(psi0.dtype if not isinstance(psi0, list) else psi0[0].dtype).eps * 100)
         if self.E_shift is not None:
             if isinstance(self.H, OrthogonalNpcLinearOperator):
                 self.H.orig_operator = ShiftNpcLinearOperator(self.H.orig_operator, self.E_shift)
@@ -150,24 +150,28 @@ class KrylovBased:
         """
         vf = self._result_krylov
         assert N == len(vf) > 1
-        psif = self.psi0 * vf[0]  # the start vector is still known and got normalized
+        if isinstance(self.psi0, npc.Array):
+            psif = self.psi0 * vf[0]  # the start vector is still known and got normalized
+        else:
+            assert isinstance(self.psi0, list)
+            psif = [p * vf[0] for p in self.psi0]
         len_cache = len(self._cache)
         # and the last len_cache vectors have been cached
         for k in range(1, min(len_cache + 1, N)):
-            psif.iadd_prefactor_other(vf[N - k], self._cache[-k])
+            self.iadd_prefactor_other(psif, vf[N - k], self._cache[-k])
         # other vectors are not cached, so we need to restart the Lanczos iteration.
         self._cache = []  # free memory: we need at least two more vectors
 
         self._rebuild_krylov_for_result_full(psif, N - len_cache - 1)
 
-        psif_norm = npc.norm(psif)
+        psif_norm = self.norm(psif)
         if abs(1. - psif_norm) > 1.e-5:
             # One reason can be that `H` is not Hermitian
             # Otherwise, the matrix (even if small) might be ill conditioned.
             # If you get this warning, you can try to set the parameters
             # `reortho`=True and `N_cache` >= `N_max`
             logger.warning("poorly conditioned H matrix in KrylovBased! |psi_0| = %f", psif_norm)
-        psif.iscale_prefactor(1. / psif_norm)
+        self.iscale_prefactor(psif, 1. / psif_norm)
         return psif
 
     def _to_cache(self, psi):
@@ -179,7 +183,34 @@ class KrylovBased:
 
     def _calc_result_krylov(self, k):
         raise NotImplementedError("subclasses should implement this")
+    
+    def norm(self, w):
+        if not isinstance(w, list):
+            return npc.norm(w)
+        else:
+            # Assumed to be list of npc array for now)
+            return np.linalg.norm([npc.norm(a) for a in w] + [0])
+    
+    def iscale_prefactor(self, w, scale):
+        if not isinstance(w, list):
+            w.iscale_prefactor(scale)
+        else:
+            for a in w:
+                a.iscale_prefactor(scale)
 
+    def inner(self, w, v):
+        if not isinstance(w, list) and not isinstance(v, list):
+            return npc.inner(w, v, axes='range', do_conj=True)
+        else:
+            assert isinstance(w, list) and isinstance(v, list)
+            return np.sum([npc.inner(a, b, axes='range', do_conj=True) for a, b in zip(w, v)])
+    
+    def iadd_prefactor_other(self, w, alpha, v):
+        if not isinstance(w, list):
+            w.iadd_prefactor_other(alpha, v)
+        else:
+            for a, b in zip(w, v):
+                a.iadd_prefactor_other(alpha, b)
         
 class GMRES():
     def __init__(self, A, x, b, options):
@@ -345,12 +376,12 @@ class Arnoldi(KrylovBased):
         w = self.psi0  # initialize
         norm = npc.norm(w)
         for k in range(self.N_max):
-            w.iscale_prefactor(1. / norm)
+            self.iscale_prefactor(w, 1. / norm)
             self._to_cache(w)
             w = self.H.matvec(w)
             for i, v_i in enumerate(self._cache):
-                h[i, k] = ov = npc.inner(v_i, w, axes='range', do_conj=True)
-                w.iadd_prefactor_other(-ov, v_i)
+                h[i, k] = ov = self.inner(v_i, w)
+                self.iadd_prefactor_other(w, -ov, v_i)
             h[k + 1, k] = norm = npc.norm(w)
             self._calc_result_krylov(k)
             if norm < self._cutoff or (k + 1 >= self.N_min and self._converged(k)):
@@ -386,19 +417,25 @@ class Arnoldi(KrylovBased):
             assert N == len(vf) > 1
             krylov_basis = self._cache
             assert len(krylov_basis) >= N
-            psi = vf[0] * krylov_basis[0]  # copy!
+            
+            if isinstance(self.psi0, npc.Array):
+                psi = vf[0] * krylov_basis[0]  # copy!
+            else:
+                assert isinstance(self.psi0, list)
+                psi = [p * vf[0] for p in krylov_basis[0]]
+            
             # and the last len_cache vectors have been cached
             for k in range(1, N):
-                psi.iadd_prefactor_other(vf[k], krylov_basis[k])
+                self.iadd_prefactor_other(psi, vf[k], krylov_basis[k])
 
-            psi_norm = npc.norm(psi)
+            psi_norm = self.norm(psi)
             if abs(1. - psi_norm) > 1.e-5:
                 # One reason can be that `H` is not Hermitian
                 # Otherwise, the matrix (even if small) might be ill conditioned.
                 # If you get this warning, you can try to set the parameters
                 # `reortho`=True and `N_cache` >= `N_max`
                 logger.warning("poorly conditioned H matrix in Arnoldi! |psi| = %f", psi_norm)
-            psi.iscale_prefactor(1. / psi_norm)
+            self.iscale_prefactor(psi, 1. / psi_norm)
             psis.append(psi)
         return psis
 
@@ -503,24 +540,24 @@ class LanczosGroundState(KrylovBased):
         """
         h = self._h_krylov
         w = self.psi0  # initialize
-        beta = npc.norm(w)
+        beta = self.norm(w)
         if self._psi0_norm is None:
             # this is only needed for normalization in LanczosEvolution
             self._psi0_norm = beta
         for k in range(self.N_max):
-            w.iscale_prefactor(1. / beta)
+            self.iscale_prefactor(w, 1. / beta)
             self._to_cache(w)
             w = self.H.matvec(w)
-            alpha = np.real(npc.inner(w, self._cache[-1], axes='range', do_conj=True)).item()
+            alpha = np.real(self.inner(w, self._cache[-1])).item()
             h[k, k] = alpha
             self._calc_result_krylov(k)
-            w.iadd_prefactor_other(-alpha, self._cache[-1])
+            self.iadd_prefactor_other(w, -alpha, self._cache[-1])
             if self.reortho:
                 for c in self._cache[:-1]:
-                    w.iadd_prefactor_other(-npc.inner(c, w, axes='range', do_conj=True), c)
+                    self.iadd_prefactor_other(w, -self.inner(c, w), c)
             elif k > 0:
-                w.iadd_prefactor_other(-beta, self._cache[-2])
-            beta = npc.norm(w)
+                self.iadd_prefactor_other(w, -beta, self._cache[-2])
+            beta = self.norm(w)
             h[k, k + 1] = h[k + 1, k] = beta  # needed for the next step and convergence criteria
             if abs(beta) < self._cutoff or (k + 1 >= self.N_min and self._converged(k)):
                 break
@@ -543,15 +580,15 @@ class LanczosGroundState(KrylovBased):
             self._to_cache(w)
             w = self.H.matvec(w)
             alpha = h[k, k]
-            w.iadd_prefactor_other(-alpha, self._cache[-1])
+            self.iadd_prefactor_other(w, -alpha, self._cache[-1])
             if self.reortho:
                 for c in self._cache[:-1]:
-                    w.iadd_prefactor_other(-npc.inner(c, w, 'range', do_conj=True), c)
+                    self.iadd_prefactor_other(w, -self.inner(c, w), c)
             elif k > 0:
-                w.iadd_prefactor_other(-beta, self._cache[-2])
+                self.iadd_prefactor_other(w, -beta, self._cache[-2])
             beta = h[k, k + 1]  # = norm(w)
-            w.iscale_prefactor(1. / beta)
-            psif.iadd_prefactor_other(vf[k + 1], w)
+            self.iscale_prefactor(w, 1. / beta)
+            self.iadd_prefactor_other(psif, vf[k + 1], w)
         # continue in _calc_result_full
 
     def _calc_result_krylov(self, k):
@@ -564,9 +601,148 @@ class LanczosGroundState(KrylovBased):
             # Diagonalize h
             E_kr, v_kr = np.linalg.eigh(h[:k + 1, :k + 1])
             self.Es[k, :k + 1] = E_kr
-            self._result_krylov = v_kr[:, 0]  # ground state of _h_krylov
+            self._result_krylov = v_kr[:, 0]  # ground state of _h_krylov    
+
+class LanczosExcitedState(LanczosGroundState):
+    """Lanczos algorithm to find the ground + excited state.
+
+    **Assumes** that `H` is hermitian.
+
+    .. deprecated :: 0.6.0
+        Renamed attribute `params` to :attr:`options`.
+
+    .. deprecated :: 0.6.0
+        Going to remove the `orthogonal_to` argument.
+        Instead, replace H with ``OrthogonalNpcLinearOperator(H, orthogonal_to)``
+        using the :class:`~tenpy.linalg.sparse.OrthogonalNpcLinearOperator`.
 
 
+    Options
+    -------
+    .. cfg:config :: LanczosGroundState
+        :include: KrylovBased
+
+        E_tol : float
+            Stop if energy difference per step < `E_tol`
+        N_cache : int
+            The maximum number of `psi` to keep in memory during the first iteration.
+            By default, we keep all states (up to N_max).
+            Set this to a number >= 2 if you are short on memory.
+            The penalty is that one needs another Lanczos iteration to
+            determine the ground state in the end, i.e., runtime is large.
+        reortho : bool
+            For poorly conditioned matrices, one can quickly loose orthogonality of the
+            generated Krylov basis.
+            If `reortho` is True, we re-orthogonalize against all the
+            vectors kept in cache to avoid that problem.
+        num_eval : int
+            How many of lowest eigenvalues to keep
+
+    """
+
+
+    def __init__(self, H, psi0, options, orthogonal_to=[]):
+        super().__init__(H, psi0, options, orthogonal_to)
+        self.num_ev = self.options.get('num_ev', 1)
+
+    def run(self):
+        """Find the ground state of H.
+
+        Returns
+        -------
+        E0 : float
+            Ground state energy (estimate).
+        psi0 : :class:`~tenpy.linalg.np_conserved.Array`
+            Ground state vector (estimate).
+        N : int
+            Used dimension of the Krylov space, i.e., how many iterations where performed.
+        """
+        N = self._build_krylov()
+        if N < self.num_ev:
+            logger.warning("Did fewer Krylov iterations (%d) than desired eigenvalues (%d).", N, self.num_ev)
+            raise ValueError('')
+            
+        Es = self.Es[N - 1, 0:self.num_ev]
+        if N > 1:
+            E0 = self.Es[N - 1, 0]
+            logger.debug("Lanczos excited N=%d, gap=%.3e, DeltaE0=%.3e, _result_krylov[-1]=%.3e", N,
+                         self.Es[N - 1, 1] - E0, self.Es[N - 2, 0] - E0, self._result_krylov[-1])
+        else:
+            logger.debug("Lanczos excited N=%d, first alpha=%.3e, beta=%.3e", N, self._h_krylov[0, 0],
+                         self._h_krylov[0, 1])
+        if self.E_shift is not None:
+            Es -= self.E_shift
+        if N == 1:
+            return Es, [self.psi0.copy()], N  # no better estimate available
+        return Es, self._calc_result_full(N), N
+
+    # This function can do fewer iterations than self.num_eval if beta is very small.
+    # I didn't change this as this is very unlikely to happen.
+    #def _build_krylov(self):
+    
+    def _converged(self, k):
+        v0 = self._result_krylov[:, 0]
+        E = self.Es[k, :]  # current energies
+        RitzRes = abs(v0[k - 1]) * self._h_krylov[k + 1, k]
+        gap = max(min([np.min(np.abs(E[i+1:] - E[i])) for i in range(self.num_ev)]), self.min_gap)
+        P_err = (RitzRes / gap)**2
+        Delta_E0 = self.Es[k - 1, 0] - E[0]
+        return P_err < self.P_tol and Delta_E0 < self.E_tol
+    
+    def _calc_result_krylov(self, k):
+        """calculate ground state of _h_krylov[:k+1, :k+1]"""
+        h = self._h_krylov
+        if k == 0:
+            self.Es[0, 0] = h[0, 0]
+            self._result_krylov = np.ones(1, np.float64)
+        else:
+            # Diagonalize h
+            E_kr, v_kr = np.linalg.eigh(h[:k + 1, :k + 1])
+            self.Es[k, :k + 1] = E_kr
+            self._result_krylov = v_kr
+
+    # Need to fix this function to rebuild Krylov basis if we've deleted them to make space.
+    def _calc_result_full(self, N):
+        """Transform self._result_krylov from the Krylov ONB to the original (npc) basis.
+
+        Construct the result ``psi_f = sum_k  _result_krylov[k] psi[k]``, where ``psi[k]``
+        is the k-th vector of the ONB of the Krylov space generated during the iteration.
+        """
+        psis = []
+        for i in range(min(N, self.num_ev)):
+            vf = self._result_krylov[:, i]
+            vf = np.real_if_close(vf)  # try to convert to real:
+            # e.g. the dominant eigenvectors of the MPS transfermatrix should be equivalent to
+            # the power method, which will be purely real for H.dtype=float, even if there might
+            # be other eigenvectors which are complex
+            assert N == len(vf) > 1
+            krylov_basis = self._cache
+            assert len(krylov_basis) >= N
+            
+            if isinstance(self.psi0, npc.Array):
+                psi = vf[0] * krylov_basis[0]  # copy!
+            else:
+                assert isinstance(self.psi0, list)
+                psi = [p * vf[0] for p in krylov_basis[0]]
+            
+            # and the last len_cache vectors have been cached
+            for k in range(1, N):
+                self.iadd_prefactor_other(psi, vf[k], krylov_basis[k])
+
+            psi_norm = self.norm(psi)
+            if abs(1. - psi_norm) > 1.e-5:
+                # One reason can be that `H` is not Hermitian
+                # Otherwise, the matrix (even if small) might be ill conditioned.
+                # If you get this warning, you can try to set the parameters
+                # `reortho`=True and `N_cache` >= `N_max`
+                logger.warning("poorly conditioned H matrix in Arnoldi! |psi| = %f", psi_norm)
+            self.iscale_prefactor(psi, 1. / psi_norm)
+            psis.append(psi)
+        return psis
+    
+    def _rebuild_krylov_for_result_full(self, psif, N_max):
+        raise NotImplementedError('len_cache > N for now.')
+            
 class LanczosEvolution(LanczosGroundState):
     """Calculate :math:`exp(delta H) |psi0>` using Lanczos.
 

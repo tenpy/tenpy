@@ -6,7 +6,7 @@ logger = logging.getLogger(__name__)
 
 from ..linalg import np_conserved as npc
 from ..networks.mpo import MPOEnvironment, MPOTransferMatrix
-from ..linalg.lanczos import GMRES, LanczosGroundState
+from ..linalg.lanczos import GMRES, LanczosGroundState, LanczosExcitedState
 from ..linalg.sparse import NpcLinearOperator, SumNpcLinearOperator
 from ..tools.params import asConfig
 from ..tools.math import entropy
@@ -36,6 +36,18 @@ def LT_general(As, Bs, L, Ws=None):
         #temp.itranspose(['vR*', 'wR', 'vR'])
     return temp
 
+# TODO - Make npc version of this as converting R to a dense array is very memory intensive.
+def construct_orthogonal(M, cutoff=1.e-13):
+    M = M.copy().combine_legs([['vL', 'p'], ['vR']], qconj=[+1, -1])
+
+    Q, R = npc.qr(M, mode='complete', inner_labels=['vR', 'vL'], qtotal_Q=M.qtotal)
+
+    proj = np.linalg.norm(R.to_ndarray(), axis=-1)
+    proj = proj < cutoff
+    Q.iproject(proj, 'vR')
+    return Q.split_legs()
+
+"""
 def construct_orthogonal(orig_AL):
         chi = orig_AL.get_leg('vL').ind_len
         AL = orig_AL.combine_legs(['vL', 'p'], qconj=[+1])
@@ -44,10 +56,14 @@ def construct_orthogonal(orig_AL):
         V_grouped = Q[:,chi:] # [TODO] Karthik did this differently, but I think this is right?
         X = R[chi:,:]
         VL = V_grouped.split_legs()
-
+        
+        print(npc.norm(npc.tensordot(Q[:,:chi].split_legs(), orig_AL.conj(), axes=(['vL', 'p'], ['vL*', 'p*']))))
+        
+        print(npc.norm(npc.tensordot(VL, orig_AL.conj(), axes=(['vL', 'p'], ['vL*', 'p*']))))
         assert npc.norm(npc.tensordot(VL, orig_AL.conj(), axes=(['vL', 'p'], ['vL*', 'p*']))) < 1.e-14
         return VL, X
-    
+"""
+
 class PlaneWaveExcitations(Algorithm):
     def __init__(self, psi, model, options, **kwargs):
         #options = asConfig(options, self.__class__.__name__)
@@ -78,10 +94,11 @@ class PlaneWaveExcitations(Algorithm):
         # Construct VL, needed to parametrize - B - as - VL - X -
         #                                       |        |
         # Use prescription under Eq. 85 in Tangent Space lecture notes.
-        self.VLs = [construct_orthogonal(self.ALs[i])[0] for i in range(self.L)]
+        self.VLs = [construct_orthogonal(self.ALs[i]) for i in range(self.L)]
         
         # Get left and right generalized eigenvalues
         boundary_env_data, self.energy_density, _ = MPOTransferMatrix.find_init_LP_RP(self.H, self.psi, calc_E=True, subtraction_gauge='rho', guess_init_env_data=self.guess_init_env_data)
+        self.energy_density = np.mean(self.energy_density)
         self.LW = boundary_env_data['init_LP']
         self.RW = boundary_env_data['init_RP']
         self.lambda_C1 = options.get('lambda_C1', None)
@@ -126,7 +143,7 @@ class PlaneWaveExcitations(Algorithm):
         #print('LWCc * r_LR', npc.tensordot(self.LWCc, self.r_LR, axes=(['wR', 'vR', 'vR*'], ['wL', 'vL', 'vL*'])))
         Tr = TR_general(self.ALs, self.ARs, self.CRW, Ws=self.Ws)
         #Should be energy density / E_C
-        self.e_LR = (Tr - self.CRW)[0,self.IdL,0]/self.r_LR[0,self.IdL,0] # tTr( LWCc * CRW) for original tensors
+        self.e_LR = (Tr[0,self.IdL,0] - self.CRW[0,self.IdL,0])/self.r_LR[0,self.IdL,0] # tTr( LWCc * CRW) for original tensors
         
         # Tw[AR,AL]
         self.r_RL = npc.Array.zeros_like(self.RW).itranspose(['vL', 'wL', 'vL*']) # [TODO] check default ordering to potentially remove transpose
@@ -142,9 +159,9 @@ class PlaneWaveExcitations(Algorithm):
         lT = LT_general(self.ARs, self.ALs, self.LWC, Ws=self.Ws)
 
         #Should be energy density / E_C
-        self.e_RL = (lT - self.LWC)[0,self.IdR,0]/self.l_RL[0,self.IdR,0]
+        self.e_RL = (lT[0,self.IdR,0] - self.LWC[0,self.IdR,0])/self.l_RL[0,self.IdR,0]
         
-        self.aligned_H = self.Aligned_Effective_H(self. ALs, self.ARs, self.VLs,
+        self.aligned_H = self.Aligned_Effective_H(self, self.ALs, self.ARs, self.VLs,
                                                   self.LW, self.RW, self.Ws, 
                                                   self.chi, d=self.d)
         
@@ -159,8 +176,9 @@ class PlaneWaveExcitations(Algorithm):
         
         if 1 >= 1:
             print("-"*20, "initializing excitation", "-"*20)
-            print("norm(LW-LW.dag):", npc.norm(self.LW - self.LW.transpose(['vR','wR','vR*']).conj()))
-            print("norm(RW-RW.dag):", npc.norm(self.RW - self.RW.transpose(['vL*','wL','vL']).conj()))
+            # Don't know how to subtract these with charges
+            #print("norm(LW-LW.dag):", npc.norm(self.LW - self.LW.transpose(['vR','wR','vR*']).conj()))
+            #print("norm(RW-RW.dag):", npc.norm(self.RW - self.RW.transpose(['vL*','wL','vL']).complex_conj()))
             assert self.psi.valid_umps
             print("Energy density:", self.energy_density)
             print("L norm:", npc.norm(self.LW))
@@ -200,15 +218,18 @@ class PlaneWaveExcitations(Algorithm):
     def infinite_sum_TLR(self, X, p):
         tol = self.options.get('tol', 1.e-10)
         sum_method = self.options.get('sum_method', 'explicit')
-        R = npc.Array.zeros_like(self.RW)
-        for i in range(self.L):
+        B0 = npc.tensordot(self.VLs[0], X[0], axes=(['vR'], ['vL']))
+        R = TR_general(self.ALs[:0] + [B0] + self.ARs[0+1:], 
+                        self.ARs, 
+                        self.RW, Ws = self.Ws)
+        for i in range(1, self.L):
             Bi = npc.tensordot(self.VLs[i], X[i], axes=(['vR'], ['vL']))
-            R += TR_general(self.ALs[:i] + [Bi] + self.ARs[i+1:], 
-                            self.ARs, 
-                            self.RW, Ws = self.Ws)        
+            R.iadd_prefactor_other(1., TR_general(self.ALs[:i] + [Bi] + self.ARs[i+1:], 
+                                                  self.ARs, 
+                                                  self.RW, Ws = self.Ws))
         
         if sum_method=='explicit':
-            R_sum = R 
+            R_sum = R.copy()
             for _ in range(100):
                 R = np.exp(-1.0j * p * self.L) * TR_general(self.ALs, self.ARs, R, Ws=self.Ws)
                 R_sum.iadd_prefactor_other(1., R)
@@ -245,15 +266,18 @@ class PlaneWaveExcitations(Algorithm):
     def infinite_sum_TRL(self, X, p):
         tol = self.options.get('tol', 1.e-10)
         sum_method = self.options.get('sum_method', 'explicit')        
-        L = npc.Array.zeros_like(self.LW)
-        for i in range(self.L):
+        B0 = npc.tensordot(self.VLs[0], X[0], axes=(['vR'], ['vL']))
+        L = LT_general(self.ALs[:0] + [B0] + self.ARs[0+1:], 
+                        self.ALs, 
+                        self.LW, Ws = self.Ws)
+        for i in range(1, self.L):
             Bi = npc.tensordot(self.VLs[i], X[i], axes=(['vR'], ['vL']))
-            L += LT_general(self.ALs[:i] + [Bi] + self.ARs[i+1:], 
-                            self.ALs, 
-                            self.LW, Ws = self.Ws)
+            L.iadd_prefactor_other(1., LT_general(self.ALs[:i] + [Bi] + self.ARs[i+1:], 
+                                                  self.ALs, 
+                                                  self.LW, Ws = self.Ws))
         
         if sum_method=='explicit':
-            L_sum = L
+            L_sum = L.copy()
             for _ in range(100):
                 L = np.exp(1.0j * p * self.L) * LT_general(self.ARs, self.ALs, L, Ws=self.Ws)
                 L_sum.iadd_prefactor_other(1., L)
@@ -287,7 +311,7 @@ class PlaneWaveExcitations(Algorithm):
             raise ValueError('Sum method', sum_method, 'not recognized!')       
         
     class Aligned_Effective_H(NpcLinearOperator):
-        def __init__(self, ALs, ARs, VLs, LW, RW, Ws, chi, d=2):
+        def __init__(self, outer, ALs, ARs, VLs, LW, RW, Ws, chi, d=2):
             self.ALs = ALs
             self.ARs = ARs
             self.VLs = VLs
@@ -296,12 +320,13 @@ class PlaneWaveExcitations(Algorithm):
             self.Ws = Ws
             self.chi = chi
             self.d = d
+            self.outer = outer
             
         def matvec(self, vec):
-            assert vec.shape[0] == len(self.VLs)
-            assert vec.size == len(self.VLs) * self.chi*(self.d-1)*self.chi
+            assert len(vec) == self.outer.L
+            assert np.sum([v.get_leg('vL').ind_len * v.get_leg('vR').ind_len for v in vec]) == self.outer.L * self.chi*(self.d-1)*self.chi
             
-            total_vec = npc.Array.zeros_like(vec)
+            total_vec = [npc.Array.zeros_like(v) for v in vec]
             
             for i in range(len(self.VLs)):
                 Bi = npc.tensordot(self.VLs[i], vec[i], axes=(['vR'], ['vL']))
@@ -323,7 +348,7 @@ class PlaneWaveExcitations(Algorithm):
                         X_out = npc.tensordot(X_out, T_RW, axes=(['vR', 'wR'], ['vL', 'wL']))
                     X_out.ireplace_labels(['vR*', 'vL*'], ['vL', 'vR'])
                     total_vec[j] += X_out
-            
+                    
             return total_vec
     
     class Unaligned_Effective_H(NpcLinearOperator):
@@ -340,10 +365,10 @@ class PlaneWaveExcitations(Algorithm):
             self.d = d
             
         def matvec(self, vec):
-            assert vec.shape[0] == len(self.VLs)
-            assert vec.size == len(self.VLs) * self.chi*(self.d-1)*self.chi
+            assert len(vec) == self.outer.L
+            assert np.sum([v.get_leg('vL').ind_len * v.get_leg('vR').ind_len for v in vec]) == self.outer.L * self.chi*(self.d-1)*self.chi
             
-            total_left = npc.Array.zeros_like(vec)
+            total_left = [npc.Array.zeros_like(v) for v in vec]
             inf_sum_TLR = self.outer.infinite_sum_TLR(vec, self.p)
             for i in range(self.outer.L):
                 X_out_left = TR_general(self.ALs[i+1:], self.ARs[i+1:], inf_sum_TLR, Ws=self.Ws[i+1:])
@@ -352,7 +377,7 @@ class PlaneWaveExcitations(Algorithm):
                 X_out_left.ireplace_labels(['vR*', 'vL*'], ['vL', 'vR'])
                 total_left[i] += X_out_left
             
-            total_right = npc.Array.zeros_like(vec)
+            total_right = [npc.Array.zeros_like(v) for v in vec]
             inf_sum_TRL = self.outer.infinite_sum_TRL(vec, self.p)
             for i in range(self.outer.L):
                 X_out_right = LT_general(self.ARs[:i+1], self.ALs[:i] + [self.VLs[i]], inf_sum_TRL, Ws=self.Ws[:i+1])
@@ -360,17 +385,33 @@ class PlaneWaveExcitations(Algorithm):
                 X_out_right = np.exp(1.0j*self.p*self.outer.L) * npc.tensordot(X_out_right, T_RW, axes=(['vR', 'wR'], ['vL', 'wL']))
                 X_out_right.ireplace_labels(['vR*', 'vL*'], ['vL', 'vR'])
                 total_right[i] += X_out_right
-                
-            return total_left + total_right
+            
+            return [a + b for a, b in zip(total_left, total_right)]
 
-    def diagonalize(self, p, n_bands=1):
+    def diagonalize(self, p, qtotal_change=None, n_bands=1):
         
         self.unaligned_H = self.Unaligned_Effective_H(self, self.ALs, self.ARs, self.VLs, 
                                                       self.LW, self.RW, self.Ws, p, self.chi, self.d)
         effective_H = SumNpcLinearOperator(self.aligned_H, self.unaligned_H)
 
         lanczos_options = self.options.subconfig('lanczos_options')
-        E, X, N = LanczosGroundState(effective_H, npc.Array.from_ndarray_trivial(np.random.rand(self.L, 10,10)+np.random.rand(self.L,10,10)*1.0j).iset_leg_labels(['s', 'vL', 'vR']), lanczos_options).run()
+        lanczos_options['num_ev'] = n_bands
+
+        X_init = self.initial_guess(qtotal_change)
+        
+        #E, X, N = LanczosExcitedState(effective_H, X_init, lanczos_options).run()
+        E, X, N = LanczosGroundState(effective_H, X_init, lanczos_options).run()
         
         return E - self.energy_density * self.L - self.lambda_C1, X
-        
+    
+    def initial_guess(self, qtotal_change):
+        X_init = []
+        for i in range(self.L):      
+            vL = self.VLs[i].get_leg('vR').conj()
+            vR = self.ALs[(i+1)% self.L].get_leg('vL').conj()
+            th0 = npc.Array.from_func(np.ones, [vL, vR],
+                                      dtype=self.psi.dtype,
+                                      qtotal=qtotal_change,
+                                      labels=['vL', 'vR'])
+            X_init.append(th0)
+        return X_init      

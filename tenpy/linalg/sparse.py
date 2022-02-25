@@ -139,7 +139,11 @@ class SumNpcLinearOperator(NpcLinearOperatorWrapper):
         self.other_operator = other_operator
 
     def matvec(self, vec):
-        return self.orig_operator.matvec(vec) + self.other_operator.matvec(vec)
+        if isinstance(vec, npc.Array):
+            return self.orig_operator.matvec(vec) + self.other_operator.matvec(vec)
+        else:
+            assert isinstance(vec, list)
+            return [a + b for a,b in zip(self.orig_operator.matvec(vec), self.other_operator.matvec(vec))]
 
     def to_matrix(self):
         return self.orig_operator.to_matrix() + self.other_operator.to_matrix()
