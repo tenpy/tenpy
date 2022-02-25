@@ -3485,7 +3485,10 @@ class MPS:
                 except ValueError as e:
                     raise ValueError(f"Would need JW string for operator {op!r}, "
                                      "but can't extract JW signs from the charges") from e
+            opname = op
             op = self.sites[i].get_op(op)
+        else:
+            opname = op
         n = op.rank // 2  # same as int(rank/2)
         if n == 1:
             pstar, p = 'p*', 'p'
@@ -3501,12 +3504,12 @@ class MPS:
             opB = npc.tensordot(op, self._B[i], axes=['p*', 'p'])
             self.set_B(i, opB, self.form[i])
             if opB.norm() < 1.e-12:
-                raise ValueError(f"Applying the operator {op!s} on site {i:d} destroys state!")
+                raise ValueError(f"Applying the operator {opname!s} on site {i:d} destroys state!")
         else:
             th = self.get_theta(i, n)
             th = npc.tensordot(op, th, axes=[pstar, p])
             if th.norm() < 1.e-12:
-                raise ValueError(f"Applying the operator {op!s} on site {i:d} destroys state!")
+                raise ValueError(f"Applying the operator {opname!s} on site {i:d} destroys state!")
             # use MPS.from_full to split the sites
             split_th = self.from_full(self.sites[i:i + n], th, None, cutoff, False, 'segment',
                                       (self.get_SL(i), self.get_SR(i + n - 1)))
@@ -3624,13 +3627,12 @@ class MPS:
             except ValueError as e:
                 raise ValueError(f"Would need JW string for term {term!r}, "
                                  "but can't extract JW signs from the charges") from e
-            raise ValueError("term has extra Jordan-Wigner string on the left!")
         for j, op in enumerate(ops):
             i = self._to_valid_index(j + i_min)  # i_min includes i_offset!
             opB = npc.tensordot(op, self._B[i], axes=['p*', 'p'])
             self.set_B(i, opB, self.form[i])
             if opB.norm() < 1.e-12:
-                raise ValueError(f"Applying the operator {op!s} on site {i:d} destroys state!")
+                raise ValueError(f"Applying the operator on site {i:d} destroys state!")
         if canonicalize:
             self.canonical_form(renormalize=renormalize)
 

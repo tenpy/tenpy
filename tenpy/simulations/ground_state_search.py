@@ -379,7 +379,7 @@ class OrthogonalExcitations(GroundStateSearch):
         # can't just use gs_data['energy'], since this is just energy density for infinite MPS
         self.logger.info("Calculate reference energy by contracting environments")
         env = MPOEnvironment(psi0_seg, self.model.H_MPO, psi0_seg, **self.init_env_data)
-        E = env.full_contraction(0)
+        E = env.full_contraction(0).real
         self.results['ground_state_energy'] = E
         return E
 
