@@ -6,8 +6,8 @@ logger = logging.getLogger(__name__)
 
 from ..linalg import np_conserved as npc
 from ..networks.mpo import MPOEnvironment, MPOTransferMatrix
-from ..linalg.lanczos import GMRES, LanczosGroundState, LanczosExcitedState
-from ..linalg.sparse import NpcLinearOperator, SumNpcLinearOperator
+from ..linalg.lanczos import GMRES, LanczosGroundState
+from ..linalg.sparse import NpcLinearOperator, SumNpcLinearOperator, OrthogonalNpcLinearOperator
 from ..tools.params import asConfig
 from ..tools.math import entropy
 from ..algorithms.algorithm import Algorithm
@@ -16,7 +16,15 @@ from ..algorithms.algorithm import Algorithm
 #from .mps_common import Sweep, ZeroSiteH, OneSiteH
 
 
-# TODO - what if W, As, or Bs are not the same size?
+"""
+TODO - 02/25/2022
+(1) Regulated transfer matrix for unit cell > 1
+(2) construct_orthogonal in npc way
+(3) restarted Lanczos
+(4) orthogonal excitation gives wrong energy for 2nd excitation; for 2-unit cell, 1st even excitation energy is not 2nd no-cc energy
+(5) DMRG over the segment
+"""
+
 def TR_general(As, Bs, R, Ws=None):
     temp = R.copy()
     for i in reversed(range(len(As))):
@@ -237,30 +245,29 @@ class PlaneWaveExcitations(Algorithm):
                     break
             return R_sum
         elif 'GMRES' in sum_method:
-            assert False
             class helper_matvec(NpcLinearOperator):
-                def __init__ (self, excit, AL, AR, W, sum_method):
-                    self.AL = AL
-                    self.AR = AR
-                    self.W = W
+                def __init__ (self, excit, ALs, ARs, Ws, sum_method):
+                    self.ALs = ALs
+                    self.ARs = ARs
+                    self.Ws = Ws
                     self.sum_method = sum_method
                     self.excit = excit
                 def matvec(self, vec):
-                    Tr = TR_general(self.AL, self.AR, vec, W=self.W)
+                    Tr = TR_general(self.ALs, self.ARs, vec, Ws=self.Ws)
                     if 'reg' in self.sum_method:
+                        assert False
                         lr = npc.tensordot(self.excit.l_LR, vec, axes=(['vR', 'wR', 'vR*'], ['vL', 'wL', 'vL*']))
                         llr = npc.tensordot(self.excit.LWCc, vec, axes=(['vR', 'wR', 'vR*'], ['vL', 'wL', 'vL*']))
                         T1_r = self.excit.r_LR * ((self.excit.e_LR-1) * lr + llr) + self.excit.CRW * lr
                         Tr = Tr - T1_r
                     return vec - np.exp(-1.0j * p) * Tr
                 
-            tm_op = helper_matvec(self, self.AL, self.AR, self.H.get_W(0), sum_method)
+            tm_op = helper_matvec(self, self.ALs, self.ARs, self.Ws, sum_method)
             GMRES_options = self.options.subconfig('GMRES_options')
-            R_sum, _, _, _ = GMRES(tm_op, npc.Array.zeros_like(R), R, GMRES_options).run()
+            R_sum, _, _, _ = GMRES(tm_op, npc.Array.zeros_like(R)*1.j, R, GMRES_options).run()
             return R_sum
         else:
             raise ValueError('Sum method', sum_method, 'not recognized!')
-            
             
         
     def infinite_sum_TRL(self, X, p):
@@ -285,27 +292,27 @@ class PlaneWaveExcitations(Algorithm):
                     break
             return L_sum
         elif 'GMRES' in sum_method:
-            assert False
             class helper_matvec(NpcLinearOperator):
-                def __init__ (self, excit, AL, AR, W, sum_method):
-                    self.AL = AL
-                    self.AR = AR
-                    self.W = W
+                def __init__ (self, excit, ALs, ARs, Ws, sum_method):
+                    self.ALs = ALs
+                    self.ARs = ARs
+                    self.Ws = Ws
                     self.sum_method = sum_method
                     self.excit = excit
                     
                 def matvec(self, vec):
-                    lT = LT_general(self.AR, self.AL, vec, W=self.W)
+                    lT = LT_general(self.ARs, self.ALs, vec, Ws=self.Ws)
                     if 'reg' in self.sum_method:
+                        assert False
                         lr = npc.tensordot(vec, self.excit.r_RL, axes=(['vR', 'wR', 'vR*'], ['vL', 'wL', 'vL*']))
                         lrr = npc.tensordot(vec, self.excit.CcRW, axes=(['vR', 'wR', 'vR*'], ['vL', 'wL', 'vL*']))
                         T1_l = self.excit.l_RL * ((self.excit.e_RL-1) * lr + lrr) + self.excit.LWC * lr
                         lT = lT - T1_l
                     return vec - np.exp(1.0j * p) * lT
         
-            tm_op = helper_matvec(self, self.AL, self.AR, self.H.get_W(0), sum_method)
+            tm_op = helper_matvec(self, self.ALs, self.ARs, self.Ws, sum_method)
             GMRES_options = self.options.subconfig('GMRES_options')
-            L_sum, _, _, _ = GMRES(tm_op, npc.Array.zeros_like(L), L, GMRES_options).run()
+            L_sum, _, _, _ = GMRES(tm_op, npc.Array.zeros_like(L)*1.j, L, GMRES_options).run()
             return L_sum
         else:
             raise ValueError('Sum method', sum_method, 'not recognized!')       
@@ -396,13 +403,21 @@ class PlaneWaveExcitations(Algorithm):
 
         lanczos_options = self.options.subconfig('lanczos_options')
         lanczos_options['num_ev'] = n_bands
-
         X_init = self.initial_guess(qtotal_change)
         
-        #E, X, N = LanczosExcitedState(effective_H, X_init, lanczos_options).run()
         E, X, N = LanczosGroundState(effective_H, X_init, lanczos_options).run()
-        
         return E - self.energy_density * self.L - self.lambda_C1, X
+        #E, X, N = LanczosExcitedState(effective_H, X_init, lanczos_options).run()
+        Xs = []
+        Es = []
+        for i in range(n_bands):
+            # TODO getting poorely conditioned Krylov error for n_bands > 1;
+            # 2nd excitation energy is not correct!
+            ortho_H = OrthogonalNpcLinearOperator(effective_H, Xs)
+            E, X, N = LanczosGroundState(ortho_H, X_init, lanczos_options).run()
+            Xs.append(X)
+            Es.append(E)
+        return [E - self.energy_density * self.L - self.lambda_C1 for E in Es], Xs
     
     def initial_guess(self, qtotal_change):
         X_init = []

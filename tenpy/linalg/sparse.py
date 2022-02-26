@@ -15,6 +15,7 @@ import scipy.sparse.linalg
 from scipy.sparse.linalg import LinearOperator as ScipyLinearOperator
 from ..tools.math import speigs, speigsh
 from ..tools.misc import argsort, group_by_degeneracy
+from . import lanczos
 import warnings
 
 __all__ = [
@@ -199,10 +200,14 @@ class OrthogonalNpcLinearOperator(NpcLinearOperatorWrapper):
         # equivalent to using H' = P H P where P is the projector (1-sum_o |o><o|)
         vec = vec.copy()
         for o in self.ortho_vecs:  # Project out
-            vec.iadd_prefactor_other(-npc.inner(o, vec, 'range', do_conj=True), o)
+            #for a, b in zip(vec, o):
+            #    a.iadd_prefactor_other(-npc.inner(b, a, axes='range', do_conj=True), b)
+            lanczos.iadd_prefactor_other(vec, -lanczos.inner(o, vec), o)
         vec = self.orig_operator.matvec(vec)
         for o in self.ortho_vecs[::-1]:  # reverse: more obviously Hermitian.
-            vec.iadd_prefactor_other(-npc.inner(o, vec, 'range', do_conj=True), o)
+            #for a, b in zip(vec, o):
+            #    a.iadd_prefactor_other(-npc.inner(b, a, axes='range', do_conj=True), b)
+            lanczos.iadd_prefactor_other(vec, -lanczos.inner(o, vec), o)
         return vec
 
     def to_matrix(self):
