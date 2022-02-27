@@ -154,10 +154,16 @@ class VUMPSEngine(Sweep):
             'norm_err': [],
             'max_split_err': [],
         }
-        
+    
+    
     def get_sweep_schedule(self):
         """Sweep from site 0 to L-1"""
         L = self.psi.L
+        
+        #i0s = list(range(0, L)) + list(range(L, 0, -1))
+        #move_right = [True] * L + [False] * L
+        #update_LP_RP = [[False, False]] * (2*L)
+        
         i0s = list(range(0, L))
         move_right = [True] * L
         update_LP_RP = [[False, False]] * L
@@ -169,7 +175,8 @@ class VUMPSEngine(Sweep):
         H = self.model.H_MPO
         psi = self.psi
         
-        boundary_env_data, Es, _ = MPOTransferMatrix.find_init_LP_RP(H, self.psi, calc_E=True, guess_init_env_data=self.guess_init_env_data) # E is already the energy density.
+        #boundary_env_data, Es, _ = MPOTransferMatrix.find_init_LP_RP(H, self.psi, calc_E=True, guess_init_env_data=self.guess_init_env_data) # E is already the energy density.
+        boundary_env_data, Es, _ = MPOTransferMatrix.find_init_LP_RP(H, self.psi, calc_E=True, guess_init_env_data=None) # E is already the energy density.
         self.env = MPOEnvironment(psi, H, psi, **boundary_env_data)
         self.transfer_matrix_energy = Es
 
@@ -240,16 +247,66 @@ class OneSiteVUMPSEngine(VUMPSEngine):
        
         lanczos_options = self.options.subconfig('lanczos_options')
         E0_1, theta0_1, N0_1 = LanczosGroundState(H0_1, C1, lanczos_options).run()
-        E0_2, theta0_2, N0_2 = LanczosGroundState(H0_2, C2, lanczos_options).run()
+        #E0_2, theta0_2, N0_2 = LanczosGroundState(H0_2, C2, lanczos_options).run()
+        E1, theta1, N1 = LanczosGroundState(H1, AC, lanczos_options).run()
         
-        E1, theta1, N1 = LanczosGroundState(H1, AC, lanczos_options).run()       
-        print(N0_1, N0_2, N1)
-        print(E0_1, E0_2, E1)
+        #print(npc.norm(theta0_1 - theta0_2))
+        print(theta1.get_leg('vL').ind_len, theta1.get_leg('vR').ind_len)
+        
+        U, S, VH = npc.svd(theta0_1,
+                                  None,
+                                     qtotal_LR=[theta0_1.qtotal, None],
+                                     inner_labels=['vR', 'vL'])
+
+        mask = S>1.e-14
+        U.iproject(mask, 'vR')
+        VH.iproject(mask, 'vL')
+
+        #print(npc.norm(npc.tensordot(U.iscale_axis(S[mask]), VH, axes=['vR', 'vL']) - theta0_1))
+        theta0_1 = npc.diag(S[mask], VH.get_leg('vL'), labels=['vL', 'vR'])
+
+        psi.set_B(i0-1, npc.tensordot(psi.get_B(i0-1, 'AL'), U, axes=(['vR'], ['vL'])), 'AL')
+        psi.set_B(i0, npc.tensordot(U.conj(), psi.get_B(i0, 'AL'), axes=(['vL*'], ['vL'])).ireplace_label('vR*', 'vL'), 'AL')
+        
+        psi.set_B(i0, npc.tensordot(VH, psi.get_B(i0, 'AR'), axes=(['vR'], ['vL'])), 'AR')
+        psi.set_B(i0-1, npc.tensordot(psi.get_B(i0-1, 'AR'), VH.conj(), axes=(['vR'], ['vR*'])).ireplace_label('vL*', 'vR'), 'AR')
+
+        theta1 = npc.tensordot(U.conj(), theta1, axes=(['vL*'], ['vL']))
+        theta1 = npc.tensordot(theta1, VH.conj(), axes=(['vR'], ['vR*'])).ireplace_labels(['vR*', 'vL*'], ['vL', 'vR'])
+        """
+        U, S, VH = npc.svd(theta0_2,
+                                  None,
+                                     qtotal_LR=[theta0_2.qtotal, None],
+                                     inner_labels=['vR', 'vL'])
+
+        mask = S>1.e-14
+        U.iproject(mask, 'vR')
+        VH.iproject(mask, 'vL')
+
+        #print(npc.norm(npc.tensordot(U.iscale_axis(S[mask]), VH, axes=['vR', 'vL']) - theta0_1))
+        theta0_2 = npc.diag(S[mask], VH.get_leg('vL'), labels=['vL', 'vR'])
+        print(psi.get_B(0, 'AL'))
+        print(psi.get_B(0, 'AR'))
+        psi.set_B(i0, npc.tensordot(psi.get_B(i0, 'AL'), U, axes=(['vR'], ['vL'])), 'AL')
+        psi.set_B(i0+1, npc.tensordot(U.conj(), psi.get_B(i0+1, 'AL'), axes=(['vL*'], ['vL'])).ireplace_label('vR*', 'vL'), 'AL')
+        
+        psi.set_B(i0+1, npc.tensordot(VH, psi.get_B(i0+1, 'AR'), axes=(['vR'], ['vL'])), 'AR')
+        psi.set_B(i0, npc.tensordot(psi.get_B(i0, 'AR'), VH.conj(), axes=(['vR'], ['vR*'])).ireplace_label('vL*', 'vR'), 'AR')
+        print(psi.get_B(0, 'AL'))
+        print(psi.get_B(0, 'AR'))
+        print('C2 SVs:', np.sum(mask))
+        theta1 = npc.tensordot(theta1, VH.conj(), axes=(['vR'], ['vR*'])).ireplace_labels(['vR*', 'vL*'], ['vL', 'vR'])
+        """
+        print(theta1.get_leg('vL').ind_len, theta1.get_leg('vR').ind_len)
+        
+        print(N0_1, 0, N1)
+        print(E0_1, 0, E1)
+        
         theta1.ireplace_label('p0', 'p')
         psi.set_C(i0, theta0_1)
-        psi.set_C(i0+self.n_optimize, theta0_2)
+        #psi.set_C(i0+1, theta0_2)
         psi.set_B(i0, theta1, form='AC')
-        AL, AR, eps_L, eps_R, entropy_1, entropy_2 = self.polar_max(theta1, theta0_1, theta0_2)
+        AL, AR, eps_L, eps_R, entropy_1, entropy_2 = self.polar_max(theta1, theta0_1, theta0_1)
         psi.set_B(i0, AL, form='AL')
         psi.set_B(i0, AR, form='AR')
         self._entropy_approx[i0 % self.psi.L] = entropy_1
@@ -260,10 +317,10 @@ class OneSiteVUMPSEngine(VUMPSEngine):
             'eps_L': eps_L,
             'eps_R': eps_R,
             'e_C1': E0_1,
-            'e_C2': E0_2,
+            'e_C2': 0,
             'e_theta': E1,
             'N0_L': N0_1,
-            'N0_R': N0_2,
+            'N0_R': 0,
             'N1': N1
         }
         
