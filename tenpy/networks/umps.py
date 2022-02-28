@@ -238,7 +238,7 @@ class uMPS(MPS):
             err[i, 2] = npc.norm(C1AR - AC)
             
         self.valid_umps = np.max(err) < cutoff
-        logger.info('uMPS is %s with max error %.e8.', 'valid' if self.valid_umps else 'invalid', np.max(err))
+        logger.info('uMPS is %s with max error %.5e.', 'valid' if self.valid_umps else 'invalid', np.max(err))
         return err
     
     def copy(self):
