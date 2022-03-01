@@ -14,7 +14,7 @@ from ..tools.misc import find_subclass
 from ..tools.process import memory_usage
 from .mps_common import Sweep, ZeroSiteH, OneSiteH, TwoSiteH
 from .truncation import truncate, svd_theta
-
+from .excitation import construct_orthogonal, LT_general, TR_general
 #import sys
 #sys.path.append("/home/sajant/vumps-tBLG/Nsite/")
 #from misc import *
@@ -31,6 +31,7 @@ class VUMPSEngine(Sweep):
         self.env.clear()
         self._entropy_approx = [None] * psi.L  # always left of a given site
         assert psi.L % model.H_MPO.L == 0
+        self.tangent_projector_test(self.env.get_initialization_data())
         
     def run(self):
         options = self.options
@@ -92,6 +93,7 @@ class VUMPSEngine(Sweep):
             self.sweep_stats['norm_err'].append(norm_err)
             self.sweep_stats['max_split_err'].append(max_split_error)
             
+            #self.tangent_projector_test(self.env.get_initialization_data())
             #print(self.sweeps, Delta_E, norm_err, Delta_S, max_split_error, self.sweep_stats['E_theta'][-1], self.sweep_stats['E_L'][-1], self.sweep_stats['E_R'][-1], self.sweep_stats['E_C1'][-1], self.sweep_stats['E_C2'][-1])
             # status update
             logger.info(
@@ -117,7 +119,7 @@ class VUMPSEngine(Sweep):
             is_first_sweep = False
         
         self.psi.test_validity()
-        self.tangent_projector_test()
+        #self.tangent_projector_test(self.env.get_initialization_data())
         logger.info("VUMPS finished after %d sweeps, max chi=%d", self.sweeps, max(self.psi.chi))
         return (self.sweep_stats['E_L'][-1] + self.sweep_stats['E_R'][-1])/2, self.psi
 
@@ -236,8 +238,33 @@ class VUMPSEngine(Sweep):
     def resume_run(self):
         raise NotImplementedError("TODO")
         
-    def tangent_projector_test(self):
-        pass
+    def tangent_projector_test(self, env_data):
+        LW = env_data['init_LP']
+        RW = env_data['init_RP']
+        
+        VLs = [construct_orthogonal(self.psi.get_B(i, form='AL')) for i in range(self.psi.L)]
+        VRs = [construct_orthogonal(self.psi.get_B(i, form='AR'), left=False) for i in range(self.psi.L)]
+        ALs = self.psi._AL
+        ARs = self.psi._AR
+        ACs = self.psi._AC
+        Ws = self.model.H_MPO._W
+        strange_left = []
+        strange_right = []
+        for i in range(self.psi.L):
+            temp_L = LT_general(ALs[:i], ALs[:i], LW, Ws=Ws[:i])
+            temp_R = TR_general(ARs[i+1:], ARs[i+1:], RW, Ws=Ws[i+1:])
+            
+            temp_VL = LT_general([VLs[i]], [ACs[i]], temp_L, Ws=[Ws[i]])
+            temp_VL = npc.tensordot(temp_VL, temp_R, axes=(['wR', 'vR*'], ['wL', 'vL*']))
+            
+            temp_VR = TR_general([VRs[i]], [ACs[i]], temp_R, Ws=[Ws[i]])
+            temp_VR = npc.tensordot(temp_L, temp_VR, axes=(['wR', 'vR*'], ['wL', 'vL*']))
+            
+            strange_left.append(npc.norm(temp_VL))
+            strange_right.append(npc.norm(temp_VR))
+        print('Strange Cancellation Term:', strange_left, strange_right)
+        
+        return strange_left, strange_right
     
     def _diagonal_gauge_C(self, theta, i0):
         U, S, VH = npc.svd(theta,

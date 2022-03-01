@@ -7,7 +7,7 @@ logger = logging.getLogger(__name__)
 from ..linalg import np_conserved as npc
 from ..networks.mpo import MPOEnvironment, MPOTransferMatrix
 from ..linalg.lanczos import GMRES, LanczosGroundState
-from ..linalg.sparse import NpcLinearOperator, SumNpcLinearOperator, OrthogonalNpcLinearOperator
+from ..linalg.sparse import NpcLinearOperator, SumNpcLinearOperator, OrthogonalNpcLinearOperator, BoostNpcLinearOperator
 from ..tools.params import asConfig
 from ..tools.math import entropy
 from ..algorithms.algorithm import Algorithm
@@ -45,14 +45,23 @@ def LT_general(As, Bs, L, Ws=None):
     return temp
 
 # TODO - Make npc version of this as converting R to a dense array is very memory intensive.
-def construct_orthogonal(M, cutoff=1.e-13):
-    M = M.copy().combine_legs([['vL', 'p'], ['vR']], qconj=[+1, -1])
-
-    Q, R = npc.qr(M, mode='complete', inner_labels=['vR', 'vL'], qtotal_Q=M.qtotal)
-
-    proj = np.linalg.norm(R.to_ndarray(), axis=-1)
-    proj = proj < cutoff
-    Q.iproject(proj, 'vR')
+def construct_orthogonal(M, cutoff=1.e-13, left=True):
+    if left:
+        M = M.copy().combine_legs([['vL', 'p'], ['vR']], qconj=[+1, -1])
+        Q, R = npc.qr(M, mode='complete', inner_labels=['vR', 'vL'], qtotal_Q=M.qtotal)
+        proj = np.linalg.norm(R.to_ndarray(), axis=-1)
+        proj = proj < cutoff
+        Q.iproject(proj, 'vR')
+        assert npc.norm(npc.tensordot(Q, M.conj(), axes=(['(vL.p)'], ['(vL*.p*)']))) < 1.e-14
+    else:
+        M = M.copy().combine_legs([['vL'], ['p', 'vR']], qconj=[+1, -1])
+        Q, R = npc.qr(M.transpose(['(p.vR)', '(vL)']), mode='complete', inner_labels=['vL', 'vR'], qtotal_Q=M.qtotal)
+        Q.itranspose(['vL', '(p.vR)'])
+        R.itranspose(['(vL)', 'vR'])
+        proj = np.linalg.norm(R.to_ndarray(), axis=0)
+        proj = proj < cutoff
+        Q.iproject(proj, 'vL')
+        assert npc.norm(npc.tensordot(Q, M.conj(), axes=(['(p.vR)'], ['(p*.vR*)']))) < 1.e-14
     return Q.split_legs()
 
 """
@@ -403,21 +412,29 @@ class PlaneWaveExcitations(Algorithm):
 
         lanczos_options = self.options.subconfig('lanczos_options')
         lanczos_options['num_ev'] = n_bands
+        #lanczos_options['E_shift'] = 0
         X_init = self.initial_guess(qtotal_change)
         
-        E, X, N = LanczosGroundState(effective_H, X_init, lanczos_options).run()
-        return E - self.energy_density * self.L - self.lambda_C1, X
+        #E, X, N = LanczosGroundState(effective_H, X_init, lanczos_options).run()
+        #return E - self.energy_density * self.L - self.lambda_C1, X
         #E, X, N = LanczosExcitedState(effective_H, X_init, lanczos_options).run()
         Xs = []
         Es = []
+        Ns = []
         for i in range(n_bands):
             # TODO getting poorely conditioned Krylov error for n_bands > 1;
             # 2nd excitation energy is not correct!
-            ortho_H = OrthogonalNpcLinearOperator(effective_H, Xs)
+            # TODO why doesn't E_shift and OrthogonalNPC not work???
+            #ortho_H = OrthogonalNpcLinearOperator(effective_H, Xs)
+            ortho_H = BoostNpcLinearOperator(effective_H, [100]*i, Xs)
             E, X, N = LanczosGroundState(ortho_H, X_init, lanczos_options).run()
             Xs.append(X)
             Es.append(E)
-        return [E - self.energy_density * self.L - self.lambda_C1 for E in Es], Xs
+            Ns.append(N)
+            if N == lanczos_options.get('N_max'):
+                import warnings
+                warnings.warn('Maximum Lanczos iterations needed; be wary of results.')
+        return [E - self.energy_density * self.L - self.lambda_C1 for E in Es], Xs, NS
     
     def initial_guess(self, qtotal_change):
         X_init = []

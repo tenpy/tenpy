@@ -165,7 +165,10 @@ class ShiftNpcLinearOperator(NpcLinearOperatorWrapper):
         self.shift = shift
 
     def matvec(self, vec):
-        return self.orig_operator.matvec(vec) + self.shift * vec
+        temp = self.orig_operator.matvec(vec)
+        lanczos.iadd_prefactor_other(temp, self.shift, vec)
+        return temp
+        # return self.orig_operator.matvec(vec) + self.shift * vec
 
     def to_matrix(self):
         mat = self.orig_operator.to_matrix()
@@ -173,6 +176,34 @@ class ShiftNpcLinearOperator(NpcLinearOperatorWrapper):
 
     def adjoint(self):
         return ShiftNpcLinearOperator(self.orig_operator.adjoint(), np.conj(self.shift))
+    
+    
+class BoostNpcLinearOperator(NpcLinearOperatorWrapper):
+    """Representes ``original_operator + shift_i * |vec_i><vec_i|``.
+
+    This can be useful e.g. for better Lanczos convergence.
+    """
+    def __init__(self, orig_operator, boosts, boost_vecs):
+        assert len(boosts) == len(boost_vecs)
+        if len(boosts) == 0.:
+            warnings.warn("boost_vecs=[]: no need for BoostNpcLinearOperator", stacklevel=2)
+        super().__init__(orig_operator)
+        self.boosts = boosts
+        self.boost_vecs = boost_vecs
+
+    def matvec(self, vec):
+        temp = self.orig_operator.matvec(vec)
+        for b, bv in zip(self.boosts, self.boost_vecs):
+            lanczos.iadd_prefactor_other(temp, b * lanczos.inner(bv, vec), bv)
+        return temp
+        # return self.orig_operator.matvec(vec) + self.shift * vec
+
+    def to_matrix(self):
+        mat = self.orig_operator.to_matrix()
+        return mat + self.shift * npc.eye_like(mat)
+
+    def adjoint(self):
+        return BoostNpcLinearOperator(self.orig_operator.adjoint(), np.conj(self.boosts), self.boost_vecs)
 
 
 class OrthogonalNpcLinearOperator(NpcLinearOperatorWrapper):
