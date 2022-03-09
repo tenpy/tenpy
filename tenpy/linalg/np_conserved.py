@@ -4076,8 +4076,25 @@ def qr(a,
     if mode != 'complete':
         q._qdata[:, 1] = map_qind[q._qdata[:, 0]]
         r._qdata[:, 0] = q._qdata[:, 1]  # copy map_qind[q._qdata[:, 0]] from q
-    else:
+    else:  # mode == 'complete'
         q._qdata[:, 1] = q._qdata[:, 0]
+        if len(q_data) < a_leg0.block_number:
+            # there is a block in A that is completely 0 and not in A._data
+            # so we need to add corresponding identity blocks in Q to ensure Q is orthogonal!
+            # find qindices of those blocks
+            extra_q_qdata = []
+            have_q_qinds = np.concatenate((np.sort(a._qdata[:, 0]), [a_leg0.block_number]))
+            x = 0
+            for qi in range(a_leg0.block_number):
+                if have_q_qinds[x] == qi:
+                    x += 1
+                    continue
+                # else: don't have block for this qi yet in qdata, add identity
+                q_block = np.eye(a_leg0.slices[qi + 1] - a_leg0.slices[qi])
+                extra_q_qdata.append([qi, qi])
+                q_data.append(q_block)
+            q._qdata = np.concatenate((q._qdata, extra_q_qdata), axis=0)
+            q._qdata_sorted = False
     if len(piped_axes) > 0:  # revert the permutation in the axes
         if 0 in piped_axes:
             q = q.split_legs(0)

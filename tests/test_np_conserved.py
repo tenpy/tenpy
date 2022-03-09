@@ -801,6 +801,8 @@ def test_qr():
                             assert R.legs[0].qconj == qconj
                             QR = npc.tensordot(Q, R, axes=1)
                             npt.assert_array_almost_equal_nulp(A_flat, QR.to_ndarray(), tol)
+                            QdaggerQ = npc.tensordot(Q.conj(), Q, axes=[0, 0])
+                            assert npc.norm(QdaggerQ - npc.eye_like(QdaggerQ)) < 1.e-10
 
 
 def test_charge_detection():
