@@ -51,8 +51,8 @@ def construct_orthogonal(M, cutoff=1.e-13, left=True):
     if left:
         M = M.copy().combine_legs([['vL', 'p'], ['vR']], qconj=[+1, -1])
         Q, R = npc.qr(M, mode='complete', inner_labels=['vR', 'vL'], qtotal_Q=M.qtotal)
-        #proj = np.linalg.norm(R.to_ndarray(), axis=-1)
-        proj = np.concatenate([np.linalg.norm(r, axis=-1) for r in R._data])
+        proj = np.linalg.norm(R.to_ndarray(), axis=-1)
+        #proj = np.concatenate([np.linalg.norm(r, axis=-1) for r in R._data])
         proj = proj < cutoff
         Q.iproject(proj, 'vR')
         assert npc.norm(npc.tensordot(Q, M.conj(), axes=(['(vL.p)'], ['(vL*.p*)']))) < 1.e-14
@@ -61,8 +61,8 @@ def construct_orthogonal(M, cutoff=1.e-13, left=True):
         Q, R = npc.qr(M.transpose(['(p.vR)', '(vL)']), mode='complete', inner_labels=['vL', 'vR'], qtotal_Q=M.qtotal)
         Q.itranspose(['vL', '(p.vR)'])
         R.itranspose(['(vL)', 'vR'])
-        #proj = np.linalg.norm(R.to_ndarray(), axis=0)
-        proj = np.concatenate([np.linalg.norm(r, axis=0) for r in R._data])
+        proj = np.linalg.norm(R.to_ndarray(), axis=0)
+        #proj = np.concatenate([np.linalg.norm(r, axis=0) for r in R._data])
         proj = proj < cutoff
         Q.iproject(proj, 'vL')
         assert npc.norm(npc.tensordot(Q, M.conj(), axes=(['(p.vR)'], ['(p*.vR*)']))) < 1.e-14
