@@ -105,7 +105,8 @@ __all__ = [
     'QCUTOFF', 'ChargeInfo', 'LegCharge', 'LegPipe', 'Array', 'zeros', 'ones', 'eye_like', 'diag',
     'concatenate', 'grid_concat', 'grid_outer', 'detect_grid_outer_legcharge', 'detect_qtotal',
     'detect_legcharge', 'trace', 'outer', 'inner', 'tensordot', 'svd', 'pinv', 'norm', 'eigh',
-    'eig', 'eigvalsh', 'eigvals', 'speigs', 'qr', 'expm', 'to_iterable_arrays'
+    'eig', 'eigvalsh', 'eigvals', 'speigs', 'expm', 'qr', 'orthogonal_columns',
+    'to_iterable_arrays'
 ]
 
 #: A cutoff to ignore machine precision rounding errors when determining charges
@@ -3939,7 +3940,7 @@ def qr(a,
     Parameters
     ----------
     a : :class:`Array`
-        A square matrix to be exponentiated, shape ``(M,N)``.
+        The matrix to be decomposed, shape ``(M,N)``.
     mode : 'reduced', 'complete'
         'reduced': return `q` and `r` with shapes (M,K) and (K,N), where K=min(M,N)
         'complete': return `q` with shape (M,M).
@@ -4044,7 +4045,7 @@ def qr(a,
                     x += 1
                     continue
                 # else: don't have block for this qi yet in qdata, add identity
-                q_block = np.eye(a_leg0.slices[qi + 1] - a_leg0.slices[qi])
+                q_block = np.eye(a_leg0.slices[qi + 1] - a_leg0.slices[qi], dtype=a.dtype)
                 extra_q_qdata.append([qi, qi])
                 q_data.append(q_block)
             q._qdata = np.concatenate((q._qdata, extra_q_qdata), axis=0)
@@ -4057,6 +4058,101 @@ def qr(a,
     q.iset_leg_labels([a_labels[0], label_Q])
     r.iset_leg_labels([label_R, a_labels[1]])
     return q, r
+
+
+def orthogonal_columns(a, new_label=None):
+    """Find orthogonal columns for a given matrix.
+
+    Given `a` of shape `(M,N)` with M >= N and *assuming* full rank N of `a`, this function
+    considers the columns of `a` as basis vectors and finds orthogonal columns completing it.
+    The resulting `ortho` will be a (M, (M-N)) matrix.
+    A simple (and more expensive) implementation based on :meth:`qr` would look like this:
+
+        def orthogonal_columns(a, new_label):
+            q, r = ncp.qr(a, mode='complete', inner_labels=[new_label, None])
+            r_dense = r.to_ndarray()
+            zero_r_rows = (np.linalg.norm(r_dense, axis=1) == 0)
+            ortho = q.iproject(zero_r_rows, axis=1)
+            orhto.iset_leg_labels([a.get_leg_labels()[0], new_label])
+            return ortho
+
+    Parameters
+    ----------
+    a : :class:`Array`
+        A square matrix to be exponentiated, shape ``(M,N)`` with N <= M.
+    new_label : None | str
+        New right label for the returned `ortho`. ``None`` defaults to the right label of `A`.
+
+    Returns
+    -------
+    ortho : :class:`Array`
+        Isometry in the sense ``ortho^dagger @ orhto == eye``, i.e. has orthonormal columns.
+        Further, all columns are orthonormal to the columns of `a`.
+    """
+    if a.rank != 2:
+        raise ValueError("expect a matrix!")
+    M, N = a.shape
+    a_labels = a._labels
+    if new_label is None:
+        new_label = a_labels[1]
+    if M < N:
+        raise ValueError(f"orthogonal_columns with M={M:d} < N{N:d}: overcomplete! ")
+    if M == N:
+        warnings.warn("orhtogonal_columns(a) for square `a` yields zero matrix!")
+        right_leg = LegCharge(a.chinfo,
+                              [0],
+                              np.zeros([0, a.chinfo.qnumber], dtype=QTYPE),
+                              a.legs[1].qconj)
+        return Array([a.legs[0], right_leg], a.dtype, a.qtotal, [a_labels[0], new_label])
+    piped_axes, a = a.as_completely_blocked()  # ensure complete blocking & sort
+    left_leg = a.legs[0]
+    left_block_sizes = left_leg.get_block_sizes()
+    ortho_data = []
+    ortho_qdata = []
+    right_kept_blocks = []
+    left_qi = -1
+    right_qi = 0
+    for b in np.argsort(a._qdata[:, 0]):
+        next_left_qi = a._qdata[b, 0]
+        for left_qi in range(left_qi + 1, next_left_qi):  # yes, duplicated left_qi here
+            # missing block in a, so add identity block in ortho
+            ortho_data.append(np.eye(left_block_sizes[left_qi], dtype=a.dtype))
+            ortho_qdata.append([left_qi, right_qi])
+            right_kept_blocks.append(left_qi)
+            right_qi += 1
+        left_qi = next_left_qi
+        a_block = a._data[b]  # assume this to have full rank
+        M, N = a_block.shape
+        if M > N:
+            # find orthogonal columns of a_block
+            q_block, r_block = np.linalg.qr(a_block, mode='complete')
+            ortho_data.append(q_block[:, N:])
+            ortho_qdata.append([left_qi, right_qi])
+            right_kept_blocks.append(left_qi)
+            right_qi += 1
+        # else: full rank a_block, so no orthogonal column for this block!
+    for left_qi in range(left_qi + 1, left_leg.block_number):  # yes, duplicated left_qi here
+        # final missing blocks in a, so add identity blocks in ortho
+        ortho_data.append(np.eye(left_block_sizes[left_qi], dtype=a.dtype))
+        ortho_qdata.append([left_qi, right_qi])
+        right_kept_blocks.append(left_qi)
+        right_qi += 1
+    right_block_sizes = [b.shape[1] for b in ortho_data]
+    right_block_slices = np.cumsum([0] + right_block_sizes)
+    right_qconj = a.legs[1].qconj
+    right_charges = a.chinfo.make_valid(right_qconj * (a.qtotal -
+                                                       left_leg.get_charge(right_kept_blocks)))
+    right_leg = LegCharge(a.chinfo, right_block_slices, right_charges, right_qconj)
+    ortho = Array([left_leg, right_leg], a.dtype, a.qtotal)
+    ortho._data = ortho_data
+    ortho._qdata = np.array(ortho_qdata, dtype=np.intp, order='C')
+    ortho._qdata_sorted = True
+
+    if len(piped_axes) > 0:  # revert the permutation in the axes
+        if 0 in piped_axes:
+            ortho = ortho.split_legs(0)
+    ortho.iset_leg_labels([a_labels[0], new_label])
+    return ortho
 
 
 def to_iterable_arrays(array_list):
