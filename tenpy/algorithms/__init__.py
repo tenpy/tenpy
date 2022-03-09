@@ -17,6 +17,7 @@
     network_contractor
     exact_diag
     vumps
+    distentangler
 """
 # Copyright 2018-2021 TeNPy Developers, GNU GPLv3
 

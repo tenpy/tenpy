@@ -982,6 +982,8 @@ class CouplingModel(Model):
         strength : scalar | array
             Prefactor of the coupling. May vary spatially (see above). If an array of smaller size
             is provided, it gets tiled to the required shape.
+            A single scalar number can be given to indicate a coupling which is uniform accross
+            the lattice.
         u1 : int
             Picks the site ``lat.unit_cell[u1]`` for OP1.
         op1 : str

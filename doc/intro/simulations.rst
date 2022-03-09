@@ -17,11 +17,20 @@ In fact, any simulation can be run from the command line, given only a parameter
 Of course, you need to specify somewhere what type of simulation you want to run. Often, one of the predefined ones like
 the :class:`~tenpy.simulations.ground_state_search.GroundStateSearch` for running DMRG or
 :class:`~tenpy.simulations.time_evolution.RealTimeEvolution` for running e.g. TEBD or TDVP will suffice.
-The simulation class can be specified with the `simulation_class` option in the yaml file, or directly as a command line
+The :class:`~tenpy.simulations.simulation.Simulation` class can be specified with the `simulation_class` option in the yaml file, or directly as a command line
 argument, e.g. ``tenpy-run -C GroundStateSearch parameters.yml``.
 Note that command line arguments possibly override entries in the yaml files.
-For more details, see :func:`tenpy.console_main` for the command-line interface and :func:`tenpy.run_simulation` for the
-python interface.
+For more details, see :func:`tenpy.console_main` for the command-line interface.
+
+Of course, you can also directly run the simulation from inside python, the command line call is essentially just a wrapper around the :func:`tenpy.run_simulation` python interface::
+
+    import tenpy
+    import yaml
+
+    simulation_params = yaml.load("parameters.yml")
+    # instead of using yaml, you can also define a usual python dictionary
+    tenpy.run_simulation(**simulation_params)
+
 
 An minimal example to run finite DMRG for a Spin-1/2 Heisenberg :class:`~tenpy.models.spins.SpinChain` could be given by
 
