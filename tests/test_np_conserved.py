@@ -805,6 +805,22 @@ def test_qr():
                             assert npc.norm(QdaggerQ - npc.eye_like(QdaggerQ)) < 1.e-10
 
 
+def test_orthogonal_columns():
+    for shape in [(8, 6), (8, 2)]:
+        tol = shape[0] * shape[1] * 100
+        for qtotal_A in [None, [1]]:
+            A = random_Array(shape, chinfo3, qtotal=qtotal_A, sort=False)
+            A_flat = A.to_ndarray()
+            ortho = npc.orthogonal_columns(A)
+            ortho.test_sanity()
+            ortho_flat = ortho.to_ndarray()
+            # check orthogonality to A_flat
+            assert np.linalg.norm(A_flat.T.conj().dot(ortho_flat)) < tol * 1.e-15
+            # check orthonormality of columns
+            orthonormal = ortho_flat.T.conj().dot(ortho_flat)
+            npt.assert_almost_equal(orthonormal, np.eye(orthonormal.shape[0]), decimal=14)
+
+
 def test_charge_detection():
     chinfo = chinfo3
     for qtotal in [[0], [1], None]:
