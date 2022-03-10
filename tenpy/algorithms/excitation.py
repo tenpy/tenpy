@@ -597,3 +597,6 @@ class PlaneWaveExcitations(Algorithm):
             #print('X' + str(i) + ' norm:', npc.norm(th0))
 
         return X_init
+
+
+
