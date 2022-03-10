@@ -433,8 +433,8 @@ class PlaneWaveExcitations(Algorithm):
                             T_RW = TR_general(self.ARs[j+1:], self.ARs[j+1:], self.RW, Ws=self.Ws[j+1:])
                             X_out = npc.tensordot(X_out, T_RW, axes=(['vR', 'wR'], ['vL', 'wL']))
                         elif i > j:
-                            X_out = LT_general(self.ALs[:j], 
-                                              self.ALs[:j], 
+                            X_out = LT_general(self.ALs[:j],
+                                              self.ALs[:j],
                                               self.LW, Ws=self.Ws[:j])
                             X_out = npc.tensordot(X_out, self.ALs[j], axes=(['vR'], ['vL']))
                             X_out = npc.tensordot(X_out, self.Ws[j], axes=(['wR', 'p'], ['wL', 'p*']))
