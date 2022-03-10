@@ -45,6 +45,7 @@ def LT_general(As, Bs, L, Ws=None):
         #temp.itranspose(['vR*', 'wR', 'vR'])
     return temp
 
+"""
 # TODO - Make npc version of this as converting R to a dense array is very memory intensive.
 # Do complete QR on blocks of M and construct VL from this a la npc.qr.
 def construct_orthogonal(M, cutoff=1.e-13, left=True):
@@ -67,6 +68,7 @@ def construct_orthogonal(M, cutoff=1.e-13, left=True):
         Q.iproject(proj, 'vL')
         assert npc.norm(npc.tensordot(Q, M.conj(), axes=(['(p.vR)'], ['(p*.vR*)']))) < 1.e-14
     return Q.split_legs()
+"""
 
 def make_Bs(VLs, Xs):
     Bs = [npc.tensordot(VL, X, axes=(['vR'], ['vL'])).combine_legs(['vL', 'p'], qconj=+1) for VL, X in zip(VLs, Xs)]
