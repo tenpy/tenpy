@@ -119,6 +119,7 @@ In practice, it is useful only print warnings and errors to stdout to allow a si
     log_params:
         to_file: INFO
         to_stdout: WARN
+        # format: "{levelname:.4s} {asctime} {message}"
 
 .. note ::
 
