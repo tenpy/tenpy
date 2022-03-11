@@ -81,6 +81,7 @@ def construct_orthogonal(M, cutoff=1.e-13, left=True):
         assert npc.norm(npc.tensordot(Q, M.conj(), axes=(['(p.vR)'], ['(p*.vR*)']))) < 1.e-14
     return Q.split_legs()
 
+"""
 def make_Bs(VLs, Xs):
     Bs = [npc.tensordot(VL, X, axes=(['vR'], ['vL'])).combine_legs(['vL', 'p'], qconj=+1) for VL, X in zip(VLs, Xs)]
     return Bs
@@ -91,6 +92,7 @@ def make_Xs(VLs, Bs):
     #for X, VL, B in zip(Xs, VLs, Bs):
     #    assert npc.norm(npc.tensordot(VL, X, axes=(['vR'], ['vL'])) - B.split_legs()) < 1.e-10
     return Xs
+"""
 
 """
 def construct_orthogonal(orig_AL):
@@ -243,15 +245,15 @@ class PlaneWaveExcitations(Algorithm):
         RP = TR_general([self.ARs[self.L-1]], [self.ARs[self.L-1]], self.RW, Ws=[self.Ws[self.L-1]])
         B = npc.tensordot(self.VLs[self.L-1], X[self.L-1], axes=(['vR'], ['vL']))
         RB = TR_general([B], [self.ARs[self.L-1]], self.RW, Ws=[self.Ws[self.L-1]])
-        for i in reversed(range(1, self.L-1)):
+        for i in reversed(range(0, self.L-1)):
             B = npc.tensordot(self.VLs[i], X[i], axes=(['vR'], ['vL']))
             RB = TR_general([B], [self.ARs[i]], RP, Ws=[self.Ws[i]]) + \
                  TR_general([self.ALs[i]], [self.ARs[i]], RB, Ws=[self.Ws[i]])
-
-            RP = TR_general([self.ARs[i]], [self.ARs[i]], RP, Ws=[self.Ws[i]])
-        B = npc.tensordot(self.VLs[0], X[0], axes=(['vR'], ['vL']))
-        RB = TR_general([B], [self.ARs[0]], RP, Ws=[self.Ws[0]]) + \
-             TR_general([self.ALs[0]], [self.ARs[0]], RB, Ws=[self.Ws[0]])
+            if i > 0:
+                RP = TR_general([self.ARs[i]], [self.ARs[i]], RP, Ws=[self.Ws[i]])
+        #B = npc.tensordot(self.VLs[0], X[0], axes=(['vR'], ['vL']))
+        #RB = TR_general([B], [self.ARs[0]], RP, Ws=[self.Ws[0]]) + \
+        #     TR_general([self.ALs[0]], [self.ARs[0]], RB, Ws=[self.Ws[0]])
         R = RB
         """
         B0 = npc.tensordot(self.VLs[0], X[0], axes=(['vR'], ['vL']))
@@ -307,15 +309,15 @@ class PlaneWaveExcitations(Algorithm):
         LP = LT_general([self.ALs[0]], [self.ALs[0]], self.LW, Ws=[self.Ws[0]])
         B = npc.tensordot(self.VLs[0], X[0], axes=(['vR'], ['vL']))
         LB = LT_general([B], [self.ALs[0]], self.LW, Ws=[self.Ws[0]])
-        for i in range(1, self.L-1):
+        for i in range(1, self.L):
             B = npc.tensordot(self.VLs[i], X[i], axes=(['vR'], ['vL']))
             LB = LT_general([B], [self.ALs[i]], LP, Ws=[self.Ws[i]]) + \
                  LT_general([self.ARs[i]], [self.ALs[i]], LB, Ws=[self.Ws[i]])
-
-            LP = LT_general([self.ALs[i]], [self.ALs[i]], LP, Ws=[self.Ws[i]])
-        B = npc.tensordot(self.VLs[self.L-1], X[self.L-1], axes=(['vR'], ['vL']))
-        LB = LT_general([B], [self.ALs[self.L-1]], LP, Ws=[self.Ws[self.L-1]]) + \
-             LT_general([self.ARs[self.L-1]], [self.ALs[self.L-1]], LB, Ws=[self.Ws[self.L-1]])
+            if i < self.L-1:
+                LP = LT_general([self.ALs[i]], [self.ALs[i]], LP, Ws=[self.Ws[i]])
+        #B = npc.tensordot(self.VLs[self.L-1], X[self.L-1], axes=(['vR'], ['vL']))
+        #LB = LT_general([B], [self.ALs[self.L-1]], LP, Ws=[self.Ws[self.L-1]]) + \
+        #     LT_general([self.ARs[self.L-1]], [self.ALs[self.L-1]], LB, Ws=[self.Ws[self.L-1]])
         L = LB
 
         """
