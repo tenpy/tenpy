@@ -244,30 +244,13 @@ class PlaneWaveExcitations(Algorithm):
         sum_tol = self.options.get('sum_tol', 1.e-10)
         sum_method = self.options.get('sum_method', 'explicit')
 
-        #RP = TR_general([self.ARs[self.L-1]], [self.ARs[self.L-1]], self.RW, Ws=[self.Ws[self.L-1]])
         B = npc.tensordot(self.VLs[self.L-1], X[self.L-1], axes=(['vR'], ['vL']))
         RB = TR_general([B], [self.ARs[self.L-1]], self.RW, Ws=[self.Ws[self.L-1]])
         for i in reversed(range(0, self.L-1)):
             B = npc.tensordot(self.VLs[i], X[i], axes=(['vR'], ['vL']))
             RB = TR_general([B], [self.ARs[i]], self.GS_env.get_RP(i), Ws=[self.Ws[i]]) + \
                  TR_general([self.ALs[i]], [self.ARs[i]], RB, Ws=[self.Ws[i]])
-            #if i > 0:
-            #    RP = TR_general([self.ARs[i]], [self.ARs[i]], RP, Ws=[self.Ws[i]])
-        #B = npc.tensordot(self.VLs[0], X[0], axes=(['vR'], ['vL']))
-        #RB = TR_general([B], [self.ARs[0]], RP, Ws=[self.Ws[0]]) + \
-        #     TR_general([self.ALs[0]], [self.ARs[0]], RB, Ws=[self.Ws[0]])
         R = RB
-        """
-        B0 = npc.tensordot(self.VLs[0], X[0], axes=(['vR'], ['vL']))
-        R = TR_general(self.ALs[:0] + [B0] + self.ARs[0+1:],
-                        self.ARs,
-                        self.RW, Ws = self.Ws)
-        for i in range(1, self.L):
-            Bi = npc.tensordot(self.VLs[i], X[i], axes=(['vR'], ['vL']))
-            R.iadd_prefactor_other(1., TR_general(self.ALs[:i] + [Bi] + self.ARs[i+1:],
-                                                  self.ARs,
-                                                  self.RW, Ws = self.Ws))
-        """
 
         assert not np.isclose(npc.norm(R), 0)
         if sum_method=='explicit':
@@ -308,33 +291,14 @@ class PlaneWaveExcitations(Algorithm):
         sum_tol = self.options.get('sum_tol', 1.e-10)
         sum_method = self.options.get('sum_method', 'explicit')
 
-        #LP = LT_general([self.ALs[0]], [self.ALs[0]], self.LW, Ws=[self.Ws[0]])
         B = npc.tensordot(self.VLs[0], X[0], axes=(['vR'], ['vL']))
         LB = LT_general([B], [self.ALs[0]], self.LW, Ws=[self.Ws[0]])
-        #LP = self.LW
-        #LB = npc.Array.zeros_like(LP) # This way is cleaner but does one extra multiplication.
         for i in range(1, self.L):
             B = npc.tensordot(self.VLs[i], X[i], axes=(['vR'], ['vL']))
             LB = LT_general([B], [self.ALs[i]], self.GS_env.get_LP(i), Ws=[self.Ws[i]]) + \
                  LT_general([self.ARs[i]], [self.ALs[i]], LB, Ws=[self.Ws[i]])
-            #if i < self.L-1:
-            #    LP = LT_general([self.ALs[i]], [self.ALs[i]], LP, Ws=[self.Ws[i]])
-        #B = npc.tensordot(self.VLs[self.L-1], X[self.L-1], axes=(['vR'], ['vL']))
-        #LB = LT_general([B], [self.ALs[self.L-1]], LP, Ws=[self.Ws[self.L-1]]) + \
-        #     LT_general([self.ARs[self.L-1]], [self.ALs[self.L-1]], LB, Ws=[self.Ws[self.L-1]])
         L = LB
 
-        """
-        B0 = npc.tensordot(self.VLs[0], X[0], axes=(['vR'], ['vL']))
-        L = LT_general(self.ALs[:0] + [B0] + self.ARs[0+1:],
-                        self.ALs,
-                        self.LW, Ws = self.Ws)
-        for i in range(1, self.L):
-            Bi = npc.tensordot(self.VLs[i], X[i], axes=(['vR'], ['vL']))
-            L.iadd_prefactor_other(1., LT_general(self.ALs[:i] + [Bi] + self.ARs[i+1:],
-                                                  self.ALs,
-                                                  self.LW, Ws = self.Ws))
-        """
         assert not np.isclose(npc.norm(L), 0)
         if sum_method=='explicit':
             L_sum = L.copy()
@@ -385,35 +349,9 @@ class PlaneWaveExcitations(Algorithm):
         def matvec(self, vec):
 
             total_vec = [npc.Array.zeros_like(v) for v in vec]
-            """
-            for i in range(len(self.VLs)):
-                Bi = npc.tensordot(self.VLs[i], vec[i], axes=(['vR'], ['vL']))
-                    
-                for j in range(len(self.VLs)):
-                    Bj = npc.tensordot(self.VLs[j], vec[j], axes=(['vR'], ['vL']))
-                    if i <= j:
-                        X_out = LT_general(self.ALs[:i] + [Bi] + self.ARs[i+1:j+1],
-                                          self.ALs[:j] + [self.VLs[j]],
-                                          self.LW, Ws=self.Ws[:j+1])
-                        T_RW = TR_general(self.ARs[j+1:], self.ARs[j+1:], self.RW, Ws=self.Ws[j+1:])
-                        X_out = npc.tensordot(X_out, T_RW, axes=(['vR', 'wR'], ['vL', 'wL']))
-                    else:
-                        X_out = LT_general(self.ALs[:j+1],
-                                          self.ALs[:j] + [self.VLs[j]],
-                                          self.LW, Ws=self.Ws[:j+1])
-                        T_RW = TR_general(self.ALs[j+1:i] + [Bi] + self.ARs[i+1:],
-                                          self.ARs[j+1:],
-                                          self.RW, Ws=self.Ws[j+1:])
-                        X_out = npc.tensordot(X_out, T_RW, axes=(['vR', 'wR'], ['vL', 'wL']))
-                    X_out.ireplace_labels(['vR*', 'vL*'], ['vL', 'vR'])
-                    
-                    total_vec[j] += X_out
-            """
-            # More efficient way of calculating aligned term.
+            
             for i in range(self.outer.L):
-                #LP = self.LW
                 LB = npc.Array.zeros_like(self.LW)
-                #RP = self.RW
                 RB = npc.Array.zeros_like(self.RW)
                 for j in range(i):
                     B = npc.tensordot(self.VLs[j], vec[j], axes=(['vR'], ['vL']))
@@ -422,7 +360,6 @@ class PlaneWaveExcitations(Algorithm):
                              LT_general([self.ARs[j]], [self.ALs[j]], LB, Ws=[self.Ws[j]]) # Does one extra multiplication when i = 0
                     else:
                         LB = LT_general([B], [self.ALs[j]], self.outer.GS_env.get_LP(j), Ws=[self.Ws[j]])
-                    #LP = LT_general([self.ALs[j]], [self.ALs[j]], LP, Ws=[self.Ws[j]])
                 
                 B = npc.tensordot(self.VLs[i], vec[i], axes=(['vR'], ['vL']))
                 LB = LT_general([self.ARs[i]], [self.VLs[i]], LB, Ws=[self.Ws[i]])
@@ -436,7 +373,6 @@ class PlaneWaveExcitations(Algorithm):
                              TR_general([self.ALs[j]], [self.ARs[j]], RB, Ws=[self.Ws[j]])
                     else:
                         RB = TR_general([B], [self.ARs[j]], self.outer.GS_env.get_RP(j), Ws=[self.Ws[j]])
-                    #RP = TR_general([self.ARs[j]], [self.ARs[j]], RP, Ws=[self.Ws[j]])
                 if i > 0:
                     total_vec[i] += npc.tensordot(LB, self.outer.GS_env.get_RP(i), axes=(['vR', 'wR'], ['vL', 'wL']))
                 if i < self.outer.L-1:
@@ -461,53 +397,27 @@ class PlaneWaveExcitations(Algorithm):
         def matvec(self, vec):
 
             total = [npc.Array.zeros_like(v) for v in vec]
-            """
-            inf_sum_TLR = self.outer.infinite_sum_TLR(vec, self.p)                
-            #env_LR = MPOEnvironment(self.psi, self.H, self.psi, **self.boundary_env_data)
-            for i in range(self.outer.L):
-                X_out_left = TR_general(self.ALs[i+1:], self.ARs[i+1:], inf_sum_TLR, Ws=self.Ws[i+1:])
-                LW_T_VL = LT_general(self.ALs[:i+1], self.ALs[:i] + [self.VLs[i]], self.LW, Ws=self.Ws[:i+1])
-                X_out_left = np.exp(-1.0j*self.p*self.outer.L) * npc.tensordot(LW_T_VL, X_out_left, axes=(['vR', 'wR'], ['vL', 'wL']))
-                X_out_left.ireplace_labels(['vR*', 'vL*'], ['vL', 'vR'])
-                total[i] += X_out_left
-            
-            inf_sum_TRL = self.outer.infinite_sum_TRL(vec, self.p)
-            for i in range(self.outer.L):
-                X_out_right = LT_general(self.ARs[:i+1], self.ALs[:i] + [self.VLs[i]], inf_sum_TRL, Ws=self.Ws[:i+1])
-                T_RW = TR_general(self.ARs[i+1:], self.ARs[i+1:], self.RW, Ws=self.Ws[i+1:])
-                X_out_right = np.exp(1.0j*self.p*self.outer.L) * npc.tensordot(X_out_right, T_RW, axes=(['vR', 'wR'], ['vL', 'wL']))
-                X_out_right.ireplace_labels(['vR*', 'vL*'], ['vL', 'vR'])
-                total[i] += X_out_right
-            """
             
             inf_sum_TLR = self.outer.infinite_sum_TLR(vec, self.p) 
             cached_TLR = [inf_sum_TLR]
             for i in reversed(range(1, self.outer.L)):
                 cached_TLR.insert(0, TR_general([self.ALs[i]], [self.ARs[i]], cached_TLR[0], Ws=[self.Ws[i]]))
-            #LP = self.LW
             for i in range(self.outer.L):
                 LP_VL = LT_general([self.ALs[i]], [self.VLs[i]], self.outer.GS_env.get_LP(i), Ws=[self.Ws[i]])
                 X_out_left = np.exp(-1.0j*self.p*self.outer.L) * npc.tensordot(LP_VL, cached_TLR[i], axes=(['vR', 'wR'], ['vL', 'wL']))
                 X_out_left.ireplace_labels(['vR*', 'vL*'], ['vL', 'vR'])
                 total[i] += X_out_left
-                
-                #if i < self.outer.L-1:
-                #    LP = LT_general([self.ALs[i]], [self.ALs[i]], LP, Ws=[self.Ws[i]])
             cached_TLR = []
             
             inf_sum_TRL = self.outer.infinite_sum_TRL(vec, self.p) 
             cached_TRL = [inf_sum_TRL]
             for i in range(0, self.outer.L-1):
                 cached_TRL.append(LT_general([self.ARs[i]], [self.ALs[i]], cached_TRL[-1], Ws=[self.Ws[i]]))
-            #RP = self.RW
             for i in reversed(range(self.outer.L)):
                 TRL_VL = LT_general([self.ARs[i]], [self.VLs[i]], cached_TRL[i], Ws=[self.Ws[i]])
                 X_out_left = np.exp(1.0j*self.p*self.outer.L) * npc.tensordot(TRL_VL, self.outer.GS_env.get_RP(i), axes=(['vR', 'wR'], ['vL', 'wL']))
                 X_out_left.ireplace_labels(['vR*', 'vL*'], ['vL', 'vR'])
                 total[i] += X_out_left
-                
-                #if i > 0:
-                #    RP = TR_general([self.ARs[i]], [self.ARs[i]], RP, Ws=[self.Ws[i]])
             cached_TRL = []
             
             return total
@@ -520,7 +430,6 @@ class PlaneWaveExcitations(Algorithm):
 
         lanczos_options = self.options.subconfig('lanczos_options')
         lanczos_options['num_ev'] = n_bands
-        #lanczos_options['E_shift'] = 0
         
         X_init = self.initial_guess(qtotal_change)
         
@@ -542,7 +451,6 @@ class PlaneWaveExcitations(Algorithm):
 
     def initial_guess(self, qtotal_change):
         X_init = []
-        #env = MPOEnvironment(self.psi, self.H, self.psi, **self.boundary_env_data)
         for i in range(self.L):
             vL = self.VLs[i].get_leg('vR').conj()
             vR = self.ALs[(i+1)% self.L].get_leg('vL').conj()
