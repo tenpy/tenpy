@@ -309,6 +309,8 @@ class PlaneWaveExcitations(Algorithm):
         LP = LT_general([self.ALs[0]], [self.ALs[0]], self.LW, Ws=[self.Ws[0]])
         B = npc.tensordot(self.VLs[0], X[0], axes=(['vR'], ['vL']))
         LB = LT_general([B], [self.ALs[0]], self.LW, Ws=[self.Ws[0]])
+        #LP = self.LW
+        #LB = npc.Array.zeros_like(LP) # This way is cleaner but does one extra multiplication.
         for i in range(1, self.L):
             B = npc.tensordot(self.VLs[i], X[i], axes=(['vR'], ['vL']))
             LB = LT_general([B], [self.ALs[i]], LP, Ws=[self.Ws[i]]) + \
@@ -381,7 +383,7 @@ class PlaneWaveExcitations(Algorithm):
         def matvec(self, vec):
 
             total_vec = [npc.Array.zeros_like(v) for v in vec]
-
+            """
             for i in range(len(self.VLs)):
                 Bi = npc.tensordot(self.VLs[i], vec[i], axes=(['vR'], ['vL']))
                     
@@ -404,6 +406,41 @@ class PlaneWaveExcitations(Algorithm):
                     X_out.ireplace_labels(['vR*', 'vL*'], ['vL', 'vR'])
                     
                     total_vec[j] += X_out
+            """
+            # More efficient way of calculating aligned term.
+            for i in range(self.outer.L):
+                LP = self.LW
+                LB = npc.Array.zeros_like(LP)
+                RP = self.RW
+                RB = npc.Array.zeros_like(RP)
+                for j in range(i):
+                    B = npc.tensordot(self.VLs[j], vec[j], axes=(['vR'], ['vL']))
+                    if j > 0:
+                        LB = LT_general([B], [self.ALs[j]], LP, Ws=[self.Ws[j]]) + \
+                             LT_general([self.ARs[j]], [self.ALs[j]], LB, Ws=[self.Ws[j]]) # Does one extra multiplication when i = 0
+                    else:
+                        LB = LT_general([B], [self.ALs[j]], LP, Ws=[self.Ws[j]])
+                    LP = LT_general([self.ALs[j]], [self.ALs[j]], LP, Ws=[self.Ws[j]])
+                
+                B = npc.tensordot(self.VLs[i], vec[i], axes=(['vR'], ['vL']))
+                LB = LT_general([self.ARs[i]], [self.VLs[i]], LB, Ws=[self.Ws[i]])
+                LP1 = LT_general([self.ALs[i]], [self.VLs[i]], LP, Ws=[self.Ws[i]])
+                LP2 = LT_general([B], [self.VLs[i]], LP, Ws=[self.Ws[i]])
+                
+                for j in reversed(range(i+1, self.outer.L)):
+                    B = npc.tensordot(self.VLs[j], vec[j], axes=(['vR'], ['vL']))
+                    if j < self.outer.L - 1:
+                        RB = TR_general([B], [self.ARs[j]], RP, Ws=[self.Ws[j]]) + \
+                             TR_general([self.ALs[j]], [self.ARs[j]], RB, Ws=[self.Ws[j]])
+                    else:
+                        RB = TR_general([B], [self.ARs[j]], RP, Ws=[self.Ws[j]])
+                    RP = TR_general([self.ARs[j]], [self.ARs[j]], RP, Ws=[self.Ws[j]])
+                if i > 0:
+                    total_vec[i] += npc.tensordot(LB, RP, axes=(['vR', 'wR'], ['vL', 'wL']))
+                if i < self.outer.L-1:
+                    total_vec[i] += npc.tensordot(LP1, RB, axes=(['vR', 'wR'], ['vL', 'wL']))
+                total_vec[i] += npc.tensordot(LP2, RP, axes=(['vR', 'wR'], ['vL', 'wL']))
+            
             return total_vec
 
     class Unaligned_Effective_H(NpcLinearOperator):
@@ -422,8 +459,8 @@ class PlaneWaveExcitations(Algorithm):
         def matvec(self, vec):
 
             total = [npc.Array.zeros_like(v) for v in vec]
-
-            inf_sum_TLR = self.outer.infinite_sum_TLR(vec, self.p)
+            """
+            inf_sum_TLR = self.outer.infinite_sum_TLR(vec, self.p)                
             #env_LR = MPOEnvironment(self.psi, self.H, self.psi, **self.boundary_env_data)
             for i in range(self.outer.L):
                 X_out_left = TR_general(self.ALs[i+1:], self.ARs[i+1:], inf_sum_TLR, Ws=self.Ws[i+1:])
@@ -431,7 +468,7 @@ class PlaneWaveExcitations(Algorithm):
                 X_out_left = np.exp(-1.0j*self.p*self.outer.L) * npc.tensordot(LW_T_VL, X_out_left, axes=(['vR', 'wR'], ['vL', 'wL']))
                 X_out_left.ireplace_labels(['vR*', 'vL*'], ['vL', 'vR'])
                 total[i] += X_out_left
-
+            
             inf_sum_TRL = self.outer.infinite_sum_TRL(vec, self.p)
             for i in range(self.outer.L):
                 X_out_right = LT_general(self.ARs[:i+1], self.ALs[:i] + [self.VLs[i]], inf_sum_TRL, Ws=self.Ws[:i+1])
@@ -439,6 +476,37 @@ class PlaneWaveExcitations(Algorithm):
                 X_out_right = np.exp(1.0j*self.p*self.outer.L) * npc.tensordot(X_out_right, T_RW, axes=(['vR', 'wR'], ['vL', 'wL']))
                 X_out_right.ireplace_labels(['vR*', 'vL*'], ['vL', 'vR'])
                 total[i] += X_out_right
+            """
+            
+            inf_sum_TLR = self.outer.infinite_sum_TLR(vec, self.p) 
+            cached_TLR = [inf_sum_TLR]
+            for i in reversed(range(1, self.outer.L)):
+                cached_TLR.insert(0, TR_general([self.ALs[i]], [self.ARs[i]], cached_TLR[0], Ws=[self.Ws[i]]))
+            LP = self.LW
+            for i in range(self.outer.L):
+                LP_VL = LT_general([self.ALs[i]], [self.VLs[i]], LP, Ws=[self.Ws[i]])
+                X_out_left = np.exp(-1.0j*self.p*self.outer.L) * npc.tensordot(LP_VL, cached_TLR[i], axes=(['vR', 'wR'], ['vL', 'wL']))
+                X_out_left.ireplace_labels(['vR*', 'vL*'], ['vL', 'vR'])
+                total[i] += X_out_left
+                
+                if i < self.outer.L-1:
+                    LP = LT_general([self.ALs[i]], [self.ALs[i]], LP, Ws=[self.Ws[i]])
+            cached_TLR = []
+            
+            inf_sum_TRL = self.outer.infinite_sum_TRL(vec, self.p) 
+            cached_TRL = [inf_sum_TRL]
+            for i in range(0, self.outer.L-1):
+                cached_TRL.append(LT_general([self.ARs[i]], [self.ALs[i]], cached_TRL[-1], Ws=[self.Ws[i]]))
+            RP = self.RW
+            for i in reversed(range(self.outer.L)):
+                TRL_VL = LT_general([self.ARs[i]], [self.VLs[i]], cached_TRL[i], Ws=[self.Ws[i]])
+                X_out_left = np.exp(1.0j*self.p*self.outer.L) * npc.tensordot(TRL_VL, RP, axes=(['vR', 'wR'], ['vL', 'wL']))
+                X_out_left.ireplace_labels(['vR*', 'vL*'], ['vL', 'vR'])
+                total[i] += X_out_left
+                
+                if i > 0:
+                    RP = TR_general([self.ARs[i]], [self.ARs[i]], RP, Ws=[self.Ws[i]])
+            cached_TRL = []
             
             return total
 
