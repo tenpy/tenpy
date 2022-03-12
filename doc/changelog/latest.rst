@@ -34,8 +34,12 @@ Added
 - Lattice :attr:`~tenpy.models.lattice.Lattice.cylinder_axis`.
 - Random number generator :attr:`~tenpy.models.model.Model.rng` for models. Any randomness of model (parameters) should use this!
 - :meth:`~tenpy.models.aklt.AKLTChain.psi_AKLT` for the exact MPS ground state of (spin-1/2) AKLT chain.
+- :meth:`~tenpy.networks.mps.MPS.extract_enlarged_segment` to simplify measurements outside the segment with segment DMRG.
+- :meth:`~tenpy.networks.mps.MPS.apply_local_term` to correctly handle Jordan-Wigner strings.
 - :func:`~tenpy.simulations.simulation.init_simulation` and :func:`~tenpy.simulations.simulation.init_simulation_from_checkpoint` for debugging or post-simulation measurement.
 - :func:`~tenpy.linalg.np_conserved.orthogonal_columns` constructing orthogonal columns to a given (rectangular) matrix.
+- :meth:`tenpy.networks.site.Site.charge_to_JW_sign` and :attr:`~tenpy.networks.site.Site.charge_to_JW_parity` to allow
+  :meth:`~tenpy.networks.mps.MPS.apply_local_op` with a fermionic operator on an MPS.
 
 Changed
 ^^^^^^^
@@ -61,3 +65,4 @@ Fixed
 - :meth:`~tenpy.models.model.CouplingModel.add_local_term` did not work with `plus_hc=True`.
 - :meth:`~tenpy.linalg.sparse.FlatLinearOperator.eigenvectors` did not always return orthogonal eigenvectors with well-defined charges.
 - Make ``cons_Sz='parity'`` for the :class:`~tenpy.networks.site.SpinHalfSite` non-trivial.
+- Handle Jordan-Wigner strings in :meth:`~tenpy.networks.mps.MPS.apply_local_op`.
