@@ -744,6 +744,7 @@ def setup_logging(options=None,
                   to_stdout="INFO",
                   to_file="INFO",
                   format="%(levelname)-8s: %(message)s",
+                  datefmt=None,
                   logger_levels={},
                   dict_config=None,
                   capture_warnings=None,
@@ -825,9 +826,18 @@ def setup_logging(options=None,
             ``Simluation.logger`` class attribute. Hence, all messages from Simulation class
             methods calling ``self.logger.info(...)`` will be affected by that.
         format : str
-            Formatting string, `fmt` argument of :class:`logging.config.Formatter`.
+            Formatting string, `fmt` argument of :class:`logging.Formatter`.
+            You can for example use ``"{loglevel:.4s} {asctime} {message}"`` to include the time
+            stamp of each message into the log - this is usefull to get an idea where code hangs.
+            Find
+            `allowed keys <https://docs.python.org/3/library/logging.html#logrecord-attributes>`_
+            here. The style of the formatter is chosen depending on whether the format string
+            contains ``'%' '{' '$'``, respectively.
+        datefmt : str
+            Formatting string for the `asctime` key in the `format`, e.g. ``"%Y-%m-%d %H:%M:%S"``,
+            see :meth:`logging.Formatter.formatTime`.
         dict_config : dict
-            Alternatively, a full configuration dictionary for :mod:`logging.config.dictConfig`.
+            Alternatively, a full configuration dictionary for :func:`logging.config.dictConfig`.
             If used, all other options except `skip_setup` and `capture_warnings` are ignored.
         capture_warnings : bool
             Whether to call :func:`logging.captureWarnings` to include the warnings into the log.
@@ -873,6 +883,7 @@ def setup_logging(options=None,
             'formatters': {
                 'custom': {
                     'format': format,
+                    'datefmt': datefmt
                 }
             },
             'handlers': handlers,
@@ -882,6 +893,14 @@ def setup_logging(options=None,
             },
             'loggers': {},
         }
+        if '%' not in format:
+            if '{' in format:
+                assert '$' not in format
+                style = '{'
+            else:
+                assert '$' in format
+                style = '$'
+            dict_config['formatters']['custom']['style'] = style
         for name, level in logger_levels.items():
             if name == 'root':
                 dict_config['root']['level'] = level
