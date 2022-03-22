@@ -363,7 +363,8 @@ class Simulation:
         self.logger.info("initialize new cache")
         self.cache = CacheFile.open(**cache_params)
         # note: can't use a `with self.cache` statement, but emulate it:
-        # self.__enter__() calls self.cache = self.cache.__enter__()
+        # self.__enter__() calls this function followed by
+        # self.cache = self.cache.__enter__()
 
     def init_model(self):
         """Initialize a :attr:`model` from the model parameters.
