@@ -807,12 +807,12 @@ def iscale_prefactor(w, scale):
         for a in w:
             a.iscale_prefactor(scale)
 
-def inner(w, v):
+def inner(w, v, axes='range', do_conj=True):
     if not isinstance(w, list) and not isinstance(v, list):
-        return npc.inner(w, v, axes='range', do_conj=True)
+        return npc.inner(w, v, axes=axes, do_conj=do_conj)
     else:
         assert isinstance(w, list) and isinstance(v, list)
-        return np.sum([npc.inner(a, b, axes='range', do_conj=True) for a, b in zip(w, v)])
+        return np.sum([npc.inner(a, b, axes=axes, do_conj=do_conj) for a, b in zip(w, v)])
 
 def iadd_prefactor_other(w, alpha, v):
     if not isinstance(w, list):
