@@ -53,8 +53,8 @@ class RealTimeEvolution(Simulation):
 
             self.logger.info("reached time %.2f, max chi=%d", self.engine.evolved_time.real,
                              max(self.psi.chi))
-            # TODO: call engine.checkpoint.emit() ?
             self.make_measurements()
+            self.engine.checkpoint.emit(self.engine)  # TODO: is this a good idea?
 
     def resume_run_algorithm(self):
         self.run_algorithm()
