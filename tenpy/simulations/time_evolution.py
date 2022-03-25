@@ -33,8 +33,8 @@ class RealTimeEvolution(Simulation):
         ('tenpy.simulations.measurement', 'evolved_time'),
     ]
 
-    def __init__(self, options):
-        super().__init__(options)
+    def __init__(self, options, **kwargs):
+        super().__init__(options, **kwargs)
         self.final_time = self.options['final_time'] - 1.e-10  # subtract eps: roundoff errors
 
     def run_algorithm(self):

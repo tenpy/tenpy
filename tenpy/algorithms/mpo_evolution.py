@@ -66,7 +66,6 @@ class ExpMPOEvolution(TimeEvolutionAlgorithm):
     def __init__(self, psi, model, options, **kwargs):
         super().__init__(psi, model, options, **kwargs)
         options = self.options
-        self.evolved_time = options.get('start_time', 0.)
         self.trunc_err = options.get('start_trunc_err', TruncationError())
         self._U_MPO = None
         self._U_param = {}
