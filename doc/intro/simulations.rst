@@ -37,6 +37,24 @@ An minimal example to run finite DMRG for a Spin-1/2 Heisenberg :class:`~tenpy.m
 .. literalinclude:: /../examples/userguide/i_dmrg_parameters.yml
 
 
+Parallelization: controlling the number of threads
+--------------------------------------------------
+Almost all of the TeNPy code is "only" using thread-based paralellization provided by the underlying LAPACK/BLAS package linked to by Numpy/Scipy, and/or TeNPy's Cython code when you compile it.
+(A notable exception is the :class:`~tenpy.tools.cache.ThreadedStorage` for caching.)
+In practice, you can control the number of threads in the same way as if you use just plain numpy - by default, this uses all the CPU cores on a given machine. 
+
+If you run things on a cluster, it is often required to only use a fixed number of cores. Assuming a standard Linux cluster, the easiest way to control the used number of threads is usually the OMP_NUM_THREADS environment variable, which you can set in your cluster submission script:
+
+.. code :: bash
+
+    export OMP_NUM_THREADS=4
+    python -m tenpy parameters.yml
+
+If you linked against MKL, you can use ``export MKL_NUM_THREADS=4`` instead. In some cases, it might also be necessary to additionaly ``export MKL_DYNAMIC=FALSE``.
+Universities usually have some kind of local cluster documentation with examples - try to follow those, and doulbe check
+that you only use the cores you request.
+
+
 Customizing parameters
 ----------------------
 

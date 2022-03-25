@@ -239,8 +239,15 @@ class Site(Hdf5Exportable):
             op = np.asarray(op)
             if op.shape != (self.dim, self.dim):
                 raise ValueError("wrong shape of on-site operator")
-            # try to convert op into npc.Array
-            op = npc.Array.from_ndarray(op, [self.leg, self.leg.conj()])
+            try:
+                op = npc.Array.from_ndarray(op, [self.leg, self.leg.conj()])
+            except ValueError as e:
+                # just add a more help-ful error message printing the operators
+                raise ValueError('\n'.join([f"Can't convert operator {name!r} to npc Array",
+                                            "Flat charges:",
+                                            str(self.leg.to_qflat()),
+                                            "Operator:",
+                                            str(op)])) from e
         if op.rank != 2:
             raise ValueError("only rank-2 on-site operators allowed")
         op.legs[0].test_equal(self.leg)
