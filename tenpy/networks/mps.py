@@ -1727,8 +1727,10 @@ class MPS:
             bonds = range(nt.start, nt.stop)
         res = []
         for ib in bonds:
-            #s = self._S[ib]
-            s = self.get_SL(ib)
+            if ib == self.L:
+                s = self.get_SR(ib-1)
+            else:
+                s = self.get_SL(ib)
             if len(s.shape) == 1:
                 res.append(entropy(s**2, n))
             else:
@@ -3072,7 +3074,7 @@ class MPS:
         if self.finite:
             return self.canonical_form_finite(**kwargs)
         else:
-            return self.canonical_form_infinite2(**kwargs)
+            return self.canonical_form_infinite1(**kwargs)
 
     def canonical_form_finite(self, renormalize=True, cutoff=0., envs_to_update=None):
         """Bring a finite (or segment) MPS into canonical form; in place.
