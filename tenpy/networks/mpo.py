@@ -2439,7 +2439,7 @@ class MPOTransferMatrix:
                 rho = npc.tensordot(S.conj(), S, axes=['vR*', 'vR'])
             else:
                 S2 = S**2
-                rho = npc.diag(S2, vL, labels=['vL*', 'vL'])
+                rho = npc.diag(S2, vL.conj(), labels=['vL*', 'vL'])
 
             # vec: vR* wR vR
             for i in range(self.L):

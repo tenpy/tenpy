@@ -26,6 +26,7 @@ __all__ = [
     'OrthogonalNpcLinearOperator',
     'FlatLinearOperator',
     'FlatHermitianOperator',
+    'BoostNpcLinearOperator'
 ]
 
 

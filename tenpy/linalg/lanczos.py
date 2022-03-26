@@ -16,7 +16,7 @@ from ..tools.misc import argsort
 
 __all__ = [
     'KrylovBased', 'Arnoldi', 'LanczosGroundState', 'LanczosEvolution', 'lanczos',
-    'lanczos_arpack', 'gram_schmidt', 'plot_stats'
+    'lanczos_arpack', 'gram_schmidt', 'norm', 'inner', 'iscale_prefactor', 'iadd_prefactor_other', 'plot_stats', 'GMRES'
 ]
 
 

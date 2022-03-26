@@ -106,7 +106,7 @@ __all__ = [
     'concatenate', 'grid_concat', 'grid_outer', 'detect_grid_outer_legcharge', 'detect_qtotal',
     'detect_legcharge', 'trace', 'outer', 'inner', 'tensordot', 'svd', 'pinv', 'norm', 'eigh',
     'eig', 'eigvalsh', 'eigvals', 'speigs', 'expm', 'qr', 'orthogonal_columns',
-    'to_iterable_arrays'
+    'to_iterable_arrays', 'polar'
 ]
 
 #: A cutoff to ignore machine precision rounding errors when determining charges
@@ -3454,11 +3454,14 @@ def inner(a, b, axes=None, do_conj=False):
     if not optimize(OptimizationFlag.skip_arg_checks):
         if a.chinfo != b.chinfo:
             raise ValueError("different ChargeInfo")
-        for lega, legb in zip(a.legs, b.legs):
-            if do_conj:
-                lega.test_equal(legb)
-            else:
-                lega.test_contractible(legb)
+        for i, (lega, legb) in enumerate(zip(a.legs, b.legs)):
+            try:
+                if do_conj:
+                    lega.test_equal(legb)
+                else:
+                    lega.test_contractible(legb)
+            except ValueError as e:
+                raise ValueError(f"incompatible legs {a._labels[i]!r} and {b._labels[i]!r}") from e
     return _inner_worker(a, b, do_conj)
 
 

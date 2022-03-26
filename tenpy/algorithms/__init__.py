@@ -37,5 +37,6 @@ __all__ = [
     "network_contractor",
     "mpo_evolution",
     "disentangler",
-    "vumps"
+    "vumps",
+    "excitation"
 ]
