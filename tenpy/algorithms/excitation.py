@@ -455,6 +455,7 @@ class PlaneWaveExcitations(Algorithm):
 
     def initial_guess(self, qtotal_change):
         X_init = []
+        valid_charge = False
         for i in range(self.L):
             vL = self.VLs[i].get_leg('vR').conj()
             vR = self.ALs[(i+1)% self.L].get_leg('vL').conj()
@@ -464,19 +465,21 @@ class PlaneWaveExcitations(Algorithm):
                                       labels=['vL', 'vR'])
 
             if np.isclose(npc.norm(th0), 0):
-                warnings.warn('Initial guess for X is zero; charges may not be allowed.')
+                warnings.warn('Initial guess for an X is zero; charges not be allowed on site ' + str(i) +  '.')
+            else:
+                valid_charge = True
+                LP = self.GS_env.get_LP(i, store=True)
+                RP = self.GS_env.get_RP(i, store=True)
+                LP = LT_general([self.VLs[i]], [self.VLs[i]], LP, Ws=[self.Ws[i]])
 
-            LP = self.GS_env.get_LP(i, store=True)
-            RP = self.GS_env.get_RP(i, store=True)
-            LP = LT_general([self.VLs[i]], [self.VLs[i]], LP, Ws=[self.Ws[i]])
+                H0 = ZeroSiteH.from_LP_RP(LP, RP)
+                if self.model.H_MPO.explicit_plus_hc:
+                    H0 = SumNpcLinearOperator(H0, H0.adjoint())
 
-            H0 = ZeroSiteH.from_LP_RP(LP, RP)
-            if self.model.H_MPO.explicit_plus_hc:
-                H0 = SumNpcLinearOperator(H0, H0.adjoint())
-
-            lanczos_options = self.options.subconfig('lanczos_options')
-            _, th0, _ = LanczosGroundState(H0, th0, lanczos_options).run()
+                lanczos_options = self.options.subconfig('lanczos_options')
+                _, th0, _ = LanczosGroundState(H0, th0, lanczos_options).run()
 
             X_init.append(th0)
-
+        print('Norm of initial guess:', [npc.norm(x) for x in X_init])
+        assert valid_charge, "No X is non-zero; charge is not valid for gluing."
         return X_init

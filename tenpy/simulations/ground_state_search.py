@@ -567,6 +567,11 @@ class OrthogonalExcitations(GroundStateSearch):
                                   labels=['vL', 'vR'])
         lanczos_params = self.options.subconfig('algorithm_params').subconfig('lanczos_params')
         _, th0, _ = lanczos.LanczosGroundState(H0, th0, lanczos_params).run()
+        norm = npc.norm(th0)
+        self.logger.info("Norm of theta guess: %.8f", npc.norm(th0))
+        if np.isclose(norm, 0):
+            raise ValueError(f"Norm of inserted theta with charge {list(qtotal_change)} on site index {site:d} is zero.")
+        
         U, s, Vh = npc.svd(th0, inner_labels=['vR', 'vL'])
         psi.set_B(site-1, npc.tensordot(psi.get_B(site-1, 'A'), U, axes=['vR', 'vL']), form='A')
         psi.set_B(site, npc.tensordot(Vh, psi.get_B(site, 'B'), axes=['vR', 'vL']), form='B')
