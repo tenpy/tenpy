@@ -299,6 +299,8 @@ class Simulation:
         # before calling the `__init__()`, such that other methods can be customized to this case.
         sim = cls.__new__(cls)
         sim.loaded_from_checkpoint = True  # hook to disable parts of the __init__()
+        if 'resume_data' in checkpoint_results:
+            kwargs.setdefault('resume_data', checkpoint_results['resume_data'])
         sim.__init__(options, **kwargs)
         sim.results = checkpoint_results
         sim.results['measurements'] = {k: list(v) for k, v in sim.results['measurements'].items()}
@@ -318,6 +320,7 @@ class Simulation:
         self.init_model()
 
         if not hasattr(self, 'psi'):
+            # didn't get psi in resume_data, but might still have it in the results
             if 'psi' not in self.results:
                 raise ValueError("psi not saved in the results: can't resume!")
             self.psi = self.results['psi']
@@ -366,7 +369,8 @@ class Simulation:
         self.logger.info("initialize new cache")
         self.cache = CacheFile.open(**cache_params)
         # note: can't use a `with self.cache` statement, but emulate it:
-        # self.__enter__() calls self.cache = self.cache.__enter__()
+        # self.__enter__() calls this function followed by
+        # self.cache = self.cache.__enter__()
 
     def init_model(self):
         """Initialize a :attr:`model` from the model parameters.

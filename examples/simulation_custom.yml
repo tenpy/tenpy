@@ -19,6 +19,7 @@ save_every_x_seconds: 1800
 log_params:
     to_stdout: WARNING  # always check this output - empty is good
     to_file: INFO
+    # format: "{levelname:.4s} {asctime} {message}"
 
 model_class : AnisotropicSpin1Chain
 model_params :

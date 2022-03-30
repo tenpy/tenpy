@@ -51,7 +51,7 @@ def to_iterable_of_len(a, L):
     return a
 
 
-def to_array(a, shape=(None, ), dtype=None):
+def to_array(a, shape=(None, ), dtype=None, allow_incommensurate=False):
     """Convert `a` to an numpy array and tile to matching dimension/shape.
 
     This function provides similar functionality as numpys broadcast, but not quite the same:
@@ -69,6 +69,9 @@ def to_array(a, shape=(None, ), dtype=None):
         For int entries, tile the array periodically to fit the len.
     dtype :
         Optionally specifies the data type.
+    allow_incommensurate : bool
+        Whether to raise an Error (``False``) or still tile to the desired shape and just "crop"
+        in the end.
 
     Returns
     -------
@@ -82,14 +85,24 @@ def to_array(a, shape=(None, ), dtype=None):
         else:  # extending dimensions is ambiguous, so we better raise an Error.
             raise ValueError("don't know how to cast `a` to required dimensions.")
     reps = [1] * a.ndim
+    need_crop = False
+    crop = [slice(None, None)] * a.ndim
     for i in range(a.ndim):
         if shape[i] is None:
             continue
-        if shape[i] % a.shape[i] != 0:
-            raise ValueError("incomensurate len for tiling from {0:d} to {1:d}".format(
-                a.shape[i], shape[i]))
         reps[i] = shape[i] // a.shape[i]
-    return np.tile(a, reps)
+        if shape[i] % a.shape[i] != 0:
+            if allow_incommensurate:
+                reps[i] = reps[i] +  1
+                crop[i] = slice(None, shape[i])
+                need_crop = True
+            else:
+                raise ValueError("incomensurate len for tiling from {0:d} to {1:d}".format(
+                    a.shape[i], shape[i]))
+    a = np.tile(a, reps)
+    if need_crop:
+        a = a[tuple(crop)]
+    return a
 
 
 if bottleneck is not None:
@@ -744,6 +757,7 @@ def setup_logging(options=None,
                   to_stdout="INFO",
                   to_file="INFO",
                   format="%(levelname)-8s: %(message)s",
+                  datefmt=None,
                   logger_levels={},
                   dict_config=None,
                   capture_warnings=None,
@@ -825,9 +839,18 @@ def setup_logging(options=None,
             ``Simluation.logger`` class attribute. Hence, all messages from Simulation class
             methods calling ``self.logger.info(...)`` will be affected by that.
         format : str
-            Formatting string, `fmt` argument of :class:`logging.config.Formatter`.
+            Formatting string, `fmt` argument of :class:`logging.Formatter`.
+            You can for example use ``"{loglevel:.4s} {asctime} {message}"`` to include the time
+            stamp of each message into the log - this is usefull to get an idea where code hangs.
+            Find
+            `allowed keys <https://docs.python.org/3/library/logging.html#logrecord-attributes>`_
+            here. The style of the formatter is chosen depending on whether the format string
+            contains ``'%' '{' '$'``, respectively.
+        datefmt : str
+            Formatting string for the `asctime` key in the `format`, e.g. ``"%Y-%m-%d %H:%M:%S"``,
+            see :meth:`logging.Formatter.formatTime`.
         dict_config : dict
-            Alternatively, a full configuration dictionary for :mod:`logging.config.dictConfig`.
+            Alternatively, a full configuration dictionary for :func:`logging.config.dictConfig`.
             If used, all other options except `skip_setup` and `capture_warnings` are ignored.
         capture_warnings : bool
             Whether to call :func:`logging.captureWarnings` to include the warnings into the log.
@@ -873,6 +896,7 @@ def setup_logging(options=None,
             'formatters': {
                 'custom': {
                     'format': format,
+                    'datefmt': datefmt
                 }
             },
             'handlers': handlers,
@@ -882,6 +906,14 @@ def setup_logging(options=None,
             },
             'loggers': {},
         }
+        if '%' not in format:
+            if '{' in format:
+                assert '$' not in format
+                style = '{'
+            else:
+                assert '$' in format
+                style = '$'
+            dict_config['formatters']['custom']['style'] = style
         for name, level in logger_levels.items():
             if name == 'root':
                 dict_config['root']['level'] = level

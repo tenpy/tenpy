@@ -2972,7 +2972,7 @@ class MPS:
         if self.finite:
             return self.canonical_form_finite(**kwargs)
         else:
-            return self.canonical_form_infinite2(**kwargs)
+            return self.canonical_form_infinite1(**kwargs)
 
     def canonical_form_finite(self, renormalize=True, cutoff=0., envs_to_update=None):
         """Bring a finite (or segment) MPS into canonical form; in place.
@@ -3221,7 +3221,10 @@ class MPS:
         # now we have old_Bs R = R new_Bs with right-orthonormal new_Bs
         self._B = new_Bs
         C_guess = npc.diag(self.get_SL(0), self._B[0].get_leg('vL'), labels=['vL', 'vR'])
-        new_As, C, _ = self._canonical_form_left_orthogonalize(R_guess, tol, arnoldi_params)
+        # TODO: we sometimes got a legchare error when using R_guess instead off C_guess,
+        # so the oder of the indices might have changed (from sorting legs?)
+        # reflect this in permutation of singular values
+        new_As, C, _ = self._canonical_form_left_orthogonalize(C_guess, tol, arnoldi_params)
         # now we have C new_Bs = new_As C with left and right-orthonormal A/B
         # but not yet diagonal S
         C.itranspose(['vL', 'vR'])

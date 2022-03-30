@@ -17,6 +17,7 @@ save_every_x_seconds: 1800
 log_params:
     to_file: INFO
     to_stdout: WARN  # always check this output - empty is good
+    # format: "{levelname:.4s} {asctime} {message}"
 
 model_class :  SpinChain
 model_params :

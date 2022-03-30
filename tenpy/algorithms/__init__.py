@@ -16,6 +16,7 @@
     mpo_evolution
     network_contractor
     exact_diag
+    distentangler
 """
 # Copyright 2018-2021 TeNPy Developers, GNU GPLv3
 
