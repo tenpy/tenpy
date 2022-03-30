@@ -51,7 +51,7 @@ def to_iterable_of_len(a, L):
     return a
 
 
-def to_array(a, shape=(None, ), dtype=None):
+def to_array(a, shape=(None, ), dtype=None, allow_incommensurate=False):
     """Convert `a` to an numpy array and tile to matching dimension/shape.
 
     This function provides similar functionality as numpys broadcast, but not quite the same:
@@ -69,6 +69,9 @@ def to_array(a, shape=(None, ), dtype=None):
         For int entries, tile the array periodically to fit the len.
     dtype :
         Optionally specifies the data type.
+    allow_incommensurate : bool
+        Whether to raise an Error (``False``) or still tile to the desired shape and just "crop"
+        in the end.
 
     Returns
     -------
@@ -82,14 +85,24 @@ def to_array(a, shape=(None, ), dtype=None):
         else:  # extending dimensions is ambiguous, so we better raise an Error.
             raise ValueError("don't know how to cast `a` to required dimensions.")
     reps = [1] * a.ndim
+    need_crop = False
+    crop = [slice(None, None)] * a.ndim
     for i in range(a.ndim):
         if shape[i] is None:
             continue
-        if shape[i] % a.shape[i] != 0:
-            raise ValueError("incomensurate len for tiling from {0:d} to {1:d}".format(
-                a.shape[i], shape[i]))
         reps[i] = shape[i] // a.shape[i]
-    return np.tile(a, reps)
+        if shape[i] % a.shape[i] != 0:
+            if allow_incommensurate:
+                reps[i] = reps[i] +  1
+                crop[i] = slice(None, shape[i])
+                need_crop = True
+            else:
+                raise ValueError("incomensurate len for tiling from {0:d} to {1:d}".format(
+                    a.shape[i], shape[i]))
+    a = np.tile(a, reps)
+    if need_crop:
+        a = a[tuple(crop)]
+    return a
 
 
 if bottleneck is not None:
