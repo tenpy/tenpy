@@ -1143,6 +1143,11 @@ class Lattice:
             lat_j[:, 0] = np.mod(lat_j_shifted[:, 0], Ls[0])
         keep = self._keep_possible_couplings(lat_j, lat_j_shifted, u2)
         mps_i = mps_i[keep]
+        if len(mps_i) == 0:
+            if strength is None:
+                return [], [], np.zeros([0, self.dim]), coupling_shape
+            else:
+                return [], [], np.array([])
         lat_indices = lat_i[keep] + shift_lat_indices[np.newaxis, :]
         lat_indices = np.mod(lat_indices, coupling_shape)
         lat_j = lat_j[keep]
