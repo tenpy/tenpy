@@ -9,11 +9,12 @@ As explained in :doc:`/intro/simulations`, you can easily add custom measurement
 # Copyright 2020-2021 TeNPy Developers, GNU GPLv3
 
 from ..networks.mpo import MPOEnvironment
+from ..tools.misc import get_recursive
 import warnings
 
 __all__ = [
-    'measurement_index', 'bond_dimension', 'bond_energies', 'energy_MPO', 'entropy',
-    'onsite_expectation_value', 'correlation_length', 'psi_method', 'evolved_time'
+    'measurement_index', 'bond_dimension', 'bond_energies', 'simulation_parameter', 'energy_MPO',
+    'entropy', 'onsite_expectation_value', 'correlation_length', 'psi_method', 'evolved_time'
 ]
 
 
@@ -65,6 +66,25 @@ def bond_energies(results, psi, simulation, key='bond_energies'):
         See :func:`~tenpy.simulation.measurement.measurement_index`.
     """
     results[key] = simulation.model.bond_energies(psi)
+
+
+def simulation_parameter(results, psi, simulation, recursive_key, key=None, **kwargs):
+    """Dummy meausurement of a simulation parameter.
+
+    This can be useful e.g. if you have a time-dependent hamiltonian parameter.
+
+    Parameters
+    ----------
+    results, psi, simulation, key :
+        See :func:`~tenpy.simulation.measurement.measurement_index`.
+    recursive_key : str
+        Recursive key of the simulation parameter to be read out.
+    default, separators :
+        Remaining arguments of :func:`~tenpy.tools.misc.get_recursive`.
+    """
+    if key is None:
+        key = recursive_key
+    results[key] = get_recursive(simulation.options, recursive_key, **kwargs)
 
 
 def energy_MPO(results, psi, simulation, key='energy_MPO'):
