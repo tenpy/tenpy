@@ -56,3 +56,4 @@ Fixed
 - :meth:`~tenpy.models.model.CouplingModel.add_local_term` did not work with `plus_hc=True`.
 - :meth:`~tenpy.linalg.sparse.FlatLinearOperator.eigenvectors` did not always return orthogonal eigenvectors with well-defined charges.
 - Make ``cons_Sz='parity'`` for the :class:`~tenpy.networks.site.SpinHalfSite` non-trivial.
+- The first, initial measurements for time-dependent Hamiltonians might have used wrong time for sequential/resume run.
