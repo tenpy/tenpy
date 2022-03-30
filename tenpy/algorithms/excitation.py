@@ -160,7 +160,7 @@ class PlaneWaveExcitations(Algorithm):
             self.lambda_C1 = npc.tensordot(self.Cs[0], self.RW, axes=(['vR'], ['vL']))
             self.lambda_C1 = npc.tensordot(self.LW, self.lambda_C1, axes=(['wR', 'vR'], ['wL', 'vL']))
             self.lambda_C1 = self.lambda_C1[0,0] / self.Cs[0][0,0]
-
+        """
         # Tw[Al,AR]
         self.l_LR = npc.Array.zeros_like(self.LW).itranspose(['vR*','wR', 'vR']) # [TODO] check default ordering to potentially remove transpose
         # Original ordering of boundary vectors ['vR*', 'wR', 'vR']
@@ -198,7 +198,7 @@ class PlaneWaveExcitations(Algorithm):
 
         #Should be energy density / E_C
         self.e_RL = (lT[0,self.IdR,0] - self.LWC[0,self.IdR,0])/self.l_RL[0,self.IdR,0]
-
+        """
         self.aligned_H = self.Aligned_Effective_H(self, self.ALs, self.ARs, self.VLs,
                                                   self.LW, self.RW, self.Ws,
                                                   self.chi, d=self.d)
@@ -223,7 +223,7 @@ class PlaneWaveExcitations(Algorithm):
             print("L norm           :", npc.norm(self.LW))
             print("R norm           :", npc.norm(self.RW))
             print("(L|R)            :", npc.tensordot(self.LW, self.RW, axes=(['vR*', 'wR', 'vR'],['vL*', 'wL', 'vL'])))
-
+            """
             lT  = LT_general(self.ALs, self.ARs, self.l_LR, Ws=self.Ws)
             Tr  = TR_general(self.ALs, self.ARs, self.r_LR, Ws=self.Ws)
             print("LR norm(l-lT)    :", npc.norm(self.l_LR-lT))
@@ -243,7 +243,7 @@ class PlaneWaveExcitations(Algorithm):
             print("ll*rr            :", npc.tensordot(self.LWC, self.CcRW,axes=(['vR*', 'wR', 'vR'],['vL*', 'wL', 'vL'])))
             print("ll*r             :", npc.tensordot(self.LWC, self.r_RL,axes=(['vR*', 'wR', 'vR'],['vL*', 'wL', 'vL'])))
             print("e_RL             :", self.e_RL)
-
+            """
     def infinite_sum_TLR(self, X, p):
         sum_tol = self.options.get('sum_tol', 1.e-10)
         sum_method = self.options.get('sum_method', 'explicit')
