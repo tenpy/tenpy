@@ -156,6 +156,9 @@ class Simulation:
     #: name of the default algorithm `engine` class
     default_algorithm = 'TwoSiteDMRGEngine'
 
+    #: name of the default initial_state_builder class
+    default_initial_state_builder = 'InitialStateBuilder'
+
     #: tuples as for :cfg:option:`Simulation.connect_measurements` that get added if
     #: the :cfg:option:`Simulation.use_default_measurements` is True.
     default_measurements = [
@@ -414,7 +417,8 @@ class Simulation:
                 Whether the final :attr:`psi` should be included into the output :attr:`results`.
         """
         if not hasattr(self, 'psi'):
-            builder_class = self.options.get('initial_state_builder_class', 'InitialStateBuilder')
+            builder_class = self.options.get('initial_state_builder_class',
+                                             self.default_initial_state_builder)
             Builder = find_subclass(InitialStateBuilder, builder_class)
             params = self.options.subconfig('initial_state_params')
             initial_state_builder = Builder(self.model.lat, params, self.model.dtype)
