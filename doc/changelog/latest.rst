@@ -37,9 +37,15 @@ Added
 - :meth:`~tenpy.networks.mps.MPS.extract_enlarged_segment` to simplify measurements outside the segment with segment DMRG.
 - :meth:`~tenpy.networks.mps.MPS.apply_local_term` to correctly handle Jordan-Wigner strings.
 - :func:`~tenpy.simulations.simulation.init_simulation` and :func:`~tenpy.simulations.simulation.init_simulation_from_checkpoint` for debugging or post-simulation measurement.
+<<<<<<< HEAD
 - :func:`~tenpy.linalg.np_conserved.orthogonal_columns` constructing orthogonal columns to a given (rectangular) matrix.
 - :meth:`tenpy.networks.site.Site.charge_to_JW_sign` and :attr:`~tenpy.networks.site.Site.charge_to_JW_parity` to allow
   :meth:`~tenpy.networks.mps.MPS.apply_local_op` with a fermionic operator on an MPS.
+=======
+- :meth:`tenpy.networks.site.Site.charge_to_JW_sign` and :attr:`~tenpy.networks.site.Site.charge_to_JW_parity` to allow
+  :meth:`~tenpy.networks.mps.MPS.apply_local_op` with a fermionic operator on an MPS.
+- :func:`~tenpy.linalg.np_conserved.orthogonal_columns` constructing orthogonal columns to a given (rectangular) matrix.
+>>>>>>> topo_excitations_refactor
 
 Changed
 ^^^^^^^
@@ -66,3 +72,4 @@ Fixed
 - :meth:`~tenpy.linalg.sparse.FlatLinearOperator.eigenvectors` did not always return orthogonal eigenvectors with well-defined charges.
 - Make ``cons_Sz='parity'`` for the :class:`~tenpy.networks.site.SpinHalfSite` non-trivial.
 - Handle Jordan-Wigner strings in :meth:`~tenpy.networks.mps.MPS.apply_local_op`.
+- The first, initial measurements for time-dependent Hamiltonians might have used wrong time for sequential/resume run.
