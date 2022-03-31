@@ -54,14 +54,14 @@ If you have a two-dimensional lattice, you can use :meth:`~tenpy.models.lattice.
 A suitable order is critical for the efficiency of MPS-based algorithms.
 On one hand, different orderings can lead to different MPO bond-dimensions, with direct impact on the complexity scaling.
 On the other hand, it influences how much entanglement needs to go through each bonds of the underlying MPS,
-e.g., the ground strate to be found in DMRG, and therefore influences the required MPS bond dimensions.
+e.g., the ground state to be found in DMRG, and therefore influences the required MPS bond dimensions.
 For the latter reason, the "optimal" ordering can not be known a priori and might even depend on your coupling
 parameters (and the phase you are in).
 In the end, you can just try different orderings and see which one works best.
 
-The simplets way to *change* the order is to use a non-default value for the initialization parameter `order` of the
+The simplest way to *change* the order is to use a non-default value for the initialization parameter `order` of the
 :class:`~tenpy.models.lattice.Lattice` class. This gets passed on to :meth:`~tenpy.models.lattice.Lattice.ordering`,
-which you an override in a custom lattice class to define new possible orderings.
+which you can override by creating a custom lattice class to define new possible orderings.
 Alternatively, you can go the most general way and simply set the attribute `order` to be a 2D numpy array with 
 lattice indices as rows, in the order you want.
 
@@ -122,8 +122,8 @@ This is discouraged, though, because the ground state MPS will require the *squa
 case!
 
 For two (or higher) dimensional lattices, e.g for DMRG on an infinite cylinder,
-you can also specify an integer `shift` instead of just saying ``'periodic'``:
-Rolling the 2D lattice up into a cylinder, you have a degree of freedom which sites to connect.
+you can also specify an integer `shift` instead of just saying ``'periodic'``.
+Rolling the 2D lattice up into a cylinder, you have a degree of freedom about which sites to connect.
 This is illustrated in the figure below for a :class:`~tenpy.models.lattice.Square` lattice with ``bc=['periodic', shift]``
 for ``shift in [-1, 0, 1]`` (different columns).
 In the first row, the orange markers indicate a pair of identified sites (see :meth:`~tenpy.models.lattice.Lattice.plot_bc_shift`).
@@ -158,10 +158,10 @@ In the second row, we directly draw lines between all sites connected by nearest
 
 Irregular Lattices
 ------------------
-The :class:`~tenpy.models.lattice.IrregularLattice` allows to add or remove sites from/to an existing regular lattice.
-The doc-string of :class:`~tenpy.models.lattice.IrregularLattice` contains several examples, let us consider another one
-here, where we use the IrregularLattice to "fix" the boundary of the Honeycomb lattice:
-when we use ``"open"`` boundary conditions for a finite system, there are two sites (on the lower left, and upper right),
+The :class:`~tenpy.models.lattice.IrregularLattice` allows you to add or remove sites from/to an existing regular lattice.
+The doc-string of :class:`~tenpy.models.lattice.IrregularLattice` contains several examples. Let us consider another one
+here, where we use the IrregularLattice to "fix" the boundary of the Honeycomb lattice.
+When we use ``"open"`` boundary conditions for a finite system, there are two sites (shown on the lower left, and upper right corners of the figure below),
 wich are not included into any hexagonal. The following example shows how to remove them from the system:
 
 .. plot ::
