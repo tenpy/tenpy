@@ -330,6 +330,7 @@ class OrthogonalExcitations(GroundStateSearch):
                 For finite MPS, this is usually just ``0, L-1``.
 
     """
+    default_initial_state_builder = 'ExcitationInitialState'
     def __init__(self, options, *, orthogonal_to=None, gs_data=None, **kwargs):
         super().__init__(options, **kwargs)
         resume_data = kwargs.get('resume_data', {})
@@ -602,7 +603,7 @@ class OrthogonalExcitations(GroundStateSearch):
         # re-initialize even if we already have a psi!
         if self.initial_state_builder is None:
             builder_class = self.options.get('initial_state_builder_class',
-                                             'ExcitationInitialState')
+                                             self.default_initial_state_builder)
             params = self.options.subconfig('initial_state_params')
             Builder = find_subclass(InitialStateBuilder, builder_class)
             if issubclass(Builder, ExcitationInitialState):
@@ -745,7 +746,7 @@ class OrthogonalExcitations(GroundStateSearch):
         self.logger.info("Norm of theta guess: %.8f", npc.norm(th0))
         if np.isclose(norm, 0):
             raise ValueError(f"Norm of inserted theta with charge {list(qtotal_change)} on site index {site:d} is zero.")
-        
+
         U, s, Vh = npc.svd(th0, inner_labels=['vR', 'vL'])
         psi.set_B(site-1, npc.tensordot(psi.get_B(site-1, 'A'), U, axes=['vR', 'vL']), form='A')
         psi.set_B(site, npc.tensordot(Vh, psi.get_B(site, 'B'), axes=['vR', 'vL']), form='B')

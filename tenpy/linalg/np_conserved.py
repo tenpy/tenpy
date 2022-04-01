@@ -2883,6 +2883,8 @@ def diag(s, leg, dtype=None, labels=None):
     if scalar:
         res._data = [np.diag(s * np.ones(size, dtype=s.dtype)) for size in leg.get_block_sizes()]
     else:
+        if s.ndim != 1:
+            raise ValueError(f"diag expected 0D or 1D `s`, got shape {s.shape!s}")
         res._data = [np.diag(s[leg.get_slice(qi)]) for qi in range(leg.block_number)]
     return res
 
