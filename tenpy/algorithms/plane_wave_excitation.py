@@ -7,26 +7,22 @@ import logging
 logger = logging.getLogger(__name__)
 
 from ..linalg import np_conserved as npc
+from ..networks.momentum_mps import MomentumMPS
 from ..networks.mpo import MPOEnvironment, MPOTransferMatrix
-from ..linalg.lanczos import GMRES, LanczosGroundState
+from ..linalg.lanczos import GMRES, LanczosGroundState, norm, inner
 from ..linalg.sparse import NpcLinearOperator, SumNpcLinearOperator, BoostNpcLinearOperator, ShiftNpcLinearOperator
 from ..tools.params import asConfig
 from ..tools.math import entropy
 from ..algorithms.algorithm import Algorithm
 from ..algorithms.mps_common import ZeroSiteH
-#from ..tools.misc import find_subclass
-#from ..tools.process import memory_usage
-#from .mps_common import Sweep, ZeroSiteH, OneSiteH
 
 __all__ = ['TR_general', 'LT_general', 'construct_orthogonal', 'PlaneWaveExcitations', ]
 
-
 """
-TODO - 02/25/2022
+TODO - 04/01/2022
 (1) Regulated transfer matrix for unit cell > 1
-(2) construct_orthogonal in npc way
-(3) restarted Lanczos
-(4) Proper way to get multiple excitations out
+(2) Multi site excitation tensor
+(3) Restarted Lanczos
 (5) DMRG over the segment
 """
 
@@ -46,33 +42,7 @@ def LT_general(As, Bs, L, Ws=None):
         if Ws is not None:
             temp = npc.tensordot(temp, Ws[i], axes=(['wR', 'p*'], ['wL', 'p']))
         temp = npc.tensordot(temp, As[i], axes=(['vR', 'p*'], ['vL', 'p']))
-        #temp.itranspose(['vR*', 'wR', 'vR'])
     return temp
-
-"""
-# TODO - Make npc version of this as converting R to a dense array is very memory intensive.
-# Do complete QR on blocks of M and construct VL from this a la npc.qr.
-def construct_orthogonal(M, cutoff=1.e-13, left=True):
-    if left:
-        M = M.copy().combine_legs([['vL', 'p'], ['vR']], qconj=[+1, -1])
-        Q, R = npc.qr(M, mode='complete', inner_labels=['vR', 'vL'], qtotal_Q=M.qtotal)
-        proj = np.linalg.norm(R.to_ndarray(), axis=-1)
-        #proj = np.concatenate([np.linalg.norm(r, axis=-1) for r in R._data])
-        proj = proj < cutoff
-        Q.iproject(proj, 'vR')
-        assert npc.norm(npc.tensordot(Q, M.conj(), axes=(['(vL.p)'], ['(vL*.p*)']))) < 1.e-14
-    else:
-        M = M.copy().combine_legs([['vL'], ['p', 'vR']], qconj=[+1, -1])
-        Q, R = npc.qr(M.transpose(['(p.vR)', '(vL)']), mode='complete', inner_labels=['vL', 'vR'], qtotal_Q=M.qtotal)
-        Q.itranspose(['vL', '(p.vR)'])
-        R.itranspose(['(vL)', 'vR'])
-        proj = np.linalg.norm(R.to_ndarray(), axis=0)
-        #proj = np.concatenate([np.linalg.norm(r, axis=0) for r in R._data])
-        proj = proj < cutoff
-        Q.iproject(proj, 'vL')
-        assert npc.norm(npc.tensordot(Q, M.conj(), axes=(['(p.vR)'], ['(p*.vR*)']))) < 1.e-14
-    return Q.split_legs()
-"""
 
 def construct_orthogonal(M, cutoff=1.e-13, left=True):
     if left:
@@ -85,39 +55,8 @@ def construct_orthogonal(M, cutoff=1.e-13, left=True):
         assert npc.norm(npc.tensordot(Q, M.conj(), axes=(['(p.vR)'], ['(p*.vR*)']))) < 1.e-14
     return Q.split_legs()
 
-"""
-def make_Bs(VLs, Xs):
-    Bs = [npc.tensordot(VL, X, axes=(['vR'], ['vL'])).combine_legs(['vL', 'p'], qconj=+1) for VL, X in zip(VLs, Xs)]
-    return Bs
-
-def make_Xs(VLs, Bs):
-    Xs = [npc.tensordot(B.split_legs(), VL.conj(), axes=(['vL', 'p'], ['vL*', 'p*'])).ireplace_label('vR*', 'vL').itranspose(['vL', 'vR']) for VL, B in zip(VLs, Bs)]
-    
-    #for X, VL, B in zip(Xs, VLs, Bs):
-    #    assert npc.norm(npc.tensordot(VL, X, axes=(['vR'], ['vL'])) - B.split_legs()) < 1.e-10
-    return Xs
-"""
-
-"""
-def construct_orthogonal(orig_AL):
-        chi = orig_AL.get_leg('vL').ind_len
-        AL = orig_AL.combine_legs(['vL', 'p'], qconj=[+1])
-        Q, R = npc.qr(AL, mode='complete', inner_labels=['vR', 'vL'])
-        n_rows = R.shape[1]
-        V_grouped = Q[:,chi:] # [TODO] Karthik did this differently, but I think this is right?
-        X = R[chi:,:]
-        VL = V_grouped.split_legs()
-
-        print(npc.norm(npc.tensordot(Q[:,:chi].split_legs(), orig_AL.conj(), axes=(['vL', 'p'], ['vL*', 'p*']))))
-
-        print(npc.norm(npc.tensordot(VL, orig_AL.conj(), axes=(['vL', 'p'], ['vL*', 'p*']))))
-        assert npc.norm(npc.tensordot(VL, orig_AL.conj(), axes=(['vL', 'p'], ['vL*', 'p*']))) < 1.e-14
-        return VL, X
-"""
-
-class PlaneWaveExcitations(Algorithm):
+class PlaneWaveExcitationEngine(Algorithm):
     def __init__(self, psi, model, options, **kwargs):
-        #options = asConfig(options, self.__class__.__name__)
         super().__init__(psi, model, options, **kwargs)
 
         assert self.psi.L == self.model.H_MPO.L
@@ -135,8 +74,7 @@ class PlaneWaveExcitations(Algorithm):
 
         self.IdL = self.H.get_IdL(0)
         self.IdR = self.H.get_IdR(-1)
-        #self.guess_init_env_data = options.get('init_data', {'init_RP': npc.tensordot(self.C, self.C.conj(), axes=(['vR', 'vL*'])) ,
-        #                                                    'init_LP': npc.tensordot(self.C.conj(), self.C, axes=(['vR*', 'vR']))})
+
         self.guess_init_env_data = self.options.get('init_data',None)
         self.dW = self.Ws[0].get_leg('wR').ind_len # [TODO] this assumes a single site
         self.chi = self.ALs[0].get_leg('vL').ind_len
@@ -160,7 +98,7 @@ class PlaneWaveExcitations(Algorithm):
             self.lambda_C1 = npc.tensordot(self.Cs[0], self.RW, axes=(['vR'], ['vL']))
             self.lambda_C1 = npc.tensordot(self.LW, self.lambda_C1, axes=(['wR', 'vR'], ['wL', 'vL']))
             self.lambda_C1 = self.lambda_C1[0,0] / self.Cs[0][0,0]
-
+        """
         # Tw[Al,AR]
         self.l_LR = npc.Array.zeros_like(self.LW).itranspose(['vR*','wR', 'vR']) # [TODO] check default ordering to potentially remove transpose
         # Original ordering of boundary vectors ['vR*', 'wR', 'vR']
@@ -198,7 +136,7 @@ class PlaneWaveExcitations(Algorithm):
 
         #Should be energy density / E_C
         self.e_RL = (lT[0,self.IdR,0] - self.LWC[0,self.IdR,0])/self.l_RL[0,self.IdR,0]
-
+        """
         self.aligned_H = self.Aligned_Effective_H(self, self.ALs, self.ARs, self.VLs,
                                                   self.LW, self.RW, self.Ws,
                                                   self.chi, d=self.d)
@@ -210,8 +148,9 @@ class PlaneWaveExcitations(Algorithm):
             temp = LT_general([self.VLs[i]], [self.ACs[i]], temp_L, Ws=[self.Ws[i]])
             temp = npc.tensordot(temp, temp_R, axes=(['wR', 'vR*'], ['wL', 'vL*']))
             strange.append(npc.norm(temp))
-        print('Strange Cancellation Term:', strange)
-
+        logger.info("Norm of H|psi> projected into the tangent space on each site: %r.", strange)
+        
+        """
         if 1 >= 1:
             print("-"*20, "initializing excitation", "-"*20)
             # Don't know how to subtract these with charges
@@ -243,7 +182,39 @@ class PlaneWaveExcitations(Algorithm):
             print("ll*rr            :", npc.tensordot(self.LWC, self.CcRW,axes=(['vR*', 'wR', 'vR'],['vL*', 'wL', 'vL'])))
             print("ll*r             :", npc.tensordot(self.LWC, self.r_RL,axes=(['vR*', 'wR', 'vR'],['vL*', 'wL', 'vL'])))
             print("e_RL             :", self.e_RL)
-
+        """
+    
+    def run(self, p, qtotal_change=None, orthogonal_to=[], E_boosts=[]):
+        self.unaligned_H = self.Unaligned_Effective_H(self, self.ALs, self.ARs, self.VLs,
+                                                      self.LW, self.RW, self.Ws, p, self.chi, self.d)
+        effective_H = SumNpcLinearOperator(self.aligned_H, self.unaligned_H)
+        lanczos_params = self.options.subconfig('lanczos_params')
+        X_init = self.initial_guess(qtotal_change)
+        if len(E_boosts) != len(orthogonal_to):
+            E_boost = self.options.get('E_boost', 100)
+            E_boosts = [E_boost] * len(orthogonal_to)
+        ortho_H = BoostNpcLinearOperator(effective_H, E_boosts, orthogonal_to)
+        
+        E, X, N = LanczosGroundState(ortho_H, X_init, lanczos_params).run()
+        
+        if N == lanczos_params.get('N_max', 20):
+            import warnings
+            warnings.warn('Maximum Lanczos iterations needed; be wary of results.')
+            
+        psi = MomentumMPS(X, self.psi, p, 1)
+        return E - self.energy_density * self.L - self.lambda_C1, psi, N
+    
+    def resume_run(self):
+        raise NotImplementedError()
+                
+    def energy(self, p, X):
+        self.unaligned_H = self.Unaligned_Effective_H(self, self.ALs, self.ARs, self.VLs,
+                                                      self.LW, self.RW, self.Ws, p, self.chi, self.d)
+        effective_H = SumNpcLinearOperator(self.aligned_H, self.unaligned_H)
+        HX = effective_H.matvec(X)
+        E = np.real(inner(X, HX)).item()
+        return E - self.energy_density * self.L - self.lambda_C1
+    
     def infinite_sum_TLR(self, X, p):
         sum_tol = self.options.get('sum_tol', 1.e-10)
         sum_method = self.options.get('sum_method', 'explicit')
@@ -276,7 +247,7 @@ class PlaneWaveExcitations(Algorithm):
                 def matvec(self, vec):
                     Tr = TR_general(self.ALs, self.ARs, vec, Ws=self.Ws)
                     if 'reg' in self.sum_method:
-                        assert False
+                        raise NotImplementedError('GMRES-reg not implemented for multi-site unit cell.')
                         lr = npc.tensordot(self.excit.l_LR, vec, axes=(['vR', 'wR', 'vR*'], ['vL', 'wL', 'vL*']))
                         llr = npc.tensordot(self.excit.LWCc, vec, axes=(['vR', 'wR', 'vR*'], ['vL', 'wL', 'vL*']))
                         T1_r = self.excit.r_LR * ((self.excit.e_LR-1) * lr + llr) + self.excit.CRW * lr
@@ -284,8 +255,8 @@ class PlaneWaveExcitations(Algorithm):
                     return vec - np.exp(-1.0j * p * self.excit.L) * Tr
 
             tm_op = helper_matvec(self, self.ALs, self.ARs, self.Ws, sum_method)
-            GMRES_options = self.options.subconfig('GMRES_options')
-            R_sum, _, _, _ = GMRES(tm_op, npc.Array.zeros_like(R)*1.j, R, GMRES_options).run()
+            GMRES_params = self.options.subconfig('GMRES_params')
+            R_sum, _, _, _ = GMRES(tm_op, npc.Array.zeros_like(R)*1.j, R, GMRES_params).run()
             return R_sum
         else:
             raise ValueError('Sum method', sum_method, 'not recognized!')
@@ -324,7 +295,7 @@ class PlaneWaveExcitations(Algorithm):
                 def matvec(self, vec):
                     lT = LT_general(self.ARs, self.ALs, vec, Ws=self.Ws)
                     if 'reg' in self.sum_method:
-                        assert False
+                        raise NotImplementedError('GMRES-reg not implemented for multi-site unit cell.')
                         lr = npc.tensordot(vec, self.excit.r_RL, axes=(['vR', 'wR', 'vR*'], ['vL', 'wL', 'vL*']))
                         lrr = npc.tensordot(vec, self.excit.CcRW, axes=(['vR', 'wR', 'vR*'], ['vL', 'wL', 'vL*']))
                         T1_l = self.excit.l_RL * ((self.excit.e_RL-1) * lr + lrr) + self.excit.LWC * lr
@@ -332,8 +303,8 @@ class PlaneWaveExcitations(Algorithm):
                     return vec - np.exp(1.0j * p * self.excit.L) * lT
 
             tm_op = helper_matvec(self, self.ALs, self.ARs, self.Ws, sum_method)
-            GMRES_options = self.options.subconfig('GMRES_options')
-            L_sum, _, _, _ = GMRES(tm_op, npc.Array.zeros_like(L)*1.j, L, GMRES_options).run()
+            GMRES_params = self.options.subconfig('GMRES_params')
+            L_sum, _, _, _ = GMRES(tm_op, npc.Array.zeros_like(L)*1.j, L, GMRES_params).run()
             return L_sum
         else:
             raise ValueError('Sum method', sum_method, 'not recognized!')
@@ -426,33 +397,6 @@ class PlaneWaveExcitations(Algorithm):
             
             return total
 
-    def diagonalize(self, p, qtotal_change=None, n_bands=1):
-
-        self.unaligned_H = self.Unaligned_Effective_H(self, self.ALs, self.ARs, self.VLs,
-                                                      self.LW, self.RW, self.Ws, p, self.chi, self.d)
-        effective_H = SumNpcLinearOperator(self.aligned_H, self.unaligned_H)
-
-        lanczos_options = self.options.subconfig('lanczos_options')
-        lanczos_options['num_ev'] = n_bands
-        
-        X_init = self.initial_guess(qtotal_change)
-        
-        Xs = []
-        Es = []
-        Ns = []
-        for i in range(n_bands):
-
-            ortho_H = BoostNpcLinearOperator(effective_H, [100]*i, Xs)            
-            E, X, N = LanczosGroundState(ortho_H, X_init, lanczos_options).run()
-
-            Xs.append(X)
-            Es.append(E)
-            Ns.append(N)
-            if N == lanczos_options.get('N_max', 20):
-                import warnings
-                warnings.warn('Maximum Lanczos iterations needed; be wary of results.')
-        return [E - self.energy_density * self.L - self.lambda_C1 for E in Es], Xs, Ns
-
     def initial_guess(self, qtotal_change):
         X_init = []
         valid_charge = False
@@ -476,8 +420,8 @@ class PlaneWaveExcitations(Algorithm):
                 if self.model.H_MPO.explicit_plus_hc:
                     H0 = SumNpcLinearOperator(H0, H0.adjoint())
 
-                lanczos_options = self.options.subconfig('lanczos_options')
-                _, th0, _ = LanczosGroundState(H0, th0, lanczos_options).run()
+                lanczos_params = self.options.subconfig('lanczos_params')
+                _, th0, _ = LanczosGroundState(H0, th0, lanczos_params).run()
 
             X_init.append(th0)
         print('Norm of initial guess:', [npc.norm(x) for x in X_init])
