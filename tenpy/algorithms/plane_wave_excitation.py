@@ -215,7 +215,6 @@ class PlaneWaveExcitationEngine(Algorithm):
         E = np.real(inner(X, HX)).item()
         return E - self.energy_density * self.L - self.lambda_C1
     
->>>>>>> 534744b18feccfdc30958100b9b24d7986cd6dca:tenpy/algorithms/plane_wave_excitation.py
     def infinite_sum_TLR(self, X, p):
         sum_tol = self.options.get('sum_tol', 1.e-10)
         sum_method = self.options.get('sum_method', 'explicit')
