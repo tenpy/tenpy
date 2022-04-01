@@ -16,8 +16,8 @@
     mpo_evolution
     network_contractor
     exact_diag
-    vumps
     distentangler
+    vumps
 """
 # Copyright 2018-2021 TeNPy Developers, GNU GPLv3
 
