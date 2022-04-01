@@ -25,3 +25,5 @@ tests/benchmark/*.png
 hdf5_io/
 examples/yaml/results
 .ipynb_checkpoints
+*.ipynb
+*.pkl

@@ -168,8 +168,7 @@ class TimeDependentExpMPOEvolution(ExpMPOEvolution):
 
     def run(self):
         N_steps = self.options.get('N_steps', 1)
-        if self.model.options['time'] != self.evolved_time:  # for non-trivial start_time
-            self.model = self.reinit_model()
+        self.reinit_model()  # self.evolved_time might be non-trivial for seq. runs
         self.update(N_steps)
         return self.psi
 
@@ -194,7 +193,7 @@ class TimeDependentExpMPOEvolution(ExpMPOEvolution):
             for U_MPO in self._U_MPO:
                 trunc_err += U_MPO.apply(self.psi, self.options)
             self.evolved_time = self.evolved_time + dt
-            self.model = self.reinit_model()  # use the updated model for the next measurement!
+            self.reinit_model()  # use the updated model for the next measurement!
         if preserve_norm:
             self.psi.norm = old_norm
         self.trunc_err = self.trunc_err + trunc_err  # not += : make a copy!
@@ -214,14 +213,19 @@ class TimeDependentExpMPOEvolution(ExpMPOEvolution):
         self._U_MPO = [U_MPO]
 
     def reinit_model(self):
-        """Re-initialize a new model at current time.
+        """Re-initialize a new `self.model` at current `self.evolved_time`.
 
         Returns
         -------
         model :
             New instance of the model initialized at ``model_params['time'] = self.evolved_time``.
         """
+        model_time = self.model.options.get('time', None)
+        if model_time is not None and model_time == self.evolved_time:
+            # no need to re-init
+            return self.model
         cls = self.model.__class__
         model_params = self.model.options  # if you get an error, set this in your custom model
         model_params['time'] = self.evolved_time
-        return cls(model_params)
+        self.model = cls(model_params)
+        return self.model

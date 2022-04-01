@@ -11,6 +11,7 @@ from ..linalg import np_conserved as npc
 from ..models.model import Model
 from ..networks.mpo import MPOEnvironment, MPOTransferMatrix
 from ..networks.mps import MPS, InitialStateBuilder
+from ..networks.umps import uMPS
 from ..algorithms.mps_common import ZeroSiteH
 from ..algorithms.dmrg import TwoSiteDMRGEngine
 from ..linalg import lanczos
@@ -77,9 +78,182 @@ class GroundStateSearch(Simulation):
         E, psi = self.engine.resume_run()
         self.results['energy'] = E
 
+class PlaneWaveExcitations(GroundStateSearch):
+    default_algorithm = 'PlaneWaveExcitationEngine'
 
+    def __init__(self, options, *, gs_data=None, **kwargs):
+        super().__init__(options, **kwargs)
+        resume_data = kwargs.get('resume_data', {})
+        self.excitations = resume_data.get('excitations', [])
+        self.results['excitation_energies'] = []
+        if self.options.get('save_psi', True):
+            self.results['excitations'] = self.excitations
+        self.init_env_data = {}
+        self._gs_data = gs_data
+        self.initial_state_builder = None
+        assert 'group_sites' not in self.options.keys(), 'No grouping allowed for Plane Wave through simulations since we cannot ungroup.'
+
+    def run(self):
+        self.load_groundstate()
+        return super().run()
+
+    def resume_run(self):
+        self.load_groundstate()
+        return super().resume_run()
+
+    def load_groundstate(self):
+        """Load ground state and convert to uMPS.
+
+        Load the ground state and initialize the model from it.
+
+        Options
+        -------
+        .. cfg:configoptions :: OrthogonalExcitations
+
+            ground_state_filename :
+                File from which the ground state should be loaded.
+            orthogonal_norm_tol : float
+                Tolerance how large :meth:`~tenpy.networks.mps.MPS.norm_err` may be for states
+                to be added to :attr:`orthogonal_to`.
+
+        Returns
+        -------
+        gs_data : dict
+            The data loaded from :cfg:option:`OrthogonalExcitations.ground_state_filename`.
+        """
+        gs_fn, gs_data = self._load_gs_data()
+        gs_data_options = gs_data['simulation_parameters']
+        # initialize original model with model_class and model_params from ground state data
+        self.logger.info("initialize original ground state model")
+        for key in gs_data_options.keys():
+            if not isinstance(key, str) or not key.startswith('model'):
+                continue
+            if key not in self.options:
+                self.options[key] = gs_data_options[key]
+        self.init_model()
+
+        # intialize original state
+        self.psi = gs_data['psi']  # no copy!
+        assert isinstance(self.psi, MPS) or isinstance(self.psi, uMPS)
+        if np.linalg.norm(self.psi.norm_test()) > self.options.get('orthogonal_norm_tol', 1.e-12):
+            if isinstance(self.psi, MPS):
+                self.logger.info("call psi.canonical_form() on ground state")
+                psi0.canonical_form()
+            else:
+                raise ValueError('uMPS does not pass norm test. Run VUMPS to get ground state or \n' +
+                                 'convert to MPS and canonicalize.')
+        if isinstance(self.psi, MPS):
+            self.psi = uMPS.from_MPS(self.psi)
+            
+        resume_data = gs_data.get('resume_data', {})
+        if resume_data.get('converged_environments', False):
+            self.logger.info("use converged environments from ground state file")
+            env_data = resume_data['init_env_data']
+            write_back = False
+        else:
+            self.logger.info("converge environments with MPOTransferMatrix")
+            guess_init_env_data = resume_data.get('init_env_data', None)
+            H = self.model.H_MPO
+            env_data = MPOTransferMatrix.find_init_LP_RP(H, self.psi, 0, None,
+                                                         guess_init_env_data)
+            write_back = self.options.get('write_back_converged_ground_state_environments', False)
+        self.init_env_data = env_data
+
+        if write_back:
+            self.write_back_environments(gs_data, gs_fn)
+        return gs_data
+
+    def _load_gs_data(self):
+        """Load ground state data from `ground_state_filename` or use simulation kwargs."""
+        if self._gs_data is not None:
+            gs_fn = None
+            self.logger.info("use ground state data of simulation class arguments")
+            gs_data = self._gs_data
+            self._gs_data = None  # reset to None to potentially allow to free the memory
+            # even though this can only work if the call structure is
+            #      sim = OrthogonalExcitations(..., gs_data=gs_data)
+            #      del gs_data
+            #      with sim:
+            #          sim.run()
+        else:
+            gs_fn = self.options['ground_state_filename']
+            self.logger.info("loading ground state data from %s", gs_fn)
+            gs_data = hdf5_io.load(gs_fn)
+        return gs_fn, gs_data
+
+    def write_back_environments(self, gs_data, gs_fn):
+        """Write converged environments back into the file with the ground state.
+
+        Parameters
+        ----------
+        gs_data : dict
+            Data loaded from the ground state file.
+        gs_fn : str | None
+            Filename where to save `gs_data`. Do nothing if `gs_fn` is None.
+        """
+        assert self.init_env_data, "should have been defined by extract_segment()"
+        orig_fn = self.output_filename
+        orig_backup_fn = self._backup_filename
+        try:
+            self.output_filename = Path(gs_fn)
+            self._backup_filename = self.get_backup_filename(self.output_filename)
+
+            resume_data = gs_data.setdefault('resume_data', {})
+            init_env_data = resume_data.setdefault('init_env_data', {})
+            init_env_data.update(self.init_env_data)
+            if resume_data.get('converged_environments', False):
+                raise ValueError(f"{gs_fn!s} already has converged environments!")
+            resume_data['converged_environments'] = True
+            resume_data['psi'] = gs_data['psi'] # could have been modified with canonical_form;
+            # in any case that's the reference ground state we use now!
+
+            self.logger.info("write converged environments back to ground state file")
+            self.save_results(gs_data)  # safely overwrite old file
+        finally:
+            self.output_filename = orig_fn
+            self._backup_filename = orig_backup_fn
+
+    def run_algorithm(self):
+        N_excitations = self.options.get("N_excitations", 1)
+        switch_charge_sector = self.options.get("switch_charge_sector", None)
+        momentum = self.options.get("momentum", None)
+        if momentum is not None:
+            momentum *= 2*np.pi/self.psi.L # Momentum is in units of 2pi/L, as this is
+            # allowed momenta for plane wave ansatz.
+            
+        self.orthogonal_Xs = []
+        # loop over excitations
+        while len(self.excitations) < N_excitations:
+
+            E, psi, N = self.engine.run(momentum, switch_charge_sector, self.orthogonal_Xs)
+            self.results['excitation_energies'].append(E)
+            self.logger.info("Excitation Energy: %.14f. Lanczos Iterations: %d", E, N)
+
+            self.orthogonal_Xs.append(psi._X)
+            self.excitations.append(psi)  # save in list of excitations
+            if len(self.excitations) >= N_excitations:
+                break
+
+            self.make_measurements()
+            self.logger.info("got %d excitations so far, proceeed to next excitation.\n%s",
+                             len(self.excitations), "+" * 80)
+            self.init_state()  # initialize a new state to be optimized
+            self.init_algorithm()
+        # done
+
+    def resume_run_algorithm(self):
+        """Not Implemented"""
+        raise NotImplementedError("TODO")
+
+    def prepare_results_for_save(self):
+        results = super().prepare_results_for_save()
+        if 'resume_data' in results:
+            results['resume_data']['excitations'] = self.excitations
+        return results
+
+    
 class OrthogonalExcitations(GroundStateSearch):
-    """Find excitations by another GroundStateSearch orthogalizing against previous states.
+    """Find excitations by another GroundStateSearch orthoganalizing against previous states.
 
     If the ground state is an infinite MPS, it is converted to `segment` boundary conditions
     at the beginning of this simulation.
@@ -156,6 +330,7 @@ class OrthogonalExcitations(GroundStateSearch):
                 For finite MPS, this is usually just ``0, L-1``.
 
     """
+    default_initial_state_builder = 'ExcitationInitialState'
     def __init__(self, options, *, orthogonal_to=None, gs_data=None, **kwargs):
         super().__init__(options, **kwargs)
         resume_data = kwargs.get('resume_data', {})
@@ -428,7 +603,7 @@ class OrthogonalExcitations(GroundStateSearch):
         # re-initialize even if we already have a psi!
         if self.initial_state_builder is None:
             builder_class = self.options.get('initial_state_builder_class',
-                                             'ExcitationInitialState')
+                                             self.default_initial_state_builder)
             params = self.options.subconfig('initial_state_params')
             Builder = find_subclass(InitialStateBuilder, builder_class)
             if issubclass(Builder, ExcitationInitialState):
@@ -571,7 +746,7 @@ class OrthogonalExcitations(GroundStateSearch):
         self.logger.info("Norm of theta guess: %.8f", npc.norm(th0))
         if np.isclose(norm, 0):
             raise ValueError(f"Norm of inserted theta with charge {list(qtotal_change)} on site index {site:d} is zero.")
-        
+
         U, s, Vh = npc.svd(th0, inner_labels=['vR', 'vL'])
         psi.set_B(site-1, npc.tensordot(psi.get_B(site-1, 'A'), U, axes=['vR', 'vL']), form='A')
         psi.set_B(site, npc.tensordot(Vh, psi.get_B(site, 'B'), axes=['vR', 'vL']), form='B')
@@ -637,7 +812,6 @@ class OrthogonalExcitations(GroundStateSearch):
         if 'resume_data' in results:
             results['resume_data']['excitations'] = self.excitations
         return results
-
 
     def get_measurement_psi_model(self, psi, model):
         """Get psi for measurements.

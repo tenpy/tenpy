@@ -56,6 +56,14 @@ class RealTimeEvolution(Simulation):
             self.make_measurements()
             self.engine.checkpoint.emit(self.engine)  # TODO: is this a good idea?
 
+    def perform_measurements(self):
+        if getattr(self.engine, 'time_dependent_H', False):
+            # might need to re-initialize model with current time
+            # in particular for a sequential/resume run, the first `self.init_model()` might not
+            # yet have had the initial start time of the algorithm engine!
+            self.model = self.engine.reinit_model()
+        return super().perform_measurements()
+
     def resume_run_algorithm(self):
         self.run_algorithm()
 
