@@ -325,6 +325,7 @@ class uMPS(MPS):
         obj.bc = 'infinite'
         obj.norm = hdf5_loader.get_attr(h5gr, "norm")
         obj.valid_umps = hdf5_loader.get_attr(h5gr, "valid_umps")
+        obj.form = [None] * len(obj._AR)
         
         obj.grouped = hdf5_loader.get_attr(h5gr, "grouped")
         obj._transfermatrix_keep = hdf5_loader.get_attr(h5gr, "transfermatrix_keep")
