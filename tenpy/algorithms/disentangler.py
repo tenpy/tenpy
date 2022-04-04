@@ -611,24 +611,26 @@ def get_disentangler(method, parent):
 
     Examples
     --------
-    >>> get_disentangler(None, p)
-    Disentangler(p)
-    >>> get_disentangler('last-renyi', p)
-    Disentangler([LastDisentangler(p), RenyiDisentangler(p)], p)
-    >>> get_disentangler('min(None,noise-renyi,min(backwards,last)-graddesc)')
-    MinDisentangler([Disentangler,
-                     CompositeDisentangler([NoiseDisentangler(p), RenyiDisentangler(p)], p),
-                     CompositeDisentangler([MinDisentangler([BackwardDisentangler(p),
-                                                             LastDisentangler(p)]),
-                                            GradientDescentDisentangler(p)], p), p)
+    .. doctest :: get_disentangler
+        :options: +SKIP
+
+        >>> get_disentangler(None, p)
+        Disentangler(p)
+        >>> get_disentangler('last-renyi', p)
+        Disentangler([LastDisentangler(p), RenyiDisentangler(p)], p)
+        >>> get_disentangler('min(None,noise-renyi,min(backwards,last)-graddesc)')
+        MinDisentangler([Disentangler,
+                        CompositeDisentangler([NoiseDisentangler(p), RenyiDisentangler(p)], p),
+                        CompositeDisentangler([MinDisentangler([BackwardDisentangler(p),
+                                                                LastDisentangler(p)]),
+                                                GradientDescentDisentangler(p)], p), p)
     """
     try:
         disent, unparsed = _parse_composite(str(method), parent)
         if len(unparsed) > 0:
             raise _ParseError
-    except _ParseError:
-        raise
-        #  raise ValueError("Error while parsing disentangle method: " + repr(method))
+    except _ParseError as e:
+        raise ValueError("Error while parsing disentangle method: " + repr(method)) from e
     return disent
 
 
