@@ -82,7 +82,7 @@ class Disentangler:
 class BackwardDisentangler(Disentangler):
     """Disentangle with backward time evolution.
 
-    See [Karrasch2013]_ for details; only useful during real-time evolution.
+    See :cite:`karrasch2013` for details; only useful during real-time evolution.
 
     For the infinite temperature state, ``theta = delta_{p0, q0}*delta_{p1, q1}``.
     Thus, an application of `U_bond` to ``p0, p1`` can be reverted completely by applying
@@ -113,7 +113,7 @@ class BackwardDisentangler(Disentangler):
 class RenyiDisentangler(Disentangler):
     """Iterative find `U` which minimized the second Renyi entropy.
 
-    See [Hauschild2018]_
+    See :cite:`hauschild2018`.
 
     Reads of the following `options` as break criteria for the iteration:
 
