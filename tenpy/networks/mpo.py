@@ -45,7 +45,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 from ..linalg import np_conserved as npc
-from ..linalg.sparse import FlatLinearOperator
+from ..linalg.sparse import NpcLinearOperator, FlatLinearOperator
 from .site import group_sites, Site
 from ..tools.string import vert_join
 from .mps import MPS as _MPS  # only for MPS._valid_bc
@@ -2200,7 +2200,7 @@ class MPOEnvironment(MPSEnvironment):
         return RHeff
 
 
-class MPOTransferMatrix:
+class MPOTransferMatrix(NpcLinearOperator):
     """Transfermatrix of a Hamiltonian-like MPO sandwiched between canonicalized MPS.
 
     Given an MPS in canonical form, this class helps to find the correct initial MPO environment
@@ -2262,7 +2262,7 @@ class MPOTransferMatrix:
         wR = wL.conj()
         S2 = psi.get_SL(0)**2
         if not transpose:  # right to left
-            # vec: vL wL vL*
+            self.acts_on = ['vL', 'wL', 'vL*']  # vec: vL wL vL*
             for i in reversed(range(self.L)):
                 # optimize: transpose arrays to mostly avoid it in matvec
                 B = psi.get_B(i, 'B').astype(dtype, False)
@@ -2291,7 +2291,7 @@ class MPOTransferMatrix:
                 guess = guess.transpose(['vL', 'wL', 'vL*'])  # copy!
                 self._project(guess)
         else:  # left to right
-            # vec: vR* wR vR
+            self.acts_on = ['vR*', 'wR', 'vR']  # labels of the vec
             for i in range(self.L):
                 A = psi.get_B(i, 'A').astype(dtype, False)
                 self._M.append(A.transpose(['vL', 'p', 'vR']))
