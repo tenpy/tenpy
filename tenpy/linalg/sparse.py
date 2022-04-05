@@ -238,13 +238,18 @@ class FlatLinearOperator(ScipyLinearOperator):
         Defaults to ``0``, i.e., *assumes* the dominant eigenvector is in charge sector 0.
     vec_label : None | str
         Label to be set to the npc vector before acting on it with `npc_matvec`. Ignored if `None`.
+    compact_flat : bool | None
+        If True, restrict the flat array to the (only) non-zero block of given `charge_sector`.
+        If False, the flat array is directly what's represented by the npc Array's
+        :meth:`~tenpy.linalg.np_conserved.Array.to_ndarray`.
+        Works only if the `leg` is blocked; None defaults to True if possible.
 
     Attributes
     ----------
     possible_charge_sectors : ndarray[QTYPE, ndim=2]
         Each row corresponds to one possible choice for `charge_sector`.
     shape : (int, int)
-        The dimensions for the selected charge sector.
+        The dimensions represented by `self` for flat numpy arrays.
     dtype : np.dtype
         The data type of the arrays.
     leg : :class:`~tenpy.linalg.charges.LegCharge`
@@ -255,8 +260,15 @@ class FlatLinearOperator(ScipyLinearOperator):
         Function to calculate the action of the linear operator on an npc vector (with one `leg`).
     matvec_count : int
         The number of times `npc_matvec` was called.
-    _mask : ndarray[ndim=1, bool]
+    compact_flat : bool
+        If True, restrict the flat array to the (only) non-zero block of given `charge_sector`.
+        If False, the flat array is directly what's represented by the npc Array's
+        :meth:`~tenpy.linalg.np_conserved.Array.to_ndarray`.
+    _mask : ndarray[ndim=1, bool] | slice
         The indices of `leg` corresponding to the `charge_sector` to be diagonalized.
+        Just a slice if `compact_flat` and `leg.is_blocked`.
+    _compact_qdata : 2D array
+        The `qdata` for the npc vector, in case `compact_flat` is True.
     _npc_matvec_multileg : function | None
         Only set if initalized with :meth:`from_guess_with_pipe`.
         The `npc_matvec` function to be wrapped around. Takes the npc Array in multidimensional
@@ -265,12 +277,19 @@ class FlatLinearOperator(ScipyLinearOperator):
         Only set if initalized with :meth:`from_guess_with_pipe`.
         Labels of the guess before combining them into a pipe (stored as `leg`).
     """
-    def __init__(self, npc_matvec, leg, dtype, charge_sector=0, vec_label=None):
+    def __init__(self, npc_matvec, leg, dtype, charge_sector=0, vec_label=None, compact_flat=None):
         self.npc_matvec = npc_matvec
         self.leg = leg
         self.possible_charge_sectors = leg.charge_sectors()
         self.shape = (leg.ind_len, leg.ind_len)
         self.dtype = dtype
+        if compact_flat is None:
+            compact_flat = charge_sector is not None and leg.is_blocked()
+        elif compact_flat:
+            if not leg.is_blocked():
+                raise ValueError("FlatLinearOperator with `compact_flat` works only "
+                                 "for blocked `leg`.")
+        self.compact_flat = compact_flat
         self.vec_label = vec_label
         self.matvec_count = 0
         self._charge_sector = None
@@ -281,7 +300,7 @@ class FlatLinearOperator(ScipyLinearOperator):
         ScipyLinearOperator.__init__(self, self.dtype, self.shape)
 
     @classmethod
-    def from_NpcArray(cls, mat, charge_sector=0):
+    def from_NpcArray(cls, mat, charge_sector=0, compact_flat=None):
         """Create a `FlatLinearOperator` from a square :class:`~tenpy.linalg.np_conserved.Array`.
 
         Parameters
@@ -292,14 +311,25 @@ class FlatLinearOperator(ScipyLinearOperator):
             Selects the charge sector of the vector onto which the Linear operator acts.
             ``None`` stands for *all* sectors, ``0`` stands for the zero-charge sector.
             Defaults to ``0``, i.e., *assumes* the dominant eigenvector is in charge sector 0.
+        compact_flat : bool | None
+            If True, restrict the flat array to the (only) non-zero block of given `charge_sector`.
+            If False, the flat array is directly what's represented by the npc Array's
+            :meth:`~tenpy.linalg.np_conserved.Array.to_ndarray`.
+            Works only for fixed charge sector and if the `leg` of `mat` is blocked;
+            None defaults to ``leg.is_blocked()``.
         """
         if mat.rank != 2:
             raise ValueError("Works only for square matrices")
         mat.legs[1].test_contractible(mat.legs[0])
-        return cls(mat.matvec, mat.legs[0], mat.dtype, charge_sector)
+        return cls(mat.matvec, mat.legs[0], mat.dtype, charge_sector, compact_flat=compact_flat)
 
     @classmethod
-    def from_guess_with_pipe(cls, npc_matvec, v0_guess, labels_split=None, dtype=None):
+    def from_guess_with_pipe(cls,
+                             npc_matvec,
+                             v0_guess,
+                             labels_split=None,
+                             dtype=None,
+                             compact_flat=True):
         """Create a `FlatLinearOperator`` from a `matvec` function acting on multiple legs.
 
         This function creates a wrapper `matvec` function to allow acting on a "vector" with
@@ -320,6 +350,10 @@ class FlatLinearOperator(ScipyLinearOperator):
             ``v0_guess.get_leg_labels()``.
         dtype : np.dtype | None
             The data type of the arrays. ``None`` defaults to dtype of `v0_guess` (!).
+        compact_flat : bool
+            If True, restrict the flat array to the non-zero parts.
+            If False, the flat array is directly what's represented by the npc Array's
+            :meth:`~tenpy.linalg.np_conserved.Array.to_ndarray`.
 
         Returns
         -------
@@ -337,7 +371,7 @@ class FlatLinearOperator(ScipyLinearOperator):
             raise ValueError("`labels_split` must contain all the legs of `v0_guess`")
         pipe = v0_combined.legs[0]
         pipe_label = v0_combined.get_leg_labels()[0]
-        res = cls(npc_matvec, pipe, dtype, v0_combined.qtotal, pipe_label)
+        res = cls(npc_matvec, pipe, dtype, v0_combined.qtotal, pipe_label, compact_flat)
         res._labels_split = labels_split
         res._npc_matvec_multileg = npc_matvec
         res.npc_matvec = res._npc_matvec_wrapper  # activate the wrapper
@@ -357,9 +391,21 @@ class FlatLinearOperator(ScipyLinearOperator):
             value = self.leg.chinfo.make_valid(value)
         self._charge_sector = value
         if value is not None:
-            self._mask = np.all(self.leg.to_qflat() == value[np.newaxis, :], axis=1)
-            self.shape = tuple([np.sum(self._mask)] * 2)
+            if self.compact_flat:
+                assert self.leg.is_blocked()
+                # self.leg is blocked by charge, and we have a fixed charge
+                # so there is only a single data block in the npc array vector!
+                qi = self.leg.get_qindex_of_charges(value)
+                self._compact_qdata = np.array([[qi]], dtype=np.intp)
+                self._mask = sl = self.leg.get_slice(qi)
+                size = sl.stop - sl.start
+                self.shape = (size, size)
+            else:
+                self._mask = np.all(self.leg.to_qflat() == value[np.newaxis, :], axis=1)
+                self.shape = tuple([np.sum(self._mask)] * 2)
         else:
+            if self.compact_flat:
+                raise ValueError("Can't use `compact_flat` option with `None` charge sector")
             chi2 = self.leg.ind_len
             self.shape = (chi2, chi2)
             self._mask = np.ones([chi2], dtype=np.bool_)
@@ -407,7 +453,13 @@ class FlatLinearOperator(ScipyLinearOperator):
         """
         if self._charge_sector is not None:
             res = npc.zeros([self.leg], vec.dtype, self._charge_sector, labels=[self.vec_label])
-            res[self._mask] = vec
+            if self.compact_flat:
+                vec = np.ascontiguousarray(vec)  # should be contiguous already, but make sure
+                res._data = [vec]
+                res._qdata = self._compact_qdata
+                res._qdata_sorted = True
+            else:
+                res[self._mask] = vec
             return res
         else:
             leg = self.leg
@@ -442,6 +494,10 @@ class FlatLinearOperator(ScipyLinearOperator):
             assert npc_vec.rank == 1
             if np.any(npc_vec.qtotal != self._charge_sector):
                 raise ValueError("npc_vec.qtotal and charge sector don't match!")
+            if self.compact_flat:
+                assert len(npc_vec._data) == 1
+                assert np.all(npc_vec._qdata == self._compact_qdata)
+                return npc_vec._data[0]
             if isinstance(npc_vec.legs[0], npc.LegPipe):
                 npc_vec = npc_vec.copy(deep=False)
                 npc_vec.legs[0] = npc_vec.legs[0].to_LegCharge()

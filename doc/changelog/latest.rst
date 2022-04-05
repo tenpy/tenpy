@@ -54,6 +54,8 @@ Fixed
 - Make sure that :meth:`~tenpy.models.lattice.lat2mps_idx` doesn't modify arguments in place.
 - The power-method :meth:`tenpy.networks.mpo.MPO.expectation_value` did not work correctly for ``H.L != psi.L``.
 - :meth:`~tenpy.models.model.CouplingModel.add_local_term` did not work with `plus_hc=True`.
-- :meth:`~tenpy.linalg.sparse.FlatLinearOperator.eigenvectors` did not always return orthogonal eigenvectors with well-defined charges.
+- :meth:`tenpy.linalg.sparse.FlatLinearOperator.eigenvectors` did not always return orthogonal eigenvectors with well-defined charges.
+- Fix :class:`tenpy.linalg.sparse.FlatLinearOperator` to not use the full flat array, but just the block with nonzero entries (which can be much smaller for a few charges).
+  This is enabled over a new option `compact_flat` that defaults to True if the vector leg is blocked by charge (and charge_sector is not None).
 - Make ``cons_Sz='parity'`` for the :class:`~tenpy.networks.site.SpinHalfSite` non-trivial.
 - The first, initial measurements for time-dependent Hamiltonians might have used wrong time for sequential/resume run.
