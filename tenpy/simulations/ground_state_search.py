@@ -935,8 +935,8 @@ def expectation_value_outside_segment_left(psi_segment, psi_L, ops, lat_segment,
     ----------
     psi_S :
         Segment MPS.
-    psi_R :
-        Inifnite MPS on the right.
+    psi_L :
+        Inifnite MPS on the left.
     ops, sites, axes:
         As for :meth:`~tenpy.networks.mps.MPS.expectation_value`.
         `sites` should only have values < 0, with -1 being the first site on the left of the

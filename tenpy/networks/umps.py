@@ -233,9 +233,9 @@ class uMPS(MPS):
             ALC2 = npc.tensordot(AL, C2, axes=['vR', 'vL']).itranspose(self._B_labels)
             C1AR = npc.tensordot(C1, AR, axes=['vR', 'vL']).itranspose(self._B_labels)
         
-            err[i, 0] = npc.norm(ALC2 - C1AR)
-            err[i, 1] = npc.norm(ALC2 - AC)
-            err[i, 2] = npc.norm(C1AR - AC)
+            err[i, 0] = npc.norm((ALC2 / npc.tensordot(ALC2, C1AR.conj(), axes=(['vL', 'p', 'vR'], ['vL*', 'p*', 'vR*']))) - C1AR)
+            err[i, 1] = npc.norm((ALC2 / npc.tensordot(ALC2, AC.conj(), axes=(['vL', 'p', 'vR'], ['vL*', 'p*', 'vR*']))) - AC)
+            err[i, 2] = npc.norm((C1AR / npc.tensordot(C1AR, AC.conj(), axes=(['vL', 'p', 'vR'], ['vL*', 'p*', 'vR*']))) - AC)
             
         self.valid_umps = np.max(err) < cutoff
         logger.info('uMPS is %s with max error %.5e.', 'valid' if self.valid_umps else 'invalid', np.max(err))
