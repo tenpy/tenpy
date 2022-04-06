@@ -537,7 +537,7 @@ class Lattice:
         """
         cp = self.copy()
         L = cp.N_sites
-        assert first >= 0
+        #assert first >= 0
         if enlarge is not None:
             if cp.bc_MPS != 'infinite':
                 raise ValueError("enlarge only possible for infinite MPS")
@@ -545,16 +545,24 @@ class Lattice:
                 raise ValueError("specifiy either `first`+`last` or `enlarge`!")
             assert enlarge > 0
             last = enlarge * L - 1
+            # first = 0
         elif last is None:
             last = L - 1
-            enlarge = 1
-        else:
-            enlarge = last + 1 // L
+        if first >= last:
+            raise ValueError(f"need first < last, got {first:d}, {last:d}")
+        first_unit_cell = first - first % L
+        segment_first_last = (first, last)
+        if first_unit_cell != 0:
+            assert first_unit_cell < 0
+            if cp.bc_MPS != 'infinite':
+                raise ValueError("can't enlarge to negative `first` for finite system")
+            # shift by whole unit cell(s) to the right until `first` is in first unit cell
+            first, last = first - first_unit_cell, last - first_unit_cell
+            assert 0 <= first < L
+        enlarge = last // L + 1
         assert enlarge > 0
         if enlarge > 1:
             cp.enlarge_mps_unit_cell(enlarge)
-        if first >= last:
-            raise ValueError(f"need first < last, got {first:d}, {last:d}")
         if first > 0 or last < cp.N_sites - 1:
             # take out some parts of the lattice
             remove = list(range(0, first)) + list(range(last + 1, cp.N_sites))
@@ -566,7 +574,7 @@ class Lattice:
             bc = self.boundary_conditions
             bc[0] = 'periodic'
             cp.boundary_conditions = bc
-        cp.segment_first_last = first, last
+        cp.segment_first_last = segment_first_last
         return cp
 
     def enlarge_mps_unit_cell(self, factor=2):
@@ -1145,6 +1153,11 @@ class Lattice:
             lat_j[:, 0] = np.mod(lat_j_shifted[:, 0], Ls[0])
         keep = self._keep_possible_couplings(lat_j, lat_j_shifted, u2)
         mps_i = mps_i[keep]
+        if len(mps_i) == 0:
+            if strength is None:
+                return [], [], np.zeros([0, self.dim]), coupling_shape
+            else:
+                return [], [], np.array([])
         lat_indices = lat_i[keep] + shift_lat_indices[np.newaxis, :]
         lat_indices = np.mod(lat_indices, coupling_shape)
         lat_j = lat_j[keep]
@@ -2387,21 +2400,15 @@ class Honeycomb(Lattice):
     def ordering(self, order):
         """Provide possible orderings of the `N` lattice sites.
 
-        The following orders are defined in this method compared to :meth:`Lattice.ordering`:
-
-        ================== =========================== =============================
-        `order`            equivalent `priority`       equivalent ``snake_winding``
-        ================== =========================== =============================
-        ``'default'``      (0, 2, 1)                   (False, False, False)
-        ``'snake'``        (0, 2, 1)                   (False, True, False)
-        ================== =========================== =============================
+        Redefines ``'default'`` ordering to be the same as (the new) ``'rings'``,
+        on top of the ones defined in :meth:`Lattice.ordering`.
 
         .. plot ::
 
             import matplotlib.pyplot as plt
             from tenpy.models import lattice
-            fig, axes = plt.subplots(1, 2, sharex=True, sharey=True, figsize=(5, 6))
-            orders = ['default', 'snake']
+            fig, axes = plt.subplots(2, 2, sharex=True, sharey=True, figsize=(5, 6))
+            orders = ['default', 'rings', 'Cstyle', 'snake']
             lat = lattice.Honeycomb(4, 3, None, bc='periodic')
             for order, ax in zip(orders, axes.flatten()):
                 lat.order = lat.ordering(order)
@@ -2415,7 +2422,8 @@ class Honeycomb(Lattice):
             plt.show()
         """
         if isinstance(order, str):
-            if order == "default":
+            if order == "default" or order == 'rings':
+                # equivalent to get_grouped_order(self.shape, [(0, 2), (1,)])
                 priority = (0, 2, 1)
                 snake_winding = (False, False, False)
                 return get_order(self.shape, snake_winding, priority)
@@ -2497,6 +2505,36 @@ class Kagome(Lattice):
         kwargs['pairs'].setdefault('next_nearest_neighbors', nNN)
         kwargs['pairs'].setdefault('next_next_nearest_neighbors', nnNN)
         Lattice.__init__(self, [Lx, Ly], sites, **kwargs)
+
+    def ordering(self, order):
+        """Provide possible orderings of the `N` lattice sites.
+
+        Defines ``'rings'`` going along y first for sites (0, 2) of the unit cell, and then
+        for site 1. ``'default'`` is ``'Cstyle'`` going within the unit cell first.
+
+        .. plot ::
+
+            import matplotlib.pyplot as plt
+            from tenpy.models import lattice
+            fig, axes = plt.subplots(1, 2, sharex=True, sharey=True, figsize=(7, 4))
+            orders = ['default', 'rings']
+            lat = lattice.Kagome(4, 3, None, bc='periodic')
+            for order, ax in zip(orders, axes.flatten()):
+                lat.order = lat.ordering(order)
+                lat.plot_order(ax, linestyle=':')
+                lat.plot_sites(ax)
+                lat.plot_basis(ax, origin=-0.25*(lat.basis[0] + lat.basis[1]))
+                ax.set_title(repr(order))
+                ax.set_aspect('equal')
+                ax.set_xlim(-1)
+                ax.set_ylim(-1)
+            plt.show()
+        """
+        if isinstance(order, str):
+            if order == "rings":
+                order = get_order_grouped(self.shape, [(0, 2), (1,)])
+                return order
+        return super().ordering(order)
 
 
 def get_lattice(lattice_name):
@@ -2614,7 +2652,7 @@ def get_order_grouped(shape, groups, priority=None):
         from tenpy.models import lattice
         fig, axes = plt.subplots(2, 2, sharex=True, sharey=True, figsize=(8, 6))
         groups = [[(0, 1, 2)], [(0, 2, 1)],
-                [(0, 1), (2,)], [(0, 2), (1,)]]
+                [(0, 2), (1,)], [(0, 2), (1,)]]
         priorities = [None, None, None, [1, 0, 2]]
         lat = lattice.Kagome(3, 3, None, bc='periodic')
         for gr, prio, ax in zip(groups, priorities, axes.flatten()):

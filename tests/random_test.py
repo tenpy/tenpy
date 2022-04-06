@@ -62,6 +62,10 @@ def gen_random_legcharge_nq(chinfo, ind_len, n_qsector):
 
 def gen_random_legcharge(chinfo, ind_len, qconj=None):
     """returns a random (unsorted) legcharge with index_len `n`."""
+    if qconj is None:
+        qconj = np.random.randint(0, 1, 1) * 2 - 1
+    if ind_len == 0:
+        return charges.LegCharge.from_qflat(chinfo, [], qconj)
     qflat = []
     for mod in chinfo.mod:
         if mod > 1:
@@ -70,8 +74,6 @@ def gen_random_legcharge(chinfo, ind_len, qconj=None):
             r = max(3, ind_len // 3)
             qflat.append(np.asarray(np.random.randint(-r, r, size=ind_len)))
     qflat = np.array(qflat, dtype=charges.QTYPE).T.reshape(ind_len, chinfo.qnumber)
-    if qconj is None:
-        qconj = np.random.randint(0, 1, 1) * 2 - 1
     return charges.LegCharge.from_qflat(chinfo, qflat, qconj).bunch()[1]
 
 

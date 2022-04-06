@@ -45,7 +45,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 from ..linalg import np_conserved as npc
-from ..linalg.sparse import FlatLinearOperator
+from ..linalg.sparse import NpcLinearOperator, FlatLinearOperator
 from .site import group_sites, Site
 from ..tools.string import vert_join
 from .mps import MPS as _MPS  # only for MPS._valid_bc
@@ -629,21 +629,120 @@ class MPO:
         Id = [0] * (self.L + 1)
         return MPO(self.sites, U, self.bc, Id, Id, max_range=self.max_range)
 
-    def expectation_value(self, psi, tol=1.e-10, max_range=100):
-        """Calculate ``<psi|self|psi>/<psi|psi>``.
+    def expectation_value(self, psi, tol=1.e-10, max_range=100, init_env_data={}):
+        """Calculate ``<psi|self|psi>/<psi|psi>`` (or density for infinite).
 
-        For a finite MPS, simply contract the network ``<psi|self|psi>``.
-        For an infinite MPS, it assumes that `self` is the a of terms, with :attr:`IdL`
-        and :attr:`IdR` defined on each site.  Under this assumption,
-        it calculates the expectation value of terms with the left-most non-trivial
-        operator inside the MPO unit cell and returns the average value per site.
+        For infinite MPS, it **assumes** that `self` is extensive, e.g. a Hamiltonian
+        but not a unitary, and returns the expectation value *density*.
+        For finite MPS, it just returns the total value.
+
+        This function is just a small wrapper around :meth:`expectation_value_finite`,
+        :meth:`expectation_value_powermethod` or :meth:`expectation_value_transfer_matrix`.
 
         Parameters
         ----------
         psi : :class:`~tenpy.networks.mps.MPS`
-            State for which the expectation value should be taken.
+            The state in which to calculate the expectation value.
+        tol, max_range :
+            See  :meth:`expectation_value_powermethod`.
+        init_env_data : dict
+            Optional environment data, if known.
+
+        Returns
+        -------
+        exp_val : float/complex
+            The expectation value of `self` with respect to the state `psi`.
+            For an infinite MPS: the (energy) density per site.
+        """
+        if self.finite:
+            return self.expectation_value_finite(psi, **init_env_data)
+        elif self.max_range is None or self.max_range > 10 * self.L:
+            return self.expectation_value_TM(psi, tol=tol, **init_env_data)
+        else:
+            return self.expectation_value_power(psi, tol=tol, max_range=max_range,
+                                                      **init_env_data)
+
+    def expectation_value_finite(self, psi, init_env_data={}):
+        """Calculate ``<psi|self|psi>/<psi|psi>`` for finite MPS.
+
+        Parameters
+        ----------
+        psi : :class:`~tenpy.networks.mps.MPS`
+            The state in which to calculate the expectation value.
+        init_env_data : dict
+            Optional environment data (for segment MPS).
+
+        Returns
+        -------
+        exp_val : float/complex
+            The expectation value of `self` with respect to the state `psi`
+            (extensive, not the density).
+        """
+        if psi.bc == 'segment':
+            if len(init_env_data) == 0:
+                init_env_data['start_env_sites'] = 0
+                warnings.warn("MPO.expectation_value(psi) with segment psi needs environments! "
+                                "Can only estimate value completely ignoring contributions "
+                                "across segment boundaries!")
+        env = MPOEnvironment(psi, self, psi, **init_env_data)
+        val = env.full_contraction(0)  # handles explicit_plus_hc
+        return np.real_if_close(val)
+
+    def expectation_value_TM(self, psi, tol=1.e-10, init_env_data={}):
+        """Calculate ``<psi|self|psi>/<psi|psi> / L`` from the MPOTransferMatrix.
+
+        Only for infinite MPS, and **assumes** that the Hamiltonian is an extensive sum of
+        (quasi)local terms, and that the MPO has all :attr:`IdL` and :attr:`IdR` defined.
+
+        Diagonalizing the :class:`MPOTransferMatrix` allows to find energy densities for infinite
+        systems even for hamiltonians with infinite (exponentially decaying) range.
+
+
+        Parameters
+        ----------
+        psi : :class:`~tenpy.networks.mps.MPS`
+            The state in which to calculate the expectation value.
         tol : float
-            Ignored for finite `psi`.
+            Precision for finding the eigenvectors of the transfer matrix.
+        init_env_data : dict
+            Optional guess for the environment data.
+
+        Returns
+        -------
+        exp_val : float/complex
+            The expectation value density of `self` with respect to the state `psi`.
+        """
+        if psi.finite:
+            raise ValueError("not infinite MPS")
+        if np.linalg.norm(psi.norm_test()) > tol:
+            psi = psi.copy()
+            psi.canonical_form()
+        guess = init_env_data.get('init_RP', None)
+        TM = MPOTransferMatrix(self, psi, transpose=False, guess=guess)
+        val, vec = TM.dominant_eigenvector(tol=tol)
+        if abs(1. - val) > tol * 10.:
+            logger.warning("MPOTransferMatrix eigenvalue not 1: got 1. - %.3e", 1. - val)
+        E = TM.energy(vec) #  handles explicit_plus_hc
+        return np.real_if_close(E)
+
+    def expectation_value_power(self, psi, tol=1.e-10, max_range=100):
+        """Calculate ``<psi|self|psi>/<psi|psi>`` with a power-method.
+
+        Only for infinite MPS, and **assumes** that the Hamiltonian is an extensive sum of
+        (quasi)local terms, and that the MPO has all :attr:`IdL` and :attr:`IdR` defined.
+        Only for infinite MPS.
+
+        Instead of diagonalizing the MPOTransferMatrix like :meth:`expectation_value_TM`, this
+        method uses just considers terms of the MPO starting in the first unit cell and then
+        continues to contract tensors until convergence. For infinite-range MPOs, this converges
+        like a power-method (i.e. slower than :meth:`expectation_value_TM`), but for finite-range
+        MPOs it's likely faster, and conceptually cleaner.
+
+        Parameters
+        ----------
+        psi : :class:`~tenpy.networks.mps.MPS`
+            The state in which to calculate the expectation value.
+        tol : float
             For infinite MPO containing exponentially decaying long-range terms, stop evaluating
             further terms if the terms in `LP` have norm < `tol`.
         max_range : int
@@ -658,13 +757,9 @@ class MPO:
             For an infinite MPS: the density per site.
         """
         if psi.finite:
-            if psi.bc == 'segment':
-                warnings.warn("MPO.expectation_value(psi) with segment psi needs environments! "
-                              "Can only estimate value completely ignoring contributions "
-                              "across segment boundaries!")
-            return MPOEnvironment(psi, self, psi, start_env_sites=0).full_contraction(0)
+            raise ValueError("not infinite MPS")
         env = MPOEnvironment(psi, self, psi, start_env_sites=0)
-        L = self.L
+        L = lcm(self.L, psi.L)
         LP0 = env.init_LP(0)
         masks_L_no_IdL = []
         masks_R_no_IdRL = []
@@ -683,8 +778,8 @@ class MPO:
         LP = npc.tensordot(LP, theta.conj(), axes=[['vR*', 'p'], ['vL*', 'p0*']])
 
         for i in range(1, max(max_range, 1) * L):
-            i0 = i % L
-            W = self._W[i0]
+            i0 = i % self.L
+            W = self.get_W(i)
             if i >= L:
                 # have one full unit cell: don't use further terms starting with IdL
                 mask_L = masks_L_no_IdL[i0]
@@ -710,7 +805,7 @@ class MPO:
             msg = "Tolerance {0:.2e} not reached within {1:d} sites".format(tol, max_range)
             warnings.warn(msg, stacklevel=2)
         if self.explicit_plus_hc:
-            current_value += np.conj(current_value)
+            current_value = current_value + np.conj(current_value)
         return np.real_if_close(current_value / L)
 
     def variance(self, psi, exp_val=None):
@@ -815,6 +910,38 @@ class MPO:
                     max_range=None,
                     cutoff=1.e-12,
                     ignore=['Id', 'JW']):
+        """Obtain a `TermList` represented by self.
+
+        This function is meant for debugging MPOs to make sure they have the terms one expects.
+        Be aware of pitfalls with operator orthonormality, e.g. for fermions
+        ``N = 0.5 * (Id + JW)`` might not appear as you expect due to `ignore`.
+
+
+        Parameters
+        ----------
+        op_basis : (list of) list of str
+            Local basis of operators in which to represent all terms of `self`,
+            e.g. ``['Id', 'Sx', 'Sy', 'Sz']`` for spin-1/2 or ``['Id', 'JW', 'C', 'Cd']`` for
+            fermions. Should be orthogonal with respect to the operator product
+            ``<A|B> = tr(A^dagger B)``.
+        start : (list of) int
+            Extract terms starting on that/these sites, going to the right, i.e. the left-most
+            index within each term is in `start`.
+            If ``None``, take all terms starting in ``range(L)``, i.e. one MPS unit cell for
+            infinite systems.
+        cutoff : float
+            Drop terms with prefactors (roughly) smaller than that.
+            Stricktly speaking, it might also drop larger terms if the term has larger weight on
+            the right (in the MPO) than on the left.
+        ignore : list of str
+            Filter terms to not contain these operator names when they're not the left/rightmost
+            operators in a term.
+
+        Returns
+        -------
+        term_list : :class:`~tenpy.networks.terms.TermList`
+            The terms in `self` with left-most index in `start`.
+        """
         if start is not None:
             start = to_iterable(start)
         else:
@@ -1457,6 +1584,7 @@ class MPOGraph:
         graph = cls(sites, bc, 0)
         for term in terms:
             term.add_to_graph(graph)
+            # add_to_graph increases `max_range` as necessary
         graph.add_missing_IdL_IdR(insert_all_id)
         return graph
 
@@ -1913,7 +2041,7 @@ class MPOEnvironment(MPSEnvironment):
     **init_env_data :
         Further keyword arguments with initializaiton data, as returned by
         :meth:`get_initialization_data`.
-        See :meth:`initialize_first_LP_last_RP` for details on these parameters.
+        See :meth:`init_first_LP_last_RP` for details on these parameters.
 
     Attributes
     ----------
@@ -2092,7 +2220,7 @@ class MPOEnvironment(MPSEnvironment):
         i : int
             The returned `LP` will contain the contraction *strictly* left of site `i`.
         store : bool
-            Wheter to store the calculated `LP` in `self` (``True``) or discard them (``False``).
+            Whether to store the calculated `LP` in `self` (``True``) or discard them (``False``).
 
         Returns
         -------
@@ -2120,7 +2248,7 @@ class MPOEnvironment(MPSEnvironment):
         i : int
             The returned `RP` will contain the contraction *strictly* rigth of site `i`.
         store : bool
-            Wheter to store the calculated `RP` in `self` (``True``) or discard them (``False``).
+            Whether to store the calculated `RP` in `self` (``True``) or discard them (``False``).
 
         Returns
         -------
@@ -2221,7 +2349,7 @@ class MPOEnvironment(MPSEnvironment):
         return RHeff
 
 
-class MPOTransferMatrix:
+class MPOTransferMatrix(NpcLinearOperator):
     """Transfermatrix of a Hamiltonian-like MPO sandwiched between canonicalized MPS.
 
     Given an MPS in canonical form, this class helps to find the correct initial MPO environment
@@ -2241,14 +2369,14 @@ class MPOTransferMatrix:
         The MPS to project on. Should be given in usual 'ket' form;
         we call `conj()` on the matrices directly.
     transpose : bool
-        Wheter `self.matvec` acts on `RP` (``False``) or `LP` (``True``).
+        Whether `self.matvec` acts on `RP` (``False``) or `LP` (``True``).
     guess : :class:`~tenpy.linalg.np_conserved.Array`
         Initial guess for the converged environment.
 
     Attributes
     ----------
     transpose : bool
-        Wheter `self.matvec` acts on `RP` (``True``) or `LP` (``False``).
+        Whether `self.matvec` acts on `RP` (``True``) or `LP` (``False``).
     dtype :
         Common dtype of `H` and `psi`.
     IdL, IdR : int
@@ -2265,9 +2393,7 @@ class MPOTransferMatrix:
     def __init__(self, H, psi, transpose=False, guess=None, _subtraction_gauge='rho'):
         if psi.finite or H.bc != 'infinite':
             raise ValueError("Only makes sense for infinite MPS")
-        if H.L != psi.L:
-            raise ValueError("Non-matching L")
-        self.L = H.L
+        self.L = lcm(H.L, psi.L)
         if np.linalg.norm(psi.norm_test()) > 1.e-10:
             raise ValueError("psi should be in canonical form!")
         if psi._p_label != ['p']:
@@ -2285,7 +2411,7 @@ class MPOTransferMatrix:
         wR = wL.conj()
         S2 = psi.get_SL(0)**2
         if not transpose:  # right to left
-            # vec: vL wL vL*
+            self.acts_on = ['vL', 'wL', 'vL*']  # vec: vL wL vL*
             for i in reversed(range(self.L)):
                 # optimize: transpose arrays to mostly avoid it in matvec
                 B = psi.get_B(i, 'B').astype(dtype, False)
@@ -2301,7 +2427,7 @@ class MPOTransferMatrix:
             rho = npc.diag(S2, vR, labels=['vR', 'vR*'])
             self._proj_rho = rho.add_leg(wR, self.IdL, axis=1, label='wR')  # vR wR vR*
         else:  # left to right
-            # vec: vR* wR vR
+            self.acts_on = ['vR*', 'wR', 'vR']  # labels of the vec
             for i in range(self.L):
                 A = psi.get_B(i, 'A').astype(dtype, False)
                 self._M.append(A.transpose(['vL', 'p', 'vR']))
@@ -2351,6 +2477,7 @@ class MPOTransferMatrix:
         self.flat_linop, self.flat_guess = FlatLinearOperator.from_guess_with_pipe(self.matvec,
                                                                                    self.guess,
                                                                                    dtype=dtype)
+        self._explicit_plus_hc = H.explicit_plus_hc
 
     def matvec(self, vec, project=True):
         """One matvec-operation.
@@ -2431,7 +2558,10 @@ class MPOTransferMatrix:
         E0 = npc.inner(dom_vec, self._proj_rho, axes)
         vec = self.matvec(dom_vec, project=False)
         E = npc.inner(vec, self._proj_rho, axes)
-        return (E - E0) / self.L
+        E = (E - E0) / self.L
+        if self._explicit_plus_hc:
+            E = np.real(E + np.conj(E))
+        return E
 
     @classmethod
     def find_init_LP_RP(cls,
@@ -2468,10 +2598,11 @@ class MPOTransferMatrix:
             Dictionary with `init_LP` and `init_RP` that can be given to :class:`MPOEnvironment`.
         E : float
             Energy per site. Only returned if `calc_E` is True.
+        eps : float
+            The contraction of ``<LP |SS|RP>`` for the environment
         """
         # first right to left
         envs = []
-        Es = []
         if guess_init_env_data is None:
             guess_init_env_data = {}
         for transpose in [False, True]:
@@ -2481,13 +2612,11 @@ class MPOTransferMatrix:
             if abs(1. - val) > tol_ev0:
                 logger.warning("MPOTransferMatrix eigenvalue not 1: got %s", val)
             envs.append(vec)
-            if calc_E:
-                Es.append(TM.energy(vec))
+            if calc_E and transpose:
+                E = TM.energy(vec)
+            L = TM.L
             del TM
-        if calc_E:
-            assert np.isclose(Es[0], Es[1]), "Left and right energy density must be close."
         init_env_data = {'init_LP': envs[1], 'init_RP': envs[0], 'age_LP': 0, 'age_RP': 0}
-        L = H.L
         if first != 0 or last is not None and last % L != L - 1:
             env = MPOEnvironment(psi, H, psi, **init_env_data)
             if first % L != 0:
@@ -2495,14 +2624,16 @@ class MPOTransferMatrix:
             if last % L != L - 1:
                 init_env_data['init_RP'] = env.get_RP(last, store=False)
         if calc_E:
+            # TODO: this doesn't work for non-default first/last!?
             SL = psi.get_SL(0)
-            vL, vR = init_env_data['init_LP'].get_leg('vR').conj(), init_env_data['init_RP'].get_leg('vL').conj()
+            RP, LP = envs
+            vL, vR = LP.get_leg('vR').conj(), RP.get_leg('vL').conj()
             SL = npc.diag(SL, vL, labels=['vL', 'vR'])
-            E0 = npc.tensordot(init_env_data['init_LP'], SL, axes=(['vR'], ['vL']))
+            E0 = npc.tensordot(vL, SL, axes=(['vR'], ['vL']))
             E0 = npc.tensordot(E0, SL.conj(), axes=(['vR*'], ['vL*']))
             E0 = npc.tensordot(E0, init_env_data['init_RP'], axes=(['vR', 'wR', 'vR*'], ['vL', 'wL', 'vL*']))
             # E0 = LP * s^2 * RP on site 0
-            return Es[0], E0, init_env_data
+            return init_env_data, E, E0
         # else:
         return init_env_data
 

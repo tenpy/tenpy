@@ -66,7 +66,7 @@ class DummyEnv:
         return {"Env data": "Could be big"}
 
 
-def dummy_measurement(results, psi, simulation):
+def dummy_measurement(results, psi, model, simulation):
     results['dummy_value'] = simulation.engine.dummy_value
 
 

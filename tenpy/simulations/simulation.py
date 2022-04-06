@@ -34,7 +34,9 @@ from .. import version
 __all__ = [
     'Simulation',
     'Skip',
+    'init_simulation',
     'run_simulation',
+    'init_simulation_from_checkpoint',
     'resume_from_checkpoint',
     'run_seq_simulations',
     'output_filename_from_dict',
@@ -46,12 +48,15 @@ class Simulation:
 
     The prefered way to run simulations is in a `with` statement, which allows us to redirect
     error messages to the log files, timely warn about unused parameters and to properly close any
-    open files. In other words, use the simulation class like this::
+    open (cache) files. In other words, use the simulation class like this::
 
         with Simulation(options, ...) as sim:
             results = sim.run()
 
     The wrappers :func:`run_simulation` and :func:`run_seq_simulations` do that.
+
+    The other, expected way to run the simulation is "resuming" from a checkpoint of an
+    interrupted simulation run, for which you can use :func:`resume_from_checkpoint`.
 
     Parameters
     ----------
@@ -294,6 +299,8 @@ class Simulation:
         # before calling the `__init__()`, such that other methods can be customized to this case.
         sim = cls.__new__(cls)
         sim.loaded_from_checkpoint = True  # hook to disable parts of the __init__()
+        if 'resume_data' in checkpoint_results:
+            kwargs.setdefault('resume_data', checkpoint_results['resume_data'])
         sim.__init__(options, **kwargs)
         sim.results = checkpoint_results
         sim.results['measurements'] = {k: list(v) for k, v in sim.results['measurements'].items()}
@@ -313,6 +320,7 @@ class Simulation:
         self.init_model()
 
         if not hasattr(self, 'psi'):
+            # didn't get psi in resume_data, but might still have it in the results
             if 'psi' not in self.results:
                 raise ValueError("psi not saved in the results: can't resume!")
             self.psi = self.results['psi']
@@ -361,7 +369,8 @@ class Simulation:
         self.logger.info("initialize new cache")
         self.cache = CacheFile.open(**cache_params)
         # note: can't use a `with self.cache` statement, but emulate it:
-        # self.__enter__() calls self.cache = self.cache.__enter__()
+        # self.__enter__() calls this function followed by
+        # self.cache = self.cache.__enter__()
 
     def init_model(self):
         """Initialize a :attr:`model` from the model parameters.
@@ -432,7 +441,6 @@ class Simulation:
                 Use this if you want to run TEBD with a model that was originally next-nearest
                 neighbor.
         """
-        self.model_ungrouped = copy.copy(self.model)
         group_sites = self.grouped = self.options.get("group_sites", 1)
         to_NN = self.options.get("group_to_NearestNeighborModel", False)
         if group_sites < 1:
@@ -440,7 +448,7 @@ class Simulation:
         if group_sites > 1:
             if not self.loaded_from_checkpoint or self.psi.grouped < group_sites:
                 self.psi.group_sites(group_sites)
-            self.model_ungrouped = copy.copy(self.model)
+            self.model_ungrouped = self.model.copy()
             self.model.group_sites(group_sites)
             if to_NN:
                 self.model = NearestNeighborModel.from_MPOModel(self.model)
@@ -577,11 +585,12 @@ class Simulation:
         # in case of a failed measurement, we should raise the exception at the end of the
         # simulation?
         results = {}
-        if self.grouped > 1:
-            psi = self.psi.copy()
-            psi.group_split(self.options['algorithm_params']['trunc_params'])
+        psi, model = self.get_measurement_psi_model(self.psi, self.model)
 
-        returned = self.measurement_event.emit(results=results, simulation=self, psi=self.psi)
+        returned = self.measurement_event.emit(results=results,
+                                               simulation=self,
+                                               psi=psi,
+                                               model=model)
         # check for returned values, although there shouldn't be any
         returned = [entry for entry in returned if entry is not None]
         if len(returned) > 0:
@@ -590,6 +599,36 @@ class Simulation:
             warnings.warn(msg)
             results['UNKNOWN'] = returned
         return results
+
+    def get_measurement_psi_model(self, psi, model):
+        """Get psi for measurements.
+
+        Sometimes, the `psi` we want to use for measurements is different from the one the
+        algorithm actually acts on.
+        Here, we split sites, if they were grouped in :meth:`group_sites_for_algorithm`.
+
+        Parameters
+        ----------
+        psi :
+            Tensor network; initially just ``self.psi``.
+            The method should make a copy before modification.
+        model :
+            Model matching `psi` (in terms of indexing, MPS order, grouped sites, ...)
+            Initially just ``self.model``.
+
+        Returns
+        -------
+        psi :
+            The psi suitable as argument for generic measurement functions.
+        model :
+            Model matching `psi` (in terms of indexing, MPS order, grouped sites, ...)
+        """
+        if self.grouped > 1:
+            if psi is self.psi:
+                psi = psi.copy()  # make copy before
+            psi.group_split(self.options['algorithm_params']['trunc_params'])
+            model = self.model_ungrouped
+        return psi, model
 
     def final_measurements(self):
         """Perform a last set of measurements."""
@@ -874,6 +913,41 @@ class Skip(ValueError):
 _deprecated_not_set = object()
 
 
+def init_simulation(simulation_class='GroundStateSearch',
+                    simulation_class_kwargs=None,
+                    **simulation_params):
+    """Run the simulation with a simulation class.
+
+    If you need to run the simulation, you can use a `with` statement for proper context
+    management::
+
+        with sim:
+            results = sim.run()
+
+    Parameters
+    ----------
+    simulation_class : str
+        The name of a (sub)class of :class:`~tenpy.simulations.simulations.Simulation`
+        to be used for running the simulation.
+    simulation_class_kwargs : dict | None
+        A dictionary of keyword-arguments to be used for the initializing the simulation.
+    **simulation_params :
+        Further keyword arguments as documented in the corresponding simulation class,
+        see :cfg:config:`Simulation`.
+
+    Returns
+    -------
+    results : dict
+        The results of the Simulation, i.e., what
+        :meth:`tenpy.simulations.simulation.Simulation.run()` returned.
+    """
+    SimClass = find_subclass(Simulation, simulation_class)
+    if simulation_class_kwargs is None:
+        simulation_class_kwargs = {}
+    sim = SimClass(simulation_params, **simulation_class_kwargs)
+    return sim
+
+
 def run_simulation(simulation_class='GroundStateSearch',
                    simulation_class_kwargs=None,
                    *,
@@ -907,22 +981,26 @@ def run_simulation(simulation_class='GroundStateSearch',
             "The `simulation_class_name` argument has been renamed to `simulation_class`"
             " for more consistency with remaining parameters.", FutureWarning)
         simulation_class = simulation_class_name
-    SimClass = find_subclass(Simulation, simulation_class)
-    if simulation_class_kwargs is None:
-        simulation_class_kwargs = {}
-    with SimClass(simulation_params, **simulation_class_kwargs) as sim:
+    sim = init_simulation(simulation_class, simulation_class_kwargs, **simulation_params)
+    with sim:
         results = sim.run()
     return results
 
 
-def resume_from_checkpoint(*,
-                           filename=None,
-                           checkpoint_results=None,
-                           update_sim_params=None,
-                           simulation_class_kwargs=None):
-    """Resume a simulation run from a given checkpoint.
+def init_simulation_from_checkpoint(*,
+                                    filename=None,
+                                    checkpoint_results=None,
+                                    update_sim_params=None,
+                                    simulation_class_kwargs=None):
+    """Re-initialize a simulation from a given checkpoint without running it.
 
     (All parameters have to be given as keyword arguments.)
+
+    If you need to run the simulation, you can use a `with` statement for proper context
+    management::
+
+        with sim:
+            results = sim.run()
 
     Parameters
     ----------
@@ -971,8 +1049,56 @@ def resume_from_checkpoint(*,
     if update_sim_params is not None:
         update_recursive(options, update_sim_params)
 
-    with SimClass.from_saved_checkpoint(checkpoint_results=checkpoint_results,
-                                        **simulation_class_kwargs) as sim:
+    sim = SimClass.from_saved_checkpoint(checkpoint_results=checkpoint_results,
+                                        **simulation_class_kwargs)
+    return sim
+
+
+def resume_from_checkpoint(*,
+                           filename=None,
+                           checkpoint_results=None,
+                           update_sim_params=None,
+                           simulation_class_kwargs=None):
+    """Resume a simulation run from a given checkpoint.
+
+    (All parameters have to be given as keyword arguments.)
+
+    Parameters
+    ----------
+    filename : None | str
+        The filename of the checkpoint to be loaded.
+        You can either specify the `filename` or the `checkpoint_results`.
+    checkpoint_results : None | dict
+        Alternatively to `filename` the results of the simulation so far, i.e. directly the data
+        dicitonary saved at a simulation checkpoint.
+    update_sim_params : None | dict
+        Allows to update specific :cfg:config:`Simulation` parameters; ignored if `None`.
+        Uses :func:`~tenpy.tools.misc.update_recursive` to update values, such that the keys of
+        `update_sim_params` can be recursive, e.g. `algorithm_params/max_sweeps`.
+    simlation_class_kwargs : None | dict
+        Further keyword arguemnts given to the simulation class, ignored if `None`.
+
+    Returns
+    -------
+    results :
+        The results from running the simulation, i.e.,
+        what :meth:`tenpy.simulations.Simulation.resume_run()` returned.
+
+    Notes
+    -----
+    The `checkpoint_filename` should be relative to the current working directory. If you use the
+    :cfg:option:`Simulation.directory`, the simulation class will attempt to change to that
+    directory during initialization. Hence, either resume the simulation from the same directory
+    where you originally started, or update the :cfg:option:`Simulation.directory`
+    (and :cfg:option`Simulation.output_filename`) parameter with `update_sim_params`.
+    """
+    sim = init_simulation_from_checkpoint(filename=filename,
+                                          checkpoint_results=checkpoint_results,
+                                          update_sim_params=update_sim_params,
+                                          simulation_class_kwargs=simulation_class_kwargs)
+    del checkpoint_results  # possibly free memory
+    options = sim.options
+    with sim:
         results = sim.resume_run()
         if 'sequential' in options:
             sequential = options['sequential']
@@ -981,6 +1107,9 @@ def resume_from_checkpoint(*,
     if 'sequential' in options:
         # note: it is important to exit the with ... as sim`` statement before continuing
         # to free memory and cache
+        SimClass = sim.__class__
+        if simulation_class_kwargs is None:
+            simulation_class_kwargs = {}
         del sim  # free memory
         return run_seq_simulations(sequential,
                                    SimClass,

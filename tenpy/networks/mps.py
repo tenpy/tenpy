@@ -1094,7 +1094,7 @@ class MPS:
             self.set_B(i, new_B, form=new_form)
 
     def increase_L(self, new_L=None):
-        """Modify `self` inplace to enlarge the MPS unit cell; in place.
+        """Modify `self` inplace to enlarge the MPS unit cell.
 
         .. deprecated :: 0.5.1
             This method will be removed in version 1.0.0.
@@ -1335,7 +1335,158 @@ class MPS:
         # note: __init__ makes deep copies of B, S
         cp = self.__class__(sites, B, S, 'segment', 'B', self.norm)
         cp.grouped = self.grouped
+        if self.bc == 'segment':
+            U_L, V_R = self.segment_boundaries
+            if U_L is not None or V_R is not None:
+                if first != 0:
+                    U_L = None
+                if last != self.L - 1:
+                    V_R = None
+            if U_L is not None or V_R is not None:
+                if U_L is None:
+                    U_L = npc.eye_like(B[0], 'vL', labels=['vL', 'vR'])
+                if V_R is None:
+                    V_R = npc.eye_like(B[-1], 'vR', labels=['vR', 'vL']).itranspose()
+                cp.segment_boundaries = (U_L, V_R)
         return cp
+
+    def extract_enlarged_segment(self,
+                                 psi_left,
+                                 psi_right,
+                                 first,
+                                 last,
+                                 add_unitcells,
+                                 cutoff=1.e-14):
+        """Extract an enlarged segment from an initially smaller segment MPS.
+
+        With :meth:`extract_segment`, we obtain a segment MPS on a small subsystem, or "segment"
+        of the original system. Yet, such an MPS still has (limited) access to the outside of the
+        segment through the Schmidt states to the left and right. While they are given by the
+        original states from which we extracted the segment, we can still change local expectation
+        values there by adjusting the weights of the Schmidt values.
+
+        Given `self` as the segment MPS and the original background MPS containing the information
+        about the Schmidt states, this function allows to define an MPS on an enlarged segment.
+        This is particularaly usefull to evaluate expectation values outside of the original
+        segment.
+
+        Parameters
+        ----------
+        psi_left, psi_right : :class:`~tenpy.networks.mps.MPS`
+            Original background MPS to the left and right of `self`.
+            May be the same if you're not looking at
+            :class:`~tenpy.simulations.ground_state_search.TopologicalExcitations`.
+        first, last : int
+            The first and last site of the segment that `self` is defined on, in the indexing of the
+            original `psi_left` and `psi_right`.
+        add_unitcells : int | (int, int)
+            How many unit cells (multiples of `psi_left/right.L`) to add to the left and right.
+            A single value is used for both directions.
+            Note that we also "complete" the unit cells to the left/right even for
+            `add_unitcells`=0. For initially finite MPS with non-trivial `first, last`, this
+            yields the state on the full finite system.
+        cutoff : float
+            Cutoff used for QR/SVDs in :meth:`canonical_form_finite`.
+
+        Returns
+        -------
+        psi_large_seg : :class:`~tenpy.networks.mps.MPS`
+            MPS in enlarged segment.
+        new_first, new_last :
+            New first and last site of the enlarge segment used for `psi_large_seg`. As `first`,`last`,
+            this is indexed with respect to the "original" MPSs `psi_left` and `psi_right`.
+        """
+        # get new_first and new_last
+        add_unitcells = to_iterable(add_unitcells)
+        if len(add_unitcells) == 1:
+            add_L = add_R = add_unitcells[0]
+        elif len(add_unitcells) == 2:
+            add_L, add_R = add_unitcells
+        else:
+            raise ValueError(f"need 1 or 2 entries in add_unitcells={add_unitcells!r}")
+        new_first = int(- add_L * psi_left.L)
+        new_last = max(psi_right.L - 1, last)
+        if not psi_right.finite:
+            # extend to full unit cell to the right if not yet full
+            new_last = new_last - (new_last % psi_right.L) + psi_right.L - 1
+            new_last = int(new_last + add_R * psi_right.L)
+        if not new_first <= first < last <= new_last:
+            raise ValueError("expected new_first <= first < last <= new_last, but got "
+                            f"{new_first} {first} {last} {new_last}")
+        if new_first < 0 and psi_left.finite or psi_right.finite and new_last >= psi_right.L:
+            raise ValueError("Trying to extend segment outside of finite state")
+
+        if new_first == first and new_last == last:
+            # nothing to do.  finite bc is okay in this case
+            return self, new_first, new_last
+
+        if self.bc != 'segment':
+            raise ValueError("only works for segment MPS!")
+
+        # first, last, new_first, new_last are "original" i-indices
+        # i = index in original (non-segment) state
+        # j = i - first = index in self
+        # k = i - new_first = index in final psi_meas = index in Bs/Ss.
+        # B[i - new_first] = B[k] where 0 <= k < new_L for new_first <= i <= new_last
+        new_L = new_last - new_first + 1
+
+        sites = [None] * new_L # indexed by site k
+        Bs = [None] * new_L
+        forms = ['B'] * new_L
+        Ss = [None] * (new_L + 1) # indexed by bond left of site k
+
+        # get A and left S from psi_left
+        for i in range(new_first, first):
+            k = i - new_first
+            sites[k] = psi_left.sites[i % psi_left.L]
+            Bs[k] = psi_left.get_B(i, 'A')
+            forms[k] = 'A'
+            # needs to be "A" form to ensure we use the S value when going from psi_left to seg
+            Ss[k] = psi_left.get_SL(i)
+        # get B and both left/right S from self
+        for i in range(first, last + 1):
+            j = i - first
+            k = i - new_first
+            sites[k] = self.sites[j]
+            Bs[k] = self.get_B(j, 'B')
+            Ss[k] = self.get_SL(j)
+        Ss[last + 1 - new_first] = self.get_SR(last - first)
+        # get all B and right S from psi_right
+        for i in range(last + 1, new_last + 1):
+            k = i - new_first
+            sites[k] = psi_right.sites[i % psi_right.L]
+            Bs[k] = psi_right.get_B(i, 'B') # needs to be in "B" form!
+            Ss[k + 1] = psi_right.get_SR(i)
+
+        # handle segment_boundaries
+        U_L, V_R = self.segment_boundaries
+        if U_L is not None and new_first < first:
+            k = first - 1 - new_first
+            Bs[k] = npc.tensordot(Bs[k], U_L, axes=['vR', 'vL'])
+        if V_R is not None and last < new_last:
+            k = last + 1 - new_first
+            Bs[k] = npc.tensordot(V_R, Bs[k], axes=['vR', 'vL'])
+
+        # initialize MPS
+        bc = 'segment'
+        if (psi_left.bc == 'finite' and new_first == 0 and
+            psi_right.bc == 'finite' and new_last == psi_right.L - 1):
+            bc = 'finite'
+
+        psi_new = MPS(sites, Bs, Ss, bc=bc, form=forms)
+        psi_new.canonical_form_finite(cutoff=cutoff)  # important: call canonical form
+        # this propagates the S from the orthogonality center in the segment to the outer parts
+
+        # handle segment boundaries, remaining cases
+        if new_first == first or new_last == last:
+            U_L_new, V_R_new = psi_new.segment_boundaries
+            if U_L is not None and new_first == first:
+                U_L_new = npc.tensordot(U_L, U_L_new, axes=['vR', 'vL'])
+            if V_R is not None and new_last == last:
+                V_R_new = npc.tensordot(V_R_new, V_R, axes=['vR', 'vL'])
+            psi_new.segment_boundaries = (U_L, V_R)
+
+        return psi_new, new_first, new_last
 
     def get_total_charge(self, only_physical_legs=False):
         """Calculate and return the `qtotal` of the whole MPS (when contracted).
@@ -1369,7 +1520,7 @@ class MPS:
         return self.chinfo.make_valid(qtotal)
 
     def gauge_total_charge(self, qtotal=None, vL_leg=None, vR_leg=None):
-        """Gauge the legcharges of the virtual bonds such that the MPS has a total `qtotal`.
+        """Gauge the legcharges of the virtual bonds s.t. MPS has given `qtotal`; in place.
 
         Parameters
         ----------
@@ -1839,6 +1990,8 @@ class MPS:
             For an infinite MPS, ``<self|other>`` is the overlap per unit cell, i.e.,
             the largest eigenvalue of the TransferMatrix.
         """
+        if self.bc != other.bc:
+            raise ValueError("can't take overlap between MPS with differen bc")
         if self.finite:
             if ignore_form:
                 # Use TransferMatrix with option to ignore the form
@@ -2026,7 +2179,7 @@ class MPS:
         JW_from_right : bool | None
             If set to True, a JW-string is coming in from the right. Corresponding `JW` operators
             are added to `ops`.
-            If `None`, use
+            If `None`, use `True` for odd number of operators which need Jordan-Wigner strings.
 
         Returns
         -------
@@ -2811,7 +2964,7 @@ class MPS:
         return err
 
     def canonical_form(self, **kwargs):
-        """Bring self into canonical 'B' form, (re-)calculate singular values.
+        """Bring self into canonical 'B' form, (re-)calculate singular values; in place.
 
         Simply calls :meth:`canonical_form_finite` or :meth:`canonical_form_infinite2`.
         Keyword arguments are passed on to the corrsponding specialized versions.
@@ -2819,10 +2972,10 @@ class MPS:
         if self.finite:
             return self.canonical_form_finite(**kwargs)
         else:
-            return self.canonical_form_infinite2(**kwargs)
+            return self.canonical_form_infinite1(**kwargs)
 
     def canonical_form_finite(self, renormalize=True, cutoff=0., envs_to_update=None):
-        """Bring a finite (or segment) MPS into canonical form (in place).
+        """Bring a finite (or segment) MPS into canonical form; in place.
 
         If any site is in :attr:`form` ``None``, it does *not* use any of the singular values `S`
         (for 'finite' boundary conditions, or only the very left `S` for 'segment' b.c.).
@@ -2836,7 +2989,8 @@ class MPS:
         Parameters
         ----------
         renormalize: bool
-            Whether a change in the norm should be discarded or used to update :attr:`norm`.
+            Whether a change in the norm should be discarded (True),
+            or used to update :attr:`norm` (False).
         cutoff : float | None
             Cutoff of singular values used in the SVDs.
         envs_to_update : None | list of :class:`MPSEnvironment`
@@ -2945,7 +3099,7 @@ class MPS:
         self.canonical_form_infinite1(**kwargs)
 
     def canonical_form_infinite1(self, renormalize=True, tol_xi=1.e6):
-        """Bring an infinite MPS into canonical form (in place).
+        """Bring an infinite MPS into canonical form; in place.
 
         If any site is in :attr:`form` ``None``, it does *not* use any of the singular values `S`.
         If all sites have a `form`, it respects the `form` to ensure
@@ -3032,7 +3186,7 @@ class MPS:
 
     def canonical_form_infinite2(self, renormalize=True, tol=1.e-15, arnoldi_params=None,
                                  cutoff=1.e-15):
-        """Convert infinite MPS to canonical form.
+        """Convert infinite MPS to canonical form; in place.
 
         Implementation following Algorithm 1,2 in :cite:`vanderstraeten2019`.
 
@@ -3067,7 +3221,10 @@ class MPS:
         # now we have old_Bs R = R new_Bs with right-orthonormal new_Bs
         self._B = new_Bs
         C_guess = npc.diag(self.get_SL(0), self._B[0].get_leg('vL'), labels=['vL', 'vR'])
-        new_As, C, _ = self._canonical_form_left_orthogonalize(R_guess, tol, arnoldi_params)
+        # TODO: we sometimes got a legchare error when using R_guess instead off C_guess,
+        # so the oder of the indices might have changed (from sorting legs?)
+        # reflect this in permutation of singular values
+        new_As, C, _ = self._canonical_form_left_orthogonalize(C_guess, tol, arnoldi_params)
         # now we have C new_Bs = new_As C with left and right-orthonormal A/B
         # but not yet diagonal S
         C.itranspose(['vL', 'vR'])
@@ -3297,7 +3454,7 @@ class MPS:
         return psi
 
     def apply_local_op(self, i, op, unitary=None, renormalize=False, cutoff=1.e-13):
-        """Apply a local (one or multi-site) operator to `self`.
+        """Apply a local (one or multi-site) operator to `self`. In place.
 
         Note that this destroys the canonical form if the local operator is non-unitary.
         Therefore, this function calls :meth:`canonical_form` if necessary.
@@ -3325,7 +3482,16 @@ class MPS:
         """
         i = self._to_valid_index(i)
         if isinstance(op, str):
+            if self.sites[i].op_needs_JW(op):
+                try:
+                    self.apply_JW_string_to_left(i)
+                except ValueError as e:
+                    raise ValueError(f"Would need JW string for operator {op!r}, "
+                                     "but can't extract JW signs from the charges") from e
+            opname = op
             op = self.sites[i].get_op(op)
+        else:
+            opname = op
         n = op.rank // 2  # same as int(rank/2)
         if n == 1:
             pstar, p = 'p*', 'p'
@@ -3340,9 +3506,13 @@ class MPS:
         if n == 1:
             opB = npc.tensordot(op, self._B[i], axes=['p*', 'p'])
             self.set_B(i, opB, self.form[i])
+            if opB.norm() < 1.e-12:
+                raise ValueError(f"Applying the operator {opname!s} on site {i:d} destroys state!")
         else:
             th = self.get_theta(i, n)
             th = npc.tensordot(op, th, axes=[pstar, p])
+            if th.norm() < 1.e-12:
+                raise ValueError(f"Applying the operator {opname!s} on site {i:d} destroys state!")
             # use MPS.from_full to split the sites
             split_th = self.from_full(self.sites[i:i + n], th, None, cutoff, False, 'segment',
                                       (self.get_SL(i), self.get_SR(i + n - 1)))
@@ -3353,8 +3523,29 @@ class MPS:
         if not unitary:
             self.canonical_form(renormalize=renormalize)
 
+    def apply_JW_string_to_left(self, i):
+        """Apply a Jordan-Wigner string to left of site `i` on the virtual MPS level. In place.
+
+        If we conserve the (parity of the) total fermion particle number, each Schmidt state
+        ``|alpha>`` on a given bond (here left of site `i`) has a well-defined parity number,
+        so we can simply transform ``|alpha> --> (-1)**parity[alpha] |alpha>``.
+        The corresponding signs ``(-1)**parity[alpha]`` are extracted by
+        :meth:`~tenpy.networks.site.Site.charge_to_JW_signs`.
+
+        .. warning ::
+
+            We may loose an overall, global minus sign in the case that some `B` tensors have
+            non-trivial `qtotal`!
+        """
+        i = self._to_valid_index(i)
+        B = self._B[i]
+        leg = B.get_leg('vL')
+        charges = leg.to_qflat() #  note: sign doesn't matter since -x % 2 == x % 2
+        JW_signs = self.sites[i].charge_to_JW_signs(charges)
+        B.iscale_axis(JW_signs, 'vL')
+
     def apply_product_op(self, ops, unitary=None, renormalize=False):
-        """Apply a (global) product of local onsite operators to `self`.
+        """Apply a (global) product of local onsite operators to `self`. In place.
 
         Note that this destroys the canonical form if any local operator is non-unitary.
         Therefore, this function calls :meth:`canonical_form` if necessary.
@@ -3363,7 +3554,11 @@ class MPS:
         intermediate calls to :meth:`canonical_form` inside the loop::
 
             for i, op in enumerate(ops):
-                self.apply_local_op(i, op, unitary, renormalize, cutoff)
+                self.apply_local_op(i, op, unitary, renormalize)
+
+        .. warning ::
+            This function does *not* automatically add Jordan-Wigner strings!
+            For correct handling of fermions, use :meth:`apply_local_term` instead.
 
         Parameters
         ----------
@@ -3396,6 +3591,52 @@ class MPS:
             # actually apply the operator at site i
             self._B[i] = npc.tensordot(op, self._B[i], axes=['p*', 'p'])
         if not unitary:
+            self.canonical_form(renormalize=renormalize)
+
+    def apply_local_term(self,
+                         term,
+                         autoJW=True,
+                         i_offset=0,
+                         canonicalize=True,
+                         renormalize=False):
+        """Similar as :meth:`apply_local_op`, but for a whole `term` acting on multiple sites.
+
+        Note that this destroys the canonical form if the local operator is non-unitary.
+        Therefore, this function calls :meth:`canonical_form` by default.
+
+        Parameters
+        ----------
+        term : list of (str, int)
+            List of tuples ``op, i`` where `i` is the MPS index of the site the operator
+            named `op` acts on.
+            The order inside `term` determines the order in which they act
+            (in the mathematical convention: the last operator in `term` is right-most,
+            so it acts first on a ket).
+        autoJW : bool
+            If True (default), automatically insert Jordan Wigner strings for Fermions as needed.
+        i_offset : int
+            Offset to be added to the site-indices in the `term`.
+        canonicalize : bool
+            Whether to call :meth:`canonical_form` with the `renormalize` argument in the end.
+        renormalize : bool
+            Whether a change in the norm should be discarded (True),
+            or used to update :attr:`norm` (False).
+            Ignored if ``canonicalize=False``.
+        """
+        ops, i_min, has_extra_JW = self._term_to_ops_list(term, autoJW, i_offset, False)
+        if has_extra_JW:
+            try:
+                self.apply_JW_string_to_left(i_min)
+            except ValueError as e:
+                raise ValueError(f"Would need JW string for term {term!r}, "
+                                 "but can't extract JW signs from the charges") from e
+        for j, op in enumerate(ops):
+            i = self._to_valid_index(j + i_min)  # i_min includes i_offset!
+            opB = npc.tensordot(op, self._B[i], axes=['p*', 'p'])
+            self.set_B(i, opB, self.form[i])
+            if opB.norm() < 1.e-12:
+                raise ValueError(f"Applying the operator on site {i:d} destroys state!")
+        if canonicalize:
             self.canonical_form(renormalize=renormalize)
 
     def perturb(self, randomize_params=None, close_1=True, canonicalize=None):
@@ -3431,7 +3672,7 @@ class MPS:
         # done
 
     def swap_sites(self, i, swap_op='auto', trunc_par=None):
-        r"""Swap the two neighboring sites `i` and `i+1` (inplace).
+        r"""Swap the two neighboring sites `i` and `i+1`; in place.
 
         Exchange two neighboring sites: form theta, 'swap' the physical legs and split
         with an svd. While the 'swap' is just a transposition/relabeling for bosons, one needs to
@@ -3575,7 +3816,7 @@ class MPS:
         return err
 
     def permute_sites(self, perm, swap_op='auto', trunc_par=None, verbose=None):
-        """Applies the permutation perm to the state (inplace).
+        """Applies the permutation perm to the state; in place.
 
         .. deprecated :: 0.8.0
             Drop / ignore `verbose` argument, never print something.
@@ -3750,7 +3991,7 @@ class MPS:
         return "\n".join(res)
 
     def compress(self, options):
-        """Compresss an MPS.
+        """Compresss an MPS; in place.
 
         Options
         -------
@@ -3763,6 +4004,11 @@ class MPS:
                 For the `SVD` compression, `trunc_params` is the only other option used.
             trunc_params : dict
                 Truncation parameters as described in :cfg:config:`truncation`.
+
+        Returns
+        -------
+        max_trunc_err : :class:`~tenpy.algorithms.truncation.TruncationError`
+            The maximal truncation error of a two-site wave function.
         """
         options = asConfig(options, "MPS_compress")
         method = options['compression_method']
@@ -4568,10 +4814,32 @@ class MPSEnvironment:
         """
         if last is None:
             last = self.L - 1
-        data = {'init_LP': self.get_LP(first, True), 'init_RP': self.get_RP(last, True)}
-        # TODO: this should apply dagger of psi.segment_boundaries!
-        data['age_LP'] = self.get_LP_age(first)
-        data['age_RP'] = self.get_RP_age(last)
+        LP = self.get_LP(first, True)
+        RP = self.get_RP(last, True)
+        # possibly apply dagger of segment_boundaries to make sure it's possible to re-initialize
+        bra_U, bra_V = self.bra.segment_boundaries
+        ket_U, ket_V = self.ket.segment_boundaries
+        if first == 0:
+            if ket_U is not None:
+                LP = npc.tensordot(LP, ket_U.conj(), axes=['vR', 'vR*'])
+                LP.ireplace_label('vL*', 'vR')
+            if bra_U is not None:
+                LP = npc.tensordot(bra_U, LP, axes=['vR', 'vR*'])
+                LP.ireplace_label('vL', 'vR*')
+        if last == self.ket.L - 1:
+            if ket_V is not None:
+                RP = npc.tensordot(ket_V.conj(), RP, axes=['vL*', 'vL'])
+                RP.ireplace_label('vR*', 'vL')
+        if last == self.bra.L - 1:
+            if bra_V is not None:
+                RP = npc.tensordot(RP, bra_V, axes=['vL*', 'vL'])
+                RP.ireplace_label('vR', 'vL*')
+        data = {
+            'init_LP': LP,
+            'age_LP': self.get_LP_age(first),
+            'init_RP': RP,
+            'age_RP': self.get_RP_age(last),
+        }
         return data
 
     def full_contraction(self, i0):
@@ -4704,7 +4972,6 @@ class MPSEnvironment:
         """Update LP[i] following the MPS gauge ``A[i-1] A[i] -> (A[i-1] U) (Udagger A[i])``."""
         assert update_bra or update_ket
         if not self.has_LP(i):
-            assert False # TODO
             return
         LP = self.get_LP(i)
         if update_ket:
@@ -4717,7 +4984,6 @@ class MPSEnvironment:
         """Update RP[i] following the MPS gauge ``B[i] B[i+1] -> (B[i] Vdagger) (V B[i+1])``."""
         assert update_bra or update_ket
         if not self.has_RP(i):
-            assert False # TODO
             return
         RP = self.get_RP(i)
         if update_ket:

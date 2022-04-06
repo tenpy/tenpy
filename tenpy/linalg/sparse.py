@@ -238,13 +238,18 @@ class FlatLinearOperator(ScipyLinearOperator):
         Defaults to ``0``, i.e., *assumes* the dominant eigenvector is in charge sector 0.
     vec_label : None | str
         Label to be set to the npc vector before acting on it with `npc_matvec`. Ignored if `None`.
+    compact_flat : bool | None
+        If True, restrict the flat array to the (only) non-zero block of given `charge_sector`.
+        If False, the flat array is directly what's represented by the npc Array's
+        :meth:`~tenpy.linalg.np_conserved.Array.to_ndarray`.
+        Works only if the `leg` is blocked; None defaults to True if possible.
 
     Attributes
     ----------
     possible_charge_sectors : ndarray[QTYPE, ndim=2]
         Each row corresponds to one possible choice for `charge_sector`.
     shape : (int, int)
-        The dimensions for the selected charge sector.
+        The dimensions represented by `self` for flat numpy arrays.
     dtype : np.dtype
         The data type of the arrays.
     leg : :class:`~tenpy.linalg.charges.LegCharge`
@@ -255,8 +260,15 @@ class FlatLinearOperator(ScipyLinearOperator):
         Function to calculate the action of the linear operator on an npc vector (with one `leg`).
     matvec_count : int
         The number of times `npc_matvec` was called.
-    _mask : ndarray[ndim=1, bool]
+    compact_flat : bool
+        If True, restrict the flat array to the (only) non-zero block of given `charge_sector`.
+        If False, the flat array is directly what's represented by the npc Array's
+        :meth:`~tenpy.linalg.np_conserved.Array.to_ndarray`.
+    _mask : ndarray[ndim=1, bool] | slice
         The indices of `leg` corresponding to the `charge_sector` to be diagonalized.
+        Just a slice if `compact_flat` and `leg.is_blocked`.
+    _compact_qdata : 2D array
+        The `qdata` for the npc vector, in case `compact_flat` is True.
     _npc_matvec_multileg : function | None
         Only set if initalized with :meth:`from_guess_with_pipe`.
         The `npc_matvec` function to be wrapped around. Takes the npc Array in multidimensional
@@ -265,12 +277,19 @@ class FlatLinearOperator(ScipyLinearOperator):
         Only set if initalized with :meth:`from_guess_with_pipe`.
         Labels of the guess before combining them into a pipe (stored as `leg`).
     """
-    def __init__(self, npc_matvec, leg, dtype, charge_sector=0, vec_label=None):
+    def __init__(self, npc_matvec, leg, dtype, charge_sector=0, vec_label=None, compact_flat=None):
         self.npc_matvec = npc_matvec
         self.leg = leg
         self.possible_charge_sectors = leg.charge_sectors()
         self.shape = (leg.ind_len, leg.ind_len)
         self.dtype = dtype
+        if compact_flat is None:
+            compact_flat = charge_sector is not None and leg.is_blocked()
+        elif compact_flat:
+            if not leg.is_blocked():
+                raise ValueError("FlatLinearOperator with `compact_flat` works only "
+                                 "for blocked `leg`.")
+        self.compact_flat = compact_flat
         self.vec_label = vec_label
         self.matvec_count = 0
         self._charge_sector = None
@@ -281,7 +300,7 @@ class FlatLinearOperator(ScipyLinearOperator):
         ScipyLinearOperator.__init__(self, self.dtype, self.shape)
 
     @classmethod
-    def from_NpcArray(cls, mat, charge_sector=0):
+    def from_NpcArray(cls, mat, charge_sector=0, compact_flat=None):
         """Create a `FlatLinearOperator` from a square :class:`~tenpy.linalg.np_conserved.Array`.
 
         Parameters
@@ -292,14 +311,25 @@ class FlatLinearOperator(ScipyLinearOperator):
             Selects the charge sector of the vector onto which the Linear operator acts.
             ``None`` stands for *all* sectors, ``0`` stands for the zero-charge sector.
             Defaults to ``0``, i.e., *assumes* the dominant eigenvector is in charge sector 0.
+        compact_flat : bool | None
+            If True, restrict the flat array to the (only) non-zero block of given `charge_sector`.
+            If False, the flat array is directly what's represented by the npc Array's
+            :meth:`~tenpy.linalg.np_conserved.Array.to_ndarray`.
+            Works only for fixed charge sector and if the `leg` of `mat` is blocked;
+            None defaults to ``leg.is_blocked()``.
         """
         if mat.rank != 2:
             raise ValueError("Works only for square matrices")
         mat.legs[1].test_contractible(mat.legs[0])
-        return cls(mat.matvec, mat.legs[0], mat.dtype, charge_sector)
+        return cls(mat.matvec, mat.legs[0], mat.dtype, charge_sector, compact_flat=compact_flat)
 
     @classmethod
-    def from_guess_with_pipe(cls, npc_matvec, v0_guess, labels_split=None, dtype=None):
+    def from_guess_with_pipe(cls,
+                             npc_matvec,
+                             v0_guess,
+                             labels_split=None,
+                             dtype=None,
+                             compact_flat=True):
         """Create a `FlatLinearOperator`` from a `matvec` function acting on multiple legs.
 
         This function creates a wrapper `matvec` function to allow acting on a "vector" with
@@ -320,6 +350,10 @@ class FlatLinearOperator(ScipyLinearOperator):
             ``v0_guess.get_leg_labels()``.
         dtype : np.dtype | None
             The data type of the arrays. ``None`` defaults to dtype of `v0_guess` (!).
+        compact_flat : bool
+            If True, restrict the flat array to the non-zero parts.
+            If False, the flat array is directly what's represented by the npc Array's
+            :meth:`~tenpy.linalg.np_conserved.Array.to_ndarray`.
 
         Returns
         -------
@@ -337,7 +371,7 @@ class FlatLinearOperator(ScipyLinearOperator):
             raise ValueError("`labels_split` must contain all the legs of `v0_guess`")
         pipe = v0_combined.legs[0]
         pipe_label = v0_combined.get_leg_labels()[0]
-        res = cls(npc_matvec, pipe, dtype, v0_combined.qtotal, pipe_label)
+        res = cls(npc_matvec, pipe, dtype, v0_combined.qtotal, pipe_label, compact_flat)
         res._labels_split = labels_split
         res._npc_matvec_multileg = npc_matvec
         res.npc_matvec = res._npc_matvec_wrapper  # activate the wrapper
@@ -357,9 +391,21 @@ class FlatLinearOperator(ScipyLinearOperator):
             value = self.leg.chinfo.make_valid(value)
         self._charge_sector = value
         if value is not None:
-            self._mask = np.all(self.leg.to_qflat() == value[np.newaxis, :], axis=1)
-            self.shape = tuple([np.sum(self._mask)] * 2)
+            if self.compact_flat:
+                assert self.leg.is_blocked()
+                # self.leg is blocked by charge, and we have a fixed charge
+                # so there is only a single data block in the npc array vector!
+                qi = self.leg.get_qindex_of_charges(value)
+                self._compact_qdata = np.array([[qi]], dtype=np.intp)
+                self._mask = sl = self.leg.get_slice(qi)
+                size = sl.stop - sl.start
+                self.shape = (size, size)
+            else:
+                self._mask = np.all(self.leg.to_qflat() == value[np.newaxis, :], axis=1)
+                self.shape = tuple([np.sum(self._mask)] * 2)
         else:
+            if self.compact_flat:
+                raise ValueError("Can't use `compact_flat` option with `None` charge sector")
             chi2 = self.leg.ind_len
             self.shape = (chi2, chi2)
             self._mask = np.ones([chi2], dtype=np.bool_)
@@ -407,7 +453,13 @@ class FlatLinearOperator(ScipyLinearOperator):
         """
         if self._charge_sector is not None:
             res = npc.zeros([self.leg], vec.dtype, self._charge_sector, labels=[self.vec_label])
-            res[self._mask] = vec
+            if self.compact_flat:
+                vec = np.ascontiguousarray(vec)  # should be contiguous already, but make sure
+                res._data = [vec]
+                res._qdata = self._compact_qdata
+                res._qdata_sorted = True
+            else:
+                res[self._mask] = vec
             return res
         else:
             leg = self.leg
@@ -442,6 +494,10 @@ class FlatLinearOperator(ScipyLinearOperator):
             assert npc_vec.rank == 1
             if np.any(npc_vec.qtotal != self._charge_sector):
                 raise ValueError("npc_vec.qtotal and charge sector don't match!")
+            if self.compact_flat:
+                assert len(npc_vec._data) == 1
+                assert np.all(npc_vec._qdata == self._compact_qdata)
+                return npc_vec._data[0]
             if isinstance(npc_vec.legs[0], npc.LegPipe):
                 npc_vec = npc_vec.copy(deep=False)
                 npc_vec.legs[0] = npc_vec.legs[0].to_LegCharge()
@@ -564,7 +620,7 @@ class FlatLinearOperator(ScipyLinearOperator):
                      which='LM',
                      v0=None,
                      v0_npc=None,
-                     cutoff=1.e-12,
+                     cutoff=1.e-10,
                      hermitian=False,
                      **kwargs):
         """Find (dominant) eigenvector(s) of self using :func:`scipy.sparse.linalg.eigs`.
@@ -636,70 +692,46 @@ class FlatLinearOperator(ScipyLinearOperator):
         if self._charge_sector is not None:
             vecs = [self.flat_to_npc(A[:, j]) for j in range(A.shape[1])]
         else:
-            k = A.shape[1]
-            vecs = [None] * k
-            multi_sectors = []
-            for j in range(k):
-                vec = A[:, j]
-                try:
-                    vecs[j] = npc.Array.from_ndarray(vec, **from_ndarray_args)
-                except ValueError as e:
-                    if not e.args[0].startswith('wrong sector'):
-                        raise
-                    multi_sectors.append(j)
+            # need to convert to flat arrays,
+            # but eigenvectors A[:, i] might not have well-defined charges because
+            # they can be arbitrarily rotated in degenerate subspaces.
+            # To make things worse, we only have `k` of them which might cut a degenerate subspace
+            # and we are not even aware of it.
+            # Luckily, within degenerat subspaces we know we can just project into a given charge
+            # sector, and get an (numerically) exact eigenstate of both charge and `self`!
+            # The tricky thing is to ensure we have enough orthogonal states left!
+
+            # strategy: only project into charge sectors with maximal weight,
+            # and re-orthogonalize other remaining eigenvectors in the degenerate subspace
+            # after projection
+
             from_ndarray_args['raise_wrong_sector'] = False
-            for degenerate in group_by_degeneracy(eta, cutoff=cutoff, subset=multi_sectors):
-                # really, we would need to diagonalize the charges within the subspace of
-                # degenerate eigenvectors of the transfermatrix.
-                # However, we (might) only know a subset of the degenerate eigenvectors,
-                # and diagonalizing the charges in that subspace might not yield real
-                # charge eigenvectors (which is obvious if we have only one of them).
-                # Instead we just project onto different blocks:
-                # within a block it will for sure be an eigenvector of both the charge
-                # and the transfer matrix!
-                # This can fail, however, if there are less non-zero blocks than eigenvectors,
-                # in which case we don't return an array with definite charge but with an
-                # additional `charge` leg.
-                if len(degenerate) == 1:
-                    # degenerate eigenvalues but we didn't find enough eigenvectors to see that
-                    j = degenerate[0]
-                    qi = np.argmax([
-                        np.linalg.norm(vec[self.leg.get_slice(qi)])
-                        for qi in range(self.leg.block_number)
-                    ])
-                    qtotal = self.leg.get_charge(qi)
-                    vecs[j] = npc.Array.from_ndarray(A[:, j], **from_ndarray_args, qtotal=qtotal)
-                else:
-                    used_blocks = set()
-                    for j in degenerate:
-                        vec = A[:, j]
-                        block_norms = [
-                            np.linalg.norm(vec[self.leg.get_slice(qi)])
-                            for qi in range(self.leg.block_number)
-                        ]
-                        for qi in np.argsort(block_norms):
-                            if qi in used_blocks or block_norms[qi] < cutoff:
-                                continue
-                            used_blocks.add(qi)
-                            qtotal = self.leg.get_charge(qi)
-                            vecs[j] = npc.Array.from_ndarray(vec,
-                                                             qtotal=qtotal,
-                                                             **from_ndarray_args)
-                            vecs[j] /= npc.norm(vecs[j])
-                            break
-                        else:
-                            # didn't break, so didn't set vecs[j]
-                            # -> can't guarantee orthogonality to previous eigenvectors
-                            msg = ("FlatLinearOperator.eigenvectors: can't project to definite "
-                                   "charge block uniquely; would need to diagonalize again "
-                                   "with given `charge_sector`.\n"
-                                   "Will return eigenvector with extra `charge` leg instead, "
-                                   "which might not be orthogonal to other eigenvectors.")
-                            warnings.warn(msg, stacklevel=2)
-                            vecs[j] = self.flat_to_npc(vec)
-                            for qi in range(self.leg.used_block_number):
-                                if block_norms[qi] > cutoff:
-                                    used_blocks.add(qi)
+            from_ndarray_args['warn_wrong_sector'] = False
+            vecs = [None] * A.shape[1]
+
+            leg = self.leg
+            # first find degenerate groups
+            for degenerate in group_by_degeneracy(eta, cutoff=cutoff):
+                degenerate = list(degenerate)
+                for _ in range(len(degenerate)):
+                    # find sector with maximal weight amongst all degenerate vectors
+                    sector_norms = np.array([[np.linalg.norm(A[leg.get_slice(qi), j])
+                                              for j in degenerate]
+                                             for qi in range(leg.block_number)])
+                    max_qi, max_j = np.unravel_index(np.argmax(sector_norms, axis=None),
+                                                      sector_norms.shape)
+                    j = degenerate[max_j]
+                    # project vector `j` into the maximal charge sector
+                    vecs[j] = npc.Array.from_ndarray(A[:, j], **from_ndarray_args)
+                    vecs[j] /= vecs[j].norm()  # renormalize
+                    degenerate.remove(j)
+                    A[:, j] = vecs[j].to_ndarray()
+                    for i in degenerate:
+                        # gram-schmidt reorthogonalize other degenerate states against this one
+                        A[:, i] -= A[:, j] * np.inner(np.conj(A[:, j]), A[:, i])
+                        A[:, i] /= np.linalg.norm(A[:, i])
+                        # -> within degenerate subspace of `self`, this is still an eigenvector
+            # done
         perm = argsort(eta, which)
         return np.array(eta)[perm], [vecs[j] for j in perm]
 
