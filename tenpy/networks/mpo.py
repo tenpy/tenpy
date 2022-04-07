@@ -2572,6 +2572,7 @@ class MPOTransferMatrix:
                         guess_init_env_data=None,
                         calc_E=False,
                         tol_ev0=1.e-8,
+                        _subtraction_gauge='rho',
                         **kwargs):
         """Find the initial LP and RP.
 
@@ -2607,7 +2608,7 @@ class MPOTransferMatrix:
             guess_init_env_data = {}
         for transpose in [False, True]:
             guess = guess_init_env_data.get('init_LP' if transpose else 'init_RP', None)
-            TM = cls(H, psi, transpose=transpose, guess=guess)
+            TM = cls(H, psi, transpose=transpose, guess=guess, _subtraction_gauge=_subtraction_gauge)
             val, vec = TM.dominant_eigenvector(**kwargs)
             if abs(1. - val) > tol_ev0:
                 logger.warning("MPOTransferMatrix eigenvalue not 1: got %s", val)
@@ -2629,9 +2630,9 @@ class MPOTransferMatrix:
             RP, LP = envs
             vL, vR = LP.get_leg('vR').conj(), RP.get_leg('vL').conj()
             SL = npc.diag(SL, vL, labels=['vL', 'vR'])
-            E0 = npc.tensordot(vL, SL, axes=(['vR'], ['vL']))
+            E0 = npc.tensordot(LP, SL, axes=(['vR'], ['vL']))
             E0 = npc.tensordot(E0, SL.conj(), axes=(['vR*'], ['vL*']))
-            E0 = npc.tensordot(E0, init_env_data['init_RP'], axes=(['vR', 'wR', 'vR*'], ['vL', 'wL', 'vL*']))
+            E0 = npc.tensordot(E0, RP, axes=(['vR', 'wR', 'vR*'], ['vL', 'wL', 'vL*']))
             # E0 = LP * s^2 * RP on site 0
             return init_env_data, E, E0
         # else:
