@@ -334,6 +334,9 @@ class OrthogonalExcitations(GroundStateSearch):
         if resume_data.get('converged_environments', False):
             self.logger.info("use converged environments from ground state file")
             env_data = resume_data['init_env_data']
+            first_s, last_s = resume_data['env_first_last']
+            assert first_s % psi0_inf.L == first % psi0_inf.L and last_s % psi0_inf.L == last % psi0_inf.L, "'first' and 'last' saved to GS file must be the same used in excitation simulation."
+            
             psi0_inf = resume_data.get('psi', psi0_inf)
             write_back = False
         else:
@@ -402,11 +405,13 @@ class OrthogonalExcitations(GroundStateSearch):
 
             resume_data = gs_data.setdefault('resume_data', {})
             init_env_data = resume_data.setdefault('init_env_data', {})
+            resume_data.setdefault('env_first_last', (0,0))
             init_env_data.update(self.init_env_data)
             if resume_data.get('converged_environments', False):
                 raise ValueError(f"{gs_fn!s} already has converged environments!")
             resume_data['converged_environments'] = True
             resume_data['psi'] = gs_data['psi'] # could have been modified with canonical_form;
+            resume_data['env_first_last'] = self.model.lat.segment_first_last
             # in any case that's the reference ground state we use now!
 
             self.logger.info("write converged environments back to ground state file")
@@ -1042,6 +1047,8 @@ class TopologicalExcitations(OrthogonalExcitations):
             self.logger.info("use converged environments from left ground state file")
             self.env_data_L = resume_data_L['init_env_data'] # Environments for infinite ground states
             # env loaded from file must use same first and last or there will be energy shifts in envs that make excitation energy incorrect.
+            first_L, last_L = resume_data_L['env_first_last']
+            assert first_L % psi0_inf_L.L == first % psi0_inf_L.L and last_L % psi0_inf_L.L == last % psi0_inf_L.L, "'first' and 'last' saved to GS file must be the same used in excitation simulation."
             psi0_inf_L = resume_data_L.get('psi', psi0_inf_L)
             write_back_left = False            
         else:
@@ -1056,6 +1063,8 @@ class TopologicalExcitations(OrthogonalExcitations):
             self.logger.info("use converged environments from right ground state file")
             self.env_data_R = resume_data_R['init_env_data']
             # env loaded from file must use same first and last or there will be energy shifts in envs that make excitation energy incorrect.
+            first_R, last_R = resume_data_R['env_first_last']
+            assert first_R % psi0_inf_R.L == first % psi0_inf_R.L and last_R % psi0_inf_R.L == last % psi0_inf_R.L, "'first' and 'last' saved to GS file must be the same used in excitation simulation."
             psi0_inf_R = resume_data_R.get('psi', psi0_inf_R)
             write_back_right = False            
         else:
