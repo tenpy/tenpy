@@ -1159,6 +1159,74 @@ class MPS:
         self._S = [self._S[i] for i in inds]
         self._S.append(self._S[0])
 
+    def enlarge_chi(self, extra_legs, random_fct=np.random.normal):
+        """Artifically enlarge the bond dimension by the specified extra legs/charges. In place.
+
+        Consider the MPS in right-canonical B form.
+        This function fills up the 'vR' leg with zeros, and then groups physical and virtual legs to fill up the 'vL' leg
+        with orthogonal rows. In than way, we get an MPS or larger bond dimension, still in right-canonical form,
+        representing the *same* state with a the additional singular values being exactly zero.
+
+        Parameters
+        ----------
+        extra_legs : list of {:class:`~tenpy.linalg.charges.LegCharge`, int}
+            The extra charges to be added on the virtual legs, with qconj=+1.
+            An int stand for "trivial" charges of charge value 0. Note that trivial charges can fail,
+            e.g. if you use the :class:`~tenpy.networks.site.SpinSite`.
+        random_fct :
+            Function generating random entries to choose extra orthogonal rows in the B tensors.
+            Should accept a `size` keyword for the shape, and return numpy arrays.
+        """
+        self.convert_form('B')
+        assert not self.finite
+        assert len(extra_legs) == self.L
+        perms_L = [None] * self.L
+        perms_R = [None] * self.L
+        for i, B in enumerate(self._B):
+            extra_leg_L = extra_legs[i]
+            extra_leg_R = extra_legs[(i+1) % self.L].conj()
+            B.itranspose(self._B_labels)
+            # add extra zero columns on the vR leg and sort by charges
+            B2 = B.extend('vR', extra_leg_R)
+            sort = [False] * (len(self._B_labels) - 1) + [True]
+            (_, _, perm_R), B2 = B2.sort_legcharge(sort, sort)
+            perms_R[(i + 1) % self.L] = perm_R
+            B2 = B2.combine_legs(self._p_label + ['vR'], qconj=-1, new_axes=1)
+            p_vR = B2.legs[1]
+            # get a new extra block of random entries for the vL leg
+            extra_B = npc.Array.from_func(random_fct, [extra_leg_L, p_vR],
+                                          dtype=B2.dtype,
+                                          qtotal=B2.qtotal,
+                                          shape_kw="size")
+            # orthogonalize rows of extra_B against rows of B2
+            extra_B = extra_B - npc.tensordot(npc.tensordot(extra_B, B2.conj(), [1, 1]),
+                                              B2,
+                                              [1, 0])
+            # orthogonalize rows within extra_B by QR
+            extra_B, extra_R = npc.qr(extra_B.itranspose([1, 0]),
+                                      inner_qconj=-1,
+                                      qtotal_Q=extra_B.qtotal)
+            try:
+                extra_B.legs[1].test_equal(extra_R.legs[1])
+            except ValueError as e:
+                print(extra_R)
+                raise ValueError("QR for Gram-Schmidt messed up charges. "
+                                 "Incompatible charges?") from e
+            extra_B.itranspose([1, 0])
+            # append extra block in vL leg of B2 and sort by charges
+            new_B = npc.concatenate([B2, extra_B], axis='vL')
+            (perm_L, _), new_B = new_B.sort_legcharge([True, False], [True, False])
+            perms_L[i] = perm_L
+            new_B = new_B.split_legs().itranspose(self._B_labels)
+            new_S = np.concatenate([self._S[i], np.zeros(extra_B.shape[0])])
+            new_S = new_S[perm_L]
+            self._B[i] = new_B
+            self._S[i] = new_S
+        for perm_L, perm_R in zip(perms_L, perms_R):
+            assert np.all(perm_L == perm_R)
+        self._S[self.L] = self._S[0]
+        self.test_sanity()
+
     def spatial_inversion(self):
         """Perform a spatial inversion along the MPS.
 

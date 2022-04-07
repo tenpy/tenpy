@@ -31,6 +31,7 @@ Added
 - :meth:`~tenpy.models.aklt.AKLTChain.psi_AKLT` for the exact MPS ground state of (spin-1/2) AKLT chain.
 - :func:`~tenpy.simulations.simulation.init_simulation` and :func:`~tenpy.simulations.simulation.init_simulation_from_checkpoint` for debugging or post-simulation measurement.
 - :func:`~tenpy.linalg.np_conserved.orthogonal_columns` constructing orthogonal columns to a given (rectangular) matrix.
+- :meth:`~tenpy.networks.mps.MPS.enlarge_chi` for artificially enlarging the bond dimension.
 
 Changed
 ^^^^^^^

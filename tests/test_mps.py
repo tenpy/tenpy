@@ -342,6 +342,20 @@ def test_roll_mps_unit_cell():
     assert abs(ov - 1.) < 1.e-14
 
 
+def test_mps_enlarge_chi(eps=1.e-14):
+    s = site.SpinHalfSite(conserve='Sz')
+    psi = mps.MPS.from_product_state([s] * 2, ['up', 'down'], bc='infinite')
+    psi.perturb({'trunc_params': {'chi_max': 10}, 'N_steps': 10}, close_1=False)
+
+    extra_qflat = [np.zeros([4, 1]) + (i % 2) for i in range(psi.L)]
+    extra_legs = [npc.LegCharge.from_qflat(psi.chinfo, qflat).bunch()[1] for qflat in extra_qflat]
+
+    psi_enl = psi.copy()
+    psi_enl.enlarge_chi(extra_legs)
+    assert np.max(psi_enl.norm_test()) < eps
+    assert abs(psi_enl.overlap(psi) - 1.) < eps
+
+
 def test_group():
     s = site.SpinHalfSite(conserve='parity')
     psi1 = mps.MPS.from_singlets(s, 6, [(1, 3), (2, 5)], lonely=[0, 4], bc='finite')
