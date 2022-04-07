@@ -678,11 +678,13 @@ class OrthogonalExcitations(GroundStateSearch):
         measure_add_unitcells = self.options.get('measure_add_unitcells', 0)
         if measure_add_unitcells is not None:
             first, last = self.results['segment_first_last']
+            print(first, last)
             psi, meas_first, meas_last = psi.extract_enlarged_segment(self.ground_state_orig,
                                                                       self.ground_state_orig,
                                                                       first,
                                                                       last,
                                                                       measure_add_unitcells)
+            print(psi.L)
             key = 'measure_segment_first_last'
             if key not in self.results:
                 self.results[key] = (meas_first, meas_last)
@@ -986,8 +988,8 @@ class TopologicalExcitations(OrthogonalExcitations):
         
     def _extract_segment_from_finite(self, psi0_fin_L, psi0_fin_R, model_fin):
         first = self.options.get('segment_first', 0)
-        boundary = self.options.get('segment_boundary', (psi0_fin_L.L-first)//2)
         last = self.options.get('segment_last', None)
+        boundary = self.options.get('segment_boundary', (last-first)//2 if last is not None else (psi0_fin_L.L-first)//2)
         assert first < boundary
         if last is not None:
             assert boundary < last
