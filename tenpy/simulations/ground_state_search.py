@@ -345,7 +345,7 @@ class OrthogonalExcitations(GroundStateSearch):
             guess_init_env_data = resume_data.get('init_env_data', None)
             H = model_inf.H_MPO
             env_data = MPOTransferMatrix.find_init_LP_RP(H, psi0_inf, first, last,
-                                                         guess_init_env_data)
+                                                         guess_init_env_data=guess_init_env_data)
         self.init_env_data = env_data
         ground_state_seg = psi0_inf.extract_segment(first, last)
         return ground_state_seg, write_back
@@ -412,7 +412,7 @@ class OrthogonalExcitations(GroundStateSearch):
                 raise ValueError(f"{gs_fn!s} already has converged environments!")
             resume_data['converged_environments'] = True
             resume_data['psi'] = gs_data['psi'] # could have been modified with canonical_form;
-            resume_data['env_first_last'] = self.model.lat.segment_first_last
+            # resume_data['env_first_last'] = self.model.lat.segment_first_last
             # in any case that's the reference ground state we use now!
 
             self.logger.info("write converged environments back to ground state file")
@@ -592,7 +592,8 @@ class OrthogonalExcitations(GroundStateSearch):
             self.logger.info('Lanczos Params in run_algorithm: %r', lanczos_params)
             # When E_shift isn't specified, we get a None, which throws an error below.
             E_shift = lanczos_params.get('E_shift', -100) #lanczos_params['E_shift'] if lanczos_params['E_shift'] is not None else 0
-
+            if E_shift is None:
+                E_shift = -100
             print("E_shift", E_shift)
             self.logger.info("Shifted ground state energy: %.14f", ground_state_energy + 0.5 * E_shift)
 
@@ -678,13 +679,11 @@ class OrthogonalExcitations(GroundStateSearch):
         measure_add_unitcells = self.options.get('measure_add_unitcells', 0)
         if measure_add_unitcells is not None:
             first, last = self.results['segment_first_last']
-            print(first, last)
             psi, meas_first, meas_last = psi.extract_enlarged_segment(self.ground_state_orig,
                                                                       self.ground_state_orig,
                                                                       first,
                                                                       last,
                                                                       measure_add_unitcells)
-            print(psi.L)
             key = 'measure_segment_first_last'
             if key not in self.results:
                 self.results[key] = (meas_first, meas_last)
@@ -898,12 +897,12 @@ class TopologicalExcitations(OrthogonalExcitations):
         ########################################
         if write_back_left:
             init_env_data = self.init_env_data
-            self.init_env_data = self.env_data_L
+            self.init_env_data = self.init_env_data_L
             self.write_back_environments(gs_data_L, gs_fn_L)
             self.init_env_data = init_env_data
         if write_back_right:
             init_env_data = self.init_env_data
-            self.init_env_data = self.env_data_R
+            self.init_env_data = self.init_env_data_R
             self.write_back_environments(gs_data_R, gs_fn_R)
             self.init_env_data = init_env_data
         self.results['segment_first_last'] = self.model.lat.segment_first_last
@@ -989,7 +988,7 @@ class TopologicalExcitations(OrthogonalExcitations):
     def _extract_segment_from_finite(self, psi0_fin_L, psi0_fin_R, model_fin):
         first = self.options.get('segment_first', 0)
         last = self.options.get('segment_last', None)
-        boundary = self.options.get('segment_boundary', (last-first)//2 if last is not None else (psi0_fin_L.L-first)//2)
+        boundary = self.options.get('segment_boundary', (last-first)//2 +first if last is not None else (psi0_fin_L.L-first)//2 + first)
         assert first < boundary
         if last is not None:
             assert boundary < last
@@ -1006,7 +1005,7 @@ class TopologicalExcitations(OrthogonalExcitations):
         env = MPOEnvironment(psi0_fin_R, self.model_orig.H_MPO, psi0_fin_R)
         self.env_data_R = env.get_initialization_data(first, last)
         self.env_data_R_seg = env.get_initialization_data(boundary, last)
-        
+                
         ground_state_seg = self._glue_segments(ground_state_seg_L, ground_state_seg_R,
                                                psi0_fin_L, psi0_fin_R,
                                                self.model, (first, last, boundary))     
@@ -1016,11 +1015,27 @@ class TopologicalExcitations(OrthogonalExcitations):
                                   'init_RP': self.env_data_R['init_RP'],
                                   'age_LP': 0,
                                   'age_RP': 0}
+            
+            #self.init_env_data = self._contract_segment_boundaries(self.init_env_data, *ground_state_seg.segment_boundaries)
         else:
             assert ground_state_seg_L.L + ground_state_seg_R.L == psi0_fin_L.L
             self.init_env_data = {}
-        
+            
         return ground_state_seg, False, False
+    
+    def _contract_segment_boundaries(self, env_data, U, Vh):
+        self.logger.info("Put segment boundaries into domain wall envs.")
+        if U is not None:
+            init_LP = npc.tensordot(U.conj(), env_data['init_LP'], axes=(['vL*'], ['vR*']))
+            init_LP = npc.tensordot(init_LP, U, axes=(['vR'], ['vL']))
+            env_data['init_LP'] = init_LP
+        
+        if Vh is not None:
+            init_RP = npc.tensordot(Vh, env_data['init_RP'], axes=(['vR'], ['vL']))
+            init_RP = npc.tensordot(init_RP, Vh.conj(), axes=(['vL*'], ['vR*']))
+            env_data['init_RP'] = init_RP
+        
+        return env_data
     
     def _extract_segment_from_infinite(self, psi0_inf_L, psi0_inf_R, model_inf, resume_data_L, resume_data_R):
         enlarge = self.options.get('segment_enlarge', None)
@@ -1029,13 +1044,8 @@ class TopologicalExcitations(OrthogonalExcitations):
             assert first == 0
         last = self.options.get('segment_last', None)
         
-        # Does the MPO transfer matrix business work with non-trivial first and last?
-        #assert first == 0
-        #assert last is None
-        print(first, enlarge, last)
         assert (enlarge is None) ^ (last is None), "'enlarge' xor 'last' must be not None."
         boundary = self.options.get('segment_boundary', (last - first) // 2 + first if enlarge is None else (enlarge//2)*psi0_inf_L.L + first)
-
         assert first < boundary
         if last is not None:
             assert boundary < last
@@ -1048,42 +1058,42 @@ class TopologicalExcitations(OrthogonalExcitations):
         gauge = self.options.get('gauge', 'rho')
         if resume_data_L.get('converged_environments', False):
             self.logger.info("use converged environments from left ground state file")
-            self.env_data_L = resume_data_L['init_env_data'] # Environments for infinite ground states
+            self.init_env_data_L = resume_data_L['init_env_data'] # Environments for infinite ground states
             # env loaded from file must use same first and last or there will be energy shifts in envs that make excitation energy incorrect.
-            first_L, last_L = resume_data_L['env_first_last']
-            assert first_L % psi0_inf_L.L == first % psi0_inf_L.L and last_L % psi0_inf_L.L == last % psi0_inf_L.L, "'first' and 'last' saved to GS file must be the same used in excitation simulation."
+            #first_L, last_L = resume_data_L['env_first_last']
+            #assert first_L % psi0_inf_L.L == first % psi0_inf_L.L and last_L % psi0_inf_L.L == last % psi0_inf_L.L, "'first' and 'last' saved to GS file must be the same used in excitation simulation."
             psi0_inf_L = resume_data_L.get('psi', psi0_inf_L)
             write_back_left = False            
         else:
             self.logger.info("converge left ground state environments with MPOTransferMatrix")
-            guess_init_env_data = resume_data_L.get('init_env_data_L', None)
-            self.env_data_L = MPOTransferMatrix.find_init_LP_RP(H, psi0_inf_L, first, last,
-                                                         guess_init_env_data, _subtraction_gauge=gauge)
+            guess_init_env_data = resume_data_L.get('init_env_data', None)
+            self.init_env_data_L = MPOTransferMatrix.find_init_LP_RP(H, psi0_inf_L, guess_init_env_data=guess_init_env_data, _subtraction_gauge=gauge)
             
             write_back_left = write_back
             
         if resume_data_R.get('converged_environments', False):
             self.logger.info("use converged environments from right ground state file")
-            self.env_data_R = resume_data_R['init_env_data']
+            self.init_env_data_R = resume_data_R['init_env_data']
             # env loaded from file must use same first and last or there will be energy shifts in envs that make excitation energy incorrect.
-            first_R, last_R = resume_data_R['env_first_last']
-            assert first_R % psi0_inf_R.L == first % psi0_inf_R.L and last_R % psi0_inf_R.L == last % psi0_inf_R.L, "'first' and 'last' saved to GS file must be the same used in excitation simulation."
+            #first_R, last_R = resume_data_R['env_first_last']
+            #assert first_R % psi0_inf_R.L == first % psi0_inf_R.L and last_R % psi0_inf_R.L == last % psi0_inf_R.L, "'first' and 'last' saved to GS file must be the same used in excitation simulation."
             psi0_inf_R = resume_data_R.get('psi', psi0_inf_R)
             write_back_right = False            
         else:
             self.logger.info("converge right ground state environments with MPOTransferMatrix")
-            guess_init_env_data = resume_data_R.get('init_env_data_R', None)
-            self.env_data_R = MPOTransferMatrix.find_init_LP_RP(H, psi0_inf_R, first, last,
-                                                         guess_init_env_data, _subtraction_gauge=gauge)
+            guess_init_env_data = resume_data_R.get('init_env_data', None)
+            self.init_env_data_R = MPOTransferMatrix.find_init_LP_RP(H, psi0_inf_R, guess_init_env_data=guess_init_env_data, _subtraction_gauge=gauge)
             
             write_back_right = write_back
         self.logger.info("converge segment environments with MPOTransferMatrix")
         #Should probably use MPOEnvironment to get this since we've already converged envs
         
-        env = MPOEnvironment(psi0_inf_L, H, psi0_inf_L, **self.env_data_L)
+        env = MPOEnvironment(psi0_inf_L, H, psi0_inf_L, **self.init_env_data_L)
+        self.env_data_L = env.get_initialization_data(first, last)
         self.env_data_L_seg = env.get_initialization_data(first, boundary-1)
         
-        env = MPOEnvironment(psi0_inf_R, H, psi0_inf_R, **self.env_data_R)
+        env = MPOEnvironment(psi0_inf_R, H, psi0_inf_R, **self.init_env_data_R)
+        self.env_data_R = env.get_initialization_data(first, last)
         self.env_data_R_seg = env.get_initialization_data(boundary, last)
         
         self.init_env_data = {'init_LP': self.env_data_L['init_LP'],
@@ -1465,7 +1475,7 @@ class TopologicalExcitationsOLD(OrthogonalExcitations):
             guess_init_env_data = resume_data.get('init_env_data', None)
             H_R = model_R_inf.H_MPO
             env_data_R, self.eps_R, self.E0_R = MPOTransferMatrix.find_init_LP_RP(H_R, psi0_R_inf, first, last,
-                                                         guess_init_env_data, calc_E=True)
+                                                         guess_init_env_data=guess_init_env_data, calc_E=True)
             self.init_env_data_R = env_data_R
 
             H_L = model_L_inf.H_MPO
