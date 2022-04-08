@@ -250,7 +250,7 @@ class OrthogonalExcitations(GroundStateSearch):
 
         # switch_charge_sector defines `self.initial_state_seg`
         self.initial_state_seg, self.qtotal_diff = self.switch_charge_sector(psi0_seg)
-
+        self.results['qtotal_diff'] = self.qtotal_diff
         if any(self.qtotal_diff):
             self.orthogonal_to = []  # different charge sector
             # so orthogonal to gs due to charge conservation
@@ -602,7 +602,7 @@ class OrthogonalExcitations(GroundStateSearch):
                 # the factor of 0.5 is somewhat arbitrary, to ensure that
                 # also excitations have energy < 0
                 print("lanczos_params['E_shift']:", lanczos_params['E_shift'])
-                raise ValueError("You need to set use diag_method='lanczos' and small enough "
+                raise ValueError("You need to set use diag_method='lanczos' and negative enough "
                                  f"lanczos_params['E_shift'] < {-2.* ground_state_energy:.2f}")
 
         # loop over excitations
@@ -912,7 +912,8 @@ class TopologicalExcitations(OrthogonalExcitations):
 
         # switch_charge_sector defines `self.initial_state_seg`
         self.initial_state_seg, self.qtotal_diff = self.switch_charge_sector(psi0_seg)
-
+        self.results['qtotal_diff'] = self.qtotal_diff
+        
         self.orthogonal_to = []  # Segment is inherently different than either left or right ground state.
         # Or at least the two sides will be different for non-trivial calculation.
         return None # return isn't used
@@ -1160,7 +1161,7 @@ class TopologicalExcitations(OrthogonalExcitations):
                 desired_Q = list(vL.chinfo.make_valid(Qmostprobable_L + Qmostprobable_R))
             else:
                 raise ValueError("Invalid `join_method` %s " % join_method)
-
+        self.gluing_charge = desired_Q
         self.logger.info("Desired gluing charge: %r", desired_Q)
 
         # We need a tensor that is non-zero only when Q = (Q^i_L - bar(Q_L)) + (Q^i_R - bar(Q_R))
@@ -1236,10 +1237,10 @@ class TopologicalExcitations(OrthogonalExcitations):
         else:
             H = self.model_orig.H_MPO
             _, epsilon_alpha, E0_alpha = MPOTransferMatrix.find_init_LP_RP(H, psi0_L, first, last,
-                                                             guess_init_env_data=self.env_data_L, calc_E=True, _subtraction_gauge=gauge)
+                                                             guess_init_env_data=self.init_env_data_L, calc_E=True, _subtraction_gauge=gauge)
             epsilon_alpha = np.mean(epsilon_alpha).real
             _, epsilon_beta, E0_beta = MPOTransferMatrix.find_init_LP_RP(H, psi0_R, first, last,
-                                                             guess_init_env_data=self.env_data_R, calc_E=True, _subtraction_gauge=gauge)
+                                                             guess_init_env_data=self.init_env_data_R, calc_E=True, _subtraction_gauge=gauge)
             epsilon_beta = np.mean(epsilon_beta).real
 
             E_L2 = E0_alpha + (seg_L.L + first % psi0_R.L + (last+1) % psi0_R.L)*epsilon_alpha
@@ -1248,15 +1249,15 @@ class TopologicalExcitations(OrthogonalExcitations):
             self.logger.info("EL, ER, EL2, ER2: %.14f, %.14f, %.14f, %.14f", E_L, E_R, E_L2, E_R2)
             self.logger.info("epsilon_L, epsilon_R, E0_L, E0_R: %.14f, %.14f, %.14f, %.14f", epsilon_alpha, epsilon_beta, E0_alpha, E0_beta)
 
-            MPO_TM = MPOTransferMatrix(H, psi0_L, transpose=False, guess = self.env_data_L['init_RP'])
-            eta_R_alpha = -1*npc.tensordot(MPO_TM._proj_trace, self.env_data_L['init_RP'], axes=(['vR', 'wR', 'vR*'], ['vL', 'wL', 'vL*']))
-            MPO_TM = MPOTransferMatrix(H, psi0_L, transpose=True, guess = self.env_data_L['init_LP'])
-            eta_L_alpha = -1*npc.tensordot(self.env_data_L['init_LP'], MPO_TM._proj_trace, axes=(['vR*', 'wR', 'vR'], ['vL*', 'wL', 'vL']))
+            MPO_TM = MPOTransferMatrix(H, psi0_L, transpose=False, guess = self.init_env_data_L['init_RP'])
+            eta_R_alpha = npc.tensordot(MPO_TM._proj_trace, self.init_env_data_L['init_RP'], axes=(['vR', 'wR', 'vR*'], ['vL', 'wL', 'vL*'])) 
+            MPO_TM = MPOTransferMatrix(H, psi0_L, transpose=True, guess = self.init_env_data_L['init_LP'])
+            eta_L_alpha = npc.tensordot(self.init_env_data_L['init_LP'], MPO_TM._proj_trace, axes=(['vR*', 'wR', 'vR'], ['vL*', 'wL', 'vL']))
 
-            MPO_TM = MPOTransferMatrix(H, psi0_R, transpose=False, guess = self.env_data_R['init_RP'])
-            eta_R_beta = -1*npc.tensordot(MPO_TM._proj_trace, self.env_data_R['init_RP'], axes=(['vR', 'wR', 'vR*'], ['vL', 'wL', 'vL*']))
-            MPO_TM = MPOTransferMatrix(H, psi0_R, transpose=True, guess = self.env_data_R['init_LP'])
-            eta_L_beta = -1*npc.tensordot(self.env_data_R['init_LP'], MPO_TM._proj_trace, axes=(['vR*', 'wR', 'vR'], ['vL*', 'wL', 'vL']))
+            MPO_TM = MPOTransferMatrix(H, psi0_R, transpose=False, guess = self.init_env_data_R['init_RP'])
+            eta_R_beta = npc.tensordot(MPO_TM._proj_trace, self.init_env_data_R['init_RP'], axes=(['vR', 'wR', 'vR*'], ['vL', 'wL', 'vL*']))
+            MPO_TM = MPOTransferMatrix(H, psi0_R, transpose=True, guess = self.init_env_data_R['init_LP'])
+            eta_L_beta = npc.tensordot(self.init_env_data_R['init_LP'], MPO_TM._proj_trace, axes=(['vR*', 'wR', 'vR'], ['vL*', 'wL', 'vL']))
 
             self.logger.info("eta_L_alpha, eta_R_alpha, eta_L_beta, eta_R_beta: %.14f, %.14f, %.14f, %.14f", eta_L_alpha, eta_R_alpha, eta_L_beta, eta_R_beta)
 
