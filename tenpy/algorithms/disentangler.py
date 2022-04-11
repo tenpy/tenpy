@@ -82,7 +82,7 @@ class Disentangler:
 class BackwardDisentangler(Disentangler):
     """Disentangle with backward time evolution.
 
-    See [Karrasch2013]_ for details; only useful during real-time evolution.
+    See :cite:`karrasch2013` for details; only useful during real-time evolution.
 
     For the infinite temperature state, ``theta = delta_{p0, q0}*delta_{p1, q1}``.
     Thus, an application of `U_bond` to ``p0, p1`` can be reverted completely by applying
@@ -113,7 +113,7 @@ class BackwardDisentangler(Disentangler):
 class RenyiDisentangler(Disentangler):
     """Iterative find `U` which minimized the second Renyi entropy.
 
-    See [Hauschild2018]_
+    See :cite:`hauschild2018`.
 
     Reads of the following `options` as break criteria for the iteration:
 
@@ -611,24 +611,26 @@ def get_disentangler(method, parent):
 
     Examples
     --------
-    >>> get_disentangler(None, p)
-    Disentangler(p)
-    >>> get_disentangler('last-renyi', p)
-    Disentangler([LastDisentangler(p), RenyiDisentangler(p)], p)
-    >>> get_disentangler('min(None,noise-renyi,min(backwards,last)-graddesc)')
-    MinDisentangler([Disentangler,
-                     CompositeDisentangler([NoiseDisentangler(p), RenyiDisentangler(p)], p),
-                     CompositeDisentangler([MinDisentangler([BackwardDisentangler(p),
-                                                             LastDisentangler(p)]),
-                                            GradientDescentDisentangler(p)], p), p)
+    .. doctest :: get_disentangler
+        :options: +SKIP
+
+        >>> get_disentangler(None, p)
+        Disentangler(p)
+        >>> get_disentangler('last-renyi', p)
+        Disentangler([LastDisentangler(p), RenyiDisentangler(p)], p)
+        >>> get_disentangler('min(None,noise-renyi,min(backwards,last)-graddesc)')
+        MinDisentangler([Disentangler,
+                        CompositeDisentangler([NoiseDisentangler(p), RenyiDisentangler(p)], p),
+                        CompositeDisentangler([MinDisentangler([BackwardDisentangler(p),
+                                                                LastDisentangler(p)]),
+                                                GradientDescentDisentangler(p)], p), p)
     """
     try:
         disent, unparsed = _parse_composite(str(method), parent)
         if len(unparsed) > 0:
             raise _ParseError
-    except _ParseError:
-        raise
-        #  raise ValueError("Error while parsing disentangle method: " + repr(method))
+    except _ParseError as e:
+        raise ValueError("Error while parsing disentangle method: " + repr(method)) from e
     return disent
 
 

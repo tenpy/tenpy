@@ -1054,7 +1054,7 @@ class LegCharge:
         if self.qconj == extra.qconj:
             new_charges[bn:] = extra.charges
         else:
-            new_charges[bn:] = -extra.charges
+            new_charges[bn:] = self.chinfo.make_valid(-extra.charges)
         return LegCharge(self.chinfo, new_slices, new_charges, qconj=self.qconj)
 
     def charge_sectors(self):

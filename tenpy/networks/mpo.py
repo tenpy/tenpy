@@ -45,7 +45,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 from ..linalg import np_conserved as npc
-from ..linalg.sparse import FlatLinearOperator
+from ..linalg.sparse import NpcLinearOperator, FlatLinearOperator
 from .site import group_sites, Site
 from ..tools.string import vert_join
 from .mps import MPS as _MPS  # only for MPS._valid_bc
@@ -2349,7 +2349,7 @@ class MPOEnvironment(MPSEnvironment):
         return RHeff
 
 
-class MPOTransferMatrix:
+class MPOTransferMatrix(NpcLinearOperator):
     """Transfermatrix of a Hamiltonian-like MPO sandwiched between canonicalized MPS.
 
     Given an MPS in canonical form, this class helps to find the correct initial MPO environment
@@ -2418,7 +2418,7 @@ class MPOTransferMatrix:
                 S2 = S**2
                 rho = npc.diag(S2, vR, labels=['vR', 'vR*'])
 
-            # vec: vL wL vL*
+            self.acts_on = ['vL', 'wL', 'vL*']  # vec: vL wL vL*
             for i in reversed(range(self.L)):
                 # optimize: transpose arrays to mostly avoid it in matvec
                 B = psi.get_B(i, 'B').astype(dtype, False)
@@ -2441,7 +2441,7 @@ class MPOTransferMatrix:
                 S2 = S**2
                 rho = npc.diag(S2, vL.conj(), labels=['vL*', 'vL'])
 
-            # vec: vR* wR vR
+            self.acts_on = ['vR*', 'wR', 'vR']  # labels of the vec
             for i in range(self.L):
                 A = psi.get_B(i, 'A').astype(dtype, False)
                 self._M.append(A.transpose(['vL', 'p', 'vR']))
@@ -2586,7 +2586,7 @@ class MPOTransferMatrix:
                         guess_init_env_data=None,
                         calc_E=False,
                         tol_ev0=1.e-8,
-                        subtraction_gauge='rho',
+                        _subtraction_gauge='rho',
                         **kwargs):
         """Find the initial LP and RP.
 
@@ -2603,9 +2603,10 @@ class MPOTransferMatrix:
         guess : None | dict
             Possible `init_env_data` with the guess/result of DMRG updates.
             If some legs are incompatible, trigger a warning and ignore.
-        subtraction_gauge : string
+        _subtraction_gauge : string
             How the additive part of the generalized eigenvector is subtracted out.
-            Possible values are 'rho' and 'trace'; see
+            Possible values are 'rho' and 'trace'; see documentation for MPOTransferMatrix
+            for more details.
         **kwargs :
             Further keyword arguments for
             :meth:`~tenpy.linalg.sparse.FlatLinearOperator.eigenvectors`.
@@ -2626,7 +2627,7 @@ class MPOTransferMatrix:
             guess_init_env_data = {}
         for transpose in [False, True]:
             guess = guess_init_env_data.get('init_LP' if transpose else 'init_RP', None)
-            TM = cls(H, psi, transpose=transpose, guess=guess, _subtraction_gauge=subtraction_gauge)
+            TM = cls(H, psi, transpose=transpose, guess=guess, _subtraction_gauge=_subtraction_gauge)
             val, vec = TM.dominant_eigenvector(**kwargs)
             if abs(1. - val) > tol_ev0:
                 logger.warning("MPOTransferMatrix eigenvalue not 1: got %s", val)

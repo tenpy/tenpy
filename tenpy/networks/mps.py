@@ -1258,6 +1258,127 @@ class MPS:
         self._S = [self._S[i] for i in inds]
         self._S.append(self._S[0])
 
+    def enlarge_chi(self, extra_legs, random_fct=np.random.normal):
+        """Artifically enlarge the bond dimension by the specified extra legs/charges. In place.
+
+        First converts the MPS in B form.
+        This function then fills up the 'vR' leg with zeros, and then groups physical and vR legs
+        to fill up the 'vL' leg with orthogonal rows. In than way, we get an MPS with larger bond
+        dimension, still in right-canonical form (assuming no "overcomplete" charge block),
+        representing the *same* state, with the additional singular values being exactly zero.
+
+        .. note ::
+            You should probably **choose** the extra charges to be sensible,
+            to expand into the space you are interested in, and not just into a random direction!
+
+        Parameters
+        ----------
+        extra_legs : list of {None, :class:`~tenpy.linalg.charges.LegCharge`, int}
+            The extra charges to be added on the virtual legs, with qconj=+1.
+            Lenght `L` +1 for finite, length `L` for infinite, with entry `i` left of site `i`.
+            If an `int` is given, fill up with a single block of charges like the Schmidt state
+            with highest weight. Note that this might force the resulting state to not be in
+            strict "right-canonical" B form if that charge block becomes overcomplete.
+        random_fct :
+            Function generating random entries to choose extra orthogonal rows in the B tensors.
+            Should accept a `size` keyword for the shape, and return numpy arrays.
+
+        Returns
+        -------
+        permutations: list of 1D array | None
+            Permutation performed on each virtual leg, such that
+            ``new_S = concatenate(old_S, zeros)[perm]``.
+        """
+        self.convert_form('B')
+        if len(extra_legs) != self.L + (1 if self.finite else 0):
+            raise ValueError("wrong len of extra_legs.")
+        perms_L = [None] * (self.L + 1)
+        perms_R = [None] * (self.L + 1)
+        extra_legs = list(extra_legs)
+        for i, add_chi in enumerate(extra_legs):
+            if not isinstance(add_chi, int):
+                continue
+            # convert chi to extra LegCharge
+            if self.chinfo.qnumber == 0:
+                extra_legs[i] = npc.LegCharge.from_trivial(add_chi, self.chinfo)
+            else:
+                max_weight = np.argmax(self._S[i])
+                if i < self.L:
+                    leg = self._B[i].get_leg('vL')
+                else:
+                    leg = self._B[-1].get_leg('vR')
+                extra_charge = leg.get_charge(leg.get_qindex(max_weight)[0])[np.newaxis, :]
+                extra_legs[i] = npc.LegCharge.from_qind(self.chinfo,
+                                                        [0, add_chi],
+                                                        extra_charge)
+        if not self.finite:
+            extra_legs.append(extra_legs[0])  # ensure length L+1
+        for i, B in enumerate(self._B):
+            extra_leg_L = extra_legs[i]
+            extra_leg_R = extra_legs[i + 1]
+            B.itranspose(self._B_labels)
+            if extra_leg_R is not None:
+                # add extra zero columns on the vR leg and sort by charges
+                extra_leg_R = extra_leg_R.conj()
+                B2 = B.extend('vR', extra_leg_R)
+                sort = [False] * (len(self._B_labels) - 1) + [True]
+                (_, _, perm_R), B2 = B2.sort_legcharge(sort, sort)
+                perms_R[i + 1] = perm_R
+            else:
+                B2 = B
+            B2 = B2.combine_legs(self._p_label + ['vR'], qconj=-1, new_axes=1)
+            if extra_leg_L is not None:
+                p_vR = B2.legs[1]
+                # get a new extra block of random entries for the vL leg
+                extra_B = npc.Array.from_func(random_fct, [extra_leg_L, p_vR],
+                                            dtype=B2.dtype,
+                                            qtotal=B2.qtotal,
+                                            shape_kw="size")
+                # orthogonalize rows of extra_B against rows of B2
+                extra_B = extra_B - npc.tensordot(npc.tensordot(extra_B, B2.conj(), [1, 1]),
+                                                B2,
+                                                [1, 0])
+                # orthogonalize rows within extra_B by QR
+                extra_B, extra_R = npc.qr(extra_B.itranspose([1, 0]),
+                                        inner_qconj=-1,
+                                        qtotal_Q=extra_B.qtotal)
+                try:
+                    extra_B.legs[1].test_equal(extra_R.legs[1])
+                except ValueError as e:
+                    print(extra_R)
+                    raise ValueError("QR for Gram-Schmidt messed up charges. "
+                                    "Incompatible charges?") from e
+                extra_B.itranspose([1, 0])
+                # append extra block in vL leg of B2 and sort by charges
+                new_B = npc.concatenate([B2, extra_B], axis='vL')
+                (perm_L, _), new_B = new_B.sort_legcharge([True, False], [True, False])
+                perms_L[i] = perm_L
+            else:
+                new_B = B2
+            new_B = new_B.split_legs().itranspose(self._B_labels)
+            self._B[i] = new_B
+        if self.finite:
+            # fix undefined permutations at boundaries
+            perms_R[0] = perms_L[0]
+            perms_L[-1] = perms_R[-1]
+        else:
+            perms_L[-1] = perms_L[0]
+            perms_R[0] = perms_R[-1]
+        for perm_L, perm_R in zip(perms_L, perms_R):
+            assert (perm_L is not None) == (perm_R is not None)
+            if perm_L is not None:
+                assert np.all(perm_L == perm_R)
+        # append zeros to singular values
+        for i, S in enumerate(self._S):
+            leg = extra_legs[i]
+            if leg is not None:
+                new_S = np.concatenate([S, np.zeros(leg.ind_len)])
+                assert perms_L[i] is not None
+                new_S = new_S[perms_L[i]]
+                self._S[i] = new_S
+        self.test_sanity()
+        return perms_L
+
     def spatial_inversion(self):
         """Perform a spatial inversion along the MPS.
 
