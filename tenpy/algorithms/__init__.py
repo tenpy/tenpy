@@ -17,12 +17,11 @@
     network_contractor
     exact_diag
     distentangler
-    vumps
 """
 # Copyright 2018-2021 TeNPy Developers, GNU GPLv3
 
 from . import algorithm, truncation, dmrg, dmrg_parallel, disentangler, mps_common, tebd, tdvp, \
-    exact_diag, purification, network_contractor, mpo_evolution, vumps, plane_wave_excitation
+    exact_diag, purification, network_contractor, mpo_evolution, plane_wave_excitation
 
 __all__ = [
     "algorithm",
@@ -37,6 +36,5 @@ __all__ = [
     "network_contractor",
     "mpo_evolution",
     "disentangler",
-    "vumps",
     "plane_wave_excitation"
 ]

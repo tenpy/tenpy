@@ -101,7 +101,8 @@ class PlaneWaveExcitationEngine(Algorithm):
             self.lambda_C1 = npc.tensordot(C0_L, self.RW, axes=(['vR'], ['vL']))
             self.lambda_C1 = npc.tensordot(self.LW, self.lambda_C1, axes=(['wR', 'vR'], ['wL', 'vL']))
             self.lambda_C1 = npc.tensordot(self.lambda_C1, C0_L.conj(), axes=(['vR*', 'vL*'], ['vL*', 'vR*'])) / norm
-        print('L:', self.lambda_C1)
+        # print('L:', self.lambda_C1)
+
         """
         # Tw[Al,AR]
         self.l_LR = npc.Array.zeros_like(self.LW).itranspose(['vR*','wR', 'vR']) # [TODO] check default ordering to potentially remove transpose
