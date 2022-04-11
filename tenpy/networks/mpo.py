@@ -2409,37 +2409,51 @@ class MPOTransferMatrix(NpcLinearOperator):
             raise ValueError("MPO needs to have structure with IdL/IdR")
         wL = H.get_W(0).get_leg('wL')
         wR = wL.conj()
-        S2 = psi.get_SL(0)**2
+        S = psi.get_SL(0)
         if not transpose:  # right to left
-            self.acts_on = ['vL', 'wL', 'vL*']  # vec: vL wL vL*
+            vR = psi.get_B(psi.L-1, 'B').get_leg('vR')
+            if isinstance(S, npc.Array):
+                rho = npc.tensordot(S, S.conj(), axes=['vL', 'vL*'])
+            else:
+                S2 = S**2
+                rho = npc.diag(S2, vR, labels=['vR', 'vR*'])
+
+            # vec: vL wL vL*
             for i in reversed(range(self.L)):
                 # optimize: transpose arrays to mostly avoid it in matvec
                 B = psi.get_B(i, 'B').astype(dtype, False)
                 self._M.append(B.transpose(['vL', 'p', 'vR']))
                 self._W.append(H.get_W(i).transpose(['p*', 'wR', 'p', 'wL']).astype(dtype, False))
                 self._M_conj.append(B.conj().itranspose(['vR*', 'p*', 'vL*']))
-            vR = self._M[0].get_leg('vR')
+
+            #vR = self._M[0].get_leg('vR')
             self._chi0 = chi0 = vR.ind_len
             eye_R = npc.diag(1., vR.conj(), dtype=dtype, labels=['vL', 'vL*'])
             self._E_shift = eye_R.add_leg(wL, self.IdL, axis=1, label='wL')  # vL wL vL*
             self._proj_trace = self._E_shift.conj().iset_leg_labels(['vR', 'wR', 'vR*']) / chi0
             self._proj_norm = eye_R.add_leg(wL, self.IdR, axis=1, label='wL').conj()  # vL* wL* vL
-            rho = npc.diag(S2, vR, labels=['vR', 'vR*'])
             self._proj_rho = rho.add_leg(wR, self.IdL, axis=1, label='wR')  # vR wR vR*
         else:  # left to right
-            self.acts_on = ['vR*', 'wR', 'vR']  # labels of the vec
+            vL = psi.get_B(0, 'A').get_leg('vL')
+            if isinstance(S, npc.Array):
+                rho = npc.tensordot(S.conj(), S, axes=['vR*', 'vR'])
+            else:
+                S2 = S**2
+                rho = npc.diag(S2, vL.conj(), labels=['vL*', 'vL'])
+
+            # vec: vR* wR vR
             for i in range(self.L):
                 A = psi.get_B(i, 'A').astype(dtype, False)
                 self._M.append(A.transpose(['vL', 'p', 'vR']))
                 self._W.append(H.get_W(i).transpose(['wR', 'p', 'wL', 'p*']).astype(dtype, False))
                 self._M_conj.append(A.conj().itranspose(['vR*', 'p*', 'vL*']))
-            vL = self._M[0].get_leg('vL')
+
+            #vL = self._M[0].get_leg('vL')
             self._chi0 = chi0 = vL.ind_len
             eye_L = npc.diag(1., vL, dtype=dtype, labels=['vR*', 'vR'])
             self._E_shift = eye_L.add_leg(wR, self.IdR, axis=1, label='wR')  # vR* wR vR
             self._proj_trace = self._E_shift.conj().iset_leg_labels(['vL*', 'wL', 'vL']) / chi0
             self._proj_norm = eye_L.add_leg(wR, self.IdL, axis=1, label='wR').conj()  # vR wR* vR*
-            rho = npc.diag(S2, vL.conj(), labels=['vL*', 'vL'])
             self._proj_rho = rho.add_leg(wL, self.IdR, axis=1, label='wL')  # vL* wL vL
         if _subtraction_gauge == 'trace':
             self._proj_subtr = self._proj_trace
@@ -2508,11 +2522,11 @@ class MPOTransferMatrix(NpcLinearOperator):
 
     def _project(self, vec):
         """Project out additive energy part from vec."""
-        if not self.transpose:
+        if not self.transpose: # Acts to the right, T * RP = RP + e_R * I
             vec.itranspose(['vL', 'wL', 'vL*'])  # shouldn't do anything
             E = npc.inner(vec, self._proj_subtr, axes=[['vL', 'wL', 'vL*'], ['vR', 'wR', 'vR*']])
             vec -= self._E_shift * E
-        else:
+        else: # Acts to the left, LP * T = LP + e_L * I
             vec.itranspose(['vR*', 'wR', 'vR'])  # shouldn't do anything
             E = npc.inner(vec, self._proj_subtr, axes=[['vR*', 'wR', 'vR'], ['vL*', 'wL', 'vL']])
             vec -= self._E_shift * E
@@ -2572,7 +2586,7 @@ class MPOTransferMatrix(NpcLinearOperator):
                         guess_init_env_data=None,
                         calc_E=False,
                         tol_ev0=1.e-8,
-                        _subtraction_gauge='rho',
+                        subtraction_gauge='rho',
                         **kwargs):
         """Find the initial LP and RP.
 
@@ -2589,6 +2603,9 @@ class MPOTransferMatrix(NpcLinearOperator):
         guess : None | dict
             Possible `init_env_data` with the guess/result of DMRG updates.
             If some legs are incompatible, trigger a warning and ignore.
+        subtraction_gauge : string
+            How the additive part of the generalized eigenvector is subtracted out.
+            Possible values are 'rho' and 'trace'; see
         **kwargs :
             Further keyword arguments for
             :meth:`~tenpy.linalg.sparse.FlatLinearOperator.eigenvectors`.
@@ -2604,17 +2621,18 @@ class MPOTransferMatrix(NpcLinearOperator):
         """
         # first right to left
         envs = []
+        Es = []
         if guess_init_env_data is None:
             guess_init_env_data = {}
         for transpose in [False, True]:
             guess = guess_init_env_data.get('init_LP' if transpose else 'init_RP', None)
-            TM = cls(H, psi, transpose=transpose, guess=guess, _subtraction_gauge=_subtraction_gauge)
+            TM = cls(H, psi, transpose=transpose, guess=guess, _subtraction_gauge=subtraction_gauge)
             val, vec = TM.dominant_eigenvector(**kwargs)
             if abs(1. - val) > tol_ev0:
                 logger.warning("MPOTransferMatrix eigenvalue not 1: got %s", val)
             envs.append(vec)
-            if calc_E and transpose:
-                E = TM.energy(vec)
+            if calc_E:
+                Es.append(TM.energy(vec)) #E_R, E_L
             L = TM.L
             del TM
         init_env_data = {'init_LP': envs[1], 'init_RP': envs[0], 'age_LP': 0, 'age_RP': 0}
@@ -2625,16 +2643,17 @@ class MPOTransferMatrix(NpcLinearOperator):
             if last % L != L - 1:
                 init_env_data['init_RP'] = env.get_RP(last, store=False)
         if calc_E:
+            # We need this for segment excitation energies.
             # TODO: this doesn't work for non-default first/last!?
             SL = psi.get_SL(0)
-            RP, LP = envs
-            vL, vR = LP.get_leg('vR').conj(), RP.get_leg('vL').conj()
-            SL = npc.diag(SL, vL, labels=['vL', 'vR'])
-            E0 = npc.tensordot(LP, SL, axes=(['vR'], ['vL']))
+            if not isinstance(SL, npc.Array):
+                vL, vR = envs[1].get_leg('vR').conj(), envs[0].get_leg('vL').conj()
+                SL = npc.diag(SL, vL, dtype=np.promote_types(psi.dtype, H.dtype), labels=['vL', 'vR'])
+            E0 = npc.tensordot(init_env_data['init_LP'], SL, axes=(['vR'], ['vL']))
             E0 = npc.tensordot(E0, SL.conj(), axes=(['vR*'], ['vL*']))
-            E0 = npc.tensordot(E0, RP, axes=(['vR', 'wR', 'vR*'], ['vL', 'wL', 'vL*']))
+            E0 = npc.tensordot(E0, init_env_data['init_RP'], axes=(['vR', 'wR', 'vR*'], ['vL', 'wL', 'vL*']))
             # E0 = LP * s^2 * RP on site 0
-            return init_env_data, E, E0
+            return init_env_data, Es, E0
         # else:
         return init_env_data
 
