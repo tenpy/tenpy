@@ -548,13 +548,13 @@ class Lattice:
             # first = 0
         elif last is None:
             last = L - 1
-        if first >= last:
-            raise ValueError(f"need first < last, got {first:d}, {last:d}")
+        if first > last: # first == last should be fine
+            raise ValueError(f"need first <= last, got {first:d}, {last:d}")
         first_unit_cell = first - first % L
         segment_first_last = (first, last)
         if first_unit_cell != 0:
-            assert first_unit_cell < 0
-            if cp.bc_MPS != 'infinite':
+            #assert first_unit_cell < 0 # SAJANT - if first > L, then first_unit_cell > 0.
+            if cp.bc_MPS != 'infinite' and first_unit_cell < 0:
                 raise ValueError("can't enlarge to negative `first` for finite system")
             # shift by whole unit cell(s) to the right until `first` is in first unit cell
             first, last = first - first_unit_cell, last - first_unit_cell

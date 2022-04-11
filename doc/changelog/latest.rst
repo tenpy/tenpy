@@ -40,6 +40,7 @@ Added
 - :meth:`tenpy.networks.site.Site.charge_to_JW_sign` and :attr:`~tenpy.networks.site.Site.charge_to_JW_parity` to allow
   :meth:`~tenpy.networks.mps.MPS.apply_local_op` with a fermionic operator on an MPS.
 - :func:`~tenpy.linalg.np_conserved.orthogonal_columns` constructing orthogonal columns to a given (rectangular) matrix.
+- :meth:`~tenpy.networks.mps.MPS.enlarge_chi` for artificially enlarging the bond dimension.
 
 Changed
 ^^^^^^^
