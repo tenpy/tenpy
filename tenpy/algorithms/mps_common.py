@@ -347,10 +347,8 @@ class Sweep(Algorithm):
         logger.info("start environment_sweep")
         for k in range(N_sweeps):
             self.sweep(optimize=False, use_ramp=False)
-            if self.verbose >= 1:
-                print('.', end='', flush=True)
-        if self.verbose >= 1:
-            print("", flush=True)  # end line
+            logger.info('.', end='', flush=True)
+        logger.info("\n")  # end line
 
     def sweep(self, optimize=True, use_ramp=True):
         """One 'sweep' of a sweeper algorithm.
@@ -393,15 +391,13 @@ class Sweep(Algorithm):
             self.i0 = i0
             self.move_right = move_right
             self.update_LP_RP = update_LP_RP
-            if self.verbose >= 10:
-                print("in sweep: i0 =", i0)
-                #print("next_qramp[0]=",next_qramp[0]," next_qramp[1]=", next_qramp[1])
+            logger.info("in sweep: i0 =", i0)
+            #logger.info("next_qramp[0]=%s , next_qramp[1]=%s",next_qramp[0], next_qramp[1])
             self._cache_optimize()
             logger.debug("in sweep: i0 =%d", i0)
             # --------- the main work --------------
             if (next_qramp[0]==self.i0) and (next_qramp[1]==self.move_right):
-                if (self.verbose >= 5):
-                    print("Inserting qramp operator at sweep ", self.sweeps, " with values: ",next_qramp)
+                logger.info("Inserting qramp operator at sweep %d with values: %r ", self.sweeps, next_qramp)
                 theta = self.prepare_update_with_ramp(next_qramp[2])
                 next_qramp=next(qramp_schedule)[0]
                 #print ("next_qramp=",next_qramp)
@@ -460,6 +456,7 @@ class Sweep(Algorithm):
         If i0 is outside the simulation cell, will translate into relevant location either forwards or backwards within cell."""
         if (i0 =='r' or i0 =='R'):
         	i0=randrange(2*self.psi.L)
+        i0=int(i0)
         change_direction=(i0 // self.psi.L) % 2
         if (change_direction):
             return (i0%self.psi.L, not move_right, op)
@@ -523,8 +520,8 @@ class Sweep(Algorithm):
                     terms.append(self._decode_i0_location(next_event[0], next_event[1], op))
         terms.sort(key=lambda x: (x[1]==True)* x[0]+(x[1]==False)*(2*self.psi.L-x[0])) # make sure terms appear sorted in MPS order
         # add a dummy entry to the end of the list enabling to call next on iterator until last relevant element reached
-        if (self.verbose>=5 and len(terms)>0):
-            print ("qramp terms for sweep", self.sweeps," are: ",terms)
+        if (len(terms)>0):
+            logger.info("qramp terms for sweep %d are: %r", self.sweeps, terms)
         terms.append([-1, True, 'None'])
         return zip(terms)
 
@@ -570,7 +567,6 @@ class Sweep(Algorithm):
             raise ValueError(f"unexpected `n_optimize` = {self.n_optimize!r}")
         for env in self._all_envs:
             env.cache_optimize(**kwargs)
->>>>>>> b49f0e0302e44439381d68a904c0a3bb06373f46
 
     def prepare_update(self):
         """Prepare `self` for calling :meth:`update_local`.

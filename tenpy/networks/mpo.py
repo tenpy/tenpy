@@ -1252,8 +1252,8 @@ class MPOGraph:
 
     This representation is used for building H_MPO from the interactions.
     The idea is to view the MPO as a kind of 'finite state machine'.
-    The **states** or **keys** of this finite state machine life on the MPO bonds *between* the
-    `Ws`. They label the indices of the virtul bonds of the MPOs, i.e., the indices on legs
+    The **states** or **keys** of this finite state machine live on the MPO bonds *between* the
+    `Ws`. They label the indices of the virtual bonds of the MPOs, i.e., the indices on legs
     ``wL`` and ``wR``. They can be anything hash-able like a ``str``, ``int`` or a tuple of them.
 
     The **edges** of the graph are the entries ``W[keyL, keyR]``, which itself are onsite operators

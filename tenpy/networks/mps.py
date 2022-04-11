@@ -954,7 +954,6 @@ class MPS:
             Parameters for truncation, see :cfg:config:`truncation`.
             If ``None``, no truncation is done.
         update_norm : bool
-            If ``True``, multiply the norm of `theta` into :attr:`norm`.
         """
         i0 = self._to_valid_index(i)
         i1 = self._to_valid_index(i0 + 1)
@@ -3730,7 +3729,7 @@ class MPS:
             if form_diff == -1.:
                 S = 1. / S
             elif form_diff != 1.:
-		if (form_diff<0.0):
+                if (form_diff<0.0):
                     S = (S+1e-15)**form_diff
                 else:
                     S = S**form_diff

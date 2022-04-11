@@ -1148,6 +1148,14 @@ class CouplingModel(Model):
             ct += t
         return ct
 
+    def get_hopping_terms(self):
+        """Return list of all :attr:`coupling_terms` that provide hopping terms."""
+        sites = self.lat.mps_sites()
+        hopping_terms=[]
+        for item in self.coupling_terms.values():
+            hopping_terms+=item.get_hopping_terms(self.lat)
+        return hopping_terms
+
     def add_multi_coupling(self,
                            strength,
                            ops,

@@ -49,11 +49,7 @@ from ..tools.process import memory_usage
 from .mps_common import Sweep, OneSiteH, TwoSiteH
 
 __all__ = [
-<<<<<<< HEAD
-    'get_engine', 'run', 'DMRGEngine', 'SingleSiteDMRGEngine', 'TwoSiteDMRGEngine', 'EngineCombine',
-    'EngineFracture', 'Mixer', 'SingleSiteMixer', 'TwoSiteMixer', 'DensityMatrixMixer', 'chi_list',
-    'full_diag_effH'
-=======
+    'get_engine',
     'run',
     'DMRGEngine',
     'SingleSiteDMRGEngine',
@@ -67,18 +63,11 @@ __all__ = [
     'TwoSiteMixer',
     'EngineCombine',
     'EngineFracture',
->>>>>>> b49f0e0302e44439381d68a904c0a3bb06373f46
 ]
     
 
-<<<<<<< HEAD
-def get_engine(psi, model, options):
+def get_engine(psi, model, options, **kwargs):
     r"""Construct an engine underlying the DMRG algorithm and return it immediately
-=======
-
-def run(psi, model, options, **kwargs):
-    r"""Run the DMRG algorithm to find the ground state of the given model.
->>>>>>> b49f0e0302e44439381d68a904c0a3bb06373f46
 
     Parameters
     ----------
@@ -118,7 +107,7 @@ def run(psi, model, options, **kwargs):
         raise ValueError("For DMRG, can only use 1 or 2 active sites, not {}".format(active_sites))
     return engine
 
-def run(psi, model, options):
+def run(psi, model, options, **kwargs):
     r"""Run the DMRG algorithm to find the ground state of the given model.
 
     Parameters
@@ -130,6 +119,9 @@ def run(psi, model, options):
     options : dict
         Further optional parameters as described in :cfg:config:`DMRGEngine`.
         Use ``verbose>0`` to print the used parameters during runtime.
+	**kwargs :
+        Further keyword arguments for the algorithm classes :class:`TwoSiteDMRGEngine` or
+        :class:`SingleSiteDMRGEngine`.
 
     Returns
     -------
@@ -148,7 +140,7 @@ def run(psi, model, options):
 
     """
     # initialize the engine
-    engine = get_engine(psi, model, options)
+    engine = get_engine(psi, model, options, kwargs)
     E, _ = engine.run()
     return {
         'E': E,
@@ -1056,18 +1048,14 @@ class DMRGEngine(Sweep):
             'max_chi': [],
             'norm_err': []
         }
-<<<<<<< HEAD
         self.chi_list = self.options.get('chi_list', None)
         if self.chi_list is not None:
             chi_max = self.chi_list[max([k for k in self.chi_list.keys() if k <= self.sweeps])]
             self.trunc_params['chi_max'] = chi_max
-            if self.verbose >= 1:
-                print("Setting chi_max =", chi_max)
+            logger.info("Setting chi_max =", chi_max)
         self.qramp_list = self.options.get('qramp_list', None)
         self.qramp_op = self.options.get('qramp_op', None)
         self.time0 = time.time()
-=======
->>>>>>> b49f0e0302e44439381d68a904c0a3bb06373f46
 
     def sweep(self, optimize=True, meas_E_trunc=False, use_ramp=True):
         """One 'sweep' of a the algorithm.
@@ -1101,17 +1089,13 @@ class DMRGEngine(Sweep):
         """
         # wrapper around tenpy.algorithms.mps_common.Sweep.sweep()
         self._meas_E_trunc = meas_E_trunc
-<<<<<<< HEAD
-        res = super().sweep(optimize, use_ramp)
-=======
         if (self.options.get('chi_list_reactivates_mixer', True) and optimize
                 and self.chi_list is not None):
             new_chi_max = self.chi_list.get(self.sweeps, None)
             if new_chi_max is not None:
                 # growing the bond dimension with chi_list, so we should also reactivate the mixer
                 self.mixer_activate()
-        res = super().sweep(optimize)
->>>>>>> b49f0e0302e44439381d68a904c0a3bb06373f46
+        res = super().sweep(optimize, use_ramp)
         if optimize:
             # update mixer
             if self.mixer is not None:
@@ -1120,7 +1104,6 @@ class DMRGEngine(Sweep):
                     self.S_inv_cutoff = 1.e-15
         return res
 
-<<<<<<< HEAD
     def prepare_update(self):
         """Prepare `self` for calling :meth:`update_local` on sites ``i0 : i0+n_optimize``.
 
@@ -1143,8 +1126,6 @@ class DMRGEngine(Sweep):
     	print ("prepare_update_with_ramp not defined in subclass of DMRGEngine - Ignoring Ramp called at i0=",self.i0, " move_right=",self.move_right," in sweep ",self.sweeps, " with operator ", qramp_op)
     	return self.prepare_update()
 
-=======
->>>>>>> b49f0e0302e44439381d68a904c0a3bb06373f46
     def update_local(self, theta, optimize=True):
         """Perform site-update on the site ``i0``.
 
@@ -1462,10 +1443,9 @@ class DMRGEngine(Sweep):
         # tile segments of the operators in all available translations
         # 1. start on first site:
         next_op=self.psi.get_op([ops[0]],i0)
-        if self.verbose>=10:
-            print ("Decoding qramp ops ",ops, " to l=",l)
-            print("full op:",next_op.to_ndarray())
-            print ("Leg labels for next_op:", next_op.get_leg_labels())
+        logger.info("Decoding qramp ops %s  to l=%d", ops, l)
+        logger.info("full op: %s",next_op.to_ndarray())
+        logger.info("Leg labels for next_op: %s", next_op.get_leg_labels())
         next_op.ireplace_labels([0,1],['p0','p0*'])
         for i in range(1,l):
             to_add=self.psi.get_op([ops[i]],i0+i)
@@ -1473,8 +1453,7 @@ class DMRGEngine(Sweep):
             next_op=npc.tensordot(next_op, to_add, axes=0)
         for j in range(l,L):
             to_add=self.psi.get_op(['Id'],i0+j)
-            if self.verbose>=10:
-                print("full op ",j,":",to_add.to_ndarray())
+            logger.info("full op %d: %s",j,to_add.to_ndarray())
             to_add.ireplace_labels([0,1],['p'+str(j),'p'+str(j)+'*'])
             next_op=npc.tensordot(next_op,to_add, axes=0)
         terms.append(next_op.transpose([2*i for i in range(L)] + [2*i+1 for i in range(L)] ))
@@ -1520,7 +1499,6 @@ class TwoSiteDMRGEngine(DMRGEngine):
 
     Attributes
     ----------
-<<<<<<< HEAD
     chi_list : dict | ``None``
         A dictionary to gradually increase the `chi_max` parameter of `trunc_params`. The key
         defines starting from which sweep `chi_max` is set to the value, e.g. ``{0: 50, 20: 100}``
@@ -1528,8 +1506,6 @@ class TwoSiteDMRGEngine(DMRGEngine):
         `trunc_params['chi_list']``. By default (``None``) this feature is disabled.
     qramp_list : dict | ``None``
         A dictionary allowing to insert local operators at given points of the DMRG run.
-=======
->>>>>>> b49f0e0302e44439381d68a904c0a3bb06373f46
     eff_H : :class:`~tenpy.algorithms.mps_common.EffectiveH`
         Effective two-site Hamiltonian.
     mixer : :class:`Mixer` | ``None``
@@ -1696,8 +1672,7 @@ class TwoSiteDMRGEngine(DMRGEngine):
         	Labels are ``'vL', 'p0', 'p1', 'vR'``, or combined versions of it (if `self.combine`).
         	For single-site DMRG, the ``'p1'`` label is missing.
         """
-        if self.verbose>=5:
-            print ("Performing update with ramp for operator", qramp_op)
+        logger.info ("Performing update with ramp for operator %s", qramp_op)
         self.make_eff_H()  # self.eff_H represents tensors LP, W0, RP
         # make theta
         cutoff = 1.e-16 if self.mixer is None else 1.e-8
@@ -1709,8 +1684,7 @@ class TwoSiteDMRGEngine(DMRGEngine):
 #         print ("Charge sectors for op0.p0",ops[0].get_leg('p0').charge_sectors())
 #         print ("Charge sectors for op0.p1",ops[0].get_leg('p1').charge_sectors())
         new_theta=npc.tensordot(theta, ops[0], axes=[['p0', 'p1'],['p0*', 'p1*']]).transpose(['vL', 'p0', 'p1', 'vR'])
-        if self.verbose>=10:
-            print ("new_theta.norm()=",npc.norm(new_theta))
+        logger.info("new_theta.norm()=%g",npc.norm(new_theta))
         for i in range(1,len(ops)):
             op=ops[i]
 #             print ("Leg labels for op",i,":", op.get_leg_labels())
