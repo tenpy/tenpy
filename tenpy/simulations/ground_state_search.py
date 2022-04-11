@@ -1232,8 +1232,12 @@ class TopologicalExcitations(OrthogonalExcitations):
         env = MPOEnvironment(seg_R, self.model.H_MPO, seg_R, **self.env_data_R)
         E_R = env.full_contraction(0).real
         
+        coeff_L = self.options.get('coeff_L', 0.5)
+        coeff_R = self.options.get('coeff_R', 0.5)
+        assert nps.abs(coeff_L + coeff_R - 1.0) < 1.e-12
+        
         if psi0_L.finite:
-            self.results['ground_state_energy'] = (E_L + E_R)/2
+            self.results['ground_state_energy'] = coeff_L * E_L + coeff_R * E_R
         else:
             H = self.model_orig.H_MPO
             _, epsilon_alpha, E0_alpha = MPOTransferMatrix.find_init_LP_RP(H, psi0_L, first, last,
@@ -1243,8 +1247,8 @@ class TopologicalExcitations(OrthogonalExcitations):
                                                              guess_init_env_data=self.init_env_data_R, calc_E=True, _subtraction_gauge=gauge)
             epsilon_beta = np.mean(epsilon_beta).real
 
-            E_L2 = E0_alpha + (seg_L.L + first % psi0_R.L + (last+1) % psi0_R.L)*epsilon_alpha
-            E_R2 = E0_beta + (seg_L.L + first % psi0_R.L + (last+1) % psi0_R.L)*epsilon_beta
+            E_L2 = E0_alpha + (seg_L.L + first % psi0_L.L + psi0_L.L - ((last+1) % psi0_L.L))*epsilon_alpha
+            E_R2 = E0_beta + (seg_L.L + first % psi0_R.L + psi0_R.L - ((last+1) % psi0_R.L))*epsilon_beta
 
             self.logger.info("EL, ER, EL2, ER2: %.14f, %.14f, %.14f, %.14f", E_L, E_R, E_L2, E_R2)
             self.logger.info("epsilon_L, epsilon_R, E0_L, E0_R: %.14f, %.14f, %.14f, %.14f", epsilon_alpha, epsilon_beta, E0_alpha, E0_beta)
@@ -1260,8 +1264,9 @@ class TopologicalExcitations(OrthogonalExcitations):
             eta_L_beta = npc.tensordot(self.init_env_data_R['init_LP'], MPO_TM._proj_trace, axes=(['vR*', 'wR', 'vR'], ['vL*', 'wL', 'vL']))
 
             self.logger.info("eta_L_alpha, eta_R_alpha, eta_L_beta, eta_R_beta: %.14f, %.14f, %.14f, %.14f", eta_L_alpha, eta_R_alpha, eta_L_beta, eta_R_beta)
-
-            self.results['ground_state_energy'] = (E_L + E_R)/2 + 1/2*(eta_L_alpha - eta_R_alpha - eta_L_beta + eta_R_beta)
+                        
+            self.results['ground_state_energy'] = coeff_L * E_L + coeff_R * E_R \
+                + (1 - coeff_L) * (eta_L_alpha - eta_R_alpha) + (1 - coeff_R) * (eta_R_beta - eta_L_beta)
 
         
         self.logger.info("Reference Ground State Energy: %.14f", self.results['ground_state_energy'])
