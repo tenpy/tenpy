@@ -4,6 +4,8 @@ import numpy as np
 import logging
 logger = logging.getLogger(__name__)
 
+__all__ = ['MomentumMPS']
+
 class MomentumMPS:
     def __init__(self, Xs, uMPS, p, n_sites=1):
         assert len(Xs) == uMPS.L, "Need as many excitations as sites in unit cell."
