@@ -2652,7 +2652,7 @@ class MPOTransferMatrix(NpcLinearOperator):
                 SL = npc.diag(SL, vL, dtype=np.promote_types(psi.dtype, H.dtype), labels=['vL', 'vR'])
             E0 = npc.tensordot(init_env_data['init_LP'], SL, axes=(['vR'], ['vL']))
             E0 = npc.tensordot(E0, SL.conj(), axes=(['vR*'], ['vL*']))
-            E0 = npc.tensordot(E0, init_env_data['init_RP'], axes=(['vR', 'wR', 'vR*'], ['vL', 'wL', 'vL*']))
+            E0 = npc.tensordot(E0, RP, axes=(['vR', 'wR', 'vR*'], ['vL', 'wL', 'vL*']))
             # E0 = LP * s^2 * RP on site 0
             return init_env_data, Es, E0
         # else:
