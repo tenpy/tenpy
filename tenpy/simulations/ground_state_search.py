@@ -251,6 +251,7 @@ class OrthogonalExcitations(GroundStateSearch):
         # switch_charge_sector defines `self.initial_state_seg`
         self.initial_state_seg, self.qtotal_diff = self.switch_charge_sector(psi0_seg)
         self.results['qtotal_diff'] = self.qtotal_diff
+        
         if any(self.qtotal_diff):
             self.orthogonal_to = []  # different charge sector
             # so orthogonal to gs due to charge conservation
@@ -334,10 +335,6 @@ class OrthogonalExcitations(GroundStateSearch):
         if resume_data.get('converged_environments', False):
             self.logger.info("use converged environments from ground state file")
             env_data = resume_data['init_env_data']
-            first_s, last_s = resume_data['env_first_last']
-            if not(first_s % psi0_inf.L == first % psi0_inf.L and last_s % psi0_inf.L == last % psi0_inf.L):
-                raise ValueError(f"'first' ({first_s % psi0_inf.L:d}) and 'last' ({last_s % psi0_inf.L:d}) saved to GS file must match in modulus 'first' ({first % psi0_inf.L:d}) and 'last' ({last % psi0_inf.L:d}) used in excitation simulation.")
-            
             psi0_inf = resume_data.get('psi', psi0_inf)
             write_back = False
         else:
@@ -406,13 +403,11 @@ class OrthogonalExcitations(GroundStateSearch):
 
             resume_data = gs_data.setdefault('resume_data', {})
             init_env_data = resume_data.setdefault('init_env_data', {})
-            resume_data.setdefault('env_first_last', (0,0))
             init_env_data.update(self.init_env_data)
             if resume_data.get('converged_environments', False):
                 raise ValueError(f"{gs_fn!s} already has converged environments!")
             resume_data['converged_environments'] = True
             resume_data['psi'] = gs_data['psi'] # could have been modified with canonical_form;
-            # resume_data['env_first_last'] = self.model.lat.segment_first_last
             # in any case that's the reference ground state we use now!
 
             self.logger.info("write converged environments back to ground state file")
@@ -571,6 +566,7 @@ class OrthogonalExcitations(GroundStateSearch):
                                   dtype=psi.dtype,
                                   qtotal=qtotal_change,
                                   labels=['vL', 'vR'])
+        assert np.abs(npc.norm(th0) - 1) < 1.e-8
         lanczos_params = self.options.subconfig('algorithm_params').subconfig('lanczos_params')
         _, th0, _ = lanczos.LanczosGroundState(H0, th0, lanczos_params).run()
         U, s, Vh = npc.svd(th0, inner_labels=['vR', 'vL'])
@@ -594,7 +590,6 @@ class OrthogonalExcitations(GroundStateSearch):
             E_shift = lanczos_params.get('E_shift', -100) #lanczos_params['E_shift'] if lanczos_params['E_shift'] is not None else 0
             if E_shift is None:
                 E_shift = -100
-            print("E_shift", E_shift)
             self.logger.info("Shifted ground state energy: %.14f", ground_state_energy + 0.5 * E_shift)
 
             if self.engine.diag_method != 'lanczos' or \
@@ -882,7 +877,7 @@ class TopologicalExcitations(OrthogonalExcitations):
         # intialize original state
         self.ground_state_orig_L = psi0_L = gs_data_L['psi']  # no copy!
         self.ground_state_orig_R = psi0_R = gs_data_R['psi']  # no copy!
-        #assert self.ground_state_orig_L.L == self.ground_state_orig_L.R
+        assert self.ground_state_orig_L.L == self.ground_state_orig_L.R
         if np.linalg.norm(psi0_L.norm_test()) > self.options.get('orthogonal_norm_tol', 1.e-12):
             self.logger.info("call psi.canonical_form() on left ground state")
             psi0_L.canonical_form()
@@ -1060,9 +1055,6 @@ class TopologicalExcitations(OrthogonalExcitations):
         if resume_data_L.get('converged_environments', False):
             self.logger.info("use converged environments from left ground state file")
             self.init_env_data_L = resume_data_L['init_env_data'] # Environments for infinite ground states
-            # env loaded from file must use same first and last or there will be energy shifts in envs that make excitation energy incorrect.
-            #first_L, last_L = resume_data_L['env_first_last']
-            #assert first_L % psi0_inf_L.L == first % psi0_inf_L.L and last_L % psi0_inf_L.L == last % psi0_inf_L.L, "'first' and 'last' saved to GS file must be the same used in excitation simulation."
             psi0_inf_L = resume_data_L.get('psi', psi0_inf_L)
             write_back_left = False            
         else:
@@ -1075,9 +1067,6 @@ class TopologicalExcitations(OrthogonalExcitations):
         if resume_data_R.get('converged_environments', False):
             self.logger.info("use converged environments from right ground state file")
             self.init_env_data_R = resume_data_R['init_env_data']
-            # env loaded from file must use same first and last or there will be energy shifts in envs that make excitation energy incorrect.
-            #first_R, last_R = resume_data_R['env_first_last']
-            #assert first_R % psi0_inf_R.L == first % psi0_inf_R.L and last_R % psi0_inf_R.L == last % psi0_inf_R.L, "'first' and 'last' saved to GS file must be the same used in excitation simulation."
             psi0_inf_R = resume_data_R.get('psi', psi0_inf_R)
             write_back_right = False            
         else:
@@ -1087,7 +1076,6 @@ class TopologicalExcitations(OrthogonalExcitations):
             
             write_back_right = write_back
         self.logger.info("converge segment environments with MPOTransferMatrix")
-        #Should probably use MPOEnvironment to get this since we've already converged envs
         
         env = MPOEnvironment(psi0_inf_L, H, psi0_inf_L, **self.init_env_data_L)
         self.env_data_L = env.get_initialization_data(first, last)
@@ -1167,7 +1155,6 @@ class TopologicalExcitations(OrthogonalExcitations):
         # We need a tensor that is non-zero only when Q = (Q^i_L - bar(Q_L)) + (Q^i_R - bar(Q_R))
         # Q is the the charge we insert. Here we only do charge gluing to get a valid segment.
         # Changing charge sector is done below by basically identical code when the segment is already formed.
-
         th0 = npc.Array.from_func(np.ones, [vL, vR],
                                   dtype=seg_L.dtype,
                                   qtotal=desired_Q,
@@ -1234,7 +1221,7 @@ class TopologicalExcitations(OrthogonalExcitations):
         
         coeff_L = self.options.get('coeff_L', 0.5)
         coeff_R = self.options.get('coeff_R', 0.5)
-        assert nps.abs(coeff_L + coeff_R - 1.0) < 1.e-12
+        assert np.abs(coeff_L + coeff_R - 1.0) < 1.e-12
         
         if psi0_L.finite:
             self.results['ground_state_energy'] = coeff_L * E_L + coeff_R * E_R
@@ -1247,8 +1234,8 @@ class TopologicalExcitations(OrthogonalExcitations):
                                                              guess_init_env_data=self.init_env_data_R, calc_E=True, _subtraction_gauge=gauge)
             epsilon_beta = np.mean(epsilon_beta).real
 
-            E_L2 = E0_alpha + (seg_L.L + first % psi0_L.L + psi0_L.L - ((last+1) % psi0_L.L))*epsilon_alpha
-            E_R2 = E0_beta + (seg_L.L + first % psi0_R.L + psi0_R.L - ((last+1) % psi0_R.L))*epsilon_beta
+            E_L2 = E0_alpha + (seg_L.L + first % psi0_L.L + psi0_L.L - (1 + (last) % psi0_L.L))*epsilon_alpha
+            E_R2 = E0_beta + (seg_L.L + first % psi0_R.L + psi0_R.L - (1 + (last) % psi0_R.L))*epsilon_beta
 
             self.logger.info("EL, ER, EL2, ER2: %.14f, %.14f, %.14f, %.14f", E_L, E_R, E_L2, E_R2)
             self.logger.info("epsilon_L, epsilon_R, E0_L, E0_R: %.14f, %.14f, %.14f, %.14f", epsilon_alpha, epsilon_beta, E0_alpha, E0_beta)
