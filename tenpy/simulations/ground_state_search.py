@@ -737,13 +737,13 @@ class OrthogonalExcitations(GroundStateSearch):
                                   labels=['vL', 'vR'])
         lanczos_params = self.options.subconfig('algorithm_params').subconfig('lanczos_params')
         _, th0, _ = lanczos.LanczosGroundState(H0, th0, lanczos_params).run()
-        
+
         # Check norm after Lanczos so that it is one.
         norm = npc.norm(th0)
         self.logger.info("Norm of theta guess: %.8f", norm)
         if np.isclose(norm, 0):
             raise ValueError(f"Norm of inserted theta with charge {list(qtotal_change)} on site index {site:d} is zero.")
-            
+
         U, s, Vh = npc.svd(th0, inner_labels=['vR', 'vL'])
         psi.set_B(site-1, npc.tensordot(psi.get_B(site-1, 'A'), U, axes=['vR', 'vL']), form='A')
         psi.set_B(site, npc.tensordot(Vh, psi.get_B(site, 'B'), axes=['vR', 'vL']), form='B')
@@ -1052,7 +1052,7 @@ class TopologicalExcitations(OrthogonalExcitations):
         # intialize original state
         self.ground_state_orig_L = psi0_L = gs_data_L['psi']  # no copy!
         self.ground_state_orig_R = psi0_R = gs_data_R['psi']  # no copy!
-        assert self.ground_state_orig_L.L == self.ground_state_orig_L.R
+        assert self.ground_state_orig_L.L == self.ground_state_orig_R.L
         if np.linalg.norm(psi0_L.norm_test()) > self.options.get('orthogonal_norm_tol', 1.e-12):
             self.logger.info("call psi.canonical_form() on left ground state")
             psi0_L.canonical_form()
@@ -1336,20 +1336,20 @@ class TopologicalExcitations(OrthogonalExcitations):
                                   labels=['vL', 'vR'])
         lanczos_params = self.options.get("lanczos_params", {}) # See if lanczos_params is in yaml, if not use empty dictionary
         _, th0, _ = lanczos.LanczosGroundState(H0, th0, lanczos_params).run()
-        
+
         norm = npc.norm(th0)
         self.logger.info("Norm of theta guess: %.8f", norm)
         if np.isclose(norm, 0):
             raise ValueError(f"Norm of inserted theta with charge {list(qtotal_change)} on site index {site:d} is zero.")
-        
+
         U, s, Vh = npc.svd(th0, inner_labels=['vR', 'vL'])
         seg_L.set_B(seg_L.L-1, npc.tensordot(seg_L.get_B(seg_L.L-1, 'A'), U, axes=['vR', 'vL']), form='A') # Put AU into last site of left segment
         seg_L.set_SR(seg_L.L-1, s)
         seg_R.set_B(0, npc.tensordot(Vh, seg_R.get_B(0, 'B'), axes=['vR', 'vL']), form='B') # Put Vh B into first site of right segment
         seg_R.set_SL(0, s)
-        
+
         combined_seg = self._concatenate_segments(seg_L, seg_R, inf_L)
-        
+
         return combined_seg
 
     def _concatenate_segments(self, seg_L, seg_R, inf_L):

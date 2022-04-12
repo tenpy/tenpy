@@ -2586,7 +2586,7 @@ class MPOTransferMatrix(NpcLinearOperator):
                         guess_init_env_data=None,
                         calc_E=False,
                         tol_ev0=1.e-8,
-                        subtraction_gauge='rho',
+                        _subtraction_gauge='rho',
                         **kwargs):
         """Find the initial LP and RP.
 
@@ -2603,7 +2603,7 @@ class MPOTransferMatrix(NpcLinearOperator):
         guess : None | dict
             Possible `init_env_data` with the guess/result of DMRG updates.
             If some legs are incompatible, trigger a warning and ignore.
-        subtraction_gauge : string
+        _subtraction_gauge : string
             How the additive part of the generalized eigenvector is subtracted out.
             Possible values are 'rho' and 'trace'; see
         **kwargs :
@@ -2626,7 +2626,7 @@ class MPOTransferMatrix(NpcLinearOperator):
             guess_init_env_data = {}
         for transpose in [False, True]:
             guess = guess_init_env_data.get('init_LP' if transpose else 'init_RP', None)
-            TM = cls(H, psi, transpose=transpose, guess=guess, _subtraction_gauge=subtraction_gauge)
+            TM = cls(H, psi, transpose=transpose, guess=guess, _subtraction_gauge=_subtraction_gauge)
             val, vec = TM.dominant_eigenvector(**kwargs)
             if abs(1. - val) > tol_ev0:
                 logger.warning("MPOTransferMatrix eigenvalue not 1: got %s", val)
