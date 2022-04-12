@@ -95,6 +95,7 @@ from ..tools.params import asConfig
 from ..tools.cache import DictCache
 from ..tools import hdf5_io
 from ..algorithms.truncation import TruncationError, svd_theta, _machine_prec_trunc_par
+from ..algorithms.tebd import RandomUnitaryEvolution
 
 __all__ = ['MPS', 'MPSEnvironment', 'TransferMatrix', 'InitialStateBuilder', 'build_initial_state']
 
@@ -265,7 +266,7 @@ class MPS:
         cp = self.__class__(self.sites, self._B, self._S, self.bc, self.form, self.norm)
         cp.grouped = self.grouped
         cp._transfermatrix_keep = self._transfermatrix_keep
-        cp.segment_boundaries = self.segment_boundaries
+        cp.segment_boundaries = getattr(self, "segment_boundaries", (None, None))
         return cp
 
     def save_hdf5(self, hdf5_saver, h5gr, subpath):
@@ -559,6 +560,79 @@ class MPS:
         return cls.from_Bflat(sites, Bs, SVs, bc, dtype, False, form, legL)
 
     @classmethod
+    def from_random_unitary_evolution(cls,
+                                      sites,
+                                      chi,
+                                      p_state,
+                                      bc='finite',
+                                      dtype=np.float64,
+                                      permute=True,
+                                      form='B',
+                                      chargeL=None):
+        psi = MPS.from_product_state(sites,
+                                     p_state,
+                                     bc,
+                                     dtype,
+                                     permute,
+                                     form,
+                                     chargeL)
+        tebd_options = dict(N_steps = 10, trunc_params={'chi_max': chi})
+        eng = RandomUnitaryEvolution(psi, tebd_options)
+        if bc == 'finite':
+            while max(psi.chi) < chi:
+                eng.run()
+        elif bc == 'infinite':
+            while np.any(np.array(psi.chi) < chi):
+                eng.run()
+        else:
+            raise NotImplementedError("MPS.from_random_unitary_evolution not implemented for segment BC.")
+        logger.info("Generated MPS of bond dimension %r via random evolution.", list(psi.chi))
+        psi.canonical_form()
+        return psi
+
+    @classmethod
+    def from_desired_bond_dimension(cls,
+                                    sites,
+                                    chi,
+                                    bc='finite',
+                                    dtype=np.float64,
+                                    permute=True,
+                                    chargeL=None):
+        sites = list(sites)
+        L = len(sites)
+        # TODO: what happens if we have charge conservation?
+        if bc == 'finite':
+            SVs = [np.ones(1)]
+            Q, _ = np.linalg.qr(np.random.rand(sites[0].dim, chi))
+            Bflat = [Q.reshape(sites[0].dim, 1, Q.shape[1])] #TODO: this only does real entries
+            for i in range(1, L-1):
+                B_vR = Bflat[-1].shape[2]
+                SV = np.random.rand(B_vR)
+                SVs.append(SV/np.linalg.norm(SV))
+                Q, _ = np.linalg.qr(np.random.rand(sites[i].dim*B_vR, chi))
+                Bflat.append(Q.reshape(sites[i].dim, B_vR, Q.shape[1]))
+            B_vR = Bflat[-1].shape[2]
+            SV = np.random.rand(B_vR)
+            SVs.append(SV/np.linalg.norm(SV))
+            Bflat.append(np.random.rand(sites[-1].dim*chi).reshape(sites[-1].dim, B_vR, 1))
+            SVs = [np.ones(1)]
+        elif bc == 'infinite':
+            Bflat = []
+            SVs = []
+            for i in range(L):
+                SV = np.random.rand(chi)
+                SVs.append(SV/np.linalg.norm(SV))
+                Q, _ = np.linalg.qr(np.random.rand(sites[i].dim*chi, chi))
+                Bflat.append(Q.reshape(sites[i].dim, chi, chi))
+            SVs.append(SVs[0])
+        else:
+            raise NotImplementedError("MPS.from_desired_bond_dimension not implemented for segment BC.")
+        psi = MPS.from_Bflat(sites, Bflat, bc=bc, dtype=dtype, permute=permute, form=None, legL=chargeL)
+        psi.canonical_form()
+        logger.info("Generated MPS of bond dimension %r from random matrices.", list(psi.chi))
+        return psi
+
+    @classmethod
     def from_Bflat(cls,
                    sites,
                    Bflat,
@@ -837,6 +911,31 @@ class MPS:
             Ts = next_Ts
             labels_L = labels_R
         return cls([site] * L, Bs, Ss, bc=bc, form=forms)
+
+    """
+    @classmethod
+    def from_uMPS(cls, psi):
+        obj = cls.__new__(cls)
+        obj.sites = list(psi.sites)
+        obj.chinfo = psi.sites[0].leg.chinfo
+        obj.dtype = psi.dtype
+        obj.form = self._parse_form('B') * len(sites)
+        obj.bc = psi.bc # only 'infinite' allowed
+        obj.norm = psi.norm
+        obj.grouped = psi.grouped
+        obj.segment_boundaries = psi.segment_boundaries
+        assert psi.valid_umps, "Can't be converting an invalid uMPS to an MPS!"
+        obj._S = [None] * (psi.L + 1)
+        # make copies of 4 types of tensors
+        obj._B = [psi.get_B(i, form='B').astype(dtype, copy=True).itranspose(obj._B_labels) for i in range(psi.L)]
+        C = psi.get_C(0)
+        U, s, V = C = npc.svd(C, inner_labels=['vR', 'vL'])
+
+        # center matrix on the left of site `i`
+
+        obj._transfermatrix_keep = psi._transfermatrix_keep
+        obj.test_sanity()
+    """
 
     @property
     def L(self):
@@ -1749,7 +1848,10 @@ class MPS:
             bonds = range(nt.start, nt.stop)
         res = []
         for ib in bonds:
-            s = self._S[ib]
+            if ib == self.L:
+                s = self.get_SR(ib-1)
+            else:
+                s = self.get_SL(ib)
             if len(s.shape) == 1:
                 res.append(entropy(s**2, n))
             else:

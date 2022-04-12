@@ -735,9 +735,15 @@ class OrthogonalExcitations(GroundStateSearch):
                                   dtype=psi.dtype,
                                   qtotal=qtotal_change,
                                   labels=['vL', 'vR'])
-        assert np.abs(npc.norm(th0) - 1) < 1.e-8
         lanczos_params = self.options.subconfig('algorithm_params').subconfig('lanczos_params')
         _, th0, _ = lanczos.LanczosGroundState(H0, th0, lanczos_params).run()
+        
+        # Check norm after Lanczos so that it is one.
+        norm = npc.norm(th0)
+        self.logger.info("Norm of theta guess: %.8f", norm)
+        if np.isclose(norm, 0):
+            raise ValueError(f"Norm of inserted theta with charge {list(qtotal_change)} on site index {site:d} is zero.")
+            
         U, s, Vh = npc.svd(th0, inner_labels=['vR', 'vL'])
         psi.set_B(site-1, npc.tensordot(psi.get_B(site-1, 'A'), U, axes=['vR', 'vL']), form='A')
         psi.set_B(site, npc.tensordot(Vh, psi.get_B(site, 'B'), axes=['vR', 'vL']), form='B')
@@ -1330,16 +1336,20 @@ class TopologicalExcitations(OrthogonalExcitations):
                                   labels=['vL', 'vR'])
         lanczos_params = self.options.get("lanczos_params", {}) # See if lanczos_params is in yaml, if not use empty dictionary
         _, th0, _ = lanczos.LanczosGroundState(H0, th0, lanczos_params).run()
-        assert np.abs(npc.norm(th0) - 1) < 1.e-8
-
+        
+        norm = npc.norm(th0)
+        self.logger.info("Norm of theta guess: %.8f", norm)
+        if np.isclose(norm, 0):
+            raise ValueError(f"Norm of inserted theta with charge {list(qtotal_change)} on site index {site:d} is zero.")
+        
         U, s, Vh = npc.svd(th0, inner_labels=['vR', 'vL'])
         seg_L.set_B(seg_L.L-1, npc.tensordot(seg_L.get_B(seg_L.L-1, 'A'), U, axes=['vR', 'vL']), form='A') # Put AU into last site of left segment
         seg_L.set_SR(seg_L.L-1, s)
         seg_R.set_B(0, npc.tensordot(Vh, seg_R.get_B(0, 'B'), axes=['vR', 'vL']), form='B') # Put Vh B into first site of right segment
         seg_R.set_SL(0, s)
-
+        
         combined_seg = self._concatenate_segments(seg_L, seg_R, inf_L)
-
+        
         return combined_seg
 
     def _concatenate_segments(self, seg_L, seg_R, inf_L):
