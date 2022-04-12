@@ -11,6 +11,7 @@ from ..linalg import np_conserved as npc
 from ..models.model import Model
 from ..networks.mpo import MPOEnvironment, MPOTransferMatrix
 from ..networks.mps import MPS, InitialStateBuilder
+from ..networks.umps import uMPS
 from ..algorithms.mps_common import ZeroSiteH
 from ..algorithms.dmrg import TwoSiteDMRGEngine
 from ..linalg import lanczos
@@ -22,6 +23,7 @@ import copy
 
 __all__ = simulation.__all__ + [
     'GroundStateSearch',
+    'PlaneWaveExcitations',
     'OrthogonalExcitations',
     'expectation_value_outside_segment_left',
     'expectation_value_outside_segment_right',
@@ -77,6 +79,173 @@ class GroundStateSearch(Simulation):
         E, psi = self.engine.resume_run()
         self.results['energy'] = E
 
+class PlaneWaveExcitations(GroundStateSearch):
+    default_algorithm = 'PlaneWaveExcitationEngine'
+
+    def __init__(self, options, *, gs_data=None, **kwargs):
+        super().__init__(options, **kwargs)
+        resume_data = kwargs.get('resume_data', {})
+        self.excitations = resume_data.get('excitations', [])
+        self.results['excitation_energies'] = []
+        if self.options.get('save_psi', True):
+            self.results['excitations'] = self.excitations
+        self.init_env_data = {}
+        self._gs_data = gs_data
+        self.initial_state_builder = None
+        assert 'group_sites' not in self.options.keys(), 'No grouping allowed for Plane Wave through simulations since we cannot ungroup.'
+
+    def run(self):
+        self.load_groundstate()
+        return super().run()
+
+    def resume_run(self):
+        self.load_groundstate()
+        return super().resume_run()
+
+    def load_groundstate(self):
+        """Load ground state and convert to uMPS.
+        Load the ground state and initialize the model from it.
+        Options
+        -------
+        .. cfg:configoptions :: OrthogonalExcitations
+            ground_state_filename :
+                File from which the ground state should be loaded.
+            orthogonal_norm_tol : float
+                Tolerance how large :meth:`~tenpy.networks.mps.MPS.norm_err` may be for states
+                to be added to :attr:`orthogonal_to`.
+        Returns
+        -------
+        gs_data : dict
+            The data loaded from :cfg:option:`OrthogonalExcitations.ground_state_filename`.
+        """
+        gs_fn, gs_data = self._load_gs_data()
+        gs_data_options = gs_data['simulation_parameters']
+        # initialize original model with model_class and model_params from ground state data
+        self.logger.info("initialize original ground state model")
+        for key in gs_data_options.keys():
+            if not isinstance(key, str) or not key.startswith('model'):
+                continue
+            if key not in self.options:
+                self.options[key] = gs_data_options[key]
+        self.init_model()
+
+        # intialize original state
+        self.psi = gs_data['psi']  # no copy!
+        assert isinstance(self.psi, MPS) or isinstance(self.psi, uMPS)
+        if np.linalg.norm(self.psi.norm_test()) > self.options.get('orthogonal_norm_tol', 1.e-12):
+            if isinstance(self.psi, MPS):
+                self.logger.info("call psi.canonical_form() on ground state")
+                psi0.canonical_form()
+            else:
+                raise ValueError('uMPS does not pass norm test. Run VUMPS to get ground state or \n' +
+                                 'convert to MPS and canonicalize.')
+        if isinstance(self.psi, MPS):
+            self.psi = uMPS.from_MPS(self.psi)
+
+        resume_data = gs_data.get('resume_data', {})
+        if resume_data.get('converged_environments', False):
+            self.logger.info("use converged environments from ground state file")
+            env_data = resume_data['init_env_data']
+            write_back = False
+        else:
+            self.logger.info("converge environments with MPOTransferMatrix")
+            guess_init_env_data = resume_data.get('init_env_data', None)
+            H = self.model.H_MPO
+            env_data = MPOTransferMatrix.find_init_LP_RP(H, self.psi, 0, None,
+                                                         guess_init_env_data)
+            write_back = self.options.get('write_back_converged_ground_state_environments', False)
+        self.init_env_data = env_data
+
+        if write_back:
+            self.write_back_environments(gs_data, gs_fn)
+        return gs_data
+
+    def _load_gs_data(self):
+        """Load ground state data from `ground_state_filename` or use simulation kwargs."""
+        if self._gs_data is not None:
+            gs_fn = None
+            self.logger.info("use ground state data of simulation class arguments")
+            gs_data = self._gs_data
+            self._gs_data = None  # reset to None to potentially allow to free the memory
+            # even though this can only work if the call structure is
+            #      sim = OrthogonalExcitations(..., gs_data=gs_data)
+            #      del gs_data
+            #      with sim:
+            #          sim.run()
+        else:
+            gs_fn = self.options['ground_state_filename']
+            self.logger.info("loading ground state data from %s", gs_fn)
+            gs_data = hdf5_io.load(gs_fn)
+        return gs_fn, gs_data
+
+    def write_back_environments(self, gs_data, gs_fn):
+        """Write converged environments back into the file with the ground state.
+        Parameters
+        ----------
+        gs_data : dict
+            Data loaded from the ground state file.
+        gs_fn : str | None
+            Filename where to save `gs_data`. Do nothing if `gs_fn` is None.
+        """
+        assert self.init_env_data, "should have been defined by extract_segment()"
+        orig_fn = self.output_filename
+        orig_backup_fn = self._backup_filename
+        try:
+            self.output_filename = Path(gs_fn)
+            self._backup_filename = self.get_backup_filename(self.output_filename)
+
+            resume_data = gs_data.setdefault('resume_data', {})
+            init_env_data = resume_data.setdefault('init_env_data', {})
+            init_env_data.update(self.init_env_data)
+            if resume_data.get('converged_environments', False):
+                raise ValueError(f"{gs_fn!s} already has converged environments!")
+            resume_data['converged_environments'] = True
+            resume_data['psi'] = gs_data['psi'] # could have been modified with canonical_form;
+            # in any case that's the reference ground state we use now!
+
+            self.logger.info("write converged environments back to ground state file")
+            self.save_results(gs_data)  # safely overwrite old file
+        finally:
+            self.output_filename = orig_fn
+            self._backup_filename = orig_backup_fn
+
+    def run_algorithm(self):
+        N_excitations = self.options.get("N_excitations", 1)
+        switch_charge_sector = self.options.get("switch_charge_sector", None)
+        momentum = self.options["momentum"]
+        if momentum is not None:
+            momentum *= 2*np.pi/self.psi.L # Momentum is in units of 2pi/L, as this is
+            # allowed momenta for plane wave ansatz.
+
+        self.orthogonal_Xs = []
+        # loop over excitations
+        while len(self.excitations) < N_excitations:
+
+            E, psi, N = self.engine.run(momentum, switch_charge_sector, self.orthogonal_Xs)
+            self.results['excitation_energies'].append(E)
+            self.logger.info("Excitation Energy: %.14f. Lanczos Iterations: %d", E, N)
+
+            self.orthogonal_Xs.append(psi._X)
+            self.excitations.append(psi)  # save in list of excitations
+            if len(self.excitations) >= N_excitations:
+                break
+
+            self.make_measurements()
+            self.logger.info("got %d excitations so far, proceeed to next excitation.\n%s",
+                             len(self.excitations), "+" * 80)
+            self.init_state()  # initialize a new state to be optimized
+            self.init_algorithm()
+        # done
+
+    def resume_run_algorithm(self):
+        """Not Implemented"""
+        raise NotImplementedError("TODO")
+
+    def prepare_results_for_save(self):
+        results = super().prepare_results_for_save()
+        if 'resume_data' in results:
+            results['resume_data']['excitations'] = self.excitations
+        return results
 
 class OrthogonalExcitations(GroundStateSearch):
     """Find excitations by another GroundStateSearch orthogalizing against previous states.
@@ -156,6 +325,7 @@ class OrthogonalExcitations(GroundStateSearch):
                 For finite MPS, this is usually just ``0, L-1``.
 
     """
+    default_initial_state_builder = 'ExcitationInitialState'
     def __init__(self, options, *, orthogonal_to=None, gs_data=None, **kwargs):
         super().__init__(options, **kwargs)
         resume_data = kwargs.get('resume_data', {})
@@ -251,7 +421,7 @@ class OrthogonalExcitations(GroundStateSearch):
         # switch_charge_sector defines `self.initial_state_seg`
         self.initial_state_seg, self.qtotal_diff = self.switch_charge_sector(psi0_seg)
         self.results['qtotal_diff'] = self.qtotal_diff
-        
+
         if any(self.qtotal_diff):
             self.orthogonal_to = []  # different charge sector
             # so orthogonal to gs due to charge conservation
@@ -528,7 +698,6 @@ class OrthogonalExcitations(GroundStateSearch):
         qtotal_diff = psi.chinfo.make_valid(qtotal_after - qtotal_before)
         self.logger.info("changed charge by %r compared to previous state", list(qtotal_diff))
         return psi, qtotal_diff
-
 
     def _apply_local_op(self, psi, apply_local_op):
         #apply_local_op should have the form [site1, op1, site2, op2, ...]
@@ -823,7 +992,7 @@ class TopologicalExcitations(OrthogonalExcitations):
         self._gs_data_L = gs_data_L
         self._gs_data_R = gs_data_R
         self.initial_state_builder = None
-        
+
     def init_orthogonal_from_groundstate(self):
         """Initialize :attr:`orthogonal_to` from the ground state.
 
@@ -908,11 +1077,11 @@ class TopologicalExcitations(OrthogonalExcitations):
         # switch_charge_sector defines `self.initial_state_seg`
         self.initial_state_seg, self.qtotal_diff = self.switch_charge_sector(psi0_seg)
         self.results['qtotal_diff'] = self.qtotal_diff
-        
+
         self.orthogonal_to = []  # Segment is inherently different than either left or right ground state.
         # Or at least the two sides will be different for non-trivial calculation.
         return None # return isn't used
-    
+
     def _load_gs_data(self):
         """Load ground state data from `ground_state_filename` or use simulation kwargs."""
         gs_data_return = []
@@ -934,7 +1103,7 @@ class TopologicalExcitations(OrthogonalExcitations):
             gs_data_return.extend((gs_F, gs_D))
         assert len(gs_data_return) == 4
         return gs_data_return
-    
+
     def extract_segment(self, psi0_L_Orig, psi0_R_Orig, model_orig, resume_data_L, resume_data_R):
         """Extract a finite segment from the original model and states.
 
@@ -980,7 +1149,7 @@ class TopologicalExcitations(OrthogonalExcitations):
             return self._extract_segment_from_infinite(psi0_L_Orig, psi0_R_Orig, model_orig, resume_data_L, resume_data_R)
         else:
             return self._extract_segment_from_finite(psi0_L_Orig, psi0_R_Orig, model_orig)
-        
+
     def _extract_segment_from_finite(self, psi0_fin_L, psi0_fin_R, model_fin):
         first = self.options.get('segment_first', 0)
         last = self.options.get('segment_last', None)
@@ -988,12 +1157,12 @@ class TopologicalExcitations(OrthogonalExcitations):
         assert first < boundary
         if last is not None:
             assert boundary < last
-        
+
         self.model = model_fin.extract_segment(first, last)
         first, last = self.model.lat.segment_first_last
         ground_state_seg_L = psi0_fin_L.extract_segment(first, boundary-1) # 2nd index included in segment
         ground_state_seg_R = psi0_fin_R.extract_segment(boundary, last)
-        
+
         env = MPOEnvironment(psi0_fin_L, self.model_orig.H_MPO, psi0_fin_L)
         self.env_data_L = env.get_initialization_data(first, last)
         self.env_data_L_seg = env.get_initialization_data(first, boundary-1)
@@ -1001,95 +1170,95 @@ class TopologicalExcitations(OrthogonalExcitations):
         env = MPOEnvironment(psi0_fin_R, self.model_orig.H_MPO, psi0_fin_R)
         self.env_data_R = env.get_initialization_data(first, last)
         self.env_data_R_seg = env.get_initialization_data(boundary, last)
-                
+
         ground_state_seg = self._glue_segments(ground_state_seg_L, ground_state_seg_R,
                                                psi0_fin_L, psi0_fin_R,
-                                               self.model, (first, last, boundary))     
-        
+                                               self.model, (first, last, boundary))
+
         if first != 0 or last is not None:
             self.init_env_data = {'init_LP': self.env_data_L['init_LP'],
                                   'init_RP': self.env_data_R['init_RP'],
                                   'age_LP': 0,
                                   'age_RP': 0}
-            
+
             #self.init_env_data = self._contract_segment_boundaries(self.init_env_data, *ground_state_seg.segment_boundaries)
         else:
             assert ground_state_seg_L.L + ground_state_seg_R.L == psi0_fin_L.L
             self.init_env_data = {}
-            
+
         return ground_state_seg, False, False
-    
+
     def _contract_segment_boundaries(self, env_data, U, Vh):
         self.logger.info("Put segment boundaries into domain wall envs.")
         if U is not None:
             init_LP = npc.tensordot(U.conj(), env_data['init_LP'], axes=(['vL*'], ['vR*']))
             init_LP = npc.tensordot(init_LP, U, axes=(['vR'], ['vL']))
             env_data['init_LP'] = init_LP
-        
+
         if Vh is not None:
             init_RP = npc.tensordot(Vh, env_data['init_RP'], axes=(['vR'], ['vL']))
             init_RP = npc.tensordot(init_RP, Vh.conj(), axes=(['vL*'], ['vR*']))
             env_data['init_RP'] = init_RP
-        
+
         return env_data
-    
+
     def _extract_segment_from_infinite(self, psi0_inf_L, psi0_inf_R, model_inf, resume_data_L, resume_data_R):
         enlarge = self.options.get('segment_enlarge', None)
         first = self.options.get('segment_first', 0)
         if enlarge is not None:
             assert first == 0
         last = self.options.get('segment_last', None)
-        
+
         assert (enlarge is None) ^ (last is None), "'enlarge' xor 'last' must be not None."
         boundary = self.options.get('segment_boundary', (last - first) // 2 + first if enlarge is None else (enlarge//2)*psi0_inf_L.L + first)
         assert first < boundary
         if last is not None:
             assert boundary < last
         write_back = self.options.get('write_back_converged_ground_state_environments', False)
-        
+
         self.model = model_inf.extract_segment(first, last, enlarge)
         first, last = self.model.lat.segment_first_last
         H = model_inf.H_MPO
-        
+
         gauge = self.options.get('gauge', 'rho')
         if resume_data_L.get('converged_environments', False):
             self.logger.info("use converged environments from left ground state file")
             self.init_env_data_L = resume_data_L['init_env_data'] # Environments for infinite ground states
             psi0_inf_L = resume_data_L.get('psi', psi0_inf_L)
-            write_back_left = False            
+            write_back_left = False
         else:
             self.logger.info("converge left ground state environments with MPOTransferMatrix")
             guess_init_env_data = resume_data_L.get('init_env_data', None)
             self.init_env_data_L = MPOTransferMatrix.find_init_LP_RP(H, psi0_inf_L, guess_init_env_data=guess_init_env_data, _subtraction_gauge=gauge)
-            
+
             write_back_left = write_back
-            
+
         if resume_data_R.get('converged_environments', False):
             self.logger.info("use converged environments from right ground state file")
             self.init_env_data_R = resume_data_R['init_env_data']
             psi0_inf_R = resume_data_R.get('psi', psi0_inf_R)
-            write_back_right = False            
+            write_back_right = False
         else:
             self.logger.info("converge right ground state environments with MPOTransferMatrix")
             guess_init_env_data = resume_data_R.get('init_env_data', None)
             self.init_env_data_R = MPOTransferMatrix.find_init_LP_RP(H, psi0_inf_R, guess_init_env_data=guess_init_env_data, _subtraction_gauge=gauge)
-            
+
             write_back_right = write_back
         self.logger.info("converge segment environments with MPOTransferMatrix")
-        
+
         env = MPOEnvironment(psi0_inf_L, H, psi0_inf_L, **self.init_env_data_L)
         self.env_data_L = env.get_initialization_data(first, last)
         self.env_data_L_seg = env.get_initialization_data(first, boundary-1)
-        
+
         env = MPOEnvironment(psi0_inf_R, H, psi0_inf_R, **self.init_env_data_R)
         self.env_data_R = env.get_initialization_data(first, last)
         self.env_data_R_seg = env.get_initialization_data(boundary, last)
-        
+
         self.init_env_data = {'init_LP': self.env_data_L['init_LP'],
                     'init_RP': self.env_data_R['init_RP'],
                     'age_LP': 0,
                     'age_RP': 0}
-            
+
         ground_state_seg_L = psi0_inf_L.extract_segment(first, boundary-1)
         ground_state_seg_R = psi0_inf_R.extract_segment(boundary, last)
         ground_state_seg = self._glue_segments(ground_state_seg_L, ground_state_seg_R,
@@ -1097,8 +1266,8 @@ class TopologicalExcitations(OrthogonalExcitations):
                                                self.model, (first, last, boundary))
 
         return ground_state_seg, write_back_left, write_back_right
-    
-    
+
+
     def _glue_segments(self, seg_L, seg_R, inf_L, inf_R, model, indices):
         join_method = self.join_method = self.options.get('join_method', "average charge")
         if inf_L.finite or inf_R.finite:
@@ -1162,15 +1331,15 @@ class TopologicalExcitations(OrthogonalExcitations):
         lanczos_params = self.options.get("lanczos_params", {}) # See if lanczos_params is in yaml, if not use empty dictionary
         _, th0, _ = lanczos.LanczosGroundState(H0, th0, lanczos_params).run()
         assert np.abs(npc.norm(th0) - 1) < 1.e-8
-        
+
         U, s, Vh = npc.svd(th0, inner_labels=['vR', 'vL'])
         seg_L.set_B(seg_L.L-1, npc.tensordot(seg_L.get_B(seg_L.L-1, 'A'), U, axes=['vR', 'vL']), form='A') # Put AU into last site of left segment
         seg_L.set_SR(seg_L.L-1, s)
         seg_R.set_B(0, npc.tensordot(Vh, seg_R.get_B(0, 'B'), axes=['vR', 'vL']), form='B') # Put Vh B into first site of right segment
         seg_R.set_SL(0, s)
-        
+
         combined_seg = self._concatenate_segments(seg_L, seg_R, inf_L)
-        
+
         return combined_seg
 
     def _concatenate_segments(self, seg_L, seg_R, inf_L):
@@ -1184,15 +1353,15 @@ class TopologicalExcitations(OrthogonalExcitations):
         rB = [seg_R.get_B(i) for i in range(seg_R.L)]
         rS = [seg_R.get_SL(i) for i in range(seg_R.L)]
         rS.append(seg_R.get_SR(seg_R.L-1))
-        
+
         assert npc.norm(seg_L.get_SR(seg_L.L-1) - rS[0]) < 1.e-12
-        
+
         cp = MPS(l_sites + r_sites, lA + rB, lS + rS, 'segment',
                  ['A'] * seg_L.L + ['B'] * seg_R.L, inf_L.norm)
         cp.grouped = inf_L.grouped
         cp.canonical_form_finite(cutoff=1e-15) #to strip out vanishing singular values at the interface
         return cp
-    
+
     def get_reference_energy(self, psi0_L, psi0_R):
         """Obtain ground state reference energy.
 
@@ -1218,11 +1387,11 @@ class TopologicalExcitations(OrthogonalExcitations):
         E_L = env.full_contraction(0).real
         env = MPOEnvironment(seg_R, self.model.H_MPO, seg_R, **self.env_data_R)
         E_R = env.full_contraction(0).real
-        
+
         coeff_L = self.options.get('coeff_L', 0.5)
         coeff_R = self.options.get('coeff_R', 0.5)
         assert np.abs(coeff_L + coeff_R - 1.0) < 1.e-12
-        
+
         if psi0_L.finite:
             self.results['ground_state_energy'] = coeff_L * E_L + coeff_R * E_R
         else:
@@ -1241,7 +1410,7 @@ class TopologicalExcitations(OrthogonalExcitations):
             self.logger.info("epsilon_L, epsilon_R, E0_L, E0_R: %.14f, %.14f, %.14f, %.14f", epsilon_alpha, epsilon_beta, E0_alpha, E0_beta)
 
             MPO_TM = MPOTransferMatrix(H, psi0_L, transpose=False, guess = self.init_env_data_L['init_RP'])
-            eta_R_alpha = npc.tensordot(MPO_TM._proj_trace, self.init_env_data_L['init_RP'], axes=(['vR', 'wR', 'vR*'], ['vL', 'wL', 'vL*'])) 
+            eta_R_alpha = npc.tensordot(MPO_TM._proj_trace, self.init_env_data_L['init_RP'], axes=(['vR', 'wR', 'vR*'], ['vL', 'wL', 'vL*']))
             MPO_TM = MPOTransferMatrix(H, psi0_L, transpose=True, guess = self.init_env_data_L['init_LP'])
             eta_L_alpha = npc.tensordot(self.init_env_data_L['init_LP'], MPO_TM._proj_trace, axes=(['vR*', 'wR', 'vR'], ['vL*', 'wL', 'vL']))
 
@@ -1251,15 +1420,15 @@ class TopologicalExcitations(OrthogonalExcitations):
             eta_L_beta = npc.tensordot(self.init_env_data_R['init_LP'], MPO_TM._proj_trace, axes=(['vR*', 'wR', 'vR'], ['vL*', 'wL', 'vL']))
 
             self.logger.info("eta_L_alpha, eta_R_alpha, eta_L_beta, eta_R_beta: %.14f, %.14f, %.14f, %.14f", eta_L_alpha, eta_R_alpha, eta_L_beta, eta_R_beta)
-                        
+
             self.results['ground_state_energy'] = coeff_L * E_L + coeff_R * E_R \
                 + (1 - coeff_L) * (eta_L_alpha - eta_R_alpha) + (1 - coeff_R) * (eta_R_beta - eta_L_beta)
 
-        
+
         self.logger.info("Reference Ground State Energy: %.14f", self.results['ground_state_energy'])
-        
+
         return self.results['ground_state_energy']
-    
+
     def get_measurement_psi_model(self, psi, model):
         """Get psi for measurements.
 
