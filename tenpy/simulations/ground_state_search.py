@@ -214,6 +214,8 @@ class PlaneWaveExcitations(GroundStateSearch):
         N_excitations = self.options.get("N_excitations", 1)
         switch_charge_sector = self.options.get("switch_charge_sector", None)
         momentum = self.options["momentum"]
+        self.results['qtotal_diff'] = switch_charge_sector
+        self.results['momentum'] = momentum
         if momentum is not None:
             momentum *= 2*np.pi/self.psi.L # Momentum is in units of 2pi/L, as this is
             # allowed momenta for plane wave ansatz.

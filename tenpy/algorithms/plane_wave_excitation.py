@@ -87,7 +87,7 @@ class PlaneWaveExcitationEngine(Algorithm):
 
         # Get left and right generalized eigenvalues
         self.gauge = self.options.get('gauge', 'trace')
-        self.boundary_env_data, self.energy_density, _ = MPOTransferMatrix.find_init_LP_RP(self.H, self.psi, calc_E=True, subtraction_gauge=self.gauge, guess_init_env_data=self.guess_init_env_data)
+        self.boundary_env_data, self.energy_density, _ = MPOTransferMatrix.find_init_LP_RP(self.H, self.psi, calc_E=True, _subtraction_gauge=self.gauge, guess_init_env_data=self.guess_init_env_data)
         self.energy_density = np.mean(self.energy_density)
         self.LW = self.boundary_env_data['init_LP']
         self.RW = self.boundary_env_data['init_RP']
@@ -414,7 +414,8 @@ class PlaneWaveExcitationEngine(Algorithm):
                                       labels=['vL', 'vR'])
 
             if np.isclose(npc.norm(th0), 0):
-                warnings.warn('Initial guess for an X is zero; charges not be allowed on site ' + str(i) +  '.')
+                logger.info("Initial guess for an X is zero; charges not be allowed on site %d.", i)
+                #warnings.warn('Initial guess for an X is zero; charges not be allowed on site ' + str(i) +  '.')
             else:
                 valid_charge = True
                 LP = self.GS_env_L.get_LP(i, store=True)
@@ -429,7 +430,8 @@ class PlaneWaveExcitationEngine(Algorithm):
                 _, th0, _ = LanczosGroundState(H0, th0, lanczos_params).run()
 
             X_init.append(th0)
-        print('Norm of initial guess:', [npc.norm(x) for x in X_init])
+        logger.info("Norms of the initial guess: %r.", [npc.norm(x) for x in X_init])
+        #print('Norm of initial guess:', [npc.norm(x) for x in X_init])
         assert valid_charge, "No X is non-zero; charge is not valid for gluing."
         return X_init
     
