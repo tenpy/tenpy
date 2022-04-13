@@ -2645,7 +2645,8 @@ class MPOTransferMatrix(NpcLinearOperator):
         if calc_E:
             # We need this for segment excitation energies.
             # TODO: this doesn't work for non-default first/last!?
-            SL = psi.get_SL(0)
+            assert (last + 1) % L == first % L, "Need to have an integer number of unit cells for the bond to be the same."
+            SL = psi.get_SL(first)
             if not isinstance(SL, npc.Array):
                 vL, vR = envs[1].get_leg('vR').conj(), envs[0].get_leg('vL').conj()
                 SL = npc.diag(SL, vL, dtype=np.promote_types(psi.dtype, H.dtype), labels=['vL', 'vR'])
