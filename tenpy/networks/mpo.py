@@ -2612,7 +2612,7 @@ class MPOTransferMatrix(NpcLinearOperator):
             val, vec = TM.dominant_eigenvector(**kwargs)
             if abs(1. - val) > tol_ev0:
                 logger.warning("MPOTransferMatrix eigenvalue not 1: got %s", val)
-            envs.append(vec)
+            envs.append(vec) # These are always on bond 0 of the unit cell.
             if calc_E and transpose:
                 E = TM.energy(vec)
             L = TM.L
@@ -2626,8 +2626,9 @@ class MPOTransferMatrix(NpcLinearOperator):
                 init_env_data['init_RP'] = env.get_RP(last, store=False)
         if calc_E:
             # TODO: this doesn't work for non-default first/last!?
-            SL = psi.get_SL(0)
-            RP, LP = envs
+            assert (last + 1) % L == first % L, "Need to have an integer number of unit cells for the bond to be the same."
+            SL = psi.get_SL(first) # Originally 0
+            RP, LP = init_env_data['init_RP'], init_env_data['init_LP'] # cannot use envs since these aren't on first and last
             vL, vR = LP.get_leg('vR').conj(), RP.get_leg('vL').conj()
             SL = npc.diag(SL, vL, labels=['vL', 'vR'])
             E0 = npc.tensordot(LP, SL, axes=(['vR'], ['vL']))
