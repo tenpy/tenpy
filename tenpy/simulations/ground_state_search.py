@@ -1404,7 +1404,7 @@ class TopologicalExcitations(OrthogonalExcitations):
         E_beta = env.full_contraction(0).real
 
         coeff_alpha = self.options.get('coeff_alpha', 0.5)
-        coeff_beta = self.options.get('coeff_beta', 0.5)
+        coeff_beta = self.options.get('coeff_beta', 1 - coeff_alpha)
         assert np.abs(coeff_alpha + coeff_beta - 1.0) < 1.e-12
 
         if psi0_L.finite:
