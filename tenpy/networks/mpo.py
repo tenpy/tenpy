@@ -2637,22 +2637,24 @@ class MPOTransferMatrix(NpcLinearOperator):
             L = TM.L
             del TM
         init_env_data = {'init_LP': envs[1], 'init_RP': envs[0], 'age_LP': 0, 'age_RP': 0}
-        if first != 0 or last is not None and last % L != L - 1:
+        if first != 0 or (last is not None and last % L != L - 1):
             env = MPOEnvironment(psi, H, psi, **init_env_data)
             if first % L != 0:
                 init_env_data['init_LP'] = env.get_LP(first, store=False)
-            if last % L != L - 1:
+            if last is not None and last % L != L - 1:
                 init_env_data['init_RP'] = env.get_RP(last, store=False)
         if calc_E:
             # We need this for segment excitation energies.
             # TODO: this doesn't work for non-default first/last!?
-            SL = psi.get_SL(0)
+            if first != 0 or last is not None:
+                assert (last + 1) % L == first % L, "Need to have an integer number of unit cells for the bond to be the same."
+            SL = psi.get_SL(first)
             if not isinstance(SL, npc.Array):
-                vL, vR = envs[1].get_leg('vR').conj(), envs[0].get_leg('vL').conj()
+                vL, vR = init_env_data['init_LP'].get_leg('vR').conj(), init_env_data['init_RP'].get_leg('vL').conj()
                 SL = npc.diag(SL, vL, dtype=np.promote_types(psi.dtype, H.dtype), labels=['vL', 'vR'])
             E0 = npc.tensordot(init_env_data['init_LP'], SL, axes=(['vR'], ['vL']))
             E0 = npc.tensordot(E0, SL.conj(), axes=(['vR*'], ['vL*']))
-            E0 = npc.tensordot(E0, RP, axes=(['vR', 'wR', 'vR*'], ['vL', 'wL', 'vL*']))
+            E0 = npc.tensordot(E0, init_env_data['init_RP'], axes=(['vR', 'wR', 'vR*'], ['vL', 'wL', 'vL*']))
             # E0 = LP * s^2 * RP on site 0
             return init_env_data, Es, E0
         # else:

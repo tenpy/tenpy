@@ -16,7 +16,7 @@ from ..tools.math import entropy
 from ..algorithms.algorithm import Algorithm
 from ..algorithms.mps_common import ZeroSiteH
 
-__all__ = ['TR_general', 'LT_general', 'construct_orthogonal', 'PlaneWaveExcitations', ]
+__all__ = ['TR_general', 'LT_general', 'construct_orthogonal', 'PlaneWaveExcitationEngine', 'TopologicalPlaneWaveExcitationEngine']
 
 """
 TODO - 04/01/2022
@@ -87,11 +87,11 @@ class PlaneWaveExcitationEngine(Algorithm):
 
         # Get left and right generalized eigenvalues
         self.gauge = self.options.get('gauge', 'trace')
-        self.boundary_env_data, self.energy_density, _ = MPOTransferMatrix.find_init_LP_RP(self.H, self.psi, calc_E=True, subtraction_gauge=self.gauge, guess_init_env_data=self.guess_init_env_data)
+        self.boundary_env_data, self.energy_density, _ = MPOTransferMatrix.find_init_LP_RP(self.H, self.psi, calc_E=True, _subtraction_gauge=self.gauge, guess_init_env_data=self.guess_init_env_data)
         self.energy_density = np.mean(self.energy_density)
         self.LW = self.boundary_env_data['init_LP']
         self.RW = self.boundary_env_data['init_RP']
-        
+
         # We create GS_env_L and GS_env_R to make topological easier.
         self.GS_env = self.GS_env_L = self.GS_env_R = MPOEnvironment(self.psi, self.H, self.psi, **self.boundary_env_data)
         self.lambda_C1 = options.get('lambda_C1', None)
@@ -101,7 +101,8 @@ class PlaneWaveExcitationEngine(Algorithm):
             self.lambda_C1 = npc.tensordot(C0_L, self.RW, axes=(['vR'], ['vL']))
             self.lambda_C1 = npc.tensordot(self.LW, self.lambda_C1, axes=(['wR', 'vR'], ['wL', 'vL']))
             self.lambda_C1 = npc.tensordot(self.lambda_C1, C0_L.conj(), axes=(['vR*', 'vL*'], ['vL*', 'vR*'])) / norm
-        print('L:', self.lambda_C1)
+        # print('L:', self.lambda_C1)
+
         """
         # Tw[Al,AR]
         self.l_LR = npc.Array.zeros_like(self.LW).itranspose(['vR*','wR', 'vR']) # [TODO] check default ordering to potentially remove transpose
@@ -153,7 +154,7 @@ class PlaneWaveExcitationEngine(Algorithm):
             temp = npc.tensordot(temp, temp_R, axes=(['wR', 'vR*'], ['wL', 'vL*']))
             strange.append(npc.norm(temp))
         logger.info("Norm of H|psi> projected into the tangent space on each site: %r.", strange)
-        
+
         """
         if 1 >= 1:
             print("-"*20, "initializing excitation", "-"*20)
@@ -166,7 +167,7 @@ class PlaneWaveExcitationEngine(Algorithm):
             print("L norm           :", npc.norm(self.LW))
             print("R norm           :", npc.norm(self.RW))
             print("(L|R)            :", npc.tensordot(self.LW, self.RW, axes=(['vR*', 'wR', 'vR'],['vL*', 'wL', 'vL'])))
-            
+
             lT  = LT_general(self.ALs, self.ARs, self.l_LR, Ws=self.Ws)
             Tr  = TR_general(self.ALs, self.ARs, self.r_LR, Ws=self.Ws)
             print("LR norm(l-lT)    :", npc.norm(self.l_LR-lT))
@@ -187,7 +188,7 @@ class PlaneWaveExcitationEngine(Algorithm):
             print("ll*r             :", npc.tensordot(self.LWC, self.r_RL,axes=(['vR*', 'wR', 'vR'],['vL*', 'wL', 'vL'])))
             print("e_RL             :", self.e_RL)
         """
-    
+
     def run(self, p, qtotal_change=None, orthogonal_to=[], E_boosts=[]):
         self.unaligned_H = self.Unaligned_Effective_H(self, self.ALs, self.ARs, self.VLs,
                                                       self.LW, self.RW, self.Ws, p, self.chi, self.d)
@@ -198,19 +199,19 @@ class PlaneWaveExcitationEngine(Algorithm):
             E_boost = self.options.get('E_boost', 100)
             E_boosts = [E_boost] * len(orthogonal_to)
         ortho_H = BoostNpcLinearOperator(effective_H, E_boosts, orthogonal_to)
-        
+
         E, X, N = LanczosGroundState(ortho_H, X_init, lanczos_params).run()
-        
+
         if N == lanczos_params.get('N_max', 20):
             import warnings
             warnings.warn('Maximum Lanczos iterations needed; be wary of results.')
-            
+
         psi = MomentumMPS(X, self.psi, p, 1)
         return E - self.energy_density * self.L - self.lambda_C1, psi, N
-    
+
     def resume_run(self):
         raise NotImplementedError()
-                
+
     def energy(self, p, X):
         self.unaligned_H = self.Unaligned_Effective_H(self, self.ALs, self.ARs, self.VLs,
                                                       self.LW, self.RW, self.Ws, p, self.chi, self.d)
@@ -218,7 +219,7 @@ class PlaneWaveExcitationEngine(Algorithm):
         HX = effective_H.matvec(X)
         E = np.real(inner(X, HX)).item()
         return E - self.energy_density * self.L - self.lambda_C1
-    
+
     def infinite_sum_TLR(self, X, p):
         sum_tol = self.options.get('sum_tol', 1.e-10)
         sum_method = self.options.get('sum_method', 'explicit')
@@ -328,7 +329,7 @@ class PlaneWaveExcitationEngine(Algorithm):
         def matvec(self, vec):
 
             total_vec = [npc.Array.zeros_like(v) for v in vec]
-            
+
             for i in range(self.outer.L):
                 LB = npc.Array.zeros_like(self.LW)
                 RB = npc.Array.zeros_like(self.RW)
@@ -339,12 +340,12 @@ class PlaneWaveExcitationEngine(Algorithm):
                              LT_general([self.ARs[j]], [self.ALs[j]], LB, Ws=[self.Ws[j]]) # Does one extra multiplication when i = 0
                     else:
                         LB = LT_general([B], [self.ALs[j]], self.outer.GS_env_L.get_LP(j), Ws=[self.Ws[j]])
-                
+
                 B = npc.tensordot(self.VLs[i], vec[i], axes=(['vR'], ['vL']))
                 LB = LT_general([self.ARs[i]], [self.VLs[i]], LB, Ws=[self.Ws[i]])
                 LP1 = LT_general([self.ALs[i]], [self.VLs[i]], self.outer.GS_env_L.get_LP(i), Ws=[self.Ws[i]])
                 LP2 = LT_general([B], [self.VLs[i]], self.outer.GS_env_L.get_LP(i), Ws=[self.Ws[i]])
-                
+
                 for j in reversed(range(i+1, self.outer.L)):
                     B = npc.tensordot(self.VLs[j], vec[j], axes=(['vR'], ['vL']))
                     if j < self.outer.L - 1:
@@ -357,7 +358,7 @@ class PlaneWaveExcitationEngine(Algorithm):
                 if i < self.outer.L-1:
                     total_vec[i] += npc.tensordot(LP1, RB, axes=(['vR', 'wR'], ['vL', 'wL']))
                 total_vec[i] += npc.tensordot(LP2, self.outer.GS_env_R.get_RP(i), axes=(['vR', 'wR'], ['vL', 'wL']))
-            
+
             return total_vec
 
     class Unaligned_Effective_H(NpcLinearOperator):
@@ -376,8 +377,8 @@ class PlaneWaveExcitationEngine(Algorithm):
         def matvec(self, vec):
 
             total = [npc.Array.zeros_like(v) for v in vec]
-            
-            inf_sum_TLR = self.outer.infinite_sum_TLR(vec, self.p) 
+
+            inf_sum_TLR = self.outer.infinite_sum_TLR(vec, self.p)
             cached_TLR = [inf_sum_TLR]
             for i in reversed(range(1, self.outer.L)):
                 cached_TLR.insert(0, TR_general([self.ALs[i]], [self.ARs[i]], cached_TLR[0], Ws=[self.Ws[i]]))
@@ -387,8 +388,8 @@ class PlaneWaveExcitationEngine(Algorithm):
                 X_out_left.ireplace_labels(['vR*', 'vL*'], ['vL', 'vR'])
                 total[i] += X_out_left
             cached_TLR = []
-            
-            inf_sum_TRL = self.outer.infinite_sum_TRL(vec, self.p) 
+
+            inf_sum_TRL = self.outer.infinite_sum_TRL(vec, self.p)
             cached_TRL = [inf_sum_TRL]
             for i in range(0, self.outer.L-1):
                 cached_TRL.append(LT_general([self.ARs[i]], [self.ALs[i]], cached_TRL[-1], Ws=[self.Ws[i]]))
@@ -398,7 +399,7 @@ class PlaneWaveExcitationEngine(Algorithm):
                 X_out_left.ireplace_labels(['vR*', 'vL*'], ['vL', 'vR'])
                 total[i] += X_out_left
             cached_TRL = []
-            
+
             return total
 
     def initial_guess(self, qtotal_change):
@@ -413,7 +414,8 @@ class PlaneWaveExcitationEngine(Algorithm):
                                       labels=['vL', 'vR'])
 
             if np.isclose(npc.norm(th0), 0):
-                warnings.warn('Initial guess for an X is zero; charges not be allowed on site ' + str(i) +  '.')
+                logger.info("Initial guess for an X is zero; charges not be allowed on site %d.", i)
+                #warnings.warn('Initial guess for an X is zero; charges not be allowed on site ' + str(i) +  '.')
             else:
                 valid_charge = True
                 LP = self.GS_env_L.get_LP(i, store=True)
@@ -431,7 +433,7 @@ class PlaneWaveExcitationEngine(Algorithm):
         print('Norm of initial guess:', [npc.norm(x) for x in X_init])
         assert valid_charge, "No X is non-zero; charge is not valid for gluing."
         return X_init
-    
+
 class TopologicalPlaneWaveExcitationEngine(PlaneWaveExcitationEngine):
     def __init__(self, psi_L, psi_R, model, options, **kwargs):
         Algorithm.__init__(self, psi_L, model, options, **kwargs)
@@ -471,12 +473,12 @@ class TopologicalPlaneWaveExcitationEngine(PlaneWaveExcitationEngine):
         self.energy_density_R = np.mean(self.energy_density_R)
         assert np.abs(self.energy_density_L - self.energy_density_R) < 1.e-10
         self.energy_density = np.mean([self.energy_density_L, self.energy_density_R])
-        
+
         self.LW = self.boundary_env_data_L['init_LP']
         self.RW = self.boundary_env_data_R['init_RP']
         self.GS_env_L = MPOEnvironment(self.psi_L, self.H, self.psi_L, **self.boundary_env_data_L)
         self.GS_env_R = MPOEnvironment(self.psi_R, self.H, self.psi_R, **self.boundary_env_data_R)
-        
+
         self.lambda_C1_L = options.get('lambda_C1_L', None)
         if self.lambda_C1_L is None:
             C0_L = self.Cs[0]
@@ -512,7 +514,7 @@ class TopologicalPlaneWaveExcitationEngine(PlaneWaveExcitationEngine):
             temp = npc.tensordot(temp, temp_R, axes=(['wR', 'vR*'], ['wL', 'vL*']))
             strange.append(npc.norm(temp))
         logger.info("Norm of H|psi_L> projected into the tangent space on each site: %r.", strange)
-        
+
         strange = []
         for i in range(self.L):
             temp_L = self.GS_env_R.get_LP(i) # LT_general(self.ALs[:i], self.ALs[:i], self.LW, Ws=self.Ws[:i])
@@ -524,15 +526,15 @@ class TopologicalPlaneWaveExcitationEngine(PlaneWaveExcitationEngine):
             temp = npc.tensordot(temp, temp_R, axes=(['wR', 'vR*'], ['wL', 'vL*']))
             strange.append(npc.norm(temp))
         logger.info("Norm of H|psi_R> projected into the tangent space on each site: %r.", strange)
-    
-    
+
+
     def gauge_ground_states():
         # Shift charges on bond so that left and right match up.
         H0 = ZeroSiteH.from_LP_RP(self.LW, self.RW)
         if self.model.H_MPO.explicit_plus_hc:
             H0 = SumNpcLinearOperator(H0, H0.adjoint())
         vL, vR = LP.get_leg('vR').conj(), RP.get_leg('vL').conj()
-        
+
         # TODO make VUMPS default to diagonal gauge or this won't work.
         if self.psi_L.chinfo.qnumber == 0:    # Handles the case of no charge-conservation
             desired_Q = None
