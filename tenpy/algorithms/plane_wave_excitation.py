@@ -430,7 +430,9 @@ class PlaneWaveExcitationEngine(Algorithm):
                 _, th0, _ = LanczosGroundState(H0, th0, lanczos_params).run()
 
             X_init.append(th0)
-        print('Norm of initial guess:', [npc.norm(x) for x in X_init])
+
+        logger.info("Norms of the initial guess: %r.", [npc.norm(x) for x in X_init])
+        #print('Norm of initial guess:', [npc.norm(x) for x in X_init])
         assert valid_charge, "No X is non-zero; charge is not valid for gluing."
         return X_init
 

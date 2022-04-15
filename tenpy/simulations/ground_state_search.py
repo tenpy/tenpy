@@ -1381,8 +1381,90 @@ class TopologicalExcitations(OrthogonalExcitations):
         cp.grouped = inf_L.grouped
         cp.canonical_form_finite(cutoff=1e-15) #to strip out vanishing singular values at the interface
         return cp
+    
+    def correction(self, psi0_alpha, psi0_beta, env_alpha, env_beta, 
+                   last, eta_R_alpha, eta_R_beta):
+        # 'last' is last site in segment
+        correction = 0
+        if psi0_alpha.finite:
+            sites = range(last, psi0_alpha.L-1)
+        else:
+            sites = range(0, psi0_alpha.L)
+        for i in sites:
+            RP_alpha = env_alpha.get_RP(i)
+            RP_beta = env_beta.get_RP(i)
+            S_alpha = psi0_alpha.get_SR(i)
+            S_beta = psi0_beta.get_SR(i)
+            wR = self.model_orig.H_MPO.get_W(i).get_leg('wR')
+            IdL = self.model_orig.H_MPO.get_IdL(i+1)
+            
+            vR = psi0_alpha.get_B(i, 'B').get_leg('vR')
+            if isinstance(S_alpha, npc.Array):
+                rho_alpha = npc.tensordot(S_alpha, S_alpha.conj(), axes=['vL', 'vL*'])
+            else:
+                S2 = S_alpha**2
+                rho_alpha = npc.diag(S2, vR, labels=['vR', 'vR*'])
+            rho_alpha = rho_alpha.add_leg(wR, IdL, axis=1, label='wR')
+            
+            vR = psi0_beta.get_B(i, 'B').get_leg('vR')
+            if isinstance(S_beta, npc.Array):
+                rho_beta = npc.tensordot(S_beta, S_beta.conj(), axes=['vL', 'vL*'])
+            else:
+                S2 = S_beta**2
+                rho_beta = npc.diag(S2, vR, labels=['vR', 'vR*'])
+            rho_beta = rho_beta.add_leg(wR, IdL, axis=1, label='wR')
+            
+            correction += npc.tensordot(rho_beta, RP_beta, axes=(['vR', 'wR', 'vR*'], ['vL', 'wL', 'vL*'])) - \
+                          npc.tensordot(rho_alpha, RP_alpha, axes=(['vR', 'wR', 'vR*'], ['vL', 'wL', 'vL*'])) - \
+                          eta_R_beta + eta_R_alpha
+        return correction
+    
+    def arbitrary_shifts(self, psi0_alpha, psi0_beta):
+        # Code taken from MPO transfer matrix
+        dtype = np.promote_types(psi0_alpha.dtype,
+             np.promote_types(psi0_beta, self.model_orig.H_MPO.dtype))
+        wL = self.model.H_MPO.get_W(0).get_leg('wL')
+        wR = wL.conj()
+        IdL = self.model_orig.H_MPO.get_IdL(0)
+        IdR = self.model_orig.H_MPO.get_IdR(-1)
+        
+        vR = psi0_alpha.get_B(psi0_alpha.L-1, 'B').get_leg('vR')
+        vL = psi0_alpha.get_B(0, 'A').get_leg('vL')
+        
+        chi0 = vR.ind_len
+        eye_R = npc.diag(1., vR.conj(), dtype=dtype, labels=['vL', 'vL*'])
+        E_shift = eye_R.add_leg(wL, IdL, axis=1, label='wL')  # vL wL vL*
+        proj_trace = E_shift.conj().iset_leg_labels(['vR', 'wR', 'vR*']) / chi0
+        #MPO_TM = MPOTransferMatrix(H, psi0_L, transpose=False, guess = self.init_env_data_L['init_RP'])
+        eta_R_alpha = npc.tensordot(proj_trace, self.init_env_data_L['init_RP'], axes=(['vR', 'wR', 'vR*'], ['vL', 'wL', 'vL*'])).real
 
-    def get_reference_energy(self, psi0_L, psi0_R):
+        chi0 = vL.ind_len
+        eye_L = npc.diag(1., vL, dtype=dtype, labels=['vR*', 'vR'])
+        E_shift = eye_L.add_leg(wR, IdR, axis=1, label='wR')  # vR* wR vR
+        proj_trace = E_shift.conj().iset_leg_labels(['vL*', 'wL', 'vL']) / chi0
+        #MPO_TM = MPOTransferMatrix(H, psi0_L, transpose=True, guess = self.init_env_data_L['init_LP'])
+        eta_L_alpha = npc.tensordot(self.init_env_data_L['init_LP'], proj_trace, axes=(['vR*', 'wR', 'vR'], ['vL*', 'wL', 'vL'])).real
+
+        vR = psi0_beta.get_B(psi0_beta.L-1, 'B').get_leg('vR')
+        vL = psi0_beta.get_B(0, 'A').get_leg('vL')
+
+        chi0 = vR.ind_len
+        eye_R = npc.diag(1., vR.conj(), dtype=dtype, labels=['vL', 'vL*'])
+        E_shift = eye_R.add_leg(wL, IdL, axis=1, label='wL')  # vL wL vL*
+        proj_trace = E_shift.conj().iset_leg_labels(['vR', 'wR', 'vR*']) / chi0
+        #MPO_TM = MPOTransferMatrix(H, psi0_R, transpose=False, guess = self.init_env_data_R['init_RP'])
+        eta_R_beta = npc.tensordot(proj_trace, self.init_env_data_R['init_RP'], axes=(['vR', 'wR', 'vR*'], ['vL', 'wL', 'vL*'])).real
+
+        chi0 = vL.ind_len
+        eye_L = npc.diag(1., vL, dtype=dtype, labels=['vR*', 'vR'])
+        E_shift = eye_L.add_leg(wR, IdR, axis=1, label='wR')  # vR* wR vR
+        proj_trace = E_shift.conj().iset_leg_labels(['vL*', 'wL', 'vL']) / chi0
+        #MPO_TM = MPOTransferMatrix(H, psi0_R, transpose=True, guess = self.init_env_data_R['init_LP'])
+        eta_L_beta = npc.tensordot(self.init_env_data_R['init_LP'], proj_trace, axes=(['vR*', 'wR', 'vR'], ['vL*', 'wL', 'vL'])).real
+        
+        return eta_L_alpha, eta_L_beta, eta_R_alpha, eta_R_beta
+    
+    def get_reference_energy(self, psi0_alpha, psi0_beta):
         """Obtain ground state reference energy.
 
         Excitation energies are full contractions of the MPOEnvironment with the environments
@@ -1398,30 +1480,35 @@ class TopologicalExcitations(OrthogonalExcitations):
         self.logger.info("Calculate reference energy by contracting environments")
         first, last = self.results['segment_first_last']
         print(first, last)
-        seg_alpha = psi0_L.extract_segment(first, last)
-        seg_beta = psi0_R.extract_segment(first, last)
+        seg_alpha = psi0_alpha.extract_segment(first, last)
+        seg_beta = psi0_beta.extract_segment(first, last)
         gauge = self.options.get('gauge', 'rho')
 
         # This is expensive but more accurate than E0 + epsilon*L
-        env = MPOEnvironment(seg_alpha, self.model.H_MPO, seg_alpha, **self.env_data_L)
-        E_alpha = env.full_contraction(0).real
-        env = MPOEnvironment(seg_beta, self.model.H_MPO, seg_beta, **self.env_data_R)
-        E_beta = env.full_contraction(0).real
+        env_alpha = MPOEnvironment(seg_alpha, self.model.H_MPO, seg_alpha, **self.env_data_L)
+        E_alpha = env_alpha.full_contraction(0).real
+        env_beta = MPOEnvironment(seg_beta, self.model.H_MPO, seg_beta, **self.env_data_R)
+        E_beta = env_beta.full_contraction(0).real
 
-        coeff_alpha = self.options.get('coeff_alpha', 0.5)
+        coeff_alpha = self.options.get('coeff_alpha', 1.)
         coeff_beta = self.options.get('coeff_beta', 1 - coeff_alpha)
         assert np.abs(coeff_alpha + coeff_beta - 1.0) < 1.e-12
 
-        if psi0_L.finite:
-            self.results['ground_state_energy'] = coeff_alpha * E_alpha + coeff_beta * E_beta
+        if psi0_alpha.finite:
+            correction = self.correction(psi0_alpha, psi0_beta, env_alpha, env_beta, last, 0, 0)
+                
+            self.results['ground_state_energy'] = coeff_alpha * E_alpha + coeff_beta * E_beta + correction
         else:
             H = self.model_orig.H_MPO
-            _, epsilon_alpha, E0_alpha = MPOTransferMatrix.find_init_LP_RP(H, psi0_L, first, last,
-                                                             guess_init_env_data=self.init_env_data_L, calc_E=True, _subtraction_gauge=gauge)
-            epsilon_alpha = np.mean(epsilon_alpha).real
-            _, epsilon_beta, E0_beta = MPOTransferMatrix.find_init_LP_RP(H, psi0_R, first, last,
-                                                             guess_init_env_data=self.init_env_data_R, calc_E=True, _subtraction_gauge=gauge)
-            epsilon_beta = np.mean(epsilon_beta).real
+            if (last + 1 - first) % psi0_alpha.L == 0: # last is included in segment.
+                _, epsilon_alpha, E0_alpha = MPOTransferMatrix.find_init_LP_RP(H, psi0_alpha, first, last,
+                                guess_init_env_data=self.init_env_data_L, calc_E=True, _subtraction_gauge=gauge)
+                epsilon_alpha = np.mean(epsilon_alpha).real
+                _, epsilon_beta, E0_beta = MPOTransferMatrix.find_init_LP_RP(H, psi0_beta, first, last,
+                                guess_init_env_data=self.init_env_data_R, calc_E=True, _subtraction_gauge=gauge)
+                epsilon_beta = np.mean(epsilon_beta).real
+            else:
+                epsilon_alpha, E0_alpha, epsilon_beta, E0_beta = 0, 0, 0, 0
 
             #E_alpha2 = E0_alpha + (seg_alpha.L + first % psi0_L.L + psi0_L.L - (1 + (last) % psi0_L.L))*epsilon_alpha
             #E_beta2 = E0_beta + (seg_beta.L + first % psi0_R.L + psi0_R.L - (1 + (last) % psi0_R.L))*epsilon_beta
@@ -1431,24 +1518,18 @@ class TopologicalExcitations(OrthogonalExcitations):
             self.logger.info("E_alpha, E_beta, E_alpha2, E_beta2: %.14f, %.14f, %.14f, %.14f", E_alpha, E_beta, E_alpha2, E_beta2)
             self.logger.info("epsilon_alpha, epsilon_beta, E0_alpha, E0_beta: %.14f, %.14f, %.14f, %.14f", epsilon_alpha, epsilon_beta, E0_alpha, E0_beta)
 
-            MPO_TM = MPOTransferMatrix(H, psi0_L, transpose=False, guess = self.init_env_data_L['init_RP'])
-            eta_R_alpha = npc.tensordot(MPO_TM._proj_trace, self.init_env_data_L['init_RP'], axes=(['vR', 'wR', 'vR*'], ['vL', 'wL', 'vL*'])).real
-            MPO_TM = MPOTransferMatrix(H, psi0_L, transpose=True, guess = self.init_env_data_L['init_LP'])
-            eta_L_alpha = npc.tensordot(self.init_env_data_L['init_LP'], MPO_TM._proj_trace, axes=(['vR*', 'wR', 'vR'], ['vL*', 'wL', 'vL'])).real
-
-            MPO_TM = MPOTransferMatrix(H, psi0_R, transpose=False, guess = self.init_env_data_R['init_RP'])
-            eta_R_beta = npc.tensordot(MPO_TM._proj_trace, self.init_env_data_R['init_RP'], axes=(['vR', 'wR', 'vR*'], ['vL', 'wL', 'vL*'])).real
-            MPO_TM = MPOTransferMatrix(H, psi0_R, transpose=True, guess = self.init_env_data_R['init_LP'])
-            eta_L_beta = npc.tensordot(self.init_env_data_R['init_LP'], MPO_TM._proj_trace, axes=(['vR*', 'wR', 'vR'], ['vL*', 'wL', 'vL'])).real
+            eta_L_alpha, eta_L_beta, eta_R_alpha, eta_R_beta = self.arbitrary_shifts(psi0_alpha, psi0_beta)
 
             self.logger.info("eta_L_alpha, eta_R_alpha, eta_L_beta, eta_R_beta: %.14f, %.14f, %.14f, %.14f", eta_L_alpha, eta_R_alpha, eta_L_beta, eta_R_beta)
-
+            
+            correction = self.correction(psi0_alpha, psi0_beta, env_alpha, env_beta, last, eta_R_alpha, eta_R_beta)
+                
             self.results['ground_state_energy'] = coeff_alpha * E_alpha + coeff_beta * E_beta \
                 + (1 - coeff_alpha) * eta_L_alpha - coeff_alpha * eta_R_alpha - coeff_beta * eta_L_beta + (1 - coeff_beta) * eta_R_beta
 
             if np.abs(E0_alpha - E0_beta) > 1.e-4:
                 warnings.warn('E0_alpha and E0_beta are more than 1.e-4 idfferent; single DW energy may not be well defined.\nOnly two DWs are well defined. PROCEED AT YOUR OWN RISK.')
-
+                
         self.logger.info("Reference Ground State Energy: %.14f", self.results['ground_state_energy'])
 
         return self.results['ground_state_energy']
@@ -1503,7 +1584,6 @@ class TopologicalExcitations(OrthogonalExcitations):
                 assert self.results[key] == (meas_first, meas_last)
             model  = self.model_orig.extract_segment(meas_first, meas_last)
         return psi, model
-
 
 class TopologicalExcitationsOLD(OrthogonalExcitations):
 
@@ -1902,7 +1982,6 @@ class TopologicalExcitationsOLD(OrthogonalExcitations):
         qtotal_diff = self.psi.chinfo.make_valid(qtotal_after - qtotal_before)
         self.logger.info("changed charge by %r compared to previous state", list(qtotal_diff))
         # assert not np.all(qtotal_diff == 0)
-
 
 class ExcitationInitialState(InitialStateBuilder):
     """InitialStateBuilder for :class:`OrthogonalExcitations`.

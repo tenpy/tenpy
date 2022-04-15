@@ -2419,6 +2419,7 @@ class MPOTransferMatrix(NpcLinearOperator):
                 rho = npc.diag(S2, vR, labels=['vR', 'vR*'])
 
             self.acts_on = ['vL', 'wL', 'vL*']  # vec: vL wL vL*
+
             for i in reversed(range(self.L)):
                 # optimize: transpose arrays to mostly avoid it in matvec
                 B = psi.get_B(i, 'B').astype(dtype, False)
@@ -2442,6 +2443,7 @@ class MPOTransferMatrix(NpcLinearOperator):
                 rho = npc.diag(S2, vL.conj(), labels=['vL*', 'vL'])
 
             self.acts_on = ['vR*', 'wR', 'vR']  # labels of the vec
+
             for i in range(self.L):
                 A = psi.get_B(i, 'A').astype(dtype, False)
                 self._M.append(A.transpose(['vL', 'p', 'vR']))
