@@ -48,12 +48,15 @@ class Simulation:
 
     The prefered way to run simulations is in a `with` statement, which allows us to redirect
     error messages to the log files, timely warn about unused parameters and to properly close any
-    open files. In other words, use the simulation class like this::
+    open (cache) files. In other words, use the simulation class like this::
 
         with Simulation(options, ...) as sim:
             results = sim.run()
 
     The wrappers :func:`run_simulation` and :func:`run_seq_simulations` do that.
+
+    The other, expected way to run the simulation is "resuming" from a checkpoint of an
+    interrupted simulation run, for which you can use :func:`resume_from_checkpoint`.
 
     Parameters
     ----------
@@ -438,7 +441,6 @@ class Simulation:
                 Use this if you want to run TEBD with a model that was originally next-nearest
                 neighbor.
         """
-        self.model_ungrouped = copy.copy(self.model)
         group_sites = self.grouped = self.options.get("group_sites", 1)
         to_NN = self.options.get("group_to_NearestNeighborModel", False)
         if group_sites < 1:
@@ -446,7 +448,7 @@ class Simulation:
         if group_sites > 1:
             if not self.loaded_from_checkpoint or self.psi.grouped < group_sites:
                 self.psi.group_sites(group_sites)
-            self.model_ungrouped = copy.copy(self.model)
+            self.model_ungrouped = self.model.copy()
             self.model.group_sites(group_sites)
             if to_NN:
                 self.model = NearestNeighborModel.from_MPOModel(self.model)
@@ -583,11 +585,12 @@ class Simulation:
         # in case of a failed measurement, we should raise the exception at the end of the
         # simulation?
         results = {}
-        if self.grouped > 1:
-            psi = self.psi.copy()
-            psi.group_split(self.options['algorithm_params']['trunc_params'])
+        psi, model = self.get_measurement_psi_model(self.psi, self.model)
 
-        returned = self.measurement_event.emit(results=results, simulation=self, psi=self.psi)
+        returned = self.measurement_event.emit(results=results,
+                                               simulation=self,
+                                               psi=psi,
+                                               model=model)
         # check for returned values, although there shouldn't be any
         returned = [entry for entry in returned if entry is not None]
         if len(returned) > 0:
@@ -596,6 +599,36 @@ class Simulation:
             warnings.warn(msg)
             results['UNKNOWN'] = returned
         return results
+
+    def get_measurement_psi_model(self, psi, model):
+        """Get psi for measurements.
+
+        Sometimes, the `psi` we want to use for measurements is different from the one the
+        algorithm actually acts on.
+        Here, we split sites, if they were grouped in :meth:`group_sites_for_algorithm`.
+
+        Parameters
+        ----------
+        psi :
+            Tensor network; initially just ``self.psi``.
+            The method should make a copy before modification.
+        model :
+            Model matching `psi` (in terms of indexing, MPS order, grouped sites, ...)
+            Initially just ``self.model``.
+
+        Returns
+        -------
+        psi :
+            The psi suitable as argument for generic measurement functions.
+        model :
+            Model matching `psi` (in terms of indexing, MPS order, grouped sites, ...)
+        """
+        if self.grouped > 1:
+            if psi is self.psi:
+                psi = psi.copy()  # make copy before
+            psi.group_split(self.options['algorithm_params']['trunc_params'])
+            model = self.model_ungrouped
+        return psi, model
 
     def final_measurements(self):
         """Perform a last set of measurements."""

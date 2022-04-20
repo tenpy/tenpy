@@ -50,8 +50,8 @@ from .site import group_sites, Site
 from ..tools.string import vert_join
 from .mps import MPS as _MPS  # only for MPS._valid_bc
 from .mps import MPSEnvironment
-from .terms import OnsiteTerms, CouplingTerms, MultiCouplingTerms
-from ..tools.misc import add_with_None_0
+from .terms import TermList, OnsiteTerms, CouplingTerms, MultiCouplingTerms
+from ..tools.misc import to_iterable, add_with_None_0
 from ..tools.math import lcm
 from ..tools.params import asConfig
 from ..algorithms.truncation import TruncationError, svd_theta
@@ -859,6 +859,155 @@ class MPO:
         contr = npc.trace(contr, 'vR', 'vR*')
         return np.real_if_close(contr - exp_val**2)
 
+    def prefactor(self, i, ops):
+        """Get prefactor for a given string of operators in self.
+
+        Parameters
+        ----------
+        i : int
+            First site with non-identity operator.
+        ops : list of str
+            String of operators for which the prefactor is to be determined;
+            the first entry is the name for the operator acting on site `i`,
+            second entry on site `i` + 1, etc.
+
+        Returns
+        -------
+        prefactor : float
+            The prefactor obtained from ``trace(dagger(ops), H) / norm``,
+            where ``norm = trace(dagger(ops), ops)``
+        """
+        ops = to_iterable(ops)
+        IdL = self.get_IdL(i)
+        IdR_final = self.get_IdR(i + len(ops) - 1)
+        if IdL is None or IdR_final is None:
+            return 0.
+        contr = None
+        for k, opname in enumerate(ops):
+            j = i + k
+            W = self.get_W(j)
+            if contr is None:
+                contr = W.take_slice(IdL, 'wL')
+            else:
+                proj = np.ones(contr.shape[0])
+                IdL = self.get_IdL(j)
+                IdR = self.get_IdR(j-1)
+                if IdL is not None:
+                    proj[IdL] = 0.
+                if IdR is not None:
+                    proj[IdR] = 0.
+                contr.iscale_axis(proj, 0)
+                contr = npc.tensordot(contr, W, axes=['wR', 'wL'])
+            site = self.sites[j % len(self.sites)]
+            op = site.get_op(opname)
+            op_norm = npc.tensordot(op.conj(), op, axes=[['p', 'p*'], ['p*', 'p']])
+            contr = npc.tensordot(op.conj(), contr, axes=[['p', 'p*'], ['p*', 'p']]) / op_norm
+        contr = contr[IdR_final]
+        return contr
+
+    def to_TermList(self, op_basis,
+                    start=None,
+                    max_range=None,
+                    cutoff=1.e-12,
+                    ignore=['Id', 'JW']):
+        """Obtain a `TermList` represented by self.
+
+        This function is meant for debugging MPOs to make sure they have the terms one expects.
+        Be aware of pitfalls with operator orthonormality, e.g. for fermions
+        ``N = 0.5 * (Id + JW)`` might not appear as you expect due to `ignore`.
+
+
+        Parameters
+        ----------
+        op_basis : (list of) list of str
+            Local basis of operators in which to represent all terms of `self`,
+            e.g. ``['Id', 'Sx', 'Sy', 'Sz']`` for spin-1/2 or ``['Id', 'JW', 'C', 'Cd']`` for
+            fermions. Should be orthogonal with respect to the operator product
+            ``<A|B> = tr(A^dagger B)``.
+        start : (list of) int
+            Extract terms starting on that/these sites, going to the right, i.e. the left-most
+            index within each term is in `start`.
+            If ``None``, take all terms starting in ``range(L)``, i.e. one MPS unit cell for
+            infinite systems.
+        cutoff : float
+            Drop terms with prefactors (roughly) smaller than that.
+            Stricktly speaking, it might also drop larger terms if the term has larger weight on
+            the right (in the MPO) than on the left.
+        ignore : list of str
+            Filter terms to not contain these operator names when they're not the left/rightmost
+            operators in a term.
+
+        Returns
+        -------
+        term_list : :class:`~tenpy.networks.terms.TermList`
+            The terms in `self` with left-most index in `start`.
+        """
+        if start is not None:
+            start = to_iterable(start)
+        else:
+            start = range(self.L)
+        L = self.L
+        if max_range is None:
+            max_range = 5 * L
+            if self.max_range is not None:
+                max_range = min(max_range, self.max_range)
+        if isinstance(op_basis[0], str):
+            op_basis = [op_basis]
+        all_terms = []
+        all_prefs = []
+        for i in start:
+            partial_L = [None] * self.get_W(i).get_leg('wL').ind_len
+            if self.get_IdL(i) is None:
+                continue
+            partial_L[self.get_IdL(i)] = [([], 1.)]
+            if self.finite:
+                max_range = min(max_range, L - i)
+            for k in range(max_range):
+                j = i + k
+                IdL = self.get_IdL(j)
+                IdR = self.get_IdR(j)
+                if IdR is None:
+                    IdR = -1  # not equal to positive index
+                site_j = self.sites[j % L]
+                W = self.get_W(j)
+                W = W.transpose(['wL', 'wR', 'p', 'p*'])
+                op_basis_j = op_basis[j % len(op_basis)]
+                partial_R = [None] * W.get_leg('wR').ind_len
+                if k > 0 and IdL is not None:
+                    partial_L[IdL] = None # drop terms not starting at `start`
+                for opname in op_basis_j:
+                    op = site_j.get_op(opname)
+                    op_dagger = op.conj().transpose()
+                    op_norm = npc.tensordot(op, op_dagger, axes=[['p', 'p*'], ['p*', 'p']])
+                    op_W = npc.tensordot(W, op_dagger, axes=[['p', 'p*'], ['p*', 'p']])
+                    op_W = op_W.to_ndarray() / op_norm
+                    op_W[np.abs(op_W) < cutoff] = 0.
+                    for x, y in zip(*np.nonzero(op_W)):
+                        if partial_L[x] is None:
+                            continue
+                        pref_j = op_W[x,y]
+                        if y == IdR:
+                            # finish terms
+                            for (term, pref) in partial_L[x]:
+                                if abs(pref * pref_j) < cutoff:
+                                    continue
+                                all_terms.append(term + [(opname, j)])
+                                all_prefs.append(pref * pref_j)
+                        else:
+                            if partial_R[y] is None:
+                                partial_R[y] = []
+                            new_partial = partial_R[y]
+                            if k > 0 and opname in ignore:
+                                for (term, pref) in partial_L[x]:
+                                    new_partial.append((term, pref * pref_j))
+                            else:
+                                for (term, pref) in partial_L[x]:
+                                    new_partial.append((term + [(opname, j)], pref * pref_j))
+                partial_L = partial_R
+                if all(t is None for t in partial_L):
+                    break
+        return TermList(all_terms, all_prefs)
+
     def dagger(self):
         """Return hermition conjugate copy of self."""
         # complex conjugate and transpose everything
@@ -1432,10 +1581,10 @@ class MPOGraph:
         from_term_list :
             equivalent for representation by :class:`~tenpy.networks.terms.TermList`.
         """
-        max_range = max([t.max_range() for t in terms])
-        graph = cls(sites, bc, max_range)
+        graph = cls(sites, bc, 0)
         for term in terms:
             term.add_to_graph(graph)
+            # add_to_graph increases `max_range` as necessary
         graph.add_missing_IdL_IdR(insert_all_id)
         return graph
 
@@ -1892,7 +2041,7 @@ class MPOEnvironment(MPSEnvironment):
     **init_env_data :
         Further keyword arguments with initializaiton data, as returned by
         :meth:`get_initialization_data`.
-        See :meth:`initialize_first_LP_last_RP` for details on these parameters.
+        See :meth:`init_first_LP_last_RP` for details on these parameters.
 
     Attributes
     ----------
@@ -2241,7 +2390,7 @@ class MPOTransferMatrix(NpcLinearOperator):
     flat_guess :
         Initial guess suitable for `flat_linop` in non-tenpy form.
     """
-    def __init__(self, H, psi, transpose=False, guess=None):
+    def __init__(self, H, psi, transpose=False, guess=None, _subtraction_gauge='rho'):
         if psi.finite or H.bc != 'infinite':
             raise ValueError("Only makes sense for infinite MPS")
         self.L = lcm(H.L, psi.L)
@@ -2260,63 +2409,84 @@ class MPOTransferMatrix(NpcLinearOperator):
             raise ValueError("MPO needs to have structure with IdL/IdR")
         wL = H.get_W(0).get_leg('wL')
         wR = wL.conj()
-        S2 = psi.get_SL(0)**2
+        S = psi.get_SL(0)
         if not transpose:  # right to left
-            self.acts_on = ['vL', 'wL', 'vL*']  # vec: vL wL vL*
+            vR = psi.get_B(psi.L-1, 'B').get_leg('vR')
+            if isinstance(S, npc.Array):
+                rho = npc.tensordot(S, S.conj(), axes=['vL', 'vL*'])
+            else:
+                S2 = S**2
+                rho = npc.diag(S2, vR, labels=['vR', 'vR*'])
+
+            # vec: vL wL vL*
             for i in reversed(range(self.L)):
                 # optimize: transpose arrays to mostly avoid it in matvec
                 B = psi.get_B(i, 'B').astype(dtype, False)
                 self._M.append(B.transpose(['vL', 'p', 'vR']))
                 self._W.append(H.get_W(i).transpose(['p*', 'wR', 'p', 'wL']).astype(dtype, False))
                 self._M_conj.append(B.conj().itranspose(['vR*', 'p*', 'vL*']))
-            vR = self._M[0].get_leg('vR')
-            self._chi0 = vR.ind_len
+
+            #vR = self._M[0].get_leg('vR')
+            self._chi0 = chi0 = vR.ind_len
             eye_R = npc.diag(1., vR.conj(), dtype=dtype, labels=['vL', 'vL*'])
             self._E_shift = eye_R.add_leg(wL, self.IdL, axis=1, label='wL')  # vL wL vL*
+            self._proj_trace = self._E_shift.conj().iset_leg_labels(['vR', 'wR', 'vR*']) / chi0
             self._proj_norm = eye_R.add_leg(wL, self.IdR, axis=1, label='wL').conj()  # vL* wL* vL
-            rho = npc.diag(S2, vR, labels=['vR', 'vR*'])
             self._proj_rho = rho.add_leg(wR, self.IdL, axis=1, label='wR')  # vR wR vR*
-            if guess is not None:
-                try:
-                    guess.get_leg('wL').test_equal(wL)
-                    guess.get_leg('vL').test_contractible(vR)
-                    guess.get_leg('vL*').test_equal(vR)
-                except ValueError:
-                    logger.warning("dropping guess for MPOTransferMatrix with incompatible legs")
-                    guess = None
-            if guess is None:
-                guess = eye_R.add_leg(wL, self.IdR, axis=1, label='wL')  # vL wL vL*
-                # no need to _project: E = 0
-            else:
-                guess = guess.transpose(['vL', 'wL', 'vL*'])  # copy!
-                self._project(guess)
         else:  # left to right
-            self.acts_on = ['vR*', 'wR', 'vR']  # labels of the vec
+            vL = psi.get_B(0, 'A').get_leg('vL')
+            if isinstance(S, npc.Array):
+                rho = npc.tensordot(S.conj(), S, axes=['vR*', 'vR'])
+            else:
+                S2 = S**2
+                rho = npc.diag(S2, vL.conj(), labels=['vL*', 'vL'])
+
+            # vec: vR* wR vR
             for i in range(self.L):
                 A = psi.get_B(i, 'A').astype(dtype, False)
                 self._M.append(A.transpose(['vL', 'p', 'vR']))
                 self._W.append(H.get_W(i).transpose(['wR', 'p', 'wL', 'p*']).astype(dtype, False))
                 self._M_conj.append(A.conj().itranspose(['vR*', 'p*', 'vL*']))
-            vL = self._M[0].get_leg('vL')
-            self._chi0 = vL.ind_len
+
+            #vL = self._M[0].get_leg('vL')
+            self._chi0 = chi0 = vL.ind_len
             eye_L = npc.diag(1., vL, dtype=dtype, labels=['vR*', 'vR'])
             self._E_shift = eye_L.add_leg(wR, self.IdR, axis=1, label='wR')  # vR* wR vR
+            self._proj_trace = self._E_shift.conj().iset_leg_labels(['vL*', 'wL', 'vL']) / chi0
             self._proj_norm = eye_L.add_leg(wR, self.IdL, axis=1, label='wR').conj()  # vR wR* vR*
-            rho = npc.diag(S2, vL.conj(), labels=['vL*', 'vL'])
             self._proj_rho = rho.add_leg(wL, self.IdR, axis=1, label='wL')  # vL* wL vL
-            if guess is not None:
-                try:
+        if _subtraction_gauge == 'trace':
+            self._proj_subtr = self._proj_trace
+        elif _subtraction_gauge == 'rho':
+            self._proj_subtr = self._proj_rho
+        else:
+            raise ValueError(f"unknown _subtraction_gauge={_subtraction_gauge!r}")
+        # check guess for correctness
+        if guess is not None:
+            try:
+                if not transpose:
+                    guess.get_leg('wL').test_equal(wL)
+                    guess.get_leg('vL').test_contractible(vR)
+                    guess.get_leg('vL*').test_equal(vR)
+                else:
                     guess.get_leg('wR').test_equal(wR)
                     guess.get_leg('vR').test_contractible(vL)
                     guess.get_leg('vR*').test_equal(vL)
-                except ValueError:
-                    logger.warning("dropping guess for MPOTransferMatrix with incompatible legs")
-                    guess = None
-            if guess is None:
+            except ValueError:
+                logger.warning("dropping guess for MPOTransferMatrix with incompatible legs")
+                guess = None
+        if guess is None:
+            if not transpose:
+                guess = eye_R.add_leg(wL, self.IdR, axis=1, label='wL')  # vL wL vL*
+            else:
                 guess = eye_L.add_leg(wR, self.IdL, axis=1, label='wR')  # vR* wR vR
+            # no need to _project: E = 0
+        else:
+            if not transpose:
+                guess = guess.transpose(['vL', 'wL', 'vL*'])  # copy!
             else:
                 guess = guess.transpose(['vR*', 'wR', 'vR'])  # copy!
-                self._project(guess)
+            self._project(guess)
         self.guess = guess
         self.flat_linop, self.flat_guess = FlatLinearOperator.from_guess_with_pipe(self.matvec,
                                                                                    self.guess,
@@ -2352,13 +2522,13 @@ class MPOTransferMatrix(NpcLinearOperator):
 
     def _project(self, vec):
         """Project out additive energy part from vec."""
-        if not self.transpose:
+        if not self.transpose: # Acts to the right, T * RP = RP + e_R * I
             vec.itranspose(['vL', 'wL', 'vL*'])  # shouldn't do anything
-            E = npc.inner(vec, self._proj_rho, axes=[['vL', 'wL', 'vL*'], ['vR', 'wR', 'vR*']])
+            E = npc.inner(vec, self._proj_subtr, axes=[['vL', 'wL', 'vL*'], ['vR', 'wR', 'vR*']])
             vec -= self._E_shift * E
-        else:
+        else: # Acts to the left, LP * T = LP + e_L * I
             vec.itranspose(['vR*', 'wR', 'vR'])  # shouldn't do anything
-            E = npc.inner(vec, self._proj_rho, axes=[['vR*', 'wR', 'vR'], ['vL*', 'wL', 'vL']])
+            E = npc.inner(vec, self._proj_subtr, axes=[['vR*', 'wR', 'vR'], ['vL*', 'wL', 'vL']])
             vec -= self._E_shift * E
 
     def dominant_eigenvector(self, **kwargs):
@@ -2395,15 +2565,17 @@ class MPOTransferMatrix(NpcLinearOperator):
         energy : float
             Energy *per site* of the MPS.
         """
-        vec = self.matvec(dom_vec, project=False)
         if not self.transpose:
-            E = npc.inner(vec, self._proj_rho, axes=[['vL', 'wL', 'vL*'], ['vR', 'wR', 'vR*']])
+            axes= (['vL', 'wL', 'vL*'], ['vR', 'wR', 'vR*'])
         else:
-            E = npc.inner(vec, self._proj_rho, axes=[['vR*', 'wR', 'vR'], ['vL*', 'wL', 'vL']])
+            axes= (['vR*', 'wR', 'vR'], ['vL*', 'wL', 'vL'])
+        E0 = npc.inner(dom_vec, self._proj_rho, axes)
+        vec = self.matvec(dom_vec, project=False)
+        E = npc.inner(vec, self._proj_rho, axes)
+        E = (E - E0) / self.L
         if self._explicit_plus_hc:
-            E = E + np.conj(E)
-        return E / self.L
->>>>>>> d66ef49e15fc05cbc76e9f19c67b14884dc01569
+            E = np.real(E + np.conj(E))
+        return E
 
     @classmethod
     def find_init_LP_RP(cls,
@@ -2414,6 +2586,7 @@ class MPOTransferMatrix(NpcLinearOperator):
                         guess_init_env_data=None,
                         calc_E=False,
                         tol_ev0=1.e-8,
+                        _subtraction_gauge='rho',
                         **kwargs):
         """Find the initial LP and RP.
 
@@ -2430,6 +2603,9 @@ class MPOTransferMatrix(NpcLinearOperator):
         guess : None | dict
             Possible `init_env_data` with the guess/result of DMRG updates.
             If some legs are incompatible, trigger a warning and ignore.
+        _subtraction_gauge : string
+            How the additive part of the generalized eigenvector is subtracted out.
+            Possible values are 'rho' and 'trace'; see
         **kwargs :
             Further keyword arguments for
             :meth:`~tenpy.linalg.sparse.FlatLinearOperator.eigenvectors`.
@@ -2440,31 +2616,46 @@ class MPOTransferMatrix(NpcLinearOperator):
             Dictionary with `init_LP` and `init_RP` that can be given to :class:`MPOEnvironment`.
         E : float
             Energy per site. Only returned if `calc_E` is True.
+        eps : float
+            The contraction of ``<LP |SS|RP>`` for the environment
         """
         # first right to left
         envs = []
+        Es = []
         if guess_init_env_data is None:
             guess_init_env_data = {}
         for transpose in [False, True]:
             guess = guess_init_env_data.get('init_LP' if transpose else 'init_RP', None)
-            TM = cls(H, psi, transpose=transpose, guess=guess)
+            TM = cls(H, psi, transpose=transpose, guess=guess, _subtraction_gauge=_subtraction_gauge)
             val, vec = TM.dominant_eigenvector(**kwargs)
             if abs(1. - val) > tol_ev0:
-                logger.warning("MPOTransferMatrix eigenvalue not 1: got 1. - %.3e", 1. - val)
+                logger.warning("MPOTransferMatrix eigenvalue not 1: got %s", val)
             envs.append(vec)
-            if calc_E and transpose:
-                E = TM.energy(vec)
+            if calc_E:
+                Es.append(TM.energy(vec)) #E_R, E_L
             L = TM.L
             del TM
         init_env_data = {'init_LP': envs[1], 'init_RP': envs[0], 'age_LP': 0, 'age_RP': 0}
-        if first != 0 or last is not None and last % L != L - 1:
+        if first != 0 or (last is not None and last % L != L - 1):
             env = MPOEnvironment(psi, H, psi, **init_env_data)
             if first % L != 0:
                 init_env_data['init_LP'] = env.get_LP(first, store=False)
-            if last % L != L - 1:
+            if last is not None and last % L != L - 1:
                 init_env_data['init_RP'] = env.get_RP(last, store=False)
         if calc_E:
-            return E, init_env_data
+            # We need this for segment excitation energies.
+            # TODO: this doesn't work for non-default first/last!?
+            if first != 0 or last is not None:
+                assert (last + 1) % L == first % L, "Need to have an integer number of unit cells for the bond to be the same."
+            SL = psi.get_SL(first)
+            if not isinstance(SL, npc.Array):
+                vL, vR = init_env_data['init_LP'].get_leg('vR').conj(), init_env_data['init_RP'].get_leg('vL').conj()
+                SL = npc.diag(SL, vL, dtype=np.promote_types(psi.dtype, H.dtype), labels=['vL', 'vR'])
+            E0 = npc.tensordot(init_env_data['init_LP'], SL, axes=(['vR'], ['vL']))
+            E0 = npc.tensordot(E0, SL.conj(), axes=(['vR*'], ['vL*']))
+            E0 = npc.tensordot(E0, init_env_data['init_RP'], axes=(['vR', 'wR', 'vR*'], ['vL', 'wL', 'vL*']))
+            # E0 = LP * s^2 * RP on site 0
+            return init_env_data, Es, E0
         # else:
         return init_env_data
 

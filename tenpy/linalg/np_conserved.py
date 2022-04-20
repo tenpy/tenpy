@@ -106,7 +106,7 @@ __all__ = [
     'concatenate', 'grid_concat', 'grid_outer', 'detect_grid_outer_legcharge', 'detect_qtotal',
     'detect_legcharge', 'trace', 'outer', 'inner', 'tensordot', 'svd', 'pinv', 'norm', 'eigh',
     'eig', 'eigvalsh', 'eigvals', 'speigs', 'expm', 'qr', 'orthogonal_columns',
-    'to_iterable_arrays'
+    'to_iterable_arrays', 'polar'
 ]
 
 #: A cutoff to ignore machine precision rounding errors when determining charges
@@ -3456,11 +3456,14 @@ def inner(a, b, axes=None, do_conj=False):
     if not optimize(OptimizationFlag.skip_arg_checks):
         if a.chinfo != b.chinfo:
             raise ValueError("different ChargeInfo")
-        for lega, legb in zip(a.legs, b.legs):
-            if do_conj:
-                lega.test_equal(legb)
-            else:
-                lega.test_contractible(legb)
+        for i, (lega, legb) in enumerate(zip(a.legs, b.legs)):
+            try:
+                if do_conj:
+                    lega.test_equal(legb)
+                else:
+                    lega.test_contractible(legb)
+            except ValueError as e:
+                raise ValueError(f"incompatible legs {a._labels[i]!r} and {b._labels[i]!r}") from e
     return _inner_worker(a, b, do_conj)
 
 
@@ -3618,6 +3621,52 @@ def svd(a,
     U.iset_leg_labels([a_labels[0], labL])
     VH.iset_leg_labels([labR, a_labels[1]])
     return U, S, VH
+
+def polar(a, cutoff=1.e-16, left=False, inner_labels=[None, None]):
+    """Polar decomposition of an Array `a`.
+
+    Factorizes ``u * p = a`` (left=False) or ``p * u = a`` (left=True), such that ``a = U*diag(S)*VH`` (where ``*`` stands for
+    a :func:`tensordot` and `diag` creates an correctly shaped Array with `S` on the diagonal).
+    For a non-zero `cutoff` this holds only approximately.
+
+    There is a gauge freedom regarding the charges, see also :meth:`Array.gauge_total_charge`.
+    We ensure contractibility by setting ``U.legs[1] = VH.legs[0].conj()``.
+    Further, we gauge the LegCharge such that `U` and `V` have the desired `qtotal_LR`.
+
+    Parameters
+    ----------
+    a : (M, N) :class:`Array`
+        Matrix to be pseudo-inverted.
+    cuttof : float
+        Cutoff for small singular values, as given to :func:`svd`.
+        (Note: different convetion than numpy.)
+
+    Returns
+    -------
+    B : (N, M) :class:`Array`
+        The pseudo-inverse of `a`.
+    """
+    # check arguments
+    if a.rank != 2:
+        raise ValueError("Polar is only defined for a 2D matrix. Use LegPipes!")
+    if cutoff < 0.:
+        raise ValueError("invalid cutoff")
+    # follow exactly the procedure lined out.
+    # however, use inplace methods and don't construct the diagonal matrix explicitly.
+    W, s, VH = svd(a, cutoff=cutoff, inner_labels=inner_labels) # w s vh
+    
+    u = tensordot(W, VH, axes=([1, 0]))
+    if not left:
+        labels = VH.conj().get_leg_labels()[1], VH.get_leg_labels()[1]
+        # a = up
+        p = tensordot(VH.conj().itranspose().iscale_axis(s), VH, axes=([1, 0])).iset_leg_labels(labels)
+        #p = (vh.T.conj() * s).dot(vh)
+    else:
+        # a = pu
+        labels = u.get_leg_labels()[0], u.conj().get_leg_labels()[0]
+        p = tensordot(W.iscale_axis(s), W.conj().itranspose(), axes=([1, 0])).iset_leg_labels(labels)
+        #p = (w * s).dot(w.T.conj())
+    return u, p, s
 
 
 def pinv(a, cutoff=1.e-15):

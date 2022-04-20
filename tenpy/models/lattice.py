@@ -144,7 +144,8 @@ class Lattice:
     pairs : dict
         See above.
     segement_first_last : tuple of int
-        The `first` and `last` MPS sites for "segment" :attr:`bc_MPS`; not set otherwise.
+        The `first` and `last` MPS sites of the original lattice for "segment" :attr:`bc_MPS`;
+        not set otherwise.
     _order : ndarray (N_sites, dim+1)
         The place where :attr:`order` is stored.
     _strides : ndarray (dim, )
@@ -536,7 +537,7 @@ class Lattice:
         """
         cp = self.copy()
         L = cp.N_sites
-        assert first >= 0
+        #assert first >= 0
         if enlarge is not None:
             if cp.bc_MPS != 'infinite':
                 raise ValueError("enlarge only possible for infinite MPS")
@@ -544,19 +545,28 @@ class Lattice:
                 raise ValueError("specifiy either `first`+`last` or `enlarge`!")
             assert enlarge > 0
             last = enlarge * L - 1
+            # first = 0
         elif last is None:
             last = L - 1
-            enlarge = 1
-        else:
-            enlarge = last + 1 // L
+        if first > last: # first == last should be fine
+            raise ValueError(f"need first <= last, got {first:d}, {last:d}")
+        first_unit_cell = first - first % L
+        segment_first_last = (first, last)
+        if first_unit_cell != 0:
+            #assert first_unit_cell < 0 # SAJANT - if first > L, then first_unit_cell > 0.
+            if cp.bc_MPS != 'infinite' and first_unit_cell < 0:
+                raise ValueError("can't enlarge to negative `first` for finite system")
+            # shift by whole unit cell(s) to the right until `first` is in first unit cell
+            first, last = first - first_unit_cell, last - first_unit_cell
+            assert 0 <= first < L
+        enlarge = last // L + 1
         assert enlarge > 0
         if enlarge > 1:
             cp.enlarge_mps_unit_cell(enlarge)
-        if first >= last:
-            raise ValueError(f"need first < last, got {first:d}, {last:d}")
         if first > 0 or last < cp.N_sites - 1:
             # take out some parts of the lattice
             remove = list(range(0, first)) + list(range(last + 1, cp.N_sites))
+            remove = cp.mps2lat_idx(remove)
             cp = IrregularLattice(cp, remove=remove)
         cp.bc_MPS = 'segment'
         if self.bc_MPS == 'finite':
@@ -564,7 +574,7 @@ class Lattice:
             bc = self.boundary_conditions
             bc[0] = 'periodic'
             cp.boundary_conditions = bc
-        cp.segment_first_last = first, last
+        cp.segment_first_last = segment_first_last
         return cp
 
     def enlarge_mps_unit_cell(self, factor=2):

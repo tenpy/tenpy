@@ -16,7 +16,7 @@ from ..tools.misc import argsort
 
 __all__ = [
     'KrylovBased', 'Arnoldi', 'LanczosGroundState', 'LanczosEvolution', 'lanczos',
-    'lanczos_arpack', 'gram_schmidt', 'plot_stats'
+    'lanczos_arpack', 'gram_schmidt', 'norm', 'inner', 'iscale_prefactor', 'iadd_prefactor_other', 'plot_stats', 'GMRES'
 ]
 
 
@@ -126,7 +126,7 @@ class KrylovBased:
         self.E_shift = options.get('E_shift', None)
         if self.N_min < 2:
             raise ValueError("Should perform at least 2 steps.")
-        self._cutoff = options.get('cutoff', np.finfo(psi0.dtype).eps * 100)
+        self._cutoff = options.get('cutoff', np.finfo(psi0.dtype if not isinstance(psi0, list) else psi0[0].dtype).eps * 100)
         if self.E_shift is not None:
             if isinstance(self.H, OrthogonalNpcLinearOperator):
                 self.H.orig_operator = ShiftNpcLinearOperator(self.H.orig_operator, self.E_shift)
@@ -150,24 +150,28 @@ class KrylovBased:
         """
         vf = self._result_krylov
         assert N == len(vf) > 1
-        psif = self.psi0 * vf[0]  # the start vector is still known and got normalized
+        if isinstance(self.psi0, npc.Array):
+            psif = self.psi0 * vf[0]  # the start vector is still known and got normalized
+        else:
+            assert isinstance(self.psi0, list)
+            psif = [p * vf[0] for p in self.psi0]
         len_cache = len(self._cache)
         # and the last len_cache vectors have been cached
         for k in range(1, min(len_cache + 1, N)):
-            psif.iadd_prefactor_other(vf[N - k], self._cache[-k])
+            self.iadd_prefactor_other(psif, vf[N - k], self._cache[-k])
         # other vectors are not cached, so we need to restart the Lanczos iteration.
         self._cache = []  # free memory: we need at least two more vectors
 
         self._rebuild_krylov_for_result_full(psif, N - len_cache - 1)
 
-        psif_norm = npc.norm(psif)
+        psif_norm = self.norm(psif)
         if abs(1. - psif_norm) > 1.e-5:
             # One reason can be that `H` is not Hermitian
             # Otherwise, the matrix (even if small) might be ill conditioned.
             # If you get this warning, you can try to set the parameters
             # `reortho`=True and `N_cache` >= `N_max`
             logger.warning("poorly conditioned H matrix in KrylovBased! |psi_0| = %f", psif_norm)
-        psif.iscale_prefactor(1. / psif_norm)
+        self.iscale_prefactor(psif, 1. / psif_norm)
         return psif
 
     def _to_cache(self, psi):
@@ -179,8 +183,128 @@ class KrylovBased:
 
     def _calc_result_krylov(self, k):
         raise NotImplementedError("subclasses should implement this")
-
-
+    
+    def norm(self, w):
+        return norm(w)
+    
+    def iscale_prefactor(self, w, scale):
+        iscale_prefactor(w, scale)
+    
+    def inner(self, w, v):
+        return inner(w, v)
+    
+    def iadd_prefactor_other(self, w, alpha, v):
+        iadd_prefactor_other(w, alpha, v)
+        
+class GMRES():
+    def __init__(self, A, x, b, options):
+        self.options = options = asConfig(options, self.__class__.__name__)
+        self.N_min = options.get('N_min', 5)
+        self.N_max = options.get('N_max', 20)
+        self.restart = options.get('restart', 10)
+        self.res = self.options.get('res', 1.e-8)
+        self.A = A
+        self.b = b.copy()
+        self.x = x.copy() # Initial guess
+        self.rs = [self.b.copy()]
+        self.rs[0] = self.rs[0].iadd_prefactor_other(-1, self.A.matvec(self.x)) # residuals
+        self.b_norm = npc.norm(self.b)
+        self.total_error = [[npc.norm(self.rs[0]) / self.b_norm]]
+        self.total_iters = []
+        self.r_norm = npc.norm(self.rs[0])
+        self.qs = [self.rs[0].copy()]
+        self.qs[0].iscale_prefactor(1./self.r_norm)
+        
+        self.sine = np.zeros(self.N_max)*1.j
+        self.cosine = np.zeros(self.N_max)*1.j
+        self.e1 = npc.Array.from_ndarray_trivial(np.zeros(self.N_max+1)*1.j)
+        self.e1[0] = 1
+        self.e1.iscale_prefactor(self.r_norm)
+        
+        self.H = npc.Array.from_ndarray_trivial(np.zeros((self.N_max+1, self.N_max))*1.j)
+        
+    def run(self):
+        for _ in range(self.restart):
+            converged=False
+            for k in range(0,self.N_max):
+                self.arnoldi(k)
+                self.apply_givens_rotation(k)
+                self.e1[k+1] = -self.sine[k] * self.e1[k]
+                self.e1[k] = self.cosine[k] * self.e1[k]
+                error = np.abs(self.e1[k+1]) / self.b_norm # The residual is just the last element of $\beta$ vector (see Wikipedia) since $y$ is found exactly.
+                self.total_error[-1].append(error)
+                if error < self.res and k >= self.N_min:
+                    converged=True
+                    break
+            self.total_iters.append(k+1)
+            self.backsolve(k+1)
+            Q_mat = npc.concatenate(self.qs[:k+1], axis=1)
+            for i in range(k+1):
+                self.x.iadd_prefactor_other(self.y[i], self.qs[i])
+            if not converged:
+                self.reset()
+            else:
+                break
+        
+        return self.x, npc.norm(self.A.matvec(self.x) - self.b) / self.b_norm, self.total_error, self.total_iters
+    
+    def arnoldi(self, k):
+        # Iterative build orthogonal Krylov subspace and $H$ matrix.
+        q = self.A.matvec(self.qs[-1])
+        for i in range(k+1):
+            self.H[i,k] = npc.inner(q, self.qs[i], axes='range', do_conj=True)
+            q.iadd_prefactor_other(-self.H[i,k], self.qs[i])
+        self.H[k+1,k] = npc.norm(q)
+        q.iscale_prefactor(1./self.H[k+1,k])
+        self.qs.append(q)
+    
+    def apply_givens_rotation(self, k):
+        # Apply rotation to $H$ so that it becomes upper triangular.
+        for i in range(k):
+            temp = self.cosine[i] * self.H[i,k] + self.sine[i] * self.H[i+1,k]
+            self.H[i+1,k] = -self.sine[i] * self.H[i,k] + self.cosine[i] * self.H[i+1,k]
+            self.H[i,k] = temp
+        
+        self.givens_rotation(k)
+        self.H[k,k] = self.cosine[k] * self.H[k,k] + self.sine[k] * self.H[k+1,k]
+        self.H[k+1,k] = 0
+    
+    def givens_rotation(self, k):
+        # Find cosine and sine such that the element below the diagonal of kth column of $H$ is removed.
+        v1, v2 = self.H[k,k], self.H[k+1,k]
+        t = np.sqrt(v1**2 + v2**2)
+        self.cosine[k] = v1 / t
+        self.sine[k] = v2 / t
+        
+    def backsolve(self, k):
+        # $H$ is now a diagonal matrix; backsolve to find $y$ exactly.
+        H = self.H[:k,:k]
+        e2 = self.e1[:k]
+        #e2[np.abs(e2.to_ndarray()) < 1.e-14] = 0 # N_max should be less than the size of A.
+        self.y = npc.Array.from_ndarray_trivial(np.ones(k))*1.j
+        for i in range(k-1,-1,-1):
+            self.y[i] = e2[i]
+            for j in range(i+1,k):
+                self.y[i] -= H[i,j]*self.y[j]
+            self.y[i] /= H[i,i]
+            
+    def reset(self):
+        # Restart GMRES algorithm using current $x$ as initial guess.
+        self.rs.append(self.b.copy())
+        self.rs[-1] = self.rs[-1].iadd_prefactor_other(-1, self.A.matvec(self.x)) # residuals
+        self.total_error.append([npc.norm(self.rs[-1]) / self.b_norm])
+        self.r_norm = npc.norm(self.rs[-1])
+        self.qs = [self.rs[-1].copy()]
+        self.qs[-1].iscale_prefactor(1./self.r_norm)
+        
+        self.sine = np.zeros(self.N_max)*1.j
+        self.cosine = np.zeros(self.N_max)*1.j
+        self.e1 = npc.Array.from_ndarray_trivial(np.zeros(self.N_max+1)*1.j)
+        self.e1[0] = 1
+        self.e1.iscale_prefactor(self.r_norm)
+        
+        self.H = npc.Array.from_ndarray_trivial(np.zeros((self.N_max+1, self.N_max))*1.j)
+        
 class Arnoldi(KrylovBased):
     """Arnoldi method for diagonalizing square, non-hermitian/symmetric matrices.
 
@@ -236,12 +360,12 @@ class Arnoldi(KrylovBased):
         w = self.psi0  # initialize
         norm = npc.norm(w)
         for k in range(self.N_max):
-            w.iscale_prefactor(1. / norm)
+            self.iscale_prefactor(w, 1. / norm)
             self._to_cache(w)
             w = self.H.matvec(w)
             for i, v_i in enumerate(self._cache):
-                h[i, k] = ov = npc.inner(v_i, w, axes='range', do_conj=True)
-                w.iadd_prefactor_other(-ov, v_i)
+                h[i, k] = ov = self.inner(v_i, w)
+                self.iadd_prefactor_other(w, -ov, v_i)
             h[k + 1, k] = norm = npc.norm(w)
             self._calc_result_krylov(k)
             if norm < self._cutoff or (k + 1 >= self.N_min and self._converged(k)):
@@ -277,19 +401,25 @@ class Arnoldi(KrylovBased):
             assert N == len(vf) > 1
             krylov_basis = self._cache
             assert len(krylov_basis) >= N
-            psi = vf[0] * krylov_basis[0]  # copy!
+            
+            if isinstance(self.psi0, npc.Array):
+                psi = vf[0] * krylov_basis[0]  # copy!
+            else:
+                assert isinstance(self.psi0, list)
+                psi = [p * vf[0] for p in krylov_basis[0]]
+            
             # and the last len_cache vectors have been cached
             for k in range(1, N):
-                psi.iadd_prefactor_other(vf[k], krylov_basis[k])
+                self.iadd_prefactor_other(psi, vf[k], krylov_basis[k])
 
-            psi_norm = npc.norm(psi)
+            psi_norm = self.norm(psi)
             if abs(1. - psi_norm) > 1.e-5:
                 # One reason can be that `H` is not Hermitian
                 # Otherwise, the matrix (even if small) might be ill conditioned.
                 # If you get this warning, you can try to set the parameters
                 # `reortho`=True and `N_cache` >= `N_max`
                 logger.warning("poorly conditioned H matrix in Arnoldi! |psi| = %f", psi_norm)
-            psi.iscale_prefactor(1. / psi_norm)
+            self.iscale_prefactor(psi, 1. / psi_norm)
             psis.append(psi)
         return psis
 
@@ -384,6 +514,7 @@ class LanczosGroundState(KrylovBased):
             E0 -= self.E_shift
         if N == 1:
             return E0, self.psi0.copy(), N  # no better estimate available
+        #return self.Es[N - 1, 0:self.options.get('num_ev', 1)], self._calc_result_full(N), N
         return E0, self._calc_result_full(N), N
 
 
@@ -394,24 +525,24 @@ class LanczosGroundState(KrylovBased):
         """
         h = self._h_krylov
         w = self.psi0  # initialize
-        beta = npc.norm(w)
+        beta = self.norm(w)
         if self._psi0_norm is None:
             # this is only needed for normalization in LanczosEvolution
             self._psi0_norm = beta
         for k in range(self.N_max):
-            w.iscale_prefactor(1. / beta)
+            self.iscale_prefactor(w, 1. / beta)
             self._to_cache(w)
             w = self.H.matvec(w)
-            alpha = np.real(npc.inner(w, self._cache[-1], axes='range', do_conj=True)).item()
+            alpha = np.real(self.inner(w, self._cache[-1])).item()
             h[k, k] = alpha
             self._calc_result_krylov(k)
-            w.iadd_prefactor_other(-alpha, self._cache[-1])
+            self.iadd_prefactor_other(w, -alpha, self._cache[-1])
             if self.reortho:
                 for c in self._cache[:-1]:
-                    w.iadd_prefactor_other(-npc.inner(c, w, axes='range', do_conj=True), c)
+                    self.iadd_prefactor_other(w, -self.inner(c, w), c)
             elif k > 0:
-                w.iadd_prefactor_other(-beta, self._cache[-2])
-            beta = npc.norm(w)
+                self.iadd_prefactor_other(w, -beta, self._cache[-2])
+            beta = self.norm(w)
             h[k, k + 1] = h[k + 1, k] = beta  # needed for the next step and convergence criteria
             if abs(beta) < self._cutoff or (k + 1 >= self.N_min and self._converged(k)):
                 break
@@ -434,15 +565,15 @@ class LanczosGroundState(KrylovBased):
             self._to_cache(w)
             w = self.H.matvec(w)
             alpha = h[k, k]
-            w.iadd_prefactor_other(-alpha, self._cache[-1])
+            self.iadd_prefactor_other(w, -alpha, self._cache[-1])
             if self.reortho:
                 for c in self._cache[:-1]:
-                    w.iadd_prefactor_other(-npc.inner(c, w, 'range', do_conj=True), c)
+                    self.iadd_prefactor_other(w, -self.inner(c, w), c)
             elif k > 0:
-                w.iadd_prefactor_other(-beta, self._cache[-2])
+                self.iadd_prefactor_other(w, -beta, self._cache[-2])
             beta = h[k, k + 1]  # = norm(w)
-            w.iscale_prefactor(1. / beta)
-            psif.iadd_prefactor_other(vf[k + 1], w)
+            self.iscale_prefactor(w, 1. / beta)
+            self.iadd_prefactor_other(psif, vf[k + 1], w)
         # continue in _calc_result_full
 
     def _calc_result_krylov(self, k):
@@ -455,8 +586,7 @@ class LanczosGroundState(KrylovBased):
             # Diagonalize h
             E_kr, v_kr = np.linalg.eigh(h[:k + 1, :k + 1])
             self.Es[k, :k + 1] = E_kr
-            self._result_krylov = v_kr[:, 0]  # ground state of _h_krylov
-
+            self._result_krylov = v_kr[:, 0]  # ground state of _h_krylov    
 
 class LanczosEvolution(LanczosGroundState):
     """Calculate :math:`exp(delta H) |psi0>` using Lanczos.
@@ -654,14 +784,42 @@ def gram_schmidt(vecs, rcond=1.e-14, verbose=None):
     res = []
     for vec in vecs:
         for other in res:
-            ov = npc.inner(other, vec, 'range', do_conj=True)
-            vec.iadd_prefactor_other(-ov, other)
-        n = npc.norm(vec)
+            ov = inner(other, vec, 'range', do_conj=True)
+            iadd_prefactor_other(vec, -ov, other)
+        n = norm(vec)
         if n > rcond:
-            vec.iscale_prefactor(1. / n)
+            iscale_prefactor(vec, 1. / n)
             res.append(vec)
     return res
 
+
+def norm(w):
+    if not isinstance(w, list):
+        return npc.norm(w)
+    else:
+        # Assumed to be list of npc array for now)
+        return np.linalg.norm([npc.norm(a) for a in w] + [0])
+
+def iscale_prefactor(w, scale):
+    if not isinstance(w, list):
+        w.iscale_prefactor(scale)
+    else:
+        for a in w:
+            a.iscale_prefactor(scale)
+
+def inner(w, v, axes='range', do_conj=True):
+    if not isinstance(w, list) and not isinstance(v, list):
+        return npc.inner(w, v, axes=axes, do_conj=do_conj)
+    else:
+        assert isinstance(w, list) and isinstance(v, list)
+        return np.sum([npc.inner(a, b, axes=axes, do_conj=do_conj) for a, b in zip(w, v)])
+
+def iadd_prefactor_other(w, alpha, v):
+    if not isinstance(w, list):
+        w.iadd_prefactor_other(alpha, v)
+    else:
+        for a, b in zip(w, v):
+            a.iadd_prefactor_other(alpha, b)
 
 def plot_stats(ax, Es):
     """Plot the convergence of the energies.

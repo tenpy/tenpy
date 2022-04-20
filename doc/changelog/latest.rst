@@ -5,11 +5,16 @@ Release Notes
 -------------
 TODO: Summarize the most important changes
 
+Note that measurment functions for simulations need to be updated to accept another `model` parameter
+
+
 Changelog
 ---------
 
 Backwards incompatible changes
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+- Measurement functions now have to take another argument `model` as well, which matches the indexing/sites of `psi`.
+  This helps to avoid special cases for grouped sites and `OrthogonalExciations`.
 - Add more fine grained sweep convergence checks for the :class:`~tenpy.algorithms.mps_common.VariationalCompression` (used when applying an MPO to an MPS!).
   In this context, we renamed the parameter `N_sweeps` to :cfg:option:`VariationalCompression.max_sweeps`.
   Further, we added the parameter :cfg:option:`VariationalCompression.min_sweeps` and :cfg:option:`VariationalCompression.tol_theta_diff`
@@ -27,9 +32,13 @@ Added
 - Allow non-trivial :attr:`~tenpy.models.lattice.Lattice.position_disorder` for lattices.
 - Option `fix_u` for :func:`~tenpy.simulations.measurement.onsite_expectation_value`.
 - Lattice :attr:`~tenpy.models.lattice.Lattice.cylinder_axis`.
-- Random number generator :attr:`~tenpy.models.model.Model.rng` for models.
+- Random number generator :attr:`~tenpy.models.model.Model.rng` for models. Any randomness of model (parameters) should use this!
 - :meth:`~tenpy.models.aklt.AKLTChain.psi_AKLT` for the exact MPS ground state of (spin-1/2) AKLT chain.
+- :meth:`~tenpy.networks.mps.MPS.extract_enlarged_segment` to simplify measurements outside the segment with segment DMRG.
+- :meth:`~tenpy.networks.mps.MPS.apply_local_term` to correctly handle Jordan-Wigner strings.
 - :func:`~tenpy.simulations.simulation.init_simulation` and :func:`~tenpy.simulations.simulation.init_simulation_from_checkpoint` for debugging or post-simulation measurement.
+- :meth:`tenpy.networks.site.Site.charge_to_JW_sign` and :attr:`~tenpy.networks.site.Site.charge_to_JW_parity` to allow
+  :meth:`~tenpy.networks.mps.MPS.apply_local_op` with a fermionic operator on an MPS.
 - :func:`~tenpy.linalg.np_conserved.orthogonal_columns` constructing orthogonal columns to a given (rectangular) matrix.
 - :meth:`~tenpy.networks.mps.MPS.enlarge_chi` for artificially enlarging the bond dimension.
 
@@ -56,6 +65,8 @@ Fixed
 - The power-method :meth:`tenpy.networks.mpo.MPO.expectation_value` did not work correctly for ``H.L != psi.L``.
 - :meth:`~tenpy.models.model.CouplingModel.add_local_term` did not work with `plus_hc=True`.
 - :meth:`tenpy.linalg.sparse.FlatLinearOperator.eigenvectors` did not always return orthogonal eigenvectors with well-defined charges.
+- Handle Jordan-Wigner strings in :meth:`~tenpy.networks.mps.MPS.apply_local_op`.
+- :meth:`~tenpy.linalg.sparse.FlatLinearOperator.eigenvectors` did not always return orthogonal eigenvectors with well-defined charges.
 - Fix :class:`tenpy.linalg.sparse.FlatLinearOperator` to not use the full flat array, but just the block with nonzero entries (which can be much smaller for a few charges).
   This is enabled over a new option `compact_flat` that defaults to True if the vector leg is blocked by charge (and charge_sector is not None).
 - Make ``cons_Sz='parity'`` for the :class:`~tenpy.networks.site.SpinHalfSite` non-trivial.
