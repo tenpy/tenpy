@@ -228,6 +228,13 @@ class TermList(Hdf5Exportable):
         shifted_terms = [[(op, i + i0) for op, i in term] for term in self.terms]
         return TermList(shifted_terms, self.strength)
 
+    def max_range(self):
+        res = 0
+        for term in self.terms:
+            ijkl = [i for op, i in term]
+            res = max(res, max(ijkl) - min(ijkl))
+        return res
+
 
 def order_combine_term(term, sites):
     """Combine operators in a term to one terms per site.
@@ -689,10 +696,10 @@ class CouplingTerms(Hdf5Exportable):
         # {i: {('opname_i', 'opname_string'): {j: {'opname_j': strength}}}}
         for i, d1 in self.coupling_terms.items():
             for (opname_i, op_string), d2 in d1.items():
-                label = (i, opname_i, op_string)
+                label = ("left", i, opname_i, op_string)
                 graph.add(i, 'IdL', label, opname_i, 1., skip_existing=True)
                 for j, d3 in d2.items():
-                    label_j = graph.add_string(i, j, label, op_string)
+                    label_j = graph.add_string_left_to_right(i, j, label, op_string)
                     for opname_j, strength in d3.items():
                         graph.add(j, label_j, 'IdR', opname_j, strength)
         # done
@@ -713,29 +720,25 @@ class CouplingTerms(Hdf5Exportable):
             ``H_bond[i]`` acts on sites ``(i-1, i)``, ``None`` represents 0.
             Legs of each ``H_bond[i]`` are ``['p0', 'p0*', 'p1', 'p1*']``.
         """
-        N_sites = self.L
-        if len(sites) != N_sites:
+        L = self.L
+        if len(sites) != L:
             raise ValueError("incompatible length")
-        H_bond = [None] * N_sites
-        for i, d1 in self.coupling_terms.items():
-            j = (i + 1) % N_sites
+        H_bond = [None] * L
+        term_list = self.to_TermList()
+        for term, strength in zip(term_list.terms, term_list.strength):
+            assert len(term) == 2
+            (op_i, i), (op_j, j) = term
+            if i + 1 != j:
+                raise ValueError("not nearest neighbor")
+            j = j % L
             site_i = sites[i]
             site_j = sites[j]
-            H = H_bond[j]
-            for (op1, op_str), d2 in d1.items():
-                for j2, d3 in d2.items():
-                    # i, j in coupling_terms are defined such that we expect j2 = i + 1
-                    if j2 != i + 1:
-                        msg = "Can't give nearest neighbor H_bond for long-range {i:d}-{j:d}"
-                        raise ValueError(msg.format(i=i, j=j2))
-                    for op2, strength in d3.items():
-                        if isinstance(op2, tuple):
-                            raise ValueError("MultiCouplingTerms: this is not nearest neighbor!")
-                        H_add = strength * npc.outer(site_i.get_op(op1), site_j.get_op(op2))
-                        H = add_with_None_0(H, H_add)
+            H_add = strength * npc.outer(site_i.get_op(op_i), site_j.get_op(op_j))
+            # TeNPy convention: H_bond[j] is acting on sites (j-1, j), i.e. bond left of site j
+            H_bond[j] = add_with_None_0(H_bond[j], H_add)
+        for H in H_bond:
             if H is not None:
                 H.iset_leg_labels(['p0', 'p0*', 'p1', 'p1*'])
-            H_bond[j] = H
         return H_bond
 
     def remove_zeros(self, tol_zero=1.e-15):
@@ -819,74 +822,132 @@ class CouplingTerms(Hdf5Exportable):
 
 class MultiCouplingTerms(CouplingTerms):
     """Operator names, site indices and strengths representing general `M`-site coupling terms.
+
     Generalizes the :attr:`coupling_terms` of :class:`CouplingTerms` to `M`-site couplings.
     The structure of the nested dictionary :attr:`coupling_terms` is similar, but we allow
-    an arbitrary recursion depth of the dictionary and build from the left and right
-    simultaneously.
+    an arbitrary recursion depth of the dictionary and build the
+    :class:`~tenpy.networks.mpo.MPOGraph` simultaneously from the left and right.
+    Doing this from both sides simultaneously is necessary to keep the scaling of the MPO bond
+    dimension optimial, which we try to acchieve by reusing states of the MPO graph as much as
+    possible as follows.
+
+    Each individual term gets split up at site `switchLR` (default: center of the coupling).
+    To the left of `switchLR`, we only use "almost-left-canonical" states in the MPO graph,
+    i.e., states where only the basic set of operators defined by the sites were applied with
+    prefactor 1. Similarly, "almost-right-canonical" states are inserted into the MPO graph
+    coming from the right. At site `switchLR`, we connect an almost-left- to an
+    almost-right-canonical state in the MPO graph with the overall `strength` prefactor for the
+    term. Since the almost-left/right-canonical states in the MPO graph represent well-defined
+    strings of operators that were applied, they can be re-used for different terms.
+    For example, ``A_i B_j C_k`` and ``A_i B_{j+1} C_k`` with ``i < j < j+1 < k`` can re-use
+    the MPO graph states left of site `j` and right of `j+1` if `switchLR` is `j` or `j+1`.
+
     Parameters
     ----------
     L : int
         Number of sites.
+
     Attributes
     ----------
     L : int
         Number of sites.
-    counter: int
-        Counts the number of couplings, use negative numbers to avoid confusion with site numbering.
-    coupling_terms : dict of dict
+    connections : list of (int, str, int, float)
+        One entry ``(switchLR, op_switch, shift, strength)`` for each (multi) coupling term added,
+        with `op_switch` being the operator acting on site `switchLR`, and `shift` defined below.
+    terms_left, terms_right : dict of dict
         Nested dictionaries of the following form for left and right::
-            
-        left = {ijkl[0]: {(ops_ijkl[0], op_string[0]):
-                    {ijkl[1]: {(ops_ijkl[1], op_string[1]):
-                              ...
-                                  {ijkl[n]: {(ops_ijkl[n],  op_string[n]): 
-                                                    {counter: strength}}}
-                    }         }
-         }         }
-         right = {ijkl[-1]: {(ops_ijkl[-1], op_string[-1]):
-                    {ijkl[-2]: {(ops_ijkl[-2], op_string[-2]):
-                               ...
-                                   {ijkl[m]: {(ops_ijkl[m],  op_string[m]): 
-                                                     {counter: switchLR}}}
-                    }         }
-         }         }
-        switchLR indicates the site where we switch from building the coupling from the left to building the
-        coupling from the right.
-        n is the last index such that ijkl[n] <= switchLR.
-        m is the first index such that ijkl[m] > switchLR.
-        For a M-site coupling, this involves a nesting depth of ``2*M`` dictionaries.
-        Note that always ``i < j < k < ... < l``, but entries with ``j,k,l >= L``
-        are allowed for the case of ``bc_MPS == 'infinite'``, when they indicate couplings
-        between different iMPS unit cells.
+
+            terms_left = {
+                ijkl[0]:
+                    {(ops_ijkl[0], op_string[0]):
+                        {ijkl[1]:
+                            {(ops_ijkl[1], op_string[1]):
+                                ...
+                                    {ijkl[n]:
+                                        {(ops_ijkl[n],  op_string[n]):
+                                            {-1: [counter, ...]}
+                                    }   }
+                        }   }
+               }   }
+            terms_right = {
+                ijkl[-1] - shift:
+                    {(ops_ijkl[-1], op_string[-1]):
+                        {ijkl[-2] - shift:
+                            {(ops_ijkl[-2], op_string[-2]):
+                                ...
+                                    {ijkl[m] - shift:
+                                        {(ops_ijkl[m],  op_string[m]):
+                                            {L + 1: [counter, ...]}
+                                    }   }
+                        }   }
+                }   }
+
+        Here, `n` and `m` (and hence the nesting depth) are determined by `switchLR`, namely
+        `n` is the largest index such that ``ijkl[n] < switchLR``, similarly `m` is the smallest
+        index such that ``switchLR < ijkl[m]``.
+        If there is no such index, we directly insert the ``-1: [counter, ...]`` part
+        at the first level of `terms_left` or `terms_right`, respectively.
+        The `counter` provides the index to ``connections`` for the given term.
+        The `shift` for the `terms_right` is a multiple of `L` such that
+        ``0 <= ijkl[-1] - shift < L``.
     """
     def __init__(self, L):
         assert L > 0
         self.L = L
-        self.coupling_terms = (dict(), dict())  #left and right dictionary
-        self.counter = -1  #counts the number of couplings, use negative numbers to avoid confusion with site numbering
+        self.terms_left = dict()
+        self.terms_right = dict()
+        # start the counter at 1 to distinguish site indices in `terms_left/right` from counters.
+        self.connections = [None]
+        self._max_range = 0
+        self._connect_left = -1
+        self._connect_right = self.L + 1
 
-    def add_multi_coupling_term(self, strength, ijkl, ops_ijkl, op_string="Id", switchLR=None):
+    def max_range(self):
+        """Determine the maximal range in :attr:`coupling_terms`.
+
+        Returns
+        -------
+        max_range : int
+            The maximum of ``j - i`` for the `i`, `j` occuring in a term of :attr:`coupling_terms`.
+        """
+        return self._max_range
+
+    def add_multi_coupling_term(self, strength, ijkl, ops_ijkl, op_string="Id",
+                                switchLR='middle_i'):
         """Add a multi-site coupling term.
+
         Parameters
         ----------
         strength : float
             The strength of the coupling term.
         ijkl : list of int
-            The MPS indices of the sites on which the operators acts. With `i, j, k, ... = ijkl`,
+            The MPS indices of the sites on which the operators acts. With ``i, j, k, ... = ijkl``,
             we require that they are ordered ascending, ``i < j < k < ...`` and
             that ``0 <= i < N_sites``.
             Inidces >= N_sites indicate couplings between different unit cells of an infinite MPS.
         ops_ijkl : list of str
-            Names of the involved operators on sites `i, j, k, ...`.
+            Names of the involved operators on sites ``i, j, k, ...``.
         op_string : (list of) str
             Names of the operator to be inserted between the operators,
-            e.g., op_string[0] is inserted between `i` and `j`.
+            e.g., ``op_string[0]`` is inserted between `i` and `j`.
             A single name holds for all in-between segments.
-        switchLR: int
+        switchLR: int | ``'middle_i'`` | ``'middle_op'``
             The site where we switch from building the coupling from the left to building the
             coupling from the right for an efficient MPO representation.
-            Default is (i+l)/2
+            This has implications for the final MPO bond dimension, but the optimal value depends
+            on what other terms there are in the Hamiltonian. We therefore provide a few
+            heurisitic choices that can be given as the following strings.
+
+            middle_i :
+                The overall middle index ``(ijkl[0] + ijkl[-1] + 1) // 2``, the default choice.
+                Somewhat reasonable if we don't know anything about the terms,
+                but often not optimal
+            middle_op :
+                The index of the middle operator ``ijkl[len(ijkl) // 2]``.
+                This is for example a good choice if you have combinations
+                ``A[i] B[i+1] C[i+j] + A[i] B[i+j-1] C[i+j]`` for large `j` and various `B`.
         """
+        L = self.L
         if len(ijkl) < 2:
             raise ValueError("Need to act on at least 2 sites. Use onsite terms!")
         if isinstance(op_string, str):
@@ -896,47 +957,67 @@ class MultiCouplingTerms(CouplingTerms):
             if not i < j:
                 raise ValueError("Need i < j < k < ...")
         if switchLR is None:
-            switchLR = (ijkl[0] + ijkl[-1]) // 2
-        assert switchLR < ijkl[-1]
-        # create nested structures from the left and right
-        # left = {ijkl[0]: {(ops_ijkl[0], op_string[0]):
-        #            {ijkl[1]: {(ops_ijkl[1], op_string[1]):
-        #                      ...
-        #                          {ijkl[n]: {(ops_ijkl[n],  op_string[n]):
-        #                                            {counter: strength}}}
-        #            }         }
-        # }         }
-        # right = {ijkl[-1]: {(ops_ijkl[-1], op_string[-1]):
-        #            {ijkl[-2]: {(ops_ijkl[-2], op_string[-2]):
-        #                       ...
-        #                           {ijkl[m]: {(ops_ijkl[m],  op_string[m]):
-        #                                             {counter: switchLR}}}
-        #            }         }
-        # }         }
-        #n is the last index such that ijkl[n] <= switchLR.
-        #m is the first index such that ijkl[m] > switchLR
+            switchLR = 'middle_i'
+        if isinstance(switchLR, str):
+            if switchLR == 'middle_i':
+                switchLR = (ijkl[0] + ijkl[-1] + 1) // 2
+            elif switchLR == 'middle_op':
+                switchLR = ijkl[len(ijkl) // 2]
+        assert 0 <= ijkl[0] <= switchLR <= ijkl[-1] and ijkl[0] < L
+        # find op_switch
+        for n, i in enumerate(ijkl):
+            if switchLR == i:
+                op_switch = ops_ijkl[n]
+                break
+            elif switchLR < i:
+                op_switch = op_string[n - 1]
+                break
+        else:  # no break
+            assert False # can't happen, since switchLR <= ijkl[-1]
 
-        d0L, d0R = self.coupling_terms
+        d0L, d0R = self.terms_left, self.terms_right
         #add left terms
         for i, op, op_str in zip(ijkl, ops_ijkl, op_string):
-            if i <= switchLR:
-                d1L = d0L.setdefault(i, dict())
-                d0L = d1L.setdefault((op, op_str), dict())
-        d0L[self.counter] = strength
-
+            if i >= switchLR:
+                break
+            d1L = d0L.setdefault(i, dict())
+            d0L = d1L.setdefault((op, op_str), dict())
+        counters_left = d0L.setdefault(self._connect_left, [])
         #add right terms
+        shift = ijkl[-1] - (ijkl[-1] % L)
         for i, op, op_str in zip(reversed(ijkl), reversed(ops_ijkl), reversed(op_string)):
-            if i > switchLR:
-                d1R = d0R.setdefault(i, dict())
-                d0R = d1R.setdefault((op, op_str), dict())
+            if i <= switchLR:
+                break
+            d1R = d0R.setdefault(i - shift, dict())
+            d0R = d1R.setdefault((op, op_str), dict())
+        counters_right = d0R.setdefault(self._connect_right, [])
+        new_connection = (switchLR, op_switch, shift, strength)
+        self._insert_connection(counters_left, counters_right, new_connection)
+        self._max_range = max(ijkl[-1] - ijkl[0], self._max_range)
 
-        if switchLR < ijkl[-1]:
-            d0R[self.counter] = switchLR
-        self.counter -= 1
+    def _insert_connection(self, counters_left, counters_right, new_connection):
+        # check whether we already got that exact same term before
+        existing_counter = None
+        for c in counters_left:
+            if self.connections[c][:3] == new_connection[:3] and c in counters_right:
+                existing_counter = c
+                break
+        if existing_counter is not None:
+            # if yes, just update strength of that term
+            updated_strength = self.connections[existing_counter][3] + new_connection[3]
+            self.connections[existing_counter] = new_connection[:3] + (updated_strength,)
+        else:
+            # otherwise append new entry to self.connections
+            counter = len(self.connections)
+            counters_left.append(counter)
+            counters_right.append(counter)
+            self.connections.append(new_connection)
 
     def multi_coupling_term_handle_JW(self, strength, term, sites, op_string=None):
         """Helping function to call before :meth:`add_multi_coupling_term`.
+
         Handle/figure out Jordan-Wigner strings if needed.
+
         Parameters
         ----------
         strength : float
@@ -952,11 +1033,13 @@ class MultiCouplingTerms(CouplingTerms):
         op_string : None | str
             Operator name to be used as operator string *between* the operators, or ``None`` if the
             Jordan Wigner string should be figured out.
+
             .. warning ::
                 ``None`` figures out for each segment between the operators, whether a
                 Jordan-Wigner string is needed.
                 This is different from a plain ``'JW'``, which just applies a string on
                 each segment!
+
         Returns
         -------
         strength, ijkl, ops_ijkl, op_string :
@@ -1025,165 +1108,103 @@ class MultiCouplingTerms(CouplingTerms):
         ops_ijkl = [op_i, op_j]
         self.add_multi_coupling_term(strength, ijkl, ops_ijkl, op_string, switchLR)
 
-    def max_range(self):
-        """Determine the maximal range in :attr:`coupling_terms`.
-        Returns
-        -------
-        max_range : int
-            The maximum of ``j - i`` for the `i`, `j` occuring in a term of :attr:`coupling_terms`.
-        """
-        dL = self._max_range(self.coupling_terms[0])
-        dR = self._max_range(self.coupling_terms[1])
-        assert sorted(list(dL.keys())) == sorted(list(dR.keys()))
-        ranges = [dR[i] - dL[i] for i in dL.keys()]
-        return max(ranges)
-
-    def _max_range(self, d0, i_idx=None, dict_i=None):
-        #recursive function to find max_range
-        #dict_i[counter] = i (most outer index in coupling_terms left or right)
-        if i_idx is None:
-            dict_i = {}
-            for i, d1 in d0.items():
-                dict_i = self._max_range(d1, i, dict_i)
-        else:
-            for key, d2 in d0.items():
-                for j, d3 in d2.items():
-                    if isinstance(d3, dict):
-                        dict_i = self._max_range(d3, i_idx, dict_i)
-                    else:
-                        #j is counter
-                        dict_i[j] = i_idx
-
-        return dict_i
-
     def add_to_graph(self, graph):
-        """Add terms from :attr:`coupling_terms` to an MPOGraph.
+        """Add terms represented by `self` to an MPOGraph.
+
         Parameters
         ----------
         graph : :class:`~tenpy.networks.mpo.MPOGraph`
             The graph into which the terms from :attr:`coupling_terms` should be added.
         """
         assert self.L == graph.L
-        connect = self._add_from_left(graph)  #returns a dictionary to connect left and right graph
-        self._add_from_right(graph, connect)
+        keys_left = self._insert_to_graph(graph, True)
+        keys_right = self._insert_to_graph(graph, False)
+        for keyL, keyR, connection in zip(keys_left, keys_right, self.connections):
+            if connection is None:
+                assert keyL is None and keyR is None
+                continue
+            switchLR, op_switch, shift, strength = connection
+            graph.add(switchLR, keyL, keyR, op_switch, strength)
+        # done
 
-    def _add_from_left(self, graph, _i=None, _d1=None, _label_left=None, connect=None):
-        if _i is None:  # beginning of recursion
-            connect = {}
-            for i, d1 in self.coupling_terms[0].items():
-                connect = self._add_from_left(graph, i, d1, 'IdL', connect)
-        else:
-            for key, d2 in _d1.items():
-                op_i, op_string_ij = key
-                if isinstance(_label_left, str) and _label_left == 'IdL':
-                    label = ("left", _i, op_i, op_string_ij)
-                else:
-                    label = _label_left + (_i, op_i, op_string_ij)
-                graph.add(_i, _label_left, label, op_i, 1., skip_existing=True)
-                for j, d3 in d2.items():
-                    if isinstance(d3, dict):  # further nesting
-                        label_j = graph.add_string(_i, j, label, op_string_ij)
-                        connect = self._add_from_left(graph, j, d3, label_j, connect)
-                    else:  #exit recursion
-                        connect[j] = (d3, label)
-        return connect
+    def _insert_to_graph(self, graph, from_left):
+        all_keys = [None] * len(self.connections)
+        d0 = self.terms_left if from_left else self.terms_right
+        _connect = self._connect_left if from_left else self._connect_right
+        for i, d1 in d0.items():
+            if i == _connect:
+                for c in d1:
+                    all_keys[c] = 'IdL' if from_left else 'IdR'
+            else:
+                for (op_i, op_string_ij), d2 in d1.items():
+                    if from_left:
+                        key_from_i = ("left", i, op_i, op_string_ij)
+                        graph.add(i, 'IdL', key_from_i, op_i, 1., skip_existing=True)
+                    else:
+                        key_from_i = ("right", i, op_i, op_string_ij)
+                        graph.add(i, key_from_i, 'IdR', op_i, 1., skip_existing=True)
+                    self._insert_to_graph_rec(graph, all_keys, d2, i, op_string_ij, key_from_i, from_left)
+        return all_keys
 
-    def _add_from_right(self, graph, connect, _i=None, _d1=None, _label_right=None):
-        if _i is None:  # beginning of recursion
-            for i, d1 in self.coupling_terms[1].items():
-                self._add_from_right(graph, connect, i, d1, 'IdR')
-        else:
-            for key, d2 in _d1.items():
-                op_i, op_string_ij = key
-                i_label = _i % self.L  #right label has to start in first unit cell
-                if isinstance(_label_right, str) and _label_right == 'IdR':
-                    label = ("right", i_label, op_i, op_string_ij)
+    def _insert_to_graph_rec(self, graph, all_keys, d2, i, op_string_ij, key_from_i, from_left):
+        """recursive part for :meth:`_insert_to_graph`"""
+        _connect = self._connect_left if from_left else self._connect_right
+        for j, d3 in d2.items():
+            if j == _connect:
+                for c in d3:
+                    switchLR, _, shift, _ = self.connections[c]
+                    if from_left:
+                        key_to_switch = graph.add_string_left_to_right(i, switchLR, key_from_i, op_string_ij)
+                    else:
+                        key_to_switch = graph.add_string_right_to_left(i, switchLR-shift, key_from_i, op_string_ij)
+                    all_keys[c] = key_to_switch
+            else:
+                if from_left:
+                    key_to_j = graph.add_string_left_to_right(i, j, key_from_i, op_string_ij)
                 else:
-                    label = _label_right + (i_label, op_i, op_string_ij)
-                for j, d3 in d2.items():
-                    if isinstance(d3, dict):  # further nesting
-                        graph.add(_i, label, _label_right, op_i, 1., skip_existing=True)
-                        label_j = graph.add_string(j, _i, label, op_string_ij)
-                        self._add_from_right(graph, connect, j, d3, label_j)
-                    else:  #exit recursion
-                        strength, label_left = connect[j]
-                        switchLR = d3  #from the construction of the coupling_terms
-                        if _i == switchLR + 1:
-                            label_2 = graph.add_string(label_left[-3], _i, label_left,
-                                                       op_string_ij)
-                            graph.add(_i,
-                                      label_2,
-                                      _label_right,
-                                      op_i,
-                                      strength,
-                                      skip_existing=False)
-                        else:
-                            graph.add(_i, label, _label_right, op_i, 1., skip_existing=True)
-                            label_2 = graph.add_string(label_left[-3], switchLR + 1, label_left,
-                                                       op_string_ij)
-                            label_3 = graph.add_string(switchLR + 1, _i, label, op_string_ij)
-                            graph.add(switchLR + 1,
-                                      label_2,
-                                      label_3,
-                                      op_string_ij,
-                                      strength,
-                                      skip_existing=False)
+                    key_to_j = graph.add_string_right_to_left(i, j, key_from_i, op_string_ij)
+                for (op_j, op_string_jk), d4 in d3.items():
+                    if from_left:
+                        key_from_j = key_to_j + (j, op_j, op_string_jk)
+                        graph.add(j, key_to_j, key_from_j, op_j, 1., skip_existing=True)
+                    else:
+                        key_from_j = key_to_j + (j, op_j, op_string_jk)
+                        graph.add(j, key_from_j, key_to_j, op_j, 1., skip_existing=True)
+                    self._insert_to_graph_rec(graph, all_keys, d4, j, op_string_jk, key_from_j, from_left)
 
     def remove_zeros(self, tol_zero=1.e-15):
         """Remove entries close to 0 from :attr:`coupling_terms`.
+
         Parameters
         ----------
         tol_zero : float
-            Entries in :attr:`coupling_terms` with `strength` < `tol_zero` are considered to be
-            zero and removed.
+            Entries in :attr:`terms_left` and :attr:`terms_right`
+            with `strength` < `tol_zero` are considered to be zero and removed.
         """
-        del_list = self._remove_zeros_left(tol_zero)
-        self._remove_zeros_right(del_list)
+        assert self._max_range is not None
+        for c, connection in enumerate(self.connections):
+            if connection is None:
+                continue
+            if abs(connection[3]) < tol_zero:
+                self.connections[c] = None
+                self._max_range = None
+        if self._max_range is None:  # removed a term
+            self._remove_empty_terms(self.terms_left, self._connect_left)
+            self._remove_empty_terms(self.terms_right, self._connect_right)
+            self._max_range = self.to_TermList().max_range()
 
-    def _remove_zeros_left(self, tol_zero, _d0=None, del_list=None):
-        if _d0 is None:
-            del_list = []
-            _d0 = self.coupling_terms[0]
-            for i, d1 in list(_d0.items()):
-                del_list = self._remove_zeros_left(tol_zero, d1, del_list)
-                if len(d1) == 0:
-                    del _d0[i]
-        else:
-            for key, d2 in list(_d0.items()):
-                for j, d3 in list(d2.items()):
-                    if isinstance(d3, dict):
-                        del_list = self._remove_zeros_left(tol_zero, d3, del_list)
-                        if len(d3) == 0:
-                            del d2[j]
-                    else:
-                        #d3 is strength
-                        if abs(d3) < tol_zero:
-                            del d2[j]
-                            del_list.append(j)  #delete coupling later in right dictionary
-                if len(d2) == 0:
-                    del _d0[key]
-        return del_list
-
-    def _remove_zeros_right(self, del_list, _d0=None):
-        if _d0 is None:
-            _d0 = self.coupling_terms[1]
-            for i, d1 in list(_d0.items()):
-                self._remove_zeros_right(del_list, d1)
-                if len(d1) == 0:
-                    del _d0[i]
-        else:
-            for key, d2 in list(_d0.items()):
-                for j, d3 in list(d2.items()):
-                    if isinstance(d3, dict):
-                        self._remove_zeros_right(del_list, d3)
-                        if len(d3) == 0:
-                            del d2[j]
-                    else:
-                        #check if coupling is in delete list
-                        if j in del_list:
-                            del d2[j]
-                if len(d2) == 0:
-                    del _d0[key]
+    def _remove_empty_terms(self, d0, _connect):
+        for i, d1 in d0.copy().items():  # shallow dict copy: might modify d0!
+            if i == _connect:
+                d0[i] = d1 = [c for c in d1 if self.connections[c] is not None]
+            else:
+                for ops, d2 in d1.copy().items():
+                    self._remove_empty_terms(d2, _connect)
+                    if len(d2) == 0:
+                        del d1[ops]
+            if len(d1) == 0:
+                del d0[i]
+        # done
 
     def to_TermList(self):
         """Convert :attr:`coupling_terms` into a :class:`TermList`.
@@ -1192,73 +1213,42 @@ class MultiCouplingTerms(CouplingTerms):
         term_list : :class:`TermList`
             Representation of the terms as a list of terms.
         """
-        dL = self._to_TermList(self.coupling_terms[0])  #left dictionary of lists
-        dR = self._to_TermList(self.coupling_terms[1])  #right dictionary of lists
-        assert sorted(list(dL.keys())) == sorted(list(dR.keys()))
-        terms = [dL[i][0] + dR[i][0][::-1] for i in reversed(sorted(list(dL.keys())))]
-        strength = [dL[i][1] for i in reversed(sorted(list(dL.keys())))]
-        return TermList(terms, strength)
+        term_list_left = self._fill_term_list(self.terms_left, self._connect_left)
+        term_list_right = self._fill_term_list(self.terms_right, self._connect_right)
+        strengths = []
+        terms = []
+        for tL, tR, c in zip(term_list_left, term_list_right, self.connections):
+            if c is None:
+                assert tL is None and tR is None
+                continue
+            switchLR, op_switch, shift, strength = c
+            term = []
+            op_str = ""
+            if tL is not None:
+                for i, op_i, op_str in tL:
+                    term.append((op_i, i))
+            if op_switch != op_str:
+                term.append((op_switch, switchLR))
+            if tR is not None:
+                for i, op_i, op_str in reversed(tR):
+                    term.append((op_i, i + shift))
+            terms.append(term)
+            strengths.append(strength)
+        return TermList(terms, strengths)
 
-    def _to_TermList(self, d0, term0=None, i0=None, term_dict=None):
-        #recursive function to find TermList
-        #term_dict[counter] = ([('A',i) ...], strength[i])
-        if term0 is None:
-            term_dict = {}
-            for i, d1 in d0.items():
-                term_dict = self._to_TermList(d1, [], i, term_dict)
-        else:
-            for key, d2 in d0.items():
-                opname_i, op_str = key
-                term1 = term0 + [(opname_i, i0)]
-                for j, d3 in d2.items():
-                    if isinstance(d3, dict):
-                        term_dict = self._to_TermList(d3, term1, j, term_dict)
-                    else:
-                        #j is counter, d3 is strength
-                        term_dict[j] = (term1, d3)
-        return term_dict
+    def _fill_term_list(self, d0, _connect, term_list=None, term_part=()):
+        if term_list is None:
+            term_list = [None] * len(self.connections)
+        for i, d1 in d0.items():
+            if i == _connect:
+                for c in d1:
+                    term_list[c] = term_part
+            else:
+                for (op_i, op_str), d2 in d1.items():
+                    self._fill_term_list(d2, _connect, term_list, term_part + ((i, op_i, op_str),))
+        return term_list
 
-    def to_nn_bond_Arrays(self, sites):
-        """Convert the :attr:`coupling_terms` into Arrays on nearest neighbor bonds.
-        Parameters
-        ----------
-        sites : list of :class:`~tenpy.networks.site.Site`
-            Defines the local Hilbert space for each site.
-            Used to translate the operator names into :class:`~tenpy.linalg.np_conserved.Array`.
-        Returns
-        -------
-        H_bond : list of {:class:`~tenpy.linalg.np_conserved.Array` | None}
-            The :attr:`coupling_terms` rewritten as ``sum_i H_bond[i]`` for MPS indices ``i``.
-            ``H_bond[i]`` acts on sites ``(i-1, i)``, ``None`` represents 0.
-            Legs of each ``H_bond[i]`` are ``['p0', 'p0*', 'p1', 'p1*']``.
-        """
-        N_sites = self.L
-        if len(sites) != N_sites:
-            raise ValueError("incompatible length")
-        H_bond = [None] * N_sites
-        for i, d1l in self.coupling_terms[0].items():
-            j = (i + 1) % N_sites
-            site_i = sites[i]
-            site_j = sites[j]
-            H = H_bond[j]
-            for (op1, op_str), d2 in d1l.items():
-                if not all([j2 < 0 for j2 in d2.keys()]):
-                    #only counter must appear as a key here
-                    raise ValueError("MultiCouplingTerms: this is not nearest neighbor!")
-                if not (i + 1) in self.coupling_terms[1].keys():
-                    raise ValueError(
-                        "Coupling from site {i:d} is not nearest neighbor!".format(i=i))
-                for (op2, op_str2), d3 in self.coupling_terms[1][i + 1].items():
-                    for c in d3.keys():
-                        assert c < 0  #only counter can appear
-                        if c in d2.keys():
-                            strength = d2[c]
-                            H_add = strength * npc.outer(site_i.get_op(op1), site_j.get_op(op2))
-                            H = add_with_None_0(H, H_add)
-            if H is not None:
-                H.iset_leg_labels(['p0', 'p0*', 'p1', 'p1*'])
-            H_bond[j] = H
-        return H_bond
+    # to_nn_bond_Arrays: uses `to_TermList`, so same as CouplingTerms.to_nn_bond_Arrays
 
     def __iadd__(self, other):
         if not isinstance(other, CouplingTerms):
@@ -1268,72 +1258,58 @@ class MultiCouplingTerms(CouplingTerms):
         if not isinstance(other, MultiCouplingTerms):
             #transform coupling to multi coupling
             for i, d0 in other.coupling_terms.items():
-                for op_i, d1 in d0.items():
+                for (op_i, op_str), d1 in d0.items():
                     for j, d2 in d1.items():
                         for op_j, strength in d2.items():
                             ijkl = [i, j]
-                            ops_ijkl = [op_i[0], op_j]
-                            self.add_multi_coupling_term(strength, ijkl, ops_ijkl, op_i[1])
-        else:  # add multi coupling to the left and right dictionaries
-            nc = self._iadd_multi_left(self.coupling_terms[0], other.coupling_terms[0])
-            self._iadd_multi_right(self.coupling_terms[1], other.coupling_terms[1], nc)
+                            ops_ijkl = [op_i, op_j]
+                            self.add_multi_coupling_term(strength, ijkl, ops_ijkl, op_str)
+        else:  # add multi coupling
+            self._iadd_multi_coupling(other)
+            self._max_range = max(self._max_range, other._max_range)
         return self
 
-    def _iadd_multi_left(self, self_d0, other_d0, new_counter=None):
-        #add terms in the left dictionary
-        if new_counter is None:  #begin recursion
-            new_counter = {}  #new_counter[other_counter] = new counter in self
-            for i, other_d1 in other_d0.items():
-                self_d1 = self_d0.setdefault(i, dict())
-                new_counter = self._iadd_multi_left(self_d1, other_d1, new_counter)
-        else:
-            for key, other_d1 in other_d0.items():
-                self_d1 = self_d0.setdefault(key, dict())
-                for j, other_d2 in other_d1.items():
-                    if isinstance(other_d2, dict):  # further nesting
-                        self_d2 = self_d1.setdefault(j, dict())
-                        new_counter = self._iadd_multi_left(self_d2, other_d2,
-                                                            new_counter)  #recursive
-                    else:  #exit recurison
-                        self_d1[self.counter] = other_d1[j]  # = strength
-                        new_counter[j] = self.counter
-                        self.counter -= 1
-        return new_counter
-
-    def _iadd_multi_right(self, self_d0, other_d0, new_counter, recursion=False):
-        #add terms in the right dictionary
-        if not recursion:  #begin recursion
-            for i, other_d1 in other_d0.items():
-                self_d1 = self_d0.setdefault(i, dict())
-                self._iadd_multi_right(self_d1, other_d1, new_counter, True)
-        else:
-            for key, other_d1 in other_d0.items():
-                self_d1 = self_d0.setdefault(key, dict())
-                for j, other_d2 in other_d1.items():
-                    if isinstance(other_d2, dict):  # further nesting
-                        self_d2 = self_d1.setdefault(j, dict())
-                        self._iadd_multi_right(self_d2, other_d2, new_counter, True)  #recursive
-                    else:  #exit recursion
-                        self_d1[new_counter[j]] = other_d1[j]  # = switchLR
+    def _iadd_multi_coupling(self, other):
+        # mix of self.to_TermList() and self.add_multi_coupling_term
+        term_list_left = other._fill_term_list(other.terms_left, self._connect_left)
+        term_list_right = other._fill_term_list(other.terms_right, self._connect_right)
+        for tL, tR, c in zip(term_list_left, term_list_right, other.connections):
+            if c is None:
+                assert tL is None and tR is None
+                continue
+            d0L, d0R = self.terms_left, self.terms_right
+            for i, op, op_str in tL:
+                d1L = d0L.setdefault(i, dict())
+                d0L = d1L.setdefault((op, op_str), dict())
+            counters_left = d0L.setdefault(self._connect_left, [])
+            for i, op, op_str in tR:
+                d1R = d0R.setdefault(i, dict())
+                d0R = d1R.setdefault((op, op_str), dict())
+            counters_right = d0R.setdefault(self._connect_right, [])
+            self._insert_connection(counters_left, counters_right, c)
 
     def _test_terms(self, sites):
-        self._test_terms_recursive(sites, self.coupling_terms[0])  #test left dictionary
-        self._test_terms_recursive(sites, self.coupling_terms[1])  #test right dictionary
+        self._test_terms_recursive(sites, self.terms_left, self._connect_left)
+        self._test_terms_recursive(sites, self.terms_right, self._connect_right)
+        for c in self.connections:
+            if c is None:
+                continue
+            switchLR, op_switch, _, _ = c
+            site = sites[switchLR % self.L]
+            if not site.valid_opname(op_switch):
+                raise ValueError(f"Operator {op_switch!r} not in {site!r}")
 
-    def _test_terms_recursive(self, sites, d0, i0=None):
+    def _test_terms_recursive(self, sites, d0, _connect):
         N_sites = len(sites)
-        if i0 is None:  #begin recursion
-            for i, d1 in d0.items():
-                self._test_terms_recursive(sites, d1, i)
-        else:
-            site_i = sites[i0 % N_sites]
-            for key, d2 in d0.items():
-                op_i, opstring_ij = key
+        assert N_sites == self.L
+        for i, d1 in d0.items():
+            if i == _connect:
+                continue
+            site_i = sites[i % N_sites]
+            for (op_i, op_string_ij), d2 in d1.items():
                 if not site_i.valid_opname(op_i):
-                    raise ValueError("Operator {op!r} not in site".format(op=op_i))
-                for j, d3 in d2.items():
-                    if isinstance(d3, dict):
-                        self._test_terms_recursive(sites, d3, j)
+                    raise ValueError(f"Operator {op_i!r} not in {site_i!r}")
+                self._test_terms_recursive(sites, d2, _connect)
 
 
 class ExponentiallyDecayingTerms(Hdf5Exportable):

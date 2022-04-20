@@ -24,6 +24,7 @@ import numpy as np
 import time
 import warnings
 import copy
+import itertools
 import logging
 logger = logging.getLogger(__name__)
 
@@ -1137,7 +1138,7 @@ class ZeroSiteH(EffectiveH):
     def __init__(self, env, i0):
         self.i0 = i0
         self.LP = env.get_LP(i0)
-        self.RP = env.get_RP(i0)
+        self.RP = env.get_RP(i0 - 1)
         self.dtype = env.H.dtype
         self.N = self.LP.get_leg('vR').ind_len * self.RP.get_leg('vL').ind_len
 
@@ -1207,6 +1208,9 @@ class VariationalCompression(Sweep):
     The algorithm is the same as described in :class:`VariationalApplyMPO`,
     except that we don't have an MPO in the networks - one can think of the MPO being trivial.
 
+    .. deprecated :: 0.9.1
+        Renamed the optoin `N_sweeps` to `max_sweeps`.
+
     Parameters
     ----------
     psi : :class:`~tenpy.networks.mps.MPS`
@@ -1225,8 +1229,13 @@ class VariationalCompression(Sweep):
 
         trunc_params : dict
             Truncation parameters as described in :cfg:config:`truncation`.
-        N_sweeps : int
-            Number of sweeps to perform.
+        min_sweeps, max_sweeps : int
+            Minimum and maximum number of sweeps to perform for the compression.
+        tol_theta_diff: float | None
+            Stop after less than `max_sweeps` sweeps if the 1-site wave function changed by less
+            than this value, ``1.-|<theta_old|theta_new>| < tol_theta_diff``, where
+            theta_old/new are two-site wave functions during the sweep to the left.
+            ``None`` disables this convergence check, always performing `max_sweeps` sweeps.
         start_env_sites : int
             Number of sites to contract for the inital LP/RP environment in case of infinite MPS.
 
@@ -1240,6 +1249,7 @@ class VariationalCompression(Sweep):
     def __init__(self, psi, options, resume_data=None):
         super().__init__(psi, None, options, resume_data=resume_data)
         self.renormalize = []
+        self._theta_diff = []
 
     def run(self):
         """Run the compression.
@@ -1255,12 +1265,26 @@ class VariationalCompression(Sweep):
         max_trunc_err : :class:`~tenpy.algorithms.truncation.TruncationError`
             The maximal truncation error of a two-site wave function.
         """
-        N_sweeps = self.options.get("N_sweeps", 2)
+        self.options.deprecated_alias("N_sweeps", "max_sweeps",
+                                      "Also check out the other new convergence parameters "
+                                      "min_N_sweeps and tol_theta_diff!")
+        max_sweeps = self.options.get("max_sweeps", 2)
+        min_sweeps = self.options.get("min_sweeps", 1)
+        tol_diff = self._tol_theta_diff = self.options.get("tol_theta_diff", 1.e-8)
+        if min_sweeps == max_sweeps and tol_diff is not None:
+            warnings.warn("VariationalCompression with min_sweeps=max_sweeps: "
+                          "we recommend to set tol_theta_diff=None to avoid overhead")
 
-        for i in range(N_sweeps):  # TODO: more fancy stopping criteria?
+        for i in range(max_sweeps):
             self.renormalize = []
+            self._theta_diff = []
             max_trunc_err = self.sweep()
-
+            if i + 1 >= min_sweeps and tol_diff is not None:
+                max_diff = max(self._theta_diff[-(self.psi.L - self.n_optimize):])
+                if max_diff < tol_diff:
+                    logger.debug("break VariationalCompression after %d sweeps "
+                                "with theta_diff=%.2e", i + 1, max_diff)
+                    break
         if self.psi.finite:
             self.psi.norm *= max(self.renormalize)
         return TruncationError(max_trunc_err, 1. - 2. * max_trunc_err)
@@ -1287,6 +1311,17 @@ class VariationalCompression(Sweep):
         self._init_ortho_to_envs(orthogonal_to, resume_data)
         self.reset_stats()
 
+    def get_sweep_schedule(self):
+        """Define the schedule of the sweep.
+
+        Compared to :meth:`~tenpy.algorithms.mps_common.Sweep.get_sweep_schedule`, we add one
+        extra update at the end with i0=0 (which is the same as the first update of the sweep).
+        This is done to ensure proper convergence after each sweep, even if that implies that
+        the site 0 is then updated twice per sweep.
+        """
+        extra = (0, True, [False, False])
+        return itertools.chain(super().get_sweep_schedule(), [extra])
+
     def update_local(self, _, optimize=True):
         """Perform local update.
 
@@ -1307,18 +1342,26 @@ class VariationalCompression(Sweep):
         """Given a new two-site wave function `theta`, split it and save it in :attr:`psi`."""
         i0 = self.i0
         new_psi = self.psi
-        qtotal_i0 = new_psi.get_B(i0, form=None).qtotal
+        old_A0 = new_psi.get_B(i0, form='A')
         U, S, VH, err, renormalize = svd_theta(theta,
                                                self.trunc_params,
-                                               qtotal_LR=[qtotal_i0, None],
+                                               qtotal_LR=[old_A0.qtotal, None],
                                                inner_labels=['vR', 'vL'])
-        self.renormalize.append(renormalize)
-        # TODO: up to the `renormalize`, we could use `new_psi.set_svd_theta`.
         U.ireplace_label('(vL.p0)', '(vL.p)')
         VH.ireplace_label('(p1.vR)', '(p.vR)')
-        B0 = U.split_legs(['(vL.p)'])
+        A0 = U.split_legs(['(vL.p)'])
         B1 = VH.split_legs(['(p.vR)'])
-        new_psi.set_B(i0, B0, form='A')  # left-canonical
+        self.renormalize.append(renormalize)
+        # first compare to old best guess to check convergence of the sweeps
+        if self._tol_theta_diff is not None and self.update_LP_RP[0] == False:
+            theta_old = new_psi.get_theta(i0)
+            theta_new_trunc = npc.tensordot(A0.scale_axis(S, 'vR'), B1, ['vR', 'vL'])
+            theta_new_trunc.iset_leg_labels(['vL', 'p0', 'p1', 'vR'])
+            ov = npc.inner(theta_new_trunc, theta_old, do_conj=True, axes='labels')
+            theta_diff = 1. - abs(ov)
+            self._theta_diff.append(theta_diff)
+        # now set the new tensors to the MPS
+        new_psi.set_B(i0, A0, form='A')  # left-canonical
         new_psi.set_B(i0 + 1, B1, form='B')  # right-canonical
         new_psi.set_SR(i0, S)
         return {'U': U, 'VH': VH, 'err': err}
