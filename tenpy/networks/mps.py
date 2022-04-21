@@ -1604,7 +1604,7 @@ class MPS:
             How many unit cells (multiples of `psi_left/right.L`) to add to the left and right.
             A single value is used for both directions.
             Note that we also "complete" the unit cells to the left/right even for
-            `add_unitcells`=0. For initially finite MPS with non-trivial `first, last`, this
+            `add_unitcells` = 0. For initially finite MPS with non-trivial `first, last`, this
             yields the state on the full finite system.
         new_first_last : (int, int)
             Alternatively, instead of specifying `add_unit_cells`, directly sepcify
@@ -2778,7 +2778,7 @@ class MPS:
                 if not all(need_JW):
                     raise ValueError("Some, but not any operators need 'JW' string!")
                 if not str_on_first:
-                    raise ValueError("Need Jordan Wigner string, but `str_on_first`=False`")
+                    raise ValueError("Need Jordan Wigner string, but str_on_first=False")
                 opstr = ['JW']
         if hermitian and np.any(sites1 != sites2):
             warnings.warn("MPS correlation function can't use the hermitian flag", stacklevel=2)

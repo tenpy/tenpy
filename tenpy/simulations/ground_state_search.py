@@ -107,6 +107,7 @@ class PlaneWaveExcitations(GroundStateSearch):
     def load_groundstate(self):
         """Load ground state and convert to uMPS.
         Load the ground state and initialize the model from it.
+
         Options
         -------
         .. cfg:configoptions :: OrthogonalExcitations
@@ -115,6 +116,7 @@ class PlaneWaveExcitations(GroundStateSearch):
             orthogonal_norm_tol : float
                 Tolerance how large :meth:`~tenpy.networks.mps.MPS.norm_err` may be for states
                 to be added to :attr:`orthogonal_to`.
+
         Returns
         -------
         gs_data : dict
@@ -182,6 +184,7 @@ class PlaneWaveExcitations(GroundStateSearch):
 
     def write_back_environments(self, gs_data, gs_fn):
         """Write converged environments back into the file with the ground state.
+
         Parameters
         ----------
         gs_data : dict
@@ -1521,7 +1524,7 @@ class ExcitationInitialState(InitialStateBuilder):
         return psi
 
     def from_file(self):
-        """Load the initial state from an exisiting file.
+        """Load the initial state from an exisiting file of a previous excitation simulation.
 
         Options
         -------

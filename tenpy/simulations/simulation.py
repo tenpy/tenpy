@@ -707,7 +707,7 @@ class Simulation:
             overwrite_output : bool
                 Only makes a difference if `skip_if_output_exists` is False and the file exists.
                 In that case, with `overwrite_output`, just save everything under that name again,
-                or with `overwrite_output`=False, replace
+                or with `overwrite_output` =False, replace
                 ``filename.ext`` with ``filename_01.ext`` (and further increasing numbers)
                 until we get a filename that doesn't exist yet.
             safe_write : bool
