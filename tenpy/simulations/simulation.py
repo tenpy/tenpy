@@ -830,7 +830,7 @@ class Simulation:
 
         Options
         -------
-        :cfg:configoptions :: Simulation
+        .. cfg:configoptions :: Simulation
 
             save_resume_data : bool
                 If True, include data from :meth:`~tenpy.algorithms.Algorithm.get_resume_data`
