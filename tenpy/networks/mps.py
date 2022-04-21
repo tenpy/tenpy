@@ -4581,10 +4581,18 @@ class MPS:
         from tenpy.tools import optimization
         need_gauge = any(self.get_total_charge() != other.get_total_charge())
         if need_gauge:
-            vL, vR = self._outer_virtual_legs()
+            vL, vR = self.outer_virtual_legs()
             other.gauge_total_charge(None, vL, vR)
 
-    def _outer_virtual_legs(self):
+    def outer_virtual_legs(self):
+        """Return the virutal legs on the left and right of the MPS.
+
+        Returns
+        -------
+        vL, vR : :class:`~tenpy.linalg.charges.LegCharge`
+            Outermost virtual legs of the MPS. Preserved for a segment MPS even when calling
+            :meth:`canonical_form` on the segment.
+        """
         U, V = self.segment_boundaries
         if U is not None:
             vL = U.get_leg('vL')
@@ -4759,8 +4767,8 @@ class MPSEnvironment:
     def _check_compatible_legs(self, init_LP, init_RP, start_env_sites):
         if init_LP is not None or init_RP is not None:
             if start_env_sites == 0:
-                vL_ket, vR_ket = self.ket._outer_virtual_legs()
-                vL_bra, vR_bra = self.bra._outer_virtual_legs()
+                vL_ket, vR_ket = self.ket.outer_virtual_legs()
+                vL_bra, vR_bra = self.bra.outer_virtual_legs()
             else:
                 vL_ket = self.ket.get_B(-start_env_sites, 'A').get_leg('vL')
                 vL_bra = self.bra.get_B(-start_env_sites, 'A').get_leg('vL')

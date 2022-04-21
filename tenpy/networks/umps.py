@@ -1039,7 +1039,7 @@ class uMPS(MPS):
     def _gauge_compatible_vL_vR(self, other):
         raise NotImplementedError("Not valid for UMPS.")
         
-    def _outer_virtual_legs(self):
+    def outer_virtual_legs(self):
         vL = self._AR[0].get_leg('vL')
         vR = self._AL[-1].get_leg('vR')
         return vL, vR
