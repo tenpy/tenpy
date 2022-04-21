@@ -1575,7 +1575,8 @@ class MPS:
                                  psi_right,
                                  first,
                                  last,
-                                 add_unitcells,
+                                 add_unitcells=None,
+                                 new_first_last=None,
                                  cutoff=1.e-14):
         """Extract an enlarged segment from an initially smaller segment MPS.
 
@@ -1605,6 +1606,9 @@ class MPS:
             Note that we also "complete" the unit cells to the left/right even for
             `add_unitcells`=0. For initially finite MPS with non-trivial `first, last`, this
             yields the state on the full finite system.
+        new_first_last : (int, int)
+            Alternatively, instead of specifying `add_unit_cells`, directly sepcify
+            the ``(new_first, new_last)`` to be returned.
         cutoff : float
             Cutoff used for QR/SVDs in :meth:`canonical_form_finite`.
 
@@ -1612,24 +1616,30 @@ class MPS:
         -------
         psi_large_seg : :class:`~tenpy.networks.mps.MPS`
             MPS in enlarged segment.
-        new_first, new_last :
-            New first and last site of the enlarge segment used for `psi_large_seg`. As `first`,`last`,
-            this is indexed with respect to the "original" MPSs `psi_left` and `psi_right`.
+        new_first, new_last : (int, int)
+            New first and last site of the enlarge segment used for `psi_large_seg`.
+            Like `first`, `last`, this is indexed with respect to the "original" MPSs
+            `psi_left` and `psi_right`.
         """
-        # get new_first and new_last
-        add_unitcells = to_iterable(add_unitcells)
-        if len(add_unitcells) == 1:
-            add_L = add_R = add_unitcells[0]
-        elif len(add_unitcells) == 2:
-            add_L, add_R = add_unitcells
+        if (add_unitcells is not None) == (new_first_last is not None):
+            raise ValueError("Specify either `add_unitcells` or `new_first_last`!")
+        if add_unitcells is not None:
+            # get new_first and new_last
+            add_unitcells = to_iterable(add_unitcells)
+            if len(add_unitcells) == 1:
+                add_L = add_R = add_unitcells[0]
+            elif len(add_unitcells) == 2:
+                add_L, add_R = add_unitcells
+            else:
+                raise ValueError(f"need 1 or 2 entries in add_unitcells={add_unitcells!r}")
+            new_first = int(- add_L * psi_left.L)
+            new_last = max(psi_right.L - 1, last)
+            if not psi_right.finite:
+                # extend to full unit cell to the right if not yet full
+                new_last = new_last - (new_last % psi_right.L) + psi_right.L - 1
+                new_last = int(new_last + add_R * psi_right.L)
         else:
-            raise ValueError(f"need 1 or 2 entries in add_unitcells={add_unitcells!r}")
-        new_first = int(- add_L * psi_left.L)
-        new_last = max(psi_right.L - 1, last)
-        if not psi_right.finite:
-            # extend to full unit cell to the right if not yet full
-            new_last = new_last - (new_last % psi_right.L) + psi_right.L - 1
-            new_last = int(new_last + add_R * psi_right.L)
+            new_first, new_last = new_first_last
         if not new_first <= first < last <= new_last:
             raise ValueError("expected new_first <= first < last <= new_last, but got "
                             f"{new_first} {first} {last} {new_last}")
@@ -5574,17 +5584,17 @@ class InitialStateBuilder:
                 The filename from which to load the state
             data_key : str
                 Key within the file to be used for loading the data.
-                Can be recursive (separted by '/'), see :func:`tenpy.tools.misc.get_recursive`.
+                Can be recursive (separated by '/'), see :func:`tenpy.tools.misc.get_recursive`.
         """
         filename = self.options['filename']
         data_key = self.options.get('data_key', "psi")
-        self.logger.info("loading initial state from %r", filename)
+        self.logger.info("loading initial state from %r, key %r", filename, data_key)
         if filename.endswith('.h5') or filename.endswith('.hdf5'):
             with hdf5_io.h5py.File(filename, 'r') as f:
                 psi = hdf5_io.load_from_hdf5(f, data_key)
         else:
             data = hdf5_io.load(filename)
-            psi = get_recursive(data, data_key)
+            psi = get_recursive(data, data_key, separator='/')
         psi.test_sanity()
         return psi
 
