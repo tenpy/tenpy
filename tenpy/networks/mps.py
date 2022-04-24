@@ -1575,7 +1575,8 @@ class MPS:
                                  psi_right,
                                  first,
                                  last,
-                                 add_unitcells,
+                                 add_unitcells=None,
+                                 new_first_last=None,
                                  cutoff=1.e-14):
         """Extract an enlarged segment from an initially smaller segment MPS.
 
@@ -1603,8 +1604,11 @@ class MPS:
             How many unit cells (multiples of `psi_left/right.L`) to add to the left and right.
             A single value is used for both directions.
             Note that we also "complete" the unit cells to the left/right even for
-            `add_unitcells`=0. For initially finite MPS with non-trivial `first, last`, this
+            `add_unitcells` = 0. For initially finite MPS with non-trivial `first, last`, this
             yields the state on the full finite system.
+        new_first_last : (int, int)
+            Alternatively, instead of specifying `add_unit_cells`, directly sepcify
+            the ``(new_first, new_last)`` to be returned.
         cutoff : float
             Cutoff used for QR/SVDs in :meth:`canonical_form_finite`.
 
@@ -1612,24 +1616,30 @@ class MPS:
         -------
         psi_large_seg : :class:`~tenpy.networks.mps.MPS`
             MPS in enlarged segment.
-        new_first, new_last :
-            New first and last site of the enlarge segment used for `psi_large_seg`. As `first`,`last`,
-            this is indexed with respect to the "original" MPSs `psi_left` and `psi_right`.
+        new_first, new_last : (int, int)
+            New first and last site of the enlarge segment used for `psi_large_seg`.
+            Like `first`, `last`, this is indexed with respect to the "original" MPSs
+            `psi_left` and `psi_right`.
         """
-        # get new_first and new_last
-        add_unitcells = to_iterable(add_unitcells)
-        if len(add_unitcells) == 1:
-            add_L = add_R = add_unitcells[0]
-        elif len(add_unitcells) == 2:
-            add_L, add_R = add_unitcells
+        if (add_unitcells is not None) == (new_first_last is not None):
+            raise ValueError("Specify either `add_unitcells` or `new_first_last`!")
+        if add_unitcells is not None:
+            # get new_first and new_last
+            add_unitcells = to_iterable(add_unitcells)
+            if len(add_unitcells) == 1:
+                add_L = add_R = add_unitcells[0]
+            elif len(add_unitcells) == 2:
+                add_L, add_R = add_unitcells
+            else:
+                raise ValueError(f"need 1 or 2 entries in add_unitcells={add_unitcells!r}")
+            new_first = int(- add_L * psi_left.L)
+            new_last = max(psi_right.L - 1, last)
+            if not psi_right.finite:
+                # extend to full unit cell to the right if not yet full
+                new_last = new_last - (new_last % psi_right.L) + psi_right.L - 1
+                new_last = int(new_last + add_R * psi_right.L)
         else:
-            raise ValueError(f"need 1 or 2 entries in add_unitcells={add_unitcells!r}")
-        new_first = int(- add_L * psi_left.L)
-        new_last = max(psi_right.L - 1, last)
-        if not psi_right.finite:
-            # extend to full unit cell to the right if not yet full
-            new_last = new_last - (new_last % psi_right.L) + psi_right.L - 1
-            new_last = int(new_last + add_R * psi_right.L)
+            new_first, new_last = new_first_last
         if not new_first <= first < last <= new_last:
             raise ValueError("expected new_first <= first < last <= new_last, but got "
                             f"{new_first} {first} {last} {new_last}")
@@ -2768,7 +2778,7 @@ class MPS:
                 if not all(need_JW):
                     raise ValueError("Some, but not any operators need 'JW' string!")
                 if not str_on_first:
-                    raise ValueError("Need Jordan Wigner string, but `str_on_first`=False`")
+                    raise ValueError("Need Jordan Wigner string, but str_on_first=False")
                 opstr = ['JW']
         if hermitian and np.any(sites1 != sites2):
             warnings.warn("MPS correlation function can't use the hermitian flag", stacklevel=2)
@@ -4571,10 +4581,18 @@ class MPS:
         from tenpy.tools import optimization
         need_gauge = any(self.get_total_charge() != other.get_total_charge())
         if need_gauge:
-            vL, vR = self._outer_virtual_legs()
+            vL, vR = self.outer_virtual_legs()
             other.gauge_total_charge(None, vL, vR)
 
-    def _outer_virtual_legs(self):
+    def outer_virtual_legs(self):
+        """Return the virutal legs on the left and right of the MPS.
+
+        Returns
+        -------
+        vL, vR : :class:`~tenpy.linalg.charges.LegCharge`
+            Outermost virtual legs of the MPS. Preserved for a segment MPS even when calling
+            :meth:`canonical_form` on the segment.
+        """
         U, V = self.segment_boundaries
         if U is not None:
             vL = U.get_leg('vL')
@@ -4749,8 +4767,8 @@ class MPSEnvironment:
     def _check_compatible_legs(self, init_LP, init_RP, start_env_sites):
         if init_LP is not None or init_RP is not None:
             if start_env_sites == 0:
-                vL_ket, vR_ket = self.ket._outer_virtual_legs()
-                vL_bra, vR_bra = self.bra._outer_virtual_legs()
+                vL_ket, vR_ket = self.ket.outer_virtual_legs()
+                vL_bra, vR_bra = self.bra.outer_virtual_legs()
             else:
                 vL_ket = self.ket.get_B(-start_env_sites, 'A').get_leg('vL')
                 vL_bra = self.bra.get_B(-start_env_sites, 'A').get_leg('vL')
@@ -5574,17 +5592,17 @@ class InitialStateBuilder:
                 The filename from which to load the state
             data_key : str
                 Key within the file to be used for loading the data.
-                Can be recursive (separted by '/'), see :func:`tenpy.tools.misc.get_recursive`.
+                Can be recursive (separated by '/'), see :func:`tenpy.tools.misc.get_recursive`.
         """
         filename = self.options['filename']
         data_key = self.options.get('data_key', "psi")
-        self.logger.info("loading initial state from %r", filename)
+        self.logger.info("loading initial state from %r, key %r", filename, data_key)
         if filename.endswith('.h5') or filename.endswith('.hdf5'):
             with hdf5_io.h5py.File(filename, 'r') as f:
                 psi = hdf5_io.load_from_hdf5(f, data_key)
         else:
             data = hdf5_io.load(filename)
-            psi = get_recursive(data, data_key)
+            psi = get_recursive(data, data_key, separator='/')
         psi.test_sanity()
         return psi
 
