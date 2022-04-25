@@ -305,7 +305,7 @@ class OrthogonalExcitations(GroundStateSearch):
         The initial state to be used in the segment: the ground state, but possibly perturbed
         and switched charge sector. Should be copied before modification.
     _gs_data : None | dict
-        Only used to pass `gs_data` to :meth:`init_orthogonal_from_groundstate`;
+        Only used to pass `gs_data` to :meth:`init_from_groundstate`;
         reset to `None` by the latter to allow to free memory.
     init_env_data : dict
         Initialization data for the :class:`~tenpy.networks.mpo.MPOEnvironment`.
@@ -334,37 +334,54 @@ class OrthogonalExcitations(GroundStateSearch):
 
     """
     default_initial_state_builder = 'ExcitationInitialState'
+
     def __init__(self, options, *, orthogonal_to=None, gs_data=None, **kwargs):
         super().__init__(options, **kwargs)
-        resume_data = kwargs.get('resume_data', {})
-        if orthogonal_to is None and 'orthogonal_to' in resume_data:
-            orthogonal_to = kwargs['resume_data']['orthogonal_to']
-        self.orthogonal_to = orthogonal_to
-        self.excitations = resume_data.get('excitations', [])
-        # note: self.results may be overwritten in from_checkpoint_results
-        self.results['excitation_energies'] = []
-        self.results['excitation_energies_MPO'] = []
-        if self.options.get('save_psi', True):
-            self.results['excitations'] = self.excitations
         self.init_env_data = {}
         self._gs_data = gs_data
         self.initial_state_builder = None
+        # Simulation.__init__() includes resume_data from kwargs into self.results['resume_data']
+        # self.results might contain entries for excitations etc, if resuming from checkpoint
+        resume_data = self.results.get('resume_data', {})
+        if orthogonal_to is None and 'orthogonal_to' in resume_data and \
+                not resume_data.get('sequential_simulations', False):
+            orthogonal_to = resume_data['orthogonal_to']
+        self.orthogonal_to = orthogonal_to
+        if 'excitations' not in self.results:
+            self.excitations = []
+        else:
+            self.excitations = self.results['excitations']
+        self.results.setdefault('excitation_energies', [])
+        self.results.setdefault('excitation_energies_MPO', [])
+        if resume_data.get('sequential_simulations', False):
+            self.logger.info("sequential run: start with empty orthogonal_to")
+            self._previous_ortho = resume_data['orthogonal_to']
+            del resume_data['orthogonal_to']  # sequential: get modified versions of those again
+            self._previous_first_last = resume_data['segment_first_last']
+            self._previous_offset = resume_data['ortho_offset']
+            # need to reset excitations to not have any yet!
+            self.excitations = []
+            self.excitation_energies = []
+            self.excitation_energies_MPO = []
+        if self.options.get('save_psi', True):
+            self.results['excitations'] = self.excitations
 
     def run(self):
-        if self.orthogonal_to is None:  # TODO still need to initialize model from ground state even if resuming with orthogonal!
-            self.init_orthogonal_from_groundstate()
+        if not hasattr(self, 'ground_state_orig_L'):
+            self.init_from_groundstate()
         return super().run()
 
     def resume_run(self):
-        if self.orthogonal_to is None:  # TODO still need to initialize model from ground state even if resuming with orthogonal!
-            self.init_orthogonal_from_groundstate()
+        if not hasattr(self, 'ground_state_orig_L'):
+            self.init_from_groundstate()
         return super().resume_run()
 
-    def init_orthogonal_from_groundstate(self):
-        """Initialize :attr:`orthogonal_to` from the ground state.
+    def init_from_groundstate(self):
+        """Initialize from the ground state data.
 
         Load the ground state and initialize the model from it.
-        Calls :meth:`extract_segment`.
+        Calls :meth:`extract_segment`, :meth:`get_reference_energy`,
+        and :meth:`switch_charge_sector`, to finally initialize :attr:`orthogonal_to`.
 
         Options
         -------
@@ -397,13 +414,13 @@ class OrthogonalExcitations(GroundStateSearch):
         """
         gs_fn, gs_data = self._load_gs_data()
         gs_data_options = gs_data['simulation_parameters']
-        # initialize original model with model_class and model_params from ground state data
-        self.logger.info("initialize original ground state model")
         for key in gs_data_options.keys():
             if not isinstance(key, str) or not key.startswith('model'):
                 continue
             if key not in self.options:
                 self.options[key] = gs_data_options[key]
+        self.logger.info("initialize original ground state model")
+        # initialize original model with model_class and model_params from ground state data
         self.init_model()
         self.model_orig = self.model
 
@@ -424,15 +441,21 @@ class OrthogonalExcitations(GroundStateSearch):
         # here, psi0_seg is the *unperturbed* ground state in the segment!
         self.get_reference_energy(psi0_seg)
 
-        # switch_charge_sector defines `self.initial_state_seg`
+        # switch_charge_sector and perturb if necessary to define self.initial_state_seg
         self.initial_state_seg, self.qtotal_diff = self.switch_charge_sector(psi0_seg)
         self.results['qtotal_diff'] = self.qtotal_diff
 
-        if any(self.qtotal_diff):
-            self.orthogonal_to = []  # different charge sector
-            # so orthogonal to gs due to charge conservation
+        if self.orthogonal_to is None:
+            if any(self.qtotal_diff):
+                self.orthogonal_to = []  # different charge sector
+                # so orthogonal to gs due to charge conservation
+            else:
+                self.orthogonal_to = [psi0_seg]
         else:
-            self.orthogonal_to = [psi0_seg]
+            # already initialized orthogonal_to from resume_data
+            # check charge consistency
+            assert tuple(self.results['qtotal_diff']) == tuple(self.qtotal_diff)
+        self.logger.info("finished init_form_groundstate()")
         return gs_data
 
     def _load_gs_data(self):
@@ -615,13 +638,20 @@ class OrthogonalExcitations(GroundStateSearch):
             else:
                 self.initial_state_builder = Builder(self.model.lat, params, self.model.dtype)
 
-        self.psi = self.initial_state_builder.run()
-
+        if not hasattr(self, '_previous_ortho'):
+            self.psi = self.initial_state_builder.run()
+        else:
+            # sequential run from previous simulation
+            psi = self._previous_ortho[self._previous_offset + len(self.excitations)]
+            self.psi = self._psi_from_previous_ortho(psi,
+                                                     self._previous_first_last,
+                                                     "previous sequential simulation",
+                                                     False)
         if self.options.get('save_psi', True):
             self.results['psi'] = self.psi
 
     def perturb_initial_state(self, psi):
-        """(Slightly) perturb an initial state.
+        """(Slightly) perturb an initial state in place.
 
         This is used to make sure it's not completely orthogonal to previous orthogonal states
         anymore; otherwise the effective Hamiltonian would be exactly 0 and we get numerical noise
@@ -650,11 +680,12 @@ class OrthogonalExcitations(GroundStateSearch):
 
     def init_algorithm(self, **kwargs):
         kwargs.setdefault('orthogonal_to', self.orthogonal_to)
-        resume_data = kwargs.setdefault('resume_data', {})
+        if 'resume_data' not in kwargs and 'resume_data' in self.results:
+            resume_data = self.results['resume_data']
+        else:
+            resume_data = kwargs.setdefault('resume_data', {})
         resume_data['init_env_data'] = self.init_env_data
         super().init_algorithm(**kwargs)
-
-    # group_sites_for_algorithm should be fine!
 
     def switch_charge_sector(self, psi0_seg):
         """Change the charge sector of `psi0_seg` and obtain `initial_state_seg`.
@@ -758,6 +789,25 @@ class OrthogonalExcitations(GroundStateSearch):
         psi.set_B(site, npc.tensordot(Vh, psi.get_B(site, 'B'), axes=['vR', 'vL']), form='B')
         psi.set_SL(site, s)
 
+    # TODO grouping sites doesn't work?
+    #  def group_sites_for_algorithm(self):
+    #      super().group_sites_for_algorithm()
+    #      group_sites = self.grouped
+    #      if group_sites > 1:
+    #          for ortho in self.orthogonal_to:
+    #              if ortho.grouped < group_sites:
+    #                  ortho.group_sites(group_sites)
+    #      # done
+
+    #  def group_split(self):
+    #      # TODO: trunc_params should be attribute of MPS
+    #      if self.grouped > 1:
+    #          trunc_params = self.options['algorithm_params']['trunc_params']
+    #          for ortho in self.orthogonal_to:
+    #              if ortho.grouped > 1:
+    #                  orhto.group_split(trunc_params)
+    #      super().group_split()
+
     def run_algorithm(self):
         N_excitations = self.options.get("N_excitations", 1)
         ground_state_energy = self.results['ground_state_energy']
@@ -813,14 +863,6 @@ class OrthogonalExcitations(GroundStateSearch):
         """Not Implemented"""
         raise NotImplementedError("TODO")
 
-    def prepare_results_for_save(self):
-        results = super().prepare_results_for_save()
-        if 'resume_data' in results and self.options['save_psi']:
-            results['resume_data']['excitations'] = self.excitations
-            results['resume_data']['orthogonal_to'] = self.orthogonal_to
-        return results
-
-
     def get_measurement_psi_model(self, psi, model):
         """Get psi for measurements.
 
@@ -871,6 +913,48 @@ class OrthogonalExcitations(GroundStateSearch):
                 assert self.results[key] == (meas_first, meas_last)
             model  = self.model_orig.extract_segment(meas_first, meas_last)
         return psi, model
+
+    def get_resume_data(self, sequential_simulations=False):
+        resume_data = super().get_resume_data(sequential_simulations)
+        if self.options['save_psi'] or sequential_simulations:
+            resume_data['ortho_offset'] = len(self.excitations) - len(self.orthogonal_to)
+            resume_data['orthogonal_to'] = self.orthogonal_to
+        if sequential_simulations:
+            resume_data['segment_first_last'] = self.results['segment_first_last']
+        return resume_data
+
+    def _psi_from_previous_ortho(self, psi, previous_first_last, source="?", perturb=False):
+        """Adjust a state from a previous `resume_data['orthogonal_to']` to be used for self.
+
+        """
+        self.logger.info('initializing psi from %s', source)
+        # enlarge segment size if necessary
+        new_first_last = self.results['segment_first_last']
+        if previous_first_last != new_first_last:
+            prev_first, prev_last = previous_first_last
+            psi, _, _ = psi.extract_enlarged_segment(self.sim.ground_state_orig_L,
+                                                     self.sim.ground_state_orig_R,
+                                                     prev_first,
+                                                     prev_last,
+                                                     new_first_last=new_first_last)
+        # double-check that charges are what we want them to be
+        psi_qtotal = psi.get_total_charge()
+        expect_qtotal = self.initial_state_seg.get_total_charge()
+        if np.any(psi_qtotal - expect_qtotal):
+            raise ValueError(f"psi from {source!s} has different charge "
+                             f"{psi_qtotal!r} than expected {expect_qtotal!r}")
+        psi_legs = psi.outer_virtual_legs()
+        expect_legs = self.initial_state_seg.outer_virtual_legs()
+        for leg_previous, leg_expected in zip(psi_legs, expect_legs):
+            try:
+                leg_previous.test_equal(leg_expected)
+            except ValueError as e:
+                raise ValueError("psi from {source!s} has incompatible legs "
+                                 "with current simulation") from e
+        # finally perturb, if desired
+        if perturb:
+            self.perturb_initial_state(psi)
+        return psi
 
 
 def expectation_value_outside_segment_right(psi_segment, psi_R, ops, lat_segment, sites=None, axes=None):
@@ -1013,7 +1097,7 @@ class TopologicalExcitations(OrthogonalExcitations):
         self._gs_data_R = gs_data_R
         self.initial_state_builder = None
 
-    def init_orthogonal_from_groundstate(self):
+    def init_from_groundstate(self):
         """Initialize :attr:`orthogonal_to` from the ground state.
 
         Load the ground state and initialize the model from it.
@@ -1545,41 +1629,18 @@ class ExcitationInitialState(InitialStateBuilder):
             # load data from previous file
             filename = self.options['filename']
             key_ortho = self.options.get('data_key_orthogonal_to', "resume_data/orthogonal_to")
-            key_excit = self.options.get('data_key_excitations', "resume_data/excitations")
+            key_offset = self.options.get('data_key_ortho_offset', "resume_data/ortho_offset")
             self.logger.info("loading previous states from %r, keys %r and %r",
-                             filename, key_ortho, key_excit)
+                             filename, key_ortho, key_offset)
             data = hdf5_io.load(filename)
-            previous_ortho = get_recursive(data, key_ortho, separator='/')
-            previous_excitations = get_recursive(data, key_excit, separator='/')
-            self._previous_ortho = previous_ortho
-            if not len(previous_ortho) >= len(previous_excitations):
-                raise ValueError("previous data generatoed from incompatible TeNPy version!")
-            self._previous_offset = len(previous_ortho) - len(previous_excitations)
+            self._previous_ortho = previous_ortho = data['resume_data']['orthogonal_to']
+            self._previous_offset = data['resume_data']['offset']
             self._previous_first_last = data['segment_first_last']
         # else: we already loaded the corresponding data
         psi = previous_ortho[self._previous_offset + len(self.sim.excitations)]
-        psi = psi.copy()
-        # enlarge segment size if necessary
-        if self._previous_first_last != self.sim.results['segment_first_last']:
-            prev_first, prev_last = self._previous_first_last
-            new_first_last = self.sim.results['segment_first_last']
-            psi, _, _ = psi.extract_enlarged_segment(self.sim.ground_state_orig_L,
-                                                     self.sim.ground_state_orig_R,
-                                                     prev_first,
-                                                     prev_last,
-                                                     new_first_last=new_first_last)
-        # double-check that charges are what we want them to be
-        psi_legs = psi.outer_virtual_legs()
-        psi_sim_legs = self.sim.initial_state_seg.outer_virtual_legs()
-        for v_new, v_sim in zip(psi_legs, psi_sim_legs):
-            v_new.test_equal(v_sim)
-        psi_qtotal = psi.get_total_charge()
-        psi_sim_qtotal = self.sim.initial_state_seg.get_total_charge()
-        if np.any(psi_qtotal - psi_sim_qtotal):
-            raise ValueError(f"State loaded from {self.options.filename} has different charge "
-                             f"{psi_qtotal!r} than expected {psi_sim_qtotal!r}")
-        # finally: perturb, if necessary
         perturb = self.options.get('perturb', False)
-        if perturb:
-            self.sim.perturb_initial_state(psi)
+        psi = self.sim._psi_from_previous_ortho(psi.copy(),
+                                                self._previous_first_last,
+                                                self.options['filename'],
+                                                perturb)
         return psi
