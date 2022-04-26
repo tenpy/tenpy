@@ -840,7 +840,7 @@ def setup_logging(options=None,
             methods calling ``self.logger.info(...)`` will be affected by that.
         format : str
             Formatting string, `fmt` argument of :class:`logging.Formatter`.
-            You can for example use ``"{loglevel:.4s} {asctime} {message}"`` to include the time
+            You can for example use ``"{levelname:.4s} {asctime} {message}"`` to include the time
             stamp of each message into the log - this is usefull to get an idea where code hangs.
             Find
             `allowed keys <https://docs.python.org/3/library/logging.html#logrecord-attributes>`_

@@ -75,6 +75,12 @@ class Simulation:
     -------
     .. cfg:config :: Simulation
 
+        simulation_class : str | class
+            Name or class of the Simulation Class to be used.
+            Read out before class initialization in :meth:`run_simulation` or similar functions.
+        simulation_class_kwargs : dict
+            Keyword arguemnts to be given to the simulation class.
+            Read out before class initialization in :meth:`run_simulation` or similar functions.
         directory : str
             If not None (default), switch to that directory at the beginning of the simulation.
         log_params : dict
@@ -208,11 +214,12 @@ class Simulation:
                               "this might or might not be what you want!")
             np.random.seed(random_seed)
             self.options.subconfig('model_params').setdefault('random_seed', random_seed + 123456)
-        self.results = {
-            'simulation_parameters': self.options,
-            'version_info': self.get_version_info(),
-            'finished_run': False,
-        }
+        if not self.loaded_from_checkpoint:
+            self.results = {
+                'simulation_parameters': self.options,
+                'version_info': self.get_version_info(),
+                'finished_run': False,
+            }
         self._last_save = time.time()
         self.measurement_event = EventHandler("psi, simulation, results")
         if resume_data is not None:
@@ -304,8 +311,9 @@ class Simulation:
         sim.loaded_from_checkpoint = True  # hook to disable parts of the __init__()
         if 'resume_data' in checkpoint_results:
             kwargs.setdefault('resume_data', checkpoint_results['resume_data'])
-        sim.__init__(options, **kwargs)
         sim.results = checkpoint_results
+        sim.__init__(options, **kwargs)
+        # convert measurement arrays back to lists to allow easy appending
         sim.results['measurements'] = {k: list(v) for k, v in sim.results['measurements'].items()}
         return sim
 
@@ -452,7 +460,8 @@ class Simulation:
         if group_sites > 1:
             if not self.loaded_from_checkpoint or self.psi.grouped < group_sites:
                 self.psi.group_sites(group_sites)
-            self.model_ungrouped = self.model.copy()
+            self.model_ungrouped = self.model
+            self.model = self.model.copy()
             self.model.group_sites(group_sites)
             if to_NN:
                 self.model = NearestNeighborModel.from_MPOModel(self.model)
@@ -475,7 +484,7 @@ class Simulation:
         ----------
         **kwargs :
             Extra keyword arguments passed on to the Algorithm.__init__(),
-            for example the `resume_data` when calling `resume_run`.
+            for example the `resume_data` when calling :meth:`resume_run`.
 
         Options
         -------
@@ -499,11 +508,11 @@ class Simulation:
         """
         alg_class_name = self.options.get("algorithm_class", self.default_algorithm)
         AlgorithmClass = find_subclass(Algorithm, alg_class_name)
-        if 'resume_data' in self.results:
-            self.logger.info("use `resume_data` for initializing the algorithm engine")
+        if 'resume_data' in self.results and 'resume_data' not in kwargs:
+            self.logger.info("use results['resume_data'] for initializing the algorithm engine")
             kwargs.setdefault('resume_data', self.results['resume_data'].copy())
             # clean up: they are no longer up to date after algorithm initialization!
-            # up to date resume_data is added in :meth:`prepare_results_for_save`
+            # up to date resume_data is added again in :meth:`prepare_results_for_save`
             self.results['resume_data'].clear()
             del self.results['resume_data']
         kwargs.setdefault('cache', self.cache)
@@ -711,7 +720,7 @@ class Simulation:
             overwrite_output : bool
                 Only makes a difference if `skip_if_output_exists` is False and the file exists.
                 In that case, with `overwrite_output`, just save everything under that name again,
-                or with `overwrite_output`=False, replace
+                or with `overwrite_output` =False, replace
                 ``filename.ext`` with ``filename_01.ext`` (and further increasing numbers)
                 until we get a filename that doesn't exist yet.
             safe_write : bool
@@ -834,7 +843,7 @@ class Simulation:
 
         Options
         -------
-        :cfg:configoptions :: Simulation
+        .. cfg:configoptions :: Simulation
 
             save_resume_data : bool
                 If True, include data from :meth:`~tenpy.algorithms.Algorithm.get_resume_data`
@@ -859,8 +868,33 @@ class Simulation:
             if v.dtype != np.dtype(object):
                 measurements[k] = v
         if self.options.get('save_resume_data', self.options['save_psi']):
-            results['resume_data'] = self.engine.get_resume_data()
+            results['resume_data'] = self.get_resume_data()
+            # note: we don't add this to self.results, but only once we save.
         return results
+
+    def get_resume_data(self, sequential_simulations=False):
+        """Hook to allow including simulation data into the `resume_data`.
+
+        Often just a call to :meth:`~tenpy.algorithms.Algorithm.get_resume_data`
+        of the algorithm :attr:`engine`, but some simulations might need to include additional
+        data.
+
+        Parameters
+        ----------
+        sequential_simulations : bool
+            If True, return only the data for re-initializing a sequential simulation run,
+            where we "adiabatically" follow the evolution of a ground state (for variational
+            algorithms), or do series of quenches (for time evolution algorithms);
+            see :func:`run_seq_simulations`.
+
+        Returns
+        -------
+        resume_data : dict
+            Dictionary with necessary data (apart from copies of `psi`, `model`, `options`)
+            that allows to continue the simulation and algorithm run from where we are now.
+            It might contain an explicit copy of `psi`.
+        """
+        return self.engine.get_resume_data(sequential_simulations)
 
     def save_at_checkpoint(self, alg_engine):
         """Save the intermediate results at the checkpoint of an algorithm.
@@ -1107,7 +1141,7 @@ def resume_from_checkpoint(*,
         if 'sequential' in options:
             sequential = options['sequential']
             sequential['index'] += 1
-            resume_data = sim.engine.get_resume_data(sequential_simulations=True)
+            resume_data = sim.get_resume_data(sequential_simulations=True)
     if 'sequential' in options:
         # note: it is important to exit the with ... as sim`` statement before continuing
         # to free memory and cache
@@ -1187,6 +1221,7 @@ def run_seq_simulations(sequential,
     simulation_class_kwargs : dict | None
     **simulation_params :
         Further arguments as in :func:`run_simulation`.
+        For details on the `simulation_params`, see :cfg:config:`Simulation`.
 
     Returns
     -------
@@ -1255,6 +1290,7 @@ def run_seq_simulations(sequential,
 
     simulation_params['sequential'] = sequential
 
+    # main loop over simulations
     for index in range(index, N_sims):
         os.chdir(base_directory)
         # update simulation parameters
@@ -1272,7 +1308,9 @@ def run_seq_simulations(sequential,
             if collect_results_in_memory:
                 all_results.append(results)
             # save results for the next simulation
-            resume_data = sim.engine.get_resume_data(sequential_simulations=True)
+            resume_data = sim.get_resume_data(sequential_simulations=True)
+        assert resume_data['sequential_simulations'], \
+            "super().get_resume_data() without sequential_simulations argument"
         del sim  # but free memory to avoid too many copies (e.g. the whole environment)
         if index + 1 < N_sims:
             del results
