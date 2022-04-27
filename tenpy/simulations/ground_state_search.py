@@ -1508,7 +1508,7 @@ class TopologicalExcitations(OrthogonalExcitations):
 
             correction += npc.tensordot(rho_beta, RP_beta, axes=(['vR', 'wR', 'vR*'], ['vL', 'wL', 'vL*'])) - \
                           npc.tensordot(rho_alpha, RP_alpha, axes=(['vR', 'wR', 'vR*'], ['vL', 'wL', 'vL*'])) - \
-                          eta_R_beta + eta_R_alpha
+                    eta_R_beta + eta_R_alpha  # TODO: this really depends on the site i; recalculate this!
         return correction
 
     def arbitrary_shifts(self, psi0_alpha, psi0_beta):
