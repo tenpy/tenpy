@@ -1510,7 +1510,31 @@ class TopologicalExcitations(OrthogonalExcitations):
                           npc.tensordot(rho_alpha, RP_alpha, axes=(['vR', 'wR', 'vR*'], ['vL', 'wL', 'vL*'])) - \
                           eta_R_beta + eta_R_alpha
         return correction
-
+    
+    def arbitrary_shift_left(self, i, psi, LP)
+        dtype = np.promote_types(psi.dtype, self.model_orig.H_MPO.dtype)
+        wR = self.model.H_MPO.get_W(i).get_leg('wL').conj()
+        IdR = self.model_orig.H_MPO.get_IdR(i-1)
+        vL = psi0_alpha.get_B(i, 'A').get_leg('vL')
+        chi0 = vL.ind_len
+        eye_L = npc.diag(1., vL, dtype=dtype, labels=['vR*', 'vR'])
+        E_shift = eye_L.add_leg(wR, IdR, axis=1, label='wR')  # vR* wR vR
+        proj_trace = E_shift.conj().iset_leg_labels(['vL*', 'wL', 'vL']) / chi0
+        eta_L = npc.tensordot(LP, proj_trace, axes=(['vR*', 'wR', 'vR'], ['vL*', 'wL', 'vL'])).real
+        return eta_L
+    
+    def arbitrary_shift_right(self, i, psi, RP, )
+        dtype = np.promote_types(psi.dtype, self.model_orig.H_MPO.dtype)
+        wL = self.model.H_MPO.get_W(i).get_leg('wL')
+        IdL = self.model_orig.H_MPO.get_IdL(i)
+        vR = psi0_alpha.get_B(i-1, 'B').get_leg('vR')
+        chi0 = vR.ind_len
+        eye_R = npc.diag(1., vR.conj(), dtype=dtype, labels=['vL', 'vL*'])
+        E_shift = eye_R.add_leg(wL, IdL, axis=1, label='wL')  # vL wL vL*
+        proj_trace = E_shift.conj().iset_leg_labels(['vR', 'wR', 'vR*']) / chi0
+        eta_R = npc.tensordot(proj_trace, RP, axes=(['vR', 'wR', 'vR*'], ['vL', 'wL', 'vL*'])).real
+        return eta_R
+    
     def arbitrary_shifts(self, psi0_alpha, psi0_beta):
         # Code taken from MPO transfer matrix
         dtype = np.promote_types(psi0_alpha.dtype,
@@ -1588,14 +1612,11 @@ class TopologicalExcitations(OrthogonalExcitations):
         else:
             env_alpha = MPOEnvironment(psi0_alpha, self.orig_model.H_MPO, psi0_alpha, **self.init_env_data_L)
             env_beta = MPOEnvironment(psi0_beta, self.orig_model.H_MPO, psi0_beta, **self.init_env_data_R)
-        coeff_alpha = self.options.get('coeff_alpha', 1.)
-        coeff_beta = self.options.get('coeff_beta', 1 - coeff_alpha)
-        assert np.abs(coeff_alpha + coeff_beta - 1.0) < 1.e-12
-
+            
         if psi0_alpha.finite:
             correction = self.correction(psi0_alpha, psi0_beta, env_alpha, env_beta, last, 0, 0)
 
-            self.results['ground_state_energy'] = coeff_alpha * E_alpha + coeff_beta * E_beta + correction
+            self.results['ground_state_energy'] = E_alpha + correction
         else:
             H = self.model_orig.H_MPO
             if (last + 1 - first) % psi0_alpha.L == 0: # last is included in segment.
@@ -1622,8 +1643,7 @@ class TopologicalExcitations(OrthogonalExcitations):
 
             correction = self.correction(psi0_alpha, psi0_beta, env_alpha, env_beta, last, eta_R_alpha, eta_R_beta) / psi0_alpha.L
 
-            self.results['ground_state_energy'] = coeff_alpha * E_alpha + coeff_beta * E_beta \
-                + (1 - coeff_alpha) * eta_L_alpha - coeff_alpha * eta_R_alpha - coeff_beta * eta_L_beta + (1 - coeff_beta) * eta_R_beta + correction
+            self.results['ground_state_energy'] = E_alpha - eta_R_alpha + eta_R_beta + correction
 
             if np.abs(E0_alpha - E0_beta) > 1.e-4:
                 warnings.warn('E0_alpha and E0_beta are more than 1.e-4 idfferent; single DW energy may not be well defined.\nOnly two DWs are well defined. PROCEED AT YOUR OWN RISK.')
