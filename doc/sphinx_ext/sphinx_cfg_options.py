@@ -221,11 +221,16 @@ class CfgConfigOptions(CfgConfig):
         self.env.ref_context['cfg:in-config'] = False
 
     def run(self):
-        index, desc = super().run()
-        assert isinstance(desc, addnodes.desc)
-        desc_content = desc[1]
-        assert isinstance(desc_content, addnodes.desc_content)
-        return desc_content.children[1:]  #don't include the summary table/list/reference
+        # try to remove the summary table (i.e. the `cfgconfig` node) from the children
+        super_return = super().run()
+        index, desc = super_return
+        if not isinstance(desc, addnodes.desc):
+            return super_return  # undexpected, fall back
+        desc_content = desc[-1]
+        if not isinstance(desc_content, addnodes.desc_content) or \
+                not isinstance(desc_content[0], cfgconfig):
+            return super_return  # undexpected: no cfgconfig, fall back
+        return desc_content[1:]  # don't include the summary table/list/reference
 
 
 class CfgOption(ObjectDescription):

@@ -127,14 +127,14 @@ class Algorithm:
         -------
         resume_data : dict
             Dictionary with necessary data (apart from copies of `psi`, `model`, `options`)
-            that allows to continue the simulation from where we are now.
+            that allows to continue the algorithm run from where we are now.
             It might contain an explicit copy of `psi`.
         """
         psi = self._resume_psi
         if psi is not None:
-            return {'psi': psi}
+            return {'psi': psi, 'sequential_simulations': sequential_simulations}
         else:
-            return {'psi': self.psi}
+            return {'psi': self.psi, 'sequential_simulations': sequential_simulations}
 
 
 class TimeEvolutionAlgorithm(Algorithm):
