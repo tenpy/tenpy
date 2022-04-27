@@ -1489,7 +1489,13 @@ class TopologicalExcitations(OrthogonalExcitations):
         E_alpha = env_alpha.full_contraction(0).real
         env_beta = MPOEnvironment(seg_beta, self.model.H_MPO, seg_beta, **self.env_data_R)
         E_beta = env_beta.full_contraction(0).real
-
+        
+        if psi0_alpha.finite:
+            env_alpha = MPOEnvironment(psi0_alpha, self.model_orig.H_MPO, psi0_alpha)
+            env_beta = MPOEnvironment(psi0_beta, self.model_orig.H_MPO, psi0_beta)
+        else:
+            env_alpha = MPOEnvironment(psi0_alpha, self.orig_model.H_MPO, psi0_alpha, **self.init_env_data_L)
+            env_beta = MPOEnvironment(psi0_beta, self.orig_model.H_MPO, psi0_beta, **self.init_env_data_R)
         coeff_alpha = self.options.get('coeff_alpha', 1.)
         coeff_beta = self.options.get('coeff_beta', 1 - coeff_alpha)
         assert np.abs(coeff_alpha + coeff_beta - 1.0) < 1.e-12
