@@ -18,7 +18,7 @@ from ..algorithms.dmrg import TwoSiteDMRGEngine
 from ..linalg import lanczos
 from ..linalg.sparse import SumNpcLinearOperator
 from ..tools.misc import find_subclass, to_iterable, get_recursive
-from ..tools.params import asConfig
+from ..tools.params import asConfig, equal_options
 
 import copy
 
@@ -82,6 +82,10 @@ class GroundStateSearch(Simulation):
 
 
 class PlaneWaveExcitations(GroundStateSearch):
+    # TODO: this uses quite a similar structure as the OrthogonalExcitations, some methods are
+    # copy-pasted (and later modified in OrhtogonalExcitations...).
+    # we should probably have a common base class for simulations loading previous ground state
+    # data.
     default_algorithm = 'PlaneWaveExcitationEngine'
 
     def __init__(self, options, *, gs_data=None, **kwargs):
@@ -278,8 +282,9 @@ class OrthogonalExcitations(GroundStateSearch):
     orthogonal_to : None | list
         States to orthogonalize against.
     gs_data : None | dict
-        Data of the ground state which should be used instead of loading the date from
-        :cfg:option:`OrthogonalExcitations.ground_state_filename`
+        Data of the ground state which should be used instead of loading the data from
+        :cfg:option:`OrthogonalExcitations.ground_state_filename`.
+        By default (None), read out the filename from the options and load the data from file.
 
     Options
     -------
@@ -415,13 +420,13 @@ class OrthogonalExcitations(GroundStateSearch):
             The data loaded from :cfg:option:`OrthogonalExcitations.ground_state_filename`.
         """
         gs_fn, gs_data = self._load_gs_data()
+        self.logger.info("initialize original ground state model")
         gs_data_options = gs_data['simulation_parameters']
         for key in gs_data_options.keys():
             if not isinstance(key, str) or not key.startswith('model'):
                 continue
             if key not in self.options:
                 self.options[key] = gs_data_options[key]
-        self.logger.info("initialize original ground state model")
         # initialize original model with model_class and model_params from ground state data
         self.init_model()
         self.model_orig = self.model
@@ -436,9 +441,10 @@ class OrthogonalExcitations(GroundStateSearch):
         # extract segments if necessary; get `init_env_data`.
         resume_data = gs_data.get('resume_data', {})
         psi0_seg, write_back = self.extract_segment(psi0, self.model, resume_data)
-        if write_back:
-            self.write_back_environments(gs_data, gs_fn)
         self.results['segment_first_last'] = self.model.lat.segment_first_last
+
+        if write_back:
+            self.write_back_environments(gs_data, gs_fn, self.init_env_data)
 
         # here, psi0_seg is the *unperturbed* ground state in the segment!
         self.get_reference_energy(psi0_seg)
@@ -586,7 +592,7 @@ class OrthogonalExcitations(GroundStateSearch):
         self.results['ground_state_energy'] = E
         return E
 
-    def write_back_environments(self, gs_data, gs_fn):
+    def write_back_environments(self, gs_data, gs_fn, new_init_env_data):
         """Write converged environments back into the file with the ground state.
 
         Parameters
@@ -595,8 +601,9 @@ class OrthogonalExcitations(GroundStateSearch):
             Data loaded from the ground state file.
         gs_fn : str | None
             Filename where to save `gs_data`. Do nothing if `gs_fn` is None.
+        init_env_data : dict
+            Environment data to be written back.
         """
-        assert self.init_env_data, "should have been defined by extract_segment()"
         orig_fn = self.output_filename
         orig_backup_fn = self._backup_filename
         try:
@@ -605,7 +612,7 @@ class OrthogonalExcitations(GroundStateSearch):
 
             resume_data = gs_data.setdefault('resume_data', {})
             init_env_data = resume_data.setdefault('init_env_data', {})
-            init_env_data.update(self.init_env_data)
+            init_env_data.update(new_init_env_data)
             if resume_data.get('converged_environments', False):
                 raise ValueError(f"{gs_fn!s} already has converged environments!")
             resume_data['converged_environments'] = True
@@ -1082,76 +1089,62 @@ def expectation_value_outside_segment_left(psi_segment, psi_L, ops, lat_segment,
 
 
 class TopologicalExcitations(OrthogonalExcitations):
-    def __init__(self, options, *, gs_data_L=None, gs_data_R=None, **kwargs):
-        super().__init__(options, **kwargs)
-        resume_data = kwargs.get('resume_data', {})
-        #  if orthogonal_to is None and 'orthogonal_to' in resume_data:
-        #      orthogonal_to = kwargs['resume_data']['orthogonal_to']
-        #      self.options.touch('ground_state_filename_left', 'ground_state_filename_right')
-        self.orthogonal_to = None # TODO: allow orthogonal_to
-        self.excitations = resume_data.get('excitations', [])
-        self.results['excitation_energies'] = []
-        self.results['excitation_energies_MPO'] = []
-        if self.options.get('save_psi', True):
-            self.results['excitations'] = self.excitations
-        self.init_env_data = {}
-        self._gs_data_L = gs_data_L
-        self._gs_data_R = gs_data_R
-        self.initial_state_builder = None
+    """Like :class:`OrthogonalExcitations` but different left and right reference ground states.
+
+    Parameters
+    ----------
+    orthogonal_to : None | list
+        States to orthogonalize against.
+    gs_data : None | (dict, dict)
+        Data of the (left, right) ground state which should be used instead of loading the data
+        from :cfg:option:`TopologicalExcitations.ground_state_filename_left` and
+        :cfg:option:`TopologicalExcitations.ground_state_filename_right`, respectively.
+        By default (None), read out the filename(s) from the options and load the data from file.
+
+    Options
+    -------
+    .. cfg:config :: TopologicalExcitations
+        :include: OrthogonalExcitations
+
+    """
+
+    # inherit __init__ from OrthogonalExcitations!
 
     def init_from_groundstate(self):
-        """Initialize :attr:`orthogonal_to` from the ground state.
+        """Initialize from the ground state data.
 
         Load the ground state and initialize the model from it.
-        Calls :meth:`extract_segment`.
-
-        An empty :attr:`orthogonal_to` indicates that we will :meth:`switch_charge_sector`
-        in the first :meth:`init_algorithm` call.
+        Calls :meth:`extract_segment`, :meth:`get_reference_energy`,
+        and :meth:`switch_charge_sector`, to finally initialize :attr:`orthogonal_to`.
 
         Options
         -------
-        .. cfg:configoptions :: OrthogonalExcitations
+        .. cfg:configoptions :: TopologicalExcitations
 
-            ground_state_filename :
-                File from which the ground state should be loaded.
-            orthogonal_norm_tol : float
-                Tolerance how large :meth:`~tenpy.networks.mps.MPS.norm_err` may be for states
-                to be added to :attr:`orthogonal_to`.
-            apply_local_op: list | None
-                If not `None`, use :meth:`~tenpy.networks.mps.MPS.apply_local_op` to change
-                the charge sector compared to the ground state.
-                Should have the form  ``[site1, operator1, site2, operator2, ...]``.
-                with the operators given as strings (to be read out from the site class).
-                Alternatively, use `switch_charge_sector`.
-                `site#` are MPS indices in the *original* ground state, not the segment!
-            switch_charge_sector : list of int | None
-                If given, change the charge sector of the exciations compared to the ground state.
-                Alternative to `apply_local_op` where we run a small zero-site diagonalization on
-                the left-most bond in the desired charge sector to update the state.
-            switch_charge_sector_site: int
-                To the left of which site we switch charge sector.
-                MPS index in the *original* ground state, not the segment!
+            ground_state_filename_left :
+                File from which the left ground state should be loaded.
+            ground_state_filename_right :
+                File from which the right ground state should be loaded.
 
-        Returns
-        -------
-        gs_data : dict
-            The data loaded from :cfg:option:`OrthogonalExcitations.ground_state_filename`.
         """
-        gs_fn_L, gs_data_L, gs_fn_R, gs_data_R = self._load_gs_data()
-        gs_data_options_L = gs_data_L['simulation_parameters']
+        gs_fn_LR, gs_data_LR  = self._load_gs_data()
         # initialize original model with model_class and model_params from ground state data
         self.logger.info("initialize original ground state model")
-        for key in gs_data_options_L.keys(): # Assume same model params for left and right
+        gs_options_L = gs_data_LR[0]['simulation_parameters']
+        gs_options_R = gs_data_LR[1]['simulation_parameters']
+        for key in gs_options_L.keys():
             if not isinstance(key, str) or not key.startswith('model'):
                 continue
             if key not in self.options:
-                self.options[key] = gs_data_options_L[key]
-        self.init_model() # FOR NOW, WE ASSUME LEFT AND RIGHT MODELS ARE THE SAME
+                if not equal_options(gs_options_L[key], gs_options_R[key]):
+                    raise ValueError("ground state files have different model parameters")
+                self.options[key] = gs_options_L[key]
+        self.init_model()  # for now, we assume left and right models are the same
         self.model_orig = self.model
 
         # intialize original state
-        self.ground_state_orig_L = psi0_L = gs_data_L['psi']  # no copy!
-        self.ground_state_orig_R = psi0_R = gs_data_R['psi']  # no copy!
+        self.ground_state_orig_L = psi0_L = gs_data_LR[0]['psi']  # no copy!
+        self.ground_state_orig_R = psi0_R = gs_data_LR[1]['psi']  # no copy!
         assert self.ground_state_orig_L.L == self.ground_state_orig_R.L
         if np.linalg.norm(psi0_L.norm_test()) > self.options.get('orthogonal_norm_tol', 1.e-12):
             self.logger.info("call psi.canonical_form() on left ground state")
@@ -1161,21 +1154,17 @@ class TopologicalExcitations(OrthogonalExcitations):
             psi0_R.canonical_form()
 
         # extract segments if necessary; get `init_env_data`.
-        resume_data_L = gs_data_L.get('resume_data', {}) # TODO this is probably wrong
-        resume_data_R = gs_data_R.get('resume_data', {}) # TODO this is probably wrong
-        psi0_seg, write_back_left, write_back_right = self.extract_segment(psi0_L, psi0_R, self.model, resume_data_L, resume_data_R)
-        ########################################
-        if write_back_left:
-            init_env_data = self.init_env_data
-            self.init_env_data = self.init_env_data_L
-            self.write_back_environments(gs_data_L, gs_fn_L)
-            self.init_env_data = init_env_data
-        if write_back_right:
-            init_env_data = self.init_env_data
-            self.init_env_data = self.init_env_data_R
-            self.write_back_environments(gs_data_R, gs_fn_R)
-            self.init_env_data = init_env_data
+        resume_data_LR = [gs_data.get('resume_data', {}) for gs_data in gs_data_LR]
+        psi0_seg, write_back_LR = self.extract_segment((psi0_L, psi0_R),
+                                                       self.model,
+                                                       resume_data_LR)
         self.results['segment_first_last'] = self.model.lat.segment_first_last
+
+        for which, write in enumerate(write_back_LR):
+            if write:
+                self.write_back_environments(gs_data_LR[which],
+                                             gs_fn_LR[which],
+                                             (self.init_env_data_L, self.init_env_data_R)[which])
 
         # here, psi0_seg is the *unperturbed* ground state in the segment!
         self.get_reference_energy(psi0_L, psi0_R)
@@ -1184,33 +1173,35 @@ class TopologicalExcitations(OrthogonalExcitations):
         self.initial_state_seg, self.qtotal_diff = self.switch_charge_sector(psi0_seg)
         self.results['qtotal_diff'] = self.qtotal_diff
 
-        self.orthogonal_to = []  # Segment is inherently different than either left or right ground state.
-        # Or at least the two sides will be different for non-trivial calculation.
-        return None # return isn't used
+        if self.orthogonal_to is None:
+            # Segment is inherently different than either left or right ground state.
+            # Or at least the two sides will be different for non-trivial calculations
+            self.orthogonal_to = []
+        else:
+            # already initialized orthogonal_to from resume_data
+            # check charge consistency
+            assert tuple(self.results['qtotal_diff']) == tuple(self.qtotal_diff)
+        self.logger.info("finished init_form_groundstate()")
+        return gs_data_LR
 
     def _load_gs_data(self):
         """Load ground state data from `ground_state_filename` or use simulation kwargs."""
-        gs_data_return = []
-        for which, gs_D in zip(['left', 'right'], [self._gs_data_L, self._gs_data_R]):
-            if gs_D is not None:
-                gs_F = None
-                self.logger.info("use ground state data of simulation class arguments")
-                gs_data = gs_D
-                gs_D = None  # reset to None to potentially allow to free the memory
-                # even though this can only work if the call structure is
-                #      sim = OrthogonalExcitations(..., gs_data=gs_data)
-                #      del gs_data
-                #      with sim:
-                #          sim.run()
-            else:
-                gs_F = self.options['ground_state_filename_' + which]
-                self.logger.info("loading " + which + " ground state data from %s", gs_F)
-                gs_D = hdf5_io.load(gs_F)
-            gs_data_return.extend((gs_F, gs_D))
-        assert len(gs_data_return) == 4
-        return gs_data_return
+        if self._gs_data is not None:
+            self.options.touch('ground_state_filename_left', 'ground_state_filename_right')
+            self.logger.info("use ground state data of simulation class arguments")
+            gs_fn_L = gs_fn_R = None
+            gs_data_L, gs_data_R = self._gs_data  # class arg should be a tuple with 2 entries
+            self._gs_data = None  # reset to None to potentially allow to free the memory
+        else:
+            gs_fn_L = self.options['ground_state_filename_left']
+            gs_fn_R = self.options['ground_state_filename_right']
+            self.logger.info("loading left ground state data from %s", gs_fn_L)
+            gs_data_L = hdf5_io.load(gs_fn_L)
+            self.logger.info("loading right ground state data from %s", gs_fn_L)
+            gs_data_R = hdf5_io.load(gs_fn_R)
+        return (gs_fn_L, gs_fn_R), (gs_data_L, gs_data_R)
 
-    def extract_segment(self, psi0_L_Orig, psi0_R_Orig, model_orig, resume_data_L, resume_data_R):
+    def extract_segment(self, psi0_orig, model_orig, resume_data):
         """Extract a finite segment from the original model and states.
 
         In case the original state is already finite, we might still extract a sub-segment
@@ -1236,37 +1227,44 @@ class TopologicalExcitations(OrthogonalExcitations):
 
         Parameters
         ----------
-        psi0_orig : :class:`~tenpy.networks.mps.MPS`
-            Original ground state.
+        psi0_orig : (:class:`~tenpy.networks.mps.MPS`, :class:`~tenpy.networks.mps.MPS`)
+            Original ground state. Tuple for (left, right) psis.
         model_orig : :class:`~tenpy.models.model.MPOModel`
             Original model.
-        resume_data : dict
-            Possibly contains `init_env_data` with environments.
+        resume_data : (dict, dict)
+            Resume data possibly containing `init_env_data` with environments.
+            If not, the environments are recalculated.
 
         Returns
         -------
         psi0_seg :
             Unperturbed ground state in the segment, against which to orthogonalize
             if we don't switch charge sector.
-        write_back : bool
-            Whether :meth:`write_back_environments` should be called.
+        write_back : (bool, bool)
+            Whether left/right state and environement should should be written back in
+            :meth:`write_back_environments`.
         """
-        if psi0_L_Orig.bc == 'infinite':
-            return self._extract_segment_from_infinite(psi0_L_Orig, psi0_R_Orig, model_orig, resume_data_L, resume_data_R)
+        assert psi0_orig[0].bc == psi0_orig[1].bc, "different boundary conditions"
+        if psi0_orig[0].bc == 'infinite':
+            return self._extract_segment_from_infinite(psi0_orig, model_orig, resume_data)
         else:
-            return self._extract_segment_from_finite(psi0_L_Orig, psi0_R_Orig, model_orig)
+            return self._extract_segment_from_finite(psi0_orig, model_orig)
 
-    def _extract_segment_from_finite(self, psi0_fin_L, psi0_fin_R, model_fin):
+    def _extract_segment_from_finite(self, psi0_fin_LR, model_fin):
+        psi0_fin_L, psi0_fin_R = psi0_fin_LR
         first = self.options.get('segment_first', 0)
         last = self.options.get('segment_last', None)
-        boundary = self.options.get('segment_boundary', (last-first)//2 +first if last is not None else (psi0_fin_L.L-first)//2 + first)
-        assert first < boundary
+        last_i = last if last is not None else psi0_fin_L.L
+        boundary = (last_i - first) // 2 + first
+        boundary = self.options.get('segment_boundary', boundary)
+        assert first < boundary <= last_i
         if last is not None:
             assert boundary < last
 
         self.model = model_fin.extract_segment(first, last)
         first, last = self.model.lat.segment_first_last
-        ground_state_seg_L = psi0_fin_L.extract_segment(first, boundary-1) # 2nd index included in segment
+        # 2nd index included in segment
+        ground_state_seg_L = psi0_fin_L.extract_segment(first, boundary - 1)
         ground_state_seg_R = psi0_fin_R.extract_segment(boundary, last)
 
         env = MPOEnvironment(psi0_fin_L, self.model_orig.H_MPO, psi0_fin_L)
@@ -1287,28 +1285,15 @@ class TopologicalExcitations(OrthogonalExcitations):
                                   'age_LP': 0,
                                   'age_RP': 0}
 
-            #self.init_env_data = self._contract_segment_boundaries(self.init_env_data, *ground_state_seg.segment_boundaries)
         else:
             assert ground_state_seg_L.L + ground_state_seg_R.L == psi0_fin_L.L
             self.init_env_data = {}
 
-        return ground_state_seg, False, False
+        return ground_state_seg, (False, False)
 
-    def _contract_segment_boundaries(self, env_data, U, Vh):
-        self.logger.info("Put segment boundaries into domain wall envs.")
-        if U is not None:
-            init_LP = npc.tensordot(U.conj(), env_data['init_LP'], axes=(['vL*'], ['vR*']))
-            init_LP = npc.tensordot(init_LP, U, axes=(['vR'], ['vL']))
-            env_data['init_LP'] = init_LP
-
-        if Vh is not None:
-            init_RP = npc.tensordot(Vh, env_data['init_RP'], axes=(['vR'], ['vL']))
-            init_RP = npc.tensordot(init_RP, Vh.conj(), axes=(['vL*'], ['vR*']))
-            env_data['init_RP'] = init_RP
-
-        return env_data
-
-    def _extract_segment_from_infinite(self, psi0_inf_L, psi0_inf_R, model_inf, resume_data_L, resume_data_R):
+    def _extract_segment_from_infinite(self, psi0_inf_LR, model_inf, resume_data_LR):
+        psi0_inf_L, psi0_inf_R = psi0_inf_LR
+        resume_data_L, resume_data_R = resume_data_LR
         enlarge = self.options.get('segment_enlarge', None)
         first = self.options.get('segment_first', 0)
         if enlarge is not None:
@@ -1373,8 +1358,7 @@ class TopologicalExcitations(OrthogonalExcitations):
                                                psi0_inf_L, psi0_inf_R,
                                                self.model, (first, last, boundary))
 
-        return ground_state_seg, write_back_left, write_back_right
-
+        return ground_state_seg, (write_back_left, write_back_right)
 
     def _glue_segments(self, seg_L, seg_R, inf_L, inf_R, model, indices):
         join_method = self.join_method = self.options.get('join_method', "average charge")
@@ -1416,7 +1400,10 @@ class TopologicalExcitations(OrthogonalExcitations):
                 QsL, psL = seg_L.probability_per_charge(posL)
                 QsR, psR = seg_R.probability_per_charge(posR)
 
-                side_by_side = string.vert_join(["left seg\n" + str(QsL), "prob\n" + str(np.array([psL]).T), "right seg\n" + str(QsR),"prob\n" +str(np.array([psR]).T)], delim=' | ')
+                side_by_side = string.vert_join(["left seg\n" + str(QsL),
+                                                 "prob\n" + str(np.array([psL]).T),
+                                                 "right seg\n" + str(QsR),
+                                                 "prob\n" +str(np.array([psR]).T)], delim=' | ')
                 self.logger.info(side_by_side)
 
                 Qmostprobable_L = QsL[np.argmax(psL)]
