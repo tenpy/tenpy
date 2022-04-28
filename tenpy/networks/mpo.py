@@ -2086,11 +2086,11 @@ class MPOEnvironment(MPSEnvironment):
         """
         if not self._finite  and (init_LP is None or init_RP is None) and \
                 start_env_sites is None and self.bra is self.ket:
-            norm_err = np.linalg.norm(psi.norm_test())
+            norm_err = np.linalg.norm(self.ket.norm_test())
             if norm_err > 1.e-10:
-                warnings.warn("call psi.canonical_form() to find MPO environments from psi alone "
+                warnings.warn("call psi.canonical_form() to regenerate MPO environments from psi"
                               f" with current norm error {norm_err:.2e}")
-                self.psi.canonical_form()
+                self.ket.canonical_form()
             env_data = MPOTransferMatrix.find_init_LP_RP(self.H, self.ket, 0, self.L - 1)
             init_LP = env_data['init_LP']
             init_RP = env_data['init_RP']
