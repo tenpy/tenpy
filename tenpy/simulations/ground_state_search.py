@@ -934,8 +934,8 @@ class OrthogonalExcitations(GroundStateSearch):
         new_first_last = self.results['segment_first_last']
         if previous_first_last != new_first_last:
             prev_first, prev_last = previous_first_last
-            psi, _, _ = psi.extract_enlarged_segment(self.sim.ground_state_orig_L,
-                                                     self.sim.ground_state_orig_R,
+            psi, _, _ = psi.extract_enlarged_segment(self.ground_state_orig_L,
+                                                     self.ground_state_orig_R,
                                                      prev_first,
                                                      prev_last,
                                                      new_first_last=new_first_last)
@@ -1718,7 +1718,7 @@ class ExcitationInitialState(InitialStateBuilder):
                              filename, key_ortho, key_offset)
             data = hdf5_io.load(filename)
             self._previous_ortho = previous_ortho = data['resume_data']['orthogonal_to']
-            self._previous_offset = data['resume_data']['offset']
+            self._previous_offset = data['resume_data']['ortho_offset']
             self._previous_first_last = data['segment_first_last']
         # else: we already loaded the corresponding data
         psi = previous_ortho[self._previous_offset + len(self.sim.excitations)]
