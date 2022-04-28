@@ -6,7 +6,7 @@ See the doc-string of :class:`Config` for details.
 
 import warnings
 import numpy as np
-from collections.abc import MutableMapping
+from collections.abc import MutableMapping, Mapping
 import pprint
 import os
 import logging
@@ -430,6 +430,45 @@ def asConfig(config, name):
     if isinstance(config, Config):
         return config
     return Config(config, name)
+
+
+def equal_options(options1, options2):
+    """Return True if `params1` has the same options as `params2`.
+
+    Some options might be set to numpy arrays, where a direct comparison fails with a ValueError
+    due to the disambiguity between ``all()`` ``any()``.
+    This function recursively checks all items of dictionary-like structures,
+    and `all` of the numpy arrays.
+
+    Parameters
+    ----------
+    options1, options2:
+        The options to be compared.
+
+    Returns
+    -------
+    equal : bool
+        True if the dicts are equal.
+    """
+    if isinstance(options1, np.ndarray):
+        if not np.all(options1 == options2):
+            return False
+    elif isinstance(options1, Mapping):
+        if set(options1.keys()) != set(options2.keys()):
+            return False
+        for key, value1 in options1.items():
+            value2 = options2[key]
+            if not equal_options(value1, value2):
+                return False
+    else:
+        # list, tuple, scalars -> direct comparison
+        try:
+            if not options1 == options2:
+                return False
+        except :
+            warnings.warn("error in equal_options: == not defined, so probably different?!")
+            return False
+    return True
 
 
 def get_parameter(params, key, default, descr, asarray=False):

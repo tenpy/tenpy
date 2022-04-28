@@ -2,8 +2,9 @@
 # Copyright 2018-2021 TeNPy Developers, GNU GPLv3
 
 import warnings
-from tenpy.tools.params import Config, asConfig
+from tenpy.tools.params import Config, asConfig, equal_options
 import copy
+import numpy as np
 
 
 def example_function(example_pars, keys=['a', 'b', 'c']):
@@ -46,3 +47,32 @@ def test_parameters():
         sub.__del__()
         assert len(w) == 3
         sub.touch('x', 'y_new')  # avoid warnings when deconstructed outside of the catch_warning
+
+
+def test_equal_options():
+    d = {
+        'a': [1, 2, 3],
+        'b': np.arange(4),
+        'sub': {
+            'x': (5, 6),
+            'y': np.ones(3),
+            'sub2': {
+                'alpha': 'string',
+                'beta': (12, [13, 14]),
+            }
+        }
+    }
+    d2 = copy.deepcopy(d)
+    assert equal_options(d, d2)
+    d2['sub']['sub2']['alpha'] = 'other_string'
+    assert not equal_options(d, d2)
+    d2['sub']['sub2']['alpha'] = 'string'
+    assert equal_options(d, d2)
+
+    d2 = copy.deepcopy(d)
+    d2['c'] = 'extra'
+    assert not equal_options(d, d2)
+
+    d2 = copy.deepcopy(d)
+    d2['sub']['z'] = 'extra_z'
+    assert not equal_options(d, d2)

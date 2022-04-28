@@ -41,6 +41,7 @@ Added
   :meth:`~tenpy.networks.mps.MPS.apply_local_op` with a fermionic operator on an MPS.
 - :func:`~tenpy.linalg.np_conserved.orthogonal_columns` constructing orthogonal columns to a given (rectangular) matrix.
 - :meth:`~tenpy.networks.mps.MPS.enlarge_chi` for artificially enlarging the bond dimension.
+- :meth:`~tenpy.tools.params.equal_options` to check if options are equal without error for numpy arrays.
 
 Changed
 ^^^^^^^
