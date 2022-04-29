@@ -536,7 +536,7 @@ class Lattice:
             A copy of `self` with "segment" :attr:`bc_MPS` and :attr:`segment_first_last` set.
         """
         cp = self.copy()
-        L = cp.N_sites
+        L = cp.N_sites # Size of finite MPS or unit cell
         #assert first >= 0
         if enlarge is not None:
             if cp.bc_MPS != 'infinite':
@@ -545,17 +545,21 @@ class Lattice:
                 raise ValueError("specifiy either `first`+`last` or `enlarge`!")
             assert enlarge > 0
             last = enlarge * L - 1
-            # first = 0
+            # first = 0, not needed since first == 0 from above.
         elif last is None:
             last = L - 1
         if first > last: # first == last should be fine
             raise ValueError(f"need first <= last, got {first:d}, {last:d}")
-        first_unit_cell = first - first % L
+        first_unit_cell = first - first % L # index of the beginning of the unit cell (of LATTICE) of first
+        if cp.bc_MPS != 'infinite':
+            assert first_unit_cell == 0 # i.e. first > 0
         segment_first_last = (first, last)
         if first_unit_cell != 0:
-            #assert first_unit_cell < 0 # SAJANT - if first > L, then first_unit_cell > 0.
-            if cp.bc_MPS != 'infinite' and first_unit_cell < 0:
-                raise ValueError("can't enlarge to negative `first` for finite system")
+            #assert first_unit_cell < 1 and first_unit_cell > -2, "No need to shift into 1st or -2nd unit cell" # SAJANT - if first > L, then first_unit_cell > 0.
+            
+            #if cp.bc_MPS != 'infinite' and first_unit_cell < 0: # finite should always have first_unit_cell==0
+            #    raise ValueError("can't enlarge to negative `first` for finite system")
+            
             # shift by whole unit cell(s) to the right until `first` is in first unit cell
             first, last = first - first_unit_cell, last - first_unit_cell
             assert 0 <= first < L

@@ -369,12 +369,12 @@ class OrthogonalExcitations(GroundStateSearch):
             self.results['excitations'] = self.excitations
 
     def run(self):
-        if not hasattr(self, 'ground_state_orig_L'):
+        if not hasattr(self, 'ground_state_orig_alpha'):
             self.init_from_groundstate()
         return super().run()
 
     def resume_run(self):
-        if not hasattr(self, 'ground_state_orig_L'):
+        if not hasattr(self, 'ground_state_orig_beta'):
             self.init_from_groundstate()
         return super().resume_run()
 
@@ -428,7 +428,7 @@ class OrthogonalExcitations(GroundStateSearch):
 
         # intialize original state
         self.ground_state_orig = psi0 = gs_data['psi']  # no copy!
-        self.ground_state_orig_L = self.ground_state_orig_R = psi0
+        self.ground_state_orig_alpha = self.ground_state_orig_beta = psi0
         if np.linalg.norm(psi0.norm_test()) > self.options.get('orthogonal_norm_tol', 1.e-12):
             self.logger.info("call psi.canonical_form() on ground state")
             psi0.canonical_form()
@@ -903,8 +903,8 @@ class OrthogonalExcitations(GroundStateSearch):
         measure_add_unitcells = self.options.get('measure_add_unitcells', 0)
         if measure_add_unitcells is not None:
             first, last = self.results['segment_first_last']
-            psi, meas_first, meas_last = psi.extract_enlarged_segment(self.ground_state_orig_L,
-                                                                      self.ground_state_orig_R,
+            psi, meas_first, meas_last = psi.extract_enlarged_segment(self.ground_state_orig_alpha,
+                                                                      self.ground_state_orig_beta,
                                                                       first,
                                                                       last,
                                                                       measure_add_unitcells)
@@ -934,8 +934,8 @@ class OrthogonalExcitations(GroundStateSearch):
         new_first_last = self.results['segment_first_last']
         if previous_first_last != new_first_last:
             prev_first, prev_last = previous_first_last
-            psi, _, _ = psi.extract_enlarged_segment(self.sim.ground_state_orig_L,
-                                                     self.sim.ground_state_orig_R,
+            psi, _, _ = psi.extract_enlarged_segment(self.sim.ground_state_orig_alpha,
+                                                     self.sim.ground_state_orig_beta,
                                                      prev_first,
                                                      prev_last,
                                                      new_first_last=new_first_last)
@@ -1082,7 +1082,7 @@ def expectation_value_outside_segment_left(psi_segment, psi_L, ops, lat_segment,
 
 
 class TopologicalExcitations(OrthogonalExcitations):
-    def __init__(self, options, *, gs_data_L=None, gs_data_R=None, **kwargs):
+    def __init__(self, options, *, gs_data_alpha=None, gs_data_beta=None, **kwargs):
         super().__init__(options, **kwargs)
         resume_data = kwargs.get('resume_data', {})
         #  if orthogonal_to is None and 'orthogonal_to' in resume_data:
@@ -1095,8 +1095,8 @@ class TopologicalExcitations(OrthogonalExcitations):
         if self.options.get('save_psi', True):
             self.results['excitations'] = self.excitations
         self.init_env_data = {}
-        self._gs_data_L = gs_data_L
-        self._gs_data_R = gs_data_R
+        self._gs_data_alpha = gs_data_alpha
+        self._gs_data_beta = gs_data_beta
         self.initial_state_builder = None
 
     def init_from_groundstate(self):
@@ -1137,48 +1137,48 @@ class TopologicalExcitations(OrthogonalExcitations):
         gs_data : dict
             The data loaded from :cfg:option:`OrthogonalExcitations.ground_state_filename`.
         """
-        gs_fn_L, gs_data_L, gs_fn_R, gs_data_R = self._load_gs_data()
-        gs_data_options_L = gs_data_L['simulation_parameters']
+        gs_fn_alpha, gs_data_alpha, gs_fn_beta, gs_data_beta = self._load_gs_data()
+        gs_data_options_alpha = gs_data_alpha['simulation_parameters']
         # initialize original model with model_class and model_params from ground state data
         self.logger.info("initialize original ground state model")
-        for key in gs_data_options_L.keys(): # Assume same model params for left and right
+        for key in gs_data_options_alpha.keys(): # Assume same model params for left and right
             if not isinstance(key, str) or not key.startswith('model'):
                 continue
             if key not in self.options:
-                self.options[key] = gs_data_options_L[key]
+                self.options[key] = gs_data_options_alpha[key]
         self.init_model() # FOR NOW, WE ASSUME LEFT AND RIGHT MODELS ARE THE SAME
         self.model_orig = self.model
 
         # intialize original state
-        self.ground_state_orig_L = psi0_L = gs_data_L['psi']  # no copy!
-        self.ground_state_orig_R = psi0_R = gs_data_R['psi']  # no copy!
-        assert self.ground_state_orig_L.L == self.ground_state_orig_R.L
-        if np.linalg.norm(psi0_L.norm_test()) > self.options.get('orthogonal_norm_tol', 1.e-12):
+        self.ground_state_orig_alpha = psi0_alpha = gs_data_alpha['psi']  # no copy!
+        self.ground_state_orig_beta = psi0_beta = gs_data_beta['psi']  # no copy!
+        assert self.ground_state_orig_alpha.L == self.ground_state_orig_beta.L
+        if np.linalg.norm(psi0_alpha.norm_test()) > self.options.get('orthogonal_norm_tol', 1.e-12):
             self.logger.info("call psi.canonical_form() on left ground state")
-            psi0_L.canonical_form()
-        if np.linalg.norm(psi0_R.norm_test()) > self.options.get('orthogonal_norm_tol', 1.e-12):
+            psi0_alpha.canonical_form()
+        if np.linalg.norm(psi0_beta.norm_test()) > self.options.get('orthogonal_norm_tol', 1.e-12):
             self.logger.info("call psi.canonical_form() on right ground state")
-            psi0_R.canonical_form()
+            psi0_beta.canonical_form()
 
         # extract segments if necessary; get `init_env_data`.
-        resume_data_L = gs_data_L.get('resume_data', {}) # TODO this is probably wrong
-        resume_data_R = gs_data_R.get('resume_data', {}) # TODO this is probably wrong
-        psi0_seg, write_back_left, write_back_right = self.extract_segment(psi0_L, psi0_R, self.model, resume_data_L, resume_data_R)
+        resume_data_alpha = gs_data_alpha.get('resume_data', {}) # TODO this is probably wrong
+        resume_data_beta = gs_data_beta.get('resume_data', {}) # TODO this is probably wrong
+        psi0_seg, write_back_left, write_back_right = self.extract_segment(psi0_alpha, psi0_beta, self.model, resume_data_alpha, resume_data_beta)
         ########################################
         if write_back_left:
             init_env_data = self.init_env_data
-            self.init_env_data = self.init_env_data_L
-            self.write_back_environments(gs_data_L, gs_fn_L)
+            self.init_env_data = self.init_env_data_alpha
+            self.write_back_environments(gs_data_alpha, gs_fn_alpha)
             self.init_env_data = init_env_data
         if write_back_right:
             init_env_data = self.init_env_data
-            self.init_env_data = self.init_env_data_R
-            self.write_back_environments(gs_data_R, gs_fn_R)
+            self.init_env_data = self.init_env_data_beta
+            self.write_back_environments(gs_data_beta, gs_fn_beta)
             self.init_env_data = init_env_data
         self.results['segment_first_last'] = self.model.lat.segment_first_last
 
         # here, psi0_seg is the *unperturbed* ground state in the segment!
-        self.get_reference_energy(psi0_L, psi0_R)
+        self.get_reference_energy(psi0_alpha, psi0_beta)
 
         # switch_charge_sector defines `self.initial_state_seg`
         self.initial_state_seg, self.qtotal_diff = self.switch_charge_sector(psi0_seg)
@@ -1191,7 +1191,7 @@ class TopologicalExcitations(OrthogonalExcitations):
     def _load_gs_data(self):
         """Load ground state data from `ground_state_filename` or use simulation kwargs."""
         gs_data_return = []
-        for which, gs_D in zip(['left', 'right'], [self._gs_data_L, self._gs_data_R]):
+        for which, gs_D in zip(['left', 'right'], [self._gs_data_alpha, self._gs_data_beta]):
             if gs_D is not None:
                 gs_F = None
                 self.logger.info("use ground state data of simulation class arguments")
@@ -1210,7 +1210,7 @@ class TopologicalExcitations(OrthogonalExcitations):
         assert len(gs_data_return) == 4
         return gs_data_return
 
-    def extract_segment(self, psi0_L_Orig, psi0_R_Orig, model_orig, resume_data_L, resume_data_R):
+    def extract_segment(self, psi0_alpha_Orig, psi0_beta_Orig, model_orig, resume_data_alpha, resume_data_beta):
         """Extract a finite segment from the original model and states.
 
         In case the original state is already finite, we might still extract a sub-segment
@@ -1251,36 +1251,45 @@ class TopologicalExcitations(OrthogonalExcitations):
         write_back : bool
             Whether :meth:`write_back_environments` should be called.
         """
-        if psi0_L_Orig.bc == 'infinite':
-            return self._extract_segment_from_infinite(psi0_L_Orig, psi0_R_Orig, model_orig, resume_data_L, resume_data_R)
+        if psi0_alpha_Orig.bc == 'infinite':
+            return self._extract_segment_from_infinite(psi0_alpha_Orig, psi0_beta_Orig, model_orig, resume_data_alpha, resume_data_beta)
         else:
-            return self._extract_segment_from_finite(psi0_L_Orig, psi0_R_Orig, model_orig)
+            return self._extract_segment_from_finite(psi0_alpha_Orig, psi0_beta_Orig, model_orig)
 
-    def _extract_segment_from_finite(self, psi0_fin_L, psi0_fin_R, model_fin):
+    def _extract_segment_from_finite(self, psi0_fin_alpha, psi0_fin_beta, model_fin):
+        """ Extract segment from finite MPS. """
         first = self.options.get('segment_first', 0)
         last = self.options.get('segment_last', None)
-        boundary = self.options.get('segment_boundary', (last-first)//2 +first if last is not None else (psi0_fin_L.L-first)//2 + first)
+        # boundary should be defined in terms of the ORIGINAL MPS and NOT first.
+        boundary = self.options.get('segment_boundary', (last-first)//2 + first if last is not None else (psi0_fin_alpha.L-first)//2 + first)
         assert first < boundary
         if last is not None:
             assert boundary < last
 
-        self.model = model_fin.extract_segment(first, last)
+        self.model = model_fin.extract_segment(first, last) # subset of original model
         first, last = self.model.lat.segment_first_last
-        ground_state_seg_L = psi0_fin_L.extract_segment(first, boundary-1) # 2nd index included in segment
-        ground_state_seg_R = psi0_fin_R.extract_segment(boundary, last)
+        
+        env = MPOEnvironment(psi0_fin_alpha, self.model_orig.H_MPO, psi0_fin_alpha)
+        self.env_data_alpha = env.get_initialization_data(first, last) # Found by contracting gauge fixed (rho, trace, dmrg)
+        # eigenvectors from unit cell boundary to the desired position).
+        self.env_data_alpha_seg = env.get_initialization_data(first, boundary-1) # 2nd index included in segment
 
-        env = MPOEnvironment(psi0_fin_L, self.model_orig.H_MPO, psi0_fin_L)
-        self.env_data_L = env.get_initialization_data(first, last)
-        self.env_data_L_seg = env.get_initialization_data(first, boundary-1)
-
-        env = MPOEnvironment(psi0_fin_R, self.model_orig.H_MPO, psi0_fin_R)
-        self.env_data_R = env.get_initialization_data(first, last)
-        self.env_data_R_seg = env.get_initialization_data(boundary, last)
-
-        ground_state_seg = self._glue_segments(ground_state_seg_L, ground_state_seg_R,
-                                               psi0_fin_L, psi0_fin_R,
+        env = MPOEnvironment(psi0_fin_beta, self.model_orig.H_MPO, psi0_fin_beta)
+        self.env_data_beta = env.get_initialization_data(first, last)
+        self.env_data_beta_seg = env.get_initialization_data(boundary, last)
+        
+        ground_state_seg_alpha = psi0_fin_alpha.extract_segment(first, boundary-1) # 2nd index included in segment
+        ground_state_seg_beta = psi0_fin_beta.extract_segment(boundary, last)
+        ground_state_seg = self._glue_segments(ground_state_seg_alpha, ground_state_seg_beta,
+                                               psi0_fin_alpha, psi0_fin_beta,
                                                self.model, (first, last, boundary))
-
+        
+        self.init_env_data = {'init_LP': self.env_data_alpha['init_LP'],
+                                  'init_RP': self.env_data_beta['init_RP'],
+                                  'age_LP': 0,
+                                  'age_RP': 0}
+        # This should work even if the segment is the entire finite MPS.
+        """
         if first != 0 or last is not None:
             self.init_env_data = {'init_LP': self.env_data_L['init_LP'],
                                   'init_RP': self.env_data_R['init_RP'],
@@ -1291,24 +1300,10 @@ class TopologicalExcitations(OrthogonalExcitations):
         else:
             assert ground_state_seg_L.L + ground_state_seg_R.L == psi0_fin_L.L
             self.init_env_data = {}
-
+        """
         return ground_state_seg, False, False
 
-    def _contract_segment_boundaries(self, env_data, U, Vh):
-        self.logger.info("Put segment boundaries into domain wall envs.")
-        if U is not None:
-            init_LP = npc.tensordot(U.conj(), env_data['init_LP'], axes=(['vL*'], ['vR*']))
-            init_LP = npc.tensordot(init_LP, U, axes=(['vR'], ['vL']))
-            env_data['init_LP'] = init_LP
-
-        if Vh is not None:
-            init_RP = npc.tensordot(Vh, env_data['init_RP'], axes=(['vR'], ['vL']))
-            init_RP = npc.tensordot(init_RP, Vh.conj(), axes=(['vL*'], ['vR*']))
-            env_data['init_RP'] = init_RP
-
-        return env_data
-
-    def _extract_segment_from_infinite(self, psi0_inf_L, psi0_inf_R, model_inf, resume_data_L, resume_data_R):
+    def _extract_segment_from_infinite(self, psi0_inf_alpha, psi0_inf_beta, model_inf, resume_data_alpha, resume_data_beta):
         enlarge = self.options.get('segment_enlarge', None)
         first = self.options.get('segment_first', 0)
         if enlarge is not None:
@@ -1316,10 +1311,12 @@ class TopologicalExcitations(OrthogonalExcitations):
         last = self.options.get('segment_last', None)
 
         assert (enlarge is None) ^ (last is None), "'enlarge' xor 'last' must be not None."
-        boundary = self.options.get('segment_boundary', (last - first) // 2 + first if enlarge is None else (enlarge//2)*psi0_inf_L.L + first)
+        boundary = self.options.get('segment_boundary', (last - first) // 2 + first if enlarge is None else (enlarge//2)*psi0_inf_alpha.L + first) # boundary should be measured from the SAME site as 'first' and not w.r.t. 'first'.
         assert first < boundary
         if last is not None:
             assert boundary < last
+        else:
+            assert boundary < enlarge * psi0_inf_alpha.L
         write_back = self.options.get('write_back_converged_ground_state_environments', False)
 
         self.model = model_inf.extract_segment(first, last, enlarge)
@@ -1327,103 +1324,103 @@ class TopologicalExcitations(OrthogonalExcitations):
         H = model_inf.H_MPO
 
         gauge = self.options.get('gauge', 'rho')
-        if resume_data_L.get('converged_environments', False):
+        if resume_data_alpha.get('converged_environments', False):
             self.logger.info("use converged environments from left ground state file")
-            self.init_env_data_L = resume_data_L['init_env_data'] # Environments for infinite ground states
-            psi0_inf_L = resume_data_L.get('psi', psi0_inf_L)
+            self.init_env_data_alpha = resume_data_alpha['init_env_data'] # Environments for infinite ground states
+            psi0_inf_alpha = resume_data_alpha.get('psi', psi0_inf_alpha)
             write_back_left = False
         else:
             self.logger.info("converge left ground state environments with MPOTransferMatrix")
-            guess_init_env_data = resume_data_L.get('init_env_data', None)
-            self.init_env_data_L = MPOTransferMatrix.find_init_LP_RP(H, psi0_inf_L, guess_init_env_data=guess_init_env_data, _subtraction_gauge=gauge)
+            guess_init_env_data = resume_data_alpha.get('init_env_data', None)
+            self.init_env_data_alpha = MPOTransferMatrix.find_init_LP_RP(H, psi0_inf_alpha, guess_init_env_data=guess_init_env_data, _subtraction_gauge=gauge)
             # On bond 0 of the unit cell
 
             write_back_left = write_back
 
-        if resume_data_R.get('converged_environments', False):
+        if resume_data_beta.get('converged_environments', False):
             self.logger.info("use converged environments from right ground state file")
-            self.init_env_data_R = resume_data_R['init_env_data']
-            psi0_inf_R = resume_data_R.get('psi', psi0_inf_R)
+            self.init_env_data_beta = resume_data_beta['init_env_data']
+            psi0_inf_beta = resume_data_beta.get('psi', psi0_inf_beta)
             write_back_right = False
         else:
             self.logger.info("converge right ground state environments with MPOTransferMatrix")
-            guess_init_env_data = resume_data_R.get('init_env_data', None)
-            self.init_env_data_R = MPOTransferMatrix.find_init_LP_RP(H, psi0_inf_R, guess_init_env_data=guess_init_env_data, _subtraction_gauge=gauge)
+            guess_init_env_data = resume_data_beta.get('init_env_data', None)
+            self.init_env_data_beta = MPOTransferMatrix.find_init_LP_RP(H, psi0_inf_beta, guess_init_env_data=guess_init_env_data, _subtraction_gauge=gauge)
             # On bond 0 of the unit cell
 
             write_back_right = write_back
         self.logger.info("converge segment environments with MPOTransferMatrix")
 
-        env = MPOEnvironment(psi0_inf_L, H, psi0_inf_L, **self.init_env_data_L)
-        self.env_data_L = env.get_initialization_data(first, last)
-        self.env_data_L_seg = env.get_initialization_data(first, boundary-1)
+        env = MPOEnvironment(psi0_inf_alpha, H, psi0_inf_alpha, **self.init_env_data_alpha)
+        self.env_data_alpha = env.get_initialization_data(first, last)
+        self.env_data_alpha_seg = env.get_initialization_data(first, boundary-1)
 
-        env = MPOEnvironment(psi0_inf_R, H, psi0_inf_R, **self.init_env_data_R)
-        self.env_data_R = env.get_initialization_data(first, last)
-        self.env_data_R_seg = env.get_initialization_data(boundary, last)
+        env = MPOEnvironment(psi0_inf_beta, H, psi0_inf_beta, **self.init_env_data_beta)
+        self.env_data_beta = env.get_initialization_data(first, last)
+        self.env_data_beta_seg = env.get_initialization_data(boundary, last)
 
-        self.init_env_data = {'init_LP': self.env_data_L['init_LP'],
-                    'init_RP': self.env_data_R['init_RP'],
-                    'age_LP': 0,
-                    'age_RP': 0}
+        self.init_env_data = {'init_LP': self.env_data_alpha['init_LP'],
+                              'init_RP': self.env_data_beta['init_RP'],
+                              'age_LP': 0,
+                              'age_RP': 0}
 
-        ground_state_seg_L = psi0_inf_L.extract_segment(first, boundary-1)
-        ground_state_seg_R = psi0_inf_R.extract_segment(boundary, last)
-        ground_state_seg = self._glue_segments(ground_state_seg_L, ground_state_seg_R,
-                                               psi0_inf_L, psi0_inf_R,
+        ground_state_seg_alpha = psi0_inf_alpha.extract_segment(first, boundary-1)
+        ground_state_seg_beta = psi0_inf_beta.extract_segment(boundary, last)
+        ground_state_seg = self._glue_segments(ground_state_seg_alpha, ground_state_seg_beta,
+                                               psi0_inf_alpha, psi0_inf_beta,
                                                self.model, (first, last, boundary))
 
         return ground_state_seg, write_back_left, write_back_right
 
 
-    def _glue_segments(self, seg_L, seg_R, inf_L, inf_R, model, indices):
+    def _glue_segments(self, seg_alpha, seg_beta, inf_alpha, inf_beta, model, indices):
         join_method = self.join_method = self.options.get('join_method', "average charge")
-        if inf_L.finite or inf_R.finite:
+        if inf_alpha.finite or inf_beta.finite:
             assert join_method == "most probable charge"
         first, last, boundary = indices
-        print(first, last, boundary)
+        self.logger.info("First: %d, Last: %d, Boundary: %d", first, last, boundary)
         left_half_model = self.model_orig.extract_segment(first, boundary-1, None)
         right_half_model = self.model_orig.extract_segment(boundary, last, None)
 
-        env_left_BC = MPOEnvironment(seg_L, left_half_model.H_MPO, seg_L, **self.env_data_L_seg)
-        env_right_BC = MPOEnvironment(seg_R, right_half_model.H_MPO, seg_R, **self.env_data_R_seg)
-        LP = env_left_BC._contract_LP(seg_L.L-1, env_left_BC.get_LP(seg_L.L-1, store=False))
-        RP = env_right_BC._contract_RP(0, env_right_BC.get_RP(0, store=False))  # saves the environments!
+        env_alpha_BC = MPOEnvironment(seg_alpha, left_half_model.H_MPO, seg_alpha, **self.env_data_alpha_seg)
+        env_beta_BC = MPOEnvironment(seg_beta, right_half_model.H_MPO, seg_beta, **self.env_data_beta_seg)
+        LP = env_alpha_BC._contract_LP(seg_alpha.L-1, env_alpha_BC.get_LP(seg_alpha.L-1, store=False))
+        RP = env_beta_BC._contract_RP(0, env_beta_BC.get_RP(0, store=False))  # saves the environments!
         H0 = ZeroSiteH.from_LP_RP(LP, RP)
         if self.model.H_MPO.explicit_plus_hc:
             H0 = SumNpcLinearOperator(H0, H0.adjoint())
         vL, vR = LP.get_leg('vR').conj(), RP.get_leg('vL').conj()
 
-        if seg_L.chinfo.qnumber == 0:    # Handles the case of no charge-conservation
+        if seg_alpha.chinfo.qnumber == 0:    # Handles the case of no charge-conservation
             desired_Q = None
         else:
             if join_method == "average charge":
-                Q_bar_L = inf_L.average_charge(0)
-                for i in range(1, inf_L.L):
-                    Q_bar_L += inf_L.average_charge(i)
-                Q_bar_L = vL.chinfo.make_valid(np.around(Q_bar_L / inf_L.L))
-                self.logger.info("Charge of left BC, averaged over site and unit cell: %r", Q_bar_L)
+                Q_bar_alpha = inf_alpha.average_charge(0)
+                for i in range(1, inf_alpha.L):
+                    Q_bar_alpha += inf_alpha.average_charge(i)
+                Q_bar_alpha = vL.chinfo.make_valid(np.around(Q_bar_alpha / inf_alpha.L))
+                self.logger.info("Charge of left BC, averaged over site and unit cell: %r", Q_bar_alpha)
 
-                Q_bar_R = inf_R.average_charge(0)
-                for i in range(1, inf_R.L):
-                    Q_bar_R += inf_R.average_charge(i)
-                Q_bar_R = vR.chinfo.make_valid(-1 * np.around(Q_bar_R / inf_R.L))
-                self.logger.info("Charge of right BC, averaged over site and unit cell: %r", -1*Q_bar_R)
-                desired_Q = list(vL.chinfo.make_valid(Q_bar_L + Q_bar_R))
+                Q_bar_beta = inf_beta.average_charge(0)
+                for i in range(1, inf_beta.L):
+                    Q_bar_beta += inf_beta.average_charge(i)
+                Q_bar_beta = vR.chinfo.make_valid(-1 * np.around(Q_bar_beta / inf_beta.L))
+                self.logger.info("Charge of right BC, averaged over site and unit cell: %r", -1*Q_bar_beta)
+                desired_Q = list(vL.chinfo.make_valid(Q_bar_alpha + Q_bar_beta))
             elif join_method == "most probable charge":
-                posL = seg_L.L
+                posL = seg_alpha.L
                 posR = 0
-                QsL, psL = seg_L.probability_per_charge(posL)
-                QsR, psR = seg_R.probability_per_charge(posR)
+                QsL, psL = seg_alpha.probability_per_charge(posL)
+                QsR, psR = seg_beta.probability_per_charge(posR)
 
                 side_by_side = string.vert_join(["left seg\n" + str(QsL), "prob\n" + str(np.array([psL]).T), "right seg\n" + str(QsR),"prob\n" +str(np.array([psR]).T)], delim=' | ')
                 self.logger.info(side_by_side)
 
-                Qmostprobable_L = QsL[np.argmax(psL)]
-                Qmostprobable_R = -1 * QsR[np.argmax(psR)]
-                self.logger.info("Most probable left:" + str(Qmostprobable_L))
-                self.logger.info("Most probable right:" + str(Qmostprobable_R))
-                desired_Q = list(vL.chinfo.make_valid(Qmostprobable_L + Qmostprobable_R))
+                Qmostprobable_alpha = QsL[np.argmax(psL)]
+                Qmostprobable_beta = -1 * QsR[np.argmax(psR)]
+                self.logger.info("Most probable left:" + str(Qmostprobable_alpha))
+                self.logger.info("Most probable right:" + str(Qmostprobable_beta))
+                desired_Q = list(vL.chinfo.make_valid(Qmostprobable_alpha + Qmostprobable_beta))
             else:
                 raise ValueError("Invalid `join_method` %s " % join_method)
         self.gluing_charge = desired_Q
@@ -1433,7 +1430,7 @@ class TopologicalExcitations(OrthogonalExcitations):
         # Q is the the charge we insert. Here we only do charge gluing to get a valid segment.
         # Changing charge sector is done below by basically identical code when the segment is already formed.
         th0 = npc.Array.from_func(np.ones, [vL, vR],
-                                  dtype=seg_L.dtype,
+                                  dtype=seg_alpha.dtype,
                                   qtotal=desired_Q,
                                   labels=['vL', 'vR'])
         lanczos_params = self.options.get("lanczos_params", {}) # See if lanczos_params is in yaml, if not use empty dictionary
@@ -1445,43 +1442,43 @@ class TopologicalExcitations(OrthogonalExcitations):
             raise ValueError(f"Norm of inserted theta with charge {list(qtotal_change)} on site index {site:d} is zero.")
 
         U, s, Vh = npc.svd(th0, inner_labels=['vR', 'vL'])
-        seg_L.set_B(seg_L.L-1, npc.tensordot(seg_L.get_B(seg_L.L-1, 'A'), U, axes=['vR', 'vL']), form='A') # Put AU into last site of left segment
-        seg_L.set_SR(seg_L.L-1, s)
-        seg_R.set_B(0, npc.tensordot(Vh, seg_R.get_B(0, 'B'), axes=['vR', 'vL']), form='B') # Put Vh B into first site of right segment
-        seg_R.set_SL(0, s)
+        seg_alpha.set_B(seg_alpha.L-1, npc.tensordot(seg_alpha.get_B(seg_alpha.L-1, 'A'), U, axes=['vR', 'vL']), form='A') # Put AU into last site of left segment
+        seg_alpha.set_SR(seg_alpha.L-1, s)
+        seg_beta.set_B(0, npc.tensordot(Vh, seg_beta.get_B(0, 'B'), axes=['vR', 'vL']), form='B') # Put Vh B into first site of right segment
+        seg_beta.set_SL(0, s)
 
-        combined_seg = self._concatenate_segments(seg_L, seg_R, inf_L)
+        combined_seg = self._concatenate_segments(seg_alpha, seg_beta, inf_alpha)
 
         return combined_seg
 
-    def _concatenate_segments(self, seg_L, seg_R, inf_L):
-        l_sites = [seg_L.sites[i] for i in range(seg_L.L)]
-        lA = [seg_L.get_B(i, 'A') for i in range(seg_L.L)]
-        lS = [seg_L.get_SL(i) for i in range(seg_L.L)]
+    def _concatenate_segments(self, seg_alpha, seg_beta, inf_alpha):
+        l_sites = [seg_alpha.sites[i] for i in range(seg_alpha.L)]
+        lA = [seg_alpha.get_B(i, 'A') for i in range(seg_alpha.L)]
+        lS = [seg_alpha.get_SL(i) for i in range(seg_alpha.L)]
         #lS.append(seg_L.get_SR(seg_L.L-1))
 
         # Building segment MPS on right half
-        r_sites = [seg_R.sites[i] for i in range(seg_R.L)]
-        rB = [seg_R.get_B(i) for i in range(seg_R.L)]
-        rS = [seg_R.get_SL(i) for i in range(seg_R.L)]
-        rS.append(seg_R.get_SR(seg_R.L-1))
+        r_sites = [seg_beta.sites[i] for i in range(seg_beta.L)]
+        rB = [seg_beta.get_B(i) for i in range(seg_beta.L)]
+        rS = [seg_beta.get_SL(i) for i in range(seg_beta.L)]
+        rS.append(seg_beta.get_SR(seg_beta.L-1))
 
-        assert npc.norm(seg_L.get_SR(seg_L.L-1) - rS[0]) < 1.e-12
+        assert npc.norm(seg_alpha.get_SR(seg_alpha.L-1) - rS[0]) < 1.e-12
 
         cp = MPS(l_sites + r_sites, lA + rB, lS + rS, 'segment',
-                 ['A'] * seg_L.L + ['B'] * seg_R.L, inf_L.norm)
-        cp.grouped = inf_L.grouped
+                 ['A'] * seg_alpha.L + ['B'] * seg_beta.L, inf_alpha.norm)
+        cp.grouped = inf_alpha.grouped
         cp.canonical_form_finite(cutoff=1e-15) #to strip out vanishing singular values at the interface
         return cp
 
-    def correction(self, psi0_alpha, psi0_beta, env_alpha, env_beta,
-                   last, eta_R_alpha, eta_R_beta):
+    def correction(self, psi0_alpha, psi0_beta, env_alpha, env_beta, last):
         # 'last' is last site in segment
         correction = 0
         if psi0_alpha.finite:
             sites = range(last, psi0_alpha.L-1)
         else:
-            sites = range(0, psi0_alpha.L)
+            sites = reversed(range(0, psi0_alpha.L))
+
         for i in sites:
             RP_alpha = env_alpha.get_RP(i)
             RP_beta = env_beta.get_RP(i)
@@ -1507,78 +1504,30 @@ class TopologicalExcitations(OrthogonalExcitations):
             rho_beta = rho_beta.add_leg(wR, IdL, axis=1, label='wR')
 
             correction += npc.tensordot(rho_beta, RP_beta, axes=(['vR', 'wR', 'vR*'], ['vL', 'wL', 'vL*'])) - \
-                          npc.tensordot(rho_alpha, RP_alpha, axes=(['vR', 'wR', 'vR*'], ['vL', 'wL', 'vL*'])) - \
-                          eta_R_beta + eta_R_alpha
+                          npc.tensordot(rho_alpha, RP_alpha, axes=(['vR', 'wR', 'vR*'], ['vL', 'wL', 'vL*']))
         return correction
-    
-    def arbitrary_shift_left(self, i, psi, LP)
+
+    def arbitrary_shift_left(self, i, psi, LP):
         dtype = np.promote_types(psi.dtype, self.model_orig.H_MPO.dtype)
-        wR = self.model.H_MPO.get_W(i).get_leg('wL').conj()
-        IdR = self.model_orig.H_MPO.get_IdR(i-1)
-        vL = psi0_alpha.get_B(i, 'A').get_leg('vL')
+        wL = self.model.H_MPO.get_W(i % self.model.H_MPO.L).get_leg('wL')
+        IdR = self.model_orig.H_MPO.get_IdR((i-1) % self.model.H_MPO.L)
+        vL = psi.get_B(i, 'A').get_leg('vL')
         chi0 = vL.ind_len
-        eye_L = npc.diag(1., vL, dtype=dtype, labels=['vR*', 'vR'])
-        E_shift = eye_L.add_leg(wR, IdR, axis=1, label='wR')  # vR* wR vR
-        proj_trace = E_shift.conj().iset_leg_labels(['vL*', 'wL', 'vL']) / chi0
+        proj_trace = npc.diag(1., vL.conj(), dtype=dtype, labels=['vL*', 'vL'])
+        proj_trace = proj_trace.add_leg(wL, IdR, axis=1, label='wL') / chi0  # vL* wL vL
         eta_L = npc.tensordot(LP, proj_trace, axes=(['vR*', 'wR', 'vR'], ['vL*', 'wL', 'vL'])).real
         return eta_L
-    
-    def arbitrary_shift_right(self, i, psi, RP, )
+
+    def arbitrary_shift_right(self, i, psi, RP):
         dtype = np.promote_types(psi.dtype, self.model_orig.H_MPO.dtype)
-        wL = self.model.H_MPO.get_W(i).get_leg('wL')
-        IdL = self.model_orig.H_MPO.get_IdL(i)
-        vR = psi0_alpha.get_B(i-1, 'B').get_leg('vR')
+        wR = self.model.H_MPO.get_W(i % self.model.H_MPO.L).get_leg('wR')
+        IdL = self.model_orig.H_MPO.get_IdL((i+1) % self.model.H_MPO.L)
+        vR = psi.get_B(i, 'B').get_leg('vR')
         chi0 = vR.ind_len
-        eye_R = npc.diag(1., vR.conj(), dtype=dtype, labels=['vL', 'vL*'])
-        E_shift = eye_R.add_leg(wL, IdL, axis=1, label='wL')  # vL wL vL*
-        proj_trace = E_shift.conj().iset_leg_labels(['vR', 'wR', 'vR*']) / chi0
+        proj_trace = npc.diag(1., vR, dtype=dtype, labels=['vR', 'vR*'])
+        proj_trace = proj_trace.add_leg(wR, IdL, axis=1, label='wR') / chi0 # vR wR vR*
         eta_R = npc.tensordot(proj_trace, RP, axes=(['vR', 'wR', 'vR*'], ['vL', 'wL', 'vL*'])).real
         return eta_R
-    
-    def arbitrary_shifts(self, psi0_alpha, psi0_beta):
-        # Code taken from MPO transfer matrix
-        dtype = np.promote_types(psi0_alpha.dtype,
-             np.promote_types(psi0_beta, self.model_orig.H_MPO.dtype))
-        wL = self.model.H_MPO.get_W(0).get_leg('wL')
-        wR = wL.conj()
-        IdL = self.model_orig.H_MPO.get_IdL(0)
-        IdR = self.model_orig.H_MPO.get_IdR(-1)
-
-        vR = psi0_alpha.get_B(psi0_alpha.L-1, 'B').get_leg('vR')
-        vL = psi0_alpha.get_B(0, 'A').get_leg('vL')
-
-        chi0 = vR.ind_len
-        eye_R = npc.diag(1., vR.conj(), dtype=dtype, labels=['vL', 'vL*'])
-        E_shift = eye_R.add_leg(wL, IdL, axis=1, label='wL')  # vL wL vL*
-        proj_trace = E_shift.conj().iset_leg_labels(['vR', 'wR', 'vR*']) / chi0
-        #MPO_TM = MPOTransferMatrix(H, psi0_L, transpose=False, guess = self.init_env_data_L['init_RP'])
-        eta_R_alpha = npc.tensordot(proj_trace, self.init_env_data_L['init_RP'], axes=(['vR', 'wR', 'vR*'], ['vL', 'wL', 'vL*'])).real
-
-        chi0 = vL.ind_len
-        eye_L = npc.diag(1., vL, dtype=dtype, labels=['vR*', 'vR'])
-        E_shift = eye_L.add_leg(wR, IdR, axis=1, label='wR')  # vR* wR vR
-        proj_trace = E_shift.conj().iset_leg_labels(['vL*', 'wL', 'vL']) / chi0
-        #MPO_TM = MPOTransferMatrix(H, psi0_L, transpose=True, guess = self.init_env_data_L['init_LP'])
-        eta_L_alpha = npc.tensordot(self.init_env_data_L['init_LP'], proj_trace, axes=(['vR*', 'wR', 'vR'], ['vL*', 'wL', 'vL'])).real
-
-        vR = psi0_beta.get_B(psi0_beta.L-1, 'B').get_leg('vR')
-        vL = psi0_beta.get_B(0, 'A').get_leg('vL')
-
-        chi0 = vR.ind_len
-        eye_R = npc.diag(1., vR.conj(), dtype=dtype, labels=['vL', 'vL*'])
-        E_shift = eye_R.add_leg(wL, IdL, axis=1, label='wL')  # vL wL vL*
-        proj_trace = E_shift.conj().iset_leg_labels(['vR', 'wR', 'vR*']) / chi0
-        #MPO_TM = MPOTransferMatrix(H, psi0_R, transpose=False, guess = self.init_env_data_R['init_RP'])
-        eta_R_beta = npc.tensordot(proj_trace, self.init_env_data_R['init_RP'], axes=(['vR', 'wR', 'vR*'], ['vL', 'wL', 'vL*'])).real
-
-        chi0 = vL.ind_len
-        eye_L = npc.diag(1., vL, dtype=dtype, labels=['vR*', 'vR'])
-        E_shift = eye_L.add_leg(wR, IdR, axis=1, label='wR')  # vR* wR vR
-        proj_trace = E_shift.conj().iset_leg_labels(['vL*', 'wL', 'vL']) / chi0
-        #MPO_TM = MPOTransferMatrix(H, psi0_R, transpose=True, guess = self.init_env_data_R['init_LP'])
-        eta_L_beta = npc.tensordot(self.init_env_data_R['init_LP'], proj_trace, axes=(['vR*', 'wR', 'vR'], ['vL*', 'wL', 'vL'])).real
-
-        return eta_L_alpha, eta_L_beta, eta_R_alpha, eta_R_beta
 
     def get_reference_energy(self, psi0_alpha, psi0_beta):
         """Obtain ground state reference energy.
@@ -1589,66 +1538,51 @@ class TopologicalExcitations(OrthogonalExcitations):
 
         Parameters
         ----------
-        psi0_seg : :class:`~tenpy.networks.msp.MPS`
-            Ground state MPS on the segment, matching :attr:`init_env_data`.
+        psi0_alpha : :class:`~tenpy.networks.msp.MPS`
+            Infinite ground state MPS on the left, matching :attr:`init_env_data_alpha`.
         """
-        # can't just use gs_data['energy'], since this is just energy density for infinite MPS
         self.logger.info("Calculate reference energy by contracting environments")
         first, last = self.results['segment_first_last']
-        print(first, last)
         seg_alpha = psi0_alpha.extract_segment(first, last)
-        seg_beta = psi0_beta.extract_segment(first, last)
         gauge = self.options.get('gauge', 'rho')
 
         # This is expensive but more accurate than E0 + epsilon*L
-        env_alpha = MPOEnvironment(seg_alpha, self.model.H_MPO, seg_alpha, **self.env_data_L)
+        env_alpha = MPOEnvironment(seg_alpha, self.model.H_MPO, seg_alpha, **self.env_data_alpha)
         E_alpha = env_alpha.full_contraction(0).real
-        env_beta = MPOEnvironment(seg_beta, self.model.H_MPO, seg_beta, **self.env_data_R)
-        E_beta = env_beta.full_contraction(0).real
-        
+
         if psi0_alpha.finite:
             env_alpha = MPOEnvironment(psi0_alpha, self.model_orig.H_MPO, psi0_alpha)
             env_beta = MPOEnvironment(psi0_beta, self.model_orig.H_MPO, psi0_beta)
         else:
-            env_alpha = MPOEnvironment(psi0_alpha, self.orig_model.H_MPO, psi0_alpha, **self.init_env_data_L)
-            env_beta = MPOEnvironment(psi0_beta, self.orig_model.H_MPO, psi0_beta, **self.init_env_data_R)
-            
+            env_alpha = MPOEnvironment(psi0_alpha, self.model_orig.H_MPO, psi0_alpha, **self.init_env_data_alpha)
+            env_beta = MPOEnvironment(psi0_beta, self.model_orig.H_MPO, psi0_beta, **self.init_env_data_beta)
+
         if psi0_alpha.finite:
-            correction = self.correction(psi0_alpha, psi0_beta, env_alpha, env_beta, last, 0, 0)
+            correction = self.correction(psi0_alpha, psi0_beta, env_alpha, env_beta, last)
 
             self.results['ground_state_energy'] = E_alpha + correction
         else:
             H = self.model_orig.H_MPO
             if (last + 1 - first) % psi0_alpha.L == 0: # last is included in segment.
                 _, epsilon_alpha, E0_alpha = MPOTransferMatrix.find_init_LP_RP(H, psi0_alpha, first, last,
-                                guess_init_env_data=self.init_env_data_L, calc_E=True, _subtraction_gauge=gauge)
+                                guess_init_env_data=self.init_env_data_alpha, calc_E=True, _subtraction_gauge=gauge)
                 epsilon_alpha = np.mean(epsilon_alpha).real
-                _, epsilon_beta, E0_beta = MPOTransferMatrix.find_init_LP_RP(H, psi0_beta, first, last,
-                                guess_init_env_data=self.init_env_data_R, calc_E=True, _subtraction_gauge=gauge)
-                epsilon_beta = np.mean(epsilon_beta).real
             else:
                 epsilon_alpha, E0_alpha, epsilon_beta, E0_beta = 0, 0, 0, 0
 
-            #E_alpha2 = E0_alpha + (seg_alpha.L + first % psi0_L.L + psi0_L.L - (1 + (last) % psi0_L.L))*epsilon_alpha
-            #E_beta2 = E0_beta + (seg_beta.L + first % psi0_R.L + psi0_R.L - (1 + (last) % psi0_R.L))*epsilon_beta
             E_alpha2 = E0_alpha + seg_alpha.L * epsilon_alpha
-            E_beta2 = E0_beta + seg_beta.L * epsilon_beta
 
-            self.logger.info("E_alpha, E_beta, E_alpha2, E_beta2: %.14f, %.14f, %.14f, %.14f", E_alpha, E_beta, E_alpha2, E_beta2)
-            self.logger.info("epsilon_alpha, epsilon_beta, E0_alpha, E0_beta: %.14f, %.14f, %.14f, %.14f", epsilon_alpha, epsilon_beta, E0_alpha, E0_beta)
+            self.logger.info("E_alpha, E_alpha2: %.14f, %.14f", E_alpha, E_alpha2)
+            self.logger.info("epsilon_alpha, E0_alpha: %.14f, %.14f", epsilon_alpha, E0_alpha)
 
-            eta_L_alpha, eta_L_beta, eta_R_alpha, eta_R_beta = self.arbitrary_shifts(psi0_alpha, psi0_beta)
-
-            self.logger.info("eta_L_alpha, eta_R_alpha, eta_L_beta, eta_R_beta: %.14f, %.14f, %.14f, %.14f", eta_L_alpha, eta_R_alpha, eta_L_beta, eta_R_beta)
-
-            correction = self.correction(psi0_alpha, psi0_beta, env_alpha, env_beta, last, eta_R_alpha, eta_R_beta) / psi0_alpha.L
-
+            eta_R_alpha = self.arbitrary_shift_right(psi0_alpha.L-1, psi0_alpha, self.init_env_data_alpha['init_RP'])
+            eta_R_beta = self.arbitrary_shift_right(psi0_alpha.L-1, psi0_beta, self.init_env_data_beta['init_RP'])
+            self.logger.info("eta_R_alpha, eta_R_beta: %.14f, %.14f", eta_R_alpha, eta_R_beta)
+            
+            correction = self.correction(psi0_alpha, psi0_beta, env_alpha, env_beta, last) / psi0_alpha.L - eta_R_beta + eta_R_alpha
+            self.logger.info("Correction term for mismatched GSs: %.14f", correction)
             self.results['ground_state_energy'] = E_alpha - eta_R_alpha + eta_R_beta + correction
-
-            if np.abs(E0_alpha - E0_beta) > 1.e-4:
-                warnings.warn('E0_alpha and E0_beta are more than 1.e-4 idfferent; single DW energy may not be well defined.\nOnly two DWs are well defined. PROCEED AT YOUR OWN RISK.')
-
-        self.logger.info("Correction term for mismatched GSs: %.14f", correction)
+            
         self.logger.info("Reference Ground State Energy: %.14f", self.results['ground_state_energy'])
 
         return self.results['ground_state_energy']
