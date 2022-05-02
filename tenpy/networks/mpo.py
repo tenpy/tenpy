@@ -2088,7 +2088,7 @@ class MPOEnvironment(MPSEnvironment):
                 start_env_sites is None and self.bra is self.ket:
             norm_err = np.linalg.norm(self.ket.norm_test())
             if norm_err > 1.e-10:
-                warnings.warn("call psi.canonical_form() to find MPO environments from psi alone "
+                warnings.warn("call psi.canonical_form() to regenerate MPO environments from psi"
                               f" with current norm error {norm_err:.2e}")
                 self.ket.canonical_form()
             env_data = MPOTransferMatrix.find_init_LP_RP(self.H, self.ket, 0, self.L - 1)
