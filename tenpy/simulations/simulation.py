@@ -39,6 +39,7 @@ __all__ = [
     'init_simulation_from_checkpoint',
     'resume_from_checkpoint',
     'run_seq_simulations',
+    'expand_sequential_simulation_params',
     'output_filename_from_dict',
 ]
 
@@ -77,10 +78,10 @@ class Simulation:
 
         simulation_class : str | class
             Name or class of the Simulation Class to be used.
-            Read out before class initialization in :meth:`run_simulation` or similar functions.
+            Read out before class initialization in :func:`run_simulation` or similar functions.
         simulation_class_kwargs : dict
             Keyword arguemnts to be given to the simulation class.
-            Read out before class initialization in :meth:`run_simulation` or similar functions.
+            Read out before class initialization in :func:`run_simulation` or similar functions.
         directory : str
             If not None (default), switch to that directory at the beginning of the simulation.
         log_params : dict
@@ -1172,9 +1173,8 @@ def run_seq_simulations(sequential,
     .. cfg:config :: sequential
 
         recursive_keys : list of str
-            Mandatory.
-            The list of recursive keys for the `simulation_params` to be changed.
-            for example an entry ``'model_params.Jz'`` indicates that
+            Mandatory. The list of recursive keys for the `simulation_params` to be changed.
+            For example an entry ``'model_params.Jz'`` indicates that
             ``simulation_params['model_params']['Jz']`` should be changed,
             see :func:`~tenpy.tools.misc.get_recursive`.
         value_lists : list of list
@@ -1226,12 +1226,75 @@ def run_seq_simulations(sequential,
         simulation. Otherwise just the results of the last simulation run.
     """
     sequential = asConfig(sequential, 'sequential')
+
+    if simulation_class_name is not _deprecated_not_set:
+        assert simulation_class == 'GroundStateSearch'
+        warnings.warn(
+            "The `simulation_class_name` argument has been renamed to `simulation_class`"
+            " for more consistency with remaining parameters.", FutureWarning)
+        simulation_class = simulation_class_name
+
+    SimClass = find_subclass(Simulation, simulation_class)
+    if simulation_class_kwargs is None:
+        simulation_class_kwargs = {}
+
+    if collect_results_in_memory:
+        all_results = []
+    else:
+        results = None
+
+    # main loop over simulations
+    for sim_params in expand_sequential_simulation_params(sequential, simulation_params):
+        del results  # free memory
+        if resume_data is not None:
+            simulation_class_kwargs['resume_data'] = resume_data
+
+        with SimClass(sim_params, **simulation_class_kwargs) as sim:
+            results = sim.run()
+            if collect_results_in_memory:
+                all_results.append(results)
+            # save results for the next simulation
+            resume_data = sim.get_resume_data(sequential_simulations=True)
+        assert resume_data['sequential_simulations'], \
+            "super().get_resume_data() without sequential_simulations argument"
+        del sim  # but free memory to avoid too many copies (e.g. the whole environment)
+    # all simulations are done!
+    if collect_results_in_memory:
+        return all_results
+    else:
+        return results
+
+
+def expand_sequential_simulation_params(sequential, simulation_params, chdir=True):
+    """Generator for expand sequential simulation parameters used for :func:`run_seq_simulations`.
+
+    The intended call structure is roughly::
+
+        for sim_params in sequential_simulation_params(sequential, simulation_params):
+            run_simulation(**sim_params)
+
+
+    Parameters
+    ----------
+    sequential : dict-like
+        The sequential parameters as specified in :cfg:config:`sequential`.
+    simulation_params : dict
+        The simulation parameters to be expanded.
+    chdir : bool
+        Flag to disable changing the current work directory to back to the
+        :cfg:option:`sequential.base_directory`.
+
+    Yields
+    ------
+    sim_params : dict
+        Deep copy of the `simulation_params`.
+    """
     separator = sequential.get('separator', '.')
     recursive_keys = sequential['recursive_keys']
     N_keys = len(recursive_keys)
     format_strs = [rkey.split(separator)[-1] + '_{0!s}' for rkey in recursive_keys]
     format_strs = sequential.get('format_strs', format_strs)
-    value_lists = [get_recursive(simulation_params, r_key) for r_key in recursive_keys]
+    value_lists = [get_recursive(simulation_params, r_key, separator) for r_key in recursive_keys]
     value_lists = sequential.get('value_lists', value_lists)
     index = sequential.get('index', 0)
     base_directory = sequential.get('base_directory', os.getcwd())
@@ -1247,17 +1310,6 @@ def run_seq_simulations(sequential,
                 assert not k.startswith(check), "really?!?"
     else:
         N_sims = 1
-
-    if simulation_class_name is not _deprecated_not_set:
-        assert simulation_class == 'GroundStateSearch'
-        warnings.warn(
-            "The `simulation_class_name` argument has been renamed to `simulation_class`"
-            " for more consistency with remaining parameters.", FutureWarning)
-        simulation_class = simulation_class_name
-
-    SimClass = find_subclass(Simulation, simulation_class)
-    if simulation_class_kwargs is None:
-        simulation_class_kwargs = {}
 
     # try to create varying output filenames
     # do we save to file at all?
@@ -1281,14 +1333,12 @@ def run_seq_simulations(sequential,
     else:  # we don't save results to files
         if not collect_results_in_memory:
             raise ValueError("Refuse to run without producing output")
-    if collect_results_in_memory:
-        all_results = []
 
     simulation_params['sequential'] = sequential
 
-    # main loop over simulations
     for index in range(index, N_sims):
-        os.chdir(base_directory)
+        if chdir:
+            os.chdir(base_directory)
         # update simulation parameters
         sequential['index'] = index
         sim_params = copy.deepcopy(simulation_params)
@@ -1296,25 +1346,9 @@ def run_seq_simulations(sequential,
             val = values[index]
             set_recursive(sim_params, rec_key, val, separator, insert_dicts=True)
 
-        if resume_data is not None:
-            simulation_class_kwargs['resume_data'] = resume_data
-
-        with SimClass(sim_params, **simulation_class_kwargs) as sim:
-            results = sim.run()
-            if collect_results_in_memory:
-                all_results.append(results)
-            # save results for the next simulation
-            resume_data = sim.get_resume_data(sequential_simulations=True)
-        assert resume_data['sequential_simulations'], \
-            "super().get_resume_data() without sequential_simulations argument"
-        del sim  # but free memory to avoid too many copies (e.g. the whole environment)
-        if index + 1 < N_sims:
-            del results
-    # all simulations are done!
-    if collect_results_in_memory:
-        return all_results
-    else:
-        return results
+        # yield the copy of sim_params such that the next simulation can run
+        yield sim_params
+    # done
 
 
 def output_filename_from_dict(options,
