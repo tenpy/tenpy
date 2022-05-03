@@ -2403,7 +2403,6 @@ class MPOTransferMatrix(NpcLinearOperator):
         if self._explicit_plus_hc:
             E = E + np.conj(E)
         return E / self.L
->>>>>>> d66ef49e15fc05cbc76e9f19c67b14884dc01569
 
     @classmethod
     def find_init_LP_RP(cls,
