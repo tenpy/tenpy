@@ -1163,7 +1163,8 @@ class TopologicalExcitations(OrthogonalExcitations):
         # extract segments if necessary; get `init_env_data`.
         resume_data_alpha = gs_data_alpha.get('resume_data', {}) # TODO this is probably wrong
         resume_data_beta = gs_data_beta.get('resume_data', {}) # TODO this is probably wrong
-        psi0_seg, write_back_left, write_back_right = self.extract_segment(psi0_alpha, psi0_beta, self.model, resume_data_alpha, resume_data_beta)
+        #psi0_seg, write_back_left, write_back_right = self.extract_segment(psi0_alpha, psi0_beta, self.model, resume_data_alpha, resume_data_beta)
+        self.initial_state_seg, self.qtotal_diff, write_back_left, write_back_right = self.extract_segment(psi0_alpha, psi0_beta, self.model, resume_data_alpha, resume_data_beta)
         ########################################
         if write_back_left:
             init_env_data = self.init_env_data
@@ -1181,7 +1182,7 @@ class TopologicalExcitations(OrthogonalExcitations):
         self.get_reference_energy(psi0_alpha, psi0_beta)
 
         # switch_charge_sector defines `self.initial_state_seg`
-        self.initial_state_seg, self.qtotal_diff = self.switch_charge_sector(psi0_seg)
+        #self.initial_state_seg, self.qtotal_diff = self.switch_charge_sector(psi0_seg)
         self.results['qtotal_diff'] = self.qtotal_diff
 
         self.orthogonal_to = []  # Segment is inherently different than either left or right ground state.
@@ -1268,7 +1269,7 @@ class TopologicalExcitations(OrthogonalExcitations):
 
         self.model = model_fin.extract_segment(first, last) # subset of original model
         first, last = self.model.lat.segment_first_last
-        
+
         env = MPOEnvironment(psi0_fin_alpha, self.model_orig.H_MPO, psi0_fin_alpha)
         self.env_data_alpha = env.get_initialization_data(first, last) # Found by contracting gauge fixed (rho, trace, dmrg)
         # eigenvectors from unit cell boundary to the desired position).
@@ -1277,13 +1278,13 @@ class TopologicalExcitations(OrthogonalExcitations):
         env = MPOEnvironment(psi0_fin_beta, self.model_orig.H_MPO, psi0_fin_beta)
         self.env_data_beta = env.get_initialization_data(first, last)
         self.env_data_beta_seg = env.get_initialization_data(boundary, last)
-        
+
         ground_state_seg_alpha = psi0_fin_alpha.extract_segment(first, boundary-1) # 2nd index included in segment
         ground_state_seg_beta = psi0_fin_beta.extract_segment(boundary, last)
-        ground_state_seg = self._glue_segments(ground_state_seg_alpha, ground_state_seg_beta,
+        ground_state_seg, qtotal_diff = self._glue_segments(ground_state_seg_alpha, ground_state_seg_beta,
                                                psi0_fin_alpha, psi0_fin_beta,
                                                self.model, (first, last, boundary))
-        
+
         self.init_env_data = {'init_LP': self.env_data_alpha['init_LP'],
                                   'init_RP': self.env_data_beta['init_RP'],
                                   'age_LP': 0,
@@ -1301,7 +1302,7 @@ class TopologicalExcitations(OrthogonalExcitations):
             assert ground_state_seg_L.L + ground_state_seg_R.L == psi0_fin_L.L
             self.init_env_data = {}
         """
-        return ground_state_seg, False, False
+        return ground_state_seg, qtotal_diff, False, False
 
     def _extract_segment_from_infinite(self, psi0_inf_alpha, psi0_inf_beta, model_inf, resume_data_alpha, resume_data_beta):
         enlarge = self.options.get('segment_enlarge', None)
@@ -1366,15 +1367,16 @@ class TopologicalExcitations(OrthogonalExcitations):
 
         ground_state_seg_alpha = psi0_inf_alpha.extract_segment(first, boundary-1)
         ground_state_seg_beta = psi0_inf_beta.extract_segment(boundary, last)
-        ground_state_seg = self._glue_segments(ground_state_seg_alpha, ground_state_seg_beta,
+        ground_state_seg, qtotal_diff = self._glue_segments(ground_state_seg_alpha, ground_state_seg_beta,
                                                psi0_inf_alpha, psi0_inf_beta,
                                                self.model, (first, last, boundary))
 
-        return ground_state_seg, write_back_left, write_back_right
+        return ground_state_seg, qtotal_diff, write_back_left, write_back_right
 
 
     def _glue_segments(self, seg_alpha, seg_beta, inf_alpha, inf_beta, model, indices):
         join_method = self.join_method = self.options.get('join_method', "average charge")
+        switch_charge_sector = self.options.get("switch_charge_sector", None)
         if inf_alpha.finite or inf_beta.finite:
             assert join_method == "most probable charge"
         first, last, boundary = indices
@@ -1392,8 +1394,14 @@ class TopologicalExcitations(OrthogonalExcitations):
         vL, vR = LP.get_leg('vR').conj(), RP.get_leg('vL').conj()
 
         if seg_alpha.chinfo.qnumber == 0:    # Handles the case of no charge-conservation
-            desired_Q = None
+            Q_offset = None
         else:
+            Qs_alpha, ps_alpha = seg_alpha.probability_per_charge(seg_alpha.L)
+            Qs_beta, ps_beta = seg_beta.probability_per_charge(0)
+
+            side_by_side = string.vert_join(["left seg\n" + str(Qs_alpha), "prob\n" + str(np.array([ps_alpha]).T), "right seg\n" + str(Qs_beta),"prob\n" +str(np.array([ps_beta]).T)], delim=' | ')
+            self.logger.info(side_by_side)
+
             if join_method == "average charge":
                 Q_bar_alpha = inf_alpha.average_charge(0)
                 for i in range(1, inf_alpha.L):
@@ -1404,34 +1412,33 @@ class TopologicalExcitations(OrthogonalExcitations):
                 Q_bar_beta = inf_beta.average_charge(0)
                 for i in range(1, inf_beta.L):
                     Q_bar_beta += inf_beta.average_charge(i)
-                Q_bar_beta = vR.chinfo.make_valid(-1 * np.around(Q_bar_beta / inf_beta.L))
-                self.logger.info("Charge of right BC, averaged over site and unit cell: %r", -1*Q_bar_beta)
-                desired_Q = list(vL.chinfo.make_valid(Q_bar_alpha + Q_bar_beta))
+                Q_bar_beta = vR.chinfo.make_valid(np.around(Q_bar_beta / inf_beta.L)) # -1*
+                self.logger.info("Charge of right BC, averaged over site and unit cell: %r", Q_bar_beta)
+                Q_offset = (vL.chinfo.make_valid(Q_bar_alpha - Q_bar_beta))
             elif join_method == "most probable charge":
-                posL = seg_alpha.L
-                posR = 0
-                QsL, psL = seg_alpha.probability_per_charge(posL)
-                QsR, psR = seg_beta.probability_per_charge(posR)
-
-                side_by_side = string.vert_join(["left seg\n" + str(QsL), "prob\n" + str(np.array([psL]).T), "right seg\n" + str(QsR),"prob\n" +str(np.array([psR]).T)], delim=' | ')
-                self.logger.info(side_by_side)
-
-                Qmostprobable_alpha = QsL[np.argmax(psL)]
-                Qmostprobable_beta = -1 * QsR[np.argmax(psR)]
+                Qmostprobable_alpha = Qs_alpha[np.argmax(ps_alpha)]
+                Qmostprobable_beta = Qs_beta[np.argmax(ps_beta)] #-1*
                 self.logger.info("Most probable left:" + str(Qmostprobable_alpha))
                 self.logger.info("Most probable right:" + str(Qmostprobable_beta))
-                desired_Q = list(vL.chinfo.make_valid(Qmostprobable_alpha + Qmostprobable_beta))
+                Q_offset = (vL.chinfo.make_valid(Qmostprobable_alpha - Qmostprobable_beta))
             else:
                 raise ValueError("Invalid `join_method` %s " % join_method)
-        self.gluing_charge = desired_Q
-        self.logger.info("Desired gluing charge: %r", desired_Q)
+
+            self.logger.info("Desired excitation charge: %r", switch_charge_sector)
+            self.gluing_charge = Q_offset
+            if switch_charge_sector is not None:
+                self.gluing_charge = vL.chinfo.make_valid(switch_charge_sector + self.gluing_charge)
+
+            self.logger.info("Desired gluing charge: %r", self.gluing_charge)
+            qtotal_diff = list(vL.chinfo.make_valid(self.gluing_charge - Q_offset))
+            self.logger.info("Targeted excitation charge: %r", qtotal_diff)
 
         # We need a tensor that is non-zero only when Q = (Q^i_L - bar(Q_L)) + (Q^i_R - bar(Q_R))
         # Q is the the charge we insert. Here we only do charge gluing to get a valid segment.
         # Changing charge sector is done below by basically identical code when the segment is already formed.
         th0 = npc.Array.from_func(np.ones, [vL, vR],
                                   dtype=seg_alpha.dtype,
-                                  qtotal=desired_Q,
+                                  qtotal=list(self.gluing_charge),
                                   labels=['vL', 'vR'])
         lanczos_params = self.options.get("lanczos_params", {}) # See if lanczos_params is in yaml, if not use empty dictionary
         _, th0, _ = lanczos.LanczosGroundState(H0, th0, lanczos_params).run()
@@ -1449,7 +1456,7 @@ class TopologicalExcitations(OrthogonalExcitations):
 
         combined_seg = self._concatenate_segments(seg_alpha, seg_beta, inf_alpha)
 
-        return combined_seg
+        return combined_seg, qtotal_diff
 
     def _concatenate_segments(self, seg_alpha, seg_beta, inf_alpha):
         l_sites = [seg_alpha.sites[i] for i in range(seg_alpha.L)]
@@ -1578,11 +1585,11 @@ class TopologicalExcitations(OrthogonalExcitations):
             eta_R_alpha = self.arbitrary_shift_right(psi0_alpha.L-1, psi0_alpha, self.init_env_data_alpha['init_RP'])
             eta_R_beta = self.arbitrary_shift_right(psi0_alpha.L-1, psi0_beta, self.init_env_data_beta['init_RP'])
             self.logger.info("eta_R_alpha, eta_R_beta: %.14f, %.14f", eta_R_alpha, eta_R_beta)
-            
+
             correction = self.correction(psi0_alpha, psi0_beta, env_alpha, env_beta, last) / psi0_alpha.L - eta_R_beta + eta_R_alpha
             self.logger.info("Correction term for mismatched GSs: %.14f", correction)
             self.results['ground_state_energy'] = E_alpha - eta_R_alpha + eta_R_beta + correction
-            
+
         self.logger.info("Reference Ground State Energy: %.14f", self.results['ground_state_energy'])
 
         return self.results['ground_state_energy']
