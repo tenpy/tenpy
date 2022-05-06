@@ -1400,37 +1400,42 @@ class TopologicalExcitations(OrthogonalExcitations):
             Qs_beta, ps_beta = seg_beta.probability_per_charge(0)
 
             side_by_side = string.vert_join(["left seg\n" + str(Qs_alpha), "prob\n" + str(np.array([ps_alpha]).T), "right seg\n" + str(Qs_beta),"prob\n" +str(np.array([ps_beta]).T)], delim=' | ')
-            self.logger.info(side_by_side)
-
+            # NOTE: chinfo.make_valid() turns charges into INT by discarding fractional part. Round first.
             if join_method == "average charge":
                 Q_bar_alpha = inf_alpha.average_charge(0)
                 for i in range(1, inf_alpha.L):
                     Q_bar_alpha += inf_alpha.average_charge(i)
-                Q_bar_alpha = vL.chinfo.make_valid(np.around(Q_bar_alpha / inf_alpha.L))
+                #Q_bar_alpha = vL.chinfo.make_valid(np.around(Q_bar_alpha / inf_alpha.L))
+                Q_bar_alpha = Q_bar_alpha / inf_alpha.L
                 self.logger.info("Charge of left BC, averaged over site and unit cell: %r", Q_bar_alpha)
 
                 Q_bar_beta = inf_beta.average_charge(0)
                 for i in range(1, inf_beta.L):
                     Q_bar_beta += inf_beta.average_charge(i)
-                Q_bar_beta = vR.chinfo.make_valid(np.around(Q_bar_beta / inf_beta.L)) # -1*
+                #Q_bar_beta = vR.chinfo.make_valid(np.around(Q_bar_beta / inf_beta.L)) # -1*
+                Q_bar_beta = Q_bar_beta / inf_beta.L # -1*
                 self.logger.info("Charge of right BC, averaged over site and unit cell: %r", Q_bar_beta)
-                Q_offset = (vL.chinfo.make_valid(Q_bar_alpha - Q_bar_beta))
+                #Q_offset = (vL.chinfo.make_valid(Q_bar_alpha - Q_bar_beta))
+                Q_offset = Q_bar_alpha - Q_bar_beta
             elif join_method == "most probable charge":
                 Qmostprobable_alpha = Qs_alpha[np.argmax(ps_alpha)]
                 Qmostprobable_beta = Qs_beta[np.argmax(ps_beta)] #-1*
-                self.logger.info("Most probable left:" + str(Qmostprobable_alpha))
-                self.logger.info("Most probable right:" + str(Qmostprobable_beta))
-                Q_offset = (vL.chinfo.make_valid(Qmostprobable_alpha - Qmostprobable_beta))
+                self.logger.info("Most probable left: %r", Qmostprobable_alpha)
+                self.logger.info("Most probable right: %r", Qmostprobable_beta)
+                #Q_offset = (vL.chinfo.make_valid(Qmostprobable_alpha - Qmostprobable_beta))
+                Q_offset = Qmostprobable_alpha - Qmostprobable_beta
             else:
                 raise ValueError("Invalid `join_method` %s " % join_method)
 
+            self.logger.info("Q Offset (offset L - offset R): %r", Q_offset)
+            #switch_charge_sector = vL.chinfo.make_valid(switch_charge_sector)
             self.logger.info("Desired excitation charge: %r", switch_charge_sector)
             self.gluing_charge = Q_offset
             if switch_charge_sector is not None:
-                self.gluing_charge = vL.chinfo.make_valid(switch_charge_sector + self.gluing_charge)
-
-            self.logger.info("Desired gluing charge: %r", self.gluing_charge)
-            qtotal_diff = list(vL.chinfo.make_valid(self.gluing_charge - Q_offset))
+                self.gluing_charge = switch_charge_sector + self.gluing_charge
+            self.gluing_charge = vL.chinfo.make_valid(np.around(self.gluing_charge))
+            self.logger.info("Gluing charge: %r", self.gluing_charge)
+            qtotal_diff = self.gluing_charge - Q_offset
             self.logger.info("Targeted excitation charge: %r", qtotal_diff)
 
         # We need a tensor that is non-zero only when Q = (Q^i_L - bar(Q_L)) + (Q^i_R - bar(Q_R))
@@ -1582,11 +1587,11 @@ class TopologicalExcitations(OrthogonalExcitations):
             self.logger.info("E_alpha, E_alpha2: %.14f, %.14f", E_alpha, E_alpha2)
             self.logger.info("epsilon_alpha, E0_alpha: %.14f, %.14f", epsilon_alpha, E0_alpha)
 
-            eta_R_alpha = self.arbitrary_shift_right(psi0_alpha.L-1, psi0_alpha, self.init_env_data_alpha['init_RP'])
-            eta_R_beta = self.arbitrary_shift_right(psi0_alpha.L-1, psi0_beta, self.init_env_data_beta['init_RP'])
+            eta_R_alpha = self.arbitrary_shift_right(psi0_alpha.L-1, psi0_alpha, self.init_env_data_alpha['init_RP']).real
+            eta_R_beta = self.arbitrary_shift_right(psi0_alpha.L-1, psi0_beta, self.init_env_data_beta['init_RP']).real
             self.logger.info("eta_R_alpha, eta_R_beta: %.14f, %.14f", eta_R_alpha, eta_R_beta)
 
-            correction = self.correction(psi0_alpha, psi0_beta, env_alpha, env_beta, last) / psi0_alpha.L - eta_R_beta + eta_R_alpha
+            correction = self.correction(psi0_alpha, psi0_beta, env_alpha, env_beta, last).real / psi0_alpha.L - eta_R_beta + eta_R_alpha
             self.logger.info("Correction term for mismatched GSs: %.14f", correction)
             self.results['ground_state_energy'] = E_alpha - eta_R_alpha + eta_R_beta + correction
 
