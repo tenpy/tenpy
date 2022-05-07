@@ -1400,6 +1400,7 @@ class TopologicalExcitations(OrthogonalExcitations):
             Qs_beta, ps_beta = seg_beta.probability_per_charge(0)
 
             side_by_side = string.vert_join(["left seg\n" + str(Qs_alpha), "prob\n" + str(np.array([ps_alpha]).T), "right seg\n" + str(Qs_beta),"prob\n" +str(np.array([ps_beta]).T)], delim=' | ')
+            self.logger.info(side_by_side)
             # NOTE: chinfo.make_valid() turns charges into INT by discarding fractional part. Round first.
             if join_method == "average charge":
                 Q_bar_alpha = inf_alpha.average_charge(0)
@@ -1434,9 +1435,9 @@ class TopologicalExcitations(OrthogonalExcitations):
             if switch_charge_sector is not None:
                 self.gluing_charge = switch_charge_sector + self.gluing_charge
             self.gluing_charge = vL.chinfo.make_valid(np.around(self.gluing_charge))
-            self.logger.info("Gluing charge: %r", self.gluing_charge)
+            self.logger.info("Gluing charge (round(Q_ex + Q_off)): %r", self.gluing_charge)
             qtotal_diff = self.gluing_charge - Q_offset
-            self.logger.info("Targeted excitation charge: %r", qtotal_diff)
+            self.logger.info("Targeted excitation charge (Q_gl - Q_off): %r", qtotal_diff)
 
         # We need a tensor that is non-zero only when Q = (Q^i_L - bar(Q_L)) + (Q^i_R - bar(Q_R))
         # Q is the the charge we insert. Here we only do charge gluing to get a valid segment.
