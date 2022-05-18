@@ -461,7 +461,7 @@ class ParallelDMRGSim(GroundStateSearch):
         if comm is None:
             comm = MPI.COMM_WORLD
         self.comm_H = comm
-        print(f"MPI rank {comm.rank:d} reporting for duty")
+        print(f"MPI rank {comm.rank:d} reporting for duty", flush=True)
         if self.comm_H.rank == 0:
             try:
                 super().__init__(options, **kwargs)
@@ -501,7 +501,7 @@ class ParallelDMRGSim(GroundStateSearch):
             self.options.warn_unused(True)
             if exc_type is None:
                 self.comm_H.bcast((actions.DONE, None))
-        print(f"MPI rank {self.comm_H.rank:d} signing off")
+        print(f"MPI rank {self.comm_H.rank:d} signing off", flush=True)
 
     def init_algorithm(self, **kwargs):
         kwargs.setdefault('comm_H', self.comm_H)

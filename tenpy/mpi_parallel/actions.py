@@ -213,6 +213,37 @@ def effh_to_matrix(node_local, on_main, LH_key, RH_key):
         contr = None
     return node_local.comm.reduce(contr, op=MPI_SUM_NONE)
 
+def big_send_env(comm, env, dest, tag):
+    env2 = env.copy(deep=True)
+    block_shapes = [d.shape for d in env2._data]
+    data_size = env.size * 16 # np.complex128 is 16 bytes
+    num_messages = data_size // 2147483647 # Max message is 2^21 - 1 bites
+    message_size = env.size // num_messages
+    message_boundary = [message_size * i for i in range(num_messages)] + [env.size]
+    assert message_boundary[-1] - message_boundary[-2] <= 2147483647
+    
+    env2._data = [block_shapes] + [message_boundary]
+    comm.send(env2, dest=dest, tag=tag)
+    
+    env_data = np.concatenate([d.flatten() for d in env._data])
+    for i in range(num_messages):
+        comm.Send(env_data[message_boundary[i]:message_boundary[i+1]], dest=dest, tag=tag*10+i)
+    
+def big_recv_env(comm, source, tag):
+    env = comm.recv(source=source, tag=tag)
+    block_shapes = env2._data[0]
+    message_boundary = env2._data[-1]
+    buffer = []
+    
+    for i in range(num_messages):
+        buffer.append(numpy.empty(message_boundary[i+1] - message_boundary[i], dtype=numpy.complex128))
+        comm.Recv(buffer[-1], dest=dest, tag=tag*10+i) 
+    
+    env_data = np.concatenate(buffer)
+    env_data = np.split(env_data, np.cumsum([np.prod(d) for d in block_shapes])[:-1])
+    env._data = [d.reshape(block_shapes[i]) for i, d in enumerate(env_data)]
+    
+    return env
 
 def contract_LP_W_sparse(node_local, on_main, i, old_key, new_key):
     assert on_main is None
@@ -232,10 +263,12 @@ def contract_LP_W_sparse(node_local, on_main, i, old_key, new_key):
                 if source == rank:
                     received_LP = my_LP  # no communication necessary
                 else:
-                    received_LP = comm.recv(source=source, tag=tag)
+                    #received_LP = comm.recv(source=source, tag=tag)
+                    received_LP = big_recv_env(comm, source, tag)
                 Wb = W[source][dest].replace_labels(['p', 'p*'], ['p0', 'p0*'])
             elif source == rank:
-                comm.send(my_LP, dest=dest, tag=tag)
+                #comm.send(my_LP, dest=dest, tag=tag)
+                big_send_env(comm, my_LP, dest, tag)
             else:
                 assert False, f"Invalid cycle on node {rank:d}: {cycle!r}"
         # now every node (which has work left) received one part
