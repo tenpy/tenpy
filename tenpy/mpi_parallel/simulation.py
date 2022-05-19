@@ -442,7 +442,8 @@ class ParallelTwoSiteDMRG(TwoSiteDMRGEngine):
     def run(self):
         # re-initialize worker to allow calling `run()` multiple times
         if self.use_threading_plus_hc:
-            print("using a worker on rank ", self.comm_H.rank)
+            self.logger.info("using a worker on rank ", self.comm_H.rank)
+            #print("using a worker on rank ", self.comm_H.rank)
             worker = Worker("EffectiveHPlusHC worker", max_queue_size=1, daemon=False)
             self.main_node_local.worker = worker
             with worker:
@@ -461,7 +462,8 @@ class ParallelDMRGSim(GroundStateSearch):
         if comm is None:
             comm = MPI.COMM_WORLD
         self.comm_H = comm
-        print(f"MPI rank {comm.rank:d} reporting for duty", flush=True)
+        self.logger.info(f"MPI rank {comm.rank:d} reporting for duty.")
+        #print(f"MPI rank {comm.rank:d} reporting for duty", flush=True)
         if self.comm_H.rank == 0:
             try:
                 super().__init__(options, **kwargs)
@@ -501,7 +503,8 @@ class ParallelDMRGSim(GroundStateSearch):
             self.options.warn_unused(True)
             if exc_type is None:
                 self.comm_H.bcast((actions.DONE, None))
-        print(f"MPI rank {self.comm_H.rank:d} signing off", flush=True)
+        self.logger.info(f"MPI rank {self.comm_H.rank:d} signing off.")
+        #print(f"MPI rank {self.comm_H.rank:d} signing off", flush=True)
 
     def init_algorithm(self, **kwargs):
         kwargs.setdefault('comm_H', self.comm_H)
@@ -525,7 +528,8 @@ class ParallelDMRGSim(GroundStateSearch):
         use_threading_plus_hc = get_recursive(self.options, 'algorithm_params.thread_plus_hc',
                                               default=False)
         if use_threading_plus_hc:
-            print("using a worker on rank ", self.comm_H.rank)
+            self.logger.info("using a worker on rank ", self.comm_H.rank)
+            #print("using a worker on rank ", self.comm_H.rank)
             worker = Worker("EffectiveHPlusHC worker", max_queue_size=1, daemon=False)
             node_local.worker = worker
             with worker:
