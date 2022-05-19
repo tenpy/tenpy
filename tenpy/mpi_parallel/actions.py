@@ -226,7 +226,7 @@ def big_send_env(comm, env, dest, tag):
         raise ValueError('dtype %s of environment not recognized' % env.dtype)
 
     data_size = env.size * dtype_size # np.complex128 is 16 bytes
-    num_messages = 1 + data_size // 100 # 2147483647 # Max message is 2^31 - 1 bites
+    num_messages = 1 + data_size // 2147483647 # Max message is 2^31 - 1 bites
     message_size = env.size // num_messages
     message_boundary = [message_size * i for i in range(num_messages)] + [env.size]
     assert message_boundary[-1] - message_boundary[-2] <= 2147483647
