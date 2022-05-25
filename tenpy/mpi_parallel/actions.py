@@ -226,7 +226,7 @@ def big_send_env(comm, env, dest, tag):
         raise ValueError('dtype %s of environment not recognized' % env.dtype)
 
     data_size = env.size * dtype_size # np.complex128 is 16 bytes
-    num_messages = 1 + data_size // 2147483647 # Max message is 2^31 - 1 bites
+    num_messages = 1 + data_size // 2147483647 # Max message is 2^31 - 1 bytes
     message_size = env.size // num_messages
     message_boundary = [message_size * i for i in range(num_messages)] + [env.size]
     assert message_boundary[-1] - message_boundary[-2] <= 2147483647
@@ -271,14 +271,14 @@ def contract_LP_W_sparse(node_local, on_main, i, old_key, new_key):
                 if source == rank:
                     received_LP = my_LP  # no communication necessary
                 else:
-                    #received_LP = comm.recv(source=source, tag=tag)
-                    received_LP = big_recv_env(comm, source, tag)
+                    received_LP = comm.recv(source=source, tag=tag)
+                    #received_LP = big_recv_env(comm, source, tag)
                     #print(received_LP.size, received_LP.stored_blocks, received_LP.dtype, received_LP2.size, received_LP2.stored_blocks, received_LP2.dtype)
                     #print([np.linalg.norm(d - e) for d,e in zip(received_LP._data, received_LP2._data)])
                 Wb = W[source][dest].replace_labels(['p', 'p*'], ['p0', 'p0*'])
             elif source == rank:
-                #comm.send(my_LP, dest=dest, tag=tag)
-                big_send_env(comm, my_LP, dest, tag)
+                comm.send(my_LP, dest=dest, tag=tag)
+                #big_send_env(comm, my_LP, dest, tag)
             else:
                 assert False, f"Invalid cycle on node {rank:d}: {cycle!r}"
         # now every node (which has work left) received one part
@@ -309,12 +309,12 @@ def contract_W_RP_sparse(node_local, on_main, i, old_key, new_key):
                 if source == rank:
                     received_RP = my_RP  # no communication necessary
                 else:
-                    #received_RP = comm.recv(source=source, tag=tag)
-                    received_RP = big_recv_env(comm, source, tag)
+                    received_RP = comm.recv(source=source, tag=tag)
+                    #received_RP = big_recv_env(comm, source, tag)
                 Wb = W[dest][source].replace_labels(['p', 'p*'], ['p1', 'p1*'])
             elif source == rank:
-                #comm.send(my_RP, dest=dest, tag=tag)
-                big_send_env(comm, my_RP, dest, tag)
+                comm.send(my_RP, dest=dest, tag=tag)
+                #big_send_env(comm, my_RP, dest, tag)
             else:
                 assert False, f"Invalid cycle on node {rank:d}: {cycle!r}"
         # now every node (which has work left) received one part
