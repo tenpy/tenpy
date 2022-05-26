@@ -213,6 +213,7 @@ def effh_to_matrix(node_local, on_main, LH_key, RH_key):
         contr = None
     return node_local.comm.reduce(contr, op=MPI_SUM_NONE)
 
+
 def big_send_env(comm, env, dest, tag):
     #env2 = env.copy(deep=True)
     env_data_orig = env._data
@@ -271,14 +272,14 @@ def contract_LP_W_sparse(node_local, on_main, i, old_key, new_key):
                 if source == rank:
                     received_LP = my_LP  # no communication necessary
                 else:
-                    received_LP = comm.recv(source=source, tag=tag)
+                    #received_LP = comm.recv(source=source, tag=tag)
                     #received_LP = big_recv_env(comm, source, tag)
-                    #print(received_LP.size, received_LP.stored_blocks, received_LP.dtype, received_LP2.size, received_LP2.stored_blocks, received_LP2.dtype)
-                    #print([np.linalg.norm(d - e) for d,e in zip(received_LP._data, received_LP2._data)])
+                    received_LP = helpers.npc_recv(comm, source, tag)
                 Wb = W[source][dest].replace_labels(['p', 'p*'], ['p0', 'p0*'])
             elif source == rank:
-                comm.send(my_LP, dest=dest, tag=tag)
+                #comm.send(my_LP, dest=dest, tag=tag)
                 #big_send_env(comm, my_LP, dest, tag)
+                helpers.npc_send(comm, my_LP, dest, tag)
             else:
                 assert False, f"Invalid cycle on node {rank:d}: {cycle!r}"
         # now every node (which has work left) received one part
@@ -309,12 +310,14 @@ def contract_W_RP_sparse(node_local, on_main, i, old_key, new_key):
                 if source == rank:
                     received_RP = my_RP  # no communication necessary
                 else:
-                    received_RP = comm.recv(source=source, tag=tag)
+                    #received_RP = comm.recv(source=source, tag=tag)
                     #received_RP = big_recv_env(comm, source, tag)
+                    received_RP = helpers.npc_recv(comm, source, tag)
                 Wb = W[dest][source].replace_labels(['p', 'p*'], ['p1', 'p1*'])
             elif source == rank:
-                comm.send(my_RP, dest=dest, tag=tag)
+                #comm.send(my_RP, dest=dest, tag=tag)
                 #big_send_env(comm, my_RP, dest, tag)
+                helpers.npc_send(comm, my_RP, dest, tag)
             else:
                 assert False, f"Invalid cycle on node {rank:d}: {cycle!r}"
         # now every node (which has work left) received one part
