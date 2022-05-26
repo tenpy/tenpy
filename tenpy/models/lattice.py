@@ -2236,6 +2236,56 @@ class Ladder(Lattice):
                 assert (False)  # should not be possible
             return ordering
         return super().ordering(order)
+      
+      
+class NLegLadder(Lattice):
+    """A ladder coupling N chains.
+
+    .. plot ::
+
+        import matplotlib.pyplot as plt
+        from tenpy.models import lattice
+        plt.figure(figsize=(5, 1.4))
+        ax = plt.gca()
+        lat = lattice.NLegLadder(4, 4, None, bc='periodic')
+        lat.plot_coupling(ax, linewidth=3.)
+        lat.plot_order(ax, linestyle=':')
+        lat.plot_sites(ax)
+        lat.plot_basis(ax, origin=[-0.5, -0.25], shade=False)
+        ax.set_aspect('equal')
+        ax.set_xlim(-1.)
+        ax.set_ylim(-1.)
+        plt.show()
+
+    Parameters
+    ----------
+    L : int
+        The length of each chain, we have N*L sites in total.
+    N : int
+        The number of legs of the ladder.
+    sites : (list of) :class:`~tenpy.networks.site.Site`
+        The N local lattice sites making the `unit_cell` of the :class:`Lattice`.
+        If only a single :class:`~tenpy.networks.site.Site` is given, it is used for all chains.
+    **kwargs :
+        Additional keyword arguments given to the :class:`Lattice`.
+        `basis`, `pos` and `pairs` are set accordingly.
+    """
+    dim = 1  #: the dimension of the lattice
+
+    def __init__(self, L, N, sites, **kwargs):
+        sites = _parse_sites(sites, N)
+        basis = np.array([[1., 0.]])
+        pos = np.vstack((np.zeros(N), np.linspace(0, 1, N))).T
+        kwargs.setdefault('basis', basis)
+        kwargs.setdefault('positions', pos)
+        NN = [(n, n + 1, np.array([0])) for n in range(N - 1)]
+        nNN = [(n, n, np.array([1])) for n in range(N)]
+        nnNN = [(n, n+1, np.array([1])) for n in range(N-1)] + [(n+1, n, np.array([1])) for n in range(N-1)]
+        kwargs.setdefault('pairs', {})
+        kwargs['pairs'].setdefault('nearest_neighbors', NN)
+        kwargs['pairs'].setdefault('next_nearest_neighbors', nNN)
+        kwargs['pairs'].setdefault('next_next_nearest_neighbors', nnNN)
+        Lattice.__init__(self, [L], sites, **kwargs)
 
 
 class Square(SimpleLattice):
