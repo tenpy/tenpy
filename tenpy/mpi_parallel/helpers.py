@@ -233,27 +233,27 @@ def npc_send(comm, array, dest, tag):
     array._data = [block_shapes] + [array.dtype]
     request = comm.isend(array, dest=dest, tag=tag)
     array._data = array_data_orig
-    
+
     requests = [MPI.REQUEST_NULL] * array.stored_blocks
-    
+
     for i in range(array.stored_blocks):
-        requests[i] = comm.Isend(np.ascontiguousarray(array._data[i]), dest=dest, tag=tag*len(block_shapes)+i)
-        
+        requests[i] = comm.Isend(np.ascontiguousarray(array._data[i]), dest=dest, tag=tag+i)
+
     MPI.Request.Waitall(requests + [request])
-    
+
 def npc_recv(comm, source, tag):
     request = comm.irecv(bytearray(1<<20), source=source, tag=tag) # Assume shell npc array is less than 1 MB in size.
     array = request.wait()
-    
+
     block_shapes = array._data[0]
     dtype = array._data[1]
     array._data = []
-    
+
     requests = [MPI.REQUEST_NULL] * len(block_shapes)
-    
+
     for i, b_s in enumerate(block_shapes):
         array._data.append(np.empty(b_s, dtype=dtype))
-        requests[i] = comm.Irecv(array._data[-1], source=source, tag=tag*len(block_shapes)+i)
-    
-    MPI.Request.Waitall(requests)    
+        requests[i] = comm.Irecv(array._data[-1], source=source, tag=tag+i)
+
+    MPI.Request.Waitall(requests)
     return array
