@@ -221,6 +221,10 @@ def build_sparse_comm_schedule(W_blocks, on_node=None):
 
 ########### NPC - MPI4PY Communication ###########
 def npc_send(comm, array, dest, tag):
+    if array is None:
+        comm.isend(array, dest=dest, tag=tag).wait()
+        return
+    
     array_data_orig = array._data
     block_shapes = [d.shape for d in array._data]
     if array.dtype == 'complex128':
@@ -244,7 +248,9 @@ def npc_send(comm, array, dest, tag):
 def npc_recv(comm, source, tag):
     request = comm.irecv(bytearray(1<<20), source=source, tag=tag) # Assume shell npc array is less than 1 MB in size.
     array = request.wait()
-
+    if array is None:
+        return array
+    
     block_shapes = array._data[0]
     dtype = array._data[1]
     array._data = []
