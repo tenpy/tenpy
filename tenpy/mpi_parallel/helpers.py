@@ -226,7 +226,7 @@ def npc_send(comm, array, dest, tag):
         comm.isend(array, dest=dest, tag=tag).wait()
         return
     
-    array_data_orig = array._data[:] #Slice list to make a shallow copy? Seems to be faster than list.copy()
+    #array_data_orig = array._data #[:] #Slice list to make a shallow copy? Seems to be faster than list.copy()
     try:
         block_shapes = [d.shape for d in array._data]
     except AttributeError:
@@ -244,25 +244,30 @@ def npc_send(comm, array, dest, tag):
         dtype_size = 8
     else:
         raise ValueError('dtype %s of environment not recognized' % array.dtype)
-
-    array._data = [block_shapes] + [array.dtype]
-    request = comm.isend(array, dest=dest, tag=tag)
+    
+    send_array = array.copy() # Make shallow copy of npc array and ONLY change copy.
+    send_array._data = [block_shapes] + [array.dtype]
+    #print('Here')
+    #print(send_array._data, array._data, array_data_orig)
+    request = comm.isend(send_array, dest=dest, tag=tag)
     #array._data = array_data_orig
 
-    #requests = [MPI.REQUEST_NULL] * array.stored_blocks
-    requests = [MPI.REQUEST_NULL] * len(array_data_orig)
+    requests = [MPI.REQUEST_NULL] * array.stored_blocks
+    #requests = [MPI.REQUEST_NULL] * len(array_data_orig)
 
     #print(array.stored_blocks, len(array_data_orig))
     #for i in range(array.stored_blocks):
-    for i, d in enumerate(array_data_orig):
+    for i, d in enumerate(array._data):
         #requests[i] = comm.Isend(np.ascontiguousarray(array._data[i]), dest=dest, tag=tag+i)
         requests[i] = comm.Isend(np.ascontiguousarray(d), dest=dest, tag=tag+i)
 
     MPI.Request.Waitall(requests + [request])
-    array._data = array_data_orig
+    #array._data = array_data_orig
     
-    for d in array._data:
-        assert type(d) is np.ndarray
+    #for d in array._data:
+    #    assert type(d) is np.ndarray
+    #print(array._data)
+    return array
 
 """
 def npc_send(comm, array, dest, tag):
@@ -337,8 +342,8 @@ def npc_recv(comm, source, tag):
         requests[i] = comm.Irecv(array._data[-1], source=source, tag=tag+i)
 
     MPI.Request.Waitall(requests)
-    for d in array._data:
-        assert type(d) is np.ndarray
+    #for d in array._data:
+    #    assert type(d) is np.ndarray
 
     return array
 

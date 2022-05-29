@@ -280,7 +280,7 @@ def contract_LP_W_sparse(node_local, on_main, i, old_key, new_key):
             elif source == rank:
                 #comm.send(my_LP, dest=dest, tag=tag)
                 #big_send_env(comm, my_LP, dest, tag)
-                helpers.npc_send(comm, my_LP, dest, tag)
+                my_LP = helpers.npc_send(comm, my_LP, dest, tag)
             else:
                 assert False, f"Invalid cycle on node {rank:d}: {cycle!r}"
         # now every node (which has work left) received one part
@@ -322,7 +322,7 @@ def contract_W_RP_sparse(node_local, on_main, i, old_key, new_key):
             elif source == rank:
                 #comm.send(my_RP, dest=dest, tag=tag)
                 #big_send_env(comm, my_RP, dest, tag)
-                helpers.npc_send(comm, my_RP, dest, tag)
+                my_RP = helpers.npc_send(comm, my_RP, dest, tag)
             else:
                 assert False, f"Invalid cycle on node {rank:d}: {cycle!r}"
         # now every node (which has work left) received one part
