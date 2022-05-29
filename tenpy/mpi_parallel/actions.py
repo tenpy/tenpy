@@ -285,8 +285,12 @@ def contract_LP_W_sparse(node_local, on_main, i, old_key, new_key):
                 assert False, f"Invalid cycle on node {rank:d}: {cycle!r}"
         # now every node (which has work left) received one part
         if received_LP is not None:
-            LHeff = helpers.sum_none(LHeff, npc.tensordot(received_LP, Wb, ['wR', 'wL']))
-        # comm.Barrier()  # TODO: probably not needed?
+            try:
+                LHeff = helpers.sum_none(LHeff, npc.tensordot(received_LP, Wb, ['wR', 'wL']))
+            except TypeError:
+                print(rank, dest, source, flush=True)
+                raise ValueError
+        #comm.Barrier()  # TODO: probably not needed?
     if LHeff is not None:
         pipeL = LHeff.make_pipe(['vR*', 'p0'], qconj=+1)
         LHeff = LHeff.combine_legs([['vR*', 'p0'], ['vR', 'p0*']], pipes=[pipeL, pipeL.conj()], new_axes=[0, 2]) # vR*.p, wR, vR.p*
@@ -323,7 +327,11 @@ def contract_W_RP_sparse(node_local, on_main, i, old_key, new_key):
                 assert False, f"Invalid cycle on node {rank:d}: {cycle!r}"
         # now every node (which has work left) received one part
         if received_RP is not None:
-            RHeff = helpers.sum_none(RHeff, npc.tensordot(Wb, received_RP, ['wR', 'wL']))
+            try:
+                RHeff = helpers.sum_none(RHeff, npc.tensordot(Wb, received_RP, ['wR', 'wL']))
+            except TypeError:
+                print(rank, dest, source, flush=True)
+                raise ValueError
         #comm.Barrier()  # TODO: probably not needed?
     if RHeff is not None:
         # TODO: is it faster to combine legs before addition?

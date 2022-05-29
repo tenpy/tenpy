@@ -226,7 +226,7 @@ def npc_send(comm, array, dest, tag):
         comm.isend(array, dest=dest, tag=tag).wait()
         return
     
-    array_data_orig = array._data
+    array_data_orig = array._data[:] #Slice list to make a shallow copy? Seems to be faster than list.copy()
     try:
         block_shapes = [d.shape for d in array._data]
     except AttributeError:
@@ -337,6 +337,9 @@ def npc_recv(comm, source, tag):
         requests[i] = comm.Irecv(array._data[-1], source=source, tag=tag+i)
 
     MPI.Request.Waitall(requests)
+    for d in array._data:
+        assert type(d) is np.ndarray
+
     return array
 
 """
