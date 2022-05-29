@@ -220,13 +220,24 @@ def build_sparse_comm_schedule(W_blocks, on_node=None):
 
 
 ########### NPC - MPI4PY Communication ###########
+
 def npc_send(comm, array, dest, tag):
-    if array is None:
+    if array is None or array.stored_blocks == 0:
         comm.isend(array, dest=dest, tag=tag).wait()
         return
     
     array_data_orig = array._data
-    block_shapes = [d.shape for d in array._data]
+    try:
+        block_shapes = [d.shape for d in array._data]
+    except AttributeError:
+        # array._data is somehow a list of lists?
+        # Sometimes array._data is [blocK_shapes] + [array.dtype]; I think this happened when the the pickled object 
+        # was sent using isend and not waited upon before changing array._data
+        print(array._data)
+        print(len(array._data))
+        print([len(d) for d in array._data])
+        raise ValueError
+
     if array.dtype == 'complex128':
         dtype_size = 16
     elif array.dtype == 'float64':
@@ -236,19 +247,83 @@ def npc_send(comm, array, dest, tag):
 
     array._data = [block_shapes] + [array.dtype]
     request = comm.isend(array, dest=dest, tag=tag)
+    #array._data = array_data_orig
+
+    #requests = [MPI.REQUEST_NULL] * array.stored_blocks
+    requests = [MPI.REQUEST_NULL] * len(array_data_orig)
+
+    #print(array.stored_blocks, len(array_data_orig))
+    #for i in range(array.stored_blocks):
+    for i, d in enumerate(array_data_orig):
+        #requests[i] = comm.Isend(np.ascontiguousarray(array._data[i]), dest=dest, tag=tag+i)
+        requests[i] = comm.Isend(np.ascontiguousarray(d), dest=dest, tag=tag+i)
+
+    MPI.Request.Waitall(requests + [request])
+    array._data = array_data_orig
+    
+    for d in array._data:
+        assert type(d) is np.ndarray
+
+"""
+def npc_send(comm, array, dest, tag):
+    if array is None or array.size == 0:
+        comm.send(array, dest=dest, tag=tag)
+        return
+    
+    array_data_orig = array._data
+    try:
+        block_shapes = [d.shape for d in array._data]
+    except AttributeError:
+        # array._data is somehow a list of lists?
+        # Sometimes array._data is [blocK_shapes] + [array.dtype]; I think this happened when the the pickled object 
+        # was sent using isend and not waited upon before changing array._data
+        print(array._data)
+        print(len(array._data))
+        print([len(d) for d in array._data])
+        raise ValueError
+
+    if array.dtype == 'complex128':
+        dtype_size = 16
+    elif array.dtype == 'float64':
+        dtype_size = 8
+    else:
+        raise ValueError('dtype %s of environment not recognized' % array.dtype)
+
+    array._data = [block_shapes] + [array.dtype]
+    comm.send(array, dest=dest, tag=tag)
+    #buf = MPI.Alloc_mem(1<<20)
+    #MPI.Attach_buffer(buf)
+    #comm.bsend(array, dest=dest, tag=tag)
+    #MPI.Detach_buffer()
+    #MPI.Free_mem(buf)
     array._data = array_data_orig
 
-    requests = [MPI.REQUEST_NULL] * array.stored_blocks
+    
+    if array.stored_blocks:
+        requests = [MPI.REQUEST_NULL] * array.stored_blocks
+        #buf = MPI.Alloc_mem(array.size*16+MPI.BSEND_OVERHEAD)
+        print(comm.Get_rank(), array.size, array.stored_blocks, array.size*dtype_size+MPI.BSEND_OVERHEAD*array.stored_blocks)
+        MPI.Attach_buffer(MPI.Alloc_mem(array.size*dtype_size+MPI.BSEND_OVERHEAD))
+        for i in range(array.stored_blocks):
+            requests[i] = comm.Ibsend(np.ascontiguousarray(array._data[i]), dest=dest, tag=tag+i)
 
+        MPI.Request.Waitall(requests)
+        MPI.Detach_buffer()
+        #MPI.Free_mem(buf)
+    
+    
+    requests = [MPI.REQUEST_NULL] * array.stored_blocks
     for i in range(array.stored_blocks):
         requests[i] = comm.Isend(np.ascontiguousarray(array._data[i]), dest=dest, tag=tag+i)
 
-    MPI.Request.Waitall(requests + [request])
+    MPI.Request.Waitall(requests)
+"""    
+
 
 def npc_recv(comm, source, tag):
     request = comm.irecv(bytearray(1<<20), source=source, tag=tag) # Assume shell npc array is less than 1 MB in size.
     array = request.wait()
-    if array is None:
+    if array is None or array.stored_blocks == 0:
         return array
     
     block_shapes = array._data[0]
@@ -263,3 +338,24 @@ def npc_recv(comm, source, tag):
 
     MPI.Request.Waitall(requests)
     return array
+
+"""
+def npc_recv(comm, source, tag):
+    array = comm.recv(bytearray(1<<20), source=source, tag=tag) # Assume shell npc array is less than 1 MB in size.
+    if array is None or array.size == 0:
+        return array
+    
+    block_shapes = array._data[0]
+    dtype = array._data[1]
+    array._data = []
+
+    if len(block_shapes):
+        requests = [MPI.REQUEST_NULL] * len(block_shapes)
+
+        for i, b_s in enumerate(block_shapes):
+            array._data.append(np.empty(b_s, dtype=dtype))
+            requests[i] = comm.Irecv(array._data[-1], source=source, tag=tag+i)
+
+        MPI.Request.Waitall(requests)
+    return array
+"""
