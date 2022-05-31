@@ -214,46 +214,59 @@ def effh_to_matrix(node_local, on_main, LH_key, RH_key):
         contr = None
     return node_local.comm.reduce(contr, op=MPI_SUM_NONE)
 
+def npc_send(comm, array, dest, tag):
+    if array is None or array.stored_blocks == 0:
+        comm.isend(array, dest=dest, tag=tag).wait()
+        return
+    
+    try:
+        block_shapes = [d.shape for d in array._data]
+    except AttributeError:
+        # array._data is somehow a list of lists?
+        # Sometimes array._data is [blocK_shapes] + [array.dtype]; I think this happened when the the pickled object 
+        # was sent using isend and not waited upon before changing array._data
+        print(array._data)
+        print(len(array._data))
+        print([len(d) for d in array._data])
+        raise ValueError
 
-def big_send_env(comm, env, dest, tag):
-    #env2 = env.copy(deep=True)
-    env_data_orig = env._data
-    env_data_flat = np.concatenate([d.flatten() for d in env._data])
-    block_shapes = [d.shape for d in env._data]
-    if env.dtype == 'complex128':
+    if array.dtype == 'complex128':
         dtype_size = 16
-    elif env.dtype == 'float64':
+    elif array.dtype == 'float64':
         dtype_size = 8
     else:
-        raise ValueError('dtype %s of environment not recognized' % env.dtype)
+        raise ValueError('dtype %s of environment not recognized' % array.dtype)
+    
+    send_array = array.copy() # Make shallow copy of npc array and ONLY change copy.
+    send_array._data = [block_shapes] + [array.dtype]
+    request = comm.isend(send_array, dest=dest, tag=tag)
 
-    data_size = env.size * dtype_size # np.complex128 is 16 bytes
-    num_messages = 1 + data_size // 2147483647 # Max message is 2^31 - 1 bytes
-    message_size = env.size // num_messages
-    message_boundary = [message_size * i for i in range(num_messages)] + [env.size]
-    assert message_boundary[-1] - message_boundary[-2] <= 2147483647
+    requests = [MPI.REQUEST_NULL] * array.stored_blocks
+    for i, d in enumerate(array._data):
+        requests[i] = comm.Isend(np.ascontiguousarray(d), dest=dest, tag=tag+i)
 
-    env._data = [block_shapes] + [message_boundary] + [env.dtype]
-    comm.send(env, dest=dest, tag=tag)
-    env._data = env_data_orig
+    MPI.Request.Waitall(requests + [request])
+    return array
 
-    for i in range(num_messages):
-        comm.Send(env_data_flat[message_boundary[i]:message_boundary[i+1]], dest=dest, tag=tag*10+i)
+def npc_recv(comm, source, tag):
+    request = comm.irecv(bytearray(1<<20), source=source, tag=tag) # Assume shell npc array is less than 1 MB in size.
+    array = request.wait()
+    if array is None or array.stored_blocks == 0:
+        return array
+    
+    block_shapes = array._data[0]
+    dtype = array._data[1]
+    array._data = []
 
-def big_recv_env(comm, source, tag):
-    env = comm.recv(source=source, tag=tag)
-    block_shapes = env._data[0]
-    message_boundary = env._data[1]
-    dtype = env._data[2]
-    env_data = np.empty(message_boundary[-1], dtype=dtype)
+    requests = [MPI.REQUEST_NULL] * len(block_shapes)
 
-    for i in range(len(message_boundary) - 1):
-        comm.Recv(env_data[message_boundary[i]:message_boundary[i+1]], source=source, tag=tag*10+i)
+    for i, b_s in enumerate(block_shapes):
+        array._data.append(np.empty(b_s, dtype=dtype))
+        requests[i] = comm.Irecv(array._data[-1], source=source, tag=tag+i)
 
-    env_data = np.split(env_data, np.cumsum([np.prod(d) for d in block_shapes])[:-1])
-    env._data = [d.reshape(block_shapes[i]) for i, d in enumerate(env_data)]
+    MPI.Request.Waitall(requests)
+    return array
 
-    return env
 
 def contract_LP_W_sparse(node_local, on_main, i, old_key, new_key):
     assert on_main is None
@@ -274,13 +287,11 @@ def contract_LP_W_sparse(node_local, on_main, i, old_key, new_key):
                     received_LP = my_LP  # no communication necessary
                 else:
                     #received_LP = comm.recv(source=source, tag=tag)
-                    #received_LP = big_recv_env(comm, source, tag)
-                    received_LP = helpers.npc_recv(comm, source, tag)
+                    received_LP = npc_recv(comm, source, tag)
                 Wb = W[source][dest].replace_labels(['p', 'p*'], ['p0', 'p0*'])
             elif source == rank:
                 #comm.send(my_LP, dest=dest, tag=tag)
-                #big_send_env(comm, my_LP, dest, tag)
-                my_LP = helpers.npc_send(comm, my_LP, dest, tag)
+                my_LP = npc_send(comm, my_LP, dest, tag)
             else:
                 assert False, f"Invalid cycle on node {rank:d}: {cycle!r}"
         # now every node (which has work left) received one part
@@ -316,13 +327,11 @@ def contract_W_RP_sparse(node_local, on_main, i, old_key, new_key):
                     received_RP = my_RP  # no communication necessary
                 else:
                     #received_RP = comm.recv(source=source, tag=tag)
-                    #received_RP = big_recv_env(comm, source, tag)
-                    received_RP = helpers.npc_recv(comm, source, tag)
+                    received_RP = npc_recv(comm, source, tag)
                 Wb = W[dest][source].replace_labels(['p', 'p*'], ['p1', 'p1*'])
             elif source == rank:
                 #comm.send(my_RP, dest=dest, tag=tag)
-                #big_send_env(comm, my_RP, dest, tag)
-                my_RP = helpers.npc_send(comm, my_RP, dest, tag)
+                my_RP = npc_send(comm, my_RP, dest, tag)
             else:
                 assert False, f"Invalid cycle on node {rank:d}: {cycle!r}"
         # now every node (which has work left) received one part

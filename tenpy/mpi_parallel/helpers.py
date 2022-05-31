@@ -5,11 +5,12 @@
 import numpy as np
 import copy
 
+"""
 try:
     from mpi4py import MPI
 except ImportError:
     warnings.warn("mpi4py not installed; MPI parallelization will not work.")
-
+"""
 
 #: blocks/arrays with norm smaller than EPSILON are dropped.
 EPSILON = 1.e-14
@@ -221,6 +222,7 @@ def build_sparse_comm_schedule(W_blocks, on_node=None):
 
 ########### NPC - MPI4PY Communication ###########
 
+"""
 def npc_send(comm, array, dest, tag):
     if array is None or array.stored_blocks == 0:
         comm.isend(array, dest=dest, tag=tag).wait()
@@ -268,6 +270,7 @@ def npc_send(comm, array, dest, tag):
     #    assert type(d) is np.ndarray
     #print(array._data)
     return array
+"""
 
 """
 def npc_send(comm, array, dest, tag):
@@ -324,7 +327,7 @@ def npc_send(comm, array, dest, tag):
     MPI.Request.Waitall(requests)
 """    
 
-
+"""
 def npc_recv(comm, source, tag):
     request = comm.irecv(bytearray(1<<20), source=source, tag=tag) # Assume shell npc array is less than 1 MB in size.
     array = request.wait()
@@ -346,6 +349,7 @@ def npc_recv(comm, source, tag):
     #    assert type(d) is np.ndarray
 
     return array
+"""
 
 """
 def npc_recv(comm, source, tag):
