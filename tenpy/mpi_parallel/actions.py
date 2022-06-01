@@ -63,6 +63,7 @@ def replica_main(node_local):
 
 
 def distr_array_scatter(node_local, on_main, key, in_cache):
+    # on_main should be list of npc_arrays
     local_part = node_local.comm.scatter(on_main)
     if in_cache:
         node_local.cache[key] = local_part
@@ -213,6 +214,59 @@ def effh_to_matrix(node_local, on_main, LH_key, RH_key):
         contr = None
     return node_local.comm.reduce(contr, op=MPI_SUM_NONE)
 
+def npc_send(comm, array, dest, tag):
+    if array is None or array.stored_blocks == 0:
+        comm.isend(array, dest=dest, tag=tag).wait()
+        return
+    
+    try:
+        block_shapes = [d.shape for d in array._data]
+    except AttributeError:
+        # array._data is somehow a list of lists?
+        # Sometimes array._data is [blocK_shapes] + [array.dtype]; I think this happened when the the pickled object 
+        # was sent using isend and not waited upon before changing array._data
+        print(array._data)
+        print(len(array._data))
+        print([len(d) for d in array._data])
+        raise ValueError
+
+    if array.dtype == 'complex128':
+        dtype_size = 16
+    elif array.dtype == 'float64':
+        dtype_size = 8
+    else:
+        raise ValueError('dtype %s of environment not recognized' % array.dtype)
+    
+    send_array = array.copy() # Make shallow copy of npc array and ONLY change copy.
+    send_array._data = [block_shapes] + [array.dtype]
+    request = comm.isend(send_array, dest=dest, tag=tag)
+
+    requests = [MPI.REQUEST_NULL] * array.stored_blocks
+    for i, d in enumerate(array._data):
+        requests[i] = comm.Isend(np.ascontiguousarray(d), dest=dest, tag=tag+i)
+
+    MPI.Request.Waitall(requests + [request])
+    return array
+
+def npc_recv(comm, source, tag):
+    request = comm.irecv(bytearray(1<<20), source=source, tag=tag) # Assume shell npc array is less than 1 MB in size.
+    array = request.wait()
+    if array is None or array.stored_blocks == 0:
+        return array
+    
+    block_shapes = array._data[0]
+    dtype = array._data[1]
+    array._data = []
+
+    requests = [MPI.REQUEST_NULL] * len(block_shapes)
+
+    for i, b_s in enumerate(block_shapes):
+        array._data.append(np.empty(b_s, dtype=dtype))
+        requests[i] = comm.Irecv(array._data[-1], source=source, tag=tag+i)
+
+    MPI.Request.Waitall(requests)
+    return array
+
 
 def contract_LP_W_sparse(node_local, on_main, i, old_key, new_key):
     assert on_main is None
@@ -232,16 +286,22 @@ def contract_LP_W_sparse(node_local, on_main, i, old_key, new_key):
                 if source == rank:
                     received_LP = my_LP  # no communication necessary
                 else:
-                    received_LP = comm.recv(source=source, tag=tag)
+                    #received_LP = comm.recv(source=source, tag=tag)
+                    received_LP = npc_recv(comm, source, tag)
                 Wb = W[source][dest].replace_labels(['p', 'p*'], ['p0', 'p0*'])
             elif source == rank:
-                comm.send(my_LP, dest=dest, tag=tag)
+                #comm.send(my_LP, dest=dest, tag=tag)
+                my_LP = npc_send(comm, my_LP, dest, tag)
             else:
                 assert False, f"Invalid cycle on node {rank:d}: {cycle!r}"
         # now every node (which has work left) received one part
         if received_LP is not None:
-            LHeff = helpers.sum_none(LHeff, npc.tensordot(received_LP, Wb, ['wR', 'wL']))
-        comm.Barrier()  # TODO: probably not needed?
+            try:
+                LHeff = helpers.sum_none(LHeff, npc.tensordot(received_LP, Wb, ['wR', 'wL']))
+            except TypeError:
+                print(rank, dest, source, flush=True)
+                raise ValueError
+        #comm.Barrier()  # TODO: probably not needed?
     if LHeff is not None:
         pipeL = LHeff.make_pipe(['vR*', 'p0'], qconj=+1)
         LHeff = LHeff.combine_legs([['vR*', 'p0'], ['vR', 'p0*']], pipes=[pipeL, pipeL.conj()], new_axes=[0, 2]) # vR*.p, wR, vR.p*
@@ -266,16 +326,22 @@ def contract_W_RP_sparse(node_local, on_main, i, old_key, new_key):
                 if source == rank:
                     received_RP = my_RP  # no communication necessary
                 else:
-                    received_RP = comm.recv(source=source, tag=tag)
+                    #received_RP = comm.recv(source=source, tag=tag)
+                    received_RP = npc_recv(comm, source, tag)
                 Wb = W[dest][source].replace_labels(['p', 'p*'], ['p1', 'p1*'])
             elif source == rank:
-                comm.send(my_RP, dest=dest, tag=tag)
+                #comm.send(my_RP, dest=dest, tag=tag)
+                my_RP = npc_send(comm, my_RP, dest, tag)
             else:
                 assert False, f"Invalid cycle on node {rank:d}: {cycle!r}"
         # now every node (which has work left) received one part
         if received_RP is not None:
-            RHeff = helpers.sum_none(RHeff, npc.tensordot(Wb, received_RP, ['wR', 'wL']))
-        comm.Barrier()  # TODO: probably not needed?
+            try:
+                RHeff = helpers.sum_none(RHeff, npc.tensordot(Wb, received_RP, ['wR', 'wL']))
+            except TypeError:
+                print(rank, dest, source, flush=True)
+                raise ValueError
+        #comm.Barrier()  # TODO: probably not needed?
     if RHeff is not None:
         # TODO: is it faster to combine legs before addition?
         pipeR = RHeff.make_pipe(['p1', 'vL*'], qconj=-1)
