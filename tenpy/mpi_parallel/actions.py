@@ -100,6 +100,52 @@ def distr_array_keep_alive(node_local, on_main, key, in_cache):
     keep_alive[key] = node_local.cache[key] if in_cache else node_local.distributed[key]
 
 
+def split_distr_array_load_hdf5(node_local, on_main, key, in_cache, filename_template, hdf5_key, projs, N_old, N_new, label):
+    #print('Node', node_local.comm.rank, ' is ready to split env.', flush=True)
+    if node_local.comm.rank % (N_new // N_old) == 0:
+        # Load the old environments
+        old_rank = node_local.comm.rank //  (N_new // N_old)
+        if filename_template is not None:
+            fn = filename_template.format(mpirank=old_rank)
+            f = getattr(node_local, 'hdf5_import_file', None)
+            if f is None:
+                import h5py
+                f = h5py.File(fn, 'r')
+                node_local.hdf5_import_file = f
+            else:
+                assert f.filename == fn
+                
+            whole_local_part = load_from_hdf5(f, hdf5_key)
+            print('Node', node_local.comm.rank, 'loaded env with shape ', whole_local_part.shape, flush=True)
+            
+            for i in range(N_new // N_old):
+                dest = node_local.comm.rank + i
+                source = node_local.comm.rank
+                
+                split_local_part = whole_local_part.copy(deep=True)
+                #print(source, dest, len(projs[dest]), np.sum(projs[dest]), flush=True)
+                split_local_part.iproject(mask=projs[dest], axes=label)
+                if dest != source:
+                    #print('Node', node_local.comm.rank, ' is sending to node', dest, flush=True)
+                    npc_send(node_local.comm, split_local_part, dest, tag = dest*10000 + source)
+                else:
+                    local_part = split_local_part
+        else:
+            # in sequential simulations after `DistributedArray._keep_alive_beyond_cache()`
+            raise NotImplementedError("Should not occur with sequential simulations; node number should be constant.")
+    else:
+        # Get split env from node which loaded and split it
+        source = node_local.comm.rank - node_local.comm.rank % (N_new // N_old)
+        #print('Node', node_local.comm.rank, 'is receiving from node', source, flush=True)
+        local_part = npc_recv(node_local.comm, source, tag = node_local.comm.rank*10000 + source)
+        
+    print('Node', node_local.comm.rank, 'has local env with shape', local_part.shape, flush=True)
+    if in_cache:
+        node_local.cache[key] = local_part
+    else:
+        node_local.distributed[key] = local_part
+
+    
 def distr_array_load_hdf5(node_local, on_main, key, in_cache, filename_template, hdf5_key):
     if filename_template is not None:
         fn = filename_template.format(mpirank=node_local.comm.rank)

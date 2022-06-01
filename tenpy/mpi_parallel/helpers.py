@@ -24,7 +24,7 @@ def sum_none(A, B, _=None):
     return A + B
 
 
-def split_MPO_leg(leg, N_nodes, mpi_split_params):
+def split_MPO_leg(leg, N_nodes, mpi_split_params, whole=True):
     """Split MPO leg indices as evenly as possible amongst N_nodes nodes.
 
     Options
@@ -65,14 +65,19 @@ def split_MPO_leg(leg, N_nodes, mpi_split_params):
         Into how many parts we need to split it.
     mpi_split_params : dict
         Options to determine how to split, see above.
-    method :
-        One of the following methods for splitting the leg.
+    whole : bool
+        If True, return projections for splitting original whole leg onto each node.
+        If False, return projections for splitting leg already split by first method
+        onto second set of nodes; e.g. for ``'Z_charge_values-block_size'``, the projections
+        will say how to split the legs for each Z_charge onto separate nodes. This is
+        needed if we take envs on N nodes and split them onto k*N nodes.
 
     **kwargs :
         Possibly extra keyword arguments depending on `method`.
     """
     D = leg.ind_len
     method = mpi_split_params.get('method', 'uniform')
+    #print('D:', D, whole, method, flush=True)
     if method == 'uniform':
         remaining = D
         running = 0
@@ -133,9 +138,12 @@ def split_MPO_leg(leg, N_nodes, mpi_split_params):
             _, _, p_leg = leg.project(p_first)
             projs_second = split_MPO_leg(p_leg, N_nodes_second, mpi_split_params)
             for p_second in projs_second:
-                proj_full = np.zeros(D, dtype=bool)
-                proj_full[p_first] = p_second
-                res.append(proj_full)
+                if whole:
+                    proj_full = np.zeros(D, dtype=bool)
+                    proj_full[p_first] = p_second
+                    res.append(proj_full)
+                else:
+                    res.append(p_second)
         mpi_split_params['method'] = method
         return res
     else:

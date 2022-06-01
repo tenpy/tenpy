@@ -396,17 +396,25 @@ class ParallelTwoSiteDMRG(TwoSiteDMRGEngine):
             self._wrap_ortho_eff_H()
 
     def _init_MPO_env(self, H, init_env_data):
+        mpi_split_params = self.options.subconfig("mpi_split_params")  # see helpers.split_MPO_leg
         # finish loading DistributedArray from hdf5 if not done yet.
         for key in ['init_LP', 'init_RP']:
             if key in init_env_data:
                 T = init_env_data[key]
                 if isinstance(T, DistributedArray):
-                    T.finish_load_from_hdf5(self.main_node_local)
+                    boundary_leg = H.get_W(0).get_leg('wL')
+                    if 'LP' in key:
+                        label='wR'
+                    elif 'RP' in key:
+                        label='wL'
+                        boundary_leg = boundary_leg.conj()
+                    else:
+                        raise ValueError()
+                    T.finish_load_from_hdf5(self.main_node_local, boundary_leg=boundary_leg, 
+                                            mpi_split_params=mpi_split_params, label=label)
         actions.run(actions.node_local_close_hdf5_file,  # does nothing if no file was opened
                    self.main_node_local,
                    ("hdf5_import_file", ))
-
-        mpi_split_params = self.options.subconfig("mpi_split_params")  # see helpers.split_MPO_leg
 
         # Initialize custom ParallelMPOEnvironment
         cache = self.main_node_local.cache
