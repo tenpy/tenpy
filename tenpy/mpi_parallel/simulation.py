@@ -405,9 +405,9 @@ class ParallelTwoSiteDMRG(TwoSiteDMRGEngine):
                     boundary_leg = H.get_W(0).get_leg('wL')
                     if 'LP' in key:
                         label='wR'
+                        boundary_leg = boundary_leg.conj()
                     elif 'RP' in key:
                         label='wL'
-                        boundary_leg = boundary_leg.conj()
                     else:
                         raise ValueError()
                     T.finish_load_from_hdf5(self.main_node_local, boundary_leg=boundary_leg, 

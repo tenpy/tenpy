@@ -118,23 +118,31 @@ class DistributedArray:
         self.node_local = node_local
         if not getattr(self, '_unfinished_load', False):
             return  # nothing to do
-        if self._mpi_size != node_local.comm.size:
-            assert node_local.comm.size > self._mpi_size
-            # note: if necessary, we can generalize to allow at least distribution over more nodes
-            if node_local.comm.size % self._mpi_size:
-                # Need N_nodes to be a multiple of old N_nodes
-                raise NotImplementedError("loading from hdf5 with different MPI rank size!")
-            else:
-                projs = split_MPO_leg(boundary_leg, node_local.comm.size, mpi_split_params, whole=False)
-                print('Size of partial projectors: ', [len(prj) for prj in projs], flush=True)
-                actions.run(actions.split_distr_array_load_hdf5,
-                            self.node_local,
-                            (self.key, self.in_cache, self._filename_template, self._subpath, projs, 
-                             self._mpi_size, node_local.comm.size, label))
-        else:
-            actions.run(actions.distr_array_load_hdf5,
+        if mpi_split_params['redistribute']:
+            # boundary_leg SHOULD be the MPO leg after recombining envs and sorting.
+            projs = split_MPO_leg(boundary_leg, node_local.comm.size, mpi_split_params, whole=True)
+            actions.run(actions.split_redistr_array_load_hdf5,
                         self.node_local,
-                        (self.key, self.in_cache, self._filename_template, self._subpath))
+                        (self.key, self.in_cache, self._filename_template, self._subpath, projs, 
+                                 self._mpi_size, node_local.comm.size, label, boundary_leg))
+        else:
+            if self._mpi_size != node_local.comm.size:
+                assert node_local.comm.size > self._mpi_size
+                # note: if necessary, we can generalize to allow at least distribution over more nodes
+                if node_local.comm.size % self._mpi_size:
+                    # Need N_nodes to be a multiple of old N_nodes
+                    raise NotImplementedError("loading from hdf5 with different MPI rank size!")
+                else:
+                    projs = split_MPO_leg(boundary_leg, node_local.comm.size, mpi_split_params, whole=False)
+                    print('Size of partial projectors: ', [len(prj) for prj in projs], flush=True)
+                    actions.run(actions.split_distr_array_load_hdf5,
+                                self.node_local,
+                                (self.key, self.in_cache, self._filename_template, self._subpath, projs, 
+                                 self._mpi_size, node_local.comm.size, label))
+            else:
+                actions.run(actions.distr_array_load_hdf5,
+                            self.node_local,
+                            (self.key, self.in_cache, self._filename_template, self._subpath))
         del self._filename_template
         del self._subpath
         del self._mpi_size

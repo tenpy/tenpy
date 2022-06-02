@@ -99,6 +99,61 @@ def distr_array_keep_alive(node_local, on_main, key, in_cache):
         node_local.__class__._keep_alive = keep_alive = {}
     keep_alive[key] = node_local.cache[key] if in_cache else node_local.distributed[key]
 
+    
+def split_redistr_array_load_hdf5(node_local, on_main, key, in_cache, filename_template, hdf5_key, projs, N_old, N_new, label, boundary_leg):
+    #print('Node', node_local.comm.rank, ' is ready to split env.', flush=True)
+    if node_local.comm.rank  == 0:
+        # Load the old environments all on the root node
+        local_parts = []
+        for o_r in range(N_old):
+            if filename_template is not None:
+                fn = filename_template.format(mpirank=o_r)
+                f = getattr(node_local, 'hdf5_import_file', None) # Should always be none since we open multiple files.
+                assert f is None
+                import h5py
+                f = h5py.File(fn, 'r')
+                local_parts.append(load_from_hdf5(f, hdf5_key))
+                f.close()
+
+                print('Root node loaded partial env indexed', o_r, 'with shape', local_parts[-1].shape, flush=True)
+
+            else:
+                # in sequential simulations after `DistributedArray._keep_alive_beyond_cache()`
+                raise NotImplementedError("Should not occur with sequential simulations; node number should be constant.")
+        
+        print('MPO dimensions of original envs:', [lp.get_leg(label).ind_len for lp in local_parts])
+        
+        whole_env = npc.concatenate(local_parts, axis=label).sort_legcharge(True)[1]
+        env_leg = whole_env.get_leg(label)
+        env_leg.test_equal(boundary_leg)
+        
+        new_local_parts = []
+        for pj in projs:
+            new_lp = whole_env.copy(deep=False)
+            new_lp.iproject(mask=pj, axes=label)
+            new_local_parts.append(new_lp)
+        print('MPO dimensions of redistributed envs:', [lp.get_leg(label).ind_len for lp in new_local_parts])
+
+        local_part = new_local_parts[0]
+        
+        for i in range(1, N_new):
+            dest = i
+            source = 0
+            # Can't use scatter since the envs may be larger than 2.1GB and thus cannot be pickled
+            npc_send(node_local.comm, new_local_parts[i], dest, tag = dest*10000 + source)
+        
+    else:
+        # Get redistributed env from root node
+        source = 0
+        #print('Node', node_local.comm.rank, 'is receiving from node', source, flush=True)
+        local_part = npc_recv(node_local.comm, source, tag = node_local.comm.rank*10000 + source)
+        
+    print('Node', node_local.comm.rank, 'has local env with shape', local_part.shape, flush=True)
+    if in_cache:
+        node_local.cache[key] = local_part
+    else:
+        node_local.distributed[key] = local_part
+    
 
 def split_distr_array_load_hdf5(node_local, on_main, key, in_cache, filename_template, hdf5_key, projs, N_old, N_new, label):
     #print('Node', node_local.comm.rank, ' is ready to split env.', flush=True)
@@ -113,7 +168,7 @@ def split_distr_array_load_hdf5(node_local, on_main, key, in_cache, filename_tem
                 f = h5py.File(fn, 'r')
                 node_local.hdf5_import_file = f
             else:
-                assert f.filename == fn
+                assert f.filename == fn, 'Conflict between ' + f.filename + ' and ' + fn + '.'
                 
             whole_local_part = load_from_hdf5(f, hdf5_key)
             print('Node', node_local.comm.rank, 'loaded env with shape ', whole_local_part.shape, flush=True)
@@ -155,7 +210,7 @@ def distr_array_load_hdf5(node_local, on_main, key, in_cache, filename_template,
             f = h5py.File(fn, 'r')
             node_local.hdf5_import_file = f
         else:
-            assert f.filename == fn
+            assert f.filename == fn, 'Conflict between ' + f.filename + ' and ' + fn + '.'
 
         local_part = load_from_hdf5(f, hdf5_key)
     else:
