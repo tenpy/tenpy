@@ -118,7 +118,7 @@ class DistributedArray:
         self.node_local = node_local
         if not getattr(self, '_unfinished_load', False):
             return  # nothing to do
-        if mpi_split_params['redistribute']:
+        if mpi_split_params.get('redistribute', False):
             # boundary_leg SHOULD be the MPO leg after recombining envs and sorting.
             projs = split_MPO_leg(boundary_leg, node_local.comm.size, mpi_split_params, whole=True)
             actions.run(actions.split_redistr_array_load_hdf5,
