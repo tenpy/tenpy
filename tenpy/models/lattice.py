@@ -26,8 +26,8 @@ from ..networks.mps import MPS  # only to check boundary conditions
 
 __all__ = [
     'Lattice', 'TrivialLattice', 'IrregularLattice', 'HelicalLattice', 'SimpleLattice', 'Chain',
-    'Ladder', 'Square', 'Triangular', 'Honeycomb', 'Kagome', 'get_lattice', 'get_order',
-    'get_order_grouped'
+    'Ladder', 'NLegLadder', 'Square', 'Triangular', 'Honeycomb', 'Kagome', 'get_lattice',
+    'get_order', 'get_order_grouped'
 ]
 
 # (update module doc string if you add further lattices)
@@ -2236,8 +2236,8 @@ class Ladder(Lattice):
                 assert (False)  # should not be possible
             return ordering
         return super().ordering(order)
-      
-      
+
+
 class NLegLadder(Lattice):
     """A ladder coupling N chains.
 
@@ -2245,10 +2245,11 @@ class NLegLadder(Lattice):
 
         import matplotlib.pyplot as plt
         from tenpy.models import lattice
-        plt.figure(figsize=(5, 1.4))
+        plt.figure(figsize=(8., 2.))
         ax = plt.gca()
         lat = lattice.NLegLadder(4, 4, None, bc='periodic')
-        lat.plot_coupling(ax, linewidth=3.)
+        lat.plot_coupling(ax, lat.pairs['rung_NN'], linewidth=3.)
+        lat.plot_coupling(ax, lat.pairs['leg_NN'], linewidth=3.)
         lat.plot_order(ax, linestyle=':')
         lat.plot_sites(ax)
         lat.plot_basis(ax, origin=[-0.5, -0.25], shade=False)
@@ -2268,7 +2269,7 @@ class NLegLadder(Lattice):
         If only a single :class:`~tenpy.networks.site.Site` is given, it is used for all chains.
     **kwargs :
         Additional keyword arguments given to the :class:`Lattice`.
-        `basis`, `pos` and `pairs` are set accordingly.
+        `rung_NN`, `leg_NN` and `diagonal` are set accordingly.
     """
     dim = 1  #: the dimension of the lattice
 
@@ -2278,13 +2279,14 @@ class NLegLadder(Lattice):
         pos = np.vstack((np.zeros(N), np.linspace(0, 1, N))).T
         kwargs.setdefault('basis', basis)
         kwargs.setdefault('positions', pos)
-        NN = [(n, n + 1, np.array([0])) for n in range(N - 1)]
-        nNN = [(n, n, np.array([1])) for n in range(N)]
-        nnNN = [(n, n+1, np.array([1])) for n in range(N-1)] + [(n+1, n, np.array([1])) for n in range(N-1)]
+        rung_NN = [(n, n + 1, np.array([0])) for n in range(N - 1)]
+        leg_NN = [(n, n, np.array([1])) for n in range(N)]
+        diag = [(n, n+1, np.array([1])) for n in range(N-1)] + \
+            [(n+1, n, np.array([1])) for n in range(N-1)]
         kwargs.setdefault('pairs', {})
-        kwargs['pairs'].setdefault('nearest_neighbors', NN)
-        kwargs['pairs'].setdefault('next_nearest_neighbors', nNN)
-        kwargs['pairs'].setdefault('next_next_nearest_neighbors', nnNN)
+        kwargs['pairs'].setdefault('rung_NN', rung_NN)
+        kwargs['pairs'].setdefault('leg_NN', leg_NN)
+        kwargs['pairs'].setdefault('diagonal', diag)
         Lattice.__init__(self, [L], sites, **kwargs)
 
 
