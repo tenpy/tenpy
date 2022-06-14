@@ -1388,7 +1388,12 @@ class Lattice:
                 pos = pos * np.array([[[1., 0]]])  # use broadcasting to add a column with zeros
             if pos.shape[2] != 2:
                 raise ValueError("can only plot in 2 dimensions.")
+            if 'label' in kwargs:
+                # only include label on the first line (since they're all the same style!)
+                kwargs['label'] = [kwargs['label']] + [None] * (pos.shape[1] - 1)
             ax.plot(pos[:, :, 0], pos[:, :, 1], **kwargs)
+            if 'label' in kwargs:
+                del kwargs['label']
 
     def plot_basis(self, ax, origin=(0., 0.), shade=None, **kwargs):
         """Plot arrows indicating the basis vectors of the lattice.
@@ -2152,7 +2157,7 @@ class Ladder(Lattice):
 
         import matplotlib.pyplot as plt
         from tenpy.models import lattice
-        plt.figure(figsize=(5, 1.4))
+        plt.figure(figsize=(5, 2.))
         ax = plt.gca()
         lat = lattice.Ladder(4, None, bc='periodic')
         lat.plot_coupling(ax, linewidth=3.)
@@ -2161,7 +2166,7 @@ class Ladder(Lattice):
         lat.plot_basis(ax, origin=[-0.5, -0.25], shade=False)
         ax.set_aspect('equal')
         ax.set_xlim(-1.)
-        ax.set_ylim(-1.)
+        ax.set_ylim(-0.5, 1.5)
         plt.show()
 
     Parameters
@@ -2245,18 +2250,21 @@ class NLegLadder(Lattice):
 
         import matplotlib.pyplot as plt
         from tenpy.models import lattice
-        plt.figure(figsize=(8., 2.))
+        plt.figure(figsize=(7., 2.))
         ax = plt.gca()
-        lat = lattice.NLegLadder(4, 4, None, bc='periodic')
-        lat.plot_coupling(ax, lat.pairs['rung_NN'], linewidth=3.)
-        lat.plot_coupling(ax, lat.pairs['leg_NN'], linewidth=3.)
+        lat = lattice.NLegLadder(5, 3, None, bc='periodic')
+        for key, lw in zip(['rung_NN', 'leg_NN', 'diagonal'], [3., 2., 1.]):
+            pairs = lat.pairs[key]
+            lat.plot_coupling(ax, pairs, linestyle='--', linewidth=lw, label=key)
         lat.plot_order(ax, linestyle=':')
         lat.plot_sites(ax)
         lat.plot_basis(ax, origin=[-0.5, -0.25], shade=False)
         ax.set_aspect('equal')
         ax.set_xlim(-1.)
-        ax.set_ylim(-1.)
+        ax.set_ylim(-0.5, 1.5)
+        ax.legend(loc='upper left', bbox_to_anchor=(1., 1.))
         plt.show()
+
 
     Parameters
     ----------
