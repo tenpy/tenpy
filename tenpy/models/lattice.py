@@ -2297,6 +2297,48 @@ class NLegLadder(Lattice):
         kwargs['pairs'].setdefault('diagonal', diag)
         Lattice.__init__(self, [L], sites, **kwargs)
 
+    def ordering(self, order):
+        """Provide possible orderings of the `N` lattice sites.
+
+        The following orders are defined in this method compared to :meth:`Lattice.ordering`:
+
+        ================== ============================================================
+        `order`            Resulting order
+        ================== ============================================================
+        ``'default'``      ``(0, 0), (0, 1), (1, 0), (1, 1), ..., (L-1, 0), (L-1, 1)``
+        ------------------ ------------------------------------------------------------
+        ``'folded'``       Like the `folded` order of the Chain in
+                           :meth:`~tenpy.models.lattice.Chain.ordering` with the N
+                           unit cell sites of the ladder always next to each other.
+                           This order might be usefull if you want to consider a
+                           ring with periodic boundary conditions with a finite MPS:
+                           It avoids the ultra-long range of the coupling from site
+                           0 to L present in the default order.
+        ================== ============================================================
+        """
+        if isinstance(order, str) and (order == 'default' or order == 'folded'):
+            (L, Lu) = self.shape
+            ordering = np.zeros([Lu * L, 2], dtype=np.intp)
+            if order == 'default':
+                ordering[:, 0] = np.repeat(np.arange(L, dtype=np.intp), Lu)
+                ordering[:, 1] = np.tile(np.arange(Lu, dtype=np.intp), L)
+            elif order == 'folded':
+                order = []
+                for i in range(L // 2):
+                    for u in range(Lu):
+                        order.append((i, u))
+                    for u in range(Lu):
+                        order.append((L - i - 1, u))
+                if L % 2 == 1:
+                    for u in range(Lu):
+                        order.append((L // 2, u))
+                assert len(order) == Lu * L
+                ordering = np.array(order, dtype=np.intp)
+            else:
+                assert (False)  # should not be possible
+            return ordering
+        return super().ordering(order)
+
 
 class Square(SimpleLattice):
     """A square lattice.
