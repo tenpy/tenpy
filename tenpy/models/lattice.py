@@ -373,19 +373,26 @@ class Lattice:
     def ordering(self, order):
         """Provide possible orderings of the `N` lattice sites.
 
-        This function can be overwritten by derived lattices to define additional orderings.
-        The following orders are defined in this method:
+        Subclasses often override this function to define additional orderings.
 
-        ================== =========================== =============================
-        `order`            equivalent `priority`       equivalent ``snake_winding``
-        ================== =========================== =============================
-        ``'Cstyle'``       (0, 1, ..., dim-1, dim)     (False, ..., False, False)
-        ``'default'``
-        ``'snake'``        (0, 1, ..., dim-1, dim)     (True, ..., True, True)
-        ``'snakeCstyle'``
-        ``'Fstyle'``       (dim-1, ..., 1, 0, dim)     (False, ..., False, False)
-        ``'snakeFstyle'``  (dim-1, ..., 1, 0, dim)     (False, ..., False, False)
-        ================== =========================== =============================
+        Possible strings for the `order` defined here are:
+
+            ``'Csyle', 'default'`` :
+                Recommended in most cases. First within the unit cell, then along y, then x.
+                ``priority=(0, 1, ..., dim-1, dim)``.
+            ``'snake', 'snakeCstyle'`` :
+                Back and forth along the various directions, in Cstyle priority.
+                Equivalent to ``snake_winding=(True, ..., True, True)`` and
+                ``priority=(0, 1, ..., dim-1, dim)``.
+            ``'Fstyle'`` :
+                Might be good for almost completely decoupled chains in a finite, long ladder/cylinder;
+                in other cases *not* a good idea.
+                Equivalent to ``snake_winding=(False, ..., False, False)`` and
+                ``priority=(dim-1, ..., 1., 0, dim)``.
+            ``'snakeFstyle'`` :
+                Snake-winding for Fstyle.
+                Equivalent to ``snake_winding=(True, ..., True, True)`` and
+                ``priority=(dim-1, ..., 1., 0, dim)``.
 
         .. plot ::
 
@@ -407,7 +414,7 @@ class Lattice:
 
         .. note ::
             For lattices with a non-trivial unit cell (e.g. Honeycomb, Kagome), the
-            grouped order might be more appropriate, see :func:`get_order_grouped`
+            grouped order might be more appropriate, see :func:`get_order_grouped`.
 
         Parameters
         ----------
@@ -2075,6 +2082,9 @@ class SimpleLattice(Lattice):
 class Chain(SimpleLattice):
     """A chain of L equal sites.
 
+    Defined pairs are ``'nearest_neighbors'``, ``'next_nearest_neighbors'``, and
+    ``'next_next_nearest_neighbors'``.
+
     .. plot ::
 
         import matplotlib.pyplot as plt
@@ -2130,21 +2140,31 @@ class Chain(SimpleLattice):
         SimpleLattice.__init__(self, [L], site, **kwargs)
 
     def ordering(self, order):
-        """Provide possible orderings of the `N` lattice sites.
+        r"""Provide possible orderings of the `N` lattice sites.
 
-        The following orders are defined in this method compared to :meth:`Lattice.ordering`:
+        The following orders are defined here in addition to :meth:`Lattice.ordering`:
 
-        ================== ============================================================
-        `order`            Resulting order
-        ================== ============================================================
-        ``'default'``      ``0, 1, 2, 3, 4, ... ,L-1``
-        ------------------ ------------------------------------------------------------
-        ``'folded'``       ``0, L-1, 1, L-2, ... , L//2``.
-                           This order might be usefull if you want to consider a
-                           ring with periodic boundary conditions with a finite MPS:
-                           It avoids the ultra-long range of the coupling from site
-                           0 to L present in the default order.
-        ================== ============================================================
+        ``'default'`` :
+            Just along the chain, ``0, 1, 2, 3, 4, ... ,L-1``.
+        ``'folded'`` :
+            Yields ``0, L-1, 1, L-2, ... , L//2``.
+            This order might be usefull if you want to consider a ring with periodic boundary
+            conditions with a finite MPS: if you squeeze this ring to a long oval and zig-zag
+            through the top and bottom, you get this order.
+            Thus, it avoids the ultra-long-range coupling from site 0 to L-1, at the expense of
+            (almost) each nearest-neighbor coupling now being next-nearest-neighbors.
+            Graphically::
+                |       PBC couplings on ring  --->        MPS order='folded'
+                |       number=physical site               number=position in MPS
+                |
+                |      --1---2---3---4                        2   4   6   8
+                |     /               \                      : : : : : : : :
+                |    0                 5       --->       0  : : : : : : : : 10
+                |     :               /                    : : : : : : : : : :
+                |      10--9---8---7-6                      1   3   5   7   9
+
+
+
         """
         if isinstance(order, str) and order == 'default' or order == 'folded':
             (L, u) = self.shape
@@ -2245,21 +2265,13 @@ class Ladder(Lattice):
     def ordering(self, order):
         """Provide possible orderings of the `N` lattice sites.
 
-        The following orders are defined in this method compared to :meth:`Lattice.ordering`:
+        The following orders are defined here in addition to :meth:`Lattice.ordering`:
 
-        ================== ============================================================
-        `order`            Resulting order
-        ================== ============================================================
-        ``'default'``      ``(0, 0), (0, 1), (1, 0), (1, 1), ..., (L-1, 0), (L-1, 1)``
-        ------------------ ------------------------------------------------------------
-        ``'folded'``       Like the `folded` order of the Chain in
-                           :meth:`~tenpy.models.lattice.Chain.ordering` with the two
-                           unit cell sites always next to each other.
-                           This order might be usefull if you want to consider a
-                           ring with periodic boundary conditions with a finite MPS:
-                           It avoids the ultra-long range of the coupling from site
-                           0 to L present in the default order.
-        ================== ============================================================
+        ``'default'`` :
+            Just along the chain, ``0, 1, 2, 3, 4, ... ,L-1``.
+        ``'folded'``:
+            Similar as the `folded` of a chain explained in :meth:`Chain.ordering`,
+            but with the two-site unit cell.
         """
         if isinstance(order, str) and (order == 'default' or order == 'folded' or order == 'folded2'):
             (L, u) = self.shape
@@ -2364,21 +2376,13 @@ class NLegLadder(Lattice):
     def ordering(self, order):
         """Provide possible orderings of the `N` lattice sites.
 
-        The following orders are defined in this method compared to :meth:`Lattice.ordering`:
+        The following orders are defined here in addition to :meth:`Lattice.ordering`:
 
-        ================== ============================================================
-        `order`            Resulting order
-        ================== ============================================================
-        ``'default'``      ``(0, 0), (0, 1), (1, 0), (1, 1), ..., (L-1, 0), (L-1, 1)``
-        ------------------ ------------------------------------------------------------
-        ``'folded'``       Like the `folded` order of the Chain in
-                           :meth:`~tenpy.models.lattice.Chain.ordering` with the N
-                           unit cell sites of the ladder always next to each other.
-                           This order might be usefull if you want to consider a
-                           ring with periodic boundary conditions with a finite MPS:
-                           It avoids the ultra-long range of the coupling from site
-                           0 to L present in the default order.
-        ================== ============================================================
+        ``'default'`` :
+            Just along the chain, ``0, 1, 2, 3, 4, ... ,L-1``.
+        ``'folded'``:
+            Similar as the `folded` of a chain explained in :meth:`Chain.ordering`,
+            but with the N-site unit cell.
         """
         if isinstance(order, str) and (order == 'default' or order == 'folded'):
             (L, Lu) = self.shape
@@ -2635,26 +2639,12 @@ class Honeycomb(Lattice):
     def ordering(self, order):
         """Provide possible orderings of the `N` lattice sites.
 
-        Redefines ``'default'`` ordering to be the same as (the new) ``'rings'``,
-        on top of the ones defined in :meth:`Lattice.ordering`.
+        The following orders are defined here in addition to :meth:`Lattice.ordering`:
 
-        .. plot ::
-
-            import matplotlib.pyplot as plt
-            from tenpy.models import lattice
-            fig, axes = plt.subplots(2, 2, sharex=True, sharey=True, figsize=(5, 6))
-            orders = ['default', 'rings', 'Cstyle', 'snake']
-            lat = lattice.Honeycomb(4, 3, None, bc='periodic')
-            for order, ax in zip(orders, axes.flatten()):
-                lat.order = lat.ordering(order)
-                lat.plot_order(ax, linestyle=':', linewidth=2)
-                lat.plot_sites(ax)
-                lat.plot_basis(ax, origin=-0.25*(lat.basis[0] + lat.basis[1]))
-                ax.set_title(repr(order))
-                ax.set_aspect('equal')
-                ax.set_xlim(-1)
-                ax.set_ylim(-1)
-            plt.show()
+        ``'rings', 'default'`` :
+            First the A sublattice, then the B sublattice.
+        ``'snake'``:
+            Snake-winding along the rings: going up the A lattice, going down B.
         """
         if isinstance(order, str):
             if order == "default" or order == 'rings':
@@ -2662,7 +2652,7 @@ class Honeycomb(Lattice):
                 priority = (0, 2, 1)
                 snake_winding = (False, False, False)
                 return get_order(self.shape, snake_winding, priority)
-            elif order == "snake":
+            elif order == "snake" or order== "snake_rings":
                 priority = (0, 2, 1)
                 snake_winding = (False, False, True)
                 return get_order(self.shape, snake_winding, priority)
@@ -2762,8 +2752,12 @@ class Kagome(Lattice):
     def ordering(self, order):
         """Provide possible orderings of the `N` lattice sites.
 
-        Defines ``'rings'`` going along y first for sites (0, 2) of the unit cell, and then
-        for site 1. ``'default'`` is ``'Cstyle'`` going within the unit cell first.
+        Depending on your couplings and states, the ``'default'``  (defined as ``'Cstyle'``),
+        or the new ``'rings'`` order along the triangles might be better.
+        The following orders are defined here in addition to :meth:`Lattice.ordering`:
+
+        ``'rings', 'default'`` :
+            Along y first for sites (0, 2) on the left of the triangles, then one ring for site 1.
 
         """
         if isinstance(order, str):
