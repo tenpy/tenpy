@@ -2196,6 +2196,9 @@ class Ladder(Lattice):
         kwargs['pairs'].setdefault('nearest_neighbors', NN)
         kwargs['pairs'].setdefault('next_nearest_neighbors', nNN)
         kwargs['pairs'].setdefault('next_next_nearest_neighbors', nnNN)
+        kwargs['pairs'].setdefault('rung_NN', [(0, 1, np.array([0]))])
+        kwargs['pairs'].setdefault('leg_NN', [(0, 0, np.array([1])), (1, 1, np.array([1]))])
+        kwargs['pairs'].setdefault('diagonal', [(0, 1, np.array([1])), (1, 0, np.array([1]))])
         Lattice.__init__(self, [L], sites, **kwargs)
 
     def ordering(self, order):
@@ -2294,6 +2297,7 @@ class NLegLadder(Lattice):
         kwargs.setdefault('pairs', {})
         kwargs['pairs'].setdefault('rung_NN', rung_NN)
         kwargs['pairs'].setdefault('leg_NN', leg_NN)
+        kwargs['pairs'].setdefault('nearest_neighbors', rung_NN + leg_NN)
         kwargs['pairs'].setdefault('diagonal', diag)
         Lattice.__init__(self, [L], sites, **kwargs)
 
