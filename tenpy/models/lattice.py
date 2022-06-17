@@ -396,7 +396,7 @@ class Lattice:
             lat = lattice.Square(5, 3, None, bc='periodic')
             for order, ax in zip(orders, axes.flatten()):
                 lat.order = lat.ordering(order)
-                lat.plot_order(ax, linestyle=':')
+                lat.plot_order(ax, linestyle=':', linewidth=2)
                 lat.plot_sites(ax)
                 lat.plot_basis(ax, origin=-0.25*(lat.basis[0] + lat.basis[1]))
                 ax.set_title(repr(order))
@@ -2083,12 +2083,30 @@ class Chain(SimpleLattice):
         ax = plt.gca()
         lat = lattice.Chain(4, None, bc='periodic')
         lat.plot_coupling(ax, linewidth=3.)
-        lat.plot_order(ax, linestyle=':')
         lat.plot_sites(ax)
         lat.plot_basis(ax, origin=(-0.5, -0.25), shade=False)
         ax.set_xlim(-1.)
         ax.set_ylim(-0.5, 0.5)
         ax.set_aspect('equal')
+        plt.show()
+
+    .. plot ::
+
+        import matplotlib.pyplot as plt
+        from tenpy.models import lattice
+        fig, axes = plt.subplots(2, 1, sharex=True, sharey=True, figsize=(8, 3))
+        lat = lattice.Chain(8, None, bc='periodic')
+        order_names=['default', 'folded']
+        for order_name, ax in zip(order_names, axes.flatten()):
+            lat.plot_coupling(ax, linestyle='-', linewidth=1)
+            lat.order = lat.ordering(order_name)
+            lat.plot_sites(ax)
+            lat.plot_order(ax, linestyle=':', linewidth=2)
+            lat.plot_basis(ax, origin=(-0.5, -0.25), shade=False)
+            ax.set_title(f"order={order_name!r}")
+            ax.set_aspect('equal')
+            ax.set_xlim(-0.8)
+            ax.set_ylim(-0.5, 0.5)
         plt.show()
 
     Parameters
@@ -2099,8 +2117,7 @@ class Chain(SimpleLattice):
         The local lattice site. The `unit_cell` of the :class:`Lattice` is just ``[site]``.
     **kwargs :
         Additional keyword arguments given to the :class:`Lattice`.
-        `pairs` are initialize with ``[next_]next_]nearest_neighbors``.
-        `positions` can be specified as a single vector.
+        `pairs` are set accordingly.
     """
     dim = 1  #: the dimension of the lattice
 
@@ -2151,23 +2168,47 @@ class Chain(SimpleLattice):
 
 
 class Ladder(Lattice):
-    """A ladder coupling two chains.
+    r"""A ladder coupling two chains.
 
     .. plot ::
 
         import matplotlib.pyplot as plt
         from tenpy.models import lattice
-        plt.figure(figsize=(5, 2.))
+        plt.figure(figsize=(7., 2.))
         ax = plt.gca()
         lat = lattice.Ladder(4, None, bc='periodic')
-        lat.plot_coupling(ax, linewidth=3.)
-        lat.plot_order(ax, linestyle=':')
+        for key, lw in zip(['rung_NN', 'leg_NN', 'diagonal'],
+                            [3., 2., 1.],):
+            pairs = lat.pairs[key]
+            lat.plot_coupling(ax, pairs, linestyle='--', linewidth=lw, label=key)
+        ax.plot([], [], ' ', label='nearest_neighbors =\n  rung_NN + leg_NN')
         lat.plot_sites(ax)
         lat.plot_basis(ax, origin=[-0.5, -0.25], shade=False)
         ax.set_aspect('equal')
         ax.set_xlim(-1.)
         ax.set_ylim(-0.5, 1.5)
+        ax.legend(loc='upper left', bbox_to_anchor=(1., 1.))
         plt.show()
+
+    .. plot ::
+
+        import matplotlib.pyplot as plt
+        from tenpy.models import lattice
+        fig, axes = plt.subplots(3, 1, sharex=True, sharey=True, figsize=(6, 5))
+        lat = lattice.Ladder(8, None, bc='periodic')
+        order_names=['default', 'folded', 'snakeFstyle']
+        for order_name, ax in zip(order_names, axes.flatten()):
+            lat.plot_coupling(ax, linestyle='-', linewidth=1)
+            lat.order = lat.ordering(order_name)
+            lat.plot_order(ax, linestyle=':', linewidth=2)
+            lat.plot_sites(ax)
+            lat.plot_basis(ax, origin=(-0.5, +0.5), shade=False)
+            ax.set_title(f"order={order_name!r}")
+            ax.set_aspect('equal')
+            ax.set_xlim(-0.8)
+            ax.set_ylim(-0.2, 1.2)
+        plt.show()
+
 
     Parameters
     ----------
@@ -2220,8 +2261,7 @@ class Ladder(Lattice):
                            0 to L present in the default order.
         ================== ============================================================
         """
-        if isinstance(order, str) and (order == 'default' or order == 'folded'
-                                       or order == 'folded2'):
+        if isinstance(order, str) and (order == 'default' or order == 'folded' or order == 'folded2'):
             (L, u) = self.shape
             assert u == 2
             ordering = np.zeros([2 * L, 2], dtype=np.intp)
@@ -2247,7 +2287,7 @@ class Ladder(Lattice):
 
 
 class NLegLadder(Lattice):
-    """A ladder coupling N chains.
+    r"""A ladder coupling N chains.
 
     .. plot ::
 
@@ -2255,17 +2295,36 @@ class NLegLadder(Lattice):
         from tenpy.models import lattice
         plt.figure(figsize=(7., 2.))
         ax = plt.gca()
-        lat = lattice.NLegLadder(5, 3, None, bc='periodic')
+        lat = lattice.NLegLadder(8, 3, None, bc='periodic')
         for key, lw in zip(['rung_NN', 'leg_NN', 'diagonal'], [3., 2., 1.]):
             pairs = lat.pairs[key]
             lat.plot_coupling(ax, pairs, linestyle='--', linewidth=lw, label=key)
-        lat.plot_order(ax, linestyle=':')
+        ax.plot([], [], ' ', label='nearest_neighbors =\n  rung_NN + leg_NN')
         lat.plot_sites(ax)
         lat.plot_basis(ax, origin=[-0.5, -0.25], shade=False)
         ax.set_aspect('equal')
         ax.set_xlim(-1.)
         ax.set_ylim(-0.5, 1.5)
         ax.legend(loc='upper left', bbox_to_anchor=(1., 1.))
+        plt.show()
+
+    .. plot ::
+
+        import matplotlib.pyplot as plt
+        from tenpy.models import lattice
+        fig, axes = plt.subplots(3, 1, sharex=True, sharey=True, figsize=(6, 5))
+        lat = lattice.NLegLadder(8, 3, None, bc='periodic')
+        order_names=['default', 'snakeFstyle', 'folded']
+        for order_name, ax in zip(order_names, axes.flatten()):
+            lat.plot_coupling(ax, linestyle='-', linewidth=1)
+            lat.order = lat.ordering(order_name)
+            lat.plot_order(ax, linestyle=':', linewidth=2)
+            lat.plot_sites(ax)
+            lat.plot_basis(ax, origin=(-0.5, +0.5), shade=False)
+            ax.set_title(f"order={order_name!r}")
+            ax.set_aspect('equal')
+            ax.set_xlim(-0.8)
+            ax.set_ylim(-0.2, 1.2)
         plt.show()
 
 
@@ -2280,7 +2339,8 @@ class NLegLadder(Lattice):
         If only a single :class:`~tenpy.networks.site.Site` is given, it is used for all chains.
     **kwargs :
         Additional keyword arguments given to the :class:`Lattice`.
-        `rung_NN`, `leg_NN` and `diagonal` are set accordingly.
+        `basis`, `pos` and `pairs` are set accordingly.
+        Defined pairs are ``'rung_NN', 'leg_NN', 'diagonal', 'nearest_neighbors'``.
     """
     dim = 1  #: the dimension of the lattice
 
@@ -2351,16 +2411,40 @@ class Square(SimpleLattice):
 
         import matplotlib.pyplot as plt
         from tenpy.models import lattice
-        plt.figure(figsize=(5, 5))
+        plt.figure(figsize=(7, 8))
         ax = plt.gca()
         lat = lattice.Square(4, 4, None, bc='periodic')
-        lat.plot_coupling(ax, linewidth=3.)
-        lat.plot_order(ax, linestyle=':')
+        lat.plot_coupling(ax, linestyle='-', linewidth=3, label='nearest_neighbors')
+        for key, lw in zip(['next_nearest_neighbors',
+                            'next_next_nearest_neighbors'],
+                        [1.5, 1.]):
+            pairs = lat.pairs[key]
+            lat.plot_coupling(ax, pairs, linestyle='--', linewidth=lw, color='gray', label=key)
         lat.plot_sites(ax)
         lat.plot_basis(ax, origin=-0.5*(lat.basis[0] + lat.basis[1]))
         ax.set_aspect('equal')
-        ax.set_xlim(-1)
-        ax.set_ylim(-1)
+        ax.set_xlim(-1, 5.2)
+        ax.set_ylim(-1.2, 6)
+        ax.legend(loc='upper left')
+        plt.show()
+
+    .. plot ::
+
+        import matplotlib.pyplot as plt
+        from tenpy.models import lattice
+        fig, axes = plt.subplots(1, 3, sharex=True, sharey=True, figsize=(8, 5))
+        lat = lattice.Square(5, 4, None, bc='periodic')
+        order_names=['default', 'snake', 'Fstyle']
+        for order_name, ax in zip(order_names, axes.flatten()):
+            lat.plot_coupling(ax, linestyle='-', linewidth=1)
+            lat.order = lat.ordering(order_name)
+            lat.plot_order(ax, linestyle=':', linewidth=2)
+            lat.plot_sites(ax)
+            lat.plot_basis(ax, origin=(-0.5, -0.5))
+            ax.set_title(f"order={order_name!r}")
+            ax.set_xlim(-1, 5)
+            ax.set_ylim(-1, 4)
+            ax.set_aspect('equal')
         plt.show()
 
     Parameters
@@ -2394,17 +2478,45 @@ class Triangular(SimpleLattice):
 
     .. plot ::
 
+
         import matplotlib.pyplot as plt
         from tenpy.models import lattice
-        plt.figure(figsize=(4, 5))
+        plt.figure(figsize=(6, 8))
         ax = plt.gca()
         lat = lattice.Triangular(4, 4, None, bc='periodic')
-        lat.plot_coupling(ax, linewidth=3.)
-        lat.plot_order(ax, linestyle=':')
+        lat.plot_coupling(ax, linestyle='-', linewidth=3, label='nearest_neighbors')
+        for key, lw in zip(['next_nearest_neighbors',
+                            'next_next_nearest_neighbors'],
+                        [1.5, 1.]):
+            pairs = lat.pairs[key]
+            lat.plot_coupling(ax, pairs, linestyle='--', linewidth=lw, color='gray', label=key)
         lat.plot_sites(ax)
         lat.plot_basis(ax, origin=-0.5*(lat.basis[0] + lat.basis[1]))
         ax.set_aspect('equal')
+        ax.set_xlim(-1)
+        ax.set_ylim(-1)
+        ax.legend(loc='upper left')
         plt.show()
+
+    .. plot ::
+
+        import matplotlib.pyplot as plt
+        from tenpy.models import lattice
+        fig, axes = plt.subplots(1, 2, sharex=True, sharey=True, figsize=(6, 4))
+        lat = lattice.Triangular(4, 4, None, bc='periodic')
+        order_names=['default', 'snake']
+        for order_name, ax in zip(order_names, axes.flatten()):
+            lat.plot_coupling(ax, linestyle='-', linewidth=1)
+            lat.order = lat.ordering(order_name)
+            lat.plot_order(ax, linestyle=':', linewidth=2)
+            lat.plot_sites(ax)
+            lat.plot_basis(ax, origin=(-0.5, -0.5))
+            ax.set_title(f"order={order_name!r}")
+            ax.set_xlim(-1, 5)
+            ax.set_ylim(-1, 6)
+            ax.set_aspect('equal')
+        plt.show()
+
 
     Parameters
     ----------
@@ -2442,16 +2554,43 @@ class Honeycomb(Lattice):
 
         import matplotlib.pyplot as plt
         from tenpy.models import lattice
-        plt.figure(figsize=(5, 6))
+        plt.figure(figsize=(6, 8))
         ax = plt.gca()
         lat = lattice.Honeycomb(4, 4, None, bc='periodic')
-        lat.plot_coupling(ax, linewidth=3.)
-        lat.plot_order(ax, linestyle=':')
+        lat.plot_coupling(ax, linestyle='-', linewidth=3, label='nearest_neighbors')
+        for key, lw in zip(['next_nearest_neighbors',
+                            'next_next_nearest_neighbors'],
+                        [1.5, 1.]):
+            pairs = lat.pairs[key]
+            lat.plot_coupling(ax, pairs, linestyle='--', linewidth=lw, color='gray', label=key)
+        for key in ['fourth_nearest_neighbors', 'fifth_nearest_neighbors']:
+            ax.plot([], [], ' ', label=key)
         lat.plot_sites(ax)
         lat.plot_basis(ax, origin=-0.5*(lat.basis[0] + lat.basis[1]))
         ax.set_aspect('equal')
         ax.set_xlim(-1)
         ax.set_ylim(-1)
+        ax.legend(loc='upper left')
+        plt.show()
+
+    .. plot ::
+
+        import matplotlib.pyplot as plt
+        from tenpy.models import lattice
+        fig, axes = plt.subplots(2, 2, sharex=True, sharey=True, figsize=(6, 8))
+        lat = lattice.Honeycomb(3, 3, None, bc='periodic')
+        order_names=['rings', 'Cstyle', 'snake', 'snakeCstyle']
+        for order_name, ax in zip(order_names, axes.flatten()):
+            lat.plot_coupling(ax, linestyle='-', linewidth=1)
+            lat.order = lat.ordering(order_name)
+            lat.plot_order(ax, linestyle=':', linewidth=2)
+            lat.plot_sites(ax)
+            lat.plot_basis(ax, origin=(-0.5, -0.5))
+            ax.set_title(f"order={order_name!r}")
+            ax.set_xlim(-0.5, 3)
+            ax.set_ylim(-0.5, 4)
+            ax.set_aspect('equal')
+        axes[0, 0].set_title("order='default'='rings'")
         plt.show()
 
     Parameters
@@ -2508,7 +2647,7 @@ class Honeycomb(Lattice):
             lat = lattice.Honeycomb(4, 3, None, bc='periodic')
             for order, ax in zip(orders, axes.flatten()):
                 lat.order = lat.ordering(order)
-                lat.plot_order(ax, linestyle=':')
+                lat.plot_order(ax, linestyle=':', linewidth=2)
                 lat.plot_sites(ax)
                 lat.plot_basis(ax, origin=-0.25*(lat.basis[0] + lat.basis[1]))
                 ax.set_title(repr(order))
@@ -2555,12 +2694,30 @@ class Kagome(Lattice):
         ax = plt.gca()
         lat = lattice.Kagome(4, 4, None, bc='periodic')
         lat.plot_coupling(ax, linewidth=3.)
-        lat.plot_order(ax, linestyle=':')
+        lat.plot_order(ax, linestyle=':', linewidth=2)
         lat.plot_sites(ax)
         lat.plot_basis(ax, origin=-0.25*(lat.basis[0] + lat.basis[1]))
         ax.set_aspect('equal')
         ax.set_xlim(-1)
         ax.set_ylim(-1)
+        plt.show()
+
+    .. plot ::
+
+        import matplotlib.pyplot as plt
+        from tenpy.models import lattice
+        fig, axes = plt.subplots(1, 2, sharex=True, sharey=True, figsize=(8, 4))
+        lat = lattice.Kagome(3, 3, None, bc='periodic')
+        order_names=['default', 'rings']
+        for order_name, ax in zip(order_names, axes.flatten()):
+            lat.plot_coupling(ax, linestyle='-', linewidth=1)
+            lat.order = lat.ordering(order_name)
+            lat.plot_order(ax, linestyle=':', linewidth=2)
+            lat.plot_sites(ax)
+            lat.plot_basis(ax, origin=(-0.5, -0.5))
+            ax.set_title(f"order={order_name!r}")
+            ax.set_aspect('equal')
+        axes[0].set_title("order='default'='Cstyle'")
         plt.show()
 
     Parameters
@@ -2608,23 +2765,6 @@ class Kagome(Lattice):
         Defines ``'rings'`` going along y first for sites (0, 2) of the unit cell, and then
         for site 1. ``'default'`` is ``'Cstyle'`` going within the unit cell first.
 
-        .. plot ::
-
-            import matplotlib.pyplot as plt
-            from tenpy.models import lattice
-            fig, axes = plt.subplots(1, 2, sharex=True, sharey=True, figsize=(7, 4))
-            orders = ['default', 'rings']
-            lat = lattice.Kagome(4, 3, None, bc='periodic')
-            for order, ax in zip(orders, axes.flatten()):
-                lat.order = lat.ordering(order)
-                lat.plot_order(ax, linestyle=':')
-                lat.plot_sites(ax)
-                lat.plot_basis(ax, origin=-0.25*(lat.basis[0] + lat.basis[1]))
-                ax.set_title(repr(order))
-                ax.set_aspect('equal')
-                ax.set_xlim(-1)
-                ax.set_ylim(-1)
-            plt.show()
         """
         if isinstance(order, str):
             if order == "rings":
@@ -2754,7 +2894,7 @@ def get_order_grouped(shape, groups, priority=None):
         for gr, prio, ax in zip(groups, priorities, axes.flatten()):
             order = lattice.get_order_grouped(lat.shape, gr, prio)
             lat.order = order
-            lat.plot_order(ax, linestyle=':')
+            lat.plot_order(ax, linestyle=':', linewidth=2)
             lat.plot_sites(ax)
             lat.plot_basis(ax, origin=-0.25*(lat.basis[0] + lat.basis[1]))
             ax.set_title(', '.join(['("grouped"', str(gr), str(prio) + ')']))
