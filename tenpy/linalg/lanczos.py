@@ -302,7 +302,7 @@ class Arnoldi(KrylovBased):
     def _converged(self, k):
         v0 = self._result_krylov[:, 0]
         E = self.Es[k, :]  # current energies
-        RitzRes = abs(v0[k - 1]) * self._h_krylov[k + 1, k]
+        RitzRes = abs(v0[k]) * self._h_krylov[k + 1, k]
         gap = max(min([np.min(np.abs(E[i+1:] - E[i])) for i in range(self.num_ev)]), self.min_gap)
         P_err = (RitzRes / gap)**2
         Delta_E0 = self.Es[k - 1, 0] - E[0]
@@ -420,7 +420,7 @@ class LanczosGroundState(KrylovBased):
     def _converged(self, k):
         v0 = self._result_krylov
         E = self.Es[k, :]  # current energies
-        RitzRes = abs(v0[k - 1]) * self._h_krylov[k, k + 1]
+        RitzRes = abs(v0[k]) * self._h_krylov[k, k + 1]
         gap = max(E[1] - E[0], self.min_gap)
         P_err = (RitzRes / gap)**2
         Delta_E0 = self.Es[k - 1, 0] - E[0]
