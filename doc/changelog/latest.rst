@@ -15,6 +15,8 @@ Backwards incompatible changes
   Further, we added the parameter :cfg:option:`VariationalCompression.min_sweeps` and :cfg:option:`VariationalCompression.tol_theta_diff`
 - Adjusted default paramters of :meth:`tenpy.networks.mps.InitialStateBuilder.randomized` to be as documented with better ``chi_max``.
 - No longer return `ov` from :func:`tenpy.linalg.lanczos.gram_schmidt`.
+- Replace the :class:`~tenpy.algorithms.tdvp.TDVPEngine` with a new version. 
+  The previous one is for now still available as :class:`~tenpy.algorithms.tdvp.OldTDVPEngine`.
 
 Added
 ^^^^^
