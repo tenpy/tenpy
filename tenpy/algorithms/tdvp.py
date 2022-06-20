@@ -81,8 +81,12 @@ class TDVPEngine(TimeEvolutionAlgorithm, Sweep):
 
     def __init__(self, psi, model, options, **kwargs):
         if self.__class__.__name__ == 'TDVPEngine':
-            raise NameError('TDVP interfaced changed.' +
-                            ' Use SingleSiteTDVPEngine or TwoSiteTDVPEngine instead')
+            msg = ("TDVP interface changed. \n"
+                   "The new TDVPEngine has subclasses SingleSiteTDVPEngine"
+                   " and TwoSiteTDVPEngine that you can use.\n"
+                   "For now, the previous version is still available as OldTDVPEngine."
+                   )
+            raise NameError(msg)
         if psi.bc != 'finite':
             raise NotImplementedError("Only finite TDVP is implemented")
         assert psi.bc == model.lat.bc_MPS
@@ -356,6 +360,7 @@ class SingleSiteTDVPEngine(TDVPEngine):
         return err  # actually no truncation error for SingleSiteTDVP
 
     def zero_site_update(self, i, theta):
+        """Zero-site update on the left of site `i`."""
         H0 = ZeroSiteH(self.env, i)
         theta, _ = LanczosEvolution(H0, theta, self.lanczos_options).run(0.5j * self.dt)
         return theta, H0
@@ -406,6 +411,9 @@ class OldTDVPEngine(TimeEvolutionAlgorithm):
         Options passed on to :class:`~tenpy.linalg.lanczos.LanczosEvolution`.
     """
     def __init__(self, psi, model, options, environment=None, **kwargs):
+        msg = "Deprecated `OldTDVPEngine`, use the new " \
+            "`SingleSiteTDVPEngine` and `TwoSiteTDVPEngine` instead."
+        warnings.warn(msg, category=FutureWarning, stacklevel=2)
         TimeEvolutionAlgorithm.__init__(self, psi, model, options, **kwargs)
         options = self.options
         if model.H_MPO.explicit_plus_hc:
@@ -791,6 +799,9 @@ class Engine(OldTDVPEngine):
 class H0_mixed:
     """Class defining the zero site Hamiltonian for Lanczos.
 
+    .. deprecated : v0.10.0
+        This class is only used by the deprecated :class:`OldTDVPEngine`.
+
     Parameters
     ----------
     Lp : :class:`tenpy.linalg.np_conserved.Array`
@@ -822,6 +833,9 @@ class H0_mixed:
 
 class H1_mixed:
     """Class defining the one site Hamiltonian for Lanczos.
+
+    .. deprecated : v0.10.0
+        This class is only used by the deprecated :class:`OldTDVPEngine`.
 
     Parameters
     ----------
@@ -862,6 +876,9 @@ class H1_mixed:
 
 class H2_mixed:
     """Class defining the two sites Hamiltonian for Lanczos.
+
+    .. deprecated : v0.10.0
+        This class is only used by the deprecated :class:`OldTDVPEngine`.
 
     Parameters
     ----------
