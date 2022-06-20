@@ -88,6 +88,7 @@ def create_example_stubs():
     """create stub files for examples and toycodes to include them in the documentation."""
     folders = [
         (['examples'], '.py', []),
+        (['examples'], '.yml', []),
         (['examples', 'advanced'], '.py', []),
         (['examples', 'chern_insulators'], '.py', []),
         (['toycodes'], '.py', []),
@@ -104,7 +105,8 @@ def create_example_stubs():
             if os.path.exists(outfile):
                 continue
             dirs = '/'.join(subfolders)
-            sentence = ("`on github <{base}/blob/main/{dirs!s}/{fn!s}>`_.")
+            sentence = ("`on github <{base}/blob/main/{dirs!s}/{fn!s}>`_ "
+                        "(`download <{base}/raw/main/{dirs!s}/{fn!s}>`_).")
             sentence = sentence.format(dirs=dirs, fn=fn, base=GITHUBBASE)
             include = '.. literalinclude:: /../{dirs!s}/{fn!s}'.format(dirs=dirs, fn=fn)
             text = '\n'.join([fn, '=' * len(fn), '', sentence, '', include, ''])
@@ -183,7 +185,8 @@ nbsphinx_prolog = r"""
 
     <div class="admonition note">
       This page was generated from
-      <a class="reference external" href="https://github.com/tenpy/tenpy_notebooks/blob/main/{{ docname|e }}">{{ docname|e }}</a>.
+      <a class="reference external" href="https://github.com/tenpy/tenpy_notebooks/blob/main/{{ docname|e }}">{{ docname|e }}</a>
+      (<a class="reference external" href="https://github.com/tenpy/tenpy_notebooks/raw/main/{{ docname|e }}" download="{{docname | e}}">download</a>).
     </div>
 """
 

@@ -71,6 +71,9 @@ class TEBDEngine(TimeEvolutionAlgorithm):
         order : int
             Order of the algorithm. The total error for evolution up to a fixed time `t`
             scales as ``O(t*dt^order)``.
+        E_offset : None | list of float
+            Energy offset to be applied in :meth:`calc_U`, see doc there.
+            Only used for real-time evolution!
 
     Attributes
     ----------
@@ -118,8 +121,9 @@ class TEBDEngine(TimeEvolutionAlgorithm):
         delta_t = self.options.get('dt', 0.1)
         N_steps = self.options.get('N_steps', 10)
         TrotterOrder = self.options.get('order', 2)
+        E_offset = self.options.get('E_offset', None)
 
-        self.calc_U(TrotterOrder, delta_t, type_evo='real', E_offset=None)
+        self.calc_U(TrotterOrder, delta_t, type_evo='real', E_offset=E_offset)
 
         Sold = np.mean(self.psi.entanglement_entropy())
         start_time = time.time()

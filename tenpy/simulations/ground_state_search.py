@@ -12,6 +12,7 @@ from ..networks.mpo import MPOEnvironment, MPOTransferMatrix
 from ..networks.mps import InitialStateBuilder
 from ..algorithms.mps_common import ZeroSiteH
 from ..linalg import lanczos
+from ..linalg.sparse import SumNpcLinearOperator
 from ..tools.misc import find_subclass
 from ..tools.params import asConfig
 
@@ -204,8 +205,8 @@ class OrthogonalExcitations(GroundStateSearch):
             self.logger.info("call psi.canonicalf_form() on ground state")
             psi0.canonical_form()
         if psi0.bc == 'infinite':
-            self.extract_segment_from_infinite(psi0, self.model, resume_data)
-            if self.options.get('write_back_converged_ground_state_environments', False):
+            write_back = self.extract_segment_from_infinite(psi0, self.model, resume_data)
+            if write_back:
                 self.write_converged_environments(data, gs_fn)
         else:
             self.init_env_data = resume_data.get('init_env_data', {})
@@ -235,16 +236,23 @@ class OrthogonalExcitations(GroundStateSearch):
             Original infinite model.
         resume_data : dict
             Possibly contains `init_env_data` with environments.
+
+        Returns
+        -------
+        write_back : bool
+            Whether we should call :meth:`write_converged_environments`.
         """
         enlarge = self.options.get('segment_enlarge', None)
         first = self.options.get('segment_first', 0)
         last = self.options.get('segment_last', None)
         self.model = model_inf.extract_segment(first, last, enlarge)
         first, last = self.model.lat.segment_first_last
+        write_back = self.options.get('write_back_converged_ground_state_environments', False)
         if resume_data.get('converged_environments', False):
             self.logger.info("use converged environments from ground state file")
             env_data = resume_data['init_env_data']
             psi0_inf = resume_data.get('psi', psi0_inf)
+            write_back = False
         else:
             self.logger.info("converge environments with MPOTransferMatrix")
             guess_init_env_data = resume_data.get('init_env_data', None)
@@ -254,6 +262,7 @@ class OrthogonalExcitations(GroundStateSearch):
         self.init_env_data = env_data
         self.ground_state_infinite = psi0_inf
         self.ground_state = psi0_inf.extract_segment(first, last)
+        return write_back
 
     def write_converged_environments(self, gs_data, gs_fn):
         """Write converged environments back into the file with the ground state.

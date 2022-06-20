@@ -163,33 +163,70 @@ def test_CouplingModel_explicit():
     Cd, C = fermion_site.Cd, fermion_site.C
     CdJW = Cd.matvec(JW)  # = Cd
     JWC = JW.matvec(C)  # = C
+    #  H_MPO_graph = tenpy.networks.mpo.MPOGraph.from_terms((M.all_onsite_terms(),
+    #                                                        M.all_coupling_terms(),
+    #                                                        M.exp_decaying_terms),
+    #                                                       M.lat.mps_sites(),
+    #                                                       M.lat.bc_MPS)
+    #  H_MPO_graph._set_ordered_states()
+    #  from pprint import pprint
+    #  pprint(H_MPO_graph._ordered_states)
+    #  print(M.all_coupling_terms().to_TermList())
+    #  [{'IdL': 0,
+    #    ('left', 0, 'Cd JW', 'JW'): 1,
+    #    ('left', 0, 'JW C', 'JW'): 2,
+    #    ('left', 0, 'N', 'Id'): 3,
+    #    ('left', 1, 'Cd JW', 'JW'): 4,
+    #    ('left', 1, 'JW C', 'JW'): 5,
+    #    ('left', 1, 'N', 'Id'): 6,
+    #    ('left', 0, 'N', 'Id', 2, 'Id', 'Id'): 7,
+    #    ('left', 1, 'N', 'Id', 3, 'Id', 'Id'): 8},
+    #    'IdR': 9,
+    #   {'IdL': 0,
+    #    ('left', 0, 'Cd JW', 'JW'): 1,
+    #    ('left', 0, 'JW C', 'JW'): 2,
+    #    ('left', 0, 'N', 'Id'): 3,
+    #    ('left', 1, 'Cd JW', 'JW'): 4,
+    #    ('left', 1, 'JW C', 'JW'): 5,
+    #    ('left', 1, 'N', 'Id'): 6},
+    #    ('left', 0, 'N', 'Id', 2, 'Id', 'Id'): 7,
+    #    ('left', 0, 'N', 'Id', 2, 'Id', 'Id', 4, 'Id', 'Id'): 8,
+    #    'IdR': 9,
+    #  0.50000 * Cd JW_0 C_1 +
+    #  1.50000 * Cd JW_0 C_2 +
+    #  0.50000 * JW C_0 Cd_1 +
+    #  1.50000 * JW C_0 Cd_2 +
+    #  4.00000 * N_0 N_5 +
+    #  1.50000 * Cd JW_1 C_3 +
+    #  1.50000 * JW C_1 Cd_3 +
+    #  4.00000 * N_1 N_4
     # yapf: disable
     W0_ex = [[Id,   CdJW, JWC,  N,    None, None, None, None, None, N*0.125],
              [None, None, None, None, None, None, None, None, None, C*1.5],
              [None, None, None, None, None, None, None, None, None, Cd*1.5],
-             [None, None, None, None, Id,   None, None, None, None, None],
-             [None, None, None, None, None, Id,   None, None, None, None],
-             [None, None, None, None, None, None, JW,   None, None, None],
-             [None, None, None, None, None, None, None, JW,   None, None],
+             [None, None, None, None, None, None, None, Id,   None, None],
+             [None, None, None, None, JW,   None, None, None, None, None],
+             [None, None, None, None, None, JW,   None, None, None, None],
+             [None, None, None, None, None, None, Id,   None, None, None],
              [None, None, None, None, None, None, None, None, Id,   None],
              [None, None, None, None, None, None, None, None, None, N*4.0],
              [None, None, None, None, None, None, None, None, None, Id]]
-    W1_ex = [[Id,   None, None, None, None, CdJW, JWC,  N,    None, N*0.125],
+    W1_ex = [[Id,   None, None, None, CdJW, JWC,  N,    None, None, N*0.125],
              [None, JW,   None, None, None, None, None, None, None, C*0.5],
              [None, None, JW,   None, None, None, None, None, None, Cd*0.5],
              [None, None, None, Id,   None, None, None, None, None, None],
-             [None, None, None, None, Id,   None, None, None, None, None],
-             [None, None, None, None, None, None, None, None, None, N*4.0],
              [None, None, None, None, None, None, None, None, None, C*1.5],
              [None, None, None, None, None, None, None, None, None, Cd*1.5],
              [None, None, None, None, None, None, None, None, Id,   None],
+             [None, None, None, None, None, None, None, Id,   None, None],
+             [None, None, None, None, None, None, None, None, None, N*4.0],
              [None, None, None, None, None, None, None, None, None, Id]]
 
     # yapf: enable
     W0_ex = npc.grid_outer(W0_ex, W0_new.legs[:2])
     W1_ex = npc.grid_outer(W1_ex, W1_new.legs[:2])
-    assert npc.norm(W0_new - W0_ex) == 0.  # coupling constants: no rounding errors
-    assert npc.norm(W1_new - W1_ex) == 0.  # coupling constants: no rounding errors
+    assert npc.norm(W0_new - W0_ex)**2 == 0.  # coupling constants: no rounding errors
+    assert npc.norm(W1_new - W1_ex)**2 == 0.  # coupling constants: no rounding errors
 
 
 @pytest.mark.parametrize("use_plus_hc, JW", [(False, 'JW'), (False, None), (True, None)])
@@ -216,56 +253,54 @@ def test_CouplingModel_multi_couplings_explicit(use_plus_hc, JW):
     JWC = JW.matvec(C)  # = C
     NJW = N.matvec(JW)
     # yapf: disable
-    # XXX
-    self = M
-    ot = self.all_onsite_terms()
-    ot.remove_zeros(1.e-12)
-    ct = self.all_coupling_terms()
-    ct.remove_zeros(1.e-12)
-    edt = self.exp_decaying_terms
+    H_MPO_graph = tenpy.networks.mpo.MPOGraph.from_terms((M.all_onsite_terms(),
+                                                          M.all_coupling_terms(),
+                                                          M.exp_decaying_terms),
+                                                         M.lat.mps_sites(),
+                                                         M.lat.bc_MPS)
+    H_MPO_graph._set_ordered_states()
+    from pprint import pprint
+    pprint(H_MPO_graph._ordered_states)
+    pprint(H_MPO_graph._build_grids())
+    print(M.all_coupling_terms().to_TermList())
+    #  0.50000 * Cd JW_0 C_1 +
+    #  1.50000 * Cd JW_0 C_2 +
+    #  0.50000 * JW C_0 Cd_1 +
+    #  1.50000 * JW C_0 Cd_2 +
+    #  1.50000 * Cd JW_1 C_3 +
+    #  1.50000 * JW C_1 Cd_3 +
+    #  4.00000 * N_0 N_5 +
+    #  4.00000 * N_1 N_4 +
+    #  1.12500 * N_0 Cd JW_1 C_2 +
+    #  1.12500 * Cd JW_0 N JW_1 C_3
 
-    #H_MPO_graph = tenpy.networks.mpo.MPOGraph.from_terms((ot, ct, edt), self.lat.mps_sites(), self.lat.bc_MPS)
-    #H_MPO_graph._set_ordered_states()
-    #from pprint import pprint
-    #pprint(H_MPO_graph._ordered_states)
-    # 0.50000 * Cd JW_0 C_1 +
-    # 1.12500 * Cd JW_0 N JW_1 C_3 +
-    # 1.50000 * Cd JW_0 C_2 +
-    # 0.50000 * JW C_0 Cd_1 +
-    # 1.50000 * JW C_0 Cd_2 +
-    # 1.12500 * N_0 Cd JW_1 C_2 +
-    # 4.00000 * N_0 N_5 +
-    # 1.50000 * Cd JW_1 C_3 +
-    # 1.50000 * JW C_1 Cd_3 +
-    # 4.00000 * N_1 N_4
-    W0_ex = [[Id,   CdJW, JWC,  N,    None, None, None, None, None,     None, N*0.125],
-             [None, None, None, None, None, None, None, None, None,     None, C*1.5],
-             [None, None, None, None, None, None, None, None, JW*1.125, None, None],
-             [None, None, None, None, None, None, None, None, None,     None, Cd*1.5],
-             [None, None, None, None, Id,   None, None, None, None,     None, None],
-             [None, None, None, None, None, None, None, None, None,     None, C*1.125],
-             [None, None, None, None, None, JW,   None, None, None,     None, None],
-             [None, None, None, None, None, None, JW,   None, None,     None, None],
-             [None, None, None, None, None, None, None, Id,   None,     None, None],
-             [None, None, None, None, None, None, None, None, None,     None, N],
-             [None, None, None, None, None, None, None, None, None,     Id,   None],
-             [None, None, None, None, None, None, None, None, None,     None, Id]]
-    W1_ex = [[Id,   None, None, None, None, None, CdJW, JWC,  N,    None, None, N*0.125],
-             [None, JW,   NJW,  None, None, None, None, None, None, None, None, C*0.5],
-             [None, None, None, JW,   None, None, None, None, None, None, None, Cd*0.5],
-             [None, None, None, None, Id,   CdJW, None, None, None, None, None, None],
-             [None, None, None, None, None, None, None, None, None, None, Id*4., None],
-             [None, None, None, None, None, None, None, None, None, None, None, C*1.5],
-             [None, None, None, None, None, None, None, None, None, None, None, Cd*1.5],
-             [None, None, None, None, None, None, None, None, None, Id*4., None, None],
-             [None, None, None, None, None, None, None, None, None, None, None, C],
-             [None, None, None, None, None, None, None, None, None, None, None, N],
-             [None, None, None, None, None, None, None, None, None, None, None, Id]]
+    W0_ex = [[Id,   CdJW, JWC,  N,    None, None, None, None, None, N*0.125],
+             [None, None, None, None, None, Id,   None, None, None, None],
+             [None, None, None, None, None, None, JW*1.5,   None, None, None],
+             [None, None, None, None, None, None, None, JW*1.5,   None, None],
+             [None, None, None, None, Id,   None, None, None, None, None],
+             [None, None, None, None, None, None, JW*1.125, None, None, None],
+             [None, None, None, None, None, None, None, None, None, C],
+             [None, None, None, None, None, None, None, None, None, Cd],
+             [None, None, None, None, None, None, None, None, None, N],
+             [None, None, None, None, None, None, None, None, Id,   None],
+             [None, None, None, None, None, None, None, None, None, Id]]
+
+    W1_ex = [[Id,   None, CdJW, JWC,  N,    None, None, None, None, None, N*0.125],
+             [None, None, None, None, None, NJW,  JW*1.5, None, None, None, C*0.5],
+             [None, None, None, None, None, None, None, JW*1.5, None, None, Cd*0.5],
+             [None, Id,   None, None, None, None, CdJW*1.125, None, None, None, None],
+             [None, None, None, None, None, None, None, None, Id*4., None, None],
+             [None, None, None, None, None, None, None, None, None, Id*4., None],
+             [None, None, None, None, None, None, None, None, None, None, C],
+             [None, None, None, None, None, None, None, None, None, None, Cd],
+             [None, None, None, None, None, None, None, None, None, None, N],
+             [None, None, None, None, None, None, None, None, None, None, Id]]
     # yapf: enable
     W0_ex = npc.grid_outer(W0_ex, W0_new.legs[:2])
+    assert npc.norm(W0_new - W0_ex) == 0.  # coupling constants: no rounding errors
     W1_ex = npc.grid_outer(W1_ex, W1_new.legs[:2])
 
-    assert npc.norm(W0_new - W0_ex) == 0.  # coupling constants: no rounding errors
     assert npc.norm(W1_new - W1_ex) == 0.  # coupling constants: no rounding errors
 
 
@@ -383,7 +418,7 @@ def test_model_plus_hc(L=6):
         assert m1.H_MPO.is_hermitian()
         assert m2.H_MPO.is_hermitian()
         assert not m3.H_MPO.is_hermitian()
-        assert m3.H_MPO.chi[3] == m3.H_MPO.chi[2] - 1  # check for smaller MPO bond dimension
+        assert m3.H_MPO.chi[3] < m2.H_MPO.chi[3]   # check for smaller MPO bond dimension
         ED1 = ExactDiag(m1)
         ED2 = ExactDiag(m2)
         ED3 = ExactDiag(m3)
@@ -401,6 +436,25 @@ def test_model_plus_hc(L=6):
     compare(m1, m2, m3, use_bonds=True)
 
     with pytest.warns(UserWarning) as record:
+        m1.add_local_term(-1.5j, [('Sp', [1, 0])])
+        m1.add_local_term(+1.5j, [('Sm', [1, 0])])
+        m2.add_local_term(-1.5j, [('Sp', [1, 0])], plus_hc=True)
+        m3.add_local_term(-1.5j, [('Sp', [1, 0])], plus_hc=True)
+        m1.add_local_term(-0.5j, [('Sp', [0, 0]), ('Sm', [2, 0])])
+        m1.add_local_term(+0.5j, [('Sp', [2, 0]), ('Sm', [0, 0])])
+        m2.add_local_term(-0.5j, [('Sp', [0, 0]), ('Sm', [2, 0])], plus_hc=True)
+        m3.add_local_term(-0.5j, [('Sp', [0, 0]), ('Sm', [2, 0])], plus_hc=True)
+        m1.add_local_term(2.5, [('Sp', [4, 0]), ('Sz', [3, 0]), ('Sm', [5, 0])])
+        m1.add_local_term(2.5, [('Sm', [4, 0]), ('Sz', [3, 0]), ('Sp', [5, 0])])
+        m2.add_local_term(2.5, [('Sp', [4, 0]), ('Sz', [3, 0]), ('Sm', [5, 0])], plus_hc=True)
+        m3.add_local_term(2.5, [('Sp', [4, 0]), ('Sz', [3, 0]), ('Sm', [5, 0])], plus_hc=True)
+    assert len(record) > 0
+    for w in record:
+        assert str(w.message).startswith("Adding terms to the CouplingMPOModel")
+
+    compare(m1, m2, m3, use_bonds=False)
+
+    with pytest.warns(UserWarning) as record:
         m1.add_exponentially_decaying_coupling(0.25, 0.5, 'Sp', 'Sz')
         m1.add_exponentially_decaying_coupling(0.25, 0.5, 'Sm', 'Sz')
         m2.add_exponentially_decaying_coupling(0.25, 0.5, 'Sp', 'Sz', plus_hc=True)
@@ -410,3 +464,65 @@ def test_model_plus_hc(L=6):
         assert str(w.message).startswith("Adding terms to the CouplingMPOModel")
 
     compare(m1, m2, m3, use_bonds=False)
+
+
+class DisorderedLatticeModel(model.CouplingMPOModel):
+    def init_sites(self, model_params):
+        conserve = model_params.get('conserve', 'parity')
+        return tenpy.networks.site.SpinHalfSite(conserve)
+
+    def init_lattice(self, model_params):
+        lat = super().init_lattice(model_params)
+        sigma = model_params.get('disorder_sigma', 0.1)
+        shape = lat.shape + (lat.basis.shape[-1], )
+        lat.position_disorder = np.random.normal(scale=sigma, size=shape)
+        return lat
+
+    def init_terms(self, model_params):
+        J = model_params.get('J', 1.)
+        for u1, u2, dx in self.lat.pairs['nearest_neighbors']:
+            dist = self.lat.distance(u1, u2, dx)
+            self.add_coupling(J/dist, u1, 'Sz', u2, 'Sz', dx)
+        for u1, u2, dx in self.lat.pairs['next_nearest_neighbors']:
+            dist = self.lat.distance(u1, u2, dx)
+            self.add_coupling(J/dist, u1, 'Sx', u2, 'Sx', dx)
+
+@pytest.mark.parametrize("bc", ['open', 'periodic'])
+def test_disordered_lattice_model(bc, J=2.):
+    model_params = {
+        'lattice': 'Kagome',
+        'Lx': 2,
+        'Ly': 3,
+        'bc_y': bc,
+        'bc_x': bc,
+        'bc_MPS': 'finite' if bc == 'open' else 'infinite',
+        'disorder_sigma': 0.1,
+        'J': J,
+    }
+    M = DisorderedLatticeModel(model_params)
+    terms = M.all_coupling_terms().to_TermList()
+    for i, j, op, need_pbc in [([0, 0, 0], [0, 0, 1], 'Sz', False),
+                               ([1, 0, 0], [0, 0, 1], 'Sz', False),
+                               ([1, 0, 2], [0, 1, 1], 'Sz', False),
+                               ([0, 0, 1], [0, 1, 0], 'Sx', False),
+                               ([1, 1, 2], [0, 2, 0], 'Sx', False),
+                               ([0, 2, 2], [1, 2, 0], 'Sx', False),
+                               ([0, 2, 2], [1, 2, 0], 'Sx', False),
+                               ([1, 0, 1], [2, 0, 0], 'Sz', True),
+                               ([1, 1, 1], [2, 0, 2], 'Sz', True),
+                               ([1, 2, 2], [1, 3, 0], 'Sz', True),
+                               ]:
+        if need_pbc and bc == 'open':
+            continue
+        ij = np.array([i, j])
+        mps_i, mps_j = M.lat.lat2mps_idx(ij)
+        pos_i, pos_j  = M.lat.position(ij)
+        dist = np.linalg.norm(pos_i - pos_j)
+        if need_pbc:
+            dist = min(dist, np.linalg.norm(pos_i - pos_j + M.lat.basis[1] * M.lat.Ls[1]))
+        try:
+            idx = terms.terms.index([(op, mps_i), (op, mps_j)])
+        except ValueError:
+            idx = terms.terms.index([(op, mps_j), (op, mps_i)])
+        assert abs(terms.strength[idx] - J/dist) < 1.e-14
+

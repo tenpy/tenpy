@@ -766,8 +766,12 @@ class DMRGEngine(Sweep):
             norm_tol_iter : float
                 Perform at most `norm_tol_iter`*`update_env` sweeps to
                 converge the norm error below `norm_tol`.
-                If the state is not converged after that, call
-                :meth:`~tenpy.networks.mps.canonical_form` instead.
+            norm_tol_final : float
+                After performing `norm_tol_iter`*`update_env` sweeps, if
+                ``np.linalg.norm(psi.norm_err()) < norm_tol_final``, call
+                :meth:`~tenpy.networks.mps.canonical_form` to canonicalise
+                instead. This tolerance should be stricter than `norm_tol`
+                to ensure canonical form even if DMRG cannot fully converge.
             P_tol_to_trunc : float
                 It's reasonable to choose the Lanczos convergence criteria
                 ``'P_tol'`` not many magnitudes lower than the current
@@ -932,24 +936,23 @@ class DMRGEngine(Sweep):
         return E, self.psi
 
     def _canonicalize(self, warn=False):
-        # update environment until norm_tol is reached
+        #Update environment until norm_tol is reached. If norm_tol_final
+        #is not reached, call canonical_form.
         if self.mixer is not None:
             return
         norm_err = np.linalg.norm(self.psi.norm_test())
         norm_tol = self.options.get('norm_tol', 1.e-5)
+        norm_tol_final = self.options.get('norm_tol_final', 1.e-10)
         if not self.finite:
             update_env = self.options['update_env']
             norm_tol_iter = self.options.get('norm_tol_iter', 5)
-        if norm_tol is None or norm_err < norm_tol:
+        if norm_tol is None or (norm_err < norm_tol and norm_err < norm_tol_final):
             return
-        if warn:
+        if warn and norm_err > norm_tol:
             logger.warning(
                 "final DMRG state not in canonical form up to "
                 "norm_tol=%.2e: norm_err=%.2e", norm_tol, norm_err)
-        if self.finite:
-            self._resume_psi = self.psi.copy()
-            self.psi.canonical_form()
-        else:
+        if norm_err > norm_tol and not self.finite:
             for _ in range(norm_tol_iter):
                 self.environment_sweeps(update_env)
                 norm_err = np.linalg.norm(self.psi.norm_test())
@@ -957,10 +960,15 @@ class DMRGEngine(Sweep):
                     break
             else:
                 logger.warning(
-                    "norm_err=%.2e still too high after environment_sweeps, "
-                    "call psi.canonical_form()", norm_err)
-                self._resume_psi = self.psi.copy()
-                self.psi.canonical_form()
+                    "norm_err=%.2e still too high after environment_sweeps", norm_err)
+        if norm_err > norm_tol_final:
+            self._resume_psi = self.psi.copy()
+            if warn and not self.finite:
+                logger.warning(
+                "final DMRG state not in canonical form up to "
+                "norm_tol_final=%.2e: norm_err=%.2e, "
+                "calling psi.canonical_form()", norm_tol_final, norm_err)
+            self.psi.canonical_form()
 
     def reset_stats(self, resume_data=None):
         """Reset the statistics, useful if you want to start a new sweep run.
@@ -1056,7 +1064,7 @@ class DMRGEngine(Sweep):
         theta : :class:`~tenpy.linalg.np_conserved.Array`
             Initial guess for the ground state of the effective Hamiltonian.
         optimize : bool
-            Wheter we actually optimize to find the ground state of the effective Hamiltonian.
+            Whether we actually optimize to find the ground state of the effective Hamiltonian.
             (If False, just update the environments).
 
         Returns

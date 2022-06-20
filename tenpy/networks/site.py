@@ -224,8 +224,15 @@ class Site(Hdf5Exportable):
             op = np.asarray(op)
             if op.shape != (self.dim, self.dim):
                 raise ValueError("wrong shape of on-site operator")
-            # try to convert op into npc.Array
-            op = npc.Array.from_ndarray(op, [self.leg, self.leg.conj()])
+            try:
+                op = npc.Array.from_ndarray(op, [self.leg, self.leg.conj()])
+            except ValueError as e:
+                # just add a more help-ful error message printing the operators
+                raise ValueError('\n'.join([f"Can't convert operator {name!r} to npc Array",
+                                            "Flat charges:",
+                                            str(self.leg.to_qflat()),
+                                            "Operator:",
+                                            str(op)])) from e
         if op.rank != 2:
             raise ValueError("only rank-2 on-site operators allowed")
         op.legs[0].test_equal(self.leg)
@@ -1409,16 +1416,17 @@ class SpinHalfFermionSite(Site):
             qmod.append(2)
             charges.append([0, 1, 1, 0])
         if cons_Sz == 'Sz':
-            qnames.append('2*Sz')
+            qnames.append('2*Sz')  # factor 2 s.t. Cu, Cd have well-defined charges!
             qmod.append(1)
             charges.append([0, 1, -1, 0])
             del ops['Sx']
             del ops['Sy']
         elif cons_Sz == 'parity':
-            qnames.append('parity_Sz')
-            qmod.append(2)  # the charge is (2*Sz) % 2
-            charges.append([0, 1, 1, 0])  # == [0, 1, -1, 0] mod 4
-            # chosen s.t. Cu, Cd have well-defined charges!
+            qnames.append('parity_Sz')  # the charge is (2*Sz) mod (2*2)
+            qmod.append(4)
+            charges.append([0, 1, 3, 0])  # == [0, 1, -1, 0] mod 4
+            # e.g. terms like `Sp_i Sp_j + hc` with Sp=Cdu Cd have charges 'N', 'parity_Sz'.
+            # The `parity_Sz` is non-trivial in this case!
         if len(qmod) == 0:
             leg = npc.LegCharge.from_trivial(d)
         else:

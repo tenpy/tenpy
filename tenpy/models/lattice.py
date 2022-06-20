@@ -26,8 +26,8 @@ from ..networks.mps import MPS  # only to check boundary conditions
 
 __all__ = [
     'Lattice', 'TrivialLattice', 'IrregularLattice', 'HelicalLattice', 'SimpleLattice', 'Chain',
-    'Ladder', 'Square', 'Triangular', 'Honeycomb', 'Kagome', 'get_lattice', 'get_order',
-    'get_order_grouped'
+    'Ladder', 'NLegLadder', 'Square', 'Triangular', 'Honeycomb', 'Kagome', 'get_lattice',
+    'get_order', 'get_order_grouped'
 ]
 
 # (update module doc string if you add further lattices)
@@ -121,7 +121,8 @@ class Lattice:
         Boundary conditions of the couplings in each direction of the lattice,
         translated into a bool array with the global `bc_choices`.
     bc_shift : None | ndarray(int)
-        The shift in x-direction when going around periodic boundaries in other directions.
+        The shift in x-direction when going around periodic boundaries in other directions;
+        entries for [y, z, ...]; length is `dim` - 1
     bc_MPS : 'finite' | 'segment' | 'infinite'
         Boundary conditions for an MPS/MPO living on the ordered lattice.
         If the system is ``'infinite'``, the infinite direction is always along the first basis
@@ -131,6 +132,15 @@ class Lattice:
         direction `i`.
     unit_cell_positions : ndarray, shape (len(unit_cell), Dim)
         for each site in the unit cell a vector giving its position within the unit cell.
+    position_disorder : ``None`` | ndarray
+        If ``None`` (default) the lattice positions are regular.
+        If not None, this array specifies a shift of each site relative to the regular lattice,
+        possibly introducing a disorder of each site.
+        It is *only* used by :meth:`position` (e.g. when plotting lattice sites)
+        and :meth:`distance`. To use this, you can set the `position_disorder` in a model,
+        and then read out and use the :meth:`distance` to possibly rescale the couling strengths.
+        The correct shape  is ``Ls[0], Ls[1], ..., len(unit_cell), Dim``, where `Dim` is the same
+        dimension as for the `unit_cell_positions` and `basis`.
     pairs : dict
         See above.
     segement_first_last : tuple of int
@@ -173,6 +183,7 @@ class Lattice:
         self.basis = np.array(basis)
         self.boundary_conditions = bc  # property setter for self.bc and self.bc_shift
         self.bc_MPS = bc_MPS
+        self.position_disorder = None  # no disorder by default
         # calculate order for MPS
         self.order = self.ordering(order)
         # uses attribute setter to calculte _mps2lat_vals_idx_fix_u etc and lat2mps
@@ -231,6 +242,8 @@ class Lattice:
             # rows of `order` unique and _perm correct?
             assert np.all(
                 np.sum(self._order * self._strides, axis=1)[self._perm] == np.arange(self.N_sites))
+        if self.position_disorder is not None:
+            assert self.position_disorder.shape == self.shape + (self.basis.shape[-1], )
 
     def copy(self):
         """Shallow copy of `self`."""
@@ -272,6 +285,10 @@ class Lattice:
             first, last = self.segment_first_last
             h5gr.attrs['segment_first'] = first
             h5gr.attrs['segment_last'] = last
+        position_disorder = getattr(self, 'position_disorder', None)
+        if position_disorder is not None:
+            hdf5_saver.save(self.position_disorder, subpath + "position_disorder")
+
 
     @classmethod
     def from_hdf5(cls, hdf5_loader, h5gr, subpath):
@@ -309,6 +326,10 @@ class Lattice:
             first = h5gr.attrs['segment_first']
             last = h5gr.attrs['segment_last']
             obj.segment_first_last = first, last
+        if "position_disorder" in h5gr:
+            obj.position_disorder = hdf5_loader.load(subpath + "position_disorder")
+        else:
+            obj.position_disorder = None
         obj.test_sanity()
         return obj
 
@@ -352,19 +373,26 @@ class Lattice:
     def ordering(self, order):
         """Provide possible orderings of the `N` lattice sites.
 
-        This function can be overwritten by derived lattices to define additional orderings.
-        The following orders are defined in this method:
+        Subclasses often override this function to define additional orderings.
 
-        ================== =========================== =============================
-        `order`            equivalent `priority`       equivalent ``snake_winding``
-        ================== =========================== =============================
-        ``'Cstyle'``       (0, 1, ..., dim-1, dim)     (False, ..., False, False)
-        ``'default'``
-        ``'snake'``        (0, 1, ..., dim-1, dim)     (True, ..., True, True)
-        ``'snakeCstyle'``
-        ``'Fstyle'``       (dim-1, ..., 1, 0, dim)     (False, ..., False, False)
-        ``'snakeFstyle'``  (dim-1, ..., 1, 0, dim)     (False, ..., False, False)
-        ================== =========================== =============================
+        Possible strings for the `order` defined here are:
+
+            ``'Csyle', 'default'`` :
+                Recommended in most cases. First within the unit cell, then along y, then x.
+                ``priority=(0, 1, ..., dim-1, dim)``.
+            ``'snake', 'snakeCstyle'`` :
+                Back and forth along the various directions, in Cstyle priority.
+                Equivalent to ``snake_winding=(True, ..., True, True)`` and
+                ``priority=(0, 1, ..., dim-1, dim)``.
+            ``'Fstyle'`` :
+                Might be good for almost completely decoupled chains in a finite, long ladder/cylinder;
+                in other cases *not* a good idea.
+                Equivalent to ``snake_winding=(False, ..., False, False)`` and
+                ``priority=(dim-1, ..., 1., 0, dim)``.
+            ``'snakeFstyle'`` :
+                Snake-winding for Fstyle.
+                Equivalent to ``snake_winding=(True, ..., True, True)`` and
+                ``priority=(dim-1, ..., 1., 0, dim)``.
 
         .. plot ::
 
@@ -375,7 +403,7 @@ class Lattice:
             lat = lattice.Square(5, 3, None, bc='periodic')
             for order, ax in zip(orders, axes.flatten()):
                 lat.order = lat.ordering(order)
-                lat.plot_order(ax, linestyle=':')
+                lat.plot_order(ax, linestyle=':', linewidth=2)
                 lat.plot_sites(ax)
                 lat.plot_basis(ax, origin=-0.25*(lat.basis[0] + lat.basis[1]))
                 ax.set_title(repr(order))
@@ -386,7 +414,7 @@ class Lattice:
 
         .. note ::
             For lattices with a non-trivial unit cell (e.g. Honeycomb, Kagome), the
-            grouped order might be more appropriate, see :func:`get_order_grouped`
+            grouped order might be more appropriate, see :func:`get_order_grouped`.
 
         Parameters
         ----------
@@ -449,8 +477,9 @@ class Lattice:
         bc = [bc_choices_reverse[bc] for bc in self.bc]
         if self.bc_shift is not None:
             for i, shift in enumerate(self.bc_shift):
-                assert bc[i + 1] == "periodic"
-                bc[i + 1] = int(shift)
+                if shift != 0:
+                    assert bc[i + 1] == "periodic"
+                    bc[i + 1] = int(shift)
         return bc
 
     @boundary_conditions.setter
@@ -473,6 +502,27 @@ class Lattice:
             if not np.any(self.bc_shift != 0):
                 self.bc_shift = None
         self.bc = np.array(bc)
+
+    @property
+    def cylinder_axis(self):
+        """Direction of the cylinder axis.
+
+        For an infinite cylinder (`bc_MPS='infinite' and ``boundary_conditions[1] == 'open'``),
+        this property gives the direction of the cylinder axis, in the same coordinates as the
+        :attr:`basis`, as a normalized vector.
+        For a 1D lattice or for open boundary conditions along y, it's just along ``basis[0]``.
+        """
+        if self.dim == 1 or self.boundary_conditions[1] == 'open':
+            return self.basis[0] / np.linalg.norm(self.basis[0])
+        if self.dim != 2:
+            raise NotImplementedError("Might not even have cylinder axis...")
+        periodicity = self.Ls[1] * self.basis[1]
+        if self.bc_shift is not None:
+            periodicity += self.bc_shift[0] * self.basis[0]
+        if len(periodicity) != 2:
+            raise ValueError("non-2D basis, can't define cylinder axis")
+        cylinder_axis = np.array([periodicity[1], - periodicity[0]])
+        return cylinder_axis / np.linalg.norm(cylinder_axis)
 
     def extract_segment(self, first=0, last=None, enlarge=None):
         """Extract a finite segment from an infinite/large system.
@@ -563,13 +613,21 @@ class Lattice:
 
         Returns
         -------
-        pos : ndarray, ``(..., dim)``
+        pos : ndarray, ``(..., Dim)``
             The position of the lattice sites specified by `lat_idx` in real-space.
+            If :attr:`position_disorder` is non-trivial, it can shift the positions!
         """
         idx = self._asvalid_latidx(lat_idx)
         res = np.take(self.unit_cell_positions, idx[..., -1], axis=0)
         for i in range(self.dim):
             res += idx[..., i, np.newaxis] * self.basis[i]
+        if self.position_disorder is not None:
+            if self.bc_shift is not None:
+                raise NotImplementedError("we don't handle non-trivial bc_shift"
+                                          "in combination with positional disorder")
+            idx = np.mod(idx, self.shape)
+            idx_pos = tuple(idx[..., i] for i in range(idx.shape[-1])) + (slice(None, None), )
+            res += self.position_disorder[idx_pos]
         return res
 
     def site(self, i):
@@ -631,6 +689,7 @@ class Lattice:
         """
         idx = self._asvalid_latidx(lat_idx)
         if self.bc_MPS != 'finite':
+            idx = idx.copy()
             i_shift = idx[..., 0] - np.mod(idx[..., 0], self.N_rings)
             idx[..., 0] -= i_shift
         i = np.sum(np.mod(idx, self.shape) * self._strides, axis=-1)  # before permutation
@@ -931,13 +990,37 @@ class Lattice:
 
         Returns
         -------
-        distance : float
+        distance : float | ndarray
             The distance between site at lattice indices ``[x, y, u1]`` and
             ``[x + dx[0], y + dx[1], u2]``, **ignoring** any boundary effects.
+            In case of non-trivial :attr:`position_disorder`, an array is returned. This array
+            is compatible with the shape/indexing required for
+            :meth:`~tenpy.models.CouplingModel.add_coupling`.
+            For example to add a Z-Z interaction of strength `J/r` with r the distance,
+            you can do something like this in :meth:`~tenpy.models.CoulingModel.init_terms`:
+
+                for u1, u2, dx in self.lat.pairs['nearest_neighbors']:
+                    dist = self.lat.distance(u1, u2, dx)
+                    self.add_coupling(J/dist, u1, 'Sz', u2, 'Sz', dx)
         """
         vec_dist = self.unit_cell_positions[u2] - self.unit_cell_positions[u1]
         for ax in range(self.dim):
             vec_dist = vec_dist + dx[..., ax, np.newaxis] * self.basis[ax]
+        if self.position_disorder is not None:
+            if self.bc_shift is not None:
+                raise NotImplementedError("we don't handle non-trivial bc_shift"
+                                          "in combination with positional disorder")
+            shape, shift = self.coupling_shape(dx)
+            slices_i = []
+            slices_j = []
+            for L, Lc, s, d in zip(self.Ls, shape, shift, dx):
+                slices_i.append(np.arange(-s, -s + Lc) % L)
+                slices_j.append(np.arange(-s + d, -s + d + Lc) % L)
+            lat_i = tuple(np.meshgrid(*slices_i, indexing='ij', sparse=True))
+            lat_j = tuple(np.meshgrid(*slices_j, indexing='ij', sparse=True))
+            disorder_i = self.position_disorder[lat_i + (u1, )]
+            disorder_j = self.position_disorder[lat_j + (u2, )]
+            vec_dist = disorder_j - disorder_i + vec_dist
         return np.linalg.norm(vec_dist, axis=-1)
 
     def find_coupling_pairs(self, max_dx=3, cutoff=None, eps=1.e-10):
@@ -1067,6 +1150,11 @@ class Lattice:
             lat_j[:, 0] = np.mod(lat_j_shifted[:, 0], Ls[0])
         keep = self._keep_possible_couplings(lat_j, lat_j_shifted, u2)
         mps_i = mps_i[keep]
+        if len(mps_i) == 0:
+            if strength is None:
+                return [], [], np.zeros([0, self.dim]), coupling_shape
+            else:
+                return [], [], np.array([])
         lat_indices = lat_i[keep] + shift_lat_indices[np.newaxis, :]
         lat_indices = np.mod(lat_indices, coupling_shape)
         lat_j = lat_j[keep]
@@ -1307,7 +1395,12 @@ class Lattice:
                 pos = pos * np.array([[[1., 0]]])  # use broadcasting to add a column with zeros
             if pos.shape[2] != 2:
                 raise ValueError("can only plot in 2 dimensions.")
+            if 'label' in kwargs:
+                # only include label on the first line (since they're all the same style!)
+                kwargs['label'] = [kwargs['label']] + [None] * (pos.shape[1] - 1)
             ax.plot(pos[:, :, 0], pos[:, :, 1], **kwargs)
+            if 'label' in kwargs:
+                del kwargs['label']
 
     def plot_basis(self, ax, origin=(0., 0.), shade=None, **kwargs):
         """Plot arrows indicating the basis vectors of the lattice.
@@ -1568,6 +1661,11 @@ class IrregularLattice(Lattice):
             pairs=regular_lattice.pairs,
         )
         self.order = self._ordering_irreg(regular_lattice.order)
+        self.position_disorder = regular_lattice.position_disorder
+        if self.position_disorder is not None:
+            if len(add_unit_cell) > 0:
+                raise ValueError("Don't know how to extend `position_disorder`. "
+                                 "Add disorder explicitly only to the IrregularLattice.")
         # done
 
     def save_hdf5(self, hdf5_saver, h5gr, subpath):
@@ -1706,7 +1804,7 @@ class HelicalLattice(Lattice):
         import matplotlib.pyplot as plt
         from mpl_toolkits.mplot3d import Axes3D
         fig = plt.figure(figsize=(7, 5))
-        ax = fig.gca(projection='3d')
+        ax = fig.add_subplot(projection='3d')
         Lx, Ly, r = 6, 6, 1.
         x = np.arange(0., Lx - 0.001, 1./Ly)
         theta = 2*np.pi* x - np.pi/6.
@@ -1984,6 +2082,9 @@ class SimpleLattice(Lattice):
 class Chain(SimpleLattice):
     """A chain of L equal sites.
 
+    Defined pairs are ``'nearest_neighbors'``, ``'next_nearest_neighbors'``, and
+    ``'next_next_nearest_neighbors'``.
+
     .. plot ::
 
         import matplotlib.pyplot as plt
@@ -1992,12 +2093,30 @@ class Chain(SimpleLattice):
         ax = plt.gca()
         lat = lattice.Chain(4, None, bc='periodic')
         lat.plot_coupling(ax, linewidth=3.)
-        lat.plot_order(ax, linestyle=':')
         lat.plot_sites(ax)
         lat.plot_basis(ax, origin=(-0.5, -0.25), shade=False)
         ax.set_xlim(-1.)
         ax.set_ylim(-0.5, 0.5)
         ax.set_aspect('equal')
+        plt.show()
+
+    .. plot ::
+
+        import matplotlib.pyplot as plt
+        from tenpy.models import lattice
+        fig, axes = plt.subplots(2, 1, sharex=True, sharey=True, figsize=(8, 3))
+        lat = lattice.Chain(8, None, bc='periodic')
+        order_names=['default', 'folded']
+        for order_name, ax in zip(order_names, axes.flatten()):
+            lat.plot_coupling(ax, linestyle='-', linewidth=1)
+            lat.order = lat.ordering(order_name)
+            lat.plot_sites(ax)
+            lat.plot_order(ax, linestyle=':', linewidth=2)
+            lat.plot_basis(ax, origin=(-0.5, -0.25), shade=False)
+            ax.set_title(f"order={order_name!r}")
+            ax.set_aspect('equal')
+            ax.set_xlim(-0.8)
+            ax.set_ylim(-0.5, 0.5)
         plt.show()
 
     Parameters
@@ -2008,8 +2127,7 @@ class Chain(SimpleLattice):
         The local lattice site. The `unit_cell` of the :class:`Lattice` is just ``[site]``.
     **kwargs :
         Additional keyword arguments given to the :class:`Lattice`.
-        `pairs` are initialize with ``[next_]next_]nearest_neighbors``.
-        `positions` can be specified as a single vector.
+        `pairs` are set accordingly.
     """
     dim = 1  #: the dimension of the lattice
 
@@ -2022,21 +2140,31 @@ class Chain(SimpleLattice):
         SimpleLattice.__init__(self, [L], site, **kwargs)
 
     def ordering(self, order):
-        """Provide possible orderings of the `N` lattice sites.
+        r"""Provide possible orderings of the `N` lattice sites.
 
-        The following orders are defined in this method compared to :meth:`Lattice.ordering`:
+        The following orders are defined here in addition to :meth:`Lattice.ordering`:
 
-        ================== ============================================================
-        `order`            Resulting order
-        ================== ============================================================
-        ``'default'``      ``0, 1, 2, 3, 4, ... ,L-1``
-        ------------------ ------------------------------------------------------------
-        ``'folded'``       ``0, L-1, 1, L-2, ... , L//2``.
-                           This order might be usefull if you want to consider a
-                           ring with periodic boundary conditions with a finite MPS:
-                           It avoids the ultra-long range of the coupling from site
-                           0 to L present in the default order.
-        ================== ============================================================
+        ``'default'`` :
+            Just along the chain, ``0, 1, 2, 3, 4, ... ,L-1``.
+        ``'folded'`` :
+            Yields ``0, L-1, 1, L-2, ... , L//2``.
+            This order might be usefull if you want to consider a ring with periodic boundary
+            conditions with a finite MPS: if you squeeze this ring to a long oval and zig-zag
+            through the top and bottom, you get this order.
+            Thus, it avoids the ultra-long-range coupling from site 0 to L-1, at the expense of
+            (almost) each nearest-neighbor coupling now being next-nearest-neighbors.
+            Graphically::
+                |       PBC couplings on ring  --->        MPS order='folded'
+                |       number=physical site               number=position in MPS
+                |
+                |      --1---2---3---4                        2   4   6   8
+                |     /               \                      : : : : : : : :
+                |    0                 5       --->       0  : : : : : : : : 10
+                |     :               /                    : : : : : : : : : :
+                |      10--9---8---7-6                      1   3   5   7   9
+
+
+
         """
         if isinstance(order, str) and order == 'default' or order == 'folded':
             (L, u) = self.shape
@@ -2060,23 +2188,47 @@ class Chain(SimpleLattice):
 
 
 class Ladder(Lattice):
-    """A ladder coupling two chains.
+    r"""A ladder coupling two chains.
 
     .. plot ::
 
         import matplotlib.pyplot as plt
         from tenpy.models import lattice
-        plt.figure(figsize=(5, 1.4))
+        plt.figure(figsize=(7., 2.))
         ax = plt.gca()
         lat = lattice.Ladder(4, None, bc='periodic')
-        lat.plot_coupling(ax, linewidth=3.)
-        lat.plot_order(ax, linestyle=':')
+        for key, lw in zip(['rung_NN', 'leg_NN', 'diagonal'],
+                            [3., 2., 1.],):
+            pairs = lat.pairs[key]
+            lat.plot_coupling(ax, pairs, linestyle='--', linewidth=lw, label=key)
+        ax.plot([], [], ' ', label='nearest_neighbors =\n  rung_NN + leg_NN')
         lat.plot_sites(ax)
         lat.plot_basis(ax, origin=[-0.5, -0.25], shade=False)
         ax.set_aspect('equal')
         ax.set_xlim(-1.)
-        ax.set_ylim(-1.)
+        ax.set_ylim(-0.5, 1.5)
+        ax.legend(loc='upper left', bbox_to_anchor=(1., 1.))
         plt.show()
+
+    .. plot ::
+
+        import matplotlib.pyplot as plt
+        from tenpy.models import lattice
+        fig, axes = plt.subplots(3, 1, sharex=True, sharey=True, figsize=(6, 5))
+        lat = lattice.Ladder(8, None, bc='periodic')
+        order_names=['default', 'folded', 'snakeFstyle']
+        for order_name, ax in zip(order_names, axes.flatten()):
+            lat.plot_coupling(ax, linestyle='-', linewidth=1)
+            lat.order = lat.ordering(order_name)
+            lat.plot_order(ax, linestyle=':', linewidth=2)
+            lat.plot_sites(ax)
+            lat.plot_basis(ax, origin=(-0.5, +0.5), shade=False)
+            ax.set_title(f"order={order_name!r}")
+            ax.set_aspect('equal')
+            ax.set_xlim(-0.8)
+            ax.set_ylim(-0.2, 1.2)
+        plt.show()
+
 
     Parameters
     ----------
@@ -2105,7 +2257,155 @@ class Ladder(Lattice):
         kwargs['pairs'].setdefault('nearest_neighbors', NN)
         kwargs['pairs'].setdefault('next_nearest_neighbors', nNN)
         kwargs['pairs'].setdefault('next_next_nearest_neighbors', nnNN)
+        kwargs['pairs'].setdefault('rung_NN', [(0, 1, np.array([0]))])
+        kwargs['pairs'].setdefault('leg_NN', [(0, 0, np.array([1])), (1, 1, np.array([1]))])
+        kwargs['pairs'].setdefault('diagonal', nNN)
         Lattice.__init__(self, [L], sites, **kwargs)
+
+    def ordering(self, order):
+        """Provide possible orderings of the `N` lattice sites.
+
+        The following orders are defined here in addition to :meth:`Lattice.ordering`:
+
+        ``'default'`` :
+            Just along the chain, ``0, 1, 2, 3, 4, ... ,L-1``.
+        ``'folded'``:
+            Similar as the `folded` of a chain explained in :meth:`Chain.ordering`,
+            but with the two-site unit cell.
+        """
+        if isinstance(order, str) and (order == 'default' or order == 'folded' or order == 'folded2'):
+            (L, u) = self.shape
+            assert u == 2
+            ordering = np.zeros([2 * L, 2], dtype=np.intp)
+            if order == 'default':
+                ordering[:, 0] = np.repeat(np.arange(L, dtype=np.intp), 2)
+                ordering[:, 1] = np.tile(np.array([0, 1], dtype=np.intp), L)
+            elif order == 'folded':
+                order = []
+                for i in range(L // 2):
+                    order.append((i, 0))
+                    order.append((i, 1))
+                    order.append((L - i - 1, 0))
+                    order.append((L - i - 1, 1))
+                if L % 2 == 1:
+                    order.append((L // 2, 0))
+                    order.append((L // 2, 1))
+                assert len(order) == 2 * L
+                ordering = np.array(order, dtype=np.intp)
+            else:
+                assert (False)  # should not be possible
+            return ordering
+        return super().ordering(order)
+
+
+class NLegLadder(Lattice):
+    r"""A ladder coupling N chains.
+
+    .. plot ::
+
+        import matplotlib.pyplot as plt
+        from tenpy.models import lattice
+        plt.figure(figsize=(7., 2.))
+        ax = plt.gca()
+        lat = lattice.NLegLadder(8, 3, None, bc='periodic')
+        for key, lw in zip(['rung_NN', 'leg_NN', 'diagonal'], [3., 2., 1.]):
+            pairs = lat.pairs[key]
+            lat.plot_coupling(ax, pairs, linestyle='--', linewidth=lw, label=key)
+        ax.plot([], [], ' ', label='nearest_neighbors =\n  rung_NN + leg_NN')
+        lat.plot_sites(ax)
+        lat.plot_basis(ax, origin=[-0.5, -0.25], shade=False)
+        ax.set_aspect('equal')
+        ax.set_xlim(-1.)
+        ax.set_ylim(-0.5, 1.5)
+        ax.legend(loc='upper left', bbox_to_anchor=(1., 1.))
+        plt.show()
+
+    .. plot ::
+
+        import matplotlib.pyplot as plt
+        from tenpy.models import lattice
+        fig, axes = plt.subplots(3, 1, sharex=True, sharey=True, figsize=(6, 5))
+        lat = lattice.NLegLadder(8, 3, None, bc='periodic')
+        order_names=['default', 'snakeFstyle', 'folded']
+        for order_name, ax in zip(order_names, axes.flatten()):
+            lat.plot_coupling(ax, linestyle='-', linewidth=1)
+            lat.order = lat.ordering(order_name)
+            lat.plot_order(ax, linestyle=':', linewidth=2)
+            lat.plot_sites(ax)
+            lat.plot_basis(ax, origin=(-0.5, +0.5), shade=False)
+            ax.set_title(f"order={order_name!r}")
+            ax.set_aspect('equal')
+            ax.set_xlim(-0.8)
+            ax.set_ylim(-0.2, 1.2)
+        plt.show()
+
+
+    Parameters
+    ----------
+    L : int
+        The length of each chain, we have N*L sites in total.
+    N : int
+        The number of legs of the ladder.
+    sites : (list of) :class:`~tenpy.networks.site.Site`
+        The N local lattice sites making the `unit_cell` of the :class:`Lattice`.
+        If only a single :class:`~tenpy.networks.site.Site` is given, it is used for all chains.
+    **kwargs :
+        Additional keyword arguments given to the :class:`Lattice`.
+        `basis`, `pos` and `pairs` are set accordingly.
+        Defined pairs are ``'rung_NN', 'leg_NN', 'diagonal', 'nearest_neighbors'``.
+    """
+    dim = 1  #: the dimension of the lattice
+
+    def __init__(self, L, N, sites, **kwargs):
+        sites = _parse_sites(sites, N)
+        basis = np.array([[1., 0.]])
+        pos = np.vstack((np.zeros(N), np.linspace(0, 1, N))).T
+        kwargs.setdefault('basis', basis)
+        kwargs.setdefault('positions', pos)
+        rung_NN = [(n, n + 1, np.array([0])) for n in range(N - 1)]
+        leg_NN = [(n, n, np.array([1])) for n in range(N)]
+        diag = [(n, n+1, np.array([1])) for n in range(N-1)] + \
+            [(n+1, n, np.array([1])) for n in range(N-1)]
+        kwargs.setdefault('pairs', {})
+        kwargs['pairs'].setdefault('rung_NN', rung_NN)
+        kwargs['pairs'].setdefault('leg_NN', leg_NN)
+        kwargs['pairs'].setdefault('nearest_neighbors', rung_NN + leg_NN)
+        kwargs['pairs'].setdefault('diagonal', diag)
+        Lattice.__init__(self, [L], sites, **kwargs)
+
+    def ordering(self, order):
+        """Provide possible orderings of the `N` lattice sites.
+
+        The following orders are defined here in addition to :meth:`Lattice.ordering`:
+
+        ``'default'`` :
+            Just along the chain, ``0, 1, 2, 3, 4, ... ,L-1``.
+        ``'folded'``:
+            Similar as the `folded` of a chain explained in :meth:`Chain.ordering`,
+            but with the N-site unit cell.
+        """
+        if isinstance(order, str) and (order == 'default' or order == 'folded'):
+            (L, Lu) = self.shape
+            ordering = np.zeros([Lu * L, 2], dtype=np.intp)
+            if order == 'default':
+                ordering[:, 0] = np.repeat(np.arange(L, dtype=np.intp), Lu)
+                ordering[:, 1] = np.tile(np.arange(Lu, dtype=np.intp), L)
+            elif order == 'folded':
+                order = []
+                for i in range(L // 2):
+                    for u in range(Lu):
+                        order.append((i, u))
+                    for u in range(Lu):
+                        order.append((L - i - 1, u))
+                if L % 2 == 1:
+                    for u in range(Lu):
+                        order.append((L // 2, u))
+                assert len(order) == Lu * L
+                ordering = np.array(order, dtype=np.intp)
+            else:
+                assert (False)  # should not be possible
+            return ordering
+        return super().ordering(order)
 
 
 class Square(SimpleLattice):
@@ -2115,16 +2415,40 @@ class Square(SimpleLattice):
 
         import matplotlib.pyplot as plt
         from tenpy.models import lattice
-        plt.figure(figsize=(5, 5))
+        plt.figure(figsize=(7, 8))
         ax = plt.gca()
         lat = lattice.Square(4, 4, None, bc='periodic')
-        lat.plot_coupling(ax, linewidth=3.)
-        lat.plot_order(ax, linestyle=':')
+        lat.plot_coupling(ax, linestyle='-', linewidth=3, label='nearest_neighbors')
+        for key, lw in zip(['next_nearest_neighbors',
+                            'next_next_nearest_neighbors'],
+                        [1.5, 1.]):
+            pairs = lat.pairs[key]
+            lat.plot_coupling(ax, pairs, linestyle='--', linewidth=lw, color='gray', label=key)
         lat.plot_sites(ax)
         lat.plot_basis(ax, origin=-0.5*(lat.basis[0] + lat.basis[1]))
         ax.set_aspect('equal')
-        ax.set_xlim(-1)
-        ax.set_ylim(-1)
+        ax.set_xlim(-1, 5.2)
+        ax.set_ylim(-1.2, 6)
+        ax.legend(loc='upper left')
+        plt.show()
+
+    .. plot ::
+
+        import matplotlib.pyplot as plt
+        from tenpy.models import lattice
+        fig, axes = plt.subplots(1, 3, sharex=True, sharey=True, figsize=(8, 5))
+        lat = lattice.Square(5, 4, None, bc='periodic')
+        order_names=['default', 'snake', 'Fstyle']
+        for order_name, ax in zip(order_names, axes.flatten()):
+            lat.plot_coupling(ax, linestyle='-', linewidth=1)
+            lat.order = lat.ordering(order_name)
+            lat.plot_order(ax, linestyle=':', linewidth=2)
+            lat.plot_sites(ax)
+            lat.plot_basis(ax, origin=(-0.5, -0.5))
+            ax.set_title(f"order={order_name!r}")
+            ax.set_xlim(-1, 5)
+            ax.set_ylim(-1, 4)
+            ax.set_aspect('equal')
         plt.show()
 
     Parameters
@@ -2158,17 +2482,45 @@ class Triangular(SimpleLattice):
 
     .. plot ::
 
+
         import matplotlib.pyplot as plt
         from tenpy.models import lattice
-        plt.figure(figsize=(4, 5))
+        plt.figure(figsize=(6, 8))
         ax = plt.gca()
         lat = lattice.Triangular(4, 4, None, bc='periodic')
-        lat.plot_coupling(ax, linewidth=3.)
-        lat.plot_order(ax, linestyle=':')
+        lat.plot_coupling(ax, linestyle='-', linewidth=3, label='nearest_neighbors')
+        for key, lw in zip(['next_nearest_neighbors',
+                            'next_next_nearest_neighbors'],
+                        [1.5, 1.]):
+            pairs = lat.pairs[key]
+            lat.plot_coupling(ax, pairs, linestyle='--', linewidth=lw, color='gray', label=key)
         lat.plot_sites(ax)
         lat.plot_basis(ax, origin=-0.5*(lat.basis[0] + lat.basis[1]))
         ax.set_aspect('equal')
+        ax.set_xlim(-1)
+        ax.set_ylim(-1)
+        ax.legend(loc='upper left')
         plt.show()
+
+    .. plot ::
+
+        import matplotlib.pyplot as plt
+        from tenpy.models import lattice
+        fig, axes = plt.subplots(1, 2, sharex=True, sharey=True, figsize=(6, 4))
+        lat = lattice.Triangular(4, 4, None, bc='periodic')
+        order_names=['default', 'snake']
+        for order_name, ax in zip(order_names, axes.flatten()):
+            lat.plot_coupling(ax, linestyle='-', linewidth=1)
+            lat.order = lat.ordering(order_name)
+            lat.plot_order(ax, linestyle=':', linewidth=2)
+            lat.plot_sites(ax)
+            lat.plot_basis(ax, origin=(-0.5, -0.5))
+            ax.set_title(f"order={order_name!r}")
+            ax.set_xlim(-1, 5)
+            ax.set_ylim(-1, 6)
+            ax.set_aspect('equal')
+        plt.show()
+
 
     Parameters
     ----------
@@ -2206,16 +2558,43 @@ class Honeycomb(Lattice):
 
         import matplotlib.pyplot as plt
         from tenpy.models import lattice
-        plt.figure(figsize=(5, 6))
+        plt.figure(figsize=(6, 8))
         ax = plt.gca()
         lat = lattice.Honeycomb(4, 4, None, bc='periodic')
-        lat.plot_coupling(ax, linewidth=3.)
-        lat.plot_order(ax, linestyle=':')
+        lat.plot_coupling(ax, linestyle='-', linewidth=3, label='nearest_neighbors')
+        for key, lw in zip(['next_nearest_neighbors',
+                            'next_next_nearest_neighbors'],
+                        [1.5, 1.]):
+            pairs = lat.pairs[key]
+            lat.plot_coupling(ax, pairs, linestyle='--', linewidth=lw, color='gray', label=key)
+        for key in ['fourth_nearest_neighbors', 'fifth_nearest_neighbors']:
+            ax.plot([], [], ' ', label=key)
         lat.plot_sites(ax)
         lat.plot_basis(ax, origin=-0.5*(lat.basis[0] + lat.basis[1]))
         ax.set_aspect('equal')
         ax.set_xlim(-1)
         ax.set_ylim(-1)
+        ax.legend(loc='upper left')
+        plt.show()
+
+    .. plot ::
+
+        import matplotlib.pyplot as plt
+        from tenpy.models import lattice
+        fig, axes = plt.subplots(2, 2, sharex=True, sharey=True, figsize=(6, 8))
+        lat = lattice.Honeycomb(3, 3, None, bc='periodic')
+        order_names=['rings', 'Cstyle', 'snake', 'snakeCstyle']
+        for order_name, ax in zip(order_names, axes.flatten()):
+            lat.plot_coupling(ax, linestyle='-', linewidth=1)
+            lat.order = lat.ordering(order_name)
+            lat.plot_order(ax, linestyle=':', linewidth=2)
+            lat.plot_sites(ax)
+            lat.plot_basis(ax, origin=(-0.5, -0.5))
+            ax.set_title(f"order={order_name!r}")
+            ax.set_xlim(-0.5, 3)
+            ax.set_ylim(-0.5, 4)
+            ax.set_aspect('equal')
+        axes[0, 0].set_title("order='default'='rings'")
         plt.show()
 
     Parameters
@@ -2260,39 +2639,20 @@ class Honeycomb(Lattice):
     def ordering(self, order):
         """Provide possible orderings of the `N` lattice sites.
 
-        The following orders are defined in this method compared to :meth:`Lattice.ordering`:
+        The following orders are defined here in addition to :meth:`Lattice.ordering`:
 
-        ================== =========================== =============================
-        `order`            equivalent `priority`       equivalent ``snake_winding``
-        ================== =========================== =============================
-        ``'default'``      (0, 2, 1)                   (False, False, False)
-        ``'snake'``        (0, 2, 1)                   (False, True, False)
-        ================== =========================== =============================
-
-        .. plot ::
-
-            import matplotlib.pyplot as plt
-            from tenpy.models import lattice
-            fig, axes = plt.subplots(1, 2, sharex=True, sharey=True, figsize=(5, 6))
-            orders = ['default', 'snake']
-            lat = lattice.Honeycomb(4, 3, None, bc='periodic')
-            for order, ax in zip(orders, axes.flatten()):
-                lat.order = lat.ordering(order)
-                lat.plot_order(ax, linestyle=':')
-                lat.plot_sites(ax)
-                lat.plot_basis(ax, origin=-0.25*(lat.basis[0] + lat.basis[1]))
-                ax.set_title(repr(order))
-                ax.set_aspect('equal')
-                ax.set_xlim(-1)
-                ax.set_ylim(-1)
-            plt.show()
+        ``'rings', 'default'`` :
+            First the A sublattice, then the B sublattice.
+        ``'snake'``:
+            Snake-winding along the rings: going up the A lattice, going down B.
         """
         if isinstance(order, str):
-            if order == "default":
+            if order == "default" or order == 'rings':
+                # equivalent to get_grouped_order(self.shape, [(0, 2), (1,)])
                 priority = (0, 2, 1)
                 snake_winding = (False, False, False)
                 return get_order(self.shape, snake_winding, priority)
-            elif order == "snake":
+            elif order == "snake" or order== "snake_rings":
                 priority = (0, 2, 1)
                 snake_winding = (False, False, True)
                 return get_order(self.shape, snake_winding, priority)
@@ -2324,12 +2684,30 @@ class Kagome(Lattice):
         ax = plt.gca()
         lat = lattice.Kagome(4, 4, None, bc='periodic')
         lat.plot_coupling(ax, linewidth=3.)
-        lat.plot_order(ax, linestyle=':')
+        lat.plot_order(ax, linestyle=':', linewidth=2)
         lat.plot_sites(ax)
         lat.plot_basis(ax, origin=-0.25*(lat.basis[0] + lat.basis[1]))
         ax.set_aspect('equal')
         ax.set_xlim(-1)
         ax.set_ylim(-1)
+        plt.show()
+
+    .. plot ::
+
+        import matplotlib.pyplot as plt
+        from tenpy.models import lattice
+        fig, axes = plt.subplots(1, 2, sharex=True, sharey=True, figsize=(8, 4))
+        lat = lattice.Kagome(3, 3, None, bc='periodic')
+        order_names=['default', 'rings']
+        for order_name, ax in zip(order_names, axes.flatten()):
+            lat.plot_coupling(ax, linestyle='-', linewidth=1)
+            lat.order = lat.ordering(order_name)
+            lat.plot_order(ax, linestyle=':', linewidth=2)
+            lat.plot_sites(ax)
+            lat.plot_basis(ax, origin=(-0.5, -0.5))
+            ax.set_title(f"order={order_name!r}")
+            ax.set_aspect('equal')
+        axes[0].set_title("order='default'='Cstyle'")
         plt.show()
 
     Parameters
@@ -2370,6 +2748,23 @@ class Kagome(Lattice):
         kwargs['pairs'].setdefault('next_nearest_neighbors', nNN)
         kwargs['pairs'].setdefault('next_next_nearest_neighbors', nnNN)
         Lattice.__init__(self, [Lx, Ly], sites, **kwargs)
+
+    def ordering(self, order):
+        """Provide possible orderings of the `N` lattice sites.
+
+        Depending on your couplings and states, the ``'default'``  (defined as ``'Cstyle'``),
+        or the new ``'rings'`` order along the triangles might be better.
+        The following orders are defined here in addition to :meth:`Lattice.ordering`:
+
+        ``'rings', 'default'`` :
+            Along y first for sites (0, 2) on the left of the triangles, then one ring for site 1.
+
+        """
+        if isinstance(order, str):
+            if order == "rings":
+                order = get_order_grouped(self.shape, [(0, 2), (1,)])
+                return order
+        return super().ordering(order)
 
 
 def get_lattice(lattice_name):
@@ -2487,13 +2882,13 @@ def get_order_grouped(shape, groups, priority=None):
         from tenpy.models import lattice
         fig, axes = plt.subplots(2, 2, sharex=True, sharey=True, figsize=(8, 6))
         groups = [[(0, 1, 2)], [(0, 2, 1)],
-                [(0, 1), (2,)], [(0, 2), (1,)]]
+                [(0, 2), (1,)], [(0, 2), (1,)]]
         priorities = [None, None, None, [1, 0, 2]]
         lat = lattice.Kagome(3, 3, None, bc='periodic')
         for gr, prio, ax in zip(groups, priorities, axes.flatten()):
             order = lattice.get_order_grouped(lat.shape, gr, prio)
             lat.order = order
-            lat.plot_order(ax, linestyle=':')
+            lat.plot_order(ax, linestyle=':', linewidth=2)
             lat.plot_sites(ax)
             lat.plot_basis(ax, origin=-0.25*(lat.basis[0] + lat.basis[1]))
             ax.set_title(', '.join(['("grouped"', str(gr), str(prio) + ')']))

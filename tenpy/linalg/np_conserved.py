@@ -105,7 +105,8 @@ __all__ = [
     'QCUTOFF', 'ChargeInfo', 'LegCharge', 'LegPipe', 'Array', 'zeros', 'ones', 'eye_like', 'diag',
     'concatenate', 'grid_concat', 'grid_outer', 'detect_grid_outer_legcharge', 'detect_qtotal',
     'detect_legcharge', 'trace', 'outer', 'inner', 'tensordot', 'svd', 'pinv', 'norm', 'eigh',
-    'eig', 'eigvalsh', 'eigvals', 'speigs', 'qr', 'expm', 'to_iterable_arrays'
+    'eig', 'eigvalsh', 'eigvals', 'speigs', 'expm', 'qr', 'orthogonal_columns',
+    'to_iterable_arrays'
 ]
 
 #: A cutoff to ignore machine precision rounding errors when determining charges
@@ -407,7 +408,8 @@ class Array:
                      qtotal=None,
                      cutoff=None,
                      labels=None,
-                     raise_wrong_sector=True):
+                     raise_wrong_sector=True,
+                     warn_wrong_sector=True):
         """convert a flat (numpy) ndarray to an Array.
 
         Parameters
@@ -461,8 +463,9 @@ class Array:
             elif np.any(np.abs(data_flat[sl]) > cutoff):
                 if raise_wrong_sector:
                     raise ValueError("wrong sector with non-zero entries")
-                warnings.warn("flat array has non-zero entries in blocks incompatible with charge",
-                              stacklevel=2)
+                if warn_wrong_sector:
+                    warnings.warn("flat array has non-zero entries in blocks "
+                                  "incompatible with charge",  stacklevel=2)
         res._data = data
         res._qdata = np.array(qdata, dtype=np.intp, order='C').reshape((len(qdata), res.rank))
         res._qdata_sorted = True
@@ -2809,7 +2812,7 @@ class Array:
             "Arrays with same labels in different order. Transpose intended?"
             " We will transpose in the future!",
             category=FutureWarning,
-            stacklevel=3)
+            stacklevel=2)
         return self
         # TODO: do this for the next release
         return self.transpose(other_labels)
@@ -2880,6 +2883,8 @@ def diag(s, leg, dtype=None, labels=None):
     if scalar:
         res._data = [np.diag(s * np.ones(size, dtype=s.dtype)) for size in leg.get_block_sizes()]
     else:
+        if s.ndim != 1:
+            raise ValueError(f"diag expected 0D or 1D `s`, got shape {s.shape!s}")
         res._data = [np.diag(s[leg.get_slice(qi)]) for qi in range(leg.block_number)]
     return res
 
@@ -3203,7 +3208,7 @@ def detect_grid_outer_legcharge(grid, grid_legs, qtotal=None, qconj=1, bunch=Fal
 
 
 def detect_qtotal(flat_array, legcharges, cutoff=None):
-    """Returns the total charge (w.r.t `legs`) of first non-zero sector found in `flat_array`.
+    """Returns the total charge (w.r.t `legs`) of the sector with largest entry in `flat_array`.
 
     Parameters
     ----------
@@ -3212,8 +3217,8 @@ def detect_qtotal(flat_array, legcharges, cutoff=None):
     legcharges : list of :class:`LegCharge`
         For each leg the LegCharge.
     cutoff : float
-        Blocks with ``np.max(np.abs(block)) > cutoff`` are considered as zero.
-        Defaults to :data:`QCUTOFF`.
+        If the largest (absolute) value is smaller than that,
+        raise a warning and return zero charges.
 
     Returns
     -------
@@ -3227,15 +3232,15 @@ def detect_qtotal(flat_array, legcharges, cutoff=None):
     """
     if cutoff is None:
         cutoff = QCUTOFF
-    chinfo = legcharges[0].chinfo
+    inds_max = np.unravel_index(np.argmax(np.abs(flat_array)), flat_array.shape)
+    val_max = abs(flat_array[inds_max])
+    if val_max < cutoff:
+        warnings.warn("can't detect total charge: no entry larger than cutoff. Return 0 charge.",
+                    stacklevel=2)
+        return legcharges[0].chinfo.make_valid()
     test_array = zeros(legcharges)  # Array prototype with correct charges
-    for qindices in test_array._iter_all_blocks():
-        sl = test_array._get_block_slices(qindices)
-        if np.any(np.abs(flat_array[sl]) > cutoff):
-            return test_array._get_block_charge(qindices)
-    warnings.warn("can't detect total charge: no entry larger than cutoff. Return 0 charge.",
-                  stacklevel=2)
-    return chinfo.make_valid()
+    qindices = [leg.get_qindex(i)[0] for leg, i in zip(legcharges, inds_max)]
+    return test_array._get_block_charge(qindices)
 
 
 def detect_legcharge(flat_array, chargeinfo, legcharges, qtotal=None, qconj=+1, cutoff=None):
@@ -3563,7 +3568,7 @@ def svd(a,
         The first label corresponds to ``U.legs[1]``, the second to ``VH.legs[0]``.
     inner_qconj : {+1, -1}
         Direction of the charges for the new leg. Default +1.
-        The new LegCharge is constructed such that ``VH.legs[0].qconj = qconj``.
+        The new LegCharge is constructed such that ``VH.legs[0].qconj = inner_qconj``.
 
     Returns
     -------
@@ -3923,15 +3928,21 @@ def expm(a):
     return res
 
 
-def qr(a, mode='reduced', inner_labels=[None, None], cutoff=None):
+def qr(a,
+       mode='reduced',
+       inner_labels=[None, None],
+       cutoff=None,
+       pos_diag_R=False,
+       qtotal_Q=None,
+       inner_qconj=+1):
     r"""Q-R decomposition of a matrix.
 
-    Decomposition such that ``A == npc.tensordot(q, r, axes=1)`` up to numerical rounding errors.
+    Decomposition such that ``A == npc.tensordot(Q, R, axes=1)`` up to numerical rounding errors.
 
     Parameters
     ----------
     a : :class:`Array`
-        A square matrix to be exponentiated, shape ``(M,N)``.
+        The matrix to be decomposed, shape ``(M,N)``.
     mode : 'reduced', 'complete'
         'reduced': return `q` and `r` with shapes (M,K) and (K,N), where K=min(M,N)
         'complete': return `q` with shape (M,M).
@@ -3940,13 +3951,23 @@ def qr(a, mode='reduced', inner_labels=[None, None], cutoff=None):
     cutoff : ``None`` or float
         If not ``None``, discard linearly dependent vectors to given precision, which might
         reduce `K` of the 'reduced' mode even further.
+    pos_diag_R : bool
+        If True, ensure the uniqueness of the qr decomposition by imposing that the diagonal of R
+        is positive.
+    qtotal_Q : None | charges
+        Total charge for `Q`. ``None`` defaults to trivial charges.
+        Use ``qtotal_Q=a.qtotal`` to get `R` with trivial charges,
+        since ``a.qtotal = chinfo.make_valid(q.qtotal + r.qtotal)``.
+    inner_qconj : {+1, -1}
+        Direction of the charges for the new leg. Default +1.
+        The new LegCharge is constructed such that ``R.legs[0].qconj = inner_qconj``.
 
     Returns
     -------
-    q : :class:`Array`
+    Q : :class:`Array`
         If `mode` is 'complete', a unitary matrix.
         For `mode` 'reduced' an isometry such that :math:`q^{*}_{j,i} q_{j,k} = \delta_{i,k}`.
-    r : :class:`Array`
+    R : :class:`Array`
         Upper triangular matrix if both legs of A are sorted by charges;
         Otherwise a simple transposition (performed when sorting by charges) brings it to
         upper triangular form.
@@ -3966,42 +3987,174 @@ def qr(a, mode='reduced', inner_labels=[None, None], cutoff=None):
             q_block, r_block = np.linalg.qr(block, mode)
         else:
             q_block, r_block = qr_li(block, cutoff)
+        if pos_diag_R:
+            r_diag = np.diag(r_block)
+            phase = r_diag / np.abs(r_diag)
+            K = len(r_diag)
+            if K < q_block.shape[1]:
+                q_block[:, :K] *= phase[np.newaxis, :]
+                r_block[:K, :] *= np.conj(phase)[:, np.newaxis]
+            else:  # equal
+                #  assert K == q_block.shape[1]
+                q_block *= phase[np.newaxis, :]
+                r_block *= np.conj(phase)[:, np.newaxis]
         q_data.append(q_block)
         r_data.append(r_block)
         if mode != 'complete':
             q1, q2 = qindices
             i0 = a_leg0.slices[q1]
             inner_leg_mask[i0:i0 + q_block.shape[1]] = True
+        #  else: assert q_block.shape[1] == q_block.shape[0]
     if mode != 'complete':
         # map qindices
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             map_qind, _, inner_leg = a_leg0.project(inner_leg_mask)
     else:
-        inner_leg = a_leg0
-    q = Array([a_leg0, inner_leg.conj()], a.dtype)
+        inner_leg = a_leg0.copy()
+        if isinstance(inner_leg, charges.LegPipe):
+            inner_leg = inner_leg.to_LegCharge()
+    if qtotal_Q is not None:
+        qtotal_Q = a.chinfo.make_valid(qtotal_Q)  # convert to ndarray
+        inner_leg.charges = a.chinfo.make_valid(inner_leg.charges - inner_leg.qconj * qtotal_Q)
+    if inner_leg.qconj != inner_qconj:
+        assert inner_qconj == -inner_leg.qconj
+        # absorb sign into charge values
+        inner_leg.charges = a.chinfo.make_valid(-inner_leg.charges)
+        inner_leg.qconj = inner_qconj
+    q = Array([a_leg0, inner_leg.conj()], a.dtype, qtotal_Q)
     q._data = q_data
     q._qdata = a._qdata.copy()
     q._qdata_sorted = False
-    r = Array([inner_leg, a.legs[1]], a.dtype, a.qtotal)
+    r = Array([inner_leg, a.legs[1]], a.dtype, a.chinfo.make_valid(a.qtotal - q.qtotal))
     r._data = r_data
     r._qdata = a._qdata.copy()
     r._qdata_sorted = False
     if mode != 'complete':
         q._qdata[:, 1] = map_qind[q._qdata[:, 0]]
         r._qdata[:, 0] = q._qdata[:, 1]  # copy map_qind[q._qdata[:, 0]] from q
+    else:  # mode == 'complete'
+        q._qdata[:, 1] = q._qdata[:, 0]
+        if len(q_data) < a_leg0.block_number:
+            # there is a block in A that is completely 0 and not in A._data
+            # so we need to add corresponding identity blocks in Q to ensure Q is orthogonal!
+            # find qindices of those blocks
+            extra_q_qdata = []
+            have_q_qinds = np.concatenate((np.sort(a._qdata[:, 0]), [a_leg0.block_number]))
+            x = 0
+            for qi in range(a_leg0.block_number):
+                if have_q_qinds[x] == qi:
+                    x += 1
+                    continue
+                # else: don't have block for this qi yet in qdata, add identity
+                q_block = np.eye(a_leg0.slices[qi + 1] - a_leg0.slices[qi], dtype=a.dtype)
+                extra_q_qdata.append([qi, qi])
+                q_data.append(q_block)
+            q._qdata = np.concatenate((q._qdata, extra_q_qdata), axis=0)
+            q._qdata_sorted = False
     if len(piped_axes) > 0:  # revert the permutation in the axes
         if 0 in piped_axes:
-            if mode != 'complete':
-                q = q.split_legs(0)
-            else:
-                q = q.split_legs(0, 1)
-                r = r.split_legs(0)
+            q = q.split_legs(0)
         if 1 in piped_axes:
             r = r.split_legs(-1)
     q.iset_leg_labels([a_labels[0], label_Q])
     r.iset_leg_labels([label_R, a_labels[1]])
     return q, r
+
+
+def orthogonal_columns(a, new_label=None):
+    """Find orthogonal columns for a given matrix.
+
+    Given `a` of shape `(M,N)` with M >= N and *assuming* full rank N of `a`, this function
+    considers the columns of `a` as basis vectors and finds orthogonal columns completing it.
+    The resulting `ortho` will be a (M, (M-N)) matrix.
+    A simple (and more expensive) implementation based on :meth:`qr` would look like this:
+
+        def orthogonal_columns(a, new_label):
+            q, r = ncp.qr(a, mode='complete', inner_labels=[new_label, None])
+            r_dense = r.to_ndarray()
+            zero_r_rows = (np.linalg.norm(r_dense, axis=1) == 0)
+            ortho = q.iproject(zero_r_rows, axis=1)
+            orhto.iset_leg_labels([a.get_leg_labels()[0], new_label])
+            return ortho
+
+    Parameters
+    ----------
+    a : :class:`Array`
+        A square matrix to be exponentiated, shape ``(M,N)`` with N <= M.
+    new_label : None | str
+        New right label for the returned `ortho`. ``None`` defaults to the right label of `A`.
+
+    Returns
+    -------
+    ortho : :class:`Array`
+        Isometry in the sense ``ortho^dagger @ orhto == eye``, i.e. has orthonormal columns.
+        Further, all columns are orthonormal to the columns of `a`.
+    """
+    if a.rank != 2:
+        raise ValueError("expect a matrix!")
+    M, N = a.shape
+    a_labels = a._labels
+    if new_label is None:
+        new_label = a_labels[1]
+    if M < N:
+        raise ValueError(f"orthogonal_columns with M={M:d} < N{N:d}: overcomplete! ")
+    if M == N:
+        warnings.warn("orhtogonal_columns(a) for square `a` yields zero matrix!")
+        right_leg = LegCharge(a.chinfo,
+                              [0],
+                              np.zeros([0, a.chinfo.qnumber], dtype=QTYPE),
+                              a.legs[1].qconj)
+        return Array([a.legs[0], right_leg], a.dtype, a.qtotal, [a_labels[0], new_label])
+    piped_axes, a = a.as_completely_blocked()  # ensure complete blocking & sort
+    left_leg = a.legs[0]
+    left_block_sizes = left_leg.get_block_sizes()
+    ortho_data = []
+    ortho_qdata = []
+    right_kept_blocks = []
+    left_qi = -1
+    right_qi = 0
+    for b in np.argsort(a._qdata[:, 0]):
+        next_left_qi = a._qdata[b, 0]
+        for left_qi in range(left_qi + 1, next_left_qi):  # yes, duplicated left_qi here
+            # missing block in a, so add identity block in ortho
+            ortho_data.append(np.eye(left_block_sizes[left_qi], dtype=a.dtype))
+            ortho_qdata.append([left_qi, right_qi])
+            right_kept_blocks.append(left_qi)
+            right_qi += 1
+        left_qi = next_left_qi
+        a_block = a._data[b]  # assume this to have full rank
+        M, N = a_block.shape
+        if M > N:
+            # find orthogonal columns of a_block
+            q_block, r_block = np.linalg.qr(a_block, mode='complete')
+            ortho_data.append(q_block[:, N:])
+            ortho_qdata.append([left_qi, right_qi])
+            right_kept_blocks.append(left_qi)
+            right_qi += 1
+        # else: full rank a_block, so no orthogonal column for this block!
+    for left_qi in range(left_qi + 1, left_leg.block_number):  # yes, duplicated left_qi here
+        # final missing blocks in a, so add identity blocks in ortho
+        ortho_data.append(np.eye(left_block_sizes[left_qi], dtype=a.dtype))
+        ortho_qdata.append([left_qi, right_qi])
+        right_kept_blocks.append(left_qi)
+        right_qi += 1
+    right_block_sizes = [b.shape[1] for b in ortho_data]
+    right_block_slices = np.cumsum([0] + right_block_sizes)
+    right_qconj = a.legs[1].qconj
+    right_charges = a.chinfo.make_valid(right_qconj * (a.qtotal -
+                                                       left_leg.get_charge(right_kept_blocks)))
+    right_leg = LegCharge(a.chinfo, right_block_slices, right_charges, right_qconj)
+    ortho = Array([left_leg, right_leg], a.dtype, a.qtotal)
+    ortho._data = ortho_data
+    ortho._qdata = np.array(ortho_qdata, dtype=np.intp, order='C')
+    ortho._qdata_sorted = True
+
+    if len(piped_axes) > 0:  # revert the permutation in the axes
+        if 0 in piped_axes:
+            ortho = ortho.split_legs(0)
+    ortho.iset_leg_labels([a_labels[0], new_label])
+    return ortho
 
 
 def to_iterable_arrays(array_list):

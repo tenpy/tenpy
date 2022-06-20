@@ -5,77 +5,61 @@ Release Notes
 -------------
 TODO: Summarize the most important changes
 
-Many thanks to Wilhelm Kadow for great work on the mixed real- and momentum-space representation for models!
-
 Changelog
 ---------
 
 Backwards incompatible changes
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-- change default separator for :func:`tenpy.tools.misc.get_recursive`, :func:`~tenpy.tools.misc.set_recursive`, :func:`~tenpy.tools.misc.update_recursive`, and
-  :func:`~tenpy.tools.misc.flatten` to ``'.'`` instead of ``'/'``. 
-  Also, :func:`~tenpy.tools.misc.get_recursive` now supports a `default` argument.
-- replace the `orthogonal_to` option of :class:`tenpy.algorithms.mps_common.Sweep` by an `orthogonal_to` keyword argument for the class and it's :meth:`~tenpy.algorithms.mps_common.Sweep.init_env`.
-- deprecated options:
-  - `sweep_0` for sweep classes; use `sweeps` in the `resume_data` instead.
-- Require context-manager-style setup for Simulation classes.
-- Replace the `SingleSiteMixer` and `TwoSiteMixer` with the :class:`~tenpy.algorithms.dmrg.SubspaceExpansion`; major
-  rewriting of the mixer code.
-  Further, we now reactivate/reset the :class:`~tenpy.algorithms.dmrg.Mixer` whenever growing the bond dimension due to `chi_list` in DMRG.
-  The new option :cfg:option:`DMRGEngine.chi_list_reactivates_mixer` allows to disable this.
-- Renamed the `simulation_class_name` argument/parameter to `simulation_class` of :func:`~tenpy.simulations.simulation.run_simulation` 
-  for more consistency with remaining simulation parameters.
-
+- Add more fine grained sweep convergence checks for the :class:`~tenpy.algorithms.mps_common.VariationalCompression` (used when applying an MPO to an MPS!).
+  In this context, we renamed the parameter `N_sweeps` to :cfg:option:`VariationalCompression.max_sweeps`.
+  Further, we added the parameter :cfg:option:`VariationalCompression.min_sweeps` and :cfg:option:`VariationalCompression.tol_theta_diff`
+- Adjusted default paramters of :meth:`tenpy.networks.mps.InitialStateBuilder.randomized` to be as documented with better ``chi_max``.
+- No longer return `ov` from :func:`tenpy.linalg.lanczos.gram_schmidt`.
 
 Added
 ^^^^^
-- :class:`tenpy.models.mixed_xk.MixedXKLattice` and :class:`tenpy.models.mixed_xk.MixedXKModel` for models in mixed real- and momentum space representation on a cylinder.
-- :func:`tenpy.simulations.simulation.run_sequential_simulations`
-- :meth:`tenpy.networks.mps.MPSEnvironment.init_LP` and :meth:`~tenpy.networks.mps.MPSEnvironment.init_RP`, and
-  :meth:`tenpy.networks.mpo.MPOEnvironment.init_LP` and :meth:`~tenpy.networks.mpo.MPOEnvironment.init_RP` additionally
-  support the argument `start_env_sites`, which can now be part of the `init_env_data`.
-  This allows to converge MPO environments from scratch, given only the MPO and MPS, with a power-method.
-  The :class:`tenpy.networks.mpo.MPOTransferMatrix` was added for converging environments from scratch with Arnoldi.
-- Caching with the :mod:`tenpy.tools.cache.DictCache`, :mod:`tenpy.tools.cache.PickleCache`, and :mod:`tenpy.tools.cache.Hdf5Cache` to reduce memory requirements.
-  In that context, the keyword argument `cache` was added to the :class:`~tenpy.algorithms.algorithm.Algorithm` base class.
-- :meth:`tenpy.networks.mps.MPS.sample_measurements`.
-- equality test for :class:`~tenpy.linalg.charges.LegCharge`.
-- MPS with segment boundaries now keep track of unitaries at the boundaries in :attr:`~tenpy.networks.mps.MPS.segment_boundaries`.
-- :class:`~tenpy.simulations.simulation.OrthogonalExcitations` simulation class for finding excited states with DMRG.
-- :cfg:option:`Simulation.group_sites` for the simultion class.
-- `extract_segment` method for model, lattice and MPS/MPO classes.
-- :class:`~tenpy.algorithms.mpo_evolution.TimeDependentExpMPOEvolution` for time-dependent hamiltonians.
-- :func:`tenpy.tools.misc.merge_recursive` to merge nested parameter dictionaries.
-
+- Wrappers for the helical and irregular lattice (removing sites) in :meth:`~tenpy.models.model.CouplingMPOModel.init_lattice`.
+- Options `pos_diag_r`, `qtotal_Q` and `qconj_inner` for :func:`~tenpy.linalg.np_conserved.qr`.
+- :class:`tenpy.linalg.lanczos.Arnoldi` (and common base class :class:`~tenpy.linalg.lanczos.KrylovBased` with :class:`~tenpy.linalg.lanczos.LanczosGroundState`).
+- Allow to pass and merge multiple parameter files to ``tenpy-run`` from the command line.
+- Greatly expanded userguide on :doc:`/intro/simulations` and added more parameter examples.
+- Option `preserve_norm` for :class:`~tenpy.algorithms.mpo_evolution.ExpMPOEvolution`.
+- Allow non-trivial :attr:`~tenpy.models.lattice.Lattice.position_disorder` for lattices.
+- Option `fix_u` for :func:`~tenpy.simulations.measurement.onsite_expectation_value`.
+- Lattice :attr:`~tenpy.models.lattice.Lattice.cylinder_axis`.
+- Random number generator :attr:`~tenpy.models.model.Model.rng` for models.
+- :meth:`~tenpy.models.aklt.AKLTChain.psi_AKLT` for the exact MPS ground state of (spin-1/2) AKLT chain.
+- :func:`~tenpy.simulations.simulation.init_simulation` and :func:`~tenpy.simulations.simulation.init_simulation_from_checkpoint` for debugging or post-simulation measurement.
+- :func:`~tenpy.linalg.np_conserved.orthogonal_columns` constructing orthogonal columns to a given (rectangular) matrix.
+- :meth:`~tenpy.networks.mps.MPS.enlarge_chi` for artificially enlarging the bond dimension.
+- :class:`~tenpy.models.lattice.NLegLadder`, and more `pairs` (``'rung_NN', 'leg_NN', 'diagonal'``) for the :class:`~tenpy.models.lattice.Ladder`.
 
 Changed
 ^^^^^^^
-- :func:`tenpy.tools.misc.find_subclass` now directly raises an error if no subclass with that name is found.
-- Renamed the `logging_params` to `log_params`.
-- :func:`tenpy.simulations.measurement.correlation_length` now supports a `unit` keyword.
-  If it is not given explicitly, a warning is raised.
-- :func:`tenpy.networks.mps.MPS.canonical_form` now supports an argument `envs_to_update` to allow keeping
-  MPS/MPOEnvironments consistent.
-- keyword argument `sequential_simulations` for :meth:`tenpy.algorithms.algorithm.Algorithm.get_resume_data`.
-- Allow to select the distribution of the generated `U` for the :class:`~tenpy.algorithms.tebd.RandomUnitaryEvolution`.
-  For randomly perturbing an MPS in :meth:`~tenpy.networks.mps.InitialStateBuilder.randomized` or the new
-  :meth:`~tenpy.networks.mps.MPS.perturb`, select the distribution suitable to preserve the dtype of the MPS.
-- Rewriting of the :class:`~tenpy.algorithms.dmrg.DensityMatrixMixer`.
-- Generalize `conserve` argument of the :class:`~tenpy.networks.site.Site` subclasses, e.g. :class:`~tenpy.networks.site.SpinHalfSite`,
-  to handle `None` and `False` the same way as a string ``'None'``. The string is the new, documented way to disable charge
-  conservation.
-
+- Renamed ``tenpy.networks.mpo.MPOGraph.add_string`` to :meth:`~tenpy.networks.mpo.MPOGraph.add_string_left_to_right`
+  as part of the fix for :issue:`148`. Added similar :meth:`~tenpy.networks.mpo.MPOGraph.add_string_left_to_right`.
+- Automatically shift terms in :meth:`~tenpy.networks.mps.MPS.expectation_value_terms_sum` to start in the MPS unit cell for infinite MPS.
+- Possible ordering='folded' for the :class:`~tenpy.models.lattice.Ladder`.
+- Enhanced implementation of :meth:`~tenpy.networks.mps.MPS.canonical_form_infinite2` to replace :meth:`~tenpy.networks.mps.MPS.canonical_form_infinite`.
+- Split up :meth:`tenpy.networks.mpo.MPO.expectation_value` into :meth:`~tenpy.networks.mpo.MPO.expectation_value_finite`
+  and :meth:`~tenpy.networks.mpo.MPO.expectation_value_power` and add :meth:`tenpy.networks.mpo.MPO.expectation_value_TM`
+- Enhanced documentation of the lattices with more plots.
 
 Fixed
 ^^^^^
-- (!) Missing ``+ h.c.`` in :meth:`tenpy.networks.mpo.MPOEnvironment.full_contraction` when `H.explicit_plus_hc` was True.
-  This caused wrong energies being reported during DMRG when `explicit_plus_hc` was used.
-- (!) The DMRG mixers didn't respect/handle the `explicit_plus_hc` of MPOs correctly. This might have lead to an
-  insufficient subspace expandsion.
-- Always return `psi` in the :meth:`tenpy.algorithms.algorithm.Algorithm.get_resume_data`.
-  Optionally, this can be a copy, e.g. if `psi.canonical_form` needs to be called at the end of the algorithm, which would render the environments invalid.
-- Use logging in simulation only after calling :func:`~tenpy.tools.misc.setup_logging`.
-- :issue:`99` and :issue:`113` by allowing to either reinitialize the environment from scratch, 
-  and/or to updating the environments in psi.canonical_form().
-- :issue:`137` additional error check for :meth:`~tenpy.networks.mps.MPS.from_lat_product_state` with
-  :class:`~tenpy.models.lattice.HelicalLattice`.
+- :issue:`145` that :func:`~tenpy.networks.mpo.make_W_II` failed for MPOs with trivial virtual bonds.
+- Make :func:`~tenpy.linalg.np_conserved.detect_qtotal` more stable: use the maximal entry instead of the first non-zero one.
+- :issue:`148` that generating MPOs with long-range couplings over multiple MPS unit cells and multi-couplings raised errors.
+- The :func:`~tenpy.linalg.np_conserved.qr` decomposition with ``mode='complete'`` sometimes returned wrong charges.
+  Moreover, it sometimes gave zero columns in Q if the R part was completely zero for that charge block.
+- Adjust default `trunc_params` of :func:`~tenpy.networks.mps.MPS.compute_K` and :func:`~tenpy.networks.mps.MPS.permute_sites` to avoid too severe truncation.
+- (!) Non-trivial `start_time` parameter caused wrong evolution in :class:`~tenpy.algorithms.mpo_evolution.TimeDependentExpMPOEvolution`.
+- Make sure that :meth:`~tenpy.models.lattice.lat2mps_idx` doesn't modify arguments in place.
+- The power-method :meth:`tenpy.networks.mpo.MPO.expectation_value` did not work correctly for ``H.L != psi.L``.
+- :meth:`~tenpy.models.model.CouplingModel.add_local_term` did not work with `plus_hc=True`.
+- :meth:`tenpy.linalg.sparse.FlatLinearOperator.eigenvectors` did not always return orthogonal eigenvectors with well-defined charges.
+- Fix :class:`tenpy.linalg.sparse.FlatLinearOperator` to not use the full flat array, but just the block with nonzero entries (which can be much smaller for a few charges).
+  This is enabled over a new option `compact_flat` that defaults to True if the vector leg is blocked by charge (and charge_sector is not None).
+- Make ``cons_Sz='parity'`` for the :class:`~tenpy.networks.site.SpinHalfSite` non-trivial.
+- The first, initial measurements for time-dependent Hamiltonians might have used wrong time for sequential/resume run.
+- Index error in stopping criteria for Lanczos, :issue:`169`.

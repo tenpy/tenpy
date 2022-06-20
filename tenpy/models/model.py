@@ -37,7 +37,7 @@ import copy
 import logging
 logger = logging.getLogger(__name__)
 
-from .lattice import get_lattice, Lattice, TrivialLattice
+from .lattice import get_lattice, Lattice, TrivialLattice, HelicalLattice, IrregularLattice
 from ..linalg import np_conserved as npc
 from ..linalg.charges import QTYPE, LegCharge
 from ..tools.misc import to_array, add_with_None_0
@@ -46,7 +46,7 @@ from ..networks import mpo  # used to construct the Hamiltonian as MPO
 from ..networks.terms import OnsiteTerms, CouplingTerms, MultiCouplingTerms
 from ..networks.terms import ExponentiallyDecayingTerms, order_combine_term
 from ..networks.site import group_sites
-from ..tools.hdf5_io import Hdf5Exportable
+from ..tools.hdf5_io import Hdf5Exportable, ATTR_FORMAT
 
 __all__ = [
     'Model', 'NearestNeighborModel', 'MPOModel', 'CouplingModel', 'MultiCouplingModel',
@@ -90,10 +90,75 @@ class Model(Hdf5Exportable):
             if self.lat is not lattice:  # expect the *same instance*!
                 raise ValueError("Model.__init__() called with different lattice instances.")
 
+    @property
+    def rng(self):
+        """Reproducible numpy pseudo random number generator.
+
+        If you want to add randomness/disorder to your model,
+        it is recommended use this random number generator for reproducibility of the model::
+
+            self.rng.random(size=[3, 5])
+
+        Especially for models with time-dependence, you can/will otherwise end up generating a new
+        disordered at each time-step!
+
+        Options
+        -------
+        .. cfg:configoptions :: CouplingMPOModel
+
+            random_seed :: None | int
+                Defaults to 123456789. Seed for numpy pseudo random number generator which can
+                be used as e.g. ``self.rng.random(...)``.
+
+        """
+        rng = getattr(self, "_rng", None)
+        if rng is None:
+            seed = getattr(self, 'options', {}).get('random_seed', 123456789)
+            self._rng = rng = np.random.default_rng(seed=seed)
+        return rng
+
     def copy(self):
         """Shallow copy of self."""
         cp = copy.copy(self)
+        if hasattr(self, '_rng'):
+            cp._rng = copy.deepcopy(self._rng)
         return cp
+
+    def save_hdf5(self, hdf5_saver, h5gr, subpath):
+        """Export `self` into a HDF5 file.
+
+        Same as :meth:`~tenpy.tools.hdf5_io.Hdf5Exportable.save_hdf5`, but handle :attr:`rng`.
+        """
+        if hasattr(self, "_rng"):
+            rng = self._rng
+            del self._rng
+            try:
+                self._rng_state = rng.bit_generator.state
+                super().save_hdf5(hdf5_saver, h5gr, subpath)
+            finally:
+                self._rng = rng
+                del self._rng_state
+        else:
+            super().save_hdf5(hdf5_saver, h5gr, subpath)
+
+    @classmethod
+    def from_hdf5(cls, hdf5_loader, h5gr, subpath):
+        """Load instance from a HDF5 file.
+
+        Same as :meth:`~tenpy.tools.hdf5_io.Hdf5Exportable.from_hdf5`, but handle :attr:`rng`.
+        """
+        obj = super().from_hdf5(hdf5_loader, h5gr, subpath)
+        if hasattr(obj, '_rng_state'):
+            rng_state = obj._rng_state
+            # reconstruct random number generator from pickle state
+            # Will fail for custom RNGs, but I hope nobody needs that.
+            # If you do, simpy remove the :attr:`from_hdf5` and :attr:`save_hdf5` methods
+            # alltogether, such that it falls back to pickle protocol (with a warning...)
+            rng = np.random.Generator(getattr(np.random, rng_state['bit_generator'])())
+            rng.__setstate__(rng_state)
+            obj._rng = rng #np.random.Generator(bg)
+            del obj._rng_state
+        return obj
 
     def extract_segment(self, first=0, last=None, enlarge=None):
         """Return a (shallow) copy with extracted segment of MPS.
@@ -756,6 +821,8 @@ class CouplingModel(Model):
         if category is None:
             category = "local " + " ".join([op for op, i in term])
         sites = self.lat.mps_sites()
+        term, sign = order_combine_term(term, sites)
+        strength = strength * sign
         N = len(sites)
         if len(term) == 1:
             ot = self.onsite_terms.setdefault(category, OnsiteTerms(N))
@@ -779,7 +846,8 @@ class CouplingModel(Model):
         else:
             raise ValueError("empty term!")
         if plus_hc:
-            hc_term = [(sites[i % N].get_hc_op_name(op), i) for op, i in reversed(term)]
+            hc_term = [(sites[i % N].get_hc_op_name(op), self.lat.mps2lat_idx(i))
+                       for op, i in reversed(term)]
             self.add_local_term(np.conj(strength), hc_term, category, plus_hc=False)
 
     def add_onsite(self, strength, u, opname, category=None, plus_hc=False):
@@ -914,6 +982,8 @@ class CouplingModel(Model):
         strength : scalar | array
             Prefactor of the coupling. May vary spatially (see above). If an array of smaller size
             is provided, it gets tiled to the required shape.
+            A single scalar number can be given to indicate a coupling which is uniform accross
+            the lattice.
         u1 : int
             Picks the site ``lat.unit_cell[u1]`` for OP1.
         op1 : str
@@ -1155,7 +1225,8 @@ class CouplingModel(Model):
                            _deprecate_2=_DEPRECATED_ARG_NOT_SET,
                            op_string=None,
                            category=None,
-                           plus_hc=False):
+                           plus_hc=False,
+                           switchLR='middle_i'):
         r"""Add multi-site coupling terms to the Hamiltonian, summing over lattice sites.
 
         Represents couplings of the form
@@ -1210,6 +1281,9 @@ class CouplingModel(Model):
                 This is different from a plain ``'JW'``, which just applies a string on
                 *each* segment and gives wrong results e.g. for Cd-C-Cd-C terms!
 
+        switchLR : int | ``"middle_i" | "middle_op"``
+            See :meth:`~tenpy.networks.terms.MultiCouplingTerms.add_multi_coupling` for
+            details on possible choices.
         category : str
             Descriptive name used as key for :attr:`coupling_terms`.
             Defaults to a string of the form ``"{op0}_i {other_ops[0]}_j {other_ops[1]}_k ..."``.
@@ -1306,7 +1380,7 @@ class CouplingModel(Model):
             term, sign = order_combine_term(term, sites)
             args = ct.multi_coupling_term_handle_JW(current_strength * sign, term, sites,
                                                     op_string)
-            ct.add_multi_coupling_term(*args)
+            ct.add_multi_coupling_term(*args, switchLR=switchLR)
 
         # add h.c. term
         if plus_hc:
@@ -1316,7 +1390,8 @@ class CouplingModel(Model):
                                     hc_ops,
                                     op_string=op_string,
                                     category=category,
-                                    plus_hc=False)
+                                    plus_hc=False,
+                                    switchLR=switchLR)
         # done
 
     def add_multi_coupling_term(self,
@@ -1325,7 +1400,8 @@ class CouplingModel(Model):
                                 ops_ijkl,
                                 op_string,
                                 category=None,
-                                plus_hc=False):
+                                plus_hc=False,
+                                switchLR='middle_i'):
         """Add a general M-site coupling term on given MPS sites.
 
         Wrapper for ``self.coupling_terms[category].add_multi_coupling_term(...)``.
@@ -1353,6 +1429,9 @@ class CouplingModel(Model):
             Defaults to a string of the form ``"{op0}_i {op1}_j {op2}_k ..."``.
         plus_hc : bool
             If `True`, the hermitian conjugate of the term is added automatically.
+        switchLR : int | ``"middle_i" | "middle_op"``
+            See :meth:`~tenpy.networks.terms.MultiCouplingTerms.add_multi_coupling` for
+            details on possible choices.
         """
         if self.explicit_plus_hc:
             if plus_hc:
@@ -1369,7 +1448,7 @@ class CouplingModel(Model):
             self.coupling_terms[category] = new_ct = MultiCouplingTerms(self.lat.N_sites)
             new_ct += ct
             ct = new_ct
-        ct.add_multi_coupling_term(strength, ijkl, ops_ijkl, op_string)
+        ct.add_multi_coupling_term(strength, ijkl, ops_ijkl, op_string, switchLR)
         if plus_hc:
             sites_ijkl = [
                 self.lat.unit_cell[self.lat.order[i % self.lat.N_sites, -1]] for i in ijkl
@@ -1377,7 +1456,7 @@ class CouplingModel(Model):
             hc_ops = [site.get_hc_op_name(op) for site, op in zip(sites_ijkl, ops_ijkl)]
             # NB: op_string should be defined on all sites in the unit cell...
             hc_op_string = [site.get_hc_op_name(op) for site, op in zip(sites_ijkl, op_string)]
-            ct.add_multi_coupling_term(np.conj(strength), ijkl, ops_ijkl, op_string)
+            ct.add_multi_coupling_term(np.conj(strength), ijkl, ops_ijkl, op_string, switchLR)
 
     def add_exponentially_decaying_coupling(self,
                                             strength,
@@ -1812,7 +1891,8 @@ class CouplingMPOModel(CouplingModel, MPOModel):
                 The name of a lattice pre-defined in TeNPy to be initialized.
                 Alternatively, directly a subclass of :class:`Lattice` instead of the name.
                 Alternatively, a (possibly self-defined) :class:`Lattice` instance.
-                In the latter case, no further parameters are read out.
+                If an instance is given, none of the further options described here are read out,
+                since they are already given inside the lattice instance!
             bc_MPS : str
                 Boundary conditions for the MPS.
             order : str
@@ -1828,11 +1908,11 @@ class CouplingMPOModel(CouplingModel, MPOModel):
                 `Lx` is the number of "rings" in the infinite MPS unit cell,
                 while `Ly` gives the circumference around the cylinder or width of th the rung
                 for a ladder (depending on `bc_y`).
-            bc_y : str
-               ``"cylinder" | "ladder"``; only read out for 2D lattices.
-               The boundary conditions in y-direction.
-            bc_x : str
-                ``"open" | "periodic"``.
+            bc_y : ``"cylinder" | "ladder" | "open" | "periodic"``
+                The boundary conditions in y-direction.
+                Only read out for 2D lattices.
+                "cylinder" is equivalent to "periodic", "ladder" is equivalent to "open".
+            bc_x : ``"open" | "periodic"``.
                 Can be used to force "periodic" boundaries for the lattice,
                 i.e., for the couplings in the Hamiltonian, even if the MPS is finite.
                 Defaults to ``"open"`` for ``bc_MPS="finite"`` and
@@ -1841,6 +1921,13 @@ class CouplingMPOModel(CouplingModel, MPOModel):
                 *not* use "periodic" boundary conditions.
                 (The MPS is still "open", so this will introduce long-range
                 couplings between the first and last sites of the MPS!)
+            helical: ``None`` | int
+                If not ``None``, wrap the lattice into a
+                :class:`~tenpy.models.lattice.HelicalLattice` with the given int as `N_unit_cells`.
+            irregular_remove : ``None`` | 2D array
+                If not ``None``, wrap the lattice into a
+                :class:`~tenpy.models.lattice.IrregularLattice` removing the specified sites.
+                To add sites, you need to overwrite the `init_lattice` method in a custom model.
         """
         lat = model_params.get('lattice', self.default_lattice)
         if isinstance(lat, str):
@@ -1867,12 +1954,21 @@ class CouplingMPOModel(CouplingModel, MPOModel):
                 Lx = model_params.get('Lx', 1)
                 Ly = model_params.get('Ly', 4)
                 bc_y = model_params.get('bc_y', 'cylinder')
-                assert bc_y in ['cylinder', 'ladder']
-                bc_y = 'periodic' if bc_y == 'cylinder' else 'open'
+                assert bc_y in ['cylinder', 'ladder', 'open', 'periodic']
+                if bc_y == 'cylinder':
+                    bc_y = 'periodic'
+                elif bc_y == 'ladder':
+                    bc_y = 'open'
                 lat = LatticeClass(Lx, Ly, sites, order=order, bc=[bc_x, bc_y], bc_MPS=bc_MPS)
             else:
                 raise ValueError("Can't auto-determine parameters for the lattice. "
                                  "Overwrite the `init_lattice` in your model!")
+            helical = model_params.get('helical_lattice', None)
+            if helical is not None:
+                lat = HelicalLattice(lat, helical)
+            irregular_remove = model_params.get('irregular_remove', None)
+            if irregular_remove is not None:
+                lat = IrregularLattice(lat, remove=irregular_remove)
         # else: a lattice was already provided
         # now, `lat` is an instance of the LatticeClass
         assert isinstance(lat, Lattice)

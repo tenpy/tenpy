@@ -782,16 +782,43 @@ def test_expm(size=10):
 
 def test_qr():
     for shape in [(4, 4), (6, 8), (8, 6)]:
-        for qtotal in [None, [1]]:
-            print("qtotal=", qtotal, "shape =", shape)
-            A = random_Array(shape, chinfo3, qtotal=qtotal, sort=False)
+        tol = shape[0] * shape[1] * 100
+        for qtotal_A in [None, [1]]:
+            A = random_Array(shape, chinfo3, qtotal=qtotal_A, sort=False)
             A_flat = A.to_ndarray()
-            q, r = npc.qr(A, 'reduced')
-            print(q._qdata)
-            q.test_sanity()
-            r.test_sanity()
-            qr = npc.tensordot(q, r, axes=1)
-            npt.assert_array_almost_equal_nulp(A_flat, qr.to_ndarray(), shape[0] * shape[1] * 100)
+            for qtotal_Q in [None, [1]]:
+                for mode in ['reduced', 'complete']:
+                    for qconj in [+1, -1]:
+                        for pos in [False, True]:
+                            print(f"shape={shape!s} qtot_A={qtotal_A!s} qtot_Q={qtotal_Q!s}"
+                                  f"mode={mode!s} pos_diag_R={pos!s} inner_qconj={qconj:+d}")
+                            Q, R = npc.qr(A, mode=mode, pos_diag_R=pos, qtotal_Q=qtotal_Q,
+                                          inner_qconj=qconj)
+                            #  print(q._qdata)
+                            Q.test_sanity()
+                            R.test_sanity()
+                            assert np.all(Q.qtotal) == A.chinfo.make_valid(qtotal_Q)
+                            assert R.legs[0].qconj == qconj
+                            QR = npc.tensordot(Q, R, axes=1)
+                            npt.assert_array_almost_equal_nulp(A_flat, QR.to_ndarray(), tol)
+                            QdaggerQ = npc.tensordot(Q.conj(), Q, axes=[0, 0])
+                            assert npc.norm(QdaggerQ - npc.eye_like(QdaggerQ)) < 1.e-10
+
+
+def test_orthogonal_columns():
+    for shape in [(8, 6), (8, 2)]:
+        tol = shape[0] * shape[1] * 100
+        for qtotal_A in [None, [1]]:
+            A = random_Array(shape, chinfo3, qtotal=qtotal_A, sort=False)
+            A_flat = A.to_ndarray()
+            ortho = npc.orthogonal_columns(A)
+            ortho.test_sanity()
+            ortho_flat = ortho.to_ndarray()
+            # check orthogonality to A_flat
+            assert np.linalg.norm(A_flat.T.conj().dot(ortho_flat)) < tol * 1.e-15
+            # check orthonormality of columns
+            orthonormal = ortho_flat.T.conj().dot(ortho_flat)
+            npt.assert_almost_equal(orthonormal, np.eye(orthonormal.shape[0]), decimal=14)
 
 
 def test_charge_detection():
