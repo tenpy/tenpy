@@ -537,6 +537,8 @@ class OldTDVPEngine(TimeEvolutionAlgorithm):
 
                 s = self.update_s_h0(s, H, 1j * 0.5 * self.dt)
                 s = s / np.linalg.norm(s.to_ndarray())
+            else:
+                self.psi.set_B(j, npc.tensordot(self.psi.get_B(j), V, axes=['vR', 'vL']), form='B')
 
     def sweep_left_right_two(self):
         """Performs the sweep left->right of the second order TDVP scheme with two sites update.
@@ -615,6 +617,10 @@ class OldTDVPEngine(TimeEvolutionAlgorithm):
 
                 s = self.update_s_h0(s, H, 1j * 0.5 * self.dt)
                 s = s / np.linalg.norm(s.to_ndarray())
+            else:
+                # overwrites previous Bj
+                self.psi.set_B(j, npc.tensordot(V, self.psi.get_B(j, form='A'),
+                                                axes=['vR', 'vL']), form='A')
 
     def sweep_right_left_two(self):
         """Performs the sweep left->right of the second order TDVP scheme with two sites update.
