@@ -2,7 +2,7 @@
 
 Many MPS-based algorithms use a 'sweep' structure, wherein local updates are
 performed on the MPS tensors sequentially, first from left to right, then from
-right to left. This procedure is common to DMRG, TDVP, sequential time evolution,
+right to left. This procedure is common to DMRG, TDVP, MPO-based time evolution,
 etc.
 
 Another common feature of these algorithms is the use of an effective local
@@ -151,7 +151,12 @@ class Sweep(Algorithm):
         if not sequential_simulations:
             data['sweeps'] = self.sweeps
             if len(self.ortho_to_envs) > 0:
-                data['orthogonal_to'] = [e.ket for e in self.ortho_to_envs]
+                if self.bc == 'finite':
+                    data['orthogonal_to'] = [e.ket for e in self.ortho_to_envs]
+                else:
+                    # need the environments as well
+                    data['orthogonal_to'] = [e.get_initialization_data(include_ket=True)
+                                            for e in self.ortho_to_envs]
         return data
 
     @property

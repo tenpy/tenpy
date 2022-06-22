@@ -4678,7 +4678,7 @@ class MPSEnvironment:
                                        *preload)
         self.cache.preload(*preload)
 
-    def get_initialization_data(self, first=0, last=None):
+    def get_initialization_data(self, first=0, last=None, include_bra=False, include_ket=False):
         """Return data for (re-)initialization of the environment.
 
         Parameters
@@ -4686,6 +4686,8 @@ class MPSEnvironment:
         first, last : int
             The first and last site, to the left and right of which we should return the
             environments.  Defaults to 0 and :attr:`L` - 1.
+        include_bra, include_ket : bool
+            Whether to also return the :attr:`bra` and :attr:`ket`, respectively.
 
         Returns
         -------
@@ -4698,12 +4700,19 @@ class MPSEnvironment:
             age_LP, age_RP : int
                 The number of physical sites involved into the contraction yielding `init_LP` and
                 `init_RP`, respectively.
+            bra, ket : :class:`~tenpy.networks.mps.MPS`
+                References of :attr:`bra` and :attr:`ket`.
+                Only included if `include_bra` and `include_ket` are True, respectively.
         """
         if last is None:
             last = self.L - 1
         data = {'init_LP': self.get_LP(first, True), 'init_RP': self.get_RP(last, True)}
         data['age_LP'] = self.get_LP_age(first)
         data['age_RP'] = self.get_RP_age(last)
+        if include_bra:
+            data['bra'] = self.bra
+        if include_ket:
+            data['ket'] = self.ket
         return data
 
     def full_contraction(self, i0):

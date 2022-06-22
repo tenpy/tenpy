@@ -65,3 +65,4 @@ Fixed
 - Make ``cons_Sz='parity'`` for the :class:`~tenpy.networks.site.SpinHalfSite` non-trivial.
 - The first, initial measurements for time-dependent Hamiltonians might have used wrong time for sequential/resume run.
 - Index error in stopping criteria for Lanczos, :issue:`169`.
+- Fix for resuming simulations with `orthogonal_to`: carry on the environments!
