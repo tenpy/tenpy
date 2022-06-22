@@ -12,7 +12,7 @@ from tenpy.networks.mps import MPS
 def test_tdvp():
     """compare overlap from TDVP with TEBD """
     L = 8
-    chi = 20
+    chi = 20  # no truncation necessary!
     delta_t = 0.01
     parameters = {
         'L': L,
@@ -56,17 +56,20 @@ def test_tdvp():
     psi_tdvp = psi.copy()
     tebd_engine = tebd.TEBDEngine(psi, M, tebd_params)
     tdvp2_engine = tdvp.TwoSiteTDVPEngine(psi_tdvp, M, tdvp_params)
-    for _ in range(10):
+    for _ in range(3):
         tebd_engine.run()
         tdvp2_engine.run()
         ov = psi.overlap(psi_tdvp)
-        assert np.abs(1 - np.abs(ov)) < 1e-10
+        print(tdvp2_engine.evolved_time, "ov = 1. - ", ov - 1.)
+        assert np.abs(1 - ov) < 1e-5
 
     # now compare TEBD and 1-site TDVP (constant bond dimension)
     tdvp_params['start_time'] = tdvp2_engine.evolved_time
     tdvp1_engine = tdvp.SingleSiteTDVPEngine(psi_tdvp, M, tdvp_params)
-    for _ in range(10):
+    print('single-site tdvp')
+    for _ in range(3):
         tebd_engine.run()
         tdvp1_engine.run()
         ov = psi.overlap(psi_tdvp)
-        assert np.abs(1 - np.abs(ov)) < 1e-10
+        print(tdvp1_engine.evolved_time, "ov = 1. - ", ov - 1.)
+        assert np.abs(1 - np.abs(ov)) < 1e-5

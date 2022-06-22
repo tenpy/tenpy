@@ -406,7 +406,7 @@ class Sweep(Algorithm):
             rigth (`True`) of the current one, and `update_LP`, `update_RP` indicate
             whether it is necessary to update the `LP` and `RP` of the environments.
         """
-        # warning: only those `LP` and `RP` that can/will be used later again should be set to True
+        # warning: set only those `LP` and `RP` to True, which can/will be used later again
         # otherwise, the assumptions in :meth:`free_no_longer_needed_envs` will not hold,
         # and you need to update that method as well!
         L = self.psi.L
@@ -525,8 +525,8 @@ class Sweep(Algorithm):
         Returns
         -------
         update_data : dict
-            Data to be processed by :meth:`post_update_local`, e.g. containing the truncation
-            error as `err`.
+            Data to be processed by :meth:`update_env` and :meth:`post_update_local`,
+            e.g. containing the truncation error as `err`.
             If :attr:`combine` is set, it should also contain the `U` and `VH` from the SVD.
         """
         raise NotImplementedError("needs to be overridden by subclass")
@@ -547,7 +547,6 @@ class Sweep(Algorithm):
             env.del_RP(i_L)
         # possibly recalculated updated center bonds
         update_LP, update_RP = self.update_LP_RP
-        combine = self.combine
         if update_LP:
             self.eff_H.update_LP(self.env, i_R, update_data['U'])  # possibly optimized
             for env in self.ortho_to_envs:
@@ -599,18 +598,19 @@ class Sweep(Algorithm):
                 # so current RP[i_R] is useless
                 for env in all_envs:
                     env.del_RP(i_R)
-            return  # n = 2 finished
-        # here n = 1
-        if self.move_right and update_RP:
-            # will update site i_L coming from the left in the future
-            # so current LP[i_L] is useless
-            for env in all_envs:
-                env.del_LP(i_L)
-        elif not self.move_right and update_LP:
-            # will update site i_R coming from the right in the future
-            # so current RP[i_R] is useless
-            for env in all_envs:
-                env.del_RP(i_R)
+        elif n == 1:
+            if self.move_right and update_RP:
+                # will update site i_L coming from the left in the future
+                # so current LP[i_L] is useless
+                for env in all_envs:
+                    env.del_LP(i_L)
+            elif not self.move_right and update_LP:
+                # will update site i_R coming from the right in the future
+                # so current RP[i_R] is useless
+                for env in all_envs:
+                    env.del_RP(i_R)
+        else:
+            assert False, "n_optimize != 1, 2"
         self.eff_H = None  # free references to environments held by eff_H
         # done
 
