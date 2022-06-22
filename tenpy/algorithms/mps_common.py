@@ -54,9 +54,6 @@ class Sweep(Algorithm):
     left-right over the MPS (for infinite MPS: over the MPS unit cell).
     Examples for such algorithms are DMRG, TDVP, and variational compression.
 
-    .. todo ::
-        TDVP is currently not implemented with the sweep class.
-
     Parameters
     ----------
     psi, model, options, **kwargs:
