@@ -6,13 +6,20 @@ The general idea of the algorithm is to project the quantum time evolution in th
 with a given bond dimension. Compared to e.g. TEBD, the algorithm has several advantages:
 e.g. it conserves the unitarity of the time evolution and the energy (for the single-site version),
 and it is suitable for time evolution of Hamiltonian with arbitrary long range in the form of MPOs.
-We have implemented the one-site formulation which **does not** allow for growth of the bond dimension,
-and the two-site algorithm which does allow the bond dimension to grow - but requires truncation as in the TEBD case.
-Much of the code is very similar as in DMRG, also based on the class :class:`~tenpy.algorithms.mps_common.Sweep`.
+We have implemented:
+1. The one-site formulation following the TDVP princible in :class:`SingleSiteTDVPEngine`,
+   which **does not** allow for growth of the bond dimension.
+   2. The two-site algorithm in the :Class:`TwoSiteDMRGEngine`, which does allow the bond
+   dimension to grow - but requires truncation as in the TEBD case, and is no longer strictly TDVP,
+   i.e. it does *not* strictly preserve the energy.
+
+Much of the code is very similar to DMRG, and also based on the
+:class:`~tenpy.algorithms.mps_common.Sweep` class.
 
 .. warning ::
-    The interface changed compared to the previous version. Using :class:`TDVPEngine`
-    will result in a error. Use :class:`SingleSiteTDVPEngine` or :class:`TwoSiteTDVPEngine` instead.
+    The interface changed compared to version 0.9.0: Using :class:`TDVPEngine` will result
+    in a error. Use :class:`SingleSiteTDVPEngine` or :class:`TwoSiteTDVPEngine` instead.
+    The old code is still around as :class:`OldTDVPEngine`.
 
 .. todo ::
     extend code to infinite MPS
@@ -37,7 +44,6 @@ logger = logging.getLogger(__name__)
 
 __all__ = ['TDVPEngine', 'SingleSiteTDVPEngine', 'TwoSiteTDVPEngine',
            'OldTDVPEngine', 'Engine', 'H0_mixed', 'H1_mixed', 'H2_mixed']
-
 
 
 class TDVPEngine(TimeEvolutionAlgorithm, Sweep):
@@ -233,6 +239,7 @@ class TwoSiteTDVPEngine(TDVPEngine):
         self.trunc_err = self.trunc_err + err
         self.trunc_err_list.append(err.eps)  # avoid error in return of sweep()
 
+
 class SingleSiteTDVPEngine(TDVPEngine):
     """Engine for the single-site TDVP algorithm.
 
@@ -283,7 +290,7 @@ class SingleSiteTDVPEngine(TDVPEngine):
 
         dt = self.dt
         if i0 == L - 1:
-            dt = 2. * dt  # instead of updating the last pair of sites twice, we double the time
+            dt = 2. * dt  # instead of updating the last site twice, we double the time
 
         # update one-site wavefunction
         theta, N = LanczosEvolution(self.eff_H, theta, self.lanczos_options).run(-0.5j * dt)
@@ -306,14 +313,15 @@ class SingleSiteTDVPEngine(TDVPEngine):
         self.psi.set_SR(i0, S)
         # note that i0 == L - 1 is left moving,
         # so we always do a zero-site update
+
         self.env.del_LP(i0 + 1)
         self.eff_H.update_LP(self.env, i0 + 1, U)
-
         theta = VH.iscale_axis(S, 'vL')
         theta, H0 = self.zero_site_update(i0 + 1, theta, 0.5j * self.dt)
         U2, S2, VH2 = npc.svd(theta, inner_labels=['vR', 'vL'])  # no truncation
         A0 = npc.tensordot(A0, U2, ['vR', 'vL'])
         self.psi.set_B(i0, A0, form='A')
+        # TODO: do we need this?
         LP = npc.tensordot(H0.LP, U2, ['vR', 'vL'])
         LP = npc.tensordot(U2.conj(), LP, ['vL*', 'vR*'])
         self.env.set_LP(i0 + 1, LP, self.env.get_LP_age(i0) + 1)
@@ -331,11 +339,6 @@ class SingleSiteTDVPEngine(TDVPEngine):
         else:
             theta = theta.combine_legs(['p0', 'vR'], qconj=-1, new_axes=1)
         U, S, VH = npc.svd(theta, qtotal_LR=[None, theta.qtotal], inner_labels=['vR', 'vL'])
-        #  qtotal = [None, theta.qtotal]
-        #  U, S, VH, err, _ = svd_theta(theta,
-        #                               self.trunc_params,
-        #                               qtotal_LR=qtotal,
-        #                               inner_labels=['vR', 'vL'])
 
         if i0 == 0:
             assert U.shape == (1, 1)
@@ -348,17 +351,18 @@ class SingleSiteTDVPEngine(TDVPEngine):
         update_data = {'U': U, 'VH': VH}
 
         if i0 != 0:
-            #  self.env.del_RP(i0 - 1)
-            #  self.eff_H.update_RP(self.env, i0 - 1, VH)
+            self.env.del_RP(i0 - 1)
+            self.eff_H.update_RP(self.env, i0 - 1, VH)
             theta = U.iscale_axis(S, 'vR')
             theta, H0 = self.zero_site_update(i0, theta, 0.5j * self.dt)
             U2, S2, VH2 = npc.svd(theta, inner_labels=['vR', 'vL'])  # no truncation
             B1 = npc.tensordot(VH2, B1, ['vR', 'vL'])
             self.psi.set_B(i0, B1, form='B')
-            update_data['VH'] = npc.tensordot(VH2, update_data['VH'], ['vR', 'vL'])
-            #  RP = npc.tensordot(VH2, H0.RP, ['vR', 'vL'])
-            #  RP = npc.tensordot(RP, VH2.conj(), ['vL*', 'vR*'])
-            #  self.env.set_RP(i0 - 1, RP, self.env.get_RP_age(i0) + 1)
+            update_data['VH'] = npc.tensordot(VH2, VH, ['vR', 'vL'])
+            # TODO: do we need this?
+            RP = npc.tensordot(VH2, H0.RP, ['vR', 'vL'])
+            RP = npc.tensordot(RP, VH2.conj(), ['vL*', 'vR*'])
+            self.env.set_RP(i0 - 1, RP, self.env.get_RP_age(i0) + 1)
             next_A = self.psi.get_B(i0 - 1, form='A')
             next_A = npc.tensordot(next_A, U2, axes=['vR', 'vL'])
             self.psi.set_B(i0 - 1, next_A, form='A')  # left-canonical
