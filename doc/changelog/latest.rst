@@ -3,13 +3,15 @@
 
 Release Notes
 -------------
-TODO: Summarize the most important changes
+Backwards-incompatible rewrite of TDVP!
 
 Changelog
 ---------
 
 Backwards incompatible changes
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+- Replace the :class:`~tenpy.algorithms.tdvp.TDVPEngine` with a new version. 
+  The previous one is for now still available as :class:`~tenpy.algorithms.tdvp.OldTDVPEngine`.
 - Add more fine grained sweep convergence checks for the :class:`~tenpy.algorithms.mps_common.VariationalCompression` (used when applying an MPO to an MPS!).
   In this context, we renamed the parameter `N_sweeps` to :cfg:option:`VariationalCompression.max_sweeps`.
   Further, we added the parameter :cfg:option:`VariationalCompression.min_sweeps` and :cfg:option:`VariationalCompression.tol_theta_diff`
@@ -32,6 +34,8 @@ Added
 - :func:`~tenpy.simulations.simulation.init_simulation` and :func:`~tenpy.simulations.simulation.init_simulation_from_checkpoint` for debugging or post-simulation measurement.
 - :func:`~tenpy.linalg.np_conserved.orthogonal_columns` constructing orthogonal columns to a given (rectangular) matrix.
 - :meth:`~tenpy.networks.mps.MPS.enlarge_chi` for artificially enlarging the bond dimension.
+- :class:`~tenpy.models.lattice.NLegLadder`, and more `pairs` (``'rung_NN', 'leg_NN', 'diagonal'``) for the :class:`~tenpy.models.lattice.Ladder`.
+- :meth:`tenpy.algorithms.Algorithm.switch_engine` for simplified switching from e.g. the `TwoSiteDMRGEngine` to the `SingleSiteDMRGEngine`.
 
 Changed
 ^^^^^^^
@@ -42,6 +46,7 @@ Changed
 - Enhanced implementation of :meth:`~tenpy.networks.mps.MPS.canonical_form_infinite2` to replace :meth:`~tenpy.networks.mps.MPS.canonical_form_infinite`.
 - Split up :meth:`tenpy.networks.mpo.MPO.expectation_value` into :meth:`~tenpy.networks.mpo.MPO.expectation_value_finite`
   and :meth:`~tenpy.networks.mpo.MPO.expectation_value_power` and add :meth:`tenpy.networks.mpo.MPO.expectation_value_TM`
+- Enhanced documentation of the lattices with more plots.
 
 Fixed
 ^^^^^
@@ -60,3 +65,5 @@ Fixed
   This is enabled over a new option `compact_flat` that defaults to True if the vector leg is blocked by charge (and charge_sector is not None).
 - Make ``cons_Sz='parity'`` for the :class:`~tenpy.networks.site.SpinHalfSite` non-trivial.
 - The first, initial measurements for time-dependent Hamiltonians might have used wrong time for sequential/resume run.
+- Index error in stopping criteria for Lanczos, :issue:`169`.
+- Fix for resuming simulations with `orthogonal_to`: carry on the environments!

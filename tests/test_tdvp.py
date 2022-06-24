@@ -1,104 +1,43 @@
 #!/usr/bin/python2
 # Copyright 2019-2021 TeNPy Developers, GNU GPLv3
 import numpy as np
-import copy
-import pickle
-import tenpy.linalg.np_conserved as npc
-import tenpy.models.spins
-import tenpy.networks.mps as mps
-import tenpy.networks.site as site
+import pytest
+from tenpy.models.spins import SpinChain
 from tenpy.algorithms import tdvp
 from tenpy.algorithms import tebd
-import sys
-import tdvp_numpy
-import tenpy.networks.mpo
-import tenpy.models.model as model
-import tenpy.models.lattice
 from tenpy.networks.mps import MPS
-from tenpy.tools.misc import inverse_permutation
-import pytest
-
-
-# TODO: no need to convert everything to numpy...
-# just compare the np_conserved TEBD with np_conserved TDVP, using mps.overlap()
-# or even better: directly compare to ED for small system
-def overlap(mps1, mps2):
-    """Calculate overlap <self|mps2>.
-
-    Performs conjugation of self!
-    """
-    X = np.ones((1, 1))
-    L = len(mps1)
-    for i in range(0, L):
-        tmp = np.tensordot(X, np.conj(mps1[i]), axes=[[0], [1]])
-        X = np.tensordot(tmp, mps2[i], axes=[[0, 1], [1, 0]])
-    overlap = X.reshape(())
-    return overlap
 
 
 @pytest.mark.slow
-def test_tdvp():
-    L = 10
-    J = 1
-    chi = 20
+def test_tdvp(eps=1.e-5):
+    """compare overlap from TDVP with TEBD """
+    L = 8
+    chi = 20  # no truncation necessary!
     delta_t = 0.01
     parameters = {
         'L': L,
         'S': 0.5,
-        'conserve': 'Sz',
-        'Jz': 1.0,
-        'Jy': 1.0,
+        'conserve': None,
         'Jx': 1.0,
-        'hx': 0.0,
-        'hy': 0.0,
-        'hz': 0.0,
-        'muJ': 0.0,
+        'Jy': 1.0,
+        'Jz': 1.0,
+        'hx': np.random.random(L),
+        'hz': np.random.random(L),
         'bc_MPS': 'finite',
     }
 
-    heisenberg = tenpy.models.spins.SpinChain(parameters)
-    H_MPO = heisenberg.H_MPO
-    h_test = []
-    for i_sites in range(H_MPO.L):
-        h_test.append(H_MPO.get_W(i_sites).transpose(['wL', 'wR', 'p*', 'p']).to_ndarray())
+    M = SpinChain(parameters)
+    # prepare system in product state
+    product_state = ["up", "down"] * (L // 2)
+    psi_tebd = MPS.from_product_state(M.lat.mps_sites(), product_state, bc=M.lat.bc_MPS)
 
-    def random_prod_state_tenpy(L, a_model):
-        product_state = []
-        #the numpy mps used to compare
-        psi_compare = []
-        sz = 2. * np.random.randint(0, 2, size=L) - 1.0
-        for i in range(L):
-            psi_compare.append(np.zeros((2, 1, 1)))
-            if sz[i] > 0:
-                product_state += ["up"]
-                psi_compare[-1][0, 0, 0] = 1
-            else:
-                product_state += ["down"]
-                psi_compare[-1][1, 0, 0] = 1
-
-        psi = MPS.from_product_state(a_model.lat.mps_sites(),
-                                     product_state,
-                                     bc=a_model.lat.bc_MPS,
-                                     form='B')
-        psi_converted = []
-        for i in range(L):
-            site = psi.sites[i]
-            perm = site.perm
-            B_tmp = psi.get_B(i).transpose(['p', 'vL', 'vR']).to_ndarray()
-            B = B_tmp[inverse_permutation(perm), :, :]
-            B = B[::-1, :, :]
-            psi_converted.append(B)
-
-        return psi
-
-    psi = random_prod_state_tenpy(heisenberg.lat.N_sites, heisenberg)
-    N_steps = 50
+    N_steps = 2
     tebd_params = {
-        'order': 2,
+        'order': 4,
         'dt': delta_t,
         'N_steps': N_steps,
         'trunc_params': {
-            'chi_max': 50,
+            'chi_max': chi,
             'svd_min': 1.e-10,
             'trunc_cut': None
         }
@@ -109,51 +48,36 @@ def test_tdvp():
         'dt': delta_t,
         'N_steps': N_steps,
         'trunc_params': {
-            'chi_max': 50,
+            'chi_max': chi,
             'svd_min': 1.e-10,
             'trunc_cut': None
         }
     }
 
-    psi_tdvp2 = copy.deepcopy(psi)
-    engine = tebd.TEBDEngine(psi, heisenberg, tebd_params)
-    tdvp_engine = tdvp.TDVPEngine(psi_tdvp2, heisenberg, tdvp_params)
-    engine.run()
-    tdvp_engine.run_two_sites(N_steps)
-    ov = psi.overlap(psi_tdvp2)
-    print("overlap TDVP and TEBD")
-    psi = engine.psi
-    print("difference")
-    print(np.abs(1 - np.abs(ov)))
-    assert np.abs(1 - np.abs(ov)) < 1e-10
-    print("two sites tdvp works")
+    # start by comparing TEBD and 2-site TDVP (increasing bond dimension)
+    psi_tdvp = psi_tebd.copy()
+    tebd_engine = tebd.TEBDEngine(psi_tebd, M, tebd_params)
+    tdvp2_engine = tdvp.TwoSiteTDVPEngine(psi_tdvp, M, tdvp_params)
+    for _ in range(3):
+        tebd_engine.run()
+        tdvp2_engine.run()
+        ov = psi_tebd.overlap(psi_tdvp)
+        print(tdvp2_engine.evolved_time, "ov = 1. - ", ov - 1.)
+        assert np.abs(1 - ov) < eps
+        Sz_tebd = psi_tebd.expectation_value('Sz')
+        Sz_tdvp = psi_tdvp.expectation_value('Sz')
+        assert np.max(np.abs(Sz_tebd - Sz_tdvp)) < eps
 
-    # test that the initial conditions are the same
-
-    tdvp_engine = tdvp.TDVPEngine(psi, heisenberg, tdvp_params)
-    psit_compare = []
-    for i in range(L):
-        B_tmp = psi.get_B(i).transpose(['p', 'vL', 'vR']).to_ndarray()
-        B = B_tmp[::-1, :, :]
-        psit_compare.append(B)
-    #**********************************************************************************************************
-    #Initialize TDVP
-    tdvp_params = {
-        'start_time': 0,
-        'dt': delta_t,
-        'N_steps': 1,
-    }
-    tdvp_engine = tdvp.TDVPEngine(psi, heisenberg, tdvp_params)
-    for t in range(10):
-        tdvp_engine.run_one_site(N_steps=1)
-        psit_compare, Rp_list, spectrum = tdvp_numpy.tdvp(psit_compare,
-                                                          h_test,
-                                                          0.5 * 1j * delta_t,
-                                                          Rp_list=None)
-        psit_ = []
-    for i in range(L):
-        B = psi.get_B(i).transpose(['p', 'vL', 'vR']).to_ndarray()
-        B = B[::-1, :, :]
-        psit_.append(B)
-    assert np.abs(np.abs(overlap(psit_, psit_compare)) - 1.0) < 1e-13
-    print("one site TDVP works")
+    # now compare TEBD and 1-site TDVP (constant bond dimension)
+    tdvp_params['start_time'] = tdvp2_engine.evolved_time
+    tdvp1_engine = tdvp.SingleSiteTDVPEngine(psi_tdvp, M, tdvp_params)
+    print('single-site tdvp')
+    for _ in range(3):
+        tebd_engine.run()
+        tdvp1_engine.run()
+        ov = psi_tebd.overlap(psi_tdvp)
+        print(tdvp1_engine.evolved_time, "ov = 1. - ", ov - 1.)
+        assert np.abs(1 - np.abs(ov)) < 1e-5
+        Sz_tebd = psi_tebd.expectation_value('Sz')
+        Sz_tdvp = psi_tdvp.expectation_value('Sz')
+        assert np.max(np.abs(Sz_tebd - Sz_tdvp)) < eps
