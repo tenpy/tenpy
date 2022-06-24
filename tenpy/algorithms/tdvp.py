@@ -295,10 +295,10 @@ class SingleSiteTDVPEngine(TDVPEngine):
         # update one-site wavefunction
         theta, N = LanczosEvolution(self.eff_H, theta, self.lanczos_options).run(-0.5j * dt)
         if self.move_right:
-            update_data = self.right_moving_update(i0, theta)
+            self.right_moving_update(i0, theta)
         else:
-            update_data = self.left_moving_update(i0, theta)
-        return update_data  # no truncation error in single-site TDVP!
+            self.left_moving_update(i0, theta)
+        return {}  # no truncation error in single-site TDVP!
 
     def right_moving_update(self, i0, theta):
         if self.combine:
@@ -307,31 +307,17 @@ class SingleSiteTDVPEngine(TDVPEngine):
             theta = theta.combine_legs(['vL', 'p0'], qconj=+1, new_axes=0)
         U, S, VH = npc.svd(theta, qtotal_LR=[theta.qtotal, None], inner_labels=['vR', 'vL'])
         # no truncation
-
         A0 = U.split_legs(['(vL.p0)']).replace_label('p0', 'p')
         self.psi.set_B(i0, A0, form='A')  # left-canonical
         self.psi.set_SR(i0, S)
-        # note that i0 == L - 1 is left moving,
-        # so we always do a zero-site update
 
-        self.env.del_LP(i0 + 1)
-        self.eff_H.update_LP(self.env, i0 + 1, U)
-        theta = VH.iscale_axis(S, 'vL')
-        theta, H0 = self.zero_site_update(i0 + 1, theta, 0.5j * self.dt)
-        U2, S2, VH2 = npc.svd(theta, inner_labels=['vR', 'vL'])  # no truncation
-        A0 = npc.tensordot(A0, U2, ['vR', 'vL'])
-        self.psi.set_B(i0, A0, form='A')
-        # TODO: do we need this?
-        LP = npc.tensordot(H0.LP, U2, ['vR', 'vL'])
-        LP = npc.tensordot(U2.conj(), LP, ['vL*', 'vR*'])
-        self.env.set_LP(i0 + 1, LP, self.env.get_LP_age(i0) + 1)
-        next_B = self.psi.get_B(i0 + 1, form='B')
-        next_B = npc.tensordot(VH2, next_B, axes=['vR', 'vL'])
-        self.psi.set_B(i0 + 1, next_B, form='B')  # right-canonical
-        # note: no need to update RP[i0], since it's deleted anyways!
-        self.psi.set_SR(i0, S2)
-
-        return  {'U': npc.tensordot(U, U2, ['vR', 'vL'])} #, 'VH': VH}
+        if True:  # note that i0 == L - 1 is left moving, so we always do a zero-site update
+            super().update_env(U=U)
+            theta = VH.scale_axis(S, 'vL')
+            theta, H0 = self.zero_site_update(i0 + 1, theta, 0.5j * self.dt)
+            next_B = self.psi.get_B(i0 + 1, form='B')
+            next_th = npc.tensordot(theta, next_B, axes=['vR', 'vL'])
+            self.psi.set_B(i0 + 1, next_th, form='Th')  # used and updated for next i0
 
     def left_moving_update(self, i0, theta):
         if self.combine:
@@ -339,42 +325,28 @@ class SingleSiteTDVPEngine(TDVPEngine):
         else:
             theta = theta.combine_legs(['p0', 'vR'], qconj=-1, new_axes=1)
         U, S, VH = npc.svd(theta, qtotal_LR=[None, theta.qtotal], inner_labels=['vR', 'vL'])
-
         if i0 == 0:
             assert U.shape == (1, 1)
             VH *= U[0, 0]  # just a global phase, but better keep it!
-
         B1 = VH.split_legs(['(p0.vR)']).replace_label('p0', 'p')
         self.psi.set_B(i0, B1, form='B')  # right-canonical
         self.psi.set_SL(i0, S)
-        # earlier update of environments, since they are needed for the one_site_update()
-        update_data = {'U': U, 'VH': VH}
 
-        if i0 != 0:
-            self.env.del_RP(i0 - 1)
-            self.eff_H.update_RP(self.env, i0 - 1, VH)
+        if i0 != 0:  # left-moving, but not the last site of the update
+            super().update_env(VH=VH)  # note: no update needed if i0=0!
             theta = U.iscale_axis(S, 'vR')
             theta, H0 = self.zero_site_update(i0, theta, 0.5j * self.dt)
-            U2, S2, VH2 = npc.svd(theta, inner_labels=['vR', 'vL'])  # no truncation
-            B1 = npc.tensordot(VH2, B1, ['vR', 'vL'])
-            self.psi.set_B(i0, B1, form='B')
-            update_data['VH'] = npc.tensordot(VH2, VH, ['vR', 'vL'])
-            # TODO: do we need this?
-            RP = npc.tensordot(VH2, H0.RP, ['vR', 'vL'])
-            RP = npc.tensordot(RP, VH2.conj(), ['vL*', 'vR*'])
-            self.env.set_RP(i0 - 1, RP, self.env.get_RP_age(i0) + 1)
             next_A = self.psi.get_B(i0 - 1, form='A')
-            next_A = npc.tensordot(next_A, U2, axes=['vR', 'vL'])
-            self.psi.set_B(i0 - 1, next_A, form='A')  # left-canonical
-            self.psi.set_SL(i0, S2)
-        return update_data
+            next_th = npc.tensordot(next_A, theta, axes=['vR', 'vL'])
+            self.psi.set_B(i0 - 1, next_th, form='Th')  # used and updated for next i0
+            # note: this zero-site update can change the singular values on the bond left of i0.
+            # however, we *don't* save them in psi: it turns out that the right singular
+            # values for correct expectation values/entropies are the ones set before the if above.
+            # (Belive me - I had that coded up and spent days looking for the bug...)
 
     def update_env(self, **update_data):
-        if not self.move_right and self.i0 == 0:
-            # don't delete LP[0], which super().update_env() would do.
-            assert tuple(self.update_LP_RP) == (False, False)  # nothing to update anyways
-        else:
-            super().update_env(**update_data)
+        """Do nothing; super().update_env() is called explicitly in :meth:`update_local`."""
+        pass
 
     def zero_site_update(self, i, theta, dt):
         """Zero-site update on the left of site `i`."""
