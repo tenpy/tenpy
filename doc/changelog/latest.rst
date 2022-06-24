@@ -3,9 +3,7 @@
 
 Release Notes
 -------------
-TODO: Summarize the most important changes
-
-- Backwards-incompatible rewrite of TDVP!
+Backwards-incompatible rewrite of TDVP!
 
 Changelog
 ---------
