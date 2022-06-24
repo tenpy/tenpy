@@ -416,7 +416,7 @@ class OldTDVPEngine(TimeEvolutionAlgorithm):
         self.evolved_time = options.get('start_time', 0.)
         self.H_MPO = model.H_MPO
         self.environment = environment
-        if not psi.finite:
+        if psi.bc != 'finite':
             raise ValueError("TDVP is only implemented for finite boundary conditions")
         self.L = self.psi.L
         self.dt = options.get('dt', 2)
