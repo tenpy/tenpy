@@ -391,10 +391,10 @@ class Sweep(Algorithm):
             self.i0 = i0
             self.move_right = move_right
             self.update_LP_RP = update_LP_RP
-            logger.info("in sweep: i0 =", i0)
-            #logger.info("next_qramp[0]=%s , next_qramp[1]=%s",next_qramp[0], next_qramp[1])
+            logger.info(f"in sweep: i0 = {i0}")
+            #logger.info("next_qramp[0]={} , next_qramp[1]={}".format(next_qramp[0], next_qramp[1]))
             self._cache_optimize()
-            logger.debug("in sweep: i0 =%d", i0)
+            logger.debug(f"in sweep: i0 ={i0}")
             # --------- the main work --------------
             if (next_qramp[0]==self.i0) and (next_qramp[1]==self.move_right):
                 logger.info("Inserting qramp operator at sweep %d with values: %r ", self.sweeps, next_qramp)

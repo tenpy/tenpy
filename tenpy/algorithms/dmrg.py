@@ -140,7 +140,7 @@ def run(psi, model, options, **kwargs):
 
     """
     # initialize the engine
-    engine = get_engine(psi, model, options, kwargs)
+    engine = get_engine(psi, model, options, **kwargs)
     E, _ = engine.run()
     return {
         'E': E,
