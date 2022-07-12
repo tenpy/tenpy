@@ -347,9 +347,6 @@ class Sweep(Algorithm):
         logger.info("start environment_sweep")
         for k in range(N_sweeps):
             self.sweep(optimize=False, use_ramp=False)
-            logger.info('.', flush=True)
-            #logger.info('.', end='', flush=True) # kwargument 'end' trips up in github test environment
-        logger.info("\n")  # end line
 
     def sweep(self, optimize=True, use_ramp=True):
         """One 'sweep' of a sweeper algorithm.
