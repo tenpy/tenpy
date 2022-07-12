@@ -1,5 +1,4 @@
 """Definition of a model: the XXZ chain."""
-# Copyright 2019-2021 TeNPy Developers, GNU GPLv3
 
 from tenpy.networks.site import SpinSite
 from tenpy.models.lattice import Chain

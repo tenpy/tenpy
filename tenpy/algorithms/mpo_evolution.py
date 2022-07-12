@@ -6,6 +6,7 @@ import numpy as np
 import time
 from scipy.linalg import expm
 import logging
+
 logger = logging.getLogger(__name__)
 
 from .algorithm import TimeEvolutionAlgorithm
@@ -40,6 +41,8 @@ class ExpMPOEvolution(TimeEvolutionAlgorithm):
         order : int
             Order of the algorithm. The total error up to time `t` scales as ``O(t*dt^order)``.
             Implemented are order = 1 and order = 2.
+        preserve_norm : bool
+            Whether the state will be normalized to its initial norm after each time step.
 
     Attributes
     ----------
@@ -63,7 +66,6 @@ class ExpMPOEvolution(TimeEvolutionAlgorithm):
     def __init__(self, psi, model, options, **kwargs):
         super().__init__(psi, model, options, **kwargs)
         options = self.options
-        self.evolved_time = options.get('start_time', 0.)
         self.trunc_err = options.get('start_trunc_err', TruncationError())
         self._U_MPO = None
         self._U_param = {}
@@ -74,10 +76,23 @@ class ExpMPOEvolution(TimeEvolutionAlgorithm):
         N_steps = self.options.get('N_steps', 1)
         approximation = self.options.get('approximation', 'II')
         order = self.options.get('order', 2)
+        preserve_norm = self.options.get('preserve_norm', None)
+
+        # preserve the norm for real time evolution
+        if preserve_norm is None:
+            if np.iscomplex(dt):
+                preserve_norm = False
+            else:
+                preserve_norm = True
+        if preserve_norm:
+            old_norm = self.psi.norm
 
         self.calc_U(dt, order, approximation)
 
         self.update(N_steps)
+
+        if preserve_norm:
+            self.psi.norm = old_norm
 
         return self.psi
 
@@ -153,6 +168,7 @@ class TimeDependentExpMPOEvolution(ExpMPOEvolution):
 
     def run(self):
         N_steps = self.options.get('N_steps', 1)
+        self.reinit_model()  # self.evolved_time might be non-trivial for seq. runs
         self.update(N_steps)
         return self.psi
 
@@ -160,6 +176,16 @@ class TimeDependentExpMPOEvolution(ExpMPOEvolution):
         dt = self.options.get('dt', 0.01)
         approximation = self.options.get('approximation', 'II')
         order = self.options.get('order', 1)
+        preserve_norm = self.options.get('preserve_norm', None)
+
+        # preserve the norm for real time evolution
+        if preserve_norm is None:
+            if np.iscomplex(dt):
+                preserve_norm = False
+            else:
+                preserve_norm = True
+        if preserve_norm:
+            old_norm = self.psi.norm
 
         trunc_err = TruncationError()
         for _ in range(N_steps):
@@ -167,7 +193,9 @@ class TimeDependentExpMPOEvolution(ExpMPOEvolution):
             for U_MPO in self._U_MPO:
                 trunc_err += U_MPO.apply(self.psi, self.options)
             self.evolved_time = self.evolved_time + dt
-            self.model = self.reinit_model()  # use the updated model for the next measurement!
+            self.reinit_model()  # use the updated model for the next measurement!
+        if preserve_norm:
+            self.psi.norm = old_norm
         self.trunc_err = self.trunc_err + trunc_err  # not += : make a copy!
         # (this is done to avoid problems of users storing self.trunc_err after each `update`)
         return trunc_err
@@ -185,14 +213,19 @@ class TimeDependentExpMPOEvolution(ExpMPOEvolution):
         self._U_MPO = [U_MPO]
 
     def reinit_model(self):
-        """Re-initialize a new model at current time.
+        """Re-initialize a new `self.model` at current `self.evolved_time`.
 
         Returns
         -------
         model :
             New instance of the model initialized at ``model_params['time'] = self.evolved_time``.
         """
+        model_time = self.model.options.get('time', None)
+        if model_time is not None and model_time == self.evolved_time:
+            # no need to re-init
+            return self.model
         cls = self.model.__class__
         model_params = self.model.options  # if you get an error, set this in your custom model
         model_params['time'] = self.evolved_time
-        return cls(model_params)
+        self.model = cls(model_params)
+        return self.model

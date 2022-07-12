@@ -60,7 +60,7 @@ def console_main(*command_line_args):
         python -m tenpy --help
 
     ..
-        Sphinx includes the output of ``tenpy-run --help`` here.
+        Sphinx includes the output of ``tenpy-run --help`` here, setup in doc/conf.py.
     """
     import numpy as np
     import scipy
@@ -80,13 +80,18 @@ def console_main(*command_line_args):
     options = {}
     if args.parameters_file:
         import yaml
-        with open(args.parameters_file, 'r') as stream:
-            options = yaml.safe_load(stream)
+        options_files = []
+        for fn in args.parameters_file:
+            with open(fn, 'r') as stream:
+                options = yaml.safe_load(stream)
+            options_files.append(options)
+        if len(options_files) > 1:
+            options = tools.misc.merge_recursive(*options_files, conflict=args.merge)
     # update extra options
     if args.option:
         for key, val_string in args.option:
             val = eval(val_string, context)
-            set_recursive(options, key, val, insert_dicts=True)
+            tools.misc.set_recursive(options, key, val, insert_dicts=True)
     if len(options) == 0:
         raise ValueError("No options supplied! Check your command line arguments!")
     if 'output_filename' not in options and 'output_filename_params' not in options:
@@ -147,9 +152,16 @@ def _setup_arg_parser(width=None):
                         default=None,
                         help="selects the Simulation (sub)class, "
                         "e.g. 'GroundStateSearch' (default) or 'RealTimeEvolution'.")
+    parser.add_argument('--merge',
+                        '-m',
+                        default='error',
+                        help="Selects how to merge conflicts in case of multiple yaml files. "
+                        "Options are 'error', 'first' or 'last'.")
     parser.add_argument('parameters_file',
-                        nargs='?',
-                        help="A yaml (*.yml) file with the simulation parameters/options.")
+                        nargs='*',
+                        help="Yaml (*.yml) file with the simulation parameters/options. "
+                        "Multiple files get merged according to MERGE; "
+                        "see tenpy.tools.misc.merge_recursive for details.")
     opt_help = textwrap.dedent("""\
         Allows overwriting some options from the yaml files.
         KEY can be recursive separated by `.`, e.g. ``algorithm_params.trunc_params.chi``.

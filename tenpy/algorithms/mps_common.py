@@ -2,7 +2,7 @@
 
 Many MPS-based algorithms use a 'sweep' structure, wherein local updates are
 performed on the MPS tensors sequentially, first from left to right, then from
-right to left. This procedure is common to DMRG, TDVP, sequential time evolution,
+right to left. This procedure is common to DMRG, TDVP, MPO-based time evolution,
 etc.
 
 Another common feature of these algorithms is the use of an effective local
@@ -20,14 +20,25 @@ implemented here also directly use the :class:`Sweep` class.
 """
 # Copyright 2018-2021 TeNPy Developers, GNU GPLv3
 
+from .algorithm import Algorithm
+from ..linalg.sparse import NpcLinearOperator, SumNpcLinearOperator, OrthogonalNpcLinearOperator
+from ..networks.mpo import MPOEnvironment
+from ..networks.mps import MPSEnvironment, MPS
+from .truncation import svd_theta, TruncationError
+from ..linalg import np_conserved as npc
 import numpy as np
 import time
 import warnings
 import copy
+<<<<<<< HEAD
 from random import randrange
+||||||| merged common ancestors
+=======
+import itertools
+>>>>>>> 8e977784ffbb7022af686418adec0d056af27853
 import logging
-logger = logging.getLogger(__name__)
 
+<<<<<<< HEAD
 from ..linalg import np_conserved as npc
 from .truncation import svd_theta, TruncationError
 from ..networks.mps import MPSEnvironment, MPS
@@ -36,6 +47,16 @@ from ..linalg.sparse import NpcLinearOperator, SumNpcLinearOperator, OrthogonalN
 from .algorithm import Algorithm
 from ..tools.params import asConfig 
 from ..tools.events import EventHandler
+||||||| merged common ancestors
+from ..linalg import np_conserved as npc
+from .truncation import svd_theta, TruncationError
+from ..networks.mps import MPSEnvironment, MPS
+from ..networks.mpo import MPOEnvironment
+from ..linalg.sparse import NpcLinearOperator, SumNpcLinearOperator, OrthogonalNpcLinearOperator
+from .algorithm import Algorithm
+=======
+logger = logging.getLogger(__name__)
+>>>>>>> 8e977784ffbb7022af686418adec0d056af27853
 
 __all__ = [
     'Sweep',
@@ -55,9 +76,6 @@ class Sweep(Algorithm):
     This is a base class, intended to cover common procedures in all algorithms that 'sweep'
     left-right over the MPS (for infinite MPS: over the MPS unit cell).
     Examples for such algorithms are DMRG, TDVP, and variational compression.
-
-    .. todo ::
-        TDVP is currently not implemented with the sweep class.
 
     Parameters
     ----------
@@ -153,7 +171,12 @@ class Sweep(Algorithm):
         if not sequential_simulations:
             data['sweeps'] = self.sweeps
             if len(self.ortho_to_envs) > 0:
-                data['orthogonal_to'] = [e.ket for e in self.ortho_to_envs]
+                if self.bc == 'finite':
+                    data['orthogonal_to'] = [e.ket for e in self.ortho_to_envs]
+                else:
+                    # need the environments as well
+                    data['orthogonal_to'] = [e.get_initialization_data(include_ket=True)
+                                            for e in self.ortho_to_envs]
         return data
 
     @property
@@ -426,7 +449,7 @@ class Sweep(Algorithm):
             rigth (`True`) of the current one, and `update_LP`, `update_RP` indicate
             whether it is necessary to update the `LP` and `RP` of the environments.
         """
-        # warning: only those `LP` and `RP` that can/will be used later again should be set to True
+        # warning: set only those `LP` and `RP` to True, which can/will be used later again
         # otherwise, the assumptions in :meth:`free_no_longer_needed_envs` will not hold,
         # and you need to update that method as well!
         L = self.psi.L
@@ -631,8 +654,8 @@ class Sweep(Algorithm):
         Returns
         -------
         update_data : dict
-            Data to be processed by :meth:`post_update_local`, e.g. containing the truncation
-            error as `err`.
+            Data to be processed by :meth:`update_env` and :meth:`post_update_local`,
+            e.g. containing the truncation error as `err`.
             If :attr:`combine` is set, it should also contain the `U` and `VH` from the SVD.
         """
         raise NotImplementedError("needs to be overridden by subclass")
@@ -653,7 +676,6 @@ class Sweep(Algorithm):
             env.del_RP(i_L)
         # possibly recalculated updated center bonds
         update_LP, update_RP = self.update_LP_RP
-        combine = self.combine
         if update_LP:
             self.eff_H.update_LP(self.env, i_R, update_data['U'])  # possibly optimized
             for env in self.ortho_to_envs:
@@ -705,18 +727,19 @@ class Sweep(Algorithm):
                 # so current RP[i_R] is useless
                 for env in all_envs:
                     env.del_RP(i_R)
-            return  # n = 2 finished
-        # here n = 1
-        if self.move_right and update_RP:
-            # will update site i_L coming from the left in the future
-            # so current LP[i_L] is useless
-            for env in all_envs:
-                env.del_LP(i_L)
-        elif not self.move_right and update_LP:
-            # will update site i_R coming from the right in the future
-            # so current RP[i_R] is useless
-            for env in all_envs:
-                env.del_RP(i_R)
+        elif n == 1:
+            if self.move_right and update_RP:
+                # will update site i_L coming from the left in the future
+                # so current LP[i_L] is useless
+                for env in all_envs:
+                    env.del_LP(i_L)
+            elif not self.move_right and update_LP:
+                # will update site i_R coming from the right in the future
+                # so current RP[i_R] is useless
+                for env in all_envs:
+                    env.del_RP(i_R)
+        else:
+            assert False, "n_optimize != 1, 2"
         self.eff_H = None  # free references to environments held by eff_H
         # done
 
@@ -1311,6 +1334,9 @@ class VariationalCompression(Sweep):
     The algorithm is the same as described in :class:`VariationalApplyMPO`,
     except that we don't have an MPO in the networks - one can think of the MPO being trivial.
 
+    .. deprecated :: 0.9.1
+        Renamed the optoin `N_sweeps` to `max_sweeps`.
+
     Parameters
     ----------
     psi : :class:`~tenpy.networks.mps.MPS`
@@ -1329,8 +1355,13 @@ class VariationalCompression(Sweep):
 
         trunc_params : dict
             Truncation parameters as described in :cfg:config:`truncation`.
-        N_sweeps : int
-            Number of sweeps to perform.
+        min_sweeps, max_sweeps : int
+            Minimum and maximum number of sweeps to perform for the compression.
+        tol_theta_diff: float | None
+            Stop after less than `max_sweeps` sweeps if the 1-site wave function changed by less
+            than this value, ``1.-|<theta_old|theta_new>| < tol_theta_diff``, where
+            theta_old/new are two-site wave functions during the sweep to the left.
+            ``None`` disables this convergence check, always performing `max_sweeps` sweeps.
         start_env_sites : int
             Number of sites to contract for the inital LP/RP environment in case of infinite MPS.
 
@@ -1344,6 +1375,7 @@ class VariationalCompression(Sweep):
     def __init__(self, psi, options, resume_data=None):
         super().__init__(psi, None, options, resume_data=resume_data)
         self.renormalize = []
+        self._theta_diff = []
 
     def run(self):
         """Run the compression.
@@ -1359,12 +1391,26 @@ class VariationalCompression(Sweep):
         max_trunc_err : :class:`~tenpy.algorithms.truncation.TruncationError`
             The maximal truncation error of a two-site wave function.
         """
-        N_sweeps = self.options.get("N_sweeps", 2)
+        self.options.deprecated_alias("N_sweeps", "max_sweeps",
+                                      "Also check out the other new convergence parameters "
+                                      "min_N_sweeps and tol_theta_diff!")
+        max_sweeps = self.options.get("max_sweeps", 2)
+        min_sweeps = self.options.get("min_sweeps", 1)
+        tol_diff = self._tol_theta_diff = self.options.get("tol_theta_diff", 1.e-8)
+        if min_sweeps == max_sweeps and tol_diff is not None:
+            warnings.warn("VariationalCompression with min_sweeps=max_sweeps: "
+                          "we recommend to set tol_theta_diff=None to avoid overhead")
 
-        for i in range(N_sweeps):  # TODO: more fancy stopping criteria?
+        for i in range(max_sweeps):
             self.renormalize = []
+            self._theta_diff = []
             max_trunc_err = self.sweep()
-
+            if i + 1 >= min_sweeps and tol_diff is not None:
+                max_diff = max(self._theta_diff[-(self.psi.L - self.n_optimize):])
+                if max_diff < tol_diff:
+                    logger.debug("break VariationalCompression after %d sweeps "
+                                "with theta_diff=%.2e", i + 1, max_diff)
+                    break
         if self.psi.finite:
             self.psi.norm *= max(self.renormalize)
         return TruncationError(max_trunc_err, 1. - 2. * max_trunc_err)
@@ -1391,6 +1437,17 @@ class VariationalCompression(Sweep):
         self._init_ortho_to_envs(orthogonal_to, resume_data)
         self.reset_stats()
 
+    def get_sweep_schedule(self):
+        """Define the schedule of the sweep.
+
+        Compared to :meth:`~tenpy.algorithms.mps_common.Sweep.get_sweep_schedule`, we add one
+        extra update at the end with i0=0 (which is the same as the first update of the sweep).
+        This is done to ensure proper convergence after each sweep, even if that implies that
+        the site 0 is then updated twice per sweep.
+        """
+        extra = (0, True, [False, False])
+        return itertools.chain(super().get_sweep_schedule(), [extra])
+
     def update_local(self, _, optimize=True):
         """Perform local update.
 
@@ -1411,18 +1468,26 @@ class VariationalCompression(Sweep):
         """Given a new two-site wave function `theta`, split it and save it in :attr:`psi`."""
         i0 = self.i0
         new_psi = self.psi
-        qtotal_i0 = new_psi.get_B(i0, form=None).qtotal
+        old_A0 = new_psi.get_B(i0, form='A')
         U, S, VH, err, renormalize = svd_theta(theta,
                                                self.trunc_params,
-                                               qtotal_LR=[qtotal_i0, None],
+                                               qtotal_LR=[old_A0.qtotal, None],
                                                inner_labels=['vR', 'vL'])
-        self.renormalize.append(renormalize)
-        # TODO: up to the `renormalize`, we could use `new_psi.set_svd_theta`.
         U.ireplace_label('(vL.p0)', '(vL.p)')
         VH.ireplace_label('(p1.vR)', '(p.vR)')
-        B0 = U.split_legs(['(vL.p)'])
+        A0 = U.split_legs(['(vL.p)'])
         B1 = VH.split_legs(['(p.vR)'])
-        new_psi.set_B(i0, B0, form='A')  # left-canonical
+        self.renormalize.append(renormalize)
+        # first compare to old best guess to check convergence of the sweeps
+        if self._tol_theta_diff is not None and self.update_LP_RP[0] == False:
+            theta_old = new_psi.get_theta(i0)
+            theta_new_trunc = npc.tensordot(A0.scale_axis(S, 'vR'), B1, ['vR', 'vL'])
+            theta_new_trunc.iset_leg_labels(['vL', 'p0', 'p1', 'vR'])
+            ov = npc.inner(theta_new_trunc, theta_old, do_conj=True, axes='labels')
+            theta_diff = 1. - abs(ov)
+            self._theta_diff.append(theta_diff)
+        # now set the new tensors to the MPS
+        new_psi.set_B(i0, A0, form='A')  # left-canonical
         new_psi.set_B(i0 + 1, B1, form='B')  # right-canonical
         new_psi.set_SR(i0, S)
         return {'U': U, 'VH': VH, 'err': err}

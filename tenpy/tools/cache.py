@@ -218,6 +218,18 @@ class CacheFile(DictCache):
              **storage_kwargs):
         """Interface for opening a :class:`Storage` and creating a :class:`DictCache` from it.
 
+        Default parameters just give a dummy cache that keeps everything in memory.
+        If you want to activate it to actually save things to disk, we cound that the following
+        ``cache_params`` parameters worked reasonably well, to be used for
+        the simulation's see :class:`~tenpy.simulations.simulation.Simulation.init_cache`:
+
+        .. code :: yaml
+
+            cache_params:
+                storage_class: PickleStorage
+                use_threading: True  # reduce the OMP_NUM_THREADS if you use this!
+                # further specify `directory` or `tmpdir` on the cluster node's local file system
+
         .. warning ::
             Make sure that you call the :meth:`close` method of the returned :class:`CacheFile`
             to close opened files and clean up temporary files/directories.
@@ -227,6 +239,9 @@ class CacheFile(DictCache):
                     cache['my_data'] = (1, 2, 3)
                     assert cache['my_data'] == (1, 2, 3)
                 # cache is closed again here, don't use it anymore
+
+
+            The :class:`~tenpy.simulation.simulation.Simulation` handles it for you.
 
         Parameters
         ----------
@@ -639,6 +654,14 @@ class Hdf5Storage(Storage):
 
 class ThreadedStorage(Storage):
     """Wrapper around a :class:`Storage` (or subclass) with thread-parallelization.
+
+    Use thread-based parallelism to avoid delays from disk input/output when caching.
+
+    .. note ::
+
+        If you're running TeNPy on a cluster, you should probably adjust the number of OMP threads,
+        e.g. ``export OMP_NUM_THREADS=3`` in your cluster submission scripts to one less thread,
+        since this class adds an extra thread waiting for disk I/O.
 
     Parameters
     ----------

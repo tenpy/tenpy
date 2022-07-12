@@ -99,7 +99,7 @@ def test_mixed_hubbard():
     dmrg_params = {
         'mixer': True,
         'max_E_err': 1.e-12,
-        'max_S_err': 1.e-8,
+        'max_S_err': 1.e-10,
         'trunc_params': {
             'chi_max': chimax,
             'svd_min': 1.e-10
