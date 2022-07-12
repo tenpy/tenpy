@@ -30,33 +30,10 @@ import numpy as np
 import time
 import warnings
 import copy
-<<<<<<< HEAD
-from random import randrange
-||||||| merged common ancestors
-=======
 import itertools
->>>>>>> 8e977784ffbb7022af686418adec0d056af27853
 import logging
 
-<<<<<<< HEAD
-from ..linalg import np_conserved as npc
-from .truncation import svd_theta, TruncationError
-from ..networks.mps import MPSEnvironment, MPS
-from ..networks.mpo import MPOEnvironment
-from ..linalg.sparse import NpcLinearOperator, SumNpcLinearOperator, OrthogonalNpcLinearOperator
-from .algorithm import Algorithm
-from ..tools.params import asConfig 
-from ..tools.events import EventHandler
-||||||| merged common ancestors
-from ..linalg import np_conserved as npc
-from .truncation import svd_theta, TruncationError
-from ..networks.mps import MPSEnvironment, MPS
-from ..networks.mpo import MPOEnvironment
-from ..linalg.sparse import NpcLinearOperator, SumNpcLinearOperator, OrthogonalNpcLinearOperator
-from .algorithm import Algorithm
-=======
 logger = logging.getLogger(__name__)
->>>>>>> 8e977784ffbb7022af686418adec0d056af27853
 
 __all__ = [
     'Sweep',

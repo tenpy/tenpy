@@ -2080,7 +2080,8 @@ def chi_list(chi_max, dchi=20, nsweeps=20, chi_min=None):
         i_min = (chi_min // dchi)
     else:
         i_min = 0
-    # alternatively, should we start chi_list with entry {0: chi_min} ?
+        # alternatively, should we start chi_list with entry {0: chi_min} ?
+    chi = int(dchi * (i_min + 1))
     for i in range(i_min, chi_max // dchi):
         chi = int(dchi * (i + 1))
         chi_list[nsweeps * (i - i_min)] = chi
