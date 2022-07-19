@@ -1548,6 +1548,50 @@ class TrivialLattice(Lattice):
         Lattice.__init__(self, [1], mps_sites, **kwargs)
 
 
+class SimpleLattice(Lattice):
+    """A lattice with a unit cell consiting of just a single site.
+
+    In many cases, the unit cell consists just of a single site, such that the the last entry of
+    `u` of an 'lattice index' can only be ``0``.
+    From the point of internal algorithms, we handle this class like a :class:`Lattice` --
+    in that way we don't need to distinguish special cases in the algorithms.
+
+    Yet, from the point of a tenpy user, for example if you measure an expectation value
+    on each site in a `SimpleLattice`, you expect to get an ndarray of dimensions ``self.Ls``,
+    not ``self.shape``. To avoid that problem, `SimpleLattice` overwrites just the meaning of
+    ``u=None`` in :meth:`mps2lat_values` to be the same as ``u=0``.
+
+    Parameters
+    ----------
+    Ls : list of int
+        the length in each direction
+    site : :class:`~tenpy.networks.site.Site`
+        the lattice site. The `unit_cell` of the :class:`Lattice` is just ``[site]``.
+    **kwargs :
+        Additional keyword arguments given to the :class:`Lattice`.
+        If `order` is specified in the form ``('standard', snake_windingi, priority)``,
+        the `snake_winding` and `priority` should only be specified for the spatial directions.
+        Similarly, `positions` can be specified as a single vector.
+    """
+    Lu = 1  #: the (expected) number of sites in the unit cell, ``len(unit_cell)``.
+
+    def __init__(self, Ls, site, **kwargs):
+        if 'positions' in kwargs:
+            Dim = len(kwargs['basis'][0]) if 'basis' in kwargs else len(Ls)
+            kwargs['positions'] = np.reshape(kwargs['positions'], (1, Dim))
+        if 'order' in kwargs and not isinstance(kwargs['order'], str):
+            descr, snake_winding, priority = kwargs['order']
+            assert descr == 'standard'
+            snake_winding = tuple(snake_winding) + (False, )
+            priority = tuple(priority) + (max(priority) + 1., )
+            kwargs['order'] = descr, snake_winding, priority
+        Lattice.__init__(self, Ls, [site], **kwargs)
+
+    def mps2lat_values(self, A, axes=0, u=None):
+        """same as :meth:`Lattice.mps2lat_values`, but ignore ``u``, setting it to ``0``."""
+        return super().mps2lat_values(A, axes, 0)
+
+
 class IrregularLattice(Lattice):
     """A variant of a regular lattice, where we might have extra sites or sites missing.
 
@@ -2037,51 +2081,6 @@ class HelicalLattice(Lattice):
         self.N_sites = len(self.unit_cell) * self._N_cells
         self.N_sites_per_ring = None  # shouldn't be used
         self.N_rings = None  # shouldn't be used - pointless for this case.
-
-
-class SimpleLattice(Lattice):
-    """A lattice with a unit cell consiting of just a single site.
-
-    In many cases, the unit cell consists just of a single site, such that the the last entry of
-    `u` of an 'lattice index' can only be ``0``.
-    From the point of internal algorithms, we handle this class like a :class:`Lattice` --
-    in that way we don't need to distinguish special cases in the algorithms.
-
-    Yet, from the point of a tenpy user, for example if you measure an expectation value
-    on each site in a `SimpleLattice`, you expect to get an ndarray of dimensions ``self.Ls``,
-    not ``self.shape``. To avoid that problem, `SimpleLattice` overwrites just the meaning of
-    ``u=None`` in :meth:`mps2lat_values` to be the same as ``u=0``.
-
-    Parameters
-    ----------
-    Ls : list of int
-        the length in each direction
-    site : :class:`~tenpy.networks.site.Site`
-        the lattice site. The `unit_cell` of the :class:`Lattice` is just ``[site]``.
-    **kwargs :
-        Additional keyword arguments given to the :class:`Lattice`.
-        If `order` is specified in the form ``('standard', snake_windingi, priority)``,
-        the `snake_winding` and `priority` should only be specified for the spatial directions.
-        Similarly, `positions` can be specified as a single vector.
-    """
-    Lu = 1  #: the (expected) number of sites in the unit cell, ``len(unit_cell)``.
-
-    def __init__(self, Ls, site, **kwargs):
-        if 'positions' in kwargs:
-            Dim = len(kwargs['basis'][0]) if 'basis' in kwargs else len(Ls)
-            kwargs['positions'] = np.reshape(kwargs['positions'], (1, Dim))
-        if 'order' in kwargs and not isinstance(kwargs['order'], str):
-            descr, snake_winding, priority = kwargs['order']
-            assert descr == 'standard'
-            snake_winding = tuple(snake_winding) + (False, )
-            priority = tuple(priority) + (max(priority) + 1., )
-            kwargs['order'] = descr, snake_winding, priority
-        Lattice.__init__(self, Ls, [site], **kwargs)
-
-    def mps2lat_values(self, A, axes=0, u=None):
-        """same as :meth:`Lattice.mps2lat_values`, but ignore ``u``, setting it to ``0``."""
-        return super().mps2lat_values(A, axes, 0)
-
 
 class Chain(SimpleLattice):
     """A chain of L equal sites.
