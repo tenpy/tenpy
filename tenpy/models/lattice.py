@@ -1296,7 +1296,7 @@ class Lattice:
                 np.logical_not(self.bc)),  # direction has PBC
             axis=(1, 2))
 
-    def plot_sites(self, ax, markers=['o', '^', 's', 'p', 'h', 'D'], **kwargs):
+    def plot_sites(self, ax, markers=['o', '^', 's', 'p', 'h', 'D'], labels=None, **kwargs):
         """Plot the sites of the lattice with markers.
 
         Parameters
@@ -1307,6 +1307,8 @@ class Lattice:
             List of values for the keywork `marker` of ``ax.plot()`` to distinguish the different
             sites in the unit cell, a site `u` in the unit cell is plotted with a marker
             ``markers[u % len(markers)]``.
+        labels : list of str
+            Labels for the different sites in the unit cell.
         **kwargs :
             Further keyword arguments given to ``ax.plot()``.
         """
@@ -1320,6 +1322,8 @@ class Lattice:
                 raise ValueError("can only plot in 2 dimensions.")
             if use_marker:
                 kwargs['marker'] = markers[u % len(markers)]
+            if labels is not None:
+                kwargs['label'] = labels[u % len(labels)]
             ax.plot(pos[:, 0], pos[:, 1], **kwargs)
 
     def plot_order(self, ax, order=None, textkwargs={}, **kwargs):
