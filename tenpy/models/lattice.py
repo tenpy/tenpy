@@ -11,6 +11,10 @@ The :class:`IrregularLattice` provides a way to remove or add sites to an existi
 lattice.
 
 See also the :doc:`/intro/model` and :doc:`/intro/lattices`.
+
+Further, an overview with plots of the predefined models is given in
+:doc:`/notebooks/`
+
 """
 # Copyright 2018-2021 TeNPy Developers, GNU GPLv3
 
@@ -18,6 +22,8 @@ import numpy as np
 import itertools
 import warnings
 import copy
+import logging
+logger = logging.getLogger(__name__)
 
 from ..networks.site import Site
 from ..tools.misc import (to_iterable, to_array, to_iterable_of_len, inverse_permutation,
@@ -25,9 +31,9 @@ from ..tools.misc import (to_iterable, to_array, to_iterable_of_len, inverse_per
 from ..networks.mps import MPS  # only to check boundary conditions
 
 __all__ = [
-    'Lattice', 'TrivialLattice', 'IrregularLattice', 'HelicalLattice', 'SimpleLattice', 'Chain',
-    'Ladder', 'NLegLadder', 'Square', 'Triangular', 'Honeycomb', 'Kagome', 'get_lattice',
-    'get_order', 'get_order_grouped'
+    'Lattice', 'TrivialLattice', 'SimpleLattice', 'MultiSpeciesLattice', 'IrregularLattice',
+    'HelicalLattice', 'Chain', 'Ladder', 'NLegLadder', 'Square', 'Triangular', 'Honeycomb',
+    'Kagome', 'get_lattice', 'get_order', 'get_order_grouped'
 ]
 
 # (update module doc string if you add further lattices)
@@ -1590,6 +1596,216 @@ class SimpleLattice(Lattice):
     def mps2lat_values(self, A, axes=0, u=None):
         """same as :meth:`Lattice.mps2lat_values`, but ignore ``u``, setting it to ``0``."""
         return super().mps2lat_values(A, axes, 0)
+
+
+class MultiSpeciesLattice(Lattice):
+    """A variant of a :class:`SimpleLattice` replacing the elementary site with a set of sites.
+
+
+    An initialized  `MultiSpeciesLattice` replaces each site in the given `simple_lattice` with
+    the `species_sites`. This is usefull e.g. if you want to place spin-full fermions
+    (or bosons) on a regular lattice, without falling back to the
+    :class:`~tenpy.networks.site.GroupedSite` causing a larger, local dimension.
+
+    This class defines pairs with appended ``'_all'`` and the `species_names` for all existing
+    pairs in the `simple_lattice`; see the example below.
+
+    Parameters
+    ----------
+    simple_lattice : :class:`Lattice`
+        A regular lattice (not necessarily a :class:`SimpleLattice`).
+        Typically one of the predefined ones, e.g.,
+        :class:`Square`, :class:`Triangular` or :class:`Honeycomb`.
+        You can initialize the `simple_lattice` with any local sites, e.g. ``sites=None``, since
+        the sites of the MultiSpeciesLattice are defined below.
+    species_sites : list of :class:`~tenpy.networks.site.Site`
+        A collection of sites representing differnt species.
+    species_names : list of str | None
+        Names for the species. Defaults to ``['0', '1', ...]``.
+        Used to define separate :attr:`pairs` by appending ``'_{name}'`` to the lattice.
+
+    Attributes
+    ----------
+    N_species : int
+        Number of species
+    species_names : list of str
+        Names for the species.
+    simple_lattice : :class:`Lattice`
+        The regular lattice on which `self` is based.
+    simple_Lu : int
+        Length of the unit cell of the `simple_lattice`.
+
+    Examples
+    --------
+    .. testsetup :: MultiSpeciesLattice
+
+        from tenpy.models.lattice import *
+        import tenpy
+
+    When defining the sites, you should probably call
+    :func:`~tenpy.networks.site.set_common_charges` (see examples there!) to adjust the charges,
+    especially if you have different sites. Consider a combination of Fermions and Spins:
+
+    .. doctest :: IrregularLattice
+
+        >>> simple_lat = Square(2, 3, None)
+        >>> f = tenpy.networks.site.FermionSite(conserve='N')
+        >>> s = tenpy.networks.site.SpinHalfSite(conserve='Sz')
+        >>> tenpy.networks.site.set_common_charges([f, s], 'independent')
+        >>> fs_lat = MultiSpeciesLattice(simple_lat, [f, s], ['f', 's'])
+        >>> for key in fs_lat.pairs.keys():
+        ...     if key.startswith('nearest'):
+        ...          print(key)
+        nearest_neighbors_f
+        nearest_neighbors_s
+        nearest_neighbors_all
+        >>> print(fs_lat.pairs['nearest_neighbors_all'])
+        [(0, 0, array([1, 0])), (0, 0, array([0, 1])), (1, 1, array([1, 0])), (1, 1, array([0, 1]))]
+
+    Note that the "simple lattice" can also have a non-trivial unit cell itself, e.g.
+    the Honeycomb already has two sites in it's unit cell.
+    It's easy to put spin-full fermions inside the Honeycomb lattice:
+
+    .. doctest ::
+
+        >>> simple_lat = Honeycomb(2, 3, None)
+        >>> f = tenpy.networks.site.FermionSite(conserve='N')
+        >>> tenpy.networks.site.set_common_charges([f, f], 'same')  # same = total N conserved
+        >>> spinfull_fermion_Honeycomb = MultiSpeciesLattice(simple_lat, [f, f], ['up', 'down'])
+
+    """
+    Lu = None  #: unknown number of sites in the unit cell
+
+    def __init__(self, simple_lattice, species_sites, species_names=None):
+        simple_Lu = simple_lattice.Lu
+        if simple_Lu is None:
+            simple_Lu = len(simple_lattice.unit_cell)
+        N_species = len(species_sites)
+        unit_cell = list(species_sites) * simple_Lu
+        if species_names is None:
+            species_names = [str(i) for i in range(N_species)]
+        if len(species_names) != N_species:
+            raise ValueError("need exactly one name for each species,"
+                             f"but got {species_names!r} for {species_sites!r}")
+        unit_cell_positions = np.repeat(simple_lattice.unit_cell_positions, N_species, axis=0)
+
+        self.N_species = N_species
+        self.species_names = species_names
+        self.simple_lattice = simple_lattice
+        self.simple_Lu = simple_Lu
+        new_pairs = self._generate_new_pairs()
+
+        Lattice.__init__(
+            self,
+            simple_lattice.Ls,
+            unit_cell,
+            bc=simple_lattice.boundary_conditions,
+            bc_MPS=simple_lattice.bc_MPS,
+            basis=simple_lattice.basis,
+            positions=unit_cell_positions,
+            pairs=new_pairs)
+
+    def _generate_new_pairs(self):
+        N_sp = self.N_species
+        names = self.species_names
+        new_pairs = {}
+        # note: inline species_u_to_simple_u and simple_u_to_species methods here
+        for pair_key, pair_val in self.simple_lattice.pairs.items():
+            pair_val_all = []
+            for sp_idx, sp_name in enumerate(names):
+                pair_key_sp = '_'.join((pair_key, sp_name))
+                if pair_key_sp in new_pairs:
+                    raise ValueError(f"duplicate key {pair_key_sp!r} for pairs; "
+                                     "use different species names!")
+                pair_val_sp = []
+                for (u1, u2, dx) in pair_val:
+                    pair_val_sp.append((u1 * N_sp + sp_idx, u2 * N_sp + sp_idx, dx))
+                new_pairs[pair_key_sp] = pair_val_sp
+                pair_val_all.extend(pair_val_sp)
+            pair_key_all = pair_key + '_all'
+            if pair_key_all in new_pairs:
+                raise ValueError(f"duplicate key {pair_key_all!r} for pairs; "
+                                 "use different species names!")
+            new_pairs[pair_key_all] = pair_val_all
+        return new_pairs
+
+
+    def ordering(self, order):
+        """Define orderings as for the `simple_lattice` with priority for within the unit cell.
+
+        See :meth:`Lattice.ordering` for arguments.
+        """
+        simple_order = self.simple_lattice.ordering(order)
+        return self._simple_order_to_self_order(simple_order)
+
+    def _simple_order_to_self_order(self, simple_order):
+        """Convert order of simple lattice to order for self.
+
+        C-style ordering, repeating whatever order we had before, and converting `u` index,
+        such that the species are always next to each other.
+        """
+        order = np.repeat(simple_order, self.N_species, axis=0)
+        species_idx = np.tile(np.arange(self.N_species, dtype=np.intp), len(simple_order))
+        order[:, -1] = self.simple_u_to_species_u(order[:, -1], species_idx)
+        return order
+
+
+    def self_u_to_simple_u(self, self_u):
+        """Get index `u` of the `simple_lattice` from index `u` in `self`.
+
+        Parameters
+        ----------
+        self_u : int
+            Unit cell index `u` in `self`.
+
+        Returns
+        -------
+        simple_u : int
+            Unit cell index `u` in the :attr:`simple_lattice`.
+        """
+        return self_u // self.N_species
+
+    def self_u_to_species_idx(self, self_u):
+        """Get species index for unit cell index.
+
+        Parameters
+        ----------
+        self_u : int
+            Unit cell index `u` in `self`.
+
+        Returns
+        -------
+        simple_u : int
+            Unit cell index `u` in the :attr:`simple_lattice`.
+        """
+        return self_u % self.N_species
+
+    def simple_u_to_species_u(self, simple_u, species_idx):
+        """Get index `u` in `self` from the `u` in the `simple_lattice` and the species index.
+
+        Parameters
+        ----------
+        simple_u : int
+            Unit cell index `u` in the :attr:`simple_lattice`.
+        species_idx : int
+            Index of the species.
+
+        Returns
+        -------
+        self_u : int
+            Unit cell index `u` in `self`.
+        """
+        return simple_u * self.N_species + species_idx
+
+    def onsite_species_pairs(self, species_1, species_2):
+        if species_1 in self.species_names:
+            species_1 = self.species_names.index(species_1)
+        if species_2 in self.species_names:
+            species_2 = self.species_names.index(species_2)
+        for simple_u in range(self.simple_Lu):
+            yield (self.simple_u_to_species_u(simple_u, species_1),
+                   self.simple_u_to_species_u(simple_u, species_2),
+                   [0] * self.dim)  # self.dim is property
 
 
 class IrregularLattice(Lattice):

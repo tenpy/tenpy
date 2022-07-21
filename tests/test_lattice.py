@@ -83,6 +83,15 @@ def test_TrivialLattice():
     lat.test_sanity()
 
 
+def test_MultiSpeciesLattice():
+    s1 = site.SpinHalfSite('Sz')
+    f1 = site.FermionSite('N')
+    site.set_common_charges([s1, f1], 'independent')
+    simple_lat = lattice.Honeycomb(3, 4, None)
+    ms_lat = lattice.MultiSpeciesLattice(simple_lat, [s1, f1])
+    ms_lat.test_sanity()
+
+
 def test_IrregularLattice():
     s1 = site.SpinHalfSite('Sz')
     s2 = site.SpinSite(0.5, 'Sz')

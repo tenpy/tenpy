@@ -37,7 +37,8 @@ import copy
 import logging
 logger = logging.getLogger(__name__)
 
-from .lattice import get_lattice, Lattice, TrivialLattice, HelicalLattice, IrregularLattice
+from .lattice import (get_lattice, Lattice, MultiSpeciesLattice, TrivialLattice, HelicalLattice,
+                      IrregularLattice)
 from ..linalg import np_conserved as npc
 from ..linalg.charges import QTYPE, LegCharge
 from ..tools.misc import to_array, add_with_None_0
@@ -45,7 +46,7 @@ from ..tools.params import asConfig
 from ..networks import mpo  # used to construct the Hamiltonian as MPO
 from ..networks.terms import OnsiteTerms, CouplingTerms, MultiCouplingTerms
 from ..networks.terms import ExponentiallyDecayingTerms, order_combine_term
-from ..networks.site import group_sites
+from ..networks.site import Site, group_sites
 from ..tools.hdf5_io import Hdf5Exportable, ATTR_FORMAT
 
 __all__ = [
@@ -1942,6 +1943,12 @@ class CouplingMPOModel(CouplingModel, MPOModel):
             bc_MPS = model_params.get('bc_MPS', 'finite')
             order = model_params.get('order', 'default')
             sites = self.init_sites(model_params)
+            if isinstance(sites, tuple) and sites[0] is not None and \
+                    not isinstance(sites[0], Site):
+                species_sites, species_names = sites
+                sites = None
+            else:
+                species_sites = None
             bc_x = 'open' if bc_MPS == 'finite' else 'periodic'
             bc_x = model_params.get('bc_x', bc_x)
             if bc_MPS != 'finite' and bc_x == 'open':
@@ -1963,6 +1970,10 @@ class CouplingMPOModel(CouplingModel, MPOModel):
             else:
                 raise ValueError("Can't auto-determine parameters for the lattice. "
                                  "Overwrite the `init_lattice` in your model!")
+
+            # possibly modify/generalize the already iniialized lattice
+            if species_sites is not None:
+                lat = MultiSpeciesLattice(lat, species_sites, species_names)
             helical = model_params.get('helical_lattice', None)
             if helical is not None:
                 lat = HelicalLattice(lat, helical)
@@ -1976,7 +1987,14 @@ class CouplingMPOModel(CouplingModel, MPOModel):
             DefaultLattice = self.default_lattice
             if isinstance(DefaultLattice, str):
                 DefaultLattice = get_lattice(DefaultLattice)
-            assert isinstance(lat, DefaultLattice)
+            check_lat = lat
+            if isinstance(check_lat, IrregularLattice):
+                check_lat = check_lat.regular_lattice
+            if isinstance(check_lat, HelicalLattice):
+                check_lat = check_lat.regular_lattice
+            if isinstance(check_lat, MultiSpeciesLattice):
+                check_lat = check_lat.simple_lattice
+            assert isinstance(check_lat, DefaultLattice), "model sets force_default_lattice"
         return lat
 
     def init_sites(self, model_params):
@@ -2003,7 +2021,22 @@ class CouplingMPOModel(CouplingModel, MPOModel):
         -------
         sites : (tuple of) :class:`~tenpy.networks.site.Site`
             The local sites of the lattice, defining the local basis states and operators.
+        optional_species_names : not set | list of str | None
+            You should usually just return the (tuple of) `sites`.
+            However, you can aditionally return a list `species_names` to indicate that the
+            :class:`~tenpy.models.lattice.MultiSpeciesLattice` should be used.
         """
+        # example:
+        #     conserve = model_params.get('conserve', 'best')
+        #     if conserve == 'best':
+        #         # might check other model_params to see what's actually best possible
+        #         conserve = 'Sz'
+        #     return SpinHalfSite(conserve=conserve)
+        # or if you want to use the MultiSpeciesLattice, e.g. for spin-full fermions:
+        #     f_up, f_down = FermionSite('N'), FermionSite('N')
+        #     set_common_charges([f_up, f_down], 'independent')
+        #     # 'independent' for conserving N_up and N_down individually, 'same' for total N
+        #     return [f_up, f_down], ["up", "down"]
         raise NotImplementedError("Subclasses should implement `init_sites`")
         # or at least redefine the lattice
 
