@@ -8,7 +8,8 @@ from .lattice import Chain
 from ..tools.params import asConfig
 from ..networks.site import FermionSite, BosonSite, SpinHalfFermionSite, spin_half_species
 
-__all__ = ['BoseHubbardModel', 'BoseHubbardChain', 'FermiHubbardModel', 'FermiHubbardChain']
+__all__ = ['BoseHubbardModel', 'BoseHubbardChain', 'FermiHubbardModel', 'FermiHubbardChain',
+           'FermiHubbardModel2']
 
 
 class BoseHubbardModel(CouplingMPOModel):
