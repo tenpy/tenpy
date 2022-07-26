@@ -7,9 +7,11 @@ with a given bond dimension. Compared to e.g. TEBD, the algorithm has several ad
 e.g. it conserves the unitarity of the time evolution and the energy (for the single-site version),
 and it is suitable for time evolution of Hamiltonian with arbitrary long range in the form of MPOs.
 We have implemented:
+
 1. The one-site formulation following the TDVP princible in :class:`SingleSiteTDVPEngine`,
    which **does not** allow for growth of the bond dimension.
-   2. The two-site algorithm in the :Class:`TwoSiteDMRGEngine`, which does allow the bond
+
+2. The two-site algorithm in the :Class:`TwoSiteDMRGEngine`, which does allow the bond
    dimension to grow - but requires truncation as in the TEBD case, and is no longer strictly TDVP,
    i.e. it does *not* strictly preserve the energy.
 

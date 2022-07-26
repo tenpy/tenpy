@@ -1586,7 +1586,7 @@ class BosonSite(Site):
 def spin_half_species(SpeciesSite, cons_N, cons_Sz, **kwargs):
     """Initialize two FermionSite or BosonSite to represent spin-1/2 species.
 
-    You can use this directly in the :method:`tenpy.models.model.CouplingMPOModel.init_sites`,
+    You can use this directly in the :meth:`tenpy.models.model.CouplingMPOModel.init_sites`,
     e.g., as in the :meth:`tenpy.models.hubbard.FermiHubbardModel2.init_sites`::
 
         cons_N = model_params.get('cons_N', 'N')

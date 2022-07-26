@@ -13,7 +13,7 @@ lattice.
 See also the :doc:`/intro/model` and :doc:`/intro/lattices`.
 
 Further, an overview with plots of the predefined models is given in
-:doc:`/notebooks/`
+:doc:`/notebooks/90_overview_predefined_lattices`
 
 """
 # Copyright 2018-2021 TeNPy Developers, GNU GPLv3
@@ -1652,9 +1652,12 @@ class MultiSpeciesLattice(Lattice):
         >>> f = tenpy.networks.site.FermionSite(conserve='N')
         >>> s = tenpy.networks.site.SpinHalfSite(conserve='Sz')
         >>> tenpy.networks.site.set_common_charges([f, s], 'independent')
+        [array([0, 1]), array([1, 0])]
         >>> fs_lat = MultiSpeciesLattice(simple_lat, [f, s], ['f', 's'])
 
     There are corresponding coupling pairs definded:
+
+    .. doctest :: MultiSpeciesLattice
 
         >>> for key in fs_lat.pairs.keys():
         ...     if key.startswith('nearest'):
@@ -1671,6 +1674,8 @@ class MultiSpeciesLattice(Lattice):
     We further have "onsite" terms for couplings between the species defined.
     Here, there is no ``'onsite_s-f'``, as it would be the same as ``'onsite_f-s'``.
 
+    .. doctest :: MultiSpeciesLattice
+
         >>> for key in fs_lat.pairs.keys():
         ...     if key.startswith('onsite'):
         ...          print(key)
@@ -1685,6 +1690,7 @@ class MultiSpeciesLattice(Lattice):
         >>> simple_lat = Honeycomb(2, 3, None)
         >>> f = tenpy.networks.site.FermionSite(conserve='N')
         >>> tenpy.networks.site.set_common_charges([f, f], 'same')  # same = total N conserved
+        [array([0, 1]), array([0, 1])]
         >>> spinfull_fermion_Honeycomb = MultiSpeciesLattice(simple_lat, [f, f], ['up', 'down'])
 
     In this case, you could also call :func:`tenpy.networks.site.spin_half_species`.
@@ -2358,6 +2364,7 @@ class Chain(SimpleLattice):
             ax.set_ylim(-0.5, 0.5)
         plt.show()
 
+
     Parameters
     ----------
     L : int
@@ -2393,6 +2400,7 @@ class Chain(SimpleLattice):
             Thus, it avoids the ultra-long-range coupling from site 0 to L-1, at the expense of
             (almost) each nearest-neighbor coupling now being next-nearest-neighbors.
             Graphically::
+
                 |       PBC couplings on ring  --->        MPS order='folded'
                 |       number=physical site               number=position in MPS
                 |
