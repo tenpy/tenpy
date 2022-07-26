@@ -1646,33 +1646,48 @@ class MultiSpeciesLattice(Lattice):
     :func:`~tenpy.networks.site.set_common_charges` (see examples there!) to adjust the charges,
     especially if you have different sites. Consider a combination of Fermions and Spins:
 
-    .. doctest :: IrregularLattice
+    .. doctest :: MultiSpeciesLattice
 
         >>> simple_lat = Square(2, 3, None)
         >>> f = tenpy.networks.site.FermionSite(conserve='N')
         >>> s = tenpy.networks.site.SpinHalfSite(conserve='Sz')
         >>> tenpy.networks.site.set_common_charges([f, s], 'independent')
         >>> fs_lat = MultiSpeciesLattice(simple_lat, [f, s], ['f', 's'])
+
+    There are corresponding coupling pairs definded:
+
         >>> for key in fs_lat.pairs.keys():
         ...     if key.startswith('nearest'):
         ...          print(key)
-        nearest_neighbors_f
-        nearest_neighbors_s
-        nearest_neighbors_all
-        >>> print(fs_lat.pairs['nearest_neighbors_all'])
+        nearest_neighbors_f-f
+        nearest_neighbors_f-s
+        nearest_neighbors_s-f
+        nearest_neighbors_s-s
+        nearest_neighbors_all-all
+        nearest_neighbors_diag
+        >>> print(fs_lat.pairs['nearest_neighbors_diag'])
         [(0, 0, array([1, 0])), (0, 0, array([0, 1])), (1, 1, array([1, 0])), (1, 1, array([0, 1]))]
 
-    Note that the "simple lattice" can also have a non-trivial unit cell itself, e.g.
-    the Honeycomb already has two sites in it's unit cell.
-    It's easy to put spin-full fermions inside the Honeycomb lattice:
+    We further have "onsite" terms for couplings between the species defined.
+    Here, there is no ``'onsite_s-f'``, as it would be the same as ``'onsite_f-s'``.
 
-    .. doctest ::
+        >>> for key in fs_lat.pairs.keys():
+        ...     if key.startswith('onsite'):
+        ...          print(key)
+        onsite_f-s
+
+
+    Note that the "simple lattice" can also have a non-trivial unit cell itself, e.g.
+    the Honeycomb already has two sites in it's unit cell:
+
+    .. doctest :: MultiSpeciesLattice
 
         >>> simple_lat = Honeycomb(2, 3, None)
         >>> f = tenpy.networks.site.FermionSite(conserve='N')
         >>> tenpy.networks.site.set_common_charges([f, f], 'same')  # same = total N conserved
         >>> spinfull_fermion_Honeycomb = MultiSpeciesLattice(simple_lat, [f, f], ['up', 'down'])
 
+    In this case, you could also call :func:`tenpy.networks.site.spin_half_species`.
     """
     Lu = None  #: unknown number of sites in the unit cell
 
@@ -1710,25 +1725,40 @@ class MultiSpeciesLattice(Lattice):
         names = self.species_names
         new_pairs = {}
         # note: inline species_u_to_simple_u and simple_u_to_species methods here
+        errmsg = "duplicate key %s for pairs; use different species names!"
         for pair_key, pair_val in self.simple_lattice.pairs.items():
             pair_val_all = []
-            for sp_idx, sp_name in enumerate(names):
-                pair_key_sp = '_'.join((pair_key, sp_name))
-                if pair_key_sp in new_pairs:
-                    raise ValueError(f"duplicate key {pair_key_sp!r} for pairs; "
-                                     "use different species names!")
-                pair_val_sp = []
-                for (u1, u2, dx) in pair_val:
-                    pair_val_sp.append((u1 * N_sp + sp_idx, u2 * N_sp + sp_idx, dx))
-                new_pairs[pair_key_sp] = pair_val_sp
-                pair_val_all.extend(pair_val_sp)
-            pair_key_all = pair_key + '_all'
-            if pair_key_all in new_pairs:
-                raise ValueError(f"duplicate key {pair_key_all!r} for pairs; "
-                                 "use different species names!")
-            new_pairs[pair_key_all] = pair_val_all
+            pair_val_diag = []
+            for sp_idx1, sp_name1 in enumerate(names):
+                for sp_idx2, sp_name2 in enumerate(names):
+                    pair_key_sp = f"{pair_key}_{sp_name1}-{sp_name2}"
+                    if pair_key_sp in new_pairs:
+                        raise ValueError(errmsg % pair_key_sp)
+                    pair_val_sp = []
+                    for (u1, u2, dx) in pair_val:
+                        pair_val_sp.append((u1 * N_sp + sp_idx1, u2 * N_sp + sp_idx2, dx))
+                    new_pairs[pair_key_sp] = pair_val_sp
+                    pair_val_all.extend(pair_val_sp)
+                    if sp_idx1 == sp_idx2:
+                        pair_val_diag.extend(pair_val_sp)
+            for key_sum, pair_val_sum in [('all-all', pair_val_all), ('diag', pair_val_diag)]:
+                pair_key_sum = f"{pair_key}_{key_sum}"
+                if pair_key_sum in new_pairs:
+                    if pair_key_sp in new_pairs:
+                        raise ValueError(errmsg % pair_key_sum)
+                new_pairs[pair_key_sum] = pair_val_sum
+        dx = [0] * self.simple_lattice.dim
+        for sp_idx1, sp_name1 in enumerate(names):
+            for sp_idx2, sp_name2 in enumerate(names):
+                if sp_idx2 <= sp_idx1:
+                    continue # fully onsite!
+                onsite_pair_key = f"onsite_{sp_name1}-{sp_name2}"
+                onsite_pair_val = [(u * N_sp + sp_idx1, u * N_sp + sp_idx2, dx)
+                                   for u in range(self.simple_Lu)]
+                if onsite_pair_key in new_pairs:
+                    raise ValueError(errmsg % onsite_pair_key)
+                new_pairs[onsite_pair_key] = onsite_pair_val
         return new_pairs
-
 
     def ordering(self, order):
         """Define orderings as for the `simple_lattice` with priority for within the unit cell.
@@ -1796,16 +1826,6 @@ class MultiSpeciesLattice(Lattice):
             Unit cell index `u` in `self`.
         """
         return simple_u * self.N_species + species_idx
-
-    def onsite_species_pairs(self, species_1, species_2):
-        if species_1 in self.species_names:
-            species_1 = self.species_names.index(species_1)
-        if species_2 in self.species_names:
-            species_2 = self.species_names.index(species_2)
-        for simple_u in range(self.simple_Lu):
-            yield (self.simple_u_to_species_u(simple_u, species_1),
-                   self.simple_u_to_species_u(simple_u, species_2),
-                   [0] * self.dim)  # self.dim is property
 
 
 class IrregularLattice(Lattice):

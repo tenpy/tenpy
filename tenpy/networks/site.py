@@ -10,7 +10,7 @@ import copy
 import warnings
 
 from ..linalg import np_conserved as npc
-from ..tools.misc import inverse_permutation
+from ..tools.misc import inverse_permutation, find_subclass
 from ..tools.hdf5_io import Hdf5Exportable
 
 __all__ = [
@@ -1035,6 +1035,34 @@ def multi_sites_combine_charges(sites, same_charges=[]):
         site.change_charge(leg, perm_flat)
     return perms
 
+def kron(*ops, group=True):
+    """Kronecker product of two or more local operators.
+
+    Parameters
+    ----------
+    *ops : :class:`~tenpy.linalg.np_conserved.Array`
+        Local operators with labels ``'p', 'p*'`` as defined in :class:`Site`.
+    group : bool
+        Whether to combine the in/outgoing legs.
+
+    Returns
+    -------
+    product : :class:`~tenpy.linalg.np_conserved.Array`
+        Outer product of the `ops`, with legs ``'p0', 'p0*', 'p1', 'p1*', ...`` (grouped=False)
+        or combined legs ``'(p0.p1...)', '(p0*.p1*...)'`` (grouped=True).
+    """
+    if len(ops) <= 1:
+        raise ValueError("need at least 2 ops")
+    product = npc.outer(ops[0].replace_labels(['p', 'p*'], ['p0', 'p0*']),
+                        ops[1].replace_labels(['p', 'p*'], ['p1', 'p1*']))
+    for i in range(2, len(ops)):
+        op = ops[i].replace_labels(['p', 'p*'], [f"p{i:d}", f"p{i:d}*"])
+        product = npc.outer(product, op)
+    if group:
+        labels = [[f"p{i:d}" for i in range(len(ops))], [f"p{i:d}*" for i in range(len(ops))]]
+        product = product.combine_legs(labels, qconj=[+1, -1])
+    return product
+
 
 # ------------------------------------------------------------------------------
 # The most common local sites.
@@ -1554,30 +1582,68 @@ class BosonSite(Site):
                                                        f=self.filling)
 
 
-def kron(*ops, group=True):
-    """Kronecker product of two or more local operators.
+def spin_half_species(SpeciesSite, cons_N, cons_Sz, **kwargs):
+    """Initialize two FermionSite or BosonSite to represent spin-1/2 species.
+
+    You can use this directly in the :method:`tenpy.models.model.CouplingMPOModel.init_sites`,
+    e.g., as in the :meth:`tenpy.models.hubbard.FermiHubbardModel2.init_sites`::
+
+        cons_N = model_params.get('cons_N', 'N')
+        cons_Sz = model_params.get('cons_Sz', 'Sz')
+        return spin_half_species(FermionSite, cons_N=cons_N, cons_Sz=cons_Sz)
 
     Parameters
     ----------
-    *ops : :class:`~tenpy.linalg.np_conserved.Array`
-        Local operators with labels ``'p', 'p*'`` as defined in :class:`Site`.
-    group : bool
-        Whether to combine the in/outgoing legs.
+    SpeciesSite : :class:`Site` | str
+        The (name of the) site class for the species;
+        usually just :class:`FermionSite` or :class:`BosonSite`.
+    cons_N : None | ``"N", "parity", "None"``
+        Whether to conserve the (parity of the) total particle number ``N_up + N_down``.
+    cons_Sz : None | ``"Sz", "parity", "None"``
+        Whether to conserve the (parity of the) total Sz spin ``N_up - N_down``.
 
     Returns
     -------
-    product : :class:`~tenpy.linalg.np_conserved.Array`
-        Outer product of the `ops`, with legs ``'p0', 'p0*', 'p1', 'p1*', ...`` (grouped=False)
-        or combined legs ``'(p0.p1...)', '(p0*.p1*...)'`` (grouped=True).
+    sites : list of `SpeciesSite`
+        Each one instance of the site for spin up and down.
+    species_names : list of str
+        Always ``['up', 'down']``. Included such that a ``return spin_half_species(...)``
+        in :meth:`~tenpy.models.model.CouplingMPOModel.init_sites` triggers the use of the
+        :class:`~tenpy.models.lattice.MultiSpeciesLattice`.
     """
-    if len(ops) <= 1:
-        raise ValueError("need at least 2 ops")
-    product = npc.outer(ops[0].replace_labels(['p', 'p*'], ['p0', 'p0*']),
-                        ops[1].replace_labels(['p', 'p*'], ['p1', 'p1*']))
-    for i in range(2, len(ops)):
-        op = ops[i].replace_labels(['p', 'p*'], [f"p{i:d}", f"p{i:d}*"])
-        product = npc.outer(product, op)
-    if group:
-        labels = [[f"p{i:d}" for i in range(len(ops))], [f"p{i:d}*" for i in range(len(ops))]]
-        product = product.combine_legs(labels, qconj=[+1, -1])
-    return product
+    SpeciesSite = find_subclass(Site, SpeciesSite)
+    if not cons_N:
+        cons_N = 'None'
+    if cons_N not in ['N', 'parity', 'None']:
+        raise ValueError("invalid `cons_N`: " + repr(cons_N))
+    if not cons_Sz:
+        cons_Sz = 'None'
+    if cons_Sz not in ['Sz', 'parity', 'None']:
+        raise ValueError("invalid `cons_Sz`: " + repr(cons_Sz))
+
+    conserve=None if cons_N == 'None' and cons_Sz == 'None' else 'N'
+
+    up_site = SpeciesSite(conserve=conserve, **kwargs)
+    down_site = SpeciesSite(conserve=conserve, **kwargs)
+
+    new_charges = []
+    new_names = []
+    new_mod = []
+    if cons_N == 'N':
+        new_charges.append([(1, 0, 0), (1, 1, 0)])
+        new_names.append('N')
+        new_mod.append(1)
+    elif cons_N == 'parity':
+        new_charges.append([(1, 0, 0), (1, 1, 0)])
+        new_names.append('parity_N')
+        new_mod.append(2)
+    if cons_Sz == 'Sz':
+        new_charges.append([(1, 0, 0), (-1, 1, 0)])
+        new_names.append('2*Sz')  # factor 2 s.t. Cu, Cd have well-defined charges!
+        new_mod.append(1)
+    elif cons_Sz == 'parity':
+        new_charges.append([(1, 0, 0), (-1, 1, 0)])
+        new_names.append('2*Sz')  # factor 2 s.t. Cu, Cd have well-defined charges!
+        new_mod.append(4)
+    set_common_charges([up_site, down_site], new_charges, new_names, new_mod)
+    return [up_site, down_site], ['up', 'down']

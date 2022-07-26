@@ -37,7 +37,9 @@ Added
 - :class:`~tenpy.models.lattice.NLegLadder`, and more `pairs` (``'rung_NN', 'leg_NN', 'diagonal'``) for the :class:`~tenpy.models.lattice.Ladder`.
 - :meth:`tenpy.algorithms.Algorithm.switch_engine` for simplified switching from e.g. the `TwoSiteDMRGEngine` to the `SingleSiteDMRGEngine`.
 - :class:`~tenpy.models.lattice.MultiSpeciesLattice` to simplify implementing e.g. spin-full fermions or bosons without
-  using the :class:`~tenpy.networks.site.GroupedSite`.
+  using the :class:`~tenpy.networks.site.GroupedSite`. Further helper functions :func:`~tenpy.networks.site.spin_half_species`, 
+  as well as the new :class:`~tenpy.models.hubbard.FermiHubbardModel2` using it, and an example
+  :doc:`/notebooks/31_multispecies_models.ipynb`.
 
 Changed
 ^^^^^^^
