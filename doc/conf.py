@@ -74,6 +74,8 @@ author = 'TeNPy Developers'
 version = tenpy.__version__  # The short X.Y version.
 release = tenpy.__full_version__  # The full version, including alpha/beta/rc tags.
 
+language = 'en'
+
 # List of patterns, relative to source directory, that match files and
 # directories to ignore when looking for source files.
 # This patterns also effect to html_static_path and html_extra_path
@@ -245,10 +247,11 @@ intersphinx_mapping = {
 # -- sphinx.ext.extlinks --------------------------------------------------
 # allows to use, e.g., :arxiv:`1805.00055`
 extlinks = {
-    'arxiv': ('https://arxiv.org/abs/%s', 'arXiv:'),
-    'doi': ('https://dx.doi.org/%s', 'doi:'),
-    'issue': (GITHUBBASE + '/issues/%s', 'issue #'),
-    'forum': ('https://tenpy.johannes-hauschild.de/viewtopic.php?t=%s', 'Community forum topic ')
+    'arxiv': ('https://arxiv.org/abs/%s', 'arXiv:%s'),
+    'doi': ('https://dx.doi.org/%s', 'doi:%s'),
+    'issue': (GITHUBBASE + '/issues/%s', 'issue #%s'),
+    'forum': ('https://tenpy.johannes-hauschild.de/viewtopic.php?t=%s',
+              'community forum (topic %s)')
 }
 
 
