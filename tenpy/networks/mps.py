@@ -2398,6 +2398,10 @@ class MPS:
         ops1 : (list of) { :class:`~tenpy.linalg.np_conserved.Array` | str }
             First operator of the correlation function (acting after ops2).
             If a list is given, ``ops1[i]`` acts on site `i` of the MPS.
+            Note that even if a list is given, we still just evaluate two-site correlations!
+            ``psi.correlation_function(['A','B'], ['C', 'D'])`` evaluates
+            ``<A_i C_j>`` for even i and even j, ``<B_i C_j>`` for even i and odd j,
+            ``<B_i C_j>`` for odd i and even j, and ``<B_i D_j>`` for odd i and odd j.
         ops2 : (list of) { :class:`~tenpy.linalg.np_conserved.Array` | str }
             Second operator of the correlation function (acting before ops1).
             If a list is given, ``ops2[j]`` acts on site `j` of the MPS.
