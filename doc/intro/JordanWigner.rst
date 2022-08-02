@@ -127,7 +127,7 @@ for example ``"Cu Cdd" == - "Cdd Cu"``, but again the ``JW`` on sites left of th
 commutation relations globally.
 
 .. warning ::
-    Again, the fermionic operators :math:`c_{\downarrow,j}, c^\dagger_{\downarrow,j}, c_{\downarrow,j}, c^\dagger_{\downarrow,j}` correspond to  *global* operators consisting of
+    Again, the fermionic operators :math:`c_{\uparrow,j}, c^\dagger_{\uparrow,j}, c_{\downarrow,j}, c^\dagger_{\downarrow,j}` correspond to  *global* operators consisting of
     the Jordan-Wigner string built by the local operator ``JW`` on sites ``l < j`` *and* the local operators ``'Cu', 'Cdu', 'Cd', 'Cdd'`` on site ``j``.
 
 Written explicitly in terms of onsite operators defined in the :class:`~tenpy.networks.sites.FermionSite`,
