@@ -343,13 +343,15 @@ class MPO:
 
     def get_W(self, i, copy=False):
         """Return `W` at site `i`."""
-        i = self._to_valid_index(i)
+        W = self._W[self._to_valid_index(i)]
+        W = W.shift_charges(i - i % self.L)
         if copy:
-            return self._W[i].copy()
-        return self._W[i]
+            return W.copy()
+        return W
 
     def set_W(self, i, W):
         """Set `W` at site `i`."""
+        W.shift_charges(i % self.L - i)
         i = self._to_valid_index(i)
         self._W[i] = W
 

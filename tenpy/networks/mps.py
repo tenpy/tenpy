@@ -907,10 +907,10 @@ class MPS:
         ------
         ValueError : if self is not in canoncial form and `form` is not None.
         """
-        i = self._to_valid_index(i)
         new_form = self._to_valid_form(form)
-        old_form = self.form[i]
-        B = self._B[i]
+        old_form = self.form[self._to_valid_index(i)]
+        B = self._B[self._to_valid_index(i)]
+        B = B.shift_charges(i - i % self.L)
         if copy:
             B = B.copy()
         if new_form is not None and old_form != new_form:
@@ -938,6 +938,7 @@ class MPS:
             The (canonical) form of the `B` to set.
             ``None`` stands for non-canonical form.
         """
+        B = B.shift_charges(i % self.L - i)  # shift back into unit cell
         i = self._to_valid_index(i)
         self.form[i] = self._to_valid_form(form)
         self.dtype = np.find_common_type([self.dtype, B.dtype], [])
@@ -985,24 +986,38 @@ class MPS:
 
     def get_SL(self, i):
         """Return singular values on the left of site `i`"""
+        shift = i - i % self.L
         i = self._to_valid_index(i)
-        return self._S[i]
+        S = self._S[i]
+        if isinstance(S, npc.Array) and shift:
+            return S.shift_charges(shift)
+        return S
 
     def get_SR(self, i):
         """Return singular values on the right of site `i`"""
+        shift = (i+1) - (i+1) % self.L
         i = self._to_valid_index(i)
-        return self._S[i + 1]
+        S = self._S[i + 1]
+        if isinstance(S, npc.Array) and shift:
+            return S.shift_charges(shift)
+        return S
 
     def set_SL(self, i, S):
         """Set singular values on the left of site `i`"""
+        shift = i - i % self.L
         i = self._to_valid_index(i)
+        if isinstance(S, npc.Array) and shift:
+            S = S.shift_charges(-shift)  # shift back into unit cell
         self._S[i] = S
         if not self.finite and i == 0:
             self._S[self.L] = S
 
     def set_SR(self, i, S):
         """Set singular values on the right of site `i`"""
+        shift = (i+1) - (i+1) % self.L
         i = self._to_valid_index(i)
+        if isinstance(S, npc.Array) and shift:
+            S = S.shift_charges(-shift)  # shift back into unit cell
         self._S[i + 1] = S
         if not self.finite and i == self.L - 1:
             self._S[0] = S
@@ -1029,6 +1044,8 @@ class MPS:
         op = op_list[i % len(op_list)]
         if (isinstance(op, str)):
             op = self.sites[i % self.L].get_op(op)
+        if op is not None:
+            op = op.shift_charges(i - i % self.L)
         return op
 
     def get_theta(self, i, n=2, cutoff=1.e-16, formL=1., formR=1.):
@@ -1056,8 +1073,8 @@ class MPS:
             In Vidal's notation (with s=lambda, G=Gamma):
             ``theta = s**form_L G_i s G_{i+1} s ... G_{i+n-1} s**form_R``.
         """
-        i = self._to_valid_index(i)
-        for j in range(i, i + n):
+        i0 = self._to_valid_index(i)
+        for j in range(i0, i0 + n):
             if self.form[j % self.L] is None:
                 raise ValueError("can't calculate theta for non-canonical form")
         if n == 1:
@@ -1066,11 +1083,11 @@ class MPS:
             raise ValueError("n needs to be larger than 0")
         # n >= 2: contract some B's
         theta = self.get_B(i, (formL, None), False, cutoff, '0')  # right form as stored
-        _, old_fR = self.form[i]
+        _, old_fR = self.form[i0]
         for k in range(1, n):  # non-empty range
             j = self._to_valid_index(i + k)
             new_fR = None if k + 1 < n else formR  # right form as stored, except for last B
-            B = self.get_B(j, (1. - old_fR, new_fR), False, cutoff, str(k))
+            B = self.get_B(i + k, (1. - old_fR, new_fR), False, cutoff, str(k))
             _, old_fR = self.form[j]
             theta = npc.tensordot(theta, B, axes=['vR', 'vL'])
         return theta
@@ -1139,7 +1156,7 @@ class MPS:
         self.test_sanity()
 
     def roll_mps_unit_cell(self, shift=1):
-        """Shift the section we define as unit cellof an infinite MPS; in place.
+        """Shift the section we define as unit cell of an infinite MPS; in place.
 
         Suppose we have a unit cell with tensors ``[A, B, C, D]`` (repeated on both sites).
         With ``shift = 1``, the new unit cell will be ``[D, A, B, C]``,
@@ -4554,11 +4571,12 @@ class MPSEnvironment:
             raise ValueError("No left part in the system???")
         age = self.get_LP_age(i0)
         for j in range(i0, i):
+            LP = LP.shift_charges(j - j % self.L)  # shift if outside of unit cell
             LP = self._contract_LP(j, LP)
             age = age + 1
             if store:
                 self.set_LP(j + 1, LP, age=age)
-        return LP
+        return LP.shift_charges(i - i % self.L)
 
     def get_RP(self, i, store=True):
         """Calculate RP at given site from nearest available one.
@@ -4597,11 +4615,12 @@ class MPSEnvironment:
             raise ValueError("No right part in the system???")
         age = self.get_RP_age(i0)
         for j in range(i0, i, -1):
+            RP = RP.shift_charges(j - j % self.L)  # shift if outside of unit cell
             RP = self._contract_RP(j, RP)
             age = age + 1
             if store:
                 self.set_RP(j - 1, RP, age=age)
-        return RP
+        return RP.shift_charges(i - i % self.L)
 
     def get_LP_age(self, i):
         """Return number of physical sites in the contractions of get_LP(i).
@@ -4619,12 +4638,14 @@ class MPSEnvironment:
 
     def set_LP(self, i, LP, age):
         """Store part to the left of site `i`."""
+        LP = LP.shift_charges(i % self.L - i)  # shift back into unit cell
         i = self._to_valid_index(i)
         self.cache[self._LP_keys[i]] = LP
         self._LP_age[i] = age
 
     def set_RP(self, i, RP, age):
         """Store part to the right of site `i`."""
+        RP = RP.shift_charges(i % self.L - i)  # shift back into unit cell
         i = self._to_valid_index(i)
         self.cache[self._RP_keys[i]] = RP
         self._RP_age[i] = age
@@ -4825,6 +4846,7 @@ class MPSEnvironment:
         axes = (self.ket._get_p_label('*') + ['vL*'], self.ket._p_label + ['vR*'])
         # for a ususal MPS, axes = (['p*', 'vL*'], ['p', 'vR*'])
         LP = npc.tensordot(self.bra.get_B(i, form='A').conj(), LP, axes=axes)
+        # LP = LP.shift_charges(i % self.L - i)  # shift back into unit cell
         return LP  # labels 'vR*', 'vR'
 
     def _contract_RP(self, i, RP):
@@ -4833,6 +4855,7 @@ class MPSEnvironment:
         axes = (self.ket._p_label + ['vL*'], self.ket._get_p_label('*') + ['vR*'])
         # for a ususal MPS, axes = (['p', 'vL*'], ['p*', 'vR*'])
         RP = npc.tensordot(RP, self.bra.get_B(i, form='B').conj(), axes=axes)
+        # RP = RP.shift_charges(i % self.L - i)  # shift back into unit cell
         return RP  # labels 'vL', 'vL*'
 
     def _to_valid_index(self, i):
