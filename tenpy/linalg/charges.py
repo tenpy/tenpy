@@ -54,6 +54,8 @@ class ChargeInfo:
         Defaults to "trivial", i.e., no charge.
     names : list of str
         Descriptive names for the charges.  Defaults to ``['']*qnumber``.
+    shift_func : callable shift_func(charges, shift)
+        Callable function to apply a shift to the charges
 
     Attributes
     ----------
@@ -70,28 +72,29 @@ class ChargeInfo:
     -----
     Instances of this class can (should) be shared between different `LegCharge` and `Array`'s.
     """
-    def __init__(self, mod=[], names=None):
+    def __init__(self, mod=[], names=None, shift_func=None):
         mod = np.array(mod, dtype=QTYPE)
         assert mod.ndim == 1
         if names is None:
             names = [''] * len(mod)
         names = [str(n) for n in names]
-        self.__setstate__((len(mod), mod, names))
+        self.__setstate__((len(mod), mod, names, shift_func))
         self.test_sanity()  # checks for invalid arguments
 
     def __getstate__(self):
         """Allow to pickle and copy."""
-        return (self._qnumber, self._mod, self.names)
+        return (self._qnumber, self._mod, self.names, self.shift_func)
 
     def __setstate__(self, state):
         """Allow to pickle and copy."""
-        qnumber, mod, names = state
+        qnumber, mod, names, shift_func = state
         self._mod = mod
         self._qnumber = mod.shape[0]
         assert qnumber == self._qnumber
         self._mask = np.not_equal(mod, 1)  # where we need to take modulo in :meth:`make_valid`
         self._mod_masked = mod[self._mask].copy()  # only where mod != 1
         self.names = names
+        self.shift_func = shift_func
 
     def save_hdf5(self, hdf5_saver, h5gr, subpath):
         """Export `self` into a HDF5 file.
@@ -113,6 +116,8 @@ class ChargeInfo:
         h5gr.attrs['num_charges'] = self._qnumber
         hdf5_saver.save(self._mod, subpath + "U1_ZN")
         hdf5_saver.save(self.names, subpath + "names")
+        if self.shift_func:
+            hdf5_saver.save(self.shift_func, subpath + "shift_func")
 
     @classmethod
     def from_hdf5(cls, hdf5_loader, h5gr, subpath):
@@ -145,7 +150,11 @@ class ChargeInfo:
             names = hdf5_loader.load(subpath + "names")
         else:
             names = [''] * qnumber
-        obj.__setstate__((qnumber, qmod, names))
+        if "shift_func" in h5gr:
+            shift_func = hdf5_loader.load(subpath + "shift_func")
+        else:
+            shift_func = None
+        obj.__setstate__((qnumber, qmod, names, shift_func))
         obj.test_sanity()
         return obj
 
@@ -280,6 +289,30 @@ class ChargeInfo:
         """
         charges = np.asarray(charges, dtype=QTYPE)[..., self._mask]
         return np.all(np.logical_and(0 <= charges, charges < self._mod_masked))
+
+    def shift_charges(self, charges, shift, copy=False):
+        r"""Shift charges by `shift` lattice sites
+
+        Parameters
+        ----------
+        charges : 2D ndarray QTYPE_t
+            Charge values to be shifted
+        shift : int
+            Off-set to be shifted
+        copy : bool
+            Whether to return a copy of the charges or shift them in-place
+
+        Returns
+        -------
+        charges : 2D ndarray QTYPE_t
+            The resulting charges
+        """
+        charges = np.asarray(charges, dtype=QTYPE)
+        if copy:
+            charges = charges.copy()
+        if self.shift_func is None:
+            return charges
+        return self.shift_func(charges, shift)
 
     def __repr__(self):
         """Full string representation."""
