@@ -40,6 +40,7 @@ Added
   using the :class:`~tenpy.networks.site.GroupedSite`. Further helper functions :func:`~tenpy.networks.site.spin_half_species`, 
   as well as the new :class:`~tenpy.models.hubbard.FermiHubbardModel2` using it, and an example
   :doc:`/notebooks/31_multispecies_models`.
+- Keyword argument `permute_dense` for :meth:`tenpy.networks.site.Site.add_op`.
 
 Changed
 ^^^^^^^

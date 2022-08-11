@@ -192,7 +192,7 @@ class Site(Hdf5Exportable):
         """
         return dict([(name, getattr(self, name)) for name in sorted(self.opnames)])
 
-    def add_op(self, name, op, need_JW=False, hc=None):
+    def add_op(self, name, op, need_JW=False, hc=None, permute_dense=False):
         """Add one on-site operators.
 
         Parameters
@@ -213,6 +213,11 @@ class Site(Hdf5Exportable):
             The name for the hermitian conjugate operator, to be used for :attr:`hc_ops`.
             By default (``None``), try to auto-determine it.
             If ``False``, disable adding antries to :attr:`hc_ops`.
+        permute_dense : bool
+            Flag to enable/disable permuations when converting `op` from numpy to
+            np_conserved arrays.
+            If True, the operator is permuted with :attr:`perm` to account for permutations
+            induced by sorting charges.
         """
         name = str(name)
         if not name.isidentifier():
@@ -225,6 +230,9 @@ class Site(Hdf5Exportable):
             op = np.asarray(op)
             if op.shape != (self.dim, self.dim):
                 raise ValueError("wrong shape of on-site operator")
+            if permute_dense:
+                perm = self.perm
+                op = op[np.ix_(perm, perm)]
             try:
                 op = npc.Array.from_ndarray(op, [self.leg, self.leg.conj()])
             except ValueError as e:
