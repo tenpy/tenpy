@@ -149,7 +149,7 @@ Analyzing the results post simulation: output structure
 A simulation usually generates an output file that can be loaded with the :func:`~tenpy.tools.hdf5_io.load` function.
 It is usually either in the pickle or HDF5 format, see :doc:`/intro/input_output` for more details.
 
-The ability to keep code snippets and plots togehter in [jupyter]_ notebooks makes them a very convenient environment for anlyzing results.
+The ability to keep code snippets and plots together in [jupyter]_ notebooks makes them a very convenient environment for analyzing results.
 There are a bunch of jupyter notebooks in the :doc:`/examples` that you can look at for inspiration.
 
 The `results` returned by :func:`~tenpy.run_simulation` are a (nested) dictionary.
@@ -199,7 +199,7 @@ following example shows:
           ops1: Sp
           ops2: Sm
 
-Note the indentantion and minus signs here: this yaml syntax is equivalent to the following python structure:
+Note the indentation and minus signs here: this yaml syntax is equivalent to the following python structure:
 
 .. code-block :: python
 
@@ -282,7 +282,7 @@ also directly specify a set of "sequential" simulations where the output/results
 next one. This can be particularly useful to "adiabatically" follow the ground state when tuning model parameters, in
 particular for flux pump experiments, or to get a stable scaling with bond dimension.
 
-To acchieve this, you need to call :func:`~tenpy.run_seq_simulations` instead of just :func:`~tenpy.run_simulation`, and
+To achieve this, you need to call :func:`~tenpy.run_seq_simulations` instead of just :func:`~tenpy.run_simulation`, and
 specify the :cfg:config:`sequential` parameters for the simulation (at the top level of the yaml files), in particular
 the `recursive_keys` for the parameters to be changed. The values for those parameters can be specified as 
 :cfg:option:`sequential.value_lists`, or as lists in the original localtion of the yaml file.

@@ -121,13 +121,13 @@ for example ``JW`` on site `j` is given by :math:`(-1)^{n_{\uparrow,j}} (-1)^{n_
 and ``Cdd`` is :math:`(-1)^{n_{\uparrow,j}} \sigma^{+}_{\downarrow,j}`.
 Note the asymmetry regarding the spin in the definition of the onsite operators:
 the spin-down operators include Jordan-Wigner signs for the spin-up fermions on the same site. 
-This asymetry stems from the ordering convention introduced by the solid line in the picture, according to which the spin-up site
+This asymmetry stems from the ordering convention introduced by the solid line in the picture, according to which the spin-up site
 is "left" of the spin-down site. With the above definition, the operators within the same :class:`~tenpy.networks.site.SpinHalfFermionSite` fulfill the expected commutation relations,
 for example ``"Cu Cdd" == - "Cdd Cu"``, but again the ``JW`` on sites left of the operator pair is crucial to get the correct
 commutation relations globally.
 
 .. warning ::
-    Again, the fermionic operators :math:`c_{\downarrow,j}, c^\dagger_{\downarrow,j}, c_{\downarrow,j}, c^\dagger_{\downarrow,j}` correspond to  *global* operators consisting of
+    Again, the fermionic operators :math:`c_{\uparrow,j}, c^\dagger_{\uparrow,j}, c_{\downarrow,j}, c^\dagger_{\downarrow,j}` correspond to  *global* operators consisting of
     the Jordan-Wigner string built by the local operator ``JW`` on sites ``l < j`` *and* the local operators ``'Cu', 'Cdu', 'Cd', 'Cdd'`` on site ``j``.
 
 Written explicitly in terms of onsite operators defined in the :class:`~tenpy.networks.sites.FermionSite`,
@@ -183,7 +183,7 @@ However, if you use the :meth:`~tenpy.models.model.CouplingModel.add_coupling` m
 TeNPy can use the information from the `Site` class to *automatically add Jordan-Wigner* strings as needed.
 Indeed, with the default argument ``op_string=None``, `add_coupling` will automatically check whether the operators
 need Jordan-Wigner strings and correspondlingly set ``op_string='JW', str_on_first=True``, if necessary.
-For `add_multi_coupling`, you cann't even explicitly specify the correct Jordan-Wigner strings, but you **must use**
+For `add_multi_coupling`, you can't even explicitly specify the correct Jordan-Wigner strings, but you **must use**
 ``op_string=None``, from which it will automatically determine where Jordan-Wigner strings are needed.
 
 Obviously, you should be careful about the convention which of the operators is applied first (in a physical
@@ -231,7 +231,7 @@ string correctly.
 Some MPS methods like
 :meth:`~tenpy.networks.mps.MPS.correlation_function`,
 :meth:`~tenpy.networks.mps.MPS.expectation_value_term` and
-:meth:`~tenpy.networks.mps.MPS.expectation_value_terms_sum` automatically add Jordan-Wignder strings 
+:meth:`~tenpy.networks.mps.MPS.expectation_value_terms_sum` automatically add Jordan-Wigner strings 
 (at least with default arguments).
 Other more low-level functions like :meth:`~tenpy.networks.mps.MPS.expectation_value_multi_sites` don't do it.
 Hence, you should always watch out during measurements, if the function used needs special treatment for Jordan-Wigner strings.
