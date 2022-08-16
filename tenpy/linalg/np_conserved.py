@@ -1417,6 +1417,7 @@ class Array:
     def shift_charges(self, shift):
         """Return a shallow copy of self with shifted charges.
         """
+        shift = int(shift)
         if not shift:
             return self
         # Note the legs are always shared between copies! We make a shallow
@@ -1429,8 +1430,7 @@ class Array:
             # _, leg = leg.sort()  # Do we need this?
             res.legs[indx_leg] = leg  # update leg in the copy
         # modify the total charge
-        res.qtotal = self.chinfo.shift_charges(self.qtotal[np.newaxis, :],
-                                               shift, copy=True).flatten()
+        res.qtotal = self.chinfo.shift_charges(self.qtotal, shift, copy=True)
         return res
 
     # reshaping ===============================================================

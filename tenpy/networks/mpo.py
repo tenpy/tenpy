@@ -308,7 +308,7 @@ class MPO:
             raise ValueError("invalid MPO boundary conditions: " + repr(self.bc))
         for i in range(self.L):
             S = self.sites[i]
-            W = self._W[i]
+            W = self.get_W(i)
             S.leg.test_equal(W.get_leg('p'))
             S.leg.test_contractible(W.get_leg('p*'))
             if self.bc == 'infinite' or i + 1 < self.L:
@@ -1753,8 +1753,6 @@ class MPOGraph:
 
         charges = [[None] * len(st) for st in states]
         charges[0][states[0]['IdL']] = chinfo.make_valid(None)  # default charge = 0.
-        if infinite:
-            charges[-1] = charges[0]  # bond is identical
 
         def travel_q_LR(i, keyL):
             """Transport charges from left to right through the MPO graph.
@@ -1784,6 +1782,8 @@ class MPOGraph:
                         ch_r[r] = qL_Wq + op_qtotal  # solve chargerule for q_right
                         if infinite or i + 1 < L:
                             edge_stack.append(((i + 1) % L, keyR))
+                        if infinite and i + 1 == L:  # copy and shift to the left leg
+                            charges[0][r] = chinfo.shift_charges(ch_r[r], -L, copy=True)
                 stack = edge_stack + stack
 
         travel_q_LR(0, 'IdL')
@@ -1840,8 +1840,6 @@ class MPOGraph:
             ch = chinfo.make_valid(ch)
             leg = npc.LegCharge.from_qflat(chinfo, ch, qconj=+1)
             legs.append(leg)
-        if infinite:
-            legs[-1] = legs[0]  # identical charges
         return legs, Ws_qtotal
 
 
@@ -2229,7 +2227,7 @@ class MPOTransferMatrix(NpcLinearOperator):
     Attributes
     ----------
     transpose : bool
-        Whether `self.matvec` acts on `RP` (``True``) or `LP` (``False``).
+        Whether `self.matvec` acts on `RP` (``False``) or `LP` (``True``).
     dtype :
         Common dtype of `H` and `psi`.
     IdL, IdR : int
@@ -2260,10 +2258,10 @@ class MPOTransferMatrix(NpcLinearOperator):
         self.IdR = H.get_IdR(-1)  # on bond between MPS unit cells
         if self.IdL is None or self.IdR is None:
             raise ValueError("MPO needs to have structure with IdL/IdR")
-        wL = H.get_W(0).get_leg('wL')
-        wR = wL.conj()
         S2 = psi.get_SL(0)**2
         if not transpose:  # right to left
+            wR = H.get_W(self.L - 1).get_leg('wR')
+            wL = wR.conj()
             self.acts_on = ['vL', 'wL', 'vL*']  # vec: vL wL vL*
             for i in reversed(range(self.L)):
                 # optimize: transpose arrays to mostly avoid it in matvec
@@ -2293,6 +2291,8 @@ class MPOTransferMatrix(NpcLinearOperator):
                 guess = guess.transpose(['vL', 'wL', 'vL*'])  # copy!
                 self._project(guess)
         else:  # left to right
+            wL = H.get_W(0).get_leg('wL')
+            wR = wL.conj()
             self.acts_on = ['vR*', 'wR', 'vR']  # labels of the vec
             for i in range(self.L):
                 A = psi.get_B(i, 'A').astype(dtype, False)
@@ -2348,6 +2348,7 @@ class MPOTransferMatrix(NpcLinearOperator):
                 vec = npc.tensordot(vec, A, axes=['vR', 'vL'])  # vR* wR p vR
                 vec = npc.tensordot(W, vec, axes=[['wL', 'p*'], ['wR', 'p']])  # wR p vR* vR
                 vec = npc.tensordot(Ac, vec, axes=[['p*', 'vL*'], ['p', 'vR*']])  # vR* wR vR
+        vec = vec.shift_charges(self.L*(-1 if self.transpose else 1))
         if project:
             self._project(vec)
         return vec

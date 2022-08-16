@@ -83,7 +83,7 @@ class ChargeInfo:
 
     def __getstate__(self):
         """Allow to pickle and copy."""
-        return (self._qnumber, self._mod, self.names, self.shift_func)
+        return (self._qnumber, self._mod, self.names, self._shift_func)
 
     def __setstate__(self, state):
         """Allow to pickle and copy."""
@@ -94,7 +94,7 @@ class ChargeInfo:
         self._mask = np.not_equal(mod, 1)  # where we need to take modulo in :meth:`make_valid`
         self._mod_masked = mod[self._mask].copy()  # only where mod != 1
         self.names = names
-        self.shift_func = shift_func
+        self._shift_func = shift_func
 
     def save_hdf5(self, hdf5_saver, h5gr, subpath):
         """Export `self` into a HDF5 file.
@@ -116,8 +116,8 @@ class ChargeInfo:
         h5gr.attrs['num_charges'] = self._qnumber
         hdf5_saver.save(self._mod, subpath + "U1_ZN")
         hdf5_saver.save(self.names, subpath + "names")
-        if self.shift_func:
-            hdf5_saver.save(self.shift_func, subpath + "shift_func")
+        if self._shift_func:
+            hdf5_saver.save(self._shift_func, subpath + "shift_func")
 
     @classmethod
     def from_hdf5(cls, hdf5_loader, h5gr, subpath):
@@ -295,7 +295,7 @@ class ChargeInfo:
 
         Parameters
         ----------
-        charges : 2D ndarray QTYPE_t
+        charges : 1D or 2D ndarray of type QTYPE_t
             Charge values to be shifted
         shift : int
             Off-set to be shifted
@@ -310,9 +310,12 @@ class ChargeInfo:
         charges = np.asarray(charges, dtype=QTYPE)
         if copy:
             charges = charges.copy()
-        if self.shift_func is None:
+        if self._shift_func is None:
             return charges
-        return self.shift_func(charges, shift)
+        charges_shape = charges.shape
+        charges = np.reshape(charges, (-1, self._mod.shape[0]))
+        charges = self._shift_func(charges, shift)
+        return np.reshape(charges, charges_shape)
 
     def __repr__(self):
         """Full string representation."""
