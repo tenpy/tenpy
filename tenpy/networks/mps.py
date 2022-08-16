@@ -235,6 +235,7 @@ class MPS:
                     raise ValueError("shape of B incompatible with len of singular values")
                 if not self.finite or i + 1 < self.L:
                     B2 = self._B[(i + 1) % self.L]
+                    B2 = B2.shift_charges((i + 1) - (i + 1) % self.L)
                     B.get_leg('vR').test_contractible(B2.get_leg('vL'))
             else:
                 assert len(self._S[i+1].shape) == 2 # special case during DMRG with mixer,
@@ -2200,7 +2201,8 @@ class MPS:
                 op_i.append('JW')
         for j in range(len(ops)):
             site = self.sites[self._to_valid_index(j + i_min + i_offset)]
-            ops[j] = site.multiply_operators(ops[j])
+            i = j + i_min + i_offset
+            ops[j] = site.multiply_operators(ops[j]).shift_charges(i - i % self.L)
         return ops, i_min + i_offset, (count_JW % 2 == 1)
 
     def expectation_value_multi_sites(self, operators, i0):
@@ -2260,6 +2262,7 @@ class MPS:
         axes[1][0] = 'vR*'
         for j in range(1, len(operators)):
             op = operators[j]  # the operator
+            # op = op.shift_charges(i0 - len(operators) - 1)  # shift manually
             is_str = isinstance(op, str)
             i = i0 + j  # the site it acts on
             B = self.get_B(i, form='B')
@@ -2267,6 +2270,7 @@ class MPS:
             if not (is_str and op == 'Id'):
                 if is_str:
                     op = self.sites[self._to_valid_index(i)].get_op(op)
+                    op = op.shift_charges(i - i % self.L)
                 C = npc.tensordot(op, C, axes=['p*', 'p'])
             C = npc.tensordot(B.conj(), C, axes=axes)
         return C
@@ -2277,12 +2281,12 @@ class MPS:
         Same as :meth:`expectation_value_multi_sites`, but with the left-most part open
         and **excluding** the singular values `S`, with legs ``'vL', 'vL*'``.
         """
-        op = operators[-1]
         imax = i0 + len(operators) - 1
         C = npc.eye_like(self.get_B(imax, 'B'), 'vR', ['vL*', 'vL'])
         axes = [self._p_label + ['vL*'], self._get_p_label('*') + ['vR*']]
         for j in reversed(range(len(operators))):
             op = operators[j]  # the operator
+            # op = op.shift_charges(i0 - len(operators) - 1)  # shift manually
             is_str = isinstance(op, str)
             i = i0 + j  # the site it acts on
             B = self.get_B(i, form='B')
@@ -2290,6 +2294,7 @@ class MPS:
             if not (is_str and op == 'Id'):
                 if is_str:
                     op = self.sites[self._to_valid_index(i)].get_op(op)
+                    op = op.shift_charges(i - i % self.L)
                 C = npc.tensordot(op, C, axes=['p*', 'p'])
             C = npc.tensordot(C, B.conj(), axes=axes)
         return C
@@ -2643,9 +2648,12 @@ class MPS:
                 CL = npc.tensordot(CL, B, axes=['vR', 'vL'])
                 if opstr is not None:
                     opstr_k = self.sites[self._to_valid_index(k)].get_op(opstr)
+                    opstr_k = opstr_k.shift_charges(k - k % self.L)
                     CL = npc.tensordot(opstr_k, CL, axes=['p*', 'p'])
                 CL = npc.tensordot(B.conj(), CL, axes=axes)
                 i = k + 1
+            # recalculate the operators (alternatively: manually shift them)
+            ops_R, _, _ = self._term_to_ops_list(term_R, autoJW, j - j_min)
             CR = self._corr_ops_RP(ops_R, j)
             result.append(npc.inner(CL, CR, axes=[['vR', 'vR*'], ['vL', 'vL*']]))
         return np.real_if_close(result)
@@ -2695,6 +2703,8 @@ class MPS:
                     CR = npc.tensordot(opstr_k, CR, axes=['p*', 'p'])
                 CR = npc.tensordot(CR, B.conj(), axes=axes)
                 j = k
+            # recalculate the operators (alternatively: manually shift them)
+            ops_L, _, _ = self._term_to_ops_list(term_L, autoJW, i, has_extra_JW)
             CL = self._corr_ops_LP(ops_L, i + i_min)
             result.append(npc.inner(CL, CR, axes=[['vR', 'vR*'], ['vL', 'vL*']]))
         return np.real_if_close(result)
@@ -3138,6 +3148,7 @@ class MPS:
         # phase 1: bring bond (i1-1, i1) in canonical form
         # find dominant right eigenvector
         norm, Gr = self._canonical_form_dominant_gram_matrix(i1, False, tol_xi)
+        Gr = Gr.shift_charges(-self.L)
         self._B[i1] /= np.sqrt(norm)  # correct norm
         if not renormalize:
             self.norm *= np.sqrt(norm)
@@ -3156,6 +3167,7 @@ class MPS:
             self.norm *= np.sqrt(norm)
         # bring bond to canonical form
         Gl, Yl, Yr = self._canonical_form_correct_left(i1, Gl, Wr)
+        Gl = Gl.shift_charges(-self.L)
         Wr = np.ones(Yr.legs[0].ind_len, np.float64)
         # now the bond (i1-1,i1) is in canonical form
         Wr_list[i1] = Wr  # diag(Wr) is right eigenvector on bond (i1-1, i1)
@@ -4925,7 +4937,7 @@ class TransferMatrix(sparse.NpcLinearOperator):
     shift_ket : int | None
         We start the `M` of the ket at site `shift_ket`. ``None`` defaults to `shift_bra`.
     transpose : bool
-        Whether `self.matvec` acts on `RP` (``True``) or `LP` (``False``).
+        Whether `self.matvec` acts on `RP` (``False``) or `LP` (``True``).
     qtotal : charges
         Total charge of the transfer matrix (which is gauged away in matvec).
     form : tuple(float, float) | None
@@ -5069,6 +5081,7 @@ class TransferMatrix(sparse.NpcLinearOperator):
             for N, M in zip(self._bra_N, self._ket_M):
                 vec = npc.tensordot(vec, M, axes=['vR', 'vL'])
                 vec = npc.tensordot(N, vec, axes=contract)  # [['vL*', 'p*'], ['vR*', 'p']])
+        vec = vec.shift_charges(self.L*(-1 if self.transpose else 1))
         if pipe is None:
             vec.itranspose(orig_labels)  # make sure we have the same labels/order as before
         else:
