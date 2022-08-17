@@ -474,6 +474,26 @@ class Site(Hdf5Exportable):
             op = npc.tensordot(op, next_op, axes=['p*', 'p'])
         return op
 
+    def shift_charges(self, shift):
+        """Return (shallow) copy with shifted charges
+
+        Parameters
+        ----------
+        shift : int
+            number of lattice sites to shift
+
+        Returns
+        -------
+        shifted : :class:`Site`
+            (Shallow) copy of self with shifted charges
+        """
+        shift = int(shift)
+        if shift == 0 or self.leg.chinfo.trivial_shift:
+            return self
+        cp = copy.copy(self)
+        cp.change_charge(self.leg.shift_charges(shift))
+        return cp
+
     def __repr__(self):
         """Debug representation of self."""
         return "<Site, d={dim:d}, ops={ops!r}>".format(dim=self.dim, ops=self.opnames)

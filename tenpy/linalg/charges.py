@@ -317,6 +317,11 @@ class ChargeInfo:
         charges = self._shift_func(charges, shift)
         return np.reshape(charges, charges_shape)
 
+    @property
+    def trivial_shift(self):
+        """Test whether shifting acts trivially on the charges."""
+        return False if self._shift_func else True
+
     def __repr__(self):
         """Full string representation."""
         return "ChargeInfo({0!s}, {1!s})".format(list(self.mod), self.names)
@@ -769,6 +774,26 @@ class LegCharge:
         res.qconj = -self.qconj
         res.charges = self.chinfo.make_valid(-self.charges)
         res.sorted = False
+        return res
+
+    def shift_charges(self, shift):
+        """Return a (shallow) copy with shifted charges.
+
+        Parameters
+        ----------
+        shift : int
+            Shift to apply to the charges
+
+        Returns
+        -------
+        shifted : :class:`LegCharge`
+            (Shallow) copy of self with shifted charges
+        """
+        shift = int(shift)
+        if shift == 0 or self.chinfo.trivial_shift:
+            return self
+        res = self.copy()  # shallow copy
+        res.charges = self.chinfo.shift_charges(self.charges, shift, copy=True)
         return res
 
     def to_qflat(self):
