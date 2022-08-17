@@ -205,7 +205,19 @@ class Lattice:
             if name in self.pairs:
                 raise ValueError("{0!s} sepcified twice!".format(name))
             self.pairs[name] = NN
+        self._cache_sites()  # this must be called again if unit_cell is modified
         self.test_sanity()  # check consistency
+
+    def _cache_sites(self):
+        """Helper function to cache the sites of the lattice"""
+        self._sites = list()
+        for lat_indx in self.order[:, :]:
+            u = lat_indx[-1]
+            mps_indx = self.lat2mps_idx(lat_indx)
+            site = self.unit_cell[u]
+            if site:  # it can be None
+                site = site.shift_charges(mps_indx)
+            self._sites.append(site)
 
     def test_sanity(self):
         """Sanity check.
@@ -638,7 +650,9 @@ class Lattice:
 
     def site(self, i):
         """return :class:`~tenpy.networks.site.Site` instance corresponding to an MPS index `i`"""
-        return self.unit_cell[self.order[i, -1]]
+        if not hasattr(self, '_sites'):
+            self._cache_sites()
+        return self._sites[i]
 
     def mps_sites(self):
         """Return a list of sites for all MPS indices.
@@ -647,7 +661,9 @@ class Lattice:
 
         This should be used for `sites` of 1D tensor networks (MPS, MPO,...).
         """
-        return [self.unit_cell[u] for u in self.order[:, -1]]
+        if not hasattr(self, '_sites'):
+            self._cache_sites()
+        return self._sites
 
     def mps2lat_idx(self, i):
         """Translate MPS index `i` to lattice indices ``(x_0, ..., x_{dim-1}, u)``.
