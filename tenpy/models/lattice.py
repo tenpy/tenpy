@@ -205,17 +205,17 @@ class Lattice:
             if name in self.pairs:
                 raise ValueError("{0!s} sepcified twice!".format(name))
             self.pairs[name] = NN
-        self._cache_sites()  # this must be called again if unit_cell is modified
+        self._cache_sites()  # this must be called again if order is modified
         self.test_sanity()  # check consistency
 
     def _cache_sites(self):
         """Helper function to cache the sites of the lattice"""
-        self._sites = list()
+        self._sites = []
         for lat_indx in self.order[:, :]:
             u = lat_indx[-1]
             mps_indx = self.lat2mps_idx(lat_indx)
             site = self.unit_cell[u]
-            if site:  # it can be None
+            if isinstance(site, Site):  # it can be None
                 site = site.shift_charges(mps_indx)
             self._sites.append(site)
 
@@ -387,6 +387,7 @@ class Lattice:
             mps2lat_vals_idx[tuple(order_[mps_fix_u, :-1].T)] = np.arange(self.N_cells)
             self._mps2lat_vals_idx_fix_u.append(mps2lat_vals_idx)
         self._mps_fix_u = tuple(self._mps_fix_u)
+        self._cache_sites()
 
     def ordering(self, order):
         """Provide possible orderings of the `N` lattice sites.
