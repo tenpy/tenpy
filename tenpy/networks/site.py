@@ -46,6 +46,9 @@ class Site(Hdf5Exportable):
         The identity operator ``'Id'`` is automatically included.
         If no ``'JW'`` for the Jordan-Wigner string is given,
         ``'JW'`` is set as an alias to ``'Id'``.
+    sort_charge : bool
+        Whether :meth:`sort_charge` should be called at the end of initialization.
+        Note that this might permute the order of the local basis states!
 
     Attributes
     ----------
@@ -74,6 +77,10 @@ class Site(Hdf5Exportable):
     hc_ops : dict(str->str)
         Mapping from operator names to their hermitian conjugates.
         Use :meth:`get_hc_op_name` to obtain entries.
+    used_sort_charge : bool
+        Whether :meth:`sort_charge` was called.
+        Note that the default argument for `sort_dense` in :meth:`add_op` changes to True in that
+        case, to ensure a consistent use.
 
     Examples
     --------
@@ -97,7 +104,8 @@ class Site(Hdf5Exportable):
     [[1. 0.]
      [0. 0.]]
     """
-    def __init__(self, leg, state_labels=None, **site_ops):
+    def __init__(self, leg, state_labels=None, sort_charge=False, **site_ops):
+        self.used_sort_charge = False
         self.leg = leg
         self.state_labels = dict()
         if state_labels is not None:
@@ -107,15 +115,17 @@ class Site(Hdf5Exportable):
         self.opnames = set()
         self.need_JW_string = set(['JW'])
         self.hc_ops = {}
+        if not hasattr(self, 'perm'):  # default permutation for the local states
+            self.perm = np.arange(self.dim)
         self.add_op('Id', npc.diag(1., self.leg), hc='Id')
         for name, op in site_ops.items():
             self.add_op(name, op)
-        if not hasattr(self, 'perm'):  # default permutation for the local states
-            self.perm = np.arange(self.dim)
         if 'JW' not in self.opnames:
             # include trivial `JW` to allow combinations
             # of bosonic and fermionic sites in an MPS
             self.add_op('JW', self.Id, hc='JW')
+        if sort_charge:
+            self.sort_charge()
         self.test_sanity()
 
     def change_charge(self, new_leg_charge=None, permute=None):
@@ -139,9 +149,7 @@ class Site(Hdf5Exportable):
             permute = np.asarray(permute, dtype=np.intp)
             inv_perm = inverse_permutation(permute)
             self.perm = self.perm[permute]
-            state_labels = self.state_labels.copy()
-            for label in state_labels:
-                self.state_labels[label] = inv_perm[state_labels[label]]
+            self.state_labels = dict((lbl, inv_perm[i]) for lbl, i in self.state_labels.items())
         for opname in self.opnames.copy():
             op = self.get_op(opname).to_ndarray()
             self.opnames.remove(opname)
@@ -149,8 +157,18 @@ class Site(Hdf5Exportable):
             if permute is not None:
                 op = op[np.ix_(permute, permute)]
             # need_JW and hc_ops are still set
-            self.add_op(opname, op, need_JW=False, hc=False)
+            self.add_op(opname, op, need_JW=False, hc=False, permute_dense=False)
         # done
+
+    def sort_charge(self, bunch=True):
+        """Sort the :attr:`leg` charges (in place)."""
+        if self.leg.sorted and (not bunch or self.leg.bunched):
+            return  # nothing to do
+        perm_qind, leg_sorted = leg.sort(bunch)
+        perm_flat = leg_unsorted.perm_flat_from_perm_qind(perm_qind)
+        self.change_charge(leg_sorted, perm_flat)
+        # change_charge updates self.state_label and self.perm
+        self.used_sort_charge = True
 
     def test_sanity(self):
         """Sanity check, raises ValueErrors, if something is wrong."""
@@ -192,7 +210,7 @@ class Site(Hdf5Exportable):
         """
         return dict([(name, getattr(self, name)) for name in sorted(self.opnames)])
 
-    def add_op(self, name, op, need_JW=False, hc=None, permute_dense=False):
+    def add_op(self, name, op, need_JW=False, hc=None, permute_dense=None):
         """Add one on-site operators.
 
         Parameters
@@ -213,11 +231,12 @@ class Site(Hdf5Exportable):
             The name for the hermitian conjugate operator, to be used for :attr:`hc_ops`.
             By default (``None``), try to auto-determine it.
             If ``False``, disable adding antries to :attr:`hc_ops`.
-        permute_dense : bool
+        permute_dense : bool | None
             Flag to enable/disable permuations when converting `op` from numpy to
             np_conserved arrays.
             If True, the operator is permuted with :attr:`perm` to account for permutations
-            induced by sorting charges.
+            induced by sorting charges; False disables the permutations.
+            By default (``None``), the value of :attr:`used_sort_charge` is used.
         """
         name = str(name)
         if not name.isidentifier():
@@ -230,6 +249,8 @@ class Site(Hdf5Exportable):
             op = np.asarray(op)
             if op.shape != (self.dim, self.dim):
                 raise ValueError("wrong shape of on-site operator")
+            if permute_dense is None:
+                permute_dense = self.used_sort_charge
             if permute_dense:
                 perm = self.perm
                 op = op[np.ix_(perm, perm)]
@@ -574,7 +595,8 @@ class GroupedSite(Site):
         JW_all = self.kroneckerproduct([s.JW for s in sites])
 
         # initialize Site
-        Site.__init__(self, pipe, None, JW=JW_all)
+        Site.__init__(self, pipe, None, JW=JW_all, sort_charge=False)
+        # no sorting needed, since pipe already is sorted.
 
         # set state labels
         for states_labels in itertools.product(*[s.state_labels.items() for s in sites]):
