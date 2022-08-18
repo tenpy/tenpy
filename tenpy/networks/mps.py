@@ -1467,7 +1467,7 @@ class MPS:
             Copy of self with 'segment' boundary conditions.
         """
         L = self.L
-        sites = [self.sites[i % L] for i in range(first, last + 1)]
+        sites = [self.sites[i % L].shift_charges(i - i % L) for i in range(first, last + 1)]
         B = [self.get_B(i) for i in range(first, last + 1)]
         S = [self.get_SL(i) for i in range(first, last + 1)]
         S.append(self.get_SR(last))
@@ -2558,7 +2558,11 @@ class MPS:
             if len(j_eq) > 0:
                 # on-site correlation function
                 op12 = npc.tensordot(self.get_op(ops1, i), self.get_op(ops2, i), axes=['p*', 'p'])
-                C[x, (sites2 == i)] = self.expectation_value(op12, i, [['p'], ['p*']])
+                op12 = op12.replace_labels(['p', 'p*'], ['p0', 'p0*'])
+                theta = self.get_theta(i, 1)
+                C1 = npc.tensordot(op12, theta, axes=['p0*', 'p0'])
+                E = npc.inner(theta, C1, axes='labels', do_conj=True)
+                C[x, (sites2 == i)] = np.real_if_close(np.array(E))
         if not hermitian:
             #  j < i
             for y, j in enumerate(sites2):
