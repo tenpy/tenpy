@@ -513,7 +513,7 @@ class MPS:
 
         .. doctest :: MPS.from_product_state
 
-            >>> spin = tenpy.networks.site.SpinHalfSite(conserve=None)
+            >>> spin = tenpy.networks.site.SpinHalfSite(conserve=None, sort_charge=False)
             >>> p_state = ["up", "down"] * (L//2)  # repeats entries L/2 times
             >>> theta, phi = np.pi/4, np.pi/6
             >>> bloch_sphere_state = np.array([np.cos(theta/2), np.exp(1.j*phi)*np.sin(theta/2)])

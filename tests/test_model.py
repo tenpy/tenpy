@@ -14,7 +14,7 @@ import numpy as np
 import numpy.testing as npt
 import pytest
 
-spin_half_site = tenpy.networks.site.SpinHalfSite('Sz')
+spin_half_site = tenpy.networks.site.SpinHalfSite('Sz', sort_charge=False)
 
 fermion_site = tenpy.networks.site.FermionSite('N')
 
@@ -307,7 +307,7 @@ def test_CouplingModel_multi_couplings_explicit(use_plus_hc, JW):
 class MyMod(model.CouplingMPOModel, model.NearestNeighborModel):
     def init_sites(self, model_params):
         conserve = model_params.get('conserve', 'parity')
-        return tenpy.networks.site.SpinHalfSite(conserve)
+        return tenpy.networks.site.SpinHalfSite(conserve, True)
 
     def init_terms(self, model_params):
         x = model_params.get('x', 1.)
@@ -321,7 +321,7 @@ class MyMod(model.CouplingMPOModel, model.NearestNeighborModel):
 
 def test_CouplingMPOModel_group():
     m1 = MyMod(dict(x=0.5, L=5, bc_MPS='finite'))
-    model_params = {'L': 6, 'hz': np.random.random([6]), 'bc_MPS': 'finite'}
+    model_params = {'L': 6, 'hz': np.random.random([6]), 'bc_MPS': 'finite', 'sort_charge': True}
     m2 = XXZChain(model_params)
     for m in [m1, m2]:
         print("model = ", m)
@@ -349,7 +349,7 @@ def test_CouplingMPOModel_group():
 
 def test_model_H_conversion(L=6):
     bc = 'finite'
-    model_params = {'L': L, 'hz': np.random.random([L]), 'bc_MPS': bc}
+    model_params = {'L': L, 'hz': np.random.random([L]), 'bc_MPS': bc, 'sort_charge': True}
     m = XXZChain(model_params)
 
     # can we run the conversion?
@@ -469,7 +469,7 @@ def test_model_plus_hc(L=6):
 class DisorderedLatticeModel(model.CouplingMPOModel):
     def init_sites(self, model_params):
         conserve = model_params.get('conserve', 'parity')
-        return tenpy.networks.site.SpinHalfSite(conserve)
+        return tenpy.networks.site.SpinHalfSite(conserve, sort_charge=True)
 
     def init_lattice(self, model_params):
         lat = super().init_lattice(model_params)

@@ -14,7 +14,7 @@ import tenpy.linalg.random_matrix as rmat
 import tenpy.linalg.np_conserved as npc
 import pytest
 
-spin_half = site.SpinHalfSite(conserve='Sz')
+spin_half = site.SpinHalfSite(conserve='Sz', sort_charge=False)
 ferm = site.FermionSite(conserve='N')
 
 
@@ -68,7 +68,8 @@ def test_canoncial_purification(L=6, charge_sector=0, eps=1.e-14):
             assert abs(entry) < eps
 
     # and one quick test of TEBD
-    xxz_pars = dict(L=L, Jxx=1., Jz=3., hz=0., bc_MPS='finite')
+    xxz_pars = dict(L=L, Jxx=1., Jz=3., hz=0., bc_MPS='finite', sort_charge=False)
+    # sort_charge should be same as for global `spin_half`.
     M = XXZChain(xxz_pars)
     TEBD_params = {
         'trunc_params': {
@@ -88,7 +89,7 @@ def test_canoncial_purification(L=6, charge_sector=0, eps=1.e-14):
 
 @pytest.mark.slow
 def test_purification_TEBD(L=3):
-    xxz_pars = dict(L=L, Jxx=1., Jz=3., hz=0., bc_MPS='finite')
+    xxz_pars = dict(L=L, Jxx=1., Jz=3., hz=0., bc_MPS='finite', sort_charge=True)
     M = XXZChain(xxz_pars)
     for disent in [
             None, 'backwards', 'min(None,last)-renyi', 'noise-norm', 'renyi-min(None,noise-renyi)'
@@ -116,7 +117,7 @@ def test_purification_TEBD(L=3):
 
 
 def test_purification_MPO(L=6):
-    xxz_pars = dict(L=L, Jxx=1., Jz=2., hz=0., bc_MPS='finite')
+    xxz_pars = dict(L=L, Jxx=1., Jz=2., hz=0., bc_MPS='finite', sort_charge=True)
     M = XXZChain(xxz_pars)
     psi = purification_mps.PurificationMPS.from_infiniteT(M.lat.mps_sites(), bc='finite')
     options = {'trunc_params': {'chi_max': 50, 'svd_min': 1.e-8}}
@@ -127,7 +128,7 @@ def test_purification_MPO(L=6):
 
 
 def test_renyi_disentangler(L=4, eps=1.e-15):
-    xxz_pars = dict(L=L, Jxx=1., Jz=3., hz=0., bc_MPS='finite')
+    xxz_pars = dict(L=L, Jxx=1., Jz=3., hz=0., bc_MPS='finite', sort_charge=True)
     M = XXZChain(xxz_pars)
     psi = purification_mps.PurificationMPS.from_infiniteT(M.lat.mps_sites(), bc='finite')
     eng = PurificationTEBD(psi, M, {'disentangle': 'renyi'})
@@ -221,7 +222,7 @@ def gen_disentangler_psi_singlet_test(site_P=spin_half, L=6, max_range=4):
     print("PQ:", np.round(mutinf_pq / np.log(2), 3))
     print("P: ", np.round(psi0.mutinf_two_site(legs='p')[1] / np.log(2), 3))
     print("Q: ", np.round(psi0.mutinf_two_site(legs='q')[1] / np.log(2), 3))
-    M = XXZChain(dict(L=L))
+    M = XXZChain(dict(L=L, sort_charge=True))
     tebd_pars = dict(trunc_params={'trunc_cut': 1.e-10}, disentangle='diag')
     eng = PurificationTEBD(psi0, M, tebd_pars)
     for i in range(L):

@@ -17,6 +17,13 @@ Backwards incompatible changes
   Further, we added the parameter :cfg:option:`VariationalCompression.min_sweeps` and :cfg:option:`VariationalCompression.tol_theta_diff`
 - Adjusted default paramters of :meth:`tenpy.networks.mps.InitialStateBuilder.randomized` to be as documented with better ``chi_max``.
 - No longer return `ov` from :func:`tenpy.linalg.lanczos.gram_schmidt`.
+- Add option `sort_charge` to the :class:`~tenpy.networks.site.Site` (calling the new :meth:`~tenpy.networks.site.Site.sort_charge` method).
+  Using `True` sorts the charges of the physical leg and thus helps to reduce overhead when using charge conservation.
+  However, doing this can lead to inconsistencies between saved data and newly generated data (after updating TeNPy). 
+  Hence, for now we keep the current default `False` behaviour, but raise a warning that you should set this option explicitly for cases where it changes things.
+  Set it to `False`, if you already have data (for your particular model), that you want to be able to load/compare to.
+  If you start a new project and don't have data yet, set it to `True`.
+  We will change the default behaviour from `False` to `True` in version 1.0.
 
 Added
 ^^^^^

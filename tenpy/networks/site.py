@@ -1,6 +1,7 @@
 """Defines a class describing the local physical Hilbert space.
 
 The :class:`Site` is the prototype, read it's docstring.
+
 """
 # Copyright 2018-2021 TeNPy Developers, GNU GPLv3
 
@@ -34,6 +35,19 @@ class Site(Hdf5Exportable):
         The order of the local basis can change depending on the charge conservation!
         This is a *necessary* feature since we need to sort the basis by charges for efficiency.
         We use the :attr:`state_labels` and :attr:`perm` to keep track of these permutations.
+
+    .. versionchanged :: 0.10
+
+        Add the option `sort_charge`. Right now the default behavriou is ``False`` for
+        backwards compatibility, but we will change it for Version 1.0 to ``True``.
+        For now, we raise a warning in cases where it can lead to changes.
+        If you see this warning, just set the value explicitly to avoid breaking compatibility of
+        existing data with future releases.
+        Set it to `False`, if you already have data (for your particular model),
+        that you want to be able to load/compare to.
+        If you start a new project and don't have data yet, set it to `True`.
+        See also the `breaking changes` section in the release notes.
+
 
     Parameters
     ----------
