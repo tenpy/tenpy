@@ -161,14 +161,26 @@ class Site(Hdf5Exportable):
         # done
 
     def sort_charge(self, bunch=True):
-        """Sort the :attr:`leg` charges (in place)."""
+        """Sort the :attr:`leg` charges (in place).
+
+        Parameter
+        ---------
+        bunch : bool
+            Whether to also group equal charges into larger blocks (usually a good idea).
+
+        Returns
+        -------
+        perm : 1D ndarray
+            The permutation
+        """
         if self.leg.sorted and (not bunch or self.leg.bunched):
-            return  # nothing to do
+            return np.arange(self.dim, dtype=np.intp) # nothing to do
         perm_qind, leg_sorted = leg.sort(bunch)
         perm_flat = leg_unsorted.perm_flat_from_perm_qind(perm_qind)
         self.change_charge(leg_sorted, perm_flat)
         # change_charge updates self.state_label and self.perm
         self.used_sort_charge = True
+        return perm_flat
 
     def test_sanity(self):
         """Sanity check, raises ValueErrors, if something is wrong."""
@@ -683,7 +695,7 @@ def group_sites(sites, n=2, labels=None, charges='same'):
     return grouped_sites
 
 
-def set_common_charges(sites, new_charges='same', new_names=None, new_mod=None):
+def set_common_charges(sites, new_charges='same', new_names=None, new_mod=None, sort_charge=True):
     r"""Adjust the charges of the given sites *in place* such that they can be used together.
 
     Before we can contract operators (and tensors) corresponding to different :class:`Site`
@@ -726,11 +738,14 @@ def set_common_charges(sites, new_charges='same', new_names=None, new_mod=None):
     new_mod : list of int
         :attr:`~tenpy.linalg.charges.ChargeInfo.mod` for the new charges, one entry for each list
         in `new_charges`. Defaults to the `mod` of the old charges, if not specified otherwise.
+    sort_charge : bool
+        Whether to sort the physical legs by charges.
 
     Returns
     -------
     perms : list of ndarray
         For each site the permutation performed on the physical leg to sort by charges.
+        Only returned if `sort_charge` is True.
 
     Examples
     --------
@@ -859,7 +874,6 @@ def set_common_charges(sites, new_charges='same', new_names=None, new_mod=None):
         >>> set_common_charges([ferm, bos], [[(1, 0, 'N'), (2, 1, 'N')]], ['N_f + 2 N_b'])
         [array([0, 1]), array([0, 1, 2, 3])]
 
-    Finally, it can sometimes be convenient to change the charges of the
     The ``new_charges='drop'`` or ``new_charges=[]`` option is a quick way to remove any charges.
 
     .. doctest :: set_common_charges
@@ -943,11 +957,15 @@ def set_common_charges(sites, new_charges='same', new_names=None, new_mod=None):
                     new_qflat[:, new_i] += old_qflat_i
         # update the site with the new charges
         leg_unsorted = npc.LegCharge.from_qflat(new_chinfo, new_qflat, site.leg.qconj)
-        perm_qind, leg = leg_unsorted.sort()
-        perm_flat = leg_unsorted.perm_flat_from_perm_qind(perm_qind)
-        perms.append(perm_flat)
+        if sort_charge:
+            perm_qind, leg = leg_unsorted.sort()
+            perm_flat = leg_unsorted.perm_flat_from_perm_qind(perm_qind)
+            perms.append(perm_flat)
+        else:
+            perm_flat = None
         site.change_charge(leg, perm_flat)
-    return perms
+    if sort_charge:
+        return perms
 
 
 def multi_sites_combine_charges(sites, same_charges=[]):
