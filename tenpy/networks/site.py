@@ -146,12 +146,15 @@ class Site(Hdf5Exportable):
             self.sort_charge()
         elif sort_charge is None:
             if not (leg.sorted and leg.bunched):
-                warnings.warn(f"LegCharge of physical leg in site {self!s} is not sorted. "
-                              "You should explicitly set `sort_charge`."
-                              "We will switch the default from False to True in version 1.0, "
-                              "which breaks compatibility of existing data with "
-                              "code/models that don't explicitly set sort_legcharge.",
-                              FutureWarning, 2)
+                msg = (f"LegCharge of physical leg in site {self!s} is not sorted. "
+                       "You should explicitly set `sort_charge`. "
+                       "Set it to False, if you already have saved data for your model and want "
+                       "to be able to load it/keep backwards compatibility. "
+                       "For new projects, if you don't have data yet, set it to `True`. "
+                       "We will switch the default from False to True in version 1.0, "
+                       "which breaks compatibility of existing data with "
+                       "code/models that don't explicitly set sort_legcharge.")
+                warnings.warn(msg, FutureWarning, 2)
         self.test_sanity()
 
     def change_charge(self, new_leg_charge=None, permute=None):
