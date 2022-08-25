@@ -1420,15 +1420,10 @@ class Array:
         shift = int(shift)
         if not shift:
             return self
-        # Note the legs are always shared between copies! We make a shallow
-        # copy, except for the charges (which we modify).
         res = self.copy(deep=False)  # only make a shallow copy
+        # modify all legs of the tensor
         for indx_leg, leg in enumerate(self.legs):
-            leg = leg.copy()  # make a shallow copy of the leg
-            charges = leg.chinfo.shift_charges(leg.charges, shift, copy=True)
-            leg.charges = charges  # set shifted charges
-            # _, leg = leg.sort()  # Do we need this?
-            res.legs[indx_leg] = leg  # update leg in the copy
+            res.legs[indx_leg] = leg.shift_charges(shift)
         # modify the total charge
         res.qtotal = self.chinfo.shift_charges(self.qtotal, shift, copy=True)
         return res

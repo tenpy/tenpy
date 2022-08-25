@@ -1150,9 +1150,10 @@ class MPS:
             raise ValueError("can't shrink!")
         if self.bc == 'segment':
             raise ValueError("can't enlarge segment MPS")
-        self.sites = factor * self.sites
-        self._B = factor * self._B
+        L = self.L
+        self._B = [self.get_B(j, form=None) for j in range(0, factor*L)]
         self._S = factor * self._S[:-1] + [self._S[-1]]
+        self.sites = [self.sites[self._to_valid_index(j)].shift_charges(j - j % L) for j in range(0, factor*L)]
         self.form = factor * self.form
         self.test_sanity()
 
@@ -2819,7 +2820,12 @@ class MPS:
                     CLs[key] = npc.tensordot(B.conj(), CL, axes=axes)
                 i = k + 1
             res = 0.
-            for ops_R, need_JW, strength in zip(all_ops_R, need_JW_R, term_list_R.strength):
+            for ops_R, need_JW, term_R, strength in zip(all_ops_R, need_JW_R, term_list_R.terms, term_list_R.strength):
+                if not self.finite and not self.chinfo.trivial_shift:
+                    # recalculate operators (should we do this more efficient?)
+                    ops_R, j_min, need_JW = self._term_to_ops_list(term_R, autoJW, j)  # <- note the j
+                    if j_min > j + min_R:
+                        ops_R = [opstr_fill[need_JW]] * (j_min - (j + min_R)) + ops_R
                 CR = self._corr_ops_RP(ops_R, j)
                 key = (need_JW, ) + tuple(self.chinfo.make_valid(-CR.qtotal))
                 CL = CLs.get(key, None)
