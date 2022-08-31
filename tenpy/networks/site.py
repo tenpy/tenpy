@@ -127,7 +127,7 @@ class Site(Hdf5Exportable):
             The new charges to be used. If ``None``, use trivial charges.
         permute : ndarray | None
             The permuation applied to the physical leg,
-            which gets used to adjust :attr:`state_labels` and :attr:`perm`.
+            which also gets used to adjust :attr:`state_labels` and :attr:`perm`.
             If you sorted the previous leg with ``perm_qind, new_leg_charge = leg.sort()``,
             use ``old_leg.perm_flat_from_perm_qind(perm_qind)``.
             Ignored if ``None``.
