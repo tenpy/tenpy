@@ -2663,6 +2663,10 @@ class MPS:
         ops1 : (list of) { :class:`~tenpy.linalg.np_conserved.Array` | str }
             First operator of the correlation function (acting after ops2).
             If a list is given, ``ops1[i]`` acts on site `i` of the MPS.
+            Note that even if a list is given, we still just evaluate two-site correlations!
+            ``psi.correlation_function(['A','B'], ['C', 'D'])`` evaluates
+            ``<A_i C_j>`` for even i and even j, ``<B_i C_j>`` for even i and odd j,
+            ``<B_i C_j>`` for odd i and even j, and ``<B_i D_j>`` for odd i and odd j.
         ops2 : (list of) { :class:`~tenpy.linalg.np_conserved.Array` | str }
             Second operator of the correlation function (acting before ops1).
             If a list is given, ``ops2[j]`` acts on site `j` of the MPS.
@@ -5032,7 +5036,7 @@ class MPSEnvironment:
                                        *preload)
         self.cache.preload(*preload)
 
-    def get_initialization_data(self, first=0, last=None):
+    def get_initialization_data(self, first=0, last=None, include_bra=False, include_ket=False):
         """Return data for (re-)initialization of the environment.
 
         Parameters
@@ -5040,6 +5044,8 @@ class MPSEnvironment:
         first, last : int
             The first and last site, to the left and right of which we should return the
             environments.  Defaults to 0 and :attr:`L` - 1.
+        include_bra, include_ket : bool
+            Whether to also return the :attr:`bra` and :attr:`ket`, respectively.
 
         Returns
         -------
@@ -5052,12 +5058,18 @@ class MPSEnvironment:
             age_LP, age_RP : int
                 The number of physical sites involved into the contraction yielding `init_LP` and
                 `init_RP`, respectively.
+            bra, ket : :class:`~tenpy.networks.mps.MPS`
+                References of :attr:`bra` and :attr:`ket`.
+                Only included if `include_bra` and `include_ket` are True, respectively.
         """
         if last is None:
             last = self.L - 1
+
         LP = self.get_LP(first, True)
         RP = self.get_RP(last, True)
         # possibly apply dagger of segment_boundaries to make sure it's possible to re-initialize
+        # [TODO] I have no idea if this is correct, and I don't remember why I added this. - Sajant
+        # If first != 0 or last != self.ket/bra.L, what happens to the boundaries?
         bra_U, bra_V = self.bra.segment_boundaries
         ket_U, ket_V = self.ket.segment_boundaries
         if first == 0:
@@ -5081,6 +5093,22 @@ class MPSEnvironment:
             'init_RP': RP,
             'age_RP': self.get_RP_age(last),
         }
+
+        if include_bra:
+            data['bra'] = self.bra
+        if include_ket:
+            data['ket'] = self.ket
+
+        """
+        # Original code
+        data = {'init_LP': self.get_LP(first, True), 'init_RP': self.get_RP(last, True)}
+        data['age_LP'] = self.get_LP_age(first)
+        data['age_RP'] = self.get_RP_age(last)
+        if include_bra:
+            data['bra'] = self.bra
+        if include_ket:
+            data['ket'] = self.ket
+        """
         return data
 
     def full_contraction(self, i0):

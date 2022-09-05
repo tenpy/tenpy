@@ -5,9 +5,22 @@ describing observables as :math:`<O> = Tr(O|\psi><\psi|) = <\psi|O|\psi>`.
 Clearly, if :math:`|\psi>` is the ground state of a Hamiltonian, this is the density matrix at
 `T=0`.
 
-At finite temperatures :math:`T > 0`, we want to describe a non-pure density matrix
-:math:`\rho = \exp(-H/T)`. This can be accieved by the so-called purification: in addition to
-the physical space `P`, we introduce a second 'auxiliar' space `Q` and define the density matrix
+At finite temperatures :math:`T > 0`, we want to describe a mixed density matrix
+:math:`\rho = \exp(-H/T)`. The following approaches have been used to lift the power of tensor
+network ansätze (representing pure states= to finite temperatures (and mixed states in general).
+
+1. Naively represent the density matrix as an MPO. This has the disadvantage that truncation can
+   quickly lead to non-positive (and hence unphysical) density matrices.
+2. Minimally entangled typical thermal states (METTS) as introduced in :cite:`white2009`.
+3. Use Purification to represent the mixed density matrix by pure states in the doubled Hilbert
+   space.
+   In the literature, this is also referred to as matrix product density operators (MPDO) or
+   locally purified density operator (LPDO).
+
+
+Here, we follow the third approach.
+In addition to the physical space `P`, we introduce a second 'auxiliar' space `Q`
+and define the density matrix
 of the physical system as :math:`\rho = Tr_Q(|\phi><\phi|)`, where :math:`|\phi>` is a pure state
 in the combined phyisical and auxiliar system.
 
@@ -73,7 +86,7 @@ An additional real-time evolution allows to calculate time correlation functions
 Time evolution algorithms (TEBD and MPO application) are adjusted in the module
 :mod:`~tenpy.algorithms.purification`.
 
-See also :cite:`karrasch2013` for additional tricks! On of their crucial observations is, that
+See also :cite:`karrasch2013` for additional tricks! One of their crucial observations is, that
 one can apply arbitrary unitaries on the auxiliar space (i.e. the `q`) without changing the result.
 This can actually be used to reduce the necessary virtual bond dimensions:
 From the definition, it is easy to see that if we apply :math:`exp(-i H t)` to the `p` legs of

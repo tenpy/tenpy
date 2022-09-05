@@ -37,16 +37,20 @@ def test_site():
     leg = gen_random_legcharge(chinfo, 8)
     op1 = npc.Array.from_func(np.random.random, [leg, leg.conj()], shape_kw='size')
     op2 = npc.Array.from_func(np.random.random, [leg, leg.conj()], shape_kw='size')
-    labels = ['up'] + [None] * (leg.ind_len - 2) + ['down']
+    op3_dense = np.diag(np.arange(10, 18))
+    labels = [f'x{i:d}' for i in range(10, 18)]
     s = site.Site(leg, labels, silly_op=op1)
-    assert s.state_index('up') == 0
-    assert s.state_index('down') == leg.ind_len - 1
+    assert s.state_index('x10') == 0
+    assert s.state_index('x17') == leg.ind_len - 1
     assert s.opnames == set(['silly_op', 'Id', 'JW'])
     assert s.silly_op is op1
     s.add_op('op2', op2)
+    s.add_op('op3', op3_dense)
     assert s.op2 is op2
     assert s.get_op('op2') is op2
     assert s.get_op('silly_op') is op1
+    npt.assert_equal(s.get_op('op3').to_ndarray(), op3_dense)
+
     npt.assert_equal(
         s.get_op('silly_op op2').to_ndarray(),
         npc.tensordot(op1, op2, [1, 0]).to_ndarray())
@@ -65,6 +69,13 @@ def test_site():
             op2 = site_check.get_op(opn).to_ndarray()
             perm = site_check.perm
             npt.assert_equal(op1[np.ix_(perm, perm)], op2)
+        # check that we got the permutations right in the basis vectors as well!
+        for i in range(8):
+            b = site_check.state_index(f"x{10 + i:d}")
+            assert site_check.get_op('op3')[b, b] == 10 + i
+    # did we also get permute=True option of add_op correct?
+    s2s.add_op('op3_n', op3_dense, permute_dense=True)
+    npt.assert_equal(s2s.get_op('op3_n').to_ndarray(), s2s.get_op('op3').to_ndarray())
     # done
 
 
