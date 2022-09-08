@@ -52,6 +52,8 @@ Changed
 - Split up :meth:`tenpy.networks.mpo.MPO.expectation_value` into :meth:`~tenpy.networks.mpo.MPO.expectation_value_finite`
   and :meth:`~tenpy.networks.mpo.MPO.expectation_value_power` and add :meth:`tenpy.networks.mpo.MPO.expectation_value_TM`
 - Enhanced documentation of the lattices with more plots.
+- Renamed ``prepare_update`` function of :class:`tenpy.algorithms.mps_common.Sweep` to 
+  :meth:`~tenpy.algorithm.mps_common.prepare_update_local`.
 
 Fixed
 ^^^^^
