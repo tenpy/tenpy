@@ -9,7 +9,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-from .algorithm import TimeEvolutionAlgorithm
+from .algorithm import TimeEvolutionAlgorithm, TimeDependentHAlgorithm
 from ..linalg import np_conserved as npc
 from .truncation import TruncationError
 from ..tools.params import asConfig
@@ -117,79 +117,10 @@ class ExpMPOEvolution(TimeEvolutionAlgorithm):
         return trunc_err
 
 
-class TimeDependentExpMPOEvolution(ExpMPOEvolution):
+class TimeDependentExpMPOEvolution(TimeDependentHAlgorithm,ExpMPOEvolution):
     """Variant of :class:`ExpMPOEvolution` that can handle time-dependent hamiltonians.
 
-    As of now, it only supports first :cfg:option:`ExpMPOEvolution.order` with a very basic
-    implementation, that just reinitializes the model after each time evolution steps with an
-    updated model parameter `time` set to :attr:`evolved_time`.
-    The model class should read that parameter.
-
-    .. todo ::
-        This is still under development and lacks rigorous tests.
+    See details in :class:`~tenpy.algorithms.algorithm.TimeDependentHAlgorithm` as well.
     """
-    time_dependent_H = True
-
-    def run(self):
-        N_steps = self.options.get('N_steps', 1)
-        self.reinit_model()  # self.evolved_time might be non-trivial for seq. runs
-        self.update(N_steps)
-        return self.psi
-
-    def update(self, N_steps):
-        dt = self.options.get('dt', 0.01)
-        approximation = self.options.get('approximation', 'II')
-        order = self.options.get('order', 1)
-        preserve_norm = self.options.get('preserve_norm', None)
-
-        # preserve the norm for real time evolution
-        if preserve_norm is None:
-            if np.iscomplex(dt):
-                preserve_norm = False
-            else:
-                preserve_norm = True
-        if preserve_norm:
-            old_norm = self.psi.norm
-
-        trunc_err = TruncationError()
-        for _ in range(N_steps):
-            self.calc_U(dt, order, approximation)
-            for U_MPO in self._U_MPO:
-                trunc_err += U_MPO.apply(self.psi, self.options)
-            self.evolved_time = self.evolved_time + dt
-            self.reinit_model()  # use the updated model for the next measurement!
-        if preserve_norm:
-            self.psi.norm = old_norm
-        self.trunc_err = self.trunc_err + trunc_err  # not += : make a copy!
-        # (this is done to avoid problems of users storing self.trunc_err after each `update`)
-        return trunc_err
-
-    def calc_U(self, dt, order, approximation):
-        U_param = dict(dt=dt, order=order, approximation=approximation, time=self.evolved_time)
-        if self._U_param == U_param:
-            return  # nothing to do: _U is cached
-        self._U_param = U_param
-        logger.info("Calculate U for %s", U_param)
-
-        if order != 1:
-            raise NotImplementedError("order > 1 with time-dependent H requires re-derivation")
-        U_MPO = self.model.H_MPO.make_U(dt * -1j, approximation=approximation)
-        self._U_MPO = [U_MPO]
-
-    def reinit_model(self):
-        """Re-initialize a new `self.model` at current `self.evolved_time`.
-
-        Returns
-        -------
-        model :
-            New instance of the model initialized at ``model_params['time'] = self.evolved_time``.
-        """
-        model_time = self.model.options.get('time', None)
-        if model_time is not None and model_time == self.evolved_time:
-            # no need to re-init
-            return self.model
-        cls = self.model.__class__
-        model_params = self.model.options  # if you get an error, set this in your custom model
-        model_params['time'] = self.evolved_time
-        self.model = cls(model_params)
-        return self.model
+    # uses run from TimeDependentHAlgorithm
+    # so nothing to redefine here

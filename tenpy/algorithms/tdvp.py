@@ -34,7 +34,7 @@ Much of the code is very similar to DMRG, and also based on the
 from tenpy.linalg.lanczos import LanczosEvolution
 from tenpy.algorithms.truncation import svd_theta, TruncationError
 from tenpy.algorithms.mps_common import Sweep, ZeroSiteH, OneSiteH, TwoSiteH
-from tenpy.algorithms.algorithm import TimeEvolutionAlgorithm
+from tenpy.algorithms.algorithm import TimeEvolutionAlgorithm, TimeDependentHAlgorithm
 from tenpy.networks.mpo import MPOEnvironment
 from tenpy.linalg import np_conserved as npc
 import numpy as np
@@ -45,7 +45,8 @@ import logging
 logger = logging.getLogger(__name__)
 
 __all__ = ['TDVPEngine', 'SingleSiteTDVPEngine', 'TwoSiteTDVPEngine',
-           'OldTDVPEngine', 'Engine', 'H0_mixed', 'H1_mixed', 'H2_mixed']
+           'TimeDependentSingleSiteTDVP', 'TimeDependentTwoSiteTDVP', 'OldTDVPEngine', 'Engine',
+           'H0_mixed', 'H1_mixed', 'H2_mixed']
 
 
 class TDVPEngine(TimeEvolutionAlgorithm, Sweep):
@@ -341,6 +342,28 @@ class SingleSiteTDVPEngine(TDVPEngine):
 
     def post_update_local(self, **update_data):
         self.trunc_err_list.append(0.)  # avoid error in return of sweep()
+
+
+class TimeDependentSingleSiteTDVP(TimeDependentHAlgorithm,SingleSiteTDVPEngine):
+    """Variant of :class:`SingleSiteTDVPEngine` that can handle time-dependent Hamiltonians.
+
+    See details in :class:`~tenpy.algorithms.algorithm.TimeDependentHAlgorithm` as well.
+    """
+    def reinit_model(self):
+        # recreate model
+        TimeDependentHAlgorithm.reinit_model(self)
+        # and reinitializie environment accordingly
+        self.init_env(self.model)
+
+
+class TimeDependentTwoSiteTDVP(TimeDependentHAlgorithm,TwoSiteTDVPEngine):
+    """Variant of :class:`TwoSiteTDVPEngine` that can handle time-dependent Hamiltonians.
+
+    See details in :class:`~tenpy.algorithms.algorithm.TimeDependentHAlgorithm` as well.
+    """
+
+    def reinit_model(self):
+        TimeDependentTwoSiteTDVP.reinit_model(self)
 
 
 class OldTDVPEngine(TimeEvolutionAlgorithm):

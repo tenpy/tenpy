@@ -14,9 +14,15 @@ Backwards incompatible changes
   The previous one is for now still available as :class:`~tenpy.algorithms.tdvp.OldTDVPEngine`.
 - Add more fine grained sweep convergence checks for the :class:`~tenpy.algorithms.mps_common.VariationalCompression` (used when applying an MPO to an MPS!).
   In this context, we renamed the parameter `N_sweeps` to :cfg:option:`VariationalCompression.max_sweeps`.
-  Further, we added the parameter :cfg:option:`VariationalCompression.min_sweeps` and :cfg:option:`VariationalCompression.tol_theta_diff`
+  Further, we added the parameter :cfg:option:`VariationalCompression.min_sweeps` and :cfg:option:`VariationalCompression.tol_theta_diff`.
 - Adjusted default paramters of :meth:`tenpy.networks.mps.InitialStateBuilder.randomized` to be as documented with better ``chi_max``.
 - No longer return `ov` from :func:`tenpy.linalg.lanczos.gram_schmidt`.
+- Unify structure of  :class:`tenpy.algorithms.algorithm.TimeEvolutionAlgorithm` subclasses
+  (e.g. :class:`tenpy.algorihtms.tebd.TEBDEngine`, :class:`tenpy.algorithms.tdvp.TDVPEngine` 
+  and :class:`tenpy.algorithms.mpo_evolution.ExpMPOEvolution`).
+  In particular, define the default values for ``N_steps=1`` and ``dt=0.1`` are now the same for these classes;
+  Previously, TEBD had a default of ``N_steps=10``, and the ExpMPOEvolution had ``dt=0.01``.
+
 
 Added
 ^^^^^

@@ -45,12 +45,12 @@ import warnings
 import logging
 logger = logging.getLogger(__name__)
 
-from .algorithm import TimeEvolutionAlgorithm
+from .algorithm import TimeEvolutionAlgorithm, TimeDependentHAlgorithm
 from ..linalg import np_conserved as npc
 from .truncation import svd_theta, TruncationError
 from ..linalg import random_matrix
 
-__all__ = ['TEBDEngine', 'Engine', 'RandomUnitaryEvolution']
+__all__ = ['TEBDEngine', 'Engine', 'RandomUnitaryEvolution', 'TimeDependentTEBD']
 
 
 class TEBDEngine(TimeEvolutionAlgorithm):
@@ -354,10 +354,10 @@ class TEBDEngine(TimeEvolutionAlgorithm):
             trunc_err += self.evolve_step(U_idx_dt, odd)
         self.evolved_time = self.evolved_time + N_steps * self._U_param['tau']
         self.trunc_err = self.trunc_err + trunc_err  # not += : make a copy!
-        # (this is done to avoid problems of users storing self.trunc_err after each `update`)
+        # (this is done to avoid problems of users storing self.trunc_err after each `evolv`)
         return trunc_err
 
-    def update_step(self, U_idx_dt, odd):
+    def evolve_step(self, U_idx_dt, odd):
         """Updates either even *or* odd bonds in unit cell.
 
         Depending on the choice of p, this function updates all even (``E``, odd=False,0)
@@ -729,5 +729,11 @@ class RandomUnitaryEvolution(TEBDEngine):
         # (this is done to avoid problems of users storing self.trunc_err after each `update`)
         return trunc_err
 
-    def _calc_bond_eig(self):
-        pass  # do nothing
+
+class TimeDependentTEBD(TimeDependentHAlgorithm,TEBDEngine):
+    """Variant of :class:`TEBDEngine` that can handle time-dependent Hamiltonians.
+
+    See details in :class:`~tenpy.algorithms.algorithm.TimeDependentHAlgorithm` as well.
+    """
+    # uses run_evolution from TimeDependentHAlgorithm
+    # so nothing to redefine here
