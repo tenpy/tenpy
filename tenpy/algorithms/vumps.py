@@ -312,49 +312,6 @@ class VUMPSEngine(Sweep):
 
         return strange_left, strange_right
 
-    def _diagonal_gauge_C_OLD(self, theta, i0, sv_cutoff):
-        U, S, VH = npc.svd(theta,
-                           cutoff=sv_cutoff,
-                           qtotal_LR=[theta.qtotal, None],
-                           inner_labels=['vR', 'vL'])
-
-        theta = npc.diag(S, VH.get_leg('vL'), labels=['vL', 'vR'])
-
-        if i0 % self.psi.L == 0:
-            self.left_U = U
-            self.right_U = VH
-
-        self.psi.set_B(i0-1, npc.tensordot(self.psi.get_B(i0-1, 'AL'), U, axes=(['vR'], ['vL'])), 'AL')
-        self.psi.set_B(i0, npc.tensordot(U.conj(), self.psi.get_B(i0, 'AL'), axes=(['vL*'], ['vL'])).ireplace_label('vR*', 'vL'), 'AL')
-
-        self.psi.set_B(i0, npc.tensordot(VH, self.psi.get_B(i0, 'AR'), axes=(['vR'], ['vL'])), 'AR')
-        self.psi.set_B(i0-1, npc.tensordot(self.psi.get_B(i0-1, 'AR'), VH.conj(), axes=(['vR'], ['vR*'])).ireplace_label('vL*', 'vR'), 'AR')
-        return theta, U, VH
-
-    def _diagonal_gauge_AC_OLD(self, U, VH, i0, n):
-        """
-        Currently updating site i0; we want to update the ACs on other sites to reflect the
-        changes to the bond matrices. $n$ is the number of physical legs the currently optimized
-        theta has, so either 1 or 2.
-
-        We need to update the right leg of AC(i0-1) since AR(i0) has changed by VH.
-        We need to update the left leg of AC(i0+n) since AL(i0+n-1) has changed by U
-        """
-        theta = self.psi.get_B(i0+n, 'AC')
-        # Commented out lines might be necessary if n > 1.
-        #C = self.psi.get_C(i0+1)
-        theta = npc.tensordot(U.conj(), theta, axes=(['vL*'], ['vL'])).ireplace_label('vR*', 'vL')
-        #C = npc.tensordot(U.conj(), C, axes=(['vL*'], ['vL'])).ireplace_label('vR*', 'vL')
-        self.psi.set_B(i0+n, theta, 'AC')
-        #self.psi.set_C(i0+1, C)
-
-        theta = self.psi.get_B(i0-1, 'AC')
-        #C = self.psi.get_C(i0-1)
-        theta = npc.tensordot(theta, VH.conj(), axes=(['vR'], ['vR*'])).ireplace_label('vL*', 'vR')
-        #C = npc.tensordot(C, VH.conj(), axes=(['vR'], ['vR*'])).ireplace_label('vL*', 'vR')
-        self.psi.set_B(i0-1, theta, 'AC')
-        #self.psi.set_C(i0-1, C)
-
 class OneSiteVUMPSEngine(VUMPSEngine):
     EffectiveH = OneSiteH
 
@@ -389,30 +346,13 @@ class OneSiteVUMPSEngine(VUMPSEngine):
         H0_1, H0_2, H1 = self.eff_H0_1, self.eff_H0_2, self.eff_H1
         AC, C1, C2 = theta
         lanczos_options = self.options.subconfig('lanczos_options')
+
         E0_1, theta0_1, N0_1 = LanczosGroundState(H0_1, C1, lanczos_options).run()
+
         if self.psi.L > 1:
             E0_2, theta0_2, N0_2 = LanczosGroundState(H0_2, C2, lanczos_options).run()
         E1, theta1, N1 = LanczosGroundState(H1, AC, lanczos_options).run()
-        """
-        if self.diagonal_gauge:
-            sv_cutoff = self.options.get('S_inv_cutoff', self.S_inv_cutoff)
-            #assert self.psi.L == 1, "'allow_reduction' does not work for multi site unit cell; use 2-site VUMPS instead."
-            if self.psi.L > 1:
-                if sv_cutoff > 0:
-                    warnings.warn("'sv_cutoff' cannot be non-zero for multi-site unit cell.")
-                sv_cutoff = 0.0
-            theta0_1, U1, VH1 = self._diagonal_gauge_C(theta0_1, i0, sv_cutoff)
 
-            theta1 = npc.tensordot(U1.conj(), theta1, axes=(['vL*'], ['vL']))
-            if self.psi.L == 1:
-                theta1 = npc.tensordot(theta1, VH1.conj(), axes=(['vR'], ['vR*'])).ireplace_labels(['vR*', 'vL*'], ['vL', 'vR'])
-                #E0_2, theta0_2, N0_2 = E0_1, theta0_1, N0_1
-            else: # self.psi.L > 1
-                theta0_2, U2, VH2 = self._diagonal_gauge_C(theta0_2, i0+1, sv_cutoff)
-
-                theta1 = npc.tensordot(theta1, VH2.conj(), axes=(['vR'], ['vR*'])).ireplace_labels(['vR*', 'vL*'], ['vL', 'vR'])
-                self._diagonal_gauge_AC(U2, VH1, i0, self.n_optimize)
-        """
         if self.psi.L == 1:
             E0_2, theta0_2, N0_2 = E0_1, theta0_1, N0_1
 
