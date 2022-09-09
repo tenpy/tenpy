@@ -41,8 +41,6 @@ class ExpMPOEvolution(TimeEvolutionAlgorithm):
         order : int
             Order of the algorithm. The total error up to time `t` scales as ``O(t*dt^order)``.
             Implemented are order = 1 and order = 2.
-        preserve_norm : bool
-            Whether the state will be normalized to its initial norm after each time step.
 
     Attributes
     ----------
@@ -70,31 +68,13 @@ class ExpMPOEvolution(TimeEvolutionAlgorithm):
         self._U_MPO = None
         self._U_param = {}
 
-    def run(self):
-        """Run the real-time evolution with the W_I/W_II approximation."""
-        dt = self.options.get('dt', 0.01)
-        N_steps = self.options.get('N_steps', 1)
-        approximation = self.options.get('approximation', 'II')
-        order = self.options.get('order', 2)
-        preserve_norm = self.options.get('preserve_norm', None)
+    # run from TimeEvolutionAlgorithm
 
-        # preserve the norm for real time evolution
-        if preserve_norm is None:
-            if np.iscomplex(dt):
-                preserve_norm = False
-            else:
-                preserve_norm = True
-        if preserve_norm:
-            old_norm = self.psi.norm
+    def prepare_evolve(self, dt):
+        order = self.options.get('order', 2)
+        approximation = self.options.get('approximation', 'II')
 
         self.calc_U(dt, order, approximation)
-
-        self.update(N_steps)
-
-        if preserve_norm:
-            self.psi.norm = old_norm
-
-        return self.psi
 
     def calc_U(self, dt, order=2, approximation='II'):
         """Calculate ``self._U_MPO``.
@@ -113,7 +93,7 @@ class ExpMPOEvolution(TimeEvolutionAlgorithm):
             Type of approximation for the time evolution operator.
         """
         U_param = dict(dt=dt, order=order, approximation=approximation)
-        if self._U_param == U_param:
+        if self._U_param == U_param and not self.force_prepare_evolve:
             return  # nothing to do: _U is cached
         self._U_param = U_param
         logger.info("Calculate U for %s", U_param)
@@ -128,28 +108,12 @@ class ExpMPOEvolution(TimeEvolutionAlgorithm):
             self._U_MPO = [U1, U2]
         else:
             raise ValueError("order {0:d} not implemented".format(order=order))
+        self.force_prepare_evolve = False
 
-    def update(self, N_steps):
-        """Time evolve by `N_steps` steps.
-
-        Parameters
-        ----------
-        N_steps: int
-            The number of time steps psi is evolved by.
-
-        Returns
-        -------
-        trunc_err: :class:`~tenpy.algorithms.truncation.TruncationError`
-            Truncation error induced during the update.
-        """
+    def evolve_step(self, dt):
         trunc_err = TruncationError()
-
-        for _ in range(N_steps):
-            for U_MPO in self._U_MPO:
-                trunc_err += U_MPO.apply(self.psi, self.options)
-        self.evolved_time = self.evolved_time + N_steps * self._U_param['dt']
-        self.trunc_err = self.trunc_err + trunc_err  # not += : make a copy!
-        # (this is done to avoid problems of users storing self.trunc_err after each `update`)
+        for U_MPO in self._U_MPO:
+            trunc_err += U_MPO.apply(self.psi, self.options)
         return trunc_err
 
 

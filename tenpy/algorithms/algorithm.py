@@ -2,7 +2,12 @@
 # Copyright 2020-2021 TeNPy Developers, GNU GPLv3
 
 import warnings
+import time
+import numpy as np
+import logging
+logger = logging.getLogger(__name__)
 
+from .truncation import TruncationError
 from ..tools.events import EventHandler
 from ..tools.params import asConfig
 from ..tools.cache import DictCache
@@ -198,6 +203,8 @@ class TimeEvolutionAlgorithm(Algorithm):
             done in :meth:`run` fixed.
             Further, e.g., the Trotter decompositions of order > 1 are slightly more efficient
             if more than one step is performed at once.
+        preserve_norm : bool
+            Whether the state will be normalized to its initial norm after each time step.
 
     Attributes
     ----------
@@ -211,6 +218,8 @@ class TimeEvolutionAlgorithm(Algorithm):
     def __init__(self, psi, model, options, **kwargs):
         super().__init__(psi, model, options, **kwargs)
         self.evolved_time = self.options.get('start_time', 0.)
+        self.trunc_err = self.options.get('start_trunc_err', TruncationError())
+        self.force_prepare_evolve = False
         if self.resume_data:
             self.evolved_time = self.resume_data['evolved_time']
 
@@ -224,4 +233,88 @@ class TimeEvolutionAlgorithm(Algorithm):
 
         You probably want to call this in a loop.
         """
-        raise NotImplementedError("Subclasses should override this")
+        dt = self.options.get('dt', 0.1)
+        N_steps = self.options.get('N_steps', 1)
+
+        start_time = time.time()
+        Sold = np.mean(self.psi.entanglement_entropy())
+
+        self.run_evolution(N_steps, dt)
+
+        S = self.psi.entanglement_entropy()
+        logger.info(
+            "--> time=%(t)3.3f, max(chi)=%(chi)d, max(S)=%(S).5f, "
+            "avg DeltaS=%(dS).4e, since last update: %(wall_time).1fs", {
+                't': self.evolved_time.real,
+                'chi': max(self.psi.chi),
+                'S': max(S),
+                'dS': np.mean(S) - Sold,
+                'wall_time': time.time() - start_time,
+            })
+        return self.psi
+
+    def run_evolution(self, N_steps, dt):
+        """Perform a (real-)time evolution of :attr:`psi` by `N_steps` * `dt`.
+
+        This is the inner part of :meth:`run` without the logging.
+        For parameters see :cfg:config:`TimeEvolutionAlgorithm`.
+        """
+        preserve_norm = self.options.get('preserve_norm', None)
+        if preserve_norm is None:  # default: preserve norm for real time evolution
+            preserve_norm = not np.iscomplex(dt)
+        if preserve_norm:
+            old_norm = self.psi.norm
+
+        self.prepare_evolve(dt)
+        trunc_err = self.evolve(N_steps, dt)
+
+        self.trunc_err = self.trunc_err + trunc_err  # not += : make a copy!
+        if preserve_norm:
+            self.psi.norm = old_norm
+
+    def prepare_evolve(self, dt):
+        """Prepare an evolution step.
+
+        This method is used to prepare repeated calls of :meth:`evolve` given the :attr:`model`.
+        For example, it may generate approximations of ``U=exp(-i H dt)``.
+        To avoid overhead, it may cache the result depending on parameters/options;
+        but it should always regenerate it if :attr:`force_prepare_evolve` is set.
+
+        Parameters
+        ----------
+        dt : float
+            The time step to be used.
+        """
+        # this function can e.g. calculate an approximation
+        raise NotImplementedError("Sublcasses should implement this.")
+
+    def evolve(self, N_steps, dt):
+        """Evolve by N_steps*dt.
+
+        Subclasses may override this with a more efficient way of do `N_steps` `update_step`.
+
+        Parameters
+        ----------
+        N_steps : int
+            The number of time steps by `dt` to take at once.
+        dt : float
+            Small time step. Might be ignored if already used in :meth:`prepare_update`.
+
+        Returns
+        -------
+        trunc_err : :class:`~tenpy.algorithms.truncation.TruncationError`
+            Sum of truncation errors introduced during evolution.
+        """
+        trunc_err = TruncationError()
+
+        for _ in range(N_steps):
+            trunc_err += self.evolve_step(dt)
+
+        self.evolved_time = self.evolved_time + N_steps * dt
+        # (this is done to avoid problems of users storing self.trunc_err after each `update`)
+        return trunc_err
+
+    def evolve_step(self, dt):
+        raise NotImplementedError("Subclasses should implement this.")
+
+
