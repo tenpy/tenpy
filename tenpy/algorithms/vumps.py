@@ -43,7 +43,9 @@ logger = logging.getLogger(__name__)
 
 from ..linalg import np_conserved as npc
 from ..networks.mpo import MPOEnvironment, MPOTransferMatrix
-from ..networks.mps import TransferMatrix
+from ..networks.mps import MPS, TransferMatrix
+from ..networks.umps import uMPS
+from ..linalg.sparse import SumNpcLinearOperator
 from ..linalg.lanczos import LanczosGroundState, lanczos_arpack
 from ..tools.params import asConfig
 from ..tools.math import entropy
@@ -73,6 +75,10 @@ class VUMPSEngine(Sweep):
 
     def __init__(self, psi, model, options, **kwargs):
         #options = asConfig(options, self.__class__.__name__)
+        if type(psi) != uMPS: #tenpy.networks.umps.uMPS:
+            assert type(psi) == MPS #tenpy.networks.mps.MPS
+            # psi is an MPS, so convert it to a uMPS
+            psi = uMPS.from_MPS(psi)
         super().__init__(psi, model, options, **kwargs)
         self.guess_init_env_data = self.env.get_initialization_data()
         self.env.clear()

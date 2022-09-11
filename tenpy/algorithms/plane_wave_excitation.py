@@ -48,11 +48,11 @@ def construct_orthogonal(M, cutoff=1.e-13, left=True):
     if left:
         M = M.copy().combine_legs([['vL', 'p'], ['vR']], qconj=[+1, -1])
         Q = npc.orthogonal_columns(M, 'vR')
-        assert npc.norm(npc.tensordot(Q, M.conj(), axes=(['(vL.p)'], ['(vL*.p*)']))) < 1.e-14
+        assert npc.norm(npc.tensordot(Q, M.conj(), axes=(['(vL.p)'], ['(vL*.p*)']))) < 1.e-12
     else:
         M = M.copy().combine_legs([['vL'], ['p', 'vR']], qconj=[+1, -1])
         Q = npc.orthogonal_columns(M.transpose(['(p.vR)', '(vL)']), 'vL').itranspose(['vL', '(p.vR)'])
-        assert npc.norm(npc.tensordot(Q, M.conj(), axes=(['(p.vR)'], ['(p*.vR*)']))) < 1.e-14
+        assert npc.norm(npc.tensordot(Q, M.conj(), axes=(['(p.vR)'], ['(p*.vR*)']))) < 1.e-12
     return Q.split_legs()
 
 class PlaneWaveExcitationEngine(Algorithm):
@@ -435,7 +435,7 @@ class PlaneWaveExcitationEngine(Algorithm):
         #print('Norm of initial guess:', [npc.norm(x) for x in X_init])
         assert valid_charge, "No X is non-zero; charge is not valid for gluing."
         return X_init
-    
+
 class MultiSitePlaneWaveExcitationEngine(Algorithm):
     def __init__(self, psi, model, options, **kwargs):
         super().__init__(psi, model, options, **kwargs)
@@ -446,7 +446,7 @@ class MultiSitePlaneWaveExcitationEngine(Algorithm):
         self.size = self.options.get('excitation_size', 1)
         assert size >= 1
         self.stretch = (size - 1) // L # How many unit cells an excitation tensor crosses into beyond its own.
-        
+
         self.ALs = [self.psi.get_AL(i) for i in range(self.L)]
         self.ARs = [self.psi.get_AR(i) for i in range(self.L)]
         self.ACs = [self.psi.get_AC(i) for i in range(self.L)]
@@ -499,7 +499,7 @@ class MultiSitePlaneWaveExcitationEngine(Algorithm):
             strange.append(npc.norm(temp))
         logger.info("Norm of H|psi> projected into the tangent space on each site: %r.", strange)
 
-        
+
     def run(self, p, qtotal_change=None, orthogonal_to=[], E_boosts=[]):
         self.unaligned_H = self.Unaligned_Effective_H(self, self.ALs, self.ARs, self.VLs,
                                                       self.LW, self.RW, self.Ws, p, self.chi, self.d)
@@ -530,7 +530,7 @@ class MultiSitePlaneWaveExcitationEngine(Algorithm):
         HX = effective_H.matvec(X)
         E = np.real(inner(X, HX)).item()
         return E - self.energy_density * self.L - self.lambda_C1
-    
+
     def attach_right(self, VL, X, As, R, Ws=None):
         B = npc.tensordot(VL, X, axes=(['vR'], ['vL']))
         RB = npc.tensordot(B, R, axes=(['vR'], ['vL']))
@@ -541,23 +541,23 @@ class MultiSitePlaneWaveExcitationEngine(Algorithm):
             RB = npc.tensordot(RB, As[i].conj(), axes=(['p', 'vL*'], ['p*', 'vR*']))
         print(RB)
         return RB
-    
+
     def starting_right_TLR(self, X):
         R = npc.Array.zeros_like(self.RW)
         for i in range(self.L):
             RB = self.GS_env_R.get_RP(i+self.size-1)
-            RB = self.attach_right(self.VLs[i], X[i], [self.ARs[j % self.L] for j in range(i, i+size)], 
+            RB = self.attach_right(self.VLs[i], X[i], [self.ARs[j % self.L] for j in range(i, i+size)],
                                    RP, Ws=[self.Ws[j % self.L] for j in range(i, i+size)])
             RB = TR_general(self.ALs[:i], self.ARs[:i], RB, Ws=[self.Ws[:i]])
             R += RB
         return R
-    
+
     def infinite_sum_TLR(self, X, p):
         sum_tol = self.options.get('sum_tol', 1.e-10)
         sum_method = self.options.get('sum_method', 'explicit')
 
         R = self.starting_right_TLR(X)
-    
+
         assert not np.isclose(npc.norm(R), 0)
         if sum_method=='explicit':
             R_sum = R.copy()
@@ -591,7 +591,7 @@ class MultiSitePlaneWaveExcitationEngine(Algorithm):
             return R_sum
         else:
             raise ValueError('Sum method', sum_method, 'not recognized!')
-    
+
     def attach_left(self, VL, X, As, L, Ws=None):
         B = npc.tensordot(VL, X, axes=(['vR'], ['vL'])) # What p labels does B have?
         LB = npc.tensordot(L, B, axes=(['vR'], ['vL']))
@@ -602,14 +602,14 @@ class MultiSitePlaneWaveExcitationEngine(Algorithm):
             LB = npc.tensordot(As[i].conj(), LB, axes=(['p*', 'vL*'], ['p', 'vR*']))
         print(LB)
         return LB
-    
+
     def starting_left_TRL(self, X):
         L = npc.Array.zeros_like(self.LW)
         for i in range(self.L):
             LB = self.GS_env_L.get_LP(i)
-            LB = self.attach_left(self.VLs[i], X[i], [self.ALs[j % self.L] for j in range(i, i+size)], 
+            LB = self.attach_left(self.VLs[i], X[i], [self.ALs[j % self.L] for j in range(i, i+size)],
                                    LP, Ws=[self.Ws[j % self.L] for j in range(i, i+size)])
-            
+
             LB = TR_general(self.ARs[(i+size)%L:], self.ALs[(i+size)%L:], RB, Ws=[self.Ws[(i+size)%L]])
             L += RB
         return L
@@ -670,12 +670,12 @@ class MultiSitePlaneWaveExcitationEngine(Algorithm):
         def matvec(self, vec):
 
             total_vec = [npc.Array.zeros_like(v) for v in vec]
-            
+
             for i in range(self.outer.stretch):
                 for j in range(self.outer.L):
                     fe
-            
-            
+
+
             for i in range(self.outer.L):
                 LB = npc.Array.zeros_like(self.LW)
                 RB = npc.Array.zeros_like(self.RW)
@@ -728,7 +728,7 @@ class MultiSitePlaneWaveExcitationEngine(Algorithm):
             end = (self.outer.size-1 % self.outer.L)
             if start > 0:
                 inf_sum_TLR = TR_general(self.ALs[start:], self.ARs[start:], inf_sum_TLR, Ws=self.Ws[start:])
-            for i in reversed(range(self.outer.L)):    
+            for i in reversed(range(self.outer.L)):
                 LP_VL = LT_general([self.ALs[i]], [self.VLs[i]], self.outer.GS_env_L.get_LP(i), Ws=[self.Ws[i]])
                 for j in range(self.outer.size-1):
                     LP_VL = npc.tensordot(LP_VL, self.ALs[j], axes=(['vR'], ['vL']))
@@ -737,17 +737,17 @@ class MultiSitePlaneWaveExcitationEngine(Algorithm):
                 X_out_left = np.exp(-1.0j*self.p*self.outer.L*(self.outer.stretch+1)) * npc.tensordot(LP_VL, inf_sum_TLR, axes=(['vR', 'wR'], ['vL', 'wL']))
                 X_out_left.ireplace_labels(['vR*', 'vL*'], ['vL', 'vR'])
                 total[i] += X_out_left
-                
+
                 inf_sum_TLR = TR_general([self.ALs[i]], [self.ARs[i]], inf_sum_TLR, Ws=[self.Ws[i]])
-                
+
             for i in range(self.outer.stretch):
                 # How many unit cells excitations extend into
                 for j in range(self.outer.L):
                     for k in range(self.outer.L):
                         LP = self.outer.GS_env_L.get_LP(j)
                         LP = npc.tensordot(LP, )
-                        
-                        
+
+
             inf_sum_TRL = self.outer.infinite_sum_TRL(vec, self.p)
             for i in range(self.outer.L):
                 TRL_VL = LT_general([self.ARs[i]], [self.VLs[i]], inf_sum_TRL, Ws=[self.Ws[i]])
@@ -758,7 +758,7 @@ class MultiSitePlaneWaveExcitationEngine(Algorithm):
                 X_out_right = np.exp(1.0j*self.p*self.outer.L) * npc.tensordot(TRL_VL, self.outer.GS_env_R.get_RP(i+self.outer.size-1), axes=(['vR', 'wR'], ['vL', 'wL']))
                 X_out_right.ireplace_labels(['vR*', 'vL*'], ['vL', 'vR'])
                 total[i] += X_out_right
-                
+
                 inf_sum_TRL = TR_general([self.ARs[i]], [self.ALs[i]], inf_sum_TRL, Ws=[self.Ws[i]])
 
             return total
