@@ -363,7 +363,7 @@ class TimeDependentTwoSiteTDVP(TimeDependentHAlgorithm,TwoSiteTDVPEngine):
     """
 
     def reinit_model(self):
-        TimeDependentTwoSiteTDVP.reinit_model(self)
+        TimeDependentSingleSiteTDVP.reinit_model(self)
 
 
 class OldTDVPEngine(TimeEvolutionAlgorithm):

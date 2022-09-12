@@ -378,15 +378,9 @@ class TimeDependentHAlgorithm(TimeEvolutionAlgorithm):
 
         Skips re-initialization if the ``model.options['time']`` is the same as `evolved_time`.
         The model should read out the option ``'time'`` and initialize the corresponding ``H(t)``.
-
-        Returns
-        -------
-        model :
-            New instance of the model initialized at ``model_params['time'] = self.evolved_time``.
         """
         model_time = self.model.options.get('time', None)
         if model_time is not None and model_time == self.evolved_time:
-            # already had that time defined during model init, so no need to update
-            return self.model
+            return  # already had that time defined during model init, so no need to update
         self.model = self.model.update_time_parameter(self.evolved_time)
         self.force_prepare_evolve = True

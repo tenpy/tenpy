@@ -61,7 +61,8 @@ class RealTimeEvolution(Simulation):
             # might need to re-initialize model with current time
             # in particular for a sequential/resume run, the first `self.init_model()` might not
             # yet have had the initial start time of the algorithm engine!
-            self.model = self.engine.reinit_model()
+            self.engine.reinit_model()
+            self.model = self.engine.model
         return super().perform_measurements()
 
     def resume_run_algorithm(self):
