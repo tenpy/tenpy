@@ -1,0 +1,21 @@
+#!/usr/bin/env -S python -m tenpy 
+
+simulation_class : GroundStateSearch
+
+ground_state_filename : a_minimal_DMRG.h5
+
+operator_t0:
+    i: 0
+    op: Sz
+
+operator_t: Sz
+
+algorithm_class: TEBDEngine
+algorithm_params:
+    trunc_params:
+        chi_max: 120
+    dt : 0.05
+    N_steps : 2  # measurements every dt*N_steps
+
+
+

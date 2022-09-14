@@ -74,3 +74,102 @@ class RealTimeEvolution(Simulation):
         We already performed a set of measurements after the evolution in :meth:`run_algorithm`.
         """
         pass
+
+
+class SpectralFunction(RealTimeEvolution):
+    """Calculate spectral functions through a time evolution.
+
+    Options
+    -------
+    .. cfg:config :: ZeroTemperatureSpectralFunction
+
+        ground_state_filename :
+            File from which the ground state (and model parameters) should be loaded.
+
+
+    .. todo ::
+        Share code with OrthogonalExcitations as far as possible?
+    """
+
+    def __init__(self, options, *, gs_data=None, **kwargs):
+        super().__init__(options, **kwargs)
+        self._gs_data = gs_data
+
+    def run(self):
+        if not hasattr(self, 'ground_state_orig'):
+            self.init_from_groundstate()
+        return super().run()
+
+    def resume_run(self):
+        if not hasattr(self, 'ground_state_orig'):
+            self.init_from_groundstate()
+        return super().resume_run()
+
+    def init_from_groundstate(self):
+        gs_fn, gs_data = self._load_gs_data()
+        self.ground_state_orig = gs_data['psi']  # no copy!
+        self.psi = self.ground_state_orig.copy()
+
+        # copy ground state model parameters
+        gs_data_options = gs_data['simulation_parameters']
+        for key in gs_data_options.keys():
+            if not isinstance(key, str) or not key.startswith('model'):
+                continue
+            if key not in self.options:
+                self.options[key] = gs_data_options[key]
+
+        # apply local operator
+        # TODO: generalize to allow more complicated ops
+        i0 = self.options['operator_t0']['i']
+        op0 = self.options['operator_t0']['op']
+        self._apply_local_op(psi, [i0, op0])
+
+    def _load_gs_data(self):
+        """Load ground state data from `ground_state_filename` or use simulation kwargs."""
+        if self._gs_data is not None:
+            gs_fn = None
+            self.logger.info("use ground state data of simulation class arguments")
+            gs_data = self._gs_data
+            self._gs_data = None  # reset to None to potentially allow to free the memory
+            # even though this can only work if the call structure is
+            #      sim = OrthogonalExcitations(..., gs_data=gs_data)
+            #      del gs_data
+            #      with sim:
+            #          sim.run()
+        else:
+            gs_fn = self.options['ground_state_filename']
+            self.logger.info("loading ground state data from %s", gs_fn)
+            gs_data = hdf5_io.load(gs_fn)
+        return gs_fn, gs_data
+
+    def _apply_local_op(self, psi, apply_local_op):
+        #apply_local_op should have the form [site1, op1, site2, op2, ...]
+        assert len(apply_local_op) % 2 == 0
+        self.logger.info("apply local operators (to switch charge sector)")
+        first, last = self.results['segment_first_last']
+        term = list(zip(apply_local_op[-1::-2], apply_local_op[-2::-2]))  # [(op, site), ...]
+        for op, i in term:
+            j = int(i)  # error for apply_local_op=["Sz", i, ...] instead of [i, "Sz", ...]
+            j = j - first  # convert from original MPS index to segment MPS index
+            if not 0 <= j < psi.L:
+                raise ValueError(f"specified site {j:d} in segment = {i:d} in original MPS"
+                                 f"is not in segment [{first:d}, {last:d}]!")
+        psi.apply_local_term(term, i_offset=-first, canonicalize=False)
+
+
+    def init_measurements(self):
+        # add measurements for overlaps
+        op = self.options['operator_t']  # TODO: could be daggger of operator_t0?
+        meas = list(self.options.get('connect_measurements', []))
+        # TODO add function to measure <psi_0 | op | psi>
+        raise NotImplementedError("TODO")
+        self.options['_connect_measurements'] = meas
+        super().init_measurements()
+
+
+    def post_process(self):
+        # optionally use linear prediction
+        # TODO: fourier transform to calculate dynamic structure factor
+
+    def linear_prediction(self):
+        raise NotImplementedError("TODO")
