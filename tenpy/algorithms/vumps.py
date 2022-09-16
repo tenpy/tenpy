@@ -433,7 +433,6 @@ class TwoSiteVUMPSEngine(VUMPSEngine):
         E0_1, theta0_1, N0_1 = LanczosGroundState(H0_1, C1, lanczos_options).run()
         E0_2, theta0_2, N0_2 = LanczosGroundState(H0_2, C2, lanczos_options).run()
         E2, theta2, N2 = LanczosGroundState(H2, AC, lanczos_options).run()
-
         U, S, VH, err, S_approx = svd_theta(theta2.combine_legs([['vL', 'p0'], ['vR', 'p1']], qconj=[+1, -1]),
                                      self.trunc_params,
                                      qtotal_LR=[theta2.qtotal, None],

@@ -355,7 +355,7 @@ class MPS:
         """Construct an MPS from a product state given in lattice coordinates.
 
         This is a wrapper around :meth:`from_product_state`.
-        The purpuse is to make the `p_state` argument independent of the `order` of the `Lattice`,
+        The purpose is to make the `p_state` argument independent of the `order` of the `Lattice`,
         and specify it in terms of lattice indices instead.
 
         Parameters
@@ -5672,6 +5672,26 @@ class InitialStateBuilder:
         lat = self.lattice
         psi = MPS.from_product_state(lat.mps_sites(), p_state, bc=lat.bc_MPS, dtype=dtype)
         return psi
+
+    def desired_bond_dimension(self, chi=None):
+        """Initialize a trivial charge MPS with desired bond dimension.
+
+        See :meth:`MPS.from_desired_bond_dimension` for details.
+
+        Options
+        -------
+        .. cfg:configoptions :: InitialStateBuilder
+
+            chi : int
+                The desired bond dimension passed on to :meth:`MPS.from_desired_bond_dimension`.
+        """
+        if chi is None:
+            chi = self.options['chi']
+        dtype = self.options.get('dtype', self.model_dtype)
+        lat = self.lattice
+        psi = MPS.from_desired_bond_dimension(lat.mps_sites(), chi, bc=lat.bc_MPS, dtype=dtype)
+        return psi
+
 
     def check_filling(self, p_state):
         """Ensure that the filling of the product state matches `check_filling` parameter.

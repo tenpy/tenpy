@@ -741,7 +741,7 @@ class uMPS(MPS):
         raise NotImplementedError("Who knows if this is valid for UMPS?")
 
     def entanglement_entropy(self, n=1, bonds=None, for_matrix_S=True):
-        assert self.valid_umps
+        #assert self.valid_umps
         assert for_matrix_S, "uMPS do not have diagonal C matrices."
         return super().entanglement_entropy(n, bonds, for_matrix_S)
 
