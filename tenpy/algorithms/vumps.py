@@ -91,7 +91,8 @@ class VUMPSEngine(Sweep):
         options = self.options
         start_time = self.time0
         self.shelve = False
-
+        
+        overlap = options.get('overlap', True)
         min_sweeps = options.get('min_sweeps', 1)
         max_sweeps = options.get('max_sweeps', 1000)
         max_E_err = options.get('max_E_err', 1.e-8)
@@ -182,7 +183,7 @@ class VUMPSEngine(Sweep):
         # psi.norm_test() is sometimes > 1.e-10 for paramagnetic TFI. More VUMPS (>10) fixes this even though the energy is already saturated for 10 sweeps.
         self.guess_init_env_data, Es, _ = MPOTransferMatrix.find_init_LP_RP(self.model.H_MPO, self.psi, calc_E=True, guess_init_env_data=self.guess_init_env_data)
         self.tangent_projector_test(self.guess_init_env_data)
-        return (Es[0] + Es[1])/2, self.psi.to_MPS(overlap=True)      # E_MPO is first returned value
+        return (Es[0] + Es[1])/2, self.psi.to_MPS(overlap=overlap)      # E_MPO is first returned value
 
     def environment_sweeps(self, N_sweeps):
         # In VUMPS we don't want to do this as we regenerate the environment each time we do an update.
