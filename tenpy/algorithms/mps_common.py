@@ -251,7 +251,11 @@ class Sweep(Algorithm):
                     init_env_data[key_new] = self.options[key_old]
 
         # actually initialize the environment
-        cache = self.cache.create_subcache('env')
+        if self.env is None:
+            cache = self.cache.create_subcache('env')
+        else:
+            cache = self.env.cache  # re-initialize and reuse the cache!
+            cache.clear()  # remove old entries which might no longer be valid
         self.env = MPOEnvironment(self.psi, H, self.psi, cache=cache, **init_env_data)
         self._init_ortho_to_envs(orthogonal_to, resume_data)
 
@@ -1305,7 +1309,11 @@ class VariationalCompression(Sweep):
         start_env_sites = self.options.get('start_env_sites', 2)
         if start_env_sites is not None and not self.psi.finite:
             init_env_data['start_env_sites'] = start_env_sites
-        cache = self.cache.create_subcache('env')
+        if self.env is None:
+            cache = self.cache.create_subcache('env')
+        else:
+            cache = self.env.cache
+            cache.clear()
         self.env = MPSEnvironment(self.psi, old_psi, cache=cache, **init_env_data)
         self._init_ortho_to_envs(orthogonal_to, resume_data)
         self.reset_stats()
