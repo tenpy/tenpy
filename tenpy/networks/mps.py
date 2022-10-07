@@ -1529,7 +1529,7 @@ class MPS:
             if np.any(vL_chdiff != 0):
                 # adjust left leg
                 self._B[0] = B.gauge_total_charge('vL', B.qtotal + vL_chdiff, vL_leg.qconj)
-            B.get_leg('vL').test_equal(vL_leg)
+            self._B[0].get_leg('vL').test_equal(vL_leg)
         for i in range(self.L):
             B = self._B[i]
             desired_qtotal = qtotal[i]
@@ -4236,8 +4236,7 @@ class MPS:
         """If necessary, gauge total charge of `other` to match the vL, vR legs of self."""
         if self.chinfo.qnumber == 0:
             return
-        from tenpy.tools import optimization
-        need_gauge = any(self.get_total_charge() != other.get_total_charge())
+        need_gauge = self._outer_virtual_legs() != other._outer_virtual_legs()
         if need_gauge:
             vL, vR = self._outer_virtual_legs()
             other.gauge_total_charge(None, vL, vR)
