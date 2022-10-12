@@ -27,6 +27,7 @@ from ..tools import hdf5_io
 from ..tools.cache import CacheFile
 from ..tools.params import asConfig
 from ..tools.events import EventHandler
+from ..tools.process import memory_usage
 from ..tools.misc import find_subclass, update_recursive, get_recursive, set_recursive
 from ..tools.misc import setup_logging as setup_logging_
 from .. import version
@@ -140,8 +141,11 @@ class Simulation:
     _backup_filename : str
         When writing a file a second time, instead of simply overwriting it, move it to there.
         In that way, we still have a non-corrupt version if something fails during saving.
+    _init_walltime : float
+        Walltime at initialization of the simulation class.
+        Used as reference point in :meth:`walltime`.
     _last_save : float
-        Time of the last call to :meth:`save_results`, initialized to startup time.
+        Time of the last call to :meth:`save_results`, initialized to :attr:`_init_walltime`.
     loaded_from_checkpoint : bool
         True when the simulation is loaded with :meth:`from_saved_checkpoint`.
     grouped : int
@@ -207,7 +211,7 @@ class Simulation:
             'version_info': self.get_version_info(),
             'finished_run': False,
         }
-        self._last_save = time.time()
+        self._last_save = self._init_walltime = time.time()
         self.measurement_event = EventHandler("psi, simulation, results")
         if resume_data is not None:
             if 'psi' in resume_data:
@@ -859,6 +863,16 @@ class Simulation:
                     "Increase the latter to %.1f", save_every)
                 self.options['save_every_x_seconds'] = save_every
         # done
+
+    def walltime(self):
+        """Returns evolved wall time since initialization of the simulation class.
+
+        Utility measurement method.
+        """
+        return time.time() - self._init_walltime
+
+    def memory_usage(self):
+        return memory_usage()
 
 
 class Skip(ValueError):

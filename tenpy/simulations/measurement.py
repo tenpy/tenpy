@@ -10,11 +10,13 @@ As explained in :doc:`/intro/simulations`, you can easily add custom measurement
 
 from ..networks.mpo import MPOEnvironment
 from ..tools.misc import get_recursive
+from ..tools import process
 import warnings
 
 __all__ = [
     'measurement_index', 'bond_dimension', 'bond_energies', 'simulation_parameter', 'energy_MPO',
-    'entropy', 'onsite_expectation_value', 'correlation_length', 'psi_method', 'evolved_time'
+    'entropy', 'onsite_expectation_value', 'correlation_length', 'psi_method',
+    'simulation_method', 'evolved_time'
 ]
 
 
@@ -205,7 +207,7 @@ def correlation_length(results, psi, simulation, key='correlation_length', unit=
 
 
 def psi_method(results, psi, simulation, method, key=None, **kwargs):
-    """General method to measure arbitrary method of psi with given additional kwargs.
+    """Generic method to measure arbitrary method of psi with given additional kwargs.
 
     Parameters
     ----------
@@ -221,6 +223,30 @@ def psi_method(results, psi, simulation, method, key=None, **kwargs):
     if key in results:
         raise ValueError(f"key {key!r} already exists in results")
     method = getattr(psi, method)
+    results[key] = method(**kwargs)
+
+
+def simulation_method(results, psi, simulation, method, key=None, **kwargs):
+    """Generic method to measure arbitrary method of simulation class with given additional kwargs.
+
+    This can be convenient if you define measurement functions in a
+    custom :class:`~tenpy.simulations.simulation.Simulation` subclass or for utility measurement
+    functions like :meth:`~tenpy.simulaitons.simulation.Simulation.walltime`
+
+    Parameters
+    ----------
+    results, psi, simulation, key:
+        See :func:`~tenpy.simulation.measurement.measurement_index`.
+    method : str
+        Name of the method of `psi` to call. `key` defaults to this if not specified.
+    **kwargs :
+        further keyword arguments given to the method
+    """
+    if key is None:
+        key = method
+    if key in results:
+        raise ValueError(f"key {key!r} already exists in results")
+    method = getattr(simulation, method)
     results[key] = method(**kwargs)
 
 
