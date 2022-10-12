@@ -184,18 +184,17 @@ evolutions also during the evolution. The default measurement functions are defi
 the module :mod:`tenpy.simulations.measurement`; :func:`~tenpy.simulations.measurement.measurement_index` documents what
 arguments a measurement function should have. 
 In the simplest case, you just specify the module and function name, but you can also add more arguments, as the
-following example shows:
+following example shows.
 
 .. code-block :: yaml
 
-    connect_measurements: 
+    connect_measurements:
       - - tenpy.simulations.measurement
         - onsite_expectation_value
         - opname: Sz
-      - - tenpy.simulations.measurement
-        - psi_method
-        - method: correlation_function
-          key: '<Sp_i Sm_j>'
+      - - psi_method
+        - correlation_function
+        - key: '<Sp_i Sm_j>'
           ops1: Sp
           ops2: Sm
 
@@ -206,10 +205,9 @@ Note the indentation and minus signs here: this yaml syntax is equivalent to the
     {'connect_measurements': [['tenpy.simulations.measurement',
                                'onsite_expectation_value',
                                {'opname': 'Sz'}],
-                              ['tenpy.simulations.measurement',
-                               'psi_method',
+                              ['psi_method',
+                               'correlation_function',
                                {'key': '<Sp_i Sm_j>',
-                                'method': 'correlation_function',
                                 'ops1': 'Sp',
                                 'ops2': 'Sm'}]]}
 

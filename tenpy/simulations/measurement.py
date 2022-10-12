@@ -15,8 +15,7 @@ import warnings
 
 __all__ = [
     'measurement_index', 'bond_dimension', 'bond_energies', 'simulation_parameter', 'energy_MPO',
-    'entropy', 'onsite_expectation_value', 'correlation_length', 'psi_method',
-    'simulation_method', 'evolved_time'
+    'entropy', 'onsite_expectation_value', 'correlation_length', 'psi_method', 'evolved_time'
 ]
 
 
@@ -207,7 +206,40 @@ def correlation_length(results, psi, simulation, key='correlation_length', unit=
 
 
 def psi_method(results, psi, simulation, method, key=None, **kwargs):
-    """Generic method to measure arbitrary method of psi with given additional kwargs.
+    """Generic function to measure arbitrary method of psi with given additional kwargs.
+
+    Instead of using `tenpy.simulations.measurement.psi_method` as a measurement function,
+    you can now directly use "psi_method" as `module_name` and replace the `connect_measurements`
+    simulation parameter entries as follows::
+
+        An old python entry for connect_measurements
+            ['tenpy.simulations.measurement',
+             'psi_method',
+             'correlation_function',
+             {'key': '<Sp_i Sm_j>',
+              'ops1': 'Sp',
+              'ops2': 'Sm'}]
+        can get replaced with new entry:
+            ['psi_method',
+             'correlation_function',
+             {'key': '<Sp_i Sm_j>',
+              'ops1': 'Sp',
+              'ops2': 'Sm'}]
+        Similarly, an old yaml entry for connect_measurements
+            - - tenpy.simulations.measurement
+              - psi_method
+              - method: correlation_function
+                key: '<Sp_i Sm_j>'
+                ops1: Sp
+                ops2: Sm
+        can get replaced with new yaml:
+            - - psi_method
+              - correlation_function
+              - key: '<Sp_i Sm_j>'
+                ops1: Sp
+                ops2: Sm
+
+    The new way is now the preferred way of measuring psi methods, the old way is deprecated.
 
     Parameters
     ----------
@@ -218,36 +250,38 @@ def psi_method(results, psi, simulation, method, key=None, **kwargs):
     **kwargs :
         further keyword arguments given to the method
     """
+    # extract the deprecation comment from the doc string
+    _psi_method_deprecated_msg = '\n'.join([line[4:] for line in
+                                            psi_method.__doc__.splitlines()[2:32]])
+    warnings.warn(_psi_method_deprecated_msg, FutureWarning)
+    _psi_method_wrapper(results, psi, simulation, method, key=key, **kwargs)
+
+
+def _psi_method_wrapper(results, psi, simulation, method, key=None, **kwargs):
+    """Wrapper function to allow measuring psi methods.
+
+    This function is used in :meth:`tenpy.simulations.Simulation._connect_measurements_method`
+    to handle cases where the `module` of
+    :cfg:option:`Simulaiton.connect_measurements` is "psi_method".
+    """
     if key is None:
         key = method
     if key in results:
-        raise ValueError(f"key {key!r} already exists in results")
+        raise ValueError(f"key {key!r} already exists in results, duplicated measurement!")
     method = getattr(psi, method)
     results[key] = method(**kwargs)
 
 
-def simulation_method(results, psi, simulation, method, key=None, **kwargs):
-    """Generic method to measure arbitrary method of simulation class with given additional kwargs.
+def _simulation_method_wrapper(results, psi, simulation, method, key, **kwargs):
+    """Wrapper function to allow measuring psi methods.
 
-    This can be convenient if you define measurement functions in a
-    custom :class:`~tenpy.simulations.simulation.Simulation` subclass or for utility measurement
-    functions like :meth:`~tenpy.simulaitons.simulation.Simulation.walltime`
-
-    Parameters
-    ----------
-    results, psi, simulation, key:
-        See :func:`~tenpy.simulation.measurement.measurement_index`.
-    method : str
-        Name of the method of `psi` to call. `key` defaults to this if not specified.
-    **kwargs :
-        further keyword arguments given to the method
+    This function is used in :meth:`tenpy.simulations.Simulation._connect_measurements_method`
+    to handle cases where the `module` of
+    :cfg:option:`Simulaiton.connect_measurements` is "simulation_method".
     """
-    if key is None:
-        key = method
     if key in results:
-        raise ValueError(f"key {key!r} already exists in results")
-    method = getattr(simulation, method)
-    results[key] = method(**kwargs)
+        raise ValueError(f"key {key!r} already exists in results, duplicated measurement!")
+    results[key] = method(psi=psi, **kwargs)
 
 
 def evolved_time(results, psi, simulation, key='evolved_time'):

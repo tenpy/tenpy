@@ -15,6 +15,7 @@ from pathlib import Path
 import time
 import importlib
 import warnings
+import functools
 import numpy as np
 import logging
 import copy
@@ -27,10 +28,10 @@ from ..tools import hdf5_io
 from ..tools.cache import CacheFile
 from ..tools.params import asConfig
 from ..tools.events import EventHandler
-from ..tools.process import memory_usage
 from ..tools.misc import find_subclass, update_recursive, get_recursive, set_recursive
 from ..tools.misc import setup_logging as setup_logging_
 from .. import version
+from .measurement import _psi_method_wrapper, _simulation_method_wrapper
 
 __all__ = [
     'Simulation',
@@ -546,7 +547,31 @@ class Simulation:
             def_meas = []
         con_meas = list(self.options.get('connect_measurements', []))
         for entry in def_meas + con_meas:
-            self.measurement_event.connect_by_name(*entry)
+            # (module_name, func_name, kwargs=None, priority=0) = entry
+            # with possibly less than
+            if entry[0] == 'simulation_method' or entry[0] == 'psi_method':
+                self._connect_measurements_method(*entry)
+            else:
+                self.measurement_event.connect_by_name(*entry)
+
+    def _connect_measurements_method(self, module_name, func_name, kwargs=None, priority=0):
+        if kwargs is None:
+            kwargs = {}
+        if module_name == 'simulation_method':
+            # the simulation class already exists, so we can directly get the corresponding method
+            func = getattr(self, func_name)
+            # but we still need a wrapper to match expect arguments and put return values in
+            # `results` dictionary
+            kwargs.setdefault('key', func_name)
+            func = functools.partial(_simulation_method_wrapper, method=func, **kwargs)
+        elif module_name == 'psi_method':
+            # psi might change/only be created at beginning of measurement,
+            # so we have to always get the psi method during measurements.
+            # This is done in _psi_method_wrapper
+            func = functools.partial(_psi_method_wrapper, method=func_name, **kwargs)
+        else:
+            assert False, "Invalid `module_name` argument for _connect_measurements_method."
+        self.measurement_event.connect(func, priority)
 
     def run_algorithm(self):
         """Run the algorithm.
@@ -864,15 +889,31 @@ class Simulation:
                 self.options['save_every_x_seconds'] = save_every
         # done
 
-    def walltime(self):
-        """Returns evolved wall time since initialization of the simulation class.
+    def m_walltime(self, psi=None, model=None):
+        """Measurement of evolved wall time since initialization of the simulation class.
 
-        Utility measurement method.
+        Utility measurement method. To measure it, add the following entry to the
+        :cfg:option:`Simulation.connect_measurements` option:
+
+        ```yaml
+        - - simulation_method
+          - m_walltime
+          - key: walltime
+        ```
+
+        Parameters
+        ----------
+        psi, model :
+            State and model to be used for measuremetns.
+            Usually the same as ``self.psi`` and ``self.model``, but can be different,
+            e.g., when grouping sites.
+
+        Returns
+        -------
+        seconds : float
+            Elapsed (wall clock) time in seconds since the
         """
         return time.time() - self._init_walltime
-
-    def memory_usage(self):
-        return memory_usage()
 
 
 class Skip(ValueError):
