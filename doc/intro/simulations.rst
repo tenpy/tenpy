@@ -180,7 +180,7 @@ somewhere in the code!
 Adding more measurements
 ------------------------
 Most simulation classes have only a few :attr:`~tenpy.simulations.Simulation.default_measurements`, but you can easily
-add more under :cfg:option:`Simulation.connect_measurements`. Each measurement is simply a function that is
+add more with the :cfg:option:`Simulation.connect_measurements` parameters. Each measurement is simply a function that is
 called whenever the simulation wants to measure, e.g. with the initial state, at the end of the simulation, and for time
 evolutions also during the evolution. The default measurement functions are defined in
 the module :mod:`tenpy.simulations.measurement`; :func:`~tenpy.simulations.measurement.measurement_index` documents what
@@ -195,7 +195,7 @@ following example shows.
         - onsite_expectation_value
         - opname: Sz
       - - psi_method
-        - correlation_function
+        - wrap correlation_function
         - key: '<Sp_i Sm_j>'
           ops1: Sp
           ops2: Sm
@@ -208,7 +208,7 @@ Note the indentation and minus signs here: this yaml syntax is equivalent to the
                                'onsite_expectation_value',
                                {'opname': 'Sz'}],
                               ['psi_method',
-                               'correlation_function',
+                               'wrap correlation_function',
                                {'key': '<Sp_i Sm_j>',
                                 'ops1': 'Sp',
                                 'ops2': 'Sm'}]]}
@@ -216,6 +216,7 @@ Note the indentation and minus signs here: this yaml syntax is equivalent to the
 The measurement functions add the values under the specified `key` to the `results` returned and saved by the
 simulation, e.g. for the above measurements you can now read out ``results['measurements']['<Sz>']`` (default key) and ``results['measurements']['<Sp_i Sm_j>']``.
 
+For more details, see the extra guide :doc:`/intro/measurements`.
 
 A full example with custom python code
 --------------------------------------
@@ -266,7 +267,7 @@ e.g., in DMRG at the end of a sweep.
 The checkpoints are saved to the same filename as the desired final output file, and get overwritten by each following save at a checkpoint.
 You can check ``results['finished']`` in the output file to see whether it finished.
 
-You can then resume the simulation using the function :func:`~tenpy.resume_from_checkpoint`.
+You can then resume the simulation using the function :func:`tenpy.resume_from_checkpoint`.
 
 Note that you can also adjust parameters for the resume. 
 For example, if you find that a DMRG result (even a finished one) is not yet fully converged in bond dimension, you can "resume" the simulation
