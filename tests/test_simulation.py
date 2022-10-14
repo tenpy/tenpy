@@ -89,7 +89,7 @@ simulation_params = {
     },
     'save_every_x_seconds':
     0.,  # save at each checkpoint
-    'connect_measurements': [('tenpy.simulations.measurement', 'onsite_expectation_value', {
+    'connect_measurements': [('tenpy.simulations.measurement', 'm_onsite_expectation_value', {
         'opname': 'Sz'
     }), (__name__, 'dummy_measurement')],
 }

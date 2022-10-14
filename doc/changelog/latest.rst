@@ -5,7 +5,7 @@ Release Notes
 -------------
 Backwards-incompatible rewrite of TDVP!
 
-Note that measurment functions for simulations need to be updated to accept another `model` parameter
+Note that measurement functions for simulations need to be updated to accept a `model` keyword argument.
 
 
 Changelog
@@ -17,6 +17,7 @@ Backwards incompatible changes
   The previous one is for now still available as :class:`~tenpy.algorithms.tdvp.OldTDVPEngine`.
 - Measurement functions now have to take another argument `model` as well, which matches the indexing/sites of `psi`.
   This helps to avoid special cases for grouped sites and `OrthogonalExciations`.
+  Moreover, we renamed all measurement functions to start with ``m_`` to clarify their usage, and renamed the (optional) argument `key` to `results_key`.
 - Add more fine grained sweep convergence checks for the :class:`~tenpy.algorithms.mps_common.VariationalCompression` (used when applying an MPO to an MPS!).
   In this context, we renamed the parameter `N_sweeps` to :cfg:option:`VariationalCompression.max_sweeps`.
   Further, we added the parameter :cfg:option:`VariationalCompression.min_sweeps` and :cfg:option:`VariationalCompression.tol_theta_diff`

@@ -83,7 +83,7 @@ def test_simulation_export_import(tmp_path):
             'product_state': [['up'], ['down']]
         },
         'connect_measurements': [
-            ('tenpy.simulations.measurement', 'onsite_expectation_value', {
+            ('tenpy.simulations.measurement', 'm_onsite_expectation_value', {
                 'opname': 'Sz'
             }),
         ],

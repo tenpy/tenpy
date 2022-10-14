@@ -162,16 +162,17 @@ class Simulation:
     #: tuples as for :cfg:option:`Simulation.connect_measurements` that get added if
     #: the :cfg:option:`Simulation.use_default_measurements` is True.
     default_measurements = [
-        ('tenpy.simulations.measurement', 'measurement_index', {}, 1),
-        ('tenpy.simulations.measurement', 'bond_dimension'),
-        ('tenpy.simulations.measurement', 'energy_MPO'),
-        ('tenpy.simulations.measurement', 'entropy'),
+        ('tenpy.simulations.measurement', 'm_measurement_index', {}, 1),
+        ('tenpy.simulations.measurement', 'm_bond_dimension'),
+        ('tenpy.simulations.measurement', 'm_energy_MPO'),
+        ('tenpy.simulations.measurement', 'm_entropy'),
     ]
 
     #: logger : An instance of a logger; see :doc:`/intro/logging`. NB: class attribute.
     logger = logging.getLogger(__name__ + ".Simulation")
 
     def __init__(self, options, *, setup_logging=True, resume_data=None):
+        self._init_walltime = time.time()
         if not hasattr(self, 'loaded_from_checkpoint'):
             self.loaded_from_checkpoint = False
         self.options = options  # delay conversion to Config: avoid logging before setup_logging
@@ -213,7 +214,7 @@ class Simulation:
             'version_info': self.get_version_info(),
             'finished_run': False,
         }
-        self._last_save = self._init_walltime = time.time()
+        self._last_save = time.time()
         self.measurement_event = EventHandler("psi, simulation, model, results")
         if resume_data is not None:
             if 'psi' in resume_data:
@@ -579,12 +580,12 @@ class Simulation:
             func = hdf5_io.find_global(module_name, func_name)
 
         if wrap:
-            if 'key' in kwargs:
-                key = kwargs['key']
-                del kwargs['key']
+            if 'results_key' in kwargs:
+                results_key = kwargs['results_key']
+                del kwargs['results_key']
             else:
-                key = func_name
-            func = measurement_wrapper(func, key=key)
+                results_key = func_name
+            func = measurement_wrapper(func, results_key=results_key)
 
         if kwargs:
             func = functools.partial(func, **kwargs)
@@ -941,24 +942,15 @@ class Simulation:
         """Wall time evolved since initialization of the simulation class.
 
         Utility measurement method. To measure it, add the following entry to the
-        :cfg:option:`Simulation.connect_measurements` option:
+        :cfg:option:`Simulation.connect_measurements` option::
 
-        ```yaml
-        - - simulation_method
-          - wrap walltime
-        ```
-
-        Parameters
-        ----------
-        psi, model :
-            State and model to be used for measuremetns.
-            Usually the same as ``self.psi`` and ``self.model``, but can be different,
-            e.g., when grouping sites.
+            - - simulation_method
+              - wrap walltime
 
         Returns
         -------
         seconds : float
-            Elapsed (wall clock) time in seconds since the
+            Elapsed (wall clock) time in seconds since the initialization of the simulation.
         """
         return time.time() - self._init_walltime
 
