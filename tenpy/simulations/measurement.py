@@ -1,4 +1,4 @@
-"""Functions to perform measurments.
+"""Functions to perform measurments during simulations.
 
 All measurement functions provided in this module support the interface used by the simulation
 class, i.e. they take the parameters documented in :func:`measurement_index` and write
@@ -11,6 +11,7 @@ As explained in :doc:`/intro/simulations`, you can easily add custom measurement
 from ..networks.mpo import MPOEnvironment
 from ..tools.misc import get_recursive
 from ..tools import process
+import functools
 import warnings
 
 __all__ = [
@@ -27,7 +28,7 @@ def measurement_index(results, psi, model, simulation, key='measurement_index'):
 
     See :doc:`/intro/simulations` for the general setup using measurements.
 
-    .. versionadded:: 0.10.0
+    .. versionchanged:: 0.10.0
 
         The `model` parameter is new! Any measurement function for simulations now has to accept
         this as keyword argument!
@@ -47,7 +48,8 @@ def measurement_index(results, psi, model, simulation, key='measurement_index'):
     simulation : :class:`~tenpy.simulations.simulation.Simulation`
         The simulation class. This gives also access to the `model`, algorithm `engine`, etc.
     key : str
-        (Optional.) The key under which to save in `results`.
+        The key under which to save data in `results`.
+        For some measurement functions optional, e.g in this case.
     **kwargs :
         Other optional keyword arguments for individual measurement functions.
         Those are documented inside each measurement function.
@@ -216,41 +218,63 @@ def correlation_length(results, psi, model, simulation, key='correlation_length'
     results[key] = corr
 
 
+def measurement_wrapper(function, key, **kwargs):
+    if key is None:
+        key = function.__name__
+
+    #  @functools.wraps(function)
+    def measurement_call(results, psi, model, simulation, **kwargs):
+        if key in results:
+            raise ValueError(f"key {key!r} already exists in `results`, "
+                             "measurement would overwrite data. "
+                             "Probably a measurement function used multiple times!")
+        res = function(**kwargs)
+        results[key] = res
+
+    return measurement_call
+
+
 def psi_method(results, psi, model, simulation, method, key=None, **kwargs):
     """Generic function to measure arbitrary method of psi with given additional kwargs.
 
-    Instead of using `tenpy.simulations.measurement.psi_method` as a measurement function,
-    you can now directly use "psi_method" as `module_name` and replace the `connect_measurements`
-    simulation parameter entries as follows::
+    .. deprecated :: 0.10.0
 
-        An old python entry for connect_measurements
-            ['tenpy.simulations.measurement',
-             'psi_method',
-             'correlation_function',
-             {'key': '<Sp_i Sm_j>',
-              'ops1': 'Sp',
-              'ops2': 'Sm'}]
-        can get replaced with new entry:
-            ['psi_method',
-             'correlation_function',
-             {'key': '<Sp_i Sm_j>',
-              'ops1': 'Sp',
-              'ops2': 'Sm'}]
-        Similarly, an old yaml entry for connect_measurements
-            - - tenpy.simulations.measurement
-              - psi_method
-              - method: correlation_function
-                key: '<Sp_i Sm_j>'
-                ops1: Sp
-                ops2: Sm
-        can get replaced with new yaml:
-            - - psi_method
-              - correlation_function
-              - key: '<Sp_i Sm_j>'
-                ops1: Sp
-                ops2: Sm
+        Instead of using this function :func:`tenpy.simulations.measurement.psi_method`
+        as a global measurement wrapper function, you can now directly use "psi_method"
+        as `module_name` and replace the `connect_measurements` simulation parameter
+        entries as follows::
 
-    The new way is now the preferred way of measuring psi methods, the old way is deprecated.
+            An old python entry for connect_measurements
+                ['tenpy.simulations.measurement',
+                'psi_method',
+                'correlation_function',
+                {'key': '<Sp_i Sm_j>',
+                'ops1': 'Sp',
+                'ops2': 'Sm'}]
+            can get replaced with new entry:
+                ['psi_method',
+                'wrap correlation_function',
+                {'key': '<Sp_i Sm_j>',
+                'ops1': 'Sp',
+                'ops2': 'Sm'}]
+            Similarly, an old yaml entry for connect_measurements
+                - - tenpy.simulations.measurement
+                - psi_method
+                - method: correlation_function
+                    key: '<Sp_i Sm_j>'
+                    ops1: Sp
+                    ops2: Sm
+            can get replaced with new yaml:
+                - - psi_method
+                - wrap correlation_function
+                - key: '<Sp_i Sm_j>'
+                    ops1: Sp
+                    ops2: Sm
+
+        The new way is now the preferred way of measuring psi methods, the old way is deprecated.
+        Note the additional "wrap " in the function name, which indicates that the specified
+        function just returns the results and does not take ``results, model, simulation`` as
+        arguments, hence we need a wrapper function for the measurement.
 
     Parameters
     ----------
@@ -262,37 +286,44 @@ def psi_method(results, psi, model, simulation, method, key=None, **kwargs):
         further keyword arguments given to the method
     """
     # extract the deprecation comment from the doc string
-    _psi_method_deprecated_msg = '\n'.join([line[4:] for line in
-                                            psi_method.__doc__.splitlines()[2:32]])
+    _psi_method_deprecated_msg = '\n'.join([line[8:] for line in
+                                            psi_method.__doc__.splitlines()[4:40]])
     warnings.warn(_psi_method_deprecated_msg, FutureWarning)
-    _psi_method_wrapper(results, psi, model, simulation, method, key=key, **kwargs)
+    _m_psi_method_wrapped(results, psi, model, simulation, method, key=key, **kwargs)
 
 
-def _psi_method_wrapper(results, psi, model, simulation, method, key=None, **kwargs):
-    """Wrapper function to allow measuring psi methods.
+# the following wrapper functions _m_{psi,model}_method_[wrapped] are used
+# in simulation._connect_measurement_fct  for entries with 'psi_method' and 'model_method' in
+# :cfg:option:`Simulation.connect_measurement`
 
-    This function is used in :meth:`tenpy.simulations.Simulation._connect_measurements_method`
-    to handle cases where the `module` of
-    :cfg:option:`Simulaiton.connect_measurements` is "psi_method".
-    """
-    if key is None:
-        key = method
+def _m_psi_method(results, psi, model, simulation, func_name, **kwargs):
+    psi_method = getattr(psi, func_name)
+    psi_method(results, model, simulation, **kwargs)
+
+
+def _m_psi_method_wrapped(results, psi, model, simulation, func_name, key, **kwargs):
     if key in results:
-        raise ValueError(f"key {key!r} already exists in results, duplicated measurement!")
-    method = getattr(psi, method)
-    results[key] = method(**kwargs)
+        raise ValueError(f"key {key!r} already exists in `results`, "
+                         "measurement would overwrite data. "
+                         "Probably a measurement function used multiple times!")
+    psi_method = getattr(psi, func_name)
+    res = psi_method(**kwargs)
+    results[key] = res
 
 
-def _simulation_method_wrapper(results, psi, model, simulation, method, key, **kwargs):
-    """Wrapper function to allow measuring psi methods.
+def _m_model_method(results, psi, model, simulation, func_name, **kwargs):
+    model_method = getattr(model, func_name)
+    model_method(results, psi, simulation, **kwargs)
 
-    This function is used in :meth:`tenpy.simulations.Simulation._connect_measurements_method`
-    to handle cases where the `module` of
-    :cfg:option:`Simulaiton.connect_measurements` is "simulation_method".
-    """
+
+def _m_model_method_wrapped(results, psi, model, simulation, func_name, key, **kwargs):
     if key in results:
-        raise ValueError(f"key {key!r} already exists in results, duplicated measurement!")
-    results[key] = method(psi=psi, **kwargs)
+        raise ValueError(f"key {key!r} already exists in `results`, "
+                         "measurement would overwrite data. "
+                         "Probably a measurement function used multiple times!")
+    model_method = getattr(model, func_name)
+    res = model_method(**kwargs)
+    results[key] = res
 
 
 def evolved_time(results, psi, model, simulation, key='evolved_time'):

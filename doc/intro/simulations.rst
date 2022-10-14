@@ -171,8 +171,10 @@ such that we can read out the final half-chain entanglement entropy like this::
     (2, 31)
     >>> print(results['measurements']['entropy'][-1, (L-1)//2])
 
-Here, the shape of the entropy array is ``(2, 31)`` since 2 is the number of measurements, and 31=L-1 the number of bonds.
-Note that you can easily read out the simulation parameters, even default ones.
+Here, the shape of the entropy array is ``(2, 31)`` since 2 is the number of measurements 
+(one on the initial state, one on the final ground state), and 31=L-1 the number of bonds.
+Note that you can easily read out the simulation parameters, even default ones that are only implicitly defined
+somewhere in the code!
 
 
 Adding more measurements

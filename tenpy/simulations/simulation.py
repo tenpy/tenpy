@@ -31,7 +31,8 @@ from ..tools.events import EventHandler
 from ..tools.misc import find_subclass, update_recursive, get_recursive, set_recursive
 from ..tools.misc import setup_logging as setup_logging_
 from .. import version
-from .measurement import _psi_method_wrapper, _simulation_method_wrapper
+from .measurement import (measurement_wrapper, _m_psi_method, _m_psi_method_wrapped,
+                          _m_model_method, _m_model_method_wrapped)
 
 __all__ = [
     'Simulation',
@@ -547,29 +548,46 @@ class Simulation:
         con_meas = list(self.options.get('connect_measurements', []))
         for entry in def_meas + con_meas:
             # (module_name, func_name, kwargs=None, priority=0) = entry
-            # with possibly less than
-            if entry[0] == 'simulation_method' or entry[0] == 'psi_method':
-                self._connect_measurements_method(*entry)
-            else:
-                self.measurement_event.connect_by_name(*entry)
+            self._connect_measurements_fct(*entry)
 
-    def _connect_measurements_method(self, module_name, func_name, kwargs=None, priority=0):
+    def _connect_measurements_fct(self, module_name, func_name, kwargs=None, priority=0):
         if kwargs is None:
             kwargs = {}
-        if module_name == 'simulation_method':
+        wrap = False
+        if func_name.startswith('wrap'):
+            wrap = True
+            func_name = func_name.split()[1]
+
+        # find measurement function
+        if module_name == 'psi_method':
+            # psi might change/only be created at beginning of measurement
+            # so the function needs to be extracted dynamically during measurement
+            # this is done in `tenpy.simulations.measurement._m_psi_method{_wrapped}()`
+            kwargs['func_name'] = func_name
+            func = _m_psi_method_wrapped if wrap else _m_psi_method
+            wrap = False
+        elif module_name == 'model_method':
+            # analogous to psi_method
+            kwargs['func_name'] = func_name
+            func = _m_model_method_wrapped if wrap else _m_model_method
+            wrap = False
+        elif module_name == 'simulation_method':
             # the simulation class already exists, so we can directly get the corresponding method
             func = getattr(self, func_name)
-            # but we still need a wrapper to match expect arguments and put return values in
-            # `results` dictionary
-            kwargs.setdefault('key', func_name)
-            func = functools.partial(_simulation_method_wrapper, method=func, **kwargs)
-        elif module_name == 'psi_method':
-            # psi might change/only be created at beginning of measurement,
-            # so we have to always get the psi method during measurements.
-            # This is done in _psi_method_wrapper
-            func = functools.partial(_psi_method_wrapper, method=func_name, **kwargs)
         else:
-            assert False, "Invalid `module_name` argument for _connect_measurements_method."
+            # global functions should also exist already, so we can directly get them
+            func = hdf5_io.find_global(module_name, func_name)
+
+        if wrap:
+            if 'key' in kwargs:
+                key = kwargs['key']
+                del kwargs['key']
+            else:
+                key = func_name
+            func = measurement_wrapper(func, key=key)
+
+        if kwargs:
+            func = functools.partial(func, **kwargs)
         self.measurement_event.connect(func, priority)
 
     def run_algorithm(self):
@@ -614,9 +632,9 @@ class Simulation:
         psi, model = self.get_measurement_psi_model(self.psi, self.model)
 
         returned = self.measurement_event.emit(results=results,
-                                               simulation=self,
                                                psi=psi,
-                                               model=model)
+                                               model=model,
+                                               simulation=self)
         # check for returned values, although there shouldn't be any
         returned = [entry for entry in returned if entry is not None]
         if len(returned) > 0:
@@ -919,16 +937,15 @@ class Simulation:
                 self.options['save_every_x_seconds'] = save_every
         # done
 
-    def m_walltime(self, psi=None, model=None):
-        """Measurement of evolved wall time since initialization of the simulation class.
+    def walltime(self):
+        """Wall time evolved since initialization of the simulation class.
 
         Utility measurement method. To measure it, add the following entry to the
         :cfg:option:`Simulation.connect_measurements` option:
 
         ```yaml
         - - simulation_method
-          - m_walltime
-          - key: walltime
+          - wrap walltime
         ```
 
         Parameters

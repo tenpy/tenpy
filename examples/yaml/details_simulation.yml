@@ -40,10 +40,9 @@ connect_measurements:
     - onsite_expectation_value
     - opname: Sz
   - - psi_method
-    - correlation_function
-    - key: '<Sp_i Sm_jasdf>'
+    - wrap correlation_function
+    - key: '<Sp_i Sm_j>'
       ops1: Sp
       ops2: Sm
   - - simulation_method
-    - m_walltime
-    - key: walltime
+    - wrap walltime

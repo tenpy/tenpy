@@ -44,10 +44,10 @@ connect_measurements:
     - onsite_expectation_value
     - opname: Sz
   - - psi_method
-    - correlation_function
+    - wrap correlation_function
     - key: '<Sp_i Sm_j>'
       ops1: Sp
       ops2: Sm
   - - model_custom               # module where function is defined
     - pollmann_turner_inversion  # function defined in the module to be measured
-    # - extra: keyword_arguments # any additional keyword arguments to be given to the function.
+    # - extra: argument          # any additional keyword argument(s) to be given to the function.

@@ -219,6 +219,5 @@ class EventHandler:
         return None
 
     def _prepare_emit(self):
-        # TODO: logging?
         # sort listeners: highest priority first
         self.listeners = sorted(self.listeners, key=lambda listener: -listener.priority)
