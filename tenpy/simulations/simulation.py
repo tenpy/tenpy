@@ -214,7 +214,7 @@ class Simulation:
             'finished_run': False,
         }
         self._last_save = self._init_walltime = time.time()
-        self.measurement_event = EventHandler("psi, simulation, results")
+        self.measurement_event = EventHandler("psi, simulation, model, results")
         if resume_data is not None:
             if 'psi' in resume_data:
                 self.psi = resume_data['psi']

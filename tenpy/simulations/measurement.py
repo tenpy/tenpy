@@ -1,10 +1,14 @@
 """Functions to perform measurments during simulations.
 
 All measurement functions provided in this module support the interface used by the simulation
-class, i.e. they take the parameters documented in :func:`measurement_index` and write
+class, i.e. they take the parameters ``results, psi, model, simulation`` as keyword arguments,
+as documented in :func:`measurement_index` and write
 the measurement results into the `results` dictionary taken as argument.
+It can take extra keyword arguments that can be specified in
 
-As explained in :doc:`/intro/simulations`, you can easily add custom measurement functions.
+As briefly explained in :doc:`/intro/simulations`, you can easily add custom measurement functions.
+
+Full description and details in :doc:`/intro/measurements`.
 """
 # Copyright 2020-2021 TeNPy Developers, GNU GPLv3
 
@@ -77,7 +81,7 @@ def bond_energies(results, psi, model, simulation, key='bond_energies'):
     results, psi, model, simulation, key :
         See :func:`~tenpy.simulation.measurement.measurement_index`.
     """
-    results[key] = simulation.model.bond_energies(psi)
+    results[key] = model.bond_energies(psi)
 
 
 def simulation_parameter(results, psi, model, simulation, recursive_key, key=None, **kwargs):
@@ -107,7 +111,7 @@ def energy_MPO(results, psi, model, simulation, key='energy_MPO'):
     results, psi, model, simulation, key :
         See :func:`~tenpy.simulation.measurement.measurement_index`.
     """
-    psi = simulation.psi  # take original psi, possibly grouped, but compatible with model
+    psi = simulation.psi  # take original psi, possibly grouped, but compatible with simulation.model
     if psi.bc == 'segment':
         init_env_data = simulation.init_env_data
         E = MPOEnvironment(psi, simulation.model.H_MPO, psi, **init_env_data).full_contraction(0)
@@ -124,7 +128,7 @@ def entropy(results, psi, model, simulation, key='entropy'):
     results, psi, simulation, key :
         See :func:`~tenpy.simulation.measurement.measurement_index`.
     """
-    results['entropy'] = psi.entanglement_entropy()
+    results[key] = psi.entanglement_entropy()
 
 
 def onsite_expectation_value(results, psi, model, simulation, opname, key=None, fix_u=None,
