@@ -269,8 +269,8 @@ def psi_method(results, psi, model, simulation, method, key=None, **kwargs):
             An old python entry for connect_measurements
                 ['tenpy.simulations.measurement',
                  'psi_method',
-                 'correlation_function',
-                 {'key': '<Sp_i Sm_j>',
+                 {'method': 'correlation_function',
+                  'key': '<Sp_i Sm_j>',
                   'ops1': 'Sp',
                   'ops2': 'Sm'}]
             can get replaced with new entry:
