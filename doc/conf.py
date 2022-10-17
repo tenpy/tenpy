@@ -144,22 +144,16 @@ html_favicon = "images/logo.ico"
 html_static_path = ['_static']
 html_last_updated_fmt = '%b %d, %Y'
 
-# used by tenpy.readthedocs.io
+html_css_files = [
+    "custom.css",  # to highlight targets
+]
+
 html_context = {
-    "display_github":
-    True,  # Integrate GitHub
-    "github_user":
-    "tenpy",  # Username
-    "github_repo":
-    "tenpy",  # Repo name
-    "github_version":
-    "main",  # Version
-    "conf_py_path":
-    "/doc/",  # Path in the checkout to the docs root
-    "css_files": [
-        "_static/custom.css",  # to highlight targets
-        "_static/copybutton.css",  # somehow this didn't get included otherwise
-    ],
+    "display_github": True,  # Integrate GitHub
+    "github_user": "tenpy",  # Username
+    "github_repo": "tenpy",  # Repo name
+    "github_version": "main",  # Version
+    "conf_py_path": "/doc/",  # Path in the checkout to the docs root
 }
 
 html_theme_options = {
@@ -167,11 +161,6 @@ html_theme_options = {
     'style_external_links': True,
 }
 
-# Custom sidebar templates, maps document names to template names.
-#html_sidebars = {}
-html_sidebars = {
-    '**': ['localtoc.html', 'relations.html', 'searchbox.html', 'globaltoc.html'],
-}
 
 # == Options for extensions ===============================================
 
