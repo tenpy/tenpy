@@ -300,7 +300,9 @@ class Simulation:
             kwargs.setdefault('resume_data', checkpoint_results['resume_data'])
         sim.__init__(options, **kwargs)
         sim.results = checkpoint_results
-        sim.results['measurements'] = {k: list(v) for k, v in sim.results['measurements'].items()}
+        if 'measurements' in checkpoint_results:
+            sim.results['measurements'] = {k: list(v)
+                                           for k, v in sim.results['measurements'].items()}
         return sim
 
     def resume_run(self):
@@ -811,16 +813,16 @@ class Simulation:
         """
         results = self.results.copy()
         results['simulation_parameters'] = self.options.as_dict()
-        # try to convert measurements into sigle arrays
-        measurements = results['measurements'].copy()
-        results['measurements'] = measurements
-        for k, v in measurements.items():
-            try:
-                v = np.array(v)
-            except:
-                continue
-            if v.dtype != np.dtype(object):
-                measurements[k] = v
+        if 'measurements' in results:
+            # try to convert measurements into numpy arrays to store more compactly
+            results['measurements'] = measurements = results['measurements'].copy()
+            for k, v in measurements.items():
+                try:
+                    v = np.array(v)
+                except:
+                    continue
+                if v.dtype != np.dtype(object):
+                    measurements[k] = v
         if self.options.get('save_resume_data', self.options['save_psi']):
             results['resume_data'] = self.engine.get_resume_data()
         return results
