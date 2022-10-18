@@ -190,12 +190,12 @@ def correlation_length(results, psi, simulation, key='correlation_length', unit=
     elif unit == 'MPS_sites_ungrouped':
         corr = corr * psi.grouped
     elif unit == 'lattice_rings':
-        lat = simulation.model.lattice
+        lat = simulation.model.lat
         if lat.N_sites_per_ring is None:
             raise ValueError("lattice doesn't define N_sites_per_ring")
         corr = corr * psi.grouped / lat.N_sites_per_ring
     elif unit == 'lattice_spacing':
-        lat = simulation.model.lattice
+        lat = simulation.model.lat
         if lat.N_sites_per_ring is None:
             raise ValueError("lattice doesn't define N_sites_per_ring")
         corr = corr * psi.grouped / lat.N_sites_per_ring / np.inner(lat.basis[0], lat.cylinder_axis)
