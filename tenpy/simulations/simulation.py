@@ -610,12 +610,37 @@ class Simulation:
         """Perform measurements and merge the results into ``self.results['measurements']``."""
         self.logger.info("make measurements")
         results = self.perform_measurements()
+        self._merge_measurement_results(results)
+
+    def _merge_measurement_results(self, results):
+        """Merge dictionary `results` from measurements into ``self.results['measurement']``."""
+        # merge the results into self.results['measurements']
         previous_results = self.results.get('measurements', None)
         if previous_results is None:
             self.results['measurements'] = {k: [v] for k, v in results.items()}
-        else:
-            for k, v in results.items():
-                previous_results[k].append(v)
+            return
+
+        previous_keys = set(previous_results.keys())
+        new_keys = set(results.keys())
+        new_keys_not_previous = new_keys - previous_keys
+        if new_keys_not_previous:
+            warnings.warn(f"measurement gave new keys {new_keys_not_previous!r} "
+                            "fill up with `None` for previous measurements.")
+            some_previous_measurement = next(iter(previous_results.values()))
+            measurement_len = len(some_previous_measurement)
+            for key in new_keys_not_previous:
+                previous_results[key] = [None] * measurement_len
+
+        # actual merge
+        for k, v in results.items():   # only new keys
+            previous_results[k].append(v)
+
+        previous_keys_not_new = previous_keys - new_keys
+        if previous_keys_not_new:
+            warnings.warn(f"measurement didn't give keys {previous_keys_not_new!r} "
+                          "we have from previous measurements, fill up with `None`")
+            for key in previous_keys_not_new:
+                previous_results[key].append(None)
         # done
 
     def perform_measurements(self):
