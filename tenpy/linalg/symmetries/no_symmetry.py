@@ -1,0 +1,5 @@
+
+
+class NoSymmetryBackend(AbstractBackend):
+    ...
+
