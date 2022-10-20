@@ -5,10 +5,9 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from enum import Enum
 from itertools import product
-from typing import TypeVar
+from typing import TypeVar, Final
 
-
-Sector = TypeVar('Sector')  # place-holder for the type of a sector.
+Sector = TypeVar('Sector')  # place-holder for the type of a sector. must support comparison (for sorting) and hashing
 
 
 class FusionStyle(Enum):
@@ -49,6 +48,15 @@ class AbstractSymmetry(ABC):
         Each sector appears only once, regardless of its multiplicity (given by n_symbol) in the fusion"""
         ...
 
+    @abstractmethod
+    def sector_dim(self, a: Sector) -> int:
+        """The dimension of a given sector"""
+        ...
+
+    @abstractmethod
+    def __eq__(self, other):
+        ...
+
     def __str__(self):
         descriptor = '' if self.name is None else f'("{self.name}")'
         return f'{self.short_name()}{descriptor}'
@@ -81,6 +89,12 @@ class NoSymmetry(AbstractSymmetry):
     def fusion_outcomes(self, a: Sector, b: Sector) -> list[Sector]:
         return [None]
 
+    def sector_dim(self, a: Sector) -> int:
+        return 1
+
+    def __eq__(self, other):
+        return isinstance(other, NoSymmetry)
+
     def __repr__(self):
         return 'NoSymmetry()'
 
@@ -93,6 +107,9 @@ class SymmetryGroup(AbstractSymmetry, ABC):
 class AbelianSymmetryGroup(SymmetryGroup, ABC):
     """Base-class that defines common features of abelian symmetry groups"""
     fusion_style = FusionStyle.single
+
+    def sector_dim(self, a: Sector) -> int:
+        return 1
 
 
 class U1Symmetry(AbelianSymmetryGroup):
@@ -107,6 +124,9 @@ class U1Symmetry(AbelianSymmetryGroup):
 
     def fusion_outcomes(self, a: Sector, b: Sector) -> list[Sector]:
         return [a + b]
+
+    def __eq__(self, other):
+        return isinstance(other, U1Symmetry)
 
     def __repr__(self):
         arg = '' if self.name is None else f'"{self.name}"'
@@ -134,6 +154,9 @@ class ZNSymmetry(AbelianSymmetryGroup):
     def fusion_outcomes(self, a: Sector, b: Sector) -> list[Sector]:
         return [(a + b) % self.N]
 
+    def __eq__(self, other):
+        return isinstance(other, ZNSymmetry) and self.N == other.N
+
     def __repr__(self):
         name_arg = '' if self.name is None else f', "{self.name}"'
         return f'ZNSymmetry({self.N}{name_arg})'
@@ -154,12 +177,18 @@ class SU2Symmetry(SymmetryGroup):
     def fusion_outcomes(self, a: Sector, b: Sector) -> list[Sector]:
         return list(range(a, b + 2, 2))
 
+    def sector_dim(self, a: Sector) -> int:
+        return a + 1
+
+    def __eq__(self, other):
+        return isinstance(other, SU2Symmetry)
+
     def __repr__(self):
         arg = '' if self.name is None else f'"{self.name}"'
         return f'SU2Symmetry({arg})'
 
 
-class FermionicGrading(AbstractSymmetry):
+class FermionicParity(AbstractSymmetry):
     """Z2 grading induced by fermionic parity. Allowed sectors are False (even parity) and True (odd parity)"""
     fusion_style = FusionStyle.single
     braiding_style = BraidingStyle.fermionic
@@ -178,6 +207,12 @@ class FermionicGrading(AbstractSymmetry):
     def fusion_outcomes(self, a: Sector, b: Sector) -> list[Sector]:
         # equal sectors fuse to bosonic sector, i.e. False
         return [a != b]
+
+    def sector_dim(self, a: Sector) -> int:
+        return 1
+
+    def __eq__(self, other):
+        return isinstance(other, FermionicParity)
 
     def __repr__(self):
         return 'FermionicGrading()'
@@ -207,12 +242,28 @@ class ProductSymmetry(AbstractSymmetry):
                and all(s.is_valid_sector(a_s) for a_s, s in zip(a, self.symmetries))
 
     def fusion_outcomes(self, a: Sector, b: Sector) -> list[Sector]:
-        results = product(s.fusion_outcomes(a_s, b_s) for s, a_s, b_s in zip(self.symmetries, a, b))
-        # results has the relevant data, but it is a generator of tuples, want a list of lists
-        return list(map(list, results))
+        raise NotImplementedError  # TODO think in detail what the sectors are!
+        # results = product(s.fusion_outcomes(a_s, b_s) for s, a_s, b_s in zip(self.symmetries, a, b))
+        # # results has the relevant data, but it is a generator of tuples, want a list of lists
+        # return list(map(list, results))
+
+    def sector_dim(self, a: Sector) -> int:
+        raise NotImplemented  # TODO think in detail what the sectors are!
+
+    def __eq__(self, other):
+        return isinstance(other, ProductSymmetry) and self.symmetries == other.symmetries
 
     def __str__(self):
         return ' × '.join(map(str, self.symmetries))
 
     def __repr__(self):
         return f'ProductSymmetry([{", ".join(map(repr, self.symmetries))}])'
+
+
+no_symmetry: Final = NoSymmetry()
+u1_symmetry: Final = U1Symmetry()
+z2_symmetry: Final = ZNSymmetry(2)
+z3_symmetry: Final = ZNSymmetry(3)
+z4_symmetry: Final = ZNSymmetry(4)
+su2_symmetry: Final = SU2Symmetry()
+fermionic_parity: Final = FermionicParity()
