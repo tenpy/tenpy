@@ -1935,15 +1935,15 @@ class MPOEnvironment(MPSEnvironment):
             Number of sites over which to converge the environment for infinite systems.
             See above.
         """
-        if not self._finite  and (init_LP is None or init_RP is None) and \
+        if not self.finite  and (init_LP is None or init_RP is None) and \
                 start_env_sites is None and self.bra is self.ket:
             env_data = MPOTransferMatrix.find_init_LP_RP(self.H, self.ket, 0, self.L - 1)
             init_LP = env_data['init_LP']
             init_RP = env_data['init_RP']
             start_env_sites = 0
         if start_env_sites is None:
-            start_env_sites = 0 if self._finite else self.L
-        if self._finite and start_env_sites != 0:
+            start_env_sites = 0 if self.finite else self.L
+        if self.finite and start_env_sites != 0:
             warnings.warn("setting `start_env_sites` to 0 for finite MPS")
             start_env_sites = 0
         init_LP, init_RP = self._check_compatible_legs(init_LP, init_RP, start_env_sites)
@@ -1957,20 +1957,20 @@ class MPOEnvironment(MPSEnvironment):
                 i = -start_env_sites
                 init_LP.get_leg('wR').test_contractible(self.H.get_W(i).get_leg('wL'))
             except ValueError:
-                warning.warn("dropping `init_LP` with incompatible MPO legs")
+                warnings.warn("dropping `init_LP` with incompatible MPO legs")
                 init_LP = None
         if init_RP is not None:
             try:
                 j = self.L - 1 + start_env_sites
                 init_RP.get_leg('wL').test_contractible(self.H.get_W(j).get_leg('wR'))
             except ValueError:
-                warning.warn("dropping `init_RP` with incompatible MPO legs")
+                warnings.warn("dropping `init_RP` with incompatible MPO legs")
                 init_RP = None
         return super()._check_compatible_legs(init_LP, init_RP, start_env_sites)
 
     def test_sanity(self):
         """Sanity check, raises ValueErrors, if something is wrong."""
-        assert (self.bra.finite == self.ket.finite == self.H.finite == self._finite)
+        assert (self.bra.finite == self.ket.finite == self.H.finite == self.finite)
         # check that the physical legs are contractable
         for b_s, H_s, k_s in zip(self.bra.sites, self.H.sites, self.ket.sites):
             b_s.leg.test_equal(k_s.leg)

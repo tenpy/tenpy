@@ -132,7 +132,7 @@ class _MPSExpectationValue:
 
         .. warning ::
 
-            This function does not normalize, if bra and ket are different.
+            This function does not normalize, if bra and ket are different, i.e. for MPSEnvironment.
             Thus it also takes into account :attr:`MPS.norm` of both `bra` and `ket`.
 
         Parameters
@@ -241,6 +241,11 @@ class _MPSExpectationValue:
             This function does *not* automatically add Jordan-Wigner strings!
             For correct handling of fermions, use :meth:`expectation_value_term` instead.
 
+        .. warning ::
+
+            This function does not normalize, if bra and ket are different.
+            Thus it also takes into account :attr:`MPS.norm` of both `bra` and `ket`.
+
         Parameters
         ----------
         operators : List of { :class:`~tenpy.linalg.np_conserved.Array` | str }
@@ -303,10 +308,11 @@ class _MPSExpectationValue:
             can be inefficient if you try to vary the left end while fixing the right end.
             In that case, you might be better off (=faster evaluation) by using
             :meth:`term_correlation_function_left` with a small for loop over the right indices.
-          .. warning ::
 
-              This function does not normalize, if bra and ket are different.
-              Thus it also takes into account :attr:`MPS.norm` of both `bra` and `ket`.
+        .. warning ::
+
+            This function does not normalize, if bra and ket are different, i.e. for MPSEnvironment.
+            Thus it also takes into account :attr:`MPS.norm` of both `bra` and `ket`.
 
         Parameters
         ----------
@@ -476,6 +482,11 @@ class _MPSExpectationValue:
             |          |     |       |        |        |        |
             |          .--S--B*[i0]--B*[i0+1]-B*[i0+2]-B*[i0+3]-.
 
+        .. warning ::
+
+            This function does not normalize, if bra and ket are different, i.e. for MPSEnvironment.
+            Thus it also takes into account :attr:`MPS.norm` of both `bra` and `ket`.
+
         Parameters
         ----------
         term : list of (str, int)
@@ -534,6 +545,11 @@ class _MPSExpectationValue:
         The terms may not overlap.
         For fermions, the order of the terms is following the usual mathematical convention,
         where term_R acts first on a physical ket.
+
+        .. warning ::
+
+            This function does not normalize, if bra and ket are different, i.e. for MPSEnvironment.
+            Thus it also takes into account :attr:`MPS.norm` of both `bra` and `ket`.
 
         Parameters
         ----------
@@ -675,6 +691,11 @@ class _MPSExpectationValue:
         **Assumes** that overall terms with an odd number of operators requiring a Jordan-Wigner
         string don't contribute.
         (In systems conserving the fermionic particle number (parity), this is true.)
+
+        .. warning ::
+
+            This function does not normalize, if bra and ket are different, i.e. for MPSEnvironment.
+            Thus it also takes into account :attr:`MPS.norm` of both `bra` and `ket`.
 
         Parameters
         ----------
@@ -2972,8 +2993,8 @@ class MPS(_MPSExpectationValue):
                 if not 0 <= i_min < L:
                     if copy is None:
                         # make explicit copy to not modify exicisting term_list
-                        copy = terms.TermList(term_list.terms, term_list.prefactors)
-                    shift = i % L - i_min
+                        copy = terms.TermList(term_list.terms, term_list.strength)
+                    shift = i_min % L - i_min
                     copy.terms[a] = [(op, i + shift) for op, i in term]
             if copy is not None:
                 term_list = copy
@@ -4488,7 +4509,6 @@ class MPSEnvironment(_MPSExpectationValue):
         if hasattr(self, 'H'):
             self.L = L = lcm(self.H.L, L)
         self.finite = self.ket.finite  # just for _to_valid_index
-        self._finite = self.ket.finite  # TODO: only keep one
         self.sites = self.ket.sites * (L//self.ket.L)
         self._LP_keys = ['LP_{0:d}'.format(i) for i in range(L)]
         self._RP_keys = ['RP_{0:d}'.format(i) for i in range(L)]
@@ -4896,6 +4916,55 @@ class MPSEnvironment(_MPSExpectationValue):
         RP = self.get_RP(i0, store=False)
         contr = npc.inner(LP, RP, axes=[['vR*', 'vR'], ['vL*', 'vL']], do_conj=False)
         return contr * self.bra.norm * self.ket.norm
+
+    def expectation_value_terms_sum(self, term_list):
+        """Calculate expectation values for a bunch of terms and sum them up.
+
+        This is equivalent to the following expression::
+
+            sum([self.expectation_value_term(term)*strength for term, strength in term_list])
+
+        However, for effiency, the term_list is converted to an MPO and the expectation value
+        of the MPO is evaluated.
+
+         .. warning ::
+
+             This function works only for finite bra and ket and does not include normalization factors.
+
+        Parameters
+        ----------
+        term_list : :class:`~tenpy.networks.terms.TermList`
+            The terms and prefactors (`strength`) to be summed up.
+
+        Returns
+        -------
+        terms_sum : list of (complex) float
+            Equivalent to the expression
+            ``sum([self.expectation_value_term(term)*strength for term, strength in term_list])``.
+        _mpo :
+            Intermediate results: the generated MPO.
+            For a finite MPS, ``terms_sum = _mpo.expectation_value(self)``, for an infinite MPS
+            ``terms_sum = _mpo.expectation_value(self) * self.L``
+
+        See also
+        --------
+        expectation_value_term : evaluates a single `term`.
+        tenpy.networks.mpo.MPO.expectation_value : expectation value density of an MPO.
+        """
+        from . import mpo, terms
+
+        L = self.L
+        if not self.finite:
+            raise ValueError("MPO expectation values only works for a finite MPSEnvironment")
+        # conversion
+        ot, ct = term_list.to_OnsiteTerms_CouplingTerms(self.sites)
+        bc = 'finite' if self.finite else 'infinite'
+        mpo_graph = mpo.MPOGraph.from_terms((ot, ct), self.sites, bc)
+        mpo_ = mpo_graph.build_MPO()
+
+        env = mpo.MPOEnvironment(self.bra, mpo_, self.ket)
+        terms_sum = env.full_contraction(0)  # handles explicit_plus_hc
+        return np.real_if_close(terms_sum), mpo_
 
 
     def _contract_LP(self, i, LP):
