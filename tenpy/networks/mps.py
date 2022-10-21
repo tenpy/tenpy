@@ -83,6 +83,7 @@ import warnings
 import random
 from functools import reduce
 import logging
+
 logger = logging.getLogger(__name__)
 
 from ..linalg import np_conserved as npc
@@ -203,7 +204,18 @@ class _MPSExpectationValue:
             >>> print(psi.expectation_value(SzSx_list, range(0, psi.L-1, 2)))
             [-0.25 -0.25 -0.25]
 
-        TODO: add example for MPSEnvironment
+        Expectation value with different bra and ket in an MPSEnvironment
+        .. doctest :: MPSEnviroment.expectation_value
+
+            >>> spin_half = tenpy.networks.site.SpinHalfSite(conserve=None)
+            >>> p2_state = [[np.sqrt(0.5), -np.sqrt(0.5)], 'up']*3
+            >>> phi = tenpy.networks.mps.MPS.from_product_state([spin_half]*6, p2_state)
+            >>> env = tenpy.networks.mps.MPSEnvironment(phi, psi)
+            >>> Sz = psi.expectation_value('Sz')
+            >>> print(Sz)
+            [0.0625 0.0625 0.0625 0.0625 0.0625 0.0625]
+
+
         """
         ops, sites, n, (op_ax_p, op_ax_pstar) = self._expectation_value_args(ops, sites, axes)
         ax_p = ['p' + str(k) for k in range(n)]
@@ -214,8 +226,8 @@ class _MPSExpectationValue:
             op = op.replace_labels(op_ax_p + op_ax_pstar, ax_p + ax_pstar)
             theta_ket = self._get_theta_ket(i, n)
             C = npc.tensordot(op, theta_ket, axes=[ax_pstar, ax_p])  # C has same labels as theta
-            C = self._contract_left(C, i) # axes_p + (vR*, vR)
-            C = self._contract_right(C, i + n -1) # axes_p + (vR*, vL*)
+            C = self._contract_left(C, i)  # axes_p + (vR*, vR)
+            C = self._contract_right(C, i + n - 1)  # axes_p + (vR*, vL*)
             C.ireplace_labels(['vR*', 'vL*'], ['vL', 'vR'])  # back to original theta labels
             theta_bra = self._get_theta_bra(i, n)
             E.append(npc.inner(theta_bra, C, axes='labels', do_conj=True))
@@ -264,7 +276,7 @@ class _MPSExpectationValue:
             where ``|psi>`` is the represented MPS.
         """
         C = self._corr_ops_LP(operators, i0)
-        C = self._contract_right(C, i0 + len(operators)-1)
+        C = self._contract_right(C, i0 + len(operators) - 1)
         exp_val = npc.trace(C, 'vR*', 'vL*')
         return np.real_if_close(exp_val)
 
@@ -787,14 +799,16 @@ class _MPSExpectationValue:
                     CLs[key] = npc.tensordot(B_bra.conj(), CL, axes=[['vL*', 'p*'], ['vR*', 'p']])
                 i = k + 1
             res = 0.
-            for ops_R, need_JW, term_R, strength in zip(all_ops_R, need_JW_R, term_list_R.terms, term_list_R.strength):
+            for ops_R, need_JW, term_R, strength in zip(all_ops_R, need_JW_R, term_list_R.terms,
+                                                        term_list_R.strength):
                 if not self.finite and not self.chinfo.trivial_shift:
                     # recalculate operators (should we do this more efficient?)
-                    ops_R, j_min, need_JW = self._term_to_ops_list(term_R, autoJW, j)  # <- note the j
+                    ops_R, j_min, need_JW = self._term_to_ops_list(term_R, autoJW,
+                                                                   j)  # <- note the j
                     if j_min > j + min_R:
                         ops_R = [opstr_fill[need_JW]] * (j_min - (j + min_R)) + ops_R
                 CR = self._corr_ops_RP(ops_R, j)
-                key = (need_JW, ) + tuple(self.chinfo.make_valid(-CR.qtotal))
+                key = (need_JW, ) + tuple(self.sites[0].leg.chinfo.make_valid(-CR.qtotal))
                 CL = CLs.get(key, None)
                 if CL is None:
                     continue  # nothing to pair up with
@@ -877,13 +891,15 @@ class _MPSExpectationValue:
         js = list(j_gtr[::-1])  # stack of j, sorted *descending*
         res = []
         for r in range(i + 1, js[0] + 1):  # js[0] is the maximum
-            B = self.get_B_ket(r, form='B')
-            B_bra = self.get_B_bra(r, form='B')
+            B = self._get_B_ket(r, form='B')
+            B_bra = self._get_B_bra(r, form='B')
             C = npc.tensordot(C, B, axes=['vR', 'vL'])
             if r == js[-1]:
                 Cij = npc.tensordot(self.get_op(ops2, r), C, axes=['p*', 'p'])
                 Cij = self._contract_right(Cij, r)
-                Cij = npc.inner(B_bra.conj(), Cij, axes=[['vL*', 'p*', 'vR*'], ['vR*', 'p', 'vL*']])
+                Cij = npc.inner(B_bra.conj(),
+                                Cij,
+                                axes=[['vL*', 'p*', 'vR*'], ['vR*', 'p', 'vL*']])
                 res.append(Cij)
                 js.pop()
             if len(js) > 0:
@@ -1049,16 +1065,16 @@ class _MPSExpectationValue:
             op = op.shift_charges(i - i % self.L)
         return op
 
-    def _get_theta_ket(self,  i, **kwargs):
+    def _get_theta_ket(self, i, **kwargs):
         raise NotImplementedError("Subclasses should override this")
 
-    def _get_B_ket(self,  i, **kwargs):
+    def _get_B_ket(self, i, **kwargs):
         raise NotImplementedError("Subclasses should override this")
 
     def _get_theta_bra(self, i, **kwargs):
         raise NotImplementedError("Subclasses should override this")
 
-    def _get_B_bra(self,  i, **kwargs):
+    def _get_B_bra(self, i, **kwargs):
         raise NotImplementedError("Subclasses should override this")
 
     def _contract_left(self):
@@ -1066,9 +1082,6 @@ class _MPSExpectationValue:
 
     def _contract_right(self):
         raise NotImplementedError("Subclasses should override this")
-
-
-
 
 
 class MPS(_MPSExpectationValue):
@@ -1201,7 +1214,7 @@ class MPS(_MPSExpectationValue):
             if B.get_leg_labels() != self._B_labels:
                 raise ValueError("B has wrong labels {0!r}, expected {1!r}".format(
                     B.get_leg_labels(), self._B_labels))
-            if len(self._S[i+1].shape) == 1:
+            if len(self._S[i + 1].shape) == 1:
                 if self._S[i].shape[-1] != B.get_leg('vL').ind_len or \
                         self._S[i+1].shape[0] != B.get_leg('vR').ind_len:
                     raise ValueError("shape of B incompatible with len of singular values")
@@ -1210,11 +1223,11 @@ class MPS(_MPSExpectationValue):
                     B2 = B2.shift_charges((i + 1) - (i + 1) % self.L)
                     B.get_leg('vR').test_contractible(B2.get_leg('vL'))
             else:
-                assert len(self._S[i+1].shape) == 2 # special case during DMRG with mixer,
+                assert len(self._S[i + 1].shape) == 2  # special case during DMRG with mixer,
                 # important for simulation resume while mixer is on
                 # we should have a well-defined form everywhere
                 B = self.get_B(i, form='Th')
-                B2 = self.get_B(i+1, form='B')
+                B2 = self.get_B(i + 1, form='B')
                 # and be able to contract Th-B
                 B.get_leg('vR').test_contractible(B2.get_leg('vL'))
                 # (but not necessarily A-B, as we have it on the first bond at DMRG checkpoints)
@@ -1968,7 +1981,7 @@ class MPS(_MPSExpectationValue):
 
     def get_SR(self, i):
         """Return singular values on the right of site `i`"""
-        shift = (i+1) - (i+1) % self.L
+        shift = (i + 1) - (i + 1) % self.L
         i = self._to_valid_index(i)
         S = self._S[i + 1]
         if isinstance(S, npc.Array) and shift:
@@ -1987,14 +2000,13 @@ class MPS(_MPSExpectationValue):
 
     def set_SR(self, i, S):
         """Set singular values on the right of site `i`"""
-        shift = (i+1) - (i+1) % self.L
+        shift = (i + 1) - (i + 1) % self.L
         i = self._to_valid_index(i)
         if isinstance(S, npc.Array) and shift:
             S = S.shift_charges(-shift)  # shift back into unit cell
         self._S[i + 1] = S
         if not self.finite and i == self.L - 1:
             self._S[0] = S
-
 
     def get_theta(self, i, n=2, cutoff=1.e-16, formL=1., formR=1.):
         """Calculates the `n`-site wavefunction on ``sites[i:i+n]``.
@@ -2098,9 +2110,12 @@ class MPS(_MPSExpectationValue):
         if self.bc == 'segment':
             raise ValueError("can't enlarge segment MPS")
         L = self.L
-        self._B = [self.get_B(j, form=None) for j in range(0, factor*L)]
+        self._B = [self.get_B(j, form=None) for j in range(0, factor * L)]
         self._S = factor * self._S[:-1] + [self._S[-1]]
-        self.sites = [self.sites[self._to_valid_index(j)].shift_charges(j - j % L) for j in range(0, factor*L)]
+        self.sites = [
+            self.sites[self._to_valid_index(j)].shift_charges(j - j % L)
+            for j in range(0, factor * L)
+        ]
         self.form = factor * self.form
         self.test_sanity()
 
@@ -2175,9 +2190,7 @@ class MPS(_MPSExpectationValue):
                 else:
                     leg = self._B[-1].get_leg('vR')
                 extra_charge = leg.get_charge(leg.get_qindex(max_weight)[0])[np.newaxis, :]
-                extra_legs[i] = npc.LegCharge.from_qind(self.chinfo,
-                                                        [0, add_chi],
-                                                        extra_charge)
+                extra_legs[i] = npc.LegCharge.from_qind(self.chinfo, [0, add_chi], extra_charge)
         if not self.finite:
             extra_legs.append(extra_legs[0])  # ensure length L+1
         for i, B in enumerate(self._B):
@@ -2198,23 +2211,22 @@ class MPS(_MPSExpectationValue):
                 p_vR = B2.legs[1]
                 # get a new extra block of random entries for the vL leg
                 extra_B = npc.Array.from_func(random_fct, [extra_leg_L, p_vR],
-                                            dtype=B2.dtype,
-                                            qtotal=B2.qtotal,
-                                            shape_kw="size")
+                                              dtype=B2.dtype,
+                                              qtotal=B2.qtotal,
+                                              shape_kw="size")
                 # orthogonalize rows of extra_B against rows of B2
-                extra_B = extra_B - npc.tensordot(npc.tensordot(extra_B, B2.conj(), [1, 1]),
-                                                B2,
-                                                [1, 0])
+                extra_B = extra_B - npc.tensordot(npc.tensordot(extra_B, B2.conj(), [1, 1]), B2,
+                                                  [1, 0])
                 # orthogonalize rows within extra_B by QR
                 extra_B, extra_R = npc.qr(extra_B.itranspose([1, 0]),
-                                        inner_qconj=-1,
-                                        qtotal_Q=extra_B.qtotal)
+                                          inner_qconj=-1,
+                                          qtotal_Q=extra_B.qtotal)
                 try:
                     extra_B.legs[1].test_equal(extra_R.legs[1])
                 except ValueError as e:
                     print(extra_R)
                     raise ValueError("QR for Gram-Schmidt messed up charges. "
-                                    "Incompatible charges?") from e
+                                     "Incompatible charges?") from e
                 extra_B.itranspose([1, 0])
                 # append extra block in vL leg of B2 and sort by charges
                 new_B = npc.concatenate([B2, extra_B], axis='vL')
@@ -3284,8 +3296,11 @@ class MPS(_MPSExpectationValue):
 
     def canonical_form_infinite(self, **kwargs):
         """Deprecated wrapper around :meth:`canonical_form_infinite1`."""
-        warnings.warn("There are different implementations of `canonical_form_infinite` now. "
-                      "Select one explicitly!", FutureWarning, stacklevel=2)
+        warnings.warn(
+            "There are different implementations of `canonical_form_infinite` now. "
+            "Select one explicitly!",
+            FutureWarning,
+            stacklevel=2)
         self.canonical_form_infinite1(**kwargs)
 
     def canonical_form_infinite1(self, renormalize=True, tol_xi=1.e6):
@@ -3376,7 +3391,10 @@ class MPS(_MPSExpectationValue):
             Gl, Yl, Yr = self._canonical_form_correct_left(j1, Gl, Wr_list[j1 % L])
         # done
 
-    def canonical_form_infinite2(self, renormalize=True, tol=1.e-15, arnoldi_params=None,
+    def canonical_form_infinite2(self,
+                                 renormalize=True,
+                                 tol=1.e-15,
+                                 arnoldi_params=None,
                                  cutoff=1.e-15):
         """Convert infinite MPS to canonical form.
 
@@ -3448,10 +3466,10 @@ class MPS(_MPSExpectationValue):
             L /= norm
             L.itranspose(L_old.get_leg_labels())
             err = npc.norm(L - L_old)
-            if err <= tol :
+            if err <= tol:
                 break
             # get better guess for L with Arnoldi
-            arnoldi_params['E_tol'] = err/10.
+            arnoldi_params['E_tol'] = err / 10.
             TM = TransferMatrix.from_Ns_Ms(new_As, self._B, transpose=True)
             L.ireplace_label('vL', 'vR*')
             E, Ls, N = Arnoldi(TM, L, arnoldi_params).run()
@@ -3473,12 +3491,12 @@ class MPS(_MPSExpectationValue):
             R /= norm
             R.itranspose(R_old.get_leg_labels())
             err = npc.norm(R - R_old)
-            if err <= tol :
+            if err <= tol:
                 break
             #  _, R = self._canonical_form_arnoldi(new_Bs, R, err/10.)
             TM = TransferMatrix.from_Ns_Ms(new_Bs, self._B, transpose=False)
             R.ireplace_label('vR', 'vL*')
-            arnoldi_params['E_tol'] = err/10.
+            arnoldi_params['E_tol'] = err / 10.
             E, Rs, N = Arnoldi(TM, R, arnoldi_params).run()
             R = Rs[0]
             R.ireplace_label('vL*', 'vR')
@@ -4231,34 +4249,6 @@ class MPS(_MPSExpectationValue):
                 raise ValueError("This should never happen: unexpected leg for scaling with S")
             return B
 
-    def _corr_up_diag(self, ops1, ops2, i, j_gtr, opstr, str_on_first, apply_opstr_first):
-        """correlation function above the diagonal: for fixed i and all j in j_gtr, j > i."""
-        op1 = self.get_op(ops1, i)
-        opstr1 = self.get_op(opstr, i)
-        if opstr1 is not None and str_on_first:
-            axes = ['p*', 'p'] if apply_opstr_first else ['p', 'p*']
-            op1 = npc.tensordot(op1, opstr1, axes=axes)
-        theta = self.get_theta(i, n=1)
-        C = npc.tensordot(op1, theta, axes=['p*', 'p0'])
-        C = npc.tensordot(theta.conj(), C, axes=[['p0*', 'vL*'], ['p', 'vL']])
-        # C has legs 'vR*', 'vR'
-        js = list(j_gtr[::-1])  # stack of j, sorted *descending*
-        res = []
-        for r in range(i + 1, js[0] + 1):  # js[0] is the maximum
-            B = self.get_B(r, form='B')
-            C = npc.tensordot(C, B, axes=['vR', 'vL'])
-            if r == js[-1]:
-                Cij = npc.tensordot(self.get_op(ops2, r), C, axes=['p*', 'p'])
-                Cij = npc.inner(B.conj(), Cij, axes=[['vL*', 'p*', 'vR*'], ['vR*', 'p', 'vR']])
-                res.append(Cij)
-                js.pop()
-            if len(js) > 0:
-                op = self.get_op(opstr, r)
-                if op is not None:
-                    C = npc.tensordot(op, C, axes=['p*', 'p'])
-                C = npc.tensordot(B.conj(), C, axes=[['vL*', 'p*'], ['vR*', 'p']])
-        return res
-
     def _canonical_form_dominant_gram_matrix(self, bond0, transpose, tol_xi, guess=None):
         """Find dominant eigenvector of the transfer matrix starting between sites (bond0-1,bond0).
 
@@ -4390,7 +4380,7 @@ class MPS(_MPSExpectationValue):
     def _get_theta_ket(self, i, *args, **kwargs):
         return self.get_theta(i, *args, **kwargs)
 
-    def _get_B_ket(self,  i, *args, **kwargs):
+    def _get_B_ket(self, i, *args, **kwargs):
         return self.get_B(i, *args, **kwargs)
 
     def _get_theta_bra(self, i, *args, **kwargs):
@@ -4497,6 +4487,7 @@ class MPSEnvironment(_MPSExpectationValue):
         ``_RP_age[i]`` stores the number of physical sites invovled into the contraction
         network which yields ``self._RP[i]``.
     """
+
     def __init__(self, bra, ket, cache=None, **init_env_data):
         if ket is None:
             ket = bra
@@ -4509,7 +4500,7 @@ class MPSEnvironment(_MPSExpectationValue):
         if hasattr(self, 'H'):
             self.L = L = lcm(self.H.L, L)
         self.finite = self.ket.finite  # just for _to_valid_index
-        self.sites = self.ket.sites * (L//self.ket.L)
+        self.sites = self.ket.sites * (L // self.ket.L)
         self._LP_keys = ['LP_{0:d}'.format(i) for i in range(L)]
         self._RP_keys = ['RP_{0:d}'.format(i) for i in range(L)]
         self._LP_age = [None] * L
@@ -4966,7 +4957,6 @@ class MPSEnvironment(_MPSExpectationValue):
         terms_sum = env.full_contraction(0)  # handles explicit_plus_hc
         return np.real_if_close(terms_sum), mpo_
 
-
     def _contract_LP(self, i, LP):
         """Contract LP with the tensors on site `i` to form ``self.get_LP(i+1)``"""
         LP = npc.tensordot(LP, self.ket.get_B(i, form='A'), axes=('vR', 'vL'))
@@ -4985,7 +4975,7 @@ class MPSEnvironment(_MPSExpectationValue):
         # RP = RP.shift_charges(i % self.L - i)  # shift back into unit cell
         return RP  # labels 'vL', 'vL*'
 
-    def _get_theta_ket(self,  i, *args, **kwargs):
+    def _get_theta_ket(self, i, *args, **kwargs):
         return self.ket.get_theta(i, *args, **kwargs)
 
     def _get_B_ket(self, i, *args, **kwargs):
@@ -4994,7 +4984,7 @@ class MPSEnvironment(_MPSExpectationValue):
     def _get_theta_bra(self, i, *args, **kwargs):
         return self.bra.get_theta(i, *args, **kwargs)
 
-    def _get_B_bra(self,  i, *args, **kwargs):
+    def _get_B_bra(self, i, *args, **kwargs):
         return self.bra.get_B(i, *args, **kwargs)
 
     def _contract_left(self, C, i):
@@ -5081,6 +5071,7 @@ class TransferMatrix(sparse.NpcLinearOperator):
     _ket_M : list of npc.Array
         The matrices of the ket, transposed for fast `matvec`.
     """
+
     def __init__(self,
                  bra,
                  ket,
@@ -5120,8 +5111,9 @@ class TransferMatrix(sparse.NpcLinearOperator):
             label = '(vL.vL*)'  # what we act on
             label_split = ['vL', 'vL*']
             M = self._ket_M = [B.itranspose(['vL'] + p + ['vR']) for B in reversed(ket_M)]
-            N = self._bra_N = [B.conj().itranspose(pstar + ['vR*', 'vL*'])
-                               for B in reversed(bra_N)]
+            N = self._bra_N = [
+                B.conj().itranspose(pstar + ['vR*', 'vL*']) for B in reversed(bra_N)
+            ]
             pipe = npc.LegPipe([M[0].get_leg('vR'), N[0].get_leg('vR*')], qconj=-1).conj()
         else:  # left to right
             label = '(vR*.vR)'  # mathematically more natural
@@ -5208,7 +5200,7 @@ class TransferMatrix(sparse.NpcLinearOperator):
             for N, M in zip(self._bra_N, self._ket_M):
                 vec = npc.tensordot(vec, M, axes=['vR', 'vL'])
                 vec = npc.tensordot(N, vec, axes=contract)  # [['vL*', 'p*'], ['vR*', 'p']])
-        vec = vec.shift_charges(self.L*(-1 if self.transpose else 1))
+        vec = vec.shift_charges(self.L * (-1 if self.transpose else 1))
         if pipe is None:
             vec.itranspose(orig_labels)  # make sure we have the same labels/order as before
         else:

@@ -42,6 +42,7 @@ import warnings
 import sys
 import copy
 import logging
+
 logger = logging.getLogger(__name__)
 
 from ..linalg import np_conserved as npc
@@ -661,8 +662,7 @@ class MPO:
         elif self.max_range is None or self.max_range > 10 * self.L:
             return self.expectation_value_TM(psi, tol=tol, **init_env_data)
         else:
-            return self.expectation_value_power(psi, tol=tol, max_range=max_range,
-                                                      **init_env_data)
+            return self.expectation_value_power(psi, tol=tol, max_range=max_range, **init_env_data)
 
     def expectation_value_finite(self, psi, init_env_data={}):
         """Calculate ``<psi|self|psi>/<psi|psi>`` for finite MPS.
@@ -684,8 +684,8 @@ class MPO:
             if len(init_env_data) == 0:
                 init_env_data['start_env_sites'] = 0
                 warnings.warn("MPO.expectation_value(psi) with segment psi needs environments! "
-                                "Can only estimate value completely ignoring contributions "
-                                "across segment boundaries!")
+                              "Can only estimate value completely ignoring contributions "
+                              "across segment boundaries!")
         env = MPOEnvironment(psi, self, psi, **init_env_data)
         val = env.full_contraction(0)  # handles explicit_plus_hc
         return np.real_if_close(val)
@@ -724,7 +724,7 @@ class MPO:
         val, vec = TM.dominant_eigenvector(tol=tol)
         if abs(1. - val) > tol * 10.:
             logger.warning("MPOTransferMatrix eigenvalue not 1: got 1. - %.3e", 1. - val)
-        E = TM.energy(vec) #  handles explicit_plus_hc
+        E = TM.energy(vec)  #  handles explicit_plus_hc
         return np.real_if_close(E)
 
     def expectation_value_power(self, psi, tol=1.e-10, max_range=100):
@@ -1393,6 +1393,7 @@ class MPOGraph:
     _grid_legs : None | list of LegCharge
         The charges for the MPO
     """
+
     def __init__(self, sites, bc='finite', max_range=None):
         self.sites = list(sites)
         self.chinfo = self.sites[0].leg.chinfo
@@ -1899,6 +1900,7 @@ class MPOEnvironment(MPSEnvironment):
     H : :class:`~tenpy.networks.mpo.MPO`
         The MPO sandwiched between `bra` and `ket`.
     """
+
     def __init__(self, bra, H, ket, cache=None, **init_env_data):
         self.H = H
         super().__init__(bra, ket, cache, **init_env_data)
@@ -2241,6 +2243,7 @@ class MPOTransferMatrix(NpcLinearOperator):
     flat_guess :
         Initial guess suitable for `flat_linop` in non-tenpy form.
     """
+
     def __init__(self, H, psi, transpose=False, guess=None):
         if psi.finite or H.bc != 'infinite':
             raise ValueError("Only makes sense for infinite MPS")
@@ -2348,7 +2351,7 @@ class MPOTransferMatrix(NpcLinearOperator):
                 vec = npc.tensordot(vec, A, axes=['vR', 'vL'])  # vR* wR p vR
                 vec = npc.tensordot(W, vec, axes=[['wL', 'p*'], ['wR', 'p']])  # wR p vR* vR
                 vec = npc.tensordot(Ac, vec, axes=[['p*', 'vL*'], ['p', 'vR*']])  # vR* wR vR
-        vec = vec.shift_charges(self.L*(-1 if self.transpose else 1))
+        vec = vec.shift_charges(self.L * (-1 if self.transpose else 1))
         if project:
             self._project(vec)
         return vec
@@ -2604,9 +2607,9 @@ def _mpo_graph_state_order(key):
         return key
     if isinstance(key, str):
         if key == 'IdL':  # should be first
-            return (-2,)
+            return (-2, )
         if key == 'IdR':  # should be last
-            return (2,)
+            return (2, )
         # fallback: compare strings
         return (0, key)
     return (0, str(key))
