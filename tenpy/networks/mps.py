@@ -204,7 +204,8 @@ class _MPSExpectationValue:
             >>> print(psi.expectation_value(SzSx_list, range(0, psi.L-1, 2)))
             [-0.25 -0.25 -0.25]
 
-        Expectation value with different bra and ket in an MPSEnvironment
+        Expectation value with different bra and ket in an MPSEnvironment:
+
         .. doctest :: MPSEnviroment.expectation_value
 
             >>> spin_half = tenpy.networks.site.SpinHalfSite(conserve=None)
@@ -240,7 +241,7 @@ class _MPSExpectationValue:
         acting on different sites next to each other.
         In other words, evaluate the expectation value of a term
         ``op0_i0 op1_{i0+1} op2_{i0+2} ...``, looking like this (with `op` short for `operators`,
-        for ``len(operators)=3``):
+        for ``len(operators)=3``)::
 
             |          .--S--B[i0]---B[i0+1]--B[i0+2]--B[i0+3]--.
             |          |     |       |        |        |        |
@@ -292,6 +293,7 @@ class _MPSExpectationValue:
         r"""Correlation function  ``<bra|op1_i op2_j|ket>`` of single site operators,
         sandwiched between bra and ket.
         For examples the contraction for a two-site operator on site `i` would look like::
+
             |          .--S--B[i]--B[i+1]--...--B[j]---.
             |          |     |     |            |      |
             |          |     |     |            op2    |
@@ -299,8 +301,11 @@ class _MPSExpectationValue:
             |          |     op1   |            |      |
             |          |     |     |            |      |
             |          .--S--B*[i]-B*[i+1]-...--B*[j]--.
+
+
         Onsite terms are taken in the order ``<psi | op1 op2 | psi>``.
         If `opstr` is given and ``str_on_first=True``, it calculates::
+
             |           for i < j                               for i > j
             |
             |          .--S--B[i]---B[i+1]--...- B[j]---.     .--S--B[j]---B[j+1]--...- B[i]---.
@@ -310,11 +315,14 @@ class _MPSExpectationValue:
             |          |     op1    |            |      |     |     opstr  opstr        op1    |
             |          |     |      |            |      |     |     |      |            |      |
             |          .--S--B*[i]--B*[i+1]-...- B*[j]--.     .--S--B*[j]--B*[j+1]-...- B*[i]--.
+
+
         For ``i==j``, no `opstr` is included.
         For ``str_on_first=False``, the `opstr` on site ``min(i, j)`` is always left out.
         Strings (like ``'Id', 'Sz'``) in the arguments are translated into single-site
         operators defined by the :class:`~tenpy.networks.site.Site` on which they act.
         Each operator should have the two legs ``'p', 'p*'``.
+
         .. warning ::
             This function is only evaluating correlation functions by moving right, and hence
             can be inefficient if you try to vary the left end while fixing the right end.
