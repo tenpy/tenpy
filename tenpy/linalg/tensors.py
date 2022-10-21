@@ -16,14 +16,15 @@ from __future__ import annotations
 import numpy as np
 
 from .backends.abstract_backend import AbstractBackend, Dtype
-from .backends.backend_factory import get_backend
-from .symmetries.groups import no_symmetry
-from .symmetries.spaces import AbstractSpace, VectorSpace
+from .symmetries import no_symmetry
+from .symmetries.spaces import AbstractSpace, VectorSpace, ProductSpace
 from .dummy_config import config
 
 
-no_symm_numpy = get_backend(no_symmetry, 'numpy')
-
+class LegPipe(ProductSpace):
+    def __init__(self, legs: list[AbstractSpace], old_labels: list[str | None]):
+        self.old_labels = old_labels[:]
+        super().__init__(spaces=legs)
 
 # TODO could have a global default_backend or sth and make all backend arguments optional
 
@@ -34,9 +35,7 @@ class Tensor:
     #  - I/O support (HDF5 and/or pickle support)
     #  - label utilities
     #    > get_leg_idx, get_leg_idcs, has_labels, labels_are
-    #    > change labels, e.g. update_labels, drop_labels,
-    #    > maybe make Tensor.leg_labels a descriptor, such that setting it causes checks?
-    #      `t.leg_labels = ['a', 'b', 'a']` should cause an error for example
+    #    > change labels, e.g. set_labels, update_labels, drop_labels
 
     # TODO: are tensors iterable? i.e. define __len__ and __iter__?
     #  Jakob: I think they shouldn't, it is not obvious what that means for non-abelian
@@ -59,35 +58,47 @@ class Tensor:
     #  - boolean and bitwise operations e.g. __or__, __lshift__ etc
     #  - conversions to types other than float or complex, e.g. __int__
 
-    def __init__(self, data, backend: AbstractBackend, legs: list[VectorSpace],
-                 labels: list[str] = None, dtype: Dtype = None):
+    def __init__(self, data, backend: AbstractBackend, legs: list[VectorSpace | LegPipe],
+                 leg_labels: list[str | None], dtype: Dtype):
         """
-        This constructor is not user-friendly. Consider using e.g. as_tensor.
-        inputs are not checked for consistency!!!
+        This constructor is not user-friendly. Use as_tensor instead.
+        Inputs are not checked for consistency.
         """
-        if dtype is None:
-            self.dtype = backend.infer_dtype(data)
         self.data = data
         self.backend = backend
         self.legs = legs
         self.num_legs = len(legs)
-        if labels is None:
-            self.labels = [None for l in legs]
-        else:
-            self.labels = labels[:]  # TODO list copy or not?
+        self.dtype = dtype
+        self.symmetry = backend.symmetry
+        self._leg_labels = leg_labels[:]
 
     def check_sanity(self):
-        assert self.dtype == self.backend.infer_dtype(self.data)
         assert all(leg.symmetry == self.backend.symmetry for leg in self.legs)
-        assert len(self.labels) == self.num_legs
+        assert all(isinstance(leg, (LegPipe, VectorSpace)) for leg in self.legs)
+        assert self.num_legs == len(self.legs)
+        assert self.dtype == self.backend.infer_dtype(self.data)
+        #
+        # checks on labels
+        assert len(self._leg_labels) == self.num_legs
+        assert all(l is None or isinstance(l, str) for l in self._leg_labels)
+        str_labels = [l for l in self._leg_labels if l is not None]
+        assert len(str_labels) == len(set(str_labels))  # checks that str_labels are unique
         if config.strict_labels:
             # check if labels are unique
-            assert len(self.labels) == len(set(self.labels))
+            assert None not in self._leg_labels
+
+    @property
+    def leg_labels(self):
+        return self._leg_labels[:]  # return a copy, so that the private attribute can not be mutated
+
+    @leg_labels.setter
+    def leg_labels(self, leg_labels):
+        raise AttributeError('Can not set Tensor.leg_labels. Use tenpy.linalg.set_labels() instead.')
 
     def copy(self):
         """return a Tensor object equal to self, such that in-place operations on self.copy() do not affect self"""
-        return Tensor(data=self.backend.copy_data(self.data), backend=self.backend,
-                      legs=self.legs[:], labels=self.labels[:])
+        return Tensor(data=self.backend.copy_data(self.data), backend=self.backend, legs=self.legs[:],
+                      leg_labels=self._leg_labels[:], dtype=self.dtype)
 
     def item(self):
         """If the tensor is a scalar (i.e. has only one entry), return that scalar as a float or complex.

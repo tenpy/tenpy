@@ -11,14 +11,14 @@ Sector = TypeVar('Sector')  # place-holder for the type of a sector. must suppor
 
 
 class FusionStyle(Enum):
-    single = 0  # only one resulting sector, a ⊗ b = c
-    multiple_unique = 1  # every sector appears at most once in pairwise fusion
+    single = 0  # only one resulting sector, a ⊗ b = c, eg abelian symmetry groups
+    multiple_unique = 1  # every sector appears at most once in pairwise fusion, N^{ab}_c \in {0,1}
     general = 2
 
 
 class BraidingStyle(Enum):
-    bosonic = 0  # symmetric braiding with trivial twist
-    fermionic = 1  # symmetric braiding with non-trivial twist
+    bosonic = 0  # symmetric braiding with trivial twist; v ⊗ w ↦ w ⊗ v
+    fermionic = 1  # symmetric braiding with non-trivial twist; v ⊗ w ↦ (-1)^p(v,w) w ⊗ v
     anyonic = 2  # non-symmetric braiding
     no_braiding = 3  # braiding is not defined
 
@@ -51,6 +51,10 @@ class AbstractSymmetry(ABC):
     @abstractmethod
     def sector_dim(self, a: Sector) -> int:
         """The dimension of a given sector"""
+        ...
+
+    @abstractmethod
+    def sector_repr(self, a: Sector) -> str:
         ...
 
     @abstractmethod
