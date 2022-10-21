@@ -17,7 +17,6 @@ import numpy as np
 
 from .backends.abstract_backend import AbstractBackend, Dtype
 from .misc import force_str_len
-from .symmetries import no_symmetry
 from .symmetries.spaces import AbstractSpace, VectorSpace, ProductSpace
 from .dummy_config import config
 
@@ -127,7 +126,7 @@ class Tensor:
                                        in zip(leg.old_labels, leg.spaces))
             else:
                 typ = 'dual' if leg.is_dual else '   .'
-                comps = ', '.join(f'{self.symmetry.sector_repr(sector)}: {mult}' for sector, mult in
+                comps = ', '.join(f'{self.symmetry.sector_str(sector)}: {mult}' for sector, mult in
                                        zip(leg.sectors, leg.multiplicities))
             lines.append(f'{indent}         {force_str_len(label, 5)}  {force_str_len(leg.dim, 5)}  {typ}  {comps}')
         lines.extend(self.backend._data_repr_lines(indent=indent, max_width=70, max_lines=20))
@@ -159,7 +158,7 @@ class Tensor:
         raise TypeError  # use all_close instead
 
     def __abs__(self):
-        return _abs(self)
+        return abs_(self)
 
     def __add__(self, other):
         if isinstance(other, Tensor):
@@ -212,7 +211,7 @@ def as_tensor(obj, backend: AbstractBackend, legs: list[VectorSpace] = None,
             legs = backend.infer_legs(obj)
         else:
             assert backend.legs_are_compatible(obj, legs)
-        return Tensor(data=obj, backend=backend, legs=legs)
+        return Tensor(data=obj, backend=backend, legs=legs)  # FIXME __init__ has changed
 
 
 class DiagonalTensor:
@@ -226,8 +225,23 @@ class DiagonalTensor:
     pass
 
 
-
 # FIXME stubs below
+
+
+def abs_(a):
+    ...
+
+
+def sub(a, b):
+    ...
+
+
+def add(a, b):
+    ...
+
+
+def mul(a, b):
+    ...
 
 #
 # def fuse_legs(..., allow_lazy: bool = True):

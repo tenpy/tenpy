@@ -2,7 +2,7 @@ from __future__ import annotations
 from abc import ABC
 
 from tenpy.linalg.backends.abstract_backend import AbstractBackend, AbstractBlockBackend, BackendArray, BackendDtype, \
-    Block
+    Block, Dtype
 from tenpy.linalg.symmetries import VectorSpace, no_symmetry, AbstractSymmetry, AbstractSpace
 
 
@@ -60,3 +60,16 @@ class AbstractNoSymmetryBackend(AbstractBackend, AbstractBlockBackend, ABC):
             return data
         else:
             raise ValueError(f'{self} can not represent {new_symm}.')
+
+    def infer_dtype(self, data: BackendArray) -> Dtype:
+        return self.block_dtype(data)
+
+    def to_dtype(self, data: BackendArray, dtype: Dtype) -> BackendArray:
+        return self.block_to_dtype(data, self.parse_dtype(dtype))
+
+    def copy_data(self, data: BackendArray) -> BackendArray:
+        return self.block_copy(data)
+
+    def _data_repr_lines(self, data: BackendArray, indent: str, max_width: int, max_lines: int):
+        return [f'{indent}* Data:'] + self._block_repr_lines(data, indent=indent + '  ', max_width=max_width,
+                                                            max_lines=max_lines - 1)

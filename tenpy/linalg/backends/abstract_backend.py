@@ -4,6 +4,8 @@ from dataclasses import dataclass
 from enum import Enum, auto
 from typing import TypeVar
 
+import numpy as np
+
 from tenpy.linalg.symmetries import AbstractSymmetry, VectorSpace, AbstractSpace
 
 
@@ -124,21 +126,14 @@ class AbstractBackend(ABC):
         ...
 
     @abstractmethod
-    def _data_repr_lines(self, indent: str, max_width: int, max_lines: int):
+    def _data_repr_lines(self, data: BackendArray, indent: str, max_width: int, max_lines: int):
         ...
 
 
 class AbstractBlockBackend(ABC):
-    _dtype_map: dict[Dtype, BackendDtype]
 
     def __init__(self, default_precision: Precision):
         self.default_precision = default_precision
-
-    def parse_dtype(self, dtype: Dtype) -> BackendDtype:
-        try:
-            return self._dtype_map[dtype]
-        except KeyError:
-            raise ValueError(f'dtype {dtype} not supported for {self}.') from None
 
     @abstractmethod
     def parse_block(self, obj, dtype: BackendDtype = None) -> Block:
@@ -164,4 +159,20 @@ class AbstractBlockBackend(ABC):
     @abstractmethod
     def block_item(self, a: Block):
         """Assumes that data is a scalar (i.e. has only one entry). Returns that scalar as python float or complex"""
+        ...
+
+    @abstractmethod
+    def block_dtype(self, a: Block) -> Dtype:
+        ...
+
+    @abstractmethod
+    def block_to_dtype(self, a: Block, dtype: BackendDtype) -> Block:
+        ...
+
+    @abstractmethod
+    def block_copy(self, a: Block) -> Block:
+        ...
+
+    @abstractmethod
+    def _block_repr_lines(self, a: Block, indent: str, max_width: int, max_lines: int):
         ...
