@@ -11,9 +11,9 @@ class AbstractSpace(ABC):
         self.dim = dim
 
 
-class VectorSpace(AbstractSpace):  # formerly "Leg"
+class VectorSpace(AbstractSpace):
     def __init__(self, symmetry: AbstractSymmetry, sector_list: list[Sector],
-                 multiplicity_list: list[int] = None, conj: bool = False,
+                 multiplicity_list: list[int] = None, is_dual: bool = False,
                  is_real: bool = False):
         """
         A vector space, which decomposes into sectors of given symmetry.
@@ -26,13 +26,14 @@ class VectorSpace(AbstractSpace):  # formerly "Leg"
         else:
             assert len(multiplicity_list) == len(sector_list)
             self.multiplicity_list = multiplicity_list
-        self.conj = conj
+        self.is_dual = is_dual
+        self.is_real = is_real
         dim = sum(symmetry.sector_dim(s) * m for s, m in zip(sector_list, self.multiplicity_list))
         super().__init__(symmetry=symmetry, dim=dim)
 
     @classmethod
-    def non_symmetric(cls, dim: int, conj: bool = False, is_real: bool = False):
-        return cls(symmetry=no_symmetry, sector_list=[None], multiplicity_list=[dim], conj=conj, is_real=is_real)
+    def non_symmetric(cls, dim: int, is_dual: bool = False, is_real: bool = False):
+        return cls(symmetry=no_symmetry, sector_list=[None], multiplicity_list=[dim], is_dual=is_dual, is_real=is_real)
 
     def __mul__(self, other):
         if isinstance(other, VectorSpace):
@@ -42,8 +43,8 @@ class VectorSpace(AbstractSpace):  # formerly "Leg"
         return NotImplemented
 
 
-class ProductSpace(AbstractSpace):  # formerly "LegPipe"
-    def __init__(self, spaces: list[VectorSpace]):
+class ProductSpace(AbstractSpace):
+    def __init__(self, spaces: list[AbstractSpace]):
         self.spaces = spaces
         super().__init__(symmetry=spaces[0].symmetry, dim=prod(s.dim for s in spaces))
 

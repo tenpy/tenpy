@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from enum import Enum, auto
 from typing import TypeVar
 
-from tenpy.linalg.symmetries import AbstractSymmetry, VectorSpace
+from tenpy.linalg.symmetries import AbstractSymmetry, VectorSpace, AbstractSpace
 
 
 class Precision(Enum):
@@ -75,7 +75,7 @@ class AbstractBackend(ABC):
         ...
 
     @abstractmethod
-    def infer_legs(self, data: BackendArray) -> list[VectorSpace]:
+    def infer_legs(self, data: BackendArray) -> list[AbstractSpace]:
         """Infer the vector spaces, if possible"""
         ...
 

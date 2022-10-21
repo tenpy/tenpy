@@ -1,9 +1,9 @@
 from __future__ import annotations
-from abc import ABC, abstractmethod
+from abc import ABC
 
 from tenpy.linalg.backends.abstract_backend import AbstractBackend, AbstractBlockBackend, BackendArray, BackendDtype, \
     Block
-from tenpy.linalg.symmetries import VectorSpace, no_symmetry, AbstractSymmetry
+from tenpy.linalg.symmetries import VectorSpace, no_symmetry, AbstractSymmetry, AbstractSpace
 
 
 # TODO eventually remove AbstractBlockBackend inheritance, it is not needed,
@@ -26,7 +26,7 @@ class AbstractNoSymmetryBackend(AbstractBackend, AbstractBlockBackend, ABC):
     def is_real(self, data: BackendArray) -> bool:
         return self.block_is_real(data)
 
-    def infer_legs(self, data: BackendArray) -> list[VectorSpace]:
+    def infer_legs(self, data: BackendArray) -> list[AbstractSpace]:
         is_real = self.is_real(data)
         return [VectorSpace.non_symmetric(dim=d, is_real=is_real) for d in self.block_shape(data)]
 
