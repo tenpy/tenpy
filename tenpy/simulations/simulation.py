@@ -551,9 +551,9 @@ class Simulation:
             # (module_name, func_name, kwargs=None, priority=0) = entry
             self._connect_measurements_fct(*entry)
 
-    def _connect_measurements_fct(self, module_name, func_name, kwargs=None, priority=0):
-        if kwargs is None:
-            kwargs = {}
+    def _connect_measurements_fct(self, module_name, func_name, extra_kwargs=None, priority=0):
+        if extra_kwargs is None:
+            extra_kwargs = {}
         wrap = False
         if func_name.startswith('wrap'):
             wrap = True
@@ -564,12 +564,12 @@ class Simulation:
             # psi might change/only be created at beginning of measurement
             # so the function needs to be extracted dynamically during measurement
             # this is done in `tenpy.simulations.measurement._m_psi_method{_wrapped}()`
-            kwargs['func_name'] = func_name
+            extra_kwargs['func_name'] = func_name
             func = _m_psi_method_wrapped if wrap else _m_psi_method
             wrap = False
         elif module_name == 'model_method':
             # analogous to psi_method
-            kwargs['func_name'] = func_name
+            extra_kwargs['func_name'] = func_name
             func = _m_model_method_wrapped if wrap else _m_model_method
             wrap = False
         elif module_name == 'simulation_method':
@@ -580,16 +580,14 @@ class Simulation:
             func = hdf5_io.find_global(module_name, func_name)
 
         if wrap:
-            if 'results_key' in kwargs:
-                results_key = kwargs['results_key']
-                del kwargs['results_key']
+            if 'results_key' in extra_kwargs:
+                results_key = extra_kwargs['results_key']
+                del extra_kwargs['results_key']
             else:
                 results_key = func_name
             func = measurement_wrapper(func, results_key=results_key)
 
-        if kwargs:
-            func = functools.partial(func, **kwargs)
-        self.measurement_event.connect(func, priority)
+        self.measurement_event.connect(func, priority, extra_kwargs)
 
     def run_algorithm(self):
         """Run the algorithm.
