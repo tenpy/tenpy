@@ -116,20 +116,21 @@ class Tensor:
             f'{indent}* Symmetry: {self.symmetry}',
             # TODO if we end up supporting qtotal, it should go here
             # TODO what is the right header in place of (?)
-            f'{indent}* Legs:  label    dim   (?)  components',
+            f'{indent}* Legs:  label    dim  dual  components',
             f'{indent}         =================================================',  # TODO how long should this be?
         ]
         for leg, label in zip(self.legs, self._leg_labels):
             if isinstance(leg, LegPipe):
-                typ = 'pipe'
+                dual = '   -'
+                comps = f'LegPipe: {", ".join(leg.old_labels)}'
                 comps = ', '.join(f'{sub_label}: {factor_space.dim}' for sub_label, factor_space
                                        in zip(leg.old_labels, leg.spaces))
             else:
-                typ = 'dual' if leg.is_dual else '   .'
+                dual = ' yes' if leg.is_dual else '  no'
                 comps = ', '.join(f'{self.symmetry.sector_str(sector)}: {mult}' for sector, mult in
                                        zip(leg.sectors, leg.multiplicities))
-            lines.append(f'{indent}         {force_str_len(label, 5)}  {force_str_len(leg.dim, 5)}  {typ}  {comps}')
-        lines.extend(self.backend._data_repr_lines(indent=indent, max_width=70, max_lines=20))
+            lines.append(f'{indent}         {force_str_len(label, 5)}  {force_str_len(leg.dim, 5)}  {dual}  {comps}')
+        lines.extend(self.backend._data_repr_lines(self.data, indent=indent, max_width=70, max_lines=20))
         lines.append(')')
 
     def __getitem__(self, item):
