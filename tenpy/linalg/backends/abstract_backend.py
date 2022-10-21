@@ -49,6 +49,12 @@ class AbstractBackend(ABC):
     def __init__(self, symmetry: AbstractSymmetry):
         self.symmetry = symmetry
 
+    def __repr__(self):
+        return f'{type(self).__name__}(symmetry={repr(self.symmetry)})'
+
+    def __str__(self):
+        return f'{type(self).__name__}({self.symmetry.short_str()})'
+
     @abstractmethod
     def parse_data(self, obj, dtype: BackendDtype = None) -> BackendArray:
         """Extract backend-specific data structure from arbitrary python object, if possible.
@@ -115,6 +121,10 @@ class AbstractBackend(ABC):
     @abstractmethod
     def copy_data(self, data: BackendArray) -> BackendArray:
         """Return a copy, such that future in-place operations on the output data do not affect the input data"""
+        ...
+
+    @abstractmethod
+    def _data_repr_lines(self, indent: str, max_width: int, max_lines: int):
         ...
 
 

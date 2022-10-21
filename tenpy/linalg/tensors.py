@@ -16,6 +16,7 @@ from __future__ import annotations
 import numpy as np
 
 from .backends.abstract_backend import AbstractBackend, Dtype
+from .misc import force_str_len
 from .symmetries import no_symmetry
 from .symmetries.spaces import AbstractSpace, VectorSpace, ProductSpace
 from .dummy_config import config
@@ -109,10 +110,28 @@ class Tensor:
             raise ValueError
 
     def __repr__(self):
-        return 'Tensor'  # FIXME
-
-    def __str__(self):
-        return 'Tensor'  # FIXME
+        indent = '  '
+        lines = [
+            f'Tensor(',
+            f'{indent}* Backend: {type(self.backend).__name__}'
+            f'{indent}* Symmetry: {self.symmetry}',
+            # TODO if we end up supporting qtotal, it should go here
+            # TODO what is the right header in place of (?)
+            f'{indent}* Legs:  label    dim   (?)  components',
+            f'{indent}         =================================================',  # TODO how long should this be?
+        ]
+        for leg, label in zip(self.legs, self._leg_labels):
+            if isinstance(leg, LegPipe):
+                typ = 'pipe'
+                comps = ', '.join(f'{sub_label}: {factor_space.dim}' for sub_label, factor_space
+                                       in zip(leg.old_labels, leg.spaces))
+            else:
+                typ = 'dual' if leg.is_dual else '   .'
+                comps = ', '.join(f'{self.symmetry.sector_repr(sector)}: {mult}' for sector, mult in
+                                       zip(leg.sectors, leg.multiplicities))
+            lines.append(f'{indent}         {force_str_len(label, 5)}  {force_str_len(leg.dim, 5)}  {typ}  {comps}')
+        lines.extend(self.backend._data_repr_lines(indent=indent, max_width=70, max_lines=20))
+        lines.append(')')
 
     def __getitem__(self, item):
         # TODO indexing is another big topic with design choices to make

@@ -4,7 +4,6 @@
 from __future__ import annotations
 from abc import ABC, abstractmethod
 from enum import Enum
-from itertools import product
 from typing import TypeVar, Final
 
 Sector = TypeVar('Sector')  # place-holder for the type of a sector. must support comparison (for sorting) and hashing
@@ -34,7 +33,8 @@ class AbstractSymmetry(ABC):
         self.name = name
 
     @abstractmethod
-    def short_name(self):
+    def short_str(self):
+        """short string representation of the symmetry, without self.name"""
         ...
 
     @abstractmethod
@@ -54,23 +54,25 @@ class AbstractSymmetry(ABC):
         ...
 
     @abstractmethod
-    def sector_repr(self, a: Sector) -> str:
+    def sector_str(self, a: Sector) -> str:
+        """Short and readable string for the sector. To be used only in the context of self."""
         ...
 
     @abstractmethod
     def __eq__(self, other):
         ...
 
+    @abstractmethod
+    def __repr__(self):
+        # Convention: valid syntax for the constructor, i.e. "ClassName(..., name='...')"
+        ...
+
     def __str__(self):
         descriptor = '' if self.name is None else f'("{self.name}")'
-        return f'{self.short_name()}{descriptor}'
+        return f'{self.short_str()}{descriptor}'
 
     def __mul__(self, other):
-        if not isinstance(other, AbstractSymmetry):
-            raise TypeError
-        syms1 = self.symmetries[:] if isinstance(self, ProductSymmetry) else [self]
-        syms2 = other.symmetries[:] if isinstance(other, ProductSymmetry) else [other]
-        return ProductSymmetry(syms1 + syms2)
+        return ProductSymmetry([self, other])
 
     # TODO a bunch of methods, such as n-symbol etc which (i think) only matter for the non-abelian implementation
 
@@ -84,8 +86,11 @@ class NoSymmetry(AbstractSymmetry):
     def __init__(self):
         super().__init__(name=None)
 
-    def short_name(self):
+    def short_str(self):
         return 'NoSymmetry'
+
+    def sector_str(self, a: Sector) -> str:
+        return '.'
 
     def is_valid_sector(self, a) -> bool:
         return a is None
@@ -104,7 +109,8 @@ class NoSymmetry(AbstractSymmetry):
 
 
 class SymmetryGroup(AbstractSymmetry, ABC):
-    """Base-class that defines common features of a symmetry with group structure"""
+    """Base-class that defines common features of a symmetry given
+    by a faithful representation of a group"""
     braiding_style = BraidingStyle.bosonic
 
 
@@ -120,8 +126,11 @@ class U1Symmetry(AbelianSymmetryGroup):
     """U(1) symmetry. Sectors are integers ..., -1, 0, 1, ... ."""
     trivial_sector = 0
 
-    def short_name(self):
+    def short_str(self):
         return 'U₁'
+
+    def sector_str(self, a: Sector) -> str:
+        return str(a)
 
     def is_valid_sector(self, a) -> bool:
         return isinstance(a, int)
@@ -133,8 +142,8 @@ class U1Symmetry(AbelianSymmetryGroup):
         return isinstance(other, U1Symmetry)
 
     def __repr__(self):
-        arg = '' if self.name is None else f'"{self.name}"'
-        return f'U1Symmetry({arg})'
+        name_arg = '' if self.name is None else f'name="{self.name}"'
+        return f'U1Symmetry({name_arg})'
 
 
 class ZNSymmetry(AbelianSymmetryGroup):
@@ -146,11 +155,14 @@ class ZNSymmetry(AbelianSymmetryGroup):
         self.N = N
         super().__init__(name=name)
 
-    def short_name(self):
+    def short_str(self):
         subscript_map = {"0": "₀", "1": "₁", "2": "₂", "3": "₃", "4": "₄", "5": "₅", "6": "₆",
                          "7": "₇", "8": "₈", "9": "₉"}
         N_subscript = ''.join(subscript_map[char] for char in str(self.N))
         return f'Z{N_subscript}'
+
+    def sector_str(self, a: Sector) -> str:
+        return str(a)
 
     def is_valid_sector(self, a) -> bool:
         return isinstance(a, int) and 0 <= a < self.N
@@ -171,11 +183,14 @@ class SU2Symmetry(SymmetryGroup):
     fusion_style = FusionStyle.multiple_unique
     trivial_sector = 0
 
-    def short_name(self):
+    def short_str(self):
         return 'SU₂'
 
+    def sector_str(self, a: Sector) -> str:
+        return str(a // 2) if a % 2 == 0 else f'{a}/2'
+
     def is_valid_sector(self, a) -> bool:
-        # charges represent twice the spin quantum number, e.g. the spin one-half sector has charge a=1
+        # Sector values represent twice the spin quantum number, e.g. the spin one-half sector has a=1
         return isinstance(a, int) and a >= 0
 
     def fusion_outcomes(self, a: Sector, b: Sector) -> list[Sector]:
@@ -188,11 +203,11 @@ class SU2Symmetry(SymmetryGroup):
         return isinstance(other, SU2Symmetry)
 
     def __repr__(self):
-        arg = '' if self.name is None else f'"{self.name}"'
-        return f'SU2Symmetry({arg})'
+        name_arg = '' if self.name is None else f'name="{self.name}"'
+        return f'SU2Symmetry({name_arg})'
 
 
-class FermionicParity(AbstractSymmetry):
+class FermionParity(AbstractSymmetry):
     """Z2 grading induced by fermionic parity. Allowed sectors are False (even parity) and True (odd parity)"""
     fusion_style = FusionStyle.single
     braiding_style = BraidingStyle.fermionic
@@ -201,11 +216,14 @@ class FermionicParity(AbstractSymmetry):
     def __init__(self):
         super().__init__(name=None)  # dont need a name, its always parity of fermion occupation
 
-    def short_name(self):
+    def short_str(self):
         return 'FermionParity'
 
+    def sector_str(self, a: Sector) -> str:
+        return 'odd' if a else 'even'
+
     def is_valid_sector(self, a) -> bool:
-        # sectors label fermionic parity, i.e. False is the bosonic sector, True the fermionic one
+        # sectors label fermionic parity, i.e. False is the even/bosonic sector, True the fermionic/odd one
         return isinstance(a, bool)
 
     def fusion_outcomes(self, a: Sector, b: Sector) -> list[Sector]:
@@ -216,10 +234,13 @@ class FermionicParity(AbstractSymmetry):
         return 1
 
     def __eq__(self, other):
-        return isinstance(other, FermionicParity)
+        return isinstance(other, FermionParity)
 
     def __repr__(self):
-        return 'FermionicGrading()'
+        return 'FermionParity()'
+
+
+# TODO which other symmetries could we need?
 
 
 class ProductSymmetry(AbstractSymmetry):
@@ -229,6 +250,15 @@ class ProductSymmetry(AbstractSymmetry):
     """
 
     def __init__(self, symmetries: list[AbstractSymmetry]):
+        # enforce associativity. i.e product of products is a single product
+        while any(isinstance(sym, ProductSymmetry) for sym in symmetries):
+            _symmetries = []
+            for sym in symmetries:
+                if isinstance(sym, ProductSymmetry):
+                    _symmetries.extend(sym.symmetries)
+                else:
+                    _symmetries.append(sym)
+            symmetries = _symmetries
         self.symmetries = symmetries
         self.num_factors = len(symmetries)
         self.fusion_style = FusionStyle[max(s.fusion_style.value for s in symmetries)]
@@ -236,8 +266,11 @@ class ProductSymmetry(AbstractSymmetry):
         self.trivial_sector = [s.trivial_sector for s in symmetries]
         super().__init__(name=None)  # (the individual symmetries have names)
 
-    def short_name(self):
-        return ' × '.join(s.short_name() for s in self.symmetries)
+    def short_str(self):
+        return ' × '.join(s.short_str() for s in self.symmetries)
+
+    def sector_str(self, a: Sector) -> str:
+        return str([s.sector_str(a_s) for s, a_s in zip(self.symmetries, a)])
 
     def is_valid_sector(self, a) -> bool:
         # charges are lists, entries are charges of the factor-symmetries
@@ -263,6 +296,12 @@ class ProductSymmetry(AbstractSymmetry):
     def __repr__(self):
         return f'ProductSymmetry([{", ".join(map(repr, self.symmetries))}])'
 
+    def __len__(self):
+        return self.num_factors
+
+    def __iter__(self):
+        yield from self.symmetries
+
 
 no_symmetry: Final = NoSymmetry()
 u1_symmetry: Final = U1Symmetry()
@@ -270,4 +309,4 @@ z2_symmetry: Final = ZNSymmetry(2)
 z3_symmetry: Final = ZNSymmetry(3)
 z4_symmetry: Final = ZNSymmetry(4)
 su2_symmetry: Final = SU2Symmetry()
-fermionic_parity: Final = FermionicParity()
+fermion_parity: Final = FermionParity()

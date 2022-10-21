@@ -10,47 +10,67 @@ class AbstractSpace(ABC):
         self.symmetry = symmetry
         self.dim = dim
 
+    def __mul__(self, other):
+        if isinstance(other, AbstractSpace):
+            return ProductSpace([self, other])
+        return NotImplemented
+
 
 class VectorSpace(AbstractSpace):
-    def __init__(self, symmetry: AbstractSymmetry, sector_list: list[Sector],
-                 multiplicity_list: list[int] = None, is_dual: bool = False,
-                 is_real: bool = False):
+    def __init__(self, symmetry: AbstractSymmetry, sectors: list[Sector], multiplicities: list[int] = None,
+                 is_dual: bool = False, is_real: bool = False):
         """
         A vector space, which decomposes into sectors of given symmetry.
-        conj: whether this is the "normal" (i.e. ket) or dual (i.e. bra) space.
-        is_real: whether the space is real or complex
+        is_dual: whether this is the "normal" (i.e. ket) or dual (i.e. bra) space.
+        is_real: whether the space is over the real numbers (otherwise over the complex numbers)
         """
-        self.sector_list = sector_list
-        if multiplicity_list is None:
-            self.multiplicity_list = [1 for s in sector_list]
+        self.sectors = sectors
+        if multiplicities is None:
+            self.multiplicities = [1 for s in sectors]
         else:
-            assert len(multiplicity_list) == len(sector_list)
-            self.multiplicity_list = multiplicity_list
+            assert len(multiplicities) == len(sectors)
+            self.multiplicities = multiplicities
         self.is_dual = is_dual
         self.is_real = is_real
-        dim = sum(symmetry.sector_dim(s) * m for s, m in zip(sector_list, self.multiplicity_list))
+        dim = sum(symmetry.sector_dim(s) * m for s, m in zip(sectors, self.multiplicities))
         super().__init__(symmetry=symmetry, dim=dim)
 
     @classmethod
     def non_symmetric(cls, dim: int, is_dual: bool = False, is_real: bool = False):
-        return cls(symmetry=no_symmetry, sector_list=[None], multiplicity_list=[dim], is_dual=is_dual, is_real=is_real)
+        return cls(symmetry=no_symmetry, sectors=[None], multiplicities=[dim], is_dual=is_dual, is_real=is_real)
 
-    def __mul__(self, other):
-        if isinstance(other, VectorSpace):
-            return ProductSpace([self, other])
-        if isinstance(other, ProductSpace):
-            return ProductSpace([self, *other.spaces])
-        return NotImplemented
+    def sectors_str(self) -> str:
+        """short str describing the sectors and their multiplicities"""
+        return ', '.join(f'{self.symmetry.sector_str(a)}: {mult}' for a, mult in zip(self.sectors, self.multiplicities))
+
+    def __repr__(self):
+        return f'VectorSpace(symmetry={self.symmetry}, sectors={self.sectors}, multiplicities={self.multiplicities}, ' \
+               f'is_dual={self.is_dual}, is_real={self.is_real})'
+
+    def __str__(self):
+        field = 'ℝ' if self.is_real else 'ℂ'
+        if self.symmetry == no_symmetry:
+            symm_details = ''
+        else:
+            symm_details = f'[{self.symmetry}, {self.sectors_str()}]'
+        res = f'{field}^{self.dim}{symm_details}'
+        # TODO make duality shorter?
+        return f'dual({res})' if self.is_dual else res
 
 
 class ProductSpace(AbstractSpace):
     def __init__(self, spaces: list[AbstractSpace]):
-        self.spaces = spaces
+        self.spaces = spaces  # spaces can be themselves ProductSpaces
         super().__init__(symmetry=spaces[0].symmetry, dim=prod(s.dim for s in spaces))
 
-    def __mul__(self, other):
-        if isinstance(other, VectorSpace):
-            return ProductSpace([*self.spaces, other])
-        if isinstance(other, ProductSpace):
-            return ProductSpace([*self.spaces, *other.spaces])
-        return NotImplemented
+    def __len__(self):
+        return len(self.spaces)
+
+    def __iter__(self):
+        yield from self.spaces
+
+    def __repr__(self):
+        return '\n'.join(('ProductSpace([', *map(repr, self.spaces), '])'))
+
+    def __str__(self):
+        return ' ⊗ '.join(map(str, self.spaces))
