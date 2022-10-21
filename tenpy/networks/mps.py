@@ -206,13 +206,13 @@ class _MPSExpectationValue:
 
         Expectation value with different bra and ket in an MPSEnvironment:
 
-        .. doctest :: MPSEnviroment.expectation_value
+        .. doctest :: MPS.expectation_value
 
             >>> spin_half = tenpy.networks.site.SpinHalfSite(conserve=None)
             >>> p2_state = [[np.sqrt(0.5), -np.sqrt(0.5)], 'up']*3
             >>> phi = tenpy.networks.mps.MPS.from_product_state([spin_half]*6, p2_state)
             >>> env = tenpy.networks.mps.MPSEnvironment(phi, psi)
-            >>> Sz = psi.expectation_value('Sz')
+            >>> Sz = env.expectation_value('Sz')
             >>> print(Sz)
             [0.0625 0.0625 0.0625 0.0625 0.0625 0.0625]
 
