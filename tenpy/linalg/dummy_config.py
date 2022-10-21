@@ -1,3 +1,4 @@
 # TODO this whole module is a dummy
 
-strict_labels = True
+class config:
+    strict_labels = True
