@@ -1,0 +1,19 @@
+
+- The following concepts have various possible names, check that use is consistent
+  > charge, sector, irrep
+  > dual, conj, ingoing
+  > leg, vectorspace, axis
+
+- Think about mutability / views and copies
+
+- Error handling
+
+- sanity checks
+
+- double-check all __str__ and __repr__
+
+- demo notebook (basis for tutorial and tests)
+
+- tests
+
+- docs

@@ -1,5 +1,5 @@
 from __future__ import annotations
-from abc import ABC
+from abc import ABC, abstractmethod
 from math import prod
 
 from tenpy.linalg.symmetries.groups import AbstractSymmetry, Sector, no_symmetry
@@ -14,6 +14,15 @@ class AbstractSpace(ABC):
         if isinstance(other, AbstractSpace):
             return ProductSpace([self, other])
         return NotImplemented
+
+    @property
+    @abstractmethod
+    def dual(self):
+        ...
+
+    @abstractmethod
+    def __eq__(self, other):
+        ...
 
 
 class VectorSpace(AbstractSpace):
@@ -57,6 +66,18 @@ class VectorSpace(AbstractSpace):
         # TODO make duality shorter?
         return f'dual({res})' if self.is_dual else res
 
+    def __eq__(self, other):
+        if isinstance(other, VectorSpace):
+            return self.sectors == other.sectors and self.multiplicities == other.multiplicities \
+                   and self.is_dual == other.is_dual and self.is_real == other.is_real
+        else:
+            return False
+
+    @property
+    def dual(self):
+        return VectorSpace(symmetry=self.symmetry, sectors=self.sectors, multiplicities=self.multiplicities,
+                           is_dual=not self.is_dual, is_real=self.is_real)
+
 
 class ProductSpace(AbstractSpace):
     def __init__(self, spaces: list[AbstractSpace]):
@@ -74,3 +95,13 @@ class ProductSpace(AbstractSpace):
 
     def __str__(self):
         return ' ⊗ '.join(map(str, self.spaces))
+
+    def __eq__(self, other):
+        if isinstance(other, ProductSpace):
+            return self.spaces == other.spaces
+        else:
+            return False
+
+    @property
+    def dual(self):
+        return ProductSpace([s.dual() for s in self.spaces])

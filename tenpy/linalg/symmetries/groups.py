@@ -74,6 +74,15 @@ class AbstractSymmetry(ABC):
     def __mul__(self, other):
         return ProductSymmetry([self, other])
 
+    @abstractmethod
+    def dual_sector(self, a: Sector) -> Sector:
+        """
+        The sector dual to a, such that N^{a,dual(a)}_u = 1.
+        TODO: define precisely what the dual sector is.
+        we want the canonical representative of its equivalence class
+        """
+        ...
+
     # TODO a bunch of methods, such as n-symbol etc which (i think) only matter for the non-abelian implementation
 
 
@@ -100,6 +109,9 @@ class NoSymmetry(AbstractSymmetry):
 
     def sector_dim(self, a: Sector) -> int:
         return 1
+
+    def dual_sector(self, a: Sector) -> Sector:
+        return None
 
     def __eq__(self, other):
         return isinstance(other, NoSymmetry)
@@ -145,6 +157,9 @@ class U1Symmetry(AbelianSymmetryGroup):
         name_arg = '' if self.name is None else f'name="{self.name}"'
         return f'U1Symmetry({name_arg})'
 
+    def dual_sector(self, a: Sector) -> Sector:
+        return -a
+
 
 class ZNSymmetry(AbelianSymmetryGroup):
     """Z_N symmetry. Sectors are integers 0 <= m < N"""
@@ -169,6 +184,9 @@ class ZNSymmetry(AbelianSymmetryGroup):
 
     def fusion_outcomes(self, a: Sector, b: Sector) -> list[Sector]:
         return [(a + b) % self.N]
+
+    def dual_sector(self, a: Sector) -> Sector:
+        return -a % self.N
 
     def __eq__(self, other):
         return isinstance(other, ZNSymmetry) and self.N == other.N
@@ -206,6 +224,9 @@ class SU2Symmetry(SymmetryGroup):
         name_arg = '' if self.name is None else f'name="{self.name}"'
         return f'SU2Symmetry({name_arg})'
 
+    def dual_sector(self, a: Sector) -> Sector:
+        return a
+
 
 class FermionParity(AbstractSymmetry):
     """Z2 grading induced by fermionic parity. Allowed sectors are False (even parity) and True (odd parity)"""
@@ -239,6 +260,9 @@ class FermionParity(AbstractSymmetry):
     def __repr__(self):
         return 'FermionParity()'
 
+    def dual_sector(self, a: Sector) -> Sector:
+        return a
+
 
 # TODO which other symmetries could we need?
 
@@ -265,6 +289,7 @@ class ProductSymmetry(AbstractSymmetry):
         self.braiding_style = BraidingStyle[max(s.braiding_style.value for s in symmetries)]
         self.trivial_sector = [s.trivial_sector for s in symmetries]
         super().__init__(name=None)  # (the individual symmetries have names)
+        raise NotImplementedError  # TODO need to think more about the structure and rep theory of product groups
 
     def short_str(self):
         return ' × '.join(s.short_str() for s in self.symmetries)
