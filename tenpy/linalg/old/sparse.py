@@ -10,11 +10,11 @@ to convert flat numpy arrays to and from np_conserved arrays.
 # Copyright 2018-2023 TeNPy Developers, GNU GPLv3
 
 import numpy as np
-from . import np_conserved as npc
+from tenpy.linalg import np_conserved as npc
 import scipy.sparse.linalg
 from scipy.sparse.linalg import LinearOperator as ScipyLinearOperator
-from ..tools.math import speigs, speigsh
-from ..tools.misc import argsort, group_by_degeneracy
+from tenpy.tools.math import speigs, speigsh
+from tenpy.tools.misc import argsort, group_by_degeneracy
 import warnings
 
 __all__ = [

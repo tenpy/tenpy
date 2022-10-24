@@ -39,8 +39,8 @@ IF DEBUG_PRINT:
 import scipy.linalg
 from scipy.linalg.blas import find_best_blas_type
 
-from ..tools.misc import inverse_permutation, to_iterable
-from ..tools.optimization import optimize, OptimizationFlag
+from tenpy.tools.misc import inverse_permutation, to_iterable
+from tenpy.tools.optimization import optimize, OptimizationFlag
 
 
 IF HAVE_MKL:

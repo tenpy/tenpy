@@ -92,14 +92,14 @@ from numbers import Integral
 
 # import public API from charges
 from .charges import ChargeInfo, LegCharge, LegPipe
-from . import charges  # for private functions
+from tenpy.linalg import charges  # for private functions
 from .svd_robust import svd as svd_flat
 
-from ..tools.misc import to_iterable, anynan, argsort, inverse_permutation, list_to_dict_list
-from ..tools.math import speigs as _sp_speigs
-from ..tools.math import qr_li, rq_li
-from ..tools.string import vert_join, is_non_string_iterable
-from ..tools.optimization import optimize, OptimizationFlag, use_cython
+from tenpy.tools.misc import to_iterable, anynan, argsort, inverse_permutation, list_to_dict_list
+from tenpy.tools.math import speigs as _sp_speigs
+from tenpy.tools.math import qr_li, rq_li
+from tenpy.tools.string import vert_join, is_non_string_iterable
+from tenpy.tools.optimization import optimize, OptimizationFlag, use_cython
 
 __all__ = [
     'QCUTOFF', 'ChargeInfo', 'LegCharge', 'LegPipe', 'Array', 'zeros', 'ones', 'eye_like', 'diag',

@@ -9,10 +9,10 @@ from .sparse import FlatHermitianOperator, OrthogonalNpcLinearOperator, ShiftNpc
 import logging
 logger = logging.getLogger(__name__)
 
-from . import np_conserved as npc
-from ..tools.params import asConfig
-from ..tools.math import speigsh
-from ..tools.misc import argsort
+from tenpy.linalg import np_conserved as npc
+from tenpy.tools.params import asConfig
+from tenpy.tools.math import speigsh
+from tenpy.tools.misc import argsort
 
 __all__ = [
     'KrylovBased', 'Arnoldi', 'LanczosGroundState', 'LanczosEvolution', 'lanczos',
