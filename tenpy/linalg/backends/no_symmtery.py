@@ -1,5 +1,5 @@
 from __future__ import annotations
-from abc import ABC
+from abc import ABC, abstractmethod
 
 from tenpy.linalg.backends.abstract_backend import AbstractBackend, AbstractBlockBackend, BackendArray, BackendDtype, \
     Block, Dtype
@@ -73,3 +73,13 @@ class AbstractNoSymmetryBackend(AbstractBackend, AbstractBlockBackend, ABC):
     def _data_repr_lines(self, data: BackendArray, indent: str, max_width: int, max_lines: int):
         return [f'{indent}* Data:'] + self._block_repr_lines(data, indent=indent + '  ', max_width=max_width,
                                                             max_lines=max_lines - 1)
+
+    @abstractmethod
+    def svd(self, a: BackendArray, idcs1: list[int], idcs2: list[int], max_singular_values: int,
+            threshold: float, max_err: float, algorithm: str):
+        # reshaping, slicing etc is so specific to the BlockBackend that I dont bother unifying anything here.
+        # that might change though...
+        ...
+
+
+

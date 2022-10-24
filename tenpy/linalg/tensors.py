@@ -95,6 +95,16 @@ class Tensor:
     def leg_labels(self, leg_labels):
         raise AttributeError('Can not set Tensor.leg_labels. Use tenpy.linalg.set_labels() instead.')
 
+    def get_leg_idx(self, leg: int | str) -> int:
+        if isinstance(leg, int):
+            return leg
+        if isinstance(leg, str):
+            return self._leg_labels.index(leg)
+        raise TypeError
+
+    def get_leg_idcs(self, legs: list[int | str]) -> list[int]:
+        return list(map(self.get_leg_idx, legs))
+
     def copy(self):
         """return a Tensor object equal to self, such that in-place operations on self.copy() do not affect self"""
         return Tensor(data=self.backend.copy_data(self.data), backend=self.backend, legs=self.legs[:],
@@ -223,6 +233,7 @@ class DiagonalTensor:
     #  > abelian: blocks, reshaped to matrices are diagonal
     #  > nonabelian: not only diagonal in coupled irrep, but also in its multiplicity, i.e. blocks are diagonal matrices
     # TODO revisit this when Tensor class and specification for data-structure of backend is "finished"
+    # TODO this could implement element-wise operations such as __mul__ and __pow__, it would be well defined
     pass
 
 

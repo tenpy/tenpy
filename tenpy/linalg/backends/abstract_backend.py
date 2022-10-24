@@ -25,6 +25,12 @@ class Dtype:
     def __repr__(self):
         return f'Dtype(Precision.{self.precision.name}, is_real={self.is_real})'
 
+    def as_real(self):
+        return Dtype(self.precision, is_real=True)
+
+    def as_complex(self):
+        return Dtype(self.precision, is_real=False)
+
 
 BackendDtype = TypeVar('BackendDtype')
 BackendArray = TypeVar('BackendArray')  # placeholder for a backend-specific type that represents (symmetric) tensors
@@ -129,8 +135,24 @@ class AbstractBackend(ABC):
     def _data_repr_lines(self, data: BackendArray, indent: str, max_width: int, max_lines: int):
         ...
 
+    @abstractmethod
+    def svd(self, a: BackendArray, idcs1: list[int], idcs2: list[int], max_singular_values: int,
+            threshold: float, max_err: float, algorithm: str
+            ) -> tuple[BackendArray, BackendArray, BackendArray, float, VectorSpace]:
+        """
+
+        Returns
+        -------
+        u, s, vh, trunc_err, new_space
+            trunc_err is the relative truncation error, i.e. norm(S_discarded) / norm(S_all)
+            new_space is the new vectorspace, that appears on u and s (on the "right"),
+                its dual appears on vh and s (on the "left")
+        """
+        ...
+
 
 class AbstractBlockBackend(ABC):
+    svd_algorithms: list[str]  # first is default
 
     def __init__(self, default_precision: Precision):
         self.default_precision = default_precision
@@ -174,5 +196,10 @@ class AbstractBlockBackend(ABC):
         ...
 
     @abstractmethod
-    def _block_repr_lines(self, a: Block, indent: str, max_width: int, max_lines: int):
+    def _block_repr_lines(self, a: Block, indent: str, max_width: int, max_lines: int) -> list[str]:
+        ...
+
+    @abstractmethod
+    def matrix_svd(self, a: Block, algorithm: str | None) -> tuple[Block, Block, Block]:
+        """SVD of a 2D block"""
         ...

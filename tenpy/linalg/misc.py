@@ -3,7 +3,7 @@
 
 def force_str_len(obj, length: int, rjust: bool = True, placeholder: str = '[...]') -> str:
     """Convert an object to a string, then force the string to a given length.
-    If it is too short, right (rjust=True) or left (rjust=False) justify it.
+    If `str(obj)` is too short, right (rjust=True) or left (rjust=False) justify it, filling with spaces.
     If it is too long, replace a central portion with the placeholder.
     """
     assert length >= 0

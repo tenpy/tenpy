@@ -1,10 +1,18 @@
+# Open design questions
+
+- Think about mutability / views and copies
+
+
+# After bulk of features exists
+
+- Go through tenpy.linalg.old and see if anything is still missing
+
+- manage namespaces, i.e. __init__.py in every module
 
 - The following concepts have various possible names, check that use is consistent
   > charge, sector, irrep
   > dual, conj, ingoing
   > leg, vectorspace, axis
-
-- Think about mutability / views and copies
 
 - Error handling
 
