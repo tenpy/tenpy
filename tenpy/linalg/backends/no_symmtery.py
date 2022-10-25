@@ -81,5 +81,11 @@ class AbstractNoSymmetryBackend(AbstractBackend, AbstractBlockBackend, ABC):
         # that might change though...
         ...
 
+    def outer(self, a: BackendArray, b: BackendArray) -> BackendArray:
+        return self.block_outer(a, b)
+
+    def inner(self, a: BackendArray, b: BackendArray) -> complex:
+        return self.block_inner(a, b)
+
 
 

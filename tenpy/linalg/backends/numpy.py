@@ -103,6 +103,13 @@ class NumpyBlockBackend(AbstractBlockBackend):
         else:
             raise ValueError(f'SVD algorithm not supported: {algorithm}')
 
+    def block_outer(self, a: Block, b: Block) -> Block:
+        return np.tensordot(a, b, ((), ()))
+
+    def block_inner(self, a: Block, b: Block) -> complex:
+        dim = max(a.ndim, b.ndim)
+        return np.tensordot(np.conj(a), b, (list(range(dim)),) * 2).item()
+
 
 class NoSymmetryNumpyBackend(NumpyBlockBackend, AbstractNoSymmetryBackend):
     def __init__(self):

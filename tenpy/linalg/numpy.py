@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from tenpy.linalg.dummy_config import config
 from tenpy.linalg.tensors import Tensor
 
 
@@ -54,6 +55,21 @@ def tdot(t1: Tensor, t2: Tensor, legs1: int | str | list[int | str], legs2: int 
     res_data = t1.backend.tdot(t1.data, t2.data, ax1, ax2)
     res_dtype = t1.backend.infer_dtype(res_data)
     return Tensor(res_data, backend=t1.backend, legs=open_legs1 + open_legs2, leg_labels=new_labels, dtype=res_dtype)
+
+
+def outer(t1: Tensor, t2: Tensor, relabel1: dict[str, str] = None, relabel2: dict[str, str] = None) -> Tensor:
+    """outer product, aka tensor product, aka direct product of two tensors"""
+    res_data = t1.backend.outer(t1.data, t2.data)
+    res_labels = result_leg_labels(t1.leg_labels, t2.leg_labels, relabel1, relabel2)
+    return Tensor(res_data, backend=t1.backend, legs=t1.legs + t2.legs, leg_labels=res_labels)
+
+
+def inner(t1: Tensor, t2: Tensor) -> complex:
+    """inner product of two tensors with the same legs."""
+    if config.strict_labels and t1.leg_labels != t2.leg_labels:
+        raise NotImplementedError  # TODO transpose st labels much. if not possible, raise.
+    assert t1.legs == t2.legs
+    return t1.backend.inner(t1.data, t2.data)
 
 
 def result_leg_labels(labels1: list[str | None], labels2: list[str | None],

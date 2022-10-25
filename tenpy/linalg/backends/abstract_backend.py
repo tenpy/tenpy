@@ -150,6 +150,16 @@ class AbstractBackend(ABC):
         """
         ...
 
+    @abstractmethod
+    def outer(self, a: BackendArray, b: BackendArray) -> BackendArray:
+        ...
+
+    @abstractmethod
+    def inner(self, a: BackendArray, b: BackendArray) -> complex:
+        # inner product of <a|b>, both of which are given as ket-like vectors
+        # (i.e. in C^N, the entries of a would need to be conjugated before multiplying with entries of b)
+        ...
+
 
 class AbstractBlockBackend(ABC):
     svd_algorithms: list[str]  # first is default
@@ -202,4 +212,12 @@ class AbstractBlockBackend(ABC):
     @abstractmethod
     def matrix_svd(self, a: Block, algorithm: str | None) -> tuple[Block, Block, Block]:
         """SVD of a 2D block"""
+        ...
+
+    @abstractmethod
+    def block_outer(self, a: Block, b: Block) -> Block:
+        ...
+
+    @abstractmethod
+    def block_inner(self, a: Block, b: Block) -> complex:
         ...
