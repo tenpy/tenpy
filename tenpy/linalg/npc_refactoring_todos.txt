@@ -2,6 +2,10 @@
 
 - Think about mutability / views and copies
 
+- Should we care about in-place operations, where we provide a Tensor instance
+  whose memory may be overwritten with the result?
+
+- Rethink the Dtype machinery
 
 # After bulk of features exists
 
@@ -13,6 +17,9 @@
   > charge, sector, irrep
   > dual, conj, ingoing
   > leg, vectorspace, axis
+
+- for function with multiple Tensor instances as inputs, should we check for compatible backends
+  or deal with whatever happens if they are not compatible?
 
 - Error handling
 

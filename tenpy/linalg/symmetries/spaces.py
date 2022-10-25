@@ -24,6 +24,9 @@ class AbstractSpace(ABC):
     def __eq__(self, other):
         ...
 
+    def can_contract_with(self, other):
+        return self == other.dual
+
 
 class VectorSpace(AbstractSpace):
     def __init__(self, symmetry: AbstractSymmetry, sectors: list[Sector], multiplicities: list[int] = None,
