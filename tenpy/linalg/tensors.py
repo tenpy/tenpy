@@ -97,13 +97,17 @@ class Tensor:
 
     def get_leg_idx(self, leg: int | str) -> int:
         if isinstance(leg, int):
+            assert 0 <= leg < self.num_legs
             return leg
         if isinstance(leg, str):
             return self._leg_labels.index(leg)
         raise TypeError
 
-    def get_leg_idcs(self, legs: list[int | str]) -> list[int]:
-        return list(map(self.get_leg_idx, legs))
+    def get_leg_idcs(self, legs: int | str | list[int | str]) -> list[int]:
+        if isinstance(legs, (int, str)):
+            return [self.get_leg_idx(legs)]
+        else:
+            return list(map(self.get_leg_idx, legs))
 
     def copy(self):
         """return a Tensor object equal to self, such that in-place operations on self.copy() do not affect self"""

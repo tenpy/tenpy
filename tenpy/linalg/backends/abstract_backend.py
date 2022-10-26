@@ -4,8 +4,6 @@ from dataclasses import dataclass
 from enum import Enum, auto
 from typing import TypeVar
 
-import numpy as np
-
 from tenpy.linalg.symmetries import AbstractSymmetry, VectorSpace, AbstractSpace
 
 
@@ -160,6 +158,18 @@ class AbstractBackend(ABC):
         # (i.e. in C^N, the entries of a would need to be conjugated before multiplying with entries of b)
         ...
 
+    @abstractmethod
+    def transpose(self, a: BackendArray, permutation: list[int]) -> BackendArray:
+        ...
+
+    @abstractmethod
+    def trace(self, a: BackendArray, idcs1: list[int], idcs2: list[int]) -> BackendArray:
+        ...
+
+    @abstractmethod
+    def conj(self, a: BackendArray) -> BackendArray:
+        ...
+
 
 class AbstractBlockBackend(ABC):
     svd_algorithms: list[str]  # first is default
@@ -180,7 +190,7 @@ class AbstractBlockBackend(ABC):
         ...
 
     @abstractmethod
-    def block_tdot(self, a: Block, b: Block, a_axes: list[int], b_axes: list[int]
+    def block_tdot(self, a: Block, b: Block, idcs_a: list[int], idcs_b: list[int]
                    ) -> Block:
         ...
 
@@ -220,4 +230,17 @@ class AbstractBlockBackend(ABC):
 
     @abstractmethod
     def block_inner(self, a: Block, b: Block) -> complex:
+        ...
+
+    @abstractmethod
+    def block_transpose(self, a: Block, permutation: list[int]) -> Block:
+        ...
+
+    @abstractmethod
+    def block_trace(self, a: Block, idcs1: list[int], idcs2: list[int]) -> Block:
+        ...
+
+    @abstractmethod
+    def block_conj(self, a: Block) -> Block:
+        """complex conjugate of a block"""
         ...

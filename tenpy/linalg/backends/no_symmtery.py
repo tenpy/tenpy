@@ -87,5 +87,11 @@ class AbstractNoSymmetryBackend(AbstractBackend, AbstractBlockBackend, ABC):
     def inner(self, a: BackendArray, b: BackendArray) -> complex:
         return self.block_inner(a, b)
 
+    def transpose(self, a: BackendArray, permutation: list[int]) -> BackendArray:
+        return self.block_transpose(a, permutation)
 
+    def trace(self, a: BackendArray, idcs1: list[int], idcs2: list[int]) -> BackendArray:
+        return self.block_trace(a, idcs1, idcs2)
 
+    def conj(self, a: BackendArray) -> BackendArray:
+        return self.block_conj(a)

@@ -53,8 +53,8 @@ class NumpyBlockBackend(AbstractBlockBackend):
     def block_is_real(self, a: Block):
         return not np.iscomplexobj(a)
 
-    def block_tdot(self, a: Block, b: Block, a_axes: list[int], b_axes: list[int]) -> Block:
-        return np.tensordot(a, b, (a_axes, b_axes))
+    def block_tdot(self, a: Block, b: Block, idcs_a: list[int], idcs_b: list[int]) -> Block:
+        return np.tensordot(a, b, (idcs_a, idcs_b))
 
     def block_shape(self, a: Block) -> tuple[int]:
         return np.shape(a)
@@ -109,6 +109,19 @@ class NumpyBlockBackend(AbstractBlockBackend):
     def block_inner(self, a: Block, b: Block) -> complex:
         dim = max(a.ndim, b.ndim)
         return np.tensordot(np.conj(a), b, (list(range(dim)),) * 2).item()
+
+    def block_transpose(self, a: Block, permutation: list[int]) -> Block:
+        return np.transpose(a, permutation)
+
+    def block_trace(self, a: Block, idcs1: list[int], idcs2: list[int]) -> Block:
+        remaining = [n for n in range(len(a.shape)) if n not in idcs1 and n not in idcs2]
+        a = np.transpose(a, remaining, idcs1, idcs2)
+        trace_dim = prod(a.shape[len(remaining):len(remaining)+len(idcs1)])
+        a = np.reshape(a, (a.shape[:len(remaining)], trace_dim, trace_dim))
+        return np.trace(a, axis1=-2, axis2=-1)
+
+    def block_conj(self, a: Block) -> Block:
+        return np.conj(a)
 
 
 class NoSymmetryNumpyBackend(NumpyBlockBackend, AbstractNoSymmetryBackend):

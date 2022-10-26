@@ -29,19 +29,8 @@ def tdot(t1: Tensor, t2: Tensor, legs1: int | str | list[int | str], legs2: int 
 
     """
 
-    if isinstance(legs1, int):
-        ax1 = [legs1]
-    elif isinstance(legs1, str):
-        ax1 = [t1.get_leg_idx(legs1)]
-    else:
-        ax1 = t1.get_leg_idcs(legs1)
-
-    if isinstance(legs2, int):
-        ax2 = [legs2]
-    elif isinstance(legs2, str):
-        ax2 = [t2.get_leg_idx(legs2)]
-    else:
-        ax2 = t2.get_leg_idcs(legs2)
+    ax1 = t1.get_leg_idcs(legs1)
+    ax2 = t2.get_leg_idcs(legs2)
 
     assert len(ax1) == len(ax2)
     assert all(t1.legs[n1].can_contract_with(t2.legs[n2]) for n1, n2 in zip(ax1, ax2))
@@ -61,15 +50,91 @@ def outer(t1: Tensor, t2: Tensor, relabel1: dict[str, str] = None, relabel2: dic
     """outer product, aka tensor product, aka direct product of two tensors"""
     res_data = t1.backend.outer(t1.data, t2.data)
     res_labels = result_leg_labels(t1.leg_labels, t2.leg_labels, relabel1, relabel2)
-    return Tensor(res_data, backend=t1.backend, legs=t1.legs + t2.legs, leg_labels=res_labels)
+    return Tensor(res_data, backend=t1.backend, legs=t1.legs + t2.legs, leg_labels=res_labels,
+                  dtype=t1.backend.infer_dtype(res_data))
 
 
 def inner(t1: Tensor, t2: Tensor) -> complex:
-    """inner product of two tensors with the same legs."""
+    """
+    Inner product of two tensors with the same legs.
+    t1 and t2 live in the same space, the inner product is the contraction of the dual ("conjugate") of t1 with t2.
+    """
     if config.strict_labels and t1.leg_labels != t2.leg_labels:
-        raise NotImplementedError  # TODO transpose st labels much. if not possible, raise.
+        # TODO transpose st labels match. if not possible, raise.
+        raise NotImplementedError
     assert t1.legs == t2.legs
     return t1.backend.inner(t1.data, t2.data)
+
+
+def transpose(t: Tensor, permutation: list[int]) -> Tensor:
+    if config.strict_labels:
+        # TODO: strict labels means position of legs should be irrelevant, there is no need to transpose.
+        print('dummy warning!')
+    assert len(permutation) == t.num_legs
+    assert set(permutation) == set(range(t.num_legs))
+    res_data = t.backend.transpose(t.data, permutation)
+    return Tensor(res_data, t.backend, [t.legs[n] for n in permutation],
+                  leg_labels=[t._leg_labels[n] for n in permutation], dtype=t.dtype)
+
+
+def trace(t: Tensor, legs1: int | str | list[int | str] = None, legs2: int | str | list[int | str] = None
+          ) -> Tensor | float | complex:
+    """default leg args: assume there are only two legs and trace over them"""
+    if legs1 is None or legs2 is None:
+        if legs1 is not None or legs2 is not None:
+            raise ValueError
+        if t.num_legs != 2:
+            raise ValueError
+        legs1 = [0]
+        legs2 = [1]
+
+    idcs1 = t.get_leg_idcs(legs1)
+    idcs2 = t.get_leg_idcs(legs2)
+    remaining_idcs = [n for n in range(t.num_legs) if n not in idcs1 and n not in idcs2]
+    assert len(idcs1) == len(idcs2)
+    assert all(idx not in idcs2 for idx in idcs1)
+    assert all(t.legs[idx1].can_contract_with(t.legs[idx2]) for idx1, idx2 in zip(idcs1, idcs2))
+    data = t.backend.trace(t, idcs1, idcs2)
+    if len(remaining_idcs) == 0:
+        # result is a scalar
+        return t.backend.item(data)
+    else:
+        return Tensor(data, t.backend, legs=[t.legs[n] for n in remaining_idcs],
+                      leg_labels=[t._leg_labels[n] for n in remaining_idcs], dtype=t.dtype)
+
+
+def conj(t: Tensor) -> Tensor:
+    """the conjugate of t, living in the dual space"""
+    # TODO (Jakob) think about this in the context of pivotal category with duals
+    return Tensor(t.backend.conj(t), backend=t.backend, legs=[s.dual for s in t.legs], leg_labels=t.leg_labels,
+                  dtype=t.dtype)
+
+
+# TODO there should be an operation that converts only one or some of the legs to dual
+#  i.e. vectorization of density matrices
+#  formally, this is contraction with the (co-)evaluation map, aka cup or cap
+
+
+
+# TODO remaining:
+#  combine legs,
+#  split legs,
+#  general interface for fusing and permuting (formerly fuse_transpose)
+#  do we allow min, max, abs, real, imag...?
+#  is_scalar ...?
+#  all_close
+#  squeeze_axis
+#  scale_axis ...? not trivial what that even means for non-abelian...
+#  norm
+#  inverse (as linear map), pseudo-inverse, regularized-inverse
+#  expm and logm (naming?)
+
+# TODO in other modules:
+#  QR
+#  eigen
+#  elementary functions, such as sin, cos, sqrt, exp, ... which only work on scalars or DiagonalTensors?
+#  indexing...
+#  random generation
 
 
 def result_leg_labels(labels1: list[str | None], labels2: list[str | None],
