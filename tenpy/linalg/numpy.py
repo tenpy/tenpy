@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 from tenpy.linalg.dummy_config import config
-from tenpy.linalg.tensors import Tensor
+from tenpy.linalg.misc import UNSPECIFIED
+from tenpy.linalg.symmetries import ProductSpace
+from tenpy.linalg.tensors import Tensor, LegPipe
 
 
 def tdot(t1: Tensor, t2: Tensor, legs1: int | str | list[int | str], legs2: int | str | list[int | str],
@@ -58,6 +60,7 @@ def inner(t1: Tensor, t2: Tensor) -> complex:
     """
     Inner product of two tensors with the same legs.
     t1 and t2 live in the same space, the inner product is the contraction of the dual ("conjugate") of t1 with t2.
+    # TODO optional do_conj arg?
     """
     if config.strict_labels and t1.leg_labels != t2.leg_labels:
         # TODO transpose st labels match. if not possible, raise.
@@ -67,6 +70,7 @@ def inner(t1: Tensor, t2: Tensor) -> complex:
 
 
 def transpose(t: Tensor, permutation: list[int]) -> Tensor:
+    # TODO call this permute_legs or sth?
     if config.strict_labels:
         # TODO: strict labels means position of legs should be irrelevant, there is no need to transpose.
         print('dummy warning!')
@@ -110,15 +114,39 @@ def conj(t: Tensor) -> Tensor:
                   dtype=t.dtype)
 
 
+def combine_legs(t: Tensor, legs: list[int | str], label: str = UNSPECIFIED) -> Tensor:
+    """
+    Combine a group of legs of a tensor. Result is at the previous position of legs[0]
+    """
+    idcs = t.get_leg_idcs(legs)
+    assert len(idcs) > 1
+    pipe = LegPipe([t.legs[n] for n in idcs], old_labels=[t._leg_labels[n] for n in idcs])
+    new_legs = [pipe if n == idcs[0] else s for n, s in enumerate(t.legs) if n not in idcs[1:]]
+    if label is UNSPECIFIED:
+        label = t._leg_labels[idcs[0]]
+    new_labels = [label if n == idcs[0] else l for n, l in enumerate(t._leg_labels) if n not in idcs[1:]]
+    data = t.backend.combine_legs(t.data, legs)
+    return Tensor(data, t.backend, legs=new_legs, leg_labels=new_labels, dtype=t.dtype)
+
+
+def split_leg(t: Tensor, leg: int | str) -> Tensor:
+    """if the legs were contiguous in t.legs before combining, this is the inverse operation of combine_legs,
+    otherwise it is only inverse up to a permute_legs"""
+    idx = t.get_leg_idx(leg)
+    leg = t.legs[idx]
+    assert isinstance(leg, LegPipe)
+    data = t.backend.split_leg(t.data, idx, orig_spaces=leg.spaces)
+    legs = t.legs[:idx] + leg.spaces + t.legs[idx + 1:]
+    labels = t._leg_labels[:idx] + leg.old_labels + t.leg_labels[idx + 1:]
+    return Tensor(data, t.backend, legs=legs, leg_labels=labels, dtype=t.dtype)
+
+
 # TODO there should be an operation that converts only one or some of the legs to dual
 #  i.e. vectorization of density matrices
 #  formally, this is contraction with the (co-)evaluation map, aka cup or cap
 
 
-
 # TODO remaining:
-#  combine legs,
-#  split legs,
 #  general interface for fusing and permuting (formerly fuse_transpose)
 #  do we allow min, max, abs, real, imag...?
 #  is_scalar ...?

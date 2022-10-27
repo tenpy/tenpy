@@ -123,6 +123,18 @@ class NumpyBlockBackend(AbstractBlockBackend):
     def block_conj(self, a: Block) -> Block:
         return np.conj(a)
 
+    def block_combine_legs(self, a: Block, legs: list[int]) -> Block:
+        # TODO optimize this?
+        legs_before_new_leg = [n for n in range(legs[0]) if n not in legs]
+        legs_after_new_leg = [n for n in range(legs[0] + 1, len(a.shape)) if n not in legs]
+        permutation = legs_before_new_leg + legs + legs_after_new_leg
+        new_shape = [a.shape[n] for n in permutation]
+        a = np.transpose(a, permutation)
+        return np.reshape(a, new_shape)
+
+    def block_split_leg(self, a: Block, leg: int, dims: list[int]) -> Block:
+        return np.reshape(a, a.shape[:leg] + dims + a.shape[leg + 1:])
+
 
 class NoSymmetryNumpyBackend(NumpyBlockBackend, AbstractNoSymmetryBackend):
     def __init__(self):

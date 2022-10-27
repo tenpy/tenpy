@@ -16,3 +16,6 @@ def force_str_len(obj, length: int, rjust: bool = True, placeholder: str = '[...
         left_chars = num_chars // 2
         right_chars = num_chars - left_chars
         return obj[:left_chars] + placeholder + obj[-right_chars:]
+
+
+UNSPECIFIED = object()

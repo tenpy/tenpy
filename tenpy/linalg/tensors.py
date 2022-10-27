@@ -22,7 +22,9 @@ from .dummy_config import config
 
 
 class LegPipe(ProductSpace):
-    def __init__(self, legs: list[AbstractSpace], old_labels: list[str | None]):
+    spaces: list[VectorSpace | LegPipe]
+
+    def __init__(self, legs: list[VectorSpace | LegPipe], old_labels: list[str | None]):
         self.old_labels = old_labels[:]
         super().__init__(spaces=legs)
 

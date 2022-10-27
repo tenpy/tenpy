@@ -170,6 +170,16 @@ class AbstractBackend(ABC):
     def conj(self, a: BackendArray) -> BackendArray:
         ...
 
+    @abstractmethod
+    def combine_legs(self, a: BackendArray, legs: list[int]) -> BackendArray:
+        """combine legs of a. resulting leg takes position of legs[0]"""
+        ...
+
+    @abstractmethod
+    def split_leg(self, a: BackendArray, leg: int, orig_spaces: list[AbstractSpace]) -> BackendArray:
+        """split a leg. resulting legs all take place of leg"""
+        ...
+
 
 class AbstractBlockBackend(ABC):
     svd_algorithms: list[str]  # first is default
@@ -243,4 +253,12 @@ class AbstractBlockBackend(ABC):
     @abstractmethod
     def block_conj(self, a: Block) -> Block:
         """complex conjugate of a block"""
+        ...
+
+    @abstractmethod
+    def block_combine_legs(self, a: Block, legs: list[int]) -> Block:
+        ...
+
+    @abstractmethod
+    def block_split_leg(self, a: Block, leg: int, dims: list[int]) -> Block:
         ...

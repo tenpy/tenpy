@@ -95,3 +95,11 @@ class AbstractNoSymmetryBackend(AbstractBackend, AbstractBlockBackend, ABC):
 
     def conj(self, a: BackendArray) -> BackendArray:
         return self.block_conj(a)
+
+    def combine_legs(self, a: BackendArray, legs: list[int]) -> BackendArray:
+        # TODO we could lazy-evaluate this...
+        return self.block_combine_legs(a, legs)
+
+    def split_leg(self, a: BackendArray, leg: int, orig_spaces: list[AbstractSpace]) -> BackendArray:
+        # TODO we could lazy-evaluate this...
+        return self.block_split_leg(a, leg, dims=[s.dim for s in orig_spaces])
