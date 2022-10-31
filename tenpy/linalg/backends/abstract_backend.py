@@ -186,6 +186,10 @@ class AbstractBackend(ABC):
         tensors with the given set of legs"""
         ...
 
+    @abstractmethod
+    def allclose(self, a: BackendArray, b: BackendArray, rtol: float, atol: float) -> bool:
+        ...
+
 
 class AbstractBlockBackend(ABC):
     svd_algorithms: list[str]  # first is default
@@ -267,4 +271,8 @@ class AbstractBlockBackend(ABC):
 
     @abstractmethod
     def block_split_leg(self, a: Block, leg: int, dims: list[int]) -> Block:
+        ...
+
+    @abstractmethod
+    def block_allclose(self, a: Block, b: Block, rtol: float, atol: float) -> bool:
         ...

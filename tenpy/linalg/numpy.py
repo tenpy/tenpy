@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import numpy as np
+
 from tenpy.linalg.dummy_config import config
 from tenpy.linalg.misc import UNSPECIFIED
 from tenpy.linalg.symmetries import ProductSpace
@@ -175,10 +177,38 @@ def is_scalar(obj) -> bool:
         raise TypeError(f'Type not supported for is_scalar: {type(obj)}')
 
 
+def allclose(a: Tensor, b: Tensor, rtol=1e-05, atol=1e-08) -> bool:
+    """
+    TODO: name? dont necessarily need to follow numpy convention
+    If a and b are equal up to numerical tolerance.
+    If the following is True "element-wise" for all numerical parameters (what exactly this means is backend-dependent)
+    `abs(a - b) <= atol + rtol * abs(b)`.
+    TODO think about edge-cases (nan, inf, ...)
+    """
+    # TODO what to do for different backends
+    backend = None
+    if isinstance(a, Tensor):
+        backend = a.backend
+        a_data = a.data
+    else:
+        assert is_scalar(a)
+        a_data = a
+
+    if isinstance(b, Tensor):
+        backend = b.backend
+        b_data = b.data
+    else:
+        assert is_scalar(b)
+        b_data = b
+
+    if backend is None:
+        return np.allclose(a_data, b_data, rtol=rtol, atol=atol)
+    else:
+        return backend.allclose(a_data, b_data, rtol=rtol, atol=atol)
+
 
 # TODO remaining:
 #  do we allow min, max, abs, real, imag...?
-#  all_close
 #  squeeze_axis
 #  scale_axis ...? not trivial what that even means for non-abelian...
 #  norm

@@ -107,3 +107,6 @@ class AbstractNoSymmetryBackend(AbstractBackend, AbstractBlockBackend, ABC):
 
     def num_parameters(self, legs: list[AbstractSpace]) -> int:
         return prod(l.dim for l in legs)
+
+    def allclose(self, a: BackendArray, b: BackendArray, rtol: float, atol: float) -> bool:
+        return self.block_allclose(a, b, rtol=rtol, atol=atol)
