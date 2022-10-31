@@ -229,13 +229,16 @@ class Tensor:
         return np.asarray(self.backend.to_dense_block(self.data), dtype)
 
 
-def as_tensor(obj, backend: AbstractBackend, legs: list[VectorSpace] = None,
+def as_tensor(obj, backend: AbstractBackend, legs: list[VectorSpace] = None, labels: list[str] = None,
               dtype: Dtype = None) -> Tensor:
     if isinstance(obj, Tensor):
         assert (legs is None) or obj.legs == legs  # see eg transpose
         assert (backend is None) or obj.backend == backend  # TODO support switching backends somewhere else
-        # TODO use dtype arg
-        return obj
+        if (dtype is not None) and (obj.dtype != dtype):
+            return Tensor(obj.backend.to_dtype(obj.data, dtype), obj.backend, legs=obj.legs,
+                          leg_labels=obj.leg_labels if labels is None else labels, dtype=dtype)
+        else:
+            return obj
 
     else:
         obj = backend.parse_data(obj, dtype=None if dtype is None else backend.parse_dtype(dtype))
@@ -243,7 +246,7 @@ def as_tensor(obj, backend: AbstractBackend, legs: list[VectorSpace] = None,
             legs = backend.infer_legs(obj)
         else:
             assert backend.legs_are_compatible(obj, legs)
-        return Tensor(data=obj, backend=backend, legs=legs)  # FIXME __init__ has changed
+        return Tensor(obj, backend, legs=legs, leg_labels=labels, dtype=dtype)
 
 
 class DiagonalTensor:
