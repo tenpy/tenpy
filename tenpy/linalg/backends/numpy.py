@@ -167,6 +167,22 @@ class NumpyBlockBackend(AbstractBlockBackend):
     def matrix_log(self, matrix: Block) -> Block:
         return scipy.linalg.logm(matrix)
 
+    def block_random_uniform(self, dims: list[int], dtype: Dtype) -> Block:
+        if dtype.is_real:
+            res = np.random.uniform(low=-1, high=1., size=dims)
+        else:
+            # z = r * e^{i pi}; PDF of r is 2r on [0, 1], CDF is r^2 ; inverse CDF sampling
+            r = np.sqrt(np.random.uniform(low=0, high=1, size=dims))
+            phi = np.random.uniform(low=0, high=2 * np.pi, size=dims)
+            res = r * np.exp(1.j * phi)
+        return np.asarray(res, dtype=_dtype_map[dtype])
+
+    def block_random_gaussian(self, dims: list[int], dtype: Dtype, sigma: float) -> Block:
+        res = np.random.normal(loc=0, scale=sigma, size=dims)
+        if not dtype.is_real:
+            res += 1.j * np.random.normal(loc=0, scale=sigma, size=dims)
+        return res
+
 
 class NoSymmetryNumpyBackend(NumpyBlockBackend, AbstractNoSymmetryBackend):
     def __init__(self):

@@ -225,7 +225,6 @@ def norm(t: Tensor) -> float:
 #  do we allow min, max, abs, real, imag...?
 #  scale_axis ...? not trivial what that even means for non-abelian...
 #  inverse (as linear map), pseudo-inverse, regularized-inverse
-#  expm and logm (naming?)
 
 # TODO in other modules:
 #  QR

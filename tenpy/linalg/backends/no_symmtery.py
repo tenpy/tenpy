@@ -124,3 +124,9 @@ class AbstractNoSymmetryBackend(AbstractBackend, AbstractBlockBackend, ABC):
     def log(self, a: BackendArray, idcs1: list[int], idcs2: list[int]) -> BackendArray:
         matrix, aux = self.block_matrixify(a, idcs1, idcs2)
         return self.block_dematrixify(self.matrix_log(matrix), aux)
+
+    def random_uniform(self, legs: list[AbstractSpace], dtype: Dtype) -> BackendArray:
+        return self.block_random_uniform([l.dim for l in legs], dtype=dtype)
+
+    def random_gaussian(self, legs: list[AbstractSpace], dtype: Dtype, sigma: float) -> BackendArray:
+        return self.block_random_gaussian([l.dim for l in legs], dtype=dtype, sigma=sigma)

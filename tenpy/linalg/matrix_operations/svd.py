@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 import numpy as np
 
-from tenpy.linalg.decompositions.leg_bipartition import leg_bipartition
+from tenpy.linalg.matrix_operations.leg_bipartition import leg_bipartition
 from tenpy.linalg.tensors import Tensor
 
 

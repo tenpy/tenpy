@@ -206,6 +206,14 @@ class AbstractBackend(ABC):
     def log(self, a: BackendArray, idcs1: list[int], idcs2: list[int]) -> BackendArray:
         ...
 
+    @abstractmethod
+    def random_uniform(self, legs: list[AbstractSpace], dtype: Dtype) -> BackendArray:
+        ...
+
+    @abstractmethod
+    def random_gaussian(self, legs: list[AbstractSpace], dtype: Dtype, sigma: float) -> BackendArray:
+        ...
+
 
 class AbstractBlockBackend(ABC):
     svd_algorithms: list[str]  # first is default
@@ -316,4 +324,12 @@ class AbstractBlockBackend(ABC):
 
     @abstractmethod
     def matrix_log(self, matrix: Block) -> Block:
+        ...
+
+    @abstractmethod
+    def block_random_uniform(self, dims: list[int], dtype: Dtype) -> Block:
+        ...
+
+    @abstractmethod
+    def block_random_gaussian(self, dims: list[int], dtype: Dtype, sigma: float) -> Block:
         ...
