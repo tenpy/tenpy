@@ -164,9 +164,20 @@ def fuse_transpose(t: Tensor, legs: list[int, list[int]]):
     return res
 
 
+def is_scalar(obj) -> bool:
+    """If obj is a scalar, meaning either a python scalar like float or complex, or a Tensor
+    which has only one-dimensional legs with trivial grading"""
+    if isinstance(obj, (int, float, complex)):
+        return True
+    if isinstance(obj, Tensor):
+        return all(l.is_trivial for l in obj.legs)
+    else:
+        raise TypeError(f'Type not supported for is_scalar: {type(obj)}')
+
+
+
 # TODO remaining:
 #  do we allow min, max, abs, real, imag...?
-#  is_scalar ...?
 #  all_close
 #  squeeze_axis
 #  scale_axis ...? not trivial what that even means for non-abelian...

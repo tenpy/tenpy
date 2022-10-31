@@ -20,6 +20,13 @@ class AbstractSpace(ABC):
     def dual(self):
         ...
 
+    @property
+    @abstractmethod
+    def is_trivial(self) -> bool:
+        """If the space is trivial, i.e. one-dimensional with trivial grading,
+        i.e. the identity object of the monoidal category"""
+        ...
+
     @abstractmethod
     def __eq__(self, other):
         ...
@@ -81,6 +88,10 @@ class VectorSpace(AbstractSpace):
         return VectorSpace(symmetry=self.symmetry, sectors=self.sectors, multiplicities=self.multiplicities,
                            is_dual=not self.is_dual, is_real=self.is_real)
 
+    @property
+    def is_trivial(self) -> bool:
+        return len(self.sectors) == 1
+
 
 class ProductSpace(AbstractSpace):
     def __init__(self, spaces: list[AbstractSpace]):
@@ -108,3 +119,7 @@ class ProductSpace(AbstractSpace):
     @property
     def dual(self):
         return ProductSpace([s.dual() for s in self.spaces])
+
+    @property
+    def is_trivial(self) -> bool:
+        return all(s.is_trivial for s in self.spaces)
