@@ -110,3 +110,6 @@ class AbstractNoSymmetryBackend(AbstractBackend, AbstractBlockBackend, ABC):
 
     def allclose(self, a: BackendArray, b: BackendArray, rtol: float, atol: float) -> bool:
         return self.block_allclose(a, b, rtol=rtol, atol=atol)
+
+    def squeeze_legs(self, a: BackendArray, idcs: list[int]) -> BackendArray:
+        return self.block_squeeze_legs(a, idcs)

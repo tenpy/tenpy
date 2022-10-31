@@ -207,6 +207,15 @@ def allclose(a: Tensor, b: Tensor, rtol=1e-05, atol=1e-08) -> bool:
         return backend.allclose(a_data, b_data, rtol=rtol, atol=atol)
 
 
+def squeeze_leg(t: Tensor, leg: int | str | list[int | str]) -> Tensor:
+    """Remove trivial leg from tensor"""
+    idcs = t.get_leg_idcs(leg)
+    assert all(t.legs[n].is_trivial for n in idcs)
+    new_legs = [l for n, l in enumerate(t.legs) if n not in idcs]
+    new_labels = [l for n, l in enumerate(t._leg_labels) if n not in idcs]
+    return Tensor(t.backend.squeeze_legs(t.data, idcs), t.backend, legs=new_legs, leg_labels=new_labels, dtype=t.dtype)
+
+
 # TODO remaining:
 #  do we allow min, max, abs, real, imag...?
 #  squeeze_axis

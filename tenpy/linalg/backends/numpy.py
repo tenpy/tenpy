@@ -138,6 +138,9 @@ class NumpyBlockBackend(AbstractBlockBackend):
     def block_allclose(self, a: Block, b: Block, rtol: float, atol: float) -> bool:
         return np.allclose(a, b, rtol=rtol, atol=atol)
 
+    def block_squeeze_legs(self, a: Block, idcs: list[int]) -> Block:
+        return np.squeeze(a, idcs)
+
 
 class NoSymmetryNumpyBackend(NumpyBlockBackend, AbstractNoSymmetryBackend):
     def __init__(self):

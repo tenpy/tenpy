@@ -190,6 +190,10 @@ class AbstractBackend(ABC):
     def allclose(self, a: BackendArray, b: BackendArray, rtol: float, atol: float) -> bool:
         ...
 
+    @abstractmethod
+    def squeeze_legs(self, a: BackendArray, idcs: list[int]) -> BackendArray:
+        ...
+
 
 class AbstractBlockBackend(ABC):
     svd_algorithms: list[str]  # first is default
@@ -275,4 +279,8 @@ class AbstractBlockBackend(ABC):
 
     @abstractmethod
     def block_allclose(self, a: Block, b: Block, rtol: float, atol: float) -> bool:
+        ...
+
+    @abstractmethod
+    def block_squeeze_legs(self, a: Block, idcs: list[int]) -> Block:
         ...
