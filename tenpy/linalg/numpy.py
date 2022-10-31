@@ -216,11 +216,14 @@ def squeeze_leg(t: Tensor, leg: int | str | list[int | str]) -> Tensor:
     return Tensor(t.backend.squeeze_legs(t.data, idcs), t.backend, legs=new_legs, leg_labels=new_labels, dtype=t.dtype)
 
 
+def norm(t: Tensor) -> float:
+    """2-norm of a tensor, i.e. sqrt(inner(t, t))"""
+    return t.backend.norm(t.data)
+
+
 # TODO remaining:
 #  do we allow min, max, abs, real, imag...?
-#  squeeze_axis
 #  scale_axis ...? not trivial what that even means for non-abelian...
-#  norm
 #  inverse (as linear map), pseudo-inverse, regularized-inverse
 #  expm and logm (naming?)
 

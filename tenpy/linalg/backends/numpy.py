@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from math import prod
+from typing import Any
 
 import numpy as np
 import scipy
@@ -10,6 +11,7 @@ from tenpy.linalg.backends.abstract_backend import AbstractBlockBackend, Dtype, 
     BackendDtype, Block
 from tenpy.linalg.backends.no_symmtery import AbstractNoSymmetryBackend
 from tenpy.linalg.backends.nonabelian import AbstractNonabelianBackend
+from tenpy.linalg.misc import inverse_permutation
 from tenpy.linalg.symmetries import AbstractSymmetry, VectorSpace
 
 _dtype_map = {
@@ -81,6 +83,7 @@ class NumpyBlockBackend(AbstractBlockBackend):
             lines = lines[:first] + [f'{indent}...'] + lines[-last:]
         return lines
 
+    # noinspection PyTypeChecker
     def matrix_svd(self, a: Block, algorithm: str | None) -> tuple[Block, Block, Block]:
         if algorithm is None:
             algorithm = 'gesdd'
@@ -141,6 +144,29 @@ class NumpyBlockBackend(AbstractBlockBackend):
     def block_squeeze_legs(self, a: Block, idcs: list[int]) -> Block:
         return np.squeeze(a, idcs)
 
+    def block_norm(self, a: Block) -> float:
+        return np.linalg.norm(a, ord=2)
+
+    def block_matrixify(self, a: Block, idcs1: list[int], idcs2: list[int]) -> tuple[Block, Any]:
+        permutation = idcs1 + idcs2
+        a = np.transpose(a, permutation)
+        a_shape = np.shape(a)
+        matrix_shape = prod(a_shape[:len(idcs1)]), prod(a_shape[len(idcs1):])
+        matrix = np.reshape(a, matrix_shape)
+        aux = (permutation, a_shape)
+        return matrix, aux
+
+    def block_dematrixify(self, matrix: Block, aux: Any) -> Block:
+        permutation, a_shape = aux
+        res = np.reshape(matrix, a_shape)
+        return np.transpose(res, inverse_permutation(permutation))
+
+    def matrix_exp(self, matrix: Block) -> Block:
+        return scipy.linalg.expm(matrix)
+
+    def matrix_log(self, matrix: Block) -> Block:
+        return scipy.linalg.logm(matrix)
+
 
 class NoSymmetryNumpyBackend(NumpyBlockBackend, AbstractNoSymmetryBackend):
     def __init__(self):
@@ -158,7 +184,7 @@ class NoSymmetryNumpyBackend(NumpyBlockBackend, AbstractNoSymmetryBackend):
         # determine number of singular values that fulfills truncation constraints
         chi = min(max_singular_values, len(s))
         if threshold > 0:
-            chi = min(chi, np.sum(s > threshold))
+            chi = min(chi, int(np.sum(s > threshold)))
         full_norm = np.linalg.norm(s)
         if max_err > 0:
             # cum_rel_err[n] is the relative error we would get if we kept only s[:n-1]

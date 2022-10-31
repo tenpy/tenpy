@@ -2,7 +2,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from enum import Enum, auto
-from typing import TypeVar
+from typing import TypeVar, Any
 
 from tenpy.linalg.symmetries import AbstractSymmetry, VectorSpace, AbstractSpace
 
@@ -194,6 +194,18 @@ class AbstractBackend(ABC):
     def squeeze_legs(self, a: BackendArray, idcs: list[int]) -> BackendArray:
         ...
 
+    @abstractmethod
+    def norm(self, a: BackendArray) -> float:
+        ...
+
+    @abstractmethod
+    def exp(self, a: BackendArray, idcs1: list[int], idcs2: list[int]) -> BackendArray:
+        ...
+
+    @abstractmethod
+    def log(self, a: BackendArray, idcs1: list[int], idcs2: list[int]) -> BackendArray:
+        ...
+
 
 class AbstractBlockBackend(ABC):
     svd_algorithms: list[str]  # first is default
@@ -283,4 +295,25 @@ class AbstractBlockBackend(ABC):
 
     @abstractmethod
     def block_squeeze_legs(self, a: Block, idcs: list[int]) -> Block:
+        ...
+
+    @abstractmethod
+    def block_norm(self, a: Block) -> float:
+        ...
+
+    @abstractmethod
+    def block_matrixify(self, a: Block, idcs1: list[int], idcs2: list[int]) -> tuple[Block, Any]:
+        """reshape to a matrix. return that matrix and data necessary to revert it"""
+        ...
+
+    @abstractmethod
+    def block_dematrixify(self, matrix: Block, aux: Any) -> Block:
+        ...
+
+    @abstractmethod
+    def matrix_exp(self, matrix: Block) -> Block:
+        ...
+
+    @abstractmethod
+    def matrix_log(self, matrix: Block) -> Block:
         ...

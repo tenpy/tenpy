@@ -113,3 +113,14 @@ class AbstractNoSymmetryBackend(AbstractBackend, AbstractBlockBackend, ABC):
 
     def squeeze_legs(self, a: BackendArray, idcs: list[int]) -> BackendArray:
         return self.block_squeeze_legs(a, idcs)
+
+    def norm(self, a: BackendArray) -> float:
+        return self.block_norm(a)
+
+    def exp(self, a: BackendArray, idcs1: list[int], idcs2: list[int]) -> BackendArray:
+        matrix, aux = self.block_matrixify(a, idcs1, idcs2)
+        return self.block_dematrixify(self.matrix_exp(matrix), aux)
+
+    def log(self, a: BackendArray, idcs1: list[int], idcs2: list[int]) -> BackendArray:
+        matrix, aux = self.block_matrixify(a, idcs1, idcs2)
+        return self.block_dematrixify(self.matrix_log(matrix), aux)

@@ -1,5 +1,9 @@
+from __future__ import annotations
+
 # TODO move somewhere else
 #  (for now i want to keep changes in refactor_npc branch contained to tenpy.linalg as much as possible
+import numpy as np
+
 
 def force_str_len(obj, length: int, rjust: bool = True, placeholder: str = '[...]') -> str:
     """Convert an object to a string, then force the string to a given length.
@@ -19,3 +23,9 @@ def force_str_len(obj, length: int, rjust: bool = True, placeholder: str = '[...
 
 
 UNSPECIFIED = object()
+
+
+def inverse_permutation(permutation: list[int]):
+    inv = np.empty_like(permutation)
+    inv[permutation] = np.arange(len(inv), dtype=inv.dtype)
+    return inv
