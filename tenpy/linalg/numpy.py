@@ -114,9 +114,15 @@ def conj(t: Tensor) -> Tensor:
                   dtype=t.dtype)
 
 
+# TODO there should be an operation that converts only one or some of the legs to dual
+#  i.e. vectorization of density matrices
+#  formally, this is contraction with the (co-)evaluation map, aka cup or cap
+
+
 def combine_legs(t: Tensor, legs: list[int | str], label: str = UNSPECIFIED) -> Tensor:
     """
-    Combine a group of legs of a tensor. Result is at the previous position of legs[0]
+    Combine a group of legs of a tensor. Result is at the previous position of legs[0].
+    # TODO support multiple combines in one function call? what would the signature be?
     """
     idcs = t.get_leg_idcs(legs)
     assert len(idcs) > 1
@@ -132,6 +138,7 @@ def combine_legs(t: Tensor, legs: list[int | str], label: str = UNSPECIFIED) -> 
 def split_leg(t: Tensor, leg: int | str) -> Tensor:
     """if the legs were contiguous in t.legs before combining, this is the inverse operation of combine_legs,
     otherwise it is only inverse up to a permute_legs"""
+    # TODO support multiple splits in one function call? make consistent with combine
     idx = t.get_leg_idx(leg)
     leg = t.legs[idx]
     assert isinstance(leg, LegPipe)
@@ -141,13 +148,23 @@ def split_leg(t: Tensor, leg: int | str) -> Tensor:
     return Tensor(data, t.backend, legs=legs, leg_labels=labels, dtype=t.dtype)
 
 
-# TODO there should be an operation that converts only one or some of the legs to dual
-#  i.e. vectorization of density matrices
-#  formally, this is contraction with the (co-)evaluation map, aka cup or cap
+def fuse_transpose(t: Tensor, legs: list[int, list[int]]):
+    """
+    Permutes and combines legs of a tensor.
+    If legs[n] is an int, it describes a leg that is permuted from t.
+    If it is a list, it describes several legs of t and the result has a LegPipe which combines them
+    """
+    # TODO support backend-specific more efficient implementations
+    legs = list(map(t.get_leg_idcs, legs))
+    flat_legs = sum(legs, [])
+    res = transpose(t, flat_legs)
+    for m, leg_grp in legs:
+        if len(leg_grp) > 1:
+            res = combine_legs(t, list(range(m, m + len(leg_grp))))
+    return res
 
 
 # TODO remaining:
-#  general interface for fusing and permuting (formerly fuse_transpose)
 #  do we allow min, max, abs, real, imag...?
 #  is_scalar ...?
 #  all_close
