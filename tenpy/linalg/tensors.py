@@ -13,6 +13,9 @@
 #
 # """
 from __future__ import annotations
+
+from math import prod
+
 import numpy as np
 
 from .backends.abstract_backend import AbstractBackend, Dtype
@@ -88,6 +91,18 @@ class Tensor:
         if config.strict_labels:
             # check if labels are unique
             assert None not in self._leg_labels
+
+    @property
+    def size(self):
+        """The total number of entries, i.e. the dimension of the tensorproduct of the legs,
+        not considering symmetry"""
+        return prod(l.dim for l in self.legs)
+
+    @property
+    def num_parameters(self):
+        """The number of free parameters, i.e. the dimension of the space of symmetry-preserving
+        tensors with the same legs"""
+        return self.backend.num_parameters(self.legs)
 
     @property
     def leg_labels(self):

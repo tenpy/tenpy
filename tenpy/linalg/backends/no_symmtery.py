@@ -1,5 +1,6 @@
 from __future__ import annotations
 from abc import ABC, abstractmethod
+from math import prod
 
 from tenpy.linalg.backends.abstract_backend import AbstractBackend, AbstractBlockBackend, BackendArray, BackendDtype, \
     Block, Dtype
@@ -103,3 +104,6 @@ class AbstractNoSymmetryBackend(AbstractBackend, AbstractBlockBackend, ABC):
     def split_leg(self, a: BackendArray, leg: int, orig_spaces: list[AbstractSpace]) -> BackendArray:
         # TODO we could lazy-evaluate this...
         return self.block_split_leg(a, leg, dims=[s.dim for s in orig_spaces])
+
+    def num_parameters(self, legs: list[AbstractSpace]) -> int:
+        return prod(l.dim for l in legs)

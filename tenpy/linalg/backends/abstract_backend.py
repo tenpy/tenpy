@@ -180,6 +180,12 @@ class AbstractBackend(ABC):
         """split a leg. resulting legs all take place of leg"""
         ...
 
+    @abstractmethod
+    def num_parameters(self, legs: list[AbstractSpace]) -> int:
+        """The number of free parameters, i.e. the dimension of the space of symmetry-preserving
+        tensors with the given set of legs"""
+        ...
+
 
 class AbstractBlockBackend(ABC):
     svd_algorithms: list[str]  # first is default
