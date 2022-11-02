@@ -821,7 +821,7 @@ class DMRGEngine(Sweep):
         max_seconds = 3600 * options.get('max_hours', 24 * 365)
         if not self.finite:
             update_env = options.get('update_env', N_sweeps_check // 2)
-        E_old, S_old = np.nan, np.mean(self.psi.entanglement_entropy())  # initial dummy values
+        E_old, S_old = np.nan, np.nan #np.mean(self.psi.entanglement_entropy())  # initial dummy values
         E, Delta_E, Delta_S = 1., 1., 1.
         self.diag_method = options['diag_method']
 
@@ -911,6 +911,7 @@ class DMRGEngine(Sweep):
                 "Delta E = %(dE).4e, Delta S = %(dS).4e (per sweep)\n"
                 "max trunc_err = %(trunc_err).4e, max E_trunc = %(E_trunc).4e\n"
                 "chi: %(chi)s\n"
+                "mixer amplitude: %(amplitude).4e\n"
                 "%(sep)s", {
                     'sweeps': self.sweeps,
                     'E': E,
@@ -924,6 +925,7 @@ class DMRGEngine(Sweep):
                     'trunc_err': max_trunc_err,
                     'E_trunc': max_E_trunc,
                     'chi': self.psi.chi if self.psi.L < 40 else max(self.psi.chi),
+                    'amplitude': self.mixer.amplitude if self.mixer is not None else 0.0,
                     'sep': "=" * 80,
                 })
             is_first_sweep = False

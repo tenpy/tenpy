@@ -350,7 +350,7 @@ def npc_send(comm, array, dest, tag):
     return array
 
 def npc_recv(comm, source, tag):
-    request = comm.irecv(bytearray(1<<20), source=source, tag=tag) # Assume shell npc array is less than 1 MB in size.
+    request = comm.irecv(bytearray(1<<22), source=source, tag=tag) # Assume shell npc array is less than 4 MB in size.
     array = request.wait()
     if array is None or array.stored_blocks == 0:
         return array
