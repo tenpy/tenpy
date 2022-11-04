@@ -143,7 +143,7 @@ If you look at the definitions very closely, you can see that in terms like ``["
 Jordan-Wigner sign :math:`(-1)^{n_\uparrow,2}` appears twice (namely once in the definition of ``"Cd"`` and once in the ``"JW"`` on site
 2) and could in principle be canceled, however in favor of a simplified handling in the code we do not recommend you to cancel it.
 Similar, within a spinless :class:`~tenpy.networks.site.FermionSite`, one can simplify ``"Cd JW" == "Cd"`` and ``"JW C" == "C"``, 
-but these relations do *not* hold in the :class:`~tenpy.networks.site.SpinHalfSite`, 
+but these relations do *not* hold in the :class:`~tenpy.networks.site.SpinHalfFermionSite`, 
 and for consistency we recommend to explicitly keep the ``"JW"`` operator string even in nearest-neighbor models where it is not strictly necessary.
 
 

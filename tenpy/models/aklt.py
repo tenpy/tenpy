@@ -2,9 +2,7 @@
 
 The AKLT model is famous for having a very simple ground state MPS of bond dimension 2.
 Writing down the Hamiltonian is easiest done in terms of bond couplings.
-This class thus serves as an example how this can be done in more gen
-The XXZ chain is contained in the more general :class:`~tenpy.models.spins.SpinChain`; the idea of
-this module is more to serve as a pedagogical example for a model.
+This class thus serves as an example how this can be done.
 """
 # Copyright 2021 TeNPy Developers, GNU GPLv3
 

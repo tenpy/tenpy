@@ -70,7 +70,8 @@ def test_simulation_export_import(tmp_path):
         'XXZChain',
         'model_params': {
             'bc_MPS': 'infinite',
-            'L': 2
+            'L': 2,
+            'sort_charge': False,
         },
         'algorithm_class':
         'DummyAlgorithmSleep',
