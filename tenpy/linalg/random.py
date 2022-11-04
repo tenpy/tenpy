@@ -5,6 +5,7 @@ from tenpy.linalg.symmetries import VectorSpace
 from tenpy.linalg.tensors import Tensor
 
 
+# FIXME dont do this
 def uniform(backend: AbstractBackend, legs: list[VectorSpace], labels: list[str] = None, dtype: Dtype = None
             ) -> Tensor:
     """
@@ -22,4 +23,5 @@ def gaussian(backend: AbstractBackend, legs: list[VectorSpace], sigma: float = 1
     return Tensor(backend.random_gaussian(legs, dtype, sigma), backend, legs=legs, leg_labels=labels, dtype=dtype)
 
 
-# TODO Haar unitary, ...
+# TODO Haar unitary, like tenpy OLD
+# TODO random isometry

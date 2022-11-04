@@ -58,12 +58,15 @@ def outer(t1: Tensor, t2: Tensor, relabel1: dict[str, str] = None, relabel2: dic
                   dtype=t1.backend.infer_dtype(res_data))
 
 
-def inner(t1: Tensor, t2: Tensor) -> complex:
+# TODO return tensor scalar?
+def inner(t1: Tensor, t2: Tensor, do_conj: bool = True) -> complex:
     """
     Inner product of two tensors with the same legs.
     t1 and t2 live in the same space, the inner product is the contraction of the dual ("conjugate") of t1 with t2.
-    # TODO optional do_conj arg?
+    # DOC do_conj arg
     """
+    if not do_conj:
+        raise NotImplementedError  # TODO
     if config.strict_labels and t1.leg_labels != t2.leg_labels:
         # TODO transpose st labels match. if not possible, raise.
         raise NotImplementedError
@@ -100,7 +103,7 @@ def trace(t: Tensor, legs1: int | str | list[int | str] = None, legs2: int | str
     assert len(idcs1) == len(idcs2)
     assert all(idx not in idcs2 for idx in idcs1)
     assert all(t.legs[idx1].can_contract_with(t.legs[idx2]) for idx1, idx2 in zip(idcs1, idcs2))
-    data = t.backend.trace(t, idcs1, idcs2)
+    data = t.backend.trace(t, idcs1, idcs2)  # FIXME use t.data
     if len(remaining_idcs) == 0:
         # result is a scalar
         return t.backend.item(data)
@@ -222,15 +225,21 @@ def norm(t: Tensor) -> float:
 
 
 # TODO remaining:
-#  do we allow min, max, abs, real, imag...?
+#  Tensor > DiagonalTensor > Scalar
+#  define elementwise ops like min, sqrt, real.. for Diagonal
+#  scalar edge case
+#  do we allow min, max, abs, real, imag...?  maybe "to_real" input is approx real, maybe only Scalar
 #  scale_axis ...? not trivial what that even means for non-abelian...
-#  inverse (as linear map), pseudo-inverse, regularized-inverse
+#  pinv?
+#  scale_axis (with a DiagonalTensor), or special case of tensordot
+#  look at OLD svd options eg degen, need them...?
 
 # TODO in other modules:
+#  think about Tensor.__del__, standard probably ok
 #  QR
 #  eigen
 #  elementary functions, such as sin, cos, sqrt, exp, ... which only work on scalars or DiagonalTensors?
-#  indexing...
+#  indexing...; dont even allow?
 #  random generation
 
 

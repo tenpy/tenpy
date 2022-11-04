@@ -1,11 +1,29 @@
+# Next up todos:
+
+- dtype: make one enum, no dataclass and is_complex_type functions, get rid of it as arg wherever possible
+
+- DiagonalTensor and Scalar subclasses
+
+- in-place operations
+
+- unify all todo lists here
+
+- ...
+
+- write, at least stub-wise non-abelian backend
+
+
 # Open design questions
 
 - Think about mutability / views and copies
+  -> mutable, e.g. via __iadd__. views are not supported, since slicing is not
 
 - Should we care about in-place operations, where we provide a Tensor instance
   whose memory may be overwritten with the result?
+  -> del and __iadd__ etc should be enough
 
-- Rethink the Dtype machinery
+- more metadata per leg (eg is it a physical or virtual leg, site number, ...)? a la iTensor
+  -> have discussed and probably no
 
 # After bulk of features exists
 
@@ -14,9 +32,11 @@
 - manage namespaces, i.e. __init__.py in every module
 
 - The following concepts have various possible names, check that use is consistent
-  > charge, sector, irrep
-  > dual, conj, ingoing
-  > leg, vectorspace, axis
+  > **charge**, sector, ~~irrep~~
+  > **dual**, conj, ingoing
+  > leg, vectorspace, axis (attribute of Tensor AND arg of eg tensordot)
+    proposal: Tensor.legs: list[VectorSpace]
+              tensordot(..., cont1: list[int | str], cont2...)
 
 - for function with multiple Tensor instances as inputs, should we check for compatible backends
   or deal with whatever happens if they are not compatible?

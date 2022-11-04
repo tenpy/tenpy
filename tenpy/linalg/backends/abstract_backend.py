@@ -7,11 +7,12 @@ from typing import TypeVar, Any
 from tenpy.linalg.symmetries import AbstractSymmetry, VectorSpace, AbstractSpace
 
 
+# TODO make Dtype.float32
 class Precision(Enum):
     half = auto()  # 16 bit per float
     single = auto()  # 32 bit per float
     double = auto()  # 64 bit per float
-    long_double = auto()  # C standard `long double`, may be 96 or 128 bit
+    long_double = auto()  # C standard `long double`, may be 96 or 128 bit  TODO make 96 AND 128, raise if unavailable
     quadruple = auto()  # 128 bit per float
 
 

@@ -42,17 +42,20 @@ class Tensor:
     #    > get_leg_idx, get_leg_idcs, has_labels, labels_are
     #    > change labels, e.g. set_labels, update_labels, drop_labels
 
-    # TODO: are tensors iterable? i.e. define __len__ and __iter__?
+    # TODO: are tensors iterable? -> no! i.e. define __len__ and __iter__?
     #  Jakob: I think they shouldn't, it is not obvious what that means for non-abelian
     #         We could define it still and raise some error when it makes no sense to iterate
 
-    # TODO: decide broadcasting rules. for now only same shapes are supported
+    # TODO: decide broadcasting rules. for now only same shapes are supported -> no!
 
     # TODO: implement a shape attribute / property? in principle it is determined by legs,
     #  but we could want a convenience object Shape which has legs as an attribute and several
     #  possible constructors / classmethods, e.g. we could allow Shape([2, 3, 1]) (implying no_symmetry)
     #  as well as Shape([vL_leg, p_leg, vR_leg]) with isinstance(p_leg, VectorSpace).
     #  the Shape type could then also work as a parameter to e.g. zeros, eye and random_uniform
+    #  // rather do zeros_like, eye_like, ...
+
+    # TODO make __eq__ be allclose with a default low tolerance
 
     # TODO jakob decided not to include the following dunders, revisit that decision
     #  - comparison: __lt__ etc, element-wise comparison is basis-dependent,
@@ -189,9 +192,6 @@ class Tensor:
     def __eq__(self, other):
         raise TypeError  # use all_close instead
 
-    def __abs__(self):
-        return abs_(self)
-
     def __add__(self, other):
         if isinstance(other, Tensor):
             return add(self, other)
@@ -229,6 +229,19 @@ class Tensor:
         return np.asarray(self.backend.to_dense_block(self.data), dtype)
 
 
+class DiagonalTensor:
+
+    # special case where incoming and outgoing legs are equal and the
+    # tensor is "diagonal" (yet to precisely formulate what this means in a basis-independent way...)
+    # this would be the natural type for the singular values of an SVD
+    #  > no_symmetry: tensor, reshaped to matrix is diagonal
+    #  > abelian: blocks, reshaped to matrices are diagonal
+    #  > nonabelian: not only diagonal in coupled irrep, but also in its multiplicity, i.e. blocks are diagonal matrices
+    # TODO revisit this when Tensor class and specification for data-structure of backend is "finished"
+    # TODO this could implement element-wise operations such as __mul__ and __pow__, it would be well defined
+    pass
+
+
 def as_tensor(obj, backend: AbstractBackend, legs: list[VectorSpace] = None, labels: list[str] = None,
               dtype: Dtype = None) -> Tensor:
     if isinstance(obj, Tensor):
@@ -249,23 +262,7 @@ def as_tensor(obj, backend: AbstractBackend, legs: list[VectorSpace] = None, lab
         return Tensor(obj, backend, legs=legs, leg_labels=labels, dtype=dtype)
 
 
-class DiagonalTensor:
-    # special case where incoming and outgoing legs are equal and the
-    # tensor is "diagonal" (yet to precisely formulate what this means in a basis-independent way...)
-    # this would be the natural type for the singular values of an SVD
-    #  > no_symmetry: tensor, reshaped to matrix is diagonal
-    #  > abelian: blocks, reshaped to matrices are diagonal
-    #  > nonabelian: not only diagonal in coupled irrep, but also in its multiplicity, i.e. blocks are diagonal matrices
-    # TODO revisit this when Tensor class and specification for data-structure of backend is "finished"
-    # TODO this could implement element-wise operations such as __mul__ and __pow__, it would be well defined
-    pass
-
-
 # FIXME stubs below
-
-
-def abs_(a):
-    ...
 
 
 def sub(a, b):
