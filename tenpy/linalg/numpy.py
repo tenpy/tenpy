@@ -180,6 +180,7 @@ def is_scalar(obj) -> bool:
         raise TypeError(f'Type not supported for is_scalar: {type(obj)}')
 
 
+# FIXME define via norm instead?? norm(a - b) <= atol + rtol * norm(a)
 def allclose(a: Tensor, b: Tensor, rtol=1e-05, atol=1e-08) -> bool:
     """
     TODO: name? dont necessarily need to follow numpy convention
@@ -222,25 +223,6 @@ def squeeze_leg(t: Tensor, leg: int | str | list[int | str]) -> Tensor:
 def norm(t: Tensor) -> float:
     """2-norm of a tensor, i.e. sqrt(inner(t, t))"""
     return t.backend.norm(t.data)
-
-
-# TODO remaining:
-#  Tensor > DiagonalTensor > Scalar
-#  define elementwise ops like min, sqrt, real.. for Diagonal
-#  scalar edge case
-#  do we allow min, max, abs, real, imag...?  maybe "to_real" input is approx real, maybe only Scalar
-#  scale_axis ...? not trivial what that even means for non-abelian...
-#  pinv?
-#  scale_axis (with a DiagonalTensor), or special case of tensordot
-#  look at OLD svd options eg degen, need them...?
-
-# TODO in other modules:
-#  think about Tensor.__del__, standard probably ok
-#  QR
-#  eigen
-#  elementary functions, such as sin, cos, sqrt, exp, ... which only work on scalars or DiagonalTensors?
-#  indexing...; dont even allow?
-#  random generation
 
 
 def result_leg_labels(labels1: list[str | None], labels2: list[str | None],

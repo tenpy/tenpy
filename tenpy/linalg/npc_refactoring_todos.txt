@@ -2,13 +2,43 @@
 
 - dtype: make one enum, no dataclass and is_complex_type functions, get rid of it as arg wherever possible
 
+- sub add mul stubs in tensors
+
 - DiagonalTensor and Scalar subclasses
+    > elementwise ops like min, max, sqrt, real, mul, ... for them
+    > elementary functions sin, cos, exp, log, sqrt, ...?
+    > as_diagonal_tensor
+    > as_scalar
+    > go through edge cases
+    > scale_axis, iscale_axis
+
+- OLD svd options (regarding degenerate singular vlaues, for example), keep them?
+
+- pseudo-inverse, aka pinv
+
+- we dont support real and imag, do we have as_real or sth, which takes a complex number with
+  negligible imag part and gives the real part
+
+- revisit random generation, functionality from OLD
 
 - in-place operations
+    > iadd_prefactor, iadd, isub, imul, itruediv
 
-- unify all todo lists here
+- I/O support (at least for Tensor, for what else?)
+
+- label utilities
+    > get_leg_idx, get_leg_idcs, has_labels, labels_are
+    > change labels, e.g. set_labels, update_labels, drop_labels
+
+- zeros_like, eye_like, ...
+
+- make Tensor.__eq__ be allclose with a default, rather low, tolerance. doc it
+
+- global default_backend or sth and make all backend arguments optional
 
 - ...
+
+- Tensor.__del__ should free up all memory. default is probably ok, but think about it again!
 
 - write, at least stub-wise non-abelian backend
 

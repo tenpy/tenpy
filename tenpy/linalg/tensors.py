@@ -20,7 +20,7 @@ import numpy as np
 
 from .backends.abstract_backend import AbstractBackend, Dtype
 from .misc import force_str_len
-from .symmetries.spaces import AbstractSpace, VectorSpace, ProductSpace
+from .symmetries.spaces import VectorSpace, ProductSpace
 from .dummy_config import config
 
 
@@ -31,40 +31,8 @@ class LegPipe(ProductSpace):
         self.old_labels = old_labels[:]
         super().__init__(spaces=legs)
 
-# TODO could have a global default_backend or sth and make all backend arguments optional
-
 
 class Tensor:
-
-    # TODO reminders:
-    #  - I/O support (HDF5 and/or pickle support)
-    #  - label utilities
-    #    > get_leg_idx, get_leg_idcs, has_labels, labels_are
-    #    > change labels, e.g. set_labels, update_labels, drop_labels
-
-    # TODO: are tensors iterable? -> no! i.e. define __len__ and __iter__?
-    #  Jakob: I think they shouldn't, it is not obvious what that means for non-abelian
-    #         We could define it still and raise some error when it makes no sense to iterate
-
-    # TODO: decide broadcasting rules. for now only same shapes are supported -> no!
-
-    # TODO: implement a shape attribute / property? in principle it is determined by legs,
-    #  but we could want a convenience object Shape which has legs as an attribute and several
-    #  possible constructors / classmethods, e.g. we could allow Shape([2, 3, 1]) (implying no_symmetry)
-    #  as well as Shape([vL_leg, p_leg, vR_leg]) with isinstance(p_leg, VectorSpace).
-    #  the Shape type could then also work as a parameter to e.g. zeros, eye and random_uniform
-    #  // rather do zeros_like, eye_like, ...
-
-    # TODO make __eq__ be allclose with a default low tolerance
-
-    # TODO jakob decided not to include the following dunders, revisit that decision
-    #  - comparison: __lt__ etc, element-wise comparison is basis-dependent,
-    #    also result would need to be a bool-valued Tensor which i dont want to support
-    #  - __mul__, __pow__ where isinstance(other, Tensor).
-    #    numpy conventions suggest elementwise operations here, which is basis-dependent and thus ill-defined
-    #  - __floordiv__ and __mod__ since those would be integer-valued
-    #  - boolean and bitwise operations e.g. __or__, __lshift__ etc
-    #  - conversions to types other than float or complex, e.g. __int__
 
     def __init__(self, data, backend: AbstractBackend, legs: list[VectorSpace | LegPipe],
                  leg_labels: list[str | None], dtype: Dtype):
@@ -149,7 +117,6 @@ class Tensor:
             f'{indent}* Backend: {type(self.backend).__name__}'
             f'{indent}* Symmetry: {self.symmetry}',
             # TODO if we end up supporting qtotal, it should go here
-            # TODO what is the right header in place of (?)
             f'{indent}* Legs:  label    dim  dual  components',
             f'{indent}         =================================================',  # TODO how long should this be?
         ]
@@ -168,19 +135,7 @@ class Tensor:
         lines.append(')')
 
     def __getitem__(self, item):
-        # TODO indexing is another big topic with design choices to make
-        #  - e.g. even forming T[2:7,:,0] for a non-abelian tensor cab involve expensive or even impossible
-        #    (for anyonic spaces) computations and the result is (in general) not a symmetric tensor anymore,
-        #    if the slice mis-aligns with the sectors.
-        #  - should T[2:7,:,0] be a copy or a "view"?, e.g. does
-        #    ```x = T[2:7, :, 0]; x[0, 0, 0] = 42``` change T?
-        # TODO once the above choices are made, implement __setitem__.
-        #  also for things like x[0, 0, 0] += 42, the result of __getitem__ should have compatible __iadd__ etc
-        # TODO there are constraints to the format of item, maybe it makes sense to write a function
-        #  get_slice or similar that supports a more general form, e.g. with labels
-        # TODO maybe it would be nice to have some sort of label-indexer
-        #  e.g. T.index_legs('a', 'c')[0, 0] would translate to T[0, :, 0] if the labels are ['a', 'b', 'c']
-        raise NotImplementedError
+        raise NotImplementedError  # TODO useful error?
 
     def __neg__(self):
         # TODO worth it to write specialized code here?
@@ -206,7 +161,7 @@ class Tensor:
 
     def __mul__(self, other):
         if isinstance(other, Tensor):
-            other = other.item()  # TODO handle errors
+            other = other.item()
         if isinstance(other, (float, complex)):
             return mul(other, self)
         return NotImplemented
@@ -275,40 +230,3 @@ def add(a, b):
 
 def mul(a, b):
     ...
-
-#
-# def fuse_legs(..., allow_lazy: bool = True):
-#     # if allow_lazy, the underlying data is unaffected.
-#     # otherwise, the underlying data is reshaped.
-#     ...
-#
-#
-# def zeros(self, legs, ....):
-#     ...
-#
-#
-# def random_uniform_tensor(self, legs, ...)
-#     return Tensor(...)
-#
-# def random_unitary_tensor(self, legs, ....):
-#     return Tensor(...)
-#
-#
-#
-# def tensordot(A: Tensor, B: Tensor, contract_A, contract_B):
-#     check_A_B_diagonal(A, B)
-#     contract_A = _parse_indices(A, contract_A)
-#     contract_B = _parse_indices(B, contract_B)
-#     assert A.backend == B.backend
-#     new_labels = _tensordot_new_labels(A, B, contract_A, contract_B)
-#     new_data = backend.tensordot(A, B, contract_A, contract_B, new_labels)
-#     return Tensor(...)
-#
-#
-#
-# def svd(A: Tensor, labels_A, label_B, new_label, new_conj=False,
-#         trunc_params=None, ...):
-#
-#
-# def eigh(A: Tensor, labels_left, labels_right):
-#     ...
