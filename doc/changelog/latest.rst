@@ -5,7 +5,7 @@ Release Notes
 -------------
 Backwards-incompatible rewrite of TDVP!
 
-Note that measurement functions for simulations need to be updated to accept a `model` keyword argument.
+Note that measurement functions for simulations need to be updated to accept a `model` keyword argument, see :issue:`182`.
 
 
 Changelog
@@ -29,7 +29,7 @@ Backwards incompatible changes
   Hence, for now we keep the current default `False` behaviour, but raise a warning that you should set this option explicitly for cases where it changes things.
   Set it to `False`, if you already have data (for your particular model), that you want to be able to load/compare to.
   If you start a new project and don't have data yet, set it to `True`.
-  We will change the default behaviour from `False` to `True` in version 1.0.
+  We will change the default behaviour from `False` to `True` in version 1.0. See also :issue:`175`.
 
 Added
 ^^^^^
