@@ -44,6 +44,9 @@ class TFIModel(CouplingMPOModel):
 
         conserve : None | 'parity'
             What should be conserved. See :class:`~tenpy.networks.Site.SpinHalfSite`.
+        sort_charge : bool | None
+            Whether to sort by charges of physical legs.
+            See change comment in :class:`~tenpy.networks.site.Site`.
         J, g : float | array
             Coupling as defined for the Hamiltonian above.
 
@@ -54,7 +57,8 @@ class TFIModel(CouplingMPOModel):
         if conserve == 'best':
             conserve = 'parity'
             self.logger.info("%s: set conserve to %s", self.name, conserve)
-        site = SpinHalfSite(conserve=conserve)
+        sort_charge = model_params.get('sort_charge', None)
+        site = SpinHalfSite(conserve=conserve, sort_charge=sort_charge)
         return site
 
     def init_terms(self, model_params):

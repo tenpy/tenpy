@@ -13,7 +13,7 @@ from tenpy.networks.terms import OnsiteTerms, CouplingTerms, MultiCouplingTerms,
 
 from random_test import random_MPS
 
-spin_half = site.SpinHalfSite(conserve='Sz')
+spin_half = site.SpinHalfSite(conserve='Sz', sort_charge=False)
 
 
 def test_MPO():
@@ -169,7 +169,7 @@ def test_MPO_conversion():
 
 
 def test_MPOEnvironment():
-    xxz_pars = dict(L=4, Jxx=1., Jz=1.1, hz=0.1, bc_MPS='finite')
+    xxz_pars = dict(L=4, Jxx=1., Jz=1.1, hz=0.1, bc_MPS='finite', sort_charge=True)
     L = xxz_pars['L']
     M = XXZChain(xxz_pars)
     state = ([0, 1] * L)[:L]  # Neel

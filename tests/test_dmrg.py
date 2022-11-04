@@ -173,7 +173,7 @@ def test_dmrg_excited(eps=1.e-12):
     # (without truncation)
     L, g = 8, 1.3
     bc = 'finite'
-    model_params = dict(L=L, J=1., g=g, bc_MPS=bc, conserve='parity')
+    model_params = dict(L=L, J=1., g=g, bc_MPS=bc, conserve='parity', sort_charge=True)
     M = TFIChain(model_params)
     # compare to exact solution
     ED = ExactDiag(M)

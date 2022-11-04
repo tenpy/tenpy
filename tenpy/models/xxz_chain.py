@@ -45,6 +45,9 @@ class XXZChain(CouplingModel, NearestNeighborModel, MPOModel):
             Coupling as defined for the Hamiltonian above.
         bc_MPS : {'finite' | 'infinte'}
             MPS boundary conditions. Coupling boundary conditions are chosen appropriately.
+        sort_charge : bool | None
+            Whether to sort by charges of physical legs.
+            See change comment in :class:`~tenpy.networks.site.Site`.
 
     """
     def __init__(self, model_params):
@@ -55,6 +58,7 @@ class XXZChain(CouplingModel, NearestNeighborModel, MPOModel):
         Jz = model_params.get('Jz', 1.)
         hz = model_params.get('hz', 0.)
         bc_MPS = model_params.get('bc_MPS', 'finite')
+        sort_charge = model_params.get('sort_charge', None)
         # 1-3):
         USE_PREDEFINED_SITE = False
         if not USE_PREDEFINED_SITE:
@@ -66,11 +70,11 @@ class XXZChain(CouplingModel, NearestNeighborModel, MPOModel):
             Sz = [[0.5, 0.], [0., -0.5]]
             # (Can't define Sx and Sy as onsite operators: they are incompatible with Sz charges.)
             # 3) local physical site
-            site = Site(leg, ['up', 'down'], Sp=Sp, Sm=Sm, Sz=Sz)
+            site = Site(leg, ['up', 'down'], sort_charge=sort_charge, Sp=Sp, Sm=Sm, Sz=Sz)
         else:
             # there is a site for spin-1/2 defined in TeNPy, so just we can just use it
             # replacing steps 1-3)
-            site = SpinHalfSite(conserve='Sz')
+            site = SpinHalfSite(conserve='Sz', sort_charge=sort_charge)
         # 4) lattice
         bc = 'open' if bc_MPS == 'finite' else 'periodic'
         lat = Chain(L, site, bc=bc, bc_MPS=bc_MPS)
@@ -104,7 +108,8 @@ class XXZChain2(CouplingMPOModel, NearestNeighborModel):
     force_default_lattice = True
 
     def init_sites(self, model_params):
-        return SpinHalfSite(conserve='Sz')  # use predefined Site
+        sort_charge = model_params.get('sort_charge', None)
+        return SpinHalfSite(conserve='Sz', sort_charge=sort_charge)  # use predefined Site
 
     def init_terms(self, model_params):
         # read out parameters
