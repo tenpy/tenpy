@@ -416,4 +416,3 @@ def test_MPO_from_wavepacket(L=10):
     assert np.max(np.abs(C - C_expexcted)) < 1.e-10
     print(C)
     print(C_expexcted)
-    assert False
