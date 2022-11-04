@@ -48,7 +48,7 @@ class AnisotropicSpin1Chain(CouplingMPOModel, NearestNeighborModel):
             self.add_onsite(D, u, 'Sz Sz')
 
 
-def pollmann_turner_inversion(results, psi, simulation, tol=0.01):
+def m_pollmann_turner_inversion(results, psi, model, simulation, tol=0.01):
     """Measurement function for equation 15 of :arxiv:`1204.0704`.
 
     See :func:`~tenpy.simulations.measurement.measurement_index` for the call structure.

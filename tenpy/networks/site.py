@@ -1005,7 +1005,7 @@ def multi_sites_combine_charges(sites, same_charges=[]):
     This function adjusts the charges of these sites such that they can be used together.
 
     .. deprecated :: 0.7.3
-        Deprecated in favore of the new, more powerful
+        Deprecated in favor of the new, more powerful
         :func:`~tenpy.networks.site.set_common_charges`.
         Be aware of the slightly different argument structure though, namely that
         this function keeps charges not included in `same_charges`, whereas you need

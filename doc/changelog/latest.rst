@@ -5,6 +5,9 @@ Release Notes
 -------------
 Backwards-incompatible rewrite of TDVP!
 
+Note that measurement functions for simulations need to be updated to accept a `model` keyword argument.
+
+
 Changelog
 ---------
 
@@ -12,6 +15,9 @@ Backwards incompatible changes
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 - Replace the :class:`~tenpy.algorithms.tdvp.TDVPEngine` with a new version. 
   The previous one is for now still available as :class:`~tenpy.algorithms.tdvp.OldTDVPEngine`.
+- Measurement functions now have to take another argument `model` as well, which matches the indexing/sites of `psi`.
+  This helps to avoid special cases for grouped sites and `OrthogonalExciations`.
+  Moreover, we renamed all measurement functions to start with ``m_`` to clarify their usage, and renamed the (optional) argument `key` to `results_key`.
 - Add more fine grained sweep convergence checks for the :class:`~tenpy.algorithms.mps_common.VariationalCompression` (used when applying an MPO to an MPS!).
   In this context, we renamed the parameter `N_sweeps` to :cfg:option:`VariationalCompression.max_sweeps`.
   Further, we added the parameter :cfg:option:`VariationalCompression.min_sweeps` and :cfg:option:`VariationalCompression.tol_theta_diff`
@@ -36,7 +42,7 @@ Added
 - Allow non-trivial :attr:`~tenpy.models.lattice.Lattice.position_disorder` for lattices.
 - Option `fix_u` for :func:`~tenpy.simulations.measurement.onsite_expectation_value`.
 - Lattice :attr:`~tenpy.models.lattice.Lattice.cylinder_axis`.
-- Random number generator :attr:`~tenpy.models.model.Model.rng` for models.
+- Random number generator :attr:`~tenpy.models.model.Model.rng` for models. Any randomness of model (parameters) should use this!
 - :meth:`~tenpy.models.aklt.AKLTChain.psi_AKLT` for the exact MPS ground state of (spin-1/2) AKLT chain.
 - :func:`~tenpy.simulations.simulation.init_simulation` and :func:`~tenpy.simulations.simulation.init_simulation_from_checkpoint` for debugging or post-simulation measurement.
 - :func:`~tenpy.linalg.np_conserved.orthogonal_columns` constructing orthogonal columns to a given (rectangular) matrix.
