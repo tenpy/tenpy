@@ -98,6 +98,7 @@ Algorithm developments
 :cite:`karrasch2013` gives some tricks to do finite-temperature simulations (DMRG), which is a bit extended in :cite:`hauschild2018a`.
 :cite:`vidal2007` introduced MERA.
 The scaling :math:`S=c/6 log(\chi)` at a 1D critical point is explained in :cite:`pollmann2009`.
+:cite:`vanderstraeten2019` gives a very good introductin to infinite, uniform MPS.
 
 
 References

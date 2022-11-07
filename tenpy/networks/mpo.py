@@ -1014,6 +1014,10 @@ class MPO:
     def apply(self, psi, options):
         """Apply `self` to an MPS `psi` and compress `psi` in place.
 
+        For infinite MPS, the assumed form of `self` is a product (e.g. a time evolution operator
+        :math:`U= e^{-iH dt}`, not an (extensive) sum as a Hamiltonian would have.
+        See :ref:`iMPSWarning` for more details.
+
         Options
         -------
         .. cfg:config :: ApplyMPO

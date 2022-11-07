@@ -184,9 +184,10 @@ def test_mps_swap():
     pairs_perm = [(perm[i], perm[j]) for i, j in pairs]
     psi = mps.MPS.from_singlets(spin_half, L, pairs, bc='infinite')
     psi.permute_sites(perm)
-    psi_perm = mps.MPS.from_singlets(spin_half, L, pairs_perm, bc='finite')
-    print(psi.overlap(psi_perm), psi.norm_test())
-    assert abs(abs(psi.overlap(psi_perm)) - 1.) < 1.e-10
+    psi_perm = mps.MPS.from_singlets(spin_half, L, pairs_perm, bc=psi.bc)
+    ov = psi.overlap(psi_perm, understood_infinite=True)
+    print(ov, psi.norm_test())
+    assert abs(abs(ov) - 1.) < 1.e-10
 
     # now start from random pairs
     pairs = [(0, 3), (1, 5), (2, 4)]
@@ -255,10 +256,10 @@ def test_compute_K():
 def test_canonical_form(bc, method):
     psi = random_MPS(8, 2, 6, form=None, bc=bc)
     psi2 = psi.copy()
-    norm = np.sqrt(psi2.overlap(psi2, ignore_form=True))
+    norm = np.sqrt(psi2.overlap(psi2, ignore_form=True, understood_infinite=True))
     print("norm =", norm)
     psi2.norm /= norm  # normalize psi2
-    norm2 = psi.overlap(psi2, ignore_form=True)
+    norm2 = psi.overlap(psi2, ignore_form=True, understood_infinite=True)
     print("norm2 =", norm2)
     assert abs(norm2 - norm) < 1.e-14 * norm
     meth = getattr(psi, method)
@@ -266,7 +267,7 @@ def test_canonical_form(bc, method):
     psi.test_sanity()
     assert abs(psi.norm - norm) < 1.e-14 * norm
     psi.norm = 1.  # normalized psi
-    ov = psi.overlap(psi2, ignore_form=True)
+    ov = psi.overlap(psi2, ignore_form=True, understood_infinite=True)
     print("normalized states: overlap <psi_canonical|psi> = 1.-", 1. - ov)
     assert abs(ov - 1.) < 1.e-14
     print("norm_test")
@@ -276,7 +277,7 @@ def test_canonical_form(bc, method):
     # call canonical_form again, it shouldn't do anything now
     meth(renormalize=True)
     psi.test_sanity()
-    ov = psi.overlap(psi3)
+    ov = psi.overlap(psi3, understood_infinite=True)
     assert abs(ov - 1.) < 1.e-14
     if method in ['canonical_form_finite', 'canonical_form_infinite2']:
         # check that A = SB S^-1 is orthonormal
@@ -292,11 +293,11 @@ def test_apply_op(bc, eps=1.e-13):
     s = site.SpinHalfSite(None)
     psi0 = mps.MPS.from_singlets(s, 3, [(0, 2)], lonely=[1], bc=bc, lonely_state='up')
     psi1 = psi0.copy()
-    psi1.apply_local_op(1, 'Sigmax')  #unitary
+    psi1.apply_local_op(1, 'Sigmax', understood_infinite=True)  #unitary
     psi1_expect = mps.MPS.from_singlets(s, 3, [(0, 2)], lonely=[1], bc=bc, lonely_state='down')
     psi1 = psi0.copy()
-    psi1.apply_local_op(1, 'Sm')  #non-unitary
-    assert abs(psi1_expect.overlap(psi1) - 1.) < eps
+    psi1.apply_local_op(1, 'Sm', understood_infinite=True)  #non-unitary
+    assert abs(psi1_expect.overlap(psi1, understood_infinite=True) - 1.) < eps
 
     psi2 = psi0.copy()
     th = psi2.get_theta(0, 3).to_ndarray().reshape((8, ))
@@ -338,7 +339,7 @@ def test_roll_mps_unit_cell():
     psi3 = psi.copy()
     psi3.spatial_inversion()
     psi3.test_sanity()
-    ov = psi3.overlap(psi_m_1)
+    ov = psi3.overlap(psi_m_1, understood_infinite=True)
     assert abs(ov - 1.) < 1.e-14
 
 
@@ -354,7 +355,7 @@ def test_mps_enlarge_chi(eps=1.e-14):
     psi_enl = psi.copy()
     psi_enl.enlarge_chi(extra_legs)
     assert np.max(psi_enl.norm_test()) < eps
-    assert abs(psi_enl.overlap(psi) - 1.) < eps
+    assert abs(psi_enl.overlap(psi, understood_infinite=True) - 1.) < eps
 
     # finite
     psi = mps.MPS.from_product_state([s] * 8, ['up', 'down'] * 4, bc='finite')
@@ -365,7 +366,7 @@ def test_mps_enlarge_chi(eps=1.e-14):
     psi_enl = psi.copy()
     psi_enl.enlarge_chi(extra_legs)
     assert np.max(psi_enl.norm_test()) < eps
-    assert abs(psi_enl.overlap(psi) - 1.) < eps
+    assert abs(psi_enl.overlap(psi, understood_infinite=True) - 1.) < eps
 
 
 def test_group():
@@ -378,7 +379,7 @@ def test_group():
     psi2.test_sanity()
     psi2.group_split({'chi_max': 2**3})
     psi2.test_sanity()
-    ov = psi1.overlap(psi2)
+    ov = psi1.overlap(psi2, understood_infinite=True)
     assert abs(1. - ov) < 1.e-14
     psi4 = psi1.copy()
     print("group n=4")
@@ -386,7 +387,7 @@ def test_group():
     psi4.test_sanity()
     psi4.group_split({'chi_max': 2**3})
     psi4.test_sanity()
-    ov = psi1.overlap(psi4)
+    ov = psi1.overlap(psi4, understood_infinite=True)
     assert abs(1. - ov) < 1.e-14
 
 

@@ -77,8 +77,9 @@ def test_ExpMPOEvolution(bc_MPS, approximation, compression, g=1.5):
             EngTEBD.run()
             psi = eng.run()
             print(psi.norm)
-            print(abs(abs(psi.overlap(psiTEBD)) - 1), abs(psi.overlap(psiTEBD) - 1))
-            assert (abs(abs(psi.overlap(psiTEBD)) - 1) < 1e-4)
+            ov = psi.overlap(psiTEBD, understood_infinite=True)
+            print(abs(abs(ov) - 1), abs(ov - 1))
+            assert (abs(abs(ov) - 1) < 1e-4)
 
 
 def fermion_TFI_H(L, g=1.5, J=1.):
