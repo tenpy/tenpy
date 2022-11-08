@@ -224,6 +224,36 @@ class Model(Hdf5Exportable):
         self.lat = TrivialLattice(grouped_sites, bc_MPS=self.lat.bc_MPS, bc='periodic')
         return grouped_sites
 
+    def update_time_parameter(self, new_time):
+        """Reconstruct Hamiltonian for time-dependent models, potentially (!) in-place.
+
+        For :class:`~tenpy.algorithms.algorithm.TimeDependentHAlgorithm`, we assume that the model
+        reads out the parameter ``self.options['time']``, and reinitialize/update the model
+        calling this method.
+
+        Paramters
+        ---------
+        new_time : float
+            Time at which the (time-dependent) Hamiltonian should be constructed.
+
+        Returns
+        -------
+        updated_model : :class:`model`
+            Model of the same class as `self` with Hamiltonian at time `new_time`.
+            Note that it *can* just be a reference to `self` if modified in place, or an entirely
+            new constructed model.
+        """
+        # eventually, we should implement
+        if not hasattr(self, 'options'):
+            msg = ("update_time_parameter assumes that the model has `options` defined, reads out "
+                   "`options['time']` and can be reinitialized from the options alone. "
+                   "However, the model {name:s} does not define options.")
+            raise NotImplementedError(msg.format(name=self.__class__.__name__))
+        cls = self.__class__
+        model_params = self.options
+        model_params['time'] = new_time
+        return cls(model_params)
+
 
 class NearestNeighborModel(Model):
     r"""Base class for a model of nearest neigbor interactions w.r.t. the MPS index.

@@ -20,9 +20,14 @@ Backwards incompatible changes
   Moreover, we renamed all measurement functions to start with ``m_`` to clarify their usage, and renamed the (optional) argument `key` to `results_key`.
 - Add more fine grained sweep convergence checks for the :class:`~tenpy.algorithms.mps_common.VariationalCompression` (used when applying an MPO to an MPS!).
   In this context, we renamed the parameter `N_sweeps` to :cfg:option:`VariationalCompression.max_sweeps`.
-  Further, we added the parameter :cfg:option:`VariationalCompression.min_sweeps` and :cfg:option:`VariationalCompression.tol_theta_diff`
+  Further, we added the parameter :cfg:option:`VariationalCompression.min_sweeps` and :cfg:option:`VariationalCompression.tol_theta_diff`.
 - Adjusted default paramters of :meth:`tenpy.networks.mps.InitialStateBuilder.randomized` to be as documented with better ``chi_max``.
 - No longer return `ov` from :func:`tenpy.linalg.lanczos.gram_schmidt`.
+- Unify structure of  :class:`tenpy.algorithms.algorithm.TimeEvolutionAlgorithm` subclasses
+  (e.g. :class:`tenpy.algorihtms.tebd.TEBDEngine`, :class:`tenpy.algorithms.tdvp.TDVPEngine` 
+  and :class:`tenpy.algorithms.mpo_evolution.ExpMPOEvolution`).
+  In particular, define the default values for ``N_steps=1`` and ``dt=0.1`` are now the same for these classes;
+  Previously, TEBD had a default of ``N_steps=10``, and the ExpMPOEvolution had ``dt=0.01``.
 - Add option `sort_charge` to the :class:`~tenpy.networks.site.Site` (calling the new :meth:`~tenpy.networks.site.Site.sort_charge` method).
   Using `True` sorts the charges of the physical leg and thus helps to reduce overhead when using charge conservation.
   However, doing this can lead to inconsistencies between saved data and newly generated data (after updating TeNPy). 
@@ -66,6 +71,8 @@ Changed
 - Split up :meth:`tenpy.networks.mpo.MPO.expectation_value` into :meth:`~tenpy.networks.mpo.MPO.expectation_value_finite`
   and :meth:`~tenpy.networks.mpo.MPO.expectation_value_power` and add :meth:`tenpy.networks.mpo.MPO.expectation_value_TM`
 - Enhanced documentation of the lattices with more plots.
+- Renamed ``prepare_update`` function of :class:`tenpy.algorithms.mps_common.Sweep` to 
+  :meth:`~tenpy.algorithm.mps_common.prepare_update_local`.
 
 Fixed
 ^^^^^
