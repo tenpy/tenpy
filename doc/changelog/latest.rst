@@ -5,6 +5,9 @@ Release Notes
 -------------
 Backwards-incompatible rewrite of TDVP!
 
+Note that measurement functions for simulations need to be updated to accept a `model` keyword argument, see :issue:`182`.
+
+
 Changelog
 ---------
 
@@ -12,6 +15,9 @@ Backwards incompatible changes
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 - Replace the :class:`~tenpy.algorithms.tdvp.TDVPEngine` with a new version. 
   The previous one is for now still available as :class:`~tenpy.algorithms.tdvp.OldTDVPEngine`.
+- Measurement functions now have to take another argument `model` as well, which matches the indexing/sites of `psi`.
+  This helps to avoid special cases for grouped sites and `OrthogonalExciations`.
+  Moreover, we renamed all measurement functions to start with ``m_`` to clarify their usage, and renamed the (optional) argument `key` to `results_key`.
 - Add more fine grained sweep convergence checks for the :class:`~tenpy.algorithms.mps_common.VariationalCompression` (used when applying an MPO to an MPS!).
   In this context, we renamed the parameter `N_sweeps` to :cfg:option:`VariationalCompression.max_sweeps`.
   Further, we added the parameter :cfg:option:`VariationalCompression.min_sweeps` and :cfg:option:`VariationalCompression.tol_theta_diff`.
@@ -22,7 +28,13 @@ Backwards incompatible changes
   and :class:`tenpy.algorithms.mpo_evolution.ExpMPOEvolution`).
   In particular, define the default values for ``N_steps=1`` and ``dt=0.1`` are now the same for these classes;
   Previously, TEBD had a default of ``N_steps=10``, and the ExpMPOEvolution had ``dt=0.01``.
-
+- Add option `sort_charge` to the :class:`~tenpy.networks.site.Site` (calling the new :meth:`~tenpy.networks.site.Site.sort_charge` method).
+  Using `True` sorts the charges of the physical leg and thus helps to reduce overhead when using charge conservation.
+  However, doing this can lead to inconsistencies between saved data and newly generated data (after updating TeNPy). 
+  Hence, for now we keep the current default `False` behaviour, but raise a warning that you should set this option explicitly for cases where it changes things.
+  Set it to `False`, if you already have data (for your particular model), that you want to be able to load/compare to.
+  If you start a new project and don't have data yet, set it to `True`.
+  We will change the default behaviour from `False` to `True` in version 1.0. See also :issue:`175`.
 
 Added
 ^^^^^
@@ -35,7 +47,7 @@ Added
 - Allow non-trivial :attr:`~tenpy.models.lattice.Lattice.position_disorder` for lattices.
 - Option `fix_u` for :func:`~tenpy.simulations.measurement.onsite_expectation_value`.
 - Lattice :attr:`~tenpy.models.lattice.Lattice.cylinder_axis`.
-- Random number generator :attr:`~tenpy.models.model.Model.rng` for models.
+- Random number generator :attr:`~tenpy.models.model.Model.rng` for models. Any randomness of model (parameters) should use this!
 - :meth:`~tenpy.models.aklt.AKLTChain.psi_AKLT` for the exact MPS ground state of (spin-1/2) AKLT chain.
 - :func:`~tenpy.simulations.simulation.init_simulation` and :func:`~tenpy.simulations.simulation.init_simulation_from_checkpoint` for debugging or post-simulation measurement.
 - :func:`~tenpy.linalg.np_conserved.orthogonal_columns` constructing orthogonal columns to a given (rectangular) matrix.
@@ -50,6 +62,7 @@ Added
 
 Changed
 ^^^^^^^
+- Raise a warning about iMPS conventions in MPS :meth:`~tenpy.networks.mps.MPS.overlap`, :meth:`~tenpy.networks.mps.MPS.apply_local_op`, which you can suppress with a new ``understood_infinite=True`` argument. See :ref:`iMPSWarning` for details.
 - Renamed ``tenpy.networks.mpo.MPOGraph.add_string`` to :meth:`~tenpy.networks.mpo.MPOGraph.add_string_left_to_right`
   as part of the fix for :issue:`148`. Added similar :meth:`~tenpy.networks.mpo.MPOGraph.add_string_left_to_right`.
 - Automatically shift terms in :meth:`~tenpy.networks.mps.MPS.expectation_value_terms_sum` to start in the MPS unit cell for infinite MPS.

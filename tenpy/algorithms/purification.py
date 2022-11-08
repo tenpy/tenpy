@@ -95,13 +95,13 @@ class PurificationTEBD(tebd.TEBDEngine):
 
         disentangle : None | str
             Method for disentangling.
-            See :func:`~tenpy.algorithm.disentangler.get_disentangler`.
+            See :func:`~tenpy.algorithms.disentangler.get_disentangler`.
 
     Attributes
     ----------
     used_disentangler : :class:`Disentangler`
         The disentangler to be used on the auxiliar indices.
-        Chosen by :func:`~tenpy.algorithm.disentangler.get_disentangler`,
+        Chosen by :func:`~tenpy.algorithms.disentangler.get_disentangler`,
         called with the TEBD parameter ``'disentangle'``.
         Defaults to the trivial disentangler for ``options['disentangle']=None``.
     _disent_iterations : 1D ndarray
@@ -142,7 +142,7 @@ class PurificationTEBD(tebd.TEBDEngine):
 
     @property
     def disent_iterations(self):
-        """For each bond the total number of iterations performed in any :class:`Disentangler`."""
+        """For each bond the total number of iterations performed in any Disentangler."""
         return self._disent_iterations[self.psi.nontrivial_bonds]
 
     def calc_U(self, order, delta_t, type_evo='real', E_offset=None):
@@ -274,7 +274,7 @@ class PurificationTEBD(tebd.TEBDEngine):
 
         The behaviour of this function is set by :attr:`used_disentangler`,
         which in turn is obtained from ``get_disentangler(options['disentangle'])``,
-        see :func:`~tenpy.algorithm.disentangler.get_disentangler` for details on the syntax.
+        see :func:`~tenpy.algorithms.disentangler.get_disentangler` for details on the syntax.
 
         Parameters
         ----------

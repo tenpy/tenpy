@@ -1,6 +1,7 @@
 """Defines a class describing the local physical Hilbert space.
 
 The :class:`Site` is the prototype, read it's docstring.
+
 """
 # Copyright 2018-2021 TeNPy Developers, GNU GPLv3
 
@@ -35,6 +36,19 @@ class Site(Hdf5Exportable):
         This is a *necessary* feature since we need to sort the basis by charges for efficiency.
         We use the :attr:`state_labels` and :attr:`perm` to keep track of these permutations.
 
+    .. versionchanged :: 0.10
+
+        Add the option `sort_charge`. Right now the default behavriou is ``False`` for
+        backwards compatibility, but we will change it for Version 1.0 to ``True``.
+        For now, we raise a warning in cases where it can lead to changes.
+        If you see this warning, just set the value explicitly to avoid breaking compatibility of
+        existing data with future releases.
+        Set it to `False`, if you already have data (for your particular model),
+        that you want to be able to load/compare to.
+        If you start a new project and don't have data yet, set it to `True`.
+        See also the `breaking changes` section in the release notes.
+
+
     Parameters
     ----------
     leg : :class:`~tenpy.linalg.charges.LegCharge`
@@ -46,6 +60,13 @@ class Site(Hdf5Exportable):
         The identity operator ``'Id'`` is automatically included.
         If no ``'JW'`` for the Jordan-Wigner string is given,
         ``'JW'`` is set as an alias to ``'Id'``.
+    sort_charge : bool | None
+        Whether :meth:`sort_charge` should be called at the end of initialization.
+        This is usually a good idea to reduce potential overhead when using charge conservation.
+        Note that this might permute the order of the local basis states!
+        For backwards compatibility with existing data, it is not (yet) enabled by default,
+        but we started to warn about the behaviour.
+        Explicitly set `sort_charge=False` to disable the warning.
 
     Attributes
     ----------
@@ -74,6 +95,10 @@ class Site(Hdf5Exportable):
     hc_ops : dict(str->str)
         Mapping from operator names to their hermitian conjugates.
         Use :meth:`get_hc_op_name` to obtain entries.
+    used_sort_charge : bool
+        Whether :meth:`sort_charge` was called.
+        Note that the default argument for `sort_dense` in :meth:`add_op` changes to True in that
+        case, to ensure a consistent use.
 
     Examples
     --------
@@ -97,7 +122,8 @@ class Site(Hdf5Exportable):
     [[1. 0.]
      [0. 0.]]
     """
-    def __init__(self, leg, state_labels=None, **site_ops):
+    def __init__(self, leg, state_labels=None, sort_charge=False, **site_ops):
+        self.used_sort_charge = False
         self.leg = leg
         self.state_labels = dict()
         if state_labels is not None:
@@ -107,15 +133,28 @@ class Site(Hdf5Exportable):
         self.opnames = set()
         self.need_JW_string = set(['JW'])
         self.hc_ops = {}
+        if not hasattr(self, 'perm'):  # default permutation for the local states
+            self.perm = np.arange(self.dim)
         self.add_op('Id', npc.diag(1., self.leg), hc='Id')
         for name, op in site_ops.items():
             self.add_op(name, op)
-        if not hasattr(self, 'perm'):  # default permutation for the local states
-            self.perm = np.arange(self.dim)
         if 'JW' not in self.opnames:
             # include trivial `JW` to allow combinations
             # of bosonic and fermionic sites in an MPS
             self.add_op('JW', self.Id, hc='JW')
+        if sort_charge:
+            self.sort_charge()
+        elif sort_charge is None:
+            if not (leg.sorted and leg.bunched):
+                msg = (f"LegCharge of physical leg in site {self!s} is not sorted. "
+                       "You should explicitly set `sort_charge`. "
+                       "Set it to False, if you already have saved data for your model and want "
+                       "to be able to load it/keep backwards compatibility. "
+                       "For new projects, if you don't have data yet, set it to `True`. "
+                       "We will switch the default from False to True in version 1.0, "
+                       "which breaks compatibility of existing data with "
+                       "code/models that don't explicitly set sort_legcharge.")
+                warnings.warn(msg, FutureWarning, 2)
         self.test_sanity()
 
     def change_charge(self, new_leg_charge=None, permute=None):
@@ -139,9 +178,7 @@ class Site(Hdf5Exportable):
             permute = np.asarray(permute, dtype=np.intp)
             inv_perm = inverse_permutation(permute)
             self.perm = self.perm[permute]
-            state_labels = self.state_labels.copy()
-            for label in state_labels:
-                self.state_labels[label] = inv_perm[state_labels[label]]
+            self.state_labels = dict((lbl, inv_perm[i]) for lbl, i in self.state_labels.items())
         for opname in self.opnames.copy():
             op = self.get_op(opname).to_ndarray()
             self.opnames.remove(opname)
@@ -149,8 +186,30 @@ class Site(Hdf5Exportable):
             if permute is not None:
                 op = op[np.ix_(permute, permute)]
             # need_JW and hc_ops are still set
-            self.add_op(opname, op, need_JW=False, hc=False)
+            self.add_op(opname, op, need_JW=False, hc=False, permute_dense=False)
         # done
+
+    def sort_charge(self, bunch=True):
+        """Sort the :attr:`leg` charges (in place).
+
+        Parameters
+        ----------
+        bunch : bool
+            Whether to also group equal charges into larger blocks (usually a good idea).
+
+        Returns
+        -------
+        perm : 1D ndarray
+            The permutation
+        """
+        if self.leg.sorted and (not bunch or self.leg.bunched):
+            return np.arange(self.dim, dtype=np.intp) # nothing to do
+        perm_qind, leg_sorted = self.leg.sort(bunch)
+        perm_flat = self.leg.perm_flat_from_perm_qind(perm_qind)
+        self.change_charge(leg_sorted, perm_flat)
+        # change_charge updates self.state_label and self.perm
+        self.used_sort_charge = True
+        return perm_flat
 
     def test_sanity(self):
         """Sanity check, raises ValueErrors, if something is wrong."""
@@ -192,7 +251,7 @@ class Site(Hdf5Exportable):
         """
         return dict([(name, getattr(self, name)) for name in sorted(self.opnames)])
 
-    def add_op(self, name, op, need_JW=False, hc=None, permute_dense=False):
+    def add_op(self, name, op, need_JW=False, hc=None, permute_dense=None):
         """Add one on-site operators.
 
         Parameters
@@ -213,11 +272,12 @@ class Site(Hdf5Exportable):
             The name for the hermitian conjugate operator, to be used for :attr:`hc_ops`.
             By default (``None``), try to auto-determine it.
             If ``False``, disable adding antries to :attr:`hc_ops`.
-        permute_dense : bool
+        permute_dense : bool | None
             Flag to enable/disable permuations when converting `op` from numpy to
             np_conserved arrays.
             If True, the operator is permuted with :attr:`perm` to account for permutations
-            induced by sorting charges.
+            induced by sorting charges; False disables the permutations.
+            By default (``None``), the value of :attr:`used_sort_charge` is used.
         """
         name = str(name)
         if not name.isidentifier():
@@ -230,6 +290,8 @@ class Site(Hdf5Exportable):
             op = np.asarray(op)
             if op.shape != (self.dim, self.dim):
                 raise ValueError("wrong shape of on-site operator")
+            if permute_dense is None:
+                permute_dense = self.used_sort_charge
             if permute_dense:
                 perm = self.perm
                 op = op[np.ix_(perm, perm)]
@@ -575,6 +637,7 @@ class GroupedSite(Site):
 
         # initialize Site
         Site.__init__(self, pipe, None, JW=JW_all)
+        # note: the pipe is sorted, so sort_charge option doesn't matter
 
         # set state labels
         for states_labels in itertools.product(*[s.state_labels.items() for s in sites]):
@@ -661,7 +724,7 @@ def group_sites(sites, n=2, labels=None, charges='same'):
     return grouped_sites
 
 
-def set_common_charges(sites, new_charges='same', new_names=None, new_mod=None):
+def set_common_charges(sites, new_charges='same', new_names=None, new_mod=None, sort_charge=True):
     r"""Adjust the charges of the given sites *in place* such that they can be used together.
 
     Before we can contract operators (and tensors) corresponding to different :class:`Site`
@@ -704,11 +767,14 @@ def set_common_charges(sites, new_charges='same', new_names=None, new_mod=None):
     new_mod : list of int
         :attr:`~tenpy.linalg.charges.ChargeInfo.mod` for the new charges, one entry for each list
         in `new_charges`. Defaults to the `mod` of the old charges, if not specified otherwise.
+    sort_charge : bool
+        Whether to sort the physical legs by charges.
 
     Returns
     -------
     perms : list of ndarray
         For each site the permutation performed on the physical leg to sort by charges.
+        Only returned if `sort_charge` is True.
 
     Examples
     --------
@@ -837,7 +903,6 @@ def set_common_charges(sites, new_charges='same', new_names=None, new_mod=None):
         >>> set_common_charges([ferm, bos], [[(1, 0, 'N'), (2, 1, 'N')]], ['N_f + 2 N_b'])
         [array([0, 1]), array([0, 1, 2, 3])]
 
-    Finally, it can sometimes be convenient to change the charges of the
     The ``new_charges='drop'`` or ``new_charges=[]`` option is a quick way to remove any charges.
 
     .. doctest :: set_common_charges
@@ -921,11 +986,15 @@ def set_common_charges(sites, new_charges='same', new_names=None, new_mod=None):
                     new_qflat[:, new_i] += old_qflat_i
         # update the site with the new charges
         leg_unsorted = npc.LegCharge.from_qflat(new_chinfo, new_qflat, site.leg.qconj)
-        perm_qind, leg = leg_unsorted.sort()
-        perm_flat = leg_unsorted.perm_flat_from_perm_qind(perm_qind)
-        perms.append(perm_flat)
+        if sort_charge:
+            perm_qind, leg = leg_unsorted.sort()
+            perm_flat = leg_unsorted.perm_flat_from_perm_qind(perm_qind)
+            perms.append(perm_flat)
+        else:
+            perm_flat = None
         site.change_charge(leg, perm_flat)
-    return perms
+    if sort_charge:
+        return perms
 
 
 def multi_sites_combine_charges(sites, same_charges=[]):
@@ -936,7 +1005,7 @@ def multi_sites_combine_charges(sites, same_charges=[]):
     This function adjusts the charges of these sites such that they can be used together.
 
     .. deprecated :: 0.7.3
-        Deprecated in favore of the new, more powerful
+        Deprecated in favor of the new, more powerful
         :func:`~tenpy.networks.site.set_common_charges`.
         Be aware of the slightly different argument structure though, namely that
         this function keeps charges not included in `same_charges`, whereas you need
@@ -1106,13 +1175,18 @@ class SpinHalfSite(Site):
     ----------
     conserve : str | None
         Defines what is conserved, see table above.
+    sort_charge : bool
+        Whether :meth:`sort_charge` should be called at the end of initialization.
+        This is usually a good idea to reduce potential overhead when using charge conservation.
+        Note that this permutes the order of the local basis states!
+        For backwards compatibility with existing data, it is not (yet) enabled by default.
 
     Attributes
     ----------
     conserve : str
         Defines what is conserved, see table above.
     """
-    def __init__(self, conserve='Sz'):
+    def __init__(self, conserve='Sz', sort_charge=None):
         if not conserve:
             conserve = 'None'
         if conserve not in ['Sz', 'parity', 'None']:
@@ -1135,7 +1209,7 @@ class SpinHalfSite(Site):
                 leg = npc.LegCharge.from_trivial(2)
         self.conserve = conserve
         # Specify Hermitian conjugates
-        Site.__init__(self, leg, ['up', 'down'], **ops)
+        Site.__init__(self, leg, ['up', 'down'], sort_charge=sort_charge, **ops)
         # further alias for state labels
         self.state_labels['-0.5'] = self.state_labels['down']
         self.state_labels['0.5'] = self.state_labels['up']
@@ -1180,6 +1254,11 @@ class SpinSite(Site):
     ----------
     conserve : str
         Defines what is conserved, see table above.
+    sort_charge : bool
+        Whether :meth:`sort_charge` should be called at the end of initialization.
+        This is usually a good idea to reduce potential overhead when using charge conservation.
+        Note that this permutes the order of the local basis states for ``conserve='parity'``!
+        For backwards compatibility with existing data, it is not (yet) enabled by default.
 
     Attributes
     ----------
@@ -1188,7 +1267,7 @@ class SpinSite(Site):
     conserve : str
         Defines what is conserved, see table above.
     """
-    def __init__(self, S=0.5, conserve='Sz'):
+    def __init__(self, S=0.5, conserve='Sz', sort_charge=None):
         if not conserve:
             conserve = 'None'
         if conserve not in ['Sz', 'parity', 'None']:
@@ -1230,7 +1309,7 @@ class SpinSite(Site):
                 leg = npc.LegCharge.from_trivial(d)
         self.conserve = conserve
         names = [str(i) for i in np.arange(-S, S + 1, 1.)]
-        Site.__init__(self, leg, names, **ops)
+        Site.__init__(self, leg, names, sort_charge=sort_charge, **ops)
         self.state_labels['down'] = self.state_labels[names[0]]
         self.state_labels['up'] = self.state_labels[names[-1]]
 
@@ -1305,7 +1384,7 @@ class FermionSite(Site):
             leg = npc.LegCharge.from_trivial(2)
         self.conserve = conserve
         self.filling = filling
-        Site.__init__(self, leg, ['empty', 'full'], **ops)
+        Site.__init__(self, leg, ['empty', 'full'], sort_charge=True, **ops)
         # specify fermionic operators
         self.need_JW_string |= set(['C', 'Cd', 'JW'])
 
@@ -1472,20 +1551,11 @@ class SpinHalfFermionSite(Site):
             else:  # len(charges) == 2: need to transpose
                 charges = [[q1, q2] for q1, q2 in zip(charges[0], charges[1])]
             chinfo = npc.ChargeInfo(qmod, qnames)
-            leg_unsorted = npc.LegCharge.from_qflat(chinfo, charges)
-            # sort by charges
-            perm_qind, leg = leg_unsorted.sort()
-            perm_flat = leg_unsorted.perm_flat_from_perm_qind(perm_qind)
-            self.perm = perm_flat
-            # permute operators accordingly
-            for opname in ops:
-                ops[opname] = ops[opname][np.ix_(perm_flat, perm_flat)]
-            # and the states
-            states = [states[i] for i in perm_flat]
+            leg = npc.LegCharge.from_qflat(chinfo, charges)
         self.cons_N = cons_N
         self.cons_Sz = cons_Sz
         self.filling = filling
-        Site.__init__(self, leg, states, **ops)
+        Site.__init__(self, leg, states, sort_charge=True, **ops)
         # specify fermionic operators
         self.need_JW_string |= set(['Cu', 'Cdu', 'Cd', 'Cdd', 'JWu', 'JWd', 'JW'])
 
@@ -1566,22 +1636,13 @@ class BosonSite(Site):
             leg = npc.LegCharge.from_qflat(chinfo, range(dim))
         elif conserve == 'parity':
             chinfo = npc.ChargeInfo([2], ['parity_N'])
-            leg_unsorted = npc.LegCharge.from_qflat(chinfo, [i % 2 for i in range(dim)])
-            # sort by charges
-            perm_qind, leg = leg_unsorted.sort()
-            perm_flat = leg_unsorted.perm_flat_from_perm_qind(perm_qind)
-            self.perm = perm_flat
-            # permute operators accordingly
-            for opname in ops:
-                ops[opname] = ops[opname][np.ix_(perm_flat, perm_flat)]
-            # and the states
-            states = [states[i] for i in perm_flat]
+            leg = npc.LegCharge.from_qflat(chinfo, [i % 2 for i in range(dim)])
         else:
             leg = npc.LegCharge.from_trivial(dim)
         self.Nmax = Nmax
         self.conserve = conserve
         self.filling = filling
-        Site.__init__(self, leg, states, **ops)
+        Site.__init__(self, leg, states, sort_charge=True, **ops)
         self.state_labels['vac'] = self.state_labels['0']  # alias
 
     def __repr__(self):

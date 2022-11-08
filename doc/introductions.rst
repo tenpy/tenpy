@@ -15,6 +15,7 @@ If you are new to TeNPy, read the :doc:`intro/overview`.
     intro/input_output
     intro/logging
     intro/options
+    intro/measurements
     intro/npc
     intro/JordanWigner
     intro/dmrg-protocol

@@ -325,7 +325,7 @@ class NearestNeighborModel(Model):
         .. doctest :: from_MPOModel
 
             >>> from tenpy.models.spins_nnn import SpinChainNNN2
-            >>> nnn_chain = SpinChainNNN2({'L': 20})
+            >>> nnn_chain = SpinChainNNN2({'L': 20, 'sort_charge': True})
             >>> print(isinstance(nnn_chain, NearestNeighborModel))
             False
             >>> print("range before grouping:", nnn_chain.H_MPO.max_range)

@@ -9,7 +9,7 @@ from tenpy.networks import site
 from tenpy.networks import mpo
 from tenpy.linalg.np_conserved import LegCharge
 
-spin_half = site.SpinHalfSite(conserve='Sz')
+spin_half = site.SpinHalfSite(conserve='Sz', sort_charge=True)
 fermion = site.FermionSite(conserve='N')
 dummy = site.Site(spin_half.leg)
 

@@ -148,7 +148,7 @@ class Sweep(Algorithm):
         if not sequential_simulations:
             data['sweeps'] = self.sweeps
             if len(self.ortho_to_envs) > 0:
-                if self.bc == 'finite':
+                if self.psi.bc == 'finite':
                     data['orthogonal_to'] = [e.ket for e in self.ortho_to_envs]
                 else:
                     # need the environments as well

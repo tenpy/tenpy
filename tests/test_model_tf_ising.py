@@ -6,7 +6,7 @@ import pytest
 
 
 def test_TFIChain_general():
-    check_general_model(TFIChain, dict(L=4, J=1., bc_MPS='finite'), {
+    check_general_model(TFIChain, dict(L=4, J=1., bc_MPS='finite', sort_charge=True), {
         'conserve': [None, 'parity'],
         'g': [0., 0.2]
     })
@@ -15,7 +15,7 @@ def test_TFIChain_general():
 @pytest.mark.slow
 def test_TFIModel2D_general():
     check_general_model(
-        TFIModel, dict(Lx=2, J=1., g=0.1), {
+        TFIModel, dict(Lx=2, J=1., g=0.1, sort_charge=True), {
             'Ly': [2, 3],
             'bc_MPS': ['finite', 'infinite'],
             'bc_y': ['ladder', 'cylinder'],

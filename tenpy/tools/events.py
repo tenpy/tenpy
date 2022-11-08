@@ -14,7 +14,7 @@ from .hdf5_io import find_global
 
 __all__ = ['Listener', 'EventHandler']
 
-Listener = namedtuple('Listener', "listener_id, callback, priority")
+Listener = namedtuple('Listener', "listener_id, callback, priority, extra_kwargs")
 
 
 class EventHandler:
@@ -122,7 +122,7 @@ class EventHandler:
             raise ValueError("connect() hasn't been called yet!'")
         return self._id_counter - 1
 
-    def connect(self, callback=None, priority=0):
+    def connect(self, callback=None, priority=0, extra_kwargs=None):
         """Register a `callback` function as a listener to the event.
 
         You can either call this function directly or use it as a function decorator,
@@ -138,6 +138,9 @@ class EventHandler:
         priority : int
             Higher priority indicates that the callback function should be called before other
             possibly registered callback functions.
+        extra_kwargs : None | dict
+            Optional extra keyword arguments given directly to the function.
+            ``None`` is equivalent to ``{}``.
 
         Returns
         -------
@@ -156,10 +159,12 @@ class EventHandler:
             return property
         listener_id = self._id_counter
         self._id_counter += 1
-        self.listeners.append(Listener(listener_id, callback, priority))
+        if extra_kwargs is None:
+            extra_kwargs = {}
+        self.listeners.append(Listener(listener_id, callback, priority, extra_kwargs))
         return callback
 
-    def connect_by_name(self, module_name, func_name, kwargs=None, priority=0):
+    def connect_by_name(self, module_name, func_name, extra_kwargs=None, priority=0):
         """Connect to a function given by the name in a module, optionally inserting arguments.
 
         Parameters
@@ -168,16 +173,15 @@ class EventHandler:
             The name of the module containing the function to be used. Gets imported.
         func_name : str
             The (qualified) name of the function inside the module.
-        kwargs : dict
+        extra_kwargs : dict
             Optional extra keyword-arguments to be given to the function.
+            ``None`` is equivalent to ``{}``.
         priority : int
             Higher priority indicates that the callback function should be called before other
             possibly registered callback functions.
         """
         func = find_global(module_name, func_name)
-        if kwargs is not None:
-            func = functools.partial(func, **kwargs)
-        self.connect(func, priority)
+        self.connect(func, priority, extra_kwargs)
 
     def disconnect(self, listener_id):
         """De-register a listener.
@@ -197,6 +201,12 @@ class EventHandler:
     def emit(self, *args, **kwargs):
         """Call the `callback` functions of all listeners.
 
+        Parameters
+        ----------
+        *args, **kwargs:
+            (Keyword) arguments to give to the callback functions.
+            Recall that there can also be addiontal `extra_kwargs` for each callback function.
+
         Returns
         -------
         results : list
@@ -204,21 +214,20 @@ class EventHandler:
         """
         self._prepare_emit()
         results = []
-        for _, callback, _ in self.listeners:
-            res = callback(*args, **kwargs)
+        for _, callback, _, extra_kwargs in self.listeners:
+            res = callback(*args, **kwargs, **extra_kwargs)
             results.append(res)
         return results
 
     def emit_until_result(self, *args, **kwargs):
         """Call the listeners `callback` until one returns not `None`."""
         self._prepare_emit()
-        for _, callback, _ in self.listeners:
-            res = callback(*args, **kwargs)
+        for _, callback, _, extra_kwargs in self.listeners:
+            res = callback(*args, **kwargs, **extra_kwargs)
             if res is not None:
                 return res
         return None
 
     def _prepare_emit(self):
-        # TODO: logging?
         # sort listeners: highest priority first
         self.listeners = sorted(self.listeners, key=lambda listener: -listener.priority)
