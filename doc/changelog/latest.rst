@@ -7,6 +7,8 @@ Backwards-incompatible rewrite of TDVP!
 
 Note that measurement functions for simulations need to be updated to accept a `model` keyword argument, see :issue:`182`.
 
+Should still work on Python 3.6, but officially support Python 3.7-3.11.
+
 
 Changelog
 ---------
