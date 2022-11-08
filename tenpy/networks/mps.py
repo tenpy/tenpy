@@ -3514,7 +3514,7 @@ class MPS:
 
     def apply_local_op(self, i, op, unitary=None, renormalize=False, cutoff=1.e-13,
                        understood_infinite=False):
-        """Apply a local (one or multi-site) operator to `self`.
+        r"""Apply a local (one or multi-site) operator to `self`.
 
         Note that this destroys the canonical form if the local operator is non-unitary.
         Therefore, this function calls :meth:`canonical_form` if necessary.
