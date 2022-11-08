@@ -11,7 +11,7 @@ We have implemented:
 1. The one-site formulation following the TDVP princible in :class:`SingleSiteTDVPEngine`,
    which **does not** allow for growth of the bond dimension.
 
-2. The two-site algorithm in the :Class:`TwoSiteDMRGEngine`, which does allow the bond
+2. The two-site algorithm in the :class:`TwoSiteTDVPEngine`, which does allow the bond
    dimension to grow - but requires truncation as in the TEBD case, and is no longer strictly TDVP,
    i.e. it does *not* strictly preserve the energy.
 
@@ -34,7 +34,7 @@ Much of the code is very similar to DMRG, and also based on the
 from tenpy.linalg.lanczos import LanczosEvolution
 from tenpy.algorithms.truncation import svd_theta, TruncationError
 from tenpy.algorithms.mps_common import Sweep, ZeroSiteH, OneSiteH, TwoSiteH
-from tenpy.algorithms.algorithm import TimeEvolutionAlgorithm
+from tenpy.algorithms.algorithm import TimeEvolutionAlgorithm, TimeDependentHAlgorithm
 from tenpy.networks.mpo import MPOEnvironment
 from tenpy.linalg import np_conserved as npc
 import numpy as np
@@ -45,7 +45,8 @@ import logging
 logger = logging.getLogger(__name__)
 
 __all__ = ['TDVPEngine', 'SingleSiteTDVPEngine', 'TwoSiteTDVPEngine',
-           'OldTDVPEngine', 'Engine', 'H0_mixed', 'H1_mixed', 'H2_mixed']
+           'TimeDependentSingleSiteTDVP', 'TimeDependentTwoSiteTDVP', 'OldTDVPEngine', 'Engine',
+           'H0_mixed', 'H1_mixed', 'H2_mixed']
 
 
 class TDVPEngine(TimeEvolutionAlgorithm, Sweep):
@@ -102,44 +103,27 @@ class TDVPEngine(TimeEvolutionAlgorithm, Sweep):
         super().__init__(psi, model, options, **kwargs)
         self.lanczos_options = self.options.subconfig('lanczos_options')
 
-    def run(self):
-        """Run TEBD real time evolution by `N_steps`*`dt`."""
-        # initialize parameters
-        self.dt = self.options.get('dt', 0.1)
-        N_steps = self.options.get('N_steps', 1)
+    # run() from TimeEvolutionAlgorithm
 
-        Sold = np.mean(self.psi.entanglement_entropy())
-        start_time = time.time()
+    def prepare_evolve(self, dt):
+        "Do nothing."
+        pass
 
-        if self.dt.imag != 0 and self.evolved_time == 0:
-            logger.warning('For imaginary time evolution canonical form might not be conserved. ' +
-                           'Call psi.canonical_form() before measurements.')
-
-        self.update(N_steps)
-
-        S = self.psi.entanglement_entropy()
-        logger.info(
-            "--> time=%(t)3.3f, max(chi)=%(chi)d, max(S)=%(S).5f, "
-            "avg DeltaS=%(dS).4e, since last update: %(wall_time).1fs", {
-                't': self.evolved_time.real,
-                'chi': max(self.psi.chi),
-                'S': max(S),
-                'dS': np.mean(S) - Sold,
-                'wall_time': time.time() - start_time,
-            })
-
-    def update(self, N_steps):
+    def evolve(self, N_steps, dt):
         """Evolve by ``N_steps * dt``.
 
         Parameters
         ----------
         N_steps : int
-            The number of steps for which the whole lattice should be updated.
-
+            The number of steps to evolve.
         """
+        self.dt = dt
+        trunc_err = TruncationError()
         for _ in range(N_steps):
-            self.sweep()
+            max_err = self.sweep()
+            trunc_err += TruncationError(max_err, 1.-2*max_err)  # TODO update definition of TruncationError
         self.evolved_time = self.evolved_time + N_steps * self.dt
+        return trunc_err
 
 
 class TwoSiteTDVPEngine(TDVPEngine):
@@ -358,6 +342,28 @@ class SingleSiteTDVPEngine(TDVPEngine):
 
     def post_update_local(self, **update_data):
         self.trunc_err_list.append(0.)  # avoid error in return of sweep()
+
+
+class TimeDependentSingleSiteTDVP(TimeDependentHAlgorithm,SingleSiteTDVPEngine):
+    """Variant of :class:`SingleSiteTDVPEngine` that can handle time-dependent Hamiltonians.
+
+    See details in :class:`~tenpy.algorithms.algorithm.TimeDependentHAlgorithm` as well.
+    """
+    def reinit_model(self):
+        # recreate model
+        TimeDependentHAlgorithm.reinit_model(self)
+        # and reinitializie environment accordingly
+        self.init_env(self.model)
+
+
+class TimeDependentTwoSiteTDVP(TimeDependentHAlgorithm,TwoSiteTDVPEngine):
+    """Variant of :class:`TwoSiteTDVPEngine` that can handle time-dependent Hamiltonians.
+
+    See details in :class:`~tenpy.algorithms.algorithm.TimeDependentHAlgorithm` as well.
+    """
+
+    def reinit_model(self):
+        TimeDependentSingleSiteTDVP.reinit_model(self)
 
 
 class OldTDVPEngine(TimeEvolutionAlgorithm):

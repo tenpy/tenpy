@@ -388,7 +388,7 @@ class Sweep(Algorithm):
             self._cache_optimize()
             logger.debug("in sweep: i0 =%d", i0)
             # --------- the main work --------------
-            theta = self.prepare_update()
+            theta = self.prepare_update_local()
             update_data = self.update_local(theta, optimize=optimize)
             self.update_env(**update_data)
             self.post_update_local(**update_data)
@@ -468,7 +468,7 @@ class Sweep(Algorithm):
         for env in self._all_envs:
             env.cache_optimize(**kwargs)
 
-    def prepare_update(self):
+    def prepare_update_local(self):
         """Prepare `self` for calling :meth:`update_local`.
 
         Returns
@@ -526,7 +526,7 @@ class Sweep(Algorithm):
         Parameters
         ----------
         theta : :class:`~tenpy.linalg.np_conserved.Array`
-            Local single- or two-site wave function, as returned by :meth:`prepare_update`.
+            Local single- or two-site wave function, as returned by :meth:`prepare_update_local`.
 
         Returns
         -------
