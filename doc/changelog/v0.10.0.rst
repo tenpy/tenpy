@@ -1,13 +1,24 @@
-[latest]
-========
+[v0.10.0] - 2022-11-08
+======================
 
 Release Notes
 -------------
-Backwards-incompatible rewrite of TDVP!
+The last release of v0.9.0 is by now over a year old, so there have accumulated quite a few fixes, updates and changes.
 
-Note that measurement functions for simulations need to be updated to accept a `model` keyword argument, see :issue:`182`.
+Everything should still work on Python 3.6, but we now officially support Python 3.7-3.11.
 
-Should still work on Python 3.6, but officially support Python 3.7-3.11.
+First of all, note that we did a (backwards-incompatible) rewrite of TDVP, which is now based on the
+:class:`~tenpy.algorithms.mps_common.Sweep` class. 
+If you need the old TDVP implementation, it's for now still available as :class:`tenpy.algorithms.tdvp.OldTDVPEngine`. 
+Thanks to Wilhelm Kadow for his great work here!
+
+There are 2 other significant changes that might require you to change something in your setup:
+
+- If you are using simulations with measurements, the measurement functions for simulations need to be updated 
+  to accept a `model` keyword argument, see :issue:`182` for more details.
+- When you initialize Sites (in models) you should explicitly pass an argument `sort_charge`.
+  Set it to `True` for new projects, but keep it as `False` if you neeed backwards compatibility with previously saved
+  data. See the last point in the list of "Backwards incompatible changes" below and :issue:`175` for more details.
 
 
 Changelog
@@ -16,7 +27,7 @@ Changelog
 Backwards incompatible changes
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 - Replace the :class:`~tenpy.algorithms.tdvp.TDVPEngine` with a new version. 
-  The previous one is for now still available as :class:`~tenpy.algorithms.tdvp.OldTDVPEngine`.
+  The previous one is for now still available as :class:`tenpy.algorithms.tdvp.OldTDVPEngine`.
 - Measurement functions now have to take another argument `model` as well, which matches the indexing/sites of `psi`.
   This helps to avoid special cases for grouped sites and `OrthogonalExciations`.
   Moreover, we renamed all measurement functions to start with ``m_`` to clarify their usage, and renamed the (optional) argument `key` to `results_key`.
@@ -28,7 +39,7 @@ Backwards incompatible changes
 - Unify structure of  :class:`tenpy.algorithms.algorithm.TimeEvolutionAlgorithm` subclasses
   (e.g. :class:`tenpy.algorihtms.tebd.TEBDEngine`, :class:`tenpy.algorithms.tdvp.TDVPEngine` 
   and :class:`tenpy.algorithms.mpo_evolution.ExpMPOEvolution`).
-  In particular, define the default values for ``N_steps=1`` and ``dt=0.1`` are now the same for these classes;
+  In particular, the default values for ``N_steps=1`` and ``dt=0.1`` are now the same for these classes;
   Previously, TEBD had a default of ``N_steps=10``, and the ExpMPOEvolution had ``dt=0.01``.
 - Add option `sort_charge` to the :class:`~tenpy.networks.site.Site` (calling the new :meth:`~tenpy.networks.site.Site.sort_charge` method).
   Using `True` sorts the charges of the physical leg and thus helps to reduce overhead when using charge conservation.
