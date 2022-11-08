@@ -150,6 +150,7 @@ import numpy as np
 import warnings
 import random
 from functools import reduce
+import copy
 import logging
 logger = logging.getLogger(__name__)
 
@@ -1560,6 +1561,8 @@ class MPS:
     def gauge_total_charge(self, qtotal=None, vL_leg=None, vR_leg=None):
         """Gauge the legcharges of the virtual bonds such that the MPS has a total `qtotal`.
 
+        Acts in place, i.e. changes the B tensors. Make a (shallow) copy if needed.
+
         Parameters
         ----------
         qtotal : (list of) charges
@@ -1597,7 +1600,7 @@ class MPS:
             if np.any(vL_chdiff != 0):
                 # adjust left leg
                 self._B[0] = B.gauge_total_charge('vL', B.qtotal + vL_chdiff, vL_leg.qconj)
-            B.get_leg('vL').test_equal(vL_leg)
+            self._B[0].get_leg('vL').test_equal(vL_leg)
         for i in range(self.L):
             B = self._B[i]
             desired_qtotal = qtotal[i]
@@ -3481,7 +3484,7 @@ class MPS:
         assert (other.L == L and L >= 2)  # (if you need this, generalize this function...)
         assert self.finite
         assert self.bc == other.bc
-        self._gauge_compatible_vL_vR(other)
+        other = self._gauge_compatible_vL_vR(other)
         legs = ['vL', 'vR'] + self._p_label
         # alpha and beta appear only on the first site
         alpha = alpha * self.norm
@@ -4324,14 +4327,19 @@ class MPS:
         return Gl, Yl, Yr
 
     def _gauge_compatible_vL_vR(self, other):
-        """If necessary, gauge total charge of `other` to match the vL, vR legs of self."""
+        """If necessary, gauge total charge of `other` to match the vL, vR legs of self.
+
+        Returns a shallow copy where legs are adjusted.
+        """
         if self.chinfo.qnumber == 0:
-            return
-        from tenpy.tools import optimization
-        need_gauge = any(self.get_total_charge() != other.get_total_charge())
+            return other
+        need_gauge = self._outer_virtual_legs() != other._outer_virtual_legs()
         if need_gauge:
             vL, vR = self._outer_virtual_legs()
+            other = copy.copy(other)  # make shallow copy
+            other._B = other._B[:]
             other.gauge_total_charge(None, vL, vR)
+        return other
 
     def _outer_virtual_legs(self):
         U, V = self.segment_boundaries
@@ -4435,7 +4443,7 @@ class MPSEnvironment:
         if ket is None:
             ket = bra
         if ket is not bra:
-            ket._gauge_compatible_vL_vR(bra)  # ensure matching charges
+            bra = ket._gauge_compatible_vL_vR(bra)  # ensure matching charges
         self.bra = bra
         self.ket = ket
         self.dtype = np.find_common_type([bra.dtype, ket.dtype], [])
