@@ -961,10 +961,8 @@ class MPS:
         update_norm : bool
             If ``True``, multiply the norm of `theta` into :attr:`norm`.
         """
-        i0 = self._to_valid_index(i)
-        i1 = self._to_valid_index(i0 + 1)
         self.dtype = np.find_common_type([self.dtype, theta.dtype], [])
-        qtotal_LR = [self._B[i0].qtotal, None]
+        qtotal_LR = [self.get_B(i).qtotal, None]
         if trunc_par is None:
             U, S, VH = npc.svd(theta, qtotal_LR=qtotal_LR, inner_labels=['vR', 'vL'])
             renorm = np.linalg.norm(S)
@@ -978,10 +976,8 @@ class MPS:
                 self.norm *= renorm
         U = U.split_legs().ireplace_label('p0', 'p')
         VH = VH.split_legs().ireplace_label('p1', 'p')
-        self._B[i0] = U.itranspose(self._B_labels)
-        self.form[i0] = self._valid_forms['A']
-        self._B[i1] = VH.itranspose(self._B_labels)
-        self.form[i1] = self._valid_forms['B']
+        self.set_B(i, U.itranspose(self._B_labels), form='A')
+        self.set_B(i+1, VH.itranspose(self._B_labels), form='B')
         self.set_SR(i, S)
         return err
 
