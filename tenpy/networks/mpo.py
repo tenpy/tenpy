@@ -51,7 +51,7 @@ from ..tools.string import vert_join
 from .mps import MPS as _MPS  # only for MPS._valid_bc
 from .mps import MPSEnvironment
 from .terms import OnsiteTerms, CouplingTerms, MultiCouplingTerms
-from ..tools.misc import add_with_None_0
+from ..tools.misc import add_with_None_0, inverse_permutation
 from ..tools.math import lcm
 from ..tools.params import asConfig
 from ..algorithms.truncation import TruncationError, svd_theta
@@ -1016,6 +1016,18 @@ class MPO:
                 B.legs[B.get_leg_index('vR')] = B.get_leg('vR').to_LegCharge()
             psi.set_B(i, B, 'B')
 
+        # fix right leg of last tensor (reason: combine_legs sorts charges)
+        if not psi.finite:
+            left_leg = psi.get_B(psi.L).get_leg('vL')
+            right_leg = psi.get_B(psi.L-1).get_leg('vR')
+            perm, _ = left_leg.sort()
+            inv_perm = inverse_permutation(perm)
+            inv_perm_flat = right_leg.perm_flat_from_perm_qind(inv_perm)
+            # TODO: Do it without using `permute`. We do not need to touch the
+            # blocks anyway, so we can just re-order B._qdata and the leg charges.
+            B = psi.get_B(psi.L-1).permute(inv_perm_flat, axis='vR')
+            psi.set_B(psi.L-1, B, 'B')
+
         if bc == 'infinite':
             # calculate (rather arbitrary) guess for S[0] (no we don't like it either)
             weight = np.ones(self.get_W(0).shape[self.get_W(0).get_leg_index('wL')]) * 0.05
@@ -1957,7 +1969,7 @@ class MPOEnvironment(MPSEnvironment):
                 i = -start_env_sites
                 init_LP.get_leg('wR').test_contractible(self.H.get_W(i).get_leg('wL'))
             except ValueError:
-                warning.warn("dropping `init_LP` with incompatible MPO legs")
+                warnings.warn("dropping `init_LP` with incompatible MPO legs")
                 init_LP = None
         if init_RP is not None:
             try:
