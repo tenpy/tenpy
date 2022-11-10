@@ -13,7 +13,7 @@ from tenpy.networks.terms import OnsiteTerms, CouplingTerms, MultiCouplingTerms,
 
 from random_test import random_MPS
 
-spin_half = site.SpinHalfSite(conserve='Sz')
+spin_half = site.SpinHalfSite(conserve='Sz', sort_charge=False)
 
 
 def test_MPO():
@@ -169,7 +169,7 @@ def test_MPO_conversion():
 
 
 def test_MPOEnvironment():
-    xxz_pars = dict(L=4, Jxx=1., Jz=1.1, hz=0.1, bc_MPS='finite')
+    xxz_pars = dict(L=4, Jxx=1., Jz=1.1, hz=0.1, bc_MPS='finite', sort_charge=True)
     L = xxz_pars['L']
     M = XXZChain(xxz_pars)
     state = ([0, 1] * L)[:L]  # Neel
@@ -287,7 +287,6 @@ def test_MPO_expectation_value(tol=1.e-15):
     assert abs(ev - desired_ev) < tol
 
 
-
 def test_MPO_var(L=8, tol=1.e-13):
     xxz_pars = dict(L=L, Jx=1., Jy=1., Jz=1.1, hz=0.1, bc_MPS='finite', conserve=None)
     M = SpinChain(xxz_pars)
@@ -401,3 +400,19 @@ def test_MPOTransferMatrix(eps=1.e-13):
         TM_vec = TM.matvec(vec, project=False)
         TM_vec.itranspose(vec.get_leg_labels())
         assert (TM_vec  - (vec + E0 * 3 * v0)).norm() < eps
+
+
+def test_MPO_from_wavepacket(L=10):
+    k0, x0, sigma, = np.pi/8., 2., 2.
+    x = np.arange(L)
+    coeff = np.exp(-1.j * k0 * x) * np.exp(- 0.5 * (x - x0)**2 / sigma**2)
+    coeff /= np.linalg.norm(coeff)
+    s = site.FermionSite(conserve='N')
+    wp = mpo.MPO.from_wavepacket([s] * L, coeff, 'Cd')
+    psi = mps.MPS.from_product_state([s] * L, ['empty'] * L)
+    wp.apply(psi, dict(compression_method='SVD'))
+    C = psi.correlation_function('Cd', 'C')
+    C_expexcted = np.conj(coeff)[:, np.newaxis] * coeff[np.newaxis, :]
+    assert np.max(np.abs(C - C_expexcted)) < 1.e-10
+    print(C)
+    print(C_expexcted)

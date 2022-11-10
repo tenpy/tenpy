@@ -31,7 +31,8 @@ class AnisotropicSpin1Chain(CouplingMPOModel, NearestNeighborModel):
         if conserve == 'best':
             conserve = 'Sz' if not model_params.any_nonzero(['B']) else None
             self.logger.info("%s: set conserve to %s", self.name, conserve)
-        return SpinSite(S=1., conserve=None)
+        sort_charge = model_params.get('sort_charge', True)
+        return SpinSite(S=1., conserve=None, sort_charge=sort_charge)
 
     def init_terms(self, model_params):
         J = model_params.get('J', 1.)
@@ -47,7 +48,7 @@ class AnisotropicSpin1Chain(CouplingMPOModel, NearestNeighborModel):
             self.add_onsite(D, u, 'Sz Sz')
 
 
-def pollmann_turner_inversion(results, psi, simulation, tol=0.01):
+def m_pollmann_turner_inversion(results, psi, model, simulation, tol=0.01):
     """Measurement function for equation 15 of :arxiv:`1204.0704`.
 
     See :func:`~tenpy.simulations.measurement.measurement_index` for the call structure.

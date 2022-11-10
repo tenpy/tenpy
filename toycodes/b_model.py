@@ -64,7 +64,7 @@ class TFIModel:
                     gL = self.g
                 if i + 1 == self.L - 1:
                     gR = self.g
-            H_bond = -self.J * np.kron(sx, sx) - gL * np.kron(sz, id) - gR * np.kron(id, sz)
+            H_bond = -self.J * np.kron(sz, sz) - gL * np.kron(sx, id) - gR * np.kron(id, sx)
             # H_bond has legs ``i, j, i*, j*``
             H_list.append(np.reshape(H_bond, [d, d, d, d]))
         self.H_bonds = H_list
@@ -79,8 +79,8 @@ class TFIModel:
         for i in range(self.L):
             w = np.zeros((3, 3, self.d, self.d), dtype=float)
             w[0, 0] = w[2, 2] = self.id
-            w[0, 1] = self.sigmax
-            w[0, 2] = -self.g * self.sigmaz
-            w[1, 2] = -self.J * self.sigmax
+            w[0, 1] = self.sigmaz
+            w[0, 2] = -self.g * self.sigmax
+            w[1, 2] = -self.J * self.sigmaz
             w_list.append(w)
         self.H_mpo = w_list

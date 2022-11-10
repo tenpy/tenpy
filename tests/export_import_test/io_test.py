@@ -57,7 +57,7 @@ def dummy_function(obj):
 def gen_example_data(version=tenpy.version.full_version):
     if '+' in version:
         version = version.split('+')[0]  # discard '+GITHASH' from version
-    s = tenpy.networks.site.SpinHalfSite()
+    s = tenpy.networks.site.SpinHalfSite(sort_charge=False)
     data = {
         'SpinHalfSite': s,
         'trivial_array': npc.Array.from_ndarray_trivial(np.arange(20).reshape([4, 5])),
@@ -66,7 +66,7 @@ def gen_example_data(version=tenpy.version.full_version):
     if parse_version(version) >= parse_version('0.5.0.dev25'):
         psi = tenpy.networks.mps.MPS.from_singlets(s, 6, [(0, 3), (1, 2), (4, 5)])
         psi.test_sanity()
-        M = tenpy.models.tf_ising.TFIChain({'L': 3, 'bc_MPS': 'infinite'})
+        M = tenpy.models.tf_ising.TFIChain({'L': 3, 'bc_MPS': 'infinite', 'sort_charge': False})
         data.update({
             'version':
             version,

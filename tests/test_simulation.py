@@ -3,6 +3,7 @@
 
 import copy
 import numpy as np
+import warnings
 import sys
 
 import tenpy
@@ -19,7 +20,7 @@ tenpy.tools.misc.skip_logging_setup = True  # skip logging setup
 class DummyAlgorithm(Algorithm):
     def __init__(self, psi, model, options, *, resume_data=None, cache=None):
         super().__init__(psi, model, options, resume_data=resume_data)
-        self.dummy_value = None
+        self.dummy_value = -1
         self.evolved_time = self.options.get('start_time', 0.)
         init_env_data = {} if resume_data is None else resume_data['init_env_data']
         self.env = DummyEnv(**init_env_data)
@@ -66,8 +67,15 @@ class DummyEnv:
         return {"Env data": "Could be big"}
 
 
-def dummy_measurement(results, psi, simulation):
+def dummy_measurement(results, psi, model, simulation):
     results['dummy_value'] = simulation.engine.dummy_value
+
+def bad_dummy_measurement(results, psi, model, simulation):
+    """Check using different keys - it should still work."""
+    i = results['measurement_index']
+    results[f"changing_key_{i:d}"] = simulation.engine.dummy_value
+    #  if i == 3:
+    #      raise ValueError("something went wrong")
 
 
 simulation_params = {
@@ -76,6 +84,7 @@ simulation_params = {
     'model_params': {
         'bc_MPS': 'infinite',  # defaults to finite
         'L': 4,
+        'sort_charge': True,
     },
     'algorithm_class':
     'DummyAlgorithm',
@@ -89,10 +98,11 @@ simulation_params = {
     },
     'save_every_x_seconds':
     0.,  # save at each checkpoint
-    'connect_measurements': [('tenpy.simulations.measurement', 'onsite_expectation_value', {
+    'connect_measurements': [('tenpy.simulations.measurement', 'm_onsite_expectation_value', {
         'opname': 'Sz'
     }), (__name__, 'dummy_measurement')],
 }
+expected_dummy_value = simulation_params['algorithm_params']['N_steps']**2
 
 
 def test_Simulation(tmp_path):
@@ -106,8 +116,30 @@ def test_Simulation(tmp_path):
     meas = results['measurements']
     # expect two measurements: once in `init_measurements` and in `final_measurement`.
     assert np.all(meas['measurement_index'] == np.arange(2))
-    assert meas['dummy_value'] == [None, sim_params['algorithm_params']['N_steps']**2]
+    assert np.all(meas['dummy_value'] == [-1, expected_dummy_value])
     assert (tmp_path / sim_params['output_filename']).exists()
+
+
+def test_bad_measurements():
+    sim_params = copy.deepcopy(simulation_params)
+    sim_params['connect_measurements'].append((__name__, 'bad_dummy_measurement', {}, -1))
+    sim = Simulation(sim_params)
+
+    with warnings.catch_warnings(record=True) as caught:
+        results = sim.run()
+    for w in caught:
+        msg = str(w.message)
+        expected = any((part in msg) for part in ["measurement gave new keys {'changing_key",
+                                                  "measurement didn't give keys {'changing_key"])
+        if not expected:
+            warnings.showwarning(w.message, w.category, w.filename, w.lineno, w.file, w.line)
+    assert len(caught) >= 2, "expected to get warnings about changing keys"
+
+    meas = results['measurements']
+    assert np.all(meas['measurement_index'] == np.arange(2))
+    assert np.all(meas['dummy_value'] == [-1, expected_dummy_value])
+    assert meas['changing_key_0'] == [-1, None]
+    assert meas['changing_key_1'] == [None, expected_dummy_value]
 
 
 def test_Simulation_resume(tmp_path):
@@ -170,7 +202,7 @@ def test_GroundStateSearch():
     meas = results['measurements']
     # expect two measurements: once in `init_measurements` and in `final_measurement`.
     assert np.all(meas['measurement_index'] == np.arange(2))
-    assert meas['dummy_value'] == [None, sim_params['algorithm_params']['N_steps']**2]
+    assert np.all(meas['dummy_value'] == [-1, expected_dummy_value])
     del sim
 
 
@@ -192,7 +224,7 @@ def test_RealTimeEvolution():
     N = len(expected_times)
     assert np.allclose(meas['evolved_time'], expected_times)
     assert np.all(meas['measurement_index'] == np.arange(N))
-    assert meas['dummy_value'] == [None] + [sim_params['algorithm_params']['N_steps']**2] * (N - 1)
+    assert np.all(meas['dummy_value'] == [-1] + [expected_dummy_value] * (N - 1))
 
 
 def test_output_filename_from_dict():

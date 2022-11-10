@@ -12,7 +12,7 @@ if not sys.version_info >= (3, 6):
 
 # hardcode version for people without git
 
-MAJOR, MINOR, MICRO = 0, 9, 0
+MAJOR, MINOR, MICRO = 0, 10, 0
 RELEASED = False
 VERSION = '{0:d}.{1:d}.{2:d}'.format(MAJOR, MINOR, MICRO)
 

@@ -17,8 +17,8 @@ The classes provided here provide a structure for the whole setup of simulations
 from . import measurement, simulation, ground_state_search, time_evolution
 
 __all__ = [
-    "simulation",
     "measurement",
+    "simulation",
     "ground_state_search",
     "time_evolution",
 ]

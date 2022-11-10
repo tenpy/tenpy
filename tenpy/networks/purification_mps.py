@@ -14,7 +14,8 @@ network ansätze (representing pure states= to finite temperatures (and mixed st
 2. Minimally entangled typical thermal states (METTS) as introduced in :cite:`white2009`.
 3. Use Purification to represent the mixed density matrix by pure states in the doubled Hilbert
    space.
-   In the literature, this is also referred to as matrix product density operators (MPDO).
+   In the literature, this is also referred to as matrix product density operators (MPDO) or
+   locally purified density operator (LPDO).
 
 
 Here, we follow the third approach.

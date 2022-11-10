@@ -5,9 +5,6 @@ from tenpy.networks.mps import MPS
 from tenpy.networks.mpo import MPO
 
 spin = SpinHalfSite(conserve="Sz")
-print(spin.Sz.to_ndarray())
-# [[ 0.5  0. ]
-#  [ 0.  -0.5]]
 
 N = 6  # number of sites
 sites = [spin] * N  # repeat entry of list N times
