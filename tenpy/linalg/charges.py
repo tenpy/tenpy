@@ -794,6 +794,7 @@ class LegCharge:
             return self
         res = self.copy()  # shallow copy
         res.charges = self.chinfo.shift_charges(self.charges, shift, copy=True)
+        res.sorted, res.bunched = False, False
         return res
 
     def to_qflat(self):
