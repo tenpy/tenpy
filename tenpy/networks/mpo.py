@@ -462,8 +462,9 @@ class MPO:
         if self.finite:
             raise ValueError("can't enlarge finite MPO")
         factor = int(factor)
-        self.sites = factor * self.sites
-        self._W = factor * self._W
+        L = self.L
+        self._W = [self.get_W(j) for j in range(0, factor*L)]
+        self.sites = [self.sites[self._to_valid_index(j)].shift_charges(j - j % L) for j in range(0, factor*L)]
         self.IdL = factor * self.IdL[:-1] + [self.IdL[-1]]
         self.IdR = factor * self.IdR[:-1] + [self.IdR[-1]]
         self.test_sanity()
