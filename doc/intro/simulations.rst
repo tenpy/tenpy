@@ -192,11 +192,11 @@ following example shows.
 
     connect_measurements:
       - - tenpy.simulations.measurement
-        - onsite_expectation_value
+        - m_onsite_expectation_value
         - opname: Sz
       - - psi_method
         - wrap correlation_function
-        - key: '<Sp_i Sm_j>'
+        - results_key: '<Sp_i Sm_j>'
           ops1: Sp
           ops2: Sm
 
@@ -205,11 +205,11 @@ Note the indentation and minus signs here: this yaml syntax is equivalent to the
 .. code-block :: python
 
     {'connect_measurements': [['tenpy.simulations.measurement',
-                               'onsite_expectation_value',
+                               'm_onsite_expectation_value',
                                {'opname': 'Sz'}],
                               ['psi_method',
                                'wrap correlation_function',
-                               {'key': '<Sp_i Sm_j>',
+                               {'results_key': '<Sp_i Sm_j>',
                                 'ops1': 'Sp',
                                 'ops2': 'Sm'}]]}
 
