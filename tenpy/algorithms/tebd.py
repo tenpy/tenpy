@@ -591,6 +591,58 @@ class Engine(TEBDEngine):
         TEBDEngine.__init__(self, psi, model, options)
 
 
+class QRBasedTEBDEngine(TEBDEngine):
+    """Similar as standard TEBD, but based on QR decompositions only.
+
+    """
+    def update_bond(self, i, U_bond):
+        i0, i1 = i - 1, i
+        logger.debug("Update sites (%d, %d)", i0, i1)
+        # Construct the theta matrix
+        C = self.psi.get_theta(i0, n=2, formL=0.)  # the two B without the S on the left
+        C = npc.tensordot(U_bond, C, axes=(['p0*', 'p1*'], ['p0', 'p1']))  # apply U
+        C.itranspose(['vL', 'p0', 'p1', 'vR'])
+        SL = self.psi.get_SL(i0)
+        if isinstance(SL, npc.Array):
+            theta = npc.tensordot(SL, C, axes=['vR', 'vL'])
+        else:
+            theta = C.scale_axis(SL, 'vL')
+
+        # here start differences to normal TEBD
+        Y0 = self.psi.get_B(i1).conj()
+        # TODO: choose Y0 as slice of theta
+
+
+        theta_i0 = npc.tensordot(theta, Y0,
+                                 axes=[['p1', 'vR'], ['p*', 'vR*']]).ireplace_label('vL*', 'vR')
+        theta_i0 = theta_i0.combine_legs(['vL', 'p0'], qconj=+1)
+        A_L, Xi = npc.qr(theta_i0, inner_labels=['vR', 'vL'])
+        A_L = A_L.split_legs(['(vL.p0)'])
+        theta_i1 = npc.tensordot(A_L.conj(), theta,
+                                 axes=[['vL*', 'p0*'], ['vL', 'p0']]).ireplace_label('vR*', 'vL')
+        theta_i1 = theta_i1.combine_legs(['p1', 'vR'], qconj=-1, new_axes=0)
+        theta_i1.itranspose(['(p1.vR)', 'vL'])
+        B_R, Xi = npc.qr(theta_i1, inner_labels=['vL', 'vR'], inner_qconj=-1)
+        B_R = B_R.split_legs(['(p1.vR)']).replace_label('p1', 'p')
+        Xi.itranspose(['vL', 'vR'])
+
+        B_L = npc.tensordot(C, B_R.conj(), axes=[['p1', 'vR'], ['p*', 'vR*']])
+        B_L.ireplace_labels(['p0', 'vL*'], ['p', 'vR'])
+
+        U, S, Vd = npc.svd(Xi, inner_labels=['vR', 'vL'])
+        B_L = npc.tensordot(B_L, U, axes=['vR', 'vL'])
+        B_R = npc.tensordot(Vd, B_R, axes=['vR', 'vL'])
+        Xi = S
+
+        self.psi.set_B(i0, B_L, form='B')
+        self.psi.set_SL(i1, Xi)
+        self.psi.set_B(i1, B_R, form='B')
+        return TruncationError()
+
+    def update_bond_imag(self, N_steps):
+        raise NotImplementedError("TODO: should be done with QR as well. Even simpler!")
+
+
 class RandomUnitaryEvolution(TEBDEngine):
     """Evolution of an MPS with random two-site unitaries in a TEBD-like fashion.
 
