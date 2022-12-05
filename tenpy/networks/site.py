@@ -1652,6 +1652,79 @@ class BosonSite(Site):
                                                        f=self.filling)
 
 
+class ClockSite(Site):
+    r"""``q``-state quantum clock site.
+
+    There are ``q`` local states, with labels ``['0', '1', ..., str(q-1)]``.
+    Special aliases are ``up`` (0), and if q is even ``down`` (q//2).
+    Local operators are the clock operators ``Z = diag([w ** 0, w ** 1, ..., w ** (q - 1)])``
+    with ``w = exp(2.j * pi / q)`` and ``X = eye(q, k=1) + eye(q, k=1-q)``, which are not hermitian (!)
+
+    =========================== ================================================
+    operator                    description
+    =========================== ================================================
+    ``Id``                      Identity :math:`\mathbb{1}`
+    ``X, Z``                    Clock operators
+    ``Xhc, Zhc``                Hermitian conjugates of clock operators
+    ``Xphc, Zphc``              Clock operator plus its hermitian conjugate
+    =========================== ================================================
+
+    ============== ====  ============================
+    `conserve`     qmod  *excluded* onsite operators
+    ============== ====  ============================
+    ``'Zq'``       [q]   --
+    ``'None'``     []    --
+    ============== ====  ============================
+
+    Parameters
+    ----------
+    q : int
+        Number of states per site
+    conserve : str | None
+        Defines what is conserved, see table above.
+    sort_charge : bool
+        Whether :meth:`sort_charge` should be called at the end of initialization.
+        This is usually a good idea to reduce potential overhead when using charge conservation.
+        Note that this permutes the order of the local basis states!
+        For backwards compatibility with existing data, it is not (yet) enabled by default.
+
+    Attributes
+    ----------
+    q : int
+        Number of states per site
+    conserve : str
+        Defines what is conserved, see table above.
+    """
+    def __init__(self, q, conserve='Zq', sort_charge=None):
+        if not (isinstance(q, int) and q > 1):
+            raise ValueError(f'invalid q: {q}')
+        self.q = q
+        if not conserve:
+            conserve = 'None'
+        if conserve not in ['Zq', 'None']:
+            raise ValueError("invalid `conserve`: " + repr(conserve))
+        X = np.eye(q, k=1) + np.eye(q, k=1-q)
+        Z = np.diag(np.exp(2.j * np.pi * np.arange(q) / q))
+        Xhc = np.eye(q, k=-1) + np.eye(q, k=q-1)
+        Zhc = np.diag(np.exp(-2.j * np.pi * np.arange(q) / q))
+        Xphc = X + Xhc
+        Zphc = np.diag(2. * np.cos(2. * np.pi * np.arange(q) / q))
+        ops = dict(X=X, Z=Z, Xhc=Xhc, Zhc=Zhc, Xphc=Xphc, Zphc=Zphc)
+        if conserve == 'Zq':
+            chinfo = npc.ChargeInfo([q], ['clock_Zq'])
+            leg = npc.LegCharge.from_qflat(chinfo, list(range(q)))
+        else:
+            leg = npc.LegCharge.from_trivial(q)
+        self.conserve = conserve
+        Site.__init__(self, leg, [str(m) for m in range(q)], sort_charge=sort_charge, **ops)
+        self.state_labels['up'] = self.state_labels['0']
+        if q % 2 == 0:
+            self.state_labels['down'] = self.state_labels[str(q // 2)]
+
+    def __repr__(self):
+        return f'ClockSite(q={self.q}, conserve={self.conserve})'
+
+
 def spin_half_species(SpeciesSite, cons_N, cons_Sz, **kwargs):
     """Initialize two FermionSite or BosonSite to represent spin-1/2 species.
 
