@@ -37,8 +37,9 @@ from . import lattice, model
 from . import tf_ising, xxz_chain, spins, spins_nnn
 from . import fermions_spinless, hubbard, hofstadter, haldane
 from . import toric_code, aklt, mixed_xk
+from . import toblerone_model
 
 __all__ = [
     'lattice', 'model', 'tf_ising', 'xxz_chain', 'spins', 'spins_nnn', 'fermions_spinless',
-    'hubbard', 'hofstadter', 'haldane', 'toric_code', 'aklt', 'mixed_xk'
+    'hubbard', 'hofstadter', 'haldane', 'toric_code', 'aklt', 'mixed_xk', 'toblerone_model'
 ]

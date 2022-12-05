@@ -97,7 +97,7 @@ def to_array(a, shape=(None, ), dtype=None, allow_incommensurate=False):
                 crop[i] = slice(None, shape[i])
                 need_crop = True
             else:
-                raise ValueError("incomensurate len for tiling from {0:d} to {1:d}".format(
+                raise ValueError("incommensurate len for tiling from input argument shape {0:d} to target shape {1:d}".format(
                     a.shape[i], shape[i]))
     a = np.tile(a, reps)
     if need_crop:

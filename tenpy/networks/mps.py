@@ -388,7 +388,7 @@ class MPS:
             >>> fermion = tenpy.networks.site.FermionSite()
             >>> ladder_i = tenpy.models.lattice.Ladder(2, [spin_half, fermion], bc_MPS="infinite")
 
-        To initialize a state of up-spins on the spin sites and half-filled ferions, you can use:
+        To initialize a state of up-spins on the spin sites and half-filled fermions, you can use:
 
         .. doctest : MPS.from_lat_product_state
 
