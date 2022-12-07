@@ -1468,7 +1468,7 @@ class MPS:
                 U, S, V, err, _ = svd_theta(theta, trunc_par, inner_labels=['vR', 'vL'])
                 Ss_new.append(S)
                 trunc_err += err
-                theta = U.split_legs(0)  # vL p0 ... pj-1 vR
+                theta = U.scale_axis(S, 'vR').split_legs(0)  # vL p0 ... pj-1 vR
                 for _ in range(n_p_label):
                     combine[0].pop()
                 B = V.split_legs(1).iset_leg_labels(self._B_labels)  # vL p vR
