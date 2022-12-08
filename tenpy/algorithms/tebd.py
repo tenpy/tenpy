@@ -47,7 +47,7 @@ logger = logging.getLogger(__name__)
 
 from .algorithm import TimeEvolutionAlgorithm, TimeDependentHAlgorithm
 from ..linalg import np_conserved as npc
-from .truncation import svd_theta, TruncationError
+from .truncation import svd_theta, TruncationError, truncate
 from ..linalg import random_matrix
 
 __all__ = ['TEBDEngine', 'Engine', 'RandomUnitaryEvolution', 'TimeDependentTEBD']
@@ -595,7 +595,7 @@ class QRBasedTEBDEngine(TEBDEngine):
     """Similar as standard TEBD, but based on QR decompositions only.
 
     """
-    def update_bond(self, i, U_bond):
+    def update_bond(self, i, U_bond, expand=0.1, small_svd_ok=False):
         i0, i1 = i - 1, i
         logger.debug("Update sites (%d, %d)", i0, i1)
         # Construct the theta matrix
@@ -608,38 +608,106 @@ class QRBasedTEBDEngine(TEBDEngine):
         else:
             theta = C.scale_axis(SL, 'vL')
 
-        # here start differences to normal TEBD
-        Y0 = self.psi.get_B(i1).conj()
-        # TODO: choose Y0 as slice of theta
+        A_L, Xi, B_R = self._qr_based_svd(i, theta, expand)
 
+        if small_svd_ok:
+            Xi.itranspose(['vL', 'vR'])
+            if expand:
+                U, S, Vd, trunc_err, renormalize = svd_theta(Xi, self.trunc_params)
+            else:
+                # direct svd without truncation
+                U, S, Vd = npc.svd(Xi, inner_labels=['vR', 'vL'])
+                renormalize = np.linalg.norm(S)
+                S /= renormalize
+                trunc_err = TruncationError()  # no truncation
+        else:
+            # replace SVD with eigh
+            Xi2 = npc.tensordot(Xi.conj(), Xi, ['vL*', 'vL'])
+            L, V = npc.eigh(Xi2, sort='>')
+            print(np.linalg.norm(L), np.min(L), np.max(L)) # TODO XXX
+            S = np.sqrt(L)
+            if expand:  # need to truncate
+                piv, renormalize, trunc_err = truncate(S, self.trunc_params)
+                S = S[piv]
+                V.iproject(piv, 'eig')
+                S /= renormalize
+            else:
+                renormalize = np.linalg.norm(S)
+                S /= renormalize
+                trunc_err = TruncationError()
+            V.ireplace_label('eig', 'vL*')
+            Vd = V.iconj().itranspose(['vL', 'vR'])
+            Vd *= np.sqrt(Vd.shape[0]) / npc.norm(Vd)
+            # TODO: renormalize correctly...
+
+        B_R = npc.tensordot(Vd, B_R, axes=['vR', 'vL'])
+
+        B_L = npc.tensordot(C / renormalize, B_R.conj(), axes=[['p1', 'vR'], ['p*', 'vR*']])
+        B_L.ireplace_labels(['p0', 'vL*'], ['p', 'vR'])
+
+        self.psi.set_B(i0, B_L, form='B')
+        self.psi.set_SL(i1, S)
+        self.psi.set_B(i1, B_R, form='B')
+        return trunc_err
+
+    def _qr_based_svd(self, i, theta, expand):
+        i0, i1 = i - 1, i
+        orig_B_L = self.psi.get_B(i0, 'B')
+        orig_B_R = self.psi.get_B(i1, 'B')
+
+        # here start differences to normal TEBD
+        if expand:
+            Y0 = theta.combine_legs(['vL', 'p0'], new_axes=[0])
+            Y0.legs[0] = Y0.legs[0].to_LegCharge()  # convert vL LegPipe to LegCharge
+            Y0.ireplace_label('(vL.p0)', 'vL')
+            if any(orig_B_L.qtotal != 0):
+                Y0.gauge_total_charge('vL', new_qtotal=orig_B_R.qtotal)
+            vL_old = orig_B_R.get_leg('vL')
+            if not vL_old.is_blocked():
+                vL_old = vL_old.sort()
+            vL_new = Y0.get_leg('vL')  # is blocked, since created from pipe
+            # vL_old is guaranteed to be a slice of vL_new by charge rule in B_L
+            piv = np.zeros(vL_new.ind_len, dtype=bool)  # indices to keep in vL_new
+            increase_per_block = max(1, int(vL_old.ind_len * expand // vL_new.block_number))
+            sizes_old = vL_old.get_block_sizes()
+            sizes_new = vL_new.get_block_sizes()
+            # iterate over charge blocks in vL_new and vL_old at the same time
+            j_old = 0
+            q_old = vL_old.charges[j_old, :]
+            for j_new, q_new in enumerate(vL_new.charges):
+                if all(q_new == q_old):  # have charge block in both vL_new and vL_old
+                    s_new = sizes_old[j_old] + increase_per_block
+                    # move to next charge block in next loop iteration
+                    j_old += 1
+                    if j_old < len(vL_old.charges):
+                        q_old = vL_old.charges[j_old, :]
+                else:  # charge block only in vL_new
+                    s_new = increase_per_block
+                s_new = min(s_new, sizes_new[j_new])  # don't go beyond block
+                start = vL_new.slices[j_new]
+                piv[start:start+s_new] = True
+            #  Y0.iproject(piv, 'vL')
+            Y0 = Y0.ireplace_label('p1', 'p').iconj()
+        else:
+            Y0 = self.psi.get_B(i1).conj()
 
         theta_i0 = npc.tensordot(theta, Y0,
                                  axes=[['p1', 'vR'], ['p*', 'vR*']]).ireplace_label('vL*', 'vR')
-        theta_i0 = theta_i0.combine_legs(['vL', 'p0'], qconj=+1)
+        theta_i0 = theta_i0.combine_legs(['vL', 'p0'], qconj=+1, new_axes=0)
         A_L, Xi = npc.qr(theta_i0, inner_labels=['vR', 'vL'])
         A_L = A_L.split_legs(['(vL.p0)'])
         theta_i1 = npc.tensordot(A_L.conj(), theta,
                                  axes=[['vL*', 'p0*'], ['vL', 'p0']]).ireplace_label('vR*', 'vL')
         theta_i1 = theta_i1.combine_legs(['p1', 'vR'], qconj=-1, new_axes=0)
-        theta_i1.itranspose(['(p1.vR)', 'vL'])
         B_R, Xi = npc.qr(theta_i1, inner_labels=['vL', 'vR'], inner_qconj=-1)
         B_R = B_R.split_legs(['(p1.vR)']).replace_label('p1', 'p')
-        Xi.itranspose(['vL', 'vR'])
 
-        B_L = npc.tensordot(C, B_R.conj(), axes=[['p1', 'vR'], ['p*', 'vR*']])
-        B_L.ireplace_labels(['p0', 'vL*'], ['p', 'vR'])
+        # TODO XXX
+        #  theta_new = npc.tensordot(npc.tensordot(A_L, Xi, ['vR', 'vL']), B_R.replace_label('p', 'p1'), ['vR', 'vL'])
+        #  print("<theta | A Xi B> =", npc.inner(theta, theta_new, axes='labels', do_conj=True))
+        return A_L, Xi, B_R
 
-        U, S, Vd = npc.svd(Xi, inner_labels=['vR', 'vL'])
-        B_L = npc.tensordot(B_L, U, axes=['vR', 'vL'])
-        B_R = npc.tensordot(Vd, B_R, axes=['vR', 'vL'])
-        Xi = S
-
-        self.psi.set_B(i0, B_L, form='B')
-        self.psi.set_SL(i1, Xi)
-        self.psi.set_B(i1, B_R, form='B')
-        return TruncationError()
-
-    def update_bond_imag(self, N_steps):
+    def update_bond_imag(self, i, U_bond):
         raise NotImplementedError("TODO: should be done with QR as well. Even simpler!")
 
 

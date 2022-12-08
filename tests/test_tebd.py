@@ -47,7 +47,7 @@ def test_tebd(bc_MPS, g=0.5):
             'trunc_cut': 1.e-13
         }
     }
-    engine = tebd.TEBDEngine(psi, M, tebd_param)
+    engine = tebd.QRBasedTEBDEngine(psi, M, tebd_param)
     engine.run_GS()
 
     print("norm_test", psi.norm_test())
@@ -109,3 +109,5 @@ def test_RandomUnitaryEvolution():
     eng.run()
     print(eng.psi.chi)
     assert tuple(eng.psi.chi) == (16, 8)
+
+
