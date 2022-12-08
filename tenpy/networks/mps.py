@@ -1433,6 +1433,7 @@ class MPS:
         """
         if trunc_par is None:
             trunc_par = {}
+        trunc_par = asConfig(trunc_params, 'trunc_params')
         self.convert_form('B')
         if self.L > 1:
             trunc_par.setdefault('chi_max', max(self.chi))
