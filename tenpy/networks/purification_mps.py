@@ -118,6 +118,7 @@ see :cite:`hauschild2018`.
 """
 # Copyright 2018-2021 TeNPy Developers, GNU GPLv3
 
+import copy
 import numpy as np
 import itertools
 
@@ -198,32 +199,37 @@ class PurificationMPS(MPS):
         return res
 
     @classmethod
-    def from_infiniteT_canonical(cls, sites, charge_sector, form='B', dtype=np.float64):
+    def from_infiniteT_canonical(cls, sites, charge_sector, dtype=np.float64,
+                                 conserve_ancilla_charge=False):
         """Initial state corresponding to *canonical* infinite-temperature ensemble.
 
         Works only for finite boundary conditions, following the idea outlined in
         :cite:`barthel2016`.
-        However, we just put trivial charges on the ancilla legs,
-        and do *not* double the number of charges as suggested in that paper - there's no need to.
-
-        Note that the 'backwards' disentanglers doesn't work with the canonical ensemble.
 
         Parameters
         ----------
         sites : list of :class:`~tenpy.networks.site.Site`
-            The sites defining the local Hilbert space.
+            The sites defining the local Hilbert space (on the physical legs).
             For usual :class:`tenpy.models.model.Model` given by `model.lat.mps_sites()`.
         charge_sector : tuple of int
             The desired charge sector to be taken for the canonical ensemble.
-        form : (list of) {``'B' | 'A' | 'C' | 'G' | None`` | tuple(float, float)}
-            The canonical form of the stored 'matrices', see table in :mod:`~tenpy.networks.mps`.
-            A single choice holds for all of the entries.
+        dtype : type or string
+            The data type of the array entries.
+        conserve_ancilla_charge : bool
+            Whether to conserve the charges on the ancilla leg.
+            If False, do *not* double the number of conserved charges to get a separate charge
+            for the ancilla degrees of freedom.
+            If True, separately conserve charges on physical and ancilla spaces.
+            In that case, use the function
+            :func:`convert_model_purification_canonical_conserve_ancilla_charge`
+            to get a converted model before using algorithms like the `PurificationTEBD`.
 
         Returns
         -------
         infiniteT_MPS : :class:`PurificationMPS`
             Describes the infinite-temperature (grand canonical) ensemble,
             i.e. expectation values give a trace over all basis states.
+
         """
         sites = list(sites)
         L = len(sites)
@@ -263,26 +269,42 @@ class PurificationMPS(MPS):
         assert Q_from_left[-1] == Q_from_right[-1]  # should match charge_sector on the right
         Q_L_arrays.append(chinfo.make_valid(charge_sector_right[np.newaxis, :]))
 
-        # TODO: should we actually double number of charges?!?
-        # this would require to change sites and mess with existing MPOs/Us to be applied
-
-        Bs = []
-        Ss = [np.ones(1, dtype=np.float64)]
         # now we can define the tensors following section VI.C) of [barthel2016]_:
         # B[vL, vR, p, q] = delta_{p,q} delta_{Q(p) + Q(vL), Q(vR)}
         # the normalization will be ensured by a call to `canonical_form_finite()` in the end.
+        Bs = []
+        Ss = [np.ones(1, dtype=np.float64)]
         Q_R = Q_L_arrays[0]
-        leg_R = npc.LegCharge.from_qflat(chinfo, Q_R, qconj=-1)
+        if not conserve_ancilla_charge:  # cac := conserve ancilla charges
+            leg_R = npc.LegCharge.from_qflat(chinfo, Q_R, qconj=-1)
+        else:
+            chinfo_cac = npc.ChargeInfo(list(chinfo.mod) * 2,
+                                        chinfo.names + [n + ' ancilla' for n in chinfo.names])
+            Q_R_cac = chinfo_cac.make_valid(np.hstack([Q_R, -Q_R]))
+            leg_R = npc.LegCharge.from_qflat(chinfo_cac, Q_R_cac, qconj=-1)
+            sites_cac = []
         for i in range(L):
             leg_p = sites[i].leg
             Q_p = leg_p.to_qflat()
-            leg_q = leg_p.conj().copy()
-            leg_q.charges = np.zeros_like(leg_q.charges)
             Q_L = Q_L_arrays[i]
-            leg_L = leg_R.conj()
             Q_R = Q_L_arrays[i+1]
-            leg_R = npc.LegCharge.from_qflat(chinfo, Q_R, qconj=-1)
             Q_R_map = dict((tuple(q),i) for i, q in enumerate(Q_R))
+
+            leg_L = leg_R.conj()
+            if not conserve_ancilla_charge:
+                leg_q = leg_p.conj().copy()
+                leg_q.charges = np.zeros_like(leg_q.charges)
+                leg_R = npc.LegCharge.from_qflat(chinfo, Q_R, qconj=-1)
+            else:
+                Q_p_cac = np.hstack([Q_p, np.zeros_like(Q_p)])
+                Q_q_cac = np.hstack([np.zeros_like(Q_p), Q_p])
+                Q_R_cac = chinfo_cac.make_valid(np.hstack([Q_R, -Q_R]))
+                leg_p = npc.LegCharge.from_qflat(chinfo_cac, Q_p_cac, qconj=+1)
+                leg_q = npc.LegCharge.from_qflat(chinfo_cac, Q_q_cac, qconj=-1)
+                leg_R = npc.LegCharge.from_qflat(chinfo_cac, Q_R_cac, qconj=-1)
+                s_cac = copy.copy(sites[i])
+                s_cac.change_charge(leg_p)  # note: if Q_p is sorted, so are Q_{p,q}_cac
+                sites_cac.append(s_cac)
             B = npc.zeros([leg_L, leg_R, leg_p, leg_q],
                           dtype=dtype,
                           labels=['vL', 'vR', 'p', 'q'])
@@ -290,13 +312,16 @@ class PurificationMPS(MPS):
                 Q_p_j = Q_p[j]
                 for vL, Q_L_vL in enumerate(Q_L):
                     Q_R_vR = tuple(chinfo.make_valid(Q_L_vL + Q_p_j))
-                    vR = QR_map.get(Q_R_vR, None)
+                    vR = Q_R_map.get(Q_R_vR, None)
                     if vR is not None:
                         B[vL, vR, j, j] = 1.  # add an entry in the tensor
                     # else: dropped Q_R_vR since it can't reach charge_sector on the right any more
             Bs.append(B)
             Ss.append(np.ones(B.shape[1], np.float64))
-        res = cls(sites, Bs, Ss, 'finite', form)
+
+        if conserve_ancilla_charge:
+            sites = sites_cac
+        res = cls(sites, Bs, Ss, 'finite', form='B')
         res.canonical_form_finite()  # calculate S values and normalize
         return res
 
@@ -481,3 +506,85 @@ class PurificationMPS(MPS):
             return [lbl + str(k) + '*' for k in range(ks) for lbl in self._p_label]
         else:
             return [lbl + str(k) for k in range(ks) for lbl in self._p_label]
+
+
+def convert_model_purification_canonical_conserve_ancilla_charge(model):
+    """Extend charges of model for :meth:`PurificationMPS.from_infiniteT_canonical`.
+
+    Parameters
+    ----------
+    model : :class:`tenpy.models.model.Model`
+        Model to be converted.
+
+    Returns
+    -------
+    model_with_extra_charges : :class:`tenpy.models.model.Model`
+        Shallow copy of the `model` with charges of sites, `H_MPO` and `H_bond` adjusted
+        to fit the doubled (with 0 extended) charges of the canonical ensemble of the
+        :class:`PurificationMPS`. The number of
+    """
+    # cac := conserve_ancilla_charge
+    model = model.copy()
+    chinfo = model.lat.unit_cell[0].leg.chinfo
+    chinfo_cac = npc.ChargeInfo(list(chinfo.mod) * 2,
+                                chinfo.names + [n + ' ancilla' for n in chinfo.names])
+
+    converted_sites_cache = {}
+    def _convert_site(site):
+        s = converted_sites_cache.get(site, None)
+        if s is not None:
+            return s
+        s_new = copy.copy(site)
+        leg_p = s_new.leg
+        Q_p = leg_p.charges
+        Q_p_cac = np.hstack([Q_p, np.zeros_like(Q_p)])  # still sorted
+        leg_p_cac = npc.LegCharge(chinfo_cac, leg_p.slices, Q_p_cac, leg_p.qconj)
+        s_new.change_charge(leg_p_cac)
+        converted_sites_cache[site] = s_new
+        return s_new
+
+    model.lat = model.lat.copy()
+    model.lat.unit_cell = [_convert_site(s) for s in model.lat.unit_cell]
+
+    if hasattr(model, 'H_MPO'):
+        model.H_MPO = H_MPO = model.H_MPO.copy()
+        H_MPO.sites = [_convert_site(s) for s in H_MPO.sites]
+        H_MPO.chinfo = chinfo_cac
+        new_W = []
+        for W in H_MPO._W:
+            W = W.copy()
+            W.itranspose(['wL', 'wR', 'p', 'p*'])
+            W.legs = W.legs[:]
+            for i in range(3):
+                leg = W.legs[i]
+                if i < 2:
+                    Q = np.hstack([leg.charges, -leg.charges])  # wL, wR
+                else:
+                    Q = np.hstack([leg.charges, np.zeros_like(leg.charges)])  # p
+                W.legs[i] = npc.LegCharge(chinfo_cac,
+                                          leg.slices,
+                                          chinfo_cac.make_valid(Q),
+                                          leg.qconj)
+            W.qtotal = np.hstack([W.qtotal, np.zeros_like(W.qtotal)])
+            W.legs[3] = W.legs[2].conj()
+            new_W.append(W)
+        H_MPO._W = new_W
+
+    if hasattr(model, 'H_bond'):
+        sites = model.lat.mps_sites()  # already updated!
+        model.H_bond = H_bond = model.H_bond[:]
+        L = len(sites)
+        assert len(sites) == len(H_bond)
+        for i, H in enumerate(H_bond):
+            if H is None:
+                continue
+            leg_p0 = sites[(i-1) % L].leg
+            leg_p1 = sites[i].leg
+            H = H.transpose(['p0', 'p1', 'p0*', 'p1*'])  # copy!
+            H.chinfo = chinfo_cac
+            H.legs = [leg_p0, leg_p1, leg_p0.conj(), leg_p1.conj()]
+            H.qtotal = np.hstack([H.qtotal, np.zeros_like(H.qtotal)])
+            H.test_sanity()
+            H_bond[i] = H
+    model.test_sanity()
+    return model
