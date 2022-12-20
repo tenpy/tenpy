@@ -46,10 +46,15 @@ def test_purification_mps():
             npt.assert_allclose(C, 0.5 * 0.5 * np.eye(L), atol=1.e-13)
 
 
-def test_canoncial_purification(L=6, charge_sector=0, eps=1.e-14):
+
+@pytest.mark.parametrize('conserve_ancilla', [False, True])
+def test_canoncial_purification(conserve_ancilla, L=6, charge_sector=0, eps=1.e-14):
     site = spin_half
-    psi = purification_mps.PurificationMPS.from_infiniteT_canonical([site] * L, [charge_sector])
+    psi = purification_mps.PurificationMPS.from_infiniteT_canonical(
+        [site] * L, [charge_sector], conserve_ancilla_charge=conserve_ancilla)
     psi.test_sanity()
+    Szs = psi.expectation_value('Sz')
+    assert abs(sum(Szs) - charge_sector) < 1.e-13
     total_psi = psi.get_theta(0, L).take_slice(0, 'vL').take_slice(0, 'vR')
     total_psi.itranspose(['p' + str(i) for i in range(L)] + ['q' + str(i) for i in range(L)])
     # note: don't `combine_legs`: it will permute the p legs differently than q due to charges
@@ -80,6 +85,8 @@ def test_canoncial_purification(L=6, charge_sector=0, eps=1.e-14):
         'dt': 0.1,
         'N_steps': 2
     }
+    if conserve_ancilla:
+        M = purification_mps.convert_model_purification_canonical_conserve_ancilla_charge(M)
     eng = PurificationTEBD(psi, M, TEBD_params)
     eng.run_imaginary(0.2)
     eng.run()
