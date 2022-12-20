@@ -124,6 +124,7 @@ import itertools
 from .mps import MPS
 from ..linalg import np_conserved as npc
 from ..tools.math import entropy
+from ..tools.misc import lexsort
 
 __all__ = ['PurificationMPS']
 
@@ -234,51 +235,65 @@ class PurificationMPS(MPS):
         charge_sector_right = chinfo.make_valid(charge_sector)
         assert charge_sector_right.ndim == 1
         # get bounds for the maximal and minimal charge values at each bond
-        qflats = [s.leg.to_qflat() for s in sites]
-        min_p_Q = [np.min(qflat, axis=0) for qflat in qflats]
-        max_p_Q = [np.max(qflat, axis=0) for qflat in qflats]
-        min_Q_left = charge_sector_left + np.cumsum(min_p_Q, axis=0)  # on bonds 1, 2, 3... L
-        max_Q_left = charge_sector_left + np.cumsum(max_p_Q, axis=0)
-        min_Q_right = charge_sector_right - np.cumsum(max_p_Q[::-1], axis=0)[::-1]  # 0, 1, ... L-1
-        max_Q_right = charge_sector_right - np.cumsum(min_p_Q[::-1], axis=0)[::-1]
-        min_Q = np.max([min_Q_left[:-1], min_Q_right[1:]], axis=0)  # on non-trivial bonds
-        max_Q = np.min([max_Q_left[:-1], max_Q_right[1:]], axis=0)  # on non-trivial bonds
-        min_Q = np.append(min_Q, [charge_sector_right], axis=0)  # bonds 1, 2, ... L
-        max_Q = np.append(max_Q, [charge_sector_right], axis=0)
-        assert np.all(max_Q >= min_Q)
-        chi = np.prod(max_Q - min_Q + 1, axis=1)  # assumes that charges can be incremented by 1
+        Q_from_right = [None] * L + [set([tuple(charge_sector_right)])]  # all bonds 0, ... L
+        for i in reversed(range(L)):
+            Q_R = np.array(list(Q_from_right[i+1]))
+            # find new charges possible on left of site i, coming from the right
+            Q_L = set()
+            for Q_p in sites[i].leg.charges:
+                Q_L_add = chinfo.make_valid(Q_R - Q_p[np.newaxis, :])
+                Q_L_add = set([tuple(q) for q in Q_L_add])
+                Q_L = Q_L.union(Q_L_add)
+            Q_from_right[i] = Q_L
+        if tuple(charge_sector_left) not in Q_from_right[0]:
+            raise ValueError("can't get desired charge sector {charge_sector!r} "
+                             "for the given charges on physical sites!")
+        Q_from_left = [set([tuple(charge_sector_left)])] + [None] * L
+        Q_L_arrays = []
+        for i in range(L):
+            Q_L = np.array(list(Q_from_left[i]))
+            Q_L = Q_L[lexsort(Q_L.T), :]
+            Q_L_arrays.append(Q_L)
+            Q_R = set()
+            for Q_p in sites[i].leg.charges:
+                Q_R_add = chinfo.make_valid(Q_L + Q_p[:, np.newaxis])
+                Q_R_add = set([tuple(q) for q in Q_R_add])
+                Q_R = Q_R.union(Q_R_add)
+            Q_from_left[i+1] = Q_R.intersection(Q_from_right[i+1])
+        assert Q_from_left[-1] == Q_from_right[-1]  # should match charge_sector on the right
+        Q_L_arrays.append(chinfo.make_valid(charge_sector_right[np.newaxis, :]))
+
+        # TODO: should we actually double number of charges?!?
+        # this would require to change sites and mess with existing MPOs/Us to be applied
 
         Bs = []
         Ss = [np.ones(1, dtype=np.float64)]
         # now we can define the tensors following section VI.C) of [barthel2016]_:
         # B[vL, vR, p, q] = delta_{p,q} delta_{Q(p) + Q(vL), Q(vR)}
         # the normalization will be ensured by a call to `canonical_form_finite()` in the end.
-        right_Q = chinfo.make_valid([charge_sector_left])
-        right_leg = npc.LegCharge.from_qflat(chinfo, right_Q, qconj=-1)
-        for s in range(L):
-            p_leg = sites[s].leg
-            p_Q = p_leg.to_qflat()
-            q_leg = p_leg.conj().copy()
-            q_leg.charges = np.zeros_like(q_leg.charges)
-            left_Q = right_Q
-            left_leg = right_leg.conj()
-            right_Q = np.array(
-                list(
-                    itertools.product(
-                        *[range(min_Q[s][c], max_Q[s][c] + 1) for c in range(chinfo.qnumber)])))
-            right_Q = right_Q[np.lexsort(right_Q.T), :]  # sort charges
-            right_leg = npc.LegCharge.from_qflat(chinfo, right_Q, qconj=-1)
-            B = npc.zeros([left_leg, right_leg, p_leg, q_leg],
+        Q_R = Q_L_arrays[0]
+        leg_R = npc.LegCharge.from_qflat(chinfo, Q_R, qconj=-1)
+        for i in range(L):
+            leg_p = sites[i].leg
+            Q_p = leg_p.to_qflat()
+            leg_q = leg_p.conj().copy()
+            leg_q.charges = np.zeros_like(leg_q.charges)
+            Q_L = Q_L_arrays[i]
+            leg_L = leg_R.conj()
+            Q_R = Q_L_arrays[i+1]
+            leg_R = npc.LegCharge.from_qflat(chinfo, Q_R, qconj=-1)
+            Q_R_map = dict((tuple(q),i) for i, q in enumerate(Q_R))
+            B = npc.zeros([leg_L, leg_R, leg_p, leg_q],
                           dtype=dtype,
                           labels=['vL', 'vR', 'p', 'q'])
-            for p in range(p_leg.ind_len):
-                for vL in range(left_Q.shape[0]):
-                    Q_vR = left_Q[vL] + p_Q[p]
-                    vR = np.nonzero(np.all(Q_vR == right_Q, axis=1))[0]
-                    if len(vR) == 0:
-                        continue
-                    vR = vR.item()
-                    B[vL, vR, p, p] = 1.  # add an entry in the tensor
+            for j in range(leg_p.ind_len):
+                Q_p_j = Q_p[j]
+                for vL, Q_L_vL in enumerate(Q_L):
+                    Q_R_vR = tuple(chinfo.make_valid(Q_L_vL + Q_p_j))
+                    vR = QR_map.get(Q_R_vR, None)
+                    if vR is not None:
+                        B[vL, vR, j, j] = 1.  # add an entry in the tensor
+                    # else: dropped Q_R_vR since it can't reach charge_sector on the right any more
             Bs.append(B)
             Ss.append(np.ones(B.shape[1], np.float64))
         res = cls(sites, Bs, Ss, 'finite', form)
