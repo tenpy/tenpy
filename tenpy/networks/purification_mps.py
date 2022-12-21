@@ -127,7 +127,7 @@ from ..linalg import np_conserved as npc
 from ..tools.math import entropy
 from ..tools.misc import lexsort
 
-__all__ = ['PurificationMPS']
+__all__ = ['PurificationMPS', 'convert_model_purification_canonical_conserve_ancilla_charge']
 
 
 class PurificationMPS(MPS):
