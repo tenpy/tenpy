@@ -3522,7 +3522,7 @@ def tensordot(a, b, axes=2):
         # #### the main work
         res = _tensordot_worker(a, b, axes)
     # labels
-    res._labels = _drop_duplicate_labels(a._labels[:-axes], b._labels[axes:])
+    res._labels = _drop_duplicate_labels(a._labels[:a.rank-axes], b._labels[axes:])
     return res
 
 
