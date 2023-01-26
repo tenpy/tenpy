@@ -3044,7 +3044,9 @@ class MPS:
         Parameters
         ----------
         renormalize: bool
-            Whether a change in the norm should be discarded or used to update :attr:`norm`.
+            Whether a change in the norm should be discarded or used to *update* :attr:`norm`.
+            Note that even `renoramlize=True` *does not reset* the :attr:`norm` to 1.
+            To do that, you would rather have to set ``psi.norm = 1`` explicitly!
         cutoff : float | None
             Cutoff of singular values used in the SVDs.
         envs_to_update : None | list of :class:`MPSEnvironment`
@@ -3184,6 +3186,8 @@ class MPS:
         ----------
         renormalize: bool
             Whether a change in the norm should be discarded or used to update :attr:`norm`.
+            Note that even `renoramlize=True` *does not reset* the :attr:`norm` to 1.
+            To do that, you would rather have to set ``psi.norm = 1`` explicitly!
         tol_xi : float
             Raise an error if the correlation length is larger than that
             (which indicates a degenerate "cat" state, e.g., for spontaneous symmetry breaking).
@@ -3257,6 +3261,8 @@ class MPS:
         ----------
         renormalize: bool
             Whether a change in the norm should be discarded or used to update :attr:`norm`.
+            Note that even `renoramlize=True` *does not reset* the :attr:`norm` to 1.
+            To do that, you would rather have to set ``psi.norm = 1`` explicitly!
         tol : float
             Precision down to which the state should be in canonical form.
         arnoldi_params : dict
