@@ -231,8 +231,8 @@ class Model(Hdf5Exportable):
         reads out the parameter ``self.options['time']``, and reinitialize/update the model
         calling this method.
 
-        Paramters
-        ---------
+        Parameters
+        ----------
         new_time : float
             Time at which the (time-dependent) Hamiltonian should be constructed.
 
