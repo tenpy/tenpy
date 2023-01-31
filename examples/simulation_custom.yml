@@ -41,13 +41,13 @@ algorithm_params:
 
 connect_measurements: 
   - - tenpy.simulations.measurement
-    - onsite_expectation_value
+    - m_onsite_expectation_value
     - opname: Sz
-  - - tenpy.simulations.measurement
-    - psi_method
-    - method: correlation_function
-      key: '<Sp_i Sm_j>'
+  - - psi_method
+    - wrap correlation_function
+    - results_key: '<Sp_i Sm_j>'
       ops1: Sp
       ops2: Sm
-  - - model_custom  # module where function is defined
-    - pollmann_turner_inversion
+  - - model_custom                 # module where function is defined
+    - m_pollmann_turner_inversion  # function defined in the module to be measured
+    # - extra: argument            # any additional keyword argument(s) to be given to the function.

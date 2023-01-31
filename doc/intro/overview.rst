@@ -46,7 +46,7 @@ There is a fairly clear hierarchy from top-level simulations wrapping everything
 over high-level algorithms in the :mod:`tenpy.algorithms` module down to basic
 operations from linear algebra in the :mod:`tenpy.linalg` module.
 
-.. image :: /images/tenpy_layers.*
+.. image :: /images/overview.*
 
 
 High-level simulations

@@ -32,4 +32,4 @@ def test_AKLT_infinite():
     E0, psi0 = eng.run()
     assert abs(E0 - (-2 / 3.)) < 1.e-10
     psi_aklt = M.psi_AKLT()
-    assert abs(1. - abs(psi0.overlap(psi_aklt))) < 1.e-10
+    assert abs(1. - abs(psi0.overlap(psi_aklt, understood_infinite=True))) < 1.e-10

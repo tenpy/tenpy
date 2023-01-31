@@ -1319,7 +1319,7 @@ class ExponentiallyDecayingTerms(Hdf5Exportable):
     following form with a single extra index of the virtual bonds:
 
     .. math ::
-        sum_{i \neq j} lambda^{|i-j|} A_i B_j
+        sum_{i < j} lambda^{|i-j|} A_i B_j
 
     For 2D cylinders (or ladders), we need a slight generalization of this, where the operators
     act only on a subset of the sites in each unit cell, given by a 1D array `subsites`:

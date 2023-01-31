@@ -14,7 +14,7 @@ import tenpy.linalg.random_matrix as rmat
 import tenpy.linalg.np_conserved as npc
 import pytest
 
-spin_half = site.SpinHalfSite(conserve='Sz')
+spin_half = site.SpinHalfSite(conserve='Sz', sort_charge=False)
 ferm = site.FermionSite(conserve='N')
 
 
@@ -46,10 +46,15 @@ def test_purification_mps():
             npt.assert_allclose(C, 0.5 * 0.5 * np.eye(L), atol=1.e-13)
 
 
-def test_canoncial_purification(L=6, charge_sector=0, eps=1.e-14):
+
+@pytest.mark.parametrize('conserve_ancilla', [False, True])
+def test_canoncial_purification(conserve_ancilla, L=6, charge_sector=0, eps=1.e-14):
     site = spin_half
-    psi = purification_mps.PurificationMPS.from_infiniteT_canonical([site] * L, [charge_sector])
+    psi = purification_mps.PurificationMPS.from_infiniteT_canonical(
+        [site] * L, [charge_sector], conserve_ancilla_charge=conserve_ancilla)
     psi.test_sanity()
+    Szs = psi.expectation_value('Sz')
+    assert abs(sum(Szs) - charge_sector) < 1.e-13
     total_psi = psi.get_theta(0, L).take_slice(0, 'vL').take_slice(0, 'vR')
     total_psi.itranspose(['p' + str(i) for i in range(L)] + ['q' + str(i) for i in range(L)])
     # note: don't `combine_legs`: it will permute the p legs differently than q due to charges
@@ -68,7 +73,8 @@ def test_canoncial_purification(L=6, charge_sector=0, eps=1.e-14):
             assert abs(entry) < eps
 
     # and one quick test of TEBD
-    xxz_pars = dict(L=L, Jxx=1., Jz=3., hz=0., bc_MPS='finite')
+    xxz_pars = dict(L=L, Jxx=1., Jz=3., hz=0., bc_MPS='finite', sort_charge=False)
+    # sort_charge should be same as for global `spin_half`.
     M = XXZChain(xxz_pars)
     TEBD_params = {
         'trunc_params': {
@@ -79,6 +85,8 @@ def test_canoncial_purification(L=6, charge_sector=0, eps=1.e-14):
         'dt': 0.1,
         'N_steps': 2
     }
+    if conserve_ancilla:
+        M = purification_mps.convert_model_purification_canonical_conserve_ancilla_charge(M)
     eng = PurificationTEBD(psi, M, TEBD_params)
     eng.run_imaginary(0.2)
     eng.run()
@@ -88,7 +96,7 @@ def test_canoncial_purification(L=6, charge_sector=0, eps=1.e-14):
 
 @pytest.mark.slow
 def test_purification_TEBD(L=3):
-    xxz_pars = dict(L=L, Jxx=1., Jz=3., hz=0., bc_MPS='finite')
+    xxz_pars = dict(L=L, Jxx=1., Jz=3., hz=0., bc_MPS='finite', sort_charge=True)
     M = XXZChain(xxz_pars)
     for disent in [
             None, 'backwards', 'min(None,last)-renyi', 'noise-norm', 'renyi-min(None,noise-renyi)'
@@ -116,7 +124,7 @@ def test_purification_TEBD(L=3):
 
 
 def test_purification_MPO(L=6):
-    xxz_pars = dict(L=L, Jxx=1., Jz=2., hz=0., bc_MPS='finite')
+    xxz_pars = dict(L=L, Jxx=1., Jz=2., hz=0., bc_MPS='finite', sort_charge=True)
     M = XXZChain(xxz_pars)
     psi = purification_mps.PurificationMPS.from_infiniteT(M.lat.mps_sites(), bc='finite')
     options = {'trunc_params': {'chi_max': 50, 'svd_min': 1.e-8}}
@@ -127,7 +135,7 @@ def test_purification_MPO(L=6):
 
 
 def test_renyi_disentangler(L=4, eps=1.e-15):
-    xxz_pars = dict(L=L, Jxx=1., Jz=3., hz=0., bc_MPS='finite')
+    xxz_pars = dict(L=L, Jxx=1., Jz=3., hz=0., bc_MPS='finite', sort_charge=True)
     M = XXZChain(xxz_pars)
     psi = purification_mps.PurificationMPS.from_infiniteT(M.lat.mps_sites(), bc='finite')
     eng = PurificationTEBD(psi, M, {'disentangle': 'renyi'})
@@ -221,7 +229,7 @@ def gen_disentangler_psi_singlet_test(site_P=spin_half, L=6, max_range=4):
     print("PQ:", np.round(mutinf_pq / np.log(2), 3))
     print("P: ", np.round(psi0.mutinf_two_site(legs='p')[1] / np.log(2), 3))
     print("Q: ", np.round(psi0.mutinf_two_site(legs='q')[1] / np.log(2), 3))
-    M = XXZChain(dict(L=L))
+    M = XXZChain(dict(L=L, sort_charge=True))
     tebd_pars = dict(trunc_params={'trunc_cut': 1.e-10}, disentangle='diag')
     eng = PurificationTEBD(psi0, M, tebd_pars)
     for i in range(L):

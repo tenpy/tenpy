@@ -45,12 +45,12 @@ import warnings
 import logging
 logger = logging.getLogger(__name__)
 
-from .algorithm import TimeEvolutionAlgorithm
+from .algorithm import TimeEvolutionAlgorithm, TimeDependentHAlgorithm
 from ..linalg import np_conserved as npc
 from .truncation import svd_theta, TruncationError
 from ..linalg import random_matrix
 
-__all__ = ['TEBDEngine', 'Engine', 'RandomUnitaryEvolution']
+__all__ = ['TEBDEngine', 'Engine', 'RandomUnitaryEvolution', 'TimeDependentTEBD']
 
 
 class TEBDEngine(TimeEvolutionAlgorithm):
@@ -99,10 +99,9 @@ class TEBDEngine(TimeEvolutionAlgorithm):
     """
     def __init__(self, psi, model, options, **kwargs):
         TimeEvolutionAlgorithm.__init__(self, psi, model, options, **kwargs)
-        self.trunc_err = self.options.get('start_trunc_err', TruncationError())
+        self._trunc_err_bonds = [TruncationError() for i in range(psi.L + 1)]
         self._U = None
         self._U_param = {}
-        self._trunc_err_bonds = [TruncationError() for i in range(psi.L + 1)]
         self._update_index = None
 
     @property
@@ -115,31 +114,7 @@ class TEBDEngine(TimeEvolutionAlgorithm):
         """truncation error introduced on each non-trivial bond."""
         return self._trunc_err_bonds[self.psi.nontrivial_bonds]
 
-    def run(self):
-        """Run TEBD real time evolution by `N_steps`*`dt`."""
-        # initialize parameters
-        delta_t = self.options.get('dt', 0.1)
-        N_steps = self.options.get('N_steps', 10)
-        TrotterOrder = self.options.get('order', 2)
-        E_offset = self.options.get('E_offset', None)
-
-        self.calc_U(TrotterOrder, delta_t, type_evo='real', E_offset=E_offset)
-
-        Sold = np.mean(self.psi.entanglement_entropy())
-        start_time = time.time()
-
-        self.update(N_steps)
-
-        S = self.psi.entanglement_entropy()
-        logger.info(
-            "--> time=%(t)3.3f, max(chi)=%(chi)d, max(S)=%(S).5f, "
-            "avg DeltaS=%(dS).4e, since last update: %(wall_time).1fs", {
-                't': self.evolved_time.real,
-                'chi': max(self.psi.chi),
-                'S': max(S),
-                'dS': np.mean(S) - Sold,
-                'wall_time': time.time() - start_time,
-            })
+    # run() as defined in TimeEvolutionAlgorithm
 
     def run_GS(self):
         """TEBD algorithm in imaginary time to find the ground state.
@@ -156,7 +131,7 @@ class TEBDEngine(TimeEvolutionAlgorithm):
                 but a too small time step requires a lot of steps to reach
                 ``exp(-tau H) --> |psi0><psi0|``.
                 Therefore, we start with fairly large time steps for a quick time evolution until
-                convergence, and the gradually decrease the time step.
+                convergence, and then gradually decrease the time step.
             order : int
                 Order of the Suzuki-Trotter decomposition.
             N_steps : int
@@ -183,7 +158,7 @@ class TEBDEngine(TimeEvolutionAlgorithm):
                 if self.psi.finite and TrotterOrder == 2:
                     self.update_imag(N_steps)
                 else:
-                    self.update(N_steps)
+                    self.evolve(N_steps, delta_tau)
                 step += N_steps
                 E = np.mean(self.model.bond_energies(self.psi))
                 DeltaE = abs(Eold - E)
@@ -306,8 +281,13 @@ class TEBDEngine(TimeEvolutionAlgorithm):
         # else
         raise ValueError("Unknown order {0!r} for Suzuki Trotter decomposition".format(order))
 
+    def prepare_evolve(self, dt):
+        order = self.options.get('order', 2)
+        E_offset = self.options.get('E_offset', None)
+        self.calc_U(order, dt, type_evo='real', E_offset=E_offset)
+
     def calc_U(self, order, delta_t, type_evo='real', E_offset=None):
-        """Calculate ``self.U_bond`` from ``self.bond_eig_{vals,vecs}``.
+        """Calculate ``self.U_bond`` from ``self.model.H_bond``.
 
         This function calculates
 
@@ -335,7 +315,7 @@ class TEBDEngine(TimeEvolutionAlgorithm):
             U_param['tau'] = -1.j * delta_t
         else:
             raise ValueError("Invalid value for `type_evo`: " + repr(type_evo))
-        if self._U_param == U_param:  # same keys and values as cached
+        if self._U_param == U_param and not self.force_prepare_evolve:
             logger.debug("Skip recalculation of U with same parameters as before")
             return  # nothing to do: U is cached
         self._U_param = U_param
@@ -348,32 +328,36 @@ class TEBDEngine(TimeEvolutionAlgorithm):
                 self._calc_U_bond(i_bond, dt * delta_t, type_evo, E_offset) for i_bond in range(L)
             ]
             self._U.append(U_bond)
-        # done
+        self.force_prepare_evolve = False
 
-    def update(self, N_steps):
-        """Evolve by ``N_steps * U_param['dt']``.
+    def evolve(self, N_steps, dt):
+        """Evolve by ``dt * N_steps``.
 
         Parameters
         ----------
         N_steps : int
             The number of steps for which the whole lattice should be updated.
+        dt : float
+            The time step; but really this was already used in :meth:`prepare_evolve`.
 
         Returns
         -------
         trunc_err : :class:`~tenpy.algorithms.truncation.TruncationError`
             The error of the represented state which is introduced due to the truncation during
-            this sequence of update steps.
+            this sequence of evolvution steps.
         """
+        if dt is not None:
+            assert dt == self._U_param['delta_t']
         trunc_err = TruncationError()
         order = self._U_param['order']
         for U_idx_dt, odd in self.suzuki_trotter_decomposition(order, N_steps):
-            trunc_err += self.update_step(U_idx_dt, odd)
+            trunc_err += self.evolve_step(U_idx_dt, odd)
         self.evolved_time = self.evolved_time + N_steps * self._U_param['tau']
         self.trunc_err = self.trunc_err + trunc_err  # not += : make a copy!
-        # (this is done to avoid problems of users storing self.trunc_err after each `update`)
+        # (this is done to avoid problems of users storing self.trunc_err after each `evolv`)
         return trunc_err
 
-    def update_step(self, U_idx_dt, odd):
+    def evolve_step(self, U_idx_dt, odd):
         """Updates either even *or* odd bonds in unit cell.
 
         Depending on the choice of p, this function updates all even (``E``, odd=False,0)
@@ -664,32 +648,26 @@ class RandomUnitaryEvolution(TEBDEngine):
         >>> print(psi2.chi)  # still a product state, not really random!!!
         [1, 1, 1, 1, 1, 1, 1]
     """
+
     def __init__(self, psi, options, **kwargs):
         TEBDEngine.__init__(self, psi, None, options, **kwargs)
 
     def run(self):
-        """Time evolution with TEBD and random two-site unitaries."""
-        N_steps = self.options.get('N_steps', 1)
-        Sold = np.mean(self.psi.entanglement_entropy())
-        start_time = time.time()
+        """Time evolution with TEBD and random two-site unitaries (possibly conserving charges)."""
+        dt = self.options.get('dt', 1)
+        if dt != 1:
+            warnings.warn(f"dt={dt!s} != 1 for RandomUnitaryEvolution "
+                          "is only used as unit for evolved_time")
+        super().run()
 
-        self.update(N_steps)
-
-        max_chi = max(self.psi.chi)
-        S = self.psi.entanglement_entropy()
-        dS = np.mean(S) - Sold
-        logger.info(
-            "--> time=%(t)3.3f, max(chi)=%(chi)d, max(S)=%(S).5f, "
-            "avg DeltaS=%(dS).4e, since last update: %(wall_time).1fs", {
-                't': self.evolved_time.real,
-                'chi': max(self.psi.chi),
-                'S': max(S),
-                'dS': np.mean(S) - Sold,
-                'wall_time': time.time() - start_time,
-            })
+    def prepare_evolve(self, dt):
+        "Do nothing, as we call :meth:`calc_U` directly in :meth:`update`."
+        pass
 
     def calc_U(self):
         """Draw new random two-site unitaries replacing the usual `U` of TEBD.
+
+        The parameter `dt` is only there for compatibility with parent classes and is ignored.
 
         .. cfg:configoptions :: RandomUnitaryEvolution
 
@@ -725,11 +703,13 @@ class RandomUnitaryEvolution(TEBDEngine):
                 U_bonds.append(U)
         self._U = [U_bonds]
 
-    def update(self, N_steps):
+    def evolve(self, N_steps, dt):
         """Apply ``N_steps`` random two-site unitaries to each bond (in even-odd pattern).
 
         Parameters
         ----------
+        dt : float
+            Mostly ignored, but used as unit to update :attr:`evolved_time`.
         N_steps : int
             The number of steps for which the whole lattice should be updated.
 
@@ -740,14 +720,20 @@ class RandomUnitaryEvolution(TEBDEngine):
             this sequence of update steps.
         """
         trunc_err = TruncationError()
-        for i in range(N_steps):
+        for _ in range(N_steps):
             self.calc_U()  # draw new random unitaries
             for odd in [1, 0]:
-                trunc_err += self.update_step(0, odd)
-        self.evolved_time = self.evolved_time + N_steps
+                trunc_err += self.evolve_step(0, odd)
+        self.evolved_time = self.evolved_time + N_steps * dt
         self.trunc_err = self.trunc_err + trunc_err  # not += : make a copy!
         # (this is done to avoid problems of users storing self.trunc_err after each `update`)
         return trunc_err
 
-    def _calc_bond_eig(self):
-        pass  # do nothing
+
+class TimeDependentTEBD(TimeDependentHAlgorithm,TEBDEngine):
+    """Variant of :class:`TEBDEngine` that can handle time-dependent Hamiltonians.
+
+    See details in :class:`~tenpy.algorithms.algorithm.TimeDependentHAlgorithm` as well.
+    """
+    # uses run_evolution from TimeDependentHAlgorithm
+    # so nothing to redefine here

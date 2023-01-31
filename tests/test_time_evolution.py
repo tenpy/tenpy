@@ -11,6 +11,8 @@ import pytest
 
 import tenpy.linalg.np_conserved as npc
 from tenpy.networks.mps import MPS
+from tenpy.networks.site import SpinHalfSite
+from tenpy.models.model import CouplingMPOModel, NearestNeighborModel
 from tenpy.models.tf_ising import TFIChain
 from tenpy.models.spins import SpinChain
 from tenpy.algorithms import tebd, tdvp, mpo_evolution, exact_diag
@@ -77,8 +79,9 @@ def test_ExpMPOEvolution(bc_MPS, approximation, compression, g=1.5):
             EngTEBD.run()
             psi = eng.run()
             print(psi.norm)
-            print(abs(abs(psi.overlap(psiTEBD)) - 1), abs(psi.overlap(psiTEBD) - 1))
-            assert (abs(abs(psi.overlap(psiTEBD)) - 1) < 1e-4)
+            ov = psi.overlap(psiTEBD, understood_infinite=True)
+            print(abs(abs(ov) - 1), abs(ov - 1))
+            assert (abs(abs(ov) - 1) < 1e-4)
 
 
 def fermion_TFI_H(L, g=1.5, J=1.):
@@ -244,3 +247,79 @@ def test_time_methods(algorithm):
     npt.assert_almost_equal(np.array(mag)[:-1, :], m_exact, 4)
     npt.assert_almost_equal(np.array(szsz)[:-1, :, :], szsz_exact, 4)
     npt.assert_almost_equal(np.array(spsm)[:-1, :], spsm_exact, 4)
+
+
+class RabiOscillations(CouplingMPOModel,NearestNeighborModel):
+    def init_sites(self, model_params):
+        site = SpinHalfSite(conserve=None)
+        site.add_op('P1', -0.5*(site.Sigmaz - site.Id))
+        return site
+
+    def init_terms(self, model_params):
+        t = model_params.get('time', 0.)
+        omega0 = model_params.get('omega0', 1.)
+        omega1 = model_params.get('omega1', 1.)
+        omega = model_params.get('omega', 1.)
+        self.add_onsite(-0.5*omega0, 0, 'Sigmaz')
+        self.add_onsite(-0.5*omega1 * np.cos(omega * t), 0, 'Sigmax')
+        self.add_onsite(+0.5*omega1 * np.sin(omega * t), 0, 'Sigmay')
+
+    def exact_solution_P1(self, t):
+        # see https://en.wikipedia.org/wiki/Rabi_cycle#In_quantum_computing
+        omega = self.options.get('omega', 1.)
+        omega0 = self.options.get('omega0', 1.)
+        omega1 = self.options.get('omega1', 1.)
+        Omega = np.sqrt((omega - omega0)**2 + omega1**2)
+        print(omega, omega0, omega1, Omega)
+        return (omega1/Omega)**2 * np.sin(0.5*Omega * t)**2
+
+
+@pytest.mark.slow
+def test_time_dependent_evolution(om=0.2*np.pi, om0=np.pi, om1=0.5*np.pi, eps=1.e-4):
+    L = 4
+    model_params = dict(L=L, omega=om, omega0=om0, omega1=om1, bc_MPS='finite')
+    M = RabiOscillations(model_params)
+    product_state = ["up"] * L  # prepare system in spin polarized state
+    psi = MPS.from_product_state(M.lat.mps_sites(), product_state, bc=M.lat.bc_MPS)
+
+    dt = 0.025
+    N_steps = 2
+    params = {
+        'order': 1,
+        'dt': dt,
+        'N_steps': N_steps,
+        'trunc_params': {
+            'chi_max': 50,
+            'svd_min': 1.e-10,
+            'trunc_cut': None
+        }
+    }
+    ts = np.arange(0, 1.2, dt * N_steps)
+    exact = M.exact_solution_P1(ts)
+    # start with TEBD
+    P1s = []
+    eng = tebd.TimeDependentTEBD(psi, M, params.copy())
+    for i, t in enumerate(ts):
+        P1 = psi.expectation_value("P1")
+        P1s.append(P1)
+
+        assert np.max(np.abs(P1 - exact[i])) < eps
+
+        if abs(t - 0.4) < 1.e-7:
+            print('switch to TimeDependentTwoSiteTDVP')
+            params['start_time'] = t
+            del params['order']
+            eng = tdvp.TimeDependentTwoSiteTDVP(psi, M, params.copy())
+        if abs(t - 0.8) < 1.e-7:
+            print('switch to TimeDependentExpMPOEvolution')
+            params['start_time'] = t
+            params['compression_method'] = 'SVD'
+            #  del params['order']
+            eng = mpo_evolution.TimeDependentExpMPOEvolution(psi, M, params.copy())
+
+        eng.run()
+    #  import matplotlib.pyplot as plt
+    #  plt.plot(ts, exact, '-', label='exact')
+    #  plt.plot(ts, P1s, 'o', label='measured')
+    #  plt.legend()
+    #  plt.show()

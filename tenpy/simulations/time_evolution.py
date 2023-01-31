@@ -30,7 +30,7 @@ class RealTimeEvolution(Simulation):
     """
     default_algorithm = 'TEBDEngine'
     default_measurements = Simulation.default_measurements + [
-        ('tenpy.simulations.measurement', 'evolved_time'),
+        ('tenpy.simulations.measurement', 'm_evolved_time'),
     ]
 
     def __init__(self, options, **kwargs):
@@ -46,13 +46,13 @@ class RealTimeEvolution(Simulation):
         while True:
             if np.real(self.engine.evolved_time) >= self.final_time:
                 break
+            self.logger.info("evolve to time %.2f, max chi=%d", self.engine.evolved_time.real,
+                             max(self.psi.chi))
             self.engine.run()
             # for time-dependent H (TimeDependentExpMPOEvolution) the engine can re-init the model;
             # use it for the measurements....
             self.model = self.engine.model
 
-            self.logger.info("reached time %.2f, max chi=%d", self.engine.evolved_time.real,
-                             max(self.psi.chi))
             self.make_measurements()
             self.engine.checkpoint.emit(self.engine)  # TODO: is this a good idea?
 
@@ -61,7 +61,8 @@ class RealTimeEvolution(Simulation):
             # might need to re-initialize model with current time
             # in particular for a sequential/resume run, the first `self.init_model()` might not
             # yet have had the initial start time of the algorithm engine!
-            self.model = self.engine.reinit_model()
+            self.engine.reinit_model()
+            self.model = self.engine.model
         return super().perform_measurements()
 
     def resume_run_algorithm(self):

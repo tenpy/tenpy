@@ -173,7 +173,7 @@ def test_dmrg_excited(eps=1.e-12):
     # (without truncation)
     L, g = 8, 1.3
     bc = 'finite'
-    model_params = dict(L=L, J=1., g=g, bc_MPS=bc, conserve='parity')
+    model_params = dict(L=L, J=1., g=g, bc_MPS=bc, conserve='parity', sort_charge=True)
     M = TFIChain(model_params)
     # compare to exact solution
     ED = ExactDiag(M)
@@ -244,7 +244,7 @@ def test_enlarge_mps_unit_cell():
     E_4, _ = dmrg.TwoSiteDMRGEngine(psi_4, M_4, dmrg_params).run()
     assert abs(E_2 - E_4) < 1.e-12
     psi_2.enlarge_mps_unit_cell(2)
-    ov = abs(psi_2.overlap(psi_4))
+    ov = abs(psi_2.overlap(psi_4, understood_infinite=True))
     print("ov = ", ov)
     assert abs(ov - 1.) < 1.e-12
 
@@ -271,7 +271,7 @@ def test_dmrg_explicit_plus_hc(N, bc_MPS, tol=1.e-13, bc='finite'):
     E2, psi2 = dmrg.TwoSiteDMRGEngine(psi2, M2, dmrg_params).run()
     print(E1, E2, abs(E1 - E2))
     assert abs(E1 - E2) < tol
-    ov = abs(psi1.overlap(psi2))
+    ov = abs(psi1.overlap(psi2, understood_infinite=True))
     print("ov =", ov)
     assert abs(ov - 1) < tol
     dmrg_params['combine'] = True
@@ -279,6 +279,6 @@ def test_dmrg_explicit_plus_hc(N, bc_MPS, tol=1.e-13, bc='finite'):
     E3, psi3 = dmrg_parallel.DMRGThreadPlusHC(psi3, M2, dmrg_params).run()
     print(E1, E3, abs(E1 - E3))
     assert abs(E1 - E3) < tol
-    ov = abs(psi1.overlap(psi3))
+    ov = abs(psi1.overlap(psi3, understood_infinite=True))
     print("ov =", ov)
     assert abs(ov - 1) < tol

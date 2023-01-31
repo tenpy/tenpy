@@ -37,16 +37,20 @@ def test_site():
     leg = gen_random_legcharge(chinfo, 8)
     op1 = npc.Array.from_func(np.random.random, [leg, leg.conj()], shape_kw='size')
     op2 = npc.Array.from_func(np.random.random, [leg, leg.conj()], shape_kw='size')
-    labels = ['up'] + [None] * (leg.ind_len - 2) + ['down']
+    op3_dense = np.diag(np.arange(10, 18))
+    labels = [f'x{i:d}' for i in range(10, 18)]
     s = site.Site(leg, labels, silly_op=op1)
-    assert s.state_index('up') == 0
-    assert s.state_index('down') == leg.ind_len - 1
+    assert s.state_index('x10') == 0
+    assert s.state_index('x17') == leg.ind_len - 1
     assert s.opnames == set(['silly_op', 'Id', 'JW'])
     assert s.silly_op is op1
     s.add_op('op2', op2)
+    s.add_op('op3', op3_dense)
     assert s.op2 is op2
     assert s.get_op('op2') is op2
     assert s.get_op('silly_op') is op1
+    npt.assert_equal(s.get_op('op3').to_ndarray(), op3_dense)
+
     npt.assert_equal(
         s.get_op('silly_op op2').to_ndarray(),
         npc.tensordot(op1, op2, [1, 0]).to_ndarray())
@@ -54,10 +58,8 @@ def test_site():
     leg2 = npc.LegCharge.from_change_charge(leg2, 0, 2, 'changed')
     s2 = copy.deepcopy(s)
     s2.change_charge(leg2)
-    perm_qind, leg2s = leg2.sort()
-    perm_flat = leg2.perm_flat_from_perm_qind(perm_qind)
     s2s = copy.deepcopy(s2)
-    s2s.change_charge(leg2s, perm_flat)
+    s2s.sort_charge()
     for site_check in [s2, s2s]:
         print("site_check.leg = ", site_check.leg)
         for opn in site_check.opnames:
@@ -65,11 +67,19 @@ def test_site():
             op2 = site_check.get_op(opn).to_ndarray()
             perm = site_check.perm
             npt.assert_equal(op1[np.ix_(perm, perm)], op2)
+        # check that we got the permutations right in the basis vectors as well!
+        for i in range(8):
+            b = site_check.state_index(f"x{10 + i:d}")
+            assert site_check.get_op('op3')[b, b] == 10 + i
+    # did we also get permute=True option of add_op correct?
+    s2s.add_op('op3_n', op3_dense, permute_dense=True)
+    npt.assert_equal(s2s.get_op('op3_n').to_ndarray(), s2s.get_op('op3').to_ndarray())
     # done
 
 
 def test_double_site():
-    for site0, site1 in [[site.SpinHalfSite(None)] * 2, [site.SpinHalfSite('Sz')] * 2]:
+    for site0, site1 in [[site.SpinHalfSite(None)] * 2,
+                         [site.SpinHalfSite('Sz', sort_charge=False)] * 2]:
         for charges in ['same', 'drop', 'independent']:
             ds = site.GroupedSite([site0, site1], charges=charges)
             ds.test_sanity()
@@ -130,27 +140,8 @@ def test_spin_half_site():
                Sigmaz='Sigmaz')
     sites = []
     for conserve in [None, 'Sz', 'parity']:
-        S = site.SpinHalfSite(conserve)
-        S.test_sanity()
-        for op in S.onsite_ops:
-            assert S.hc_ops[op] == hcs[op]
-        if conserve != 'Sz':
-            SxSy = ['Sx', 'Sy']
-        else:
-            SxSy = None
-        check_spin_site(S, SxSy=SxSy)
-        sites.append(S)
-    check_same_operators(sites)
-
-
-def test_spin_site():
-    hcs = dict(Id='Id', JW='JW', Sx='Sx', Sy='Sy', Sz='Sz', Sp='Sm', Sm='Sp')
-    for s in [0.5, 1, 1.5, 2, 5]:
-        print('s = ', s)
-        sites = []
-        for conserve in [None, 'Sz', 'parity']:
-            print("conserve = ", conserve)
-            S = site.SpinSite(s, conserve)
+        for sort_charge in [True, False]:
+            S = site.SpinHalfSite(conserve, sort_charge=sort_charge)
             S.test_sanity()
             for op in S.onsite_ops:
                 assert S.hc_ops[op] == hcs[op]
@@ -160,6 +151,27 @@ def test_spin_site():
                 SxSy = None
             check_spin_site(S, SxSy=SxSy)
             sites.append(S)
+    check_same_operators(sites)
+
+
+def test_spin_site():
+    hcs = dict(Id='Id', JW='JW', Sx='Sx', Sy='Sy', Sz='Sz', Sp='Sm', Sm='Sp')
+    for s in [0.5, 1, 1.5, 2, 5]:
+        print('s = ', s)
+        sites = []
+        for sort_charge in [True, False]:
+                for conserve in [None, 'Sz', 'parity']:
+                    print("conserve = ", conserve)
+                    S = site.SpinSite(s, conserve, sort_charge=sort_charge)
+                    S.test_sanity()
+                    for op in S.onsite_ops:
+                        assert S.hc_ops[op] == hcs[op]
+                    if conserve != 'Sz':
+                        SxSy = ['Sx', 'Sy']
+                    else:
+                        SxSy = None
+                    check_spin_site(S, SxSy=SxSy)
+                    sites.append(S)
         check_same_operators(sites)
 
 
