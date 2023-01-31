@@ -199,7 +199,10 @@ class PurificationMPS(MPS):
         return res
 
     @classmethod
-    def from_infiniteT_canonical(cls, sites, charge_sector, dtype=np.float64,
+    def from_infiniteT_canonical(cls,
+                                 sites,
+                                 charge_sector,
+                                 dtype=np.float64,
                                  conserve_ancilla_charge=False):
         """Initial state corresponding to *canonical* infinite-temperature ensemble.
 
@@ -243,7 +246,7 @@ class PurificationMPS(MPS):
         # get bounds for the maximal and minimal charge values at each bond
         Q_from_right = [None] * L + [set([tuple(charge_sector_right)])]  # all bonds 0, ... L
         for i in reversed(range(L)):
-            Q_R = np.array(list(Q_from_right[i+1]))
+            Q_R = np.array(list(Q_from_right[i + 1]))
             # find new charges possible on left of site i, coming from the right
             Q_L = set()
             for Q_p in sites[i].leg.charges:
@@ -265,7 +268,7 @@ class PurificationMPS(MPS):
                 Q_R_add = chinfo.make_valid(Q_L + Q_p[:, np.newaxis])
                 Q_R_add = set([tuple(q) for q in Q_R_add])
                 Q_R = Q_R.union(Q_R_add)
-            Q_from_left[i+1] = Q_R.intersection(Q_from_right[i+1])
+            Q_from_left[i + 1] = Q_R.intersection(Q_from_right[i + 1])
         assert Q_from_left[-1] == Q_from_right[-1]  # should match charge_sector on the right
         Q_L_arrays.append(chinfo.make_valid(charge_sector_right[np.newaxis, :]))
 
@@ -278,8 +281,8 @@ class PurificationMPS(MPS):
         if not conserve_ancilla_charge:  # cac := conserve ancilla charges
             leg_R = npc.LegCharge.from_qflat(chinfo, Q_R, qconj=-1)
         else:
-            chinfo_cac = npc.ChargeInfo(list(chinfo.mod) * 2,
-                                        chinfo.names + [n + ' ancilla' for n in chinfo.names])
+            chinfo_cac = npc.ChargeInfo(
+                list(chinfo.mod) * 2, chinfo.names + [n + ' ancilla' for n in chinfo.names])
             Q_R_cac = chinfo_cac.make_valid(np.hstack([Q_R, -Q_R]))
             leg_R = npc.LegCharge.from_qflat(chinfo_cac, Q_R_cac, qconj=-1)
             sites_cac = []
@@ -287,8 +290,8 @@ class PurificationMPS(MPS):
             leg_p = sites[i].leg
             Q_p = leg_p.to_qflat()
             Q_L = Q_L_arrays[i]
-            Q_R = Q_L_arrays[i+1]
-            Q_R_map = dict((tuple(q),i) for i, q in enumerate(Q_R))
+            Q_R = Q_L_arrays[i + 1]
+            Q_R_map = dict((tuple(q), i) for i, q in enumerate(Q_R))
 
             leg_L = leg_R.conj()
             if not conserve_ancilla_charge:
@@ -305,9 +308,7 @@ class PurificationMPS(MPS):
                 s_cac = copy.copy(sites[i])
                 s_cac.change_charge(leg_p)  # note: if Q_p is sorted, so are Q_{p,q}_cac
                 sites_cac.append(s_cac)
-            B = npc.zeros([leg_L, leg_R, leg_p, leg_q],
-                          dtype=dtype,
-                          labels=['vL', 'vR', 'p', 'q'])
+            B = npc.zeros([leg_L, leg_R, leg_p, leg_q], dtype=dtype, labels=['vL', 'vR', 'p', 'q'])
             for j in range(leg_p.ind_len):
                 Q_p_j = Q_p[j]
                 for vL, Q_L_vL in enumerate(Q_L):
@@ -526,10 +527,11 @@ def convert_model_purification_canonical_conserve_ancilla_charge(model):
     # cac := conserve_ancilla_charge
     model = model.copy()
     chinfo = model.lat.unit_cell[0].leg.chinfo
-    chinfo_cac = npc.ChargeInfo(list(chinfo.mod) * 2,
-                                chinfo.names + [n + ' ancilla' for n in chinfo.names])
+    chinfo_cac = npc.ChargeInfo(
+        list(chinfo.mod) * 2, chinfo.names + [n + ' ancilla' for n in chinfo.names])
 
     converted_sites_cache = {}
+
     def _convert_site(site):
         s = converted_sites_cache.get(site, None)
         if s is not None:
@@ -545,6 +547,7 @@ def convert_model_purification_canonical_conserve_ancilla_charge(model):
 
     model.lat = model.lat.copy()
     model.lat.unit_cell = [_convert_site(s) for s in model.lat.unit_cell]
+    model.lat._sites = [_convert_site(s) for s in model.lat._sites]
 
     if hasattr(model, 'H_MPO'):
         model.H_MPO = H_MPO = model.H_MPO.copy()
@@ -561,9 +564,7 @@ def convert_model_purification_canonical_conserve_ancilla_charge(model):
                     Q = np.hstack([leg.charges, -leg.charges])  # wL, wR
                 else:
                     Q = np.hstack([leg.charges, np.zeros_like(leg.charges)])  # p
-                W.legs[i] = npc.LegCharge(chinfo_cac,
-                                          leg.slices,
-                                          chinfo_cac.make_valid(Q),
+                W.legs[i] = npc.LegCharge(chinfo_cac, leg.slices, chinfo_cac.make_valid(Q),
                                           leg.qconj)
             W.qtotal = np.hstack([W.qtotal, np.zeros_like(W.qtotal)])
             W.legs[3] = W.legs[2].conj()
@@ -578,8 +579,9 @@ def convert_model_purification_canonical_conserve_ancilla_charge(model):
         for i, H in enumerate(H_bond):
             if H is None:
                 continue
-            leg_p0 = sites[(i-1) % L].leg
+            leg_p0 = sites[(i - 1) % L].leg
             leg_p1 = sites[i].leg
+
             H = H.transpose(['p0', 'p1', 'p0*', 'p1*'])  # copy!
             H.chinfo = chinfo_cac
             H.legs = [leg_p0, leg_p1, leg_p0.conj(), leg_p1.conj()]
