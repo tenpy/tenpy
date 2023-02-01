@@ -1,7 +1,7 @@
 """a collection of tests to check the functionality of network_contractor.py."""
 # Copyright 2018-2021 TeNPy Developers, GNU GPLv3
 
-from tenpy.algorithms.network_contractor import contract, outer_product
+from tenpy.algorithms.network_contractor import contract, ncon
 import numpy as np
 from tenpy.linalg import np_conserved as npc
 import pytest
@@ -164,14 +164,14 @@ def test_fixes_issue131():
 
         links1 = [[1, -1, -3], [1, -2, -4]]
         # sum_x A[x, a, c] A[x, b, d] = result[a, b, c, d]
-        expect1 = npc.tensordot(A_npc, A_npc, (0, 0)).transpose(0, 2, 1, 3)
-        res1 = ncon(A, links1)
-        assert np.linalg.norm(expect1 - res1) < 1e-10
+        expect1 = npc.tensordot(A, A.conj(), (0, 0)).transpose([0, 2, 1, 3])
+        res1 = ncon([A, A.conj()], links1)
+        assert npc.norm(expect1 - res1) < 1e-10
         
         links2 = [[1, -1, -2], [1, -3, -4]]
         # sum_x A[x, a, b] A[x, c, d] = result[a, b, c, d]
-        expect2 = npc.tensordot(A_npc, A_npc, (0, 0))
-        res2 = ncon(A, links2)
-        assert np.linalg.norm(expect2 - res2) < 1e-10
+        expect2 = npc.tensordot(A, A.conj(), (0, 0))
+        res2 = ncon([A, A.conj()], links2)
+        assert npc.norm(expect2 - res2) < 1e-10
 
-        assert np.linalg.norm(res1 - res2) > 1e-5
+        assert res1.shape != res2.shape
