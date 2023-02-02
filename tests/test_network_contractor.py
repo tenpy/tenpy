@@ -1,11 +1,12 @@
 """a collection of tests to check the functionality of network_contractor.py."""
 # Copyright 2018-2021 TeNPy Developers, GNU GPLv3
 
-from tenpy.algorithms.network_contractor import contract, outer_product
+from tenpy.algorithms.network_contractor import contract, ncon
 import numpy as np
 from tenpy.linalg import np_conserved as npc
 import pytest
 import warnings
+from random_test import random_Array
 
 # Contruct toy tensors
 # ====================
@@ -103,23 +104,13 @@ def test_contract_with_sequence():
     S = Sy
     S.iset_leg_labels(['U', 'L'])
 
-    # the supplied sequence should generate three suboptimal warnings
-    with warnings.catch_warnings(record=True) as cw:
-        # Cause all warnings to always be triggered.
-        warnings.simplefilter("always")
-
-        res = contract(tensor_list=[v, h2, S, h, w],
-                       tensor_names=['v', 'h2', 'S', 'h', 'w'],
-                       leg_contractions=[['v', 'L1', 'h2', 'p1*'], ['v', 'L2', 'h2', 'p2*'],
-                                         ['h2', 'p1', 'h', 'p1*'], ['h2', 'p2', 'S', 'U'],
-                                         ['S', 'L', 'h', 'p2*'], ['h', 'p1', 'w', 'U1'],
-                                         ['h', 'p2', 'w', 'U2']],
-                       sequence=[1, 3, 5, 6, 4, 2, 0])
-
-        assert len(cw) == 3
-        assert "Suboptimal contraction sequence" in str(cw[0].message)
-        assert "Suboptimal contraction sequence" in str(cw[1].message)
-        assert "Suboptimal contraction sequence" in str(cw[2].message)
+    res = contract(tensor_list=[v, h2, S, h, w],
+                tensor_names=['v', 'h2', 'S', 'h', 'w'],
+                leg_contractions=[['v', 'L1', 'h2', 'p1*'], ['v', 'L2', 'h2', 'p2*'],
+                                    ['h2', 'p1', 'h', 'p1*'], ['h2', 'p2', 'S', 'U'],
+                                    ['S', 'L', 'h', 'p2*'], ['h', 'p1', 'w', 'U1'],
+                                    ['h', 'p2', 'w', 'U2']],
+                sequence=[1, 3, 5, 6, 4, 2, 0])
 
     expected_result = -0.1735 - 0.5015j  # from MatLab
 
@@ -163,3 +154,24 @@ def test_outer_product():
     expected_result = expected_result.transpose([1, 3, 0, 2])
 
     assert np.linalg.norm(res.to_ndarray() - expected_result) < 1.e-10
+    
+    
+def test_fixes_issue131():
+    no_charge = npc.Array.from_ndarray_trivial(np.random.rand(8, 2, 4))
+    with_charge = random_Array((20, 15, 10), npc.ChargeInfo([1, 3, 1, 2]), sort=False)
+    
+    for A in [no_charge, with_charge]:
+
+        links1 = [[1, -1, -3], [1, -2, -4]]
+        # sum_x A[x, a, c] A[x, b, d] = result[a, b, c, d]
+        expect1 = npc.tensordot(A, A.conj(), (0, 0)).transpose([0, 2, 1, 3])
+        res1 = ncon([A, A.conj()], links1)
+        assert npc.norm(expect1 - res1) < 1e-10
+        
+        links2 = [[1, -1, -2], [1, -3, -4]]
+        # sum_x A[x, a, b] A[x, c, d] = result[a, b, c, d]
+        expect2 = npc.tensordot(A, A.conj(), (0, 0))
+        res2 = ncon([A, A.conj()], links2)
+        assert npc.norm(expect2 - res2) < 1e-10
+
+        assert res1.shape != res2.shape
