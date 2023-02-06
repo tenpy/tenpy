@@ -208,6 +208,8 @@ class OrthogonalExcitations(GroundStateSearch):
             write_back = self.extract_segment_from_infinite(psi0, self.model, resume_data)
             if write_back:
                 self.write_converged_environments(data, gs_fn)
+            E0 = MPOEnvironment(self.groundstate, self.model.H_MPO, self.groundstate, **self.init_env_data).full_contraction(0)
+            self.results['ground_state_energy'] = E0
         else:
             self.init_env_data = resume_data.get('init_env_data', {})
             self.ground_state_infinite = None
@@ -217,11 +219,10 @@ class OrthogonalExcitations(GroundStateSearch):
         switch_charge_sector = self.options.get("switch_charge_sector", None)
         if apply_local_op is None and switch_charge_sector is None:
             self.orthogonal_to = [self.ground_state]
-            self.results['ground_state_energy'] = E0
         else:
             # we will switch charge sector
             self.orthogonal_to = []  # so we don't need to orthognalize against original g.s.
-            # optimization: delay calculation of the reference ground_state_energy
+            # TODO optimization: delay calculation of the reference ground_state_energy
             # until self.switch_charge_sector() is called by self.init_algorithm()
         return data
 
