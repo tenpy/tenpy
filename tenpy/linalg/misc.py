@@ -1,8 +1,9 @@
 from __future__ import annotations
+from typing import Sequence, TypeVar
+import numpy as np
 
 # TODO move somewhere else
 #  (for now i want to keep changes in refactor_npc branch contained to tenpy.linalg as much as possible
-import numpy as np
 
 
 def force_str_len(obj, length: int, rjust: bool = True, placeholder: str = '[...]') -> str:
@@ -29,3 +30,10 @@ def inverse_permutation(permutation: list[int]):
     inv = np.empty_like(permutation)
     inv[permutation] = np.arange(len(inv), dtype=inv.dtype)
     return inv
+
+
+T = TypeVar('T')
+
+
+def duplicate_entries(seq: Sequence[T], ignore: Sequence[T] = []) -> set[T]:
+    return set(ele for idx, ele in enumerate(seq) if ele in seq[idx + 1:] and ele not in ignore)

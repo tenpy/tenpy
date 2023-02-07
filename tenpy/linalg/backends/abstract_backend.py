@@ -5,6 +5,7 @@ from enum import Enum, auto
 from typing import TypeVar, Any
 
 from tenpy.linalg.symmetries import AbstractSymmetry, VectorSpace, AbstractSpace
+from tenpy.linalg.tensors import Leg
 
 
 # TODO make Dtype.float32
@@ -88,12 +89,12 @@ class AbstractBackend(ABC):
         ...
 
     @abstractmethod
-    def infer_legs(self, data: BackendArray) -> list[AbstractSpace]:
+    def infer_legs(self, data: BackendArray, labels: list[str] | None) -> list[Leg]:
         """Infer the vector spaces, if possible"""
         ...
 
     @abstractmethod
-    def legs_are_compatible(self, data: BackendArray, legs: list[VectorSpace]) -> bool:
+    def legs_are_compatible(self, data: BackendArray, legs: list[Leg]) -> bool:
         """Whether a given list of vector spaces is compatible with the data"""
         ...
 
@@ -179,12 +180,6 @@ class AbstractBackend(ABC):
     @abstractmethod
     def split_leg(self, a: BackendArray, leg: int, orig_spaces: list[AbstractSpace]) -> BackendArray:
         """split a leg. resulting legs all take place of leg"""
-        ...
-
-    @abstractmethod
-    def num_parameters(self, legs: list[AbstractSpace]) -> int:
-        """The number of free parameters, i.e. the dimension of the space of symmetry-preserving
-        tensors with the given set of legs"""
         ...
 
     @abstractmethod

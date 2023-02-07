@@ -5,6 +5,7 @@ from math import prod
 from tenpy.linalg.backends.abstract_backend import AbstractBackend, AbstractBlockBackend, BackendArray, BackendDtype, \
     Block, Dtype
 from tenpy.linalg.symmetries import VectorSpace, no_symmetry, AbstractSymmetry, AbstractSpace
+from tenpy.linalg.tensors import Leg
 
 
 # TODO eventually remove AbstractBlockBackend inheritance, it is not needed,
@@ -27,18 +28,24 @@ class AbstractNoSymmetryBackend(AbstractBackend, AbstractBlockBackend, ABC):
     def is_real(self, data: BackendArray) -> bool:
         return self.block_is_real(data)
 
-    def infer_legs(self, data: BackendArray) -> list[AbstractSpace]:
+    def infer_legs(self, data: BackendArray, labels: list[str] | None) -> list[Leg]:
         is_real = self.is_real(data)
-        return [VectorSpace.non_symmetric(dim=d, is_real=is_real) for d in self.block_shape(data)]
+        shape = self.block_shape(data)
+        if labels is None:
+            labels = [None] * len(shape)
+        else:
+            assert len(labels) == len(shape)
+        return [Leg.trivial(dim=d, ax=n, label=l, is_real=is_real) 
+                for n, (d, l) in enumerate(zip(shape, labels))]
 
     def tdot(self, a: BackendArray, b: BackendArray, a_axes: list[int], b_axes: list[int]
              ) -> BackendArray:
         return self.block_tdot(a, b, a_axes, b_axes)
 
-    def legs_are_compatible(self, data: BackendArray, legs: list[VectorSpace]) -> bool:
+    def legs_are_compatible(self, data: BackendArray, legs: list[Leg]) -> bool:
         shape = self.block_shape(data)
         for n, leg in enumerate(legs):
-            if not (leg.symmetry == no_symmetry and leg.dim == shape[n]):
+            if not (leg.space.symmetry == no_symmetry and leg.space.dim == shape[n]):
                 return False
         return True
 
@@ -104,9 +111,6 @@ class AbstractNoSymmetryBackend(AbstractBackend, AbstractBlockBackend, ABC):
     def split_leg(self, a: BackendArray, leg: int, orig_spaces: list[AbstractSpace]) -> BackendArray:
         # TODO we could lazy-evaluate this...
         return self.block_split_leg(a, leg, dims=[s.dim for s in orig_spaces])
-
-    def num_parameters(self, legs: list[AbstractSpace]) -> int:
-        return prod(l.dim for l in legs)
 
     def allclose(self, a: BackendArray, b: BackendArray, rtol: float, atol: float) -> bool:
         return self.block_allclose(a, b, rtol=rtol, atol=atol)
