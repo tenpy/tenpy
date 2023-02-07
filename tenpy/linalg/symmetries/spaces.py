@@ -2,11 +2,11 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from math import prod
 
-from tenpy.linalg.symmetries.groups import AbstractSymmetry, Sector, no_symmetry
+from tenpy.linalg.symmetries.groups import Symmetry, Sector, no_symmetry
 
 
 class AbstractSpace(ABC):
-    def __init__(self, symmetry: AbstractSymmetry, dim: int):
+    def __init__(self, symmetry: Symmetry, dim: int):
         self.symmetry = symmetry
         self.dim = dim
 
@@ -36,10 +36,10 @@ class AbstractSpace(ABC):
 
 
 class VectorSpace(AbstractSpace):
-    def __init__(self, symmetry: AbstractSymmetry, sectors: list[Sector], multiplicities: list[int] = None,
+    def __init__(self, symmetry: Symmetry, sectors: list[Sector], multiplicities: list[int] = None,
                  is_dual: bool = False, is_real: bool = False):
         """
-        A vector space, which decomposes into sectors of given symmetry.
+        A vector space, which decomposes into sectors of a given symmetry.
         is_dual: whether this is the "normal" (i.e. ket) or dual (i.e. bra) space.
         is_real: whether the space is over the real numbers (otherwise over the complex numbers)
         """
@@ -96,7 +96,9 @@ class VectorSpace(AbstractSpace):
 class ProductSpace(AbstractSpace):
     def __init__(self, spaces: list[AbstractSpace]):
         self.spaces = spaces  # spaces can be themselves ProductSpaces
-        super().__init__(symmetry=spaces[0].symmetry, dim=prod(s.dim for s in spaces))
+        symmetry = spaces[0].symmetry
+        assert all(s.symmetry == symmetry for s in spaces)
+        super().__init__(symmetry=symmetry, dim=prod(s.dim for s in spaces))
 
     def __len__(self):
         return len(self.spaces)
@@ -123,3 +125,9 @@ class ProductSpace(AbstractSpace):
     @property
     def is_trivial(self) -> bool:
         return all(s.is_trivial for s in self.spaces)
+
+    @property
+    def num_parameters(self) -> int:
+        """The number of free parameters, i.e. the dimension of the space of symmetry-preserving
+        tensors within this space"""
+        raise NotImplementedError  # TODO
