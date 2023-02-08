@@ -109,9 +109,10 @@ class NumpyBlockBackend(AbstractBlockBackend):
     def block_outer(self, a: Block, b: Block) -> Block:
         return np.tensordot(a, b, ((), ()))
 
-    def block_inner(self, a: Block, b: Block) -> complex:
+    def block_inner(self, a: Block, b: Block, axs2: list[int] | None) -> complex:
         dim = max(a.ndim, b.ndim)
-        return np.tensordot(np.conj(a), b, (list(range(dim)),) * 2).item()
+        axs2 = list(range(dim)) if axs2 is None else axs2
+        return np.tensordot(np.conj(a), b, (list(range(dim)), axs2)).item()
 
     def block_transpose(self, a: Block, permutation: list[int]) -> Block:
         return np.transpose(a, permutation)

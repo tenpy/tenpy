@@ -92,8 +92,8 @@ class AbstractNoSymmetryBackend(AbstractBackend, AbstractBlockBackend, ABC):
     def outer(self, a: BackendArray, b: BackendArray) -> BackendArray:
         return self.block_outer(a, b)
 
-    def inner(self, a: BackendArray, b: BackendArray) -> complex:
-        return self.block_inner(a, b)
+    def inner(self, a: BackendArray, b: BackendArray, axs2: list[int] | None) -> complex:
+        return self.block_inner(a, b, axs2)
 
     def transpose(self, a: BackendArray, permutation: list[int]) -> BackendArray:
         return self.block_transpose(a, permutation)

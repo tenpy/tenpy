@@ -155,9 +155,10 @@ class AbstractBackend(ABC):
         ...
 
     @abstractmethod
-    def inner(self, a: BackendArray, b: BackendArray) -> complex:
+    def inner(self, a: BackendArray, b: BackendArray, axs2: list[int] | None) -> complex:
         # inner product of <a|b>, both of which are given as ket-like vectors
         # (i.e. in C^N, the entries of a would need to be conjugated before multiplying with entries of b)
+        # axs2, if not None, gives the order of the axes of b
         ...
 
     @abstractmethod
@@ -269,7 +270,7 @@ class AbstractBlockBackend(ABC):
         ...
 
     @abstractmethod
-    def block_inner(self, a: Block, b: Block) -> complex:
+    def block_inner(self, a: Block, b: Block, axs2: list[int] | None) -> complex:
         ...
 
     @abstractmethod

@@ -1,4 +1,5 @@
 from __future__ import annotations
+import enum
 
 from math import prod
 
@@ -28,13 +29,29 @@ class Leg:
         self.fused_from = fused_from
 
     @classmethod
-    def fuse(cls, legs: list[Leg], label: str = None) -> Leg:
+    def combine(cls, legs: list[Leg], label: str = None) -> Leg:
         return cls(space=ProductSpace([l.space for l in legs]), axs=[ax for l in legs for ax in l.axs],
                    label=label, fused_from=legs)
+
+    def split(self) -> list[Leg]:
+        if self.fused_from is None:
+            raise ValueError(f'Leg "{self.label}" can not be split')
+        return self.fused_from
 
     @classmethod
     def trivial(cls, dim: int, ax: int, label: str = None, is_real: bool = True):
         return cls(space=VectorSpace.non_symmetric(dim=dim, is_real=is_real), axs=[ax], label=label)
+
+    @property
+    def is_trivial(self) -> bool:
+        return self.space.dim == 1
+
+    def dual(self) -> Leg:
+        """The dual leg, that can be contracted with self"""
+        return Leg(space=self.space.dual, axs=self.axs, label=dual_leg_label(self.label))
+
+    def can_contract_with(self, other: Leg) -> bool:
+        return self.space.is_dual_of(other.space)
 
     def components_str(self, max_len: int) -> str:
         if self.fused_from is not None:
@@ -49,6 +66,25 @@ class Leg:
             res = res[:max_len - 6] + ' [...]'
 
         return res
+
+    def copy(self):
+        return Leg(space=self.space, axs=self.axs, label=self.label, fused_from=self.fused_from)
+
+    def relabelled(self, label: str | None):
+        """return a copy with a new label"""
+        return Leg(space=self.space, axs=self.axs, label=label, fused_from=self.fused_from)
+
+
+def dual_leg_label(label: str) -> str:
+    """return the label that a leg should have after conjugation"""
+    if label.endswith('*'):
+        return label[:-1]
+    else:
+        return label + '*'
+
+
+def combine_leg_labels(labels: list[str | None]) -> str:
+    return '(' + '.'.join(f'?{n}' if l is None else l for n, l in enumerate(labels)) + ')'
 
 
 class Tensor:
@@ -99,6 +135,10 @@ class Tensor:
     def leg_labels(self, leg_labels):
         self.set_labels(leg_labels)
 
+    @property
+    def is_fully_labelled(self) -> bool:
+        return None not in self.leg_labels
+
     def set_labels(self, leg_labels: list[str]):
         assert not duplicate_entries(leg_labels, ignore=[None])
         assert len(leg_labels) == self.num_legs
@@ -116,11 +156,21 @@ class Tensor:
         else:
             raise TypeError
 
-    def get_leg_idcs(self, legs: int | str | list[int | str]) -> list[int]:
-        if isinstance(legs, (int, str)):
-            return [self.get_leg_idx(legs)]
+    def get_leg_idcs(self, which_legs: int | str | list[int | str]) -> list[int]:
+        if isinstance(which_legs, (int, str)):
+            return [self.get_leg_idx(which_legs)]
         else:
-            return list(map(self.get_leg_idx, legs))
+            return list(map(self.get_leg_idx, which_legs))
+
+    def get_legs(self, which_legs: int | str | list[int | str]) -> list[Leg]:
+        return [self.legs[idx] for idx in self.get_leg_idcs(which_legs)]
+
+    def get_all_axs(self, which_legs: int | str | list[int | str]) -> list[int]:
+        """Get a list of all axes of the underlying data that are described by the given leg(s)"""
+        if isinstance(which_legs, (int, str)):
+            return self.legs[self.get_leg_idx(which_legs)].axs
+        else:
+            return [ax for which_leg in which_legs for ax in self.legs[self.get_leg_idx(which_leg)].axs]
 
     def copy(self):
         """return a Tensor object equal to self, such that in-place operations on self.copy() do not affect self"""
@@ -219,7 +269,7 @@ class Tensor:
         return np.asarray(self.backend.to_dense_block(self.data), dtype)
 
 
-class DiagonalTensor:
+class DiagonalTensor(Tensor):
 
     # special case where incoming and outgoing legs are equal and the
     # tensor is "diagonal" (yet to precisely formulate what this means in a basis-independent way...)
@@ -232,6 +282,9 @@ class DiagonalTensor:
 
     def __init__(self) -> None:
         raise NotImplementedError  # TODO
+
+
+# TODO is there a use for a special Scalar(DiagonalTensor) class?
 
 
 def as_tensor(obj, backend: AbstractBackend, legs: list[Leg] = None, labels: list[str] = None,

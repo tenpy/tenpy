@@ -31,7 +31,10 @@ class AbstractSpace(ABC):
     def __eq__(self, other):
         ...
 
-    def can_contract_with(self, other):
+    def is_dual_of(self, other):
+        # FIXME think about duality in more detail.
+        #  i.e. is a 
+        # `Vectorspace(a.symmetry, [sector.dual for sector in a.sectors], a.multiplicities, not a.is_dual, a.is_real) == a` ?
         return self == other.dual
 
 

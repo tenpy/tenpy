@@ -1,14 +1,16 @@
 from __future__ import annotations
 
 import numpy as np
+from tenpy.linalg.backends.abstract_backend import AbstractBackend
 
 from tenpy.linalg.dummy_config import config
 from tenpy.linalg.misc import UNSPECIFIED
 from tenpy.linalg.symmetries import ProductSpace
-from tenpy.linalg.tensors import Tensor, LegPipe
+from tenpy.linalg.tensors import Leg, Tensor, LegPipe, combine_leg_labels
 
 
-def tdot(t1: Tensor, t2: Tensor, legs1: int | str | list[int | str], legs2: int | str | list[int | str],
+def tdot(t1: Tensor, t2: Tensor, 
+         legs1: int | str | list[int | str] = -1, legs2: int | str | list[int | str] = 0,
          relabel1: dict[str, str] = None, relabel2: dict[str, str] = None) -> Tensor:
     """
     TODO: decide name, eg from tensordot, tdot, contract
@@ -32,91 +34,105 @@ def tdot(t1: Tensor, t2: Tensor, legs1: int | str | list[int | str], legs2: int 
     -------
 
     """
-
-    ax1 = t1.get_leg_idcs(legs1)
-    ax2 = t2.get_leg_idcs(legs2)
-
-    assert len(ax1) == len(ax2)
-    assert all(t1.legs[n1].can_contract_with(t2.legs[n2]) for n1, n2 in zip(ax1, ax2))
-
-    open_legs1 = [l for n, l in enumerate(t1.legs) if n not in ax1]
-    open_legs2 = [l for n, l in enumerate(t2.legs) if n not in ax2]
-    open_labels1 = [l for n, l in enumerate(t1._leg_labels) if n not in ax1]
-    open_labels2 = [l for n, l in enumerate(t2._leg_labels) if n not in ax2]
-    new_labels = result_leg_labels(open_labels1, open_labels2, relabel1, relabel2)
-
-    res_data = t1.backend.tdot(t1.data, t2.data, ax1, ax2)
-    res_dtype = t1.backend.infer_dtype(res_data)
-    return Tensor(res_data, backend=t1.backend, legs=open_legs1 + open_legs2, leg_labels=new_labels, dtype=res_dtype)
+    leg_idcs1 = t1.get_leg_idcs(legs1)
+    leg_idcs2 = t2.get_leg_idcs(legs2)
+    if len(leg_idcs1) != len(leg_idcs2):
+        # checking this for leg_idcs* instead of legs* allows us to assume that they are both lists
+        raise ValueError('Must specify the same number of legs for both tensors')
+    if not all(t1.legs[idx1].can_contract_with(t2.legs[idx2]) for idx1, idx2 in zip(leg_idcs1, leg_idcs2)):
+        raise ValueError('Incompatible legs.')  # TODO show which
+    backend = get_same_backend(t1, t2)
+    open_legs1 = [leg for idx, leg in enumerate(t1.legs) if idx not in leg_idcs1]
+    open_legs2 = [leg for idx, leg in enumerate(t2.legs) if idx not in leg_idcs2]
+    res_legs = get_result_legs(open_legs1, open_legs2, relabel1, relabel2)
+    res_data = backend.tdot(t1.data, t2.data, t1.get_all_axs(legs1), t2.get_all_axs(legs2))
+    return Tensor(res_data, backend=backend, legs=res_legs)
 
 
 def outer(t1: Tensor, t2: Tensor, relabel1: dict[str, str] = None, relabel2: dict[str, str] = None) -> Tensor:
     """outer product, aka tensor product, aka direct product of two tensors"""
-    res_data = t1.backend.outer(t1.data, t2.data)
-    res_labels = result_leg_labels(t1.leg_labels, t2.leg_labels, relabel1, relabel2)
-    return Tensor(res_data, backend=t1.backend, legs=t1.legs + t2.legs, leg_labels=res_labels,
-                  dtype=t1.backend.infer_dtype(res_data))
+    backend = get_same_backend(t1, t2)
+    res_legs = get_result_legs(t1.legs, t2.legs, relabel1, relabel2)
+    res_data = backend.outer(t1.data, t2.data)
+    return Tensor(res_data, backend=backend, legs=res_legs)
 
 
-# TODO return tensor scalar?
-def inner(t1: Tensor, t2: Tensor, do_conj: bool = True) -> complex:
+def inner(t1: Tensor, t2: Tensor) -> complex:
     """
     Inner product of two tensors with the same legs.
-    t1 and t2 live in the same space, the inner product is the contraction of the dual ("conjugate") of t1 with t2.
-    # DOC do_conj arg
+    t1 and t2 live in the same space, the inner product is the contraction of the dual ("conjugate") of t1 with t2
+
+    If config.strict_labels, legs with matching labels are contracted.
+    Otherwise the n-th leg of t1 is contracted with the n-th leg of t2
     """
-    if not do_conj:
-        raise NotImplementedError  # TODO
-    if config.strict_labels and t1.leg_labels != t2.leg_labels:
-        # TODO transpose st labels match. if not possible, raise.
-        raise NotImplementedError
-    assert t1.legs == t2.legs
-    return t1.backend.inner(t1.data, t2.data)
+    if t1.num_legs != t2.num_legs:
+        raise ValueError('Tensors need to have the same number of legs')
+    
+    if config.strict_labels:
+        if t1.is_fully_labelled and t2.is_fully_labelled:
+            match_by_labels = True
+        else:
+            match_by_labels = False
+            # TODO issue warning?
+    else:
+        match_by_labels = False
+    
+    if match_by_labels:
+        leg_order_2 = t2.get_leg_idcs(t1.leg_labels)
+    else:
+        leg_order_2 = range(t2.num_legs)
+    if not all(t1.legs[n1].space == t2.legs[n2].space for n1, n2 in enumerate(leg_order_2)):
+        raise ValueError('Incompatible legs')
+    axs2 = t2.get_all_axs(leg_order_2)
+    backend = get_same_backend(t1, t2)
+    res = backend.inner(t1.data, t2.data, axs2=axs2)
+    # TODO: Scalar(Tensor) class...?
+    return res
 
 
 def transpose(t: Tensor, permutation: list[int]) -> Tensor:
-    # TODO call this permute_legs or sth?
+    """Change the order of legs of a Tensor. 
+    This is done lazily, i.e. the underlying `t.data` is not changed at all.
+    transpose only affects which of the `t.legs` points to which axis/axes of `t.data`.
+    TODO: also have an inplace version?
+    TODO: name it permute_legs or sth instead?
+    """
     if config.strict_labels:
-        # TODO: strict labels means position of legs should be irrelevant, there is no need to transpose.
+        # TODO: proper warning:
+        # strict labels means position of legs should be irrelevant, there is no need to transpose.
         print('dummy warning!')
     assert len(permutation) == t.num_legs
     assert set(permutation) == set(range(t.num_legs))
-    res_data = t.backend.transpose(t.data, permutation)
-    return Tensor(res_data, t.backend, [t.legs[n] for n in permutation],
-                  leg_labels=[t._leg_labels[n] for n in permutation], dtype=t.dtype)
+    return Tensor(t.data, backend=t.backend, legs=[t.legs[n] for n in permutation])
 
 
-def trace(t: Tensor, legs1: int | str | list[int | str] = None, legs2: int | str | list[int | str] = None
+def trace(t: Tensor, legs1: int | str | list[int | str] = -2, legs2: int | str | list[int | str] = -1
           ) -> Tensor | float | complex:
-    """default leg args: assume there are only two legs and trace over them"""
-    if legs1 is None or legs2 is None:
-        if legs1 is not None or legs2 is not None:
-            raise ValueError
-        if t.num_legs != 2:
-            raise ValueError
-        legs1 = [0]
-        legs2 = [1]
-
-    idcs1 = t.get_leg_idcs(legs1)
-    idcs2 = t.get_leg_idcs(legs2)
-    remaining_idcs = [n for n in range(t.num_legs) if n not in idcs1 and n not in idcs2]
-    assert len(idcs1) == len(idcs2)
-    assert all(idx not in idcs2 for idx in idcs1)
-    assert all(t.legs[idx1].can_contract_with(t.legs[idx2]) for idx1, idx2 in zip(idcs1, idcs2))
-    data = t.backend.trace(t, idcs1, idcs2)  # FIXME use t.data
-    if len(remaining_idcs) == 0:
+    """
+    Trace over one or more pairs of legs, that is contract these pairs.
+    """
+    leg_idcs1 = t.get_leg_idcs(legs1)
+    leg_idcs2 = t.get_leg_idcs(legs2)
+    if len(leg_idcs1) != len(leg_idcs2):
+        raise ValueError('Must specify same number of legs')
+    axs1 = t.get_all_axs(leg_idcs1)
+    axs2 = t.get_all_axs(leg_idcs2)
+    remaining_leg_idcs = [n for n in range(t.num_legs) if n not in leg_idcs1 and n not in leg_idcs2]
+    res_data = t.backend.trace(t, axs1, axs2)
+    if len(remaining_leg_idcs) == 0:
         # result is a scalar
-        return t.backend.item(data)
+        return t.backend.item(res_data)
     else:
-        return Tensor(data, t.backend, legs=[t.legs[n] for n in remaining_idcs],
-                      leg_labels=[t._leg_labels[n] for n in remaining_idcs], dtype=t.dtype)
+        return Tensor(res_data, backend=t.backend, legs=[t.legs[n] for n in remaining_leg_idcs])
 
 
 def conj(t: Tensor) -> Tensor:
-    """the conjugate of t, living in the dual space"""
+    """
+    The conjugate of t, living in the dual space.
+    Labels are adjuste as `'p'` -> `'p*'` and `'p*'` -> `'p'`
+    """
     # TODO (Jakob) think about this in the context of pivotal category with duals
-    return Tensor(t.backend.conj(t), backend=t.backend, legs=[s.dual for s in t.legs], leg_labels=t.leg_labels,
-                  dtype=t.dtype)
+    return Tensor(t.backend.conj(t), backend=t.backend, legs=[l.dual for l in t.legs])
 
 
 # TODO there should be an operation that converts only one or some of the legs to dual
@@ -124,49 +140,41 @@ def conj(t: Tensor) -> Tensor:
 #  formally, this is contraction with the (co-)evaluation map, aka cup or cap
 
 
-def combine_legs(t: Tensor, legs: list[int | str], label: str = UNSPECIFIED) -> Tensor:
+def combine_legs(t: Tensor, legs: list[int | str], new_label: str = UNSPECIFIED) -> Tensor:
     """
     Combine a group of legs of a tensor. Result is at the previous position of legs[0].
-    # TODO support multiple combines in one function call? what would the signature be?
+    This is done lazily, i.e. the underlying `t.data` is not changed at all.
+    # TODO support multiple combines in one function call? what would the signature be
+    # TODO inplace version
     """
-    idcs = t.get_leg_idcs(legs)
-    assert len(idcs) > 1
-    pipe = LegPipe([t.legs[n] for n in idcs], old_labels=[t._leg_labels[n] for n in idcs])
-    new_legs = [pipe if n == idcs[0] else s for n, s in enumerate(t.legs) if n not in idcs[1:]]
-    if label is UNSPECIFIED:
-        label = t._leg_labels[idcs[0]]
-    new_labels = [label if n == idcs[0] else l for n, l in enumerate(t._leg_labels) if n not in idcs[1:]]
-    data = t.backend.combine_legs(t.data, legs)
-    return Tensor(data, t.backend, legs=new_legs, leg_labels=new_labels, dtype=t.dtype)
+    if len(legs) < 2:
+        raise ValueError('expected at least two legs')
+    
+    leg_idcs = t.get_leg_idcs(legs)
+    if new_label is UNSPECIFIED:
+        new_label = combine_leg_labels(t.leg_labels)
+    new_leg = Leg.combine([t.legs[idx] for idx in leg_idcs], label=new_label)
+    legs = [new_leg if idx == leg_idcs[0] else leg 
+            for idx, leg in enumerate(t.legs)
+            if idx not in leg_idcs[1:]]
+    return Tensor(t.data, backend=t.backend, legs=legs)
 
 
 def split_leg(t: Tensor, leg: int | str) -> Tensor:
-    """if the legs were contiguous in t.legs before combining, this is the inverse operation of combine_legs,
-    otherwise it is only inverse up to a permute_legs"""
-    # TODO support multiple splits in one function call? make consistent with combine
-    idx = t.get_leg_idx(leg)
-    leg = t.legs[idx]
-    assert isinstance(leg, LegPipe)
-    data = t.backend.split_leg(t.data, idx, orig_spaces=leg.spaces)
-    legs = t.legs[:idx] + leg.spaces + t.legs[idx + 1:]
-    labels = t._leg_labels[:idx] + leg.old_labels + t.leg_labels[idx + 1:]
-    return Tensor(data, t.backend, legs=legs, leg_labels=labels, dtype=t.dtype)
+    """
+    Split a leg that was previously combined.
+    This is done lazily, i.e. the underlying `t.data` is not changed at all.
+    If the legs were contiguous in t.legs before combining, this is the inverse operation of combine_legs,
+    otherwise it is the inverse up to a permute_legs
+    # TODO support multiple splits? -> make consistent with combine
+    # TODO inplace version
+    """
+    leg_idx = t.get_leg_idx(leg)
+    legs = t.legs[:leg_idx] + t.legs[leg_idx].split() + t.legs[leg_idx + 1:]
+    return Tensor(t.data, backend=t.backend, legs=legs)
 
 
-def fuse_transpose(t: Tensor, legs: list[int, list[int]]):
-    """
-    Permutes and combines legs of a tensor.
-    If legs[n] is an int, it describes a leg that is permuted from t.
-    If it is a list, it describes several legs of t and the result has a LegPipe which combines them
-    """
-    # TODO support backend-specific more efficient implementations
-    legs = list(map(t.get_leg_idcs, legs))
-    flat_legs = sum(legs, [])
-    res = transpose(t, flat_legs)
-    for m, leg_grp in legs:
-        if len(leg_grp) > 1:
-            res = combine_legs(t, list(range(m, m + len(leg_grp))))
-    return res
+# TODO is something like fuse_transpose convenient?
 
 
 def is_scalar(obj) -> bool:
@@ -180,44 +188,51 @@ def is_scalar(obj) -> bool:
         raise TypeError(f'Type not supported for is_scalar: {type(obj)}')
 
 
-# FIXME define via norm instead?? norm(a - b) <= atol + rtol * norm(a)
 def allclose(a: Tensor, b: Tensor, rtol=1e-05, atol=1e-08) -> bool:
     """
-    TODO: name? dont necessarily need to follow numpy convention
-    If a and b are equal up to numerical tolerance.
-    If the following is True "element-wise" for all numerical parameters (what exactly this means is backend-dependent)
-    `abs(a - b) <= atol + rtol * abs(b)`.
-    TODO think about edge-cases (nan, inf, ...)
+    If a and b are equal up to numerical tolerance, that is if `norm(a - b) <= atol + rtol * norm(a)`.
+    Note that the definition is not symmetric under exchanging `a` and `b`.
     """
-    # TODO what to do for different backends
-    backend = None
-    if isinstance(a, Tensor):
-        backend = a.backend
-        a_data = a.data
+    assert rtol >= 0
+    assert atol >= 0
+    if isinstance(a, Tensor) and isinstance(b, Tensor):
+        diff = norm(a - b)
+        a_norm = norm(a)
     else:
-        assert is_scalar(a)
-        a_data = a
+        if isinstance(a, Tensor):
+            try:
+                a = a.item()
+            except ValueError:
+                raise ValueError('Can not compare non-scalar Tensor and scalar') from None
+        if isinstance(b, Tensor):
+            try:
+                b = b.item()
+            except ValueError:
+                raise ValueError('Can not compare scalar and non-scalar Tensor') from None
+        diff = abs(a - b)
+        a_norm = abs(a)
+    return diff <= atol + rtol * a_norm
 
-    if isinstance(b, Tensor):
-        backend = b.backend
-        b_data = b.data
+
+ALL = object()
+
+
+def squeeze_legs(t: Tensor, legs: int | str | list[int | str] = ALL) -> Tensor:
+    """
+    Remove trivial leg from tensor. 
+    If legs are specified, they are squeezed if they are trivial and a ValueError is raised if not.
+    If no legs are specified, all trivial legs are squeezed
+    """
+    if legs is ALL:
+        legs = [n for n, l in enumerate(t.legs) if l.is_trivial]
     else:
-        assert is_scalar(b)
-        b_data = b
-
-    if backend is None:
-        return np.allclose(a_data, b_data, rtol=rtol, atol=atol)
-    else:
-        return backend.allclose(a_data, b_data, rtol=rtol, atol=atol)
-
-
-def squeeze_leg(t: Tensor, leg: int | str | list[int | str]) -> Tensor:
-    """Remove trivial leg from tensor"""
-    idcs = t.get_leg_idcs(leg)
-    assert all(t.legs[n].is_trivial for n in idcs)
-    new_legs = [l for n, l in enumerate(t.legs) if n not in idcs]
-    new_labels = [l for n, l in enumerate(t._leg_labels) if n not in idcs]
-    return Tensor(t.backend.squeeze_legs(t.data, idcs), t.backend, legs=new_legs, leg_labels=new_labels, dtype=t.dtype)
+        legs = t.get_leg_idcs(legs)
+        if not all(t.legs[idx].is_trivial for idx in legs):
+            raise ValueError('Tried to squeeze non-trivial legs.')
+    axs = t.get_all_axs(legs)
+    res_legs = [l for idx, l in enumerate(t.legs) if idx not in legs]
+    res_data = t.backend.squeeze_legs(t.data, axs)
+    return Tensor(res_data, backend=t.backend, legs=res_legs)
 
 
 def norm(t: Tensor) -> float:
@@ -225,35 +240,36 @@ def norm(t: Tensor) -> float:
     return t.backend.norm(t.data)
 
 
-def result_leg_labels(labels1: list[str | None], labels2: list[str | None],
-                      relabel1: dict[str, str] | None, relabel2: dict[str, str] | None
-                      ) -> list[str | None]:
-    """basically just list concatenation, i.e. labels1 + labels2,
-    but with duplicate checks and (optional) relabelling."""
+def get_result_legs(legs1: list[Leg], legs2: list[Leg], relabel1: dict[str, str] | None, 
+                    relabel2: dict[str, str] | None) -> list[Leg]:
+    """
+    Utility function to combine two lists of `Leg`s, such that they can appear on the same tensor.
+    Labels are changed by the mappings relabel1 and relabel2.
+    Any conflicting labels (after relabelling) are dropped 
+    """
+    relabel1 = relabel1 or {}
+    relabel2 = relabel2 or {}
 
-    if relabel1 is not None:
-        relabel1 = relabel1.copy()  # this may be inefficient, but should be rewritten in C anyway
-        labels1 = [relabel1.pop(l, l) for l in labels1]
-        if len(relabel1) > 0:
-            raise ValueError(f'relabel1 has superfluous entries: {list(relabel1.keys())}')
+    labels1 = [relabel1.get(leg.label, leg.label) for leg in legs1]
+    labels2 = [relabel2.get(leg.label, leg.label) for leg in legs2]
 
-    if relabel2 is not None:
-        relabel2 = relabel2.copy()
-        labels2 = [relabel2.pop(l, l) for l in labels1]
-        if len(relabel2) > 0:
-            raise ValueError(f'relabel2 has superfluous entries: {list(relabel1.keys())}')
+    conflicting = [label for label in labels1 if label in labels2]
+    # TODO issue a warning?
 
-    res_labels = labels1 + labels2
-    duplicates = []
-    for n, l in enumerate(res_labels):
-        if l is None:
-            continue
+    legs1 = [leg.relabelled(None if label in conflicting else label) 
+             for leg, label in zip(legs1, labels1)]
+    legs2 = [leg.relabelled(None if label in conflicting else label) 
+             for leg, label in zip(legs2, labels2)]
+    return legs1 + legs2
 
-        if l in duplicates:
-            res_labels[n] = None
-        elif l in res_labels[n + 1:]:
-            duplicates.append(l)
-            res_labels[n] = None
-    # TODO warn if there were duplicates?
 
-    return res_labels
+# TODO move this somewhere else?
+def get_same_backend(*tensors: Tensor, error_msg: str = 'Incompatible backends') -> AbstractBackend:
+    """If all tensors have the same backend, return it. Otherwise raise a ValueError"""
+    try:
+        backend = tensors[0].backend
+    except IndexError:
+        raise ValueError('expected at least one tensor') from None
+    if not all(tens.backend == backend for tens in tensors):
+        raise ValueError(error_msg)
+    return backend
