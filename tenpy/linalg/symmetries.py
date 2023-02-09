@@ -32,6 +32,13 @@ class Symmetry(ABC):
         self.group_name = group_name
         self.descriptive_name = descriptive_name
 
+    @property
+    def is_abelian(self) -> bool:
+        if isinstance(self, ProductSymmetry):
+            return all(factor.is_abelian for factor in self.factors)
+        else:
+            return isinstance(self, AbelianGroup)
+
     @abstractmethod
     def is_valid_sector(self, a: Sector) -> bool:
         """Whether `a` is a valid sector of this symmetry"""
@@ -180,8 +187,12 @@ class Group(Symmetry, ABC):
 
 class AbelianGroup(Group, ABC):
     """
-    Base-class for abelian symmetry groups
+    Base-class for abelian symmetry groups.
+    Note that a product of several abelian groups is also an abelian group, but represented by a ProductSymmetry,
+    which is not a subclass of AbelianGroup.
     """
+    is_abelian = True
+    
     def __init__(self, trivial_sector: Sector, group_name: str, descriptive_name: str | None = None):
         Group.__init__(self, fusion_style=FusionStyle.single, trivial_sector=trivial_sector, 
                        group_name=group_name, descriptive_name=descriptive_name)
@@ -310,3 +321,139 @@ z9_symmetry: Final = ZNSymmetry(N=9)
 u1_symmetry: Final = U1Symmetry()
 su2_symmetry: Final = SU2Symmetry()
 fermion_parity: Final = FermionParity()
+
+
+class VectorSpace:
+    
+    def __init__(self, symmetry: Symmetry, sectors: list[Sector], multiplicities: list[int] = None,
+                 is_dual: bool = False, is_real: bool = False):
+        """
+        A vector space, which decomposes into sectors of a given symmetry.
+        is_dual: whether this is the "normal" (i.e. ket) or dual (i.e. bra) space.
+        is_real: whether the space is over the real numbers (otherwise over the complex numbers)
+        """
+        self.symmetry = symmetry
+        self.dim = sum(symmetry.sector_dim(s) * m for s, m in zip(sectors, self.multiplicities))
+        self.sectors = sectors
+        if multiplicities is None:
+            self.multiplicities = [1 for s in sectors]
+        else:
+            assert len(multiplicities) == len(sectors)
+            self.multiplicities = multiplicities
+        self.is_dual = is_dual
+        self.is_real = is_real
+
+        # backends may write these attributes to cache metadata
+        self._abelian_backend_slices = None
+
+    @classmethod
+    def non_symmetric(cls, dim: int, is_dual: bool = False, is_real: bool = False):
+        return cls(symmetry=no_symmetry, sectors=[None], multiplicities=[dim], is_dual=is_dual, is_real=is_real)
+
+    def sectors_str(self) -> str:
+        """short str describing the sectors and their multiplicities"""
+        return ', '.join(f'{self.symmetry.sector_str(a)}: {mult}' for a, mult in zip(self.sectors, self.multiplicities))
+
+    def __mul__(self, other):
+        if isinstance(other, VectorSpace):
+            return ProductSpace([self, other])
+        return NotImplemented
+    
+    def __repr__(self):
+        return f'VectorSpace(symmetry={self.symmetry}, sectors={self.sectors}, multiplicities={self.multiplicities}, ' \
+               f'is_dual={self.is_dual}, is_real={self.is_real})'
+
+    def __str__(self):
+        field = 'ℝ' if self.is_real else 'ℂ'
+        if self.symmetry == no_symmetry:
+            symm_details = ''
+        else:
+            symm_details = f'[{self.symmetry}, {self.sectors_str()}]'
+        res = f'{field}^{self.dim}{symm_details}'
+        # TODO make duality shorter?
+        return f'dual({res})' if self.is_dual else res
+
+    def __eq__(self, other):
+        if isinstance(other, VectorSpace):
+            # FIXME need to be more careful with is_dual flag!
+            return self.sectors == other.sectors and self.multiplicities == other.multiplicities \
+                   and self.is_dual == other.is_dual and self.is_real == other.is_real
+        else:
+            return False
+
+    @property
+    def dual(self):
+        return VectorSpace(symmetry=self.symmetry, sectors=self.sectors, multiplicities=self.multiplicities,
+                           is_dual=not self.is_dual, is_real=self.is_real)
+
+    def is_dual_of(self, other):
+        # FIXME think about duality in more detail.
+        #  i.e. is a 
+        # `Vectorspace(a.symmetry, [sector.dual for sector in a.sectors], a.multiplicities, not a.is_dual, a.is_real) == a` ?
+        return self == other.dual
+
+    @property
+    def is_trivial(self) -> bool:
+        return len(self.sectors) == 1
+
+    @property
+    def num_parameters(self) -> int:
+        """The number of free parameters, i.e. the dimension of the space of symmetry-preserving
+        tensors within this space"""
+        raise NotImplementedError  # TODO
+
+
+class ProductSpace(VectorSpace):
+    def __init__(self, spaces: list[VectorSpace], is_dual: bool = False):
+        self.spaces = spaces  # spaces can be themselves ProductSpaces
+        symmetry = spaces[0].symmetry
+        assert all(s.symmetry == symmetry for s in spaces)
+        sectors = [list(combination) for combination in product(*(space.sectors for space in spaces))]
+        multiplicities = [prod(combination) for combination in product(*(space.multiplicities for space in spaces))]
+        is_real = spaces[0].is_real
+        assert all(space.is_real == is_real for space in spaces)
+
+        self._abelian_backend_slices = None
+        self._abelian_backend_qmap = None
+        # ...
+        
+        VectorSpace.__init__(self, symmetry=symmetry, sectors=sectors, multiplicities=multiplicities, 
+                             is_dual=is_dual, is_real=is_real)
+
+    def __len__(self):
+        return len(self.spaces)
+
+    def __iter__(self):
+        yield from self.spaces
+
+    def __repr__(self):
+        return '\n'.join(('ProductSpace([', *map(repr, self.spaces), '])'))
+
+    def __str__(self):
+        return ' ⊗ '.join(map(str, self.spaces))
+
+    def __eq__(self, other):
+        if isinstance(other, ProductSpace):
+            # FIXME need to be more careful about is_dual flags!
+            return self.spaces == other.spaces
+        else:
+            return False
+
+    @property
+    def dim(self) -> int:
+        return prod(space.dim for space in self.spaces)
+
+    @property
+    def dual(self):
+        # TODO should this just change self.is_dual instead...?
+        return ProductSpace([s.dual() for s in self.spaces])
+
+    @property
+    def is_trivial(self) -> bool:
+        return all(s.is_trivial for s in self.spaces)
+
+    @property
+    def num_parameters(self) -> int:
+        """The number of free parameters, i.e. the dimension of the space of symmetry-preserving
+        tensors within this space"""
+        raise NotImplementedError  # TODO

@@ -15,6 +15,7 @@ from tenpy.linalg.misc import inverse_permutation
 from tenpy.linalg.symmetries import AbstractSymmetry, VectorSpace
 
 _dtype_map = {
+    None: None,
     Dtype(Precision.half, True): np.float16,
     Dtype(Precision.single, True): np.float32,
     Dtype(Precision.double, True): np.float64,
@@ -43,7 +44,7 @@ class NumpyBlockBackend(AbstractBlockBackend):
     def __init__(self):
         AbstractBlockBackend.__init__(self, default_precision=Precision.single)
 
-    def parse_dtype(self, dtype: Dtype) -> BackendDtype:
+    def parse_dtype(self, dtype: Dtype | None) -> BackendDtype:
         try:
             return _dtype_map[dtype]
         except KeyError:
@@ -185,43 +186,22 @@ class NumpyBlockBackend(AbstractBlockBackend):
         return res
 
 
+
 class NoSymmetryNumpyBackend(NumpyBlockBackend, AbstractNoSymmetryBackend):
     def __init__(self):
         NumpyBlockBackend.__init__(self)
         AbstractNoSymmetryBackend.__init__(self)
 
-    def svd(self, a, idcs1: list[int], idcs2: list[int], max_singular_values: int,
-            threshold: float, max_err: float, algorithm: str = None):
+    def svd(self, a, idcs1: list[int], idcs2: list[int]):
         a = np.transpose(a, idcs1 + idcs2)
         a_shape1 = np.shape(a)[:len(idcs1)]
         a_shape2 = np.shape(a)[len(idcs1):]
         a = np.reshape(a, (prod(a_shape1), prod(a_shape2)))
-        u, s, vh = self.matrix_svd(a, algorithm=algorithm)
-
-        # determine number of singular values that fulfills truncation constraints
-        chi = min(max_singular_values, len(s))
-        if threshold > 0:
-            chi = min(chi, int(np.sum(s > threshold)))
-        full_norm = np.linalg.norm(s)
-        if max_err > 0:
-            # cum_rel_err[n] is the relative error we would get if we kept only s[:n-1]
-            cum_rel_err = np.cumsum(s[::-1] ** 2)[::-1] / (full_norm ** 2)
-            n = np.flatnonzero(cum_rel_err <= max_err)[0]
-            # now, cum_rel_err[n] is the first entry below max_err
-            chi = min(chi, n - 1)
-
-        if chi < len(s):
-            trunc_err = np.linalg.norm(s[chi:]) / full_norm
-            u = u[:, :chi]
-            s = s[:chi]
-            vh = vh[:chi]
-        else:
-            trunc_err = 0
-
-        u = np.reshape(u, (*a_shape1, chi))
-        vh = np.reshape(vh, (chi, *a_shape2))
-        new_space = VectorSpace.non_symmetric(chi, is_dual=False, is_real=False)
-        return u, s, vh, trunc_err, new_space
+        u, s, vh = self.matrix_svd(a)
+        u = np.reshape(u, (*a_shape1, len(s)))
+        vh = np.reshape(vh, (len(s), *a_shape2))
+        new_space = VectorSpace.non_symmetric(len(s), is_dual=False, is_real=False)
+        return u, s, vh, new_space
 
 
 class AbelianNumpyBackend(NumpyBlockBackend, AbstractAbelianBackend):

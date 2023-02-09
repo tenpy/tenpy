@@ -5,6 +5,8 @@ import numpy as np
 # TODO move somewhere else
 #  (for now i want to keep changes in refactor_npc branch contained to tenpy.linalg as much as possible
 
+# TODO make sure everything is still needed
+
 
 def force_str_len(obj, length: int, rjust: bool = True, placeholder: str = '[...]') -> str:
     """Convert an object to a string, then force the string to a given length.

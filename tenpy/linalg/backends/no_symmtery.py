@@ -2,10 +2,9 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from math import prod
 
-from tenpy.linalg.backends.abstract_backend import AbstractBackend, AbstractBlockBackend, BackendArray, BackendDtype, \
+from .abstract_backend import AbstractBackend, AbstractBlockBackend, BackendArray, BackendDtype, \
     Block, Dtype
-from tenpy.linalg.symmetries import VectorSpace, no_symmetry, AbstractSymmetry, AbstractSpace
-from tenpy.linalg.tensors import Leg
+from ..symmetries import ProductSpace, VectorSpace, no_symmetry, AbstractSymmetry, AbstractSpace
 
 
 # TODO eventually remove AbstractBlockBackend inheritance, it is not needed,
@@ -22,27 +21,21 @@ class AbstractNoSymmetryBackend(AbstractBackend, AbstractBlockBackend, ABC):
     def __init__(self):
         AbstractBackend.__init__(self, no_symmetry)
 
-    def parse_data(self, obj, dtype: BackendDtype = None) -> BackendArray:
-        return self.parse_block(obj, dtype)
+    def parse_data(self, obj, legs: list[VectorSpace], dtype: BackendDtype = None
+                   ) -> tuple[BackendArray, tuple[int]]:
+        assert all(leg.symmetry == no_symmetry for leg in legs)
+        data = self.parse_block(obj, dtype)
+        shape = self.block_shape(obj)
+        return data, shape
 
     def is_real(self, data: BackendArray) -> bool:
         return self.block_is_real(data)
-
-    def infer_legs(self, data: BackendArray, labels: list[str] | None) -> list[Leg]:
-        is_real = self.is_real(data)
-        shape = self.block_shape(data)
-        if labels is None:
-            labels = [None] * len(shape)
-        else:
-            assert len(labels) == len(shape)
-        return [Leg.trivial(dim=d, ax=n, label=l, is_real=is_real) 
-                for n, (d, l) in enumerate(zip(shape, labels))]
 
     def tdot(self, a: BackendArray, b: BackendArray, a_axes: list[int], b_axes: list[int]
              ) -> BackendArray:
         return self.block_tdot(a, b, a_axes, b_axes)
 
-    def legs_are_compatible(self, data: BackendArray, legs: list[Leg]) -> bool:
+    def legs_are_compatible(self, data: BackendArray, legs: list[VectorSpace]) -> bool:
         shape = self.block_shape(data)
         for n, leg in enumerate(legs):
             if not (leg.space.symmetry == no_symmetry and leg.space.dim == shape[n]):
@@ -83,8 +76,7 @@ class AbstractNoSymmetryBackend(AbstractBackend, AbstractBlockBackend, ABC):
                                                             max_lines=max_lines - 1)
 
     @abstractmethod
-    def svd(self, a: BackendArray, idcs1: list[int], idcs2: list[int], max_singular_values: int,
-            threshold: float, max_err: float, algorithm: str):
+    def svd(self, a: BackendArray, idcs1: list[int], idcs2: list[int]):
         # reshaping, slicing etc is so specific to the BlockBackend that I dont bother unifying anything here.
         # that might change though...
         ...
@@ -104,13 +96,12 @@ class AbstractNoSymmetryBackend(AbstractBackend, AbstractBlockBackend, ABC):
     def conj(self, a: BackendArray) -> BackendArray:
         return self.block_conj(a)
 
-    def combine_legs(self, a: BackendArray, legs: list[int]) -> BackendArray:
-        # TODO we could lazy-evaluate this...
+    def combine_legs(self, a: BackendArray, legs: list[int], old_legs: list[VectorSpace], 
+                     new_leg: ProductSpace) -> BackendArray:
         return self.block_combine_legs(a, legs)
 
-    def split_leg(self, a: BackendArray, leg: int, orig_spaces: list[AbstractSpace]) -> BackendArray:
-        # TODO we could lazy-evaluate this...
-        return self.block_split_leg(a, leg, dims=[s.dim for s in orig_spaces])
+    def split_leg(self, a: BackendArray, leg_idx: int, leg: ProductSpace) -> BackendArray:
+        return self.block_split_leg(a, leg_idx, dims=[s.dim for s in leg.spaces])
 
     def allclose(self, a: BackendArray, b: BackendArray, rtol: float, atol: float) -> bool:
         return self.block_allclose(a, b, rtol=rtol, atol=atol)
@@ -134,3 +125,10 @@ class AbstractNoSymmetryBackend(AbstractBackend, AbstractBlockBackend, ABC):
 
     def random_gaussian(self, legs: list[AbstractSpace], dtype: Dtype, sigma: float) -> BackendArray:
         return self.block_random_gaussian([l.dim for l in legs], dtype=dtype, sigma=sigma)
+
+    def add(self, a: BackendArray, b: BackendArray) -> BackendArray:
+        return self.block_add(a, b)
+
+    def mul(self, a: float | complex, b: BackendArray) -> BackendArray:
+        return self.block_mul(a, b)
+        

@@ -10,4 +10,4 @@ class AbstractNonabelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
 
     def tdot(self, a: BackendArray, b: BackendArray, a_axes: list[int], b_axes: list[int]
              ) -> BackendArray:
-        ...  # FIXME
+        ...  # TODO

@@ -6,15 +6,15 @@ from tenpy.linalg.backends.abstract_backend import AbstractBackend, AbstractBloc
 
 # TODO eventually remove AbstractBlockBackend inheritance, it is not needed,
 #  jakob only keeps it around to make his IDE happy
-from tenpy.linalg.symmetries.groups import AbstractSymmetry, AbelianSymmetryGroup
+from ..symmetries import Symmetry, AbelianGroup
 
 
 class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
 
-    def __init__(self, symmetry: AbstractSymmetry):
-        assert isinstance(symmetry, AbelianSymmetryGroup)
+    def __init__(self, symmetry: Symmetry):
+        assert symmetry.is_abelian
         super().__init__(symmetry=symmetry)
 
     def tdot(self, a: BackendArray, b: BackendArray, a_axes: list[int], b_axes: list[int]
              ) -> BackendArray:
-        ...  # FIXME
+        ...  # TODO

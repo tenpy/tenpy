@@ -4,8 +4,7 @@ from dataclasses import dataclass
 from enum import Enum, auto
 from typing import TypeVar, Any
 
-from tenpy.linalg.symmetries import AbstractSymmetry, VectorSpace, AbstractSpace
-from tenpy.linalg.tensors import Leg
+from tenpy.linalg.symmetries import AbstractSymmetry, ProductSpace, VectorSpace, AbstractSpace
 
 
 # TODO make Dtype.float32
@@ -64,13 +63,15 @@ class AbstractBackend(ABC):
         return f'{type(self).__name__}({self.symmetry.short_str()})'
 
     @abstractmethod
-    def parse_data(self, obj, dtype: BackendDtype = None) -> BackendArray:
+    def parse_data(self, obj, legs: list[VectorSpace], dtype: BackendDtype = None
+                   ) -> tuple[BackendArray, tuple[int]]:
         """Extract backend-specific data structure from arbitrary python object, if possible.
-#         Raise TypeError or ValueError if not."""
+        Return this data and its shape.
+        Raise TypeError or ValueError if obj can not be interpreted as an array."""
         ...
 
     @abstractmethod
-    def parse_dtype(self, dtype: Dtype) -> BackendDtype:
+    def parse_dtype(self, dtype: Dtype | None) -> BackendDtype:
         """Translate Dtype instance to a backend-specific format"""
         ...
 
@@ -89,12 +90,7 @@ class AbstractBackend(ABC):
         ...
 
     @abstractmethod
-    def infer_legs(self, data: BackendArray, labels: list[str] | None) -> list[Leg]:
-        """Infer the vector spaces, if possible"""
-        ...
-
-    @abstractmethod
-    def legs_are_compatible(self, data: BackendArray, legs: list[Leg]) -> bool:
+    def legs_are_compatible(self, data: BackendArray, legs: list[VectorSpace]) -> bool:
         """Whether a given list of vector spaces is compatible with the data"""
         ...
 
@@ -136,17 +132,13 @@ class AbstractBackend(ABC):
         ...
 
     @abstractmethod
-    def svd(self, a: BackendArray, idcs1: list[int], idcs2: list[int], max_singular_values: int,
-            threshold: float, max_err: float, algorithm: str
-            ) -> tuple[BackendArray, BackendArray, BackendArray, float, VectorSpace]:
+    def svd(self, a: BackendArray, idcs1: list[int], idcs2: list[int]
+            ) -> tuple[BackendArray, BackendArray, BackendArray, VectorSpace]:
         """
 
         Returns
         -------
-        u, s, vh, trunc_err, new_space
-            trunc_err is the relative truncation error, i.e. norm(S_discarded) / norm(S_all)
-            new_space is the new vectorspace, that appears on u and s (on the "right"),
-                its dual appears on vh and s (on the "left")
+        u, s, vh, new_space
         """
         ...
 
@@ -174,12 +166,13 @@ class AbstractBackend(ABC):
         ...
 
     @abstractmethod
-    def combine_legs(self, a: BackendArray, legs: list[int]) -> BackendArray:
+    def combine_legs(self, a: BackendArray, legs: list[int], old_legs: list[VectorSpace], 
+                     new_leg: ProductSpace) -> BackendArray:
         """combine legs of a. resulting leg takes position of legs[0]"""
         ...
 
     @abstractmethod
-    def split_leg(self, a: BackendArray, leg: int, orig_spaces: list[AbstractSpace]) -> BackendArray:
+    def split_leg(self, a: BackendArray, leg_idx: int, leg: ProductSpace) -> BackendArray:
         """split a leg. resulting legs all take place of leg"""
         ...
 
@@ -209,6 +202,14 @@ class AbstractBackend(ABC):
 
     @abstractmethod
     def random_gaussian(self, legs: list[AbstractSpace], dtype: Dtype, sigma: float) -> BackendArray:
+        ...
+
+    @abstractmethod
+    def add(self, a: BackendArray, b: BackendArray) -> BackendArray:
+        ...
+
+    @abstractmethod
+    def mul(self, a: float | complex, b: BackendArray) -> BackendArray:
         ...
 
 
@@ -330,3 +331,9 @@ class AbstractBlockBackend(ABC):
     @abstractmethod
     def block_random_gaussian(self, dims: list[int], dtype: Dtype, sigma: float) -> Block:
         ...
+
+    def block_add(self, a: Block, b: Block) -> Block:
+        return a + b
+
+    def block_mul(self, a: float | complex, b: Block) -> Block:
+        return a * b

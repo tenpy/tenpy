@@ -1,8 +1,8 @@
 # Next up todos:
 
-- dtype: make one enum, no dataclass and is_complex_type functions, get rid of it as arg wherever possible
+- SVD: svd(), svd_truncated(), truncate_svd()   # better names?
 
-- sub add mul stubs in tensors
+- dtype: use numpy dtypes
 
 - DiagonalTensor and Scalar subclasses
     > elementwise ops like min, max, sqrt, real, mul, ... for them
@@ -12,27 +12,16 @@
     > go through edge cases
     > scale_axis, iscale_axis
 
-- OLD svd options (regarding degenerate singular vlaues, for example), keep them?
+- pseudo-inverse, aka pinv?
 
-- pseudo-inverse, aka pinv
-
-- we dont support real and imag, do we have as_real or sth, which takes a complex number with
-  negligible imag part and gives the real part
-
-- revisit random generation, functionality from OLD
+- random
 
 - in-place operations
     > iadd_prefactor, iadd, isub, imul, itruediv
 
 - I/O support (at least for Tensor, for what else?)
 
-- label utilities
-    > get_leg_idx, get_leg_idcs, has_labels, labels_are
-    > change labels, e.g. set_labels, update_labels, drop_labels
-
-- zeros_like, eye_like, ...
-
-- make Tensor.__eq__ be allclose with a default, rather low, tolerance. doc it
+- zero, zero_like, eye, eye_like, ... (as classmethods? so we can have seperate Tensor and DiagonalTensor implementations?)
 
 - global default_backend or sth and make all backend arguments optional
 
@@ -44,9 +33,6 @@
 
 
 # Open design questions
-
-- Think about mutability / views and copies
-  -> mutable, e.g. via __iadd__. views are not supported, since slicing is not
 
 - Should we care about in-place operations, where we provide a Tensor instance
   whose memory may be overwritten with the result?

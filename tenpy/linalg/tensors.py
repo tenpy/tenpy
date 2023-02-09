@@ -1,78 +1,13 @@
 from __future__ import annotations
-import enum
 
-from math import prod
-
+from typing import Iterable
 import numpy as np
 
+from .numpy import get_same_backend
 from .backends.abstract_backend import AbstractBackend, Dtype
 from .misc import duplicate_entries, force_str_len
-from .symmetries.spaces import VectorSpace, ProductSpace
-
-
-class Leg:
-    def __init__(self, space: VectorSpace | ProductSpace, axs: list[int], label: str = None, 
-                 fused_from: list[Leg] = None):
-        """Data associated with the leg of a tensor
-
-        Args:
-            space (VectorSpace | ProductSpace): The space that this leg represents. Includes symmetry data
-            axs (list[int]): which of the axes of the underlying backend-specific data this leg refers to
-            label (str, optional): a string label used to identify this leg.
-            fused_from (list[Leg], optional): if this leg is the result of fusing legs, a list of those legs.
-                this data allows fusing to be reversed, and lazily evaluated.
-        """
-        self.space = space
-        self.axs = axs
-        self.num_axs = len(axs)
-        self.label = label
-        self.fused_from = fused_from
-
-    @classmethod
-    def combine(cls, legs: list[Leg], label: str = None) -> Leg:
-        return cls(space=ProductSpace([l.space for l in legs]), axs=[ax for l in legs for ax in l.axs],
-                   label=label, fused_from=legs)
-
-    def split(self) -> list[Leg]:
-        if self.fused_from is None:
-            raise ValueError(f'Leg "{self.label}" can not be split')
-        return self.fused_from
-
-    @classmethod
-    def trivial(cls, dim: int, ax: int, label: str = None, is_real: bool = True):
-        return cls(space=VectorSpace.non_symmetric(dim=dim, is_real=is_real), axs=[ax], label=label)
-
-    @property
-    def is_trivial(self) -> bool:
-        return self.space.dim == 1
-
-    def dual(self) -> Leg:
-        """The dual leg, that can be contracted with self"""
-        return Leg(space=self.space.dual, axs=self.axs, label=dual_leg_label(self.label))
-
-    def can_contract_with(self, other: Leg) -> bool:
-        return self.space.is_dual_of(other.space)
-
-    def components_str(self, max_len: int) -> str:
-        if self.fused_from is not None:
-            res = ' ⊗ '.join(f'({leg.label}: {leg.space.dim})' for leg in self.fused_from)
-        elif isinstance(self.space, ProductSpace):
-            res = ' ⊗ '.join(str(leg.space.dim) for leg in self.fused_from)
-        else:
-            res = ' ⊕ '.join(f'({mult} * {self.space.symmetry.sector_str(sector)})' 
-                             for mult, sector in zip(self.space.multiplicities, self.space.sectors))
-
-        if len(res) > max_len:
-            res = res[:max_len - 6] + ' [...]'
-
-        return res
-
-    def copy(self):
-        return Leg(space=self.space, axs=self.axs, label=self.label, fused_from=self.fused_from)
-
-    def relabelled(self, label: str | None):
-        """return a copy with a new label"""
-        return Leg(space=self.space, axs=self.axs, label=label, fused_from=self.fused_from)
+from .dummy_config import config
+from .symmetries import VectorSpace, ProductSpace
 
 
 def dual_leg_label(label: str) -> str:
@@ -87,9 +22,17 @@ def combine_leg_labels(labels: list[str | None]) -> str:
     return '(' + '.'.join(f'?{n}' if l is None else l for n, l in enumerate(labels)) + ')'
 
 
+def split_leg_label(label: str) -> list[str | None]:
+    if label.startswith('(') and label.endswith(')'):
+        labels = label.lstrip('(').rstrip(')').split('.')
+        return [None if l.startswith('?') else l for l in labels]
+    else:
+        raise ValueError('Invalid format for a combined label')
+
+
 class Tensor:
 
-    def __init__(self, data, backend: AbstractBackend, legs: list[Leg]):
+    def __init__(self, data, backend: AbstractBackend, legs: list[VectorSpace], labels: list[str | None] = None):
         """
         This constructor is not user-friendly. Use as_tensor instead.
         Inputs are not checked for consistency.
@@ -97,29 +40,31 @@ class Tensor:
         self.data = data
         self.backend = backend
         self.legs = legs
+        self.labels = labels or [None] * len(legs)
         self.num_legs = len(legs)
         self.symmetry = legs[0].space.symmetry
-        self.label_map = {l.label: n for n, l in enumerate(legs) if l.label is not None}
-        self.parent_space = ProductSpace(spaces=[l.space for l in legs])
 
     @property
     def dtype(self):
         return self.backend.infer_dtype(self.data)
 
+    @property
+    def parent_space(self) -> VectorSpace:
+        if self.num_legs == 1:
+            return self.legs[0]
+        else:
+            return ProductSpace(spaces=self.legs)
+
     def check_sanity(self):
         assert self.backend.supports_symmetry(self.symmetry)
         assert all(l.space.symmetry == self.symmetry for l in self.legs)
-        all_axs = [ax for leg in self.legs for ax in leg.axs]
-        expect_num_axs = self.backend.num_axs(self.data)
-        assert not duplicate_entries(all_axs) 
-        assert len(all_axs) == expect_num_axs
-        assert all(0 <= ax < expect_num_axs for ax in all_axs)
+        assert len(self.legs) == self.num_legs > 0
 
     @property
     def size(self) -> int:
-        """The total number of entries, i.e. the dimension of the tensorproduct of the legs,
-        *not* considering symmetry"""
-        return prod(l.dim for l in self.legs)
+        """The total number of entries, i.e. the dimension of the space of tensors on the same space 
+        if symmetries were ignored"""
+        return self.parent_space.dim
 
     @property
     def num_parameters(self) -> int:
@@ -128,22 +73,19 @@ class Tensor:
         return self.parent_space.num_parameters
 
     @property
-    def leg_labels(self) -> list[str]:
-        return [l.label for l in self.legs]
-
-    @leg_labels.setter
-    def leg_labels(self, leg_labels):
-        self.set_labels(leg_labels)
-
-    @property
     def is_fully_labelled(self) -> bool:
-        return None not in self.leg_labels
+        return None not in self.labels
 
-    def set_labels(self, leg_labels: list[str]):
-        assert not duplicate_entries(leg_labels, ignore=[None])
-        assert len(leg_labels) == self.num_legs
-        for leg, label in zip(self.legs, leg_labels):
-            leg.label = label
+    def has_label(self, label: str, *more: str) -> bool:
+        return label in self.labels and all(l in self.labels for l in more)
+
+    def labels_are(self, *labels: str) -> bool:
+        return set(self.labels) == set(labels)
+
+    def set_labels(self, labels: list[str | None]):
+        assert not duplicate_entries(labels, ignore=[None])
+        assert len(labels) == self.num_legs
+        self.labels = labels[:]
 
     def get_leg_idx(self, which_leg: int | str) -> int:
         if isinstance(which_leg, str):
@@ -162,19 +104,12 @@ class Tensor:
         else:
             return list(map(self.get_leg_idx, which_legs))
 
-    def get_legs(self, which_legs: int | str | list[int | str]) -> list[Leg]:
+    def get_legs(self, which_legs: int | str | list[int | str]) -> list[VectorSpace]:
         return [self.legs[idx] for idx in self.get_leg_idcs(which_legs)]
-
-    def get_all_axs(self, which_legs: int | str | list[int | str]) -> list[int]:
-        """Get a list of all axes of the underlying data that are described by the given leg(s)"""
-        if isinstance(which_legs, (int, str)):
-            return self.legs[self.get_leg_idx(which_legs)].axs
-        else:
-            return [ax for which_leg in which_legs for ax in self.legs[self.get_leg_idx(which_leg)].axs]
 
     def copy(self):
         """return a Tensor object equal to self, such that in-place operations on self.copy() do not affect self"""
-        return Tensor(data=self.backend.copy_data(self.data), backend=self.backend, legs=self.legs[:])
+        return Tensor(data=self.backend.copy_data(self.data), backend=self.backend, legs=self.legs[:], labels=self.labels[:])
 
     def item(self):
         """If the tensor is a scalar (i.e. has only one entry), return that scalar as a float or complex.
@@ -186,10 +121,21 @@ class Tensor:
 
     def __repr__(self):
         indent = '  '
+        COMPONENT_LEN = 50
 
-        label_strs = [force_str_len(l.label, 5) for l in self.legs]
-        dim_strs = [force_str_len(l.dim, 5) for l in self.legs]
-        components_strs = [l.components_str(max_len=50) for l in self.legs]
+        label_strs = [force_str_len(label, 5) for label in self.labels]
+        dim_strs = [force_str_len(leg.dim, 5) for leg in self.legs]
+        components_strs = []
+        for leg, label in zip(self.legs, self.labels):
+            if isinstance(leg, ProductSpace):
+                sublabels = split_leg_label(label)
+                components = ' ⊗ '.join(f'({l}: {s.dim})' for l, s in zip(sublabels, leg.spaces))
+            else:
+                components = ' ⊕ '.join(f'({mult} * {leg.symmetry.sector_str(sect)})' 
+                                        for mult, sect in zip(leg.multiplicities, leg.sectors))
+            if len(components) > COMPONENT_LEN:
+                components = components[:COMPONENT_LEN - 6] + ' [...]'
+            components_strs.append(components)
 
         lines = [
             f'Tensor(',
@@ -209,7 +155,6 @@ class Tensor:
         raise TypeError('Tensor object is not subscriptable')
     
     def __neg__(self):
-        # TODO worth it to write specialized code here?
         return self.__mul__(-1)
 
     def __pos__(self):
@@ -227,7 +172,8 @@ class Tensor:
 
     def __sub__(self, other):
         if isinstance(other, Tensor):
-            return sub(self, other)
+            # TODO is this efficient enough?
+            return add(self, mul(-1, other))
         else:
             return NotImplemented
 
@@ -287,13 +233,13 @@ class DiagonalTensor(Tensor):
 # TODO is there a use for a special Scalar(DiagonalTensor) class?
 
 
-def as_tensor(obj, backend: AbstractBackend, legs: list[Leg] = None, labels: list[str] = None,
+def as_tensor(obj, backend: AbstractBackend, legs: list[VectorSpace] = None, labels: list[str] = None,
               dtype: Dtype = None) -> Tensor:
+    # TODO use a default backend from global config?
     if isinstance(obj, Tensor):
         obj = obj.copy()
 
         if legs is not None:
-            assert labels is None
             raise NotImplementedError  # TODO what to do here?
 
         if backend is not None:
@@ -309,25 +255,39 @@ def as_tensor(obj, backend: AbstractBackend, legs: list[Leg] = None, labels: lis
         return obj
 
     else:
-        obj = backend.parse_data(obj, dtype=None if dtype is None else backend.parse_dtype(dtype))
+        obj, shape = backend.parse_data(obj, legs, dtype=backend.parse_dtype(dtype))
         if legs is None:
-            legs = backend.infer_legs(obj, labels=labels)
+            legs = [VectorSpace.non_symmetric(d) for d in shape]
         else:
-            assert labels is None
             assert backend.legs_are_compatible(obj, legs)
-        return Tensor(obj, backend, legs=legs)
+        return Tensor(obj, backend, legs=legs, labels=labels)
 
 
-# FIXME stubs below
+def match_label_order(a: Tensor, b: Tensor) -> Iterable[int]:
+    """Determine the order of legs of b, such that they match the legs of a.
+    If config.stric_labels, this is a permutation determined by the labels, otherwise it is range(num_legs).
+    """
+    if config.strict_labels:
+        if a.is_fully_labelled and b.is_fully_labelled:
+            match_by_labels = True
+        else:
+            match_by_labels = False
+            # TODO issue warning?
+    else:
+        match_by_labels = False
+    
+    if match_by_labels:
+        leg_order = b.get_leg_idcs(a.leg_labels)
+    else:
+        leg_order = range(b.num_legs)
 
 
-def sub(a, b):
-    ...
+def add(a: Tensor, b: Tensor) -> Tensor:
+    backend = get_same_backend(a, b)
+    res_data = backend.add(a.data, b.data, b_perm=match_label_order(a, b))
+    return Tensor(res_data, backend=backend, legs=a.legs, labels=a.labels)
 
 
-def add(a, b):
-    ...
-
-
-def mul(a, b):
-    ...
+def mul(a: float | complex, b: Tensor) -> Tensor:
+    res_data = b.backend.mul(a, b.data)
+    return Tensor(res_data, backend=b.backend, legs=b.legs, labels=b.labels)
