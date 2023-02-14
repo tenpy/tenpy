@@ -1,6 +1,11 @@
 name: sphinx-doctest
 
-on: [push]
+on:
+  push: 
+    branches:
+      - main
+  pull-request:
+
 
 jobs:
   build:
