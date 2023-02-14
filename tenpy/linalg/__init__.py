@@ -1,31 +1,27 @@
 r"""Linear-algebra tools for tensor networks.
 
-Most notably is the module :mod:`~tenpy.linalg.np_conserved`,
-which contains everything needed to make use of
-charge conservervation in the context of tensor networks.
+Most notably is the module :mod:`~tenpy.linalg.tensors`,
+which provides the :class:`~tenpy.linalg.tensors.Tensor` class used by the rest of the library.
 
-Relevant contents of :mod:`~tenpy.linalg.charges`
-are imported to :mod:`~tenpy.linalg.np_conserved`,
-so you propably won't need to import `charges` directly.
 
 .. rubric:: Submodules
 
 .. autosummary::
     :toctree: .
 
-    np_conserved
-    charges
-    svd_robust
+    tensors
+    symmetry
     random_matrix
     sparse
     lanczos
+    old
 
 """
 # Copyright 2018-2023 TeNPy Developers, GNU GPLv3
 
-from . import charges, np_conserved, lanczos, random_matrix, sparse, svd_robust
+from . import symmetries, backends, tensors, lanczos, random_matrix, sparse
 
-__all__ = ['charges', 'np_conserved', 'lanczos', 'random_matrix', 'sparse', 'svd_robust']
+#  __all__ = ['charges', 'np_conserved', 'lanczos', 'random_matrix', 'sparse', 'svd_robust']
 
 from ..tools import optimization
 
@@ -56,7 +52,7 @@ def _patch_cython():
     # done
 
 
-assert optimization.have_cython_functions is not None  # check that we had a `@use_cython` somewhere
+#  assert optimization.have_cython_functions is not None  # check that we had a `@use_cython` somewhere
 
 if optimization.have_cython_functions:
     _patch_cython()

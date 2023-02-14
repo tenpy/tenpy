@@ -1,7 +1,7 @@
 """A collection of tests for tenpy.linalg.charges."""
 # Copyright 2018-2023 TeNPy Developers, GNU GPLv3
 
-import tenpy.linalg.charges as charges
+import tenpy.linalg.old.charges as charges
 import numpy as np
 import numpy.testing as npt
 import itertools as it

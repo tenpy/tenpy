@@ -5,7 +5,7 @@ import numpy as np
 import numpy.testing as npt
 from scipy.linalg import diagsvd
 
-from tenpy.linalg import svd_robust
+from tenpy.linalg.old import svd_robust
 
 import random_test  # fix the random seed.
 from tenpy.linalg.random_matrix import standard_normal_complex

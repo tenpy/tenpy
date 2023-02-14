@@ -26,9 +26,9 @@ import copy
 import bisect
 import warnings
 
-from tenpy.tools.misc import lexsort, inverse_permutation
-from tenpy.tools.string import vert_join
-from tenpy.tools.optimization import optimize, OptimizationFlag, use_cython
+from ...tools.misc import lexsort, inverse_permutation
+from ...tools.string import vert_join
+from ...tools.optimization import optimize, OptimizationFlag, use_cython
 
 __all__ = ['ChargeInfo', 'LegCharge', 'LegPipe', 'QTYPE']
 
