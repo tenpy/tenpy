@@ -24,7 +24,7 @@ class BraidingStyle(Enum):
 
 class Symmetry(ABC):
     """Base class for symmetries that impose a block-structure on tensors"""
-    def __init__(self, fusion_style: FusionStyle, braiding_style: BraidingStyle, trivial_sector: Sector, 
+    def __init__(self, fusion_style: FusionStyle, braiding_style: BraidingStyle, trivial_sector: Sector,
                  group_name: str, descriptive_name: str | None = None):
         self.fusion_style = fusion_style
         self.braiding_style = braiding_style
@@ -77,14 +77,14 @@ class Symmetry(ABC):
             factors = [self]
         else:
             return NotImplemented
-        
+
         if isinstance(other, ProductSymmetry):
             factors = factors + other.factors
         elif isinstance(other, Symmetry):
             factors = factors + [other]
         else:
             return NotImplemented
-        
+
         return ProductSymmetry(factors=factors)
 
     @abstractmethod
@@ -103,24 +103,24 @@ class NoSymmetry(Symmetry):
     """Trivial symmetry group that doesn't do anything. the only allowed sector is `None`"""
 
     def __init__(self):
-        Symmetry.__init__(self, fusion_style=FusionStyle.single, braiding_style=BraidingStyle.bosonic, 
+        Symmetry.__init__(self, fusion_style=FusionStyle.single, braiding_style=BraidingStyle.bosonic,
                           trivial_sector=None, group_name='NoSymmetry', descriptive_name=None)
-    
+
     def is_valid_sector(self, a: Sector) -> bool:
         return a is None
-    
+
     def fusion_outcomes(self, a: Sector, b: Sector) -> list[Sector]:
         return [None]
-    
+
     def sector_dim(self, a: Sector) -> int:
         return 1
-    
+
     def sector_str(self, a: Sector) -> int:
         return '.'
-    
+
     def __repr__(self):
         return 'NoSymmetry()'
-    
+
     def dual_sector(self, a: Sector) -> Sector:
         return None
 
@@ -135,8 +135,8 @@ class ProductSymmetry(Symmetry):
         else:
             descriptive_name = None
         Symmetry.__init__(
-            self, 
-            fusion_style=max((f.fusion_style for f in factors), key=lambda style: style.value), 
+            self,
+            fusion_style=max((f.fusion_style for f in factors), key=lambda style: style.value),
             braiding_style=max((f.braiding_style for f in factors), key=lambda style: style.value),
             trivial_sector=[f.trivial_sector for f in factors],
             group_name=' ⨉ '.join(f.group_name for f in factors),
@@ -148,7 +148,7 @@ class ProductSymmetry(Symmetry):
             return False
         try:
             return all(f.is_valid_sector(b) for f, b in zip(self.factors, a))
-        except TypeError:  
+        except TypeError:
             # if a is not iterable
             return False
 
@@ -180,8 +180,8 @@ class Group(Symmetry, ABC):
     Noteable counter-examples are fermionic parity or anyonic grading.
     """
     def __init__(self, fusion_style: FusionStyle, trivial_sector: Sector, group_name: str, descriptive_name: str | None = None):
-        Symmetry.__init__(self, fusion_style=fusion_style, braiding_style=BraidingStyle.bosonic, 
-                          trivial_sector=trivial_sector, group_name=group_name, 
+        Symmetry.__init__(self, fusion_style=fusion_style, braiding_style=BraidingStyle.bosonic,
+                          trivial_sector=trivial_sector, group_name=group_name,
                           descriptive_name=descriptive_name)
 
 
@@ -192,63 +192,64 @@ class AbelianGroup(Group, ABC):
     which is not a subclass of AbelianGroup.
     """
     is_abelian = True
-    
+
     def __init__(self, trivial_sector: Sector, group_name: str, descriptive_name: str | None = None):
-        Group.__init__(self, fusion_style=FusionStyle.single, trivial_sector=trivial_sector, 
+        Group.__init__(self, fusion_style=FusionStyle.single, trivial_sector=trivial_sector,
                        group_name=group_name, descriptive_name=descriptive_name)
 
     def sector_dim(self, a: Sector) -> int:
         return 1
 
+# TODO group_names U(1) and SU(2) or U₁ and SU₂ ?
+# JH: at least consistent: if Z_N, then also U_1 and SU_2.
+# Challenge: when you want to compare, you need to copy-paste
 
-class QmodGroup(AbelianGroup, ABC):
-    """
-    Common code for Z_N and U(1) groups.
-    The sectors are labelled by modular integers Z_N or all integers Z, respectively.
-    Qmod, i.e. the divisor for modular addition is N or "no modulo"/1, respectively.
-    Allowed sectors are integers, either 0, 1, ..., N or any (including negative) integer.
-    Fusion is addition module Qmod 
-    """
-    def __init__(self, qmod: int, group_name: str, descriptive_name: str | None = None):
-        self.qmod = qmod
-        AbelianGroup.__init__(self, trivial_sector=0, group_name=group_name, 
+class U1Symmetry(AbelianGroup):
+    """U(1) symmetry. Sectors are integers ..., `-2`, `-1`, `0`, `1`, `2`, ..."""
+    def __init__(self, descriptive_name: str | None = None):
+        AbelianGroup.__init__(self, trivial_sector=0, group_name='U(1)',
                               descriptive_name=descriptive_name)
 
     def is_valid_sector(self, a: Sector) -> bool:
-        return isinstance(a, int) and (self.qmod == 1 or 0 <= a < self.qmod)
+        return isinstance(a, int)
 
     def fusion_outcomes(self, a: Sector, b: Sector) -> list[Sector]:
-        return [(a + b) % self.qmod]
+        return [(a + b)]
 
     def dual_sector(self, a: Sector) -> Sector:
-        return (-a) % self.qmod
+        return -a
+
+    def __repr__(self):
+        return 'U1Symmetry()'
 
 
 class ZNSymmetry(QmodGroup):
     """Z_N symmetry. Sectors are integers `0`, `1`, ..., `N-1`"""
     def __init__(self, N: int, descriptive_name: str | None = None):
+        assert isinstance(N, int)
+        if not isinstance(N, int) and N > 1:
+            raise ValueError(f"invalid ZNSymmetry(N={N!r},{descriptive_name!s})")
         self.N = N
-        subscript_map = {'0': '₀', '1': '₁', '2': '₂', '3': '₃', '4': '₄', '5': '⨉⨉⨉⨉', '6': '₆',
+        subscript_map = {'0': '₀', '1': '₁', '2': '₂', '3': '₃', '4': '₄', '5': '₅', '6': '₆',
                          '7': '₇', '8': '₈', '9': '₉'}
         subscript_N = ''.join(subscript_map[char] for char in str(N))
-        QmodGroup.__init__(self, qmod=N, group_name=f'ℤ{subscript_N}', descriptive_name=descriptive_name)
-    
+        group_name = f'ℤ{subscript_N}'
+        AbelianGroup.__init__(self, trivial_sector=0, group_name=group_name,
+                              descriptive_name=descriptive_name)
+
     def __repr__(self):
         return f'ZNSymmetry(N={self.N})'  # TODO include descriptive_name?
 
+    def is_valid_sector(self, a: Sector) -> bool:
+        return isinstance(a, int) and (0 <= a < self.N)
 
-# TODO group_names U(1) and SU(2) or U₁ and SU₂ ?
+    def fusion_outcomes(self, a: Sector, b: Sector) -> list[Sector]:
+        return [(a + b) % self.N]
+
+    def dual_sector(self, a: Sector) -> Sector:
+        return (-a) % self.N
 
 
-class U1Symmetry(QmodGroup):
-    """U(1) symmetry. Sectors are integers ..., `-2`, `-1`, `0`, `1`, `2`, ..."""
-    def __init__(self, descriptive_name: str | None = None):
-        QmodGroup.__init__(self, qmod=1, group_name='U(1)', descriptive_name=descriptive_name)
-
-    def __repr__(self):
-        return 'U1Symmetry()'
-
-    
 class SU2Symmetry(Group):
     """SU(2) symmetry. Sectors are positive integers `jj` = `0`, `1`, `2`, ...
     which label the spin `jj/2` irrep of SU(2).
@@ -256,7 +257,7 @@ class SU2Symmetry(Group):
     E.g. a spin-1/2 degree of freedom is represented by the sector `1`.
     """
     def __init__(self, descriptive_name: str | None = None):
-        Group.__init__(self, fusion_style=FusionStyle.multiple_unique, trivial_sector=0, 
+        Group.__init__(self, fusion_style=FusionStyle.multiple_unique, trivial_sector=0,
                        group_name='SU(2)', descriptive_name=descriptive_name)
 
     def is_valid_sector(self, a: Sector) -> bool:
@@ -285,7 +286,7 @@ class FermionParity(Symmetry):
     """Fermionic Parity. Sectors are `0` (even parity) and `1` (odd parity)"""
 
     def __init__(self):
-        Symmetry.__init__(self, fusion_style=FusionStyle.single, braiding_style=BraidingStyle.fermionic, 
+        Symmetry.__init__(self, fusion_style=FusionStyle.single, braiding_style=BraidingStyle.fermionic,
                           trivial_sector=0, group_name='FermionParity', descriptive_name=None)
 
     def is_valid_sector(self, a: Sector) -> bool:
@@ -324,7 +325,7 @@ fermion_parity: Final = FermionParity()
 
 
 class VectorSpace:
-    
+
     def __init__(self, symmetry: Symmetry, sectors: list[Sector], multiplicities: list[int] = None,
                  is_dual: bool = False, is_real: bool = False):
         """
@@ -358,7 +359,7 @@ class VectorSpace:
         if isinstance(other, VectorSpace):
             return ProductSpace([self, other])
         return NotImplemented
-    
+
     def __repr__(self):
         return f'VectorSpace(symmetry={self.symmetry}, sectors={self.sectors}, multiplicities={self.multiplicities}, ' \
                f'is_dual={self.is_dual}, is_real={self.is_real})'
@@ -388,7 +389,7 @@ class VectorSpace:
 
     def is_dual_of(self, other):
         # FIXME think about duality in more detail.
-        #  i.e. is a 
+        #  i.e. is a
         # `Vectorspace(a.symmetry, [sector.dual for sector in a.sectors], a.multiplicities, not a.is_dual, a.is_real) == a` ?
         return self == other.dual
 
@@ -416,8 +417,8 @@ class ProductSpace(VectorSpace):
         self._abelian_backend_slices = None
         self._abelian_backend_qmap = None
         # ...
-        
-        VectorSpace.__init__(self, symmetry=symmetry, sectors=sectors, multiplicities=multiplicities, 
+
+        VectorSpace.__init__(self, symmetry=symmetry, sectors=sectors, multiplicities=multiplicities,
                              is_dual=is_dual, is_real=is_real)
 
     def __len__(self):
