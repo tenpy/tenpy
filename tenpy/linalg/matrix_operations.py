@@ -1,7 +1,6 @@
 from __future__ import annotations
 import math
-from .tensors import DiagonalTensor, Tensor
-from .numpy import get_same_backend
+from .tensors import DiagonalTensor, Tensor, get_same_backend
 
 
 def svd(a: Tensor, u_legs: list[int | str] = None, vh_legs: list[int | str] = None,
