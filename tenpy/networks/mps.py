@@ -1668,6 +1668,8 @@ class MPS:
         if bonds is None:
             nt = self.nontrivial_bonds
             bonds = range(nt.start, nt.stop)
+        if isinstance(bonds, int):
+            bonds = [bonds]
         res = []
         for ib in bonds:
             s = self._S[ib]
