@@ -11,10 +11,6 @@ from ..symmetries import Symmetry, AbelianGroup
 
 class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
 
-    def __init__(self, symmetry: Symmetry):
-        assert symmetry.is_abelian
-        super().__init__(symmetry=symmetry)
-
     def tdot(self, a: Data, b: Data, a_axes: list[int], b_axes: list[int]
              ) -> Data:
         ...  # TODO

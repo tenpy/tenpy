@@ -54,9 +54,6 @@ class AbstractBackend(ABC):
     """
     default_precision: Precision
 
-    def __init__(self, symmetry: AbstractSymmetry):
-        self.symmetry = symmetry
-
     def __repr__(self):
         return f'{type(self).__name__}'
 

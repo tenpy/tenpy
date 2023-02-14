@@ -17,9 +17,6 @@ class AbstractNoSymmetryBackend(AbstractBackend, AbstractBlockBackend, ABC):
     Tensor.data is a single block of the AbstractBlockBackend, e.g. a numpy.ndarray for NumpyBlockBackend
     """
 
-    def __init__(self):
-        AbstractBackend.__init__(self, no_symmetry)
-
     def infer_dtype(self, a: Tensor) -> Dtype:
         return self.block_dtype(a.data)
 

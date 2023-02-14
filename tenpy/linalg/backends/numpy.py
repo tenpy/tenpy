@@ -186,10 +186,6 @@ class NumpyBlockBackend(AbstractBlockBackend):
 
 
 class NoSymmetryNumpyBackend(NumpyBlockBackend, AbstractNoSymmetryBackend):
-    def __init__(self):
-        NumpyBlockBackend.__init__(self)
-        AbstractNoSymmetryBackend.__init__(self)
-
     def svd(self, a: Tensor, axs1: list[int], axs2: list[int], new_leg: VectorSpace | None
             ) -> tuple[Data, Data, Data, VectorSpace]:
         a = np.transpose(a.data, axs1 + axs2)
@@ -205,15 +201,11 @@ class NoSymmetryNumpyBackend(NumpyBlockBackend, AbstractNoSymmetryBackend):
 
 
 class AbelianNumpyBackend(NumpyBlockBackend, AbstractAbelianBackend):
-    def __init__(self, symmetry: AbstractSymmetry):
-        NumpyBlockBackend.__init__(self)
-        AbstractAbelianBackend.__init__(self, symmetry=symmetry)
+    pass
 
 
 class NonabelianNumpyBackend(NumpyBlockBackend, AbstractNonabelianBackend):
-    def __init__(self, symmetry: Symmetry):
-        NumpyBlockBackend.__init__(self)
-        AbstractNonabelianBackend.__init__(self, symmetry=symmetry)
+    pass
 
 
 def _svd_gesvd(a):
