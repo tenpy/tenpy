@@ -2,7 +2,8 @@
 
 - SVD: svd(), svd_truncated(), truncate_svd()   # better names?
 
-- dtype: use numpy dtypes
+- dtype: use numpy dtypes 
+  JH: actually, I think it might make sense to keep specific allowed dtypes only, np.dtype might be too general
 
 - DiagonalTensor and Scalar subclasses
     > elementwise ops like min, max, sqrt, real, mul, ... for them
@@ -68,3 +69,5 @@
 - tests
 
 - docs
+
+- benchmark- benchmark- benchmark- benchmark- benchmark- benchmark- benchmark- benchmark- benchmark

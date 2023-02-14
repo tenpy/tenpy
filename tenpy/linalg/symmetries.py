@@ -223,7 +223,7 @@ class U1Symmetry(AbelianGroup):
         return 'U1Symmetry()'
 
 
-class ZNSymmetry(QmodGroup):
+class ZNSymmetry(AbelianGroup):
     """Z_N symmetry. Sectors are integers `0`, `1`, ..., `N-1`"""
     def __init__(self, N: int, descriptive_name: str | None = None):
         assert isinstance(N, int)

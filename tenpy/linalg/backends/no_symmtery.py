@@ -4,7 +4,7 @@ from math import prod
 
 from .abstract_backend import AbstractBackend, AbstractBlockBackend, BackendArray, BackendDtype, \
     Block, Dtype
-from ..symmetries import ProductSpace, VectorSpace, no_symmetry, AbstractSymmetry, AbstractSpace
+from ..symmetries import ProductSpace, VectorSpace, no_symmetry, Symmetry
 
 
 # TODO eventually remove AbstractBlockBackend inheritance, it is not needed,
@@ -48,13 +48,13 @@ class AbstractNoSymmetryBackend(AbstractBackend, AbstractBlockBackend, ABC):
     def to_dense_block(self, data: BackendArray) -> Block:
         return data
 
-    def reduce_symmetry(self, data: BackendArray, new_symm: AbstractSymmetry) -> BackendArray:
+    def reduce_symmetry(self, data: BackendArray, new_symm: Symmetry) -> BackendArray:
         if new_symm == no_symmetry:
             return data
         else:
             raise ValueError(f'Can not decrease {no_symmetry} to {new_symm}.')
 
-    def increase_symmetry(self, data: BackendArray, new_symm: AbstractSymmetry, atol=1e-8, rtol=1e-5
+    def increase_symmetry(self, data: BackendArray, new_symm: Symmetry, atol=1e-8, rtol=1e-5
                           ) -> BackendArray:
         if new_symm == no_symmetry:
             raise UserWarning  # TODO logging
@@ -96,7 +96,7 @@ class AbstractNoSymmetryBackend(AbstractBackend, AbstractBlockBackend, ABC):
     def conj(self, a: BackendArray) -> BackendArray:
         return self.block_conj(a)
 
-    def combine_legs(self, a: BackendArray, legs: list[int], old_legs: list[VectorSpace], 
+    def combine_legs(self, a: BackendArray, legs: list[int], old_legs: list[VectorSpace],
                      new_leg: ProductSpace) -> BackendArray:
         return self.block_combine_legs(a, legs)
 
@@ -120,10 +120,10 @@ class AbstractNoSymmetryBackend(AbstractBackend, AbstractBlockBackend, ABC):
         matrix, aux = self.block_matrixify(a, idcs1, idcs2)
         return self.block_dematrixify(self.matrix_log(matrix), aux)
 
-    def random_uniform(self, legs: list[AbstractSpace], dtype: Dtype) -> BackendArray:
+    def random_uniform(self, legs: list[VectorSpace], dtype: Dtype) -> BackendArray:
         return self.block_random_uniform([l.dim for l in legs], dtype=dtype)
 
-    def random_gaussian(self, legs: list[AbstractSpace], dtype: Dtype, sigma: float) -> BackendArray:
+    def random_gaussian(self, legs: list[VectorSpace], dtype: Dtype, sigma: float) -> BackendArray:
         return self.block_random_gaussian([l.dim for l in legs], dtype=dtype, sigma=sigma)
 
     def add(self, a: BackendArray, b: BackendArray) -> BackendArray:
@@ -131,4 +131,4 @@ class AbstractNoSymmetryBackend(AbstractBackend, AbstractBlockBackend, ABC):
 
     def mul(self, a: float | complex, b: BackendArray) -> BackendArray:
         return self.block_mul(a, b)
-        
+

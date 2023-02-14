@@ -3,7 +3,6 @@ from __future__ import annotations
 from typing import Iterable
 import numpy as np
 
-from .numpy import get_same_backend
 from .backends.abstract_backend import AbstractBackend, Dtype
 from .misc import duplicate_entries, force_str_len
 from .dummy_config import config
@@ -62,7 +61,7 @@ class Tensor:
 
     @property
     def size(self) -> int:
-        """The total number of entries, i.e. the dimension of the space of tensors on the same space 
+        """The total number of entries, i.e. the dimension of the space of tensors on the same space
         if symmetries were ignored"""
         return self.parent_space.dim
 
@@ -131,7 +130,7 @@ class Tensor:
                 sublabels = split_leg_label(label)
                 components = ' ⊗ '.join(f'({l}: {s.dim})' for l, s in zip(sublabels, leg.spaces))
             else:
-                components = ' ⊕ '.join(f'({mult} * {leg.symmetry.sector_str(sect)})' 
+                components = ' ⊕ '.join(f'({mult} * {leg.symmetry.sector_str(sect)})'
                                         for mult, sect in zip(leg.multiplicities, leg.sectors))
             if len(components) > COMPONENT_LEN:
                 components = components[:COMPONENT_LEN - 6] + ' [...]'
@@ -153,7 +152,7 @@ class Tensor:
     def __getitem__(self, item):
         # TODO point towards a "as flat" option
         raise TypeError('Tensor object is not subscriptable')
-    
+
     def __neg__(self):
         return self.__mul__(-1)
 
@@ -163,7 +162,7 @@ class Tensor:
     def __eq__(self, other):
         # TODO make sure the pointer is correct.
         raise TypeError('Tensor does not support == comparison. Use tenpy.allclose instead.')
-    
+
     def __add__(self, other):
         if isinstance(other, Tensor):
             return add(self, other)
@@ -275,7 +274,7 @@ def match_label_order(a: Tensor, b: Tensor) -> Iterable[int]:
             # TODO issue warning?
     else:
         match_by_labels = False
-    
+
     if match_by_labels:
         leg_order = b.get_leg_idcs(a.leg_labels)
     else:
@@ -283,6 +282,8 @@ def match_label_order(a: Tensor, b: Tensor) -> Iterable[int]:
 
 
 def add(a: Tensor, b: Tensor) -> Tensor:
+    # TODO moved import here to avoid import cycle
+    from .numpy import get_same_backend
     backend = get_same_backend(a, b)
     res_data = backend.add(a.data, b.data, b_perm=match_label_order(a, b))
     return Tensor(res_data, backend=backend, legs=a.legs, labels=a.labels)
@@ -291,3 +292,7 @@ def add(a: Tensor, b: Tensor) -> Tensor:
 def mul(a: float | complex, b: Tensor) -> Tensor:
     res_data = b.backend.mul(a, b.data)
     return Tensor(res_data, backend=b.backend, legs=b.legs, labels=b.labels)
+
+
+
+

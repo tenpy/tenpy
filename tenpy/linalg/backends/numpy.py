@@ -12,7 +12,7 @@ from tenpy.linalg.backends.abstract_backend import AbstractBlockBackend, Dtype, 
 from tenpy.linalg.backends.no_symmtery import AbstractNoSymmetryBackend
 from tenpy.linalg.backends.nonabelian import AbstractNonabelianBackend
 from tenpy.linalg.misc import inverse_permutation
-from tenpy.linalg.symmetries import AbstractSymmetry, VectorSpace
+from tenpy.linalg.symmetries import Symmetry, VectorSpace
 
 _dtype_map = {
     None: None,
@@ -20,7 +20,7 @@ _dtype_map = {
     Dtype(Precision.single, True): np.float32,
     Dtype(Precision.double, True): np.float64,
     Dtype(Precision.long_double, True): np.longdouble,
-    Dtype(Precision.half, False): np.complex32,
+    #  Dtype(Precision.half, False): np.complex32, # numpy has no np.complex32
     Dtype(Precision.single, False): np.complex64,
     Dtype(Precision.double, False): np.complex128,
     Dtype(Precision.long_double, False): np.clongdouble,
@@ -31,7 +31,7 @@ _inverse_dtype_map = {
     np.float32: Dtype(Precision.single, True),
     np.float64: Dtype(Precision.double, True),
     np.longdouble: Dtype(Precision.long_double, True),
-    np.complex32: Dtype(Precision.half, False),
+    #  np.complex32: Dtype(Precision.half, False),
     np.complex64: Dtype(Precision.single, False),
     np.complex128: Dtype(Precision.double, False),
     np.clongdouble: Dtype(Precision.long_double, False),
@@ -211,7 +211,7 @@ class AbelianNumpyBackend(NumpyBlockBackend, AbstractAbelianBackend):
 
 
 class NonabelianNumpyBackend(NumpyBlockBackend, AbstractNonabelianBackend):
-    def __init__(self, symmetry: AbstractSymmetry):
+    def __init__(self, symmetry: Symmetry):
         NumpyBlockBackend.__init__(self)
         AbstractNonabelianBackend.__init__(self, symmetry=symmetry)
 

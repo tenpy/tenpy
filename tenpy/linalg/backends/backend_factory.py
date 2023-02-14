@@ -1,8 +1,7 @@
 from __future__ import annotations
 
-from tenpy.linalg.backends import NoSymmetryNumpyBackend, AbstractBackend
-from tenpy.linalg.symmetries import AbstractSymmetry, no_symmetry
-from tenpy.linalg.symmetries.groups import AbelianSymmetryGroup
+from . import NoSymmetryNumpyBackend, AbstractBackend
+from ..symmetries import Symmetry, no_symmetry, AbelianGroup
 
 _backend_lookup = dict(
     no_symmetry=dict(
@@ -54,7 +53,7 @@ def get_backend(symmetry: AbstractSymmetry = no_symmetry, block_backend: str = '
     if symmetry_backend is None:
         if symmetry == no_symmetry:
             symmetry_backend = 'no_symmetry'
-        elif isinstance(symmetry, AbelianSymmetryGroup):
+        elif isinstance(symmetry, AbelianGroup):
             symmetry_backend = 'abelian'
         else:
             symmetry_backend = 'nonabelian'
@@ -75,7 +74,7 @@ def get_backend(symmetry: AbstractSymmetry = no_symmetry, block_backend: str = '
             raise NotImplementedError  # TODO, torch with device arg ..?
 
     if symmetry_backend == 'abelian':
-        assert isinstance(symmetry, AbelianSymmetryGroup)
+        assert isinstance(symmetry, AbelianGroup)
         if block_backend in ['numpy', 'torch', 'tensorflow', 'jax']:
             # TODO for these cases, could do a pure-python version of AbstractAbelianBackend
             #  then we should issue a warning regarding performance
@@ -88,7 +87,7 @@ def get_backend(symmetry: AbstractSymmetry = no_symmetry, block_backend: str = '
             raise NotImplementedError
 
     if symmetry_backend == 'nonabelian':
-        assert isinstance(symmetry, AbelianSymmetryGroup)
+        assert isinstance(symmetry, AbelianGroup)
         if block_backend in ['numpy', 'torch', 'tensorflow', 'jax']:
             # TODO for these cases, could do a pure-python version of AbstractNonabelianBackend
             #  then we should issue a warning regarding performance

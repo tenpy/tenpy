@@ -6,7 +6,7 @@ from .symmetries import ProductSpace
 from .tensors import Tensor, combine_leg_labels, split_leg_label, match_label_order
 
 
-def tdot(t1: Tensor, t2: Tensor, 
+def tdot(t1: Tensor, t2: Tensor,
          legs1: int | str | list[int | str] = -1, legs2: int | str | list[int | str] = 0,
          relabel1: dict[str, str] = None, relabel2: dict[str, str] = None) -> Tensor:
     """
@@ -76,7 +76,7 @@ def inner(t1: Tensor, t2: Tensor) -> complex:
 
 
 def transpose(t: Tensor, permutation: list[int]) -> Tensor:
-    """Change the order of legs of a Tensor. 
+    """Change the order of legs of a Tensor.
     TODO: also have an inplace version?
     TODO: name it permute_legs or sth instead?
     """
@@ -87,7 +87,7 @@ def transpose(t: Tensor, permutation: list[int]) -> Tensor:
     assert len(permutation) == t.num_legs
     assert set(permutation) == set(range(t.num_legs))
     res_data = t.backend.transpose(t.data)
-    return Tensor(res_data, backend=t.backend, legs=[t.legs[n] for n in permutation], 
+    return Tensor(res_data, backend=t.backend, legs=[t.legs[n] for n in permutation],
                   labels=[t.labels[n] for n in permutation])
 
 
@@ -106,7 +106,7 @@ def trace(t: Tensor, legs1: int | str | list[int | str] = -2, legs2: int | str |
         # result is a scalar
         return t.backend.item(res_data)
     else:
-        return Tensor(res_data, backend=t.backend, legs=[t.legs[n] for n in remaining_leg_idcs], 
+        return Tensor(res_data, backend=t.backend, legs=[t.legs[n] for n in remaining_leg_idcs],
                       labels=[t.labels[n] for n in remaining_leg_idcs])
 
 
@@ -126,14 +126,14 @@ def conj(t: Tensor) -> Tensor:
 
 def combine_legs(t: Tensor, legs: list[int | str], new_leg: ProductSpace = None) -> Tensor:
     """
-    Combine a group of legs of a tensor. Resulting leg (of type ProductSpace) is at the 
+    Combine a group of legs of a tensor. Resulting leg (of type ProductSpace) is at the
     previous position of legs[0].
     # TODO support multiple combines in one function call? what would the signature be
     # TODO inplace version
     """
     if len(legs) < 2:
         raise ValueError('expected at least two legs')
-    
+
     leg_idcs = t.get_leg_idcs(legs)
     if new_leg is None:
         new_leg = ProductSpace([t.legs[idx] for idx in leg_idcs])
@@ -206,7 +206,7 @@ ALL_TRIVIAL_LEGS = object()
 
 def squeeze_legs(t: Tensor, legs: int | str | list[int | str] = ALL_TRIVIAL_LEGS) -> Tensor:
     """
-    Remove trivial leg from tensor. 
+    Remove trivial leg from tensor.
     If legs are specified, they are squeezed if they are trivial and a ValueError is raised if not.
     If no legs are specified, all trivial legs are squeezed
     """
@@ -227,12 +227,12 @@ def norm(t: Tensor) -> float:
     return t.backend.norm(t.data)
 
 
-def get_result_labels(legs1: list[str | None], legs2: list[str | None], 
+def get_result_labels(legs1: list[str | None], legs2: list[str | None],
                       relabel1: dict[str, str] | None, relabel2: dict[str, str] | None) -> list[str]:
     """
     Utility function to combine two lists of leg labels, such that they can appear on the same tensor.
     Labels are changed by the mappings relabel1 and relabel2.
-    Any conflicting labels (after relabelling) are dropped 
+    Any conflicting labels (after relabelling) are dropped
     """
     relabel1 = relabel1 or {}
     relabel2 = relabel2 or {}

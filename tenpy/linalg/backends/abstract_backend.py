@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from enum import Enum, auto
 from typing import TypeVar, Any
 
-from tenpy.linalg.symmetries import AbstractSymmetry, ProductSpace, VectorSpace, AbstractSpace
+from ..symmetries import Symmetry, VectorSpace, ProductSpace
 
 
 # TODO make Dtype.float32
@@ -16,7 +16,7 @@ class Precision(Enum):
     quadruple = auto()  # 128 bit per float
 
 
-@dataclass
+@dataclass(frozen=True)
 class Dtype:
     precision: Precision
     is_real: bool
@@ -166,7 +166,7 @@ class AbstractBackend(ABC):
         ...
 
     @abstractmethod
-    def combine_legs(self, a: BackendArray, legs: list[int], old_legs: list[VectorSpace], 
+    def combine_legs(self, a: BackendArray, legs: list[int], old_legs: list[VectorSpace],
                      new_leg: ProductSpace) -> BackendArray:
         """combine legs of a. resulting leg takes position of legs[0]"""
         ...
