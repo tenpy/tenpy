@@ -5,6 +5,7 @@ from enum import Enum, auto
 from typing import TypeVar, Any
 
 from ..symmetries import Symmetry, VectorSpace, ProductSpace
+from ..tensors import Tensor
 
 
 # TODO make Dtype.float32
@@ -32,7 +33,7 @@ class Dtype:
 
 
 BackendDtype = TypeVar('BackendDtype')
-BackendArray = TypeVar('BackendArray')  # placeholder for a backend-specific type that represents (symmetric) tensors
+Data = TypeVar('Data')  # placeholder for a backend-specific type that holds all data of a tensor (excpet the symmetry data stored in its legs)
 Block = TypeVar('Block')  # placeholder for a backend-specific type that represents the blocks of symmetric tensors
 
 
@@ -57,159 +58,157 @@ class AbstractBackend(ABC):
         self.symmetry = symmetry
 
     def __repr__(self):
-        return f'{type(self).__name__}(symmetry={repr(self.symmetry)})'
+        return f'{type(self).__name__}'
 
     def __str__(self):
-        return f'{type(self).__name__}({self.symmetry.short_str()})'
+        return f'{type(self).__name__}'
 
-    @abstractmethod
-    def parse_data(self, obj, legs: list[VectorSpace], dtype: BackendDtype = None
-                   ) -> tuple[BackendArray, tuple[int]]:
-        """Extract backend-specific data structure from arbitrary python object, if possible.
-        Return this data and its shape.
-        Raise TypeError or ValueError if obj can not be interpreted as an array."""
-        ...
-
+    # TODO revisit dtypes
     @abstractmethod
     def parse_dtype(self, dtype: Dtype | None) -> BackendDtype:
         """Translate Dtype instance to a backend-specific format"""
         ...
 
+    # TODO revisit dtypes
     @abstractmethod
-    def infer_dtype(self, data: BackendArray) -> Dtype:
+    def infer_dtype(self, a: Tensor) -> Dtype:
+        ...
+
+    # TODO revisit dtypes
+    @abstractmethod
+    def to_dtype(self, a: Tensor, dtype: Dtype) -> Tensor:
         ...
 
     @abstractmethod
-    def to_dtype(self, data: BackendArray, dtype: Dtype) -> BackendArray:
-        ...
-
-    @abstractmethod
-    def is_real(self, data: BackendArray) -> bool:
-        """If the data is comprised of real numbers.
+    def is_real(self, a: Tensor) -> bool:
+        """If the Tensor is comprised of real numbers.
         Complex numbers with small or zero imaginary part still cause a `False` return."""
         ...
 
     @abstractmethod
-    def legs_are_compatible(self, data: BackendArray, legs: list[VectorSpace]) -> bool:
-        """Whether a given list of vector spaces is compatible with the data"""
+    def tdot(self, a: Tensor, b: Tensor, axs_a: list[int], axs_b: list[int]) -> Data:
+        """Tensordot i.e. pairwise contraction"""
         ...
 
     @abstractmethod
-    def tdot(self, a: BackendArray, b: BackendArray, a_axes: list[int], b_axes: list[int]
-             ) -> BackendArray:
+    def item(self, a: Tensor) -> float | complex:
+        """Assumes that data is a scalar (i.e. has only one entry). 
+        Returns that scalar as python float or complex"""
         ...
 
     @abstractmethod
-    def item(self, data: BackendArray) -> float | complex:
-        """Assumes that data is a scalar (i.e. has only one entry). Returns that scalar as python float or complex"""
-        ...
-
-    @abstractmethod
-    def to_dense_block(self, data: BackendArray) -> Block:
+    def to_dense_block(self, a: Tensor) -> Block:
         """Forget about symmetry structure and convert to a single block."""
         ...
 
     @abstractmethod
-    def reduce_symmetry(self, data: BackendArray, new_symm: AbstractSymmetry) -> BackendArray:
+    def reduce_symmetry(self, a: Tensor, new_symm: Symmetry) -> Data:
         """Convert to lower symmetry group. TODO what additional info do we need?"""
         ...
 
     @abstractmethod
-    def increase_symmetry(self, data: BackendArray, new_symm: AbstractSymmetry, atol=1e-8, rtol=1e-5
-                          ) -> BackendArray:
+    def increase_symmetry(self, a: Tensor, new_symm: Symmetry, atol=1e-8, rtol=1e-5) -> Data:
         """Convert to higher symmetry, if data is symmetric under it.
         If data is not symmetric under the higher symmetry i.e. if
         norm(old - projected) >= atol + rtol * norm(old), raise a ValueError"""
         ...
 
     @abstractmethod
-    def copy_data(self, data: BackendArray) -> BackendArray:
+    def copy_data(self, a: Tensor) -> Data:
         """Return a copy, such that future in-place operations on the output data do not affect the input data"""
         ...
 
     @abstractmethod
-    def _data_repr_lines(self, data: BackendArray, indent: str, max_width: int, max_lines: int):
+    def _data_repr_lines(self, data: Data, indent: str, max_width: int, max_lines: int) -> list[str]:
+        """helper function for Tensor.__repr__ ; return a list of strs which are the lines
+        comprising the ``"* Data:"``section.
+        indent is to be placed in front of every line"""
         ...
 
     @abstractmethod
-    def svd(self, a: BackendArray, idcs1: list[int], idcs2: list[int]
-            ) -> tuple[BackendArray, BackendArray, BackendArray, VectorSpace]:
+    def svd(self, a: Tensor, axs1: list[int], axs2: list[int], new_leg: VectorSpace | None
+            ) -> tuple[Data, Data, Data, VectorSpace]:
         """
+        SVD of a tensor, interpreted as a linear map / matrix from axs1 to axs2.
 
+        Development Notes
+        -----------------
+        - abelian backend: if len(axs1) > 1 or len(axs2) > 1, call combine legs and warn that this may
+        be inefficient.
+        
         Returns
         -------
-        u, s, vh, new_space
+        u, s, vh, new_leg
         """
         ...
 
     @abstractmethod
-    def outer(self, a: BackendArray, b: BackendArray) -> BackendArray:
+    def outer(self, a: Tensor, b: Tensor) -> Data:
         ...
 
     @abstractmethod
-    def inner(self, a: BackendArray, b: BackendArray, axs2: list[int] | None) -> complex:
-        # inner product of <a|b>, both of which are given as ket-like vectors
-        # (i.e. in C^N, the entries of a would need to be conjugated before multiplying with entries of b)
-        # axs2, if not None, gives the order of the axes of b
+    def inner(self, a: Tensor, b: Tensor, axs2: list[int] | None) -> complex:
+        """
+        inner product of <a|b>, both of which are given as ket-like vectors
+        (i.e. in C^N, the entries of a would need to be conjugated before multiplying with entries of b)
+        axs2, if not None, gives the order of the axes of b
+        """
         ...
 
     @abstractmethod
-    def transpose(self, a: BackendArray, permutation: list[int]) -> BackendArray:
+    def transpose(self, a: Tensor, permutation: list[int]) -> Data:
         ...
 
     @abstractmethod
-    def trace(self, a: BackendArray, idcs1: list[int], idcs2: list[int]) -> BackendArray:
+    def trace(self, a: Tensor, idcs1: list[int], idcs2: list[int]) -> Data:
         ...
 
     @abstractmethod
-    def conj(self, a: BackendArray) -> BackendArray:
+    def conj(self, a: Tensor) -> Data:
         ...
 
     @abstractmethod
-    def combine_legs(self, a: BackendArray, legs: list[int], old_legs: list[VectorSpace],
-                     new_leg: ProductSpace) -> BackendArray:
-        """combine legs of a. resulting leg takes position of legs[0]"""
+    def combine_legs(self, a: Tensor, idcs: list[int], new_leg: ProductSpace) -> Data:
+        """combine legs of a. resulting leg takes position idcs[0]"""
         ...
 
     @abstractmethod
-    def split_leg(self, a: BackendArray, leg_idx: int, leg: ProductSpace) -> BackendArray:
+    def split_leg(self, a: Tensor, leg_idx: int) -> Data:
         """split a leg. resulting legs all take place of leg"""
         ...
 
     @abstractmethod
-    def allclose(self, a: BackendArray, b: BackendArray, rtol: float, atol: float) -> bool:
+    def allclose(self, a: Tensor, b: Tensor, rtol: float, atol: float) -> bool:
         ...
 
     @abstractmethod
-    def squeeze_legs(self, a: BackendArray, idcs: list[int]) -> BackendArray:
+    def squeeze_legs(self, a: Tensor, idcs: list[int]) -> Data:
+        """Assume the legs at given indices are trivial and get rid of them"""
         ...
 
     @abstractmethod
-    def norm(self, a: BackendArray) -> float:
+    def norm(self, a: Tensor) -> float:
         ...
 
     @abstractmethod
-    def exp(self, a: BackendArray, idcs1: list[int], idcs2: list[int]) -> BackendArray:
+    def exp(self, a: Tensor, idcs1: list[int], idcs2: list[int]) -> Data:
         ...
 
     @abstractmethod
-    def log(self, a: BackendArray, idcs1: list[int], idcs2: list[int]) -> BackendArray:
+    def log(self, a: Tensor, idcs1: list[int], idcs2: list[int]) -> Data:
+        ...
+
+    # TODO dtype
+    @abstractmethod
+    def random_gaussian(self, legs: list[VectorSpace], dtype: Dtype, sigma: float) -> Data:
         ...
 
     @abstractmethod
-    def random_uniform(self, legs: list[AbstractSpace], dtype: Dtype) -> BackendArray:
+    def add(self, a: Tensor, b: Tensor) -> Data:
         ...
 
     @abstractmethod
-    def random_gaussian(self, legs: list[AbstractSpace], dtype: Dtype, sigma: float) -> BackendArray:
-        ...
-
-    @abstractmethod
-    def add(self, a: BackendArray, b: BackendArray) -> BackendArray:
-        ...
-
-    @abstractmethod
-    def mul(self, a: float | complex, b: BackendArray) -> BackendArray:
+    def mul(self, a: float | complex, b: Tensor) -> Data:
         ...
 
 
@@ -218,12 +217,6 @@ class AbstractBlockBackend(ABC):
 
     def __init__(self, default_precision: Precision):
         self.default_precision = default_precision
-
-    @abstractmethod
-    def parse_block(self, obj, dtype: BackendDtype = None) -> Block:
-        """Extract a block from arbitrary python object, if possible.
-        Raise TypeError or ValueError if not."""
-        ...
 
     @abstractmethod
     def block_is_real(self, a: Block):
@@ -322,10 +315,6 @@ class AbstractBlockBackend(ABC):
 
     @abstractmethod
     def matrix_log(self, matrix: Block) -> Block:
-        ...
-
-    @abstractmethod
-    def block_random_uniform(self, dims: list[int], dtype: Dtype) -> Block:
         ...
 
     @abstractmethod

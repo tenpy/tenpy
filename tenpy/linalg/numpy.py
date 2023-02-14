@@ -44,7 +44,7 @@ def tdot(t1: Tensor, t2: Tensor,
     open_labels1 = [leg for idx, leg in enumerate(t1.labels) if idx not in leg_idcs1]
     open_labels2 = [leg for idx, leg in enumerate(t2.labels) if idx not in leg_idcs2]
     res_labels = get_result_labels(open_labels1, open_labels2, relabel1, relabel2)
-    res_data = backend.tdot(t1.data, t2.data, leg_idcs1, leg_idcs2)
+    res_data = backend.tdot(t1, t2, leg_idcs1, leg_idcs2)
     return Tensor(res_data, backend=backend, legs=open_legs1 + open_legs2, labels=res_labels)
 
 
@@ -52,7 +52,7 @@ def outer(t1: Tensor, t2: Tensor, relabel1: dict[str, str] = None, relabel2: dic
     """outer product, aka tensor product, aka direct product of two tensors"""
     backend = get_same_backend(t1, t2)
     res_labels = get_result_labels(t1.labels, t2.labels, relabel1, relabel2)
-    res_data = backend.outer(t1.data, t2.data)
+    res_data = backend.outer(t1, t2)
     return Tensor(res_data, backend=backend, legs=t1.legs + t2.legs, labels=res_labels)
 
 
@@ -70,7 +70,7 @@ def inner(t1: Tensor, t2: Tensor) -> complex:
     if not all(t1.legs[n1].space == t2.legs[n2].space for n1, n2 in enumerate(leg_order_2)):
         raise ValueError('Incompatible legs')
     backend = get_same_backend(t1, t2)
-    res = backend.inner(t1.data, t2.data, axs2=leg_order_2)
+    res = backend.inner(t1, t2, axs2=leg_order_2)
     # TODO: Scalar(Tensor) class...?
     return res
 
@@ -86,7 +86,7 @@ def transpose(t: Tensor, permutation: list[int]) -> Tensor:
         print('dummy warning!')
     assert len(permutation) == t.num_legs
     assert set(permutation) == set(range(t.num_legs))
-    res_data = t.backend.transpose(t.data)
+    res_data = t.backend.transpose(t)
     return Tensor(res_data, backend=t.backend, legs=[t.legs[n] for n in permutation],
                   labels=[t.labels[n] for n in permutation])
 
@@ -143,7 +143,7 @@ def combine_legs(t: Tensor, legs: list[int | str], new_leg: ProductSpace = None)
     new_label = combine_leg_labels(t.leg_labels)
     res_labels = [new_label if idx == leg_idcs[0] else label for idx, label in enumerate(t.leg_labels)
               if idx not in leg_idcs[1:]]
-    res_data = t.backend.combine_legs(t.data, leg_idcs=leg_idcs, old_legs=old_legs, new_leg=new_leg)
+    res_data = t.backend.combine_legs(t, leg_idcs=leg_idcs, new_leg=new_leg)
     return Tensor(res_data, backend=t.backend, legs=res_legs, labels=res_labels)
 
 
@@ -160,13 +160,13 @@ def split_leg(t: Tensor, leg: int | str) -> Tensor:
         raise ValueError(f'Leg {leg} is not a ProductSpace.')
     legs = t.legs[:leg_idx] + t.legs[leg_idx].spaces + t.legs[leg_idx + 1:]
     labels = t.labels[:leg_idx] + split_leg_label(t.labels[leg_idx]) + t.labels[leg_idx + 1:]
-    res_data = t.backend.split_leg(t.data, leg_idx=leg_idx, leg=t.legs[leg_idx])
+    res_data = t.backend.split_leg(t, leg_idx=leg_idx)
     return Tensor(res_data, backend=t.backend, legs=legs, labels=labels)
 
 
 def is_scalar(obj) -> bool:
     """If obj is a scalar, meaning either a python scalar like float or complex, or a Tensor
-    which has only one-dimensional legs with trivial grading"""
+    which has only one-dimensional legs"""
     if isinstance(obj, (int, float, complex)):
         return True
     if isinstance(obj, Tensor):
@@ -218,13 +218,13 @@ def squeeze_legs(t: Tensor, legs: int | str | list[int | str] = ALL_TRIVIAL_LEGS
             raise ValueError('Tried to squeeze non-trivial legs.')
     res_legs = [l for idx, l in enumerate(t.legs) if idx not in leg_idcs]
     res_labels = [label for idx, label in enumerate(t.labels) if idx not in leg_idcs]
-    res_data = t.backend.squeeze_legs(t.data, leg_idcs)
+    res_data = t.backend.squeeze_legs(t, leg_idcs)
     return Tensor(res_data, backend=t.backend, legs=res_legs, labels=res_labels)
 
 
 def norm(t: Tensor) -> float:
     """2-norm of a tensor, i.e. sqrt(inner(t, t))"""
-    return t.backend.norm(t.data)
+    return t.backend.norm(t)
 
 
 def get_result_labels(legs1: list[str | None], legs2: list[str | None],

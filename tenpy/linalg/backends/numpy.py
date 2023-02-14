@@ -6,13 +6,13 @@ from typing import Any
 import numpy as np
 import scipy
 
-from tenpy.linalg.backends.abelian import AbstractAbelianBackend
-from tenpy.linalg.backends.abstract_backend import AbstractBlockBackend, Dtype, Precision, \
-    BackendDtype, Block
-from tenpy.linalg.backends.no_symmtery import AbstractNoSymmetryBackend
-from tenpy.linalg.backends.nonabelian import AbstractNonabelianBackend
-from tenpy.linalg.misc import inverse_permutation
-from tenpy.linalg.symmetries import Symmetry, VectorSpace
+from .abelian import AbstractAbelianBackend
+from .abstract_backend import AbstractBlockBackend, Dtype, Precision, BackendDtype, Block, Data
+from .no_symmtery import AbstractNoSymmetryBackend
+from .nonabelian import AbstractNonabelianBackend
+from ..misc import inverse_permutation
+from ..symmetries import Symmetry, VectorSpace
+from ..tensors import Tensor
 
 _dtype_map = {
     None: None,
@@ -49,9 +49,6 @@ class NumpyBlockBackend(AbstractBlockBackend):
             return _dtype_map[dtype]
         except KeyError:
             raise ValueError(f'dtype {dtype} not supported for {self}.') from None
-
-    def parse_block(self, obj, dtype: BackendDtype = None) -> Block:
-        return np.asarray(obj, dtype)
 
     def block_is_real(self, a: Block):
         return not np.iscomplexobj(a)
@@ -169,15 +166,16 @@ class NumpyBlockBackend(AbstractBlockBackend):
     def matrix_log(self, matrix: Block) -> Block:
         return scipy.linalg.logm(matrix)
 
-    def block_random_uniform(self, dims: list[int], dtype: Dtype) -> Block:
-        if dtype.is_real:
-            res = np.random.uniform(low=-1, high=1., size=dims)
-        else:
-            # z = r * e^{i pi}; PDF of r is 2r on [0, 1], CDF is r^2 ; inverse CDF sampling
-            r = np.sqrt(np.random.uniform(low=0, high=1, size=dims))
-            phi = np.random.uniform(low=0, high=2 * np.pi, size=dims)
-            res = r * np.exp(1.j * phi)
-        return np.asarray(res, dtype=_dtype_map[dtype])
+    # TODO is this useful...?
+    # def block_random_uniform(self, dims: list[int], dtype: Dtype) -> Block:
+    #     if dtype.is_real:
+    #         res = np.random.uniform(low=-1, high=1., size=dims)
+    #     else:
+    #         # z = r * e^{i pi}; PDF of r is 2r on [0, 1], CDF is r^2 ; inverse CDF sampling
+    #         r = np.sqrt(np.random.uniform(low=0, high=1, size=dims))
+    #         phi = np.random.uniform(low=0, high=2 * np.pi, size=dims)
+    #         res = r * np.exp(1.j * phi)
+    #     return np.asarray(res, dtype=_dtype_map[dtype])
 
     def block_random_gaussian(self, dims: list[int], dtype: Dtype, sigma: float) -> Block:
         res = np.random.normal(loc=0, scale=sigma, size=dims)
@@ -192,16 +190,18 @@ class NoSymmetryNumpyBackend(NumpyBlockBackend, AbstractNoSymmetryBackend):
         NumpyBlockBackend.__init__(self)
         AbstractNoSymmetryBackend.__init__(self)
 
-    def svd(self, a, idcs1: list[int], idcs2: list[int]):
-        a = np.transpose(a, idcs1 + idcs2)
-        a_shape1 = np.shape(a)[:len(idcs1)]
-        a_shape2 = np.shape(a)[len(idcs1):]
+    def svd(self, a: Tensor, axs1: list[int], axs2: list[int], new_leg: VectorSpace | None
+            ) -> tuple[Data, Data, Data, VectorSpace]:
+        a = np.transpose(a.data, axs1 + axs2)
+        a_shape1 = np.shape(a)[:len(axs1)]
+        a_shape2 = np.shape(a)[len(axs1):]
         a = np.reshape(a, (prod(a_shape1), prod(a_shape2)))
         u, s, vh = self.matrix_svd(a)
         u = np.reshape(u, (*a_shape1, len(s)))
         vh = np.reshape(vh, (len(s), *a_shape2))
-        new_space = VectorSpace.non_symmetric(len(s), is_dual=False, is_real=False)
-        return u, s, vh, new_space
+        if new_leg is None:
+            new_leg = VectorSpace.non_symmetric(len(s), is_dual=False, is_real=False)
+        return u, s, vh, new_leg
 
 
 class AbelianNumpyBackend(NumpyBlockBackend, AbstractAbelianBackend):

@@ -3,7 +3,6 @@ from __future__ import annotations
 from typing import Iterable
 import numpy as np
 
-from .backends.abstract_backend import AbstractBackend, Dtype
 from .misc import duplicate_entries, force_str_len
 from .dummy_config import config
 from .symmetries import VectorSpace, ProductSpace
@@ -30,8 +29,17 @@ def split_leg_label(label: str) -> list[str | None]:
 
 
 class Tensor:
+    """
 
-    def __init__(self, data, backend: AbstractBackend, legs: list[VectorSpace], labels: list[str | None] = None):
+    Attributes
+    ----------
+    data
+    backend : :class:`~tenpy.linalg.backends.abstract_backend.AbstractBackend`
+    legs : list of :class:`~tenpy.linalg.symmetries.VectorSpace`
+    labels : list of {``None``, str}
+    """
+
+    def __init__(self, data, backend, legs: list[VectorSpace], labels: list[str | None] = None):
         """
         This constructor is not user-friendly. Use as_tensor instead.
         Inputs are not checked for consistency.
@@ -232,34 +240,35 @@ class DiagonalTensor(Tensor):
 # TODO is there a use for a special Scalar(DiagonalTensor) class?
 
 
-def as_tensor(obj, backend: AbstractBackend, legs: list[VectorSpace] = None, labels: list[str] = None,
-              dtype: Dtype = None) -> Tensor:
-    # TODO use a default backend from global config?
-    if isinstance(obj, Tensor):
-        obj = obj.copy()
+# TODO provide function with more narrowly defined input, "from_numpy" or sth,
+# def as_tensor(obj, backend: AbstractBackend, legs: list[VectorSpace] = None, labels: list[str] = None,
+#               dtype: Dtype = None) -> Tensor:
+#     # TODO use a default backend from global config?
+#     if isinstance(obj, Tensor):
+#         obj = obj.copy()
 
-        if legs is not None:
-            raise NotImplementedError  # TODO what to do here?
+#         if legs is not None:
+#             raise NotImplementedError  # TODO what to do here?
 
-        if backend is not None:
-            raise NotImplementedError  # TODO
+#         if backend is not None:
+#             raise NotImplementedError  # TODO
 
-        if labels is not None:
-            obj.set_labels(labels)
+#         if labels is not None:
+#             obj.set_labels(labels)
 
-        if dtype is not None:
-            obj.data = obj.backend.to_dtype(obj.data, dtype)
+#         if dtype is not None:
+#             obj.data = obj.backend.to_dtype(obj.data, dtype)
 
-        obj.check_sanity()
-        return obj
+#         obj.check_sanity()
+#         return obj
 
-    else:
-        obj, shape = backend.parse_data(obj, legs, dtype=backend.parse_dtype(dtype))
-        if legs is None:
-            legs = [VectorSpace.non_symmetric(d) for d in shape]
-        else:
-            assert backend.legs_are_compatible(obj, legs)
-        return Tensor(obj, backend, legs=legs, labels=labels)
+#     else:
+#         obj, shape = backend.parse_data(obj, legs, dtype=backend.parse_dtype(dtype))
+#         if legs is None:
+#             legs = [VectorSpace.non_symmetric(d) for d in shape]
+#         else:
+#             assert backend.legs_are_compatible(obj, legs)
+#         return Tensor(obj, backend, legs=legs, labels=labels)
 
 
 def match_label_order(a: Tensor, b: Tensor) -> Iterable[int]:

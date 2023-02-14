@@ -37,7 +37,7 @@ def svd(a: Tensor, u_legs: list[int | str] = None, vh_legs: list[int | str] = No
     l_u, l_su, l_sv, l_vh = _svd_new_labels(new_labels)
 
     # TODO read algorithm etc from config
-    u_data, s_data, vh_data, new_leg = a.backend.svd(a.data, u_idcs, vh_idcs)
+    u_data, s_data, vh_data, new_leg = a.backend.svd(a, u_idcs, vh_idcs)
 
     U = Tensor(u_data, backend=a.backend, legs=[a.legs[n] for n in u_idcs] + [new_leg], 
                labels=[a.labels[n] for n in u_idcs] + [l_u])
@@ -48,7 +48,8 @@ def svd(a: Tensor, u_legs: list[int | str] = None, vh_legs: list[int | str] = No
     return U, S, Vh
 
 
-def truncate_svd(U: Tensor, S: DiagonalTensor, Vh: Tensor) -> tuple[Tensor, DiagonalTensor, Tensor, float]:
+def truncate_svd(U: Tensor, S: DiagonalTensor, Vh: Tensor, options=None
+                 ) -> tuple[Tensor, DiagonalTensor, Tensor, float]:
     """Truncate an SVD decomposition
     
     Returns
@@ -56,7 +57,8 @@ def truncate_svd(U: Tensor, S: DiagonalTensor, Vh: Tensor) -> tuple[Tensor, Diag
     U, S, Vh, trunc_err
     """
     backend = get_same_backend(U, S, Vh)
-    u_data, s_data, vh_data, new_leg, trunc_err = backend.trunacte_svd(U.data, S.data, Vh.data)
+    # TODO implement backend.truncate_svd
+    u_data, s_data, vh_data, new_leg, trunc_err = backend.truncate_svd(U, S, Vh, options)
     U = Tensor(u_data, backend=backend, legs=U.legs[:-1] + [new_leg], labels=U.labels)
     # TODO revisit this once DiagonalTensor is defined
     S = DiagonalTensor(s_data, backend=backend, legs=[new_leg.dual, new_leg], labels=S.labels)
@@ -140,7 +142,7 @@ def exp(t: Tensor | complex | float, legs1: list[int | str] = None, legs2: list[
     idcs1, idcs2 = leg_bipartition(legs1, legs2)
     assert len(idcs1) == len(idcs2)
     assert all(t.legs[i1].is_dual_of(t.legs[i2]) for i1, i2 in zip(idcs1, idcs2))
-    res_data = t.backend.exp(t.data, idcs1, idcs2)
+    res_data = t.backend.exp(t, idcs1, idcs2)
     return Tensor(res_data, backend=t.backend, legs=t.legs, labels=t.labels)
 
 
@@ -155,6 +157,6 @@ def log(t: Tensor | complex | float, legs1: list[int | str] = None, legs2: list[
     idcs1, idcs2 = leg_bipartition(legs1, legs2)
     assert len(idcs1) == len(idcs2)
     assert all(t.legs[i1].is_dual_of(t.legs[i2]) for i1, i2 in zip(idcs1, idcs2))
-    res_data = t.backend.log(t.data, idcs1, idcs2)
+    res_data = t.backend.log(t, idcs1, idcs2)
     return Tensor(res_data, backend=t.backend, legs=t.legs, labels=t.labels)
     
