@@ -44,6 +44,10 @@ class AbstractBackend(ABC):
         ...
 
     @abstractmethod
+    def supports_symmetry(self, symmetry: Symmetry) -> bool:
+        ...
+
+    @abstractmethod
     def is_real(self, a: Tensor) -> bool:
         """If the Tensor is comprised of real numbers.
         Complex numbers with small or zero imaginary part still cause a `False` return."""

@@ -23,6 +23,9 @@ class AbstractNoSymmetryBackend(AbstractBackend, AbstractBlockBackend, ABC):
     def to_dtype(self, a: Tensor, dtype: Dtype) -> Tensor:
         return self.block_to_dtype(a.data, dtype)
 
+    def supports_symmetry(self, symmetry: Symmetry) -> bool:
+        return symmetry == no_symmetry
+
     def is_real(self, a: Tensor) -> bool:
         return self.block_is_real(a.data)
 
