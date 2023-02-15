@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from .backends import AbstractBackend, Dtype
+from .backends import AbstractBackend
 from .symmetries import VectorSpace
 from .tensors import Tensor
 

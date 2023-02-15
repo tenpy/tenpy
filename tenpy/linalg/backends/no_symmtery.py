@@ -2,9 +2,9 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from math import prod
 
-from .abstract_backend import AbstractBackend, AbstractBlockBackend, Data, Block, Dtype
+from .abstract_backend import AbstractBackend, AbstractBlockBackend, Data, Block
 from ..symmetries import ProductSpace, VectorSpace, no_symmetry, Symmetry
-from ..tensors import Tensor
+from ..tensors import Tensor, Dtype
 
 
 # TODO eventually remove AbstractBlockBackend inheritance, it is not needed,
@@ -17,11 +17,11 @@ class AbstractNoSymmetryBackend(AbstractBackend, AbstractBlockBackend, ABC):
     Tensor.data is a single block of the AbstractBlockBackend, e.g. a numpy.ndarray for NumpyBlockBackend
     """
 
-    def infer_dtype(self, a: Tensor) -> Dtype:
+    def get_dtype(self, a: Tensor) -> Dtype:
         return self.block_dtype(a.data)
 
     def to_dtype(self, a: Tensor, dtype: Dtype) -> Tensor:
-        return self.block_to_dtype(a.data, self.parse_dtype(dtype))
+        return self.block_to_dtype(a.data, dtype)
 
     def is_real(self, a: Tensor) -> bool:
         return self.block_is_real(a.data)

@@ -1,11 +1,20 @@
 from __future__ import annotations
 
-from typing import Iterable
+from typing import Iterable, TypeVar
 import numpy as np
 
 from .misc import duplicate_entries, force_str_len
 from .dummy_config import config
 from .symmetries import VectorSpace, ProductSpace
+
+
+float32 = np.float32
+float64 = np.float64
+complex64 = np.complex64
+complex128 = np.complex128
+SUPPORTED_DTYPES = [float32, float64, complex64, complex128]
+Dtype = TypeVar('Dtype', bound=type)
+# TODO need more dtypes than that?
 
 
 def dual_leg_label(label: str) -> str:
@@ -53,7 +62,7 @@ class Tensor:
 
     @property
     def dtype(self):
-        return self.backend.infer_dtype(self.data)
+        return self.backend.get_dtype(self.data)
 
     @property
     def parent_space(self) -> VectorSpace:
@@ -257,7 +266,7 @@ class DiagonalTensor(Tensor):
 #             obj.set_labels(labels)
 
 #         if dtype is not None:
-#             obj.data = obj.backend.to_dtype(obj.data, dtype)
+#             obj.data = obj.backend.to_dtype(obj, dtype)
 
 #         obj.check_sanity()
 #         return obj

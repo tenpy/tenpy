@@ -7,48 +7,16 @@ import numpy as np
 import scipy
 
 from .abelian import AbstractAbelianBackend
-from .abstract_backend import AbstractBlockBackend, Dtype, Precision, BackendDtype, Block, Data
+from .abstract_backend import AbstractBlockBackend, Block, Data
 from .no_symmtery import AbstractNoSymmetryBackend
 from .nonabelian import AbstractNonabelianBackend
 from ..misc import inverse_permutation
-from ..symmetries import Symmetry, VectorSpace
-from ..tensors import Tensor
-
-_dtype_map = {
-    None: None,
-    Dtype(Precision.half, True): np.float16,
-    Dtype(Precision.single, True): np.float32,
-    Dtype(Precision.double, True): np.float64,
-    Dtype(Precision.long_double, True): np.longdouble,
-    #  Dtype(Precision.half, False): np.complex32, # numpy has no np.complex32
-    Dtype(Precision.single, False): np.complex64,
-    Dtype(Precision.double, False): np.complex128,
-    Dtype(Precision.long_double, False): np.clongdouble,
-}
-
-_inverse_dtype_map = {
-    np.float16: Dtype(Precision.half, True),
-    np.float32: Dtype(Precision.single, True),
-    np.float64: Dtype(Precision.double, True),
-    np.longdouble: Dtype(Precision.long_double, True),
-    #  np.complex32: Dtype(Precision.half, False),
-    np.complex64: Dtype(Precision.single, False),
-    np.complex128: Dtype(Precision.double, False),
-    np.clongdouble: Dtype(Precision.long_double, False),
-}
+from ..symmetries import VectorSpace
+from ..tensors import Tensor, Dtype
 
 
 class NumpyBlockBackend(AbstractBlockBackend):
     svd_algorithms = ['gesdd', 'gesvd', 'robust', 'robust_silent']
-
-    def __init__(self):
-        AbstractBlockBackend.__init__(self, default_precision=Precision.single)
-
-    def parse_dtype(self, dtype: Dtype | None) -> BackendDtype:
-        try:
-            return _dtype_map[dtype]
-        except KeyError:
-            raise ValueError(f'dtype {dtype} not supported for {self}.') from None
 
     def block_is_real(self, a: Block):
         return not np.iscomplexobj(a)
@@ -63,9 +31,9 @@ class NumpyBlockBackend(AbstractBlockBackend):
         return a.item()
 
     def block_dtype(self, a: Block) -> Dtype:
-        return _inverse_dtype_map[np.dtype(a)]
+        return a.dtype
 
-    def block_to_dtype(self, a: Block, dtype: BackendDtype) -> Block:
+    def block_to_dtype(self, a: Block, dtype: Dtype) -> Block:
         return np.asarray(a, dtype=dtype)
 
     def block_copy(self, a: Block) -> Block:

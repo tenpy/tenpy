@@ -5,34 +5,9 @@ from enum import Enum, auto
 from typing import TypeVar, Any
 
 from ..symmetries import Symmetry, VectorSpace, ProductSpace
-from ..tensors import Tensor
+from ..tensors import Tensor, Dtype
 
 
-# TODO make Dtype.float32
-class Precision(Enum):
-    half = auto()  # 16 bit per float
-    single = auto()  # 32 bit per float
-    double = auto()  # 64 bit per float
-    long_double = auto()  # C standard `long double`, may be 96 or 128 bit  TODO make 96 AND 128, raise if unavailable
-    quadruple = auto()  # 128 bit per float
-
-
-@dataclass(frozen=True)
-class Dtype:
-    precision: Precision
-    is_real: bool
-
-    def __repr__(self):
-        return f'Dtype(Precision.{self.precision.name}, is_real={self.is_real})'
-
-    def as_real(self):
-        return Dtype(self.precision, is_real=True)
-
-    def as_complex(self):
-        return Dtype(self.precision, is_real=False)
-
-
-BackendDtype = TypeVar('BackendDtype')
 Data = TypeVar('Data')  # placeholder for a backend-specific type that holds all data of a tensor (excpet the symmetry data stored in its legs)
 Block = TypeVar('Block')  # placeholder for a backend-specific type that represents the blocks of symmetric tensors
 
@@ -52,7 +27,6 @@ class AbstractBackend(ABC):
     Where Xxx describes the symmetry, e.g. NoSymmetry, Abelian, Nonabelian
     and Yyy describes the numerical routines that handle the blocks, e.g. numpy, torch, ...
     """
-    default_precision: Precision
 
     def __repr__(self):
         return f'{type(self).__name__}'
@@ -60,20 +34,13 @@ class AbstractBackend(ABC):
     def __str__(self):
         return f'{type(self).__name__}'
 
-    # TODO revisit dtypes
     @abstractmethod
-    def parse_dtype(self, dtype: Dtype | None) -> BackendDtype:
-        """Translate Dtype instance to a backend-specific format"""
+    def get_dtype(self, a: Tensor) -> Dtype:
         ...
 
-    # TODO revisit dtypes
     @abstractmethod
-    def infer_dtype(self, a: Tensor) -> Dtype:
-        ...
-
-    # TODO revisit dtypes
-    @abstractmethod
-    def to_dtype(self, a: Tensor, dtype: Dtype) -> Tensor:
+    def to_dtype(self, a: Tensor, dtype: Dtype) -> Data:
+        """cast to given dtype"""
         ...
 
     @abstractmethod
@@ -212,9 +179,6 @@ class AbstractBackend(ABC):
 class AbstractBlockBackend(ABC):
     svd_algorithms: list[str]  # first is default
 
-    def __init__(self, default_precision: Precision):
-        self.default_precision = default_precision
-
     @abstractmethod
     def block_is_real(self, a: Block):
         """If the block is comprised of real numbers.
@@ -240,7 +204,7 @@ class AbstractBlockBackend(ABC):
         ...
 
     @abstractmethod
-    def block_to_dtype(self, a: Block, dtype: BackendDtype) -> Block:
+    def block_to_dtype(self, a: Block, dtype: Dtype) -> Block:
         ...
 
     @abstractmethod
