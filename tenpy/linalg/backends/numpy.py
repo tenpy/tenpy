@@ -27,7 +27,7 @@ class NumpyBlockBackend(AbstractBlockBackend):
     def block_shape(self, a: Block) -> tuple[int]:
         return np.shape(a)
 
-    def block_item(self, a: Block):
+    def block_item(self, a: Block) -> float | complex:
         return a.item()
 
     def block_dtype(self, a: Block) -> Dtype:

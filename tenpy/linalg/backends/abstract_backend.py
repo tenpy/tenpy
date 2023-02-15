@@ -199,7 +199,7 @@ class AbstractBlockBackend(ABC):
         ...
 
     @abstractmethod
-    def block_item(self, a: Block):
+    def block_item(self, a: Block) -> float | complex:
         """Assumes that data is a scalar (i.e. has only one entry). Returns that scalar as python float or complex"""
         ...
 

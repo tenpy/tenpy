@@ -1,16 +1,18 @@
 from __future__ import annotations
 
-from . import NoSymmetryNumpyBackend, AbstractBackend
+from .abstract_backend import AbstractBackend
+from .numpy import NoSymmetryNumpyBackend
+from .torch import NoSymmetryTorchBackend
 from ..symmetries import Symmetry, no_symmetry, AbelianGroup
 
 _backend_lookup = dict(
     no_symmetry=dict(
         numpy=(NoSymmetryNumpyBackend, {}),
-        torch=None,  # TODO
+        torch=(NoSymmetryTorchBackend, {}),
         tensorflow=None,  # TODO
         jax=None,  # TODO
         cpu=(NoSymmetryNumpyBackend, {}),
-        gpu=None,  # TODO
+        gpu=(NoSymmetryTorchBackend, dict(device='cuda')),
         tpu=None,  # TODO
     ),
     #
@@ -20,7 +22,7 @@ _backend_lookup = dict(
         tensorflow=None,  # FUTURE
         jax=None,  # FUTURE
         cpu=None,  # TODO: npc
-        gpu=None,  # FUTURE
+        gpu=None,  # TODO: quick-and-dirty npc + torch
         tpu=None,  # FUTURE
     ),
     #
@@ -29,14 +31,16 @@ _backend_lookup = dict(
         torch=None,  # FUTURE
         tensorflow=None,  # FUTURE
         jax=None,  # FUTURE
-        cpu=(NoSymmetryNumpyBackend, {}),
+        cpu=None,  # FUTURE
         gpu=None,  # FUTURE
         tpu=None,  # FUTURE
     ),
 )
 
+_instantiated_backends = {}  # keys: (symmetry_backend, block_backend, kwargs)
 
-def get_backend(symmetry: AbstractSymmetry = no_symmetry, block_backend: str = 'numpy',
+
+def get_backend(symmetry: Symmetry = no_symmetry, block_backend: str = 'numpy',
                 symmetry_backend: str = None) -> AbstractBackend:
     """
     Parameters
@@ -45,7 +49,8 @@ def get_backend(symmetry: AbstractSymmetry = no_symmetry, block_backend: str = '
     block_backend : {'numpy', 'torch', 'tensorflow', 'jax', 'cpu', 'gpu', 'tpu'}
     symmetry_backend : {None, 'no_symmetry', 'abelian', 'nonabelian'}
         None means select based on the symmetry.
-        It is possible though, to request the non-abelian backend even though the symmetry is actually abelian
+        It is possible though, to request the non-abelian backend even though the symmetry is 
+        actually abelian.
     """
     # TODO cache these instances, make sure there is only ever one.
     #  -> need hash for AbstractSymmetry instances
@@ -53,50 +58,21 @@ def get_backend(symmetry: AbstractSymmetry = no_symmetry, block_backend: str = '
     if symmetry_backend is None:
         if symmetry == no_symmetry:
             symmetry_backend = 'no_symmetry'
-        elif isinstance(symmetry, AbelianGroup):
+        elif symmetry.is_abelian:
             symmetry_backend = 'abelian'
         else:
             symmetry_backend = 'nonabelian'
+    assert symmetry_backend in ['no_symmetry', 'abelian', 'nonabelian']
 
-    if symmetry_backend == 'no_symmetry':
-        assert symmetry == no_symmetry
-        if block_backend in ['numpy', 'cpu']:
-            return NoSymmetryNumpyBackend()
-        if block_backend == 'torch':
-            raise NotImplementedError  # TODO
-        if block_backend == 'tensorflow':
-            raise NotImplementedError  # TODO
-        if block_backend == 'jax':
-            raise NotImplementedError  # TODO
-        if block_backend == 'gpu':
-            raise NotImplementedError  # TODO, torch with device arg ..?
-        if block_backend == 'tpu':
-            raise NotImplementedError  # TODO, torch with device arg ..?
+    res = _backend_lookup[symmetry_backend][block_backend]
+    if res is None:
+        raise NotImplementedError(f'Backend not implemented {symmetry_backend} & {block_backend}')
+    cls, kwargs = res
 
-    if symmetry_backend == 'abelian':
-        assert isinstance(symmetry, AbelianGroup)
-        if block_backend in ['numpy', 'torch', 'tensorflow', 'jax']:
-            # TODO for these cases, could do a pure-python version of AbstractAbelianBackend
-            #  then we should issue a warning regarding performance
-            raise NotImplementedError
-        if block_backend == 'cpu':
-            # TODO: quick-and-dirty: np_conserved, long-term: redo it as a C extension
-            raise NotImplementedError
-        if block_backend in ['gpu', 'tpu']:
-            # FUTURE: extension in C/C++ that calls CUDA or whatever
-            raise NotImplementedError
-
-    if symmetry_backend == 'nonabelian':
-        assert isinstance(symmetry, AbelianGroup)
-        if block_backend in ['numpy', 'torch', 'tensorflow', 'jax']:
-            # TODO for these cases, could do a pure-python version of AbstractNonabelianBackend
-            #  then we should issue a warning regarding performance
-            raise NotImplementedError
-        if block_backend == 'cpu':
-            # FUTURE: extension in C/C++ that calls BLAS or whatever
-            raise NotImplementedError
-        if block_backend in ['gpu', 'tpu']:
-            # FUTURE: extension in C/C++ that calls CUDA or whatever
-            raise NotImplementedError
-
-    raise RuntimeError  # if none of the above if clauses applied, there is an error in the code.
+    key = (symmetry_backend, block_backend, kwargs)
+    if key not in _instantiated_backends:
+        backend = cls(**kwargs)
+        _instantiated_backends[key] = backend
+    else:
+        backend = _instantiated_backends[key]
+    return backend
