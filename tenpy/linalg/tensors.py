@@ -96,7 +96,7 @@ class Tensor:
         return label in self.labels and all(l in self.labels for l in more)
 
     def labels_are(self, *labels: str) -> bool:
-        return set(self.labels) == set(labels)
+        return self.is_fully_labelled and len(labels) == len(self.labels) and set(labels) == set(self.labels)
 
     def set_labels(self, labels: list[str | None]):
         assert not duplicate_entries(labels, ignore=[None])
