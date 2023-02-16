@@ -38,17 +38,10 @@ class AbstractNoSymmetryBackend(AbstractBackend, AbstractBlockBackend, ABC):
     def to_dense_block(self, a: Tensor) -> Block:
         return a.data
 
-    def reduce_symmetry(self, a: Tensor, new_symm: Symmetry) -> Data:
-        if new_symm == no_symmetry:
-            return a.data
-        else:
-            raise ValueError(f'Can not decrease {no_symmetry} to {new_symm}.')
-
-    def increase_symmetry(self, a: Tensor, new_symm: Symmetry, atol=1e-8, rtol=1e-5) -> Data:
-        if new_symm == no_symmetry:
-            return a.data
-        else:
-            raise ValueError(f'{self} can not represent {new_symm}.')
+    def from_dense_block(self, a: Block, legs: list[VectorSpace], atol: float = 1e-8, rtol: float = 1e-5
+                         ) -> Data:
+        assert all(leg.symmetry == no_symmetry for leg in legs)
+        return a  # TODO could this cause mutability issues?
 
     def copy_data(self, a: Tensor) -> Data:
         return self.block_copy(a.data)

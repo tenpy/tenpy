@@ -151,6 +151,9 @@ class NumpyBlockBackend(AbstractBlockBackend):
             res += 1.j * np.random.normal(loc=0, scale=sigma, size=dims)
         return res
 
+    def block_from_numpy(self, a) -> Block:
+        return a
+
 
 
 class NoSymmetryNumpyBackend(NumpyBlockBackend, AbstractNoSymmetryBackend):

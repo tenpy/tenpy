@@ -70,15 +70,12 @@ class AbstractBackend(ABC):
         ...
 
     @abstractmethod
-    def reduce_symmetry(self, a: Tensor, new_symm: Symmetry) -> Data:
-        """Convert to lower symmetry group. TODO what additional info do we need?"""
-        ...
-
-    @abstractmethod
-    def increase_symmetry(self, a: Tensor, new_symm: Symmetry, atol=1e-8, rtol=1e-5) -> Data:
-        """Convert to higher symmetry, if data is symmetric under it.
-        If data is not symmetric under the higher symmetry i.e. if
-        norm(old - projected) >= atol + rtol * norm(old), raise a ValueError"""
+    def from_dense_block(self, a: Block, legs: list[VectorSpace], atol: float = 1e-8, rtol: float = 1e-5
+                         ) -> Data:
+        """Convert a dense block to the data for a symmetric tensor.
+        If the block is not symmetric, measured by ``allclose(a, projected, atol, rtol)``,
+        where ``projected`` is `a` projected to the space of symmetric tensors
+        """
         ...
 
     @abstractmethod
@@ -184,7 +181,11 @@ class AbstractBlockBackend(ABC):
     svd_algorithms: list[str]  # first is default
 
     @abstractmethod
-    def block_is_real(self, a: Block):
+    def block_from_numpy(self, a) -> Block:
+        ...
+
+    @abstractmethod
+    def block_is_real(self, a: Block) -> bool:
         """If the block is comprised of real numbers.
         Complex numbers with small or zero imaginary part still cause a `False` return."""
         ...

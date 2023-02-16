@@ -43,6 +43,9 @@ class Tensor:
     Attributes
     ----------
     data
+        backend-specific data structure that contains the numerical data, i.e. the free parameters
+        of tensors with the given symmetry.
+        data about the symmetry is contained in the legs.
     backend : :class:`~tenpy.linalg.backends.abstract_backend.AbstractBackend`
     legs : list of :class:`~tenpy.linalg.symmetries.VectorSpace`
     labels : list of {``None``, str}
@@ -230,6 +233,67 @@ class Tensor:
         #  are there cases where they are not?
         return np.asarray(self.backend.to_dense_block(self.data), dtype)
 
+    @classmethod
+    def from_numpy(cls, array: np.ndarray, backend, legs: list[VectorSpace]=None, dtype=None, 
+                   labels=None, atol: float = 1e-8, rtol: float = 1e-5) -> Tensor:
+        """Convert a numpy array to a Tensor with given symmetry, if the array is symmetric under it.
+        If data is not symmetric under the symmetry i.e. if
+        ``not allclose(array, projected, atol, rtol)``, raise a ValueError.
+
+        TODO document how the sectors are expected to be embedded, i.e. which slices correspond to which charge.
+        TODO support non-canonical embedding?
+        TODO make backend optional? let get_backend with no args return a globally configurable default
+
+        Parameters
+        ----------
+        array : array_like
+            The data to be converted to a Tensor.
+        backend : :class:`~tenpy.linalg.backends.abstract_backend.AbstractBackend`
+            The backend for the Tensor
+        legs : list of :class:`~tenpy.linalg.symmetries.VectorSpace`, optional
+            The vectorspaces associated with legs of the tensors. Contains symmetry data.
+            If ``None`` (default), trivial legs of appropriate dimension are assumed.
+        dtype : ``np.dtype``, optional
+            The data type of the Tensor entries. Defaults to dtype of `array`
+        labels : list of {str | None}, optional
+            Labels associated with each leg, ``None`` for unnamed legs.
+        """
+        block = backend.block_from_numpy(np.asarray(array, dtype=dtype))
+        return cls.from_dense_block(block=block, backend=backend, legs=legs, labels=labels, atol=atol, 
+                                    rtol=rtol)
+
+    @classmethod
+    def from_dense_block(cls, block, backend, legs: list[VectorSpace]=None, labels=None, 
+                         atol: float = 1e-8, rtol: float = 1e-5) -> Tensor:
+        """Convert a dense block of the backend to a Tensor with given symmetry, if the block is 
+        symmetric under it.
+        If data is not symmetric under the symmetry i.e. if
+        ``not allclose(array, projected, atol, rtol)``, raise a ValueError.
+
+        TODO document how the sectors are expected to be embedded, i.e. which slices correspond to which charge.
+        TODO support non-canonical embedding?
+        TODO make backend optional? let get_backend with no args return a globally configurable default
+
+        Parameters
+        ----------
+        array : array_like
+            The data to be converted to a Tensor.
+        backend : :class:`~tenpy.linalg.backends.abstract_backend.AbstractBackend`
+            The backend for the Tensor
+        legs : list of :class:`~tenpy.linalg.symmetries.VectorSpace`, optional
+            The vectorspaces associated with legs of the tensors. Contains symmetry data.
+            If ``None`` (default), trivial legs of appropriate dimension are assumed.
+        dtype : ``np.dtype``, optional
+            The data type of the Tensor entries. Defaults to dtype of `array`
+        labels : list of {str | None}, optional
+            Labels associated with each leg, ``None`` for unnamed legs.
+        """
+        is_real = False  # FIXME dummy
+        if legs is None:
+            legs = [VectorSpace.non_symmetric(d, is_real=is_real) for d in backend.block_shape(block)]
+        data = backend.from_dense_block(block, legs=legs, atol=atol, rtol=rtol)
+        return cls(data=data, backend=backend, legs=legs, labels=labels)
+        
 
 class DiagonalTensor(Tensor):
 

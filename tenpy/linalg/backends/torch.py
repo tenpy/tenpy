@@ -141,6 +141,9 @@ class TorchBlockBackend(AbstractBlockBackend):
         std = sigma * torch_module.ones_like(mean)
         return torch_module.normal(mean, std)
 
+    def block_from_numpy(self, a) -> Block:
+        return torch_module.tensor(a)
+
 
 class NoSymmetryTorchBackend(TorchBlockBackend, AbstractNoSymmetryBackend):
     def __init__(self, device: str = 'cpu'):
