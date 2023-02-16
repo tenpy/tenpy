@@ -43,6 +43,12 @@ class AbstractNoSymmetryBackend(AbstractBackend, AbstractBlockBackend, ABC):
         assert all(leg.symmetry == no_symmetry for leg in legs)
         return a  # TODO could this cause mutability issues?
 
+    def zero_data(self, legs: list[VectorSpace], dtype: Dtype):
+        return self.zero_block(shape=[l.dim for l in legs], dtype=dtype)
+
+    def eye_data(self, legs: list[VectorSpace], dtype: Dtype) -> Data:
+        return self.eye_block(legs=[l.dim for l in legs], dtype=dtype)
+
     def copy_data(self, a: Tensor) -> Data:
         return self.block_copy(a.data)
 

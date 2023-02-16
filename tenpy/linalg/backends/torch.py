@@ -144,6 +144,15 @@ class TorchBlockBackend(AbstractBlockBackend):
     def block_from_numpy(self, a) -> Block:
         return torch_module.tensor(a)
 
+    def zero_block(self, shape: list[int], dtype: Dtype) -> Block:
+        return torch_module.zeros(shape, dtype=self.dtype_map2[dtype])
+    
+    def eye_block(self, legs: list[int], dtype: Dtype) -> Data:
+        matrix_dim = prod(legs)
+        eye = torch_module.eye(matrix_dim, dtype=self.dtype_map2[dtype])
+        eye = torch_module.reshape(eye, legs + legs)
+        return eye
+
 
 class NoSymmetryTorchBackend(TorchBlockBackend, AbstractNoSymmetryBackend):
     def __init__(self, device: str = 'cpu'):

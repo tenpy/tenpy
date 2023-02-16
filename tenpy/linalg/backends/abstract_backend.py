@@ -79,6 +79,17 @@ class AbstractBackend(ABC):
         ...
 
     @abstractmethod
+    def zero_data(self, legs: list[VectorSpace], dtype: Dtype) -> Data:
+        """Data for a zero tensor"""
+        ...
+
+    @abstractmethod
+    def eye_data(self, legs: list[VectorSpace], dtype: Dtype) -> Data:
+        """Data for an identity map from legs to their duals. In particular, the resulting tensor
+        has twice as many legs"""
+        ...
+
+    @abstractmethod
     def copy_data(self, a: Tensor) -> Data:
         """Return a copy, such that future in-place operations on the output data do not affect the input data"""
         ...
@@ -292,3 +303,12 @@ class AbstractBlockBackend(ABC):
 
     def block_mul(self, a: float | complex, b: Block) -> Block:
         return a * b
+
+    @abstractmethod
+    def zero_block(self, shape: list[int], dtype: Dtype) -> Block:
+        ...
+
+    @abstractmethod
+    def eye_block(self, legs: list[int], dtype: Dtype) -> Data:
+        """eye from legs to dual of legs (result has ``2 * len(legs)`` axes!!)"""
+        ...

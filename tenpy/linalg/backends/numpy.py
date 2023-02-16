@@ -154,7 +154,15 @@ class NumpyBlockBackend(AbstractBlockBackend):
     def block_from_numpy(self, a) -> Block:
         return a
 
+    def zero_block(self, shape: list[int], dtype: Dtype) -> Block:
+        return np.zeros(shape, dtype=dtype)
 
+    def eye_block(self, legs: list[int], dtype: Dtype) -> Data:
+        matrix_dim = prod(legs)
+        eye = np.eye(matrix_dim, dtype=dtype)
+        eye = np.reshape(eye, legs + legs)
+        return eye
+    
 
 class NoSymmetryNumpyBackend(NumpyBlockBackend, AbstractNoSymmetryBackend):
     def svd(self, a: Tensor, axs1: list[int], axs2: list[int], new_leg: VectorSpace | None

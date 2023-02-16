@@ -235,7 +235,7 @@ class Tensor:
 
     @classmethod
     def from_numpy(cls, array: np.ndarray, backend, legs: list[VectorSpace]=None, dtype=None, 
-                   labels=None, atol: float = 1e-8, rtol: float = 1e-5) -> Tensor:
+                   labels: list[str | None] = None, atol: float = 1e-8, rtol: float = 1e-5) -> Tensor:
         """Convert a numpy array to a Tensor with given symmetry, if the array is symmetric under it.
         If data is not symmetric under the symmetry i.e. if
         ``not allclose(array, projected, atol, rtol)``, raise a ValueError.
@@ -263,8 +263,9 @@ class Tensor:
                                     rtol=rtol)
 
     @classmethod
-    def from_dense_block(cls, block, backend, legs: list[VectorSpace]=None, labels=None, 
-                         atol: float = 1e-8, rtol: float = 1e-5) -> Tensor:
+    def from_dense_block(cls, block, backend, legs: list[VectorSpace]=None, 
+                         labels: list[str | None] = None, atol: float = 1e-8, rtol: float = 1e-5
+                         ) -> Tensor:
         """Convert a dense block of the backend to a Tensor with given symmetry, if the block is 
         symmetric under it.
         If data is not symmetric under the symmetry i.e. if
@@ -293,6 +294,42 @@ class Tensor:
             legs = [VectorSpace.non_symmetric(d, is_real=is_real) for d in backend.block_shape(block)]
         data = backend.from_dense_block(block, legs=legs, atol=atol, rtol=rtol)
         return cls(data=data, backend=backend, legs=legs, labels=labels)
+
+    @classmethod
+    def zero(cls, backend, legs: list[VectorSpace] | list[int], labels: list[str | None] = None, 
+             dtype: Dtype = complex128) -> Tensor:
+        """A zero tensor"""
+        if any(isinstance(l, int) for l in legs):
+            assert all(isinstance(l, int) for l in legs)
+            legs = [VectorSpace.non_symmetric(d) for d in legs] 
+        data = backend.zero_data(legs=legs, dtype=dtype)
+        return cls(data=data, backend=backend, legs=legs, labels=labels)
+
+    @classmethod
+    def eye(cls, backend, legs_or_dim: int | list[VectorSpace], labels: list[str | None] = None,
+            dtype: Dtype = complex128) -> Tensor:
+        """The identity map from one group of legs to their duals.
+
+        Parameters
+        ----------
+        backend : :class:`~tenpy.linalg.backends.abstract_backend.AbstractBackend`
+            The backend for the Tensor
+        legs_or_dim : int | list[VectorSpace]
+            Either an integer, equivalent to a trivial leg of this dimension; the result has two legs.
+            Or a list of spaces, then the identity map is from those spaces to their dual.
+            The resulting tensor has twice as many legs.
+        labels : list[str | None], optional
+            Labels associated with each leg, ``None`` for unnamed legs.
+        dtype : Dtype, optional
+            The data type of the Tensor entries. Defaults to dtype of `array`.
+            
+        """
+        if isinstance(legs_or_dim, int):
+            legs_or_dim = [VectorSpace.non_symmetric(legs_or_dim)]
+        data = backend.eye_data(legs=legs_or_dim, dtype=dtype)
+        legs = legs_or_dim + [leg.dual for leg in legs_or_dim]
+        return cls(data=data, backend=backend, legs=legs, labels=labels)
+        
         
 
 class DiagonalTensor(Tensor):
@@ -364,7 +401,7 @@ def match_label_order(a: Tensor, b: Tensor) -> Iterable[int]:
 
 
 def add(a: Tensor, b: Tensor) -> Tensor:
-    # TODO moved import here to avoid import cycle
+    # TODO if one but not both is a DiagonalTensor, we need to convert it to Tensor
     backend = get_same_backend(a, b)
     res_data = backend.add(a.data, b.data, b_perm=match_label_order(a, b))
     return Tensor(res_data, backend=backend, legs=a.legs, labels=a.labels)
