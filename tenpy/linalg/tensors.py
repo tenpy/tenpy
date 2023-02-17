@@ -195,7 +195,7 @@ class Tensor:
         raise TypeError('Tensor object is not subscriptable')
 
     def __neg__(self):
-        return self.__mul__(-1)
+        return mul(-1, self)
 
     def __pos__(self):
         return self
@@ -219,11 +219,12 @@ class Tensor:
 
     def __mul__(self, other):
         if isinstance(other, Tensor):
-            try:
-                other = other.item()
-            except ValueError:
-                raise ValueError('Tensors can only be multiplied with scalars') from None
-        if isinstance(other, (float, complex)):
+            if all(leg.dim == 1 for leg in self.legs):
+                return mul(self.item(), other)
+            if all(leg.dim == 1 for leg in other.legs):
+                return mul(other.item(), self)
+            raise ValueError('Tensors can only be multiplied with scalars') from None
+        if isinstance(other, (int, float, complex)):
             return mul(other, self)
         return NotImplemented
 
