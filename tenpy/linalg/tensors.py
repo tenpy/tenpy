@@ -59,7 +59,8 @@ class Tensor:
         self.data = data
         self.backend = backend
         self.legs = legs
-        self.labels = labels or [None] * len(legs)
+        self._labels = labels or [None] * len(legs)
+        self._labelmap = {label: leg_num for leg_num, label in enumerate(self.labels) if label is not None}
         self.num_legs = len(legs)
         self.symmetry = legs[0].symmetry
         self.backend.finalize_Tensor_init(self)
@@ -110,12 +111,21 @@ class Tensor:
         assert not duplicate_entries(labels, ignore=[None])
         assert len(labels) == self.num_legs
         self.labels = labels[:]
+        self._labelmap = {label: leg_num for leg_num, label in enumerate(self.labels) if label is not None}
+
+    @property
+    def labels(self) -> list[str]:
+        return self._labels[:]
+
+    @labels.setter
+    def labels(self, value):
+        self.set_labels(value)
 
     def get_leg_idx(self, which_leg: int | str) -> int:
         # TODO which type of error should be raised?
         if isinstance(which_leg, str):
             try:
-                which_leg = self.label_map[which_leg]
+                which_leg = self._labelmap[which_leg]
             except KeyError:
                 raise KeyError(f'No leg with label {which_leg}.') from None
         if isinstance(which_leg, int):
