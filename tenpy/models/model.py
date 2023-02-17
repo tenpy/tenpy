@@ -40,7 +40,7 @@ logger = logging.getLogger(__name__)
 from .lattice import (get_lattice, Lattice, MultiSpeciesLattice, TrivialLattice, HelicalLattice,
                       IrregularLattice)
 from ..linalg import np_conserved as npc
-from ..linalg.charges import QTYPE, LegCharge
+from ..linalg.old.charges import QTYPE, LegCharge
 from ..tools.misc import to_array, add_with_None_0
 from ..tools.params import asConfig
 from ..networks import mpo  # used to construct the Hamiltonian as MPO
