@@ -92,6 +92,10 @@ class Tensor:
         tensors with the same legs"""
         return self.parent_space.num_parameters
 
+    # TODO implement a shape property. 
+    # should probably be a custom class that can be indexed by label (str) or index (int)
+    #  -> include in tests
+
     @property
     def is_fully_labelled(self) -> bool:
         return None not in self.labels
@@ -108,12 +112,17 @@ class Tensor:
         self.labels = labels[:]
 
     def get_leg_idx(self, which_leg: int | str) -> int:
+        # TODO which type of error should be raised?
         if isinstance(which_leg, str):
-            which_leg = self.label_map[which_leg]
+            try:
+                which_leg = self.label_map[which_leg]
+            except KeyError:
+                raise KeyError(f'No leg with label {which_leg}.') from None
         if isinstance(which_leg, int):
             if which_leg < 0:
                 which_leg = which_leg + self.num_legs
-            assert 0 <= which_leg < self.num_legs
+            if not 0 <= which_leg < self.num_legs:
+                raise KeyError(f'Leg index out of bounds: {which_leg}.') from None
             return which_leg
         else:
             raise TypeError
