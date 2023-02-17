@@ -154,7 +154,7 @@ class Tensor:
         """If the tensor is a scalar (i.e. has only one entry), return that scalar as a float or complex.
         Otherwise raise a ValueError"""
         if all(leg.dim == 1 for leg in self.legs):
-            return self.backend.item(self.data)
+            return self.backend.item(self)
         else:
             raise ValueError('Not a scalar')
 
