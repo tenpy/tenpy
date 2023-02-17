@@ -151,7 +151,11 @@ class ProductSymmetry(Symmetry):
         )
 
     def is_valid_sector(self, a: Sector) -> bool:
-        if len(a) != len(self.factors):
+        try:
+            len_a = len(a)
+        except TypeError:
+            return False
+        if len_a != len(self.factors):
             return False
         try:
             return all(f.is_valid_sector(b) for f, b in zip(self.factors, a))
