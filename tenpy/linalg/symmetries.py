@@ -355,6 +355,9 @@ su2_symmetry: Final = SU2Symmetry()
 fermion_parity: Final = FermionParity()
 
 
+# TODO fibonacci anyons ...
+
+
 class VectorSpace:
 
     def __init__(self, symmetry: Symmetry, sectors: list[Sector], multiplicities: list[int] = None,
@@ -466,10 +469,6 @@ class ProductSpace(VectorSpace):
             return self.spaces == other.spaces
         else:
             return False
-
-    @property
-    def dim(self) -> int:
-        return prod(space.dim for space in self.spaces)
 
     @property
     def dual(self):
