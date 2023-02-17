@@ -19,6 +19,7 @@ which provides the :class:`~tenpy.linalg.tensors.Tensor` class used by the rest 
 """
 # Copyright 2018-2023 TeNPy Developers, GNU GPLv3
 
+from . import old  # need to import old._npc_helper first!
 from . import symmetries, backends, tensors, lanczos, random_matrix, sparse
 
 #  __all__ = ['charges', 'np_conserved', 'lanczos', 'random_matrix', 'sparse', 'svd_robust']
@@ -28,7 +29,7 @@ from ..tools import optimization
 
 def _patch_cython():
     # "monkey patch" some objects to avoid cyclic import structure
-    from . import _npc_helper
+    from .old import _npc_helper, charges, np_conserved
     _npc_helper._charges = charges
     _npc_helper._np_conserved = np_conserved
     assert _npc_helper.QTYPE == charges.QTYPE

@@ -94,7 +94,7 @@ except:
     #: None, or the `bottleneck` module, if installed.
 
 have_cython_functions = None
-"""bool whether the import of the cython file ``tenpy/linalg/_npc_helper.pyx`` succeeded.
+"""bool whether the import of the cython file ``tenpy/linalg/old/_npc_helper.pyx`` succeeded.
 
 The value is set in the first call of :func:`use_cython`.
 """
@@ -253,7 +253,7 @@ def use_cython(func=None, replacement=None, check_doc=True):
             return result
 
     This decorator indicates that there is a `Cython <https://cython.org>`_ implementation in
-    the file ``tenpy/linalg/_npc_helper.pyx``, which should have the same signature (i.e. same
+    the file ``tenpy/linalg/old/_npc_helper.pyx``, which should have the same signature (i.e. same
     arguments and return values) as the decorated function, and can be used as a replacement for
     the decorated function. However, if the cython code could not be compiled on your system
     (or if the environment variable ``TENPY_OPTIMIZE`` is set to negative values, or
@@ -268,7 +268,7 @@ def use_cython(func=None, replacement=None, check_doc=True):
     func : function
         The defined function
     replacement : string | None
-        The name of the function defined in ``tenpy/linalg/_npc_helper.pyx`` which should
+        The name of the function defined in ``tenpy/linalg/old/_npc_helper.pyx`` which should
         replace the decorated function.
         ``None`` defaults to the name of the decorated function,
         e.g., in the above example `my_slow_function`.
@@ -299,7 +299,7 @@ def use_cython(func=None, replacement=None, check_doc=True):
             have_cython_functions = False
         elif optimize(OptimizationFlag.default):
             try:
-                from ..linalg import _npc_helper
+                from ..linalg.old import _npc_helper
                 _npc_helper_module = _npc_helper
                 have_cython_functions = True
                 compiled_with_MKL = _npc_helper.compiled_with_MKL
