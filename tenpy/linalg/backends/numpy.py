@@ -41,7 +41,7 @@ class NumpyBlockBackend(AbstractBlockBackend):
 
     def _block_repr_lines(self, a: Block, indent: str, max_width: int, max_lines: int) -> list[str]:
         # TODO i like julia style much better actually, especially for many legs
-        with np.set_printoptions(linewidth=max_width - len(indent)):
+        with np.printoptions(linewidth=max_width - len(indent)):
             lines = [f'{indent}{line}' for line in repr(a).split('\n')]
         if len(lines) > max_lines:
             first = (max_lines - 1) // 2
