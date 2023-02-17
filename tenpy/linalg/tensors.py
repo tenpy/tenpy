@@ -188,6 +188,7 @@ class Tensor:
             lines.append(f'{indent}         {l}  {d}  {c}')
         lines.extend(self.backend._data_repr_lines(self.data, indent=indent, max_width=70, max_lines=20))
         lines.append(')')
+        return "\n".join(lines)
 
     def __getitem__(self, item):
         # TODO point towards a "as flat" option
