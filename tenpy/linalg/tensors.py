@@ -110,7 +110,7 @@ class Tensor:
     def set_labels(self, labels: list[str | None]):
         assert not duplicate_entries(labels, ignore=[None])
         assert len(labels) == self.num_legs
-        self.labels = labels[:]
+        self._labels = labels[:]
         self._labelmap = {label: leg_num for leg_num, label in enumerate(self.labels) if label is not None}
 
     @property
