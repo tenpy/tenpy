@@ -42,11 +42,12 @@ class AbelianBlockData:
                                 self.qdata,
                                 self.qdata_sorted)
 
+# JU: also dataclass?
 class AbelianVectorSpaceData:
     def __init__(self, leg: VectorSpace):
         self.slices = np.cumsum(leg.multiplicities)
 
-
+# JU: also dataclass?
 class AbelianProductSpaceData:
     def __init__(self, pipe: ProductSpace):
         self.qmap = ...
@@ -61,7 +62,7 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
     ----------
 
     """
-    def finalize_Tensor_init(self, a: Tensor) -> None
+    def finalize_Tensor_init(self, a: Tensor) -> None:
         for leg in a.legs:
             if leg._abelian_data is None:
                 if isinstance(leg, ProductSpace):  # TODO: hasattr(leg, 'spaces') is more robust
@@ -74,15 +75,17 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
         return a.data.dtype  # TODO type vs numpy dtype?
 
     def to_dtype(self, a: Tensor, dtype: Dtype) -> Data:
-        data  = a.data.copy()  # TODO: should this make a copy?
+        data = a.data.copy()  # TODO: should this make a copy?
         data.blocks = [self.block_to_dtype(block, dtype) for block in data.blocks]
         data.dtype = dtype
         return data
 
     # TODO: unclear what this should do instance-specific? Shouldn't this be class-specific?
+    #  JU: yes, this can be a classmethod
     # AbstractNoSymmetryBackend checks == no_symmetry, but we might not have a unique instance?
+    #  JU: have implement Symmetry.__eq__ to to sensible things
     def supports_symmetry(self, symmetry: Symmetry) -> bool:
-        return isinstance(symmetry, AbelianGroup) # or ProductGroup([AbelianGroup]) ...?
+        return symmetry.is_abelian
 
     def is_real(self, a: Tensor) -> bool:
         return a.data.dtype.is_real
@@ -101,26 +104,26 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
             slices = []
             for (qi, leg) in zip(qindices, a.legs):
                 sl = leg._abelian_data.slices
-                slices.append(slice(sl[qi], sl[qi+1])
+                slices.append(slice(sl[qi], sl[qi+1]))
             res[tuple(slices)] = block
         return res
 
     # TODO: is it okay to have extra kwargs qtotal?
-    def from_dense_block(self, a: Block, legs: list[VectorSpace], atol: float = 1e-8, rtol: float = 1e-5
+    #  JU: probably
+    def from_dense_block(self, a: Block, legs: list[VectorSpace], atol: float = 1e-8, rtol: float = 1e-5,
                          *, qtotal = None) -> Data:
+        # JU: res is not defined
         if qtotal is None:
             res.qtotal = qtotal = detect_qtotal(a, legs, atol, rtol)
-
 
         for block, qindices in zip(a.blocks, a.qdata):
             slices = []
             for (qi, leg) in zip(qindices, a.legs):
                 sl = leg._abelian_data.slices
-                slices.append(slice(sl[qi], sl[qi+1])
+                slices.append(slice(sl[qi], sl[qi+1]))
             res[tuple(slices)] = block
 
-
-        return a  # TODO could this cause mutability issues?
+        return res
 
     def zero_data(self, legs: list[VectorSpace], dtype: Dtype):
         qtotal = legs[0].symmetry.trivial_sector
