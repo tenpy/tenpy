@@ -1,6 +1,5 @@
 from __future__ import annotations
 from abc import ABC, abstractmethod
-from math import prod
 
 from .abstract_backend import AbstractBackend, AbstractBlockBackend, Data, Block
 from ..symmetries import ProductSpace, VectorSpace, no_symmetry, Symmetry
@@ -14,13 +13,17 @@ from ..tensors import Tensor, Dtype
 class AbstractNoSymmetryBackend(AbstractBackend, AbstractBlockBackend, ABC):
     """
     Backend with no symmetries.
-    Tensor.data is a single block of the AbstractBlockBackend, e.g. a numpy.ndarray for NumpyBlockBackend
+
+    Attributes
+    ----------
+    data : Block
+        A single block of the AbstractBlockBackend, e.g. a numpy.ndarray for NumpyBlockBackend.
     """
 
     def get_dtype(self, a: Tensor) -> Dtype:
         return self.block_dtype(a.data)
 
-    def to_dtype(self, a: Tensor, dtype: Dtype) -> Tensor:
+    def to_dtype(self, a: Tensor, dtype: Dtype) -> Data:
         return self.block_to_dtype(a.data, dtype)
 
     def supports_symmetry(self, symmetry: Symmetry) -> bool:

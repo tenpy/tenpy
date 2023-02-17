@@ -282,6 +282,7 @@ class SU2Symmetry(Group):
         return a
 
 
+# TODO: shouldn't this be a subclass of ZNsymmetry?
 class FermionParity(Symmetry):
     """Fermionic Parity. Sectors are `0` (even parity) and `1` (odd parity)"""
 
@@ -334,18 +335,18 @@ class VectorSpace:
         is_real: whether the space is over the real numbers (otherwise over the complex numbers)
         """
         self.symmetry = symmetry
-        self.dim = sum(symmetry.sector_dim(s) * m for s, m in zip(sectors, self.multiplicities))
         self.sectors = sectors
         if multiplicities is None:
             self.multiplicities = [1 for s in sectors]
         else:
             assert len(multiplicities) == len(sectors)
             self.multiplicities = multiplicities
+        self.dim = sum(symmetry.sector_dim(s) * m for s, m in zip(sectors, self.multiplicities))
         self.is_dual = is_dual
         self.is_real = is_real
 
         # backends may write these attributes to cache metadata
-        self._abelian_backend_slices = None
+        self._abelian_data = None
 
     @classmethod
     def non_symmetric(cls, dim: int, is_dual: bool = False, is_real: bool = False):
@@ -413,10 +414,6 @@ class ProductSpace(VectorSpace):
         multiplicities = [prod(combination) for combination in product(*(space.multiplicities for space in spaces))]
         is_real = spaces[0].is_real
         assert all(space.is_real == is_real for space in spaces)
-
-        self._abelian_backend_slices = None
-        self._abelian_backend_qmap = None
-        # ...
 
         VectorSpace.__init__(self, symmetry=symmetry, sectors=sectors, multiplicities=multiplicities,
                              is_dual=is_dual, is_real=is_real)

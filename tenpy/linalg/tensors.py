@@ -61,7 +61,8 @@ class Tensor:
         self.legs = legs
         self.labels = labels or [None] * len(legs)
         self.num_legs = len(legs)
-        self.symmetry = legs[0].space.symmetry
+        self.symmetry = legs[0].symmetry
+        self.backend.finalize_Tensor_init(self)
 
     @property
     def dtype(self):
@@ -76,7 +77,7 @@ class Tensor:
 
     def check_sanity(self):
         assert self.backend.supports_symmetry(self.symmetry)
-        assert all(l.space.symmetry == self.symmetry for l in self.legs)
+        assert all(l.symmetry == self.symmetry for l in self.legs)
         assert len(self.legs) == self.num_legs > 0
 
     @property
@@ -234,7 +235,7 @@ class Tensor:
         return np.asarray(self.backend.to_dense_block(self.data), dtype)
 
     @classmethod
-    def from_numpy(cls, array: np.ndarray, backend, legs: list[VectorSpace]=None, dtype=None, 
+    def from_numpy(cls, array: np.ndarray, backend, legs: list[VectorSpace]=None, dtype=None,
                    labels: list[str | None] = None, atol: float = 1e-8, rtol: float = 1e-5) -> Tensor:
         """Convert a numpy array to a Tensor with given symmetry, if the array is symmetric under it.
         If data is not symmetric under the symmetry i.e. if
@@ -259,14 +260,14 @@ class Tensor:
             Labels associated with each leg, ``None`` for unnamed legs.
         """
         block = backend.block_from_numpy(np.asarray(array, dtype=dtype))
-        return cls.from_dense_block(block=block, backend=backend, legs=legs, labels=labels, atol=atol, 
+        return cls.from_dense_block(block=block, backend=backend, legs=legs, labels=labels, atol=atol,
                                     rtol=rtol)
 
     @classmethod
-    def from_dense_block(cls, block, backend, legs: list[VectorSpace]=None, 
+    def from_dense_block(cls, block, backend, legs: list[VectorSpace]=None,
                          labels: list[str | None] = None, atol: float = 1e-8, rtol: float = 1e-5
                          ) -> Tensor:
-        """Convert a dense block of the backend to a Tensor with given symmetry, if the block is 
+        """Convert a dense block of the backend to a Tensor with given symmetry, if the block is
         symmetric under it.
         If data is not symmetric under the symmetry i.e. if
         ``not allclose(array, projected, atol, rtol)``, raise a ValueError.
@@ -296,12 +297,12 @@ class Tensor:
         return cls(data=data, backend=backend, legs=legs, labels=labels)
 
     @classmethod
-    def zero(cls, backend, legs: list[VectorSpace] | list[int], labels: list[str | None] = None, 
+    def zero(cls, backend, legs: list[VectorSpace] | list[int], labels: list[str | None] = None,
              dtype: Dtype = complex128) -> Tensor:
         """A zero tensor"""
         if any(isinstance(l, int) for l in legs):
             assert all(isinstance(l, int) for l in legs)
-            legs = [VectorSpace.non_symmetric(d) for d in legs] 
+            legs = [VectorSpace.non_symmetric(d) for d in legs]
         data = backend.zero_data(legs=legs, dtype=dtype)
         return cls(data=data, backend=backend, legs=legs, labels=labels)
 
@@ -322,15 +323,15 @@ class Tensor:
             Labels associated with each leg, ``None`` for unnamed legs.
         dtype : Dtype, optional
             The data type of the Tensor entries. Defaults to dtype of `array`.
-            
+
         """
         if isinstance(legs_or_dim, int):
             legs_or_dim = [VectorSpace.non_symmetric(legs_or_dim)]
         data = backend.eye_data(legs=legs_or_dim, dtype=dtype)
         legs = legs_or_dim + [leg.dual for leg in legs_or_dim]
         return cls(data=data, backend=backend, legs=legs, labels=labels)
-        
-        
+
+
 
 class DiagonalTensor(Tensor):
 

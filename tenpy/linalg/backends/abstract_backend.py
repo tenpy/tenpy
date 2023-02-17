@@ -34,6 +34,9 @@ class AbstractBackend(ABC):
     def __str__(self):
         return f'{type(self).__name__}'
 
+    def finalize_Tensor_init(self, a: Tensor):
+        pass
+
     @abstractmethod
     def get_dtype(self, a: Tensor) -> Dtype:
         ...
@@ -60,7 +63,7 @@ class AbstractBackend(ABC):
 
     @abstractmethod
     def item(self, a: Tensor) -> float | complex:
-        """Assumes that data is a scalar (i.e. has only one entry). 
+        """Assumes that data is a scalar (i.e. has only one entry).
         Returns that scalar as python float or complex"""
         ...
 
@@ -111,7 +114,7 @@ class AbstractBackend(ABC):
         -----------------
         - abelian backend: if len(axs1) > 1 or len(axs2) > 1, call combine legs and warn that this may
         be inefficient.
-        
+
         Returns
         -------
         u, s, vh, new_leg
