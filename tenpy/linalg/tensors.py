@@ -457,7 +457,12 @@ def tdot(t1: Tensor, t2: Tensor,
     open_labels2 = [leg for idx, leg in enumerate(t2.labels) if idx not in leg_idcs2]
     res_labels = get_result_labels(open_labels1, open_labels2, relabel1, relabel2)
     res_data = backend.tdot(t1, t2, leg_idcs1, leg_idcs2)
-    return Tensor(res_data, backend=backend, legs=open_legs1 + open_legs2, labels=res_labels)
+    res_legs = open_legs1 + open_legs2
+    if len(res_legs) == 0:
+        # TODO make sure this is a python scalar not some weird backend-structure
+        return res_data
+    else:
+        return Tensor(res_data, backend=backend, legs=res_legs, labels=res_labels)
 
 
 def outer(t1: Tensor, t2: Tensor, relabel1: dict[str, str] = None, relabel2: dict[str, str] = None) -> Tensor:
