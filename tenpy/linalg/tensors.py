@@ -243,8 +243,8 @@ class Tensor:
         return self.__mul__(factor)
 
     def __float__(self):
-        if not self.dtype.is_real:
-            raise UserWarning  # TODO logging system
+        if not self.backend.is_real(self):
+            pass  # FIXME issue warning
         return self.item().real
 
     def __complex__(self):
