@@ -646,11 +646,14 @@ def get_result_labels(legs1: list[str | None], legs2: list[str | None],
     Labels are changed by the mappings relabel1 and relabel2.
     Any conflicting labels (after relabelling) are dropped
     """
-    relabel1 = relabel1 or {}
-    relabel2 = relabel2 or {}
-
-    labels1 = [relabel1.get(leg.label, leg.label) for leg in legs1]
-    labels2 = [relabel2.get(leg.label, leg.label) for leg in legs2]
+    if relabel1 is None:
+        labels1 = legs1
+    else:
+        labels1 = [relabel1.get(leg.label, leg.label) for leg in legs1]
+    if relabel2 is None:
+        labels2 = legs2
+    else:
+        labels2 = [relabel2.get(leg.label, leg.label) for leg in legs2]
     conflicting = [label for label in labels1 if label in labels2]
     labels = labels1 + labels2
     if conflicting:
