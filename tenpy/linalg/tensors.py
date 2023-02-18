@@ -425,12 +425,12 @@ def match_label_order(a: Tensor, b: Tensor) -> Iterable[int]:
 def add(a: Tensor, b: Tensor) -> Tensor:
     # TODO if one but not both is a DiagonalTensor, we need to convert it to Tensor
     backend = get_same_backend(a, b)
-    res_data = backend.add(a.data, b.data, b_perm=match_label_order(a, b))
+    res_data = backend.add(a, b, b_perm=match_label_order(a, b))
     return Tensor(res_data, backend=backend, legs=a.legs, labels=a.labels)
 
 
 def mul(a: float | complex, b: Tensor) -> Tensor:
-    res_data = b.backend.mul(a, b.data)
+    res_data = b.backend.mul(a, b)
     return Tensor(res_data, backend=b.backend, legs=b.legs, labels=b.labels)
 
 
