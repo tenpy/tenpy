@@ -403,9 +403,10 @@ class DiagonalTensor(Tensor):
 #         return Tensor(obj, backend, legs=legs, labels=labels)
 
 
-def match_label_order(a: Tensor, b: Tensor) -> Iterable[int]:
+def match_label_order(a: Tensor, b: Tensor) -> Iterable[int] | None:
     """Determine the order of legs of b, such that they match the legs of a.
-    If config.stric_labels, this is a permutation determined by the labels, otherwise it is range(num_legs).
+    If config.stric_labels, this is a permutation determined by the labels, otherwise it is None.
+    A None return indicates range(b.num_legs), i.e. that no trasnpose is needed.
     """
     if config.strict_labels:
         if a.is_fully_labelled and b.is_fully_labelled:
@@ -416,16 +417,22 @@ def match_label_order(a: Tensor, b: Tensor) -> Iterable[int]:
     else:
         match_by_labels = False
 
-    if match_by_labels:
-        leg_order = b.get_leg_idcs(a.leg_labels)
-    else:
-        leg_order = range(b.num_legs)
+    if not match_by_labels:
+        return None
+
+    if a._labels == b._lables:
+        return None
+    
+    return b.get_leg_idcs(a.leg_labels)
 
 
 def add(a: Tensor, b: Tensor) -> Tensor:
     # TODO if one but not both is a DiagonalTensor, we need to convert it to Tensor
     backend = get_same_backend(a, b)
-    res_data = backend.add(a, b, b_perm=match_label_order(a, b))
+    b_order = match_label_order(a, b)
+    if b_order is not None:
+        b = transpose(b, b_order)
+    res_data = backend.add(a, b)
     return Tensor(res_data, backend=backend, legs=a.legs, labels=a.labels)
 
 
