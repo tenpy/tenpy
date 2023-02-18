@@ -373,39 +373,11 @@ class DiagonalTensor(Tensor):
     def __init__(self) -> None:
         raise NotImplementedError  # TODO
 
+    def to_full_tensor(self) -> Tensor:
+        raise NotImplementedError
+
 
 # TODO is there a use for a special Scalar(DiagonalTensor) class?
-
-
-# TODO provide function with more narrowly defined input, "from_numpy" or sth,
-# def as_tensor(obj, backend: AbstractBackend, legs: list[VectorSpace] = None, labels: list[str] = None,
-#               dtype: Dtype = None) -> Tensor:
-#     # TODO use a default backend from global config?
-#     if isinstance(obj, Tensor):
-#         obj = obj.copy()
-
-#         if legs is not None:
-#             raise NotImplementedError  # TODO what to do here?
-
-#         if backend is not None:
-#             raise NotImplementedError  # TODO
-
-#         if labels is not None:
-#             obj.set_labels(labels)
-
-#         if dtype is not None:
-#             obj.data = obj.backend.to_dtype(obj, dtype)
-
-#         obj.check_sanity()
-#         return obj
-
-#     else:
-#         obj, shape = backend.parse_data(obj, legs, dtype=backend.parse_dtype(dtype))
-#         if legs is None:
-#             legs = [VectorSpace.non_symmetric(d) for d in shape]
-#         else:
-#             assert backend.legs_are_compatible(obj, legs)
-#         return Tensor(obj, backend, legs=legs, labels=labels)
 
 
 def match_label_order(a: Tensor, b: Tensor) -> Iterable[int] | None:

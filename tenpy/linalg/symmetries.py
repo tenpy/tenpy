@@ -219,8 +219,14 @@ class AbelianGroup(Group, ABC):
         return 1
 
 # TODO group_names U(1) and SU(2) or U₁ and SU₂ ?
-# JH: at least consistent: if Z_N, then also U_1 and SU_2.
-# Challenge: when you want to compare, you need to copy-paste
+#   JH: at least consistent: if Z_N, then also U_1 and SU_2.
+#       Challenge: when you want to compare, you need to copy-paste
+#   JU: - The conventional notation in maths is actually not "consistent" in that way.
+#         It is $\mathbb{Z}_N$, $\mathrm{U}(N)$ and $\mathrm{SU}(N)$
+#       - This only concerns group_name attribute, which is used in__str__ outputs.
+#         __repr__ outputs always have the name of the class, e.g. U1Symmetry. 
+#         There i chose no parens or underscores bc of python naming standards.
+#       - What do you mean with "when you want to compare"?
 
 class U1Symmetry(AbelianGroup):
     """U(1) symmetry. Sectors are integers ..., `-2`, `-1`, `0`, `1`, `2`, ..."""
@@ -309,7 +315,6 @@ class SU2Symmetry(Group):
         return a
 
 
-# TODO: shouldn't this be a subclass of ZNsymmetry?
 class FermionParity(Symmetry):
     """Fermionic Parity. Sectors are `0` (even parity) and `1` (odd parity)"""
 
