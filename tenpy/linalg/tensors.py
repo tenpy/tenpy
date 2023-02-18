@@ -328,17 +328,17 @@ class Tensor:
         return cls(data=data, backend=backend, legs=legs, labels=labels)
 
     @classmethod
-    def eye(cls, backend, legs_or_dim: int | list[VectorSpace], labels: list[str | None] = None,
-            dtype: Dtype = complex128) -> Tensor:
+    def eye(cls, backend, legs_or_dims: int | VectorSpace | list[int | VectorSpace], 
+            labels: list[str | None] = None, dtype: Dtype = complex128) -> Tensor:
         """The identity map from one group of legs to their duals.
 
         Parameters
         ----------
         backend : :class:`~tenpy.linalg.backends.abstract_backend.AbstractBackend`
             The backend for the Tensor
-        legs_or_dim : int | list[VectorSpace]
-            Either an integer, equivalent to a trivial leg of this dimension; the result has two legs.
-            Or a list of spaces, then the identity map is from those spaces to their dual.
+        legs_or_dims : int | VectorSpace | list[int | VectorSpace]
+            Description of *half* of the legs of the result, either via their vectorspace
+            or via an integer, which means a trivial VectorSpace of that dimension.
             The resulting tensor has twice as many legs.
         labels : list[str | None], optional
             Labels associated with each leg, ``None`` for unnamed legs.
@@ -346,10 +346,15 @@ class Tensor:
             The data type of the Tensor entries. Defaults to dtype of `array`.
 
         """
-        if isinstance(legs_or_dim, int):
-            legs_or_dim = [VectorSpace.non_symmetric(legs_or_dim)]
-        data = backend.eye_data(legs=legs_or_dim, dtype=dtype)
-        legs = legs_or_dim + [leg.dual for leg in legs_or_dim]
+        if isinstance(legs_or_dims, int):
+            legs_or_dims = [VectorSpace.non_symmetric(legs_or_dims)]
+        elif isinstance(legs_or_dims, VectorSpace):
+            legs_or_dims = [legs_or_dims]
+        else:
+            legs_or_dims = [ele if isinstance(ele, VectorSpace) else VectorSpace.non_symmetric(ele) 
+                            for ele in legs_or_dims]
+        data = backend.eye_data(legs=legs_or_dims, dtype=dtype)
+        legs = legs_or_dims + [leg.dual for leg in legs_or_dims]
         return cls(data=data, backend=backend, legs=legs, labels=labels)
 
 
