@@ -250,7 +250,7 @@ class Tensor:
     def __complex__(self):
         return complex(self.item())
 
-    def __array__(self, dtype):
+    def __array__(self, dtype=None):
         # TODO this assumes that the blocks are valid inputs to np.asarray.
         #  are there cases where they are not?
         return np.asarray(self.backend.to_dense_block(self.data), dtype)
