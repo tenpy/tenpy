@@ -67,7 +67,7 @@ class Tensor:
 
     @property
     def dtype(self):
-        return self.backend.get_dtype(self.data)
+        return self.backend.get_dtype(self)
 
     @property
     def parent_space(self) -> VectorSpace:
