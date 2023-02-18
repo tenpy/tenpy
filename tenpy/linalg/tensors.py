@@ -397,10 +397,10 @@ def match_label_order(a: Tensor, b: Tensor) -> Iterable[int] | None:
     if not match_by_labels:
         return None
 
-    if a._labels == b._lables:
+    if a._labels == b._labels:
         return None
     
-    return b.get_leg_idcs(a.leg_labels)
+    return b.get_leg_idcs(a.labels)
 
 
 def add(a: Tensor, b: Tensor) -> Tensor:
@@ -484,7 +484,9 @@ def inner(t1: Tensor, t2: Tensor) -> complex:
     if t1.num_legs != t2.num_legs:
         raise ValueError('Tensors need to have the same number of legs')
     leg_order_2 = match_label_order(t1, t2)
-    if not all(t1.legs[n1].space == t2.legs[n2].space for n1, n2 in enumerate(leg_order_2)):
+    if leg_order_2 is None:
+        leg_order_2 = range(t2.num_legs)
+    if not all(t1.legs[n1] == t2.legs[n2] for n1, n2 in enumerate(leg_order_2)):
         raise ValueError('Incompatible legs')
     backend = get_same_backend(t1, t2)
     res = backend.inner(t1, t2, axs2=leg_order_2)
