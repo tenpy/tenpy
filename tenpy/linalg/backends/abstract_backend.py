@@ -64,8 +64,13 @@ class AbstractBackend(ABC):
         """Tensordot i.e. pairwise contraction"""
         ...
 
-    @abstractmethod
     def item(self, a: Tensor) -> float | complex:
+        """Assumes that tensor is a scalar (i.e. has only one entry).
+        Returns that scalar as python float or complex"""
+        return self.data_item(a.data)
+
+    @abstractmethod
+    def data_item(self, a: Data) -> float | complex:
         """Assumes that data is a scalar (i.e. has only one entry).
         Returns that scalar as python float or complex"""
         ...

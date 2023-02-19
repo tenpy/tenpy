@@ -38,8 +38,8 @@ class AbstractNoSymmetryBackend(AbstractBackend, AbstractBlockBackend, ABC):
     def tdot(self, a: Tensor, b: Tensor, axs_a: list[int], axs_b: list[int]) -> Data:
         return self.block_tdot(a.data, b.data, axs_a, axs_b)
 
-    def item(self, a: Tensor) -> float | complex:
-        return self.block_item(a.data)
+    def data_item(self, a: Data) -> float | complex:
+        return self.block_item(a)
 
     def to_dense_block(self, a: Tensor) -> Block:
         return a.data

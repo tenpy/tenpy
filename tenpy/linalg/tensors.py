@@ -552,7 +552,7 @@ def trace(t: Tensor, legs1: int | str | list[int | str] = -2, legs2: int | str |
     res_data = t.backend.trace(t, leg_idcs1, leg_idcs2)
     if len(remaining_leg_idcs) == 0:
         # result is a scalar
-        return t.backend.item(res_data)
+        return t.backend.data_item(res_data)
     else:
         return Tensor(res_data, backend=t.backend, legs=[t.legs[n] for n in remaining_leg_idcs],
                       labels=[t.labels[n] for n in remaining_leg_idcs])

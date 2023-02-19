@@ -93,7 +93,7 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
     def is_real(self, a: Tensor) -> bool:
         return a.data.dtype.is_real
 
-    def item(self, a: Tensor) -> float | complex:
+    def data_item(self, a: Data) -> float | complex:
         if len(a.blocks) > 1:
             raise ValueError("More than 1 block!")
         if len(a.blocks) == 0:
