@@ -1,4 +1,4 @@
-# Copyright 2021 TeNPy Developers, GNU GPLv3
+# Copyright 2021-2023 TeNPy Developers, GNU GPLv3
 from tenpy.models import aklt
 from test_model import check_general_model
 from tenpy.algorithms.dmrg import TwoSiteDMRGEngine

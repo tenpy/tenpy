@@ -29,7 +29,7 @@ Much of the code is very similar to DMRG, and also based on the
 .. todo ::
     allow for increasing bond dimension in SingleSiteTDVPEngine, similar to DMRG Mixer
 """
-# Copyright 2019-2021 TeNPy Developers, GNU GPLv3
+# Copyright 2019-2023 TeNPy Developers, GNU GPLv3
 
 from tenpy.linalg.lanczos import LanczosEvolution
 from tenpy.algorithms.truncation import svd_theta, TruncationError

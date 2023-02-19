@@ -18,7 +18,7 @@
     exact_diag
     disentangler
 """
-# Copyright 2018-2021 TeNPy Developers, GNU GPLv3
+# Copyright 2018-2023 TeNPy Developers, GNU GPLv3
 
 from . import algorithm, truncation, dmrg, dmrg_parallel, disentangler, mps_common, tebd, tdvp, \
     exact_diag, purification, network_contractor, mpo_evolution

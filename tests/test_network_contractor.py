@@ -1,5 +1,5 @@
 """a collection of tests to check the functionality of network_contractor.py."""
-# Copyright 2018-2021 TeNPy Developers, GNU GPLv3
+# Copyright 2018-2023 TeNPy Developers, GNU GPLv3
 
 from tenpy.algorithms.network_contractor import contract, ncon
 import numpy as np
