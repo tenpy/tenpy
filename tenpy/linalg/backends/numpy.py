@@ -1,9 +1,7 @@
 # Copyright 2023-2023 TeNPy Developers, GNU GPLv3
 from __future__ import annotations
 
-from math import prod
 from typing import Any
-
 import numpy as np
 import scipy
 
@@ -89,7 +87,7 @@ class NumpyBlockBackend(AbstractBlockBackend):
     def block_trace(self, a: Block, idcs1: list[int], idcs2: list[int]) -> Block:
         remaining = [n for n in range(len(a.shape)) if n not in idcs1 and n not in idcs2]
         a = np.transpose(a, remaining, idcs1, idcs2)
-        trace_dim = prod(a.shape[len(remaining):len(remaining)+len(idcs1)])
+        trace_dim = np.prod(a.shape[len(remaining):len(remaining)+len(idcs1)])
         a = np.reshape(a, (a.shape[:len(remaining)], trace_dim, trace_dim))
         return np.trace(a, axis1=-2, axis2=-1)
 
@@ -121,7 +119,7 @@ class NumpyBlockBackend(AbstractBlockBackend):
         permutation = idcs1 + idcs2
         a = np.transpose(a, permutation)
         a_shape = np.shape(a)
-        matrix_shape = prod(a_shape[:len(idcs1)]), prod(a_shape[len(idcs1):])
+        matrix_shape = np.prod(a_shape[:len(idcs1)]), np.prod(a_shape[len(idcs1):])
         matrix = np.reshape(a, matrix_shape)
         aux = (permutation, a_shape)
         return matrix, aux
@@ -161,7 +159,7 @@ class NumpyBlockBackend(AbstractBlockBackend):
         return np.zeros(shape, dtype=dtype)
 
     def eye_block(self, legs: list[int], dtype: Dtype) -> Data:
-        matrix_dim = prod(legs)
+        matrix_dim = np.prod(legs)
         eye = np.eye(matrix_dim, dtype=dtype)
         eye = np.reshape(eye, legs + legs)
         return eye
@@ -173,7 +171,7 @@ class NoSymmetryNumpyBackend(NumpyBlockBackend, AbstractNoSymmetryBackend):
         a = np.transpose(a.data, axs1 + axs2)
         a_shape1 = np.shape(a)[:len(axs1)]
         a_shape2 = np.shape(a)[len(axs1):]
-        a = np.reshape(a, (prod(a_shape1), prod(a_shape2)))
+        a = np.reshape(a, (np.prod(a_shape1), np.prod(a_shape2)))
         u, s, vh = self.matrix_svd(a)
         u = np.reshape(u, (*a_shape1, len(s)))
         vh = np.reshape(vh, (len(s), *a_shape2))

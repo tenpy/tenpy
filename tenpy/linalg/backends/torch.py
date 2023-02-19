@@ -1,6 +1,6 @@
 # Copyright 2023-2023 TeNPy Developers, GNU GPLv3
 from __future__ import annotations
-from math import prod
+from numpy import prod
 from typing import Any
 
 from .abelian import AbstractAbelianBackend

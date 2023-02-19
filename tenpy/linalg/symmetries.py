@@ -4,7 +4,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from enum import Enum
 from itertools import product
-from math import prod
+from numpy import prod
 from typing import TypeVar, Final
 
 

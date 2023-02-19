@@ -1,6 +1,5 @@
 """A collection of tests for tenpy.linalg.tensors."""
 # Copyright 2023-2023 TeNPy Developers, GNU GPLv3
-from math import prod
 from multiprocessing.sharedctypes import Value
 import numpy as np
 from tenpy.linalg import tensors
@@ -30,7 +29,7 @@ def test_Tensor_methods():
     tens3.check_sanity()
 
     print('check size')
-    assert tens3.size == prod(data.shape)
+    assert tens3.size == np.prod(data.shape)
 
     # TODO reintroduce when implemented
     # print('check num_parameters')
