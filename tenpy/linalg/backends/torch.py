@@ -101,7 +101,8 @@ class TorchBlockBackend(AbstractBlockBackend):
         legs_before_new_leg = [n for n in range(legs[0]) if n not in legs]
         legs_after_new_leg = [n for n in range(legs[0] + 1, len(a.shape)) if n not in legs]
         permutation = legs_before_new_leg + legs + legs_after_new_leg
-        new_shape = [a.shape[n] for n in permutation]
+        new_shape = [a.shape[n] for n in legs_before_new_leg] + [prod([a.shape[n] for n in legs])] \
+            + [a.shape[n] for n in legs_after_new_leg]
         a = torch_module.permute(a, permutation)
         return torch_module.reshape(a, new_shape)
 

@@ -116,7 +116,8 @@ class NumpyBlockBackend(AbstractBlockBackend):
         legs_before_new_leg = [n for n in range(legs[0]) if n not in legs]
         legs_after_new_leg = [n for n in range(legs[0] + 1, len(a.shape)) if n not in legs]
         permutation = legs_before_new_leg + legs + legs_after_new_leg
-        new_shape = [a.shape[n] for n in permutation]
+        new_shape = [a.shape[n] for n in legs_before_new_leg] + [np.prod([a.shape[n] for n in legs])] \
+            + [a.shape[n] for n in legs_after_new_leg]
         a = np.transpose(a, permutation)
         return np.reshape(a, new_shape)
 

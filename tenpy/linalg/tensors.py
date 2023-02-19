@@ -586,14 +586,13 @@ def combine_legs(t: Tensor, legs: list[int | str], new_leg: ProductSpace = None)
     leg_idcs = t.get_leg_idcs(legs)
     if new_leg is None:
         new_leg = ProductSpace([t.legs[idx] for idx in leg_idcs])
-    old_legs = [t.legs[idx] for idx in leg_idcs]
     res_legs = [new_leg if idx == leg_idcs[0] else leg for idx, leg in enumerate(t.legs)
             if idx not in leg_idcs[1:]]
-    new_label = _combine_leg_labels(t.leg_labels)
-    res_labels = [new_label if idx == leg_idcs[0] else label for idx, label in enumerate(t.leg_labels)
+    new_label = _combine_leg_labels([t._labels[idx] for idx in leg_idcs])
+    res_labels = [new_label if idx == leg_idcs[0] else label for idx, label in enumerate(t._labels)
               if idx not in leg_idcs[1:]]
-    res_data = t.backend.combine_legs(t, leg_idcs=leg_idcs, new_leg=new_leg)
-    return Tensor(res_data, backend=t.backend, legs=res_legs, labels=res_labels)
+    res_data = t.backend.combine_legs(t, idcs=leg_idcs, new_leg=new_leg)
+    return Tensor(res_data, backend=t.backend, legs=res_legs, labels=res_labels, dtype=t.dtype)
 
 
 def split_leg(t: Tensor, leg: int | str) -> Tensor:
