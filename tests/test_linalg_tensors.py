@@ -228,7 +228,8 @@ def test_inner():
 
 def test_transpose():
     backend = NoSymmetryNumpyBackend()
-    data = np.random.random([3, 5]) + 1.j * np.random.random([3, 5, 7, 10])
+    shape = [3, 5, 7, 10]
+    data = np.random.random(shape) + 1.j * np.random.random(shape)
     t = tensors.Tensor.from_numpy(data, backend, labels=['a', 'b', 'c', 'd'])
     res = tensors.transpose(t, [2, 0, 3, 1])
     assert res.labels == ['c', 'a', 'd', 'b']
