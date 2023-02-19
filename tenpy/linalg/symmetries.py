@@ -5,7 +5,7 @@ from abc import ABC, abstractmethod
 from enum import Enum
 from itertools import product
 from numpy import prod
-from typing import TypeVar, Final
+from typing import TypeVar
 
 
 __all__ = ['Sector', 'FusionStyle', 'BraidingStyle', 'Symmetry', 'NoSymmetry', 'ProductSymmetry',
@@ -355,18 +355,18 @@ class FermionParity(Symmetry):
         return a
 
 
-no_symmetry: Final = NoSymmetry()
-z2_symmetry: Final = ZNSymmetry(N=2)
-z3_symmetry: Final = ZNSymmetry(N=3)
-z4_symmetry: Final = ZNSymmetry(N=4)
-z5_symmetry: Final = ZNSymmetry(N=5)
-z6_symmetry: Final = ZNSymmetry(N=6)
-z7_symmetry: Final = ZNSymmetry(N=7)
-z8_symmetry: Final = ZNSymmetry(N=8)
-z9_symmetry: Final = ZNSymmetry(N=9)
-u1_symmetry: Final = U1Symmetry()
-su2_symmetry: Final = SU2Symmetry()
-fermion_parity: Final = FermionParity()
+no_symmetry = NoSymmetry()
+z2_symmetry = ZNSymmetry(N=2)
+z3_symmetry = ZNSymmetry(N=3)
+z4_symmetry = ZNSymmetry(N=4)
+z5_symmetry = ZNSymmetry(N=5)
+z6_symmetry = ZNSymmetry(N=6)
+z7_symmetry = ZNSymmetry(N=7)
+z8_symmetry = ZNSymmetry(N=8)
+z9_symmetry = ZNSymmetry(N=9)
+u1_symmetry = U1Symmetry()
+su2_symmetry = SU2Symmetry()
+fermion_parity = FermionParity()
 
 
 # TODO fibonacci anyons ...
