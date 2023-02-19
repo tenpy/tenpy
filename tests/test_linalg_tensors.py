@@ -2,7 +2,7 @@
 # Copyright 2023-2023 TeNPy Developers, GNU GPLv3
 from multiprocessing.sharedctypes import Value
 import numpy as np
-from tenpy.linalg import tensors
+from tenpy.linalg.tensors import *
 from tenpy.linalg.backends import NoSymmetryNumpyBackend
 from tenpy.linalg.symmetries import VectorSpace
 import pytest
@@ -17,15 +17,15 @@ def test_Tensor_methods():
     legs = [VectorSpace.non_symmetric(d) for d in data.shape]
     
     print('checking __init__ with labels=None')
-    tens1 = tensors.Tensor(data, backend, legs, labels=None)
+    tens1 = Tensor(data, backend, legs, labels=None)
     tens1.check_sanity()
 
     print('checking __init__, partially labelled')
-    tens2 = tensors.Tensor(data2, backend, legs, labels=[None, 'a', 'b'])
+    tens2 = Tensor(data2, backend, legs, labels=[None, 'a', 'b'])
     tens2.check_sanity()
 
     print('checking __init__, fully labelled')
-    tens3 = tensors.Tensor(data, backend, legs, labels=['foo', 'a', 'b'])
+    tens3 = Tensor(data, backend, legs, labels=['foo', 'a', 'b'])
     tens3.check_sanity()
 
     print('check size')
@@ -72,7 +72,7 @@ def test_Tensor_methods():
     assert tens3.get_leg_idcs(['i', 'k', 1]) == [0, 2, 1]
 
     print('check item')
-    tens4 = tensors.Tensor(np.ones((1,)), backend, legs=[VectorSpace.non_symmetric(1)])
+    tens4 = Tensor(np.ones((1,)), backend, legs=[VectorSpace.non_symmetric(1)])
     assert np.allclose(tens4.item(), 1)
     
     print('check str and repr')
@@ -111,21 +111,21 @@ def test_Tensor_classmethods():
     data = np.random.random((2, 3, 10))
     
     print('checking from_numpy')
-    tens = tensors.Tensor.from_numpy(data, backend=backend)
+    tens = Tensor.from_numpy(data, backend=backend)
     assert np.allclose(data, tens.data)
 
     print('checking from_dense_block')
-    tens = tensors.Tensor.from_dense_block(data, backend=backend)
+    tens = Tensor.from_dense_block(data, backend=backend)
     assert np.allclose(data, tens.data)
 
     print('checking zero')
-    tens = tensors.Tensor.zero(backend, [2, 3, 4])
+    tens = Tensor.zero(backend, [2, 3, 4])
     assert np.allclose(tens.data, np.zeros([2, 3, 4]))
 
     print('checking eye')
-    tens = tensors.Tensor.eye(backend, 5)
+    tens = Tensor.eye(backend, 5)
     assert np.allclose(tens.data, np.eye(5))
-    tens = tensors.Tensor.eye(backend, [VectorSpace.non_symmetric(10), 4])
+    tens = Tensor.eye(backend, [VectorSpace.non_symmetric(10), 4])
     assert np.allclose(tens.data, np.eye(40).reshape((10, 4, 10, 4)))
 
 
@@ -140,58 +140,58 @@ def test_tdot():
     data3 = np.random.random((a.dim, b.dim))
     data4 = np.random.random((c.dim, b.dim))
     data5 = np.random.random((c.dim, a.dim, b.dim))
-    t1 = tensors.Tensor.from_numpy(data1, backend, legs=[a, b, c])
-    t2 = tensors.Tensor.from_numpy(data2, backend, legs=[b.dual, c.dual, d.dual])
-    t3 = tensors.Tensor.from_numpy(data3, backend, legs=[a.dual, b.dual])
-    t4 = tensors.Tensor.from_numpy(data4, backend, legs=[c.dual, b.dual])
-    t5 = tensors.Tensor.from_numpy(data5, backend, legs=[c.dual, a.dual, b.dual])
-    t1_labelled = tensors.Tensor.from_numpy(data1, backend, legs=[a, b, c], labels=['a', 'b', 'c'])
-    t2_labelled = tensors.Tensor.from_numpy(data2, backend, legs=[b.dual, c.dual, d.dual], labels=['b*', 'c*', 'd*'])
-    t3_labelled = tensors.Tensor.from_numpy(data3, backend, legs=[a.dual, b.dual], labels=['a*', 'b*'])
-    t4_labelled = tensors.Tensor.from_numpy(data4, backend, legs=[c.dual, b.dual], labels=['c*', 'b*'])
-    t5_labelled = tensors.Tensor.from_numpy(data5, backend, legs=[c.dual, a.dual, b.dual], labels=['c*', 'a*', 'b*'])
+    t1 = Tensor.from_numpy(data1, backend, legs=[a, b, c])
+    t2 = Tensor.from_numpy(data2, backend, legs=[b.dual, c.dual, d.dual])
+    t3 = Tensor.from_numpy(data3, backend, legs=[a.dual, b.dual])
+    t4 = Tensor.from_numpy(data4, backend, legs=[c.dual, b.dual])
+    t5 = Tensor.from_numpy(data5, backend, legs=[c.dual, a.dual, b.dual])
+    t1_labelled = Tensor.from_numpy(data1, backend, legs=[a, b, c], labels=['a', 'b', 'c'])
+    t2_labelled = Tensor.from_numpy(data2, backend, legs=[b.dual, c.dual, d.dual], labels=['b*', 'c*', 'd*'])
+    t3_labelled = Tensor.from_numpy(data3, backend, legs=[a.dual, b.dual], labels=['a*', 'b*'])
+    t4_labelled = Tensor.from_numpy(data4, backend, legs=[c.dual, b.dual], labels=['c*', 'b*'])
+    t5_labelled = Tensor.from_numpy(data5, backend, legs=[c.dual, a.dual, b.dual], labels=['c*', 'a*', 'b*'])
 
     print('contract one leg')
     expect = np.tensordot(data1, data2, (1, 0))
-    res1 = tensors.tdot(t1, t2, 1, 0).data
-    res2 = tensors.tdot(t1_labelled, t2_labelled, 1, 0).data
-    res3 = tensors.tdot(t1_labelled, t2_labelled, 'b', 'b*').data
+    res1 = tdot(t1, t2, 1, 0).data
+    res2 = tdot(t1_labelled, t2_labelled, 1, 0).data
+    res3 = tdot(t1_labelled, t2_labelled, 'b', 'b*').data
     assert np.allclose(res1, expect)
     assert np.allclose(res2, expect)
     assert np.allclose(res3, expect)
     
     print('contract two legs')
     expect = np.tensordot(data1, data2, ([1, 2], [0, 1]))
-    res1 = tensors.tdot(t1, t2, [1, 2], [0, 1]).data
-    res2 = tensors.tdot(t1_labelled, t2_labelled, [1, 2], [0, 1]).data
-    res3 = tensors.tdot(t1_labelled, t2_labelled, ['b', 'c'], ['b*', 'c*']).data
+    res1 = tdot(t1, t2, [1, 2], [0, 1]).data
+    res2 = tdot(t1_labelled, t2_labelled, [1, 2], [0, 1]).data
+    res3 = tdot(t1_labelled, t2_labelled, ['b', 'c'], ['b*', 'c*']).data
     assert np.allclose(res1, expect)
     assert np.allclose(res2, expect)
     assert np.allclose(res3, expect)
 
     print('contract all legs of first tensor')
     expect = np.tensordot(data3, data1, ([0, 1], [0, 1]))
-    res1 = tensors.tdot(t3, t1, [0, 1], [0, 1]).data
-    res2 = tensors.tdot(t3_labelled, t1_labelled, [0, 1], [0, 1]).data
-    res3 = tensors.tdot(t3_labelled, t1_labelled, ['a*', 'b*'], ['a', 'b']).data
+    res1 = tdot(t3, t1, [0, 1], [0, 1]).data
+    res2 = tdot(t3_labelled, t1_labelled, [0, 1], [0, 1]).data
+    res3 = tdot(t3_labelled, t1_labelled, ['a*', 'b*'], ['a', 'b']).data
     assert np.allclose(res1, expect)
     assert np.allclose(res2, expect)
     assert np.allclose(res3, expect)
 
     print('contract all legs of second tensor')
     expect = np.tensordot(data1, data4, ([1, 2], [1, 0]))
-    res1 = tensors.tdot(t1, t4, [1, 2], [1, 0]).data
-    res2 = tensors.tdot(t1_labelled, t4_labelled, [1, 2], [1, 0]).data
-    res3 = tensors.tdot(t1_labelled, t4_labelled, ['b', 'c'], ['b*', 'c*']).data
+    res1 = tdot(t1, t4, [1, 2], [1, 0]).data
+    res2 = tdot(t1_labelled, t4_labelled, [1, 2], [1, 0]).data
+    res3 = tdot(t1_labelled, t4_labelled, ['b', 'c'], ['b*', 'c*']).data
     assert np.allclose(res1, expect)
     assert np.allclose(res2, expect)
     assert np.allclose(res3, expect)
 
     print('scalar result')
     expect = np.tensordot(data1, data5, ([0, 1, 2], [1, 2, 0]))
-    res1 = tensors.tdot(t1, t5, [0, 1, 2], [1, 2, 0]).data
-    res2 = tensors.tdot(t1_labelled, t5_labelled, [0, 1, 2], [1, 2, 0]).data
-    res3 = tensors.tdot(t1_labelled, t5_labelled, ['a', 'b', 'c'], ['a*', 'b*', 'c*']).data
+    res1 = tdot(t1, t5, [0, 1, 2], [1, 2, 0]).data
+    res2 = tdot(t1_labelled, t5_labelled, [0, 1, 2], [1, 2, 0]).data
+    res3 = tdot(t1_labelled, t5_labelled, ['a', 'b', 'c'], ['a*', 'b*', 'c*']).data
     assert np.allclose(res1, expect)
     assert np.allclose(res2, expect)
     assert np.allclose(res3, expect)
@@ -201,10 +201,10 @@ def test_outer():
     backend = NoSymmetryNumpyBackend()
     data1 = np.random.random([3, 5])
     data2 = np.random.random([4, 8])
-    t1 = tensors.Tensor.from_numpy(data1, backend, labels=['a', 'f'])
-    t2 = tensors.Tensor.from_numpy(data2, backend, labels=['g', 'b'])
+    t1 = Tensor.from_numpy(data1, backend, labels=['a', 'f'])
+    t2 = Tensor.from_numpy(data2, backend, labels=['g', 'b'])
     expect = data1[:, :, None, None] * data2[None, None, :, :]
-    res = tensors.outer(t1, t2)
+    res = outer(t1, t2)
     assert np.allclose(expect, res.data)
     assert res.labels_are('a', 'f', 'g', 'b')
 
@@ -214,14 +214,14 @@ def test_inner():
     data1 = np.random.random([3, 5]) + 1.j * np.random.random([3, 5])
     data2 = np.random.random([3, 5]) + 1.j * np.random.random([3, 5])
     data3 = np.random.random([5, 3]) + 1.j * np.random.random([5, 3])
-    t1 = tensors.Tensor.from_numpy(data1, backend)
-    t2 = tensors.Tensor.from_numpy(data2, backend, labels=['a', 'b'])
-    t3 = tensors.Tensor.from_numpy(data3, backend, labels=['b', 'a'])
+    t1 = Tensor.from_numpy(data1, backend)
+    t2 = Tensor.from_numpy(data2, backend, labels=['a', 'b'])
+    t3 = Tensor.from_numpy(data3, backend, labels=['b', 'a'])
     expect1 = np.tensordot(np.conj(data1), data2, ([0, 1], [0, 1]))
-    res1 = tensors.inner(t1, t2)
+    res1 = inner(t1, t2)
     assert np.allclose(expect1, res1)
     expect2 = np.tensordot(np.conj(data2), data3, ([0, 1], [1, 0]))
-    res2 = tensors.inner(t2, t3)
+    res2 = inner(t2, t3)
     assert np.allclose(expect2, res2)
 
 
@@ -229,18 +229,69 @@ def test_transpose():
     backend = NoSymmetryNumpyBackend()
     shape = [3, 5, 7, 10]
     data = np.random.random(shape) + 1.j * np.random.random(shape)
-    t = tensors.Tensor.from_numpy(data, backend, labels=['a', 'b', 'c', 'd'])
-    res = tensors.transpose(t, [2, 0, 3, 1])
+    t = Tensor.from_numpy(data, backend, labels=['a', 'b', 'c', 'd'])
+    res = transpose(t, [2, 0, 3, 1])
     assert res.labels == ['c', 'a', 'd', 'b']
     assert np.allclose(res.data, np.transpose(data, [2, 0, 3, 1]))
     
 
 def test_trace():
-    pass  # FIXME    
+    backend = NoSymmetryNumpyBackend()
+
+    print('single legpair - default legs* args')
+    data = np.random.random([7, 7, 7]) + 1.j * np.random.random([7, 7, 7])
+    legs = [VectorSpace.non_symmetric(7), VectorSpace.non_symmetric(7), VectorSpace.non_symmetric(7).dual]
+    tens = Tensor.from_numpy(data, backend, legs, labels=['a', 'b', 'b*'])
+    expect = np.trace(data, axis1=-2, axis2=-1)
+    res = trace(tens)
+    assert res.labels_are('a')
+    assert np.allclose(expect, res.data)
+
+    print('single legpair - via idx or label')
+    expect = np.trace(data, axis1=0, axis2=2)
+    res_idx = trace(tens, 0, 2)
+    res_label = trace(tens, 'a', 'b*')
+    assert res_idx.labels_are('b')
+    assert np.allclose(res_idx.data, expect)
+    assert res_label.labels_are('b')
+    assert np.allclose(res_label.data, expect)
+
+    print('two legpairs')
+    data = np.random.random([11, 13, 11, 7, 13]) + 1.j * np.random.random([11, 13, 11, 7, 13])
+    expect = np.trace(np.trace(data, axis1=1, axis2=4), axis1=0, axis2=1)
+    a = VectorSpace.non_symmetric(11)
+    b = VectorSpace.non_symmetric(13)
+    c = VectorSpace.non_symmetric(7)
+    tens = Tensor.from_numpy(data, backend, [a, b.dual, a.dual, c, b], labels=['a', 'b*', 'a*', 'c', 'b'])
+    res_idx = trace(tens, [0, 1], [2, 4])
+    res_label = trace(tens, ['a', 'b*'], ['a*', 'b'])
+    assert res_idx.labels_are('c')
+    assert np.allclose(res_idx.data, expect)
+    assert res_label.labels_are('c')
+    assert np.allclose(res_label.data, expect)
+
+    print('scalar result')
+    data = np.random.random([11, 13, 11, 13]) + 1.j * np.random.random([11, 13, 11, 13])
+    expect = np.trace(np.trace(data, axis1=1, axis2=3), axis1=0, axis2=1)
+    a = VectorSpace.non_symmetric(11)
+    b = VectorSpace.non_symmetric(13)
+    tens = Tensor.from_numpy(data, backend, [a, b.dual, a.dual, b], labels=['a', 'b*', 'a*', 'b'])
+    res_idx = trace(tens, [0, 1], [2, 3])
+    res_label = trace(tens, ['a', 'b*'], ['a*', 'b'])
+    assert isinstance(res_idx, complex)
+    assert np.allclose(res_idx, expect)
+    assert isinstance(res_label, complex)
+    assert np.allclose(res_label, expect)
     
 
 def test_conj():
-    pass  # FIXME    
+    backend = NoSymmetryNumpyBackend()
+    data = np.random.random([2, 4, 5]) + 1.j * np.random.random([2, 4, 5])
+    tens = Tensor.from_numpy(data, backend, labels=['a', 'b', None])
+    res = conj(tens)
+    assert np.allclose(res.data, np.conj(data))
+    assert res.labels == ['a*', 'b*', None]
+    assert [l1.is_dual_of(l2) for l1, l2 in zip(res.legs, tens.legs)]
     
 
 def test_combine_split():
