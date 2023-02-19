@@ -92,3 +92,4 @@ def test_u1_symmetry():
 # TODO ZN, SU2, Fermion
 
 # TODO VectorSpace, ProductSpace
+# TODO test VectorSpace.is_trivial

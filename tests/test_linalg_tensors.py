@@ -295,20 +295,75 @@ def test_conj():
     
 
 def test_combine_split():
-    pass  # FIXME    
+    backend = NoSymmetryNumpyBackend()
+    data = np.random.random([2, 4, 7, 5]) + 1.j * np.random.random([2, 4, 7, 5])
+    tens = Tensor.from_numpy(data, backend, labels=['a', 'b', 'c', 'd'])
+
+    print('check by idx')
+    res = combine_legs(tens, [1, 2])
+    assert np.allclose(res.data, np.reshape(data, [2, 28, 5]))
+    assert res.labels == ['a', '(b.c)', 'd']
+    split = split_leg(res, 1)
+    assert np.allclose(split.data, data)
+    assert split.labels == ['a', 'b', 'c', 'd']
+
+    print('check by label')
+    res = combine_legs(tens, ['b', 'd'])
+    expect = np.reshape(np.transpose(data, [0, 1, 3, 2]), [2, 20, 7])
+    assert np.allclose(res.data, expect)
+    assert res.labels == ['a', '(b.d)', 'c']
+    split = split_leg(res, '(b.d)')
+    assert np.allclose(split.data, np.transpose(data, [0, 1, 3, 2]))
+    assert split.labels == ['a', 'b', 'd', 'c']
+
+    print('check splitting a non-combined leg raises')
+    with pytest.raises(ValueError):
+        split_leg(res, 0)
+    with pytest.raises(ValueError):
+        split_leg(res, 'a')
     
 
 def test_is_scalar():
-    pass  # FIXME    
+    backend = NoSymmetryNumpyBackend()
+    assert is_scalar(1) 
+    assert is_scalar(0.) 
+    assert is_scalar(1. + 2.j) 
+    scalar_tens = Tensor.from_numpy([[1.]], backend)
+    assert is_scalar(scalar_tens)
+    non_scalar_tens = Tensor.from_numpy([[1., 2.], [3., 4.]], backend)
+    assert not is_scalar(non_scalar_tens)
     
 
 def test_allclose():
+    backend = NoSymmetryNumpyBackend()
     pass  # FIXME 
     
 
 def test_squeeze_legs():
-    pass  # FIXME 
+    backend = NoSymmetryNumpyBackend()
+    data = np.random.random([2, 1, 7, 1, 1]) + 1.j * np.random.random([2, 1, 7, 1, 1])
+    tens = Tensor.from_numpy(data, backend, labels=['a', 'b', 'c', 'd', 'e'])
+
+    print('squeezing all legs (default arg)')
+    res = squeeze_legs(tens)
+    assert np.allclose(res.data, data[:, 0, :, 0, 0])
+    assert res.labels == ['a', 'c']
+
+    print('squeeze specific leg by idx')
+    res = squeeze_legs(tens, 1)
+    assert np.allclose(res.data, data[:, 0, :, :, :])
+    assert res.labels == ['a', 'c', 'd', 'e']
+
+    print('squeeze legs by labels')
+    res = squeeze_legs(tens, ['b', 'e'])
+    assert np.allclose(res.data, data[:, 0, :, :, 0])
+    assert res.labels == ['a', 'c', 'd']
     
 
 def test_norm():
-    pass  # FIXME
+    backend = NoSymmetryNumpyBackend()
+    data = np.random.random([2, 3, 7]) + 1.j * np.random.random([2, 3, 7])
+    tens = Tensor.from_numpy(data, backend)
+    res = norm(tens)
+    expect = np.linalg.norm(data)
+    assert np.allclose(res, expect)
