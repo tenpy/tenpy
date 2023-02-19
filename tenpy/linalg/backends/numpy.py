@@ -128,7 +128,7 @@ class NumpyBlockBackend(AbstractBlockBackend):
         return np.allclose(a, b, rtol=rtol, atol=atol)
 
     def block_squeeze_legs(self, a: Block, idcs: list[int]) -> Block:
-        return np.squeeze(a, idcs)
+        return np.squeeze(a, tuple(idcs))
 
     def block_norm(self, a: Block) -> float:
         return np.linalg.norm(a, ord=2)
