@@ -25,6 +25,8 @@ class Dtype(Enum):
 
 def _dual_leg_label(label: str) -> str:
     """return the label that a leg should have after conjugation"""
+    if label is None:
+        return None
     if label.endswith('*'):
         return label[:-1]
     else:
@@ -562,7 +564,8 @@ def conj(t: Tensor) -> Tensor:
     Labels are adjuste as `'p'` -> `'p*'` and `'p*'` -> `'p'`
     """
     # TODO (Jakob) think about this in the context of pivotal category with duals
-    return Tensor(t.backend.conj(t), backend=t.backend, legs=[l.dual for l in t.legs])
+    return Tensor(t.backend.conj(t), backend=t.backend, legs=[l.dual for l in t.legs],
+                  labels=[_dual_leg_label(l) for l in t._labels], dtype=t.dtype)
 
 
 # TODO there should be an operation that converts only one or some of the legs to dual
