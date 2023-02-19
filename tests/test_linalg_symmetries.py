@@ -1,4 +1,5 @@
 """A collection of tests for tenpy.linalg.symmetries."""
+# Copyright 2023-2023 TeNPy Developers, GNU GPLv3
 
 from tenpy.linalg import symmetries
 

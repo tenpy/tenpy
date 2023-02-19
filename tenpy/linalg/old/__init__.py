@@ -1,0 +1,1 @@
+# Copyright 2023-2023 TeNPy Developers, GNU GPLv3

@@ -1,3 +1,5 @@
+# Copyright 2023-2023 TeNPy Developers, GNU GPLv3
+
 from __future__ import annotations
 import math
 from .tensors import DiagonalTensor, Tensor, get_same_backend

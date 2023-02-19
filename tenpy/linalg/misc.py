@@ -1,3 +1,5 @@
+# Copyright 2023-2023 TeNPy Developers, GNU GPLv3
+
 from __future__ import annotations
 from typing import Sequence, TypeVar
 import numpy as np

@@ -1,3 +1,5 @@
+# Copyright 2023-2023 TeNPy Developers, GNU GPLv3
+
 from __future__ import annotations
 from abc import ABC, abstractmethod
 from enum import Enum
