@@ -443,7 +443,7 @@ class VectorSpace:
 
     @property
     def is_trivial(self) -> bool:
-        return len(self.sectors) == 1
+        return self.sectors == [self.symmetry.trivial_sector] and self.multiplicities == [1]
 
     @property
     def num_parameters(self) -> int:
