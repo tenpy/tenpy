@@ -1,5 +1,5 @@
 """The tenpy entry point, called by ``python -m tenpy``."""
-# Copyright 2020-2021 TeNPy Developers, GNU GPLv3
+# Copyright 2020-2023 TeNPy Developers, GNU GPLv3
 
 import tenpy
 

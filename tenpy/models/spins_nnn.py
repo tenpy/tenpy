@@ -14,7 +14,7 @@ latter by using :meth:`~tenpy.models.model.MPOModel.group_sites` and
 :meth:`~tenpy.models.model.NearestNeighbormodel.from_MPOModel`.
 An example for such a case is given in the file ``examples/c_tebd.py``.
 """
-# Copyright 2018-2021 TeNPy Developers, GNU GPLv3
+# Copyright 2018-2023 TeNPy Developers, GNU GPLv3
 
 import numpy as np
 

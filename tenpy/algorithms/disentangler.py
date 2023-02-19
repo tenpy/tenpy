@@ -7,7 +7,7 @@ For now, this is written for disentangling purifications; could be generalized t
 
 .. autodata:: disentanglers_atom_parse_dict
 """
-# Copyright 2018-2021 TeNPy Developers, GNU GPLv3
+# Copyright 2018-2023 TeNPy Developers, GNU GPLv3
 
 import numpy as np
 import logging

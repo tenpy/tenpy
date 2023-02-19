@@ -3,7 +3,7 @@
 These functions can be used in d_dmrg.py and e_tdvp to replace
 the eigsh and expm_mulitply calls, as commented out in the code.
 """
-# Copyright 2021-2022 TeNPy Developers, GNU GPLv3
+# Copyright 2021-2023 TeNPy Developers, GNU GPLv3
 
 from scipy.sparse.linalg import expm
 import numpy as np

@@ -2,7 +2,7 @@
 
 .. todo ::     add further terms (e.g. c^dagger c^dagger + h.c.) to the Hamiltonian.
 """
-# Copyright 2018-2021 TeNPy Developers, GNU GPLv3
+# Copyright 2018-2023 TeNPy Developers, GNU GPLv3
 
 import numpy as np
 
