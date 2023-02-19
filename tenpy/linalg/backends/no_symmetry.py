@@ -6,6 +6,8 @@ from .abstract_backend import AbstractBackend, AbstractBlockBackend, Data, Block
 from ..symmetries import ProductSpace, VectorSpace, no_symmetry, Symmetry
 from ..tensors import Tensor, Dtype
 
+__all__ = ['AbstractNoSymmetryBackend']
+
 
 # TODO eventually remove AbstractBlockBackend inheritance, it is not needed,
 #  jakob only keeps it around to make his IDE happy

@@ -9,11 +9,13 @@ import scipy
 
 from .abelian import AbstractAbelianBackend
 from .abstract_backend import AbstractBlockBackend, Block, Data
-from .no_symmtery import AbstractNoSymmetryBackend
+from .no_symmetry import AbstractNoSymmetryBackend
 from .nonabelian import AbstractNonabelianBackend
 from ..misc import inverse_permutation
 from ..symmetries import VectorSpace
 from ..tensors import Tensor, Dtype
+
+__all__ = ['NumpyBlockBackend', 'NoSymmetryNumpyBackend', 'AbelianNumpyBackend', 'NonabelianNumpyBackend']
 
 
 class NumpyBlockBackend(AbstractBlockBackend):

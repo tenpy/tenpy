@@ -6,6 +6,9 @@ from .numpy import NoSymmetryNumpyBackend
 from .torch import NoSymmetryTorchBackend
 from ..symmetries import Symmetry, no_symmetry, AbelianGroup
 
+__all__ = ['get_backend']
+
+
 _backend_lookup = dict(
     no_symmetry=dict(
         numpy=(NoSymmetryNumpyBackend, {}),

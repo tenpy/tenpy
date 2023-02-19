@@ -9,6 +9,10 @@ from .misc import duplicate_entries, force_str_len
 from .dummy_config import config
 from .symmetries import VectorSpace, ProductSpace
 
+__all__ = ['Tensor', 'DiagonalTensor', 'tdot', 'outer', 'inner', 'transpose', 'trace', 'conj',
+           'combine_legs', 'split_leg', 'is_scalar', 'allclose', 'squeeze_legs', 'norm', 
+           'get_same_backend', 'Dtype']
+
 
 float32 = np.float32
 float64 = np.float64
@@ -19,7 +23,7 @@ Dtype = TypeVar('Dtype', bound=type)
 # TODO need more dtypes than that?
 
 
-def dual_leg_label(label: str) -> str:
+def _dual_leg_label(label: str) -> str:
     """return the label that a leg should have after conjugation"""
     if label.endswith('*'):
         return label[:-1]
@@ -27,11 +31,11 @@ def dual_leg_label(label: str) -> str:
         return label + '*'
 
 
-def combine_leg_labels(labels: list[str | None]) -> str:
+def _combine_leg_labels(labels: list[str | None]) -> str:
     return '(' + '.'.join(f'?{n}' if l is None else l for n, l in enumerate(labels)) + ')'
 
 
-def split_leg_label(label: str) -> list[str | None]:
+def _split_leg_label(label: str) -> list[str | None]:
     if label.startswith('(') and label.endswith(')'):
         labels = label.lstrip('(').rstrip(')').split('.')
         return [None if l.startswith('?') else l for l in labels]
@@ -169,7 +173,7 @@ class Tensor:
         components_strs = []
         for leg, label in zip(self.legs, self.labels):
             if isinstance(leg, ProductSpace):
-                sublabels = split_leg_label(label)
+                sublabels = _split_leg_label(label)
                 components = ' ⊗ '.join(f'({l}: {s.dim})' for l, s in zip(sublabels, leg.spaces))
             else:
                 components = ' ⊕ '.join(f'({mult} * {leg.symmetry.sector_str(sect)})'
@@ -197,7 +201,7 @@ class Tensor:
         raise TypeError('Tensor object is not subscriptable')
 
     def __neg__(self):
-        return mul(-1, self)
+        return _mul(-1, self)
 
     def __pos__(self):
         return self
@@ -208,26 +212,26 @@ class Tensor:
 
     def __add__(self, other):
         if isinstance(other, Tensor):
-            return add(self, other)
+            return _add(self, other)
         else:
             return NotImplemented
 
     def __sub__(self, other):
         if isinstance(other, Tensor):
             # TODO is this efficient enough?
-            return add(self, mul(-1, other))
+            return _add(self, _mul(-1, other))
         else:
             return NotImplemented
 
     def __mul__(self, other):
         if isinstance(other, Tensor):
             if all(leg.dim == 1 for leg in self.legs):
-                return mul(self.item(), other)
+                return _mul(self.item(), other)
             if all(leg.dim == 1 for leg in other.legs):
-                return mul(other.item(), self)
+                return _mul(other.item(), self)
             raise ValueError('Tensors can only be multiplied with scalars') from None
         if isinstance(other, (int, float, complex)):
-            return mul(other, self)
+            return _mul(other, self)
         return NotImplemented
 
     __rmul__ = __mul__  # all allowed multiplications are commutative
@@ -382,7 +386,7 @@ class DiagonalTensor(Tensor):
 # TODO is there a use for a special Scalar(DiagonalTensor) class?
 
 
-def match_label_order(a: Tensor, b: Tensor) -> Iterable[int] | None:
+def _match_label_order(a: Tensor, b: Tensor) -> Iterable[int] | None:
     """Determine the order of legs of b, such that they match the legs of a.
     If config.stric_labels, this is a permutation determined by the labels, otherwise it is None.
     A None return indicates range(b.num_legs), i.e. that no trasnpose is needed.
@@ -405,17 +409,17 @@ def match_label_order(a: Tensor, b: Tensor) -> Iterable[int] | None:
     return b.get_leg_idcs(a.labels)
 
 
-def add(a: Tensor, b: Tensor) -> Tensor:
+def _add(a: Tensor, b: Tensor) -> Tensor:
     # TODO if one but not both is a DiagonalTensor, we need to convert it to Tensor
     backend = get_same_backend(a, b)
-    b_order = match_label_order(a, b)
+    b_order = _match_label_order(a, b)
     if b_order is not None:
         b = transpose(b, b_order)
     res_data = backend.add(a, b)
     return Tensor(res_data, backend=backend, legs=a.legs, labels=a.labels)
 
 
-def mul(a: float | complex, b: Tensor) -> Tensor:
+def _mul(a: float | complex, b: Tensor) -> Tensor:
     res_data = b.backend.mul(a, b)
     return Tensor(res_data, backend=b.backend, legs=b.legs, labels=b.labels)
 
@@ -457,7 +461,7 @@ def tdot(t1: Tensor, t2: Tensor,
     open_legs2 = [leg for idx, leg in enumerate(t2.legs) if idx not in leg_idcs2]
     open_labels1 = [leg for idx, leg in enumerate(t1.labels) if idx not in leg_idcs1]
     open_labels2 = [leg for idx, leg in enumerate(t2.labels) if idx not in leg_idcs2]
-    res_labels = get_result_labels(open_labels1, open_labels2, relabel1, relabel2)
+    res_labels = _get_result_labels(open_labels1, open_labels2, relabel1, relabel2)
     res_data = backend.tdot(t1, t2, leg_idcs1, leg_idcs2)
     res_legs = open_legs1 + open_legs2
     if len(res_legs) == 0:
@@ -470,7 +474,7 @@ def tdot(t1: Tensor, t2: Tensor,
 def outer(t1: Tensor, t2: Tensor, relabel1: dict[str, str] = None, relabel2: dict[str, str] = None) -> Tensor:
     """outer product, aka tensor product, aka direct product of two tensors"""
     backend = get_same_backend(t1, t2)
-    res_labels = get_result_labels(t1.labels, t2.labels, relabel1, relabel2)
+    res_labels = _get_result_labels(t1.labels, t2.labels, relabel1, relabel2)
     res_data = backend.outer(t1, t2)
     return Tensor(res_data, backend=backend, legs=t1.legs + t2.legs, labels=res_labels)
 
@@ -485,7 +489,7 @@ def inner(t1: Tensor, t2: Tensor) -> complex:
     """
     if t1.num_legs != t2.num_legs:
         raise ValueError('Tensors need to have the same number of legs')
-    leg_order_2 = match_label_order(t1, t2)
+    leg_order_2 = _match_label_order(t1, t2)
     if leg_order_2 is None:
         leg_order_2 = range(t2.num_legs)
     if not all(t1.legs[n1] == t2.legs[n2] for n1, n2 in enumerate(leg_order_2)):
@@ -561,7 +565,7 @@ def combine_legs(t: Tensor, legs: list[int | str], new_leg: ProductSpace = None)
     old_legs = [t.legs[idx] for idx in leg_idcs]
     res_legs = [new_leg if idx == leg_idcs[0] else leg for idx, leg in enumerate(t.legs)
             if idx not in leg_idcs[1:]]
-    new_label = combine_leg_labels(t.leg_labels)
+    new_label = _combine_leg_labels(t.leg_labels)
     res_labels = [new_label if idx == leg_idcs[0] else label for idx, label in enumerate(t.leg_labels)
               if idx not in leg_idcs[1:]]
     res_data = t.backend.combine_legs(t, leg_idcs=leg_idcs, new_leg=new_leg)
@@ -580,7 +584,7 @@ def split_leg(t: Tensor, leg: int | str) -> Tensor:
     if not isinstance(t.legs[leg_idx]):
         raise ValueError(f'Leg {leg} is not a ProductSpace.')
     legs = t.legs[:leg_idx] + t.legs[leg_idx].spaces + t.legs[leg_idx + 1:]
-    labels = t.labels[:leg_idx] + split_leg_label(t.labels[leg_idx]) + t.labels[leg_idx + 1:]
+    labels = t.labels[:leg_idx] + _split_leg_label(t.labels[leg_idx]) + t.labels[leg_idx + 1:]
     res_data = t.backend.split_leg(t, leg_idx=leg_idx)
     return Tensor(res_data, backend=t.backend, legs=legs, labels=labels)
 
@@ -600,6 +604,8 @@ def allclose(a: Tensor, b: Tensor, rtol=1e-05, atol=1e-08) -> bool:
     """
     If a and b are equal up to numerical tolerance, that is if `norm(a - b) <= atol + rtol * norm(a)`.
     Note that the definition is not symmetric under exchanging `a` and `b`.
+
+    TODO "all" isnt really reflecting what going on. different name?
     """
     assert rtol >= 0
     assert atol >= 0
@@ -622,7 +628,7 @@ def allclose(a: Tensor, b: Tensor, rtol=1e-05, atol=1e-08) -> bool:
     return diff <= atol + rtol * a_norm
 
 
-ALL_TRIVIAL_LEGS = object()
+ALL_TRIVIAL_LEGS = object()  # TODO use None instead ...
 
 
 def squeeze_legs(t: Tensor, legs: int | str | list[int | str] = ALL_TRIVIAL_LEGS) -> Tensor:
@@ -648,7 +654,7 @@ def norm(t: Tensor) -> float:
     return t.backend.norm(t)
 
 
-def get_result_labels(legs1: list[str | None], legs2: list[str | None],
+def _get_result_labels(legs1: list[str | None], legs2: list[str | None],
                       relabel1: dict[str, str] | None, relabel2: dict[str, str] | None) -> list[str]:
     """
     Utility function to combine two lists of leg labels, such that they can appear on the same tensor.

@@ -6,6 +6,7 @@ from .backends import AbstractBackend
 from .symmetries import VectorSpace
 from .tensors import Tensor
 
+__all__ = ['uniform', 'normal']
 
 def uniform() -> Tensor:
     # TODO is there even a useful and basis-independent notion of a uniform probability distribution?

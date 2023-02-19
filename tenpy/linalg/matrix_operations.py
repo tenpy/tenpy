@@ -4,6 +4,8 @@ from __future__ import annotations
 import math
 from .tensors import DiagonalTensor, Tensor, get_same_backend
 
+__all__ = ['svd', 'truncate_svd', 'svd_split', 'leg_bipartition', 'exp', 'log']
+
 
 def svd(a: Tensor, u_legs: list[int | str] = None, vh_legs: list[int | str] = None,
         new_labels: tuple[str, ...] = None, options=None) -> tuple[Tensor, DiagonalTensor, Tensor]:
