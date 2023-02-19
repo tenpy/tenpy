@@ -532,7 +532,7 @@ def transpose(t: Tensor, permutation: list[int]) -> Tensor:
         print('dummy warning!')
     assert len(permutation) == t.num_legs
     assert set(permutation) == set(range(t.num_legs))
-    res_data = t.backend.transpose(t)
+    res_data = t.backend.transpose(t, permutation)
     return Tensor(res_data, backend=t.backend, legs=[t.legs[n] for n in permutation],
                   labels=[t.labels[n] for n in permutation])
 
