@@ -9,7 +9,7 @@ from .no_symmetry import AbstractNoSymmetryBackend
 from .nonabelian import AbstractNonabelianBackend
 from ..misc import inverse_permutation
 from ..symmetries import VectorSpace
-from ..tensors import Tensor, Dtype, float32, float64, complex64, complex128
+from ..tensors import Tensor, Dtype
 
 __all__ = ['TorchBlockBackend', 'NoSymmetryTorchBackend', 'AbelianTorchBackend', 'NonabelianTorchBackend']
 
@@ -26,19 +26,17 @@ class TorchBlockBackend(AbstractBlockBackend):
             raise ImportError('Could not import torch. Use a different backend or install torch.') from e
         torch_module = torch
         super().__init__()
-        self.dtype_map1 = {
-            torch.float32: float32,
-            torch.float64: float64,
-            torch.complex64: complex64,
-            torch.complex128: complex128,
+        self.tenpy_dtype_map = {
+            torch.float32: Dtype.float32,
+            torch.float64: Dtype.float64,
+            torch.complex64: Dtype.complex64,
+            torch.complex128: Dtype.complex128,
         }
-        self.dtype_map2 = {
-            float32: torch.float32,
-            float64: torch.float64,
-            complex64: torch.complex64,
-            complex128: torch.complex128,
-            float: float,
-            complex: complex
+        self.backend_dtype_map = {
+            Dtype.float32: torch.float32,
+            Dtype.float64: torch.float64,
+            Dtype.complex64: torch.complex64,
+            Dtype.complex128: torch.complex128,
         }
 
     def block_is_real(self, a: Block):
@@ -54,10 +52,10 @@ class TorchBlockBackend(AbstractBlockBackend):
         return a.item()
 
     def block_dtype(self, a: Block) -> Dtype:
-        return self.dtype_map1[a.dtype]
+        return self.tenpy_dtype_map[a.dtype]
 
     def block_to_dtype(self, a: Block, dtype: Dtype) -> Block:
-        return a.type(self.dtype_map2[dtype])
+        return a.type(self.backend_dtype_map[dtype])
 
     def block_copy(self, a: Block) -> Block:
         return torch_module.tensor(a)
@@ -148,11 +146,11 @@ class TorchBlockBackend(AbstractBlockBackend):
         return torch_module.tensor(a)
 
     def zero_block(self, shape: list[int], dtype: Dtype) -> Block:
-        return torch_module.zeros(shape, dtype=self.dtype_map2[dtype])
+        return torch_module.zeros(shape, dtype=self.backend_dtype_map[dtype])
     
     def eye_block(self, legs: list[int], dtype: Dtype) -> Data:
         matrix_dim = prod(legs)
-        eye = torch_module.eye(matrix_dim, dtype=self.dtype_map2[dtype])
+        eye = torch_module.eye(matrix_dim, dtype=self.backend_dtype_map[dtype])
         eye = torch_module.reshape(eye, legs + legs)
         return eye
 

@@ -23,8 +23,8 @@ class AbstractNoSymmetryBackend(AbstractBackend, AbstractBlockBackend, ABC):
         A single block of the AbstractBlockBackend, e.g. a numpy.ndarray for NumpyBlockBackend.
     """
 
-    def get_dtype(self, a: Tensor) -> Dtype:
-        return self.block_dtype(a.data)
+    def get_dtype_from_data(self, a: Data) -> Dtype:
+        return self.block_dtype(a)
 
     def to_dtype(self, a: Tensor, dtype: Dtype) -> Data:
         return self.block_to_dtype(a.data, dtype)

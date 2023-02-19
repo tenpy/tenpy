@@ -26,7 +26,7 @@ __all__ = ['AbelianBlockData', 'AbelianVectorSpaceData', 'AbelianProductSpaceDat
 @dataclass
 class AbelianBlockData:
     """Data stored in a tensor for AbelianBlockData"""
-    dtype : Dtype  # numpy dtype (more than just np.float64)  # TODO: revert to using custom dtypes?
+    dtype : Dtype  # data type
     qtotal : np.ndarray  # total charge
     blocks : List[Block]  # The actual entries of the tensor. Formerly known as Array._data
     qdata : np.ndarray  # For each of the blocks entries the qindices of the different legs.
@@ -74,8 +74,8 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
                     leg._abelian_data = AbelianVectorSpaceData(leg)
 
 
-    def get_dtype(self, a: Tensor) -> Dtype:
-        return a.data.dtype  # TODO type vs numpy dtype?
+    def get_dtype_from_data(self, a: Data) -> Dtype:
+        return a.dtype
 
     def to_dtype(self, a: Tensor, dtype: Dtype) -> Data:
         data = a.data.copy()  # TODO: should this make a copy?

@@ -41,7 +41,7 @@ class AbstractBackend(ABC):
         pass
 
     @abstractmethod
-    def get_dtype(self, a: Tensor) -> Dtype:
+    def get_dtype_from_data(self, a: Data) -> Dtype:
         ...
 
     @abstractmethod

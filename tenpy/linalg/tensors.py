@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-from typing import Iterable, TypeVar
+from typing import Iterable
 import numpy as np
+from enum import Enum, auto
 
 from .misc import duplicate_entries, force_str_len
 from .dummy_config import config
@@ -14,14 +15,13 @@ __all__ = ['Tensor', 'DiagonalTensor', 'tdot', 'outer', 'inner', 'transpose', 't
            'get_same_backend', 'Dtype']
 
 
-float32 = np.float32
-float64 = np.float64
-complex64 = np.complex64
-complex128 = np.complex128
-SUPPORTED_DTYPES = [float32, float64, complex64, complex128]
-Dtype = TypeVar('Dtype', bound=type)
-# TODO need more dtypes than that?
-
+class Dtype(Enum):
+    # TODO expose those in some high-level init, maybe even as tenpy.float32 ?
+    float32 = auto()
+    float64 = auto()
+    complex64 = auto()
+    complex128 = auto()
+    
 
 def _dual_leg_label(label: str) -> str:
     """return the label that a leg should have after conjugation"""
@@ -57,10 +57,26 @@ class Tensor:
     labels : list of {``None``, str}
     """
 
-    def __init__(self, data, backend, legs: list[VectorSpace], labels: list[str | None] = None):
+    def __init__(self, data, backend, legs: list[VectorSpace], labels: list[str | None] = None, 
+                 dtype: Dtype = None):
         """
-        This constructor is not user-friendly. Use as_tensor instead.
+        This constructor is not user-friendly. 
+        Use as_tensor instead.  TODO point to which methods here?
         Inputs are not checked for consistency.
+
+        Parameters
+        ----------
+        data
+            The numerical data ("free parameters") comprising the tensor. type is backend-specific
+        backend
+            The backend for the Tensor
+        legs : list[VectorSpace]
+            The legs of the Tensor
+        labels : list[str | None] | None
+            Labels for the legs. If None, translates to ``[None, None, ...]`` of appropriate length
+        dtype : 
+            Datatype of the tensor. If ``None``, it is inferred from `data`.
+            Note that no type-conversion is done by this contructor!
         """
         self.data = data
         self.backend = backend
@@ -70,10 +86,10 @@ class Tensor:
         self.num_legs = len(legs)
         self.symmetry = legs[0].symmetry
         self.backend.finalize_Tensor_init(self)
-
-    @property
-    def dtype(self):
-        return self.backend.get_dtype(self)
+        if dtype is None:
+            self.dtype = backend.get_dtype_from_data(data)
+        else:
+            self.dtype = dtype
 
     @property
     def parent_space(self) -> VectorSpace:
@@ -86,6 +102,7 @@ class Tensor:
         assert self.backend.supports_symmetry(self.symmetry)
         assert all(l.symmetry == self.symmetry for l in self.legs)
         assert len(self.legs) == self.num_legs > 0
+        assert self.backend.get_dtype_from_data(self.data) == self.dtype
 
     @property
     def size(self) -> int:
@@ -262,7 +279,7 @@ class Tensor:
         return np.asarray(self.backend.to_dense_block(self.data), dtype)
 
     @classmethod
-    def from_numpy(cls, array: np.ndarray, backend, legs: list[VectorSpace]=None, dtype=None,
+    def from_numpy(cls, array: np.ndarray, backend, legs: list[VectorSpace]=None, dtype: Dtype = None,
                    labels: list[str | None] = None, atol: float = 1e-8, rtol: float = 1e-5) -> Tensor:
         """Convert a numpy array to a Tensor with given symmetry, if the array is symmetric under it.
         If data is not symmetric under the symmetry i.e. if
@@ -286,12 +303,12 @@ class Tensor:
         labels : list of {str | None}, optional
             Labels associated with each leg, ``None`` for unnamed legs.
         """
-        block = backend.block_from_numpy(np.asarray(array, dtype=dtype))
+        block = backend.block_from_numpy(np.asarray(array))
         return cls.from_dense_block(block=block, backend=backend, legs=legs, labels=labels, atol=atol,
-                                    rtol=rtol)
+                                    rtol=rtol, dtype=dtype)
 
     @classmethod
-    def from_dense_block(cls, block, backend, legs: list[VectorSpace]=None,
+    def from_dense_block(cls, block, backend, legs: list[VectorSpace]=None, dtype: Dtype=None,
                          labels: list[str | None] = None, atol: float = 1e-8, rtol: float = 1e-5
                          ) -> Tensor:
         """Convert a dense block of the backend to a Tensor with given symmetry, if the block is
@@ -313,19 +330,23 @@ class Tensor:
             The vectorspaces associated with legs of the tensors. Contains symmetry data.
             If ``None`` (default), trivial legs of appropriate dimension are assumed.
         dtype : ``np.dtype``, optional
-            The data type of the Tensor entries. Defaults to dtype of `array`
+            The data type of the Tensor entries. Defaults to dtype of `block`
         labels : list of {str | None}, optional
             Labels associated with each leg, ``None`` for unnamed legs.
         """
         is_real = False  # FIXME dummy
         if legs is None:
             legs = [VectorSpace.non_symmetric(d, is_real=is_real) for d in backend.block_shape(block)]
+        if dtype is None:
+            dtype = backend.block_dtype(block)
+        else:
+            block = backend.block_to_dtype(block, dtype)
         data = backend.from_dense_block(block, legs=legs, atol=atol, rtol=rtol)
-        return cls(data=data, backend=backend, legs=legs, labels=labels)
+        return cls(data=data, backend=backend, legs=legs, labels=labels, dtype=dtype)
 
     @classmethod
     def zero(cls, backend, legs: list[VectorSpace] | list[int], labels: list[str | None] = None,
-             dtype: Dtype = complex128) -> Tensor:
+             dtype: Dtype = Dtype.complex128) -> Tensor:
         """A zero tensor"""
         if any(isinstance(l, int) for l in legs):
             assert all(isinstance(l, int) for l in legs)
@@ -335,7 +356,7 @@ class Tensor:
 
     @classmethod
     def eye(cls, backend, legs_or_dims: int | VectorSpace | list[int | VectorSpace], 
-            labels: list[str | None] = None, dtype: Dtype = complex128) -> Tensor:
+            labels: list[str | None] = None, dtype: Dtype = Dtype.complex128) -> Tensor:
         """The identity map from one group of legs to their duals.
 
         Parameters
@@ -349,7 +370,7 @@ class Tensor:
         labels : list[str | None], optional
             Labels associated with each leg, ``None`` for unnamed legs.
         dtype : Dtype, optional
-            The data type of the Tensor entries. Defaults to dtype of `array`.
+            The data type of the Tensor entries.
 
         """
         if isinstance(legs_or_dims, int):

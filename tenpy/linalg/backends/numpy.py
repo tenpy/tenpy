@@ -19,6 +19,23 @@ __all__ = ['NumpyBlockBackend', 'NoSymmetryNumpyBackend', 'AbelianNumpyBackend',
 class NumpyBlockBackend(AbstractBlockBackend):
     svd_algorithms = ['gesdd', 'gesvd', 'robust', 'robust_silent']
 
+    tenpy_dtype_map = {
+        np.float32: Dtype.float32,
+        np.float64: Dtype.float64,
+        np.complex64: Dtype.complex64,
+        np.complex128: Dtype.complex128,
+        np.dtype('float32'): Dtype.float32,
+        np.dtype('float64'): Dtype.float64,
+        np.dtype('complex64'): Dtype.complex64,
+        np.dtype('complex128'): Dtype.complex128,
+    }
+    backend_dtype_map = {
+        Dtype.float32: np.float32,
+        Dtype.float64: np.float64,
+        Dtype.complex64: np.complex64,
+        Dtype.complex128: np.complex128,
+    }
+
     def block_is_real(self, a: Block):
         return not np.iscomplexobj(a)
 
@@ -32,10 +49,10 @@ class NumpyBlockBackend(AbstractBlockBackend):
         return a.item()
 
     def block_dtype(self, a: Block) -> Dtype:
-        return a.dtype
+        return self.tenpy_dtype_map[a.dtype]
 
     def block_to_dtype(self, a: Block, dtype: Dtype) -> Block:
-        return np.asarray(a, dtype=dtype)
+        return np.asarray(a, dtype=self.backend_dtype_map[dtype])
 
     def block_copy(self, a: Block) -> Block:
         return np.copy(a)
@@ -135,17 +152,6 @@ class NumpyBlockBackend(AbstractBlockBackend):
     def matrix_log(self, matrix: Block) -> Block:
         return scipy.linalg.logm(matrix)
 
-    # TODO is this useful...?
-    # def block_random_uniform(self, dims: list[int], dtype: Dtype) -> Block:
-    #     if dtype.is_real:
-    #         res = np.random.uniform(low=-1, high=1., size=dims)
-    #     else:
-    #         # z = r * e^{i pi}; PDF of r is 2r on [0, 1], CDF is r^2 ; inverse CDF sampling
-    #         r = np.sqrt(np.random.uniform(low=0, high=1, size=dims))
-    #         phi = np.random.uniform(low=0, high=2 * np.pi, size=dims)
-    #         res = r * np.exp(1.j * phi)
-    #     return np.asarray(res, dtype=_dtype_map[dtype])
-
     def block_random_gaussian(self, dims: list[int], dtype: Dtype, sigma: float) -> Block:
         res = np.random.normal(loc=0, scale=sigma, size=dims)
         if not dtype.is_real:
@@ -156,11 +162,11 @@ class NumpyBlockBackend(AbstractBlockBackend):
         return a
 
     def zero_block(self, shape: list[int], dtype: Dtype) -> Block:
-        return np.zeros(shape, dtype=dtype)
+        return np.zeros(shape, dtype=self.backend_dtype_map[dtype])
 
     def eye_block(self, legs: list[int], dtype: Dtype) -> Data:
         matrix_dim = np.prod(legs)
-        eye = np.eye(matrix_dim, dtype=dtype)
+        eye = np.eye(matrix_dim, dtype=self.backend_dtype_map[dtype])
         eye = np.reshape(eye, legs + legs)
         return eye
     
