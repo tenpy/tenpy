@@ -122,7 +122,7 @@ class NumpyBlockBackend(AbstractBlockBackend):
         return np.reshape(a, new_shape)
 
     def block_split_leg(self, a: Block, leg: int, dims: list[int]) -> Block:
-        return np.reshape(a, a.shape[:leg] + dims + a.shape[leg + 1:])
+        return np.reshape(a, (*a.shape[:leg], *dims, *a.shape[leg + 1:]))
 
     def block_allclose(self, a: Block, b: Block, rtol: float, atol: float) -> bool:
         return np.allclose(a, b, rtol=rtol, atol=atol)

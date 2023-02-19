@@ -604,7 +604,7 @@ def split_leg(t: Tensor, leg: int | str) -> Tensor:
     # TODO inplace version
     """
     leg_idx = t.get_leg_idx(leg)
-    if not isinstance(t.legs[leg_idx]):
+    if not isinstance(t.legs[leg_idx], ProductSpace):
         raise ValueError(f'Leg {leg} is not a ProductSpace.')
     legs = t.legs[:leg_idx] + t.legs[leg_idx].spaces + t.legs[leg_idx + 1:]
     labels = t.labels[:leg_idx] + _split_leg_label(t.labels[leg_idx]) + t.labels[leg_idx + 1:]

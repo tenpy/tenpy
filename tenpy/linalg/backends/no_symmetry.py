@@ -88,7 +88,7 @@ class AbstractNoSymmetryBackend(AbstractBackend, AbstractBlockBackend, ABC):
         return self.block_combine_legs(a.data, idcs)
 
     def split_leg(self, a: Tensor, leg_idx: int) -> Data:
-        return self.block_split_leg(a, leg_idx, dims=[s.dim for s in a.legs[leg_idx]])
+        return self.block_split_leg(a.data, leg_idx, dims=[s.dim for s in a.legs[leg_idx]])
 
     def allclose(self, a: Tensor, b: Tensor, rtol: float, atol: float) -> bool:
         return self.block_allclose(a.data, b.data, rtol=rtol, atol=atol)

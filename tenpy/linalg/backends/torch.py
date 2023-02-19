@@ -107,7 +107,7 @@ class TorchBlockBackend(AbstractBlockBackend):
         return torch_module.reshape(a, new_shape)
 
     def block_split_leg(self, a: Block, leg: int, dims: list[int]) -> Block:
-        return torch_module.reshape(a, a.shape[:leg] + dims + a.shape[leg + 1:])
+        return torch_module.reshape(a, (*a.shape[:leg], *dims, *a.shape[leg + 1:]))
 
     def block_allclose(self, a: Block, b: Block, rtol: float, atol: float) -> bool:
         return torch_module.allclose(a, b, rtol=rtol, atol=atol)
