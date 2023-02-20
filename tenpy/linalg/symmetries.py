@@ -143,6 +143,7 @@ class NoSymmetry(Symmetry):
 
 class ProductSymmetry(Symmetry):
     """Multiple symmetry groups. The allowed sectors are lists of sectors of the factor symmetries."""
+    # TODO: sectors need hash and ordering. should implement our own dataclass?
 
     def __init__(self, factors: list[Symmetry]):
         self.factors = factors
@@ -423,17 +424,35 @@ class VectorSpace:
         return f'dual({res})' if self.is_dual else res
 
     def __eq__(self, other):
-        if isinstance(other, VectorSpace):
-            # FIXME need to be more careful with is_dual flag!
-            return self.sectors == other.sectors and self.multiplicities == other.multiplicities \
-                   and self.is_dual == other.is_dual and self.is_real == other.is_real
-        else:
+        if not isinstance(other, VectorSpace):
             return False
+
+        if self.is_real != other.is_real:
+            return False
+
+        if self.is_dual != other.is_dual:
+            return False
+
+        if len(self.sectors) != len(other.sectors):
+            # now we may assume that checking all multiplicities of self is enough.
+            return False
+        
+        # TODO: this is probably inefficient. eventually this should all be C(++) anyway...
+        other_multiplicities = {sector: mult for sector, mult in zip(other.sectors, other.multiplicities)}
+
+        return all(mult == other_multiplicities.get(sector, -1) 
+                   for mult, sector in zip(self.multiplicities, self.sectors))
 
     @property
     def dual(self):
         return VectorSpace(symmetry=self.symmetry, sectors=self.sectors, multiplicities=self.multiplicities,
                            is_dual=not self.is_dual, is_real=self.is_real)
+
+    def can_contract_with(self, other):
+        if self.is_real:
+            return self == other
+        else:
+            return self == other.dual
 
     def is_dual_of(self, other):
         # FIXME think about duality in more detail.
