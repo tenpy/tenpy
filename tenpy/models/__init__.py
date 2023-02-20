@@ -31,7 +31,7 @@ All other modules in this folder contain model classes derived from these base c
     toric_code
     mixed_xk
 """
-# Copyright 2018-2021 TeNPy Developers, GNU GPLv3
+# Copyright 2018-2023 TeNPy Developers, GNU GPLv3
 
 from . import lattice, model
 from . import tf_ising, xxz_chain, spins, spins_nnn

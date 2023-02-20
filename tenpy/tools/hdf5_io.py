@@ -65,7 +65,7 @@ Names for the ``ATTR_TYPE`` attribute:
 
 .. autodata:: TYPES_FOR_HDF5_DATASETS
 """
-# Copyright 2020-2021 TeNPy Developers, GNU GPLv3
+# Copyright 2020-2023 TeNPy Developers, GNU GPLv3
 
 import pickle
 import gzip

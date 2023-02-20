@@ -4,7 +4,7 @@ The :class:`EventHandler` is basically just holds a list of functions
 which can get called once a certain "event" happens.
 Examples are given in the class doc-string.
 """
-# Copyright 2020-2021 TeNPy Developers, GNU GPLv3
+# Copyright 2020-2023 TeNPy Developers, GNU GPLv3
 
 from collections import namedtuple
 import warnings

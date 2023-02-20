@@ -16,7 +16,7 @@ Further, an overview with plots of the predefined models is given in
 :doc:`/notebooks/90_overview_predefined_lattices`
 
 """
-# Copyright 2018-2021 TeNPy Developers, GNU GPLv3
+# Copyright 2018-2023 TeNPy Developers, GNU GPLv3
 
 import numpy as np
 import itertools

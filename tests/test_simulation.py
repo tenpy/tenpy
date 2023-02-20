@@ -1,5 +1,5 @@
 """A collection of tests to check the functionality of modules in `tenpy.simulations`"""
-# Copyright 2020-2021 TeNPy Developers, GNU GPLv3
+# Copyright 2020-2023 TeNPy Developers, GNU GPLv3
 
 import copy
 import numpy as np

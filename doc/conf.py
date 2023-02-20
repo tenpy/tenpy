@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-# Copyright 2019-2021 TeNPy Developers, GNU GPLv3
+# Copyright 2019-2023 TeNPy Developers, GNU GPLv3
 #
 import sys
 import os

@@ -1,3 +1,4 @@
+# Copyright 2018-2023 TeNPy Developers, GNU GPLv3
 from tenpy.models.mixed_xk import (MixedXKLattice, MixedXKModel, SpinlessMixedXKSquare,
                                    HubbardMixedXKSquare)
 from test_model import check_general_model

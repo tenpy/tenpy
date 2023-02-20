@@ -1,5 +1,5 @@
 """This module contains some base classes for algorithms."""
-# Copyright 2020-2021 TeNPy Developers, GNU GPLv3
+# Copyright 2020-2023 TeNPy Developers, GNU GPLv3
 
 import warnings
 import time
