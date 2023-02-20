@@ -179,7 +179,7 @@ class ProductSymmetry(Symmetry):
         return [list(combination) for combination in product(*all_outcomes)]
 
     def sector_dim(self, a: Sector) -> int:
-        return prod(f.sector_dim(a_f) for f, a_f in zip(self.factors, a))
+        return prod([f.sector_dim(a_f) for f, a_f in zip(self.factors, a)])
 
     def sector_str(self, a: Sector) -> str:
         return f'[{", ".join(f.sector_str(a_f) for f, a_f in zip(self.factors, a))}]'
