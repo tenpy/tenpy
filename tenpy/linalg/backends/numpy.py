@@ -131,7 +131,7 @@ class NumpyBlockBackend(AbstractBlockBackend):
         return np.squeeze(a, tuple(idcs))
 
     def block_norm(self, a: Block) -> float:
-        return np.linalg.norm(a, ord=2)
+        return np.linalg.norm(a)
 
     def block_matrixify(self, a: Block, idcs1: list[int], idcs2: list[int]) -> tuple[Block, Any]:
         permutation = idcs1 + idcs2
