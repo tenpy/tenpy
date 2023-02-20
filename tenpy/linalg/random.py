@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from .backends import AbstractBackend
+from .backends.abstract_backend import AbstractBackend
 from .symmetries import VectorSpace
 from .tensors import Tensor
 
