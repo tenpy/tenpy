@@ -129,7 +129,7 @@ class NoSymmetry(Symmetry):
         return 1
 
     def sector_str(self, a: Sector) -> int:
-        return '.'
+        return 'None'
 
     def __repr__(self):
         return 'NoSymmetry()'

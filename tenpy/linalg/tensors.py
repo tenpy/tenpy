@@ -203,7 +203,7 @@ class Tensor:
 
         lines = [
             f'Tensor(',
-            f'{indent}* Backend: {type(self.backend).__name__}'
+            f'{indent}* Backend: {type(self.backend).__name__}',
             f'{indent}* Symmetry: {self.symmetry}',
             # TODO if we end up supporting qtotal, it should go here
             f'{indent}* Legs:  label    dim  components',
