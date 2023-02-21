@@ -12,7 +12,7 @@ from .symmetries import VectorSpace, ProductSpace
 
 __all__ = ['Tensor', 'DiagonalTensor', 'tdot', 'outer', 'inner', 'transpose', 'trace', 'conj',
            'combine_legs', 'split_leg', 'is_scalar', 'allclose', 'squeeze_legs', 'norm', 
-           'get_same_backend', 'Dtype']
+           'get_same_backend', 'Dtype', 'zero_like']
 
 
 class Dtype(Enum):
@@ -386,6 +386,11 @@ class Tensor:
         legs = legs_or_dims + [leg.dual for leg in legs_or_dims]
         return cls(data=data, backend=backend, legs=legs, labels=labels)
 
+
+def zero_like(tens: Tensor, labels: list[str | None] = None) -> Tensor:
+    if labels is None:
+        labels = tens.labels
+    return Tensor.zero(backend=tens.backend, legs=tens.legs, labels=labels, dtype=tens.dtype)
 
 
 class DiagonalTensor(Tensor):
