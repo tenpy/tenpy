@@ -24,6 +24,7 @@ class TorchBlockBackend(AbstractBlockBackend):
             import torch
         except ImportError as e:
             raise ImportError('Could not import torch. Use a different backend or install torch.') from e
+        self.device = device
         torch_module = torch
         super().__init__()
         self.tenpy_dtype_map = {
@@ -58,7 +59,7 @@ class TorchBlockBackend(AbstractBlockBackend):
         return a.type(self.backend_dtype_map[dtype])
 
     def block_copy(self, a: Block) -> Block:
-        return torch_module.tensor(a)
+        return torch_module.tensor(a, device=self.device)
 
     def _block_repr_lines(self, a: Block, indent: str, max_width: int, max_lines: int) -> list[str]:
         torch_module.set_printoptions(linewidth=max_width - len(indent))
@@ -139,19 +140,20 @@ class TorchBlockBackend(AbstractBlockBackend):
         raise NotImplementedError  # TODO: could not find a torch implementation via their docs...?
 
     def block_random_gaussian(self, dims: list[int], dtype: Dtype, sigma: float) -> Block:
-        mean = torch_module.zeros(size=dims, dtype=dtype)
-        std = sigma * torch_module.ones_like(mean)
+        # Note that if device is CUDA, this function synchronizes the device with the CPU
+        mean = torch_module.zeros(size=dims, dtype=dtype, device=self.device)
+        std = sigma * torch_module.ones_like(mean, device=self.device)
         return torch_module.normal(mean, std)
 
     def block_from_numpy(self, a) -> Block:
-        return torch_module.tensor(a)
+        return torch_module.tensor(a, device=self.device)
 
     def zero_block(self, shape: list[int], dtype: Dtype) -> Block:
-        return torch_module.zeros(shape, dtype=self.backend_dtype_map[dtype])
+        return torch_module.zeros(shape, dtype=self.backend_dtype_map[dtype], device=self.device)
     
     def eye_block(self, legs: list[int], dtype: Dtype) -> Data:
         matrix_dim = prod(legs)
-        eye = torch_module.eye(matrix_dim, dtype=self.backend_dtype_map[dtype])
+        eye = torch_module.eye(matrix_dim, dtype=self.backend_dtype_map[dtype], device=self.device)
         eye = torch_module.reshape(eye, legs + legs)
         return eye
 
