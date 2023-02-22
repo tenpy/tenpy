@@ -109,9 +109,15 @@ class Symmetry(ABC):
         """
         ...
 
+    @abstractmethod
+    def n_symbol(self, a: Sector, b: Sector, c: Sector) -> int:
+        """The N-symbol N^{ab}_c, i.e. how often c appears in the fusion of a and b"""
+        ...
+
     # TODO a bunch of methods, such as n-symbol etc which (i think) only matter for the non-abelian implementation
 
 
+# TODO could make this a subclass of AbelianGroup ...
 class NoSymmetry(Symmetry):
     """Trivial symmetry group that doesn't do anything. the only allowed sector is `None`"""
 
@@ -139,6 +145,9 @@ class NoSymmetry(Symmetry):
 
     def dual_sector(self, a: Sector) -> Sector:
         return None
+
+    def n_symbol(self, a: Sector, b: Sector, c: Sector) -> int:
+        return 1
 
 
 class ProductSymmetry(Symmetry):
@@ -200,6 +209,9 @@ class ProductSymmetry(Symmetry):
     def dual_sector(self, a: Sector) -> Sector:
         return [f.dual_sector(a_f) for f, a_f in zip(self.factors, a)]
 
+    def n_symbol(self, a: Sector, b: Sector, c: Sector) -> int:
+        prod(f.n_symbol(a_f, b_f, c_f) for f, a_f, b_f, c_f in zip(self.factors, a, b, c))
+
 
 # TODO: call it GroupSymmetry instead?
 class Group(Symmetry, ABC):
@@ -226,6 +238,9 @@ class AbelianGroup(Group, ABC):
                        group_name=group_name, descriptive_name=descriptive_name)
 
     def sector_dim(self, a: Sector) -> int:
+        return 1
+
+    def n_symbol(self, a: Sector, b: Sector, c: Sector) -> int:
         return 1
 
 # TODO group_names U(1) and SU(2) or U₁ and SU₂ ?
@@ -324,6 +339,9 @@ class SU2Symmetry(Group):
     def dual_sector(self, a: Sector) -> Sector:
         return a
 
+    def n_symbol(self, a: Sector, b: Sector, c: Sector) -> int:
+        raise NotImplementedError  # TODO port su2calc
+
 
 class FermionParity(Symmetry):
     """Fermionic Parity. Sectors are `0` (even parity) and `1` (odd parity)"""
@@ -354,6 +372,9 @@ class FermionParity(Symmetry):
 
     def dual_sector(self, a: Sector) -> Sector:
         return a
+
+    def n_symbol(self, a: Sector, b: Sector, c: Sector) -> int:
+        return 1
 
 
 no_symmetry = NoSymmetry()
