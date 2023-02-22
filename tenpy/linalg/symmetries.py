@@ -96,8 +96,20 @@ class Symmetry(ABC):
 
         return ProductSymmetry(factors=factors)
 
+    def __eq__(self, other):
+        if not isinstance(other, Symmetry):
+            return False
+
+        if self.descriptive_name != other.descriptive_name:
+            return False
+
+        return self.is_same_symmetry(other)
+
     @abstractmethod
-    def __eq__(self, other) -> bool:
+    def is_same_symmetry(self, other) -> bool:
+        """whether self and other describe the same mathematical structure.
+        descriptive_name is ignored.
+        """
         ...
 
     @abstractmethod
@@ -140,7 +152,7 @@ class NoSymmetry(Symmetry):
     def __repr__(self):
         return 'NoSymmetry()'
 
-    def __eq__(self, other) -> bool:
+    def is_same_symmetry(self, other) -> bool:
         return isinstance(other, NoSymmetry)
 
     def dual_sector(self, a: Sector) -> Sector:
@@ -199,12 +211,22 @@ class ProductSymmetry(Symmetry):
     def __str__(self):
         return ' ⨉ '.join(str(f) for f in self.factors)
 
-    def __eq__(self, other) -> bool:
+    def __eq__(self, other):
+        if not isinstance(other, ProductSymmetry):
+            return False
+
+        if len(self.factors) != len(other.factors):
+            return False
+
+        return all(f1 == f2 for f1, f2 in zip(self.factors, other.factors))
+            
+
+    def is_same_symmetry(self, other) -> bool:
         if not isinstance(other, ProductSymmetry):
             return False
         if len(self.factors) != len(other.factors):
             return False
-        return all(f1 == f2 for f1, f2 in zip(self.factors, other.factors))
+        return all(f1.is_same_symmetry(f2) for f1, f2 in zip(self.factors, other.factors))
 
     def dual_sector(self, a: Sector) -> Sector:
         return [f.dual_sector(a_f) for f, a_f in zip(self.factors, a)]
@@ -271,7 +293,7 @@ class U1Symmetry(AbelianGroup):
     def __repr__(self):
         return 'U1Symmetry()'
 
-    def __eq__(self, other) -> bool:
+    def is_same_symmetry(self, other) -> bool:
         return isinstance(other, U1Symmetry)
 
 
@@ -292,7 +314,7 @@ class ZNSymmetry(AbelianGroup):
     def __repr__(self):
         return f'ZNSymmetry(N={self.N})'  # TODO include descriptive_name?
 
-    def __eq__(self, other) -> bool:
+    def is_same_symmetry(self, other) -> bool:
         return isinstance(other, ZNSymmetry) and other.N == self.N
 
     def is_valid_sector(self, a: Sector) -> bool:
@@ -333,7 +355,7 @@ class SU2Symmetry(Group):
     def __repr__(self):
         return 'SU2Symmetry()'
 
-    def __eq__(self, other) -> bool:
+    def is_same_symmetry(self, other) -> bool:
         return isinstance(other, SU2Symmetry)
 
     def dual_sector(self, a: Sector) -> Sector:
@@ -367,7 +389,7 @@ class FermionParity(Symmetry):
     def __repr__(self):
         return 'FermionParity()'
 
-    def __eq__(self, other) -> bool:
+    def is_same_symmetry(self, other) -> bool:
         return isinstance(other, FermionParity)
 
     def dual_sector(self, a: Sector) -> Sector:
