@@ -2,9 +2,10 @@
 from __future__ import annotations
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
+from typing import Iterable, Iterator
 
 from .abstract_backend import AbstractBackend, AbstractBlockBackend, Block
-from ..symmetries import Sector, Symmetry, VectorSpace, ProductSpace
+from ..symmetries import FusionStyle, Sector, Symmetry, VectorSpace, ProductSpace
 from ..tensors import Dtype, Tensor
 
 __all__ = ['AbstractNonabelianBackend']
@@ -56,13 +57,12 @@ class AbstractNonabelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
         return self.block_item(next(iter(a.blocks.values())))
 
     def to_dense_block(self, a: Tensor) -> Block:
-        # FIXME not done here
         res = self.zero_block(a.shape, a.dtype)
         for coupled in a.data.blocks.keys():
             for splitting_tree in all_fusion_trees(a.data.codomain, coupled):
                 for fusion_tree in all_fusion_trees(a.data.domain, coupled):
                     # [b1,...,bN,c]
-                    X = self.fusion_tree_to_block(fusion_tree)  # FIXME implement
+                    X = self.fusion_tree_to_block(fusion_tree)
 
                     # [j1,...,jM, k1,...,kN]
                     degeneracy_data = a.data.get_sub_block(fusion_tree, splitting_tree)
@@ -83,9 +83,15 @@ class AbstractNonabelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
                             *(leg.get_slice(sector) for leg, sector in zip(a.data.domain, fusion_tree.uncoupled)))
 
                     res[idcs] += contribution
-        return res  
-                    
+        return res
 
+    def fusion_tree_to_block(self, tree: FusionTree) -> Block:
+        """convert a FusionTree to a block, containing its "matrix" representation."""
+        if tree.num_vertices == 0:
+            # tree ist just c <- c for a single sector c == tree.coupled
+            if tree.are_dual[0]:
+                ...  # FIXME stopped here. should probably write down clear definitions...
+                    
     def from_dense_block(self, a: Block, legs: list[VectorSpace], atol: float = 1e-8, 
                          rtol: float = 0.00001) -> NonAbelianData:
         raise NotImplementedError  # FIXME
@@ -173,3 +179,228 @@ class AbstractNonabelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
     def mul(self, a: float | complex, b: Tensor) -> NonAbelianData:
         blocks = {coupled: a * block for coupled, block in b.data.blocks.items()}
         return NonAbelianData(blocks, codomain=b.data.codomain, domain=b.data.domain, dtype=b.dtype)
+
+
+def _block_pairs(a: NonAbelianData, b: NonAbelianData) -> Iterator[tuple[Sector, Block, Block]]:
+    """yield all block pairs, if a coupled sector appears as a key in the blocks dictionary
+    of one, but not both inputs, the corresponding other block defaults to zeros like the existing block
+    """
+    assert a.codomain == b.codomain
+    assert a.domain == b.domain
+
+    for coupled, block_a in a.blocks.items():
+        block_b = b.blocks.get(coupled, None)
+        if block_b is None:
+            block_b = 0 * block_a
+        yield coupled, block_a, block_b
+
+    for coupled, block_b in b.blocks.items():
+        if coupled in a.blocks:
+            continue  # have already yielded for that coupled sector
+        block_a = a.blocks.get(coupled, None)
+        if block_a is None:
+            block_a = 0 * block_b
+        yield coupled, block_a, block_b
+
+
+# TODO dedicated fusion_trees module?
+
+
+class FusionTree:
+    """
+    A fusion tree, which represents the map from uncoupled to coupled sectors
+
+        example fusion tree with
+            uncoupled = [a, b, c, d]
+            are_dual = [False, True, True, False]
+            inner_sectors = [x, y]
+            multiplicities = [m0, m1, m2]
+
+        |
+        coupled
+        |
+        m2
+        |  \ 
+        x   \ 
+        |    \ 
+        m1    \ 
+        |  \   \ 
+        y   \   \ 
+        |    \   \ 
+        m0    \   \ 
+        |  \   \   \ 
+        a   b   c   d
+        |   |   |   |
+        |   Z   Z   |
+        |   |   |   |
+    
+    """
+
+    def __init__(self, symmetry: Symmetry,
+                 uncoupled: list[Sector],  # N uncoupled sectors
+                 coupled: Sector,
+                 are_dual: list[bool],  # N flags: is there a Z isomorphism below the uncoupled sector
+                 inner_sectors: list[Sector],  # N - 2 internal sectors
+                 multiplicities: list[int] = None,  # N - 1 multiplicity labels; all 0 per default
+                 ):
+        self.symmetry = symmetry
+        self.uncoupled = uncoupled
+        self.coupled = coupled
+        self.are_dual = are_dual
+        self.inner_sectors = inner_sectors
+        self.multiplicities = [0] * (len(uncoupled) - 1) if multiplicities is None else multiplicities
+
+        self.fusion_style = symmetry.fusion_style
+        self.braiding_style = symmetry.braiding_style
+        self.num_uncoupled = len(uncoupled)
+        self.num_vertices = max(len(uncoupled) - 1, 0)
+        self.num_inner_edges = max(len(uncoupled) - 2, 0)
+
+    def check_sanity(self):
+        assert all(self.symmetry.is_valid_sector(a) for a in self.uncoupled)
+        assert len(self.uncoupled) == self.num_uncoupled
+        assert self.symmetry.is_valid_sector(self.coupled)
+        assert len(self.are_dual) == self.num_uncoupled
+        assert len(self.inner_sectors) == self.num_inner_edges
+        assert all(self.symmetry.is_valid_sector(x) for x in self.inner_sectors)
+        assert len(self.multiplicities) == self.num_vertices
+
+        # check that inner_sectors and multiplicities are consistent with the fusion rules
+        for vertex in range(self.num_vertices):
+            # the two sectors below this vertex
+            a = self.uncoupled[0] if vertex == 0 else self.inner_sectors[vertex - 1]
+            b = self.uncoupled[vertex + 1]
+            # the sector above this vertex
+            c = self.inner_sectors[vertex] if vertex < self.num_inner_edges else self.uncoupled
+            N = self.symmetry.n_symbol(a, b, c)
+            assert N > 0  # if N==0 then a and b can not fuse to c
+            assert 0 <= self.multiplicities[vertex] < N
+
+    def __hash__(self) -> int:
+        if self.fusion_style == FusionStyle.single:
+            # inner sectors are completely determined by uncoupled, all multiplicities are 0
+            unique_identifier = (self.are_dual, self.coupled, self.uncoupled)
+        elif self.fusion_style == FusionStyle.multiple_unique:
+            # all multiplicities are 0
+            unique_identifier = (self.are_dual, self.coupled, self.uncoupled, self.inner_sectors)
+        else:
+            unique_identifier = (self.are_dual, self.coupled, self.uncoupled, self.inner_sectors, self.multiplicities)
+
+        return hash(unique_identifier)
+
+    def __eq__(self, other) -> bool:
+        if not isinstance(other, FusionTree):
+            return False
+
+        return all(
+            self.coupled == other.coupled,
+            self.uncoupled == other.uncoupled,
+            self.inner_sectors == other.inner_sectors,
+            self.multiplicities == other.multiplicities
+        )
+
+    def __str__(self) -> str:
+        # TODO this ignores are_dual !!
+        uncoupled_str = '(' + ', '.join(self.symmetry.sector_str(a) for a in self.uncoupled) + ')'
+        entries = [f'{self.symmetry.sector_str(self.coupled)} ⟵ {uncoupled_str}']
+        if self.fusion_style in [FusionStyle.multiple_unique, FusionStyle.general] and self.num_inner_edges > 0:
+            inner_sectors_str = ', '.join(self.symmetry.sector_str(x) for x in self.inner_sectors)
+            entries.append(f'({inner_sectors_str})')
+        if self.fusion_style == FusionStyle.general and self.num_vertices > 0:
+            mults_str = ', '.join(self.multiplicities)
+            entries.append(f'({mults_str})')
+        entries = ', '.join(entries)
+        return f'FusionTree[{str(self.symmetry)}]({entries})'
+
+    def __repr__(self) -> str:
+        return f'FusionTree({self.uncoupled}, {self.coupled}, {self.are_dual}, {self.inner_sectors}, {self.multiplicities})'        
+
+
+class fusion_trees:
+    """
+    custom iterator for `FusionTree`s.
+    Reason to do this is that we can conveniently access length of the fusion_trees without 
+    generating all the actual trees and have a more efficient lookup for the index of a tree.
+    """
+    def __init__(self, symmetry: Symmetry, uncoupled: list[Sector], coupled: Sector | None = None):
+        # DOC: coupled = None means trivial sector
+        self.symmetry = symmetry
+        assert len(uncoupled) > 0
+        self.uncoupled = uncoupled
+        self.coupled = symmetry.trivial_sector if coupled is None else coupled
+
+    def __iter__(self) -> Iterator[FusionTree]:
+        if len(self.uncoupled) == 0:
+            raise RuntimeError
+        elif len(self.uncoupled) == 1:
+            yield FusionTree(self.symmetry, self.uncoupled, self.coupled, [False], [], [])
+        elif len(self.uncoupled) == 2:
+            for mu in range(self.symmetry.n_symbol(*self.uncoupled, self.coupled)):
+                yield FusionTree(self.symmetry, self.uncoupled, self.coupled, [False, False], [], [mu])
+        else:
+            a1, a2, *a_rest = self.uncoupled
+            for b in self.symmetry.fusion_outcomes(a1, a2):
+                for rest_tree in fusion_trees(symmetry=self.symmetry, uncoupled=[b] + a_rest, coupled=self.coupled):
+                    for mu in range(self.symmetry.n_symbol(a1, a2, b)):
+                        yield FusionTree(self.symmetry, self.uncoupled, self.coupled, [False] * len(self.uncoupled), 
+                                         [b] + rest_tree.inner_sectors, [mu] + rest_tree.multiplicities)
+
+    def __len__(self) -> int:
+        if len(self.uncoupled) == 1:
+            return 1
+
+        if len(self.uncoupled) == 2:
+            return self.symmetry.n_symbol(*self.uncoupled, self.coupled)
+
+        else:
+            a1, a2, *a_rest = self.uncoupled
+            # TODO if this is used a lot, could cache those lengths of the subtrees
+            return sum(
+                self.symmetry.n_symbol(a1, a2, b) * len(fusion_trees([b] + a_rest, self.coupled))
+                for b in self.symmetry.fusion_outcomes(a1, a2)
+            )
+
+    def index(self, tree: FusionTree) -> int:
+        # TODO inefficient dummy implementation, can exploit __len__ of iterator over subtrees
+        # to know how many we need to skip.
+        for n, t in enumerate(self):
+            if t == tree:
+                return n
+        raise ValueError(f'tree not in {self}: {tree}')
+
+
+def all_fusion_trees(space: VectorSpace, coupled: Sector = None) -> Iterator[FusionTree]:
+    """Yield all fusion trees from the uncoupled sectors of space to the given coupled sector 
+    (if not None) or to all possible coupled sectors (default)"""
+    if coupled is None:
+        for coupled in coupled_sectors(space):
+            yield from all_fusion_trees(space, coupled=coupled)
+    else:
+        for uncoupled in space.sectors:
+            yield from fusion_trees(uncoupled, coupled)
+
+
+def coupled_sectors(space: VectorSpace) -> Iterable[Sector]:
+    """All possible coupled sectors"""
+    if isinstance(space, ProductSpace):
+        # TODO this can probably be optimized...
+        # set is important to exclude duplicates
+        return set(
+            coupled for uncoupled in space.sectors 
+            for coupled in _iter_coupled(space.symmetry, uncoupled)
+        )
+    else:
+        return space.sectors
+
+
+def _iter_coupled(symmetry: Symmetry, uncoupled: list[Sector]) -> Iterator[Sector]:
+    """Iterate all possible coupled sectors of given uncoupled sectors"""
+    if len(uncoupled) == 0:
+        raise RuntimeError
+
+    if len(uncoupled) == 1:
+        yield uncoupled[0]
+    elif len(uncoupled) == 2:
+        a1, a2, *rest = uncoupled
+        for b in symmetry.fusion_outcomes(a1, a2):
+            yield from _iter_coupled(symmetry, [b, *rest])
