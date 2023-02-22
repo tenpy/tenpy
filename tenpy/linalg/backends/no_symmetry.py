@@ -33,6 +33,7 @@ class AbstractNoSymmetryBackend(AbstractBackend, AbstractBlockBackend, ABC):
         return symmetry == no_symmetry
 
     def is_real(self, a: Tensor) -> bool:
+        # TODO(JU): this should be checkable via the dtype and can be removed, no?
         return self.block_is_real(a.data)
 
     def tdot(self, a: Tensor, b: Tensor, axs_a: list[int], axs_b: list[int]) -> Data:

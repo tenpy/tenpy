@@ -46,6 +46,8 @@ class AbelianBlockData:
                                 self.qdata_sorted)
 
 # JU: also dataclass?
+# JU: NonAbelian backend also needs the slices. So we could just always 
+#     define them in VectorSpace.__init__?
 class AbelianVectorSpaceData:
     def __init__(self, leg: VectorSpace):
         self.slices = np.cumsum(leg.multiplicities)
