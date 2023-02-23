@@ -1,12 +1,13 @@
 # Copyright 2023-2023 TeNPy Developers, GNU GPLv3
 
 from __future__ import annotations
+from dis import pretty_flags
 
 from typing import Iterable
 import numpy as np
 from enum import Enum, auto
 
-from .misc import duplicate_entries, force_str_len
+from .misc import duplicate_entries, force_str_len, join_as_many_as_possible
 from .dummy_config import config
 from .symmetries import VectorSpace, ProductSpace
 
@@ -183,23 +184,35 @@ class Tensor:
         else:
             raise ValueError('Not a scalar')
 
-    def __repr__(self):
-        indent = '  '
-        COMPONENT_LEN = 50
-
-        label_strs = [force_str_len(label, 5) for label in self.labels]
-        dim_strs = [force_str_len(leg.dim, 5) for leg in self.legs]
+    def _repr_leg_components(self, max_len: int) -> list:
+        """A summary of the components of legs, used in Tensor.__repr__"""
         components_strs = []
         for leg, label in zip(self.legs, self.labels):
             if isinstance(leg, ProductSpace):
-                sublabels = _split_leg_label(label)
-                components = ' ⊗ '.join(f'({l}: {s.dim})' for l, s in zip(sublabels, leg.spaces))
+                sublabels = [f'?{n}' if l is None else l for n, l in enumerate(_split_leg_label(label))]
+                prefix = 'ProductSpace: '
+                components = prefix + join_as_many_as_possible(
+                    [f'({l}: {s.dim})' for l, s in zip(sublabels, leg.spaces)], 
+                    separator=' ⊗ ', 
+                    priorities=[s.dim for s in leg.spaces], 
+                    max_len=max_len - len(prefix)
+                )
             else:
-                components = ' ⊕ '.join(f'({mult} * {leg.symmetry.sector_str(sect)})'
-                                        for mult, sect in zip(leg.multiplicities, leg.sectors))
-            if len(components) > COMPONENT_LEN:
-                components = components[:COMPONENT_LEN - 6] + ' [...]'
+                components = join_as_many_as_possible(
+                    [f'({mult} * {leg.symmetry.sector_str(sect)})' 
+                     for mult, sect in zip(leg.multiplicities, leg.sectors)],
+                    separator=' ⊕ ',
+                    priorities=leg.multiplicities,
+                    max_len=max_len
+                )
             components_strs.append(components)
+        return components_strs
+
+    def __repr__(self):
+        indent = '  '
+        label_strs = [force_str_len(label, 5) for label in self.labels]
+        dim_strs = [force_str_len(leg.dim, 5) for leg in self.legs]
+        components_strs = self._repr_leg_components(max_len=50)  # TODO picked an arbitrary length
 
         lines = [
             f'Tensor(',

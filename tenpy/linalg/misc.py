@@ -43,3 +43,28 @@ _T = TypeVar('_T')
 
 def duplicate_entries(seq: Sequence[_T], ignore: Sequence[_T] = []) -> set[_T]:
     return set(ele for idx, ele in enumerate(seq) if ele in seq[idx + 1:] and ele not in ignore)
+
+
+def join_as_many_as_possible(msgs: Sequence[str], separator: str, priorities: Sequence[int] = None,
+                             max_len: int = None, fill: str = '...') -> str:
+    """Like ``separator.join(msgs)`` but if the result is too long, only some of the `msgs`
+    will be included. Higher values in `priorities` are prioritized 
+    (default: prioritize what appears earlier in `msgs`).
+    """
+    if len(msgs) == 0:
+        return ''
+    if sum(len(m) for m in msgs) + len(separator) * (len(msgs) - 1) <= max_len:
+        return separator.join(msgs)
+
+    if priorities is None:
+        order = range(len(msgs))
+    else:
+        order = np.argsort(-np.array(priorities))
+
+    # build arrays whose n-th elemnt represent the resulting length if n+1 msgs are kept
+    cum_lengths = np.cumsum([len(msgs[n]) for n in order])
+    candidate_lengths = cum_lengths + np.arange(1, len(msgs) + 1) * len(separator) + len(fill)
+    num_msgs = np.where(candidate_lengths > max_len)[0][0]
+
+    return separator.join([msgs[n] for n in order[:num_msgs]] + [fill])
+    
