@@ -291,7 +291,8 @@ class U1Symmetry(AbelianGroup):
         return -a
 
     def __repr__(self):
-        return 'U1Symmetry()'
+        name_str = '' if self.descriptive_name is None else f'"{self.descriptive_name}"'
+        return f'U1Symmetry({name_str})'
 
     def is_same_symmetry(self, other) -> bool:
         return isinstance(other, U1Symmetry)
@@ -312,7 +313,8 @@ class ZNSymmetry(AbelianGroup):
                               descriptive_name=descriptive_name)
 
     def __repr__(self):
-        return f'ZNSymmetry(N={self.N})'  # TODO include descriptive_name?
+        name_str = '' if self.descriptive_name is None else f', "{self.descriptive_name}"'
+        return f'ZNSymmetry({self.N}{name_str})'  # TODO include descriptive_name?
 
     def is_same_symmetry(self, other) -> bool:
         return isinstance(other, ZNSymmetry) and other.N == self.N
@@ -353,7 +355,8 @@ class SU2Symmetry(Group):
         return f'J={j_str}'
 
     def __repr__(self):
-        return 'SU2Symmetry()'
+        name_str = '' if self.descriptive_name is None else f'"{self.descriptive_name}"'
+        return f'SU2Symmetry({name_str})'
 
     def is_same_symmetry(self, other) -> bool:
         return isinstance(other, SU2Symmetry)
