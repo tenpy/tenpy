@@ -624,8 +624,8 @@ class QRBasedTEBDEngine(TEBDEngine):
             # replace SVD with eigh
             Xi2 = npc.tensordot(Xi.conj(), Xi, ['vL*', 'vL'])
             L, V = npc.eigh(Xi2, sort='>')
-            print(np.linalg.norm(L), np.min(L), np.max(L)) # TODO XXX
-            S = np.sqrt(L)
+            #print(np.linalg.norm(L), np.min(L), np.max(L)) # TODO XXX
+            S = np.sqrt(np.abs(L))  # abs to avoid `nan` due to accidentially negative values close to zero
             if expand:  # need to truncate
                 piv, renormalize, trunc_err = truncate(S, self.trunc_params)
                 S = S[piv]
@@ -707,8 +707,77 @@ class QRBasedTEBDEngine(TEBDEngine):
         #  print("<theta | A Xi B> =", npc.inner(theta, theta_new, axes='labels', do_conj=True))
         return A_L, Xi, B_R
 
-    def update_bond_imag(self, i, U_bond):
-        raise NotImplementedError("TODO: should be done with QR as well. Even simpler!")
+    def update_bond_imag(self, i, U_bond, expand=0.1, small_svd_ok=True):
+        i0, i1 = i - 1, i
+        logger.debug("Update sites (%d, %d)", i0, i1)
+        # Construct the theta matrix
+        theta = self.psi.get_theta(i0, n=2)
+        theta = npc.tensordot(U_bond, theta, axes=(['p0*', 'p1*'], ['p0', 'p1']))
+        theta.itranspose(['vL', 'p0', 'p1', 'vR'])
+
+        A_L, Xi, B_R = self._qr_based_svd(i, theta, expand)
+        A_L.ireplace_labels(['p0'], ['p'])
+
+        if small_svd_ok:
+            Xi.itranspose(['vL', 'vR'])
+            if expand:
+                U, S, Vd, trunc_err, renormalize = svd_theta(Xi, self.trunc_params)
+            else:
+                # direct svd without truncation
+                U, S, Vd = npc.svd(Xi, inner_labels=['vR', 'vL'])
+                renormalize = np.linalg.norm(S)
+                S /= renormalize
+                trunc_err = TruncationError()  # no truncation
+        else:
+            raise NotImplementedError("TODO: implement this similar to the update_bond function")
+            # TODO does not work!
+            # replace SVD with eigh; need to do this twice compared to ``update_bond'' function
+            Xi2 = npc.tensordot(Xi.conj(), Xi, ['vL*', 'vL'])
+            L, V = npc.eigh(Xi2, sort='>')
+
+            Xi2_ = npc.tensordot(Xi, Xi.conj(), ['vR', 'vR*'])
+            L_, U = npc.eigh(Xi2_, sort='>')
+
+            # test: add zeros to L or L_ such that both have the same shape; their maximum difference has to be smaller than numerical precision
+            if np.max( np.abs( np.pad(L, (0,max(0, L_.shape[0]-L.shape[0]))) - np.pad(L_, (0,max(0, L.shape[0]-L_.shape[0]))) ) ) > 1e-14:
+                raise ValueError
+            # should we take L or L_?
+            if L_.shape[0] < L.shape[0]: # the basis for truncation and projection is the smaller array
+                L = L_
+
+            if np.min(L) < -1e-14:
+                raise ValueError
+            S = np.sqrt(np.abs(L))  # abs to avoid `nan` due to accidentially negative values close to zero
+            if expand:  # need to truncate
+                piv, renormalize, trunc_err = truncate(S, self.trunc_params)
+                S = S[piv]
+                V.iproject(piv, 'eig')
+                U.iproject(piv, 'eig')
+                S /= renormalize
+            else:
+                renormalize = np.linalg.norm(S)
+                S /= renormalize
+                trunc_err = TruncationError()
+            V.ireplace_label('eig', 'vL*')
+            Vd = V.iconj().itranspose(['vL', 'vR'])
+            Vd *= np.sqrt(Vd.shape[0]) / npc.norm(Vd)
+            U.ireplace_label('eig', 'vR')
+            U *= np.sqrt(U.shape[1]) / npc.norm(U)
+
+            # the resulting A_L and B_R are in left and right canonical form,
+            # but compared to the small_svd approach, the approximation of theta by  A_L - S - B_R  
+            # is far worse (sometimes however it seems to work?)
+
+        B_R = npc.tensordot(Vd, B_R, axes=['vR', 'vL'])
+        A_L = npc.tensordot(A_L, U, axes=['vR', 'vL'])
+
+        self.psi.norm *= renormalize
+
+        self.psi.set_B(i0, A_L, form='A')
+        self.psi.set_SL(i1, S)
+        self.psi.set_B(i1, B_R, form='B')
+
+        return trunc_err
 
 
 class RandomUnitaryEvolution(TEBDEngine):
