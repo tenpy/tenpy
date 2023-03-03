@@ -621,7 +621,7 @@ class QRBasedTEBDEngine(TEBDEngine):
                 S /= renormalize
                 trunc_err = TruncationError()  # no truncation
         else:
-            _, S, Vd, trunc_err, renormalize = _eig_based_svd(
+            U, S, Vd, trunc_err, renormalize = _eig_based_svd(
                 Xi, inner_labels=['vR', 'vL'], need_U=False, trunc_params=self.trunc_params
             )
 
@@ -680,12 +680,12 @@ class QRBasedTEBDEngine(TEBDEngine):
                                  axes=[['p1', 'vR'], ['p*', 'vR*']]).ireplace_label('vL*', 'vR')
         theta_i0 = theta_i0.combine_legs(['vL', 'p0'], qconj=+1, new_axes=0)
         A_L, Xi = npc.qr(theta_i0, inner_labels=['vR', 'vL'])
-        A_L = A_L.split_legs(['(vL.p0)'])
+        A_L = A_L.split_legs(['(vL.p0)']).ireplace_label('p0', 'p')
         theta_i1 = npc.tensordot(A_L.conj(), theta,
-                                 axes=[['vL*', 'p0*'], ['vL', 'p0']]).ireplace_label('vR*', 'vL')
+                                 axes=[['vL*', 'p*'], ['vL', 'p0']]).ireplace_label('vR*', 'vL')
         theta_i1 = theta_i1.combine_legs(['p1', 'vR'], qconj=-1, new_axes=0)
         B_R, Xi = npc.qr(theta_i1, inner_labels=['vL', 'vR'], inner_qconj=-1)
-        B_R = B_R.split_legs(['(p1.vR)']).replace_label('p1', 'p')
+        B_R = B_R.split_legs(['(p1.vR)']).ireplace_label('p1', 'p')
 
         # TODO XXX
         #  theta_new = npc.tensordot(npc.tensordot(A_L, Xi, ['vR', 'vL']), B_R.replace_label('p', 'p1'), ['vR', 'vL'])
@@ -701,7 +701,6 @@ class QRBasedTEBDEngine(TEBDEngine):
         theta.itranspose(['vL', 'p0', 'p1', 'vR'])
 
         A_L, Xi, B_R = self._qr_based_svd(i, theta, expand)
-        A_L.ireplace_labels(['p0'], ['p'])
         Xi.itranspose(['vL', 'vR'])
 
         if small_svd_ok:
