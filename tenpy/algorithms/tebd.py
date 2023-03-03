@@ -595,7 +595,7 @@ class QRBasedTEBDEngine(TEBDEngine):
     """Similar as standard TEBD, but based on QR decompositions only.
 
     """
-    def update_bond(self, i, U_bond, expand=0.1, small_svd_ok=False):
+    def update_bond(self, i, U_bond, expand=0.1, use_eig_based_svd=False):
         i0, i1 = i - 1, i
         logger.debug("Update sites (%d, %d)", i0, i1)
         # Construct the theta matrix
@@ -611,7 +611,12 @@ class QRBasedTEBDEngine(TEBDEngine):
         A_L, Xi, B_R = self._qr_based_svd(i, theta, expand)
         Xi.itranspose(['vL', 'vR'])
 
-        if small_svd_ok:
+        if use_eig_based_svd:
+            U, S, Vd, trunc_err, renormalize = _eig_based_svd(
+                Xi, inner_labels=['vR', 'vL'], need_U=False, 
+                trunc_params=self.trunc_params if expand else None
+            )
+        else:
             if expand:
                 U, S, Vd, trunc_err, renormalize = svd_theta(Xi, self.trunc_params)
             else:
@@ -620,10 +625,6 @@ class QRBasedTEBDEngine(TEBDEngine):
                 renormalize = np.linalg.norm(S)
                 S /= renormalize
                 trunc_err = TruncationError()  # no truncation
-        else:
-            U, S, Vd, trunc_err, renormalize = _eig_based_svd(
-                Xi, inner_labels=['vR', 'vL'], need_U=False, trunc_params=self.trunc_params
-            )
 
         B_R = npc.tensordot(Vd, B_R, axes=['vR', 'vL'])
 
@@ -692,7 +693,7 @@ class QRBasedTEBDEngine(TEBDEngine):
         #  print("<theta | A Xi B> =", npc.inner(theta, theta_new, axes='labels', do_conj=True))
         return A_L, Xi, B_R
 
-    def update_bond_imag(self, i, U_bond, expand=0.1, small_svd_ok=True):
+    def update_bond_imag(self, i, U_bond, expand=0.1, use_eig_based_svd=True):
         i0, i1 = i - 1, i
         logger.debug("Update sites (%d, %d)", i0, i1)
         # Construct the theta matrix
@@ -703,7 +704,11 @@ class QRBasedTEBDEngine(TEBDEngine):
         A_L, Xi, B_R = self._qr_based_svd(i, theta, expand)
         Xi.itranspose(['vL', 'vR'])
 
-        if small_svd_ok:
+        if use_eig_based_svd:
+            U, S, Vd, trunc_err, renormalize = _eig_based_svd(
+                Xi, inner_labels=['vR', 'vL'], trunc_params=self.trunc_params if expand else None
+            )
+        else:
             if expand:
                 U, S, Vd, trunc_err, renormalize = svd_theta(Xi, self.trunc_params)
             else:
@@ -712,10 +717,6 @@ class QRBasedTEBDEngine(TEBDEngine):
                 renormalize = np.linalg.norm(S)
                 S /= renormalize
                 trunc_err = TruncationError()  # no truncation
-        else:
-            U, S, Vd, trunc_err, renormalize = _eig_based_svd(
-                Xi, inner_labels=['vR', 'vL'], trunc_params=self.trunc_params
-            )
 
         B_R = npc.tensordot(Vd, B_R, axes=['vR', 'vL'])
         A_L = npc.tensordot(A_L, U, axes=['vR', 'vL'])
