@@ -609,9 +609,9 @@ class QRBasedTEBDEngine(TEBDEngine):
             theta = C.scale_axis(SL, 'vL')
 
         A_L, Xi, B_R = self._qr_based_svd(i, theta, expand)
+        Xi.itranspose(['vL', 'vR'])
 
         if small_svd_ok:
-            Xi.itranspose(['vL', 'vR'])
             if expand:
                 U, S, Vd, trunc_err, renormalize = svd_theta(Xi, self.trunc_params)
             else:
@@ -621,24 +621,9 @@ class QRBasedTEBDEngine(TEBDEngine):
                 S /= renormalize
                 trunc_err = TruncationError()  # no truncation
         else:
-            # replace SVD with eigh
-            Xi2 = npc.tensordot(Xi.conj(), Xi, ['vL*', 'vL'])
-            L, V = npc.eigh(Xi2, sort='>')
-            #print(np.linalg.norm(L), np.min(L), np.max(L)) # TODO XXX
-            S = np.sqrt(np.abs(L))  # abs to avoid `nan` due to accidentially negative values close to zero
-            if expand:  # need to truncate
-                piv, renormalize, trunc_err = truncate(S, self.trunc_params)
-                S = S[piv]
-                V.iproject(piv, 'eig')
-                S /= renormalize
-            else:
-                renormalize = np.linalg.norm(S)
-                S /= renormalize
-                trunc_err = TruncationError()
-            V.ireplace_label('eig', 'vL*')
-            Vd = V.iconj().itranspose(['vL', 'vR'])
-            Vd *= np.sqrt(Vd.shape[0]) / npc.norm(Vd)
-            # TODO: renormalize correctly...
+            _, S, Vd, trunc_err, renormalize = _eig_based_svd(
+                Xi, inner_labels=['vR', 'vL'], need_U=False, trunc_params=self.trunc_params
+            )
 
         B_R = npc.tensordot(Vd, B_R, axes=['vR', 'vL'])
 
@@ -717,9 +702,9 @@ class QRBasedTEBDEngine(TEBDEngine):
 
         A_L, Xi, B_R = self._qr_based_svd(i, theta, expand)
         A_L.ireplace_labels(['p0'], ['p'])
+        Xi.itranspose(['vL', 'vR'])
 
         if small_svd_ok:
-            Xi.itranspose(['vL', 'vR'])
             if expand:
                 U, S, Vd, trunc_err, renormalize = svd_theta(Xi, self.trunc_params)
             else:
@@ -729,44 +714,9 @@ class QRBasedTEBDEngine(TEBDEngine):
                 S /= renormalize
                 trunc_err = TruncationError()  # no truncation
         else:
-            raise NotImplementedError("TODO: implement this similar to the update_bond function")
-            # TODO does not work!
-            # replace SVD with eigh; need to do this twice compared to ``update_bond'' function
-            Xi2 = npc.tensordot(Xi.conj(), Xi, ['vL*', 'vL'])
-            L, V = npc.eigh(Xi2, sort='>')
-
-            Xi2_ = npc.tensordot(Xi, Xi.conj(), ['vR', 'vR*'])
-            L_, U = npc.eigh(Xi2_, sort='>')
-
-            # test: add zeros to L or L_ such that both have the same shape; their maximum difference has to be smaller than numerical precision
-            if np.max( np.abs( np.pad(L, (0,max(0, L_.shape[0]-L.shape[0]))) - np.pad(L_, (0,max(0, L.shape[0]-L_.shape[0]))) ) ) > 1e-14:
-                raise ValueError
-            # should we take L or L_?
-            if L_.shape[0] < L.shape[0]: # the basis for truncation and projection is the smaller array
-                L = L_
-
-            if np.min(L) < -1e-14:
-                raise ValueError
-            S = np.sqrt(np.abs(L))  # abs to avoid `nan` due to accidentially negative values close to zero
-            if expand:  # need to truncate
-                piv, renormalize, trunc_err = truncate(S, self.trunc_params)
-                S = S[piv]
-                V.iproject(piv, 'eig')
-                U.iproject(piv, 'eig')
-                S /= renormalize
-            else:
-                renormalize = np.linalg.norm(S)
-                S /= renormalize
-                trunc_err = TruncationError()
-            V.ireplace_label('eig', 'vL*')
-            Vd = V.iconj().itranspose(['vL', 'vR'])
-            Vd *= np.sqrt(Vd.shape[0]) / npc.norm(Vd)
-            U.ireplace_label('eig', 'vR')
-            U *= np.sqrt(U.shape[1]) / npc.norm(U)
-
-            # the resulting A_L and B_R are in left and right canonical form,
-            # but compared to the small_svd approach, the approximation of theta by  A_L - S - B_R  
-            # is far worse (sometimes however it seems to work?)
+            U, S, Vd, trunc_err, renormalize = _eig_based_svd(
+                Xi, inner_labels=['vR', 'vL'], trunc_params=self.trunc_params
+            )
 
         B_R = npc.tensordot(Vd, B_R, axes=['vR', 'vL'])
         A_L = npc.tensordot(A_L, U, axes=['vR', 'vL'])
@@ -779,6 +729,73 @@ class QRBasedTEBDEngine(TEBDEngine):
 
         return trunc_err
 
+
+def _eig_based_svd(A, need_U: bool = True, need_Vd: bool = True, inner_labels=[None, None],
+                   trunc_params=None):
+    """Computes the singular value decomposition of a matrix A, but via diagonalization of
+    its "square" A.hc @ A and/or A @ A.hc, i.e. two eigh calls instead of an svd call.
+
+    Truncation if performed if and only if trunc_params are given.
+
+    This performs better on GPU, but is not really useful on CPU.
+
+    If isometries U or Vd are not needed, their computation can be omitted for performance.
+    """
+    warnings.warn('_eig_based_svd is untested!!')  # TODO (JU) we shouldnt do this on CPU anyway...
+    warnings.warn('_eig_based_svd is nonsensical on CPU!!')
+    assert A.rank == 2
+
+    if need_U and need_Vd:
+        # need to do two diagonalizations to get both right and left singular vectors
+        try:
+            A.legs[0].test_contractible(A.legs[1])
+        except ValueError:
+            # need to be more elaborate in this case ; the new leg on U as computed below
+            # would not be contractible with the new leg in Vd ...
+            raise NotImplementedError from None
+        
+        U, S, _ = _eig_based_svd(A, need_U=True, need_Vd=False)
+        _, S, Vd = _eig_based_svd(A, need_U=False, need_Vd=True)
+        return U, S, Vd
+
+    if need_U:
+        Vd = None
+        A_Ahc = npc.tensordot(A, A.conj(), [1, 0])
+        L, U = npc.eigh(A_Ahc, sort='>')
+        S = np.sqrt(np.abs(L))  # abs to avoid `nan` due to accidentially negative values close to zero
+        U = U.ireplace_label('eig', inner_labels[0])
+    elif need_Vd:
+        U = None
+        Ahc_A = npc.tensordot(A.conj(), A, [1, 0])
+        L, V = npc.eigh(Ahc_A, sort='>')
+        S = np.sqrt(np.abs(L))  # abs to avoid `nan` due to accidentially negative values close to zero
+        Vd = V.iconj().itranspose([1, 0]).ireplace_label('eig', inner_labels[1])
+    else:
+        U = None
+        Vd = None
+        # use the smaller of the two square matrices -- they have the same eigenvalues
+        if A.shape[1] >= A.shape[0]:
+            A2 = npc.tensordot(A, A.conj(), [1, 0])
+        else:
+            A2 = npc.tensordot(A.conj(), A, [1, 0])
+        L = npc.eigvalsh(A2)
+        S = np.sqrt(np.abs(L))  # abs to avoid `nan` due to accidentially negative values close to zero
+
+    if trunc_params is not None:
+        piv, renormalize, trunc_err = truncate(S, trunc_params)
+        S = S[piv]
+        S /= renormalize
+        if need_U:
+            U.iproject(piv, 1)
+        if need_Vd:
+            Vd.iproject(piv, 0)
+    else:
+        renormalize = np.linalg.norm(S)
+        S /= renormalize
+        trunc_err = TruncationError()
+
+    return U, S, Vd, trunc_err, renormalize
+        
 
 class RandomUnitaryEvolution(TEBDEngine):
     """Evolution of an MPS with random two-site unitaries in a TEBD-like fashion.
