@@ -10,8 +10,7 @@ by Robert N. C. Pfeifer, Glen Evenbly, Sukhwinder Singh, Guifre Vidal, see :arxi
 .. todo ::
     - implement or wrap netcon.m, a function to find optimal contractionn sequences
         (:arxiv:`1304.6112`)
-    - improve helpfulness of Warnings
-    - _do_trace: trace over all pairs of legs at once. need the corresponding npc function first.
+    - implement or deprecate the outer_product in sequence behavior
 """
 # Copyright 2018-2023 TeNPy Developers, GNU GPLv3
 
@@ -56,6 +55,8 @@ def ncon(tensor_list, leg_links, sequence=None):
         The number or tensor resulting from the contraction.
     """
     tensor_list, leg_links, sequence = _ncon_input_checks(tensor_list, leg_links, sequence)
+    if outer_product in sequence:
+        raise NotImplementedError('Current implementation does not support outer product in sequence')
     tensor_list, leg_links, sequence = _ncon_do_traces(tensor_list, leg_links, sequence)
     tensor_list, leg_links, sequence = _ncon_do_binary_contractions(tensor_list, leg_links, sequence)
     tensor_list, leg_links = _ncon_do_outer_products(tensor_list, leg_links)
@@ -232,13 +233,12 @@ def _partial_trace(tensor, tensor_links, loc):
     trace_axes = np.zeros((num_traces, 2), dtype=np.int_)
     for n, value in enumerate(trace_links):
         trace_axes[n, :] = np.where(tensor_links == value)[0]
-    other_axes = [ax for ax in range(len(tensor_links)) if ax not in trace_axes]
     
     try:
         tensor = tensor.combine_legs(combine_legs=(trace_axes[:, 0], trace_axes[:, 1]), new_axes=(-2, -1))
         tensor = npc.trace(tensor, leg1=-2, leg2=-1)
     except Exception as e:
-        msg = (f'An error ocurred while performing the partial trace in tensor_list[{loc}]. '
+        msg = (f'An error ocurred while performing the partial trace on tensor_list[{loc}]. '
                f'Original stacktrace below.')
         raise type(e)(msg) from e
     
@@ -265,7 +265,7 @@ def _ncon_do_binary_contractions(tensor_list, leg_links, sequence):
         
         try:
             res = npc.tensordot(tensor_a, tensor_b, (a_axes, b_axes))
-        except Excpetion as e:
+        except Exception as e:
             msg = (f'An error occured while performing the pairwise contraction indicated by '
                    f'values {", ".join(common_values)} in leg_links. '
                    f'Original stacktrace below.')
