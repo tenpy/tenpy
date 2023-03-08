@@ -50,7 +50,7 @@ from ..linalg import np_conserved as npc
 from .truncation import svd_theta, TruncationError, truncate
 from ..linalg import random_matrix
 
-__all__ = ['TEBDEngine', 'Engine', 'RandomUnitaryEvolution', 'TimeDependentTEBD']
+__all__ = ['TEBDEngine', 'Engine', 'QRBasedTEBDEngine', 'RandomUnitaryEvolution', 'TimeDependentTEBD']
 
 
 class TEBDEngine(TimeEvolutionAlgorithm):
@@ -688,12 +688,14 @@ class QRBasedTEBDEngine(TEBDEngine):
         B_R, Xi = npc.qr(theta_i1, inner_labels=['vL', 'vR'], inner_qconj=-1)
         B_R = B_R.split_legs(['(p1.vR)']).ireplace_label('p1', 'p')
 
-        # TODO XXX
+        # TODO extract an error measure somehow...?
+        # could calculate the following, but unlike for SVD-based decomposition, its not quasi-free
+        # to compute it...
         #  theta_new = npc.tensordot(npc.tensordot(A_L, Xi, ['vR', 'vL']), B_R.replace_label('p', 'p1'), ['vR', 'vL'])
         #  print("<theta | A Xi B> =", npc.inner(theta, theta_new, axes='labels', do_conj=True))
         return A_L, Xi, B_R
 
-    def update_bond_imag(self, i, U_bond, expand=0.1, use_eig_based_svd=True):
+    def update_bond_imag(self, i, U_bond, expand=0.1, use_eig_based_svd=False):
         i0, i1 = i - 1, i
         logger.debug("Update sites (%d, %d)", i0, i1)
         # Construct the theta matrix
@@ -741,7 +743,6 @@ def _eig_based_svd(A, need_U: bool = True, need_Vd: bool = True, inner_labels=[N
 
     If isometries U or Vd are not needed, their computation can be omitted for performance.
     """
-    warnings.warn('_eig_based_svd is untested!!')  # TODO (JU) we shouldnt do this on CPU anyway...
     warnings.warn('_eig_based_svd is nonsensical on CPU!!')
     assert A.rank == 2
 
@@ -754,22 +755,29 @@ def _eig_based_svd(A, need_U: bool = True, need_Vd: bool = True, inner_labels=[N
             # would not be contractible with the new leg in Vd ...
             raise NotImplementedError from None
         
-        U, S, _ = _eig_based_svd(A, need_U=True, need_Vd=False)
-        _, S, Vd = _eig_based_svd(A, need_U=False, need_Vd=True)
-        return U, S, Vd
+        U, S, _, _, _ = _eig_based_svd(
+            A, need_U=True, need_Vd=False, inner_labels=inner_labels, trunc_params=trunc_params
+        )
+        _, S, Vd, trunc_err, renormalize = _eig_based_svd(
+            A, need_U=False, need_Vd=True, inner_labels=inner_labels, trunc_params=trunc_params
+        )
+        return U, S, Vd, trunc_err, renormalize
+
+    logger.debug(f'A._labels = {A._labels}')
 
     if need_U:
         Vd = None
-        A_Ahc = npc.tensordot(A, A.conj(), [1, 0])
+        A_Ahc = npc.tensordot(A, A.conj(), [1, 1])
         L, U = npc.eigh(A_Ahc, sort='>')
         S = np.sqrt(np.abs(L))  # abs to avoid `nan` due to accidentially negative values close to zero
         U = U.ireplace_label('eig', inner_labels[0])
     elif need_Vd:
         U = None
-        Ahc_A = npc.tensordot(A.conj(), A, [1, 0])
+        Ahc_A = npc.tensordot(A.conj(), A, [0, 0])
         L, V = npc.eigh(Ahc_A, sort='>')
+        logger.info(f'V._labels={V._labels}')
         S = np.sqrt(np.abs(L))  # abs to avoid `nan` due to accidentially negative values close to zero
-        Vd = V.iconj().itranspose([1, 0]).ireplace_label('eig', inner_labels[1])
+        Vd = V.iconj().itranspose().ireplace_label('eig*', inner_labels[1])
     else:
         U = None
         Vd = None
