@@ -24,10 +24,14 @@ def test_trotter_decomposition():
                 evolved[k] += dt[j]
             npt.assert_array_almost_equal_nulp(evolved, N * np.ones([2]), N * 2)
 
-
+            
+# TODO (JU) also test real time evolution?
 @pytest.mark.slow
-@pytest.mark.parametrize('bc_MPS', ['finite', 'infinite'])
-def test_tebd(bc_MPS, g=0.5):
+@pytest.mark.parametrize('bc_MPS, which_engine', 
+                         [(bc_MPS, which_engine) 
+                          for bc_MPS in ['finite', 'infinite'] 
+                          for which_engine in ['standard', 'qr']])
+def test_tebd(bc_MPS, which_engine, g=0.5):
     L = 2 if bc_MPS == 'infinite' else 6
     #  xxz_pars = dict(L=L, Jxx=1., Jz=3., hz=0., bc_MPS=bc_MPS)
     #  M = XXZChain(xxz_pars)
@@ -47,7 +51,12 @@ def test_tebd(bc_MPS, g=0.5):
             'trunc_cut': 1.e-13
         }
     }
-    engine = tebd.QRBasedTEBDEngine(psi, M, tebd_param)
+    if which_engine == 'standard':
+        engine = tebd.TEBDEngine(psi, M, tebd_param)
+    elif which_engine == 'qr':
+        engine = tebd.QRBasedTEBDEngine(psi, M, tebd_param)
+    else:
+        raise RuntimeError
     engine.run_GS()
 
     print("norm_test", psi.norm_test())
