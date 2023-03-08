@@ -763,8 +763,6 @@ def _eig_based_svd(A, need_U: bool = True, need_Vd: bool = True, inner_labels=[N
         )
         return U, S, Vd, trunc_err, renormalize
 
-    logger.debug(f'A._labels = {A._labels}')
-
     if need_U:
         Vd = None
         A_Ahc = npc.tensordot(A, A.conj(), [1, 1])
@@ -775,7 +773,6 @@ def _eig_based_svd(A, need_U: bool = True, need_Vd: bool = True, inner_labels=[N
         U = None
         Ahc_A = npc.tensordot(A.conj(), A, [0, 0])
         L, V = npc.eigh(Ahc_A, sort='>')
-        logger.info(f'V._labels={V._labels}')
         S = np.sqrt(np.abs(L))  # abs to avoid `nan` due to accidentially negative values close to zero
         Vd = V.iconj().itranspose().ireplace_label('eig*', inner_labels[1])
     else:
