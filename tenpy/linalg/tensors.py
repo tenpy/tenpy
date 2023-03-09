@@ -1,7 +1,10 @@
 # Copyright 2023-2023 TeNPy Developers, GNU GPLv3
 
 from __future__ import annotations
+from abc import ABC, abstractmethod
 from dis import pretty_flags
+from multiprocessing import dummy
+from tkinter import scrolledtext
 
 from typing import Iterable
 import numpy as np
@@ -25,7 +28,7 @@ class Dtype(Enum):
     
 
 def _dual_leg_label(label: str) -> str:
-    """return the label that a leg should have after conjugation"""
+    """the label that a leg should have after conjugation"""
     if label is None:
         return None
     if label.endswith('*'):
@@ -35,43 +38,27 @@ def _dual_leg_label(label: str) -> str:
 
 
 def _combine_leg_labels(labels: list[str | None]) -> str:
+    """the label that a combined leg should have"""
     return '(' + '.'.join(f'?{n}' if l is None else l for n, l in enumerate(labels)) + ')'
 
 
 def _split_leg_label(label: str) -> list[str | None]:
+    """undo _combine_leg_labels, i.e. recover the original labels"""
     if label.startswith('(') and label.endswith(')'):
         labels = label.lstrip('(').rstrip(')').split('.')
         return [None if l.startswith('?') else l for l in labels]
     else:
         raise ValueError('Invalid format for a combined label')
 
+_DUMMY_LABEL = '!'
 
-class Tensor:
-    """
 
-    Attributes
-    ----------
-    data
-        backend-specific data structure that contains the numerical data, i.e. the free parameters
-        of tensors with the given symmetry.
-        data about the symmetry is contained in the legs.
-    backend : :class:`~tenpy.linalg.backends.abstract_backend.AbstractBackend`
-    legs : list of :class:`~tenpy.linalg.symmetries.VectorSpace`
-        These may be instances of a backend-specifc subclass of :class:`~tenpy.linalg.symmetries.VectorSpace`
-    labels : list of {``None``, str}
-    """
+class AbstractTensor(ABC):
 
-    def __init__(self, data, backend, legs: list[VectorSpace], labels: list[str | None] = None, 
-                 dtype: Dtype = None):
+    def __init__(self, backend, legs: list[VectorSpace], labels: list[str | None] | None, dtype: Dtype):
         """
-        This constructor is not user-friendly. 
-        Use as_tensor instead.  TODO point to which methods here?
-        Inputs are not checked for consistency.
-
         Parameters
         ----------
-        data
-            The numerical data ("free parameters") comprising the tensor. type is backend-specific
         backend: :class:`~tenpy.linalg.backends.abstract_backend.AbstractBackend`
             The backend for the Tensor
         legs : list[VectorSpace]
@@ -79,33 +66,29 @@ class Tensor:
         labels : list[str | None] | None
             Labels for the legs. If None, translates to ``[None, None, ...]`` of appropriate length
         dtype : 
-            Datatype of the tensor. If ``None``, it is inferred from `data`.
-            Note that no type-conversion is done by this contructor!
+            Datatype of the tensor.
         """
-        self.data = data
         self.backend = backend
         self.legs = [backend.convert_vector_space(leg) for leg in legs]
-        self._labels = labels or [None] * len(legs)
+        if labels is None:
+            self._labels = [None] * len(legs)
+        else:
+            self._labels = labels
         self._labelmap = {label: leg_num for leg_num, label in enumerate(self.labels) if label is not None}
         self.num_legs = len(legs)
         self.symmetry = legs[0].symmetry
-        if dtype is None:
-            self.dtype = backend.get_dtype_from_data(data)
-        else:
-            self.dtype = dtype
-
-    @property
-    def parent_space(self) -> VectorSpace:
+        self.dtype = dtype
+        
         if self.num_legs == 1:
-            return self.legs[0]
+            self.parent_space = self.legs[0]
         else:
-            return ProductSpace(spaces=self.legs)
+            self.parent_space = backend.convert_vector_space(ProductSpace(self.legs))
 
     def check_sanity(self):
         assert self.backend.supports_symmetry(self.symmetry)
         assert all(l.symmetry == self.symmetry for l in self.legs)
-        assert len(self.legs) == self.num_legs > 0
-        assert self.backend.get_dtype_from_data(self.data) == self.dtype
+        assert len(self.legs) == len(self._labels) == self.num_legs > 0
+        assert not duplicate_entries(self._labels, ignore=[None])
 
     @property
     def size(self) -> int:
@@ -125,13 +108,13 @@ class Tensor:
 
     @property
     def is_fully_labelled(self) -> bool:
-        return None not in self.labels
+        return None not in self._labels
 
     def has_label(self, label: str, *more: str) -> bool:
-        return label in self.labels and all(l in self.labels for l in more)
+        return label in self._labels and all(l in self._labels for l in more)
 
     def labels_are(self, *labels: str) -> bool:
-        return self.is_fully_labelled and len(labels) == len(self.labels) and set(labels) == set(self.labels)
+        return self.is_fully_labelled and len(labels) == len(self._labels) and set(labels) == set(self._labels)
 
     def set_labels(self, labels: list[str | None]):
         assert not duplicate_entries(labels, ignore=[None])
@@ -148,17 +131,16 @@ class Tensor:
         self.set_labels(value)
 
     def get_leg_idx(self, which_leg: int | str) -> int:
-        # TODO which type of error should be raised?
         if isinstance(which_leg, str):
             try:
                 which_leg = self._labelmap[which_leg]
             except KeyError:
-                raise KeyError(f'No leg with label {which_leg}.') from None
+                raise ValueError(f'No leg with label {which_leg}.') from None
         if isinstance(which_leg, int):
             if which_leg < 0:
                 which_leg = which_leg + self.num_legs
             if not 0 <= which_leg < self.num_legs:
-                raise KeyError(f'Leg index out of bounds: {which_leg}.') from None
+                raise ValueError(f'Leg index out of bounds: {which_leg}.') from None
             return which_leg
         else:
             raise TypeError
@@ -172,17 +154,15 @@ class Tensor:
     def get_legs(self, which_legs: int | str | list[int | str]) -> list[VectorSpace]:
         return [self.legs[idx] for idx in self.get_leg_idcs(which_legs)]
 
-    def copy(self):
-        """return a Tensor object equal to self, such that in-place operations on self.copy() do not affect self"""
-        return Tensor(data=self.backend.copy_data(self.data), backend=self.backend, legs=self.legs[:], labels=self.labels[:])
+    @abstractmethod
+    def copy(self, deep=True):
+        ...
 
+    @abstractmethod
     def item(self):
         """If the tensor is a scalar (i.e. has only one entry), return that scalar as a float or complex.
         Otherwise raise a ValueError"""
-        if all(leg.dim == 1 for leg in self.legs):
-            return self.backend.item(self)
-        else:
-            raise ValueError('Not a scalar')
+        ...
 
     def _repr_leg_components(self, max_len: int) -> list:
         """A summary of the components of legs, used in Tensor.__repr__"""
@@ -208,32 +188,16 @@ class Tensor:
             components_strs.append(components)
         return components_strs
 
-    def __repr__(self):
-        indent = '  '
-        label_strs = [force_str_len(label, 5) for label in self.labels]
-        dim_strs = [force_str_len(leg.dim, 5) for leg in self.legs]
-        components_strs = self._repr_leg_components(max_len=50)  # TODO picked an arbitrary length
-
-        lines = [
-            f'Tensor(',
-            f'{indent}* Backend: {type(self.backend).__name__}',
-            f'{indent}* Symmetry: {self.symmetry}',
-            # TODO if we end up supporting qtotal, it should go here
-            f'{indent}* Legs:  label    dim  components',
-            f'{indent}         =============={"=" * max(10, *(len(c) for c in components_strs))}',
-        ]
-        for l, d, c in zip(label_strs, dim_strs, components_strs):
-            lines.append(f'{indent}         {l}  {d}  {c}')
-        lines.extend(self.backend._data_repr_lines(self.data, indent=indent, max_width=70, max_lines=20))
-        lines.append(')')
-        return "\n".join(lines)
+    @abstractmethod
+    def _mul_scalar(self, other: complex):
+        ...
 
     def __getitem__(self, item):
         # TODO point towards a "as flat" option
         raise TypeError('Tensor object is not subscriptable')
 
     def __neg__(self):
-        return _mul(-1, self)
+        return self._mul_scalar(-1)
 
     def __pos__(self):
         return self
@@ -242,31 +206,28 @@ class Tensor:
         # TODO make sure the pointer is correct.
         raise TypeError('Tensor does not support == comparison. Use tenpy.allclose instead.')
 
+    @abstractmethod
     def __add__(self, other):
-        if isinstance(other, Tensor):
-            return _add(self, other)
-        else:
-            return NotImplemented
+        ...
 
+    @abstractmethod
     def __sub__(self, other):
-        if isinstance(other, Tensor):
-            # TODO is this efficient enough?
-            return _add(self, _mul(-1, other))
-        else:
-            return NotImplemented
+        ...
 
     def __mul__(self, other):
-        if isinstance(other, Tensor):
-            if all(leg.dim == 1 for leg in self.legs):
-                return _mul(self.item(), other)
+        if isinstance(other, AbstractTensor):
             if all(leg.dim == 1 for leg in other.legs):
-                return _mul(other.item(), self)
+                return self._mul_scalar(other.item())
+            if all(leg.dim == 1 for leg in self.legs):
+                return other._mul_scalar(self.item())
             raise ValueError('Tensors can only be multiplied with scalars') from None
         if isinstance(other, (int, float, complex)):
-            return _mul(other, self)
+            return self._mul_scalar(other)
         return NotImplemented
 
-    __rmul__ = __mul__  # all allowed multiplications are commutative
+    def __rmul__(self, other):
+        # all allowed multiplication is commutative
+        return self.__mul__(other)
 
     def __truediv__(self, other):
         if isinstance(other, Tensor):
@@ -274,28 +235,26 @@ class Tensor:
                 other = other.item()
             except ValueError:
                 raise ValueError('Tensors can only be divived by scalars') from None
-        try:
-            factor = 1. / other
-        except TypeError:
-            return NotImplemented
-        return self.__mul__(factor)
+        return self._mul_scalar(1. / other)
+
+    @abstractmethod
+    def is_real(self) -> bool:
+        ...
 
     def __float__(self):
-        if not self.backend.is_real(self):
+        if not self.is_real():
             pass  # FIXME issue warning
         return self.item().real
 
     def __complex__(self):
         return complex(self.item())
 
+    @abstractmethod
     def to_dense_block(self, leg_order: list[int | str] = None):
         """Convert tensor to a dense (i.e. no longer exploiting the symmetry structure) block,
         i.e. a numpy ndarray if the backend is a NumpyBlockBackend, or a torch Tensor of
         the backend is a TorchBlockBackend"""
-        block = self.backend.to_dense_block(self)
-        if leg_order is not None:
-            block = self.backend.block_transpose(block, self.get_leg_idcs(leg_order))
-        return block
+        ...
 
     def to_numpy_ndarray(self, leg_order: list[int | str] = None, dtype=None) -> np.ndarray:
         """Convert to a numpy array"""
@@ -307,29 +266,141 @@ class Tensor:
         return self.to_numpy_ndarray(dtype=dtype)
 
     @classmethod
-    def from_numpy(cls, array: np.ndarray, backend, legs: list[VectorSpace]=None, dtype: Dtype = None,
-                   labels: list[str | None] = None, atol: float = 1e-8, rtol: float = 1e-5) -> Tensor:
-        """Convert a numpy array to a Tensor with given symmetry, if the array is symmetric under it.
-        If data is not symmetric under the symmetry i.e. if
-        ``not allclose(array, projected, atol, rtol)``, raise a ValueError.
-
-        TODO document how the sectors are expected to be embedded, i.e. which slices correspond to which charge.
-        TODO support non-canonical embedding?
-        TODO make backend optional? let get_backend with no args return a globally configurable default
+    @abstractmethod
+    def zero(cls, backend, legs: list[VectorSpace] | list[int], labels: list[str | None] = None,
+             dtype: Dtype = Dtype.complex128) -> Tensor:
+        """A zero tensor"""
+        ...
+    
+    @classmethod
+    def eye(cls, backend, legs_or_dims: int | VectorSpace | list[int | VectorSpace], 
+            labels: list[str | None] = None, dtype: Dtype = Dtype.complex128) -> Tensor:
+        """The identity map from one group of legs to their duals.
 
         Parameters
         ----------
-        array : array_like
-            The data to be converted to a Tensor.
         backend : :class:`~tenpy.linalg.backends.abstract_backend.AbstractBackend`
             The backend for the Tensor
-        legs : list of :class:`~tenpy.linalg.symmetries.VectorSpace`, optional
-            The vectorspaces associated with legs of the tensors. Contains symmetry data.
-            If ``None`` (default), trivial legs of appropriate dimension are assumed.
-        dtype : ``np.dtype``, optional
-            The data type of the Tensor entries. Defaults to dtype of `array`
-        labels : list of {str | None}, optional
+        legs_or_dims : int | VectorSpace | list[int | VectorSpace]
+            Description of *half* of the legs of the result, either via their vectorspace
+            or via an integer, which means a trivial VectorSpace of that dimension.
+            The resulting tensor has twice as many legs.
+        labels : list[str | None], optional
             Labels associated with each leg, ``None`` for unnamed legs.
+        dtype : Dtype, optional
+            The data type of the Tensor entries.
+
+        """
+        ...
+
+
+class Tensor(AbstractTensor):
+    """
+
+    Attributes
+    ----------
+    data
+        backend-specific data structure that contains the numerical data, i.e. the free parameters
+        of tensors with the given symmetry.
+        data about the symmetry is contained in the legs.
+    backend : :class:`~tenpy.linalg.backends.abstract_backend.AbstractBackend`
+    legs : list of :class:`~tenpy.linalg.symmetries.VectorSpace`
+        These may be instances of a backend-specifc subclass of :class:`~tenpy.linalg.symmetries.VectorSpace`
+    labels : list of {``None``, str}
+    """
+
+    def __init__(self, data, backend, legs: list[VectorSpace], labels: list[str | None] | None, dtype: Dtype):
+        """
+        This constructor is not user-friendly. 
+        Use as_tensor instead.  TODO point to which methods here?
+        Inputs are not checked for consistency.
+
+        Parameters
+        ----------
+        data
+            The numerical data ("free parameters") comprising the tensor. type is backend-specific
+        backend: :class:`~tenpy.linalg.backends.abstract_backend.AbstractBackend`
+            The backend for the Tensor
+        legs : list[VectorSpace]
+            The legs of the Tensor
+        labels : list[str | None] | None
+            Labels for the legs. If None, translates to ``[None, None, ...]`` of appropriate length
+        dtype : 
+            Datatype of the tensor. If ``None``, it is inferred from `data`.
+            Note that no type-conversion is done by this contructor!
+        """
+        AbstractTensor.__init__(self, backend=backend, legs=legs, labels=labels, dtype=dtype)
+        self.data = data
+
+    def check_sanity(self):
+        assert self.backend.get_dtype_from_data(self.data) == self.dtype
+        super().check_sanity()
+
+    def copy(self, deep=True):
+        if deep:
+            return Tensor(data=self.backend.copy_data(self.data),
+                          backend=self.backend, 
+                          legs=self.legs[:], 
+                          labels=self.labels[:],
+                          dtype=self.dtype)
+        return Tensor(data=self.data,
+                      backend=self.backend, 
+                      legs=self.legs, 
+                      labels=self.labels,
+                      dtype=self.dtype)
+
+    def item(self):
+        if all(leg.dim == 1 for leg in self.legs):
+            return self.backend.item(self)
+        else:
+            raise ValueError('Not a scalar')
+
+    def _mul_scalar(self, other: complex):
+        raise NotImplementedError  # FIXME
+
+    def __add__(self, other):
+        if isinstance(other, Tensor):
+            raise NotImplementedError  # FIXME
+        return NotImplemented
+
+    def __sub__(self, other):
+        if isinstance(other, Tensor):
+            raise NotImplementedError  # FIXME
+        return NotImplemented
+
+    def __repr__(self):
+        indent = '  '
+        label_strs = [force_str_len(label, 5) for label in self.labels]
+        dim_strs = [force_str_len(leg.dim, 5) for leg in self.legs]
+        components_strs = self._repr_leg_components(max_len=50)  # TODO picked an arbitrary length
+
+        lines = [
+            f'Tensor(',
+            f'{indent}* Backend: {type(self.backend).__name__}',
+            f'{indent}* Symmetry: {self.symmetry}',
+            f'{indent}* Legs:  label    dim  components',
+            f'{indent}         =============={"=" * max(10, *(len(c) for c in components_strs))}',
+        ]
+        for l, d, c in zip(label_strs, dim_strs, components_strs):
+            lines.append(f'{indent}         {l}  {d}  {c}')
+        lines.extend(self.backend._data_repr_lines(self.data, indent=indent, max_width=70, max_lines=20))
+        lines.append(')')
+        return "\n".join(lines)
+
+    def is_real(self):
+        return self.backend.is_real(self)
+
+    def to_dense_block(self, leg_order: list[int | str] = None):
+        block = self.backend.to_dense_block(self)
+        if leg_order is not None:
+            block = self.backend.block_transpose(block, self.get_leg_idcs(leg_order))
+        return block
+
+    @classmethod
+    def from_numpy(cls, array: np.ndarray, backend, legs: list[VectorSpace]=None, dtype: Dtype = None,
+                   labels: list[str | None] = None, atol: float = 1e-8, rtol: float = 1e-5) -> Tensor:
+        """
+        Like from_dense_block but `array` is a numpy array
         """
         block = backend.block_from_numpy(np.asarray(array))
         return cls.from_dense_block(block=block, backend=backend, legs=legs, labels=labels, atol=atol,
@@ -375,7 +446,6 @@ class Tensor:
     @classmethod
     def zero(cls, backend, legs: list[VectorSpace] | list[int], labels: list[str | None] = None,
              dtype: Dtype = Dtype.complex128) -> Tensor:
-        """A zero tensor"""
         if any(isinstance(l, int) for l in legs):
             assert all(isinstance(l, int) for l in legs)
             legs = [VectorSpace.non_symmetric(d) for d in legs]
@@ -385,22 +455,6 @@ class Tensor:
     @classmethod
     def eye(cls, backend, legs_or_dims: int | VectorSpace | list[int | VectorSpace], 
             labels: list[str | None] = None, dtype: Dtype = Dtype.complex128) -> Tensor:
-        """The identity map from one group of legs to their duals.
-
-        Parameters
-        ----------
-        backend : :class:`~tenpy.linalg.backends.abstract_backend.AbstractBackend`
-            The backend for the Tensor
-        legs_or_dims : int | VectorSpace | list[int | VectorSpace]
-            Description of *half* of the legs of the result, either via their vectorspace
-            or via an integer, which means a trivial VectorSpace of that dimension.
-            The resulting tensor has twice as many legs.
-        labels : list[str | None], optional
-            Labels associated with each leg, ``None`` for unnamed legs.
-        dtype : Dtype, optional
-            The data type of the Tensor entries.
-
-        """
         if isinstance(legs_or_dims, int):
             legs_or_dims = [VectorSpace.non_symmetric(legs_or_dims)]
         elif isinstance(legs_or_dims, VectorSpace):
@@ -411,6 +465,101 @@ class Tensor:
         data = backend.eye_data(legs=legs_or_dims, dtype=dtype)
         legs = legs_or_dims + [leg.dual for leg in legs_or_dims]
         return cls(data=data, backend=backend, legs=legs, labels=labels)
+
+
+# FIXME adjust API functions tdot, svd, ...
+# TODO is this a good name?
+# TODO docstring is quick and dirty
+class ChargedTensor(AbstractTensor):
+    # formerly, this was covered by npc Arrays with qtotal != 0.
+    """
+    Tensors which transform under a given symmetry in a more general manner than the Tensor class,
+    which represent tensors which are invariant under the symmetry.
+
+    The ChargedTensor is a composite object consisting of an invariant Tensor with a 
+    designated dummy leg and a state that this leg is to be contracted with.
+    This contraction is kept track of only symbolically.
+
+    If the dummy leg has any non-trivial sectors, this composite object is not invariant under the
+    symmetry.
+    The decomposition into a symmetric tensor and an explicit state, however, allows us
+    to still apply the machinery for symmetric tensors and exploit the sparsity.
+
+    Parameters
+    ----------
+    invariant_data: 
+        The numerical data ("free parameters") comprising the symmetry-invariant part tensor. 
+        type is backend-specific. The dummy leg must be the last leg.
+    backend: :class:`~tenpy.linalg.backends.abstract_backend.AbstractBackend`
+        The backend
+    legs: list[VectorSpace]
+        The legs of the composite object, *ex*cluding the dummy leg
+    dummy_leg: VectorSpace
+        The dummy leg
+    dummy_leg_state: block | None
+        The state that the dummy leg is contracted with. 
+        Either a backend-specific block of shape ``(dummy_leg.dim,)``, or `None`,
+        which is interpreted ``1`` if `dummmy_leg.dim == 1` and raises a `ValueError` otherwise.
+    labels: list[str | None] | None
+        Labels for the legs, *ex*cluding the dummy leg
+    dtype:
+        Dtype of the tensor. If ``None``, it is inferred from `data`.
+        Note that no type-conversion is done by this contructor!
+    """
+    
+    def __init__(self, invariant_data, backend, legs: list[VectorSpace], dummy_leg: VectorSpace, dummy_leg_state,
+                 labels: list[str | None] | None, dtype: Dtype | None):
+        AbstractTensor.__init__(self, backend=backend, legs=legs, labels=labels, dtype=dtype)
+        self.invariant_part = Tensor(
+            data=invariant_data, backend=backend, legs=self.legs + [dummy_leg], labels=self.labels + [_DUMMY_LABEL],
+            dtype=dtype
+        )
+        self.dummy_leg = dummy_leg
+        if dummy_leg_state is None:
+            if dummy_leg.dim != 1:
+                raise ValueError('Can not infer state for a dummy leg with dim > 1')
+            dummy_leg_state = backend.backend.block_from_numpy(np.array([1.]))
+        self.dummy_leg_state = dummy_leg_state
+
+    def check_sanity(self):
+        self.invariant_part.check_sanity()
+        assert self.backend.block_shape(self.dummy_leg_state) == (self.dummy_leg.dim,)
+        super().check_sanity()
+
+    def copy(self, deep=True):
+        raise NotImplementedError  # FIXME
+
+    def item(self):
+        if not all(leg.dim == 1 for leg in self.invariant_part.legs[:-1]):
+            raise ValueError('Not a scalar')
+        return self.backend.block_item(self.to_dense_block())
+
+    def __repr__(self):
+        return 'ChargedTensor(... [this is a stub __repr__])'  # TODO
+
+    def is_real(self):
+        return self.backend.is_real(self.invariant_part) and self.backend.block_is_real(self.dummy_leg_state)
+
+    def to_dense_block(self, leg_order: list[int | str] = None):
+        invariant_block = self.backend.to_dense_block(self.invariant_part)
+        block = self.backend.block_tdot(invariant_block, self.dummy_leg_state, [-1], [0])
+        if leg_order is not None:
+            block = self.backend.block_transpose(block, self.get_leg_idcs(leg_order))
+        return block
+
+    @classmethod
+    def from_numpy(cls, **todo_args):
+        ...  # FIXME stub
+
+    @classmethod
+    def from_dense_block(cls, **todo_args):
+        ...  # FIXME stub
+
+    @classmethod
+    def zero(cls, **todo_args):
+        ...
+
+    # TODO: ChargedTensor.eye makes no sense, right?
 
 
 def zero_like(tens: Tensor, labels: list[str | None] = None) -> Tensor:
