@@ -15,7 +15,7 @@ from typing import Iterable, TypeVar, List
 import numpy as np
 
 from .abstract_backend import AbstractBackend, AbstractBlockBackend, Data, Block
-from ..symmetries import Symmetry, AbelianGroup, VectorSpace, ProductSpace
+from ..symmetries import Symmetry, AbelianGroup, VectorSpace, ProductSpace, Sector
 from ..tensors import Tensor, Dtype
 from ...tools.optimization import use_cython
 
@@ -45,18 +45,28 @@ class AbelianBlockData:
                                 self.qdata,
                                 self.qdata_sorted)
 
-# JU: also dataclass?
-# JU: NonAbelian backend also needs the slices. So we could just always 
-#     define them in VectorSpace.__init__?
-class AbelianVectorSpaceData:
-    def __init__(self, leg: VectorSpace):
-        self.slices = np.cumsum(leg.multiplicities)
 
-# JU: also dataclass?
-class AbelianProductSpaceData:
-    def __init__(self, pipe: ProductSpace):
-        self.qmap = ...
-        raise NotImplementedError("TODO")  # TODO
+class AbelianBackendVectorSpace(VectorSpace):
+    def __init__(self, symmetry: Symmetry, sectors: list[Sector], multiplicities: list[int], 
+                 is_dual: bool, is_real: bool):
+        VectorSpace.__init__(self, symmetry, sectors, multiplicities, is_dual, is_real)
+        self.slices = np.cumsum(self.multiplicities)
+
+    @classmethod
+    def from_vector_space(cls, space: VectorSpace) -> AbelianBackendVectorSpace:
+        return cls(space.symmetry, space.sectors, space.multiplicities, space.is_dual,
+                   space.is_real)
+
+
+class AbelianBackendProductSpace(ProductSpace):
+    # formerly known as LegPipe
+    def __init__(self, spaces: list[VectorSpace], is_dual: bool = False):
+        ProductSpace.__init__(self, spaces, is_dual)
+        self.qmap = ...  # TODO
+
+    @classmethod
+    def from_product_space(cls, space: ProductSpace) -> AbelianBackendProductSpace:
+        return cls(space.spaces, space.is_dual)
 
 
 
@@ -67,14 +77,13 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
     ----------
 
     """
-    def finalize_Tensor_init(self, a: Tensor) -> None:
-        for leg in a.legs:
-            if leg._abelian_data is None:
-                if isinstance(leg, ProductSpace):  # TODO: hasattr(leg, 'spaces') is more robust
-                    leg._abelian_data = AbelianProductSpaceData(leg)
-                else:
-                    leg._abelian_data = AbelianVectorSpaceData(leg)
-
+    def convert_vector_space(self, leg: VectorSpace) -> VectorSpace:
+        if isinstance(leg, (AbelianBackendVectorSpace, AbelianBackendProductSpace)):
+            return leg
+        elif isinstance(leg, ProductSpace):
+            return AbelianBackendProductSpace.from_product_space(leg)
+        else:
+            return AbelianBackendVectorSpace.from_vector_space(leg)
 
     def get_dtype_from_data(self, a: Data) -> Dtype:
         return a.dtype

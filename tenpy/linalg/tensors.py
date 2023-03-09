@@ -57,6 +57,7 @@ class Tensor:
         data about the symmetry is contained in the legs.
     backend : :class:`~tenpy.linalg.backends.abstract_backend.AbstractBackend`
     legs : list of :class:`~tenpy.linalg.symmetries.VectorSpace`
+        These may be instances of a backend-specifc subclass of :class:`~tenpy.linalg.symmetries.VectorSpace`
     labels : list of {``None``, str}
     """
 
@@ -83,12 +84,11 @@ class Tensor:
         """
         self.data = data
         self.backend = backend
-        self.legs = legs
+        self.legs = [backend.convert_vector_space(leg) for leg in legs]
         self._labels = labels or [None] * len(legs)
         self._labelmap = {label: leg_num for leg_num, label in enumerate(self.labels) if label is not None}
         self.num_legs = len(legs)
         self.symmetry = legs[0].symmetry
-        self.backend.finalize_Tensor_init(self)
         if dtype is None:
             self.dtype = backend.get_dtype_from_data(data)
         else:

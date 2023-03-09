@@ -37,8 +37,10 @@ class AbstractBackend(ABC):
     def __str__(self):
         return f'{type(self).__name__}'
 
-    def finalize_Tensor_init(self, a: Tensor):
-        pass
+    def convert_vector_space(self, leg: VectorSpace) -> VectorSpace:
+        """convert a VectorSpace (or ProductSpace) instance to a backend-specific
+        subclass"""
+        return leg
 
     @abstractmethod
     def get_dtype_from_data(self, a: Data) -> Dtype:

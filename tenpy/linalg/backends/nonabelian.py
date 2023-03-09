@@ -26,10 +26,6 @@ class NonAbelianData:
 #  jakob only keeps it around to make his IDE happy
 class AbstractNonabelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
 
-    def finalize_Tensor_init(self, a: Tensor):
-        # TODO do we need to do stuff?
-        return super().finalize_Tensor_init(a)
-
     def get_dtype_from_data(self, a: NonAbelianData) -> Dtype:
         return a.dtype
 
