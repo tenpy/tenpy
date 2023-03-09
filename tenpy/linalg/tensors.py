@@ -72,7 +72,7 @@ class Tensor:
         ----------
         data
             The numerical data ("free parameters") comprising the tensor. type is backend-specific
-        backend
+        backend: :class:`~tenpy.linalg.backends.abstract_backend.AbstractBackend`
             The backend for the Tensor
         legs : list[VectorSpace]
             The legs of the Tensor
@@ -288,10 +288,23 @@ class Tensor:
     def __complex__(self):
         return complex(self.item())
 
-    def __array__(self, dtype=None):
-        # TODO this assumes that the blocks are valid inputs to np.asarray.
+    def to_dense_block(self, leg_order: list[int | str] = None):
+        """Convert tensor to a dense (i.e. no longer exploiting the symmetry structure) block,
+        i.e. a numpy ndarray if the backend is a NumpyBlockBackend, or a torch Tensor of
+        the backend is a TorchBlockBackend"""
+        block = self.backend.to_dense_block(self)
+        if leg_order is not None:
+            block = self.backend.block_transpose(block, self.get_leg_idcs(leg_order))
+        return block
+
+    def to_numpy_ndarray(self, leg_order: list[int | str] = None, dtype=None) -> np.ndarray:
+        """Convert to a numpy array"""
+        # TODO (JU) this assumes that the blocks are valid inputs to np.asarray.
         #  are there cases where they are not?
-        return np.asarray(self.backend.to_dense_block(self.data), dtype)
+        return np.asarray(self.to_dense_block(leg_order=leg_order), dtype=dtype)
+
+    def __array__(self, dtype=None):
+        return self.to_numpy_ndarray(dtype=dtype)
 
     @classmethod
     def from_numpy(cls, array: np.ndarray, backend, legs: list[VectorSpace]=None, dtype: Dtype = None,
