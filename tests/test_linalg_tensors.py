@@ -1,23 +1,37 @@
 """A collection of tests for tenpy.linalg.tensors."""
 # Copyright 2023-2023 TeNPy Developers, GNU GPLv3
-from multiprocessing.sharedctypes import Value
 import numpy as np
 from tenpy.linalg.tensors import *
-from tenpy.linalg.backends import NoSymmetryNumpyBackend
+from tenpy.linalg.backends.abstract_backend import AbstractBackend
+from tenpy.linalg.backends.torch import TorchBlockBackend, NoSymmetryTorchBackend
+from tenpy.linalg.backends.numpy import NumpyBlockBackend, NoSymmetryNumpyBackend
 from tenpy.linalg.symmetries import VectorSpace
+
 import pytest
 
+all_backends = dict(
+    numpy_no_symm=NoSymmetryNumpyBackend(),
+    torch_no_symm=NoSymmetryTorchBackend()
+)
+
+def random_block(shape, backend):
+    if isinstance(backend, NumpyBlockBackend):
+        return np.random.random(shape)
+    elif isinstance(backend, TorchBlockBackend):
+        import torch
+        return torch.randn(shape)
 
 
-def test_Tensor_methods():
-    backend = NoSymmetryNumpyBackend()
-    data = np.random.random((2, 3, 10))
-    data2 = np.random.random((2, 3, 10))
+@pytest.mark.parametrize('backend', all_backends.keys())
+def test_Tensor_methods(backend):
+    backend = all_backends[backend]
+    data1 = random_block((2, 3, 10), backend)
+    data2 = random_block((2, 3, 10), backend)
     
-    legs = [VectorSpace.non_symmetric(d) for d in data.shape]
+    legs = [VectorSpace.non_symmetric(d) for d in data1.shape]
     
     print('checking __init__ with labels=None')
-    tens1 = Tensor(data, backend, legs, labels=None)
+    tens1 = Tensor(data1, backend, legs, labels=None)
     tens1.check_sanity()
 
     print('checking __init__, partially labelled')
@@ -25,11 +39,11 @@ def test_Tensor_methods():
     tens2.check_sanity()
 
     print('checking __init__, fully labelled')
-    tens3 = Tensor(data, backend, legs, labels=['foo', 'a', 'b'])
+    tens3 = Tensor(data1, backend, legs, labels=['foo', 'a', 'b'])
     tens3.check_sanity()
 
     print('check size')
-    assert tens3.size == np.prod(data.shape)
+    assert tens3.size == np.prod(data1.shape)
 
     # TODO reintroduce when implemented
     # print('check num_parameters')
@@ -58,11 +72,11 @@ def test_Tensor_methods():
     print('check get_leg_idx')
     assert tens3.get_leg_idx(0) == 0
     assert tens3.get_leg_idx(-1) == 2
-    with pytest.raises(KeyError):
+    with pytest.raises(ValueError):
         tens3.get_leg_idx(10)
     assert tens3.get_leg_idx('i') == 0
     assert tens3.get_leg_idx('j') == 1
-    with pytest.raises(KeyError):
+    with pytest.raises(ValueError):
         tens3.get_leg_idx('bar')
     with pytest.raises(TypeError):
         tens3.get_leg_idx(None)
@@ -72,8 +86,9 @@ def test_Tensor_methods():
     assert tens3.get_leg_idcs(['i', 'k', 1]) == [0, 2, 1]
 
     print('check item')
-    tens4 = Tensor(np.ones((1,)), backend, legs=[VectorSpace.non_symmetric(1)])
-    assert np.allclose(tens4.item(), 1)
+    data4 = random_block((1,), backend)
+    tens4 = Tensor(data4, backend, legs=[VectorSpace.non_symmetric(1)])
+    assert np.allclose(tens4.item(), data4[0])
     
     print('check str and repr')
     str(tens1)
@@ -83,13 +98,13 @@ def test_Tensor_methods():
 
     print('check addition + multiplication')
     neg_t3 = -tens3
-    assert np.allclose(neg_t3.data, -data)
+    assert np.allclose(neg_t3.data, -tens3.data)
     a = 42
     b = 17
     res = a * tens1 - b * tens2
-    assert np.allclose(res.data, a * data - b * data2)
+    assert np.allclose(res.data, a * data1 - b * data2)
     res = tens1 / a + tens2 / b
-    assert np.allclose(res.data, data / a + data2 / b)
+    assert np.allclose(res.data, data1 / a + data2 / b)
     # TODO check strict label behavior!
 
     with pytest.raises(TypeError):
@@ -97,18 +112,18 @@ def test_Tensor_methods():
 
     print('check converisions, float, complex, array')
     assert isinstance(float(tens4), float)
-    assert np.allclose(float(tens4), 1)
+    assert np.allclose(float(tens4), float(data4))
     assert isinstance(complex(tens4 + 2.j * tens4), complex)
-    assert np.allclose(complex(tens4 + 2.j * tens4), 1 + 2.j)
+    assert np.allclose(complex(tens4 + 2.j * tens4), complex(data4 + 2.j * data4))
     # TODO check that float of a complex tensor raises a warning
     t1_np = np.asarray(tens1)
-    assert np.allclose(t1_np, data)
+    assert np.allclose(t1_np, data1)
 
 
-
-def test_Tensor_classmethods():
-    backend = NoSymmetryNumpyBackend()
-    data = np.random.random((2, 3, 10))
+@pytest.mark.parametrize('backend', all_backends.keys())
+def test_Tensor_classmethods(backend):
+    backend = all_backends[backend]
+    data = random_block((2, 3, 10), backend)
     
     print('checking from_numpy')
     tens = Tensor.from_numpy(data, backend=backend)
@@ -129,8 +144,9 @@ def test_Tensor_classmethods():
     assert np.allclose(tens.data, np.eye(40).reshape((10, 4, 10, 4)))
 
 
-def test_tdot():
-    backend = NoSymmetryNumpyBackend()
+@pytest.mark.parametrize('backend', all_backends.keys())
+def test_tdot(backend):
+    backend = all_backends[backend]
     a = VectorSpace.non_symmetric(7)
     b = VectorSpace.non_symmetric(13)
     c = VectorSpace.non_symmetric(22)
@@ -197,8 +213,9 @@ def test_tdot():
     assert np.allclose(res3, expect)
 
 
-def test_outer():
-    backend = NoSymmetryNumpyBackend()
+@pytest.mark.parametrize('backend', all_backends.keys())
+def test_outer(backend):
+    backend = all_backends[backend]
     data1 = np.random.random([3, 5])
     data2 = np.random.random([4, 8])
     t1 = Tensor.from_numpy(data1, backend, labels=['a', 'f'])
@@ -209,8 +226,9 @@ def test_outer():
     assert res.labels_are('a', 'f', 'g', 'b')
 
 
-def test_inner():
-    backend = NoSymmetryNumpyBackend()
+@pytest.mark.parametrize('backend', all_backends.keys())
+def test_inner(backend):
+    backend = all_backends[backend]
     data1 = np.random.random([3, 5]) + 1.j * np.random.random([3, 5])
     data2 = np.random.random([3, 5]) + 1.j * np.random.random([3, 5])
     data3 = np.random.random([5, 3]) + 1.j * np.random.random([5, 3])
@@ -225,8 +243,9 @@ def test_inner():
     assert np.allclose(expect2, res2)
 
 
-def test_transpose():
-    backend = NoSymmetryNumpyBackend()
+@pytest.mark.parametrize('backend', all_backends.keys())
+def test_transpose(backend):
+    backend = all_backends[backend]
     shape = [3, 5, 7, 10]
     data = np.random.random(shape) + 1.j * np.random.random(shape)
     t = Tensor.from_numpy(data, backend, labels=['a', 'b', 'c', 'd'])
@@ -235,8 +254,9 @@ def test_transpose():
     assert np.allclose(res.data, np.transpose(data, [2, 0, 3, 1]))
     
 
-def test_trace():
-    backend = NoSymmetryNumpyBackend()
+@pytest.mark.parametrize('backend', all_backends.keys())
+def test_trace(backend):
+    backend = all_backends[backend]
 
     print('single legpair - default legs* args')
     data = np.random.random([7, 7, 7]) + 1.j * np.random.random([7, 7, 7])
@@ -284,18 +304,24 @@ def test_trace():
     assert np.allclose(res_label, expect)
     
 
-def test_conj():
-    backend = NoSymmetryNumpyBackend()
+@pytest.mark.parametrize('backend', all_backends.keys())
+def test_conj(backend):
+    backend = all_backends[backend]
     data = np.random.random([2, 4, 5]) + 1.j * np.random.random([2, 4, 5])
     tens = Tensor.from_numpy(data, backend, labels=['a', 'b', None])
     res = conj(tens)
-    assert np.allclose(res.data, np.conj(data))
+    if isinstance(backend, TorchBlockBackend):
+        res_data = res.data.resolve_conj().numpy()
+    else:
+        res_data = res.data
+    assert np.allclose(res_data, np.conj(data))
     assert res.labels == ['a*', 'b*', None]
     assert [l1.is_dual_of(l2) for l1, l2 in zip(res.legs, tens.legs)]
     
 
-def test_combine_split():
-    backend = NoSymmetryNumpyBackend()
+@pytest.mark.parametrize('backend', all_backends.keys())
+def test_combine_split(backend):
+    backend = all_backends[backend]
     data = np.random.random([2, 4, 7, 5]) + 1.j * np.random.random([2, 4, 7, 5])
     tens = Tensor.from_numpy(data, backend, labels=['a', 'b', 'c', 'd'])
 
@@ -323,8 +349,9 @@ def test_combine_split():
         split_leg(res, 'a')
     
 
-def test_is_scalar():
-    backend = NoSymmetryNumpyBackend()
+@pytest.mark.parametrize('backend', all_backends.keys())
+def test_is_scalar(backend):
+    backend = all_backends[backend]
     assert is_scalar(1) 
     assert is_scalar(0.) 
     assert is_scalar(1. + 2.j) 
@@ -334,13 +361,15 @@ def test_is_scalar():
     assert not is_scalar(non_scalar_tens)
     
 
-def test_allclose():
-    backend = NoSymmetryNumpyBackend()
+@pytest.mark.parametrize('backend', all_backends.keys())
+def test_allclose(backend):
+    backend = all_backends[backend]
     pass  # FIXME 
     
 
-def test_squeeze_legs():
-    backend = NoSymmetryNumpyBackend()
+@pytest.mark.parametrize('backend', all_backends.keys())
+def test_squeeze_legs(backend):
+    backend = all_backends[backend]
     data = np.random.random([2, 1, 7, 1, 1]) + 1.j * np.random.random([2, 1, 7, 1, 1])
     tens = Tensor.from_numpy(data, backend, labels=['a', 'b', 'c', 'd', 'e'])
 
@@ -360,8 +389,9 @@ def test_squeeze_legs():
     assert res.labels == ['a', 'c', 'd']
     
 
-def test_norm():
-    backend = NoSymmetryNumpyBackend()
+@pytest.mark.parametrize('backend', all_backends.keys())
+def test_norm(backend):
+    backend = all_backends[backend]
     data = np.random.random([2, 3, 7]) + 1.j * np.random.random([2, 3, 7])
     tens = Tensor.from_numpy(data, backend)
     res = norm(tens)
