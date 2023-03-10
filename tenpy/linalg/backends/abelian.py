@@ -19,7 +19,7 @@ from ..symmetries import Symmetry, AbelianGroup, VectorSpace, ProductSpace, Sect
 from ..tensors import Tensor, Dtype
 from ...tools.optimization import use_cython
 
-__all__ = ['AbelianBlockData', 'AbelianVectorSpaceData', 'AbelianProductSpaceData', 
+__all__ = ['AbelianBlockData', 'AbelianBackendVectorSpace', 'AbelianBackendProductSpace', 
            'AbstractAbelianBackend', 'detect_qtotal']
 
 

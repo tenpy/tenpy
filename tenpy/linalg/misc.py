@@ -4,7 +4,8 @@ from __future__ import annotations
 from typing import Sequence, TypeVar
 import numpy as np
 
-__all__ = ['force_str_len', 'UNSPECIFIED', 'inverse_permutation', 'duplicate_entries']
+__all__ = ['force_str_len', 'UNSPECIFIED', 'inverse_permutation', 'duplicate_entries', 
+           'join_as_many_as_possible']
 
 # TODO move somewhere else
 #  (for now i want to keep changes in refactor_npc branch contained to tenpy.linalg as much as possible

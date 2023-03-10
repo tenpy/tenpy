@@ -8,7 +8,8 @@ from .abstract_backend import AbstractBackend, AbstractBlockBackend, Block
 from ..symmetries import FusionStyle, Sector, Symmetry, VectorSpace, ProductSpace
 from ..tensors import Dtype, Tensor
 
-__all__ = ['AbstractNonabelianBackend']
+__all__ = ['AbstractNonabelianBackend', 'NonAbelianData', 'FusionTree', 'fusion_trees', 
+           'all_fusion_trees', 'coupled_sectors']
 
 
 @dataclass
