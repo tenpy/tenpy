@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 import math
-from .tensors import DiagonalTensor, Tensor, get_same_backend
+from .tensors import DiagonalTensor, AbstractTensor, Tensor, get_same_backend
 
 __all__ = ['svd', 'truncate_svd', 'svd_split', 'leg_bipartition', 'exp', 'log']
 
 
-def svd(a: Tensor, u_legs: list[int | str] = None, vh_legs: list[int | str] = None,
-        new_labels: tuple[str, ...] = None, options=None) -> tuple[Tensor, DiagonalTensor, Tensor]:
+def svd(a: AbstractTensor, u_legs: list[int | str] = None, vh_legs: list[int | str] = None,
+        new_labels: tuple[str, ...] = None, options=None
+        ) -> tuple[AbstractTensor, DiagonalTensor, AbstractTensor]:
     """SVD of a tensor, viewed as a linear map (i.e. matrix) from one set of its legs to the rest.
 
     TODO: document input format for u_legs / vh_legs, can probably to it centrally for all matrix ops
@@ -36,6 +37,9 @@ def svd(a: Tensor, u_legs: list[int | str] = None, vh_legs: list[int | str] = No
         The tensors U, S, Vh that form the SVD, such that `tdot(U, tdot(S, Vh, 1, 0), -1, 0)` is equal
         to `a` up to numerical precsision
     """
+    if not isinstance(a, Tensor):
+        raise NotImplementedError  # TODO
+    
     u_idcs, vh_idcs = leg_bipartition(a, u_legs, vh_legs)
     l_u, l_su, l_sv, l_vh = _svd_new_labels(new_labels)
 
@@ -51,14 +55,17 @@ def svd(a: Tensor, u_legs: list[int | str] = None, vh_legs: list[int | str] = No
     return U, S, Vh
 
 
-def truncate_svd(U: Tensor, S: DiagonalTensor, Vh: Tensor, options=None
-                 ) -> tuple[Tensor, DiagonalTensor, Tensor, float]:
+def truncate_svd(U: AbstractTensor, S: DiagonalTensor, Vh: AbstractTensor, options=None
+                 ) -> tuple[AbstractTensor, DiagonalTensor, AbstractTensor, float]:
     """Truncate an SVD decomposition
     
     Returns
     -------
     U, S, Vh, trunc_err
     """
+    if not isinstance(U, Tensor) or not isinstance(Vh, Tensor):
+        raise NotImplementedError
+    
     backend = get_same_backend(U, S, Vh)
     # TODO implement backend.truncate_svd
     u_data, s_data, vh_data, new_leg, trunc_err = backend.truncate_svd(U, S, Vh, options)
@@ -69,7 +76,7 @@ def truncate_svd(U: Tensor, S: DiagonalTensor, Vh: Tensor, options=None
     return U, S, Vh, trunc_err
 
 
-def svd_split(a: Tensor, legs1: list[int | str] = None, legs2: list[int | str] = None, 
+def svd_split(a: AbstractTensor, legs1: list[int | str] = None, legs2: list[int | str] = None, 
               new_labels: tuple[str, str] = None, options=None, s_exponent: float = .5):
     """Split a tensor via (truncated) svd, 
     i.e. compute (U @ S ** s_exponent) and (S ** (1 - s_exponent) @ Vh)"""
@@ -94,7 +101,7 @@ def _svd_new_labels(new_labels: tuple[str, ...] | None) -> tuple[str, str, str, 
     return l_u, l_su, l_sv, l_vh
 
 
-def leg_bipartition(a: Tensor, legs1: list[int | str] | None, legs2: list[int | str] | None
+def leg_bipartition(a: AbstractTensor, legs1: list[int | str] | None, legs2: list[int | str] | None
                     ) -> tuple[list[int] | list[int]]:
     """Utility function for partitioning the legs of a Tensor into two groups.
     The tensor can then unambiguously be understood as a linear map, and linear algebra concepts
@@ -134,14 +141,17 @@ def leg_bipartition(a: Tensor, legs1: list[int | str] | None, legs2: list[int | 
     return idcs1, idcs2
 
 
-def exp(t: Tensor | complex | float, legs1: list[int | str] = None, legs2: list[int | str] = None) -> Tensor:
+def exp(t: AbstractTensor | complex | float, legs1: list[int | str] = None, 
+        legs2: list[int | str] = None) -> AbstractTensor | complex | float:
     """
     The exponential of t, viewed as a linear map from legs1 to legs2.
     Requires the two groups of legs to be mutually dual.
     Contrary to numpy, this is *not* the element-wise exponential function.
     """
-    if not isinstance(t, Tensor):
+    if not isinstance(t, AbstractTensor):
         return math.exp(t)
+    if not isinstance(t, Tensor):
+        raise NotImplementedError
     idcs1, idcs2 = leg_bipartition(legs1, legs2)
     assert len(idcs1) == len(idcs2)
     assert all(t.legs[i1].is_dual_of(t.legs[i2]) for i1, i2 in zip(idcs1, idcs2))
@@ -149,14 +159,17 @@ def exp(t: Tensor | complex | float, legs1: list[int | str] = None, legs2: list[
     return Tensor(res_data, backend=t.backend, legs=t.legs, labels=t.labels)
 
 
-def log(t: Tensor | complex | float, legs1: list[int | str] = None, legs2: list[int | str] = None) -> Tensor:
+def log(t: AbstractTensor | complex | float, legs1: list[int | str] = None, 
+        legs2: list[int | str] = None) -> AbstractTensor | complex | float:
     """
     The (natural) logarithm of t, viewed as a linear map from legs1 to legs2.
     Requires the two groups of legs to be mutually dual.
     Contrary to numpy, this is *not* the element-wise exponential function.
     """
-    if not isinstance(t, Tensor):
+    if not isinstance(t, AbstractTensor):
         return math.log(t)
+    if not isinstance(t, Tensor):
+        raise NotImplementedError
     idcs1, idcs2 = leg_bipartition(legs1, legs2)
     assert len(idcs1) == len(idcs2)
     assert all(t.legs[i1].is_dual_of(t.legs[i2]) for i1, i2 in zip(idcs1, idcs2))
