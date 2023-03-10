@@ -23,10 +23,15 @@ __all__ = ['AbelianBlockData', 'AbelianBackendVectorSpace', 'AbelianBackendProdu
            'AbstractAbelianBackend', 'detect_qtotal']
 
 
+# TODO (JU) call it AbelianBackendData instead? "Block" sounds misleading to me
 @dataclass
 class AbelianBlockData:
     """Data stored in a tensor for AbelianBlockData"""
     dtype : Dtype  # data type
+    # TODO (JU) the implementation of ChargedTensor i have proposed would mean that the AbelianBackend
+    #  can leave out qtotal (i.e. assume it is zero).
+    #  a ChargedTensor has an extra leg with ind_len 1 and a non-zero sector,
+    #  which effectively introduces a "qtotal" to the charge-rule
     qtotal : np.ndarray  # total charge
     blocks : List[Block]  # The actual entries of the tensor. Formerly known as Array._data
     qdata : np.ndarray  # For each of the blocks entries the qindices of the different legs.
