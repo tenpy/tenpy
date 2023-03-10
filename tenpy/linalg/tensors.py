@@ -689,7 +689,7 @@ def inner(t1: Tensor, t2: Tensor) -> complex:
         raise ValueError('Tensors need to have the same number of legs')
     leg_order_2 = _match_label_order(t1, t2)
     if leg_order_2 is None:
-        leg_order_2 = range(t2.num_legs)
+        leg_order_2 = list(range(t2.num_legs))
     if not all(t1.legs[n1] == t2.legs[n2] for n1, n2 in enumerate(leg_order_2)):
         raise ValueError('Incompatible legs')
     backend = get_same_backend(t1, t2)

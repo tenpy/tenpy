@@ -86,13 +86,19 @@ class TorchBlockBackend(AbstractBlockBackend):
         axs1 = list(range(len(a.shape)))
         if axs2 is None:
             axs2 = axs1
-        return torch_module.tensordot(a, b, (axs1, axs2))
+        return torch_module.tensordot(torch_module.conj(a), b, (axs1, axs2))
 
     def block_transpose(self, a: Block, permutation: list[int]) -> Block:
         return torch_module.permute(a, permutation)  # TODO: this is documented as a view. is that a problem?
 
     def block_trace(self, a: Block, idcs1: list[int], idcs2: list[int]) -> Block:
-        raise NotImplementedError  # torch.trace supports only 2D inputs
+        other_idcs = [n for n in range(len(a.shape)) if n not in idcs1 and n not in idcs2]
+        a = torch_module.permute(a, other_idcs + idcs1 + idcs2)
+        num_other = len(other_idcs)
+        num_trace = len(idcs1)
+        trace_dim = prod(a.shape[num_other:num_other + num_trace])
+        a = torch_module.reshape(a, [*a.shape[:num_other], trace_dim, trace_dim])
+        return a.diagonal(offset=0, dim1=-1, dim2=-2).sum(-1)
 
     def block_conj(self, a: Block) -> Block:
         return torch_module.conj(a)
@@ -114,7 +120,9 @@ class TorchBlockBackend(AbstractBlockBackend):
         return torch_module.allclose(a, b, rtol=rtol, atol=atol)
 
     def block_squeeze_legs(self, a: Block, idcs: list[int]) -> Block:
-        return torch_module.squeeze(a, idcs)
+        # TODO (JU) this is ugly... but torch.squeeze squeezes all axes of dim 1, cant control which
+        idx = [0 if ax in idcs else slice(None, None, None) for ax in range(len(a.shape))]
+        return a[idx]
 
     def block_norm(self, a: Block) -> float:
         return torch_module.norm(a)

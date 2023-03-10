@@ -95,7 +95,7 @@ class AbstractNoSymmetryBackend(AbstractBackend, AbstractBlockBackend, ABC):
         return self.block_allclose(a.data, b.data, rtol=rtol, atol=atol)
 
     def squeeze_legs(self, a: Tensor, idcs: list[int]) -> Data:
-        return self.block_squeeze_legs(a, idcs)
+        return self.block_squeeze_legs(a.data, idcs)
 
     def norm(self, a: Tensor) -> float:
         return self.block_norm(a.data)
