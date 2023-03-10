@@ -52,7 +52,7 @@ _DUMMY_LABEL = '!'
 
 class AbstractTensor(ABC):
 
-    def __init__(self, backend, legs: list[VectorSpace], labels: list[str | None] | None, dtype: Dtype):
+    def __init__(self, backend, legs: list[VectorSpace], labels: list[str | None] | None):
         """
         Parameters
         ----------
@@ -62,8 +62,6 @@ class AbstractTensor(ABC):
             The legs of the Tensor
         labels : list[str | None] | None
             Labels for the legs. If None, translates to ``[None, None, ...]`` of appropriate length
-        dtype : 
-            Datatype of the tensor.
         """
         self.backend = backend
         self.legs = [backend.convert_vector_space(leg) for leg in legs]
@@ -74,7 +72,6 @@ class AbstractTensor(ABC):
         self._labelmap = {label: leg_num for leg_num, label in enumerate(self.labels) if label is not None}
         self.num_legs = len(legs)
         self.symmetry = legs[0].symmetry
-        self.dtype = dtype
         
         if self.num_legs == 1:
             self.parent_space = self.legs[0]
@@ -257,6 +254,7 @@ class AbstractTensor(ABC):
         """Convert to a numpy array"""
         # TODO (JU) this assumes that the blocks are valid inputs to np.asarray.
         #  are there cases where they are not?
+        # TODO document what dtype is! give it a clearer name, eg numpy_dtype ?
         return np.asarray(self.to_dense_block(leg_order=leg_order), dtype=dtype)
 
     def __array__(self, dtype=None):
@@ -285,8 +283,7 @@ class Tensor(AbstractTensor):
     labels : list of {``None``, str}
     """
 
-    def __init__(self, data, backend, legs: list[VectorSpace], labels: list[str | None] | None = None, 
-                 dtype: Dtype = None):
+    def __init__(self, data, backend, legs: list[VectorSpace], labels: list[str | None] | None = None):
         """
         This constructor is not user-friendly. 
         Use as_tensor instead.  TODO point to which methods here?
@@ -302,17 +299,15 @@ class Tensor(AbstractTensor):
             The legs of the Tensor
         labels : list[str | None] | None
             Labels for the legs. If None, translates to ``[None, None, ...]`` of appropriate length
-        dtype : 
-            Datatype of the tensor. If ``None``, it is inferred from `data`.
-            Note that no type-conversion is done by this contructor!
         """
-        if dtype is None:
-            dtype = backend.get_dtype_from_data(data)
-        AbstractTensor.__init__(self, backend=backend, legs=legs, labels=labels, dtype=dtype)
+        AbstractTensor.__init__(self, backend=backend, legs=legs, labels=labels)
         self.data = data
 
+    @property
+    def dtype(self) -> Dtype:
+        return self.backend.get_dtype_from_data(self.data)
+
     def check_sanity(self):
-        assert self.backend.get_dtype_from_data(self.data) == self.dtype
         super().check_sanity()
 
     def copy(self, deep=True):
@@ -320,13 +315,11 @@ class Tensor(AbstractTensor):
             return Tensor(data=self.backend.copy_data(self.data),
                           backend=self.backend, 
                           legs=self.legs[:], 
-                          labels=self.labels[:],
-                          dtype=self.dtype)
+                          labels=self.labels[:])
         return Tensor(data=self.data,
                       backend=self.backend, 
                       legs=self.legs, 
-                      labels=self.labels,
-                      dtype=self.dtype)
+                      labels=self.labels)
 
     def item(self):
         if all(leg.dim == 1 for leg in self.legs):
@@ -421,12 +414,10 @@ class Tensor(AbstractTensor):
         is_real = False  # FIXME dummy
         if legs is None:
             legs = [VectorSpace.non_symmetric(d, is_real=is_real) for d in backend.block_shape(block)]
-        if dtype is None:
-            dtype = backend.block_dtype(block)
-        else:
+        if dtype is not None:
             block = backend.block_to_dtype(block, dtype)
         data = backend.from_dense_block(block, legs=legs, atol=atol, rtol=rtol)
-        return cls(data=data, backend=backend, legs=legs, labels=labels, dtype=dtype)
+        return cls(data=data, backend=backend, legs=legs, labels=labels)
 
     @classmethod
     def zero(cls, backend, legs: list[VectorSpace] | list[int], labels: list[str | None] = None,
@@ -503,19 +494,13 @@ class ChargedTensor(AbstractTensor):
         which is interpreted ``1`` if `dummmy_leg.dim == 1` and raises a `ValueError` otherwise.
     labels: list[str | None] | None
         Labels for the legs, *ex*cluding the dummy leg
-    dtype:
-        Dtype of the tensor. If ``None``, it is inferred from `data`.
-        Note that no type-conversion is done by this contructor!
     """
     
     def __init__(self, invariant_data, backend, legs: list[VectorSpace], dummy_leg: VectorSpace, dummy_leg_state,
-                 labels: list[str | None] | None = None, dtype: Dtype | None = None):
-        if dtype is None:
-            dtype = backend.get_dtype_from_data(invariant_data)
-        AbstractTensor.__init__(self, backend=backend, legs=legs, labels=labels, dtype=dtype)
+                 labels: list[str | None] | None = None):
+        AbstractTensor.__init__(self, backend=backend, legs=legs, labels=labels)
         self.invariant_part = Tensor(
             data=invariant_data, backend=backend, legs=self.legs + [dummy_leg], labels=self.labels + [_DUMMY_LABEL],
-            dtype=dtype
         )
         self.dummy_leg = dummy_leg
         if dummy_leg_state is None:
@@ -523,6 +508,10 @@ class ChargedTensor(AbstractTensor):
                 raise ValueError('Can not infer state for a dummy leg with dim > 1')
             dummy_leg_state = backend.backend.block_from_numpy(np.array([1.]))
         self.dummy_leg_state = dummy_leg_state
+
+    @property
+    def dtype(self) -> Dtype:
+        return self.invariant_part.dtype
 
     def check_sanity(self):
         self.invariant_part.check_sanity()
@@ -748,7 +737,7 @@ def conj(t: Tensor) -> Tensor:
     """
     # TODO (Jakob) think about this in the context of pivotal category with duals
     return Tensor(t.backend.conj(t), backend=t.backend, legs=[l.dual for l in t.legs],
-                  labels=[_dual_leg_label(l) for l in t._labels], dtype=t.dtype)
+                  labels=[_dual_leg_label(l) for l in t._labels])
 
 
 # TODO there should be an operation that converts only one or some of the legs to dual
@@ -775,7 +764,7 @@ def combine_legs(t: Tensor, legs: list[int | str], new_leg: ProductSpace = None)
     res_labels = [new_label if idx == leg_idcs[0] else label for idx, label in enumerate(t._labels)
               if idx not in leg_idcs[1:]]
     res_data = t.backend.combine_legs(t, idcs=leg_idcs, new_leg=new_leg)
-    return Tensor(res_data, backend=t.backend, legs=res_legs, labels=res_labels, dtype=t.dtype)
+    return Tensor(res_data, backend=t.backend, legs=res_legs, labels=res_labels)
 
 
 def split_leg(t: Tensor, leg: int | str) -> Tensor:
