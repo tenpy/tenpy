@@ -271,27 +271,6 @@ class AbstractTensor(ABC):
              dtype: Dtype = Dtype.complex128) -> Tensor:
         """A zero tensor"""
         ...
-    
-    @classmethod
-    def eye(cls, backend, legs_or_dims: int | VectorSpace | list[int | VectorSpace], 
-            labels: list[str | None] = None, dtype: Dtype = Dtype.complex128) -> Tensor:
-        """The identity map from one group of legs to their duals.
-
-        Parameters
-        ----------
-        backend : :class:`~tenpy.linalg.backends.abstract_backend.AbstractBackend`
-            The backend for the Tensor
-        legs_or_dims : int | VectorSpace | list[int | VectorSpace]
-            Description of *half* of the legs of the result, either via their vectorspace
-            or via an integer, which means a trivial VectorSpace of that dimension.
-            The resulting tensor has twice as many legs.
-        labels : list[str | None], optional
-            Labels associated with each leg, ``None`` for unnamed legs.
-        dtype : Dtype, optional
-            The data type of the Tensor entries.
-
-        """
-        ...
 
 
 class Tensor(AbstractTensor):
@@ -455,6 +434,22 @@ class Tensor(AbstractTensor):
     @classmethod
     def eye(cls, backend, legs_or_dims: int | VectorSpace | list[int | VectorSpace], 
             labels: list[str | None] = None, dtype: Dtype = Dtype.complex128) -> Tensor:
+        """The identity map from one group of legs to their duals.
+
+        Parameters
+        ----------
+        backend : :class:`~tenpy.linalg.backends.abstract_backend.AbstractBackend`
+            The backend for the Tensor
+        legs_or_dims : int | VectorSpace | list[int | VectorSpace]
+            Description of *half* of the legs of the result, either via their vectorspace
+            or via an integer, which means a trivial VectorSpace of that dimension.
+            The resulting tensor has twice as many legs.
+        labels : list[str | None], optional
+            Labels associated with each leg, ``None`` for unnamed legs.
+        dtype : Dtype, optional
+            The data type of the Tensor entries.
+
+        """
         if isinstance(legs_or_dims, int):
             legs_or_dims = [VectorSpace.non_symmetric(legs_or_dims)]
         elif isinstance(legs_or_dims, VectorSpace):
@@ -547,6 +542,8 @@ class ChargedTensor(AbstractTensor):
             block = self.backend.block_transpose(block, self.get_leg_idcs(leg_order))
         return block
 
+    # TODO "detect qtotal"-like classmethod
+
     @classmethod
     def from_numpy(cls, **todo_args):
         ...  # FIXME stub
@@ -558,8 +555,6 @@ class ChargedTensor(AbstractTensor):
     @classmethod
     def zero(cls, **todo_args):
         ...
-
-    # TODO: ChargedTensor.eye makes no sense, right?
 
 
 def zero_like(tens: Tensor, labels: list[str | None] = None) -> Tensor:
