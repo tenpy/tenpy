@@ -214,7 +214,7 @@ class AbstractTensor(ABC):
     def __mul__(self, other):
         if isinstance(other, AbstractTensor):
             if all(leg.dim == 1 for leg in other.legs):
-                self._mul_scalar(other.item())
+                return self._mul_scalar(other.item())
             if all(leg.dim == 1 for leg in self.legs):
                 return other._mul_scalar(self.item())
             raise ValueError('Tensors can only be multiplied with scalars') from None
@@ -312,7 +312,7 @@ class Tensor(AbstractTensor):
         self.data = data
 
     def check_sanity(self):
-        assert self.backend.get_dtype_from_data(self.data) == self.dtype, f'{self.backend.get_dtype_from_data(self.data)} != {self.dtype}'
+        assert self.backend.get_dtype_from_data(self.data) == self.dtype
         super().check_sanity()
 
     def copy(self, deep=True):
