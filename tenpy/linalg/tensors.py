@@ -214,7 +214,7 @@ class AbstractTensor(ABC):
     def __mul__(self, other):
         if isinstance(other, AbstractTensor):
             if all(leg.dim == 1 for leg in other.legs):
-                return self._mul_scalar(other.item())
+                self._mul_scalar(other.item())
             if all(leg.dim == 1 for leg in self.legs):
                 return other._mul_scalar(self.item())
             raise ValueError('Tensors can only be multiplied with scalars') from None
@@ -312,7 +312,7 @@ class Tensor(AbstractTensor):
         self.data = data
 
     def check_sanity(self):
-        assert self.backend.get_dtype_from_data(self.data) == self.dtype
+        assert self.backend.get_dtype_from_data(self.data) == self.dtype, f'{self.backend.get_dtype_from_data(self.data)} != {self.dtype}'
         super().check_sanity()
 
     def copy(self, deep=True):
@@ -335,16 +335,22 @@ class Tensor(AbstractTensor):
             raise ValueError('Not a scalar')
 
     def _mul_scalar(self, other: complex):
-        raise NotImplementedError  # FIXME
+        return Tensor(self.backend.mul(other, self), backend=self.backend, legs=self.legs,
+                      labels=self.labels)
 
     def __add__(self, other):
         if isinstance(other, Tensor):
-            raise NotImplementedError  # FIXME
+            backend = get_same_backend(self, other)
+            other_order = _match_label_order(self, other)
+            if other_order is not None:
+                other = transpose(other, other_order)
+            res_data = backend.add(self, other)
+            return Tensor(res_data, backend=backend, legs=self.legs, labels=self.labels)
         return NotImplemented
 
     def __sub__(self, other):
         if isinstance(other, Tensor):
-            raise NotImplementedError  # FIXME
+            return self.__add__(other._mul_scalar(-1))
         return NotImplemented
 
     def __repr__(self):
