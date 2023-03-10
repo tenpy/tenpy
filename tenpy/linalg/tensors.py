@@ -2,9 +2,6 @@
 
 from __future__ import annotations
 from abc import ABC, abstractmethod
-from dis import pretty_flags
-from multiprocessing import dummy
-from tkinter import scrolledtext
 
 from typing import Iterable
 import numpy as np
@@ -288,7 +285,8 @@ class Tensor(AbstractTensor):
     labels : list of {``None``, str}
     """
 
-    def __init__(self, data, backend, legs: list[VectorSpace], labels: list[str | None] | None, dtype: Dtype):
+    def __init__(self, data, backend, legs: list[VectorSpace], labels: list[str | None] | None = None, 
+                 dtype: Dtype = None):
         """
         This constructor is not user-friendly. 
         Use as_tensor instead.  TODO point to which methods here?
@@ -308,6 +306,8 @@ class Tensor(AbstractTensor):
             Datatype of the tensor. If ``None``, it is inferred from `data`.
             Note that no type-conversion is done by this contructor!
         """
+        if dtype is None:
+            dtype = backend.get_dtype_from_data(data)
         AbstractTensor.__init__(self, backend=backend, legs=legs, labels=labels, dtype=dtype)
         self.data = data
 
@@ -503,7 +503,9 @@ class ChargedTensor(AbstractTensor):
     """
     
     def __init__(self, invariant_data, backend, legs: list[VectorSpace], dummy_leg: VectorSpace, dummy_leg_state,
-                 labels: list[str | None] | None, dtype: Dtype | None):
+                 labels: list[str | None] | None = None, dtype: Dtype | None = None):
+        if dtype is None:
+            dtype = backend.get_dtype_from_data(invariant_data)
         AbstractTensor.__init__(self, backend=backend, legs=legs, labels=labels, dtype=dtype)
         self.invariant_part = Tensor(
             data=invariant_data, backend=backend, legs=self.legs + [dummy_leg], labels=self.labels + [_DUMMY_LABEL],
