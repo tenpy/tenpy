@@ -603,6 +603,11 @@ class QRBasedTEBDEngine(TEBDEngine):
         and we need to disregard those eigenvectors of the larger one, that have eigenvalue zero,
         since we dont have corresponding eigenvalues of the smaller one.
 
+    .. todo ::
+        Can we implement some simple diagnostics that issue a warning if the CBE expansion
+        was too small?
+        Could potentially look into the tail of the schmidt spectrum.
+
     Options
     -------
     .. cfg:config :: QRBasedTEBDEngine
