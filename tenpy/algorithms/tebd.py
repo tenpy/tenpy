@@ -592,14 +592,14 @@ class Engine(TEBDEngine):
 
 
 class QRBasedTEBDEngine(TEBDEngine):
-    """Version of :class:`~tenpy.algorithms.tebd.TEBDEngine` that relies on QR decompositions
+    r"""Version of :class:`~tenpy.algorithms.tebd.TEBDEngine` that relies on QR decompositions
     for the truncation of the evolved local wavefunction.
     As introduced in :arxiv:`2212.09782`.
 
     .. todo ::
         To use `use_eig_based_svd == True`, which makes sense on GPU only, we need to implement
         the `_eig_based_svd` for "non-square" matrices.
-        This means that :math:`M^\dagger M` and :math:`M M^\dagger` dont have the same size,
+        This means that :math:`M^{\dagger} M` and :math:`M M^{\dagger}` dont have the same size,
         and we need to disregard those eigenvectors of the larger one, that have eigenvalue zero,
         since we dont have corresponding eigenvalues of the smaller one.
 
