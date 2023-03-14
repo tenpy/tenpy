@@ -25,7 +25,6 @@ def test_trotter_decomposition():
             npt.assert_array_almost_equal_nulp(evolved, N * np.ones([2]), N * 2)
 
             
-# TODO (JU) also test real time evolution?
 @pytest.mark.slow
 @pytest.mark.parametrize('bc_MPS, which_engine', 
                          [(bc_MPS, which_engine) 
