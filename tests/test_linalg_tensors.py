@@ -133,6 +133,8 @@ def test_Tensor_classmethods(backend):
     tens = Tensor.from_dense_block(data, backend=backend)
     assert np.allclose(data, tens.data)
 
+    # TODO from_block_func, from_numpy_func
+
     print('checking zero')
     tens = Tensor.zero(backend, [2, 3, 4])
     assert np.allclose(tens.data, np.zeros([2, 3, 4]))

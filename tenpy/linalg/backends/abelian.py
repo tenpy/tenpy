@@ -130,7 +130,7 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
     # TODO: is it okay to have extra kwargs qtotal?
     #  JU: probably
     def from_dense_block(self, a: Block, legs: list[VectorSpace], atol: float = 1e-8, rtol: float = 1e-5,
-                         *, qtotal = None) -> Data:
+                         *, qtotal = None) -> AbelianBlockData:
         # JU: res is not defined
         if qtotal is None:
             res.qtotal = qtotal = detect_qtotal(a, legs, atol, rtol)
@@ -143,6 +143,9 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
             res[tuple(slices)] = block
 
         return res
+
+    def from_block_func(self, func, legs: list[VectorSpace]) -> AbelianBlockData:
+        raise NotImplementedError  # TODO
 
     def zero_data(self, legs: list[VectorSpace], dtype: Dtype):
         qtotal = legs[0].symmetry.trivial_sector

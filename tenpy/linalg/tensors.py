@@ -445,8 +445,8 @@ class Tensor(AbstractTensor):
     def from_dense_block(cls, block, backend, legs: list[VectorSpace]=None, dtype: Dtype=None,
                          labels: list[str | None] = None, atol: float = 1e-8, rtol: float = 1e-5
                          ) -> Tensor:
-        """Convert a dense block of the backend to a Tensor with given symmetry, if the block is
-        symmetric under it.
+        """Convert a dense block of the backend to a Tensor with given symmetry (implied by the `legs`), 
+        if the block is symmetric under it.
         If data is not symmetric under the symmetry i.e. if
         ``not allclose(array, projected, atol, rtol)``, raise a ValueError.
 
@@ -504,16 +504,99 @@ class Tensor(AbstractTensor):
             The data type of the Tensor entries.
 
         """
-        if isinstance(legs_or_dims, int):
-            legs_or_dims = [VectorSpace.non_symmetric(legs_or_dims)]
-        elif isinstance(legs_or_dims, VectorSpace):
-            legs_or_dims = [legs_or_dims]
-        else:
-            legs_or_dims = [ele if isinstance(ele, VectorSpace) else VectorSpace.non_symmetric(ele) 
-                            for ele in legs_or_dims]
-        data = backend.eye_data(legs=legs_or_dims, dtype=dtype)
-        legs = legs_or_dims + [leg.dual for leg in legs_or_dims]
+        legs = _parse_legs_or_dims(legs_or_dims)
+        data = backend.eye_data(legs=legs, dtype=dtype)
+        legs = legs + [leg.dual for leg in legs]
         return cls(data=data, backend=backend, legs=legs, labels=labels)
+
+    @classmethod
+    def from_numpy_func(cls, func, backend, legs_or_dims: int | VectorSpace | list[int | VectorSpace],
+                        labels: list[str | None] = None, func_args=(), func_kwargs={}, 
+                        shape_kw: str = None, dtype: Dtype = None) -> Tensor:
+        """Create a Tensor from a numpy function.
+
+        This function ceates a tensor by filling the blocks, i.e. the free paramaters of the tensors
+        using `func`, which is a function returning numpy arrays, e.g. ``np.ones`` or
+        ``np.random.standard_normal``
+
+        Parameters
+        ----------
+        func : callable
+            A callable object which is called to generate the blocks.
+            We expect that `func` returns a numpy ndarray of the given `shape`.
+            If no `shape_kw` is given, it is called as ``func(shape, *func_args, **func_kwargs)``,
+            otherwise as ``func(*func_args, **{shape_kw: shape}, **func_kwargs)``,
+            where `shape` is a tuple of int.
+        backend : :class:`~tenpy.linalg.backends.abstract_backend.AbstractBackend`
+            The backend for the tensor
+        legs_or_dims : int | VectorSpace | list[int | VectorSpace]
+            Description of *half* of the legs of the result, either via their vectorspace
+            or via an integer, which means a trivial VectorSpace of that dimension.
+            The resulting tensor has twice as many legs.
+        labels : list[str | None], optional
+            Labels associated with each leg, ``None`` for unnamed legs.
+        unc_args : iterable
+            Additional arguments given to `func`.
+        func_kwargs : dict
+            Additional keyword arguments given to `func`.
+        shape_kw : None | str
+            If given, the keyword with which shape is given to `func`.
+        dtype : None | Dtype
+            If given, the results of `func` are converted to this dtype
+        """
+        def block_func(shape):
+            if shape_kw is None:
+                arr = func(shape, *func_args, **func_kwargs)
+            else:
+                arr = func(*func_args, **{shape_kw: shape}, **func_kwargs)
+            return backend.block_from_numpy(arr)
+        
+        legs = _parse_legs_or_dims(legs_or_dims)
+        return cls(data=backend.from_block_func(block_func, legs), backend=backend, legs=legs,
+                   labels=labels)
+
+    @classmethod
+    def from_block_func(cls, func, backend, legs_or_dims: int | VectorSpace | list[int | VectorSpace],
+                        labels: list[str | None] = None, func_args=(), func_kwargs={}, 
+                        shape_kw: str = None, dtype: Dtype = None) -> Tensor:
+        """Create a Tensor from a block function.
+
+        This function ceates a tensor by filling the blocks, i.e. the free paramaters of the tensors
+        using `func`, which is a function returning backend-specific blocks.
+
+        Parameters
+        ----------
+        func : callable
+            A callable object which is called to generate the blocks.
+            We expect that `func` returns a backend-specific block of the given `shape`.
+            If no `shape_kw` is given, it is called as ``func(shape, *func_args, **func_kwargs)``,
+            otherwise as ``func(*func_args, **{shape_kw: shape}, **func_kwargs)``,
+            where `shape` is a tuple of int.
+        backend : :class:`~tenpy.linalg.backends.abstract_backend.AbstractBackend`
+            The backend for the tensor
+        legs_or_dims : int | VectorSpace | list[int | VectorSpace]
+            Description of *half* of the legs of the result, either via their vectorspace
+            or via an integer, which means a trivial VectorSpace of that dimension.
+            The resulting tensor has twice as many legs.
+        labels : list[str | None], optional
+            Labels associated with each leg, ``None`` for unnamed legs.
+        unc_args : iterable
+            Additional arguments given to `func`.
+        func_kwargs : dict
+            Additional keyword arguments given to `func`.
+        shape_kw : None | str
+            If given, the keyword with which shape is given to `func`.
+        dtype : None | Dtype
+            If given, the results of `func` are converted to this dtype
+        """
+        def block_func(shape):
+            if shape_kw is None:
+                return func(shape, *func_args, **func_kwargs)
+            else:
+                return func(*func_args, **{shape_kw: shape}, **func_kwargs)
+        legs = _parse_legs_or_dims(legs_or_dims)
+        return cls(data=backend.from_block_func(block_func, legs), backend=backend, legs=legs,
+                   labels=labels)
 
     def tdot(self, other: AbstractTensor, 
              legs1: int | str | list[int | str] = -1, legs2: int | str | list[int | str] = 0, 
@@ -963,3 +1046,13 @@ def get_same_backend(*tensors: AbstractTensor, error_msg: str = 'Incompatible ba
     if not all(tens.backend == backend for tens in tensors):
         raise ValueError(error_msg)
     return backend
+
+
+def _parse_legs_or_dims(legs_or_dims: int | VectorSpace | list[int | VectorSpace]) -> list[VectorSpace]:
+    if isinstance(legs_or_dims, int):
+        return [VectorSpace.non_symmetric(legs_or_dims)]
+    elif isinstance(legs_or_dims, VectorSpace):
+        return [legs_or_dims]
+    else:
+        return [ele if isinstance(ele, VectorSpace) else VectorSpace.non_symmetric(ele)
+                for ele in legs_or_dims]

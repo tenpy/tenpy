@@ -92,6 +92,11 @@ class AbstractBackend(ABC):
         ...
 
     @abstractmethod
+    def from_block_func(self, func, legs: list[VectorSpace]) -> Data:
+        """Generate tensor data from a function ``func(shape: tuple[int]) -> block``."""
+        ...
+
+    @abstractmethod
     def zero_data(self, legs: list[VectorSpace], dtype: Dtype) -> Data:
         """Data for a zero tensor"""
         ...

@@ -93,6 +93,9 @@ class AbstractNonabelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
                          rtol: float = 0.00001) -> NonAbelianData:
         raise NotImplementedError  # FIXME
 
+    def from_block_func(self, func, legs: list[VectorSpace]) -> NonAbelianData:
+        raise NotImplementedError  # FIXME
+
     def zero_data(self, legs: list[VectorSpace], dtype: Dtype) -> NonAbelianData:
         codomain = ProductSpace(legs)
         domain = ProductSpace([])
