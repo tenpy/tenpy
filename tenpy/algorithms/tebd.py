@@ -592,12 +592,57 @@ class Engine(TEBDEngine):
 
 
 class QRBasedTEBDEngine(TEBDEngine):
-    """Similar as standard TEBD, but based on QR decompositions only.
+    """Version of :class:`~tenpy.algorithms.tebd.TEBDEngine` that relies on QR decompositions
+    for the truncation of the evolved local wavefunction.
+    As introduced in :arxiv:`2212.09782`.
 
-    """
-    def update_bond(self, i, U_bond, expand=0.1, use_eig_based_svd=False):
+    .. todo ::
+        To use `use_eig_based_svd == True`, which makes sense on GPU only, we need to implement
+        the `_eig_based_svd` for "non-square" matrices.
+        This means that :math:`M^\dagger M` and :math:`M M^\dagger` dont have the same size,
+        and we need to disregard those eigenvectors of the larger one, that have eigenvalue zero,
+        since we dont have corresponding eigenvalues of the smaller one.
+
+    Options
+    -------
+    .. cfg:config :: QRBasedTEBDEngine
+        :include: TEBDEngine
+
+        cbe_expand : float
+            Expansion rate. The QR-based decomposition is carried out at an expanded bond dimension
+            ``eta = (1 + cbe_expand) * chi``, where ``chi`` is the bond dimension before the time step.
+        cbe_expand_0 : float
+            Expansion rate at low ``chi``.
+            If given, the expansion rate decreases linearly from ``cbe_expand_0`` at ``chi == 1`` 
+            to ``cbe_expand`` at ``chi == trunc_params['chi_max']``, then remains constant.
+            If not given, the expansion rate is ``cbe_expand`` at all ``chi``.
+        use_eig_based_svd : bool
+            Whether the SVD of the bond matrix :math:`\Xi` should be carried out numerically via
+            the eigensystem. This is faster on GPUs, but less accurate.
+            It makes no sense to do this on CPU.
+            Default is `False`.
+    """         
+    
+    def _expansion_rate(self, i):
+        """get expansion rate for updating bond i"""
+        expand = self.options.get('cbe_expand', 0.1)
+        expand_0 = self.options.get('cbe_expand_0', None)
+
+        if expand_0 is None or expand_0 == expand:
+            return expand
+
+        chi_max = self.options.subconfig('trunc_params').get('chi_max', None)
+        if chi_max is None:
+            raise ValueError('Need to specify trunc_params["chi_max"] in order to use cbe_expand_0.')
+
+        chi = min(self.get_SL(i).shape)
+        return max(expand_0 - chi / chi_max * (expand_0 - expand), expand)
+             
+    
+    def update_bond(self, i, U_bond):
         i0, i1 = i - 1, i
-        logger.debug("Update sites (%d, %d)", i0, i1)
+        expand = self._expansion_rate(i)
+        logger.debug(f'Update sites ({i0}, {i1}). CBE expand={expand}')
         # Construct the theta matrix
         C = self.psi.get_theta(i0, n=2, formL=0.)  # the two B without the S on the left
         C = npc.tensordot(U_bond, C, axes=(['p0*', 'p1*'], ['p0', 'p1']))  # apply U
@@ -611,7 +656,7 @@ class QRBasedTEBDEngine(TEBDEngine):
         A_L, Xi, B_R = self._qr_based_svd(i, theta, expand)
         Xi.itranspose(['vL', 'vR'])
 
-        if use_eig_based_svd:
+        if self.options.get('use_eig_based_svd', False):
             U, S, Vd, trunc_err, renormalize = _eig_based_svd(
                 Xi, inner_labels=['vR', 'vL'], need_U=False, 
                 trunc_params=self.trunc_params if expand else None
@@ -695,9 +740,10 @@ class QRBasedTEBDEngine(TEBDEngine):
         #  print("<theta | A Xi B> =", npc.inner(theta, theta_new, axes='labels', do_conj=True))
         return A_L, Xi, B_R
 
-    def update_bond_imag(self, i, U_bond, expand=0.1, use_eig_based_svd=False):
+    def update_bond_imag(self, i, U_bond):
         i0, i1 = i - 1, i
-        logger.debug("Update sites (%d, %d)", i0, i1)
+        expand = self._expansion_rate(i)
+        logger.debug(f'Update sites ({i0}, {i1}). CBE expand={expand}')
         # Construct the theta matrix
         theta = self.psi.get_theta(i0, n=2)
         theta = npc.tensordot(U_bond, theta, axes=(['p0*', 'p1*'], ['p0', 'p1']))
@@ -706,7 +752,7 @@ class QRBasedTEBDEngine(TEBDEngine):
         A_L, Xi, B_R = self._qr_based_svd(i, theta, expand)
         Xi.itranspose(['vL', 'vR'])
 
-        if use_eig_based_svd:
+        if self.options.get('use_eig_based_svd', False):
             U, S, Vd, trunc_err, renormalize = _eig_based_svd(
                 Xi, inner_labels=['vR', 'vL'], trunc_params=self.trunc_params if expand else None
             )
@@ -738,9 +784,7 @@ def _eig_based_svd(A, need_U: bool = True, need_Vd: bool = True, inner_labels=[N
     its "square" A.hc @ A and/or A @ A.hc, i.e. two eigh calls instead of an svd call.
 
     Truncation if performed if and only if trunc_params are given.
-
     This performs better on GPU, but is not really useful on CPU.
-
     If isometries U or Vd are not needed, their computation can be omitted for performance.
     """
     warnings.warn('_eig_based_svd is nonsensical on CPU!!')
