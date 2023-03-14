@@ -7,6 +7,8 @@ import warnings
 from tenpy.models.xxz_chain import XXZChain
 from tenpy.models.lattice import Square, Chain, Honeycomb
 
+from tenpy.tools import misc
+from tenpy.algorithms import tebd
 from tenpy.networks import mps, site
 from tenpy.networks.terms import TermList
 from random_test import rand_permutation, random_MPS
@@ -389,6 +391,44 @@ def test_group():
     psi4.test_sanity()
     ov = psi1.overlap(psi4, understood_infinite=True)
     assert abs(1. - ov) < 1.e-14
+
+
+def _get_grouped_corr(psi: mps.MPS, op: str, L: int, sites_to_group: int):
+    corr = np.zeros((L, L), dtype=np.complex128)
+    for i in range(sites_to_group):
+        for j in range(sites_to_group):
+            corr[i::sites_to_group, j::sites_to_group] = psi.correlation_function(f'{op}{i}', f'{op}{j}')
+    return corr
+    
+
+def test_fixes_issue_197():
+    sites_to_group = 3
+    num_groups = 4
+    op = 'Sz'
+    conserve = None
+
+    L = sites_to_group * num_groups
+    s = site.SpinHalfSite(conserve=conserve, sort_charge=True)
+    psi = mps.MPS.from_product_state(sites=[s] * L, p_state=misc.to_array(['up', 'down'], (L,)))
+    tebd.RandomUnitaryEvolution(psi, options=dict(N_steps=4)).run()
+    chi_init = max(psi.chi)
+    corr_init = psi.correlation_function(op, op)
+
+    psi.canonical_form()
+    corr_canonical = psi.correlation_function(op, op)
+    assert np.allclose(corr_canonical, corr_init)
+
+    psi.group_sites(3)
+    corr_grouped = _get_grouped_corr(psi, op, L, sites_to_group)
+    assert np.allclose(corr_grouped, corr_init)
+
+    psi.group_split(dict(chi_max=chi_init))
+    corr_split = psi.correlation_function(op, op)
+    assert np.allclose(corr_split, corr_init)
+
+    psi.canonical_form()
+    corr_split_canonical = psi.correlation_function(op, op)
+    assert np.allclose(corr_split_canonical, corr_init)
 
 
 def test_expectation_value_term():
