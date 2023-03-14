@@ -626,6 +626,11 @@ class QRBasedTEBDEngine(TEBDEngine):
             the eigensystem. This is faster on GPUs, but less accurate.
             It makes no sense to do this on CPU.
             Default is `False`.
+        compute_err : bool
+            Whether the truncation error should be computed exactly.
+            Unlike for SVD-based TEBD, computing the truncation error is significantly more expensive.
+            If `True` (default), the full error is computed.
+            Otherwise, the truncation error is set to NaN.
     """         
     
     def _expansion_rate(self, i):
@@ -666,12 +671,16 @@ class QRBasedTEBDEngine(TEBDEngine):
                 Xi, inner_labels=['vR', 'vL'], need_U=False, trunc_params=self.trunc_params
             )
         else:
-            U, S, Vd, trunc_err, renormalize = svd_theta(Xi, self.trunc_params)
+            U, S, Vd, _, renormalize = svd_theta(Xi, self.trunc_params)
 
         B_R = npc.tensordot(Vd, B_R, axes=['vR', 'vL'])
-
         B_L = npc.tensordot(C / renormalize, B_R.conj(), axes=[['p1', 'vR'], ['p*', 'vR*']])
         B_L.ireplace_labels(['p0', 'vL*'], ['p', 'vR'])
+
+        if self.options.get('compute_err', True):
+            trunc_err = TruncationError.from_norm(norm_new=np.linalg.norm(S), norm_old=npc.norm(theta))
+        else:
+            trunc_err = TruncationError(np.nan, np.nan)
 
         self.psi.set_B(i0, B_L, form='B')
         self.psi.set_SL(i1, S)
@@ -759,8 +768,12 @@ class QRBasedTEBDEngine(TEBDEngine):
         B_R = npc.tensordot(Vd, B_R, axes=['vR', 'vL'])
         A_L = npc.tensordot(A_L, U, axes=['vR', 'vL'])
 
-        self.psi.norm *= renormalize
+        if self.options.get('compute_err', True):
+            trunc_err = TruncationError.from_norm(norm_new=np.linalg.norm(S), norm_old=npc.norm(theta))
+        else:
+            trunc_err = TruncationError(np.nan, np.nan)
 
+        self.psi.norm *= renormalize
         self.psi.set_B(i0, A_L, form='A')
         self.psi.set_SL(i1, S)
         self.psi.set_B(i1, B_R, form='B')
