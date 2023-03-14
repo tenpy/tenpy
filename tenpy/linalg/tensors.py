@@ -10,6 +10,7 @@ from enum import Enum, auto
 from .misc import duplicate_entries, force_str_len, join_as_many_as_possible
 from .dummy_config import config
 from .symmetries import VectorSpace, ProductSpace
+from .backends.backend_factory import get_default_backend
 
 __all__ = ['AbstractTensor', 'Tensor', 'ChargedTensor', 'DiagonalTensor', 'tdot', 'outer', 'inner', 
            'transpose', 'trace', 'conj', 'combine_legs', 'split_leg', 'is_scalar', 'allclose', 
@@ -55,18 +56,21 @@ ALL_TRIVIAL_LEGS = object()  # TODO use None instead ...
 
 class AbstractTensor(ABC):
 
-    def __init__(self, backend, legs: list[VectorSpace], labels: list[str | None] | None):
+    def __init__(self, legs: list[VectorSpace], backend, labels: list[str | None] | None):
         """
         Parameters
         ----------
-        backend: :class:`~tenpy.linalg.backends.abstract_backend.AbstractBackend`
-            The backend for the Tensor
         legs : list[VectorSpace]
             The legs of the Tensor
+        backend: :class:`~tenpy.linalg.backends.abstract_backend.AbstractBackend`, optional
+            The backend for the Tensor
         labels : list[str | None] | None
             Labels for the legs. If None, translates to ``[None, None, ...]`` of appropriate length
         """
-        self.backend = backend
+        if backend is None:
+            self.backend = get_default_backend()
+        else:
+            self.backend = backend
         self.legs = [backend.convert_vector_space(leg) for leg in legs]
         if labels is None:
             self._labels = [None] * len(legs)
@@ -265,7 +269,7 @@ class AbstractTensor(ABC):
 
     @classmethod
     @abstractmethod
-    def zero(cls, backend, legs: list[VectorSpace] | list[int], labels: list[str | None] = None,
+    def zero(cls, legs: list[VectorSpace] | list[int], backend=None, labels: list[str | None] = None,
              dtype: Dtype = Dtype.complex128) -> Tensor:
         """A zero tensor"""
         ...
@@ -295,7 +299,7 @@ class AbstractTensor(ABC):
 
     @abstractmethod
     def trace(self, legs1: int | str | list[int | str] = -2, legs2: int | str | list[int | str] = -1
-          ) -> AbstractTensor | float | complex:
+              ) -> AbstractTensor | float | complex:
         """See tensors.trace"""
         ...
 
@@ -340,7 +344,7 @@ class Tensor(AbstractTensor):
     labels : list of {``None``, str}
     """
 
-    def __init__(self, data, backend, legs: list[VectorSpace], labels: list[str | None] | None = None):
+    def __init__(self, data, legs: list[VectorSpace], backend=None, labels: list[str | None] | None = None):
         """
         This constructor is not user-friendly. 
         Use as_tensor instead.  TODO point to which methods here?
@@ -350,7 +354,7 @@ class Tensor(AbstractTensor):
         ----------
         data
             The numerical data ("free parameters") comprising the tensor. type is backend-specific
-        backend: :class:`~tenpy.linalg.backends.abstract_backend.AbstractBackend`
+        backend: :class:`~tenpy.linalg.backends.abstract_backend.AbstractBackend`, optional
             The backend for the Tensor
         legs : list[VectorSpace]
             The legs of the Tensor
@@ -432,17 +436,19 @@ class Tensor(AbstractTensor):
         return block
 
     @classmethod
-    def from_numpy(cls, array: np.ndarray, backend, legs: list[VectorSpace]=None, dtype: Dtype = None,
+    def from_numpy(cls, array: np.ndarray, backend=None, legs: list[VectorSpace]=None, dtype: Dtype = None,
                    labels: list[str | None] = None, atol: float = 1e-8, rtol: float = 1e-5) -> Tensor:
         """
         Like from_dense_block but `array` is a numpy array
         """
+        if backend is None:
+            backend = get_default_backend()
         block = backend.block_from_numpy(np.asarray(array))
         return cls.from_dense_block(block=block, backend=backend, legs=legs, labels=labels, atol=atol,
                                     rtol=rtol, dtype=dtype)
 
     @classmethod
-    def from_dense_block(cls, block, backend, legs: list[VectorSpace]=None, dtype: Dtype=None,
+    def from_dense_block(cls, block, backend=None, legs: list[VectorSpace]=None, dtype: Dtype=None,
                          labels: list[str | None] = None, atol: float = 1e-8, rtol: float = 1e-5
                          ) -> Tensor:
         """Convert a dense block of the backend to a Tensor with given symmetry (implied by the `legs`), 
@@ -458,7 +464,7 @@ class Tensor(AbstractTensor):
         ----------
         array : array_like
             The data to be converted to a Tensor.
-        backend : :class:`~tenpy.linalg.backends.abstract_backend.AbstractBackend`
+        backend : :class:`~tenpy.linalg.backends.abstract_backend.AbstractBackend`, optional
             The backend for the Tensor
         legs : list of :class:`~tenpy.linalg.symmetries.VectorSpace`, optional
             The vectorspaces associated with legs of the tensors. Contains symmetry data.
@@ -469,6 +475,8 @@ class Tensor(AbstractTensor):
             Labels associated with each leg, ``None`` for unnamed legs.
         """
         is_real = False  # FIXME dummy
+        if backend is None:
+            backend = get_default_backend()
         if legs is None:
             legs = [VectorSpace.non_symmetric(d, is_real=is_real) for d in backend.block_shape(block)]
         if dtype is not None:
@@ -477,16 +485,18 @@ class Tensor(AbstractTensor):
         return cls(data=data, backend=backend, legs=legs, labels=labels)
 
     @classmethod
-    def zero(cls, backend, legs: list[VectorSpace] | list[int], labels: list[str | None] = None,
+    def zero(cls, legs: list[VectorSpace] | list[int], backend=None, labels: list[str | None] = None,
              dtype: Dtype = Dtype.complex128) -> Tensor:
         if any(isinstance(l, int) for l in legs):
             assert all(isinstance(l, int) for l in legs)
             legs = [VectorSpace.non_symmetric(d) for d in legs]
+        if backend is None:
+            backend = get_default_backend()
         data = backend.zero_data(legs=legs, dtype=dtype)
         return cls(data=data, backend=backend, legs=legs, labels=labels)
 
     @classmethod
-    def eye(cls, backend, legs_or_dims: int | VectorSpace | list[int | VectorSpace], 
+    def eye(cls, legs_or_dims: int | VectorSpace | list[int | VectorSpace], backend=None, 
             labels: list[str | None] = None, dtype: Dtype = Dtype.complex128) -> Tensor:
         """The identity map from one group of legs to their duals.
 
@@ -504,13 +514,15 @@ class Tensor(AbstractTensor):
             The data type of the Tensor entries.
 
         """
+        if backend is None:
+            backend = get_default_backend()
         legs = _parse_legs_or_dims(legs_or_dims)
         data = backend.eye_data(legs=legs, dtype=dtype)
         legs = legs + [leg.dual for leg in legs]
         return cls(data=data, backend=backend, legs=legs, labels=labels)
 
     @classmethod
-    def from_numpy_func(cls, func, backend, legs_or_dims: int | VectorSpace | list[int | VectorSpace],
+    def from_numpy_func(cls, func, legs_or_dims: int | VectorSpace | list[int | VectorSpace], backend=None,
                         labels: list[str | None] = None, func_args=(), func_kwargs={}, 
                         shape_kw: str = None, dtype: Dtype = None) -> Tensor:
         """Create a Tensor from a numpy function.
@@ -544,6 +556,9 @@ class Tensor(AbstractTensor):
         dtype : None | Dtype
             If given, the results of `func` are converted to this dtype
         """
+        if backend is None:
+            backend = get_default_backend()
+            
         def block_func(shape):
             if shape_kw is None:
                 arr = func(shape, *func_args, **func_kwargs)
@@ -556,7 +571,7 @@ class Tensor(AbstractTensor):
                    labels=labels)
 
     @classmethod
-    def from_block_func(cls, func, backend, legs_or_dims: int | VectorSpace | list[int | VectorSpace],
+    def from_block_func(cls, func, legs_or_dims: int | VectorSpace | list[int | VectorSpace], backend=None,
                         labels: list[str | None] = None, func_args=(), func_kwargs={}, 
                         shape_kw: str = None, dtype: Dtype = None) -> Tensor:
         """Create a Tensor from a block function.
@@ -589,6 +604,9 @@ class Tensor(AbstractTensor):
         dtype : None | Dtype
             If given, the results of `func` are converted to this dtype
         """
+        if backend is None:
+            backend = get_default_backend()
+            
         def block_func(shape):
             if shape_kw is None:
                 return func(shape, *func_args, **func_kwargs)
@@ -1015,7 +1033,7 @@ def norm(t: AbstractTensor) -> float:
 
 
 def _get_result_labels(legs1: list[str | None], legs2: list[str | None],
-                      relabel1: dict[str, str] | None, relabel2: dict[str, str] | None) -> list[str]:
+                       relabel1: dict[str, str] | None, relabel2: dict[str, str] | None) -> list[str]:
     """
     Utility function to combine two lists of leg labels, such that they can appear on the same tensor.
     Labels are changed by the mappings relabel1 and relabel2.

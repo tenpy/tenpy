@@ -1,12 +1,16 @@
 # Copyright 2023-2023 TeNPy Developers, GNU GPLv3
 from __future__ import annotations
 
+import logging
+
 from .abstract_backend import AbstractBackend
 from .numpy import NoSymmetryNumpyBackend
 from .torch import NoSymmetryTorchBackend
 from ..symmetries import Symmetry, no_symmetry, AbelianGroup
 
 __all__ = ['get_backend']
+
+logger = logging.getLogger(__name__)
 
 
 _backend_lookup = dict(
@@ -80,3 +84,9 @@ def get_backend(symmetry: Symmetry = no_symmetry, block_backend: str = 'numpy',
     else:
         backend = _instantiated_backends[key]
     return backend
+
+
+def get_default_backend():
+    """dummy implementation for a settable backend global through all of tenpy"""
+    # FIXME proper implementation
+    return get_backend()
