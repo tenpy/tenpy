@@ -643,9 +643,8 @@ class Tensor(AbstractTensor):
         """See tensors.norm"""
         return self.backend.norm(self)
 
-# FIXME adjust API functions tdot, svd, ...
+
 # TODO is this a good name?
-# TODO docstring is quick and dirty
 class ChargedTensor(AbstractTensor):
     # formerly, this was covered by npc Arrays with qtotal != 0.
     """
@@ -663,34 +662,23 @@ class ChargedTensor(AbstractTensor):
 
     Parameters
     ----------
-    invariant_data: 
-        The numerical data ("free parameters") comprising the symmetry-invariant part tensor. 
-        type is backend-specific. The dummy leg must be the last leg.
-    backend: :class:`~tenpy.linalg.backends.abstract_backend.AbstractBackend`
-        The backend
-    legs: list[VectorSpace]
-        The legs of the composite object, *ex*cluding the dummy leg
-    dummy_leg: VectorSpace
-        The dummy leg
+    invariant_part: 
+        The symmetry-invariant part. the dummy leg is the last of its legs.
     dummy_leg_state: block | None
-        The state that the dummy leg is contracted with. 
+        The state that the dummy leg is contracted with.
         Either a backend-specific block of shape ``(dummy_leg.dim,)``, or `None`,
-        which is interpreted ``1`` if `dummmy_leg.dim == 1` and raises a `ValueError` otherwise.
-    labels: list[str | None] | None
-        Labels for the legs, *ex*cluding the dummy leg
+        which is interpreted ``[1]`` if `dummmy_leg.dim == 1` and raises a `ValueError` otherwise.
     """
     
-    def __init__(self, invariant_data, backend, legs: list[VectorSpace], dummy_leg: VectorSpace, dummy_leg_state,
-                 labels: list[str | None] | None = None):
-        AbstractTensor.__init__(self, backend=backend, legs=legs, labels=labels)
-        self.invariant_part = Tensor(
-            data=invariant_data, backend=backend, legs=self.legs + [dummy_leg], labels=self.labels + [_DUMMY_LABEL],
-        )
-        self.dummy_leg = dummy_leg
+    def __init__(self, invariant_part: Tensor, dummy_leg_state=None):
+        AbstractTensor.__init__(self, backend=invariant_part.backend, legs=invariant_part.legs[:-1], 
+                                labels=invariant_part.labels[:-1])
+        self.invariant_part = invariant_part
+        self.dummy_leg = invariant_part.leg[-1]
         if dummy_leg_state is None:
-            if dummy_leg.dim != 1:
+            if self.dummy_leg.dim != 1:
                 raise ValueError('Can not infer state for a dummy leg with dim > 1')
-            dummy_leg_state = backend.backend.block_from_numpy(np.array([1.]))
+            dummy_leg_state = self.backend.block_from_numpy(np.array([1.]))
         self.dummy_leg_state = dummy_leg_state
 
     @property
@@ -703,7 +691,10 @@ class ChargedTensor(AbstractTensor):
         super().check_sanity()
 
     def copy(self, deep=True):
-        raise NotImplementedError  # FIXME
+        if deep:
+            return ChargedTensor(invariant_part=self.invariant_part.copy(deep=True),
+                                 dummy_leg_state=self.backend.block_copy(self.dummy_leg_state))
+        return ChargedTensor(invariant_part=self.invariant_part, dummy_leg_state=self.dummy_leg_state)
 
     def item(self):
         if not all(leg.dim == 1 for leg in self.invariant_part.legs[:-1]):
