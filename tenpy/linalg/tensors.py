@@ -614,6 +614,42 @@ class Tensor(AbstractTensor):
         return cls(data=backend.from_block_func(block_func, legs), backend=backend, legs=legs,
                    labels=labels)
 
+    @classmethod
+    def random_uniform(cls, legs_or_dims: int | VectorSpace | list[int | VectorSpace], backend=None,
+                       labels: list[str | None] = None, dtype: Dtype = Dtype.complex128) -> Tensor:
+        """Generate a tensor whose block-entries (i.e. the free parameters of tensors compatible with
+        the symmetry) are drawn independently and uniformly.
+        If dtype is a real type, they are drawn from [-1, 1], if it is complex, real and imaginary part
+        are drawn independently from [-1, 1].
+
+        .. note ::
+            This is not a well defined probability distribution on the space of symmetric tensors,
+            since it depends on a choice of basis that defines what the individual uniformly drawn
+            numbers mean.
+
+        Parameters
+        ----------
+        legs_or_dims : int | VectorSpace | list[int | VectorSpace]
+            Description of the legs of the result, either via their vectorspace
+            or via an integer, which means a trivial VectorSpace of that dimension.
+        backend : :class:`~tenpy.linalg.backends.abstract_backend.AbstractBackend`
+            The backend for the tensor
+        labels : list[str | None], optional
+            Labels associated with each leg, ``None`` for unnamed legs.
+        dtype : Dtype
+            The dtype for the tensor
+        """
+        if backend is None:
+            backend = get_default_backend()
+        legs = _parse_legs_or_dims(legs_or_dims)
+
+        def block_func(shape):
+            return backend.block_random_uniform(shape, dtype)
+        
+        return cls(data=backend.from_block_func(block_func, legs), backend=backend, legs=legs, 
+                   labels=labels)
+        
+
     def tdot(self, other: AbstractTensor, 
              legs1: int | str | list[int | str] = -1, legs2: int | str | list[int | str] = 0, 
              relabel1: dict[str, str] = None, relabel2: dict[str, str] = None) -> AbstractTensor:

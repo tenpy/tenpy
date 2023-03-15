@@ -147,9 +147,12 @@ class TorchBlockBackend(AbstractBlockBackend):
     def matrix_log(self, matrix: Block) -> Block:
         raise NotImplementedError  # TODO: could not find a torch implementation via their docs...?
 
+    def block_random_uniform(self, dims: list[int], dtype: Dtype) -> Block:
+        return torch_module.rand(*dims, dtype=self.backend_dtype_map[dtype], device=self.device)
+
     def block_random_gaussian(self, dims: list[int], dtype: Dtype, sigma: float) -> Block:
         # Note that if device is CUDA, this function synchronizes the device with the CPU
-        mean = torch_module.zeros(size=dims, dtype=dtype, device=self.device)
+        mean = torch_module.zeros(size=dims, dtype=self.backend_dtype_map[dtype], device=self.device)
         std = sigma * torch_module.ones_like(mean, device=self.device)
         return torch_module.normal(mean, std)
 
