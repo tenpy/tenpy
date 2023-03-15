@@ -167,7 +167,7 @@ class AbstractNonabelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
     def log(self, a: Tensor, idcs1: list[int], idcs2: list[int]) -> NonAbelianData:
         raise NotImplementedError  # FIXME
 
-    def random_gaussian(self, legs: list[VectorSpace], dtype: Dtype, sigma: float) -> NonAbelianData:
+    def random_normal(self, legs: list[VectorSpace], dtype: Dtype, sigma: float) -> NonAbelianData:
         raise NotImplementedError  # FIXME
 
     def add(self, a: Tensor, b: Tensor) -> NonAbelianData:

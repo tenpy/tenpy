@@ -153,7 +153,13 @@ class NumpyBlockBackend(AbstractBlockBackend):
     def matrix_log(self, matrix: Block) -> Block:
         return scipy.linalg.logm(matrix)
 
-    def block_random_gaussian(self, dims: list[int], dtype: Dtype, sigma: float) -> Block:
+    def block_random_uniform(self, dims: list[int], dtype: Dtype) -> Block:
+        res = np.random.uniform(-1, 1, size=dims)
+        if not dtype.is_real:
+            res += 1.j * np.random.uniform(-1, 1, size=dims)
+        return res
+
+    def block_random_normal(self, dims: list[int], dtype: Dtype, sigma: float) -> Block:
         res = np.random.normal(loc=0, scale=sigma, size=dims)
         if not dtype.is_real:
             res += 1.j * np.random.normal(loc=0, scale=sigma, size=dims)

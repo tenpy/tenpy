@@ -150,7 +150,7 @@ class TorchBlockBackend(AbstractBlockBackend):
     def block_random_uniform(self, dims: list[int], dtype: Dtype) -> Block:
         return torch_module.rand(*dims, dtype=self.backend_dtype_map[dtype], device=self.device)
 
-    def block_random_gaussian(self, dims: list[int], dtype: Dtype, sigma: float) -> Block:
+    def block_random_normal(self, dims: list[int], dtype: Dtype, sigma: float) -> Block:
         # Note that if device is CUDA, this function synchronizes the device with the CPU
         mean = torch_module.zeros(size=dims, dtype=self.backend_dtype_map[dtype], device=self.device)
         std = sigma * torch_module.ones_like(mean, device=self.device)

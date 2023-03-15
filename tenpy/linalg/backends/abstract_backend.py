@@ -192,9 +192,10 @@ class AbstractBackend(ABC):
     def log(self, a: Tensor, idcs1: list[int], idcs2: list[int]) -> Data:
         ...
 
-    # TODO dtype
     @abstractmethod
-    def random_gaussian(self, legs: list[VectorSpace], dtype: Dtype, sigma: float) -> Data:
+    def random_normal(self, legs: list[VectorSpace], dtype: Dtype, sigma: float) -> Data:
+        """generate the data for a tensor drawn randomly from the normal distribution with zero mean
+        and standard deviation sigma"""
         ...
 
     @abstractmethod
@@ -313,7 +314,11 @@ class AbstractBlockBackend(ABC):
         ...
 
     @abstractmethod
-    def block_random_gaussian(self, dims: list[int], dtype: Dtype, sigma: float) -> Block:
+    def block_random_uniform(self, dims: list[int], dtype: Dtype) -> Block:
+        ...
+
+    @abstractmethod
+    def block_random_normal(self, dims: list[int], dtype: Dtype, sigma: float) -> Block:
         ...
 
     def block_add(self, a: Block, b: Block) -> Block:

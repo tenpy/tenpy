@@ -6,6 +6,7 @@ from abc import ABC, abstractmethod
 from typing import Iterable
 import numpy as np
 from enum import Enum, auto
+import warnings
 
 from .misc import duplicate_entries, force_str_len, join_as_many_as_possible
 from .dummy_config import config
@@ -648,8 +649,62 @@ class Tensor(AbstractTensor):
         
         return cls(data=backend.from_block_func(block_func, legs), backend=backend, legs=legs, 
                    labels=labels)
-        
 
+    @classmethod
+    def random_normal(cls, mean: Tensor = None, sigma: float = 1.,
+                      legs_or_dims: int | VectorSpace | list[int | VectorSpace] = None, backend=None,
+                      labels: list[str | None] = None, dtype: Dtype = None) -> Tensor:
+        r"""Generate a tensor from the normal distribution.
+
+        The probability density is
+
+        .. math ::
+            p(T) \propto \mathrm{exp}\left[ \frac{(T - \mathtt{mean})^2}{2 \mathtt{sigma}^2} \right]
+
+        .. note ::
+            The tensors legs, backend and labels can be specified either via the `mean` or via 
+            explicit parameters, but not both.
+            If `mean` is given, the explicit parameters are ignored.
+        
+        Parameters
+        ----------
+        mean : Tensor | None
+            The mean of the distribution. `mean=None` means a mean of zero and makes the
+            `legs_or_dims` argument required.
+        sigma : float
+            The standard deviation of the distribution
+        legs_or_dims : int | VectorSpace | list[int | VectorSpace] | None
+            If `mean` is given, this argument is ignored and legs are the same as those of `mean`.
+            Otherwise, a description of the legs of the result, either via their vectorspace
+            or via an integer, which means a trivial VectorSpace of that dimension.
+        backend : :class:`~tenpy.linalg.backends.abstract_backend.AbstractBackend`
+            If `mean` is given, this argument is ignored and the backend is the same as of `mean`.
+            Otherwise, the backend for the tensor
+        labels : list[str | None], optional
+            If `mean` is given, this argument is ignored and labels are the same as those of `mean`.
+            Otherwise, labels associated with each leg, ``None`` for unnamed legs.
+        dtype : Dtype
+            The dtype for the tensor. If not given, use the dtype of `mean`. If `mean` is not given,
+            default to `Dtype.complex128`.
+        """
+        if mean is not None:
+            for name, val in zip(['legs_or_dims', 'backend', 'labels'], [legs_or_dims, backend, labels]):
+                if val is not None:
+                    warnings.warn(f'{name} argument to Tensor.random_normal was ignored, because mean was given.')
+                    
+            if dtype is None:
+                dtype = mean.dtype
+            return mean + cls.random_normal(mean=None, sigma=sigma, legs_or_dims=mean.legs, backend=mean.backend,
+                                            labels=mean.labels, dtype=dtype)
+
+        if backend is None:
+            backend = get_default_backend()
+        if dtype is None:
+            dtype = Dtype.complex128
+        legs = _parse_legs_or_dims(legs_or_dims)
+        data = backend.random_normal(legs=legs, dtype=dtype, sigma=sigma)
+        return cls(data=data, backend=backend, legs=legs, labels=labels)
+        
     def tdot(self, other: AbstractTensor, 
              legs1: int | str | list[int | str] = -1, legs2: int | str | list[int | str] = 0, 
              relabel1: dict[str, str] = None, relabel2: dict[str, str] = None) -> AbstractTensor:

@@ -135,7 +135,7 @@ def test_Tensor_classmethods(backend):
 
     # TODO from_block_func, from_numpy_func
 
-    # TODO random_uniform
+    # TODO random_uniform, random_normal
 
     print('checking zero')
     tens = Tensor.zero(backend, [2, 3, 4])

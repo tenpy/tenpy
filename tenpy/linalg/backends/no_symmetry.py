@@ -111,8 +111,8 @@ class AbstractNoSymmetryBackend(AbstractBackend, AbstractBlockBackend, ABC):
         matrix, aux = self.block_matrixify(a.data, idcs1, idcs2)
         return self.block_dematrixify(self.matrix_log(matrix), aux)
 
-    def random_gaussian(self, legs: list[VectorSpace], dtype: Dtype, sigma: float) -> Data:
-        return self.block_random_gaussian([l.dim for l in legs], dtype=dtype, sigma=sigma)
+    def random_normal(self, legs: list[VectorSpace], dtype: Dtype, sigma: float) -> Data:
+        return self.block_random_normal([l.dim for l in legs], dtype=dtype, sigma=sigma)
 
     def add(self, a: Tensor, b: Tensor) -> Data:
         return self.block_add(a.data, b.data)
