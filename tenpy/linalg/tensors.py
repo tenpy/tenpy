@@ -542,9 +542,8 @@ class Tensor(AbstractTensor):
         backend : :class:`~tenpy.linalg.backends.abstract_backend.AbstractBackend`
             The backend for the tensor
         legs_or_dims : int | VectorSpace | list[int | VectorSpace]
-            Description of *half* of the legs of the result, either via their vectorspace
+            Description of the legs of the result, either via their vectorspace
             or via an integer, which means a trivial VectorSpace of that dimension.
-            The resulting tensor has twice as many legs.
         labels : list[str | None], optional
             Labels associated with each leg, ``None`` for unnamed legs.
         unc_args : iterable
@@ -590,9 +589,8 @@ class Tensor(AbstractTensor):
         backend : :class:`~tenpy.linalg.backends.abstract_backend.AbstractBackend`
             The backend for the tensor
         legs_or_dims : int | VectorSpace | list[int | VectorSpace]
-            Description of *half* of the legs of the result, either via their vectorspace
+            Description of the legs of the result, either via their vectorspace
             or via an integer, which means a trivial VectorSpace of that dimension.
-            The resulting tensor has twice as many legs.
         labels : list[str | None], optional
             Labels associated with each leg, ``None`` for unnamed legs.
         unc_args : iterable
