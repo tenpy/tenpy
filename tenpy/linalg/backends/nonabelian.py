@@ -152,7 +152,7 @@ class AbstractNonabelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
     def split_leg(self, a: Tensor, leg_idx: int) -> NonAbelianData:
         raise NotImplementedError  # FIXME
 
-    def allclose(self, a: Tensor, b: Tensor, rtol: float, atol: float) -> bool:
+    def almost_equal(self, a: Tensor, b: Tensor, rtol: float, atol: float) -> bool:
         raise NotImplementedError  # FIXME
 
     def squeeze_legs(self, a: Tensor, idcs: list[int]) -> NonAbelianData:

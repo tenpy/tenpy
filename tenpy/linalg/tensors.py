@@ -205,8 +205,8 @@ class AbstractTensor(ABC):
         return self
 
     def __eq__(self, other):
-        # TODO make sure the pointer is correct.
-        raise TypeError('Tensor does not support == comparison. Use tenpy.allclose instead.')
+        msg = f'{type(self)} does not support == comparison. Use tenpy.almost_equal instead.'
+        raise TypeError(msg)
 
     @abstractmethod
     def __add__(self, other):
@@ -327,6 +327,12 @@ class AbstractTensor(ABC):
     @abstractmethod
     def norm(self) -> float:
         """See tensors.norm"""
+        ...
+
+    # TODO decide default values. could let them depend on dtype?
+    @abstractmethod
+    def almost_equal(self, other: AbstractTensor, atol: float = 1e-5, rtol: float = 1e-8) -> bool:
+        """See tensors.almost_equal"""
         ...
 
 
@@ -833,6 +839,14 @@ class Tensor(AbstractTensor):
         """See tensors.norm"""
         return self.backend.norm(self)
 
+    def almost_equal(self, other: AbstractTensor, atol: float = 1e-5, rtol: float = 1e-8) -> bool:
+        if not isinstance(other, Tensor):
+            raise NotImplementedError  # TODO
+        if self.legs != other.legs:
+            raise ValueError('Mismatching shapes')
+        backend = get_same_backend(self, other)
+        return backend.almost_equal(self, other, atol=atol, rtol=rtol)
+
 
 # TODO is this a good name?
 class ChargedTensor(AbstractTensor):
@@ -917,6 +931,14 @@ class ChargedTensor(AbstractTensor):
     @classmethod
     def zero(cls, **todo_args):
         ...
+
+    def almost_equal(self, other: AbstractTensor, atol: float = 0.00001, rtol: float = 1e-8) -> bool:
+        # TODO comparing general ChargedTensors is not so easy, since the decomposition into
+        #  invariant part and non-invariant state is not unique.
+        #  For one-dimensional dummy legs, we could fix the gauge freedom by demanding that dummy state is [1].
+        #  For higher-dimensional dummy legs, i dont yet know how to do this cleverly.
+        #  Could convert to dense tensors and compare those, and issue a warning that its not very efficient.
+        raise NotImplementedError  # TODO
 
 
 class DiagonalTensor(AbstractTensor):
@@ -1078,35 +1100,6 @@ def is_scalar(obj) -> bool:
         raise TypeError(f'Type not supported for is_scalar: {type(obj)}')
 
 
-def allclose(a, b, rtol=1e-05, atol=1e-08) -> bool:
-    """
-    If a and b are equal up to numerical tolerance, that is if `norm(a - b) <= atol + rtol * norm(a)`.
-    Note that the definition is not symmetric under exchanging `a` and `b`.
-
-    TODO "all" isnt really reflecting what going on. different name?
-    TODO this should scale with the number of entries somehow, no?
-    """
-    assert rtol >= 0
-    assert atol >= 0
-    if isinstance(a, AbstractTensor) and isinstance(b, AbstractTensor):
-        diff = norm(a - b)
-        a_norm = norm(a)
-    else:
-        if isinstance(a, AbstractTensor):
-            try:
-                a = a.item()
-            except ValueError:
-                raise ValueError('Can not compare non-scalar Tensor and scalar') from None
-        if isinstance(b, AbstractTensor):
-            try:
-                b = b.item()
-            except ValueError:
-                raise ValueError('Can not compare scalar and non-scalar Tensor') from None
-        diff = abs(a - b)
-        a_norm = abs(a)
-    return diff <= atol + rtol * a_norm
-
-
 def squeeze_legs(t: AbstractTensor, legs: int | str | list[int | str] = ALL_TRIVIAL_LEGS) -> Tensor:
     """
     Remove trivial leg from tensor.
@@ -1119,6 +1112,23 @@ def squeeze_legs(t: AbstractTensor, legs: int | str | list[int | str] = ALL_TRIV
 def norm(t: AbstractTensor) -> float:
     """2-norm of a tensor, i.e. sqrt(inner(t, t))"""
     return t.norm()
+
+
+def almost_equal(t1: AbstractTensor, t2: AbstractTensor, atol: float = 1e-5, rtol: float = 1e-8) -> bool:
+    """Checks if two tensors are equal up to numerical tolerance.
+
+    The blocks of the two tensors are compared.
+    The tensors count as almost equal if all block-entries, i.e. all their free parameters
+    individually fulfill `abs(a1 - a2) <= atol + rtol * abs(a1)`.
+
+    In the non-symmetric case, this is equivalent to e.g. ``numpy.allclose``.
+    In the symmetric case, it is a close analogue.
+
+    .. note ::
+        The definition is not symmetric, so there may be edge-cases where
+        ``almost_equal(t1, t2) != almost_equal(t2, t1)``
+    """
+    return t1.almost_equal(t2, atol=atol, rtol=rtol)
 
 
 def _get_result_labels(legs1: list[str | None], legs2: list[str | None],

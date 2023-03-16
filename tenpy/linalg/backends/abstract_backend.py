@@ -172,7 +172,7 @@ class AbstractBackend(ABC):
         ...
 
     @abstractmethod
-    def allclose(self, a: Tensor, b: Tensor, rtol: float, atol: float) -> bool:
+    def almost_equal(self, a: Tensor, b: Tensor, rtol: float, atol: float) -> bool:
         ...
 
     @abstractmethod
