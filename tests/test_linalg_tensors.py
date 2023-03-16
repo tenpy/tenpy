@@ -30,15 +30,15 @@ def test_Tensor_methods(backend):
     legs = [VectorSpace.non_symmetric(d) for d in data1.shape]
     
     print('checking __init__ with labels=None')
-    tens1 = tensors.Tensor(data1, backend, legs, labels=None)
+    tens1 = tensors.Tensor(data1, legs=legs, backend=backend, labels=None)
     tens1.check_sanity()
 
     print('checking __init__, partially labelled')
-    tens2 = tensors.Tensor(data2, backend, legs, labels=[None, 'a', 'b'])
+    tens2 = tensors.Tensor(data2, legs=legs, backend=backend, labels=[None, 'a', 'b'])
     tens2.check_sanity()
 
     print('checking __init__, fully labelled')
-    tens3 = tensors.Tensor(data1, backend, legs, labels=['foo', 'a', 'b'])
+    tens3 = tensors.Tensor(data1, legs=legs, backend=backend, labels=['foo', 'a', 'b'])
     tens3.check_sanity()
 
     print('check size')
@@ -86,7 +86,7 @@ def test_Tensor_methods(backend):
 
     print('check item')
     data4 = random_block((1,), backend)
-    tens4 = tensors.Tensor(data4, backend, legs=[VectorSpace.non_symmetric(1)])
+    tens4 = tensors.Tensor(data4, backend=backend, legs=[VectorSpace.non_symmetric(1)])
     assert np.allclose(tens4.item(), data4[0])
     
     print('check str and repr')
@@ -137,13 +137,13 @@ def test_Tensor_classmethods(backend):
     # TODO random_uniform, random_normal
 
     print('checking zero')
-    tens = tensors.Tensor.zero(backend, [2, 3, 4])
+    tens = tensors.Tensor.zero([2, 3, 4], backend=backend)
     assert np.allclose(tens.data, np.zeros([2, 3, 4]))
 
     print('checking eye')
-    tens = tensors.Tensor.eye(backend, 5)
+    tens = tensors.Tensor.eye(5, backend=backend)
     assert np.allclose(tens.data, np.eye(5))
-    tens = tensors.Tensor.eye(backend, [VectorSpace.non_symmetric(10), 4])
+    tens = tensors.Tensor.eye([VectorSpace.non_symmetric(10), 4], backend=backend)
     assert np.allclose(tens.data, np.eye(40).reshape((10, 4, 10, 4)))
 
 
@@ -159,16 +159,21 @@ def test_tdot(backend):
     data3 = np.random.random((a.dim, b.dim))
     data4 = np.random.random((c.dim, b.dim))
     data5 = np.random.random((c.dim, a.dim, b.dim))
-    t1 = tensors.Tensor.from_numpy(data1, backend, legs=[a, b, c])
-    t2 = tensors.Tensor.from_numpy(data2, backend, legs=[b.dual, c.dual, d.dual])
-    t3 = tensors.Tensor.from_numpy(data3, backend, legs=[a.dual, b.dual])
-    t4 = tensors.Tensor.from_numpy(data4, backend, legs=[c.dual, b.dual])
-    t5 = tensors.Tensor.from_numpy(data5, backend, legs=[c.dual, a.dual, b.dual])
-    t1_labelled = tensors.Tensor.from_numpy(data1, backend, legs=[a, b, c], labels=['a', 'b', 'c'])
-    t2_labelled = tensors.Tensor.from_numpy(data2, backend, legs=[b.dual, c.dual, d.dual], labels=['b*', 'c*', 'd*'])
-    t3_labelled = tensors.Tensor.from_numpy(data3, backend, legs=[a.dual, b.dual], labels=['a*', 'b*'])
-    t4_labelled = tensors.Tensor.from_numpy(data4, backend, legs=[c.dual, b.dual], labels=['c*', 'b*'])
-    t5_labelled = tensors.Tensor.from_numpy(data5, backend, legs=[c.dual, a.dual, b.dual], labels=['c*', 'a*', 'b*'])
+    t1 = tensors.Tensor.from_numpy(data1, backend=backend, legs=[a, b, c])
+    t2 = tensors.Tensor.from_numpy(data2, backend=backend, legs=[b.dual, c.dual, d.dual])
+    t3 = tensors.Tensor.from_numpy(data3, backend=backend, legs=[a.dual, b.dual])
+    t4 = tensors.Tensor.from_numpy(data4, backend=backend, legs=[c.dual, b.dual])
+    t5 = tensors.Tensor.from_numpy(data5, backend=backend, legs=[c.dual, a.dual, b.dual])
+    t1_labelled = tensors.Tensor.from_numpy(data1, backend=backend, legs=[a, b, c], 
+                                            labels=['a', 'b', 'c'])
+    t2_labelled = tensors.Tensor.from_numpy(data2, backend=backend, legs=[b.dual, c.dual, d.dual], 
+                                            labels=['b*', 'c*', 'd*'])
+    t3_labelled = tensors.Tensor.from_numpy(data3, backend=backend, legs=[a.dual, b.dual], 
+                                            labels=['a*', 'b*'])
+    t4_labelled = tensors.Tensor.from_numpy(data4, backend=backend, legs=[c.dual, b.dual], 
+                                            labels=['c*', 'b*'])
+    t5_labelled = tensors.Tensor.from_numpy(data5, backend=backend, legs=[c.dual, a.dual, b.dual], 
+                                            labels=['c*', 'a*', 'b*'])
 
     print('contract one leg')
     expect = np.tensordot(data1, data2, (1, 0))
@@ -221,8 +226,8 @@ def test_outer(backend):
     backend = all_backends[backend]
     data1 = np.random.random([3, 5])
     data2 = np.random.random([4, 8])
-    t1 = tensors.Tensor.from_numpy(data1, backend, labels=['a', 'f'])
-    t2 = tensors.Tensor.from_numpy(data2, backend, labels=['g', 'b'])
+    t1 = tensors.Tensor.from_numpy(data1, backend=backend, labels=['a', 'f'])
+    t2 = tensors.Tensor.from_numpy(data2, backend=backend, labels=['g', 'b'])
     expect = data1[:, :, None, None] * data2[None, None, :, :]
     res = tensors.outer(t1, t2)
     assert np.allclose(expect, res.data)
@@ -235,9 +240,9 @@ def test_inner(backend):
     data1 = np.random.random([3, 5]) + 1.j * np.random.random([3, 5])
     data2 = np.random.random([3, 5]) + 1.j * np.random.random([3, 5])
     data3 = np.random.random([5, 3]) + 1.j * np.random.random([5, 3])
-    t1 = tensors.Tensor.from_numpy(data1, backend)
-    t2 = tensors.Tensor.from_numpy(data2, backend, labels=['a', 'b'])
-    t3 = tensors.Tensor.from_numpy(data3, backend, labels=['b', 'a'])
+    t1 = tensors.Tensor.from_numpy(data1, backend=backend)
+    t2 = tensors.Tensor.from_numpy(data2, backend=backend, labels=['a', 'b'])
+    t3 = tensors.Tensor.from_numpy(data3, backend=backend, labels=['b', 'a'])
     expect1 = np.tensordot(np.conj(data1), data2, ([0, 1], [0, 1]))
     res1 = tensors.inner(t1, t2)
     assert np.allclose(expect1, res1)
@@ -251,7 +256,7 @@ def test_transpose(backend):
     backend = all_backends[backend]
     shape = [3, 5, 7, 10]
     data = np.random.random(shape) + 1.j * np.random.random(shape)
-    t = tensors.Tensor.from_numpy(data, backend, labels=['a', 'b', 'c', 'd'])
+    t = tensors.Tensor.from_numpy(data, backend=backend, labels=['a', 'b', 'c', 'd'])
     res = tensors.transpose(t, [2, 0, 3, 1])
     assert res.labels == ['c', 'a', 'd', 'b']
     assert np.allclose(res.data, np.transpose(data, [2, 0, 3, 1]))
@@ -264,7 +269,7 @@ def test_trace(backend):
     print('single legpair - default legs* args')
     data = np.random.random([7, 7, 7]) + 1.j * np.random.random([7, 7, 7])
     legs = [VectorSpace.non_symmetric(7), VectorSpace.non_symmetric(7), VectorSpace.non_symmetric(7).dual]
-    tens = tensors.Tensor.from_numpy(data, backend, legs, labels=['a', 'b', 'b*'])
+    tens = tensors.Tensor.from_numpy(data, legs=legs, backend=backend, labels=['a', 'b', 'b*'])
     expect = np.trace(data, axis1=-2, axis2=-1)
     res = tensors.trace(tens)
     assert res.labels_are('a')
@@ -285,7 +290,8 @@ def test_trace(backend):
     a = VectorSpace.non_symmetric(11)
     b = VectorSpace.non_symmetric(13)
     c = VectorSpace.non_symmetric(7)
-    tens = tensors.Tensor.from_numpy(data, backend, [a, b.dual, a.dual, c, b], labels=['a', 'b*', 'a*', 'c', 'b'])
+    tens = tensors.Tensor.from_numpy(data, legs=[a, b.dual, a.dual, c, b], backend=backend, 
+                                     labels=['a', 'b*', 'a*', 'c', 'b'])
     res_idx = tensors.trace(tens, [0, 1], [2, 4])
     res_label = tensors.trace(tens, ['a', 'b*'], ['a*', 'b'])
     assert res_idx.labels_are('c')
@@ -298,7 +304,8 @@ def test_trace(backend):
     expect = np.trace(np.trace(data, axis1=1, axis2=3), axis1=0, axis2=1)
     a = VectorSpace.non_symmetric(11)
     b = VectorSpace.non_symmetric(13)
-    tens = tensors.Tensor.from_numpy(data, backend, [a, b.dual, a.dual, b], labels=['a', 'b*', 'a*', 'b'])
+    tens = tensors.Tensor.from_numpy(data, legs=[a, b.dual, a.dual, b], backend=backend, 
+                                     labels=['a', 'b*', 'a*', 'b'])
     res_idx = tensors.trace(tens, [0, 1], [2, 3])
     res_label = tensors.trace(tens, ['a', 'b*'], ['a*', 'b'])
     assert isinstance(res_idx, complex)
@@ -311,7 +318,7 @@ def test_trace(backend):
 def test_conj(backend):
     backend = all_backends[backend]
     data = np.random.random([2, 4, 5]) + 1.j * np.random.random([2, 4, 5])
-    tens = tensors.Tensor.from_numpy(data, backend, labels=['a', 'b', None])
+    tens = tensors.Tensor.from_numpy(data, backend=backend, labels=['a', 'b', None])
     res = tensors.conj(tens)
     if isinstance(backend, TorchBlockBackend):
         res_data = res.data.resolve_conj().numpy()
@@ -326,7 +333,7 @@ def test_conj(backend):
 def test_combine_split(backend):
     backend = all_backends[backend]
     data = np.random.random([2, 4, 7, 5]) + 1.j * np.random.random([2, 4, 7, 5])
-    tens = tensors.Tensor.from_numpy(data, backend, labels=['a', 'b', 'c', 'd'])
+    tens = tensors.Tensor.from_numpy(data, backend=backend, labels=['a', 'b', 'c', 'd'])
 
     print('check by idx')
     res = tensors.combine_legs(tens, [1, 2])
@@ -358,9 +365,9 @@ def test_is_scalar(backend):
     assert tensors.is_scalar(1) 
     assert tensors.is_scalar(0.) 
     assert tensors.is_scalar(1. + 2.j) 
-    scalar_tens = tensors.Tensor.from_numpy([[1.]], backend)
+    scalar_tens = tensors.Tensor.from_numpy([[1.]], backend=backend)
     assert tensors.is_scalar(scalar_tens)
-    non_scalar_tens = tensors.Tensor.from_numpy([[1., 2.], [3., 4.]], backend)
+    non_scalar_tens = tensors.Tensor.from_numpy([[1., 2.], [3., 4.]], backend=backend)
     assert not tensors.is_scalar(non_scalar_tens)
     
 
@@ -369,8 +376,8 @@ def test_almost_equal(backend):
     backend = all_backends[backend]
     data1  = np.random.random([2, 4, 3, 5])
     data2 = data1 + 1e-7 * np.random.random([2, 4, 3, 5])
-    t1 = tensors.Tensor.from_numpy(data1, backend)
-    t2 = tensors.Tensor.from_numpy(data2, backend)
+    t1 = tensors.Tensor.from_numpy(data1, backend=backend)
+    t2 = tensors.Tensor.from_numpy(data2, backend=backend)
     assert tensors.almost_equal(t1, t2)
     assert not tensors.almost_equal(t1, t2, atol=1e-10, rtol=1e-10)
     
@@ -379,7 +386,7 @@ def test_almost_equal(backend):
 def test_squeeze_legs(backend):
     backend = all_backends[backend]
     data = np.random.random([2, 1, 7, 1, 1]) + 1.j * np.random.random([2, 1, 7, 1, 1])
-    tens = tensors.Tensor.from_numpy(data, backend, labels=['a', 'b', 'c', 'd', 'e'])
+    tens = tensors.Tensor.from_numpy(data, backend=backend, labels=['a', 'b', 'c', 'd', 'e'])
 
     print('squeezing all legs (default arg)')
     res = tensors.squeeze_legs(tens)
@@ -401,7 +408,7 @@ def test_squeeze_legs(backend):
 def test_norm(backend):
     backend = all_backends[backend]
     data = np.random.random([2, 3, 7]) + 1.j * np.random.random([2, 3, 7])
-    tens = tensors.Tensor.from_numpy(data, backend)
+    tens = tensors.Tensor.from_numpy(data, backend=backend)
     res = tensors.norm(tens)
     expect = np.linalg.norm(data)
     assert np.allclose(res, expect)
