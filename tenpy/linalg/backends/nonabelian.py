@@ -2,14 +2,19 @@
 from __future__ import annotations
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Iterable, Iterator
+from typing import Iterable, Iterator, TYPE_CHECKING
 
-from .abstract_backend import AbstractBackend, AbstractBlockBackend, Block
+from .abstract_backend import AbstractBackend, AbstractBlockBackend, Block, Dtype
 from ..symmetries import FusionStyle, Sector, Symmetry, VectorSpace, ProductSpace
-from ..tensors import Dtype, Tensor
 
 __all__ = ['AbstractNonabelianBackend', 'NonAbelianData', 'FusionTree', 'fusion_trees', 
            'all_fusion_trees', 'coupled_sectors']
+
+
+if TYPE_CHECKING:
+    # can not import Tensor at runtime, since it would be a circular import
+    # this clause allows mypy etc to evaluate the type-hints anyway
+    from ..tensors import Tensor
 
 
 @dataclass

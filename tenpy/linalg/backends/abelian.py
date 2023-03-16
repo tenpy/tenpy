@@ -11,16 +11,21 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Iterable, TypeVar, List
+from typing import Iterable, TypeVar, List, TYPE_CHECKING
 import numpy as np
 
-from .abstract_backend import AbstractBackend, AbstractBlockBackend, Data, Block
+from .abstract_backend import AbstractBackend, AbstractBlockBackend, Data, Block, Dtype
 from ..symmetries import Symmetry, AbelianGroup, VectorSpace, ProductSpace, Sector
-from ..tensors import Tensor, Dtype
 from ...tools.optimization import use_cython
 
 __all__ = ['AbelianBlockData', 'AbelianBackendVectorSpace', 'AbelianBackendProductSpace', 
            'AbstractAbelianBackend', 'detect_qtotal']
+
+
+if TYPE_CHECKING:
+    # can not import Tensor at runtime, since it would be a circular import
+    # this clause allows mypy etc to evaluate the type-hints anyway
+    from ..tensors import Tensor
 
 
 # TODO (JU) call it AbelianBackendData instead? "Block" sounds misleading to me

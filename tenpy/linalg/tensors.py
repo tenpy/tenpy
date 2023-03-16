@@ -12,18 +12,11 @@ from .misc import duplicate_entries, force_str_len, join_as_many_as_possible
 from .dummy_config import config
 from .symmetries import VectorSpace, ProductSpace
 from .backends.backend_factory import get_default_backend
+from .backends.abstract_backend import Dtype
 
 __all__ = ['AbstractTensor', 'Tensor', 'ChargedTensor', 'DiagonalTensor', 'tdot', 'outer', 'inner', 
            'transpose', 'trace', 'conj', 'combine_legs', 'split_leg', 'is_scalar', 'allclose', 
            'squeeze_legs', 'norm', 'get_same_backend', 'Dtype', 'zero_like']
-
-
-class Dtype(Enum):
-    # TODO expose those in some high-level init, maybe even as tenpy.float32 ?
-    float32 = auto()
-    float64 = auto()
-    complex64 = auto()
-    complex128 = auto()
     
 
 def _dual_leg_label(label: str) -> str:

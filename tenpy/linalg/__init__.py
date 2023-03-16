@@ -21,12 +21,12 @@ which provides the :class:`~tenpy.linalg.tensors.Tensor` class used by the rest 
 
 from . import old  # need to import old._npc_helper first!
 from . import symmetries, backends, tensors, lanczos, random_matrix, sparse
-from . import charges, matrix_operations, random
+from . import charges, matrix_operations
 from ..tools import optimization
 
 
 __all__ = ['old', 'charges', 'np_conserved', 'lanczos', 'random_matrix', 'sparse', 
-           'matrix_operations', 'random', 'symmetries', 'tensors', 'backends', 
+           'matrix_operations', 'symmetries', 'tensors', 'backends', 
            'dummy_config', 'misc']
 
 

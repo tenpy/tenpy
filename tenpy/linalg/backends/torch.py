@@ -1,17 +1,22 @@
 # Copyright 2023-2023 TeNPy Developers, GNU GPLv3
 from __future__ import annotations
 from numpy import prod
-from typing import Any
+from typing import Any, TYPE_CHECKING
 
 from .abelian import AbstractAbelianBackend
-from .abstract_backend import AbstractBlockBackend, Block, Data
+from .abstract_backend import AbstractBlockBackend, Block, Data, Dtype
 from .no_symmetry import AbstractNoSymmetryBackend
 from .nonabelian import AbstractNonabelianBackend
 from ..misc import inverse_permutation
 from ..symmetries import VectorSpace
-from ..tensors import Tensor, Dtype
 
 __all__ = ['TorchBlockBackend', 'NoSymmetryTorchBackend', 'AbelianTorchBackend', 'NonabelianTorchBackend']
+
+
+if TYPE_CHECKING:
+    # can not import Tensor at runtime, since it would be a circular import
+    # this clause allows mypy etc to evaluate the type-hints anyway
+    from ..tensors import Tensor
 
 
 class TorchBlockBackend(AbstractBlockBackend):

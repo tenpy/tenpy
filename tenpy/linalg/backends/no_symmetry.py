@@ -1,12 +1,18 @@
 # Copyright 2023-2023 TeNPy Developers, GNU GPLv3
 from __future__ import annotations
 from abc import ABC, abstractmethod
+from typing import TYPE_CHECKING
 
-from .abstract_backend import AbstractBackend, AbstractBlockBackend, Data, Block
+from .abstract_backend import AbstractBackend, AbstractBlockBackend, Data, Block, Dtype
 from ..symmetries import ProductSpace, VectorSpace, no_symmetry, Symmetry
-from ..tensors import Tensor, Dtype
 
 __all__ = ['AbstractNoSymmetryBackend']
+
+
+if TYPE_CHECKING:
+    # can not import Tensor at runtime, since it would be a circular import
+    # this clause allows mypy etc to evaluate the type-hints anyway
+    from ..tensors import Tensor
 
 
 # TODO eventually remove AbstractBlockBackend inheritance, it is not needed,
