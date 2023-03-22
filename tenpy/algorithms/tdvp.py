@@ -312,11 +312,42 @@ class SingleSiteTDVPEngine(TDVPEngine):
 
 
 class BondExpandingSingleSiteTDVPEngine(TDVPEngine):
-    """Single site TDVP with controlled bond expansion.
-    This is an attempt to implement arXiv:2208.10972.
+    """Engine for the single-site TDVP algorithm with controlled bond expansion.
+
+    Parameters
+    ----------
+    psi, model, options, **kwargs:
+        Same as for :class:`~tenpy.algorithms.algorithm.Algorithm`.
+
+    Options
+    -------
+    .. cfg:config :: TDVP
+        :include: TimeEvolutionAlgorithm
+
+        trunc_params : dict
+            Truncation parameters as described in :func:`~tenpy.algorithms.truncation.truncate`
+        lanczos_options : dict
+            Lanczos options as described in :cfg:config:`Lanczos`.
+
+    Attributes
+    ----------
+    options: dict
+        Optional parameters.
+    evolved_time : float | complex
+        Indicating how long `psi` has been evolved, ``psi = exp(-i * evolved_time * H) psi(t=0)``.
+    psi : :class:`~tenpy.networks.mps.MPS`
+        The MPS, time evolved in-place.
+    env : :class:`~tenpy.networks.mpo.MPOEnvironment`
+        The environment, storing the `LP` and `RP` to avoid recalculations.
+    lanczos_options : :class:`~tenpy.tools.params.Config`
+        Options passed on to :class:`~tenpy.linalg.lanczos.LanczosEvolution`.
     """
 
     EffectiveH = OneSiteH
+
+    def __init__(self, psi, model, options, **kwargs):
+        super().__init__(psi, model, options, **kwargs)
+        self.trunc_err = TruncationError()
 
     def get_sweep_schedule(self):
         """slightly different sweep schedule than DMRG"""
@@ -339,12 +370,10 @@ class BondExpandingSingleSiteTDVPEngine(TDVPEngine):
             Labels are ``'vL', 'p0', 'p1', 'vR'``, or combined versions of it (if `self.combine`).
             For single-site DMRG, the ``'p1'`` label is missing.
         """
-        # expand bond dimension (when going right->left skip the first site)
+        # expand bond dimension (when going right->left: skip the first site)
         if not (self.i0 == 0 and not self.move_right):
             self.expand_bond()
-
         self.make_eff_H()  # self.eff_H represents tensors LP, W0, RP
-
         # make theta
         theta = self.psi.get_theta(self.i0, n=self.n_optimize, cutoff=self.S_inv_cutoff)
         theta = self.eff_H.combine_theta(theta)
@@ -361,18 +390,17 @@ class BondExpandingSingleSiteTDVPEngine(TDVPEngine):
         # update one-site wavefunction
         theta, N = LanczosEvolution(self.eff_H, theta, self.lanczos_options).run(-0.5j * dt)
         if self.move_right:
-            self.right_moving_update(i0, theta)
+            err = self.right_moving_update(i0, theta)
         else:
-            self.left_moving_update(i0, theta)
-        return {}  # no truncation error in single-site TDVP!
+            err = self.left_moving_update(i0, theta)
+        return {'err': err, 'N': N}
 
     def right_moving_update(self, i0, theta):
         if self.combine:
             theta.itranspose(['(vL.p0)', 'vR'])
         else:
             theta = theta.combine_legs(['vL', 'p0'], qconj=+1, new_axes=0)
-        # TODO: We should keep track of the truncation error here
-        U, S, VH, err, norm = svd_theta(theta, self.trunc_params, inner_labels=['vR', 'vL'], qtotal_LR=[theta.qtotal, None])
+        U, S, VH, err, _ = svd_theta(theta, self.trunc_params, inner_labels=['vR', 'vL'], qtotal_LR=[theta.qtotal, None])
         A0 = U.split_legs(['(vL.p0)']).replace_label('p0', 'p')
         self.psi.set_B(i0, A0, form='A')  # left-canonical
         self.psi.set_SR(i0, S)
@@ -385,13 +413,14 @@ class BondExpandingSingleSiteTDVPEngine(TDVPEngine):
             next_th = npc.tensordot(theta, next_B, axes=['vR', 'vL'])
             self.psi.set_B(i0 + 1, next_th, form='Th')  # used and updated for next i0
 
+        return err
+
     def left_moving_update(self, i0, theta):
         if self.combine:
             theta.itranspose(['vL', '(p0.vR)'])
         else:
             theta = theta.combine_legs(['p0', 'vR'], qconj=-1, new_axes=1)
-        # TODO: We should keep track of the truncation error here
-        U, S, VH, err, norm = svd_theta(theta, self.trunc_params, qtotal_LR=[None, theta.qtotal], inner_labels=['vR', 'vL'])
+        U, S, VH, err, _ = svd_theta(theta, self.trunc_params, qtotal_LR=[None, theta.qtotal], inner_labels=['vR', 'vL'])
         if i0 == 0:
             theta = npc.tensordot(U.scale_axis(S, 'vR'), VH, axes=(['vR'], ['vL']))
             theta = theta.split_legs(['(p0.vR)']).replace_label('p0', 'p')
@@ -413,6 +442,8 @@ class BondExpandingSingleSiteTDVPEngine(TDVPEngine):
             # values for correct expectation values/entropies are the ones set before the if above.
             # (Belive me - I had that coded up and spent days looking for the bug...)
 
+        return err
+
     def update_env(self, **update_data):
         """Do nothing; super().update_env() is called explicitly in :meth:`update_local`."""
         pass
@@ -423,8 +454,9 @@ class BondExpandingSingleSiteTDVPEngine(TDVPEngine):
         theta, _ = LanczosEvolution(H0, theta, self.lanczos_options).run(dt)
         return theta, H0
 
-    def post_update_local(self, **update_data):
-        self.trunc_err_list.append(0.)  # avoid error in return of sweep()
+    def post_update_local(self, err, **update_data):
+        self.trunc_err = self.trunc_err + err
+        self.trunc_err_list.append(err.eps)  # avoid error in return of sweep()
 
 
 class TimeDependentSingleSiteTDVP(TimeDependentHAlgorithm,SingleSiteTDVPEngine):
