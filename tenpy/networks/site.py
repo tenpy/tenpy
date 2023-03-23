@@ -1589,7 +1589,7 @@ class SpinHalfHoleSite(Site):
     Local states are:
          ``empty``  (vacuum),
          ``up``     (one spin-up electron),
-         ``down``   (one spin-down electron), and
+         ``down``   (one spin-down electron)
 
     Local operators can be built from creation operators.
 

@@ -14,7 +14,7 @@ Backwards incompatible changes
 
 Added
 ^^^^^
-- nothing yet
+-  :meth:`~tenpy.models.tj_model.tJModel` and :meth:`~tenpy.networks.site.SpinHalfHoleSite`
 
 Changed
 ^^^^^^^
