@@ -7,6 +7,7 @@ import os
 import inspect
 import sphinx_rtd_theme
 import io
+import warnings
 
 # ensure parent folder is in sys.path to allow import of tenpy
 REPO_PREFIX = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
