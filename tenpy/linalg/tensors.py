@@ -14,10 +14,10 @@ from .symmetries import VectorSpace, ProductSpace
 from .backends.backend_factory import get_default_backend
 from .backends.abstract_backend import Dtype
 
-__all__ = ['AbstractTensor', 'Tensor', 'ChargedTensor', 'DiagonalTensor', 'tdot', 'outer', 'inner', 
-           'transpose', 'trace', 'conj', 'combine_legs', 'split_leg', 'is_scalar', 'allclose', 
+__all__ = ['AbstractTensor', 'Tensor', 'ChargedTensor', 'DiagonalTensor', 'tdot', 'outer', 'inner',
+           'transpose', 'trace', 'conj', 'combine_legs', 'split_leg', 'is_scalar', 'allclose',
            'squeeze_legs', 'norm', 'get_same_backend', 'Dtype', 'zero_like']
-    
+
 
 def _dual_leg_label(label: str) -> str:
     """the label that a leg should have after conjugation"""
@@ -73,7 +73,7 @@ class AbstractTensor(ABC):
         self._labelmap = {label: leg_num for leg_num, label in enumerate(self.labels) if label is not None}
         self.num_legs = len(legs)
         self.symmetry = legs[0].symmetry
-        
+
         if self.num_legs == 1:
             self.parent_space = self.legs[0]
         else:
@@ -97,7 +97,7 @@ class AbstractTensor(ABC):
         tensors with the same legs"""
         return self.parent_space.num_parameters
 
-    # TODO implement a shape property. 
+    # TODO implement a shape property.
     # should probably be a custom class that can be indexed by label (str) or index (int)
     #  -> include in tests
 
@@ -167,14 +167,14 @@ class AbstractTensor(ABC):
                 sublabels = [f'?{n}' if l is None else l for n, l in enumerate(_split_leg_label(label))]
                 prefix = 'ProductSpace: '
                 components = prefix + join_as_many_as_possible(
-                    [f'({l}: {s.dim})' for l, s in zip(sublabels, leg.spaces)], 
-                    separator=' ⊗ ', 
-                    priorities=[s.dim for s in leg.spaces], 
+                    [f'({l}: {s.dim})' for l, s in zip(sublabels, leg.spaces)],
+                    separator=' ⊗ ',
+                    priorities=[s.dim for s in leg.spaces],
                     max_len=max_len - len(prefix)
                 )
             else:
                 components = join_as_many_as_possible(
-                    [f'({mult} * {leg.symmetry.sector_str(sect)})' 
+                    [f'({mult} * {leg.symmetry.sector_str(sect)})'
                      for mult, sect in zip(leg.multiplicities, leg.sectors)],
                     separator=' ⊕ ',
                     priorities=leg.multiplicities,
@@ -211,6 +211,7 @@ class AbstractTensor(ABC):
 
     def __mul__(self, other):
         if isinstance(other, AbstractTensor):
+            # TODO JH: remove this? 1-item tensors should not behave like scalars
             if all(leg.dim == 1 for leg in other.legs):
                 return self._mul_scalar(other.item())
             if all(leg.dim == 1 for leg in self.legs):
@@ -269,20 +270,20 @@ class AbstractTensor(ABC):
         ...
 
     @abstractmethod
-    def tdot(self, other: AbstractTensor, 
-             legs1: int | str | list[int | str] = -1, legs2: int | str | list[int | str] = 0, 
+    def tdot(self, other: AbstractTensor,
+             legs1: int | str | list[int | str] = -1, legs2: int | str | list[int | str] = 0,
              relabel1: dict[str, str] = None, relabel2: dict[str, str] = None) -> AbstractTensor:
         """See tensors.tdot"""
         ...
 
     @abstractmethod
-    def outer(self, other: AbstractTensor, relabel1: dict[str, str] = None, 
+    def outer(self, other: AbstractTensor, relabel1: dict[str, str] = None,
               relabel2: dict[str, str] = None) -> AbstractTensor:
         """See tensors.outer"""
         ...
 
     @abstractmethod
-    def inner(self, other: AbstractTensor) -> complex: 
+    def inner(self, other: AbstractTensor) -> complex:
         """See tensors.inner"""
         ...
 
@@ -346,7 +347,7 @@ class Tensor(AbstractTensor):
 
     def __init__(self, data, legs: list[VectorSpace], backend=None, labels: list[str | None] | None = None):
         """
-        This constructor is not user-friendly. 
+        This constructor is not user-friendly.
         Use as_tensor instead.  TODO point to which methods here?
         Inputs are not checked for consistency.
 
@@ -374,12 +375,12 @@ class Tensor(AbstractTensor):
     def copy(self, deep=True):
         if deep:
             return Tensor(data=self.backend.copy_data(self.data),
-                          backend=self.backend, 
-                          legs=self.legs[:], 
+                          backend=self.backend,
+                          legs=self.legs[:],
                           labels=self.labels[:])
         return Tensor(data=self.data,
-                      backend=self.backend, 
-                      legs=self.legs, 
+                      backend=self.backend,
+                      legs=self.legs,
                       labels=self.labels)
 
     def item(self):
@@ -451,7 +452,7 @@ class Tensor(AbstractTensor):
     def from_dense_block(cls, block, backend=None, legs: list[VectorSpace]=None, dtype: Dtype=None,
                          labels: list[str | None] = None, atol: float = 1e-8, rtol: float = 1e-5
                          ) -> Tensor:
-        """Convert a dense block of the backend to a Tensor with given symmetry (implied by the `legs`), 
+        """Convert a dense block of the backend to a Tensor with given symmetry (implied by the `legs`),
         if the block is symmetric under it.
         If data is not symmetric under the symmetry i.e. if
         ``not allclose(array, projected, atol, rtol)``, raise a ValueError.
@@ -496,7 +497,7 @@ class Tensor(AbstractTensor):
         return cls(data=data, backend=backend, legs=legs, labels=labels)
 
     @classmethod
-    def eye(cls, legs_or_dims: int | VectorSpace | list[int | VectorSpace], backend=None, 
+    def eye(cls, legs_or_dims: int | VectorSpace | list[int | VectorSpace], backend=None,
             labels: list[str | None] = None, dtype: Dtype = Dtype.complex128) -> Tensor:
         """The identity map from one group of legs to their duals.
 
@@ -523,7 +524,7 @@ class Tensor(AbstractTensor):
 
     @classmethod
     def from_numpy_func(cls, func, legs_or_dims: int | VectorSpace | list[int | VectorSpace], backend=None,
-                        labels: list[str | None] = None, func_args=(), func_kwargs={}, 
+                        labels: list[str | None] = None, func_args=(), func_kwargs={},
                         shape_kw: str = None, dtype: Dtype = None) -> Tensor:
         """Create a Tensor from a numpy function.
 
@@ -557,21 +558,21 @@ class Tensor(AbstractTensor):
         """
         if backend is None:
             backend = get_default_backend()
-            
+
         def block_func(shape):
             if shape_kw is None:
                 arr = func(shape, *func_args, **func_kwargs)
             else:
                 arr = func(*func_args, **{shape_kw: shape}, **func_kwargs)
             return backend.block_from_numpy(arr)
-        
+
         legs = _parse_legs_or_dims(legs_or_dims)
         return cls(data=backend.from_block_func(block_func, legs), backend=backend, legs=legs,
                    labels=labels)
 
     @classmethod
     def from_block_func(cls, func, legs_or_dims: int | VectorSpace | list[int | VectorSpace], backend=None,
-                        labels: list[str | None] = None, func_args=(), func_kwargs={}, 
+                        labels: list[str | None] = None, func_args=(), func_kwargs={},
                         shape_kw: str = None, dtype: Dtype = None) -> Tensor:
         """Create a Tensor from a block function.
 
@@ -604,7 +605,7 @@ class Tensor(AbstractTensor):
         """
         if backend is None:
             backend = get_default_backend()
-            
+
         def block_func(shape):
             if shape_kw is None:
                 return func(shape, *func_args, **func_kwargs)
@@ -645,8 +646,8 @@ class Tensor(AbstractTensor):
 
         def block_func(shape):
             return backend.block_random_uniform(shape, dtype)
-        
-        return cls(data=backend.from_block_func(block_func, legs), backend=backend, legs=legs, 
+
+        return cls(data=backend.from_block_func(block_func, legs), backend=backend, legs=legs,
                    labels=labels)
 
     @classmethod
@@ -661,10 +662,10 @@ class Tensor(AbstractTensor):
             p(T) \propto \mathrm{exp}\left[ \frac{(T - \mathtt{mean})^2}{2 \mathtt{sigma}^2} \right]
 
         .. note ::
-            The tensors legs, backend and labels can be specified either via the `mean` or via 
+            The tensors legs, backend and labels can be specified either via the `mean` or via
             explicit parameters, but not both.
             If `mean` is given, the explicit parameters are ignored.
-        
+
         Parameters
         ----------
         mean : Tensor | None
@@ -690,7 +691,7 @@ class Tensor(AbstractTensor):
             for name, val in zip(['legs_or_dims', 'backend', 'labels'], [legs_or_dims, backend, labels]):
                 if val is not None:
                     warnings.warn(f'{name} argument to Tensor.random_normal was ignored, because mean was given.')
-                    
+
             if dtype is None:
                 dtype = mean.dtype
             return mean + cls.random_normal(mean=None, sigma=sigma, legs_or_dims=mean.legs, backend=mean.backend,
@@ -703,9 +704,9 @@ class Tensor(AbstractTensor):
         legs = _parse_legs_or_dims(legs_or_dims)
         data = backend.random_normal(legs=legs, dtype=dtype, sigma=sigma)
         return cls(data=data, backend=backend, legs=legs, labels=labels)
-        
-    def tdot(self, other: AbstractTensor, 
-             legs1: int | str | list[int | str] = -1, legs2: int | str | list[int | str] = 0, 
+
+    def tdot(self, other: AbstractTensor,
+             legs1: int | str | list[int | str] = -1, legs2: int | str | list[int | str] = 0,
              relabel1: dict[str, str] = None, relabel2: dict[str, str] = None) -> AbstractTensor:
         if not isinstance(other, Tensor):
             raise NotImplementedError  # TODO
@@ -767,7 +768,7 @@ class Tensor(AbstractTensor):
         res_data = self.backend.transpose(self, permutation)
         return Tensor(res_data, backend=self.backend, legs=[self.legs[n] for n in permutation],
                     labels=[self._labels[n] for n in permutation])
-        
+
     def trace(self, legs1: int | str | list[int | str] = -2, legs2: int | str | list[int | str] = -1
               ) -> AbstractTensor | float | complex:
         leg_idcs1 = self.get_leg_idcs(legs1)
@@ -848,7 +849,7 @@ class ChargedTensor(AbstractTensor):
     Tensors which transform under a given symmetry in a more general manner than the Tensor class,
     which represent tensors which are invariant under the symmetry.
 
-    The ChargedTensor is a composite object consisting of an invariant Tensor with a 
+    The ChargedTensor is a composite object consisting of an invariant Tensor with a
     designated dummy leg and a state that this leg is to be contracted with.
     This contraction is kept track of only symbolically.
 
@@ -859,16 +860,16 @@ class ChargedTensor(AbstractTensor):
 
     Parameters
     ----------
-    invariant_part: 
+    invariant_part:
         The symmetry-invariant part. the dummy leg is the last of its legs.
     dummy_leg_state: block | None
         The state that the dummy leg is contracted with.
         Either a backend-specific block of shape ``(dummy_leg.dim,)``, or `None`,
         which is interpreted ``[1]`` if `dummmy_leg.dim == 1` and raises a `ValueError` otherwise.
     """
-    
+
     def __init__(self, invariant_part: Tensor, dummy_leg_state=None):
-        AbstractTensor.__init__(self, backend=invariant_part.backend, legs=invariant_part.legs[:-1], 
+        AbstractTensor.__init__(self, backend=invariant_part.backend, legs=invariant_part.legs[:-1],
                                 labels=invariant_part.labels[:-1])
         self.invariant_part = invariant_part
         self.dummy_leg = invariant_part.leg[-1]
@@ -963,7 +964,7 @@ def zero_like(tens: AbstractTensor, labels: list[str | None] = None) -> Tensor:
 
 def _match_label_order(a: Tensor, b: Tensor) -> Iterable[int] | None:
     """Determine the order of legs of b, such that they match the legs of a.
-    If config.stric_labels, this is a permutation determined by the labels, otherwise it is None.
+    If config.strict_labels, this is a permutation determined by the labels, otherwise it is None.
     A None return indicates range(b.num_legs), i.e. that no trasnpose is needed.
     """
     if config.strict_labels:
@@ -980,7 +981,7 @@ def _match_label_order(a: Tensor, b: Tensor) -> Iterable[int] | None:
 
     if a._labels == b._labels:
         return None
-    
+
     return b.get_leg_idcs(a.labels)
 
 
@@ -1012,7 +1013,7 @@ def tdot(t1: AbstractTensor, t2: AbstractTensor,
     return t1.tdot(t2, legs1=legs1, legs2=legs2, relabel1=relabel1, relabel2=relabel2)
 
 
-def outer(t1: AbstractTensor, t2: AbstractTensor, relabel1: dict[str, str] = None, 
+def outer(t1: AbstractTensor, t2: AbstractTensor, relabel1: dict[str, str] = None,
           relabel2: dict[str, str] = None) -> AbstractTensor:
     """outer product, aka tensor product, aka direct product of two tensors"""
     return t1.outer(t2, relabel1=relabel1, relabel2=relabel2)

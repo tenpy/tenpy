@@ -27,6 +27,13 @@ class Dtype(Enum):
     complex64 = auto()
     complex128 = auto()
 
+# TODO: this works in python 3.10, is it an issue in other python versions?
+# we could also define real/complex dtypes as even/odd in the enum
+Dtype.float32.is_real = True
+Dtype.float64.is_real = True
+Dtype.complex64.is_real = False
+Dtype.complex128.is_real = False
+
 
 class AbstractBackend(ABC):
     """
@@ -51,8 +58,7 @@ class AbstractBackend(ABC):
         return f'{type(self).__name__}'
 
     def convert_vector_space(self, leg: VectorSpace) -> VectorSpace:
-        """convert a VectorSpace (or ProductSpace) instance to a backend-specific
-        subclass"""
+        """convert a VectorSpace (or ProductSpace) instance to a backend-specific subclass"""
         return leg
 
     @abstractmethod

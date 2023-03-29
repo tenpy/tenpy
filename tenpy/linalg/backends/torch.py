@@ -166,7 +166,7 @@ class TorchBlockBackend(AbstractBlockBackend):
 
     def zero_block(self, shape: list[int], dtype: Dtype) -> Block:
         return torch_module.zeros(shape, dtype=self.backend_dtype_map[dtype], device=self.device)
-    
+
     def eye_block(self, legs: list[int], dtype: Dtype) -> Data:
         matrix_dim = prod(legs)
         eye = torch_module.eye(matrix_dim, dtype=self.backend_dtype_map[dtype], device=self.device)
@@ -178,7 +178,7 @@ class NoSymmetryTorchBackend(TorchBlockBackend, AbstractNoSymmetryBackend):
     def __init__(self, device: str = 'cpu'):
         TorchBlockBackend.__init__(self, device=device)
         AbstractNoSymmetryBackend.__init__(self)
-    
+
     def svd(self, a: Tensor, axs1: list[int], axs2: list[int], new_leg: VectorSpace | None
             ) -> tuple[Data, Data, Data, VectorSpace]:
         a = torch_module.permute(a.data, axs1 + axs2)
@@ -196,10 +196,10 @@ class NoSymmetryTorchBackend(TorchBlockBackend, AbstractNoSymmetryBackend):
 class AbelianTorchBackend(TorchBlockBackend, AbstractAbelianBackend):
     def __init__(self, device: str = 'cpu'):
         TorchBlockBackend.__init__(self, device=device)
-        AbstractNoSymmetryBackend.__init__(self)
+        AbstractAbelianBackend.__init__(self)
 
 
 class NonabelianTorchBackend(TorchBlockBackend, AbstractNonabelianBackend):
     def __init__(self, device: str = 'cpu'):
         TorchBlockBackend.__init__(self, device=device)
-        AbstractNoSymmetryBackend.__init__(self)
+        AbstractNonabelianBackend.__init__(self)
