@@ -219,7 +219,7 @@ class ProductSymmetry(Symmetry):
             return False
 
         return all(f1 == f2 for f1, f2 in zip(self.factors, other.factors))
-            
+
 
     def is_same_symmetry(self, other) -> bool:
         if not isinstance(other, ProductSymmetry):
@@ -237,6 +237,7 @@ class ProductSymmetry(Symmetry):
 
 class _ABCFactorSymmetryMeta(ABCMeta):
     """Metaclass for the AbstractBaseClasses which can be factors of a ProductSymmetry.
+
     For concreteness let FactorSymmetry be such a class.
     This metaclass, in addition to having the same effects as making the class an AbstractBaseClass
     modifies instancecheck, such that products of FactorSymmetry instances, which are instances
@@ -247,23 +248,24 @@ class _ABCFactorSymmetryMeta(ABCMeta):
     """
 
     def __instancecheck__(cls, instance) -> bool:
-        if type.__instancecheck__(ProductSymmetry, instance):
+        if (cls == Group or cls == AbelianGroup) and \
+                type.__instancecheck__(ProductSymmetry, instance):
             return all(type.__instancecheck__(cls, factor) for factor in instance.factors)
         return type.__instancecheck__(cls, instance)
 
 
-# TODO: call it GroupSymmetry instead?
+# TODO: call it GroupSymmetry instead? (JH: yes, I like that.)
 class Group(Symmetry, metaclass=_ABCFactorSymmetryMeta):
     """
     Base-class for symmetries that are described by a group via a faithful representation on the Hilbert space.
     Noteable counter-examples are fermionic parity or anyonic grading.
     """
-    def __init__(self, fusion_style: FusionStyle, trivial_sector: Sector, group_name: str, 
+    def __init__(self, fusion_style: FusionStyle, trivial_sector: Sector, group_name: str,
                  descriptive_name: str | None = None):
         Symmetry.__init__(self, fusion_style=fusion_style, braiding_style=BraidingStyle.bosonic,
                           trivial_sector=trivial_sector, group_name=group_name,
                           descriptive_name=descriptive_name)
-    
+
 
 
 class AbelianGroup(Group, metaclass=_ABCFactorSymmetryMeta):
@@ -290,9 +292,11 @@ class AbelianGroup(Group, metaclass=_ABCFactorSymmetryMeta):
 #   JU: - The conventional notation in maths is actually not "consistent" in that way.
 #         It is $\mathbb{Z}_N$, $\mathrm{U}(N)$ and $\mathrm{SU}(N)$
 #       - This only concerns group_name attribute, which is used in__str__ outputs.
-#         __repr__ outputs always have the name of the class, e.g. U1Symmetry. 
+#         __repr__ outputs always have the name of the class, e.g. U1Symmetry.
 #         There i chose no parens or underscores bc of python naming standards.
 #       - What do you mean with "when you want to compare"?
+#  JH: agreed, there's still the descriptive_name and class names for comparisons, depending on
+#  what one wants to check. I suggest to follow usual math convention for the group name.
 
 class U1Symmetry(AbelianGroup):
     """U(1) symmetry. Sectors are integers ..., `-2`, `-1`, `0`, `1`, `2`, ..."""
@@ -501,11 +505,11 @@ class VectorSpace:
         if len(self.sectors) != len(other.sectors):
             # now we may assume that checking all multiplicities of self is enough.
             return False
-        
+
         # TODO: this is probably inefficient. eventually this should all be C(++) anyway...
         other_multiplicities = {sector: mult for sector, mult in zip(other.sectors, other.multiplicities)}
 
-        return all(mult == other_multiplicities.get(sector, -1) 
+        return all(mult == other_multiplicities.get(sector, -1)
                    for mult, sector in zip(self.multiplicities, self.sectors))
 
     @property
