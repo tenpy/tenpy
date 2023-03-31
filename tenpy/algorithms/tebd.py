@@ -669,6 +669,7 @@ class QRBasedTEBDEngine(TEBDEngine):
         self.psi.set_B(i0, B_L, form='B')
         self.psi.set_SL(i1, S)
         self.psi.set_B(i1, B_R, form='B')
+        self._trunc_err_bonds[i] = self._trunc_err_bonds[i] + trunc_err
         return trunc_err
 
     def update_bond_imag(self, i, U_bond):
@@ -694,6 +695,7 @@ class QRBasedTEBDEngine(TEBDEngine):
         self.psi.set_B(i0, A_L, form='A')
         self.psi.set_SL(i1, S)
         self.psi.set_B(i1, B_R, form='B')
+        self._trunc_err_bonds[i] = self._trunc_err_bonds[i] + trunc_err
 
         return trunc_err
 
