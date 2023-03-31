@@ -619,7 +619,7 @@ class QRBasedTEBDEngine(TEBDEngine):
         use_eig_based_svd : bool
             Whether the SVD of the bond matrix :math:`\Xi` should be carried out numerically via
             the eigensystem. This is faster on GPUs, but less accurate.
-            It makes no sense to do this on CPU.
+            It makes no sense to do this on CPU. It is currently not supported for update_imag.
             Default is `False`.
         compute_err : bool
             Whether the truncation error should be computed exactly.
@@ -682,9 +682,15 @@ class QRBasedTEBDEngine(TEBDEngine):
         theta.itranspose(['vL', 'p0', 'p1', 'vR'])
         theta = theta.combine_legs([('vL', 'p0'), ('p1', 'vR')], qconj=[+1, -1])
 
+        use_eig_based_svd = self.options.get('use_eig_based_svd', False)
+
+        if use_eig_based_svd:
+            # see todo comment in _eig_based_svd
+            raise NotImplementedError('update_bond_imag does not (yet) support eig based SVD')
+
         Y0 = _qr_tebd_cbe_Y0(B_L=self.psi.get_B(i0, 'B'), B_R=self.psi.get_B(i1, 'B'), theta=theta, expand=expand)
         A_L, S, B_R, trunc_err, renormalize = _qr_based_decomposition(
-            theta=theta, Y0=Y0, use_eig_based_svd=self.options.get('use_eig_based_svd', False),
+            theta=theta, Y0=Y0, use_eig_based_svd=use_eig_based_svd,
             need_A_L=True, compute_err=self.options.get('compute_err', True),
             trunc_params=self.trunc_params
         )
@@ -821,26 +827,17 @@ def _eig_based_svd(A, need_U: bool = True, need_Vd: bool = True, inner_labels=[N
     Truncation if performed if and only if trunc_params are given.
     This performs better on GPU, but is not really useful on CPU.
     If isometries U or Vd are not needed, their computation can be omitted for performance.
+
+    Does not (yet) support computing both U and Vd
     """
     warnings.warn('_eig_based_svd is nonsensical on CPU!!')
     assert A.rank == 2
 
     if need_U and need_Vd:
-        # need to do two diagonalizations to get both right and left singular vectors
-        try:
-            A.legs[0].test_contractible(A.legs[1])
-        except ValueError:
-            # need to be more elaborate in this case ; the new leg on U as computed below
-            # would not be contractible with the new leg in Vd ...
-            raise NotImplementedError from None
-        
-        U, S, _, _, _ = _eig_based_svd(
-            A, need_U=True, need_Vd=False, inner_labels=inner_labels, trunc_params=trunc_params
-        )
-        _, S, Vd, trunc_err, renormalize = _eig_based_svd(
-            A, need_U=False, need_Vd=True, inner_labels=inner_labels, trunc_params=trunc_params
-        )
-        return U, S, Vd, trunc_err, renormalize
+        # TODO (JU) just doing separate eighs for U, S and for S, Vd is not sufficient
+        #  the phases of U / Vd are arbitrary.
+        #  Need to put in more work in that case...
+        raise NotImplementedError
 
     if need_U:
         Vd = None
