@@ -723,7 +723,7 @@ class QRBasedTEBDEngine(TEBDEngine):
                 s_new = min(s_new, sizes_new[j_new])  # don't go beyond block
                 start = vL_new.slices[j_new]
                 piv[start:start+s_new] = True
-            #  Y0.iproject(piv, 'vL')
+            Y0.iproject(piv, 'vL')
             Y0 = Y0.ireplace_label('p1', 'p').iconj()
         else:
             Y0 = self.psi.get_B(i1).conj()
