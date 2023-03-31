@@ -592,8 +592,8 @@ class Engine(TEBDEngine):
 
 
 class QRBasedTEBDEngine(TEBDEngine):
-    r"""Version of :class:`~tenpy.algorithms.tebd.TEBDEngine` that relies on QR decompositions
-    for the truncation of the evolved local wavefunction.
+    r"""Version of TEBD that relies on QR decompositions rather than SVD.
+    
     As introduced in :arxiv:`2212.09782`.
 
     .. todo ::
@@ -602,11 +602,6 @@ class QRBasedTEBDEngine(TEBDEngine):
         This means that :math:`M^{\dagger} M` and :math:`M M^{\dagger}` dont have the same size,
         and we need to disregard those eigenvectors of the larger one, that have eigenvalue zero,
         since we dont have corresponding eigenvalues of the smaller one.
-
-    .. todo ::
-        Can we implement some simple diagnostics that issue a warning if the CBE expansion
-        was too small?
-        Could potentially look into the tail of the schmidt spectrum.
 
     Options
     -------
@@ -628,7 +623,7 @@ class QRBasedTEBDEngine(TEBDEngine):
             Default is `False`.
         compute_err : bool
             Whether the truncation error should be computed exactly.
-            Unlike for SVD-based TEBD, computing the truncation error is significantly more expensive.
+            Compared to SVD-based TEBD, computing the truncation error is significantly more expensive.
             If `True` (default), the full error is computed.
             Otherwise, the truncation error is set to NaN.
     """         
@@ -783,8 +778,10 @@ class QRBasedTEBDEngine(TEBDEngine):
 
 def _eig_based_svd(A, need_U: bool = True, need_Vd: bool = True, inner_labels=[None, None],
                    trunc_params=None):
-    """Computes the singular value decomposition of a matrix A, but via diagonalization of
-    its "square" A.hc @ A and/or A @ A.hc, i.e. two eigh calls instead of an svd call.
+    """Computes the singular value decomposition of a matrix A via eigh
+
+    Singular values and vectors are obtained by diagonalizing the "square" A.hc @ A and/or A @ A.hc, 
+    i.e. with two eigh calls instead of an svd call.
 
     Truncation if performed if and only if trunc_params are given.
     This performs better on GPU, but is not really useful on CPU.
