@@ -6,6 +6,7 @@ from enum import Enum
 from itertools import product
 from numpy import prod
 from typing import TypeVar
+import copy
 
 
 __all__ = ['Sector', 'FusionStyle', 'BraidingStyle', 'Symmetry', 'NoSymmetry', 'ProductSymmetry',
@@ -443,31 +444,44 @@ fermion_parity = FermionParity()
 
 
 class VectorSpace:
-
     def __init__(self, symmetry: Symmetry, sectors: list[Sector], multiplicities: list[int] = None,
                  is_dual: bool = False, is_real: bool = False):
-        """
-        A vector space, which decomposes into sectors of a given symmetry.
-        is_dual: whether this is the "normal" (i.e. ket) or dual (i.e. bra) space.
-        is_real: whether the space is over the real numbers (otherwise over the complex numbers)
+        """A vector space, which decomposes into sectors of a given symmetry.
+
+        Parameters
+        ----------
+        is_dual:
+            Whether this is the "normal" (i.e. ket) or dual (i.e. bra) space.
+            For ``is_dual=True`` the stored `self._sectors` are the dual of the passed `sectors`,
+            but `self.sectors` still returns the original (dual of the dual) sectors.
+        is_real:
+            Whether the space is over the real numbers (otherwise over the complex numbers)
         """
         self.symmetry = symmetry
-        self.sectors = sectors
-        if multiplicities is None:
-            self.multiplicities = [1 for s in sectors]
+        if is_dual:
+            # by convention, we store non-dual sectors in self._sectors
+            self._sectors = [symmetry.dual_sector(s) for s in sectors]
         else:
-            assert len(multiplicities) == len(sectors)
+            self._sectors = sectors
+        self.N_sectors = N_sectors = len(sectors)
+        if multiplicities is None:
+            self.multiplicities = [1] * N_sectors
+        else:
+            assert len(multiplicities) == N_sectors
             self.multiplicities = multiplicities
         self.dim = sum(symmetry.sector_dim(s) * m for s, m in zip(sectors, self.multiplicities))
         self.is_dual = is_dual
         self.is_real = is_real
 
-        # backends may write these attributes to cache metadata
-        self._abelian_data = None
-
     @classmethod
     def non_symmetric(cls, dim: int, is_dual: bool = False, is_real: bool = False):
         return cls(symmetry=no_symmetry, sectors=[None], multiplicities=[dim], is_dual=is_dual, is_real=is_real)
+
+    @property
+    def sectors(self):
+        if self.is_dual:
+            return [self.symmetry.dual_sector(s) for s in self._sectors]
+        return self._sectors
 
     def sectors_str(self) -> str:
         """short str describing the sectors and their multiplicities"""
@@ -514,8 +528,9 @@ class VectorSpace:
 
     @property
     def dual(self):
-        return VectorSpace(symmetry=self.symmetry, sectors=self.sectors, multiplicities=self.multiplicities,
-                           is_dual=not self.is_dual, is_real=self.is_real)
+        res = copy.copy(self)  # shallow copy, works for subclasses as well
+        res.is_dual = not self.is_dual
+        return res
 
     def can_contract_with(self, other):
         if self.is_real:
@@ -531,7 +546,7 @@ class VectorSpace:
 
     @property
     def is_trivial(self) -> bool:
-        return self.sectors == [self.symmetry.trivial_sector] and self.multiplicities == [1]
+        return self._sectors == [self.symmetry.trivial_sector] and self.multiplicities == [1]
 
     @property
     def num_parameters(self) -> int:
@@ -542,6 +557,7 @@ class VectorSpace:
 
 class ProductSpace(VectorSpace):
     def __init__(self, spaces: list[VectorSpace], is_dual: bool = False):
+        # effect of `is_dual=True` is just that VectorSpace.__init__(...) saves dual self._sectors internally.
         self.spaces = spaces  # spaces can be themselves ProductSpaces
         symmetry = spaces[0].symmetry
         assert all(s.symmetry == symmetry for s in spaces)
@@ -552,6 +568,18 @@ class ProductSpace(VectorSpace):
 
         VectorSpace.__init__(self, symmetry=symmetry, sectors=sectors, multiplicities=multiplicities,
                              is_dual=is_dual, is_real=is_real)
+
+    def as_VectorSpace(self):
+        """Forget about the substructure of the ProductSpace but view only as VectorSpace.
+
+        This is necessary before truncation, after which the product-space structure is no
+        longer necessarily given.
+        """
+        return VectorSpace(symmetry=self.symmetry,
+                           sectors=self.sectors,
+                           multiplicities=self.multiplicities,
+                           is_dual=self.is_dual,
+                           is_real=self.is_real)
 
     def __len__(self):
         return len(self.spaces)
@@ -574,8 +602,11 @@ class ProductSpace(VectorSpace):
 
     @property
     def dual(self):
-        # TODO should this just change self.is_dual instead...?
-        return ProductSpace([s.dual() for s in self.spaces])
+        # need to flip both self.is_dual and self.spaces[:].is_dual to keep it consistent!
+        res = copy.copy(self)  # works for subclasses as well
+        res.is_dual = not self.is_dual
+        res.spaces = [s.dual() for s in self.spaces]
+        return res
 
     @property
     def is_trivial(self) -> bool:

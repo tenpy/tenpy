@@ -65,7 +65,7 @@ class AbstractTensor(ABC):
             self.backend = get_default_backend()
         else:
             self.backend = backend
-        self.legs = [backend.convert_vector_space(leg) for leg in legs]
+        self.legs = [self.backend.convert_vector_space(leg) for leg in legs]
         if labels is None:
             self._labels = [None] * len(legs)
         else:
@@ -74,10 +74,11 @@ class AbstractTensor(ABC):
         self.num_legs = len(legs)
         self.symmetry = legs[0].symmetry
 
+        # TODO optimize: don't need parent_space for each tensor? Dynamically calculate/cache in property
         if self.num_legs == 1:
             self.parent_space = self.legs[0]
         else:
-            self.parent_space = backend.convert_vector_space(ProductSpace(self.legs))
+            self.parent_space = self.backend.convert_vector_space(ProductSpace(self.legs))
 
     def check_sanity(self):
         assert self.backend.supports_symmetry(self.symmetry)
