@@ -561,6 +561,8 @@ class ProductSpace(VectorSpace):
         self.spaces = spaces  # spaces can be themselves ProductSpaces
         symmetry = spaces[0].symmetry
         assert all(s.symmetry == symmetry for s in spaces)
+        # TODO FIXME JH: I'm super confused, sectors and multiplicites don't have the same length
+        # here? We should use symmetry.fusion_outcomes() for the sectors!
         sectors = [list(combination) for combination in product(*(space.sectors for space in spaces))]
         multiplicities = [prod(combination) for combination in product(*(space.multiplicities for space in spaces))]
         is_real = spaces[0].is_real
