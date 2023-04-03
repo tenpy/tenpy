@@ -734,7 +734,6 @@ def _qr_tebd_cbe_Y0(B_L: npc.Array, B_R: npc.Array, theta: npc.Array, expand: fl
     vL_new = Y0.get_leg('vL')  # is blocked, since created from pipe
 
     # vL_old is guaranteed to be a slice of vL_new by charge rule in B_L
-    # TODO (JU): Is this actually true if all charges on the physical leg are non-zero?
     piv = np.zeros(vL_new.ind_len, dtype=bool)  # indices to keep in vL_new
     increase_per_block = max(1, int(vL_old.ind_len * expand // vL_new.block_number))
     sizes_old = vL_old.get_block_sizes()
