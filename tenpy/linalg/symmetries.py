@@ -484,8 +484,9 @@ class VectorSpace:
         return self._sectors
 
     def sectors_str(self) -> str:
-        """short str describing the sectors and their multiplicities"""
-        return ', '.join(f'{self.symmetry.sector_str(a)}: {mult}' for a, mult in zip(self.sectors, self.multiplicities))
+        """short str describing the (possibly dual) sectors and their multiplicities"""
+        return ', '.join(f'{self.symmetry.sector_str(a)}{dual}: {mult}'
+                         for a, mult in zip(self._sectors, self.multiplicities))
 
     def __mul__(self, other):
         if isinstance(other, VectorSpace):
@@ -503,7 +504,7 @@ class VectorSpace:
         else:
             symm_details = f'[{self.symmetry}, {self.sectors_str()}]'
         res = f'{field}^{self.dim}{symm_details}'
-        # TODO make duality shorter?
+        # TODO does duality of sectors make sense like this (as defined in sectors_str)
         return f'dual({res})' if self.is_dual else res
 
     def __eq__(self, other):
@@ -521,6 +522,8 @@ class VectorSpace:
             return False
 
         # TODO: this is probably inefficient. eventually this should all be C(++) anyway...
+        # it might be enough to check sectors in order, if we fix the order through a convention
+        # then we don't need to generate the lookup dict here
         other_multiplicities = {sector: mult for sector, mult in zip(other.sectors, other.multiplicities)}
 
         return all(mult == other_multiplicities.get(sector, -1)
@@ -542,6 +545,7 @@ class VectorSpace:
         # FIXME think about duality in more detail.
         #  i.e. is a
         # `Vectorspace(a.symmetry, [sector.dual for sector in a.sectors], a.multiplicities, not a.is_dual, a.is_real) == a` ?
+        # JH: no, it's not, the `is_dual` indicates whether it's a "bra" or "ket" space.
         return self == other.dual
 
     @property
@@ -555,14 +559,13 @@ class VectorSpace:
         raise NotImplementedError  # TODO
 
 
+# TODO: does the distinction between ProductSpace and FusionSpace make sense?
 class ProductSpace(VectorSpace):
     def __init__(self, spaces: list[VectorSpace], is_dual: bool = False):
-        # effect of `is_dual=True` is just that VectorSpace.__init__(...) saves dual self._sectors internally.
         self.spaces = spaces  # spaces can be themselves ProductSpaces
         symmetry = spaces[0].symmetry
         assert all(s.symmetry == symmetry for s in spaces)
-        # TODO FIXME JH: I'm super confused, sectors and multiplicites don't have the same length
-        # here? We should use symmetry.fusion_outcomes() for the sectors!
+        # TODO FIXME sectors are lists of previous sectors and hence not valid sector for the given symmetry!?
         sectors = [list(combination) for combination in product(*(space.sectors for space in spaces))]
         multiplicities = [prod(combination) for combination in product(*(space.multiplicities for space in spaces))]
         is_real = spaces[0].is_real
@@ -608,6 +611,106 @@ class ProductSpace(VectorSpace):
         res = copy.copy(self)  # works for subclasses as well
         res.is_dual = not self.is_dual
         res.spaces = [s.dual() for s in self.spaces]
+        return res
+
+    @property
+    def is_trivial(self) -> bool:
+        return all(s.is_trivial for s in self.spaces)
+
+    @property
+    def num_parameters(self) -> int:
+        """The number of free parameters, i.e. the dimension of the space of symmetry-preserving
+        tensors within this space"""
+        raise NotImplementedError  # TODO
+
+
+class FusionSpace(VectorSpace):
+    r"""Take the product of multiple spaces and fuse them left-to-right.
+
+    This generates a fusion tree looking like this (or it's dual flipped upside down)::
+
+        spaces[0]
+             \   spaces[1]
+              \ /
+               Y   spaces[2]
+                \ /
+                 Y
+                  \
+                   ....
+
+    It is the product space of the individual `spaces`,
+    but with an associated basis change implied to allow preserving the symmetry.
+    """
+    def __init__(self, spaces: list[VectorSpace], is_dual: bool = False):
+        assert len(spaces) > 0
+        symmetry = spaces[0].symmetry
+        self.spaces = spaces  # spaces can themselves be ProductSpaces
+
+        fused_sectors, fused_multiplicities = self._fuse_spaces(spaces)
+        is_real = spaces[0].is_real
+        assert all(space.is_real == is_real for space in spaces)
+
+        # for `is_dual=True` VectorSpace.__init__(...) just saves dual self._sectors internally
+        # TODO think through non-abelian case where switching is_dual compared to spaces
+        #      implicitly contracts a cap/cup.
+        VectorSpace.__init__(self,
+                             symmetry=symmetry,
+                             sectors=fused_sectors,
+                             multiplicities=fused_multiplicities,
+                             is_dual=is_dual,
+                             is_real=is_real)
+
+    def _fuse_spaces(self, spaces: list[VectorSpace]):
+        """Calculate sectors and multiplicities of possible fusion results from merging spaces."""
+        symmetry = spaces[0].symmetry
+        assert all(s.symmetry == symmetry for s in spaces)
+
+        fusion = dict(zip(spaces[0].sectors, spaces[0].multiplicities))
+        for space in spaces[1:]:
+            new_fusion = {}
+            for s_a, m_a in fusion.items():
+                for s_b, m_b in zip(space.sectors, space.multiplicities):
+                    for s_c in symmetry.fusion_outcomes(s_a, s_b):
+                        # TODO FIXME do we need to take symmetry.sector_dim into account here?
+                        n = symmetry.n_symbol(s_a, s_b, s_c)
+                        new_fusion[s_c] = new_fusion.get(s_c, 0) + m_a * m_b * n
+            fusion = new_fusion
+            # by convention fuse spaces left to right, i.e. (...((0,1), 2), ..., N)
+        sectors = fusion.keys()
+        multiplicities = fusion.values()
+        return sectors, multiplicities
+
+    def as_VectorSpace(self):
+        """Forget about the substructure of the ProductSpace but view only as VectorSpace.
+
+        This is necessary before truncation, after which the product-space structure is no
+        longer necessarily given.
+        """
+        return VectorSpace(symmetry=self.symmetry,
+                           sectors=self.sectors,
+                           multiplicities=self.multiplicities,
+                           is_dual=self.is_dual,
+                           is_real=self.is_real)
+
+    def __repr__(self):
+        return '\n'.join(('FusionSpace([', *map(repr, self.spaces), '])'))
+
+    def __str__(self):
+        return f"FusionSpace([{', '.join(map(str, self.spaces))}])"
+
+    def __eq__(self, other):
+        if isinstance(other, FusionSpace):
+            return self.is_dual == other.dual and self.spaces == other.spaces
+        # else
+        return False
+
+    @property
+    def dual(self):
+        # need to flip both self.is_dual and self.spaces[:].is_dual to keep it consistent!
+        res = copy.copy(self)  # works for subclasses as well
+        res.is_dual = not self.is_dual
+        res.spaces = [s.dual() for s in self.spaces]
+        # TODO double-check/write test that the fusion of the dual goes through like this...
         return res
 
     @property
