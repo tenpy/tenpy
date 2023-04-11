@@ -1,9 +1,20 @@
 """Backends for abelian group symmetries.
 
 Changes compared to old np_conserved:
-    - keep legs "sorted" and "bunched" at all times
-    - keep qdata sorted (i.e. not arbitrary permutation in qinds)
-    -
+
+- replace `ChargeInfo` by subclasses of `AbelianGroup` (or `ProductSymmetry`)
+- replace `LegCharge` by `AbelianBackendVectorSpace` and `LegPipe` by `AbelianBackendFusionSpace`
+- standard `Tensor` have qtotal=0, only ChargedTensor can have non-zero qtotal
+- relabeling:
+    - `Array.qdata`, "qind" and "qindices" to `AbelianBackendData.block_inds` and "block indices"
+    - `LegPipe.qmap` to `AbelianBackendFusionSpace.block_ind_map` (witch changed column order!!!)
+    - `LegPipe._perm` to `FusionSpace._perm_block_inds_map`
+    - `LetCharge.get_block_sizes()` is just `VectorSpace.multiplicities`
+- keep VectorSpace and FusionSpace "sorted" and "bunched",
+  i.e. do not support legs with smaller blocks to effectively allow block-sparse tensors with
+  smaller blocks than dictated by symmetries (which we actually have in H_MPO on the virtual legs...)
+  In turn, VectorSpace saves a `_perm` used to sort the originally passed `sectors`.
+- keep `Tensor.block_ins` sorted (i.e. no arbitrary gauge permutation in block indices)
 
 """
 # Copyright 2023-2023 TeNPy Developers, GNU GPLv3
@@ -13,87 +24,331 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Iterable, TypeVar, List, TYPE_CHECKING
 import numpy as np
+from numpy.typing import ndarray
+import copy
 
 from .abstract_backend import AbstractBackend, AbstractBlockBackend, Data, Block, Dtype
-from ..symmetries import Symmetry, AbelianGroup, VectorSpace, ProductSpace, Sector
+from ..symmetries import Symmetry, ProductSymmetry, AbelianGroup, VectorSpace, FusionSpace, Sector
 from ...tools.optimization import use_cython
 
-__all__ = ['AbelianBlockData', 'AbelianBackendVectorSpace', 'AbelianBackendProductSpace', 
+__all__ = ['AbelianBackendData', 'AbelianBackendVectorSpace', 'AbelianBackendFusionSpace',
            'AbstractAbelianBackend', 'detect_qtotal']
+
+Charge = np.int_
+#Sector = ndarray[Charge] with length=number of symmetries (>1 only for ProductSymmetry) internally
+# properties return a single Charge or Tuple of Charges
+Qindex = np.int_  # index of a given sector within an (AbelianBackend)VectorSpace
 
 
 if TYPE_CHECKING:
     # can not import Tensor at runtime, since it would be a circular import
     # this clause allows mypy etc to evaluate the type-hints anyway
-    from ..tensors import Tensor
-
-
-# TODO (JU) call it AbelianBackendData instead? "Block" sounds misleading to me
-@dataclass
-class AbelianBlockData:
-    """Data stored in a tensor for AbelianBlockData"""
-    dtype : Dtype  # data type
-    # TODO (JU) the implementation of ChargedTensor i have proposed would mean that the AbelianBackend
-    #  can leave out qtotal (i.e. assume it is zero).
-    #  a ChargedTensor has an extra leg with ind_len 1 and a non-zero sector,
-    #  which effectively introduces a "qtotal" to the charge-rule
-    qtotal : np.ndarray  # total charge
-    blocks : List[Block]  # The actual entries of the tensor. Formerly known as Array._data
-    qdata : np.ndarray  # For each of the blocks entries the qindices of the different legs.
-    qdata_sorted : bool # Whether qdata is lexsorted. Defaults to `True`, but *must* be set to `False` by algorithms changing qdata.
-
-    def copy(self, deep=True):
-        if deep:
-            return AbelianBlockData(self.dtype,
-                                    self.qtotal.copy(),
-                                    self.blocks.copy(),
-                                    self.qdata.copy(),
-                                    self.qdata_sorted)
-        return AbelianBlockData(self.dtype,
-                                self.qtotal,
-                                self.blocks,
-                                self.qdata,
-                                self.qdata_sorted)
+    from ..tensors import Tensor, ChargedTensor
 
 
 class AbelianBackendVectorSpace(VectorSpace):
-    def __init__(self, symmetry: Symmetry, sectors: list[Sector], multiplicities: list[int], 
-                 is_dual: bool, is_real: bool):
+    """Subclass of VectorSpace with additonal data and restrictions.
+
+    A `Sector` consists of a single integer of charge values (for U1Symmetry and ZNSymmetry)
+    or a tuple of integers for ProductSpace.
+
+
+    Attributes
+    ----------
+    perm_qind : ndarray[int]
+        Permutation from the original order of sectors to the sorted one in :attr:`sectors`.
+    slices : ndarray[(int, int)]
+        For each sector the begin and end when projecting to/from a "flat" ndarray
+        without symmetries. Note that this is not sorted when perm_qind is non-trivial.
+
+    """
+    def __init__(self, symmetry: Symmetry, sectors: list[Sector], multiplicities: list[int],
+                 is_dual: bool, is_real: bool, perm_qind=None, slices=None):
+        # possibly originally unsorted sectors
+        sectors = np.asarray(sectors, dtype=Charge) # TODO: typecheck probably complains?
+        multiplicities = np.asarray(multiplicities)
         VectorSpace.__init__(self, symmetry, sectors, multiplicities, is_dual, is_real)
-        self.slices = np.cumsum(self.multiplicities)
+        N_sectors = sectors.shape[0]
+        self.sector_ndim = sectors.ndim
+        if sectors.ndim == 1:
+            assert not isinstance(symmetry, ProductSymmetry)
+        if perm_qind is None:
+            # sort by slices
+            assert slices is None
+            slices = np.zeros((N_sectors, 2), np.intp)
+            slices[:, 1] = slice_ends = np.cumsum(self.multiplicities)
+            slices[1:, 0] = slice_ends[:-1]
+            self.slices = slices
+            self._sort_sectors()
+        else:
+            # TODO: do we need this case?
+            assert slices is not None
+            self.perm_qind = perm_qind
+            self.slices = slices
 
-    @classmethod
-    def from_vector_space(cls, space: VectorSpace) -> AbelianBackendVectorSpace:
-        return cls(space.symmetry, space.sectors, space.multiplicities, space.is_dual,
-                   space.is_real)
+    def _sort_sectors(self):
+            # sort sectors
+            assert not hasattr(self, 'perm_qind')
+            if self.sector_ndim == 1:
+                perm_qind = np.argsort(perm_qind)
+            else:
+                assert self.sector_ndim == 2
+                perm_qind = np.lexsort(self.sectors.T)
+            self.perm_qind = perm_qind
+            self.sectors = sectors[perm_qind]
+            self.multiplicities = self.multiplicities[perm_qind]
+            self.slices = self.slices[perm_qind]
 
 
-class AbelianBackendProductSpace(ProductSpace):
+    # TODO: do we need get_qindex?
+    # Since slices is no longer sorted, it would be O(L) rather than O(log(L))
+
+    def project(self, mask):
+        raise NotImplementedError("TODO")
+
+
+
+# TODO: is the diamond-structure inheritance okay?
+class AbelianBackendFusionSpace(FusionSpace, AbelianBackendVectorSpace):
+    r"""
+
+    Attributes
+    ----------
+    block_ind_map :
+        See below. (In old np_conserved: `qmap`)
+
+
+    Notes
+    -----
+    For ``np.reshape``, taking, for example,  :math:`i,j,... \rightarrow k` amounted to
+    :math:`k = s_1*i + s_2*j + ...` for appropriate strides :math:`s_1,s_2`.
+
+    In the charged case, however, we want to block :math:`k` by charge, so we must
+    implicitly permute as well.  This reordering is encoded in `block_ind_map` as follows.
+
+    Each block index combination :math:`(i_1, ..., i_{nlegs})` of the `nlegs=len(spaces)`
+    input VectorSpaces will end up getting placed in some slice :math:`a_j:a_{j+1}` of the
+    resulting `FusionSpace`. Within this slice, the data is simply reshaped in usual row-major
+    fashion ('C'-order), i.e., with strides :math:`s_1 > s_2 > ...` given by the block size.
+
+    It will be a subslice of a new total block in the FusionSpace labeled by block index
+    :mah:`J`. We fuse charges according to the rule::
+
+        FusionSpace.sectors[J] = fusion_outcomes(*[l.sectors[i_l]
+            for l, i_l,l in zip(incoming_block_inds, spaces)])
+
+    Since many charge combinations can fuse to the same total charge,
+    in general there will be many tuples :math:`(i_1, ..., i_{nlegs})` belonging to the same
+    charge block :math:`J` in the `FusionSpace`.
+
+    The rows of `block_ind_map` are precisely the collections of
+    ``[b_{J,k}, b_{J,k+1}, i_1, . . . , i_{nlegs}, J]``.
+    Here, :math:`b_k:b_{k+1}` denotes the slice of this block index combination *within*
+    the total block `J`, i.e., ``b_{J,k} = a_j - self.slices[J]``.
+
+    The rows of `block_ind_map` are lex-sorted first by ``J``, then the ``i``.
+    Each ``J`` will have multiple rows,
+    and the order in which they are stored in `block_inds` is the order the data is stored
+    in the actual tensor, i.e., it might look like ::
+
+        [ ...,
+         [ b_{J,k},   b_{J,k+1},  i_1,    ..., i_{nlegs}   , J,   ],
+         [ b_{J,k+1}, b_{J,k+2},  i'_1,   ..., i'_{nlegs}  , J,   ],
+         [ 0,         b_{J,1},    i''_1,  ..., i''_{nlegs} , J + 1],
+         [ b_{J,1},   b_{J,2},    i'''_1, ..., i'''_{nlegs}, J + 1],
+         ...]
+
+    """
     # formerly known as LegPipe
     def __init__(self, spaces: list[VectorSpace], is_dual: bool = False):
-        ProductSpace.__init__(self, spaces, is_dual)
-        self.qmap = ...  # TODO
+        backend = spaces[0].backend
+        spaces = [backend.convert_vector_space(s) for s in spaces]
+        self._init_from_spaces(spaces)
+        #  FusionSpace.__init__(self, spaces, is_dual) TODO: do we have to explicitly call that,
+        # or is it okay if we just set everything needed?
+        # The order of sectors defined there might not be the same as below....
 
-    @classmethod
-    def from_product_space(cls, space: ProductSpace) -> AbelianBackendProductSpace:
-        return cls(space.spaces, space.is_dual)
+    def _init_from_spaces(self, spaces: list[AbelianBackendVectorSpace]):
+        # this function heavily uses numpys advanced indexing, for details see
+        # `http://docs.scipy.org/doc/numpy/reference/arrays.indexing.html`_
+        N_spaces = len(spaces)
+
+        spaces_N_sectors = tuple(space.N_sectors for space in spaces)
+        self._strides = _make_stride(spaces_N_sectors, Cstyle=True)
+        # (save strides for :meth:`_map_incoming_block_inds`)
+
+        # create a grid to select the multi-index sector
+        grid = np.indices(spaces_N_sectors, np.intp)
+        # grid is an array with shape ``(N_spaces, *spaces_N_sectors)``,
+        # with grid[li, ...] = {np.arange(space_block_numbers[li]) increasing in li-th direcion}
+        # save the strides of grid, which is needed for :meth:`_map_incoming_block_inds`
+        # collapse the different directions into one.
+        grid = grid.reshape(N_spaces, -1)  # *this* is the actual `reshaping`
+        # *columns* of grid are now all possible cominations of qindices.
+
+        nblocks = grid.shape[1]  # number of blocks in FusionSpace = np.product(spaces_N_sectors)
+        # this is different from N_sectors
+
+        # determine block_ind_map -- it's essentially the grid.
+        block_ind_map = np.empty((nblocks, 3 + N_spaces), dtype=np.intp)
+        block_ind_map[:, 2:-1] = grid.T  # transpose -> rows are possible combinations.
+
+        # the block size for given (i1, i2, ...) is the product of ``multiplicities[il]``
+        # andvanced indexing:
+        # ``grid[li]`` is a 1D array containing the qindex `q_li` of leg ``li`` for all blocks
+        blocksizes = np.prod([space.multiplicities[gr] for space, gr in zip(spaces, grid)], axis=0)
+        # block_ind_map[:, :3] is initialized after sort/bunch.
+
+        # calculate new non-dual sectors
+        sectors_to_fuse = (space.dual.sector if is_dual else space.sector for space in spaces)
+        non_dual_sectors = _fuse_abelian_charges(spaces[0].symmetry, *sectors_to_fuse)
+
+        # sort sectors
+
+# TODO FIXME: adjust below
+        if sort and qnumber > 0:
+            # sort by charge. Similar code as in :meth:`LegCharge.sort`,
+            # but don't want to create a copy, nor is qind[:, 0] initialized yet.
+            perm_qind = lexsort(charges.T)
+            block_ind_map = block_ind_map[perm_qind]
+            charges = charges[perm_qind]
+            blocksizes = blocksizes[perm_qind]
+            self._perm = inverse_permutation(perm_qind)
+        else:
+            self._perm = None
+        self._set_charges(charges)
+        self.sorted = sort or (qnumber == 0)
+        self._set_block_sizes(blocksizes)  # sets self.slices
+        block_ind_map[:, 0] = self.slices[:-1]
+        block_ind_map[:, 1] = self.slices[1:]
+
+        if bunch:
+            # call LegCharge.bunch(), which also calculates new blocksizes
+            idx, bunched = LegCharge.bunch(self)
+            self._set_charges(bunched.charges)  # copy information back to self
+            self._set_slices(bunched.slices)
+            # calculate block_ind_map[:, 2], the qindices corresponding to the rows of block_ind_map
+            q_map_Qi = np.zeros(len(block_ind_map), dtype=np.intp)
+            q_map_Qi[idx[1:-1]] = 1  # not for the first entry => np.cumsum starts with 0
+            block_ind_map[:, 2] = q_map_Qi = np.cumsum(q_map_Qi)
+            self.bunched = True
+        else:
+            block_ind_map[:, 2] = q_map_Qi = np.arange(len(block_ind_map), dtype=np.intp)
+            idx = np.arange(len(block_ind_map) + 1, dtype=np.intp)
+        # calculate the slices within blocks: subtract the start of each block
+        block_ind_map[:, :2] -= (self.slices[q_map_Qi])[:, np.newaxis]
+        self.block_ind_map = block_ind_map  # finished
+        self.q_map_slices = idx
+
+    def _map_incoming_block_inds(self, incoming_block_inds):
+        """Map incoming qindices to indices of :attr:`block_ind_map`.
+
+        Needed for `combine_legs`.
+
+        Parameters
+        ----------
+        incoming_block_inds : 2D array
+            Rows are block indices :math:`(i_1, i_2, ... i_{nlegs})` for incoming legs.
+
+        Returns
+        -------
+        block_inds: 1D array
+            For each row of `incoming_block_inds` an index `J` such that
+            ``self.block_ind_map[J, 2:-1] == block_inds[j]``.
+        """
+        assert (incoming_block_inds.shape[1] == len(self.spaces)
+        # calculate indices of block_ind_map[_perm], which is sorted by :math:`i_1, i_2, ...`,
+        # by using the appropriate strides
+        inds_before_perm = np.sum(incoming_block_inds * self._strides[np.newaxis, :], axis=1)
+        # permute them to indices in block_ind_map
+        if self._perm_block_inds_map is None:
+            return inds_before_perm  # no permutation necessary
+        return self._perm_block_inds_map[inds_before_perm]
+
+    def as_VectorSpace(self):
+        res = AbelianBackendVectorSpace.__new__(AbelianBackendVectorSpace)
+        return res
+
+
+    #  def sectors(self):
+    #      # In AbelianBackend, we save the _sectors in a 2D numpy array, no matter the nesting
+    #      # convert to nested list of list for nested FusionSpace
+    #      returns nested lists for nested FusionSpace, but we
+    #      if self.is_dual:
+
+
+def _make_stride(shape, cstyle=True):
+    """Create the strides for C- (or F-style) arrays with a given shape.
+
+    Equivalent to ``x = np.zeros(shape); return np.array(x.strides, np.intp) // x.itemsize``.
+    """
+    L = len(shape)
+    stride = 1
+    res = np.empty([L], np.intp)
+    if cstyle:
+        res[L - 1] = 1
+        for a in range(L - 1, 0, -1):
+            stride *= shape[a]
+            res[a - 1] = stride
+    else:
+        res[0] = 1
+        for a in range(0, L - 1):
+            stride *= shape[a]
+            res[a + 1] = stride
+    return res
+
+def _fuse_abelian_charges(symmetry: AbelianSymmetry, *sector_arrays: ndarray[Sector]):
+    from ..symmetries import FusionStyle
+    assert symmetry.fusion_style == FusionStyle.single
+    # sectors[i] can be 1d numpy arrays, or list of 1D arrays if using a ProductSymmetry
+    fusion = sector_arrays[0]
+    for sector in sector_arrays[1:]:
+        fusion = symmetry.single_fusion_outcomes(fusion, sector_array)
+        # == fusion + space.sector, but mod N for ZN
+    return np.asarray(fusion)
+
+
+
+
+@dataclass
+class AbelianBackendData:
+    """Data stored in a Tensor for :class:`AbstractAbelianBackend`."""
+    dtype : Dtype
+    np_dtype : np.dtype
+    blocks : List[Block]  # The actual entries of the tensor. Formerly known as Array._data
+    block_inds : np.ndarray  # For each of the blocks entries the qindices of the different legs.
+
+    def copy(self, deep=True):
+        if deep:
+            return AbelianBackendData(self.dtype,
+                                      [self.block_copy(b) for b in self.blocks],
+                                      self.block_inds.copy())
+        return AbelianBackendData(self.dtype, self.blocks, self.block_inds)
+
+    def _sort_block_inds(self):
+        """Bring `block_inds` (back) into the conventional sorted order.
+
+        To speed up functions as tensordot, we always keep the blocks in a well-defined order
+        where ``np.lexsort(block_inds.T)`` is trivial."""
+        perm = np.lexsort(self.block_inds.T)
+        self.block_inds = self.block_inds[perm, :]
+        self.blocks = [self.blocks[p] for p in perm]
 
 
 
 class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
     """Backend for Abelian group symmetries.
 
-    Attributes
-    ----------
 
     """
-    def convert_vector_space(self, leg: VectorSpace) -> VectorSpace:
-        if isinstance(leg, (AbelianBackendVectorSpace, AbelianBackendProductSpace)):
+    def convert_vector_space(self, leg: VectorSpace) -> AbelianBackendVectorSpace:
+        if isinstance(leg, (AbelianBackendVectorSpace, AbelianBackendFusionSpace)):
             return leg
-        elif isinstance(leg, ProductSpace):
-            return AbelianBackendProductSpace.from_product_space(leg)
+        elif isinstance(leg, FusionSpace):
+            return AbelianBackendFusionSpace(leg.spaces, leg.is_dual)
         else:
-            return AbelianBackendVectorSpace.from_vector_space(leg)
+            return AbelianBackendVectorSpace(leg.symmetry, leg.sectors,
+                                             leg.multiplicities, leg.is_dual, leg.is_real)
 
     def get_dtype_from_data(self, a: Data) -> Dtype:
         return a.dtype
@@ -135,7 +390,7 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
     # TODO: is it okay to have extra kwargs qtotal?
     #  JU: probably
     def from_dense_block(self, a: Block, legs: list[VectorSpace], atol: float = 1e-8, rtol: float = 1e-5,
-                         *, qtotal = None) -> AbelianBlockData:
+                         *, qtotal = None) -> AbelianBackendData:
         # JU: res is not defined
         if qtotal is None:
             res.qtotal = qtotal = detect_qtotal(a, legs, atol, rtol)
@@ -149,7 +404,7 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
 
         return res
 
-    def from_block_func(self, func, legs: list[VectorSpace]) -> AbelianBlockData:
+    def from_block_func(self, func, legs: list[VectorSpace]) -> AbelianBackendData:
         raise NotImplementedError  # TODO
 
     def zero_data(self, legs: list[VectorSpace], dtype: Dtype):
@@ -191,7 +446,7 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
     #  def conj(self, a: Tensor) -> Data:
     #      return self.block_conj(a.data)
 
-    #  def combine_legs(self, a: Tensor, idcs: list[int], new_leg: ProductSpace) -> Data:
+    #  def combine_legs(self, a: Tensor, idcs: list[int], new_leg: FusionSpace) -> Data:
     #      return self.block_combine_legs(a.data, idcs)
 
     #  def split_leg(self, a: Tensor, leg_idx: int) -> Data:
@@ -224,11 +479,12 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
     #      return self.block_mul(a, b.data)
 
 
-def detect_qtotal(flat_array, legcharges):
-    inds_max = np.unravel_index(np.argmax(np.abs(flat_array)), flat_array.shape)
-    val_max = abs(flat_array[inds_max])
+# TODO FIXME how to handle ChargedTensor vs Tensor?
+#  def detect_qtotal(flat_array, legcharges):
+#      inds_max = np.unravel_index(np.argmax(np.abs(flat_array)), flat_array.shape)
+#      val_max = abs(flat_array[inds_max])
 
-    test_array = zeros(legcharges)  # Array prototype with correct charges
-    qindices = [leg.get_qindex(i)[0] for leg, i in zip(legcharges, inds_max)]
-    q = np.sum([l.get_charge(qi) for l, qi in zip(self.legs, qindices)], axis=0)
-    return make_valid(q)  # TODO: leg.get_qindex, leg.get_charge
+#      test_array = zeros(legcharges)  # Array prototype with correct charges
+#      qindices = [leg.get_qindex(i)[0] for leg, i in zip(legcharges, inds_max)]
+#      q = np.sum([l.get_charge(qi) for l, qi in zip(self.legs, qindices)], axis=0)
+#      return make_valid(q)  # TODO: leg.get_qindex, leg.get_charge
