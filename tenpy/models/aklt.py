@@ -34,7 +34,12 @@ class AKLTChain(NearestNeighborModel, MPOModel):
     def __init__(self, model_params):
         model_params = asConfig(model_params, "AKLTModel")
         L = model_params.get('L', 2)
-        site = SpinSite(S=1., conserve='Sz')
+        conserve = model_params.get('conserve', 'Sz')
+        if conserve == 'best':
+            conserve = 'Sz'
+            self.logger.info("%s: set conserve to %s", self.name, conserve)
+        sort_charge = model_params.get('sort_charge', None)
+        site = SpinSite(S=1., conserve=conserve, sort_charge=sort_charge)
 
         # lattice
         bc_MPS = model_params.get('bc_MPS', 'finite')
@@ -61,15 +66,21 @@ class AKLTChain(NearestNeighborModel, MPOModel):
 
 
     def psi_AKLT(self):
-        """Initialize the chi=2 MPS which is exact ground state of the AKLT model."""
+        """Initialize the chi=2 MPS which is exact ground state of the AKLT model.
+
+        Returns
+        -------
+        psi_aklt : :class:`~tenpy.networks.mps.MPS`
+            The AKLT groundstate
+        """
         # build each B tensor of the MPS as contraction of
         #    --sR  sL--
         #       |  |
         #       proj
         #         |
         #
-        # where  SL--SR forms a singlet between neighboring spin-1/2,
-        # and projS1 is the projector from two spin-1/2 to spin-1.
+        # where  sL--sR forms a singlet between neighboring spin-1/2,
+        # and proj is the projector from two spin-1/2 to spin-1.
         # indexing of basis states:
         # spin-1/2: 0=|m=-1/2>, 1=|m=+1/2>;  spin-1: 0=|m=-1>, 1=|m=0> 2=|m=+1>
         sL = np.sqrt(0.5) * np.array([[1., 0.], [0., -1.]]) # p2 vR
@@ -82,31 +93,32 @@ class AKLTChain(NearestNeighborModel, MPOModel):
         B = np.tensordot(B, sL, axes=[2, 0]) # vL p [p2], [p2] vR
         B = B * np.sqrt(4./3.)  # normalize after projection
         B = B.transpose([1, 0, 2]) # p vL vR
-        S = np.sqrt(0.5) * np.ones([2])
         # it's easy to check that B is right-canonical:
         BB = np.tensordot(B, B.conj(), axes=[[0, 2], [0, 2]])
-        assert np.linalg.norm(np.eye(2) - BB) < 1.e-14
+        assert np.linalg.norm(np.eye(2) - BB) < 1.e-14, 'BB=' + str(BB).replace('\n', '  ')
 
         L = self.lat.N_sites
         Bs = [B] * L
-        Ss = [S] * (L + 1)
 
-        spin1 = self.lat.unit_cell[0]
-        legL = None  # default
         if self.lat.bc_MPS == 'finite':
             # project onto one of the two virtual states on the left/right most state.
             # It's a ground state whatever you choose here,
             # but we project to different indices to allow Sz convservation
             # and fix overall Sz=0 sector
             Bs[0] = Bs[0][:, :1, :]
-            Bs[-1] = Bs[-1][:, -1:, :]
-            Ss[0] = Ss[-1] = np.ones([1.])
-        elif spin1.conserve in ['Sz', 'parity']:
-            chinfo = spin1.leg.chinfo
-            legL = npc.LegCharge.from_qflat(chinfo, [[0], [2]])
-        return MPS.from_Bflat(self.lat.mps_sites(),
-                              Bs,
-                              bc=self.lat.bc_MPS,
-                              permute=True,
-                              form='B',
-                              legL=legL)
+            Bs[-1] = Bs[-1][:, :, :-1]
+            form = None  # Bs[-1] is not right canonical
+        else:
+            form = 'B'
+
+        spin1 = self.lat.unit_cell[0]
+        if self.lat.bc_MPS != 'finite' and spin1.conserve in ['Sz', 'parity']:
+            charges = [[0], [2]] if spin1.conserve == 'Sz' else [[0], [1]]
+            legL = npc.LegCharge.from_qflat(spin1.leg.chinfo, charges)
+        else:
+            legL = None
+
+        res = MPS.from_Bflat(self.lat.mps_sites(), Bs, bc=self.lat.bc_MPS, permute=True, form=form, legL=legL)
+        if form is None:
+            res.canonical_form()
+        return res
