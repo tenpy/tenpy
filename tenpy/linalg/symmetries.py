@@ -60,6 +60,12 @@ class Symmetry(ABC):
         Each sector appears only once, regardless of its multiplicity (given by n_symbol) in the fusion"""
         ...
 
+    # TODO: fix Types to ndarray[Sector]
+    def single_fusion_outcomes(self, a: list[Sector], b: list[Sector]) -> list[Sector]:
+        """This method allows optimizations to work with numpy-arrays of sectors."""
+        assert self.fusion_style == FusionStyle.single
+        return [self.fusion_outcomes(s_a, s_b)[0] for s_a, s_b in zip(a, b)]
+
     @abstractmethod
     def sector_dim(self, a: Sector) -> int:
         """The dimension of a sector as a subspace of the hilbert space"""
@@ -169,6 +175,8 @@ class ProductSymmetry(Symmetry):
 
     def __init__(self, factors: list[Symmetry]):
         self.factors = factors
+        for f in factors:
+            assert not isinstance(f, ProductSymmetry)  # avoid headaches about nested sector lists
         if all(f.descriptive_name is not None for f in factors):
             descriptive_name = f'[{", ".join(f.descriptive_name for f in factors)}]'
         else:
@@ -199,6 +207,20 @@ class ProductSymmetry(Symmetry):
         # this can probably be optimized. could also special-case FusionStyle.single
         all_outcomes = (f.fusion_outcomes(a_f, b_f) for f, a_f, b_f in zip(self.factors, a, b))
         return [list(combination) for combination in product(*all_outcomes)]
+
+    # TODO: fix Types to ndarray[Sector]
+    def single_fusion_outcomes(self, a: list[Sector], b: list[Sector]) -> list[Sector]:
+        """This method allows optimizations to work with numpy-arrays of sectors."""
+        assert self.fusion_style == FusionStyle.single
+        a = np.asarray(a)
+        if a.ndim != 2 or a.dtype == object or a.shape[1] != len(self.factors):
+            return super().unique_fusion_outcomes(a, b)
+            # the optimization below assumes Sectors are simple list of int
+        b = np.asarray(b)
+        # calculate unique_fusion_outcomes factor-wise
+        fusions = [factor.unique_fusion_outcomes(col_a, col_b)
+                   for factor, col_a, col_b in zip(self.factors, a.T, b.T)]
+        return np.array(fusions).T
 
     def sector_dim(self, a: Sector) -> int:
         return prod([f.sector_dim(a_f) for f, a_f in zip(self.factors, a)])
@@ -286,6 +308,7 @@ class AbelianGroup(Group, metaclass=_ABCFactorSymmetryMeta):
 
     def n_symbol(self, a: Sector, b: Sector, c: Sector) -> int:
         return 1
+
 
 # TODO group_names U(1) and SU(2) or U₁ and SU₂ ?
 #   JH: at least consistent: if Z_N, then also U_1 and SU_2.
