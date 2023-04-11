@@ -18,7 +18,7 @@ def test_AKLT_finite():
     # are arbitrary.
     # if they are in a superposition, this will contribute at most another factor of 2 to chi.
     assert all([chi <= 4 for chi in psi0.chi])
-
+    
 
 @pytest.mark.slow
 def test_AKLT_infinite():
@@ -33,3 +33,14 @@ def test_AKLT_infinite():
     assert abs(E0 - (-2 / 3.)) < 1.e-10
     psi_aklt = M.psi_AKLT()
     assert abs(1. - abs(psi0.overlap(psi_aklt, understood_infinite=True))) < 1.e-10
+
+
+@pytest.mark.parametrize('bc_MPS, conserve', [('finite', 'None'), ('infinite', 'None'), 
+                                              ('finite', 'parity'), ('infinite', 'parity'), 
+                                              ('finite', 'Sz'), ('infinite', 'Sz')])
+def test_psi_AKLT(bc_MPS, conserve):
+    L = 4
+    M = aklt.AKLTChain(dict(L=L, bc_MPS=bc_MPS, conserve=conserve))
+    psi_aklt = M.psi_AKLT()
+    bond_energies = M.bond_energies(psi_aklt)
+    assert all(abs(en - (-2 / 3.)) < 1.e-10 for en in bond_energies), f'bond_energies={bond_energies}'
