@@ -295,6 +295,35 @@ def test_boson_site():
         check_same_operators(sites)
 
 
+def test_clock_site():
+    hcs = dict(Id='Id', JW='JW', X='Xhc', Z='Zhc', Xhc='X', Zhc='Z', Xphc='Xphc', Zphc='Zphc')
+    for q in [2, 3, 5, 10]:
+        sites = []
+        for conserve in ['Z', None]:
+            S = site.ClockSite(q=q, conserve=conserve)
+            S.test_sanity()
+            for op in S.onsite_ops:
+                assert S.hc_ops[op] == hcs[op]
+
+            # clock algebra
+            w = np.exp(2.j * np.pi / q)
+            X = S.X.to_ndarray()
+            Z = S.Z.to_ndarray()
+            # compute q-th powers
+            Z_pow_q = Z
+            X_pow_q = X
+            for _ in range(q - 1):
+                Z_pow_q = np.dot(Z_pow_q, Z)
+                X_pow_q = np.dot(X_pow_q, X)
+                
+            npt.assert_array_almost_equal_nulp(np.dot(X, Z), w * np.dot(Z, X), 3 * q)
+            npt.assert_array_almost_equal_nulp(X_pow_q, np.eye(q), 3 * q)
+            npt.assert_array_almost_equal_nulp(Z_pow_q, np.eye(q), 3 * q)
+
+            sites.append(S)
+        check_same_operators(sites)
+
+
 def test_set_common_charges():
     spin = site.SpinSite(0.5, 'Sz')
     spin1 = site.SpinSite(1, 'Sz')

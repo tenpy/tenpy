@@ -27,6 +27,7 @@ __all__ = [
     'SpinHalfFermionSite',
     'SpinHalfHoleSite',
     'BosonSite',
+    'ClockSite',
     'spin_half_species',
 ]
 
@@ -1906,3 +1907,84 @@ def spin_half_species(SpeciesSite, cons_N, cons_Sz, **kwargs):
         new_mod.append(4)
     set_common_charges([up_site, down_site], new_charges, new_names, new_mod)
     return [up_site, down_site], ['up', 'down']
+
+
+class ClockSite(Site):
+    r"""Quantum clock site.
+
+    There are ``q`` local states, with labels ``['0', '1', ..., str(q-1)]``.
+    Special aliases are ``up`` (0), and if q is even ``down`` (q / 2).
+    Local operators are the clock operators ``Z = diag([w ** 0, w ** 1, ..., w ** (q - 1)])``
+    with ``w = exp(2.j * pi / q)`` and ``X = eye(q, k=1) + eye(q, k=1-q)``, which are not hermitian (!)
+
+    =========================== ================================================
+    operator                    description
+    =========================== ================================================
+    ``Id, JW``                  Identity :math:`\mathbb{1}`
+    ``X, Z``                    Clock operators
+    ``Xhc, Zhc``                Hermitian conjugates of clock operators
+    ``Xphc, Zphc``              Clock operator plus its hermitian conjugate
+    =========================== ================================================
+
+    ============== ====  ============================
+    `conserve`     qmod  *excluded* onsite operators
+    ============== ====  ============================
+    ``'Z'``        [q]   ``Xphc, Zphc``
+    ``'None'``     []    --
+    ============== ====  ============================
+
+    Parameters
+    ----------
+    q : int
+        Number of states per site
+    conserve : str | None
+        Defines what is conserved, see table above.
+    sort_charge : bool
+        Whether :meth:`sort_charge` should be called at the end of initialization.
+        This is usually a good idea to reduce potential overhead when using charge conservation.
+        Note that this permutes the order of the local basis states!
+        For backwards compatibility with existing data, it is not (yet) enabled by default.
+
+    Attributes
+    ----------
+    q : int
+        Number of states per site
+    conserve : str
+        Defines what is conserved, see table above.
+    """
+    def __init__(self, q, conserve='Z', sort_charge=None):
+        if not (isinstance(q, int) and q > 1):
+            raise ValueError(f'invalid q: {q}')
+        self.q = q
+        if not conserve:
+            conserve = 'None'
+        if conserve not in ['Z', 'None']:
+            raise ValueError("invalid `conserve`: " + repr(conserve))
+        X = np.eye(q, k=1) + np.eye(q, k=1-q)
+        Z = np.diag(np.exp(2.j * np.pi * np.arange(q, dtype=np.complex128) / q))
+        Xhc = X.conj().transpose()
+        Zhc = Z.conj().transpose()
+        Xphc = X + Xhc
+        Zphc = np.diag(2. * np.cos(2. * np.pi * np.arange(q, dtype=np.complex128) / q))
+        if conserve == 'Z':
+            # we store n as the charge where <Z> = exp(2.j * pi * n / q)
+            chinfo = npc.ChargeInfo([q], ['clock_phase'])
+            leg = npc.LegCharge.from_qflat(chinfo, list(range(q)))
+        else:
+            leg = npc.LegCharge.from_trivial(q)
+        self.conserve = conserve
+        names = [str(m) for m in range(q)]
+        Site.__init__(self, leg, names, sort_charge=sort_charge)
+        self.add_op('X', X, hc='Xhc')
+        self.add_op('Xhc', Xhc, hc='X')
+        self.add_op('Z', Z, hc='Zhc')
+        self.add_op('Zhc', Zhc, hc='Z')
+        if conserve != 'Z':
+            self.add_op('Xphc', Xphc, hc='Xphc')
+            self.add_op('Zphc', Zphc, hc='Zphc')
+        self.state_labels['up'] = self.state_labels['0']
+        if q % 2 == 0:
+            self.state_labels['down'] = self.state_labels[str(q // 2)]
+
+    def __repr__(self):
+        return f'ClockSite(q={self.q}, conserve={self.conserve})'
