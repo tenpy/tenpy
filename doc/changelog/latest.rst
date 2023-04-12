@@ -5,6 +5,9 @@ Release Notes
 -------------
 TODO: Summarize the most important changes
 
+If you have ever defined a custom model and used :meth:`~tenpy.models.model.CouplingModel.add_multi_coupling_term` with `plus_hc=True`,
+please note :issue:`218`!
+
 Changelog
 ---------
 
@@ -26,3 +29,5 @@ Fixed
   charges of the original model, and has the option to double the number of charges to separately conserve the charges
   on each the physical and ancialla legs.
 - Fix a wrong total charge in :meth:`~tenpy.networks.mpo.MPO.apply_zipup`.
+- Fix :issue:`218` that :meth:`~tenpy.models.model.CouplingModel.add_multi_coupling_term` with `plus_hc=True` didn't
+  correctly add the hermitian conjugate.

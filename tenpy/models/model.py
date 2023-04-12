@@ -1441,6 +1441,9 @@ class CouplingModel(Model):
             This function does not handle Jordan-Wigner strings!
             You might want to use :meth:`add_local_term` instead.
 
+        .. versionchanged :: 0.10.1
+            Fix a bug that `plus_hc` didn't correcly add the hermitian conjugate terms.
+
         Parameters
         ----------
         strength : float
@@ -1487,7 +1490,11 @@ class CouplingModel(Model):
             hc_ops = [site.get_hc_op_name(op) for site, op in zip(sites_ijkl, ops_ijkl)]
             # NB: op_string should be defined on all sites in the unit cell...
             hc_op_string = [site.get_hc_op_name(op) for site, op in zip(sites_ijkl, op_string)]
-            ct.add_multi_coupling_term(np.conj(strength), ijkl, ops_ijkl, op_string, switchLR)
+            ct.add_multi_coupling_term(np.conj(strength),
+                                       ijkl,
+                                       hc_ops,
+                                       hc_op_string,
+                                       switchLR)
 
     def add_exponentially_decaying_coupling(self,
                                             strength,
