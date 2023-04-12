@@ -399,7 +399,7 @@ def _get_grouped_corr(psi: mps.MPS, op: str, L: int, sites_to_group: int):
         for j in range(sites_to_group):
             corr[i::sites_to_group, j::sites_to_group] = psi.correlation_function(f'{op}{i}', f'{op}{j}')
     return corr
-    
+
 
 def test_fixes_issue_197():
     sites_to_group = 3
@@ -457,8 +457,8 @@ def test_expectation_value_term():
     # terms_sum
     pref = np.random.random([5])
     term_list = TermList([[('Nd', 0)],
-                          [('Nu', 1), ('Nd', 2)],
-                          [('Nd', 2), ('Nu', 5)],
+                          [('Nu', 1-psi2.L), ('Nd', 2-psi2.L)],  # shift outside of unit cell
+                          [('Nd', 2+2*psi2.L), ('Nu', 5+2*psi2.L)],  # to test shift code block
                           [('Nu Nd', 3)],
                           [('Nu', 1), ('Nu', 5)]], pref)  # yapf: disable
     desired = sum(pref[1:])

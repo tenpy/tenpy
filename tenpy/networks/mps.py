@@ -2413,9 +2413,9 @@ class MPS:
                 i_min = min([i for _, i in term])
                 if not 0 <= i_min < L:
                     if copy is None:
-                        # make explicit copy to not modify exicisting term_list
-                        copy = terms.TermList(term_list.terms, term_list.prefactors)
-                    shift = i % L - i_min
+                        # make explicit copy to not modify existing term_list
+                        copy = terms.TermList(term_list.terms, term_list.strength)
+                    shift = i_min % L - i_min
                     copy.terms[a] = [(op, i + shift) for op, i in term]
             if copy is not None:
                 term_list = copy
