@@ -315,12 +315,10 @@ def test_clock_site():
             for _ in range(q - 1):
                 Z_pow_q = np.dot(Z_pow_q, Z)
                 X_pow_q = np.dot(X_pow_q, X)
-            # assert_array_almost_equal_nulp would be too strict, 
-            # since the phases in Z suffer from floating point errors more than e.g. 
-            # pauli operators
-            npt.assert_almost_equal(np.dot(X, Z), w * np.dot(Z, X))
-            npt.assert_almost_equal(X_pow_q, np.eye(q))
-            npt.assert_almost_equal(Z_pow_q, np.eye(q))
+                
+            npt.assert_array_almost_equal_nulp(np.dot(X, Z), w * np.dot(Z, X), 3 * q)
+            npt.assert_array_almost_equal_nulp(X_pow_q, np.eye(q), 3 * q)
+            npt.assert_array_almost_equal_nulp(Z_pow_q, np.eye(q), 3 * q)
 
             sites.append(S)
         check_same_operators(sites)

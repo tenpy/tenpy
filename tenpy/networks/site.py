@@ -1968,7 +1968,6 @@ class ClockSite(Site):
         Zphc = np.diag(2. * np.cos(2. * np.pi * np.arange(q, dtype=np.complex128) / q))
         if conserve == 'Z':
             # we store n as the charge where <Z> = exp(2.j * pi * n / q)
-            # TODO (JU): document this somewhere?
             chinfo = npc.ChargeInfo([q], ['clock_phase'])
             leg = npc.LegCharge.from_qflat(chinfo, list(range(q)))
         else:
