@@ -611,11 +611,14 @@ class QRBasedTEBDEngine(TEBDEngine):
         cbe_expand : float
             Expansion rate. The QR-based decomposition is carried out at an expanded bond dimension
             ``eta = (1 + cbe_expand) * chi``, where ``chi`` is the bond dimension before the time step.
+            Default is `0.1`.
         cbe_expand_0 : float
             Expansion rate at low ``chi``.
             If given, the expansion rate decreases linearly from ``cbe_expand_0`` at ``chi == 1`` 
             to ``cbe_expand`` at ``chi == trunc_params['chi_max']``, then remains constant.
             If not given, the expansion rate is ``cbe_expand`` at all ``chi``.
+        cbe_min_block_increase : int
+            Minimum bond dimension increase for each block. Default is `1`.
         use_eig_based_svd : bool
             Whether the SVD of the bond matrix :math:`\Xi` should be carried out numerically via
             the eigensystem. This is faster on GPUs, but less accurate.
@@ -654,7 +657,9 @@ class QRBasedTEBDEngine(TEBDEngine):
         theta = C.scale_axis(self.psi.get_SL(i0), 'vL')
         theta = theta.combine_legs([('vL', 'p0'), ('p1', 'vR')], qconj=[+1, -1])
 
-        Y0 = _qr_tebd_cbe_Y0(B_L=self.psi.get_B(i0, 'B'), B_R=self.psi.get_B(i1, 'B'), theta=theta, expand=expand)
+        min_block_increase = self.options.get('cbe_min_block_increase', 1)
+        Y0 = _qr_tebd_cbe_Y0(B_L=self.psi.get_B(i0, 'B'), B_R=self.psi.get_B(i1, 'B'), theta=theta, 
+                             expand=expand, min_block_increase=min_block_increase)
         A_L, S, B_R, trunc_err, renormalize = _qr_based_decomposition(
             theta=theta, Y0=Y0, use_eig_based_svd=self.options.get('use_eig_based_svd', False),
             need_A_L=False, compute_err=self.options.get('compute_err', True),
@@ -688,7 +693,9 @@ class QRBasedTEBDEngine(TEBDEngine):
             # see todo comment in _eig_based_svd
             raise NotImplementedError('update_bond_imag does not (yet) support eig based SVD')
 
-        Y0 = _qr_tebd_cbe_Y0(B_L=self.psi.get_B(i0, 'B'), B_R=self.psi.get_B(i1, 'B'), theta=theta, expand=expand)
+        min_block_increase = self.options.get('cbe_min_block_increase', 1)
+        Y0 = _qr_tebd_cbe_Y0(B_L=self.psi.get_B(i0, 'B'), B_R=self.psi.get_B(i1, 'B'), theta=theta, 
+                             expand=expand, min_block_increase=min_block_increase)
         A_L, S, B_R, trunc_err, renormalize = _qr_based_decomposition(
             theta=theta, Y0=Y0, use_eig_based_svd=use_eig_based_svd,
             need_A_L=True, compute_err=self.options.get('compute_err', True),
@@ -706,7 +713,7 @@ class QRBasedTEBDEngine(TEBDEngine):
         return trunc_err
 
 
-def _qr_tebd_cbe_Y0(B_L: npc.Array, B_R: npc.Array, theta: npc.Array, expand: float):
+def _qr_tebd_cbe_Y0(B_L: npc.Array, B_R: npc.Array, theta: npc.Array, expand: float, min_block_increase: int):
     """Generate the initial guess Y0 for the left isometry in QR based TEBD
 
     Parameters
@@ -723,6 +730,8 @@ def _qr_tebd_cbe_Y0(B_L: npc.Array, B_R: npc.Array, theta: npc.Array, expand: fl
     if expand is None or expand == 0:
         return B_R.combine_legs(['p', 'vR']).ireplace_labels('(p.vR)', '(p1.vR)')
 
+    assert min_block_increase >= 0
+
     Y0 = theta.copy(deep=False)
     Y0.legs[0] = Y0.legs[0].to_LegCharge()
     Y0.ireplace_label('(vL.p0)', 'vL')
@@ -735,7 +744,7 @@ def _qr_tebd_cbe_Y0(B_L: npc.Array, B_R: npc.Array, theta: npc.Array, expand: fl
 
     # vL_old is guaranteed to be a slice of vL_new by charge rule in B_L
     piv = np.zeros(vL_new.ind_len, dtype=bool)  # indices to keep in vL_new
-    increase_per_block = max(1, int(vL_old.ind_len * expand // vL_new.block_number))
+    increase_per_block = max(min_block_increase, int(vL_old.ind_len * expand // vL_new.block_number))
     sizes_old = vL_old.get_block_sizes()
     sizes_new = vL_new.get_block_sizes()
     # iterate over charge blocks in vL_new and vL_old at the same time
