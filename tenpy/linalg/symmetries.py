@@ -17,7 +17,6 @@ __all__ = ['Sector', 'FusionStyle', 'BraidingStyle', 'Symmetry', 'NoSymmetry', '
 
 
 # TODO handle these typehints more elegantly...?
-
 # dtype is integer.
 Sector = np.ndarray  # 1D array, axes [q], where q goes over different charge-values which describe a sector
 SectorArray = np.ndarray  # 2D array, axes [s, q], where s goes over different sectors
@@ -339,22 +338,6 @@ class AbelianGroup(Group, metaclass=_ABCFactorSymmetryMeta):
         return 1
 
 
-# TODO group_names U(1) and SU(2) or U₁ and SU₂ ?
-#   JH: at least consistent: if Z_N, then also U_1 and SU_2.
-#       Challenge: when you want to compare, you need to copy-paste
-#   JU: - The conventional notation in maths is actually not "consistent" in that way.
-#         It is $\mathbb{Z}_N$, $\mathrm{U}(N)$ and $\mathrm{SU}(N)$
-#       - This only concerns group_name attribute, which is used in__str__ outputs.
-#         __repr__ outputs always have the name of the class, e.g. U1Symmetry.
-#         There i chose no parens or underscores bc of python naming standards.
-#       - What do you mean with "when you want to compare"?
-#  JH: agreed, there's still the descriptive_name and class names for comparisons, depending on
-#  what one wants to check. I suggest to follow usual math convention for the group name.
-
-# TODO could make this a subclass of AbelianGroup ...
-#  JU: yes we should! otherwise it does not count as abelian or as a group!
-
-
 class NoSymmetry(AbelianGroup):
     """Trivial symmetry group that doesn't do anything. 
 
@@ -443,7 +426,7 @@ class ZNSymmetry(AbelianGroup):
 
     def __repr__(self):
         name_str = '' if self.descriptive_name is None else f', "{self.descriptive_name}"'
-        return f'ZNSymmetry({self.N}{name_str})'  # TODO include descriptive_name?
+        return f'ZNSymmetry({self.N}{name_str})'
 
     def is_same_symmetry(self, other) -> bool:
         return isinstance(other, ZNSymmetry) and other.N == self.N
@@ -702,6 +685,11 @@ class VectorSpace:
 
 
 # TODO: does the distinction between ProductSpace and FusionSpace make sense?
+#  JU: FusionSpace looks good. I dont think we need the current ProductSpace.
+#      If we keep only FusionSpace, we might name it ProductSpace again.
+#      If we keep both, ProductSpace should not be a subclass of VectorSpace, since we dont
+#       evaluate what its sectors as a symmetry-graded VectorSpace are. Then, a FusionSpace
+#       would be a VectorSpace and a ProductSpace.
 class ProductSpace(VectorSpace):
     def __init__(self, spaces: list[VectorSpace], is_dual: bool = False):
         self.spaces = spaces  # spaces can be themselves ProductSpaces
