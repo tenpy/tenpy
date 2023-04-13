@@ -45,14 +45,7 @@ class Symmetry(ABC):
         self.trivial_sector = trivial_sector
         self.group_name = group_name
         self.descriptive_name = descriptive_name
-
-    # TODO (JU) with the hacked instancecheck, we dont need this anymore, right?
-    @property
-    def is_abelian(self) -> bool:
-        if isinstance(self, ProductSymmetry):
-            return all(factor.is_abelian for factor in self.factors)
-        else:
-            return isinstance(self, AbelianGroup)
+        self.is_abelian = (fusion_style == FusionStyle.single)
 
     @abstractmethod
     def is_valid_sector(self, a: Sector) -> bool:
@@ -156,51 +149,6 @@ class Symmetry(ABC):
         ...
 
     # TODO a bunch of methods, such as n-symbol etc which (i think) only matter for the non-abelian implementation
-
-
-# TODO could make this a subclass of AbelianGroup ...
-#  JU: yes we should! otherwise it does not count as abelian or as a group!
-class NoSymmetry(Symmetry):
-    """Trivial symmetry group that doesn't do anything. 
-
-    The only allowed sector is `[0]` of integer dtype.
-    """
-
-    def __init__(self):
-        Symmetry.__init__(self, fusion_style=FusionStyle.single, braiding_style=BraidingStyle.bosonic,
-                          trivial_sector=np.array([0], dtype=np.int8), 
-                          group_name='NoSymmetry', descriptive_name=None)
-
-    def is_valid_sector(self, a: Sector) -> bool:
-        return _is_arraylike(a, shape=(1,)) and a[0] == 0
-
-    def fusion_outcomes(self, a: Sector, b: Sector) -> SectorArray:
-        return self.trivial_sector
-
-    def single_fusion_outcomes(self, a: SectorArray, b: SectorArray) -> SectorArray:
-        # assume that a consists of valid sectors, so it is [[0], [0], ..., [0]], which is also the result.
-        return a  
-
-    def sector_dim(self, a: Sector) -> int:
-        return 1
-
-    def sector_str(self, a: Sector) -> int:
-        return 'None'  # TODO (JU) : use sth else...?
-
-    def __repr__(self):
-        return 'NoSymmetry()'
-
-    def is_same_symmetry(self, other) -> bool:
-        return isinstance(other, NoSymmetry)
-
-    def dual_sector(self, a: Sector) -> Sector:
-        return a
-
-    def dual_sectors(self, sectors: SectorArray) -> SectorArray:
-        return sectors
-
-    def n_symbol(self, a: Sector, b: Sector, c: Sector) -> int:
-        return 1
 
 
 class ProductSymmetry(Symmetry):
@@ -376,7 +324,6 @@ class AbelianGroup(Group, metaclass=_ABCFactorSymmetryMeta):
     Note that a product of several abelian groups is also an abelian group, but represented by a ProductSymmetry,
     which is not a subclass of AbelianGroup.
     """
-    is_abelian = True
 
     def __init__(self, trivial_sector: Sector, group_name: str, descriptive_name: str | None = None):
         Group.__init__(self, fusion_style=FusionStyle.single, trivial_sector=trivial_sector,
@@ -400,6 +347,45 @@ class AbelianGroup(Group, metaclass=_ABCFactorSymmetryMeta):
 #       - What do you mean with "when you want to compare"?
 #  JH: agreed, there's still the descriptive_name and class names for comparisons, depending on
 #  what one wants to check. I suggest to follow usual math convention for the group name.
+
+# TODO could make this a subclass of AbelianGroup ...
+#  JU: yes we should! otherwise it does not count as abelian or as a group!
+
+
+class NoSymmetry(AbelianGroup):
+    """Trivial symmetry group that doesn't do anything. 
+
+    The only allowed sector is `[0]` of integer dtype.
+    """
+
+    def __init__(self):
+        AbelianGroup.__init__(self, trivial_sector=np.array([0], dtype=np.int8), group_name='NoSymmetry', 
+                              descriptive_name=None)
+
+    def is_valid_sector(self, a: Sector) -> bool:
+        return _is_arraylike(a, shape=(1,)) and a[0] == 0
+
+    def fusion_outcomes(self, a: Sector, b: Sector) -> SectorArray:
+        return a
+
+    def single_fusion_outcomes(self, a: SectorArray, b: SectorArray) -> SectorArray:
+        return a
+
+    def dual_sector(self, a: Sector) -> Sector:
+        return a
+
+    def dual_sectors(self, sectors: SectorArray) -> SectorArray:
+        return sectors
+
+    def sector_str(self, a: Sector) -> int:
+        return 'None'  # TODO (JU) : use sth else...?
+
+    def __repr__(self):
+        return 'NoSymmetry()'
+
+    def is_same_symmetry(self, other) -> bool:
+        return isinstance(other, NoSymmetry)
+    
 
 class U1Symmetry(AbelianGroup):
     """U(1) symmetry. 
@@ -483,6 +469,7 @@ class SU2Symmetry(Group):
     This is for convenience so that we can work with `int` objects.
     E.g. a spin-1/2 degree of freedom is represented by the sector `[1]`.
     """
+    
     def __init__(self, descriptive_name: str | None = None):
         Group.__init__(self, fusion_style=FusionStyle.multiple_unique, trivial_sector=np.array([0], dtype=np.int8),
                        group_name='SU(2)', descriptive_name=descriptive_name)
