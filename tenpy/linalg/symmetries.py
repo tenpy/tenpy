@@ -214,7 +214,7 @@ class ProductSymmetry(Symmetry):
         result = np.zeros(num_possibilities + [self.sector_ind_len], dtype=a.dtype)
         for i, c_i in enumerate(all_outcomes):
             res_idx = (colon,) * len(self.factors) + (slice(self.sector_slices[i], self.sector_slices[i + 1], None),)
-            c_i_idx = (None,) * i + (colon,) + (None,) * (len(self.factors) - i)
+            c_i_idx = (None,) * i + (colon,) + (None,) * (len(self.factors) - i - 1) + (colon,)
             result[res_idx] = c_i[c_i_idx]
 
         # now reshape so that we get a 2D array where the first index (axis=0) runs over all those
@@ -289,7 +289,8 @@ class ProductSymmetry(Symmetry):
         return np.concatenate(components, axis=-1)
 
     def n_symbol(self, a: Sector, b: Sector, c: Sector) -> int:
-        if self.fusion_style <= FusionStyle.multiple_unique:
+        if self.fusion_style in [FusionStyle.single, FusionStyle.multiple_unique]:
+            # TODO it is only 1 if a and b can fuse to c !!
             return 1
         
         contributions = []
@@ -348,6 +349,7 @@ class AbelianGroup(Group, metaclass=_ABCFactorSymmetryMeta):
         return 1
 
     def n_symbol(self, a: Sector, b: Sector, c: Sector) -> int:
+        # TODO it is only 1 if a and b can fuse to c !!
         return 1
 
 
@@ -365,7 +367,7 @@ class NoSymmetry(AbelianGroup):
         return _is_arraylike(a, shape=(1,)) and a[0] == 0
 
     def fusion_outcomes(self, a: Sector, b: Sector) -> SectorArray:
-        return a
+        return a[None, :]
 
     def single_fusion_outcomes(self, a: SectorArray, b: SectorArray) -> SectorArray:
         return a
@@ -477,11 +479,8 @@ class SU2Symmetry(Group):
         return _is_arraylike(a, shape=(1,)) and a[0] >= 0
 
     def fusion_outcomes(self, a: Sector, b: Sector) -> SectorArray:
-        return self.single_fusion_outcomes(a[None, :], b[None, :])
-
-    def single_fusion_outcomes(self, a: SectorArray, b: SectorArray) -> SectorArray:
         # J_tot = |J1 - J2|, ..., J1 + J2
-        return np.arange(np.abs(a - b), a + b + 2, 2)
+        return np.arange(np.abs(a - b), a + b + 2, 2)[:, None]
 
     def sector_dim(self, a: Sector) -> int:
         # dim = 2 * J + 1 = jj + 1
@@ -550,6 +549,7 @@ class FermionParity(Symmetry):
         return sectors
 
     def n_symbol(self, a: Sector, b: Sector, c: Sector) -> int:
+        # TODO it is only 1 if a and b can fuse to c !!
         return 1
 
 
