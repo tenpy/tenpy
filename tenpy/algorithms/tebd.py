@@ -47,10 +47,10 @@ logger = logging.getLogger(__name__)
 
 from .algorithm import TimeEvolutionAlgorithm, TimeDependentHAlgorithm
 from ..linalg import np_conserved as npc
-from .truncation import svd_theta, TruncationError
+from .truncation import svd_theta, TruncationError, truncate
 from ..linalg import random_matrix
 
-__all__ = ['TEBDEngine', 'Engine', 'RandomUnitaryEvolution', 'TimeDependentTEBD']
+__all__ = ['TEBDEngine', 'Engine', 'QRBasedTEBDEngine', 'RandomUnitaryEvolution', 'TimeDependentTEBD']
 
 
 class TEBDEngine(TimeEvolutionAlgorithm):
@@ -590,6 +590,301 @@ class Engine(TEBDEngine):
         warnings.warn(msg, category=FutureWarning, stacklevel=2)
         TEBDEngine.__init__(self, psi, model, options)
 
+
+class QRBasedTEBDEngine(TEBDEngine):
+    r"""Version of TEBD that relies on QR decompositions rather than SVD.
+    
+    As introduced in :arxiv:`2212.09782`.
+
+    .. todo ::
+        To use `use_eig_based_svd == True`, which makes sense on GPU only, we need to implement
+        the `_eig_based_svd` for "non-square" matrices.
+        This means that :math:`M^{\dagger} M` and :math:`M M^{\dagger}` dont have the same size,
+        and we need to disregard those eigenvectors of the larger one, that have eigenvalue zero,
+        since we dont have corresponding eigenvalues of the smaller one.
+
+    Options
+    -------
+    .. cfg:config :: QRBasedTEBDEngine
+        :include: TEBDEngine
+
+        cbe_expand : float
+            Expansion rate. The QR-based decomposition is carried out at an expanded bond dimension
+            ``eta = (1 + cbe_expand) * chi``, where ``chi`` is the bond dimension before the time step.
+            Default is `0.1`.
+        cbe_expand_0 : float
+            Expansion rate at low ``chi``.
+            If given, the expansion rate decreases linearly from ``cbe_expand_0`` at ``chi == 1`` 
+            to ``cbe_expand`` at ``chi == trunc_params['chi_max']``, then remains constant.
+            If not given, the expansion rate is ``cbe_expand`` at all ``chi``.
+        cbe_min_block_increase : int
+            Minimum bond dimension increase for each block. Default is `1`.
+        use_eig_based_svd : bool
+            Whether the SVD of the bond matrix :math:`\Xi` should be carried out numerically via
+            the eigensystem. This is faster on GPUs, but less accurate.
+            It makes no sense to do this on CPU. It is currently not supported for update_imag.
+            Default is `False`.
+        compute_err : bool
+            Whether the truncation error should be computed exactly.
+            Compared to SVD-based TEBD, computing the truncation error is significantly more expensive.
+            If `True` (default), the full error is computed.
+            Otherwise, the truncation error is set to NaN.
+    """         
+    
+    def _expansion_rate(self, i):
+        """get expansion rate for updating bond i"""
+        expand = self.options.get('cbe_expand', 0.1)
+        expand_0 = self.options.get('cbe_expand_0', None)
+
+        if expand_0 is None or expand_0 == expand:
+            return expand
+
+        chi_max = self.trunc_params.get('chi_max', None)
+        if chi_max is None:
+            raise ValueError('Need to specify trunc_params["chi_max"] in order to use cbe_expand_0.')
+
+        chi = min(self.get_SL(i).shape)
+        return max(expand_0 - chi / chi_max * (expand_0 - expand), expand)
+             
+    def update_bond(self, i, U_bond):
+        i0, i1 = i - 1, i
+        expand = self._expansion_rate(i)
+        logger.debug(f'Update sites ({i0}, {i1}). CBE expand={expand}')
+        # Construct the theta matrix
+        C = self.psi.get_theta(i0, n=2, formL=0.)  # the two B without the S on the left
+        C = npc.tensordot(U_bond, C, axes=(['p0*', 'p1*'], ['p0', 'p1']))  # apply U
+        C.itranspose(['vL', 'p0', 'p1', 'vR'])
+        theta = C.scale_axis(self.psi.get_SL(i0), 'vL')
+        theta = theta.combine_legs([('vL', 'p0'), ('p1', 'vR')], qconj=[+1, -1])
+
+        min_block_increase = self.options.get('cbe_min_block_increase', 1)
+        Y0 = _qr_tebd_cbe_Y0(B_L=self.psi.get_B(i0, 'B'), B_R=self.psi.get_B(i1, 'B'), theta=theta, 
+                             expand=expand, min_block_increase=min_block_increase)
+        A_L, S, B_R, trunc_err, renormalize = _qr_based_decomposition(
+            theta=theta, Y0=Y0, use_eig_based_svd=self.options.get('use_eig_based_svd', False),
+            need_A_L=False, compute_err=self.options.get('compute_err', True),
+            trunc_params=self.trunc_params
+        )
+        B_L = npc.tensordot(C.combine_legs(('p1', 'vR'), pipes=theta.legs[1]), 
+                            B_R.conj(), 
+                            axes=[['(p1.vR)'], ['(p*.vR*)']]) / renormalize
+        B_L.ireplace_labels(['p0', 'vL*'], ['p', 'vR'])
+        B_R = B_R.split_legs(1)
+
+        self.psi.set_B(i0, B_L, form='B')
+        self.psi.set_SL(i1, S)
+        self.psi.set_B(i1, B_R, form='B')
+        self._trunc_err_bonds[i] = self._trunc_err_bonds[i] + trunc_err
+        return trunc_err
+
+    def update_bond_imag(self, i, U_bond):
+        i0, i1 = i - 1, i
+        expand = self._expansion_rate(i)
+        logger.debug(f'Update sites ({i0}, {i1}). CBE expand={expand}')
+        # Construct the theta matrix
+        theta = self.psi.get_theta(i0, n=2)
+        theta = npc.tensordot(U_bond, theta, axes=(['p0*', 'p1*'], ['p0', 'p1']))
+        theta.itranspose(['vL', 'p0', 'p1', 'vR'])
+        theta = theta.combine_legs([('vL', 'p0'), ('p1', 'vR')], qconj=[+1, -1])
+
+        use_eig_based_svd = self.options.get('use_eig_based_svd', False)
+
+        if use_eig_based_svd:
+            # see todo comment in _eig_based_svd
+            raise NotImplementedError('update_bond_imag does not (yet) support eig based SVD')
+
+        min_block_increase = self.options.get('cbe_min_block_increase', 1)
+        Y0 = _qr_tebd_cbe_Y0(B_L=self.psi.get_B(i0, 'B'), B_R=self.psi.get_B(i1, 'B'), theta=theta, 
+                             expand=expand, min_block_increase=min_block_increase)
+        A_L, S, B_R, trunc_err, renormalize = _qr_based_decomposition(
+            theta=theta, Y0=Y0, use_eig_based_svd=use_eig_based_svd,
+            need_A_L=True, compute_err=self.options.get('compute_err', True),
+            trunc_params=self.trunc_params
+        )
+        A_L = A_L.split_legs(0)
+        B_R = B_R.split_legs(1)
+
+        self.psi.norm *= renormalize
+        self.psi.set_B(i0, A_L, form='A')
+        self.psi.set_SL(i1, S)
+        self.psi.set_B(i1, B_R, form='B')
+        self._trunc_err_bonds[i] = self._trunc_err_bonds[i] + trunc_err
+
+        return trunc_err
+
+
+def _qr_tebd_cbe_Y0(B_L: npc.Array, B_R: npc.Array, theta: npc.Array, expand: float, min_block_increase: int):
+    """Generate the initial guess Y0 for the left isometry in QR based TEBD
+
+    Parameters
+    ----------
+    B_L : Array with legs [vL, p, vR]
+    B_R : Array with legs [vL, p, vR]
+    theta : Array with legs [(vL.p0), (p1.vR)]
+    expand : float or None
+
+    Returns
+    -------
+    Y0 : Array with legs [vL, (p1.vR)]
+    """
+    if expand is None or expand == 0:
+        return B_R.combine_legs(['p', 'vR']).ireplace_labels('(p.vR)', '(p1.vR)')
+
+    assert min_block_increase >= 0
+
+    Y0 = theta.copy(deep=False)
+    Y0.legs[0] = Y0.legs[0].to_LegCharge()
+    Y0.ireplace_label('(vL.p0)', 'vL')
+    if any(B_L.qtotal != 0):
+        Y0.gauge_total_charge('vL', new_qtotal=B_R.qtotal)
+    vL_old = B_R.get_leg('vL')
+    if not vL_old.is_blocked():
+        vL_old = vL_old.sort()
+    vL_new = Y0.get_leg('vL')  # is blocked, since created from pipe
+
+    # vL_old is guaranteed to be a slice of vL_new by charge rule in B_L
+    piv = np.zeros(vL_new.ind_len, dtype=bool)  # indices to keep in vL_new
+    increase_per_block = max(min_block_increase, int(vL_old.ind_len * expand // vL_new.block_number))
+    sizes_old = vL_old.get_block_sizes()
+    sizes_new = vL_new.get_block_sizes()
+    # iterate over charge blocks in vL_new and vL_old at the same time
+    j_old = 0
+    q_old = vL_old.charges[j_old, :]
+    for j_new, q_new in enumerate(vL_new.charges):
+        if all(q_new == q_old):  # have charge block in both vL_new and vL_old
+            s_new = sizes_old[j_old] + increase_per_block
+            # move to next charge block in next loop iteration
+            j_old += 1
+            if j_old < len(vL_old.charges):
+                q_old = vL_old.charges[j_old, :]
+        else:  # charge block only in vL_new
+            s_new = increase_per_block
+        s_new = min(s_new, sizes_new[j_new])  # don't go beyond block
+        start = vL_new.slices[j_new]
+        piv[start:start+s_new] = True
+    Y0.iproject(piv, 'vL')
+    return Y0
+
+
+def _qr_based_decomposition(theta: npc.Array, Y0: npc.Array, use_eig_based_svd: bool, trunc_params,
+                            need_A_L: bool, compute_err: bool):
+    """Perform the decomposition step of QR based TEBD
+
+    Parameters
+    ----------
+    theta : Array with legs [(vL.p0), (p1.vR)]
+    Y0 : Array with legs [vL, (p1.vR)]
+    ...
+
+    Returns
+    -------
+    A_L : array with legs [(vL.p), vR] or None
+    S : 1D numpy array
+    B_R : array with legs [vL, (p.vR)]
+    trunc_err : TruncationError
+    renormalize : float
+    """
+    
+    if compute_err:
+        need_A_L = True
+
+    # QR based updates
+    theta_i0 = npc.tensordot(theta, Y0.conj(), ['(p1.vR)', '(p1*.vR*)']).ireplace_label('vL*', 'vR')
+    A_L, _ = npc.qr(theta_i0, inner_labels=['vR', 'vL'])  
+    # A_L: [(vL.p0), vR]
+    theta_i1 = npc.tensordot(A_L.conj(), theta, ['(vL*.p0*)', '(vL.p0)']).ireplace_label('vR*', 'vL')
+    theta_i1.itranspose(['(p1.vR)', 'vL'])
+    B_R, Xi = npc.qr(theta_i1, inner_labels=['vL', 'vR'], inner_qconj=-1)
+    B_R.itranspose(['vL', '(p1.vR)'])
+    Xi.itranspose(['vL', 'vR'])
+
+    # SVD of bond matrix Xi
+    if use_eig_based_svd:
+        U, S, Vd, trunc_err, renormalize = _eig_based_svd(
+            Xi, inner_labels=['vR', 'vL'], need_U=need_A_L, trunc_params=trunc_params
+        )
+    else:
+        U, S, Vd, _, renormalize = svd_theta(Xi, trunc_params)
+    B_R = npc.tensordot(Vd, B_R, ['vR', 'vL'])
+    if need_A_L:
+        A_L = npc.tensordot(A_L, U, ['vR', 'vL'])
+    else:
+        A_L = None
+
+    if compute_err:
+        theta_approx = npc.tensordot(A_L.scale_axis(S, axis='vR'), B_R, ['vR', 'vL'])
+        eps = npc.norm(theta - theta_approx) ** 2
+        trunc_err = TruncationError(eps, 1. - 2. * eps)
+    else:
+        trunc_err = TruncationError(np.nan, np.nan)
+
+    B_R = B_R.ireplace_label('(p1.vR)', '(p.vR)')
+    if need_A_L:
+        A_L = A_L.ireplace_label('(vL.p0)', '(vL.p)')
+        
+    return A_L, S, B_R, trunc_err, renormalize
+
+
+def _eig_based_svd(A, need_U: bool = True, need_Vd: bool = True, inner_labels=[None, None],
+                   trunc_params=None):
+    """Computes the singular value decomposition of a matrix A via eigh
+
+    Singular values and vectors are obtained by diagonalizing the "square" A.hc @ A and/or A @ A.hc, 
+    i.e. with two eigh calls instead of an svd call.
+
+    Truncation if performed if and only if trunc_params are given.
+    This performs better on GPU, but is not really useful on CPU.
+    If isometries U or Vd are not needed, their computation can be omitted for performance.
+
+    Does not (yet) support computing both U and Vd
+    """
+    warnings.warn('_eig_based_svd is nonsensical on CPU!!')
+    assert A.rank == 2
+
+    if need_U and need_Vd:
+        # TODO (JU) just doing separate eighs for U, S and for S, Vd is not sufficient
+        #  the phases of U / Vd are arbitrary.
+        #  Need to put in more work in that case...
+        raise NotImplementedError
+
+    if need_U:
+        Vd = None
+        A_Ahc = npc.tensordot(A, A.conj(), [1, 1])
+        L, U = npc.eigh(A_Ahc, sort='>')
+        S = np.sqrt(np.abs(L))  # abs to avoid `nan` due to accidentially negative values close to zero
+        U = U.ireplace_label('eig', inner_labels[0])
+    elif need_Vd:
+        U = None
+        Ahc_A = npc.tensordot(A.conj(), A, [0, 0])
+        L, V = npc.eigh(Ahc_A, sort='>')
+        S = np.sqrt(np.abs(L))  # abs to avoid `nan` due to accidentially negative values close to zero
+        Vd = V.iconj().itranspose().ireplace_label('eig*', inner_labels[1])
+    else:
+        U = None
+        Vd = None
+        # use the smaller of the two square matrices -- they have the same eigenvalues
+        if A.shape[1] >= A.shape[0]:
+            A2 = npc.tensordot(A, A.conj(), [1, 0])
+        else:
+            A2 = npc.tensordot(A.conj(), A, [1, 0])
+        L = npc.eigvalsh(A2)
+        S = np.sqrt(np.abs(L))  # abs to avoid `nan` due to accidentially negative values close to zero
+
+    if trunc_params is not None:
+        piv, renormalize, trunc_err = truncate(S, trunc_params)
+        S = S[piv]
+        S /= renormalize
+        if need_U:
+            U.iproject(piv, 1)
+        if need_Vd:
+            Vd.iproject(piv, 0)
+    else:
+        renormalize = np.linalg.norm(S)
+        S /= renormalize
+        trunc_err = TruncationError()
+
+    return U, S, Vd, trunc_err, renormalize
+        
 
 class RandomUnitaryEvolution(TEBDEngine):
     """Evolution of an MPS with random two-site unitaries in a TEBD-like fashion.

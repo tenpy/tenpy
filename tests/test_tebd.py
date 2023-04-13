@@ -24,10 +24,15 @@ def test_trotter_decomposition():
                 evolved[k] += dt[j]
             npt.assert_array_almost_equal_nulp(evolved, N * np.ones([2]), N * 2)
 
-
+            
 @pytest.mark.slow
-@pytest.mark.parametrize('bc_MPS', ['finite', 'infinite'])
-def test_tebd(bc_MPS, g=0.5):
+@pytest.mark.parametrize('bc_MPS, which_engine, compute_err',
+                         [('finite', 'standard', None),
+                          ('infinite', 'standard', None),
+                          ('finite', 'qr', True),
+                          ('infinite', 'qr', True),
+                          ('finite', 'qr', False)])
+def test_tebd(bc_MPS, which_engine, compute_err, g=0.5):
     L = 2 if bc_MPS == 'infinite' else 6
     #  xxz_pars = dict(L=L, Jxx=1., Jz=3., hz=0., bc_MPS=bc_MPS)
     #  M = XXZChain(xxz_pars)
@@ -45,10 +50,23 @@ def test_tebd(bc_MPS, g=0.5):
         'trunc_params': {
             'chi_max': 50,
             'trunc_cut': 1.e-13
-        }
+        },
     }
-    engine = tebd.TEBDEngine(psi, M, tebd_param)
+    if which_engine == 'standard':
+        engine = tebd.TEBDEngine(psi, M, tebd_param)
+    elif which_engine == 'qr':
+        tebd_param['compute_err'] = compute_err
+        engine = tebd.QRBasedTEBDEngine(psi, M, tebd_param)
+    else:
+        raise RuntimeError
+    
     engine.run_GS()
+
+    if compute_err is False:
+        assert np.isnan(engine.trunc_err.eps)
+        assert np.isnan(engine.trunc_err.ov)
+    else:
+        assert engine.trunc_err.eps >= 0
 
     print("norm_test", psi.norm_test())
     if bc_MPS == 'finite':
@@ -109,3 +127,5 @@ def test_RandomUnitaryEvolution():
     eng.run()
     print(eng.psi.chi)
     assert tuple(eng.psi.chi) == (16, 8)
+
+
