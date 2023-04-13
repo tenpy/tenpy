@@ -45,6 +45,7 @@ class Symmetry(ABC):
         self.trivial_sector = trivial_sector
         self.group_name = group_name
         self.descriptive_name = descriptive_name
+        self.sector_ind_len = len(trivial_sector)  # how many entries are needed to describe a Sector
         self.is_abelian = (fusion_style == FusionStyle.single)
 
     @abstractmethod
@@ -167,9 +168,11 @@ class ProductSymmetry(Symmetry):
             descriptive_name = f'[{", ".join(f.descriptive_name for f in factors)}]'
         else:
             descriptive_name = None
-            
-        # FIXME (JU) properly support factors whose sectors have more than one entry
-        self.sector_slices = list(range(len(factors) + 1))  # sector[sector_slices[i]:sector_slices[i+1]] gives the part for factors[i]
+
+        # define sector_slices such that
+        # s[sector_slices[i]:sector_slices[i+1]] 
+        # gives the part of s (a sector of the ProductSymmetry) which describe a sector of factors[i]
+        self.sector_slices = np.cumsum([0] + [f.sector_ind_len for f in factors])
 
         Symmetry.__init__(
             self,
