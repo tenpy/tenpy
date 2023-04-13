@@ -192,24 +192,35 @@ class ProductSymmetry(Symmetry):
         return True
 
     def fusion_outcomes(self, a: Sector, b: Sector) -> SectorArray:
+        colon = slice(None, None, None)
         all_outcomes = []
+        num_possibilities = []
         for i, f_i in enumerate(self.factors):
             a_i = a[self.sector_slices[i]:self.sector_slices[i + 1]]
             b_i = b[self.sector_slices[i]:self.sector_slices[i + 1]]
             c_i = f_i.fusion_outcomes(a_i, b_i)
             all_outcomes.append(c_i)
+            num_possibilities.append(c_i.shape[0])
 
         # form an array of all combinations of the c_i
         # e.g. if we have 3 factors, we want
-        # result[i, j, k, :] = np.concatenate([c_1[i, :], c_2[j, :], c_3[k, :]], axis=-1)
-        colon = slice(None, None, None)
-        idcs = [(None,) * i + (colon,) + (None,) * (len(self.factors) - i - 1) + (colon,)
-                for i in range(len(self.factors))]
-        result = np.concatenate([c_i[idx] for c_i, idx in zip(all_outcomes, idcs)], axis=-1)
-        # reshaping then gives us all combinations as a 2D array
+        # result[n1, n2, n3, :] = np.concatenate([c_1[n1, :], c_2[n2, :], c_3[n3, :]], axis=-1)
+        # we set the following elements:
+        #
+        # |                                                       i-th axis
+        # |                                                       v
+        # | results[:, :, ..., :, slice_i] = c_i[None, None, ..., :, ..., None, :]
+        #
+        result = np.zeros(num_possibilities + [self.sector_ind_len], dtype=a.dtype)
+        for i, c_i in enumerate(all_outcomes):
+            res_idx = (colon,) * len(self.factors) + (slice(self.sector_slices[i], self.sector_slices[i + 1], None),)
+            c_i_idx = (None,) * i + (colon,) + (None,) * (len(self.factors) - i)
+            result[res_idx] = c_i[c_i_idx]
+
+        # now reshape so that we get a 2D array where the first index (axis=0) runs over all those
+        # combinations
         *rest, last = result.shape
         result = np.reshape(result, (np.prod(rest), last))
-
         return result
 
     def single_fusion_outcomes(self, a: SectorArray, b: SectorArray) -> SectorArray:
@@ -516,9 +527,9 @@ class FermionParity(Symmetry):
         return self.single_fusion_outcomes(a[None, :], b[None, :])
 
     def single_fusion_outcomes(self, a: SectorArray, b: SectorArray) -> SectorArray:
-        # equal sectors fuse to even parity, i.e. to `0 == int(False)`
-        # unequal sectors fuse to odd parity i.e. to `1 == int(True)`
-        return np.not_equal(a, b).astype(np.int8)
+        # equal sectors fuse to even parity, i.e. to `0 == (0 + 0) % 2 == (1 + 1) % 2`
+        # unequal sectors fuse to odd parity i.e. to `1 == (0 + 1) % 2 == (1 + 0) % 2`
+        return (a + b) % 2
 
     def sector_dim(self, a: Sector) -> int:
         return 1
