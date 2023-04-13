@@ -183,6 +183,8 @@ class ProductSymmetry(Symmetry):
         )
 
     def is_valid_sector(self, a: Sector) -> bool:
+        if not _is_arraylike(a, shape=(self.sector_ind_len,)):
+            return False
         for i, f_i in enumerate(self.factors):
             a_i = a[self.sector_slices[i]:self.sector_slices[i + 1]]
             if not f_i.is_valid_sector(a_i):
