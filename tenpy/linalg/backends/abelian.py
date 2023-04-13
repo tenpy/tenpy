@@ -24,7 +24,8 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Iterable, TypeVar, List, TYPE_CHECKING
 import numpy as np
-from numpy.typing import ndarray
+# TODO (JU) numpy.typing.ndarray does not exist. can just use numpy.ndarray, no?
+# from numpy.typing import ndarray  
 import copy
 
 from .abstract_backend import AbstractBackend, AbstractBlockBackend, Data, Block, Dtype
@@ -256,7 +257,7 @@ class AbelianBackendFusionSpace(FusionSpace, AbelianBackendVectorSpace):
             For each row of `incoming_block_inds` an index `J` such that
             ``self.block_ind_map[J, 2:-1] == block_inds[j]``.
         """
-        assert (incoming_block_inds.shape[1] == len(self.spaces)
+        assert incoming_block_inds.shape[1] == len(self.spaces)
         # calculate indices of block_ind_map[_perm], which is sorted by :math:`i_1, i_2, ...`,
         # by using the appropriate strides
         inds_before_perm = np.sum(incoming_block_inds * self._strides[np.newaxis, :], axis=1)
