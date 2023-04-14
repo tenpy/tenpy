@@ -24,8 +24,6 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Iterable, TypeVar, List, TYPE_CHECKING
 import numpy as np
-# TODO (JU) numpy.typing.ndarray does not exist. can just use numpy.ndarray, no?
-# from numpy.typing import ndarray  
 import copy
 
 from .abstract_backend import AbstractBackend, AbstractBlockBackend, Data, Block, Dtype
@@ -56,15 +54,15 @@ class AbelianBackendVectorSpace(VectorSpace):
 
     Attributes
     ----------
-    perm_qind : ndarray[int]
+    perm_block_inds : ndarray[int]
         Permutation from the original order of sectors to the sorted one in :attr:`sectors`.
     slices : ndarray[(int, int)]
         For each sector the begin and end when projecting to/from a "flat" ndarray
-        without symmetries. Note that this is not sorted when perm_qind is non-trivial.
+        without symmetries. Note that this is not sorted when perm_block_inds is non-trivial.
 
     """
     def __init__(self, symmetry: Symmetry, sectors: list[Sector], multiplicities: list[int],
-                 is_dual: bool, is_real: bool, perm_qind=None, slices=None):
+                 is_dual: bool, is_real: bool, perm_block_inds=None, slices=None):
         # possibly originally unsorted sectors
         sectors = np.asarray(sectors, dtype=Charge) # TODO: typecheck probably complains?
         multiplicities = np.asarray(multiplicities)
@@ -73,7 +71,7 @@ class AbelianBackendVectorSpace(VectorSpace):
         self.sector_ndim = sectors.ndim
         if sectors.ndim == 1:
             assert not isinstance(symmetry, ProductSymmetry)
-        if perm_qind is None:
+        if perm_block_inds is None:
             # sort by slices
             assert slices is None
             slices = np.zeros((N_sectors, 2), np.intp)
@@ -84,21 +82,17 @@ class AbelianBackendVectorSpace(VectorSpace):
         else:
             # TODO: do we need this case?
             assert slices is not None
-            self.perm_qind = perm_qind
+            self.perm_block_inds = perm_block_inds
             self.slices = slices
 
     def _sort_sectors(self):
             # sort sectors
-            assert not hasattr(self, 'perm_qind')
-            if self.sector_ndim == 1:
-                perm_qind = np.argsort(perm_qind)
-            else:
-                assert self.sector_ndim == 2
-                perm_qind = np.lexsort(self.sectors.T)
-            self.perm_qind = perm_qind
-            self.sectors = sectors[perm_qind]
-            self.multiplicities = self.multiplicities[perm_qind]
-            self.slices = self.slices[perm_qind]
+            assert not hasattr(self, 'perm_block_inds')
+            perm_block_inds = np.lexsort(self._sectors.T)
+            self.perm_block_inds = perm_block_inds
+            self._sectors = self._sectors[perm_block_inds]
+            self.multiplicities = self.multiplicities[perm_block_inds]
+            self.slices = self.slices[perm_block_inds]
 
 
     # TODO: do we need get_qindex?
@@ -164,14 +158,11 @@ class AbelianBackendFusionSpace(FusionSpace, AbelianBackendVectorSpace):
     def __init__(self, spaces: list[VectorSpace], is_dual: bool = False):
         backend = spaces[0].backend
         spaces = [backend.convert_vector_space(s) for s in spaces]
-        self._init_from_spaces(spaces)
-        #  FusionSpace.__init__(self, spaces, is_dual) TODO: do we have to explicitly call that,
-        # or is it okay if we just set everything needed?
-        # The order of sectors defined there might not be the same as below....
+        FusionSpace.__init__(self, spaces, is_dual)
 
-    def _init_from_spaces(self, spaces: list[AbelianBackendVectorSpace]):
+    def _fuse_spaces(self, spaces: list[AbelianBackendVectorSpace], is_dual: bool):
         # this function heavily uses numpys advanced indexing, for details see
-        # `http://docs.scipy.org/doc/numpy/reference/arrays.indexing.html`_
+        # http://docs.scipy.org/doc/numpy/reference/arrays.indexing.html
         N_spaces = len(spaces)
 
         spaces_N_sectors = tuple(space.N_sectors for space in spaces)
@@ -191,55 +182,55 @@ class AbelianBackendFusionSpace(FusionSpace, AbelianBackendVectorSpace):
         # this is different from N_sectors
 
         # determine block_ind_map -- it's essentially the grid.
-        block_ind_map = np.empty((nblocks, 3 + N_spaces), dtype=np.intp)
+        block_ind_map = np.zeros((nblocks, 3 + N_spaces), dtype=np.intp)
         block_ind_map[:, 2:-1] = grid.T  # transpose -> rows are possible combinations.
 
         # the block size for given (i1, i2, ...) is the product of ``multiplicities[il]``
         # andvanced indexing:
         # ``grid[li]`` is a 1D array containing the qindex `q_li` of leg ``li`` for all blocks
-        blocksizes = np.prod([space.multiplicities[gr] for space, gr in zip(spaces, grid)], axis=0)
+        multiplicities = np.prod([space.multiplicities[gr] for space, gr in zip(spaces, grid)], axis=0)
         # block_ind_map[:, :3] is initialized after sort/bunch.
 
         # calculate new non-dual sectors
-        sectors_to_fuse = (space.dual.sector if is_dual else space.sector for space in spaces)
-        non_dual_sectors = _fuse_abelian_charges(spaces[0].symmetry, *sectors_to_fuse)
+        non_dual_sectors = _fuse_abelian_charges(spaces[0].symmetry,
+                                                 *(space.sectors for space in spaces))
+        if is_dual:
+            non_dual_sectors = spaces[0].symmetry.dual_sectors(non_dual_sectors)
 
-        # sort sectors
+        # sort (non-dual) charge sectors. Similar code as in :meth:`LegCharge.sort`
+        perm_block_inds = np.lexsort(charges.T)
+        block_ind_map = block_ind_map[perm_block_inds]
+        non_dual_sectors = non_dual_sectors[perm_block_inds]
+        multiplicities = multiplicities[perm_block_inds]
+        # inverse permutation is needed in _map_incoming_block_inds
+        self._inv_perm_block_inds = inverse_permutation(perm_block_inds)
 
-# TODO FIXME: adjust below
-        if sort and qnumber > 0:
-            # sort by charge. Similar code as in :meth:`LegCharge.sort`,
-            # but don't want to create a copy, nor is qind[:, 0] initialized yet.
-            perm_qind = lexsort(charges.T)
-            block_ind_map = block_ind_map[perm_qind]
-            charges = charges[perm_qind]
-            blocksizes = blocksizes[perm_qind]
-            self._perm = inverse_permutation(perm_qind)
-        else:
-            self._perm = None
-        self._set_charges(charges)
-        self.sorted = sort or (qnumber == 0)
-        self._set_block_sizes(blocksizes)  # sets self.slices
-        block_ind_map[:, 0] = self.slices[:-1]
-        block_ind_map[:, 1] = self.slices[1:]
 
-        if bunch:
-            # call LegCharge.bunch(), which also calculates new blocksizes
-            idx, bunched = LegCharge.bunch(self)
-            self._set_charges(bunched.charges)  # copy information back to self
-            self._set_slices(bunched.slices)
-            # calculate block_ind_map[:, 2], the qindices corresponding to the rows of block_ind_map
-            q_map_Qi = np.zeros(len(block_ind_map), dtype=np.intp)
-            q_map_Qi[idx[1:-1]] = 1  # not for the first entry => np.cumsum starts with 0
-            block_ind_map[:, 2] = q_map_Qi = np.cumsum(q_map_Qi)
-            self.bunched = True
-        else:
-            block_ind_map[:, 2] = q_map_Qi = np.arange(len(block_ind_map), dtype=np.intp)
-            idx = np.arange(len(block_ind_map) + 1, dtype=np.intp)
+        slices = np.cumsum(multiplicities)
+        block_ind_map[1:, 0] = slices[:-1]  # start with 0
+        block_ind_map[:, 1] = slices
+
+        # bunch sectors with equal charges together
+        diffs = _find_row_differences(non_dual_sectors)
+        non_dual_sectors = non_dual_sectors[diffs]
+        multiplicities = slices[diffs]
+        multiplicities[1:] -= multiplicities[:-1]
+
+        new_block_ind = np.zeros(len(block_ind_map), dtype=np.intp) # = J
+        new_block_ind[diffs[1:]] = 1  # not for the first entry => np.cumsum starts with 0
+        block_ind_map[:, -1] = new_block_ind = np.cumsum(new_block_ind)
         # calculate the slices within blocks: subtract the start of each block
-        block_ind_map[:, :2] -= (self.slices[q_map_Qi])[:, np.newaxis]
+        block_ind_map[:, :2] -= multiplicities[new_block_ind][:, np.newaxis]
+
         self.block_ind_map = block_ind_map  # finished
-        self.q_map_slices = idx
+        # self.q_map_slices = diffs  # up to last index.
+        # TODO: do we need this? I think it was used in split_legs()...
+
+        if is_dual:
+            sectors = spaces[0].symmetry.dual_sectors(non_dual_sectors)
+        else:
+            sectors = non_dual_sectors
+        return sectors, multiplicities
 
     def _map_incoming_block_inds(self, incoming_block_inds):
         """Map incoming qindices to indices of :attr:`block_ind_map`.
@@ -258,13 +249,12 @@ class AbelianBackendFusionSpace(FusionSpace, AbelianBackendVectorSpace):
             ``self.block_ind_map[J, 2:-1] == block_inds[j]``.
         """
         assert incoming_block_inds.shape[1] == len(self.spaces)
-        # calculate indices of block_ind_map[_perm], which is sorted by :math:`i_1, i_2, ...`,
+        # calculate indices of block_ind_map[_inv_perm_block_inds],
+        # which is sorted by :math:`i_1, i_2, ...`,
         # by using the appropriate strides
         inds_before_perm = np.sum(incoming_block_inds * self._strides[np.newaxis, :], axis=1)
-        # permute them to indices in block_ind_map
-        if self._perm_block_inds_map is None:
-            return inds_before_perm  # no permutation necessary
-        return self._perm_block_inds_map[inds_before_perm]
+        # now permute them to indices in block_ind_map
+        return self._inv_perm_block_inds[inds_before_perm]
 
     def as_VectorSpace(self):
         res = AbelianBackendVectorSpace.__new__(AbelianBackendVectorSpace)
@@ -298,13 +288,33 @@ def _make_stride(shape, cstyle=True):
             res[a + 1] = stride
     return res
 
+def _find_row_differences(sectors: SectorArray):
+    """Return indices where the rows of the 2D array `qflat` change.
+
+    Parameters
+    ----------
+    sectors : 2D array
+        The rows of this array are compared.
+
+    Returns
+    -------
+    diffs: 1D array
+        The indices where rows change, including the first and last. Equivalent to:
+        ``[0] + [i for i in range(1, len(qflat)) if np.any(qflat[i-1] != qflat[i])]``
+    """
+    # NOTE: remove last entry [len(sectors)] compared to old.charges
+    diff = np.ones(sectors.shape[0], dtype=np.bool_)
+    diff[1:] = np.any(sectors[1:] != sectors[:-1], axis=1)
+    return np.nonzero(diff)[0]  # get the indices of True-values
+
+
 def _fuse_abelian_charges(symmetry: AbelianSymmetry, *sector_arrays: ndarray[Sector]):
     from ..symmetries import FusionStyle
     assert symmetry.fusion_style == FusionStyle.single
     # sectors[i] can be 1d numpy arrays, or list of 1D arrays if using a ProductSymmetry
     fusion = sector_arrays[0]
     for sector in sector_arrays[1:]:
-        fusion = symmetry.single_fusion_outcomes(fusion, sector_array)
+        fusion = symmetry.fusion_outcomes_broadcast(fusion, sector_array)
         # == fusion + space.sector, but mod N for ZN
     return np.asarray(fusion)
 
