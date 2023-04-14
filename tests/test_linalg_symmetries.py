@@ -26,7 +26,7 @@ def common_checks(sym: symmetries.Symmetry, example_sector):
 
     # defining property of trivial sector
     assert_array_equal(
-        sym.fusion_outcomes(example_sector, sym.trivial_sector), 
+        sym.fusion_outcomes(example_sector, sym.trivial_sector),
         example_sector[None, :]
     )
 
@@ -38,8 +38,8 @@ def common_checks(sym: symmetries.Symmetry, example_sector):
         assert sym.n_symbol(example_sector, sym.dual_sector(example_sector), sym.trivial_sector) == 1
     except NotImplementedError:
         pass  # TODO SU(2) does not implement n_symbol yet
-    
-    
+
+
 def test_no_symmetry():
     sym = symmetries.NoSymmetry()
     s = np.array([0])
@@ -49,7 +49,7 @@ def test_no_symmetry():
     assert isinstance(sym, symmetries.AbelianGroup)
     assert isinstance(sym, symmetries.Group)
     assert sym.is_abelian
-    
+
     print('checking valid sectors')
     assert sym.is_valid_sector(s)
     assert not sym.is_valid_sector(np.array([1]))
@@ -57,14 +57,14 @@ def test_no_symmetry():
 
     print('checking fusion_outcomes')
     assert_array_equal(
-        sym.fusion_outcomes(s, s), 
+        sym.fusion_outcomes(s, s),
         np.array([[0]])
     )
-    
-    print('checking single_fusion_outcomes')
+
+    print('checking fusion_outcomes_broadcast')
     many_s = np.stack([s, s, s])
     assert_array_equal(
-        sym.single_fusion_outcomes(many_s, many_s),
+        sym.fusion_outcomes_broadcast(many_s, many_s),
         many_s
     )
 
@@ -99,7 +99,7 @@ def test_product_symmetry():
     s1 = np.array([5, 3, 1])  # e.g. spin 5/2 , 3 particles , odd parity ("fermionic")
     s2 = np.array([3, 2, 0])  # e.g. spin 3/2 , 2 particles , even parity ("bosonic")
     common_checks(sym, example_sector=s1)
-    
+
     u1_z3 = symmetries.u1_symmetry * symmetries.z3_symmetry
     common_checks(u1_z3, example_sector=np.array([42, 1]))
 
@@ -110,7 +110,7 @@ def test_product_symmetry():
     assert isinstance(u1_z3, symmetries.AbelianGroup)
     assert isinstance(u1_z3, symmetries.Group)
     assert u1_z3.is_abelian
-    
+
     print('checking creation via __mul__')
     sym2 = symmetries.su2_symmetry * symmetries.u1_symmetry * symmetries.fermion_parity
     assert sym2 == sym
@@ -128,13 +128,13 @@ def test_product_symmetry():
     expect = np.array([[2, 5, 1], [4, 5, 1], [6, 5, 1], [8, 5, 1]])
     assert_array_equal(outcomes, expect)
 
-    print('checking single_fusion_outcomes')
+    print('checking fusion_outcomes_broadcast')
     with pytest.raises(AssertionError):
         # sym does not have FusionStyle.single, so this should raise
-        _ = sym.single_fusion_outcomes(s1[None, :], s2[None, :])
-    outcomes = u1_z3.single_fusion_outcomes(np.array([[42, 2], [-2, 0]]), np.array([[1, 1], [2, 1]]))
+        _ = sym.fusion_outcomes_broadcast(s1[None, :], s2[None, :])
+    outcomes = u1_z3.fusion_outcomes_broadcast(np.array([[42, 2], [-2, 0]]), np.array([[1, 1], [2, 1]]))
     assert_array_equal(outcomes, np.array([[43, 0], [0, 1]]))
-    
+
     print('checking sector dimensions')
     assert sym.sector_dim(s1) == 6
     assert sym.sector_dim(s2) == 4
@@ -173,18 +173,18 @@ def test_u1_symmetry():
     assert isinstance(sym, symmetries.AbelianGroup)
     assert isinstance(sym, symmetries.Group)
     assert sym.is_abelian
-    
+
     print('checking valid sectors')
     for s in [s_0, s_1, s_neg1, s_2, s_42]:
         assert sym.is_valid_sector(s)
     assert not sym.is_valid_sector(np.array([0, 0]))
-    
+
     print('checking fusion_outcomes')
     assert_array_equal(sym.fusion_outcomes(s_1, s_1), s_2[None, :])
     assert_array_equal(sym.fusion_outcomes(s_neg1, s_1), s_0[None, :])
 
-    print('checking single_fusion_outcomes')
-    outcomes = sym.single_fusion_outcomes(np.stack([s_0, s_1, s_0]), np.stack([s_neg1, s_1, s_2]))
+    print('checking fusion_outcomes_broadcast')
+    outcomes = sym.fusion_outcomes_broadcast(np.stack([s_0, s_1, s_0]), np.stack([s_neg1, s_1, s_2]))
     assert_array_equal(outcomes, np.stack([s_neg1, s_2, s_2]))
 
     print('checking sector dimensions')
@@ -209,7 +209,7 @@ def test_u1_symmetry():
     assert_array_equal(sym.dual_sector(s_1), s_neg1)
 
     print('checking dual_sectors')
-    assert_array_equal(sym.dual_sectors(np.stack([s_0, s_1, s_42, s_2])), 
+    assert_array_equal(sym.dual_sectors(np.stack([s_0, s_1, s_42, s_2])),
                        np.array([0, -1, -42, -2])[:, None])
 
 
@@ -225,23 +225,23 @@ def test_ZN_symmetry(N):
     assert isinstance(sym, symmetries.AbelianGroup)
     assert isinstance(sym, symmetries.Group)
     assert sym.is_abelian
-    
+
     print('checking valid sectors')
     for s in sectors_a:
         assert sym.is_valid_sector(s)
     assert not sym.is_valid_sector(np.array([0, 0]))
     assert not sym.is_valid_sector(np.array([N]))
     assert not sym.is_valid_sector(np.array([-1]))
-    
+
     print('checking fusion_outcomes')
     for a in sectors_a:
         for b in sectors_b:
             expect = (a + b)[None, :] % N
             assert_array_equal(sym.fusion_outcomes(a, b), expect)
 
-    print('checking single_fusion_outcomes')
+    print('checking fusion_outcomes_broadcast')
     expect = (sectors_a + sectors_b) % N
-    assert_array_equal(sym.single_fusion_outcomes(sectors_a, sectors_b), expect)
+    assert_array_equal(sym.fusion_outcomes_broadcast(sectors_a, sectors_b), expect)
 
     print('checking sector dimensions')
     for s in sectors_a:
@@ -302,10 +302,10 @@ def test_su2_symmetry():
         np.array([[1], [3], [5]])
     )
 
-    print('checking single_fusion_outcomes')
+    print('checking fusion_outcomes_broadcast')
     with pytest.raises(AssertionError):
         # sym does not have FusionStyle.single, so this should raise
-        _ = sym.single_fusion_outcomes(spin_1[None, :], spin_3_half[None, :])
+        _ = sym.fusion_outcomes_broadcast(spin_1[None, :], spin_3_half[None, :])
 
     print('checking sector dimensions')
     assert sym.sector_dim(spin_1) == 3
@@ -348,10 +348,10 @@ def test_fermion_parity():
     print('checking fusion_outcomes')
     assert_array_equal(sym.fusion_outcomes(odd, odd), even[None, :])
     assert_array_equal(sym.fusion_outcomes(odd, even), odd[None, :])
-    
-    print('checking single_fusion_outcomes')
+
+    print('checking fusion_outcomes_broadcast')
     assert_array_equal(
-        sym.single_fusion_outcomes(np.stack([even, even, odd]), np.stack([even, odd, odd])),
+        sym.fusion_outcomes_broadcast(np.stack([even, even, odd]), np.stack([even, odd, odd])),
         np.stack([even, odd, even])
     )
 
@@ -370,7 +370,7 @@ def test_fermion_parity():
     assert_array_equal(sym.dual_sector(odd), odd)
 
     print('checking dual_sectors')
-    assert_array_equal(sym.dual_sectors(np.stack([odd, even, odd])), 
+    assert_array_equal(sym.dual_sectors(np.stack([odd, even, odd])),
                        np.stack([odd, even, odd]))
 
 

@@ -55,17 +55,19 @@ class Symmetry(ABC):
     @abstractmethod
     def fusion_outcomes(self, a: Sector, b: Sector) -> SectorArray:
         """Returns all outcomes for the fusion of sectors
-        
+
         Each sector appears only once, regardless of its multiplicity (given by n_symbol) in the fusion
         """
         ...
 
-    # TODO (JU) name may be confusing...
-    #  maybe fusion_outcomes_broadcast or something?
-    def single_fusion_outcomes(self, a: SectorArray, b: SectorArray) -> SectorArray:
+    # TODO (JU) name may be confusing... maybe fusion_outcomes_broadcast or something?
+    # (JH) Changed it. But:
+    # This function is only usefull for "single" style fusion; in other cases you would
+    # still need to know the slices which of the sectors fused to which of the results....
+    def fusion_outcomes_broadcast(self, a: SectorArray, b: SectorArray) -> SectorArray:
         """This method allows optimized fusion in the case of FusionStyle.single.
-        
-        For two SectorArrays, return the element-wise fusion outcome of each pair of Sectors, 
+
+        For two SectorArrays, return the element-wise fusion outcome of each pair of Sectors,
         which is a single unique Sector, as a new SectorArray.
         Subclasses may override this with more efficient implementations.
         """
@@ -169,7 +171,7 @@ class ProductSymmetry(Symmetry):
             descriptive_name = None
 
         # define sector_slices such that
-        # s[sector_slices[i]:sector_slices[i+1]] 
+        # s[sector_slices[i]:sector_slices[i+1]]
         # gives the part of s (a sector of the ProductSymmetry) which describe a sector of factors[i]
         self.sector_slices = np.cumsum([0] + [f.sector_ind_len for f in factors])
 
@@ -223,13 +225,13 @@ class ProductSymmetry(Symmetry):
         result = np.reshape(result, (np.prod(rest), last))
         return result
 
-    def single_fusion_outcomes(self, a: SectorArray, b: SectorArray) -> SectorArray:
+    def fusion_outcomes_broadcast(self, a: SectorArray, b: SectorArray) -> SectorArray:
         assert self.fusion_style == FusionStyle.single
         components = []
         for i, f_i in enumerate(self.factors):
             a_i = a[:, self.sector_slices[i]:self.sector_slices[i + 1]]
             b_i = b[:, self.sector_slices[i]:self.sector_slices[i + 1]]
-            c_i = f_i.single_fusion_outcomes(a_i, b_i)
+            c_i = f_i.fusion_outcomes_broadcast(a_i, b_i)
             components.append(c_i)
         # the c_i have the same first axis as a and b.
         # it remains to concatenate them along the last axis
@@ -238,7 +240,7 @@ class ProductSymmetry(Symmetry):
     def sector_dim(self, a: Sector) -> int:
         if self.fusion_style == FusionStyle.single:
             return 1
-        
+
         dims = []
         for i, f_i in enumerate(self.factors):
             a_i = a[self.sector_slices[i]:self.sector_slices[i + 1]]
@@ -292,7 +294,7 @@ class ProductSymmetry(Symmetry):
         if self.fusion_style in [FusionStyle.single, FusionStyle.multiple_unique]:
             # TODO it is only 1 if a and b can fuse to c !!
             return 1
-        
+
         contributions = []
         for i, f_i in enumerate(self.factors):
             a_i = a[self.sector_slices[i]:self.sector_slices[i + 1]]
@@ -354,22 +356,22 @@ class AbelianGroup(Group, metaclass=_ABCFactorSymmetryMeta):
 
 
 class NoSymmetry(AbelianGroup):
-    """Trivial symmetry group that doesn't do anything. 
+    """Trivial symmetry group that doesn't do anything.
 
     The only allowed sector is `[0]` of integer dtype.
     """
 
     def __init__(self):
-        AbelianGroup.__init__(self, trivial_sector=np.array([0], dtype=np.int8), group_name='NoSymmetry', 
+        AbelianGroup.__init__(self, trivial_sector=np.array([0], dtype=np.int8), group_name='NoSymmetry',
                               descriptive_name=None)
 
     def is_valid_sector(self, a: Sector) -> bool:
         return _is_arraylike(a, shape=(1,)) and a[0] == 0
 
     def fusion_outcomes(self, a: Sector, b: Sector) -> SectorArray:
-        return a[None, :]
+        return a[np.newaxis, :]
 
-    def single_fusion_outcomes(self, a: SectorArray, b: SectorArray) -> SectorArray:
+    def fusion_outcomes_broadcast(self, a: SectorArray, b: SectorArray) -> SectorArray:
         return a
 
     def dual_sector(self, a: Sector) -> Sector:
@@ -378,7 +380,7 @@ class NoSymmetry(AbelianGroup):
     def dual_sectors(self, sectors: SectorArray) -> SectorArray:
         return sectors
 
-    def sector_str(self, a: Sector) -> int:
+    def sector_str(self, a: Sector) -> str:
         return 'None'  # TODO (JU) : use sth else...?
 
     def __repr__(self):
@@ -386,10 +388,10 @@ class NoSymmetry(AbelianGroup):
 
     def is_same_symmetry(self, other) -> bool:
         return isinstance(other, NoSymmetry)
-    
+
 
 class U1Symmetry(AbelianGroup):
-    """U(1) symmetry. 
+    """U(1) symmetry.
 
     Allowed sectors are 1D arrays with a single integer entry.
     ..., `[-2]`, `[-1]`, `[0]`, `[1]`, `[2]`, ...
@@ -402,9 +404,9 @@ class U1Symmetry(AbelianGroup):
         return _is_arraylike(a, shape=(1,))
 
     def fusion_outcomes(self, a: Sector, b: Sector) -> SectorArray:
-        return self.single_fusion_outcomes(a[None, :], b[None, :])
+        return self.fusion_outcomes_broadcast(a[np.newaxis, :], b[np.newaxis, :])
 
-    def single_fusion_outcomes(self, a: SectorArray, b: SectorArray) -> SectorArray:
+    def fusion_outcomes_broadcast(self, a: SectorArray, b: SectorArray) -> SectorArray:
         return a + b
 
     def dual_sector(self, a: Sector) -> Sector:
@@ -422,7 +424,7 @@ class U1Symmetry(AbelianGroup):
 
 
 class ZNSymmetry(AbelianGroup):
-    """Z_N symmetry. 
+    """Z_N symmetry.
 
     Allowed sectors are 1D arrays with a single integer entry between `0` and `N-1`.
     `[0]`, `[1]`, ..., `[N-1]`
@@ -450,9 +452,9 @@ class ZNSymmetry(AbelianGroup):
         return _is_arraylike(a, shape=(1,)) and (0 <= a[0] < self.N)
 
     def fusion_outcomes(self, a: Sector, b: Sector) -> SectorArray:
-        return self.single_fusion_outcomes(a[None, :], b[None, :])
+        return self.fusion_outcomes_broadcast(a[np.newaxis, :], b[np.newaxis, :])
 
-    def single_fusion_outcomes(self, a: SectorArray, b: SectorArray) -> SectorArray:
+    def fusion_outcomes_broadcast(self, a: SectorArray, b: SectorArray) -> SectorArray:
         return (a + b) % self.N
 
     def dual_sector(self, a: Sector) -> Sector:
@@ -463,14 +465,14 @@ class ZNSymmetry(AbelianGroup):
 
 
 class SU2Symmetry(Group):
-    """SU(2) symmetry. 
+    """SU(2) symmetry.
 
     Allowed sectors are 1D arrays ``[jj]`` of positive integers `jj` = `0`, `1`, `2`, ...
     which label the spin `jj/2` irrep of SU(2).
     This is for convenience so that we can work with `int` objects.
     E.g. a spin-1/2 degree of freedom is represented by the sector `[1]`.
     """
-    
+
     def __init__(self, descriptive_name: str | None = None):
         Group.__init__(self, fusion_style=FusionStyle.multiple_unique, trivial_sector=np.array([0], dtype=np.int8),
                        group_name='SU(2)', descriptive_name=descriptive_name)
@@ -480,7 +482,7 @@ class SU2Symmetry(Group):
 
     def fusion_outcomes(self, a: Sector, b: Sector) -> SectorArray:
         # J_tot = |J1 - J2|, ..., J1 + J2
-        return np.arange(np.abs(a - b), a + b + 2, 2)[:, None]
+        return np.arange(np.abs(a - b), a + b + 2, 2)[:, np.newaxis]
 
     def sector_dim(self, a: Sector) -> int:
         # dim = 2 * J + 1 = jj + 1
@@ -508,7 +510,7 @@ class SU2Symmetry(Group):
 
 
 class FermionParity(Symmetry):
-    """Fermionic Parity. 
+    """Fermionic Parity.
 
     Allowed sectors are 1D arrays with a single entry of either `0` (even parity) or `1` (odd parity).
     `[0]`, `[1]`
@@ -516,16 +518,16 @@ class FermionParity(Symmetry):
 
     def __init__(self):
         Symmetry.__init__(self, fusion_style=FusionStyle.single, braiding_style=BraidingStyle.fermionic,
-                          trivial_sector=np.array([0], dtype=np.int8), group_name='FermionParity', 
+                          trivial_sector=np.array([0], dtype=np.int8), group_name='FermionParity',
                           descriptive_name=None)
 
     def is_valid_sector(self, a: Sector) -> bool:
         return _is_arraylike(a, shape=(1,)) and (a[0] in [0, 1])
 
     def fusion_outcomes(self, a: Sector, b: Sector) -> SectorArray:
-        return self.single_fusion_outcomes(a[None, :], b[None, :])
+        return self.fusion_outcomes_broadcast(a[np.newaxis, :], b[np.newaxis, :])
 
-    def single_fusion_outcomes(self, a: SectorArray, b: SectorArray) -> SectorArray:
+    def fusion_outcomes_broadcast(self, a: SectorArray, b: SectorArray) -> SectorArray:
         # equal sectors fuse to even parity, i.e. to `0 == (0 + 0) % 2 == (1 + 1) % 2`
         # unequal sectors fuse to odd parity i.e. to `1 == (0 + 1) % 2 == (1 + 0) % 2`
         return (a + b) % 2
@@ -604,7 +606,7 @@ class VectorSpace:
 
     @classmethod
     def non_symmetric(cls, dim: int, is_dual: bool = False, is_real: bool = False):
-        return cls(symmetry=no_symmetry, sectors=no_symmetry.trivial_sector[None, :], 
+        return cls(symmetry=no_symmetry, sectors=no_symmetry.trivial_sector[None, :],
                    multiplicities=[dim], is_dual=is_dual, is_real=is_real)
 
     @property
