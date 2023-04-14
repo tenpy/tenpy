@@ -791,7 +791,7 @@ class FusionSpace(VectorSpace):
         symmetry = spaces[0].symmetry
         self.spaces = spaces  # spaces can themselves be ProductSpaces
 
-        fused_sectors, fused_multiplicities = self._fuse_spaces(spaces)
+        fused_sectors, fused_multiplicities = self._fuse_spaces(spaces, is_dual)
         is_real = spaces[0].is_real
         assert all(space.is_real == is_real for space in spaces)
 
@@ -805,24 +805,28 @@ class FusionSpace(VectorSpace):
                              is_dual=is_dual,
                              is_real=is_real)
 
-    def _fuse_spaces(self, spaces: list[VectorSpace]):
+    def _fuse_spaces(self, spaces: list[VectorSpace], is_dual: bool):
         """Calculate sectors and multiplicities of possible fusion results from merging spaces."""
         symmetry = spaces[0].symmetry
         assert all(s.symmetry == symmetry for s in spaces)
 
-        fusion = dict(zip(spaces[0].sectors, spaces[0].multiplicities))
+        # use t_ = tuple(s_) as dict keys with a bit ugly conversion between tuple and ndarray
+        fusion = dict((tuple(s), m) for s, m in zip(spaces[0].sectors, spaces[0].multiplicities))
         for space in spaces[1:]:
             new_fusion = {}
-            for s_a, m_a in fusion.items():
+            for t_a, m_a in fusion.items():
+                s_a = np.array(t_a)
                 for s_b, m_b in zip(space.sectors, space.multiplicities):
                     for s_c in symmetry.fusion_outcomes(s_a, s_b):
+                        t_c = tuple(s_c)
                         # TODO FIXME do we need to take symmetry.sector_dim into account here?
                         n = symmetry.n_symbol(s_a, s_b, s_c)
-                        new_fusion[s_c] = new_fusion.get(s_c, 0) + m_a * m_b * n
+                        new_fusion[t_c] = new_fusion.get(t_c, 0) + m_a * m_b * n
             fusion = new_fusion
             # by convention fuse spaces left to right, i.e. (...((0,1), 2), ..., N)
-        sectors = fusion.keys()
+        sectors = np.asarray(fusion.keys())
         multiplicities = fusion.values()
+        # note: sectors are not sorted here; need `is_dual` to allow correct sorting.
         return sectors, multiplicities
 
     def as_VectorSpace(self):
