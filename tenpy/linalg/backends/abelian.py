@@ -27,7 +27,8 @@ import numpy as np
 import copy
 
 from .abstract_backend import AbstractBackend, AbstractBlockBackend, Data, Block, Dtype
-from ..symmetries import Symmetry, ProductSymmetry, AbelianGroup, VectorSpace, FusionSpace, Sector
+from ..symmetries.groups import Symmetry, ProductSymmetry, AbelianGroup, Sector
+from ..symmetries.spaces import VectorSpace, FusionSpace
 from ...tools.optimization import use_cython
 
 __all__ = ['AbelianBackendData', 'AbelianBackendVectorSpace', 'AbelianBackendFusionSpace',
@@ -309,7 +310,7 @@ def _find_row_differences(sectors: SectorArray):
 
 
 def _fuse_abelian_charges(symmetry: AbelianSymmetry, *sector_arrays: ndarray[Sector]):
-    from ..symmetries import FusionStyle
+    from ..symmetries.groups import FusionStyle
     assert symmetry.fusion_style == FusionStyle.single
     # sectors[i] can be 1d numpy arrays, or list of 1D arrays if using a ProductSymmetry
     fusion = sector_arrays[0]

@@ -1,5 +1,5 @@
 # Copyright 2023-2023 TeNPy Developers, GNU GPLv3
-from . import abelian, abstract_backend, backend_factory, no_symmetry, nonabelian, numpy, torch
+from . import abstract_backend, abelian, backend_factory, no_symmetry, nonabelian, numpy, torch
 from .abstract_backend import AbstractBackend
 from .numpy import NoSymmetryNumpyBackend, AbelianNumpyBackend, NonabelianNumpyBackend
 from .torch import NoSymmetryTorchBackend, AbelianTorchBackend, NonabelianTorchBackend

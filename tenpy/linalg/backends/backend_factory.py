@@ -6,7 +6,7 @@ import logging
 from .abstract_backend import AbstractBackend
 from .numpy import NoSymmetryNumpyBackend
 from .torch import NoSymmetryTorchBackend
-from ..symmetries import Symmetry, no_symmetry, AbelianGroup
+from ..symmetries.groups import Symmetry, no_symmetry, AbelianGroup
 
 __all__ = ['get_backend']
 
@@ -66,6 +66,8 @@ def get_backend(symmetry: Symmetry = no_symmetry, block_backend: str = 'numpy',
     if symmetry_backend is None:
         if symmetry == no_symmetry:
             symmetry_backend = 'no_symmetry'
+        # TODO (JU) should instancheck abelian group instead.
+        #  abelian backend does not support general abelian fusion categories, e.g. fermion parity
         elif symmetry.is_abelian:
             symmetry_backend = 'abelian'
         else:

@@ -2,15 +2,13 @@
 
 from __future__ import annotations
 from abc import ABC, abstractmethod
-
 from typing import Iterable
 import numpy as np
-from enum import Enum, auto
 import warnings
 
 from .misc import duplicate_entries, force_str_len, join_as_many_as_possible
 from .dummy_config import config
-from .symmetries import VectorSpace, ProductSpace
+from .symmetries.spaces import VectorSpace, ProductSpace
 from .backends.backend_factory import get_default_backend
 from .backends.abstract_backend import Dtype
 

@@ -1,12 +1,13 @@
 """A collection of tests for tenpy.linalg.tensors."""
 # Copyright 2023-2023 TeNPy Developers, GNU GPLv3
 import numpy as np
+import pytest
+
 from tenpy.linalg import tensors
 from tenpy.linalg.backends.torch import TorchBlockBackend, NoSymmetryTorchBackend
 from tenpy.linalg.backends.numpy import NumpyBlockBackend, NoSymmetryNumpyBackend
-from tenpy.linalg.symmetries import VectorSpace
+from tenpy.linalg.symmetries.spaces import VectorSpace
 
-import pytest
 
 all_backends = dict(
     numpy_no_symm=NoSymmetryNumpyBackend(),

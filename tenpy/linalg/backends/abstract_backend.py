@@ -1,11 +1,11 @@
 # Copyright 2023-2023 TeNPy Developers, GNU GPLv3
 from __future__ import annotations
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
 from enum import Enum, auto
 from typing import TypeVar, Any, TYPE_CHECKING
 
-from ..symmetries import Symmetry, VectorSpace, ProductSpace
+from ..symmetries.groups import Symmetry
+from ..symmetries.spaces import VectorSpace, ProductSpace
 
 __all__ = ['Data', 'Block', 'AbstractBackend', 'AbstractBlockBackend']
 
@@ -15,10 +15,12 @@ if TYPE_CHECKING:
     # this clause allows mypy etc to evaluate the type-hints anyway
     from ..tensors import Tensor
 
+# placeholder for a backend-specific type that holds all data of a tensor 
+#  (except the symmetry data stored in its legs)
+Data = TypeVar('Data')
 
-Data = TypeVar('Data')  # placeholder for a backend-specific type that holds all data of a tensor (excpet the symmetry data stored in its legs)
-Block = TypeVar('Block')  # placeholder for a backend-specific type that represents the blocks of symmetric tensors
-
+# placeholder for a backend-specific type that represents the blocks of symmetric tensors
+Block = TypeVar('Block')
 
 class Dtype(Enum):
     # TODO expose those in some high-level init, maybe even as tenpy.float32 ?

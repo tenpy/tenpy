@@ -8,7 +8,7 @@ from .abstract_backend import AbstractBlockBackend, Block, Data, Dtype
 from .no_symmetry import AbstractNoSymmetryBackend
 from .nonabelian import AbstractNonabelianBackend
 from ..misc import inverse_permutation
-from ..symmetries import VectorSpace
+from ..symmetries.spaces import VectorSpace
 
 __all__ = ['TorchBlockBackend', 'NoSymmetryTorchBackend', 'AbelianTorchBackend', 'NonabelianTorchBackend']
 

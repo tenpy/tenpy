@@ -4,7 +4,8 @@ from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING
 
 from .abstract_backend import AbstractBackend, AbstractBlockBackend, Data, Block, Dtype
-from ..symmetries import ProductSpace, VectorSpace, no_symmetry, Symmetry
+from ..symmetries.groups import no_symmetry, Symmetry
+from ..symmetries.spaces import VectorSpace, ProductSpace
 
 __all__ = ['AbstractNoSymmetryBackend']
 
