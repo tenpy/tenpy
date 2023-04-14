@@ -12,24 +12,45 @@ __all__ = ['VectorSpace', 'ProductSpace', 'FusionSpace']
 
 
 class VectorSpace:
-    def __init__(self, symmetry: Symmetry, sectors: SectorArray, multiplicities: list[int] = None,
-                 is_dual: bool = False, is_real: bool = False):
+    def __init__(self, symmetry: Symmetry, sectors: SectorArray, multiplicities: np.ndarray = None,
+                 is_real: bool = False, _is_dual: bool = False):
         """A vector space, which decomposes into sectors of a given symmetry.
+        
         Parameters
         ----------
-        is_dual:
-            Whether this is the "normal" (i.e. ket) or dual (i.e. bra) space.
-            For ``is_dual=True`` the stored `self._sectors` are the dual of the passed `sectors`,
-            but `self.sectors` still returns the original (dual of the dual) sectors.
+        symmetry:
+            The symmetry associated with this space.
+        sectors:
+            The sectors of the symmetry that compose this space.
+            A 2D array of integers with axes [s, q] where s goes over different sectors
+            and q over the different quantities needed to describe a sector.
+            If sectors appear multiple times in the space, they may either be described through
+            repetition in sectors or via multiplicities.
+        multiplicities:
+            How often each of the `sectors` appears.
+            A 1D array of positive integers with axis [s].
+            ``sectors[i_s, :]`` appears ``multiplicities[i_s]`` times.
+            If not given, a multiplicity ``1`` is assumed for all `sectors`.
         is_real:
-            Whether the space is over the real numbers (otherwise over the complex numbers)
+            Whether the space is over the real numbers. 
+            Otherwise it is over the complex numbers (default).
+        _is_dual:
+            Whether this is the "normal" (i.e. ket) or dual (i.e. bra) space.
+
+            .. warning :    
+                For ``is_dual==True``, the passed sectors are interpreted as the sectors of
+                the ("non-dual") ket-space isomorphic to self.
+                They are stored as ``self._sectors``, while ``self.sectors``, accesed via the 
+                property are the duals of `sectors == self._sectors`.
+                This means that to construct the dual of ``VectorSpace(..., some_sectors)``,
+                we need to call ``VectorSpace(..., some_sectors, _is_dual=True)`` and in particular
+                pass the _same_ sectors. 
+                To construct a dual space, consider using `space.dual` instead.
         """
         self.symmetry = symmetry
-        if is_dual:
-            # by convention, we store non-dual sectors in self._sectors
-            self._sectors = symmetry.dual_sectors(sectors)
-        else:
-            self._sectors = sectors
+        self._sectors = sectors
+
+        # TODO (JU): call it num_sectors for PEP8s sake (i.e. uppercase only for classes)?
         self.N_sectors = N_sectors = len(sectors)
 
         # TODO (JU) make multiplicities a numpy array?
@@ -39,13 +60,18 @@ class VectorSpace:
             assert len(multiplicities) == N_sectors
             self.multiplicities = multiplicities
         self.dim = sum(symmetry.sector_dim(s) * m for s, m in zip(sectors, self.multiplicities))
-        self.is_dual = is_dual
+        self.is_dual = _is_dual
+
+        if is_real:
+            # TODO (JU): pretty sure some parts of linalg.symmetries.groups relies on 
+            #  the assumption of complex vector spaces. not sure though, need to check.
+            raise NotImplementedError
         self.is_real = is_real
 
     @classmethod
-    def non_symmetric(cls, dim: int, is_dual: bool = False, is_real: bool = False):
+    def non_symmetric(cls, dim: int, is_real: bool = False, _is_dual: bool = False):
         return cls(symmetry=no_symmetry, sectors=no_symmetry.trivial_sector[None, :],
-                   multiplicities=[dim], is_dual=is_dual, is_real=is_real)
+                   multiplicities=[dim], is_real=is_real, _is_dual=_is_dual)
 
     @property
     def sectors(self):
@@ -54,9 +80,9 @@ class VectorSpace:
         return self._sectors
 
     def sectors_str(self) -> str:
-        """short str describing the (possibly dual) sectors and their multiplicities"""
-        # FIXME variable `dual` not defined
-        return ', '.join(f'{self.symmetry.sector_str(a)}{dual}: {mult}'
+        """short str describing the self._sectors and their multiplicities"""
+        # TODO (JU) what if there are a lot of sectors?
+        return ', '.join(f'{self.symmetry.sector_str(a)}: {mult}'
                          for a, mult in zip(self._sectors, self.multiplicities))
 
     # TODO (JU) define mul for ProductSpace?
@@ -66,8 +92,10 @@ class VectorSpace:
         return NotImplemented
 
     def __repr__(self):
-        return f'VectorSpace(symmetry={self.symmetry}, sectors={self.sectors}, multiplicities={self.multiplicities}, ' \
-               f'is_dual={self.is_dual}, is_real={self.is_real})'
+        # TODO (JU) what if there are a lot of sectors?
+        dual_str = '.dual' if self.is_dual else ''
+        return f'VectorSpace(symmetry={self.symmetry}, sectors={self.sectors}, ' \
+               f'multiplicities={self.multiplicities}, is_real={self.is_real}){dual_str}'
 
     def __str__(self):
         field = 'ℝ' if self.is_real else 'ℂ'
@@ -76,7 +104,6 @@ class VectorSpace:
         else:
             symm_details = f'[{self.symmetry}, {self.sectors_str()}]'
         res = f'{field}^{self.dim}{symm_details}'
-        # TODO does duality of sectors make sense like this (as defined in sectors_str)
         return f'dual({res})' if self.is_dual else res
 
     def __eq__(self, other):
@@ -109,10 +136,13 @@ class VectorSpace:
 
     def can_contract_with(self, other):
         if self.is_real:
+            # TODO (JU) is this actually true...?
+            #  it is if we ignore symmetries, but with symmetries we should take care of the sectors?
             return self == other
         else:
             return self == other.dual
 
+    # TODO (JU) deprecate this in favor of can_contract_with ?
     def is_dual_of(self, other):
         # FIXME think about duality in more detail.
         #  i.e. is a
