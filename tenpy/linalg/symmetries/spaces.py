@@ -49,17 +49,20 @@ class VectorSpace:
     def __init__(self, symmetry: Symmetry, sectors: SectorArray, multiplicities: np.ndarray = None,
                  is_real: bool = False, _is_dual: bool = False):
         self.symmetry = symmetry
-        self._sectors = sectors
+
 
         # TODO (JU): call it num_sectors for PEP8s sake (i.e. uppercase only for classes)?
         self.N_sectors = N_sectors = len(sectors)
 
         # TODO (JU) make multiplicities a numpy array?
         if multiplicities is None:
-            self.multiplicities = [1] * N_sectors
-        else:
-            assert len(multiplicities) == N_sectors
-            self.multiplicities = multiplicities
+            multiplicities = [1] * N_sectors
+        multiplicities = np.asarray(multiplicities, dtype=int)
+        assert np.all(multiplicities > 0)
+        assert multiplicities.shape == (N_sectors,)
+        self.multiplicities = multiplicities
+        # TODO (JU) if we have a version of sector_dim that works on SectorArray, we could use 
+        #  numpy __mul__ and np.sum here...
         self.dim = sum(symmetry.sector_dim(s) * m for s, m in zip(sectors, self.multiplicities))
         self.is_dual = _is_dual
 
@@ -158,7 +161,8 @@ class VectorSpace:
             return False
         if not np.all(self._sectors[0] == self.symmetry.trivial_sector):
             return False
-        if self.multiplicities != [1]:
+        # have already checked if there is more than 1 sector, so can assume self.multiplicities.shape == (1,)
+        if self.multiplicities[0] != 1:
             return False
         return True
 
@@ -313,7 +317,7 @@ class ProductSpace(VectorSpace):
             fusion = new_fusion
             # by convention fuse spaces left to right, i.e. (...((0,1), 2), ..., N)
         sectors = np.asarray(fusion.keys())
-        multiplicities = fusion.values()
+        multiplicities = np.asarray(fusion.values())
         
         # note: sectors are not sorted here; need `is_dual` to allow correct sorting.
         # TODO FIXME (JU): no, we can sort them here. Those are the "non-dual" sectors. right?
