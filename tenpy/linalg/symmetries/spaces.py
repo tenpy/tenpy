@@ -49,7 +49,7 @@ class VectorSpace:
     def __init__(self, symmetry: Symmetry, sectors: SectorArray, multiplicities: np.ndarray = None,
                  is_real: bool = False, _is_dual: bool = False):
         self.symmetry = symmetry
-
+        self._sectors = sectors
 
         # TODO (JU): call it num_sectors for PEP8s sake (i.e. uppercase only for classes)?
         self.N_sectors = N_sectors = len(sectors)
@@ -121,18 +121,16 @@ class VectorSpace:
         if self.is_dual != other.is_dual:
             return False
 
-        if len(self.sectors) != len(other.sectors):
+        if self.N_sectors != other.N_sectors:
             # now we may assume that checking all multiplicities of self is enough.
             return False
 
         # TODO: this is probably inefficient. eventually this should all be C(++) anyway...
-        # it might be enough to check sectors in order, if we fix the order through a convention
-        # then we don't need to generate the lookup dict here
-        other_multiplicities = {sector: mult for sector, mult in zip(other.sectors, other.multiplicities)}
-
-        return all(mult == other_multiplicities.get(sector, -1)
-                   for mult, sector in zip(self.multiplicities, self.sectors))
-
+        self_order = np.argsort(self.sectors, axis=0)
+        other_order = np.argsort(other.sectors, axis=0)
+        return np.all(self.sectors[self_order] == other.sectors[other_order]) \
+            and np.all(self.multiplicities[self_order] == other.multiplicities[other_order])
+        
     @property
     def dual(self):
         res = copy.copy(self)  # shallow copy, works for subclasses as well
@@ -227,13 +225,13 @@ class ProductSpace(VectorSpace):
         is_real = spaces[0].is_real
         assert all(space.is_real == is_real for space in spaces)
         if _sectors is None or _multiplicities is None:
-            _sectors, _multiplicities = self._fuse_spaces(spaces)
+            _sectors, _multiplicities = self._fuse_spaces(symmetry=symmetry, spaces=spaces)
         VectorSpace.__init__(self,
                              symmetry=symmetry,
                              sectors=_sectors,
                              multiplicities=_multiplicities,
                              is_real=is_real,
-                             is_dual=is_dual)
+                             _is_dual=is_dual)
         
     def as_VectorSpace(self):
         """Forget about the substructure of the ProductSpace but view only as VectorSpace.
@@ -243,7 +241,7 @@ class ProductSpace(VectorSpace):
         return VectorSpace(symmetry=self.symmetry,
                            sectors=self._sectors,  # underscore is important!
                            multiplicities=self.multiplicities,
-                           is_dual=self.is_dual,
+                           _is_dual=self.is_dual,
                            is_real=self.is_real)
 
     def flip_is_dual(self) -> ProductSpace:
@@ -297,7 +295,7 @@ class ProductSpace(VectorSpace):
     def is_trivial(self) -> bool:
         return all(s.is_trivial for s in self.spaces)
 
-    def _fuse_spaces(self, spaces: list[VectorSpace], symmetry: Symmetry
+    def _fuse_spaces(self, symmetry: Symmetry, spaces: list[VectorSpace]
                      ) -> tuple[SectorArray, np.ndarray]:
         """Calculate sectors and multiplicities in the fusion of spaces."""
         fusion = dict((tuple(s), m) for s, m in zip(spaces[0].sectors, spaces[0].multiplicities))
@@ -316,8 +314,8 @@ class ProductSpace(VectorSpace):
                         new_fusion[t_c] = new_fusion.get(t_c, 0) + m_a * m_b * n
             fusion = new_fusion
             # by convention fuse spaces left to right, i.e. (...((0,1), 2), ..., N)
-        sectors = np.asarray(fusion.keys())
-        multiplicities = np.asarray(fusion.values())
+        sectors = np.asarray(list(fusion.keys()))
+        multiplicities = np.asarray(list(fusion.values()))
         
         # note: sectors are not sorted here; need `is_dual` to allow correct sorting.
         # TODO FIXME (JU): no, we can sort them here. Those are the "non-dual" sectors. right?
