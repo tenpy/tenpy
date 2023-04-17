@@ -216,7 +216,7 @@ class ProductSpace(VectorSpace):
     """
     
     def __init__(self, spaces: list[VectorSpace], is_dual: bool = False, 
-                 _sectors: SectorArray=None, _multiplicities: np.ndarray = None):
+                 _sectors: SectorArray = None, _multiplicities: np.ndarray = None):
         self.spaces = spaces  # spaces can be themselves ProductSpaces
         symmetry = spaces[0].symmetry
         assert all(s.symmetry == symmetry for s in spaces)
@@ -293,8 +293,7 @@ class ProductSpace(VectorSpace):
     def is_trivial(self) -> bool:
         return all(s.is_trivial for s in self.spaces)
 
-    @classmethod
-    def _fuse_spaces(cls, spaces: list[VectorSpace], symmetry: Symmetry
+    def _fuse_spaces(self, spaces: list[VectorSpace], symmetry: Symmetry
                      ) -> tuple[SectorArray, np.ndarray]:
         """Calculate sectors and multiplicities in the fusion of spaces."""
         fusion = dict((tuple(s), m) for s, m in zip(spaces[0].sectors, spaces[0].multiplicities))

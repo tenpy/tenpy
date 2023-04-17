@@ -1,4 +1,4 @@
-"""A collection of tests for tenpy.linalg.symmetries."""
+"""A collection of tests for tenpy.linalg.symmetries.groups."""
 # Copyright 2023-2023 TeNPy Developers, GNU GPLv3
 import pytest
 import numpy as np
@@ -15,6 +15,14 @@ def common_checks(sym: groups.Symmetry, example_sector):
     for invalid_sector in [0, 1, 42., None, False, 'foo', [0], ['foo'], [None], (), []]:
         assert not sym.is_valid_sector(invalid_sector)
     assert sym.sector_dim(sym.trivial_sector) == 1
+    assert sym.num_sectors == np.inf or (isinstance(sym.num_sectors, int) and sym.num_sectors > 0)
+
+    # check all_symmetries
+    if sym.num_sectors < np.inf:
+        all_sectors = sym.all_sectors()
+        assert all_sectors.shape == (sym.num_sectors, sym.sector_ind_len)
+        for s in all_sectors:
+            assert sym.is_valid_sector(s)
 
     # just check if they run
     _ = sym.sector_str(sym.trivial_sector)

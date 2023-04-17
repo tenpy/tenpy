@@ -3,7 +3,8 @@
 from __future__ import annotations
 from abc import ABC, abstractmethod, ABCMeta
 from enum import Enum
-from typing import TypeVar
+from typing import TypeVar, Iterator
+from itertools import product, count
 import numpy as np
 
 
@@ -37,11 +38,12 @@ class BraidingStyle(Enum):
 class Symmetry(ABC):
     """Base class for symmetries that impose a block-structure on tensors"""
     def __init__(self, fusion_style: FusionStyle, braiding_style: BraidingStyle, trivial_sector: Sector,
-                 group_name: str, descriptive_name: str | None = None):
+                 group_name: str, num_sectors: int | float, descriptive_name: str | None = None):
         self.fusion_style = fusion_style
         self.braiding_style = braiding_style
         self.trivial_sector = trivial_sector
         self.group_name = group_name
+        self.num_sectors = num_sectors
         self.descriptive_name = descriptive_name
         self.sector_ind_len = len(trivial_sector)  # how many entries are needed to describe a Sector
         self.is_abelian = (fusion_style == FusionStyle.single)
@@ -149,8 +151,14 @@ class Symmetry(ABC):
         """The N-symbol N^{ab}_c, i.e. how often c appears in the fusion of a and b"""
         ...
 
-    # TODO a bunch of methods, such as n-symbol etc which (i think) only matter for the non-abelian implementation
+    def all_sectors(self) -> SectorArray:
+        """If there are finitely many sectors, return all of them. Else raise a ValueError."""
+        if self.num_sectors == np.inf:
+            msg = f'{type(self)} has infinitely many sectors.'
+            raise ValueError(msg)
 
+        raise NotImplementedError
+        
 
 class ProductSymmetry(Symmetry):
     """Multiple symmetries.
@@ -180,6 +188,7 @@ class ProductSymmetry(Symmetry):
             braiding_style=max((f.braiding_style for f in factors), key=lambda style: style.value),
             trivial_sector=np.concatenate([f.trivial_sector for f in factors]),
             group_name=' ⨉ '.join(f.group_name for f in factors),
+            num_sectors=np.prod([symm.num_sectors for symm in factors]),
             descriptive_name=descriptive_name
         )
 
@@ -220,8 +229,7 @@ class ProductSymmetry(Symmetry):
 
         # now reshape so that we get a 2D array where the first index (axis=0) runs over all those
         # combinations
-        *rest, last = result.shape
-        result = np.reshape(result, (np.prod(rest), last))
+        result = np.reshape(result, (np.prod(num_possibilities), self.sector_ind_len))
         return result
 
     def fusion_outcomes_broadcast(self, a: SectorArray, b: SectorArray) -> SectorArray:
@@ -302,6 +310,21 @@ class ProductSymmetry(Symmetry):
             contributions.append(f_i.n_symbol(a_i, b_i, c_i))
         return np.prod(contributions)
 
+    def all_sectors(self) -> SectorArray:
+        if self.num_sectors == np.inf:
+            msg = f'{self} has infinitely many sectors.'
+            raise ValueError(msg)
+
+        # construct like in fusion_outcomes
+        colon = slice(None, None, None)
+        results_shape = [f.num_sectors for f in self.factors] + [self.sector_ind_len]
+        results = np.zeros(results_shape, dtype=self.trivial_sector.dtype)
+        for i, f_i in enumerate(self.factors):
+            lhs_idx = (colon,) * len(self.factors) + (slice(self.sector_slices[i], self.sector_slices[i + 1], None),)
+            rhs_idx = (None,) * i + (colon,) + (None,) * (len(self.factors) - i - 1) + (colon,)
+            results[lhs_idx] = f_i.all_sectors()[rhs_idx]
+        return np.reshape(results, (np.prod(results_shape[:-1]), results_shape[-1]))
+
 
 class _ABCFactorSymmetryMeta(ABCMeta):
     """Metaclass for the AbstractBaseClasses which can be factors of a ProductSymmetry.
@@ -328,10 +351,10 @@ class Group(Symmetry, metaclass=_ABCFactorSymmetryMeta):
     Base-class for symmetries that are described by a group via a faithful representation on the Hilbert space.
     Noteable counter-examples are fermionic parity or anyonic grading.
     """
-    def __init__(self, fusion_style: FusionStyle, trivial_sector: Sector, group_name: str,
-                 descriptive_name: str | None = None):
+    def __init__(self, fusion_style: FusionStyle, trivial_sector: Sector, group_name: str, 
+                 num_sectors: int | float, descriptive_name: str | None = None):
         Symmetry.__init__(self, fusion_style=fusion_style, braiding_style=BraidingStyle.bosonic,
-                          trivial_sector=trivial_sector, group_name=group_name,
+                          trivial_sector=trivial_sector, group_name=group_name, num_sectors=num_sectors,
                           descriptive_name=descriptive_name)
 
 
@@ -342,9 +365,10 @@ class AbelianGroup(Group, metaclass=_ABCFactorSymmetryMeta):
     which is not a subclass of AbelianGroup.
     """
 
-    def __init__(self, trivial_sector: Sector, group_name: str, descriptive_name: str | None = None):
+    def __init__(self, trivial_sector: Sector, group_name: str, num_sectors: int | float, 
+                 descriptive_name: str | None = None):
         Group.__init__(self, fusion_style=FusionStyle.single, trivial_sector=trivial_sector,
-                       group_name=group_name, descriptive_name=descriptive_name)
+                       group_name=group_name, num_sectors=num_sectors, descriptive_name=descriptive_name)
 
     def sector_dim(self, a: Sector) -> int:
         return 1
@@ -362,7 +386,7 @@ class NoSymmetry(AbelianGroup):
 
     def __init__(self):
         AbelianGroup.__init__(self, trivial_sector=np.array([0], dtype=np.int8), group_name='NoSymmetry',
-                              descriptive_name=None)
+                              num_sectors=1, descriptive_name=None)
 
     def is_valid_sector(self, a: Sector) -> bool:
         return _is_arraylike(a, shape=(1,)) and a[0] == 0
@@ -388,6 +412,9 @@ class NoSymmetry(AbelianGroup):
     def is_same_symmetry(self, other) -> bool:
         return isinstance(other, NoSymmetry)
 
+    def all_sectors(self) -> SectorArray:
+        return self.trivial_sector[None, :]
+
 
 class U1Symmetry(AbelianGroup):
     """U(1) symmetry.
@@ -397,7 +424,7 @@ class U1Symmetry(AbelianGroup):
     """
     def __init__(self, descriptive_name: str | None = None):
         AbelianGroup.__init__(self, trivial_sector=np.array([0], dtype=np.int8), group_name='U(1)',
-                              descriptive_name=descriptive_name)
+                              num_sectors=np.inf, descriptive_name=descriptive_name)
 
     def is_valid_sector(self, a: Sector) -> bool:
         return _is_arraylike(a, shape=(1,))
@@ -438,7 +465,7 @@ class ZNSymmetry(AbelianGroup):
         subscript_N = ''.join(subscript_map[char] for char in str(N))
         group_name = f'ℤ{subscript_N}'
         AbelianGroup.__init__(self, trivial_sector=np.array([0], dtype=np.int8), group_name=group_name,
-                              descriptive_name=descriptive_name)
+                              num_sectors=N, descriptive_name=descriptive_name)
 
     def __repr__(self):
         name_str = '' if self.descriptive_name is None else f', "{self.descriptive_name}"'
@@ -462,6 +489,9 @@ class ZNSymmetry(AbelianGroup):
     def dual_sectors(self, sectors: SectorArray) -> SectorArray:
         return (-sectors) % self.N
 
+    def all_sectors(self) -> SectorArray:
+        return np.arange(self.N, dtype=np.int8)[:, None]
+
 
 class SU2Symmetry(Group):
     """SU(2) symmetry.
@@ -474,7 +504,7 @@ class SU2Symmetry(Group):
 
     def __init__(self, descriptive_name: str | None = None):
         Group.__init__(self, fusion_style=FusionStyle.multiple_unique, trivial_sector=np.array([0], dtype=np.int8),
-                       group_name='SU(2)', descriptive_name=descriptive_name)
+                       group_name='SU(2)', num_sectors=np.inf, descriptive_name=descriptive_name)
 
     def is_valid_sector(self, a: Sector) -> bool:
         return _is_arraylike(a, shape=(1,)) and a[0] >= 0
@@ -518,7 +548,7 @@ class FermionParity(Symmetry):
     def __init__(self):
         Symmetry.__init__(self, fusion_style=FusionStyle.single, braiding_style=BraidingStyle.fermionic,
                           trivial_sector=np.array([0], dtype=np.int8), group_name='FermionParity',
-                          descriptive_name=None)
+                          num_sectors=2, descriptive_name=None)
 
     def is_valid_sector(self, a: Sector) -> bool:
         return _is_arraylike(a, shape=(1,)) and (a[0] in [0, 1])
@@ -553,8 +583,11 @@ class FermionParity(Symmetry):
         # TODO it is only 1 if a and b can fuse to c !!
         return 1
 
-# TODO fibonacci anyons ...
+    def all_sectors(self) -> SectorArray:
+        return np.arange(2, dtype=np.int8)[:, None]
 
+
+# TODO fibonacci anyons ...
 
 
 no_symmetry = NoSymmetry()
