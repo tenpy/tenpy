@@ -245,7 +245,7 @@ class ProductSpace(VectorSpace):
                            is_real=self.is_real)
 
     def flip_is_dual(self) -> ProductSpace:
-        """Return a ProductSpace isomrophic to self with opposite is_dual attribute.
+        """Return a ProductSpace isomorphic to self with opposite is_dual attribute.
 
         This realizes the isomorphism between ``dual(V) * dual(W)`` and ``dual(V * W)``.
         """
@@ -253,7 +253,7 @@ class ProductSpace(VectorSpace):
                             _sectors=self._sectors, _multiplicities=self.multiplicities)
         
     def gauge_is_dual(self, is_dual: bool) -> ProductSpace:
-        """Return a ProductSpace isomrophic to self with the given is_dual attribute."""
+        """Return a ProductSpace isomorphic (or equal) to self with the given is_dual attribute."""
         if is_dual == self.is_dual:
             return self
         else:

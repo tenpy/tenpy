@@ -95,3 +95,7 @@ def test_product_space(symm):
     assert p1 == p1
     assert p1 != p3a
     assert p3a == p3b
+    assert p2 == spaces.ProductSpace([s1.dual, s2.dual], is_dual=True).flip_is_dual()
+    assert p2 == spaces.ProductSpace([s1, s2], is_dual=True).dual
+    assert p2.is_dual_of(spaces.ProductSpace([s1.dual, s2.dual]).flip_is_dual())
+    assert p2.is_dual_of(spaces.ProductSpace([s1, s2], is_dual=True))
