@@ -73,6 +73,7 @@ class AbstractTensor(ABC):
         self.symmetry = legs[0].symmetry
 
         # TODO optimize: don't need parent_space for each tensor? Dynamically calculate/cache in property
+        #  (JU) yes, this can be a cached property
         if self.num_legs == 1:
             self.parent_space = self.legs[0]
         else:
@@ -160,6 +161,7 @@ class AbstractTensor(ABC):
 
     def _repr_leg_components(self, max_len: int) -> list:
         """A summary of the components of legs, used in Tensor.__repr__"""
+        # TODO (JU) revise this. think about is_dual flag
         components_strs = []
         for leg, label in zip(self.legs, self.labels):
             if isinstance(leg, ProductSpace):
@@ -789,6 +791,7 @@ class Tensor(AbstractTensor):
         return Tensor(self.backend.conj(self), backend=self.backend, legs=[l.dual for l in self.legs],
                       labels=[_dual_leg_label(l) for l in self._labels])
 
+    # TODO (JU): do we need an option to set is_dual of the new leg?
     def combine_legs(self, legs: list[int | str], new_leg: ProductSpace = None) -> AbstractTensor:
         """See tensors.combine_legs"""
         if len(legs) < 2:
@@ -810,6 +813,9 @@ class Tensor(AbstractTensor):
         leg_idx = self.get_leg_idx(leg)
         if not isinstance(self.legs[leg_idx], ProductSpace):
             raise ValueError(f'Leg {leg} is not a ProductSpace.')
+        if self.legs[leg_idx].is_dual:
+              # TODO FIXME (JU): double check this case! make sure its covered in tests
+            raise NotImplementedError
         legs = self.legs[:leg_idx] + self.legs[leg_idx].spaces + self.legs[leg_idx + 1:]
         labels = self.labels[:leg_idx] + _split_leg_label(self.labels[leg_idx]) + self.labels[leg_idx + 1:]
         res_data = self.backend.split_leg(self, leg_idx=leg_idx)
