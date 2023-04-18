@@ -404,7 +404,7 @@ class NoSymmetry(AbelianGroup):
         return sectors
 
     def sector_str(self, a: Sector) -> str:
-        return 'None'  # TODO (JU) : use sth else...?
+        return '[0]'
 
     def __repr__(self):
         return 'NoSymmetry()'
@@ -518,8 +518,10 @@ class SU2Symmetry(Group):
         return a[0] + 1
 
     def sector_str(self, a: Sector) -> str:
-        j_str = str(a[0] // 2) if a[0] % 2 == 0 else f'{a[0]}/2'
-        return f'J={j_str}'
+        # TODO what should the sector string be...?
+        jj = a[0]
+        j_str = str(jj // 2) if jj % 2 == 0 else f'{jj}/2'
+        return f'[{jj} (J={j_str})]'
 
     def __repr__(self):
         name_str = '' if self.descriptive_name is None else f'"{self.descriptive_name}"'
@@ -565,7 +567,7 @@ class FermionParity(Symmetry):
         return 1
 
     def sector_str(self, a: Sector) -> str:
-        return 'even' if a[0] == 0 else 'odd'
+        return '[even]' if a[0] == 0 else '[odd]'
 
     def __repr__(self):
         return 'FermionParity()'

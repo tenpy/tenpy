@@ -204,8 +204,7 @@ class AbstractTensor(ABC):
         ...
 
     def _repr_leg_components(self, max_len: int) -> list:
-        """A summary of the components of legs, used in Tensor.__repr__"""
-        # TODO (JU) revise this. think about is_dual flag
+        """A summary of the components of legs, used in repr"""
         components_strs = []
         for leg, label in zip(self.legs, self.labels):
             if isinstance(leg, ProductSpace):
@@ -455,19 +454,23 @@ class Tensor(AbstractTensor):
 
     def __repr__(self):
         indent = '  '
-        label_strs = [force_str_len(label, 5) for label in self.labels]
-        dim_strs = [force_str_len(leg.dim, 5) for leg in self.legs]
+        num_cols_label = min(10, max(5, *(len(str(l)) for l in self.labels)))
+        num_cols_dim = min(5, max(3, *(len(str(leg.dim)) for leg in self.legs)))
+        
+        label_strs = [force_str_len(label, num_cols_label, rjust=False) for label in self.labels]
+        dim_strs = [force_str_len(leg.dim, num_cols_dim) for leg in self.legs]
+        dual_strs = ['dual' if leg.is_dual else '   /' for leg in self.legs]
         components_strs = self._repr_leg_components(max_len=50)  # TODO picked an arbitrary length
 
         lines = [
             f'Tensor(',
             f'{indent}* Backend: {type(self.backend).__name__}',
             f'{indent}* Symmetry: {self.symmetry}',
-            f'{indent}* Legs:  label    dim  components',
-            f'{indent}         =============={"=" * max(10, *(len(c) for c in components_strs))}',
+            f'{indent}* Legs:  label{" " * (num_cols_label - 5)}  {" " * (num_cols_dim - 3)}dim  dual  components',
+            f'{indent}         {"=" * (10 + num_cols_label + num_cols_dim + max(10, *(len(c) for c in components_strs)))}',
         ]
-        for l, d, c in zip(label_strs, dim_strs, components_strs):
-            lines.append(f'{indent}         {l}  {d}  {c}')
+        for entries in zip(label_strs, dim_strs, dual_strs, components_strs):
+            lines.append(f'{indent}         {"  ".join(entries)}')
         lines.extend(self.backend._data_repr_lines(self.data, indent=indent, max_width=70, max_lines=20))
         lines.append(')')
         return "\n".join(lines)

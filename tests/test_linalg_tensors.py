@@ -468,3 +468,37 @@ def test_norm(backend):
     res = tensors.norm(tens)
     expect = np.linalg.norm(data)
     assert np.allclose(res, expect)
+
+
+def demo_repr():
+    # this is intended to generate a bunch of demo reprs
+    # can not really make this an automated test, the point is for a human to have a look
+    # and decide if the output is useful, concise, correct, etc.
+    #
+    # run e.g. via the following command from the tests folder
+    # python -c "from test_linalg_tensors import demo_repr; demo_repr()"
+    
+    print()
+    separator = '=' * 80
+    
+    backend = NoSymmetryNumpyBackend()
+    dims = (5, 2, 5)
+    data = random_block(dims, backend)
+    legs = [VectorSpace.non_symmetric(d) for d in dims]
+    tens1 = tensors.Tensor(data, legs=legs, backend=backend, labels=['vL', 'p', 'vR'])
+    tens2 = tensors.combine_legs(tens1, ['p', 'vR'])
+
+    for command in ['repr(tens1.legs[0])', 
+                    'str(tens1.legs[0])', 
+                    'repr(tens1)', 
+                    'repr(tens2.legs[1])', 
+                    'str(tens2.legs[1])', 
+                    'repr(tens2)']:
+        output = eval(command)
+        print()
+        print(separator)
+        print(command)
+        print(separator)
+        print(output)
+        print(separator)
+        print()

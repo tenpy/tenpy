@@ -27,7 +27,10 @@ def force_str_len(obj, length: int, rjust: bool = True, placeholder: str = '[...
         assert num_chars >= 0, f'Placeholder {placeholder} is longer than length={length}!'
         left_chars = num_chars // 2
         right_chars = num_chars - left_chars
-        return obj[:left_chars] + placeholder + obj[-right_chars:]
+        res = obj[:left_chars] + placeholder
+        if right_chars > 0:
+            res = res + obj[-right_chars:]
+        return res
 
 
 UNSPECIFIED = object()
