@@ -3,6 +3,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from enum import Enum, auto
 from typing import TypeVar, Any, TYPE_CHECKING
+import numpy as np
 
 from ..symmetries.groups import Symmetry
 from ..symmetries.spaces import VectorSpace, ProductSpace
@@ -262,6 +263,10 @@ class AbstractBlockBackend(ABC):
     @abstractmethod
     def block_to_dtype(self, a: Block, dtype: Dtype) -> Block:
         ...
+
+    def block_to_numpy(self, a: Block, numpy_dtype=None) -> np.ndarray:
+        # BlockBackends may override, if this implementation is not valid
+        return np.asarray(a, dtype=numpy_dtype)
 
     @abstractmethod
     def block_copy(self, a: Block) -> Block:

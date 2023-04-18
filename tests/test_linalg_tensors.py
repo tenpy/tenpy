@@ -276,6 +276,11 @@ def test_tdot(backend):
     assert np.allclose(res2, expect)
     assert np.allclose(res3, expect)
 
+    # TODO check that trying to contract incompatible legs raises
+    #  - opposite is_dual but different dim
+    #  - opposite is_dual and dim but different sectors
+    #  - same dim and sectors but same is_dual
+
 
 @pytest.mark.parametrize('backend', all_backends.keys())
 def test_outer(backend):

@@ -229,7 +229,6 @@ class AbstractTensor(ABC):
         ...
 
     def __getitem__(self, item):
-        # TODO point towards a "as flat" option
         raise TypeError('Tensor object is not subscriptable')
 
     def __neg__(self):
@@ -289,9 +288,8 @@ class AbstractTensor(ABC):
 
     def to_numpy_ndarray(self, leg_order: list[int | str] = None, numpy_dtype=None) -> np.ndarray:
         """Convert to a numpy array"""
-        # TODO (JU) this assumes that the blocks are valid inputs to np.asarray.
-        #  are there cases where they are not?
-        return np.asarray(self.to_dense_block(leg_order=leg_order), dtype=numpy_dtype)
+        block = self.to_dense_block(leg_order=leg_order)
+        return self.backend.block_to_numpy(block, numpy_dtype=numpy_dtype)
 
     def __array__(self, dtype=None):
         return self.to_numpy_ndarray(numpy_dtype=dtype)
