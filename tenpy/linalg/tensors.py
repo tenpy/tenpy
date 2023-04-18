@@ -224,6 +224,34 @@ class AbstractTensor(ABC):
             components_strs.append(components)
         return components_strs
 
+    def _repr_header_lines(self, indent: str) -> list[str]:
+        num_cols_label = min(10, max(5, *(len(str(l)) for l in self.labels)))
+        num_cols_dim = min(5, max(3, *(len(str(leg.dim)) for leg in self.legs)))
+        
+        label_strs = [force_str_len(label, num_cols_label, rjust=False) for label in self.labels]
+        dim_strs = [force_str_len(leg.dim, num_cols_dim) for leg in self.legs]
+        dual_strs = ['dual' if leg.is_dual else '   /' for leg in self.legs]
+        components_strs = self._repr_leg_components(max_len=50)
+        
+        lines = [
+            f'{indent}* Backend: {self.backend}',
+            f'{indent}* Symmetry: {self.symmetry}',
+            f'{indent}* Legs:  label{" " * (num_cols_label - 5)}  {" " * (num_cols_dim - 3)}dim  dual  components',
+            f'{indent}         {"=" * (10 + num_cols_label + num_cols_dim + max(10, *(len(c) for c in components_strs)))}',
+        ]
+        for entries in zip(label_strs, dim_strs, dual_strs, components_strs):
+            lines.append(f'{indent}         {"  ".join(entries)}')
+
+        return lines
+
+    def __repr__(self):
+        indent = '  '
+        lines = [f'{self.__class__.__name__}(']
+        lines.extend(self._repr_header_lines(indent=indent))    
+        lines.extend(self.backend._data_repr_lines(self.data, indent=indent, max_width=70, max_lines=20))
+        lines.append(')')
+        return "\n".join(lines)
+
     @abstractmethod
     def _mul_scalar(self, other: complex):
         ...
@@ -439,29 +467,6 @@ class Tensor(AbstractTensor):
         if isinstance(other, Tensor):
             return self.__add__(other._mul_scalar(-1))
         return NotImplemented
-
-    def __repr__(self):
-        indent = '  '
-        num_cols_label = min(10, max(5, *(len(str(l)) for l in self.labels)))
-        num_cols_dim = min(5, max(3, *(len(str(leg.dim)) for leg in self.legs)))
-        
-        label_strs = [force_str_len(label, num_cols_label, rjust=False) for label in self.labels]
-        dim_strs = [force_str_len(leg.dim, num_cols_dim) for leg in self.legs]
-        dual_strs = ['dual' if leg.is_dual else '   /' for leg in self.legs]
-        components_strs = self._repr_leg_components(max_len=50)
-
-        lines = [
-            f'Tensor(',
-            f'{indent}* Backend: {type(self.backend).__name__}',
-            f'{indent}* Symmetry: {self.symmetry}',
-            f'{indent}* Legs:  label{" " * (num_cols_label - 5)}  {" " * (num_cols_dim - 3)}dim  dual  components',
-            f'{indent}         {"=" * (10 + num_cols_label + num_cols_dim + max(10, *(len(c) for c in components_strs)))}',
-        ]
-        for entries in zip(label_strs, dim_strs, dual_strs, components_strs):
-            lines.append(f'{indent}         {"  ".join(entries)}')
-        lines.extend(self.backend._data_repr_lines(self.data, indent=indent, max_width=70, max_lines=20))
-        lines.append(')')
-        return "\n".join(lines)
 
     def is_real(self):
         return self.backend.is_real(self)
@@ -744,7 +749,12 @@ class Tensor(AbstractTensor):
              legs1: int | str | list[int | str] = -1, legs2: int | str | list[int | str] = 0,
              relabel1: dict[str, str] = None, relabel2: dict[str, str] = None) -> AbstractTensor:
         if isinstance(other, ChargedTensor):
-            raise NotImplementedError  # TODO
+            # make sure that legs2 are interpreted w.r.t. other, not other.invariant_part
+            legs2 = other.get_leg_idcs(legs2)
+            assert other.invariant_part.labels[-1] not in relabel2
+            invariant_part = self.tdot(other.invariant_part, legs1=legs1, legs2=legs2, 
+                                       relabel1=relabel1, relabel2=relabel2)
+            return ChargedTensor(invariant_part=invariant_part, dummy_leg_state=other.dummy_leg_state)
         elif isinstance(other, DiagonalTensor):
             raise NotImplementedError  # TODO
         elif not isinstance(other, Tensor):
@@ -773,7 +783,9 @@ class Tensor(AbstractTensor):
 
     def outer(self, other: AbstractTensor, relabel1: dict[str, str] = None, relabel2: dict[str, str] = None) -> AbstractTensor:
         if isinstance(other, ChargedTensor):
-            raise NotImplementedError  # TODO
+            assert other.invariant_part.labels[-1] not in relabel2
+            invariant_part = self.outer(other.invariant_part, relabel1=relabel1, relabel2=relabel2)
+            return ChargedTensor(invariant_part=invariant_part, dummy_leg_state=other.dummy_leg_state)
         elif isinstance(other, DiagonalTensor):
             raise NotImplementedError  # TODO
         elif not isinstance(other, Tensor):
@@ -786,14 +798,6 @@ class Tensor(AbstractTensor):
         return Tensor(res_data, backend=backend, legs=self.legs + other.legs, labels=res_labels)
 
     def inner(self, other: AbstractTensor) -> complex:
-        if isinstance(other, ChargedTensor):
-            raise NotImplementedError  # TODO
-        elif isinstance(other, DiagonalTensor):
-            raise NotImplementedError  # TODO
-        elif not isinstance(other, Tensor):
-            raise TypeError(f'inner not supported for types {type(self)} and {type(other)}.')
-        # can now assume that isinstance(other, Tensor)
-
         if self.num_legs != other.num_legs:
             raise ValueError('Tensors need to have the same number of legs')
         leg_order_2 = _match_label_order(self, other)
@@ -802,6 +806,17 @@ class Tensor(AbstractTensor):
         if not all(self.legs[n1] == other.legs[n2] for n1, n2 in enumerate(leg_order_2)):
             raise ValueError('Incompatible legs')
         backend = get_same_backend(self, other)
+        
+        if isinstance(other, ChargedTensor):
+            res_invariant = self.tdot(other.invariant_part, legs1=list(range(self.num_legs)), legs2=leg_order_2)
+            res = ChargedTensor(res_invariant, dummy_leg_state=other.dummy_leg_state)
+            return res.item()
+        elif isinstance(other, DiagonalTensor):
+            raise NotImplementedError  # TODO
+        elif not isinstance(other, Tensor):
+            raise TypeError(f'inner not supported for types {type(self)} and {type(other)}.')
+        # can now assume that isinstance(other, Tensor)
+        
         res = backend.inner(self, other, axs2=leg_order_2)
         return res
 
@@ -882,11 +897,7 @@ class Tensor(AbstractTensor):
         return self.backend.norm(self)
 
     def almost_equal(self, other: AbstractTensor, atol: float = 1e-5, rtol: float = 1e-8) -> bool:
-        if isinstance(other, ChargedTensor):
-            raise NotImplementedError  # TODO
-        elif isinstance(other, DiagonalTensor):
-            raise NotImplementedError  # TODO
-        elif not isinstance(other, Tensor):
+        if not isinstance(other, Tensor):
             raise TypeError(f'tdot not supported for types {type(self)} and {type(other)}.')
         # can now assume that isinstance(other, Tensor)
         
@@ -924,7 +935,7 @@ class ChargedTensor(AbstractTensor):
         AbstractTensor.__init__(self, backend=invariant_part.backend, legs=invariant_part.legs[:-1],
                                 labels=invariant_part.labels[:-1])
         self.invariant_part = invariant_part
-        self.dummy_leg = invariant_part.leg[-1]
+        self.dummy_leg = invariant_part.legs[-1]
         if dummy_leg_state is None:
             if self.dummy_leg.dim != 1:
                 raise ValueError('Can not infer state for a dummy leg with dim > 1')
@@ -951,8 +962,13 @@ class ChargedTensor(AbstractTensor):
             raise ValueError('Not a scalar')
         return self.backend.block_item(self.to_dense_block())
 
-    def __repr__(self):
-        return 'ChargedTensor(... [this is a stub __repr__])'  # TODO
+    def _repr_header_lines(self, indent: str) -> list[str]:
+        lines = AbstractTensor._repr_header_lines(self, indent=indent)
+        lines.append(f'{indent}* Dummy Leg: {self.dummy_leg}')
+        lines.append(f'{indent}* Dummy Leg state:')
+        lines.extend(self.backend._block_repr_lines(self.dummy_leg_state, indent=indent + '  '),
+                     max_width=70, max_lines=3)
+        return lines
 
     def is_real(self):
         return self.backend.is_real(self.invariant_part) and self.backend.block_is_real(self.dummy_leg_state)
@@ -979,12 +995,26 @@ class ChargedTensor(AbstractTensor):
         ...
 
     def almost_equal(self, other: AbstractTensor, atol: float = 0.00001, rtol: float = 1e-8) -> bool:
-        # TODO comparing general ChargedTensors is not so easy, since the decomposition into
-        #  invariant part and non-invariant state is not unique.
-        #  For one-dimensional dummy legs, we could fix the gauge freedom by demanding that dummy state is [1].
-        #  For higher-dimensional dummy legs, i dont yet know how to do this cleverly.
-        #  Could convert to dense tensors and compare those, and issue a warning that its not very efficient.
-        raise NotImplementedError  # TODO
+        if not isinstance(other, ChargedTensor):
+            raise TypeError(f'tdot not supported for types {type(self)} and {type(other)}.')
+        # can now assume that isinstance(other, ChargedTensor)
+
+        if self.legs != other.legs:
+            raise ValueError('Mismatching shapes')
+        if self.dummy_leg != other.dummy_leg:
+            return False
+
+        if self.dummy_leg.dim == 1:
+            factor = self.backend.block_item(self.dummy_leg_state) / other.backend.block_item(other.dummy_leg_state)
+            return self.invariant_part.almost_equal(factor * other, atol=atol, rtol=rtol)
+        else:
+            # TODO (JU): Can this be done more efficiently?
+            #  the problem is that the decomposition into invariant part and non-invariant state is 
+            #  not unique, so we cant just compare the invariant parts.
+            backend = get_same_backend(self, other)
+            self_block = self.to_dense_block()
+            other_block = other.to_dense_block(leg_order=_match_label_order(self, other))
+            return backend.block_allclose(self_block, other_block)
 
 
 class DiagonalTensor(AbstractTensor):
