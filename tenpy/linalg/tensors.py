@@ -5,6 +5,7 @@ from abc import ABC, abstractmethod
 from typing import Iterable
 import numpy as np
 import warnings
+from functools import cached_property
 
 from .misc import duplicate_entries, force_str_len, join_as_many_as_possible
 from .dummy_config import config
@@ -46,6 +47,59 @@ _DUMMY_LABEL = '!'
 ALL_TRIVIAL_LEGS = object()  # TODO use None instead ...
 
 
+class Shape:
+    # TODO docstring
+    
+    def __init__(self, legs: list[VectorSpace], labels: list[str | None] = None):
+        self.legs = legs
+        if labels is None:
+            labels = [None] * len(legs)
+        else:
+            labels = labels[:]
+        self._labels = labels
+        self._labelmap = {label: leg_num for leg_num, label in enumerate(self.labels) if label is not None}
+        self.num_legs = len(legs)
+        self.dims = [l.dim for l in legs]
+
+    def check_sanity(self):
+        assert not duplicate_entries(self._labels, ignore=[None])
+
+    def __iter__(self):
+        return iter(self.dims)
+
+    def __getitem__(self, key):
+        if isinstance(key, str):
+            try:
+                key = self.label_to_legnum(key)
+            except ValueError:
+                raise IndexError(f'No leg with label {key}.') from None
+        return self.dims[key]
+
+    def set_labels(self, labels: list[str | None]):
+        assert not duplicate_entries(labels, ignore=[None])
+        assert len(labels) == self.num_legs
+        self._labels = labels[:]
+        self._labelmap = {label: leg_num for leg_num, label in enumerate(self.labels) if label is not None}
+
+    @property
+    def labels(self) -> list[str | None]:
+        return self._labels[:]
+
+    @labels.setter
+    def labels(self, value):
+        self.set_labels(value)
+
+    @property
+    def is_fully_labelled(self) -> bool:
+        return None not in self._labels
+
+    def label_to_legnum(self, label: str) -> int:
+        num = self._labelmap.get(label, None)
+        if num is None:
+            raise ValueError(f'No leg with label {label}')
+        return num
+
+
 class AbstractTensor(ABC):
 
     def __init__(self, legs: list[VectorSpace], backend, labels: list[str | None] | None):
@@ -64,26 +118,22 @@ class AbstractTensor(ABC):
         else:
             self.backend = backend
         self.legs = [self.backend.convert_vector_space(leg) for leg in legs]
-        if labels is None:
-            self._labels = [None] * len(legs)
-        else:
-            self._labels = labels
-        self._labelmap = {label: leg_num for leg_num, label in enumerate(self.labels) if label is not None}
+        self.shape = Shape(legs=self.legs, labels=labels)
         self.num_legs = len(legs)
         self.symmetry = legs[0].symmetry
-
-        # TODO optimize: don't need parent_space for each tensor? Dynamically calculate/cache in property
-        #  (JU) yes, this can be a cached property
-        if self.num_legs == 1:
-            self.parent_space = self.legs[0]
-        else:
-            self.parent_space = self.backend.convert_vector_space(ProductSpace(self.legs))
 
     def check_sanity(self):
         assert self.backend.supports_symmetry(self.symmetry)
         assert all(l.symmetry == self.symmetry for l in self.legs)
-        assert len(self.legs) == len(self._labels) == self.num_legs > 0
-        assert not duplicate_entries(self._labels, ignore=[None])
+        assert len(self.legs) == self.shape.num_legs == self.num_legs > 0
+        self.shape.check_sanity()
+
+    @cached_property
+    def parent_space(self) -> VectorSpace:
+        if self.num_legs == 1:
+            return self.legs[0]
+        else:
+            return self.backend.convert_vector_space(ProductSpace(self.legs))
 
     @property
     def size(self) -> int:
@@ -97,40 +147,34 @@ class AbstractTensor(ABC):
         tensors with the same legs"""
         return self.parent_space.num_parameters
 
-    # TODO implement a shape property.
-    # should probably be a custom class that can be indexed by label (str) or index (int)
-    #  -> include in tests
-
     @property
     def is_fully_labelled(self) -> bool:
-        return None not in self._labels
+        return self.shape.is_fully_labelled
 
     def has_label(self, label: str, *more: str) -> bool:
-        return label in self._labels and all(l in self._labels for l in more)
+        return label in self.shape._labels and all(l in self.shape._labels for l in more)
 
     def labels_are(self, *labels: str) -> bool:
-        return self.is_fully_labelled and len(labels) == len(self._labels) and set(labels) == set(self._labels)
+        if not self.is_fully_labelled:
+            return False
+        if len(labels) != len(self.shape._labels):
+            return False
+        return set(labels) == set(self.shape._labels)
 
     def set_labels(self, labels: list[str | None]):
-        assert not duplicate_entries(labels, ignore=[None])
-        assert len(labels) == self.num_legs
-        self._labels = labels[:]
-        self._labelmap = {label: leg_num for leg_num, label in enumerate(self.labels) if label is not None}
+        self.shape.set_labels(labels)
 
     @property
-    def labels(self) -> list[str]:
-        return self._labels[:]
+    def labels(self) -> list[str | None]:
+        return self.shape.labels
 
     @labels.setter
     def labels(self, value):
-        self.set_labels(value)
+        self.shape.set_labels(value)
 
     def get_leg_idx(self, which_leg: int | str) -> int:
         if isinstance(which_leg, str):
-            try:
-                which_leg = self._labelmap[which_leg]
-            except KeyError:
-                raise ValueError(f'No leg with label {which_leg}.') from None
+            which_leg = self.shape.label_to_legnum(which_leg)
         if isinstance(which_leg, int):
             if which_leg < 0:
                 which_leg = which_leg + self.num_legs
@@ -768,7 +812,7 @@ class Tensor(AbstractTensor):
         assert set(permutation) == set(range(self.num_legs))
         res_data = self.backend.transpose(self, permutation)
         return Tensor(res_data, backend=self.backend, legs=[self.legs[n] for n in permutation],
-                    labels=[self._labels[n] for n in permutation])
+                    labels=[self.shape._labels[n] for n in permutation])
 
     def trace(self, legs1: int | str | list[int | str] = -2, legs2: int | str | list[int | str] = -1
               ) -> AbstractTensor | float | complex:
@@ -789,7 +833,7 @@ class Tensor(AbstractTensor):
         """See tensors.conj"""
         # TODO (Jakob) think about this in the context of pivotal category with duals
         return Tensor(self.backend.conj(self), backend=self.backend, legs=[l.dual for l in self.legs],
-                      labels=[_dual_leg_label(l) for l in self._labels])
+                      labels=[_dual_leg_label(l) for l in self.shape._labels])
 
     # TODO (JU): do we need an option to set is_dual of the new leg?
     def combine_legs(self, legs: list[int | str], new_leg: ProductSpace = None) -> AbstractTensor:
@@ -802,8 +846,9 @@ class Tensor(AbstractTensor):
             new_leg = ProductSpace([self.legs[idx] for idx in leg_idcs])
         res_legs = [new_leg if idx == leg_idcs[0] else leg for idx, leg in enumerate(self.legs)
                     if idx not in leg_idcs[1:]]
-        new_label = _combine_leg_labels([self._labels[idx] for idx in leg_idcs])
-        res_labels = [new_label if idx == leg_idcs[0] else label for idx, label in enumerate(self._labels)
+        new_label = _combine_leg_labels([self.shape._labels[idx] for idx in leg_idcs])
+        res_labels = [new_label if idx == leg_idcs[0] else label 
+                      for idx, label in enumerate(self.shape._labels)
                       if idx not in leg_idcs[1:]]
         res_data = self.backend.combine_legs(self, idcs=leg_idcs, new_leg=new_leg)
         return Tensor(res_data, backend=self.backend, legs=res_legs, labels=res_labels)
@@ -984,7 +1029,7 @@ def _match_label_order(a: Tensor, b: Tensor) -> Iterable[int] | None:
     if not match_by_labels:
         return None
 
-    if a._labels == b._labels:
+    if a.shape._labels == b.shape._labels:
         return None
 
     return b.get_leg_idcs(a.labels)

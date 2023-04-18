@@ -22,25 +22,66 @@ def random_block(shape, backend):
         return torch.randn(shape)
 
 
+# TODO tests for ChargedTensor, also as input for tdot etc
+# TODO DiagonalTensor
+
+
+def check_shape(shape: tensors.Shape, dims: tuple[int, ...], labels: list[str]):
+    shape.check_sanity()
+
+    # check attributes
+    assert shape.dims == list(dims)
+    assert shape._labels == labels
+    assert shape.labels == labels
+
+    # check iter
+    assert tuple(shape) == dims
+    n = 0
+    for d in shape:
+        assert d == dims[n]
+        n += 1
+
+    # check __getitem__
+    for n, label in enumerate(labels):
+        # indexing by string label
+        if label is not None:
+            assert shape[label] == dims[n]
+        # indexing by integer
+        assert shape[n] == dims[n]
+    assert shape[1:] == list(dims)[1:]
+    with pytest.raises(IndexError):
+        _ = shape['label_that_shape_does_not_have']
+
+    assert shape.is_fully_labelled != (None in labels)
+
+
 @pytest.mark.parametrize('backend', all_backends.keys())
 def test_Tensor_methods(backend):
     backend = all_backends[backend]
-    data1 = random_block((2, 3, 10), backend)
-    data2 = random_block((2, 3, 10), backend)
-    
-    legs = [VectorSpace.non_symmetric(d) for d in data1.shape]
+    dims = (2, 3, 10)
+    data1 = random_block(dims, backend)
+    data2 = random_block(dims, backend)
+
+    # TODO also test with symmetries, once abelian backend is ready
+    legs = [VectorSpace.non_symmetric(d) for d in dims]
     
     print('checking __init__ with labels=None')
     tens1 = tensors.Tensor(data1, legs=legs, backend=backend, labels=None)
     tens1.check_sanity()
 
     print('checking __init__, partially labelled')
-    tens2 = tensors.Tensor(data2, legs=legs, backend=backend, labels=[None, 'a', 'b'])
+    labels2 = [None, 'a', 'b']
+    tens2 = tensors.Tensor(data2, legs=legs, backend=backend, labels=labels2)
     tens2.check_sanity()
 
     print('checking __init__, fully labelled')
-    tens3 = tensors.Tensor(data1, legs=legs, backend=backend, labels=['foo', 'a', 'b'])
+    labels3 = ['foo', 'a', 'b']
+    tens3 = tensors.Tensor(data1, legs=legs, backend=backend, labels=labels3)
     tens3.check_sanity()
+
+    check_shape(tens1.shape, dims=dims, labels=[None, None, None])
+    check_shape(tens2.shape, dims=dims, labels=labels2)
+    check_shape(tens3.shape, dims=dims, labels=labels3)
 
     print('check size')
     assert tens3.size == np.prod(data1.shape)
@@ -65,25 +106,27 @@ def test_Tensor_methods(backend):
     assert tens3.labels_are('a', 'foo', 'b')
     assert not tens3.labels_are('a', 'foo', 'b', 'bar')
 
-    
+    print('check setting labels')
     tens3.set_labels(['i', 'j', 'k'])
     assert tens3.labels_are('i', 'j', 'k')
+    tens3.labels = ['foo', 'a', 'b']
+    assert tens3.labels_are('foo', 'a', 'b')
 
     print('check get_leg_idx')
     assert tens3.get_leg_idx(0) == 0
     assert tens3.get_leg_idx(-1) == 2
     with pytest.raises(ValueError):
         tens3.get_leg_idx(10)
-    assert tens3.get_leg_idx('i') == 0
-    assert tens3.get_leg_idx('j') == 1
+    assert tens3.get_leg_idx('foo') == 0
+    assert tens3.get_leg_idx('a') == 1
     with pytest.raises(ValueError):
         tens3.get_leg_idx('bar')
     with pytest.raises(TypeError):
         tens3.get_leg_idx(None)
 
     print('check get_leg_idcs')
-    assert tens3.get_leg_idcs('i') == [0]
-    assert tens3.get_leg_idcs(['i', 'k', 1]) == [0, 2, 1]
+    assert tens3.get_leg_idcs('foo') == [0]
+    assert tens3.get_leg_idcs(['foo', 'b', 1]) == [0, 2, 1]
 
     print('check item')
     data4 = random_block((1,), backend)
