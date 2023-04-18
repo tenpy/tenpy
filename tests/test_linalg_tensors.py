@@ -269,9 +269,9 @@ def test_tdot(backend):
 
     print('scalar result')
     expect = np.tensordot(data1, data5, ([0, 1, 2], [1, 2, 0]))
-    res1 = tensors.tdot(t1, t5, [0, 1, 2], [1, 2, 0]).data
-    res2 = tensors.tdot(t1_labelled, t5_labelled, [0, 1, 2], [1, 2, 0]).data
-    res3 = tensors.tdot(t1_labelled, t5_labelled, ['a', 'b', 'c'], ['a*', 'b*', 'c*']).data
+    res1 = tensors.tdot(t1, t5, [0, 1, 2], [1, 2, 0])
+    res2 = tensors.tdot(t1_labelled, t5_labelled, [0, 1, 2], [1, 2, 0])
+    res3 = tensors.tdot(t1_labelled, t5_labelled, ['a', 'b', 'c'], ['a*', 'b*', 'c*'])
     assert np.allclose(res1, expect)
     assert np.allclose(res2, expect)
     assert np.allclose(res3, expect)

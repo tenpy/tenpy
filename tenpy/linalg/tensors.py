@@ -44,9 +44,6 @@ def _split_leg_label(label: str) -> list[str | None]:
 _DUMMY_LABEL = '!'
 
 
-ALL_TRIVIAL_LEGS = object()  # TODO use None instead ...
-
-
 class Shape:
     # TODO docstring
     
@@ -254,27 +251,21 @@ class AbstractTensor(ABC):
         ...
 
     def __mul__(self, other):
-        if isinstance(other, AbstractTensor):
-            # TODO JH: remove this? 1-item tensors should not behave like scalars
-            if all(leg.dim == 1 for leg in other.legs):
-                return self._mul_scalar(other.item())
-            if all(leg.dim == 1 for leg in self.legs):
-                return other._mul_scalar(self.item())
-            raise ValueError('Tensors can only be multiplied with scalars') from None
         if isinstance(other, (int, float, complex)):
             return self._mul_scalar(other)
-        return NotImplemented
+        raise TypeError(f'Tensors can only be multiplied with scalars, not {type(other)}.') from None
 
     def __rmul__(self, other):
         # all allowed multiplication is commutative
         return self.__mul__(other)
 
     def __truediv__(self, other):
-        if isinstance(other, Tensor):
-            try:
-                other = other.item()
-            except ValueError:
-                raise ValueError('Tensors can only be divived by scalars') from None
+        if not isinstance(other, (int, float, complex)):
+            raise TypeError(f'Tensors can only be divived by scalars, not {type(other)}.') from None
+        try:
+            other_inv = 1. / other
+        except Exception:
+            raise ValueError(f'Tensors can only be divided by invertible scalars.') from None
         return self._mul_scalar(1. / other)
 
     @abstractmethod
@@ -296,15 +287,14 @@ class AbstractTensor(ABC):
         the backend is a TorchBlockBackend"""
         ...
 
-    def to_numpy_ndarray(self, leg_order: list[int | str] = None, dtype=None) -> np.ndarray:
+    def to_numpy_ndarray(self, leg_order: list[int | str] = None, numpy_dtype=None) -> np.ndarray:
         """Convert to a numpy array"""
         # TODO (JU) this assumes that the blocks are valid inputs to np.asarray.
         #  are there cases where they are not?
-        # TODO document what dtype is! give it a clearer name, eg numpy_dtype ?
-        return np.asarray(self.to_dense_block(leg_order=leg_order), dtype=dtype)
+        return np.asarray(self.to_dense_block(leg_order=leg_order), dtype=numpy_dtype)
 
     def __array__(self, dtype=None):
-        return self.to_numpy_ndarray(dtype=dtype)
+        return self.to_numpy_ndarray(numpy_dtype=dtype)
 
     @classmethod
     @abstractmethod
@@ -358,7 +348,7 @@ class AbstractTensor(ABC):
         ...
 
     @abstractmethod
-    def squeeze_legs(self, legs: int | str | list[int | str] = ALL_TRIVIAL_LEGS) -> AbstractTensor:
+    def squeeze_legs(self, legs: int | str | list[int | str] = None) -> AbstractTensor:
         """See tensors.squeeze_legs"""
         ...
 
@@ -392,7 +382,7 @@ class Tensor(AbstractTensor):
     def __init__(self, data, legs: list[VectorSpace], backend=None, labels: list[str | None] | None = None):
         """
         This constructor is not user-friendly.
-        Use as_tensor instead.  TODO point to which methods here?
+        Use as_tensor instead.
         Inputs are not checked for consistency.
 
         Parameters
@@ -460,7 +450,7 @@ class Tensor(AbstractTensor):
         label_strs = [force_str_len(label, num_cols_label, rjust=False) for label in self.labels]
         dim_strs = [force_str_len(leg.dim, num_cols_dim) for leg in self.legs]
         dual_strs = ['dual' if leg.is_dual else '   /' for leg in self.legs]
-        components_strs = self._repr_leg_components(max_len=50)  # TODO picked an arbitrary length
+        components_strs = self._repr_leg_components(max_len=50)
 
         lines = [
             f'Tensor(',
@@ -507,7 +497,6 @@ class Tensor(AbstractTensor):
 
         TODO document how the sectors are expected to be embedded, i.e. which slices correspond to which charge.
         TODO support non-canonical embedding?
-        TODO make backend optional? let get_backend with no args return a globally configurable default
 
         Parameters
         ----------
@@ -756,8 +745,13 @@ class Tensor(AbstractTensor):
     def tdot(self, other: AbstractTensor,
              legs1: int | str | list[int | str] = -1, legs2: int | str | list[int | str] = 0,
              relabel1: dict[str, str] = None, relabel2: dict[str, str] = None) -> AbstractTensor:
-        if not isinstance(other, Tensor):
+        if isinstance(other, ChargedTensor):
             raise NotImplementedError  # TODO
+        elif isinstance(other, DiagonalTensor):
+            raise NotImplementedError  # TODO
+        elif not isinstance(other, Tensor):
+            raise TypeError(f'tdot not supported for types {type(self)} and {type(other)}.')
+        # can now assume that isinstance(other, Tensor)
 
         leg_idcs1 = self.get_leg_idcs(legs1)
         leg_idcs2 = other.get_leg_idcs(legs2)
@@ -765,7 +759,7 @@ class Tensor(AbstractTensor):
             # checking this for leg_idcs* instead of legs* allows us to assume that they are both lists
             raise ValueError('Must specify the same number of legs for both tensors')
         if not all(self.legs[idx1].is_dual_of(other.legs[idx2]) for idx1, idx2 in zip(leg_idcs1, leg_idcs2)):
-            raise ValueError('Incompatible legs.')  # TODO show which
+            raise ValueError('Incompatible legs.')
         backend = get_same_backend(self, other)
         open_legs1 = [leg for idx, leg in enumerate(self.legs) if idx not in leg_idcs1]
         open_legs2 = [leg for idx, leg in enumerate(other.legs) if idx not in leg_idcs2]
@@ -775,14 +769,18 @@ class Tensor(AbstractTensor):
         res_data = backend.tdot(self, other, leg_idcs1, leg_idcs2)
         res_legs = open_legs1 + open_legs2
         if len(res_legs) == 0:
-            # TODO make sure this is a python scalar not some weird backend-structure
-            return res_data
+            return backend.data_item(res_data)
         else:
             return Tensor(res_data, backend=backend, legs=res_legs, labels=res_labels)
 
     def outer(self, other: AbstractTensor, relabel1: dict[str, str] = None, relabel2: dict[str, str] = None) -> AbstractTensor:
-        if not isinstance(other, Tensor):
+        if isinstance(other, ChargedTensor):
             raise NotImplementedError  # TODO
+        elif isinstance(other, DiagonalTensor):
+            raise NotImplementedError  # TODO
+        elif not isinstance(other, Tensor):
+            raise TypeError(f'outer not supported for types {type(self)} and {type(other)}.')
+        # can now assume that isinstance(other, Tensor)
 
         backend = get_same_backend(self, other)
         res_labels = _get_result_labels(self.labels, other.labels, relabel1, relabel2)
@@ -790,8 +788,13 @@ class Tensor(AbstractTensor):
         return Tensor(res_data, backend=backend, legs=self.legs + other.legs, labels=res_labels)
 
     def inner(self, other: AbstractTensor) -> complex:
-        if not isinstance(other, Tensor):
+        if isinstance(other, ChargedTensor):
             raise NotImplementedError  # TODO
+        elif isinstance(other, DiagonalTensor):
+            raise NotImplementedError  # TODO
+        elif not isinstance(other, Tensor):
+            raise TypeError(f'inner not supported for types {type(self)} and {type(other)}.')
+        # can now assume that isinstance(other, Tensor)
 
         if self.num_legs != other.num_legs:
             raise ValueError('Tensors need to have the same number of legs')
@@ -802,15 +805,10 @@ class Tensor(AbstractTensor):
             raise ValueError('Incompatible legs')
         backend = get_same_backend(self, other)
         res = backend.inner(self, other, axs2=leg_order_2)
-        # TODO: Scalar(Tensor) class...?
         return res
 
-    def transpose(self, permutation: list[int]) -> AbstractTensor:
-        # TODO also support labels (i.e. str) as permutation entries?
-        if config.strict_labels:
-            # TODO: proper warning:
-            # strict labels means position of legs should be irrelevant, there is no need to transpose.
-            print('dummy warning!')
+    def transpose(self, permutation: list[int | str]) -> AbstractTensor:
+        permutation = self.get_leg_idcs(permutation)
         assert len(permutation) == self.num_legs
         assert set(permutation) == set(range(self.num_legs))
         res_data = self.backend.transpose(self, permutation)
@@ -834,7 +832,6 @@ class Tensor(AbstractTensor):
 
     def conj(self) -> AbstractTensor:
         """See tensors.conj"""
-        # TODO (Jakob) think about this in the context of pivotal category with duals
         return Tensor(self.backend.conj(self), backend=self.backend, legs=[l.dual for l in self.legs],
                       labels=[_dual_leg_label(l) for l in self.shape._labels])
 
@@ -869,9 +866,9 @@ class Tensor(AbstractTensor):
         res_data = self.backend.split_leg(self, leg_idx=leg_idx)
         return Tensor(res_data, backend=self.backend, legs=legs, labels=labels)
 
-    def squeeze_legs(self, legs: int | str | list[int | str] = ALL_TRIVIAL_LEGS) -> AbstractTensor:
+    def squeeze_legs(self, legs: int | str | list[int | str] = None) -> AbstractTensor:
         """See tensors.squeeze_legs"""
-        if legs is ALL_TRIVIAL_LEGS:
+        if legs is None:
             leg_idcs = [n for n, l in enumerate(self.legs) if l.is_trivial]
         else:
             leg_idcs = self.get_leg_idcs(legs)
@@ -887,17 +884,21 @@ class Tensor(AbstractTensor):
         return self.backend.norm(self)
 
     def almost_equal(self, other: AbstractTensor, atol: float = 1e-5, rtol: float = 1e-8) -> bool:
-        if not isinstance(other, Tensor):
+        if isinstance(other, ChargedTensor):
             raise NotImplementedError  # TODO
+        elif isinstance(other, DiagonalTensor):
+            raise NotImplementedError  # TODO
+        elif not isinstance(other, Tensor):
+            raise TypeError(f'tdot not supported for types {type(self)} and {type(other)}.')
+        # can now assume that isinstance(other, Tensor)
+        
         if self.legs != other.legs:
             raise ValueError('Mismatching shapes')
         backend = get_same_backend(self, other)
         return backend.almost_equal(self, other, atol=atol, rtol=rtol)
 
 
-# TODO is this a good name?
 class ChargedTensor(AbstractTensor):
-    # formerly, this was covered by npc Arrays with qtotal != 0.
     """
     Tensors which transform under a given symmetry in a more general manner than the Tensor class,
     which represent tensors which are invariant under the symmetry.
@@ -1000,7 +1001,7 @@ class DiagonalTensor(AbstractTensor):
     # TODO this could implement element-wise operations such as __mul__ and __pow__, it would be well defined
 
     def __init__(self) -> None:
-        raise NotImplementedError  # TODO
+        raise NotImplementedError
 
     def to_full_tensor(self) -> Tensor:
         raise NotImplementedError
@@ -1042,9 +1043,9 @@ def tdot(t1: AbstractTensor, t2: AbstractTensor,
          legs1: int | str | list[int | str] = -1, legs2: int | str | list[int | str] = 0,
          relabel1: dict[str, str] = None, relabel2: dict[str, str] = None) -> AbstractTensor:
     """
-    TODO: decide name, eg from tensordot, tdot, contract
+    Contraction of two tensors.
 
-    Contraction of two tensors
+    TODO more details, e.g. that legs need to match
 
     Parameters
     ----------
@@ -1139,19 +1140,17 @@ def is_scalar(obj) -> bool:
     which has only one-dimensional legs"""
     if isinstance(obj, (int, float, complex)):
         return True
-    if isinstance(obj, Tensor):
-        return all(l.is_trivial for l in obj.legs)
     if isinstance(obj, AbstractTensor):
-        raise NotImplementedError  # TODO
+        return all(l.is_trivial for l in obj.legs)
     else:
         raise TypeError(f'Type not supported for is_scalar: {type(obj)}')
 
 
-def squeeze_legs(t: AbstractTensor, legs: int | str | list[int | str] = ALL_TRIVIAL_LEGS) -> Tensor:
+def squeeze_legs(t: AbstractTensor, legs: int | str | list[int | str] = None) -> Tensor:
     """
     Remove trivial leg from tensor.
     If legs are specified, they are squeezed if they are trivial and a ValueError is raised if not.
-    If no legs are specified, all trivial legs are squeezed
+    If legs is None (default), all trivial legs are squeezed
     """
     return t.squeeze_legs(legs=legs)
 
@@ -1196,7 +1195,8 @@ def _get_result_labels(legs1: list[str | None], legs2: list[str | None],
     conflicting = [label for label in labels1 if label in labels2]
     labels = labels1 + labels2
     if conflicting:
-        # TODO issue warning
+        # TODO issue warning? 
+        #  JU: maybe logger.debug?
         labels = [None if label in conflicting else label for label in labels]
     return labels
 
