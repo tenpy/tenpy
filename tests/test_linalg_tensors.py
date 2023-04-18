@@ -8,17 +8,29 @@ from tenpy.linalg.backends.torch import TorchBlockBackend, NoSymmetryTorchBacken
 from tenpy.linalg.backends.numpy import NumpyBlockBackend, NoSymmetryNumpyBackend
 from tenpy.linalg.symmetries.spaces import VectorSpace
 
+try:
+    import torch
+except ModuleNotFoundError:
+    torch = None
+
 
 all_backends = dict(
     numpy_no_symm=NoSymmetryNumpyBackend(),
-    torch_no_symm=NoSymmetryTorchBackend()
 )
+
+if torch is not None:
+    # add backends that depend on torch only if torch is installed
+    # adjusting all_backends adds more cases to the ``@pytest.mark.parametrize``d tests below.
+    all_backends.update(
+        torch_no_symm=NoSymmetryTorchBackend()
+    )
+
 
 def random_block(shape, backend):
     if isinstance(backend, NumpyBlockBackend):
         return np.random.random(shape)
     elif isinstance(backend, TorchBlockBackend):
-        import torch
+        assert torch is not None, 'torch not installed!'
         return torch.randn(shape)
 
 
