@@ -6,8 +6,10 @@ import tenpy.linalg.np_conserved as npc
 import numpy as np
 from tenpy.networks.mps import MPS
 from tenpy.models.spins import SpinChain
+from tenpy.models.model import CouplingMPOModel, NearestNeighborModel
+from tenpy.models.xxz_chain import XXZChain2
 import tenpy.algorithms.tebd as tebd
-from tenpy.networks.site import SpinHalfSite
+from tenpy.networks.site import SpinHalfSite, SpinSite
 from tenpy.algorithms.exact_diag import ExactDiag
 import pytest
 
@@ -129,3 +131,53 @@ def test_RandomUnitaryEvolution():
     assert tuple(eng.psi.chi) == (16, 8)
 
 
+@pytest.mark.parametrize('S', [.5, 2.5, 5])
+def test_fixes_issue_220(S):
+    L = 20
+    num_tau = 5
+    chi_max = 50
+
+
+    class HighSpinXXZChain(CouplingMPOModel, NearestNeighborModel):
+        """Like XXZChain2, but the local total spin S is variable, and charges are sorted"""
+        default_lattice = 'Chain'
+        force_default_lattice = True
+
+        def init_sites(self, model_params):
+            return SpinSite(S=model_params.get('S', 5), conserve=model_params.get('conserve', 'Sz'),
+                            sort_charge=True)
+
+        def init_terms(self, model_params):
+            Jxx = model_params.get('Jxx', 1.)
+            Jz = model_params.get('Jz', 1.)
+            hz = model_params.get('hz', 0.)
+
+            for u in range(len(self.lat.unit_cell)):
+                self.add_onsite(-hz, u, 'Sz')
+            for u1, u2, dx in self.lat.pairs['nearest_neighbors']:
+                self.add_coupling(Jxx * 0.5, u1, 'Sp', u2, 'Sm', dx, plus_hc=True)
+                self.add_coupling(Jz, u1, 'Sz', u2, 'Sz', dx)
+    
+    model = HighSpinXXZChain(model_params=dict(S=S, L=L, conserve=None))
+    neel = ['up', 'up'] * (L // 2) + ['up'] * (L % 2)
+    psi_init = MPS.from_product_state(sites=model.lat.unit_cell * L, p_state=neel)
+
+    options = dict(
+        order=2,
+        trunc_params=dict(
+            chi_max=chi_max,
+            svd_min=1e-10,
+            trunc_cut=None,
+        ),
+    )
+    engine = tebd.QRBasedTEBDEngine(psi=psi_init, model=model, options=options)
+    dt = 0.01
+    n_steps = 5
+    dtau = dt * n_steps
+
+    _ = engine.psi.entanglement_entropy()
+
+    for n_tau in range(num_tau):
+        engine.prepare_evolve(dt)
+        err = engine.evolve(N_steps=n_steps, dt=dt)
+        _ = engine.psi.entanglement_entropy()
