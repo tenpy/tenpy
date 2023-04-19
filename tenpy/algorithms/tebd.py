@@ -760,9 +760,14 @@ def _qr_tebd_cbe_Y0(B_L: npc.Array, B_R: npc.Array, theta: npc.Array, expand: fl
         else:  # charge block only in vL_new
             s_new = increase_per_block
         s_new = min(s_new, sizes_new[j_new])  # don't go beyond block
+        # blocks Y0._data[j_new] have axis [vL, (p1.vR)]. want to keep the s_new slices of the vL axis
+        #  that have the largest norm
+        priorities = np.linalg.norm(Y0._data[j_new], axis=1)
+        kept_slices = np.argsort(-priorities)[:s_new]  # negative sign so we sort large to small
         start = vL_new.slices[j_new]
-        piv[start:start+s_new] = True
+        piv[start + kept_slices] = True
     Y0.iproject(piv, 'vL')
+    assert npc.norm(Y0) > 0
     return Y0
 
 
