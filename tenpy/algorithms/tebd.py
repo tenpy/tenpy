@@ -750,6 +750,7 @@ def _qr_tebd_cbe_Y0(B_L: npc.Array, B_R: npc.Array, theta: npc.Array, expand: fl
     # iterate over charge blocks in vL_new and vL_old at the same time
     j_old = 0
     q_old = vL_old.charges[j_old, :]
+    qdata_idx = 0
     for j_new, q_new in enumerate(vL_new.charges):
         if all(q_new == q_old):  # have charge block in both vL_new and vL_old
             s_new = sizes_old[j_old] + increase_per_block
@@ -760,12 +761,24 @@ def _qr_tebd_cbe_Y0(B_L: npc.Array, B_R: npc.Array, theta: npc.Array, expand: fl
         else:  # charge block only in vL_new
             s_new = increase_per_block
         s_new = min(s_new, sizes_new[j_new])  # don't go beyond block
-        # blocks Y0._data[j_new] have axis [vL, (p1.vR)]. want to keep the s_new slices of the vL axis
+
+        if Y0._qdata[qdata_idx, 0] != j_new:
+            # block does not exist
+            # while we could set corresponding piv entries to True, it would not help, since
+            # the corresponding "entries" of Y0 are zero anyway
+            continue
+            
+        # block has axis [vL, (p1.vR)]. want to keep the s_new slices of the vL axis
         #  that have the largest norm
-        priorities = np.linalg.norm(Y0._data[j_new], axis=1)
-        kept_slices = np.argsort(-priorities)[:s_new]  # negative sign so we sort large to small
+        norms = np.linalg.norm(Y0._data[qdata_idx], axis=1)
+        kept_slices = np.argsort(-norms)[:s_new]  # negative sign so we sort large to small
         start = vL_new.slices[j_new]
         piv[start + kept_slices] = True
+
+        qdata_idx += 1
+        if qdata_idx >= Y0._qdata.shape[0]:
+            break
+        
     Y0.iproject(piv, 'vL')
     assert npc.norm(Y0) > 0
     return Y0
