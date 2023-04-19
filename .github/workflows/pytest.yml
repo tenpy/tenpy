@@ -30,7 +30,7 @@ jobs:
         #  scipy>=0.18
         #  Cython>=0.29
         #  setuptools>=30.3.0
-        pip install numpy=1.21.6 scipy=1.7.3 Cython>=0.29 setuptools>=30.3.0
+        pip install numpy==1.21.6 scipy==1.7.3 Cython>=0.29 setuptools>=30.3.0
     - name : Build
       run: |
         pip install .
