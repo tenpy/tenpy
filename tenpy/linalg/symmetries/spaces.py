@@ -13,7 +13,7 @@ __all__ = ['VectorSpace', 'ProductSpace']
 
 class VectorSpace:
     """A vector space, which decomposes into sectors of a given symmetry.
-    
+
     Parameters
     ----------
     symmetry:
@@ -30,44 +30,42 @@ class VectorSpace:
         ``sectors[i_s, :]`` appears ``multiplicities[i_s]`` times.
         If not given, a multiplicity ``1`` is assumed for all `sectors`.
     is_real : bool
-        Whether the space is over the real numbers. 
+        Whether the space is over the real numbers.
         Otherwise it is over the complex numbers (default).
     _is_dual : bool
         Whether this is the "normal" (i.e. ket) or dual (i.e. bra) space.
         To construct a dual space, consider using `space.dual` instead.
 
-        .. warning :    
+        .. warning :
             For ``_is_dual==True``, the passed `sectors` are interpreted as the sectors of
             the ("non-dual") ket-space isomorphic to self.
-            They are stored as ``self._sectors``, while ``self.sectors``, accessed via the property, 
+            They are stored as ``self._sectors``, while ``self.sectors``, accessed via the property,
             are the duals of `sectors == self._sectors` if ``_is_dual==True``.
             This means that to construct the dual of ``VectorSpace(..., some_sectors)``,
             we need to call ``VectorSpace(..., some_sectors, _is_dual=True)`` and in particular
-            pass the _same_ sectors. 
+            pass the _same_ sectors.
     """
-    
+
     def __init__(self, symmetry: Symmetry, sectors: SectorArray, multiplicities: np.ndarray = None,
                  is_real: bool = False, _is_dual: bool = False):
         self.symmetry = symmetry
         self._sectors = sectors
-
-        # TODO (JU): call it num_sectors for PEP8s sake (i.e. uppercase only for classes)?
-        self.N_sectors = N_sectors = len(sectors)
+        self.num_sectors = num_sectors = len(sectors)
 
         # TODO (JU) make multiplicities a numpy array?
         if multiplicities is None:
-            multiplicities = [1] * N_sectors
+            multiplicities = np.ones((num_sectors,), dtype=int)
         multiplicities = np.asarray(multiplicities, dtype=int)
         assert np.all(multiplicities > 0)
-        assert multiplicities.shape == (N_sectors,)
+        assert multiplicities.shape == (num_sectors,)
         self.multiplicities = multiplicities
-        # TODO (JU) if we have a version of sector_dim that works on SectorArray, we could use 
+        # TODO (JU) if we have a version of sector_dim that works on SectorArray, we could use
         #  numpy __mul__ and np.sum here...
         self.dim = sum(symmetry.sector_dim(s) * m for s, m in zip(sectors, self.multiplicities))
         self.is_dual = _is_dual
 
         if is_real:
-            # TODO (JU): pretty sure some parts of linalg.symmetries.groups relies on 
+            # TODO (JU): pretty sure some parts of linalg.symmetries.groups relies on
             #  the assumption of complex vector spaces. not sure though, need to check.
             raise NotImplementedError
         self.is_real = is_real
@@ -122,7 +120,7 @@ class VectorSpace:
         if self.is_dual != other.is_dual:
             return False
 
-        if self.N_sectors != other.N_sectors:
+        if self.num_sectors != other.num_sectors:
             # now we may assume that checking all multiplicities of self is enough.
             return False
 
@@ -131,7 +129,7 @@ class VectorSpace:
         other_order = np.argsort(other.sectors, axis=0)
         return np.all(self.sectors[self_order] == other.sectors[other_order]) \
             and np.all(self.multiplicities[self_order] == other.multiplicities[other_order])
-        
+
     @property
     def dual(self):
         res = copy.copy(self)  # shallow copy, works for subclasses as well
@@ -191,7 +189,7 @@ class ProductSpace(VectorSpace):
     |                Y
     |                 \
     |                 self
-    
+
     It is the product space of the individual `spaces`,
     but with an associated basis change implied to allow preserving the symmetry.
 
@@ -204,21 +202,21 @@ class ProductSpace(VectorSpace):
         To construct duals, consider using `space.dual` instead.
 
         .. warning :
-            For ``_is_dual==True``, the passed `spaces` are interpreted as the factors of 
+            For ``_is_dual==True``, the passed `spaces` are interpreted as the factors of
             the "non-dual" space.
-            This means that to construct the dual of ``ProducSpace(some_spaces)``,
+            This means that to construct the dual of ``ProductSpace(some_spaces)``,
             wen need to call ``ProductSpace(some_spaces, _is_dual=True)`` and in particular
             pass the _same_ spaces.
             In particular, this is not the same as ``ProductSpace([s.dual for s in some_spaces])``.
-            
+
     _sectors:
         Can optionally pass the sectors of self, to avoid recomputation.
         These are the inputs to VectorSpace.__init__, so they are unchanged by flipping is_dual.
     _multiplicities:
         Can optionally pass the multiplicities of self, to avoid recomputation.
     """
-    
-    def __init__(self, spaces: list[VectorSpace], is_dual: bool = False, 
+
+    def __init__(self, spaces: list[VectorSpace], is_dual: bool = False,
                  _sectors: SectorArray = None, _multiplicities: np.ndarray = None):
         self.spaces = spaces  # spaces can be themselves ProductSpaces
         symmetry = spaces[0].symmetry
@@ -233,7 +231,7 @@ class ProductSpace(VectorSpace):
                              multiplicities=_multiplicities,
                              is_real=is_real,
                              _is_dual=is_dual)
-        
+
     def as_VectorSpace(self):
         """Forget about the substructure of the ProductSpace but view only as VectorSpace.
         This is necessary before truncation, after which the product-space structure is no
@@ -242,8 +240,8 @@ class ProductSpace(VectorSpace):
         return VectorSpace(symmetry=self.symmetry,
                            sectors=self._sectors,  # underscore is important!
                            multiplicities=self.multiplicities,
-                           _is_dual=self.is_dual,
-                           is_real=self.is_real)
+                           is_real=self.is_real,
+                           _is_dual=self.is_dual)
 
     def flip_is_dual(self) -> ProductSpace:
         """Return a ProductSpace isomorphic to self, which hat the opposite is_dual attribute.
@@ -253,7 +251,7 @@ class ProductSpace(VectorSpace):
         """
         return ProductSpace(spaces=[s.dual for s in self.spaces], is_dual=not self.is_dual,
                             _sectors=self._sectors, _multiplicities=self.multiplicities)
-        
+
     def gauge_is_dual(self, is_dual: bool) -> ProductSpace:
         """Return a ProductSpace isomorphic (or equal) to self with the given is_dual attribute."""
         if is_dual == self.is_dual:
@@ -294,6 +292,8 @@ class ProductSpace(VectorSpace):
 
     @property
     def dual(self):
+        # TODO fix this to return spaces=[s.dual for s in self.spaces]
+        # -> other convention for ProductSpace.__init__(), but .spaces is what we split up into.
         return ProductSpace(spaces=self.spaces, is_dual=not self.is_dual, _sectors=self._sectors,
                             _multiplicities=self.multiplicities)
 
@@ -322,8 +322,8 @@ class ProductSpace(VectorSpace):
             # by convention fuse spaces left to right, i.e. (...((0,1), 2), ..., N)
         sectors = np.asarray(list(fusion.keys()))
         multiplicities = np.asarray(list(fusion.values()))
-        
+
         # note: sectors are not sorted here; need `is_dual` to allow correct sorting.
         # TODO FIXME (JU): no, we can sort them here. Those are the "non-dual" sectors. right?
-        
+
         return sectors, multiplicities

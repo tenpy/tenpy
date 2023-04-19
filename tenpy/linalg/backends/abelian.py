@@ -25,6 +25,7 @@ from dataclasses import dataclass
 from typing import Iterable, TypeVar, List, TYPE_CHECKING
 import numpy as np
 import copy
+import warnings
 
 from .abstract_backend import AbstractBackend, AbstractBlockBackend, Data, Block, Dtype
 from ..symmetries.groups import Symmetry, ProductSymmetry, AbelianGroup, Sector
@@ -47,10 +48,7 @@ if TYPE_CHECKING:
 
 
 class AbelianBackendVectorSpace(VectorSpace):
-    """Subclass of VectorSpace with additonal data and restrictions.
-
-    A `Sector` consists of a single integer of charge values (for U1Symmetry and ZNSymmetry)
-    or a tuple of integers for ProductSpace.
+    """Subclass of VectorSpace with additonal data and restrictions for AbstractAbelianBackend.
 
 
     Attributes
@@ -62,23 +60,18 @@ class AbelianBackendVectorSpace(VectorSpace):
         without symmetries. Note that this is not sorted when perm_block_inds is non-trivial.
 
     """
-    def __init__(self, symmetry: Symmetry, sectors: list[Sector], multiplicities: list[int],
-                 is_dual: bool, is_real: bool, perm_block_inds=None, slices=None):
-        # possibly originally unsorted sectors
-        sectors = np.asarray(sectors, dtype=Charge) # TODO: typecheck probably complains?
-        multiplicities = np.asarray(multiplicities)
-        VectorSpace.__init__(self, symmetry, sectors, multiplicities, is_dual, is_real)
-        N_sectors = sectors.shape[0]
+    def __init__(self, symmetry: Symmetry, sectors: SectorArray, multiplicities: np.ndarray = None,
+                 is_real: bool = False, _is_dual: bool = False,
+                 perm_block_inds=None, slices=None):
+        VectorSpace.__init__(self, symmetry, sectors, multiplicities, is_real, _is_dual)
+        num_sectors = sectors.shape[0]
         self.sector_ndim = sectors.ndim
         if sectors.ndim == 1:
             assert not isinstance(symmetry, ProductSymmetry)
         if perm_block_inds is None:
             # sort by slices
             assert slices is None
-            slices = np.zeros((N_sectors, 2), np.intp)
-            slices[:, 1] = slice_ends = np.cumsum(self.multiplicities)
-            slices[1:, 0] = slice_ends[:-1]
-            self.slices = slices
+            self.slices = _slices_from_multiplicities(multiplicities)
             self._sort_sectors()
         else:
             # TODO: do we need this case?
@@ -95,13 +88,47 @@ class AbelianBackendVectorSpace(VectorSpace):
             self.multiplicities = self.multiplicities[perm_block_inds]
             self.slices = self.slices[perm_block_inds]
 
-
     # TODO: do we need get_qindex?
     # Since slices is no longer sorted, it would be O(L) rather than O(log(L))
 
-    def project(self, mask):
-        raise NotImplementedError("TODO")
+    def project(self, mask: ndarray):
+        """Return copy keeping only the indices specified by `mask`.
 
+        Parameters
+        ----------
+        mask : 1D array(bool)
+            Whether to keep each of the indices in the dense array.
+
+        Returns
+        -------
+        map_qind : 1D array
+            Map of qindices, such that ``qind_new = map_qind[qind_old]``,
+            and ``map_qind[qind_old] = -1`` for qindices projected out.
+        block_masks : 1D array
+            The bool mask for each of the *remaining* blocks.
+        projected_copy : :class:`LegCharge`
+            Copy of self with the qind projected by `mask`.
+        """
+        mask = np.asarray(mask, dtype=np.bool_)
+        cp = copy.copy()
+        block_masks = [mask[b:e] for b, e in self.slices]
+        new_multiplicities = np.array([np.sum(bm) for bm in block_masks])
+        keep = np.nonzero(new_multiplicities)[0]
+        block_masks = [block_masks[i] for i in keep]
+        new_block_number = len(block_masks)
+        cp._sectors = cp._sectors[keep]
+        cp.multiplicities = new_multiplicities[keep]
+        cp.slices = _slices_from_multiplicities(cp.multiplicities)
+        map_qind = np.full((new_block_number,), -1, np.intp)
+        map_qind[keep] = cp.perm_block_inds = np.arange(new_block_number)
+        return map_qind, block_masks, cp
+
+
+def _slices_from_multiplicities(multiplicities: np.ndarray):
+    slices = np.zeros((len(multiplicities), 2), np.intp)
+    slices[:, 1] = slice_ends = np.cumsum(self.multiplicities)
+    slices[1:, 0] = slice_ends[:-1]
+    return slices
 
 
 # TODO: is the diamond-structure inheritance okay?
@@ -166,21 +193,21 @@ class AbelianBackendFusionSpace(FusionSpace, AbelianBackendVectorSpace):
         # http://docs.scipy.org/doc/numpy/reference/arrays.indexing.html
         N_spaces = len(spaces)
 
-        spaces_N_sectors = tuple(space.N_sectors for space in spaces)
-        self._strides = _make_stride(spaces_N_sectors, Cstyle=True)
+        spaces_num_sectors = tuple(space.num_sectors for space in spaces)
+        self._strides = _make_stride(spaces_num_sectors, Cstyle=True)
         # (save strides for :meth:`_map_incoming_block_inds`)
 
         # create a grid to select the multi-index sector
-        grid = np.indices(spaces_N_sectors, np.intp)
-        # grid is an array with shape ``(N_spaces, *spaces_N_sectors)``,
+        grid = np.indices(spaces_num_sectors, np.intp)
+        # grid is an array with shape ``(N_spaces, *spaces_num_sectors)``,
         # with grid[li, ...] = {np.arange(space_block_numbers[li]) increasing in li-th direcion}
         # save the strides of grid, which is needed for :meth:`_map_incoming_block_inds`
         # collapse the different directions into one.
         grid = grid.reshape(N_spaces, -1)  # *this* is the actual `reshaping`
         # *columns* of grid are now all possible cominations of qindices.
 
-        nblocks = grid.shape[1]  # number of blocks in FusionSpace = np.product(spaces_N_sectors)
-        # this is different from N_sectors
+        nblocks = grid.shape[1]  # number of blocks in FusionSpace = np.product(spaces_num_sectors)
+        # this is different from num_sectors
 
         # determine block_ind_map -- it's essentially the grid.
         block_ind_map = np.zeros((nblocks, 3 + N_spaces), dtype=np.intp)
@@ -193,6 +220,7 @@ class AbelianBackendFusionSpace(FusionSpace, AbelianBackendVectorSpace):
         # block_ind_map[:, :3] is initialized after sort/bunch.
 
         # calculate new non-dual sectors
+        # TODO FIXME: update conveniton of is_dual=True...
         non_dual_sectors = _fuse_abelian_charges(spaces[0].symmetry,
                                                  *(space.sectors for space in spaces))
         if is_dual:
@@ -224,9 +252,10 @@ class AbelianBackendFusionSpace(FusionSpace, AbelianBackendVectorSpace):
         block_ind_map[:, :2] -= multiplicities[new_block_ind][:, np.newaxis]
 
         self.block_ind_map = block_ind_map  # finished
-        # self.q_map_slices = diffs  # up to last index.
+        # self.q_map_slices = diffs  # reminder: differs from old npc by missing last index.
         # TODO: do we need this? I think it was used in split_legs()...
 
+        # TODO FIXME is_dual convention changed....
         if is_dual:
             sectors = spaces[0].symmetry.dual_sectors(non_dual_sectors)
         else:
@@ -258,15 +287,32 @@ class AbelianBackendFusionSpace(FusionSpace, AbelianBackendVectorSpace):
         return self._inv_perm_block_inds[inds_before_perm]
 
     def as_VectorSpace(self):
-        res = AbelianBackendVectorSpace.__new__(AbelianBackendVectorSpace)
-        return res
+        return AbelianBackendVectorSpace(symmetry=self.symmetry,
+                                         sectors=self.sectors,  # TODO: self._sectors vs self.sectors?
+                                         multiplicities=self.multiplicities,
+                                         is_dual=self.is_dual,
+                                         is_real=self.is_real)
 
+    def project(self, *args, **kwargs):
+        """Convert self to VectorSpace and call :meth:`AbelianBackendVectorSpace.project`.
 
-    #  def sectors(self):
-    #      # In AbelianBackend, we save the _sectors in a 2D numpy array, no matter the nesting
-    #      # convert to nested list of list for nested FusionSpace
-    #      returns nested lists for nested FusionSpace, but we
-    #      if self.is_dual:
+        In general, this could be implemented for a ProductSpace, but would make
+        `split_legs` more complicated, thus we keep it simple.
+        If you really want to project and split afterwards, use the following work-around,
+        which is for example used in :class:`~tenpy.algorithms.exact_diagonalization`:
+
+        1) Create the full pipe and save it separetely.
+        2) Convert the Pipe to a Leg & project the array with it.
+        3) [... do calculations ...]
+        4) To split the 'projected pipe' of `A`, create an empty array `B` with the legs of A,
+           but replace the projected leg by the full pipe. Set `A` as a slice of `B`.
+           Finally split the pipe.
+        """
+        # TODO: this should be FusionSpace.project()
+        # is method resolution order correct to choose that over AbelianBackendVectorSpace.project()?
+        warnings.warn("Converting FusionSpace to VectorSpace for `project`", stacklevel=2)
+        res = self.as_VectorSpace()
+        return res.project(*args, **kwargs)
 
 
 def _make_stride(shape, cstyle=True):
@@ -359,8 +405,8 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
         elif isinstance(leg, FusionSpace):
             return AbelianBackendFusionSpace(leg.spaces, leg.is_dual)
         else:
-            return AbelianBackendVectorSpace(leg.symmetry, leg.sectors,
-                                             leg.multiplicities, leg.is_dual, leg.is_real)
+            return AbelianBackendVectorSpace(leg.symmetry, leg.sectors, leg.multiplicities,
+                                             leg.is_real, leg.is_dual)
 
     def get_dtype_from_data(self, a: Data) -> Dtype:
         return a.dtype
