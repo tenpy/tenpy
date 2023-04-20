@@ -34,7 +34,7 @@ def _get_four_sectors(symm: groups.Symmetry) -> groups.SectorArray:
 def test_vector_space(symm):
     symm: groups.Symmetry = symmetries[symm]
     # TODO (JU) test real (as in "not complex") vectorspaces
-    
+
     sectors = _get_four_sectors(symm)
     mults = [2, 1, 3, 5]
     s1 = spaces.VectorSpace(symmetry=symm, sectors=sectors, multiplicities=mults)
@@ -55,7 +55,7 @@ def test_vector_space(symm):
     assert s1 != s1.dual
     assert s1 != s2
     assert s1 != spaces.VectorSpace(symmetry=symm, sectors=sectors, multiplicities=[2, 1, 3, 6])
-    assert s1.dual == spaces.VectorSpace(symmetry=symm, sectors=sectors, multiplicities=mults, 
+    assert s1.dual == spaces.VectorSpace(symmetry=symm, sectors=sectors, multiplicities=mults,
                                          _is_dual=True)
     assert s1.can_contract_with(s1.dual)
     assert not s1.can_contract_with(s1)
@@ -66,14 +66,14 @@ def test_vector_space(symm):
     assert not s2.is_trivial
     assert spaces.VectorSpace.non_symmetric(dim=1).is_trivial
     assert spaces.VectorSpace(symmetry=symm, sectors=symm.trivial_sector[None, :]).is_trivial
-    
+
     # TODO (JU) test num_parameters when ready
 
 @pytest.mark.parametrize('symm', symmetries.keys())
 def test_product_space(symm):
     symm: groups.Symmetry = symmetries[symm]
     # TODO (JU) test real (as in "not complex") vectorspaces
-    
+
     sectors = _get_four_sectors(symm)
     s1 = spaces.VectorSpace(symmetry=symm, sectors=sectors, multiplicities=[2, 1, 3, 4])
     s2 = spaces.VectorSpace(symmetry=symm, sectors=sectors[:2], multiplicities=[2, 1])
@@ -95,7 +95,10 @@ def test_product_space(symm):
     assert p1 == p1
     assert p1 != p3a
     assert p3a == p3b
-    assert p2 == spaces.ProductSpace([s1.dual, s2.dual], is_dual=True).flip_is_dual()
-    assert p2 == spaces.ProductSpace([s1, s2], is_dual=True).dual
+    assert p2 == spaces.ProductSpace([s1.dual, s2.dual], _is_dual=True).dual
+    for p in [p1, p2, p3a, p3b]:
+        assert p.can_contract_with(p.dual)
+    assert p2 == spaces.ProductSpace([s1, s2], _is_dual=True).flip_is_dual()
     assert p2.is_dual_of(spaces.ProductSpace([s1.dual, s2.dual]).flip_is_dual())
-    assert p2.is_dual_of(spaces.ProductSpace([s1, s2], is_dual=True))
+    assert p2.is_dual_of(spaces.ProductSpace([s1.dual, s2.dual], _is_dual=True))
+

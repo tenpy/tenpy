@@ -3,14 +3,14 @@
 Changes compared to old np_conserved:
 
 - replace `ChargeInfo` by subclasses of `AbelianGroup` (or `ProductSymmetry`)
-- replace `LegCharge` by `AbelianBackendVectorSpace` and `LegPipe` by `AbelianBackendFusionSpace`
+- replace `LegCharge` by `AbelianBackendVectorSpace` and `LegPipe` by `AbelianBackendProductSpace`
 - standard `Tensor` have qtotal=0, only ChargedTensor can have non-zero qtotal
 - relabeling:
     - `Array.qdata`, "qind" and "qindices" to `AbelianBackendData.block_inds` and "block indices"
-    - `LegPipe.qmap` to `AbelianBackendFusionSpace.block_ind_map` (witch changed column order!!!)
-    - `LegPipe._perm` to `FusionSpace._perm_block_inds_map`
+    - `LegPipe.qmap` to `AbelianBackendProductSpace.block_ind_map` (witch changed column order!!!)
+    - `LegPipe._perm` to `ProductSpace._perm_block_inds_map`
     - `LetCharge.get_block_sizes()` is just `VectorSpace.multiplicities`
-- keep VectorSpace and FusionSpace "sorted" and "bunched",
+- keep VectorSpace and ProductSpace "sorted" and "bunched",
   i.e. do not support legs with smaller blocks to effectively allow block-sparse tensors with
   smaller blocks than dictated by symmetries (which we actually have in H_MPO on the virtual legs...)
   In turn, VectorSpace saves a `_perm` used to sort the originally passed `sectors`.
@@ -29,10 +29,10 @@ import warnings
 
 from .abstract_backend import AbstractBackend, AbstractBlockBackend, Data, Block, Dtype
 from ..symmetries.groups import Symmetry, ProductSymmetry, AbelianGroup, Sector
-from ..symmetries.spaces import VectorSpace, FusionSpace
+from ..symmetries.spaces import VectorSpace, ProductSpace
 from ...tools.optimization import use_cython
 
-__all__ = ['AbelianBackendData', 'AbelianBackendVectorSpace', 'AbelianBackendFusionSpace',
+__all__ = ['AbelianBackendData', 'AbelianBackendVectorSpace', 'AbelianBackendProductSpace',
            'AbstractAbelianBackend', 'detect_qtotal']
 
 Charge = np.int_
@@ -132,7 +132,7 @@ def _slices_from_multiplicities(multiplicities: np.ndarray):
 
 
 # TODO: is the diamond-structure inheritance okay?
-class AbelianBackendFusionSpace(FusionSpace, AbelianBackendVectorSpace):
+class AbelianBackendProductSpace(ProductSpace, AbelianBackendVectorSpace):
     r"""
 
     Attributes
@@ -151,18 +151,18 @@ class AbelianBackendFusionSpace(FusionSpace, AbelianBackendVectorSpace):
 
     Each block index combination :math:`(i_1, ..., i_{nlegs})` of the `nlegs=len(spaces)`
     input VectorSpaces will end up getting placed in some slice :math:`a_j:a_{j+1}` of the
-    resulting `FusionSpace`. Within this slice, the data is simply reshaped in usual row-major
+    resulting `ProductSpace`. Within this slice, the data is simply reshaped in usual row-major
     fashion ('C'-order), i.e., with strides :math:`s_1 > s_2 > ...` given by the block size.
 
-    It will be a subslice of a new total block in the FusionSpace labeled by block index
+    It will be a subslice of a new total block in the ProductSpace labeled by block index
     :mah:`J`. We fuse charges according to the rule::
 
-        FusionSpace.sectors[J] = fusion_outcomes(*[l.sectors[i_l]
+        ProductSpace.sectors[J] = fusion_outcomes(*[l.sectors[i_l]
             for l, i_l,l in zip(incoming_block_inds, spaces)])
 
     Since many charge combinations can fuse to the same total charge,
     in general there will be many tuples :math:`(i_1, ..., i_{nlegs})` belonging to the same
-    charge block :math:`J` in the `FusionSpace`.
+    charge block :math:`J` in the `ProductSpace`.
 
     The rows of `block_ind_map` are precisely the collections of
     ``[b_{J,k}, b_{J,k+1}, i_1, . . . , i_{nlegs}, J]``.
@@ -186,7 +186,7 @@ class AbelianBackendFusionSpace(FusionSpace, AbelianBackendVectorSpace):
     def __init__(self, spaces: list[VectorSpace], is_dual: bool = False):
         backend = spaces[0].backend
         spaces = [backend.convert_vector_space(s) for s in spaces]
-        FusionSpace.__init__(self, spaces, is_dual)
+        ProductSpace.__init__(self, spaces, is_dual)
 
     def _fuse_spaces(self, spaces: list[AbelianBackendVectorSpace], is_dual: bool):
         # this function heavily uses numpys advanced indexing, for details see
@@ -206,7 +206,7 @@ class AbelianBackendFusionSpace(FusionSpace, AbelianBackendVectorSpace):
         grid = grid.reshape(N_spaces, -1)  # *this* is the actual `reshaping`
         # *columns* of grid are now all possible cominations of qindices.
 
-        nblocks = grid.shape[1]  # number of blocks in FusionSpace = np.product(spaces_num_sectors)
+        nblocks = grid.shape[1]  # number of blocks in ProductSpace = np.product(spaces_num_sectors)
         # this is different from num_sectors
 
         # determine block_ind_map -- it's essentially the grid.
@@ -308,9 +308,9 @@ class AbelianBackendFusionSpace(FusionSpace, AbelianBackendVectorSpace):
            but replace the projected leg by the full pipe. Set `A` as a slice of `B`.
            Finally split the pipe.
         """
-        # TODO: this should be FusionSpace.project()
+        # TODO: this should be ProductSpace.project()
         # is method resolution order correct to choose that over AbelianBackendVectorSpace.project()?
-        warnings.warn("Converting FusionSpace to VectorSpace for `project`", stacklevel=2)
+        warnings.warn("Converting ProductSpace to VectorSpace for `project`", stacklevel=2)
         res = self.as_VectorSpace()
         return res.project(*args, **kwargs)
 
@@ -400,10 +400,10 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
 
     """
     def convert_vector_space(self, leg: VectorSpace) -> AbelianBackendVectorSpace:
-        if isinstance(leg, (AbelianBackendVectorSpace, AbelianBackendFusionSpace)):
+        if isinstance(leg, (AbelianBackendVectorSpace, AbelianBackendProductSpace)):
             return leg
-        elif isinstance(leg, FusionSpace):
-            return AbelianBackendFusionSpace(leg.spaces, leg.is_dual)
+        elif isinstance(leg, ProductSpace):
+            return AbelianBackendProductSpace(leg.spaces, leg.is_dual)
         else:
             return AbelianBackendVectorSpace(leg.symmetry, leg.sectors, leg.multiplicities,
                                              leg.is_real, leg.is_dual)
@@ -504,7 +504,7 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
     #  def conj(self, a: Tensor) -> Data:
     #      return self.block_conj(a.data)
 
-    #  def combine_legs(self, a: Tensor, idcs: list[int], new_leg: FusionSpace) -> Data:
+    #  def combine_legs(self, a: Tensor, idcs: list[int], new_leg: ProductSpace) -> Data:
     #      return self.block_combine_legs(a.data, idcs)
 
     #  def split_leg(self, a: Tensor, leg_idx: int) -> Data:

@@ -3,6 +3,7 @@
 from __future__ import annotations
 from itertools import product
 import numpy as np
+from numpy import ndarray
 import copy
 
 from .groups import SectorArray, Symmetry, no_symmetry
@@ -46,13 +47,12 @@ class VectorSpace:
             pass the _same_ sectors.
     """
 
-    def __init__(self, symmetry: Symmetry, sectors: SectorArray, multiplicities: np.ndarray = None,
+    def __init__(self, symmetry: Symmetry, sectors: SectorArray, multiplicities: ndarray = None,
                  is_real: bool = False, _is_dual: bool = False):
         self.symmetry = symmetry
-        self._sectors = sectors
+        self._sectors = np.asarray(sectors, dtype=int)
         self.num_sectors = num_sectors = len(sectors)
 
-        # TODO (JU) make multiplicities a numpy array?
         if multiplicities is None:
             multiplicities = np.ones((num_sectors,), dtype=int)
         multiplicities = np.asarray(multiplicities, dtype=int)
@@ -84,6 +84,7 @@ class VectorSpace:
     def sectors_str(self) -> str:
         """short str describing the self._sectors and their multiplicities"""
         # TODO (JU) what if there are a lot of sectors?
+        # (JH) maybe print up to 5 or 10 with largest multiplicities?
         return ', '.join(f'{self.symmetry.sector_str(a)}: {mult}'
                          for a, mult in zip(self._sectors, self.multiplicities))
 
@@ -125,6 +126,7 @@ class VectorSpace:
             return False
 
         # TODO: this is probably inefficient. eventually this should all be C(++) anyway...
+        # TODO: (JH) we should by convention always sort self._sectors...
         self_order = np.argsort(self.sectors, axis=0)
         other_order = np.argsort(other.sectors, axis=0)
         return np.all(self.sectors[self_order] == other.sectors[other_order]) \
@@ -140,16 +142,14 @@ class VectorSpace:
         if self.is_real:
             # TODO (JU) is this actually true...?
             #  it is if we ignore symmetries, but with symmetries we should take care of the sectors?
+            # (JH) just by defining the `is_dual` flag to distinguish bra vs ket,
+            #      I'd say we should still check self == other.dual for is_real=True.
             return self == other
         else:
             return self == other.dual
 
     # TODO (JU) deprecate this in favor of can_contract_with ?
     def is_dual_of(self, other):
-        # FIXME think about duality in more detail.
-        #  i.e. is a
-        # `Vectorspace(a.symmetry, [sector.dual for sector in a.sectors], a.multiplicities, not a.is_dual, a.is_real) == a` ?
-        # JH: no, it's not, the `is_dual` indicates whether it's a "bra" or "ket" space.
         return self == other.dual
 
     @property
@@ -193,44 +193,45 @@ class ProductSpace(VectorSpace):
     It is the product space of the individual `spaces`,
     but with an associated basis change implied to allow preserving the symmetry.
 
+    .. note ::
+        While mathematically
+        ``ProductSpace([s.dual for s in spaces]).dual == ProductSpace(spaces)``,
+        in this implementation we explicitly distinguish those spaces, and consider them as
+        non-equal due to a different :attr:`is_dual` flag!
+        This flag is somewhat artifical, but necessary to allows us to
+        a) sort by charge sectors on the non-dual spaces to ensure matching order between legs that
+        can be contracted, and further
+        b) consistently view every `ProductSpace` as a :class:`VectorSpace`, i.e. have proper
+        subclass behavior.
+
     Parameters
     ----------
     spaces:
         The factor spaces that multiply to this space.
+        For `is_dual=True`, they are the factors of the dual space.
     _is_dual : bool
-        Whether this is the "normal" product of ``spaces`` or the dual of the product of ``spaces``.
-        To construct duals, consider using `space.dual` instead.
-
-        .. warning :
-            For ``_is_dual==True``, the passed `spaces` are interpreted as the factors of
-            the "non-dual" space.
-            This means that to construct the dual of ``ProductSpace(some_spaces)``,
-            wen need to call ``ProductSpace(some_spaces, _is_dual=True)`` and in particular
-            pass the _same_ spaces.
-            In particular, this is not the same as ``ProductSpace([s.dual for s in some_spaces])``.
-
-    _sectors:
-        Can optionally pass the sectors of self, to avoid recomputation.
+        Flag indicating wether the fusion space represents a dual (bra) space or a non-dual (ket)
+        space. See note above.
+    _sectors, _multiplicities:
+        Can optionally be passed to avoid recomputation.
         These are the inputs to VectorSpace.__init__, so they are unchanged by flipping is_dual.
-    _multiplicities:
-        Can optionally pass the multiplicities of self, to avoid recomputation.
     """
 
-    def __init__(self, spaces: list[VectorSpace], is_dual: bool = False,
-                 _sectors: SectorArray = None, _multiplicities: np.ndarray = None):
+    def __init__(self, spaces: list[VectorSpace], _is_dual: bool = False,
+                 _sectors: SectorArray = None, _multiplicities: ndarray = None):
         self.spaces = spaces  # spaces can be themselves ProductSpaces
         symmetry = spaces[0].symmetry
         assert all(s.symmetry == symmetry for s in spaces)
         is_real = spaces[0].is_real
         assert all(space.is_real == is_real for space in spaces)
         if _sectors is None or _multiplicities is None:
-            _sectors, _multiplicities = self._fuse_spaces(symmetry=symmetry, spaces=spaces)
+            _sectors, _multiplicities = self._fuse_spaces(symmetry, spaces, _is_dual)
         VectorSpace.__init__(self,
                              symmetry=symmetry,
                              sectors=_sectors,
                              multiplicities=_multiplicities,
                              is_real=is_real,
-                             _is_dual=is_dual)
+                             _is_dual=_is_dual)
 
     def as_VectorSpace(self):
         """Forget about the substructure of the ProductSpace but view only as VectorSpace.
@@ -244,13 +245,15 @@ class ProductSpace(VectorSpace):
                            _is_dual=self.is_dual)
 
     def flip_is_dual(self) -> ProductSpace:
-        """Return a ProductSpace isomorphic to self, which hat the opposite is_dual attribute.
+        """Return a ProductSpace isomorphic to self, which has the opposite is_dual attribute.
 
         This realizes the isomorphism between ``V.dual * W.dual`` and ``(V * W).dual``
         for `VectorSpace`s ``V`` and ``W``.
         """
-        return ProductSpace(spaces=[s.dual for s in self.spaces], is_dual=not self.is_dual,
-                            _sectors=self._sectors, _multiplicities=self.multiplicities)
+        # note: yields dual self._sector so can have different sorting of _sectors!
+        # so can't just pass self._sectors and self._multiplicities
+        # TODO: should we return the associated permutation of block_indices?
+        return ProductSpace(spaces=self.spaces, _is_dual=not self.is_dual)
 
     def gauge_is_dual(self, is_dual: bool) -> ProductSpace:
         """Return a ProductSpace isomorphic (or equal) to self with the given is_dual attribute."""
@@ -292,18 +295,23 @@ class ProductSpace(VectorSpace):
 
     @property
     def dual(self):
-        # TODO fix this to return spaces=[s.dual for s in self.spaces]
-        # -> other convention for ProductSpace.__init__(), but .spaces is what we split up into.
-        return ProductSpace(spaces=self.spaces, is_dual=not self.is_dual, _sectors=self._sectors,
-                            _multiplicities=self.multiplicities)
+        res = copy.copy(self)  # shallow copy, works for subclasses as well
+        res.is_dual = not self.is_dual
+        res.spaces = [s.dual for s in self.spaces]
+        return res
 
     @property
     def is_trivial(self) -> bool:
         return all(s.is_trivial for s in self.spaces)
 
-    def _fuse_spaces(self, symmetry: Symmetry, spaces: list[VectorSpace]
-                     ) -> tuple[SectorArray, np.ndarray]:
+    def _fuse_spaces(self, symmetry: Symmetry, spaces: list[VectorSpace], _is_dual: bool,
+                     ) -> tuple[SectorArray, ndarray]:
         """Calculate sectors and multiplicities in the fusion of spaces."""
+        if _is_dual:
+            spaces = [s.dual for s in spaces] # directly fuse sectors of dual spaces.
+            # This yields overall dual `sectors` to return, which we directly save in
+            # self._sectors, such that `self.sectors` (which takes a dual!) yields correct sectors
+            # Overall, this ensures consistent sorting/order of sectors between dual ProductSpace!
         fusion = dict((tuple(s), m) for s, m in zip(spaces[0].sectors, spaces[0].multiplicities))
         for space in spaces[1:]:
             new_fusion = {}
@@ -322,8 +330,4 @@ class ProductSpace(VectorSpace):
             # by convention fuse spaces left to right, i.e. (...((0,1), 2), ..., N)
         sectors = np.asarray(list(fusion.keys()))
         multiplicities = np.asarray(list(fusion.values()))
-
-        # note: sectors are not sorted here; need `is_dual` to allow correct sorting.
-        # TODO FIXME (JU): no, we can sort them here. Those are the "non-dual" sectors. right?
-
         return sectors, multiplicities
