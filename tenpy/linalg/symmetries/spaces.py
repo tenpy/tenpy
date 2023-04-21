@@ -113,7 +113,7 @@ class VectorSpace:
 
     def __eq__(self, other):
         if not isinstance(other, VectorSpace):
-            return False
+            return NotImplemented
 
         if self.is_real != other.is_real:
             return False
@@ -286,7 +286,7 @@ class ProductSpace(VectorSpace):
 
     def __eq__(self, other):
         if not isinstance(other, ProductSpace):
-            return False
+            return NotImplemented
         if other.is_dual != self.is_dual:
             return False
         if len(other.spaces) != len(self.spaces):
@@ -328,6 +328,6 @@ class ProductSpace(VectorSpace):
                         new_fusion[t_c] = new_fusion.get(t_c, 0) + m_a * m_b * n
             fusion = new_fusion
             # by convention fuse spaces left to right, i.e. (...((0,1), 2), ..., N)
-        sectors = np.asarray(list(fusion.keys()))
+        _sectors = np.asarray(list(fusion.keys()))
         multiplicities = np.asarray(list(fusion.values()))
-        return sectors, multiplicities
+        return _sectors, multiplicities

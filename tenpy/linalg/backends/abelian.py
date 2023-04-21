@@ -29,7 +29,9 @@ import warnings
 
 from .abstract_backend import AbstractBackend, AbstractBlockBackend, Data, Block, Dtype
 from ..symmetries.groups import Symmetry, ProductSymmetry, AbelianGroup, Sector
+from numpy import ndarray
 from ..symmetries.spaces import VectorSpace, ProductSpace
+from ...tools.misc import inverse_permutation
 from ...tools.optimization import use_cython
 
 __all__ = ['AbelianBackendData', 'AbelianBackendVectorSpace', 'AbelianBackendProductSpace',
@@ -60,7 +62,7 @@ class AbelianBackendVectorSpace(VectorSpace):
         without symmetries. Note that this is not sorted when perm_block_inds is non-trivial.
 
     """
-    def __init__(self, symmetry: Symmetry, sectors: SectorArray, multiplicities: np.ndarray = None,
+    def __init__(self, symmetry: Symmetry, sectors: SectorArray, multiplicities: ndarray = None,
                  is_real: bool = False, _is_dual: bool = False,
                  perm_block_inds=None, slices=None):
         VectorSpace.__init__(self, symmetry, sectors, multiplicities, is_real, _is_dual)
@@ -71,7 +73,7 @@ class AbelianBackendVectorSpace(VectorSpace):
         if perm_block_inds is None:
             # sort by slices
             assert slices is None
-            self.slices = _slices_from_multiplicities(multiplicities)
+            self.slices = _slices_from_multiplicities(self.multiplicities)
             self._sort_sectors()
         else:
             # TODO: do we need this case?
@@ -123,10 +125,15 @@ class AbelianBackendVectorSpace(VectorSpace):
         map_qind[keep] = cp.perm_block_inds = np.arange(new_block_number)
         return map_qind, block_masks, cp
 
+    def __mul__(self, other):
+        if isinstance(other, AbelianBackendVectorSpace):
+            return AbelianBackendProductSpace([self, other])
+        return NotImplemented
 
-def _slices_from_multiplicities(multiplicities: np.ndarray):
+
+def _slices_from_multiplicities(multiplicities: ndarray):
     slices = np.zeros((len(multiplicities), 2), np.intp)
-    slices[:, 1] = slice_ends = np.cumsum(self.multiplicities)
+    slices[:, 1] = slice_ends = np.cumsum(multiplicities)
     slices[1:, 0] = slice_ends[:-1]
     return slices
 
@@ -183,34 +190,38 @@ class AbelianBackendProductSpace(ProductSpace, AbelianBackendVectorSpace):
 
     """
     # formerly known as LegPipe
-    def __init__(self, spaces: list[VectorSpace], is_dual: bool = False):
-        backend = spaces[0].backend
-        spaces = [backend.convert_vector_space(s) for s in spaces]
-        ProductSpace.__init__(self, spaces, is_dual)
 
-    def _fuse_spaces(self, spaces: list[AbelianBackendVectorSpace], is_dual: bool):
+    # TODO: AbelienBackendVectorSpace doesn't have access to backend,
+    # so can't call convert_vector_space().
+    #  def __init__(self, spaces: list[VectorSpace], _is_dual: bool = False):
+    #      backend = spaces[0].backend
+    #      spaces = [backend.convert_vector_space(s) for s in spaces]
+    #      ProductSpace.__init__(self, spaces, is_dual)
+
+    def _fuse_spaces(self, symmetry: Symmetry, spaces: list[VectorSpace], _is_dual: bool,
+                     ) -> tuple[SectorArray, ndarray]:
         # this function heavily uses numpys advanced indexing, for details see
         # http://docs.scipy.org/doc/numpy/reference/arrays.indexing.html
-        N_spaces = len(spaces)
+        num_spaces = len(spaces)
 
         spaces_num_sectors = tuple(space.num_sectors for space in spaces)
-        self._strides = _make_stride(spaces_num_sectors, Cstyle=True)
+        self._strides = _make_stride(spaces_num_sectors, cstyle=True)
         # (save strides for :meth:`_map_incoming_block_inds`)
 
         # create a grid to select the multi-index sector
         grid = np.indices(spaces_num_sectors, np.intp)
-        # grid is an array with shape ``(N_spaces, *spaces_num_sectors)``,
+        # grid is an array with shape ``(num_spaces, *spaces_num_sectors)``,
         # with grid[li, ...] = {np.arange(space_block_numbers[li]) increasing in li-th direcion}
         # save the strides of grid, which is needed for :meth:`_map_incoming_block_inds`
         # collapse the different directions into one.
-        grid = grid.reshape(N_spaces, -1)  # *this* is the actual `reshaping`
+        grid = grid.reshape(num_spaces, -1)  # *this* is the actual `reshaping`
         # *columns* of grid are now all possible cominations of qindices.
 
         nblocks = grid.shape[1]  # number of blocks in ProductSpace = np.product(spaces_num_sectors)
         # this is different from num_sectors
 
         # determine block_ind_map -- it's essentially the grid.
-        block_ind_map = np.zeros((nblocks, 3 + N_spaces), dtype=np.intp)
+        block_ind_map = np.zeros((nblocks, 3 + num_spaces), dtype=np.intp)
         block_ind_map[:, 2:-1] = grid.T  # transpose -> rows are possible combinations.
 
         # the block size for given (i1, i2, ...) is the product of ``multiplicities[il]``
@@ -220,28 +231,32 @@ class AbelianBackendProductSpace(ProductSpace, AbelianBackendVectorSpace):
         # block_ind_map[:, :3] is initialized after sort/bunch.
 
         # calculate new non-dual sectors
-        # TODO FIXME: update conveniton of is_dual=True...
-        non_dual_sectors = _fuse_abelian_charges(spaces[0].symmetry,
-                                                 *(space.sectors for space in spaces))
-        if is_dual:
-            non_dual_sectors = spaces[0].symmetry.dual_sectors(non_dual_sectors)
+        if _is_dual:
+            # overall fusion of sectors is equivalent to taking dual of each sector
+            # in standard use cases, this can often avoid explicit
+            # symmetry.dual_sector() calls in VectorSpace.sectors()
+            fuse_sectors = [s.dual.sectors for s in spaces]
+        else:
+            fuse_sectors = [s.sectors for s in spaces]
+        # _sectors are the ones saved in self._sectors, not the property self.sectors
+        _sectors = _fuse_abelian_charges(symmetry,
+            *(sectors[gr] for sectors, gr in zip(fuse_sectors, grid)))
 
         # sort (non-dual) charge sectors. Similar code as in :meth:`LegCharge.sort`
-        perm_block_inds = np.lexsort(charges.T)
+        perm_block_inds = np.lexsort(_sectors.T)
         block_ind_map = block_ind_map[perm_block_inds]
-        non_dual_sectors = non_dual_sectors[perm_block_inds]
+        _sectors = _sectors[perm_block_inds]
         multiplicities = multiplicities[perm_block_inds]
         # inverse permutation is needed in _map_incoming_block_inds
         self._inv_perm_block_inds = inverse_permutation(perm_block_inds)
-
 
         slices = np.cumsum(multiplicities)
         block_ind_map[1:, 0] = slices[:-1]  # start with 0
         block_ind_map[:, 1] = slices
 
         # bunch sectors with equal charges together
-        diffs = _find_row_differences(non_dual_sectors)
-        non_dual_sectors = non_dual_sectors[diffs]
+        diffs = _find_row_differences(_sectors)
+        _sectors = _sectors[diffs]
         multiplicities = slices[diffs]
         multiplicities[1:] -= multiplicities[:-1]
 
@@ -255,12 +270,7 @@ class AbelianBackendProductSpace(ProductSpace, AbelianBackendVectorSpace):
         # self.q_map_slices = diffs  # reminder: differs from old npc by missing last index.
         # TODO: do we need this? I think it was used in split_legs()...
 
-        # TODO FIXME is_dual convention changed....
-        if is_dual:
-            sectors = spaces[0].symmetry.dual_sectors(non_dual_sectors)
-        else:
-            sectors = non_dual_sectors
-        return sectors, multiplicities
+        return _sectors, multiplicities
 
     def _map_incoming_block_inds(self, incoming_block_inds):
         """Map incoming qindices to indices of :attr:`block_ind_map`.
@@ -288,10 +298,10 @@ class AbelianBackendProductSpace(ProductSpace, AbelianBackendVectorSpace):
 
     def as_VectorSpace(self):
         return AbelianBackendVectorSpace(symmetry=self.symmetry,
-                                         sectors=self.sectors,  # TODO: self._sectors vs self.sectors?
+                                         sectors=self._sectors,
                                          multiplicities=self.multiplicities,
-                                         is_dual=self.is_dual,
-                                         is_real=self.is_real)
+                                         is_real=self.is_real,
+                                         _is_dual=self.is_dual)
 
     def project(self, *args, **kwargs):
         """Convert self to VectorSpace and call :meth:`AbelianBackendVectorSpace.project`.
@@ -349,19 +359,19 @@ def _find_row_differences(sectors: SectorArray):
         The indices where rows change, including the first and last. Equivalent to:
         ``[0] + [i for i in range(1, len(qflat)) if np.any(qflat[i-1] != qflat[i])]``
     """
-    # NOTE: remove last entry [len(sectors)] compared to old.charges
+    # note: remove last entry [len(sectors)] compared to old.charges
     diff = np.ones(sectors.shape[0], dtype=np.bool_)
     diff[1:] = np.any(sectors[1:] != sectors[:-1], axis=1)
     return np.nonzero(diff)[0]  # get the indices of True-values
 
 
-def _fuse_abelian_charges(symmetry: AbelianSymmetry, *sector_arrays: ndarray[Sector]):
+def _fuse_abelian_charges(symmetry: AbelianSymmetry, *sector_arrays: SectorArray) -> SectorArray:
     from ..symmetries.groups import FusionStyle
     assert symmetry.fusion_style == FusionStyle.single
     # sectors[i] can be 1d numpy arrays, or list of 1D arrays if using a ProductSymmetry
     fusion = sector_arrays[0]
-    for sector in sector_arrays[1:]:
-        fusion = symmetry.fusion_outcomes_broadcast(fusion, sector_array)
+    for sectors in sector_arrays[1:]:
+        fusion = symmetry.fusion_outcomes_broadcast(fusion, sectors)
         # == fusion + space.sector, but mod N for ZN
     return np.asarray(fusion)
 
@@ -374,7 +384,7 @@ class AbelianBackendData:
     dtype : Dtype
     np_dtype : np.dtype
     blocks : List[Block]  # The actual entries of the tensor. Formerly known as Array._data
-    block_inds : np.ndarray  # For each of the blocks entries the qindices of the different legs.
+    block_inds : ndarray  # For each of the blocks entries the qindices of the different legs.
 
     def copy(self, deep=True):
         if deep:
