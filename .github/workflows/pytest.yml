@@ -28,6 +28,7 @@ jobs:
     - name: Check numpy importable
       run: |
         python -c "import numpy as np; print(np.ones((1, 2)))"
+        python -c "import numpy as np; print(np.__file__)"
     - name : Build
       run: |
         pip install .
