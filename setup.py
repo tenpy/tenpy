@@ -201,6 +201,7 @@ def setup_package():
     setup(version=full_version,
           ext_modules=ext_modules,
           install_requires=read_requ_file('requirements.txt'),
+          setup_requires=read_requ_file('requirements.txt'),
           extras_require=extras_require)
 
 
