@@ -24,14 +24,14 @@ jobs:
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install -r requirements.txt
+        python -m pip install -r requirements.txt
     - name: Check numpy importable
       run: |
         python -c "import numpy as np; print(np.ones((1, 2)))"
         python -c "import numpy as np; print(np.__file__)"
     - name : Build
       run: |
-        pip install .
+        python -m pip install .
 #    - name: Lint with flake8
 #      run: |
 #        pip install flake8
@@ -41,5 +41,5 @@ jobs:
 #        flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
     - name: Test with pytest
       run: |
-        pip install pytest
+        python -m pip install pytest
         pytest
