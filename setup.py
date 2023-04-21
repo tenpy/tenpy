@@ -1,7 +1,6 @@
 # Copyright 2018-2023 TeNPy Developers, GNU GPLv3
-from setuptools import setup, find_packages
-from setuptools import Extension
-import numpy
+from setuptools import setup, Extension
+from setuptools.command.build_ext import build_ext
 import sys
 import os
 import subprocess
@@ -91,6 +90,7 @@ cython_version = '{cython_ver!s}'
         cython_ver = Cython.__version__
     except:
         cython_ver = "(not available)"
+    import numpy
     content = content.format(version=VERSION,
                              full_version=full_version,
                              released=RELEASED,
@@ -113,6 +113,7 @@ def setup_cython_extension():
         from Cython.Build import cythonize
     except:
         return []
+    import numpy
     include_dirs = [numpy.get_include()]
     libs = []
     lib_dirs = []
@@ -174,6 +175,18 @@ def setup_cython_extension():
     return ext_modules
 
 
+class LazyImportBuildExtCmd(build_ext):
+    def run(self):
+        # write_version_py requires numpy import, so we can not run it in setup_package
+        full_version, git_rev = get_version_info()
+        write_version_py(full_version, git_rev)
+        super().run()
+
+    def finalize_options(self):
+        self.distribution.ext_modules = setup_cython_extension()
+        super().finalize_options()
+
+
 def setup_package():
     # change directory to root path of the repository
     src_path = os.path.dirname(os.path.abspath(sys.argv[0]))
@@ -183,7 +196,6 @@ def setup_package():
     os.environ.setdefault("TENPY_NO_CYTHON", "true")
 
     full_version, git_rev = get_version_info()
-    write_version_py(full_version, git_rev)
 
     ext_modules = setup_cython_extension()
 
@@ -198,7 +210,9 @@ def setup_package():
     setup(version=full_version,
           ext_modules=ext_modules,
           install_requires=read_requ_file('requirements.txt'),
-          extras_require=extras_require)
+          setup_requires=read_requ_file('requirements.txt'),  # TODO or only Cython, numpy?
+          extras_require=extras_require,
+          cmdclass={"build_ext": LazyImportBuildExtCmd})
 
 
 if __name__ == "__main__":
