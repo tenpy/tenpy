@@ -1,4 +1,6 @@
 # Copyright 2018-2023 TeNPy Developers, GNU GPLv3
+from setuptools import dist
+dist.Distribution().fetch_build_eggs(['Cython>=0.29', 'numpy>=1.13'])
 from setuptools import setup, find_packages
 from setuptools import Extension
 import sys
