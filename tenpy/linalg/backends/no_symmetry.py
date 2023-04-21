@@ -43,9 +43,6 @@ class AbstractNoSymmetryBackend(AbstractBackend, AbstractBlockBackend, ABC):
         # TODO(JU): this should be checkable via the dtype and can be removed, no?
         return self.block_is_real(a.data)
 
-    def tdot(self, a: Tensor, b: Tensor, axs_a: list[int], axs_b: list[int]) -> Data:
-        return self.block_tdot(a.data, b.data, axs_a, axs_b)
-
     def data_item(self, a: Data) -> float | complex:
         return self.block_item(a)
 
@@ -72,6 +69,9 @@ class AbstractNoSymmetryBackend(AbstractBackend, AbstractBlockBackend, ABC):
     def _data_repr_lines(self, data: Data, indent: str, max_width: int, max_lines: int):
         return [f'{indent}* Data:'] + self._block_repr_lines(data, indent=indent + '  ', max_width=max_width,
                                                             max_lines=max_lines - 1)
+
+    def tdot(self, a: Tensor, b: Tensor, axs_a: list[int], axs_b: list[int]) -> Data:
+        return self.block_tdot(a.data, b.data, axs_a, axs_b)
 
     @abstractmethod
     def svd(self, a: Tensor, axs1: list[int], axs2: list[int], new_leg: VectorSpace | None

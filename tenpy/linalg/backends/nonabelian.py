@@ -9,7 +9,7 @@ from ..symmetries.groups import FusionStyle, Sector, Symmetry
 from ..symmetries.spaces import VectorSpace, ProductSpace
 
 
-__all__ = ['AbstractNonabelianBackend', 'NonAbelianData', 'FusionTree', 'fusion_trees', 
+__all__ = ['AbstractNonabelianBackend', 'NonAbelianData', 'FusionTree', 'fusion_trees',
            'all_fusion_trees', 'coupled_sectors']
 
 
@@ -28,7 +28,7 @@ class NonAbelianData:
     codomain: ProductSpace
     domain: ProductSpace
     dtype: Dtype
-    
+
 
 # TODO eventually remove AbstractBlockBackend inheritance, it is not needed,
 #  jakob only keeps it around to make his IDE happy
@@ -38,9 +38,9 @@ class AbstractNonabelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
         return a.dtype
 
     def to_dtype(self, a: Tensor, dtype: Dtype) -> NonAbelianData:
-        blocks = {sector: self.block_to_dtype(block, dtype) 
+        blocks = {sector: self.block_to_dtype(block, dtype)
                   for sector, block in a.data.blocks.items()}
-        return NonAbelianData(blocks=blocks, codomain=a.data.codomain, domain=a.data.domain, 
+        return NonAbelianData(blocks=blocks, codomain=a.data.codomain, domain=a.data.domain,
                                     dtype=a.dtype)
 
     def supports_symmetry(self, symmetry: Symmetry) -> bool:
@@ -48,10 +48,6 @@ class AbstractNonabelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
 
     def is_real(self, a: Tensor) -> bool:
         return all(self.block_is_real(block) for block in a.data.blocks.values())
-
-    def tdot(self, a: Tensor, b: Tensor, axs_a: list[int], axs_b: list[int]
-             ) -> NonAbelianData:
-        raise NotImplementedError  # FIXME
 
     def data_item(self, a: NonAbelianData) -> float | complex:
         if len(a.blocks) > 1:
@@ -95,8 +91,8 @@ class AbstractNonabelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
             # tree ist just c <- c for a single sector c == tree.coupled
             if tree.are_dual[0]:
                 ...  # FIXME stopped here. should probably write down clear definitions...
-                    
-    def from_dense_block(self, a: Block, legs: list[VectorSpace], atol: float = 1e-8, 
+
+    def from_dense_block(self, a: Block, legs: list[VectorSpace], atol: float = 1e-8,
                          rtol: float = 0.00001) -> NonAbelianData:
         raise NotImplementedError  # FIXME
 
@@ -108,7 +104,7 @@ class AbstractNonabelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
         domain = ProductSpace([])
         # FIXME implement block_size
         # FIXME coupled sectors: second argument optional!
-        blocks = {c: self.zero_block((codomain.block_size(c), domain.block_size(c)), dtype) 
+        blocks = {c: self.zero_block((codomain.block_size(c), domain.block_size(c)), dtype)
                   for c in coupled_sectors(codomain, domain)}
         return NonAbelianData(blocks, codomain=codomain, domain=domain, dtype=dtype)
 
@@ -116,7 +112,7 @@ class AbstractNonabelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
         codomain = ProductSpace(legs)
         # TODO think about if ProductSpace([l.dual for l in legs]) is ProductSpace(legs).dual
         domain = codomain.dual
-        blocks = {c: self.eye_block([codomain.block_size(c)], dtype) 
+        blocks = {c: self.eye_block([codomain.block_size(c)], dtype)
                   for c in coupled_sectors(codomain)}
         return NonAbelianData(blocks, codomain=codomain, domain=domain, dtype=dtype)
 
@@ -129,8 +125,12 @@ class AbstractNonabelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
             codomain=a.data.codomain, domain=a.data.domain, dtype=a.dtype
         )
 
-    def _data_repr_lines(self, data: NonAbelianData, indent: str, max_width: int, 
+    def _data_repr_lines(self, data: NonAbelianData, indent: str, max_width: int,
                          max_lines: int) -> list[str]:
+        raise NotImplementedError  # FIXME
+
+    def tdot(self, a: Tensor, b: Tensor, axs_a: list[int], axs_b: list[int]
+             ) -> NonAbelianData:
         raise NotImplementedError  # FIXME
 
     def svd(self, a: Tensor, axs1: list[int], axs2: list[int], new_leg: VectorSpace | None
@@ -179,7 +179,7 @@ class AbstractNonabelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
 
     def add(self, a: Tensor, b: Tensor) -> NonAbelianData:
         # TODO: not checking leg compatibility. ok?
-        blocks = {coupled: block_a + block_b 
+        blocks = {coupled: block_a + block_b
                   for coupled, block_a, block_b in _block_pairs(a.data, b.data)}
         return NonAbelianData(blocks, codomain=a.data.codomain, domain=a.data.domain, dtype=a.dtype)
 
@@ -227,20 +227,20 @@ class FusionTree:
         coupled
         |
         m2
-        |  \ 
-        x   \ 
-        |    \ 
-        m1    \ 
-        |  \   \ 
-        y   \   \ 
-        |    \   \ 
-        m0    \   \ 
-        |  \   \   \ 
+        |  \
+        x   \
+        |    \
+        m1    \
+        |  \   \
+        y   \   \
+        |    \   \
+        m0    \   \
+        |  \   \   \
         a   b   c   d
         |   |   |   |
         |   Z   Z   |
         |   |   |   |
-    
+
     """
 
     def __init__(self, symmetry: Symmetry,
@@ -320,13 +320,13 @@ class FusionTree:
         return f'FusionTree[{str(self.symmetry)}]({entries})'
 
     def __repr__(self) -> str:
-        return f'FusionTree({self.uncoupled}, {self.coupled}, {self.are_dual}, {self.inner_sectors}, {self.multiplicities})'        
+        return f'FusionTree({self.uncoupled}, {self.coupled}, {self.are_dual}, {self.inner_sectors}, {self.multiplicities})'
 
 
 class fusion_trees:
     """
     custom iterator for `FusionTree`s.
-    Reason to do this is that we can conveniently access length of the fusion_trees without 
+    Reason to do this is that we can conveniently access length of the fusion_trees without
     generating all the actual trees and have a more efficient lookup for the index of a tree.
     """
     def __init__(self, symmetry: Symmetry, uncoupled: list[Sector], coupled: Sector | None = None):
@@ -349,7 +349,7 @@ class fusion_trees:
             for b in self.symmetry.fusion_outcomes(a1, a2):
                 for rest_tree in fusion_trees(symmetry=self.symmetry, uncoupled=[b] + a_rest, coupled=self.coupled):
                     for mu in range(self.symmetry.n_symbol(a1, a2, b)):
-                        yield FusionTree(self.symmetry, self.uncoupled, self.coupled, [False] * len(self.uncoupled), 
+                        yield FusionTree(self.symmetry, self.uncoupled, self.coupled, [False] * len(self.uncoupled),
                                          [b] + rest_tree.inner_sectors, [mu] + rest_tree.multiplicities)
 
     def __len__(self) -> int:
@@ -377,7 +377,7 @@ class fusion_trees:
 
 
 def all_fusion_trees(space: VectorSpace, coupled: Sector = None) -> Iterator[FusionTree]:
-    """Yield all fusion trees from the uncoupled sectors of space to the given coupled sector 
+    """Yield all fusion trees from the uncoupled sectors of space to the given coupled sector
     (if not None) or to all possible coupled sectors (default)"""
     if coupled is None:
         for coupled in coupled_sectors(space):
@@ -393,7 +393,7 @@ def coupled_sectors(space: VectorSpace) -> Iterable[Sector]:
         # TODO this can probably be optimized...
         # set is important to exclude duplicates
         return set(
-            coupled for uncoupled in space.sectors 
+            coupled for uncoupled in space.sectors
             for coupled in _iter_coupled(space.symmetry, uncoupled)
         )
     else:

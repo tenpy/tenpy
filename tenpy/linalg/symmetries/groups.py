@@ -61,10 +61,6 @@ class Symmetry(ABC):
         """
         ...
 
-    # TODO (JU) name may be confusing... maybe fusion_outcomes_broadcast or something?
-    # (JH) Changed it. But:
-    # This function is only usefull for "single" style fusion; in other cases you would
-    # still need to know the slices which of the sectors fused to which of the results....
     def fusion_outcomes_broadcast(self, a: SectorArray, b: SectorArray) -> SectorArray:
         """This method allows optimized fusion in the case of FusionStyle.single.
 
@@ -158,7 +154,7 @@ class Symmetry(ABC):
             raise ValueError(msg)
 
         raise NotImplementedError
-        
+
 
 class ProductSymmetry(Symmetry):
     """Multiple symmetries.
@@ -351,7 +347,7 @@ class Group(Symmetry, metaclass=_ABCFactorSymmetryMeta):
     Base-class for symmetries that are described by a group via a faithful representation on the Hilbert space.
     Noteable counter-examples are fermionic parity or anyonic grading.
     """
-    def __init__(self, fusion_style: FusionStyle, trivial_sector: Sector, group_name: str, 
+    def __init__(self, fusion_style: FusionStyle, trivial_sector: Sector, group_name: str,
                  num_sectors: int | float, descriptive_name: str | None = None):
         Symmetry.__init__(self, fusion_style=fusion_style, braiding_style=BraidingStyle.bosonic,
                           trivial_sector=trivial_sector, group_name=group_name, num_sectors=num_sectors,
@@ -365,7 +361,7 @@ class AbelianGroup(Group, metaclass=_ABCFactorSymmetryMeta):
     which is not a subclass of AbelianGroup.
     """
 
-    def __init__(self, trivial_sector: Sector, group_name: str, num_sectors: int | float, 
+    def __init__(self, trivial_sector: Sector, group_name: str, num_sectors: int | float,
                  descriptive_name: str | None = None):
         Group.__init__(self, fusion_style=FusionStyle.single, trivial_sector=trivial_sector,
                        group_name=group_name, num_sectors=num_sectors, descriptive_name=descriptive_name)
@@ -413,7 +409,7 @@ class NoSymmetry(AbelianGroup):
         return isinstance(other, NoSymmetry)
 
     def all_sectors(self) -> SectorArray:
-        return self.trivial_sector[None, :]
+        return self.trivial_sector[np.newaxis, :]
 
 
 class U1Symmetry(AbelianGroup):

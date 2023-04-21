@@ -16,7 +16,7 @@ if TYPE_CHECKING:
     # this clause allows mypy etc to evaluate the type-hints anyway
     from ..tensors import Tensor
 
-# placeholder for a backend-specific type that holds all data of a tensor 
+# placeholder for a backend-specific type that holds all data of a tensor
 #  (except the symmetry data stored in its legs)
 Data = TypeVar('Data')
 
@@ -83,11 +83,6 @@ class AbstractBackend(ABC):
         Complex numbers with small or zero imaginary part still cause a `False` return."""
         ...
 
-    @abstractmethod
-    def tdot(self, a: Tensor, b: Tensor, axs_a: list[int], axs_b: list[int]) -> Data:
-        """Tensordot i.e. pairwise contraction"""
-        ...
-
     def item(self, a: Tensor) -> float | complex:
         """Assumes that tensor is a scalar (i.e. has only one entry).
         Returns that scalar as python float or complex"""
@@ -139,6 +134,11 @@ class AbstractBackend(ABC):
         """helper function for Tensor.__repr__ ; return a list of strs which are the lines
         comprising the ``"* Data:"``section.
         indent is to be placed in front of every line"""
+        ...
+
+    @abstractmethod
+    def tdot(self, a: Tensor, b: Tensor, axs_a: list[int], axs_b: list[int]) -> Data:
+        """Tensordot i.e. pairwise contraction"""
         ...
 
     @abstractmethod
