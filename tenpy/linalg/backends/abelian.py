@@ -28,7 +28,7 @@ import copy
 import warnings
 
 from .abstract_backend import AbstractBackend, AbstractBlockBackend, Data, Block, Dtype
-from ..symmetries.groups import Symmetry, ProductSymmetry, AbelianGroup, Sector
+from ..symmetries.groups import FusionStyle, BraidingStyle, Symmetry, Sector
 from numpy import ndarray
 from ..symmetries.spaces import VectorSpace, ProductSpace
 from ...tools.misc import inverse_permutation
@@ -37,16 +37,12 @@ from ...tools.optimization import use_cython
 __all__ = ['AbelianBackendData', 'AbelianBackendVectorSpace', 'AbelianBackendProductSpace',
            'AbstractAbelianBackend', 'detect_qtotal']
 
-Charge = np.int_
-#Sector = ndarray[Charge] with length=number of symmetries (>1 only for ProductSymmetry) internally
-# properties return a single Charge or Tuple of Charges
-Qindex = np.int_  # index of a given sector within an (AbelianBackend)VectorSpace
-
 
 if TYPE_CHECKING:
     # can not import Tensor at runtime, since it would be a circular import
     # this clause allows mypy etc to evaluate the type-hints anyway
     from ..tensors import Tensor, ChargedTensor
+    from ..sy
 
 
 class AbelianBackendVectorSpace(VectorSpace):
@@ -68,8 +64,6 @@ class AbelianBackendVectorSpace(VectorSpace):
         VectorSpace.__init__(self, symmetry, sectors, multiplicities, is_real, _is_dual)
         num_sectors = sectors.shape[0]
         self.sector_ndim = sectors.ndim
-        if sectors.ndim == 1:
-            assert not isinstance(symmetry, ProductSymmetry)
         if perm_block_inds is None:
             # sort by slices
             assert slices is None
@@ -366,25 +360,36 @@ def _find_row_differences(sectors: SectorArray):
 
 
 def _fuse_abelian_charges(symmetry: AbelianSymmetry, *sector_arrays: SectorArray) -> SectorArray:
-    from ..symmetries.groups import FusionStyle
     assert symmetry.fusion_style == FusionStyle.single
-    # sectors[i] can be 1d numpy arrays, or list of 1D arrays if using a ProductSymmetry
     fusion = sector_arrays[0]
     for sectors in sector_arrays[1:]:
         fusion = symmetry.fusion_outcomes_broadcast(fusion, sectors)
         # == fusion + space.sector, but mod N for ZN
     return np.asarray(fusion)
 
-
+def _valid_block_indices(spaces: list[AbelianBackendVectorSpace]):
+    """Find block_inds where the charges of the `spaces` fuse to `symmetry.trivial_sector`"""
+    symmetry = spaces[0].symmetry
+    # TODO: this is brute-force going through all possible combinations of block indices
+    # spaces are sorted, so we can probably reduce that search space quite a bit...
+    # similar to `grid` in ProductSpace._fuse_spaces()
+    grid = np.indices(s.num_sectors for s in spaces, dtype=int)
+    grid = grid.reshape((len(spaces), -1))
+    total_sectors = _fuse_abelian_charges(symmetry,
+                                          space.sector[gr] for space, gr in zip(spaces, grid))
+    valid = np.all(total_sectors == symmetry.trivial_sector[np.newaxis, :], axis=1)
+    block_inds = grid.T[valid, :]
+    perm = np.lexsort(block_inds.T)
+    return block_inds[perm, :]
 
 
 @dataclass
 class AbelianBackendData:
     """Data stored in a Tensor for :class:`AbstractAbelianBackend`."""
     dtype : Dtype
-    np_dtype : np.dtype
     blocks : List[Block]  # The actual entries of the tensor. Formerly known as Array._data
-    block_inds : ndarray  # For each of the blocks entries the qindices of the different legs.
+    block_inds : ndarray  # For each of the blocks entries the block indices specifying to which
+    # sector of the different legs it belongs
 
     def copy(self, deep=True):
         if deep:
@@ -403,10 +408,8 @@ class AbelianBackendData:
         self.blocks = [self.blocks[p] for p in perm]
 
 
-
 class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
     """Backend for Abelian group symmetries.
-
 
     """
     def convert_vector_space(self, leg: VectorSpace) -> AbelianBackendVectorSpace:
@@ -427,60 +430,54 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
         data.dtype = dtype
         return data
 
-    # TODO: unclear what this should do instance-specific? Shouldn't this be class-specific?
-    #  JU: yes, this can be a classmethod
-    # AbstractNoSymmetryBackend checks == no_symmetry, but we might not have a unique instance?
-    #  JU: have implement Symmetry.__eq__ to to sensible things
     def supports_symmetry(self, symmetry: Symmetry) -> bool:
-        return symmetry.is_abelian
+        return symmetry.is_abelian and symmetry.braiding_style == BraidingStyle.bosonic
 
     def is_real(self, a: Tensor) -> bool:
-        return a.data.dtype.is_real
+        return a.dtype.is_real
 
     def data_item(self, a: Data) -> float | complex:
         if len(a.blocks) > 1:
             raise ValueError("More than 1 block!")
         if len(a.blocks) == 0:
             assert all(leg.dim == 1 for leg in a.legs)
-            return 0
+            return 0.
         return self.block_item(a.blocks[0])
 
     def to_dense_block(self, a: Tensor) -> Block:
-        res = np.zeros([leg.dim for leg in a.legs])
-        for block, qindices in zip(a.blocks, a.qdata):
-            slices = []
-            for (qi, leg) in zip(qindices, a.legs):
-                sl = leg._abelian_data.slices
-                slices.append(slice(sl[qi], sl[qi+1]))
+        res = self.zero_block([leg.dim for leg in a.legs])
+        for block, block_inds in zip(a.data.blocks, a.data.block_inds):
+            slices = [slice(*leg.slices[qi]) for i, leg in zip(block_inds, a.legs)]
             res[tuple(slices)] = block
         return res
 
-    # TODO: is it okay to have extra kwargs qtotal?
-    #  JU: probably
-    def from_dense_block(self, a: Block, legs: list[VectorSpace], atol: float = 1e-8, rtol: float = 1e-5,
-                         *, qtotal = None) -> AbelianBackendData:
-        # JU: res is not defined
-        if qtotal is None:
-            res.qtotal = qtotal = detect_qtotal(a, legs, atol, rtol)
-
-        for block, qindices in zip(a.blocks, a.qdata):
-            slices = []
-            for (qi, leg) in zip(qindices, a.legs):
-                sl = leg._abelian_data.slices
-                slices.append(slice(sl[qi], sl[qi+1]))
-            res[tuple(slices)] = block
-
-        return res
+    def from_dense_block(self, a: Block, legs: list[VectorSpace], atol: float = 1e-8, rtol: float = 1e-5) -> AbelianBackendData:
+        legs = [self.convert_vector_space(leg) for leg in legs]
+        # TODO (JH) should we convert legs in tensors.py or here per backend?
+        # -> same for other functions like zeros() etc
+        dtype = self.block_dtype(a)
+        block_inds = _valid_block_indices(legs)
+        blocks = []
+        for b_i in block_inds:
+            slices = [slice(*leg.slices[qi]) for i, leg in zip(block_inds, a.legs)]
+            blocks.append(a[tuple(slices)])
+        return AbelianBackendData(dtype, blocks, block_inds)
 
     def from_block_func(self, func, legs: list[VectorSpace]) -> AbelianBackendData:
-        raise NotImplementedError  # TODO
+        dtype = self.block_dtype(a)
+        block_inds = _valid_block_indices(legs)
+        blocks = []
+        for b_i in block_inds:
+            shape = [leg.multiplicities[i] for i, leg in zip(block_inds, a.legs)]
+            blocks.append(func(tuple(shape)))
+        return AbelianBackendData(dtype, blocks, block_inds)
 
-    def zero_data(self, legs: list[VectorSpace], dtype: Dtype):
-        qtotal = legs[0].symmetry.trivial_sector
-        return
+    def zero_data(self, legs: list[VectorSpace], dtype: Dtype) -> AbelianBackendData:
+        block_inds = np.zeros([0, len(legs)], dtype=int)
+        return AbelianBackendData(dtype, [], block_inds)
 
-    #  def eye_data(self, legs: list[VectorSpace], dtype: Dtype) -> Data:
-    #      return self.eye_block(legs=[l.dim for l in legs], dtype=dtype)
+    def eye_data(self, legs: list[VectorSpace], dtype: Dtype) -> Data:
+        return self.eye_block(legs=[l.dim for l in legs], dtype=dtype)
 
     #  def copy_data(self, a: Tensor) -> Data:
     #      return self.block_copy(a.data)
