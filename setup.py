@@ -1,7 +1,6 @@
 # Copyright 2018-2023 TeNPy Developers, GNU GPLv3
 from setuptools import setup, find_packages
 from setuptools import Extension
-import numpy
 import sys
 import os
 import subprocess
@@ -91,6 +90,7 @@ cython_version = '{cython_ver!s}'
         cython_ver = Cython.__version__
     except:
         cython_ver = "(not available)"
+    import numpy
     content = content.format(version=VERSION,
                              full_version=full_version,
                              released=RELEASED,
@@ -113,6 +113,7 @@ def setup_cython_extension():
         from Cython.Build import cythonize
     except:
         return []
+    import numpy
     include_dirs = [numpy.get_include()]
     libs = []
     lib_dirs = []
