@@ -129,3 +129,14 @@ def test_RandomUnitaryEvolution():
     assert tuple(eng.psi.chi) == (16, 8)
 
 
+@pytest.mark.parametrize('S', [.5, 2.5, 5])
+def test_fixes_issue_220(S):
+    L = 20
+    
+    model = SpinChain(dict(S=S, conserve=None, sort_charge=True, Jx=1., Jy=1., Jz=1., L=L))
+    neel = ['up', 'up'] * (L // 2) + ['up'] * (L % 2)
+    psi_init = MPS.from_product_state(sites=model.lat.unit_cell * L, p_state=neel)
+    trunc_params=dict(chi_max=50, svd_min=1e-10, trunc_cut=None)
+    options = dict(order=2, trunc_params=trunc_params, N_steps=5, dt=0.01)
+    engine = tebd.QRBasedTEBDEngine(psi=psi_init, model=model, options=options)
+    engine.run()
