@@ -81,6 +81,13 @@ class VectorSpace:
             return self.symmetry.dual_sectors(self._sectors)
         return self._sectors
 
+    def sector(self, i: int) -> Sector:
+        """Return a single sector for a given block index `i`."""
+        sector = self._sectors[i, :]
+        if self.is_dual:
+            return self.symmetry.dual_sector(sector)
+        return sector
+
     def sectors_str(self) -> str:
         """short str describing the self._sectors and their multiplicities"""
         # TODO (JU) what if there are a lot of sectors?

@@ -483,12 +483,38 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
         blocks = [self.eye_block(shape, dtype) for shape in zip(dims)]
         return AbelianBackendData(dtype, blocks, np.hstack([block_inds, block_inds]))
 
-    #  def copy_data(self, a: Tensor) -> Data:
-    #      return self.block_copy(a.data)
+    def copy_data(self, a: Tensor) -> Data:
+        return a.data.copy(deep=True)
 
-    #  def _data_repr_lines(self, data: Data, indent: str, max_width: int, max_lines: int):
-    #      return [f'{indent}* Data:'] + self._block_repr_lines(data, indent=indent + '  ', max_width=max_width,
-    #                                                          max_lines=max_lines - 1)
+    def _data_repr_lines(self, data: Data, indent: str, max_width: int, max_lines: int):
+        if len(data.blocks) == 0:
+            return [f'{indent}* Data : no non-zero block']
+        if max_lines <= 1:
+            return [f'{indent}* Data : {len(data.blocks):d} blocks']
+        # show largest blocks first until we hit max_lines
+        sizes = np.prod([self.block_shape(block) for block in data.blocks], axis=1)
+        all_lines = [None]
+        shown_blocks = 0
+        for i in np.argsort(sizes):
+            bi = data.block_inds[i, :]
+            # TODO : would make sense to show sectors rather than block_inds
+            # but don't have access to legs
+            # sector = [symmetry.sector_str(leg.sectors[i]) for i, leg in zip(bi, legs)]
+            sector_line = f'{indent}  * block_inds {bi!s}'
+            all_lines.append(sector_line)
+            all_lines.extend(self._block_repr_lines(data.blocks[i],
+                                                    indent=indent + '    ',
+                                                    max_width=max_width,
+                                                    max_lines=max_lines - len(all_lines)))
+            shown_blocks += 1
+            if len(all_lines) + 1 >= max_lines:
+                break
+        if shown_blocks == len(data.blocks):
+            shown = f'all {shown_blocks:d}'
+        else:
+            shown = f'largest {shown_blocks:d} of {len(data.blocks):d}'
+        all_lines[0] = f'{indent}* Data : {shown} blocks'
+        return all_lines
 
     #  def tdot(self, a: Tensor, b: Tensor, axs_a: list[int], axs_b: list[int]) -> Data:
     #      return self.block_tdot(a.data, b.data, axs_a, axs_b)
@@ -506,14 +532,20 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
     #  def inner(self, a: Tensor, b: Tensor, axs2: list[int] | None) -> complex:
     #      return self.block_inner(a.data, b.data, axs2)
 
-    #  def transpose(self, a: Tensor, permutation: list[int]) -> Data:
-    #      return self.block_transpose(a.data, permutation)
+    def transpose(self, a: Tensor, permutation: list[int]) -> Data:
+        blocks = a.data.blocks
+        blocks = [self.block_transpose(block, permutation) for block in a.data.blocks]
+        block_inds = a.data.block_inds[:, permutation]
+        data = AbelianBackendData(a.data.dtype, blocks, block_inds)
+        data._sort_block_inds()
+        return data
 
     #  def trace(self, a: Tensor, idcs1: list[int], idcs2: list[int]) -> Data:
     #      return self.block_trace(a.data, idcs1, idcs2)
 
-    #  def conj(self, a: Tensor) -> Data:
-    #      return self.block_conj(a.data)
+    def conj(self, a: Tensor) -> Data:
+        blocks = [self.block_conj(b) for b in a.data.blocks]
+        return AbelianBackendData(a.data.dtype, blocks, a.data.block_inds)
 
     #  def combine_legs(self, a: Tensor, idcs: list[int], new_leg: ProductSpace) -> Data:
     #      return self.block_combine_legs(a.data, idcs)
@@ -524,11 +556,31 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
     #  def almost_equal(self, a: Tensor, b: Tensor, rtol: float, atol: float) -> bool:
     #      return self.block_allclose(a.data, b.data, rtol=rtol, atol=atol)
 
-    #  def squeeze_legs(self, a: Tensor, idcs: list[int]) -> Data:
-    #      return self.block_squeeze_legs(a, idcs)
+    def squeeze_legs(self, a: Tensor, idcs: list[int]) -> Data:
+        n_legs = a.num_legs
+        if len(a.data.blocks) == 0:
+            return AbelianBackendData(a.data.dtype, [],
+                                      np.zeros([0, n_legs - len(idcs)], dtype=int))
+        blocks = [self.block_squeeze_legs(b, idcs) for b in self.blocks]
+        block_inds = a.data.block_inds
+        symmetry = a.legs[0].symmetry
+        sector = symmetry.trivial_sector
+        for i in idcs:
+            bi = block_inds[0, i]
+            assert np.all(block_inds[:, i] == bi)
+            sector = symmetry.fusion_outcomes(sector, a.legs[i].sector(bi))[0]
+        if not np.all(sector == symmetry.trivial_sector):
+            # TODO return corresponding ChargedTensor instead in this case?
+            raise ValueError("Squeezing legs drops non-trivial charges, would give ChargedTensor.")
+        keep = np.ones(n_legs, dtype=bool)
+        keep[idcs] = False
+        block_inds = block_inds[:, keep]
+        return AbelianBackendData(a.data.dtype, blocks, block_inds)
 
-    #  def norm(self, a: Tensor) -> float:
-    #      return self.block_norm(a.data)
+    def norm(self, a: Tensor) -> float:
+        # TODO: argument for different p-norms?
+        block_norms = [self.block_norm(b) for b in a.data]
+        return np.linalg.norm(block_norms)
 
     #  def exp(self, a: Tensor, idcs1: list[int], idcs2: list[int]) -> Data:
     #      matrix, aux = self.block_matrixify(a.data, idcs1, idcs2)

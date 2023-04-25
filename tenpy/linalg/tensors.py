@@ -46,7 +46,7 @@ _DUMMY_LABEL = '!'
 
 class Shape:
     # TODO docstring
-    
+
     def __init__(self, legs: list[VectorSpace], labels: list[str | None] = None):
         self.legs = legs
         if labels is None:
@@ -227,12 +227,12 @@ class AbstractTensor(ABC):
     def _repr_header_lines(self, indent: str) -> list[str]:
         num_cols_label = min(10, max(5, *(len(str(l)) for l in self.labels)))
         num_cols_dim = min(5, max(3, *(len(str(leg.dim)) for leg in self.legs)))
-        
+
         label_strs = [force_str_len(label, num_cols_label, rjust=False) for label in self.labels]
         dim_strs = [force_str_len(leg.dim, num_cols_dim) for leg in self.legs]
         dual_strs = ['dual' if leg.is_dual else '   /' for leg in self.legs]
         components_strs = self._repr_leg_components(max_len=50)
-        
+
         lines = [
             f'{indent}* Backend: {self.backend}',
             f'{indent}* Symmetry: {self.symmetry}',
@@ -247,7 +247,7 @@ class AbstractTensor(ABC):
     def __repr__(self):
         indent = '  '
         lines = [f'{self.__class__.__name__}(']
-        lines.extend(self._repr_header_lines(indent=indent))    
+        lines.extend(self._repr_header_lines(indent=indent))
         lines.extend(self.backend._data_repr_lines(self.data, indent=indent, max_width=70, max_lines=20))
         lines.append(')')
         return "\n".join(lines)
@@ -752,7 +752,7 @@ class Tensor(AbstractTensor):
             # make sure that legs2 are interpreted w.r.t. other, not other.invariant_part
             legs2 = other.get_leg_idcs(legs2)
             assert other.invariant_part.labels[-1] not in relabel2
-            invariant_part = self.tdot(other.invariant_part, legs1=legs1, legs2=legs2, 
+            invariant_part = self.tdot(other.invariant_part, legs1=legs1, legs2=legs2,
                                        relabel1=relabel1, relabel2=relabel2)
             return ChargedTensor(invariant_part=invariant_part, dummy_leg_state=other.dummy_leg_state)
         elif isinstance(other, DiagonalTensor):
@@ -806,7 +806,7 @@ class Tensor(AbstractTensor):
         if not all(self.legs[n1] == other.legs[n2] for n1, n2 in enumerate(leg_order_2)):
             raise ValueError('Incompatible legs')
         backend = get_same_backend(self, other)
-        
+
         if isinstance(other, ChargedTensor):
             res_invariant = self.tdot(other.invariant_part, legs1=list(range(self.num_legs)), legs2=leg_order_2)
             res = ChargedTensor(res_invariant, dummy_leg_state=other.dummy_leg_state)
@@ -816,7 +816,7 @@ class Tensor(AbstractTensor):
         elif not isinstance(other, Tensor):
             raise TypeError(f'inner not supported for types {type(self)} and {type(other)}.')
         # can now assume that isinstance(other, Tensor)
-        
+
         res = backend.inner(self, other, axs2=leg_order_2)
         return res
 
@@ -860,7 +860,7 @@ class Tensor(AbstractTensor):
         res_legs = [new_leg if idx == leg_idcs[0] else leg for idx, leg in enumerate(self.legs)
                     if idx not in leg_idcs[1:]]
         new_label = _combine_leg_labels([self.shape._labels[idx] for idx in leg_idcs])
-        res_labels = [new_label if idx == leg_idcs[0] else label 
+        res_labels = [new_label if idx == leg_idcs[0] else label
                       for idx, label in enumerate(self.shape._labels)
                       if idx not in leg_idcs[1:]]
         res_data = self.backend.combine_legs(self, idcs=leg_idcs, new_leg=new_leg)
@@ -888,6 +888,9 @@ class Tensor(AbstractTensor):
             if not all(self.legs[idx].is_trivial for idx in leg_idcs):
                 raise ValueError('Tried to squeeze non-trivial legs.')
         res_legs = [l for idx, l in enumerate(self.legs) if idx not in leg_idcs]
+        if len(res_legs) == 0:
+            raise ValueError("squeeze_legs() with no leg left.")
+            # TODO: should we return self.item() in this case?
         res_labels = [label for idx, label in enumerate(self.labels) if idx not in leg_idcs]
         res_data = self.backend.squeeze_legs(self, leg_idcs)
         return Tensor(res_data, backend=self.backend, legs=res_legs, labels=res_labels)
@@ -900,7 +903,7 @@ class Tensor(AbstractTensor):
         if not isinstance(other, Tensor):
             raise TypeError(f'tdot not supported for types {type(self)} and {type(other)}.')
         # can now assume that isinstance(other, Tensor)
-        
+
         if self.legs != other.legs:
             raise ValueError('Mismatching shapes')
         backend = get_same_backend(self, other)
@@ -1009,7 +1012,7 @@ class ChargedTensor(AbstractTensor):
             return self.invariant_part.almost_equal(factor * other, atol=atol, rtol=rtol)
         else:
             # TODO (JU): Can this be done more efficiently?
-            #  the problem is that the decomposition into invariant part and non-invariant state is 
+            #  the problem is that the decomposition into invariant part and non-invariant state is
             #  not unique, so we cant just compare the invariant parts.
             backend = get_same_backend(self, other)
             self_block = self.to_dense_block()
@@ -1223,7 +1226,7 @@ def _get_result_labels(legs1: list[str | None], legs2: list[str | None],
     conflicting = [label for label in labels1 if label in labels2]
     labels = labels1 + labels2
     if conflicting:
-        # TODO issue warning? 
+        # TODO issue warning?
         #  JU: maybe logger.debug?
         labels = [None if label in conflicting else label for label in labels]
     return labels
