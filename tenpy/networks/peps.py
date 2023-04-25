@@ -37,12 +37,191 @@ TODO explain more, e.g.
 import numpy as np
 
 from ..linalg import np_conserved as npc
+from ..linalg.np_conserved import Array
+from ..networks.site import Site
 
 __all__ = []  # TODO
 
 
-class PEPS:
+class PEPSLikeIndexable:
+    _valid_bc = ['finite', 'infinite']
+    _p_labels = ['p']  # labels of phyical leg(s)
+    _tensor_labels = ['p', 'vU', 'vL', 'vD', 'vR']  # all labels of a _tensor (order is used!)
+    
+    def __init__(self, sites: list[Site], tensors: list[Array], lx: int, ly: int, bc: str = 'finite'):
+        # TODO doc: flat lists: tensors[x * ly + y]
+        
+        self.sites = sites
+        self.chinfo = self.sites[0].leg.chinfo  # TODO check others?
+        self.dtype = dtype = np.find_common_type([t.dtype for t in tensors], [])
+        self.bc = bc
+        self.lx = lx
+        self.ly = ly
+        self._tensors = [T.astype(dtype, copy=True).itranspose(self._tensor_labels) for T in tensors]
+        self.test_sanity()
+
+    @classmethod
+    def from_list_of_lists(cls, sites: list[list[Site]], tensors: list[list[Array]], bc: str = 'finite'):
+        lx = len(sites)
+        ly = len(sites[0])
+        assert all(len(col) == ly for col in sites)
+        assert len(tensors) == lx
+        assert all(len(col) == ly for col in tensors)
+        return cls(
+            sites=[s for col in sites for s in col],
+            tensors=[t for col in tensors for t in col],
+            lx=lx, ly=ly, bc=bc
+        )
+
+    @property
+    def num_sites(self):
+        return self.lx * self.ly
+
+    def _parse_x(self, x: int) -> int:
+        if x < 0:
+            x = x + self.lx
+        if not 0 <= x < self.lx:
+            raise ValueError(f'x index out of bounds: {x}')
+        return x
+
+    def _parse_y(self, y: int) -> int:
+        if y < 0:
+            y = y + self.ly
+        if not 0 <= y < self.ly:
+            raise ValueError(f'y index out of bound: {y}')
+        return y
+
+    def _coords_to_idx(self, x: int, y: int) -> int:
+        return self._parse_x(x) * self.ly + self._parse_y(y)
+
+    def _idx_to_coords(self, i: int) -> tuple[int, int]:
+        if i < 0:
+            i = i + self.num_sites
+        assert 0 <= i < self.num_sites
+        return divmod(i, self.ly)
+
+    def test_sanity(self):
+        """Sanity check, raises ValueErrors, if something is wrong."""
+        if self.bc not in self._valid_bc:
+            raise ValueError(f'invalid boundary condition: {self.bc}')
+
+        if len(self.sites) != self.num_sites:
+            msg = f'Wrong len of sites. Expected {self.lx} * {self.ly} = {self.num_sites}. Got {len(self.sites)}'
+            raise ValueError(msg)
+        if len(self.tensors) != self.num_sites:
+            msg = f'Wrong len of tensors. Expected {self.lx} * {self.ly} = {self.num_sites}. Got {len(self.tensors)}'
+            raise ValueError(msg)
+
+        for i, tens in enumerate(self._tensors):
+            x, y = self._idx_to_coords(i)
+
+            if tens.get_leg_labels() != self._tensors_labels:
+                msg = f'tensor at site {(x, y)} has wrong labels {T.get_leg_labels()}. Expected {self._tensors_labels}'
+                raise ValueError(msg)
+
+            if self.bc == 'infinite' or x > 0:  # check the bonds between unit cells (x==0) only for infinite
+                tens.get_leg('vL').test_contractible(self[x - 1, y].get_leg('vR'))
+            if self.bc == 'infinite' or y > 0:
+                tens.get_leg('vD').test_contractible(self[x, y - 1].get_leg('vU'))
+
+        #  for finite system; check boundary legs are trivial
+        if self.bc == 'finite':
+            for boundary, leg in zip(self[0, :], self[-1, :], self[:, 0], self[:, -1],
+                                     ['vL', 'vR', 'vD', 'vU']):
+                for tens in boundary:
+                    if tens.get_leg(leg).ind_len != 1:
+                        raise ValueError(f'Non-trivial {leg} leg at boundary')
+
+    def copy(self):
+        """Returns a copy of `self`.
+
+        The copy still shares the sites, chinfo, and LegCharges of the T tensors, but the values of
+        T are deeply copied.
+        """
+        # __init__ makes deep copies of tensors
+        cp = self.__class__(sites=self.sites, tensors=self._tensors, bc=self.bc)
+        return cp
+
+    @property
+    def bc_is_infinite(self):
+        assert self.bc in self._valid_bc
+        return self.bc == 'infinite'
+
+    @property
+    def hor_bond_dims(self) -> np.ndarray:
+        """Dimensions of the (nontrivial) horizontal virtual bonds"""
+        if self.bc == 'finite':
+            # omit x == 0 sites, i.e. indices which are multiples of ly
+            dims = [t.shape[t.get_leg_index['vL']] for i, t in enumerate(self._tensors) if i % self.ly != 0]
+        else:
+            dims = [t.shape[t.get_leg_index['vL']] for t in self._tensors]
+        return np.array(dims, dtype=int)
+
+    @property
+    def vert_bond_dims(self) -> np.ndarray:
+        """Dimensions of the (nontrivial) vertical virtual bonds"""
+        if self.bc == 'finite':
+            # omit y == 0 sites, i.e. indices < ly
+            dims = [t.shape[t.get_leg_index['vL']] for i, t in enumerate(self._tensors) if i >= self.ly]
+        else:
+            dims = [t.shape[t.get_leg_index['vL']] for t in self._tensors]
+        return np.array(dims, dtype=int)
+
+    @property
+    def bond_dim(self) -> int:
+        """maximum of virtual bond dimensions"""
+        return max(np.max(self.hor_D), np.max(self.vert_D))
+
+    def _parse_item(self, x: int | slice, y: int | slice = None, *rest) -> int | slice:
+        if rest:
+            raise IndexError('too many indices for PEPS')
+        
+        if y is None:
+            y = slice(0, self.ly, 1)
+
+        if isinstance(x, int):
+            x = self._parse_x(x)
+            if isinstance(y, int):
+                return x * self.ly + self._parse_y(y)
+            if isinstance(y, slice):
+                return slice(x * self.ly + self._parse_y(y.start),
+                             x * self.ly + self._parse_y(y.stop),
+                             y.step)
+        elif isinstance(x, slice):
+            if isinstance(y, int):
+                y = self._parse_y(y)
+                return slice(self._parse_x(x.start) + y,
+                             self._parse_x(x.stop) + y,
+                             self.ly * x.step)
+
+        # all valid cases were covered above and have already returned
+        raise TypeError('PEPS indices must be int, (int, slice) or (slice, int)')
+                
+    def __getitem__(self, item):
+        idcs = self._parse_item(*item)
+        return self._tensors[idcs]
+
+    def __setitem__(self, item, value):
+        idcs = self._parse_item(*item)
+        if isinstance(idcs, slice):
+            try:
+                valid = all(t.get_leg_labels() == self._tensor_labels for t in value)
+            except (TypeError, AttributeError):  # iteration failed or elements dont have get_leg_labels()
+                raise TypeError(f'Expected iterable of Array. Got {type(value)}')
+        else:
+            try:
+                valid = value.get_leg_labels() == self._tensor_labels
+            except AttributeError:
+                raise TypeError(f'Expected iterable of Array. Got {type(value)}')
+        if not valid:
+            raise ValueError('Invalid legs.')
+        self._tensors[idcs] = value
+        
+
+class PEPS(PEPSLikeIndexable):
     r"""A projected entangled pair state (PEPS), either finite (fPEPS) or infinite (iPEPS).
+
+    TODO (JU) : normalization of tensors? store norm seperately?
 
     Parameters
     ----------
@@ -59,86 +238,12 @@ class PEPS:
 
     
     """
-
-    _valid_bc = ['finite', 'infinite']
-    _p_label = ['p']  # labels of phyical leg(s)
-    _T_labels = ['p', 'vU', 'vL', 'vD', 'vR']  # all labels of a _T tensor (order is used!)
-
-    def __init__(self, sites, Ts, bc='finite'):
-        # TODO store a norm attribute...?
-        self.sites = [list(col) for col in sites]
-        self.chinfo = self.sites[0][0].leg.chinfo
-        self.dtype = dtype = np.find_common_type([T.dtype for col in Ts for T in col], [])
-        self.bc = bc
-        self.lx = len(Ts)
-        self.ly = len(Ts[0])
-        self._T = [[T.astype(dtype, copy=True).itranspose(self._T_labels) for T in col] for col in Ts]
-        self.test_sanity()
-
-    def test_sanity(self):
-        """Sanity check, raises ValueErrors, if something is wrong."""
-        if self.bc not in self._valid_bc:
-            raise ValueError(f'invalid boundary condition: {self.bc}')
-
-        # check self.sites
-        if len(self.sites) == self.lx:
-            raise ValueError('wrong len of self.sites')
-        wrong_length_columns = [i for i, col in enumerate(self.sites) if len(col) != self.ly]
-        if wrong_length_columns:
-            raise ValueError(f'wrong len of self.sites[i] for i in {wrong_length_columns}.')
-
-        # check self._T
-        #  correct list lengths
-        if len(self._T) != self.lx:
-            raise ValueError('wrong len of self._T')
-        wrong_length_columns = [i for i, col in enumerate(self._T) if len(col) != self.ly]
-        if wrong_length_columns:
-            raise ValueError(f'wrong len of self._T[i] for i in {wrong_length_columns}.')
-        #  correct labels and non-trivial legs
-        for x, col in enumerate(self._T):
-            for y, T in enumerate(col):
-                if T.get_leg_labels() != self._T_labels:
-                    msg = f'T at site {(x, y)} has wrong labels {T.get_leg_labels()}. Expected {self._T_labels}'
-                    raise ValueError(msg)
-
-                if self.bc == 'infinite' or x + 1 < self.lx:
-                    T2 = self._T[(x + 1) % self.lx][y]
-                    T.get_leg('vR').test_contractible(T2.get_leg('vL'))
-                if self.bc == 'infinite' or y + 1 < self.ly:
-                    T2 = self._T[x][(y + 1) % self.ly]
-                    T.get_leg('vU').test_contractivle(T2.get_leg('vD'))
-        #  correct trivial legs
-        if self.bc == 'finite':
-            for T in self._T[0]:
-                if T.get_leg('vL').ind_len != 1:
-                    raise ValueError('Non-trivial leg at left boundary')
-            for T in self._T[-1]:
-                if T.get_leg('vR').ind_len != 1:
-                    raise ValueError('Non-trivial leg at right boundary')
-            for col in self._T:
-                if col[0].get_leg('vD').ind_len != 1:
-                    raise ValueError('Non-trivial leg at bottom boundary')
-            for col in self._T:
-                if col[-1].get_leg('vU').ind_len != 1:
-                    raise ValueError('Non-trivial leg at bottom boundary')
-
-    def copy(self):
-        """Returns a copy of `self`.
-
-        The copy still shares the sites, chinfo, and LegCharges of the T tensors, but the values of
-        T are deeply copied.
-        """
-        # __init__ makes deep copies of T
-        cp = self.__class__(sites=self.sites, Ts=self._T, bc=self.bc)
-        # TODO need to set any other attributes?
-        return cp
-
     def save_hdf5(self, hdf5_saver, h5gr, subpath):
-        raise NotImplementedError  # TODO
+        raise NotImplementedError  # TODO (JU) can implement in PEPSLikeIndexable?
                     
     @classmethod
     def from_hdf5(cls, hdf5_loader, h5gr, subpath):
-        raise NotImplementedError  # TODO
+        raise NotImplementedError  # TODO (JU) can implement in PEPSLikeIndexable?
 
     @classmethod
     def from_product_state(cls, sites, p_state, bc='finite', dtype=np.complex128, permute=True,
@@ -181,6 +286,7 @@ class PEPS:
 
         TODO example, doctest
         """
+        raise NotImplementedError  # FIXME update to flat list
         sites = [list(col) for col in sites]
         lx = len(sites)
         ly = len(sites[0])
@@ -235,39 +341,8 @@ class PEPS:
             Ts.append(T_col)
         return cls(sites=sites, Ts=Ts, bc=bc)
 
-    @property
-    def bc_is_infinite(self):
-        assert self.bc in self._valid_bc
-        return self.bc == 'infinite'
 
-    @property
-    def hor_D(self) -> np.ndarray:
-        """Dimensions of the (nontrivial) horizontal virtual bonds"""
-        if self.bc == 'finite':
-            x_slice = slice(1, self.lx)
-        else:
-            x_slice = slice(0, self.lx)
-        dims = [[T.shape[T.get_leg_index('vL')] for T in col] for col in self._Ts[x_slice]]
-        return np.array(dims, dtype=int)
-
-    @property
-    def vert_D(self) -> np.ndarray:
-        """Dimensions of the (nontrivial) vertical virtual bonds"""
-        if self.bc == 'finite':
-            y_slice = slice(1, self.ly)
-        else:
-            y_slice = slice(0, self.ly)
-        dims = [[T.shape[T.get_leg_index('vD')] for T in col[y_slice]] for col in self._Ts]
-        return np.array(dims, dtype=int)
-
-    @property
-    def max_D(self) -> int:
-        """maximum of virtual bond dimensions"""
-        return max(np.max(self.hor_D), np.max(self.vert_D))
-
-    def get_T(self, x: int, y: int) -> npc.Array:
-        return self._Ts[x][y]
-
-    def set_T(self, x: int, y: int, T: npc.Array):
-        self._Ts[x][y] = T
- 
+class PEPO(PEPSLikeIndexable):
+    _p_labels = ['p', 'p*']
+    _tensor_labels = ['p', 'p*', 'vU', 'vL', 'vD', 'vR']
+    
