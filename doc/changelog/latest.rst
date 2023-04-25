@@ -21,7 +21,9 @@ Added
 
 Changed
 ^^^^^^^
-- nothing yet
+- Change the build system and metadata declaration to ``pyproject.toml`` format.
+  This makes installation more future-proof and stable, but should not affect how tenpy is used,
+  once installed.
 
 Fixed
 ^^^^^
