@@ -366,13 +366,15 @@ class Simulation:
                 :meth:`~tenpy.tools.cache.CacheFile.open`.
         """
         cache_threshold_chi = self.options.get("cache_threshold_chi", 2000)
-        cache_params = self.options.get("cache_params", {})
         chi = get_recursive(self.options, "algorithm_params.trunc_params.chi_max", default=None)
         if chi is not None and chi < cache_threshold_chi:
+            self.options.touch("cache_params")
+            self.logger.info("No cache due to chi=%d < cache_threshold_chi = %d",
+                             chi, cache_threshold_chi)
             self.cache = CacheFile.open()  # default = keep in RAM.
             return
         self.cache.close()
-        self.logger.info("initialize new cache")
+        cache_params = self.options.get("cache_params", {})
         self.cache = CacheFile.open(**cache_params)
         # note: can't use a `with self.cache` statement, but emulate it:
         # self.__enter__() calls this function followed by

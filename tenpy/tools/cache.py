@@ -263,6 +263,10 @@ class CacheFile(DictCache):
             `storage_class`.
         """
         StorageClass = find_subclass(Storage, storage_class)
+        if StorageClass == Storage:
+            logger.info("use trivial cache (keeps everything in RAM)")
+        else:
+            logger.info("new non-trivial cache with storage %s", StorageClass.__name__)
         storage = StorageClass.open(delete=delete, **storage_kwargs)
         if use_threading:
             storage = ThreadedStorage.open(storage, max_queue_size=max_queue_size)
