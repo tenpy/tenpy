@@ -17,7 +17,9 @@ Backwards incompatible changes
 
 Added
 ^^^^^
--  :meth:`~tenpy.models.tj_model.tJModel` and :meth:`~tenpy.networks.site.SpinHalfHoleSite`
+- :class:`~tenpy.models.tj_model.tJModel` and :class:`~tenpy.networks.site.SpinHalfHoleSite`
+- :class:`~tenpy.algorithms.tebd.QRBasedTEBDEngine`
+- :class:`~tenpy.models.clock.ClockModel`, :class:`~tenpy.models.clock.ClockChain` and :class:`~tenpy.models.sites.ClockSite` 
 
 Changed
 ^^^^^^^
@@ -31,3 +33,4 @@ Fixed
 - Fix a wrong total charge in :meth:`~tenpy.networks.mpo.MPO.apply_zipup`.
 - Fix :issue:`218` that :meth:`~tenpy.models.model.CouplingModel.add_multi_coupling_term` with `plus_hc=True` didn't
   correctly add the hermitian conjugate.
+- Fix :issue:`210` that :meth:`~tenpy.models.aklt.AKLTChain.psi_AKLT` had typos and wrong canonical form for finite systems.
