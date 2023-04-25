@@ -42,7 +42,6 @@ if TYPE_CHECKING:
     # can not import Tensor at runtime, since it would be a circular import
     # this clause allows mypy etc to evaluate the type-hints anyway
     from ..tensors import Tensor, ChargedTensor
-    from ..sy
 
 
 class AbelianBackendVectorSpace(VectorSpace):
@@ -199,30 +198,31 @@ class AbelianBackendProductSpace(ProductSpace, AbelianBackendVectorSpace):
         num_spaces = len(spaces)
 
         spaces_num_sectors = tuple(space.num_sectors for space in spaces)
-        self._strides = _make_stride(spaces_num_sectors, cstyle=True)
+        self._strides = _make_stride(spaces_num_sectors, cstyle=False)
         # (save strides for :meth:`_map_incoming_block_inds`)
 
         # create a grid to select the multi-index sector
         grid = np.indices(spaces_num_sectors, np.intp)
         # grid is an array with shape ``(num_spaces, *spaces_num_sectors)``,
         # with grid[li, ...] = {np.arange(space_block_numbers[li]) increasing in li-th direcion}
-        # save the strides of grid, which is needed for :meth:`_map_incoming_block_inds`
         # collapse the different directions into one.
-        grid = grid.reshape(num_spaces, -1)  # *this* is the actual `reshaping`
-        # *columns* of grid are now all possible cominations of qindices.
+        grid = grid.T.reshape(-1, num_spaces)  # *this* is the actual `reshaping`
+        # *rows* of grid are now all possible cominations of qindices.
+        # transpose before reshape ensures that grid.T is np.lexsort()-ed
 
-        nblocks = grid.shape[1]  # number of blocks in ProductSpace = np.product(spaces_num_sectors)
+        nblocks = grid.shape[0]  # number of blocks in ProductSpace = np.product(spaces_num_sectors)
         # this is different from num_sectors
 
         # determine block_ind_map -- it's essentially the grid.
         block_ind_map = np.zeros((nblocks, 3 + num_spaces), dtype=np.intp)
-        block_ind_map[:, 2:-1] = grid.T  # transpose -> rows are possible combinations.
+        block_ind_map[:, 2:-1] = grid  # possible combinations of indices
 
         # the block size for given (i1, i2, ...) is the product of ``multiplicities[il]``
         # andvanced indexing:
-        # ``grid[li]`` is a 1D array containing the qindex `q_li` of leg ``li`` for all blocks
-        multiplicities = np.prod([space.multiplicities[gr] for space, gr in zip(spaces, grid)], axis=0)
-        # block_ind_map[:, :3] is initialized after sort/bunch.
+        # ``grid.T[li]`` is a 1D array containing the qindex `q_li` of leg ``li`` for all blocks
+        multiplicities = np.prod([space.multiplicities[gr] for space, gr in zip(spaces, grid.T)],
+                                 axis=0)
+        # block_ind_map[:, :2] and [:, -1] is initialized after sort/bunch.
 
         # calculate new non-dual sectors
         if _is_dual:
@@ -234,7 +234,7 @@ class AbelianBackendProductSpace(ProductSpace, AbelianBackendVectorSpace):
             fuse_sectors = [s.sectors for s in spaces]
         # _sectors are the ones saved in self._sectors, not the property self.sectors
         _sectors = _fuse_abelian_charges(symmetry,
-            *(sectors[gr] for sectors, gr in zip(fuse_sectors, grid)))
+            *(sectors[gr] for sectors, gr in zip(fuse_sectors, grid.T)))
 
         # sort (non-dual) charge sectors. Similar code as in :meth:`LegCharge.sort`
         perm_block_inds = np.lexsort(_sectors.T)
@@ -373,12 +373,12 @@ def _valid_block_indices(spaces: list[AbelianBackendVectorSpace]):
     # TODO: this is brute-force going through all possible combinations of block indices
     # spaces are sorted, so we can probably reduce that search space quite a bit...
     # similar to `grid` in ProductSpace._fuse_spaces()
-    grid = np.indices(s.num_sectors for s in spaces, dtype=int)
-    grid = grid.reshape((len(spaces), -1))
+    grid = np.indices((s.num_sectors for s in spaces), dtype=int)
+    grid = grid.T.reshape((-1, len(spaces)))
     total_sectors = _fuse_abelian_charges(symmetry,
-                                          space.sector[gr] for space, gr in zip(spaces, grid))
+                                          (space.sector[gr] for space, gr in zip(spaces, grid.T)))
     valid = np.all(total_sectors == symmetry.trivial_sector[np.newaxis, :], axis=1)
-    block_inds = grid.T[valid, :]
+    block_inds = grid[valid, :]
     perm = np.lexsort(block_inds.T)
     return block_inds[perm, :]
 
@@ -459,7 +459,7 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
         block_inds = _valid_block_indices(legs)
         blocks = []
         for b_i in block_inds:
-            slices = [slice(*leg.slices[qi]) for i, leg in zip(block_inds, a.legs)]
+            slices = [slice(*leg.slices[i]) for i, leg in zip(b_i, a.legs)]
             blocks.append(a[tuple(slices)])
         return AbelianBackendData(dtype, blocks, block_inds)
 
@@ -468,16 +468,20 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
         block_inds = _valid_block_indices(legs)
         blocks = []
         for b_i in block_inds:
-            shape = [leg.multiplicities[i] for i, leg in zip(block_inds, a.legs)]
+            shape = [leg.multiplicities[i] for i, leg in zip(b_i, a.legs)]
             blocks.append(func(tuple(shape)))
         return AbelianBackendData(dtype, blocks, block_inds)
 
     def zero_data(self, legs: list[VectorSpace], dtype: Dtype) -> AbelianBackendData:
-        block_inds = np.zeros([0, len(legs)], dtype=int)
+        block_inds = np.zeros((0, len(legs)), dtype=int)
         return AbelianBackendData(dtype, [], block_inds)
 
     def eye_data(self, legs: list[VectorSpace], dtype: Dtype) -> Data:
-        return self.eye_block(legs=[l.dim for l in legs], dtype=dtype)
+        block_inds = np.indices((leg.num_sectors for leg in legs)).T.reshape(-1, len(legs))
+        # block_inds is by construction np.lexsort()-ed
+        dims = [leg.multiplicities[bi] for leg, bi in zip(legs, block_inds.T)]
+        blocks = [self.eye_block(shape, dtype) for shape in zip(dims)]
+        return AbelianBackendData(dtype, blocks, np.hstack([block_inds, block_inds]))
 
     #  def copy_data(self, a: Tensor) -> Data:
     #      return self.block_copy(a.data)
