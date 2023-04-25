@@ -1,38 +1,19 @@
 # Copyright 2018-2023 TeNPy Developers, GNU GPLv3
 from setuptools import setup, Extension
-from setuptools.command.build_ext import build_ext
-import sys
+try:
+    from Cython.Build import cythonize
+    from Cython import __version__ as cython_version
+except:
+    cythonize = None
+    cython_version = '(not available)'
 import os
+import numpy
 import subprocess
 
-if not sys.version_info >= (3, 6):
-    print("ERROR: old python version, the script got called by\n" + sys.version)
-    sys.exit(1)
-
 # hardcode version for people without git
-
 MAJOR, MINOR, MICRO = 0, 10, 0
 RELEASED = False
 VERSION = '{0:d}.{1:d}.{2:d}'.format(MAJOR, MINOR, MICRO)
-
-#  Before updating a version, make sure that *all* tests run successfully!
-#  To update to a new release:
-#      # update changelog and release notes
-#      # update the version in this module and in tenpy/version.py, set RELEASED=True
-#      git commit -m "VERSION 0.1.2"
-#      git tag -s "v0.1.2"  # (sign: requires GPG key)
-#      bash ./compile.sh
-#      pytest -m "not slow"  # run at least a quick test!
-#      # python setup.py sdist  # create source package for PyPI, done by github action
-#      # reset RELEASED = False in this module and tenpy/version.py, copy changelog template.
-#      git commit -m "reset released=False"
-#      git push
-#      git push origin v0.1.2 # also push the tag
-#      create release with release-notes on github
-#      # (the release triggers the github action for uploading the package to PyPi like this:
-#      # python -m twine upload dist/physics-tenpy-0.1.2.tar.gz
-# or   # python -m twine upload --repository-url https://test.pypi.org/legacy/ dist/physics-tenpy-0.1.2.tar.gz
-#      # wait for conda-forge bot to create a pull request with the new version and merge it
 
 
 def get_git_revision():
@@ -50,7 +31,6 @@ def get_git_revision():
 
 def get_git_description():
     """Get number of commits since last git tag.
-
     If unknown, return 0
     """
     if not os.path.exists('.git'):
@@ -71,8 +51,9 @@ def get_version_info():
     return full_version, git_rev
 
 
-def write_version_py(full_version, git_rev, filename='tenpy/_version.py'):
-    """Write the version during compilation to disc."""
+def write_underscore_version_py(filename='tenpy/_version.py'):
+    """Write the version at build time i.e. during compilation to file."""
+    full_version, git_rev = get_version_info()
     content = """\
 # THIS FILE IS GENERATED FROM setup.py
 # thus, it contains the version during compilation
@@ -85,35 +66,19 @@ git_revision = '{git_rev!s}'
 numpy_version = '{numpy_ver!s}'
 cython_version = '{cython_ver!s}'
 """
-    try:
-        import Cython
-        cython_ver = Cython.__version__
-    except:
-        cython_ver = "(not available)"
-    import numpy
     content = content.format(version=VERSION,
                              full_version=full_version,
                              released=RELEASED,
                              git_rev=git_rev,
                              numpy_ver=numpy.version.full_version,
-                             cython_ver=cython_ver)
-    with open(filename, 'w') as f:
-        f.write(content)
-    # done
-
-
-def read_requ_file(filename):
-    with open(filename, 'r') as f:
-        requ = f.readlines()
-    return [l.strip() for l in requ if l.strip()]
+                             cython_ver=cython_version)
 
 
 def setup_cython_extension():
-    try:
-        from Cython.Build import cythonize
-    except:
+    if cythonize is None:
+        print('Could not load cython. tenpy will not be compiled.')
         return []
-    import numpy
+
     include_dirs = [numpy.get_include()]
     libs = []
     lib_dirs = []
@@ -175,45 +140,5 @@ def setup_cython_extension():
     return ext_modules
 
 
-class LazyImportBuildExtCmd(build_ext):
-    def run(self):
-        # write_version_py requires numpy import, so we can not run it in setup_package
-        full_version, git_rev = get_version_info()
-        write_version_py(full_version, git_rev)
-        super().run()
-
-    def finalize_options(self):
-        self.distribution.ext_modules = setup_cython_extension()
-        super().finalize_options()
-
-
-def setup_package():
-    # change directory to root path of the repository
-    src_path = os.path.dirname(os.path.abspath(sys.argv[0]))
-    os.chdir(src_path)
-
-    # avoid warning from tenpy.tools.optimization.use_cython when we didn't compile yet.
-    os.environ.setdefault("TENPY_NO_CYTHON", "true")
-
-    full_version, git_rev = get_version_info()
-
-    ext_modules = setup_cython_extension()
-
-    extras_require = {
-        'extra': ['bottleneck', 'yapf==0.28.0', 'docformatter==1.3.1'],
-        'io': ['h5py', 'pyyaml'],
-        'plot': ['matplotlib>=2.0'],
-        'test': ['pytest'],
-    }
-    extras_require['all'] = [r for requ in extras_require.values() for r in requ]
-
-    setup(version=full_version,
-          ext_modules=ext_modules,
-          install_requires=read_requ_file('requirements.txt'),
-          setup_requires=read_requ_file('requirements.txt'),  # TODO or only Cython, numpy?
-          extras_require=extras_require,
-          cmdclass={"build_ext": LazyImportBuildExtCmd})
-
-
-if __name__ == "__main__":
-    setup_package()
+if __name__ == '__main__':
+    setup(ext_modules=setup_cython_extension())
