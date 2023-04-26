@@ -25,17 +25,27 @@ Block = TypeVar('Block')
 
 class Dtype(Enum):
     # TODO expose those in some high-level init, maybe even as tenpy.float32 ?
-    float32 = auto()
-    float64 = auto()
-    complex64 = auto()
-    complex128 = auto()
+    float32 = 1
+    complex64 = 2
+    float64 = 3
+    complex128 = 4
 
-# TODO: this works in python 3.10, is it an issue in other python versions?
-# we could also define real/complex dtypes as even/odd in the enum
-Dtype.float32.is_real = True
-Dtype.float64.is_real = True
-Dtype.complex64.is_real = False
-Dtype.complex128.is_real = False
+    @property
+    def is_real(dtype):
+        return dtype.value % 2 == 1
+
+    @property
+    def to_complex(dtype):
+        if dtype.value % 2 == 0:
+            return dtype
+        return MyDtype(dtype.value + 1)
+
+    def common(*dtypes):
+        res = MyDtype(max(*(t.value for t in dtypes)))
+        if res.is_real:
+            if not all(t.is_real for t in dtypes):
+                return res.to_complex
+        return res
 
 
 class AbstractBackend(ABC):
