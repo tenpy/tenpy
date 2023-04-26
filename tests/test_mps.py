@@ -294,12 +294,28 @@ def test_canonical_form(bc, method):
 def test_apply_op(bc, eps=1.e-13):
     s = site.SpinHalfSite(None)
     psi0 = mps.MPS.from_singlets(s, 3, [(0, 2)], lonely=[1], bc=bc, lonely_state='up')
+    # psi0 = 1/sqrt(2) ( | up up down> - | down up up> )
     psi1 = psi0.copy()
     psi1.apply_local_op(1, 'Sigmax', understood_infinite=True)  #unitary
     psi1_expect = mps.MPS.from_singlets(s, 3, [(0, 2)], lonely=[1], bc=bc, lonely_state='down')
     psi1 = psi0.copy()
     psi1.apply_local_op(1, 'Sm', understood_infinite=True)  #non-unitary
     assert abs(psi1_expect.overlap(psi1, understood_infinite=True) - 1.) < eps
+
+    psi1 = psi0.copy()
+    psi1.apply_local_op(2, 'Sm', understood_infinite=True)  # non-unitary, should change norm
+    assert abs(psi1.norm  - 0.5**0.5) < eps
+    psi1_expect  = mps.MPS.from_product_state([s]*3, ['down', 'up', 'down'], bc=bc)
+    # up to phase and norm
+    assert abs(- psi1_expect.overlap(psi1, understood_infinite=True) / psi1.norm - 1.) < eps
+
+    psi1 = psi0.copy()
+    SmSm = site.kron(s.Sm, s.Sm, group=False)
+    psi1.apply_local_op(1, SmSm, understood_infinite=True)  # non-unitary, should change norm
+    assert abs(psi1.norm  - 0.5**0.5) < eps
+    psi1_expect  = mps.MPS.from_product_state([s]*3, ['down', 'down', 'down'], bc=bc)
+    # up to phase and norm
+    assert abs(- psi1_expect.overlap(psi1, understood_infinite=True) / psi1.norm - 1.) < eps
 
     psi2 = psi0.copy()
     th = psi2.get_theta(0, 3).to_ndarray().reshape((8, ))

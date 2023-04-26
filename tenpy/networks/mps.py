@@ -3550,8 +3550,8 @@ class MPS:
             or whether we should call :meth:`canonical_form` (``False``).
             ``None`` checks whether ``norm(op dagger(op) - identity)`` is smaller than `cutoff`.
         renormalize : bool
-            Whether the final state should keep track of the norm (False, default) or be
-            renormalized to have norm 1 (True).
+            Whether the final state should keep track of the norm (False, default), or
+            the *change* of norm should be discarded (True).
         cutoff : float
             Cutoff for singular values if `op` acts on more than one site (see :meth:`from_full`).
             (And used as cutoff for a unspecified `unitary`.)
@@ -3584,8 +3584,10 @@ class MPS:
             th = self.get_theta(i, n)
             th = npc.tensordot(op, th, axes=[pstar, p])
             # use MPS.from_full to split the sites
-            split_th = self.from_full(self.sites[i:i + n], th, None, cutoff, False, 'segment',
-                                      (self.get_SL(i), self.get_SR(i + n - 1)))
+            split_th = self.from_full(self.sites[i:i + n], th, None, cutoff, renormalize,
+                                      'segment', (self.get_SL(i), self.get_SR(i + n - 1)))
+            if not renormalize:
+                self.norm *= split_th.norm
             for j in range(n):
                 self.set_B(i + j, split_th._B[j], split_th.form[j])
             for j in range(n - 1):
@@ -3616,8 +3618,8 @@ class MPS:
             or whether we should call :meth:`canonical_form` (``False``).
             ``None`` checks whether ``max(norm(op dagger(op) - identity) for op in ops) < 1.e-14``
         renormalize : bool
-            Whether the final state should keep track of the norm (False, default) or be
-            renormalized to have norm 1 (True).
+            Whether the final state should keep track of the norm (False, default), or
+            the *change* of norm should be discarded (True).
         """
         ops = to_iterable(ops)
         if self.L % len(ops) != 0:

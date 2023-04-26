@@ -31,3 +31,5 @@ Fixed
 - Fix a wrong total charge in :meth:`~tenpy.networks.mpo.MPO.apply_zipup`.
 - Fix :issue:`218` that :meth:`~tenpy.models.model.CouplingModel.add_multi_coupling_term` with `plus_hc=True` didn't
   correctly add the hermitian conjugate.
+- Fix that the MPS :meth:`~tenpy.networks.mps.MPS.apply_local_op` with local multi-site operators didn't correctly track the
+  norm with `renormalize=False`.
