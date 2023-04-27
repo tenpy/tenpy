@@ -434,10 +434,7 @@ class LanczosGroundState(KrylovBased):
     """Lanczos algorithm to find the ground state.
 
     **Assumes** that `H` is hermitian.
-
-    .. deprecated :: 0.6.0
-        Renamed attribute `params` to :attr:`options`.
-
+    
     Options
     -------
     .. cfg:config :: LanczosGroundState
@@ -708,13 +705,8 @@ def lanczos_arpack(H, psi, options={}):
     return Es[0], psi0
 
 
-def gram_schmidt(vecs, rcond=1.e-14, verbose=None):
+def gram_schmidt(vecs, rcond=1.e-14):
     """In place Gram-Schmidt Orthogonalization and normalization for npc Arrays.
-
-    .. deprecated :: 0.9.1
-        Previously, this function return `vecs, ov` with `ov` being the overlaps
-        ``<vecs[i]|vecs[j]>``. The return value `ov` has been dropped now,
-        since it wasn't used anyways.
 
     Parameters
     ----------
@@ -730,8 +722,6 @@ def gram_schmidt(vecs, rcond=1.e-14, verbose=None):
     vecs : list of Array
         The ortho-normalized vectors (without any ``None``).
     """
-    if verbose is not None:
-        warnings.warn("Dropped verbose argument", category=FutureWarning, stacklevel=2)
     res = []
     for vec in vecs:
         for other in res:
