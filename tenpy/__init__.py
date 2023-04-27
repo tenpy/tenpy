@@ -190,10 +190,6 @@ def console_main(*command_line_args):
     if 'output_filename' not in options and 'output_filename_params' not in options:
         raise ValueError("No output filename specified - refuse to run without saving anything!")
     if args.sim_class is not None:  # non-default
-        if 'simulation_class_name' in options:
-            warnings.warn('command line overrides deprecated `simulation_class_name` parameter',
-                          FutureWarning)
-            del options['simulation_class_name']
         options['simulation_class'] = args.sim_class
     if args.RAM:
         # exit immediately
