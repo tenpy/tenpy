@@ -57,8 +57,6 @@ __all__ = [
     'Mixer',
     'DensityMatrixMixer',
     'SubspaceExpansion',
-    'SingleSiteMixer',
-    'TwoSiteMixer',
     'EngineCombine',
     'EngineFracture',
 ]
@@ -142,26 +140,6 @@ class SubspaceExpansion(Mixer, mps_common.SubspaceExpansion):
     def perturb_svd(self, engine, theta, i0, move_right):
         U, S, VH, err = self.mix_and_decompose_1site(engine, theta, i0, move_right)
         return U, S, VH, err, S
-
-
-class SingleSiteMixer(SubspaceExpansion):
-    r"""Deprecated name for the :class:`SubspaceExpansion` class.
-
-    .. deprecated :: 0.5.0
-       Instead of `SingleSiteMixer` and `TwoSiteMixer`, directly use :class:`SubspaceExpansion`
-       which is compatible with both single-site and two-site DMRG.
-    """
-    def __init__(self, *args, **kwargs):
-        msg = ("The `SingleSiteMixer` and `TwoSiteMixer` have been replaced by the unified "
-               "`SubspaceExpansion` class, and\n"
-               "all mixers are compatible with both SingleSiteDMRGEngine and TwoSiteDMRGEngine.")
-        warnings.warn(msg, category=FutureWarning, stacklevel=2)
-        super().__init__(*args, **kwargs)
-
-
-class TwoSiteMixer(SingleSiteMixer):
-    # Both DMRG engines have code in mixed_svd to support both single-site and two-site mixers
-    pass
 
 
 class DensityMatrixMixer(Mixer, mps_common.DensityMatrixMixer):
