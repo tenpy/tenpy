@@ -1433,7 +1433,9 @@ class Array:
             computing new leg pipes for the same legs multiple times.
             The LegPipes are conjugated, if that is necessary for compatibility with the legs.
         qconj : (iterable of) {+1, -1}
-            Specify whether new created pipes point inward or outward. Defaults to +1.
+            Specify whether new created pipes point inward or outward. 
+            Defaults to the same value as the first of the legs to be combined.
+            E.g. for a single combine, the default `qconj` is `self.get_leg(combine_legs[0]).qconj`.
             Ignored for given `pipes`, which are not newly calculated.
 
         Returns
@@ -2650,12 +2652,7 @@ class Array:
             if pipe is None:
                 qconj_i = qconj[i]
                 if qconj_i is None:
-                    qconj_i = +1  # will change in future to
-                    qconj_i_new = self.get_leg(combine_legs[i][0]).qconj
-                    if qconj_i != qconj_i_new:
-                        warnings.warn(
-                            "combine_legs default value for `qconj` will change "
-                            "from +1 to `qconj` of the first leg, here `-1`", FutureWarning, 3)
+                    qconj_i = self.get_leg(combine_legs[i][0]).qconj
                 pipes[i] = self.make_pipe(axes=combine_legs[i], qconj=qconj_i)
             else:
                 # test for compatibility
