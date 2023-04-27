@@ -1602,36 +1602,6 @@ class CouplingModel(Model):
             self.exp_decaying_terms.add_exponentially_decaying_coupling(
                 np.conj(strength), np.conj(lambda_), hc_op_i, hc_op_j, subsites, op_string)
 
-    def calc_H_onsite(self, tol_zero=1.e-15):
-        """Calculate `H_onsite` from `self.onsite_terms`.
-
-        .. deprecated:: 0.4.0
-            This function will be removed in 1.0.0.
-            Replace calls to this function by
-            ``self.all_onsite_terms().remove_zeros(tol_zero).to_Arrays(self.lat.mps_sites())``.
-            You might also want to take :attr:`explicit_plus_hc` into account.
-
-        Parameters
-        ----------
-        tol_zero : float
-            prefactors with ``abs(strength) < tol_zero`` are considered to be zero.
-
-        Returns
-        -------
-        H_onsite : list of npc.Array
-        onsite terms of the Hamiltonian. If :attr:`explicit_plus_hc` is True,
-            Hermitian conjugates of the onsite terms will be included.
-        """
-        warnings.warn("Deprecated `calc_H_onsite` in CouplingModel", FutureWarning, stacklevel=2)
-        ot = self.all_onsite_terms()
-        ot.remove_zeros(tol_zero)
-        ot_arrays = ot.to_Arrays(self.lat.mps_sites())
-        if self.explicit_plus_hc:
-            for i, op in enumerate(ot_arrays):
-                if op is not None:
-                    ot_arrays[i] = op + op.conj().itranspose(op.get_leg_labels())
-        return ot_arrays
-
     def calc_H_bond(self, tol_zero=1.e-15):
         """calculate `H_bond` from :attr:`coupling_terms` and :attr:`onsite_terms`.
 
