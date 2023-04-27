@@ -1875,13 +1875,6 @@ class CouplingMPOModel(CouplingModel, MPOModel):
         # finally checks for misspelled parameter names
         model_params.warn_unused()
 
-    @property
-    def verbose(self):
-        warnings.warn(
-            "verbose is deprecated, we're using logging now! \n"
-            "See https://tenpy.readthedocs.io/en/latest/intro/logging.html", FutureWarning, 2)
-        return self.options.get('verbose', 1.)
-
     def init_H_from_terms(self):
         """Initialize `H_MPO` (and `H_bond`) from the terms of the `CouplingModel`.
 
