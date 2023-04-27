@@ -166,9 +166,6 @@ class DMRGEngine(IterativeSweeps):
     A generic protocol for approaching a physics question using DMRG is given in
     :doc:`/intro/dmrg-protocol`.
 
-    .. deprecated :: 0.5.0
-        Renamed parameter/attribute `DMRG_params` to :attr:`options`.
-
     Options
     -------
     .. cfg:config :: DMRGEngine
@@ -273,11 +270,6 @@ class DMRGEngine(IterativeSweeps):
         decay_infinite = decay_finite ** (disable_finite / disable_infinite)
         mixer_options.setdefault('decay', decay_finite if self.finite else decay_infinite)
         mixer_options.setdefault('disable_after', disable_finite if self.finite else disable_infinite)
-
-    @property
-    def DMRG_params(self):
-        warnings.warn("renamed self.DMRG_params -> self.options", FutureWarning, stacklevel=2)
-        return self.options
 
     def pre_run_initialize(self):
         super().pre_run_initialize()
