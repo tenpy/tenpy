@@ -3897,15 +3897,6 @@ class MPS(BaseMPSExpectationValue):
                 self.segment_boundaries = (U, VR_segment)
             return U, VR_segment
 
-    def canonical_form_infinite(self, **kwargs):
-        """Deprecated wrapper around :meth:`canonical_form_infinite1`."""
-        warnings.warn(
-            "There are different implementations of `canonical_form_infinite` now. "
-            "Select one explicitly!",
-            FutureWarning,
-            stacklevel=2)
-        self.canonical_form_infinite1(**kwargs)
-
     def canonical_form_infinite1(self, renormalize=True, tol_xi=1.e6):
         """Bring an infinite MPS into canonical form; in place.
 
