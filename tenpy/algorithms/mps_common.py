@@ -694,12 +694,7 @@ class Sweep(Algorithm):
         if Mixer_class is True:
             Mixer_class = self.DefaultMixer
         if isinstance(Mixer_class, str):
-            if Mixer_class == "Mixer":
-                msg = 'Use `True` instead of "Mixer" for DMRG parameter "mixer"'
-                warnings.warn(msg, FutureWarning)
-                Mixer_class = self.DefaultMixer
-            else:
-                Mixer_class = find_subclass(Mixer, Mixer_class)
+            Mixer_class = find_subclass(Mixer, Mixer_class)
         mixer_params = self.options.subconfig('mixer_params')
         self.mixer = Mixer_class(mixer_params, self.sweeps)
         logger.info(f'activate {Mixer_class.__name__} with initial amplitude {self.mixer.amplitude}')
