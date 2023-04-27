@@ -2782,18 +2782,11 @@ class Array:
                 warnings.warn("Not all legs labeled, so no transpose for Array addition. "
                               "Did you intend to transpose?")
             return self  # not all legs labeled
-        if set(self_labels) != set(other_labels):
-            return self  # different labels
-        # now: same labels, different order.
-        # TODO to keep backwards compatibility, just warn for now
-        warnings.warn(
-            "Arrays with same labels in different order. Transpose intended?"
-            " We will transpose in the future!",
-            category=FutureWarning,
-            stacklevel=2)
+        if set(self_labels) == set(other_labels):
+            # same labels, different order.
+            return self.transpose(other_labels)
+        # else: different labels
         return self
-        # TODO: do this for the next release
-        return self.transpose(other_labels)
 
 
 # ##################################
