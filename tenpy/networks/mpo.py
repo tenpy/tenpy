@@ -1362,22 +1362,6 @@ class MPO:
 
         return trunc_err
 
-    def get_full_hamiltonian(self, maxsize=1e6):
-        """extract the full Hamiltonian as a ``d**L``x``d**L`` matrix.
-
-        .. deprecated :: 0.5.0
-            Use :meth:`tenpy.algorithms.exact_diag.ExactDiag.from_H_mpo` instead.
-        """
-        msg = "Use functions from `tenpy.algorithms.exact_diag.ExactDiag.from_H_mpo` instead"
-        warnings.warn(msg, FutureWarning, 2)
-        if (self.dim[0]**(2 * self.L) > maxsize):
-            print('Matrix dimension exceeds maxsize')
-            return np.zeros(1)
-        singlesitempo = self.get_grouped_mpo(self.L)
-        # Note: the trace works only for 'finite' boundary conditions
-        # where the legs are trivial - otherwise it would give 0 or even raise an error!
-        return npc.trace(singlesitempo.get_W(0), axes=[['wL'], ['wR']])
-
     def _to_valid_index(self, i, bond=False):
         """Make sure `i` is a valid index (depending on `self.bc`)."""
         if not self.finite:
