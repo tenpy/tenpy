@@ -25,8 +25,7 @@ The matrices and singular values always represent a normalized state
 but (for finite MPS) we keep track of the norm in :attr:`~tenpy.networks.mps.MPS.norm`
 (which is respected by :meth:`~tenpy.networks.mps.MPS.overlap`, ...).
 
-Valid MPS boundary conditions (not to confuse with `bc_coupling` of
-:class:`tenpy.models.model.CouplingModel`)  are the following:
+Valid MPS boundary conditions are the following:
 
 ==========  ===================================================================================
 `bc`        description
