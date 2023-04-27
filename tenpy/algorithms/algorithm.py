@@ -137,13 +137,6 @@ class Algorithm:
         obj.checkpoint = other_engine.checkpoint  # TODO: do this?
         return obj
 
-    @property
-    def verbose(self):
-        warnings.warn(
-            "verbose is deprecated, we're using logging now! \n"
-            "See https://tenpy.readthedocs.io/en/latest/intro/logging.html", FutureWarning, 2)
-        return self.options.get('verbose', 1.)
-
     def run(self):
         """Actually run the algorithm.
 
