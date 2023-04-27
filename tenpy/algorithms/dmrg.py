@@ -57,8 +57,6 @@ __all__ = [
     'Mixer',
     'DensityMatrixMixer',
     'SubspaceExpansion',
-    'EngineCombine',
-    'EngineFracture',
 ]
 
 
@@ -1334,44 +1332,6 @@ class SingleSiteDMRGEngine(DMRGEngine):
             msg = (f'Using {self.mixer.__class__.__name__} with single-site DMRG is inefficient. '
                    f'The resulting algorithm has two-site costs!')
             warnings.warn(msg)
-
-
-class EngineCombine(TwoSiteDMRGEngine):
-    r"""Engine which combines legs into pipes as far as possible.
-
-    This engine combines the virtual and physical leg for the left site and right site into pipes.
-    This reduces the overhead of calculating charge combinations in the contractions,
-    but one :meth:`matvec` is formally more expensive, :math:`O(2 d^3 \chi^3 D)`.
-
-    .. deprecated :: 0.5.0
-       Directly use the :class:`TwoSiteDMRGEngine` with the DMRG parameter ``combine=True``.
-    """
-    def __init__(self, psi, model, DMRG_params):
-        msg = ("Old-style engines are deprecated in favor of `Sweep` subclasses.\n"
-               "Use `TwoSiteDMRGEngine` with parameter `combine=True` "
-               "instead of `EngineCombine`.")
-        warnings.warn(msg, category=FutureWarning, stacklevel=2)
-        DMRG_params['combine'] = True  # to reproduces old-style engine
-        super().__init__(psi, model, DMRG_params)
-
-
-class EngineFracture(TwoSiteDMRGEngine):
-    r"""Engine which keeps the legs separate.
-
-    Due to a different contraction order in :meth:`matvec`, this engine might be faster than
-    :class:`EngineCombine`, at least for large physical dimensions and if the MPO is sparse.
-    One :meth:`matvec` is :math:`O(2 \chi^3 d^2 W + 2 \chi^2 d^3 W^2 )`.
-
-    .. deprecated :: 0.5.0
-       Directly use the :class:`TwoSiteDMRGEngine` with the DMRG parameter ``combine=False``.
-    """
-    def __init__(self, psi, model, DMRG_params):
-        msg = ("Old-style engines are deprecated in favor of `Sweep` subclasses.\n"
-               "Use `TwoSiteDMRGEngine` with parameter `combine=False` "
-               "instead of `EngineFracture`.")
-        warnings.warn(msg, category=FutureWarning, stacklevel=2)
-        DMRG_params['combine'] = False  # to reproduces old-style engine
-        super().__init__(psi, model, DMRG_params)
 
 
 def chi_list(chi_max, dchi=20, nsweeps=20):
