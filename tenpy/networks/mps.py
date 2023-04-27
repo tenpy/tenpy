@@ -4746,11 +4746,8 @@ class MPS(BaseMPSExpectationValue):
         self.sites[self._to_valid_index(i + 1)] = siteL
         return err
 
-    def permute_sites(self, perm, swap_op='auto', trunc_par=None, verbose=None):
+    def permute_sites(self, perm, swap_op='auto', trunc_par=None):
         """Applies the permutation perm to the state; in place.
-
-        .. deprecated :: 0.8.0
-            Drop / ignore `verbose` argument, never print something.
 
         Parameters
         ----------
@@ -4768,8 +4765,6 @@ class MPS(BaseMPSExpectationValue):
         trunc_err : :class:`~tenpy.algorithms.truncation.TruncationError`
             The error of the represented state introduced by the truncation after the swaps.
         """
-        if verbose is not None:
-            warnings.warn("Dropped verbose argument", category=FutureWarning, stacklevel=2)
         perm = list(perm)  # gets modified, so we should copy
         # In order to keep sites close together, we always scan from the left,
         # keeping everything up to `i` in strictly ascending order.
@@ -4800,7 +4795,6 @@ class MPS(BaseMPSExpectationValue):
                   swap_op='auto',
                   trunc_par=None,
                   canonicalize=1.e-6,
-                  verbose=None,
                   expected_mean_k=0.):
         r"""Compute the momentum quantum numbers of the entanglement spectrum for 2D states.
 
@@ -4812,9 +4806,6 @@ class MPS(BaseMPSExpectationValue):
         finds the dominant eigenvector of the mixed transfer matrix to get the quantum numbers,
         along the lines of :cite:`pollmann2012`, see also (the appendix and Fig. 11 in the arXiv
         version of) :cite:`cincio2013`.
-
-        .. deprecated :: 0.8.0
-            Drop / ignore `verbose` argument, never print something.
 
         Parameters
         ----------
