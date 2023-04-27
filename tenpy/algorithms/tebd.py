@@ -59,9 +59,6 @@ class TEBDEngine(TimeEvolutionAlgorithm):
 
     Parameters are the same as for :class:`~tenpy.algorithms.algorithm.Algorithm`.
 
-    .. deprecated :: 0.6.0
-        Renamed parameter/attribute `TEBD_params` to :attr:`options`.
-
     Options
     -------
     .. cfg:config :: TEBDEngine
@@ -109,11 +106,6 @@ class TEBDEngine(TimeEvolutionAlgorithm):
         self._U = None
         self._U_param = {}
         self._update_index = None
-
-    @property
-    def TEBD_params(self):
-        warnings.warn("renamed self.TEBD_params -> self.options", FutureWarning, stacklevel=2)
-        return self.options
 
     @property
     def trunc_err_bonds(self):

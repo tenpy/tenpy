@@ -82,9 +82,6 @@ class PurificationApplyMPO(VariationalApplyMPO):
 class PurificationTEBD(tebd.TEBDEngine):
     r"""Time evolving block decimation (TEBD) for purification MPS.
 
-    .. deprecated :: 0.6.0
-        Renamed parameter/attribute `TEBD_params` to :attr:`options`.
-
     Parameters are the same as for :class:`~tenpy.algorithms.algorithm.Algorithm`.
 
     Options
