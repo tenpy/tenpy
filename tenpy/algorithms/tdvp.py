@@ -45,7 +45,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 __all__ = ['TDVPEngine', 'SingleSiteTDVPEngine', 'TwoSiteTDVPEngine',
-           'TimeDependentSingleSiteTDVP', 'TimeDependentTwoSiteTDVP', 'Engine']
+           'TimeDependentSingleSiteTDVP', 'TimeDependentTwoSiteTDVP']
 
 
 class TDVPEngine(TimeEvolutionAlgorithm, Sweep):
