@@ -815,20 +815,10 @@ class CouplingModel(Model):
     In this class, the terms of the Hamiltonian are specified explicitly as
     :class:`~tenpy.networks.terms.OnsiteTerms` or :class:`~tenpy.networks.terms.CouplingTerms`.
 
-    .. deprecated:: 0.4.0
-        `bc_coupling` will be removed in 1.0.0. To specify the full geometry in the lattice,
-        use the `bc` parameter of the :class:`~tenpy.model.lattice.Lattice`.
-
     Parameters
     ----------
     lattice : :class:`~tenpy.model.lattice.Lattice`
         The lattice defining the geometry and the local Hilbert space(s).
-    bc_coupling : (iterable of) {``'open'`` | ``'periodic'`` | ``int``}
-        Boundary conditions of the couplings in each direction of the lattice. Defines how the
-        couplings are added in :meth:`add_coupling`. A single string holds for all directions.
-        An integer `shift` means that we have periodic boundary conditions along this direction,
-        but shift/tilt by ``-shift*lattice.basis[0]`` (~cylinder axis for ``bc_MPS='infinite'``)
-        when going around the boundary along this direction.
     explicit_plus_hc : bool
         If True, the Hermitian conjugate of the MPO is computed at runtime,
         rather than saved in the MPO.
@@ -854,13 +844,8 @@ class CouplingModel(Model):
         and :meth:`add_exponentially_decaying_coupling` respect this flag, ensuring that the
         *represented* Hamiltonian is independent of the `explicit_plus_hc` flag.
     """
-    def __init__(self, lattice, bc_coupling=None, explicit_plus_hc=False):
+    def __init__(self, lattice, explicit_plus_hc=False):
         Model.__init__(self, lattice)
-        if bc_coupling is not None:
-            warnings.warn("`bc_coupling` in CouplingModel: use `bc` in Lattice instead",
-                          FutureWarning,
-                          stacklevel=2)
-            lattice._set_bc(bc_coupling)
         L = self.lat.N_sites
         self.onsite_terms = {}
         self.coupling_terms = {}
