@@ -5914,9 +5914,6 @@ class TransferMatrix(sparse.NpcLinearOperator):
 
     Note that we keep all M and N as copies.
 
-    .. deprecated :: 0.6.0
-        The default for `shift_ket` was the value of `shift_bra`, this will be changed to 0.
-
     Parameters
     ----------
     bra : MPS
@@ -5925,9 +5922,8 @@ class TransferMatrix(sparse.NpcLinearOperator):
         The MPS which is not (complex) conjugated.
     shift_bra : int
         We start the `N` of the bra at site `shift_bra` (i.e. the `j` in the above network).
-    shift_ket : int | None
+    shift_ket : int
         We start the `M` of the ket at site `shift_ket` (i.e. the `i` in the above network).
-        ``None`` is deprecated, default will be changed to 0 in the future.
     transpose : bool
         Whether `self.matvec` acts on `RP` (``False``) or `LP` (``True``).
     charge_sector : None | charges | ``0``
@@ -5947,8 +5943,8 @@ class TransferMatrix(sparse.NpcLinearOperator):
         of `bra.L` and `ket.L`.
     shift_bra : int
         We start the `N` of the bra at site `shift_bra`.
-    shift_ket : int | None
-        We start the `M` of the ket at site `shift_ket`. ``None`` defaults to `shift_bra`.
+    shift_ket : int
+        We start the `M` of the ket at site `shift_ket`.
     transpose : bool
         Whether `self.matvec` acts on `RP` (``True``) or `LP` (``False``).
     qtotal : charges
@@ -5972,18 +5968,13 @@ class TransferMatrix(sparse.NpcLinearOperator):
                  bra,
                  ket,
                  shift_bra=0,
-                 shift_ket=None,
+                 shift_ket=0,
                  transpose=False,
                  charge_sector=0,
                  form='B'):
         L = lcm(bra.L, ket.L)
         if ket.chinfo != bra.chinfo:
             raise ValueError("incompatible charges")
-        if shift_ket is None:
-            if shift_bra != 0:
-                warnings.warn("default for shift_ket will change to 0. Specify both explicitly!",
-                              FutureWarning, 2)
-            shift_ket = shift_bra
         self.shift_bra = shift_bra
         self.shift_ket = shift_ket
         assert ket._p_label == bra._p_label
