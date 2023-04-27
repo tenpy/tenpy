@@ -24,5 +24,6 @@ If you want to become a member of the developer team, just ask ;-)
     :maxdepth: 1
 
     contr/guidelines
+    contr/release
     contr/build_doc
     contr/todo
