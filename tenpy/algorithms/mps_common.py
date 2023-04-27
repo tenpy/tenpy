@@ -214,23 +214,9 @@ class Sweep(Algorithm):
 
         Options
         -------
-        .. deprecated :: 0.6.0
-            Options `LP`, `LP_age`, `RP` and `RP_age` are now collected in a dictionary
-            `init_env_data` with different keys `init_LP`, `init_RP`, `age_LP`, `age_RP`
-
-        .. deprecated :: 0.8.0
-            Instead of passing the `init_env_data` as a option, it should be passed
-            as dict entry of `resume_data`.
 
         .. cfg:configoptions :: Sweep
-
-            init_env_data : dict
-                Dictionary as returned by ``self.env.get_initialization_data()`` from
-                :meth:`~tenpy.networks.mpo.MPOEnvironment.get_initialization_data`.
-                Deprecated, use the `resume_data` function/class argument instead.
-            orthogonal_to : list of :class:`~tenpy.networks.mps.MPS`
-                Deprecated in favor of the `orthogonal_to` function argument (forwarded from the
-                class argument) with the same effect.
+                
             start_env : int
                 Number of sweeps to be performed without optimization to update the environment.
 
@@ -244,9 +230,6 @@ class Sweep(Algorithm):
         # extract `init_env_data` from options or previous env
         if resume_data is None:
             resume_data = {}
-        if 'init_env_data' in self.options:
-            warnings.warn("put init_env_data in resume_data instead of options!", FutureWarning)
-            resume_data.setdefault('init_env_data', self.options['init_env_data'])
         init_env_data = {}
         if self.env is not None and self.psi.bc != 'finite':
             # reuse previous environments.
@@ -256,14 +239,6 @@ class Sweep(Algorithm):
         if not self.psi.finite and init_env_data and \
                 self.options.get('chi_list', None) is not None:
             warnings.warn("Re-using environment with `chi_list` set! Do you want this?")
-        replaced = [('LP', 'init_LP'), ('LP_age', 'age_LP'), ('RP', 'init_RP'),
-                    ('RP_age', 'age_RP')]
-        if any([key_old in self.options for key_old, _ in replaced]):
-            warnings.warn("Deprecated options LP/RP/LP_age/RP_age: collected in `init_env_data`",
-                          FutureWarning)
-            for key_old, key_new in replaced:
-                if key_old in self.options:
-                    init_env_data[key_new] = self.options[key_old]
 
         # actually initialize the environment
         self._init_mpo_env(H, init_env_data)
@@ -286,12 +261,6 @@ class Sweep(Algorithm):
 
     def _init_ortho_to_envs(self, orthogonal_to, resume_data):
         # (re)initialize ortho_to_envs
-        if 'orthogonal_to' in self.options:
-            warnings.warn(
-                "Deprecated `orthogonal_to` in dmrg options: instead give "
-                "`orthogonal_to` as keyword to the Algorithm class.", FutureWarning)
-            assert orthogonal_to is None
-            orthogonal_to = self.options['orthogonal_to']
         if 'orthogonal_to' in resume_data:
             orthogonal_to = resume_data['orthogonal_to']  # precedence for resume_data!
 
@@ -322,10 +291,6 @@ class Sweep(Algorithm):
 
         Options
         -------
-        .. deprecated : 0.9
-            sweep_0 : int
-                Number of sweeps that have already been performed.
-                Pass as ``resume_data['sweeps']`` instead.
 
         .. cfg:configoptions :: Sweep
 
@@ -338,10 +303,6 @@ class Sweep(Algorithm):
                 20 sweeps and ``chi_max=100`` afterwards.
         """
         self.sweeps = 0
-        if 'sweep_0' in self.options:
-            warnings.warn("Deprecated sweep_0 option: set as resume_data['sweep'] instead.",
-                          FutureWarning)
-            self.sweeps = self.options['sweep_0']
         if resume_data is not None and 'sweeps' in resume_data:
             self.sweeps = resume_data['sweeps']
         self.shelve = False
