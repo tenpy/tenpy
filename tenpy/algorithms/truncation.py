@@ -143,10 +143,6 @@ def truncate(S, options):
 
     Options
     -------
-    .. deprecated :: 0.5.1
-        Renamed `symmetry_tol` to `degeneracy_tol`,
-        and don't use log in the condition any more.
-
     .. cfg:config:: truncation
 
         chi_max : int
@@ -194,10 +190,6 @@ def truncate(S, options):
     chi_max = options.get('chi_max', 100)
     chi_min = options.get('chi_min', None)
     deg_tol = options.get('degeneracy_tol', None)
-    options.deprecated_alias('symmetry_tol', 'degeneracy_tol',
-                             "We don't use `log` in the condition anymore!")
-    if 'symmetry_tol' in options:  # deprecated!
-        deg_tol = np.log(options['symmetry_tol'])
     svd_min = options.get('svd_min', 1.e-14)
     trunc_cut = options.get('trunc_cut', 1.e-14)
 
