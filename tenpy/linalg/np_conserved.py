@@ -640,29 +640,6 @@ class Array:
         """Alias for :attr:`rank` or ``len(self.shape)``."""
         return self.rank
 
-    @property
-    def labels(self):
-        warnings.warn("Deprecated access of Array.labels as dictionary.",
-                      category=FutureWarning,
-                      stacklevel=2)
-        dict_lab = {}
-        for i, l in enumerate(self._labels):
-            if l is not None:
-                dict_lab[l] = i
-        return dict_lab
-
-    @labels.setter
-    def labels(self, dict_lab):
-        warnings.warn("Deprecated setting of Array.labels with dictionary.",
-                      category=FutureWarning,
-                      stacklevel=2)
-        list_lab = [None] * self.rank
-        for k, v in dict_lab.items():
-            if list_lab[v] is not None:
-                raise ValueError("Two labels point to the same index " + repr(dict_lab))
-            list_lab[v] = str(k)
-        self._labels = list_lab
-
     # labels ==================================================================
 
     def get_leg_index(self, label):
