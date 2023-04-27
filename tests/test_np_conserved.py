@@ -504,12 +504,8 @@ def test_npc_addition_transpose():
     a2 = np.swapaxes(a1, 0, 1)
     t1 = npc.Array.from_ndarray_trivial(a1, labels=['a', 'b', 'c'])
     t2 = npc.Array.from_ndarray_trivial(a2, labels=['b', 'a', 'c'])
-    # TODO: for now warning
-    with pytest.warns(FutureWarning):
-        diff = npc.norm(t1 - t2)
-    # TODO: when the behaviour is changed do
-    #  diff = npc.norm(t1 - t2)
-    #  assert diff < 1.e-10
+    diff = npc.norm(t1 - t2)
+    assert diff < 1.e-10
 
 
 def test_npc_tensordot():
