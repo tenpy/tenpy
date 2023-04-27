@@ -14,9 +14,9 @@ import warnings
 __all__ = [
     'to_iterable', 'to_iterable_of_len', 'to_array', 'anynan', 'argsort', 'lexsort',
     'inverse_permutation', 'list_to_dict_list', 'atleast_2d_pad', 'transpose_list_list',
-    'zero_if_close', 'pad', 'any_nonzero', 'add_with_None_0', 'chi_list', 'group_by_degeneracy',
+    'zero_if_close', 'pad', 'any_nonzero', 'add_with_None_0', 'group_by_degeneracy',
     'get_close', 'find_subclass', 'get_recursive', 'set_recursive', 'update_recursive',
-    'merge_recursive', 'flatten', 'setup_logging', 'build_initial_state', 'setup_executable',
+    'merge_recursive', 'flatten', 'setup_logging',,
     'convert_memory_units', 'consistency_check', 'TenpyInconsistencyError',
     'TenpyInconsistencyWarning'
 ]
@@ -434,19 +434,6 @@ def add_with_None_0(a, b):
     if b is None:
         return a
     return a + b
-
-
-def chi_list(chi_max, dchi=20, nsweeps=20, verbose=0):
-    warnings.warn("Deprecated: moved `chi_list` to `tenpy.algorithms.dmrg.chi_list`.",
-                  category=FutureWarning,
-                  stacklevel=2)
-    from tenpy.algorithms import dmrg
-    chi_list = dmrg.chi_list(chi_max, dchi, nsweeps)
-    if verbose:
-        import pprint
-        print("chi_list = ")
-        pprint.pprint(chi_list)
-    return chi_list
 
 
 def group_by_degeneracy(E, *args, subset=None, cutoff=1.e-12):
@@ -934,190 +921,6 @@ def setup_logging(options=None,
     logging.config.dictConfig(dict_config)
     if capture_warnings:
         logging.captureWarnings(True)
-
-
-def build_initial_state(size, states, filling, mode='random', seed=None):
-    warnings.warn(
-        "Deprecated `build_initial_state`: Use `tenpy.networks.mps.InitialStateBuilder` instead.",
-        category=FutureWarning,
-        stacklevel=2)
-    from tenpy.networks import mps
-    return mps.build_initial_state(size, states, filling, mode, seed)
-
-
-def setup_executable(mod, run_defaults, identifier_list=None):
-    """Read command line arguments and turn into useable dicts.
-
-    .. warning ::
-
-        this is a deprecated interface. Use the :class:`~tenpy.simulations.simulation.Simulation`
-        interface in combination with :func:`~tenpy.console_main` instead.
-        You can invoke that from the command line as ``python -m tenpy ...``.
-
-    Uses default values defined at:
-    - model class for model_par
-    - here for sim_par
-    - executable file for run_par
-    Alternatively, a model_defaults dictionary and identifier_list can be supplied without the model
-
-    NB: for setup_executable to work with a model class, the model class needs to define two things:
-            - defaults, a static (class level) dictionary with (key, value) pairs that have the name
-              of the parameter (as string) as key, and the default value as value.
-            - identifier, a static (class level) list or other iterable with the names of the parameters
-              to be used in filename identifiers.
-
-    Parameters
-    ----------
-    mod : model | dict
-        Model class (or instance) OR a dictionary containing model defaults
-    run_defaults : dict
-        default values for executable file parameters
-    identifier_list : iterable
-        Used only if mod is a dict. Contains the identifier variables
-
-    Returns
-    -------
-    model_par, sim_par, run_par : dict
-        containing all parameters.
-    args :
-        namespace with raw arguments for some backwards compatibility with executables.
-    """
-    warnings.warn("Deprecated: use `tenpy.run_simulation` and `tenpy.console_main` instead.",
-                  category=FutureWarning,
-                  stacklevel=2)
-    parser = argparse.ArgumentParser()
-
-    # These deal with backwards compatibility (supplying a model)
-    if type(mod) != dict and identifier_list == None:  # Assume we've been given a model class
-        try:
-            model_defaults = mod.defaults
-            identifier_list = mod.identifier
-        except AttributeError as err:
-            print("Cannot get model defaults and identifier list from mod. Is mod a class/instance?")
-            print(err)
-            raise AttributeError
-    elif type(mod) == dict and hasattr(identifier_list, '__iter__'):
-        model_defaults = mod
-    else:
-        raise ValueError("If model_par are supplied as dict, identifier_list should be provided.")
-
-    # The model_par bit (for all model parameters)
-    for label, value in model_defaults.items():
-        if type(value) == bool:  # For boolean defaults, we want a true/false flag
-            if value:
-                parser.add_argument('-' + label, action='store_false')
-            else:
-                parser.add_argument('-' + label, action='store_true')
-        else:  # For non-boolean defaults, take the type of the default as type for the cmdline var
-            parser.add_argument('-' + label, type=type(value), default=value)
-
-    # The run_par bit (for executable-level parameters). These are defined in the executable file
-    # but need to be included for argparse to work correctly.
-    for label, value in run_defaults.items():
-        if type(value) == bool:  # For boolean defaults, we want a true/false flag
-            if value:
-                parser.add_argument('-' + label, action='store_false')
-            else:
-                parser.add_argument('-' + label, action='store_true')
-        else:  # For non-boolean defaults, take the type of the default as type for the cmdline var
-            print('Adding argument', label)
-            parser.add_argument('-' + label, type=type(value), default=value)
-    # The following parameters are run-time but so general they're defined here
-    parser.add_argument('-ncores', type=int, default=1)
-    parser.add_argument('-dir', type=str, default=None)
-    parser.add_argument('-plots', action='store_true')  # Generic flag to activate plotting
-    parser.add_argument('-seed', default=None)  # For anything random
-
-    # The sim_par bit (for DMRG-related parameters). These don't vary, so we'll just define here.
-    parser.add_argument('-chi', type=int, default=100)
-    parser.add_argument('-dchi', type=int, default=20)  # Step size for chi ramp
-    parser.add_argument('-dsweeps', type=int, default=20)  # Number of sweeps for chi step
-    parser.add_argument('-min_sweeps', type=int, default=30)
-    parser.add_argument('-max_sweeps', type=int, default=1000)
-    #parser.add_argument('-n_steps', type=int, default=10)
-    #parser.add_argument('-max_steps', type=int, default=2400)
-    parser.add_argument('-mixer', action='store_true')  # To activate mixer
-    parser.add_argument('-mix_str', type=float, default=1.e-3)
-    parser.add_argument('-mix_dec', type=float, default=1.5)
-    parser.add_argument('-mix_len', type=int, default=80)
-    parser.add_argument('-start_env', type=int, default=0)
-    parser.add_argument('-update_env', type=int)
-
-    # Now parse and turn into manageable dicts.
-    args = parser.parse_args()
-    par_dict = vars(args)  # Turns args (='Namespace' object) into dict.
-
-    model_par = {}
-    for label in model_defaults.keys():  # Select the model-relevant parts of par_dict
-        model_par[label] = par_dict[label]
-
-    run_par = {}
-    for label in run_defaults.keys():  # Select the executable-relevant parts of par_dict
-        run_par[label] = par_dict[label]
-
-    try:
-        sim_par = {
-            'chi_list': chi_list(args.chi, args.dchi, args.dsweeps),
-            'N_sweeps_check': 10,
-            'min_sweeps': args.min_sweeps,
-            'max_sweeps': args.max_sweeps,
-            'verbose': args.verbose,  # Take this from the model
-            'lanczos_params': {
-                'N_min': 2,
-                'N_max': 40,
-                'E_tol': 10**(-12)
-            }
-        }
-    except AttributeError as err:
-        print(
-            'sim_par parsing has failed, most likely because model does not define verbose parameter.'
-        )
-        print(err)
-        raise AttributeError
-    if args.mixer:
-        sim_par['mixer'] = True
-        sim_par['mixer_params'] = {
-            'amplitude': args.mix_str,
-            'decay': args.mix_dec,
-            'disable_after': args.mix_len
-        }
-
-    # Having set up all dictionaries, we can now do some other setting up
-    omp_set_nthreads(args.ncores)
-    if not args.dir == None:
-        os.chdir(args.dir)
-    import matplotlib
-    matplotlib.rcParams["savefig.directory"] = os.chdir(os.getcwd())
-
-    # Build the identifier based on model-defined and general parameters
-    identifier = "chi_{}_seed_{}_".format(args.chi, args.seed)  # Only use seed if supplied?
-    for varname in identifier_list:
-        if 'conserve' in varname:
-            shortened = varname.replace('conserve',
-                                        'cons').replace('number',
-                                                        'num').replace('charge',
-                                                                       'ch').replace('spin', 'S')
-            identifier += shortened + "_"
-        elif model_par[varname] != 0:  # Parameters that are 0 are ignored. Only want supplied?
-            identifier += varname + "_" + str(model_par[varname]) + "_"
-    if args.mixer:
-        identifier += 'mix_({},{},{})'.format(args.mix_str, args.mix_dec, args.mix_len)
-    if identifier[-1] == "_":
-        identifier = identifier[:-1]
-    # Attempt to shorten the identifier
-    identifier = identifier.replace('periodic', 'inf').replace('finite', 'fin').replace('.0_', '_')
-    if len(identifier) >= 144:
-        print("Warning: identifier has a length longer than max filename on encrypted Ubuntu!")
-
-    run_par.update({
-        'ncores': args.ncores,
-        'dir': args.dir,
-        'plots': args.plots,
-        'identifier': identifier,
-        'seed': args.seed,
-    })
-
-    return model_par, sim_par, run_par, args
 
 
 def convert_memory_units(value, unit_from='bytes', unit_to=None):
