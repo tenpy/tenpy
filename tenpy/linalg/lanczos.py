@@ -10,13 +10,8 @@ warnings.warn('The tenpy.linalg.lanczos module has been renamed to tenpy.linalg.
               'will be removed in v1.0')
 
 
-def lanczos(H, psi, options={}, orthogonal_to=[]):
-    """Simple wrapper calling ``LanczosGroundState(H, psi, options, orthogonal_to).run()``
-
-    .. deprecated :: 0.6.0
-        Going to remove the `orthogonal_to` argument.
-        Instead, replace H with `OrthogonalNpcLinearOperator(H, orthogonal_to)`
-        using the :class:`~tenpy.linalg.sparse.OrthogonalNpcLinearOperator`.
+def lanczos(H, psi, options={}):
+    """Simple wrapper calling ``LanczosGroundState(H, psi, options).run()``
 
     .. deprecated :: 1.0.0
         Going to remove the `lanczos` function.
@@ -24,7 +19,7 @@ def lanczos(H, psi, options={}, orthogonal_to=[]):
 
     Parameters
     ----------
-    H, psi, options, orthogonal_to :
+    H, psi, options :
         See :class:`LanczosGroundState`.
 
     Returns
