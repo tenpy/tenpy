@@ -56,9 +56,6 @@ class TDVPEngine(TimeEvolutionAlgorithm, Sweep):
     :class:`SingleSiteTDVPEngine` and :class:`TwoSiteTDVPEngine`.
     Use the latter two classes for actual TDVP runs.
 
-    .. deprecated :: 0.6.0
-        Renamed parameter/attribute `TDVP_params` to :attr:`options`.
-
     Parameters
     ----------
     psi, model, options, **kwargs:
@@ -381,9 +378,6 @@ class OldTDVPEngine(TimeEvolutionAlgorithm):
     .. deprecated :: 0.10.0
         Replace this engine with the new :class:`TDVPEngine`.
 
-    .. deprecated :: 0.6.0
-        Renamed parameter/attribute `TDVP_params` to :attr:`options`.
-
     Parameters
     ----------
     psi, model, options, **kwargs:
@@ -438,11 +432,6 @@ class OldTDVPEngine(TimeEvolutionAlgorithm):
         self.L = self.psi.L
         self.dt = options.get('dt', 2)
         self.N_steps = options.get('N_steps', 10)
-
-    @property
-    def TDVP_params(self):
-        warnings.warn("renamed self.TDVP_params -> self.options", FutureWarning, stacklevel=2)
-        return self.options
 
     def run(self):
         """(Real-)time evolution with TDVP."""
