@@ -54,8 +54,6 @@ __all__ = [
     'CouplingMPOModel'
 ]
 
-_DEPRECATED_ARG_NOT_SET = "DEPRECATED"
-
 
 class Model(Hdf5Exportable):
     """Base class for all models.
@@ -1312,8 +1310,6 @@ class CouplingModel(Model):
     def add_multi_coupling(self,
                            strength,
                            ops,
-                           _deprecate_1=_DEPRECATED_ARG_NOT_SET,
-                           _deprecate_2=_DEPRECATED_ARG_NOT_SET,
                            op_string=None,
                            category=None,
                            plus_hc=False,
@@ -1338,13 +1334,6 @@ class CouplingModel(Model):
 
         The necessary terms are just added to :attr:`coupling_terms`;
         this function does not rebuild the MPO.
-
-        .. deprecated:: 0.6.0
-            We switched from the three arguments `u0`, `op0` and `other_op` with
-            ``other_ops=[(u1, op1, dx1), (op2, u2, dx2), ...]``
-            to a single, equivalent argument `ops` which should now read
-            ``ops=[(op0, dx0, u0), (op1, dx1, u1), (op2, dx2, u2), ...]``, where
-            ``dx0 = [0]*self.lat.dim``. Note the changed order inside the tuples!
 
         Parameters
         ----------
@@ -1403,23 +1392,6 @@ class CouplingModel(Model):
         add_coupling : Add terms acting on two sites.
         add_multi_coupling_term : Add a single term, not summing over the possible :math:`\vec{x}`.
         """
-        if _deprecate_1 is not _DEPRECATED_ARG_NOT_SET or \
-                _deprecate_2 is not _DEPRECATED_ARG_NOT_SET:
-            msg = ("Deprecated arguments of CouplingModel.add_multi_coupling:\n"
-                   "switch to using a single argument \n"
-                   "     ops=[(op0, [0]*self.lat.dim, u0), (op1, dx1, u1), (op2, dx2, u2), ...]\n"
-                   "instead of the three arguments \n"
-                   "     u0\n"
-                   "     op0\n"
-                   "     other_ops=[(u1, op1, dx1), (op2, u2, dx2), ...]\n"
-                   "Note the reordering ``(u, op, dx) -> (op, dx, u)`` in the tuples!")
-            warnings.warn(msg, FutureWarning, stacklevel=2)
-            u0 = ops
-            op0 = _deprecate_1
-            dx0 = [0] * self.lat.dim
-            other_ops = _deprecate_2
-            # new argument:
-            ops = [(op0, dx0, u0)] + [(op, dx, u) for (u, op, dx) in other_ops]
         # split `ops` into separate groups
         all_ops = [t[0] for t in ops]
         all_us = np.array([t[2] for t in ops], np.intp)
