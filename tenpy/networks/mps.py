@@ -2460,31 +2460,6 @@ class MPS(BaseMPSExpectationValue):
             new_B = self.get_B(i, form=new_form, copy=False)  # calculates the desired form.
             self.set_B(i, new_B, form=new_form)
 
-    def increase_L(self, new_L=None):
-        """Modify `self` inplace to enlarge the MPS unit cell.
-
-        .. deprecated :: 0.5.1
-            This method will be removed in version 1.0.0.
-            Use the equivalent ``psi.enlarge_mps_unit_cell(new_L//psi.L)`` instead of
-            ``psi.increase_L(new_L)``.
-
-        Parameters
-        ----------
-        new_L : int
-            New number of sites. Needs to be an integer multiple of :attr:`L`.
-            Defaults to ``2*self.L``.
-        """
-        old_L = self.L
-        if new_L is None:
-            new_L = 2 * old_L
-        if new_L % old_L:
-            raise ValueError("new_L = {0:d} not a multiple of old L={1:d}".format(new_L, old_L))
-        factor = new_L // old_L
-        warnings.warn(
-            "use `psi.enlarge_mps_unit_cell(factor=new_L//psi.L)` "
-            "instead of `psi.increase_L(new_L)`.", FutureWarning, 2)
-        self.enlarge_mps_unit_cell(factor)
-
     def enlarge_mps_unit_cell(self, factor=2):
         """Repeat the unit cell for infinite MPS boundary conditions; in place.
 
