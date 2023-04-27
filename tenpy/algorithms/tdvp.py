@@ -766,18 +766,6 @@ class OldTDVPEngine(TimeEvolutionAlgorithm):
         return s_new
 
 
-class Engine(OldTDVPEngine):
-    """Deprecated old name of the :class:`OldTDVPEngine`.
-
-    .. deprecated : v0.8.0
-        Renamed the `Engine` to `TDVPEngine` to have unique algorithm class names.
-    """
-    def __init__(self, psi, model, options, **kwargs):
-        msg = "Renamed `Engine` class to `TDVPEngine`."
-        warnings.warn(msg, category=FutureWarning, stacklevel=2)
-        TDVPEngine.__init__(self, psi, model, options, **kwargs)
-
-
 class H0_mixed:
     """Class defining the zero site Hamiltonian for Lanczos.
 
