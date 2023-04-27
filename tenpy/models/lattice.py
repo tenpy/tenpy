@@ -63,11 +63,6 @@ class Lattice:
     The function :meth:`mps2lat_values` performs the necessary reshaping and re-ordering from
     arrays indexed in MPS form to arrays indexed in lattice form.
 
-    .. deprecated :: 0.5.0
-        The parameters and attributes `nearest_neighbors`, `next_nearest_neighbors` and
-        `next_next_nearest_neighbors` are deprecated. Instead, we use a dictionary `pairs`
-        with those names as keys and the corresponding values as specified before.
-
     Parameters
     ----------
     Ls : list of int
@@ -93,12 +88,6 @@ class Lattice:
     positions : iterable of 1D arrays
         For each site of the unit cell the position within the unit cell.
         Defaults to ``np.zeros((len(unit_cell), dim))``.
-    nearest_neighbors : ``None`` | list of ``(u1, u2, dx)``
-        Deprecated. Specify as ``pairs['nearest_neighbors']`` instead.
-    next_nearest_neighbors : ``None`` | list of ``(u1, u2, dx)``
-        Deprecated. Specify as ``pairs['next_nearest_neighbors']`` instead.
-    next_next_nearest_neighbors : ``None`` | list of ``(u1, u2, dx)``
-        Deprecated. Specify as ``pairs['next_next_nearest_neighbors']`` instead.
     pairs : dict
         Of the form ``{'nearest_neighbors': [(u1, u2, dx), ...], ...}``.
         Typical keys are ``'nearest_neighbors', 'next_nearest_neighbors'``.
@@ -175,9 +164,6 @@ class Lattice:
                  bc_MPS='finite',
                  basis=None,
                  positions=None,
-                 nearest_neighbors=None,
-                 next_nearest_neighbors=None,
-                 next_next_nearest_neighbors=None,
                  pairs=None):
         self.unit_cell = list(unit_cell)
         self._set_Ls(Ls)  # after setting unit_cell
@@ -196,17 +182,6 @@ class Lattice:
         self.order = self.ordering(order)
         # uses attribute setter to calculate _mps2lat_vals_idx_fix_u etc and lat2mps
         self.pairs = pairs if pairs is not None else {}
-        for name, NN in [('nearest_neighbors', nearest_neighbors),
-                         ('next_nearest_neighbors', next_nearest_neighbors),
-                         ('next_next_nearest_neighbors', next_next_nearest_neighbors)]:
-            if NN is None:
-                continue  # no value set
-            msg = "Lattice.__init__() got argument `{0!s}`.\nSet as `neighbors['{0!s}'] instead!"
-            msg = msg.format(name)
-            warnings.warn(msg, FutureWarning)
-            if name in self.pairs:
-                raise ValueError("{0!s} specified twice!".format(name))
-            self.pairs[name] = NN
         self.test_sanity()  # check consistency
 
     def test_sanity(self):
@@ -965,26 +940,6 @@ class Lattice:
                 count += 1
         return count
 
-    def number_nearest_neighbors(self, u=0):
-        """Deprecated.
-
-        .. deprecated :: 0.5.0
-            Use :meth:`count_neighbors` instead.
-        """
-        msg = "Use ``count_neighbors(u, 'nearest_neighbors')`` instead."
-        warnings.warn(msg, FutureWarning)
-        return self.count_neighbors(u, 'nearest_neighbors')
-
-    def number_next_nearest_neighbors(self, u=0):
-        """Deprecated.
-
-        .. deprecated :: 0.5.0
-            Use :meth:`count_neighbors` instead.
-        """
-        msg = "Use ``count_neighbors(u, 'next_nearest_neighbors')`` instead."
-        warnings.warn(msg, FutureWarning)
-        return self.count_neighbors(u, 'next_nearest_neighbors')
-
     def distance(self, u1, u2, dx):
         """Get the distance for a given coupling between two sites in the lattice.
 
@@ -1598,27 +1553,6 @@ class Lattice:
         for L in self.Ls:
             strides.append(strides[-1] * L)
         self._strides = np.array(strides, np.intp)
-
-    @property
-    def nearest_neighbors(self):
-        msg = ("Deprecated access with ``lattice.nearest_neighbors``.\n"
-               "Use ``lattice.pairs['nearest_neighbors']`` instead.")
-        warnings.warn(msg, FutureWarning)
-        return self.pairs['nearest_neighbors']
-
-    @property
-    def next_nearest_neighbors(self):
-        msg = ("Deprecated access with ``lattice.next_nearest_neighbors``.\n"
-               "Use ``lattice.pairs['next_nearest_neighbors']`` instead.")
-        warnings.warn(msg, FutureWarning)
-        return self.pairs['next_nearest_neighbors']
-
-    @property
-    def next_next_nearest_neighbors(self):
-        msg = ("Deprecated access with ``lattice.next_next_nearest_neighbors``.\n"
-               "Use ``lattice.pairs['next_next_nearest_neighbors']`` instead.")
-        warnings.warn(msg, FutureWarning)
-        return self.pairs['next_next_nearest_neighbors']
 
 
 class TrivialLattice(Lattice):
@@ -2994,20 +2928,6 @@ class Honeycomb(Lattice):
                 snake_winding = (False, False, True)
                 return get_order(self.shape, snake_winding, priority)
         return super().ordering(order)
-
-    @property
-    def fourth_nearest_neighbors(self):
-        msg = ("Deprecated access with ``lattice.fourth_nearest_neighbors``.\n"
-               "Use ``lattice.pairs['fourth_nearest_neighbors']`` instead.")
-        warnings.warn(msg, FutureWarning)
-        return self.pairs['fourth_nearest_neighbors']
-
-    @property
-    def fifth_nearest_neighbors(self):
-        msg = ("Deprecated access with ``lattice.fifth_nearest_neighbors``.\n"
-               "Use ``lattice.pairs['fifth_nearest_neighbors']`` instead.")
-        warnings.warn(msg, FutureWarning)
-        return self.pairs['fifth_nearest_neighbors']
 
 
 class Kagome(Lattice):
