@@ -3369,7 +3369,7 @@ def outer(a, b):
     return res
 
 
-def inner(a, b, axes=None, do_conj=False):
+def inner(a, b, axes='labels', do_conj=False):
     """Contract all legs in `a` and `b`, return scalar.
 
     Parameters
@@ -3381,8 +3381,8 @@ def inner(a, b, axes=None, do_conj=False):
         `axes_a` and `axes_b` specify the legs of `a` and `b`, respectively,
         which should be contracted. Legs can be specified with leg labels or indices.
         We contract leg ``axes_a[i]`` of `a` with leg ``axes_b[i]`` of `b`.
-        The default ``axes='range'`` is equivalent to ``(range(rank), range(rank))``.
-        ``axes='labels'`` is equivalent to either ``(a.get_leg_labels(), a.get_leg_labels())``
+        ``axes='range'`` is equivalent to ``(range(rank), range(rank))``.
+        The default ``axes='labels'`` is equivalent to either ``(a.get_leg_labels(), a.get_leg_labels())``
         for ``do_conj=True``,
         or to ``(a.get_leg_labels(), conj_labels(a.get_leg_labels()))`` for ``do_conj=False``.
         In other words, ``axes='labels'`` requires `a` and `b` to have the same/conjugated labels
@@ -3400,10 +3400,7 @@ def inner(a, b, axes=None, do_conj=False):
         return np.sum([inner(w, v, axes=axes, do_conj=do_conj) for w, v in zip(a, b)])
     if a.rank != b.rank:
         raise ValueError("different rank!")
-    if axes is None or axes == 'range':
-        if axes is None:
-            msg = "inner(): `axes` currently defaults to 'range', will change to 'labels'"
-            warnings.warn(msg, FutureWarning, stacklevel=2)
+    if axes == 'range':
         transp = False
     else:
         if axes == 'labels':
