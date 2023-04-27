@@ -148,11 +148,6 @@ class Sweep(Algorithm):
         self.update_LP_RP = (True, False)
 
     @property
-    def engine_params(self):
-        warnings.warn("renamed self.engine_params -> self.options", FutureWarning, stacklevel=2)
-        return self.options
-
-    @property
     def _all_envs(self):
         return [self.env] + self.ortho_to_envs
 
