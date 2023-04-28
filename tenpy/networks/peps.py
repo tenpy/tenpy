@@ -23,8 +23,7 @@ We use the following label convention for the `T` (where arrows indicate `qconj`
     |      ^  ^
     |     p   vD
 
-We store one 5-leg tensor `_T[x][y]` with labels ``'p', 'vU', 'vL', 'vD', 'vR'`` for each of the
-`lx * ly` lattice sites where ``0 <= x < lx`` and ``0 <= y < ly``.
+We store one 5-leg tensor with labels ``'p', 'vU', 'vL', 'vD', 'vR'`` for each of the `lx * ly` lattice sites.
 
 TODO explain more, e.g.
 - boundary conditions (infinite, finite, TODOD: segment)
@@ -36,6 +35,9 @@ TODO explain more, e.g.
 
 import numpy as np
 
+from tenpy.linalg.np_conserved import Array
+from tenpy.networks.site import Site
+
 from ..linalg import np_conserved as npc
 from ..linalg.np_conserved import Array
 from ..networks.site import Site
@@ -44,13 +46,12 @@ __all__ = []  # TODO
 
 
 class PEPSLikeIndexable:
+    """Class with common features of PEPS-like tensor networks, e.g. PEPS, PEPO"""
     _valid_bc = ['finite', 'infinite']
     _p_labels = ['p']  # labels of phyical leg(s)
     _tensor_labels = ['p', 'vU', 'vL', 'vD', 'vR']  # all labels of a _tensor (order is used!)
     
     def __init__(self, sites: list[Site], tensors: list[Array], lx: int, ly: int, bc: str = 'finite'):
-        # TODO doc: flat lists: tensors[x * ly + y]
-        
         self.sites = sites
         self.chinfo = self.sites[0].leg.chinfo  # TODO check others?
         self.dtype = dtype = np.find_common_type([t.dtype for t in tensors], [])
@@ -116,7 +117,8 @@ class PEPSLikeIndexable:
             x, y = self._idx_to_coords(i)
 
             if tens.get_leg_labels() != self._tensors_labels:
-                msg = f'tensor at site {(x, y)} has wrong labels {T.get_leg_labels()}. Expected {self._tensors_labels}'
+                msg = f'tensor at site {(x, y)} has wrong labels {tens.get_leg_labels()}. '\
+                      f'Expected {self._tensors_labels}.'
                 raise ValueError(msg)
 
             if self.bc == 'infinite' or x > 0:  # check the bonds between unit cells (x==0) only for infinite
@@ -173,6 +175,9 @@ class PEPSLikeIndexable:
         return max(np.max(self.hor_D), np.max(self.vert_D))
 
     def _parse_item(self, x: int | slice, y: int | slice = None, *rest) -> int | slice:
+        # helper for __getitem__ and __setitem__
+        # using `peps[item]` results in a call `_parse_item(*item)`.
+        # the return is an int or slice, which is used to index the flat list self._tensors
         if rest:
             raise IndexError('too many indices for PEPS')
         
@@ -225,19 +230,36 @@ class PEPS(PEPSLikeIndexable):
 
     Parameters
     ----------
-    sites : list of list of :class:`~tenpy.networks.site.Site`
+    sites : list of :class:`~tenpy.networks.site.Site`
         Defines the local Hilbert space for each site
-    Ts : list of list of :class:`~tenpy.linalg.np_conserved.Array`
-        The tensors of the PEPS, labels are ``p, vU, vL, vD, vR`` (in any order)
+    tensors : list of :class:`~tenpy.linalg.np_conserved.Array`
+        The tensors of the PEPS, labels are ``p, vU, vL, vD, vR``.
+        If the legs are not in the above order, the tensors are transposed to match it.
+        The tensor at site ``(x, y)`` is ``tensors[x * ly + y]``.
+    lx : int
+        Horizontal size of the system (for finite bc) or unit cell (for infinite bc)
+    ly : int
+        Vertival size
     bc : ``'finite' | 'infinite'``
         Boundary conditions as descrided in the module doc-string.
 
     Attributes
     ----------
-    TODO
-
+    sites
+    chinfo
+    dtype
+    bc
+    lx
+    ly
+    _tensors
+    _factor : float
+        A factor. A PEPS represents the state given by its tensors, scaled by _factor.
     
     """
+    def __init__(self, sites: list[Site], tensors: list[Array], lx: int, ly: int, bc: str = 'finite'):
+        self._factor = 1.
+        super().__init__(sites, tensors, lx, ly, bc)
+    
     def save_hdf5(self, hdf5_saver, h5gr, subpath):
         raise NotImplementedError  # TODO (JU) can implement in PEPSLikeIndexable?
                     
@@ -246,13 +268,14 @@ class PEPS(PEPSLikeIndexable):
         raise NotImplementedError  # TODO (JU) can implement in PEPSLikeIndexable?
 
     @classmethod
-    def from_product_state(cls, sites, p_state, bc='finite', dtype=np.complex128, permute=True,
-                           chargesL=None, chargesD=None, chargesR=None, chargesU=None):
+    def from_product_state(cls, sites: list[Site], p_state: list[int | str | np.ndarray], 
+                           lx: int, ly: int, bc: str = 'finite', dtype=np.complex128, 
+                           permute: bool = True):
         """Construct a PEPS from a given product state
 
         Parameters
         ----------
-        sites : list of list of :class:`~tenpy.networks.site.Site`
+        sites : list of :class:`~tenpy.networks.site.Site`
             The sites defining the local Hilbert space.
         p_state : list of list of {int | str | 1D array}
             Defines the product state to be represented.
@@ -270,14 +293,6 @@ class PEPS(PEPSLikeIndexable):
             If `permute` is True (default), we permute the given `p_state` locally according to
             each site's :attr:`~tenpy.networks.Site.perm`.
             The `p_state` entries should then always be given as if `conserve=None` in the Site.
-        chargesL : list of list of charges, optional
-            Leg charges for the left virtual legs.
-        chargesD : list of list of charges, optional
-            Leg charges for the right virtual legs.
-        chargesR : list of charges, optional
-            Only for finite boundary conditions; the charges on the right legs for the rightmost column
-        chargesU : list of charges, optional
-            Only for finite boundary conditions; the charges on the up legs for the uppermost column
 
         Returns
         -------
@@ -286,60 +301,51 @@ class PEPS(PEPSLikeIndexable):
 
         TODO example, doctest
         """
-        raise NotImplementedError  # FIXME update to flat list
-        sites = [list(col) for col in sites]
-        lx = len(sites)
-        ly = len(sites[0])
-        assert all(len(col) == ly for col in sites[1:])
-        chinfo = sites[0][0].leg.chinfo
-        if chargesL is None:
-            chargesL = [[None] * ly] * lx
-        legsL = [[npc.LegCharge.from_qflat(chinfo, [chinfo.make_valid(ch)]) for ch in col] for col in chargesL]
-        if chargesD is None:
-            chargesD = [[None] * ly] * lx
-        legsD = [[npc.LegCharge.from_qflat(chinfo, [chinfo.make_valid(ch)]) for ch in col] for col in chargesD]
-        if bc == 'finite':
-            if chargesR is None:
-                chargesR = [None] * ly
-            right_col = [npc.LegCharge.from_qflat(chinfo, [chinfo.make_valid(ch)]) for ch in chargesR]
-            legsR = [[l.conj() for l in col] for col in legsL[1:]] + [right_col]
-            if chargesU is None:
-                chargesU = [None] * lx
-            top_row = [npc.LegCharge.from_qflat(chinfo, [chinfo.make_valid(ch)]) for ch in chargesU]
-            legsU = [[l.conj() for l in col[1:]] + [top_leg] for col, top_leg in zip(legsD, top_row)]
-        else:
-            assert chargesR is None
-            assert chargesU is None
-            legsR = [[l.conj() for l in col] for col in legsL[1:]] + [[l.conj() for l in legsL[0]]]
-            legsU = [[l.conj() for l in col[1:]] + [col[0].conj()] for col in legsD]
+        chinfo = sites[0].leg.chinfo
+        leg_L = leg_D = npc.LegCharge.from_qflat(chinfo, [chinfo.make_valid(None)])
+        leg_R = leg_U = leg_L.conj()
+        tensors = []
+        for site, state in zip(sites, p_state):
+            do_permute = permute
+            if isinstance(state, str):
+                state = site.state_labels[state]
+                do_permute = False
 
-        Ts = []
-        for cols in zip(p_state, sites, legsU, legsL, legsD, legsR):
-            T_col = []
-            for p_st, site, legU, legL, legD, legR in zip(*cols):
-                perm = permute
-                if isinstance(p_st, str):
-                    p_st = site.state_labels[p_st]
-                    perm = False
-                try:
-                    iter(p_st)
-                except TypeError:
-                    is_iterable = False
-                else:
-                    is_iterable = True
-                if is_iterable:
-                    if len(p_st) != site.dim:
-                        raise ValueError('p_state incompatible with local dim.')
-                    T = np.array(p_st, dtype).reshape((site.dim, 1, 1, 1, 1))
-                else:
-                    T = np.zeros((site.dim, 1, 1, 1, 1), dtype)
-                    T[p_st, 0, 0, 0, 0] = 1.0
-                if perm:
-                    T = T[site.perm, :, :, :, :]
-                T = npc.Array.from_ndarray(T, [site.leg, legU, legL, legD, legR])
-                T_col.append(T)
-            Ts.append(T_col)
-        return cls(sites=sites, Ts=Ts, bc=bc)
+            try:  # TODO make this a function in tools.misc?
+                iter(state)
+            except TypeError:
+                is_iterable = False
+            else:
+                is_iterable = True
+
+            if is_iterable:
+                if len(state) != site.dim:
+                    raise ValueError('p_state incompatible with local dim.')
+                T = np.array(state, dtype).reshape((site.dim, 1, 1, 1, 1))
+            else:
+                T = np.zeros((site.dim, 1, 1, 1, 1), dtype)
+                T[state, 0, 0, 0, 0] = 1.0
+
+            if do_permute:
+                T = T[site.perm, :, :, :, :]
+            T = npc.Array.from_ndarray(T, [site.leg, leg_U, leg_L, leg_D, leg_R], 
+                                       labels=['p', 'vU', 'vL', 'vD', 'vR'])
+            tensors.append(T)
+        return cls(sites=sites, tensors=tensors, lx=lx, ly=ly, bc=bc)
+
+    def normalize_tensors(self, norm_ord=2, preserve_norm: bool = False):
+        """
+
+        Parameters
+        ----------
+        norm_ord : float | ``'inf'`` | ``'transfer'``
+            Normalizes the tensors to `npc.norm(T, norm_ord) == 1`.
+            ``transfer`` instead normalizes the dominant singular value of T @ T* as a matrix
+            from [(vL.vL*.vD.vD*), (vR.vR*.vU.vU*) to 1.
+        preserve_norm : bool
+            If self._factor should be updated accordingly, to preserve the norm of self
+        """
+        raise NotImplementedError  # TODO
 
 
 class PEPO(PEPSLikeIndexable):
