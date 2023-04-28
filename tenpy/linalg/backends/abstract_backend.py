@@ -25,18 +25,19 @@ Block = TypeVar('Block')
 
 class Dtype(Enum):
     # TODO expose those in some high-level init, maybe even as tenpy.float32 ?
-    float32 = 1
-    complex64 = 2
-    float64 = 3
-    complex128 = 4
+    # value = num_bytes * 2 + int(not is_real)
+    float32 = 8
+    complex64 = 9
+    float64 = 10
+    complex128 = 11
 
     @property
     def is_real(dtype):
-        return dtype.value % 2 == 1
+        return dtype.value % 2 == 0
 
     @property
     def to_complex(dtype):
-        if dtype.value % 2 == 0:
+        if dtype.value % 2 == 1:
             return dtype
         return MyDtype(dtype.value + 1)
 
@@ -44,7 +45,7 @@ class Dtype(Enum):
         res = MyDtype(max(*(t.value for t in dtypes)))
         if res.is_real:
             if not all(t.is_real for t in dtypes):
-                return res.to_complex
+                return MyDtype(res.value + 1)  # = res.to_complex
         return res
 
 
