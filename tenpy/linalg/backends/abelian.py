@@ -730,8 +730,27 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
     #      # that might change though...
     #      ...
 
-    #  def outer(self, a: Tensor, b: Tensor) -> Data:
-    #      return self.block_outer(a.data, b.data)
+    def outer(self, a: Tensor, b: Tensor) -> Data:
+        res_dtype = a.data.dtype.common(b.data.dtype)
+        a_blocks = a.data.blocks
+        b_blocks = b.data.blocks
+        if a.data.dtype != res_dtype:
+            a_blocks = [self.block_to_dtype(T) for T in a_blocks]
+        if b.data.dtype != res_dtype:
+            b_blocks = [self.block_to_dtype(T) for T in b_blocks]
+        a_block_inds = a.data.block_inds
+        b_block_inds = b.data.block_inds
+        l_a, num_legs_a = a_block_inds.shape
+        l_b, num_legs_b = b_block_inds.shape
+        grid = np.indices([len(a_block_inds), len(b_block_inds)]).T.reshape(-1, 2)
+        # grid is lexsorted, with rows as all combinations of a/b block indices.
+        res_block_inds = np.empty((l_a * l_b, num_legs_a + num_legs_b), dtype=int)
+        res_block_inds[:, :num_legs_a] = a_block_inds[grid[:, 0]]
+        res_block_inds[:, num_legs_a:] = b_block_inds[grid[:, 1]]
+
+        res_blocks = [self.block_outer(a_blocks[i], b_blocks[j]) for i, j in grid]
+
+        return AbelianBackendData(dtype, res_blocks, res_block_inds)
 
     #  def inner(self, a: Tensor, b: Tensor, axs2: list[int] | None) -> complex:
     #      return self.block_inner(a.data, b.data, axs2)
