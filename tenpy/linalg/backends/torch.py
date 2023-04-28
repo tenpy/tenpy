@@ -76,13 +76,6 @@ class TorchBlockBackend(AbstractBlockBackend):
             lines = lines[:first] + [f'{indent}...'] + lines[-last:]
         return lines
 
-    def matrix_svd(self, a: Block, algorithm: str | None) -> tuple[Block, Block, Block]:
-        if algorithm is None:
-            algorithm = 'gesvd'
-        assert algorithm in self.svd_algorithms
-        U, S, V = torch_module.linalg.svd(a, full_matrices=False, driver=algorithm)
-        return U, S, V
-
     def block_outer(self, a: Block, b: Block) -> Block:
         return torch_module.tensordot(a, b, ([], []))
 
@@ -132,6 +125,9 @@ class TorchBlockBackend(AbstractBlockBackend):
     def block_norm(self, a: Block) -> float:
         return torch_module.norm(a)
 
+    def block_reshape(self, a: Block, shape: Tuple[int]) -> Block:
+        return torch_module.reshape(a, shape)
+
     def block_matrixify(self, a: Block, idcs1: list[int], idcs2: list[int]) -> tuple[Block, Any]:
         permutation = idcs1 + idcs2
         a = torch_module.permute(a, permutation)
@@ -145,6 +141,16 @@ class TorchBlockBackend(AbstractBlockBackend):
         permutation, a_shape = aux
         res = torch_module.reshape(matrix, a_shape)
         return torch_module.permute(res, inverse_permutation(permutation))
+
+    def matrix_dot(self, a: Block, b: Block) -> Block:
+        return torch_module.matmul(a, b)
+
+    def matrix_svd(self, a: Block, algorithm: str | None) -> tuple[Block, Block, Block]:
+        if algorithm is None:
+            algorithm = 'gesvd'
+        assert algorithm in self.svd_algorithms
+        U, S, V = torch_module.linalg.svd(a, full_matrices=False, driver=algorithm)
+        return U, S, V
 
     def matrix_exp(self, matrix: Block) -> Block:
         raise NotImplementedError  # TODO: could not find a torch implementation via their docs...?

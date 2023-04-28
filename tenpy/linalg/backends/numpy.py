@@ -72,29 +72,6 @@ class NumpyBlockBackend(AbstractBlockBackend):
             lines = lines[:first] + [f'{indent}...'] + lines[-last:]
         return lines
 
-    # noinspection PyTypeChecker
-    def matrix_svd(self, a: Block, algorithm: str | None) -> tuple[Block, Block, Block]:
-        if algorithm is None:
-            algorithm = 'gesdd'
-
-        if algorithm == 'gesdd':
-            return scipy.linalg.svd(a, full_matrices=False)
-
-        elif algorithm in ['robust', 'robust_silent']:
-            silent = algorithm == 'robust_silent'
-            try:
-                return scipy.linalg.svd(a, full_matrices=False)
-            except np.linalg.LinAlgError:
-                if not silent:
-                    raise NotImplementedError  # TODO log warning
-            return _svd_gesvd(a)
-
-        elif algorithm == 'gesvd':
-            return _svd_gesvd(a)
-
-        else:
-            raise ValueError(f'SVD algorithm not supported: {algorithm}')
-
     def block_outer(self, a: Block, b: Block) -> Block:
         return np.tensordot(a, b, ((), ()))
 
@@ -138,6 +115,9 @@ class NumpyBlockBackend(AbstractBlockBackend):
     def block_norm(self, a: Block) -> float:
         return np.linalg.norm(a)
 
+    def block_reshape(self, a: Block, shape: Tuple[int]) -> Block:
+        return np.reshape(a, shape)
+
     def block_matrixify(self, a: Block, idcs1: list[int], idcs2: list[int]) -> tuple[Block, Any]:
         permutation = idcs1 + idcs2
         a = np.transpose(a, permutation)
@@ -151,6 +131,32 @@ class NumpyBlockBackend(AbstractBlockBackend):
         permutation, a_shape = aux
         res = np.reshape(matrix, a_shape)
         return np.transpose(res, inverse_permutation(permutation))
+
+    def matrix_dot(self, a: Block, b: Block) -> Block:
+        return np.dot(a, b)
+
+    # noinspection PyTypeChecker
+    def matrix_svd(self, a: Block, algorithm: str | None) -> tuple[Block, Block, Block]:
+        if algorithm is None:
+            algorithm = 'gesdd'
+
+        if algorithm == 'gesdd':
+            return scipy.linalg.svd(a, full_matrices=False)
+
+        elif algorithm in ['robust', 'robust_silent']:
+            silent = algorithm == 'robust_silent'
+            try:
+                return scipy.linalg.svd(a, full_matrices=False)
+            except np.linalg.LinAlgError:
+                if not silent:
+                    raise NotImplementedError  # TODO log warning
+            return _svd_gesvd(a)
+
+        elif algorithm == 'gesvd':
+            return _svd_gesvd(a)
+
+        else:
+            raise ValueError(f'SVD algorithm not supported: {algorithm}')
 
     def matrix_exp(self, matrix: Block) -> Block:
         return scipy.linalg.expm(matrix)
@@ -181,7 +187,7 @@ class NumpyBlockBackend(AbstractBlockBackend):
         eye = np.eye(matrix_dim, dtype=self.backend_dtype_map[dtype])
         eye = np.reshape(eye, legs + legs)
         return eye
-    
+
 
 class NoSymmetryNumpyBackend(NumpyBlockBackend, AbstractNoSymmetryBackend):
     def svd(self, a: Tensor, axs1: list[int], axs2: list[int], new_leg: VectorSpace | None

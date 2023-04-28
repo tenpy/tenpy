@@ -31,7 +31,7 @@ from .abstract_backend import AbstractBackend, AbstractBlockBackend, Data, Block
 from ..symmetries.groups import FusionStyle, BraidingStyle, Symmetry, Sector
 from numpy import ndarray
 from ..symmetries.spaces import VectorSpace, ProductSpace
-from ...tools.misc import inverse_permutation
+from ...tools.misc import inverse_permutation, list_to_dict_list
 from ...tools.optimization import use_cython
 
 __all__ = ['AbelianBackendData', 'AbelianBackendVectorSpace', 'AbelianBackendProductSpace',
@@ -339,7 +339,7 @@ def _make_stride(shape, cstyle=True):
             res[a + 1] = stride
     return res
 
-def _find_row_differences(sectors: SectorArray):
+def _find_row_differences(sectors: SectorArray, include_len: bool=False):
     """Return indices where the rows of the 2D array `qflat` change.
 
     Parameters
@@ -353,9 +353,10 @@ def _find_row_differences(sectors: SectorArray):
         The indices where rows change, including the first and last. Equivalent to:
         ``[0] + [i for i in range(1, len(qflat)) if np.any(qflat[i-1] != qflat[i])]``
     """
-    # note: remove last entry [len(sectors)] compared to old.charges
-    diff = np.ones(sectors.shape[0], dtype=np.bool_)
-    diff[1:] = np.any(sectors[1:] != sectors[:-1], axis=1)
+    # note: by default remove last entry [len(sectors)] compared to old.charges
+    len_sectors = len(sectors)
+    diff = np.ones(len_sectors + int(include_len), dtype=np.bool_)
+    diff[1:len_sectors] = np.any(sectors[1:] != sectors[:-1], axis=1)
     return np.nonzero(diff)[0]  # get the indices of True-values
 
 
@@ -516,8 +517,212 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
         all_lines[0] = f'{indent}* Data : {shown} blocks'
         return all_lines
 
-    #  def tdot(self, a: Tensor, b: Tensor, axs_a: list[int], axs_b: list[int]) -> Data:
-    #      return self.block_tdot(a.data, b.data, axs_a, axs_b)
+    def tdot(self, a: Tensor, b: Tensor, axs_a: list[int], axs_b: list[int]) -> Data:
+        #  Looking at the source of numpy's tensordot (which is just 62 lines of python code),
+        #  you will find that it has the following strategy:
+
+        #  1. Transpose `a` and `b` such that the axes to sum over are in the end of `a` and front of `b`.
+        #  2. Combine the legs `axes`-legs and other legs with a `np.reshape`,
+        #  such that `a` and `b` are matrices.
+        #  3. Perform a matrix product with `np.dot`.
+        #  4. Split the remaining axes with another `np.reshape` to obtain the correct shape.
+
+        #  The main work is done by `np.dot`, which calls LAPACK to perform the simple matrix product.
+        #  [This matrix multiplication of a ``NxK`` times ``KxM`` matrix is actually faster
+        #  than the O(N*K*M) needed by a naive implementation looping over the indices.]
+
+        #  We follow the same overall strategy data block entries.
+        #  Step 1) is performed by :meth:`_tdot_transpose_axes`
+
+        #  The steps 2) and 4) could be implemented with `combine_legs` and `split_legs`.
+        #  However, that would actually be an overkill: we're not interested
+        #  in the full charge data of the combined legs (which would be generated in the LegPipes).
+        #  Instead, we just need to track the block_inds of a and b carefully.
+
+        #  Our step 2) is implemented in :meth:`_tdot_pre_worker`:
+        #  We split `a.data.block_inds` into `a_block_inds_keep` and `a_block_inds_contr`, and similar for `b`.
+        #  Then, view `a` is a matrix :math:`A_{i,k1}` and `b` as :math:`B_{k2,j}`, where
+        #  `i` can be any row of `a_block_inds_keep`, `j` can be any row of `b_block_inds_keep`.
+        #  The `k1` and `k2` are rows/columns of `a/b_block_inds_contr`, which come from compatible dual legs.
+        #  In our storage scheme, `a.data.blocks[s]` then contains the block :math:`A_{i,k1}` for
+        #  ``j = a_block_inds_keep[s]`` and ``k1 = a_block_inds_contr[s]``.
+        #  To identify the different indices `i` and `j`, it is easiest to lexsort in the `s`.
+        #  Note that we give priority to the `{a,b}_block_inds_keep` over the `_contr`, such that
+        #  equal rows of `i` are contiguous in `a_block_inds_keep`.
+        #  Then, they are identified with :func:`_find_row_differences`.
+
+        #  Now, the goal is to calculate the sums :math:`C_{i,j} = sum_k A_{i,k} B_{k,j}`,
+        #  analogous to step 3) above. This is implemented directly in this function.
+        #  It is done 'naively' by explicit loops over ``i``, ``j`` and ``k``.
+        #  However, this is not as bad as it sounds:
+        #  First, we loop only over existent ``i`` and ``j``
+        #  (in the sense that there is at least some non-zero block with these ``i`` and ``j``).
+        #  Second, if the ``i`` and ``j`` are not compatible with the new total charge,
+        #  we know that ``C_{i,j}`` will be zero.
+        #  Third, given ``i`` and ``j``, the sum over ``k`` runs only over
+        #  ``k1`` with nonzero :math:`A_{i,k1}`, and ``k2` with nonzero :math:`B_{k2,j}`.
+
+        #  How many multiplications :math:`A_{i,k} B_{k,j}` we actually have to perform
+        #  depends on the sparseness. If ``k`` comes from a single leg, it is completely sorted
+        #  by charges, so the 'sum' over ``k`` will contain at most one term!
+
+        # note: tensor.tdot() checks special-cases inner and outer, so it's at least a mat-vec
+        open_axs_a = [leg for idx, leg in enumerate(a.legs) if idx not in axs_a]
+        open_axs_b = [leg for idx, leg in enumerate(b.legs) if idx not in axs_b]
+        assert len(open_axs_a) > 0 or len(open_legs2) > 0, "special case inner() in tensor.tdot()"
+        assert len(axs_a) > 0, "special case outer() in tensor.tdot()"
+
+        if len(a.data.blocks) == 0 or len(b.data.blocks) == 0:
+            dtype = a.data.dtype.common(b.data.dtype)
+            return self.zero_data([a.legs[i] for i in open_axs_a] + [b.legs[i] for i in open_axs_b], dtype)
+
+        # for details on the implementation, see _tensordot_worker.
+        # Step 1: transpose if necessary:
+        a, b, contr_axes = self._tdot_transpose_axes(a, b, open_axs_a, axs_a, axs_b, open_axs_b)
+        # now we need to contract the last `contr_axes` of a with the first `contr_axes` of b
+
+        # Step 2:
+        cut_a = a.num_legs - contr_axes
+        cut_b = contr_axes
+        a_pre_result, b_pre_result, res_dtype = self._tdot_pre_worker(a, b, cut_a, cut_b)
+        a_blocks, a_block_inds_contr, a_block_inds_keep, a_shape_keep = a_pre_result
+        b_blocks, b_block_inds_contr, b_block_inds_keep, b_shape_keep = b_pre_result
+
+        # Step 3) loop over column/row of the result
+        sym = a.legs[0].symmetry
+        a_charges_keep = _fuse_abelian_charges(sym, *(leg[i] for leg, i in zip(a.legs[:cut_a], a_block_inds_keep.T)))
+        b_charges_keep_dual = _fuse_abelian_charges(sym, *(leg.dual[i] for leg, i in zip(b.legs[cut_b:], b_block_inds_keep.T)))
+        # dual such that b_charges_keep_dual must match a_charges_keep
+        a_lookup_charges = list_to_dict_list(a_charges_keep)  # lookup table ``charge -> [row_a]``
+
+        # (rows_a changes faster than cols_b, such that the resulting array is qdata lex-sorted)
+        # determine output qdata
+        res_data = []
+        res_block_inds_a = []
+        res_block_inds_b = []
+        for col_b, charge_match in enumerate(b_charges_keep_dual):
+            b_blocks_in_col = b_data[col_b]
+            rows_a = a_lookup_charges.get(tuple(charge_match), [])  # empty list if no match
+            for row_a in rows_a:
+                ks = _iter_common_sorted(a_block_inds_contr[row_a], b_block_inds_contr[col_b])
+                if len(ks) == 0:
+                    continue
+                a_blocks_in_row = a_data[row_a]
+                k1, k2 = ks[0]
+                block_contr = self.block_dot(a_blocks_in_row[k1], b_blocks_in_col[k2])
+                for k1, k2 in ks[1:]:
+                    block_contr = block_contr + self.block_dot(a_block_inds_contr[k1],
+                                                               b_blocks_in_col[k2])
+
+                # Step 4) reshape back to tensors
+                block_contr = self.block_reshape(block_contr, a_shape_keep[row_a] + b_shape_keep[col_b])
+                res_data.append(block_contr)
+                res_block_inds_a.append(a_block_inds_keep[row_a])
+                res_block_inds_b.append(b_block_inds_contr[col_b])
+        if len(res_data) == 0:
+            return self.zero_data(a.legs[:cut_a] + b.legs[cut_b:], dtype)
+        return AbelianBackendData(res_dtype, res_blocks, np.hstack((res_block_inds_a, res_block_inds_b)))
+
+    def _tdot_transpose_axes(self, a: Tensor, b: Tensor, open_axs_a, axs_a, axs_b, open_axs_b):
+        contr_axes = len(axs_a)
+        open_a = len(open_axs_a)
+        # try to be smart and avoid unnecessary transposes
+        last_axes_a = all(i >= open_a for i in axs_a)
+        first_axes_b = all(i < contr_axes for i in axs_b)
+        if last_axes_a and first_axes_b:
+            # we contract only last axes of a and first axes of b
+            axs_a_order = [i - open_a for i in axs_a]
+            if all(i == j for i, j in zip(axs_a_order, axs_b)):
+                return a, b, contr_axes  # no transpose necessary
+                # (doesn't matter if axs_b is not ordered)
+            # it's enough to transpose one of the arrays!
+            # let's sort axs_a and only transpose axs_b  # TODO optimization: choose depending on size of a/b?
+            axs_b = [axs_b[i] for i in np.argsort(axs_a)]
+            b = b.transpose(axs_b + open_axs_b)
+            return a, b, contr_axes
+        if last_axes_a:
+            # no need to transpose a
+            axs_b = [axs_b[i] for i in np.argsort(axs_a)]
+            b = b.transpose(axs_b + open_axs_b)
+            return a, b, contr_axes
+        elif first_axes_b:
+            # no need to transpose b
+            axs_a = [axs_a[i] for i in np.argsort(axs_b)]
+            a = a.transpose(open_legs_a + axs_a)
+            return a, b, contr_axes
+        # no special case to avoid transpose -> transpose both
+        a = a.transpose(open_legs_a + axs_a)
+        b = b.transpose(axs_b + open_axs_b)
+        return a, b, contr_axes
+
+    def _tdot_pre_worker(self, a: Tensor, b: Tensor, cut_a:int, cut_b: int):
+        """Pre-calculations before the actual matrix product of tdot.
+
+        Called by :meth:`_tensordot_worker`.
+        See doc-string of :meth:`tdot` for details on the implementation.
+
+        Returns
+        -------
+        a_pre_result, b_pre_result : tuple
+            In the following order, it contains for `a`, and `b` respectively:
+            a_blocks : list of reshaped tensors
+            a_block_inds_contr : 2D array with block indices of `a` which we need to sum over
+            a_block_inds_keep : 2D array of the block indices of `a` which will appear in the final result
+            a_slices : partition to map the indices of a_*_keep to a_data
+        res_dtype : np.dtype
+            The data type which should be chosen for the result.
+            (The `dtype` of the ``s`` above might differ from `res_dtype`!).
+        """
+        # convert block_inds_contr over which we sum to a 1D array for faster lookup/iteration
+        # TODO: dangerous overflow if strides become too large?
+        # F-style strides to preserve sorting
+        stride = _make_stride([len(l.sectors) for l in a.legs[cut_a:]], False)
+        a_block_inds_contr = np.sum(a.data.block_inds[:, cut_a:] * stride, axis=1)
+        # lex-sort a.data.block_inds, dominated by the axes kept, then the axes summed over.
+        a_sort = np.lexsort(np.hstack(a_block_inds_contr[:, np.newaxis], a.data.block_inds[:, :cut_a]).T)
+        a_block_inds_keep = a.data.block_inds[a_sort, :cut_a]
+        a_block_inds_contr = a_block_inds_contr[a_sort]
+        a_blocks = a.data.blocks
+        a_blocks = [a_blocks[i] for i in a_sort]
+        # combine all b_block_inds[:cut_b] into one column (with the same stride as before)
+        b_block_inds_contr = np.sum(b.data.block_inds[:, :cut_b] * stride, axis=1)
+        # lex-sort b_block_inds, dominated by the axes summed over, then the axes kept.
+        b_data = b._data
+        b_block_inds_keep = b.data.block_inds[:, cut_b:]
+        # find blocks where block_inds_a[not_axes_a] and block_inds_b[not_axes_b] change
+        a_slices = _find_row_differences(a_block_inds_keep, include_len=True)
+        b_slices = _find_row_differences(b_block_inds_keep, include_len=True)
+        # the slices divide a_data and b_data into rows and columns of the final result
+        a_data = [a_data[i:i2] for i, i2 in zip(a_slices[:-1], a_slices[1:])]
+        b_data = [b_data[j:j2] for j, j2 in zip(b_slices[:-1], b_slices[1:])]
+        a_block_inds_contr = [a_block_inds_contr[i:i2] for i, i2 in zip(a_slices[:-1], a_slices[1:])]
+        b_block_inds_contr = [b_block_inds_contr[i:i2] for i, i2 in zip(b_slices[:-1], b_slices[1:])]
+        a_block_inds_keep = a_block_inds_keep[a_slices[:-1]]
+        b_block_inds_keep = b_block_inds_keep[b_slices[:-1]]
+        a_shape_keep = [blocks[0].shape[:cut_a] for blocks in a_data]
+        b_shape_keep = [blocks[0].shape[cut_b:] for blocks in b_data]
+
+        # determine calculation type and result type
+        res_dtype = a.dtype.common(b.dtype)
+
+        # reshape a_data and b_data to matrix/vector
+        a_data = self._tdot_pre_reshape(a_data, cut_a, res_dtype)
+        b_data = self._tdot_pre_reshape(b_data, cut_b, res_dtype)
+
+        # collect and return the results
+        a_pre_result = a_data, a_block_inds_contr, a_block_inds_keep, a_shape_keep
+        b_pre_result = b_data, b_block_inds_contr, b_block_inds_keep, b_shape_keep
+        return a_pre_result, b_pre_result, res_dtype
+
+    def _tdot_pre_reshape(self, blocks_list, cut, dtype):
+        """Reshape blocks to (fortran) matrix/vector (depending on `cut`)"""
+        if cut == 0 or cut == data[0][0].ndim:
+            # special case: reshape to 1D vectors
+            return [[self.to_dtype(self.block_reshape(T, (-1,)), dtype) for T in blocks]
+                    for blocks in blocks_list]
+        res = [[self.block_reshape(T, (np.prod(self.block_shape(T)[:cut]), -1)) for T in blocks]
+                for blocks in blocks_list]
+        return res
 
     #  @abstractmethod
     #  def svd(self, a: Tensor, axs1: list[int], axs2: list[int], new_leg: VectorSpace | None
@@ -598,6 +803,10 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
 
     #  def mul(self, a: float | complex, b: Tensor) -> Data:
     #      return self.block_mul(a, b.data)
+
+    # TODO: support eig(h), eigvals
+    # TODO: concatenate and grid_concat
+
 
 
 # TODO FIXME how to handle ChargedTensor vs Tensor?

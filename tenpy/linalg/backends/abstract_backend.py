@@ -80,7 +80,7 @@ class AbstractBackend(ABC):
 
     @abstractmethod
     def to_dtype(self, a: Tensor, dtype: Dtype) -> Data:
-        """cast to given dtype"""
+        """cast to given dtype. No copy if already has dtype."""
         ...
 
     @abstractmethod
@@ -287,11 +287,6 @@ class AbstractBlockBackend(ABC):
         ...
 
     @abstractmethod
-    def matrix_svd(self, a: Block, algorithm: str | None) -> tuple[Block, Block, Block]:
-        """SVD of a 2D block"""
-        ...
-
-    @abstractmethod
     def block_outer(self, a: Block, b: Block) -> Block:
         ...
 
@@ -333,12 +328,26 @@ class AbstractBlockBackend(ABC):
         ...
 
     @abstractmethod
+    def block_reshape(self, a: Block, shape: Tuple[int]) -> Block:
+        ...
+
+    @abstractmethod
     def block_matrixify(self, a: Block, idcs1: list[int], idcs2: list[int]) -> tuple[Block, Any]:
         """reshape to a matrix. return that matrix and data necessary to revert it"""
         ...
 
     @abstractmethod
     def block_dematrixify(self, matrix: Block, aux: Any) -> Block:
+        ...
+
+    @abstractmethod
+    def matrix_dot(self, a: Block, b: Block) -> Block:
+        """As in numpy.dot, both a and b might be matrix or vector."""
+        ...
+
+    @abstractmethod
+    def matrix_svd(self, a: Block, algorithm: str | None) -> tuple[Block, Block, Block]:
+        """SVD of a 2D block"""
         ...
 
     @abstractmethod

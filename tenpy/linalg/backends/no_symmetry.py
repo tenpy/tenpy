@@ -73,7 +73,6 @@ class AbstractNoSymmetryBackend(AbstractBackend, AbstractBlockBackend, ABC):
     def tdot(self, a: Tensor, b: Tensor, axs_a: list[int], axs_b: list[int]) -> Data:
         return self.block_tdot(a.data, b.data, axs_a, axs_b)
 
-    @abstractmethod
     def svd(self, a: Tensor, axs1: list[int], axs2: list[int], new_leg: VectorSpace | None
             ) -> tuple[Data, Data, Data, VectorSpace]:
         # reshaping, slicing etc is so specific to the BlockBackend that I dont bother unifying anything here.

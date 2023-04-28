@@ -773,8 +773,20 @@ class Tensor(AbstractTensor):
         open_legs2 = [leg for idx, leg in enumerate(other.legs) if idx not in leg_idcs2]
         open_labels1 = [leg for idx, leg in enumerate(self.labels) if idx not in leg_idcs1]
         open_labels2 = [leg for idx, leg in enumerate(other.labels) if idx not in leg_idcs2]
+        # check for special cases, such that backend.tdot doesn't have to do that
+        # special case: inner()
+        if len(open_legs1) == 0 and len(open_legs2) == 0:
+            # TODO add args to inner() with implicit transpose and specify that it shouldn't use conj(a)
+            a = self.transpose(leg_idcs1)
+            b = other.transpose(leg_idcs2)
+            return a.conj().inner(b)
+        # special case: outer()
+        if len(leg_idcs1) == 0:
+            return self.outer(a, b, relabel1, relabel2)
         res_labels = _get_result_labels(open_labels1, open_labels2, relabel1, relabel2)
-        res_data = backend.tdot(self, other, leg_idcs1, leg_idcs2)
+
+        res_data = backend.tdot(self, other, leg_idcs1, leg_idcs2)  # most of the work
+
         res_legs = open_legs1 + open_legs2
         if len(res_legs) == 0:
             return backend.data_item(res_data)
@@ -1050,7 +1062,7 @@ def zero_like(tens: AbstractTensor, labels: list[str | None] = None) -> Tensor:
 def _match_label_order(a: Tensor, b: Tensor) -> Iterable[int] | None:
     """Determine the order of legs of b, such that they match the legs of a.
     If config.strict_labels, this is a permutation determined by the labels, otherwise it is None.
-    A None return indicates range(b.num_legs), i.e. that no trasnpose is needed.
+    A None return indicates range(b.num_legs), i.e. that no transpose is needed.
     """
     if config.strict_labels:
         if a.is_fully_labelled and b.is_fully_labelled:
@@ -1104,6 +1116,7 @@ def outer(t1: AbstractTensor, t2: AbstractTensor, relabel1: dict[str, str] = Non
     return t1.outer(t2, relabel1=relabel1, relabel2=relabel2)
 
 
+# TODO: arguments which legs match (=possible transpose before contraction)
 def inner(t1: AbstractTensor, t2: AbstractTensor) -> complex:
     """
     Inner product of two tensors with the same legs.
