@@ -426,10 +426,7 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
 
     def to_dtype(self, a: Tensor, dtype: Dtype) -> Data:
         # shallow copy if dtype stays same
-        data = a.data.copy()
-        data.blocks = [self.block_to_dtype(block, dtype) for block in data.blocks]
-        data.dtype = dtype
-        return data
+        return AbelianBackendData(dtype, [self.block_to_dtype(block, dtype) for block in a.data.blocks], a.data.block_inds)
 
     def supports_symmetry(self, symmetry: Symmetry) -> bool:
         return symmetry.is_abelian and symmetry.braiding_style == BraidingStyle.bosonic
@@ -687,38 +684,40 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
         # combine all b_block_inds[:cut_b] into one column (with the same stride as before)
         b_block_inds_contr = np.sum(b.data.block_inds[:, :cut_b] * stride, axis=1)
         # lex-sort b_block_inds, dominated by the axes summed over, then the axes kept.
-        b_data = b._data
+        b_blocks = b.data.blocks
         b_block_inds_keep = b.data.block_inds[:, cut_b:]
         # find blocks where block_inds_a[not_axes_a] and block_inds_b[not_axes_b] change
         a_slices = _find_row_differences(a_block_inds_keep, include_len=True)
         b_slices = _find_row_differences(b_block_inds_keep, include_len=True)
-        # the slices divide a_data and b_data into rows and columns of the final result
-        a_data = [a_data[i:i2] for i, i2 in zip(a_slices[:-1], a_slices[1:])]
-        b_data = [b_data[j:j2] for j, j2 in zip(b_slices[:-1], b_slices[1:])]
+        # the slices divide a_blocks and b_blocks into rows and columns of the final result
+        a_blocks = [a_blocks[i:i2] for i, i2 in zip(a_slices[:-1], a_slices[1:])]
+        b_blocks = [b_blocks[j:j2] for j, j2 in zip(b_slices[:-1], b_slices[1:])]
         a_block_inds_contr = [a_block_inds_contr[i:i2] for i, i2 in zip(a_slices[:-1], a_slices[1:])]
         b_block_inds_contr = [b_block_inds_contr[i:i2] for i, i2 in zip(b_slices[:-1], b_slices[1:])]
         a_block_inds_keep = a_block_inds_keep[a_slices[:-1]]
         b_block_inds_keep = b_block_inds_keep[b_slices[:-1]]
-        a_shape_keep = [blocks[0].shape[:cut_a] for blocks in a_data]
-        b_shape_keep = [blocks[0].shape[cut_b:] for blocks in b_data]
+        a_shape_keep = [blocks[0].shape[:cut_a] for blocks in a_blocks]
+        b_shape_keep = [blocks[0].shape[cut_b:] for blocks in b_blocks]
 
-        # determine calculation type and result type
-        res_dtype = a.dtype.common(b.dtype)
-
-        # reshape a_data and b_data to matrix/vector
-        a_data = self._tdot_pre_reshape(a_data, cut_a, res_dtype)
-        b_data = self._tdot_pre_reshape(b_data, cut_b, res_dtype)
+        res_dtype = a.data.dtype.common(b.data.dtype)
+        if a.data.dtype != res_dtype:
+            a_blocks = [[self.block_to_dtype(T) for T in blocks] for blocks in a_blocks]
+        if b.data.dtype != res_dtype:
+            b_blocks = [[self.block_to_dtype(T) for T in blocks] for blocks in b_blocks]
+        # reshape a_blocks and b_blocks to matrix/vector
+        a_blocks = self._tdot_pre_reshape(a_blocks, cut_a)
+        b_blocks = self._tdot_pre_reshape(b_blocks, cut_b)
 
         # collect and return the results
-        a_pre_result = a_data, a_block_inds_contr, a_block_inds_keep, a_shape_keep
-        b_pre_result = b_data, b_block_inds_contr, b_block_inds_keep, b_shape_keep
+        a_pre_result = a_blocks, a_block_inds_contr, a_block_inds_keep, a_shape_keep
+        b_pre_result = b_blocks, b_block_inds_contr, b_block_inds_keep, b_shape_keep
         return a_pre_result, b_pre_result, res_dtype
 
-    def _tdot_pre_reshape(self, blocks_list, cut, dtype):
+    def _tdot_pre_reshape(self, blocks_list, cut):
         """Reshape blocks to (fortran) matrix/vector (depending on `cut`)"""
         if cut == 0 or cut == data[0][0].ndim:
             # special case: reshape to 1D vectors
-            return [[self.to_dtype(self.block_reshape(T, (-1,)), dtype) for T in blocks]
+            return [[self.block_reshape(T, (-1,)) for T in blocks]
                     for blocks in blocks_list]
         res = [[self.block_reshape(T, (np.prod(self.block_shape(T)[:cut]), -1)) for T in blocks]
                 for blocks in blocks_list]
