@@ -383,6 +383,29 @@ def _valid_block_indices(spaces: list[AbelianBackendVectorSpace]):
     return block_inds[perm, :]
 
 
+def _iter_common_sorted(a, b):
+    """Yield indices ``i, j`` for which ``a[i] == b[j]``.
+
+    *Assumes* that `a` and `b` are strictly ascending.
+    Given that, it is equivalent to (but faster than)
+    ``[(i, j) for j, i in itertools.product(range(len(b)), range(len(a)) if a[i] == b[j]]``
+    """
+    l_a = len(a)
+    l_b = len(b)
+    i, j = 0, 0
+    res = []
+    while i < l_a and j < l_b:
+        if a[i] < b[j]:
+            i += 1
+        elif b[j] < a[i]:
+            j += 1
+        else:
+            res.append((i, j))
+            i += 1
+            j += 1
+    return res
+
+
 @dataclass
 class AbelianBackendData:
     """Data stored in a Tensor for :class:`AbstractAbelianBackend`."""
@@ -671,7 +694,6 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
             (The `dtype` of the ``s`` above might differ from `res_dtype`!).
         """
         # convert block_inds_contr over which we sum to a 1D array for faster lookup/iteration
-        # TODO: dangerous overflow if strides become too large?
         # F-style strides to preserve sorting
         stride = _make_stride([len(l.sectors) for l in a.legs[cut_a:]], False)
         a_block_inds_contr = np.sum(a.data.block_inds[:, cut_a:] * stride, axis=1)
@@ -752,8 +774,21 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
 
         return AbelianBackendData(dtype, res_blocks, res_block_inds)
 
-    #  def inner(self, a: Tensor, b: Tensor, axs2: list[int] | None) -> complex:
-    #      return self.block_inner(a.data, b.data, axs2)
+    def inner(self, a: Tensor, b: Tensor, axs2: list[int] | None) -> complex:
+        a_blocks = a.data.blocks
+        a_block_inds = np.sum(a.data.block_inds * stride, axis=1)
+        if axs2 is not None:
+            stride = stride[axs2]
+        b_blocks = b.data.blocks
+        b_block_inds = np.sum(b.data.block_inds * stride, axis=1)
+        if axs2 is not None:
+            # we permuted the strides, so b_block_inds is no longer sorted
+            sort = np.argsort(b_block_inds)
+            b_block_inds = b_block_inds[sort, :]
+            b_blocks = [b_blocks[i] for i in sort]
+        res = [self.block_inner(a_blocks[i], b_blocks[j], axs2)
+               for i, j in _iter_common_sorted_arrays(a_block_inds, b_block_inds)]
+        return np.sum(res)
 
     def transpose(self, a: Tensor, permutation: list[int]) -> Data:
         blocks = a.data.blocks
