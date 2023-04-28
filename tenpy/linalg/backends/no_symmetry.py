@@ -2,6 +2,7 @@
 from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING
+from numpy import prod
 
 from .abstract_backend import AbstractBackend, AbstractBlockBackend, Data, Block, Dtype
 from ..symmetries.groups import no_symmetry, Symmetry
@@ -75,9 +76,17 @@ class AbstractNoSymmetryBackend(AbstractBackend, AbstractBlockBackend, ABC):
 
     def svd(self, a: Tensor, axs1: list[int], axs2: list[int], new_leg: VectorSpace | None
             ) -> tuple[Data, Data, Data, VectorSpace]:
-        # reshaping, slicing etc is so specific to the BlockBackend that I dont bother unifying anything here.
-        # that might change though...
-        ...
+        a = self.block_transpose(a.data, axs1 + axs2)
+        a_shape = self.block_shape(a)
+        a_shape1 = a_shape[:len(axs1)]
+        a_shape2 = a_shape[len(axs1):]
+        a = self.block_reshape(a, (prod(a_shape1), prod(a_shape2)))
+        u, s, vh = self.matrix_svd(a)
+        u = self.block_reshape(u, a_shape1 + (len(s), ))
+        vh = self.block_reshape(vh, (len(s), ) + a_shape2)
+        if new_leg is None:
+            new_leg = VectorSpace.non_symmetric(len(s), is_dual=False, is_real=a.legs[0].is_real)
+        return u, s, vh, new_leg
 
     def outer(self, a: Tensor, b: Tensor) -> Data:
         return self.block_outer(a.data, b.data)

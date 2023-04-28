@@ -190,19 +190,7 @@ class NumpyBlockBackend(AbstractBlockBackend):
 
 
 class NoSymmetryNumpyBackend(NumpyBlockBackend, AbstractNoSymmetryBackend):
-    def svd(self, a: Tensor, axs1: list[int], axs2: list[int], new_leg: VectorSpace | None
-            ) -> tuple[Data, Data, Data, VectorSpace]:
-        a = np.transpose(a.data, axs1 + axs2)
-        a_shape1 = np.shape(a)[:len(axs1)]
-        a_shape2 = np.shape(a)[len(axs1):]
-        a = np.reshape(a, (np.prod(a_shape1), np.prod(a_shape2)))
-        u, s, vh = self.matrix_svd(a)
-        u = np.reshape(u, (*a_shape1, len(s)))
-        vh = np.reshape(vh, (len(s), *a_shape2))
-        if new_leg is None:
-            new_leg = VectorSpace.non_symmetric(len(s), is_dual=False, is_real=False)
-        return u, s, vh, new_leg
-
+    pass
 
 class AbelianNumpyBackend(NumpyBlockBackend, AbstractAbelianBackend):
     pass

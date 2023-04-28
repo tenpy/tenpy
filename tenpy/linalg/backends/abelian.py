@@ -140,7 +140,6 @@ class AbelianBackendProductSpace(ProductSpace, AbelianBackendVectorSpace):
     block_ind_map :
         See below. (In old np_conserved: `qmap`)
 
-
     Notes
     -----
     For ``np.reshape``, taking, for example,  :math:`i,j,... \rightarrow k` amounted to
@@ -426,7 +425,8 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
         return a.dtype
 
     def to_dtype(self, a: Tensor, dtype: Dtype) -> Data:
-        data = a.data.copy()  # TODO: should this make a copy?
+        # shallow copy if dtype stays same
+        data = a.data.copy()
         data.blocks = [self.block_to_dtype(block, dtype) for block in data.blocks]
         data.dtype = dtype
         return data

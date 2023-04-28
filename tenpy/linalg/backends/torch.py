@@ -185,19 +185,6 @@ class NoSymmetryTorchBackend(TorchBlockBackend, AbstractNoSymmetryBackend):
         TorchBlockBackend.__init__(self, device=device)
         AbstractNoSymmetryBackend.__init__(self)
 
-    def svd(self, a: Tensor, axs1: list[int], axs2: list[int], new_leg: VectorSpace | None
-            ) -> tuple[Data, Data, Data, VectorSpace]:
-        a = torch_module.permute(a.data, axs1 + axs2)
-        a_shape1 = a.shape[:len(axs1)]
-        a_shape2 = a.shape[len(axs1):]
-        a = torch_module.reshape(a, (prod(a_shape1), prod(a_shape2)))
-        u, s, vh = self.matrix_svd(a)
-        u = torch_module.reshape(u, (*a_shape1, len(s)))
-        vh = torch_module.reshape(vh, (len(s), *a_shape2))
-        if new_leg is None:
-            new_leg = VectorSpace.non_symmetric(len(s), is_dual=False, is_real=False)
-        return u, s, vh, new_leg
-
 
 class AbelianTorchBackend(TorchBlockBackend, AbstractAbelianBackend):
     def __init__(self, device: str = 'cpu'):
