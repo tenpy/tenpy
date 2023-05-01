@@ -64,12 +64,27 @@ def replica_main(node_local):
 
 def distr_array_scatter(node_local, on_main, key, in_cache):
     # on_main should be list of npc_arrays
-    local_part = node_local.comm.scatter(on_main)
+    # Potential issue - envs may be larger than 2.1GB and thus cannot be pickled, so scatter will fail
+    # One might need to send each piece individually as done in the redistribute function below
+    if node_local.comm.rank  == 0:
+        assert len(on_main) == node_local.comm.size
+        for i in range(1, node_local.comm.size):
+            dest = i
+            source = 0
+            # Can't use scatter since the envs may be larger than 2.1GB and thus cannot be pickled
+            npc_send(node_local.comm, on_main[i], dest, tag = dest*10000 + source)
+        local_part = on_main[0]
+    else:
+        # Get redistributed env from root node
+        source = 0
+        #print('Node', node_local.comm.rank, 'is receiving from node', source, flush=True)
+        local_part = npc_recv(node_local.comm, source, tag = node_local.comm.rank*10000 + source)
+
+    #local_part = node_local.comm.scatter(on_main)
     if in_cache:
         node_local.cache[key] = local_part
     else:
         node_local.distributed[key] = local_part
-
 
 def distr_array_gather(node_local, on_main, key, in_cache):
     local_part = node_local.cache[key] if in_cache else node_local.distributed[key]
