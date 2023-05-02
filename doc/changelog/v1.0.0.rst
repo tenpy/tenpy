@@ -12,16 +12,70 @@ Changelog
 
 Backwards incompatible changes
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-- nothing yet
+- Change the default to `sort_charge=True` in the config of models and in the `__init__` of sites.
+  This may cause issues when loading data that was saved using an older version of tenpy.
+  See also :issue:`175`.
+- Drop support for scipy<0.18, in particular in svd_robust
+- Drop support for legacy `simulation_class_name` option in `console_main`, 
+  i.e. when calling `tenpy-run` and in `simulation.py`
+- Drop support for outer products in the sequence of ncon
 
-Added
-^^^^^
-- nothing yet
+- Call signature changes (mostly removing legacy keyword arguments):
+  - Model.add_multi_coupling() : remove legacy positional arguments
+  - MPS.expectation_value_terms_sum() : remove legacy `prefactors` argument
+  - mps.TransferMatrix() : Change default of `shift_ket` to ``0``
+  - Array.combine_legs() : Change default of `qconj`
+  - KrylovBased(), LanczosGroundState(), lanczos(), lanczos_arpack() : remove legacy `orthogonal_to` arg
+  - lanczos.gram_schmidt() : remove legacy `verbose` arg
+  - np_conserved.inner() : change default of `axes` to `labels`
+  - MPS.permute_sites() : remove legacy `verbose` arg
+  - tools.misc.setup_logging() : remove legacy `options` positional argument
+
+- Remove deprecated / legacy submodules:
+  - models.bose_hubbard and models.bose_hubbard_chain
+  - models.fermions_hubbard and models.fermion_chain
+  - algorithms.purification_tebd
+  - mps_sweeps
+
+- Remove deprecated / legacy config entries:
+  - CouplingModel : bc_coupling
+  - truncation : symmetry_tol
+  - Sweep : LP, LP_age, RP, RP_age, init_env_data, orthogonal_to, sweep_0
+  - Simulation : logging_params
+  - VariationalCompression : N_sweeps
+
+- Remove deprecated / legacy attributes:
+  - Lattice.nearest_neighbors, etc.
+  - DMRGEngine.DMRG_params, Sweep.engine_params, TDVPEngine.TDVP_params, TEBDEngine.TEBD_params
+  - Array.labels
+  - Algorithm.verbose, CouplingModel.verbose, Simulation.verbose, Config.verbose
+
+- Remove deprecated / legacy methods:
+  - MPO.get_grouped_mpo()
+  - MPO.get_full_hamiltonian()
+  - MPS.increase_L()
+  - MPS.canonical_form_infinite()
+  - CouplingModel.calc_H_onsite()
+  - FlatLinearOperator.flat_to_npc_all_sectors and FlatLinearOperator.npc_to_flat_all_sectors
+
+- Remove deprecated / legacy functions:
+  - tools.misc.chi_list()
+  - tools.misc.setup_executable()
+  - tools.misc.build_initial()
+  - tools.misc.any_nonzero()
+  - tools.params.get_parameter()
+  - tools.params.unused_parameters()
+  - sites.multi_sites_combine_charges()
+
+- Remove deprecated / legacy classes:
+  - dmrg.SingleSiteMixer, drmg.TwoSiteMixer
+  - dmrg.EngineCombine, dmrg.EngineFracture
+  - tdvp.Engine, tdvp.OldTDVPEngine
+  - tebd.Engine
+  - model.MultiCoupingModel
 
 Changed
 ^^^^^^^
-- nothing yet
-
-Fixed
-^^^^^
-- nothing yet
+- Remove `FutureWarning`s:
+  - When using legacy features, e.g. config parameters
+  - When adding Arrays causes a transpose to match labels
