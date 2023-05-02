@@ -272,8 +272,7 @@ def test_npc_Array_reshape():
                                  ([[0], [1], [2]], [0, 1, 2]), ([[2, 0]], [1, 2, 0]),
                                  ([[2, 0, 1]], [2, 0, 1])]:
         print('combine legs', comb_legs)
-        with pytest.warns(FutureWarning):
-            acomb = a.combine_legs(comb_legs)  # just sorts second leg
+        acomb = a.combine_legs(comb_legs)  # just sorts second leg
         print("=> labels: ", acomb.get_leg_labels())
         acomb.test_sanity()
         asplit = acomb.split_legs()
@@ -324,8 +323,7 @@ def test_npc_Array_reshape_2():
     shape = (2, 5, 2)
     a = random_Array(shape, chinfo3, sort=True)
     aflat = a.to_ndarray()
-    with pytest.warns(FutureWarning):
-        acomb = a.combine_legs([[0, 1]])
+    acomb = a.combine_legs([[0, 1]])
     acombflat = acomb.to_ndarray()
     pipe = acomb.legs[0]
     print(a)
