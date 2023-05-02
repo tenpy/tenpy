@@ -1152,9 +1152,6 @@ class Skip(ValueError):
         self.filename = filename
 
 
-_deprecated_not_set = object()
-
-
 def init_simulation(simulation_class='GroundStateSearch',
                     simulation_class_kwargs=None,
                     **simulation_params):
@@ -1192,13 +1189,8 @@ def init_simulation(simulation_class='GroundStateSearch',
 
 def run_simulation(simulation_class='GroundStateSearch',
                    simulation_class_kwargs=None,
-                   *,
-                   simulation_class_name=_deprecated_not_set,
                    **simulation_params):
     """Run the simulation with a simulation class.
-
-    .. deprecated :: 0.9.0
-        The `simulation_class_name` argument has been renamed to just `simulation_class`.
 
     Parameters
     ----------
@@ -1217,12 +1209,6 @@ def run_simulation(simulation_class='GroundStateSearch',
         The results of the Simulation, i.e., what
         :meth:`~tenpy.simulations.simulation.Simulation.run()` returned.
     """
-    if simulation_class_name is not _deprecated_not_set:
-        assert simulation_class == 'GroundStateSearch'
-        warnings.warn(
-            "The `simulation_class_name` argument has been renamed to `simulation_class`"
-            " for more consistency with remaining parameters.", FutureWarning)
-        simulation_class = simulation_class_name
     sim = init_simulation(simulation_class, simulation_class_kwargs, **simulation_params)
     with sim:
         results = sim.run()
@@ -1365,7 +1351,6 @@ def run_seq_simulations(sequential,
                         simulation_class='GroundStateSearch',
                         simulation_class_kwargs=None,
                         *,
-                        simulation_class_name=_deprecated_not_set,
                         resume_data=None,
                         collect_results_in_memory=False,
                         **simulation_params):
@@ -1454,13 +1439,6 @@ def run_seq_simulations(sequential,
                 assert not k.startswith(check), "really?!?"
     else:
         N_sims = 1
-
-    if simulation_class_name is not _deprecated_not_set:
-        assert simulation_class == 'GroundStateSearch'
-        warnings.warn(
-            "The `simulation_class_name` argument has been renamed to `simulation_class`"
-            " for more consistency with remaining parameters.", FutureWarning)
-        simulation_class = simulation_class_name
 
     SimClass = find_subclass(Simulation, simulation_class)
     if simulation_class_kwargs is None:
