@@ -41,9 +41,8 @@ class ClockModel(CouplingMPOModel):
 
         conserve : None | 'Z'
             What should be conserved. See :class:`~tenpy.networks.Site.ClockSite`.
-        sort_charge : bool | None
-            Whether to sort by charges of physical legs.
-            See change comment in :class:`~tenpy.networks.site.Site`.
+        sort_charge : bool
+            Whether to sort by charges of physical legs. `True` by default.
         q : int
             The number of states per site.
         J, g : float | array
@@ -59,7 +58,7 @@ class ClockModel(CouplingMPOModel):
         q = model_params.get('q', None)
         if q is None:
             raise ValueError('Need to specify q.')
-        sort_charge = model_params.get('sort_charge', None)
+        sort_charge = model_params.get('sort_charge', True)
         return ClockSite(q=q, conserve=conserve, sort_charge=sort_charge)
 
     def init_terms(self, model_params):

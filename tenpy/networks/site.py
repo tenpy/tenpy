@@ -47,19 +47,6 @@ class Site(Hdf5Exportable):
         This is a *necessary* feature since we need to sort the basis by charges for efficiency.
         We use the :attr:`state_labels` and :attr:`perm` to keep track of these permutations.
 
-    .. versionchanged :: 0.10
-
-        Add the option `sort_charge`. Right now the default behavior is ``False`` for
-        backwards compatibility, but we will change it for Version 1.0 to ``True``.
-        For now, we raise a warning in cases where it can lead to changes.
-        If you see this warning, just set the value explicitly to avoid breaking compatibility of
-        existing data with future releases.
-        Set it to `False`, if you already have data (for your particular model),
-        that you want to be able to load/compare to.
-        If you start a new project and don't have data yet, set it to `True`.
-        See also the `breaking changes` section in the release notes.
-
-
     Parameters
     ----------
     leg : :class:`~tenpy.linalg.charges.LegCharge`
@@ -71,13 +58,10 @@ class Site(Hdf5Exportable):
         The identity operator ``'Id'`` is automatically included.
         If no ``'JW'`` for the Jordan-Wigner string is given,
         ``'JW'`` is set as an alias to ``'Id'``.
-    sort_charge : bool | None
+    sort_charge : bool
         Whether :meth:`sort_charge` should be called at the end of initialization.
         This is usually a good idea to reduce potential overhead when using charge conservation.
         Note that this might permute the order of the local basis states!
-        For backwards compatibility with existing data, it is not (yet) enabled by default,
-        but we started to warn about the behavior.
-        Explicitly set `sort_charge=False` to disable the warning.
 
     Attributes
     ----------
@@ -125,24 +109,58 @@ class Site(Hdf5Exportable):
     Note that ``Sx = (Sp + Sm)/2`` violates Sz conservation and is thus not a valid
     on-site operator.
 
-    >>> chinfo = npc.ChargeInfo([1], ['2*Sz'])
-    >>> ch = npc.LegCharge.from_qflat(chinfo, [1, -1])
-    >>> Sp = [[0, 1.], [0, 0]]
-    >>> Sm = [[0, 0], [1., 0]]
-    >>> Sz = [[0.5, 0], [0, -0.5]]
-    >>> site = tenpy.networks.site.Site(ch, ['up', 'down'], Splus=Sp, Sminus=Sm, Sz=Sz)
-    >>> print(site.Splus.to_ndarray())
-    [[0. 1.]
-     [0. 0.]]
-    >>> print(site.get_op('Sminus').to_ndarray())
-    [[0. 0.]
-     [1. 0.]]
-    >>> print(site.get_op('Splus Sminus').to_ndarray())
-    [[1. 0.]
-     [0. 0.]]
+    .. testsetup :: Site[sort_charge=False]
+
+        from tenpy.linalg import np_conserved as npc
+        from tenpy.networks.site import Site
+
+    .. doctest :: Site[sort_charge=False]
+
+        >>> chinfo = npc.ChargeInfo([1], ['2 * Sz'])
+        >>> ch = npc.LegCharge.from_qflat(chinfo, [1, -1])
+        >>> Sp = [[0, 1.], [0, 0]]
+        >>> Sm = [[0, 0], [1., 0]]
+        >>> Sz = [[0.5, 0], [0, -0.5]]
+        >>> site = tenpy.networks.site.Site(ch, ['up', 'down'], Splus=Sp, Sminus=Sm, Sz=Sz)
+        >>> print(site.Splus.to_ndarray())
+        [[0. 1.]
+        [0. 0.]]
+        >>> print(site.get_op('Sminus').to_ndarray())
+        [[0. 0.]
+        [1. 0.]]
+        >>> print(site.get_op('Splus Sminus').to_ndarray())
+        [[1. 0.]
+        [0. 0.]]
+     
+    Note that sorting the charges (which happens by default!) may lead to unintuitive
+    matrix representations of the operators, because physicists are typically not used to
+    writing them in the sorted basis (in this case ``['down', 'up']``);
+
+    .. testsetup :: Site
+
+        from tenpy.linalg import np_conserved as npc
+        from tenpy.networks.site import Site
+        chinfo = npc.ChargeInfo([1], ['Sz'])
+        ch = npc.LegCharge.from_qflat(chinfo, [1, -1])
+        Sp = [[0, 1.], [0, 0]]
+        Sm = [[0, 0], [1., 0]]
+        Sz = [[0.5, 0], [0, -0.5]]
+
+    .. doctest :: Site
+        
+        >>> site = Site(ch, ['up', 'down'], Splus=Sp, Sminus=Sm, Sz=Sz)
+        >>> print(site.Splus.to_ndarray())
+        [[0. 0.]
+         [1. 0.]]
+        >>> print(site.get_op('Sminus').to_ndarray())
+        [[0. 1.]
+         [0. 0.]]
+        >>> print(site.get_op('Splus Sminus').to_ndarray())
+        [[0. 0.]
+         [0. 1.]]
     """
 
-    def __init__(self, leg, state_labels=None, sort_charge=False, **site_ops):
+    def __init__(self, leg, state_labels=None, sort_charge=True, **site_ops):
         self.used_sort_charge = False
         self.leg = leg
         self.state_labels = dict()
@@ -164,17 +182,6 @@ class Site(Hdf5Exportable):
             self.add_op('JW', self.Id, hc='JW')
         if sort_charge:
             self.sort_charge()
-        elif sort_charge is None:
-            if not (leg.sorted and leg.bunched):
-                msg = (f"LegCharge of physical leg in site {self!s} is not sorted. "
-                       "You should explicitly set `sort_charge`. "
-                       "Set it to False, if you already have saved data for your model and want "
-                       "to be able to load it/keep backwards compatibility. "
-                       "For new projects, if you don't have data yet, set it to `True`. "
-                       "We will switch the default from False to True in version 1.0, "
-                       "which breaks compatibility of existing data with "
-                       "code/models that don't explicitly set sort_legcharge.")
-                warnings.warn(msg, FutureWarning, 2)
         self.test_sanity()
 
     def change_charge(self, new_leg_charge=None, permute=None):
@@ -1314,7 +1321,6 @@ class SpinHalfSite(Site):
         Whether :meth:`sort_charge` should be called at the end of initialization.
         This is usually a good idea to reduce potential overhead when using charge conservation.
         Note that this permutes the order of the local basis states!
-        For backwards compatibility with existing data, it is not (yet) enabled by default.
 
     Attributes
     ----------
@@ -1322,7 +1328,7 @@ class SpinHalfSite(Site):
         Defines what is conserved, see table above.
     """
 
-    def __init__(self, conserve='Sz', sort_charge=None):
+    def __init__(self, conserve='Sz', sort_charge=True):
         if not conserve:
             conserve = 'None'
         if conserve not in ['Sz', 'parity', 'None']:
@@ -1395,7 +1401,6 @@ class SpinSite(Site):
         Whether :meth:`sort_charge` should be called at the end of initialization.
         This is usually a good idea to reduce potential overhead when using charge conservation.
         Note that this permutes the order of the local basis states for ``conserve='parity'``!
-        For backwards compatibility with existing data, it is not (yet) enabled by default.
 
     Attributes
     ----------
@@ -1405,7 +1410,7 @@ class SpinSite(Site):
         Defines what is conserved, see table above.
     """
 
-    def __init__(self, S=0.5, conserve='Sz', sort_charge=None):
+    def __init__(self, S=0.5, conserve='Sz', sort_charge=True):
         if not conserve:
             conserve = 'None'
         if conserve not in ['Sz', 'parity', 'None']:
@@ -2078,7 +2083,6 @@ class ClockSite(Site):
         Whether :meth:`sort_charge` should be called at the end of initialization.
         This is usually a good idea to reduce potential overhead when using charge conservation.
         Note that this permutes the order of the local basis states!
-        For backwards compatibility with existing data, it is not (yet) enabled by default.
 
     Attributes
     ----------
@@ -2087,7 +2091,7 @@ class ClockSite(Site):
     conserve : str
         Defines what is conserved, see table above.
     """
-    def __init__(self, q, conserve='Z', sort_charge=None):
+    def __init__(self, q, conserve='Z', sort_charge=True):
         if not (isinstance(q, int) and q > 1):
             raise ValueError(f'invalid q: {q}')
         self.q = q

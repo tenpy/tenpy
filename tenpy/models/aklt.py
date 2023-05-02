@@ -38,7 +38,7 @@ class AKLTChain(NearestNeighborModel, MPOModel):
         if conserve == 'best':
             conserve = 'Sz'
             self.logger.info("%s: set conserve to %s", self.name, conserve)
-        sort_charge = model_params.get('sort_charge', None)
+        sort_charge = model_params.get('sort_charge', True)
         site = SpinSite(S=1., conserve=conserve, sort_charge=sort_charge)
 
         # lattice
