@@ -2121,9 +2121,6 @@ class VariationalCompression(IterativeSweeps):
     The algorithm is the same as described in :class:`VariationalApplyMPO`,
     except that we don't have an MPO in the networks - one can think of the MPO being trivial.
 
-    .. deprecated :: 0.9.1
-        Renamed the option `N_sweeps` to `max_sweeps`.
-
     Parameters
     ----------
     psi : :class:`~tenpy.networks.mps.MPS`
@@ -2165,9 +2162,6 @@ class VariationalCompression(IterativeSweeps):
 
     def pre_run_initialize(self):
         super().pre_run_initialize()
-        self.options.deprecated_alias("N_sweeps", "max_sweeps",
-                                      "Also check out the other new convergence parameters "
-                                      "min_N_sweeps and tol_theta_diff!")
         max_sweeps = self._max_sweeps = self.options.get("max_sweeps", 2)
         min_sweeps = self._min_sweeps = self.options.get("min_sweeps", 1)
         tol_diff = self._tol_theta_diff = self.options.get("tol_theta_diff", 1.e-8)
