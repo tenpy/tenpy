@@ -252,13 +252,6 @@ class Simulation:
                                   exc_info=(exc_type, exc_value, traceback))
         self.options.warn_unused(True)
 
-    @property
-    def verbose(self):
-        warnings.warn(
-            "verbose is deprecated, we're using logging now! \n"
-            "See https://tenpy.readthedocs.io/en/latest/intro/logging.html", FutureWarning, 2)
-        return self.options.get('verbose', 1.)
-
     def estimate_RAM(self):
         """Estimates the RAM usage for the simulation, without running it.
 
