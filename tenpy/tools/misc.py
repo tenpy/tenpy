@@ -692,8 +692,7 @@ def flatten(mapping, separator='.'):
 skip_logging_setup = False
 
 
-def setup_logging(options=None,
-                  output_filename=None,
+def setup_logging(output_filename=None,
                   *,
                   filename=_not_set,
                   to_stdout="INFO",
@@ -742,17 +741,13 @@ def setup_logging(options=None,
         e.g., because you run multiple :class:`~tenpy.simulations.simulation.Simulation`
         classes sequentially (e.g., :func:`~tenpy.simulations.simulation.run_seq_simulations`).
 
-    .. deprecated :: 0.9.0
-        The arguments were previously collected in a dictionary `options`.
-        Now they should be given directly as keyword arguments.
-
     Parameters
     ----------
-    **kwargs :
-        Keyword arguments as described in the options below.
     output_filename : None | str
         The filename for where results are saved. The :cfg:option:`log.filename` for the
         log-file defaults to this, but replacing the extension with ``.log``.
+    **kwargs :
+        Keyword arguments as described in the options below.
 
     Options
     -------
@@ -798,9 +793,6 @@ def setup_logging(options=None,
             Whether to call :func:`logging.captureWarnings` to include the warnings into the log.
     """
     import logging.config
-    if options is not None:
-        warnings.warn("Give logging parameters directly as keyword arguments!", FutureWarning, 2)
-        locals().update(**options)
     if filename is _not_set:
         if output_filename is not None:
             root, ext = os.path.splitext(output_filename)
