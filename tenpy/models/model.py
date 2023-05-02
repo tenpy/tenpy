@@ -50,8 +50,7 @@ from ..networks.site import Site, group_sites
 from ..tools.hdf5_io import Hdf5Exportable
 
 __all__ = [
-    'Model', 'NearestNeighborModel', 'MPOModel', 'CouplingModel', 'MultiCouplingModel',
-    'CouplingMPOModel'
+    'Model', 'NearestNeighborModel', 'MPOModel', 'CouplingModel', 'CouplingMPOModel'
 ]
 
 
@@ -1761,22 +1760,6 @@ class CouplingModel(Model):
             else:
                 strength[slices] *= np.exp(1.j * phase[ax])  # hopping in *positive* y-direction
         return strength
-
-
-class MultiCouplingModel(CouplingModel):
-    """Deprecated class which was a generalization of the `CouplingModel`.
-
-    .. deprecated:: 0.7.2
-        In earlier versions of TeNPy, this class contained the methods
-        :meth:`add_multi_coupling` and :meth:`add_multi_coupling_term`.
-        However, since we introduced the :class:`~tenpy.networks.terms.MultiCouplingTerms`,
-        this separation within the Model class is no longer necessary.
-        We hence merged the `MultiCouplingModel` with the `CouplingModel`.
-    """
-    def __init_subclass__(cls):
-        msg = ("The `MultiCouplingModel` class is deprecated and has been merged into "
-               "the `CouplingModel`. No need to subclass the `MultiCouplingModel` anymore!")
-        warnings.warn(msg, DeprecationWarning, 2)
 
 
 def _warn_post_init_add(f):
