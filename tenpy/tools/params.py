@@ -54,13 +54,6 @@ class Config(MutableMapping):
         self.unused = set(config.keys())
         self.name = name
 
-    @property
-    def verbose(self):
-        warnings.warn(
-            "verbose is deprecated, we're using logging now! \n"
-            "See https://tenpy.readthedocs.io/en/latest/intro/logging.html", FutureWarning, 2)
-        return self.options.get('verbose', 1.)
-
     def copy(self, share_unused=True):
         """Make a *shallow* copy, as for a dictionary.
 
