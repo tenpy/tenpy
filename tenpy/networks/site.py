@@ -815,8 +815,6 @@ def set_common_charges(sites, new_charges='same', new_names=None, new_mod=None, 
 
     A typical place to do this would be in :meth:`tenpy.models.model.CouplingMPOModel.init_sites`.
 
-    (This function replaces the now deprecated :func:`multi_sites_combine_charges`.)
-
     Parameters
     ----------
     sites : list of :class:`Site`
