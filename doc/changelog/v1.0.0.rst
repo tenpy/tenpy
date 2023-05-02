@@ -66,6 +66,7 @@ Backwards incompatible changes
   - tools.params.get_parameter()
   - tools.params.unused_parameters()
   - sites.multi_sites_combine_charges()
+  - legacy functions in simulations.measurements
 
 - Remove deprecated / legacy classes:
   - dmrg.SingleSiteMixer, drmg.TwoSiteMixer
