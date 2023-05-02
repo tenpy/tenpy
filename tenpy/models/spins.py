@@ -42,9 +42,8 @@ class SpinModel(CouplingMPOModel):
         conserve : 'best' | 'Sz' | 'parity' | None
             What should be conserved. See :class:`~tenpy.networks.Site.SpinSite`.
             For ``'best'``, we check the parameters what can be preserved.
-        sort_charge : bool | None
-            Whether to sort by charges of physical legs.
-            See change comment in :class:`~tenpy.networks.site.Site`.
+        sort_charge : bool
+            Whether to sort by charges of physical legs. `True` by default.
         Jx, Jy, Jz, hx, hy, hz, muJ, D, E  : float | array
             Coupling as defined for the Hamiltonian above.
 
@@ -62,7 +61,7 @@ class SpinModel(CouplingMPOModel):
             else:
                 conserve = None
             self.logger.info("%s: set conserve to %s", self.name, conserve)
-        sort_charge = model_params.get('sort_charge', None)
+        sort_charge = model_params.get('sort_charge', True)
         site = SpinSite(S, conserve, sort_charge)
         return site
 

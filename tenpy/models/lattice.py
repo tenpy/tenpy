@@ -1669,7 +1669,7 @@ class MultiSpeciesLattice(Lattice):
 
         >>> simple_lat = Square(2, 3, None)
         >>> f = tenpy.networks.site.FermionSite(conserve='N')
-        >>> s = tenpy.networks.site.SpinHalfSite(conserve='Sz')
+        >>> s = tenpy.networks.site.SpinHalfSite(conserve='Sz', sort_charge=False)
         >>> tenpy.networks.site.set_common_charges([f, s], 'independent')
         [array([0, 1]), array([1, 0])]
         >>> fs_lat = MultiSpeciesLattice(simple_lat, [f, s], ['f', 's'])
