@@ -201,19 +201,13 @@ class Simulation:
         self.fix_output_filenames()
         if setup_logging:
             log_params = self.options.setdefault('log_params', {})
-            if 'logging_params' in self.options:
-                # when you remove this if clause, also clean up the 'logging_params' from the
-                # self.options.touch(..., 'logging_params') below
-                warnings.warn("Renamed `logging_params` to `log_params` for simulation.",
-                              FutureWarning, 2)
-                log_params = self.options['logging_params']
             setup_logging_(**log_params, output_filename=self.output_filename)
         # now that we have logging running, catch up with log messages
         self.logger.info("new simulation\n%s\n%s\n%s", "=" * 80, self.__class__.__name__, "=" * 80)
         self.options = asConfig(self.options, self.__class__.__name__)
         self.options.touch('directory', 'output_filename', 'output_filename_params',
                            'overwrite_output', 'skip_if_output_exists', 'safe_write', 'log_params',
-                           'logging_params', 'estimate_RAM_const_offset')
+                           'estimate_RAM_const_offset')
         if cwd is not None:
             self.logger.info("change directory to %s", cwd)  # os.chdir(cwd) above
         self.logger.info("output filename: %s", self.output_filename)
