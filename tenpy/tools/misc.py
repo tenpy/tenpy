@@ -14,11 +14,10 @@ import warnings
 __all__ = [
     'to_iterable', 'to_iterable_of_len', 'to_array', 'anynan', 'argsort', 'lexsort',
     'inverse_permutation', 'list_to_dict_list', 'atleast_2d_pad', 'transpose_list_list',
-    'zero_if_close', 'pad', 'any_nonzero', 'add_with_None_0', 'group_by_degeneracy',
-    'get_close', 'find_subclass', 'get_recursive', 'set_recursive', 'update_recursive',
-    'merge_recursive', 'flatten', 'setup_logging',,
-    'convert_memory_units', 'consistency_check', 'TenpyInconsistencyError',
-    'TenpyInconsistencyWarning'
+    'zero_if_close', 'pad', 'add_with_None_0', 'group_by_degeneracy', 'get_close',
+    'find_subclass', 'get_recursive', 'set_recursive', 'update_recursive', 'merge_recursive',
+    'flatten', 'setup_logging', 'convert_memory_units', 'consistency_check',
+    'TenpyInconsistencyError', 'TenpyInconsistencyWarning'
 ]
 
 _not_set = object()  # sentinel
@@ -363,57 +362,6 @@ def pad(a, w_l=0, v_l=0, w_r=0, v_r=0, axis=0):
     take[axis] = slice(-w_r, None)
     b[tuple(take)] = v_r
     return b
-
-
-def any_nonzero(params, keys, verbose_msg=None):
-    """Check for any non-zero or non-equal entries in some parameters.
-
-    .. deprecated :: 0.8.0
-        This method will be removed in version 1.0.0.
-        Use :meth:`tenpy.tools.params.Config.any_nonzero` instead.
-
-    Parameters
-    ----------
-    params : dict | Config
-        A dictionary of parameters, or a :class:`~tenpy.tools.params.Config`
-        instance.
-    keys : list of {key | tuple of keys}
-        For a single key, check ``params[key]`` for non-zero entries.
-        For a tuple of keys, all the ``params[key]`` have to be equal (as numpy arrays).
-    verbose_msg : None | str
-        If params['verbose'] >= 1, we print `verbose_msg` before checking,
-        and a short notice with the `key`, if a non-zero entry is found.
-
-    Returns
-    -------
-    match : bool
-        False, if all params[key] are zero or `None` and
-        True, if any of the params[key] for single `key` in `keys`,
-        or if any of the entries for a tuple of `keys`
-    """
-    msg = ("tools.misc.any_nonzero() is deprecated in favor of "
-           "tools.params.Config.any_nonzero().")
-    warnings.warn(msg, category=FutureWarning, stacklevel=2)
-    if isinstance(params, Config):
-        return params.any_nonzero(keys, verbose_msg)
-    verbose = (params.get('verbose', 0) > 1.)
-    for k in keys:
-        if isinstance(k, tuple):
-            # check equality
-            val = params.get(k[0], None)
-            for k1 in k[1:]:
-                if not np.array_equal(val, params.get(k1, None)):
-                    if verbose:
-                        print("{k0!r} and {k1!r} have different entries.".format(k0=k[0], k1=k1))
-                    return True
-        else:
-            val = params.get(k, None)
-            if val is not None and np.any(np.array(val) != 0.):  # count `None` as zero
-                if verbose:
-                    print(verbose_msg)
-                    print(str(k) + " has nonzero entries")
-                return True
-    return False
 
 
 def add_with_None_0(a, b):
