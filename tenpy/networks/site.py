@@ -19,7 +19,6 @@ __all__ = [
     'GroupedSite',
     'group_sites',
     'set_common_charges',
-    'multi_sites_combine_charges',
     'kron',
     'SpinHalfSite',
     'SpinSite',
@@ -1136,123 +1135,6 @@ def _set_common_charges_charge_to_JW_parity(sites, new_charges, new_mod):
         return np.array(charge_to_JW_parity, int)
     # else: couldn't partition at least with the greedy algorithm.
     return None
-
-
-def multi_sites_combine_charges(sites, same_charges=[]):
-    """Adjust the charges of the given sites (in place) such that they can be used together.
-
-    When we want to contract tensors corresponding to different :class:`Site` instances,
-    these sites need to share a single :class:`~tenpy.linalg.charges.ChargeInfo`.
-    This function adjusts the charges of these sites such that they can be used together.
-
-    .. deprecated :: 0.7.3
-        Deprecated in favor of the new, more powerful
-        :func:`~tenpy.networks.site.set_common_charges`.
-        Be aware of the slightly different argument structure though, namely that
-        this function keeps charges not included in `same_charges`, whereas you need
-        to include them explicitly into the `new_charges` argument of `set_common_charges`.
-
-
-    Parameters
-    ----------
-    sites : list of :class:`Site`
-        The sites to be combined. Modified **in place**.
-    same_charges : ``[[(int, int|str), (int, int|str), ...], ...]``
-        Defines which charges actually are the same, i.e. their quantum numbers are added up.
-        Each charge is specified by a tuple ``(s, i)= (int, int|str)``, where `s` gives the index
-        of the site within ``sites`` and `i` the index or name of the charge in the
-        :class:`~tenpy.linalg.charges.ChargeInfo` of this site.
-
-    Returns
-    -------
-    perms : list of ndarray
-        For each site the permutation performed on the physical leg to sort by charges.
-
-    Examples
-    --------
-    .. doctest :: multi_sites_combine_charges
-        :options: +NORMALIZE_WHITESPACE
-
-        >>> from tenpy.networks.site import *
-        >>> ferm = SpinHalfFermionSite(cons_N='N', cons_Sz='Sz')
-        >>> spin = SpinSite(1.0, 'Sz')
-        >>> ferm.leg.chinfo is spin.leg.chinfo
-        False
-        >>> print(spin.leg)
-         +1
-        0 [[-2]
-        1  [ 0]
-        2  [ 2]]
-        3
-        >>> multi_sites_combine_charges([ferm, spin], same_charges=[[(0, 1), (1, 0)]])
-        [array([0, 1, 2, 3]), array([0, 1, 2])]
-        >>> # no permutations where needed
-        >>> ferm.leg.chinfo is spin.leg.chinfo
-        True
-        >>> ferm.leg.chinfo.names
-        ['N', '2*Sz']
-        >>> print(spin.leg)
-         +1
-        0 [[ 0 -2]
-        1  [ 0  0]
-        2  [ 0  2]]
-        3
-    """
-    warnings.warn(
-        "multi_sites_combine_charges is deprecated! \n"
-        "Use `set_common_charges` instead, but watch out: "
-        "the argument structure is not equivalent!",
-        FutureWarning,
-        stacklevel=2)
-    # parse same_charges argument
-    same_charges = list(same_charges)  # need to modify elements...
-    same_charges_flat = []
-    for j in range(len(same_charges)):
-        same_charges_j = []
-        for s, i in same_charges[j]:
-            if isinstance(i, str):  # map string to ints
-                i = sites[s].leg.chinfo.names.index(i)
-            i = int(i)  # should be integer now...
-            same_charges_j.append((s, i))
-            same_charges_flat.append((s, i))
-        same_charges[j] = same_charges_j
-    if len(same_charges_flat) != len(set(same_charges_flat)):
-        raise ValueError("Can't have duplicates in same_charges!")
-    # find out which charges we keep
-    keep_charges = []  # list of (s, i) which appear in the new ChargeInfo
-    map_charges = {}  # dict (s, i)->(s,i): those not appearing in keep_charges to the one in it
-    for s, site in enumerate(sites):
-        for i in range(site.leg.chinfo.qnumber):
-            keep_charges.append((s, i))  # first all, remove some below
-    for same_charges_j in same_charges:
-        s0, i0 = same_charges_j[0]
-        for s, i in same_charges_j[1:]:
-            idx = keep_charges.index((s, i))
-            del keep_charges[idx]
-            map_charges[(s, i)] = (s0, i0)
-    # define common ChargeInfo class
-    qnumber = len(keep_charges)
-    names = [sites[s].leg.chinfo.names[i] for (s, i) in keep_charges]
-    mod = [sites[s].leg.chinfo.mod[i] for (s, i) in keep_charges]
-    chinfo = npc.ChargeInfo(mod, names)
-    # now define the new legs and update the charges of the sites
-    perms = []
-    for s, site in enumerate(sites):
-        old_qflat = site.leg.to_qflat()
-        new_qflat = np.zeros((site.leg.ind_len, qnumber), old_qflat.dtype)
-        for old_i in range(site.leg.chinfo.qnumber):
-            if (s, old_i) in map_charges:
-                new_i = keep_charges.index(map_charges[(s, old_i)])
-            else:
-                new_i = keep_charges.index((s, old_i))
-            new_qflat[:, new_i] = old_qflat[:, old_i]
-        # other charges are 0 = trivial
-        leg_unsorted = npc.LegCharge.from_qflat(chinfo, new_qflat, site.leg.qconj)
-        perm_qind, leg = leg_unsorted.sort()
-        perm_flat = leg_unsorted.perm_flat_from_perm_qind(perm_qind)
-        perms.append(perm_flat)
-        site.change_charge(leg, perm_flat)
-    return perms
 
 
 def kron(*ops, group=True):
