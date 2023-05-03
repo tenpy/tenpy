@@ -1,15 +1,15 @@
 r"""This module contains a base class for Projected Entangled Pair States (PEPS) in two dimensions
 
-A PEPS looks roughly like this::
+A PEPS looks roughly like this, here for a ``3 x 3`` system or infinite system with ``3 x 3``
+unit cell::
 
-    |        ...        ...        ...
-    |         |          |          |
-    |   -- T[0][2] -- T[1][2] -- T[2][2] -- ...
-    |         |          |          |
-    |   -- T[0][1] -- T[1][1] -- T[2][1] -- ...
-    |         |          |          |
-    |   -- T[0][0] -- T[1][0] -- T[2][0] -- ...
-    |         |          |          |
+    |        |       |       |
+    |   -- T[2] -- T[5] -- T[8] --
+    |        |       |       |
+    |   -- T[1] -- T[4] -- T[7] --
+    |        |       |       |
+    |   -- T[0] -- T[3] -- T[6] --
+    |        |       |       |
 
 where each T also has a physical leg which is not shown (e.g. pointing "downward" into the screen)
 
@@ -34,22 +34,25 @@ TODO explain more, e.g.
 # Copyright 2023 TeNPy Developers, GNU GPLv3
 
 import numpy as np
-
-from tenpy.linalg.np_conserved import Array
-from tenpy.networks.site import Site
+import copy
 
 from ..linalg import np_conserved as npc
 from ..linalg.np_conserved import Array
 from ..networks.site import Site
+from .mpo import MPO
 
-__all__ = []  # TODO
+__all__ = ['PEPSLike', 'PEPS', 'PEPO']
 
 
-class PEPSLikeIndexable:
+class PEPSLike:
     """Class with common features of PEPS-like tensor networks, e.g. PEPS, PEPO"""
     _valid_bc = ['finite', 'infinite']
     _p_labels = ['p']  # labels of phyical leg(s)
-    _tensor_labels = ['p', 'vU', 'vL', 'vD', 'vR']  # all labels of a _tensor (order is used!)
+    _up_label = 'vU'
+    _left_label = 'vL'
+    _down_label = 'vD'
+    _right_label = 'vR'
+    _tensor_labels = ['p', 'vU', 'vL', 'vD', 'vR']  # all labels of a _tensor (order is used!)]
     
     def __init__(self, sites: list[Site], tensors: list[Array], lx: int, ly: int, bc: str = 'finite'):
         self.sites = sites
@@ -221,9 +224,93 @@ class PEPSLikeIndexable:
         if not valid:
             raise ValueError('Invalid legs.')
         self._tensors[idcs] = value
+
+    def to_dense(self) -> npc.Array:
+        if self.bc != 'finite':
+            raise RuntimeError
+        if self.lx * self.ly > 49:
+            raise RuntimeError
+
+        # bottom left corner
+        res = self._tensors[0].squeeze([self._down_label, self._left_label])
+        res.ireplace_labels(self._p_labels, [f'{p}_00' for p in self._p_labels])
+
+        # left column
+        for y in range(1, self.ly):
+            tens = self._tensors[y].squeeze(self._left_label)
+            res = npc.tensordot(res, tens, (self._up_label, self._down_label))
+            res.ireplace_labels(self._p_labels + [self._right_label], 
+                                [f'{p}_0{y}' for p in self._p_labels] + [f'{self._right_label}_{y}'])
+        res = res.squeeze(self._up_labels)
+
+        # other columns
+        for x in range(1, self.lx):
+            tens = self._tensors[x * self.ly].squeez(self._down_label)
+            res = npc.tensordot(res, tens, (f'{self._right_label}_0', self._left_label))
+            res.ireplace_labels(self._p_labels + [self._right_label], 
+                                [f'{p}_{x}0' for p in self._p_labels] + [f'{self._right_label}_{y}'])
+
+            for y in range(1, self.ly):
+                tens = self._tensors[x * self.ly + y]
+                res = npc.tensordot(res, tens, ([self._up_label, f'{self._right_label}_{y}'], 
+                                                [self._down_label, self._left_label]))
+                res.ireplace_labels(self._p_labels + [self._right_label], 
+                                [f'{p}_{x}{y}' for p in self._p_labels] + [f'{self._right_label}_{y}'])
+            res = res.squeeze(self._up_labels)
+
+        res = res.squeeze([f'{self._right_label}_{y}' for y in range(self.ly)])
+        return res
+
+    def copy(self):
+        return copy.copy(self)
+
+    def rotate90(self, clockwise: bool = True):
+        old_labels = [self._up_label, self._left_label, self._down_label, self._right_label]
+        if clockwise:
+            new_labels = [self._right_label, self._up_label, self._left_label, self._down_label]
+        else:
+            new_labels = [self._left_label, self._down_label, self._right_label, self._up_label]
+        new_lx = self.ly
+        new_ly = self.lx
+        tensors = []
+        sites = []
+        for new_x in range(new_lx):
+            for new_y in range(new_ly):
+                if clockwise:
+                    # (old_x, old_y) = (old_lx - new_y, new_x)
+                    old_idx = (self.lx - new_y) * self.ly + new_x
+                else:
+                    # (old_x, old_y) = (new_y, old_ly - new_x)
+                    old_idx = new_y * self.ly + self.ly - new_x
+                tens = self._tensors[old_idx].replace_labels(old_labels, new_labels)
+                tensors.append(tens)
+                sites.append(self.sites[old_idx])
+        cp = self.copy()
+        cp.tensors = tensors
+        cp.sites = sites
+        cp.lx = new_lx
+        cp.ly = new_ly
+        return cp
+
+    def rotate180(self):
+        old_labels = [self._up_label, self._left_label, self._down_label, self._right_label]
+        new_labels = [self._down_label, self._right_label, self._up_label, self._left_label]
+        tensors = []
+        sites = []
+        for new_x in range(self.lx):
+            for new_y in range(self.ly):
+                # (old_x, old_y) = (lx - new_x, ly - new_y)
+                old_idx = (self.lx - new_x) * self.ly + self.ly - new_y
+                tens = self._tensors[old_idx].replace_labels(old_labels, new_labels)
+                tensors.append(tens)
+                sites.append(self.sites[old_idx])
+        cp = self.copy()
+        cp.tensors = tensors
+        cp.sites = sites
+        return cp
         
 
-class PEPS(PEPSLikeIndexable):
+class PEPS(PEPSLike):
     r"""A projected entangled pair state (PEPS), either finite (fPEPS) or infinite (iPEPS).
 
     TODO (JU) : normalization of tensors? store norm seperately?
@@ -258,14 +345,14 @@ class PEPS(PEPSLikeIndexable):
     """
     def __init__(self, sites: list[Site], tensors: list[Array], lx: int, ly: int, bc: str = 'finite'):
         self._factor = 1.
-        super().__init__(sites, tensors, lx, ly, bc)
+        PEPSLike.__init__(self, sites, tensors, lx, ly, bc)
     
     def save_hdf5(self, hdf5_saver, h5gr, subpath):
-        raise NotImplementedError  # TODO (JU) can implement in PEPSLikeIndexable?
+        raise NotImplementedError  # TODO (JU) can implement in PEPSLike?
                     
     @classmethod
     def from_hdf5(cls, hdf5_loader, h5gr, subpath):
-        raise NotImplementedError  # TODO (JU) can implement in PEPSLikeIndexable?
+        raise NotImplementedError  # TODO (JU) can implement in PEPSLike?
 
     @classmethod
     def from_product_state(cls, sites: list[Site], p_state: list[int | str | np.ndarray], 
@@ -345,10 +432,152 @@ class PEPS(PEPSLikeIndexable):
         preserve_norm : bool
             If self._factor should be updated accordingly, to preserve the norm of self
         """
-        raise NotImplementedError  # TODO
+        factors = []
+        for n, tens in enumerate(self._tensors):
+            if norm_ord == 'transfer':
+                raise NotImplementedError
+            else:
+                norm = npc.norm(tens, ord=norm_ord)
+            self._tensors[n] = tens / norm
+            factors.append(norm)
+        if preserve_norm:
+            self._factor = self._factor * np.prod(factors)
 
 
-class PEPO(PEPSLikeIndexable):
+class PEPO(PEPSLike):
     _p_labels = ['p', 'p*']
-    _tensor_labels = ['p', 'p*', 'vU', 'vL', 'vD', 'vR']
-    
+    _up_label = 'wU'
+    _left_label = 'wL'
+    _down_label = 'wD'
+    _right_label = 'wR'
+    _tensor_labels = ['p', 'p*', 'wU', 'wL', 'wD', 'wR']
+
+    @classmethod
+    def from_nearest_neighbors(cls, site: Site, lx: int, ly: int, 
+                               horizontal: bool, bond_pos: int,
+                               a: float = 1., A: str | npc.Array = None, 
+                               b: float = 1., B: str | npc.Array = None,
+                               ):
+        """
+        Generate all horizontal (or all vertical) terms of a nearest neighbor model with finite bc.
+
+        TODO can generalize this quite a bit, can form sums of MPOs, *if* they have the usual grid.
+        Could e.g. add MPOGraphs.
+
+        The resulting operator is
+
+        .. math ::
+
+            a \sum_{<i,j>_hor} A_j A_j + b/2 \sum_i B_i
+
+        where ``<i, j>_hor`` are all pairs of horizontal nearest neighbors.
+        The factor 1/2 in front of b is conventional because a NN operator is usually split into
+        a horizontal and a vertical part
+        """
+        if horizontal:
+            vert = cls.from_nearest_neighbors(
+                site=site, 
+                lx=ly, ly=lx, horizontal=False, bond_pos=bond_pos,  # note rotation (lx, ly) <-> (ly, lx)
+                a=a, A=A, b=b, B=B
+            )
+            return vert.rotate90()
+        
+        # can assume vertical from now on
+        assert 0 <= bond_pos < ly
+
+        if A is None:
+            site.get_op('Id').zeros_like()
+        elif isinstance(A, str):
+            A = site.get_op(A)
+        if B is None:
+            B = site.get_op('Id').zeros_like()
+        elif isinstance(B, str):
+            B = site.get_op(B)
+        Id = site.get_op('Id')
+
+        trivial_leg = npc.LegCharge.from_qflat(site.leg.chinfo, [site.leg.chinfo.make_valid()])
+        trivial_leg_conj = trivial_leg.conj()
+        leg_C_wU = npc.LegCharge.from_qflat(site.leg.chinfo, [Id.qtotal, A.qtotal, Id.qtotal], qconj=-1)
+        leg_D_wL = npc.LegCharge.from_qflat(site.leg.chinfo, [site.leg.chinfo.make_valid()] * 2)
+
+        _C = [[Id, A, .5 * b * B], [None, None, a * A], [None, None, Id]]
+        _I = [[None, None, Id], [None, None, None], [None, None, None]]
+        _zero = [[None, None, None], [None, None, None], [None, None, None]]
+        grid_labels = ['wL', 'wR', 'wD', 'wU']
+        C_grid = np.array([[_C]], dtype=object)
+        D_grid = np.array([[_I, _C], [_zero, _I]], dtype=object)
+
+        C_bottom = npc.grid_outer(C_grid[:, :, :1, :],  # contract wD with [1, 0, 0]
+                                  [trivial_leg, trivial_leg_conj, trivial_leg, leg_C_wU],
+                                  grid_labels=grid_labels)
+        C_mid = npc.grid_outer(C_grid,
+                               [trivial_leg, trivial_leg_conj, leg_C_wU.conj(), leg_C_wU],
+                               grid_labels=grid_labels)
+        C_top = npc.grid_outer(C_grid[:, :, :, -1:],  # contract wU with [0, 0, 1]
+                               [trivial_leg, trivial_leg_conj, leg_C_wU.conj(), trivial_leg_conj],
+                               grid_labels=grid_labels)
+        C_col = [C_bottom] + [C_mid] * (ly - 2) + [C_top]
+
+        if bond_pos == 0:
+            D_left = npc.grid_outer(D_grid[:1, :, :1, :],  # contract wL with [1, 0] and wD with [1, 0, 0]
+                                    [trivial_leg, leg_D_wL.conj(), trivial_leg, leg_C_wU],
+                                    grid_labels=grid_labels)
+            D_mid = npc.grid_outer(D_grid[:, :, :1, :],  # contract wD with [1, 0, 0]
+                                   [leg_D_wL, leg_D_wL.conj(), trivial_leg, leg_C_wU],
+                                   grid_labels=grid_labels)
+            D_right = npc.grid_outer(D_grid[:, -1:, :1, :],  # contract wR with [0, 1] and wD with [1, 0, 0]
+                                     [leg_D_wL, trivial_leg_conj, trivial_leg, leg_C_wU],
+                                     grid_labels=grid_labels)
+        elif bond_pos == ly - 1:
+            D_left = npc.grid_outer(D_grid[:1, :, :, -1:],  # contract wL with [1, 0] and wU with [0, 0, 1]
+                                    [trivial_leg, leg_D_wL.conj(), leg_C_wU.conj(), trivial_leg_conj],
+                                    grid_labels=grid_labels)
+            D_mid = npc.grid_outer(D_grid[:, :, :, -1:],  # contract wU with [0, 0, 1]
+                                   [leg_D_wL, leg_D_wL.conj(), leg_C_wU.conj(), trivial_leg_conj],
+                                   grid_labels=grid_labels)
+            D_right = npc.grid_outer(D_grid[:, -1:, :, -1:],  # contract wR with [0, 1] and wU with [0, 0, 1]
+                                     [leg_D_wL, trivial_leg_conj, leg_C_wU.conj(), trivial_leg_conj],
+                                     grid_labels=grid_labels)
+        else:
+            D_left = npc.grid_outer(D_grid[:1, :, :, :],  # contract wL with [1, 0]
+                                    [trivial_leg, leg_D_wL.conj(), leg_C_wU.conj(), leg_C_wU],
+                                    grid_labels=grid_labels)
+            D_mid = npc.grid_outer(D_grid,
+                                [leg_D_wL, leg_D_wL.conj(), leg_C_wU.conj(), leg_C_wU],
+                                grid_labels=grid_labels)
+            D_right = npc.grid_outer(D_grid[:, -1:, :, :],  # contract wR with [0, 1]
+                                    [leg_D_wL, trivial_leg_conj, leg_C_wU.conj(), leg_C_wU],
+                                    grid_labels=grid_labels)
+        
+        left_col = C_col[:bond_pos] + [D_left] + C_col[bond_pos + 1:]
+        mid_col = C_col[:bond_pos] + [D_mid] + C_col[bond_pos + 1:]
+        right_col = C_col[:bond_pos] + [D_right] + C_col[bond_pos + 1:]
+        tensors = left_col + mid_col * (lx - 2) + right_col
+
+        return cls(sites=[site] * (lx * ly), tensors=tensors, lx=lx, ly=ly, bc='finite')
+
+    @classmethod
+    def from_mpo_sum(cls, mpos: list[MPO], horizontal: bool, bond_pos: int = None):
+        """Create a PEPO for the sum of MPOs. Only for finite systems.
+
+        The MPOs are embedded "left to right" for horizontal and "bottom to top" for vertical
+        and act trivially on sites outside of their row / column.
+        
+        Parameters
+        ----------
+        mpos
+        horizontal : bool
+            If the MPOs are embedded horizontally (``True``) or vertically (``False``)
+        bond_pos : int
+            The index (x or y coordinate) of the additional two-dimensional bond is inserted
+        """
+        raise NotImplementedError
+
+    def dagger(self):
+        """Return hermition conjugate copy of self."""
+        raise NotImplementedError  # need to think about charges and qconj in detail
+        # [p, p*, vU, ...] -conj-> [p*, p, vU*, ...] -transp-> [p, p*, vU*, ...]
+        tensors = [t.conj().itranspose(['p', 'p*', 'vU*', 'vL*', 'vD*', 'vR*']) for t in self._tensors]
+        # [p, p*, vU*, ...] -relabel-> [p, p*, vU, ...]
+        for t in tensors:
+            t.ireplace_labels(['vU*', 'vL*', 'vD*', 'vR*'], ['vU', 'vL', 'vD', 'vR'])
