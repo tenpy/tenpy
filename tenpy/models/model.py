@@ -961,7 +961,7 @@ class CouplingModel(Model):
         ot.add_onsite_term(strength, i, op)
         if plus_hc:
             site = self.lat.unit_cell[self.lat.order[i, -1]]
-            hc_op = site.get_hc_op_name(opname)
+            hc_op = site.get_hc_op_name(op)
             ot.add_onsite_term(np.conj(strength), i, hc_op)
 
     def all_onsite_terms(self):
