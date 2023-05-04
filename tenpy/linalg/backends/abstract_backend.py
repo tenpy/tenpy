@@ -195,8 +195,11 @@ class AbstractBackend(ABC):
         ...
 
     @abstractmethod
-    def combine_legs(self, a: Tensor, idcs: list[list[int]], new_legs: list[ProductSpace]) -> Data:
-        """combine legs of a. resulting ProductSpace takes positions idcs[0]"""
+    def combine_legs(self, a: Tensor, leg_slices: list[int, int], new_legs: list[ProductSpace]) -> Data:
+        """combine legs of a.
+
+        leg_slices=(begin, end) sorted in ascending order.
+        """
         ...
 
     @abstractmethod
@@ -311,9 +314,13 @@ class AbstractBlockBackend(ABC):
     def block_combine_legs(self, a: Block, legs_slices: list[tuple[int]]) -> Block:
         """no transpose, only reshape ``legs[b:e] for b,e in legs_slicse`` to single legs"""
         old_shape = self.block_shape(a)
-        new_shape = list(old_shape)
-        for b, e in legs_slices:  # descending!
-            new_shape[b:e] = [np.product(old_shape[b:e])]
+        new_shape = []
+        last_e = 0
+        for b, e in legs_slices:  # ascending!
+            new_shape.extend(old_shape[last_e:b])
+            new_shape.append(np.product(old_shape[b:e]))
+            last_e = e
+        new_shape.extend(old_shape[last_e:])
         return self.block_reshape(a, tuple(new_shape))
 
     def block_split_legs(self, a: Block, idcs: list[int], dims: list[list[int]]) -> Block:

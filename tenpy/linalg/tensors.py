@@ -881,11 +881,13 @@ class Tensor(AbstractTensor):
                      new_axes: list[int]=None) -> AbstractTensor:
         """See tensors.combine_legs"""
         combine_leg_idcs = [self.get_leg_idcs(ll) for ll in legs]
+        for leg_idcs in combine_leg_idcs:
+            assert len(leg_idcs) > 0, "empty `legs` entry"
 
         new_legs = self._combine_legs_make_ProductSpace(combine_leg_idcs, new_legs, new_duals)
         new_axes, transp = self._combine_legs_new_axes(combine_leg_idcs, new_axes)
-        # permute arguments sucht that new_axes is sorted descending
-        perm_args = np.argsort(new_axes)[::-1]
+        # permute arguments sucht that new_axes is sorted ascending
+        perm_args = np.argsort(new_axes)
         combine_leg_idcs = [combine_leg_idcs[p] for p in perm_args]
         new_legs = [new_legs[p] for p in perm_args]
         new_axes = [new_axes[p] for p in perm_args]
@@ -899,7 +901,7 @@ class Tensor(AbstractTensor):
 
         res_labels = list(res.labels)
         res_legs = list(res.legs)
-        for (b, e), new_leg in zip(leg_slices, new_legs):  # descending!
+        for (b, e), new_leg in zip(reversed(leg_slices), reversed(new_legs)):  # descending b:e!
             res_labels[b:e] = [_combine_leg_labels(res_labels[b:e])]
             res_legs[b:e] = [new_leg]
         res_data = self.backend.combine_legs(res, leg_slices=leg_slices, new_legs=new_legs)
