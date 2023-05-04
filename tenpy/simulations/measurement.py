@@ -12,11 +12,11 @@ Full description and details in :doc:`/intro/measurements`.
 """
 # Copyright 2020-2023 TeNPy Developers, GNU GPLv3
 
+import numpy as np
+import warnings
+
 from ..networks.mpo import MPOEnvironment
 from ..tools.misc import get_recursive
-from ..tools import process
-import functools
-import warnings
 
 __all__ = [
     'measurement_wrapper', 'm_measurement_index', 'm_bond_dimension', 'm_bond_energies',
@@ -193,7 +193,7 @@ def m_onsite_expectation_value(results, psi, model, simulation, opname, results_
 
 
 def m_correlation_length(results, psi, model, simulation, results_key='correlation_length', unit=None, **kwargs):
-    """Measure the correlaiton of an infinite MPS.
+    """Measure the correlation of an infinite MPS.
 
     Parameters
     ----------

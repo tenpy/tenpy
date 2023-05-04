@@ -1685,7 +1685,7 @@ class Array:
         return enc_axes, self.combine_legs([[a] for a in enc_axes], qconj=qconj)
 
     def squeeze(self, axes=None):
-        """Remove single-dimenisional legs, like :func:`np.squeeze`.
+        """Remove single-dimensional legs, like :func:`np.squeeze`.
 
         If a squeezed leg has non-zero charge, this charge is added to :attr:`qtotal`.
 
