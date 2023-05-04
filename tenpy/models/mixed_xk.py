@@ -517,7 +517,7 @@ class MixedXKModel(CouplingMPOModel):
         r"""Terms to be measured in x-k space for real space onsite observables.
 
         Provide the necessary terms which can be measured in an MPS with
-        :meth:`~tenpy.networks.mps.MPS.expectation_value_sum_terms` to evaluate a
+        :meth:`~tenpy.networks.mps.MPS.expectation_value_terms_sum` to evaluate a
         onsite observable :math:`A_{x,y}` in real space
         where :math:`A_{x,y} = \sum_{l1,l2} A_{l1,l2} c^\dagger_{x,y,l1} c_{x,y,l2}`
         with the provided matrix elements ``A[l1,l2]`` and coordinates ``x, y = A_coord``.
@@ -564,7 +564,7 @@ class MixedXKModel(CouplingMPOModel):
         r"""Terms to be measured in x-k-space for real space correlation functions.
 
         Provide the necessary terms which can be measured in an MPS with
-        :meth:`~tenpy.networks.mps.MPS.expectation_value_sum_terms` to evaluate a
+        :meth:`~tenpy.networks.mps.MPS.expectation_value_terms_sum` to evaluate a
         correlation function :math:`A_{x1,y1} B_{x1,y2}`,
         where :math:`A_{x1,y1} = \sum_{l1,l2} A_{l1,l2} c^\dagger_{x1,y1,l1} c_{x1,y1,l2}`
         with the provided matrix elements ``A[l1,l2]`` and coordinates ``x1, y1 = A_coord``,
@@ -592,7 +592,7 @@ class MixedXKModel(CouplingMPOModel):
         r"""Terms to be measured in x-k-space for real space correlation functions.
 
         Provide the necessary terms which can be measured in an MPS with
-        :meth:`~tenpy.networks.mps.MPS.expectation_value_sum_terms` to evaluate a n-site
+        :meth:`~tenpy.networks.mps.MPS.expectation_value_terms_sum` to evaluate a n-site
         correlation function :math:`A_{x1,y1} B_{x2,y2} C_{x3,y3} ...`,
         where :math:`A_{x,y} = \sum_{l1,l2} A_{l1,l2} c^\dagger_{x,y,l1} c_{x,y,l2}`
         with the provided matrix elements ``orbital_coeffs[0][l1,l2]`` and coordinates
@@ -646,7 +646,7 @@ class MixedXKModel(CouplingMPOModel):
         """Terms to be measured in x-k-space for real space correlation functions.
 
         Provide the necessary terms which can be measured in an MPS with
-        :meth:`~tenpy.networks.mps.MPS.expectation_value_sum_terms` to evaluate a
+        :meth:`~tenpy.networks.mps.MPS.expectation_value_terms_sum` to evaluate a
         real-space correlation function of creation and annihilation operators::
 
             sum([coeff * prod(ops[i]_{rs_coords[i],orbitals[i]} for i in len(ops))

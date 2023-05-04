@@ -117,7 +117,7 @@ class Site(Hdf5Exportable):
     Note that ``Sx = (Sp + Sm)/2`` violates Sz conservation and is thus not a valid
     on-site operator.
 
-    >>> chinfo = npc.ChargeInfo([1], ['Sz'])
+    >>> chinfo = npc.ChargeInfo([1], ['2*Sz'])
     >>> ch = npc.LegCharge.from_qflat(chinfo, [1, -1])
     >>> Sp = [[0, 1.], [0, 0]]
     >>> Sm = [[0, 0], [1., 0]]

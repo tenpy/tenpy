@@ -643,7 +643,7 @@ class QRBasedTEBDEngine(TEBDEngine):
         if chi_max is None:
             raise ValueError('Need to specify trunc_params["chi_max"] in order to use cbe_expand_0.')
 
-        chi = min(self.get_SL(i).shape)
+        chi = min(self.psi.get_SL(i).shape)
         return max(expand_0 - chi / chi_max * (expand_0 - expand), expand)
              
     def update_bond(self, i, U_bond):

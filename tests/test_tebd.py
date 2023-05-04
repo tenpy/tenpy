@@ -55,7 +55,11 @@ def test_tebd(bc_MPS, which_engine, compute_err, g=0.5):
     if which_engine == 'standard':
         engine = tebd.TEBDEngine(psi, M, tebd_param)
     elif which_engine == 'qr':
-        tebd_param['compute_err'] = compute_err
+        tebd_param.update(
+            compute_err=compute_err,
+            cbe_expand=0.1,
+            cbe_expand_0=0.2,
+        )
         engine = tebd.QRBasedTEBDEngine(psi, M, tebd_param)
     else:
         raise RuntimeError
