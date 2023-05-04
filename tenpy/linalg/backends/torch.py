@@ -101,19 +101,6 @@ class TorchBlockBackend(AbstractBlockBackend):
     def block_conj(self, a: Block) -> Block:
         return torch_module.conj(a)
 
-    def block_combine_legs(self, a: Block, legs: list[int]) -> Block:
-        # TODO optimize this?
-        legs_before_new_leg = [n for n in range(legs[0]) if n not in legs]
-        legs_after_new_leg = [n for n in range(legs[0] + 1, len(a.shape)) if n not in legs]
-        permutation = legs_before_new_leg + legs + legs_after_new_leg
-        new_shape = [a.shape[n] for n in legs_before_new_leg] + [prod([a.shape[n] for n in legs])] \
-            + [a.shape[n] for n in legs_after_new_leg]
-        a = torch_module.permute(a, permutation)
-        return torch_module.reshape(a, new_shape)
-
-    def block_split_leg(self, a: Block, leg: int, dims: list[int]) -> Block:
-        return torch_module.reshape(a, (*a.shape[:leg], *dims, *a.shape[leg + 1:]))
-
     def block_allclose(self, a: Block, b: Block, rtol: float, atol: float) -> bool:
         return torch_module.allclose(a, b, rtol=rtol, atol=atol)
 

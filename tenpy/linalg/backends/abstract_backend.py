@@ -195,12 +195,12 @@ class AbstractBackend(ABC):
         ...
 
     @abstractmethod
-    def combine_legs(self, a: Tensor, idcs: list[int], new_leg: ProductSpace) -> Data:
-        """combine legs of a. resulting leg takes position idcs[0]"""
+    def combine_legs(self, a: Tensor, idcs: list[list[int]], new_legs: list[ProductSpace]) -> Data:
+        """combine legs of a. resulting ProductSpace takes positions idcs[0]"""
         ...
 
     @abstractmethod
-    def split_leg(self, a: Tensor, leg_idx: int) -> Data:
+    def split_legs(self, a: Tensor, leg_idcs: list[int]) -> Data:
         """split a leg. resulting legs all take place of leg"""
         ...
 
@@ -308,13 +308,24 @@ class AbstractBlockBackend(ABC):
         """complex conjugate of a block"""
         ...
 
-    @abstractmethod
-    def block_combine_legs(self, a: Block, legs: list[int]) -> Block:
-        ...
+    def block_combine_legs(self, a: Block, legs_slices: list[tuple[int]]) -> Block:
+        """no transpose, only reshape ``legs[b:e] for b,e in legs_slicse`` to single legs"""
+        old_shape = self.block_shape(a)
+        new_shape = list(old_shape)
+        for b, e in legs_slices:  # descending!
+            new_shape[b:e] = [np.product(old_shape[b:e])]
+        return self.block_reshape(a, tuple(new_shape))
 
-    @abstractmethod
-    def block_split_leg(self, a: Block, leg: int, dims: list[int]) -> Block:
-        ...
+    def block_split_legs(self, a: Block, idcs: list[int], dims: list[list[int]]) -> Block:
+        old_shape = self.block_shape(a)
+        new_shape = []
+        start = 0
+        for i, i_dims in zip(idcs, dims):
+            new_shape.extend(old_shape[start:i])
+            new_shape.extend(i_dims)
+            start = i + 1
+        new_shape.extend(old_shape[start:])
+        return self.block_reshape(a, tuple(new_shape))
 
     @abstractmethod
     def block_allclose(self, a: Block, b: Block, rtol: float, atol: float) -> bool:
@@ -329,7 +340,7 @@ class AbstractBlockBackend(ABC):
         ...
 
     @abstractmethod
-    def block_reshape(self, a: Block, shape: Tuple[int]) -> Block:
+    def block_reshape(self, a: Block, shape: tuple[int]) -> Block:
         ...
 
     @abstractmethod

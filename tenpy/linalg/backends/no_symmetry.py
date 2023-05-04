@@ -103,11 +103,11 @@ class AbstractNoSymmetryBackend(AbstractBackend, AbstractBlockBackend, ABC):
     def conj(self, a: Tensor) -> Data:
         return self.block_conj(a.data)
 
-    def combine_legs(self, a: Tensor, idcs: list[int], new_leg: ProductSpace) -> Data:
-        return self.block_combine_legs(a.data, idcs)
+    def combine_legs(self, a: Tensor, leg_slices: list[int, int], new_legs: list[ProductSpace]) -> Data:
+        return self.block_combine_legs(a.data, leg_slices)
 
-    def split_leg(self, a: Tensor, leg_idx: int) -> Data:
-        return self.block_split_leg(a.data, leg_idx, dims=[s.dim for s in a.legs[leg_idx]])
+    def split_legs(self, a: Tensor, leg_idcs: list[int]) -> Data:
+        return self.block_split_legs(a.data, leg_idcs, [[s.dim for s in a.legs[i].spaces] for i in leg_idcs])
 
     def almost_equal(self, a: Tensor, b: Tensor, rtol: float, atol: float) -> bool:
         return self.block_allclose(a.data, b.data, rtol=rtol, atol=atol)
