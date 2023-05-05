@@ -805,8 +805,65 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
         blocks = [self.block_conj(b) for b in a.data.blocks]
         return AbelianBackendData(a.data.dtype, blocks, a.data.block_inds)
 
-    #  def combine_legs(self, a: Tensor, combine_slices: list[int, int], product_spaces: list[ProductSpace], new_axes: list[int], final_legs: list[VectorSpace]) -> Data:
-    #      return self.block_combine_legs(a.data, combine_slices)
+    def combine_legs(self, a: Tensor, combine_slices: list[int, int], product_spaces: list[ProductSpace], new_axes: list[int], final_legs: list[VectorSpace]) -> Data:
+        old_block_inds = a.data.block_inds
+        # first, find block indices of the final array to which we map
+        map_inds = [product_space._map_incoming_block_inds(old_block_inds[:, b:e])
+                    for product_space, (b,e) in zip(product_spaces, leg_slices)]
+        old_block_inds = a.data.block_inds
+        old_blocks = a.data.blocks
+        res_block_inds = np.empty((len(old_block_inds), len(final_legs)), dtype=int)
+        last_e = 0
+        last_a = -1
+        for a, (b, e), product_space, map_ind in zip(new_axes, combine_slices, product_spaces, map_inds):
+            res_block_inds[:, last_a + 1:a] = old_block_inds[:, last_e:b]
+            res_block_inds[:, a] = product_space.block_ind_map[map_ind]
+            last_e = e
+            last_a = a
+        res_block_inds[:, last_a + 1:] = old_block_inds[:, last_e:]
+
+        # now we have probably many duplicate rows in res_block_inds, since many combinations of
+        # non-combined block indices map to the same block index in product space
+        # -> find unique entries by sorting res_block_inds
+        sort = np.lexsort(res_block_inds.T)
+        res_block_inds = res_block_inds[sort]
+        old_blocks = [old_blocks[i] for i in sort]
+        map_inds = [map_[sort] for map_ in map_inds]
+
+        # determine slices in the new blocks
+        block_slices = np.zeros((len(old_blocks), len(final_legs), 2), int)
+        block_shape = np.empty((len(old_blocks), len(final_legs)), int)
+        for i, leg in enumerate(final_legs):  # legs not in new_axes
+            if i not in new_axes:
+                # block_slices[:, i, 0] = 0
+                block_slices[:, i, 1] = block_shape[:, i] = leg.multiplicities[res_block_inds[:, i]]
+        for i, product_space, map_ind in zip(new_axes, product_spaces, map_inds):  # legs in new_axes
+            slices = product_space.block_ind_map[map_ind, :2]
+            block_slices[:, i, :] = slices
+            block_shape[:, i] = slices[:, 1] - slices[:, 0]
+
+        # split res_block_inds into parts, which give a unique new blocks
+        diffs = _find_row_differences(res_block_inds)  # including 0 and len to have slices later
+        res_num_blocks = len(diffs) - 1
+        res_block_inds = res_block_inds[diffs[:res_num_blocks], :]
+        res_block_shapes = np.empty((res_num_blocks, len(final_legs)), int)
+        for i, leg in enumerate(final_legs):
+            res_block_shapes[:, i] = leg.multiplicities[block_inds[:, i]]
+
+        # now the hard part: map data
+        res_blocks = []
+        # iterate over ranges of equal qindices in qdata
+        for res_block_shape, beg, end in zip(res_block_shapes, diffs[:-1], diffs[1:]):
+            new_block = self.zero_block(res_block_shape, dtype=res.data.dtype)
+            for old_row in range(beg, end):  # copy blocks
+                shape = block_shape[old_row]  # this has multiplied dimensions for combined legs
+                old_block = self.block_reshape(old_blocks[old_row], shape)
+                new_slices = tuple(slice(b, e) for b, e in block_slices[old_row])
+
+                new_block[new_slices] = old_block  # actual data copy
+
+            res_blocks.append(new_block)
+        return AbelianBackendData(a.data.dtype, res_blocks, res_block_inds)
 
     #  def split_legs(self, a: Tensor, leg_idcs: list[int]) -> Data:
     #      return self.block_split_legs(a.data, leg_idcs, [[s.dim for s in a.legs[i].spaces] for i in leg_idcs])

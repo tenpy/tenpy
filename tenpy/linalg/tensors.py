@@ -904,7 +904,7 @@ class Tensor(AbstractTensor):
         for (b, e), new_leg in zip(reversed(combine_slices), reversed(product_spaces)):  # descending b:e!
             res_labels[b:e] = [_combine_leg_labels(res_labels[b:e])]
             res_legs[b:e] = [new_leg]
-        res_data = self.backend.combine_legs(res, combine_slices=combine_slices, product_spaces=product_spaces)
+        res_data = self.backend.combine_legs(res, combine_slices, product_spaces, new_axes, res_legs)
         return Tensor(res_data, backend=self.backend, legs=res_legs, labels=res_labels)
 
     def make_ProductSpace(self, legs, **kwargs):
