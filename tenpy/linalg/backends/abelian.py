@@ -14,7 +14,7 @@ Changes compared to old np_conserved:
   i.e. do not support legs with smaller blocks to effectively allow block-sparse tensors with
   smaller blocks than dictated by symmetries (which we actually have in H_MPO on the virtual legs...)
   In turn, VectorSpace saves a `_perm` used to sort the originally passed `sectors`.
-- keep `Tensor.block_ins` sorted (i.e. no arbitrary gauge permutation in block indices)
+- keep `block_inds` sorted (i.e. no arbitrary gauge permutation in block indices)
 
 """
 # Copyright 2023-2023 TeNPy Developers, GNU GPLv3
@@ -96,9 +96,9 @@ class AbelianBackendVectorSpace(VectorSpace):
 
         Returns
         -------
-        map_qind : 1D array
-            Map of qindices, such that ``qind_new = map_qind[qind_old]``,
-            and ``map_qind[qind_old] = -1`` for qindices projected out.
+        map_block_ind : 1D array
+            Map of block indices, such that ``block_ind_new = map_block_ind[block_ind_old]``,
+            and ``map_block_ind[block_ind] = -1`` for block indices projected out.
         block_masks : 1D array
             The bool mask for each of the *remaining* blocks.
         projected_copy : :class:`LegCharge`
@@ -114,9 +114,9 @@ class AbelianBackendVectorSpace(VectorSpace):
         cp._sectors = cp._sectors[keep]
         cp.multiplicities = new_multiplicities[keep]
         cp.slices = _slices_from_multiplicities(cp.multiplicities)
-        map_qind = np.full((new_block_number,), -1, np.intp)
-        map_qind[keep] = cp.perm_block_inds = np.arange(new_block_number)
-        return map_qind, block_masks, cp
+        map_block_ind = np.full((new_block_number,), -1, np.intp)
+        map_block_inds[keep] = cp.perm_block_inds = np.arange(new_block_number)
+        return map_block_inds, block_masks, cp
 
     def __mul__(self, other):
         if isinstance(other, AbelianBackendVectorSpace):
@@ -266,7 +266,7 @@ class AbelianBackendProductSpace(ProductSpace, AbelianBackendVectorSpace):
         return _sectors, multiplicities
 
     def _map_incoming_block_inds(self, incoming_block_inds):
-        """Map incoming qindices to indices of :attr:`block_ind_map`.
+        """Map incoming block indices to indices of :attr:`block_ind_map`.
 
         Needed for `combine_legs`.
 
@@ -278,7 +278,7 @@ class AbelianBackendProductSpace(ProductSpace, AbelianBackendVectorSpace):
         Returns
         -------
         block_inds: 1D array
-            For each row of `incoming_block_inds` an index `J` such that
+            For each row j of `incoming_block_inds` an index `J` such that
             ``self.block_ind_map[J, 2:-1] == block_inds[j]``.
         """
         assert incoming_block_inds.shape[1] == len(self.spaces)
@@ -805,11 +805,11 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
         blocks = [self.block_conj(b) for b in a.data.blocks]
         return AbelianBackendData(a.data.dtype, blocks, a.data.block_inds)
 
-    #  def combine_legs(self, a: Tensor, idcs: list[int], new_leg: ProductSpace) -> Data:
-    #      return self.block_combine_legs(a.data, idcs)
+    #  def combine_legs(self, a: Tensor, combine_slices: list[int, int], product_spaces: list[ProductSpace], new_axes: list[int], final_legs: list[VectorSpace]) -> Data:
+    #      return self.block_combine_legs(a.data, combine_slices)
 
-    #  def split_leg(self, a: Tensor, leg_idx: int) -> Data:
-    #      return self.block_split_leg(a, leg_idx, dims=[s.dim for s in a.legs[leg_idx]])
+    #  def split_legs(self, a: Tensor, leg_idcs: list[int]) -> Data:
+    #      return self.block_split_legs(a.data, leg_idcs, [[s.dim for s in a.legs[i].spaces] for i in leg_idcs])
 
     #  def almost_equal(self, a: Tensor, b: Tensor, rtol: float, atol: float) -> bool:
     #      return self.block_allclose(a.data, b.data, rtol=rtol, atol=atol)

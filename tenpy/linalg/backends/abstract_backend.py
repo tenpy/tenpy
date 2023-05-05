@@ -195,10 +195,12 @@ class AbstractBackend(ABC):
         ...
 
     @abstractmethod
-    def combine_legs(self, a: Tensor, leg_slices: list[int, int], new_legs: list[ProductSpace]) -> Data:
-        """combine legs of a.
+    def combine_legs(self, a: Tensor, combine_slices: list[int, int], product_spaces: list[ProductSpace], new_axes: list[int], final_legs: list[VectorSpace]) -> Data:
+        """combine legs of `a` (without transpose).
 
-        leg_slices=(begin, end) sorted in ascending order.
+        ``combine_slices[i]=(begin, end)`` sorted in ascending order of `begin` indicates that
+        ``a.legs[begin:end]`` is to be combined to `product_spaces[i]`, yielding `final_legs`.
+        `new_axes[i]` is the index of `product_spaces[i]` in `final_legs` (also fixed by `combine_slices`).
         """
         ...
 
