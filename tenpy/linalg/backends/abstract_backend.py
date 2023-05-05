@@ -205,8 +205,8 @@ class AbstractBackend(ABC):
         ...
 
     @abstractmethod
-    def split_legs(self, a: Tensor, leg_idcs: list[int]) -> Data:
-        """split a leg. resulting legs all take place of leg"""
+    def split_legs(self, a: Tensor, leg_idcs: list[int], final_legs: list[VectorSpace]) -> Data:
+        """split multiple product space legs."""
         ...
 
     @abstractmethod

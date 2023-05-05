@@ -995,7 +995,7 @@ class Tensor(AbstractTensor):
             start = i + 1
         new_legs.extend(old_legs[start:])
         new_labels.extend(old_labels[start:])
-        res_data = self.backend.split_legs(self, leg_idcs)
+        res_data = self.backend.split_legs(self, leg_idcs, new_legs)
         return Tensor(res_data, backend=self.backend, legs=new_legs, labels=new_labels)
 
     def squeeze_legs(self, legs: int | str | list[int | str] = None) -> AbstractTensor:

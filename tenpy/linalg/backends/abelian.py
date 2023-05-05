@@ -248,7 +248,10 @@ class AbelianBackendProductSpace(ProductSpace, AbelianBackendVectorSpace):
         block_ind_map[:, 1] = slices
 
         # bunch sectors with equal charges together
-        diffs = _find_row_differences(_sectors)
+        diffs = _find_row_differences(_sectors, include_len=True)
+        self.block_ind_map_slices = diffs
+        diffs = diffs[:-1]
+
         _sectors = _sectors[diffs]
         multiplicities = slices[diffs]
         multiplicities[1:] -= multiplicities[:-1]
@@ -260,8 +263,6 @@ class AbelianBackendProductSpace(ProductSpace, AbelianBackendVectorSpace):
         block_ind_map[:, :2] -= multiplicities[new_block_ind][:, np.newaxis]
 
         self.block_ind_map = block_ind_map  # finished
-        # self.q_map_slices = diffs  # reminder: differs from old npc by missing last index.
-        # TODO: do we need this? I think it was used in split_legs()...
 
         return _sectors, multiplicities
 
@@ -865,8 +866,81 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
             res_blocks.append(new_block)
         return AbelianBackendData(a.data.dtype, res_blocks, res_block_inds)
 
-    #  def split_legs(self, a: Tensor, leg_idcs: list[int]) -> Data:
-    #      return self.block_split_legs(a.data, leg_idcs, [[s.dim for s in a.legs[i].spaces] for i in leg_idcs])
+    def split_legs(self, a: Tensor, leg_idcs: list[int], final_legs: list[VectorSpace]) -> Data:
+        # TODO (JH) below, we implement it by first generating the block_inds of the splitted tensor and
+        # then extract subblocks from the original one.
+        # Why not go the other way around and implement
+        # block_views = self.block_split(block, block_sizes, axis) similar as np.array_split()
+        # and call that for each axis to be split for each block?
+        # we do a lot of numpy index tricks below, but does that really save time for splitting?
+        # block_split should just be views anyways, not data copies?
+
+        if len(a.data.blocks) == 0:
+            return self.zero_data(a.legs, a.data.dtype)
+        n_split = len(leg_idcs)
+        product_spaces = [a.legs[i] for i in leg_idcs]
+        res_num_legs = a.num_legs + sum(len(p.spaces) for p in product_space) - len(product_spaces)
+
+        old_blocks = a.data.blocks
+        old_block_inds = a.data.block_inds
+
+        # get new qdata
+        map_slices_beg = np.zeros((len(old_blocks), n_split, 2), int)
+        map_slices_shape = np.zeros((len(old_blocks), n_split), int)  # = end - beg
+        for j, product_space in enumerate(product_spaces):
+            block_inds_j = old_block_inds[:, leg_idcs[j]]
+            map_slices_beg = product_space.block_ind_map_slices[block_inds_j]
+            sizes = product_space.block_ind_map_slices[1:] - product_space.block_ind_map_slices[:-1]
+            map_slices_shape = sizes[block_inds_j]
+        new_data_blocks_per_old_block = np.prod(map_slices_shape, axis=1)
+
+        old_rows = np.concatenate([np.full((s,), i, int) for i, s in enumerate(new_data_blocks_per_old_block)])
+        res_num_blocks = len(old_rows)
+
+        map_rows = []
+        for beg, shape in zip(map_slices_beg, map_slices_shape):
+            map_rows.append(np.indices(shape, int).reshape(n_split, -1).T + beg[np.newaxis, :])
+        map_rows = np.concatenate(map_rows, axis=0)  # shape (res_num_blocks, n_split)
+
+        # generate new block_inds and figure out slices within old blocks to be extracted
+        new_block_inds = np.empty((res_num_blocks, res_num_legs), dtype=int)
+        old_block_beg = np.zeros((res_num_blocks, a.num_legs), dtype=int)
+        old_block_shapes = np.empty((res_num_blocks, a.num_legs), dtype=int)
+        shift = 0  #  = i - k for indices below
+        j = 0  # index within product_spaces
+        for i in range(a.num_legs):  # i = index in old tensor
+            if i in leg_idcs:
+                product_space = product_spaces[j]  # = a.legs[i]
+                k = i + shift  # = index where split legs begin in new tensor
+                k2 = k + len(product_space.spaces)  # = until where spaces go in new tensor
+                block_ind_map = product_space.block_ind_map[map_rows[:, j], :]
+                new_block_inds[:, k:k2] = block_ind_map[:, 2:-1]
+                old_block_beg[:, i] = block_ind_map[:, 0]
+                old_block_shapes[:, i] = block_ind_map[:, 1] - block_ind_map[:, 0]
+                shift += len(product_space.spaces) - 1
+                j += 1
+            else:
+                new_block_inds[:, i + shift] = old_block_inds[old_rows, j]
+                old_block_shapes[:, i] = new_block_shapes[:, i + shift]
+        # sort new_block_inds
+        sort = np.lexsort(new_block_inds.T)
+        new_block_inds = new_block_inds[sort, :]
+        old_block_beg = old_block_beg[sort]
+        old_block_shapes = old_block_shapes[sort]
+
+        new_block_shapes = np.empty((res_num_blocks, res_num_legs), dtype=int)
+        for i, leg in enumerate(final_legs):
+            new_block_shapes[:, ax] = leg.multiplicities[new_block_inds[:, ax]]
+
+        # the actual loop to split the blocks
+        new_blocks = []
+        for i in range(res_num_blocks):
+            old_block = old_blocks[old_rows[i]]
+            slices = tuple(slice(b, b + s) for b, s in zip(old_block_beg[i], old_block_shapes[i]))
+            new_block = old_block[slices]
+            new_blocks.append(self.block_reshape(new_block, new_block_shapes[i]))
+
+        return AbelianBackendData(a.data.dtype, new_blocks, new_block_inds)
 
     #  def almost_equal(self, a: Tensor, b: Tensor, rtol: float, atol: float) -> bool:
     #      return self.block_allclose(a.data, b.data, rtol=rtol, atol=atol)
