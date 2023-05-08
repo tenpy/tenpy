@@ -83,6 +83,9 @@ version = {attr = "tenpy.__version__"}
 
 [tool.pytest.ini_options]
 filterwarnings = "always"
-markers = {slow = "marks tests as slow (deselect with `-m 'not slow'`)"}
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+]
+#{slow = "marks tests as slow (deselect with `-m 'not slow'`)"}
 log_level = "INFO"
 log_format = "%(asctime)s %(levelname)-8s %(filename)-16s%(lineno)4d: %(message)s"
