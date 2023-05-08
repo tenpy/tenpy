@@ -462,6 +462,7 @@ class TEBDEngine(TimeEvolutionAlgorithm):
                             axes=['(p1.vR)', '(p1*.vR*)'])
         B_L.ireplace_labels(['vL*', 'p0'], ['vR', 'p'])
         B_L /= renormalize  # re-normalize to <psi|psi> = 1
+        self.psi.norm *= renormalize
         self.psi.set_SR(i0, S)
         self.psi.set_B(i0, B_L, form='B')
         self.psi.set_B(i1, B_R, form='B')
@@ -670,7 +671,7 @@ class QRBasedTEBDEngine(TEBDEngine):
                             axes=[['(p1.vR)'], ['(p*.vR*)']]) / renormalize
         B_L.ireplace_labels(['p0', 'vL*'], ['p', 'vR'])
         B_R = B_R.split_legs(1)
-
+        self.psi.norm *= renormalize
         self.psi.set_B(i0, B_L, form='B')
         self.psi.set_SL(i1, S)
         self.psi.set_B(i1, B_R, form='B')

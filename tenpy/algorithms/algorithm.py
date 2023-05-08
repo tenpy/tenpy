@@ -205,6 +205,7 @@ class TimeEvolutionAlgorithm(Algorithm):
             if more than one step is performed at once.
         preserve_norm : bool
             Whether the state will be normalized to its initial norm after each time step.
+            Per default, this is ``False`` for real time evolution and ``True`` for imaginary time.
 
     Attributes
     ----------
