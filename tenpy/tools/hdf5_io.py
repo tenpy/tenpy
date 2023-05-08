@@ -754,11 +754,11 @@ class Hdf5Saver:
         except (ImportError, KeyError, AttributeError):
             raise Hdf5ExportError(
                 "Can't export `{0!r}`: it's not found as {1} in module {2}".format(
-                    obj, module, classname)) from None
+                    obj, qualname, module)) from None
         else:
             if obj2 is not obj:
                 raise Hdf5ExportError("Can't export `{0!r}`: it's not the same object"
-                                      "as {1} in module {2}".format(obj, module, classname))
+                                      "as {1} in module {2}".format(obj, qualname, module))
         full_name = qualname + " in " + module
         self.h5group[path] = full_name  # save as string dataset
         h5gr = self.h5group[path]
