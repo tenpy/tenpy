@@ -2101,7 +2101,8 @@ class MPOEnvironment(MPSEnvironment):
         """
         i0 = i - start_env_sites
         IdL = self.H.get_IdL(i0)
-        assert IdL is not None
+        if IdL is None:
+            raise RuntimeError(f'Need to set IdL at i0={i0} for the MPO self.H')
         init_LP = super().init_LP(i0, 0)
         leg_mpo = self.H.get_W(i0).get_leg('wL').conj()
         init_LP = init_LP.add_leg(leg_mpo, IdL, axis=1, label='wR')
@@ -2126,7 +2127,8 @@ class MPOEnvironment(MPSEnvironment):
         """
         i0 = i + start_env_sites
         IdR = self.H.get_IdR(i0)
-        assert IdR is not None
+        if IdR is None:
+            raise RuntimeError(f'Need to set IdR at i0={i0} for the MPO self.H')
         init_RP = super().init_RP(i0, 0)
         leg_mpo = self.H.get_W(i0).get_leg('wR').conj()
         init_RP = init_RP.add_leg(leg_mpo, IdR, axis=1, label='wL')
