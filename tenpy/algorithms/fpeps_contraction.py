@@ -289,12 +289,12 @@ class ThreeLayerColumn(BulkMPO):
 LEFT = 0
 BOTTOM = 1
 RIGHT = 2
-UP = 3
+TOP = 3
 
 
-class BoundaryMPS2(MPS):
+class BoundaryMPS(MPS):
     _valid_bc = ['finite']
-    _valid_orientations = [LEFT, BOTTOM, RIGHT, UP]
+    _valid_orientations = [LEFT, BOTTOM, RIGHT, TOP]
     _p_label = ['pb', 'pk']
     _B_labels = ['vL', 'pb', 'pk', 'vR']
 
@@ -318,15 +318,7 @@ class BoundaryMPS2(MPS):
 
     @classmethod
     def _get_trivial_B_legs(cls, orientation: int, chargeinfo=None):
-        vL_leg = LegCharge.from_trivial(1, chargeinfo=chargeinfo, qconj=+1)
-        vR_leg = vL_leg.conj()
-        if orientation in [LEFT, BOTTOM]:  # pk should be like a PEPS-leg vR or vU -> qconj=-1
-            pk_leg = vR_leg
-            pb_leg = vL_leg
-        else:  # pk is vL or vD with qconj=+1
-            pk_leg = vL_leg
-            pb_leg = vR_leg
-        return [vL_leg, pb_leg, pk_leg, vR_leg]
+        raise NotImplementedError('Subclasses should implement this')
 
     @property
     def L(self):
@@ -340,11 +332,26 @@ class BoundaryMPS2(MPS):
     # TODO raise NotImplemented on not supported methods
     
 
+class BoundaryMPS2(BoundaryMPS):
+    _p_label = ['pb', 'pk']
+    _B_labels = ['vL', 'pb', 'pk', 'vR']
 
-class BoundaryMPS3(BoundaryMPS2):
+    @classmethod
+    def _get_trivial_B_legs(cls, orientation: int, chargeinfo=None):
+        vL_leg = LegCharge.from_trivial(1, chargeinfo=chargeinfo, qconj=+1)
+        vR_leg = vL_leg.conj()
+        if orientation in [LEFT, BOTTOM]:  # pk should be like a PEPS-leg vR or vU -> qconj=-1
+            pk_leg = vR_leg
+            pb_leg = vL_leg
+        else:  # pk is vL or vD with qconj=+1
+            pk_leg = vL_leg
+            pb_leg = vR_leg
+        return [vL_leg, pb_leg, pk_leg, vR_leg]
+    
+
+class BoundaryMPS3(BoundaryMPS):
     _p_label = ['pb', 'po', 'pk']
     _B_labels = ['vL', 'pb', 'po', 'pk', 'vR']
-    # TODO do we need to modify more?
 
     @classmethod
     def _get_trivial_B_legs(cls, orientation: int, chargeinfo=None):
@@ -354,3 +361,122 @@ class BoundaryMPS3(BoundaryMPS2):
         po_leg = pk_leg
         return [vL_leg, pb_leg, po_leg, pk_leg, vR_leg]
 
+
+class PepsDiagram:
+    # this is for finite PEPS! 
+    # (for infinite PEPS it makes no sense to consider two-layer diagram seperate from a numerator)
+
+    def __init__(self, bra: PEPS, ket: PEPS):
+        self.bra = bra
+        self.ket = ket
+        self.lx = bra.lx
+        self.ly = bra.ly
+        self.test_sanity()
+
+    def test_sanity(self):
+        assert self.bra.bc == self.ket.bc == 'finite'
+        assert self.bra.lx == self.ket.lx == self.lx
+        assert self.bra.ly == self.ket.ly == self.ly
+
+    # TODO BoundaryMPS computation and caching
+    
+
+class TwoLayerPepsDiagram(PepsDiagram):
+            
+    def get_col_bmpo(self, orientation: int, x: int):
+        if orientation == LEFT:
+            #            ['p', 'vU',  'vL',  'vD',  'vR']
+            ket_labels = ['q', 'wkR', 'pk*', 'wkL', 'pk']
+            bra_labels = ['q*', 'wbR', 'pb*', 'wbL', 'pb']
+        elif orientation == RIGHT:
+            ket_labels = ['q', 'wkR', 'pk', 'wkL', 'pk*']
+            bra_labels = ['q*', 'wbR', 'pb', 'wbL', 'pb*']
+        else:
+            raise ValueError
+        x = self.bra._parse_x(x)
+        ket_col = []
+        bra_col = []
+        for y in range(self.ly):
+            ket_col.append(self.ket[x, y].replace_labels(['p', 'vU', 'vL', 'vD', 'vR'], ket_labels))
+            bra_col.append(self.bra[x, y].conj().replace_labels(['p*', 'vU*', 'vL*', 'vD*', 'vR*'], bra_labels))
+        return TwoLayerColumn(bra_tensors=bra_col, ket_tensors=ket_col)
+        
+    def get_row_bmpo(self, orientation: int, y: int):
+        if orientation == BOTTOM:
+            #            ['p', 'vU', 'vL',  'vD',  'vR']
+            ket_labels = ['q', 'pk', 'wkL', 'pk*', 'wkR']
+            bra_labels = ['q*', 'pb', 'wbL', 'pb*', 'wbR']
+        elif orientation == TOP:
+            ket_labels = ['q', 'pk*', 'wkL', 'pk', 'wkR']
+            bra_labels = ['q*', 'pb*', 'wbL', 'pb', 'wbR']
+        else:
+            raise ValueError
+        y = self.bra._parse_y(y)
+        ket_row = []
+        bra_row = []
+        for x in range(self.lx):
+            ket_row.append(self.ket[x, y].replace_labels(['p', 'vU', 'vL', 'vD', 'vR'], ket_labels))
+            bra_row.append(self.bra[x, y].conj().replace_labels(['p*', 'vU*', 'vL*', 'vD*', 'vR*'], bra_labels))
+        return TwoLayerColumn(bra_tensors=bra_row, ket_tensors=ket_row)
+
+
+class ThreeLayerPepsDiagram(PepsDiagram):
+    # this is for finite PEPS! 
+    # (for infinite PEPS it makes no sense to consider two-layer diagram seperate from a numerator)
+
+    def __init__(self, bra: PEPS, op: PEPO, ket: PEPS):
+        self.op = op
+        PepsDiagram.__init__(self, bra=bra, ket=ket)
+
+    def test_sanity(self):
+        assert self.op.bc == 'finite'
+        assert self.op.lx == self.lx
+        assert self.op.ly == self.ly
+
+    def get_col_bmpo(self, orientation: int, x: int):
+        if orientation == LEFT:
+            #            ['p', 'vU',  'vL',  'vD',  'vR']
+            ket_labels = ['q', 'wkR', 'pk*', 'wkL', 'pk']
+            op_labels = ['q', 'q*', 'woR', 'po*', 'woL', 'po']
+            bra_labels = ['q*', 'wbR', 'pb*', 'wbL', 'pb']
+        elif orientation == RIGHT:
+            ket_labels = ['q', 'wkR', 'pk', 'wkL', 'pk*']
+            op_labels = ['q', 'q*', 'woR', 'po', 'woL', 'po*']
+            bra_labels = ['q*', 'wbR', 'pb', 'wbL', 'pb*']
+        else:
+            raise ValueError
+        x = self.bra._parse_x(x)
+        ket_col = []
+        op_col = []
+        bra_col = []
+        for y in range(self.ly):
+            ket_col.append(self.ket[x, y].replace_labels(['p', 'vU', 'vL', 'vD', 'vR'], ket_labels))
+            op_col.append(self.op[x, y].replace_labels(['p', 'p*', 'wU', 'wL', 'wD', 'wR'], op_labels))
+            bra_col.append(self.bra[x, y].conj().replace_labels(['p*', 'vU*', 'vL*', 'vD*', 'vR*'], bra_labels))
+        return ThreeLayerColumn(bra_tensors=bra_col, op_tensors=op_col, ket_tensors=ket_col)
+
+    def get_row_bmpo(self, orientation: int, y: int):
+        if orientation == BOTTOM:
+            #            ['p', 'vU', 'vL',  'vD',  'vR']
+            ket_labels = ['q', 'pk', 'wkL', 'pk*', 'wkR']
+            op_labels = ['q', 'q*', 'po', 'woL', 'po*', 'woR']
+            bra_labels = ['q*', 'pb', 'wbL', 'pb*', 'wbR']
+        elif orientation == TOP:
+            ket_labels = ['q', 'pk*', 'wkL', 'pk', 'wkR']
+            op_labels = ['q', 'q*', 'po*', 'woL', 'po', 'woR']
+            bra_labels = ['q*', 'pb*', 'wbL', 'pb', 'wbR']
+        else:
+            raise ValueError
+        y = self.bra._parse_y(y)
+        ket_row = []
+        op_row = []
+        bra_row = []
+        for x in range(self.lx):
+            ket_row.append(self.ket[x, y].replace_labels(['p', 'vU', 'vL', 'vD', 'vR'], ket_labels))
+            op_row.append(self.op[x, y].replace_labels(['p', 'p*', 'wU', 'wL', 'wD', 'wR'], op_labels))
+            bra_row.append(self.bra[x, y].conj().replace_labels(['p*', 'vU*', 'vL*', 'vD*', 'vR*'], bra_labels))
+        return ThreeLayerColumn(bra_tensors=bra_row, op_tensors=op_row, ket_tensors=ket_row)
+
+
+class MpoPepsDiagram(PepsDiagram):
+    raise NotImplementedError  # FIXME
