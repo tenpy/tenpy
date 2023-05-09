@@ -513,7 +513,7 @@ class OldTDVPEngine(TimeEvolutionAlgorithm):
             else:
                 B = self.psi.get_B(j, form='B')
                 #theta[vL,p,vR]=s[vL,vR]*self.psi[p,vL,vR]
-                theta = npc.tensordot(s, B, axes=('vR', 'vL'))
+                theta = npc.tensordot(s, B, axes=('vR', 'vL'))  # noqa: F821
             Lp = self.environment.get_LP(j)
             Rp = self.environment.get_RP(j)
             W1 = self.environment.H.get_W(j)
@@ -589,9 +589,8 @@ class OldTDVPEngine(TimeEvolutionAlgorithm):
             if j == self.L - 1:
                 theta = B
             else:
-                theta = npc.tensordot(B, s,
-                                      axes=('vR',
-                                            'vL'))  #theta[vL,p,vR]=s[vL,vR]*self.psi[p,vL,vR]
+                #theta[vL,p,vR]=s[vL,vR]*self.psi[p,vL,vR]
+                theta = npc.tensordot(B, s, axes=('vR', 'vL'))  # noqa: F821
 
             # Apply expm (-dt H) for 1-site
             chiB, chiA, d = theta.to_ndarray().shape

@@ -439,7 +439,7 @@ class LanczosGroundState(KrylovBased):
                 for c in self._cache[:-1]:
                     w.iadd_prefactor_other(-npc.inner(c, w, 'range', do_conj=True), c)
             elif k > 0:
-                w.iadd_prefactor_other(-beta, self._cache[-2])
+                w.iadd_prefactor_other(-beta, self._cache[-2])  # noqa: F821
             beta = h[k, k + 1]  # = norm(w)
             w.iscale_prefactor(1. / beta)
             psif.iadd_prefactor_other(vf[k + 1], w)
