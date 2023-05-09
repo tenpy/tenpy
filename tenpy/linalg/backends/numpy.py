@@ -102,6 +102,9 @@ class NumpyBlockBackend(AbstractBlockBackend):
     def block_norm(self, a: Block) -> float:
         return np.linalg.norm(a)
 
+    def block_max_abs(self, a: Block) -> float:
+        return np.max(np.abs(a))
+
     def block_reshape(self, a: Block, shape: Tuple[int]) -> Block:
         return np.reshape(a, shape)
 

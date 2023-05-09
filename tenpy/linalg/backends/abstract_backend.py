@@ -349,6 +349,10 @@ class AbstractBlockBackend(ABC):
         ...
 
     @abstractmethod
+    def block_max_abs(self, a: Block) -> float:
+        ...
+
+    @abstractmethod
     def block_reshape(self, a: Block, shape: tuple[int]) -> Block:
         ...
 

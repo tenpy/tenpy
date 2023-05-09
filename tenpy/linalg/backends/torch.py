@@ -112,6 +112,9 @@ class TorchBlockBackend(AbstractBlockBackend):
     def block_norm(self, a: Block) -> float:
         return torch_module.norm(a)
 
+    def block_max_abs(self, a: Block) -> float:
+        return torch_module.max(torch_module.max(a))
+
     def block_reshape(self, a: Block, shape: Tuple[int]) -> Block:
         return torch_module.reshape(a, shape)
 
