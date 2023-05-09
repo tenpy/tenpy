@@ -319,10 +319,16 @@ class AbelianBackendProductSpace(ProductSpace, AbelianBackendVectorSpace):
         return res.project(*args, **kwargs)
 
 
+_MAX_INT = np.iinfo(int).max
+
+
 def _make_stride(shape, cstyle=True):
     """Create the strides for C- (or F-style) arrays with a given shape.
 
     Equivalent to ``x = np.zeros(shape); return np.array(x.strides, np.intp) // x.itemsize``.
+
+    Note that ``np.sum(inds * _make_stride(np.max(inds, axis=0), cstyle=False), axis=1)`` is
+    sorted for (positive) 2D `inds` if ``np.lexsort(inds.T)`` is sorted.
     """
     L = len(shape)
     stride = 1
@@ -332,12 +338,15 @@ def _make_stride(shape, cstyle=True):
         for a in range(L - 1, 0, -1):
             stride *= shape[a]
             res[a - 1] = stride
+        assert stride * shape[0] < _MAX_INT
     else:
         res[0] = 1
         for a in range(0, L - 1):
             stride *= shape[a]
             res[a + 1] = stride
+        assert stride * shape[0] < _MAX_INT
     return res
+
 
 def _find_row_differences(sectors: SectorArray, include_len: bool=False):
     """Return indices where the rows of the 2D array `qflat` change.
@@ -405,6 +414,62 @@ def _iter_common_sorted(a, b):
             i += 1
             j += 1
     return res
+
+
+def _iter_common_sorted_arrays(a, b):
+    """Yield indices ``i, j`` for which ``a[i, :] == b[j, :]``.
+
+    *Assumes* that `a` and `b` are strictly lex-sorted (according to ``np.lexsort(a.T)``).
+    Given that, it is equivalent to (but faster than)
+    ``[(i, j) for j, i in itertools.product(range(len(b)), range(len(a)) if all(a[i,:] == b[j,:]]``
+    """
+    l_a, d_a = a.shape
+    l_b, d_b = b.shape
+    assert d_a == d_b
+    i, j = 0, 0
+    both = []
+    while i < l_a and j < l_b:
+        for k in reversed(range(d_a)):
+            if a[i, k] < b[j, k]:
+                i += 1
+                break
+            elif b[j, k] < a[i, k]:
+                j += 1
+                break
+        else:
+            both.append((i, j))
+            i += 1
+            j += 1
+    return res
+
+
+def _iter_common_noncommon_sorted_arrays(a, b):
+    """Return list of indices ``i,j`` for which ``a[i, :] is not in b``, and ``b[j,:] is not in a``.
+
+    *Assumes* that `a` and `b` are strictly lex-sorted (according to ``np.lexsort(a.T)``).
+    """
+    l_a, d_a = a.shape
+    l_b, d_b = b.shape
+    assert d_a == d_b
+    i, j = 0, 0
+    only_a = []
+    only_b = []
+    both = []
+    while i < l_a and j < l_b:
+        for k in reversed(range(d_a)):
+            if a[i, k] < b[j, k]:
+                only_a.append(i)
+                i += 1
+                break
+            elif b[j, k] < a[i, k]:
+                only_b.append(j)
+                j += 1
+                break
+        else:
+            both.append((i,j))
+            i += 1
+            j += 1
+    return both, only_a, only_b
 
 
 @dataclass
@@ -706,7 +771,7 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
         a_blocks = [a_blocks[i] for i in a_sort]
         # combine all b_block_inds[:cut_b] into one column (with the same stride as before)
         b_block_inds_contr = np.sum(b.data.block_inds[:, :cut_b] * stride, axis=1)
-        # lex-sort b_block_inds, dominated by the axes summed over, then the axes kept.
+        # b_block_inds is already lex-sorted, dominated by the axes kept, then the axes summed over
         b_blocks = b.data.blocks
         b_block_inds_keep = b.data.block_inds[:, cut_b:]
         # find blocks where block_inds_a[not_axes_a] and block_inds_b[not_axes_b] change
@@ -777,6 +842,7 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
 
     def inner(self, a: Tensor, b: Tensor, axs2: list[int] | None) -> complex:
         a_blocks = a.data.blocks
+        stride = _make_stride([len(l.sectors) for l in a.legs], False)
         a_block_inds = np.sum(a.data.block_inds * stride, axis=1)
         if axs2 is not None:
             stride = stride[axs2]
@@ -788,7 +854,7 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
             b_block_inds = b_block_inds[sort, :]
             b_blocks = [b_blocks[i] for i in sort]
         res = [self.block_inner(a_blocks[i], b_blocks[j], axs2)
-               for i, j in _iter_common_sorted_arrays(a_block_inds, b_block_inds)]
+               for i, j in _iter_common_sorted(a_block_inds, b_block_inds)]
         return np.sum(res)
 
     def transpose(self, a: Tensor, permutation: list[int]) -> Data:
@@ -942,8 +1008,20 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
 
         return AbelianBackendData(a.data.dtype, new_blocks, new_block_inds)
 
-    #  def almost_equal(self, a: Tensor, b: Tensor, rtol: float, atol: float) -> bool:
-    #      return self.block_allclose(a.data, b.data, rtol=rtol, atol=atol)
+    def almost_equal(self, a: Tensor, b: Tensor, rtol: float, atol: float) -> bool:
+        both, only_a, only_b = _iter_common_sorted_arrays(a.data.block_inds, b.data.block_inds)
+        a_blocks = a.data.blocks
+        b_blocks = b.data.blocks
+        for i in only_a:
+            if self.block_max_abs(a_blocks[i]) > atol:
+                return False
+        for j in only_b:
+            if self.block_max_abs(b_blocks[j]) > atol:
+                return False
+        for (i, j) in both:
+            if not self.block_allclose(a_blocks[i], b_blocks[j], rtol=rtol, atol=atol):
+                return False
+        return True
 
     def squeeze_legs(self, a: Tensor, idcs: list[int]) -> Data:
         n_legs = a.num_legs
