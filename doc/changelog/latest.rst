@@ -38,3 +38,8 @@ Fixed
 - Fix :issue:`210` that :meth:`~tenpy.models.aklt.AKLTChain.psi_AKLT` had typos and wrong canonical form for finite systems.
 - Fix that the MPS :meth:`~tenpy.networks.mps.MPS.apply_local_op` with local multi-site operators didn't correctly track the
   norm with `renormalize=False`.
+- We now update the norm of the MPS in :meth:`~tenpy.algorithms.tebd.TEBDEngine.update_bond`.
+  If the parameter ``preserve_norm`` is ``True`` (which is the default for real time evolution)
+  this has no effect when using :meth:`~tenpy.algorithms.tebd.TEBDEngine.run` or similat, 
+  since the MPS norm is reset after the timestep anyway.
+  It does, however, change the behavior if ``preserve_norm`` is ``False``.
