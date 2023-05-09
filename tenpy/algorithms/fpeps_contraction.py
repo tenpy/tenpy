@@ -10,7 +10,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-__all__ = ['BulkMPO', 'TwoLayerColumn']
+__all__ = ['BulkMPO', 'TwoLayerColumn', 'ThreeLayerColumn']
 
 class BulkMPO:
     """Like a finite MPO, but there are multiple virtual legs per bond and multiple physical leg(pairs)
