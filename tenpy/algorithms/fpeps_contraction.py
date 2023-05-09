@@ -1,12 +1,14 @@
 """Algorithms for contraction of finite PEPS diagrams, e.g. expectation values."""
 # Copyright 2023 TeNPy Developers, GNU GPLv3
 
-from tenpy.linalg import np_conserved as npc
 from ..linalg import np_conserved as npc
+from ..linalg.charges import LegCharge
+from ..networks.peps import PEPS, PEPO
 from ..networks.mps import MPS
 from ..networks.mpo import MPO
 from ..networks.site import Site
 import logging
+import numpy as np
 
 logger = logging.getLogger(__name__)
 
@@ -282,3 +284,73 @@ class ThreeLayerColumn(BulkMPO):
         bra_grad = bra_grad.iconj(complex_conj=False)  
         
         return value, next_LP, bra_grad
+
+
+LEFT = 0
+BOTTOM = 1
+RIGHT = 2
+UP = 3
+
+
+class BoundaryMPS2(MPS):
+    _valid_bc = ['finite']
+    _valid_orientations = [LEFT, BOTTOM, RIGHT, UP]
+    _p_label = ['pb', 'pk']
+    _B_labels = ['vL', 'pb', 'pk', 'vR']
+
+    def __init__(self, orientation: int, Bs, SVs=None, form=None, norm: float = 1):
+        self.orientation = orientation
+        if SVs is None:
+            SVs = [None] * (len(Bs) + 1)
+        MPS.__init__(self, sites=None, Bs=Bs, SVs=SVs, bc='finite', form=form, norm=norm)
+
+    def test_sanity(self):
+        assert self.orientation in self._valid_orientations
+        MPS.test_sanity(self)
+
+    @classmethod
+    def from_trivial(cls, orientation: int, L: int, chargeinfo=None, dtype=np.complex128):
+        legs = cls._get_trivial_B_legs(orientation=orientation, chargeinfo=chargeinfo)
+        B = npc.ones(legs, dtype=dtype, labels=cls._B_labels)
+        Bs = [B.copy() for _ in range(L)]
+        SVs = [np.ones([1]) for _ in range(L + 1)]
+        return cls(orientation=orientation, Bs=Bs, SVs=SVs, form='B', norm=1)
+
+    @classmethod
+    def _get_trivial_B_legs(cls, orientation: int, chargeinfo=None):
+        vL_leg = LegCharge.from_trivial(1, chargeinfo=chargeinfo, qconj=+1)
+        vR_leg = vL_leg.conj()
+        if orientation in [LEFT, BOTTOM]:  # pk should be like a PEPS-leg vR or vU -> qconj=-1
+            pk_leg = vR_leg
+            pb_leg = vL_leg
+        else:  # pk is vL or vD with qconj=+1
+            pk_leg = vL_leg
+            pb_leg = vR_leg
+        return [vL_leg, pb_leg, pk_leg, vR_leg]
+
+    @property
+    def L(self):
+        return len(self._B)
+
+    @property
+    def dim(self):
+        return [np.prod([B.get_leg(p).dim for p in self._p_label]) for B in self._B]
+
+    # TODO implement h5 I/O
+    # TODO raise NotImplemented on not supported methods
+    
+
+
+class BoundaryMPS3(BoundaryMPS2):
+    _p_label = ['pb', 'po', 'pk']
+    _B_labels = ['vL', 'pb', 'po', 'pk', 'vR']
+    # TODO do we need to modify more?
+
+    @classmethod
+    def _get_trivial_B_legs(cls, orientation: int, chargeinfo=None):
+        vL_leg, pb_leg, pk_leg, vR_leg = BoundaryMPS2._get_trivial_B_legs(
+            cls, orientation=orientation, chargeinfo=chargeinfo
+        )
+        po_leg = pk_leg
+        return [vL_leg, pb_leg, po_leg, pk_leg, vR_leg]
+
