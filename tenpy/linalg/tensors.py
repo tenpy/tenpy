@@ -872,12 +872,12 @@ class Tensor(AbstractTensor):
         if len(leg_idcs1) != len(leg_idcs2):
             raise ValueError('Must specify same number of legs')
         remaining_leg_idcs = [n for n in range(self.num_legs) if n not in leg_idcs1 and n not in leg_idcs2]
-        res_data = self.backend.trace(self, leg_idcs1, leg_idcs2)
         if len(remaining_leg_idcs) == 0:
-            # result is a scalar
-            return self.backend.data_item(res_data)
+            return self.backend.trace_full(self, leg_idcs1, leg_idcs2)
         else:
-            return Tensor(res_data, backend=self.backend, legs=[self.legs[n] for n in remaining_leg_idcs],
+            res_data = self.backend.trace_partial(self, leg_idcs1, leg_idcs2, remaining_leg_idcs)
+            return Tensor(res_data, backend=self.backend,
+                          legs=[self.legs[n] for n in remaining_leg_idcs],
                           labels=[self.labels[n] for n in remaining_leg_idcs])
 
     def conj(self) -> AbstractTensor:

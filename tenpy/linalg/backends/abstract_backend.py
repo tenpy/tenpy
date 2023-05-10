@@ -171,7 +171,7 @@ class AbstractBackend(ABC):
         ...
 
     @abstractmethod
-    def inner(self, a: Tensor, b: Tensor, axs2: list[int] | None) -> complex:
+    def inner(self, a: Tensor, b: Tensor, axs2: list[int] | None) -> float | complex:
         """
         inner product of <a|b>, both of which are given as ket-like vectors
         (i.e. in C^N, the entries of a would need to be conjugated before multiplying with entries of b)
@@ -184,7 +184,11 @@ class AbstractBackend(ABC):
         ...
 
     @abstractmethod
-    def trace(self, a: Tensor, idcs1: list[int], idcs2: list[int]) -> Data:
+    def trace_full(self, a: Tensor, idcs1: list[int], idcs2: list[int]) -> float | complex:
+        ...
+
+    @abstractmethod
+    def trace_partial(self, a: Tensor, idcs1: list[int], idcs2: list[int], remaining_idcs: list[int]) -> Data:
         ...
 
     @abstractmethod
@@ -289,7 +293,7 @@ class AbstractBlockBackend(ABC):
         ...
 
     @abstractmethod
-    def block_inner(self, a: Block, b: Block, axs2: list[int] | None) -> complex:
+    def block_inner(self, a: Block, b: Block, axs2: list[int] | None) -> float | complex:
         ...
 
     @abstractmethod
@@ -297,7 +301,11 @@ class AbstractBlockBackend(ABC):
         ...
 
     @abstractmethod
-    def block_trace(self, a: Block, idcs1: list[int], idcs2: list[int]) -> Block:
+    def block_trace_full(self, a: Block, idcs1: list[int], idcs2: list[int]) -> float | complex:
+        ...
+
+    @abstractmethod
+    def block_trace_partial(self, a: Block, idcs1: list[int], idcs2: list[int], remaining_idcs: list[int]) -> Block:
         ...
 
     @abstractmethod

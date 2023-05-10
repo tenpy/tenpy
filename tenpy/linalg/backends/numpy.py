@@ -83,11 +83,16 @@ class NumpyBlockBackend(AbstractBlockBackend):
     def block_transpose(self, a: Block, permutation: list[int]) -> Block:
         return np.transpose(a, permutation)
 
-    def block_trace(self, a: Block, idcs1: list[int], idcs2: list[int]) -> Block:
-        remaining = [n for n in range(len(a.shape)) if n not in idcs1 and n not in idcs2]
+    def block_trace_full(self, a: Block, idcs1: list[int], idcs2: list[int]) -> float | complex:
+        a = np.transpose(a, idcs1 + idcs2)
+        trace_dim = np.prod(a.shape[:len(idcs1)])
+        a = np.reshape(a, (trace_dim, trace_dim))
+        return np.trace(a, axis1=0, axis2=1)
+
+    def block_trace_partial(self, a: Block, idcs1: list[int], idcs2: list[int], remaining: list[int]) -> Block:
         a = np.transpose(a, remaining + idcs1 + idcs2)
         trace_dim = np.prod(a.shape[len(remaining):len(remaining)+len(idcs1)])
-        a = np.reshape(a, (*a.shape[:len(remaining)], trace_dim, trace_dim))
+        a = np.reshape(a, a.shape[:len(remaining)] + (trace_dim, trace_dim))
         return np.trace(a, axis1=-2, axis2=-1)
 
     def block_conj(self, a: Block) -> Block:

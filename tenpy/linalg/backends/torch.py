@@ -89,13 +89,16 @@ class TorchBlockBackend(AbstractBlockBackend):
     def block_transpose(self, a: Block, permutation: list[int]) -> Block:
         return torch_module.permute(a, permutation)  # TODO: this is documented as a view. is that a problem?
 
-    def block_trace(self, a: Block, idcs1: list[int], idcs2: list[int]) -> Block:
-        other_idcs = [n for n in range(len(a.shape)) if n not in idcs1 and n not in idcs2]
-        a = torch_module.permute(a, other_idcs + idcs1 + idcs2)
-        num_other = len(other_idcs)
-        num_trace = len(idcs1)
-        trace_dim = prod(a.shape[num_other:num_other + num_trace])
-        a = torch_module.reshape(a, [*a.shape[:num_other], trace_dim, trace_dim])
+    def block_trace_full(self, a: Block, idcs1: list[int], idcs2: list[int]) -> float | complex:
+        a = np.transpose(a, idcs1 + idcs2)
+        trace_dim = np.prod(a.shape[:len(idcs1)])
+        a = torch_module.reshape(a, (trace_dim, trace_dim))
+        return a.diagonal(offset=0, dim1=0, dim2=1).sum(0)
+
+    def block_trace_partial(self, a: Block, idcs1: list[int], idcs2: list[int], remaining: list[int]) -> Block:
+        a = torch_module.permute(a, remaining + idcs1 + idcs2)
+        trace_dim = prod(a.shape[len(remaining):len(remaining)+len(idcs1)])
+        a = torch_module.reshape(a, a.shape[:len(remaining)] + (trace_dim, trace_dim))
         return a.diagonal(offset=0, dim1=-1, dim2=-2).sum(-1)
 
     def block_conj(self, a: Block) -> Block:

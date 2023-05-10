@@ -919,9 +919,42 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
         data._sort_block_inds()
         return data
 
-    # TODO
-    #  def trace(self, a: Tensor, idcs1: list[int], idcs2: list[int]) -> Data:
-    #      return self.block_trace(a.data, idcs1, idcs2)
+    def trace_full(self, a: Tensor, idcs1: list[int], idcs2: list[int]) -> float | complex:
+        a_blocks = a.data.blocks
+        a_block_inds_1 = a.data.block_inds[:, idcs1]
+        a_block_inds_2 = a.data.block_inds[:, idcs2]
+        total_sum = 0.  # TODO: should this be 0.j if a.dtype
+        if not a.data.dtype.is_real:
+            total_sum = 0.j
+        for block, i1, i2 in zip(a_blocks, a_block_inds_1, a_block_inds_2):
+            # if len(idcs1) == 1, i1==i2 due to charge conservation,
+            # but for multi-dimensional indices not clear
+            if np.all(i1 == i2):
+                total_sum += self.block_trace_full(a, idcs1, idcs2)
+        return total_sum
+
+    def trace_partial(self, a: Tensor, idcs1: list[int], idcs2: list[int], remaining_idcs: list[int]) -> Data:
+        a_blocks = a.data.blocks
+        a_block_inds_1 = a.data.block_inds[:, idcs1]
+        a_block_inds_2 = a.data.block_inds[:, idcs2]
+        a_block_inds_rem = a.data.block_inds[:, remaining_idcs]
+        raise NotImplementedError("TODO") # TODO
+        res_data = {}  # dictionary res_block_inds_row -> Block
+        for block, i1, i2, ir in zip(a_blocks, a_block_inds_1, a_block_inds_2, a_block_inds_rem):
+            if not np.all(i1 == i1):
+                continue
+            ir = tuple(ir)
+            block = self.block_trace_partial(block, idcs1, idcs2)
+            add_block = res_data.get(ir, None)
+            if add_block is not None:
+                block = block + add_block
+            res_data[ir] = block
+        res_blocks = res_data.values()
+        res_block_inds = np.array(res_data.keys(), int)
+        sort = np.lexsort(res_block_inds.T)
+        res_blocks = [res_blocks[i] for i in sort]
+        res_block_inds = res_block_inds[sort, :]
+        return AbelianBackendData(a.data.dtype, res_blocks, res_block_inds)
 
     def conj(self, a: Tensor) -> Data:
         blocks = [self.block_conj(b) for b in a.data.blocks]
