@@ -26,7 +26,7 @@ We use the following label convention for the `T` (where arrows indicate `qconj`
 We store one 5-leg tensor with labels ``'p', 'vU', 'vL', 'vD', 'vR'`` for each of the `lx * ly` lattice sites.
 
 TODO explain more, e.g.
-- boundary conditions (infinite, finite, TODOD: segment)
+- boundary conditions (infinite, finite, TODO: segment?)
 - symmetries, e.g. C4v
 - normalization
     

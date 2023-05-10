@@ -7,6 +7,7 @@ from ..networks.peps import PEPS, PEPO
 from ..networks.mps import MPS
 from ..networks.mpo import MPO
 from ..networks.site import Site
+from ..tools.params import asConfig, Config
 import logging
 import numpy as np
 
@@ -16,7 +17,7 @@ __all__ = ['BulkMPO', 'TwoLayerColumn', 'ThreeLayerColumn']
 
 class BulkMPO:
     """Like a finite MPO, but there are multiple virtual legs per bond and multiple physical leg(pairs)
-    per site, and the MPO-tensors have a substructure as the contraction of tensors"""
+    per site, and the MPO-tensors have a substructure as the contraction of multiple tensors"""
 
     # _virt_labels = [...]
     # _p_labels = [...]
@@ -125,6 +126,7 @@ class TwoLayerColumn(BulkMPO):
     |                                         /
     |                                       pb
 
+    Note that this class does not conjugate the bra tensors!
     """
     _virt_labels = ['wb', 'wk']
     _p_labels = ['pb', 'pk']
@@ -215,6 +217,7 @@ class ThreeLayerColumn(BulkMPO):
     |                                         /
     |                                       pb
 
+    Note that this class does not conjugate the bra tensors!
     """
     _virt_labels = ['wb', 'wo', 'wk']
     _p_labels = ['pb', 'po', 'pk']
@@ -309,15 +312,15 @@ class BoundaryMPS(MPS):
         MPS.test_sanity(self)
 
     @classmethod
-    def from_trivial(cls, orientation: int, L: int, chargeinfo=None, dtype=np.complex128):
-        legs = cls._get_trivial_B_legs(orientation=orientation, chargeinfo=chargeinfo)
+    def from_trivial(cls, orientation: int, L: int, chinfo=None, dtype=np.complex128):
+        legs = cls._get_trivial_B_legs(orientation=orientation, chinfo=chinfo)
         B = npc.ones(legs, dtype=dtype, labels=cls._B_labels)
         Bs = [B.copy() for _ in range(L)]
         SVs = [np.ones([1]) for _ in range(L + 1)]
         return cls(orientation=orientation, Bs=Bs, SVs=SVs, form='B', norm=1)
 
     @classmethod
-    def _get_trivial_B_legs(cls, orientation: int, chargeinfo=None):
+    def _get_trivial_B_legs(cls, orientation: int, chinfo=None):
         raise NotImplementedError('Subclasses should implement this')
 
     @property
@@ -366,22 +369,86 @@ class PepsDiagram:
     # this is for finite PEPS! 
     # (for infinite PEPS it makes no sense to consider two-layer diagram seperate from a numerator)
 
-    def __init__(self, bra: PEPS, ket: PEPS):
+    # subclasses should override this with a concrete subclass of BoundaryMPS (the class itself)
+    _BoundaryMPSClass = BoundaryMPS  
+
+    def __init__(self, bra: PEPS, ket: PEPS, options=None):
         self.bra = bra
         self.ket = ket
-        self.lx = bra.lx
-        self.ly = bra.ly
+        self.lx = lx = bra.lx
+        self.ly = ly = bra.ly
+        self.options = asConfig(options or {}, 'PepsContraction')  # TODO doc parameters
+        self.chinfo = chinfo = bra.chinfo
+        self._bmps_cache = [None] * 4
+        self._bmps_cache[LEFT] = self._bmps_cache[RIGHT] = [None] * lx
+        self._bmps_cache[TOP] = self._bmps_cache[BOTTOM] = [None] * ly
+        self._bmps_cache[LEFT][0] = self._BoundaryMPSClass.from_trivial(LEFT, L=ly, chinfo=chinfo)
+        self._bmps_cache[RIGHT][-1] = self._BoundaryMPSClass.from_trivial(RIGHT, L=ly, chinfo=chinfo)
+        self._bmps_cache[BOTTOM][0] = self._BoundaryMPSClass.from_trivial(BOTTOM, L=ly, chinfo=chinfo)
+        self._bmps_cache[TOP][-1] = self._BoundaryMPSClass.from_trivial(TOP, L=ly, chinfo=chinfo)
         self.test_sanity()
-
+        
     def test_sanity(self):
         assert self.bra.bc == self.ket.bc == 'finite'
         assert self.bra.lx == self.ket.lx == self.lx
         assert self.bra.ly == self.ket.ly == self.ly
+        assert self._BoundaryMPSClass is not BoundaryMPS  # subclasses need to override!
+        assert len(self._bmps_cache[TOP]) == len(self._bmps_cache[BOTTOM]) == self.ly
+        assert len(self._bmps_cache[LEFT]) == len(self._bmps_cache[RIGHT]) == self.lx
+        assert all([
+            self._bmps_cache[LEFT][0] is not None,
+            self._bmps_cache[RIGHT][-1] is not None,
+            self._bmps_cache[BOTTOM][0] is not None,
+            self._bmps_cache[TOP][-1] is not None,
+        ])
 
-    # TODO BoundaryMPS computation and caching
+    def _lookup_bmps(self, orientation: int, n: int):
+        # subclasses may change this to lookup bmps somewhere else
+        # e.g. if part of an operator-diagram is like the norm diagram
+        return self._bmps_cache[orientation][n]
+
+    def get_bmps(self, orientation: int, n: int):
+        if orientation in [LEFT, BOTTOM]:
+            last_n = 0
+            step = -1
+        else:
+            L = self.lx if orientation == RIGHT else self.ly
+            last_n = L - 1
+            step = 1
+
+        res = self._lookup_bmps(orientation, n)
+        i = n
+        # go towards the boundary until we find a bMPS that is cached
+        while res is None:
+            i += step
+            if i * step > last_n:  # if i is outside the boundaries
+                raise RuntimeError  # should have hit the from_trivial bmps that are set in __init__ by now
+            res = self._lookup_bmps(orientation, i)
+
+        # go back to n and cache all results on the way
+        while i * step > n * step:
+            # TODO initial guess!!
+            res, _ = apply_bmps(res, self.get_bmpo(orientation, i), options=self.options)
+            self._bmps_cache[orientation][i] = res
+
+        return res
+
+    def get_bmpo(self, orientation, n: int):
+        if orientation in [LEFT, RIGHT]:
+            return self.get_col_bmpo(orientation, x=n)
+        else:
+            return self.get_row_bmpo(orientation, y=n)
+
+    def get_col_bmpo(self, orientation: int, x: int):
+        raise NotImplementedError('subclasses should implement this')
+
+    def get_row_bmpo(self, orientation: int, y: int):
+        raise NotImplementedError('subclasses should implement this')
     
 
 class TwoLayerPepsDiagram(PepsDiagram):
+
+    _BoundaryMPSClass = BoundaryMPS2
             
     def get_col_bmpo(self, orientation: int, x: int):
         if orientation == LEFT:
@@ -423,6 +490,8 @@ class TwoLayerPepsDiagram(PepsDiagram):
 class ThreeLayerPepsDiagram(PepsDiagram):
     # this is for finite PEPS! 
     # (for infinite PEPS it makes no sense to consider two-layer diagram seperate from a numerator)
+
+    _BoundaryMPSClass = BoundaryMPS3
 
     def __init__(self, bra: PEPS, op: PEPO, ket: PEPS):
         self.op = op
@@ -479,4 +548,9 @@ class ThreeLayerPepsDiagram(PepsDiagram):
 
 
 class MpoPepsDiagram(PepsDiagram):
-    raise NotImplementedError  # FIXME
+    def __init__(self):
+        raise NotImplementedError  # FIXME
+
+
+def apply_bmps(bmps: BoundaryMPS, bmpo: BulkMPO, options: Config, initial_guess: BoundaryMPS = None):
+    raise NotImplementedError  # TODO
