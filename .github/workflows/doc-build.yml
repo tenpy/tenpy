@@ -29,7 +29,12 @@ jobs:
     - name: Build documentation
       # building html is necessary to include the module docstrings with autodoc
       shell: bash -el {0}
-      run: python -m sphinx -b html ./doc ./doc/sphinx_build
+      run: |
+        conda info
+        conda list
+        which python
+        which sphinx
+        python -m sphinx -b html ./doc ./doc/sphinx_build
     - name: Run doctests
       shell: bash -el {0}
       run: |
