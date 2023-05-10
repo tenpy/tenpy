@@ -182,6 +182,7 @@ class NumpyBlockBackend(AbstractBlockBackend):
 class NoSymmetryNumpyBackend(NumpyBlockBackend, AbstractNoSymmetryBackend):
     pass
 
+
 class AbelianNumpyBackend(NumpyBlockBackend, AbstractAbelianBackend):
     pass
 

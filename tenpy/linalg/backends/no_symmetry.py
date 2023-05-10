@@ -111,12 +111,8 @@ class AbstractNoSymmetryBackend(AbstractBackend, AbstractBlockBackend, ABC):
         block_method = getattr(self, block_method)
         return block_method(a.data)
 
-    def random_normal(self, legs: list[VectorSpace], dtype: Dtype, sigma: float) -> Data:
-        return self.block_random_normal([l.dim for l in legs], dtype=dtype, sigma=sigma)
-
     def add(self, a: Tensor, b: Tensor) -> Data:
         return self.block_add(a.data, b.data)
 
     def mul(self, a: float | complex, b: Tensor) -> Data:
         return self.block_mul(a, b.data)
-

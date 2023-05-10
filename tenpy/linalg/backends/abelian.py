@@ -919,6 +919,7 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
         data._sort_block_inds()
         return data
 
+    # TODO
     #  def trace(self, a: Tensor, idcs1: list[int], idcs2: list[int]) -> Data:
     #      return self.block_trace(a.data, idcs1, idcs2)
 
@@ -1110,10 +1111,6 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
         dtype = a.data.dtype if len(res_blocks) == 0 else self.block_dtype(res_blocks[0])
         return AbelianBackendData(a.data.dtype, res_blocks, a.data.block_inds)
 
-    # TODO
-    #  def random_normal(self, legs: list[VectorSpace], dtype: Dtype, sigma: float) -> Data:
-    #      return self.block_random_normal([l.dim for l in legs], dtype=dtype, sigma=sigma)
-
     def add(self, a: Tensor, b: Tensor) -> Data:
         a_blocks = a.data.blocks
         b_blocks = b.data.blocks
@@ -1149,7 +1146,6 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
 
     # TODO: support eig(h), eigvals
     # TODO: concatenate and grid_concat
-
 
 
 # TODO FIXME how to handle ChargedTensor vs Tensor?

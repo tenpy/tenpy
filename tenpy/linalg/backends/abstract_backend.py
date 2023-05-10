@@ -121,7 +121,7 @@ class AbstractBackend(ABC):
 
     @abstractmethod
     def from_block_func(self, func, legs: list[VectorSpace]) -> Data:
-        """Generate tensor data from a function ``func(shape: tuple[int]) -> block``."""
+        """Generate tensor data from a function ``func(shape: tuple[int]) -> Block``."""
         ...
 
     @abstractmethod
@@ -226,12 +226,6 @@ class AbstractBackend(ABC):
         block_method :
             Name of a BlockBackend method with signature ``block_method(a: Block) -> Block``.
         """
-        ...
-
-    @abstractmethod
-    def random_normal(self, legs: list[VectorSpace], dtype: Dtype, sigma: float) -> Data:
-        """generate the data for a tensor drawn randomly from the normal distribution with zero mean
-        and standard deviation sigma"""
         ...
 
     @abstractmethod

@@ -763,8 +763,12 @@ class Tensor(AbstractTensor):
         if dtype is None:
             dtype = Dtype.complex128
         legs = _parse_legs_or_dims(legs_or_dims)
-        data = backend.random_normal(legs=legs, dtype=dtype, sigma=sigma)
-        return cls(data=data, backend=backend, legs=legs, labels=labels)
+
+        def block_func(shape):
+            return backend.block_random_normal(shape, dtype, sigma)
+
+        return cls(data=backend.from_block_func(block_func, legs), backend=backend, legs=legs,
+                   labels=labels)
 
     def tdot(self, other: AbstractTensor,
              legs1: int | str | list[int | str] = -1, legs2: int | str | list[int | str] = 0,
