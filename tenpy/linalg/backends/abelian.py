@@ -377,6 +377,7 @@ def _fuse_abelian_charges(symmetry: AbelianSymmetry, *sector_arrays: SectorArray
         # == fusion + space.sector, but mod N for ZN
     return np.asarray(fusion)
 
+
 def _valid_block_indices(spaces: list[AbelianBackendVectorSpace]):
     """Find block_inds where the charges of the `spaces` fuse to `symmetry.trivial_sector`"""
     symmetry = spaces[0].symmetry
@@ -396,10 +397,13 @@ def _valid_block_indices(spaces: list[AbelianBackendVectorSpace]):
 def _iter_common_sorted(a, b):
     """Yield indices ``i, j`` for which ``a[i] == b[j]``.
 
-    *Assumes* that `a` and `b` are strictly ascending.
+    *Assumes* that `a` and `b` are strictly ascending 1D arrays.
     Given that, it is equivalent to (but faster than)
     ``[(i, j) for j, i in itertools.product(range(len(b)), range(len(a)) if a[i] == b[j]]``
     """
+    # when we call this function, we basically wanted _iter_common_sorted_arrays,
+    # but used strides to merge multiple columns to avoid too much python loops
+    # for C-implementation, this is definitely no longer necessary.
     l_a = len(a)
     l_b = len(b)
     i, j = 0, 0
@@ -444,7 +448,7 @@ def _iter_common_sorted_arrays(a, b):
 
 
 def _iter_common_noncommon_sorted_arrays(a, b):
-    """Return list of indices ``i,j`` for which ``a[i, :] is not in b``, and ``b[j,:] is not in a``.
+    """Return three list of indices ``i,j`` for which ``a[i, :] is not in b``, and ``b[j,:] is not in a``.
 
     *Assumes* that `a` and `b` are strictly lex-sorted (according to ``np.lexsort(a.T)``).
     """
@@ -458,19 +462,18 @@ def _iter_common_noncommon_sorted_arrays(a, b):
     while i < l_a and j < l_b:
         for k in reversed(range(d_a)):
             if a[i, k] < b[j, k]:
-                only_a.append(i)
+                yield i, None
                 i += 1
                 break
             elif b[j, k] < a[i, k]:
-                only_b.append(j)
+                yield None, j
                 j += 1
                 break
         else:
-            both.append((i,j))
+            yield i, j
             i += 1
             j += 1
-    return both, only_a, only_b
-
+    # return
 
 @dataclass
 class AbelianBackendData:
@@ -489,13 +492,13 @@ class AbelianBackendData:
         self.block_inds = self.block_inds[perm, :]
         self.blocks = [self.blocks[p] for p in perm]
 
+
 @dataclass
 class AbelianBackendDiagonalData:
     """Data stored in a DiagonalTensor for :class:`AbstractAbelianBackend`."""
     dtye: Dtype
     blocks : List[Block]
     block_inds : ndarray
-
 
 
 class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
@@ -1060,18 +1063,18 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
         return AbelianBackendData(a.data.dtype, new_blocks, new_block_inds)
 
     def almost_equal(self, a: Tensor, b: Tensor, rtol: float, atol: float) -> bool:
-        both, only_a, only_b = _iter_common_sorted_arrays(a.data.block_inds, b.data.block_inds)
         a_blocks = a.data.blocks
         b_blocks = b.data.blocks
-        for i in only_a:
-            if self.block_max_abs(a_blocks[i]) > atol:
-                return False
-        for j in only_b:
-            if self.block_max_abs(b_blocks[j]) > atol:
-                return False
-        for (i, j) in both:
-            if not self.block_allclose(a_blocks[i], b_blocks[j], rtol=rtol, atol=atol):
-                return False
+        for i, j in _iter_common_sorted_arrays(a.data.block_inds, b.data.block_inds):
+            if j is None:
+                if self.block_max_abs(a_blocks[i]) > atol:
+                    return False
+            elif i is None:
+                if self.block_max_abs(b_blocks[j]) > atol:
+                    return False
+            else:
+                if not self.block_allclose(a_blocks[i], b_blocks[j], rtol=rtol, atol=atol):
+                    return False
         return True
 
     def squeeze_legs(self, a: Tensor, idcs: list[int]) -> Data:
@@ -1100,20 +1103,46 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
         block_norms = [self.block_norm(b) for b in a.data]
         return np.linalg.norm(block_norms)
 
+    # TODO
     #  def exp(self, a: Tensor, idcs1: list[int], idcs2: list[int]) -> Data:
     #      matrix, aux = self.block_matrixify(a.data, idcs1, idcs2)
     #      return self.block_dematrixify(self.matrix_exp(matrix), aux)
 
+    # TODO
     #  def log(self, a: Tensor, idcs1: list[int], idcs2: list[int]) -> Data:
     #      matrix, aux = self.block_matrixify(a.data, idcs1, idcs2)
     #      return self.block_dematrixify(self.matrix_log(matrix), aux)
 
+    # TODO
     #  def random_normal(self, legs: list[VectorSpace], dtype: Dtype, sigma: float) -> Data:
     #      return self.block_random_normal([l.dim for l in legs], dtype=dtype, sigma=sigma)
 
-    #  def add(self, a: Tensor, b: Tensor) -> Data:
-    #      return self.block_add(a.data, b.data)
+    def add(self, a: Tensor, b: Tensor) -> Data:
+        a_blocks = a.data.blocks
+        b_blocks = b.data.blocks
+        a_block_inds = a.data.block_inds
+        b_block_inds = b.data.block_inds
+        common_type = a.dtype.common(b.dtype)
+        if a.data.dtype != common_dtype:
+            a_blocks = [self.block_to_dtype(T, common_type) for T in a_blocks]
+        if b.data.dtype != common_dtype:
+            b_blocks = [self.block_to_dtype(T, common_type) for T in b_blocks]
+        res_blocks = []
+        res_block_inds = []
+        for i, j in _iter_common_noncommon_sorted_arrays(a_block_inds, b_block_inds):
+            if j is None:
+                res_blocks.append(a_blocks[i])
+                res_block_inds.append(a_block_inds[i])
+            elif i is None:
+                res_blocks.append(b_blocks[j])
+                res_block_inds.append(b_block_inds[j])
+            else:
+                res_blocks.append(self.block_add(a_blocks[i], b_blocks[j]))
+                res_block_inds.append(a_block_inds[i])
+        res_block_inds = np.concatenate(res_block_inds, axis=0)
+        return AbelianBackendData(common_type, res_blocks, res_block_inds)
 
+    # TODO
     #  def mul(self, a: float | complex, b: Tensor) -> Data:
     #      return self.block_mul(a, b.data)
 

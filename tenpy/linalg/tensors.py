@@ -476,6 +476,10 @@ class Tensor(AbstractTensor):
             other_order = _match_label_order(self, other)
             if other_order is not None:
                 other = transpose(other, other_order)
+            for leg_self, leg_other in zip(self.legs, other.legs):
+                if leg_self != leg_other:
+                    # TODO also print corresponding label(s)
+                    raise ValueError('\n'.join(["Incompatible legs for +:", str(self_leg), str(other_leg)]))
             res_data = backend.add(self, other)
             return Tensor(res_data, backend=backend, legs=self.legs, labels=self.labels)
         return NotImplemented
