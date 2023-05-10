@@ -1122,6 +1122,7 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
         b_blocks = b.data.blocks
         a_block_inds = a.data.block_inds
         b_block_inds = b.data.block_inds
+        # ensure common dtypes
         common_type = a.dtype.common(b.dtype)
         if a.data.dtype != common_dtype:
             a_blocks = [self.block_to_dtype(T, common_type) for T in a_blocks]
@@ -1142,9 +1143,12 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
         res_block_inds = np.concatenate(res_block_inds, axis=0)
         return AbelianBackendData(common_type, res_blocks, res_block_inds)
 
-    # TODO
-    #  def mul(self, a: float | complex, b: Tensor) -> Data:
-    #      return self.block_mul(a, b.data)
+    def mul(self, a: float | complex, b: Tensor) -> Data:
+        if a == 0.:
+            return self.zero_data(b.legs, b.data.dtype)
+        res_blocks = [self.block_mul(a, T) for T in b.data.blocks]
+        res_dtype = b.data.dtype if len(res_blocks) == 0 else self.block_dtype(res_blocks[0])
+        return AbelianBackendData(res_dtype, res_blocks, b.data.block_inds)
 
     # TODO: support eig(h), eigvals
     # TODO: concatenate and grid_concat
