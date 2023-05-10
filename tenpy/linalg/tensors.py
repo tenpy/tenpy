@@ -19,6 +19,9 @@ __all__ = ['AbstractTensor', 'Tensor', 'ChargedTensor', 'DiagonalTensor', 'tdot'
            'zero_like']
 
 
+# svd, svd_truncate, exp, log are implemented in matrix_operations.py
+
+
 def _dual_leg_label(label: str) -> str:
     """the label that a leg should have after conjugation"""
     if label is None:
@@ -1149,6 +1152,8 @@ class DiagonalTensor(AbstractTensor):
     #  > nonabelian: not only diagonal in coupled irrep, but also in its multiplicity, i.e. blocks are diagonal matrices
     # TODO revisit this when Tensor class and specification for data-structure of backend is "finished"
     # TODO this could implement element-wise operations such as __mul__ and __pow__, it would be well defined
+
+    # TODO should this allow that the incoming and outgoing legs are non-dual of each other?
 
     def __init__(self) -> None:
         raise NotImplementedError

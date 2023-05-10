@@ -21,14 +21,11 @@ if TYPE_CHECKING:
 #  jakob only keeps it around to make his IDE happy
 
 
+
 class AbstractNoSymmetryBackend(AbstractBackend, AbstractBlockBackend, ABC):
     """
     Backend with no symmetries.
 
-    Attributes
-    ----------
-    data : Block
-        A single block of the AbstractBlockBackend, e.g. a numpy.ndarray for NumpyBlockBackend.
     """
 
     def get_dtype_from_data(self, a: Data) -> Dtype:
@@ -74,18 +71,9 @@ class AbstractNoSymmetryBackend(AbstractBackend, AbstractBlockBackend, ABC):
     def tdot(self, a: Tensor, b: Tensor, axs_a: list[int], axs_b: list[int]) -> Data:
         return self.block_tdot(a.data, b.data, axs_a, axs_b)
 
-    def svd(self, a: Tensor, axs1: list[int], axs2: list[int], new_leg: VectorSpace | None
-            ) -> tuple[Data, Data, Data, VectorSpace]:
-        a = self.block_transpose(a.data, axs1 + axs2)
-        a_shape = self.block_shape(a)
-        a_shape1 = a_shape[:len(axs1)]
-        a_shape2 = a_shape[len(axs1):]
-        a = self.block_reshape(a, (prod(a_shape1), prod(a_shape2)))
+    def svd(self, a: Tensor, new_vh_leg_dual: bool) -> tuple[Data, Data, Data, VectorSpace]:
         u, s, vh = self.matrix_svd(a)
-        u = self.block_reshape(u, a_shape1 + (len(s), ))
-        vh = self.block_reshape(vh, (len(s), ) + a_shape2)
-        if new_leg is None:
-            new_leg = VectorSpace.non_symmetric(len(s), is_dual=False, is_real=a.legs[0].is_real)
+        new_leg = VectorSpace.non_symmetric(len(s), is_dual=new_vh_leg_dual, is_real=a.legs[0].is_real)
         return u, s, vh, new_leg
 
     def outer(self, a: Tensor, b: Tensor) -> Data:

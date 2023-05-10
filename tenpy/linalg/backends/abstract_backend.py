@@ -153,19 +153,16 @@ class AbstractBackend(ABC):
         ...
 
     @abstractmethod
-    def svd(self, a: Tensor, axs1: list[int], axs2: list[int], new_leg: VectorSpace | None
-            ) -> tuple[Data, Data, Data, VectorSpace]:
+    def svd(self, a: Tensor, new_vh_leg_dual: bool) -> tuple[Data, Data, Data, VectorSpace]:  # TODO: Data -> DiagonalData for S
         """
-        SVD of a tensor, interpreted as a linear map / matrix from axs1 to axs2.
-
-        Development Notes
-        -----------------
-        - abelian backend: if len(axs1) > 1 or len(axs2) > 1, call combine legs and warn that this may
-        be inefficient.
+        SVD of a Matrix, `a` has only two legs (often ProductSpace).
 
         Returns
         -------
-        u, s, vh, new_leg
+        u, s, vh :
+            Data of corresponding tensors.
+        new_leg :
+            (Backend-specific) VectorSpace the new leg of vh.
         """
         ...
 
@@ -372,7 +369,11 @@ class AbstractBlockBackend(ABC):
 
     @abstractmethod
     def matrix_svd(self, a: Block, algorithm: str | None) -> tuple[Block, Block, Block]:
-        """SVD of a 2D block"""
+        """SVD of a 2D block.
+
+        With full_matrices=False, i.e. shape ``(n,m) -> (n,k), (k,) (k,m)`` where
+        ``k <= min(n,m)``.
+        """
         ...
 
     @abstractmethod

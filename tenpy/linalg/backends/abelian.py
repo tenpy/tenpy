@@ -235,7 +235,7 @@ class AbelianBackendProductSpace(ProductSpace, AbelianBackendVectorSpace):
         _sectors = _fuse_abelian_charges(symmetry,
             *(sectors[gr] for sectors, gr in zip(fuse_sectors, grid.T)))
 
-        # sort (non-dual) charge sectors. Similar code as in :meth:`LegCharge.sort`
+        # sort (non-dual) charge sectors. Similar code as in AbelianBackendVectorSpace._sort_sectors
         perm_block_inds = np.lexsort(_sectors.T)
         block_ind_map = block_ind_map[perm_block_inds]
         _sectors = _sectors[perm_block_inds]
@@ -480,13 +480,6 @@ class AbelianBackendData:
     block_inds : ndarray  # For each of the blocks entries the block indices specifying to which
     # sector of the different legs it belongs
 
-    def copy(self, deep=True):
-        if deep:
-            return AbelianBackendData(self.dtype,
-                                      [self.block_copy(b) for b in self.blocks],
-                                      self.block_inds.copy())
-        return AbelianBackendData(self.dtype, self.blocks, self.block_inds)
-
     def _sort_block_inds(self):
         """Bring `block_inds` (back) into the conventional sorted order.
 
@@ -495,6 +488,14 @@ class AbelianBackendData:
         perm = np.lexsort(self.block_inds.T)
         self.block_inds = self.block_inds[perm, :]
         self.blocks = [self.blocks[p] for p in perm]
+
+@dataclass
+class AbelianBackendDiagonalData:
+    """Data stored in a DiagonalTensor for :class:`AbstractAbelianBackend`."""
+    dtye: Dtype
+    blocks : List[Block]
+    block_inds : ndarray
+
 
 
 class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
@@ -571,7 +572,9 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
         return AbelianBackendData(dtype, blocks, np.hstack([block_inds, block_inds]))
 
     def copy_data(self, a: Tensor) -> Data:
-        return a.data.copy(deep=True)
+        return AbelianBackendData(a.data.dtype,
+                                  [self.block_copy(b) for b in self.blocks],
+                                  a.data.block_inds.copy())
 
     def _data_repr_lines(self, data: Data, indent: str, max_width: int, max_lines: int):
         if len(data.blocks) == 0:
@@ -811,12 +814,60 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
                 for blocks in blocks_list]
         return res
 
-    #  @abstractmethod
-    #  def svd(self, a: Tensor, axs1: list[int], axs2: list[int], new_leg: VectorSpace | None
-    #          ) -> tuple[Data, Data, Data, VectorSpace]:
-    #      # reshaping, slicing etc is so specific to the BlockBackend that I dont bother unifying anything here.
-    #      # that might change though...
-    #      ...
+    def svd(self, a: Tensor, new_vh_leg_dual: bool) -> tuple[Data, Data, Data, VectorSpace]:
+        leg_L, leg_R = a.legs
+        u_blocks = []
+        s_blocks = []
+        s_lens = []
+        vh_blocks = []
+        for block in a.data.blocks:
+            u, s, vh = self.matrix_svd(block)
+            u_blocks.append(u)
+            s_blocks.append(s)
+            s_lens.append(len(s))
+            v_blocks.append(v)
+        # TODO: need second version with truncation, here we just keep everything
+        u, s, vh = self.matrix_svd(a)
+        symmetry = a.legs[0].symmetry
+        sectors = a.legs[1].sectors
+        block_inds_L, block_inds_R = a.data.block_inds.T  # columns of block_inds
+        # due to lexsort(a.data.block_inds.T), block_inds_R is sorted, but block_inds_L not.
+        block_inds_C = np.arange(len(s_blocks), int)
+        if new_vh_leg_dual != leg_R.is_dual:
+            # opposite dual flag in legs of vH => same _sectors
+            # project onto block indices in central leg which we kept, given by block_inds_R
+            new_leg = AbelianBackendVectorSpace(symmetry,
+                                                leg_R._sectors[block_inds_R, :],
+                                                leg_R.multiplicities[block_inds_R],
+                                                is_real=leg_R.is_real,
+                                                _is_dual=new_vh_leg_dual)
+            assert np.all(new_leg.perm_block_inds == block_inds_C), "new_leg sectors should be sorted"  # TODO remove this after tests ran
+        else:  # new_vh_leg_dual == leg_R.is_dual
+            # same dual flag in legs of vH => opposite _sectors => opposite sorting!!!
+            sectors = symmetry.dual_sectors(leg_R._sectors[block_inds_R, :])  # not sorted
+            new_leg = AbelianBackendVectorSpace(symmetry,
+                                                leg_R._sectors[block_inds_R, :],
+                                                leg_R.multiplicities[block_inds_R],
+                                                is_real=leg_R.is_real,
+                                                _is_dual=new_vh_leg_dual)
+            # new_leg has sorted _sectors in __init__, but that might have induced permutation
+            block_inds_C = block_inds_C[new_leg.perm_block_inds]  # no longer sorted
+        u_block_inds = np.hstack(block_inds_L, block_inds_C)
+        s_block_inds = block_inds_C
+        vh_block_inds = np.hstack(block_inds_C, block_inds_R)  # sorted
+        if new_vh_leg_dual == leg_R.is_dual:
+            # need to sort u_block_inds and s_block_inds
+            # since we lexsort with last column changing slowest, we need to sort block_inds_C only
+            sort = np.argsort(block_inds_C)
+            u_block_inds = u_block_inds[sort, :]
+            s_block_inds = s_block_inds[sort, :]
+            u_blocks = [u_blocks[i] for i in sort]
+            s_blocks = [s_blocks[i] for i in sort]
+
+        return (AbelianBackendData(dtype, u_blocks, u_block_inds),
+                AbelianBackednDiagonalData(dtype, s_blocks, s_block_inds),
+                AbelianBackendData(dtype, v_blocks, vh_block_inds),
+                new_leg)
 
     def outer(self, a: Tensor, b: Tensor) -> Data:
         res_dtype = a.data.dtype.common(b.data.dtype)
