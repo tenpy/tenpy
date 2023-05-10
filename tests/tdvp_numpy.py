@@ -191,18 +191,6 @@ def evolve_lanczos(H, psiI, dt, krylovDim):
     return psiF
 
 
-def expm_multiply(A, v, time, m):
-    iflag = np.array([1])
-    tol = 0.0
-    n = A.shape[0]
-    anorm = 1
-    wsp = np.zeros(7 + n * (m + 2) + 5 * (m + 2) * (m + 2), dtype=complex)
-    iwsp = np.zeros(m + 2, dtype=int)
-
-    output_vec, tol0, iflag0 = zgexpv(m, time, v, tol, anorm, wsp, iwsp, A.matvec, 0)
-    return output_vec
-
-
 def MPO_TFI(Jx, Jz, hx, hz):
     d = 2
     Id = np.eye(2, dtype=float)

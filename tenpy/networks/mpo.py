@@ -1970,7 +1970,7 @@ class MPOEnvironment(MPSEnvironment):
     ket : :class:`~tenpy.networks.mpo.MPS`
         The MPS on which `H` acts. May be identical with `bra`.
     **init_env_data :
-        Further keyword arguments with initializaiton data, as returned by
+        Further keyword arguments with initialization data, as returned by
         :meth:`get_initialization_data`.
         See :meth:`initialize_first_LP_last_RP` for details on these parameters.
 

@@ -289,7 +289,7 @@ class TimeEvolutionAlgorithm(Algorithm):
             The time step to be used.
         """
         # this function can e.g. calculate an approximation
-        raise NotImplementedError("Sublcasses should implement this.")
+        raise NotImplementedError("Subclasses should implement this.")
 
     def evolve(self, N_steps, dt):
         """Evolve by N_steps*dt.
