@@ -1103,15 +1103,12 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
         block_norms = [self.block_norm(b) for b in a.data]
         return np.linalg.norm(block_norms)
 
-    # TODO
-    #  def exp(self, a: Tensor, idcs1: list[int], idcs2: list[int]) -> Data:
-    #      matrix, aux = self.block_matrixify(a.data, idcs1, idcs2)
-    #      return self.block_dematrixify(self.matrix_exp(matrix), aux)
-
-    # TODO
-    #  def log(self, a: Tensor, idcs1: list[int], idcs2: list[int]) -> Data:
-    #      matrix, aux = self.block_matrixify(a.data, idcs1, idcs2)
-    #      return self.block_dematrixify(self.matrix_log(matrix), aux)
+    def act_block_diagonal_square_matrix(self, a: Tensor, block_backend_fct: str) -> Data:
+        """Apply functions like exp() and log() on a (square) block-diagonal `a`."""
+        block_method = getattr(self, block_method)
+        res_blocks = [block_method(b) for b in a.data.blocks]
+        dtype = a.data.dtype if len(res_blocks) == 0 else self.block_dtype(res_blocks[0])
+        return AbelianBackendData(a.data.dtype, res_blocks, a.data.block_inds)
 
     # TODO
     #  def random_normal(self, legs: list[VectorSpace], dtype: Dtype, sigma: float) -> Data:

@@ -106,13 +106,10 @@ class AbstractNoSymmetryBackend(AbstractBackend, AbstractBlockBackend, ABC):
     def norm(self, a: Tensor) -> float:
         return self.block_norm(a.data)
 
-    def exp(self, a: Tensor, idcs1: list[int], idcs2: list[int]) -> Data:
-        matrix, aux = self.block_matrixify(a.data, idcs1, idcs2)
-        return self.block_dematrixify(self.matrix_exp(matrix), aux)
-
-    def log(self, a: Tensor, idcs1: list[int], idcs2: list[int]) -> Data:
-        matrix, aux = self.block_matrixify(a.data, idcs1, idcs2)
-        return self.block_dematrixify(self.matrix_log(matrix), aux)
+    def act_block_diagonal_square_matrix(self, a: Tensor, block_method: str) -> Data:
+        """Apply functions like exp() and log() on a (square) block-diagonal `a`."""
+        block_method = getattr(self, block_method)
+        return block_method(a.data)
 
     def random_normal(self, legs: list[VectorSpace], dtype: Dtype, sigma: float) -> Data:
         return self.block_random_normal([l.dim for l in legs], dtype=dtype, sigma=sigma)

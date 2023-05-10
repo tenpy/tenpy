@@ -164,15 +164,7 @@ def exp(t: AbstractTensor | complex | float, legs1: list[int | str] = None,
     Requires the two groups of legs to be mutually dual.
     Contrary to numpy, this is *not* the element-wise exponential function.
     """
-    if not isinstance(t, AbstractTensor):
-        return math.exp(t)
-    if not isinstance(t, Tensor):
-        raise NotImplementedError
-    idcs1, idcs2 = leg_bipartition(legs1, legs2)
-    assert len(idcs1) == len(idcs2)
-    assert all(t.legs[i1].is_dual_of(t.legs[i2]) for i1, i2 in zip(idcs1, idcs2))
-    res_data = t.backend.exp(t, idcs1, idcs2)
-    return Tensor(res_data, backend=t.backend, legs=t.legs, labels=t.labels)
+    return _act_block_diagonal_square_matrix(t, legs1, legs2, 'matrix_exp')
 
 
 def log(t: AbstractTensor | complex | float, legs1: list[int | str] = None,
@@ -182,13 +174,29 @@ def log(t: AbstractTensor | complex | float, legs1: list[int | str] = None,
     Requires the two groups of legs to be mutually dual.
     Contrary to numpy, this is *not* the element-wise exponential function.
     """
-    if not isinstance(t, AbstractTensor):
-        return math.log(t)
-    if not isinstance(t, Tensor):
-        raise NotImplementedError
+    return _act_block_diagonal_square_matrix(t, legs1, legs2, 'matrix_log')
+
+
+def _act_block_diagonal_square_matrix(t: AbstractTensor,
+                                      legs1: list[int | str],
+                                      legs2: list[int | str],
+                                      block_method: str) -> AbstractTensor:
+    """
+
+    block_method :
+        Name of a BlockBackend method with signature ``block_method(a: Block) -> Block``.
+    """
     idcs1, idcs2 = leg_bipartition(legs1, legs2)
     assert len(idcs1) == len(idcs2)
     assert all(t.legs[i1].is_dual_of(t.legs[i2]) for i1, i2 in zip(idcs1, idcs2))
-    res_data = t.backend.log(t, idcs1, idcs2)
-    return Tensor(res_data, backend=t.backend, legs=t.legs, labels=t.labels)
-
+    if len(idcs1) > 1:
+        pipe = t.make_ProductSpace(idcs1)
+        t = t.combine_legs([idcs1, idcs2], new_legs=[pipe.dual, pipe], new_axes=[0, 1])
+    res_data = t.backend.act_block_diagonal_square_matrix(t, block_method)
+    res = Tensor(res_data, backend=t.backend, legs=t.legs, labels=t.labels)
+    if len(idcs1) > 1:
+        res = res.split_legs()
+        transposed = idcs1 + idcs2
+        if any(i != j for i, j in enumerate(transposed)):
+            res = res.transpose(inverse_permutation(transposed))
+    return res

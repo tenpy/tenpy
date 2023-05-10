@@ -220,11 +220,12 @@ class AbstractBackend(ABC):
         ...
 
     @abstractmethod
-    def exp(self, a: Tensor, idcs1: list[int], idcs2: list[int]) -> Data:
-        ...
+    def act_block_diagonal_square_matrix(self, a: Tensor, block_method: str) -> Data:
+        """Apply functions like exp() and log() on a (square) block-diagonal `a`.
 
-    @abstractmethod
-    def log(self, a: Tensor, idcs1: list[int], idcs2: list[int]) -> Data:
+        block_method :
+            Name of a BlockBackend method with signature ``block_method(a: Block) -> Block``.
+        """
         ...
 
     @abstractmethod
