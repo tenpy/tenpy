@@ -15,6 +15,10 @@ build
 dev_test
 dist
 tenpy/_version.py
+tenpy/linalg/*.c
+tenpy/linalg/*.cpp
+tenpy/linalg/*.so
+tenpy/linalg/*.html
 tenpy/linalg/old/*.c
 tenpy/linalg/old/*.cpp
 tenpy/linalg/old/*.so
