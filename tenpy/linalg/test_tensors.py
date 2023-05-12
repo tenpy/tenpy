@@ -76,7 +76,7 @@ def test_Tensor_methods(backend):
 
     # TODO also test with symmetries, once abelian backend is ready
     legs = [VectorSpace.non_symmetric(d) for d in dims]
-    
+
     print('checking __init__ with labels=None')
     tens1 = tensors.Tensor(data1, legs=legs, backend=backend, labels=None)
     tens1.check_sanity()
@@ -144,7 +144,7 @@ def test_Tensor_methods(backend):
     data4 = random_block((1,), backend)
     tens4 = tensors.Tensor(data4, backend=backend, legs=[VectorSpace.non_symmetric(1)])
     assert np.allclose(tens4.item(), data4[0])
-    
+
     print('check str and repr')
     str(tens1)
     str(tens3)
@@ -179,7 +179,7 @@ def test_Tensor_methods(backend):
 def test_Tensor_classmethods(backend):
     backend = all_backends[backend]
     data = random_block((2, 3, 10), backend)
-    
+
     print('checking from_numpy')
     tens = tensors.Tensor.from_numpy(data, backend=backend)
     assert np.allclose(data, tens.data)
@@ -220,15 +220,15 @@ def test_tdot(backend):
     t3 = tensors.Tensor.from_numpy(data3, backend=backend, legs=[a.dual, b.dual])
     t4 = tensors.Tensor.from_numpy(data4, backend=backend, legs=[c.dual, b.dual])
     t5 = tensors.Tensor.from_numpy(data5, backend=backend, legs=[c.dual, a.dual, b.dual])
-    t1_labelled = tensors.Tensor.from_numpy(data1, backend=backend, legs=[a, b, c], 
+    t1_labelled = tensors.Tensor.from_numpy(data1, backend=backend, legs=[a, b, c],
                                             labels=['a', 'b', 'c'])
-    t2_labelled = tensors.Tensor.from_numpy(data2, backend=backend, legs=[b.dual, c.dual, d.dual], 
+    t2_labelled = tensors.Tensor.from_numpy(data2, backend=backend, legs=[b.dual, c.dual, d.dual],
                                             labels=['b*', 'c*', 'd*'])
-    t3_labelled = tensors.Tensor.from_numpy(data3, backend=backend, legs=[a.dual, b.dual], 
+    t3_labelled = tensors.Tensor.from_numpy(data3, backend=backend, legs=[a.dual, b.dual],
                                             labels=['a*', 'b*'])
-    t4_labelled = tensors.Tensor.from_numpy(data4, backend=backend, legs=[c.dual, b.dual], 
+    t4_labelled = tensors.Tensor.from_numpy(data4, backend=backend, legs=[c.dual, b.dual],
                                             labels=['c*', 'b*'])
-    t5_labelled = tensors.Tensor.from_numpy(data5, backend=backend, legs=[c.dual, a.dual, b.dual], 
+    t5_labelled = tensors.Tensor.from_numpy(data5, backend=backend, legs=[c.dual, a.dual, b.dual],
                                             labels=['c*', 'a*', 'b*'])
 
     print('contract one leg')
@@ -239,7 +239,7 @@ def test_tdot(backend):
     assert np.allclose(res1, expect)
     assert np.allclose(res2, expect)
     assert np.allclose(res3, expect)
-    
+
     print('contract two legs')
     expect = np.tensordot(data1, data2, ([1, 2], [0, 1]))
     res1 = tensors.tdot(t1, t2, [1, 2], [0, 1]).data
@@ -321,7 +321,7 @@ def test_transpose(backend):
     res = tensors.transpose(t, [2, 0, 3, 1])
     assert res.labels == ['c', 'a', 'd', 'b']
     assert np.allclose(res.data, np.transpose(data, [2, 0, 3, 1]))
-    
+
 
 @pytest.mark.parametrize('backend', all_backends.keys())
 def test_trace(backend):
@@ -351,7 +351,7 @@ def test_trace(backend):
     a = VectorSpace.non_symmetric(11)
     b = VectorSpace.non_symmetric(13)
     c = VectorSpace.non_symmetric(7)
-    tens = tensors.Tensor.from_numpy(data, legs=[a, b.dual, a.dual, c, b], backend=backend, 
+    tens = tensors.Tensor.from_numpy(data, legs=[a, b.dual, a.dual, c, b], backend=backend,
                                      labels=['a', 'b*', 'a*', 'c', 'b'])
     res_idx = tensors.trace(tens, [0, 1], [2, 4])
     res_label = tensors.trace(tens, ['a', 'b*'], ['a*', 'b'])
@@ -365,7 +365,7 @@ def test_trace(backend):
     expect = np.trace(np.trace(data, axis1=1, axis2=3), axis1=0, axis2=1)
     a = VectorSpace.non_symmetric(11)
     b = VectorSpace.non_symmetric(13)
-    tens = tensors.Tensor.from_numpy(data, legs=[a, b.dual, a.dual, b], backend=backend, 
+    tens = tensors.Tensor.from_numpy(data, legs=[a, b.dual, a.dual, b], backend=backend,
                                      labels=['a', 'b*', 'a*', 'b'])
     res_idx = tensors.trace(tens, [0, 1], [2, 3])
     res_label = tensors.trace(tens, ['a', 'b*'], ['a*', 'b'])
@@ -373,7 +373,7 @@ def test_trace(backend):
     assert np.allclose(res_idx, expect)
     assert isinstance(res_label, complex)
     assert np.allclose(res_label, expect)
-    
+
 
 @pytest.mark.parametrize('backend', all_backends.keys())
 def test_conj(backend):
@@ -388,7 +388,7 @@ def test_conj(backend):
     assert np.allclose(res_data, np.conj(data))
     assert res.labels == ['a*', 'b*', None]
     assert [l1.is_dual_of(l2) for l1, l2 in zip(res.legs, tens.legs)]
-    
+
 
 @pytest.mark.parametrize('backend', all_backends.keys())
 def test_combine_split(backend):
@@ -418,19 +418,19 @@ def test_combine_split(backend):
         tensors.split_leg(res, 0)
     with pytest.raises(ValueError):
         tensors.split_leg(res, 'a')
-    
+
 
 @pytest.mark.parametrize('backend', all_backends.keys())
 def test_is_scalar(backend):
     backend = all_backends[backend]
-    assert tensors.is_scalar(1) 
-    assert tensors.is_scalar(0.) 
-    assert tensors.is_scalar(1. + 2.j) 
+    assert tensors.is_scalar(1)
+    assert tensors.is_scalar(0.)
+    assert tensors.is_scalar(1. + 2.j)
     scalar_tens = tensors.Tensor.from_numpy([[1.]], backend=backend)
     assert tensors.is_scalar(scalar_tens)
     non_scalar_tens = tensors.Tensor.from_numpy([[1., 2.], [3., 4.]], backend=backend)
     assert not tensors.is_scalar(non_scalar_tens)
-    
+
 
 @pytest.mark.parametrize('backend', all_backends.keys())
 def test_almost_equal(backend):
@@ -441,7 +441,7 @@ def test_almost_equal(backend):
     t2 = tensors.Tensor.from_numpy(data2, backend=backend)
     assert tensors.almost_equal(t1, t2)
     assert not tensors.almost_equal(t1, t2, atol=1e-10, rtol=1e-10)
-    
+
 
 @pytest.mark.parametrize('backend', all_backends.keys())
 def test_squeeze_legs(backend):
@@ -463,7 +463,7 @@ def test_squeeze_legs(backend):
     res = tensors.squeeze_legs(tens, ['b', 'e'])
     assert np.allclose(res.data, data[:, 0, :, :, 0])
     assert res.labels == ['a', 'c', 'd']
-    
+
 
 @pytest.mark.parametrize('backend', all_backends.keys())
 def test_norm(backend):
@@ -482,10 +482,10 @@ def demo_repr():
     #
     # run e.g. via the following command from the tests folder
     # python -c "from test_linalg_tensors import demo_repr; demo_repr()"
-    
+
     print()
     separator = '=' * 80
-    
+
     backend = NoSymmetryNumpyBackend()
     dims = (5, 2, 5)
     data = random_block(dims, backend)
@@ -493,11 +493,11 @@ def demo_repr():
     tens1 = tensors.Tensor(data, legs=legs, backend=backend, labels=['vL', 'p', 'vR'])
     tens2 = tensors.combine_legs(tens1, ['p', 'vR'])
 
-    for command in ['repr(tens1.legs[0])', 
-                    'str(tens1.legs[0])', 
-                    'repr(tens1)', 
-                    'repr(tens2.legs[1])', 
-                    'str(tens2.legs[1])', 
+    for command in ['repr(tens1.legs[0])',
+                    'str(tens1.legs[0])',
+                    'repr(tens1)',
+                    'repr(tens2.legs[1])',
+                    'str(tens2.legs[1])',
                     'repr(tens2)']:
         output = eval(command)
         print()

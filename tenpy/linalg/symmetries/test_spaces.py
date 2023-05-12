@@ -33,14 +33,13 @@ def _get_four_sectors(symm: groups.Symmetry) -> groups.SectorArray:
     return res
 
 
-@pytest.mark.parametrize('symm', symmetries.keys())
-@pytest.mark.parametrize('VectorSpace', VectorSpace_classes)
-def test_vector_space(symm, VectorSpace):
-    symm: groups.Symmetry = symmetries[symm]
+def test_vector_space(some_symmetry, some_symmetry_sectors, some_symmetry_multiplicities, VectorSpace):
+    symm = some_symmetry
+    sectors = some_symmetry_sectors
+    mults = some_symmetry_multiplicities
+
     # TODO (JU) test real (as in "not complex") vectorspaces
 
-    sectors = _get_four_sectors(symm)
-    mults = [2, 1, 3, 5]
     s1 = VectorSpace(symmetry=symm, sectors=sectors, multiplicities=mults)
     s2 = VectorSpace.non_symmetric(dim=8)
 
@@ -58,7 +57,12 @@ def test_vector_space(symm, VectorSpace):
     assert s1 == s1
     assert s1 != s1.dual
     assert s1 != s2
-    assert s1 != VectorSpace(symmetry=symm, sectors=sectors, multiplicities=[2, 1, 3, 6])
+    wrong_mults = mults.copy()
+    if len(mults) > 2:
+        wrong_mults[-2] += 1
+    else:
+        wrong_mults[0] += 1
+    assert s1 != VectorSpace(symmetry=symm, sectors=sectors, multiplicities=wrong_mults)
     assert s1.dual == VectorSpace(symmetry=symm, sectors=sectors, multiplicities=mults,
                                   _is_dual=True)
     assert s1.can_contract_with(s1.dual)
@@ -73,17 +77,18 @@ def test_vector_space(symm, VectorSpace):
 
     # TODO (JU) test num_parameters when ready
 
-@pytest.mark.parametrize('symm', symmetries.keys())
-@pytest.mark.parametrize('VectorSpace, ProductSpace',
-                         zip(VectorSpace_classes, ProductSpace_classes))
-def test_product_space(symm, VectorSpace, ProductSpace):
-    symm: groups.Symmetry = symmetries[symm]
+
+def test_product_space(some_symmetry, some_symmetry_sectors, some_symmetry_multiplicities,
+                       VectorSpace, ProductSpace):
+    symm = some_symmetry
+    sectors = some_symmetry_sectors
+    mults = some_symmetry_multiplicities
+
     # TODO (JU) test real (as in "not complex") vectorspaces
 
-    sectors = _get_four_sectors(symm)
-    s1 = VectorSpace(symmetry=symm, sectors=sectors, multiplicities=[2, 1, 3, 4])
-    s2 = VectorSpace(symmetry=symm, sectors=sectors[:2], multiplicities=[2, 1])
-    s3 = VectorSpace(symmetry=symm, sectors=sectors[::2], multiplicities=[3, 2])
+    s1 = VectorSpace(symmetry=symm, sectors=sectors, multiplicities=mults)
+    s2 = VectorSpace(symmetry=symm, sectors=sectors[:2], multiplicities=mults[:2])
+    s3 = VectorSpace(symmetry=symm, sectors=sectors[::2], multiplicities=mults[::2])
 
     p1 = ProductSpace([s1, s2, s3])
     p2 = s1 * s2

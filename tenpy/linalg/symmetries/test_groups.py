@@ -41,7 +41,13 @@ def common_checks(sym: groups.Symmetry, example_sector):
     try:
         assert sym.n_symbol(example_sector, sym.dual_sector(example_sector), sym.trivial_sector) == 1
     except NotImplementedError:
+        pytest.xfail("NotImplementedError")
         pass  # TODO SU(2) does not implement n_symbol yet
+
+
+def test_generic_symmetry(some_symmetry, some_symmetry_sectors):
+    example_sector = some_symmetry_sectors[0]
+    common_checks(some_symmetry, example_sector)
 
 
 def test_no_symmetry():
@@ -281,12 +287,16 @@ def test_ZN_symmetry(N):
     assert_array_equal(sym.dual_sectors(sectors_a), (-sectors_a) % N)
 
 
+def test_su2_symmetry_common():
+    sym = groups.SU2Symmetry()
+    common_checks(sym, example_sector=np.array([3]))
+
+
 def test_su2_symmetry():
     sym = groups.SU2Symmetry()
     spin_1 = np.array([2])
     spin_3_half = np.array([3])
     sym_with_name = groups.SU2Symmetry('foo')
-    common_checks(sym, example_sector=spin_3_half)
 
     print('instancecheck and is_abelian')
     assert not isinstance(sym, groups.AbelianGroup)

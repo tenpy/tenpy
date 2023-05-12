@@ -21,7 +21,6 @@ if TYPE_CHECKING:
 #  jakob only keeps it around to make his IDE happy
 
 
-
 class AbstractNoSymmetryBackend(AbstractBackend, AbstractBlockBackend, ABC):
     """
     Backend with no symmetries.
