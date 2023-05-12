@@ -54,17 +54,15 @@ def some_symmetry_multiplicities(some_symmetry_sectors):
     return mults[:len(some_symmetry_sectors)]
 
 
-@pytest.fixture(params=[spaces.VectorSpace, backends.abelian.AbelianBackendVectorSpace], ids=repr)
+@pytest.fixture(params=[spaces.VectorSpace, backends.abelian.AbelianBackendVectorSpace],
+                ids=lambda cls: cls.__name__)
 def VectorSpace(request):
     return request.param
 
 
-@pytest.fixture
+@pytest.fixture(ids=lambda cls:cls.__name__)
 def ProductSpace(VectorSpace):
-    # TODO (JH) requires VectorSpace.ProductSpace class attribute!!!
-    if VectorSpace == backends.abelian.AbelianBackendVectorSpace:
-        return backends.abelian.AbelianBackendProductSpace
-    return spaces.ProductSpace
+    return VectorSpace.ProductSpace
 
 
 @pytest.fixture

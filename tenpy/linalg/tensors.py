@@ -19,6 +19,7 @@ __all__ = ['AbstractTensor', 'Tensor', 'ChargedTensor', 'DiagonalTensor', 'tdot'
            'zero_like']
 
 
+# TODO import stuff from matrix_operations
 # svd, svd_truncate, exp, log are implemented in matrix_operations.py
 
 
@@ -134,7 +135,7 @@ class AbstractTensor(ABC):
         if self.num_legs == 1:
             return self.legs[0]
         else:
-            return self.backend.convert_vector_space(ProductSpace(self.legs))
+            return self.legs[0].ProductSpace(self.legs)
 
     @property
     def size(self) -> int:
@@ -921,7 +922,7 @@ class Tensor(AbstractTensor):
     def make_ProductSpace(self, legs, **kwargs):
         leg_idcs = self.get_leg_idcs(legs)
         legs = [self.legs[i] for i in leg_idcs]
-        return ProductSpace(legs, **kwargs)  # TODO: this should be something like class-attribute self.backend.ProductSpace
+        return legs[0].ProductSpace(legs, **kwargs)  # TODO: this should be something like class-attribute self.backend.ProductSpace
 
     def _combine_legs_make_ProductSpace(self, combine_leg_idcs, product_spaces, product_spaces_dual):
         """Argument parsing for :meth:`combine_legs`: make missing ProductSpace legs.

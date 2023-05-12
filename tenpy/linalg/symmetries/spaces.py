@@ -46,6 +46,10 @@ class VectorSpace:
             we need to call ``VectorSpace(..., some_sectors, _is_dual=True)`` and in particular
             pass the _same_ sectors.
     """
+    ProductSpace = None  # we set this to the ProductSpace class below
+    # for subclasses, it's the corresponding ProductSpace subclass, e.g.
+    # AbelianBackendVectorSpace.ProductSpace = AbelianBackendProductSpace
+    # This allows combine_legs() etc to generate apropriate sublcasses
 
     def __init__(self, symmetry: Symmetry, sectors: SectorArray, multiplicities: ndarray = None,
                  is_real: bool = False, _is_dual: bool = False):
@@ -99,7 +103,7 @@ class VectorSpace:
     #  should we even define __mul__ ...?
     def __mul__(self, other):
         if isinstance(other, VectorSpace):
-            return ProductSpace([self, other])
+            return self.ProductSpace([self, other])
         return NotImplemented
 
     def __repr__(self):
@@ -255,12 +259,14 @@ class ProductSpace(VectorSpace):
         """Return a ProductSpace isomorphic to self, which has the opposite is_dual attribute.
 
         This realizes the isomorphism between ``V.dual * W.dual`` and ``(V * W).dual``
-        for `VectorSpace`s ``V`` and ``W``.
+        for `VectorSpace` ``V`` and ``W``.
+
+        Note that e.g. the AbelianBackend sorts differently in this case, leading to a permutation
+        of the block indices.
         """
         # note: yields dual self._sector so can have different sorting of _sectors!
         # so can't just pass self._sectors and self._multiplicities
-        # TODO: should we return the associated permutation of block_indices?
-        return ProductSpace(spaces=self.spaces, _is_dual=not self.is_dual)
+        return self.ProductSpace(spaces=self.spaces, _is_dual=not self.is_dual)
 
     def gauge_is_dual(self, is_dual: bool) -> ProductSpace:
         """Return a ProductSpace isomorphic (or equal) to self with the given is_dual attribute."""
@@ -338,3 +344,6 @@ class ProductSpace(VectorSpace):
         _sectors = np.asarray(list(fusion.keys()))
         multiplicities = np.asarray(list(fusion.values()))
         return _sectors, multiplicities
+
+
+VectorSpace.ProductSpace = ProductSpace

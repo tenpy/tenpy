@@ -183,15 +183,10 @@ class AbelianBackendProductSpace(ProductSpace, AbelianBackendVectorSpace):
     """
     # formerly known as LegPipe
 
-    # TODO: AbelienBackendVectorSpace doesn't have access to backend,
-    # so can't call convert_vector_space().
-    #  def __init__(self, spaces: list[VectorSpace], _is_dual: bool = False):
-    #      backend = spaces[0].backend
-    #      spaces = [backend.convert_vector_space(s) for s in spaces]
-    #      ProductSpace.__init__(self, spaces, is_dual)
-
-    def _fuse_spaces(self, symmetry: Symmetry, spaces: list[VectorSpace], _is_dual: bool,
+    def _fuse_spaces(self, symmetry: Symmetry, spaces: list[AbelianBackendVectorSpace], _is_dual: bool,
                      ) -> tuple[SectorArray, ndarray]:
+        for s in spaces:
+            assert isinstance(s, AbelianBackendVectorSpace)
         # this function heavily uses numpys advanced indexing, for details see
         # http://docs.scipy.org/doc/numpy/reference/arrays.indexing.html
         num_spaces = len(spaces)
@@ -318,6 +313,8 @@ class AbelianBackendProductSpace(ProductSpace, AbelianBackendVectorSpace):
         res = self.as_VectorSpace()
         return res.project(*args, **kwargs)
 
+
+AbelianBackendVectorSpace.ProductSpace = AbelianBackendProductSpace
 
 _MAX_INT = np.iinfo(int).max
 
@@ -509,10 +506,11 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
         if isinstance(leg, (AbelianBackendVectorSpace, AbelianBackendProductSpace)):
             return leg
         elif isinstance(leg, ProductSpace):
-            return AbelianBackendProductSpace(leg.spaces, leg.is_dual)
+            spaces = [self.convert_vector_space(s) for s in spaces]
+            return AbelianBackendProductSpace(spaces, _is_dual=leg.is_dual)
         else:
-            return AbelianBackendVectorSpace(leg.symmetry, leg.sectors, leg.multiplicities,
-                                             leg.is_real, leg.is_dual)
+            return AbelianBackendVectorSpace(leg.symmetry, leg._sectors, leg.multiplicities,
+                                             leg.is_real, _is_dual=leg.is_dual)
 
     def get_dtype_from_data(self, a: Data) -> Dtype:
         return a.dtype
@@ -868,7 +866,7 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
             s_blocks = [s_blocks[i] for i in sort]
 
         return (AbelianBackendData(dtype, u_blocks, u_block_inds),
-                AbelianBackednDiagonalData(dtype, s_blocks, s_block_inds),
+                AbelianBackendDiagonalData(dtype, s_blocks, s_block_inds),
                 AbelianBackendData(dtype, v_blocks, vh_block_inds),
                 new_leg)
 
@@ -960,7 +958,7 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
         blocks = [self.block_conj(b) for b in a.data.blocks]
         return AbelianBackendData(a.data.dtype, blocks, a.data.block_inds)
 
-    def combine_legs(self, a: Tensor, combine_slices: list[int, int], product_spaces: list[ProductSpace], new_axes: list[int], final_legs: list[VectorSpace]) -> Data:
+    def combine_legs(self, a: Tensor, combine_slices: list[int, int], product_spaces: list[AbelianBackendProductSpace], new_axes: list[int], final_legs: list[VectorSpace]) -> Data:
         old_block_inds = a.data.block_inds
         # first, find block indices of the final array to which we map
         map_inds = [product_space._map_incoming_block_inds(old_block_inds[:, b:e])
