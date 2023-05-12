@@ -1,0 +1,11 @@
+[flake8]
+exclude = 
+    .git,
+    __pycache__,
+    build,
+    dist
+max-complexity = 10
+select = E9,F63,F7,F82
+show-source = True
+statistics = True
+count = True
