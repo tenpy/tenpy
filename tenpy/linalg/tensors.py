@@ -488,7 +488,7 @@ class Tensor(AbstractTensor):
             for leg_self, leg_other in zip(self.legs, other.legs):
                 if leg_self != leg_other:
                     # TODO also print corresponding label(s)
-                    raise ValueError('\n'.join(["Incompatible legs for +:", str(self_leg), str(other_leg)]))
+                    raise ValueError('\n'.join(["Incompatible legs for +:", str(leg_self), str(leg_other)]))
             res_data = backend.add(self, other)
             return Tensor(res_data, backend=backend, legs=self.legs, labels=self.labels)
         return NotImplemented

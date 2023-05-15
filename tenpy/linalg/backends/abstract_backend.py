@@ -39,10 +39,10 @@ class Dtype(Enum):
     def to_complex(dtype):
         if dtype.value % 2 == 1:
             return dtype
-        return MyDtype(dtype.value + 1)
+        return Dtype(dtype.value + 1)
 
     def common(*dtypes):
-        res = Dtype(max(*(t.value for t in dtypes)))
+        res = Dtype(max(t.value for t in dtypes))
         if res.is_real:
             if not all(t.is_real for t in dtypes):
                 return Dtype(res.value + 1)  # = res.to_complex

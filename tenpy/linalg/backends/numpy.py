@@ -111,7 +111,7 @@ class NumpyBlockBackend(AbstractBlockBackend):
     def block_max_abs(self, a: Block) -> float:
         return np.max(np.abs(a))
 
-    def block_reshape(self, a: Block, shape: Tuple[int]) -> Block:
+    def block_reshape(self, a: Block, shape: tuple[int]) -> Block:
         return np.reshape(a, shape)
 
     def block_matrixify(self, a: Block, idcs1: list[int], idcs2: list[int]) -> tuple[Block, Any]:
