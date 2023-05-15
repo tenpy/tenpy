@@ -7,9 +7,6 @@ from tenpy.linalg.symmetries import spaces, groups
 from tenpy.linalg.backends import abelian
 
 
-VectorSpace_classes = [spaces.VectorSpace, abelian.AbelianBackendVectorSpace]
-ProductSpace_classes = [spaces.ProductSpace, abelian.AbelianBackendProductSpace]
-
 symmetries = dict(
     no_symmetry=groups.no_symmetry,
     z4=groups.z4_symmetry,
@@ -33,19 +30,18 @@ def _get_four_sectors(symm: groups.Symmetry) -> groups.SectorArray:
     return res
 
 
-def test_vector_space(some_symmetry, some_symmetry_sectors, some_symmetry_multiplicities, VectorSpace):
-    symm = some_symmetry
-    sectors = some_symmetry_sectors
-    mults = some_symmetry_multiplicities
+def test_vector_space(symmetry, symmetry_sectors_rng, np_random, VectorSpace):
+    sectors = symmetry_sectors_rng(10)
+    mults = np_random.integers(1, 10, size=len(sectors))
 
     # TODO (JU) test real (as in "not complex") vectorspaces
 
-    s1 = VectorSpace(symmetry=symm, sectors=sectors, multiplicities=mults)
+    s1 = VectorSpace(symmetry=symmetry, sectors=sectors, multiplicities=mults)
     s2 = VectorSpace.non_symmetric(dim=8)
 
     print('checking VectorSpace.sectors')
     assert_array_equal(s2.sectors, groups.no_symmetry.trivial_sector[None, :])
-    assert_array_equal(s1.dual.sectors, symm.dual_sectors(s1.sectors))
+    assert_array_equal(s1.dual.sectors, symmetry.dual_sectors(s1.sectors))
 
     print('checking str and repr')
     _ = str(s1)
@@ -62,8 +58,8 @@ def test_vector_space(some_symmetry, some_symmetry_sectors, some_symmetry_multip
         wrong_mults[-2] += 1
     else:
         wrong_mults[0] += 1
-    assert s1 != VectorSpace(symmetry=symm, sectors=sectors, multiplicities=wrong_mults)
-    assert s1.dual == VectorSpace(symmetry=symm, sectors=sectors, multiplicities=mults,
+    assert s1 != VectorSpace(symmetry=symmetry, sectors=sectors, multiplicities=wrong_mults)
+    assert s1.dual == VectorSpace(symmetry=symmetry, sectors=sectors, multiplicities=mults,
                                   _is_dual=True)
     assert s1.can_contract_with(s1.dual)
     assert not s1.can_contract_with(s1)
@@ -73,22 +69,20 @@ def test_vector_space(some_symmetry, some_symmetry_sectors, some_symmetry_multip
     assert not s1.is_trivial
     assert not s2.is_trivial
     assert VectorSpace.non_symmetric(dim=1).is_trivial
-    assert VectorSpace(symmetry=symm, sectors=symm.trivial_sector[None, :]).is_trivial
+    assert VectorSpace(symmetry=symmetry, sectors=symmetry.trivial_sector[np.newaxis, :]).is_trivial
 
     # TODO (JU) test num_parameters when ready
 
 
-def test_product_space(some_symmetry, some_symmetry_sectors, some_symmetry_multiplicities,
-                       VectorSpace, ProductSpace):
-    symm = some_symmetry
-    sectors = some_symmetry_sectors
-    mults = some_symmetry_multiplicities
+def test_product_space(symmetry, symmetry_sectors_rng, np_random, VectorSpace, ProductSpace):
+    sectors = symmetry_sectors_rng(10)
+    mults = np_random.integers(1, 10, size=len(sectors))
 
     # TODO (JU) test real (as in "not complex") vectorspaces
 
-    s1 = VectorSpace(symmetry=symm, sectors=sectors, multiplicities=mults)
-    s2 = VectorSpace(symmetry=symm, sectors=sectors[:2], multiplicities=mults[:2])
-    s3 = VectorSpace(symmetry=symm, sectors=sectors[::2], multiplicities=mults[::2])
+    s1 = VectorSpace(symmetry=symmetry, sectors=sectors, multiplicities=mults)
+    s2 = VectorSpace(symmetry=symmetry, sectors=sectors[:2], multiplicities=mults[:2])
+    s3 = VectorSpace(symmetry=symmetry, sectors=sectors[::2], multiplicities=mults[::2])
 
     p1 = ProductSpace([s1, s2, s3])
     p2 = s1 * s2

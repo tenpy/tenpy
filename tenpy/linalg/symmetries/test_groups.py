@@ -6,7 +6,7 @@ from numpy.testing import assert_array_equal
 from tenpy.linalg.symmetries import groups
 
 
-def common_checks(sym: groups.Symmetry, example_sector):
+def common_checks(sym: groups.Symmetry, example_sectors):
     # common consistency checks to be performed on a symmetry instance
     assert sym.trivial_sector.shape == (sym.sector_ind_len,)
     assert sym.is_valid_sector(sym.trivial_sector)
@@ -29,31 +29,31 @@ def common_checks(sym: groups.Symmetry, example_sector):
     _ = str(sym)
 
     # defining property of trivial sector
-    assert_array_equal(
-        sym.fusion_outcomes(example_sector, sym.trivial_sector),
-        example_sector[None, :]
-    )
+    for example_sector in example_sectors:
+        fusion = sym.fusion_outcomes(example_sector, sym.trivial_sector)
+        assert len(fusion) == 1
+        assert_array_equal(fusion[0], example_sector)
 
     # trivial sector is its own dual
     assert_array_equal(sym.dual_sector(sym.trivial_sector), sym.trivial_sector)
 
     # defining property of dual sector
     try:
-        assert sym.n_symbol(example_sector, sym.dual_sector(example_sector), sym.trivial_sector) == 1
+        for example_sector in example_sectors:
+            assert sym.n_symbol(example_sector, sym.dual_sector(example_sector), sym.trivial_sector) == 1
     except NotImplementedError:
         pytest.xfail("NotImplementedError")
         pass  # TODO SU(2) does not implement n_symbol yet
 
 
-def test_generic_symmetry(some_symmetry, some_symmetry_sectors):
-    example_sector = some_symmetry_sectors[0]
-    common_checks(some_symmetry, example_sector)
+def test_generic_symmetry(symmetry, symmetry_sectors_rng):
+    common_checks(symmetry, symmetry_sectors_rng(10))
 
 
 def test_no_symmetry():
     sym = groups.NoSymmetry()
     s = np.array([0])
-    common_checks(sym, example_sector=s)
+    common_checks(sym, example_sectors=s[np.newaxis, :])
 
     print('instancecheck and is_abelian')
     assert isinstance(sym, groups.AbelianGroup)
@@ -108,10 +108,10 @@ def test_product_symmetry():
     ])
     s1 = np.array([5, 3, 1])  # e.g. spin 5/2 , 3 particles , odd parity ("fermionic")
     s2 = np.array([3, 2, 0])  # e.g. spin 3/2 , 2 particles , even parity ("bosonic")
-    common_checks(sym, example_sector=s1)
+    common_checks(sym, example_sectors=np.array([s1, s2]))
 
     u1_z3 = groups.u1_symmetry * groups.z3_symmetry
-    common_checks(u1_z3, example_sector=np.array([42, 1]))
+    common_checks(u1_z3, example_sectors=np.array([[42, 1], [-1, 2], [-2, 0]]))
 
     print('instancecheck and is_abelian')
     assert not isinstance(sym, groups.AbelianGroup)
@@ -177,7 +177,7 @@ def test_u1_symmetry():
     s_neg1 = np.array([-1])
     s_2 = np.array([2])
     s_42 = np.array([42])
-    common_checks(sym, example_sector=s_42)
+    common_checks(sym, example_sectors=np.array([s_0, s_1, s_neg1, s_2, s_42]))
 
     print('instancecheck and is_abelian')
     assert isinstance(sym, groups.AbelianGroup)
@@ -229,7 +229,7 @@ def test_ZN_symmetry(N):
     sym_with_name = groups.ZNSymmetry(N, descriptive_name='foo')
     sectors_a = np.array([0, 1, 2, 10])[:, None] % N
     sectors_b = np.array([0, 1, 3, 11])[:, None] % N
-    common_checks(sym, example_sector=np.array([1]))
+    common_checks(sym, example_sectors=sectors_a)
 
     print('instancecheck and is_abelian')
     assert isinstance(sym, groups.AbelianGroup)
@@ -289,7 +289,7 @@ def test_ZN_symmetry(N):
 
 def test_su2_symmetry_common():
     sym = groups.SU2Symmetry()
-    common_checks(sym, example_sector=np.array([3]))
+    common_checks(sym, example_sectors=np.array([3]))
 
 
 def test_su2_symmetry():
@@ -346,7 +346,7 @@ def test_fermion_parity():
     sym = groups.FermionParity()
     even = np.array([0])
     odd = np.array([1])
-    common_checks(sym, example_sector=odd)
+    common_checks(sym, example_sectors=np.array([even, odd]))
 
     print('instancecheck and is_abelian')
     assert not isinstance(sym, groups.AbelianGroup)

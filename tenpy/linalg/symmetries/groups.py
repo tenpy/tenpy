@@ -217,7 +217,8 @@ class ProductSymmetry(Symmetry):
         # |                                                       v
         # | results[:, :, ..., :, slice_i] = c_i[None, None, ..., :, ..., None, :]
         #
-        result = np.zeros(num_possibilities + [self.sector_ind_len], dtype=a.dtype)
+        c_dtype = np.find_common_type([], [a.dtype, b.dtype])
+        result = np.zeros(num_possibilities + [self.sector_ind_len], dtype=c_dtype)
         for i, c_i in enumerate(all_outcomes):
             res_idx = (colon,) * len(self.factors) + (slice(self.sector_slices[i], self.sector_slices[i + 1], None),)
             c_i_idx = (None,) * i + (colon,) + (None,) * (len(self.factors) - i - 1) + (colon,)

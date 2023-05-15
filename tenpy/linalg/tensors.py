@@ -712,6 +712,7 @@ class Tensor(AbstractTensor):
         return cls(data=backend.from_block_func(block_func, legs), backend=backend, legs=legs,
                    labels=labels)
 
+    # TODO: typicall, we'll give legs rather than mean & sigma, make legs first arg?
     @classmethod
     def random_normal(cls, mean: Tensor = None, sigma: float = 1.,
                       legs_or_dims: int | VectorSpace | list[int | VectorSpace] = None, backend=None,

@@ -8,50 +8,21 @@ from . import backends
 from .symmetries import groups, spaces
 
 
+@pytest.fixture
+def np_random() -> np.random.Generator:
+    return np.random.default_rng(seed=12345)
+
+
 @pytest.fixture(params=[groups.no_symmetry,
                         groups.u1_symmetry,
-                        groups.ZNSymmetry(3, "My_Z3_symmetry"),
+                        groups.z2_symmetry,
+                        groups.ZNSymmetry(4, "My_Z4_symmetry"),
                         groups.ProductSymmetry([groups.u1_symmetry, groups.z3_symmetry]),
                         # groups.su2_symmetry,  # TODO reintroduce once SU2 is implemented
                         ],
                 ids=repr)
-def some_symmetry(request):
+def symmetry(request):
     return request.param
-
-def _get_example_symmetry_sectors(some_symmetry: groups.Symmetry) -> groups.SectorArray:
-    # TODO: should this be sorted? Unique entries?  fixed number of entries? or just <= 10?
-    if isinstance(some_symmetry, groups.SU2Symmetry):
-        return np.arange(0, 8, 2, dtype=int)[:, None]
-    elif isinstance(some_symmetry, groups.U1Symmetry):
-        return np.array([-2, 4, 5, 1, 0, 492])[:, np.newaxis]
-    elif isinstance(some_symmetry, groups.ProductSymmetry):
-        factor_sectors = [_get_example_symmetry_sectors(factor) for factor in some_symmetry.factors]
-        combs = np.indices([len(s) for s in factor_sectors]).T.reshape((-1, len(factor_sectors)))
-        keep = [3, 2, 5, 0, 1, 7, 9, 30, 11, 12]
-        return np.array([combs[i] for i in keep if i < len(combs)])
-    elif some_symmetry.num_sectors < np.inf:
-        res = some_symmetry.all_sectors()
-        if len(res) >= 10:
-            res = res[0, 3, 2, 6, 7, 8]
-        elif len(res) >= 4:
-            res = res[:4]
-        else:
-            assert len(res) > 0
-        assert res.shape[1] == some_symmetry.sector_ind_len
-        return res
-    pytest.skip("don't know how to get symmetry sectors")  # raises Skipped
-
-
-@pytest.fixture
-def some_symmetry_sectors(some_symmetry: groups.Symmetry) -> groups.SectorArray:
-    # separate function to allow recursion - pytest does not allow to call fixtures directly
-    return _get_example_symmetry_sectors(some_symmetry)
-
-@pytest.fixture
-def some_symmetry_multiplicities(some_symmetry_sectors):
-    mults = np.array([2, 1, 3, 5, 1, 3, 2, 2, 1, 3, 4, 5, 4, 3, 1, 10])
-    assert len(some_symmetry_sectors) <= len(mults) , "more sectors than expected!"
-    return mults[:len(some_symmetry_sectors)]
 
 
 @pytest.fixture(params=[spaces.VectorSpace, backends.abelian.AbelianBackendVectorSpace],
@@ -65,20 +36,69 @@ def ProductSpace(VectorSpace):
     return VectorSpace.ProductSpace
 
 
+def random_symmetry_sectors(symmetry: groups.Symmetry, np_random: np.random.Generator, len_=None) -> groups.SectorArray:
+    """random non-sorted, but unique symmetry sectors"""
+    if len_ is None:
+        len_ = np_random.integers(3,7)
+    if isinstance(symmetry, groups.SU2Symmetry):
+        return np.arange(0, 2*len_, 2, dtype=int)[:, np.newaxis]
+    elif isinstance(symmetry, groups.U1Symmetry):
+        vals = [123] + list(range(-len_, len_))
+        return np_random.choice(vals, replace=False, size=(len_, 1))
+    elif symmetry.num_sectors < np.inf:
+        if symmetry.num_sectors <= len_:
+            return symmetry.all_sectors()
+        return np_random.choice(symmetry.all_sectors(), size=len_)
+    elif isinstance(symmetry, groups.ProductSymmetry):
+        factor_len = max(3, len_ // len(symmetry.factors))
+        factor_sectors = [random_symmetry_sectors(factor, np_random, factor_len)
+                          for factor in symmetry.factors]
+        combs = np.indices([len(s) for s in factor_sectors]).T.reshape((-1, len(factor_sectors)))
+        if len(combs) > len_:
+            combs = np_random.choice(combs, replace=False, size=len_)
+        res = np.hstack([fs[i] for fs, i in zip(factor_sectors, combs.T)])
+        return res
+    pytest.skip("don't know how to get symmetry sectors")  # raises Skipped
+
+
+@pytest.fixture
+def symmetry_sectors_rng(symmetry, np_random):
+    def generator(size: int):
+        """generate random symmetry sectors"""
+        return random_symmetry_sectors(symmetry, np_random, len_=size)
+    return generator
+
+
+def random_vector_space(symmetry, max_num_blocks=5, max_block_size=5, np_random=None, VectorSpace=spaces.VectorSpace):
+    if np_random is None:
+        np_ranodm = np.random.default_rng()
+    len_ = np_random.integers(1, max_num_blocks)
+    sectors = random_symmetry_sectors(symmetry, np_random, len_)
+    mults = np_random.integers(1, max_block_size, size=(len(sectors),))
+    dual = np_random.random() < 0.5
+    return VectorSpace(some_symmetry, some_symmetry_sectors, mults, is_real=False, _is_dual=dual)
+
+
+@pytest.fixture
+def vector_space_rng(symmetry, symmetry_sectors_rng, np_random, VectorSpace):
+    def generator(max_num_blocks: int = 4, max_block_size=8):
+        """generate random VectorSpace instances"""
+        return random_vector_space(symmetry, max_num_blocks, max_block_size, np_random, VectorSpace)
+    return generator
+
+
 @pytest.fixture
 def default_backend():
     return backends.backend_factory.get_default_backend()
 
 
-@pytest.fixture(params=['numpy', 'torch'])
-def some_block_backend(request):
-    if request.name == 'torch':
+@pytest.fixture(params=['numpy']) # TODO: reintroduce 'torch'])
+def block_backend(request):
+    if request.param == 'torch':
         torch = pytest.importorskip('torch', reason='torch not installed')
-    return request.name
+    return request.param
 
 
 @pytest.fixture
-def some_backend(some_symmetry, some_block_backend):
-    return backends.backend_factory.get_backend(some_symmetry, some_block_backend)
-
-
+def backend(symmetry, block_backend):
+    return backends.backend_factory.get_backend(symmetry, block_backend)
