@@ -263,7 +263,7 @@ class FusionTree:
         self.num_vertices = max(len(uncoupled) - 1, 0)
         self.num_inner_edges = max(len(uncoupled) - 2, 0)
 
-    def check_sanity(self):
+    def test_sanity(self):
         assert all(self.symmetry.is_valid_sector(a) for a in self.uncoupled)
         assert len(self.uncoupled) == self.num_uncoupled
         assert self.symmetry.is_valid_sector(self.coupled)

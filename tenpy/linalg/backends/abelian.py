@@ -504,8 +504,8 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
     ProductSpaceCls = AbelianBackendProductSpace
     DataCls = AbelianBackendData
 
-    def check_data_sanity(self, a: Tensor):
-        super().check_data_sanity(a)
+    def test_data_sanity(self, a: Tensor):
+        super().test_data_sanity(a)
         assert a.data.block_inds.shape == (len(a.data.blocks), a.num_legs)
         # check expected tensor dimensions
         block_shapes = np.array([leg.multiplicities[i] for leg, i in zip(a.legs, a.data.block_inds.T)]).T

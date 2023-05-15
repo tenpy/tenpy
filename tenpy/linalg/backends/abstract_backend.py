@@ -68,10 +68,10 @@ class AbstractBackend(ABC):
     ProductSpaceCls = ProductSpace
     DataCls = Block
 
-    def check_data_sanity(self, a: Tensor):
+    def test_data_sanity(self, a: Tensor):
         assert isinstance(a.data, self.DataCls)
         # note: no super(), this is the top you reach!
-        # subclasses will typically call super().check_data_sanity(a)
+        # subclasses will typically call super().test_data_sanity(a)
 
     def __repr__(self):
         return f'{type(self).__name__}'

@@ -63,7 +63,7 @@ class Shape:
         self.num_legs = len(legs)
         self.dims = [l.dim for l in legs]
 
-    def check_sanity(self):
+    def test_sanity(self):
         assert not duplicate_entries(self._labels, ignore=[None])
 
     def __iter__(self):
@@ -127,13 +127,13 @@ class AbstractTensor(ABC):
         self.num_legs = len(legs)
         self.symmetry = legs[0].symmetry
 
-    def check_sanity(self):
+    def test_sanity(self):
         assert self.backend.supports_symmetry(self.symmetry)
         assert all(l.symmetry == self.symmetry for l in self.legs)
         assert len(self.legs) == self.shape.num_legs == self.num_legs > 0
         for leg in self.legs:
             assert isinstance(leg, (self.backend.VectorSpaceCls, self.backend.ProductSpaceCls))
-        self.shape.check_sanity()
+        self.shape.test_sanity()
 
     @cached_property
     def parent_space(self) -> VectorSpace:
@@ -453,10 +453,10 @@ class Tensor(AbstractTensor):
     def dtype(self) -> Dtype:
         return self.backend.get_dtype_from_data(self.data)
 
-    def check_sanity(self):
-        super().check_sanity()
+    def test_sanity(self):
+        super().test_sanity()
         assert isinstance(self.data, self.backend.DataCls)
-        self.backend.check_data_sanity(self)
+        self.backend.test_data_sanity(self)  # TODO rename to test_sanity!
 
     def copy(self, deep=True):
         if deep:
@@ -1111,10 +1111,10 @@ class ChargedTensor(AbstractTensor):
     def dtype(self) -> Dtype:
         return self.invariant_part.dtype
 
-    def check_sanity(self):
-        self.invariant_part.check_sanity()
+    def test_sanity(self):
+        self.invariant_part.test_sanity()
         assert self.backend.block_shape(self.dummy_leg_state) == (self.dummy_leg.dim,)
-        super().check_sanity()
+        AbstractTensor.test_sanity(self)
 
     def copy(self, deep=True):
         if deep:

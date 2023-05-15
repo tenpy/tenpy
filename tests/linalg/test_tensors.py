@@ -24,7 +24,7 @@ def random_block(shape, backend):
 
 
 def check_shape(shape: tensors.Shape, dims: tuple[int, ...], labels: list[str]):
-    shape.check_sanity()
+    shape.test_sanity()
 
     # check attributes
     assert shape.dims == list(dims)
@@ -96,17 +96,17 @@ def test_Tensor_methods(backend, vector_space_rng, backend_data_rng):
 
     print('checking __init__ with labels=None')
     tens1 = tensors.Tensor(data1, legs=legs, backend=backend, labels=None)
-    tens1.check_sanity()
+    tens1.test_sanity()
 
     print('checking __init__, partially labelled')
     labels2 = [None, 'a', 'b']
     tens2 = tensors.Tensor(data2, legs=legs, backend=backend, labels=labels2)
-    tens2.check_sanity()
+    tens2.test_sanity()
 
     print('checking __init__, fully labelled')
     labels3 = ['foo', 'a', 'b']
     tens3 = tensors.Tensor(data1, legs=legs, backend=backend, labels=labels3)
-    tens3.check_sanity()
+    tens3.test_sanity()
 
     check_shape(tens1.shape, dims=dims, labels=[None, None, None])
     check_shape(tens2.shape, dims=dims, labels=labels2)
@@ -233,8 +233,8 @@ def test_tdot(backend, vector_space_rng, backend_data_rng):
         res1 = tensors.tdot(tensors_[i], tensors_[j], ax_i, ax_j)
         res2 = tensors.tdot(tensors_[i], tensors_[j], lbl_i, lbl_j)
         if len(expect.shape) > 0:
-            res1.check_sanity()
-            res2.check_sanity()
+            res1.test_sanity()
+            res2.test_sanity()
             res1 = res1.to_numpy_ndarray()
             res2 = res2.to_numpy_ndarray()
         # else: got scalar, but we can compare it to 0-dim ndarray
