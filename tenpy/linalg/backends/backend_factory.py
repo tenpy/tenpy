@@ -4,8 +4,8 @@ from __future__ import annotations
 import logging
 
 from .abstract_backend import AbstractBackend
-from .numpy import NoSymmetryNumpyBackend
-from .torch import NoSymmetryTorchBackend
+from .numpy import NoSymmetryNumpyBackend, AbelianNumpyBackend
+from .torch import NoSymmetryTorchBackend, AbelianTorchBackend
 from ..symmetries.groups import Symmetry, no_symmetry, AbelianGroup
 
 __all__ = ['get_backend']
@@ -25,8 +25,8 @@ _backend_lookup = dict(
     ),
     #
     abelian=dict(
-        numpy=None,  # TODO: pure-python npc
-        torch=None,  # TODO: quick-and-dirty npc + torch
+        numpy=(AbelianNumpyBackend, {}),
+        torch=(AbelianTorchBackend, {}),
         tensorflow=None,  # FUTURE
         jax=None,  # FUTURE
         cpu=None,  # TODO: npc
@@ -57,7 +57,7 @@ def get_backend(symmetry: Symmetry = no_symmetry, block_backend: str = 'numpy',
     block_backend : {'numpy', 'torch', 'tensorflow', 'jax', 'cpu', 'gpu', 'tpu'}
     symmetry_backend : {None, 'no_symmetry', 'abelian', 'nonabelian'}
         None means select based on the symmetry.
-        It is possible though, to request the non-abelian backend even though the symmetry is 
+        It is possible though, to request the non-abelian backend even though the symmetry is
         actually abelian.
     """
     # TODO cache these instances, make sure there is only ever one.
@@ -79,7 +79,7 @@ def get_backend(symmetry: Symmetry = no_symmetry, block_backend: str = 'numpy',
         raise NotImplementedError(f'Backend not implemented {symmetry_backend} & {block_backend}')
     cls, kwargs = res
 
-    key = (symmetry_backend, block_backend, kwargs)
+    key = (symmetry_backend, block_backend, tuple(kwargs.items()))
     if key not in _instantiated_backends:
         backend = cls(**kwargs)
         _instantiated_backends[key] = backend
