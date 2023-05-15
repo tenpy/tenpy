@@ -42,10 +42,10 @@ class Dtype(Enum):
         return MyDtype(dtype.value + 1)
 
     def common(*dtypes):
-        res = MyDtype(max(*(t.value for t in dtypes)))
+        res = Dtype(max(*(t.value for t in dtypes)))
         if res.is_real:
             if not all(t.is_real for t in dtypes):
-                return MyDtype(res.value + 1)  # = res.to_complex
+                return Dtype(res.value + 1)  # = res.to_complex
         return res
 
 
@@ -64,6 +64,14 @@ class AbstractBackend(ABC):
     Where Xxx describes the symmetry, e.g. NoSymmetry, Abelian, Nonabelian
     and Yyy describes the numerical routines that handle the blocks, e.g. numpy, torch, ...
     """
+    VectorSpaceCls = VectorSpace
+    ProductSpaceCls = ProductSpace
+    DataCls = Block
+
+    def check_data_sanity(self, a: Tensor):
+        assert isinstance(a.data, self.DataCls)
+        # note: no super(), this is the top you reach!
+        # subclasses will typically call super().check_data_sanity(a)
 
     def __repr__(self):
         return f'{type(self).__name__}'
@@ -245,7 +253,7 @@ class AbstractBlockBackend(ABC):
     svd_algorithms: list[str]  # first is default
 
     @abstractmethod
-    def block_from_numpy(self, a) -> Block:
+    def block_from_numpy(self, a: np.ndarray) -> Block:
         ...
 
     @abstractmethod

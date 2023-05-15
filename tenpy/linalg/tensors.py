@@ -119,7 +119,10 @@ class AbstractTensor(ABC):
             self.backend = get_default_backend()
         else:
             self.backend = backend
-        self.legs = [self.backend.convert_vector_space(leg) for leg in legs]
+        #  self.legs = [self.backend.convert_vector_space(leg) for leg in legs]  # TODO: this causes issues since data.block_inds don't fit any more!!!!!
+        self.legs = list(legs)
+        for leg in self.legs:
+            assert isinstance(leg, (self.backend.VectorSpaceCls, self.backend.ProductSpaceCls))  # TODO: remove this test
         self.shape = Shape(legs=self.legs, labels=labels)
         self.num_legs = len(legs)
         self.symmetry = legs[0].symmetry
@@ -128,6 +131,8 @@ class AbstractTensor(ABC):
         assert self.backend.supports_symmetry(self.symmetry)
         assert all(l.symmetry == self.symmetry for l in self.legs)
         assert len(self.legs) == self.shape.num_legs == self.num_legs > 0
+        for leg in self.legs:
+            assert isinstance(leg, (self.backend.VectorSpaceCls, self.backend.ProductSpaceCls))
         self.shape.check_sanity()
 
     @cached_property
@@ -442,6 +447,7 @@ class Tensor(AbstractTensor):
         """
         AbstractTensor.__init__(self, backend=backend, legs=legs, labels=labels)
         self.data = data
+        assert isinstance(data, self.backend.DataCls)
 
     @property
     def dtype(self) -> Dtype:
@@ -449,6 +455,8 @@ class Tensor(AbstractTensor):
 
     def check_sanity(self):
         super().check_sanity()
+        assert isinstance(self.data, self.backend.DataCls)
+        self.backend.check_data_sanity(self)
 
     def copy(self, deep=True):
         if deep:
@@ -541,18 +549,35 @@ class Tensor(AbstractTensor):
         if backend is None:
             backend = get_default_backend()
         if legs is None:
-            legs = [VectorSpace.non_symmetric(d, is_real=is_real) for d in backend.block_shape(block)]
+            legs = [backend.VectorSpaceCls.non_symmetric(d, is_real=is_real)
+                    for d in backend.block_shape(block)]
         if dtype is not None:
             block = backend.block_to_dtype(block, dtype)
         data = backend.from_dense_block(block, legs=legs, atol=atol, rtol=rtol)
         return cls(data=data, backend=backend, legs=legs, labels=labels)
 
     @classmethod
-    def zero(cls, legs: list[VectorSpace] | list[int], backend=None, labels: list[str | None] = None,
+    def zero(cls, legs_or_dims: int | VectorSpace | list[int | VectorSpace],
+             backend=None, labels: list[str | None] = None,
              dtype: Dtype = Dtype.complex128) -> Tensor:
-        if any(isinstance(l, int) for l in legs):
-            assert all(isinstance(l, int) for l in legs)
-            legs = [VectorSpace.non_symmetric(d) for d in legs]
+        """Empty Tensor with zero entries (not stored explicitly in most backends).
+
+        Parameters
+        ----------
+        legs_or_dims : int | VectorSpace | list[int | VectorSpace]
+            Description of *half* of the legs of the result, either via their vectorspace
+            or via an integer, which means a trivial VectorSpace of that dimension.
+            The resulting tensor has twice as many legs.
+        backend : :class:`~tenpy.linalg.backends.abstract_backend.AbstractBackend`
+            The backend for the Tensor
+        labels : list[str | None], optional
+            Labels associated with each leg, ``None`` for unnamed legs.
+        dtype : Dtype, optional
+            The data type of the Tensor entries.
+
+        """
+        legs = _parse_legs_or_dims(legs_or_dims)
+        legs = [backend.convert_vector_space(leg) for leg in legs]
         if backend is None:
             backend = get_default_backend()
         data = backend.zero_data(legs=legs, dtype=dtype)
@@ -580,6 +605,7 @@ class Tensor(AbstractTensor):
         if backend is None:
             backend = get_default_backend()
         legs = _parse_legs_or_dims(legs_or_dims)
+        legs = [backend.convert_vector_space(leg) for leg in legs]
         data = backend.eye_data(legs=legs, dtype=dtype)
         legs = legs + [leg.dual for leg in legs]
         return cls(data=data, backend=backend, legs=legs, labels=labels)
@@ -609,7 +635,7 @@ class Tensor(AbstractTensor):
             or via an integer, which means a trivial VectorSpace of that dimension.
         labels : list[str | None], optional
             Labels associated with each leg, ``None`` for unnamed legs.
-        unc_args : iterable
+        func_args : iterable
             Additional arguments given to `func`.
         func_kwargs : dict
             Additional keyword arguments given to `func`.
@@ -620,6 +646,8 @@ class Tensor(AbstractTensor):
         """
         if backend is None:
             backend = get_default_backend()
+        legs = _parse_legs_or_dims(legs_or_dims)
+        legs = [backend.convert_vector_space(leg) for leg in legs]
 
         def block_func(shape):
             if shape_kw is None:
@@ -628,7 +656,6 @@ class Tensor(AbstractTensor):
                 arr = func(*func_args, **{shape_kw: shape}, **func_kwargs)
             return backend.block_from_numpy(arr)
 
-        legs = _parse_legs_or_dims(legs_or_dims)
         return cls(data=backend.from_block_func(block_func, legs), backend=backend, legs=legs,
                    labels=labels)
 
@@ -667,13 +694,14 @@ class Tensor(AbstractTensor):
         """
         if backend is None:
             backend = get_default_backend()
+        legs = _parse_legs_or_dims(legs_or_dims)
+        legs = [backend.convert_vector_space(leg) for leg in legs]
 
         def block_func(shape):
             if shape_kw is None:
                 return func(shape, *func_args, **func_kwargs)
             else:
                 return func(*func_args, **{shape_kw: shape}, **func_kwargs)
-        legs = _parse_legs_or_dims(legs_or_dims)
         return cls(data=backend.from_block_func(block_func, legs), backend=backend, legs=legs,
                    labels=labels)
 
@@ -705,6 +733,7 @@ class Tensor(AbstractTensor):
         if backend is None:
             backend = get_default_backend()
         legs = _parse_legs_or_dims(legs_or_dims)
+        legs = [backend.convert_vector_space(leg) for leg in legs]
 
         def block_func(shape):
             return backend.block_random_uniform(shape, dtype)
@@ -765,6 +794,7 @@ class Tensor(AbstractTensor):
         if dtype is None:
             dtype = Dtype.complex128
         legs = _parse_legs_or_dims(legs_or_dims)
+        legs = [backend.convert_vector_space(leg) for leg in legs]
 
         def block_func(shape):
             return backend.block_random_normal(shape, dtype, sigma)
@@ -809,7 +839,7 @@ class Tensor(AbstractTensor):
             return a.conj().inner(b)
         # special case: outer()
         if len(leg_idcs1) == 0:
-            return self.outer(a, b, relabel1, relabel2)
+            return self.outer(other, relabel1, relabel2)
         res_labels = _get_result_labels(open_labels1, open_labels2, relabel1, relabel2)
 
         res_data = backend.tdot(self, other, leg_idcs1, leg_idcs2)  # most of the work
@@ -1396,10 +1426,12 @@ def get_same_backend(*tensors: AbstractTensor, error_msg: str = 'Incompatible ba
 
 
 def _parse_legs_or_dims(legs_or_dims: int | VectorSpace | list[int | VectorSpace]) -> list[VectorSpace]:
-    if isinstance(legs_or_dims, int):
-        return [VectorSpace.non_symmetric(legs_or_dims)]
-    elif isinstance(legs_or_dims, VectorSpace):
+    if isinstance(legs_or_dims, VectorSpace):
         return [legs_or_dims]
-    else:
-        return [ele if isinstance(ele, VectorSpace) else VectorSpace.non_symmetric(ele)
-                for ele in legs_or_dims]
+    try:
+        iter(legs_or_dims)
+    except TypeError:
+        return [VectorSpace.non_symmetric(legs_or_dims)]
+    # else: iterable
+    return [ele if isinstance(ele, VectorSpace) else VectorSpace.non_symmetric(ele)
+            for ele in legs_or_dims]

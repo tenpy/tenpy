@@ -110,8 +110,8 @@ class VectorSpace:
         # TODO (JU) what if there are a lot of sectors?
         dual_str = '.dual' if self.is_dual else ''
         is_real_str = ', is_real=True' if self.is_real else ''
-        return f'VectorSpace({repr(self.symmetry)}, sectors={self.sectors}, ' \
-               f'multiplicities={self.multiplicities}{is_real_str}){dual_str}'
+        return f'{self.__class__.__name__}({self.symmetry!r}, sectors={self.sectors!r}, ' \
+               f'multiplicities={self.multiplicities!s}{is_real_str}){dual_str}'
 
     def __str__(self):
         field = 'ℝ' if self.is_real else 'ℂ'
@@ -282,7 +282,7 @@ class ProductSpace(VectorSpace):
         return iter(self.spaces)
 
     def __repr__(self):
-        lines = ['ProductSpace([']
+        lines = [f'{self.__class__.__name__}([']
         for s in self.spaces:
             lines.append(f'  {repr(s)},')
         if self.is_dual:

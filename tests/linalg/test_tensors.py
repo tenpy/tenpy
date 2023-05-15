@@ -4,34 +4,19 @@ import numpy as np
 import pytest
 
 from tenpy.linalg import tensors
-from tenpy.linalg.backends.torch import TorchBlockBackend, NoSymmetryTorchBackend
-from tenpy.linalg.backends.numpy import NumpyBlockBackend, NoSymmetryNumpyBackend
+from tenpy.linalg.backends.torch import TorchBlockBackend
+from tenpy.linalg.backends.numpy import NumpyBlockBackend
 from tenpy.linalg.symmetries.spaces import VectorSpace
 
-try:
-    import torch
-except ModuleNotFoundError:
-    torch = None
-
-
-all_backends = dict(
-    numpy_no_symm=NoSymmetryNumpyBackend(),
-)
-
-if torch is not None:
-    # add backends that depend on torch only if torch is installed
-    # adjusting all_backends adds more cases to the ``@pytest.mark.parametrize``d tests below.
-    all_backends.update(
-        torch_no_symm=NoSymmetryTorchBackend()
-    )
 
 
 def random_block(shape, backend):
     if isinstance(backend, NumpyBlockBackend):
         return np.random.random(shape)
     elif isinstance(backend, TorchBlockBackend):
-        assert torch is not None, 'torch not installed!'
+        import torch
         return torch.randn(shape)
+
 
 
 # TODO tests for ChargedTensor, also as input for tdot etc
@@ -67,15 +52,47 @@ def check_shape(shape: tensors.Shape, dims: tuple[int, ...], labels: list[str]):
     assert shape.is_fully_labelled != (None in labels)
 
 
-@pytest.mark.parametrize('backend', all_backends.keys())
-def test_Tensor_methods(backend):
-    backend = all_backends[backend]
-    dims = (2, 3, 10)
-    data1 = random_block(dims, backend)
-    data2 = random_block(dims, backend)
+def test_Tensor_classmethods(backend, vector_space_rng, backend_data_rng, np_random):
+    legs = [vector_space_rng(d, 4, backend.VectorSpaceCls) for d in (3, 1, 7)]
+    dims = tuple(leg.dim for leg in legs)
 
-    # TODO also test with symmetries, once abelian backend is ready
-    legs = [VectorSpace.non_symmetric(d) for d in dims]
+    numpy_block = np_random.normal(dims)
+    dense_block = backend.block_from_numpy(numpy_block)
+
+    print('checking from_dense_block')
+    tens = tensors.Tensor.from_dense_block(dense_block, backend=backend)
+    data = backend.block_to_numpy(tens.to_dense_block())
+    assert np.allclose(data, numpy_block)
+
+    print('checking from_numpy')
+    tens = tensors.Tensor.from_numpy(numpy_block, backend=backend)
+    data = tens.to_numpy_ndarray()
+    assert np.allclose(data, numpy_block)
+
+    # TODO from_block_func, from_numpy_func
+
+    # TODO random_uniform, random_normal
+
+    print('checking zero')
+    tens = tensors.Tensor.zero(dims, backend=backend)
+    assert np.allclose(tens.to_numpy_ndarray(), np.zeros(dims))
+    tens = tensors.Tensor.zero(legs, backend=backend)
+    assert np.allclose(tens.to_numpy_ndarray(), np.zeros(dims))
+
+    print('checking eye')
+    tens = tensors.Tensor.eye(legs[0], backend=backend)
+    assert np.allclose(tens.to_numpy_ndarray(), np.eye(legs[0].dim))
+    tens = tensors.Tensor.eye(legs[:2], backend=backend)
+    assert np.allclose(tens.to_numpy_ndarray(), np.eye(np.prod(dims[:2])).reshape(dims[:2] + dims[:2]))
+
+
+def test_Tensor_methods(backend, vector_space_rng, backend_data_rng):
+    legs = [vector_space_rng(d, 4, backend.VectorSpaceCls) for d in (3, 1, 7)]
+    dims = tuple(leg.dim for leg in legs)
+
+    data1 = backend_data_rng(legs)
+    data2 = backend_data_rng(legs)
+
 
     print('checking __init__ with labels=None')
     tens1 = tensors.Tensor(data1, legs=legs, backend=backend, labels=None)
@@ -96,7 +113,7 @@ def test_Tensor_methods(backend):
     check_shape(tens3.shape, dims=dims, labels=labels3)
 
     print('check size')
-    assert tens3.size == np.prod(data1.shape)
+    assert tens3.size == np.prod(dims)
 
     # TODO reintroduce when implemented
     # print('check num_parameters')
@@ -141,9 +158,15 @@ def test_Tensor_methods(backend):
     assert tens3.get_leg_idcs(['foo', 'b', 1]) == [0, 2, 1]
 
     print('check item')
-    data4 = random_block((1,), backend)
-    tens4 = tensors.Tensor(data4, backend=backend, legs=[VectorSpace.non_symmetric(1)])
-    assert np.allclose(tens4.item(), data4[0])
+    triv_legs = [vector_space_rng(1, 1, backend.VectorSpaceCls) for i in range(2)]
+    for leg in triv_legs[:]:
+        triv_legs.append(leg.dual)
+    assert all(leg.dim == 1 for leg in triv_legs)
+    data4 = backend_data_rng(triv_legs)
+    tens4 = tensors.Tensor(data4, backend=backend, legs=triv_legs)
+    tens4_item = backend.data_item(data4)
+    # not a good test, but the best we can do backend independent:
+    assert tens4.item() == tens4_item
 
     print('check str and repr')
     str(tens1)
@@ -151,15 +174,20 @@ def test_Tensor_methods(backend):
     repr(tens1)
     repr(tens3)
 
+    print('convert to dense')
+    dense1 = tens1.to_numpy_ndarray()
+    dense2 = tens2.to_numpy_ndarray()
+    dense3 = tens3.to_numpy_ndarray()
+
     print('check addition + multiplication')
     neg_t3 = -tens3
-    assert np.allclose(neg_t3.data, -tens3.data)
+    assert np.allclose(neg_t3.to_numpy_ndarray(), -dense3)
     a = 42
     b = 17
     res = a * tens1 - b * tens2
-    assert np.allclose(res.data, a * data1 - b * data2)
+    assert np.allclose(res.to_numpy_ndarray(), a * dense1 - b * dense2)
     res = tens1 / a + tens2 / b
-    assert np.allclose(res.data, data1 / a + data2 / b)
+    assert np.allclose(res.to_numpy_ndarray(), dense1 / a + dense2 / b)
     # TODO check strict label behavior!
 
     with pytest.raises(TypeError):
@@ -167,114 +195,51 @@ def test_Tensor_methods(backend):
 
     print('check converisions, float, complex, array')
     assert isinstance(float(tens4), float)
-    assert np.allclose(float(tens4), float(data4))
+    assert np.allclose(float(tens4), float(tens4_item))
     assert isinstance(complex(tens4 + 2.j * tens4), complex)
-    assert np.allclose(complex(tens4 + 2.j * tens4), complex(data4 + 2.j * data4))
+    assert np.allclose(complex(tens4 + 2.j * tens4), complex(tens4_item + 2.j * tens4_item))
     # TODO check that float of a complex tensor raises a warning
     t1_np = np.asarray(tens1)
-    assert np.allclose(t1_np, data1)
+    assert np.allclose(t1_np, dense1)
 
 
-@pytest.mark.parametrize('backend', all_backends.keys())
-def test_Tensor_classmethods(backend):
-    backend = all_backends[backend]
-    data = random_block((2, 3, 10), backend)
+def test_tdot(backend, vector_space_rng, backend_data_rng):
+    a, b, c, d = [vector_space_rng(d, 3, backend.VectorSpaceCls) for d in [3, 7, 5, 9]]
+    legs_ = [[a, b, c],
+             [b.dual, c.dual, d.dual],
+             [a.dual, b.dual],
+             [c.dual, b.dual],
+             [c.dual, a.dual, b.dual]]
+    labels_ = [['a', 'b', 'c'],
+               ['b*', 'c*', 'd*'],
+               ['a*', 'b*'],
+               ['c*', 'b*'],
+               ['c*', 'a*', 'b*']]
+    data_ = [backend_data_rng(l) for l in legs_]
+    tensors_ = [tensors.Tensor(data, legs, backend, labels) for data, legs, labels in
+                zip(data_, legs_, labels_)]
+    dense_ = [t.to_numpy_ndarray() for t in tensors_]
 
-    print('checking from_numpy')
-    tens = tensors.Tensor.from_numpy(data, backend=backend)
-    assert np.allclose(data, tens.data)
-
-    print('checking from_dense_block')
-    tens = tensors.Tensor.from_dense_block(data, backend=backend)
-    assert np.allclose(data, tens.data)
-
-    # TODO from_block_func, from_numpy_func
-
-    # TODO random_uniform, random_normal
-
-    print('checking zero')
-    tens = tensors.Tensor.zero([2, 3, 4], backend=backend)
-    assert np.allclose(tens.data, np.zeros([2, 3, 4]))
-
-    print('checking eye')
-    tens = tensors.Tensor.eye(5, backend=backend)
-    assert np.allclose(tens.data, np.eye(5))
-    tens = tensors.Tensor.eye([VectorSpace.non_symmetric(10), 4], backend=backend)
-    assert np.allclose(tens.data, np.eye(40).reshape((10, 4, 10, 4)))
-
-
-@pytest.mark.parametrize('backend', all_backends.keys())
-def test_tdot(backend):
-    backend = all_backends[backend]
-    a = VectorSpace.non_symmetric(7)
-    b = VectorSpace.non_symmetric(13)
-    c = VectorSpace.non_symmetric(22)
-    d = VectorSpace.non_symmetric(11)
-    data1 = np.random.random((a.dim, b.dim, c.dim))
-    data2 = np.random.random((b.dim, c.dim, d.dim))
-    data3 = np.random.random((a.dim, b.dim))
-    data4 = np.random.random((c.dim, b.dim))
-    data5 = np.random.random((c.dim, a.dim, b.dim))
-    t1 = tensors.Tensor.from_numpy(data1, backend=backend, legs=[a, b, c])
-    t2 = tensors.Tensor.from_numpy(data2, backend=backend, legs=[b.dual, c.dual, d.dual])
-    t3 = tensors.Tensor.from_numpy(data3, backend=backend, legs=[a.dual, b.dual])
-    t4 = tensors.Tensor.from_numpy(data4, backend=backend, legs=[c.dual, b.dual])
-    t5 = tensors.Tensor.from_numpy(data5, backend=backend, legs=[c.dual, a.dual, b.dual])
-    t1_labelled = tensors.Tensor.from_numpy(data1, backend=backend, legs=[a, b, c],
-                                            labels=['a', 'b', 'c'])
-    t2_labelled = tensors.Tensor.from_numpy(data2, backend=backend, legs=[b.dual, c.dual, d.dual],
-                                            labels=['b*', 'c*', 'd*'])
-    t3_labelled = tensors.Tensor.from_numpy(data3, backend=backend, legs=[a.dual, b.dual],
-                                            labels=['a*', 'b*'])
-    t4_labelled = tensors.Tensor.from_numpy(data4, backend=backend, legs=[c.dual, b.dual],
-                                            labels=['c*', 'b*'])
-    t5_labelled = tensors.Tensor.from_numpy(data5, backend=backend, legs=[c.dual, a.dual, b.dual],
-                                            labels=['c*', 'a*', 'b*'])
-
-    print('contract one leg')
-    expect = np.tensordot(data1, data2, (1, 0))
-    res1 = tensors.tdot(t1, t2, 1, 0).data
-    res2 = tensors.tdot(t1_labelled, t2_labelled, 1, 0).data
-    res3 = tensors.tdot(t1_labelled, t2_labelled, 'b', 'b*').data
-    assert np.allclose(res1, expect)
-    assert np.allclose(res2, expect)
-    assert np.allclose(res3, expect)
-
-    print('contract two legs')
-    expect = np.tensordot(data1, data2, ([1, 2], [0, 1]))
-    res1 = tensors.tdot(t1, t2, [1, 2], [0, 1]).data
-    res2 = tensors.tdot(t1_labelled, t2_labelled, [1, 2], [0, 1]).data
-    res3 = tensors.tdot(t1_labelled, t2_labelled, ['b', 'c'], ['b*', 'c*']).data
-    assert np.allclose(res1, expect)
-    assert np.allclose(res2, expect)
-    assert np.allclose(res3, expect)
-
-    print('contract all legs of first tensor')
-    expect = np.tensordot(data3, data1, ([0, 1], [0, 1]))
-    res1 = tensors.tdot(t3, t1, [0, 1], [0, 1]).data
-    res2 = tensors.tdot(t3_labelled, t1_labelled, [0, 1], [0, 1]).data
-    res3 = tensors.tdot(t3_labelled, t1_labelled, ['a*', 'b*'], ['a', 'b']).data
-    assert np.allclose(res1, expect)
-    assert np.allclose(res2, expect)
-    assert np.allclose(res3, expect)
-
-    print('contract all legs of second tensor')
-    expect = np.tensordot(data1, data4, ([1, 2], [1, 0]))
-    res1 = tensors.tdot(t1, t4, [1, 2], [1, 0]).data
-    res2 = tensors.tdot(t1_labelled, t4_labelled, [1, 2], [1, 0]).data
-    res3 = tensors.tdot(t1_labelled, t4_labelled, ['b', 'c'], ['b*', 'c*']).data
-    assert np.allclose(res1, expect)
-    assert np.allclose(res2, expect)
-    assert np.allclose(res3, expect)
-
-    print('scalar result')
-    expect = np.tensordot(data1, data5, ([0, 1, 2], [1, 2, 0]))
-    res1 = tensors.tdot(t1, t5, [0, 1, 2], [1, 2, 0])
-    res2 = tensors.tdot(t1_labelled, t5_labelled, [0, 1, 2], [1, 2, 0])
-    res3 = tensors.tdot(t1_labelled, t5_labelled, ['a', 'b', 'c'], ['a*', 'b*', 'c*'])
-    assert np.allclose(res1, expect)
-    assert np.allclose(res2, expect)
-    assert np.allclose(res3, expect)
+    checks = [("single leg", 0, 1, 1, 0, 'b', 'b*'),
+              ("two legs", 0, 1, [1, 2], [0, 1], ['b', 'c'], ['b*', 'c*']),
+              ("all legs of first tensor", 2, 0, [1, 0], [1, 0], ['a*', 'b*'], ['a', 'b']),
+              ("all legs of second tensor", 0, 3, [1, 2], [1, 0], ['b', 'c'], ['b*', 'c*']),
+              ("scalar result / inner()", 0, 4, [0, 1, 2], [1, 2, 0], ['a', 'b', 'c'], ['a*', 'b*', 'c*']),
+              ("no leg / outer()", 2, 3, [], [], [], []),
+              ]
+    for comment, i, j, ax_i, ax_j, lbl_i, lbl_j in checks:
+        print('tdot: contract ', comment)
+        expect = np.tensordot(dense_[i], dense_[j], (ax_i, ax_j))
+        res1 = tensors.tdot(tensors_[i], tensors_[j], ax_i, ax_j)
+        res2 = tensors.tdot(tensors_[i], tensors_[j], lbl_i, lbl_j)
+        if len(expect.shape) > 0:
+            res1.check_sanity()
+            res2.check_sanity()
+            res1 = res1.to_numpy_ndarray()
+            res2 = res2.to_numpy_ndarray()
+        # else: got scalar, but we can compare it to 0-dim ndarray
+        assert np.allclose(res1, expect)
+        assert np.allclose(res2, expect)
 
     # TODO check that trying to contract incompatible legs raises
     #  - opposite is_dual but different dim
@@ -282,9 +247,9 @@ def test_tdot(backend):
     #  - same dim and sectors but same is_dual
 
 
-@pytest.mark.parametrize('backend', all_backends.keys())
-def test_outer(backend):
-    backend = all_backends[backend]
+# TODO (JH): continue to fix tests below to work with new fixtures for any backend
+def test_outer(some_backend):
+    backend = some_backend
     data1 = np.random.random([3, 5])
     data2 = np.random.random([4, 8])
     t1 = tensors.Tensor.from_numpy(data1, backend=backend, labels=['a', 'f'])
@@ -295,9 +260,8 @@ def test_outer(backend):
     assert res.labels_are('a', 'f', 'g', 'b')
 
 
-@pytest.mark.parametrize('backend', all_backends.keys())
-def test_inner(backend):
-    backend = all_backends[backend]
+def test_inner(some_backend):
+    backend = some_backend
     data1 = np.random.random([3, 5]) + 1.j * np.random.random([3, 5])
     data2 = np.random.random([3, 5]) + 1.j * np.random.random([3, 5])
     data3 = np.random.random([5, 3]) + 1.j * np.random.random([5, 3])
@@ -312,9 +276,8 @@ def test_inner(backend):
     assert np.allclose(expect2, res2)
 
 
-@pytest.mark.parametrize('backend', all_backends.keys())
-def test_transpose(backend):
-    backend = all_backends[backend]
+def test_transpose(some_backend):
+    backend = some_backend
     shape = [3, 5, 7, 10]
     data = np.random.random(shape) + 1.j * np.random.random(shape)
     t = tensors.Tensor.from_numpy(data, backend=backend, labels=['a', 'b', 'c', 'd'])
@@ -323,9 +286,8 @@ def test_transpose(backend):
     assert np.allclose(res.data, np.transpose(data, [2, 0, 3, 1]))
 
 
-@pytest.mark.parametrize('backend', all_backends.keys())
-def test_trace(backend):
-    backend = all_backends[backend]
+def test_trace(some_backend):
+    backend = some_backend
 
     print('single legpair - default legs* args')
     data = np.random.random([7, 7, 7]) + 1.j * np.random.random([7, 7, 7])
@@ -375,9 +337,8 @@ def test_trace(backend):
     assert np.allclose(res_label, expect)
 
 
-@pytest.mark.parametrize('backend', all_backends.keys())
-def test_conj(backend):
-    backend = all_backends[backend]
+def test_conj(some_backend):
+    backend = some_backend
     data = np.random.random([2, 4, 5]) + 1.j * np.random.random([2, 4, 5])
     tens = tensors.Tensor.from_numpy(data, backend=backend, labels=['a', 'b', None])
     res = tensors.conj(tens)
@@ -390,9 +351,8 @@ def test_conj(backend):
     assert [l1.is_dual_of(l2) for l1, l2 in zip(res.legs, tens.legs)]
 
 
-@pytest.mark.parametrize('backend', all_backends.keys())
-def test_combine_split(backend):
-    backend = all_backends[backend]
+def test_combine_split(some_backend):
+    backend = some_backend
     data = np.random.random([2, 4, 7, 5]) + 1.j * np.random.random([2, 4, 7, 5])
     tens = tensors.Tensor.from_numpy(data, backend=backend, labels=['a', 'b', 'c', 'd'])
 
@@ -420,21 +380,18 @@ def test_combine_split(backend):
         tensors.split_leg(res, 'a')
 
 
-@pytest.mark.parametrize('backend', all_backends.keys())
-def test_is_scalar(backend):
-    backend = all_backends[backend]
-    assert tensors.is_scalar(1)
-    assert tensors.is_scalar(0.)
-    assert tensors.is_scalar(1. + 2.j)
+def test_is_scalar(some_backend):
+    backend = some_backend
+    for s in [1, 0., 1.+2.j, np.int64(123), np.float64(2.345), np.complex128(1.+3.j)]:
+        assert tensors.is_scalar(s)
     scalar_tens = tensors.Tensor.from_numpy([[1.]], backend=backend)
     assert tensors.is_scalar(scalar_tens)
     non_scalar_tens = tensors.Tensor.from_numpy([[1., 2.], [3., 4.]], backend=backend)
     assert not tensors.is_scalar(non_scalar_tens)
 
 
-@pytest.mark.parametrize('backend', all_backends.keys())
-def test_almost_equal(backend):
-    backend = all_backends[backend]
+def test_almost_equal(some_backend):
+    backend = some_backend
     data1  = np.random.random([2, 4, 3, 5])
     data2 = data1 + 1e-7 * np.random.random([2, 4, 3, 5])
     t1 = tensors.Tensor.from_numpy(data1, backend=backend)
@@ -443,9 +400,8 @@ def test_almost_equal(backend):
     assert not tensors.almost_equal(t1, t2, atol=1e-10, rtol=1e-10)
 
 
-@pytest.mark.parametrize('backend', all_backends.keys())
-def test_squeeze_legs(backend):
-    backend = all_backends[backend]
+def test_squeeze_legs(some_backend):
+    backend=some_backend
     data = np.random.random([2, 1, 7, 1, 1]) + 1.j * np.random.random([2, 1, 7, 1, 1])
     tens = tensors.Tensor.from_numpy(data, backend=backend, labels=['a', 'b', 'c', 'd', 'e'])
 
@@ -465,11 +421,9 @@ def test_squeeze_legs(backend):
     assert res.labels == ['a', 'c', 'd']
 
 
-@pytest.mark.parametrize('backend', all_backends.keys())
-def test_norm(backend):
-    backend = all_backends[backend]
+def test_norm(some_backend):
     data = np.random.random([2, 3, 7]) + 1.j * np.random.random([2, 3, 7])
-    tens = tensors.Tensor.from_numpy(data, backend=backend)
+    tens = tensors.Tensor.from_numpy(data, backend=some_backend)
     res = tensors.norm(tens)
     expect = np.linalg.norm(data)
     assert np.allclose(res, expect)
@@ -480,8 +434,8 @@ def demo_repr():
     # can not really make this an automated test, the point is for a human to have a look
     # and decide if the output is useful, concise, correct, etc.
     #
-    # run e.g. via the following command from the tests folder
-    # python -c "from test_linalg_tensors import demo_repr; demo_repr()"
+    # run e.g. via the following command
+    # python -c "from tenpy.linalg.test_tensor import demo_repr; demo_repr()"
 
     print()
     separator = '=' * 80

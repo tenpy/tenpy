@@ -1,6 +1,7 @@
 # Copyright 2023-2023 TeNPy Developers, GNU GPLv3
 from __future__ import annotations
 from numpy import prod
+import numpy
 from typing import Any, TYPE_CHECKING
 
 from .abelian import AbstractAbelianBackend
@@ -23,7 +24,7 @@ class TorchBlockBackend(AbstractBlockBackend):
 
     svd_algorithms = ['gesvdj', 'gesvd']
 
-    def __init__(self, device: str = 'cpu') -> None:
+    def __init__(self, device: str = 'cpu', **kwargs) -> None:
         global torch_module
         try:
             import torch
@@ -31,7 +32,6 @@ class TorchBlockBackend(AbstractBlockBackend):
             raise ImportError('Could not import torch. Use a different backend or install torch.') from e
         self.device = device
         torch_module = torch
-        super().__init__()
         self.tenpy_dtype_map = {
             torch.float32: Dtype.float32,
             torch.float64: Dtype.float64,
@@ -44,6 +44,8 @@ class TorchBlockBackend(AbstractBlockBackend):
             Dtype.complex64: torch.complex64,
             Dtype.complex128: torch.complex128,
         }
+        self.BlockCls = torch.Tensor
+        super().__init__(**kwargs)
 
     def block_is_real(self, a: Block):
         return not torch_module.is_complex(a)
@@ -160,7 +162,7 @@ class TorchBlockBackend(AbstractBlockBackend):
         std = sigma * torch_module.ones_like(mean, device=self.device)
         return torch_module.normal(mean, std)
 
-    def block_from_numpy(self, a) -> Block:
+    def block_from_numpy(self, a: numpy.ndarray) -> Block:
         return torch_module.tensor(a, device=self.device)
 
     def zero_block(self, shape: list[int], dtype: Dtype) -> Block:

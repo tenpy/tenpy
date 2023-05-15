@@ -238,27 +238,25 @@ class AbelianBackendProductSpace(ProductSpace, AbelianBackendVectorSpace):
         # inverse permutation is needed in _map_incoming_block_inds
         self._inv_perm_block_inds = inverse_permutation(perm_block_inds)
 
-        slices = np.cumsum(multiplicities)
-        block_ind_map[1:, 0] = slices[:-1]  # start with 0
-        block_ind_map[:, 1] = slices
+        slices = np.concatenate([[0], np.cumsum(multiplicities)], axis=0)
+        block_ind_map[:, 0] = slices[:-1]  # start with 0
+        block_ind_map[:, 1] = slices[1:]
 
         # bunch sectors with equal charges together
         diffs = _find_row_differences(_sectors, include_len=True)
         self.block_ind_map_slices = diffs
+        slices = slices[diffs]
+        multiplicities = slices[1:] - slices[:-1]
         diffs = diffs[:-1]
 
         _sectors = _sectors[diffs]
-        multiplicities = slices[diffs]
-        multiplicities[1:] -= multiplicities[:-1]
 
         new_block_ind = np.zeros(len(block_ind_map), dtype=np.intp) # = J
         new_block_ind[diffs[1:]] = 1  # not for the first entry => np.cumsum starts with 0
         block_ind_map[:, -1] = new_block_ind = np.cumsum(new_block_ind)
         # calculate the slices within blocks: subtract the start of each block
-        block_ind_map[:, :2] -= multiplicities[new_block_ind][:, np.newaxis]
-
+        block_ind_map[:, :2] -= slices[new_block_ind][:, np.newaxis]
         self.block_ind_map = block_ind_map  # finished
-
         return _sectors, multiplicities
 
     def _map_incoming_block_inds(self, incoming_block_inds):
@@ -384,7 +382,7 @@ def _valid_block_indices(spaces: list[AbelianBackendVectorSpace]):
     grid = np.indices((s.num_sectors for s in spaces), dtype=int)
     grid = grid.T.reshape((-1, len(spaces)))
     total_sectors = _fuse_abelian_charges(symmetry,
-                                          (space.sector[gr] for space, gr in zip(spaces, grid.T)))
+                                          *(space.sectors[gr] for space, gr in zip(spaces, grid.T)))
     valid = np.all(total_sectors == symmetry.trivial_sector[np.newaxis, :], axis=1)
     block_inds = grid[valid, :]
     perm = np.lexsort(block_inds.T)
@@ -502,6 +500,21 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
     """Backend for Abelian group symmetries.
 
     """
+    VectorSpaceCls = AbelianBackendVectorSpace
+    ProductSpaceCls = AbelianBackendProductSpace
+    DataCls = AbelianBackendData
+
+    def check_data_sanity(self, a: Tensor):
+        super().check_data_sanity(a)
+        assert a.data.block_inds.shape == (len(a.data.blocks), a.num_legs)
+        # check expected tensor dimensions
+        block_shapes = np.array([leg.multiplicities[i] for leg, i in zip(a.legs, a.data.block_inds.T)]).T
+        for block, shape in zip(a.data.blocks, block_shapes):
+            assert self.block_shape(block) == tuple(shape)
+        assert not np.any(a.data.block_inds < 0)
+        assert not np.any(a.data.block_inds >= np.array([[leg.num_sectors for leg in a.legs]]))
+        # TODO: could also check that
+
     def convert_vector_space(self, leg: VectorSpace) -> AbelianBackendVectorSpace:
         if isinstance(leg, (AbelianBackendVectorSpace, AbelianBackendProductSpace)):
             return leg
@@ -529,14 +542,14 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
         if len(a.blocks) > 1:
             raise ValueError("More than 1 block!")
         if len(a.blocks) == 0:
-            assert all(leg.dim == 1 for leg in a.legs)
+            #  assert all(leg.dim == 1 for leg in a.legs)
             return 0.
         return self.block_item(a.blocks[0])
 
     def to_dense_block(self, a: Tensor) -> Block:
-        res = self.zero_block([leg.dim for leg in a.legs])
+        res = self.zero_block([leg.dim for leg in a.legs], a.data.dtype)
         for block, block_inds in zip(a.data.blocks, a.data.block_inds):
-            slices = [slice(*leg.slices[qi]) for i, leg in zip(block_inds, a.legs)]
+            slices = [slice(*leg.slices[i]) for i, leg in zip(block_inds, a.legs)]
             res[tuple(slices)] = block
         return res
 
@@ -548,17 +561,20 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
         block_inds = _valid_block_indices(legs)
         blocks = []
         for b_i in block_inds:
-            slices = [slice(*leg.slices[i]) for i, leg in zip(b_i, a.legs)]
+            slices = [slice(*leg.slices[i]) for i, leg in zip(b_i, legs)]
             blocks.append(a[tuple(slices)])
         return AbelianBackendData(dtype, blocks, block_inds)
 
     def from_block_func(self, func, legs: list[VectorSpace]) -> AbelianBackendData:
-        dtype = self.block_dtype(a)
         block_inds = _valid_block_indices(legs)
         blocks = []
         for b_i in block_inds:
-            shape = [leg.multiplicities[i] for i, leg in zip(b_i, a.legs)]
+            shape = [leg.multiplicities[i] for i, leg in zip(b_i, legs)]
             blocks.append(func(tuple(shape)))
+        if len(blocks) == 0:
+            dtype = self.block_dtype(func((1,) * len(legs)))
+        else:
+            dtype = self.block_dtype(blocks[0])
         return AbelianBackendData(dtype, blocks, block_inds)
 
     def zero_data(self, legs: list[VectorSpace], dtype: Dtype) -> AbelianBackendData:
@@ -569,7 +585,7 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
         block_inds = np.indices((leg.num_sectors for leg in legs)).T.reshape(-1, len(legs))
         # block_inds is by construction np.lexsort()-ed
         dims = [leg.multiplicities[bi] for leg, bi in zip(legs, block_inds.T)]
-        blocks = [self.eye_block(shape, dtype) for shape in zip(dims)]
+        blocks = [self.eye_block(shape, dtype) for shape in zip(*dims)]
         return AbelianBackendData(dtype, blocks, np.hstack([block_inds, block_inds]))
 
     def copy_data(self, a: Tensor) -> Data:
@@ -657,8 +673,8 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
         #  by charges, so the 'sum' over ``k`` will contain at most one term!
 
         # note: tensor.tdot() checks special-cases inner and outer, so it's at least a mat-vec
-        open_axs_a = [leg for idx, leg in enumerate(a.legs) if idx not in axs_a]
-        open_axs_b = [leg for idx, leg in enumerate(b.legs) if idx not in axs_b]
+        open_axs_a = [idx for idx in range(a.num_legs) if idx not in axs_a]
+        open_axs_b = [idx for idx in range(b.num_legs) if idx not in axs_b]
         assert len(open_axs_a) > 0 or len(open_legs2) > 0, "special case inner() in tensor.tdot()"
         assert len(axs_a) > 0, "special case outer() in tensor.tdot()"
 
@@ -680,36 +696,36 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
 
         # Step 3) loop over column/row of the result
         sym = a.legs[0].symmetry
-        a_charges_keep = _fuse_abelian_charges(sym, *(leg[i] for leg, i in zip(a.legs[:cut_a], a_block_inds_keep.T)))
-        b_charges_keep_dual = _fuse_abelian_charges(sym, *(leg.dual[i] for leg, i in zip(b.legs[cut_b:], b_block_inds_keep.T)))
+        a_charges_keep = _fuse_abelian_charges(sym, *(leg.sectors[i] for leg, i in zip(a.legs[:cut_a], a_block_inds_keep.T)))
+        b_charges_keep_dual = _fuse_abelian_charges(sym, *(leg.dual.sectors[i] for leg, i in zip(b.legs[cut_b:], b_block_inds_keep.T)))
         # dual such that b_charges_keep_dual must match a_charges_keep
         a_lookup_charges = list_to_dict_list(a_charges_keep)  # lookup table ``charge -> [row_a]``
 
         # (rows_a changes faster than cols_b, such that the resulting array is qdata lex-sorted)
         # determine output qdata
-        res_data = []
+        res_blocks = []
         res_block_inds_a = []
         res_block_inds_b = []
         for col_b, charge_match in enumerate(b_charges_keep_dual):
-            b_blocks_in_col = b_data[col_b]
+            b_blocks_in_col = b_blocks[col_b]
             rows_a = a_lookup_charges.get(tuple(charge_match), [])  # empty list if no match
             for row_a in rows_a:
                 ks = _iter_common_sorted(a_block_inds_contr[row_a], b_block_inds_contr[col_b])
                 if len(ks) == 0:
                     continue
-                a_blocks_in_row = a_data[row_a]
+                a_blocks_in_row = a_blocks[row_a]
                 k1, k2 = ks[0]
-                block_contr = self.block_dot(a_blocks_in_row[k1], b_blocks_in_col[k2])
+                block_contr = self.matrix_dot(a_blocks_in_row[k1], b_blocks_in_col[k2])
                 for k1, k2 in ks[1:]:
-                    block_contr = block_contr + self.block_dot(a_block_inds_contr[k1],
-                                                               b_blocks_in_col[k2])
+                    block_contr = block_contr + self.matrix_dot(a_block_inds_contr[k1],
+                                                                b_blocks_in_col[k2])
 
                 # Step 4) reshape back to tensors
                 block_contr = self.block_reshape(block_contr, a_shape_keep[row_a] + b_shape_keep[col_b])
-                res_data.append(block_contr)
+                res_blocks.append(block_contr)
                 res_block_inds_a.append(a_block_inds_keep[row_a])
                 res_block_inds_b.append(b_block_inds_contr[col_b])
-        if len(res_data) == 0:
+        if len(res_blocks) == 0:
             return self.zero_data(a.legs[:cut_a] + b.legs[cut_b:], dtype)
         return AbelianBackendData(res_dtype, res_blocks, np.hstack((res_block_inds_a, res_block_inds_b)))
 
@@ -738,10 +754,10 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
         elif first_axes_b:
             # no need to transpose b
             axs_a = [axs_a[i] for i in np.argsort(axs_b)]
-            a = a.transpose(open_legs_a + axs_a)
+            a = a.transpose(open_axs_a + axs_a)
             return a, b, contr_axes
         # no special case to avoid transpose -> transpose both
-        a = a.transpose(open_legs_a + axs_a)
+        a = a.transpose(open_axs_a + axs_a)
         b = b.transpose(axs_b + open_axs_b)
         return a, b, contr_axes
 
@@ -755,7 +771,7 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
         -------
         a_pre_result, b_pre_result : tuple
             In the following order, it contains for `a`, and `b` respectively:
-            a_blocks : list of reshaped tensors
+            a_blocks : list of list of reshaped tensors
             a_block_inds_contr : 2D array with block indices of `a` which we need to sum over
             a_block_inds_keep : 2D array of the block indices of `a` which will appear in the final result
             a_slices : partition to map the indices of a_*_keep to a_data
@@ -768,7 +784,7 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
         stride = _make_stride([len(l.sectors) for l in a.legs[cut_a:]], False)
         a_block_inds_contr = np.sum(a.data.block_inds[:, cut_a:] * stride, axis=1)
         # lex-sort a.data.block_inds, dominated by the axes kept, then the axes summed over.
-        a_sort = np.lexsort(np.hstack(a_block_inds_contr[:, np.newaxis], a.data.block_inds[:, :cut_a]).T)
+        a_sort = np.lexsort(np.hstack([a_block_inds_contr[:, np.newaxis], a.data.block_inds[:, :cut_a]]).T)
         a_block_inds_keep = a.data.block_inds[a_sort, :cut_a]
         a_block_inds_contr = a_block_inds_contr[a_sort]
         a_blocks = a.data.blocks
@@ -797,17 +813,17 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
         if b.data.dtype != res_dtype:
             b_blocks = [[self.block_to_dtype(T) for T in blocks] for blocks in b_blocks]
         # reshape a_blocks and b_blocks to matrix/vector
-        a_blocks = self._tdot_pre_reshape(a_blocks, cut_a)
-        b_blocks = self._tdot_pre_reshape(b_blocks, cut_b)
+        a_blocks = self._tdot_pre_reshape(a_blocks, cut_a, a.num_legs)
+        b_blocks = self._tdot_pre_reshape(b_blocks, cut_b, b.num_legs)
 
         # collect and return the results
         a_pre_result = a_blocks, a_block_inds_contr, a_block_inds_keep, a_shape_keep
         b_pre_result = b_blocks, b_block_inds_contr, b_block_inds_keep, b_shape_keep
         return a_pre_result, b_pre_result, res_dtype
 
-    def _tdot_pre_reshape(self, blocks_list, cut):
+    def _tdot_pre_reshape(self, blocks_list, cut, num_legs):
         """Reshape blocks to (fortran) matrix/vector (depending on `cut`)"""
-        if cut == 0 or cut == data[0][0].ndim:
+        if cut == 0 or cut == num_legs:
             # special case: reshape to 1D vectors
             return [[self.block_reshape(T, (-1,)) for T in blocks]
                     for blocks in blocks_list]
@@ -1148,11 +1164,11 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
         a_block_inds = a.data.block_inds
         b_block_inds = b.data.block_inds
         # ensure common dtypes
-        common_type = a.dtype.common(b.dtype)
+        common_dtype = a.dtype.common(b.dtype)
         if a.data.dtype != common_dtype:
-            a_blocks = [self.block_to_dtype(T, common_type) for T in a_blocks]
+            a_blocks = [self.block_to_dtype(T, common_dtype) for T in a_blocks]
         if b.data.dtype != common_dtype:
-            b_blocks = [self.block_to_dtype(T, common_type) for T in b_blocks]
+            b_blocks = [self.block_to_dtype(T, common_dtype) for T in b_blocks]
         res_blocks = []
         res_block_inds = []
         for i, j in _iter_common_noncommon_sorted_arrays(a_block_inds, b_block_inds):
@@ -1165,8 +1181,11 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
             else:
                 res_blocks.append(self.block_add(a_blocks[i], b_blocks[j]))
                 res_block_inds.append(a_block_inds[i])
-        res_block_inds = np.concatenate(res_block_inds, axis=0)
-        return AbelianBackendData(common_type, res_blocks, res_block_inds)
+        if len(res_block_inds) > 0:
+            res_block_inds = np.array(res_block_inds)
+        else:
+            res_block_inds = np.zeros((0, a.num_legs), int)
+        return AbelianBackendData(common_dtype, res_blocks, res_block_inds)
 
     def mul(self, a: float | complex, b: Tensor) -> Data:
         if a == 0.:

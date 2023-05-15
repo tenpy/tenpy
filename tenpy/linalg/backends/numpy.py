@@ -22,6 +22,7 @@ if TYPE_CHECKING:
 
 
 class NumpyBlockBackend(AbstractBlockBackend):
+    BlockCls = np.ndarray
     svd_algorithms = ['gesdd', 'gesvd', 'robust', 'robust_silent']
 
     tenpy_dtype_map = {
@@ -171,7 +172,7 @@ class NumpyBlockBackend(AbstractBlockBackend):
             res += 1.j * np.random.normal(loc=0, scale=sigma, size=dims)
         return res
 
-    def block_from_numpy(self, a) -> Block:
+    def block_from_numpy(self, a: np.ndarray) -> Block:
         return a
 
     def zero_block(self, shape: list[int], dtype: Dtype) -> Block:

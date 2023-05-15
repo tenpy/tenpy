@@ -26,6 +26,13 @@ class AbstractNoSymmetryBackend(AbstractBackend, AbstractBlockBackend, ABC):
     Backend with no symmetries.
 
     """
+    VectorSpaceCls = VectorSpace
+    ProductSpaceCls = ProductSpace
+    DataCls = "Block of AbstractBlockBackend"
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.DataCls = self.BlockCls
 
     def get_dtype_from_data(self, a: Data) -> Dtype:
         return self.block_dtype(a)

@@ -4,8 +4,8 @@
 import numpy as np
 import pytest
 
-from . import backends
-from .symmetries import groups, spaces
+from tenpy.linalg import backends
+from tenpy.linalg.symmetries import groups, spaces
 
 
 @pytest.fixture
@@ -43,7 +43,7 @@ def random_symmetry_sectors(symmetry: groups.Symmetry, np_random: np.random.Gene
     if isinstance(symmetry, groups.SU2Symmetry):
         return np.arange(0, 2*len_, 2, dtype=int)[:, np.newaxis]
     elif isinstance(symmetry, groups.U1Symmetry):
-        vals = [123] + list(range(-len_, len_))
+        vals = list(range(-len_, len_)) + [123]
         return np_random.choice(vals, replace=False, size=(len_, 1))
     elif symmetry.num_sectors < np.inf:
         if symmetry.num_sectors <= len_:
@@ -72,17 +72,17 @@ def symmetry_sectors_rng(symmetry, np_random):
 def random_vector_space(symmetry, max_num_blocks=5, max_block_size=5, np_random=None, VectorSpace=spaces.VectorSpace):
     if np_random is None:
         np_ranodm = np.random.default_rng()
-    len_ = np_random.integers(1, max_num_blocks)
+    len_ = np_random.integers(1, max_num_blocks, endpoint=True)
     sectors = random_symmetry_sectors(symmetry, np_random, len_)
-    mults = np_random.integers(1, max_block_size, size=(len(sectors),))
+    mults = np_random.integers(1, max_block_size, size=(len(sectors),), endpoint=True)
     dual = np_random.random() < 0.5
-    return VectorSpace(some_symmetry, some_symmetry_sectors, mults, is_real=False, _is_dual=dual)
+    return VectorSpace(symmetry, sectors, mults, is_real=False, _is_dual=dual)
 
 
 @pytest.fixture
-def vector_space_rng(symmetry, symmetry_sectors_rng, np_random, VectorSpace):
-    def generator(max_num_blocks: int = 4, max_block_size=8):
-        """generate random VectorSpace instances"""
+def vector_space_rng(symmetry, symmetry_sectors_rng, np_random):
+    def generator(max_num_blocks: int = 4, max_block_size=8, VectorSpace=spaces.VectorSpace):
+        """generate random spaces.VectorSpace instances."""
         return random_vector_space(symmetry, max_num_blocks, max_block_size, np_random, VectorSpace)
     return generator
 
@@ -102,3 +102,24 @@ def block_backend(request):
 @pytest.fixture
 def backend(symmetry, block_backend):
     return backends.backend_factory.get_backend(symmetry, block_backend)
+
+
+@pytest.fixture
+def block_rng(backend, np_random):
+    def generator(size):
+        return backend.block_from_numpy(np_random.normal(size=size))
+    return generator
+
+
+@pytest.fixture
+def backend_data_rng(backend, block_rng, np_random):
+    def generator(legs):
+        data = backend.from_block_func(block_rng, legs)
+        if isinstance(backend, backends.abelian.AbstractAbelianBackend):
+            if np_random.random() < 0.5:  # with 50% probability
+                # keep roughly half of the blocks
+                keep = (np_random.random(len(data.blocks)) < 0.5)
+                data.blocks = [block for block, k in zip(data.blocks, keep) if k]
+                data.block_inds = data.block_inds[keep]
+        return data
+    return generator
