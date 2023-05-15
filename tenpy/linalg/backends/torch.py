@@ -92,8 +92,8 @@ class TorchBlockBackend(AbstractBlockBackend):
         return torch_module.permute(a, permutation)  # TODO: this is documented as a view. is that a problem?
 
     def block_trace_full(self, a: Block, idcs1: list[int], idcs2: list[int]) -> float | complex:
-        a = np.transpose(a, idcs1 + idcs2)
-        trace_dim = np.prod(a.shape[:len(idcs1)])
+        a = torch_module.permute(a, idcs1 + idcs2)
+        trace_dim = prod(a.shape[:len(idcs1)])
         a = torch_module.reshape(a, (trace_dim, trace_dim))
         return a.diagonal(offset=0, dim1=0, dim2=1).sum(0)
 
@@ -120,7 +120,7 @@ class TorchBlockBackend(AbstractBlockBackend):
     def block_max_abs(self, a: Block) -> float:
         return torch_module.max(torch_module.max(a))
 
-    def block_reshape(self, a: Block, shape: Tuple[int]) -> Block:
+    def block_reshape(self, a: Block, shape: tuple[int]) -> Block:
         return torch_module.reshape(a, shape)
 
     def block_matrixify(self, a: Block, idcs1: list[int], idcs2: list[int]) -> tuple[Block, Any]:
