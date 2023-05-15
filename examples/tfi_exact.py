@@ -8,7 +8,7 @@ The Hamiltonian reads
 
 import numpy as np
 import scipy.sparse as sparse
-import scipy.sparse.linalg.eigen.arpack as arp
+from scipy.sparse.linalg import eigsh
 import warnings
 import scipy.integrate
 
@@ -45,7 +45,7 @@ def finite_gs_energy(L, J, g):
     for i in range(L):
         H_z = H_z + sz_list[i]
     H = -J * H_xx - g * H_z
-    E, V = arp.eigsh(H, k=1, which='SA', return_eigenvectors=True, ncv=20)
+    E, V = eigsh(H, k=1, which='SA', return_eigenvectors=True, ncv=20)
     return E[0]
 
 
