@@ -692,5 +692,22 @@ def test_InitialStateBuilder():
     assert 1.e-8 < abs(psi5.overlap(psi1) - 1) < 0.1  # but here we randomize only a bit
 
 
+def test_fixes_181():
+    # See https://github.com/tenpy/tenpy/issues/181
+    s0 = site.SpinHalfSite('Sz', sort_charge=True)
+    lat = Chain(10, s0, bc_MPS='finite')
+    psi1 = mps.InitialStateBuilder(
+        lat, {
+            'method': 'randomized',
+            'randomized_from_method': 'lat_product_state',
+            'randomize_close_1': True,
+            'randomize_params': {'N_steps': 2},
+            'product_state': [['up'], ['down']],
+            'check_filling': 0.5,
+            'full_empty': ['up', 'down'],
+        }, model_dtype=np.complex128).run()
+    psi1.enlarge_chi([0, 0, 0, 1, 2, 2, 2, 1, 0, 0, 0])
+
+
 if __name__ == "__main__":
     test_sample_measurements()
