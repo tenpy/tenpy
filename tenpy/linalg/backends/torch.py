@@ -147,6 +147,9 @@ class TorchBlockBackend(AbstractBlockBackend):
         U, S, V = torch_module.linalg.svd(a, full_matrices=False, driver=algorithm)
         return U, S, V
 
+    def matrix_qr(self, a: Block, full: bool) -> tuple[Block, Block]:
+        return torch_module.qr(a, some=not full)
+
     def matrix_exp(self, matrix: Block) -> Block:
         raise NotImplementedError  # TODO: could not find a torch implementation via their docs...?
 

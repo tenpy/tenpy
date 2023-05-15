@@ -36,6 +36,7 @@ def force_str_len(obj, length: int, rjust: bool = True, placeholder: str = '[...
 UNSPECIFIED = object()
 
 
+# TODO is actually implemented in tools.misc ...
 def inverse_permutation(permutation: list[int]):
     inv = np.empty_like(permutation)
     inv[permutation] = np.arange(len(inv), dtype=inv.dtype)

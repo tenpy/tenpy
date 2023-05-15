@@ -1,8 +1,8 @@
 # Copyright 2023-2023 TeNPy Developers, GNU GPLv3
 
 from __future__ import annotations
-import math
 from .tensors import DiagonalTensor, AbstractTensor, Tensor, get_same_backend
+from ..tools.misc import inverse_permutation
 
 __all__ = ['svd', 'truncate_svd', 'svd_split', 'leg_bipartition', 'exp', 'log']
 
@@ -15,13 +15,15 @@ def svd(a: AbstractTensor, u_legs: list[int | str] = None, vh_legs: list[int | s
 
     TODO: document input format for u_legs / vh_legs, can probably to it centrally for all matrix ops
 
+    TODO: document efficiency issues when combining legs
+
     Parameters
     ----------
     a : Tensor
     u_legs : list[int  |  str], optional
         Which of the legs belong to "matrix rows" and end up as legs of U.
     vh_legs : list[int  |  str], optional
-        Which of the legs belong to "matrix rows" and end up as legs of Vh.
+        Which of the legs belong to "matrix columns" and end up as legs of Vh.
     new_labels : tuple[str, ...], optional
         Specification for the labels of the newly generated leg, i.e. those legs that would need to
         be contracted to recover `a`.
@@ -31,6 +33,7 @@ def svd(a: AbstractTensor, u_legs: list[int | str] = None, vh_legs: list[int | s
         If None (default), the new legs will not be labelled
     new_vh_leg_dual : bool
         Whether the new leg of `vh` will be dual or not.
+        TODO what is the intuitive default?
     options : dict | Config | None
         TODO: things like driver / stable / ... ?
 
@@ -41,34 +44,78 @@ def svd(a: AbstractTensor, u_legs: list[int | str] = None, vh_legs: list[int | s
         to `a` up to numerical precsision
     """
     if not isinstance(a, Tensor):
-        raise NotImplementedError  # TODO
+        raise NotImplementedError  # TODO ChargedTensor support
 
     u_idcs, vh_idcs = leg_bipartition(a, u_legs, vh_legs)
     l_u, l_su, l_sv, l_vh = _svd_new_labels(new_labels)
 
     need_combine = (len(u_idcs) != 1 or len(vh_idcs) != 1)
     if need_combine:
-        a = a.combine_legs(u_idcs, v_idcs, new_axes=[0, 1])
+        a = a.combine_legs(u_idcs, vh_idcs, new_axes=[0, 1])
     elif u_idcs[0] == 1:   # both single entry, so v_idcs = [1]
         a = a.transpose([1, 0])
 
     # TODO read algorithm etc from config
     u_data, s_data, vh_data, new_leg = a.backend.svd(a, new_vh_leg_dual)
 
-    U = Tensor(u_data, backend=a.backend, legs=[a.legs[0], new_leg.dual],
-               labels=[a.labels[n] for n in u_idcs] + [l_u])
+    U = Tensor(u_data, backend=a.backend, legs=[a.legs[0], new_leg.dual])
     # TODO revisit this once DiagonalTensor is defined
     S = DiagonalTensor(s_data, backend=a.backend, legs=[new_leg, new_leg.dual], labels=[l_su, l_sv])
-    Vh = Tensor(vh_data, backend=a.backend, legs=[new_leg, a.legs[1]],
-                labels=[l_vh] + [a.labels[n] for n in vh_idcs])
+    Vh = Tensor(vh_data, backend=a.backend, legs=[new_leg, a.legs[1]])
     if need_combine:
         U = U.split_leg(0)
         Vh = Vh.split_leg(1)
+    U.set_labels([a.labels[n] for n in u_idcs] + [l_u])
+    Vh.set_labels([l_vh] + [a.labels[n] for n in vh_idcs])
     return U, S, Vh
 
 
+def qr(a: AbstractTensor, q_legs: list[int | str] = None, r_legs: list[int | str] = None,
+       new_labels: tuple[str, str] = [None, None], new_r_leg_dual: bool = False,
+       full: bool = False):
+    """QR decomposition of a tensor, viewed as a linear map.
+
+    Parameters
+    ----------
+    a : Tensor
+        The tensor to decompose
+    q_legs :
+        Which of the legs belong to "matrix rows" and end up as legs of Q.
+    r_legs :
+        Which of the legs belong to "matrix columns" and end up as legs of R.
+    new_labels : tuple[str, str], optional
+        Labels for the new legs on Q and R.
+    new_r_leg_dual: bool
+        Whether the new leg on R will be dual or not. This is purely conventional.
+        TODO what is the intuitive default? -> match convention with SVD
+    full: bool
+        Whether the full QR decomposition should be computed
+    """
+    if not isinstance(a, Tensor):
+        raise NotImplementedError  # TODO ChargedTensor support
+
+    a_labels = a.labels
+    q_idcs, r_idcs = leg_bipartition(a, q_legs, r_legs)
+
+    need_combine = (len(q_idcs) > 1 or len(r_idcs) > 1)
+    if need_combine:
+        a = a.combine_legs(q_idcs, r_idcs, new_axes=[0, 1])
+    elif q_idcs[0] == 1:  # this implies q_idcs == [1] and r_idcs == [0]
+        a = a.transpose([1, 0])
+
+    q_data, r_data, new_leg = a.backend.qr(a, new_r_leg_dual, full=full)
+
+    Q = Tensor(q_data, legs=[a.legs[0], new_leg.dual], backend=a.backend)
+    R = Tensor(r_data, legs=[new_leg, a.legs[1]], backend=a.backend)
+    if need_combine:
+        R = R.split_leg(1)
+        Q = Q.split_leg(0)
+    Q.set_labels([a_labels[n] for n in q_idcs] + [new_labels[0]])
+    R.set_labels([new_labels[1]], [a_labels[n] for n in r_idcs])
+    return Q, R
+
+
 # TODO directly provide truncated SVD
-# TODO QR
 
 
 def truncate_svd(U: AbstractTensor, S: DiagonalTensor, Vh: AbstractTensor, options=None

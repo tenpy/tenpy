@@ -175,6 +175,19 @@ class AbstractBackend(ABC):
         ...
 
     @abstractmethod
+    def qr(self, a: Tensor, new_r_leg_dual: bool, full: bool) -> tuple[Data, Data, VectorSpace]:
+        """QR decomposition of a Matrix `a` with two legs (which may be ProductSpace)
+
+        Returns
+        -------
+        q, r:
+            Data of corresponding tensors.
+        new_leg :
+            (Backend-specific) VectorSpace the new leg of r.
+        """
+        ...
+
+    @abstractmethod
     def outer(self, a: Tensor, b: Tensor) -> Data:
         ...
 
@@ -364,6 +377,7 @@ class AbstractBlockBackend(ABC):
     def block_reshape(self, a: Block, shape: tuple[int]) -> Block:
         ...
 
+    # TODO get rid of this and demtrixify?
     @abstractmethod
     def block_matrixify(self, a: Block, idcs1: list[int], idcs2: list[int]) -> tuple[Block, Any]:
         """reshape to a matrix. return that matrix and data necessary to revert it"""
@@ -385,6 +399,11 @@ class AbstractBlockBackend(ABC):
         With full_matrices=False, i.e. shape ``(n,m) -> (n,k), (k,) (k,m)`` where
         ``k <= min(n,m)``.
         """
+        ...
+
+    @abstractmethod
+    def matrix_qr(self, a: Block, full: bool) -> tuple[Block, Block]:
+        """QR decomposition of a 2D block"""
         ...
 
     @abstractmethod

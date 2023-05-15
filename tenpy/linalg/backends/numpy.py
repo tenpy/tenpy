@@ -154,6 +154,9 @@ class NumpyBlockBackend(AbstractBlockBackend):
         else:
             raise ValueError(f'SVD algorithm not supported: {algorithm}')
 
+    def matrix_qr(self, a: Block, full: bool) -> tuple[Block, Block]:
+        return scipy.linalg.qr(a, mode='full' if full else 'economic')
+
     def matrix_exp(self, matrix: Block) -> Block:
         return scipy.linalg.expm(matrix)
 
