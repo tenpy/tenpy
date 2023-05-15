@@ -1269,7 +1269,9 @@ class MPS:
             if not isinstance(add_chi, int):
                 continue
             # convert chi to extra LegCharge
-            if self.chinfo.qnumber == 0:
+            if add_chi == 0:
+                extra_legs[i] = None
+            elif self.chinfo.qnumber == 0:
                 extra_legs[i] = npc.LegCharge.from_trivial(add_chi, self.chinfo)
             else:
                 max_weight = np.argmax(self._S[i])
@@ -1308,6 +1310,10 @@ class MPS:
                 extra_B = extra_B - npc.tensordot(npc.tensordot(extra_B, B2.conj(), [1, 1]),
                                                 B2,
                                                 [1, 0])
+                if npc.norm(extra_B) < 1e-12:
+                    logger.warning(
+                        f'Failed to orthogonalize extra_B against B2. norm(extra_B) = {npc.norm(extra_B)}.'
+                    )
                 # orthogonalize rows within extra_B by QR
                 extra_B, extra_R = npc.qr(extra_B.itranspose([1, 0]),
                                         inner_qconj=-1,
