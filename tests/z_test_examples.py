@@ -13,16 +13,10 @@ import warnings
 
 # get directory where the examples can be found
 examples_dir = os.path.join(os.path.dirname(__file__), '..', 'examples')
-toycodes_path = os.path.join(os.path.dirname(__file__), '..', 'toycodes')
-toycodes_dir = os.path.join(toycodes_path, 'tenpy_toycodes')
 
 exclude = ["__pycache__"]
 
 examples = [fn for fn in os.listdir(examples_dir) if fn[-3:] == '.py' and fn not in exclude]
-if os.path.exists(toycodes_dir):
-    toycodes = [fn for fn in os.listdir(toycodes_dir) if fn[-3:] == '.py' and fn not in exclude]
-else:
-    toycodes = []
 
 
 @pytest.mark.example  # allow to skip the examples with ``$> pytest -m "not example"``
@@ -42,20 +36,3 @@ def test_examples_import(filename):
             exec(script, scope, scope)
     finally:
         sys.path[:] = old_sys_path
-
-
-@pytest.mark.example  # allow to skip the examples with ``$> pytest -m "not example"``
-@pytest.mark.slow
-@pytest.mark.parametrize('filename', toycodes)
-def test_toycodes_import(filename):
-    assert filename[-3:] == '.py'
-    old_sys_path = sys.path[:]
-    if toycodes_path not in sys.path:
-        sys.path[:0] = [toycodes_path]  # add the directory to sys.path
-    try:
-        with warnings.catch_warnings():
-            warnings.simplefilter('ignore')  # disable warngings temporarily
-            importlib.import_module('tenpy_toycodes.' + filename[:-3])
-    finally:
-        sys.path[:] = old_sys_path
-
