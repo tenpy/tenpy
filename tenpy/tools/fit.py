@@ -12,14 +12,28 @@ __all__ = [
 
 
 def alg_decay(x, a, b, c):
-    """define the algebraic decay."""
+    """Algebraic decay function :math :`a * x^{-b} + c`."""
     return a * x**(-b) + c
 
 
 def linear_fit(x, y):
-    """Perform a linear fit of y to ax + b.
+    """Perform a linear fit `y` ~ `a * x + b`.
 
-    Returns a, b, res.
+    Parameters
+    ----------
+    x : array_like [M]
+        The independent variable where the data is measured.
+    y : array_like [M]
+        The dependent data.
+
+    Returns
+    -------
+    a : float
+        The "slope" parameter of the fit function.
+    b : float
+        They "y-intercept" parameter of the fit function.
+    res : float
+        The (squared) residue, i.e. ``sum((y - (a * x + b)) ** 2)``.
     """
     assert x.ndim == 1 and y.ndim == 1
     fit = np.linalg.lstsq(np.vstack([x, np.ones(len(x))]).T, y, rcond=None)
@@ -41,14 +55,41 @@ def alg_decay_fit_res(log_b, x, y):
 
 
 def alg_decay_fit(x, y, npts=5, power_range=(0.01, 4.), power_mesh=[60, 10]):
-    """Fit y to the form ``a*x**(-b) + c``.
+    """Fit `y` to an algebraic decay of the form :math :`a * x^{-b} + c`.
 
-    Returns a triplet [a, b, c].
+    The exponent ``b`` is first determined via a brute-force search with a fixed search grid
+    which is refined in multiple steps.
+    Then, ``a`` and ``c`` are determined via least-squares linear fit with independent variable :math:`x^{-b}`.
 
-    npts specifies the maximum number of points to fit.  If npts < len(x), then alg_decay_fit() will only fit to the last npts points.
-    power_range is a tuple that gives that restricts the possible ranges for b.
-    power_mesh is a list of numbers, which specifies how fine to search for the optimal b.
-    E.g., if power_mesh = [60,10], then it'll first divide the power_range into 60 intervals, and then divide those intervals by 10.
+    Parameters
+    ----------
+    x : array_like [M]
+        The independent variable where the data is measured.
+    y : array_like [M]
+        The dependent data.
+    npts : int
+        The maximum number of points used for the fit.
+        If ``npts < len(x)``, only the last `npts` datapoints, i.e. ``x[-npts:]`` and ``y[-npts:]`` are used.
+    power_range : tuple(float, float)
+        A range that restricts the possible values of the fit exponent ``b``
+    power_mesh : list of float
+        Number of points in the search grid for the fit exponent ``b``.
+        The ``power_range`` is first divded into ``power_mesh[0]`` many intervals.
+        Then, for each subsequent entry of ``power_mesh`` the smaller region around the best
+        previous guess is further divided into as many intervals.
+
+    Returns
+    -------
+    a : float
+        The prefactor of the fitted algebraic decay.
+    b : float
+        The (negative) exponent of the fitted algebraic decay.
+    c : float
+        The y-intercept of the fitted algebraic decay.
+
+    See Also
+    --------
+    alg_decay_fits
     """
     x = np.array(x)
     y = np.array(y)
@@ -76,9 +117,30 @@ def alg_decay_fit(x, y, npts=5, power_range=(0.01, 4.), power_mesh=[60, 10]):
 
 
 def alg_decay_fits(x, ys, npts=5, power_range=(0.01, 4.), power_mesh=[60, 10]):
-    """Fit arrays of y's to the form a * x**(-b) + c.
+    """Batched version of :func:`~tenpy.tools.fit.alg_decay`.
 
-    Returns arrays of [a, b, c]."""
+    Parameters
+    ----------
+    x : array_like [M]
+        The independent variable where the data is measured.
+    y : array_like [M, N]
+        ``N`` distinct sets of data for the dependent variable. ``N`` seperate fits will be performed.
+    *args :
+        Same as for :func:`~tenpy.tools.fit.alg_decay`.
+
+    Returns
+    -------
+    a : array [N]
+        The prefactors of each fitted algebraic decay.
+    b : array [N]
+        The (negative) exponents of each fitted algebraic decay.
+    c : array [N]
+        The y-intercepts of each fitted algebraic decay.
+
+    See Also
+    --------
+    alg_decay_fit
+    """
     x = np.array(x)
     if x.ndim != 1:
         raise ValueError
@@ -93,14 +155,37 @@ def alg_decay_fits(x, ys, npts=5, power_range=(0.01, 4.), power_mesh=[60, 10]):
 
 
 def plot_alg_decay_fit(plot_module, x, y, fit_par, xfunc=None, kwargs={}, plot_fit_args={}):
-    """Given x, y, and fit_par (output from alg_decay_fit), produces a plot of the algebraic decay
-    fit.
+    """Utility function used the plot an algebraic fit function next to the data.
 
-    plot_module is matplotlib.pyplot, or a subplot. x, y are the data (real, 1-dimensional
-    np.ndarray) fit_par is a triplet of numbers [a, b, c] that describes and algebraic decay (see
-    alg_decay()). xfunc is an optional parameter that scales the x-axis in the resulting plot.
-    kwargs is a dictionary, whoses key/items are passed to the plot function. plot_fit_args is a
-    dictionary that controls how the fit is shown.
+    Parameters
+    ----------
+    plot_module
+        This is either the module ``matplotlib.pyplot`` or an instance of ``matplotlib.pyplot.subplot``.
+    x, y : array_like [M]
+        The (real-valued) data.
+    fit_par : tuple(float, float, float)
+        The fit parameters ``(a, b, c)``, e.g. as returned by :func:`~tenpy.tools.fit.alg_decay`.
+    xfunc : callable, optional
+        If given, this function is used to scale the x-axis of the plot.
+    kwargs : dict
+        Keyword arguments that are passed to the ``plot_module.plot`` function.
+    plot_fit_args : dict
+        A dictionary that controls how the fit is shown via the following key value pairs::
+
+        =================== ====== ========= =======================================================================
+        key                 type   default   description
+        =================== ====== ========= =======================================================================
+        show_data_points    bool   True      If the datapoint `x`, `y` should be plotted.
+        ------------------- ------ --------- -----------------------------------------------------------------------
+        n_interp            int    30        The number of points to plot for the fit.
+        ------------------- ------ --------- -----------------------------------------------------------------------
+        show_fit            bool   True      If the fit should be plotted.
+        ------------------- ------ --------- -----------------------------------------------------------------------
+        extrap_line_start   int    -2        Define the start of the extrapolation line as ``x[extrap_line_start]``.
+        ------------------- ------ --------- -----------------------------------------------------------------------
+        extrap_line_end     int    ...       Define the end of the extrapolation as ``x[extrap_line_end]``.
+                                             Per default, it ends at the end of the x-axis.
+        =================== ====== ========= =======================================================================
     """
     if xfunc is None:
         xfunc = lambda x: x
