@@ -375,6 +375,7 @@ def _fuse_abelian_charges(symmetry: AbelianSymmetry, *sector_arrays: SectorArray
 
 def _valid_block_indices(spaces: list[AbelianBackendVectorSpace]):
     """Find block_inds where the charges of the `spaces` fuse to `symmetry.trivial_sector`"""
+    assert len(spaces) > 0
     symmetry = spaces[0].symmetry
     # TODO: this is brute-force going through all possible combinations of block indices
     # spaces are sorted, so we can probably reduce that search space quite a bit...
@@ -675,7 +676,7 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
         # note: tensor.tdot() checks special-cases inner and outer, so it's at least a mat-vec
         open_axs_a = [idx for idx in range(a.num_legs) if idx not in axs_a]
         open_axs_b = [idx for idx in range(b.num_legs) if idx not in axs_b]
-        assert len(open_axs_a) > 0 or len(open_legs2) > 0, "special case inner() in tensor.tdot()"
+        assert len(open_axs_a) > 0 or len(open_axs_b) > 0, "special case inner() in tensor.tdot()"
         assert len(axs_a) > 0, "special case outer() in tensor.tdot()"
 
         if len(a.data.blocks) == 0 or len(b.data.blocks) == 0:
@@ -696,8 +697,14 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
 
         # Step 3) loop over column/row of the result
         sym = a.legs[0].symmetry
-        a_charges_keep = _fuse_abelian_charges(sym, *(leg.sectors[i] for leg, i in zip(a.legs[:cut_a], a_block_inds_keep.T)))
-        b_charges_keep_dual = _fuse_abelian_charges(sym, *(leg.dual.sectors[i] for leg, i in zip(b.legs[cut_b:], b_block_inds_keep.T)))
+        if cut_a > 0:
+            a_charges_keep = _fuse_abelian_charges(sym, *(leg.sectors[i] for leg, i in zip(a.legs[:cut_a], a_block_inds_keep.T)))
+        else:
+            a_charges_keep = np.zeros((len(a_block_inds_keep), sym.sector_ind_len), int)
+        if cut_b < b.num_legs:
+            b_charges_keep_dual = _fuse_abelian_charges(sym, *(leg.dual.sectors[i] for leg, i in zip(b.legs[cut_b:], b_block_inds_keep.T)))
+        else:
+            b_charges_keep_dual = np.zeros((len(b_block_inds_keep), sym.sector_ind_len), int)
         # dual such that b_charges_keep_dual must match a_charges_keep
         a_lookup_charges = list_to_dict_list(a_charges_keep)  # lookup table ``charge -> [row_a]``
 
@@ -717,16 +724,16 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
                 k1, k2 = ks[0]
                 block_contr = self.matrix_dot(a_blocks_in_row[k1], b_blocks_in_col[k2])
                 for k1, k2 in ks[1:]:
-                    block_contr = block_contr + self.matrix_dot(a_block_inds_contr[k1],
+                    block_contr = block_contr + self.matrix_dot(a_blocks_in_row[k1],
                                                                 b_blocks_in_col[k2])
 
                 # Step 4) reshape back to tensors
                 block_contr = self.block_reshape(block_contr, a_shape_keep[row_a] + b_shape_keep[col_b])
                 res_blocks.append(block_contr)
                 res_block_inds_a.append(a_block_inds_keep[row_a])
-                res_block_inds_b.append(b_block_inds_contr[col_b])
+                res_block_inds_b.append(b_block_inds_keep[col_b])
         if len(res_blocks) == 0:
-            return self.zero_data(a.legs[:cut_a] + b.legs[cut_b:], dtype)
+            return self.zero_data(a.legs[:cut_a] + b.legs[cut_b:], res_dtype)
         return AbelianBackendData(res_dtype, res_blocks, np.hstack((res_block_inds_a, res_block_inds_b)))
 
     def _tdot_transpose_axes(self, a: Tensor, b: Tensor, open_axs_a, axs_a, axs_b, open_axs_b):
@@ -886,6 +893,9 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
                 AbelianBackendData(dtype, v_blocks, vh_block_inds),
                 new_leg)
 
+    def qr(self, a: Tensor, new_r_leg_dual: bool, full: bool) -> tuple[Data, Data, VectorSpace]:
+        raise NotImplementedError("TODO")  # TODO XXX
+
     def outer(self, a: Tensor, b: Tensor) -> Data:
         res_dtype = a.data.dtype.common(b.data.dtype)
         a_blocks = a.data.blocks
@@ -906,7 +916,7 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
 
         res_blocks = [self.block_outer(a_blocks[i], b_blocks[j]) for i, j in grid]
 
-        return AbelianBackendData(dtype, res_blocks, res_block_inds)
+        return AbelianBackendData(res_dtype, res_blocks, res_block_inds)
 
     def inner(self, a: Tensor, b: Tensor, axs2: list[int] | None) -> complex:
         a_blocks = a.data.blocks
@@ -919,7 +929,7 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
         if axs2 is not None:
             # we permuted the strides, so b_block_inds is no longer sorted
             sort = np.argsort(b_block_inds)
-            b_block_inds = b_block_inds[sort, :]
+            b_block_inds = b_block_inds[sort]
             b_blocks = [b_blocks[i] for i in sort]
         res = [self.block_inner(a_blocks[i], b_blocks[j], axs2)
                for i, j in _iter_common_sorted(a_block_inds, b_block_inds)]
