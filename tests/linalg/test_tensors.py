@@ -1,6 +1,8 @@
 """A collection of tests for tenpy.linalg.tensors."""
 # Copyright 2023-2023 TeNPy Developers, GNU GPLv3
 import numpy as np
+import numpy.testing as npt
+
 import pytest
 
 from tenpy.linalg import tensors
@@ -62,12 +64,12 @@ def test_Tensor_classmethods(backend, vector_space_rng, backend_data_rng, np_ran
     print('checking from_dense_block')
     tens = tensors.Tensor.from_dense_block(dense_block, backend=backend)
     data = backend.block_to_numpy(tens.to_dense_block())
-    assert np.allclose(data, numpy_block)
+    npt.assert_array_equal(data, numpy_block)
 
     print('checking from_numpy')
     tens = tensors.Tensor.from_numpy(numpy_block, backend=backend)
     data = tens.to_numpy_ndarray()
-    assert np.allclose(data, numpy_block)
+    npt.assert_array_equal(data, numpy_block)
 
     # TODO from_block_func, from_numpy_func
 
@@ -75,15 +77,15 @@ def test_Tensor_classmethods(backend, vector_space_rng, backend_data_rng, np_ran
 
     print('checking zero')
     tens = tensors.Tensor.zero(dims, backend=backend)
-    assert np.allclose(tens.to_numpy_ndarray(), np.zeros(dims))
+    npt.assert_array_equal(tens.to_numpy_ndarray(), np.zeros(dims))
     tens = tensors.Tensor.zero(legs, backend=backend)
-    assert np.allclose(tens.to_numpy_ndarray(), np.zeros(dims))
+    npt.assert_array_equal(tens.to_numpy_ndarray(), np.zeros(dims))
 
     print('checking eye')
     tens = tensors.Tensor.eye(legs[0], backend=backend)
-    assert np.allclose(tens.to_numpy_ndarray(), np.eye(legs[0].dim))
+    npt.assert_array_equal(tens.to_numpy_ndarray(), np.eye(legs[0].dim))
     tens = tensors.Tensor.eye(legs[:2], backend=backend)
-    assert np.allclose(tens.to_numpy_ndarray(), np.eye(np.prod(dims[:2])).reshape(dims[:2] + dims[:2]))
+    npt.assert_array_equal(tens.to_numpy_ndarray(), np.eye(np.prod(dims[:2])).reshape(dims[:2] + dims[:2]))
 
 
 def test_Tensor_methods(backend, vector_space_rng, backend_data_rng):
@@ -181,13 +183,13 @@ def test_Tensor_methods(backend, vector_space_rng, backend_data_rng):
 
     print('check addition + multiplication')
     neg_t3 = -tens3
-    assert np.allclose(neg_t3.to_numpy_ndarray(), -dense3)
+    npt.assert_array_equal(neg_t3.to_numpy_ndarray(), -dense3)
     a = 42
     b = 17
     res = a * tens1 - b * tens2
-    assert np.allclose(res.to_numpy_ndarray(), a * dense1 - b * dense2)
+    npt.assert_almost_equal(res.to_numpy_ndarray(), a * dense1 - b * dense2)
     res = tens1 / a + tens2 / b
-    assert np.allclose(res.to_numpy_ndarray(), dense1 / a + dense2 / b)
+    npt.assert_almost_equal(res.to_numpy_ndarray(), dense1 / a + dense2 / b)
     # TODO check strict label behavior!
 
     with pytest.raises(TypeError):
@@ -195,12 +197,10 @@ def test_Tensor_methods(backend, vector_space_rng, backend_data_rng):
 
     print('check converisions, float, complex, array')
     assert isinstance(float(tens4), float)
-    assert np.allclose(float(tens4), float(tens4_item))
+    npt.assert_equal(float(tens4), float(tens4_item))
     assert isinstance(complex(tens4 + 2.j * tens4), complex)
-    assert np.allclose(complex(tens4 + 2.j * tens4), complex(tens4_item + 2.j * tens4_item))
+    npt.assert_equal(complex(tens4 + 2.j * tens4), complex(tens4_item + 2.j * tens4_item))
     # TODO check that float of a complex tensor raises a warning
-    t1_np = np.asarray(tens1)
-    assert np.allclose(t1_np, dense1)
 
 
 def test_tdot(backend, vector_space_rng, backend_data_rng):
@@ -237,9 +237,11 @@ def test_tdot(backend, vector_space_rng, backend_data_rng):
             res2.test_sanity()
             res1 = res1.to_numpy_ndarray()
             res2 = res2.to_numpy_ndarray()
-        # else: got scalar, but we can compare it to 0-dim ndarray
-        assert np.allclose(res1, expect)
-        assert np.allclose(res2, expect)
+            npt.assert_array_almost_equal(res1, expect)
+            npt.assert_array_almost_equal(res2, expect)
+        else: # got scalar, but we can compare it to 0-dim ndarray
+            npt.assert_almost_equal(res1, expect)
+            npt.assert_almost_equal(res2, expect)
 
     # TODO check that trying to contract incompatible legs raises
     #  - opposite is_dual but different dim
@@ -248,136 +250,148 @@ def test_tdot(backend, vector_space_rng, backend_data_rng):
 
 
 # TODO (JH): continue to fix tests below to work with new fixtures for any backend
-def test_outer(some_backend):
-    backend = some_backend
-    data1 = np.random.random([3, 5])
-    data2 = np.random.random([4, 8])
-    t1 = tensors.Tensor.from_numpy(data1, backend=backend, labels=['a', 'f'])
-    t2 = tensors.Tensor.from_numpy(data2, backend=backend, labels=['g', 'b'])
-    expect = data1[:, :, None, None] * data2[None, None, :, :]
-    res = tensors.outer(t1, t2)
-    assert np.allclose(expect, res.data)
-    assert res.labels_are('a', 'f', 'g', 'b')
+def test_outer(tensor_rng):
+    tensors_ = [tensor_rng(labels=labels) for labels in [['a'], ['b'], ['c', 'd']]]
+    dense_ = [t.to_numpy_ndarray() for t in tensors_]
+
+    for i, j  in [(0, 1), (0, 2), (0, 0), (2, 2)]:
+        print(i, j)
+        expect = np.tensordot(dense_[i], dense_[j], axes=0)
+        res = tensors.outer(tensors_[i], tensors_[j])
+        res.test_sanity()
+        npt.assert_array_almost_equal(res.to_numpy_ndarray(), expect)
+        if i != j:
+            assert res.labels_are(*(tensors_[i].labels + tensors_[j].labels))
+        else:
+            assert all(l is None for l in res.labels)
 
 
-def test_inner(some_backend):
-    backend = some_backend
-    data1 = np.random.random([3, 5]) + 1.j * np.random.random([3, 5])
-    data2 = np.random.random([3, 5]) + 1.j * np.random.random([3, 5])
-    data3 = np.random.random([5, 3]) + 1.j * np.random.random([5, 3])
-    t1 = tensors.Tensor.from_numpy(data1, backend=backend)
-    t2 = tensors.Tensor.from_numpy(data2, backend=backend, labels=['a', 'b'])
-    t3 = tensors.Tensor.from_numpy(data3, backend=backend, labels=['b', 'a'])
-    expect1 = np.tensordot(np.conj(data1), data2, ([0, 1], [0, 1]))
-    res1 = tensors.inner(t1, t2)
-    assert np.allclose(expect1, res1)
-    expect2 = np.tensordot(np.conj(data2), data3, ([0, 1], [1, 0]))
-    res2 = tensors.inner(t2, t3)
-    assert np.allclose(expect2, res2)
+def test_transpose(tensor_rng):
+    labels = list('abcd')
+    t = tensor_rng(labels=labels)
+    d = t.to_numpy_ndarray()
+    for perm in [[0, 2, 1, 3], [3, 2, 1, 0], [1, 0, 3, 2], [0, 1, 2, 3], [0, 3, 2, 1]]:
+        expect = d.transpose(perm)
+        res = t.transpose(perm)
+        res.test_sanity()
+        npt.assert_array_equal(res.to_numpy_ndarray(), expect)
+        assert res.labels == [labels[i] for i in perm]
 
 
-def test_transpose(some_backend):
-    backend = some_backend
-    shape = [3, 5, 7, 10]
-    data = np.random.random(shape) + 1.j * np.random.random(shape)
-    t = tensors.Tensor.from_numpy(data, backend=backend, labels=['a', 'b', 'c', 'd'])
-    res = tensors.transpose(t, [2, 0, 3, 1])
-    assert res.labels == ['c', 'a', 'd', 'b']
-    assert np.allclose(res.data, np.transpose(data, [2, 0, 3, 1]))
+def test_inner(tensor_rng):
+    # TODO: complex!
+    t0 = tensor_rng(labels=['a'])
+    t1 = tensor_rng(legs=t0.legs, labels=t0.labels)
+    t2 = tensor_rng(labels=['a', 'b'])
+    t3 = tensor_rng(legs=t2.legs, labels=t2.labels)
+
+    for t_i, t_j in [(t0, t1), (t2, t3)]:
+        d_i = t_i.to_numpy_ndarray()
+        d_j = t_j.to_numpy_ndarray()
+
+        expect = np.inner(d_i.flatten().conj(), d_j.flatten())
+        if t_j.num_legs > 0:
+            t_j = t_j.transpose(t_j.labels[::-1])  # transpose should be reverted in inner()
+        res = tensors.inner(t_i, t_j)
+        npt.assert_allclose(res, expect)
+
+        expect = np.linalg.norm(d_i) **2
+        res = tensors.inner(t_i, t_i)
+        npt.assert_allclose(res, expect)
 
 
-def test_trace(some_backend):
-    backend = some_backend
+def test_trace(backend, vector_space_rng, tensor_rng):
+    a = vector_space_rng(3, 3, backend.VectorSpaceCls)
+    b = vector_space_rng(4, 3, backend.VectorSpaceCls)
+    c = vector_space_rng(2, 2, backend.VectorSpaceCls)
+    t1 = tensor_rng(legs=[a, a.dual], labels=['a', 'a*'])
+    d1 = t1.to_numpy_ndarray()
+    t2 = tensor_rng(legs=[a, b, a.dual, b.dual], labels=['a', 'b', 'a*', 'b*'])
+    d2 = t2.to_numpy_ndarray()
+    t3 = tensor_rng(legs=[a, c, b, a.dual, b.dual], labels=['a', 'c', 'b', 'a*', 'b*'])
+    d3 = t3.to_numpy_ndarray()
 
-    print('single legpair - default legs* args')
-    data = np.random.random([7, 7, 7]) + 1.j * np.random.random([7, 7, 7])
-    legs = [VectorSpace.non_symmetric(7), VectorSpace.non_symmetric(7), VectorSpace.non_symmetric(7).dual]
-    tens = tensors.Tensor.from_numpy(data, legs=legs, backend=backend, labels=['a', 'b', 'b*'])
-    expect = np.trace(data, axis1=-2, axis2=-1)
-    res = tensors.trace(tens)
-    assert res.labels_are('a')
-    assert np.allclose(expect, res.data)
+    print('single legpair - full')
+    expected = np.trace(d1, axis1=0, axis2=1)
+    res = tensors.trace(t1, 'a*', 'a')
+    npt.assert_array_almost_equal_nulp(res, expected, 100)
 
-    print('single legpair - via idx or label')
-    expect = np.trace(data, axis1=0, axis2=2)
-    res_idx = tensors.trace(tens, 0, 2)
-    res_label = tensors.trace(tens, 'a', 'b*')
-    assert res_idx.labels_are('b')
-    assert np.allclose(res_idx.data, expect)
-    assert res_label.labels_are('b')
-    assert np.allclose(res_label.data, expect)
+    print('single legpair - partial')
+    expected = np.trace(d2, axis1=1, axis2=3)
+    res = tensors.trace(t2, 'b*', 'b')
+    res.test_sanity()
+    assert res.labels_are('a', 'a*')
+    npt.assert_array_almost_equal_nulp(res.to_numpy_ndarray(), expected, 100)
 
-    print('two legpairs')
-    data = np.random.random([11, 13, 11, 7, 13]) + 1.j * np.random.random([11, 13, 11, 7, 13])
-    expect = np.trace(np.trace(data, axis1=1, axis2=4), axis1=0, axis2=1)
-    a = VectorSpace.non_symmetric(11)
-    b = VectorSpace.non_symmetric(13)
-    c = VectorSpace.non_symmetric(7)
-    tens = tensors.Tensor.from_numpy(data, legs=[a, b.dual, a.dual, c, b], backend=backend,
-                                     labels=['a', 'b*', 'a*', 'c', 'b'])
-    res_idx = tensors.trace(tens, [0, 1], [2, 4])
-    res_label = tensors.trace(tens, ['a', 'b*'], ['a*', 'b'])
-    assert res_idx.labels_are('c')
-    assert np.allclose(res_idx.data, expect)
-    assert res_label.labels_are('c')
-    assert np.allclose(res_label.data, expect)
+    print('two legpairs - full')
+    expected = np.trace(d2, axis1=1, axis2=3).trace(axis1=0, axis2=1)
+    res = tensors.trace(t2, ['a', 'b*'], ['a*', 'b'])
+    npt.assert_array_almost_equal_nulp(res, expected, 100)
 
-    print('scalar result')
-    data = np.random.random([11, 13, 11, 13]) + 1.j * np.random.random([11, 13, 11, 13])
-    expect = np.trace(np.trace(data, axis1=1, axis2=3), axis1=0, axis2=1)
-    a = VectorSpace.non_symmetric(11)
-    b = VectorSpace.non_symmetric(13)
-    tens = tensors.Tensor.from_numpy(data, legs=[a, b.dual, a.dual, b], backend=backend,
-                                     labels=['a', 'b*', 'a*', 'b'])
-    res_idx = tensors.trace(tens, [0, 1], [2, 3])
-    res_label = tensors.trace(tens, ['a', 'b*'], ['a*', 'b'])
-    assert isinstance(res_idx, complex)
-    assert np.allclose(res_idx, expect)
-    assert isinstance(res_label, complex)
-    assert np.allclose(res_label, expect)
+    print('two legpairs - partial')
+    expected = np.trace(d3, axis1=2, axis2=4).trace(axis1=0, axis2=2)
+    res = tensors.trace(t3, ['a', 'b*'], ['a*', 'b'])
+    res.test_sanity()
+    assert res.labels_are('c')
+    npt.assert_array_almost_equal_nulp(res.to_numpy_ndarray(), expected, 100)
 
 
-def test_conj(some_backend):
-    backend = some_backend
-    data = np.random.random([2, 4, 5]) + 1.j * np.random.random([2, 4, 5])
-    tens = tensors.Tensor.from_numpy(data, backend=backend, labels=['a', 'b', None])
+def test_conj(tensor_rng):
+    tens = tensor_rng(labels=['a', 'b', None])
+    expect = np.conj(tens.to_numpy_ndarray())
     res = tensors.conj(tens)
-    if isinstance(backend, TorchBlockBackend):
-        res_data = res.data.resolve_conj().numpy()
-    else:
-        res_data = res.data
-    assert np.allclose(res_data, np.conj(data))
+    res.test_sanity()
     assert res.labels == ['a*', 'b*', None]
     assert [l1.is_dual_of(l2) for l1, l2 in zip(res.legs, tens.legs)]
+    assert np.allclose(res.to_numpy_ndarray(), expect)
 
 
-def test_combine_split(some_backend):
-    backend = some_backend
-    data = np.random.random([2, 4, 7, 5]) + 1.j * np.random.random([2, 4, 7, 5])
-    tens = tensors.Tensor.from_numpy(data, backend=backend, labels=['a', 'b', 'c', 'd'])
+def test_combine_split(tensor_rng):
+    tens = tensor_rng(labels=['a', 'b', 'c', 'd'])
+    dense = tens.to_numpy_ndarray()
+    d0, d1, d2, d3 = dims = tuple(tens.shape)
 
     print('check by idx')
     res = tensors.combine_legs(tens, [1, 2])
-    assert np.allclose(res.data, np.reshape(data, [2, 28, 5]))
+    res.test_sanity()
     assert res.labels == ['a', '(b.c)', 'd']
+    expect = dense.reshape((d0, d1*d2, d3))
+    npt.assert_equal(res.to_numpy_ndarray(), expect)
     split = tensors.split_leg(res, 1)
-    assert np.allclose(split.data, data)
+    split.test_sanity()
     assert split.labels == ['a', 'b', 'c', 'd']
+    npt.assert_equal(split.to_numpy_ndarray(), dense)
 
     print('check by label')
     res = tensors.combine_legs(tens, ['b', 'd'])
-    expect = np.reshape(np.transpose(data, [0, 1, 3, 2]), [2, 20, 7])
-    assert np.allclose(res.data, expect)
+    res.test_sanity()
     assert res.labels == ['a', '(b.d)', 'c']
+    expect = dense.transpose([0, 1, 3, 2]).reshape([d0, d1*d3, d2])
+    npt.assert_equal(res.to_numpy_ndarray(), expect)
     split = tensors.split_leg(res, '(b.d)')
-    assert np.allclose(split.data, np.transpose(data, [0, 1, 3, 2]))
+    split.test_sanity()
     assert split.labels == ['a', 'b', 'd', 'c']
+    assert np.allclose(split.to_numpy_ndarray(), dense.transpose([0, 1, 3, 2]))
 
     print('check splitting a non-combined leg raises')
     with pytest.raises(ValueError):
         tensors.split_leg(res, 0)
     with pytest.raises(ValueError):
-        tensors.split_leg(res, 'a')
+        tensors.split_leg(res, 'd')
+
+    print('check combining multiple legs')
+    res = tensors.combine_legs(tens, ['c', 'a'], ['b', 'd'], new_axes=[1, 0],
+                               product_spaces_dual=[False, True])
+    res.test_sanity()
+    assert res.labels == ['(b.d)', '(c.a)']
+    assert res.legs[0].is_dual == True
+    assert res.legs[1].is_dual == False
+    expect = dense.transpose([1, 3, 2, 0]).reshape((d1*d3, d2*d0))
+    npt.assert_equal(res.to_numpy_ndarray(), expect)
+    split = tensors.split_legs(res)
+    split.test_sanity()
+    assert split.labels == ['b', 'd', 'c', 'a']
+    npt.assert_equal(split.to_numpy_ndarray(), dense.transpose([1, 3, 2, 0]))
 
 
 def test_is_scalar(some_backend):

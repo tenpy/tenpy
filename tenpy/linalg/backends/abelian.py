@@ -954,7 +954,7 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
             # if len(idcs1) == 1, i1==i2 due to charge conservation,
             # but for multi-dimensional indices not clear
             if np.all(i1 == i2):
-                total_sum += self.block_trace_full(a, idcs1, idcs2)
+                total_sum += self.block_trace_full(block, idcs1, idcs2)
         return total_sum
 
     def trace_partial(self, a: Tensor, idcs1: list[int], idcs2: list[int], remaining_idcs: list[int]) -> Data:
@@ -962,19 +962,20 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
         a_block_inds_1 = a.data.block_inds[:, idcs1]
         a_block_inds_2 = a.data.block_inds[:, idcs2]
         a_block_inds_rem = a.data.block_inds[:, remaining_idcs]
-        raise NotImplementedError("TODO") # TODO
         res_data = {}  # dictionary res_block_inds_row -> Block
         for block, i1, i2, ir in zip(a_blocks, a_block_inds_1, a_block_inds_2, a_block_inds_rem):
-            if not np.all(i1 == i1):
+            if not np.all(i1 == i2):
                 continue
             ir = tuple(ir)
-            block = self.block_trace_partial(block, idcs1, idcs2)
+            block = self.block_trace_partial(block, idcs1, idcs2, remaining_idcs)
             add_block = res_data.get(ir, None)
             if add_block is not None:
                 block = block + add_block
             res_data[ir] = block
-        res_blocks = res_data.values()
-        res_block_inds = np.array(res_data.keys(), int)
+        res_blocks = list(res_data.values())
+        if len(res_blocks) == 0:
+            return self.zero_data([a.legs[i] for i in remaining_idcs], a.data.dtype)
+        res_block_inds = np.array(list(res_data.keys()), dtype=int)
         sort = np.lexsort(res_block_inds.T)
         res_blocks = [res_blocks[i] for i in sort]
         res_block_inds = res_block_inds[sort, :]
@@ -988,7 +989,7 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
         old_block_inds = a.data.block_inds
         # first, find block indices of the final array to which we map
         map_inds = [product_space._map_incoming_block_inds(old_block_inds[:, b:e])
-                    for product_space, (b,e) in zip(product_spaces, leg_slices)]
+                    for product_space, (b,e) in zip(product_spaces, combine_slices)]
         old_block_inds = a.data.block_inds
         old_blocks = a.data.blocks
         res_block_inds = np.empty((len(old_block_inds), len(final_legs)), dtype=int)
@@ -996,7 +997,7 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
         last_a = -1
         for a, (b, e), product_space, map_ind in zip(new_axes, combine_slices, product_spaces, map_inds):
             res_block_inds[:, last_a + 1:a] = old_block_inds[:, last_e:b]
-            res_block_inds[:, a] = product_space.block_ind_map[map_ind]
+            res_block_inds[:, a] = product_space.block_ind_map[map_ind, -1]
             last_e = e
             last_a = a
         res_block_inds[:, last_a + 1:] = old_block_inds[:, last_e:]

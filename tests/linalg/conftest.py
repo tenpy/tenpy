@@ -6,6 +6,7 @@ import pytest
 
 from tenpy.linalg import backends
 from tenpy.linalg.symmetries import groups, spaces
+from tenpy.linalg import tensors
 
 
 @pytest.fixture
@@ -122,4 +123,22 @@ def backend_data_rng(backend, block_rng, np_random):
                 data.blocks = [block for block, k in zip(data.blocks, keep) if k]
                 data.block_inds = data.block_inds[keep]
         return data
+    return generator
+
+@pytest.fixture
+def tensor_rng(backend, backend_data_rng, vector_space_rng):
+    def generator(legs=None, num_legs=2, labels=None):
+        if labels is not None:
+            num_legs = len(labels)
+        if legs is None:
+            legs = [vector_space_rng(3, 3, backend.VectorSpaceCls) for _ in range(num_legs)]
+        else:
+            legs = list(legs)
+            for i, leg in enumerate(legs):
+                if leg is None:
+                    legs[i] = vector_space_rng(3, 3, backend.VectorSpaceCls)
+                else:
+                    legs[i] = backend.convert_vector_space(leg)
+        data = backend_data_rng(legs)
+        return tensors.Tensor(data, backend=backend, legs=legs, labels=labels)
     return generator
