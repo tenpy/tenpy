@@ -329,9 +329,6 @@ class AbstractTensor(ABC):
         block = self.to_dense_block(leg_order=leg_order)
         return self.backend.block_to_numpy(block, numpy_dtype=numpy_dtype)
 
-    def __array__(self, dtype=None):
-        return self.to_numpy_ndarray(numpy_dtype=dtype)
-
     @classmethod
     @abstractmethod
     def zero(cls, legs: list[VectorSpace] | list[int], backend=None, labels: list[str | None] = None,
