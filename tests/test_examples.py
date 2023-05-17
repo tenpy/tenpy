@@ -1,7 +1,8 @@
-"""test whether the examples can at least be imported without problems.
+"""A test for the examples.
 
 The files are only imported, so please protect example code from running with standard ``if
-__name__ == "__main__": ...`` clauses, if you want to demonstrate an interactive code.
+__name__ == "__main__": ...`` clauses, if you want to demonstrate an interactive code, which
+should not be executed as part of the tests.
 """
 # Copyright (C) TeNPy Developers, GNU GPLv3
 
@@ -31,7 +32,7 @@ def test_examples_import(filename):
         with open(os.path.join(examples_dir, filename)) as f:
             script = f.read()
         with warnings.catch_warnings():
-            warnings.simplefilter('ignore')  # disable warngings temporarily
+            warnings.simplefilter('ignore')  # disable warnings temporarily
             scope = {}
             exec(script, scope, scope)
     finally:
