@@ -120,20 +120,6 @@ class TorchBlockBackend(AbstractBlockBackend):
     def block_reshape(self, a: Block, shape: tuple[int]) -> Block:
         return torch_module.reshape(a, shape)
 
-    def block_matrixify(self, a: Block, idcs1: list[int], idcs2: list[int]) -> tuple[Block, Any]:
-        permutation = idcs1 + idcs2
-        a = torch_module.permute(a, permutation)
-        a_shape = a.shape
-        matrix_shape = prod(a_shape[:len(idcs1)]), prod(a_shape[len(idcs1):])
-        matrix = torch_module.reshape(a, matrix_shape)
-        aux = (permutation, a_shape)
-        return matrix, aux
-
-    def block_dematrixify(self, matrix: Block, aux: Any) -> Block:
-        permutation, a_shape = aux
-        res = torch_module.reshape(matrix, a_shape)
-        return torch_module.permute(res, inverse_permutation(permutation))
-
     def matrix_dot(self, a: Block, b: Block) -> Block:
         return torch_module.matmul(a, b)
 

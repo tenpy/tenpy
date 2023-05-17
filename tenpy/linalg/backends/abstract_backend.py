@@ -376,16 +376,6 @@ class AbstractBlockBackend(ABC):
     def block_reshape(self, a: Block, shape: tuple[int]) -> Block:
         ...
 
-    # TODO get rid of this and demtrixify?
-    @abstractmethod
-    def block_matrixify(self, a: Block, idcs1: list[int], idcs2: list[int]) -> tuple[Block, Any]:
-        """reshape to a matrix. return that matrix and data necessary to revert it"""
-        ...
-
-    @abstractmethod
-    def block_dematrixify(self, matrix: Block, aux: Any) -> Block:
-        ...
-
     @abstractmethod
     def matrix_dot(self, a: Block, b: Block) -> Block:
         """As in numpy.dot, both a and b might be matrix or vector."""

@@ -111,20 +111,6 @@ class NumpyBlockBackend(AbstractBlockBackend):
     def block_reshape(self, a: Block, shape: tuple[int]) -> Block:
         return np.reshape(a, shape)
 
-    def block_matrixify(self, a: Block, idcs1: list[int], idcs2: list[int]) -> tuple[Block, Any]:
-        permutation = idcs1 + idcs2
-        a = np.transpose(a, permutation)
-        a_shape = np.shape(a)
-        matrix_shape = np.prod(a_shape[:len(idcs1)]), np.prod(a_shape[len(idcs1):])
-        matrix = np.reshape(a, matrix_shape)
-        aux = (permutation, a_shape)
-        return matrix, aux
-
-    def block_dematrixify(self, matrix: Block, aux: Any) -> Block:
-        permutation, a_shape = aux
-        res = np.reshape(matrix, a_shape)
-        return np.transpose(res, inverse_permutation(permutation))
-
     def matrix_dot(self, a: Block, b: Block) -> Block:
         return np.dot(a, b)
 
