@@ -269,11 +269,10 @@ class AbstractBlockBackend(ABC):
     def block_from_numpy(self, a: np.ndarray) -> Block:
         ...
 
-    @abstractmethod
     def block_is_real(self, a: Block) -> bool:
         """If the block is comprised of real numbers.
         Complex numbers with small or zero imaginary part still cause a `False` return."""
-        ...
+        return self.tenpy_dtype_map[self.block_dtype(a)].is_real
 
     @abstractmethod
     def block_tdot(self, a: Block, b: Block, idcs_a: list[int], idcs_b: list[int]

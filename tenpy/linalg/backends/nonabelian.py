@@ -46,9 +46,6 @@ class AbstractNonabelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
     def supports_symmetry(self, symmetry: Symmetry) -> bool:
         return True
 
-    def is_real(self, a: Tensor) -> bool:
-        return all(self.block_is_real(block) for block in a.data.blocks.values())
-
     def data_item(self, a: NonAbelianData) -> float | complex:
         if len(a.blocks) > 1:
             raise ValueError('Not a scalar.')

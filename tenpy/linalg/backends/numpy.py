@@ -42,9 +42,6 @@ class NumpyBlockBackend(AbstractBlockBackend):
         Dtype.complex128: np.complex128,
     }
 
-    def block_is_real(self, a: Block):
-        return not np.iscomplexobj(a)
-
     def block_tdot(self, a: Block, b: Block, idcs_a: list[int], idcs_b: list[int]) -> Block:
         return np.tensordot(a, b, (idcs_a, idcs_b))
 

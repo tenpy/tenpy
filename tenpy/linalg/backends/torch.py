@@ -47,9 +47,6 @@ class TorchBlockBackend(AbstractBlockBackend):
         self.BlockCls = torch.Tensor
         super().__init__(**kwargs)
 
-    def block_is_real(self, a: Block):
-        return not torch_module.is_complex(a)
-
     def block_tdot(self, a: Block, b: Block, idcs_a: list[int], idcs_b: list[int]) -> Block:
         return torch_module.tensordot(a, b, (idcs_a, idcs_b))
 
