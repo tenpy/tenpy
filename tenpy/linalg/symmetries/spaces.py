@@ -337,7 +337,7 @@ class ProductSpace(VectorSpace):
                         #  JU: no. the multiplicity of a sector in a space does not include the sector_dim.
                         #      the dimension of the space is (roughly)
                         #      sum(multiplicities[i] * sector_dim(sectors[i]))
-                        n = symmetry.n_symbol(s_a, s_b, s_c)
+                        n = symmetry._n_symbol(s_a, s_b, s_c)
                         new_fusion[t_c] = new_fusion.get(t_c, 0) + m_a * m_b * n
             fusion = new_fusion
             # by convention fuse spaces left to right, i.e. (...((0,1), 2), ..., N)

@@ -276,7 +276,7 @@ class FusionTree:
             b = self.uncoupled[vertex + 1]
             # the sector above this vertex
             c = self.inner_sectors[vertex] if vertex < self.num_inner_edges else self.uncoupled
-            N = self.symmetry.n_symbol(a, b, c)
+            N = self.symmetry._n_symbol(a, b, c)
             assert N > 0  # if N==0 then a and b can not fuse to c
             assert 0 <= self.multiplicities[vertex] < N
 
@@ -339,13 +339,13 @@ class fusion_trees:
         elif len(self.uncoupled) == 1:
             yield FusionTree(self.symmetry, self.uncoupled, self.coupled, [False], [], [])
         elif len(self.uncoupled) == 2:
-            for mu in range(self.symmetry.n_symbol(*self.uncoupled, self.coupled)):
+            for mu in range(self.symmetry._n_symbol(*self.uncoupled, self.coupled)):
                 yield FusionTree(self.symmetry, self.uncoupled, self.coupled, [False, False], [], [mu])
         else:
             a1, a2, *a_rest = self.uncoupled
             for b in self.symmetry.fusion_outcomes(a1, a2):
                 for rest_tree in fusion_trees(symmetry=self.symmetry, uncoupled=[b] + a_rest, coupled=self.coupled):
-                    for mu in range(self.symmetry.n_symbol(a1, a2, b)):
+                    for mu in range(self.symmetry._n_symbol(a1, a2, b)):
                         yield FusionTree(self.symmetry, self.uncoupled, self.coupled, [False] * len(self.uncoupled),
                                          [b] + rest_tree.inner_sectors, [mu] + rest_tree.multiplicities)
 
@@ -354,13 +354,13 @@ class fusion_trees:
             return 1
 
         if len(self.uncoupled) == 2:
-            return self.symmetry.n_symbol(*self.uncoupled, self.coupled)
+            return self.symmetry._n_symbol(*self.uncoupled, self.coupled)
 
         else:
             a1, a2, *a_rest = self.uncoupled
             # TODO if this is used a lot, could cache those lengths of the subtrees
             return sum(
-                self.symmetry.n_symbol(a1, a2, b) * len(fusion_trees([b] + a_rest, self.coupled))
+                self.symmetry._n_symbol(a1, a2, b) * len(fusion_trees([b] + a_rest, self.coupled))
                 for b in self.symmetry.fusion_outcomes(a1, a2)
             )
 

@@ -40,7 +40,7 @@ def common_checks(sym: groups.Symmetry, example_sectors):
     # defining property of dual sector
     try:
         for example_sector in example_sectors:
-            assert sym.n_symbol(example_sector, sym.dual_sector(example_sector), sym.trivial_sector) == 1
+            assert sym._n_symbol(example_sector, sym.dual_sector(example_sector), sym.trivial_sector) == 1
     except NotImplementedError:
         pytest.xfail("NotImplementedError")
         pass  # TODO SU(2) does not implement n_symbol yet
@@ -57,7 +57,7 @@ def test_no_symmetry():
 
     print('instancecheck and is_abelian')
     assert isinstance(sym, groups.AbelianGroup)
-    assert isinstance(sym, groups.Group)
+    assert isinstance(sym, groups.GroupSymmetry)
     assert sym.is_abelian
 
     print('checking valid sectors')
@@ -115,10 +115,10 @@ def test_product_symmetry():
 
     print('instancecheck and is_abelian')
     assert not isinstance(sym, groups.AbelianGroup)
-    assert not isinstance(sym, groups.Group)
+    assert not isinstance(sym, groups.GroupSymmetry)
     assert not sym.is_abelian
     assert isinstance(u1_z3, groups.AbelianGroup)
-    assert isinstance(u1_z3, groups.Group)
+    assert isinstance(u1_z3, groups.GroupSymmetry)
     assert u1_z3.is_abelian
 
     print('checking creation via __mul__')
@@ -181,7 +181,7 @@ def test_u1_symmetry():
 
     print('instancecheck and is_abelian')
     assert isinstance(sym, groups.AbelianGroup)
-    assert isinstance(sym, groups.Group)
+    assert isinstance(sym, groups.GroupSymmetry)
     assert sym.is_abelian
 
     print('checking valid sectors')
@@ -233,7 +233,7 @@ def test_ZN_symmetry(N):
 
     print('instancecheck and is_abelian')
     assert isinstance(sym, groups.AbelianGroup)
-    assert isinstance(sym, groups.Group)
+    assert isinstance(sym, groups.GroupSymmetry)
     assert sym.is_abelian
 
     print('checking valid sectors')
@@ -300,7 +300,7 @@ def test_su2_symmetry():
 
     print('instancecheck and is_abelian')
     assert not isinstance(sym, groups.AbelianGroup)
-    assert isinstance(sym, groups.Group)
+    assert isinstance(sym, groups.GroupSymmetry)
     assert not sym.is_abelian
 
     print('checking valid sectors')
@@ -350,7 +350,7 @@ def test_fermion_parity():
 
     print('instancecheck and is_abelian')
     assert not isinstance(sym, groups.AbelianGroup)
-    assert not isinstance(sym, groups.Group)
+    assert not isinstance(sym, groups.GroupSymmetry)
     assert sym.is_abelian
 
     print('checking valid sectors')
