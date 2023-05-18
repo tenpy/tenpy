@@ -28,7 +28,7 @@ import copy
 import warnings
 
 from .abstract_backend import AbstractBackend, AbstractBlockBackend, Data, Block, Dtype
-from ..symmetries.groups import FusionStyle, BraidingStyle, Symmetry, Sector
+from ..symmetries.groups import FusionStyle, BraidingStyle, Symmetry, Sector, SectorArray
 from numpy import ndarray
 from ..symmetries.spaces import VectorSpace, ProductSpace
 from ...tools.misc import inverse_permutation, list_to_dict_list
@@ -114,7 +114,7 @@ class AbelianBackendVectorSpace(VectorSpace):
         cp._sectors = cp._sectors[keep]
         cp.multiplicities = new_multiplicities[keep]
         cp.slices = _slices_from_multiplicities(cp.multiplicities)
-        map_block_ind = np.full((new_block_number,), -1, np.intp)
+        map_block_inds = np.full((new_block_number,), -1, np.intp)
         map_block_inds[keep] = cp.perm_block_inds = np.arange(new_block_number)
         return map_block_inds, block_masks, cp
 

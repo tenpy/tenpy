@@ -15,8 +15,7 @@ from .backends.abstract_backend import Dtype
 
 __all__ = ['AbstractTensor', 'Tensor', 'ChargedTensor', 'DiagonalTensor', 'tdot', 'outer', 'inner',
            'transpose', 'trace', 'conj', 'combine_legs', 'combine_leg', 'split_legs', 'split_leg',
-           'is_scalar', 'allclose', 'squeeze_legs', 'norm', 'get_same_backend', 'Dtype',
-           'zero_like']
+           'is_scalar', 'squeeze_legs', 'norm', 'get_same_backend', 'Dtype', 'zero_like']
 
 
 # TODO import stuff from matrix_operations

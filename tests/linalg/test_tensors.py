@@ -7,7 +7,7 @@ import pytest
 
 from tenpy.linalg import tensors
 from tenpy.linalg.backends.torch import TorchBlockBackend
-from tenpy.linalg.backends.numpy import NumpyBlockBackend
+from tenpy.linalg.backends.numpy import NumpyBlockBackend, NoSymmetryNumpyBackend
 from tenpy.linalg.symmetries.spaces import VectorSpace
 
 

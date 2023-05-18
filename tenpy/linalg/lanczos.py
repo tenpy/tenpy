@@ -439,7 +439,7 @@ class LanczosGroundState(KrylovBased):
                 for c in self._cache[:-1]:
                     w.iadd_prefactor_other(-npc.inner(c, w, 'range', do_conj=True), c)
             elif k > 0:
-                w.iadd_prefactor_other(-beta, self._cache[-2])
+                w.iadd_prefactor_other(-beta, self._cache[-2])  # noqa: F821
             beta = h[k, k + 1]  # = norm(w)
             w.iscale_prefactor(1. / beta)
             psif.iadd_prefactor_other(vf[k + 1], w)
@@ -617,7 +617,7 @@ def lanczos_arpack(H, psi, options={}, orthogonal_to=[]):
         msg = ("Lanczos argument `orthogonal_to` is deprecated and will be removed.\n"
                "Instead, replace `H` with  `OrthogonalNpcLinearOperator(H, orthogonal_to)`.")
         warnings.warn(msg, category=FutureWarning, stacklevel=2)
-        H = OrthogonalNpcLinearOperator(self.H, orthogonal_to)
+        H = OrthogonalNpcLinearOperator(H, orthogonal_to)
     options = asConfig(options, "Lanczos")
     H_flat, psi_flat = FlatHermitianOperator.from_guess_with_pipe(H.matvec, psi, dtype=H.dtype)
     tol = options.get('P_tol', 1.e-14)

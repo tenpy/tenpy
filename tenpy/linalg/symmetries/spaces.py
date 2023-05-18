@@ -6,7 +6,7 @@ import numpy as np
 from numpy import ndarray
 import copy
 
-from .groups import SectorArray, Symmetry, no_symmetry
+from .groups import Sector, SectorArray, Symmetry, no_symmetry
 
 
 __all__ = ['VectorSpace', 'ProductSpace']
