@@ -82,6 +82,12 @@ class Symmetry(ABC):
         """The dimension of a sector as a subspace of the hilbert space"""
         ...
 
+    def batch_sector_dim(self, a: SectorArray) -> npt.NDArray[np.int_]:
+        """sector_dim of every sector (row) in a"""
+        if self.fusion_style == FusionStyle.single:
+            return np.ones([a.shape[0]], dtype=int)
+        return np.array([self.sector_dim(s) for s in a])
+
     def sector_str(self, a: Sector) -> str:
         """Short and readable string for the sector. Is used in __str__ of symmetry-related objects."""
         return str(a)
@@ -259,6 +265,15 @@ class ProductSymmetry(Symmetry):
             a_i = a[self.sector_slices[i]:self.sector_slices[i + 1]]
             dims.append(f_i.sector_dim(a_i))
         return np.prod(dims)
+
+    def batch_sector_dim(self, a: SectorArray) -> npt.NDArray[np.int_]:
+        if self.fusion_style == FusionStyle.single:
+            return np.ones([a.shape[0]], dtype=int)
+        dims = []
+        for i, f_i in enumerate(self.factors):
+            a_i = a[:, self.sector_slices[i]:self.sector_slices[i + 1]]
+            dims.append(f_i.batch_sector_dim(a_i))
+        return np.prod(dims, axis=0)
 
     def sector_str(self, a: Sector) -> str:
         strs = []
@@ -519,6 +534,10 @@ class SU2Symmetry(GroupSymmetry):
     def sector_dim(self, a: Sector) -> int:
         # dim = 2 * J + 1 = jj + 1
         return a[0] + 1
+
+    def batch_sector_dim(self, a: SectorArray) -> npt.NDArray[np.int_]:
+        # dim = 2 * J + 1 = jj + 1
+        return a[:, 0] + 1
 
     def sector_str(self, a: Sector) -> str:
         jj = a[0]
