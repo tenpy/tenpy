@@ -342,7 +342,7 @@ def test_conj(tensor_rng):
     res = tensors.conj(tens)
     res.test_sanity()
     assert res.labels == ['a*', 'b*', None]
-    assert [l1.is_dual_of(l2) for l1, l2 in zip(res.legs, tens.legs)]
+    assert [l1.can_contract_with(l2) for l1, l2 in zip(res.legs, tens.legs)]
     assert np.allclose(res.to_numpy_ndarray(), expect)
 
 

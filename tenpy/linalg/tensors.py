@@ -824,7 +824,7 @@ class Tensor(AbstractTensor):
         if len(leg_idcs1) != len(leg_idcs2):
             # checking this for leg_idcs* instead of legs* allows us to assume that they are both lists
             raise ValueError('Must specify the same number of legs for both tensors')
-        if not all(self.legs[idx1].is_dual_of(other.legs[idx2]) for idx1, idx2 in zip(leg_idcs1, leg_idcs2)):
+        if not all(self.legs[idx1].can_contract_with(other.legs[idx2]) for idx1, idx2 in zip(leg_idcs1, leg_idcs2)):
             raise ValueError('Incompatible legs.')
         backend = get_same_backend(self, other)
         open_legs1 = [leg for idx, leg in enumerate(self.legs) if idx not in leg_idcs1]
