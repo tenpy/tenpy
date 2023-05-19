@@ -316,7 +316,7 @@ class ProductSymmetry(Symmetry):
             components.append(f_i.dual_sectors(sectors_i))
         return np.concatenate(components, axis=-1)
 
-    def n_symbol(self, a: Sector, b: Sector, c: Sector) -> int:
+    def _n_symbol(self, a: Sector, b: Sector, c: Sector) -> int:
         if self.fusion_style in [FusionStyle.single, FusionStyle.multiple_unique]:
             return 1
 
