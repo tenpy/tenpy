@@ -659,12 +659,14 @@ class Tensor(AbstractTensor):
 
         if shape_kw is not None:
             def block_func(shape):
-                return func(**{shape_kw: shape}, **func_kwargs)
+                arr = func(**{shape_kw: shape}, **func_kwargs)
+                return backend.block_from_numpy(arr)
         else:
-            block_func = func
-
-        return cls(data=backend.from_block_func(block_func, legs, **func_kwargs),
-                   backend=backend, legs=legs, labels=labels)
+            def block_func(shape):
+                arr = func(shape, **func_kwargs)
+                return backend.block_from_numpy(arr)
+        data = backend.from_block_func(block_func, legs)
+        return cls(data=data, backend=backend, legs=legs, labels=labels)
 
     @classmethod
     def from_block_func(cls, func, legs: list[VectorSpace], backend=None,
@@ -683,10 +685,10 @@ class Tensor(AbstractTensor):
             If no `shape_kw` is given, it is called as ``func(shape, **func_kwargs)``,
             otherwise as ``func(**{shape_kw: shape}, **func_kwargs)``,
             where `shape` is a tuple of int.
-        backend : :class:`~tenpy.linalg.backends.abstract_backend.AbstractBackend`
-            The backend for the tensor
         legs : list of VectorSpace
             The legs of the result.
+        backend : :class:`~tenpy.linalg.backends.abstract_backend.AbstractBackend`
+            The backend for the tensor
         labels : list[str | None], optional
             Labels associated with each leg, ``None`` for unnamed legs.
         func_kwargs : dict
@@ -702,12 +704,12 @@ class Tensor(AbstractTensor):
 
         if shape_kw is not None:
             def block_func(shape):
-                return func(*func_args, **{shape_kw: shape}, **func_kwargs)
+                return func(**{shape_kw: shape}, **func_kwargs)
         else:
-            block_func = func
-        return cls(data=backend.from_block_func(block_func, legs, **func_kwargs),
-                   backend=backend, legs=legs,
-                   labels=labels)
+            def block_func(shape):
+                return func(shape, **func_kwargs)
+        data = backend.from_block_func(block_func, legs)
+        return cls(data=data, backend=backend, legs=legs, labels=labels)
 
     @classmethod
     def random_uniform(cls, legs: VectorSpace | list[VectorSpace], backend=None,
