@@ -10,6 +10,7 @@ from tenpy.linalg.backends.torch import TorchBlockBackend
 from tenpy.linalg.backends.numpy import NumpyBlockBackend
 from tenpy.linalg.symmetries.spaces import VectorSpace
 
+import warnings
 
 
 def random_block(shape, backend):
@@ -206,6 +207,16 @@ def test_Tensor_methods(backend, vector_space_rng, backend_data_rng):
     npt.assert_equal(float(tens4), float(tens4_item))
     assert isinstance(complex(tens4 + 2.j * tens4), complex)
     npt.assert_equal(complex(tens4 + 2.j * tens4), complex(tens4_item + 2.j * tens4_item))
+
+    with warnings.catch_warnings(record=True) as caught:
+        r = float(tens4 + 2.j * tens4)
+    if abs(tens4_item) > 0.:
+        assert len(caught) == 1
+        assert "converting complex to real" in str(caught[0].message)
+    else:
+        assert len(caught) == 0
+    assert r == tens4_item
+
     # TODO check that float of a complex tensor raises a warning
 
 
@@ -285,11 +296,10 @@ def test_transpose(tensor_rng):
 
 
 def test_inner(tensor_rng):
-    # TODO: complex!
-    t0 = tensor_rng(labels=['a'])
-    t1 = tensor_rng(legs=t0.legs, labels=t0.labels)
-    t2 = tensor_rng(labels=['a', 'b'])
-    t3 = tensor_rng(legs=t2.legs, labels=t2.labels)
+    t0 = tensor_rng(labels=['a'], real=False)
+    t1 = tensor_rng(legs=t0.legs, labels=t0.labels, real=False)
+    t2 = tensor_rng(labels=['a', 'b'], real=False)
+    t3 = tensor_rng(legs=t2.legs, labels=t2.labels, real=False)
 
     for t_i, t_j in [(t0, t1), (t2, t3)]:
         d_i = t_i.to_numpy_ndarray()
@@ -343,9 +353,9 @@ def test_trace(backend, vector_space_rng, tensor_rng):
 
 
 def test_conj(tensor_rng):
-    # TODO complex!!!
-    tens = tensor_rng(labels=['a', 'b', None])
+    tens = tensor_rng(labels=['a', 'b', None], real=False)
     expect = np.conj(tens.to_numpy_ndarray())
+    assert np.linalg.norm(expect.imag) > 0 , "expect complex data!"
     res = tensors.conj(tens)
     res.test_sanity()
     assert res.labels == ['a*', 'b*', None]
@@ -414,7 +424,7 @@ def test_is_scalar(backend, tensor_rng, vector_space_rng):
 
 
 def test_norm(tensor_rng):
-    tens = tensor_rng()
+    tens = tensor_rng(real=False)
     expect = np.linalg.norm(tens.to_numpy_ndarray())
     res = tensors.norm(tens)
     assert np.allclose(res, expect)
@@ -422,7 +432,7 @@ def test_norm(tensor_rng):
 
 def test_almost_equal(tensor_rng):
     for i in range(10):
-        t1 = tensor_rng(num_legs=3)
+        t1 = tensor_rng(num_legs=3, real=False)
         t_diff = tensor_rng(t1.legs)
         if t_diff.norm() > 1.e-7:
             break

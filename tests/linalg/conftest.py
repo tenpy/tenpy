@@ -7,6 +7,7 @@ import pytest
 from tenpy.linalg import backends
 from tenpy.linalg.symmetries import groups, spaces
 from tenpy.linalg import tensors
+from tenpy.linalg.backends.abstract_backend import Dtype
 
 
 @pytest.fixture
@@ -107,15 +108,18 @@ def backend(symmetry, block_backend):
 
 @pytest.fixture
 def block_rng(backend, np_random):
-    def generator(size):
-        return backend.block_from_numpy(np_random.normal(size=size))
+    def generator(size, real=True):
+        block = np_random.normal(size=size)
+        if not real:
+            block = block + 1.j * np_random.normal(size=size)
+        return backend.block_from_numpy(block)
     return generator
 
 
 @pytest.fixture
 def backend_data_rng(backend, block_rng, np_random):
-    def generator(legs):
-        data = backend.from_block_func(block_rng, legs)
+    def generator(legs, real=True):
+        data = backend.from_block_func(block_rng, legs, real=real)
         if isinstance(backend, backends.abelian.AbstractAbelianBackend):
             if np_random.random() < 0.5:  # with 50% probability
                 # keep roughly half of the blocks
@@ -125,9 +129,10 @@ def backend_data_rng(backend, block_rng, np_random):
         return data
     return generator
 
+
 @pytest.fixture
 def tensor_rng(backend, backend_data_rng, vector_space_rng):
-    def generator(legs=None, num_legs=2, labels=None, max_num_blocks=5, max_block_size=5):
+    def generator(legs=None, num_legs=2, labels=None, max_num_blocks=5, max_block_size=5, real=True):
         if labels is not None:
             num_legs = len(labels)
         if legs is None:
@@ -140,6 +145,6 @@ def tensor_rng(backend, backend_data_rng, vector_space_rng):
                     legs[i] = vector_space_rng(max_num_blocks, max_block_size, backend.VectorSpaceCls)
                 else:
                     legs[i] = backend.convert_vector_space(leg)
-        data = backend_data_rng(legs)
+        data = backend_data_rng(legs, real=real)
         return tensors.Tensor(data, backend=backend, legs=legs, labels=labels)
     return generator

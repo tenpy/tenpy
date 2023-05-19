@@ -317,7 +317,7 @@ class AbstractTensor(ABC):
 
     def __float__(self):
         if not self.is_real():
-            pass  # FIXME issue warning
+            warnings.warn("converting complex to real, only return real part!", stacklevel=2)
         return self.item().real
 
     def __complex__(self):
