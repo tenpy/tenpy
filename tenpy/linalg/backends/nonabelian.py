@@ -138,7 +138,7 @@ class AbstractNonabelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
     def outer(self, a: Tensor, b: Tensor) -> NonAbelianData:
         raise NotImplementedError  # FIXME
 
-    def inner(self, a: Tensor, b: Tensor, axs2: list[int] | None) -> complex:
+    def inner(self, a: Tensor, b: Tensor, do_conj: bool, axs2: list[int] | None) -> complex:
         raise NotImplementedError  # FIXME
 
     def transpose(self, a: Tensor, permutation: list[int]) -> NonAbelianData:

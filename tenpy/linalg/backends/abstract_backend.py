@@ -192,11 +192,13 @@ class AbstractBackend(ABC):
         ...
 
     @abstractmethod
-    def inner(self, a: Tensor, b: Tensor, axs2: list[int] | None) -> float | complex:
+    def inner(self, a: Tensor, b: Tensor, do_conj: bool, axs2: list[int] | None) -> float | complex:
         """
         inner product of <a|b>, both of which are given as ket-like vectors
         (i.e. in C^N, the entries of a would need to be conjugated before multiplying with entries of b)
-        axs2, if not None, gives the order of the axes of b
+        axs2, if not None, gives the order of the axes of b.
+        If do_conj, a is assumed as a "ket vector", in the same space as b, which will need to be conjugated.
+        Otherwise, a is assumed as a "bra vector", in the dual space, s.t. no conj is needed.
         """
         ...
 
@@ -313,7 +315,7 @@ class AbstractBlockBackend(ABC):
         ...
 
     @abstractmethod
-    def block_inner(self, a: Block, b: Block, axs2: list[int] | None) -> float | complex:
+    def block_inner(self, a: Block, b: Block, do_conj: bool, axs2: list[int] | None) -> float | complex:
         ...
 
     @abstractmethod

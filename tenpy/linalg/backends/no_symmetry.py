@@ -87,8 +87,8 @@ class AbstractNoSymmetryBackend(AbstractBackend, AbstractBlockBackend, ABC):
     def outer(self, a: Tensor, b: Tensor) -> Data:
         return self.block_outer(a.data, b.data)
 
-    def inner(self, a: Tensor, b: Tensor, axs2: list[int] | None) -> complex:
-        return self.block_inner(a.data, b.data, axs2)
+    def inner(self, a: Tensor, b: Tensor, do_conj: bool, axs2: list[int] | None) -> complex:
+        return self.block_inner(a.data, b.data, do_conj=do_conj, axs2=axs2)
 
     def transpose(self, a: Tensor, permutation: list[int]) -> Data:
         return self.block_transpose(a.data, permutation)

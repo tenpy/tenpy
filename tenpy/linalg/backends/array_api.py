@@ -73,10 +73,12 @@ class ArrayApiBlockBackend(AbstractBlockBackend):
     def block_outer(self, a: Block, b: Block) -> Block:
         return self._api.tensordot(a, b, 0)
 
-    def block_inner(self, a: Block, b: Block, axs2: list[int] | None) -> complex:
+    def block_inner(self, a: Block, b: Block, do_conj: bool, axs2: list[int] | None) -> complex:
         dim = max(a.ndim, b.ndim)
         axs2 = list(range(dim)) if axs2 is None else axs2
-        res = self._api.tensordot(self._api.conj(a), b, (list(range(dim)), axs2))
+        if do_conj:
+            a = self._api.conj(a)
+        res = self._api.tensordot(a, b, (list(range(dim)), axs2))
         return self.block_item(res)
 
     def block_transpose(self, a: Block, permutation: list[int]) -> Block:
