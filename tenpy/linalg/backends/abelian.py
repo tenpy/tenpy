@@ -536,9 +536,6 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
     def supports_symmetry(self, symmetry: Symmetry) -> bool:
         return symmetry.is_abelian and symmetry.braiding_style == BraidingStyle.bosonic
 
-    def is_real(self, a: Tensor) -> bool:
-        return a.dtype.is_real
-
     def data_item(self, a: Data) -> float | complex:
         if len(a.blocks) > 1:
             raise ValueError("More than 1 block!")

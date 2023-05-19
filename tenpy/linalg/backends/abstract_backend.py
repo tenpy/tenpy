@@ -96,11 +96,11 @@ class AbstractBackend(ABC):
     def supports_symmetry(self, symmetry: Symmetry) -> bool:
         ...
 
-    @abstractmethod
     def is_real(self, a: Tensor) -> bool:
         """If the Tensor is comprised of real numbers.
         Complex numbers with small or zero imaginary part still cause a `False` return."""
-        ...
+        # NonAbelian backend might implement this differently.
+        return a.dtype.is_real
 
     def item(self, a: Tensor) -> float | complex:
         """Assumes that tensor is a scalar (i.e. has only one entry).
