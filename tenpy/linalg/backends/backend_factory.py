@@ -90,5 +90,5 @@ def get_backend(symmetry: Symmetry = no_symmetry, block_backend: str = 'numpy',
 
 def get_default_backend():
     """dummy implementation for a settable backend global through all of tenpy"""
-    # FIXME proper implementation
+    # TODO: proper implementation
     return get_backend()

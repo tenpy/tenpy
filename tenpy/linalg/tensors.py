@@ -316,7 +316,7 @@ class AbstractTensor(ABC):
 
     def __float__(self):
         if not self.is_real():
-            pass  # FIXME issue warning
+            pass  # TODO: issue warning
         return self.item().real
 
     def __complex__(self):
@@ -556,7 +556,7 @@ class Tensor(AbstractTensor):
         labels : list of {str | None}, optional
             Labels associated with each leg, ``None`` for unnamed legs.
         """
-        is_real = False  # FIXME dummy
+        is_real = False  # TODO: dummy
         if backend is None:
             backend = get_default_backend()
         if legs is None:
@@ -1038,7 +1038,7 @@ class Tensor(AbstractTensor):
                 if not isinstance(self.legs[i], ProductSpace):
                     raise ValueError(f'Leg {i} is not a ProductSpace.')
                 if self.legs[i].is_dual:
-                    # TODO FIXME (JU): double check this case! make sure its covered in tests
+                    # TODO (JU): double check this case! make sure its covered in tests
                     raise NotImplementedError
         old_legs = self.legs
         old_labels = self.labels
@@ -1167,11 +1167,11 @@ class ChargedTensor(AbstractTensor):
 
     @classmethod
     def from_numpy(cls, **todo_args):
-        ...  # FIXME stub
+        ...  # TODO: stub
 
     @classmethod
     def from_dense_block(cls, **todo_args):
-        ...  # FIXME stub
+        ...  # TODO: stub
 
     @classmethod
     def zero(cls, **todo_args):

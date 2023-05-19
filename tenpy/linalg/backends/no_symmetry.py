@@ -79,7 +79,7 @@ class AbstractNoSymmetryBackend(AbstractBackend, AbstractBlockBackend, ABC):
         return u, s, vh, new_leg
 
     def qr(self, a: Tensor, new_r_leg_dual: bool, full: bool) -> tuple[Data, Data, VectorSpace]:
-        q, r = self.matrix_qr(a, full=full)  # FIXME implement
+        q, r = self.matrix_qr(a, full=full)
         new_leg_dim = self.block_shape(r)[0]
         new_leg = VectorSpace.non_symmetric(new_leg_dim, is_dual=new_r_leg_dual, is_real=a.legs[0].is_real)
         return q, r, new_leg

@@ -1214,7 +1214,7 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
     # TODO: concatenate and grid_concat
 
 
-# TODO FIXME how to handle ChargedTensor vs Tensor?
+# TODO how to handle ChargedTensor vs Tensor?
 #  def detect_qtotal(flat_array, legcharges):
 #      inds_max = np.unravel_index(np.argmax(np.abs(flat_array)), flat_array.shape)
 #      val_max = abs(flat_array[inds_max])

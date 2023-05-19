@@ -72,10 +72,10 @@ class AbstractNonabelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
                     symmetry_data = self.block_tdot(Y, X, [-1], [-1])
 
                     # kron into combined indeces [(a1,j1), ..., (aM,jM) , (b1,k1),...,(bN,kN)]
-                    contribution = self.block_kron(symmetry_data, degeneracy_data)  # FIXME implmnt
+                    contribution = self.block_kron(symmetry_data, degeneracy_data)  # TODO: implment
 
-                    # FIXME get_slice implementation?
-                    # TODO nonabelian (at least) want a map from sector to its index, so we dont have to sort always
+                    # TODO: get_slice implementation?
+                    # TODO: nonabelian (at least) want a map from sector to its index, so we dont have to sort always
                     idcs = (*(leg.get_slice(sector) for leg, sector in zip(a.data.codomain, splitting_tree.uncoupled)),
                             *(leg.get_slice(sector) for leg, sector in zip(a.data.domain, fusion_tree.uncoupled)))
 
@@ -87,35 +87,35 @@ class AbstractNonabelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
         if tree.num_vertices == 0:
             # tree ist just c <- c for a single sector c == tree.coupled
             if tree.are_dual[0]:
-                ...  # FIXME stopped here. should probably write down clear definitions...
+                ...  # TODO: stopped here. should probably write down clear definitions...
 
     def from_dense_block(self, a: Block, legs: list[VectorSpace], atol: float = 1e-8,
                          rtol: float = 0.00001) -> NonAbelianData:
-        raise NotImplementedError  # FIXME
+        raise NotImplementedError  # TODO:
 
     def from_block_func(self, func, legs: list[VectorSpace]) -> NonAbelianData:
-        raise NotImplementedError  # FIXME
+        raise NotImplementedError  # TODO:
 
     def zero_data(self, legs: list[VectorSpace], dtype: Dtype) -> NonAbelianData:
         codomain = ProductSpace(legs)
         domain = ProductSpace([])
-        # FIXME implement block_size
-        # FIXME coupled sectors: second argument optional!
+        # TODO: implement block_size
+        # TODO: coupled sectors: second argument optional!
         blocks = {c: self.zero_block((codomain.block_size(c), domain.block_size(c)), dtype)
                   for c in coupled_sectors(codomain, domain)}
         return NonAbelianData(blocks, codomain=codomain, domain=domain, dtype=dtype)
 
     def eye_data(self, legs: list[VectorSpace], dtype: Dtype) -> NonAbelianData:
         codomain = ProductSpace(legs)
-        # TODO think about if ProductSpace([l.dual for l in legs]) is ProductSpace(legs).dual
+        # TODO: think about if ProductSpace([l.dual for l in legs]) is ProductSpace(legs).dual
         domain = codomain.dual
         blocks = {c: self.eye_block([codomain.block_size(c)], dtype)
                   for c in coupled_sectors(codomain)}
         return NonAbelianData(blocks, codomain=codomain, domain=domain, dtype=dtype)
 
     def copy_data(self, a: Tensor) -> NonAbelianData:
-        # TODO define more clearly what this should even do
-        # TODO should we have Tensor.codomain and Tensor.domain properties?
+        # TODO: define more clearly what this should even do
+        # TODO: should we have Tensor.codomain and Tensor.domain properties?
         #      how else would we expose details about the grouping?
         return NonAbelianData(
             blocks={sector: self.block_copy(block) for sector, block in a.data.blocks.values()},
@@ -124,55 +124,55 @@ class AbstractNonabelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
 
     def _data_repr_lines(self, data: NonAbelianData, indent: str, max_width: int,
                          max_lines: int) -> list[str]:
-        raise NotImplementedError  # FIXME
+        raise NotImplementedError  # TODO
 
     def tdot(self, a: Tensor, b: Tensor, axs_a: list[int], axs_b: list[int]
              ) -> NonAbelianData:
-        raise NotImplementedError  # FIXME
+        raise NotImplementedError  # TODO
 
     def svd(self, a: Tensor, axs1: list[int], axs2: list[int], new_leg: VectorSpace | None
             ) -> tuple[NonAbelianData, NonAbelianData, NonAbelianData, VectorSpace]:
         # can use self.matrix_svd
-        raise NotImplementedError  # FIXME
+        raise NotImplementedError  # TODO
 
     def outer(self, a: Tensor, b: Tensor) -> NonAbelianData:
-        raise NotImplementedError  # FIXME
+        raise NotImplementedError  # TODO
 
     def inner(self, a: Tensor, b: Tensor, do_conj: bool, axs2: list[int] | None) -> complex:
-        raise NotImplementedError  # FIXME
+        raise NotImplementedError  # TODO
 
     def permute_legs(self, a: Tensor, permutation: list[int]) -> NonAbelianData:
-        raise NotImplementedError  # FIXME
+        raise NotImplementedError  # TODO
 
     def trace(self, a: Tensor, idcs1: list[int], idcs2: list[int]) -> NonAbelianData:
-        raise NotImplementedError  # FIXME
+        raise NotImplementedError  # TODO
 
     def conj(self, a: Tensor) -> NonAbelianData:
-        raise NotImplementedError  # FIXME
+        raise NotImplementedError  # TODO
 
     def combine_legs(self, a: Tensor, idcs: list[int], new_leg: ProductSpace) -> NonAbelianData:
-        raise NotImplementedError  # FIXME
+        raise NotImplementedError  # TODO
 
     def split_leg(self, a: Tensor, leg_idx: int) -> NonAbelianData:
-        raise NotImplementedError  # FIXME
+        raise NotImplementedError  # TODO
 
     def almost_equal(self, a: Tensor, b: Tensor, rtol: float, atol: float) -> bool:
-        raise NotImplementedError  # FIXME
+        raise NotImplementedError  # TODO
 
     def squeeze_legs(self, a: Tensor, idcs: list[int]) -> NonAbelianData:
-        raise NotImplementedError  # FIXME
+        raise NotImplementedError  # TODO
 
     def norm(self, a: Tensor) -> float:
-        raise NotImplementedError  # FIXME
+        raise NotImplementedError  # TODO
 
     def exp(self, a: Tensor, idcs1: list[int], idcs2: list[int]) -> NonAbelianData:
-        raise NotImplementedError  # FIXME
+        raise NotImplementedError  # TODO
 
     def log(self, a: Tensor, idcs1: list[int], idcs2: list[int]) -> NonAbelianData:
-        raise NotImplementedError  # FIXME
+        raise NotImplementedError  # TODO
 
     def random_normal(self, legs: list[VectorSpace], dtype: Dtype, sigma: float) -> NonAbelianData:
-        raise NotImplementedError  # FIXME
+        raise NotImplementedError  # TODO
 
     def add(self, a: Tensor, b: Tensor) -> NonAbelianData:
         # TODO: not checking leg compatibility. ok?
