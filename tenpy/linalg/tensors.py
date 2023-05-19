@@ -515,7 +515,7 @@ class Tensor(AbstractTensor):
     def to_dense_block(self, leg_order: list[int | str] = None):
         block = self.backend.to_dense_block(self)
         if leg_order is not None:
-            block = self.backend.block_transpose(block, self.get_leg_idcs(leg_order))
+            block = self.backend.block_permute_axes(block, self.get_leg_idcs(leg_order))
         return block
 
     @classmethod
@@ -1163,7 +1163,7 @@ class ChargedTensor(AbstractTensor):
         invariant_block = self.backend.to_dense_block(self.invariant_part)
         block = self.backend.block_tdot(invariant_block, self.dummy_leg_state, [-1], [0])
         if leg_order is not None:
-            block = self.backend.block_transpose(block, self.get_leg_idcs(leg_order))
+            block = self.backend.block_permute_axes(block, self.get_leg_idcs(leg_order))
         return block
 
     # TODO "detect qtotal"-like classmethod
