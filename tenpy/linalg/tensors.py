@@ -960,10 +960,19 @@ class Tensor(AbstractTensor):
         res_data = self.backend.combine_legs(res, combine_slices, product_spaces, new_axes, res_legs)
         return Tensor(res_data, backend=self.backend, legs=res_legs, labels=res_labels)
 
+    # TODO: (JU) should we name it make_product_space ?
+    #  make_ProductSpace to me suggests that i get (a subclass of) ProductSpace, not an instance.
     def make_ProductSpace(self, legs, **kwargs):
-        leg_idcs = self.get_leg_idcs(legs)
-        legs = [self.legs[i] for i in leg_idcs]
-        return legs[0].ProductSpace(legs, **kwargs)  # TODO: this should be something like class-attribute self.backend.ProductSpace
+        legs = self.get_legs(legs)
+        # TODO: this should be something like class-attribute self.backend.ProductSpace
+        #  JU: I think the attribute which has the same name as an existing class is confusing...
+        #      At least i would call if ProductSpaceCls or similar.
+        #  JU: What do you think about a make_product_space(cls, spaces, **kwargs) classmethod in VectorSpace?
+        #      We could then call it here as ``legs[0].make_product_space(legs, **kwargs)``.
+        #      By assigning the ProductSpace class-attribute (which is callable), you are effectively
+        #      adding exactly such a method to the namespace of any VectorSpace instance, just
+        #      with less clear names and docs.
+        return legs[0].ProductSpace(legs, **kwargs)
 
     def _combine_legs_make_ProductSpace(self, combine_leg_idcs, product_spaces, product_spaces_dual):
         """Argument parsing for :meth:`combine_legs`: make missing ProductSpace legs.
@@ -1070,6 +1079,9 @@ class Tensor(AbstractTensor):
         if len(res_legs) == 0:
             raise ValueError("squeeze_legs() with no leg left.")
             # TODO: should we return self.item() in this case?
+            #  JU: I dont think so, because code might rely on getting a AbstractTensor.
+            #      There might be a case for a Scalar(AbstractTensor) type...
+            #      the ArrayAPI does this too, any "scalar" output needs to be a 0D array.
         res_labels = [label for idx, label in enumerate(self.labels) if idx not in leg_idcs]
         res_data = self.backend.squeeze_legs(self, leg_idcs)
         return Tensor(res_data, backend=self.backend, legs=res_legs, labels=res_labels)
