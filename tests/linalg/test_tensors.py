@@ -2,15 +2,14 @@
 # Copyright 2023-2023 TeNPy Developers, GNU GPLv3
 import numpy as np
 import numpy.testing as npt
-
 import pytest
+import warnings
 
 from tenpy.linalg import tensors
+from tenpy.linalg.backends.abelian import AbstractAbelianBackend
 from tenpy.linalg.backends.torch import TorchBlockBackend
 from tenpy.linalg.backends.numpy import NumpyBlockBackend, NoSymmetryNumpyBackend
 from tenpy.linalg.symmetries.spaces import VectorSpace
-
-import warnings
 
 
 def random_block(shape, backend):
@@ -19,7 +18,6 @@ def random_block(shape, backend):
     elif isinstance(backend, TorchBlockBackend):
         import torch
         return torch.randn(shape)
-
 
 
 # TODO tests for ChargedTensor, also as input for tdot etc
@@ -59,8 +57,17 @@ def test_Tensor_classmethods(backend, vector_space_rng, backend_data_rng, np_ran
     legs = [vector_space_rng(d, 4, backend.VectorSpaceCls) for d in (3, 1, 7)]
     dims = tuple(leg.dim for leg in legs)
 
-    numpy_block = np_random.normal(dims)
+    numpy_block = np_random.normal(size=dims)
     dense_block = backend.block_from_numpy(numpy_block)
+
+    if isinstance(backend, AbstractAbelianBackend):
+        # There are two problems:
+        #  - We need to generate numpy_block and dense_block such that they are symmetric,
+        #    i.e. only non-zero (up to tolerance) within the allowed blocks
+        #  - Randomly generating the legs seems to be a bad idea.
+        #    Here, I get a combination of legs that allows no valid blocks...
+        #    I.e. `backends.abelian._valid_block_indices(legs)` is empty.
+        pytest.xfail('Need to redesign tests')
 
     print('checking from_dense_block')
     tens = tensors.Tensor.from_dense_block(dense_block, legs=legs, backend=backend)

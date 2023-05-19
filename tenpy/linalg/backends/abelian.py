@@ -563,7 +563,9 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
     def from_dense_block(self, a: Block, legs: list[VectorSpace], atol: float = 1e-8, rtol: float = 1e-5) -> AbelianBackendData:
         legs = [self.convert_vector_space(leg) for leg in legs]
         # TODO (JH) should we convert legs in tensors.py or here per backend?
-        # -> same for other functions like zeros() etc
+        #  -> same for other functions like zeros() etc
+        #  JU: I think we should do it here, even if the legs are possibly already converted.
+        #      It is just one function call and one isntancecheck, so we might as well do it.
         dtype = self.block_dtype(a)
         block_inds = _valid_block_indices(legs)
         blocks = []
