@@ -387,22 +387,14 @@ class AbstractTensor(ABC):
                      *legs: list[int | str],
                      new_legs: list[ProductSpace]=None,
                      product_spaces_dual: list[bool]=None,
-                     new_axes: list[int]=None) -> AbstractTensor:
+                     ) -> AbstractTensor:
         """See tensors.combine_legs"""
         ...
 
-    def combine_leg(self, legs: list[int | str], *, product_space: ProductSpace = None, product_space_dual: bool=None, new_axis: int=None) -> AbstractTensor:
-        """See tensors.combine_leg"""
-        return self.combine_legs(legs, product_spaces=[product_space], product_spaces_dual=[product_space_dual])
-
     @abstractmethod
-    def split_legs(self, legs: None | list[int | str]) -> AbstractTensor:
+    def split_legs(self, legs: list[int | str] = None) -> AbstractTensor:
         """See tensors.split_legs"""
         ...
-
-    def split_leg(self, leg: int | str) -> AbstractTensor:
-        """See tensors.split_leg"""
-        return self.split_legs([leg])
 
     @abstractmethod
     def squeeze_legs(self, legs: int | str | list[int | str] = None) -> AbstractTensor:
@@ -922,7 +914,7 @@ class Tensor(AbstractTensor):
                      *legs: list[int | str],
                      product_spaces: list[ProductSpace]=None,
                      product_spaces_dual: list[bool]=None,
-                     new_axes: list[int]=None) -> AbstractTensor:
+                     ) -> Tensor:
         """See tensors.combine_legs"""
         combine_leg_idcs = [self.get_leg_idcs(ll) for ll in legs]
         for leg_idcs in combine_leg_idcs:
@@ -995,27 +987,16 @@ class Tensor(AbstractTensor):
                     assert self_leg == given_space, f"Incompatible `self.legs` and product_spaces[{i:d}].spaces"
         return product_spaces
 
-    def _combine_legs_new_axes(self, combine_leg_idcs, new_axes):
+    def _combine_legs_new_axes(self, combine_leg_idcs):
         """Figure out new_axes and how legs have to be transposed."""
         all_combine_leg_idcs = np.concatenate(combine_leg_idcs)
         non_combined_legs = np.array([a for a in range(self.num_legs) if a not in all_combine_leg_idcs])
-        if new_axes is None:  # figure out default product_spaces
-            first_cl = np.array([cl[0] for cl in combine_leg_idcs])
-            new_axes = [(np.sum(non_combined_legs < a) + np.sum(first_cl < a)) for a in first_cl]
-        else:  # test compatibility
-            if len(new_axes) != len(combine_leg_idcs):
-                raise ValueError("wrong len of `new_axes`")
-            new_axes = list(new_axes)
-            new_rank = len(combine_leg_idcs) + len(non_combined_legs)
-            for i, a in enumerate(new_axes):
-                if a < 0:
-                    new_axes[i] = a + new_rank
-                elif a >= new_rank:
-                    raise ValueError("new_axis larger than the new number of legs")
+        first_cl = np.array([cl[0] for cl in combine_leg_idcs])
+        new_axes = [(np.sum(non_combined_legs < a) + np.sum(first_cl < a)) for a in first_cl]
         # construct transpose
         transpose = [[a] for a in non_combined_legs]
         perm_args = np.argsort(new_axes)
-        cumsum = 0
+        cumsum = 0  # TODO @jhauschild this is not used?
         for s in perm_args:
             transpose.insert(new_axes[s], list(combine_leg_idcs[s]))
         new_axes = [new_axes[s] for s in perm_args]
@@ -1024,8 +1005,8 @@ class Tensor(AbstractTensor):
         transpose = sum(transpose, [])  # flatten: [a] + [b] = [a, b]
         return combine_slices, new_axes, tuple(transpose), perm_args
 
-    def split_legs(self, legs: list[int | str]=None) -> AbstractTensor:
-        """See tensors.split_leg"""
+    def split_legs(self, legs: list[int | str] = None) -> AbstractTensor:
+        """See tensors.split_legs"""
         if legs is None:
             leg_idcs = [i for i, leg in enumerate(self.legs) if isinstance(leg, ProductSpace)]
         else:
@@ -1417,41 +1398,58 @@ def conj(t: AbstractTensor) -> AbstractTensor:
 def combine_legs(t: AbstractTensor,
                  *legs: list[int | str],
                  product_spaces: list[ProductSpace]=None,
-                 product_spaces_dual: list[bool]=None,
-                 new_axes: list[int]=None) -> AbstractTensor:
+                 product_spaces_dual: list[bool]=None
+                 ) -> AbstractTensor:
     """
-    Combine groups of legs of a tensor. Resulting legs (of type ProductSpace) are at the
-    previous position of the first leg in the group.
+    Combine (multiple) groups of legs on a tensor to (multiple) ProductSpaces.
+
+    Parameters
+    ----------
+    t :
+        The tensor whose legs should be combined.
+    *legs : tuple of list of {int | str}
+        One or more groups of legs.
+    product_spaces : list of ProductSpace
+        For optimization, the resulting ProductSpace instances per leg group can be passed. keyword only.
+        By default, they are recomputed.
+    product_spaces_dual : list of bool
+        For each group, whether the resulting ProductSpace should be dual. keyword only.
+        Per default, it has the same is_dual as the first (by appearance in `legs`) of the combined legs.
+
+    Result
+    ------
+    combined :
+        A tensor with combined legs.
+        The order of legs is the same as for `t`, except that ``legs[n][0]`` is replaced by the
+        ``n``-th ``ProductSpace`` and the other ``legs[n][1:]`` are left out.
+
+    See Also
+    --------
+    split_legs
     """
-    return t.combine_legs(*legs, product_spaces=product_spaces, product_spaces_dual=product_spaces_dual, new_axes=new_axes)
+    return t.combine_legs(*legs, product_spaces=product_spaces, product_spaces_dual=product_spaces_dual)
 
 
-def combine_leg(t: AbstractTensor, legs: list[int | str], product_space: ProductSpace = None, product_space_dual=None, new_axis=None) -> AbstractTensor:
-    """
-    Combine a group of legs of a tensor. Resulting leg (of type ProductSpace) is at the
-    previous position of legs[0].
-    """
-    return t.combine_leg(legs=legs, product_space=product_space, product_space_dual=product_space_dual, new_axis=new_axis)
-
-
-def split_legs(t: AbstractTensor, legs: None | list[int | str]=None) -> Tensor:
+def split_legs(t: AbstractTensor, legs: list[int | str] = None) -> Tensor:
     """
     Split legs that were previously combined.
-    If the legs were contiguous in t.legs before combining, this is the inverse operation of combine_legs,
-    otherwise it is the inverse up to a transpose
+
+    Up to a possible ``permute_legs``, this is the inverse operation of ``combine_legs``.
+    It is the exact inverse if the original non-fused legs were contiguous and ordered in ``t_before_combine.legs``.
+
+    Parameters
+    ----------
+    t :
+        The tensor whose legs should be split.
+    legs : list of {int | str}, or None
+        Which legs should be split. By default, all ``ProductSpace``s are split.
+
+    See Also
+    --------
+    combine_legs
     """
     # TODO inplace version
     return t.split_legs(legs)
-
-
-def split_leg(t: AbstractTensor, leg: int | str) -> Tensor:
-    """
-    Split a leg that was previously combined.
-    If the legs were contiguous in t.legs before combining, this is the inverse operation of combine_leg,
-    otherwise it is the inverse up to a transpose
-    """
-    # TODO inplace version
-    return t.split_leg(leg=leg)
 
 
 def is_scalar(obj) -> bool:
