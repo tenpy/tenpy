@@ -390,14 +390,21 @@ def test_combine_split(tensor_rng):
     npt.assert_equal(split.to_numpy_ndarray(), dense.transpose([1, 3, 2, 0]))
 
 
-def test_is_scalar(some_backend):
-    backend = some_backend
+def test_is_scalar(backend, tensor_rng, vector_space_rng):
     for s in [1, 0., 1.+2.j, np.int64(123), np.float64(2.345), np.complex128(1.+3.j)]:
         assert tensors.is_scalar(s)
-    scalar_tens = tensors.Tensor.from_numpy([[1.]], backend=backend)
+    triv_leg = vector_space_rng(1, 1)
+    scalar_tens = tensor_rng(legs=[triv_leg, triv_leg.dual])
     assert tensors.is_scalar(scalar_tens)
-    non_scalar_tens = tensors.Tensor.from_numpy([[1., 2.], [3., 4.]], backend=backend)
-    assert not tensors.is_scalar(non_scalar_tens)
+    # generate non-scalar tensor
+    for i in range(20):
+        non_scalar_tens = tensor_rng(num_legs=3)
+        if any(d > 1 for d in non_scalar_tens.shape):  # non-trivial
+            assert not tensors.is_scalar(non_scalar_tens)
+            break
+    else:  # didn't break
+        pytest.skip("can't generate non-scalar tensor")
+
 
 
 def test_almost_equal(some_backend):

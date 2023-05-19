@@ -127,16 +127,17 @@ def backend_data_rng(backend, block_rng, np_random):
 
 @pytest.fixture
 def tensor_rng(backend, backend_data_rng, vector_space_rng):
-    def generator(legs=None, num_legs=2, labels=None):
+    def generator(legs=None, num_legs=2, labels=None, max_num_blocks=5, max_block_size=5):
         if labels is not None:
             num_legs = len(labels)
         if legs is None:
-            legs = [vector_space_rng(3, 3, backend.VectorSpaceCls) for _ in range(num_legs)]
+            legs = [vector_space_rng(max_num_blocks, max_block_size, backend.VectorSpaceCls)
+                    for _ in range(num_legs)]
         else:
             legs = list(legs)
             for i, leg in enumerate(legs):
                 if leg is None:
-                    legs[i] = vector_space_rng(3, 3, backend.VectorSpaceCls)
+                    legs[i] = vector_space_rng(max_num_blocks, max_block_size, backend.VectorSpaceCls)
                 else:
                     legs[i] = backend.convert_vector_space(leg)
         data = backend_data_rng(legs)

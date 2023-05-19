@@ -3,6 +3,7 @@
 from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import Iterable
+from numbers import Integral
 import numpy as np
 import warnings
 from functools import cached_property
@@ -1351,12 +1352,14 @@ def split_leg(t: AbstractTensor, leg: int | str) -> Tensor:
 def is_scalar(obj) -> bool:
     """If obj is a scalar, meaning either a python scalar like float or complex, or a Tensor
     which has only one-dimensional legs"""
-    if isinstance(obj, (int, float, complex)):
-        return True
     if isinstance(obj, AbstractTensor):
-        return all(l.is_trivial for l in obj.legs)
-    else:
-        raise TypeError(f'Type not supported for is_scalar: {type(obj)}')
+        return all(d == 1 for d in obj.shape)
+        # TODO is above check wrong?
+        # It was checking all(leg.is_trivial for leg in obj.legs) before, but that returned False
+        # for Tensor([[1.]], [leg, leg.dual]) with leg = VectorSpace(sectors=[[1]], multiplicities=[1])
+    if isinstance(obj, (int, float, complex, Integral)):  # Integral for np.int64()
+        return True
+    raise TypeError(f'Type not supported for is_scalar: {type(obj)}')
 
 
 def squeeze_legs(t: AbstractTensor, legs: int | str | list[int | str] = None) -> Tensor:
