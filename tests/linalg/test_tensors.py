@@ -63,13 +63,13 @@ def test_Tensor_classmethods(backend, vector_space_rng, backend_data_rng, np_ran
     dense_block = backend.block_from_numpy(numpy_block)
 
     print('checking from_dense_block')
-    tens = tensors.Tensor.from_dense_block(dense_block, backend=backend)
+    tens = tensors.Tensor.from_dense_block(dense_block, legs=legs, backend=backend)
     tens.test_sanity()
     data = backend.block_to_numpy(tens.to_dense_block())
     npt.assert_array_equal(data, numpy_block)
 
     print('checking from_numpy')
-    tens = tensors.Tensor.from_numpy(numpy_block, backend=backend)
+    tens = tensors.Tensor.from_numpy(numpy_block, legs=legs, backend=backend)
     tens.test_sanity()
     data = tens.to_numpy_ndarray()
     npt.assert_array_equal(data, numpy_block)

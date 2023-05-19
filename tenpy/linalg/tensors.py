@@ -523,7 +523,7 @@ class Tensor(AbstractTensor):
         return block
 
     @classmethod
-    def from_numpy(cls, array: np.ndarray, backend=None, legs: list[VectorSpace]=None, dtype: Dtype = None,
+    def from_numpy(cls, array: np.ndarray, legs: list[VectorSpace], backend=None, dtype: Dtype = None,
                    labels: list[str | None] = None, atol: float = 1e-8, rtol: float = 1e-5) -> Tensor:
         """
         Like from_dense_block but `array` is a numpy array
@@ -531,11 +531,11 @@ class Tensor(AbstractTensor):
         if backend is None:
             backend = get_default_backend()
         block = backend.block_from_numpy(np.asarray(array))
-        return cls.from_dense_block(block=block, backend=backend, legs=legs, labels=labels, atol=atol,
+        return cls.from_dense_block(block=block, legs=legs, backend=backend, labels=labels, atol=atol,
                                     rtol=rtol, dtype=dtype)
 
     @classmethod
-    def from_dense_block(cls, block, backend=None, legs: list[VectorSpace]=None, dtype: Dtype=None,
+    def from_dense_block(cls, block, legs: list[VectorSpace], backend=None, dtype: Dtype=None,
                          labels: list[str | None] = None, atol: float = 1e-8, rtol: float = 1e-5
                          ) -> Tensor:
         """Convert a dense block of the backend to a Tensor with given symmetry (implied by the `legs`),
@@ -551,12 +551,10 @@ class Tensor(AbstractTensor):
         ----------
         array : array_like
             The data to be converted to a Tensor.
+        legs : list of :class:`~tenpy.linalg.symmetries.VectorSpace`, optional
+            The vectorspaces associated with legs of the tensors. This specifies the symmetry.
         backend : :class:`~tenpy.linalg.backends.abstract_backend.AbstractBackend`, optional
             The backend for the Tensor
-        legs : list of :class:`~tenpy.linalg.symmetries.VectorSpace`, optional
-            The vectorspaces associated with legs of the tensors. Contains symmetry data.
-            If ``None`` (default), trivial legs of appropriate dimension are assumed.
-            TODO: make mandatory?
         dtype : ``np.dtype``, optional
             The data type of the Tensor entries. Defaults to dtype of `block`
         labels : list of {str | None}, optional
@@ -567,9 +565,6 @@ class Tensor(AbstractTensor):
         is_real = False  # TODO: dummy
         if backend is None:
             backend = get_default_backend()
-        if legs is None:
-            legs = [backend.VectorSpaceCls.non_symmetric(d, is_real=is_real)
-                    for d in backend.block_shape(block)]
         if dtype is not None:
             block = backend.block_to_dtype(block, dtype)
         data = backend.from_dense_block(block, legs=legs, atol=atol, rtol=rtol)
@@ -628,7 +623,7 @@ class Tensor(AbstractTensor):
 
     # TODO: dtype arg unused?
     @classmethod
-    def from_numpy_func(cls, func, legs: VectorSpace | list[VectorSpace], backend=None,
+    def from_numpy_func(cls, func, legs: list[VectorSpace], backend=None,
                         labels: list[str | None] = None, func_kwargs={},
                         shape_kw: str = None, dtype: Dtype = None) -> Tensor:
         """Create a Tensor from a numpy function.
@@ -645,10 +640,10 @@ class Tensor(AbstractTensor):
             If no `shape_kw` is given, it is called as ``func(shape, **func_kwargs)``,
             otherwise as ``func(**{shape_kw: shape}, **func_kwargs)``,
             where `shape` is a tuple of int.
+        legs : list of VectorSpace
+            The legs of the result.
         backend : :class:`~tenpy.linalg.backends.abstract_backend.AbstractBackend`
             The backend for the tensor
-        legs : (list of) VectorSpace
-            The legs of the result.
         labels : list[str | None], optional
             Labels associated with each leg, ``None`` for unnamed legs.
         func_kwargs : dict
@@ -669,11 +664,10 @@ class Tensor(AbstractTensor):
             block_func = func
 
         return cls(data=backend.from_block_func(block_func, legs, **func_kwargs),
-                   backend=backend, legs=legs,
-                   labels=labels)
+                   backend=backend, legs=legs, labels=labels)
 
     @classmethod
-    def from_block_func(cls, func, legs: VectorSpace | list[VectorSpace], backend=None,
+    def from_block_func(cls, func, legs: list[VectorSpace], backend=None,
                         labels: list[str | None] = None, func_kwargs={},
                         shape_kw: str = None, dtype: Dtype = None) -> Tensor:
         """Create a Tensor from a block function.
@@ -691,7 +685,7 @@ class Tensor(AbstractTensor):
             where `shape` is a tuple of int.
         backend : :class:`~tenpy.linalg.backends.abstract_backend.AbstractBackend`
             The backend for the tensor
-        legs : (list of) VectorSpace
+        legs : list of VectorSpace
             The legs of the result.
         labels : list[str | None], optional
             Labels associated with each leg, ``None`` for unnamed legs.
@@ -1163,7 +1157,7 @@ class ChargedTensor(AbstractTensor):
         return block
 
     @classmethod
-    def from_numpy(cls, array: np.ndarray, backend=None, legs: list[VectorSpace]=None, dtype: Dtype=None,
+    def from_numpy(cls, array: np.ndarray, legs: list[VectorSpace], backend=None, dtype: Dtype=None,
                    labels: list[str | None] = None, atol: float = 1e-8, rtol: float = 1e-5,
                    dummy_leg: VectorSpace = None, dummy_leg_state=None
                    ) -> ChargedTensor:
@@ -1175,11 +1169,11 @@ class ChargedTensor(AbstractTensor):
         block = backend.block_from_numpy(np.asarray(array))
         if dummy_leg_state is not None:
             dummy_leg_state = backend.block_from_numpy(np.asarray(dummy_leg_state))
-        return cls.from_dense_block(block, backend=backend, legs=legs, dtype=dtype, labels=labels,
+        return cls.from_dense_block(block, legs=legs, backend=backend, dtype=dtype, labels=labels,
                                     atol=atol, rtol=rtol, dummy_leg=dummy_leg, dummy_leg_state=dummy_leg_state)
 
     @classmethod
-    def from_dense_block(cls, block, backend=None, legs: list[VectorSpace]=None, dtype: Dtype=None,
+    def from_dense_block(cls, block, legs: list[VectorSpace], backend=None, dtype: Dtype=None,
                          labels: list[str | None] = None, atol: float = 1e-8, rtol: float = 1e-5,
                          dummy_leg: VectorSpace = None, dummy_leg_state=None
                          ) -> ChargedTensor:
@@ -1191,12 +1185,11 @@ class ChargedTensor(AbstractTensor):
         ----------
         block :
             The data to be converted, a backend-specific block.
-        backend : :class:`~tenpy.linalg.backends.abstract_backend.AbstractBackend`, optional
-            The backend for the ChargedTensor.
         legs : list of :class:`~tenpy.linalg.symmetries.VectorSpace`, optional
             The vectorspaces associated with legs of the tensors. Contains symmetry data.
-            If ``None`` (default), trivial legs of appropriate dimension are assumed.
             Does not contain the dummy leg.
+        backend : :class:`~tenpy.linalg.backends.abstract_backend.AbstractBackend`, optional
+            The backend for the ChargedTensor.
         dtype : Dtype, optional
             The data type for the ChargedTensor. By default, this is inferred from the block.
         labels : list of {str | None}, optional
@@ -1212,9 +1205,6 @@ class ChargedTensor(AbstractTensor):
         is_real = False  # TODO: dummy
         if backend is None:
             backend = get_default_backend()
-        if legs is None:
-            legs = [backend.VectorSpaceCls.non_symmetric(d, is_real=is_real)
-                    for d in backend.block_shape(block)]
         if labels is None:
             labels = [None] * len(legs)
         if dtype is not None:
@@ -1226,7 +1216,7 @@ class ChargedTensor(AbstractTensor):
         if dummy_leg_state is not None and backend.block_shape(dummy_leg_state) != (1,):
             msg = f'Wrong shape of dummy_leg_state. Expected (1,). Got {backend.block_shape(dummy_leg_state)}'
             raise ValueError(msg)
-        invariant_part = Tensor.from_dense_block(block, backend=backend, legs=legs + [dummy_leg],
+        invariant_part = Tensor.from_dense_block(block, legs=legs + [dummy_leg], backend=backend,
                                                  dtype=dtype, labels=labels + [cls._DUMMY_LABEL],
                                                  atol=atol, rtol=rtol)
         return cls(invariant_part, dummy_leg_state=dummy_leg_state)
