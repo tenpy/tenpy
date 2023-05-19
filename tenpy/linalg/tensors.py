@@ -14,12 +14,14 @@ from .symmetries.spaces import VectorSpace, ProductSpace
 from .backends.backend_factory import get_default_backend
 from .backends.abstract_backend import Dtype
 
-from .matrix_operations import svd, truncate_svd, svd_split, leg_bipartition, exp, log
+# TODO this gives a circular import...
+# from .matrix_operations import svd, truncate_svd, svd_split, leg_bipartition, exp, log
 
 __all__ = ['AbstractTensor', 'Tensor', 'ChargedTensor', 'DiagonalTensor', 'tdot', 'outer', 'inner',
            'permute_legs', 'trace', 'conj', 'combine_legs', 'combine_leg', 'split_legs', 'split_leg',
            'is_scalar', 'squeeze_legs', 'norm', 'get_same_backend', 'Dtype', 'zero_like',
-           'svd', 'truncate_svd', 'svd_split', 'leg_bipartition', 'exp', 'log']
+        #    'svd', 'truncate_svd', 'svd_split', 'leg_bipartition', 'exp', 'log'
+           ]
 # svd, svd_truncate, exp, log are implemented in matrix_operations.py
 
 

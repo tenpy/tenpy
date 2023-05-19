@@ -8,8 +8,6 @@ from itertools import product, count
 from numpy import typing as npt
 import numpy as np
 
-from tenpy.linalg.symmetries.groups import Sector, SectorArray
-
 
 __all__ = ['Sector', 'FusionStyle', 'BraidingStyle', 'Symmetry', 'NoSymmetry', 'ProductSymmetry',
            'GroupSymmetry', 'AbelianGroup', 'U1Symmetry', 'ZNSymmetry', 'SU2Symmetry', 'FermionParity',
