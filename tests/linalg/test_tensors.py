@@ -63,11 +63,13 @@ def test_Tensor_classmethods(backend, vector_space_rng, backend_data_rng, np_ran
 
     print('checking from_dense_block')
     tens = tensors.Tensor.from_dense_block(dense_block, backend=backend)
+    tens.test_sanity()
     data = backend.block_to_numpy(tens.to_dense_block())
     npt.assert_array_equal(data, numpy_block)
 
     print('checking from_numpy')
     tens = tensors.Tensor.from_numpy(numpy_block, backend=backend)
+    tens.test_sanity()
     data = tens.to_numpy_ndarray()
     npt.assert_array_equal(data, numpy_block)
 
@@ -77,14 +79,18 @@ def test_Tensor_classmethods(backend, vector_space_rng, backend_data_rng, np_ran
 
     print('checking zero')
     tens = tensors.Tensor.zero(dims, backend=backend)
+    tens.test_sanity()
     npt.assert_array_equal(tens.to_numpy_ndarray(), np.zeros(dims))
     tens = tensors.Tensor.zero(legs, backend=backend)
+    tens.test_sanity()
     npt.assert_array_equal(tens.to_numpy_ndarray(), np.zeros(dims))
 
     print('checking eye')
     tens = tensors.Tensor.eye(legs[0], backend=backend)
+    tens.test_sanity()
     npt.assert_array_equal(tens.to_numpy_ndarray(), np.eye(legs[0].dim))
     tens = tensors.Tensor.eye(legs[:2], backend=backend)
+    tens.test_sanity()
     npt.assert_array_equal(tens.to_numpy_ndarray(), np.eye(np.prod(dims[:2])).reshape(dims[:2] + dims[:2]))
 
 
@@ -235,10 +241,10 @@ def test_tdot(backend, vector_space_rng, backend_data_rng):
         if len(expect.shape) > 0:
             res1.test_sanity()
             res2.test_sanity()
-            res1 = res1.to_numpy_ndarray()
-            res2 = res2.to_numpy_ndarray()
-            npt.assert_array_almost_equal(res1, expect)
-            npt.assert_array_almost_equal(res2, expect)
+            res1_d = res1.to_numpy_ndarray()
+            res2_d = res2.to_numpy_ndarray()
+            npt.assert_array_almost_equal(res1_d, expect)
+            npt.assert_array_almost_equal(res2_d, expect)
         else: # got scalar, but we can compare it to 0-dim ndarray
             npt.assert_almost_equal(res1, expect)
             npt.assert_almost_equal(res2, expect)
@@ -337,6 +343,7 @@ def test_trace(backend, vector_space_rng, tensor_rng):
 
 
 def test_conj(tensor_rng):
+    # TODO complex!!!
     tens = tensor_rng(labels=['a', 'b', None])
     expect = np.conj(tens.to_numpy_ndarray())
     res = tensors.conj(tens)
@@ -406,44 +413,54 @@ def test_is_scalar(backend, tensor_rng, vector_space_rng):
         pytest.skip("can't generate non-scalar tensor")
 
 
-
-def test_almost_equal(some_backend):
-    backend = some_backend
-    data1  = np.random.random([2, 4, 3, 5])
-    data2 = data1 + 1e-7 * np.random.random([2, 4, 3, 5])
-    t1 = tensors.Tensor.from_numpy(data1, backend=backend)
-    t2 = tensors.Tensor.from_numpy(data2, backend=backend)
-    assert tensors.almost_equal(t1, t2)
-    assert not tensors.almost_equal(t1, t2, atol=1e-10, rtol=1e-10)
+def test_norm(tensor_rng):
+    tens = tensor_rng()
+    expect = np.linalg.norm(tens.to_numpy_ndarray())
+    res = tensors.norm(tens)
+    assert np.allclose(res, expect)
 
 
-def test_squeeze_legs(some_backend):
-    backend=some_backend
-    data = np.random.random([2, 1, 7, 1, 1]) + 1.j * np.random.random([2, 1, 7, 1, 1])
-    tens = tensors.Tensor.from_numpy(data, backend=backend, labels=['a', 'b', 'c', 'd', 'e'])
+def test_almost_equal(tensor_rng):
+    for i in range(10):
+        t1 = tensor_rng(num_legs=3)
+        t_diff = tensor_rng(t1.legs)
+        if t_diff.norm() > 1.e-7:
+            break
+    else:
+        pytest.skip("can't generate random nonzero tensor?")
+    t2 = t1 + 1.e-7 * t_diff
+    assert tensors.almost_equal(t1, t2), "default a_tol should be > 1e-7!"
+    assert not tensors.almost_equal(t1, t2, atol=1.e-10, rtol=1.e-10), "tensors differ by 1e-7!"
+
+
+def test_squeeze_legs(tensor_rng, symmetry):
+    for i in range(10):
+        triv_leg = VectorSpace(symmetry, symmetry.trivial_sector[np.newaxis, :], np.ones((1,)))
+        assert triv_leg.is_trivial
+        tens = tensor_rng([None, triv_leg, None, triv_leg.dual, triv_leg], labels=list('abcde'))
+        if not tens.legs[0].is_trivial and not tens.legs[2].is_trivial:
+            break
+    else:
+        pytest.skip("can't generate non-triv leg")
+    dense = tens.to_numpy_ndarray()
 
     print('squeezing all legs (default arg)')
     res = tensors.squeeze_legs(tens)
-    assert np.allclose(res.data, data[:, 0, :, 0, 0])
+    res.test_sanity()
     assert res.labels == ['a', 'c']
+    npt.assert_array_equal(res.to_numpy_ndarray(), dense[:, 0, :, 0, 0])
 
     print('squeeze specific leg by idx')
     res = tensors.squeeze_legs(tens, 1)
-    assert np.allclose(res.data, data[:, 0, :, :, :])
+    res.test_sanity()
     assert res.labels == ['a', 'c', 'd', 'e']
+    npt.assert_array_equal(res.to_numpy_ndarray(), dense[:, 0, :, :, :])
 
     print('squeeze legs by labels')
     res = tensors.squeeze_legs(tens, ['b', 'e'])
-    assert np.allclose(res.data, data[:, 0, :, :, 0])
+    res.test_sanity()
     assert res.labels == ['a', 'c', 'd']
-
-
-def test_norm(some_backend):
-    data = np.random.random([2, 3, 7]) + 1.j * np.random.random([2, 3, 7])
-    tens = tensors.Tensor.from_numpy(data, backend=some_backend)
-    res = tensors.norm(tens)
-    expect = np.linalg.norm(data)
-    assert np.allclose(res, expect)
+    npt.assert_array_equal(res.to_numpy_ndarray(), dense[:, 0, :, :, 0])
 
 
 def demo_repr():
@@ -452,7 +469,7 @@ def demo_repr():
     # and decide if the output is useful, concise, correct, etc.
     #
     # run e.g. via the following command
-    # python -c "from tenpy.linalg.test_tensor import demo_repr; demo_repr()"
+    # python -c "from test_tensors import demo_repr; demo_repr()"
 
     print()
     separator = '=' * 80

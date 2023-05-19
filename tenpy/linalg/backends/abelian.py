@@ -435,7 +435,6 @@ def _iter_common_sorted_arrays(a, b):
     l_b, d_b = b.shape
     assert d_a == d_b
     i, j = 0, 0
-    both = []
     while i < l_a and j < l_b:
         for k in reversed(range(d_a)):
             if a[i, k] < b[j, k]:
@@ -445,10 +444,10 @@ def _iter_common_sorted_arrays(a, b):
                 j += 1
                 break
         else:
-            both.append((i, j))
+            yield (i, j)
             i += 1
             j += 1
-    return res
+    # done
 
 
 def _iter_common_noncommon_sorted_arrays(a, b):
@@ -477,7 +476,7 @@ def _iter_common_noncommon_sorted_arrays(a, b):
             yield i, j
             i += 1
             j += 1
-    # return
+    # done
 
 @dataclass
 class AbelianBackendData:
@@ -1149,7 +1148,7 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
         if len(a.data.blocks) == 0:
             return AbelianBackendData(a.data.dtype, [],
                                       np.zeros([0, n_legs - len(idcs)], dtype=int))
-        blocks = [self.block_squeeze_legs(b, idcs) for b in self.blocks]
+        blocks = [self.block_squeeze_legs(b, idcs) for b in a.data.blocks]
         block_inds = a.data.block_inds
         symmetry = a.legs[0].symmetry
         sector = symmetry.trivial_sector
@@ -1167,7 +1166,7 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
 
     def norm(self, a: Tensor) -> float:
         # TODO: argument for different p-norms?
-        block_norms = [self.block_norm(b) for b in a.data]
+        block_norms = [self.block_norm(b) for b in a.data.blocks]
         return np.linalg.norm(block_norms)
 
     def act_block_diagonal_square_matrix(self, a: Tensor, block_backend_fct: str) -> Data:
