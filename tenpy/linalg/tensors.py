@@ -1114,6 +1114,9 @@ class ChargedTensor(AbstractTensor):
         which is interpreted ``[1]`` if `dummmy_leg.dim == 1` and raises a `ValueError` otherwise.
     """
 
+    # TODO doc somewhere that this label has special meaning
+    _DUMMY_LABEL = '!'  # canonical label for the dummy leg
+
     def __init__(self, invariant_part: Tensor, dummy_leg_state=None):
         AbstractTensor.__init__(self, backend=invariant_part.backend, legs=invariant_part.legs[:-1],
                                 labels=invariant_part.labels[:-1])
@@ -1174,8 +1177,16 @@ class ChargedTensor(AbstractTensor):
         ...  # TODO: stub
 
     @classmethod
-    def zero(cls, **todo_args):
-        ...
+    def zero(cls, legs: VectorSpace | list[VectorSpace], dummy_leg: VectorSpace,
+             backend=None, labels: list[str | None] = None, dtype: Dtype = Dtype.complex128,
+             dummy_leg_state=None):
+        if isinstance(legs, VectorSpace):
+            legs = [legs]
+        if labels is None:
+            labels = [None] * len(legs)
+        invariant_part = Tensor.zero(legs=legs + [dummy_leg], backend=backend,
+                                     labels=labels + [cls._DUMMY_LABEL], dtype=dtype)
+        return cls(invariant_part=invariant_part, dummy_leg_state=dummy_leg_state)
 
     def almost_equal(self, other: AbstractTensor, atol: float = 0.00001, rtol: float = 1e-8) -> bool:
         if not isinstance(other, ChargedTensor):
