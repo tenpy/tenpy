@@ -60,9 +60,12 @@ class AbelianBackendVectorSpace(VectorSpace):
     def __init__(self, symmetry: Symmetry, sectors: SectorArray, multiplicities: ndarray = None,
                  is_real: bool = False, _is_dual: bool = False,
                  perm_block_inds=None, slices=None):
-        VectorSpace.__init__(self, symmetry, sectors, multiplicities, is_real, _is_dual)
+        super().__init__(symmetry=symmetry,
+                         sectors=sectors,
+                         multiplicities=multiplicities,
+                         is_real=is_real,
+                         _is_dual=_is_dual)
         num_sectors = sectors.shape[0]
-        self.sector_ndim = sectors.ndim
         if perm_block_inds is None:
             # sort by slices
             assert slices is None
@@ -75,13 +78,18 @@ class AbelianBackendVectorSpace(VectorSpace):
             self.slices = slices
 
     def _sort_sectors(self):
-            # sort sectors
-            assert not hasattr(self, 'perm_block_inds')
-            perm_block_inds = np.lexsort(self._sectors.T)
-            self.perm_block_inds = perm_block_inds
-            self._sectors = self._sectors[perm_block_inds]
-            self.multiplicities = self.multiplicities[perm_block_inds]
-            self.slices = self.slices[perm_block_inds]
+        # sort sectors
+        assert not hasattr(self, 'perm_block_inds')
+        perm_block_inds = np.lexsort(self._sectors.T)
+        self.perm_block_inds = perm_block_inds
+        self._sectors = self._sectors[perm_block_inds]
+        self.multiplicities = self.multiplicities[perm_block_inds]
+        self.slices = self.slices[perm_block_inds]
+
+    def test_sanity(self):
+        assert len(self.sectors) == len(self.multiplicities) == len(self.slices)
+        assert np.all(self.multiplicities > 0)
+
 
     # TODO: do we need get_qindex?
     # Since slices is no longer sorted, it would be O(L) rather than O(log(L))
@@ -506,6 +514,8 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
     DataCls = AbelianBackendData
 
     def test_data_sanity(self, a: Tensor):
+        for leg in a.legs:
+            leg.test_sanity()
         super().test_data_sanity(a)
         assert a.data.block_inds.shape == (len(a.data.blocks), a.num_legs)
         # check expected tensor dimensions
@@ -983,6 +993,7 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
         return AbelianBackendData(a.data.dtype, blocks, a.data.block_inds)
 
     def combine_legs(self, a: Tensor, combine_slices: list[int, int], product_spaces: list[AbelianBackendProductSpace], new_axes: list[int], final_legs: list[VectorSpace]) -> Data:
+        res_dtype = a.data.dtype
         old_block_inds = a.data.block_inds
         # first, find block indices of the final array to which we map
         map_inds = [product_space._map_incoming_block_inds(old_block_inds[:, b:e])
@@ -991,13 +1002,13 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
         old_blocks = a.data.blocks
         res_block_inds = np.empty((len(old_block_inds), len(final_legs)), dtype=int)
         last_e = 0
-        last_a = -1
-        for a, (b, e), product_space, map_ind in zip(new_axes, combine_slices, product_spaces, map_inds):
-            res_block_inds[:, last_a + 1:a] = old_block_inds[:, last_e:b]
-            res_block_inds[:, a] = product_space.block_ind_map[map_ind, -1]
+        last_i = -1
+        for i, (b, e), product_space, map_ind in zip(new_axes, combine_slices, product_spaces, map_inds):
+            res_block_inds[:, last_i + 1:i] = old_block_inds[:, last_e:b]
+            res_block_inds[:, i] = product_space.block_ind_map[map_ind, -1]
             last_e = e
-            last_a = a
-        res_block_inds[:, last_a + 1:] = old_block_inds[:, last_e:]
+            last_i = i
+        res_block_inds[:, last_i + 1:] = old_block_inds[:, last_e:]
 
         # now we have probably many duplicate rows in res_block_inds, since many combinations of
         # non-combined block indices map to the same block index in product space
@@ -1020,18 +1031,18 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
             block_shape[:, i] = slices[:, 1] - slices[:, 0]
 
         # split res_block_inds into parts, which give a unique new blocks
-        diffs = _find_row_differences(res_block_inds)  # including 0 and len to have slices later
+        diffs = _find_row_differences(res_block_inds, include_len=True)  # including 0 and len to have slices later
         res_num_blocks = len(diffs) - 1
         res_block_inds = res_block_inds[diffs[:res_num_blocks], :]
         res_block_shapes = np.empty((res_num_blocks, len(final_legs)), int)
         for i, leg in enumerate(final_legs):
-            res_block_shapes[:, i] = leg.multiplicities[block_inds[:, i]]
+            res_block_shapes[:, i] = leg.multiplicities[res_block_inds[:, i]]
 
         # now the hard part: map data
         res_blocks = []
         # iterate over ranges of equal qindices in qdata
         for res_block_shape, beg, end in zip(res_block_shapes, diffs[:-1], diffs[1:]):
-            new_block = self.zero_block(res_block_shape, dtype=res.data.dtype)
+            new_block = self.zero_block(res_block_shape, dtype=res_dtype)
             for old_row in range(beg, end):  # copy blocks
                 shape = block_shape[old_row]  # this has multiplied dimensions for combined legs
                 old_block = self.block_reshape(old_blocks[old_row], shape)
@@ -1040,7 +1051,7 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
                 new_block[new_slices] = old_block  # actual data copy
 
             res_blocks.append(new_block)
-        return AbelianBackendData(a.data.dtype, res_blocks, res_block_inds)
+        return AbelianBackendData(res_dtype, res_blocks, res_block_inds)
 
     def split_legs(self, a: Tensor, leg_idcs: list[int], final_legs: list[VectorSpace]) -> Data:
         # TODO (JH) below, we implement it by first generating the block_inds of the splitted tensor and
@@ -1052,22 +1063,21 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
         # block_split should just be views anyways, not data copies?
 
         if len(a.data.blocks) == 0:
-            return self.zero_data(a.legs, a.data.dtype)
+            return self.zero_data(final_legs, a.data.dtype)
         n_split = len(leg_idcs)
         product_spaces = [a.legs[i] for i in leg_idcs]
-        res_num_legs = a.num_legs + sum(len(p.spaces) for p in product_space) - len(product_spaces)
+        res_num_legs = len(final_legs)
 
         old_blocks = a.data.blocks
         old_block_inds = a.data.block_inds
 
-        # get new qdata
-        map_slices_beg = np.zeros((len(old_blocks), n_split, 2), int)
+        map_slices_beg = np.zeros((len(old_blocks), n_split), int)
         map_slices_shape = np.zeros((len(old_blocks), n_split), int)  # = end - beg
         for j, product_space in enumerate(product_spaces):
             block_inds_j = old_block_inds[:, leg_idcs[j]]
-            map_slices_beg = product_space.block_ind_map_slices[block_inds_j]
+            map_slices_beg[:, j] = product_space.block_ind_map_slices[block_inds_j]
             sizes = product_space.block_ind_map_slices[1:] - product_space.block_ind_map_slices[:-1]
-            map_slices_shape = sizes[block_inds_j]
+            map_slices_shape[:, j] = sizes[block_inds_j]
         new_data_blocks_per_old_block = np.prod(map_slices_shape, axis=1)
 
         old_rows = np.concatenate([np.full((s,), i, int) for i, s in enumerate(new_data_blocks_per_old_block)])
@@ -1096,17 +1106,18 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
                 shift += len(product_space.spaces) - 1
                 j += 1
             else:
-                new_block_inds[:, i + shift] = old_block_inds[old_rows, j]
-                old_block_shapes[:, i] = new_block_shapes[:, i + shift]
+                new_block_inds[:, i + shift] = nbi = old_block_inds[old_rows, i]
+                old_block_shapes[:, i] = a.legs[i].multiplicities[nbi]
         # sort new_block_inds
         sort = np.lexsort(new_block_inds.T)
         new_block_inds = new_block_inds[sort, :]
         old_block_beg = old_block_beg[sort]
         old_block_shapes = old_block_shapes[sort]
+        old_rows = old_rows[sort]
 
         new_block_shapes = np.empty((res_num_blocks, res_num_legs), dtype=int)
         for i, leg in enumerate(final_legs):
-            new_block_shapes[:, ax] = leg.multiplicities[new_block_inds[:, ax]]
+            new_block_shapes[:, i] = leg.multiplicities[new_block_inds[:, i]]
 
         # the actual loop to split the blocks
         new_blocks = []

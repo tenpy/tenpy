@@ -1025,9 +1025,6 @@ class Tensor(AbstractTensor):
             for i in leg_idcs:
                 if not isinstance(self.legs[i], ProductSpace):
                     raise ValueError(f'Leg {i} is not a ProductSpace.')
-                if self.legs[i].is_dual:
-                    # TODO FIXME (JU): double check this case! make sure its covered in tests
-                    raise NotImplementedError
         old_legs = self.legs
         old_labels = self.labels
         new_legs = []

@@ -237,12 +237,11 @@ class ProductSpace(VectorSpace):
         assert all(space.is_real == is_real for space in spaces)
         if _sectors is None or _multiplicities is None:
             _sectors, _multiplicities = self._fuse_spaces(symmetry, spaces, _is_dual)
-        VectorSpace.__init__(self,
-                             symmetry=symmetry,
-                             sectors=_sectors,
-                             multiplicities=_multiplicities,
-                             is_real=is_real,
-                             _is_dual=_is_dual)
+        super().__init__(symmetry=symmetry,
+                         sectors=_sectors,
+                         multiplicities=_multiplicities,
+                         is_real=is_real,
+                         _is_dual=_is_dual)
 
     def as_VectorSpace(self):
         """Forget about the substructure of the ProductSpace but view only as VectorSpace.
@@ -294,7 +293,7 @@ class ProductSpace(VectorSpace):
     def __str__(self):
         res = ' ⊗ '.join(map(str, self.spaces))
         if self.is_dual:
-            res = f'dual(res)'
+            res = f'dual({res})'
         return res
 
     def __eq__(self, other):

@@ -347,7 +347,7 @@ def test_conj(tensor_rng):
 
 
 def test_combine_split(tensor_rng):
-    tens = tensor_rng(labels=['a', 'b', 'c', 'd'])
+    tens = tensor_rng(labels=['a', 'b', 'c', 'd'], max_num_blocks=5, max_block_size=5)
     dense = tens.to_numpy_ndarray()
     d0, d1, d2, d3 = dims = tuple(tens.shape)
 
@@ -355,8 +355,8 @@ def test_combine_split(tensor_rng):
     res = tensors.combine_legs(tens, [1, 2])
     res.test_sanity()
     assert res.labels == ['a', '(b.c)', 'd']
-    expect = dense.reshape((d0, d1*d2, d3))
-    npt.assert_equal(res.to_numpy_ndarray(), expect)
+    # note: dense reshape is not enough to check expect, since we have permutation in indices.
+    # hence, we only check that we get back the same after split
     split = tensors.split_leg(res, 1)
     split.test_sanity()
     assert split.labels == ['a', 'b', 'c', 'd']
@@ -366,8 +366,6 @@ def test_combine_split(tensor_rng):
     res = tensors.combine_legs(tens, ['b', 'd'])
     res.test_sanity()
     assert res.labels == ['a', '(b.d)', 'c']
-    expect = dense.transpose([0, 1, 3, 2]).reshape([d0, d1*d3, d2])
-    npt.assert_equal(res.to_numpy_ndarray(), expect)
     split = tensors.split_leg(res, '(b.d)')
     split.test_sanity()
     assert split.labels == ['a', 'b', 'd', 'c']
@@ -386,8 +384,6 @@ def test_combine_split(tensor_rng):
     assert res.labels == ['(b.d)', '(c.a)']
     assert res.legs[0].is_dual == True
     assert res.legs[1].is_dual == False
-    expect = dense.transpose([1, 3, 2, 0]).reshape((d1*d3, d2*d0))
-    npt.assert_equal(res.to_numpy_ndarray(), expect)
     split = tensors.split_legs(res)
     split.test_sanity()
     assert split.labels == ['b', 'd', 'c', 'a']
