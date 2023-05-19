@@ -541,6 +541,7 @@ class Tensor(AbstractTensor):
 
         TODO document how the sectors are expected to be embedded, i.e. which slices correspond to which charge.
         TODO support non-canonical embedding?
+        TODO : for block and numpy classmethods, e.g. also "from_func", unify docs
 
         Parameters
         ----------
@@ -551,10 +552,13 @@ class Tensor(AbstractTensor):
         legs : list of :class:`~tenpy.linalg.symmetries.VectorSpace`, optional
             The vectorspaces associated with legs of the tensors. Contains symmetry data.
             If ``None`` (default), trivial legs of appropriate dimension are assumed.
+            TODO: make mandatory?
         dtype : ``np.dtype``, optional
             The data type of the Tensor entries. Defaults to dtype of `block`
         labels : list of {str | None}, optional
             Labels associated with each leg, ``None`` for unnamed legs.
+        atol, rtol : float
+            TODO doc
         """
         is_real = False  # TODO: dummy
         if backend is None:
@@ -1113,7 +1117,6 @@ class ChargedTensor(AbstractTensor):
         Either a backend-specific block of shape ``(dummy_leg.dim,)``, or `None`,
         which is interpreted ``[1]`` if `dummmy_leg.dim == 1` and raises a `ValueError` otherwise.
     """
-
     # TODO doc somewhere that this label has special meaning
     _DUMMY_LABEL = '!'  # canonical label for the dummy leg
 
@@ -1166,15 +1169,74 @@ class ChargedTensor(AbstractTensor):
             block = self.backend.block_permute_axes(block, self.get_leg_idcs(leg_order))
         return block
 
-    # TODO "detect qtotal"-like classmethod
+    @classmethod
+    def from_numpy(cls, array: np.ndarray, backend=None, legs: list[VectorSpace]=None, dtype: Dtype=None,
+                   labels: list[str | None] = None, atol: float = 1e-8, rtol: float = 1e-5,
+                   dummy_leg: VectorSpace = None, dummy_leg_state=None
+                   ) -> ChargedTensor:
+        """
+        Like from_dense_block but `array` and `dummy_leg_state` are numpy arrays.
+        """
+        if backend is None:
+            backend = get_default_backend()
+        block = backend.block_from_numpy(np.asarray(array))
+        if dummy_leg_state is not None:
+            dummy_leg_state = backend.block_from_numpy(np.asarray(dummy_leg_state))
+        return cls.from_dense_block(block, backend=backend, legs=legs, dtype=dtype, labels=labels,
+                                    atol=atol, rtol=rtol, dummy_leg=dummy_leg, dummy_leg_state=dummy_leg_state)
 
     @classmethod
-    def from_numpy(cls, **todo_args):
-        ...  # TODO: stub
+    def from_dense_block(cls, block, backend=None, legs: list[VectorSpace]=None, dtype: Dtype=None,
+                         labels: list[str | None] = None, atol: float = 1e-8, rtol: float = 1e-5,
+                         dummy_leg: VectorSpace = None, dummy_leg_state=None
+                         ) -> ChargedTensor:
+        """Convert a dense block of the backend to a ChargedTensor, if possible.
 
-    @classmethod
-    def from_dense_block(cls, **todo_args):
-        ...  # TODO: stub
+        TODO doc how and when it could fail
+
+        Parameters
+        ----------
+        block :
+            The data to be converted, a backend-specific block.
+        backend : :class:`~tenpy.linalg.backends.abstract_backend.AbstractBackend`, optional
+            The backend for the ChargedTensor.
+        legs : list of :class:`~tenpy.linalg.symmetries.VectorSpace`, optional
+            The vectorspaces associated with legs of the tensors. Contains symmetry data.
+            If ``None`` (default), trivial legs of appropriate dimension are assumed.
+            Does not contain the dummy leg.
+        dtype : Dtype, optional
+            The data type for the ChargedTensor. By default, this is inferred from the block.
+        labels : list of {str | None}, optional
+            Labels associated with each leg, ``None`` for unnamed legs.
+            Does not contain a label for the dummy leg.
+        atol, rtol : float
+            TODO doc
+        dummy_leg : VectorSpace
+            The dummy leg. If not given, it is inferred from the block.
+        dummy_leg_state : block
+            The state on the dummy leg. Defaults to ``[1.]``.
+        """
+        is_real = False  # TODO: dummy
+        if backend is None:
+            backend = get_default_backend()
+        if legs is None:
+            legs = [backend.VectorSpaceCls.non_symmetric(d, is_real=is_real)
+                    for d in backend.block_shape(block)]
+        if labels is None:
+            labels = [None] * len(legs)
+        if dtype is not None:
+            block = backend.block_to_dtype(block, dtype)
+        # add 1-dim axis for the dummy leg
+        block = backend.block_add_axis(block, -1)
+        if dummy_leg is None:
+            dummy_leg = backend.infer_leg(block, legs + [None])
+        if dummy_leg_state is not None and backend.block_shape(dummy_leg_state) != (1,):
+            msg = f'Wrong shape of dummy_leg_state. Expected (1,). Got {backend.block_shape(dummy_leg_state)}'
+            raise ValueError(msg)
+        invariant_part = Tensor.from_dense_block(block, backend=backend, legs=legs + [dummy_leg],
+                                                 dtype=dtype, labels=labels + [cls._DUMMY_LABEL],
+                                                 atol=atol, rtol=rtol)
+        return cls(invariant_part, dummy_leg_state=dummy_leg_state)
 
     @classmethod
     def zero(cls, legs: VectorSpace | list[VectorSpace], dummy_leg: VectorSpace,
