@@ -158,9 +158,9 @@ class VectorSpace:
             return False
         if self.num_sectors != other.num_sectors:
             return False
-        # the _sectors (note the underscore!) of the dual space are the same as those of the 
+        # the _sectors (note the underscore!) of the dual space are the same as those of the
         # original space, while the other.sectors would be different.
-        return self._sectors == other._sectors
+        return np.all(self._sectors == other._sectors)
 
     @property
     def is_trivial(self) -> bool:

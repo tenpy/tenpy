@@ -85,27 +85,24 @@ def test_product_space(symmetry, symmetry_sectors_rng, np_random, VectorSpace, P
     s3 = VectorSpace(symmetry=symmetry, sectors=sectors[::2], multiplicities=mults[::2])
 
     p1 = ProductSpace([s1, s2, s3])
-    p2 = s1 * s2
-    p3a = p2 * s3
-    p3b = ProductSpace([ProductSpace([s1, s2]), s3])
+    p2 = ProductSpace([s1, s2])
+    p3 = ProductSpace([ProductSpace([s1, s2]), s3])
 
-    assert_array_equal(p1.sectors, p3a.sectors)
-    assert_array_equal(p1.sectors, p3b.sectors)
+    assert_array_equal(p1.sectors, p3.sectors)
 
     _ = str(p1)
-    _ = str(p3a)
+    _ = str(p3)
     _ = repr(p1)
-    _ = repr(p3a)
+    _ = repr(p3)
 
     assert p1 == p1
-    assert p1 != p3a
-    assert p3a == p3b
+    assert p1 != p3
     assert p2 == ProductSpace([s1.dual, s2.dual], _is_dual=True).dual
-    for p in [p1, p2, p3a, p3b]:
+    for p in [p1, p2, p3]:
         assert p.can_contract_with(p.dual)
     assert p2 == ProductSpace([s1, s2], _is_dual=True).flip_is_dual()
-    assert p2.is_dual_of(ProductSpace([s1.dual, s2.dual]).flip_is_dual())
-    assert p2.is_dual_of(ProductSpace([s1.dual, s2.dual], _is_dual=True))
+    assert p2.can_contract_with(ProductSpace([s1.dual, s2.dual]).flip_is_dual())
+    assert p2.can_contract_with(ProductSpace([s1.dual, s2.dual], _is_dual=True))
     p1_s = p1.as_VectorSpace()
     assert isinstance(p1_s, VectorSpace)
     assert p1_s == p1

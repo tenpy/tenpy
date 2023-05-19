@@ -13,6 +13,7 @@ from .dummy_config import config
 from .symmetries.spaces import VectorSpace, ProductSpace
 from .backends.backend_factory import get_default_backend
 from .backends.abstract_backend import Dtype
+from ..tools.misc import to_iterable
 
 # TODO this gives a circular import...
 # from .matrix_operations import svd, truncate_svd, svd_split, leg_bipartition, exp, log
@@ -619,6 +620,7 @@ class Tensor(AbstractTensor):
         """
         if backend is None:
             backend = get_default_backend()
+        legs = to_iterable(legs)
         legs = [backend.convert_vector_space(leg) for leg in legs]
         data = backend.eye_data(legs=legs, dtype=dtype)
         legs = legs + [leg.dual for leg in legs]

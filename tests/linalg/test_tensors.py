@@ -79,9 +79,6 @@ def test_Tensor_classmethods(backend, vector_space_rng, backend_data_rng, np_ran
     # TODO random_uniform, random_normal
 
     print('checking zero')
-    tens = tensors.Tensor.zero(dims, backend=backend)
-    tens.test_sanity()
-    npt.assert_array_equal(tens.to_numpy_ndarray(), np.zeros(dims))
     tens = tensors.Tensor.zero(legs, backend=backend)
     tens.test_sanity()
     npt.assert_array_equal(tens.to_numpy_ndarray(), np.zeros(dims))
@@ -193,6 +190,11 @@ def test_Tensor_methods(backend, vector_space_rng, backend_data_rng):
     npt.assert_array_equal(neg_t3.to_numpy_ndarray(), -dense3)
     a = 42
     b = 17
+    with pytest.raises(ValueError) as err:
+        res = a * tens1 - b * tens2
+    assert "required in strict label mode" in err.value.args[0]  # TODO: check other config values?
+    tens1.set_labels(['foo', 'a', 'b'])
+    tens2.set_labels(['foo', 'a', 'b'])
     res = a * tens1 - b * tens2
     npt.assert_almost_equal(res.to_numpy_ndarray(), a * dense1 - b * dense2)
     res = tens1 / a + tens2 / b
@@ -203,6 +205,7 @@ def test_Tensor_methods(backend, vector_space_rng, backend_data_rng):
         tens1 == tens2
 
     print('check converisions, float, complex, array')
+    tens4.set_labels(['i', 'j', 'i*', 'j*'])
     assert isinstance(float(tens4), float)
     npt.assert_equal(float(tens4), float(tens4_item))
     assert isinstance(complex(tens4 + 2.j * tens4), complex)
@@ -283,13 +286,13 @@ def test_outer(tensor_rng):
             assert all(l is None for l in res.labels)
 
 
-def test_transpose(tensor_rng):
+def test_permute_legs(tensor_rng):
     labels = list('abcd')
     t = tensor_rng(labels=labels)
     d = t.to_numpy_ndarray()
     for perm in [[0, 2, 1, 3], [3, 2, 1, 0], [1, 0, 3, 2], [0, 1, 2, 3], [0, 3, 2, 1]]:
         expect = d.transpose(perm)
-        res = t.transpose(perm)
+        res = t.permute_legs(perm)
         res.test_sanity()
         npt.assert_array_equal(res.to_numpy_ndarray(), expect)
         assert res.labels == [labels[i] for i in perm]
@@ -307,7 +310,7 @@ def test_inner(tensor_rng):
 
         expect = np.inner(d_i.flatten().conj(), d_j.flatten())
         if t_j.num_legs > 0:
-            t_j = t_j.transpose(t_j.labels[::-1])  # transpose should be reverted in inner()
+            t_j = t_j.permute_legs(t_j.labels[::-1])  # transpose should be reverted in inner()
         res = tensors.inner(t_i, t_j)
         npt.assert_allclose(res, expect)
 
@@ -432,8 +435,8 @@ def test_norm(tensor_rng):
 
 def test_almost_equal(tensor_rng):
     for i in range(10):
-        t1 = tensor_rng(num_legs=3, real=False)
-        t_diff = tensor_rng(t1.legs)
+        t1 = tensor_rng(labels=['a', 'b', 'c'], real=False)
+        t_diff = tensor_rng(t1.legs, labels=['a', 'b', 'c'])
         if t_diff.norm() > 1.e-7:
             break
     else:

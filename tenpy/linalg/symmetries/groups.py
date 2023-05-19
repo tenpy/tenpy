@@ -174,7 +174,7 @@ class ProductSymmetry(Symmetry):
 
     The allowed sectors are "stacks" of sectors for the individual symmetries.
 
-    If all factors are AbelianGroup instances, instances of this class will mascerade as 
+    If all factors are AbelianGroup instances, instances of this class will mascerade as
     instances of AbelianGroup too. Same for GroupSymmetry.
     """
     def __init__(self, factors: list[Symmetry]):
@@ -202,7 +202,7 @@ class ProductSymmetry(Symmetry):
         )
 
     def is_valid_sector(self, a: Sector) -> bool:
-        if getattr(a, 'shape', ()) == (self.sector_ind_len,):
+        if getattr(a, 'shape', ()) != (self.sector_ind_len,):
             return False
         for i, f_i in enumerate(self.factors):
             a_i = a[self.sector_slices[i]:self.sector_slices[i + 1]]
@@ -622,8 +622,8 @@ class FibonacciGrading(Symmetry):
     _phi = .5 * (1 + np.sqrt(5))  # the golden ratio
 
     def __init__(self):
-        Symmetry.__init__(self, 
-                          fusion_style=FusionStyle.multiple_unique, 
+        Symmetry.__init__(self,
+                          fusion_style=FusionStyle.multiple_unique,
                           braiding_style=BraidingStyle.anyonic,
                           trivial_sector=np.array([0], dtype=np.int8),
                           group_name='FibonacciGrading',
@@ -649,7 +649,7 @@ class FibonacciGrading(Symmetry):
 
     def dual_sector(self, a: Sector) -> Sector:
         return a
-    
+
     def dual_sectors(self, sectors: SectorArray) -> SectorArray:
         return sectors
 
