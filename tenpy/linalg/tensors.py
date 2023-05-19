@@ -336,7 +336,7 @@ class AbstractTensor(ABC):
 
     @classmethod
     @abstractmethod
-    def zero(cls, legs: list[VectorSpace] | list[int], backend=None, labels: list[str | None] = None,
+    def zero(cls, legs: VectorSpace | list[VectorSpace], backend=None, labels: list[str | None] = None,
              dtype: Dtype = Dtype.complex128) -> Tensor:
         """A zero tensor"""
         ...
@@ -568,17 +568,17 @@ class Tensor(AbstractTensor):
         return cls(data=data, backend=backend, legs=legs, labels=labels)
 
     @classmethod
-    def zero(cls, legs_or_dims: int | VectorSpace | list[int | VectorSpace],
+    def zero(cls, legs: VectorSpace | list[VectorSpace],
              backend=None, labels: list[str | None] = None,
              dtype: Dtype = Dtype.complex128) -> Tensor:
         """Empty Tensor with zero entries (not stored explicitly in most backends).
 
         Parameters
         ----------
-        legs_or_dims : int | VectorSpace | list[int | VectorSpace]
-            Description of *half* of the legs of the result, either via their vectorspace
-            or via an integer, which means a trivial VectorSpace of that dimension.
+        legs : (list of) VectorSpace
+            *Half* of the legs of the result.
             The resulting tensor has twice as many legs.
+            TODO: why half??? zeromap is well defined even if not diagonal...
         backend : :class:`~tenpy.linalg.backends.abstract_backend.AbstractBackend`
             The backend for the Tensor
         labels : list[str | None], optional
@@ -587,7 +587,6 @@ class Tensor(AbstractTensor):
             The data type of the Tensor entries.
 
         """
-        legs = _parse_legs_or_dims(legs_or_dims)
         legs = [backend.convert_vector_space(leg) for leg in legs]
         if backend is None:
             backend = get_default_backend()
@@ -595,7 +594,7 @@ class Tensor(AbstractTensor):
         return cls(data=data, backend=backend, legs=legs, labels=labels)
 
     @classmethod
-    def eye(cls, legs_or_dims: int | VectorSpace | list[int | VectorSpace], backend=None,
+    def eye(cls, legs: VectorSpace | list[VectorSpace], backend=None,
             labels: list[str | None] = None, dtype: Dtype = Dtype.complex128) -> Tensor:
         """The identity map from one group of legs to their duals.
 
@@ -603,10 +602,8 @@ class Tensor(AbstractTensor):
         ----------
         backend : :class:`~tenpy.linalg.backends.abstract_backend.AbstractBackend`
             The backend for the Tensor
-        legs_or_dims : int | VectorSpace | list[int | VectorSpace]
-            Description of *half* of the legs of the result, either via their vectorspace
-            or via an integer, which means a trivial VectorSpace of that dimension.
-            The resulting tensor has twice as many legs.
+        legs : (list of) VectorSpace
+            *Half* of the legs of the result. The resulting tensor has twice as many legs.
         labels : list[str | None], optional
             Labels associated with each leg, ``None`` for unnamed legs.
         dtype : Dtype, optional
@@ -615,14 +612,14 @@ class Tensor(AbstractTensor):
         """
         if backend is None:
             backend = get_default_backend()
-        legs = _parse_legs_or_dims(legs_or_dims)
         legs = [backend.convert_vector_space(leg) for leg in legs]
         data = backend.eye_data(legs=legs, dtype=dtype)
         legs = legs + [leg.dual for leg in legs]
         return cls(data=data, backend=backend, legs=legs, labels=labels)
 
+    # TODO: dtype arg unused?
     @classmethod
-    def from_numpy_func(cls, func, legs_or_dims: int | VectorSpace | list[int | VectorSpace], backend=None,
+    def from_numpy_func(cls, func, legs: VectorSpace | list[VectorSpace], backend=None,
                         labels: list[str | None] = None, func_args=(), func_kwargs={},
                         shape_kw: str = None, dtype: Dtype = None) -> Tensor:
         """Create a Tensor from a numpy function.
@@ -641,9 +638,8 @@ class Tensor(AbstractTensor):
             where `shape` is a tuple of int.
         backend : :class:`~tenpy.linalg.backends.abstract_backend.AbstractBackend`
             The backend for the tensor
-        legs_or_dims : int | VectorSpace | list[int | VectorSpace]
-            Description of the legs of the result, either via their vectorspace
-            or via an integer, which means a trivial VectorSpace of that dimension.
+        legs : (list of) VectorSpace
+            The legs of the result.
         labels : list[str | None], optional
             Labels associated with each leg, ``None`` for unnamed legs.
         func_args : iterable
@@ -657,7 +653,6 @@ class Tensor(AbstractTensor):
         """
         if backend is None:
             backend = get_default_backend()
-        legs = _parse_legs_or_dims(legs_or_dims)
         legs = [backend.convert_vector_space(leg) for leg in legs]
 
         def block_func(shape):
@@ -671,7 +666,7 @@ class Tensor(AbstractTensor):
                    labels=labels)
 
     @classmethod
-    def from_block_func(cls, func, legs_or_dims: int | VectorSpace | list[int | VectorSpace], backend=None,
+    def from_block_func(cls, func, legs: VectorSpace | list[VectorSpace], backend=None,
                         labels: list[str | None] = None, func_args=(), func_kwargs={},
                         shape_kw: str = None, dtype: Dtype = None) -> Tensor:
         """Create a Tensor from a block function.
@@ -689,9 +684,8 @@ class Tensor(AbstractTensor):
             where `shape` is a tuple of int.
         backend : :class:`~tenpy.linalg.backends.abstract_backend.AbstractBackend`
             The backend for the tensor
-        legs_or_dims : int | VectorSpace | list[int | VectorSpace]
-            Description of the legs of the result, either via their vectorspace
-            or via an integer, which means a trivial VectorSpace of that dimension.
+        legs : (list of) VectorSpace
+            The legs of the result.
         labels : list[str | None], optional
             Labels associated with each leg, ``None`` for unnamed legs.
         unc_args : iterable
@@ -705,7 +699,6 @@ class Tensor(AbstractTensor):
         """
         if backend is None:
             backend = get_default_backend()
-        legs = _parse_legs_or_dims(legs_or_dims)
         legs = [backend.convert_vector_space(leg) for leg in legs]
 
         def block_func(shape):
@@ -717,7 +710,7 @@ class Tensor(AbstractTensor):
                    labels=labels)
 
     @classmethod
-    def random_uniform(cls, legs_or_dims: int | VectorSpace | list[int | VectorSpace], backend=None,
+    def random_uniform(cls, legs: VectorSpace | list[VectorSpace], backend=None,
                        labels: list[str | None] = None, dtype: Dtype = Dtype.complex128) -> Tensor:
         """Generate a tensor whose block-entries (i.e. the free parameters of tensors compatible with
         the symmetry) are drawn independently and uniformly.
@@ -731,9 +724,8 @@ class Tensor(AbstractTensor):
 
         Parameters
         ----------
-        legs_or_dims : int | VectorSpace | list[int | VectorSpace]
-            Description of the legs of the result, either via their vectorspace
-            or via an integer, which means a trivial VectorSpace of that dimension.
+        legs : (list of) VectorSpace
+            The legs of the result.
         backend : :class:`~tenpy.linalg.backends.abstract_backend.AbstractBackend`
             The backend for the tensor
         labels : list[str | None], optional
@@ -743,7 +735,6 @@ class Tensor(AbstractTensor):
         """
         if backend is None:
             backend = get_default_backend()
-        legs = _parse_legs_or_dims(legs_or_dims)
         legs = [backend.convert_vector_space(leg) for leg in legs]
 
         def block_func(shape):
@@ -753,7 +744,7 @@ class Tensor(AbstractTensor):
                    labels=labels)
 
     @classmethod
-    def random_normal(cls, legs_or_dims: int | VectorSpace | list[int | VectorSpace] = None,
+    def random_normal(cls, legs: VectorSpace | list[VectorSpace] = None,
                       mean: Tensor = None, sigma: float = 1.,
                       backend=None, labels: list[str | None] = None, dtype: Dtype = None) -> Tensor:
         r"""Generate a tensor from the normal distribution.
@@ -770,13 +761,12 @@ class Tensor(AbstractTensor):
 
         Parameters
         ----------
-        legs_or_dims : int | VectorSpace | list[int | VectorSpace] | None
+        legs : (list of) VectorSpace
             If `mean` is given, this argument is ignored and legs are the same as those of `mean`.
-            Otherwise, a description of the legs of the result, either via their vectorspace
-            or via an integer, which means a trivial VectorSpace of that dimension.
+            Otherwise, the legs of the result.
         mean : Tensor | None
             The mean of the distribution. `mean=None` means a mean of zero and makes the
-            `legs_or_dims` argument required.
+            `legs` argument required.
         sigma : float
             The standard deviation of the distribution
         backend : :class:`~tenpy.linalg.backends.abstract_backend.AbstractBackend`
@@ -790,20 +780,19 @@ class Tensor(AbstractTensor):
             default to `Dtype.complex128`.
         """
         if mean is not None:
-            for name, val in zip(['legs_or_dims', 'backend', 'labels'], [legs_or_dims, backend, labels]):
+            for name, val in zip(['legs', 'backend', 'labels'], [legs, backend, labels]):
                 if val is not None:
                     warnings.warn(f'{name} argument to Tensor.random_normal was ignored, because mean was given.')
 
             if dtype is None:
                 dtype = mean.dtype
-            return mean + cls.random_normal(mean=None, sigma=sigma, legs_or_dims=mean.legs, backend=mean.backend,
+            return mean + cls.random_normal(legs=mean.legs, mean=None, sigma=sigma, backend=mean.backend,
                                             labels=mean.labels, dtype=dtype)
 
         if backend is None:
             backend = get_default_backend()
         if dtype is None:
             dtype = Dtype.complex128
-        legs = _parse_legs_or_dims(legs_or_dims)
         legs = [backend.convert_vector_space(leg) for leg in legs]
 
         def block_func(shape):
@@ -1482,15 +1471,3 @@ def get_same_backend(*tensors: AbstractTensor, error_msg: str = 'Incompatible ba
     if not all(tens.backend == backend for tens in tensors):
         raise ValueError(error_msg)
     return backend
-
-
-def _parse_legs_or_dims(legs_or_dims: int | VectorSpace | list[int | VectorSpace]) -> list[VectorSpace]:
-    if isinstance(legs_or_dims, VectorSpace):
-        return [legs_or_dims]
-    try:
-        iter(legs_or_dims)
-    except TypeError:
-        return [VectorSpace.non_symmetric(legs_or_dims)]
-    # else: iterable
-    return [ele if isinstance(ele, VectorSpace) else VectorSpace.non_symmetric(ele)
-            for ele in legs_or_dims]
