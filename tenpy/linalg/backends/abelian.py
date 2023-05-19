@@ -572,14 +572,14 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
             blocks.append(a[tuple(slices)])
         return AbelianBackendData(dtype, blocks, block_inds)
 
-    def from_block_func(self, func, legs: list[VectorSpace]) -> AbelianBackendData:
+    def from_block_func(self, func, legs: list[VectorSpace], **func_kwargs) -> AbelianBackendData:
         block_inds = _valid_block_indices(legs)
         blocks = []
         for b_i in block_inds:
             shape = [leg.multiplicities[i] for i, leg in zip(b_i, legs)]
-            blocks.append(func(tuple(shape)))
+            blocks.append(func(tuple(shape), **func_kwargs))
         if len(blocks) == 0:
-            dtype = self.block_dtype(func((1,) * len(legs)))
+            dtype = self.block_dtype(func((1,) * len(legs), **func_kwargs))
         else:
             dtype = self.block_dtype(blocks[0])
         return AbelianBackendData(dtype, blocks, block_inds)

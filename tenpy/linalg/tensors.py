@@ -615,7 +615,7 @@ class Tensor(AbstractTensor):
 
     @classmethod
     def from_numpy_func(cls, func, legs_or_dims: int | VectorSpace | list[int | VectorSpace], backend=None,
-                        labels: list[str | None] = None, func_args=(), func_kwargs={},
+                        labels: list[str | None] = None, func_kwargs={},
                         shape_kw: str = None, dtype: Dtype = None) -> Tensor:
         """Create a Tensor from a numpy function.
 
@@ -628,8 +628,8 @@ class Tensor(AbstractTensor):
         func : callable
             A callable object which is called to generate the blocks.
             We expect that `func` returns a numpy ndarray of the given `shape`.
-            If no `shape_kw` is given, it is called as ``func(shape, *func_args, **func_kwargs)``,
-            otherwise as ``func(*func_args, **{shape_kw: shape}, **func_kwargs)``,
+            If no `shape_kw` is given, it is called as ``func(shape, **func_kwargs)``,
+            otherwise as ``func(**{shape_kw: shape}, **func_kwargs)``,
             where `shape` is a tuple of int.
         backend : :class:`~tenpy.linalg.backends.abstract_backend.AbstractBackend`
             The backend for the tensor
@@ -638,8 +638,6 @@ class Tensor(AbstractTensor):
             or via an integer, which means a trivial VectorSpace of that dimension.
         labels : list[str | None], optional
             Labels associated with each leg, ``None`` for unnamed legs.
-        func_args : iterable
-            Additional arguments given to `func`.
         func_kwargs : dict
             Additional keyword arguments given to `func`.
         shape_kw : None | str
@@ -652,19 +650,19 @@ class Tensor(AbstractTensor):
         legs = _parse_legs_or_dims(legs_or_dims)
         legs = [backend.convert_vector_space(leg) for leg in legs]
 
-        def block_func(shape):
-            if shape_kw is None:
-                arr = func(shape, *func_args, **func_kwargs)
-            else:
-                arr = func(*func_args, **{shape_kw: shape}, **func_kwargs)
-            return backend.block_from_numpy(arr)
+        if shape_kw is not None:
+            def block_func(shape):
+                return func(**{shape_kw: shape}, **func_kwargs)
+        else:
+            block_func = func
 
-        return cls(data=backend.from_block_func(block_func, legs), backend=backend, legs=legs,
+        return cls(data=backend.from_block_func(block_func, legs, **func_kwargs),
+                   backend=backend, legs=legs,
                    labels=labels)
 
     @classmethod
     def from_block_func(cls, func, legs_or_dims: int | VectorSpace | list[int | VectorSpace], backend=None,
-                        labels: list[str | None] = None, func_args=(), func_kwargs={},
+                        labels: list[str | None] = None, func_kwargs={},
                         shape_kw: str = None, dtype: Dtype = None) -> Tensor:
         """Create a Tensor from a block function.
 
@@ -676,8 +674,8 @@ class Tensor(AbstractTensor):
         func : callable
             A callable object which is called to generate the blocks.
             We expect that `func` returns a backend-specific block of the given `shape`.
-            If no `shape_kw` is given, it is called as ``func(shape, *func_args, **func_kwargs)``,
-            otherwise as ``func(*func_args, **{shape_kw: shape}, **func_kwargs)``,
+            If no `shape_kw` is given, it is called as ``func(shape, **func_kwargs)``,
+            otherwise as ``func(**{shape_kw: shape}, **func_kwargs)``,
             where `shape` is a tuple of int.
         backend : :class:`~tenpy.linalg.backends.abstract_backend.AbstractBackend`
             The backend for the tensor
@@ -686,8 +684,6 @@ class Tensor(AbstractTensor):
             or via an integer, which means a trivial VectorSpace of that dimension.
         labels : list[str | None], optional
             Labels associated with each leg, ``None`` for unnamed legs.
-        unc_args : iterable
-            Additional arguments given to `func`.
         func_kwargs : dict
             Additional keyword arguments given to `func`.
         shape_kw : None | str
@@ -700,12 +696,13 @@ class Tensor(AbstractTensor):
         legs = _parse_legs_or_dims(legs_or_dims)
         legs = [backend.convert_vector_space(leg) for leg in legs]
 
-        def block_func(shape):
-            if shape_kw is None:
-                return func(shape, *func_args, **func_kwargs)
-            else:
+        if shape_kw is not None:
+            def block_func(shape):
                 return func(*func_args, **{shape_kw: shape}, **func_kwargs)
-        return cls(data=backend.from_block_func(block_func, legs), backend=backend, legs=legs,
+        else:
+            block_func = func
+        return cls(data=backend.from_block_func(block_func, legs, **func_kwargs),
+                   backend=backend, legs=legs,
                    labels=labels)
 
     @classmethod
@@ -738,11 +735,8 @@ class Tensor(AbstractTensor):
         legs = _parse_legs_or_dims(legs_or_dims)
         legs = [backend.convert_vector_space(leg) for leg in legs]
 
-        def block_func(shape):
-            return backend.block_random_uniform(shape, dtype)
-
-        return cls(data=backend.from_block_func(block_func, legs), backend=backend, legs=legs,
-                   labels=labels)
+        return cls(data=backend.from_block_func(backend.block_random_uniform, legs, dtype=Dtype),
+                   backend=backend, legs=legs, labels=labels)
 
     # TODO: typicall, we'll give legs rather than mean & sigma, make legs first arg?
     @classmethod
@@ -799,11 +793,8 @@ class Tensor(AbstractTensor):
         legs = _parse_legs_or_dims(legs_or_dims)
         legs = [backend.convert_vector_space(leg) for leg in legs]
 
-        def block_func(shape):
-            return backend.block_random_normal(shape, dtype, sigma)
-
-        return cls(data=backend.from_block_func(block_func, legs), backend=backend, legs=legs,
-                   labels=labels)
+        return cls(data=backend.from_block_func(backend.block_random_normal, legs, dtype=dtype, sigma=sigma),
+                   backend=backend, legs=legs, labels=labels)
 
     def tdot(self, other: AbstractTensor,
              legs1: int | str | list[int | str] = -1, legs2: int | str | list[int | str] = 0,
