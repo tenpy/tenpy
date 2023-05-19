@@ -377,7 +377,7 @@ def test_combine_split(tensor_rng):
     assert res.labels == ['a', '(b.c)', 'd']
     # note: dense reshape is not enough to check expect, since we have permutation in indices.
     # hence, we only check that we get back the same after split
-    split = tensors.split_leg(res, 1)
+    split = tensors.split_legs(res, 1)
     split.test_sanity()
     assert split.labels == ['a', 'b', 'c', 'd']
     npt.assert_equal(split.to_numpy_ndarray(), dense)
@@ -386,21 +386,29 @@ def test_combine_split(tensor_rng):
     res = tensors.combine_legs(tens, ['b', 'd'])
     res.test_sanity()
     assert res.labels == ['a', '(b.d)', 'c']
-    split = tensors.split_leg(res, '(b.d)')
+    split = tensors.split_legs(res, '(b.d)')
     split.test_sanity()
     assert split.labels == ['a', 'b', 'd', 'c']
     assert np.allclose(split.to_numpy_ndarray(), dense.transpose([0, 1, 3, 2]))
 
     print('check splitting a non-combined leg raises')
     with pytest.raises(ValueError):
-        tensors.split_leg(res, 0)
+        tensors.split_legs(res, 0)
     with pytest.raises(ValueError):
-        tensors.split_leg(res, 'd')
+        tensors.split_legs(res, 'd')
 
     print('check combining multiple legs')
-    res = tensors.combine_legs(tens, ['c', 'a'], ['b', 'd'], new_axes=[1, 0],
-                               product_spaces_dual=[False, True])
+    res = tensors.combine_legs(tens, ['c', 'a'], ['b', 'd'], product_spaces_dual=[False, True])
     res.test_sanity()
+    # leg order after combine:
+    #
+    #     replace by (b.d)
+    #     |     omit
+    #     |     |
+    # [a, b, c, d]               ->   [(b.d), (c.a)]
+    #  |     |
+    #  omit  replace by (c.a)
+    #
     assert res.labels == ['(b.d)', '(c.a)']
     assert res.legs[0].is_dual == True
     assert res.legs[1].is_dual == False

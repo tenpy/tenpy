@@ -93,7 +93,7 @@ class AbstractNonabelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
                          rtol: float = 0.00001) -> NonAbelianData:
         raise NotImplementedError  # TODO:
 
-    def from_block_func(self, func, legs: list[VectorSpace]) -> NonAbelianData:
+    def from_block_func(self, func, legs: list[VectorSpace], func_kwargs={}) -> NonAbelianData:
         raise NotImplementedError  # TODO:
 
     def zero_data(self, legs: list[VectorSpace], dtype: Dtype) -> NonAbelianData:

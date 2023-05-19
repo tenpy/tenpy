@@ -119,7 +119,7 @@ def block_rng(backend, np_random):
 @pytest.fixture
 def backend_data_rng(backend, block_rng, np_random):
     def generator(legs, real=True):
-        data = backend.from_block_func(block_rng, legs, real=real)
+        data = backend.from_block_func(block_rng, legs, func_kwargs=dict(real=real))
         if isinstance(backend, backends.abelian.AbstractAbelianBackend):
             if np_random.random() < 0.5:  # with 50% probability
                 # keep roughly half of the blocks

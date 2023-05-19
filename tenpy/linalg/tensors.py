@@ -15,15 +15,12 @@ from .backends.backend_factory import get_default_backend
 from .backends.abstract_backend import Dtype
 from ..tools.misc import to_iterable
 
-# TODO this gives a circular import...
-# from .matrix_operations import svd, truncate_svd, svd_split, leg_bipartition, exp, log
-
 __all__ = ['AbstractTensor', 'Tensor', 'ChargedTensor', 'DiagonalTensor', 'tdot', 'outer', 'inner',
            'permute_legs', 'trace', 'conj', 'combine_legs', 'combine_leg', 'split_legs', 'split_leg',
            'is_scalar', 'squeeze_legs', 'norm', 'get_same_backend', 'Dtype', 'zero_like',
-        #    'svd', 'truncate_svd', 'svd_split', 'leg_bipartition', 'exp', 'log'
            ]
-# svd, svd_truncate, exp, log are implemented in matrix_operations.py
+
+# svd, qr, eigen, exp, log, ... are implemented in matrix_operations.py
 
 
 def _dual_leg_label(label: str) -> str:
@@ -380,8 +377,6 @@ class AbstractTensor(ABC):
         """See tensors.conj"""
         ...
 
-    # TODO: do we need `new_axes` kwarg?
-    #  JU: I dont think we need it, users can always transpose
     @abstractmethod
     def combine_legs(self,
                      *legs: list[int | str],
@@ -517,9 +512,7 @@ class Tensor(AbstractTensor):
     @classmethod
     def from_numpy(cls, array: np.ndarray, legs: list[VectorSpace], backend=None, dtype: Dtype = None,
                    labels: list[str | None] = None, atol: float = 1e-8, rtol: float = 1e-5) -> Tensor:
-        """
-        Like from_dense_block but `array` is a numpy array
-        """
+        """Like from_dense_block but `array` is a numpy array(-like)"""
         if backend is None:
             backend = get_default_backend()
         block = backend.block_from_numpy(np.asarray(array))
@@ -530,19 +523,18 @@ class Tensor(AbstractTensor):
     def from_dense_block(cls, block, legs: list[VectorSpace], backend=None, dtype: Dtype=None,
                          labels: list[str | None] = None, atol: float = 1e-8, rtol: float = 1e-5
                          ) -> Tensor:
-        """Convert a dense block of the backend to a Tensor with given symmetry (implied by the `legs`),
-        if the block is symmetric under it.
-        If data is not symmetric under the symmetry i.e. if
-        ``not allclose(array, projected, atol, rtol)``, raise a ValueError.
+        """Convert a dense block of the backend to a Tensor.
+
+        If the block is not symmetric under the symmetry (specified by the legs), i.e. if
+        ``not allclose(block, projected, atol, rtol)``, a ValueError is raised.
 
         TODO document how the sectors are expected to be embedded, i.e. which slices correspond to which charge.
         TODO support non-canonical embedding?
-        TODO : for block and numpy classmethods, e.g. also "from_func", unify docs
 
         Parameters
         ----------
-        array : array_like
-            The data to be converted to a Tensor.
+        block : Block
+            The data to be converted to a Tensor as a backend-specific block.
         legs : list of :class:`~tenpy.linalg.symmetries.VectorSpace`, optional
             The vectorspaces associated with legs of the tensors. This specifies the symmetry.
         backend : :class:`~tenpy.linalg.backends.abstract_backend.AbstractBackend`, optional
@@ -552,9 +544,8 @@ class Tensor(AbstractTensor):
         labels : list of {str | None}, optional
             Labels associated with each leg, ``None`` for unnamed legs.
         atol, rtol : float
-            TODO doc
+            Absolute and relative tolerance for checking if the block is symmetric.
         """
-        is_real = False  # TODO: dummy
         if backend is None:
             backend = get_default_backend()
         if dtype is not None:
@@ -652,11 +643,13 @@ class Tensor(AbstractTensor):
         if shape_kw is not None:
             def block_func(shape):
                 arr = func(**{shape_kw: shape}, **func_kwargs)
-                return backend.block_from_numpy(arr)
+                block = backend.block_from_numpy(arr)
+                return backend.block_to_dtype(block, dtype)
         else:
             def block_func(shape):
                 arr = func(shape, **func_kwargs)
-                return backend.block_from_numpy(arr)
+                block = backend.block_from_numpy(arr)
+                return backend.block_to_dtype(block, dtype)
         data = backend.from_block_func(block_func, legs)
         return cls(data=data, backend=backend, legs=legs, labels=labels)
 
@@ -696,10 +689,13 @@ class Tensor(AbstractTensor):
 
         if shape_kw is not None:
             def block_func(shape):
-                return func(**{shape_kw: shape}, **func_kwargs)
+                block = func(**{shape_kw: shape}, **func_kwargs)
+                return backend.block_to_dtype(block, dtype)
         else:
             def block_func(shape):
-                return func(shape, **func_kwargs)
+                block = func(shape, **func_kwargs)
+                return backend.block_to_dtype(block, dtype)
+
         data = backend.from_block_func(block_func, legs)
         return cls(data=data, backend=backend, legs=legs, labels=labels)
 
@@ -921,7 +917,7 @@ class Tensor(AbstractTensor):
             assert len(leg_idcs) > 0, "empty `legs` entry"
 
         product_spaces = self._combine_legs_make_ProductSpace(combine_leg_idcs, product_spaces, product_spaces_dual)
-        combine_slices, new_axes, transp, perm_args = self._combine_legs_new_axes(combine_leg_idcs, new_axes)
+        combine_slices, new_axes, transp, perm_args = self._combine_legs_new_axes(combine_leg_idcs)
         product_spaces = [product_spaces[p] for p in perm_args]  # permuted args such that new_axes is ascending
 
         if transp != tuple(range(len(transp))):
@@ -1005,9 +1001,9 @@ class Tensor(AbstractTensor):
         transpose = sum(transpose, [])  # flatten: [a] + [b] = [a, b]
         return combine_slices, new_axes, tuple(transpose), perm_args
 
-    def split_legs(self, legs: list[int | str] = None) -> AbstractTensor:
+    def split_legs(self, *legs: int | str) -> AbstractTensor:
         """See tensors.split_legs"""
-        if legs is None:
+        if len(legs) == 0:
             leg_idcs = [i for i, leg in enumerate(self.legs) if isinstance(leg, ProductSpace)]
         else:
             leg_idcs = sorted(self.get_leg_idcs(legs))
@@ -1430,7 +1426,7 @@ def combine_legs(t: AbstractTensor,
     return t.combine_legs(*legs, product_spaces=product_spaces, product_spaces_dual=product_spaces_dual)
 
 
-def split_legs(t: AbstractTensor, legs: list[int | str] = None) -> Tensor:
+def split_legs(t: AbstractTensor, *legs: int | str) -> Tensor:
     """
     Split legs that were previously combined.
 
@@ -1441,15 +1437,15 @@ def split_legs(t: AbstractTensor, legs: list[int | str] = None) -> Tensor:
     ----------
     t :
         The tensor whose legs should be split.
-    legs : list of {int | str}, or None
-        Which legs should be split. By default, all ``ProductSpace``s are split.
+    legs : tuple of {int | str}, or None
+        Which legs should be split. If none are specified, all ``ProductSpace``s are split.
 
     See Also
     --------
     combine_legs
     """
     # TODO inplace version
-    return t.split_legs(legs)
+    return t.split_legs(*legs)
 
 
 def is_scalar(obj) -> bool:
