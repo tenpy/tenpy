@@ -13,12 +13,12 @@ from .symmetries.spaces import VectorSpace, ProductSpace
 from .backends.backend_factory import get_default_backend
 from .backends.abstract_backend import Dtype
 
+from .matrix_operations import svd, truncate_svd, svd_split, leg_bipartition, exp, log
+
 __all__ = ['AbstractTensor', 'Tensor', 'ChargedTensor', 'DiagonalTensor', 'tdot', 'outer', 'inner',
            'transpose', 'trace', 'conj', 'combine_legs', 'combine_leg', 'split_legs', 'split_leg',
-           'is_scalar', 'squeeze_legs', 'norm', 'get_same_backend', 'Dtype', 'zero_like']
-
-
-# TODO import stuff from matrix_operations
+           'is_scalar', 'squeeze_legs', 'norm', 'get_same_backend', 'Dtype', 'zero_like',
+           'svd', 'truncate_svd', 'svd_split', 'leg_bipartition', 'exp', 'log']
 # svd, svd_truncate, exp, log are implemented in matrix_operations.py
 
 
@@ -45,11 +45,12 @@ def _split_leg_label(label: str) -> list[str | None]:
     else:
         raise ValueError('Invalid format for a combined label')
 
-_DUMMY_LABEL = '!'
-
 
 class Shape:
-    # TODO docstring
+    """An object storing the legs and labels of a tensor.
+    When iterated or indexed, it behaves like a sequence of integers, the dimension of the legs.
+    Can be indexed by integer (leg position) or string (leg label).
+    """
 
     def __init__(self, legs: list[VectorSpace], labels: list[str | None] = None):
         self.legs = legs
@@ -375,6 +376,7 @@ class AbstractTensor(ABC):
         ...
 
     # TODO: do we need `new_axes` kwarg?
+    #  JU: I dont think we need it, users can always transpose
     @abstractmethod
     def combine_legs(self,
                      *legs: list[int | str],
@@ -407,7 +409,6 @@ class AbstractTensor(ABC):
         """See tensors.norm"""
         ...
 
-    # TODO decide default values. could let them depend on dtype?
     @abstractmethod
     def almost_equal(self, other: AbstractTensor, atol: float = 1e-5, rtol: float = 1e-8) -> bool:
         """See tensors.almost_equal"""
@@ -457,7 +458,7 @@ class Tensor(AbstractTensor):
     def test_sanity(self):
         super().test_sanity()
         assert isinstance(self.data, self.backend.DataCls)
-        self.backend.test_data_sanity(self)  # TODO rename to test_sanity!
+        self.backend.test_data_sanity(self)
 
     def copy(self, deep=True):
         if deep:
@@ -486,10 +487,18 @@ class Tensor(AbstractTensor):
             other_order = _match_label_order(self, other)
             if other_order is not None:
                 other = transpose(other, other_order)
-            for leg_self, leg_other in zip(self.legs, other.legs):
+            for n, (leg_self, leg_other) in enumerate(zip(self.legs, other.legs)):
                 if leg_self != leg_other:
-                    # TODO also print corresponding label(s)
-                    raise ValueError('\n'.join(["Incompatible legs for +:", str(leg_self), str(leg_other)]))
+                    self_label = self.shape._labels[n]
+                    self_label = '' if self_label is None else self_label + ': '
+                    other_label = other.shape._label[n]
+                    other_label = '' if other_label is None else other_label + ': '
+                    msg = '\n'.join([
+                        'Incompatible legs for +:', 
+                        self_label + str(leg_self), 
+                        other_label + str(leg_other)
+                    ])
+                    raise ValueError(msg)
             res_data = backend.add(self, other)
             return Tensor(res_data, backend=backend, legs=self.legs, labels=self.labels)
         return NotImplemented
@@ -742,11 +751,10 @@ class Tensor(AbstractTensor):
         return cls(data=backend.from_block_func(block_func, legs), backend=backend, legs=legs,
                    labels=labels)
 
-    # TODO: typicall, we'll give legs rather than mean & sigma, make legs first arg?
     @classmethod
-    def random_normal(cls, mean: Tensor = None, sigma: float = 1.,
-                      legs_or_dims: int | VectorSpace | list[int | VectorSpace] = None, backend=None,
-                      labels: list[str | None] = None, dtype: Dtype = None) -> Tensor:
+    def random_normal(cls, legs_or_dims: int | VectorSpace | list[int | VectorSpace] = None,
+                      mean: Tensor = None, sigma: float = 1.,
+                      backend=None, labels: list[str | None] = None, dtype: Dtype = None) -> Tensor:
         r"""Generate a tensor from the normal distribution.
 
         The probability density is
@@ -761,15 +769,15 @@ class Tensor(AbstractTensor):
 
         Parameters
         ----------
+        legs_or_dims : int | VectorSpace | list[int | VectorSpace] | None
+            If `mean` is given, this argument is ignored and legs are the same as those of `mean`.
+            Otherwise, a description of the legs of the result, either via their vectorspace
+            or via an integer, which means a trivial VectorSpace of that dimension.
         mean : Tensor | None
             The mean of the distribution. `mean=None` means a mean of zero and makes the
             `legs_or_dims` argument required.
         sigma : float
             The standard deviation of the distribution
-        legs_or_dims : int | VectorSpace | list[int | VectorSpace] | None
-            If `mean` is given, this argument is ignored and legs are the same as those of `mean`.
-            Otherwise, a description of the legs of the result, either via their vectorspace
-            or via an integer, which means a trivial VectorSpace of that dimension.
         backend : :class:`~tenpy.linalg.backends.abstract_backend.AbstractBackend`
             If `mean` is given, this argument is ignored and the backend is the same as of `mean`.
             Otherwise, the backend for the tensor
