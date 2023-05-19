@@ -79,7 +79,7 @@ class AbstractNoSymmetryBackend(AbstractBackend, AbstractBlockBackend, ABC):
         return u, s, vh, new_leg
 
     def qr(self, a: Tensor, new_r_leg_dual: bool, full: bool) -> tuple[Data, Data, VectorSpace]:
-        q, r = self.matrix_qr(a, full=full)  # FIXME implement
+        q, r = self.matrix_qr(a, full=full)
         new_leg_dim = self.block_shape(r)[0]
         new_leg = VectorSpace.non_symmetric(new_leg_dim, is_dual=new_r_leg_dual, is_real=a.legs[0].is_real)
         return q, r, new_leg
@@ -87,11 +87,11 @@ class AbstractNoSymmetryBackend(AbstractBackend, AbstractBlockBackend, ABC):
     def outer(self, a: Tensor, b: Tensor) -> Data:
         return self.block_outer(a.data, b.data)
 
-    def inner(self, a: Tensor, b: Tensor, axs2: list[int] | None) -> complex:
-        return self.block_inner(a.data, b.data, axs2)
+    def inner(self, a: Tensor, b: Tensor, do_conj: bool, axs2: list[int] | None) -> complex:
+        return self.block_inner(a.data, b.data, do_conj=do_conj, axs2=axs2)
 
-    def transpose(self, a: Tensor, permutation: list[int]) -> Data:
-        return self.block_transpose(a.data, permutation)
+    def permute_legs(self, a: Tensor, permutation: list[int]) -> Data:
+        return self.block_permute_axes(a.data, permutation)
 
     def trace_full(self, a: Tensor, idcs1: list[int], idcs2: list[int]) -> float | complex:
         return self.block_trace_full(a.data, idcs1, idcs2)
@@ -127,3 +127,11 @@ class AbstractNoSymmetryBackend(AbstractBackend, AbstractBlockBackend, ABC):
 
     def mul(self, a: float | complex, b: Tensor) -> Data:
         return self.block_mul(a, b.data)
+
+    def infer_leg(self, block: Block, legs: list[VectorSpace | None], is_dual: bool = False,
+                  is_real: bool = False) -> VectorSpace:
+        idx, *more = [n for n, leg in enumerate(legs) if leg is None]
+        if more:
+            raise ValueError('Can only infer one leg')
+        dim = self.block_shape(block)[idx]
+        return self.VectorSpaceCls.non_symmetric(dim, _is_dual=is_dual, is_real=is_real)

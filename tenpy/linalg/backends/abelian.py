@@ -28,7 +28,7 @@ import copy
 import warnings
 
 from .abstract_backend import AbstractBackend, AbstractBlockBackend, Data, Block, Dtype
-from ..symmetries.groups import FusionStyle, BraidingStyle, Symmetry, Sector
+from ..symmetries.groups import FusionStyle, BraidingStyle, Symmetry, Sector, SectorArray
 from numpy import ndarray
 from ..symmetries.spaces import VectorSpace, ProductSpace
 from ...tools.misc import inverse_permutation, list_to_dict_list
@@ -122,7 +122,7 @@ class AbelianBackendVectorSpace(VectorSpace):
         cp._sectors = cp._sectors[keep]
         cp.multiplicities = new_multiplicities[keep]
         cp.slices = _slices_from_multiplicities(cp.multiplicities)
-        map_block_ind = np.full((new_block_number,), -1, np.intp)
+        map_block_inds = np.full((new_block_number,), -1, np.intp)
         map_block_inds[keep] = cp.perm_block_inds = np.arange(new_block_number)
         return map_block_inds, block_masks, cp
 
@@ -757,21 +757,21 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
             # it's enough to transpose one of the arrays!
             # let's sort axs_a and only transpose axs_b  # TODO optimization: choose depending on size of a/b?
             axs_b = [axs_b[i] for i in np.argsort(axs_a)]
-            b = b.transpose(axs_b + open_axs_b)
+            b = b.permute_legs(axs_b + open_axs_b)
             return a, b, contr_axes
         if last_axes_a:
             # no need to transpose a
             axs_b = [axs_b[i] for i in np.argsort(axs_a)]
-            b = b.transpose(axs_b + open_axs_b)
+            b = b.permute_legs(axs_b + open_axs_b)
             return a, b, contr_axes
         elif first_axes_b:
             # no need to transpose b
             axs_a = [axs_a[i] for i in np.argsort(axs_b)]
-            a = a.transpose(open_axs_a + axs_a)
+            a = a.permute_legs(open_axs_a + axs_a)
             return a, b, contr_axes
         # no special case to avoid transpose -> transpose both
-        a = a.transpose(open_axs_a + axs_a)
-        b = b.transpose(axs_b + open_axs_b)
+        a = a.permute_legs(open_axs_a + axs_a)
+        b = b.permute_legs(axs_b + open_axs_b)
         return a, b, contr_axes
 
     def _tdot_pre_worker(self, a: Tensor, b: Tensor, cut_a:int, cut_b: int):
@@ -924,7 +924,12 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
 
         return AbelianBackendData(res_dtype, res_blocks, res_block_inds)
 
-    def inner(self, a: Tensor, b: Tensor, axs2: list[int] | None) -> complex:
+    def inner(self, a: Tensor, b: Tensor, do_conj: bool, axs2: list[int] | None) -> complex:
+        if not do_conj:
+            # TODO: (JU) have added do_conj argument.
+            #  I think it is enough to just give it to block_inner, but could you double check?
+            raise NotImplementedError
+
         a_blocks = a.data.blocks
         stride = _make_stride([len(l.sectors) for l in a.legs], False)
         a_block_inds = np.sum(a.data.block_inds * stride, axis=1)
@@ -937,13 +942,13 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
             sort = np.argsort(b_block_inds)
             b_block_inds = b_block_inds[sort]
             b_blocks = [b_blocks[i] for i in sort]
-        res = [self.block_inner(a_blocks[i], b_blocks[j], axs2)
+        res = [self.block_inner(a_blocks[i], b_blocks[j], do_conj=do_conj, axs2=axs2)
                for i, j in _iter_common_sorted(a_block_inds, b_block_inds)]
         return np.sum(res)
 
-    def transpose(self, a: Tensor, permutation: list[int]) -> Data:
+    def permute_legs(self, a: Tensor, permutation: list[int]) -> Data:
         blocks = a.data.blocks
-        blocks = [self.block_transpose(block, permutation) for block in a.data.blocks]
+        blocks = [self.block_permute_axes(block, permutation) for block in a.data.blocks]
         block_inds = a.data.block_inds[:, permutation]
         data = AbelianBackendData(a.data.dtype, blocks, block_inds)
         data._sort_block_inds()
@@ -1212,16 +1217,21 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
         res_dtype = b.data.dtype if len(res_blocks) == 0 else self.block_dtype(res_blocks[0])
         return AbelianBackendData(res_dtype, res_blocks, b.data.block_inds)
 
+    def infer_leg(self, block: Block, legs: list[VectorSpace | None], is_dual: bool = False,
+                  is_real: bool = False) -> VectorSpace:
+        raise NotImplementedError  # TODO
+        # TODO how to handle ChargedTensor vs Tensor?
+        #  def detect_qtotal(flat_array, legcharges):
+        #      inds_max = np.unravel_index(np.argmax(np.abs(flat_array)), flat_array.shape)
+        #      val_max = abs(flat_array[inds_max])
+
+        #      test_array = zeros(legcharges)  # Array prototype with correct charges
+        #      qindices = [leg.get_qindex(i)[0] for leg, i in zip(legcharges, inds_max)]
+        #      q = np.sum([l.get_charge(qi) for l, qi in zip(self.legs, qindices)], axis=0)
+        #      return make_valid(q)  # TODO: leg.get_qindex, leg.get_charge
+
     # TODO: support eig(h), eigvals
     # TODO: concatenate and grid_concat
 
 
-# TODO FIXME how to handle ChargedTensor vs Tensor?
-#  def detect_qtotal(flat_array, legcharges):
-#      inds_max = np.unravel_index(np.argmax(np.abs(flat_array)), flat_array.shape)
-#      val_max = abs(flat_array[inds_max])
 
-#      test_array = zeros(legcharges)  # Array prototype with correct charges
-#      qindices = [leg.get_qindex(i)[0] for leg, i in zip(legcharges, inds_max)]
-#      q = np.sum([l.get_charge(qi) for l, qi in zip(self.legs, qindices)], axis=0)
-#      return make_valid(q)  # TODO: leg.get_qindex, leg.get_charge

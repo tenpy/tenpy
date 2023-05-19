@@ -73,12 +73,14 @@ class NumpyBlockBackend(AbstractBlockBackend):
     def block_outer(self, a: Block, b: Block) -> Block:
         return np.tensordot(a, b, ((), ()))
 
-    def block_inner(self, a: Block, b: Block, axs2: list[int] | None) -> complex:
+    def block_inner(self, a: Block, b: Block, do_conj: bool, axs2: list[int] | None) -> complex:
         dim = max(a.ndim, b.ndim)
         axs2 = list(range(dim)) if axs2 is None else axs2
-        return np.tensordot(np.conj(a), b, (list(range(dim)), axs2)).item()
+        if do_conj:
+            a = np.conj(a)
+        return np.tensordot(a, b, (list(range(dim)), axs2)).item()
 
-    def block_transpose(self, a: Block, permutation: list[int]) -> Block:
+    def block_permute_axes(self, a: Block, permutation: list[int]) -> Block:
         return np.transpose(a, permutation)
 
     def block_trace_full(self, a: Block, idcs1: list[int], idcs2: list[int]) -> float | complex:
@@ -101,6 +103,9 @@ class NumpyBlockBackend(AbstractBlockBackend):
 
     def block_squeeze_legs(self, a: Block, idcs: list[int]) -> Block:
         return np.squeeze(a, tuple(idcs))
+
+    def block_add_axis(self, a: Block, pos: int) -> Block:
+        return np.expand_dims(a, pos)
 
     def block_norm(self, a: Block) -> float:
         return np.linalg.norm(a)

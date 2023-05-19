@@ -2,7 +2,7 @@
 from __future__ import annotations
 from abc import ABC, abstractmethod
 from enum import Enum, auto
-from typing import TypeVar, Any, TYPE_CHECKING
+from typing import TypeVar, Any, TYPE_CHECKING, Type
 import numpy as np
 
 from ..symmetries.groups import Symmetry
@@ -64,8 +64,8 @@ class AbstractBackend(ABC):
     Where Xxx describes the symmetry, e.g. NoSymmetry, Abelian, Nonabelian
     and Yyy describes the numerical routines that handle the blocks, e.g. numpy, torch, ...
     """
-    VectorSpaceCls = VectorSpace
-    ProductSpaceCls = ProductSpace
+    VectorSpaceCls: Type[VectorSpace] = VectorSpace
+    ProductSpaceCls: Type[ProductSpace] = ProductSpace
     DataCls = Block
 
     def test_data_sanity(self, a: Tensor):
@@ -192,16 +192,18 @@ class AbstractBackend(ABC):
         ...
 
     @abstractmethod
-    def inner(self, a: Tensor, b: Tensor, axs2: list[int] | None) -> float | complex:
+    def inner(self, a: Tensor, b: Tensor, do_conj: bool, axs2: list[int] | None) -> float | complex:
         """
         inner product of <a|b>, both of which are given as ket-like vectors
         (i.e. in C^N, the entries of a would need to be conjugated before multiplying with entries of b)
-        axs2, if not None, gives the order of the axes of b
+        axs2, if not None, gives the order of the axes of b.
+        If do_conj, a is assumed as a "ket vector", in the same space as b, which will need to be conjugated.
+        Otherwise, a is assumed as a "bra vector", in the dual space, s.t. no conj is needed.
         """
         ...
 
     @abstractmethod
-    def transpose(self, a: Tensor, permutation: list[int]) -> Data:
+    def permute_legs(self, a: Tensor, permutation: list[int]) -> Data:
         ...
 
     @abstractmethod
@@ -261,6 +263,13 @@ class AbstractBackend(ABC):
     def mul(self, a: float | complex, b: Tensor) -> Data:
         ...
 
+    @abstractmethod
+    def infer_leg(self, block: Block, legs: list[VectorSpace | None], is_dual: bool = False,
+                  is_real: bool = False) -> VectorSpace:
+        """Infer a missing leg from the dense block"""
+        # TODO make it poss
+        ...
+
 
 class AbstractBlockBackend(ABC):
     svd_algorithms: list[str]  # first is default
@@ -313,11 +322,11 @@ class AbstractBlockBackend(ABC):
         ...
 
     @abstractmethod
-    def block_inner(self, a: Block, b: Block, axs2: list[int] | None) -> float | complex:
+    def block_inner(self, a: Block, b: Block, do_conj: bool, axs2: list[int] | None) -> float | complex:
         ...
 
     @abstractmethod
-    def block_transpose(self, a: Block, permutation: list[int]) -> Block:
+    def block_permute_axes(self, a: Block, permutation: list[int]) -> Block:
         ...
 
     @abstractmethod
@@ -362,6 +371,11 @@ class AbstractBlockBackend(ABC):
 
     @abstractmethod
     def block_squeeze_legs(self, a: Block, idcs: list[int]) -> Block:
+        # TODO rename to squeeze_axes ?
+        ...
+
+    @abstractmethod
+    def block_add_axis(self, a: Block, pos: int) -> Block:
         ...
 
     @abstractmethod

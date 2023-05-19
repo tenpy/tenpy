@@ -6,7 +6,7 @@ import numpy as np
 from numpy import ndarray
 import copy
 
-from .groups import SectorArray, Symmetry, no_symmetry
+from .groups import Sector, SectorArray, Symmetry, no_symmetry
 
 
 __all__ = ['VectorSpace', 'ProductSpace']
@@ -49,7 +49,7 @@ class VectorSpace:
     ProductSpace = None  # we set this to the ProductSpace class below
     # for subclasses, it's the corresponding ProductSpace subclass, e.g.
     # AbelianBackendVectorSpace.ProductSpace = AbelianBackendProductSpace
-    # This allows combine_legs() etc to generate apropriate sublcasses
+    # This allows combine_legs() etc to generate appropriate sublcasses
 
     def __init__(self, symmetry: Symmetry, sectors: SectorArray, multiplicities: ndarray = None,
                  is_real: bool = False, _is_dual: bool = False):
@@ -63,15 +63,8 @@ class VectorSpace:
         assert np.all(multiplicities > 0)
         assert multiplicities.shape == (num_sectors,)
         self.multiplicities = multiplicities
-        # TODO (JU) if we have a version of sector_dim that works on SectorArray, we could use
-        #  numpy __mul__ and np.sum here...
-        self.dim = sum(symmetry.sector_dim(s) * m for s, m in zip(sectors, self.multiplicities))
+        self.dim = np.sum(symmetry.batch_sector_dim(sectors) * multiplicities)
         self.is_dual = _is_dual
-
-        if is_real:
-            # TODO (JU): pretty sure some parts of linalg.symmetries.groups relies on
-            #  the assumption of complex vector spaces. not sure though, need to check.
-            raise NotImplementedError
         self.is_real = is_real
 
     @classmethod
@@ -92,25 +85,30 @@ class VectorSpace:
             return self.symmetry.dual_sector(sector)
         return sector
 
-    def sectors_str(self) -> str:
-        """short str describing the self._sectors and their multiplicities"""
-        # TODO (JU) what if there are a lot of sectors?
-        # (JH) maybe print up to 5 or 10 with largest multiplicities?
-        return ', '.join(f'{self.symmetry.sector_str(a)}: {mult}'
-                         for a, mult in zip(self._sectors, self.multiplicities))
+    def sectors_str(self, separator=', ', max_len=70) -> str:
+        """short str describing the self._sectors (note the underscore!) and their multiplicities"""
+        full = separator.join(f'{self.symmetry.sector_str(a)}: {mult}'
+                              for a, mult in zip(self._sectors, self.multiplicities))
+        if len(full) <= max_len:
+            return full
 
-    # TODO (JU) this product is not associative; a * (b * c) and (a * b) * c have different nestings.
-    #  should we even define __mul__ ...?
-    def __mul__(self, other):
-        if isinstance(other, VectorSpace):
-            return self.ProductSpace([self, other])
-        return NotImplemented
+        res = ''
+        end = '[...]'
+
+        for idx in np.argsort(self.multiplicities):
+            new = f'{self.symmetry.sector_str(self._sectors[idx])}: {self.multiplicities[idx]}'
+            if len(res) + len(new) + len(end) + 2 * len(separator) > max_len:
+                return res + separator + end
+            res = res + separator + new
+        raise RuntimeError  # a return should be triggered from within the for loop!
 
     def __repr__(self):
-        # TODO (JU) what if there are a lot of sectors?
         dual_str = '.dual' if self.is_dual else ''
         is_real_str = ', is_real=True' if self.is_real else ''
-        return f'{self.__class__.__name__}({self.symmetry!r}, sectors={self.sectors!r}, ' \
+        sectors_str = repr(self._sectors)
+        if len(sectors_str) > 50:
+            sectors_str = '[...]'
+        return f'{self.__class__.__name__}({self.symmetry!r}, sectors={sectors_str}, ' \
                f'multiplicities={self.multiplicities!s}{is_real_str}){dual_str}'
 
     def __str__(self):
@@ -136,7 +134,6 @@ class VectorSpace:
             # now we may assume that checking all multiplicities of self is enough.
             return False
 
-        # TODO: this is probably inefficient. eventually this should all be C(++) anyway...
         # TODO: (JH) we should by convention always sort self._sectors...
         self_order = np.argsort(self.sectors, axis=0)
         other_order = np.argsort(other.sectors, axis=0)
@@ -150,18 +147,20 @@ class VectorSpace:
         return res
 
     def can_contract_with(self, other):
-        if self.is_real:
-            # TODO (JU) is this actually true...?
-            #  it is if we ignore symmetries, but with symmetries we should take care of the sectors?
-            # (JH) just by defining the `is_dual` flag to distinguish bra vs ket,
-            #      I'd say we should still check self == other.dual for is_real=True.
-            return self == other
-        else:
-            return self == other.dual
+        """If self can be contracted with other.
 
-    # TODO (JU) deprecate this in favor of can_contract_with ?
-    def is_dual_of(self, other):
-        return self == other.dual
+        Equivalent to ``self == other.dual``"""
+        if not isinstance(other, VectorSpace):
+            return False
+        if self.is_real != other.is_real:
+            return False
+        if self.is_dual == other.is_dual:
+            return False
+        if self.num_sectors != other.num_sectors:
+            return False
+        # the _sectors (note the underscore!) of the dual space are the same as those of the 
+        # original space, while the other.sectors would be different.
+        return self._sectors == other._sectors
 
     @property
     def is_trivial(self) -> bool:
@@ -176,8 +175,8 @@ class VectorSpace:
 
     @property
     def num_parameters(self) -> int:
-        """The number of free parameters, i.e. the dimension of the space of symmetry-preserving
-        tensors within this space"""
+        """The number of free parameters, i.e. the number of linearly independent symmetric tensors in this space."""
+        # TODO isnt this just the multiplicity of the trivial sector?
         raise NotImplementedError  # TODO
 
 
@@ -324,7 +323,7 @@ class ProductSpace(VectorSpace):
             # This yields overall dual `sectors` to return, which we directly save in
             # self._sectors, such that `self.sectors` (which takes a dual!) yields correct sectors
             # Overall, this ensures consistent sorting/order of sectors between dual ProductSpace!
-        fusion = dict((tuple(s), m) for s, m in zip(spaces[0].sectors, spaces[0].multiplicities))
+        fusion = {tuple(s): m for s, m in zip(spaces[0].sectors, spaces[0].multiplicities)}
         for space in spaces[1:]:
             new_fusion = {}
             for t_a, m_a in fusion.items():
@@ -332,11 +331,7 @@ class ProductSpace(VectorSpace):
                 for s_b, m_b in zip(space.sectors, space.multiplicities):
                     for s_c in symmetry.fusion_outcomes(s_a, s_b):
                         t_c = tuple(s_c)
-                        # TODO do we need to take symmetry.sector_dim into account here?
-                        #  JU: no. the multiplicity of a sector in a space does not include the sector_dim.
-                        #      the dimension of the space is (roughly)
-                        #      sum(multiplicities[i] * sector_dim(sectors[i]))
-                        n = symmetry.n_symbol(s_a, s_b, s_c)
+                        n = symmetry._n_symbol(s_a, s_b, s_c)
                         new_fusion[t_c] = new_fusion.get(t_c, 0) + m_a * m_b * n
             fusion = new_fusion
             # by convention fuse spaces left to right, i.e. (...((0,1), 2), ..., N)

@@ -7,7 +7,7 @@ import pytest
 
 from tenpy.linalg import tensors
 from tenpy.linalg.backends.torch import TorchBlockBackend
-from tenpy.linalg.backends.numpy import NumpyBlockBackend
+from tenpy.linalg.backends.numpy import NumpyBlockBackend, NoSymmetryNumpyBackend
 from tenpy.linalg.symmetries.spaces import VectorSpace
 
 import warnings
@@ -359,7 +359,7 @@ def test_conj(tensor_rng):
     res = tensors.conj(tens)
     res.test_sanity()
     assert res.labels == ['a*', 'b*', None]
-    assert [l1.is_dual_of(l2) for l1, l2 in zip(res.legs, tens.legs)]
+    assert [l1.can_contract_with(l2) for l1, l2 in zip(res.legs, tens.legs)]
     assert np.allclose(res.to_numpy_ndarray(), expect)
 
 

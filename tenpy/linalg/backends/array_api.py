@@ -73,13 +73,15 @@ class ArrayApiBlockBackend(AbstractBlockBackend):
     def block_outer(self, a: Block, b: Block) -> Block:
         return self._api.tensordot(a, b, 0)
 
-    def block_inner(self, a: Block, b: Block, axs2: list[int] | None) -> complex:
+    def block_inner(self, a: Block, b: Block, do_conj: bool, axs2: list[int] | None) -> complex:
         dim = max(a.ndim, b.ndim)
         axs2 = list(range(dim)) if axs2 is None else axs2
-        res = self._api.tensordot(self._api.conj(a), b, (list(range(dim)), axs2))
+        if do_conj:
+            a = self._api.conj(a)
+        res = self._api.tensordot(a, b, (list(range(dim)), axs2))
         return self.block_item(res)
 
-    def block_transpose(self, a: Block, permutation: list[int]) -> Block:
+    def block_permute_axes(self, a: Block, permutation: list[int]) -> Block:
         return self._api.permute_dims(a, permutation)
 
     def block_trace_full(self, a: Block, idcs1: list[int], idcs2: list[int]) -> float | complex:
@@ -94,7 +96,7 @@ class ArrayApiBlockBackend(AbstractBlockBackend):
         trace_dim = np.prod(a.shape[len(remaining):len(remaining)+len(idcs1)])
         a = self._api.reshape(a, (-1, trace_dim, trace_dim))
         return self._api.linalg.trace(a)
-    
+
     def block_conj(self, a: Block) -> Block:
         return self._api.conj(a)
 
@@ -104,6 +106,9 @@ class ArrayApiBlockBackend(AbstractBlockBackend):
 
     def block_squeeze_legs(self, a: Block, idcs: list[int]) -> Block:
         return self._api.squeeze(a, tuple(idcs))
+
+    def block_add_axis(self, a: Block, pos: int) -> Block:
+        return self._api.expand_dims(a, axis=pos)
 
     def block_norm(self, a: Block) -> float:
         res = self._api.linalg.vector_norm(a, axis=None, ord=2)

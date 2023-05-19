@@ -78,14 +78,16 @@ class TorchBlockBackend(AbstractBlockBackend):
     def block_outer(self, a: Block, b: Block) -> Block:
         return torch_module.tensordot(a, b, ([], []))
 
-    def block_inner(self, a: Block, b: Block, axs2: list[int] | None) -> complex:
+    def block_inner(self, a: Block, b: Block, do_conj: bool, axs2: list[int] | None) -> complex:
         # TODO is this faster than torch.sum(a * b.transpose[axs2]) ?
         axs1 = list(range(len(a.shape)))
         if axs2 is None:
             axs2 = axs1
-        return torch_module.tensordot(torch_module.conj(a), b, (axs1, axs2))
+        if do_conj:
+            a = torch_module.conj(a)
+        return torch_module.tensordot(a, b, (axs1, axs2))
 
-    def block_transpose(self, a: Block, permutation: list[int]) -> Block:
+    def block_permute_axes(self, a: Block, permutation: list[int]) -> Block:
         return torch_module.permute(a, permutation)  # TODO: this is documented as a view. is that a problem?
 
     def block_trace_full(self, a: Block, idcs1: list[int], idcs2: list[int]) -> float | complex:
@@ -110,6 +112,9 @@ class TorchBlockBackend(AbstractBlockBackend):
         # TODO (JU) this is ugly... but torch.squeeze squeezes all axes of dim 1, cant control which
         idx = [0 if ax in idcs else slice(None, None, None) for ax in range(len(a.shape))]
         return a[idx]
+
+    def block_add_axis(self, a: Block, pos: int) -> Block:
+        return torch_module.unsqueeze(a, pos)
 
     def block_norm(self, a: Block) -> float:
         return torch_module.norm(a)
