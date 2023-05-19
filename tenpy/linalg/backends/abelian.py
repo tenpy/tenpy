@@ -751,21 +751,21 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
             # it's enough to transpose one of the arrays!
             # let's sort axs_a and only transpose axs_b  # TODO optimization: choose depending on size of a/b?
             axs_b = [axs_b[i] for i in np.argsort(axs_a)]
-            b = b.transpose(axs_b + open_axs_b)
+            b = b.permute_legs(axs_b + open_axs_b)
             return a, b, contr_axes
         if last_axes_a:
             # no need to transpose a
             axs_b = [axs_b[i] for i in np.argsort(axs_a)]
-            b = b.transpose(axs_b + open_axs_b)
+            b = b.permute_legs(axs_b + open_axs_b)
             return a, b, contr_axes
         elif first_axes_b:
             # no need to transpose b
             axs_a = [axs_a[i] for i in np.argsort(axs_b)]
-            a = a.transpose(open_axs_a + axs_a)
+            a = a.permute_legs(open_axs_a + axs_a)
             return a, b, contr_axes
         # no special case to avoid transpose -> transpose both
-        a = a.transpose(open_axs_a + axs_a)
-        b = b.transpose(axs_b + open_axs_b)
+        a = a.permute_legs(open_axs_a + axs_a)
+        b = b.permute_legs(axs_b + open_axs_b)
         return a, b, contr_axes
 
     def _tdot_pre_worker(self, a: Tensor, b: Tensor, cut_a:int, cut_b: int):
@@ -940,9 +940,9 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
                for i, j in _iter_common_sorted(a_block_inds, b_block_inds)]
         return np.sum(res)
 
-    def transpose(self, a: Tensor, permutation: list[int]) -> Data:
+    def permute_legs(self, a: Tensor, permutation: list[int]) -> Data:
         blocks = a.data.blocks
-        blocks = [self.block_transpose(block, permutation) for block in a.data.blocks]
+        blocks = [self.block_permute_axes(block, permutation) for block in a.data.blocks]
         block_inds = a.data.block_inds[:, permutation]
         data = AbelianBackendData(a.data.dtype, blocks, block_inds)
         data._sort_block_inds()

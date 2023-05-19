@@ -81,7 +81,7 @@ class ArrayApiBlockBackend(AbstractBlockBackend):
         res = self._api.tensordot(a, b, (list(range(dim)), axs2))
         return self.block_item(res)
 
-    def block_transpose(self, a: Block, permutation: list[int]) -> Block:
+    def block_permute_axes(self, a: Block, permutation: list[int]) -> Block:
         return self._api.permute_dims(a, permutation)
 
     def block_trace_full(self, a: Block, idcs1: list[int], idcs2: list[int]) -> float | complex:

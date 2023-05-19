@@ -90,8 +90,8 @@ class AbstractNoSymmetryBackend(AbstractBackend, AbstractBlockBackend, ABC):
     def inner(self, a: Tensor, b: Tensor, do_conj: bool, axs2: list[int] | None) -> complex:
         return self.block_inner(a.data, b.data, do_conj=do_conj, axs2=axs2)
 
-    def transpose(self, a: Tensor, permutation: list[int]) -> Data:
-        return self.block_transpose(a.data, permutation)
+    def permute_legs(self, a: Tensor, permutation: list[int]) -> Data:
+        return self.block_permute_axes(a.data, permutation)
 
     def trace_full(self, a: Tensor, idcs1: list[int], idcs2: list[int]) -> float | complex:
         return self.block_trace_full(a.data, idcs1, idcs2)

@@ -87,7 +87,7 @@ class TorchBlockBackend(AbstractBlockBackend):
             a = torch_module.conj(a)
         return torch_module.tensordot(a, b, (axs1, axs2))
 
-    def block_transpose(self, a: Block, permutation: list[int]) -> Block:
+    def block_permute_axes(self, a: Block, permutation: list[int]) -> Block:
         return torch_module.permute(a, permutation)  # TODO: this is documented as a view. is that a problem?
 
     def block_trace_full(self, a: Block, idcs1: list[int], idcs2: list[int]) -> float | complex:

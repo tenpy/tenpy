@@ -80,7 +80,7 @@ class NumpyBlockBackend(AbstractBlockBackend):
             a = np.conj(a)
         return np.tensordot(a, b, (list(range(dim)), axs2)).item()
 
-    def block_transpose(self, a: Block, permutation: list[int]) -> Block:
+    def block_permute_axes(self, a: Block, permutation: list[int]) -> Block:
         return np.transpose(a, permutation)
 
     def block_trace_full(self, a: Block, idcs1: list[int], idcs2: list[int]) -> float | complex:

@@ -16,7 +16,7 @@ from .backends.abstract_backend import Dtype
 from .matrix_operations import svd, truncate_svd, svd_split, leg_bipartition, exp, log
 
 __all__ = ['AbstractTensor', 'Tensor', 'ChargedTensor', 'DiagonalTensor', 'tdot', 'outer', 'inner',
-           'transpose', 'trace', 'conj', 'combine_legs', 'combine_leg', 'split_legs', 'split_leg',
+           'permute_legs', 'trace', 'conj', 'combine_legs', 'combine_leg', 'split_legs', 'split_leg',
            'is_scalar', 'squeeze_legs', 'norm', 'get_same_backend', 'Dtype', 'zero_like',
            'svd', 'truncate_svd', 'svd_split', 'leg_bipartition', 'exp', 'log']
 # svd, svd_truncate, exp, log are implemented in matrix_operations.py
@@ -361,7 +361,7 @@ class AbstractTensor(ABC):
         ...
 
     @abstractmethod
-    def transpose(self, permutation: list[int]) -> AbstractTensor:
+    def permute_legs(self, permutation: list[int]) -> AbstractTensor:
         """See tensors.transpose"""
         ...
 
@@ -487,7 +487,7 @@ class Tensor(AbstractTensor):
             backend = get_same_backend(self, other)
             other_order = match_legs(self, other)
             if other_order is not None:
-                other = transpose(other, other_order)
+                other = permute_legs(other, other_order)
             for n, (leg_self, leg_other) in enumerate(zip(self.legs, other.legs)):
                 if leg_self != leg_other:
                     self_label = self.shape._labels[n]
@@ -844,8 +844,8 @@ class Tensor(AbstractTensor):
         # special case: inner()
         if len(open_legs1) == 0 and len(open_legs2) == 0:
             # TODO add args to inner() with implicit transpose and specify that it shouldn't use conj(a)
-            a = self.transpose(leg_idcs1)
-            b = other.transpose(leg_idcs2)
+            a = self.permute_legs(leg_idcs1)
+            b = other.permute_legs(leg_idcs2)
             return a.conj().inner(b)
         # special case: outer()
         if len(leg_idcs1) == 0:
@@ -905,11 +905,11 @@ class Tensor(AbstractTensor):
         res = backend.inner(self, other, do_conj=do_conj, axs2=leg_order_2)
         return res
 
-    def transpose(self, permutation: list[int | str]) -> AbstractTensor:
+    def permute_legs(self, permutation: list[int | str]) -> AbstractTensor:
         permutation = self.get_leg_idcs(permutation)
         assert len(permutation) == self.num_legs
         assert set(permutation) == set(range(self.num_legs))
-        res_data = self.backend.transpose(self, permutation)
+        res_data = self.backend.permute_legs(self, permutation)
         return Tensor(res_data, backend=self.backend, legs=[self.legs[n] for n in permutation],
                     labels=[self.shape._labels[n] for n in permutation])
 
@@ -948,7 +948,7 @@ class Tensor(AbstractTensor):
         product_spaces = [product_spaces[p] for p in perm_args]  # permuted args such that new_axes is ascending
 
         if transp != tuple(range(len(transp))):
-            res = self.transpose(transp)
+            res = self.permute_legs(transp)
         else:
             res = self.copy(deep=False)
 
@@ -1339,12 +1339,12 @@ def inner(t1: AbstractTensor, t2: AbstractTensor, do_conj: bool = True,
     return t1.inner(t2, do_conj=do_conj, legs1=legs1, legs2=legs2)
 
 
-def transpose(t: AbstractTensor, permutation: list[int]) -> AbstractTensor:
+def permute_legs(t: AbstractTensor, permutation: list[int]) -> AbstractTensor:
     """Change the order of legs of a Tensor.
     """
     # TODO: also have an inplace version?
     # TODO: name it permute_legs or sth instead?
-    return t.transpose(permutation)
+    return t.permute_legs(permutation)
 
 
 def trace(t: AbstractTensor, legs1: int | str | list[int | str] = -2, legs2: int | str | list[int | str] = -1

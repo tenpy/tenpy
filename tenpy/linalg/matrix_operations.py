@@ -53,7 +53,7 @@ def svd(a: AbstractTensor, u_legs: list[int | str] = None, vh_legs: list[int | s
     if need_combine:
         a = a.combine_legs(u_idcs, vh_idcs, new_axes=[0, 1])
     elif u_idcs[0] == 1:   # both single entry, so v_idcs = [1]
-        a = a.transpose([1, 0])
+        a = a.permute_legs([1, 0])
 
     # TODO read algorithm etc from config
     u_data, s_data, vh_data, new_leg = a.backend.svd(a, new_vh_leg_dual)
@@ -101,7 +101,7 @@ def qr(a: AbstractTensor, q_legs: list[int | str] = None, r_legs: list[int | str
     if need_combine:
         a = a.combine_legs(q_idcs, r_idcs, new_axes=[0, 1])
     elif q_idcs[0] == 1:  # this implies q_idcs == [1] and r_idcs == [0]
-        a = a.transpose([1, 0])
+        a = a.permute_legs([1, 0])
 
     q_data, r_data, new_leg = a.backend.qr(a, new_r_leg_dual, full=full)
 
@@ -245,5 +245,5 @@ def _act_block_diagonal_square_matrix(t: AbstractTensor,
         res = res.split_legs()
         transposed = idcs1 + idcs2
         if any(i != j for i, j in enumerate(transposed)):
-            res = res.transpose(inverse_permutation(transposed))
+            res = res.permute_legs(inverse_permutation(transposed))
     return res

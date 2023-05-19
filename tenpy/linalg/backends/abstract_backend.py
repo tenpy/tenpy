@@ -203,7 +203,7 @@ class AbstractBackend(ABC):
         ...
 
     @abstractmethod
-    def transpose(self, a: Tensor, permutation: list[int]) -> Data:
+    def permute_legs(self, a: Tensor, permutation: list[int]) -> Data:
         ...
 
     @abstractmethod
@@ -319,7 +319,7 @@ class AbstractBlockBackend(ABC):
         ...
 
     @abstractmethod
-    def block_transpose(self, a: Block, permutation: list[int]) -> Block:
+    def block_permute_axes(self, a: Block, permutation: list[int]) -> Block:
         ...
 
     @abstractmethod
