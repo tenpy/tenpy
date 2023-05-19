@@ -96,7 +96,7 @@ class ArrayApiBlockBackend(AbstractBlockBackend):
         trace_dim = np.prod(a.shape[len(remaining):len(remaining)+len(idcs1)])
         a = self._api.reshape(a, (-1, trace_dim, trace_dim))
         return self._api.linalg.trace(a)
-    
+
     def block_conj(self, a: Block) -> Block:
         return self._api.conj(a)
 
@@ -106,6 +106,9 @@ class ArrayApiBlockBackend(AbstractBlockBackend):
 
     def block_squeeze_legs(self, a: Block, idcs: list[int]) -> Block:
         return self._api.squeeze(a, tuple(idcs))
+
+    def block_add_axis(self, a: Block, pos: int) -> Block:
+        return self._api.expand_dims(a, axis=pos)
 
     def block_norm(self, a: Block) -> float:
         res = self._api.linalg.vector_norm(a, axis=None, ord=2)

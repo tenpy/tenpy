@@ -364,6 +364,11 @@ class AbstractBlockBackend(ABC):
 
     @abstractmethod
     def block_squeeze_legs(self, a: Block, idcs: list[int]) -> Block:
+        # TODO rename to squeeze_axes ?
+        ...
+
+    @abstractmethod
+    def block_add_axis(self, a: Block, pos: int) -> Block:
         ...
 
     @abstractmethod

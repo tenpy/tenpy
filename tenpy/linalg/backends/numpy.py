@@ -104,6 +104,9 @@ class NumpyBlockBackend(AbstractBlockBackend):
     def block_squeeze_legs(self, a: Block, idcs: list[int]) -> Block:
         return np.squeeze(a, tuple(idcs))
 
+    def block_add_axis(self, a: Block, pos: int) -> Block:
+        return np.expand_dims(a, pos)
+
     def block_norm(self, a: Block) -> float:
         return np.linalg.norm(a)
 

@@ -113,6 +113,9 @@ class TorchBlockBackend(AbstractBlockBackend):
         idx = [0 if ax in idcs else slice(None, None, None) for ax in range(len(a.shape))]
         return a[idx]
 
+    def block_add_axis(self, a: Block, pos: int) -> Block:
+        return torch_module.unsqueeze(a, pos)
+
     def block_norm(self, a: Block) -> float:
         return torch_module.norm(a)
 
