@@ -2,7 +2,7 @@
 from __future__ import annotations
 from abc import ABC, abstractmethod
 from enum import Enum, auto
-from typing import TypeVar, Any, TYPE_CHECKING
+from typing import TypeVar, Any, TYPE_CHECKING, Type
 import numpy as np
 
 from ..symmetries.groups import Symmetry
@@ -64,8 +64,8 @@ class AbstractBackend(ABC):
     Where Xxx describes the symmetry, e.g. NoSymmetry, Abelian, Nonabelian
     and Yyy describes the numerical routines that handle the blocks, e.g. numpy, torch, ...
     """
-    VectorSpaceCls = VectorSpace
-    ProductSpaceCls = ProductSpace
+    VectorSpaceCls: Type[VectorSpace] = VectorSpace
+    ProductSpaceCls: Type[ProductSpace] = ProductSpace
     DataCls = Block
 
     def test_data_sanity(self, a: Tensor):
@@ -261,6 +261,13 @@ class AbstractBackend(ABC):
 
     @abstractmethod
     def mul(self, a: float | complex, b: Tensor) -> Data:
+        ...
+
+    @abstractmethod
+    def infer_leg(self, block: Block, legs: list[VectorSpace | None], is_dual: bool = False,
+                  is_real: bool = False) -> VectorSpace:
+        """Infer a missing leg from the dense block"""
+        # TODO make it poss
         ...
 
 

@@ -127,3 +127,11 @@ class AbstractNoSymmetryBackend(AbstractBackend, AbstractBlockBackend, ABC):
 
     def mul(self, a: float | complex, b: Tensor) -> Data:
         return self.block_mul(a, b.data)
+
+    def infer_leg(self, block: Block, legs: list[VectorSpace | None], is_dual: bool = False,
+                  is_real: bool = False) -> VectorSpace:
+        idx, *more = [n for n, leg in enumerate(legs) if leg is None]
+        if more:
+            raise ValueError('Can only infer one leg')
+        dim = self.block_shape(block)[idx]
+        return self.VectorSpaceCls.non_symmetric(dim, _is_dual=is_dual, is_real=is_real)

@@ -184,6 +184,10 @@ class AbstractNonabelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
         blocks = {coupled: a * block for coupled, block in b.data.blocks.items()}
         return NonAbelianData(blocks, codomain=b.data.codomain, domain=b.data.domain, dtype=b.dtype)
 
+    def infer_leg(self, block: Block, legs: list[VectorSpace | None], is_dual: bool = False,
+                  is_real: bool = False) -> VectorSpace:
+        raise NotImplementedError  # TODO
+
 
 def _block_pairs(a: NonAbelianData, b: NonAbelianData) -> Iterator[tuple[Sector, Block, Block]]:
     """yield all block pairs, if a coupled sector appears as a key in the blocks dictionary

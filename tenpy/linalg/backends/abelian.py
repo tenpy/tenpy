@@ -1210,16 +1210,21 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
         res_dtype = b.data.dtype if len(res_blocks) == 0 else self.block_dtype(res_blocks[0])
         return AbelianBackendData(res_dtype, res_blocks, b.data.block_inds)
 
+    def infer_leg(self, block: Block, legs: list[VectorSpace | None], is_dual: bool = False,
+                  is_real: bool = False) -> VectorSpace:
+        raise NotImplementedError  # TODO
+        # TODO how to handle ChargedTensor vs Tensor?
+        #  def detect_qtotal(flat_array, legcharges):
+        #      inds_max = np.unravel_index(np.argmax(np.abs(flat_array)), flat_array.shape)
+        #      val_max = abs(flat_array[inds_max])
+
+        #      test_array = zeros(legcharges)  # Array prototype with correct charges
+        #      qindices = [leg.get_qindex(i)[0] for leg, i in zip(legcharges, inds_max)]
+        #      q = np.sum([l.get_charge(qi) for l, qi in zip(self.legs, qindices)], axis=0)
+        #      return make_valid(q)  # TODO: leg.get_qindex, leg.get_charge
+
     # TODO: support eig(h), eigvals
     # TODO: concatenate and grid_concat
 
 
-# TODO how to handle ChargedTensor vs Tensor?
-#  def detect_qtotal(flat_array, legcharges):
-#      inds_max = np.unravel_index(np.argmax(np.abs(flat_array)), flat_array.shape)
-#      val_max = abs(flat_array[inds_max])
 
-#      test_array = zeros(legcharges)  # Array prototype with correct charges
-#      qindices = [leg.get_qindex(i)[0] for leg, i in zip(legcharges, inds_max)]
-#      q = np.sum([l.get_charge(qi) for l, qi in zip(self.legs, qindices)], axis=0)
-#      return make_valid(q)  # TODO: leg.get_qindex, leg.get_charge
