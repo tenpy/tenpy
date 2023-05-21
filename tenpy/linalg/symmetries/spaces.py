@@ -146,6 +146,20 @@ class VectorSpace:
         res.is_dual = not self.is_dual
         return res
 
+    def flip_is_dual(self) -> VectorSpace:
+        """Return copy of `self` with same :attr:`sectors`, but opposite :attr:`is_dual` flag.
+
+        Note that this leg can often not be contracted with `self` since the order of the
+        :attr:`sectors` might have changed.
+        """
+        # note: yields dual self._sectors so can have different sorting of _sectors!
+        # sectors can get sorted in VectorSpace.__init__() (e.g. in AbelianBackendVectorSpace)
+        return self.__class__(self.symmetry,
+                              self.symmetry.dual_sectors(self._sectors),
+                              self.multiplicities,
+                              self.is_real,
+                              not self.is_dual)
+
     def can_contract_with(self, other):
         """If self can be contracted with other.
 
@@ -207,18 +221,26 @@ class ProductSpace(VectorSpace):
         While mathematically
         ``ProductSpace([s.dual for s in spaces]).dual == ProductSpace(spaces)``,
         in this implementation we explicitly distinguish those spaces, and consider them as
-        non-equal due to a different :attr:`is_dual` flag!
-        This flag is somewhat artifical, but necessary to allows us to
+        non-equal due to a different :attr:`is_dual` flag.
+        Instead, we have
+        ``ProductSpace(spaces).dual == ProductSpace([s.dual for s in spaces], _is_dual=True)``
+        and hence
+        ``ProductSpace([s.dual for s in spaces]).dual == ProductSpace(spaces, _is_dual=True)``.
+        Note that the `spaces` passed to `ProductSpace` are always the :attr:`spaces`
+        that you can split the `ProductSpace` into!
+        The :attr:`is_dual` flag is somewhat artifical, but necessary to allows us to
         a) sort by charge sectors on the non-dual spaces to ensure matching order between legs that
         can be contracted, and further
         b) consistently view every `ProductSpace` as a :class:`VectorSpace`, i.e. have proper
         subclass behavior.
+        In principle, you can change the flag after creating the ProductSpace with
+        :meth:`flip_is_dual`, but note that this usually gives non-contractible legs (despite
+        having mathematically the same sectors - the order in which we store them is different).
 
     Parameters
     ----------
     spaces:
         The factor spaces that multiply to this space.
-        For `is_dual=True`, they are the factors of the dual space.
     _is_dual : bool
         Flag indicating wether the fusion space represents a dual (bra) space or a non-dual (ket)
         space. See note above.
@@ -258,20 +280,12 @@ class ProductSpace(VectorSpace):
 
         This realizes the isomorphism between ``V.dual * W.dual`` and ``(V * W).dual``
         for `VectorSpace` ``V`` and ``W``.
-
-        Note that e.g. the AbelianBackend sorts differently in this case, leading to a permutation
-        of the block indices.
+        However, note that the returned space can often not be contracted with `self`
+        since the order of the :attr:`sectors` might have changed.
         """
-        # note: yields dual self._sector so can have different sorting of _sectors!
+        # note: yields dual self._sectors so can have different sorting of _sectors!
         # so can't just pass self._sectors and self._multiplicities
-        return self.ProductSpace(spaces=self.spaces, _is_dual=not self.is_dual)
-
-    def gauge_is_dual(self, is_dual: bool) -> ProductSpace:
-        """Return a ProductSpace isomorphic (or equal) to self with the given is_dual attribute."""
-        if is_dual == self.is_dual:
-            return self
-        else:
-            return self.flip_is_dual()
+        return self.__class__(spaces=self.spaces, _is_dual=not self.is_dual)
 
     def __len__(self):
         return len(self.spaces)
