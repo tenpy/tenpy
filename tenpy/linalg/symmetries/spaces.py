@@ -79,7 +79,10 @@ class VectorSpace:
         return self._sectors
 
     def sector(self, i: int) -> Sector:
-        """Return a single sector for a given block index `i`."""
+        """Return a single sector for a given index `i`.
+        This is equivalent to ``self.sectors[i]``, but faster if ``self.is_dual``.
+        In particular, it ignores the ``self.sector_perm``.
+        """
         sector = self._sectors[i, :]
         if self.is_dual:
             return self.symmetry.dual_sector(sector)
@@ -172,18 +175,25 @@ class VectorSpace:
             return False
         if self.num_sectors != other.num_sectors:
             return False
+        if self.symmetry != other.symmetry:
+            return False
         # the _sectors (note the underscore!) of the dual space are the same as those of the
         # original space, while the other.sectors would be different.
-        return np.all(self._sectors == other._sectors)
+        return np.all(self._sectors == other._sectors) and np.all(self.multiplicities == other.multiplicities)
 
     @property
     def is_trivial(self) -> bool:
+        """Whether self is the trivial space.
+
+        The trivial space is the one-dimensional space which consists only of the trivial sector,
+        appearing exactly once. In a mathematical sense, the trivial sector _is_ the trivial space.
+        """
         if self._sectors.shape[0] != 1:
-            return False
-        if not np.all(self._sectors[0] == self.symmetry.trivial_sector):
             return False
         # have already checked if there is more than 1 sector, so can assume self.multiplicities.shape == (1,)
         if self.multiplicities[0] != 1:
+            return False
+        if not np.all(self._sectors[0] == self.symmetry.trivial_sector):
             return False
         return True
 
@@ -219,7 +229,7 @@ class ProductSpace(VectorSpace):
 
     .. note ::
         While mathematically
-        ``ProductSpace([s.dual for s in spaces]).dual == ProductSpace(spaces)``,
+        ``ProductSpace([s.dual for s in spaces]).dual`` and ``ProductSpace(spaces)`` are the same,
         in this implementation we explicitly distinguish those spaces, and consider them as
         non-equal due to a different :attr:`is_dual` flag.
         Instead, we have
@@ -264,6 +274,7 @@ class ProductSpace(VectorSpace):
                          is_real=is_real,
                          _is_dual=_is_dual)
 
+    # TODO python naming convention is snake case: as_vector_space
     def as_VectorSpace(self):
         """Forget about the substructure of the ProductSpace but view only as VectorSpace.
         This is necessary before truncation, after which the product-space structure is no

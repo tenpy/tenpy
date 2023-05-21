@@ -456,7 +456,7 @@ class Tensor(AbstractTensor):
         if deep:
             return Tensor(data=self.backend.copy_data(self.data),
                           backend=self.backend,
-                          legs=self.legs[:],
+                          legs=self.legs[:],  # TODO do we think of legs as immutable? if not, copy!
                           labels=self.labels[:])
         return Tensor(data=self.data,
                       backend=self.backend,
@@ -1181,7 +1181,6 @@ class ChargedTensor(AbstractTensor):
         dummy_leg_state : block
             The state on the dummy leg. Defaults to ``[1.]``.
         """
-        is_real = False  # TODO: dummy
         if backend is None:
             backend = get_default_backend()
         if labels is None:

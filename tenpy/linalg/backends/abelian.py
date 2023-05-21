@@ -9,7 +9,7 @@ Changes compared to old np_conserved:
     - `Array.qdata`, "qind" and "qindices" to `AbelianBackendData.block_inds` and "block indices"
     - `LegPipe.qmap` to `AbelianBackendProductSpace.block_ind_map` (witch changed column order!!!)
     - `LegPipe._perm` to `ProductSpace._perm_block_inds_map`
-    - `LetCharge.get_block_sizes()` is just `VectorSpace.multiplicities`
+    - `LegCharge.get_block_sizes()` is just `VectorSpace.multiplicities`
 - keep VectorSpace and ProductSpace "sorted" and "bunched",
   i.e. do not support legs with smaller blocks to effectively allow block-sparse tensors with
   smaller blocks than dictated by symmetries (which we actually have in H_MPO on the virtual legs...)
@@ -113,7 +113,7 @@ class AbelianBackendVectorSpace(VectorSpace):
             Copy of self with the qind projected by `mask`.
         """
         mask = np.asarray(mask, dtype=np.bool_)
-        cp = copy.copy()
+        cp = copy.copy(self)
         block_masks = [mask[b:e] for b, e in self.slices]
         new_multiplicities = np.array([np.sum(bm) for bm in block_masks])
         keep = np.nonzero(new_multiplicities)[0]
@@ -122,7 +122,7 @@ class AbelianBackendVectorSpace(VectorSpace):
         cp._sectors = cp._sectors[keep]
         cp.multiplicities = new_multiplicities[keep]
         cp.slices = _slices_from_multiplicities(cp.multiplicities)
-        map_block_inds = np.full((new_block_number,), -1, np.intp)
+        map_block_inds = np.full((new_block_number,), -1, np.int)
         map_block_inds[keep] = cp.perm_block_inds = np.arange(new_block_number)
         return map_block_inds, block_masks, cp
 
@@ -306,7 +306,7 @@ class AbelianBackendProductSpace(ProductSpace, AbelianBackendVectorSpace):
         If you really want to project and split afterwards, use the following work-around,
         which is for example used in :class:`~tenpy.algorithms.exact_diagonalization`:
 
-        1) Create the full pipe and save it separetely.
+        1) Create the full pipe and save it separately.
         2) Convert the Pipe to a Leg & project the array with it.
         3) [... do calculations ...]
         4) To split the 'projected pipe' of `A`, create an empty array `B` with the legs of A,

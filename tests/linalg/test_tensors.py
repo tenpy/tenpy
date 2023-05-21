@@ -61,12 +61,19 @@ def test_Tensor_classmethods(backend, vector_space_rng, backend_data_rng, np_ran
     dense_block = backend.block_from_numpy(numpy_block)
 
     if isinstance(backend, AbstractAbelianBackend):
-        # There are two problems:
-        #  - We need to generate numpy_block and dense_block such that they are symmetric,
-        #    i.e. only non-zero (up to tolerance) within the allowed blocks
+        # TODO (JU): there are two problems:
+        #  - We need to generate numpy_block and dense_block such that they are symmetric (up to tolerance),
+        #    i.e. only non-zero within the allowed blocks.
+        #    The easy way would be to generate them via Tensor.from_numpy_func(...).to_dense_block()
+        #    But that would go against the spirit of testing isolated features.
         #  - Randomly generating the legs seems to be a bad idea.
         #    Here, I get a combination of legs that allows no valid blocks...
         #    I.e. `backends.abelian._valid_block_indices(legs)` is empty.
+        #    Idea: Generate N-1 legs randomly, then construct the last as follows;
+        #          Form the ProductSpace of those, convert to VectorSpace, take the dual, randomly remove some of the sectors,
+        #          add some additional random sectors.
+        #          This guarantees that at least for those sectors left untouched, we get allowed blocks.
+        #          So we probably want a "rng" that generates all legs at once?
         pytest.xfail('Need to redesign tests')
 
     print('checking from_dense_block')
