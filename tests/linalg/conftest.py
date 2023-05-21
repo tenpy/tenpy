@@ -73,7 +73,7 @@ def symmetry_sectors_rng(symmetry, np_random):
 
 def random_vector_space(symmetry, max_num_blocks=5, max_block_size=5, np_random=None, VectorSpace=spaces.VectorSpace):
     if np_random is None:
-        np_ranodm = np.random.default_rng()
+        np_random = np.random.default_rng()
     len_ = np_random.integers(1, max_num_blocks, endpoint=True)
     sectors = random_symmetry_sectors(symmetry, np_random, len_)
     mults = np_random.integers(1, max_block_size, size=(len(sectors),), endpoint=True)

@@ -28,7 +28,7 @@ import copy
 import warnings
 
 from .abstract_backend import AbstractBackend, AbstractBlockBackend, Data, Block, Dtype
-from ..symmetries.groups import FusionStyle, BraidingStyle, Symmetry, Sector, SectorArray
+from ..symmetries.groups import FusionStyle, BraidingStyle, Symmetry, Sector, SectorArray, AbelianGroup
 from numpy import ndarray
 from ..symmetries.spaces import VectorSpace, ProductSpace
 from ...tools.misc import inverse_permutation, list_to_dict_list
@@ -372,7 +372,7 @@ def _find_row_differences(sectors: SectorArray, include_len: bool=False):
     return np.nonzero(diff)[0]  # get the indices of True-values
 
 
-def _fuse_abelian_charges(symmetry: AbelianSymmetry, *sector_arrays: SectorArray) -> SectorArray:
+def _fuse_abelian_charges(symmetry: AbelianGroup, *sector_arrays: SectorArray) -> SectorArray:
     assert symmetry.fusion_style == FusionStyle.single
     fusion = sector_arrays[0]
     for sectors in sector_arrays[1:]:
@@ -529,7 +529,7 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
         if isinstance(leg, (AbelianBackendVectorSpace, AbelianBackendProductSpace)):
             return leg
         elif isinstance(leg, ProductSpace):
-            spaces = [self.convert_vector_space(s) for s in spaces]
+            spaces = [self.convert_vector_space(s) for s in leg.spaces]
             return AbelianBackendProductSpace(spaces, _is_dual=leg.is_dual)
         else:
             return AbelianBackendVectorSpace(leg.symmetry, leg._sectors, leg.multiplicities,
@@ -857,7 +857,7 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
             u_blocks.append(u)
             s_blocks.append(s)
             s_lens.append(len(s))
-            v_blocks.append(v)
+            vh_blocks.append(vh)
         # TODO: need second version with truncation, here we just keep everything
         u, s, vh = self.matrix_svd(a)
         symmetry = a.legs[0].symmetry
@@ -878,7 +878,7 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
             # same dual flag in legs of vH => opposite _sectors => opposite sorting!!!
             sectors = symmetry.dual_sectors(leg_R._sectors[block_inds_R, :])  # not sorted
             new_leg = AbelianBackendVectorSpace(symmetry,
-                                                leg_R._sectors[block_inds_R, :],
+                                                sectors,
                                                 leg_R.multiplicities[block_inds_R],
                                                 is_real=leg_R.is_real,
                                                 _is_dual=new_vh_leg_dual)
@@ -896,9 +896,10 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
             u_blocks = [u_blocks[i] for i in sort]
             s_blocks = [s_blocks[i] for i in sort]
 
-        return (AbelianBackendData(dtype, u_blocks, u_block_inds),
-                AbelianBackendDiagonalData(dtype, s_blocks, s_block_inds),
-                AbelianBackendData(dtype, v_blocks, vh_block_inds),
+        # TODO (JU) this assumes same dtype withput explicitly checking. thats probably ok...
+        return (AbelianBackendData(a.dtype, u_blocks, u_block_inds),
+                AbelianBackendDiagonalData(a.dtype.to_real, s_blocks, s_block_inds),
+                AbelianBackendData(a.dtype, vh_blocks, vh_block_inds),
                 new_leg)
 
     def qr(self, a: Tensor, new_r_leg_dual: bool, full: bool) -> tuple[Data, Data, VectorSpace]:

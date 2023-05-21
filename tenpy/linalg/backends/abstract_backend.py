@@ -41,6 +41,12 @@ class Dtype(Enum):
             return dtype
         return Dtype(dtype.value + 1)
 
+    @property
+    def to_real(dtype):
+        if dtype.value % 2 == 0:
+            return dtype
+        return Dtype(dtype.value - 1)
+
     def common(*dtypes):
         res = Dtype(max(t.value for t in dtypes))
         if res.is_real:
