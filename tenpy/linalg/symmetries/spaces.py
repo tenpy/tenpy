@@ -15,6 +15,20 @@ __all__ = ['VectorSpace', 'ProductSpace']
 class VectorSpace:
     """A vector space, which decomposes into sectors of a given symmetry.
 
+
+    Attributes
+    ----------
+    sectors : 2D np array of int
+        The sectors that compose this space.
+    _sectors: : 2D np array of int
+        Internally stored version of :attr:`sectors`. These are the sectors of the "non-dual" ket-space,
+        that is either equal (if `self.is_dual is False`) or isomorphic (if `self.is_dual is True`) to
+        `self`. This allows us to bring the sectors in a canonical order that is the same for a space
+        and its dual, by sorting `_sectors` instead of `sectors`.
+    is_dual : bool
+        Whether this is the dual (a.k.a. bra) space, composed of `sectors == symmtery.dual_sectors(_sectors)`
+        or the regular (a.k.a. ket) space composed of `sectors == _sectors`.
+
     Parameters
     ----------
     symmetry:
@@ -35,16 +49,15 @@ class VectorSpace:
         Otherwise it is over the complex numbers (default).
     _is_dual : bool
         Whether this is the "normal" (i.e. ket) or dual (i.e. bra) space.
-        To construct a dual space, consider using `space.dual` instead.
 
         .. warning :
-            For ``_is_dual==True``, the passed `sectors` are interpreted as the sectors of
-            the ("non-dual") ket-space isomorphic to self.
+            For ``_is_dual is True``, the passed `sectors` are interpreted as the sectors of the
+            ("non-dual") ket-space isomorphic to self.
             They are stored as ``self._sectors``, while ``self.sectors``, accessed via the property,
-            are the duals of `sectors == self._sectors` if ``_is_dual==True``.
+            are the duals of `sectors == self._sectors` if ``_is_dual is True``.
             This means that to construct the dual of ``VectorSpace(..., some_sectors)``,
             we need to call ``VectorSpace(..., some_sectors, _is_dual=True)`` and in particular
-            pass the _same_ sectors.
+            pass the *same* sectors.
     """
     ProductSpace = None  # we set this to the ProductSpace class below
     # for subclasses, it's the corresponding ProductSpace subclass, e.g.
@@ -228,35 +241,62 @@ class ProductSpace(VectorSpace):
     but with an associated basis change implied to allow preserving the symmetry.
 
     .. note ::
-        While mathematically
-        ``ProductSpace([s.dual for s in spaces]).dual`` and ``ProductSpace(spaces)`` are the same,
-        in this implementation we explicitly distinguish those spaces, and consider them as
-        non-equal due to a different :attr:`is_dual` flag.
-        Instead, we have
-        ``ProductSpace(spaces).dual == ProductSpace([s.dual for s in spaces], _is_dual=True)``
-        and hence
-        ``ProductSpace([s.dual for s in spaces]).dual == ProductSpace(spaces, _is_dual=True)``.
-        Note that the `spaces` passed to `ProductSpace` are always the :attr:`spaces`
-        that you can split the `ProductSpace` into!
-        The :attr:`is_dual` flag is somewhat artifical, but necessary to allows us to
-        a) sort by charge sectors on the non-dual spaces to ensure matching order between legs that
-        can be contracted, and further
-        b) consistently view every `ProductSpace` as a :class:`VectorSpace`, i.e. have proper
-        subclass behavior.
-        In principle, you can change the flag after creating the ProductSpace with
-        :meth:`flip_is_dual`, but note that this usually gives non-contractible legs (despite
-        having mathematically the same sectors - the order in which we store them is different).
+        While mathematically the dual of the product :math:`(V \otimes W)^*` is the same as the
+        product of the duals :math:`V^* \otimes W^*`, we distinguish these two objects in the
+        implementation. This allows us to fulfill all of the following constraints
+        a) Have the same order of `_sectors` for a space and its dual, to make contractions easier.
+        b) Consistently view every ProductSpace as a VectorSpace, i.e. have proper subclass behavior
+           and in particular a well-behaved `is_dual` attribute.
+        c) A ProductSpace can always be split into its :attr:`spaces`.
+
+        As an example, consider two VectorSpaces ``V`` and ``W`` and the following four possible
+        products::
+
+            ==== ============================ ================== ========= =================
+                 Mathematical Expression      .spaces            .is_dual  ._sectors
+            ==== ============================ ================== ========= =================
+            P1   :math:`V \otimes W`          [V, W]             False     P1._sectors
+            P2   :math:`(V \otimes W)^*`      [V.dual, W.dual]   True      P1._sectors
+            P3   :math:`V^* \otimes W^*`      [V.dual, W.dual]   False     dual(P1._sectors)
+            P4   :math:`(V^* \otimes W^*)^*`  [V, W]             True      dual(P1._sectors)
+            ==== ============================ ================== ========= =================
+
+        They can be related to each other via the :attr:`dual` property or via :meth:`flip_is_dual`.
+        In this example we have `P1.dual == P2`` and ``P3.dual == P4``, as well as
+        ``P1.flip_is_dual() == P4`` and ``P2.flip_is_dual() == P3``.
+
+        The mutually dual spaces, e.g. ``P1`` and ``P2``, can contracted with each other, as they
+        have opposite :attr:`is_dual` and matching :attr:`._sectors`.
+        The spaces related by :meth:`flip_is_dual()`, e.g. ``P2`` and ``P3``, would be considered
+        the same space mathematically, but in this implementation we have ``P2 != P3`` due to the
+        different :attr:`is_dual` attribute.
+        Since they represent the same space, they have the same entries in :attr:`sectors` (no
+        underscore!), but not necessarily in the same order; due to the different :attr:`is_dual`,
+        their :attr:`_sectors` are different and we sort by :attr:`_sectors`, not :attr:`sectors`.
+        This also means that ``P1.can_contract_with(P3) is False``.
+        The contraction can be done, however, by first converting ``P3.flip_is_dual() == P2``,
+        since then ``P1.can_contract_with(P2) is True``.
+        # TODO (JU) is there a corresponding function that does this on a tensor? -> reference it.
+
+        This convention has the downside that the mathematical notation :math:`P_2 = (V \otimes W)^*`
+        does not transcribe trivially into a single call of ``ProductSpace.__init__``, since
+        ``P2 = ProductSpace([V.dual, W.dual], is_dual=True)``.
+        Consider writing ``P2 = ProductSpace([V, W]).dual`` instead for more readable code,
+        if performance is not critical.
 
     Parameters
     ----------
     spaces:
         The factor spaces that multiply to this space.
     _is_dual : bool
-        Flag indicating wether the fusion space represents a dual (bra) space or a non-dual (ket)
-        space. See note above.
+        Flag indicating wether the fusion space represents a dual (bra) space or a non-dual (ket) space.
+
+        .. warning ::
+            When setting `_is_dual=True`, consider the note above!
+
     _sectors, _multiplicities:
         Can optionally be passed to avoid recomputation.
-        These are the inputs to VectorSpace.__init__, so they are unchanged by flipping is_dual.
+        These are the inputs to VectorSpace.__init__, as computed by _fuse_spaces.
     """
 
     def __init__(self, spaces: list[VectorSpace], _is_dual: bool = False,
@@ -296,6 +336,9 @@ class ProductSpace(VectorSpace):
         """
         # note: yields dual self._sectors so can have different sorting of _sectors!
         # so can't just pass self._sectors and self._multiplicities
+        # TODO (JU) we can pass self.symmetry.dual_sectors(self._sectors) and self.multiplicities.
+        #           we just need to be careful if we need to sort them here or if __init__ takes care of it.
+        # TODO (JU) @jhauschild : why self.__class__ over ProductSpace?
         return self.__class__(spaces=self.spaces, _is_dual=not self.is_dual)
 
     def __len__(self):
