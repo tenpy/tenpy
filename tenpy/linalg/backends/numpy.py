@@ -175,6 +175,9 @@ class NumpyBlockBackend(AbstractBlockBackend):
         eye = np.reshape(eye, legs + legs)
         return eye
 
+    def block_kron(self, a: Block, b: Block) -> Block:
+        return np.kron(a, b)
+
 
 class NoSymmetryNumpyBackend(NumpyBlockBackend, AbstractNoSymmetryBackend):
     pass

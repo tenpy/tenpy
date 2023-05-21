@@ -439,3 +439,8 @@ class AbstractBlockBackend(ABC):
     def eye_block(self, legs: list[int], dtype: Dtype) -> Data:
         """eye from legs to dual of legs (result has ``2 * len(legs)`` axes!!)"""
         ...
+
+    @abstractmethod
+    def block_kron(self, a: Block, b: Block) -> Block:
+        """The kronecker product, like numpy.kron"""
+        ...

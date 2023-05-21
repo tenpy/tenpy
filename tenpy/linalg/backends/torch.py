@@ -165,6 +165,9 @@ class TorchBlockBackend(AbstractBlockBackend):
         eye = torch_module.reshape(eye, legs + legs)
         return eye
 
+    def block_kron(self, a: Block, b: Block) -> Block:
+        return torch_module.kron(a, b)
+
 
 class NoSymmetryTorchBackend(TorchBlockBackend, AbstractNoSymmetryBackend):
     def __init__(self, device: str = 'cpu'):

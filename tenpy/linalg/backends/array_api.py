@@ -167,6 +167,9 @@ class ArrayApiBlockBackend(AbstractBlockBackend):
         eye = self._api.reshape(eye, legs + legs)
         return eye
 
+    def block_kron(self, a: Block, b: Block) -> Block:
+        raise NotImplementedError  # TODO not in API...?
+
 
 class NoSymmetryArrayApiBackend(ArrayApiBlockBackend, AbstractNoSymmetryBackend):
     def __init__(self, api_namespace):
