@@ -3,15 +3,11 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Iterable, Iterator, TYPE_CHECKING
+import numpy as np
 
 from .abstract_backend import AbstractBackend, AbstractBlockBackend, Block, Dtype
-from ..symmetries.groups import FusionStyle, Sector, Symmetry
+from ..symmetries.groups import FusionStyle, Sector, SectorArray, Symmetry
 from ..symmetries.spaces import VectorSpace, ProductSpace
-
-
-__all__ = ['AbstractNonabelianBackend', 'NonAbelianData', 'FusionTree', 'fusion_trees',
-           'all_fusion_trees', 'coupled_sectors']
-
 
 if TYPE_CHECKING:
     # can not import Tensor at runtime, since it would be a circular import
@@ -19,20 +15,102 @@ if TYPE_CHECKING:
     from ..tensors import Tensor
 
 
+__all__ = ['AbstractNonabelianBackend', 'NonAbelianData', 'FusionTree', 'fusion_trees',
+           'all_fusion_trees', 'coupled_sectors']
+
+
+class NonabelianBackendProductSpace(ProductSpace):
+
+    @classmethod
+    def from_product_space(cls, space: ProductSpace) -> NonabelianBackendProductSpace:
+        if isinstance(space, NonabelianBackendProductSpace):
+            return space
+        return cls(spaces=_unpack_flat_spaces(space.spaces), _is_dual=space.is_dual, _sectors=space._sectors,
+                   _multiplicities=space.multiplicities)
+
+    def block_size(self, coupled: Sector) -> int:
+        # OPTIMIZE try to iterate over block_sizes together with coupled, instead of searching for coupled...
+        raise NotImplementedError  # TODO
+
+    def subblock_size(self, fusion_tree: FusionTree) -> int:
+        raise NotImplementedError  # TODO
+
+    def subblock_slice(self, fusion_tree: FusionTree) -> slice:
+        raise NotImplementedError  # TODO
+
+
+def _unpack_flat_spaces(spaces: list[VectorSpace]) -> list[VectorSpace]:
+    """In a list of spaces, unpack any ProductSpaces by inserting their .spaces into the list.
+    The result is a "flat" list of spaces, which are not ProductSpaces"""
+    res = []
+    for s in spaces:
+        if isinstance(s, ProductSpace):
+            res.extend(_unpack_flat_spaces(s.spaces))
+        else:
+            res.append(s)
+    return res
+
+
 @dataclass
 class NonAbelianData:
-    # NOTE: assumes the first num_in_legs legs to be "ingoing" i.e. part of the domain, the rest
-    # as outgoing, i.e. part of the codomain
-    # per default, all legs are outgoing
+    r"""Data for a tensor
+
+    We store tensors as linear maps
+
+        T : domain -> codomain
+
+    where domain = NonabelianBackendProductSpace([V_1, V_2, ..., V_M])
+    and codomain = NonabelianBackendProductSpace([W_1, W_2, ..., W_N])
+    along with codomain_idcs and domain_idcs which tell us how they are embedded in the tensor.legs
+
+    There is an additional freedom, how the legs are divided between domain and codomain.
+    Instead of having a space ``A`` in the codomain, we can instead have ``A.dual`` in the domain.
+    For example, a tensor with ``T.legs = [A, B, C]`` can be represented by
+    ``NonAbelianData(..., codomain=[A, B, C], domain=[], codomain_idcs=[0, 1, 2], domain_idcs=[])``
+    or ``NonAbelianData(..., codomain=[A, B], domain=[C.dual], codomain_idcs=[0, 1], domain_idcs=[2])``.
+    Note that an empty (co)domain ``NonabelianBackendProductSpace([])`` represents the underlying
+    field, i.e. :math:`\Rbb` or :math:`\Cbb`.
+    """
     blocks: dict[Sector, Block]
-    codomain: ProductSpace
-    domain: ProductSpace
+    codomain: NonabelianBackendProductSpace
+    domain: NonabelianBackendProductSpace
+    codomain_idcs: list[int]
+    domain_idcs: list[int]
+    # TODO this does not work if tensor.legs contains ProductSpaces!
     dtype: Dtype
+
+    def get_sub_block(self, splitting_tree: FusionTree, fusion_tree: FusionTree):
+        block = self.blocks[fusion_tree.coupled]
+        idx = (self.codomain.subblock_slice(splitting_tree),
+               self.domain.subblock_slice(fusion_tree))
+        # TODO do we assume that blocks can be indexed like that?
+        return block[idx]
 
 
 # TODO eventually remove AbstractBlockBackend inheritance, it is not needed,
 #  jakob only keeps it around to make his IDE happy
 class AbstractNonabelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
+
+    VectorSpaceCls = VectorSpace
+    ProductSpaceCls = NonabelianBackendProductSpace
+    DataCls = NonAbelianData
+
+    def test_data_sanity(self, a: Tensor):
+        super().test_data_sanity(a)
+        for c, block in a.data.blocks.items():
+            assert a.symmetry.is_valid_sector(c)
+            assert self.block_shape(block) == (a.data.codomain.block_size(c), a.data.domain.block_size(c))
+        assert set(a.data.codomain_legs + a.data.domain_legs) == set(range(a.num_legs))
+        for idx, leg in zip(a.data.codomain_legs, a.data.codomain.spaces):
+            assert a.legs[idx] == leg
+        for idx, leg in zip(a.data.domain_legs, a.data.domain.spaces):
+            assert a.legs[idx] == leg.dual
+
+    def convert_vector_space(self, leg: VectorSpace) -> VectorSpace:
+        if isinstance(leg, ProductSpace):
+            return NonabelianBackendProductSpace.from_product_space(leg)
+        else:
+            return leg
 
     def get_dtype_from_data(self, a: NonAbelianData) -> Dtype:
         return a.dtype
@@ -40,42 +118,41 @@ class AbstractNonabelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
     def to_dtype(self, a: Tensor, dtype: Dtype) -> NonAbelianData:
         blocks = {sector: self.block_to_dtype(block, dtype)
                   for sector, block in a.data.blocks.items()}
-        return NonAbelianData(blocks=blocks, codomain=a.data.codomain, domain=a.data.domain,
-                                    dtype=a.dtype)
+        return NonAbelianData(blocks=blocks, codomain=a.data.codomain, domain=a.data.domain, dtype=dtype)
 
     def supports_symmetry(self, symmetry: Symmetry) -> bool:
-        return True
+        return isinstance(symmetry, Symmetry)
+
+    def is_real(self, a: Tensor) -> bool:
+        # TODO (JU) this may not even be well-defined if a.symmetry is not a group ...
+        #  I think we should take the POV that we are always working over the complex numbers,
+        #  even if the dtype is real. in that case, imaginary parts just happen to be 0.
+        raise NotImplementedError
 
     def data_item(self, a: NonAbelianData) -> float | complex:
         if len(a.blocks) > 1:
             raise ValueError('Not a scalar.')
-        if len(a.blocks) == 0:
-            raise RuntimeError('This should not happen')
-        return self.block_item(next(iter(a.blocks.values())))
+        block = next(iter(a.blocks.values()))
+        return self.block_item(block)
 
     def to_dense_block(self, a: Tensor) -> Block:
         res = self.zero_block(a.shape, a.dtype)
+        codomain = [a.legs[n] for n in a.data.codomain_legs]
+        domain = [a.legs[n] for n in a.data.domain_legs]
         for coupled in a.data.blocks.keys():
-            for splitting_tree in all_fusion_trees(a.data.codomain, coupled):
-                for fusion_tree in all_fusion_trees(a.data.domain, coupled):
-                    # [b1,...,bN,c]
-                    X = self.fusion_tree_to_block(fusion_tree)
-
-                    # [j1,...,jM, k1,...,kN]
-                    degeneracy_data = a.data.get_sub_block(fusion_tree, splitting_tree)
-
-                    # [a1,...,aM,c]
-                    Y = self.block_conj(self.fusion_tree_to_block(splitting_tree))
-
+            for splitting_tree in all_fusion_trees(codomain, coupled):
+                for fusion_tree in all_fusion_trees(domain, coupled):
+                    X = self.fusion_tree_to_block(fusion_tree)  # [b1,...,bN,c]
+                    degeneracy_data = a.data.get_sub_block(fusion_tree, splitting_tree)  # [j1,...,jM, k1,...,kN]
+                    Y = self.block_conj(self.fusion_tree_to_block(splitting_tree))  # [a1,...,aM,c]
                     # symmetric tensors are the identity on the coupled sectors; so we can contract
-                    # [a1,...,aM , b1,...,bN]
-                    symmetry_data = self.block_tdot(Y, X, [-1], [-1])
-
+                    symmetry_data = self.block_tdot(Y, X, [-1], [-1])  # [a1,...,aM , b1,...,bN]
                     # kron into combined indeces [(a1,j1), ..., (aM,jM) , (b1,k1),...,(bN,kN)]
-                    contribution = self.block_kron(symmetry_data, degeneracy_data)  # TODO: implment
+                    contribution = self.block_kron(symmetry_data, degeneracy_data)
 
                     # TODO: get_slice implementation?
                     # TODO: nonabelian (at least) want a map from sector to its index, so we dont have to sort always
+                    # TODO: would be better to iterate over uncoupled sectors, together with their slices, then we dont need to look them up.
                     idcs = (*(leg.get_slice(sector) for leg, sector in zip(a.data.codomain, splitting_tree.uncoupled)),
                             *(leg.get_slice(sector) for leg, sector in zip(a.data.domain, fusion_tree.uncoupled)))
 
@@ -91,35 +168,48 @@ class AbstractNonabelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
 
     def from_dense_block(self, a: Block, legs: list[VectorSpace], atol: float = 1e-8,
                          rtol: float = 0.00001) -> NonAbelianData:
-        raise NotImplementedError  # TODO:
+        # TODO add arg to specify (co-)domain?
+        raise NotImplementedError
 
     def from_block_func(self, func, legs: list[VectorSpace], func_kwargs={}) -> NonAbelianData:
-        raise NotImplementedError  # TODO:
+        # TODO add arg to specify (co-)domain?
+        codomain = NonabelianBackendProductSpace(spaces=_unpack_flat_spaces(legs))
+        domain = NonabelianBackendProductSpace([])
+        blocks = {c: func((codomain.block_size(c), domain.block_size(c)), **func_kwargs)
+                  for c in coupled_sectors(codomain, domain)}
+        try:
+            sample_block = next(iter(blocks.keys()))
+        except StopIteration:
+            sample_block = func((1,) * len(legs), **func_kwargs)
+        return NonAbelianData(blocks=blocks, codomain=codomain, domain=domain,
+                              codomain_idcs=list(range(codomain.spaces)), domain_idcs=[],
+                              dtype = self.block_dtype(sample_block))
 
     def zero_data(self, legs: list[VectorSpace], dtype: Dtype) -> NonAbelianData:
-        codomain = ProductSpace(legs)
-        domain = ProductSpace([])
-        # TODO: implement block_size
-        # TODO: coupled sectors: second argument optional!
-        blocks = {c: self.zero_block((codomain.block_size(c), domain.block_size(c)), dtype)
+        # TODO add arg to specify (co-)domain?
+        codomain = NonabelianBackendProductSpace(spaces=_unpack_flat_spaces(legs))
+        domain = NonabelianBackendProductSpace([])
+        blocks = {c: self.zero_block((codomain.block_size(c), domain.block_size(c)), dtype=dtype)
                   for c in coupled_sectors(codomain, domain)}
-        return NonAbelianData(blocks, codomain=codomain, domain=domain, dtype=dtype)
+        return NonAbelianData(blocks=blocks, codomain=codomain, domain=domain,
+                              codomain_idcs=list(range(codomain.spaces)), domain_idcs=[], 
+                              dtype=dtype)
 
     def eye_data(self, legs: list[VectorSpace], dtype: Dtype) -> NonAbelianData:
-        codomain = ProductSpace(legs)
-        # TODO: think about if ProductSpace([l.dual for l in legs]) is ProductSpace(legs).dual
-        domain = codomain.dual
-        blocks = {c: self.eye_block([codomain.block_size(c)], dtype)
-                  for c in coupled_sectors(codomain)}
-        return NonAbelianData(blocks, codomain=codomain, domain=domain, dtype=dtype)
+        # TODO add arg to specify (co-)domain?
+        codomain = NonabelianBackendProductSpace(spaces=_unpack_flat_spaces(legs))
+        domain = NonabelianBackendProductSpace([])
+        blocks = {c: self.eye_block((codomain.block_size(c), domain.block_size(c)), dtype=dtype)
+                  for c in coupled_sectors(codomain, domain)}
+        return NonAbelianData(blocks=blocks, codomain=codomain, domain=domain,
+                              codomain_idcs=list(range(codomain.spaces)), domain_idcs=[],
+                              dtype=dtype)
 
     def copy_data(self, a: Tensor) -> NonAbelianData:
-        # TODO: define more clearly what this should even do
-        # TODO: should we have Tensor.codomain and Tensor.domain properties?
-        #      how else would we expose details about the grouping?
         return NonAbelianData(
             blocks={sector: self.block_copy(block) for sector, block in a.data.blocks.values()},
-            codomain=a.data.codomain, domain=a.data.domain, dtype=a.dtype
+            codomain=a.data.codomain, domain=a.data.domain, codomain_idcs=a.data.codomain_idcs,
+            domain_idcs=a.data.domain_idcs
         )
 
     def _data_repr_lines(self, data: NonAbelianData, indent: str, max_width: int,
@@ -135,6 +225,9 @@ class AbstractNonabelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
         # can use self.matrix_svd
         raise NotImplementedError  # TODO
 
+    def qr(self, a: Tensor, new_r_leg_dual: bool, full: bool) -> tuple[NonAbelianData, NonAbelianData, VectorSpace]:
+        raise NotImplementedError  # TODO
+
     def outer(self, a: Tensor, b: Tensor) -> NonAbelianData:
         raise NotImplementedError  # TODO
 
@@ -144,16 +237,20 @@ class AbstractNonabelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
     def permute_legs(self, a: Tensor, permutation: list[int]) -> NonAbelianData:
         raise NotImplementedError  # TODO
 
-    def trace(self, a: Tensor, idcs1: list[int], idcs2: list[int]) -> NonAbelianData:
+    def trace_full(self, a: Tensor, idcs1: list[int], idcs2: list[int]) -> float | complex:
+        raise NotImplementedError  # TODO
+
+    def trace_partial(self, a: Tensor, idcs1: list[int], idcs2: list[int], remaining_idcs: list[int]) -> NonAbelianData:
         raise NotImplementedError  # TODO
 
     def conj(self, a: Tensor) -> NonAbelianData:
         raise NotImplementedError  # TODO
 
-    def combine_legs(self, a: Tensor, idcs: list[int], new_leg: ProductSpace) -> NonAbelianData:
+    def combine_legs(self, a: Tensor, combine_slices: list[int, int], product_spaces: list[ProductSpace],
+                     new_axes: list[int], final_legs: list[VectorSpace]) -> NonAbelianData:
         raise NotImplementedError  # TODO
 
-    def split_leg(self, a: Tensor, leg_idx: int) -> NonAbelianData:
+    def split_legs(self, a: Tensor, leg_idcs: list[int], final_legs: list[VectorSpace]) -> NonAbelianData:
         raise NotImplementedError  # TODO
 
     def almost_equal(self, a: Tensor, b: Tensor, rtol: float, atol: float) -> bool:
@@ -165,13 +262,7 @@ class AbstractNonabelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
     def norm(self, a: Tensor) -> float:
         raise NotImplementedError  # TODO
 
-    def exp(self, a: Tensor, idcs1: list[int], idcs2: list[int]) -> NonAbelianData:
-        raise NotImplementedError  # TODO
-
-    def log(self, a: Tensor, idcs1: list[int], idcs2: list[int]) -> NonAbelianData:
-        raise NotImplementedError  # TODO
-
-    def random_normal(self, legs: list[VectorSpace], dtype: Dtype, sigma: float) -> NonAbelianData:
+    def act_block_diagonal_square_matrix(self, a: Tensor, block_method: str) -> NonAbelianData:
         raise NotImplementedError  # TODO
 
     def add(self, a: Tensor, b: Tensor) -> NonAbelianData:
@@ -218,29 +309,31 @@ class FusionTree:
     """
     A fusion tree, which represents the map from uncoupled to coupled sectors
 
-        example fusion tree with
-            uncoupled = [a, b, c, d]
-            are_dual = [False, True, True, False]
-            inner_sectors = [x, y]
-            multiplicities = [m0, m1, m2]
+    Example fusion tree with
+        uncoupled = [a, b, c, d]
+        are_dual = [False, True, True, False]
+        inner_sectors = [x, y]
+        multiplicities = [m0, m1, m2]
 
-        |
-        coupled
-        |
-        m2
-        |  \
-        x   \
-        |    \
-        m1    \
-        |  \   \
-        y   \   \
-        |    \   \
-        m0    \   \
-        |  \   \   \
-        a   b   c   d
-        |   |   |   |
-        |   Z   Z   |
-        |   |   |   |
+    |    |
+    |    coupled
+    |    |
+    |    m2
+    |    |  \
+    |    x   \
+    |    |    \
+    |    m1    \
+    |    |  \   \
+    |    y   \   \
+    |    |    \   \
+    |    m0    \   \
+    |    |  \   \   \
+    |    a   b   c   d
+    |    |   |   |   |
+    |    |   Z   Z   |
+    |    |   |   |   |
+
+    
 
     """
 
@@ -388,27 +481,15 @@ def all_fusion_trees(space: VectorSpace, coupled: Sector = None) -> Iterator[Fus
             yield from fusion_trees(uncoupled, coupled)
 
 
-def coupled_sectors(space: VectorSpace) -> Iterable[Sector]:
-    """All possible coupled sectors"""
-    if isinstance(space, ProductSpace):
-        # TODO this can probably be optimized...
-        # set is important to exclude duplicates
-        return set(
-            coupled for uncoupled in space.sectors
-            for coupled in _iter_coupled(space.symmetry, uncoupled)
-        )
-    else:
-        return space.sectors
-
-
-def _iter_coupled(symmetry: Symmetry, uncoupled: list[Sector]) -> Iterator[Sector]:
-    """Iterate all possible coupled sectors of given uncoupled sectors"""
-    if len(uncoupled) == 0:
-        raise RuntimeError
-
-    if len(uncoupled) == 1:
-        yield uncoupled[0]
-    elif len(uncoupled) == 2:
-        a1, a2, *rest = uncoupled
-        for b in symmetry.fusion_outcomes(a1, a2):
-            yield from _iter_coupled(symmetry, [b, *rest])
+def coupled_sectors(codomain: NonabelianBackendProductSpace, domain: NonabelianBackendProductSpace
+                    ) -> SectorArray:
+    """The coupled sectors which are admitted by both codomain and domain"""
+    # TODO think about duality!
+    codomain_coupled = codomain._sectors
+    domain_coupled = domain._sectors
+    # OPTIMIZE: find the sectors which appear in both codomain_coupled and domain_coupled
+    #  can probably be done much more efficiently, in particular since they are sorted.
+    #  look at np.intersect1d for inspiration?
+    are_equal = codomain_coupled[:, None, :] == domain_coupled[None, :, :]  # [c_codom, c_dom, q]
+    mask = np.any(np.all(are_equal, axis=2), axis=0)  # [c_dom]
+    return domain_coupled[mask]
