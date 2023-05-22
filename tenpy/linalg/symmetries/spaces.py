@@ -1,19 +1,35 @@
 # Copyright 2023-2023 TeNPy Developers, GNU GPLv3
 
 from __future__ import annotations
-from itertools import product
 import numpy as np
 from numpy import ndarray
 import copy
+from functools import cached_property
+import warnings
 
 from .groups import Sector, SectorArray, Symmetry, no_symmetry
+from ...tools.misc import inverse_permutation
 
 
 __all__ = ['VectorSpace', 'ProductSpace']
 
 
 class VectorSpace:
-    """A vector space, which decomposes into sectors of a given symmetry.
+    r"""A vector space, which decomposes into sectors of a given symmetry.
+
+    Attributes
+    ----------
+    TODO incomplete
+    sector_perm : 1D numpy array of int
+        The permutation that defines how the `self.sectors` are embedded in the vector space.
+        ``self.sectors[n]`` is the `sector_perm[n]`-th in the vector space.
+        In other words, ``self.sectors == sectors_in_dense_space[sector_perm]``.
+        The `sectors` argument that was originally passed to ``Vectorspace.__init__`` can be recovered
+        as ``self._sectors[self.inverse_sector_perm]``
+    slices : 2D numpy array of int
+        For every sector ``self.sectors[n]``, this specifices the start (``slices[n, 0]``)
+        and stop (``slices[n, 1]``) of indices on a dense array into which the sector is embedded.
+        Note that ``slices[n, 1] - slices[n, 0] == symmetry.sectors_dim(sectors[n]) * multiplicities[n]``.
 
 
     Attributes
@@ -31,22 +47,23 @@ class VectorSpace:
 
     Parameters
     ----------
-    symmetry:
+    symmetry: Symmetry
         The symmetry associated with this space.
-    sectors:
+    sectors: 2D array_like of int
         The sectors of the symmetry that compose this space.
         A 2D array of integers with axes [s, q] where s goes over different sectors
         and q over the different quantities needed to describe a sector.
-        If sectors appear multiple times in the space, they may either be described through
-        repetition in sectors or via multiplicities.
-    multiplicities:
-        How often each of the `sectors` appears.
-        A 1D array of positive integers with axis [s].
+        E.g. if the symmetry is :math:`U(1) \times Z_2`, then ``sectors[s, 0]`` gives the :math:`U(1)`
+        charge for the `s`-th sector, and ``sectors[s, 1]`` the respective :math:`Z_2` charge.
+        Sectors may not contain duplicates. Multiplicity is specified via the seperate arg below.
+        The sectors are sorted before storing them. See :attr:`sector_perm`.
+    multiplicities: 1D array_like of int
+        How often each of the `sectors` appears. A 1D array of positive integers with axis [s].
         ``sectors[i_s, :]`` appears ``multiplicities[i_s]`` times.
         If not given, a multiplicity ``1`` is assumed for all `sectors`.
+        Before storing, the multiplicities are permuted along with the `sectors` to sort the latter.
     is_real : bool
-        Whether the space is over the real numbers.
-        Otherwise it is over the complex numbers (default).
+        Whether the space is over the real numbers. Otherwise it is over the complex numbers (default).
     _is_dual : bool
         Whether this is the "normal" (i.e. ket) or dual (i.e. bra) space.
 
@@ -58,6 +75,13 @@ class VectorSpace:
             This means that to construct the dual of ``VectorSpace(..., some_sectors)``,
             we need to call ``VectorSpace(..., some_sectors, _is_dual=True)`` and in particular
             pass the *same* sectors.
+            Consider using ``VectorSpace(..., some_sectors).dual`` instead for more readable code.
+
+    _sector_perm : 1D array-like of int, optional
+        Allows to skip the sorting of sectors. If `sector_perm` is given, the `sectors` are assumed
+        to be sorted (this is not checked!) and we store this permutation as :attr:`sector_perm`.
+    _slices : 2D array-like
+        Allows to skip recomputing the :attr:`slices`. These are the slices *after* sorting.
     """
     ProductSpace = None  # we set this to the ProductSpace class below
     # for subclasses, it's the corresponding ProductSpace subclass, e.g.
@@ -65,20 +89,74 @@ class VectorSpace:
     # This allows combine_legs() etc to generate appropriate sublcasses
 
     def __init__(self, symmetry: Symmetry, sectors: SectorArray, multiplicities: ndarray = None,
-                 is_real: bool = False, _is_dual: bool = False):
+                 is_real: bool = False, _is_dual: bool = False, _sector_perm: ndarray = None,
+                 _slices: ndarray = None):
         self.symmetry = symmetry
-        self._sectors = np.asarray(sectors, dtype=int)
-        self.num_sectors = num_sectors = len(sectors)
-
+        sectors = np.asarray(sectors, dtype=int)
+        num_sectors = len(sectors)
         if multiplicities is None:
             multiplicities = np.ones((num_sectors,), dtype=int)
-        multiplicities = np.asarray(multiplicities, dtype=int)
-        assert np.all(multiplicities > 0)
-        assert multiplicities.shape == (num_sectors,)
-        self.multiplicities = multiplicities
-        self.dim = np.sum(symmetry.batch_sector_dim(sectors) * multiplicities)
-        self.is_dual = _is_dual
+        else:
+            multiplicities = np.asarray(multiplicities, dtype=int)
         self.is_real = is_real
+        self.is_dual = _is_dual
+
+        # if needed, sort the sectors.
+        if _sector_perm is None:
+            self.sector_perm = perm = np.lexsort(sectors.T)
+            self._sectors = sectors[perm]
+            self.multiplicities = multiplicities[perm]
+        else:
+            perm = None
+            self.sector_perm = np.asarray(_sector_perm, dtype=np.intp)
+            self._sectors = sectors
+            self.multiplicities = multiplicities
+
+        if _slices is None:
+            # note: need to use the sectors, multiplicities *before sorting* here, since that
+            #       represents how they are embedded into a dense space
+            slices = _calc_slices(symmetry, sectors, multiplicities)
+            if perm is not None:
+                # if sectors have been sorted above, we need to permute the slices accordingly
+                slices = slices[perm]
+            self.slices = slices
+        else:
+            self.slices = _slices
+
+    def test_sanity(self):
+        assert np.all(self.multiplicities > 0)
+        assert self.multiplicities.shape == (self.num_sectors,)
+        # TODO add something like:
+        #   assert len(np.unique(self._sectors, axis=0)) == self.num_sectors
+        #   but it currently makes some tests fail, because the fixtures create duplicate sectors
+        # TODO more
+
+    # TODO when should these caches be reset?
+    @cached_property
+    def inverse_sector_perm(self):
+        """The inverse permutation of :attr:`sector_perm`."""
+        return inverse_permutation(self.sector_perm)
+
+    @cached_property
+    def index_perm(self):
+        """The permutation that needs to be applied to a dense array such that it matches the order
+        of :attr:`_sectors`.
+        TODO double check that this is "the right way around".
+        """
+        return np.concatenate([np.arange(sl[0], sl[1]) for sl in self.slices])
+
+    @cached_property
+    def inverse_index_perm(self):
+        """The inverse permutation of :attr:`index_perm`."""
+        return inverse_permutation(self.index_perm)
+
+    @property
+    def dim(self):
+        return np.sum(self.symmetry.batch_sector_dim(self._sectors) * self.multiplicities)
+
+    @property
+    def num_sectors(self):
+        return len(self._sectors)
 
     @classmethod
     def non_symmetric(cls, dim: int, is_real: bool = False, _is_dual: bool = False):
@@ -119,6 +197,7 @@ class VectorSpace:
         raise RuntimeError  # a return should be triggered from within the for loop!
 
     def __repr__(self):
+        # TODO include sector_perm?
         dual_str = '.dual' if self.is_dual else ''
         is_real_str = ', is_real=True' if self.is_real else ''
         sectors_str = repr(self._sectors)
@@ -128,6 +207,7 @@ class VectorSpace:
                f'multiplicities={self.multiplicities!s}{is_real_str}){dual_str}'
 
     def __str__(self):
+        # TODO include sector_perm?
         field = 'ℝ' if self.is_real else 'ℂ'
         if self.symmetry == no_symmetry:
             symm_details = ''
@@ -137,24 +217,21 @@ class VectorSpace:
         return f'dual({res})' if self.is_dual else res
 
     def __eq__(self, other):
+        # TODO should we compare the perm_sectors?
+        #  I.e. is VectorSpace(sym, sectors=[s1, s2]) == VectorSpace(sym, sectors=[s2, s1]) ?
         if not isinstance(other, VectorSpace):
             return NotImplemented
-
         if self.is_real != other.is_real:
             return False
-
         if self.is_dual != other.is_dual:
             return False
-
         if self.num_sectors != other.num_sectors:
             # now we may assume that checking all multiplicities of self is enough.
             return False
-
-        # TODO: (JH) we should by convention always sort self._sectors...
-        self_order = np.argsort(self.sectors, axis=0)
-        other_order = np.argsort(other.sectors, axis=0)
-        return np.all(self.sectors[self_order] == other.sectors[other_order]) \
-            and np.all(self.multiplicities[self_order] == other.multiplicities[other_order])
+        if self.symmetry != other.symmetry:
+            return False
+        # _sectors are sorted, so we can just compare them elementwise.
+        return np.all(self._sectors == other._sectors) and np.all(self.multiplicities == other.multiplicities)
 
     @property
     def dual(self):
@@ -180,6 +257,8 @@ class VectorSpace:
         """If self can be contracted with other.
 
         Equivalent to ``self == other.dual``"""
+        # TODO should we compare the perm_sectors ?
+        #  I.e. can VectorSpace(sym, [s1, s2]) be contracted with VectorSpace(sym, [s2, s1]).dual ?
         if not isinstance(other, VectorSpace):
             return False
         if self.is_real != other.is_real:
@@ -215,6 +294,57 @@ class VectorSpace:
         """The number of free parameters, i.e. the number of linearly independent symmetric tensors in this space."""
         # TODO isnt this just the multiplicity of the trivial sector?
         raise NotImplementedError  # TODO
+
+    def project(self, mask: ndarray):
+        """Return a copy, keeping only the indices specified by `mask`.
+
+        The resulting embedding (given by ``projected.sector_perm``) follows the same order of
+        sectors as for ``self``, except sectors which are entirely projected out are omitted.
+
+        Parameters
+        ----------
+        mask : 1D array(bool)
+            Whether to keep each of the indices in the *dense* array.
+            In particular, this refers to the basis *before* self.sector_perm is applied
+            TODO is this actually what we want? do we also want another version where the mask is
+              in sector_perm order? or maybe even per-sector masks?
+
+        Returns
+        -------
+        sector_idx_map : 1D array
+            Map of sector indices.
+            A non-negative entry ``m = sector_idx_map[n]`` indicates that ``sectors_after[m] == sectors_before[n]``
+            and ``sector_idx_map[n] == -1`` indicates that ``sectors_before[n]`` is projected out entirely.
+        sector_masks: list of 1D array
+            For every *remaining* sector, the respective mask of length `sector_dim * old_multiplicity`.
+        projected : :class:`VectorSpace`
+            Copy of self after the projection, i.e. with ``projected.dim == np.sum(mask)``.
+        """
+        mask = np.asarray(mask, dtype=np.bool_)
+        projected = copy.copy(self)
+        sector_masks = [mask[start:stop] for start, stop in self.slices]
+        new_multiplicities = np.array([np.sum(sm) for sm in sector_masks])
+        keep = np.nonzero(new_multiplicities)[0]
+        sector_masks = [sector_masks[i] for i in keep]
+        new_sector_number = len(sector_masks)
+        sector_idx_map = np.full((new_sector_number,), -1, dtype=np.int8)
+        sector_idx_map[keep] = np.arange(new_sector_number)
+        projected.sector_perm = perm = sector_idx_map[projected.sector_perm]
+        projected._sectors = projected._sectors[keep]
+        projected.multiplicities = new_multiplicities[keep]
+        inv_perm = inverse_permutation(perm)
+        unpermuted_slices = _calc_slices(self.symmetry, projected.sectors[inv_perm], projected.multiplicities[inv_perm])
+        projected.slices = unpermuted_slices[perm]
+        return sector_idx_map, sector_masks, projected
+
+
+def _calc_slices(symmetry: Symmetry, sectors: SectorArray, multiplicities: ndarray) -> ndarray:
+    """Calculate the slices given sectors and multiplicities *in the dense order*, i.e. not sorted."""
+    slices = np.zeros((len(sectors), 2), dtype=np.intp)
+    # OPTIMIZE should we special case abelian symmetries to skip some multiplications by 1?
+    slices[:, 1] = slice_ends = np.cumsum(multiplicities * symmetry.batch_sector_dim(sectors))
+    slices[1:, 0] = slice_ends[:-1]
+    return slices
 
 
 class ProductSpace(VectorSpace):
@@ -294,13 +424,12 @@ class ProductSpace(VectorSpace):
         .. warning ::
             When setting `_is_dual=True`, consider the note above!
 
-    _sectors, _multiplicities:
-        Can optionally be passed to avoid recomputation.
-        These are the inputs to VectorSpace.__init__, as computed by _fuse_spaces.
+    _sectors, _multiplicities, _sector_perm, _slices:
+        These inputs to VectorSpace.__init__ can optionally be passed to avoid recomputation.
     """
 
-    def __init__(self, spaces: list[VectorSpace], _is_dual: bool = False,
-                 _sectors: SectorArray = None, _multiplicities: ndarray = None):
+    def __init__(self, spaces: list[VectorSpace], _is_dual: bool = False, _sectors: SectorArray = None,
+                 _multiplicities: ndarray = None, _sector_perm: ndarray = None, _slices: ndarray = None):
         self.spaces = spaces  # spaces can be themselves ProductSpaces
         symmetry = spaces[0].symmetry
         assert all(s.symmetry == symmetry for s in spaces)
@@ -308,11 +437,8 @@ class ProductSpace(VectorSpace):
         assert all(space.is_real == is_real for space in spaces)
         if _sectors is None or _multiplicities is None:
             _sectors, _multiplicities = self._fuse_spaces(symmetry, spaces, _is_dual)
-        super().__init__(symmetry=symmetry,
-                         sectors=_sectors,
-                         multiplicities=_multiplicities,
-                         is_real=is_real,
-                         _is_dual=_is_dual)
+        VectorSpace.__init__(self, symmetry=symmetry, sectors=_sectors, multiplicities=_multiplicities,
+                             is_real=is_real, _is_dual=_is_dual, _sector_perm=_sector_perm, _slices=_slices)
 
     # TODO python naming convention is snake case: as_vector_space
     def as_VectorSpace(self):
@@ -406,6 +532,26 @@ class ProductSpace(VectorSpace):
         _sectors = np.asarray(list(fusion.keys()))
         multiplicities = np.asarray(list(fusion.values()))
         return _sectors, multiplicities
+
+    def project(self, *args, **kwargs):
+        """Convert self to VectorSpace and call :meth:`VectorSpace.project`.
+
+        In general, this could be implemented for a ProductSpace, but would make
+        `split_legs` more complicated, thus we keep it simple.
+        If you really want to project and split afterwards, use the following work-around,
+        which is for example used in :class:`~tenpy.algorithms.exact_diagonalization`:
+
+        1) Create the full pipe and save it separately.
+        2) Convert the Pipe to a Leg & project the array with it.
+        3) [... do calculations ...]
+        4) To split the 'projected pipe' of `A`, create an empty array `B` with the legs of A,
+           but replace the projected leg by the full pipe. Set `A` as a slice of `B`.
+           Finally split the pipe.
+        """
+        warnings.warn("Converting ProductSpace to VectorSpace for `project`", stacklevel=2)
+        res = self.as_VectorSpace()
+        return res.project(*args, **kwargs)
+
 
 
 VectorSpace.ProductSpace = ProductSpace

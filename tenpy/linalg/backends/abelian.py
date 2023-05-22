@@ -16,6 +16,9 @@ Changes compared to old np_conserved:
   In turn, VectorSpace saves a `_perm` used to sort the originally passed `sectors`.
 - keep `block_inds` sorted (i.e. no arbitrary gauge permutation in block indices)
 
+TODO (JU): @jhauschild We can maybe hack together the H_MPO block-structure by adding an extra
+  "symmetry" to a ProductSymmetry?
+
 """
 # Copyright 2023-2023 TeNPy Developers, GNU GPLv3
 from __future__ import annotations
@@ -44,6 +47,9 @@ if TYPE_CHECKING:
     from ..tensors import Tensor, ChargedTensor
 
 
+# TODO (JU) when abelian backend is completely done, decide if this is still needed,
+#  i.e. if AbelianBackendVectorSpace has any features that VectorSpace does not have.
+#  or if we can stop using backend-specific VectorSpace and only do it for ProductSpace.
 class AbelianBackendVectorSpace(VectorSpace):
     """Subclass of VectorSpace with additonal data and restrictions for AbstractAbelianBackend.
 
@@ -57,86 +63,10 @@ class AbelianBackendVectorSpace(VectorSpace):
         without symmetries. Note that this is not sorted when perm_block_inds is non-trivial.
 
     """
-    def __init__(self, symmetry: Symmetry, sectors: SectorArray, multiplicities: ndarray = None,
-                 is_real: bool = False, _is_dual: bool = False,
-                 perm_block_inds=None, slices=None):
-        super().__init__(symmetry=symmetry,
-                         sectors=sectors,
-                         multiplicities=multiplicities,
-                         is_real=is_real,
-                         _is_dual=_is_dual)
-        num_sectors = sectors.shape[0]
-        if perm_block_inds is None:
-            # sort by slices
-            assert slices is None
-            self.slices = _slices_from_multiplicities(self.multiplicities)
-            self._sort_sectors()
-        else:
-            # TODO: do we need this case?
-            assert slices is not None
-            self.perm_block_inds = perm_block_inds
-            self.slices = slices
-
-    def _sort_sectors(self):
-        # sort sectors
-        assert not hasattr(self, 'perm_block_inds')
-        perm_block_inds = np.lexsort(self._sectors.T)
-        self.perm_block_inds = perm_block_inds
-        self._sectors = self._sectors[perm_block_inds]
-        self.multiplicities = self.multiplicities[perm_block_inds]
-        self.slices = self.slices[perm_block_inds]
-
-    def test_sanity(self):
-        assert len(self.sectors) == len(self.multiplicities) == len(self.slices)
-        assert np.all(self.multiplicities > 0)
-
-
-    # TODO: do we need get_qindex?
-    # Since slices is no longer sorted, it would be O(L) rather than O(log(L))
-
-    def project(self, mask: ndarray):
-        """Return copy keeping only the indices specified by `mask`.
-
-        Parameters
-        ----------
-        mask : 1D array(bool)
-            Whether to keep each of the indices in the dense array.
-
-        Returns
-        -------
-        map_block_ind : 1D array
-            Map of block indices, such that ``block_ind_new = map_block_ind[block_ind_old]``,
-            and ``map_block_ind[block_ind] = -1`` for block indices projected out.
-        block_masks : 1D array
-            The bool mask for each of the *remaining* blocks.
-        projected_copy : :class:`LegCharge`
-            Copy of self with the qind projected by `mask`.
-        """
-        mask = np.asarray(mask, dtype=np.bool_)
-        cp = copy.copy(self)
-        block_masks = [mask[b:e] for b, e in self.slices]
-        new_multiplicities = np.array([np.sum(bm) for bm in block_masks])
-        keep = np.nonzero(new_multiplicities)[0]
-        block_masks = [block_masks[i] for i in keep]
-        new_block_number = len(block_masks)
-        cp._sectors = cp._sectors[keep]
-        cp.multiplicities = new_multiplicities[keep]
-        cp.slices = _slices_from_multiplicities(cp.multiplicities)
-        map_block_inds = np.full((new_block_number,), -1, np.int)
-        map_block_inds[keep] = cp.perm_block_inds = np.arange(new_block_number)
-        return map_block_inds, block_masks, cp
-
-    def __mul__(self, other):
-        if isinstance(other, AbelianBackendVectorSpace):
-            return AbelianBackendProductSpace([self, other])
-        return NotImplemented
-
-
-def _slices_from_multiplicities(multiplicities: ndarray):
-    slices = np.zeros((len(multiplicities), 2), np.intp)
-    slices[:, 1] = slice_ends = np.cumsum(multiplicities)
-    slices[1:, 0] = slice_ends[:-1]
-    return slices
+    @property
+    def perm_block_inds(self):
+        # TODO instead rename the attribute wherever it is used
+        return self.sector_perm
 
 
 # TODO: is the diamond-structure inheritance okay?
@@ -244,6 +174,7 @@ class AbelianBackendProductSpace(ProductSpace, AbelianBackendVectorSpace):
         _sectors = _sectors[perm_block_inds]
         multiplicities = multiplicities[perm_block_inds]
         # inverse permutation is needed in _map_incoming_block_inds
+        # TODO is this redundant with VectorSpace.inverse_sector_perm?
         self._inv_perm_block_inds = inverse_permutation(perm_block_inds)
 
         slices = np.concatenate([[0], np.cumsum(multiplicities)], axis=0)
@@ -298,6 +229,7 @@ class AbelianBackendProductSpace(ProductSpace, AbelianBackendVectorSpace):
                                          is_real=self.is_real,
                                          _is_dual=self.is_dual)
 
+    # TODO this is now redundant, because ProductSpace implements project,
     def project(self, *args, **kwargs):
         """Convert self to VectorSpace and call :meth:`AbelianBackendVectorSpace.project`.
 

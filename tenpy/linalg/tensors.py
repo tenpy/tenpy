@@ -109,18 +109,23 @@ class Shape:
 
 
 class AbstractTensor(ABC):
+    """
+    Common base class for tensors.
+
+    .. note ::
+        TODO write clean text about VectorSpace.sector_perm and how it affects internal storage
+
+    Parameters
+    ----------
+    legs : list[VectorSpace]
+        The legs of the Tensor
+    backend: :class:`~tenpy.linalg.backends.abstract_backend.AbstractBackend`, optional
+        The backend for the Tensor
+    labels : list[str | None] | None
+        Labels for the legs. If None, translates to ``[None, None, ...]`` of appropriate length
+    """
 
     def __init__(self, legs: list[VectorSpace], backend, labels: list[str | None] | None):
-        """
-        Parameters
-        ----------
-        legs : list[VectorSpace]
-            The legs of the Tensor
-        backend: :class:`~tenpy.linalg.backends.abstract_backend.AbstractBackend`, optional
-            The backend for the Tensor
-        labels : list[str | None] | None
-            Labels for the legs. If None, translates to ``[None, None, ...]`` of appropriate length
-        """
         if backend is None:
             self.backend = get_default_backend()
         else:
