@@ -496,7 +496,8 @@ class Tensor(AbstractTensor):
         return NotImplemented
 
     def __sub__(self, other):
-        if isinstance(other, Tensor):
+        # TODO make this the default implementation at AbstractTensor level?
+        if isinstance(other, AbstractTensor):
             return self.__add__(other._mul_scalar(-1))
         return NotImplemented
 
@@ -933,6 +934,7 @@ class Tensor(AbstractTensor):
         res_data = self.backend.combine_legs(res, combine_slices, product_spaces, new_axes, res_legs)
         return Tensor(res_data, backend=self.backend, legs=res_legs, labels=res_labels)
 
+    # TODO (JU): should this be implemented in AbstractTensor?
     # TODO: (JU) should we name it make_product_space ?
     #  make_ProductSpace to me suggests that i get (a subclass of) ProductSpace, not an instance.
     def make_ProductSpace(self, legs, **kwargs):
@@ -1094,7 +1096,6 @@ class ChargedTensor(AbstractTensor):
         Either a backend-specific block of shape ``(dummy_leg.dim,)``, or `None`,
         which is interpreted ``[1]`` if `dummmy_leg.dim == 1` and raises a `ValueError` otherwise.
     """
-    # TODO doc somewhere that this label has special meaning
     _DUMMY_LABEL = '!'  # canonical label for the dummy leg
 
     def __init__(self, invariant_part: Tensor, dummy_leg_state=None):
@@ -1105,7 +1106,6 @@ class ChargedTensor(AbstractTensor):
         if dummy_leg_state is None:
             if self.dummy_leg.dim != 1:
                 raise ValueError('Can not infer state for a dummy leg with dim > 1')
-            dummy_leg_state = self.backend.block_from_numpy(np.array([1.]))
         self.dummy_leg_state = dummy_leg_state
 
     @property
@@ -1114,13 +1114,18 @@ class ChargedTensor(AbstractTensor):
 
     def test_sanity(self):
         self.invariant_part.test_sanity()
-        assert self.backend.block_shape(self.dummy_leg_state) == (self.dummy_leg.dim,)
+        if self.dummy_leg_state is not None:
+            assert self.backend.block_shape(self.dummy_leg_state) == (self.dummy_leg.dim,)
         AbstractTensor.test_sanity(self)
 
     def copy(self, deep=True):
         if deep:
+            if self.dummy_leg_state is None:
+                dummy_leg_state = None
+            else:
+                dummy_leg_state = self.backend.block_copy(self.dummy_leg_state)
             return ChargedTensor(invariant_part=self.invariant_part.copy(deep=True),
-                                 dummy_leg_state=self.backend.block_copy(self.dummy_leg_state))
+                                 dummy_leg_state=dummy_leg_state)
         return ChargedTensor(invariant_part=self.invariant_part, dummy_leg_state=self.dummy_leg_state)
 
     def item(self):
@@ -1128,20 +1133,60 @@ class ChargedTensor(AbstractTensor):
             raise ValueError('Not a scalar')
         return self.backend.block_item(self.to_dense_block())
 
+    def _mul_scalar(self, other: complex):
+        # can chosse to either "scale" the invariant part or the dummy_leg_state.
+        # we might want to keep dummy_leg_state=None, so we scale the invariant part
+        return ChargedTensor(
+            invariant_part=self.invariant_part._mul_scalar(other),
+            dummy_leg_state=self.dummy_leg_state
+        )
+
+    def __add__(self, other):
+        if isinstance(other, ChargedTensor):
+            if self.dummy_leg != other.dummy_leg:
+                raise ValueError('can not add ChargedTensors with different dummy legs')
+
+            if self.dummy_leg.dim == 1:
+                factor = self._dummy_leg_state_item() / other._dummy_leg_state_item()
+            elif self.backend.block_allclose(self.dummy_leg_state, other.dummy_legs_state):
+                factor = 1.
+            else:
+                msg = 'Can not add ChargedTensors with different dummy_leg_states unless dummy_leg is one-dimensional'
+                raise ValueError(msg)
+            return ChargedTensor(invariant_part=self.invariant_part + factor * other.invariant_part,
+                                 dummy_leg_state=self.dummy_leg_state)
+
+        elif isinstance(other, AbstractTensor):
+            raise TypeError(f"unsupported operand type(s) for +: 'ChargedTensor' and '{type(other)}'")
+        return NotImplemented
+
+    def __sub__(self, other):
+        # TODO make this the default implementation at AbstractTensor level?
+        if isinstance(other, AbstractTensor):
+            return self.__add__(other._mul_scalar(-1))
+        return NotImplemented
+
     def _repr_header_lines(self, indent: str) -> list[str]:
         lines = AbstractTensor._repr_header_lines(self, indent=indent)
         lines.append(f'{indent}* Dummy Leg: {self.dummy_leg}')
         lines.append(f'{indent}* Dummy Leg state:')
-        lines.extend(self.backend._block_repr_lines(self.dummy_leg_state, indent=indent + '  '),
-                     max_width=70, max_lines=3)
+        if self.dummy_leg_state is None:
+            lines.append(f'{indent}  [1.]')
+        else:
+            lines.extend(self.backend._block_repr_lines(self.dummy_leg_state, indent=indent + '  '),
+                        max_width=70, max_lines=3)
         return lines
 
     def is_real(self):
-        return self.backend.is_real(self.invariant_part) and self.backend.block_is_real(self.dummy_leg_state)
+        dummy_leg_state_real = self.dummy_leg_state is None or self.backend.block_is_real(self.dummy_leg_state)
+        return self.backend.is_real(self.invariant_part) and dummy_leg_state_real
 
     def to_dense_block(self, leg_order: list[int | str] = None):
         invariant_block = self.backend.to_dense_block(self.invariant_part)
-        block = self.backend.block_tdot(invariant_block, self.dummy_leg_state, [-1], [0])
+        if self.dummy_leg_state is None:
+            block = self.backend.block_squeeze_legs(invariant_block, -1)
+        else:
+            block = self.backend.block_tdot(invariant_block, self.dummy_leg_state, [-1], [0])
         if leg_order is not None:
             block = self.backend.block_permute_axes(block, self.get_leg_idcs(leg_order))
         return block
@@ -1186,11 +1231,11 @@ class ChargedTensor(AbstractTensor):
             Labels associated with each leg, ``None`` for unnamed legs.
             Does not contain a label for the dummy leg.
         atol, rtol : float
-            TODO doc
+            Absolute and relative tolerance for checking if the block is actually symmetric.
         dummy_leg : VectorSpace
             The dummy leg. If not given, it is inferred from the block.
         dummy_leg_state : block
-            The state on the dummy leg. Defaults to ``[1.]``.
+            The state on the dummy leg. Defaults to ``None``, which represents the state ``[1.]``.
         """
         if backend is None:
             backend = get_default_backend()
@@ -1222,6 +1267,59 @@ class ChargedTensor(AbstractTensor):
                                      labels=labels + [cls._DUMMY_LABEL], dtype=dtype)
         return cls(invariant_part=invariant_part, dummy_leg_state=dummy_leg_state)
 
+    @classmethod
+    def from_numpy_func(cls, func, legs: VectorSpace | list[VectorSpace], dummy_leg: VectorSpace,
+                        backend=None, labels: list[str | None] = None, func_kwargs={},
+                        shape_kw: str = None, dtype: Dtype = None):
+        inv = Tensor.from_numpy_func(func=func, legs=legs + [dummy_leg], backend=backend,
+                                     labels=labels + [cls._DUMMY_LABEL], func_kwargs=func_kwargs,
+                                     shape_kw=shape_kw, dtype=dtype)
+        shape = (dummy_leg.dim,)
+        if shape_kw is not None:
+            arr = func(**{shape_kw: shape}, **func_kwargs)
+        else:
+            arr = func(shape, **func_kwargs)
+        block = inv.backend.block_from_numpy(block)
+        block = inv.backend.block_to_dtype(block, dtype)
+        return ChargedTensor(invariant_part=inv, dummy_leg_state=block)
+
+    @classmethod
+    def from_block_func(cls, func, legs: VectorSpace | list[VectorSpace], dummy_leg: VectorSpace,
+                        backend=None, labels: list[str | None] = None, func_kwargs={},
+                        shape_kw: str = None, dtype: Dtype = None):
+        inv = Tensor.from_block_func(func=func, legs=legs + [dummy_leg], backend=backend,
+                                     labels=labels + [cls._DUMMY_LABEL], func_kwargs=func_kwargs,
+                                     shape_kw=shape_kw, dtype=dtype)
+        shape = (dummy_leg.dim,)
+        if shape_kw is not None:
+            block = func(**{shape_kw: shape}, **func_kwargs)
+        else:
+            block = func(shape, **func_kwargs)
+        block = inv.backend.block_to_dtype(block, dtype)
+        return ChargedTensor(invariant_part=inv, dummy_leg_state=block)
+
+    @classmethod
+    def random_uniform(cls, legs: VectorSpace | list[VectorSpace], dummy_leg: VectorSpace,
+                       backend=None, labels: list[str | None] = None, dtype: Dtype = Dtype.complex128,
+                       dummy_leg_state=None):
+        inv = Tensor.random_uniform(legs=legs + [dummy_leg], backend=backend, labels=labels + [cls._DUMMY_LABEL],
+                                    dtype=dtype)
+        return ChargedTensor(invariant_part=inv, dummy_leg_state=dummy_leg_state)
+
+    @classmethod
+    def random_normal(cls):
+        raise NotImplementedError  # TODO
+
+    def _dummy_leg_state_item(self) -> float:
+        """If the dummy leg is one-dimensonal, return the single item of the dummy_leg_state.
+        Otherwise raise a ValueError"""
+        if self.dummy_leg.dim != 1:
+            raise ValueError('Leg is not one-dimensional')
+        if self.dummy_leg_state is None:
+            return 1.
+        else:
+            return self.backend.block_item(self.dummy_leg_state)
+
     def almost_equal(self, other: AbstractTensor, atol: float = 0.00001, rtol: float = 1e-8) -> bool:
         if not isinstance(other, ChargedTensor):
             raise TypeError(f'tdot not supported for types {type(self)} and {type(other)}.')
@@ -1233,16 +1331,84 @@ class ChargedTensor(AbstractTensor):
             return False
 
         if self.dummy_leg.dim == 1:
-            factor = self.backend.block_item(self.dummy_leg_state) / other.backend.block_item(other.dummy_leg_state)
+            factor = self._dummy_leg_state_item() / other._dummy_leg_state_item()
             return self.invariant_part.almost_equal(factor * other, atol=atol, rtol=rtol)
+        elif self.backend.block_allclose(self.dummy_leg_state, other.dummy_leg_state, atol, rtol):
+            return self.invariant_part.almost_equal(other, atol=atol, rtol=rtol)
         else:
-            # TODO (JU): Can this be done more efficiently?
-            #  the problem is that the decomposition into invariant part and non-invariant state is
-            #  not unique, so we cant just compare the invariant parts.
+            # The decomposition into invariant part and non-invariant state is not unique,
+            # so we cant just compare them individually.
+            # OPTIMIZE (JU) is there a more efficient way?
+            # TODO should we have an extra argument that changes the behavior to return False
+            #  (or None, which is falsy) in this case?
+            warnings.warn('Converting ChargedTensor to dense block for `almost_equal`', stacklevel=2)
             backend = get_same_backend(self, other)
             self_block = self.to_dense_block()
             other_block = other.to_dense_block(leg_order=match_legs(self, other))
             return backend.block_allclose(self_block, other_block)
+
+    # TODO i dont really liek this method-based implementation anymore...
+    def tdot(self, other: AbstractTensor,
+             legs1: int | str | list[int | str] = -1, legs2: int | str | list[int | str] = 0,
+             relabel1: dict[str, str] = None, relabel2: dict[str, str] = None) -> AbstractTensor:
+        raise NotImplementedError  # TODO
+
+    def outer(self, other: AbstractTensor, relabel1: dict[str, str] = None, relabel2: dict[str, str] = None) -> AbstractTensor:
+        raise NotImplementedError  # TODO
+
+    def inner(self, other: AbstractTensor, do_conj: bool = True,
+              legs1: list[int | str] = None, legs2: list[int | str]  = None) -> complex:
+        raise NotImplementedError  # TODO
+
+    def permute_legs(self, permutation: list[int | str]) -> AbstractTensor:
+        permutation = self.get_leg_idcs(permutation)  # needed, since invariant_part does not have the same legs
+        permutation = permutation + [-1]  # keep dummy leg at its position
+        return ChargedTensor(invariant_part=self.invariant_part.permute_legs(permutation),
+                             dummy_leg_state=self.dummy_leg_state)
+
+    def trace(self, legs1: int | str | list[int | str] = -2, legs2: int | str | list[int | str] = -1
+              ) -> AbstractTensor | float | complex:
+        legs1 = self.get_leg_idcs(legs1)  # needed, since invariant_part does not have the same legs
+        legs2 = self.get_leg_idcs(legs2)
+        return ChargedTensor(invariant_part=self.invariant_part.trace(legs1, legs2),
+                             dummy_leg_state=self.dummy_leg_state)
+
+    def conj(self) -> AbstractTensor:
+        if self.dummy_leg_state is None:
+            dummy_leg_state = None  # conj([1]) == [1]
+        else:
+            dummy_leg_state = self.backend.block_conj(self.dummy_leg_state)
+        return ChargedTensor(invariant_part=self.invariant_part.conj(), dummy_leg_state=dummy_leg_state)
+
+    def combine_legs(self,
+                     *legs: list[int | str],
+                     product_spaces: list[ProductSpace]=None,
+                     product_spaces_dual: list[bool]=None,
+                     new_axes: list[int]=None) -> Tensor:
+        legs = [self.get_leg_idcs(group) for group in legs]  # needed, since invariant_part does not have the same legs
+        inv = self.invariant_part.combine_legs(*legs, product_spaces=product_spaces,
+                                               product_spaces_dual=product_spaces_dual, new_axes=new_axes)
+        return ChargedTensor(invariant_part=inv, dummy_leg_state=self.dummy_leg_state)
+
+    def split_legs(self, *legs: int | str) -> AbstractTensor:
+        legs = [self.get_leg_idcs(group) for group in legs]  # needed, since invariant_part does not have the same legs
+        return ChargedTensor(invariant_part=self.invariant_part.split_legs(*legs),
+                             dummy_leg_state=self.dummy_leg_state)
+
+    def squeeze_legs(self, legs: int | str | list[int | str] = None) -> AbstractTensor:
+        legs = self.get_leg_idcs(legs)  # needed, since invariant_part does not have the same legs
+        return ChargedTensor(invariant_part=self.invariant_part.squeeze_legs(legs),
+                             dummy_leg_state=self.dummy_leg_state)
+
+    def norm(self) -> float:
+        if self.dummy_leg.dim == 1:
+            return self._dummy_leg_state_item() * self.invariant_part.norm()
+        else:
+            # TODO could do sth like
+            # sqrt(sum(slice_norms ** 2))
+            #  where slice_norms = [abs(s) * inv[..., idx] for idx, s in enumerate(dummy_leg_state)]
+            warnings.warn('Converting ChargedTensor to dense block for `norm`', stacklevel=2)
+            return self.backend.block_norm(self.to_dense_block())
 
 
 class DiagonalTensor(AbstractTensor):
