@@ -26,6 +26,11 @@ Changed
 - Change the build system and metadata declaration to ``pyproject.toml`` format.
   This makes installation more future-proof and stable, but should not affect how tenpy is used,
   once installed.
+- Allow `couplings` parameters in the :class:`~tenpy.models.mixed_xk.MixedXKModel` methods 
+  :meth:`~tenpy.models.mixed_xk.MixedXKModel.add_inter_ring_hopping`,
+  :meth:`~tenpy.models.mixed_xk.MixedXKModel.add_intra_ring_hopping`,
+  :meth:`~tenpy.models.mixed_xk.MixedXKModel.add_inter_ring_interaction`, and
+  :meth:`~tenpy.models.mixed_xk.MixedXKModel.add_intre_ring_interaction` to vary with `x`.
 
 Fixed
 ^^^^^
