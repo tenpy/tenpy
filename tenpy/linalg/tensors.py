@@ -382,7 +382,7 @@ class AbstractTensor(ABC):
                      *legs: list[int | str],
                      new_legs: list[ProductSpace]=None,
                      product_spaces_dual: list[bool]=None,
-                     ) -> AbstractTensor:
+                     new_axes: list[int]=None) -> AbstractTensor:
         """See tensors.combine_legs"""
         ...
 
@@ -910,14 +910,14 @@ class Tensor(AbstractTensor):
                      *legs: list[int | str],
                      product_spaces: list[ProductSpace]=None,
                      product_spaces_dual: list[bool]=None,
-                     ) -> Tensor:
+                     new_axes: list[int]=None) -> Tensor:
         """See tensors.combine_legs"""
         combine_leg_idcs = [self.get_leg_idcs(ll) for ll in legs]
         for leg_idcs in combine_leg_idcs:
             assert len(leg_idcs) > 0, "empty `legs` entry"
 
         product_spaces = self._combine_legs_make_ProductSpace(combine_leg_idcs, product_spaces, product_spaces_dual)
-        combine_slices, new_axes, transp, perm_args = self._combine_legs_new_axes(combine_leg_idcs)
+        combine_slices, new_axes, transp, perm_args = self._combine_legs_new_axes(combine_leg_idcs, new_axes)
         product_spaces = [product_spaces[p] for p in perm_args]  # permuted args such that new_axes is ascending
 
         if transp != tuple(range(len(transp))):
@@ -983,12 +983,23 @@ class Tensor(AbstractTensor):
                     assert self_leg == given_space, f"Incompatible `self.legs` and product_spaces[{i:d}].spaces"
         return product_spaces
 
-    def _combine_legs_new_axes(self, combine_leg_idcs):
+    def _combine_legs_new_axes(self, combine_leg_idcs, new_axes):
         """Figure out new_axes and how legs have to be transposed."""
         all_combine_leg_idcs = np.concatenate(combine_leg_idcs)
         non_combined_legs = np.array([a for a in range(self.num_legs) if a not in all_combine_leg_idcs])
-        first_cl = np.array([cl[0] for cl in combine_leg_idcs])
-        new_axes = [(np.sum(non_combined_legs < a) + np.sum(first_cl < a)) for a in first_cl]
+        if new_axes is None:  # figure out default product_spaces
+            first_cl = np.array([cl[0] for cl in combine_leg_idcs])
+            new_axes = [(np.sum(non_combined_legs < a) + np.sum(first_cl < a)) for a in first_cl]
+        else:  # test compatibility
+            if len(new_axes) != len(combine_leg_idcs):
+                raise ValueError("wrong len of `new_axes`")
+            new_axes = list(new_axes)
+            new_rank = len(combine_leg_idcs) + len(non_combined_legs)
+            for i, a in enumerate(new_axes):
+                if a < 0:
+                    new_axes[i] = a + new_rank
+                elif a >= new_rank:
+                    raise ValueError("new_axis larger than the new number of legs")
         # construct transpose
         transpose = [[a] for a in non_combined_legs]
         perm_args = np.argsort(new_axes)
@@ -1393,8 +1404,8 @@ def conj(t: AbstractTensor) -> AbstractTensor:
 def combine_legs(t: AbstractTensor,
                  *legs: list[int | str],
                  product_spaces: list[ProductSpace]=None,
-                 product_spaces_dual: list[bool]=None
-                 ) -> AbstractTensor:
+                 product_spaces_dual: list[bool]=None,
+                 new_axes: list[int]=None) -> AbstractTensor:
     """
     Combine (multiple) groups of legs on a tensor to (multiple) ProductSpaces.
 
@@ -1422,7 +1433,8 @@ def combine_legs(t: AbstractTensor,
     --------
     split_legs
     """
-    return t.combine_legs(*legs, product_spaces=product_spaces, product_spaces_dual=product_spaces_dual)
+    return t.combine_legs(*legs, product_spaces=product_spaces, product_spaces_dual=product_spaces_dual,
+                          new_axes=new_axes)
 
 
 def split_legs(t: AbstractTensor, *legs: int | str) -> Tensor:
