@@ -15,6 +15,11 @@ __all__ = ['VectorSpace', 'ProductSpace']
 class VectorSpace:
     """A vector space, which decomposes into sectors of a given symmetry.
 
+    .. note ::
+        It is best to think of ``VectorSpace``s as immutable objects.
+        In practice they are mutable, i.e. you could change their attributes. but this may lead to
+        unexpected behavior, since it might make the cached metadata inconsistent.
+
     Parameters
     ----------
     symmetry:

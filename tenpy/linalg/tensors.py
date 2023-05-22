@@ -1,3 +1,8 @@
+"""
+
+TODO put this in the proper place:
+The labels should not include the characters `.`, `?` or `!`.
+"""
 # Copyright 2023-2023 TeNPy Developers, GNU GPLv3
 
 from __future__ import annotations
@@ -41,7 +46,7 @@ def _combine_leg_labels(labels: list[str | None]) -> str:
 def _split_leg_label(label: str) -> list[str | None]:
     """undo _combine_leg_labels, i.e. recover the original labels"""
     if label.startswith('(') and label.endswith(')'):
-        labels = label.lstrip('(').rstrip(')').split('.')
+        labels = label[1:-1].split('.')
         return [None if l.startswith('?') else l for l in labels]
     else:
         raise ValueError('Invalid format for a combined label')
@@ -456,7 +461,7 @@ class Tensor(AbstractTensor):
         if deep:
             return Tensor(data=self.backend.copy_data(self.data),
                           backend=self.backend,
-                          legs=self.legs[:],  # TODO do we think of legs as immutable? if not, copy!
+                          legs=self.legs[:],
                           labels=self.labels[:])
         return Tensor(data=self.data,
                       backend=self.backend,
@@ -563,11 +568,9 @@ class Tensor(AbstractTensor):
         Parameters
         ----------
         legs : (list of) VectorSpace
-            *Half* of the legs of the result.
-            The resulting tensor has twice as many legs.
-            TODO: why half??? zeromap is well defined even if not diagonal...
+            The legs of the Tensor.
         backend : :class:`~tenpy.linalg.backends.abstract_backend.AbstractBackend`
-            The backend for the Tensor
+            The backend for the Tensor.
         labels : list[str | None], optional
             Labels associated with each leg, ``None`` for unnamed legs.
         dtype : Dtype, optional
@@ -605,7 +608,6 @@ class Tensor(AbstractTensor):
         legs = legs + [leg.dual for leg in legs]
         return cls(data=data, backend=backend, legs=legs, labels=labels)
 
-    # TODO: dtype arg unused?
     @classmethod
     def from_numpy_func(cls, func, legs: list[VectorSpace], backend=None,
                         labels: list[str | None] = None, func_kwargs={},
