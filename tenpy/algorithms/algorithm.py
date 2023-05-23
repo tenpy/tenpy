@@ -182,6 +182,86 @@ class Algorithm:
         else:
             return {'psi': self.psi}
 
+    def estimate_RAM(self):
+        """
+        Gives an approximate prediction for the required virtual memory usage.
+        This calculation is based on the requested bond dimension, local Hilbert space dimension, the number of sites and the boundary conditions.
+
+        Returns
+        -------
+        usage : int
+            Required virtual memory in kB as int.
+        """
+        import numpy as np
+        entry_size = 8 # 8 bit for a default float, could be replaced by array.itemsize for numpy arrays
+
+        # get info from model & params
+        L = self.psi.L
+        chi_max = self.trunc_params["chi_max"]
+        H_dim = [self.model.lat.mps_sites()[i].dim for i in range(self.psi.L)]
+
+        # H_dim = self.model.lat.mps_sites()[0].dim               # only works for constant Hilbert space dimension
+        # chi_i = lambda i: min((1+min(i, L-i) )* H_dim, chi_max) # only works for constant Hilbert space dimension
+
+        # determine all bond dimensions for arbitrary chains
+        if self.psi.bc == "finite":
+            chis = np.zeros(L+1)
+            # first go from left to right
+            chis[0] = self.model.lat.mps_sites()[0].dim
+            for i in range(1, L):
+                chis[i] = min(chis[i-1] + self.model.lat.mps_sites()[i-1].dim, chi_max)
+            # now introduce cutoff from right
+            chis[L] = self.model.lat.mps_sites()[L-1].dim
+            for i in range(L-1, 0, -1):
+                chis[i] = min(chis[i], min(chis[i+1] + self.model.lat.mps_sites()[i].dim, chi_max))
+        else:
+            chis = [chi_max]*(L+1)
+
+        # MPS ram:
+        num_entries = 0
+        for i in range(len(self.model.lat.mps_sites())):
+            site_i = self.model.lat.mps_sites()[i]
+            num_entries += site_i.dim * chis[i] * chis[i+1]
+
+        RAM = (num_entries * entry_size // 1024) # return value in kB
+        logger.debug("Extracted MPS RAM usage as\t\t%d kB" % RAM)
+
+        if isinstance(self, tenpy.algorithms.mps_common.Sweep):
+            #Size of each environment: chi_{i}**2 * D_i or chi_{i+1}**2 * D_i (depending on left/right environment)
+            env_RAM = (sum(chis[:-1]**2 * H_dim) * 8) // 1024
+            logger.debug("Extracted MPS environment RAM usage as\t%d kB" % env_RAM)
+            RAM += env_RAM
+
+        MPO = None
+        if isinstance(self.model, tenpy.models.model.MPOModel):
+            #TODO: if calc_H_MPO is summarized in parent class, rework those checks
+            # get H_eff from Hamiltonian
+            MPO = self.model.H_MPO
+
+        if isinstance(self.model, tenpy.models.model.NearestNeighborModel):
+            #TODO: if calc_H_MPO is summarized in parent class, rework those checks
+            # get H_eff from Hamiltonian
+            MPO = self.model.calc_H_MPO_from_bond()
+
+        if isinstance(self.model, tenpy.models.model.CouplingModel):
+            #TODO: if calc_H_MPO is summarized in parent class, rework those checks
+            # get H_eff from Hamiltonian
+            MPO = self.model.calc_H_MPO()
+        
+        if not MPO is None:
+            MPO_RAM = 0
+            for i in range(MPO.L):
+                entry = MPO.get_W(i)
+                MPO_RAM += np.prod(entry.shape) * 8
+            
+            # map to kB:
+            MPO_RAM = MPO_RAM // 1024
+            logger.debug("Extracted MPO RAM usage as\t\t%d kB" % MPO_RAM)
+            RAM += MPO_RAM
+
+        return RAM # in kB
+
+
 
 class TimeEvolutionAlgorithm(Algorithm):
     """Common interface for (real) time evolution algorithms.

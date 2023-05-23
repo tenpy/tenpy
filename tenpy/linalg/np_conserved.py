@@ -2339,6 +2339,7 @@ class Array:
         """
         if self is other:
             return True
+        if not isinstance(other, Array): raise NotImplementedError
         if other.chinfo != self.chinfo:
             raise ValueError("other array has different charges!")
         other = other._transpose_same_labels(self._labels)

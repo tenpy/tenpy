@@ -191,6 +191,9 @@ def console_main(*command_line_args):
                           FutureWarning)
             del options['simulation_class_name']
         options['simulation_class'] = args.sim_class
+    if 'RAM' in options:
+        print(simulation.estimate_RAM())
+        exit(0)
     if 'sequential' not in options:
         run_simulation(**options)
     else:
@@ -246,6 +249,10 @@ def _setup_arg_parser(width=None):
                         default='error',
                         help="Selects how to merge conflicts in case of multiple yaml files. "
                         "Options are 'error', 'first' or 'last'.")
+    parser.add_argument('--RAM',
+                        '-M',
+                        default='error',
+                        help="Estimates the required ram. This argument does not execute any code, but prints the prediction in MB and then exits")
     parser.add_argument('parameters_file',
                         nargs='*',
                         help="Yaml (*.yml) file with the simulation parameters/options. "
