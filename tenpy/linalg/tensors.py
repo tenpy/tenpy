@@ -299,9 +299,10 @@ class AbstractTensor(ABC):
     def __add__(self, other):
         ...
 
-    @abstractmethod
     def __sub__(self, other):
-        ...
+        if isinstance(other, AbstractTensor):
+            return self.__add__(other._mul_scalar(-1))
+        return NotImplemented
 
     def __mul__(self, other):
         if isinstance(other, (int, float, complex)):
@@ -503,12 +504,10 @@ class Tensor(AbstractTensor):
                     raise ValueError(msg)
             res_data = backend.add(self, other)
             return Tensor(res_data, backend=backend, legs=self.legs, labels=self.labels)
-        return NotImplemented
-
-    def __sub__(self, other):
-        # TODO make this the default implementation at AbstractTensor level?
-        if isinstance(other, AbstractTensor):
-            return self.__add__(other._mul_scalar(-1))
+        elif isinstance(other, DiagonalTensor):
+            raise NotImplementedError  # TODO
+        elif isinstance(other, AbstractTensor):
+            raise TypeError(f"unsupported operand type(s) for +: 'Tensor' and '{type(other)}'")
         return NotImplemented
 
     def is_real(self):
@@ -1159,12 +1158,6 @@ class ChargedTensor(AbstractTensor):
             raise TypeError(f"unsupported operand type(s) for +: 'ChargedTensor' and '{type(other)}'")
         return NotImplemented
 
-    def __sub__(self, other):
-        # TODO make this the default implementation at AbstractTensor level?
-        if isinstance(other, AbstractTensor):
-            return self.__add__(other._mul_scalar(-1))
-        return NotImplemented
-
     def _repr_header_lines(self, indent: str) -> list[str]:
         lines = AbstractTensor._repr_header_lines(self, indent=indent)
         lines.append(f'{indent}* Dummy Leg: {self.dummy_leg}')
@@ -1471,12 +1464,6 @@ class DiagonalTensor(AbstractTensor):
 
     def __add__(self, other):
         raise NotImplementedError  # TODO
-
-    def __sub__(self, other):
-        # TODO make this the default implementation at AbstractTensor level?
-        if isinstance(other, AbstractTensor):
-            return self.__add__(other._mul_scalar(-1))
-        return NotImplemented
 
     def is_real(self):
         raise NotImplementedError  # TODO
