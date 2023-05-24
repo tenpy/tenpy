@@ -45,98 +45,10 @@ if TYPE_CHECKING:
 
 
 class AbelianBackendVectorSpace(VectorSpace):
-    """Subclass of VectorSpace with additonal data and restrictions for AbstractAbelianBackend.
-
-
-    Attributes
-    ----------
-    perm_block_inds : ndarray[int]
-        Permutation from the original order of sectors to the sorted one in :attr:`sectors`.
-    slices : ndarray[(int, int)]
-        For each sector the begin and end when projecting to/from a "flat" ndarray
-        without symmetries. Note that this is not sorted when perm_block_inds is non-trivial.
-
-    """
-    def __init__(self, symmetry: Symmetry, sectors: SectorArray, multiplicities: ndarray = None,
-                 is_real: bool = False, _is_dual: bool = False,
-                 perm_block_inds=None, slices=None):
-        super().__init__(symmetry=symmetry,
-                         sectors=sectors,
-                         multiplicities=multiplicities,
-                         is_real=is_real,
-                         _is_dual=_is_dual)
-        num_sectors = sectors.shape[0]
-        if perm_block_inds is None:
-            # sort by slices
-            assert slices is None
-            self.slices = _slices_from_multiplicities(self.multiplicities)
-            self._sort_sectors()
-        else:
-            # TODO: do we need this case?
-            assert slices is not None
-            self.perm_block_inds = perm_block_inds
-            self.slices = slices
-
-    def _sort_sectors(self):
-        # sort sectors
-        assert not hasattr(self, 'perm_block_inds')
-        perm_block_inds = np.lexsort(self._sectors.T)
-        self.perm_block_inds = perm_block_inds
-        self._sectors = self._sectors[perm_block_inds]
-        self.multiplicities = self.multiplicities[perm_block_inds]
-        self.slices = self.slices[perm_block_inds]
-
-    def test_sanity(self):
-        assert len(self.sectors) == len(self.multiplicities) == len(self.slices)
-        assert np.all(self.multiplicities > 0)
-
-
+    """Subclass of VectorSpace with additional data and restrictions for AbstractAbelianBackend."""
+    pass  # currently there are no extra features compared to VectorSpace, that might change though.
     # TODO: do we need get_qindex?
     # Since slices is no longer sorted, it would be O(L) rather than O(log(L))
-
-    def project(self, mask: ndarray):
-        """Return copy keeping only the indices specified by `mask`.
-
-        Parameters
-        ----------
-        mask : 1D array(bool)
-            Whether to keep each of the indices in the dense array.
-
-        Returns
-        -------
-        map_block_ind : 1D array
-            Map of block indices, such that ``block_ind_new = map_block_ind[block_ind_old]``,
-            and ``map_block_ind[block_ind] = -1`` for block indices projected out.
-        block_masks : 1D array
-            The bool mask for each of the *remaining* blocks.
-        projected_copy : :class:`LegCharge`
-            Copy of self with the qind projected by `mask`.
-        """
-        mask = np.asarray(mask, dtype=np.bool_)
-        cp = copy.copy(self)
-        block_masks = [mask[b:e] for b, e in self.slices]
-        new_multiplicities = np.array([np.sum(bm) for bm in block_masks])
-        keep = np.nonzero(new_multiplicities)[0]
-        block_masks = [block_masks[i] for i in keep]
-        new_block_number = len(block_masks)
-        cp._sectors = cp._sectors[keep]
-        cp.multiplicities = new_multiplicities[keep]
-        cp.slices = _slices_from_multiplicities(cp.multiplicities)
-        map_block_inds = np.full((new_block_number,), -1, np.int)
-        map_block_inds[keep] = cp.perm_block_inds = np.arange(new_block_number)
-        return map_block_inds, block_masks, cp
-
-    def __mul__(self, other):
-        if isinstance(other, AbelianBackendVectorSpace):
-            return AbelianBackendProductSpace([self, other])
-        return NotImplemented
-
-
-def _slices_from_multiplicities(multiplicities: ndarray):
-    slices = np.zeros((len(multiplicities), 2), np.intp)
-    slices[:, 1] = slice_ends = np.cumsum(multiplicities)
-    slices[1:, 0] = slice_ends[:-1]
-    return slices
 
 
 # TODO: is the diamond-structure inheritance okay?
@@ -238,13 +150,11 @@ class AbelianBackendProductSpace(ProductSpace, AbelianBackendVectorSpace):
         _sectors = _fuse_abelian_charges(symmetry,
             *(sectors[gr] for sectors, gr in zip(fuse_sectors, grid.T)))
 
-        # sort (non-dual) charge sectors. Similar code as in AbelianBackendVectorSpace._sort_sectors
-        perm_block_inds = np.lexsort(_sectors.T)
-        block_ind_map = block_ind_map[perm_block_inds]
-        _sectors = _sectors[perm_block_inds]
-        multiplicities = multiplicities[perm_block_inds]
-        # inverse permutation is needed in _map_incoming_block_inds
-        self._inv_perm_block_inds = inverse_permutation(perm_block_inds)
+        # sort (non-dual) charge sectors. Similar code as in VectorSpace.__init__
+        sector_perm = np.lexsort(_sectors.T)
+        block_ind_map = block_ind_map[sector_perm]
+        _sectors = _sectors[sector_perm]
+        multiplicities = multiplicities[sector_perm]
 
         slices = np.concatenate([[0], np.cumsum(multiplicities)], axis=0)
         block_ind_map[:, 0] = slices[:-1]  # start with 0
@@ -265,7 +175,7 @@ class AbelianBackendProductSpace(ProductSpace, AbelianBackendVectorSpace):
         # calculate the slices within blocks: subtract the start of each block
         block_ind_map[:, :2] -= slices[new_block_ind][:, np.newaxis]
         self.block_ind_map = block_ind_map  # finished
-        return _sectors, multiplicities
+        return _sectors, multiplicities, sector_perm
 
     def _map_incoming_block_inds(self, incoming_block_inds):
         """Map incoming block indices to indices of :attr:`block_ind_map`.
@@ -284,12 +194,12 @@ class AbelianBackendProductSpace(ProductSpace, AbelianBackendVectorSpace):
             ``self.block_ind_map[J, 2:-1] == block_inds[j]``.
         """
         assert incoming_block_inds.shape[1] == len(self.spaces)
-        # calculate indices of block_ind_map[_inv_perm_block_inds],
+        # calculate indices of block_ind_map[inverse_sector_perm],
         # which is sorted by :math:`i_1, i_2, ...`,
         # by using the appropriate strides
         inds_before_perm = np.sum(incoming_block_inds * self._strides[np.newaxis, :], axis=1)
         # now permute them to indices in block_ind_map
-        return self._inv_perm_block_inds[inds_before_perm]
+        return self.inverse_sector_perm[inds_before_perm]
 
     def as_VectorSpace(self):
         return AbelianBackendVectorSpace(symmetry=self.symmetry,
@@ -297,27 +207,6 @@ class AbelianBackendProductSpace(ProductSpace, AbelianBackendVectorSpace):
                                          multiplicities=self.multiplicities,
                                          is_real=self.is_real,
                                          _is_dual=self.is_dual)
-
-    def project(self, *args, **kwargs):
-        """Convert self to VectorSpace and call :meth:`AbelianBackendVectorSpace.project`.
-
-        In general, this could be implemented for a ProductSpace, but would make
-        `split_legs` more complicated, thus we keep it simple.
-        If you really want to project and split afterwards, use the following work-around,
-        which is for example used in :class:`~tenpy.algorithms.exact_diagonalization`:
-
-        1) Create the full pipe and save it separately.
-        2) Convert the Pipe to a Leg & project the array with it.
-        3) [... do calculations ...]
-        4) To split the 'projected pipe' of `A`, create an empty array `B` with the legs of A,
-           but replace the projected leg by the full pipe. Set `A` as a slice of `B`.
-           Finally split the pipe.
-        """
-        # TODO: this should be ProductSpace.project()
-        # is method resolution order correct to choose that over AbelianBackendVectorSpace.project()?
-        warnings.warn("Converting ProductSpace to VectorSpace for `project`", stacklevel=2)
-        res = self.as_VectorSpace()
-        return res.project(*args, **kwargs)
 
 
 AbelianBackendVectorSpace.ProductSpace = AbelianBackendProductSpace
@@ -873,7 +762,7 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
                                                 leg_R.multiplicities[block_inds_R],
                                                 is_real=leg_R.is_real,
                                                 _is_dual=new_vh_leg_dual)
-            assert np.all(new_leg.perm_block_inds == block_inds_C), "new_leg sectors should be sorted"  # TODO remove this after tests ran
+            assert np.all(new_leg.sector_perm == block_inds_C), "new_leg sectors should be sorted"  # TODO remove this after tests ran
         else:  # new_vh_leg_dual == leg_R.is_dual
             # same dual flag in legs of vH => opposite _sectors => opposite sorting!!!
             sectors = symmetry.dual_sectors(leg_R._sectors[block_inds_R, :])  # not sorted
@@ -883,7 +772,7 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
                                                 is_real=leg_R.is_real,
                                                 _is_dual=new_vh_leg_dual)
             # new_leg has sorted _sectors in __init__, but that might have induced permutation
-            block_inds_C = block_inds_C[new_leg.perm_block_inds]  # no longer sorted
+            block_inds_C = block_inds_C[new_leg.sector_perm]  # no longer sorted
         u_block_inds = np.hstack(block_inds_L, block_inds_C)
         s_block_inds = block_inds_C
         vh_block_inds = np.hstack(block_inds_C, block_inds_R)  # sorted
@@ -1235,6 +1124,3 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
 
     # TODO: support eig(h), eigvals
     # TODO: concatenate and grid_concat
-
-
-
