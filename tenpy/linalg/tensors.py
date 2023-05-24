@@ -11,7 +11,7 @@ from typing import Iterable
 from numbers import Integral
 import numpy as np
 import warnings
-from functools import cached_property
+from functools import cached_property, singledispatchmethod
 
 from .misc import duplicate_entries, force_str_len, join_as_many_as_possible
 from .dummy_config import config
@@ -793,22 +793,16 @@ class Tensor(AbstractTensor):
         return cls(data=backend.from_block_func(backend.block_random_normal, legs, dtype=dtype, sigma=sigma),
                    backend=backend, legs=legs, labels=labels)
 
+    @singledispatchmethod
     def tdot(self, other: AbstractTensor,
              legs1: int | str | list[int | str] = -1, legs2: int | str | list[int | str] = 0,
              relabel1: dict[str, str] = None, relabel2: dict[str, str] = None) -> AbstractTensor:
-        if isinstance(other, ChargedTensor):
-            # make sure that legs2 are interpreted w.r.t. other, not other.invariant_part
-            legs2 = other.get_leg_idcs(legs2)
-            assert other.invariant_part.labels[-1] not in relabel2
-            invariant_part = self.tdot(other.invariant_part, legs1=legs1, legs2=legs2,
-                                       relabel1=relabel1, relabel2=relabel2)
-            return ChargedTensor(invariant_part=invariant_part, dummy_leg_state=other.dummy_leg_state)
-        elif isinstance(other, DiagonalTensor):
-            raise NotImplementedError  # TODO
-        elif not isinstance(other, Tensor):
-            raise TypeError(f'tdot not supported for types {type(self)} and {type(other)}.')
-        # can now assume that isinstance(other, Tensor)
+        raise TypeError(f'tdot not supported for {type(self)} and {type(other)}')
 
+    @tdot.register
+    def _tdot(self, other: Tensor,
+             legs1: int | str | list[int | str] = -1, legs2: int | str | list[int | str] = 0,
+             relabel1: dict[str, str] = None, relabel2: dict[str, str] = None) -> Tensor:
         leg_idcs1 = self.get_leg_idcs(legs1)
         leg_idcs2 = other.get_leg_idcs(legs2)
         if len(leg_idcs1) != len(leg_idcs2):
@@ -840,6 +834,22 @@ class Tensor(AbstractTensor):
             return backend.data_item(res_data)
         else:
             return Tensor(res_data, backend=backend, legs=res_legs, labels=res_labels)
+
+    @tdot.register
+    def _tdot(self, other: ChargedTensor,
+             legs1: int | str | list[int | str] = -1, legs2: int | str | list[int | str] = 0,
+             relabel1: dict[str, str] = None, relabel2: dict[str, str] = None) -> ChargedTensor:
+        legs2 = other.get_leg_idcs(legs2)
+        assert other.invariant_part.labels[-1] not in relabel2
+        invariant_part = self.tdot(other.invariant_part, legs1=legs1, legs2=legs2,
+                                   relabel1=relabel1, relabel2=relabel2)
+        return ChargedTensor(invariant_part=invariant_part, dummy_leg_state=other.dummy_leg_state)
+
+    @tdot.register
+    def _tdot(self, other: DiagonalTensor,
+             legs1: int | str | list[int | str] = -1, legs2: int | str | list[int | str] = 0,
+             relabel1: dict[str, str] = None, relabel2: dict[str, str] = None) -> Tensor:
+        raise NotImplementedError  # TODO
 
     def outer(self, other: AbstractTensor, relabel1: dict[str, str] = None, relabel2: dict[str, str] = None) -> AbstractTensor:
         if isinstance(other, ChargedTensor):
