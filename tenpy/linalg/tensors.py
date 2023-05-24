@@ -18,7 +18,7 @@ from .dummy_config import config
 from .symmetries.spaces import VectorSpace, ProductSpace
 from .backends.backend_factory import get_default_backend
 from .backends.abstract_backend import Dtype
-from ..tools.misc import to_iterable
+from ..tools.misc import to_iterable, to_iterable_of_len
 
 __all__ = ['AbstractTensor', 'Tensor', 'ChargedTensor', 'DiagonalTensor', 'tdot', 'outer', 'inner',
            'permute_legs', 'trace', 'conj', 'combine_legs', 'combine_leg', 'split_legs', 'split_leg',
@@ -967,15 +967,7 @@ class Tensor(AbstractTensor):
             raise ValueError("wrong len of `product_spaces`")
         else:
             product_spaces = list(product_spaces)
-        # default arguments for product_spaces_dual
-        if product_spaces_dual is None:
-            product_spaces_dual = [self.legs[leg_idcs[0]].is_dual for leg_idcs in combine_leg_idcs]
-        elif product_spaces_dual is True:
-            product_spaces_dual = [True] * n_comb
-        elif product_spaces_dual is False:
-            product_spaces_dual = [False] * n_comb
-        elif len(product_spaces_dual) != n_comb:
-            raise ValueError("wrong len of `product_spaces_dual`")
+        product_spaces_dual = to_iterable_of_len(product_spaces_dual, n_comb)
         # make pipes as necessary
         for i, (leg_idcs, product_space) in enumerate(zip(combine_leg_idcs, product_spaces)):
             if product_space is None:

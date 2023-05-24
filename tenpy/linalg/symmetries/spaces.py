@@ -381,8 +381,10 @@ class ProductSpace(VectorSpace):
     spaces:
         The factor spaces that multiply to this space.
         The resulting product space can always be split back into these.
-    _is_dual : bool
+    _is_dual : bool | None
         Flag indicating wether the fusion space represents a dual (bra) space or a non-dual (ket) space.
+        Per default (``_is_dual=None``), ``spaces[0].is_dual`` is used, i.e. the ``ProductSpace``
+        will be a bra space if and only if its first factor is a bra space.
 
         .. warning ::
             When setting `_is_dual=True`, consider the notes below!
@@ -436,8 +438,10 @@ class ProductSpace(VectorSpace):
     Consider writing ``P2 = ProductSpace([V, W]).dual`` instead for more readable code.
     """
 
-    def __init__(self, spaces: list[VectorSpace], _is_dual: bool = False, _sectors: SectorArray = None,
+    def __init__(self, spaces: list[VectorSpace], _is_dual: bool = None, _sectors: SectorArray = None,
                  _multiplicities: ndarray = None, _sector_perm: ndarray = None, _slices: ndarray = None):
+        if _is_dual is None:
+            _is_dual = spaces[0].is_dual
         self.spaces = spaces  # spaces can be themselves ProductSpaces
         symmetry = spaces[0].symmetry
         assert all(s.symmetry == symmetry for s in spaces)
