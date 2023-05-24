@@ -396,6 +396,17 @@ class AbelianBackendDiagonalData:
 class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
     """Backend for Abelian group symmetries.
 
+    Notes
+    -----
+    The data stored for the various tensor classes defined in ``tenpy.linalg.tensors`` is::
+
+        - ``Tensor``:
+            An ``AbelianBackendData`` instance whose blocks have as many axes as the tensor has legs.
+
+        - ``DiagonalTensor`` :
+            An ``AbelianBackendData`` instance whose blocks have only a single axis.
+            This is the diagonal of the corresponding 2D block in a ``Tensor``.
+
     """
     VectorSpaceCls = AbelianBackendVectorSpace
     ProductSpaceCls = AbelianBackendProductSpace

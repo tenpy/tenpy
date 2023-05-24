@@ -25,6 +25,16 @@ class AbstractNoSymmetryBackend(AbstractBackend, AbstractBlockBackend, ABC):
     """
     Backend with no symmetries.
 
+    Notes
+    -----
+    The data stored for the various tensor classes defined in ``tenpy.linalg.tensors`` is::
+
+        - ``Tensor``:
+            A single Block with as many axes as there a legs on the tensor.
+
+        - ``DiagonalTensor`` :
+            A single 1D Block. The diagonal of the corresponding 2D block of a ``Tensor``.
+
     """
     VectorSpaceCls = VectorSpace
     ProductSpaceCls = ProductSpace
