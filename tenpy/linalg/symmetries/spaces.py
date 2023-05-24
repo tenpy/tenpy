@@ -376,49 +376,6 @@ class ProductSpace(VectorSpace):
     It is the product space of the individual `spaces`,
     but with an associated basis change implied to allow preserving the symmetry.
 
-    .. note ::
-        While mathematically the dual of the product :math:`(V \otimes W)^*` is the same as the
-        product of the duals :math:`V^* \otimes W^*`, we distinguish these two objects in the
-        implementation. This allows us to fulfill all of the following constraints
-        a) Have the same order of `_sectors` for a space and its dual, to make contractions easier.
-        b) Consistently view every ProductSpace as a VectorSpace, i.e. have proper subclass behavior
-           and in particular a well-behaved `is_dual` attribute.
-        c) A ProductSpace can always be split into its :attr:`spaces`.
-
-        As an example, consider two VectorSpaces ``V`` and ``W`` and the following four possible
-        products::
-
-            ==== ============================ ================== ========= =================
-                 Mathematical Expression      .spaces            .is_dual  ._sectors
-            ==== ============================ ================== ========= =================
-            P1   :math:`V \otimes W`          [V, W]             False     P1._sectors
-            P2   :math:`(V \otimes W)^*`      [V.dual, W.dual]   True      P1._sectors
-            P3   :math:`V^* \otimes W^*`      [V.dual, W.dual]   False     dual(P1._sectors)
-            P4   :math:`(V^* \otimes W^*)^*`  [V, W]             True      dual(P1._sectors)
-            ==== ============================ ================== ========= =================
-
-        They can be related to each other via the :attr:`dual` property or via :meth:`flip_is_dual`.
-        In this example we have `P1.dual == P2`` and ``P3.dual == P4``, as well as
-        ``P1.flip_is_dual() == P4`` and ``P2.flip_is_dual() == P3``.
-
-        The mutually dual spaces, e.g. ``P1`` and ``P2``, can be contracted with each other, as they
-        have opposite :attr:`is_dual` and matching :attr:`._sectors`.
-        The spaces related by :meth:`flip_is_dual()`, e.g. ``P2`` and ``P3``, would be considered
-        the same space mathematically, but in this implementation we have ``P2 != P3`` due to the
-        different :attr:`is_dual` attribute.
-        Since they represent the same space, they have the same entries in :attr:`sectors` (no
-        underscore!), but not necessarily in the same order; due to the different :attr:`is_dual`,
-        their :attr:`_sectors` are different and we sort by :attr:`_sectors`, not :attr:`sectors`.
-        This also means that ``P1.can_contract_with(P3) is False``.
-        The contraction can be done, however, by first converting ``P3.flip_is_dual() == P2``,
-        since then ``P1.can_contract_with(P2) is True``.
-        # TODO (JU) is there a corresponding function that does this on a tensor? -> reference it.
-
-        This convention has the downside that the mathematical notation :math:`P_2 = (V \otimes W)^*`
-        does not transcribe trivially into a single call of ``ProductSpace.__init__``, since
-        ``P2 = ProductSpace([V.dual, W.dual], is_dual=True)``.
-        Consider writing ``P2 = ProductSpace([V, W]).dual`` instead for more readable code.
-
     Parameters
     ----------
     spaces:
@@ -428,11 +385,55 @@ class ProductSpace(VectorSpace):
         Flag indicating wether the fusion space represents a dual (bra) space or a non-dual (ket) space.
 
         .. warning ::
-            When setting `_is_dual=True`, consider the note above!
+            When setting `_is_dual=True`, consider the notes below!
 
     _sectors, _multiplicities, _sector_perm, _slices:
         These inputs to VectorSpace.__init__ can optionally be passed to avoid recomputation.
         Specify either all or None of them.
+
+    Notes
+    -----
+    While mathematically the dual of the product :math:`(V \otimes W)^*` is the same as the
+    product of the duals :math:`V^* \otimes W^*`, we distinguish these two objects in the
+    implementation. This allows us to fulfill all of the following constraints
+    a) Have the same order of `_sectors` for a space and its dual, to make contractions easier.
+    b) Consistently view every ProductSpace as a VectorSpace, i.e. have proper subclass behavior
+        and in particular a well-behaved `is_dual` attribute.
+    c) A ProductSpace can always be split into its :attr:`spaces`.
+
+    As an example, consider two VectorSpaces ``V`` and ``W`` and the following four possible
+    products::
+
+        ==== ============================ ================== ========= =================
+                Mathematical Expression      .spaces            .is_dual  ._sectors
+        ==== ============================ ================== ========= =================
+        P1   :math:`V \otimes W`          [V, W]             False     P1._sectors
+        P2   :math:`(V \otimes W)^*`      [V.dual, W.dual]   True      P1._sectors
+        P3   :math:`V^* \otimes W^*`      [V.dual, W.dual]   False     dual(P1._sectors)
+        P4   :math:`(V^* \otimes W^*)^*`  [V, W]             True      dual(P1._sectors)
+        ==== ============================ ================== ========= =================
+
+    They can be related to each other via the :attr:`dual` property or via :meth:`flip_is_dual`.
+    In this example we have `P1.dual == P2`` and ``P3.dual == P4``, as well as
+    ``P1.flip_is_dual() == P4`` and ``P2.flip_is_dual() == P3``.
+
+    The mutually dual spaces, e.g. ``P1`` and ``P2``, can be contracted with each other, as they
+    have opposite :attr:`is_dual` and matching :attr:`._sectors`.
+    The spaces related by :meth:`flip_is_dual()`, e.g. ``P2`` and ``P3``, would be considered
+    the same space mathematically, but in this implementation we have ``P2 != P3`` due to the
+    different :attr:`is_dual` attribute.
+    Since they represent the same space, they have the same entries in :attr:`sectors` (no
+    underscore!), but not necessarily in the same order; due to the different :attr:`is_dual`,
+    their :attr:`_sectors` are different and we sort by :attr:`_sectors`, not :attr:`sectors`.
+    This also means that ``P1.can_contract_with(P3) is False``.
+    The contraction can be done, however, by first converting ``P3.flip_is_dual() == P2``,
+    since then ``P1.can_contract_with(P2) is True``.
+    # TODO (JU) is there a corresponding function that does this on a tensor? -> reference it.
+
+    This convention has the downside that the mathematical notation :math:`P_2 = (V \otimes W)^*`
+    does not transcribe trivially into a single call of ``ProductSpace.__init__``, since
+    ``P2 = ProductSpace([V.dual, W.dual], is_dual=True)``.
+    Consider writing ``P2 = ProductSpace([V, W]).dual`` instead for more readable code.
     """
 
     def __init__(self, spaces: list[VectorSpace], _is_dual: bool = False, _sectors: SectorArray = None,
