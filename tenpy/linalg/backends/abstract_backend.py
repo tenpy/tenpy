@@ -26,6 +26,7 @@ Block = TypeVar('Block')
 class Dtype(Enum):
     # TODO expose those in some high-level init, maybe even as tenpy.float32 ?
     # value = num_bytes * 2 + int(not is_real)
+    bool = 2
     float32 = 8
     complex64 = 9
     float64 = 10
@@ -37,12 +38,16 @@ class Dtype(Enum):
 
     @property
     def to_complex(dtype):
+        if dtype.value == 2:
+            raise ValueError('Dtype.bool can not be converted to complex')
         if dtype.value % 2 == 1:
             return dtype
         return Dtype(dtype.value + 1)
 
     @property
     def to_real(dtype):
+        if dtype.value == 2:
+            raise ValueError('Dtype.bool can not be converted to real')
         if dtype.value % 2 == 0:
             return dtype
         return Dtype(dtype.value - 1)
