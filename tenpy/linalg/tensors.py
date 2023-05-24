@@ -17,7 +17,7 @@ from .misc import duplicate_entries, force_str_len, join_as_many_as_possible
 from .dummy_config import config
 from .symmetries.spaces import VectorSpace, ProductSpace
 from .backends.backend_factory import get_default_backend
-from .backends.abstract_backend import Dtype
+from .backends.abstract_backend import Dtype, Block
 from ..tools.misc import to_iterable, to_iterable_of_len
 
 __all__ = ['AbstractTensor', 'Tensor', 'ChargedTensor', 'DiagonalTensor', 'tdot', 'outer', 'inner',
@@ -1411,23 +1411,176 @@ class ChargedTensor(AbstractTensor):
 
 
 class DiagonalTensor(AbstractTensor):
+    r"""Special case of a tensor with two legs that is diagonal in the computational basis.
 
-    # special case where incoming and outgoing legs are equal and the
-    # tensor is "diagonal" (yet to precisely formulate what this means in a basis-independent way...)
-    # this would be the natural type for the singular values of an SVD
-    #  > no_symmetry: tensor, reshaped to matrix is diagonal
-    #  > abelian: blocks, reshaped to matrices are diagonal
-    #  > nonabelian: not only diagonal in coupled irrep, but also in its multiplicity, i.e. blocks are diagonal matrices
-    # TODO revisit this when Tensor class and specification for data-structure of backend is "finished"
-    # TODO this could implement element-wise operations such as __mul__ and __pow__, it would be well defined
+    TODO support all kinds of element-wise operations, __mul__, __pow__, exp, ...
 
-    # TODO should this allow that the incoming and outgoing legs are non-dual of each other?
+    Parameters
+    ----------
+    data
+        The numerical data ("free parameters") comprising the tensor. type is backend-specific
+    first_leg : VectorSpace
+        The first leg of this tensor.
+    second_leg_dual : bool
+        Wether the second leg is the dual of the first (default) or the same.
+        If ``True``, the result is a tensor :math:`\sum_n c_n \vert n \rangle\langle n \vert`.
+        Otherwise it is :math:`\sum_n c_n \vert n \rangle \otimes \vert n \rangle`.
+    backend: :class:`~tenpy.linalg.backends.abstract_backend.AbstractBackend`, optional
+        The backend for the Tensor
+    labels : list[str | None] | None
+        Labels for the legs. If None, translates to ``[None, None, ...]`` of appropriate length
+    """
+    def __init__(self, data, first_leg: VectorSpace, second_leg_dual: bool = True, backend=None,
+                 labels: list[str | None] = None):
+        self.data = data
+        second_leg = first_leg.dual if second_leg_dual else first_leg
+        AbstractTensor.__init__(self, legs=[first_leg, second_leg], backend=backend, labels=labels)
 
-    def __init__(self) -> None:
-        raise NotImplementedError
+    def test_sanity(self):
+        super().test_sanity()
+        assert isinstance(self.data, self.backend.DataCls)
+        # self.backend.test_data_sanity(self)  # TODO modify this
 
-    def to_full_tensor(self) -> Tensor:
-        raise NotImplementedError
+    @property
+    def dtype(self) -> Dtype:
+        return self.backend.get_dtype_from_data(self.data)
+
+    def copy(self, deep=True):
+        if deep:
+            return DiagonalTensor(data=self.backend.copy_data(self.data),
+                                  backend=self.backend,
+                                  legs=self.legs[:],
+                                  labels=self.labels[:])
+        else:
+            return DiagonalTensor(data=self.data,
+                                  backend=self.backend,
+                                  legs=self.legs,
+                                  labels=self.labels)
+
+    def item(self):
+        raise NotImplementedError  # TODO
+
+    def __mul__(self, other):
+        if isinstance(other, DiagonalTensor):
+            raise NotImplementedError  # TODO
+        return AbstractTensor.__mul__(self, other)
+
+    def _mul_scalar(self, other: complex):
+        raise NotImplementedError  # TODO
+
+    def __add__(self, other):
+        raise NotImplementedError  # TODO
+
+    def __sub__(self, other):
+        # TODO make this the default implementation at AbstractTensor level?
+        if isinstance(other, AbstractTensor):
+            return self.__add__(other._mul_scalar(-1))
+        return NotImplemented
+
+    def is_real(self):
+        raise NotImplementedError  # TODO
+
+    def to_dense_block(self, leg_order: list[int | str] = None):
+        raise NotImplementedError  # TODO
+
+    @cached_property
+    def diag_block(self):
+        raise NotImplementedError  # TODO
+
+    @cached_property
+    def diag_numpy(self):
+        raise NotImplementedError  # TODO
+
+    @classmethod
+    def from_full_tensor(cls, t: Tensor, atol: float = 1e-8, rtol: float = 1e-5) -> DiagonalTensor:
+        raise NotImplementedError  # TODO
+
+    @classmethod
+    def from_diag_numpy(cls, diag: np.ndarray, first_leg: VectorSpace, second_leg_dual: bool = True,
+                        backend=None, labels: list[str | None] = None) -> DiagonalTensor:
+        raise NotImplementedError  # TODO
+
+    @classmethod
+    def from_diag_block(cls, diag: Block, first_leg: VectorSpace, second_leg_dual: bool = True,
+                        backend=None, labels: list[str | None] = None) -> DiagonalTensor:
+        raise NotImplementedError  # TODO
+
+    @classmethod
+    def zero(cls, first_leg: VectorSpace, second_leg_dual: bool = True, backend=None,
+             labels: list[str | None] = None) -> DiagonalTensor:
+        raise NotImplementedError  # TODO
+
+    @classmethod
+    def eye(cls, first_leg: VectorSpace, second_leg_dual: bool = True, backend=None,
+            labels: list[str | None] = None) -> DiagonalTensor:
+        raise NotImplementedError  # TODO
+
+    @classmethod
+    def from_numpy_func(cls, func, first_leg: VectorSpace, second_leg_dual: bool = True,
+                        backend=None, labels: list[str | None] = None, func_kwargs={},
+                        shape_kw: str = None, dtype: Dtype = None) -> DiagonalTensor:
+        raise NotImplementedError  # TODO
+
+    @classmethod
+    def from_block_func(cls, func, first_leg: VectorSpace, second_leg_dual: bool = True,
+                        backend=None, labels: list[str | None] = None, func_kwargs={},
+                        shape_kw: str = None, dtype: Dtype = None) -> DiagonalTensor:
+        raise NotImplementedError  # TODO
+
+    @classmethod
+    def random_uniform(cls, first_leg: VectorSpace, second_leg_dual: bool = True, backend=None,
+                       labels: list[str | None] = None, dtype: Dtype = Dtype.complex128
+                       ) -> DiagonalTensor:
+        raise NotImplementedError  # TODO
+
+    @classmethod
+    def random_normal(cls, first_leg: VectorSpace = None, second_leg_dual: bool = None,
+                      mean: Tensor = None, sigma: float = 1., backend=None,
+                      labels: list[str | None] = None, dtype: Dtype = None
+                      ) -> DiagonalTensor:
+        raise NotImplementedError  # TODO
+
+    def tdot(self, other: AbstractTensor,
+             legs1: int | str | list[int | str] = -1, legs2: int | str | list[int | str] = 0,
+             relabel1: dict[str, str] = None, relabel2: dict[str, str] = None) -> AbstractTensor:
+        raise NotImplementedError  # TODO
+
+    def outer(self, other: AbstractTensor, relabel1: dict[str, str] = None,
+              relabel2: dict[str, str] = None) -> AbstractTensor:
+        raise NotImplementedError  # TODO
+
+    def inner(self, other: AbstractTensor, do_conj: bool = True,
+              legs1: list[int | str] = None, legs2: list[int | str]  = None) -> complex:
+        raise NotImplementedError  # TODO
+
+    def permute_legs(self, permutation: list[int | str]) -> AbstractTensor:
+        raise NotImplementedError  # TODO
+
+    def trace(self, legs1: int | str | list[int | str] = -2, legs2: int | str | list[int | str] = -1
+              ) -> AbstractTensor | float | complex:
+        raise NotImplementedError  # TODO
+
+    def conj(self) -> AbstractTensor:
+        raise NotImplementedError  # TODO
+
+    def combine_legs(self,
+                     *legs: list[int | str],
+                     product_spaces: list[ProductSpace]=None,
+                     product_spaces_dual: list[bool]=None,
+                     new_axes: list[int]=None) -> Tensor:
+        raise NotImplementedError  # TODO
+
+    def split_legs(self, *legs: int | str) -> AbstractTensor:
+        raise NotImplementedError  # TODO
+
+    def squeeze_legs(self, legs: int | str | list[int | str] = None) -> AbstractTensor:
+        raise NotImplementedError  # TODO
+
+    def norm(self) -> float:
+        raise NotImplementedError  # TODO
+
+    def almost_equal(self, other: AbstractTensor, atol: float = 1e-5, rtol: float = 1e-8) -> bool:
+        raise NotImplementedError  # TODO
 
 
 def zero_like(tens: AbstractTensor, labels: list[str | None] = None) -> Tensor:
