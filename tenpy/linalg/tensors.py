@@ -417,6 +417,10 @@ class AbstractTensor(ABC):
         """See tensors.almost_equal"""
         ...
 
+    @abstractmethod
+    def apply_mask(self, mask: Mask, leg: int | str) -> AbstractTensor:
+        ...
+
 
 class Tensor(AbstractTensor):
     """
@@ -1070,6 +1074,9 @@ class Tensor(AbstractTensor):
         backend = get_same_backend(self, other)
         return backend.almost_equal(self, other, atol=atol, rtol=rtol)
 
+    def apply_mask(self, mask: Mask, leg: int | str) -> Tensor:
+        raise NotImplementedError  # TODO
+
 
 class ChargedTensor(AbstractTensor):
     """
@@ -1402,6 +1409,9 @@ class ChargedTensor(AbstractTensor):
             warnings.warn('Converting ChargedTensor to dense block for `norm`', stacklevel=2)
             return self.backend.block_norm(self.to_dense_block())
 
+    def apply_mask(self, mask: Mask, leg: int | str) -> ChargedTensor:
+        raise NotImplementedError  # TODO
+
 
 class DiagonalTensor(AbstractTensor):
     r"""Special case of a tensor with two legs that is diagonal in the computational basis.
@@ -1569,6 +1579,98 @@ class DiagonalTensor(AbstractTensor):
 
     def almost_equal(self, other: AbstractTensor, atol: float = 1e-5, rtol: float = 1e-8) -> bool:
         raise NotImplementedError  # TODO
+
+    def apply_mask(self, mask: Mask, leg: int | str) -> 'TODO':
+        # TODO we could want to differnt things here:
+        #  - "proper subclass behavior": meaning apply the mask only to one leg.
+        #    would need to convert to Tensor first
+        #  - apply the mask to both legs to get a DiagonalTensor on the mask.small_leg
+        raise NotImplementedError
+
+
+class Mask(AbstractTensor):
+    r"""A boolean mask that can be used to project a leg.
+
+    As an AbstractTensor, the first leg is the larger leg and the second is a "slice" of it.
+
+    TODO put this piece of doc in the right place:
+    Via `tdot`, the mask can be applied only to the *dual* of `large_leg`.
+    With the  `apply_*` methods however, a mask can be applied to both `large_leg` and its dual.
+
+    Parameters
+    ----------
+    data
+        The numerical data (i.e. boolean flags) comprising the mask. type is backend-specific
+    large_leg : VectorSpace
+        The larger leg, the source/domain of the projection.
+    small_leg : VectorSpace
+        The smaller leg, the target/codomain of the projection.
+        Should have the same :attr:`is_dual` as `large_leg`.
+    backend: :class:`~tenpy.linalg.backends.abstract_backend.AbstractBackend`, optional
+        The backend for the Tensor
+    labels : list[str | None] | None
+        Labels for the legs. If None, translates to ``[None, None, ...]`` of appropriate length
+    """
+    def __init__(self, data, small_leg: VectorSpace, large_leg: VectorSpace, backend=None,
+                 labels: list[str | None] = None):
+        self.data = data
+        self.dtype = Dtype.bool
+        AbstractTensor.__init__(self, legs=[small_leg, large_leg], backend=backend, labels=labels)
+
+    def test_sanity(self):
+        super().test_sanity()
+        assert isinstance(self.data, self.backend.DataCls)
+        # self.backend.test_data_sanity(self)  # TODO modify this
+        assert self.legs[0].is_dual != self.legs[1].is_dual
+        # TODO check if legs[0] is a slice of legs[1]
+
+    @property
+    def small_leg(self):
+        return self.spaces[0]
+
+    @property
+    def large_leg(self):
+        return self.spaces[1]
+
+    @classmethod
+    def from_diagonal_tensor(cls, d: DiagonalTensor) -> Mask:
+        """"""
+        assert d.dtype == Dtype.bool
+        ...  # TODO
+
+    @classmethod
+    def from_flat_numpy(cls, mask: np.ndaray, large_leg: VectorSpace) -> Mask:
+        ...  # TODO
+
+    @classmethod
+    def from_flat_block(cls, mask: np.ndarray, large_leg: VectorSpace) -> Mask:
+        ...  # TODO
+
+    @classmethod
+    def from_indices(cls, indices: list[int] | np.ndarray, large_leg: VectorSpace) -> Mask:
+        ...  # TODO
+
+    @classmethod
+    def from_slice(cls, s: slice, large_leg: VectorSpace) -> Mask:
+        ...  # TODO
+
+    def copy(self, deep=True):
+        if deep:
+            return Mask(data=self.backend.copy_data(self.data),
+                        small_legs=self.legs[0],
+                        large_leg=self.legs[1],
+                        backend=self.backend,
+                        labels=self.labels[:])
+        return Mask(data=self.data,
+                    small_legs=self.legs[0],
+                    large_leg=self.legs[1],
+                    backend=self.backend,
+                    labels=self.labels)
+
+    def apply_mask(self, mask: Mask, leg: int | str) -> Mask:
+        raise NotImplementedError
+
+    # TODO all the other methods...
 
 
 def zero_like(tens: AbstractTensor, labels: list[str | None] = None) -> Tensor:
