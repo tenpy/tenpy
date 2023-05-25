@@ -113,6 +113,32 @@ class Shape:
         return f"({dims})"
 
 
+class _TensorIndexHelper:
+    """A helper class that redirects __getitem__ to an AbstractTensor.
+
+    This allows indexing wihtout calling the label order by redirecting
+    ``tensor.index('a', 'b')[1, 2]`` to ``tensor[idx]`` for an appropriate index.
+    """
+    def __init__(self, tensor: AbstractTensor, which_legs: list[int | str]):
+        self.tensors = tensor
+        self.which_legs = which_legs
+
+    def transform_item(self, item):
+        item = to_iterable(item)
+        assert Ellipsis not in item
+        assert len(item) == len(self.leg_idcs)
+        res = [slice(None, None, None) for _ in range(self.tesnor.num_legs)]
+        for which_leg, idx in zip(self.which_legs, item):
+            res[self.tensor.get_leg_idx(which_leg)] = idx
+        return res
+
+    def __getitem__(self, item):
+        return self.tensor.__getitem__(self.transform_item(item))
+
+    def __setitem__(self, item):
+        return self.tensor.__setitem__(self.transform_item(item))
+
+
 class AbstractTensor(ABC):
     """
     Common base class for tensors.
@@ -150,6 +176,102 @@ class AbstractTensor(ABC):
         for leg in self.legs:
             assert isinstance(leg, (self.backend.VectorSpaceCls, self.backend.ProductSpaceCls))
         self.shape.test_sanity()
+
+    def __getitem__(self, item):
+        """We support indexing with the following objects:
+        - A single index
+        - A tuple of at most ``self.num_legs`` entries.
+          The tuple entries may be indices or ``Ellipsis`` (i.e. ``...``).
+        TODO do we also support a dict?, i.e. `tensor[{'a': slice(1, 10), 'b': 3}]`
+
+        Indices may be of the following form
+        - integers
+        - slices
+        - Masks
+
+        TODO should we support indexing DiagonalTensors and Masks by a single index that acts on both legs?
+          how?
+        """
+        item = list(to_iterable(item))  # translates single index to ``[item]``
+        if None in item:
+            # check this explicitly, because we use None below to mean "nothing to do on this leg"
+            raise IndexError("'None' is not a valid index.")
+
+        # bring to length num_legs, fill with None if there is nothing to do on a given leg
+        if Ellipsis in item:
+            where = item.index(Ellipsis)
+            first = item[:where]
+            last = item[where + 1:]
+            if Ellipsis in last:
+                raise IndexError("Ellipsis ('...') may not appear multiple times.")
+            item = first + [None] * (self.num_legs - len(first) - len(last)) + last
+        elif len(item) < self.num_legs:
+            item.extend([None] * (self.num_legs - len(item)))
+        elif len(item) > self.num_legs:
+            raise IndexError(f'Too many indices. Got {len(item)} indices for {self.num_legs} legs.')
+
+        mask_legs = []
+        masks = []
+        int_legs = []
+        ints = []
+        for leg_num, idx in enumerate(item):
+            if idx is None or idx == slice(None, None, None):
+                pass
+            elif isinstance(idx, int):
+                int_legs.append(leg_num)
+                ints.append(idx)
+            elif isinstance(idx, slice):
+                mask_legs.append(leg_num)
+                masks.append(Mask.from_slice(idx, self.legs[leg_num]))
+            elif isinstance(idx, Mask):
+                mask_legs.append(leg_num)
+                masks.append(idx)
+            else:
+                raise IndexError(f'Unsupported index type: {type(idx)}')
+
+        res, is_scalar = self._take_integer_indices(idcs=ints, which_legs=int_legs)
+        if is_scalar:
+            assert len(masks) == 0  # otherwise something went wrong...
+        else:
+            res = res._take_mask_indices(masks=masks, legs=mask_legs)
+        return res
+
+    def index(self, *legs: int | str):
+        """This method allows indexing a tensor "by label".
+
+        It returns a helper object, that can be indexed instead of self.
+        For example, if we have a tensor with labels 'a', 'b' and 'c', but we are not sure about
+        their order, we can call ``tensor.index('a', 'b')[0, 1]``.
+        If ``tensors.labels == ['a', 'b', 'c']`` in alphabetic order, we get ``tensor[0, 1]``.
+        However if the order of labels happens to be different, e.g.
+        ``tensor.labels == ['b', 'c', 'a']`` we get ``tensor[1, :, 0]``.
+        """
+        return _TensorIndexHelper(self, legs)
+
+    def __setitem__(self, item):
+        raise TypeError('tensors are immutable and dont support item assignment')
+
+    @abstractmethod
+    def _take_integer_indices(self, idcs: list[int], which_legs: list[int]
+                              ) -> tuple[AbstractTensor | complex | float, bool]:
+        """Helper function for __getitem__ to index self with integers
+
+        Returns
+        -------
+        res : AbstractTensor | complex | float
+            The indexed tensors
+        is_scalar : bool
+            If the result is a number (otherwise a tensor)
+        """
+        ...
+
+    def _take_mask_indices(self, masks: list[Mask], legs: list[int]) -> AbstractTensor:
+        """Helper function for __getitem__ to index self with masks.
+        Subclasses may override this implementation."""
+        res = self
+        for mask, leg in zip(masks, legs):
+            res = res.apply_mask(mask, leg)
+        return res
 
     @cached_property
     def parent_space(self) -> VectorSpace:
@@ -1074,6 +1196,11 @@ class Tensor(AbstractTensor):
         backend = get_same_backend(self, other)
         return backend.almost_equal(self, other, atol=atol, rtol=rtol)
 
+    def _take_integer_indices(self, idcs: list[int], legs: list[int]
+                              ) -> tuple[Tensor | ChargedTensor | complex | float, bool]:
+        # TODO: dont forget to account for legs sector_perm / index_perm!
+        raise NotImplementedError  # TODO
+
     def apply_mask(self, mask: Mask, leg: int | str) -> Tensor:
         raise NotImplementedError  # TODO
 
@@ -1409,6 +1536,14 @@ class ChargedTensor(AbstractTensor):
             warnings.warn('Converting ChargedTensor to dense block for `norm`', stacklevel=2)
             return self.backend.block_norm(self.to_dense_block())
 
+    def _take_integer_indices(self, idcs: list[int], legs: list[int]
+                              ) -> tuple[ChargedTensor | complex | float, bool]:
+        # TODO should this convert to Tensor, if possible?
+        #  instinctively, i would say no, but we should have a method to convert to Tensor, if possible,
+        #  i.e. if the dummy leg is trivial (has only the trivial sector and only once)
+        # TODO: dont forget to account for legs sector_perm / index_perm!
+        raise NotImplementedError  # TODO
+
     def apply_mask(self, mask: Mask, leg: int | str) -> ChargedTensor:
         raise NotImplementedError  # TODO
 
@@ -1580,6 +1715,11 @@ class DiagonalTensor(AbstractTensor):
     def almost_equal(self, other: AbstractTensor, atol: float = 1e-5, rtol: float = 1e-8) -> bool:
         raise NotImplementedError  # TODO
 
+    def _take_integer_indices(self, idcs: list[int], legs: list[int]
+                              ) -> tuple[Tensor | complex | float, bool]:
+        # TODO: dont forget to account for legs sector_perm / index_perm!
+        raise NotImplementedError  # TODO
+
     def apply_mask(self, mask: Mask, leg: int | str) -> 'TODO':
         # TODO we could want to differnt things here:
         #  - "proper subclass behavior": meaning apply the mask only to one leg.
@@ -1640,18 +1780,22 @@ class Mask(AbstractTensor):
 
     @classmethod
     def from_flat_numpy(cls, mask: np.ndaray, large_leg: VectorSpace) -> Mask:
+        # TODO remember to use large_leg.index_perm!
         ...  # TODO
 
     @classmethod
     def from_flat_block(cls, mask: np.ndarray, large_leg: VectorSpace) -> Mask:
+        # TODO remember to use large_leg.index_perm!
         ...  # TODO
 
     @classmethod
     def from_indices(cls, indices: list[int] | np.ndarray, large_leg: VectorSpace) -> Mask:
+        # TODO remember to use large_leg.index_perm!
         ...  # TODO
 
     @classmethod
     def from_slice(cls, s: slice, large_leg: VectorSpace) -> Mask:
+        # TODO remember to use large_leg.index_perm!
         ...  # TODO
 
     def copy(self, deep=True):
@@ -1666,6 +1810,11 @@ class Mask(AbstractTensor):
                     large_leg=self.legs[1],
                     backend=self.backend,
                     labels=self.labels)
+
+    def _take_integer_indices(self, idcs: list[int], legs: list[int]
+                              ) -> tuple[Tensor | ChargedTensor | complex | float, bool]:
+        # TODO: dont forget to account for legs sector_perm / index_perm!
+        raise NotImplementedError  # TODO
 
     def apply_mask(self, mask: Mask, leg: int | str) -> Mask:
         raise NotImplementedError
