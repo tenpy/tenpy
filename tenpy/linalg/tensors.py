@@ -1448,14 +1448,15 @@ class DiagonalTensor(AbstractTensor):
     def copy(self, deep=True):
         if deep:
             return DiagonalTensor(data=self.backend.copy_data(self.data),
+                                  first_leg=self.legs[0],
+                                  second_leg_dual=(self.legs[1].is_dual != self.legs[0].is_dual),
                                   backend=self.backend,
-                                  legs=self.legs[:],
                                   labels=self.labels[:])
-        else:
-            return DiagonalTensor(data=self.data,
-                                  backend=self.backend,
-                                  legs=self.legs,
-                                  labels=self.labels)
+        return DiagonalTensor(data=self.data,
+                              first_leg=self.legs[0],
+                              second_leg_dual=(self.legs[1].is_dual != self.legs[0].is_dual),
+                              backend=self.backend,
+                              labels=self.labels)
 
     def item(self):
         raise NotImplementedError  # TODO
