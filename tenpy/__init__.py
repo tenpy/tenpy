@@ -252,7 +252,7 @@ def _setup_arg_parser(width=None):
     parser.add_argument('--RAM',
                         '-M',
                         default='error',
-                        help="Estimates the required ram. This argument does not execute any code, but prints the prediction in MB and then exits")
+                        help="Estimates the required RAM. This argument does not execute any code, but prints the prediction in kB and then exits.")
     parser.add_argument('parameters_file',
                         nargs='*',
                         help="Yaml (*.yml) file with the simulation parameters/options. "

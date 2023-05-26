@@ -9,7 +9,7 @@ Different algorithms require different representations of the Hamiltonian.
 For example for DMRG, the Hamiltonian needs to be given as an MPO,
 while TEBD needs the Hamiltonian to be represented by 'nearest neighbor' bond terms.
 This module contains the base classes defining these possible representations,
-namley the :class:`MPOModel` and :class:`NearestNeighborModel`.
+namely the :class:`MPOModel` and :class:`NearestNeighborModel`.
 
 A particular model like the :class:`~tenpy.models.models.xxz_chain.XXZChain` should then
 yet another class derived from these classes. In it's __init__, it needs to explicitly call
@@ -254,9 +254,26 @@ class Model(Hdf5Exportable):
         model_params['time'] = new_time
         return cls(model_params)
 
+    def estimate_RAM_saving_factor(self):
+        """Returns the expected saving factor for RAM based on charge conservation.
+
+        Returns
+        -------
+        factor : int
+            saving factor, due to conservation
+        """
+        chinfo = self.lat.unit_cell[0].leg.chinfo
+        savings = 1
+        for mod in chinfo.mod:
+            if mod == 1:
+                savings *= 1/4 # this is what we found empirically
+            else:
+                savings *= 1/mod
+        print(savings)
+        return savings
 
 class NearestNeighborModel(Model):
-    r"""Base class for a model of nearest neigbor interactions w.r.t. the MPS index.
+    r"""Base class for a model of nearest neighbor interactions w.r.t. the MPS index.
 
     In this class, the Hamiltonian :math:`H = \sum_{i} H_{i,i+1}` is represented by
     "bond terms" :math:`H_{i,i+1}` acting only on two neighboring sites `i` and `i+1`,
@@ -305,7 +322,7 @@ class NearestNeighborModel(Model):
     def from_MPOModel(cls, mpo_model):
         """Initialize a NearestNeighborModel from a model class defining an MPO.
 
-        This is especially usefull in combination with :meth:`MPOModel.group_sites`.
+        This is especially useful in combination with :meth:`MPOModel.group_sites`.
 
         Parameters
         ----------
@@ -397,7 +414,7 @@ class NearestNeighborModel(Model):
         factor : int
             The new number of sites in the MPS unit cell will be increased from `N_sites` to
             ``factor*N_sites_per_ring``. Since MPS unit cells are repeated in the `x`-direction
-            in our convetion, the lattice shape goes from
+            in our convention, the lattice shape goes from
             ``(Lx, Ly, ..., Lu)`` to ``(Lx*factor, Ly, ..., Lu)``.
         """
         super().enlarge_mps_unit_cell(factor)
@@ -635,7 +652,7 @@ class MPOModel(Model):
         factor : int
             The new number of sites in the MPS unit cell will be increased from `N_sites` to
             ``factor*N_sites_per_ring``. Since MPS unit cells are repeated in the `x`-direction
-            in our convetion, the lattice shape goes from
+            in our convention, the lattice shape goes from
             ``(Lx, Ly, ..., Lu)`` to ``(Lx*factor, Ly, ..., Lu)``.
         """
         super().enlarge_mps_unit_cell(factor)
@@ -759,7 +776,7 @@ class CouplingModel(Model):
 
     .. deprecated:: 0.4.0
         `bc_coupling` will be removed in 1.0.0. To specify the full geometry in the lattice,
-        use the `bc` parameter of the :class:`~tenpy.model.latttice.Lattice`.
+        use the `bc` parameter of the :class:`~tenpy.model.lattice.Lattice`.
 
     Parameters
     ----------
@@ -794,7 +811,7 @@ class CouplingModel(Model):
         ``self.add_coupling(..., plus_hc=True)`` was used.
         Note that :meth:`add_onsite`, :meth:`add_coupling`, :meth:`add_multi_coupling`
         and :meth:`add_exponentially_decaying_coupling` respect this flag, ensuring that the
-        *represented* Hamiltonian is indepentent of the `explicit_plus_hc` flag.
+        *represented* Hamiltonian is independent of the `explicit_plus_hc` flag.
     """
     def __init__(self, lattice, bc_coupling=None, explicit_plus_hc=False):
         Model.__init__(self, lattice)
@@ -1013,7 +1030,7 @@ class CouplingModel(Model):
         strength : scalar | array
             Prefactor of the coupling. May vary spatially (see above). If an array of smaller size
             is provided, it gets tiled to the required shape.
-            A single scalar number can be given to indicate a coupling which is uniform accross
+            A single scalar number can be given to indicate a coupling which is uniform across
             the lattice.
         u1 : int
             Picks the site ``lat.unit_cell[u1]`` for OP1.
@@ -1282,7 +1299,7 @@ class CouplingModel(Model):
         .. deprecated:: 0.6.0
             We switched from the three arguments `u0`, `op0` and `other_op` with
             ``other_ops=[(u1, op1, dx1), (op2, u2, dx2), ...]``
-            to a single, equivalent argment `ops` which should now read
+            to a single, equivalent argument `ops` which should now read
             ``ops=[(op0, dx0, u0), (op1, dx1, u1), (op2, dx2, u2), ...]``, where
             ``dx0 = [0]*self.lat.dim``. Note the changed order inside the tuples!
 

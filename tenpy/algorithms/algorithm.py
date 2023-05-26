@@ -183,17 +183,17 @@ class Algorithm:
             return {'psi': self.psi}
 
     def estimate_RAM(self):
-        """
-        Gives an approximate prediction for the required virtual memory usage.
+        """Gives an approximate prediction for the required memory usage.
         This calculation is based on the requested bond dimension, local Hilbert space dimension, the number of sites and the boundary conditions.
 
         Returns
         -------
-        usage : int
-            Required virtual memory in kB as int.
+        usage : float
+            Required RAM in kB.
         """
         import numpy as np
-        entry_size = 8 # 8 bit for a default float, could be replaced by array.itemsize for numpy arrays
+        # get memory per item
+        entry_size = self.psi.dtype.itemsize
 
         # get info from model & params
         L = self.psi.L
@@ -223,43 +223,35 @@ class Algorithm:
             site_i = self.model.lat.mps_sites()[i]
             num_entries += site_i.dim * chis[i] * chis[i+1]
 
-        RAM = (num_entries * entry_size // 1024) # return value in kB
-        logger.debug("Extracted MPS RAM usage as\t\t%d kB" % RAM)
+        RAM = num_entries # store number of entries first
+        logger.debug("Extracted MPS RAM usage as\t\t%d kB" % (RAM*entry_size // 1024))
 
-        if isinstance(self, tenpy.algorithms.mps_common.Sweep):
+        from .mps_common import Sweep
+        from .mpo_evolution import ExpMPOEvolution
+
+        if isinstance(self, (Sweep, ExpMPOEvolution)):
             #Size of each environment: chi_{i}**2 * D_i or chi_{i+1}**2 * D_i (depending on left/right environment)
-            env_RAM = (sum(chis[:-1]**2 * H_dim) * 8) // 1024
-            logger.debug("Extracted MPS environment RAM usage as\t%d kB" % env_RAM)
+            env_RAM = sum(chis[:-1]**2 * H_dim)
+            logger.debug("Extracted MPS environment RAM usage as\t%d kB" % (env_RAM*entry_size // 1028))
             RAM += env_RAM
 
-        MPO = None
-        if isinstance(self.model, tenpy.models.model.MPOModel):
-            #TODO: if calc_H_MPO is summarized in parent class, rework those checks
-            # get H_eff from Hamiltonian
             MPO = self.model.H_MPO
+            entry_size = MPO.dtype.itemsize if MPO.dtype.itemsize > entry_size else entry_size
 
-        if isinstance(self.model, tenpy.models.model.NearestNeighborModel):
-            #TODO: if calc_H_MPO is summarized in parent class, rework those checks
-            # get H_eff from Hamiltonian
-            MPO = self.model.calc_H_MPO_from_bond()
-
-        if isinstance(self.model, tenpy.models.model.CouplingModel):
-            #TODO: if calc_H_MPO is summarized in parent class, rework those checks
-            # get H_eff from Hamiltonian
-            MPO = self.model.calc_H_MPO()
-        
-        if not MPO is None:
             MPO_RAM = 0
             for i in range(MPO.L):
                 entry = MPO.get_W(i)
-                MPO_RAM += np.prod(entry.shape) * 8
+                MPO_RAM += np.prod(entry.shape)
             
-            # map to kB:
-            MPO_RAM = MPO_RAM // 1024
-            logger.debug("Extracted MPO RAM usage as\t\t%d kB" % MPO_RAM)
+            logger.debug("Extracted MPO RAM usage as\t\t%d kB" % (MPO_RAM // 128))
             RAM += MPO_RAM
 
-        return RAM # in kB
+        saving_factor = self.model.estimate_RAM_saving_factor()
+        logger.debug("Each entry uses %d byte" % (entry_size))
+        RAM *= entry_size
+        logger.debug("We have a saving factor of %d" % (saving_factor))
+        RAM *= saving_factor
+        return RAM / 1024 # in kB
 
 
 
