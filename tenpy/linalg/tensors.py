@@ -116,27 +116,27 @@ class Shape:
 class _TensorIndexHelper:
     """A helper class that redirects __getitem__ to an AbstractTensor.
 
-    This allows indexing wihtout calling the label order by redirecting
-    ``tensor.index('a', 'b')[1, 2]`` to ``tensor[idx]`` for an appropriate index.
+    This allows indexing without knowing the order of labels by redirecting
+    ``tensor.index('a', 'b')[1, 2]`` to ``tensor[idx]`` for an appropriate ``idx`.
     """
     def __init__(self, tensor: AbstractTensor, which_legs: list[int | str]):
-        self.tensors = tensor
+        self.tensor = tensor
         self.which_legs = which_legs
 
-    def transform_item(self, item):
-        item = to_iterable(item)
-        assert Ellipsis not in item
-        assert len(item) == len(self.leg_idcs)
-        res = [slice(None, None, None) for _ in range(self.tesnor.num_legs)]
-        for which_leg, idx in zip(self.which_legs, item):
+    def transform_idcs(self, idcs):
+        idcs = to_iterable(idcs)
+        assert Ellipsis not in idcs
+        assert len(idcs) == len(self.leg_idcs)
+        res = [slice(None, None, None) for _ in range(self.tensor.num_legs)]
+        for which_leg, idx in zip(self.which_legs, idcs):
             res[self.tensor.get_leg_idx(which_leg)] = idx
         return res
 
-    def __getitem__(self, item):
-        return self.tensor.__getitem__(self.transform_item(item))
+    def __getitem__(self, idcs):
+        return self.tensor.__getitem__(self.transform_item(idcs))
 
-    def __setitem__(self, item):
-        return self.tensor.__setitem__(self.transform_item(item))
+    def __setitem__(self, idcs, value):
+        return self.tensor.__setitem__(self.transform_item(idcs), value)
 
 
 class AbstractTensor(ABC):
@@ -177,52 +177,45 @@ class AbstractTensor(ABC):
             assert isinstance(leg, (self.backend.VectorSpaceCls, self.backend.ProductSpaceCls))
         self.shape.test_sanity()
 
-    def __getitem__(self, item):
+    def __getitem__(self, idcs):
+        # TODO tests
         """We support indexing with the following objects:
-        - A single index
+        - A single integer
         - A tuple of at most ``self.num_legs`` entries.
           The tuple entries may be indices or ``Ellipsis`` (i.e. ``...``).
-        TODO do we also support a dict?, i.e. `tensor[{'a': slice(1, 10), 'b': 3}]`
 
         Indices may be of the following form
         - integers
-        - slices
+        - slice(None, None, None)  (meaning "keep this leg as is")
         - Masks
 
         TODO should we support indexing DiagonalTensors and Masks by a single index that acts on both legs?
           how?
         """
-        item = list(to_iterable(item))  # translates single index to ``[item]``
-        if None in item:
-            # check this explicitly, because we use None below to mean "nothing to do on this leg"
-            raise IndexError("'None' is not a valid index.")
+        idcs = list(to_iterable(idcs))  # translates single index to ``[idcs]``
 
-        # bring to length num_legs, fill with None if there is nothing to do on a given leg
-        if Ellipsis in item:
-            where = item.index(Ellipsis)
-            first = item[:where]
-            last = item[where + 1:]
+        if Ellipsis in idcs:
+            where = idcs.index(Ellipsis)
+            first = idcs[:where]
+            last = idcs[where + 1:]
             if Ellipsis in last:
                 raise IndexError("Ellipsis ('...') may not appear multiple times.")
-            item = first + [None] * (self.num_legs - len(first) - len(last)) + last
-        elif len(item) < self.num_legs:
-            item.extend([None] * (self.num_legs - len(item)))
-        elif len(item) > self.num_legs:
-            raise IndexError(f'Too many indices. Got {len(item)} indices for {self.num_legs} legs.')
+            idcs = first + [slice(None, None, None)] * (self.num_legs - len(first) - len(last)) + last
+        elif len(idcs) > self.num_legs:
+            raise IndexError(f'Too many indices. Got {len(idcs)} indices for {self.num_legs} legs.')
 
         mask_legs = []
         masks = []
         int_legs = []
         ints = []
-        for leg_num, idx in enumerate(item):
-            if idx is None or idx == slice(None, None, None):
-                pass
-            elif isinstance(idx, int):
+        for leg_num, idx in enumerate(idcs):
+            if isinstance(idx, int):
                 int_legs.append(leg_num)
                 ints.append(idx)
             elif isinstance(idx, slice):
-                mask_legs.append(leg_num)
-                masks.append(Mask.from_slice(idx, self.legs[leg_num]))
+                if idx != slice(None, None, None):
+                    raise IndexError('Non-trivial slices are not supported.')
+                # else: nothing to do
             elif isinstance(idx, Mask):
                 mask_legs.append(leg_num)
                 masks.append(idx)
@@ -248,8 +241,26 @@ class AbstractTensor(ABC):
         """
         return _TensorIndexHelper(self, legs)
 
-    def __setitem__(self, item):
-        raise TypeError('tensors are immutable and dont support item assignment')
+    def __setitem__(self, idcs, value):
+        # TODO tests
+        idcs = to_iterable(idcs)
+        if Ellipsis in idcs:
+            raise IndexError("Ellipsis ('...') are not supported for item assignment.")
+        if len(idcs) < self.num_legs:
+            raise IndexError('Can only set single entries of a tensor. Not enough indices given.')
+        if len(idcs) > self.num_legs:
+            raise IndexError(f'Too many indices. Got {len(idcs)} indices for {self.num_legs} legs.')
+        for n, idx in enumerate(idcs):
+            if idx < 0:
+                idcs[n] = idx + self.legs[n].dim
+            if not 0 <= idcs[n] < self.legs[n].dim:
+                msg = f'Index {idx} is out of bounds for leg {n} with label {self.labels[n]} and ' \
+                      f'dimension {self.legs[n].dim}'
+                raise IndexError(msg)
+        expect_type = float if self.is_real else complex
+        if not isinstance(value, expect_type):
+            raise TypeError(f'Expected element of type {expect_type}. Got {type(value)}.')
+        self._set_element(idcs, value)
 
     @abstractmethod
     def _take_integer_indices(self, idcs: list[int], which_legs: list[int]
@@ -272,6 +283,13 @@ class AbstractTensor(ABC):
         for mask, leg in zip(masks, legs):
             res = res.apply_mask(mask, leg)
         return res
+
+    @abstractmethod
+    def _set_element(self, idcs: list[int], value: float | complex):
+        """Helper function for __setitem__ after arguments were parsed.
+        Can assume that idcs has correct length and entries are valid & non-negative (0 <= idx < dim).
+        """
+        ...
 
     @cached_property
     def parent_space(self) -> VectorSpace:
@@ -403,9 +421,6 @@ class AbstractTensor(ABC):
     @abstractmethod
     def _mul_scalar(self, other: complex):
         ...
-
-    def __getitem__(self, item):
-        raise TypeError('Tensor object is not subscriptable')
 
     def __neg__(self):
         return self._mul_scalar(-1)
@@ -1201,6 +1216,10 @@ class Tensor(AbstractTensor):
         # TODO: dont forget to account for legs sector_perm / index_perm!
         raise NotImplementedError  # TODO
 
+    def _set_element(self, idcs: list[int], value: float | complex):
+        # TODO: dont forget to account for legs sector_perm / index_perm!
+        raise NotImplementedError  # TODO
+
     def apply_mask(self, mask: Mask, leg: int | str) -> Tensor:
         raise NotImplementedError  # TODO
 
@@ -1544,6 +1563,10 @@ class ChargedTensor(AbstractTensor):
         # TODO: dont forget to account for legs sector_perm / index_perm!
         raise NotImplementedError  # TODO
 
+    def _set_element(self, idcs: list[int], value: float | complex):
+        # TODO: dont forget to account for legs sector_perm / index_perm!
+        raise NotImplementedError  # TODO
+
     def apply_mask(self, mask: Mask, leg: int | str) -> ChargedTensor:
         raise NotImplementedError  # TODO
 
@@ -1720,7 +1743,11 @@ class DiagonalTensor(AbstractTensor):
         # TODO: dont forget to account for legs sector_perm / index_perm!
         raise NotImplementedError  # TODO
 
-    def apply_mask(self, mask: Mask, leg: int | str) -> 'TODO':
+    def _set_element(self, idcs: list[int], value: float | complex):
+        # TODO: dont forget to account for legs sector_perm / index_perm!
+        raise NotImplementedError  # TODO
+
+    def apply_mask(self, mask: Mask, leg: int | str) -> Tensor:
         # TODO we could want to differnt things here:
         #  - "proper subclass behavior": meaning apply the mask only to one leg.
         #    would need to convert to Tensor first
@@ -1813,6 +1840,10 @@ class Mask(AbstractTensor):
 
     def _take_integer_indices(self, idcs: list[int], legs: list[int]
                               ) -> tuple[Tensor | ChargedTensor | complex | float, bool]:
+        # TODO: dont forget to account for legs sector_perm / index_perm!
+        raise NotImplementedError  # TODO
+
+    def _set_element(self, idcs: list[int], value: float | complex):
         # TODO: dont forget to account for legs sector_perm / index_perm!
         raise NotImplementedError  # TODO
 
