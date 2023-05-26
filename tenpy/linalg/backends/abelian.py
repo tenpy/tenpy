@@ -750,16 +750,14 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
         leg_L, leg_R = a.legs
         u_blocks = []
         s_blocks = []
-        s_lens = []
         vh_blocks = []
         for block in a.data.blocks:
             u, s, vh = self.matrix_svd(block)
             u_blocks.append(u)
             s_blocks.append(s)
-            s_lens.append(len(s))
+            assert len(s) > 0
             vh_blocks.append(vh)
         # TODO: need second version with truncation, here we just keep everything
-        u, s, vh = self.matrix_svd(a)
         symmetry = a.legs[0].symmetry
         sectors = a.legs[1].sectors
         block_inds_L, block_inds_R = a.data.block_inds.T  # columns of block_inds
@@ -796,14 +794,85 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
             u_blocks = [u_blocks[i] for i in sort]
             s_blocks = [s_blocks[i] for i in sort]
 
-        # TODO (JU) this assumes same dtype withput explicitly checking. thats probably ok...
-        return (AbelianBackendData(a.dtype, u_blocks, u_block_inds),
-                AbelianBackendDiagonalData(a.dtype.to_real, s_blocks, s_block_inds),
-                AbelianBackendData(a.dtype, vh_blocks, vh_block_inds),
+        # TODO (JU) this assumes same dtype without explicitly checking. thats probably ok...
+        dtype = a.data.dtype
+        return (AbelianBackendData(dtype, u_blocks, u_block_inds),
+                AbelianBackendDiagonalData(dtype.to_real, s_blocks, s_block_inds),
+                AbelianBackendData(dtype, vh_blocks, vh_block_inds),
                 new_leg)
 
     def qr(self, a: Tensor, new_r_leg_dual: bool, full: bool) -> tuple[Data, Data, VectorSpace]:
-        raise NotImplementedError("TODO")  # TODO XXX
+        q_leg_0, r_leg_1 = a.legs
+        q_blocks = []
+        r_blocks = []
+        for block in zip(a.data.blocks):
+            q, r = self.matrix_qr(block, full=full)
+            q_blocks.append(q_block)
+            r_blocks.append(r_block)
+        sym = a.symmetry
+        if full:
+            new_leg = q_leg_0.as_VectorSpace()
+            # sort q_blocks
+            q_blocks_full = [None] * q_leg_0.num_sectors
+            for i, q in zip(a.data.block_inds[:, 0], q_blocks):
+                q_blocks_full[i] = q
+            if len(q_blocks) < q_leg_0.num_sectors:
+                # there is a block-column in `a` that is completely 0 and not in a.data.blocks
+                # so we need to add corresponding identity blocks in q to ensure q is unitary!
+                dtype = a.data.dtype
+                for i, q in enumerate(q_blocks_full):
+                    if q is None:
+                        q_blocks_full[i] = self.eye_block([q_leg_0.multiplicities[i]], dtype)
+            q_block_inds = np.hstack([np.arange(q_leg_0.num_sectors, int)[:, np.newaxis]]*2)
+            r_block_inds = a.data.block_inds.copy() # is already sorted...
+            if new_r_leg_dual != new_leg.is_dual:
+                # similar as new_leg.flip_is_dual(), but also get permuation on the way
+                new_sectors = sym.dual_sectors(new_leg._sectors)  # ._sectors, not .sectors
+                perm = np.lexsort(new_sectors.T)
+                new_leg = AbelianBackendVectorSpace(sym,
+                                                    new_sectors[sort, :],
+                                                    new_leg.multiplicities[sort],
+                                                    new_leg.is_real,
+                                                    new_r_leg_dual)
+                inv_perm = inverse_permutation(perm)
+                #  perm[new_i] = old_i ;     inv_perm[old_i] = new_i
+                #  new_sectors[new_i] = old_sectors[old_i] = old_sectors[perm[new_i]]
+                #  old_q_block_inds[a, 1] = [some old_i, ...]
+                #  new_q_block_inds[a, 1] = [some_new_i, ...] =  [inv_perm[some_old_i] ...]
+                q_block_inds[:, 1] = inv_perm[q_block_inds[:, 1]]
+                r_block_inds[:, 0] = inv_perm[r_block_inds[:, 0]]
+                # and finally sort q_block_inds again
+                # lexsort(r_block_inds.T) is sorted: dominated by second column without duplicates
+                sort = np.lexsort(q_block_inds.T)
+                q_block_inds = q_block_inds[sort, :]
+                q_blocks_full = [q_blocks_full[i] for i in sort]
+            q_data = AbelianBackendData(a.data.dtype, q_blocks_full, q_block_inds)
+            r_data = AbelianBackendData(a.data.dtype, r_blocks, r_block_inds)
+        else:
+            # possibly skipping some sectors of q_leg_0 in new_leg
+            keep = a.data.block_inds[:, 0] # not sorted
+            new_leg_sectors = q_leg_0._sectors[keep, :]
+            new_leg_mults = np.array([self.block_shape(q)[1] for q in q_blocks], int)
+            if new_r_leg_dual != q_leg_0.is_dual:
+                new_leg_sectors = sym.dual_sectors(new_leg_sectors)
+            perm = np.lexsort(new_leg_sectors.T)
+            inv_perm = inverse_permutation(perm)
+            new_leg = AbelianBackendVectorSpace(sym,
+                                                new_leg_sectors[perm, :],
+                                                new_leg_mults[perm],
+                                                q_leg_0.is_real,
+                                                q_leg_0.is_dual)
+            new_block_inds = inv_perm[keep][:, np.newaxis]
+            q_block_inds = np.hstack([keep[:, np.newaxis], new_block_inds]) # not sorted
+            r_block_inds = np.hstack([new_block_inds, a.data.block_inds[:, 1]])  # lexsorted
+            # lexsort(r_block_inds.T) is sorted: dominated by second column without duplicates
+            sort = np.lexsort(q_block_inds.T)
+            q_block_inds = q_block_inds[sort, :]
+            q_blocks = [q_blocks[i] for i in sort]
+            q_data = AbelianBackendData(a.dtype, q_blocks, q_block_inds)
+            r_data = AbelianBackendData(a.dtype, r_blocks, r_block_inds)
+        assert new_leg.is_dual == new_r_leg_dual  # TODO: remove this test
+        return q_data, r_data, new_leg
 
     def outer(self, a: Tensor, b: Tensor) -> Data:
         res_dtype = a.data.dtype.common(b.data.dtype)
