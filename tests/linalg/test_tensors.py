@@ -53,11 +53,12 @@ def check_shape(shape: tensors.Shape, dims: tuple[int, ...], labels: list[str]):
     assert shape.is_fully_labelled != (None in labels)
 
 
-def test_Tensor_classmethods(backend, vector_space_rng, backend_data_rng, np_random):
-    legs = [vector_space_rng(d, 4, backend.VectorSpaceCls) for d in (3, 1, 7)]
-    dims = tuple(leg.dim for leg in legs)
+def test_Tensor_classmethods(backend, vector_space_rng, backend_data_rng, tensor_rng, np_random):
+    T = tensor_rng(num_legs=3)  # compatible legs where we can have blocks
+    legs = T.legs
+    dims = tuple(T.shape)
 
-    numpy_block = np_random.normal(size=dims)
+    numpy_block = T.to_numpy_ndarray()
     dense_block = backend.block_from_numpy(numpy_block)
 
     if isinstance(backend, AbstractAbelianBackend):
@@ -66,6 +67,16 @@ def test_Tensor_classmethods(backend, vector_space_rng, backend_data_rng, np_ran
         #    i.e. only non-zero within the allowed blocks.
         #    The easy way would be to generate them via Tensor.from_numpy_func(...).to_dense_block()
         #    But that would go against the spirit of testing isolated features.
+        #    (JH): I think it's fine to use tensor_rng().to_dense_block() as a starting point.
+        #          general test structure of all tests (e.g. tdot) is:
+        #          1) generate random tensor T
+        #          2) convert T to numpy T_dense
+        #          3) do function to test (e.g. tdot) on both T and T_dense with numpy
+        #          4) convert result to dense and compare with numpy-only version
+        #
+        #          So if Tensor.to_dense_ndarray() doesn't work, all tensor tests will fail, but
+        #          that's okay - we just need a separate, hardcoded test that `to_dense_ndarray()`
+        #          is okay.
         #  - Randomly generating the legs seems to be a bad idea.
         #    Here, I get a combination of legs that allows no valid blocks...
         #    I.e. `backends.abelian._valid_block_indices(legs)` is empty.
@@ -74,7 +85,9 @@ def test_Tensor_classmethods(backend, vector_space_rng, backend_data_rng, np_ran
         #          add some additional random sectors.
         #          This guarantees that at least for those sectors left untouched, we get allowed blocks.
         #          So we probably want a "rng" that generates all legs at once?
-        pytest.xfail('Need to redesign tests')
+        #    (JH): makes sense - I implemented tensor_rng() to do this (roughly, not adding extra blocks)
+        #  pytest.xfail('Need to redesign tests')
+        pass
 
     print('checking from_dense_block')
     tens = tensors.Tensor.from_dense_block(dense_block, legs=legs, backend=backend)
@@ -106,11 +119,12 @@ def test_Tensor_classmethods(backend, vector_space_rng, backend_data_rng, np_ran
     npt.assert_array_equal(tens.to_numpy_ndarray(), np.eye(np.prod(dims[:2])).reshape(dims[:2] + dims[:2]))
 
 
-def test_Tensor_methods(backend, vector_space_rng, backend_data_rng):
-    legs = [vector_space_rng(d, 4, backend.VectorSpaceCls) for d in (3, 1, 7)]
-    dims = tuple(leg.dim for leg in legs)
+def test_Tensor_methods(backend, vector_space_rng, backend_data_rng, tensor_rng):
+    T = tensor_rng(num_legs=3)  # compatible legs where we can have blocks
+    legs = T.legs
+    dims = tuple(T.shape)
 
-    data1 = backend_data_rng(legs)
+    data1 = T.data
     data2 = backend_data_rng(legs)
 
 

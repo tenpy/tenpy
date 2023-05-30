@@ -348,8 +348,6 @@ def _iter_common_noncommon_sorted_arrays(a, b):
     l_b, d_b = b.shape
     assert d_a == d_b
     i, j = 0, 0
-    only_a = []
-    only_b = []
     both = []
     while i < l_a and j < l_b:
         for k in reversed(range(d_a)):
@@ -357,7 +355,7 @@ def _iter_common_noncommon_sorted_arrays(a, b):
                 yield i, None
                 i += 1
                 break
-            elif b[j, k] < a[i, k]:
+            elif a[i, k] > b[j, k]:
                 yield None, j
                 j += 1
                 break
@@ -365,6 +363,11 @@ def _iter_common_noncommon_sorted_arrays(a, b):
             yield i, j
             i += 1
             j += 1
+    # can still have i < l_a or j < l_b, but not both
+    for i2 in range(i, l_a):
+        yield i2, None
+    for j2 in range(j, l_b):
+        yield None, j2
     # done
 
 @dataclass
@@ -1108,7 +1111,7 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
     def almost_equal(self, a: Tensor, b: Tensor, rtol: float, atol: float) -> bool:
         a_blocks = a.data.blocks
         b_blocks = b.data.blocks
-        for i, j in _iter_common_sorted_arrays(a.data.block_inds, b.data.block_inds):
+        for i, j in _iter_common_noncommon_sorted_arrays(a.data.block_inds, b.data.block_inds):
             if j is None:
                 if self.block_max_abs(a_blocks[i]) > atol:
                     return False

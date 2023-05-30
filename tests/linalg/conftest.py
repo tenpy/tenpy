@@ -131,20 +131,35 @@ def backend_data_rng(backend, block_rng, np_random):
 
 
 @pytest.fixture
-def tensor_rng(backend, backend_data_rng, vector_space_rng):
+def tensor_rng(backend, backend_data_rng, vector_space_rng, np_random):
     def generator(legs=None, num_legs=2, labels=None, max_num_blocks=5, max_block_size=5, real=True):
         if labels is not None:
             num_legs = len(labels)
         if legs is None:
-            legs = [vector_space_rng(max_num_blocks, max_block_size, backend.VectorSpaceCls)
-                    for _ in range(num_legs)]
-        else:
-            legs = list(legs)
-            for i, leg in enumerate(legs):
-                if leg is None:
+            legs = [None] * num_legs
+        legs = list(legs)
+        missing_legs = [i for i, leg in enumerate(legs) if leg is None]
+        last_missing = missing_legs[-1] if len(missing_legs) > 0 and len(legs) > 1 else -1
+        for i, leg in enumerate(legs):
+            if leg is None:
+                if i != last_missing:
                     legs[i] = vector_space_rng(max_num_blocks, max_block_size, backend.VectorSpaceCls)
-                else:
-                    legs[i] = backend.convert_vector_space(leg)
+            else:
+                legs[i] = backend.convert_vector_space(leg)
+        if last_missing != -1:
+            # generate compatible leg such that tensor can have non-zero blocks given the charges
+            compatible = legs[:]
+            compatible.pop(last_missing)
+            compatible_leg = backend.ProductSpaceCls(compatible).as_VectorSpace().dual
+            if compatible_leg.num_sectors > max_num_blocks:
+                keep = np_random.choice(compatible_leg.num_sectors, max_num_blocks, replace=False)
+                compatible_leg = backend.VectorSpaceCls(compatible_leg.symmetry,
+                                                        compatible_leg._sectors[keep, :],
+                                                        np.maximum(compatible_leg.multiplicities[keep],
+                                                                   max_block_size),
+                                                        compatible_leg.is_real,
+                                                        compatible_leg.is_dual)
+            legs[last_missing] = compatible_leg
         data = backend_data_rng(legs, real=real)
         return tensors.Tensor(data, backend=backend, legs=legs, labels=labels)
     return generator
