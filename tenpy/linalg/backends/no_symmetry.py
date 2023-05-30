@@ -4,7 +4,7 @@ from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING
 from numpy import prod
 
-from .abstract_backend import AbstractBackend, AbstractBlockBackend, Data, Block, Dtype
+from .abstract_backend import AbstractBackend, AbstractBlockBackend, Data, DiagonalData, Block, Dtype
 from ..symmetries.groups import no_symmetry, Symmetry
 from ..symmetries.spaces import VectorSpace, ProductSpace
 
@@ -14,7 +14,7 @@ __all__ = ['AbstractNoSymmetryBackend']
 if TYPE_CHECKING:
     # can not import Tensor at runtime, since it would be a circular import
     # this clause allows mypy etc to evaluate the type-hints anyway
-    from ..tensors import Tensor
+    from ..tensors import Tensor, DiagonalTensor
 
 
 # TODO eventually remove AbstractBlockBackend inheritance, it is not needed,
@@ -145,3 +145,17 @@ class AbstractNoSymmetryBackend(AbstractBackend, AbstractBlockBackend, ABC):
             raise ValueError('Can only infer one leg')
         dim = self.block_shape(block)[idx]
         return self.VectorSpaceCls.non_symmetric(dim, _is_dual=is_dual, is_real=is_real)
+
+    def get_element(self, a: Tensor, idcs: list[int]) -> complex | float | bool:
+        return self.get_block_element(a.data, idcs)
+
+    def get_element_diagonal(self, a: DiagonalTensor, idx: int) -> complex | float | bool:
+        # a.data is a single 1D block
+        return self.get_block_element(a.data, [idx])
+
+    def set_element(self, a: Tensor, idcs: list[int], value: complex | float) -> Data:
+        return self.set_block_element(a.data, idcs, value)
+
+    def set_element_diagonal(self, a: DiagonalTensor, idx: int, value: complex | float | bool
+                             ) -> DiagonalData:
+        return self.set_block_element(a.data, [idx], value)

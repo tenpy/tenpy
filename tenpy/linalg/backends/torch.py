@@ -168,6 +168,14 @@ class TorchBlockBackend(AbstractBlockBackend):
     def block_kron(self, a: Block, b: Block) -> Block:
         return torch_module.kron(a, b)
 
+    def get_block_element(self, a: Block, idcs: list[int]) -> complex | float | bool:
+        return a[tuple(idcs)].item()
+
+    def set_block_element(self, a: Block, idcs: list[int], value: complex | float | bool) -> Block:
+        res = self.block_copy(a)
+        res[tuple(idcs)] = value
+        return res
+
 
 class NoSymmetryTorchBackend(TorchBlockBackend, AbstractNoSymmetryBackend):
     def __init__(self, device: str = 'cpu'):

@@ -27,7 +27,7 @@ import numpy as np
 import copy
 import warnings
 
-from .abstract_backend import AbstractBackend, AbstractBlockBackend, Data, Block, Dtype
+from .abstract_backend import AbstractBackend, AbstractBlockBackend, Data, DiagonalData, Block, Dtype
 from ..symmetries.groups import FusionStyle, BraidingStyle, Symmetry, Sector, SectorArray, AbelianGroup
 from numpy import ndarray
 from ..symmetries.spaces import VectorSpace, ProductSpace
@@ -41,7 +41,7 @@ __all__ = ['AbelianBackendData', 'AbelianBackendVectorSpace', 'AbelianBackendPro
 if TYPE_CHECKING:
     # can not import Tensor at runtime, since it would be a circular import
     # this clause allows mypy etc to evaluate the type-hints anyway
-    from ..tensors import Tensor, ChargedTensor
+    from ..tensors import Tensor, ChargedTensor, DiagonalTensor
 
 
 class AbelianBackendVectorSpace(VectorSpace):
@@ -1204,6 +1204,19 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
         #      qindices = [leg.get_qindex(i)[0] for leg, i in zip(legcharges, inds_max)]
         #      q = np.sum([l.get_charge(qi) for l, qi in zip(self.legs, qindices)], axis=0)
         #      return make_valid(q)  # TODO: leg.get_qindex, leg.get_charge
+
+    def get_element(self, a: Tensor, idcs: list[int]) -> complex | float | bool:
+        raise NotImplementedError  # TODO
+
+    def get_element_diagonal(self, a: DiagonalTensor, idx: int) -> complex | float | bool:
+        raise NotImplementedError  # TODO
+
+    def set_element(self, a: Tensor, idcs: list[int], value: complex | float) -> Data:
+        raise NotImplementedError  # TODO
+
+    def set_element_diagonal(self, a: DiagonalTensor, idx: int, value: complex | float | bool
+                             ) -> DiagonalData:
+        raise NotImplementedError  # TODO
 
     # TODO: support eig(h), eigvals
     # TODO: concatenate and grid_concat

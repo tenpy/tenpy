@@ -14,11 +14,12 @@ __all__ = ['Data', 'Block', 'AbstractBackend', 'AbstractBlockBackend']
 if TYPE_CHECKING:
     # can not import Tensor at runtime, since it would be a circular import
     # this clause allows mypy etc to evaluate the type-hints anyway
-    from ..tensors import Tensor
+    from ..tensors import Tensor, DiagonalTensor
 
 # placeholder for a backend-specific type that holds all data of a tensor
 #  (except the symmetry data stored in its legs)
 Data = TypeVar('Data')
+DiagonalData = TypeVar('DiagonalData')
 
 # placeholder for a backend-specific type that represents the blocks of symmetric tensors
 Block = TypeVar('Block')
@@ -52,12 +53,37 @@ class Dtype(Enum):
             return dtype
         return Dtype(dtype.value - 1)
 
+    @property
+    def python_type(dtype):
+        if dtype.value == 2:
+            return bool
+        if dtype.is_real:
+            return float
+        return complex
+
+    @property
+    def zero_scalar(dtype):
+        return dtype.python_type(0)
+
     def common(*dtypes):
         res = Dtype(max(t.value for t in dtypes))
         if res.is_real:
             if not all(t.is_real for t in dtypes):
                 return Dtype(res.value + 1)  # = res.to_complex
         return res
+
+    def convert_python_scalar(dtype, value) -> complex | float | bool:
+        if dtype.value == 2:  # Dtype.bool
+            if value in [True, False, 0, 1]:
+                return bool(value)
+        elif dtype.is_real:
+            if isinstance(value, (int, float)):
+                return float(value)
+            # TODO what should we do for complex values?
+        else:
+            if isinstance(value, (int, float, complex)):
+                return complex(value)
+        raise TypeError(f'Type {type(value)} is incompatible with dtype {dtype}')
 
 
 class AbstractBackend(ABC):
@@ -281,6 +307,67 @@ class AbstractBackend(ABC):
         # TODO make it poss
         ...
 
+    @abstractmethod
+    def get_element(self, a: Tensor, idcs: list[int]) -> complex | float | bool:
+        """Get a single scalar element from a tensor.
+
+        Parameters
+        ----------
+        idcs
+            The indices. Checks have already been performed, i.e. we may assume that
+            - len(idcs) == a.num_legs
+            - 0 <= idx < leg.dim
+            - the indices reference an allowed (by the charge rule) entry.
+            The indices are w.r.t. the internal (sorted) order.
+        """
+        ...
+
+    @abstractmethod
+    def get_element_diagonal(self, a: DiagonalTensor, idx: int) -> complex | float | bool:
+        """Get a single scalar element from a diagonal tensor.
+
+        Parameters
+        ----------
+        idx
+            The index for both legs. Checks have already been performed, i.e. we may assume that
+            - 0 <= idx < leg.dim
+            The index are w.r.t. the internal (sorted) order.
+        """
+        ...
+
+    @abstractmethod
+    def set_element(self, a: Tensor, idcs: list[int], value: complex | float) -> Data:
+        """Return a copy of the data of a tensor, with a single element changed.
+
+        Parameters
+        ----------
+        idcs
+            The indices. Checks have already been performed, i.e. we may assume that
+            - len(idcs) == a.num_legs
+            - 0 <= idx < leg.dim
+            - the indices reference an allowed (by the charge rule) entry.
+            The indices are w.r.t. the internal (sorted) order.
+        value
+            A value of the appropriate type ``a.dtype.python_type``.
+        """
+        ...
+
+    @abstractmethod
+    def set_element_diagonal(self, a: DiagonalTensor, idx: int, value: complex | float | bool
+                             ) -> DiagonalData:
+        """Return a copy of the data of a diagonal tensor, with a single element changed.
+
+        Parameters
+        ----------
+        idx
+            The index for both legs. Checks have already been performed, i.e. we may assume that
+            - 0 <= idx < leg.dim
+            The index are w.r.t. the internal (sorted) order.
+        value
+            A value of the appropriate type ``a.dtype.python_type``.
+        """
+        ...
+        
 
 class AbstractBlockBackend(ABC):
     svd_algorithms: list[str]  # first is default
@@ -454,4 +541,13 @@ class AbstractBlockBackend(ABC):
     @abstractmethod
     def block_kron(self, a: Block, b: Block) -> Block:
         """The kronecker product, like numpy.kron"""
+        ...
+
+    @abstractmethod
+    def get_block_element(self, a: Block, idcs: list[int]) -> complex | float | bool:
+        ...
+
+    @abstractmethod
+    def set_block_element(self, a: Block, idcs: list[int], value: complex | float | bool) -> Block:
+        """Return a modified copy, with the entry at `idcs` set to `value`"""
         ...
