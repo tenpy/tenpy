@@ -28,6 +28,8 @@ __all__ = ['AbstractTensor', 'Tensor', 'ChargedTensor', 'DiagonalTensor', 'tdot'
 
 # svd, qr, eigen, exp, log, ... are implemented in matrix_operations.py
 
+# TODO (JH) should default dtype for zeros(), eye() etc really be complex128? simple potential to accidentally cast float to complex?
+# TODO (JH) eye_like()
 
 def _dual_leg_label(label: str) -> str:
     """the label that a leg should have after conjugation"""
