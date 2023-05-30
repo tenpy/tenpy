@@ -17,29 +17,19 @@ __all__ = ['VectorSpace', 'ProductSpace']
 class VectorSpace:
     r"""A vector space, which decomposes into sectors of a given symmetry.
 
+    .. note ::
+        It is best to think of ``VectorSpace``s as immutable objects.
+        In practice they are mutable, i.e. you could change their attributes.
+        This may lead to unexpected behavior, however, since it might make the cached metadata inconsistent.
+
     Attributes
     ----------
     TODO incomplete
-    sector_perm : 1D numpy array of int
-        The permutation that defines how the `self.sectors` are embedded in the vector space.
-        ``self.sectors[n]`` is the `sector_perm[n]`-th in the vector space.
-        In other words, ``self.sectors == sectors_in_dense_space[sector_perm]``.
-        The `sectors` argument that was originally passed to ``Vectorspace.__init__`` can be recovered
-        as ``self._sectors[self.inverse_sector_perm]``
-    slices : 2D numpy array of int
-        For every sector ``self.sectors[n]``, this specifices the start (``slices[n, 0]``)
-        and stop (``slices[n, 1]``) of indices on a dense array into which the sector is embedded.
-        Note that ``slices[n, 1] - slices[n, 0] == symmetry.sectors_dim(sectors[n]) * multiplicities[n]``.
-
-    .. note ::
-        It is best to think of ``VectorSpace``s as immutable objects.
-        In practice they are mutable, i.e. you could change their attributes. but this may lead to
-        unexpected behavior, since it might make the cached metadata inconsistent.
-
-    Attributes
-    ----------
     sectors : 2D np array of int
         The sectors that compose this space.
+        We internally store `_sectors`, see below.
+        The `sectors` argument that was originally passed to ``Vectorspace.__init__`` can be recovered
+        as ``self._sectors[self.inverse_sector_perm]``
     _sectors: : 2D np array of int
         Internally stored version of :attr:`sectors`. These are the sectors of the "non-dual" ket-space,
         that is either equal (if `self.is_dual is False`) or isomorphic (if `self.is_dual is True`) to
@@ -48,6 +38,14 @@ class VectorSpace:
     is_dual : bool
         Whether this is the dual (a.k.a. bra) space, composed of `sectors == symmtery.dual_sectors(_sectors)`
         or the regular (a.k.a. ket) space composed of `sectors == _sectors`.
+    sector_perm : 1D numpy array of int
+        The permutation that defines how the `self.sectors` are embedded in the vector space.
+        ``self.sectors[n]`` is the `sector_perm[n]`-th in the vector space.
+        In other words, ``self.sectors == sectors_in_dense_space[sector_perm]``.
+    slices : 2D numpy array of int
+        For every sector ``self.sectors[n]``, this specifices the start (``slices[n, 0]``)
+        and stop (``slices[n, 1]``) of indices on a dense array into which the sector is embedded.
+        Note that ``slices[n, 1] - slices[n, 0] == symmetry.sectors_dim(sectors[n]) * multiplicities[n]``.
 
     Parameters
     ----------
@@ -144,15 +142,37 @@ class VectorSpace:
 
     @cached_property
     def index_perm(self):
-        """The permutation that needs to be applied to a dense array such that it matches the order
-        of :attr:`_sectors`.
-        TODO double check that this is "the right way around".
+        """The permutation of indices induced by sorting the sectors.
+
+        TODO double check that this is used "the right way around" wherever it occurs
+
+        It maps from indices w.r.t to the internal (sorted) order to indices of a dense array.
+
+        Examples
+        --------
+        ``dense_idx = inverse_index_perm[internal_idx]``
+
+        ``dense_array[..., inverse_index_perm[n], ...] == internal_data_as_block[..., n, ...]
+
+        ``dense_array[..., inverse_index_perm, ...] == internal_data_as_block[..., :, ...]``
         """
         return np.concatenate([np.arange(sl[0], sl[1]) for sl in self.slices])
 
     @cached_property
     def inverse_index_perm(self):
-        """The inverse permutation of :attr:`index_perm`."""
+        """The inverse permutation of :attr:`index_perm`.
+
+        It maps from indices as they would be used for a dense array to indices w.r.t to the
+        internal (sorted) order.
+
+        Examples
+        --------
+        ``internal_idx = index_perm[dense_idx]``
+
+        ``dense_array[..., n, ...] == internal_data_as_block[..., index_perm[n], ...]``
+
+        ``dense_array[..., :, ...] == internal_data_as_block[..., index_perm, ...]``
+        """
         return inverse_permutation(self.index_perm)
 
     @property
