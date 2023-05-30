@@ -204,6 +204,23 @@ class VectorSpace:
             return self.symmetry.dual_sector(sector)
         return sector
 
+    def idx_to_sector(self, idx: int) -> Sector:
+        """Returns the sector associated with an index.
+        
+        The index is understood as an index of the dense array, not of the internal order.
+        The result sector is from `self.sectors` *without* underscore.
+        """
+        if not (-self.dim <= idx < self.dim):
+            raise ValueError(f'Index {idx} out of bounds for space of dimension {self.dim}.')
+        if idx < 0:
+            idx = self.dim + idx
+        for n, (start, stop) in enumerate(self.slices):
+            if start <= idx < stop:
+                return self.sector(n)
+        # for an in-bounds index, the above return should have triggered.
+        # getting here means that self.slices are inconsistend.
+        raise RuntimeError
+
     def sectors_str(self, separator=', ', max_len=70) -> str:
         """short str describing the self._sectors (note the underscore!) and their multiplicities"""
         full = separator.join(f'{self.symmetry.sector_str(a)}: {mult}'
