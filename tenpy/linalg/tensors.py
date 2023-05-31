@@ -280,6 +280,39 @@ class AbstractTensor(ABC):
             res = res.apply_mask(mask, leg)
         return res
 
+    def _input_checks_inner(self, other: AbstractTensor, do_conj: bool, legs1: list[int | str] | None,
+                            legs2: list[int | str] | None) -> list[int]:
+        """Check if inputs to inner are valid and return leg_order_2"""
+        if self.num_legs != other.num_legs:
+            raise ValueError('Tensors need to have the same number of legs')
+        leg_order_2 = match_legs(self, other, legs1=legs1, legs2=legs2)
+        if leg_order_2 is None:
+            leg_order_2 = list(range(other.num_legs))
+        if do_conj:
+            are_compatible = all(self.legs[n1] == other.legs[n2] for n1, n2 in enumerate(leg_order_2))
+        else:
+            are_compatible = all(self.legs[n1].can_contract_with(other.legs[n2]) for n1, n2 in enumerate(leg_order_2))
+        if not are_compatible:
+            raise ValueError('Incompatible legs')
+        return leg_order_2
+
+    def _input_checks_add_tensor(self, other: AbstractTensor) -> list[int] | None:
+        """Check if inputs to _add_tensor are valid and return other_order"""
+        other_order = match_legs(self, other)
+        for n, (leg_self, leg_other) in enumerate(zip(self.legs, other.legs)):
+            if leg_self != leg_other:
+                self_label = self.shape._labels[n]
+                self_label = '' if self_label is None else self_label + ': '
+                other_label = other.shape._label[n]
+                other_label = '' if other_label is None else other_label + ': '
+                msg = '\n'.join([
+                    'Incompatible legs for +:',
+                    self_label + str(leg_self),
+                    other_label + str(leg_other)
+                ])
+                raise ValueError(msg)
+        return other_order
+
     def __repr__(self):
         indent = '  '
         lines = [f'{self.__class__.__name__}(']
@@ -1045,78 +1078,67 @@ class Tensor(AbstractTensor):
     # Implementing binary tensor methods
     # --------------------------------------------
 
-    def almost_equal(self, other: AbstractTensor, atol: float = 1e-5, rtol: float = 1e-8) -> bool:
+    def almost_equal(self, other: Tensor, atol: float = 1e-5, rtol: float = 1e-8) -> bool:
+        if isinstance(other, DiagonalTensor):
+            other = other.to_full_tensor()
         if not isinstance(other, Tensor):
-            raise TypeError(f'tdot not supported for types {type(self)} and {type(other)}.')
-        # can now assume that isinstance(other, Tensor)
-
+            raise TypeError(f'almost_equal not supported for types {type(self)} and {type(other)}.')
         if self.legs != other.legs:
             raise ValueError('Mismatching shapes')
-        backend = get_same_backend(self, other)
-        return backend.almost_equal(self, other, atol=atol, rtol=rtol)
+        return get_same_backend(self, other).almost_equal(self, other, atol=atol, rtol=rtol)
 
-    def inner(self, other: AbstractTensor, do_conj: bool = True,
-              legs1: list[int | str] = None, legs2: list[int | str]  = None) -> float | complex:
-        if self.num_legs != other.num_legs:
-            raise ValueError('Tensors need to have the same number of legs')
-        # TODO: if co_conj=False, should we not match e.g. 'p*' with 'p'?
-        leg_order_2 = match_legs(self, other, legs1=legs1, legs2=legs2)
-        if leg_order_2 is None:
-            leg_order_2 = list(range(other.num_legs))
-        if do_conj:
-            are_compatible = all(self.legs[n1] == other.legs[n2] for n1, n2 in enumerate(leg_order_2))
-        else:
-            are_compatible = all(self.legs[n1].can_contract_with(other.legs[n2]) for n1, n2 in enumerate(leg_order_2))
-        if not are_compatible:
-            raise ValueError('Incompatible legs')
-        backend = get_same_backend(self, other)
-
+    def inner(self, other: AbstractTensor, do_conj: bool = True, legs1: list[int | str] = None,
+              legs2: list[int | str]  = None) -> float | complex:
+        leg_order_2 = self._input_checks_inner(other, do_conj=do_conj, legs1=legs1, legs2=legs2)
+        if isinstance(other, DiagonalTensor):
+            # OPTIMIZE ?
+            other = other.to_full_tensor()
+            # other is now a Tensor -> redirect to isinstance(other, Tensor) case
         if isinstance(other, ChargedTensor):
-            res_invariant = self.tdot(other.invariant_part, legs1=list(range(self.num_legs)), legs2=leg_order_2)
-            res = ChargedTensor(res_invariant, dummy_leg_state=other.dummy_leg_state)
-            return res.item()
-        elif isinstance(other, DiagonalTensor):
-            raise NotImplementedError  # TODO
-        elif not isinstance(other, Tensor):
-            raise TypeError(f'inner not supported for types {type(self)} and {type(other)}.')
-        # can now assume that isinstance(other, Tensor)
-
-        res = backend.inner(self, other, do_conj=do_conj, axs2=leg_order_2)
-        return res
+            # self is not charged and thus lives in the trivial sector of the parent space.
+            # thus, only the components of other in the trivial sector contribute to the overlap.
+            other = other._project_to_invariant()
+            if other is None:
+                # other has no part in the trivial sector
+                return Dtype.common(self.dtype, other.dtype).zero_scalar
+            # other is now a Tensor -> redirect to isinstance(other, Tensor) case
+        if isinstance(other, Tensor):
+            return get_same_backend(self, other).inner(self, other, do_conj=do_conj, axs2=leg_order_2)
+        raise TypeError(f'inner not supported for {type(self)} and {type(other)}')
 
     def outer(self, other: AbstractTensor, relabel1: dict[str, str] = None,
               relabel2: dict[str, str] = None) -> AbstractTensor:
+        if isinstance(other, DiagonalTensor):
+            # OPTIMIZE this could be done more efficiently in the backend...
+            other = other.to_full_tensor()
+        if isinstance(other, Tensor):
+            backend = get_same_backend(self, other)
+            return Tensor(data=backend.outer(self, other),
+                          legs=self.legs + other.legs,
+                          backend=backend,
+                          labels=_get_result_labels(self.labels, other.labels, relabel1, relabel2))
         if isinstance(other, ChargedTensor):
             assert other.invariant_part.labels[-1] not in relabel2
-            invariant_part = self.outer(other.invariant_part, relabel1=relabel1, relabel2=relabel2)
-            return ChargedTensor(invariant_part=invariant_part, dummy_leg_state=other.dummy_leg_state)
-        elif isinstance(other, DiagonalTensor):
-            raise NotImplementedError  # TODO
-        elif not isinstance(other, Tensor):
-            raise TypeError(f'outer not supported for types {type(self)} and {type(other)}.')
-        # can now assume that isinstance(other, Tensor)
+            return ChargedTensor(
+                invariant_part=self.outer(other.invariant_part, relabel1=relabel1, relabel2=relabel2),
+                dummy_leg_state=other.dummy_leg_state
+            )
+        raise TypeError(f'outer not supported for {type(self)} and {type(other)}')
 
-        backend = get_same_backend(self, other)
-        res_labels = _get_result_labels(self.labels, other.labels, relabel1, relabel2)
-        res_data = backend.outer(self, other)
-        return Tensor(res_data, backend=backend, legs=self.legs + other.legs, labels=res_labels)
-
-    def tdot(self, other: AbstractTensor,
-             legs1: int | str | list[int | str] = -1, legs2: int | str | list[int | str] = 0,
-             relabel1: dict[str, str] = None, relabel2: dict[str, str] = None) -> AbstractTensor:
+    def tdot(self, other: AbstractTensor, legs1: int | str | list[int | str] = -1,
+             legs2: int | str | list[int | str] = 0, relabel1: dict[str, str] = None,
+             relabel2: dict[str, str] = None) -> AbstractTensor | float | complex:
         if isinstance(other, ChargedTensor):
-            # make sure that legs2 are interpreted w.r.t. other, not other.invariant_part
-            legs2 = other.get_leg_idcs(legs2)
+            legs2 = other.get_leg_idcs(legs2)  # make sure we reference w.r.t. other, not other.invariant_part
             assert other.invariant_part.labels[-1] not in relabel2
             invariant_part = self.tdot(other.invariant_part, legs1=legs1, legs2=legs2,
                                        relabel1=relabel1, relabel2=relabel2)
             return ChargedTensor(invariant_part=invariant_part, dummy_leg_state=other.dummy_leg_state)
-        elif isinstance(other, DiagonalTensor):
+        if isinstance(other, DiagonalTensor):
             raise NotImplementedError  # TODO
-        elif not isinstance(other, Tensor):
-            raise TypeError(f'tdot not supported for types {type(self)} and {type(other)}.')
-        # can now assume that isinstance(other, Tensor)
-
+        if not isinstance(other, Tensor):
+            raise TypeError(f'tdot not supported for {type(self)} and {type(other)}')
+        # can assume that other is a Tensor from now on
         leg_idcs1 = self.get_leg_idcs(legs1)
         leg_idcs2 = other.get_leg_idcs(legs2)
         if len(leg_idcs1) != len(leg_idcs2):
@@ -1139,10 +1161,9 @@ class Tensor(AbstractTensor):
         # special case: outer()
         if len(leg_idcs1) == 0:
             return self.outer(other, relabel1, relabel2)
+        # remaining case: actual tensordot with non-trivial contraction and with open indices
         res_labels = _get_result_labels(open_labels1, open_labels2, relabel1, relabel2)
-
         res_data = backend.tdot(self, other, leg_idcs1, leg_idcs2)  # most of the work
-
         res_legs = open_legs1 + open_legs2
         if len(res_legs) == 0:
             return backend.data_item(res_data)
@@ -1150,27 +1171,16 @@ class Tensor(AbstractTensor):
             return Tensor(res_data, backend=backend, legs=res_legs, labels=res_labels)
 
     def _add_tensor(self, other: AbstractTensor) -> AbstractTensor:
+        if isinstance(other, DiagonalTensor):
+            # OPTIMIZE ?
+            other = other.to_full_tensor()
         if isinstance(other, Tensor):
             backend = get_same_backend(self, other)
-            other_order = match_legs(self, other)
+            other_order = self._input_checks_add_tensor(other)
             if other_order is not None:
                 other = permute_legs(other, other_order)
-            for n, (leg_self, leg_other) in enumerate(zip(self.legs, other.legs)):
-                if leg_self != leg_other:
-                    self_label = self.shape._labels[n]
-                    self_label = '' if self_label is None else self_label + ': '
-                    other_label = other.shape._label[n]
-                    other_label = '' if other_label is None else other_label + ': '
-                    msg = '\n'.join([
-                        'Incompatible legs for +:',
-                        self_label + str(leg_self),
-                        other_label + str(leg_other)
-                    ])
-                    raise ValueError(msg)
             res_data = backend.add(self, other)
             return Tensor(res_data, backend=backend, legs=self.legs, labels=self.labels)
-        elif isinstance(other, DiagonalTensor):
-            raise NotImplementedError  # TODO
         raise TypeError(f"unsupported operand type(s) for +: 'Tensor' and '{type(other)}'")
 
     # --------------------------------------------
@@ -1406,6 +1416,30 @@ class ChargedTensor(AbstractTensor):
     def random_normal(cls) -> ChargedTensor:
         raise NotImplementedError  # TODO
 
+    def project_to_invariant(self) -> Tensor:
+        """Project self into the invariant subspace of the parent space.
+
+        These are the contributions from trivial sectors in the dummy leg.
+
+        See Also
+        --------
+        :meth:`_project_to_invariant`
+        """
+        res = self._project_to_invariant()
+        if res is None:
+            res = Tensor.zero(legs=self.legs, backend=self.backend, labels=self.labels, dtype=self.dtype)
+        return res
+
+    def _project_to_invariant(self) -> Tensor | None:
+        """Internal version of :meth:`project_to_invariant`.
+
+        If the dummy leg does not contain the trivial sector of the symmetry,
+        the result is known to vanish exactly and ``None`` is returned.
+        The "public" version :meth:`project_to_invariant` (no underscore!) instead returns a
+        zero `Tensor` in this case.
+        """
+        raise NotImplementedError  # TODO
+
     # --------------------------------------------
     # Overriding methods from AbstractTensor
     # --------------------------------------------
@@ -1552,7 +1586,7 @@ class ChargedTensor(AbstractTensor):
 
     def almost_equal(self, other: AbstractTensor, atol: float = 0.00001, rtol: float = 1e-8) -> bool:
         if not isinstance(other, ChargedTensor):
-            raise TypeError(f'tdot not supported for types {type(self)} and {type(other)}.')
+            raise TypeError(f'almost_equal not supported for types {type(self)} and {type(other)}.')
         # can now assume that isinstance(other, ChargedTensor)
 
         if self.legs != other.legs:
@@ -1577,30 +1611,94 @@ class ChargedTensor(AbstractTensor):
             other_block = other.to_dense_block(leg_order=match_legs(self, other))
             return backend.block_allclose(self_block, other_block)
 
-    def inner(self, other: AbstractTensor, do_conj: bool = True,
-              legs1: list[int | str] = None, legs2: list[int | str]  = None) -> complex:
-        raise NotImplementedError  # TODO
-
-    def outer(self, other: AbstractTensor, relabel1: dict[str, str] = None, relabel2: dict[str, str] = None) -> AbstractTensor:
-        raise NotImplementedError  # TODO
-
-    def tdot(self, other: AbstractTensor,
-             legs1: int | str | list[int | str] = -1, legs2: int | str | list[int | str] = 0,
-             relabel1: dict[str, str] = None, relabel2: dict[str, str] = None) -> AbstractTensor:
-        raise NotImplementedError  # TODO
-
-    def _add_tensor(self, other: AbstractTensor) -> AbstractTensor:
+    def inner(self, other: AbstractTensor, do_conj: bool = True, legs1: list[int | str] = None,
+              legs2: list[int | str]  = None) -> float | complex:
+        leg_order_2 = self._input_checks_inner(other, do_conj=do_conj, legs1=legs1, legs2=legs2)
+        if isinstance(other, DiagonalTensor):
+            # OPTIMIZE
+            other = other.to_full_tensor()
+            # other is now a Tensor -> redirect to isinstance(other, Tensor) case
+        if isinstance(other, Tensor):
+            # other is not charged and thus lives in the trivial sector of the parent space.
+            # thus, only the components of self in the trivial sector contribute to the overlap
+            self_projected = self._project_to_invariant()
+            if self_projected is None:
+                return Dtype.common(self.dtype, other.dtype).zero_scalar
+            return self_projected.inner(other, do_conj=do_conj, legs1=legs1, legs2=legs2)
         if isinstance(other, ChargedTensor):
-            if self.dummy_leg != other.dummy_leg:
-                raise ValueError('can not add ChargedTensors with different dummy legs')
-            try:
-                factor = self._dummy_leg_state_item()
-            except ValueError:
-                msg = 'Can not add ChargedTensors with different dummy_leg_states unless dummy_leg is one-dimensional'
-                raise ValueError(msg) from None
-            return ChargedTensor(invariant_part=self.invariant_part + factor * other.invariant_part,
-                                 dummy_leg_state=self.dummy_leg_state)
-        raise TypeError(f"unsupported operand type(s) for +: 'ChargedTensor' and '{type(other)}'")
+            # OPTIMIZE could directly return 0 if the two tensors have completely different charges
+            backend = get_same_backend(self, other)
+            # contract the invariant parts with each other and convert do dense block
+            inv1 = self.invariant_part.conj() if do_conj else self.invariant_part
+            res = inv1.tdot(other.invariant_part, legs1=list(range(self.num_legs)), legs2=leg_order_2)
+            res = res.to_dense_block()
+            # contract with state on dummy leg of self
+            if self.dummy_leg_state is None:
+                res = backend.block_squeeze_legs(res, 0)
+            else:
+                state = backend.block_conj(self.dummy_leg_state) if do_conj else self.dummy_leg_state
+                res = backend.block_tdot(state, res, 0, 0)
+            # contract with state on dummy leg of other
+            if other.dummy_leg_state is None:
+                res = backend.block_squeeze_legs(res, 0)
+            else:
+                res = backend.block_tdot(res, other.dumm_leg_state, 0, 0)
+            return backend.block_item(res)
+        raise TypeError(f'inner not supported for {type(self)} and {type(other)}')
+    
+    def outer(self, other: AbstractTensor,
+              relabel1: dict[str, str] = None, relabel2: dict[str, str] = None):
+        if isinstance(other, DiagonalTensor):
+            # OPTIMIZE
+            other = other.to_full_tensor()
+        if isinstance(other, Tensor):
+            assert self.invariant_part.labels[-1] not in relabel1
+            inv_part = self.invariant_part.outer(other, relabel1=relabel1, relabel2=relabel2)
+            # permute dummy leg to the back
+            self_normal = list(range(self.num_legs))
+            self_dummy = [self.num_legs]
+            other_normal = list(range(self.num_legs + 1, self.num_legs + 1 + other.num_legs))
+            inv_part = inv_part.permute_legs(self_normal + other_normal + self_dummy)
+            return ChargedTensor(invariant_part=inv_part, dummy_leg_state=self.dummy_leg_state)
+        if isinstance(other, ChargedTensor):
+            # can implement somewhat easily if at least one dummy leg is one-dimensional
+            # TODO implement common functionality in "ChargedTensor.from_two_dummy_legs" or sth
+            #      result could be a Tensor, if possible!
+            raise NotImplementedError  # TODO
+        raise TypeError(f'outer not supported for {type(self)} and {type(other)}')
+
+    def tdot(self, other: AbstractTensor, legs1: int | str | list[int | str] = -1,
+             legs2: int | str | list[int | str] = 0, relabel1: dict[str, str] = None,
+             relabel2: dict[str, str] = None) -> AbstractTensor | float | complex:
+        if isinstance(other, (Tensor, DiagonalTensor)):
+            # In both of these cases, the main work is done by tdot(self.invariant_part, other, ...)
+            legs1 = self.get_leg_idcs(legs1)  # make sure we reference w.r.t. self, not self.invariant_part
+            assert self.invariant_part.labels[-1] not in relabel1
+            invariant_part = self.invariant_part.tdot(other, legs1=legs1, legs2=legs2,
+                                                      relabel1=relabel1, relabel2=relabel2)
+            permutation = invariant_part
+            assert self.invariant_part.labels[-1] == self._DUMMY_LABEL
+            permutation.remove(self._DUMMY_LABEL)
+            permutation.append(self._DUMMY_LABEL)
+            invariant_part = invariant_part.permute_legs(permutation)
+            return ChargedTensor(invariant_part=invariant_part, dummy_leg_state=self.dummy_leg_state)
+        if isinstance(other, ChargedTensor):
+            # TODO share code with outer(ChargedTensor, ChargedTensor)
+            raise NotImplementedError  # TODO
+        raise TypeError(f'tdot not supported for {type(self)} and {type(other)}')
+
+    def _add_tensor(self, other: AbstractTensor) -> ChargedTensor:
+        if not isinstance(other, ChargedTensor):
+            raise TypeError(f"unsupported operand type(s) for +: 'Tensor' and '{type(other)}'")
+        if self.dummy_leg != other.dummy_leg:
+            raise ValueError('Can not add ChargedTensors with different dummy legs')
+        try:
+            factor = self._dummy_leg_state_item()
+        except ValueError:
+            msg = 'Can not add ChargedTensors unless dummy_leg is one-dimensional'
+            raise ValueError(msg) from None
+        return ChargedTensor(invariant_part=self.invariant_part + factor * other.invariant_part,
+                             dummy_leg_state=self.dummy_leg_state)
 
     # --------------------------------------------
     # Internal utility methods
@@ -1816,24 +1914,7 @@ class DiagonalTensor(AbstractTensor):
     # Implementing binary tensor methods
     # --------------------------------------------
     
-    def almost_equal(self, other: AbstractTensor, atol: float = 1e-5, rtol: float = 1e-8) -> bool:
-        raise NotImplementedError  # TODO
-
-    def inner(self, other: AbstractTensor, do_conj: bool = True,
-              legs1: list[int | str] = None, legs2: list[int | str]  = None) -> complex:
-        raise NotImplementedError  # TODO
-
-    def outer(self, other: AbstractTensor, relabel1: dict[str, str] = None,
-              relabel2: dict[str, str] = None) -> AbstractTensor:
-        raise NotImplementedError  # TODO
-
-    def tdot(self, other: AbstractTensor,
-             legs1: int | str | list[int | str] = -1, legs2: int | str | list[int | str] = 0,
-             relabel1: dict[str, str] = None, relabel2: dict[str, str] = None) -> AbstractTensor:
-        raise NotImplementedError  # TODO
-
-    def _add_tensor(self, other: AbstractTensor) -> AbstractTensor:
-        raise NotImplementedError  # TODO
+    # TODO implement them
 
 
 class Mask(AbstractTensor):
