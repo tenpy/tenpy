@@ -89,6 +89,30 @@ class BoseHubbardChain(BoseHubbardModel, NearestNeighborModel):
         model_params.setdefault('lattice', "Chain")
         CouplingMPOModel.__init__(self, model_params)
 
+    def estimate_RAM_saving_factor(self):
+        """Returns the expected saving factor for RAM based on charge conservation.
+        For the BoseHubbardChain this factor was found to be between 1/7 and 1/10, therefore it is by default to 1/8 (for particle number conservation).
+
+        Returns
+        -------
+        factor : int
+            saving factor, due to conservation
+
+        Options
+        -------
+        .. cfg:configoptions :: Model
+
+            saving_factor :: None | int
+                Quantizes the RAM saving, due to conservation laws. By default it is 1/8 for the BoseHubbardChain. However, this factor might be overwritten, if a better approximation is known. In this case one can pass it via the argument ''saving_factor'' to the model.
+
+        """
+        chinfo = self.lat.unit_cell[0].leg.chinfo
+        savings = 1
+        for mod in chinfo.mod:
+            if mod == 1:
+                savings *= 1/8 # this is what we found empirically
+        return self.options.get("saving_factor", savings)
+
 
 class FermiHubbardModel(CouplingMPOModel):
     r"""Spin-1/2 Fermi-Hubbard model.

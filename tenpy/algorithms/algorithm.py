@@ -182,14 +182,19 @@ class Algorithm:
         else:
             return {'psi': self.psi}
 
-    def estimate_RAM(self):
+    def estimate_RAM(self, mini=50_000):
         """Gives an approximate prediction for the required memory usage.
         This calculation is based on the requested bond dimension, local Hilbert space dimension, the number of sites and the boundary conditions.
+
+        Parameters
+        ----------
+        mini : float
+            The minimum amount of RAM in kB to be returned. By default 50 MB.
 
         Returns
         -------
         usage : float
-            Required RAM in kB.
+            Required RAM in kB. It always returns a minimum of mini=50 MB.
         """
         import numpy as np
         # get memory per item
@@ -249,9 +254,11 @@ class Algorithm:
         saving_factor = self.model.estimate_RAM_saving_factor()
         logger.debug("Each entry uses %d byte" % (entry_size))
         RAM *= entry_size
-        logger.debug("We have a saving factor of %d" % (saving_factor))
+        logger.debug("We have a saving factor of %d" % (1/saving_factor))
         RAM *= saving_factor
-        return RAM / 1024 # in kB
+        logger.info("Total RAM expectation:\t\t\t%d kB" % (RAM//1024))
+
+        return max(RAM / 1024, mini) # in kB
 
 
 
