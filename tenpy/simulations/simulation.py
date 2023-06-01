@@ -737,7 +737,7 @@ class Simulation:
         else:
             # use the cwd of the file where the simulation class is defined
             module = importlib.import_module(sim_module)  # get module object
-            cwd = os.path.dirname(os.path.abspath(module.__file__)),
+            cwd = os.path.dirname(os.path.abspath(module.__file__))
         git_rev = version._get_git_revision(cwd)
 
         version_info = {

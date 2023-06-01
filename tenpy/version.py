@@ -51,7 +51,9 @@ def _get_git_revision(cwd=None):
         rev = subprocess.check_output(['git', 'rev-parse', 'HEAD'],
                                       cwd=cwd,
                                       stderr=subprocess.STDOUT).decode().strip()
-    except:
+    except (subprocess.SubprocessError, FileNotFoundError):
+        # FileNotFound e.g if git is not installed or cwd doesn't exist
+        # SubprocessError: git command failed for whatever reason
         rev = "unknown"
     return rev
 
