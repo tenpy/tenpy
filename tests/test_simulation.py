@@ -67,8 +67,9 @@ class DummyEnv:
         return {"Env data": "Could be big"}
 
 
-def dummy_measurement(results, psi, model, simulation):
+def dummy_value_measurement(results, psi, model, simulation):
     results['dummy_value'] = simulation.engine.dummy_value
+
 
 def bad_dummy_measurement(results, psi, model, simulation):
     """Check using different keys - it should still work."""
@@ -100,7 +101,7 @@ simulation_params = {
     0.,  # save at each checkpoint
     'connect_measurements': [('tenpy.simulations.measurement', 'm_onsite_expectation_value', {
         'opname': 'Sz'
-    }), (__name__, 'dummy_measurement')],
+    }), (__name__, 'dummy_value_measurement')],
 }
 expected_dummy_value = simulation_params['algorithm_params']['N_steps']**2
 
@@ -140,6 +141,22 @@ def test_bad_measurements():
     assert np.all(meas['dummy_value'] == [-1, expected_dummy_value])
     assert meas['changing_key_0'] == [-1, None]
     assert meas['changing_key_1'] == [None, expected_dummy_value]
+
+
+def test_measure_at_algorithm_checkpoint():
+    sim_params = copy.deepcopy(simulation_params)
+    sim_params['connect_measurements'].append(('tenpy.simulations.measurement', 'm_evolved_time'))
+    sim_params['measure_at_algorithm_checkpoints'] = True
+    sim = Simulation(sim_params)
+    results = sim.run()  # should do exactly two measurements: one before and one after eng.run()
+    assert sim.model.lat.bc_MPS == 'infinite'  # check whether model parameters were used
+    assert 'psi' in results  # should be by default
+    meas = results['measurements']
+    # expect multiple measurements:
+    # once in `init_measurements` and in `final_measurement`, and 4 algorithm checkpoints
+    assert np.all(meas['measurement_index'] == np.arange(2 + 4))
+    assert np.all(meas['evolved_time'] == [0., 0.5, 1., 1.5, 2.0, 2.0])
+    assert np.all(meas['dummy_value'] == [-1] + [expected_dummy_value] * (1+4))
 
 
 def test_Simulation_resume(tmp_path):

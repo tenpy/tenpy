@@ -20,6 +20,8 @@ Added
 - :class:`~tenpy.models.tj_model.tJModel` and :class:`~tenpy.networks.site.SpinHalfHoleSite`
 - :class:`~tenpy.algorithms.tebd.QRBasedTEBDEngine`
 - :class:`~tenpy.models.clock.ClockModel`, :class:`~tenpy.models.clock.ClockChain` and :class:`~tenpy.models.sites.ClockSite` 
+- Simulation parameters :cfg:option:`Simulation.measure_at_algorithm_checkpoints` and
+  :cfg:option:`Simulation.canonicalize_before_measurement'
 
 Changed
 ^^^^^^^

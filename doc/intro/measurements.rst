@@ -122,7 +122,7 @@ yet methods of `psi` don't follow the measurement function call structure, but s
 For those cases, you can use another special syntax, namely to **simply add `wrap` before the function name**.
 In this case, we don't pass ``results, psi, model, simulation``, but simply save the return values of the function
 in the results, under the `results_key` that gets passed as extra keyword argument,
-see :func:`~tenpy.simulations.measurment.measurement_wrapper`.
+see (the source code of) :func:`~tenpy.simulations.measurment.measurement_wrapper`.
 The `results_key` defaults to the function name.
 
 To make this clearer, let's extend the example above with more measurements:
