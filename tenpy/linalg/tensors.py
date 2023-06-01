@@ -30,7 +30,6 @@ __all__ = ['Shape', 'AbstractTensor', 'Tensor', 'ChargedTensor', 'DiagonalTensor
 # svd, qr, eigen, exp, log, ... are implemented in matrix_operations.py
 
 # TODO (JH) should default dtype for zeros(), eye() etc really be complex128? simple potential to accidentally cast float to complex?
-# TODO (JH) eye_like()
 
 class Shape:
     """An object storing the legs and labels of a tensor.
@@ -614,9 +613,10 @@ class Tensor(AbstractTensor):
             *Half* of the legs of the result. The resulting tensor has twice as many legs.
         labels : list[str | None], optional
             Labels associated with each leg, ``None`` for unnamed legs.
+            Can either give one label for each of the `legs`, and the second half will be the respective
+            dual labels, or give twice as many and specify them all.
         dtype : Dtype, optional
             The data type of the Tensor entries.
-
         """
         if backend is None:
             backend = get_default_backend()
@@ -624,6 +624,12 @@ class Tensor(AbstractTensor):
         legs = [backend.convert_vector_space(leg) for leg in legs]
         data = backend.eye_data(legs=legs, dtype=dtype)
         legs = legs + [leg.dual for leg in legs]
+        if labels is not None:
+            if len(labels) == len(legs):
+                labels = labels + [_dual_leg_label(l) for l in labels]
+            elif len(labels) != 2 * len(legs):
+                msg = f'Wrong number of labels. Expected {len(legs)} or {2 * len(legs)}. Got {len(labels)}.'
+                raise ValueError(msg)
         return cls(data=data, backend=backend, legs=legs, labels=labels)
 
     @classmethod
@@ -1746,8 +1752,7 @@ class DiagonalTensor(AbstractTensor):
         return self.backend.get_dtype_from_data(self.data)
 
     @classmethod
-    def eye(cls, first_leg: VectorSpace, second_leg_dual: bool = True, backend=None,
-            labels: list[str | None] = None) -> DiagonalTensor:
+    def eye(cls, first_leg: VectorSpace, backend=None, labels: list[str | None] = None) -> DiagonalTensor:
         raise NotImplementedError  # TODO
 
     @classmethod
@@ -2209,6 +2214,23 @@ def trace(t: AbstractTensor, legs1: int | str | list[int | str] = -2, legs2: int
 
 def zero_like(tens: AbstractTensor) -> AbstractTensor:
     return tens.zero(backend=tens.backend, legs=tens.legs, labels=tens.labels, dtype=tens.dtype)
+
+
+def eye_like(tens: AbstractTensor) -> Tensor | DiagonalTensor:
+    if not isinstance(tens, (Tensor, DiagonalTensor)):
+        raise TypeError(f'eye is not defined for type {type(tens)}')
+    if tens.num_legs % 2 != 0:
+        raise ValueError('eye is not defined for an odd number of legs')
+    legs_1 = tens.legs[:tens.num_legs // 2]
+    legs_2 = tens.legs[tens.num_legs // 2:]
+    for l1, l2 in zip(legs_1, legs_2):
+        if not l1.can_contract_with(l2):
+            if len(legs_1) == 1:
+                msg = 'Second leg must be the dual of the first leg'
+            else:
+                msg = 'Second half of legs must be the dual of the first half'
+            raise ValueError(msg)
+    return tens.eye(legs=legs_1, backend=tens.backend, labels=tens.labels, dtype=tens.dtype)
 
 
 # ##################################
