@@ -25,7 +25,7 @@ from ..tools.misc import to_iterable, to_iterable_of_len
 __all__ = ['Shape', 'AbstractTensor', 'Tensor', 'ChargedTensor', 'DiagonalTensor', 'Mask',
            'almost_equal', 'combine_legs', 'conj', 'inner', 'is_scalar', 'norm', 'outer',
            'permute_legs', 'split_legs', 'squeeze_legs', 'tdot', 'trace', 'zero_like',
-           'get_same_backend', 'match_legs']
+           'get_same_backend', 'match_leg_order']
 
 # svd, qr, eigen, exp, log, ... are implemented in matrix_operations.py
 
@@ -280,24 +280,55 @@ class AbstractTensor(ABC):
         return res
 
     def _input_checks_inner(self, other: AbstractTensor, do_conj: bool, legs1: list[int | str] | None,
-                            legs2: list[int | str] | None) -> list[int]:
-        """Check if inputs to inner are valid and return leg_order_2"""
+                            legs2: list[int | str] | None) -> list[int] | None:
+        """Check if inputs to inner are valid.
+
+        Returns
+        -------
+        leg_order_2 : (list of int) or None
+            The order of legs on other, such that they match the legs of self.
+            None is returned instead of the trivial order ``[0, 1, 2, ...]``.
+        """
         if self.num_legs != other.num_legs:
             raise ValueError('Tensors need to have the same number of legs')
-        leg_order_2 = match_legs(self, other, legs1=legs1, legs2=legs2)
-        if leg_order_2 is None:
-            leg_order_2 = list(range(other.num_legs))
-        if do_conj:
-            are_compatible = all(self.legs[n1] == other.legs[n2] for n1, n2 in enumerate(leg_order_2))
+        # determine leg_order_2
+        if legs1 is None and legs2 is None:
+            leg_order_2 = match_leg_order(self, other)
         else:
-            are_compatible = all(self.legs[n1].can_contract_with(other.legs[n2]) for n1, n2 in enumerate(leg_order_2))
+            if legs1 is None:
+                legs1 = np.arange(self.num_legs, dtype=int)
+            else:
+                legs1 = np.array(self.get_leg_idcs(legs1), dtype=int)
+            if legs2 is None:
+                legs2 = np.arange(self.num_legs, dtype=int)
+            else:
+                legs2 = np.array(other.get_leg_idcs(legs2), dtype=int)
+            if np.all(legs1 == legs2):
+                leg_order_2 = None
+            else:
+                leg_order_2 = np.argsort(legs1)[legs2]
+        if leg_order_2 is None:
+            other_legs_ordered = other.legs
+        else:
+            other_legs_ordered = (other.legs[leg_order_2[n]] for n in range(self.num_legs))
+        if do_conj:
+            are_compatible = all(l1 == l2 for l1, l2 in zip(self.legs, other_legs_ordered))
+        else:
+            are_compatible = all(l1.can_contract_with(l2) for l1, l2 in zip(self.legs, other_legs_ordered))
         if not are_compatible:
             raise ValueError('Incompatible legs')
         return leg_order_2
 
     def _input_checks_add_tensor(self, other: AbstractTensor) -> list[int] | None:
-        """Check if inputs to _add_tensor are valid and return other_order"""
-        other_order = match_legs(self, other)
+        """Check if inputs to _add_tensor are valid.
+
+        Returns
+        -------
+        other_order : (list of int) or None
+            The order of legs on other, such that they match the legs of self.
+            None is equivalent to ``list(range(other.num_legs)`` and indicates that no permutation is needed.
+        """
+        other_order = match_leg_order(self, other)  # TODO double check and cover in tests that this works
         for n, (leg_self, leg_other) in enumerate(zip(self.legs, other.legs)):
             if leg_self != leg_other:
                 self_label = self.shape._labels[n]
@@ -1592,7 +1623,7 @@ class ChargedTensor(AbstractTensor):
             warnings.warn('Converting ChargedTensor to dense block for `almost_equal`', stacklevel=2)
             backend = get_same_backend(self, other)
             self_block = self.to_dense_block()
-            other_block = other.to_dense_block(leg_order=match_legs(self, other))
+            other_block = other.to_dense_block(leg_order=match_leg_order(self, other))
             return backend.block_allclose(self_block, other_block)
 
     def inner(self, other: AbstractTensor, do_conj: bool = True, legs1: list[int | str] = None,
@@ -1614,6 +1645,8 @@ class ChargedTensor(AbstractTensor):
             backend = get_same_backend(self, other)
             # contract the invariant parts with each other and convert do dense block
             inv1 = self.invariant_part.conj() if do_conj else self.invariant_part
+            if leg_order_2 is None:
+                leg_order_2 = list(range(other.num_legs))
             res = inv1.tdot(other.invariant_part, legs1=list(range(self.num_legs)), legs2=leg_order_2)
             res = res.to_dense_block()
             # contract with state on dummy leg of self
@@ -2116,7 +2149,11 @@ def inner(t1: AbstractTensor, t2: AbstractTensor, do_conj: bool = True,
         If true (default), `t1` lives in the same space as `t2` and will be conjugated to form ``<t1|t2>``.
         Otherwise, `t1` lives in the dual space of `t2` and will not be conjugated.
     legs1, legs2 : list of int or str, optional
-        Specify which leg belongs to which, see `match_legs`.
+        Specify which legs are to be contracted with which ones.
+        If both are ``None`` (default), legs are identified "by label" in strict label mode or "by order"
+        in lax label mode, like in :meth:`match_leg_order`.
+        Otherwise, ``legs1[n]`` of ``t1`` is contracted with ``legs2[n]`` of ``t2``, where
+        a single ``None``/unspecified list is interpreted as ``list(range(num_legs))``.
     """
     return t1.inner(t2, do_conj=do_conj, legs1=legs1, legs2=legs2)
 
@@ -2259,52 +2296,23 @@ def get_same_backend(*tensors: AbstractTensor, error_msg: str = 'Incompatible ba
     return backend
 
 
-# TODO rename? also rename the args?
-def match_legs(t1: AbstractTensor, t2: AbstractTensor,
-               legs1: list[int | str] = None, legs2: list[int | str] = None):
-    """Utility function that determines the permutation necessary to match the legs
-    of the second tensor `t2` to those of the first tensor `t1`.
+def match_leg_order(t1: AbstractTensor, t2: AbstractTensor) -> list[int] | None:
+    """Utility function to determine how to match legs of two tensors.
 
-    Parameters
-    ----------
-    t1, t2 :
-        The two tensors
-    legs1, legs2 : list of int or str, optional
-        Two lists that specify which leg of `t1` should be matched with which of `t2`;
-        If both are `None` (default) in strict label mode, legs with the same label will be matched
-        and an ValueError is raised if that is not possible.
-        If both are `None` (default) in lax label mode, legs will be matched by order.
-        If one is `None`, it is equivalent to `range(tn.num_legs)`.
-        If both are given, they specify that ``legs1[n]`` of `t1` will be contracted with ``legs2[n]`` of `t2`.
-
-    Returns
-    -------
-    permutation : (list of int) or None
-        The permutation required, the ``permutation[n]``-th leg of `t2` is matched with the ``n``-th
-        leg of `t1`. A result ``None`` is equivalent to ``range(t1.num_legs)`` and signals that
-        no permutation is needed
+    In strict label mode, returns the permutation ``perm`` that matches the legs "by label",
+    i.e. such that ``t2.labels[perm[n]] == t1.labels[n]``.
+    In other words, it is the order of legs on ``t2``, such that they match those on ``t1``.
+    None is returned instead of a trivial permutation.
+    In lax label mode, we want to match the legs "by order" and hence always return None.
     """
-    if legs1 is None and legs2 is None:
-        if config.strict_labels:
-            if not (t1.is_fully_labelled and t2.is_fully_labelled):
-                raise ValueError('Fully labelled tensors are required in strict label mode')
-            if t1.shape._labels == t2.shape._labels:
-                return None
-            return t2.get_leg_idcs(t1.labels)
-        else:
+    if config.strict_labels:
+        if not (t1.is_fully_labelled and t2.is_fully_labelled):
+            raise ValueError('Fully labelled tensors are required in strict label mode')
+        if t1.shape._labels == t2.shape._labels:
             return None
-
-    elif legs1 is None:
-        return t2.get_leg_idcs(legs2)
-
-    elif legs2 is None:
-        return np.argsort(t1.get_leg_idcs(legs1))
-
+        return t2.get_leg_idcs(t1.labels)
     else:
-        order1 = np.asarray(t1.get_leg_idcs(legs1), dtype=np.intp)
-        order2 = np.asarray(t2.get_leg_idcs(legs2), dtype=np.intp)
-        perm = np.argsort(order2)[order1]
-        return perm
+        return None
 
 
 # ##################################
