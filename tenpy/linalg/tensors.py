@@ -19,7 +19,7 @@ from .dummy_config import config
 from .symmetries.groups import AbelianGroup
 from .symmetries.spaces import VectorSpace, ProductSpace
 from .backends.backend_factory import get_default_backend
-from .backends.abstract_backend import Dtype, Block
+from .backends.abstract_backend import Dtype, Block, AbstractBackend
 from ..tools.misc import to_iterable, to_iterable_of_len
 
 __all__ = ['Shape', 'AbstractTensor', 'Tensor', 'ChargedTensor', 'DiagonalTensor', 'Mask',
@@ -31,7 +31,6 @@ __all__ = ['Shape', 'AbstractTensor', 'Tensor', 'ChargedTensor', 'DiagonalTensor
 
 # TODO (JH) should default dtype for zeros(), eye() etc really be complex128? simple potential to accidentally cast float to complex?
 # TODO (JH) eye_like()
-
 
 class Shape:
     """An object storing the legs and labels of a tensor.
@@ -528,7 +527,6 @@ class AbstractTensor(ABC):
         """See tensors.almost_equal"""
         ...
 
-    # TODO type may also be float
     @abstractmethod
     def inner(self, other: AbstractTensor, do_conj: bool = True,
               legs1: list[int | str] = None, legs2: list[int | str]  = None) -> float | complex:
@@ -541,11 +539,10 @@ class AbstractTensor(ABC):
         """See tensors.outer"""
         ...
 
-    # TODO type may also be complex or float
     @abstractmethod
-    def tdot(self, other: AbstractTensor,
-             legs1: int | str | list[int | str] = -1, legs2: int | str | list[int | str] = 0,
-             relabel1: dict[str, str] = None, relabel2: dict[str, str] = None) -> AbstractTensor:
+    def tdot(self, other: AbstractTensor, legs1: int | str | list[int | str] = -1,
+             legs2: int | str | list[int | str] = 0, relabel1: dict[str, str] = None,
+             relabel2: dict[str, str] = None) -> AbstractTensor | float | complex:
         """See tensors.tdot"""
         ...
 
@@ -599,7 +596,7 @@ class Tensor(AbstractTensor):
     # Additional methods (not in AbstractTensor)
     # --------------------------------------------
 
-    # TODO should this just be a regular attribute of AbstractTensor?
+    # TODO should this just be a regular attribute of AbstractTensor? -> yes
     @property
     def dtype(self) -> Dtype:
         return self.backend.get_dtype_from_data(self.data)
@@ -889,7 +886,8 @@ class Tensor(AbstractTensor):
                 #       the unique fusion channel coupled[0]
                 coupled = self.symmetry.fusion_outcomes(coupled[0], s)
         else:
-            raise NotImplementedError  # TODO do this when there is a general implementation of fusion trees
+            # TODO do this when there is a general implementation of fusion trees
+            raise NotImplementedError
 
         return np.any(np.all(coupled == self.symmetry.trivial_sector[None, :], axis=1))
 
@@ -1027,11 +1025,7 @@ class Tensor(AbstractTensor):
                 raise ValueError('Tried to squeeze non-trivial legs.')
         res_legs = [l for idx, l in enumerate(self.legs) if idx not in leg_idcs]
         if len(res_legs) == 0:
-            raise ValueError("squeeze_legs() with no leg left.")
-            # TODO: should we return self.item() in this case?
-            #  JU: I dont think so, because code might rely on getting a AbstractTensor.
-            #      There might be a case for a Scalar(AbstractTensor) type...
-            #      the ArrayAPI does this too, any "scalar" output needs to be a 0D array.
+            raise ValueError("squeeze_legs() with no leg left. Use item instead.")
         res_labels = [label for idx, label in enumerate(self.labels) if idx not in leg_idcs]
         res_data = self.backend.squeeze_legs(self, leg_idcs)
         return Tensor(res_data, backend=self.backend, legs=res_legs, labels=res_labels)
@@ -1154,10 +1148,7 @@ class Tensor(AbstractTensor):
         # check for special cases, such that backend.tdot doesn't have to do that
         # special case: inner()
         if len(open_legs1) == 0 and len(open_legs2) == 0:
-            # TODO add args to inner() with implicit transpose and specify that it shouldn't use conj(a)
-            a = self.permute_legs(leg_idcs1)
-            b = other.permute_legs(leg_idcs2)
-            return a.conj().inner(b)
+            return self.inner(other, do_conj=False, legs1=leg_idcs1, legs2=leg_idcs2)
         # special case: outer()
         if len(leg_idcs1) == 0:
             return self.outer(other, relabel1, relabel2)
@@ -1514,7 +1505,7 @@ class ChargedTensor(AbstractTensor):
         if self.dummy_leg.dim == 1:
             return self._dummy_leg_state_item() * self.invariant_part.norm()
         else:
-            # TODO could do sth like
+            # OPTIMIZE could do sth like
             # sqrt(sum(slice_norms ** 2))
             #  where slice_norms = [abs(s) * inv[..., idx] for idx, s in enumerate(dummy_leg_state)]
             warnings.warn('Converting ChargedTensor to dense block for `norm`', stacklevel=2)
@@ -1554,17 +1545,14 @@ class ChargedTensor(AbstractTensor):
                              dummy_leg_state=self.dummy_leg_state)
 
     def _get_element(self, idcs: list[int]) -> float | complex:
-        if self.dummy_leg_state is None:
-            return self.invariant_part._get_element(idcs + [0])
         if self.dummy_leg.dim == 1:
-            inv_scalar = self.invariant_part._get_element(idcs + [0])
-            return self.backend.block_item(self.dummy_leg_state) * inv_scalar
+            return self._dummy_leg_state_item() * self.invariant_part._get_element(idcs + [0])
         # TODO the remaining case is more complicated... implement it?
         #  would need to partially index invariant part...
         raise ValueError('Can not access elements of ChargedTensor with non-trivial dummy leg')
 
     def _mul_scalar(self, other: complex) -> ChargedTensor:
-        # can chosse to either "scale" the invariant part or the dummy_leg_state.
+        # can choose to either "scale" the invariant part or the dummy_leg_state.
         # we might want to keep dummy_leg_state=None, so we scale the invariant part
         return ChargedTensor(
             invariant_part=self.invariant_part._mul_scalar(other),
@@ -1576,7 +1564,6 @@ class ChargedTensor(AbstractTensor):
             factor = self._dummy_leg_state_item()
         except ValueError:
             msg = 'Can not set elements of ChargedTensor with non-trivial dummy leg'
-            # TODO is this the right error type?
             raise ValueError(msg) from None
         self.invariant_part._set_element(idcs + [0], value / factor)
 
@@ -1597,14 +1584,10 @@ class ChargedTensor(AbstractTensor):
         if self.dummy_leg.dim == 1:
             factor = self._dummy_leg_state_item() / other._dummy_leg_state_item()
             return self.invariant_part.almost_equal(factor * other, atol=atol, rtol=rtol)
-        elif self.backend.block_allclose(self.dummy_leg_state, other.dummy_leg_state, atol, rtol):
-            return self.invariant_part.almost_equal(other, atol=atol, rtol=rtol)
         else:
             # The decomposition into invariant part and non-invariant state is not unique,
             # so we cant just compare them individually.
             # OPTIMIZE (JU) is there a more efficient way?
-            # TODO should we have an extra argument that changes the behavior to return False
-            #  (or None, which is falsy) in this case?
             warnings.warn('Converting ChargedTensor to dense block for `almost_equal`', stacklevel=2)
             backend = get_same_backend(self, other)
             self_block = self.to_dense_block()
@@ -2178,7 +2161,7 @@ def split_legs(t: AbstractTensor, *legs: int | str) -> Tensor:
     return t.split_legs(*legs)
 
 
-def squeeze_legs(t: AbstractTensor, legs: int | str | list[int | str] = None) -> Tensor:
+def squeeze_legs(t: AbstractTensor, legs: int | str | list[int | str] = None) -> AbstractTensor:
     """
     Remove trivial leg from tensor.
     If legs are specified, they are squeezed if they are trivial and a ValueError is raised if not.
@@ -2189,7 +2172,8 @@ def squeeze_legs(t: AbstractTensor, legs: int | str | list[int | str] = None) ->
 
 def tdot(t1: AbstractTensor, t2: AbstractTensor,
          legs1: int | str | list[int | str] = -1, legs2: int | str | list[int | str] = 0,
-         relabel1: dict[str, str] = None, relabel2: dict[str, str] = None) -> AbstractTensor:
+         relabel1: dict[str, str] = None, relabel2: dict[str, str] = None
+         ) -> AbstractTensor | float | complex:
     """
     Contraction of two tensors.
 
@@ -2223,11 +2207,8 @@ def trace(t: AbstractTensor, legs1: int | str | list[int | str] = -2, legs2: int
     return t.trace(legs1=legs1, legs2=legs2)
 
 
-def zero_like(tens: AbstractTensor, labels: list[str | None] = None) -> Tensor:
-    # TODO (JU) remove labels arg?, can always relabel...
-    if labels is None:
-        labels = tens.labels
-    return type(tens).zero(backend=tens.backend, legs=tens.legs, labels=labels, dtype=tens.dtype)
+def zero_like(tens: AbstractTensor) -> AbstractTensor:
+    return tens.zero(backend=tens.backend, legs=tens.legs, labels=tens.labels, dtype=tens.dtype)
 
 
 # ##################################
@@ -2235,7 +2216,8 @@ def zero_like(tens: AbstractTensor, labels: list[str | None] = None) -> Tensor:
 # ##################################
 
 
-def get_same_backend(*tensors: AbstractTensor, error_msg: str = 'Incompatible backends.'):
+def get_same_backend(*tensors: AbstractTensor, error_msg: str = 'Incompatible backends.'
+                     ) -> AbstractBackend:
     """If all tensors have the same backend, return it. Otherwise raise a ValueError"""
     try:
         backend = tensors[0].backend
