@@ -409,7 +409,7 @@ class AbstractTensor(ABC):
         return self._mul_scalar(1. / other)
 
     def __float__(self):
-        if not self.is_real():
+        if not self.dtype.is_real:
             warnings.warn("converting complex to real, only return real part!", stacklevel=2)
         return self.item().real
 
@@ -447,10 +447,6 @@ class AbstractTensor(ABC):
 
     @abstractmethod
     def copy(self, deep=True) -> AbstractTensor:
-        ...
-
-    @abstractmethod
-    def is_real(self) -> bool:  # TODO is this needed...?
         ...
 
     @abstractmethod
@@ -863,8 +859,7 @@ class Tensor(AbstractTensor):
         if backend is None:
             backend = get_default_backend()
         legs = [backend.convert_vector_space(leg) for leg in legs]
-
-        return cls(data=backend.from_block_func(backend.block_random_uniform, legs, dtype=Dtype),
+        return cls(data=backend.from_block_func(backend.block_random_uniform, legs, dtype=dtype),
                    backend=backend, legs=legs, labels=labels)
 
     def idcs_fulfill_charge_rule(self, idcs: list[int]) -> bool:
@@ -973,9 +968,6 @@ class Tensor(AbstractTensor):
                       backend=self.backend,
                       legs=self.legs,
                       labels=self.labels)
-
-    def is_real(self) -> bool:
-        return self.backend.is_real(self)
 
     def item(self) -> float | complex:
         if all(leg.dim == 1 for leg in self.legs):
@@ -1498,10 +1490,6 @@ class ChargedTensor(AbstractTensor):
                                  dummy_leg_state=dummy_leg_state)
         return ChargedTensor(invariant_part=self.invariant_part, dummy_leg_state=self.dummy_leg_state)
 
-    def is_real(self) -> bool:
-        dummy_leg_state_real = self.dummy_leg_state is None or self.backend.block_is_real(self.dummy_leg_state)
-        return self.backend.is_real(self.invariant_part) and dummy_leg_state_real
-
     def item(self) -> float | complex:
         if not all(leg.dim == 1 for leg in self.invariant_part.legs[:-1]):
             raise ValueError('Not a scalar')
@@ -1855,9 +1843,6 @@ class DiagonalTensor(AbstractTensor):
                               second_leg_dual=(self.legs[1].is_dual != self.legs[0].is_dual),
                               backend=self.backend,
                               labels=self.labels)
-
-    def is_real(self) -> bool:
-        raise NotImplementedError  # TODO
 
     def item(self) -> bool | float | complex:
         raise NotImplementedError  # TODO
