@@ -113,8 +113,8 @@ class AbstractTensor(ABC):
     labels : list[str | None] | None
         Labels for the legs. If None, translates to ``[None, None, ...]`` of appropriate length
     """
-
-    def __init__(self, legs: list[VectorSpace], backend, labels: list[str | None] | None):
+    #  backend.get_dtype_from_data(self.data)
+    def __init__(self, legs: list[VectorSpace], backend, labels: list[str | None] | None, dtype: Dtype):
         if backend is None:
             self.backend = get_default_backend()
         else:
@@ -126,6 +126,7 @@ class AbstractTensor(ABC):
         self.shape = Shape(legs=self.legs, labels=labels)
         self.num_legs = len(legs)
         self.symmetry = legs[0].symmetry
+        self.dtype = dtype
 
     def test_sanity(self) -> None:
         assert self.backend.supports_symmetry(self.symmetry)
@@ -582,7 +583,10 @@ class Tensor(AbstractTensor):
         labels : list[str | None] | None
             Labels for the legs. If None, translates to ``[None, None, ...]`` of appropriate length
         """
-        AbstractTensor.__init__(self, backend=backend, legs=legs, labels=labels)
+        if backend is None:
+            backend = get_default_backend()
+        dtype = backend.get_dtype_from_data(data)
+        AbstractTensor.__init__(self, backend=backend, legs=legs, labels=labels, dtype=dtype)
         self.data = data
         assert isinstance(data, self.backend.DataCls)
 
@@ -594,11 +598,6 @@ class Tensor(AbstractTensor):
     # --------------------------------------------
     # Additional methods (not in AbstractTensor)
     # --------------------------------------------
-
-    # TODO should this just be a regular attribute of AbstractTensor? -> yes
-    @property
-    def dtype(self) -> Dtype:
-        return self.backend.get_dtype_from_data(self.data)
 
     @classmethod
     def eye(cls, legs: VectorSpace | list[VectorSpace], backend=None,
@@ -1283,8 +1282,13 @@ class ChargedTensor(AbstractTensor):
     _DUMMY_LABEL = '!'  # canonical label for the dummy leg
 
     def __init__(self, invariant_part: Tensor, dummy_leg_state=None):
+        if dummy_leg_state is None:
+            dtype = invariant_part.dtype
+        else:
+            dtype = Dtype.common(invariant_part.dtype,
+                                 invariant_part.backend.get_dtype_from_data(dummy_leg_state))
         AbstractTensor.__init__(self, backend=invariant_part.backend, legs=invariant_part.legs[:-1],
-                                labels=invariant_part.labels[:-1])
+                                labels=invariant_part.labels[:-1], dtype=dtype)
         self.invariant_part = invariant_part
         self.dummy_leg = invariant_part.legs[-1]
         if dummy_leg_state is None:
@@ -1301,10 +1305,6 @@ class ChargedTensor(AbstractTensor):
     # --------------------------------------------
     # Additional methods (not in AbstractTensor)
     # --------------------------------------------
-
-    @property
-    def dtype(self) -> Dtype:
-        return self.invariant_part.dtype
 
     @classmethod
     def from_block_func(cls, func, legs: VectorSpace | list[VectorSpace], dummy_leg: VectorSpace,
@@ -1728,7 +1728,10 @@ class DiagonalTensor(AbstractTensor):
                  labels: list[str | None] = None):
         self.data = data
         second_leg = first_leg.dual if second_leg_dual else first_leg
-        AbstractTensor.__init__(self, legs=[first_leg, second_leg], backend=backend, labels=labels)
+        if backend is None:
+            backend = get_default_backend()
+        dtype = backend.get_dtype_from_data(data)
+        AbstractTensor.__init__(self, legs=[first_leg, second_leg], backend=backend, labels=labels, dtype=dtype)
 
     def test_sanity(self) -> None:
         super().test_sanity()
@@ -1746,10 +1749,6 @@ class DiagonalTensor(AbstractTensor):
     @cached_property
     def diag_numpy(self) -> np.ndarray:
         raise NotImplementedError  # TODO
-
-    @property
-    def dtype(self) -> Dtype:
-        return self.backend.get_dtype_from_data(self.data)
 
     @classmethod
     def eye(cls, first_leg: VectorSpace, backend=None, labels: list[str | None] = None) -> DiagonalTensor:
@@ -1931,8 +1930,7 @@ class Mask(AbstractTensor):
     def __init__(self, data, small_leg: VectorSpace, large_leg: VectorSpace, backend=None,
                  labels: list[str | None] = None):
         self.data = data
-        self.dtype = Dtype.bool
-        AbstractTensor.__init__(self, legs=[small_leg, large_leg], backend=backend, labels=labels)
+        AbstractTensor.__init__(self, legs=[small_leg, large_leg], backend=backend, labels=labels, dtype=Dtype.bool)
 
     def test_sanity(self) -> None:
         super().test_sanity()
