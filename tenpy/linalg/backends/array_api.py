@@ -178,6 +178,14 @@ class ArrayApiBlockBackend(AbstractBlockBackend):
         res[tuple(idcs)] = value
         return res
 
+    def block_get_diagonal(self, a: Block, check_offdiagonal: bool) -> Block:
+        raise NotImplementedError  # TODO
+        # res = np.diagonal(a)
+        # if check_offdiagonal:
+        #     if not np.allclose(a, np.diag(res)):
+        #         raise ValueError('Not a diagonal block.')
+        # return res
+
 
 class NoSymmetryArrayApiBackend(ArrayApiBlockBackend, AbstractNoSymmetryBackend):
     def __init__(self, api_namespace):

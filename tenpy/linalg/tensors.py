@@ -862,6 +862,9 @@ class Tensor(AbstractTensor):
         return cls(data=backend.from_block_func(backend.block_random_uniform, legs, dtype=dtype),
                    backend=backend, legs=legs, labels=labels)
 
+    def diagonal(self) -> DiagonalTensor:
+        return DiagonalTensor.from_tensor(self, check_offdiagonal=False)
+
     def idcs_fulfill_charge_rule(self, idcs: list[int]) -> bool:
         """Whether the given indices fulfill the charge rule.
 
@@ -1394,6 +1397,10 @@ class ChargedTensor(AbstractTensor):
         return ChargedTensor(invariant_part=inv, dummy_leg_state=block)
 
     @classmethod
+    def from_tensor(cls, tens: Tensor) -> ChargedTensor:
+        return ChargedTensor(invariant_part=add_trivial_leg(tens, pos=-1))
+    
+    @classmethod
     def random_uniform(cls, legs: VectorSpace | list[VectorSpace], dummy_leg: VectorSpace,
                        backend=None, labels: list[str | None] = None, dtype: Dtype = Dtype.complex128,
                        dummy_leg_state=None) -> ChargedTensor:
@@ -1769,6 +1776,21 @@ class DiagonalTensor(AbstractTensor):
         raise NotImplementedError  # TODO
 
     @classmethod
+    def from_tensor(cls, tens: Tensor, check_offdiagonal: bool) -> DiagonalTensor:
+        if tens.num_legs != 2:
+            raise ValueError
+        if tens.legs[1] == tens.legs[0]:
+            second_leg_dual = False
+        elif tens.legs[1].can_contract_with(tens.legs[0]):
+            second_leg_dual=True
+        else:
+            raise ValueError('Second leg must be equal to or dual of first leg')
+        return cls(
+            data=tens.backend.diagonal_data_from_full_tensor(tens, check_offdiagonal=check_offdiagonal),
+            first_leg=tens.legs[0], second_leg_dual=second_leg_dual, backend=tens.backend, labels=tens.labels
+        )
+
+    @classmethod
     def random_normal(cls, first_leg: VectorSpace = None, second_leg_dual: bool = None,
                       mean: Tensor = None, sigma: float = 1., backend=None,
                       labels: list[str | None] = None, dtype: Dtype = None
@@ -2015,6 +2037,10 @@ class Mask(AbstractTensor):
 
 # TODO (JU) find a good way to write type hints for these, having in mind the possible combinations
 #           of AbstractTensor-subtypes.
+
+def add_trivial_leg(tens, pos: int = -1):
+    raise NotImplementedError  # TODO
+
 
 def almost_equal(t1: AbstractTensor, t2: AbstractTensor, atol: float = 1e-5, rtol: float = 1e-8) -> bool:
     """Checks if two tensors are equal up to numerical tolerance.

@@ -367,6 +367,11 @@ class AbstractBackend(ABC):
             A value of the appropriate type ``a.dtype.python_type``.
         """
         ...
+
+    @abstractmethod
+    def diagonal_data_from_full_tensor(self, a: Tensor, check_offdiagonal: bool) -> DiagonalData:
+        """Get the DiagonalData corresponding to a tensor with two legs"""
+        ...
         
 
 class AbstractBlockBackend(ABC):
@@ -550,4 +555,9 @@ class AbstractBlockBackend(ABC):
     @abstractmethod
     def set_block_element(self, a: Block, idcs: list[int], value: complex | float | bool) -> Block:
         """Return a modified copy, with the entry at `idcs` set to `value`"""
+        ...
+
+    @abstractmethod
+    def block_get_diagonal(self, a: Block, check_offdiagonal: bool) -> Block:
+        """Get the diagonal of a 2D block as a 1D block"""
         ...

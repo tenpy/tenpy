@@ -1218,5 +1218,10 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
                              ) -> DiagonalData:
         raise NotImplementedError  # TODO
 
+    def diagonal_data_from_full_tensor(self, a: Tensor, check_offdiagonal: bool) -> DiagonalData:
+        # can assume that Tensor hast two legs, i.e. that a.data.blocks are 2D blocks
+        # use self.block_get_diagonal(block, check_offdiagonal)
+        raise NotImplementedError  # TODO
+
     # TODO: support eig(h), eigvals
     # TODO: concatenate and grid_concat

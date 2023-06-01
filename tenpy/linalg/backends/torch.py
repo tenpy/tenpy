@@ -175,7 +175,14 @@ class TorchBlockBackend(AbstractBlockBackend):
         res = self.block_copy(a)
         res[tuple(idcs)] = value
         return res
-
+    
+    def block_get_diagonal(self, a: Block, check_offdiagonal: bool) -> Block:
+        res = torch_module.diagoanl(a)
+        if check_offdiagonal:
+            if not torch_module.allclose(res, torch_module.diag(a)):
+                raise ValueError('Not a diagonal block.')
+        return res
+        
 
 class NoSymmetryTorchBackend(TorchBlockBackend, AbstractNoSymmetryBackend):
     def __init__(self, device: str = 'cpu'):

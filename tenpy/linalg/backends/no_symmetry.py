@@ -159,3 +159,6 @@ class AbstractNoSymmetryBackend(AbstractBackend, AbstractBlockBackend, ABC):
     def set_element_diagonal(self, a: DiagonalTensor, idx: int, value: complex | float | bool
                              ) -> DiagonalData:
         return self.set_block_element(a.data, [idx], value)
+    
+    def diagonal_data_from_full_tensor(self, a: Tensor, check_offdiagonal: bool) -> DiagonalData:
+        return self.block_get_diagonal(a.data, check_offdiagonal=check_offdiagonal)
