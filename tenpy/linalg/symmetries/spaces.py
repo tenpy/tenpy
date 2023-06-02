@@ -370,7 +370,7 @@ class VectorSpace:
         keep = np.nonzero(new_multiplicities)[0]
         sector_masks = [sector_masks[i] for i in keep]
         new_sector_number = len(sector_masks)
-        sector_idx_map = np.full((new_sector_number,), -1, dtype=np.int8)
+        sector_idx_map = np.full((new_sector_number,), -1, dtype=int)
         sector_idx_map[keep] = np.arange(new_sector_number)
         projected.sector_perm = perm = sector_idx_map[projected.sector_perm]
         projected._sectors = projected._sectors[keep]

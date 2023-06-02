@@ -401,7 +401,7 @@ class NoSymmetry(AbelianGroup):
     """
 
     def __init__(self):
-        AbelianGroup.__init__(self, trivial_sector=np.array([0], dtype=np.int8), group_name='NoSymmetry',
+        AbelianGroup.__init__(self, trivial_sector=np.array([0], dtype=int), group_name='NoSymmetry',
                               num_sectors=1, descriptive_name=None)
 
     def is_valid_sector(self, a: Sector) -> bool:
@@ -439,7 +439,7 @@ class U1Symmetry(AbelianGroup):
     ..., `[-2]`, `[-1]`, `[0]`, `[1]`, `[2]`, ...
     """
     def __init__(self, descriptive_name: str | None = None):
-        AbelianGroup.__init__(self, trivial_sector=np.array([0], dtype=np.int8), group_name='U(1)',
+        AbelianGroup.__init__(self, trivial_sector=np.array([0], dtype=int), group_name='U(1)',
                               num_sectors=np.inf, descriptive_name=descriptive_name)
 
     def is_valid_sector(self, a: Sector) -> bool:
@@ -480,7 +480,7 @@ class ZNSymmetry(AbelianGroup):
                          '7': '₇', '8': '₈', '9': '₉'}
         subscript_N = ''.join(subscript_map[char] for char in str(N))
         group_name = f'ℤ{subscript_N}'
-        AbelianGroup.__init__(self, trivial_sector=np.array([0], dtype=np.int8), group_name=group_name,
+        AbelianGroup.__init__(self, trivial_sector=np.array([0], dtype=int), group_name=group_name,
                               num_sectors=N, descriptive_name=descriptive_name)
 
     def __repr__(self):
@@ -506,7 +506,7 @@ class ZNSymmetry(AbelianGroup):
         return (-sectors) % self.N
 
     def all_sectors(self) -> SectorArray:
-        return np.arange(self.N, dtype=np.int8)[:, None]
+        return np.arange(self.N, dtype=int)[:, None]
 
 
 class SU2Symmetry(GroupSymmetry):
@@ -519,7 +519,7 @@ class SU2Symmetry(GroupSymmetry):
     """
 
     def __init__(self, descriptive_name: str | None = None):
-        GroupSymmetry.__init__(self, fusion_style=FusionStyle.multiple_unique, trivial_sector=np.array([0], dtype=np.int8),
+        GroupSymmetry.__init__(self, fusion_style=FusionStyle.multiple_unique, trivial_sector=np.array([0], dtype=int),
                        group_name='SU(2)', num_sectors=np.inf, descriptive_name=descriptive_name)
 
     def is_valid_sector(self, a: Sector) -> bool:
@@ -568,7 +568,7 @@ class FermionParity(Symmetry):
 
     def __init__(self):
         Symmetry.__init__(self, fusion_style=FusionStyle.single, braiding_style=BraidingStyle.fermionic,
-                          trivial_sector=np.array([0], dtype=np.int8), group_name='FermionParity',
+                          trivial_sector=np.array([0], dtype=int), group_name='FermionParity',
                           num_sectors=2, descriptive_name=None)
 
     def is_valid_sector(self, a: Sector) -> bool:
@@ -604,7 +604,7 @@ class FermionParity(Symmetry):
         return 1
 
     def all_sectors(self) -> SectorArray:
-        return np.arange(2, dtype=np.int8)[:, None]
+        return np.arange(2, dtype=int)[:, None]
 
 
 class FibonacciGrading(Symmetry):
@@ -625,7 +625,7 @@ class FibonacciGrading(Symmetry):
         Symmetry.__init__(self,
                           fusion_style=FusionStyle.multiple_unique,
                           braiding_style=BraidingStyle.anyonic,
-                          trivial_sector=np.array([0], dtype=np.int8),
+                          trivial_sector=np.array([0], dtype=int),
                           group_name='FibonacciGrading',
                           num_sectors=2, descriptive_name=None)
 
@@ -657,7 +657,7 @@ class FibonacciGrading(Symmetry):
         return 1
 
     def all_sectors(self) -> SectorArray:
-        return np.arange(2, dtype=np.int8)[:, None]
+        return np.arange(2, dtype=int)[:, None]
 
 
 no_symmetry = NoSymmetry()
