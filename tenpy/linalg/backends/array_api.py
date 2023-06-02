@@ -30,12 +30,14 @@ class ArrayApiBlockBackend(AbstractBlockBackend):
             api_namespace.float64: Dtype.float64,
             api_namespace.complex64: Dtype.complex64,
             api_namespace.complex128: Dtype.complex128,
+            api_namespace.bool: Dtype.bool
         }
         self.backend_dtype_map = {
             Dtype.float32: api_namespace.float32,
             Dtype.float64: api_namespace.float64,
             Dtype.complex64: api_namespace.complex64,
             Dtype.complex128: api_namespace.complex128,
+            Dtype.bool:api_namespace.bool,
         }
 
     def block_tdot(self, a: Block, b: Block, idcs_a: list[int], idcs_b: list[int]) -> Block:

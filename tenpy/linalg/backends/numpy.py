@@ -30,16 +30,19 @@ class NumpyBlockBackend(AbstractBlockBackend):
         np.float64: Dtype.float64,
         np.complex64: Dtype.complex64,
         np.complex128: Dtype.complex128,
+        np.bool_: Dtype.bool,
         np.dtype('float32'): Dtype.float32,
         np.dtype('float64'): Dtype.float64,
         np.dtype('complex64'): Dtype.complex64,
         np.dtype('complex128'): Dtype.complex128,
+        np.dtype('bool'): Dtype.bool,
     }
     backend_dtype_map = {
         Dtype.float32: np.float32,
         Dtype.float64: np.float64,
         Dtype.complex64: np.complex64,
         Dtype.complex128: np.complex128,
+        Dtype.bool: np.bool_,
     }
 
     def block_tdot(self, a: Block, b: Block, idcs_a: list[int], idcs_b: list[int]) -> Block:

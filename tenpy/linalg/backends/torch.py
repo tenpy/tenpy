@@ -37,12 +37,14 @@ class TorchBlockBackend(AbstractBlockBackend):
             torch.float64: Dtype.float64,
             torch.complex64: Dtype.complex64,
             torch.complex128: Dtype.complex128,
+            torch.bool: Dtype.bool,
         }
         self.backend_dtype_map = {
             Dtype.float32: torch.float32,
             Dtype.float64: torch.float64,
             Dtype.complex64: torch.complex64,
             Dtype.complex128: torch.complex128,
+            Dtype.bool: torch.bool,
         }
         self.BlockCls = torch.Tensor
         super().__init__(**kwargs)
