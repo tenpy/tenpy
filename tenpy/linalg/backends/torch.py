@@ -161,6 +161,9 @@ class TorchBlockBackend(AbstractBlockBackend):
     def zero_block(self, shape: list[int], dtype: Dtype) -> Block:
         return torch_module.zeros(shape, dtype=self.backend_dtype_map[dtype], device=self.device)
 
+    def ones_block(self, shape: list[int], dtype: Dtype) -> Block:
+        return torch_module.ones(shape, dtype=self.backend_dtype_map[dtype], device=self.device)
+
     def eye_block(self, legs: list[int], dtype: Dtype) -> Data:
         matrix_dim = prod(legs)
         eye = torch_module.eye(matrix_dim, dtype=self.backend_dtype_map[dtype], device=self.device)
@@ -184,6 +187,12 @@ class TorchBlockBackend(AbstractBlockBackend):
             if not torch_module.allclose(res, torch_module.diag(a)):
                 raise ValueError('Not a diagonal block.')
         return res
+
+    def block_from_diagonal(self, diag: Block) -> Block:
+        return torch_module.diag(diag)
+
+    def block_sum_all(self, a: Block) -> float | complex:
+        return torch_module.sum(a)
         
 
 class NoSymmetryTorchBackend(TorchBlockBackend, AbstractNoSymmetryBackend):

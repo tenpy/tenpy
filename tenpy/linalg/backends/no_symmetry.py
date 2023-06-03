@@ -44,6 +44,13 @@ class AbstractNoSymmetryBackend(AbstractBackend, AbstractBlockBackend, ABC):
         super().__init__(**kwargs)
         self.DataCls = self.BlockCls
 
+    def test_data_sanity(self, a: Tensor | DiagonalTensor, is_diagonal: bool):
+        AbstractBackend.test_data_sanity(self, a, is_diagonal=is_diagonal)
+        if is_diagonal:
+            assert self.block_shape(a.data) == (a.legs[0].dim,), f'{self.block_shape(a)} != {(a.legs[0].dim,)}'
+        else:
+            assert self.block_shape(a.data) == tuple(a.shape), f'{self.block_shape(a)} != {tuple(a.shape.dims)}'
+
     def get_dtype_from_data(self, a: Data) -> Dtype:
         return self.block_dtype(a)
 
@@ -53,10 +60,13 @@ class AbstractNoSymmetryBackend(AbstractBackend, AbstractBlockBackend, ABC):
     def supports_symmetry(self, symmetry: Symmetry) -> bool:
         return symmetry == no_symmetry
 
-    def data_item(self, a: Data) -> float | complex:
+    def data_item(self, a: Data | DiagonalData) -> float | complex:
         return self.block_item(a)
 
     def to_dense_block(self, a: Tensor) -> Block:
+        return a.data
+
+    def diagonal_to_block(self, a: DiagonalTensor) -> Block:
         return a.data
 
     def from_dense_block(self, a: Block, legs: list[VectorSpace], atol: float = 1e-8, rtol: float = 1e-5
@@ -64,16 +74,25 @@ class AbstractNoSymmetryBackend(AbstractBackend, AbstractBlockBackend, ABC):
         assert all(leg.symmetry == no_symmetry for leg in legs)
         return a  # TODO could this cause mutability issues?
 
+    def diagonal_from_block(self, a: Block, leg: VectorSpace) -> DiagonalData:
+        return a
+
     def from_block_func(self, func, legs: list[VectorSpace], func_kwargs={}):
         return func(tuple(l.dim for l in legs), **func_kwargs)
+
+    def diagonal_from_block_func(self, func, leg: VectorSpace, func_kwargs={}) -> DiagonalData:
+        return func((leg.dim,), **func_kwargs)
 
     def zero_data(self, legs: list[VectorSpace], dtype: Dtype):
         return self.zero_block(shape=[l.dim for l in legs], dtype=dtype)
 
+    def zero_diagonal_data(self, leg: VectorSpace, dtype: Dtype) -> DiagonalData:
+        return self.zero_block(shape=[leg.dim], dtype=dtype)
+
     def eye_data(self, legs: list[VectorSpace], dtype: Dtype) -> Data:
         return self.eye_block(legs=[l.dim for l in legs], dtype=dtype)
 
-    def copy_data(self, a: Tensor) -> Data:
+    def copy_data(self, a: Tensor | DiagonalTensor) -> Data | DiagonalData:
         return self.block_copy(a.data)
 
     def _data_repr_lines(self, data: Data, indent: str, max_width: int, max_lines: int):
@@ -109,7 +128,10 @@ class AbstractNoSymmetryBackend(AbstractBackend, AbstractBlockBackend, ABC):
     def trace_partial(self, a: Tensor, idcs1: list[int], idcs2: list[int], remaining_idcs: list[int]) -> Data:
         return self.block_trace_partial(a.data, idcs1, idcs2, remaining_idcs)
 
-    def conj(self, a: Tensor) -> Data:
+    def diagonal_tensor_trace_full(self, a: DiagonalTensor) -> float | complex:
+        return self.block_sum_all(a.data)
+
+    def conj(self, a: Tensor | DiagonalTensor) -> Data | DiagonalData:
         return self.block_conj(a.data)
 
     def combine_legs(self, a: Tensor, combine_slices: list[int, int], product_spaces: list[ProductSpace], new_axes: list[int], final_legs: list[VectorSpace]) -> Data:
@@ -124,7 +146,7 @@ class AbstractNoSymmetryBackend(AbstractBackend, AbstractBlockBackend, ABC):
     def squeeze_legs(self, a: Tensor, idcs: list[int]) -> Data:
         return self.block_squeeze_legs(a.data, idcs)
 
-    def norm(self, a: Tensor) -> float:
+    def norm(self, a: Tensor | DiagonalTensor) -> float:
         return self.block_norm(a.data)
 
     def act_block_diagonal_square_matrix(self, a: Tensor, block_method: str) -> Data:
@@ -162,3 +184,18 @@ class AbstractNoSymmetryBackend(AbstractBackend, AbstractBlockBackend, ABC):
     
     def diagonal_data_from_full_tensor(self, a: Tensor, check_offdiagonal: bool) -> DiagonalData:
         return self.block_get_diagonal(a.data, check_offdiagonal=check_offdiagonal)
+
+    def full_data_from_diagonal_tensor(self, a: DiagonalTensor) -> Data:
+        return self.block_from_diagonal(a.data)
+
+    def scale_axis(self, a: Tensor, b: DiagonalTensor, leg: int) -> Data:
+        return self.block_scale_axis(a, b, leg)
+
+    def diagonal_elementwise_unary(self, a: DiagonalTensor, func, func_kwargs, maps_zero_to_zero: bool
+                                   ) -> DiagonalData:
+        return func(a.data, **func_kwargs)
+
+    def diagonal_elementwise_binary(self, a: DiagonalTensor, b: DiagonalTensor, func,
+                                    func_kwargs, partial_zero_is_identity: bool, partial_zero_is_zero: bool
+                                    ) -> DiagonalData:
+        return func(a.data, b.data, **func_kwargs)

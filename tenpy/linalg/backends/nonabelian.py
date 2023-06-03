@@ -95,8 +95,10 @@ class AbstractNonabelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
     ProductSpaceCls = NonabelianBackendProductSpace
     DataCls = NonAbelianData
 
-    def test_data_sanity(self, a: Tensor):
-        super().test_data_sanity(a)
+    def test_data_sanity(self, a: Tensor | DiagonalTensor, is_diagonal: bool):
+        if is_diagonal:
+            raise NotImplementedError  # TODO
+        super().test_data_sanity(a, is_diagonal=is_diagonal)
         for c, block in a.data.blocks.items():
             assert a.symmetry.is_valid_sector(c)
             assert self.block_shape(block) == (a.data.codomain.block_size(c), a.data.domain.block_size(c))
@@ -277,6 +279,21 @@ class AbstractNonabelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
 
     def infer_leg(self, block: Block, legs: list[VectorSpace | None], is_dual: bool = False,
                   is_real: bool = False) -> VectorSpace:
+        raise NotImplementedError  # TODO
+
+    def full_data_from_diagonal_tensor(self, a: DiagonalTensor) -> Data:
+        raise NotImplementedError  # TODO
+
+    def scale_axis(self, a: Tensor, b: DiagonalTensor, leg: int) -> Data:
+        raise NotImplementedError  # TODO
+    
+    def diagonal_elementwise_unary(self, a: DiagonalTensor, func, func_kwargs, maps_zero_to_zero: bool
+                                   ) -> DiagonalData:
+        raise NotImplementedError  # TODO
+
+    def diagonal_elementwise_binary(self, a: DiagonalTensor, b: DiagonalTensor, func,
+                                    func_kwargs, partial_zero_is_identity: bool, partial_zero_is_zero: bool
+                                    ) -> DiagonalData:
         raise NotImplementedError  # TODO
 
 

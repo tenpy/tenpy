@@ -388,6 +388,7 @@ class AbelianBackendData:
         self.blocks = [self.blocks[p] for p in perm]
 
 
+# TODO (JU): do we need a seperate class for this?
 @dataclass
 class AbelianBackendDiagonalData:
     """Data stored in a DiagonalTensor for :class:`AbstractAbelianBackend`."""
@@ -415,10 +416,15 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
     ProductSpaceCls = AbelianBackendProductSpace
     DataCls = AbelianBackendData
 
-    def test_data_sanity(self, a: Tensor):
+    def test_data_sanity(self, a: Tensor | DiagonalTensor, is_diagonal: bool):
+        if is_diagonal:
+            raise NotImplementedError  # TODO
         for leg in a.legs:
+            # TODO (JU) define clearly what this function is supposed to do
+            #    a) test sanity of a.data only: -> dont check the legs, do that in Tensor.test_sanity
+            #    b) test sanity of all of a: -> rename the function and also check legs in other backends
             leg.test_sanity()
-        super().test_data_sanity(a)
+        super().test_data_sanity(a, is_diagonal=is_diagonal)
         assert a.data.block_inds.shape == (len(a.data.blocks), a.num_legs)
         # check expected tensor dimensions
         block_shapes = np.array([leg.multiplicities[i] for leg, i in zip(a.legs, a.data.block_inds.T)]).T
@@ -448,12 +454,12 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
     def supports_symmetry(self, symmetry: Symmetry) -> bool:
         return symmetry.is_abelian and symmetry.braiding_style == BraidingStyle.bosonic
 
-    def data_item(self, a: Data) -> float | complex:
+    def data_item(self, a: Data | DiagonalData) -> float | complex:
         if len(a.blocks) > 1:
             raise ValueError("More than 1 block!")
         if len(a.blocks) == 0:
             #  assert all(leg.dim == 1 for leg in a.legs)
-            return 0.
+            return 0.  # TODO dtype.zero_scalar?
         return self.block_item(a.blocks[0])
 
     def to_dense_block(self, a: Tensor) -> Block:
@@ -461,6 +467,12 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
         for block, block_inds in zip(a.data.blocks, a.data.block_inds):
             slices = [slice(*leg.slices[i]) for i, leg in zip(block_inds, a.legs)]
             res[tuple(slices)] = block
+        return res
+
+    def diagonal_to_block(self, a: DiagonalTensor) -> Block:
+        res = self.zero_block([a.legs[0].dim], a.dtype)
+        for block, block_idx in zip(a.data.block, a.data.block_inds):
+            res[slice(*a.legs[0].slices[block_idx])] = block
         return res
 
     def from_dense_block(self, a: Block, legs: list[VectorSpace], atol: float = 1e-8, rtol: float = 1e-5) -> AbelianBackendData:
@@ -477,6 +489,11 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
             blocks.append(a[tuple(slices)])
         return AbelianBackendData(dtype, blocks, block_inds)
 
+    def diagonal_from_block(self, a: Block, leg: VectorSpace) -> DiagonalData:
+        leg = self.convert_vector_space(leg)
+        dtype = self.block_dtype(a)
+        raise NotImplementedError  # TODO
+
     def from_block_func(self, func, legs: list[VectorSpace], func_kwargs={}) -> AbelianBackendData:
         block_inds = _valid_block_indices(legs)
         blocks = []
@@ -489,9 +506,15 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
             dtype = self.block_dtype(blocks[0])
         return AbelianBackendData(dtype, blocks, block_inds)
 
+    def diagonal_from_block_func(self, func, leg: VectorSpace, func_kwargs={}) -> DiagonalData:
+        raise NotImplementedError  # TODO
+
     def zero_data(self, legs: list[VectorSpace], dtype: Dtype) -> AbelianBackendData:
         block_inds = np.zeros((0, len(legs)), dtype=int)
         return AbelianBackendData(dtype, [], block_inds)
+
+    def zero_diagonal_data(self, leg: VectorSpace, dtype: Dtype) -> DiagonalData:
+        raise NotImplementedError  # TODO
 
     def eye_data(self, legs: list[VectorSpace], dtype: Dtype) -> Data:
         block_inds = np.indices((leg.num_sectors for leg in legs)).T.reshape(-1, len(legs))
@@ -500,7 +523,9 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
         blocks = [self.eye_block(shape, dtype) for shape in zip(*dims)]
         return AbelianBackendData(dtype, blocks, np.hstack([block_inds, block_inds]))
 
-    def copy_data(self, a: Tensor) -> Data:
+    def copy_data(self, a: Tensor | DiagonalTensor) -> Data | DiagonalData:
+        if isinstance(a.data, AbelianBackendDiagonalData):
+            raise NotImplementedError  # TODO
         return AbelianBackendData(a.data.dtype,
                                   [self.block_copy(b) for b in self.blocks],
                                   a.data.block_inds.copy())
@@ -967,7 +992,12 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
         res_block_inds = res_block_inds[sort, :]
         return AbelianBackendData(a.data.dtype, res_blocks, res_block_inds)
 
-    def conj(self, a: Tensor) -> Data:
+    def diagonal_tensor_trace_full(self, a: DiagonalTensor) -> float | complex:
+        raise NotImplementedError  # TODO
+
+    def conj(self, a: Tensor | DiagonalTensor) -> Data | DiagonalData:
+        if isinstance(a.data, AbelianBackendDiagonalData):
+            raise NotImplementedError  # TODO
         blocks = [self.block_conj(b) for b in a.data.blocks]
         return AbelianBackendData(a.data.dtype, blocks, a.data.block_inds)
 
@@ -1144,7 +1174,7 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
         block_inds = block_inds[:, keep]
         return AbelianBackendData(a.data.dtype, blocks, block_inds)
 
-    def norm(self, a: Tensor) -> float:
+    def norm(self, a: Tensor | DiagonalTensor) -> float:
         # TODO: argument for different p-norms?
         block_norms = [self.block_norm(b) for b in a.data.blocks]
         return np.linalg.norm(block_norms)
@@ -1196,6 +1226,12 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
                   is_real: bool = False) -> VectorSpace:
         raise NotImplementedError  # TODO
         # TODO how to handle ChargedTensor vs Tensor?
+        #  JU: dont need to consider ChargedTensor here.
+        #      When e.g. a ChargedTensor classmethod wants to infer the charge, it should add a
+        #      one-dimensional axis to the block. then, this block is "uncharged", i.e. it will
+        #      become the ``invariant_part: Tensor`` of the ChargedTensor.
+        #      The "qtotal" is then the charge of the "artificial"/"dummy" leg.
+        
         #  def detect_qtotal(flat_array, legcharges):
         #      inds_max = np.unravel_index(np.argmax(np.abs(flat_array)), flat_array.shape)
         #      val_max = abs(flat_array[inds_max])
@@ -1206,21 +1242,51 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
         #      return make_valid(q)  # TODO: leg.get_qindex, leg.get_charge
 
     def get_element(self, a: Tensor, idcs: list[int]) -> complex | float | bool:
+        # use self.get_block_element(block, idcs)
         raise NotImplementedError  # TODO
 
     def get_element_diagonal(self, a: DiagonalTensor, idx: int) -> complex | float | bool:
+        # use self.get_block_element(block, idcs)
         raise NotImplementedError  # TODO
 
     def set_element(self, a: Tensor, idcs: list[int], value: complex | float) -> Data:
+        # use self.set_block_element(block, idcs, value)
         raise NotImplementedError  # TODO
 
     def set_element_diagonal(self, a: DiagonalTensor, idx: int, value: complex | float | bool
                              ) -> DiagonalData:
+        # use self.set_block_element(block, idcs, value)
         raise NotImplementedError  # TODO
 
     def diagonal_data_from_full_tensor(self, a: Tensor, check_offdiagonal: bool) -> DiagonalData:
         # can assume that Tensor hast two legs, i.e. that a.data.blocks are 2D blocks
         # use self.block_get_diagonal(block, check_offdiagonal)
+        raise NotImplementedError  # TODO
+
+    def full_data_from_diagonal_tensor(self, a: DiagonalTensor) -> Data:
+        # use self.block_from_diagonal(block)
+        raise NotImplementedError  # TODO
+
+    def scale_axis(self, a: Tensor, b: DiagonalTensor, leg: int) -> Data:
+        # use self.block_scale_axis(a_block, b_1d_block, leg)
+        raise NotImplementedError  # TODO
+    
+    def diagonal_elementwise_unary(self, a: DiagonalTensor, func, func_kwargs, maps_zero_to_zero: bool
+                                   ) -> DiagonalData:
+        # Apply a function ``func(block: Block, **kwargs) -> Block`` to all elements of a diagonal tensor.
+        # ``maps_zero_to_zero=True`` promises that ``func(zero_block) == zero_block``
+        raise NotImplementedError  # TODO
+
+    def diagonal_elementwise_binary(self, a: DiagonalTensor, b: DiagonalTensor, func,
+                                    func_kwargs, partial_zero_is_identity: bool, partial_zero_is_zero: bool
+                                    ) -> DiagonalData:
+        # Apply a function ``func(a_block: Block, b_block: Block, **kwargs) -> Block`` to all
+        # pairs of elements.
+        # Input tensors are both DiagonalTensor and have equal legs.
+        # ``partial_zero_is_identity=True`` promises that ``func(any_block, zero_block) == any_block``,
+        # and similarly for the second argument.
+        # ``partial_zero_is_zero=True`` promises that ``func(any_block, zero_block) == zero_block``,
+        # and similarly for the second argument.
         raise NotImplementedError  # TODO
 
     # TODO: support eig(h), eigvals

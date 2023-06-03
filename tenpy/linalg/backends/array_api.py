@@ -1,5 +1,4 @@
-"""Implements a generic BlockBackend that works with any library which follows
-the Array API standard 
+"""Implements a generic BlockBackend that works with any library which follows the Array API standard
 https://data-apis.org/array-api/latest/purpose_and_scope.html
 """
 # Copyright 2023-2023 TeNPy Developers, GNU GPLv3
@@ -163,6 +162,9 @@ class ArrayApiBlockBackend(AbstractBlockBackend):
     def zero_block(self, shape: list[int], dtype: Dtype) -> Block:
         return self._api.zeros(shape, dtype=self.backend_dtype_map[dtype])
 
+    def ones_block(self, shape: list[int], dtype: Dtype) -> Block:
+        return self._api.ones(shape, dtype=self.backend_dtype_map[dtype])
+
     def eye_block(self, legs: list[int], dtype: Dtype) -> Data:
         matrix_dim = np.prod(legs)
         eye = self._api.eye(matrix_dim, dtype=self.backend_dtype_map[dtype])
@@ -187,6 +189,13 @@ class ArrayApiBlockBackend(AbstractBlockBackend):
         #     if not np.allclose(a, np.diag(res)):
         #         raise ValueError('Not a diagonal block.')
         # return res
+
+    def block_from_diagonal(self, diag: Block) -> Block:
+        raise NotImplementedError  # TODO
+        # return np.diag(diag)
+
+    def block_sum_all(self, a: Block) -> float | complex:
+        return self._api.sum(a)
 
 
 class NoSymmetryArrayApiBackend(ArrayApiBlockBackend, AbstractNoSymmetryBackend):

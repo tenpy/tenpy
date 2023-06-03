@@ -172,6 +172,9 @@ class NumpyBlockBackend(AbstractBlockBackend):
     def zero_block(self, shape: list[int], dtype: Dtype) -> Block:
         return np.zeros(shape, dtype=self.backend_dtype_map[dtype])
 
+    def ones_block(self, shape: list[int], dtype: Dtype) -> Block:
+        return np.ones(shape, dtype=self.backend_dtype_map[dtype])
+
     def eye_block(self, legs: list[int], dtype: Dtype) -> Data:
         matrix_dim = np.prod(legs)
         eye = np.eye(matrix_dim, dtype=self.backend_dtype_map[dtype])
@@ -195,6 +198,12 @@ class NumpyBlockBackend(AbstractBlockBackend):
             if not np.allclose(a, np.diag(res)):
                 raise ValueError('Not a diagonal block.')
         return res
+
+    def block_from_diagonal(self, diag: Block) -> Block:
+        return np.diag(diag)
+
+    def block_sum_all(self, a: Block) -> float | complex:
+        return np.sum(a)
     
 
 class NoSymmetryNumpyBackend(NumpyBlockBackend, AbstractNoSymmetryBackend):

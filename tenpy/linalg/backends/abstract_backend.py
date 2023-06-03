@@ -105,7 +105,7 @@ class AbstractBackend(ABC):
     ProductSpaceCls: Type[ProductSpace] = ProductSpace
     DataCls = Block
 
-    def test_data_sanity(self, a: Tensor):
+    def test_data_sanity(self, a: Tensor | DiagonalTensor, is_diagonal: bool):
         assert isinstance(a.data, self.DataCls)
         # note: no super(), this is the top you reach!
         # subclasses will typically call super().test_data_sanity(a)
@@ -139,20 +139,35 @@ class AbstractBackend(ABC):
         # NonAbelian backend might implement this differently.
         return a.dtype.is_real
 
-    def item(self, a: Tensor) -> float | complex:
+    def item(self, a: Tensor | DiagonalTensor) -> float | complex:
         """Assumes that tensor is a scalar (i.e. has only one entry).
         Returns that scalar as python float or complex"""
         return self.data_item(a.data)
 
     @abstractmethod
-    def data_item(self, a: Data) -> float | complex:
+    def data_item(self, a: Data | DiagonalData) -> float | complex:
         """Assumes that data is a scalar (i.e. has only one entry).
         Returns that scalar as python float or complex"""
         ...
 
     @abstractmethod
     def to_dense_block(self, a: Tensor) -> Block:
-        """Forget about symmetry structure and convert to a single block."""
+        """Forget about symmetry structure and convert to a single block.
+        This includes a permutation of the basis, specified by the legs of `a`.
+        (see VectorSpace.sector_perm or VectorSpace.index_perm).
+        """
+        ...
+
+    @abstractmethod
+    def diagonal_to_block(self, a: DiagonalTensor) -> Block:
+        """Forget about symmetry structure and convert the diagonals of the blocks
+        to a single 1D block.
+        This is the diagonal of the respective non-symmetric 2D tensor.
+        This includes a permutation of the basis, specified by the legs of `a`.
+        (see VectorSpace.sector_perm or VectorSpace.index_perm).
+
+        Equivalent to self.block_get_diagonal(a.to_full_tensor().to_dense_block())
+        """
         ...
 
     @abstractmethod
@@ -161,6 +176,16 @@ class AbstractBackend(ABC):
         """Convert a dense block to the data for a symmetric tensor.
         If the block is not symmetric, measured by ``allclose(a, projected, atol, rtol)``,
         where ``projected`` is `a` projected to the space of symmetric tensors
+        This includes a permutation of the basis, specified by the legs of `a`.
+        (see VectorSpace.sector_perm or VectorSpace.index_perm).
+        """
+        ...
+
+    @abstractmethod
+    def diagonal_from_block(self, a: Block, leg: VectorSpace) -> DiagonalData:
+        """DiagonalData from a 1D block.
+        This includes a permutation of the basis, specified by the legs of `a`.
+        (see VectorSpace.sector_perm or VectorSpace.index_perm).
         """
         ...
 
@@ -170,8 +195,16 @@ class AbstractBackend(ABC):
         ...
 
     @abstractmethod
+    def diagonal_from_block_func(self, func, leg: VectorSpace, func_kwargs={}) -> DiagonalData:
+        ...
+
+    @abstractmethod
     def zero_data(self, legs: list[VectorSpace], dtype: Dtype) -> Data:
         """Data for a zero tensor"""
+        ...
+
+    @abstractmethod
+    def zero_diagonal_data(self, leg: VectorSpace, dtype: Dtype) -> DiagonalData:
         ...
 
     @abstractmethod
@@ -181,7 +214,7 @@ class AbstractBackend(ABC):
         ...
 
     @abstractmethod
-    def copy_data(self, a: Tensor) -> Data:
+    def copy_data(self, a: Tensor | DiagonalTensor) -> Data | DiagonalData:
         """Return a copy, such that future in-place operations on the output data do not affect the input data"""
         ...
 
@@ -252,7 +285,11 @@ class AbstractBackend(ABC):
         ...
 
     @abstractmethod
-    def conj(self, a: Tensor) -> Data:
+    def diagonal_tensor_trace_full(self, a: DiagonalTensor) -> float | complex:
+        ...
+
+    @abstractmethod
+    def conj(self, a: Tensor | DiagonalTensor) -> Data | DiagonalData:
         ...
 
     @abstractmethod
@@ -280,7 +317,7 @@ class AbstractBackend(ABC):
         ...
 
     @abstractmethod
-    def norm(self, a: Tensor) -> float:
+    def norm(self, a: Tensor | DiagonalTensor) -> float:
         ...
 
     @abstractmethod
@@ -371,6 +408,37 @@ class AbstractBackend(ABC):
     @abstractmethod
     def diagonal_data_from_full_tensor(self, a: Tensor, check_offdiagonal: bool) -> DiagonalData:
         """Get the DiagonalData corresponding to a tensor with two legs"""
+        ...
+
+    @abstractmethod
+    def full_data_from_diagonal_tensor(self, a: DiagonalTensor) -> Data:
+        ...
+
+    @abstractmethod
+    def scale_axis(self, a: Tensor, b: DiagonalTensor, leg: int) -> Data:
+        """Scale axis ``leg`` of ``a`` with ``b``, then permute legs to move the scaled leg to given position"""
+        ...
+
+    @abstractmethod
+    def diagonal_elementwise_unary(self, a: DiagonalTensor, func, func_kwargs, maps_zero_to_zero: bool
+                                   ) -> DiagonalData:
+        """Apply a function ``func(block: Block, **kwargs) -> Block`` to all elements of a diagonal tensor.
+        ``maps_zero_to_zero=True`` promises that ``func(zero_block) == zero_block``.
+        """
+        ...
+
+    @abstractmethod
+    def diagonal_elementwise_binary(self, a: DiagonalTensor, b: DiagonalTensor, func,
+                                    func_kwargs, partial_zero_is_identity: bool, partial_zero_is_zero: bool
+                                    ) -> DiagonalData:
+        """Apply a function ``func(a_block: Block, b_block: Block, **kwargs) -> Block`` to all
+        pairs of elements.
+        Input tensors are both DiagonalTensor and have equal legs.
+        ``partial_zero_is_identity=True`` promises that ``func(any_block, zero_block) == any_block``,
+        and similarly for the second argument.
+        ``partial_zero_is_zero=True`` promises that ``func(any_block, zero_block) == zero_block``,
+        and similarly for the second argument.
+        """
         ...
         
 
@@ -539,6 +607,10 @@ class AbstractBlockBackend(ABC):
         ...
 
     @abstractmethod
+    def ones_block(self, shape: list[int], dtype: Dtype) -> Block:
+        ...
+
+    @abstractmethod
     def eye_block(self, legs: list[int], dtype: Dtype) -> Data:
         """eye from legs to dual of legs (result has ``2 * len(legs)`` axes!!)"""
         ...
@@ -561,3 +633,23 @@ class AbstractBlockBackend(ABC):
     def block_get_diagonal(self, a: Block, check_offdiagonal: bool) -> Block:
         """Get the diagonal of a 2D block as a 1D block"""
         ...
+
+    @abstractmethod
+    def block_from_diagonal(self, diag: Block) -> Block:
+        """Return a 2D square block that has the 1D ``diag`` on the diagonal"""
+        ...
+
+    def block_scale_axis(self, block: Block, factors: Block, axis: int) -> Block:
+        """multiply block with the factors (a 1D block), along a given axis.
+        E.g. if block is 4D and ``axis==2`` with numpy-like broadcasting, this is would be
+        ``block * factors[None, None, :, None]``.
+        """
+        idx = [None] * len(self.block_shape(block))
+        idx[axis] = slice(None, None,  None)
+        return block * factors[idx]
+
+    @abstractmethod
+    def block_sum_all(self, a: Block) -> float | complex:
+        """The sum of all entries of the block"""
+        ...
+    
