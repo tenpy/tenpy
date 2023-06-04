@@ -30,8 +30,6 @@ __all__ = ['Shape', 'AbstractTensor', 'Tensor', 'ChargedTensor', 'DiagonalTensor
 
 # svd, qr, eigen, exp, log, ... are implemented in matrix_operations.py
 
-# TODO (JH) should default dtype for zeros(), eye() etc really be complex128? simple potential to accidentally cast float to complex?
-
 class Shape:
     """An object storing the legs and labels of a tensor.
     When iterated or indexed, it behaves like a sequence of integers, the dimension of the legs.
@@ -455,7 +453,7 @@ class AbstractTensor(ABC):
     @classmethod
     @abstractmethod
     def zero(cls, legs: VectorSpace | list[VectorSpace], backend=None, labels: list[str | None] = None,
-             dtype: Dtype = Dtype.complex128) -> AbstractTensor:
+             dtype: Dtype = Dtype.float64) -> AbstractTensor:
         """A zero tensor"""
         ...
 
@@ -628,7 +626,7 @@ class Tensor(AbstractTensor):
 
     @classmethod
     def eye(cls, legs: VectorSpace | list[VectorSpace], backend=None,
-            labels: list[str | None] = None, dtype: Dtype = Dtype.complex128) -> Tensor:
+            labels: list[str | None] = None, dtype: Dtype = Dtype.float64) -> Tensor:
         """The identity map from one group of legs to their duals.
 
         Parameters
@@ -842,7 +840,7 @@ class Tensor(AbstractTensor):
             Otherwise, labels associated with each leg, ``None`` for unnamed legs.
         dtype : Dtype
             The dtype for the tensor. If not given, use the dtype of `mean`. If `mean` is not given,
-            default to `Dtype.complex128`.
+            default to `Dtype.float64`.
         """
         if mean is not None:
             for name, val in zip(['legs', 'backend', 'labels'], [legs, backend, labels]):
@@ -857,7 +855,7 @@ class Tensor(AbstractTensor):
         if backend is None:
             backend = get_default_backend()
         if dtype is None:
-            dtype = Dtype.complex128
+            dtype = Dtype.float64
         legs = [backend.convert_vector_space(leg) for leg in legs]
 
         return cls(data=backend.from_block_func(backend.block_random_normal, legs, dtype=dtype, sigma=sigma),
@@ -865,7 +863,7 @@ class Tensor(AbstractTensor):
 
     @classmethod
     def random_uniform(cls, legs: VectorSpace | list[VectorSpace], backend=None,
-                       labels: list[str | None] = None, dtype: Dtype = Dtype.complex128) -> Tensor:
+                       labels: list[str | None] = None, dtype: Dtype = Dtype.float64) -> Tensor:
         """Generate a tensor whose block-entries (i.e. the free parameters of tensors compatible with
         the symmetry) are drawn independently and uniformly.
         If dtype is a real type, they are drawn from [-1, 1], if it is complex, real and imaginary part
@@ -936,7 +934,7 @@ class Tensor(AbstractTensor):
     @classmethod
     def zero(cls, legs: VectorSpace | list[VectorSpace],
              backend=None, labels: list[str | None] = None,
-             dtype: Dtype = Dtype.complex128) -> Tensor:
+             dtype: Dtype = Dtype.float64) -> Tensor:
         """Empty Tensor with zero entries (not stored explicitly in most backends).
 
         Parameters
@@ -1447,7 +1445,7 @@ class ChargedTensor(AbstractTensor):
     
     @classmethod
     def random_uniform(cls, legs: VectorSpace | list[VectorSpace], dummy_leg: VectorSpace,
-                       backend=None, labels: list[str | None] = None, dtype: Dtype = Dtype.complex128,
+                       backend=None, labels: list[str | None] = None, dtype: Dtype = Dtype.float64,
                        dummy_leg_state=None) -> ChargedTensor:
         inv = Tensor.random_uniform(legs=legs + [dummy_leg], backend=backend, labels=labels + [cls._DUMMY_LABEL],
                                     dtype=dtype)
@@ -1502,7 +1500,7 @@ class ChargedTensor(AbstractTensor):
     
     @classmethod
     def zero(cls, legs: VectorSpace | list[VectorSpace], dummy_leg: VectorSpace,
-             backend=None, labels: list[str | None] = None, dtype: Dtype = Dtype.complex128,
+             backend=None, labels: list[str | None] = None, dtype: Dtype = Dtype.float64,
              dummy_leg_state=None) -> ChargedTensor:
         if isinstance(legs, VectorSpace):
             legs = [legs]
@@ -1798,7 +1796,7 @@ class DiagonalTensor(AbstractTensor):
 
     @classmethod
     def eye(cls, first_leg: VectorSpace, backend=None, labels: list[str | None] = None,
-            dtype: Dtype = Dtype.complex128) -> DiagonalTensor:
+            dtype: Dtype = Dtype.float64) -> DiagonalTensor:
         if backend is None:
             backend = get_default_backend()
         return cls.from_block_func(
@@ -1902,7 +1900,7 @@ class DiagonalTensor(AbstractTensor):
         if backend is None:
             backend = get_default_backend()
         if dtype is None:
-            dtype = Dtype.complex128
+            dtype = Dtype.float64
         data = backend.diagonal_from_block_func(backend.block_random_normal, leg=first_leg,
                                                 func_kwargs=dict(dtype=dtype))
         return cls(data=data, first_leg=first_leg, second_leg_dual=second_leg_dual, backend=backend,
@@ -1910,7 +1908,7 @@ class DiagonalTensor(AbstractTensor):
 
     @classmethod
     def random_uniform(cls, first_leg: VectorSpace, second_leg_dual: bool = True, backend=None,
-                       labels: list[str | None] = None, dtype: Dtype = Dtype.complex128
+                       labels: list[str | None] = None, dtype: Dtype = Dtype.float64
                        ) -> DiagonalTensor:
         if backend is None:
             backend = get_default_backend()
@@ -1982,7 +1980,7 @@ class DiagonalTensor(AbstractTensor):
     
     @classmethod
     def zero(cls, first_leg: VectorSpace, second_leg_dual: bool = True, backend=None,
-             labels: list[str | None] = None, dtype: Dtype = Dtype.complex128) -> DiagonalTensor:
+             labels: list[str | None] = None, dtype: Dtype = Dtype.float64) -> DiagonalTensor:
         if backend is None:
             backend = get_default_backend()
         data = backend.zero_diagonal_data(leg=first_leg, dtype=dtype)
