@@ -1313,6 +1313,7 @@ class ChargedTensor(AbstractTensor):
         The state that the dummy leg is contracted with.
         Either a backend-specific block of shape ``(dummy_leg.dim,)``, or `None`,
         which is interpreted ``[1]`` if `dummmy_leg.dim == 1` and raises a `ValueError` otherwise.
+        This state is in the "public" basis of the dummy_leg, i.e. not considering its `index_perm`.
     """
     _DUMMY_LABEL = '!'  # canonical label for the dummy leg
 
@@ -1439,6 +1440,32 @@ class ChargedTensor(AbstractTensor):
     @classmethod
     def from_tensor(cls, tens: Tensor) -> ChargedTensor:
         return ChargedTensor(invariant_part=add_trivial_leg(tens, pos=-1))
+
+    @classmethod
+    def from_two_dummy_legs(cls, invariant_part: Tensor, leg1: int, state1: Block, leg2: int,
+                            state2: Block, convert_to_tensor_if_possible: bool = False
+                            ) -> ChargedTensor | Tensor:
+        leg1 = invariant_part.get_leg_idx(leg1)
+        leg2 = invariant_part.get_leg_idx(leg2)
+        first = min(leg1, leg2)
+        second = max(leg1, leg2)
+        other_legs = list(range(first)) \
+                     + list(range(first + 1, second)) \
+                     + list(range(second + 1, invariant_part.num_legs))
+        invariant_part = invariant_part.permute_legs(other_legs + [leg1, leg2])
+        invariant_part = invariant_part.combine_legs(-2, -1)
+        product_space: ProductSpace = invariant_part.legs[-1]
+        state = invariant_part.backend.fuse_states(
+            state1=state1, state2=state2, space1=product_space.spaces[0], space2=product_space[1],
+            product_space=product_space
+        )
+        res = ChargedTensor(invariant_part=invariant_part, dummy_leg_state=state)
+        if convert_to_tensor_if_possible:
+            try:
+                res = res.convert_to_tensor()
+            except ValueError:
+                pass  # if its not possible to convert to Tensor, just leave it as ChargedTensor
+        return res
     
     @classmethod
     def random_uniform(cls, legs: VectorSpace | list[VectorSpace], dummy_leg: VectorSpace,
@@ -1475,6 +1502,23 @@ class ChargedTensor(AbstractTensor):
         zero `Tensor` in this case.
         """
         raise NotImplementedError  # TODO
+
+    def convert_to_tensor(self) -> Tensor:
+        """If possible, convert self to a Tensor. Otherwise raise a ValueError.
+
+        It is possible to convert a ChargedTensor to a Tensor if and only if the dummy leg only
+        contains the trivial sector.
+
+        See Also
+        --------
+        project_to_invariant
+        """
+        if not np.all(self.dummy_leg._sectors[:] == self.symmetry.trivial_sector[None, :]):
+            raise ValueError('ChargedTensor with non-trivial charge could not be converted to Tensor.')
+        if self.dummy_leg.dim == 1:
+            return self._dummy_leg_state_item() * self.invariant_part.squeeze_legs(-1)
+        state = Tensor.from_dense_block(self.dummy_leg_state, legs=[self.dummy_leg], backend=self.backend)
+        return self.invariant_part.tdot(state, -1, 0)
 
     # --------------------------------------------
     # Overriding methods from AbstractTensor
@@ -1664,12 +1708,12 @@ class ChargedTensor(AbstractTensor):
             return backend.block_item(res)
         raise TypeError(f'inner not supported for {type(self)} and {type(other)}')
     
-    def outer(self, other: AbstractTensor,
-              relabel1: dict[str, str] = None, relabel2: dict[str, str] = None):
+    def outer(self, other: AbstractTensor, relabel1: dict[str, str] = None,
+              relabel2: dict[str, str] = None) -> AbstractTensor:
+        assert self.invariant_part.labels[-1] not in relabel1
         if isinstance(other, DiagonalTensor):
             other = other.to_full_tensor()
         if isinstance(other, Tensor):
-            assert self.invariant_part.labels[-1] not in relabel1
             inv_part = self.invariant_part.outer(other, relabel1=relabel1, relabel2=relabel2)
             # permute dummy leg to the back
             self_normal = list(range(self.num_legs))
@@ -1678,19 +1722,21 @@ class ChargedTensor(AbstractTensor):
             inv_part = inv_part.permute_legs(self_normal + other_normal + self_dummy)
             return ChargedTensor(invariant_part=inv_part, dummy_leg_state=self.dummy_leg_state)
         if isinstance(other, ChargedTensor):
-            # can implement somewhat easily if at least one dummy leg is one-dimensional
-            # TODO implement common functionality in "ChargedTensor.from_two_dummy_legs" or sth
-            #      result could be a Tensor, if possible!
-            raise NotImplementedError  # TODO
+            assert other.invariant_part.labels[-1] not in relabel2
+            invariant_part = self.invariant_part.outer(other.invariant_part, relabel1=relabel1, relabel2=relabel2)
+            return ChargedTensor.from_two_dummy_legs(
+                invariant_part, leg1=self.num_legs, state1=self.dummy_leg_state, leg2=-1,
+                state2=other.dummy_leg_state, convert_to_tensor_if_possible=True
+            )
         raise TypeError(f'outer not supported for {type(self)} and {type(other)}')
 
     def tdot(self, other: AbstractTensor, legs1: int | str | list[int | str] = -1,
              legs2: int | str | list[int | str] = 0, relabel1: dict[str, str] = None,
              relabel2: dict[str, str] = None) -> AbstractTensor | float | complex:
+        legs1 = self.get_leg_idcs(legs1)  # make sure we reference w.r.t. self, not self.invariant_part
+        assert self.invariant_part.labels[-1] not in relabel1
         if isinstance(other, (Tensor, DiagonalTensor)):
             # In both of these cases, the main work is done by tdot(self.invariant_part, other, ...)
-            legs1 = self.get_leg_idcs(legs1)  # make sure we reference w.r.t. self, not self.invariant_part
-            assert self.invariant_part.labels[-1] not in relabel1
             invariant_part = self.invariant_part.tdot(other, legs1=legs1, legs2=legs2,
                                                       relabel1=relabel1, relabel2=relabel2)
             # move dummy leg to the back
@@ -1701,8 +1747,14 @@ class ChargedTensor(AbstractTensor):
             invariant_part = invariant_part.permute_legs(permutation)
             return ChargedTensor(invariant_part=invariant_part, dummy_leg_state=self.dummy_leg_state)
         if isinstance(other, ChargedTensor):
-            # TODO share code with outer(ChargedTensor, ChargedTensor)
-            raise NotImplementedError  # TODO
+            legs2 = other.get_leg_idcs(legs2)  # make sure we referecne w.r.t. other
+            assert other.invariant_part.labels[-1] not in relabel2
+            invariant = self.invariant_part.tdot(other.invariant_part, legs1=legs1, legs2=legs2,
+                                                 relabel1=relabel1, relabel2=relabel2)
+            return ChargedTensor.from_two_dummy_legs(
+                invariant, leg1=self.num_legs - len(legs1), state1=self.dummy_leg_state,
+                leg2=-1, state2=other.dummy_leg_state, convert_to_tensor_if_possible=True
+            )
         raise TypeError(f'tdot not supported for {type(self)} and {type(other)}')
 
     def _add_tensor(self, other: AbstractTensor) -> ChargedTensor:

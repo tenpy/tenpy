@@ -1289,5 +1289,9 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
         # and similarly for the second argument.
         raise NotImplementedError  # TODO
 
-    # TODO: support eig(h), eigvals
-    # TODO: concatenate and grid_concat
+    def fuse_states(self, state1: Block | None, state2: Block | None, space1: VectorSpace,
+                    space2: VectorSpace, product_space: ProductSpace = None) -> Block | None:
+        # - consider state{1|2}.sector_perm // slices
+        # - use block_kron (or trivial kron=state{1|2}, if the other is None)
+        # - if kron is not None, consider product_sapce.sector_perm // slices
+        raise NotImplementedError  # TODO

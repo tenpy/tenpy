@@ -199,3 +199,12 @@ class AbstractNoSymmetryBackend(AbstractBackend, AbstractBlockBackend, ABC):
                                     func_kwargs, partial_zero_is_identity: bool, partial_zero_is_zero: bool
                                     ) -> DiagonalData:
         return func(a.data, b.data, **func_kwargs)
+
+    def fuse_states(self, state1: Block | None, state2: Block | None, space1: VectorSpace,
+                    space2: VectorSpace, product_space: ProductSpace = None) -> Block | None:
+        if state1 is None:
+            return state2
+        if state2 is None:
+            return state1
+        return self.block_kron(state1, state2)
+        

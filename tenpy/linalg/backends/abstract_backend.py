@@ -440,6 +440,15 @@ class AbstractBackend(ABC):
         and similarly for the second argument.
         """
         ...
+
+    @abstractmethod
+    def fuse_states(self, state1: Block | None, state2: Block | None, space1: VectorSpace,
+                    space2: VectorSpace, product_space: ProductSpace = None) -> Block | None:
+        """Given states in two VectorSpaces, compute the respective state in the product space.
+
+        States can be specified as 1D blocks or as ``None``, which represents ``[1.]``.
+        """
+        ...
         
 
 class AbstractBlockBackend(ABC):

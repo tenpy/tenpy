@@ -296,6 +296,10 @@ class AbstractNonabelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
                                     ) -> DiagonalData:
         raise NotImplementedError  # TODO
 
+    def fuse_states(self, state1: Block | None, state2: Block | None, space1: VectorSpace,
+                    space2: VectorSpace, product_space: ProductSpace = None) -> Block | None:
+        raise NotImplementedError  # TODO
+
 
 def _block_pairs(a: NonAbelianData, b: NonAbelianData) -> Iterator[tuple[Sector, Block, Block]]:
     """yield all block pairs, if a coupled sector appears as a key in the blocks dictionary
