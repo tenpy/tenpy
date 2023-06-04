@@ -925,11 +925,6 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
         return AbelianBackendData(res_dtype, res_blocks, res_block_inds)
 
     def inner(self, a: Tensor, b: Tensor, do_conj: bool, axs2: list[int] | None) -> complex:
-        if not do_conj:
-            # TODO: (JU) have added do_conj argument.
-            #  I think it is enough to just give it to block_inner, but could you double check?
-            raise NotImplementedError
-
         a_blocks = a.data.blocks
         stride = _make_stride([len(l.sectors) for l in a.legs], False)
         a_block_inds = np.sum(a.data.block_inds * stride, axis=1)
