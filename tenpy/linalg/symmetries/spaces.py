@@ -578,6 +578,7 @@ class ProductSpace(VectorSpace):
             If the returned sectors are sorted, the :attr:`sector_perm` for self.
             If _sectors are not sorted, this is None.
         """
+        # TODO (JU) should we special case symmetry.fusion_style == FusionStyle.single ?
         if _is_dual:
             spaces = [s.dual for s in spaces] # directly fuse sectors of dual spaces.
             # This yields overall dual `sectors` to return, which we directly save in

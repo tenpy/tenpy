@@ -715,9 +715,6 @@ class Tensor(AbstractTensor):
         If the block is not symmetric under the symmetry (specified by the legs), i.e. if
         ``not allclose(block, projected, atol, rtol)``, a ValueError is raised.
 
-        TODO document how the sectors are expected to be embedded, i.e. which slices correspond to which charge.
-        TODO support non-canonical embedding?
-
         Parameters
         ----------
         block : Block
@@ -918,7 +915,7 @@ class Tensor(AbstractTensor):
                 #       the unique fusion channel coupled[0]
                 coupled = self.symmetry.fusion_outcomes(coupled[0], s)
         else:
-            # TODO do this when there is a general implementation of fusion trees
+            # will do this when there is a general implementation of fusion trees
             raise NotImplementedError
 
         return np.any(np.all(coupled == self.symmetry.trivial_sector[None, :], axis=1))
@@ -1436,7 +1433,7 @@ class ChargedTensor(AbstractTensor):
         else:
             arr = func(shape, **func_kwargs)
         block = inv.backend.block_from_numpy(block)
-        block = inv.backend.block_to_dtype(block, dtype)
+        block = inv.backend.block_to_dtype(block, dtype)  # TODO (JU) add dtype arg directly to block_from_numpy?
         return ChargedTensor(invariant_part=inv, dummy_leg_state=block)
 
     @classmethod
@@ -1549,9 +1546,6 @@ class ChargedTensor(AbstractTensor):
         if self.dummy_leg.dim == 1:
             return self._dummy_leg_state_item() * self.invariant_part.norm()
         else:
-            # OPTIMIZE could do sth like
-            # sqrt(sum(slice_norms ** 2))
-            #  where slice_norms = [abs(s) * inv[..., idx] for idx, s in enumerate(dummy_leg_state)]
             warnings.warn('Converting ChargedTensor to dense block for `norm`', stacklevel=2)
             return self.backend.block_norm(self.to_dense_block())
 
@@ -1591,9 +1585,8 @@ class ChargedTensor(AbstractTensor):
     def _get_element(self, idcs: list[int]) -> float | complex:
         if self.dummy_leg.dim == 1:
             return self._dummy_leg_state_item() * self.invariant_part._get_element(idcs + [0])
-        # TODO the remaining case is more complicated... implement it?
-        #  would need to partially index invariant part...
-        raise ValueError('Can not access elements of ChargedTensor with non-trivial dummy leg')
+        masks = [Mask.from_indices([idx], leg) for idx, leg in zip(idcs, self.legs)]
+        return self._take_mask_indices(masks, legs=list(range(self.num_legs))).item()
 
     def _mul_scalar(self, other: complex) -> ChargedTensor:
         # can choose to either "scale" the invariant part or the dummy_leg_state.
@@ -1674,7 +1667,6 @@ class ChargedTensor(AbstractTensor):
     def outer(self, other: AbstractTensor,
               relabel1: dict[str, str] = None, relabel2: dict[str, str] = None):
         if isinstance(other, DiagonalTensor):
-            # OPTIMIZE
             other = other.to_full_tensor()
         if isinstance(other, Tensor):
             assert self.invariant_part.labels[-1] not in relabel1
@@ -1964,7 +1956,6 @@ class DiagonalTensor(AbstractTensor):
         if len(masks) == 2:
             if masks[0].same_mask_action(masks[1]):
                 return self.apply_mask_both_legs(masks[0])
-        # TODO is this warning appropriate?
         warnings.warn('Converting DiagonalTensor to Tensor in order to apply mask', stacklevel=2)
         return self.to_full_tensor()._take_mask_indices(masks, legs)
 
@@ -2034,7 +2025,6 @@ class DiagonalTensor(AbstractTensor):
         return self.backend.norm(self)
 
     def permute_legs(self, permutation: list[int | str]) -> DiagonalTensor:
-        # TODO is it ok to not copy the data? prob yes
         permutation = self.get_leg_idcs(permutation)
         return DiagonalTensor(data=self.data, first_leg=self.legs[permutation[0]],
                               second_leg_dual=self.second_leg_dual, backend=self.backend,
@@ -2053,7 +2043,7 @@ class DiagonalTensor(AbstractTensor):
 
     def trace(self, legs1: int | str | list[int | str] = -2, legs2: int | str | list[int | str] = -1
               ) -> float | complex:
-        # TODO should we check for invalid inputs?
+        # TODO should we check for invalid inputs? -> I think yes...
         return self.backend.diagonal_tensor_trace_full(self)
 
     def _get_element(self, idcs: list[int]) -> bool | float | complex:
@@ -2375,11 +2365,9 @@ def is_scalar(obj) -> bool:
     which has only one-dimensional legs"""
     if isinstance(obj, AbstractTensor):
         return all(d == 1 for d in obj.shape)
-        # TODO is above check wrong?
-        # It was checking all(leg.is_trivial for leg in obj.legs) before, but that returned False
-        # for Tensor([[1.]], [leg, leg.dual]) with leg = VectorSpace(sectors=[[1]], multiplicities=[1])
     if isinstance(obj, (int, float, complex, Integral)):  # Integral for np.int64()
         return True
+    # TODO (JU): should we just return False here?
     raise TypeError(f'Type not supported for is_scalar: {type(obj)}')
 
 
@@ -2398,7 +2386,6 @@ def permute_legs(t: AbstractTensor, permutation: list[int]) -> AbstractTensor:
     """Change the order of legs of a Tensor.
     """
     # TODO: also have an inplace version?
-    # TODO: name it permute_legs or sth instead?
     return t.permute_legs(permutation)
 
 
@@ -2420,7 +2407,7 @@ def split_legs(t: AbstractTensor, *legs: int | str) -> Tensor:
     --------
     combine_legs
     """
-    # TODO inplace version
+    # TODO inplace version?
     return t.split_legs(*legs)
 
 
