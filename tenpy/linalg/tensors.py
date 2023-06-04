@@ -1432,7 +1432,7 @@ class ChargedTensor(AbstractTensor):
             arr = func(**{shape_kw: shape}, **func_kwargs)
         else:
             arr = func(shape, **func_kwargs)
-        block = inv.backend.block_from_numpy(block)
+        block = inv.backend.block_from_numpy(arr)
         block = inv.backend.block_to_dtype(block, dtype)  # TODO (JU) add dtype arg directly to block_from_numpy?
         return ChargedTensor(invariant_part=inv, dummy_leg_state=block)
 
