@@ -14,6 +14,8 @@ from numbers import Number
 import numpy as np
 import warnings
 from functools import cached_property
+import logging
+logger = logging.getLogger(__name__)
 
 from .misc import duplicate_entries, force_str_len, join_as_many_as_possible
 from .dummy_config import config
@@ -2783,7 +2785,7 @@ def _get_result_labels(legs1: list[str | None], legs2: list[str | None],
     conflicting = [label for label in labels1 if label in labels2]
     labels = labels1 + labels2
     if conflicting:
-        # TODO issue warning?
-        #  JU: maybe logger.debug?
+        # stacklevel 1 is this function, 2 is the API function using it, 3 could be from the user.
+        logger.debug(f'Conflicting labels {", ".join(conflicting)} are dropped.', stacklevel=3)
         labels = [None if label in conflicting else label for label in labels]
     return labels
