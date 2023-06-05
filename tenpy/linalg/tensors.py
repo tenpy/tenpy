@@ -267,7 +267,7 @@ class AbstractTensor(ABC):
 
         return lines
 
-    def _take_mask_indices(self, masks: list[Mask], legs: list[int]) -> AbstractTensor:
+    def _getitem_apply_masks(self, masks: list[Mask], legs: list[int]) -> AbstractTensor:
         """Helper function for __getitem__ to index self with masks.
         Subclasses may override this implementation."""
         res = self
@@ -380,7 +380,7 @@ class AbstractTensor(ABC):
                         raise IndexError('Non-trivial slices are not supported.')
                 else:
                     raise IndexError(f'Invalid index type: {type(idx)}')
-            return self._take_mask_indices(masks=masks, legs=mask_legs)
+            return self._getitem_apply_masks(masks=masks, legs=mask_legs)
 
     def __setitem__(self, idcs, value):
         # TODO tests
@@ -1627,7 +1627,7 @@ class ChargedTensor(AbstractTensor):
         if self.dummy_leg.dim == 1:
             return self._dummy_leg_state_item() * self.invariant_part._get_element(idcs + [0])
         masks = [Mask.from_indices([idx], leg) for idx, leg in zip(idcs, self.legs)]
-        return self._take_mask_indices(masks, legs=list(range(self.num_legs))).item()
+        return self._getitem_apply_masks(masks, legs=list(range(self.num_legs))).item()
 
     def _mul_scalar(self, other: complex) -> ChargedTensor:
         # can choose to either "scale" the invariant part or the dummy_leg_state.
@@ -2110,12 +2110,12 @@ class DiagonalTensor(AbstractTensor):
     # Overriding methods from AbstractTensor
     # --------------------------------------------
 
-    def _take_mask_indices(self, masks: list[Mask], legs: list[int]) -> Tensor | DiagonalTensor:
+    def _getitem_apply_masks(self, masks: list[Mask], legs: list[int]) -> Tensor | DiagonalTensor:
         if len(masks) == 2:
             if masks[0].same_mask_action(masks[1]):
                 return self._apply_mask_both_legs(masks[0])
         warnings.warn('Converting DiagonalTensor to Tensor in order to apply mask', stacklevel=2)
-        return self.to_full_tensor()._take_mask_indices(masks, legs)
+        return self.to_full_tensor()._getitem_apply_masks(masks, legs)
 
     def __eq__(self, other):
         return self._binary_operand(self, other, func=operator.eq, operand='==', bool_inputs=None)
