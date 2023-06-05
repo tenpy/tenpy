@@ -1782,6 +1782,10 @@ class ChargedTensor(AbstractTensor):
             return self.backend.block_item(self.dummy_leg_state)
 
 
+# TODO where to put this? where to doc it?
+BOTH = object()  # sentinel value for the default behavior of DiagonalTensor.apply_mask
+
+
 class DiagonalTensor(AbstractTensor):
     r"""Special case of a tensor with two legs that is diagonal in the computational basis.
 
@@ -1958,16 +1962,16 @@ class DiagonalTensor(AbstractTensor):
         return cls(data=data, first_leg=first_leg, second_leg_dual=second_leg_dual, backend=backend,
                    labels=labels)
 
-    def apply_mask_both_legs(self, mask: Mask) -> DiagonalTensor:
-        """Apply the same mask to both legs."""
-        raise NotImplementedError  # TODO
-
     def to_full_tensor(self) -> Tensor:
         """Forget about diagonal structure and convert to a Tensor"""
         return Tensor(
             data=self.backend.full_data_from_diagonal_tensor(self),
             legs=self.legs, backend=self.backend, labels=self.labels
         )
+
+    def _apply_mask_both_legs(self, mask: Mask) -> DiagonalTensor:
+        """Apply the same mask to both legs."""
+        raise NotImplementedError  # TODO
 
     def _binary_operand(self, other: bool | Number | DiagonalTensor, func, operand: str, bool_inputs: bool):
         """Utility function for a shared implementation of binary functions, whose second argument
@@ -2109,7 +2113,7 @@ class DiagonalTensor(AbstractTensor):
     def _take_mask_indices(self, masks: list[Mask], legs: list[int]) -> Tensor | DiagonalTensor:
         if len(masks) == 2:
             if masks[0].same_mask_action(masks[1]):
-                return self.apply_mask_both_legs(masks[0])
+                return self._apply_mask_both_legs(masks[0])
         warnings.warn('Converting DiagonalTensor to Tensor in order to apply mask', stacklevel=2)
         return self.to_full_tensor()._take_mask_indices(masks, legs)
 
@@ -2141,13 +2145,12 @@ class DiagonalTensor(AbstractTensor):
         return cls(data=data, first_leg=first_leg, second_leg_dual=second_leg_dual, backend=backend,
                    labels=labels)
 
-    def apply_mask(self, mask: Mask, leg: int | str) -> Tensor:
-        # TODO can we tell sphinx to add the following note, but otherwise keep the docstring
-        #      defined in AbstractTensor.apply_mask ?
-        # for proper subclass behavior, this function applies the mask to only one leg.
-        # the result is no longer diagonal, and thus a Tensor
-        # See Also: apply_mask_both_legs
-        raise NotImplementedError
+    def apply_mask(self, mask: Mask, leg: int | str = BOTH) -> DiagonalTensor | Tensor:
+        # TODO amend docstring of superclass
+        if leg is BOTH:
+            return self._apply_mask_both_legs(mask)
+        
+        raise NotImplementedError  # TODO
 
     def combine_legs(self,
                      *legs: list[int | str],
