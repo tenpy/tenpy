@@ -85,9 +85,9 @@ class VectorSpace:
     _slices : 2D array-like
         Allows to skip recomputing the :attr:`slices`. These are the slices *after* sorting.
     """
-    ProductSpace = None  # we set this to the ProductSpace class below
+    ProductSpaceCls = None  # we set this to the ProductSpace class below
     # for subclasses, it's the corresponding ProductSpace subclass, e.g.
-    # AbelianBackendVectorSpace.ProductSpace = AbelianBackendProductSpace
+    # AbelianBackendVectorSpace.ProductSpaceCls = AbelianBackendProductSpace
     # This allows combine_legs() etc to generate appropriate sublcasses
 
     def __init__(self, symmetry: Symmetry, sectors: SectorArray, multiplicities: ndarray = None,
@@ -622,4 +622,4 @@ class ProductSpace(VectorSpace):
 
 
 
-VectorSpace.ProductSpace = ProductSpace
+VectorSpace.ProductSpaceCls = ProductSpace

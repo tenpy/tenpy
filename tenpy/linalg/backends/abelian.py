@@ -209,7 +209,7 @@ class AbelianBackendProductSpace(ProductSpace, AbelianBackendVectorSpace):
                                          _is_dual=self.is_dual)
 
 
-AbelianBackendVectorSpace.ProductSpace = AbelianBackendProductSpace
+AbelianBackendVectorSpace.ProductSpaceCls = AbelianBackendProductSpace
 
 _MAX_INT = np.iinfo(int).max
 

@@ -35,7 +35,8 @@ def VectorSpace(request):
 
 @pytest.fixture(ids=lambda cls:cls.__name__)
 def ProductSpace(VectorSpace):
-    return VectorSpace.ProductSpace
+    # TODO (JU) should we also rename the fixtures to VectorSpaceCls, ProductSpaceCls
+    return VectorSpace.ProductSpaceCls
 
 
 def random_symmetry_sectors(symmetry: groups.Symmetry, np_random: np.random.Generator, len_=None) -> groups.SectorArray:

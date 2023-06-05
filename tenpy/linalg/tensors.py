@@ -160,7 +160,7 @@ class AbstractTensor(ABC):
     @cached_property
     def parent_space(self) -> ProductSpace:
         """The space that the tensor lives in"""
-        return self.legs[0].ProductSpace(self.legs)
+        return self.legs[0].ProductSpaceCls(self.legs)
 
     @property
     def size(self) -> int:
@@ -1215,20 +1215,9 @@ class Tensor(AbstractTensor):
     # Internal utility methods
     # --------------------------------------------
 
-    # TODO (JU): should this be implemented in AbstractTensor?
-    # TODO: (JU) should we name it make_product_space ?
-    #  make_ProductSpace to me suggests that i get (a subclass of) ProductSpace, not an instance.
     def make_ProductSpace(self, legs, **kwargs) -> ProductSpace:
         legs = self.get_legs(legs)
-        # TODO: this should be something like class-attribute self.backend.ProductSpace
-        #  JU: I think the attribute which has the same name as an existing class is confusing...
-        #      At least i would call if ProductSpaceCls or similar.
-        #  JU: What do you think about a make_product_space(cls, spaces, **kwargs) classmethod in VectorSpace?
-        #      We could then call it here as ``legs[0].make_product_space(legs, **kwargs)``.
-        #      By assigning the ProductSpace class-attribute (which is callable), you are effectively
-        #      adding exactly such a method to the namespace of any VectorSpace instance, just
-        #      with less clear names and docs.
-        return legs[0].ProductSpace(legs, **kwargs)
+        return legs[0].ProductSpaceCls(legs, **kwargs)
 
     def _combine_legs_make_ProductSpace(self, combine_leg_idcs, product_spaces, product_spaces_dual):
         """Argument parsing for :meth:`combine_legs`: make missing ProductSpace legs.
