@@ -158,12 +158,9 @@ class AbstractTensor(ABC):
         return self.parent_space.num_parameters
 
     @cached_property
-    def parent_space(self) -> VectorSpace:
-        # TODO should we always return a ProductSpace?
-        if self.num_legs == 1:
-            return self.legs[0]
-        else:
-            return self.legs[0].ProductSpace(self.legs)
+    def parent_space(self) -> ProductSpace:
+        """The space that the tensor lives in"""
+        return self.legs[0].ProductSpace(self.legs)
 
     @property
     def size(self) -> int:
