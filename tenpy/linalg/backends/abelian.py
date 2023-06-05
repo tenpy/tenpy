@@ -388,15 +388,6 @@ class AbelianBackendData:
         self.blocks = [self.blocks[p] for p in perm]
 
 
-# TODO (JU): do we need a seperate class for this?
-@dataclass
-class AbelianBackendDiagonalData:
-    """Data stored in a DiagonalTensor for :class:`AbstractAbelianBackend`."""
-    dtye: Dtype
-    blocks : List[Block]
-    block_inds : ndarray
-
-
 class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
     """Backend for Abelian group symmetries.
 
@@ -417,8 +408,6 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
     DataCls = AbelianBackendData
 
     def test_data_sanity(self, a: Tensor | DiagonalTensor, is_diagonal: bool):
-        if is_diagonal:
-            raise NotImplementedError  # TODO
         for leg in a.legs:
             # TODO (JU) define clearly what this function is supposed to do
             #    a) test sanity of a.data only: -> dont check the legs, do that in Tensor.test_sanity
@@ -429,7 +418,8 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
         # check expected tensor dimensions
         block_shapes = np.array([leg.multiplicities[i] for leg, i in zip(a.legs, a.data.block_inds.T)]).T
         for block, shape in zip(a.data.blocks, block_shapes):
-            assert self.block_shape(block) == tuple(shape)
+            expect_shape = (shape[0],) if is_diagonal else tuple(shape)
+            assert self.block_shape(block) == expect_shape
         assert not np.any(a.data.block_inds < 0)
         assert not np.any(a.data.block_inds >= np.array([[leg.num_sectors for leg in a.legs]]))
         # TODO: could also check that
@@ -524,8 +514,6 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
         return AbelianBackendData(dtype, blocks, np.hstack([block_inds, block_inds]))
 
     def copy_data(self, a: Tensor | DiagonalTensor) -> Data | DiagonalData:
-        if isinstance(a.data, AbelianBackendDiagonalData):
-            raise NotImplementedError  # TODO
         return AbelianBackendData(a.data.dtype,
                                   [self.block_copy(b) for b in self.blocks],
                                   a.data.block_inds.copy())
@@ -825,7 +813,7 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
         # TODO (JU) this assumes same dtype without explicitly checking. thats probably ok...
         dtype = a.data.dtype
         return (AbelianBackendData(dtype, u_blocks, u_block_inds),
-                AbelianBackendDiagonalData(dtype.to_real, s_blocks, s_block_inds),
+                AbelianBackendData(dtype.to_real, s_blocks, s_block_inds),
                 AbelianBackendData(dtype, vh_blocks, vh_block_inds),
                 new_leg)
 
@@ -991,8 +979,6 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
         raise NotImplementedError  # TODO
 
     def conj(self, a: Tensor | DiagonalTensor) -> Data | DiagonalData:
-        if isinstance(a.data, AbelianBackendDiagonalData):
-            raise NotImplementedError  # TODO
         blocks = [self.block_conj(b) for b in a.data.blocks]
         return AbelianBackendData(a.data.dtype, blocks, a.data.block_inds)
 
