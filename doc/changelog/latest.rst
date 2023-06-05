@@ -36,6 +36,8 @@ Changed
 
 Fixed
 ^^^^^
+- Potentially serious bug :issue:`260` that the `sorted` flag of :class:`~tenpy.linalg.charges.LegCharge` was not set
+  correctly in :func:`~tenpy.linalg.np_conserved.qr`.
 - :meth:`~tenpy.networks.purification_mps.PurificationMPS.from_infiniteT_canonical` should now work with arbitrary
   charges of the original model, and has the option to double the number of charges to separately conserve the charges
   on each the physical and ancialla legs.

@@ -292,8 +292,7 @@ class PurificationMPS(MPS):
 
             leg_L = leg_R.conj()
             if not conserve_ancilla_charge:
-                leg_q = leg_p.conj().copy()
-                leg_q.charges = np.zeros_like(leg_q.charges)
+                leg_q = npc.LegCharge.from_trivial(leg_p.ind_len, chinfo, -leg_p.qconj)
                 leg_R = npc.LegCharge.from_qflat(chinfo, Q_R, qconj=-1)
             else:
                 Q_p_cac = np.hstack([Q_p, np.zeros_like(Q_p)])
@@ -538,7 +537,7 @@ def convert_model_purification_canonical_conserve_ancilla_charge(model):
         leg_p = s_new.leg
         Q_p = leg_p.charges
         Q_p_cac = np.hstack([Q_p, np.zeros_like(Q_p)])  # still sorted
-        leg_p_cac = npc.LegCharge(chinfo_cac, leg_p.slices, Q_p_cac, leg_p.qconj)
+        leg_p_cac = npc.LegCharge.from_qind(chinfo_cac, leg_p.slices, Q_p_cac, leg_p.qconj)
         s_new.change_charge(leg_p_cac)
         converted_sites_cache[site] = s_new
         return s_new
@@ -561,10 +560,10 @@ def convert_model_purification_canonical_conserve_ancilla_charge(model):
                     Q = np.hstack([leg.charges, -leg.charges])  # wL, wR
                 else:
                     Q = np.hstack([leg.charges, np.zeros_like(leg.charges)])  # p
-                W.legs[i] = npc.LegCharge(chinfo_cac,
-                                          leg.slices,
-                                          chinfo_cac.make_valid(Q),
-                                          leg.qconj)
+                W.legs[i] = npc.LegCharge.from_qind(chinfo_cac,
+                                                    leg.slices,
+                                                    chinfo_cac.make_valid(Q),
+                                                    leg.qconj)
             W.qtotal = np.hstack([W.qtotal, np.zeros_like(W.qtotal)])
             W.legs[3] = W.legs[2].conj()
             new_W.append(W)
