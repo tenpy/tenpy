@@ -10,7 +10,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 import operator
 from typing import TypeVar, Sequence, NoReturn
-from numbers import Integral, Number
+from numbers import Number
 import numpy as np
 import warnings
 from functools import cached_property
@@ -2534,11 +2534,10 @@ def is_scalar(obj) -> bool:
     which has only one-dimensional legs"""
     if isinstance(obj, AbstractTensor):
         return all(d == 1 for d in obj.shape)
-    # TODO use ``isinstance(obj, Number)`` instead?
-    if isinstance(obj, (int, float, complex, Integral)):  # Integral for np.int64()
+    # checking for Number includes int, float, complex, but also e.g. np.int64()
+    if isinstance(obj, Number):
         return True
-    # TODO (JU): should we just return False here?
-    raise TypeError(f'Type not supported for is_scalar: {type(obj)}')
+    return False
 
 
 def norm(t: AbstractTensor) -> float:
