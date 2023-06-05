@@ -3,8 +3,9 @@
 from __future__ import annotations
 from typing import Sequence, TypeVar
 import numpy as np
+from functools import wraps
 
-__all__ = ['force_str_len', 'UNSPECIFIED', 'inverse_permutation', 'duplicate_entries', 
+__all__ = ['force_str_len', 'UNSPECIFIED', 'inverse_permutation', 'duplicate_entries',
            'join_as_many_as_possible']
 
 # TODO move somewhere else
@@ -53,7 +54,7 @@ def duplicate_entries(seq: Sequence[_T], ignore: Sequence[_T] = []) -> set[_T]:
 def join_as_many_as_possible(msgs: Sequence[str], separator: str, priorities: Sequence[int] = None,
                              max_len: int = None, fill: str = '...') -> str:
     """Like ``separator.join(msgs)`` but if the result is too long, only some of the `msgs`
-    will be included. Higher values in `priorities` are prioritized 
+    will be included. Higher values in `priorities` are prioritized
     (default: prioritize what appears earlier in `msgs`).
     """
     if len(msgs) == 0:
@@ -72,4 +73,3 @@ def join_as_many_as_possible(msgs: Sequence[str], separator: str, priorities: Se
     num_msgs = np.where(candidate_lengths > max_len)[0][0]
 
     return separator.join([msgs[n] for n in order[:num_msgs]] + [fill])
-    

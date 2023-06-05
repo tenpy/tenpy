@@ -22,6 +22,7 @@ from .symmetries.spaces import VectorSpace, ProductSpace
 from .backends.backend_factory import get_default_backend
 from .backends.abstract_backend import Dtype, Block, AbstractBackend
 from ..tools.misc import to_iterable, to_iterable_of_len
+from ..tools.docs import amend_parent_docstring
 
 __all__ = ['Shape', 'AbstractTensor', 'Tensor', 'ChargedTensor', 'DiagonalTensor', 'Mask',
            'almost_equal', 'combine_legs', 'conj', 'inner', 'is_scalar', 'norm', 'outer',
@@ -456,6 +457,15 @@ class AbstractTensor(ABC):
 
     @abstractmethod
     def apply_mask(self, mask: Mask, leg: int | str) -> AbstractTensor:
+        """TODO write docstring
+
+        Parameters
+        ==========
+        mask : Mask
+            The mask to be applied
+        leg : int | str
+            Which leg to apply to
+        """
         ...
 
     @abstractmethod
@@ -2134,8 +2144,12 @@ class DiagonalTensor(AbstractTensor):
         return cls(data=data, first_leg=first_leg, second_leg_dual=second_leg_dual, backend=backend,
                    labels=labels)
 
+    @amend_parent_docstring(parent=AbstractTensor.apply_mask)
     def apply_mask(self, mask: Mask, leg: int | str = BOTH) -> DiagonalTensor | Tensor:
-        # TODO amend docstring of superclass
+        """.. note ::
+            For ``DiagonalTensor``s, :meth:`apply_mask` has a default argument for `legs` which
+            causes the mask to be applied to *both* legs.
+        """
         if leg is BOTH:
             return self._apply_mask_both_legs(mask)
         
