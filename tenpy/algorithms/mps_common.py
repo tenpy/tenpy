@@ -2,7 +2,7 @@
 
 Many MPS-based algorithms use a 'sweep' structure, wherein local updates are
 performed on the MPS tensors sequentially, first from left to right, then from
-right to left. This procedure is common to DMRG, TDVP, sequential time evolution,
+right to left. This procedure is common to DMRG, TDVP, MPO-based time evolution,
 etc.
 
 Another common feature of these algorithms is the use of an effective local
@@ -20,20 +20,20 @@ implemented here also directly use the :class:`Sweep` class.
 """
 # Copyright 2018-2021 TeNPy Developers, GNU GPLv3
 
+from .algorithm import Algorithm
+from ..linalg.sparse import NpcLinearOperator, SumNpcLinearOperator, OrthogonalNpcLinearOperator
+from ..networks.mpo import MPOEnvironment
+from ..networks.mps import MPSEnvironment, MPS
+from .truncation import svd_theta, TruncationError
+from ..linalg import np_conserved as npc
 import numpy as np
 import time
 import warnings
 import copy
 import itertools
 import logging
-logger = logging.getLogger(__name__)
 
-from ..linalg import np_conserved as npc
-from .truncation import svd_theta, TruncationError
-from ..networks.mps import MPSEnvironment, MPS
-from ..networks.mpo import MPOEnvironment
-from ..linalg.sparse import NpcLinearOperator, SumNpcLinearOperator, OrthogonalNpcLinearOperator
-from .algorithm import Algorithm
+logger = logging.getLogger(__name__)
 
 __all__ = [
     'Sweep',
@@ -53,9 +53,6 @@ class Sweep(Algorithm):
     This is a base class, intended to cover common procedures in all algorithms that 'sweep'
     left-right over the MPS (for infinite MPS: over the MPS unit cell).
     Examples for such algorithms are DMRG, TDVP, and variational compression.
-
-    .. todo ::
-        TDVP is currently not implemented with the sweep class.
 
     Parameters
     ----------
@@ -150,8 +147,13 @@ class Sweep(Algorithm):
         data['init_env_data'] = self.env.get_initialization_data()
         if not sequential_simulations:
             data['sweeps'] = self.sweeps
-        if self.ortho_to_envs:
-            data['orthogonal_to'] = [e.ket for e in self.ortho_to_envs]
+            if len(self.ortho_to_envs) > 0:
+                if self.psi.bc == 'finite':
+                    data['orthogonal_to'] = [e.ket for e in self.ortho_to_envs]
+                else:
+                    # need the environments as well
+                    data['orthogonal_to'] = [e.get_initialization_data(include_ket=True)
+                                            for e in self.ortho_to_envs]
         return data
 
     @property
@@ -409,7 +411,7 @@ class Sweep(Algorithm):
             rigth (`True`) of the current one, and `update_LP`, `update_RP` indicate
             whether it is necessary to update the `LP` and `RP` of the environments.
         """
-        # warning: only those `LP` and `RP` that can/will be used later again should be set to True
+        # warning: set only those `LP` and `RP` to True, which can/will be used later again
         # otherwise, the assumptions in :meth:`free_no_longer_needed_envs` will not hold,
         # and you need to update that method as well!
         L = self.psi.L
@@ -528,8 +530,8 @@ class Sweep(Algorithm):
         Returns
         -------
         update_data : dict
-            Data to be processed by :meth:`post_update_local`, e.g. containing the truncation
-            error as `err`.
+            Data to be processed by :meth:`update_env` and :meth:`post_update_local`,
+            e.g. containing the truncation error as `err`.
             If :attr:`combine` is set, it should also contain the `U` and `VH` from the SVD.
         """
         raise NotImplementedError("needs to be overridden by subclass")
@@ -550,7 +552,6 @@ class Sweep(Algorithm):
             env.del_RP(i_L)
         # possibly recalculated updated center bonds
         update_LP, update_RP = self.update_LP_RP
-        combine = self.combine
         if update_LP:
             self.eff_H.update_LP(self.env, i_R, update_data['U'])  # possibly optimized
             for env in self.ortho_to_envs:
@@ -602,18 +603,19 @@ class Sweep(Algorithm):
                 # so current RP[i_R] is useless
                 for env in all_envs:
                     env.del_RP(i_R)
-            return  # n = 2 finished
-        # here n = 1
-        if self.move_right and update_RP:
-            # will update site i_L coming from the left in the future
-            # so current LP[i_L] is useless
-            for env in all_envs:
-                env.del_LP(i_L)
-        elif not self.move_right and update_LP:
-            # will update site i_R coming from the right in the future
-            # so current RP[i_R] is useless
-            for env in all_envs:
-                env.del_RP(i_R)
+        elif n == 1:
+            if self.move_right and update_RP:
+                # will update site i_L coming from the left in the future
+                # so current LP[i_L] is useless
+                for env in all_envs:
+                    env.del_LP(i_L)
+            elif not self.move_right and update_LP:
+                # will update site i_R coming from the right in the future
+                # so current RP[i_R] is useless
+                for env in all_envs:
+                    env.del_RP(i_R)
+        else:
+            assert False, "n_optimize != 1, 2"
         self.eff_H = None  # free references to environments held by eff_H
         # done
 
@@ -779,6 +781,22 @@ class OneSiteH(EffectiveH):
                   self.RP.get_leg('vL').ind_len)
         if combine:
             self.combine_Heff(env)
+
+    @classmethod
+    def from_LP_W0_RP(cls, LP, W0, RP, i0=0, combine=False, move_right=True):
+        self = cls.__new__(cls)
+        assert combine==False, "TODO, do we need to implement this?"
+        self.i0 = i0
+        self.LP = LP.itranspose(['vR*', 'wR', 'vR'])
+        self.RP = RP.itranspose(['wL', 'vL', 'vL*'])
+        self.W0 = W0.replace_labels(['p', 'p*'], ['p0', 'p0*'])
+        self.dtype = LP.dtype
+        self.combine = combine
+        assert move_right==True, "For VUMPS, we only move right"
+        self.move_right = move_right
+        self.N = (self.LP.get_leg('vR').ind_len * self.W0.get_leg('p0').ind_len *
+                  self.RP.get_leg('vL').ind_len)
+        return self
 
     def matvec(self, theta):
         """Apply the effective Hamiltonian to `theta`.

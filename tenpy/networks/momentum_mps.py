@@ -14,14 +14,14 @@ class MomentumMPS:
         self.uMPS_GS = uMPS
         self.p = p
         self.n_sites = n_sites # Number of sites of single excitation tensor.
-        
+
     def copy(self):
         """Returns a copy of `self`.
         """
         # __init__ makes deep copies of B, S
         cp = self.__class__(self._X, self.uMPS_GS, self.p, self.n_sites)
         return cp
-    
+
     def save_hdf5(self, hdf5_saver, h5gr, subpath):
         """Export `self` into a HDF5 file.
 
@@ -46,7 +46,7 @@ class MomentumMPS:
         hdf5_saver.save(self.uMPS_GS, subpath + "GS_uMPS")
         hdf5_saver.save(self.p, subpath + "momentum")
         h5gr.attrs["n_sites"] = self.n_sites
-        
+
     @classmethod
     def from_hdf5(cls, hdf5_loader, h5gr, subpath):
         """Load instance from a HDF5 file.
@@ -76,7 +76,7 @@ class MomentumMPS:
         obj.n_sites = hdf5_loader.get_attr(h5gr, "n_sites")
         obj.uMPS_GS.test_sanity()
         return obj
-    
+
     def get_B(self, i, copy=False):
         """Return (view of) `X` at site `i` in canonical form.
 
@@ -90,7 +90,7 @@ class MomentumMPS:
         Returns
         -------
         X : :class:`~tenpy.linalg.np_conserved.Array`
-            The excitation 'matrix' `X` at site `i` with leg labels 
+            The excitation 'matrix' `X` at site `i` with leg labels
             ``'vL', 'p1', ..., 'p{n_sites-1}', 'vR'``.
             May be a view of the matrix (if ``copy=False``) or a copy (if ``copy=True``).
 
@@ -100,13 +100,13 @@ class MomentumMPS:
         if copy:
             B = B.copy()
         return B
-    
+
     def entanglement_entropy(self, n=1, bonds=None):
         raise NotImplementedError()
-        
+
     def expectation_value_term(self, term):
         raise NotImplementedError()
-        
+
     def _to_valid_index(self, i):
         """Make sure `i` is a valid index."""
         return i % self.L

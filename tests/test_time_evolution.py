@@ -76,7 +76,7 @@ def test_ExpMPOEvolution(bc_MPS, approximation, compression, g=1.5):
         for i in range(30):
             EngTEBD.run()
             psi = eng.run()
-            #  print(psi.norm)
+            print(psi.norm)
             print(abs(abs(psi.overlap(psiTEBD)) - 1), abs(psi.overlap(psiTEBD) - 1))
             assert (abs(abs(psi.overlap(psiTEBD)) - 1) < 1e-4)
 
@@ -95,7 +95,7 @@ def fermion_TFI_H(L, g=1.5, J=1.):
         A[i, i + 1] += -J
         A[i + 1, i] += -np.conj(J)
         B[i, i + 1] += -J
-        B[i + 1, i] += J  #no minus due to anti-commutation
+        B[i + 1, i] += J  # no minus due to anti-commutation
     A[L - 1, L - 1] += 2 * g
     return np.concatenate((np.concatenate(
         (A, B), axis=1), np.concatenate((B.conj().T, -A.T), axis=1)),
@@ -113,9 +113,9 @@ def exact_expectation(L, g, t=1., dt=0.01):
 
     H0 = fermion_TFI_H(L, g=g, J=0.)
     vp, U0p = LA.eigh(H0)
-    assert np.all(vp.round(10) != 0.)  #so far no handling of zero eigenvalues
+    assert np.all(vp.round(10) != 0.)  # so far no handling of zero eigenvalues
 
-    #reshape eigenvalues und -vectors to the form (v1, ..., vN, -v1, ..., -vN)
+    # reshape eigenvalues und -vectors to the form (v1, ..., vN, -v1, ..., -vN)
     U0 = np.zeros(U0p.shape)
     U0[:, :L] = U0p[:, L::][:, ::-1]
     for i in range(L):
@@ -132,12 +132,12 @@ def exact_expectation(L, g, t=1., dt=0.01):
     for i in range(L):
         U[:, L + i] = gamma @ U[:, i]
 
-    mag = []  #avarage magnetization
-    szsz = []  #correlation functions
+    mag = []  # avarage magnetization
+    szsz = []  # correlation functions
     spsm = []  # nearest neighbor <S+S- + S-S+> correlation
     for t in np.arange(0, t, dt):
         Ub = U @ np.diag(np.exp(
-            -1j * t * v)) @ U.conj().T @ U0  #the total (unitary) Boguliobov transformation
+            -1j * t * v)) @ U.conj().T @ U0  # the total (unitary) Boguliobov transformation
         X = Ub[L::, L::]
         Y = Ub[L::, :L]
         npt.assert_almost_equal((X @ X.conj().T + Y @ Y.conj().T), np.identity(L), 7)
@@ -157,7 +157,7 @@ def exact_expectation(L, g, t=1., dt=0.01):
         Delta = LA.inv(S)
         npt.assert_almost_equal(np.abs(LA.det(X)) * np.sqrt(LA.det(S)), 1, 7)
 
-        #measure z-magnetization
+        # measure z-magnetization
         mz = []
         for i in range(L):
             ni = Delta[i + L, i]
@@ -165,13 +165,14 @@ def exact_expectation(L, g, t=1., dt=0.01):
             mz.append(1 - 2 * ni.real)
         mag.append(mz)
 
-        #measure sigmaz-sigmaz correlations
+        # measure sigmaz-sigmaz correlations
         s = np.zeros((L, L))
         for i in range(L):
             for j in range(L):
-                ninj =  -0.25*(-Delta[j+L, i+3*L] + Delta[i+L, j+3*L])*(-Delta[j+2*L, i] + Delta[i+2*L, j]) \
-                        +0.25*(-Delta[j+L, j] + Delta[j+2*L, j+3*L])*(-Delta[i+L, i] + Delta[i+2*L, i+3*L]) \
-                        -0.25*(-Delta[j+L, i] + Delta[i+2*L, j+3*L])*(-Delta[i+L, j] + Delta[j+2*L, i+3*L])
+                ninj = -0.25*(-Delta[j+L, i+3*L] + Delta[i+L, j+3*L])*(-Delta[j+2*L, i] + Delta[i+2*L, j]) \
+                    + 0.25*(-Delta[j+L, j] + Delta[j+2*L, j+3*L])*(-Delta[i+L, i] + Delta[i+2*L, i+3*L]) \
+                    - 0.25*(-Delta[j+L, i] + Delta[i+2*L, j+3*L]) * \
+                    (-Delta[i+L, j] + Delta[j+2*L, i+3*L])
                 ni = Delta[i + L, i]
                 nj = Delta[j + L, j]
                 sij = 1 - 2 * ni - 2 * nj + 4 * ninj
@@ -179,7 +180,7 @@ def exact_expectation(L, g, t=1., dt=0.01):
                 s[i, j] = sij.real if i != j else 1.
         szsz.append(s)
 
-        #measure sigma+sigma- correlatios
+        # measure sigma+sigma- correlatios
         s = []
         for i in range(L - 1):
             j = i + 1
@@ -199,12 +200,12 @@ def test_time_methods(algorithm):
 
     model_params = dict(L=L, J=1., g=g, bc_MPS='finite', conserve=None)
     M = TFIChain(model_params)
-    product_state = ["up"] * L  #prepare system in spin polarized state
+    product_state = ["up"] * L  # prepare system in spin polarized state
     psi = MPS.from_product_state(M.lat.mps_sites(), product_state, bc=M.lat.bc_MPS)
 
     dt = 0.01
     N_steps = 2
-    t = 0.5  #total time evolution
+    t = 0.3  # total time evolution
     params = {
         'order': 2,
         'dt': dt,
@@ -218,9 +219,8 @@ def test_time_methods(algorithm):
     if algorithm == 'TEBD':
         eng = tebd.TEBDEngine(psi, M, params)
     elif algorithm == 'TDVP':
-        params['active_sites'] = 2
         del params['order']
-        eng = tdvp.TDVPEngine(psi, M, params)
+        eng = tdvp.TwoSiteTDVPEngine(psi, M, params)
     elif algorithm == 'ExpMPO':
         params['compression_method'] = 'SVD'
         del params['order']

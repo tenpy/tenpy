@@ -3,7 +3,7 @@
 
 Release Notes
 -------------
-TODO: Summarize the most important changes
+Backwards-incompatible rewrite of TDVP!
 
 Note that measurment functions for simulations need to be updated to accept another `model` parameter
 
@@ -15,6 +15,8 @@ Backwards incompatible changes
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 - Measurement functions now have to take another argument `model` as well, which matches the indexing/sites of `psi`.
   This helps to avoid special cases for grouped sites and `OrthogonalExciations`.
+- Replace the :class:`~tenpy.algorithms.tdvp.TDVPEngine` with a new version. 
+  The previous one is for now still available as :class:`~tenpy.algorithms.tdvp.OldTDVPEngine`.
 - Add more fine grained sweep convergence checks for the :class:`~tenpy.algorithms.mps_common.VariationalCompression` (used when applying an MPO to an MPS!).
   In this context, we renamed the parameter `N_sweeps` to :cfg:option:`VariationalCompression.max_sweeps`.
   Further, we added the parameter :cfg:option:`VariationalCompression.min_sweeps` and :cfg:option:`VariationalCompression.tol_theta_diff`
@@ -42,6 +44,13 @@ Added
   :meth:`~tenpy.networks.mps.MPS.apply_local_op` with a fermionic operator on an MPS.
 - :func:`~tenpy.linalg.np_conserved.orthogonal_columns` constructing orthogonal columns to a given (rectangular) matrix.
 - :meth:`~tenpy.networks.mps.MPS.enlarge_chi` for artificially enlarging the bond dimension.
+- :class:`~tenpy.models.lattice.NLegLadder`, and more `pairs` (``'rung_NN', 'leg_NN', 'diagonal'``) for the :class:`~tenpy.models.lattice.Ladder`.
+- :meth:`tenpy.algorithms.Algorithm.switch_engine` for simplified switching from e.g. the `TwoSiteDMRGEngine` to the `SingleSiteDMRGEngine`.
+- :class:`~tenpy.models.lattice.MultiSpeciesLattice` to simplify implementing e.g. spin-full fermions or bosons without
+  using the :class:`~tenpy.networks.site.GroupedSite`. Further helper functions :func:`~tenpy.networks.site.spin_half_species`, 
+  as well as the new :class:`~tenpy.models.hubbard.FermiHubbardModel2` using it, and an example
+  :doc:`/notebooks/31_multispecies_models`.
+- Keyword argument `permute_dense` for :meth:`tenpy.networks.site.Site.add_op`.
 
 Changed
 ^^^^^^^
@@ -52,6 +61,7 @@ Changed
 - Enhanced implementation of :meth:`~tenpy.networks.mps.MPS.canonical_form_infinite2` to replace :meth:`~tenpy.networks.mps.MPS.canonical_form_infinite`.
 - Split up :meth:`tenpy.networks.mpo.MPO.expectation_value` into :meth:`~tenpy.networks.mpo.MPO.expectation_value_finite`
   and :meth:`~tenpy.networks.mpo.MPO.expectation_value_power` and add :meth:`tenpy.networks.mpo.MPO.expectation_value_TM`
+- Enhanced documentation of the lattices with more plots.
 
 Fixed
 ^^^^^
@@ -66,9 +76,10 @@ Fixed
 - The power-method :meth:`tenpy.networks.mpo.MPO.expectation_value` did not work correctly for ``H.L != psi.L``.
 - :meth:`~tenpy.models.model.CouplingModel.add_local_term` did not work with `plus_hc=True`.
 - :meth:`tenpy.linalg.sparse.FlatLinearOperator.eigenvectors` did not always return orthogonal eigenvectors with well-defined charges.
-- Handle Jordan-Wigner strings in :meth:`~tenpy.networks.mps.MPS.apply_local_op`.
-- :meth:`~tenpy.linalg.sparse.FlatLinearOperator.eigenvectors` did not always return orthogonal eigenvectors with well-defined charges.
 - Fix :class:`tenpy.linalg.sparse.FlatLinearOperator` to not use the full flat array, but just the block with nonzero entries (which can be much smaller for a few charges).
   This is enabled over a new option `compact_flat` that defaults to True if the vector leg is blocked by charge (and charge_sector is not None).
 - Make ``cons_Sz='parity'`` for the :class:`~tenpy.networks.site.SpinHalfSite` non-trivial.
+- Handle Jordan-Wigner strings in :meth:`~tenpy.networks.mps.MPS.apply_local_op`.
 - The first, initial measurements for time-dependent Hamiltonians might have used wrong time for sequential/resume run.
+- Index error in stopping criteria for Lanczos, :issue:`169`.
+- Fix for resuming simulations with `orthogonal_to`: carry on the environments!

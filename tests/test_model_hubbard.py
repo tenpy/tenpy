@@ -6,6 +6,9 @@ from test_model import check_general_model
 def test_FermiHubbardModel():
     check_general_model(hubbard.FermiHubbardModel, {'lattice': "Square", 'Lx': 2, 'Ly': 3}, {})
 
+def test_FermiHubbardModel():
+    check_general_model(hubbard.FermiHubbardModel2, {'lattice': "Square", 'Lx': 2, 'Ly': 3}, {})
+
 
 def test_FermiHubbardChain():
     check_general_model(hubbard.FermiHubbardChain, {}, {})

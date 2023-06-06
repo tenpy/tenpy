@@ -2423,7 +2423,8 @@ class MPOTransferMatrix(NpcLinearOperator):
                 S2 = S**2
                 rho = npc.diag(S2, vR, labels=['vR', 'vR*'])
 
-            # vec: vL wL vL*
+            self.acts_on = ['vL', 'wL', 'vL*']  # vec: vL wL vL*
+
             for i in reversed(range(self.L)):
                 # optimize: transpose arrays to mostly avoid it in matvec
                 B = psi.get_B(i, 'B').astype(dtype, False)
@@ -2446,7 +2447,8 @@ class MPOTransferMatrix(NpcLinearOperator):
                 S2 = S**2
                 rho = npc.diag(S2, vL.conj(), labels=['vL*', 'vL'])
 
-            # vec: vR* wR vR
+            self.acts_on = ['vR*', 'wR', 'vR']  # labels of the vec
+
             for i in range(self.L):
                 A = psi.get_B(i, 'A').astype(dtype, False)
                 self._M.append(A.transpose(['vL', 'p', 'vR']))
@@ -2610,7 +2612,8 @@ class MPOTransferMatrix(NpcLinearOperator):
             If some legs are incompatible, trigger a warning and ignore.
         _subtraction_gauge : string
             How the additive part of the generalized eigenvector is subtracted out.
-            Possible values are 'rho' and 'trace'; see
+            Possible values are 'rho' and 'trace'; see documentation for MPOTransferMatrix
+            for more details.
         **kwargs :
             Further keyword arguments for
             :meth:`~tenpy.linalg.sparse.FlatLinearOperator.eigenvectors`.

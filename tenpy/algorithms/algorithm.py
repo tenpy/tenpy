@@ -55,7 +55,7 @@ class Algorithm:
     cache : :class:`DictCache` or subclass
         The cache to be used.
     resume_data : dict
-        Data gvien as parameter `resume_data` and/or to be returned by :meth:`get_resume_data`.
+        Data given as parameter `resume_data` and/or to be returned by :meth:`get_resume_data`.
     _resume_psi :
         Possibly a copy of `psi` to be used for :meth:`get_resume_data`.
     """
@@ -74,6 +74,47 @@ class Algorithm:
         self.cache = cache
         self.checkpoint = EventHandler("algorithm")
         self._resume_psi = None
+
+    @classmethod
+    def switch_engine(cls, other_engine, *, options=None, **kwargs):
+        """Initialize algorithm from another algorithm instance of a different class.
+
+        You can initialize one engine from another, not too different subclasses.
+        Internally, this function calls :meth:`get_resume_data` to extract data from the
+        `other_engine` and then initializes the new class.
+
+        Note that it transfers the data **without** making copies in most case; even the options!
+        Thus, when you call `run()` on one of the two algorithm instances, it will modify the
+        state, environment, etc. in the other.
+        We recommend to make the switch as ``engine = OtherSubClass.switch_engine(engine)``
+        directly replacing the reference.
+
+        Parameters
+        ----------
+        cls : class
+            Subclass of :class:`Algorithm` to be initialized.
+        other_engine : :class:`Algorithm`
+            The engine from which data should be transfered. Another, but not too different
+            algorithm subclass-class; e.g. you can switch from the
+            :class:`~tenpy.algorithms.dmrg.TwoSiteDMRGEngine` to the
+            :class:`~tenpy.algorithms.dmrg.OneSiteDMRGEngine`.
+        options : None | dict-like
+            If not None, these options are used for the new initialization.
+            If None, take the options from the `other_engine`.
+        **kwargs :
+            Further keyword arguments for class initialization.
+            If not defined, `resume_data` is collected with :meth:`get_resume_data`.
+        """
+        # If `resume_data` is defined in the kwargs, use that.
+        # This allows subclasses to overwritinstead of calling :meth:`get_resume_data`.
+        if 'resume_data' not in kwargs:
+            kwargs['resume_data'] = other_engine.get_resume_data()
+        if options is None:
+            options = other_engine.options
+        kwargs.setdefault('cache', other_engine.cache)
+        obj = cls(other_engine.psi, other_engine.model, options, **kwargs)
+        obj.checkpoint = other_engine.checkpoint  # TODO: do this?
+        return obj
 
     @property
     def verbose(self):
