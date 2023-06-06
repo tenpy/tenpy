@@ -288,6 +288,10 @@ def test_tdot(backend, vector_space_rng, backend_data_rng):
             npt.assert_array_almost_equal(res1_d, expect)
             npt.assert_array_almost_equal(res2_d, expect)
         else: # got scalar, but we can compare it to 0-dim ndarray
+            # TODO (JU): the "scalar result / inner()" case fails.
+            #   in abelian backends inner(), _iter_common_sorted(a_block_inds, b_block_inds)
+            #   does not yield anything. either its arguments, i suspect b_block_inds, are wrong,
+            #   or _iter_common_sorted is buggy.
             npt.assert_almost_equal(res1, expect)
             npt.assert_almost_equal(res2, expect)
 
