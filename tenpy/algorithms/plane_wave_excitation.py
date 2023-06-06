@@ -16,7 +16,8 @@ from ..tools.math import entropy
 from ..algorithms.algorithm import Algorithm
 from ..algorithms.mps_common import ZeroSiteH
 
-__all__ = ['TR_general', 'LT_general', 'construct_orthogonal', 'PlaneWaveExcitationEngine', 'TopologicalPlaneWaveExcitationEngine']
+__all__ = ['TR_general', 'LT_general', 'construct_orthogonal', 'PlaneWaveExcitationEngine',
+           'MultiSitePlaneWaveExcitationEngine', 'TopologicalPlaneWaveExcitationEngine']
 
 """
 TODO - 04/01/2022
