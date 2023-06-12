@@ -1974,7 +1974,9 @@ class DiagonalTensor(AbstractTensor):
         """Apply the same mask to both legs."""
         raise NotImplementedError  # TODO
 
-    def _binary_operand(self, other: bool | Number | DiagonalTensor, func, operand: str, bool_inputs: bool):
+    def _binary_operand(self, other: Number | DiagonalTensor, func, operand: str,
+                        is_bool_valued: bool, return_NotImplemented: bool = True
+                        ) -> DiagonalTensor | Mask:
         """Utility function for a shared implementation of binary functions, whose second argument
         may be a scalar ("to be broadcast") or a DiagonalTensor,
         e.g. the dunder methods, ``__mul__, __eq__, __lt__, __pow__, ...``.
@@ -1982,47 +1984,46 @@ class DiagonalTensor(AbstractTensor):
         Parameters
         ----------
         other
-            If ``bool_inputs is True``, either a bool or a DiagonalTensor of dtype bool.
-            If ``bool_inputs is False``, either a number or a DiagonalTensor of non-bool dtype.
-            If ``bool_inputs is None``, any of the above.
+            Either a number or a DiagonalTensor.
         func
-            The function as with signature
-            ``func(self_block: Block, other_block_or_other: bool | Number | Block) -> Block``
+            The function with signature
+            ``func(self_block: Block, other_or_other_block: Number | Block) -> Block``
         operand
             A string representation of the operand, used in error messages
-        bool_inputs
-            If the inputs need to be bools, see `other`
+        is_bool_valued
+            Whether the output is boolean-valued.
+            If so, a `Mask` is returned, otherwise a `DiagonalTensor`.
+        return_NotImplemented
+            Whether `NotImplemented` should be returned on a non-scalar and non-`AbstractTensor` other.
         """
-        if isinstance(other, bool):
-            other_is_scalar = True
-            other_type_ok = (bool_inputs is not False)
-        elif isinstance(other, Number):
-            other_is_scalar = True
-            other_type_ok = (bool_inputs is not True)
+        if isinstance(other, Number):
+            backend = self.backend
+            data = backend.diagonal_elementwise_unary(self, func=lambda block: func(block, other))
+            labels = self.labels
         elif isinstance(other, DiagonalTensor):
-            if self.legs != other.legs:
-                raise ValueError('Incompatible legs')
-            other_is_scalar = False
-            is_bool = other.dtype == Dtype.bool
-            other_type_ok = (bool_inputs is not False) if is_bool else (bool_inputs is not True)
+            backend = get_same_backend(self, other)
+            if self.legs[0] != other.legs[0] or self.second_leg_dual != other.second_leg_dual:
+                raise ValueError('Incompatible legs!')
+            data = backend.diagonal_elementwise_binary(self, other, func=func)
+            labels = []
+            for l1, l2 in zip(self.labels, other.labels):
+                if l1 is None:
+                    labels.append(l2)
+                elif l2 is None or l1 == l2:
+                    labels.append(l1)
+                else:
+                    logger.debug(f'Conflicting labels {l1} vs. {l2} are dropped.', stacklevel=3)
+                    labels.append(None)
+        elif return_NotImplemented and not isinstance(other, AbstractTensor):
+            return NotImplemented
         else:
-            other_type_ok = False
-        self_is_bool = self.dtype == Dtype.bool
-        self_type_ok = (bool_inputs is not False) if self_is_bool else (bool_inputs is not True)
-
-        if not (other_type_ok and self_type_ok):
-            self_type = f'DiagonalTensor[dtype={self.dtype}]'
-            if isinstance(other, DiagonalTensor):
-                other_type = f'DiagonalTensor[dtype={other.dtype}]'
-            else:
-                other_type = type(other)
-            msg = f'Invalid types for operand "{operand}": {self_type} and {other_type}'
+            msg = f'Invalid types for operand "{operand}": {type(self)} and {type(other)}'
             raise TypeError(msg)
 
-        if other_is_scalar:
-            return self._elementwise_unary(func=lambda block: func(block, other))
-        return self._elementwise_binary(other, func=func)
-            
+        if is_bool_valued:
+            return Mask(data, large_leg=self.legs[0], small_leg=None, backend=backend, labels=self.labels)
+        return DiagonalTensor(data, first_leg=self.first_leg, second_leg_dual=self.second_leg_dual,
+                              backend=backend, labels=labels)
 
     def _elementwise_unary(self, func, func_kwargs={}, maps_zero_to_zero: bool = False) -> DiagonalTensor:
         """Wrap backend.diagonal_elementwise_unary
@@ -2055,57 +2056,25 @@ class DiagonalTensor(AbstractTensor):
     def __abs__(self):
         return self._elementwise_unary(func=operator.abs, maps_zero_to_zero=True)
 
-    def __bool__(self):
-        if self.dtype == Dtype.bool:
-            return bool(self.item())
-        raise TypeError(f'DiagonalTensor of dtype {self.dtype} can not be cast to bool.')
-
-    def __and__(self, other):
-        return self._binary_operand(self, other, func=operator.and_, operand='&', bool_inputs=True)
-
     def __ge__(self, other):
-        return self._binary_operand(self, other, func=operator.ge, operand='>=', bool_inputs=False)
+        return self._binary_operand(self, other, func=operator.ge, operand='>=', is_bool_valued=True)
 
     def __gt__(self, other):
-        return self._binary_operand(self, other, func=operator.gt, operand='>', bool_inputs=False)
+        return self._binary_operand(self, other, func=operator.gt, operand='>', is_bool_valued=True)
 
     def __le__(self, other):
-        return self._binary_operand(self, other, func=operator.le, operand='<=', bool_inputs=False)
+        return self._binary_operand(self, other, func=operator.le, operand='<=', is_bool_valued=True)
 
     def __lt__(self, other):
-        return self._binary_operand(self, other, func=operator.lt, operand='<', bool_inputs=False)
-
-    def __ne__(self, other):
-        return self._binary_operand(self, other, func=operator.ne, operand='!=', bool_inputs=None)
-
-    def __or__(self, other):
-        return self._binary_operand(self, other, func=operator.or_, operand='|', bool_inputs=True)
+        return self._binary_operand(self, other, func=operator.lt, operand='<', is_bool_valued=True)
 
     def __pow__(self, other):
-        if isinstance(other, DiagonalTensor):
-            return self._elementwise_binary(other, func=operator.pow)
-        elif isinstance(other, Number):
-            return self._elementwise_unary(func=lambda block: block ** other, maps_zero_to_zero=True)
-        raise TypeError(f'Invalid types for operand "**": {type(self)} and {type(other)}')
-
-    def __rand__(self, other):
-        # other & self  ==  self & other
-        return self.__and__(other)
-    
-    def __ror__(self, other):
-        # other | self  ==  self | other
-        return self.__or__(other)
+        return self._binary_operand(other, func=operator.pow, operand='**', is_bool_valued=False)
 
     def __rpow__(self, other):
         if isinstance(other, Number):
             return self._elementwise_unary(func=lambda block: other ** block)
         raise TypeError(f'Invalid types for operand "**": {type(other)} and {type(self)}')
-
-    def __rxor__(self, other):
-        return self.__xor__(other)
-    
-    def __xor__(self, other):
-        return self._binary_operand(self, other, func=operator.xor, operand='^', bool_inputs=True)
 
     # --------------------------------------------
     # Overriding methods from AbstractTensor
@@ -2118,9 +2087,6 @@ class DiagonalTensor(AbstractTensor):
         warnings.warn('Converting DiagonalTensor to Tensor in order to apply mask', stacklevel=2)
         return self.to_full_tensor()._getitem_apply_masks(masks, legs)
 
-    def __eq__(self, other):
-        return self._binary_operand(self, other, func=operator.eq, operand='==', bool_inputs=None)
-
     def __mul__(self, other):
         if isinstance(other, DiagonalTensor):
             # _elementwise_binary performs input checks.
@@ -2131,7 +2097,7 @@ class DiagonalTensor(AbstractTensor):
         if isinstance(other, DiagonalTensor):
             # _elementwise_binary performs input checks.
             return self._elementwise_binary(other, func=operator.truediv)
-        return AbstractTensor.__mul__truediv____(self, other)
+        return AbstractTensor.__truediv__(self, other)
 
     # --------------------------------------------
     # Implementing abstractmethods
