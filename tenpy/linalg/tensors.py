@@ -2005,15 +2005,8 @@ class DiagonalTensor(AbstractTensor):
             if self.legs[0] != other.legs[0] or self.second_leg_dual != other.second_leg_dual:
                 raise ValueError('Incompatible legs!')
             data = backend.diagonal_elementwise_binary(self, other, func=func)
-            labels = []
-            for l1, l2 in zip(self.labels, other.labels):
-                if l1 is None:
-                    labels.append(l2)
-                elif l2 is None or l1 == l2:
-                    labels.append(l1)
-                else:
-                    logger.debug(f'Conflicting labels {l1} vs. {l2} are dropped.', stacklevel=3)
-                    labels.append(None)
+            labels = _get_same_labels(self.labels, other.labels)
+            
         elif return_NotImplemented and not isinstance(other, AbstractTensor):
             return NotImplemented
         else:
@@ -2351,10 +2344,67 @@ class Mask(AbstractTensor):
         This function determines if this action is the same."""
         raise NotImplementedError  # TODO
 
+    def _binary_operand(self, other: bool | Mask, func, operand: str, return_NotImplemented: bool = True
+                        ) -> Mask:
+        """Utility function for a shared implementation of binary functions, whose second argument
+        may be a scalar ("to be broadcast") or a Mask.
+
+        Parameters
+        ----------
+        other
+            Either a bool or a Mask.
+        func
+            The function with signature
+            ``func(self_block: Block, other_or_other_block: bool | Block) -> Block``
+        operand
+            A string representation of the operand, used in error messages
+        return_NotImplemented
+            Whether `NotImplemented` should be returned on a non-scalar and non-`AbstractTensor` other.
+        """
+        if isinstance(other, bool):
+            backend = self.backend
+            data = backend.diagonal_elementwise_unary(self, func=lambda block: func(block, other))
+            labels = self.labels
+        elif isinstance(other, Mask):
+            backend = get_same_backend(self, other)
+            if self.legs[0] != other.legs[0]:
+                raise ValueError('Incompatible legs!')
+            data = backend.diagonal_elementwise_binary(self, other, func=func)
+            labels = _get_same_labels(self.labels, other.labels)
+        elif return_NotImplemented and not isinstance(other, (AbstractTensor, Number)):
+            return NotImplemented
+        else:
+            msg = f'Invalid types for operand "{operand}": {type(self)} and {type(other)}'
+            raise TypeError(msg)
+        return Mask(data, large_leg=self.large_leg, small_leg=None, backend=backend, labels=labels)
+
+    def __and__(self, other) -> bool:
+        return self._binary_operand(other, func=operator.and_, operand='&')
+
     def __eq__(self, other) -> bool:
         if isinstance(other, Mask):
             return self.large_leg == other.large_leg and self.same_mask_action(other)
         raise TypeError(f'{type(self)} does not support == comparison with {type(other)}')
+
+    def __ne__(self, other) -> bool:
+        if isinstance(other, Mask):
+            return self.large_leg != other.large_leg or not self.same_mask_action(other)
+        raise TypeError(f'{type(self)} does not support != comparison with {type(other)}')
+
+    def __rand__(self, other) -> bool:
+        return self._binary_operand(other, func=operator.and_, operand='&')
+
+    def __ror__(self, other) -> bool:
+        return self._binary_operand(other, func=operator.or_, operand='|')
+
+    def __rxor__(self, other) -> bool:
+        return self._binary_operand(other, func=operator.xor, operand='^')
+
+    def __or__(self, other) -> bool:
+        return self._binary_operand(other, func=operator.or_, operand='|')
+
+    def __xor__(self, other) -> bool:
+        return self._binary_operand(other, func=operator.xor, operand='^')
 
     # --------------------------------------------
     # Overriding methods from AbstractTensor
@@ -2752,4 +2802,20 @@ def _get_result_labels(legs1: list[str | None], legs2: list[str | None],
         # stacklevel 1 is this function, 2 is the API function using it, 3 could be from the user.
         logger.debug(f'Conflicting labels {", ".join(conflicting)} are dropped.', stacklevel=3)
         labels = [None if label in conflicting else label for label in labels]
+    return labels
+
+
+def _get_same_labels(labels1: list[str | None], labels2: list[str | None]) -> list[str | None]:
+    """Utility function that compares labels. Per pair of labels: If one is None, the other is chosen.
+    If both are not None and equal, they are chosen. If both are not None, but unequal, None is chosen
+    and a warning is emitted to logger.debug"""
+    labels = []
+    for l1, l2 in zip(labels1, labels2):
+        if l1 is None:
+            labels.append(l2)
+        elif l2 is None or l1 == l2:
+            labels.append(l1)
+        else:
+            logger.debug(f'Conflicting labels {l1} vs. {l2} are dropped.', stacklevel=4)
+            labels.append(None)
     return labels
