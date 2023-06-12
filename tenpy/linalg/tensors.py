@@ -2322,18 +2322,22 @@ class Mask(AbstractTensor):
         The numerical data (i.e. boolean flags) comprising the mask. type is backend-specific
     large_leg : VectorSpace
         The larger leg, the source/domain of the projection.
-    small_leg : VectorSpace
-        The smaller leg, the target/codomain of the projection.
-        Should have the same :attr:`is_dual` as `large_leg`.
+    small_leg : VectorSpace | None
+        To avoid recomputation, the resulting small leg can optionally be given.
+        The small leg is entirely determined by the large leg and the data.
     backend: :class:`~tenpy.linalg.backends.abstract_backend.AbstractBackend`, optional
         The backend for the Tensor
     labels : list[str | None] | None
         Labels for the legs. If None, translates to ``[None, None, ...]`` of appropriate length
     """
-    def __init__(self, data, small_leg: VectorSpace, large_leg: VectorSpace, backend=None,
+    def __init__(self, data, large_leg: VectorSpace, small_leg: VectorSpace = None, backend=None,
                  labels: list[str | None] = None):
         self.data = data
-        AbstractTensor.__init__(self, legs=[small_leg, large_leg], backend=backend, labels=labels, dtype=Dtype.bool)
+        if backend is None:
+            backend = get_default_backend()
+        if small_leg is None:
+            small_leg = backend.mask_infer_small_leg(data=data, large_leg=large_leg)
+        AbstractTensor.__init__(self, legs=[large_leg, small_leg], backend=backend, labels=labels, dtype=Dtype.bool)
 
     def test_sanity(self) -> None:
         super().test_sanity()
@@ -2348,17 +2352,11 @@ class Mask(AbstractTensor):
 
     @property
     def large_leg(self) -> VectorSpace:
-        return self.spaces[1]
+        return self.spaces[0]
 
     @property
     def small_leg(self) -> VectorSpace:
-        return self.spaces[0]
-
-    @classmethod
-    def from_diagonal_tensor(cls, d: DiagonalTensor) -> Mask:
-        """"""
-        assert d.dtype == Dtype.bool
-        ...  # TODO
+        return self.spaces[1]
 
     @classmethod
     def from_flat_block(cls, mask: np.ndarray, large_leg: VectorSpace) -> Mask:
