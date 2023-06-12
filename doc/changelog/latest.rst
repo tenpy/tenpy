@@ -52,3 +52,5 @@ Fixed
   this has no effect when using :meth:`~tenpy.algorithms.tebd.TEBDEngine.run` or similar,
   since the MPS norm is reset after the timestep anyway.
   It does, however, change the behavior if ``preserve_norm`` is ``False``.
+- :issue:`265` that MPO methods :meth:`~tenpy.networks.mpo.MPO.make_U_I`, `make_U_II`, `apply_naively` and `apply_zipup` 
+  just ignored the `explicit_plus_hc` flag of the MPO, possibly giving completely wrong results without raising errors.

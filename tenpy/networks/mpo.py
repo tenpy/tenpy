@@ -606,6 +606,10 @@ class MPO:
         UI : :class:`~tenpy.networks.mpo.MPO`
             The propagator, i.e. approximation :math:`U_I ~= exp(H*dt)`
         """
+        if self.explicit_plus_hc:
+            raise NotImplementedError("MPO.make_U_I() assumes hermitian H, you can't use "
+                                      "the `explicit_plus_hc=True` flag!\n"
+                                      "See also https://github.com/tenpy/tenpy/issues/265")
         U = [
             self.get_W(i).astype(np.result_type(dt, self.dtype),
                                  copy=True).itranspose(['wL', 'wR', 'p', 'p*'])
@@ -659,6 +663,10 @@ class MPO:
             The propagator, i.e. approximation :math:`UII ~= exp(H*dt)`
 
         """
+        if self.explicit_plus_hc:
+            raise NotImplementedError("MPO.make_U_II() assumes hermitian H, you can't use "
+                                      "the `explicit_plus_hc=True` flag!\n"
+                                      "See also https://github.com/tenpy/tenpy/issues/265")
         dtype = np.result_type(dt, self.dtype)
         IdL = self.IdL
         IdR = self.IdR
@@ -1074,6 +1082,8 @@ class MPO:
             raise ValueError("Boundary conditions of MPS and MPO are not the same")
         if psi.L != self.L:
             raise ValueError("Length of MPS and MPO not the same")
+        if self.explicit_plus_hc:
+            raise NotImplementedError("Can't use explicit_plus_hc with apply_naively")
         for i in range(psi.L):
             B = npc.tensordot(psi.get_B(i, 'B'), self.get_W(i), axes=('p', 'p*'))
             if i == 0 and bc == 'finite':
@@ -1155,6 +1165,8 @@ class MPO:
             raise ValueError("Length of MPS and MPO not the same")
         if bc != 'finite':
             raise ValueError("Only finite boundary conditions implemented")
+        if self.explicit_plus_hc:
+            raise NotImplementedError("Can't use explicit_plus_hc with apply_zipup")
         for i in range(psi.L):
             B = npc.tensordot(psi.get_B(i, 'B'), self.get_W(i), axes=('p', 'p*'))
             if i == 0 and bc == 'finite':
