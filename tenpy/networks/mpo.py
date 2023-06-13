@@ -34,7 +34,7 @@ We store these indices in `IdL` and `IdR` (if there are such indices).
 Similar as for the MPS, a bond index ``i`` is *left* of site `i`,
 i.e. between sites ``i-1`` and ``i``.
 """
-# Copyright 2018-2021 TeNPy Developers, GNU GPLv3
+# Copyright 2018-2023 TeNPy Developers, GNU GPLv3
 
 import numpy as np
 from scipy.linalg import expm
@@ -42,6 +42,7 @@ import warnings
 import sys
 import copy
 import logging
+
 logger = logging.getLogger(__name__)
 
 from ..linalg import np_conserved as npc
@@ -300,6 +301,81 @@ class MPO:
             W = npc.grid_outer(grids[i], [legs[i], legs[i + 1].conj()], Ws_qtotal[i], ['wL', 'wR'])
             Ws.append(W)
         return cls(sites, Ws, bc, IdL, IdR, max_range, explicit_plus_hc)
+
+    @classmethod
+    def from_wavepacket(cls, sites, coeff, op, eps=1.e-15):
+        r"""Create a (finite) MPO wave packet representing ``sum_i coeff[i] op_i``.
+
+        Note that we define it only for finite systems; a generalization to fininite systems
+        is not straight forward due to normalization issues: the individual terms vanish in
+        the thermodynamic limit!
+
+        Parameters
+        ----------
+        sites : list of :class:`~tenpy.models.lattice.Site`
+            Defines the local Hilbert space for each site.
+        coeff : list of float/complex
+            Wave packet coefficients.
+        op : str
+            Name of the operator to be applied.
+        eps : float
+            Discard terms where ``abs(coeff[i]) < eps``.
+
+        Examples
+        --------
+        Say you have fermions, so ``op='Cd'``, and want to create
+        a gaussian wave paket :math:`\sum_x \alpha_x c^\dagger_x` with
+        :math:`\alpha_x \propto e^{-0.5(x-x_0)^2/\sigma^2} e^{i k_0 x}`.
+        Then you would use
+
+        .. testsetup :: from_wavepacket
+
+            from tenpy.networks.site import FermionSite
+            from tenpy.networks.mpo import MPO
+            from tenpy.networks.mps import MPS
+            import numpy as np
+
+        .. doctest :: from_wavepacket
+            L, k0, x0, sigma, = 50, np.pi/8., 10., 5.
+            x = np.arange(L)
+            coeff = np.exp(-1.j * k0 * x) * np.exp(- 0.5 * (x - x0)**2 / sigma**2)
+            coeff /= np.linalg.norm(coeff)
+            site = FermionSite(conserve='N')
+            wp = MPO.from_wavepacket([site] * L, coeff, 'Cd')
+
+        Indeed, we can apply this to a (vacuum) MPS and get the correct state:
+
+        .. doctest :: from_wavepacket
+            psi = MPS.from_product_state([sites] * L, ['empty'] * L)
+            wp.apply(psi, dict(compression_method='SVD'))
+            C = psi.correlation_function('Cd', 'C')
+            C_expexcted = np.conj(coeff)[:, np.newaxis] * coeff[np.newaxis, :]
+            asssert np.max(np.abs(C - C_expected) ) < 1.e-10
+        """
+        coeff = np.asarray(coeff)
+        assert coeff.shape == (len(sites), )
+        L = len(sites)
+        assert L >= 2
+        first_nonzero = np.nonzero(coeff)[0][0]
+        needs_JW = sites[first_nonzero].op_needs_JW(op)
+        upper_left = 'JW' if needs_JW else 'Id'
+
+        grids = []
+        for i in range(L):
+            local = None if abs(coeff[i]) < eps else [(op, coeff[i])]
+            grid = [[upper_left, local], [None, 'Id']]
+            if i == 0:
+                grid = grid[:1]  # first row only
+            if i == L - 1:  # last column only
+                grid = [grid[0][1:], grid[1][1:]]
+            grids.append(grid)
+        IdL = [0] + [None] * L
+        # note: for finite bc, the JW string ends at site 0, so we don't need to worry about
+        # extending it to the left; but for infinite MPS, the first environment for applying the
+        # MPO to an MPS would need a non-trivial modification that is not captured when setting
+        # IdL=0!
+        IdR = [None] * L + [0]
+        return cls.from_grids(sites, grids, 'finite', IdL, IdR)
 
     def test_sanity(self):
         """Sanity check, raises ValueErrors, if something is wrong."""
@@ -659,8 +735,7 @@ class MPO:
         elif self.max_range is None or self.max_range > 10 * self.L:
             return self.expectation_value_TM(psi, tol=tol, **init_env_data)
         else:
-            return self.expectation_value_power(psi, tol=tol, max_range=max_range,
-                                                      **init_env_data)
+            return self.expectation_value_power(psi, tol=tol, max_range=max_range, **init_env_data)
 
     def expectation_value_finite(self, psi, init_env_data={}):
         """Calculate ``<psi|self|psi>/<psi|psi>`` for finite MPS.
@@ -682,8 +757,8 @@ class MPO:
             if len(init_env_data) == 0:
                 init_env_data['start_env_sites'] = 0
                 warnings.warn("MPO.expectation_value(psi) with segment psi needs environments! "
-                                "Can only estimate value completely ignoring contributions "
-                                "across segment boundaries!")
+                              "Can only estimate value completely ignoring contributions "
+                              "across segment boundaries!")
         env = MPOEnvironment(psi, self, psi, **init_env_data)
         val = env.full_contraction(0)  # handles explicit_plus_hc
         return np.real_if_close(val)
@@ -722,7 +797,7 @@ class MPO:
         val, vec = TM.dominant_eigenvector(tol=tol)
         if abs(1. - val) > tol * 10.:
             logger.warning("MPOTransferMatrix eigenvalue not 1: got 1. - %.3e", 1. - val)
-        E = TM.energy(vec) #  handles explicit_plus_hc
+        E = TM.energy(vec)  #  handles explicit_plus_hc
         return np.real_if_close(E)
 
     def expectation_value_power(self, psi, tol=1.e-10, max_range=100):
@@ -1087,6 +1162,10 @@ class MPO:
     def apply(self, psi, options):
         """Apply `self` to an MPS `psi` and compress `psi` in place.
 
+        For infinite MPS, the assumed form of `self` is a product (e.g. a time evolution operator
+        :math:`U= e^{-iH dt}`, not an (extensive) sum as a Hamiltonian would have.
+        See :ref:`iMPSWarning` for more details.
+
         Options
         -------
         .. cfg:config :: ApplyMPO
@@ -1242,7 +1321,7 @@ class MPO:
                 B = npc.tensordot(VH, B, axes=(['wR', 'vR'], ['wL', 'vL']))
                 B = B.take_slice(self.get_IdR(i), 'wR')
                 B = B.combine_legs(['vL', 'p'], qconj=[-1])
-                U, S, VH, err, norm_new = svd_theta(B, relax_trunc)
+                U, S, VH, err, norm_new = svd_theta(B, relax_trunc, [B.qtotal, None])
                 trunc_err += err
                 psi.norm *= norm_new
                 U = U.split_legs()
@@ -1540,6 +1619,7 @@ class MPOGraph:
     _grid_legs : None | list of LegCharge
         The charges for the MPO
     """
+
     def __init__(self, sites, bc='finite', max_range=None):
         self.sites = list(sites)
         self.chinfo = self.sites[0].leg.chinfo
@@ -2039,7 +2119,7 @@ class MPOEnvironment(MPSEnvironment):
     ket : :class:`~tenpy.networks.mpo.MPS`
         The MPS on which `H` acts. May be identical with `bra`.
     **init_env_data :
-        Further keyword arguments with initializaiton data, as returned by
+        Further keyword arguments with initialization data, as returned by
         :meth:`get_initialization_data`.
         See :meth:`init_first_LP_last_RP` for details on these parameters.
 
@@ -2048,6 +2128,7 @@ class MPOEnvironment(MPSEnvironment):
     H : :class:`~tenpy.networks.mpo.MPO`
         The MPO sandwiched between `bra` and `ket`.
     """
+
     def __init__(self, bra, H, ket, cache=None, **init_env_data):
         self.H = H
         super().__init__(bra, ket, cache, **init_env_data)
@@ -2111,14 +2192,14 @@ class MPOEnvironment(MPSEnvironment):
                 i = -start_env_sites
                 init_LP.get_leg('wR').test_contractible(self.H.get_W(i).get_leg('wL'))
             except ValueError:
-                warning.warn("dropping `init_LP` with incompatible MPO legs")
+                warnings.warn("dropping `init_LP` with incompatible MPO legs")
                 init_LP = None
         if init_RP is not None:
             try:
                 j = self.L - 1 + start_env_sites
                 init_RP.get_leg('wL').test_contractible(self.H.get_W(j).get_leg('wR'))
             except ValueError:
-                warning.warn("dropping `init_RP` with incompatible MPO legs")
+                warnings.warn("dropping `init_RP` with incompatible MPO legs")
                 init_RP = None
         return super()._check_compatible_legs(init_LP, init_RP, start_env_sites)
 
@@ -2174,7 +2255,8 @@ class MPOEnvironment(MPSEnvironment):
         """
         i0 = i - start_env_sites
         IdL = self.H.get_IdL(i0)
-        assert IdL is not None
+        if IdL is None:
+            raise RuntimeError(f'Need to set IdL at i0={i0} for the MPO self.H')
         init_LP = super().init_LP(i0, 0)
         leg_mpo = self.H.get_W(i0).get_leg('wL').conj()
         init_LP = init_LP.add_leg(leg_mpo, IdL, axis=1, label='wR')
@@ -2199,7 +2281,8 @@ class MPOEnvironment(MPSEnvironment):
         """
         i0 = i + start_env_sites
         IdR = self.H.get_IdR(i0)
-        assert IdR is not None
+        if IdR is None:
+            raise RuntimeError(f'Need to set IdR at i0={i0} for the MPO self.H')
         init_RP = super().init_RP(i0, 0)
         leg_mpo = self.H.get_W(i0).get_leg('wR').conj()
         init_RP = init_RP.add_leg(leg_mpo, IdR, axis=1, label='wL')
@@ -2801,9 +2884,9 @@ def _mpo_graph_state_order(key):
         return key
     if isinstance(key, str):
         if key == 'IdL':  # should be first
-            return (-2,)
+            return (-2, )
         if key == 'IdR':  # should be last
-            return (2,)
+            return (2, )
         # fallback: compare strings
         return (0, key)
     return (0, str(key))

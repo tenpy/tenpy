@@ -1,4 +1,4 @@
-# Copyright 2018-2021 TeNPy Developers, GNU GPLv3
+# Copyright 2018-2023 TeNPy Developers, GNU GPLv3
 
 from tenpy.models.toric_code import ToricCode
 from test_model import check_general_model
@@ -11,14 +11,14 @@ import warnings
 
 @pytest.mark.slow
 def test_ToricCode_general():
-    check_general_model(ToricCode, dict(Lx=2, Ly=3, bc_MPS='infinite'), {
+    check_general_model(ToricCode, dict(Lx=2, Ly=3, bc_MPS='infinite', sort_charge=True), {
         'conserve': [None, 'parity'],
     })
 
 
 @pytest.mark.slow
 def test_ToricCode(Lx=1, Ly=2):
-    model_params = {'Lx': Lx, 'Ly': Ly, 'bc_MPS': 'infinite'}
+    model_params = {'Lx': Lx, 'Ly': Ly, 'bc_MPS': 'infinite', 'sort_charge': True}
     M = ToricCode(model_params)
     psi = MPS.from_product_state(M.lat.mps_sites(), [0] * M.lat.N_sites, bc='infinite')
     dmrg_params = {

@@ -1,0 +1,91 @@
+[build-system]
+requires = ["setuptools>=30.3.0", "numpy>1.13", "scipy>=0.18", "Cython>0.29"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "physics-tenpy"
+dynamic = ["version"]
+description = "Simulation of quantum many-body systems with tensor networks in Python"
+readme = {file = "README.rst", content-type = "text/x-rst"}
+requires-python = ">=3.6"
+license = {text = "GPLv3"}
+authors = [
+    {name = "TeNPy Developer Team"},
+]
+maintainers = [
+    {name = "Johannes Hauschild", email="tenpy@johannes-hauschild.de"},
+    {name = "Jakob Unfried", email="jakob.unfried@tum.de"},
+]
+keywords = ["tensor networks", "matrix product states"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
+    "Natural Language :: English",
+    "Programming Language :: C",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.6",
+    "Programming Language :: Python :: 3.7",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Operating System :: Unix",
+    "Operating System :: MacOS",
+    "Operating System :: Microsoft :: Windows",
+    "Topic :: Scientific/Engineering",
+    "Topic :: Scientific/Engineering :: Physics",
+]
+dependencies = [
+    "numpy>=1.13",
+    "scipy>=0.18",
+]
+
+[project.optional-dependencies]
+plot = ["matplotlib>=2.0"]
+io = ["h5py", "pyyaml"]
+test = ["pytest>=6.0"]
+extra = ["bottleneck", "yapf==0.28.0", "docformatter==1.3.1"]
+docbuild = [
+    "Sphinx", 
+    "sphinx-rtd-theme", 
+    "sphinxcontrib-bibtex", 
+    "matplotlib", 
+    "ipykernel",
+    "nbsphinx",
+    "pandoc",
+    "sphinx_copybutton",
+]
+all = ["tenpy[plot, io, test, extra, docbuild]"]
+
+
+[project.urls]
+"Homepage" = "https://github.com/tenpy/tenpy"
+"Documentation" = "https://tenpy.readthedocs.io/"
+"Source" = "https://github.com/tenpy/tenpy"
+"User Forum" = "https://tenpy.johannes-hauschild.de"
+"Bug Tracker" = "https://github.com/tenpy/tenpy/issues"
+
+
+[project.scripts]
+tenpy-run = "tenpy:console_main"
+
+
+[tool.setuptools]
+packages = ["tenpy"]
+
+
+[tool.setuptools.dynamic]
+version = {attr = "tenpy.__version__"}
+
+
+[tool.pytest.ini_options]
+filterwarnings = "always"
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+]
+#{slow = "marks tests as slow (deselect with `-m 'not slow'`)"}
+log_level = "INFO"
+log_format = "%(asctime)s %(levelname)-8s %(filename)-16s%(lineno)4d: %(message)s"

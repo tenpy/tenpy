@@ -27,7 +27,7 @@ as base class in (most of) the predefined models in TeNPy.
 
 See also the introduction in :doc:`/intro/model`.
 """
-# Copyright 2018-2021 TeNPy Developers, GNU GPLv3
+# Copyright 2018-2023 TeNPy Developers, GNU GPLv3
 
 import numpy as np
 import warnings
@@ -224,6 +224,36 @@ class Model(Hdf5Exportable):
         self.lat = TrivialLattice(grouped_sites, bc_MPS=self.lat.bc_MPS, bc='periodic')
         return grouped_sites
 
+    def update_time_parameter(self, new_time):
+        """Reconstruct Hamiltonian for time-dependent models, potentially (!) in-place.
+
+        For :class:`~tenpy.algorithms.algorithm.TimeDependentHAlgorithm`, we assume that the model
+        reads out the parameter ``self.options['time']``, and reinitialize/update the model
+        calling this method.
+
+        Parameters
+        ----------
+        new_time : float
+            Time at which the (time-dependent) Hamiltonian should be constructed.
+
+        Returns
+        -------
+        updated_model : :class:`model`
+            Model of the same class as `self` with Hamiltonian at time `new_time`.
+            Note that it *can* just be a reference to `self` if modified in place, or an entirely
+            new constructed model.
+        """
+        # eventually, we should implement
+        if not hasattr(self, 'options'):
+            msg = ("update_time_parameter assumes that the model has `options` defined, reads out "
+                   "`options['time']` and can be reinitialized from the options alone. "
+                   "However, the model {name:s} does not define options.")
+            raise NotImplementedError(msg.format(name=self.__class__.__name__))
+        cls = self.__class__
+        model_params = self.options
+        model_params['time'] = new_time
+        return cls(model_params)
+
 
 class NearestNeighborModel(Model):
     r"""Base class for a model of nearest neigbor interactions w.r.t. the MPS index.
@@ -295,7 +325,7 @@ class NearestNeighborModel(Model):
         .. doctest :: from_MPOModel
 
             >>> from tenpy.models.spins_nnn import SpinChainNNN2
-            >>> nnn_chain = SpinChainNNN2({'L': 20})
+            >>> nnn_chain = SpinChainNNN2({'L': 20, 'sort_charge': True})
             >>> print(isinstance(nnn_chain, NearestNeighborModel))
             False
             >>> print("range before grouping:", nnn_chain.H_MPO.max_range)
@@ -931,7 +961,7 @@ class CouplingModel(Model):
         ot.add_onsite_term(strength, i, op)
         if plus_hc:
             site = self.lat.unit_cell[self.lat.order[i, -1]]
-            hc_op = site.get_hc_op_name(opname)
+            hc_op = site.get_hc_op_name(op)
             ot.add_onsite_term(np.conj(strength), i, hc_op)
 
     def all_onsite_terms(self):
@@ -1411,6 +1441,9 @@ class CouplingModel(Model):
             This function does not handle Jordan-Wigner strings!
             You might want to use :meth:`add_local_term` instead.
 
+        .. versionchanged :: 0.10.1
+            Fix a bug that `plus_hc` didn't correcly add the hermitian conjugate terms.
+
         Parameters
         ----------
         strength : float
@@ -1457,7 +1490,11 @@ class CouplingModel(Model):
             hc_ops = [site.get_hc_op_name(op) for site, op in zip(sites_ijkl, ops_ijkl)]
             # NB: op_string should be defined on all sites in the unit cell...
             hc_op_string = [site.get_hc_op_name(op) for site, op in zip(sites_ijkl, op_string)]
-            ct.add_multi_coupling_term(np.conj(strength), ijkl, ops_ijkl, op_string, switchLR)
+            ct.add_multi_coupling_term(np.conj(strength),
+                                       ijkl,
+                                       hc_ops,
+                                       hc_op_string,
+                                       switchLR)
 
     def add_exponentially_decaying_coupling(self,
                                             strength,

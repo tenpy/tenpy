@@ -37,11 +37,12 @@ algorithm_params:
 
 connect_measurements: 
   - - tenpy.simulations.measurement
-    - onsite_expectation_value
+    - m_onsite_expectation_value
     - opname: Sz
-  - - tenpy.simulations.measurement
-    - psi_method
-    - method: correlation_function
-      key: '<Sp_i Sm_j>'
+  - - psi_method
+    - wrap correlation_function
+    - results_key: '<Sp_i Sm_j>'
       ops1: Sp
       ops2: Sm
+  - - simulation_method
+    - wrap walltime

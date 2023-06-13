@@ -1,3 +1,6 @@
 [submodule "doc/notebooks"]
 	path = doc/notebooks
 	url = https://github.com/tenpy/tenpy_notebooks
+[submodule "doc/toycodes"]
+	path = doc/toycodes
+	url = https://github.com/tenpy/tenpy_toycodes

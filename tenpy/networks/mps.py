@@ -75,13 +75,82 @@ site of the MPS in :attr:`MPS.form`.
                     :meth:`~tenpy.networks.mps.MPS.canonical_form` (or similar)
                     before using algorithms.
 ======== ========== ==========================================================================
+
+.. _iMPSWarning:
+
+A warning about infinite MPS
+----------------------------
+Infinite MPS by definition have a the unit cell repeating indefinitely.
+This makes a few things tricky. See :cite:`vanderstraeten2019` for a very good review, here
+we only discuss the biggest pitfalls.
+
+Consider a (properly normalized) iMPS representing some state :math:`\ket{\psi}`.
+If we make a copy and change just one number of the MPS by some small :math:`\epsilon`,
+we get a new iMPS wave function :math:`\ket{\phi}`. Clearly, this is "almost" the same state.
+Indeed, if we construct the :class:`TransferMatrix` between :math:`\phi` and :math:`\psi` and
+check the eigenvalues, we will find a dominat eigenvalue :math:`\eta \approx 1`
+up to an error depending on :math:`\epsilon`.
+However, since it is not quite 1, the formal overlap bewteen the iMPS vanishes
+in the thermodynamic limit :math:`N \rightarrow \infty`,
+
+.. math ::
+
+    \langle \phi | \psi \rangle = \lim_{N \rightarrow \infty} (\mathrm{TransferMatrix})^N
+    = \lim_{N \rightarrow \infty} \eta^N \ =0.
+
+Since this formal overlap is always 0 (for normalized, different iMPS with :math:`\eta < 1`),
+1 (for normalized equal iMPS with :math:`\eta=1`),
+or infinite (for non-normalized iMPS with :math:`\eta > 1`),
+we rather define the :meth:`MPS.overlap` to return directly the dominant eigenvalue :math:`\eta`
+of the transfer matrix for infinite MPS, which is a more sensible measure for how close two iMPS
+are.
+
+.. warning ::
+
+    For infinite MPS methods like :meth:`MPS.overlap`, :meth:`apply` and :meth:`MPS.apply_local`
+    might not do what you naively expect.
+    As a trivial consequence, you can not apply a (local or infinite) operator to
+    an iMPS, calculate the overlap and expect to get the same as if you calculate
+    the expectation value of that operator!
+
+In fact, there are more issues in this naive aproach, hidden in the "apply an operator".
+How the "apply" has to work internally, depends crucially on the form of the operator.
+First, you can can have a *single local operator*, e.g. a single :math:`S^z_i`.
+Applying such an operator breaks translation invariance,
+so you can not write the result as iMPS. (Rather, you would need to considere a different unit
+cell in a background of an iMPS, which we define as "segment" boundary conditions.)
+
+Second, you might have an extensive "sum of local operators",
+e.g. :math:`M = \sum_i S^z_i` or directly the Hamiltonain.
+Again, the local terms break translation invariance. While in this case the sum can recover the
+translation invariance, the result is again not an iMPS, but in the tangent space of iMPS
+(or a generalization thereof if the local terms have more than one site).
+Expectation values, e.g. the energy, are extensive sums of some density (which is returned
+when you calculate the expectation values).
+You can not get this from :meth:`MPS.overlap`, since the latter gives products of local values
+rather than sums.
+In general, you might even have higher moments (e.g., :math:`M^2` or :math:`H^2`), for which
+expectation values scale not just linear in :math:`N`, but as higher-order polynomials.
+
+Finally, you can have a product of local operators rather than a sum (roughly speaking, ignoring
+the issue of commutation relations for a second).
+An example would be a time evolution operator, say Trotter decomposed as
+
+.. math ::
+    U = exp(-i H t) \approx \prod_{i~\mathrm{even}} e^{-i h_i t}
+                            \prod_{i~\mathrm{odd}} e^{-i h_i t}.
+
+After applying such an evolution operator, you indeed stay in the form of a translation invariant
+iMPS, so this is the form *assumed* when calling MPO :meth:`~tenpy.networks.mpo.MPO.apply` on an
+MPS.
 """
-# Copyright 2018-2021 TeNPy Developers, GNU GPLv3
+# Copyright 2018-2023 TeNPy Developers, GNU GPLv3
 
 import numpy as np
 import warnings
 import random
 from functools import reduce
+import copy
 import logging
 logger = logging.getLogger(__name__)
 
@@ -514,7 +583,7 @@ class MPS:
 
         .. doctest :: MPS.from_product_state
 
-            >>> spin = tenpy.networks.site.SpinHalfSite(conserve=None)
+            >>> spin = tenpy.networks.site.SpinHalfSite(conserve=None, sort_charge=False)
             >>> p_state = ["up", "down"] * (L//2)  # repeats entries L/2 times
             >>> theta, phi = np.pi/4, np.pi/6
             >>> bloch_sphere_state = np.array([np.cos(theta/2), np.exp(1.j*phi)*np.sin(theta/2)])
@@ -1299,7 +1368,9 @@ class MPS:
             if not isinstance(add_chi, int):
                 continue
             # convert chi to extra LegCharge
-            if self.chinfo.qnumber == 0:
+            if add_chi == 0:
+                extra_legs[i] = None
+            elif self.chinfo.qnumber == 0:
                 extra_legs[i] = npc.LegCharge.from_trivial(add_chi, self.chinfo)
             else:
                 max_weight = np.argmax(self._S[i])
@@ -1338,6 +1409,10 @@ class MPS:
                 extra_B = extra_B - npc.tensordot(npc.tensordot(extra_B, B2.conj(), [1, 1]),
                                                 B2,
                                                 [1, 0])
+                if npc.norm(extra_B) < 1e-12:
+                    logger.warning(
+                        f'Failed to orthogonalize extra_B against B2. norm(extra_B) = {npc.norm(extra_B)}.'
+                    )
                 # orthogonalize rows within extra_B by QR
                 extra_B, extra_R = npc.qr(extra_B.itranspose([1, 0]),
                                         inner_qconj=-1,
@@ -1463,6 +1538,7 @@ class MPS:
         """
         if trunc_par is None:
             trunc_par = {}
+        trunc_par = asConfig(trunc_par, 'trunc_params')
         self.convert_form('B')
         if self.L > 1:
             trunc_par.setdefault('chi_max', max(self.chi))
@@ -1498,7 +1574,7 @@ class MPS:
                 U, S, V, err, _ = svd_theta(theta, trunc_par, inner_labels=['vR', 'vL'])
                 Ss_new.append(S)
                 trunc_err += err
-                theta = U.split_legs(0)  # vL p0 ... pj-1 vR
+                theta = U.scale_axis(S, 'vR').split_legs(0)  # vL p0 ... pj-1 vR
                 for _ in range(n_p_label):
                     combine[0].pop()
                 B = V.split_legs(1).iset_leg_labels(self._B_labels)  # vL p vR
@@ -1752,6 +1828,8 @@ class MPS:
     def gauge_total_charge(self, qtotal=None, vL_leg=None, vR_leg=None):
         """Gauge the legcharges of the virtual bonds s.t. MPS has given `qtotal`; in place.
 
+        Acts in place, i.e. changes the B tensors. Make a (shallow) copy if needed.
+
         Parameters
         ----------
         qtotal : (list of) charges
@@ -1789,7 +1867,7 @@ class MPS:
             if np.any(vL_chdiff != 0):
                 # adjust left leg
                 self._B[0] = B.gauge_total_charge('vL', B.qtotal + vL_chdiff, vL_leg.qconj)
-            B.get_leg('vL').test_equal(vL_leg)
+            self._B[0].get_leg('vL').test_equal(vL_leg)
         for i in range(self.L):
             B = self._B[i]
             desired_qtotal = qtotal[i]
@@ -1856,6 +1934,8 @@ class MPS:
         if bonds is None:
             nt = self.nontrivial_bonds
             bonds = range(nt.start, nt.stop)
+        if isinstance(bonds, int):
+            bonds = [bonds]
         res = []
         for ib in bonds:
             if ib == self.L:
@@ -2195,7 +2275,8 @@ class MPS:
                     rho = npc.tensordot(rho, B.conj(), axes=contr_legs)
         return np.array(coord), np.array(mutinf)
 
-    def overlap(self, other, charge_sector=None, ignore_form=False, **kwargs):
+    def overlap(self, other, charge_sector=None, ignore_form=False, understood_infinite=False,
+                **kwargs):
         """Compute overlap ``<self|other>``.
 
         Parameters
@@ -2211,6 +2292,9 @@ class MPS:
             If ``True``, we ignore the canonical form (i.e., whether the MPS is in left, right,
             mixed or no canonical form) and just contract all the :attr:`_B` as they are.
             (This can give different results!)
+        understood_infinite : bool
+            Raise a warning to make aware of :ref:`iMPSWarning`.
+            Set ``understood_infinite=True`` to suppress the warning.
         **kwargs :
             Further keyword arguments given to :meth:`TransferMatrix.eigenvectors`;
             only used for infinite boundary conditions.
@@ -2235,6 +2319,13 @@ class MPS:
                 env = MPSEnvironment(self, other)
                 return env.full_contraction(0)
         else:  # infinite
+            if not understood_infinite:
+                warnings.warn("The returned overlap between two iMPS is **not** just <phi|psi>, "
+                              "as you might assume naively, but here defined to return the "
+                              "dominant eigenvalue eta of the (mixed) TransferMatrix. "
+                              "The former is lim_{N -> infty} eta^N and vanishes in the "
+                              "thermodynamic limit! "
+                              "See the warning in the docs of tenpy.networks.mps.")
             form = None if ignore_form else 'B'
             TM = TransferMatrix(self, other, charge_sector=charge_sector, form=form)
             ov, _ = TM.eigenvectors(**kwargs)
@@ -2593,9 +2684,9 @@ class MPS:
                 i_min = min([i for _, i in term])
                 if not 0 <= i_min < L:
                     if copy is None:
-                        # make explicit copy to not modify exicisting term_list
-                        copy = terms.TermList(term_list.terms, term_list.prefactors)
-                    shift = i % L - i_min
+                        # make explicit copy to not modify existing term_list
+                        copy = terms.TermList(term_list.terms, term_list.strength)
+                    shift = i_min % L - i_min
                     copy.terms[a] = [(op, i + shift) for op, i in term]
             if copy is not None:
                 term_list = copy
@@ -3226,8 +3317,9 @@ class MPS:
         Parameters
         ----------
         renormalize: bool
-            Whether a change in the norm should be discarded (True),
-            or used to update :attr:`norm` (False).
+            Whether a change in the norm should be discarded or used to *update* :attr:`norm`.
+            Note that even `renoramlize=True` *does not reset* the :attr:`norm` to 1.
+            To do that, you would rather have to set ``psi.norm = 1`` explicitly!
         cutoff : float | None
             Cutoff of singular values used in the SVDs.
         envs_to_update : None | list of :class:`MPSEnvironment`
@@ -3358,6 +3450,8 @@ class MPS:
         ----------
         renormalize: bool
             Whether a change in the norm should be discarded or used to update :attr:`norm`.
+            Note that even `renoramlize=True` *does not reset* the :attr:`norm` to 1.
+            To do that, you would rather have to set ``psi.norm = 1`` explicitly!
         tol_xi : float
             Raise an error if the correlation length is larger than that
             (which indicates a degenerate "cat" state, e.g., for spontaneous symmetry breaking).
@@ -3431,6 +3525,8 @@ class MPS:
         ----------
         renormalize: bool
             Whether a change in the norm should be discarded or used to update :attr:`norm`.
+            Note that even `renoramlize=True` *does not reset* the :attr:`norm` to 1.
+            To do that, you would rather have to set ``psi.norm = 1`` explicitly!
         tol : float
             Precision down to which the state should be in canonical form.
         arnoldi_params : dict
@@ -3659,7 +3755,7 @@ class MPS:
         assert (other.L == L and L >= 2)  # (if you need this, generalize this function...)
         assert self.finite
         assert self.bc == other.bc
-        self._gauge_compatible_vL_vR(other)
+        other = self._gauge_compatible_vL_vR(other)
         legs = ['vL', 'vR'] + self._p_label
         # alpha and beta appear only on the first site
         alpha = alpha * self.norm
@@ -3690,11 +3786,16 @@ class MPS:
         psi.canonical_form_finite(renormalize=False, cutoff=cutoff)
         return psi
 
-    def apply_local_op(self, i, op, unitary=None, renormalize=False, cutoff=1.e-13):
+    def apply_local_op(self, i, op, unitary=None, renormalize=False, cutoff=1.e-13,
+                       understood_infinite=False):
         """Apply a local (one or multi-site) operator to `self`. In place.
 
         Note that this destroys the canonical form if the local operator is non-unitary.
         Therefore, this function calls :meth:`canonical_form` if necessary.
+
+        For infinite MPS, it applies the operator **in parallel** within each unit site,
+        i.e., really it applies :math:`\prod_{u \in \mathbb{Z}} (\mathrm{op}_{i + u *L})`
+        where :attr:`L` is the number of sites in the MPS unit cell.
 
         Parameters
         ----------
@@ -3711,12 +3812,19 @@ class MPS:
             or whether we should call :meth:`canonical_form` (``False``).
             ``None`` checks whether ``norm(op dagger(op) - identity)`` is smaller than `cutoff`.
         renormalize : bool
-            Whether the final state should keep track of the norm (False, default) or be
-            renormalized to have norm 1 (True).
+            Whether the final state should keep track of the norm (False, default), or
+            the *change* of norm should be discarded (True).
         cutoff : float
             Cutoff for singular values if `op` acts on more than one site (see :meth:`from_full`).
             (And used as cutoff for a unspecified `unitary`.)
+        understood_infinite : bool
+            Raise a warning to make aware of :ref:`iMPSWarning`.
+            Set ``understood_infinite=True`` to suppress the warning.
         """
+        if not self.finite and not understood_infinite:
+            warnings.warn("For infinite MPS, apply_local_op acts on *each* unit cell in parallel."
+                          "See the warning in the docs of tenpy.networks.mps.")
+
         i = self._to_valid_index(i)
         if isinstance(op, str):
             if self.sites[i].op_needs_JW(op):
@@ -3751,8 +3859,10 @@ class MPS:
             if th.norm() < 1.e-12:
                 raise ValueError(f"Applying the operator {opname!s} on site {i:d} destroys state!")
             # use MPS.from_full to split the sites
-            split_th = self.from_full(self.sites[i:i + n], th, None, cutoff, False, 'segment',
-                                      (self.get_SL(i), self.get_SR(i + n - 1)))
+            split_th = self.from_full(self.sites[i:i + n], th, None, cutoff, renormalize,
+                                      'segment', (self.get_SL(i), self.get_SR(i + n - 1)))
+            if not renormalize:
+                self.norm *= split_th.norm
             for j in range(n):
                 self.set_B(i + j, split_th._B[j], split_th.form[j])
             for j in range(n - 1):
@@ -3808,8 +3918,8 @@ class MPS:
             or whether we should call :meth:`canonical_form` (``False``).
             ``None`` checks whether ``max(norm(op dagger(op) - identity) for op in ops) < 1.e-14``
         renormalize : bool
-            Whether the final state should keep track of the norm (False, default) or be
-            renormalized to have norm 1 (True).
+            Whether the final state should keep track of the norm (False, default), or
+            the *change* of norm should be discarded (True).
         """
         ops = to_iterable(ops)
         if self.L % len(ops) != 0:
@@ -4579,14 +4689,19 @@ class MPS:
         return Gl, Yl, Yr
 
     def _gauge_compatible_vL_vR(self, other):
-        """If necessary, gauge total charge of `other` to match the vL, vR legs of self."""
+        """If necessary, gauge total charge of `other` to match the vL, vR legs of self.
+
+        Returns a shallow copy where legs are adjusted.
+        """
         if self.chinfo.qnumber == 0:
-            return
-        from tenpy.tools import optimization
-        need_gauge = any(self.get_total_charge() != other.get_total_charge())
+            return other
+        need_gauge = self._outer_virtual_legs() != other._outer_virtual_legs()
         if need_gauge:
             vL, vR = self.outer_virtual_legs()
+            other = copy.copy(other)  # make shallow copy
+            other._B = other._B[:]
             other.gauge_total_charge(None, vL, vR)
+        return other
 
     def outer_virtual_legs(self):
         """Return the virutal legs on the left and right of the MPS.
@@ -4698,7 +4813,7 @@ class MPSEnvironment:
         if ket is None:
             ket = bra
         if ket is not bra:
-            ket._gauge_compatible_vL_vR(bra)  # ensure matching charges
+            bra = ket._gauge_compatible_vL_vR(bra)  # ensure matching charges
         self.bra = bra
         self.ket = ket
         self.dtype = np.find_common_type([bra.dtype, ket.dtype], [])

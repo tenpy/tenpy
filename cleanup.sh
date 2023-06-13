@@ -38,7 +38,7 @@ rm_files tenpy/_version.py
 
 # clean-up generated documentation
 rm_dir "doc/examples"
-rm_dir "doc/toycodes"
+rm_dir "doc/toycode_stubs"
 rm_dir "doc/reference"
 rm_dir "doc/sphinx_build"
 

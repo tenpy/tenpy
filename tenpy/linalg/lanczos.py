@@ -1,5 +1,5 @@
 """Lanczos algorithm for np_conserved arrays."""
-# Copyright 2018-2021 TeNPy Developers, GNU GPLv3
+# Copyright 2018-2023 TeNPy Developers, GNU GPLv3
 
 import warnings
 import numpy as np
@@ -183,19 +183,19 @@ class KrylovBased:
 
     def _calc_result_krylov(self, k):
         raise NotImplementedError("subclasses should implement this")
-    
+
     def norm(self, w):
         return norm(w)
-    
+
     def iscale_prefactor(self, w, scale):
         iscale_prefactor(w, scale)
-    
+
     def inner(self, w, v):
         return inner(w, v)
-    
+
     def iadd_prefactor_other(self, w, alpha, v):
         iadd_prefactor_other(w, alpha, v)
-        
+
 class GMRES():
     def __init__(self, A, x, b, options):
         self.options = options = asConfig(options, self.__class__.__name__)
@@ -214,15 +214,15 @@ class GMRES():
         self.r_norm = npc.norm(self.rs[0])
         self.qs = [self.rs[0].copy()]
         self.qs[0].iscale_prefactor(1./self.r_norm)
-        
+
         self.sine = np.zeros(self.N_max)*1.j
         self.cosine = np.zeros(self.N_max)*1.j
         self.e1 = npc.Array.from_ndarray_trivial(np.zeros(self.N_max+1)*1.j)
         self.e1[0] = 1
         self.e1.iscale_prefactor(self.r_norm)
-        
+
         self.H = npc.Array.from_ndarray_trivial(np.zeros((self.N_max+1, self.N_max))*1.j)
-        
+
     def run(self):
         for _ in range(self.restart):
             converged=False
@@ -245,9 +245,9 @@ class GMRES():
                 self.reset()
             else:
                 break
-        
+
         return self.x, npc.norm(self.A.matvec(self.x) - self.b) / self.b_norm, self.total_error, self.total_iters
-    
+
     def arnoldi(self, k):
         # Iterative build orthogonal Krylov subspace and $H$ matrix.
         q = self.A.matvec(self.qs[-1])
@@ -257,25 +257,25 @@ class GMRES():
         self.H[k+1,k] = npc.norm(q)
         q.iscale_prefactor(1./self.H[k+1,k])
         self.qs.append(q)
-    
+
     def apply_givens_rotation(self, k):
         # Apply rotation to $H$ so that it becomes upper triangular.
         for i in range(k):
             temp = self.cosine[i] * self.H[i,k] + self.sine[i] * self.H[i+1,k]
             self.H[i+1,k] = -self.sine[i] * self.H[i,k] + self.cosine[i] * self.H[i+1,k]
             self.H[i,k] = temp
-        
+
         self.givens_rotation(k)
         self.H[k,k] = self.cosine[k] * self.H[k,k] + self.sine[k] * self.H[k+1,k]
         self.H[k+1,k] = 0
-    
+
     def givens_rotation(self, k):
         # Find cosine and sine such that the element below the diagonal of kth column of $H$ is removed.
         v1, v2 = self.H[k,k], self.H[k+1,k]
         t = np.sqrt(v1**2 + v2**2)
         self.cosine[k] = v1 / t
         self.sine[k] = v2 / t
-        
+
     def backsolve(self, k):
         # $H$ is now a diagonal matrix; backsolve to find $y$ exactly.
         H = self.H[:k,:k]
@@ -287,7 +287,7 @@ class GMRES():
             for j in range(i+1,k):
                 self.y[i] -= H[i,j]*self.y[j]
             self.y[i] /= H[i,i]
-            
+
     def reset(self):
         # Restart GMRES algorithm using current $x$ as initial guess.
         self.rs.append(self.b.copy())
@@ -296,15 +296,15 @@ class GMRES():
         self.r_norm = npc.norm(self.rs[-1])
         self.qs = [self.rs[-1].copy()]
         self.qs[-1].iscale_prefactor(1./self.r_norm)
-        
+
         self.sine = np.zeros(self.N_max)*1.j
         self.cosine = np.zeros(self.N_max)*1.j
         self.e1 = npc.Array.from_ndarray_trivial(np.zeros(self.N_max+1)*1.j)
         self.e1[0] = 1
         self.e1.iscale_prefactor(self.r_norm)
-        
+
         self.H = npc.Array.from_ndarray_trivial(np.zeros((self.N_max+1, self.N_max))*1.j)
-        
+
 class Arnoldi(KrylovBased):
     """Arnoldi method for diagonalizing square, non-hermitian/symmetric matrices.
 
@@ -401,13 +401,13 @@ class Arnoldi(KrylovBased):
             assert N == len(vf) > 1
             krylov_basis = self._cache
             assert len(krylov_basis) >= N
-            
+
             if isinstance(self.psi0, npc.Array):
                 psi = vf[0] * krylov_basis[0]  # copy!
             else:
                 assert isinstance(self.psi0, list)
                 psi = [p * vf[0] for p in krylov_basis[0]]
-            
+
             # and the last len_cache vectors have been cached
             for k in range(1, N):
                 self.iadd_prefactor_other(psi, vf[k], krylov_basis[k])
@@ -570,7 +570,7 @@ class LanczosGroundState(KrylovBased):
                 for c in self._cache[:-1]:
                     self.iadd_prefactor_other(w, -self.inner(c, w), c)
             elif k > 0:
-                self.iadd_prefactor_other(w, -beta, self._cache[-2])
+                self.iadd_prefactor_other(w, -beta, self._cache[-2])  # noqa: F821
             beta = h[k, k + 1]  # = norm(w)
             self.iscale_prefactor(w, 1. / beta)
             self.iadd_prefactor_other(psif, vf[k + 1], w)
@@ -586,7 +586,7 @@ class LanczosGroundState(KrylovBased):
             # Diagonalize h
             E_kr, v_kr = np.linalg.eigh(h[:k + 1, :k + 1])
             self.Es[k, :k + 1] = E_kr
-            self._result_krylov = v_kr[:, 0]  # ground state of _h_krylov    
+            self._result_krylov = v_kr[:, 0]  # ground state of _h_krylov
 
 class LanczosEvolution(LanczosGroundState):
     """Calculate :math:`exp(delta H) |psi0>` using Lanczos.
@@ -747,7 +747,7 @@ def lanczos_arpack(H, psi, options={}, orthogonal_to=[]):
         msg = ("Lanczos argument `orthogonal_to` is deprecated and will be removed.\n"
                "Instead, replace `H` with  `OrthogonalNpcLinearOperator(H, orthogonal_to)`.")
         warnings.warn(msg, category=FutureWarning, stacklevel=2)
-        H = OrthogonalNpcLinearOperator(self.H, orthogonal_to)
+        H = OrthogonalNpcLinearOperator(H, orthogonal_to)
     options = asConfig(options, "Lanczos")
     H_flat, psi_flat = FlatHermitianOperator.from_guess_with_pipe(H.matvec, psi, dtype=H.dtype)
     tol = options.get('P_tol', 1.e-14)
