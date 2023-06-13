@@ -38,6 +38,7 @@ i.e. between sites ``i-1`` and ``i``.
 
 import numpy as np
 from scipy.linalg import expm
+from scipy.special import comb # only for segment LP, RP
 import warnings
 import sys
 import copy
@@ -46,16 +47,17 @@ import logging
 logger = logging.getLogger(__name__)
 
 from ..linalg import np_conserved as npc
-from ..linalg.sparse import NpcLinearOperator, FlatLinearOperator
+from ..linalg.sparse import NpcLinearOperator, FlatLinearOperator, ShiftNpcLinearOperator
 from .site import group_sites, Site
 from ..tools.string import vert_join
 from .mps import MPS as _MPS  # only for MPS._valid_bc
-from .mps import MPSEnvironment
+from .mps import MPSEnvironment, TransferMatrix # transfermatrix only for _compute_max_cj
 from .terms import OnsiteTerms, CouplingTerms, MultiCouplingTerms
 from ..tools.misc import add_with_None_0
 from ..tools.math import lcm
 from ..tools.params import asConfig
 from ..algorithms.truncation import TruncationError, svd_theta
+from ..linalg.lanczos import GMRES
 
 __all__ = [
     'MPO', 'make_W_II', 'MPOGraph', 'MPOEnvironment', 'MPOTransferMatrix', 'grid_insert_ops'
@@ -2028,8 +2030,13 @@ class MPOEnvironment(MPSEnvironment):
             warnings.warn("setting `start_env_sites` to 0 for finite MPS")
             start_env_sites = 0
         init_LP, init_RP = self._check_compatible_legs(init_LP, init_RP, start_env_sites)
+        if self.ket.bc == 'segment' and self.bra is self.ket and (init_LP is None or init_RP is None):
+            # warn that this might not be the correct envs
+            warnings.warn("building Environments for segment b.c. as required by tdvp, other purposes may require different Environments") 
+            # _init_first_LP_last_RP_segment explicitly checks leg compatibility
+            init_LP, init_RP = self.init_first_LP_last_RP_segment()
         if self.ket.bc == 'segment' and (init_LP is None or init_RP is None):
-            raise ValueError("Environments with segment b.c. need explicit environments!")
+            raise ValueError("Environments with bra != ket and segment b.c. need explicit environments!")
         super().init_first_LP_last_RP(init_LP, init_RP, age_LP, age_RP, start_env_sites)
 
     def _check_compatible_legs(self, init_LP, init_RP, start_env_sites):
@@ -2135,6 +2142,276 @@ class MPOEnvironment(MPSEnvironment):
         for j in range(i0, i, -1):
             init_RP = self._contract_RP(j, init_RP)
         return init_RP
+
+    def init_first_LP_last_RP_segment(self, return_all=False):
+        """ Build the environments needed to perform tdvp on MPS with segment b.c.
+        
+        For segment b.c. the left environment LP[0] corresponds to the contraction
+        of an infinite half chain 
+                                     - - - - - > - - - - - 'vR*'               
+                                    |              |
+        LP[0] = lim_(n \to \infty) LP[-\infty]->- T_H**n - 'wR' (index j later on)
+                                    |              |
+                                     - - - - - > - - - - - 'vR'
+                                     
+        where T_H corresponds to the transfer matrix with the MPO H squeezed between the two MPS.
+        The general problem is that LP[-\infty] T_H**n does not converge do to
+        the additive contribution arising from the energy, i.e. T_H**n ~ e_1*n 
+        Under the assumption that H is upper triangular however,
+        LP[0] can be calculated iteratively as
+        
+        LP[0]_tot = \sum_j \sum_a e_a*(n**a)*c^j_a (e_0 = 1)
+        
+        where the c^j_a are tensors with legs ['vR*','vR'] and the index j corresponds to the leg 'wR'.
+        The index a depends on the diagonal entries of H and LP[0] = \sum_j c^j_0
+        
+        Parameters
+        ----------
+        return_all : bool, optional
+            Whether to return LP[0] or LP[0]_tot. The default is False.
+
+        Returns
+        -------
+        (list of) :class:`~tenpy.linalg.np_conserved.Array` 
+            The left environments. If return_all=False, a single array with legs ['vR*','wR','vR'] corresponding
+            to LP[0], else a list of arrays corresponding to \sum_j e_a*(n**a)*c^j_a for each a
+        (list of) :class:`~tenpy.linalg.np_conserved.Array` 
+            The right environments. As above, but arrays have legs ['vL*','wL','vL']
+
+        """
+        # explicitly check leg compatibility
+        legs = self._check_compatible_legs_segment()
+        # transposes H._W legs to ['wL', 'wR', 'p', 'p*'] if needed        
+        n_ones, types = self._classify_segment_H()
+        LPs = self._init_first_LP_segment(legs, n_ones, types)
+        RPs = self._init_last_RP_segment(legs, n_ones, types)
+        if return_all:
+            return LPs, RPs
+        else:
+            return LPs[0], RPs[0]
+        
+    def _init_first_LP_segment(self, legs, n_ones, types):
+        """ See _init_first_LP_last_RP_segment for info
+        
+        """
+        # LPs[gamma] contains c_gamma^j for all j, thus C_gamma,tot^j = (LPs[gamma]*T)[j]
+        LPs = [npc.Array(legs[:3], dtype=self.dtype, labels=['vR*','wR','vR'])]*n_ones
+        epsilons = [1.]*n_ones
+        # i_min = min(j) s.t. types[j] in ['id','x'] i.e. the starting index
+        i_min =  min([i for i in range(len(types)) if types[i] in ('id','x')])
+        #c_0^i_min
+        LPs[0][:,i_min,:] = self._compute_max_cj(i_min, types[i_min], 'LP', legcharge=legs[0])[0]
+        # number of nonzero c_m^j
+        m = 1
+        for j in range(i_min+1,self.H.chi[0]):
+            diag_type=types[j]
+            if diag_type in ['id','x']:
+                cmj, rho = self._compute_max_cj(j, diag_type, 'LP', legcharge=legs[0])
+                LPs[m][:,j,:] = cmj
+                # new epsilon
+                ctot_last = self._get_ctot_segment(j, LPs[m-1], 'LP')
+                epsilons[m] = np.real(epsilons[m-1]*npc.inner(ctot_last, rho)/(m*npc.inner(cmj, rho)))
+            # calculate c_gamma^j recursively
+            for gamma in range(m-1,-1,-1):
+                b = self._compute_b_gmres(j, gamma, epsilons, m, LPs, 'LP')
+                if diag_type == 'zero':
+                    LPs[gamma][:,j,:] = b
+                else:
+                     # find c_gamma^j using GMRES on -c_gamma^j(TWjj-1) =
+                     # -1/e_gamma (e_gamma C_gamma,tot^j - \sum_(a>gamma) e_alpha comb(a,gamma)c_a^j)
+                     # initial guess is the identity atm
+                     x = npc.diag(1., leg = legs[0], dtype=self.dtype, labels=['vR*','vR'])
+                     A = ShiftNpcLinearOperator(self._compute_TWjj(j, 'A', True), -1.)
+                     solver = GMRES(A, x, b, options={})
+                     x_sol, res, _, _ = solver.run()
+                     # fix legs
+                     x_sol.split_legs()
+                     x_sol.itranspose(['vR*','vR'])
+                     LPs[gamma][:,j,:] = x_sol
+        return LPs
+    
+    def _init_last_RP_segment(self, legs, n_ones, types):
+        """ See _init_first_LP_last_RP_segment for info
+        Right environment with reversed indices, i.e. we start at j_max and go down with i
+        
+        """
+        RPs = [npc.Array(legs[3:],dtype=self.dtype,labels=['vL*','wL','vL'])]*n_ones
+        epsilons = [1.]*n_ones
+        j_max = max([j for j in range(len(types)) if types[j] in ('id','x')])
+        #c_0^j_max
+        RPs[0][:,j_max,:] = self._compute_max_cj(j_max, types[j_max], 'RP', legcharge=legs[3])[0]
+        # number of nonzero c_m^j
+        m = 1
+        for i in range(j_max-1,-1,-1):
+            diag_type=types[i]
+            if diag_type in ['id','x']:
+                cmi, rho = self._compute_max_cj(i, diag_type, 'RP', legcharge=legs[3])
+                RPs[m][:,i,:] = cmi
+                # new epsilon
+                ctot_last = self._get_ctot_segment(i, RPs[m-1], 'RP')
+                epsilons[m] = np.real(epsilons[m-1]*npc.inner(rho, ctot_last)/(m*npc.inner(rho, cmi)))
+            # calculate c_gamma^j recursively
+            for gamma in range(m-1,-1,-1):
+                b = self._compute_b_gmres(i, gamma, epsilons, m, RPs, 'RP')
+                if diag_type == 'zero':
+                    RPs[gamma][:,i,:] = b
+                else:
+                     # as in _init_first_LP_segment
+                     x = npc.diag(1., leg=legs[3], dtype=self.dtype, labels=['vL*','vL'])
+                     A = ShiftNpcLinearOperator(self._compute_TWjj(i, 'B', False), -1.)
+                     solver = GMRES(A, x, b, options={})
+                     x_sol, res, _, _ = solver.run()
+                     # fix legs
+                     x_sol.split_legs()
+                     x_sol.itranspose(['vL*','vL'])
+                     RPs[gamma][:,i,:] = x_sol.split_legs()
+        return RPs
+
+    def _classify_segment_H(self, tol = 1.e-10):
+        """ Classifies the diagonal elements W[0]_jj*W[1]_jj*W[2]_jj... of H according to
+        {'id':identity, 'lid':l*identity, 'x':largest eigval one,
+         'lx': largest eigval smaller one, 'zero':zero}
+
+        Parameters
+        ----------
+        tol : float, optional
+            Tolerance for np.allclose and the maximum eigenvalue. The default is 1.e-10.
+
+        Raises
+        ------
+        ValueError
+            If the largest eigenvalue of a diagonal entry is larger than 1+tol.
+
+        Returns
+        -------
+        n_ones : int
+            Number of diagonal entries with largest eigval equal to one.
+        types : list of str
+            Types of the diagonal entries as defined above.
+
+        """
+        L = len(self.H._W)
+        D = self.H.chi[0]    
+        # types is one of 'id' 'lid' 'x' 'lx' 'zero'
+        types = []
+        # order all W matrices correctly
+        for site in range(L):
+            self.H.get_W(site).itranspose(['wL', 'wR', 'p', 'p*'])
+        for j in range(D):
+            curr_type = 'id'
+            for site in range(L):
+                Wjj = self.H.get_W(site)[j,j].to_ndarray()
+                # diagonal element is zero
+                if np.allclose(Wjj,np.zeros(Wjj.shape),atol=tol):
+                    curr_type = 'zero'
+                    break
+                abs_max_eig = np.linalg.norm(Wjj,ord=2)
+                if abs_max_eig > 1.+tol:
+                    raise ValueError('MPO contains operator with 2-norm larger one at W[{site}]_{j}{j}'.format(site=site,j=j))
+                is_id = np.allclose(Wjj,Wjj[0,0]*np.eye(Wjj.shape[0]),atol=tol)
+                # lx
+                if abs(abs_max_eig-1.)>tol and not is_id:
+                    curr_type = 'lx'
+                # lid
+                elif abs(abs_max_eig-1.)>tol:
+                    curr_type = 'lid' if 'id' in curr_type else 'lx'
+                # x
+                elif not is_id:
+                    curr_type = 'lx' if 'x' in curr_type else 'x'
+                # id -> no change
+            types.append(curr_type)
+        n_ones = types.count('id')+types.count('x')
+        return n_ones, types
+    
+    def _compute_TWjj(self, j, form, transpose):
+        bra_N = [self.bra.get_B(i, form=form) for i in range(self.L)]
+        ket_M = [npc.tensordot(self.ket.get_B(i, form=form), self.H.get_W(i)[j,j],
+                               axes=[self.ket._p_label,self.ket._get_p_label('*')]) for i in range(self.L)]
+        return TransferMatrix.from_Ns_Ms(bra_N, ket_M, transpose=transpose, charge_sector=None, p_label=self.ket._p_label)  
+        
+    def _compute_max_cj(self, j, type_j, which, legcharge=None, tol=1.e-5):
+        """ Find dominant eigenvector of <bra|W_jj|ket> 
+        for params see _init_first_LP_segment
+        
+        """
+        if type_j == 'id':
+            cj_labels = ['vR*','vR'] if which == 'LP' else ['vL*','vL']
+            rho_labels = ['vL*','vL'] if which == 'LP' else ['vR*','vR']
+            max_cj = npc.diag(1., legcharge, dtype=self.dtype, labels=cj_labels)
+            SVs = self.ket.get_SR(self.L-1)**2 if which=='LP' else self.ket.get_SL(0)**2
+            rho = npc.diag(SVs, legcharge.conj(), labels=rho_labels)
+            return max_cj, rho 
+        else:
+            form = 'A' if which=='LP' else 'B'
+            transpose = True if which=='LP' else False
+            # max_cj
+            TWjj = self._compute_TWjj(j, form, transpose)
+            max_ev, max_cj = TWjj.eigenvectors()
+            if abs(max_ev[0]-1)>tol:
+                warnings.warn('Largest eigenvalue of TWjj is '+str(max_ev[0])+', not one within tol='+str(tol))
+            Trho = self._compute_TWjj(j, form, not transpose)
+            max_ev_rho, rho = Trho.eigenvectors()
+            if abs(max_ev_rho[0]-1)>tol:
+                warnings.warn('Largest eigenvalue of TWjj_rho is '+str(max_ev_rho[0])+', not one within tol='+str(tol))
+            # fix legs
+            max_cj[0].split_legs()
+            max_cj[0].itranspose(cj_labels)
+            rho[0].split_legs()
+            rho[0].itranspose(rho_labels)
+            return max_cj[0], rho[0]
+    
+    def _get_ctot_segment(self, j, cs, which):
+        """ Compute \sum_(i<j)c_a^iT^W_ij for _init_first_LP_segment
+        
+        """
+        # essentially get_LP[L]/RP[-1] 
+        v_last = np.zeros(self.H.chi[0], dtype=self.dtype)
+        v_last[j] = 1.
+        H_leg = self.H.get_W(0).get_leg('wL') if which=='LP' else self.H.get_W(self.L-1).get_leg('wR')
+        v_last = npc.Array.from_ndarray(v_last, [H_leg], 
+                                        labels=['wL'] if which=='LP' else ['wR'])
+        init_env = cs
+        if which == 'LP':    
+            for i in range(self.L):
+                init_env = self._contract_LP(i, init_env)
+        else:
+            for i in range(self.L-1,-1,-1):
+                init_env = self._contract_RP(i, init_env)
+        # get correct ctot and fix legs (for RP order is wrong)
+        res = npc.tensordot(init_env, v_last, axes=['wR','wL'] if which=='LP' else ['wL','wR'])
+        res.itranspose(['vR*','vR'] if which=='LP' else ['vL*','vL'])
+        return res
+    
+    def _compute_b_gmres(self, j, gamma, epsilons, m, all_cs, which):
+        """ Compute C_gamma,tot^j - \sum_a>gamma e_a/e_gamma comb(a,gamma)c_a^j for _init_first_LP_segment
+        
+        """ 
+        b = self._get_ctot_segment(j, all_cs[gamma], which)
+        for alpha in range(gamma+1,m+1):
+            b -= epsilons[alpha]*comb(alpha, gamma)*all_cs[alpha][:,j,:]
+        return b
+    
+    def _check_compatible_legs_segment(self):
+        """ check leg compatibility for _init_first_LP_last_RP_segment
+        
+        Returns
+        -------
+        list of :class:`~tenpy.linalg.charges.LegCharge`
+            Legs as required for LP[0] and RP[-1]
+
+        """
+        left_ket = self.ket.get_B(0, None).get_leg('vL')
+        left_bra = self.bra.get_B(0, None).get_leg('vL')
+        left_W = self.H.get_W(0).get_leg('wL')
+        right_ket = self.ket.get_B(self.L-1,None).get_leg('vR')
+        right_bra = self.bra.get_B(self.L-1,None).get_leg('vR')
+        right_W = self.H.get_W(self.L-1).get_leg('wR')
+        left_ket.test_equal(left_bra)
+        right_ket.test_equal(right_bra)
+        left_ket.test_contractible(right_ket)
+        left_bra.test_contractible(right_bra)
+        left_W.test_contractible(right_W)
+        return [left_bra,left_W.conj(),left_ket.conj(),right_bra,right_W.conj(),right_ket.conj()]
 
     def get_LP(self, i, store=True):
         """Calculate LP at given site from nearest available one (including `i`).

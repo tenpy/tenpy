@@ -97,8 +97,8 @@ class TDVPEngine(TimeEvolutionAlgorithm, Sweep):
                    "For now, the previous version is still available as OldTDVPEngine."
                    )
             raise NameError(msg)
-        if psi.bc != 'finite':
-            raise NotImplementedError("Only finite TDVP is implemented")
+        if psi.bc not in ('finite','segment'):
+            raise NotImplementedError("Only finite and segment TDVP is implemented")
         assert psi.bc == model.lat.bc_MPS
         super().__init__(psi, model, options, **kwargs)
         self.lanczos_options = self.options.subconfig('lanczos_options')
