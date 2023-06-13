@@ -14,7 +14,7 @@ __all__ = ['Data', 'Block', 'AbstractBackend', 'AbstractBlockBackend']
 if TYPE_CHECKING:
     # can not import Tensor at runtime, since it would be a circular import
     # this clause allows mypy etc to evaluate the type-hints anyway
-    from ..tensors import Tensor, DiagonalTensor
+    from ..tensors import Tensor, DiagonalTensor, Mask
 
 # placeholder for a backend-specific type that holds all data of a tensor
 #  (except the symmetry data stored in its legs)
@@ -105,7 +105,7 @@ class AbstractBackend(ABC):
     ProductSpaceCls: Type[ProductSpace] = ProductSpace
     DataCls = Block
 
-    def test_data_sanity(self, a: Tensor | DiagonalTensor, is_diagonal: bool):
+    def test_data_sanity(self, a: Tensor | DiagonalTensor | Mask, is_diagonal: bool):
         assert isinstance(a.data, self.DataCls)
         # note: no super(), this is the top you reach!
         # subclasses will typically call super().test_data_sanity(a)

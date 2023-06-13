@@ -41,7 +41,7 @@ __all__ = ['AbelianBackendData', 'AbelianBackendVectorSpace', 'AbelianBackendPro
 if TYPE_CHECKING:
     # can not import Tensor at runtime, since it would be a circular import
     # this clause allows mypy etc to evaluate the type-hints anyway
-    from ..tensors import Tensor, ChargedTensor, DiagonalTensor
+    from ..tensors import Tensor, ChargedTensor, DiagonalTensor, Mask
 
 
 class AbelianBackendVectorSpace(VectorSpace):
@@ -411,7 +411,7 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
     ProductSpaceCls = AbelianBackendProductSpace
     DataCls = AbelianBackendData
 
-    def test_data_sanity(self, a: Tensor | DiagonalTensor, is_diagonal: bool):
+    def test_data_sanity(self, a: Tensor | DiagonalTensor | Mask, is_diagonal: bool):
         for leg in a.legs:
             # TODO (JU) define clearly what this function is supposed to do
             #    a) test sanity of a.data only: -> dont check the legs, do that in Tensor.test_sanity

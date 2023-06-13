@@ -628,6 +628,7 @@ class Tensor(AbstractTensor):
     def test_sanity(self) -> None:
         super().test_sanity()
         self.backend.test_data_sanity(self, is_diagonal=False)
+        assert self.dtype != Dtype.bool
 
     # --------------------------------------------
     # Additional methods (not in AbstractTensor)
@@ -1331,10 +1332,11 @@ class ChargedTensor(AbstractTensor):
         self.dummy_leg_state = dummy_leg_state
 
     def test_sanity(self):
+        super().test_sanity()
         self.invariant_part.test_sanity()
         if self.dummy_leg_state is not None:
             assert self.backend.block_shape(self.dummy_leg_state) == (self.dummy_leg.dim,)
-        AbstractTensor.test_sanity(self)
+        assert self.dtype != Dtype.bool
 
     # --------------------------------------------
     # Additional methods (not in AbstractTensor)
@@ -1821,6 +1823,7 @@ class DiagonalTensor(AbstractTensor):
     def test_sanity(self) -> None:
         super().test_sanity()
         self.backend.test_data_sanity(self, is_diagonal=True)
+        assert self.dtype != Dtype.bool
 
     # --------------------------------------------
     # Additional methods (not in AbstractTensor)
@@ -2284,6 +2287,7 @@ class Mask(AbstractTensor):
     small_leg : VectorSpace | None
         To avoid recomputation, the resulting small leg can optionally be given.
         The small leg is entirely determined by the large leg and the data.
+        It must have the same :attr:`is_dual`.
     backend: :class:`~tenpy.linalg.backends.abstract_backend.AbstractBackend`, optional
         The backend for the Tensor
     labels : list[str | None] | None
@@ -2300,10 +2304,10 @@ class Mask(AbstractTensor):
 
     def test_sanity(self) -> None:
         super().test_sanity()
-        assert isinstance(self.data, self.backend.DataCls)
-        # self.backend.test_data_sanity(self)  # TODO modify this
-        assert self.legs[0].is_dual != self.legs[1].is_dual
-        # TODO check if legs[0] is a slice of legs[1]
+        self.backend.test_data_sanity(self, is_diagonal=True)
+        assert self.legs[0].is_dual == self.legs[1].is_dual
+        assert self.legs[1].is_subspace_of(self.legs[0])
+        assert self.dtype == Dtype.bool
 
     # --------------------------------------------
     # Additional methods (not in AbstractTensor)

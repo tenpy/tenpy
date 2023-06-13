@@ -12,7 +12,7 @@ from ..symmetries.spaces import VectorSpace, ProductSpace
 if TYPE_CHECKING:
     # can not import Tensor at runtime, since it would be a circular import
     # this clause allows mypy etc to evaluate the type-hints anyway
-    from ..tensors import Tensor
+    from ..tensors import Tensor, DiagonalTensor, Mask
 
 
 __all__ = ['AbstractNonabelianBackend', 'NonAbelianData', 'FusionTree', 'fusion_trees',
@@ -95,7 +95,7 @@ class AbstractNonabelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
     ProductSpaceCls = NonabelianBackendProductSpace
     DataCls = NonAbelianData
 
-    def test_data_sanity(self, a: Tensor | DiagonalTensor, is_diagonal: bool):
+    def test_data_sanity(self, a: Tensor | DiagonalTensor | Mask, is_diagonal: bool):
         if is_diagonal:
             raise NotImplementedError  # TODO
         super().test_data_sanity(a, is_diagonal=is_diagonal)

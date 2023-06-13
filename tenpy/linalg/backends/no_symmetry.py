@@ -14,7 +14,7 @@ __all__ = ['AbstractNoSymmetryBackend']
 if TYPE_CHECKING:
     # can not import Tensor at runtime, since it would be a circular import
     # this clause allows mypy etc to evaluate the type-hints anyway
-    from ..tensors import Tensor, DiagonalTensor
+    from ..tensors import Tensor, DiagonalTensor, Mask
 
 
 # TODO eventually remove AbstractBlockBackend inheritance, it is not needed,
@@ -47,7 +47,7 @@ class AbstractNoSymmetryBackend(AbstractBackend, AbstractBlockBackend, ABC):
         super().__init__(**kwargs)
         self.DataCls = self.BlockCls
 
-    def test_data_sanity(self, a: Tensor | DiagonalTensor, is_diagonal: bool):
+    def test_data_sanity(self, a: Tensor | DiagonalTensor | Mask, is_diagonal: bool):
         AbstractBackend.test_data_sanity(self, a, is_diagonal=is_diagonal)
         if is_diagonal:
             assert self.block_shape(a.data) == (a.legs[0].dim,), f'{self.block_shape(a)} != {(a.legs[0].dim,)}'
