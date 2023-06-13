@@ -18,6 +18,7 @@ you might also try the equivalent :func:`mkl_get_nthreads` and :func:`mkl_set_nt
 import warnings
 import ctypes
 from ctypes.util import find_library
+import sys
 
 __all__ = [
     'memory_usage', 'load_omp_library', 'omp_get_nthreads', 'omp_set_nthreads', 'mkl_get_nthreads',
@@ -39,7 +40,9 @@ def memory_usage():
     """
     try:
         import resource  # linux-only
-        return resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024
+        unit_to_MB = 1024**2 if sys.platform == 'darwin' else 1024  # linux uses kB, but MacOS byte
+        # see also issue #262
+        return resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / unit_to_MB
     except ImportError:
         pass
     try:
