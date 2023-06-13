@@ -384,10 +384,11 @@ class VectorSpace:
         """Whether self is a subspace of other.
 
         This function considers both spaces purely as `VectorSpace`s and ignores a possible
-        `ProductSpace` structure."""
-        # TODO test
-        # TODO should this care about duality? current implementation does not, i.e.
-        #  some_space.is_subspace_of(some_space.dual) == True
+        `ProductSpace` structure.
+        Per convention, self is never a subspace of other, if the :attr:`is_dual` are different
+        """
+        if self.is_dual != other.is_dual:
+            return False
         if self.symmetry != other.symmetry:
             return False
 
@@ -399,6 +400,7 @@ class VectorSpace:
                     return False
                 n_self += 1
             if n_self == self.num_sectors:
+                # have checked all sectors of self
                 return True
         # reaching this line means self has sectors which other does not have
         return False

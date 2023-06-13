@@ -93,7 +93,7 @@ def test_vector_space(symmetry, symmetry_sectors_rng, np_random, VectorSpace):
     fewer_sectors2 = VectorSpace(symmetry=symmetry, sectors=[sectors[i] for i in which2],
                                  multiplicities=[mults[i] for i in which2])
     assert s1.is_subspace_of(s1)
-    assert s1.dual.is_subspace_of(s1)  # TODO is this expected behavior?
+    assert not s1.dual.is_subspace_of(s1)
     assert same_sectors_less_mults.is_subspace_of(s1)
     assert not s1.is_subspace_of(same_sectors_less_mults)
     assert not same_sectors_different_mults.is_subspace_of(s1)
