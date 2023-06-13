@@ -35,6 +35,9 @@ class AbstractNoSymmetryBackend(AbstractBackend, AbstractBlockBackend, ABC):
         - ``DiagonalTensor`` :
             A single 1D Block. The diagonal of the corresponding 2D block of a ``Tensor``.
 
+        - ``Mask``:
+            These bool values indicate which indices of the large leg are kept for the small leg.
+
     """
     VectorSpaceCls = VectorSpace
     ProductSpaceCls = ProductSpace

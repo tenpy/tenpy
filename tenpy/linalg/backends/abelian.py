@@ -402,6 +402,10 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
             An ``AbelianBackendData`` instance whose blocks have only a single axis.
             This is the diagonal of the corresponding 2D block in a ``Tensor``.
 
+        - ``Mask`` :
+            An ``AbelianBackendData`` instance whose blocks have only a single axis and bool values.
+            These bool values indicate which indices of the large leg are kept for the small leg.
+
     """
     VectorSpaceCls = AbelianBackendVectorSpace
     ProductSpaceCls = AbelianBackendProductSpace
