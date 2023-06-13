@@ -210,4 +210,8 @@ class AbstractNoSymmetryBackend(AbstractBackend, AbstractBlockBackend, ABC):
         if state2 is None:
             return state1
         return self.block_kron(state1, state2)
-        
+
+    def mask_infer_small_leg(self, mask_data: Data, large_leg: VectorSpace) -> VectorSpace:
+        return VectorSpace.non_symmetric(dim=self.block_sum_all(mask_data),
+                                         is_real=large_leg.is_real,
+                                         _is_dual=large_leg.is_dual)

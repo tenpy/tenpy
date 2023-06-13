@@ -1280,3 +1280,11 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
         # - use block_kron (or trivial kron=state{1|2}, if the other is None)
         # - if kron is not None, consider product_sapce.sector_perm // slices
         raise NotImplementedError  # TODO
+
+    def mask_infer_small_leg(self, mask_data: Data, large_leg: VectorSpace) -> VectorSpace:
+        # loop over blocks of the data
+        # - count number of True (use self.block_sum_all)
+        # - if zero, skip
+        # - add the corresponding sector and multiplicity
+        # make vectorspace
+        raise NotImplementedError  # TODO

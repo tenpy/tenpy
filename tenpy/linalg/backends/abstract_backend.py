@@ -450,7 +450,12 @@ class AbstractBackend(ABC):
         States can be specified as 1D blocks or as ``None``, which represents ``[1.]``.
         """
         ...
-        
+
+    @abstractmethod
+    def mask_infer_small_leg(self, mask_data: Data, large_leg: VectorSpace) -> VectorSpace:
+        """Infer the smaller leg that a mask with the given data projects to."""
+        ...
+
 
 class AbstractBlockBackend(ABC):
     svd_algorithms: list[str]  # first is default
@@ -660,6 +665,8 @@ class AbstractBlockBackend(ABC):
 
     @abstractmethod
     def block_sum_all(self, a: Block) -> float | complex:
-        """The sum of all entries of the block"""
+        """The sum of all entries of the block.
+        If the block contains boolean values, this should return the number of ``True`` entries.
+        """
         ...
     
