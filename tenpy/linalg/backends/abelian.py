@@ -827,8 +827,8 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
         r_blocks = []
         for block in zip(a.data.blocks):
             q, r = self.matrix_qr(block, full=full)
-            q_blocks.append(q_block)
-            r_blocks.append(r_block)
+            q_blocks.append(q)
+            r_blocks.append(r)
         sym = a.symmetry
         if full:
             new_leg = q_leg_0.as_VectorSpace()
