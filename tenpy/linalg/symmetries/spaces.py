@@ -380,6 +380,29 @@ class VectorSpace:
         projected.slices = unpermuted_slices[perm]
         return sector_idx_map, sector_masks, projected
 
+    def is_subspace_of(self, other: VectorSpace) -> bool:
+        """Whether self is a subspace of other.
+
+        This function considers both spaces purely as `VectorSpace`s and ignores a possible
+        `ProductSpace` structure."""
+        # TODO test
+        # TODO should this care about duality? current implementation does not, i.e.
+        #  some_space.is_subspace_of(some_space.dual) == True
+        if self.symmetry != other.symmetry:
+            return False
+
+        # the _sectors are lexsorted, so we can just iterate over both of them
+        n_self = 0
+        for other_sector, other_mult in zip(other._sectors, other.multiplicities):
+            if np.all(self._sectors[n_self] == other_sector):
+                if self.multiplicities[n_self] > other_mult:
+                    return False
+                n_self += 1
+            if n_self == self.num_sectors:
+                return True
+        # reaching this line means self has sectors which other does not have
+        return False
+
 
 def _calc_slices(symmetry: Symmetry, sectors: SectorArray, multiplicities: ndarray) -> ndarray:
     """Calculate the slices given sectors and multiplicities *in the dense order*, i.e. not sorted."""

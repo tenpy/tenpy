@@ -71,6 +71,45 @@ def test_vector_space(symmetry, symmetry_sectors_rng, np_random, VectorSpace):
     assert VectorSpace.non_symmetric(dim=1).is_trivial
     assert VectorSpace(symmetry=symmetry, sectors=symmetry.trivial_sector[np.newaxis, :]).is_trivial
 
+    print('checking is_subspace_of')
+    print(f'{len(sectors)=}')
+    same_sectors_less_mults = VectorSpace(
+        symmetry=symmetry, sectors=sectors, multiplicities=[max(1, m - 1) for m in mults]
+    )
+    same_sectors_different_mults = VectorSpace(
+       symmetry=symmetry, sectors=sectors,
+       multiplicities=[max(1, m + (+1 if i % 2 == 0 else -1)) for i, m in enumerate(mults)]
+    )  # but at least one mult is larger than for s1
+    if len(sectors) > 2:
+        which1 = [0, -1]
+        which2 = [1, -2]
+    else:
+        # if there are only two sectors, we cant have different sets of sectors,
+        # both of which have multiple entries
+        which1 = [0]
+        which2 = [-1]
+    fewer_sectors1 = VectorSpace(symmetry=symmetry, sectors=[sectors[i] for i in which1],
+                                 multiplicities=[mults[i] for i in which1])
+    fewer_sectors2 = VectorSpace(symmetry=symmetry, sectors=[sectors[i] for i in which2],
+                                 multiplicities=[mults[i] for i in which2])
+    assert s1.is_subspace_of(s1)
+    assert s1.dual.is_subspace_of(s1)  # TODO is this expected behavior?
+    assert same_sectors_less_mults.is_subspace_of(s1)
+    assert not s1.is_subspace_of(same_sectors_less_mults)
+    assert not same_sectors_different_mults.is_subspace_of(s1)
+    assert len(sectors) == 1 or not s1.is_subspace_of(same_sectors_different_mults)
+    assert fewer_sectors1.is_subspace_of(s1)
+    if len(sectors) == 1:
+        # if there is only one sector, the "fewer_sectors*" spaces dont actually have fewer sectors
+        # and are both equal to s1
+        assert s1.is_subspace_of(fewer_sectors1)
+        assert fewer_sectors1.is_subspace_of(fewer_sectors2)
+        assert fewer_sectors2.is_subspace_of(fewer_sectors1)
+    else:
+        assert not s1.is_subspace_of(fewer_sectors1)
+        assert not fewer_sectors1.is_subspace_of(fewer_sectors2)
+        assert not fewer_sectors2.is_subspace_of(fewer_sectors1)
+
     # TODO (JU) test num_parameters when ready
 
 
