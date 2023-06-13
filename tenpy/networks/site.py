@@ -229,9 +229,13 @@ class Site(Hdf5Exportable):
             return np.arange(self.dim, dtype=np.intp)  # nothing to do
         perm_qind, leg_sorted = self.leg.sort(bunch)
         perm_flat = self.leg.perm_flat_from_perm_qind(perm_qind)
+        charge_to_JW_parity = getattr(self, 'charge_to_JW_parity', None)
         self.change_charge(leg_sorted, perm_flat)
         # change_charge updates self.state_label and self.perm
         self.used_sort_charge = True
+        if charge_to_JW_parity is not None:
+            # preserve charge_to_JW_parity
+            self.charge_to_JW_parity = charge_to_JW_parity
         return perm_flat
 
     def test_sanity(self):
@@ -1698,6 +1702,9 @@ class SpinHalfFermionSite(Site):
         Site.__init__(self, leg, states, sort_charge=True, **ops)
         # specify fermionic operators
         self.need_JW_string |= set(['Cu', 'Cdu', 'Cd', 'Cdd', 'JWu', 'JWd', 'JW'])
+        if cons_N == 'N' or cons_N == 'parity':
+            self.charge_to_JW_parity = np.array([1] + [0]*(len(qnames) - 1))
+        # else: can't define charge_to_JW_parity
 
     def __repr__(self):
         """Debug representation of self."""
@@ -1871,11 +1878,9 @@ class SpinHalfHoleSite(Site):
         self.need_JW_string |= set(['Cu', 'Cdu', 'Cd', 'Cdd', 'JWu', 'JWd', 'JW'])
 
         if cons_N == 'N' or cons_N == 'parity':
-            charge_to_JW_parity = [0] * self.leg.chinfo.qnumber
-            charge_to_JW_parity[0] = 1 # first charge is N, so use that for
-            self.charge_to_JW_parity = np.array(charge_to_JW_parity)  # trivial
-        else:
-            self.charge_to_JW_parity = None  # can't define it!
+            self.charge_to_JW_parity = np.array([1] + [0]*(len(qnames) - 1))
+        # else: can't define charge_to_JW_parity
+
 
     def __repr__(self):
         """Debug representation of self."""
