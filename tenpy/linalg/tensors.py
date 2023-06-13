@@ -421,7 +421,7 @@ class AbstractTensor(ABC):
         return NotImplemented
 
     def __mul__(self, other):
-        if isinstance(other, (int, float, complex)):
+        if isinstance(other, Number):
             return self._mul_scalar(other)
         raise TypeError(f'Tensors can only be multiplied with scalars, not {type(other)}.') from None
 
@@ -430,7 +430,7 @@ class AbstractTensor(ABC):
         return self.__mul__(other)
 
     def __truediv__(self, other):
-        if not isinstance(other, (int, float, complex)):
+        if not isinstance(other, Number):
             raise TypeError(f'Tensors can only be divived by scalars, not {type(other)}.') from None
         try:
             other_inv = 1. / other

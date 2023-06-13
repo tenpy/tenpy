@@ -3,6 +3,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from enum import Enum, auto
 from typing import TypeVar, Any, TYPE_CHECKING, Type
+from numbers import Number
 import numpy as np
 
 from ..symmetries.groups import Symmetry
@@ -81,7 +82,7 @@ class Dtype(Enum):
                 return float(value)
             # TODO what should we do for complex values?
         else:
-            if isinstance(value, (int, float, complex)):
+            if isinstance(value, Number):
                 return complex(value)
         raise TypeError(f'Type {type(value)} is incompatible with dtype {dtype}')
 
