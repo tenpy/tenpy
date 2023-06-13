@@ -1,4 +1,14 @@
-# Copyright 2022 TeNPy Developers, GNU GPLv3
+"""Plane wave excitations ansatz.
+
+
+.. todo ::
+
+    (1) Regulated transfer matrix for unit cell > 1
+    (2) Multi site excitation tensor
+    (3) Restarted Lanczos
+    (5) DMRG over the segment
+"""
+# Copyright 2022-2023 TeNPy Developers, GNU GPLv3
 
 import numpy as np
 import time
@@ -19,13 +29,6 @@ from ..algorithms.mps_common import ZeroSiteH
 __all__ = ['TR_general', 'LT_general', 'construct_orthogonal', 'PlaneWaveExcitationEngine',
            'MultiSitePlaneWaveExcitationEngine', 'TopologicalPlaneWaveExcitationEngine']
 
-"""
-TODO - 04/01/2022
-(1) Regulated transfer matrix for unit cell > 1
-(2) Multi site excitation tensor
-(3) Restarted Lanczos
-(5) DMRG over the segment
-"""
 
 def TR_general(As, Bs, R, Ws=None):
     temp = R.copy()

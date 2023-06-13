@@ -9,7 +9,7 @@ Only functions in this module are valid "actions", but you can add new functions
 if necessary; from outside tenpy just
 ``tenpy.mpi_parallel.actions.my_new_action = my_new_function``.
 """
-# Copyright 2021 TeNPy Developers, GNU GPLv3
+# Copyright 2021-2023 TeNPy Developers, GNU GPLv3
 
 import numpy as np
 import copy
@@ -114,7 +114,7 @@ def distr_array_keep_alive(node_local, on_main, key, in_cache):
         node_local.__class__._keep_alive = keep_alive = {}
     keep_alive[key] = node_local.cache[key] if in_cache else node_local.distributed[key]
 
-    
+
 def split_redistr_array_load_hdf5(node_local, on_main, key, in_cache, filename_template, hdf5_key, projs, N_old, N_new, label, boundary_leg):
     #print('Node', node_local.comm.rank, ' is ready to split env.', flush=True)
     if node_local.comm.rank  == 0:
@@ -135,13 +135,13 @@ def split_redistr_array_load_hdf5(node_local, on_main, key, in_cache, filename_t
             else:
                 # in sequential simulations after `DistributedArray._keep_alive_beyond_cache()`
                 raise NotImplementedError("Should not occur with sequential simulations; node number should be constant.")
-        
+
         print('MPO dimensions of original envs:', [lp.get_leg(label).ind_len for lp in local_parts])
-        
+
         whole_env = npc.concatenate(local_parts, axis=label).sort_legcharge(True)[1]
         env_leg = whole_env.get_leg(label)
         env_leg.test_equal(boundary_leg)
-        
+
         new_local_parts = []
         for pj in projs:
             new_lp = whole_env.copy(deep=False)
@@ -150,25 +150,25 @@ def split_redistr_array_load_hdf5(node_local, on_main, key, in_cache, filename_t
         print('MPO dimensions of redistributed envs:', [lp.get_leg(label).ind_len for lp in new_local_parts])
 
         local_part = new_local_parts[0]
-        
+
         for i in range(1, N_new):
             dest = i
             source = 0
             # Can't use scatter since the envs may be larger than 2.1GB and thus cannot be pickled
             npc_send(node_local.comm, new_local_parts[i], dest, tag = dest*10000 + source)
-        
+
     else:
         # Get redistributed env from root node
         source = 0
         #print('Node', node_local.comm.rank, 'is receiving from node', source, flush=True)
         local_part = npc_recv(node_local.comm, source, tag = node_local.comm.rank*10000 + source)
-        
+
     print('Node', node_local.comm.rank, 'has local env with shape', local_part.shape, flush=True)
     if in_cache:
         node_local.cache[key] = local_part
     else:
         node_local.distributed[key] = local_part
-    
+
 
 def split_distr_array_load_hdf5(node_local, on_main, key, in_cache, filename_template, hdf5_key, projs, N_old, N_new, label):
     #print('Node', node_local.comm.rank, ' is ready to split env.', flush=True)
@@ -184,14 +184,14 @@ def split_distr_array_load_hdf5(node_local, on_main, key, in_cache, filename_tem
                 node_local.hdf5_import_file = f
             else:
                 assert f.filename == fn, 'Conflict between ' + f.filename + ' and ' + fn + '.'
-                
+
             whole_local_part = load_from_hdf5(f, hdf5_key)
             print('Node', node_local.comm.rank, 'loaded env with shape ', whole_local_part.shape, flush=True)
-            
+
             for i in range(N_new // N_old):
                 dest = node_local.comm.rank + i
                 source = node_local.comm.rank
-                
+
                 split_local_part = whole_local_part.copy(deep=True)
                 #print(source, dest, len(projs[dest]), np.sum(projs[dest]), flush=True)
                 split_local_part.iproject(mask=projs[dest], axes=label)
@@ -208,14 +208,14 @@ def split_distr_array_load_hdf5(node_local, on_main, key, in_cache, filename_tem
         source = node_local.comm.rank - node_local.comm.rank % (N_new // N_old)
         #print('Node', node_local.comm.rank, 'is receiving from node', source, flush=True)
         local_part = npc_recv(node_local.comm, source, tag = node_local.comm.rank*10000 + source)
-        
+
     print('Node', node_local.comm.rank, 'has local env with shape', local_part.shape, flush=True)
     if in_cache:
         node_local.cache[key] = local_part
     else:
         node_local.distributed[key] = local_part
 
-    
+
 def distr_array_load_hdf5(node_local, on_main, key, in_cache, filename_template, hdf5_key):
     if filename_template is not None:
         fn = filename_template.format(mpirank=node_local.comm.rank)
@@ -334,12 +334,12 @@ def npc_send(comm, array, dest, tag):
     if array is None or array.stored_blocks == 0:
         comm.isend(array, dest=dest, tag=tag).wait()
         return
-    
+
     try:
         block_shapes = [d.shape for d in array._data]
     except AttributeError:
         # array._data is somehow a list of lists?
-        # Sometimes array._data is [blocK_shapes] + [array.dtype]; I think this happened when the the pickled object 
+        # Sometimes array._data is [blocK_shapes] + [array.dtype]; I think this happened when the the pickled object
         # was sent using isend and not waited upon before changing array._data
         print(array._data)
         print(len(array._data))
@@ -352,7 +352,7 @@ def npc_send(comm, array, dest, tag):
         dtype_size = 8
     else:
         raise ValueError('dtype %s of environment not recognized' % array.dtype)
-    
+
     send_array = array.copy() # Make shallow copy of npc array and ONLY change copy.
     send_array._data = [block_shapes] + [array.dtype]
     request = comm.isend(send_array, dest=dest, tag=tag)
@@ -369,7 +369,7 @@ def npc_recv(comm, source, tag):
     array = request.wait()
     if array is None or array.stored_blocks == 0:
         return array
-    
+
     block_shapes = array._data[0]
     dtype = array._data[1]
     array._data = []

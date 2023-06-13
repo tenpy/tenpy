@@ -20,7 +20,7 @@ The functions in the class are mostly trivial copies of the functions from MPS t
 account for the additional type of tensor structure.
 
 """
-# Copyright 2018-2021 TeNPy Developers, GNU GPLv3
+# Copyright 2018-2023 TeNPy Developers, GNU GPLv3
 
 import numpy as np
 import warnings
@@ -42,7 +42,7 @@ class uMPS(MPS):
     """
 
     # valid boundary conditions. Don't overwrite this!
-    _valid_bc = ('infinite')
+    _valid_bc = ('infinite', )
     # All labels of each tensor in _C (order is used!)
     _C_labels = ['vL', 'vR']
     # Labels for other tensors are inhereted from MPS.

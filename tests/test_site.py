@@ -315,7 +315,7 @@ def test_clock_site():
             for _ in range(q - 1):
                 Z_pow_q = np.dot(Z_pow_q, Z)
                 X_pow_q = np.dot(X_pow_q, X)
-                
+
             npt.assert_array_almost_equal_nulp(np.dot(X, Z), w * np.dot(Z, X), 3 * q)
             npt.assert_array_almost_equal_nulp(X_pow_q, np.eye(q), 3 * q)
             npt.assert_array_almost_equal_nulp(Z_pow_q, np.eye(q), 3 * q)
@@ -333,6 +333,8 @@ def test_set_common_charges():
     spin1_ops = {op_name: get_site_op_flat(spin1, op_name) for op_name in spin1.opnames}
     ferm_ops = {op_name: get_site_op_flat(ferm, op_name) for op_name in ferm.opnames}
     boson_ops = {op_name: get_site_op_flat(boson, op_name) for op_name in boson.opnames}
+    assert spin.charge_to_JW_parity is not None
+    assert ferm.charge_to_JW_parity is not None
     site.set_common_charges([spin, ferm])
     assert tuple(spin.leg.chinfo.names) == ('2*Sz', 'N')
     spin.test_sanity()

@@ -1,5 +1,5 @@
 """Helper functions and classes for MPI parallelziation."""
-# Copyright 2021 TeNPy Developers, GNU GPLv3
+# Copyright 2021-2023 TeNPy Developers, GNU GPLv3
 
 
 import numpy as np
@@ -235,13 +235,13 @@ def npc_send(comm, array, dest, tag):
     if array is None or array.stored_blocks == 0:
         comm.isend(array, dest=dest, tag=tag).wait()
         return
-    
+
     #array_data_orig = array._data #[:] #Slice list to make a shallow copy? Seems to be faster than list.copy()
     try:
         block_shapes = [d.shape for d in array._data]
     except AttributeError:
         # array._data is somehow a list of lists?
-        # Sometimes array._data is [blocK_shapes] + [array.dtype]; I think this happened when the the pickled object 
+        # Sometimes array._data is [blocK_shapes] + [array.dtype]; I think this happened when the the pickled object
         # was sent using isend and not waited upon before changing array._data
         print(array._data)
         print(len(array._data))
@@ -254,7 +254,7 @@ def npc_send(comm, array, dest, tag):
         dtype_size = 8
     else:
         raise ValueError('dtype %s of environment not recognized' % array.dtype)
-    
+
     send_array = array.copy() # Make shallow copy of npc array and ONLY change copy.
     send_array._data = [block_shapes] + [array.dtype]
     #print('Here')
@@ -273,7 +273,7 @@ def npc_send(comm, array, dest, tag):
 
     MPI.Request.Waitall(requests + [request])
     #array._data = array_data_orig
-    
+
     #for d in array._data:
     #    assert type(d) is np.ndarray
     #print(array._data)
@@ -285,13 +285,13 @@ def npc_send(comm, array, dest, tag):
     if array is None or array.size == 0:
         comm.send(array, dest=dest, tag=tag)
         return
-    
+
     array_data_orig = array._data
     try:
         block_shapes = [d.shape for d in array._data]
     except AttributeError:
         # array._data is somehow a list of lists?
-        # Sometimes array._data is [blocK_shapes] + [array.dtype]; I think this happened when the the pickled object 
+        # Sometimes array._data is [blocK_shapes] + [array.dtype]; I think this happened when the the pickled object
         # was sent using isend and not waited upon before changing array._data
         print(array._data)
         print(len(array._data))
@@ -314,7 +314,7 @@ def npc_send(comm, array, dest, tag):
     #MPI.Free_mem(buf)
     array._data = array_data_orig
 
-    
+
     if array.stored_blocks:
         requests = [MPI.REQUEST_NULL] * array.stored_blocks
         #buf = MPI.Alloc_mem(array.size*16+MPI.BSEND_OVERHEAD)
@@ -326,14 +326,14 @@ def npc_send(comm, array, dest, tag):
         MPI.Request.Waitall(requests)
         MPI.Detach_buffer()
         #MPI.Free_mem(buf)
-    
-    
+
+
     requests = [MPI.REQUEST_NULL] * array.stored_blocks
     for i in range(array.stored_blocks):
         requests[i] = comm.Isend(np.ascontiguousarray(array._data[i]), dest=dest, tag=tag+i)
 
     MPI.Request.Waitall(requests)
-"""    
+"""
 
 """
 def npc_recv(comm, source, tag):
@@ -341,7 +341,7 @@ def npc_recv(comm, source, tag):
     array = request.wait()
     if array is None or array.stored_blocks == 0:
         return array
-    
+
     block_shapes = array._data[0]
     dtype = array._data[1]
     array._data = []
@@ -364,7 +364,7 @@ def npc_recv(comm, source, tag):
     array = comm.recv(bytearray(1<<20), source=source, tag=tag) # Assume shell npc array is less than 1 MB in size.
     if array is None or array.size == 0:
         return array
-    
+
     block_shapes = array._data[0]
     dtype = array._data[1]
     array._data = []

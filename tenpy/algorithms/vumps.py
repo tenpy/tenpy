@@ -31,7 +31,7 @@ Best practices for multi-site unit cell uMPS would be to start with the 2-site a
 the single-site algorithm, which is the more principled algorithm.
 
 """
-# Copyright 2022 TeNPy Developers, GNU GPLv3
+# Copyright 2022-2023 TeNPy Developers, GNU GPLv3
 
 
 import numpy as np
@@ -91,7 +91,7 @@ class VUMPSEngine(Sweep):
         options = self.options
         start_time = self.time0
         self.shelve = False
-        
+
         overlap = options.get('overlap', True)
         min_sweeps = options.get('min_sweeps', 1)
         max_sweeps = options.get('max_sweeps', 1000)

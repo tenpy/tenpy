@@ -1,5 +1,5 @@
 """Extension of other tenpy classes to employ MPI parallelization."""
-# Copyright 2021 TeNPy Developers, GNU GPLv3
+# Copyright 2021-2023 TeNPy Developers, GNU GPLv3
 
 #: flag to select contraction method for attaching W to LP/RP, which requires much communication
 CONTRACT_W = "sparse"  # you can't change this dynamically....
@@ -410,7 +410,7 @@ class ParallelTwoSiteDMRG(TwoSiteDMRGEngine):
                         label='wL'
                     else:
                         raise ValueError()
-                    T.finish_load_from_hdf5(self.main_node_local, boundary_leg=boundary_leg, 
+                    T.finish_load_from_hdf5(self.main_node_local, boundary_leg=boundary_leg,
                                             mpi_split_params=mpi_split_params, label=label)
         actions.run(actions.node_local_close_hdf5_file,  # does nothing if no file was opened
                    self.main_node_local,

@@ -262,7 +262,7 @@ class MPS:
         self.chinfo = self.sites[0].leg.chinfo
         self.dtype = dtype = np.find_common_type([B.dtype for B in Bs], [])
         self.form = self._parse_form(form)
-        self.bc = bc  # one of ``'finite', 'periodic', 'segment'``.
+        self.bc = bc  # one of ``self._valid_bc = ('finite', 'periodic', 'segment')``
         self.norm = norm
         self.grouped = 1
         self.segment_boundaries = (None, None)
@@ -4695,7 +4695,7 @@ class MPS:
         """
         if self.chinfo.qnumber == 0:
             return other
-        need_gauge = self._outer_virtual_legs() != other._outer_virtual_legs()
+        need_gauge = (self.outer_virtual_legs() != other.outer_virtual_legs())
         if need_gauge:
             vL, vR = self.outer_virtual_legs()
             other = copy.copy(other)  # make shallow copy
