@@ -1093,7 +1093,7 @@ class MPO:
                 B = npc.tensordot(VH, B, axes=(['wR', 'vR'], ['wL', 'vL']))
                 B = B.take_slice(self.get_IdR(i), 'wR')
                 B = B.combine_legs(['vL', 'p'], qconj=[-1])
-                U, S, VH, err, norm_new = svd_theta(B, relax_trunc)
+                U, S, VH, err, norm_new = svd_theta(B, relax_trunc, [B.qtotal, None])
                 trunc_err += err
                 psi.norm *= norm_new
                 U = U.split_legs()
