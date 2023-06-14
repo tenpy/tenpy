@@ -202,8 +202,8 @@ class _MPSExpectationValue:
 
         .. warning ::
 
-            This function does not normalize, if bra and ket are different, i.e. for MPSEnvironment.
-            Thus it also takes into account :attr:`MPS.norm` of both `bra` and `ket`.
+            This function assumes that bra and ket are normalized, i.e. for MPSEnvironment.
+            Thus you may want to take into account :attr:`MPS.norm` of both `bra` and `ket`.
 
         Parameters
         ----------
@@ -325,8 +325,8 @@ class _MPSExpectationValue:
 
         .. warning ::
 
-            This function does not normalize, if bra and ket are different.
-            Thus it also takes into account :attr:`MPS.norm` of both `bra` and `ket`.
+            This function assumes that bra and ket are normalized, i.e. for MPSEnvironment.
+            Thus you may want to take into account :attr:`MPS.norm` of both `bra` and `ket`.
 
         Parameters
         ----------
@@ -400,8 +400,8 @@ class _MPSExpectationValue:
 
         .. warning ::
 
-            This function does not normalize, if bra and ket are different, i.e. for MPSEnvironment.
-            Thus it also takes into account :attr:`MPS.norm` of both `bra` and `ket`.
+            This function assumes that bra and ket are normalized, i.e. for MPSEnvironment.
+            Thus you may want to take into account :attr:`MPS.norm` of both `bra` and `ket`.
 
         Parameters
         ----------
@@ -573,8 +573,8 @@ class _MPSExpectationValue:
 
         .. warning ::
 
-            This function does not normalize, if bra and ket are different, i.e. for MPSEnvironment.
-            Thus it also takes into account :attr:`MPS.norm` of both `bra` and `ket`.
+            This function assumes that bra and ket are normalized, i.e. for MPSEnvironment.
+            Thus you may want to take into account :attr:`MPS.norm` of both `bra` and `ket`.
 
         Parameters
         ----------
@@ -637,8 +637,8 @@ class _MPSExpectationValue:
 
         .. warning ::
 
-            This function does not normalize, if bra and ket are different, i.e. for MPSEnvironment.
-            Thus it also takes into account :attr:`MPS.norm` of both `bra` and `ket`.
+            This function assumes that bra and ket are normalized, i.e. for MPSEnvironment.
+            Thus you may want to take into account :attr:`MPS.norm` of both `bra` and `ket`.
 
         Parameters
         ----------
@@ -782,8 +782,8 @@ class _MPSExpectationValue:
 
         .. warning ::
 
-            This function does not normalize, if bra and ket are different, i.e. for MPSEnvironment.
-            Thus it also takes into account :attr:`MPS.norm` of both `bra` and `ket`.
+            This function assumes that bra and ket are normalized, i.e. for MPSEnvironment.
+            Thus you may want to take into account :attr:`MPS.norm` of both `bra` and `ket`.
 
         Parameters
         ----------
