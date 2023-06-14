@@ -25,20 +25,21 @@ All other modules in this folder contain model classes derived from these base c
     spins_nnn
     fermions_spinless
     hubbard
+    tj_model
     aklt
     hofstadter
     haldane
     toric_code
     mixed_xk
 """
-# Copyright 2018-2021 TeNPy Developers, GNU GPLv3
+# Copyright 2018-2023 TeNPy Developers, GNU GPLv3
 
 from . import lattice, model
 from . import tf_ising, xxz_chain, spins, spins_nnn
-from . import fermions_spinless, hubbard, hofstadter, haldane
+from . import fermions_spinless, hubbard, tj_model, hofstadter, haldane
 from . import toric_code, aklt, mixed_xk
 
 __all__ = [
     'lattice', 'model', 'tf_ising', 'xxz_chain', 'spins', 'spins_nnn', 'fermions_spinless',
-    'hubbard', 'hofstadter', 'haldane', 'toric_code', 'aklt', 'mixed_xk'
+    'hubbard', 'tj_model', 'hofstadter', 'haldane', 'toric_code', 'aklt', 'mixed_xk'
 ]

@@ -11,7 +11,7 @@ dependencies:
   - setuptools>=30.3.0
   - h5py
   - pyyaml
-  - sphinx
+  - sphinx=6.2.1
   - sphinx_rtd_theme
   - sphinxcontrib-bibtex
   - matplotlib

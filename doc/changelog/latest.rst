@@ -3,71 +3,54 @@
 
 Release Notes
 -------------
-Backwards-incompatible rewrite of TDVP!
+TODO: Summarize the most important changes
+
+If you have ever defined a custom model and used :meth:`~tenpy.models.model.CouplingModel.add_multi_coupling_term` with `plus_hc=True`,
+please note :issue:`218`!
 
 Changelog
 ---------
 
 Backwards incompatible changes
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-- Replace the :class:`~tenpy.algorithms.tdvp.TDVPEngine` with a new version. 
-  The previous one is for now still available as :class:`~tenpy.algorithms.tdvp.OldTDVPEngine`.
-- Add more fine grained sweep convergence checks for the :class:`~tenpy.algorithms.mps_common.VariationalCompression` (used when applying an MPO to an MPS!).
-  In this context, we renamed the parameter `N_sweeps` to :cfg:option:`VariationalCompression.max_sweeps`.
-  Further, we added the parameter :cfg:option:`VariationalCompression.min_sweeps` and :cfg:option:`VariationalCompression.tol_theta_diff`
-- Adjusted default paramters of :meth:`tenpy.networks.mps.InitialStateBuilder.randomized` to be as documented with better ``chi_max``.
-- No longer return `ov` from :func:`tenpy.linalg.lanczos.gram_schmidt`.
+- nothing yet
 
 Added
 ^^^^^
-- Wrappers for the helical and irregular lattice (removing sites) in :meth:`~tenpy.models.model.CouplingMPOModel.init_lattice`.
-- Options `pos_diag_r`, `qtotal_Q` and `qconj_inner` for :func:`~tenpy.linalg.np_conserved.qr`.
-- :class:`tenpy.linalg.lanczos.Arnoldi` (and common base class :class:`~tenpy.linalg.lanczos.KrylovBased` with :class:`~tenpy.linalg.lanczos.LanczosGroundState`).
-- Allow to pass and merge multiple parameter files to ``tenpy-run`` from the command line.
-- Greatly expanded userguide on :doc:`/intro/simulations` and added more parameter examples.
-- Option `preserve_norm` for :class:`~tenpy.algorithms.mpo_evolution.ExpMPOEvolution`.
-- Allow non-trivial :attr:`~tenpy.models.lattice.Lattice.position_disorder` for lattices.
-- Option `fix_u` for :func:`~tenpy.simulations.measurement.onsite_expectation_value`.
-- Lattice :attr:`~tenpy.models.lattice.Lattice.cylinder_axis`.
-- Random number generator :attr:`~tenpy.models.model.Model.rng` for models.
-- :meth:`~tenpy.models.aklt.AKLTChain.psi_AKLT` for the exact MPS ground state of (spin-1/2) AKLT chain.
-- :func:`~tenpy.simulations.simulation.init_simulation` and :func:`~tenpy.simulations.simulation.init_simulation_from_checkpoint` for debugging or post-simulation measurement.
-- :func:`~tenpy.linalg.np_conserved.orthogonal_columns` constructing orthogonal columns to a given (rectangular) matrix.
-- :meth:`~tenpy.networks.mps.MPS.enlarge_chi` for artificially enlarging the bond dimension.
-- :class:`~tenpy.models.lattice.NLegLadder`, and more `pairs` (``'rung_NN', 'leg_NN', 'diagonal'``) for the :class:`~tenpy.models.lattice.Ladder`.
-- :meth:`tenpy.algorithms.Algorithm.switch_engine` for simplified switching from e.g. the `TwoSiteDMRGEngine` to the `SingleSiteDMRGEngine`.
-- :class:`~tenpy.models.lattice.MultiSpeciesLattice` to simplify implementing e.g. spin-full fermions or bosons without
-  using the :class:`~tenpy.networks.site.GroupedSite`. Further helper functions :func:`~tenpy.networks.site.spin_half_species`, 
-  as well as the new :class:`~tenpy.models.hubbard.FermiHubbardModel2` using it, and an example
-  :doc:`/notebooks/31_multispecies_models`.
+- :class:`~tenpy.models.tj_model.tJModel` and :class:`~tenpy.networks.site.SpinHalfHoleSite`
+- :class:`~tenpy.algorithms.tebd.QRBasedTEBDEngine`
+- :class:`~tenpy.models.clock.ClockModel`, :class:`~tenpy.models.clock.ClockChain` and :class:`~tenpy.models.sites.ClockSite`
+- Simulation parameters :cfg:option:`Simulation.measure_at_algorithm_checkpoints` and
+  :cfg:option:`Simulation.canonicalize_before_measurement`
 
 Changed
 ^^^^^^^
-- Renamed ``tenpy.networks.mpo.MPOGraph.add_string`` to :meth:`~tenpy.networks.mpo.MPOGraph.add_string_left_to_right`
-  as part of the fix for :issue:`148`. Added similar :meth:`~tenpy.networks.mpo.MPOGraph.add_string_left_to_right`.
-- Automatically shift terms in :meth:`~tenpy.networks.mps.MPS.expectation_value_terms_sum` to start in the MPS unit cell for infinite MPS.
-- Possible ordering='folded' for the :class:`~tenpy.models.lattice.Ladder`.
-- Enhanced implementation of :meth:`~tenpy.networks.mps.MPS.canonical_form_infinite2` to replace :meth:`~tenpy.networks.mps.MPS.canonical_form_infinite`.
-- Split up :meth:`tenpy.networks.mpo.MPO.expectation_value` into :meth:`~tenpy.networks.mpo.MPO.expectation_value_finite`
-  and :meth:`~tenpy.networks.mpo.MPO.expectation_value_power` and add :meth:`tenpy.networks.mpo.MPO.expectation_value_TM`
-- Enhanced documentation of the lattices with more plots.
+- Change the build system and metadata declaration to ``pyproject.toml`` format.
+  This makes installation more future-proof and stable, but should not affect how tenpy is used,
+  once installed.
+- Allow `couplings` parameters in the :class:`~tenpy.models.mixed_xk.MixedXKModel` methods
+  :meth:`~tenpy.models.mixed_xk.MixedXKModel.add_inter_ring_hopping`,
+  :meth:`~tenpy.models.mixed_xk.MixedXKModel.add_intra_ring_hopping`,
+  :meth:`~tenpy.models.mixed_xk.MixedXKModel.add_inter_ring_interaction`, and
+  :meth:`~tenpy.models.mixed_xk.MixedXKModel.add_intre_ring_interaction` to vary with `x`.
 
 Fixed
 ^^^^^
-- :issue:`145` that :func:`~tenpy.networks.mpo.make_W_II` failed for MPOs with trivial virtual bonds.
-- Make :func:`~tenpy.linalg.np_conserved.detect_qtotal` more stable: use the maximal entry instead of the first non-zero one.
-- :issue:`148` that generating MPOs with long-range couplings over multiple MPS unit cells and multi-couplings raised errors.
-- The :func:`~tenpy.linalg.np_conserved.qr` decomposition with ``mode='complete'`` sometimes returned wrong charges.
-  Moreover, it sometimes gave zero columns in Q if the R part was completely zero for that charge block.
-- Adjust default `trunc_params` of :func:`~tenpy.networks.mps.MPS.compute_K` and :func:`~tenpy.networks.mps.MPS.permute_sites` to avoid too severe truncation.
-- (!) Non-trivial `start_time` parameter caused wrong evolution in :class:`~tenpy.algorithms.mpo_evolution.TimeDependentExpMPOEvolution`.
-- Make sure that :meth:`~tenpy.models.lattice.lat2mps_idx` doesn't modify arguments in place.
-- The power-method :meth:`tenpy.networks.mpo.MPO.expectation_value` did not work correctly for ``H.L != psi.L``.
-- :meth:`~tenpy.models.model.CouplingModel.add_local_term` did not work with `plus_hc=True`.
-- :meth:`tenpy.linalg.sparse.FlatLinearOperator.eigenvectors` did not always return orthogonal eigenvectors with well-defined charges.
-- Fix :class:`tenpy.linalg.sparse.FlatLinearOperator` to not use the full flat array, but just the block with nonzero entries (which can be much smaller for a few charges).
-  This is enabled over a new option `compact_flat` that defaults to True if the vector leg is blocked by charge (and charge_sector is not None).
-- Make ``cons_Sz='parity'`` for the :class:`~tenpy.networks.site.SpinHalfSite` non-trivial.
-- The first, initial measurements for time-dependent Hamiltonians might have used wrong time for sequential/resume run.
-- Index error in stopping criteria for Lanczos, :issue:`169`.
-- Fix for resuming simulations with `orthogonal_to`: carry on the environments!
+- Potentially serious bug :issue:`260` that the `sorted` flag of :class:`~tenpy.linalg.charges.LegCharge` was not set
+  correctly in :func:`~tenpy.linalg.np_conserved.qr`.
+- :meth:`~tenpy.networks.purification_mps.PurificationMPS.from_infiniteT_canonical` should now work with arbitrary
+  charges of the original model, and has the option to double the number of charges to separately conserve the charges
+  on each the physical and ancialla legs.
+- Fix a wrong total charge in :meth:`~tenpy.networks.mpo.MPO.apply_zipup`.
+- Fix :issue:`218` that :meth:`~tenpy.models.model.CouplingModel.add_multi_coupling_term` with `plus_hc=True` didn't
+  correctly add the hermitian conjugate.
+- Fix :issue:`210` that :meth:`~tenpy.models.aklt.AKLTChain.psi_AKLT` had typos and wrong canonical form for finite systems.
+- Fix that the MPS :meth:`~tenpy.networks.mps.MPS.apply_local_op` with local multi-site operators didn't correctly track the
+  norm with `renormalize=False`.
+- We now update the norm of the MPS in :meth:`~tenpy.algorithms.tebd.TEBDEngine.update_bond`.
+  If the parameter ``preserve_norm`` is ``True`` (which is the default for real time evolution)
+  this has no effect when using :meth:`~tenpy.algorithms.tebd.TEBDEngine.run` or similar,
+  since the MPS norm is reset after the timestep anyway.
+  It does, however, change the behavior if ``preserve_norm`` is ``False``.
+- :issue:`265` that MPO methods :meth:`~tenpy.networks.mpo.MPO.make_U_I`, `make_U_II`, `apply_naively` and `apply_zipup` 
+  just ignored the `explicit_plus_hc` flag of the MPO, possibly giving completely wrong results without raising errors.

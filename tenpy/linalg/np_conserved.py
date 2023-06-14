@@ -81,7 +81,7 @@ Overview
     speigs
 
 """
-# Copyright 2018-2021 TeNPy Developers, GNU GPLv3
+# Copyright 2018-2023 TeNPy Developers, GNU GPLv3
 
 import numpy as np
 import scipy.linalg
@@ -1685,7 +1685,7 @@ class Array:
         return enc_axes, self.combine_legs([[a] for a in enc_axes], qconj=qconj)
 
     def squeeze(self, axes=None):
-        """Remove single-dimenisional legs, like :func:`np.squeeze`.
+        """Remove single-dimensional legs, like :func:`np.squeeze`.
 
         If a squeezed leg has non-zero charge, this charge is added to :attr:`qtotal`.
 
@@ -3522,7 +3522,7 @@ def tensordot(a, b, axes=2):
         # #### the main work
         res = _tensordot_worker(a, b, axes)
     # labels
-    res._labels = _drop_duplicate_labels(a._labels[:-axes], b._labels[axes:])
+    res._labels = _drop_duplicate_labels(a._labels[:a.rank-axes], b._labels[axes:])
     return res
 
 
@@ -4017,10 +4017,12 @@ def qr(a,
     if qtotal_Q is not None:
         qtotal_Q = a.chinfo.make_valid(qtotal_Q)  # convert to ndarray
         inner_leg.charges = a.chinfo.make_valid(inner_leg.charges - inner_leg.qconj * qtotal_Q)
+        inner_leg.sorted = False
     if inner_leg.qconj != inner_qconj:
         assert inner_qconj == -inner_leg.qconj
         # absorb sign into charge values
         inner_leg.charges = a.chinfo.make_valid(-inner_leg.charges)
+        inner_leg.sorted = False
         inner_leg.qconj = inner_qconj
     q = Array([a_leg0, inner_leg.conj()], a.dtype, qtotal_Q)
     q._data = q_data

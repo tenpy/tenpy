@@ -43,3 +43,6 @@ I get a warning about ...
     Make sure that you don't have a typo and that it is in the right parameter set!
     Also, check the logging output whether the parameter was actually used.
     For further details, see :doc:`/intro/options`
+
+... the overlap of infinite MPS not being what I expect naively.
+    See :ref:`iMPSWarning`.

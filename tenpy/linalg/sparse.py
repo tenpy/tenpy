@@ -7,7 +7,7 @@ implementations of these algorithms (e.g., :mod:`~tenpy.linalg.lanczos`). Moreov
 :class:`FlatLinearOperator` allows to use all the scipy sparse methods by providing functionality
 to convert flat numpy arrays to and from np_conserved arrays.
 """
-# Copyright 2018-2021 TeNPy Developers, GNU GPLv3
+# Copyright 2018-2023 TeNPy Developers, GNU GPLv3
 
 import numpy as np
 from . import np_conserved as npc

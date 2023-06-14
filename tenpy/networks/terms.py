@@ -5,7 +5,7 @@ acting on them. Each term is given by a collection of (onsite) operator names an
 sites it acts on. Moreover, we associate a `strength` to each term, which corresponds to the
 prefactor when specifying e.g. a Hamiltonian.
 """
-# Copyright 2019-2021 TeNPy Developers, GNU GPLv3
+# Copyright 2019-2023 TeNPy Developers, GNU GPLv3
 
 import numpy as np
 import warnings
@@ -1319,7 +1319,7 @@ class ExponentiallyDecayingTerms(Hdf5Exportable):
     following form with a single extra index of the virtual bonds:
 
     .. math ::
-        sum_{i \neq j} lambda^{|i-j|} A_i B_j
+        sum_{i < j} lambda^{|i-j|} A_i B_j
 
     For 2D cylinders (or ladders), we need a slight generalization of this, where the operators
     act only on a subset of the sites in each unit cell, given by a 1D array `subsites`:

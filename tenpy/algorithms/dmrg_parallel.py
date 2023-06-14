@@ -3,7 +3,7 @@
 .. warning ::
     This module is still under active development. Use with care!
 """
-# Copyright 2021 TeNPy Developers, GNU GPLv3
+# Copyright 2021-2023 TeNPy Developers, GNU GPLv3
 
 from ..tools.thread import Worker
 

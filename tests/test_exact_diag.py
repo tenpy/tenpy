@@ -1,5 +1,5 @@
 """A collection of tests to check the functionality of algorithms.exact_diagonalization."""
-# Copyright 2018-2021 TeNPy Developers, GNU GPLv3
+# Copyright 2018-2023 TeNPy Developers, GNU GPLv3
 
 import tenpy.linalg.np_conserved as npc
 import numpy as np
@@ -10,7 +10,7 @@ from tenpy.linalg.lanczos import lanczos
 
 def test_ED():
     # just quickly check that it runs without errors for a small system
-    xxz_pars = dict(L=4, Jxx=1., Jz=1., hz=0.0, bc_MPS='finite')
+    xxz_pars = dict(L=4, Jxx=1., Jz=1., hz=0.0, bc_MPS='finite', sort_charge=True)
     M = XXZChain(xxz_pars)
     ED = ExactDiag(M)
     ED.build_full_H_from_mpo()
