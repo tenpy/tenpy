@@ -806,14 +806,7 @@ class _MPSExpectationValue:
                     CLs[key] = npc.tensordot(B_bra.conj(), CL, axes=[['vL*', 'p*'], ['vR*', 'p']])
                 i = k + 1
             res = 0.
-            for ops_R, need_JW, term_R, strength in zip(all_ops_R, need_JW_R, term_list_R.terms,
-                                                        term_list_R.strength):
-                if not self.finite and not self.chinfo.trivial_shift:
-                    # recalculate operators (should we do this more efficient?)
-                    ops_R, j_min, need_JW = self._term_to_ops_list(term_R, autoJW,
-                                                                   j)  # <- note the j
-                    if j_min > j + min_R:
-                        ops_R = [opstr_fill[need_JW]] * (j_min - (j + min_R)) + ops_R
+            for ops_R, need_JW, strength in zip(all_ops_R, need_JW_R, term_list_R.strength):
                 CR = self._corr_ops_RP(ops_R, j)
                 key = (need_JW, ) + tuple(self.sites[0].leg.chinfo.make_valid(-CR.qtotal))
                 CL = CLs.get(key, None)
