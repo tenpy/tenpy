@@ -23,7 +23,7 @@ Added
 - Simulation parameters :cfg:option:`Simulation.measure_at_algorithm_checkpoints` and
   :cfg:option:`Simulation.canonicalize_before_measurement`
 - :class:`~tenpy.networks.mps._MPSExpectationValue` parent class to unify the framework of computing expectation values and
-  correlation functions in `~tenpy.networks.mps.MPS` and `~tenpy.networks.mps.MPSEnvironment`
+  correlation functions in :class:`~tenpy.networks.mps.MPS` and :class:`~tenpy.networks.mps.MPSEnvironment`
 
 Changed
 ^^^^^^^
