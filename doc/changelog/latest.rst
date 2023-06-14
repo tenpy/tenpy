@@ -22,6 +22,8 @@ Added
 - :class:`~tenpy.models.clock.ClockModel`, :class:`~tenpy.models.clock.ClockChain` and :class:`~tenpy.models.sites.ClockSite`
 - Simulation parameters :cfg:option:`Simulation.measure_at_algorithm_checkpoints` and
   :cfg:option:`Simulation.canonicalize_before_measurement`
+- :class:`~tenpy.networks.mps._MPSExpectationValue` parent class to unify the framework of computing expectation values and
+  correlation functions in `~tenpy.networks.mps.MPS` and `~tenpy.networks.mps.MPSEnvironment`
 
 Changed
 ^^^^^^^
