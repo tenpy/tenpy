@@ -333,16 +333,16 @@ def test_permute_legs(tensor_rng):
 def test_inner(tensor_rng):
     t0 = tensor_rng(labels=['a'], real=False)
     t1 = tensor_rng(legs=t0.legs, labels=t0.labels, real=False)
-    t2 = tensor_rng(labels=['a', 'b'], real=False)
+    t2 = tensor_rng(labels=['a', 'b', 'c'], real=False)
     t3 = tensor_rng(legs=t2.legs, labels=t2.labels, real=False)
 
-    for t_i, t_j in [(t0, t1), (t2, t3)]:
+    for t_i, t_j, perm in [(t0, t1, ['a']), (t2, t3, ['b', 'c', 'a'])]:
         d_i = t_i.to_numpy_ndarray()
         d_j = t_j.to_numpy_ndarray()
 
         expect = np.inner(d_i.flatten().conj(), d_j.flatten())
         if t_j.num_legs > 0:
-            t_j = t_j.permute_legs(t_j.labels[::-1])  # transpose should be reverted in inner()
+            t_j = t_j.permute_legs(perm)  # transpose should be reverted in inner()
         res = tensors.inner(t_i, t_j)
         npt.assert_allclose(res, expect)
 
