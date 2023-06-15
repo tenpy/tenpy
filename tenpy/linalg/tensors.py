@@ -707,11 +707,15 @@ class Tensor(AbstractTensor):
         if shape_kw is not None:
             def block_func(shape):
                 block = func(**{shape_kw: shape}, **func_kwargs)
-                return backend.block_to_dtype(block, dtype)
+                if dtype is not None:
+                    block = backend.block_to_dtype(block, dtype)
+                return block
         else:
             def block_func(shape):
                 block = func(shape, **func_kwargs)
-                return backend.block_to_dtype(block, dtype)
+                if dtype is not None:
+                    block = backend.block_to_dtype(block, dtype)
+                return block
 
         data = backend.from_block_func(block_func, legs)
         return cls(data=data, backend=backend, legs=legs, labels=labels)
@@ -804,12 +808,17 @@ class Tensor(AbstractTensor):
             def block_func(shape):
                 arr = func(**{shape_kw: shape}, **func_kwargs)
                 block = backend.block_from_numpy(arr)
-                return backend.block_to_dtype(block, dtype)
+                if dtype is not None:
+                    block = backend.block_to_dtype(block, dtype)
+                return block
         else:
             def block_func(shape):
                 arr = func(shape, **func_kwargs)
                 block = backend.block_from_numpy(arr)
-                return backend.block_to_dtype(block, dtype)
+                if dtype is not None:
+                    block = backend.block_to_dtype(block, dtype)
+                return block
+
         data = backend.from_block_func(block_func, legs)
         return cls(data=data, backend=backend, legs=legs, labels=labels)
 
@@ -1354,7 +1363,8 @@ class ChargedTensor(AbstractTensor):
             block = func(**{shape_kw: shape}, **func_kwargs)
         else:
             block = func(shape, **func_kwargs)
-        block = inv.backend.block_to_dtype(block, dtype)
+        if dtype is not None:
+            block = inv.backend.block_to_dtype(block, dtype)
         return ChargedTensor(invariant_part=inv, dummy_leg_state=block)
 
     @classmethod
@@ -1434,7 +1444,8 @@ class ChargedTensor(AbstractTensor):
         else:
             arr = func(shape, **func_kwargs)
         block = inv.backend.block_from_numpy(arr)
-        block = inv.backend.block_to_dtype(block, dtype)  # TODO (JU) add dtype arg directly to block_from_numpy?
+        if dtype is not None:
+            block = inv.backend.block_to_dtype(block, dtype)
         return ChargedTensor(invariant_part=inv, dummy_leg_state=block)
 
     @classmethod
@@ -1863,11 +1874,15 @@ class DiagonalTensor(AbstractTensor):
         if shape_kw is not None:
             def block_func(shape):
                 block = func(**{shape_kw: shape}, **func_kwargs)
-                return backend.block_to_dtype(block, dtype)
+                if dtype is not None:
+                    block = backend.block_to_dtype(block, dtype)
+                return block
         else:
             def block_func(shape):
                 block = func(shape, **func_kwargs)
-                return backend.block_to_dtype(block, dtype)
+                if dtype is not None:
+                    block = backend.block_to_dtype(block, dtype)
+                return block
 
         data = backend.diagonal_from_block_func(block_func, leg=first_leg)
         return cls(data=data, first_leg=first_leg, second_leg_dual=second_leg_dual, backend=backend,
@@ -1901,12 +1916,18 @@ class DiagonalTensor(AbstractTensor):
             def block_func(shape):
                 arr = func(**{shape_kw: shape}, **func_kwargs)
                 block = backend.block_from_numpy(arr)
-                return backend.block_to_dtype(block, dtype)
+                if dtype is not None:
+                    block = backend.block_to_dtype(block, dtype)
+                return block
+
         else:
             def block_func(shape):
                 arr = func(shape, **func_kwargs)
                 block = backend.block_from_numpy(arr)
-                return backend.block_to_dtype(block, dtype)
+                if dtype is not None:
+                    block = backend.block_to_dtype(block, dtype)
+                return block
+
         data = backend.diagonal_from_block_func(block_func, leg=first_leg)
         return cls(data=data, first_leg=first_leg, second_leg_dual=second_leg_dual, backend=backend,
                    labels=labels)
