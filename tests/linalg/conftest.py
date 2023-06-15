@@ -50,8 +50,8 @@ def random_symmetry_sectors(symmetry: groups.Symmetry, np_random: np.random.Gene
         return np_random.choice(vals, replace=False, size=(len_, 1))
     elif symmetry.num_sectors < np.inf:
         if symmetry.num_sectors <= len_:
-            return symmetry.all_sectors()
-        return np_random.choice(symmetry.all_sectors(), size=len_)
+            return np_random.permutation(symmetry.all_sectors())
+        return np_random.choice(symmetry.all_sectors(), replace=False, size=len_)
     elif isinstance(symmetry, groups.ProductSymmetry):
         factor_len = max(3, len_ // len(symmetry.factors))
         factor_sectors = [random_symmetry_sectors(factor, np_random, factor_len)
