@@ -205,20 +205,17 @@ class Algorithm:
         chi_max = self.trunc_params["chi_max"]
         H_dim = [self.model.lat.mps_sites()[i].dim for i in range(self.psi.L)]
 
-        # H_dim = self.model.lat.mps_sites()[0].dim               # only works for constant Hilbert space dimension
-        # chi_i = lambda i: min((1+min(i, L-i) )* H_dim, chi_max) # only works for constant Hilbert space dimension
-
         # determine all bond dimensions for arbitrary chains
         if self.psi.bc == "finite":
-            chis = np.zeros(L+1)
+            chis = np.zeros(L+1, dtype=int)
             # first go from left to right
             chis[0] = self.model.lat.mps_sites()[0].dim
             for i in range(1, L):
-                chis[i] = min(chis[i-1] + self.model.lat.mps_sites()[i-1].dim, chi_max)
+                chis[i] = min(chis[i-1] * self.model.lat.mps_sites()[i-1].dim, chi_max)
             # now introduce cutoff from right
             chis[L] = self.model.lat.mps_sites()[L-1].dim
             for i in range(L-1, 0, -1):
-                chis[i] = min(chis[i], min(chis[i+1] + self.model.lat.mps_sites()[i].dim, chi_max))
+                chis[i] = min(chis[i], min(chis[i+1] * self.model.lat.mps_sites()[i].dim, chi_max))
         else:
             chis = [chi_max]*(L+1)
 
@@ -228,27 +225,29 @@ class Algorithm:
             site_i = self.model.lat.mps_sites()[i]
             num_entries += site_i.dim * chis[i] * chis[i+1]
 
-        RAM = num_entries # store number of entries first
+        RAM = num_entries   # store number of entries first, multiply with memory per entry later.
+                            # This is because the algorithm's MPS RAM would increase if the MPO had a greater floating-point number than the MPS.
         logger.debug("Extracted MPS RAM usage as\t\t%d kB" % (RAM*entry_size // 1024))
 
         from .mps_common import Sweep
         from .mpo_evolution import ExpMPOEvolution
 
         if isinstance(self, (Sweep, ExpMPOEvolution)):
-            #Size of each environment: chi_{i}**2 * D_i or chi_{i+1}**2 * D_i (depending on left/right environment)
-            env_RAM = sum(chis[:-1]**2 * H_dim)
-            logger.debug("Extracted MPS environment RAM usage as\t%d kB" % (env_RAM*entry_size // 1028))
-            RAM += env_RAM
 
             MPO = self.model.H_MPO
             entry_size = MPO.dtype.itemsize if MPO.dtype.itemsize > entry_size else entry_size
-
             MPO_RAM = 0
+            env_RAM = 0
             for i in range(MPO.L):
-                entry = MPO.get_W(i)
-                MPO_RAM += np.prod(entry.shape)
-            
+                W = MPO.get_W(i)
+                MPO_RAM += np.prod(W.shape)
+                # Size of each environment: chi_{i}**2 * D_i or chi_{i+1}**2 * D_i (depending on left/right environment)
+                # The shape is ordered like (wL, wR, p, p*)
+                env_RAM += chis[i]**2 * max(W.shape[0], W.shape[1])
+
+            logger.debug("Extracted MPS environment RAM usage as\t%d kB" % (env_RAM*entry_size // 1024))
             logger.debug("Extracted MPO RAM usage as\t\t%d kB" % (MPO_RAM // 128))
+            RAM += env_RAM
             RAM += MPO_RAM
 
         saving_factor = self.model.estimate_RAM_saving_factor()
