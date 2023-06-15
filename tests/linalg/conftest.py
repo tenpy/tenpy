@@ -77,7 +77,9 @@ def random_vector_space(symmetry, max_num_blocks=5, max_block_size=5, np_random=
         np_random = np.random.default_rng()
     len_ = np_random.integers(1, max_num_blocks, endpoint=True)
     sectors = random_symmetry_sectors(symmetry, np_random, len_)
-    mults = np_random.integers(1, max_block_size, size=(len(sectors),), endpoint=True)
+    # if there are very few sectors, e.g. for symmetry==NoSymmetry(), dont let them be one-dimensional
+    min_mult = min(max_block_size, max(4 - len(sectors), 1))
+    mults = np_random.integers(min_mult, max_block_size, size=(len(sectors),), endpoint=True)
     dual = np_random.random() < 0.5
     return VectorSpace(symmetry, sectors, mults, is_real=False, _is_dual=dual)
 
