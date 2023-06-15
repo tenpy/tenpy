@@ -335,8 +335,12 @@ class VectorSpace:
     @property
     def num_parameters(self) -> int:
         """The number of free parameters, i.e. the number of linearly independent symmetric tensors in this space."""
-        # TODO isnt this just the multiplicity of the trivial sector?
-        raise NotImplementedError  # TODO
+        # the trivial sector is by definition self-dual, so we can search self._sectors, even if self.is_dual is True.
+        # OPTIMIZE use that _sectors are lexsorted to shorten the loop if trivial sector is not in _sectors.
+        for s, m in zip(self._sectors, self.multiplicities):
+            if np.all(s == self.symmetry.trivial_sector):
+                return m
+        return 0
 
     def project(self, mask: ndarray):
         """Return a copy, keeping only the indices specified by `mask`.

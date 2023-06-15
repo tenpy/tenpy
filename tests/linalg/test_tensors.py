@@ -6,6 +6,8 @@ import pytest
 import warnings
 
 from tenpy.linalg import tensors
+from tenpy.linalg.backends.abstract_backend import Dtype
+from tenpy.linalg.backends.no_symmetry import AbstractNoSymmetryBackend
 from tenpy.linalg.backends.abelian import AbstractAbelianBackend
 from tenpy.linalg.backends.torch import TorchBlockBackend
 from tenpy.linalg.backends.numpy import NumpyBlockBackend, NoSymmetryNumpyBackend
@@ -127,7 +129,6 @@ def test_Tensor_methods(backend, vector_space_rng, backend_data_rng, tensor_rng)
     data1 = T.data
     data2 = backend_data_rng(legs)
 
-
     print('checking __init__ with labels=None')
     tens1 = tensors.Tensor(data1, legs=legs, backend=backend, labels=None)
     tens1.test_sanity()
@@ -149,9 +150,18 @@ def test_Tensor_methods(backend, vector_space_rng, backend_data_rng, tensor_rng)
     print('check size')
     assert tens3.size == np.prod(dims)
 
-    # TODO reintroduce when implemented
-    # print('check num_parameters')
-    # assert tens3.num_parameters == prod(data.shape)
+    print('check num_parameters')
+    if isinstance(backend, AbstractNoSymmetryBackend):
+        expect = np.prod(backend.block_shape(data1))
+    elif isinstance(backend, AbstractAbelianBackend):
+        tensor_with_all_blocks = tensors.Tensor.from_block_func(
+            func=backend.zero_block, legs=legs, backend=backend,
+            func_kwargs=dict(dtype=Dtype.float64)
+        )
+        expect = sum(np.prod(backend.block_shape(block)) for block in tensor_with_all_blocks.data.blocks)
+    else:
+        pytest.xfail(f'Dont know how to construct expected num_parameters for {type(backend)}')
+    assert tens3.num_parameters == expect
 
     print('check is_fully_labelled')
     assert not tens1.is_fully_labelled
