@@ -261,28 +261,39 @@ def test_Tensor_methods(backend, vector_space_rng, backend_data_rng, tensor_rng)
     # TODO check that float of a complex tensor raises a warning
 
 
-def test_tdot(backend, vector_space_rng, backend_data_rng):
-    a, b, c, d = [vector_space_rng(d, 3, backend.VectorSpaceCls) for d in [3, 7, 5, 9]]
-    legs_ = [[a, b, c],
-             [b.dual, c.dual, d.dual],
-             [a.dual, b.dual],
-             [c.dual, b.dual],
-             [c.dual, a.dual, b.dual]]
-    labels_ = [['a', 'b', 'c'],
-               ['b*', 'c*', 'd*'],
-               ['a*', 'b*'],
-               ['c*', 'b*'],
-               ['c*', 'a*', 'b*']]
+def test_tdot(backend, vector_space_rng, backend_data_rng, tensor_rng):
+    # define legs such that a tensor with the following combinations all allow non-zero num_parameters
+    # [a, b] , [a, b, c] , [a, b, d]
+    a = vector_space_rng(3, 3, backend.VectorSpaceCls)
+    b = tensor_rng([a, None], 2, max_num_blocks=3, max_block_size=3).legs[-1]
+    c = tensor_rng([a, b, None], 3, max_num_blocks=3, max_block_size=3).legs[-1]
+    d = tensor_rng([a, b, None], 3, max_num_blocks=3, max_block_size=3).legs[-1]
+    print([l.dim for l in [a, b, c, d]])
+    
+    legs_ = [[a, b, c.dual],
+             [d, b.dual, a.dual],
+             [b.dual, a.dual],
+             [a, b]]
+    labels_ = [['a', 'b', 'c*'],
+               ['d', 'b*', 'a*'],
+               ['b*', 'a*'],
+               ['a', 'b']
+               ]
     data_ = [backend_data_rng(l) for l in legs_]
     tensors_ = [tensors.Tensor(data, legs, backend, labels) for data, legs, labels in
                 zip(data_, legs_, labels_)]
+    for n, t in enumerate(tensors_):
+        # make sure we are defining tensors which actually contain blocks and are not just zero by
+        # charge conservation
+        assert t.num_parameters > 0, f'tensor {n} has 0 free parameters'
+    
     dense_ = [t.to_numpy_ndarray() for t in tensors_]
 
-    checks = [("single leg", 0, 1, 1, 0, 'b', 'b*'),
-              ("two legs", 0, 1, [1, 2], [0, 1], ['b', 'c'], ['b*', 'c*']),
-              ("all legs of first tensor", 2, 0, [1, 0], [1, 0], ['a*', 'b*'], ['a', 'b']),
-              ("all legs of second tensor", 0, 3, [1, 2], [1, 0], ['b', 'c'], ['b*', 'c*']),
-              ("scalar result / inner()", 0, 4, [0, 1, 2], [1, 2, 0], ['a', 'b', 'c'], ['a*', 'b*', 'c*']),
+    checks = [("single leg", 0, 1, 1, 1, 'b', 'b*'),
+              ("two legs", 0, 1, [0, 1], [2, 1], ['a', 'b'], ['a*', 'b*']),
+              ("all legs of first tensor", 2, 0, [0, 1], [1, 0], ['a*', 'b*'], ['a', 'b']),
+              ("all legs of second tensor", 1, 3, [1, 2], [1, 0], ['a*', 'b*'], ['a', 'b']),
+              ("scalar result / inner()", 2, 3, [0, 1], [1, 0], ['a*', 'b*'], ['a', 'b']),
               ("no leg / outer()", 2, 3, [], [], [], []),
               ]
     for comment, i, j, ax_i, ax_j, lbl_i, lbl_j in checks:
@@ -298,10 +309,6 @@ def test_tdot(backend, vector_space_rng, backend_data_rng):
             npt.assert_array_almost_equal(res1_d, expect)
             npt.assert_array_almost_equal(res2_d, expect)
         else: # got scalar, but we can compare it to 0-dim ndarray
-            # TODO (JU): the "scalar result / inner()" case fails.
-            #   in abelian backends inner(), _iter_common_sorted(a_block_inds, b_block_inds)
-            #   does not yield anything. either its arguments, i suspect b_block_inds, are wrong,
-            #   or _iter_common_sorted is buggy.
             npt.assert_almost_equal(res1, expect)
             npt.assert_almost_equal(res2, expect)
 
