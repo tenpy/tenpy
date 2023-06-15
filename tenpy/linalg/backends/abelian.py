@@ -917,11 +917,14 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
         return AbelianBackendData(res_dtype, res_blocks, res_block_inds)
 
     def inner(self, a: Tensor, b: Tensor, do_conj: bool, axs2: list[int] | None) -> complex:
+        # a.legs[i] to be contracted with b.legs[axs2[i]]
         a_blocks = a.data.blocks
         stride = _make_stride([len(l.sectors) for l in a.legs], False)
         a_block_inds = np.sum(a.data.block_inds * stride, axis=1)
         if axs2 is not None:
-            stride = stride[axs2]
+            # permute strides to match the label order on b:
+            # strides_for_a[i] == strides_for_b[axs2[i]]
+            stride[axs2] = stride.copy()
         b_blocks = b.data.blocks
         b_block_inds = np.sum(b.data.block_inds * stride, axis=1)
         if axs2 is not None:
