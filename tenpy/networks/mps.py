@@ -2594,7 +2594,7 @@ class MPS:
             warnings.warn(
                 "Inefficent evaluation of MPS.correlation_function(), "
                 "it's probably faster to use MPS.term_correlation_function_left()",
-                stracklevel=2)
+                stacklevel=2)
         if autoJW and not all([isinstance(op1, str) for op1 in ops1]):
             warnings.warn("Non-string operator: can't auto-determine Jordan-Wigner!", stacklevel=2)
             autoJW = False
