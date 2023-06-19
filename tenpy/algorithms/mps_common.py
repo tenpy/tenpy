@@ -79,7 +79,7 @@ class Sweep(Algorithm):
     Attributes
     ----------
     EffectiveH : class
-        Class attribute; a sublcass of :class:`~tenpy.algorithms.mps_common.EffectiveH`.
+        Class attribute; a subclass of :class:`~tenpy.algorithms.mps_common.EffectiveH`.
         It's length attribute determines how many sites are optimized/updated at once,
         see also :attr:`n_optimize`.
     E_trunc_list : list
@@ -183,7 +183,7 @@ class Sweep(Algorithm):
         resume_data : None | dict
             Given when resuming a simulation, as returned by :meth:`get_resume_data`.
             Can contain another dict under the key `init_env_data`; the contents of
-            `init_env_data` get passed as keyword arguments to the environment initializaiton.
+            `init_env_data` get passed as keyword arguments to the environment initialization.
         orthogonal_to : None | list of :class:`~tenpy.networks.mps.MPS` | list of dict
             List of other matrix product states to orthogonalize against.
             Instead of just the state, you can specify a dict with the state as `ket`
@@ -409,7 +409,7 @@ class Sweep(Algorithm):
             Schedule for the sweep. Each entry is ``(i0, move_right, (update_LP, update_RP))``,
             where `i0` is the leftmost of the ``self.EffectiveH.length`` sites to be updated in
             :meth:`update_local`, `move_right` indicates whether the next `i0` in the schedule is
-            rigth (`True`) of the current one, and `update_LP`, `update_RP` indicate
+            right (`True`) of the current one, and `update_LP`, `update_RP` indicate
             whether it is necessary to update the `LP` and `RP` of the environments.
         """
         # warning: set only those `LP` and `RP` to True, which can/will be used later again
@@ -1110,7 +1110,7 @@ class ZeroSiteH(EffectiveH):
             |        .---    ---.
 
 
-    Note that this class has less funcitonality than the :class:`OneSiteH` and :class:`TwoSiteH`.
+    Note that this class has less functionality than the :class:`OneSiteH` and :class:`TwoSiteH`.
 
     Parameters
     ----------
@@ -1212,7 +1212,7 @@ class VariationalCompression(Sweep):
     except that we don't have an MPO in the networks - one can think of the MPO being trivial.
 
     .. deprecated :: 0.9.1
-        Renamed the optoin `N_sweeps` to `max_sweeps`.
+        Renamed the option `N_sweeps` to `max_sweeps`.
 
     Parameters
     ----------

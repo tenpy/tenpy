@@ -11,7 +11,7 @@ This might be used to obtain the spectrum, the ground state or highly excited st
     symmetries like translation symmetry, SU(2) symmetry or inversion symmetries.
     In other words, this code does not aim to provide state-of-the-art exact diagonalization,
     but just the ability to diagonalize the defined models for small system sizes
-    without addional extra work.
+    without additional extra work.
 """
 # Copyright 2018-2023 TeNPy Developers, GNU GPLv3
 

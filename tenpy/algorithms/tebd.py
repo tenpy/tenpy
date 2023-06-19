@@ -1,7 +1,7 @@
 r"""Time evolving block decimation (TEBD).
 
 The TEBD algorithm (proposed in :cite:`vidal2004`) uses a trotter decomposition of the
-Hamiltonian to perform a time evoltion of an MPS. It works only for nearest-neighbor hamiltonians
+Hamiltonian to perform a time evolution of an MPS. It works only for nearest-neighbor hamiltonians
 (in tenpy given by a :class:`~tenpy.models.model.NearestNeighborModel`),
 which can be written as :math:`H = H^{even} + H^{odd}`,  such that :math:`H^{even}` contains the
 the terms on even bonds (and similar :math:`H^{odd}` the terms on odd bonds).
@@ -34,7 +34,7 @@ If one chooses imaginary :math:`dt`, the exponential projects
 
 .. note ::
     The application of DMRG is typically much more efficient than imaginary TEBD!
-    Yet, imaginary TEBD might be usefull for cross-checks and testing.
+    Yet, imaginary TEBD might be useful for cross-checks and testing.
 
 """
 # Copyright 2018-2023 TeNPy Developers, GNU GPLv3
@@ -402,7 +402,7 @@ class TEBDEngine(TimeEvolutionAlgorithm):
         """Updates the B matrices on a given bond.
 
         Function that updates the B matrices, the bond matrix s between and the
-        bond dimension chi for bond i. The correponding tensor networks look like this::
+        bond dimension chi for bond i. The corresponding tensor networks look like this::
 
         |           --S--B1--B2--           --B1--B2--
         |                |   |                |   |
@@ -558,7 +558,7 @@ class TEBDEngine(TimeEvolutionAlgorithm):
         return trunc_err
 
     def _calc_U_bond(self, i_bond, dt, type_evo, E_offset):
-        """Calculate exponential of a bond Hamitonian.
+        """Calculate exponential of a bond Hamiltonian.
 
         * ``U_bond = exp(-i dt (H_bond-E_offset_bond))`` for ``type_evo='real'``, or
         * ``U_bond = exp(- dt H_bond)`` for ``type_evo='imag'``.
@@ -917,7 +917,7 @@ class RandomUnitaryEvolution(TEBDEngine):
 
     On one hand, such an evolution is of interest in recent research (see eg. :arxiv:`1710.09827`).
     On the other hand, it also comes in handy to "randomize" an initial state, e.g. for DMRG.
-    Note that the entanglement grows very quickly, choose the truncation paramters accordingly!
+    Note that the entanglement grows very quickly, choose the truncation parameters accordingly!
 
     Options
     -------
