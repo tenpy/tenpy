@@ -139,6 +139,11 @@ class MPO:
         self.bc = bc
         self.max_range = max_range
         self.explicit_plus_hc = explicit_plus_hc
+        # for dynamic segments
+        self._is_dynamic = False
+        self._init_W = None
+        self._init_sites = None
+        self._init_L = None
         self.test_sanity()
 
     def copy(self):
@@ -467,6 +472,60 @@ class MPO:
         self.IdL = factor * self.IdL[:-1] + [self.IdL[-1]]
         self.IdR = factor * self.IdR[:-1] + [self.IdR[-1]]
         self.test_sanity()
+    
+    def to_dynamic_segment(self, init_W=None, init_sites=None):
+        if self._is_dynamic:
+            logger.info("MPO already compatible with dynamic window")
+            return
+        if self.bc == 'finite':
+            raise ValueError("MPO with finite b.c. not compatible with dynamic window")
+        elif self.bc == "infinite":
+            logger.info('Converting infinite MPO to segment MPO with dynamic window')
+            # we can keep everything else as it is
+            self.bc == 'segment'
+        elif init_W == None:
+            # make sure that the outer W legs are contractible, slightly different error message
+            try:
+                self._W[0].get_leg('wL').test_contractible(self._W[-1].get_leg('wR'))
+            except ValueError as e:
+                raise ValueError("outer MPO legs don't match") from e
+        else: 
+            assert len(init_W)==len(init_sites), 'incompatible init params'
+            warnings.warn("using custom init_W is discouraged!")
+            # check that the outer virtual legs match
+            try:
+                self._W[0].get_leg('wL').test_contractible(init_W[-1].get_leg('wR'))
+                self._W[-1].get_leg('wR').test_contractible(init_W[0].get_leg('wL'))
+            except ValueError as e:
+                raise ValueError("outer virtual legs of self and init_W don't match") from e
+        if init_W == None:
+            self._init_W = [self.get_W(i, copy=True) for i in range(self.L)]
+            self._init_sites = [site for site in self.sites]
+            self._init_L = self.L
+        else:
+            self._init_W = init_W
+            self._init_sites = init_sites
+            self._init_L = len(init_W)
+            _init_W_type = np.find_common_type([W.dtype for W in init_W], [])
+            self.dtype = np.find_common_type([self.dtype, _init_W_type], [])
+        self._is_dynamic = True
+        self.test_sanity()
+    
+    def enlarge_segment_window(self):
+        if self.bc != 'segment':
+            raise ValueError('Need segment b.c. for a dynamic window, for infinite b.c. use enlarge_mps_unit_cell instead')
+        if not self._is_dynamic:
+            raise ValueError('MPO not suitable for dynamic window, call self.to_dynamic_segment first')
+        self.sites = self._init_sites+self.sites+self._init_sites
+        self._W = self._init_W+self._W+self._init_W
+        self.test_sanity()
+    
+    def remove_dynamic_segment(self):
+        self._init_W = None
+        self._init_sites = None
+        self._init_L = None
+        self._is_dynamic = False
+        self.test_sanity()
 
     def group_sites(self, n=2, grouped_sites=None):
         """Modify `self` inplace to group sites.
@@ -510,6 +569,9 @@ class MPO:
         self._W = Ws
         self.sites = grouped_sites
         self.grouped = self.grouped * n
+        if self._is_dynamic_:
+            logger.info('removing dynamic window, initial tensors are not compatible with grouped sites')
+            self.remove_dynamic_segment()
 
     def extract_segment(self, first, last):
         """Extract a segment from the MPO.
@@ -1992,7 +2054,8 @@ class MPOEnvironment(MPSEnvironment):
                               init_RP=None,
                               age_LP=0,
                               age_RP=0,
-                              start_env_sites=None):
+                              start_env_sites=None,
+                              keep_all_env=False):
         """(Re)initialize first LP and last RP from the given data.
 
         If `init_LP` and `init_RP` are not given, we try to find sensible initial values.
@@ -2017,6 +2080,9 @@ class MPOEnvironment(MPSEnvironment):
         start_env_sites : int | None
             Number of sites over which to converge the environment for infinite systems.
             See above.
+        keep_all_env : bool
+            Whether to keep all envs for segment b.c. If True, envs are stored in self.LPs, self.RPs
+            and the corresponding prefactors in self.eL,self.eR
         """
         if not self._finite  and (init_LP is None or init_RP is None) and \
                 start_env_sites is None and self.bra is self.ket:
@@ -2031,12 +2097,11 @@ class MPOEnvironment(MPSEnvironment):
             start_env_sites = 0
         init_LP, init_RP = self._check_compatible_legs(init_LP, init_RP, start_env_sites)
         if self.ket.bc == 'segment' and self.bra is self.ket and (init_LP is None or init_RP is None):
-            # warn that this might not be the correct envs
             warnings.warn("building Environments for segment b.c. as required by tdvp, other purposes may require different Environments") 
             # _init_first_LP_last_RP_segment explicitly checks leg compatibility
-            init_LP, init_RP = self.init_first_LP_last_RP_segment()
-        if self.ket.bc == 'segment' and (init_LP is None or init_RP is None):
-            raise ValueError("Environments with bra != ket and segment b.c. need explicit environments!")
+            line_to_make_error
+        elif self.ket.bc == 'segment' and (init_LP is None or init_RP is None):
+            raise ValueError("MPOEnvironment with bra != ket and segment b.c. need explicit environments!")
         super().init_first_LP_last_RP(init_LP, init_RP, age_LP, age_RP, start_env_sites)
 
     def _check_compatible_legs(self, init_LP, init_RP, start_env_sites):
@@ -2143,7 +2208,180 @@ class MPOEnvironment(MPSEnvironment):
             init_RP = self._contract_RP(j, init_RP)
         return init_RP
 
-    def init_first_LP_last_RP_segment(self, return_all=False):
+    def get_LP(self, i, store=True):
+        """Calculate LP at given site from nearest available one (including `i`).
+
+        The returned ``LP_i`` corresponds to the following contraction,
+        where the M's and the N's are in the 'A' form::
+
+            |     .-------M[0]--- ... --M[i-1]--->-   'vR'
+            |     |       |             |
+            |     LP[0]---W[0]--- ... --W[i-1]--->-   'wR'
+            |     |       |             |
+            |     .-------N[0]*-- ... --N[i-1]*--<-   'vR*'
+
+
+        Parameters
+        ----------
+        i : int
+            The returned `LP` will contain the contraction *strictly* left of site `i`.
+        store : bool
+            Whether to store the calculated `LP` in `self` (``True``) or discard them (``False``).
+
+        Returns
+        -------
+        LP_i : :class:`~tenpy.linalg.np_conserved.Array`
+            Contraction of everything left of site `i`,
+            with labels ``'vR*', 'wR', 'vR'`` for `bra`, `H`, `ket`.
+        """
+        # actually same as MPSEnvironment, just updated the labels in the doc string.
+        return super().get_LP(i, store)
+
+    def get_RP(self, i, store=True):
+        """Calculate RP at given site from nearest available one (including `i`).
+
+        The returned ``RP_i`` corresponds to the following contraction,
+        where the M's and the N's are in the 'B' form::
+
+            |     'vL'  ->---M[i+1]-- ... --M[L-1]----.
+            |                |              |         |
+            |     'wL'  ->---W[i+1]-- ... --W[L-1]----RP[-1]
+            |                |              |         |
+            |     'vL*' -<---N[i+1]*- ... --N[L-1]*---.
+
+        Parameters
+        ----------
+        i : int
+            The returned `RP` will contain the contraction *strictly* rigth of site `i`.
+        store : bool
+            Whether to store the calculated `RP` in `self` (``True``) or discard them (``False``).
+
+        Returns
+        -------
+        RP_i : :class:`~tenpy.linalg.np_conserved.Array`
+            Contraction of everything right of site `i`,
+            with labels ``'vL*', 'wL', 'vL'`` for `bra`, `H`, `ket`.
+        """
+        # actually same as MPSEnvironment, just updated the labels in the doc string.
+        return super().get_RP(i, store)
+
+    def full_contraction(self, i0):
+        """Calculate the energy by a full contraction of the network.
+
+        The full contraction of the environments gives the value
+        ``<bra|H|ket> / (norm(|bra>)*norm(|ket>))``,
+        i.e. if `bra` is `ket` and normalized, the total energy.
+        For this purpose, this function contracts
+        ``get_LP(i0+1, store=False)`` and ``get_RP(i0, store=False)``.
+
+        Parameters
+        ----------
+        i0 : int
+            Site index.
+        """
+        # same as MPSEnvironment.full_contraction, but also contract 'wL' with 'wR'
+        if self.ket.finite and i0 + 1 == self.L:
+            # special case to handle `_to_valid_index` correctly:
+            # get_LP(L) is not valid for finite b.c, so we use need to calculate it explicitly.
+            LP = self.get_LP(i0, store=False)
+            LP = self._contract_LP(i0, LP)
+        else:
+            LP = self.get_LP(i0 + 1, store=False)
+
+        # multiply with `S` on bra and ket side
+        S_bra = self.bra.get_SR(i0).conj()
+        if isinstance(S_bra, npc.Array):
+            LP = npc.tensordot(S_bra, LP, axes=['vL*', 'vR*'])
+        else:
+            LP = LP.scale_axis(S_bra, 'vR*')
+        S_ket = self.ket.get_SR(i0)
+        if isinstance(S_ket, npc.Array):
+            LP = npc.tensordot(LP, S_ket, axes=['vR', 'vL'])
+        else:
+            LP = LP.scale_axis(S_ket, 'vR')
+        RP = self.get_RP(i0, store=False)
+        res = npc.inner(LP, RP, axes=[['vR*', 'wR', 'vR'], ['vL*', 'wL', 'vL']], do_conj=False)
+        if self.H.explicit_plus_hc:
+            res = res + np.conj(res)
+        return res
+
+    def expectation_value(self, ops, sites=None, axes=None):
+        """(doesn't make sense)"""
+        raise NotImplementedError("doesn't make sense for an MPOEnvironment")
+
+    def _contract_LP(self, i, LP):
+        """Contract LP with the tensors on site `i` to form ``self._LP[i+1]``"""
+        # same as MPSEnvironment._contract_LP, but also contract with `H.get_W(i)`
+        LP = npc.tensordot(LP, self.ket.get_B(i, form='A'), axes=('vR', 'vL'))
+        LP = npc.tensordot(self.H.get_W(i), LP, axes=(['p*', 'wL'], ['p', 'wR']))
+        axes = (self.bra._get_p_label('*') + ['vL*'], self.ket._p_label + ['vR*'])
+        # for a ususal MPS, axes = (['p*', 'vL*'], ['p', 'vR*'])
+        LP = npc.tensordot(self.bra.get_B(i, form='A').conj(), LP, axes=axes)
+        return LP  # labels 'vR*', 'wR', 'vR'
+
+    def _contract_RP(self, i, RP):
+        """Contract RP with the tensors on site `i` to form ``self._RP[i-1]``"""
+        # same as MPSEnvironment._contract_RP, but also contract with `H.get_W(i)`
+        RP = npc.tensordot(self.ket.get_B(i, form='B'), RP, axes=('vR', 'vL'))
+        RP = npc.tensordot(RP, self.H.get_W(i), axes=(['p', 'wL'], ['p*', 'wR']))
+        axes = (self.ket._p_label + ['vL*'], self.ket._get_p_label('*') + ['vR*'])
+        # for a ususal MPS, axes = (['p', 'vL*'], ['p*', 'vR*'])
+        RP = npc.tensordot(RP, self.bra.get_B(i, form='B').conj(), axes=axes)
+        return RP  # labels 'vL', 'wL', 'vL*'
+
+    def _contract_LHeff(self, i, label_p='p0', pipe=None):
+        LP = self.get_LP(i)
+        p, ps = label_p, label_p + '*'
+        W = self.H.get_W(i).replace_labels(['p', 'p*'], [p, ps])
+        LHeff = npc.tensordot(LP, W, axes=['wR', 'wL'])
+        if pipe is None:
+            pipe = LHeff.make_pipe(['vR*', p], qconj=+1)
+
+        LHeff = LHeff.combine_legs([['vR*', p], ['vR', ps]],
+                                   pipes=[pipe, pipe.conj()],
+                                   new_axes=[0, 2])
+        return LHeff
+
+    def _contract_RHeff(self, i, label_p='p1', pipe=None):
+        RP = self.get_RP(i)
+        p, ps = label_p, label_p + '*'
+        W = self.H.get_W(i).replace_labels(['p', 'p*'], [p, ps])
+        RHeff = npc.tensordot(W, RP, axes=['wR', 'wL'])
+        if pipe is None:
+            pipe = RHeff.make_pipe([p, 'vL*'], qconj=-1)
+        RHeff = RHeff.combine_legs([[p, 'vL*'], [ps, 'vL']],
+                                   pipes=[pipe, pipe.conj()],
+                                   new_axes=[2, 1])
+        return RHeff
+
+
+class SegmentMPOEnvironment(MPOEnvironment):
+    
+    def __init__(self, H, ket, keep_all_env=False, cache=None, **init_env_data):
+        super().__init__(ket, H, ket, cache, **init_env_data)
+    
+    def init_first_LP_last_RP(self, args):
+        # todo
+        pass
+    
+    def test_sanity(self):
+        # todo
+        pass
+    
+    def init_LP(self, i, start_env_sites=0):
+        # just raise Error if no LP present raise NotImplementedError
+        pass
+    
+    def init_RP(self, i, start_env_sites=0):
+        # as above
+        pass
+    
+    def full_contraction(self):
+        # use energy
+        pass
+    
+    
+    def init_first_LP_last_RP_segment(self, keep_all=False):
         """ Build the environments needed to perform tdvp on MPS with segment b.c.
         
         For segment b.c. the left environment LP[0] corresponds to the contraction
@@ -2180,15 +2418,35 @@ class MPOEnvironment(MPSEnvironment):
 
         """
         # explicitly check leg compatibility
-        legs = self._check_compatible_legs_segment()
+        legs = self._check_legs_segment()
         # transposes H._W legs to ['wL', 'wR', 'p', 'p*'] if needed        
         n_ones, types = self._classify_segment_H()
         LPs = self._init_first_LP_segment(legs, n_ones, types)
         RPs = self._init_last_RP_segment(legs, n_ones, types)
-        if return_all:
+        if keep_all:
             return LPs, RPs
         else:
             return LPs[0], RPs[0]
+
+    def _check_legs_segment(self):
+        """ check leg compatibility for _init_first_LP_last_RP_segment
+        
+        Returns
+        -------
+        list of :class:`~tenpy.linalg.charges.LegCharge`
+            Legs as required for LP[0] and RP[-1]
+
+        """
+        left_ket = self.ket.get_B(0, None).get_leg('vL')
+        left_bra = self.bra.get_B(0, None).get_leg('vL')
+        left_W = self.H.get_W(0).get_leg('wL')
+        right_ket = self.ket.get_B(self.L-1,None).get_leg('vR')
+        right_bra = self.bra.get_B(self.L-1,None).get_leg('vR')
+        right_W = self.H.get_W(self.L-1).get_leg('wR')
+        # make sure we can contract "infinitely many" segments
+        left_ket.test_contractible(right_ket)
+        left_W.test_contractible(right_W)
+        return [left_bra,left_W.conj(),left_ket.conj(),right_bra,right_W.conj(),right_ket.conj()]
         
     def _init_first_LP_segment(self, legs, n_ones, types):
         """ See _init_first_LP_last_RP_segment for info
@@ -2390,176 +2648,12 @@ class MPOEnvironment(MPSEnvironment):
         for alpha in range(gamma+1,m+1):
             b -= epsilons[alpha]*comb(alpha, gamma)*all_cs[alpha][:,j,:]
         return b
-    
-    def _check_compatible_legs_segment(self):
-        """ check leg compatibility for _init_first_LP_last_RP_segment
+
         
-        Returns
-        -------
-        list of :class:`~tenpy.linalg.charges.LegCharge`
-            Legs as required for LP[0] and RP[-1]
-
-        """
-        left_ket = self.ket.get_B(0, None).get_leg('vL')
-        left_bra = self.bra.get_B(0, None).get_leg('vL')
-        left_W = self.H.get_W(0).get_leg('wL')
-        right_ket = self.ket.get_B(self.L-1,None).get_leg('vR')
-        right_bra = self.bra.get_B(self.L-1,None).get_leg('vR')
-        right_W = self.H.get_W(self.L-1).get_leg('wR')
-        left_ket.test_equal(left_bra)
-        right_ket.test_equal(right_bra)
-        left_ket.test_contractible(right_ket)
-        left_bra.test_contractible(right_bra)
-        left_W.test_contractible(right_W)
-        return [left_bra,left_W.conj(),left_ket.conj(),right_bra,right_W.conj(),right_ket.conj()]
-
-    def get_LP(self, i, store=True):
-        """Calculate LP at given site from nearest available one (including `i`).
-
-        The returned ``LP_i`` corresponds to the following contraction,
-        where the M's and the N's are in the 'A' form::
-
-            |     .-------M[0]--- ... --M[i-1]--->-   'vR'
-            |     |       |             |
-            |     LP[0]---W[0]--- ... --W[i-1]--->-   'wR'
-            |     |       |             |
-            |     .-------N[0]*-- ... --N[i-1]*--<-   'vR*'
-
-
-        Parameters
-        ----------
-        i : int
-            The returned `LP` will contain the contraction *strictly* left of site `i`.
-        store : bool
-            Whether to store the calculated `LP` in `self` (``True``) or discard them (``False``).
-
-        Returns
-        -------
-        LP_i : :class:`~tenpy.linalg.np_conserved.Array`
-            Contraction of everything left of site `i`,
-            with labels ``'vR*', 'wR', 'vR'`` for `bra`, `H`, `ket`.
-        """
-        # actually same as MPSEnvironment, just updated the labels in the doc string.
-        return super().get_LP(i, store)
-
-    def get_RP(self, i, store=True):
-        """Calculate RP at given site from nearest available one (including `i`).
-
-        The returned ``RP_i`` corresponds to the following contraction,
-        where the M's and the N's are in the 'B' form::
-
-            |     'vL'  ->---M[i+1]-- ... --M[L-1]----.
-            |                |              |         |
-            |     'wL'  ->---W[i+1]-- ... --W[L-1]----RP[-1]
-            |                |              |         |
-            |     'vL*' -<---N[i+1]*- ... --N[L-1]*---.
-
-        Parameters
-        ----------
-        i : int
-            The returned `RP` will contain the contraction *strictly* rigth of site `i`.
-        store : bool
-            Whether to store the calculated `RP` in `self` (``True``) or discard them (``False``).
-
-        Returns
-        -------
-        RP_i : :class:`~tenpy.linalg.np_conserved.Array`
-            Contraction of everything right of site `i`,
-            with labels ``'vL*', 'wL', 'vL'`` for `bra`, `H`, `ket`.
-        """
-        # actually same as MPSEnvironment, just updated the labels in the doc string.
-        return super().get_RP(i, store)
-
-    def full_contraction(self, i0):
-        """Calculate the energy by a full contraction of the network.
-
-        The full contraction of the environments gives the value
-        ``<bra|H|ket> / (norm(|bra>)*norm(|ket>))``,
-        i.e. if `bra` is `ket` and normalized, the total energy.
-        For this purpose, this function contracts
-        ``get_LP(i0+1, store=False)`` and ``get_RP(i0, store=False)``.
-
-        Parameters
-        ----------
-        i0 : int
-            Site index.
-        """
-        # same as MPSEnvironment.full_contraction, but also contract 'wL' with 'wR'
-        if self.ket.finite and i0 + 1 == self.L:
-            # special case to handle `_to_valid_index` correctly:
-            # get_LP(L) is not valid for finite b.c, so we use need to calculate it explicitly.
-            LP = self.get_LP(i0, store=False)
-            LP = self._contract_LP(i0, LP)
-        else:
-            LP = self.get_LP(i0 + 1, store=False)
-
-        # multiply with `S` on bra and ket side
-        S_bra = self.bra.get_SR(i0).conj()
-        if isinstance(S_bra, npc.Array):
-            LP = npc.tensordot(S_bra, LP, axes=['vL*', 'vR*'])
-        else:
-            LP = LP.scale_axis(S_bra, 'vR*')
-        S_ket = self.ket.get_SR(i0)
-        if isinstance(S_ket, npc.Array):
-            LP = npc.tensordot(LP, S_ket, axes=['vR', 'vL'])
-        else:
-            LP = LP.scale_axis(S_ket, 'vR')
-        RP = self.get_RP(i0, store=False)
-        res = npc.inner(LP, RP, axes=[['vR*', 'wR', 'vR'], ['vL*', 'wL', 'vL']], do_conj=False)
-        if self.H.explicit_plus_hc:
-            res = res + np.conj(res)
-        return res
-
-    def expectation_value(self, ops, sites=None, axes=None):
-        """(doesn't make sense)"""
-        raise NotImplementedError("doesn't make sense for an MPOEnvironment")
-
-    def _contract_LP(self, i, LP):
-        """Contract LP with the tensors on site `i` to form ``self._LP[i+1]``"""
-        # same as MPSEnvironment._contract_LP, but also contract with `H.get_W(i)`
-        LP = npc.tensordot(LP, self.ket.get_B(i, form='A'), axes=('vR', 'vL'))
-        LP = npc.tensordot(self.H.get_W(i), LP, axes=(['p*', 'wL'], ['p', 'wR']))
-        axes = (self.bra._get_p_label('*') + ['vL*'], self.ket._p_label + ['vR*'])
-        # for a ususal MPS, axes = (['p*', 'vL*'], ['p', 'vR*'])
-        LP = npc.tensordot(self.bra.get_B(i, form='A').conj(), LP, axes=axes)
-        return LP  # labels 'vR*', 'wR', 'vR'
-
-    def _contract_RP(self, i, RP):
-        """Contract RP with the tensors on site `i` to form ``self._RP[i-1]``"""
-        # same as MPSEnvironment._contract_RP, but also contract with `H.get_W(i)`
-        RP = npc.tensordot(self.ket.get_B(i, form='B'), RP, axes=('vR', 'vL'))
-        RP = npc.tensordot(RP, self.H.get_W(i), axes=(['p', 'wL'], ['p*', 'wR']))
-        axes = (self.ket._p_label + ['vL*'], self.ket._get_p_label('*') + ['vR*'])
-        # for a ususal MPS, axes = (['p', 'vL*'], ['p*', 'vR*'])
-        RP = npc.tensordot(RP, self.bra.get_B(i, form='B').conj(), axes=axes)
-        return RP  # labels 'vL', 'wL', 'vL*'
-
-    def _contract_LHeff(self, i, label_p='p0', pipe=None):
-        LP = self.get_LP(i)
-        p, ps = label_p, label_p + '*'
-        W = self.H.get_W(i).replace_labels(['p', 'p*'], [p, ps])
-        LHeff = npc.tensordot(LP, W, axes=['wR', 'wL'])
-        if pipe is None:
-            pipe = LHeff.make_pipe(['vR*', p], qconj=+1)
-
-        LHeff = LHeff.combine_legs([['vR*', p], ['vR', ps]],
-                                   pipes=[pipe, pipe.conj()],
-                                   new_axes=[0, 2])
-        return LHeff
-
-    def _contract_RHeff(self, i, label_p='p1', pipe=None):
-        RP = self.get_RP(i)
-        p, ps = label_p, label_p + '*'
-        W = self.H.get_W(i).replace_labels(['p', 'p*'], [p, ps])
-        RHeff = npc.tensordot(W, RP, axes=['wR', 'wL'])
-        if pipe is None:
-            pipe = RHeff.make_pipe([p, 'vL*'], qconj=-1)
-        RHeff = RHeff.combine_legs([[p, 'vL*'], [ps, 'vL']],
-                                   pipes=[pipe, pipe.conj()],
-                                   new_axes=[2, 1])
-        return RHeff
-
-
+    
+    
+        
+        
 class MPOTransferMatrix(NpcLinearOperator):
     """Transfermatrix of a Hamiltonian-like MPO sandwiched between canonicalized MPS.
 

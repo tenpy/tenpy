@@ -222,6 +222,17 @@ class MPS:
         Sometimes (e.g. during DMRG with an enabled mixer), entries may temporarily be
         a non-diagonal :class:`tenpy.linalg.np_conserved.Array` to be inserted between the
         left canonical 'A' tensors on the left and rigth-canonical _B[i] on the right.
+    _init_B : None or list of :class:`npc.Array`
+        Only for segment b.c., defaults to None. Holds a copy of the initial Bs outside the segment after calling
+        to_dynamic_segment explicitly, which allows to gradually increase the segment window
+    _init_S : None or list of :class:`npc.Array`
+        Same as for self._dynamic_B but for the singular values
+    _init_sites : None or list of _class:`~tenpy.networks.site.Site`
+        sites related to self._init_B
+    _init_L : None or int
+        Initial length for MPS with segment b.c. and _dynamic_B != None, i.e. len(_dynamic_B)
+    _is_dynamic : Bool
+        Only for segment b.c. True if the window can be dynamically enlarged
     _valid_forms : dict
         Class attribute.
         Mapping for canonical forms to a tuple ``(nuL, nuR)`` indicating that
@@ -279,6 +290,12 @@ class MPS:
         elif self.bc == 'finite':
             self._S[0] = self._S[-1] = np.ones([1], dtype=np.float64)
         self._transfermatrix_keep = 1
+        # stores copies of the initial Bs, SVs, and sites for segment b.c. when a dynamic window is desired
+        self._init_B = None # All Bs are stored in form 'B', except the last one in form 'G'
+        self._init_S = None
+        self._init_sites = None
+        self._init_L = None 
+        self._is_dynamic = False
         self.test_sanity()
 
     def test_sanity(self):
@@ -1199,12 +1216,92 @@ class MPS:
             raise ValueError("`factor` should be integer!")
         if factor <= 1:
             raise ValueError("can't shrink!")
-        if self.bc == 'segment':
+        if self.bc == 'segment': # what about finite bc?
             raise ValueError("can't enlarge segment MPS")
         self.sites = factor * self.sites
         self._B = factor * self._B
         self._S = factor * self._S[:-1] + [self._S[-1]]
         self.form = factor * self.form
+        self.test_sanity()
+
+    def to_dynamic_segment(self, init_B = None, init_S=None, init_sites=None):
+        if self._is_dynamic:
+            logger.info("segment window already dynamic")
+            return
+        if self.bc == 'finite':
+            raise ValueError("MPS with finite b.c. can't be converted to dynamic segment")
+        elif self.bc == "infinite":
+            logger.info('Converting infinite MPS to segment MPS with dynamic window')
+            # we can keep everything else as it is
+            self.bc == 'segment'
+        elif init_B == None:
+            # make sure that the outer B legs are contractible, slightly different error message
+            try:
+                self._B[0].get_leg('vL').test_contractible(self._B[-1].get_leg('vR'))
+            except ValueError as e:
+                raise ValueError("outer MPS legs don't match") from e
+        else: 
+            assert len(init_S)-len(init_B)==1 and len(init_B)==len(init_sites), 'incompatible init params'
+            warnings.warn("using custom init_B is discouraged. Make sure that init_B[-1] is in G form!")
+            # check that the outer virtual legs match
+            vL_seg, vR_seg = self._outer_virtual_legs()
+            try:
+                vL_seg.test_contractible(init_B[-1].get_leg('vR'))
+                vR_seg.test_contractible(init_B[0].get_leg('vL'))
+            except ValueError as e:
+                raise ValueError("outer virtual legs of self and init_B don't match") from e
+        if self.norm != 1.:
+            warnings.warn('MPS has norm={0}, dynamically added segments will not keep track of it'.format(self.norm))
+        
+        # Bs stored in B form except the last one in G
+        if init_B == None:
+            self._init_B = [self.get_B(i, form='B' if i!=self.L-1 else 'G', copy=True) for i in range(self.L)]
+            self._init_S = [S.copy() for S in self._S]
+            self._init_sites = [site for site in self.sites]
+            self._init_L = self.L
+        else:
+            self._init_B = init_B
+            self._init_S = init_S
+            self._init_sites = init_sites
+            self._init_L = len(init_B)
+            _init_B_type = np.find_common_type([B.dtype for B in init_B], [])
+            self.dtype = np.find_common_type([self.dtype, _init_B_type], [])
+        self._is_dynamic = True
+        self.test_sanity()
+
+    def enlarge_segment_window(self):
+        if self.bc != 'segment':
+            raise ValueError('Need segment b.c. for a dynamic window, for infinite b.c. use enlarge_mps_unit_cell instead')
+        if not self._is_dynamic:
+            raise ValueError('MPS has no dynamic window, call self.to_dynamic_segment first')
+        # leg compatibility should be ensured through segment_boundaries
+        self.sites = self._init_sites+self.sites+self._init_sites
+        self._B = self._init_B+self._B+self._init_B
+        self._S = self._init_S[:-1] + self._S + self._init_S[1:]
+        self.form = [(0., 1.)]*(self._init_L) + self.form + [(0., 1.)]*(self._init_L)
+        # fix B = G-U-S left of U_L
+        if self.segment_boundaries[0] != None:
+            B_L = npc.tensordot(self._B[self._init_L-1], self.segment_boundaries[0], axes=['vR','vL'])
+            self._B[self._init_L-1] = self._scale_axis_B(B_L, self._S[self._init_L], 1., 'vR', 1.e-16)
+        else:
+            self._B[self._init_L-1] = self._scale_axis_B(self._B[self._init_L-1], self._S[self._init_L], 1., 'vR', 1.e-16)
+        # fix B right of V_L
+        if self.segment_boundaries[1] != None:
+            self._B[-self._init_L] = npc.tensordot(self.segment_boundaries[1], self._B[-self._init_L], axes=['vR','vL'])
+        # last B is still in G form
+        self._B[-1] = self._scale_axis_B(self._B[-1], self._S[-1], 1., 'vR', 1.e-16)
+        # update U_L V_R to identities
+        self.segment_boundaries = (npc.eye_like(self._B[0], axis='vL', labels=['vL','vR']),
+                                   npc.eye_like(self._B[-1], axis='vR', labels=['vR','vL']))
+        self.test_sanity()
+        
+    def remove_dynamic_segment(self):
+        logger.info('Converting to non-enlargable segment')
+        self._init_B = None
+        self._init_S = None
+        self._init_sites = None
+        self._init_L = None
+        self._is_dynamic = False
         self.test_sanity()
 
     def roll_mps_unit_cell(self, shift=1):
@@ -1418,6 +1515,9 @@ class MPS:
         self.sites = grouped_sites
         self.form = [B_form] * len(grouped_sites)
         self.grouped = self.grouped * n
+        if self._is_dynamic_:
+            logger.info('removing dynamic window, initial tensors are not compatible with grouped sites')
+            self.remove_dynamic_segment()
 
     def group_split(self, trunc_par=None):
         """Modify `self` inplace to split previously grouped sites.
@@ -1491,6 +1591,9 @@ class MPS:
         self._S = Ss
         self.grouped = max(self.grouped // n0, 1)
         self.form = [self._valid_forms['B']] * len(sites)
+        if self._is_dynamic_:
+            logger.info('removing dynamic window, initial tensors are not compatible with split sites')
+            self.remove_dynamic_segment()
         self.test_sanity()
         return trunc_err
 
