@@ -512,7 +512,6 @@ class DensityMatrixMixer(Mixer):
         # Thus, rho_L U = U S S, i.e. columns of U are the eigenvectors of rho_L,
         # eigenvalues are S^2.
         val_L, U = npc.eigh(rho_L)
-        U.legs[1] = U.legs[1].to_LegCharge()  # explicit conversion: avoid warning in `iproject`
         U.iset_leg_labels(['(vL.p0)', 'vR'])
         val_L[val_L < 0.] = 0.  # for stability reasons
         val_L /= np.sum(val_L)
@@ -523,7 +522,6 @@ class DensityMatrixMixer(Mixer):
         # rho_R ~=  theta^T theta^* = V^* S U^T U* S V^T = V^* S S V^T  (for mixer -> 0)
         # Thus, rho_R V^* = V^* S S, i.e. columns of V^* are eigenvectors of rho_R
         val_R, Vc = npc.eigh(rho_R)
-        Vc.legs[1] = Vc.legs[1].to_LegCharge()
         Vc.iset_leg_labels(['(p1.vR)', 'vL'])
         VH = Vc.itranspose(['vL', '(p1.vR)'])
         val_R[val_R < 0.] = 0.  # for stability reasons

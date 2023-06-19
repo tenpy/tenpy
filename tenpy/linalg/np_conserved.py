@@ -4005,15 +4005,11 @@ def qr(a,
             i0 = a_leg0.slices[q1]
             inner_leg_mask[i0:i0 + q_block.shape[1]] = True
         #  else: assert q_block.shape[1] == q_block.shape[0]
+    inner_leg = a_leg0.copy()
+    if isinstance(inner_leg, charges.LegPipe):
+        inner_leg = inner_leg.to_LegCharge()
     if mode != 'complete':
-        # map qindices
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
-            map_qind, _, inner_leg = a_leg0.project(inner_leg_mask)
-    else:
-        inner_leg = a_leg0.copy()
-        if isinstance(inner_leg, charges.LegPipe):
-            inner_leg = inner_leg.to_LegCharge()
+        map_qind, _, inner_leg = inner_leg.project(inner_leg_mask)
     if qtotal_Q is not None:
         qtotal_Q = a.chinfo.make_valid(qtotal_Q)  # convert to ndarray
         inner_leg.charges = a.chinfo.make_valid(inner_leg.charges - inner_leg.qconj * qtotal_Q)
@@ -4828,6 +4824,8 @@ def _eig_worker(hermitian, a, sort, UPLO='L'):
     dtype = np.float64 if hermitian else np.complex128
     resw = np.zeros(a.shape[0], dtype=dtype)
     resv = diag(1., a.legs[0], dtype=np.promote_types(dtype, a.dtype))
+    if isinstance(a.legs[0], LegPipe):
+        resv.legs[1] = resv.legs[1].to_LegCharge()
     # w, v now default to 0 and the Identity
     for qindices, block in zip(a._qdata, a._data):  # non-zero blocks on the diagonal
         if hermitian:
