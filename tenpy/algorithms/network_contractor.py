@@ -8,7 +8,7 @@ by Robert N. C. Pfeifer, Glen Evenbly, Sukhwinder Singh, Guifre Vidal, see :arxi
 .. autodata :: outer_product
 
 .. todo ::
-    - implement or wrap netcon.m, a function to find optimal contractionn sequences
+    - implement or wrap netcon.m, a function to find optimal contraction sequences
         (:arxiv:`1304.6112`)
     - implement or deprecate the outer_product in sequence behavior
 """

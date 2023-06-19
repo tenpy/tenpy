@@ -19,7 +19,7 @@ __all__ = ['PurificationTwoSiteU', 'PurificationApplyMPO', 'PurificationTEBD', '
 class PurificationTwoSiteU(TwoSiteH):
     """Variant of `TwoSiteH` suitable for purification.
 
-    The MPO gets only applied to the physical legs `p0`, `p1`, the ancialla legs `q0`, `q1` of
+    The MPO gets only applied to the physical legs `p0`, `p1`, the ancilla legs `q0`, `q1` of
     `theta` are ignored.
     """
     length = 2
@@ -105,9 +105,9 @@ class PurificationTEBD(tebd.TEBDEngine):
         called with the TEBD parameter ``'disentangle'``.
         Defaults to the trivial disentangler for ``options['disentangle']=None``.
     _disent_iterations : 1D ndarray
-        Number of iterations performed on all bonds, including trivial bonds; lenght `L`.
+        Number of iterations performed on all bonds, including trivial bonds; length `L`.
     _guess_U_disent : list of list of npc.Array
-        Same index strucuture as `self._U`: for each two-site U of the physical time evolution
+        Same index structure as `self._U`: for each two-site U of the physical time evolution
         the disentangler from the last application. Initialized to identities.
     """
     def __init__(self, psi, model, options, **kwargs):
@@ -298,7 +298,7 @@ class PurificationTEBD(tebd.TEBDEngine):
     def disentangle_global(self, pair=None):
         """Try global disentangling by determining the maximally entangled pairs of sites.
 
-        Caclulate the mutual information (in the auxiliar space) between two sites and determine
+        Calculate the mutual information (in the auxiliar space) between two sites and determine
         where it is maximal. Disentangle these two sites with :meth:`disentangle`
         """
         max_range = self.options.get('disent_gl_maxrange', 10)
@@ -385,18 +385,18 @@ class PurificationTEBD(tebd.TEBDEngine):
             raise NotImplementedError  # adjust: what's the shortest path?
         assert (i < j)
         for j0 in range(j, i + 1, -1):  # j0 = current site of `j`
-            # originial leg `j` is at j0
+            # original leg `j` is at j0
             self._update_index = None, j0
             self._swap_disentangle_bond(j0, swap=True, disentangle=False)  # swap j0-1, j0
-            # originial leg is at `j0-1`
+            # original leg is at `j0-1`
         # disentangle i, i+1
         self._update_index = None, i + 1
         self._swap_disentangle_bond(i + 1, swap=False, disentangle=True)
         for j0 in range(i + 1, j):  # j0 = current site of `j`
-            # originial leg `j` is at j0
+            # original leg `j` is at j0
             self._update_index = None, j0 + 1
             self._swap_disentangle_bond(j0 + 1, disentangle=on_way)  # swap j0, j0+1
-            # originial leg is at `j0+1`
+            # original leg is at `j0+1`
         self._update_index = None  # done
 
     def _swap_disentangle_bond(self, i, swap=True, disentangle=False):

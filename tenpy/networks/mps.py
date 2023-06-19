@@ -16,7 +16,7 @@ We store one 3-leg tensor `_B[i]` with labels ``'vL', 'vR', 'p'`` for each of th
 ``0 <= i < L``.
 Additionally, we store ``L+1`` singular value arrays `_S[ib]` on each bond ``0 <= ib <= L``,
 independent of the boundary conditions.
-``_S[ib]`` gives the singlur values on the bond ``i-1, i``.
+``_S[ib]`` gives the singular values on the bond ``i-1, i``.
 However, be aware that e.g. :attr:`~tenpy.networks.mps.MPS.chi` returns only the dimensions of the
 :attr:`~tenpy.networks.mps.MPS.nontrivial_bonds` depending on the boundary conditions.
 
@@ -31,7 +31,7 @@ Valid MPS boundary conditions (not to confuse with `bc_coupling` of
 ==========  ===================================================================================
 `bc`        description
 ==========  ===================================================================================
-'finite'    Finite MPS, ``G0 s1 G1 ... s{L-1} G{l-1}``. This is acchieved
+'finite'    Finite MPS, ``G0 s1 G1 ... s{L-1} G{l-1}``. This is achieved
             by using a trivial left and right bond ``s[0] = s[-1] = np.array([1.])``.
 'segment'   Generalization of 'finite', describes an MPS embedded in left and right
             environments. The left environment is described by ``chi[0]`` *orthonormal* states
@@ -64,13 +64,13 @@ site of the MPS in :attr:`MPS.form`.
 `form`   tuple      description
 ======== ========== ==========================================================================
 ``'B'``  (0, 1)     right canonical: ``_B[i] = -- Gamma[i] -- s[i+1]--``
-                    The default form, which algorithms asssume.
+                    The default form, which algorithms assume.
 ``'C'``  (0.5, 0.5) symmetric form: ``_B[i] = -- s[i]**0.5 -- Gamma[i] -- s[i+1]**0.5--``
 ``'A'``  (1, 0)     left canonical: ``_B[i] = -- s[i] -- Gamma[i] --``.
 ``'G'``  (0, 0)     Save only ``_B[i] = -- Gamma[i] --``.
 ``'Th'`` (1, 1)     Form of a local wave function `theta` with singular value on both sides.
                     ``psi.get_B(i, 'Th') is equivalent to ``psi.get_theta(i, n=1)``.
-``None`` ``None``   General non-canoncial form.
+``None`` ``None``   General non-canonical form.
                     Valid form for initialization, but you need to call
                     :meth:`~tenpy.networks.mps.MPS.canonical_form` (or similar)
                     before using algorithms.
@@ -181,7 +181,7 @@ class MPS:
         The singular values on *each* bond. Should always have length `L+1`.
         Entries out of :attr:`nontrivial_bonds` are ignored.
     bc : ``'finite' | 'segment' | 'infinite'``
-        Boundary conditions as described in the tabel of the module doc-string.
+        Boundary conditions as described in the table of the module doc-string.
     form : (list of) {``'B' | 'A' | 'C' | 'G' | 'Th' | None`` | tuple(float, float)}
         The form of the stored 'matrices', see table in module doc-string.
         A single choice holds for all of the entries.
@@ -221,7 +221,7 @@ class MPS:
         takes proper care of the boundary conditions.
         Sometimes (e.g. during DMRG with an enabled mixer), entries may temporarily be
         a non-diagonal :class:`tenpy.linalg.np_conserved.Array` to be inserted between the
-        left canonical 'A' tensors on the left and rigth-canonical _B[i] on the right.
+        left canonical 'A' tensors on the left and right-canonical _B[i] on the right.
     _valid_forms : dict
         Class attribute.
         Mapping for canonical forms to a tuple ``(nuL, nuR)`` indicating that
@@ -423,7 +423,7 @@ class MPS:
         """Construct an MPS from a product state given in lattice coordinates.
 
         This is a wrapper around :meth:`from_product_state`.
-        The purpuse is to make the `p_state` argument independent of the `order` of the `Lattice`,
+        The purpose is to make the `p_state` argument independent of the `order` of the `Lattice`,
         and specify it in terms of lattice indices instead.
 
         Parameters
@@ -456,7 +456,7 @@ class MPS:
             >>> fermion = tenpy.networks.site.FermionSite()
             >>> ladder_i = tenpy.models.lattice.Ladder(2, [spin_half, fermion], bc_MPS="infinite")
 
-        To initialize a state of up-spins on the spin sites and half-filled ferions, you can use:
+        To initialize a state of up-spins on the spin sites and half-filled fermions, you can use:
 
         .. doctest : MPS.from_lat_product_state
 
@@ -538,7 +538,7 @@ class MPS:
             An entry of `int` type represents the physical index of the state to be used.
             An entry which is a 1D array defines the complete wavefunction on that site; this
             allows to make a (local) superposition.
-        bc : {'infinite', 'finite', 'segmemt'}
+        bc : {'infinite', 'finite', 'segment'}
             MPS boundary conditions. See docstring of :class:`MPS`.
         dtype : type or string
             The data type of the array entries.
@@ -593,7 +593,7 @@ class MPS:
         the order of the two entries for the ``bloch_sphere_state`` would be *exactly the opposite*
         (when we keep the the north-pole of the bloch sphere being the up-state).
         The reason is that the `SpinChain` uses the general :class:`~tenpy.networks.site.SpinSite`,
-        where the states are orderd ascending from ``'down'`` to ``'up'``.
+        where the states are ordered ascending from ``'down'`` to ``'up'``.
         The :class:`~tenpy.networks.site.SpinHalfSite` on the other hand uses the order
         ``'up', 'down'`` where that the Pauli matrices look as usual.
         """
@@ -650,7 +650,7 @@ class MPS:
             The singular values on *each* bond. Should always have length `L+1`.
             By default (``None``), set all singular values to the same value.
             Entries out of :attr:`nontrivial_bonds` are ignored.
-        bc : {'infinite', 'finite', 'segmemt'}
+        bc : {'infinite', 'finite', 'segment'}
             MPS boundary conditions. See docstring of :class:`MPS`.
         dtype : type or string
             The data type of the array entries. Defaults to the common dtype of `Bflat`.
@@ -739,7 +739,7 @@ class MPS:
         bc : 'finite' | 'segment'
             Boundary conditions.
         outer_S : None | (array, array)
-            For 'semgent' `bc` the singular values on the left and right of the considered segment,
+            For 'segment' `bc` the singular values on the left and right of the considered segment,
             `None` for 'finite' boundary conditions.
 
         Returns
@@ -821,7 +821,7 @@ class MPS:
             Sites which are not included into a singlet pair.
         lonely_state : int | str
             The state for the lonely sites.
-        bc : {'infinite', 'finite', 'segmemt'}
+        bc : {'infinite', 'finite', 'segment'}
             MPS boundary conditions. See docstring of :class:`MPS`.
 
         Returns
@@ -974,7 +974,7 @@ class MPS:
 
         Raises
         ------
-        ValueError : if self is not in canoncial form and `form` is not None.
+        ValueError : if self is not in canonical form and `form` is not None.
         """
         i = self._to_valid_index(i)
         new_form = self._to_valid_form(form)
@@ -1245,7 +1245,7 @@ class MPS:
         ----------
         extra_legs : list of {None, :class:`~tenpy.linalg.charges.LegCharge`, int}
             The extra charges to be added on the virtual legs, with qconj=+1.
-            Lenght `L` +1 for finite, length `L` for infinite, with entry `i` left of site `i`.
+            Length `L` +1 for finite, length `L` for infinite, with entry `i` left of site `i`.
             If an `int` is given, fill up with a single block of charges like the Schmidt state
             with highest weight. Note that this might force the resulting state to not be in
             strict "right-canonical" B form if that charge block becomes overcomplete.
@@ -2594,7 +2594,7 @@ class MPS:
             warnings.warn(
                 "Inefficent evaluation of MPS.correlation_function(), "
                 "it's probably faster to use MPS.term_correlation_function_left()",
-                stracklevel=2)
+                stacklevel=2)
         if autoJW and not all([isinstance(op1, str) for op1 in ops1]):
             warnings.warn("Non-string operator: can't auto-determine Jordan-Wigner!", stacklevel=2)
             autoJW = False

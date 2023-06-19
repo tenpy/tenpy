@@ -20,7 +20,7 @@ They should both give the same results (up to rounding errors). However, if star
 state, :class:`SingleSiteDMRGEngine` depends critically on the use of a :class:`Mixer`, while
 :class:`TwoSiteDMRGEngine` is in principle more computationally expensive to run and has
 occasionally displayed some convergence issues..
-Which one is preffered in the end is not obvious a priori and might depend on the used model.
+Which one is preferred in the end is not obvious a priori and might depend on the used model.
 Just try both of them.
 
 A :class:`Mixer` should be used initially to avoid that the algorithm gets stuck in local energy
@@ -118,7 +118,7 @@ class Mixer:
     """Base class of a general Mixer.
 
     Since DMRG performs only local updates of the state, it can get stuck in "local minima",
-    in particular if the Hamiltonain is long-range -- which is the case if one
+    in particular if the Hamiltonian is long-range -- which is the case if one
     maps a 2D system ("infinite cylinder") to 1D -- or if one wants to do single-site updates.
     The idea of the mixer is to perturb the state with the terms of the Hamiltonian
     which have contributions in both the "left" and "right" side of the system.
@@ -427,7 +427,7 @@ class DensityMatrixMixer(Mixer):
         \rightarrow  tr_R(|\theta><\theta|) + a \sum_l h_l tr_R(|\theta><\theta|) h_l^\dagger
 
     where `a` is the (small) perturbation :attr:`amplitude` and `h_l` are the left parts of
-    the Hamiltonian going accross the center bond (i0, i0+1).
+    the Hamiltonian going across the center bond (i0, i0+1).
     This perturbs singular values on the order of that amplitude.
 
     Pictorially, the left density matrix `rho_L` is given by::
@@ -723,7 +723,7 @@ class DMRGEngine(Sweep):
         .. cfg:configoptions :: DMRGEngine
 
             diag_method : str
-                Method to be used for diagonalzation, default ``'default'``.
+                Method to be used for diagonalization, default ``'default'``.
                 For possible arguments see :meth:`DMRGEngine.diag`.
             E_tol_to_trunc : float
                 It's reasonable to choose the Lanczos convergence criteria
@@ -787,7 +787,7 @@ class DMRGEngine(Sweep):
             P_tol_min : float
                 See `P_tol_to_trunc`
             update_env : int
-                Number of sweeps without bond optimizaiton to update the
+                Number of sweeps without bond optimization to update the
                 environment for infinite boundary conditions,
                 performed every `N_sweeps_check` sweeps.
         """

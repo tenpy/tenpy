@@ -588,7 +588,7 @@ class Lattice:
         factor : int
             The new number of sites in the MPS unit cell will be increased from `N_sites` to
             ``factor*N_sites_per_ring``. Since MPS unit cells are repeated in the `x`-direction
-            in our convetion, the lattice shape goes from
+            in our convention, the lattice shape goes from
             ``(Lx, Ly, ..., Lu)`` to ``(Lx*factor, Ly, ..., Lu)``.
         """
         if self.bc_MPS != "infinite":
@@ -662,7 +662,7 @@ class Lattice:
         lat_idx : array
             First dimensions like `i`, last dimension has len `dim`+1 and contains the lattice
             indices ``(x_0, ..., x_{dim-1}, u)`` corresponding to `i`.
-            For `i` accross the MPS unit cell and "infinite" or "segment" `bc_MPS`,
+            For `i` across the MPS unit cell and "infinite" or "segment" `bc_MPS`,
             we shift `x_0` accordingly.
         """
         if self.bc_MPS != 'finite':
@@ -685,7 +685,7 @@ class Lattice:
             The last dimension corresponds to lattice indices ``(x_0, ..., x_{D-1}, u)``.
             All lattice indices should be positive and smaller than the corresponding entry in
             ``self.shape``. Exception: for "infinite" or "segment" `bc_MPS`,
-            an `x_0` outside indicates shifts accross the boundary.
+            an `x_0` outside indicates shifts across the boundary.
 
         Returns
         -------
@@ -768,7 +768,7 @@ class Lattice:
 
         Examples
         --------
-        Say you measure expection values of an onsite term for an MPS, which gives you an 1D array
+        Say you measure expectation values of an onsite term for an MPS, which gives you an 1D array
         `A`, where `A[i]` is the expectation value of the site given by ``self.mps2lat_idx(i)``.
         Then this function gives you the expectation values ordered by the lattice:
 
@@ -844,7 +844,7 @@ class Lattice:
             Specifies for each `axis` in `axes`, for which MPS indices we have values in the
             corresponding `axis` of `A`.
             Defaults to ``[np.arange(A.shape[ax]) for ax in axes]``.
-            For indices accross the MPS unit cell and "infinite" `bc_MPS`,
+            For indices across the MPS unit cell and "infinite" `bc_MPS`,
             we shift `x_0` accordingly.
         include_u : (list of) bool
             Specifies for each `axis` in `axes`, whether the `u` index of the lattice should be
@@ -983,7 +983,7 @@ class Lattice:
         :attr:`basis` and :attr:`unit_cell_positions` of the lattice).
 
         .. warning ::
-            This function ignores "wrapping" arround the cylinder in the case of periodic boundary
+            This function ignores "wrapping" around the cylinder in the case of periodic boundary
             conditions.
 
         Parameters
@@ -1127,16 +1127,16 @@ class Lattice:
         mps1, mps2 : 1D array
             For each possible two-site coupling the MPS indices for the `u1` and `u2`.
         strength_vals : 1D array
-            (Only returend if `strength` is not None.)
+            (Only returned if `strength` is not None.)
             Such that ``for (i, j, s) in zip(mps1, mps2, strength_vals):`` iterates over all
             possible couplings with `s` being the strength of that coupling.
             Couplings where ``strength_vals == 0.`` are filtered out.
         lat_indices : 2D int array
-            (Only returend if `strength` is None.)
+            (Only returned if `strength` is None.)
             Rows of `lat_indices` correspond to entries of `mps1` and `mps2` and contain the
             lattice indices of the "lower left corner" of the box containing the coupling.
         coupling_shape : tuple of int
-            (Only returend if `strength` is None.)
+            (Only returned if `strength` is None.)
             Len :attr:`dim`. The correct shape for an array specifying the coupling strength.
             `lat_indices` has only rows within this shape.
         """
@@ -1188,7 +1188,7 @@ class Lattice:
         """filter possible j sites of a coupling from :meth:`possible_couplings`"""
         return np.all(
             np.logical_or(
-                lat_j_shifted == lat_j,  # not accross the boundary
+                lat_j_shifted == lat_j,  # not across the boundary
                 np.logical_not(self.bc)),  # direction has PBC
             axis=1)
 
@@ -1240,16 +1240,16 @@ class Lattice:
             conditions of `self` (how much the `box` for given `dx` can be shifted around without
             hitting a boundary - these are the different rows).
         strength_vals : 1D array
-            (Only returend if `strength` is not None.)
+            (Only returned if `strength` is not None.)
             Such that ``for  (ijkl, s) in zip(mps_ijkl, strength_vals):`` iterates over all
             possible couplings with `s` being the strength of that coupling.
             Couplings where ``strength_vals == 0.`` are filtered out.
         lat_indices : 2D int array
-            (Only returend if `strength` is None.)
+            (Only returned if `strength` is None.)
             Rows of `lat_indices` correspond to rows of `mps_ijkl` and contain the lattice indices
             of the "lower left corner" of the box containing the coupling.
         coupling_shape : tuple of int
-            (Only returend if `strength` is None.)
+            (Only returned if `strength` is None.)
             Len :attr:`dim`. The correct shape for an array specifying the coupling strength.
             `lat_indices` has only rows within this shape.
         """
@@ -1298,7 +1298,7 @@ class Lattice:
         """Filter possible couplings from :meth:`possible_multi_couplings`"""
         return np.all(
             np.logical_or(
-                lat_ijkl_shifted == lat_ijkl,  # not accross the boundary
+                lat_ijkl_shifted == lat_ijkl,  # not across the boundary
                 np.logical_not(self.bc)),  # direction has PBC
             axis=(1, 2))
 
@@ -1310,7 +1310,7 @@ class Lattice:
         ax : :class:`matplotlib.axes.Axes`
             The axes on which we should plot.
         markers : list
-            List of values for the keywork `marker` of ``ax.plot()`` to distinguish the different
+            List of values for the keyword `marker` of ``ax.plot()`` to distinguish the different
             sites in the unit cell, a site `u` in the unit cell is plotted with a marker
             ``markers[u % len(markers)]``.
         labels : list of str
@@ -1370,7 +1370,7 @@ class Lattice:
             The axes on which we should plot.
         coupling : list of (u1, u2, dx)
             By default (``None``), use ``self.pairs['nearest_neighbors']``.
-            Specifies the connections to be plotted; iteating over lattice indices `(i0, i1, ...)`,
+            Specifies the connections to be plotted; iterating over lattice indices `(i0, i1, ...)`,
             we plot a connection from the site ``(i0, i1, ..., u1)`` to the site
             ``(i0+dx[0], i1+dx[1], ..., u2)``, taking into account the boundary conditions.
         wrap : bool
@@ -1451,7 +1451,7 @@ class Lattice:
         ax : :class:`matplotlib.axes.Axes`
             The axes on which we should plot.
         direction : int
-            The direction of the lattice along which we should mark the idenitified sites.
+            The direction of the lattice along which we should mark the identified sites.
             If ``None``, mark it along all directions with periodic boundary conditions.
         cylinder_axis : bool
             Whether to plot the cylinder axis as well.
@@ -1475,7 +1475,7 @@ class Lattice:
         x_y = []
         for i in dirs:
             if self.bc[i]:
-                raise ValueError("Boundary conditons are not periodic for given direction")
+                raise ValueError("Boundary conditions are not periodic for given direction")
             x_y.append(origin)
             x_y.append(origin + self.Ls[i] * self.basis[i])
             if self.bc_shift is not None and i > 0:
@@ -1539,7 +1539,7 @@ class Lattice:
 class TrivialLattice(Lattice):
     """Trivial lattice consisting of a single (possibly large) unit cell in 1D.
 
-    This is usefull if you need a valid :class:`Lattice` with given :meth:`mps_sites`
+    This is useful if you need a valid :class:`Lattice` with given :meth:`mps_sites`
     and don't care about the actual geometry, e.g, because you don't intend to use the
     :class:`~tenpy.models.model.CouplingModel`.
 
@@ -1555,7 +1555,7 @@ class TrivialLattice(Lattice):
 
 
 class SimpleLattice(Lattice):
-    """A lattice with a unit cell consiting of just a single site.
+    """A lattice with a unit cell consisting of just a single site.
 
     In many cases, the unit cell consists just of a single site, such that the the last entry of
     `u` of an 'lattice index' can only be ``0``.
@@ -1603,7 +1603,7 @@ class MultiSpeciesLattice(Lattice):
 
 
     An initialized  `MultiSpeciesLattice` replaces each site in the given `simple_lattice` with
-    the `species_sites`. This is usefull e.g. if you want to place spin-full fermions
+    the `species_sites`. This is useful e.g. if you want to place spin-full fermions
     (or bosons) on a regular lattice, without falling back to the
     :class:`~tenpy.networks.site.GroupedSite` causing a larger, local dimension.
 
@@ -1619,7 +1619,7 @@ class MultiSpeciesLattice(Lattice):
         You can initialize the `simple_lattice` with any local sites, e.g. ``sites=None``, since
         the sites of the MultiSpeciesLattice are defined below.
     species_sites : list of :class:`~tenpy.networks.site.Site`
-        A collection of sites representing differnt species.
+        A collection of sites representing different species.
     species_names : list of str | None
         Names for the species. Defaults to ``['0', '1', ...]``.
         Used to define separate :attr:`pairs` by appending ``'_{name}'`` to the lattice.
@@ -1655,7 +1655,7 @@ class MultiSpeciesLattice(Lattice):
         [array([0, 1]), array([1, 0])]
         >>> fs_lat = MultiSpeciesLattice(simple_lat, [f, s], ['f', 's'])
 
-    There are corresponding coupling pairs definded:
+    There are corresponding coupling pairs defined:
 
     .. doctest :: MultiSpeciesLattice
 
