@@ -292,12 +292,12 @@ class BaseMPSExpectationValue(metaclass=ABCMeta):
         for i in sites:
             op = self.get_op(ops, i)
             op = op.replace_labels(op_ax_p + op_ax_pstar, ax_p + ax_pstar)
-            theta_ket = self._get_theta_ket(i, n)
+            theta_ket = self._get_ket().get_theta(i, n)
             C = npc.tensordot(op, theta_ket, axes=[ax_pstar, ax_p])  # C has same labels as theta
             C = self._contract_with_LP(C, i)  # axes_p + (vR*, vR)
             C = self._contract_with_RP(C, i + n - 1)  # axes_p + (vR*, vL*)
             C.ireplace_labels(['vR*', 'vL*'], ['vL', 'vR'])  # back to original theta labels
-            theta_bra = self._get_theta_bra(i, n)
+            theta_bra = self._get_bra().get_theta(i, n)
             E.append(npc.inner(theta_bra, C, axes='labels', do_conj=True))
         return np.real_if_close(np.array(E))
 
@@ -695,12 +695,12 @@ class BaseMPSExpectationValue(metaclass=ABCMeta):
             for k in range(i, j):
                 assert i == k
                 # contract CL with tensors on site `k`
-                B_ket = self._get_B_ket(k, form='B')
+                B_ket = self._get_ket().get_B(k, form='B')
                 CL = npc.tensordot(CL, B_ket, axes=['vR', 'vL'])
                 if opstr is not None:
                     opstr_k = self.sites[self._to_valid_index(k)].get_op(opstr)
                     CL = npc.tensordot(opstr_k, CL, axes=['p*', 'p'])
-                B_bra = self._get_B_bra(k, form='B')
+                B_bra = self._get_bra().get_B(k, form='B')
                 CL = npc.tensordot(B_bra.conj(), CL, axes=[['vL*', 'p*'], ['vR*', 'p']])
                 i = k + 1
             # recalculate the operators (alternatively: manually shift them)
@@ -747,12 +747,12 @@ class BaseMPSExpectationValue(metaclass=ABCMeta):
             assert i0 <= j
             for k in range(j - 1, i0, -1):
                 # contract CR with tensors on site `k`
-                B_ket = self._get_B_ket(k, form='B')
+                B_ket = self._get_ket().get_B(k, form='B')
                 CR = npc.tensordot(B_ket, CR, axes=['vR', 'vL'])
                 if opstr is not None:
                     opstr_k = self.sites[self._to_valid_index(k)].get_op(opstr)
                     CR = npc.tensordot(opstr_k, CR, axes=['p*', 'p'])
-                B_bra = self._get_B_bra(k, form='B')
+                B_bra = self._get_bra().get_B(k, form='B')
                 CR = npc.tensordot(CR, B_bra.conj(), axes=[['p', 'vL*'], ['p*', 'vR*']])
                 j = k
             # recalculate the operators (alternatively: manually shift them)
@@ -862,8 +862,8 @@ class BaseMPSExpectationValue(metaclass=ABCMeta):
             for k in range(i, j):
                 assert i == k
                 # contract CL with tensors on site `k`
-                B_ket = self._get_B_ket(k, form='B')
-                B_bra = self._get_B_bra(k, form='B')
+                B_ket = self._get_ket().get_B(k, form='B')
+                B_bra = self._get_bra().get_B(k, form='B')
                 for key, CL in CLs.items():
                     need_JW = key[0]
                     CL = npc.tensordot(CL, B_ket, axes=['vR', 'vL'])
@@ -949,8 +949,8 @@ class BaseMPSExpectationValue(metaclass=ABCMeta):
         if opstr1 is not None and str_on_first:
             axes = ['p*', 'p'] if apply_opstr_first else ['p', 'p*']
             op1 = npc.tensordot(op1, opstr1, axes=axes)
-        theta_ket = self._get_theta_ket(i, n=1)
-        theta_bra = self._get_theta_bra(i, n=1)
+        theta_ket = self._get_ket().get_theta(i, n=1)
+        theta_bra = self._get_bra().get_theta(i, n=1)
         C = npc.tensordot(op1, theta_ket, axes=['p*', 'p0'])
         C = self._contract_with_LP(C, i)
         C = npc.tensordot(theta_bra.conj(), C, axes=[['p0*', 'vL*'], ['p', 'vR*']])
@@ -958,8 +958,8 @@ class BaseMPSExpectationValue(metaclass=ABCMeta):
         js = list(j_gtr[::-1])  # stack of j, sorted *descending*
         res = []
         for r in range(i + 1, js[0] + 1):  # js[0] is the maximum
-            B = self._get_B_ket(r, form='B')
-            B_bra = self._get_B_bra(r, form='B')
+            B = self._get_ket().get_B(r, form='B')
+            B_bra = self._get_bra().get_B(r, form='B')
             C = npc.tensordot(C, B, axes=['vR', 'vL'])
             if r == js[-1]:
                 Cij = npc.tensordot(self.get_op(ops2, r), C, axes=['p*', 'p'])
@@ -985,8 +985,8 @@ class BaseMPSExpectationValue(metaclass=ABCMeta):
         op = operators[0]
         if (isinstance(op, str)):
             op = self.sites[self._to_valid_index(i0)].get_op(op)
-        theta_ket = self._get_theta_ket(i0, n=1)
-        theta_bra = self._get_theta_bra(i0, n=1)
+        theta_ket = self._get_ket().get_theta(i0, n=1)
+        theta_bra = self._get_bra().get_theta(i0, n=1)
         C = npc.tensordot(op, theta_ket, axes=['p*', 'p0'])
         C = self._contract_with_LP(C, i0)  # 'p' 'vR*' 'vR'
         C = npc.tensordot(theta_bra.conj(), C, axes=[['p0*', 'vL*'], ['p', 'vR*']])
@@ -994,13 +994,13 @@ class BaseMPSExpectationValue(metaclass=ABCMeta):
             op = operators[j]  # the operator
             is_str = isinstance(op, str)
             i = i0 + j  # the site it acts on
-            B_ket = self._get_B_ket(i, form='B')
+            B_ket = self._get_ket().get_B(i, form='B')
             C = npc.tensordot(C, B_ket, axes=['vR', 'vL'])
             if not (is_str and op == 'Id'):
                 if is_str:
                     op = self.sites[self._to_valid_index(i)].get_op(op)
                 C = npc.tensordot(op, C, axes=['p*', 'p'])
-            B_bra = self._get_B_bra(i, form='B')
+            B_bra = self._get_bra().get_B(i, form='B')
             C = npc.tensordot(B_bra.conj(), C, axes=[['vL*', 'p*'], ['vR*', 'p']])
         return C
 
@@ -1012,20 +1012,20 @@ class BaseMPSExpectationValue(metaclass=ABCMeta):
         """
         op = operators[-1]
         imax = i0 + len(operators) - 1
-        C = npc.eye_like(self._get_B_ket(imax, 'B'), 'vR', ['vR', 'vL'])
+        C = npc.eye_like(self._get_ket().get_B(imax, 'B'), 'vR', ['vR', 'vL'])
         C = self._contract_with_RP(C, imax)  # 'vL' 'vL*'
         #axes = [self._p_label + ['vL*'], self._get_p_label('*') + ['vR*']]
         for j in reversed(range(len(operators))):
             op = operators[j]  # the operator
             is_str = isinstance(op, str)
             i = i0 + j  # the site it acts on
-            B_ket = self._get_B_ket(i, form='B')
+            B_ket = self._get_ket().get_B(i, form='B')
             C = npc.tensordot(B_ket, C, axes=['vR', 'vL'])
             if not (is_str and op == 'Id'):
                 if is_str:
                     op = self.sites[self._to_valid_index(i)].get_op(op)
                 C = npc.tensordot(op, C, axes=['p*', 'p'])
-            B_bra = self._get_B_bra(i, form='B')
+            B_bra = self._get_bra().get_B(i, form='B')
             C = npc.tensordot(B_bra.conj(), C, axes=[['vR*', 'p*'], ['vL*', 'p']])
         return C
 
@@ -1131,19 +1131,17 @@ class BaseMPSExpectationValue(metaclass=ABCMeta):
         return op
 
     @abstractmethod
-    def _get_theta_ket(self, i, **kwargs):
+    def _get_bra(self):
+        """Return bra used in expectation values.
+
+        Just `self` in MPS, or self.bra in MPSEnvironment"""
         ...
 
     @abstractmethod
-    def _get_B_ket(self, i, **kwargs):
-        ...
+    def _get_ket(self):
+        """Return bra used in expectation values.
 
-    @abstractmethod
-    def _get_theta_bra(self, i, **kwargs):
-        ...
-
-    @abstractmethod
-    def _get_B_bra(self, i, **kwargs):
+        Just `self` in MPS, or self.ket in MPSEnvironment"""
         ...
 
     @abstractmethod
@@ -4480,17 +4478,11 @@ class MPS(BaseMPSExpectationValue):
             vR = self._B[-1].get_leg('vR')
         return vL, vR
 
-    def _get_theta_ket(self, i, *args, **kwargs):
-        return self.get_theta(i, *args, **kwargs)
+    def _get_ket(self):
+        return self
 
-    def _get_B_ket(self, i, *args, **kwargs):
-        return self.get_B(i, *args, **kwargs)
-
-    def _get_theta_bra(self, i, *args, **kwargs):
-        return self.get_theta(i, *args, **kwargs)
-
-    def _get_B_bra(self, i, *args, **kwargs):
-        return self.get_B(i, *args, **kwargs)
+    def _get_bra(self):
+        return self
 
     def _contract_with_LP(self, C, i):
         C.ireplace_labels(['vL'], ['vR*'])
@@ -5071,8 +5063,6 @@ class MPSEnvironment(BaseEnvironment, BaseMPSExpectationValue):
         |    .--<- vR*         vL* -<-.
 
     """
-
-
     def _contract_LP(self, i, LP):
         LP = npc.tensordot(LP, self.ket.get_B(i, form='A'), axes=('vR', 'vL'))
         axes = (self.ket._get_p_label('*') + ['vL*'], self.ket._p_label + ['vR*'])
@@ -5086,17 +5076,13 @@ class MPSEnvironment(BaseEnvironment, BaseMPSExpectationValue):
         # for a ususal MPS, axes = (['p', 'vL*'], ['p*', 'vR*'])
         RP = npc.tensordot(RP, self.bra.get_B(i, form='B').conj(), axes=axes)
         return RP  # labels 'vL', 'vL*'
-    def _get_theta_ket(self, i, *args, **kwargs):
-        return self.ket.get_theta(i, *args, **kwargs)
 
-    def _get_B_ket(self, i, *args, **kwargs):
-        return self.ket.get_B(i, *args, **kwargs)
+    # methods for Expectation values
+    def _get_bra(self):
+        return self.bra
 
-    def _get_theta_bra(self, i, *args, **kwargs):
-        return self.bra.get_theta(i, *args, **kwargs)
-
-    def _get_B_bra(self, i, *args, **kwargs):
-        return self.bra.get_B(i, *args, **kwargs)
+    def _get_ket(self):
+        return self.ket
 
     def _contract_with_LP(self, C, i):
         LP = self.get_LP(i, store=True)
