@@ -146,6 +146,7 @@ MPS.
 """
 # Copyright 2018-2023 TeNPy Developers, GNU GPLv3
 
+from abc import ABCMeta, abstractmethod
 import numpy as np
 import warnings
 import random
@@ -169,19 +170,15 @@ from ..algorithms.truncation import TruncationError, svd_theta, _machine_prec_tr
 __all__ = ['MPS', 'MPSEnvironment', 'TransferMatrix', 'InitialStateBuilder', 'build_initial_state']
 
 
-class _MPSExpectationValue:
-    r""" Parent class for MPS and MPSEnvironment to unify the framework of computing
-    expectation values and correlation functions
-    For general expectation values of operators 'ops' between different states
-    <bra|ops|ket> we need to include the left/ right environments LP/RP. These are
-    calculated in MPSEnvironment.
-    For MPS LP/RP are trivial because of the canonical form.
-    """
+class BaseMPSExpectationValue(metaclass=ABCMeta):
+    r"""Base class providing unified expectation value framework for MPS and MPSEnvironment.
 
-    def __init__(self):
-        assert hasattr(self, 'L')
-        assert hasattr(self, 'sites')
-        assert hasattr(self, 'finite')
+    For general expectation values of operators 'ops' between different states
+    ``<bra|ops|ket>`` we need to include the left/ right environments ``LP`` and ``RP``.
+    These are calculated in :class:`MPSEnvironment`.
+    For "standard" expectation values ``<psi|ops|psi>``, the environments are trivial identities
+    due to the canonical from.
+    """
 
     def expectation_value(self, ops, sites=None, axes=None):
         """Expectation value ``<bra|ops|ket>`` of (n-site) operator(s).
@@ -1132,26 +1129,38 @@ class _MPSExpectationValue:
             op = self.sites[i % self.L].get_op(op)
         return op
 
+    @abstractmethod
     def _get_theta_ket(self, i, **kwargs):
-        raise NotImplementedError("Subclasses should override this")
+        ...
 
+    @abstractmethod
     def _get_B_ket(self, i, **kwargs):
-        raise NotImplementedError("Subclasses should override this")
+        ...
 
+    @abstractmethod
     def _get_theta_bra(self, i, **kwargs):
-        raise NotImplementedError("Subclasses should override this")
+        ...
 
+    @abstractmethod
     def _get_B_bra(self, i, **kwargs):
-        raise NotImplementedError("Subclasses should override this")
+        ...
 
-    def _contract_left(self):
-        raise NotImplementedError("Subclasses should override this")
+    @abstractmethod
+    def _contract_left(self, C, i):
+        """contract `C` with `self.get_LP(i)`.
 
-    def _contract_right(self):
-        raise NotImplementedError("Subclasses should override this")
+        If `bra` = `ket`, this is a trivial relabeling of legs `vL` -> `vR*`."""
+        ...
+
+    @abstractmethod
+    def _contract_right(self, C, i):
+        """contract `C` with `self.get_RP(i)`.
+
+        If `bra` = `ket`, this is a trivial relabeling of legs `vR` -> `vL*`."""
+        ...
 
 
-class MPS(_MPSExpectationValue):
+class MPS(BaseMPSExpectationValue):
     r"""A Matrix Product State, finite (MPS) or infinite (iMPS).
 
     Parameters
@@ -4491,36 +4500,14 @@ class MPS(_MPSExpectationValue):
         return C
 
 
-class MPSEnvironment(_MPSExpectationValue):
-    """Stores partial contractions of :math:`<bra|Op|ket>` for local operators `Op`.
+class BaseEnvironment(metaclass=ABCMeta):
+    """Base class for :class:`MPSEnvironement` storing partial contractions between MPS.
 
-    The network for a contraction :math:`<bra|Op|ket>` of a local operator `Op`, say exemplary
-    at sites `i, i+1` looks like::
+    When `bra` and `ket` are the same, a suitable canonical form simplifies `LP` and `RP` tensors
+    to identities, but for different `bra` and `ket`, or if we sandwich a whole MPO between the
+    `bra` and `ket` (even if they are the same), the partial contractions are non-trivial.
 
-        |     .-----M[0]--- ... --M[1]---M[2]--- ... ->--.
-        |     |     |             |      |               |
-        |     |     |             |------|               |
-        |     LP[0] |             |  Op  |               RP[-1]
-        |     |     |             |------|               |
-        |     |     |             |      |               |
-        |     .-----N[0]*-- ... --N[1]*--N[2]*-- ... -<--.
-
-    Of course, we can also calculate the overlap `<bra|ket>` by using the special case ``Op = Id``.
-
-    We use the following label convention (where arrows indicate `qconj`)::
-
-        |    .-->- vR           vL ->-.
-        |    |                        |
-        |    LP                       RP
-        |    |                        |
-        |    .--<- vR*         vL* -<-.
-
-    To avoid recalculations of the whole network e.g. in the DMRG sweeps,
-    we store the contractions up to some site index in this class.
-    For ``bc='finite','segment'``, the very left and right part ``LP[0]`` and
-    ``RP[L-1]`` are trivial and don't change,
-    but for ``bc='infinite'`` they are might be updated
-    (by inserting another unit cell to the left/right).
+    This class stores the partial contractions up to each bond.
 
     The MPS `bra` and `ket` have to be in canonical form.
     All the environments are constructed without the singular values on the open bond.
@@ -5046,8 +5033,46 @@ class MPSEnvironment(_MPSExpectationValue):
         terms_sum = env.full_contraction(0)  # handles explicit_plus_hc
         return np.real_if_close(terms_sum), mpo_
 
+    @abstractmethod
     def _contract_LP(self, i, LP):
         """Contract LP with the tensors on site `i` to form ``self.get_LP(i+1)``"""
+        ...
+
+    @abstractmethod
+    def _contract_RP(self, i, RP):
+        """Contract RP with the tensors on site `i` to form ``self.get_RP(i-1)``"""
+        ...
+
+
+class MPSEnvironment(BaseEnvironment, BaseMPSExpectationValue):
+    """Class storing partial contractions between two different MPS and providing expectation values.
+
+    The network for a contraction :math:`<bra|Op|ket>` of a local operator `Op`, say exemplary
+    at sites `i, i+1` looks like::
+
+        |     .-----M[0]--- ... --M[1]---M[2]--- ... ->--.
+        |     |     |             |      |               |
+        |     |     |             |------|               |
+        |     LP[0] |             |  Op  |               RP[-1]
+        |     |     |             |------|               |
+        |     |     |             |      |               |
+        |     .-----N[0]*-- ... --N[1]*--N[2]*-- ... -<--.
+
+    This class stores the partial contractions `LP` and `RP` coming from the left and right up to
+    each bond, allowing efficient calculations of expectation values, correlation functions etc.
+
+    We use the following label convention (where arrows indicate `qconj`)::
+
+        |    .-->- vR           vL ->-.
+        |    |                        |
+        |    LP                       RP
+        |    |                        |
+        |    .--<- vR*         vL* -<-.
+
+    """
+
+
+    def _contract_LP(self, i, LP):
         LP = npc.tensordot(LP, self.ket.get_B(i, form='A'), axes=('vR', 'vL'))
         axes = (self.ket._get_p_label('*') + ['vL*'], self.ket._p_label + ['vR*'])
         # for a ususal MPS, axes = (['p*', 'vL*'], ['p', 'vR*'])
@@ -5055,13 +5080,11 @@ class MPSEnvironment(_MPSExpectationValue):
         return LP  # labels 'vR*', 'vR'
 
     def _contract_RP(self, i, RP):
-        """Contract RP with the tensors on site `i` to form ``self.get_RP(i-1)``"""
         RP = npc.tensordot(self.ket.get_B(i, form='B'), RP, axes=('vR', 'vL'))
         axes = (self.ket._p_label + ['vL*'], self.ket._get_p_label('*') + ['vR*'])
         # for a ususal MPS, axes = (['p', 'vL*'], ['p*', 'vR*'])
         RP = npc.tensordot(RP, self.bra.get_B(i, form='B').conj(), axes=axes)
         return RP  # labels 'vL', 'vL*'
-
     def _get_theta_ket(self, i, *args, **kwargs):
         return self.ket.get_theta(i, *args, **kwargs)
 

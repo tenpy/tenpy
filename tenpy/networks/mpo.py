@@ -50,7 +50,7 @@ from ..linalg.sparse import NpcLinearOperator, FlatLinearOperator
 from .site import group_sites, Site
 from ..tools.string import vert_join
 from .mps import MPS as _MPS  # only for MPS._valid_bc
-from .mps import MPSEnvironment
+from .mps import BaseEnvironment
 from .terms import OnsiteTerms, CouplingTerms, MultiCouplingTerms
 from ..tools.misc import add_with_None_0
 from ..tools.math import lcm
@@ -1935,7 +1935,7 @@ class MPOGraph:
         return legs, Ws_qtotal
 
 
-class MPOEnvironment(MPSEnvironment):
+class MPOEnvironment(BaseEnvironment):
     """Stores partial contractions of :math:`<bra|H|ket>` for an MPO `H`.
 
     The network for a contraction :math:`<bra|H|ket>` of an MPO `H` between two MPS looks like::
@@ -1958,18 +1958,7 @@ class MPOEnvironment(MPSEnvironment):
         |    |                        |
         |    .--<- vR*         vL* -<-.
 
-    To avoid recalculations of the whole network e.g. in the DMRG sweeps,
-    we store the contractions up to some site index in this class.
-    For ``bc='finite','segment'``, the very left and right part ``LP[0]`` and
-    ``RP[-1]`` are trivial and don't change in the DMRG algorithm,
-    but for iDMRG (``bc='infinite'``) they are also updated
-    (by inserting another unit cell to the left/right).
-
-    The MPS `bra` and `ket` have to be in canonical form.
-    All the environments are constructed without the singular values on the open bond.
-    In other words, we contract left-canonical `A` to the left parts `LP`
-    and right-canonical `B` to the right parts `RP`.
-
+    See :class:`BaseEnvironment` for further details.
 
     Parameters
     ----------
@@ -2245,60 +2234,6 @@ class MPOEnvironment(MPSEnvironment):
             res = res + np.conj(res)
         return res
 
-    def expectation_value(self, ops, sites=None, axes=None):
-        """(doesn't make sense)"""
-        raise NotImplementedError("doesn't make sense for an MPOEnvironment")
-
-    def expectation_value_multi_sites(self, operators, i0):
-        """(doesn't make sense)"""
-        raise NotImplementedError("doesn't make sense for an MPOEnvironment")
-
-    def correlation_function(self,
-                             ops1,
-                             ops2,
-                             sites1=None,
-                             sites2=None,
-                             opstr=None,
-                             str_on_first=True,
-                             hermitian=False,
-                             autoJW=True):
-        """(doesn't make sense)"""
-        raise NotImplementedError("doesn't make sense for an MPOEnvironment")
-
-    def expectation_value_term(self, term, autoJW=True):
-        """(doesn't make sense)"""
-        raise NotImplementedError("doesn't make sense for an MPOEnvironment")
-
-    def term_correlation_function_right(self,
-                                        term_L,
-                                        term_R,
-                                        i_L=0,
-                                        j_R=None,
-                                        autoJW=True,
-                                        opstr=None):
-        """(doesn't make sense)"""
-        raise NotImplementedError("doesn't make sense for an MPOEnvironment")
-
-    def term_correlation_function_left(self,
-                                       term_L,
-                                       term_R,
-                                       i_L=None,
-                                       j_R=0,
-                                       autoJW=True,
-                                       opstr=None):
-        """(doesn't make sense)"""
-        raise NotImplementedError("doesn't make sense for an MPOEnvironment")
-
-    def term_list_correlation_function_right(self,
-                                             term_list_L,
-                                             term_list_R,
-                                             i_L=0,
-                                             j_R=None,
-                                             autoJW=True,
-                                             opstr=None):
-        """(doesn't make sense)"""
-        raise NotImplementedError("doesn't make sense for an MPOEnvironment")
-
     def _contract_LP(self, i, LP):
         """Contract LP with the tensors on site `i` to form ``self._LP[i+1]``"""
         # same as MPSEnvironment._contract_LP, but also contract with `H.get_W(i)`
@@ -2343,6 +2278,16 @@ class MPOEnvironment(MPSEnvironment):
                                    pipes=[pipe, pipe.conj()],
                                    new_axes=[2, 1])
         return RHeff
+
+    def _to_valid_index(self, i):
+        """Make sure `i` is a valid index (depending on `finite`)."""
+        if not self.finite:
+            return i % self.L
+        if i < 0:
+            i += self.L
+        if i >= self.L or i < 0:
+            raise KeyError("i = {0:d} out of bounds for finite MPS".format(i))
+        return i
 
 
 class MPOTransferMatrix(NpcLinearOperator):
