@@ -571,12 +571,13 @@ def test_expectation_value_multisite():
     ev = env1.expectation_value(SpSm)
     npt.assert_almost_equal(ev, [-0.5, 0., -0.5, 0., -0.5])
 
-    psi1.apply_local_op(2, SpSm)  # multi-site operator
+    psi1.apply_local_op(2, SpSm)  # multi-site operator, not unitary!
+    assert abs(psi1.norm  - 0.5**0.5) < 1.e-14
     ev = psi1.expectation_value(SpSm)  # normalized!
     npt.assert_almost_equal(ev, [-0.5, 0., 0.0, 0., -0.5])
-    env1 = mps.MPSEnvironment(psi1, psi)  # normalized!
-    ev = env1.expectation_value(SpSm)*psi.norm*psi1.norm / psi1.overlap(psi)  # normalize
-    npt.assert_almost_equal(ev, [-0.5, 0., -1., 0., -0.5])
+    env1 = mps.MPSEnvironment(psi1, psi)
+    ev = env1.expectation_value(SpSm) # = <psi|dagger(SpSm)_2 SpSm_i |psi>
+    npt.assert_almost_equal(ev, np.array([+0.25, 0., 0.5, 0., 0.25]))
 
 
 def test_MPSEnvironment_expectation_values():

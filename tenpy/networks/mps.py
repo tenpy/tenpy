@@ -198,10 +198,6 @@ class BaseMPSExpectationValue(metaclass=ABCMeta):
         Here, the `B` are taken from `ket`, the `B*` from `bra`.
         For MPS expectation values these are the same and LP/ RP are trivial.
 
-        .. warning ::
-
-            This function assumes that bra and ket are normalized, i.e. for MPSEnvironment.
-            Thus you may want to take into account :attr:`MPS.norm` of both `bra` and `ket`.
 
         Parameters
         ----------
@@ -226,6 +222,15 @@ class BaseMPSExpectationValue(metaclass=ABCMeta):
         exp_vals : 1D ndarray
             Expectation values, ``exp_vals[i] = <bra|ops[i]|ket>``, where ``ops[i]`` acts on
             site(s) ``j, j+1, ..., j+{n-1}`` with ``j=sites[i]``.
+
+            .. warning ::
+
+                The :class:`MPSEnvironment` variant of this method takes the accumulated MPS
+                :attr:`~tenpy.networks.mps.MPS.norm` into account, which is non-trivial e.g. when you
+                used `apply_local_op` with non-unitary operators.
+
+                In contrast, the :class:`MPS` variant of this method *ignores* the `norm`,
+                i.e. returns the expectation value for the normalized state.
 
         Examples
         --------
@@ -299,7 +304,7 @@ class BaseMPSExpectationValue(metaclass=ABCMeta):
             C.ireplace_labels(['vR*', 'vL*'], ['vL', 'vR'])  # back to original theta labels
             theta_bra = self._get_bra().get_theta(i, n)
             E.append(npc.inner(theta_bra, C, axes='labels', do_conj=True))
-        return np.real_if_close(np.array(E))
+        return self._normalize_exp_val(E)
 
     def expectation_value_multi_sites(self, operators, i0):
         r"""Expectation value  ``<bra|op0_{i0}op1_{i0+1}...opN_{i0+N}|ket>``.
@@ -321,11 +326,6 @@ class BaseMPSExpectationValue(metaclass=ABCMeta):
             This function does *not* automatically add Jordan-Wigner strings!
             For correct handling of fermions, use :meth:`expectation_value_term` instead.
 
-        .. warning ::
-
-            This function assumes that bra and ket are normalized, i.e. for MPSEnvironment.
-            Thus you may want to take into account :attr:`MPS.norm` of both `bra` and `ket`.
-
         Parameters
         ----------
         operators : List of { :class:`~tenpy.linalg.np_conserved.Array` | str }
@@ -340,13 +340,21 @@ class BaseMPSExpectationValue(metaclass=ABCMeta):
         -------
         exp_val : float/complex
             The expectation value of the tensorproduct of the given onsite operators,
-            ``<psi|operators[0]_{i0} operators[1]_{i0+1} ... |psi>/<psi|psi>``,
-            where ``|psi>`` is the represented MPS.
+            ``<bra|operators[0]_{i0} operators[1]_{i0+1} ... |ket>``.
+
+            .. warning ::
+
+                The :class:`MPSEnvironment` variant of this method takes the accumulated MPS
+                :attr:`~tenpy.networks.mps.MPS.norm` into account, which is non-trivial e.g. when you
+                used `apply_local_op` with non-unitary operators.
+
+                In contrast, the :class:`MPS` variant of this method *ignores* the `norm`,
+                i.e. returns the expectation value for the normalized state.
         """
         C = self._corr_ops_LP(operators, i0)
         C = self._contract_with_RP(C, i0 + len(operators) - 1)
         exp_val = npc.trace(C, 'vR*', 'vL*')
-        return np.real_if_close(exp_val)
+        return self._normalize_exp_val(exp_val)
 
     def correlation_function(self,
                              ops1,
@@ -378,7 +386,7 @@ class BaseMPSExpectationValue(metaclass=ABCMeta):
             |          .--S--B[i]---B[i+1]--...- B[j]---.     .--S--B[j]---B[j+1]--...- B[i]---.
             |          |     |      |            |      |     |     |      |            |      |
             |          |     opstr  opstr        op2    |     |     op2    |            |      |
-            |          LP[i] |     |            |       RP[j] LP[j] |      |            |      RP[i]
+            |          LP[i] |      |            |      RP[j] LP[j] |      |            |      RP[i]
             |          |     op1    |            |      |     |     opstr  opstr        op1    |
             |          |     |      |            |      |     |     |      |            |      |
             |          .--S--B*[i]--B*[i+1]-...- B*[j]--.     .--S--B*[j]--B*[j+1]-...- B*[i]--.
@@ -395,11 +403,6 @@ class BaseMPSExpectationValue(metaclass=ABCMeta):
             can be inefficient if you try to vary the left end while fixing the right end.
             In that case, you might be better off (=faster evaluation) by using
             :meth:`term_correlation_function_left` with a small for loop over the right indices.
-
-        .. warning ::
-
-            This function assumes that bra and ket are normalized, i.e. for MPSEnvironment.
-            Thus you may want to take into account :attr:`MPS.norm` of both `bra` and `ket`.
 
         Parameters
         ----------
@@ -439,16 +442,26 @@ class BaseMPSExpectationValue(metaclass=ABCMeta):
             *Ignored* if `opstr` is given.
             If `True`, auto-determine if a Jordan-Wigner string is needed.
             Works only if exclusively strings were used for `op1` and `op2`.
+
         Returns
         -------
         C : 2D ndarray
-            The correlation function ``C[x, y] = <psi|ops1[i] ops2[j]|psi>``,
+            The correlation function ``C[x, y] = <bra|ops1[i] ops2[j]|ket>``,
             where ``ops1[i]`` acts on site ``i=sites1[x]`` and ``ops2[j]`` on site ``j=sites2[y]``.
             If `opstr` is given, it gives (for ``str_on_first=True``):
-            - For ``i < j``: ``C[x, y] = <psi|ops1[i] prod_{i <= r < j} opstr[r] ops2[j]|psi>``.
-            - For ``i > j``: ``C[x, y] = <psi|prod_{j <= r < i} opstr[r] ops1[i] ops2[j]|psi>``.
-            - For ``i = j``: ``C[x, y] = <psi|ops1[i] ops2[j]|psi>``.
+            - For ``i < j``: ``C[x, y] = <bra|ops1[i] prod_{i <= r < j} opstr[r] ops2[j]|ket>``.
+            - For ``i > j``: ``C[x, y] = <bra|prod_{j <= r < i} opstr[r] ops1[i] ops2[j]|ket>``.
+            - For ``i = j``: ``C[x, y] = <bra|ops1[i] ops2[j]|ket>``.
             The condition ``<= r`` is replaced by a strict ``< r``, if ``str_on_first=False``.
+
+            .. warning ::
+
+                The :class:`MPSEnvironment` variant of this method takes the accumulated MPS
+                :attr:`~tenpy.networks.mps.MPS.norm` into account, which is non-trivial e.g. when you
+                used `apply_local_op` with non-unitary operators.
+
+                In contrast, the :class:`MPS` variant of this method *ignores* the `norm`,
+                i.e. returns the expectation value for the normalized state.
 
         Examples
         --------
@@ -551,7 +564,7 @@ class BaseMPSExpectationValue(metaclass=ABCMeta):
                                                             str_on_first, False)
                     # exchange ops1 and ops2 : they commute on different sites,
                     # but we apply opstr after op1 (using the last argument = False)
-        return np.real_if_close(C)
+        return self._normalize_exp_val(C)
 
     def expectation_value_term(self, term, autoJW=True):
         r"""Expectation value  ``<bra|op_{i0}op_{i1}...op_{iN}|ket>``.
@@ -569,10 +582,6 @@ class BaseMPSExpectationValue(metaclass=ABCMeta):
             |          |     |       |        |        |        |
             |          .--S--B*[i0]--B*[i0+1]-B*[i0+2]-B*[i0+3]-.
 
-        .. warning ::
-
-            This function assumes that bra and ket are normalized, i.e. for MPSEnvironment.
-            Thus you may want to take into account :attr:`MPS.norm` of both `bra` and `ket`.
 
         Parameters
         ----------
@@ -589,8 +598,16 @@ class BaseMPSExpectationValue(metaclass=ABCMeta):
         -------
         exp_val : float/complex
             The expectation value of the tensorproduct of the given onsite operators,
-            ``<psi|op_i0 op_i1 ... op_iN |psi>/<psi|psi>``,
-            where ``|psi>`` is the represented MPS.
+            ``<bra|op_i0 op_i1 ... op_iN |ket>``.
+
+            .. warning ::
+
+                The :class:`MPSEnvironment` variant of this method takes the accumulated MPS
+                :attr:`~tenpy.networks.mps.MPS.norm` into account, which is non-trivial e.g. when you
+                used `apply_local_op` with non-unitary operators.
+
+                In contrast, the :class:`MPS` variant of this method *ignores* the `norm`,
+                i.e. returns the expectation value for the normalized state.
 
         See also
         --------
@@ -663,6 +680,15 @@ class BaseMPSExpectationValue(metaclass=ABCMeta):
         corrs : 1D array
             Values of the correlation function, one for each entry in the list `j_R`.
 
+            .. warning ::
+
+                The :class:`MPSEnvironment` variant of this method takes the accumulated MPS
+                :attr:`~tenpy.networks.mps.MPS.norm` into account, which is non-trivial e.g. when you
+                used `apply_local_op` with non-unitary operators.
+
+                In contrast, the :class:`MPS` variant of this method *ignores* the `norm`,
+                i.e. returns the expectation value for the normalized state.
+
         See also
         --------
         correlation_function : varying both `i` and `j` at once.
@@ -707,7 +733,7 @@ class BaseMPSExpectationValue(metaclass=ABCMeta):
             ops_R, _, _ = self._term_to_ops_list(term_R, autoJW, j - j_min)
             CR = self._corr_ops_RP(ops_R, j)
             result.append(npc.inner(CL, CR, axes=[['vR', 'vR*'], ['vL', 'vL*']]))
-        return np.real_if_close(result)
+        return self._normalize_exp_val(result)
 
     def term_correlation_function_left(self,
                                        term_L,
@@ -759,7 +785,7 @@ class BaseMPSExpectationValue(metaclass=ABCMeta):
             ops_L, _, _ = self._term_to_ops_list(term_L, autoJW, i, has_extra_JW)
             CL = self._corr_ops_LP(ops_L, i + i_min)
             result.append(npc.inner(CL, CR, axes=[['vR', 'vR*'], ['vL', 'vL*']]))
-        return np.real_if_close(result)
+        return self._normalize_exp_val(result)
 
     def term_list_correlation_function_right(self,
                                              term_list_L,
@@ -772,16 +798,11 @@ class BaseMPSExpectationValue(metaclass=ABCMeta):
 
         Generalization of :meth:`term_correlation_function_right` to the case where
         `term_list_L` and `term_R` are sums of terms.
-        This function calculates ``<psi|term_list_L[i_L] term_list_R[j]|psi> for j in j_R``.
+        This function calculates ``<bra|term_list_L[i_L] term_list_R[j]|ket> for j in j_R``.
 
         **Assumes** that overall terms with an odd number of operators requiring a Jordan-Wigner
         string don't contribute.
         (In systems conserving the fermionic particle number (parity), this is true.)
-
-        .. warning ::
-
-            This function assumes that bra and ket are normalized, i.e. for MPSEnvironment.
-            Thus you may want to take into account :attr:`MPS.norm` of both `bra` and `ket`.
 
         Parameters
         ----------
@@ -807,6 +828,15 @@ class BaseMPSExpectationValue(metaclass=ABCMeta):
         -------
         corrs : 1D array
             Values of the correlation function, one for each entry in the list `j_R`.
+
+            .. warning ::
+
+                The :class:`MPSEnvironment` variant of this method takes the accumulated MPS
+                :attr:`~tenpy.networks.mps.MPS.norm` into account, which is non-trivial e.g. when you
+                used `apply_local_op` with non-unitary operators.
+
+                In contrast, the :class:`MPS` variant of this method *ignores* the `norm`,
+                i.e. returns the expectation value for the normalized state.
 
         See also
         --------
@@ -881,7 +911,7 @@ class BaseMPSExpectationValue(metaclass=ABCMeta):
                     continue  # nothing to pair up with
                 res = res + strength * npc.inner(CL, CR, axes=[['vR', 'vR*'], ['vL', 'vL*']])
             result.append(res)
-        return np.real_if_close(result)
+        return self._normalize_exp_val(result)
 
     def _term_to_ops_list(self, term, autoJW=True, i_offset=0, JW_from_right=False):
         """Translate a `term` to a list of operators (one per site).
@@ -1145,6 +1175,11 @@ class BaseMPSExpectationValue(metaclass=ABCMeta):
         ...
 
     @abstractmethod
+    def _normalize_exp_val(self, value):
+        """Return `value`, but multiply with bra.norm and ket.norm for MPSEnvironment."""
+        ...
+
+    @abstractmethod
     def _contract_with_LP(self, C, i):
         """contract `C` with `self.get_LP(i)`.
 
@@ -1193,8 +1228,9 @@ class MPS(BaseMPSExpectationValue):
     dtype : type
         The data type of the ``_B``.
     norm : float
-        The norm of the state, i.e. ``sqrt(<psi|psi>)``.
-        Ignored for (normalized) :meth:`expectation_value`, but important for :meth:`overlap`.
+        The overall norm of the state, i.e. ``sqrt(<psi|psi>)`` - the tensors are kept normalized.
+        Ignored for (normalized) :meth:`expectation_value` and co,
+        but important for :meth:`overlap` and expectation value methods of :class:`MPSEnvironment`.
     grouped : int
         Number of sites grouped together, see :meth:`group_sites`.
     segment_boundaries : tuple of :class:`~tenpy.linalg.np_conserved.Array` | (None, None)
@@ -4484,6 +4520,9 @@ class MPS(BaseMPSExpectationValue):
     def _get_bra(self):
         return self
 
+    def _normalize_exp_val(self, value):
+        return np.real_if_close(value) # ignore self.norm
+
     def _contract_with_LP(self, C, i):
         C.ireplace_labels(['vL'], ['vR*'])
         return C
@@ -5073,9 +5112,8 @@ class MPSEnvironment(BaseEnvironment, BaseMPSExpectationValue):
 
         The full contraction of the environments gives the overlap ``<bra|ket>``,
         taking into account the :attr:`MPS.norm` of both `bra` and `ket`.
-        For this purpose, this function contracts
-        ``get_LP(i0+1, store=False)`` and ``get_RP(i0, store=False)`` with appropriate singular
-        values in between.
+        For this purpose, this function contracts ``get_LP(i0+1, store=False)`` and
+        ``get_RP(i0, store=False)`` with appropriate singular values in between.
 
         Parameters
         ----------
@@ -5106,6 +5144,15 @@ class MPSEnvironment(BaseEnvironment, BaseMPSExpectationValue):
 
     def _get_ket(self):
         return self.ket
+
+    def _normalize_exp_val(self, value):
+        # this ensures that
+        #     MPSEnvironment(psi, psi.apply_local_op('B', i)).expecation_value('A', j)
+        # gives the same as
+        #     psi.correlation_function('A', 'B', sites1=[i], sites2=[j])
+        # and psi.apply_local_op('Adagger', i).overlap(psi.apply_local_op('B', j)
+        # for initially normalized psi
+        return np.real_if_close(value) * (self.bra.norm * self.ket.norm)
 
     def _contract_with_LP(self, C, i):
         LP = self.get_LP(i, store=True)
