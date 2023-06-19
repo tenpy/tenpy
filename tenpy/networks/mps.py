@@ -4941,20 +4941,25 @@ class BaseEnvironment(metaclass=ABCMeta):
             data['ket'] = self.ket
         return data
 
+    @abstractmethod
     def full_contraction(self, i0):
         """Calculate the overlap by a full contraction of the network.
 
-        The full contraction of the environments gives the overlap ``<bra|ket>``,
-        taking into account :attr:`MPS.norm` of both `bra` and `ket`.
-        For this purpose, this function contracts
-        ``get_LP(i0+1, store=False)`` and ``get_RP(i0, store=False)`` with appropriate singular
-        values in between.
+        This function contracts ``get_LP(i0+1, store=False)`` and ``get_RP(i0, store=False)``
+        with appropriate singular values in between.
+
+        Conventions for :class:`MPSEnvironment` and :class:`~tenpy.networks.mpo.MPOEnvironment`
+        are slightly different: the `MPSEnvironment` multiplies with
+        taking into account :attr:`MPS.norm` of both `bra` and `ket`, the MPOEnvironment not.
 
         Parameters
         ----------
         i0 : int
             Site index.
         """
+        ...  # can use _full_contraction_LP_RP
+
+    def _full_contraction_LP_RP(self, i0):
         if self.ket.finite and i0 + 1 == self.L:
             # special case to handle `_to_valid_index` correctly:
             # get_LP(L) is not valid for finite b.c, so we use need to calculate it explicitly.
@@ -4974,8 +4979,7 @@ class BaseEnvironment(metaclass=ABCMeta):
         else:
             LP = LP.scale_axis(S_ket, 'vR')
         RP = self.get_RP(i0, store=False)
-        contr = npc.inner(LP, RP, axes=[['vR*', 'vR'], ['vL*', 'vL']], do_conj=False)
-        return contr * self.bra.norm * self.ket.norm
+        return LP, RP
 
     def expectation_value_terms_sum(self, term_list):
         """Calculate expectation values for a bunch of terms and sum them up.
@@ -5063,6 +5067,25 @@ class MPSEnvironment(BaseEnvironment, BaseMPSExpectationValue):
         |    .--<- vR*         vL* -<-.
 
     """
+
+    def full_contraction(self, i0):
+        """Calculate the overlap by a full contraction of the network.
+
+        The full contraction of the environments gives the overlap ``<bra|ket>``,
+        taking into account the :attr:`MPS.norm` of both `bra` and `ket`.
+        For this purpose, this function contracts
+        ``get_LP(i0+1, store=False)`` and ``get_RP(i0, store=False)`` with appropriate singular
+        values in between.
+
+        Parameters
+        ----------
+        i0 : int
+            Site index.
+        """
+        LP, RP = self._full_contraction_LP_RP(i0)
+        contr = npc.inner(LP, RP, axes=[['vR*', 'vR'], ['vL*', 'vL']], do_conj=False)
+        return contr * self.bra.norm * self.ket.norm
+
     def _contract_LP(self, i, LP):
         LP = npc.tensordot(LP, self.ket.get_B(i, form='A'), axes=('vR', 'vL'))
         axes = (self.ket._get_p_label('*') + ['vL*'], self.ket._p_label + ['vR*'])

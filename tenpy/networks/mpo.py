@@ -2198,10 +2198,10 @@ class MPOEnvironment(BaseEnvironment):
         """Calculate the energy by a full contraction of the network.
 
         The full contraction of the environments gives the value
-        ``<bra|H|ket> / (norm(|bra>)*norm(|ket>))``,
-        i.e. if `bra` is `ket` and normalized, the total energy.
-        For this purpose, this function contracts
-        ``get_LP(i0+1, store=False)`` and ``get_RP(i0, store=False)``.
+        ``<bra|H|ket> `` ignoring the :attr:`~tenpy.networks.mps.MPS.norm` of the `bra` and `ket`,
+        i.e. the total energy (even if bra and ket are not normalized).
+        For this purpose, this function contracts ``get_LP(i0+1, store=False)`` and
+        ``get_RP(i0, store=False)`` with appropriate singular values in between.
 
         Parameters
         ----------
@@ -2209,26 +2209,7 @@ class MPOEnvironment(BaseEnvironment):
             Site index.
         """
         # same as MPSEnvironment.full_contraction, but also contract 'wL' with 'wR'
-        if self.ket.finite and i0 + 1 == self.L:
-            # special case to handle `_to_valid_index` correctly:
-            # get_LP(L) is not valid for finite b.c, so we use need to calculate it explicitly.
-            LP = self.get_LP(i0, store=False)
-            LP = self._contract_LP(i0, LP)
-        else:
-            LP = self.get_LP(i0 + 1, store=False)
-
-        # multiply with `S` on bra and ket side
-        S_bra = self.bra.get_SR(i0).conj()
-        if isinstance(S_bra, npc.Array):
-            LP = npc.tensordot(S_bra, LP, axes=['vL*', 'vR*'])
-        else:
-            LP = LP.scale_axis(S_bra, 'vR*')
-        S_ket = self.ket.get_SR(i0)
-        if isinstance(S_ket, npc.Array):
-            LP = npc.tensordot(LP, S_ket, axes=['vR', 'vL'])
-        else:
-            LP = LP.scale_axis(S_ket, 'vR')
-        RP = self.get_RP(i0, store=False)
+        LP, RP = self._full_contraction_LP_RP(i0)
         res = npc.inner(LP, RP, axes=[['vR*', 'wR', 'vR'], ['vL*', 'wL', 'vL']], do_conj=False)
         if self.H.explicit_plus_hc:
             res = res + np.conj(res)
