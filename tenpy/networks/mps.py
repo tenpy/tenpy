@@ -167,7 +167,8 @@ from ..tools.cache import DictCache
 from ..tools import hdf5_io
 from ..algorithms.truncation import TruncationError, svd_theta, _machine_prec_trunc_par
 
-__all__ = ['MPS', 'MPSEnvironment', 'TransferMatrix', 'InitialStateBuilder', 'build_initial_state']
+__all__ = ['BaseMPSExpectationValue', 'MPS', 'BaseEnvironment', 'MPSEnvironment', 'TransferMatrix',
+           'InitialStateBuilder', 'build_initial_state']
 
 
 class BaseMPSExpectationValue(metaclass=ABCMeta):
@@ -293,8 +294,8 @@ class BaseMPSExpectationValue(metaclass=ABCMeta):
             op = op.replace_labels(op_ax_p + op_ax_pstar, ax_p + ax_pstar)
             theta_ket = self._get_theta_ket(i, n)
             C = npc.tensordot(op, theta_ket, axes=[ax_pstar, ax_p])  # C has same labels as theta
-            C = self._contract_left(C, i)  # axes_p + (vR*, vR)
-            C = self._contract_right(C, i + n - 1)  # axes_p + (vR*, vL*)
+            C = self._contract_with_LP(C, i)  # axes_p + (vR*, vR)
+            C = self._contract_with_RP(C, i + n - 1)  # axes_p + (vR*, vL*)
             C.ireplace_labels(['vR*', 'vL*'], ['vL', 'vR'])  # back to original theta labels
             theta_bra = self._get_theta_bra(i, n)
             E.append(npc.inner(theta_bra, C, axes='labels', do_conj=True))
@@ -343,7 +344,7 @@ class BaseMPSExpectationValue(metaclass=ABCMeta):
             where ``|psi>`` is the represented MPS.
         """
         C = self._corr_ops_LP(operators, i0)
-        C = self._contract_right(C, i0 + len(operators) - 1)
+        C = self._contract_with_RP(C, i0 + len(operators) - 1)
         exp_val = npc.trace(C, 'vR*', 'vL*')
         return np.real_if_close(exp_val)
 
@@ -951,7 +952,7 @@ class BaseMPSExpectationValue(metaclass=ABCMeta):
         theta_ket = self._get_theta_ket(i, n=1)
         theta_bra = self._get_theta_bra(i, n=1)
         C = npc.tensordot(op1, theta_ket, axes=['p*', 'p0'])
-        C = self._contract_left(C, i)
+        C = self._contract_with_LP(C, i)
         C = npc.tensordot(theta_bra.conj(), C, axes=[['p0*', 'vL*'], ['p', 'vR*']])
         # C has legs 'vR*', 'vR'
         js = list(j_gtr[::-1])  # stack of j, sorted *descending*
@@ -962,7 +963,7 @@ class BaseMPSExpectationValue(metaclass=ABCMeta):
             C = npc.tensordot(C, B, axes=['vR', 'vL'])
             if r == js[-1]:
                 Cij = npc.tensordot(self.get_op(ops2, r), C, axes=['p*', 'p'])
-                Cij = self._contract_right(Cij, r)
+                Cij = self._contract_with_RP(Cij, r)
                 Cij = npc.inner(B_bra.conj(),
                                 Cij,
                                 axes=[['vL*', 'p*', 'vR*'], ['vR*', 'p', 'vL*']])
@@ -987,7 +988,7 @@ class BaseMPSExpectationValue(metaclass=ABCMeta):
         theta_ket = self._get_theta_ket(i0, n=1)
         theta_bra = self._get_theta_bra(i0, n=1)
         C = npc.tensordot(op, theta_ket, axes=['p*', 'p0'])
-        C = self._contract_left(C, i0)  # 'p' 'vR*' 'vR'
+        C = self._contract_with_LP(C, i0)  # 'p' 'vR*' 'vR'
         C = npc.tensordot(theta_bra.conj(), C, axes=[['p0*', 'vL*'], ['p', 'vR*']])
         for j in range(1, len(operators)):
             op = operators[j]  # the operator
@@ -1012,7 +1013,7 @@ class BaseMPSExpectationValue(metaclass=ABCMeta):
         op = operators[-1]
         imax = i0 + len(operators) - 1
         C = npc.eye_like(self._get_B_ket(imax, 'B'), 'vR', ['vR', 'vL'])
-        C = self._contract_right(C, imax)  # 'vL' 'vL*'
+        C = self._contract_with_RP(C, imax)  # 'vL' 'vL*'
         #axes = [self._p_label + ['vL*'], self._get_p_label('*') + ['vR*']]
         for j in reversed(range(len(operators))):
             op = operators[j]  # the operator
@@ -1146,14 +1147,14 @@ class BaseMPSExpectationValue(metaclass=ABCMeta):
         ...
 
     @abstractmethod
-    def _contract_left(self, C, i):
+    def _contract_with_LP(self, C, i):
         """contract `C` with `self.get_LP(i)`.
 
         If `bra` = `ket`, this is a trivial relabeling of legs `vL` -> `vR*`."""
         ...
 
     @abstractmethod
-    def _contract_right(self, C, i):
+    def _contract_with_RP(self, C, i):
         """contract `C` with `self.get_RP(i)`.
 
         If `bra` = `ket`, this is a trivial relabeling of legs `vR` -> `vL*`."""
@@ -4491,11 +4492,11 @@ class MPS(BaseMPSExpectationValue):
     def _get_B_bra(self, i, *args, **kwargs):
         return self.get_B(i, *args, **kwargs)
 
-    def _contract_left(self, C, i):
+    def _contract_with_LP(self, C, i):
         C.ireplace_labels(['vL'], ['vR*'])
         return C
 
-    def _contract_right(self, C, i):
+    def _contract_with_RP(self, C, i):
         C.ireplace_labels(['vR'], ['vL*'])
         return C
 
@@ -5097,12 +5098,12 @@ class MPSEnvironment(BaseEnvironment, BaseMPSExpectationValue):
     def _get_B_bra(self, i, *args, **kwargs):
         return self.bra.get_B(i, *args, **kwargs)
 
-    def _contract_left(self, C, i):
+    def _contract_with_LP(self, C, i):
         LP = self.get_LP(i, store=True)
         C = npc.tensordot(LP, C, axes=['vR', 'vL'])  # axes_p + (vR*, vR)
         return C
 
-    def _contract_right(self, C, i):
+    def _contract_with_RP(self, C, i):
         RP = self.get_RP(i, store=True)
         C = npc.tensordot(C, RP, axes=['vR', 'vL'])  # axes_p + (vL, vL*)
         return C
