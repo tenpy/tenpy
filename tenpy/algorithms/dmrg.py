@@ -1888,7 +1888,7 @@ def full_diag_effH(effH, theta_guess, keep_sector=True):
             E, V = np.linalg.eigh(block)
             E0 = E[0]
             theta = theta_guess.zeros_like()
-            theta.dtype = np.find_common_type([fullH.dtype, theta_guess.dtype], [])
+            theta.dtype = np.promote_types(fullH.dtype, theta_guess.dtype)
             theta_block = theta.get_block(np.array([qi], np.intp), insert=True)
             theta_block[:] = V[:, 0]  # copy data into theta
     else:  # allow to change charge sector!

@@ -1286,7 +1286,7 @@ class MPS(BaseMPSExpectationValue):
     def __init__(self, sites, Bs, SVs, bc='finite', form='B', norm=1.):
         self.sites = list(sites)
         self.chinfo = self.sites[0].leg.chinfo
-        self.dtype = dtype = np.find_common_type([B.dtype for B in Bs], [])
+        self.dtype = dtype = np.result_type(*[B.dtype for B in Bs])
         self.form = self._parse_form(form)
         self.bc = bc  # one of ``'finite', 'periodic', 'segment'``.
         self.norm = norm
@@ -1437,7 +1437,7 @@ class MPS(BaseMPSExpectationValue):
         obj.grouped = hdf5_loader.get_attr(h5gr, "grouped")
         obj._transfermatrix_keep = hdf5_loader.get_attr(h5gr, "transfermatrix_keep")
         obj.chinfo = hdf5_loader.load(subpath + "chinfo")
-        obj.dtype = np.find_common_type([B.dtype for B in obj._B], [])
+        obj.dtype = np.result_type(*[B.dtype for B in obj._B])
         if "segment_boundaries" in h5gr:
             obj.segment_boundaries = hdf5_loader.load(subpath + "segment_boundaries")
         else:
@@ -2036,7 +2036,7 @@ class MPS(BaseMPSExpectationValue):
         """
         i = self._to_valid_index(i)
         self.form[i] = self._to_valid_form(form)
-        self.dtype = np.find_common_type([self.dtype, B.dtype], [])
+        self.dtype = np.promote_types(self.dtype, B.dtype)
         self._B[i] = B.itranspose(self._B_labels)
 
     def set_svd_theta(self, i, theta, trunc_par=None, update_norm=False):
@@ -2057,7 +2057,7 @@ class MPS(BaseMPSExpectationValue):
         """
         i0 = self._to_valid_index(i)
         i1 = self._to_valid_index(i0 + 1)
-        self.dtype = np.find_common_type([self.dtype, theta.dtype], [])
+        self.dtype = np.promote_types(self.dtype, theta.dtype)
         qtotal_LR = [self._B[i0].qtotal, None]
         if trunc_par is None:
             U, S, VH = npc.svd(theta, qtotal_LR=qtotal_LR, inner_labels=['vR', 'vL'])
@@ -4607,7 +4607,7 @@ class BaseEnvironment(metaclass=ABCMeta):
             bra = ket._gauge_compatible_vL_vR(bra)  # ensure matching charges
         self.bra = bra
         self.ket = ket
-        self.dtype = np.find_common_type([bra.dtype, ket.dtype], [])
+        self.dtype = np.promote_types(bra.dtype, ket.dtype)
         self.L = L = lcm(bra.L, ket.L)
         if hasattr(self, 'H'):
             self.L = L = lcm(self.H.L, L)

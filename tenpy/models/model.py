@@ -515,7 +515,7 @@ class NearestNeighborModel(Model):
             MPO representation of the Hamiltonian.
         """
         H_bond = self.H_bond  # entry i acts on sites (i-1,i)
-        dtype = np.find_common_type([Hb.dtype for Hb in H_bond if Hb is not None], [])
+        dtype = np.result_type(*[Hb.dtype for Hb in H_bond if Hb is not None])
         bc = self.lat.bc_MPS
         sites = self.lat.mps_sites()
         L = len(sites)
@@ -1743,7 +1743,7 @@ class CouplingModel(Model):
         c_shape = self.lat.coupling_shape(dx)[0]
         strength = to_array(strength, c_shape)
         # make strength complex
-        complex_dtype = np.find_common_type([strength.dtype], [np.dtype('complex128')])
+        complex_dtype = np.result_type('c8', strength.dtype)
         strength = np.asarray(strength, complex_dtype)
         for ax in range(self.lat.dim):
             if self.lat.bc[ax]:  # open boundary conditions

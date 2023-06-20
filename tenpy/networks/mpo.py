@@ -129,7 +129,7 @@ class MPO:
                  explicit_plus_hc=False):
         self.sites = list(sites)
         self.chinfo = self.sites[0].leg.chinfo
-        self.dtype = dtype = np.find_common_type([W.dtype for W in Ws], [])
+        self.dtype = dtype = np.result_type(*[W.dtype for W in Ws])
         self._W = [W.astype(dtype, copy=True) for W in Ws]
         self.IdL = self._get_Id(IdL, len(sites))
         self.IdR = self._get_Id(IdR, len(sites))
@@ -206,7 +206,7 @@ class MPO:
         obj.sites = hdf5_loader.load(subpath + "sites")
         obj.chinfo = hdf5_loader.load(subpath + "chinfo")
         obj._W = hdf5_loader.load(subpath + "tensors")
-        obj.dtype = np.find_common_type([W.dtype for W in obj._W], [])
+        obj.dtype = np.result_type(*[W.dtype for W in obj._W])
         obj.IdL = hdf5_loader.load(subpath + "index_identity_left")
         obj.IdR = hdf5_loader.load(subpath + "index_identity_right")
         obj.grouped = hdf5_loader.get_attr(h5gr, "grouped")
@@ -1984,7 +1984,7 @@ class MPOEnvironment(BaseEnvironment):
     def __init__(self, bra, H, ket, cache=None, **init_env_data):
         self.H = H
         super().__init__(bra, ket, cache, **init_env_data)
-        self.dtype = np.find_common_type([bra.dtype, ket.dtype, H.dtype], [])
+        self.dtype = np.result_type(bra.dtype, ket.dtype, H.dtype)
 
     def init_first_LP_last_RP(self,
                               init_LP=None,
