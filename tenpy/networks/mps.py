@@ -3653,6 +3653,30 @@ class MPS(BaseMPSExpectationValue):
             Qs[i] = Q.split_legs()
         return Qs, R
 
+    def split_cat_state(self):
+        r""" Detects whether `self` is a cat state or not. If it is a cat state, tries to split it to its components
+        """
+
+        assert (not self.finite)
+        T = TransferMatrix(self, self, charge_sector=None, form="B", transpose=False)
+        vals, ws = T.eigenvectors(num_ev=num_ev, cutoff=1e-8)
+        degeneracy = 0
+        # count the number of degenerate eigenvalues
+        for val in vals:
+            if np.isclose(1, np.abs(vals)):
+                degeneracy += 1
+            else:
+                break
+        # N = get_unit_cell_factor()
+        N = 1
+        psi_enlarged = psi.copy().enlarge_mps_unit_cell(N)
+        vals = vals**N
+        qs = [w[i].qtotal for i in range(degeneracy)]
+        if np.all(qs == qs[0]):
+            for i, w in enumerate ws[:degeneracy]:
+                
+
+
     def correlation_length(self, target=1, tol_ev0=1.e-8, charge_sector=0):
         r"""Calculate the correlation length by diagonalizing the transfer matrix.
 
