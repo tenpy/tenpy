@@ -22,6 +22,11 @@ Added
 - :class:`~tenpy.models.clock.ClockModel`, :class:`~tenpy.models.clock.ClockChain` and :class:`~tenpy.models.sites.ClockSite`
 - Simulation parameters :cfg:option:`Simulation.measure_at_algorithm_checkpoints` and
   :cfg:option:`Simulation.canonicalize_before_measurement`
+- :class:`~tenpy.networks.mps.BaseMPSExpectationValues` parent class to unify the framework of computing expectation values and
+  correlation functions in :class:`~tenpy.networks.mps.MPS` and :class:`~tenpy.networks.mps.MPSEnvironment`
+- Abstract :class:`~tenpy.networks.mps.BaseEnvironment` parent class for :class:`~tenpy.networks.mps.MPSEnvironment`
+  and :class:`~tenpy.networks.mpo.MPOEnvironment`
+
 
 Changed
 ^^^^^^^
@@ -54,3 +59,4 @@ Fixed
   It does, however, change the behavior if ``preserve_norm`` is ``False``.
 - :issue:`265` that MPO methods :meth:`~tenpy.networks.mpo.MPO.make_U_I`, `make_U_II`, `apply_naively` and `apply_zipup` 
   just ignored the `explicit_plus_hc` flag of the MPO, possibly giving completely wrong results without raising errors.
+- Make sure that :func:`~tenpy.linalg.np_conserved.eigh` doesn't have a :class:`~tenpy.linalg.charges.LegPipe` on the second (=new) leg.

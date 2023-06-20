@@ -50,7 +50,7 @@ from ..linalg.sparse import NpcLinearOperator, FlatLinearOperator
 from .site import group_sites, Site
 from ..tools.string import vert_join
 from .mps import MPS as _MPS  # only for MPS._valid_bc
-from .mps import MPSEnvironment
+from .mps import BaseEnvironment
 from .terms import OnsiteTerms, CouplingTerms, MultiCouplingTerms
 from ..tools.misc import add_with_None_0
 from ..tools.math import lcm
@@ -129,7 +129,7 @@ class MPO:
                  explicit_plus_hc=False):
         self.sites = list(sites)
         self.chinfo = self.sites[0].leg.chinfo
-        self.dtype = dtype = np.find_common_type([W.dtype for W in Ws], [])
+        self.dtype = dtype = np.result_type(*[W.dtype for W in Ws])
         self._W = [W.astype(dtype, copy=True) for W in Ws]
         self.IdL = self._get_Id(IdL, len(sites))
         self.IdR = self._get_Id(IdR, len(sites))
@@ -206,7 +206,7 @@ class MPO:
         obj.sites = hdf5_loader.load(subpath + "sites")
         obj.chinfo = hdf5_loader.load(subpath + "chinfo")
         obj._W = hdf5_loader.load(subpath + "tensors")
-        obj.dtype = np.find_common_type([W.dtype for W in obj._W], [])
+        obj.dtype = np.result_type(*[W.dtype for W in obj._W])
         obj.IdL = hdf5_loader.load(subpath + "index_identity_left")
         obj.IdR = hdf5_loader.load(subpath + "index_identity_right")
         obj.grouped = hdf5_loader.get_attr(h5gr, "grouped")
@@ -1935,7 +1935,7 @@ class MPOGraph:
         return legs, Ws_qtotal
 
 
-class MPOEnvironment(MPSEnvironment):
+class MPOEnvironment(BaseEnvironment):
     """Stores partial contractions of :math:`<bra|H|ket>` for an MPO `H`.
 
     The network for a contraction :math:`<bra|H|ket>` of an MPO `H` between two MPS looks like::
@@ -1958,18 +1958,7 @@ class MPOEnvironment(MPSEnvironment):
         |    |                        |
         |    .--<- vR*         vL* -<-.
 
-    To avoid recalculations of the whole network e.g. in the DMRG sweeps,
-    we store the contractions up to some site index in this class.
-    For ``bc='finite','segment'``, the very left and right part ``LP[0]`` and
-    ``RP[-1]`` are trivial and don't change in the DMRG algorithm,
-    but for iDMRG (``bc='infinite'``) they are also updated
-    (by inserting another unit cell to the left/right).
-
-    The MPS `bra` and `ket` have to be in canonical form.
-    All the environments are constructed without the singular values on the open bond.
-    In other words, we contract left-canonical `A` to the left parts `LP`
-    and right-canonical `B` to the right parts `RP`.
-
+    See :class:`BaseEnvironment` for further details.
 
     Parameters
     ----------
@@ -1995,7 +1984,7 @@ class MPOEnvironment(MPSEnvironment):
     def __init__(self, bra, H, ket, cache=None, **init_env_data):
         self.H = H
         super().__init__(bra, ket, cache, **init_env_data)
-        self.dtype = np.find_common_type([bra.dtype, ket.dtype, H.dtype], [])
+        self.dtype = np.result_type(bra.dtype, ket.dtype, H.dtype)
 
     def init_first_LP_last_RP(self,
                               init_LP=None,
@@ -2028,15 +2017,15 @@ class MPOEnvironment(MPSEnvironment):
             Number of sites over which to converge the environment for infinite systems.
             See above.
         """
-        if not self._finite  and (init_LP is None or init_RP is None) and \
+        if not self.finite  and (init_LP is None or init_RP is None) and \
                 start_env_sites is None and self.bra is self.ket:
             env_data = MPOTransferMatrix.find_init_LP_RP(self.H, self.ket, 0, self.L - 1)
             init_LP = env_data['init_LP']
             init_RP = env_data['init_RP']
             start_env_sites = 0
         if start_env_sites is None:
-            start_env_sites = 0 if self._finite else self.L
-        if self._finite and start_env_sites != 0:
+            start_env_sites = 0 if self.finite else self.L
+        if self.finite and start_env_sites != 0:
             warnings.warn("setting `start_env_sites` to 0 for finite MPS")
             start_env_sites = 0
         init_LP, init_RP = self._check_compatible_legs(init_LP, init_RP, start_env_sites)
@@ -2063,7 +2052,7 @@ class MPOEnvironment(MPSEnvironment):
 
     def test_sanity(self):
         """Sanity check, raises ValueErrors, if something is wrong."""
-        assert (self.bra.finite == self.ket.finite == self.H.finite == self._finite)
+        assert (self.bra.finite == self.ket.finite == self.H.finite == self.finite)
         # check that the physical legs are contractable
         for b_s, H_s, k_s in zip(self.bra.sites, self.H.sites, self.ket.sites):
             b_s.leg.test_equal(k_s.leg)
@@ -2209,10 +2198,10 @@ class MPOEnvironment(MPSEnvironment):
         """Calculate the energy by a full contraction of the network.
 
         The full contraction of the environments gives the value
-        ``<bra|H|ket> / (norm(|bra>)*norm(|ket>))``,
-        i.e. if `bra` is `ket` and normalized, the total energy.
-        For this purpose, this function contracts
-        ``get_LP(i0+1, store=False)`` and ``get_RP(i0, store=False)``.
+        ``<bra|H|ket> `` ignoring the :attr:`~tenpy.networks.mps.MPS.norm` of the `bra` and `ket`,
+        i.e. the total energy (even if bra and ket are not normalized).
+        For this purpose, this function contracts ``get_LP(i0+1, store=False)`` and
+        ``get_RP(i0, store=False)`` with appropriate singular values in between.
 
         Parameters
         ----------
@@ -2220,34 +2209,11 @@ class MPOEnvironment(MPSEnvironment):
             Site index.
         """
         # same as MPSEnvironment.full_contraction, but also contract 'wL' with 'wR'
-        if self.ket.finite and i0 + 1 == self.L:
-            # special case to handle `_to_valid_index` correctly:
-            # get_LP(L) is not valid for finite b.c, so we use need to calculate it explicitly.
-            LP = self.get_LP(i0, store=False)
-            LP = self._contract_LP(i0, LP)
-        else:
-            LP = self.get_LP(i0 + 1, store=False)
-
-        # multiply with `S` on bra and ket side
-        S_bra = self.bra.get_SR(i0).conj()
-        if isinstance(S_bra, npc.Array):
-            LP = npc.tensordot(S_bra, LP, axes=['vL*', 'vR*'])
-        else:
-            LP = LP.scale_axis(S_bra, 'vR*')
-        S_ket = self.ket.get_SR(i0)
-        if isinstance(S_ket, npc.Array):
-            LP = npc.tensordot(LP, S_ket, axes=['vR', 'vL'])
-        else:
-            LP = LP.scale_axis(S_ket, 'vR')
-        RP = self.get_RP(i0, store=False)
+        LP, RP = self._full_contraction_LP_RP(i0)
         res = npc.inner(LP, RP, axes=[['vR*', 'wR', 'vR'], ['vL*', 'wL', 'vL']], do_conj=False)
         if self.H.explicit_plus_hc:
             res = res + np.conj(res)
         return res
-
-    def expectation_value(self, ops, sites=None, axes=None):
-        """(doesn't make sense)"""
-        raise NotImplementedError("doesn't make sense for an MPOEnvironment")
 
     def _contract_LP(self, i, LP):
         """Contract LP with the tensors on site `i` to form ``self._LP[i+1]``"""
@@ -2293,6 +2259,16 @@ class MPOEnvironment(MPSEnvironment):
                                    pipes=[pipe, pipe.conj()],
                                    new_axes=[2, 1])
         return RHeff
+
+    def _to_valid_index(self, i):
+        """Make sure `i` is a valid index (depending on `finite`)."""
+        if not self.finite:
+            return i % self.L
+        if i < 0:
+            i += self.L
+        if i >= self.L or i < 0:
+            raise KeyError("i = {0:d} out of bounds for finite MPS".format(i))
+        return i
 
 
 class MPOTransferMatrix(NpcLinearOperator):

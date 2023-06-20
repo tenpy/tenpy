@@ -1750,7 +1750,7 @@ class Array:
         cp = self.copy(deep=False)  # manual deep copy: don't copy every block twice
         cp._qdata = cp._qdata.copy()
         if dtype is None:
-            dtype = np.find_common_type([d.dtype for d in self._data], [])
+            dtype = np.result_type(*[d.dtype for d in self._data])
         cp.dtype = dtype = np.dtype(dtype)
         if copy or dtype != self.dtype:
             cp._data = [d.astype(dtype, copy=copy) for d in self._data]
@@ -1990,7 +1990,7 @@ class Array:
         if s.shape != (self.shape[axis], ):
             raise ValueError("s has wrong shape: " + str(s.shape) + " instead of " +
                              str(self.shape[axis]))
-        self.dtype = np.find_common_type([self.dtype], [s.dtype])
+        self.dtype = np.promote_types(self.dtype, s.dtype)
         leg = self.legs[axis]
         if axis != self.rank - 1:
             self._data = [
@@ -2108,7 +2108,7 @@ class Array:
         if ord == 0:
             return np.sum([np.count_nonzero(t) for t in self._data], dtype=np.int_)
         if convert_to_float:
-            new_type = np.find_common_type([np.float_, self.dtype], [])  # int -> float
+            new_type = np.result_type('f4', self.dtype)  # int -> float
             if new_type != self.dtype:
                 return self.astype(new_type).norm(ord, False)
         block_norms = [np.linalg.norm(t.reshape(-1), ord) for t in self._data]
@@ -2210,7 +2210,7 @@ class Array:
             self._qdata = np.array(qdata, dtype=np.intp)
             # ``self._qdata_sorted = True`` was set by self.isort_qdata
         if len(self._data) > 0:
-            self.dtype = np.find_common_type([d.dtype for d in self._data], [])
+            self.dtype = np.result_type(*[d.dtype for d in self._data])
             self._data = [np.asarray(a, dtype=self.dtype) for a in self._data]
         return self
 
@@ -2928,7 +2928,7 @@ def concatenate(arrays, axis=0, copy=True):
             raise ValueError("wrong qtotal")
         for l in not_axis:
             a.legs[l].test_equal(res.legs[l])
-    dtype = res.dtype = np.find_common_type([a.dtype for a in arrays], [])
+    dtype = res.dtype = np.result_type(*[a.dtype for a in arrays])
     # stack the data
     res_axis_bl_sizes = []
     res_axis_charges = []
@@ -3128,7 +3128,7 @@ def grid_outer(grid, grid_legs, qtotal=None, grid_labels=None):
         raise ValueError("grid shape incompatible with grid_legs")
     idx, entry = entries[0]  # first non-trivial entry
     chinfo = entry.chinfo
-    dtype = np.find_common_type([e.dtype for _, e in entries], [])
+    dtype = np.result_type(*[e.dtype for _, e in entries])
     legs = list(grid_legs) + entry.legs
     labels = entry._labels[:]
     if grid_labels is None:
@@ -3373,7 +3373,7 @@ def outer(a, b):
     """
     if a.chinfo != b.chinfo:
         raise ValueError("different ChargeInfo")
-    dtype = np.find_common_type([a.dtype, b.dtype], [])
+    dtype = np.promote_types(a.dtype, b.dtype)
     qtotal = a.chinfo.make_valid(a.qtotal + b.qtotal)
     res = Array(a.legs + b.legs, dtype, qtotal)
 
@@ -3502,7 +3502,7 @@ def tensordot(a, b, axes=2):
         return _inner_worker(a, b, False)  # full contraction yields a single number
     elif no_block or one_block:
         cut_a = a.rank - axes
-        res = Array(a.legs[:cut_a] + b.legs[axes:], np.find_common_type([a.dtype, b.dtype], []),
+        res = Array(a.legs[:cut_a] + b.legs[axes:], np.promote_types(a.dtype, b.dtype),
                     a.chinfo.make_valid(a.qtotal + b.qtotal))
         if one_block:
             # optimize for special case that a and b have only 1 entry
@@ -3687,7 +3687,7 @@ def norm(a, ord=None, convert_to_float=True):
         return a.norm(ord, convert_to_float)
     elif isinstance(a, np.ndarray):
         if convert_to_float:
-            new_type = np.find_common_type([np.float_, a.dtype], [])  # int -> float
+            new_type = np.result_type('f4', a.dtype)  # int -> float
             a = np.asarray(a, new_type)  # doesn't copy, if the dtype did not change.
         return np.linalg.norm(a.reshape((-1, )), ord)
     else:
@@ -3915,7 +3915,7 @@ def expm(a):
         raise NotImplementedError("A*A has different qtotal than A; nilpotent matrix")
     piped_axes, a = a.as_completely_blocked()  # ensure complete blocking
 
-    res_dtype = np.find_common_type([a.dtype], [np.float64])
+    res_dtype = np.result_type('f8', a.dtype)
     res = diag(1., a.legs[0], dtype=res_dtype)
     res._labels = a._labels[:]
     for qindices, block in zip(a._qdata, a._data):  # non-zero blocks on the diagonal
@@ -4005,15 +4005,11 @@ def qr(a,
             i0 = a_leg0.slices[q1]
             inner_leg_mask[i0:i0 + q_block.shape[1]] = True
         #  else: assert q_block.shape[1] == q_block.shape[0]
+    inner_leg = a_leg0.copy()
+    if isinstance(inner_leg, charges.LegPipe):
+        inner_leg = inner_leg.to_LegCharge()
     if mode != 'complete':
-        # map qindices
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
-            map_qind, _, inner_leg = a_leg0.project(inner_leg_mask)
-    else:
-        inner_leg = a_leg0.copy()
-        if isinstance(inner_leg, charges.LegPipe):
-            inner_leg = inner_leg.to_LegCharge()
+        map_qind, _, inner_leg = inner_leg.project(inner_leg_mask)
     if qtotal_Q is not None:
         qtotal_Q = a.chinfo.make_valid(qtotal_Q)  # convert to ndarray
         inner_leg.charges = a.chinfo.make_valid(inner_leg.charges - inner_leg.qconj * qtotal_Q)
@@ -4174,7 +4170,7 @@ def to_iterable_arrays(array_list):
 
 def _find_calc_dtype(a_dtype, b_dtype):
     """return (calc_dtype, res_dtype) suitable for BLAS calculations."""
-    res_dtype = np.find_common_type([a_dtype, b_dtype], [])
+    res_dtype = np.promote_types(a_dtype, b_dtype)
     _, calc_dtype, _ = BLAS.find_best_blas_type(dtype=res_dtype)
     return calc_dtype, res_dtype
 
@@ -4676,7 +4672,7 @@ def _tensordot_worker(a, b, axes):
     """
     chinfo = a.chinfo
     if a.stored_blocks == 0 or b.stored_blocks == 0:  # special case: `a` or `b` is 0
-        return zeros(a.legs[:-axes] + b.legs[axes:], np.find_common_type([a.dtype, b.dtype], []),
+        return zeros(a.legs[:-axes] + b.legs[axes:], np.promote_types(a.dtype, b.dtype),
                      a.qtotal + b.qtotal)
     cut_a = a.rank - axes
     cut_b = axes
@@ -4828,6 +4824,8 @@ def _eig_worker(hermitian, a, sort, UPLO='L'):
     dtype = np.float64 if hermitian else np.complex128
     resw = np.zeros(a.shape[0], dtype=dtype)
     resv = diag(1., a.legs[0], dtype=np.promote_types(dtype, a.dtype))
+    if isinstance(a.legs[0], LegPipe):
+        resv.legs[1] = resv.legs[1].to_LegCharge()
     # w, v now default to 0 and the Identity
     for qindices, block in zip(a._qdata, a._data):  # non-zero blocks on the diagonal
         if hermitian:

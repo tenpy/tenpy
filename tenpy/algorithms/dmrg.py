@@ -512,7 +512,6 @@ class DensityMatrixMixer(Mixer):
         # Thus, rho_L U = U S S, i.e. columns of U are the eigenvectors of rho_L,
         # eigenvalues are S^2.
         val_L, U = npc.eigh(rho_L)
-        U.legs[1] = U.legs[1].to_LegCharge()  # explicit conversion: avoid warning in `iproject`
         U.iset_leg_labels(['(vL.p0)', 'vR'])
         val_L[val_L < 0.] = 0.  # for stability reasons
         val_L /= np.sum(val_L)
@@ -523,7 +522,6 @@ class DensityMatrixMixer(Mixer):
         # rho_R ~=  theta^T theta^* = V^* S U^T U* S V^T = V^* S S V^T  (for mixer -> 0)
         # Thus, rho_R V^* = V^* S S, i.e. columns of V^* are eigenvectors of rho_R
         val_R, Vc = npc.eigh(rho_R)
-        Vc.legs[1] = Vc.legs[1].to_LegCharge()
         Vc.iset_leg_labels(['(p1.vR)', 'vL'])
         VH = Vc.itranspose(['vL', '(p1.vR)'])
         val_R[val_R < 0.] = 0.  # for stability reasons
@@ -1890,7 +1888,7 @@ def full_diag_effH(effH, theta_guess, keep_sector=True):
             E, V = np.linalg.eigh(block)
             E0 = E[0]
             theta = theta_guess.zeros_like()
-            theta.dtype = np.find_common_type([fullH.dtype, theta_guess.dtype], [])
+            theta.dtype = np.promote_types(fullH.dtype, theta_guess.dtype)
             theta_block = theta.get_block(np.array([qi], np.intp), insert=True)
             theta_block[:] = V[:, 0]  # copy data into theta
     else:  # allow to change charge sector!
