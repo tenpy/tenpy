@@ -54,7 +54,7 @@ class Algorithm:
     options : :class:`~tenpy.tools.params.Config`
         Optional parameters.
     checkpoint : :class:`~tenpy.tools.events.EventHandler`
-        An event that the algorithm emits at regular intervalls when it is in a
+        An event that the algorithm emits at regular intervals when it is in a
         "well defined" step, where an intermediate status report, measurements and/or
         interrupting and saving to disk for later resume make sense.
     cache : :class:`DictCache` or subclass
@@ -99,7 +99,7 @@ class Algorithm:
         cls : class
             Subclass of :class:`Algorithm` to be initialized.
         other_engine : :class:`Algorithm`
-            The engine from which data should be transfered. Another, but not too different
+            The engine from which data should be transferred. Another, but not too different
             algorithm subclass-class; e.g. you can switch from the
             :class:`~tenpy.algorithms.dmrg.TwoSiteDMRGEngine` to the
             :class:`~tenpy.algorithms.dmrg.OneSiteDMRGEngine`.
@@ -111,7 +111,7 @@ class Algorithm:
             If not defined, `resume_data` is collected with :meth:`get_resume_data`.
         """
         # If `resume_data` is defined in the kwargs, use that.
-        # This allows subclasses to overwritinstead of calling :meth:`get_resume_data`.
+        # This allows subclasses to overwrite instead of calling :meth:`get_resume_data`.
         if 'resume_data' not in kwargs:
             kwargs['resume_data'] = other_engine.get_resume_data()
         if options is None:
@@ -133,7 +133,7 @@ class Algorithm:
 
         Needs to be implemented in subclasses.
         """
-        raise NotImplementedError("Sublcasses should implement this.")
+        raise NotImplementedError("Subclasses should implement this.")
 
     def resume_run(self):
         """Resume a run that was interrupted.

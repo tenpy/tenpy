@@ -39,8 +39,8 @@ class Site(Hdf5Exportable):
     defining the charges of the physical leg for this site.
     Moreover, it stores (local) on-site operators, which are directly available as attribute,
     e.g., ``self.Sz`` is the Sz operator for the :class:`SpinSite`.
-    Alternatively, operators can be obained with :meth:`get_op`.
-    The operator names ``Id`` and ``JW`` are reserved for the identy and Jordan-Wigner strings.
+    Alternatively, operators can be obtained with :meth:`get_op`.
+    The operator names ``Id`` and ``JW`` are reserved for the identity and Jordan-Wigner strings.
 
     .. warning ::
         The order of the local basis can change depending on the charge conservation!

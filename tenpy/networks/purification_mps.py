@@ -22,7 +22,7 @@ Here, we follow the third approach.
 In addition to the physical space `P`, we introduce a second 'auxiliar' space `Q`
 and define the density matrix
 of the physical system as :math:`\rho = Tr_Q(|\phi><\phi|)`, where :math:`|\phi>` is a pure state
-in the combined phyisical and auxiliar system.
+in the combined physical and auxiliary system.
 
 For :math:`T=\infty`, the density matrix :math:`\rho_\infty` is the identity matrix.
 In other words, expectation values are sums over all possible states
@@ -64,7 +64,7 @@ We  use the following label convention::
     |         p
 
 You can view the `MPO` as an MPS by combining the `p` and `q` leg and defining every physical
-operator to act trivial on the `q` leg. In expecation values, you would then sum over
+operator to act trivial on the `q` leg. In expectation values, you would then sum over
 over the `q` legs, which is exactly what we need.
 In other words, the choice :math:`B = \delta_{p,q}` with trivial (length-1) virtual bonds yields
 infinite temperature expectation values for operators action only on the `p` legs!
@@ -72,7 +72,7 @@ infinite temperature expectation values for operators action only on the `p` leg
 Now, you go a step further and also apply imaginary time evolution (acting only on `p` legs)
 to the initial infinite temperature state.
 For example, the normalized state :math:`|\psi> \propto \exp(-\beta/2 H)|\phi>`
-yields expecation values
+yields expectation values
 
 .. math ::
     <O>  = Tr(\exp(-\beta H) O) / Tr(\exp(-\beta H))
@@ -134,7 +134,7 @@ class PurificationMPS(MPS):
     r"""An MPS representing a finite-temperature ensemble using purification.
 
     Similar as an MPS, but each `B` has now the four legs ``'vL', 'vR', 'p', 'q'``.
-    From the point of algorithms, it is to be considered as a ususal MPS by combining the legs
+    From the point of algorithms, it is to be considered as a usual MPS by combining the legs
     `p` and `q`, but all physical operators act only on the `p` part.
     For example, the right-canonical form is defined as if the legs 'p' and 'q' would be combined,
     e.g. a right-canonical `B` full-fills::
@@ -330,7 +330,7 @@ class PurificationMPS(MPS):
         This function is similar as :meth:`entanglement_entropy`,
         but for more general geometry of the region `A` to be a segment of a *few* sites.
 
-        This is acchieved by explicitly calculating the reduced density matrix of `A`
+        This is achieved by explicitly calculating the reduced density matrix of `A`
         and thus works only for small segments.
 
         Parameters
@@ -343,7 +343,7 @@ class PurificationMPS(MPS):
             or `range(L)` for infinite boundary conditions.
         n : int | float
             Selects which entropy to calculate;
-            `n=1` (default) is the ususal von-Neumann entanglement entropy,
+            `n=1` (default) is the usual von-Neumann entanglement entropy,
             otherwise the `n`-th Renyi entropy.
         leg : 'p', 'q', 'pq'
             Whether we look at the entanglement entropy in both (`pq`) or

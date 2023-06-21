@@ -3,7 +3,7 @@
 A 'model' is supposed to represent a Hamiltonian in a generalized way.
 The :class:`~tenpy.models.lattice.Lattice` specifies the geometry and
 underlying Hilbert space, and is thus common to all models.
-It is needed to intialize the common base class :class:`Model` of all models.
+It is needed to initialize the common base class :class:`Model` of all models.
 
 Different algorithms require different representations of the Hamiltonian.
 For example for DMRG, the Hamiltonian needs to be given as an MPO,
@@ -515,7 +515,7 @@ class NearestNeighborModel(Model):
             MPO representation of the Hamiltonian.
         """
         H_bond = self.H_bond  # entry i acts on sites (i-1,i)
-        dtype = np.find_common_type([Hb.dtype for Hb in H_bond if Hb is not None], [])
+        dtype = np.result_type(*[Hb.dtype for Hb in H_bond if Hb is not None])
         bc = self.lat.bc_MPS
         sites = self.lat.mps_sites()
         L = len(sites)
@@ -1086,7 +1086,7 @@ class CouplingModel(Model):
             >>> for u1, u2, dx in self.lat.pairs['nearest_neighbors']:
             ...     self.add_coupling(t, u1, 'Cd', u2, 'C', dx, plus_hc=True)
 
-        Alternatively, you can add the hermitian conjugate terms explictly. The correct way is to
+        Alternatively, you can add the hermitian conjugate terms explicitly. The correct way is to
         complex conjugate the strength, take the hermitian conjugate of the operators and swap the
         order (including a swap `u1` <-> `u2`), and use the opposite direction ``-dx``, i.e.
         the `h.c.` of ``add_coupling(t, u1, 'A', u2, 'B', dx)`` is
@@ -1452,7 +1452,7 @@ class CouplingModel(Model):
             The MPS indices of the sites on which the operators acts. With `i, j, k, ... = ijkl`,
             we require that they are ordered ascending, ``i < j < k < ...`` and
             that ``0 <= i < N_sites``.
-            Inidces >= N_sites indicate couplings between different unit cells of an infinite MPS.
+            Indices >= N_sites indicate couplings between different unit cells of an infinite MPS.
         ops_ijkl : list of str
             Names of the involved operators on sites `i, j, k, ...`.
         op_string : list of str
@@ -1743,7 +1743,7 @@ class CouplingModel(Model):
         c_shape = self.lat.coupling_shape(dx)[0]
         strength = to_array(strength, c_shape)
         # make strength complex
-        complex_dtype = np.find_common_type([strength.dtype], [np.dtype('complex128')])
+        complex_dtype = np.result_type('c8', strength.dtype)
         strength = np.asarray(strength, complex_dtype)
         for ax in range(self.lat.dim):
             if self.lat.bc[ax]:  # open boundary conditions
@@ -1865,7 +1865,7 @@ class CouplingMPOModel(CouplingModel, MPOModel):
         self._called_CouplingMPOModel_init = True
         self.manually_call_init_H = getattr(self, 'manually_call_init_H', False)
         explicit_plus_hc = model_params.get('explicit_plus_hc', False)
-        # 1-4) iniitalize lattice
+        # 1-4) initalize lattice
         lat = self.init_lattice(model_params)
         # 5) initialize CouplingModel
         CouplingModel.__init__(self, lat, explicit_plus_hc=explicit_plus_hc)
@@ -2008,7 +2008,7 @@ class CouplingMPOModel(CouplingModel, MPOModel):
                 raise ValueError("Can't auto-determine parameters for the lattice. "
                                  "Overwrite the `init_lattice` in your model!")
 
-            # possibly modify/generalize the already iniialized lattice
+            # possibly modify/generalize the already initialized lattice
             if species_sites is not None:
                 lat = MultiSpeciesLattice(lat, species_sites, species_names)
             helical = model_params.get('helical_lattice', None)

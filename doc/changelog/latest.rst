@@ -16,7 +16,6 @@ Changelog
 
 Backwards incompatible changes
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-=======
 - nothing yet
 
 Added
@@ -32,6 +31,10 @@ Added
   :meth:`~tenpy.networks.mps.MPS.apply_local_op` with a fermionic operator on an MPS.
 - Split off :func:`~tenpy.simulations.simulation.expand_sequential_simulation_params` generator for sequential
   simulation parameters.
+- :class:`~tenpy.networks.mps.BaseMPSExpectationValues` parent class to unify the framework of computing expectation values and
+  correlation functions in :class:`~tenpy.networks.mps.MPS` and :class:`~tenpy.networks.mps.MPSEnvironment`
+- Abstract :class:`~tenpy.networks.mps.BaseEnvironment` parent class for :class:`~tenpy.networks.mps.MPSEnvironment`
+  and :class:`~tenpy.networks.mpo.MPOEnvironment`
 
 
 Changed
@@ -66,3 +69,4 @@ Fixed
   It does, however, change the behavior if ``preserve_norm`` is ``False``.
 - :issue:`265` that MPO methods :meth:`~tenpy.networks.mpo.MPO.make_U_I`, `make_U_II`, `apply_naively` and `apply_zipup` 
   just ignored the `explicit_plus_hc` flag of the MPO, possibly giving completely wrong results without raising errors.
+- Make sure that :func:`~tenpy.linalg.np_conserved.eigh` doesn't have a :class:`~tenpy.linalg.charges.LegPipe` on the second (=new) leg.
