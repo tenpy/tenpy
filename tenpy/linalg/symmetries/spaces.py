@@ -26,7 +26,7 @@ class VectorSpace:
     ----------
     TODO incomplete
     sectors : 2D np array of int
-        The sectors that compose this space.
+        The sectors that compose this space. Sectors must be unique.
         We internally store `_sectors`, see below.
         The `sectors` argument that was originally passed to ``Vectorspace.__init__`` can be recovered
         as ``self._sectors[self.inverse_sector_perm]``
@@ -129,11 +129,9 @@ class VectorSpace:
     def test_sanity(self):
         assert np.all(self.multiplicities > 0)
         assert self.multiplicities.shape == (self.num_sectors,)
-        # TODO add something like:
-        #   assert len(np.unique(self._sectors, axis=0)) == self.num_sectors
-        #   but it currently makes some tests fail, because the fixtures create duplicate sectors
-        # TODO more
-
+        assert len(np.unique(self._sectors, axis=0)) == self.num_sectors
+        # TODO more checks?
+ 
     # TODO when should these caches be reset?
     @cached_property
     def inverse_sector_perm(self):
