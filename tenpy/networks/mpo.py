@@ -38,6 +38,7 @@ i.e. between sites ``i-1`` and ``i``.
 
 import numpy as np
 from scipy.linalg import expm
+from scipy.special import comb # only for infinite LP, RP
 import warnings
 import sys
 import copy
@@ -46,16 +47,17 @@ import logging
 logger = logging.getLogger(__name__)
 
 from ..linalg import np_conserved as npc
-from ..linalg.sparse import NpcLinearOperator, FlatLinearOperator
+from ..linalg.sparse import NpcLinearOperator, FlatLinearOperator, ShiftNpcLinearOperator
 from .site import group_sites, Site
 from ..tools.string import vert_join
 from .mps import MPS as _MPS  # only for MPS._valid_bc
-from .mps import BaseEnvironment
+from .mps import BaseEnvironment, TransferMatrix # TransferMatrix only for EnvironmentInitializer
 from .terms import TermList, OnsiteTerms, CouplingTerms, MultiCouplingTerms
 from ..tools.misc import to_iterable, add_with_None_0
 from ..tools.math import lcm
 from ..tools.params import asConfig
 from ..algorithms.truncation import TruncationError, svd_theta
+from ..linalg.lanczos import GMRES
 
 __all__ = [
     'MPO', 'make_W_II', 'MPOGraph', 'MPOEnvironment', 'MPOTransferMatrix', 'grid_insert_ops'
@@ -115,6 +117,9 @@ class MPO:
         The matrices of the MPO. Labels are ``'wL', 'wR', 'p', 'p*'``.
     _valid_bc : tuple of str
         Class attribute. Valid boundary conditions; the same as for an MPS.
+    _charge_perm : {list of 1D arrays | None}
+        The inverse permutations obtained by self.sort_legcharges such that
+        W[n][_charge_perm[n][i],_charge_perm[n+1][j]] = W_unsorted[n][i,j]
     """
 
     _valid_bc = _MPS._valid_bc  # same valid boundary conditions as an MPS.
@@ -137,6 +142,7 @@ class MPO:
         self.bc = bc
         self.max_range = max_range
         self.explicit_plus_hc = explicit_plus_hc
+        self._charge_perm = None
         self.test_sanity()
 
     def copy(self):
@@ -566,6 +572,13 @@ class MPO:
             if IdR is not None:
                 IdR = IdR % chi[b]
                 self.IdR[b] = np.nonzero(p == IdR)[0][0]
+        # store inverse permutation in self._charge_perm
+        inv_perms = []
+        for perm in perms:
+            inv_perm = np.empty_like(perm)
+            inv_perm[perm] = np.arange(len(inv_perm), dtype=inv_perm.dtype)
+            inv_perms.append(inv_perm)
+        self._charge_perm = inv_perms
         # done
 
     def make_U(self, dt, approximation='II'):
@@ -1391,6 +1404,13 @@ class MPO:
         if i >= self.L + int(bond) or i < 0:
             raise KeyError("i = {0:d} out of bounds for finite MPO".format(i))
         return i
+
+    def _perm_index(self, i_perm, j):
+        """ Converts unsorted indices to sorted ones if sort_legcharges was called on self """
+        if self._charge_perm == None:
+            return j
+        else:
+            return self._charge_perm[i_perm][j]
 
     @staticmethod
     def _get_Id(Id, L):
@@ -2423,6 +2443,270 @@ class MPOEnvironment(BaseEnvironment):
         if i >= self.L or i < 0:
             raise KeyError("i = {0:d} out of bounds for finite MPS".format(i))
         return i
+
+class EnvironmentInitializer():
+
+    def __init__(self, H, ket):
+        self.H = H
+        self.ket = ket
+        self.dtype = np.result_type(ket.dtype, H.dtype)
+        self.L = self.ket.L
+        self.test_sanity()
+
+    def test_sanity(self):
+       """Sanity check, raises ValueErrors, if something is wrong."""
+       assert (self.ket.bc == self.H.bc)
+       assert self.ket.bc != 'finite'
+       assert self.ket.L == self.H.L
+       # check that the physical legs are contractible
+       for H_s, k_s in zip(self.H.sites, self.ket.sites):
+           k_s.leg.test_equal(H_s.leg)
+       if self.ket.bc == 'segment':
+           # check that outer legs are contractible
+           self.ket.get_B(0).get_leg('vL').test_contractible(self.ket.get_B(self.L-1).get_leg('vR'))
+           self.H.get_W(0).get_leg('wL').test_contractible(self.H.get_W(self.L-1).get_leg('wR'))
+
+    def build_first_LP_last_RP_infinite(self, which='both'): #may add tol_H, tol_eigvals if wanted
+        """ Build initial environments for infinite / segment MPOEnvironments
+        
+        For iMPS the left environment LP[0] corresponds to the contraction
+        of an infinite half chain 
+                                     - - - - - > - - - - - 'vR*'               
+                                    |              |
+        LP[0] = lim_(n \to \infty) LP[-\infty]->- T_H**n - 'wR' (index j later on)
+                                    |              |
+                                     - - - - - > - - - - - 'vR'
+                                     
+        where T_H corresponds to the transfer matrix ket-H-ket 
+        We assume that H is upper triangular up to some permutation H._charge_perm.
+        Then LP[0] can be calculated iteratively as
+        
+        LP[0]_tot = \sum_j \sum_a e_a*(n**a)*c^j_a (e_0 = 1)
+        
+        where the c^j_a are tensors with legs ['vR*','vR'] and the index j corresponds to the leg 'wR'.
+        The index a depends on the diagonal entries of H and LP[0] = \sum_j c^j_0
+        
+        Parameters
+        ----------
+        which : one of 'LP', 'RP', 'both'
+            which initial environments to compute
+        Returns
+        -------
+        envs : dict with keys 'LP', 'RP'
+            e.g. envs['LP'] = epsilons_L, LPs where epsilons are the prefactors and
+            LPs : list of :class:`~tenpy.linalg.np_conserved.Array` are the corresponding environments
+                        
+        """
+        n_ones, types = self._classify_H()
+        assert which == 'LP' or 'RP' or 'both', 'Invalid environment type "{0}"'.format(which)
+        envs = dict()
+        if which=='LP' or which=='both':
+            envs['LP'] = self._init_first_LP_infinite(n_ones, types)
+        if which=='RP' or which=='both':
+            envs['RP'] = self._init_last_RP_infinite(n_ones, types)
+        return envs     
+
+    def _init_first_LP_infinite(self, n_ones, types):
+        """ See _init_first_LP_last_RP_segment for info
+        
+        """
+        legs = [self.ket.get_B(0).get_leg('vL'), self.H.get_W(0).get_leg('wL').conj(),
+                self.ket.get_B(0).get_leg('vL').conj()]
+        # LPs[gamma] contains c_gamma^j for all j, thus C_gamma,tot^j = (LPs[gamma]*T)[j]
+        LPs = [npc.Array(legs, dtype=self.dtype, labels=['vR*','wR','vR']) for _ in range(n_ones)]
+        epsilons = [1.]*n_ones
+        # i_min = min(j) s.t. types[j] in ['id','x'] i.e. the starting index
+        i_min =  min([i for i in range(len(types)) if types[i] in ('id','x')])
+        #c_0^i_min
+        perm_i_min = self.H._perm_index(0, i_min)
+        LPs[0][:,perm_i_min,:] = self._compute_max_cj(i_min, types[i_min], 'LP', legcharge=legs[0])[0]
+        # number of nonzero c_m^j up to index j
+        m = 1
+        for j in range(i_min+1,self.H.chi[0]):
+            perm_j = self.H._perm_index(0, j)
+            diag_type=types[j]
+            if diag_type in ['id','x']:
+                cmj, rho = self._compute_max_cj(j, diag_type, 'LP', legcharge=legs[0])
+                LPs[m][:,perm_j,:] = cmj
+                # new epsilon
+                ctot_last = self._get_ctot_segment(j, LPs[m-1], 'LP')
+                epsilons[m] = np.real(epsilons[m-1]*npc.inner(ctot_last, rho)/(m*npc.inner(cmj, rho)))
+            # calculate c_gamma^j recursively
+            for gamma in range(m-1,-1,-1):
+                b = self._compute_b_gmres(j, gamma, epsilons, m, LPs, 'LP')
+                if diag_type == 'zero':            
+                    LPs[gamma][:,perm_j,:] = b
+                else:
+                     # find c_gamma^j using GMRES on -c_gamma^j(TWjj-1) =
+                     # -1/e_gamma (e_gamma C_gamma,tot^j - \sum_(a>gamma) e_alpha comb(a,gamma)c_a^j)
+                     # initial guess is the identity atm
+                     x = npc.diag(1., leg = legs[0], dtype=self.dtype, labels=['vR*','vR'])
+                     A = ShiftNpcLinearOperator(self._compute_TWjj(j, 'A', True), -1.)
+                     solver = GMRES(A, x, b, options={}) # default atm
+                     x_sol, res, _, _ = solver.run()
+                     # fix legs
+                     x_sol.split_legs()
+                     x_sol.itranspose(['vR*','vR'])
+                     LPs[gamma][:,perm_j,:] = -x_sol # A has global - sign
+            if diag_type in ['id','x']:
+                m += 1 # increase number of nonzero LPs, at the end to ensure correct range in loop above
+        return epsilons, LPs
+
+    def _init_last_RP_infinite(self, n_ones, types):
+        """ See _init_first_LP_last_RP_segment for info
+        
+        Right environment has reversed indices, i.e. we start at j_max and go down with i
+        """
+        legs = [self.ket.get_B(self.L-1).get_leg('vR'), self.H.get_W(self.L-1).get_leg('wR').conj(),
+                self.ket.get_B(self.L-1).get_leg('vR').conj()]
+        RPs = [npc.Array(legs, dtype=self.dtype, labels=['vL*','wL','vL']) for _ in range(n_ones)]
+        epsilons = [1.]*n_ones
+        j_max = max([j for j in range(len(types)) if types[j] in ('id','x')])
+        #c_0^j_max
+        perm_j_max = self.H._perm_index(self.L, j_max)
+        RPs[0][:,perm_j_max,:] = self._compute_max_cj(j_max, types[j_max], 'RP', legcharge=legs[0])[0]
+        # number of nonzero c_m^j
+        m = 1
+        for i in range(j_max-1,-1,-1):
+            perm_i = self.H._perm_index(self.L, i)
+            diag_type=types[i]
+            if diag_type in ['id','x']:
+                cmi, rho = self._compute_max_cj(i, diag_type, 'RP', legcharge=legs[0])
+                RPs[m][:,perm_i,:] = cmi
+                # new epsilon
+                ctot_last = self._get_ctot_segment(i, RPs[m-1], 'RP')
+                epsilons[m] = np.real(epsilons[m-1]*npc.inner(rho, ctot_last)/(m*npc.inner(rho, cmi)))
+            # calculate c_gamma^j recursively
+            for gamma in range(m-1,-1,-1):
+                b = self._compute_b_gmres(i, gamma, epsilons, m, RPs, 'RP')
+                if diag_type == 'zero':
+                    RPs[gamma][:,perm_i,:] = b
+                else:
+                     # as in _init_first_LP_segment
+                     x = npc.diag(1., leg=legs[0], dtype=self.dtype, labels=['vL*','vL'])
+                     A = ShiftNpcLinearOperator(self._compute_TWjj(i, 'B', False), -1.)
+                     solver = GMRES(A, x, b, options={}) # default atm
+                     x_sol, res, _, _ = solver.run()
+                     # fix legs
+                     x_sol.split_legs()
+                     x_sol.itranspose(['vL*','vL'])
+                     RPs[gamma][:,perm_i,:] = -x_sol # A has global - sign
+            if diag_type in ['id','x']:
+                m += 1 # increase number of nonzero LPs, at the end to ensure correct range in loop above
+        return epsilons, RPs
+
+    def _classify_H(self, tol = 1.e-10):
+        """ Classifies the diagonal elements W[0]_jj*W[1]_jj*W[2]_jj... of H according to
+        {'id':identity, 'lid':l*identity, 'x':largest eigval one,
+         'lx': largest eigval smaller one, 'zero':zero}
+        Raises ValueError if the largest eigenvalue of a diagonal entry is larger than 1+tol.
+        """
+        D = self.H.chi[0]    
+        types = []
+        # order all W matrices correctly
+        for site in range(self.L):
+            self.H.get_W(site).itranspose(['wL', 'wR', 'p', 'p*'])
+        for j in range(D):
+            curr_type = 'id'
+            for site in range(self.L):
+                perm_jj = (self.H._perm_index(site, j),self.H._perm_index(site+1, j))
+                Wjj = self.H.get_W(site)[perm_jj].to_ndarray()
+                # diagonal element is zero
+                if np.allclose(Wjj,np.zeros(Wjj.shape),atol=tol):
+                    curr_type = 'zero'
+                    break
+                abs_max_eig = np.linalg.norm(Wjj,ord=2)
+                if abs_max_eig > 1.+tol:
+                    raise ValueError('MPO contains operator with 2-norm larger one at W[{site}]_{j}{j}'.format(site=site,j=j))
+                is_id = np.allclose(Wjj,Wjj[0,0]*np.eye(Wjj.shape[0]),atol=tol)
+                # lx
+                if abs(abs_max_eig-1.)>tol and not is_id:
+                    curr_type = 'lx'
+                # lid
+                elif abs(abs_max_eig-1.)>tol:
+                    curr_type = 'lid' if 'id' in curr_type else 'lx'
+                # x
+                elif not is_id:
+                    curr_type = 'lx' if 'x' in curr_type else 'x'
+                # id -> no change
+            types.append(curr_type)
+        n_ones = types.count('id')+types.count('x')
+        return n_ones, types
+
+    def _compute_TWjj(self, j, form, transpose):
+        bra_N = [self.ket.get_B(i, form=form) for i in range(self.L)]
+        ket_M = [npc.tensordot(self.ket.get_B(i, form=form), self.H.get_W(i)[self.H._perm_index(i, j), 
+                                                                             self.H._perm_index(i+1,j)],
+                               axes=[self.ket._p_label,self.ket._get_p_label('*')]) for i in range(self.L)]
+        return TransferMatrix.from_Ns_Ms(bra_N, ket_M, transpose=transpose, charge_sector=None, p_label=self.ket._p_label)  
+
+    def _get_ctot_segment(self, j, cs, which):
+        """ Compute \sum_(i<j)c_a^iT^W_ij for _init_first_LP_segment"""
+        # essentially get_LP[L]/RP[-1] 
+        v_last = np.zeros(self.H.chi[0], dtype=self.dtype)
+        perm_j = self.H._perm_index(self.L if which=='LP' else 0, j)
+        v_last[perm_j] = 1.
+        H_leg = self.H.get_W(0).get_leg('wL') if which=='LP' else self.H.get_W(self.L-1).get_leg('wR')
+        v_last = npc.Array.from_ndarray(v_last, [H_leg], 
+                                        labels=['wL'] if which=='LP' else ['wR'])
+        init_env = cs
+        index_order = range(self.L) if which=='LP' else range(self.L-1,-1,-1)
+        for i in index_order:
+            init_env = self._contract_slice(i, init_env, which)
+        # get correct ctot and fix legs (for RP order is wrong)
+        res = npc.tensordot(init_env, v_last, axes=['wR','wL'] if which=='LP' else ['wL','wR'])
+        res.itranspose(['vR*','vR'] if which=='LP' else ['vL*','vL'])
+        return res
+
+    def _contract_slice(self, i, env, which):
+        """ Essentially just a unified copy of MPOEnvironment._contract_LP(RP)"""
+        # p,pc = self.ket._p_label, self.ket._get_p_label('*') 
+        if which == 'LP':
+            env = npc.tensordot(env, self.ket.get_B(i, form='A'), axes=('vR', 'vL'))
+            env = npc.tensordot(self.H.get_W(i), env, axes=(['p*', 'wL'], ['p', 'wR']))
+            env = npc.tensordot(self.ket.get_B(i, form='A').conj(), env, axes=(['p*','vL*'],['p','vR*']))
+            return env
+        else:
+            env = npc.tensordot(self.ket.get_B(i, form='B'), env, axes=('vR', 'vL'))
+            env = npc.tensordot(env, self.H.get_W(i), axes=(['p', 'wL'], ['p*', 'wR']))
+            env = npc.tensordot(env, self.ket.get_B(i, form='B').conj(), axes=(['p','vL*'],['p*','vR*']))
+            return env
+
+    def _compute_b_gmres(self, j, gamma, epsilons, m, all_cs, which):
+        """ Compute C_gamma,tot^j - \sum_a>gamma e_a/e_gamma comb(a,gamma)c_a^j """ 
+        b = self._get_ctot_segment(j, all_cs[gamma], which)
+        perm_j = self.H._perm_index(0 if which=='LP' else self.L, j)
+        for alpha in range(gamma+1,m+1):
+            b -= epsilons[alpha]/epsilons[gamma]*comb(alpha, gamma)*all_cs[alpha][:,perm_j,:]
+        return b
+
+    def _compute_max_cj(self, j, type_j, which, legcharge=None, tol=1.e-5):
+        """ Find dominant eigenvector of <ket|W_jj|ket> """
+        cj_labels = ['vR*','vR'] if which == 'LP' else ['vL*','vL']
+        rho_labels = ['vL*','vL'] if which == 'LP' else ['vR*','vR']
+        if type_j == 'id':
+            max_cj = npc.diag(1., legcharge, dtype=self.dtype, labels=cj_labels)
+            SVs = self.ket.get_SR(self.L-1)**2 if which=='LP' else self.ket.get_SL(0)**2
+            rho = npc.diag(SVs, legcharge.conj(), labels=rho_labels)
+            return max_cj, rho 
+        else:
+            form = 'A' if which=='LP' else 'B'
+            transpose = True if which=='LP' else False
+            # max_cj
+            TWjj = self._compute_TWjj(j, form, transpose)
+            max_ev, max_cj = TWjj.eigenvectors()
+            if abs(max_ev[0]-1)>tol:
+                warnings.warn('Largest {0} eigenvalue of <ket|TWjj|ket> is {1} not one within tol={2}'.format(
+                    'left' if which=='LP' else 'right', max_ev, tol))
+            Trho = self._compute_TWjj(j, form, not transpose)
+            max_ev_rho, rho = Trho.eigenvectors()
+            if abs(max_ev_rho[0]-1)>tol:
+                warnings.warn('Largest {0} eigenvalue of <ket|TWjj|ket> is {1} not one within tol={2}'.format(
+                    'right' if which=='LP' else 'left', max_ev_rho, tol))            # fix legs
+            max_cj[0].split_legs()
+            max_cj[0].itranspose(cj_labels)
+            rho[0].split_legs()
+            rho[0].itranspose(rho_labels)
 
 
 class MPOTransferMatrix(NpcLinearOperator):
