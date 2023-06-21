@@ -179,11 +179,10 @@ class BaseMPSExpectationValue(metaclass=ABCMeta):
     These are calculated in :class:`MPSEnvironment`.
     For "standard" expectation values ``<psi|ops|psi>``, the environments are trivial identities
     due to the canonical from.
-    """
 
-    def __init__(self, sites):
-        self.sites = sites
-        self.L = len(sites)
+    Subclasses need to have the attributes `sites`, `L`, `bc`, `finite`.
+    See :class:`MPS` for details.
+    """
 
     def expectation_value(self, ops, sites=None, axes=None):
         """Expectation value ``<bra|ops|ket>`` of (n-site) operator(s).
