@@ -116,7 +116,8 @@ class AbstractTensor(ABC):
         Labels for the legs. If None, translates to ``[None, None, ...]`` of appropriate length
     """
     #  backend.get_dtype_from_data(self.data)
-    def __init__(self, legs: list[VectorSpace], backend, labels: list[str | None] | None, dtype: Dtype):
+    def __init__(self, legs: list[VectorSpace], backend: AbstractBackend, labels: list[str | None] | None,
+                 dtype: Dtype):
         if backend is None:
             self.backend = get_default_backend(legs[0].symmetry)
         else:
