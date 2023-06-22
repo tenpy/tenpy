@@ -242,11 +242,6 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
     DataCls = AbelianBackendData
 
     def test_data_sanity(self, a: Tensor | DiagonalTensor | Mask, is_diagonal: bool):
-        for leg in a.legs:
-            # TODO (JU) define clearly what this function is supposed to do
-            #    a) test sanity of a.data only: -> dont check the legs, do that in Tensor.test_sanity
-            #    b) test sanity of all of a: -> rename the function and also check legs in other backends
-            leg.test_sanity()
         super().test_data_sanity(a, is_diagonal=is_diagonal)
         assert a.data.block_inds.shape == (len(a.data.blocks), a.num_legs)
         # check expected tensor dimensions
@@ -256,7 +251,6 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
             assert self.block_shape(block) == expect_shape
         assert not np.any(a.data.block_inds < 0)
         assert not np.any(a.data.block_inds >= np.array([[leg.num_sectors for leg in a.legs]]))
-        # TODO: could also check that
 
     def test_leg_sanity(self, leg: VectorSpace):
         if isinstance(leg, ProductSpace):

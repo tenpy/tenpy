@@ -46,7 +46,7 @@ class AbstractNoSymmetryBackend(AbstractBackend, AbstractBlockBackend, ABC):
         self.DataCls = self.BlockCls
 
     def test_data_sanity(self, a: Tensor | DiagonalTensor | Mask, is_diagonal: bool):
-        AbstractBackend.test_data_sanity(self, a, is_diagonal=is_diagonal)
+        super().test_data_sanity(a, is_diagonal=is_diagonal)
         if is_diagonal:
             assert self.block_shape(a.data) == (a.legs[0].dim,), f'{self.block_shape(a)} != {(a.legs[0].dim,)}'
         else:
