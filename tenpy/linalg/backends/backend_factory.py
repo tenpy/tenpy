@@ -88,7 +88,8 @@ def get_backend(symmetry: Symmetry = no_symmetry, block_backend: str = 'numpy',
     return backend
 
 
-def get_default_backend():
+def get_default_backend(symmetry: Symmetry = None):
     """dummy implementation for a settable backend global through all of tenpy"""
     # TODO: proper implementation
-    return get_backend()
+    kwargs = {} if symmetry is None else dict(symmetry=symmetry)
+    return get_backend(**kwargs)
