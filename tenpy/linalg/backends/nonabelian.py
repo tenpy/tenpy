@@ -19,26 +19,6 @@ __all__ = ['AbstractNonabelianBackend', 'NonAbelianData', 'FusionTree', 'fusion_
            'all_fusion_trees', 'coupled_sectors']
 
 
-class NonabelianBackendProductSpace(ProductSpace):
-
-    @classmethod
-    def from_product_space(cls, space: ProductSpace) -> NonabelianBackendProductSpace:
-        if isinstance(space, NonabelianBackendProductSpace):
-            return space
-        return cls(spaces=_unpack_flat_spaces(space.spaces), _is_dual=space.is_dual, _sectors=space._sectors,
-                   _multiplicities=space.multiplicities)
-
-    def block_size(self, coupled: Sector) -> int:
-        # OPTIMIZE try to iterate over block_sizes together with coupled, instead of searching for coupled...
-        raise NotImplementedError  # TODO
-
-    def subblock_size(self, fusion_tree: FusionTree) -> int:
-        raise NotImplementedError  # TODO
-
-    def subblock_slice(self, fusion_tree: FusionTree) -> slice:
-        raise NotImplementedError  # TODO
-
-
 def _unpack_flat_spaces(spaces: list[VectorSpace]) -> list[VectorSpace]:
     """In a list of spaces, unpack any ProductSpaces by inserting their .spaces into the list.
     The result is a "flat" list of spaces, which are not ProductSpaces"""
@@ -72,8 +52,8 @@ class NonAbelianData:
     field, i.e. :math:`\Rbb` or :math:`\Cbb`.
     """
     blocks: dict[Sector, Block]
-    codomain: NonabelianBackendProductSpace
-    domain: NonabelianBackendProductSpace
+    codomain: ProductSpace
+    domain: ProductSpace
     codomain_idcs: list[int]
     domain_idcs: list[int]
     # TODO this does not work if tensor.legs contains ProductSpaces!
@@ -90,9 +70,6 @@ class NonAbelianData:
 # TODO eventually remove AbstractBlockBackend inheritance, it is not needed,
 #  jakob only keeps it around to make his IDE happy
 class AbstractNonabelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
-
-    VectorSpaceCls = VectorSpace
-    ProductSpaceCls = NonabelianBackendProductSpace
     DataCls = NonAbelianData
 
     def test_data_sanity(self, a: Tensor | DiagonalTensor | Mask, is_diagonal: bool):
@@ -107,12 +84,6 @@ class AbstractNonabelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
             assert a.legs[idx] == leg
         for idx, leg in zip(a.data.domain_legs, a.data.domain.spaces):
             assert a.legs[idx] == leg.dual
-
-    def convert_vector_space(self, leg: VectorSpace) -> VectorSpace:
-        if isinstance(leg, ProductSpace):
-            return NonabelianBackendProductSpace.from_product_space(leg)
-        else:
-            return leg
 
     def get_dtype_from_data(self, a: NonAbelianData) -> Dtype:
         return a.dtype
@@ -175,8 +146,8 @@ class AbstractNonabelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
 
     def from_block_func(self, func, legs: list[VectorSpace], func_kwargs={}) -> NonAbelianData:
         # TODO add arg to specify (co-)domain?
-        codomain = NonabelianBackendProductSpace(spaces=_unpack_flat_spaces(legs))
-        domain = NonabelianBackendProductSpace([])
+        codomain = ProductSpace(spaces=_unpack_flat_spaces(legs), backend=self)
+        domain = ProductSpace([], backend=self)
         blocks = {c: func((codomain.block_size(c), domain.block_size(c)), **func_kwargs)
                   for c in coupled_sectors(codomain, domain)}
         try:
@@ -189,8 +160,8 @@ class AbstractNonabelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
 
     def zero_data(self, legs: list[VectorSpace], dtype: Dtype) -> NonAbelianData:
         # TODO add arg to specify (co-)domain?
-        codomain = NonabelianBackendProductSpace(spaces=_unpack_flat_spaces(legs))
-        domain = NonabelianBackendProductSpace([])
+        codomain = ProductSpace(spaces=_unpack_flat_spaces(legs), backend=self)
+        domain = ProductSpace([], backend=self)
         blocks = {c: self.zero_block((codomain.block_size(c), domain.block_size(c)), dtype=dtype)
                   for c in coupled_sectors(codomain, domain)}
         return NonAbelianData(blocks=blocks, codomain=codomain, domain=domain,
@@ -199,8 +170,8 @@ class AbstractNonabelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
 
     def eye_data(self, legs: list[VectorSpace], dtype: Dtype) -> NonAbelianData:
         # TODO add arg to specify (co-)domain?
-        codomain = NonabelianBackendProductSpace(spaces=_unpack_flat_spaces(legs))
-        domain = NonabelianBackendProductSpace([])
+        codomain = ProductSpace(spaces=_unpack_flat_spaces(legs), backend=self)
+        domain = ProductSpace([], backend=self)
         blocks = {c: self.eye_block((codomain.block_size(c), domain.block_size(c)), dtype=dtype)
                   for c in coupled_sectors(codomain, domain)}
         return NonAbelianData(blocks=blocks, codomain=codomain, domain=domain,
@@ -505,8 +476,7 @@ def all_fusion_trees(space: VectorSpace, coupled: Sector = None) -> Iterator[Fus
             yield from fusion_trees(uncoupled, coupled)
 
 
-def coupled_sectors(codomain: NonabelianBackendProductSpace, domain: NonabelianBackendProductSpace
-                    ) -> SectorArray:
+def coupled_sectors(codomain: ProductSpace, domain: ProductSpace) -> SectorArray:
     """The coupled sectors which are admitted by both codomain and domain"""
     # TODO think about duality!
     codomain_coupled = codomain._sectors

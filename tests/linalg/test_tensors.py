@@ -202,7 +202,7 @@ def test_Tensor_methods(backend, vector_space_rng, backend_data_rng, tensor_rng)
     assert tens3.get_leg_idcs(['foo', 'b', 1]) == [0, 2, 1]
 
     print('check item')
-    triv_legs = [vector_space_rng(1, 1, backend.VectorSpaceCls) for i in range(2)]
+    triv_legs = [vector_space_rng(1, 1) for i in range(2)]
     for leg in triv_legs[:]:
         triv_legs.append(leg.dual)
     assert all(leg.dim == 1 for leg in triv_legs)
@@ -264,7 +264,7 @@ def test_Tensor_methods(backend, vector_space_rng, backend_data_rng, tensor_rng)
 def test_tdot(backend, vector_space_rng, backend_data_rng, tensor_rng):
     # define legs such that a tensor with the following combinations all allow non-zero num_parameters
     # [a, b] , [a, b, c] , [a, b, d]
-    a = vector_space_rng(3, 3, backend.VectorSpaceCls)
+    a = vector_space_rng(3, 3)
     b = tensor_rng([a, None], 2, max_num_blocks=3, max_block_size=3).legs[-1]
     c = tensor_rng([a, b, None], 3, max_num_blocks=3, max_block_size=3).legs[-1]
     d = tensor_rng([a, b, None], 3, max_num_blocks=3, max_block_size=3).legs[-1]
@@ -369,9 +369,9 @@ def test_inner(tensor_rng):
 
 
 def test_trace(backend, vector_space_rng, tensor_rng):
-    a = vector_space_rng(3, 3, backend.VectorSpaceCls)
-    b = vector_space_rng(4, 3, backend.VectorSpaceCls)
-    c = vector_space_rng(2, 2, backend.VectorSpaceCls)
+    a = vector_space_rng(3, 3)
+    b = vector_space_rng(4, 3)
+    c = vector_space_rng(2, 2)
     t1 = tensor_rng(legs=[a, a.dual], labels=['a', 'a*'])
     d1 = t1.to_numpy_ndarray()
     t2 = tensor_rng(legs=[a, b, a.dual, b.dual], labels=['a', 'b', 'a*', 'b*'])

@@ -34,8 +34,7 @@ from ..symmetries.spaces import VectorSpace, ProductSpace
 from ...tools.misc import inverse_permutation, list_to_dict_list
 from ...tools.optimization import use_cython
 
-__all__ = ['AbelianBackendData', 'AbelianBackendVectorSpace', 'AbelianBackendProductSpace',
-           'AbstractAbelianBackend', 'detect_qtotal']
+__all__ = ['AbelianBackendData', 'AbstractAbelianBackend', 'detect_qtotal']
 
 
 if TYPE_CHECKING:
@@ -43,173 +42,6 @@ if TYPE_CHECKING:
     # this clause allows mypy etc to evaluate the type-hints anyway
     from ..tensors import Tensor, ChargedTensor, DiagonalTensor, Mask
 
-
-class AbelianBackendVectorSpace(VectorSpace):
-    """Subclass of VectorSpace with additional data and restrictions for AbstractAbelianBackend."""
-    pass  # currently there are no extra features compared to VectorSpace, that might change though.
-    # TODO: do we need get_qindex?
-    # Since slices is no longer sorted, it would be O(L) rather than O(log(L))
-
-
-# TODO: is the diamond-structure inheritance okay?
-class AbelianBackendProductSpace(ProductSpace, AbelianBackendVectorSpace):
-    r"""
-
-    Attributes
-    ----------
-    block_ind_map :
-        See below. (In old np_conserved: `qmap`)
-
-    Notes
-    -----
-    For ``np.reshape``, taking, for example,  :math:`i,j,... \rightarrow k` amounted to
-    :math:`k = s_1*i + s_2*j + ...` for appropriate strides :math:`s_1,s_2`.
-
-    In the charged case, however, we want to block :math:`k` by charge, so we must
-    implicitly permute as well.  This reordering is encoded in `block_ind_map` as follows.
-
-    Each block index combination :math:`(i_1, ..., i_{nlegs})` of the `nlegs=len(spaces)`
-    input VectorSpaces will end up getting placed in some slice :math:`a_j:a_{j+1}` of the
-    resulting `ProductSpace`. Within this slice, the data is simply reshaped in usual row-major
-    fashion ('C'-order), i.e., with strides :math:`s_1 > s_2 > ...` given by the block size.
-
-    It will be a subslice of a new total block in the ProductSpace labeled by block index
-    :mah:`J`. We fuse charges according to the rule::
-
-        ProductSpace.sectors[J] = fusion_outcomes(*[l.sectors[i_l]
-            for l, i_l,l in zip(incoming_block_inds, spaces)])
-
-    Since many charge combinations can fuse to the same total charge,
-    in general there will be many tuples :math:`(i_1, ..., i_{nlegs})` belonging to the same
-    charge block :math:`J` in the `ProductSpace`.
-
-    The rows of `block_ind_map` are precisely the collections of
-    ``[b_{J,k}, b_{J,k+1}, i_1, . . . , i_{nlegs}, J]``.
-    Here, :math:`b_k:b_{k+1}` denotes the slice of this block index combination *within*
-    the total block `J`, i.e., ``b_{J,k} = a_j - self.slices[J]``.
-
-    The rows of `block_ind_map` are lex-sorted first by ``J``, then the ``i``.
-    Each ``J`` will have multiple rows,
-    and the order in which they are stored in `block_inds` is the order the data is stored
-    in the actual tensor, i.e., it might look like ::
-
-        [ ...,
-         [ b_{J,k},   b_{J,k+1},  i_1,    ..., i_{nlegs}   , J,   ],
-         [ b_{J,k+1}, b_{J,k+2},  i'_1,   ..., i'_{nlegs}  , J,   ],
-         [ 0,         b_{J,1},    i''_1,  ..., i''_{nlegs} , J + 1],
-         [ b_{J,1},   b_{J,2},    i'''_1, ..., i'''_{nlegs}, J + 1],
-         ...]
-
-    """
-    # formerly known as LegPipe
-
-    def _fuse_spaces(self, symmetry: Symmetry, spaces: list[AbelianBackendVectorSpace], _is_dual: bool,
-                     ) -> tuple[SectorArray, ndarray]:
-        for s in spaces:
-            assert isinstance(s, AbelianBackendVectorSpace)
-        # this function heavily uses numpys advanced indexing, for details see
-        # http://docs.scipy.org/doc/numpy/reference/arrays.indexing.html
-        num_spaces = len(spaces)
-
-        spaces_num_sectors = tuple(space.num_sectors for space in spaces)
-        self._strides = _make_stride(spaces_num_sectors, cstyle=False)
-        # (save strides for :meth:`_map_incoming_block_inds`)
-
-        # create a grid to select the multi-index sector
-        grid = np.indices(spaces_num_sectors, np.intp)
-        # grid is an array with shape ``(num_spaces, *spaces_num_sectors)``,
-        # with grid[li, ...] = {np.arange(space_block_numbers[li]) increasing in li-th direcion}
-        # collapse the different directions into one.
-        grid = grid.T.reshape(-1, num_spaces)  # *this* is the actual `reshaping`
-        # *rows* of grid are now all possible cominations of qindices.
-        # transpose before reshape ensures that grid.T is np.lexsort()-ed
-
-        nblocks = grid.shape[0]  # number of blocks in ProductSpace = np.product(spaces_num_sectors)
-        # this is different from num_sectors
-
-        # determine block_ind_map -- it's essentially the grid.
-        block_ind_map = np.zeros((nblocks, 3 + num_spaces), dtype=np.intp)
-        block_ind_map[:, 2:-1] = grid  # possible combinations of indices
-
-        # the block size for given (i1, i2, ...) is the product of ``multiplicities[il]``
-        # andvanced indexing:
-        # ``grid.T[li]`` is a 1D array containing the qindex `q_li` of leg ``li`` for all blocks
-        multiplicities = np.prod([space.multiplicities[gr] for space, gr in zip(spaces, grid.T)],
-                                 axis=0)
-        # block_ind_map[:, :2] and [:, -1] is initialized after sort/bunch.
-
-        # calculate new non-dual sectors
-        if _is_dual:
-            # overall fusion of sectors is equivalent to taking dual of each sector
-            # in standard use cases, this can often avoid explicit
-            # symmetry.dual_sector() calls in VectorSpace.sectors()
-            fuse_sectors = [s.dual.sectors for s in spaces]
-        else:
-            fuse_sectors = [s.sectors for s in spaces]
-        # _sectors are the ones saved in self._sectors, not the property self.sectors
-        _sectors = _fuse_abelian_charges(symmetry,
-            *(sectors[gr] for sectors, gr in zip(fuse_sectors, grid.T)))
-
-        # sort (non-dual) charge sectors. Similar code as in VectorSpace.__init__
-        sector_perm = np.lexsort(_sectors.T)
-        block_ind_map = block_ind_map[sector_perm]
-        _sectors = _sectors[sector_perm]
-        multiplicities = multiplicities[sector_perm]
-
-        slices = np.concatenate([[0], np.cumsum(multiplicities)], axis=0)
-        block_ind_map[:, 0] = slices[:-1]  # start with 0
-        block_ind_map[:, 1] = slices[1:]
-
-        # bunch sectors with equal charges together
-        diffs = _find_row_differences(_sectors, include_len=True)
-        self.block_ind_map_slices = diffs
-        slices = slices[diffs]
-        multiplicities = slices[1:] - slices[:-1]
-        diffs = diffs[:-1]
-
-        _sectors = _sectors[diffs]
-
-        new_block_ind = np.zeros(len(block_ind_map), dtype=np.intp) # = J
-        new_block_ind[diffs[1:]] = 1  # not for the first entry => np.cumsum starts with 0
-        block_ind_map[:, -1] = new_block_ind = np.cumsum(new_block_ind)
-        # calculate the slices within blocks: subtract the start of each block
-        block_ind_map[:, :2] -= slices[new_block_ind][:, np.newaxis]
-        self.block_ind_map = block_ind_map  # finished
-        return _sectors, multiplicities, sector_perm
-
-    def _map_incoming_block_inds(self, incoming_block_inds):
-        """Map incoming block indices to indices of :attr:`block_ind_map`.
-
-        Needed for `combine_legs`.
-
-        Parameters
-        ----------
-        incoming_block_inds : 2D array
-            Rows are block indices :math:`(i_1, i_2, ... i_{nlegs})` for incoming legs.
-
-        Returns
-        -------
-        block_inds: 1D array
-            For each row j of `incoming_block_inds` an index `J` such that
-            ``self.block_ind_map[J, 2:-1] == block_inds[j]``.
-        """
-        assert incoming_block_inds.shape[1] == len(self.spaces)
-        # calculate indices of block_ind_map[inverse_sector_perm],
-        # which is sorted by :math:`i_1, i_2, ...`,
-        # by using the appropriate strides
-        inds_before_perm = np.sum(incoming_block_inds * self._strides[np.newaxis, :], axis=1)
-        # now permute them to indices in block_ind_map
-        return self.inverse_sector_perm[inds_before_perm]
-
-    def as_VectorSpace(self):
-        return AbelianBackendVectorSpace(symmetry=self.symmetry,
-                                         sectors=self._sectors,
-                                         multiplicities=self.multiplicities,
-                                         is_real=self.is_real,
-                                         _is_dual=self.is_dual)
-
-
-AbelianBackendVectorSpace.ProductSpaceCls = AbelianBackendProductSpace
 
 _MAX_INT = np.iinfo(int).max
 
@@ -270,7 +102,7 @@ def _fuse_abelian_charges(symmetry: AbelianGroup, *sector_arrays: SectorArray) -
     return np.asarray(fusion)
 
 
-def _valid_block_indices(spaces: list[AbelianBackendVectorSpace]):
+def _valid_block_indices(spaces: list[VectorSpace]):
     """Find block_inds where the charges of the `spaces` fuse to `symmetry.trivial_sector`"""
     assert len(spaces) > 0
     symmetry = spaces[0].symmetry
@@ -407,8 +239,6 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
             These bool values indicate which indices of the large leg are kept for the small leg.
 
     """
-    VectorSpaceCls = AbelianBackendVectorSpace
-    ProductSpaceCls = AbelianBackendProductSpace
     DataCls = AbelianBackendData
 
     def test_data_sanity(self, a: Tensor | DiagonalTensor | Mask, is_diagonal: bool):
@@ -428,16 +258,97 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
         assert not np.any(a.data.block_inds >= np.array([[leg.num_sectors for leg in a.legs]]))
         # TODO: could also check that
 
-    def convert_vector_space(self, leg: VectorSpace) -> AbelianBackendVectorSpace:
-        if isinstance(leg, (AbelianBackendVectorSpace, AbelianBackendProductSpace)):
-            return leg
-        elif isinstance(leg, ProductSpace):
-            spaces = [self.convert_vector_space(s) for s in leg.spaces]
-            return AbelianBackendProductSpace(spaces, _is_dual=leg.is_dual)
-        else:
-            return AbelianBackendVectorSpace(leg.symmetry, leg._sectors, leg.multiplicities,
-                                             leg.is_real, _is_dual=leg.is_dual)
+    def test_leg_sanity(self, leg: VectorSpace):
+        if isinstance(leg, ProductSpace):
+            assert all(hasattr(leg, attr) for attr in ['_strides', 'block_ind_map_slices', 'block_ind_map'])
+            # TODO should we do some consistency checks on shapes / values?
+        super().test_leg_sanity(leg)
 
+    def _fuse_spaces(self, symmetry: Symmetry, spaces: list[VectorSpace], _is_dual: bool
+                     ) -> tuple[SectorArray, ndarray, ndarray, dict]:
+        
+        # this function heavily uses numpys advanced indexing, for details see
+        # http://docs.scipy.org/doc/numpy/reference/arrays.indexing.html
+
+        metadata = {}
+        
+        num_spaces = len(spaces)
+        spaces_num_sectors = tuple(space.num_sectors for space in spaces)
+        metadata['_strides'] = _make_stride(spaces_num_sectors, cstyle=False)
+        # (save strides for :meth:`product_space_map_incoming_block_inds`)
+
+        # create a grid to select the multi-index sector
+        grid = np.indices(spaces_num_sectors, np.intp)
+        # grid is an array with shape ``(num_spaces, *spaces_num_sectors)``,
+        # with grid[li, ...] = {np.arange(space_block_numbers[li]) increasing in li-th direcion}
+        # collapse the different directions into one.
+        grid = grid.T.reshape(-1, num_spaces)  # *this* is the actual `reshaping`
+        # *rows* of grid are now all possible cominations of qindices.
+        # transpose before reshape ensures that grid.T is np.lexsort()-ed
+
+        nblocks = grid.shape[0]  # number of blocks in ProductSpace = np.product(spaces_num_sectors)
+        # this is different from num_sectors
+        
+        # determine block_ind_map -- it's essentially the grid.
+        block_ind_map = np.zeros((nblocks, 3 + num_spaces), dtype=np.intp)
+        block_ind_map[:, 2:-1] = grid  # possible combinations of indices
+
+        # the block size for given (i1, i2, ...) is the product of ``multiplicities[il]``
+        # andvanced indexing:
+        # ``grid.T[li]`` is a 1D array containing the qindex `q_li` of leg ``li`` for all blocks
+        multiplicities = np.prod([space.multiplicities[gr] for space, gr in zip(spaces, grid.T)],
+                                 axis=0)
+        # block_ind_map[:, :2] and [:, -1] is initialized after sort/bunch.
+
+        # calculate new non-dual sectors
+        if _is_dual:
+            # overall fusion of sectors is equivalent to taking dual of each sector
+            # in standard use cases, this can often avoid explicit
+            # symmetry.dual_sector() calls in VectorSpace.sectors()
+            fuse_sectors = [s.dual.sectors for s in spaces]
+        else:
+            fuse_sectors = [s.sectors for s in spaces]
+        # _sectors are the ones saved in self._sectors, not the property self.sectors
+        _sectors = _fuse_abelian_charges(symmetry,
+            *(sectors[gr] for sectors, gr in zip(fuse_sectors, grid.T)))
+
+        # sort (non-dual) charge sectors. Similar code as in VectorSpace.__init__
+        sector_perm = np.lexsort(_sectors.T)
+        block_ind_map = block_ind_map[sector_perm]
+        _sectors = _sectors[sector_perm]
+        multiplicities = multiplicities[sector_perm]
+
+        slices = np.concatenate([[0], np.cumsum(multiplicities)], axis=0)
+        block_ind_map[:, 0] = slices[:-1]  # start with 0
+        block_ind_map[:, 1] = slices[1:]
+
+        # bunch sectors with equal charges together
+        diffs = _find_row_differences(_sectors, include_len=True)
+        metadata['block_ind_map_slices'] = diffs
+        slices = slices[diffs]
+        multiplicities = slices[1:] - slices[:-1]
+        diffs = diffs[:-1]
+
+        _sectors = _sectors[diffs]
+
+        new_block_ind = np.zeros(len(block_ind_map), dtype=np.intp) # = J
+        new_block_ind[diffs[1:]] = 1  # not for the first entry => np.cumsum starts with 0
+        block_ind_map[:, -1] = new_block_ind = np.cumsum(new_block_ind)
+        # calculate the slices within blocks: subtract the start of each block
+        block_ind_map[:, :2] -= slices[new_block_ind][:, np.newaxis]
+        metadata['block_ind_map'] = block_ind_map  # finished
+        return _sectors, multiplicities, sector_perm, metadata
+
+    def add_leg_metadata(self, leg: VectorSpace) -> VectorSpace:
+        if isinstance(leg, ProductSpace):
+            if not all(hasattr(leg, attr) for attr in ['_strides', 'block_ind_map_slices', 'block_ind_map']):
+                # OPTIMIZE write version that just calculates the metadata, without sectors?
+                _, _, _, metadata = self._fuse_spaces(symmetry=leg.symmetry, spaces=leg.spaces, _is_dual=leg._is_dual)
+                for key, val in metadata.items():
+                    setattr(leg, key, val)
+        # for non-ProductSpace: no metadata to add
+        return leg
+            
     def get_dtype_from_data(self, a: Data) -> Dtype:
         return a.dtype
 
@@ -470,11 +381,6 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
         return res
 
     def from_dense_block(self, a: Block, legs: list[VectorSpace], atol: float = 1e-8, rtol: float = 1e-5) -> AbelianBackendData:
-        legs = [self.convert_vector_space(leg) for leg in legs]
-        # TODO (JH) should we convert legs in tensors.py or here per backend?
-        #  -> same for other functions like zeros() etc
-        #  JU: I think we should do it here, even if the legs are possibly already converted.
-        #      It is just one function call and one isntancecheck, so we might as well do it.
         dtype = self.block_dtype(a)
         block_inds = _valid_block_indices(legs)
         blocks = []
@@ -484,7 +390,6 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
         return AbelianBackendData(dtype, blocks, block_inds)
 
     def diagonal_from_block(self, a: Block, leg: VectorSpace) -> DiagonalData:
-        leg = self.convert_vector_space(leg)
         dtype = self.block_dtype(a)
         raise NotImplementedError  # TODO
 
@@ -786,20 +691,20 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
         if new_vh_leg_dual != leg_R.is_dual:
             # opposite dual flag in legs of vH => same _sectors
             # project onto block indices in central leg which we kept, given by block_inds_R
-            new_leg = AbelianBackendVectorSpace(symmetry,
-                                                leg_R._sectors[block_inds_R, :],
-                                                leg_R.multiplicities[block_inds_R],
-                                                is_real=leg_R.is_real,
-                                                _is_dual=new_vh_leg_dual)
+            new_leg = VectorSpace(symmetry,
+                                  leg_R._sectors[block_inds_R, :],
+                                  leg_R.multiplicities[block_inds_R],
+                                  is_real=leg_R.is_real,
+                                  _is_dual=new_vh_leg_dual)
             assert np.all(new_leg.sector_perm == block_inds_C), "new_leg sectors should be sorted"  # TODO remove this after tests ran
         else:  # new_vh_leg_dual == leg_R.is_dual
             # same dual flag in legs of vH => opposite _sectors => opposite sorting!!!
             sectors = symmetry.dual_sectors(leg_R._sectors[block_inds_R, :])  # not sorted
-            new_leg = AbelianBackendVectorSpace(symmetry,
-                                                sectors,
-                                                leg_R.multiplicities[block_inds_R],
-                                                is_real=leg_R.is_real,
-                                                _is_dual=new_vh_leg_dual)
+            new_leg = VectorSpace(symmetry,
+                                  sectors,
+                                  leg_R.multiplicities[block_inds_R],
+                                  is_real=leg_R.is_real,
+                                  _is_dual=new_vh_leg_dual)
             # new_leg has sorted _sectors in __init__, but that might have induced permutation
             block_inds_C = block_inds_C[new_leg.sector_perm]  # no longer sorted
         u_block_inds = np.hstack(block_inds_L, block_inds_C)
@@ -849,11 +754,11 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
                 # similar as new_leg.flip_is_dual(), but also get permuation on the way
                 new_sectors = sym.dual_sectors(new_leg._sectors)  # ._sectors, not .sectors
                 perm = np.lexsort(new_sectors.T)
-                new_leg = AbelianBackendVectorSpace(sym,
-                                                    new_sectors[sort, :],
-                                                    new_leg.multiplicities[sort],
-                                                    new_leg.is_real,
-                                                    new_r_leg_dual)
+                new_leg = VectorSpace(sym,
+                                      new_sectors[sort, :],
+                                      new_leg.multiplicities[sort],
+                                      new_leg.is_real,
+                                      new_r_leg_dual)
                 inv_perm = inverse_permutation(perm)
                 #  perm[new_i] = old_i ;     inv_perm[old_i] = new_i
                 #  new_sectors[new_i] = old_sectors[old_i] = old_sectors[perm[new_i]]
@@ -877,11 +782,11 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
                 new_leg_sectors = sym.dual_sectors(new_leg_sectors)
             perm = np.lexsort(new_leg_sectors.T)
             inv_perm = inverse_permutation(perm)
-            new_leg = AbelianBackendVectorSpace(sym,
-                                                new_leg_sectors[perm, :],
-                                                new_leg_mults[perm],
-                                                q_leg_0.is_real,
-                                                q_leg_0.is_dual)
+            new_leg = VectorSpace(sym,
+                                  new_leg_sectors[perm, :],
+                                  new_leg_mults[perm],
+                                  q_leg_0.is_real,
+                                  q_leg_0.is_dual)
             new_block_inds = inv_perm[keep][:, np.newaxis]
             q_block_inds = np.hstack([keep[:, np.newaxis], new_block_inds]) # not sorted
             r_block_inds = np.hstack([new_block_inds, a.data.block_inds[:, 1]])  # lexsorted
@@ -989,11 +894,12 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
         blocks = [self.block_conj(b) for b in a.data.blocks]
         return AbelianBackendData(a.data.dtype, blocks, a.data.block_inds)
 
-    def combine_legs(self, a: Tensor, combine_slices: list[int, int], product_spaces: list[AbelianBackendProductSpace], new_axes: list[int], final_legs: list[VectorSpace]) -> Data:
+    def combine_legs(self, a: Tensor, combine_slices: list[int, int], product_spaces: list[ProductSpace],
+                     new_axes: list[int], final_legs: list[VectorSpace]) -> Data:
         res_dtype = a.data.dtype
         old_block_inds = a.data.block_inds
         # first, find block indices of the final array to which we map
-        map_inds = [product_space._map_incoming_block_inds(old_block_inds[:, b:e])
+        map_inds = [product_space_map_incoming_block_inds(product_space, old_block_inds[:, b:e])
                     for product_space, (b,e) in zip(product_spaces, combine_slices)]
         old_block_inds = a.data.block_inds
         old_blocks = a.data.blocks
@@ -1291,3 +1197,30 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
         # - add the corresponding sector and multiplicity
         # make vectorspace
         raise NotImplementedError  # TODO
+
+
+def product_space_map_incoming_block_inds(space: ProductSpace, incoming_block_inds):
+    """Map incoming block indices to indices of :attr:`block_ind_map`.
+
+    Needed for `combine_legs`.
+
+    Parameters
+    ----------
+    space : ProductSpace
+        The ProductSpace which indices are to be mapped
+    incoming_block_inds : 2D array
+        Rows are block indices :math:`(i_1, i_2, ... i_{nlegs})` for incoming legs.
+
+    Returns
+    -------
+    block_inds: 1D array
+        For each row j of `incoming_block_inds` an index `J` such that
+        ``self.block_ind_map[J, 2:-1] == block_inds[j]``.
+    """
+    assert incoming_block_inds.shape[1] == len(space.spaces)
+    # calculate indices of block_ind_map[inverse_sector_perm],
+    # which is sorted by :math:`i_1, i_2, ...`,
+    # by using the appropriate strides
+    inds_before_perm = np.sum(incoming_block_inds * space._strides[np.newaxis, :], axis=1)
+    # now permute them to indices in block_ind_map
+    return space.inverse_sector_perm[inds_before_perm]

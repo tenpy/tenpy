@@ -7,7 +7,7 @@ from numbers import Number
 import numpy as np
 
 from ..symmetries.groups import Symmetry
-from ..symmetries.spaces import VectorSpace, ProductSpace
+from ..symmetries.spaces import VectorSpace, ProductSpace, _fuse_spaces
 
 __all__ = ['Data', 'Block', 'AbstractBackend', 'AbstractBlockBackend']
 
@@ -102,8 +102,6 @@ class AbstractBackend(ABC):
     Where Xxx describes the symmetry, e.g. NoSymmetry, Abelian, Nonabelian
     and Yyy describes the numerical routines that handle the blocks, e.g. numpy, torch, ...
     """
-    VectorSpaceCls: Type[VectorSpace] = VectorSpace
-    ProductSpaceCls: Type[ProductSpace] = ProductSpace
     DataCls = Block
 
     def test_data_sanity(self, a: Tensor | DiagonalTensor | Mask, is_diagonal: bool):
@@ -111,14 +109,22 @@ class AbstractBackend(ABC):
         # note: no super(), this is the top you reach!
         # subclasses will typically call super().test_data_sanity(a)
 
+    def test_leg_sanity(self, leg: VectorSpace):
+        assert isinstance(leg, VectorSpace)
+
     def __repr__(self):
         return f'{type(self).__name__}'
 
     def __str__(self):
         return f'{type(self).__name__}'
 
-    def convert_vector_space(self, leg: VectorSpace) -> VectorSpace:
-        """convert a VectorSpace (or ProductSpace) instance to a backend-specific subclass"""
+    def _fuse_spaces(self, symmetry: Symmetry, spaces: list[VectorSpace], _is_dual: bool):
+        """Backends may override the behavior of linalg.spaces._fuse_spaces in order to compute
+        their backend-specfic metadata alongside the sectors"""
+        return _fuse_spaces(symmetry=symmetry, spaces=spaces, _is_dual=_is_dual)
+
+    def add_leg_metadata(self, leg: VectorSpace) -> VectorSpace:
+        """Add backend-specifc metadata to a leg (modifying it in-place) and returning it"""
         return leg
 
     @abstractmethod

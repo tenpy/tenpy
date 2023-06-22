@@ -121,10 +121,7 @@ class AbstractTensor(ABC):
             self.backend = get_default_backend()
         else:
             self.backend = backend
-        #  self.legs = [self.backend.convert_vector_space(leg) for leg in legs]  # TODO: this causes issues since data.block_inds don't fit any more!!!!!
         self.legs = list(legs)
-        for leg in self.legs:
-            assert isinstance(leg, (self.backend.VectorSpaceCls, self.backend.ProductSpaceCls))  # TODO: remove this test
         self.shape = Shape(legs=self.legs, labels=labels)
         self.num_legs = len(legs)
         self.symmetry = legs[0].symmetry
@@ -135,7 +132,7 @@ class AbstractTensor(ABC):
         assert all(l.symmetry == self.symmetry for l in self.legs)
         assert len(self.legs) == self.shape.num_legs == self.num_legs > 0
         for leg in self.legs:
-            assert isinstance(leg, (self.backend.VectorSpaceCls, self.backend.ProductSpaceCls))
+            self.backend.test_leg_sanity(leg)
         self.shape.test_sanity()
 
     # ----------------------------------
@@ -163,7 +160,7 @@ class AbstractTensor(ABC):
     @cached_property
     def parent_space(self) -> ProductSpace:
         """The space that the tensor lives in"""
-        return self.legs[0].ProductSpaceCls(self.legs)
+        return ProductSpace(self.legs, backend=self.backend)
 
     @property
     def size(self) -> int:
@@ -655,7 +652,7 @@ class Tensor(AbstractTensor):
         if backend is None:
             backend = get_default_backend()
         legs = to_iterable(legs)
-        legs = [backend.convert_vector_space(leg) for leg in legs]
+        legs = [backend.add_leg_metadata(leg) for leg in legs]
         data = backend.eye_data(legs=legs, dtype=dtype)
         legs = legs + [leg.dual for leg in legs]
         if labels is not None:
@@ -702,7 +699,7 @@ class Tensor(AbstractTensor):
         """
         if backend is None:
             backend = get_default_backend()
-        legs = [backend.convert_vector_space(leg) for leg in legs]
+        legs = [backend.add_leg_metadata(leg) for leg in legs]
 
         if shape_kw is not None:
             def block_func(shape):
@@ -802,7 +799,7 @@ class Tensor(AbstractTensor):
         """
         if backend is None:
             backend = get_default_backend()
-        legs = [backend.convert_vector_space(leg) for leg in legs]
+        legs = [backend.add_leg_metadata(leg) for leg in legs]
 
         if shape_kw is not None:
             def block_func(shape):
@@ -872,7 +869,7 @@ class Tensor(AbstractTensor):
             backend = get_default_backend()
         if dtype is None:
             dtype = Dtype.float64
-        legs = [backend.convert_vector_space(leg) for leg in legs]
+        legs = [backend.add_leg_metadata(leg) for leg in legs]
 
         return cls(data=backend.from_block_func(backend.block_random_normal, legs, dtype=dtype, sigma=sigma),
                    backend=backend, legs=legs, labels=labels)
@@ -903,7 +900,7 @@ class Tensor(AbstractTensor):
         """
         if backend is None:
             backend = get_default_backend()
-        legs = [backend.convert_vector_space(leg) for leg in legs]
+        legs = [backend.add_leg_metadata(leg) for leg in legs]
         return cls(data=backend.from_block_func(backend.block_random_uniform, legs, dtype=dtype),
                    backend=backend, legs=legs, labels=labels)
 
@@ -965,7 +962,7 @@ class Tensor(AbstractTensor):
             The data type of the Tensor entries.
 
         """
-        legs = [backend.convert_vector_space(leg) for leg in legs]
+        legs = [backend.add_leg_metadata(leg) for leg in legs]
         if backend is None:
             backend = get_default_backend()
         data = backend.zero_data(legs=legs, dtype=dtype)
@@ -1237,9 +1234,8 @@ class Tensor(AbstractTensor):
     # Internal utility methods
     # --------------------------------------------
 
-    def make_ProductSpace(self, legs, **kwargs) -> ProductSpace:
-        legs = self.get_legs(legs)
-        return legs[0].ProductSpaceCls(legs, **kwargs)
+    def make_ProductSpace(self, legs: int | str | list[int | str], _is_dual=None) -> ProductSpace:
+        return ProductSpace(self.get_legs(legs), _is_dual=_is_dual, backend=self.backend)
 
     def _combine_legs_make_ProductSpace(self, combine_leg_idcs, product_spaces, product_spaces_dual):
         """Argument parsing for :meth:`combine_legs`: make missing ProductSpace legs.

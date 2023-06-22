@@ -39,8 +39,6 @@ class AbstractNoSymmetryBackend(AbstractBackend, AbstractBlockBackend, ABC):
             These bool values indicate which indices of the large leg are kept for the small leg.
 
     """
-    VectorSpaceCls = VectorSpace
-    ProductSpaceCls = ProductSpace
     DataCls = "Block of AbstractBlockBackend"
 
     def __init__(self, **kwargs):
@@ -169,7 +167,7 @@ class AbstractNoSymmetryBackend(AbstractBackend, AbstractBlockBackend, ABC):
         if more:
             raise ValueError('Can only infer one leg')
         dim = self.block_shape(block)[idx]
-        return self.VectorSpaceCls.non_symmetric(dim, _is_dual=is_dual, is_real=is_real)
+        return VectorSpace.non_symmetric(dim, _is_dual=is_dual, is_real=is_real)
 
     def get_element(self, a: Tensor, idcs: list[int]) -> complex | float | bool:
         return self.get_block_element(a.data, idcs)

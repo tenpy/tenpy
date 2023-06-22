@@ -6,9 +6,13 @@ from numpy import ndarray
 import copy
 from functools import cached_property
 import warnings
+from typing import TYPE_CHECKING
 
 from .groups import Sector, SectorArray, Symmetry, no_symmetry
 from ...tools.misc import inverse_permutation
+
+if TYPE_CHECKING:
+    from ..backends.abstract_backend import AbstractBackend
 
 
 __all__ = ['VectorSpace', 'ProductSpace']
@@ -85,11 +89,7 @@ class VectorSpace:
     _slices : 2D array-like
         Allows to skip recomputing the :attr:`slices`. These are the slices *after* sorting.
     """
-    ProductSpaceCls = None  # we set this to the ProductSpace class below
-    # for subclasses, it's the corresponding ProductSpace subclass, e.g.
-    # AbelianBackendVectorSpace.ProductSpaceCls = AbelianBackendProductSpace
-    # This allows combine_legs() etc to generate appropriate sublcasses
-
+    
     def __init__(self, symmetry: Symmetry, sectors: SectorArray, multiplicities: ndarray = None,
                  is_real: bool = False, _is_dual: bool = False, _sector_perm: ndarray = None,
                  _slices: ndarray = None):
@@ -445,6 +445,9 @@ class ProductSpace(VectorSpace):
     spaces:
         The factor spaces that multiply to this space.
         The resulting product space can always be split back into these.
+    backend : AbstractBackend | None
+        If a backend is given, the backend-specific metadata will be set
+        via `backend._fuse_spaces` and `backend.add_leg_metadata`
     _is_dual : bool | None
         Flag indicating wether the fusion space represents a dual (bra) space or a non-dual (ket) space.
         Per default (``_is_dual=None``), ``spaces[0].is_dual`` is used, i.e. the ``ProductSpace``
@@ -453,9 +456,11 @@ class ProductSpace(VectorSpace):
         .. warning ::
             When setting `_is_dual=True`, consider the notes below!
 
-    _sectors, _multiplicities, _sector_perm, _slices:
+    _sectors, _multiplicities, _sector_perm:
         These inputs to VectorSpace.__init__ can optionally be passed to avoid recomputation.
         Specify either all or None of them.
+    _slices:
+        inputs to VectorSpace.__init__ can optionally be passed to avoid recomputation
 
     Notes
     -----
@@ -501,9 +506,9 @@ class ProductSpace(VectorSpace):
     ``P2 = ProductSpace([V.dual, W.dual], is_dual=True)``.
     Consider writing ``P2 = ProductSpace([V, W]).dual`` instead for more readable code.
     """
-
-    def __init__(self, spaces: list[VectorSpace], _is_dual: bool = None, _sectors: SectorArray = None,
-                 _multiplicities: ndarray = None, _sector_perm: ndarray = None, _slices: ndarray = None):
+    def __init__(self, spaces: list[VectorSpace], backend: AbstractBackend = None, _is_dual: bool = None,
+                 _sectors: SectorArray = None, _multiplicities: ndarray = None, _sector_perm: ndarray = None,
+                 _slices: ndarray = None):
         if _is_dual is None:
             _is_dual = spaces[0].is_dual
         self.spaces = spaces  # spaces can be themselves ProductSpaces
@@ -511,13 +516,29 @@ class ProductSpace(VectorSpace):
         assert all(s.symmetry == symmetry for s in spaces)
         is_real = spaces[0].is_real
         assert all(space.is_real == is_real for space in spaces)
+
         if _sectors is None:
-            assert all(arg is None for arg in [_multiplicities, _sector_perm, _slices])
-            _sectors, _multiplicities, _sector_perm = self._fuse_spaces(
-                symmetry=symmetry, spaces=spaces, _is_dual=_is_dual
-            )
+            assert all(arg is None for arg in [_multiplicities, _sector_perm])
+            if backend is None:
+                _sectors, _multiplicities, _sector_perm, metadata = _fuse_spaces(
+                    symmetry=spaces[0].symmetry, spaces=spaces, _is_dual=_is_dual
+                )
+            else:
+                _sectors, _multiplicities, _sector_perm, metadata = backend._fuse_spaces(
+                    symmetry=spaces[0].symmetry, spaces=spaces, _is_dual=_is_dual
+                )
+            for key, val in metadata.items():
+                setattr(self, key, val)
+        else:
+            assert _multiplicities is not None
         VectorSpace.__init__(self, symmetry=symmetry, sectors=_sectors, multiplicities=_multiplicities,
                              is_real=is_real, _is_dual=_is_dual, _sector_perm=_sector_perm, _slices=_slices)
+        if backend is not None:
+            backend.add_leg_metadata(self)
+
+    def test_sanity(self):
+        assert all(s.symmetry == self.symmetry for s in self.spaces)
+        return super().test_sanity()
 
     # TODO python naming convention is snake case: as_vector_space
     def as_VectorSpace(self):
@@ -538,13 +559,16 @@ class ProductSpace(VectorSpace):
         for `VectorSpace` ``V`` and ``W``.
         However, note that the returned space can often not be contracted with `self`
         since the order of the :attr:`sectors` might have changed.
+
+        Backend-specific metadata may be lost.
         """
-        # note: yields dual self._sectors so can have different sorting of _sectors!
-        # so can't just pass self._sectors and self._multiplicities
-        # TODO (JU) we can pass self.symmetry.dual_sectors(self._sectors) and self.multiplicities.
-        #           we just need to be careful if we need to sort them here or if __init__ takes care of it.
-        # note: Using self.__class__ makes this work for the backend-specific subclasses as well.
-        return self.__class__(spaces=self.spaces, _is_dual=not self.is_dual)
+        # TODO test this
+        _sectors = self.symmetry.dual_sectors(self._sectors)
+        
+        return ProductSpace(spaces=self.spaces, _is_dual=not self.is_dual,
+                            _sectors=self.symmetry.dual_sectors(self._sectors),
+                            _multiplicities=self.multiplicities,
+                            _sector_perm=None, _slices=self.slices)
 
     def __len__(self):
         return len(self.spaces)
@@ -588,46 +612,6 @@ class ProductSpace(VectorSpace):
     def is_trivial(self) -> bool:
         return all(s.is_trivial for s in self.spaces)
 
-    def _fuse_spaces(self, symmetry: Symmetry, spaces: list[VectorSpace], _is_dual: bool
-                     ) -> tuple[SectorArray, ndarray, ndarray]:
-        """Helper function for ProductSpace.__init__.
-
-        May be overridden by the backend-specific subclasses of ProductSpace.
-        Calculate sectors and multiplicities in the fusion of spaces, given the inputs of __init__.
-
-        Returns
-        -------
-        _sectors : 2D array of int
-            The sectors to be stored as self._sectors. May or may no be sorted, see `sector_perm`
-        multiplicities : 1D array of int
-            The multiplicities, in the order matching _sectors
-        sector_perm : None | 1D array of int
-            If the returned sectors are sorted, the :attr:`sector_perm` for self.
-            If _sectors are not sorted, this is None.
-        """
-        # TODO (JU) should we special case symmetry.fusion_style == FusionStyle.single ?
-        if _is_dual:
-            spaces = [s.dual for s in spaces] # directly fuse sectors of dual spaces.
-            # This yields overall dual `sectors` to return, which we directly save in
-            # self._sectors, such that `self.sectors` (which takes a dual!) yields correct sectors
-            # Overall, this ensures consistent sorting/order of sectors between dual ProductSpace!
-        fusion = {tuple(s): m for s, m in zip(spaces[0].sectors, spaces[0].multiplicities)}
-        for space in spaces[1:]:
-            new_fusion = {}
-            for t_a, m_a in fusion.items():
-                s_a = np.array(t_a)
-                for s_b, m_b in zip(space.sectors, space.multiplicities):
-                    for s_c in symmetry.fusion_outcomes(s_a, s_b):
-                        t_c = tuple(s_c)
-                        n = symmetry._n_symbol(s_a, s_b, s_c)
-                        new_fusion[t_c] = new_fusion.get(t_c, 0) + m_a * m_b * n
-            fusion = new_fusion
-            # by convention fuse spaces left to right, i.e. (...((0,1), 2), ..., N)
-        _sectors = np.asarray(list(fusion.keys()))
-        multiplicities = np.asarray(list(fusion.values()))
-        sector_perm = None
-        return _sectors, multiplicities, sector_perm
-
     def project(self, *args, **kwargs):
         """Convert self to VectorSpace and call :meth:`VectorSpace.project`.
 
@@ -648,5 +632,48 @@ class ProductSpace(VectorSpace):
         return res.project(*args, **kwargs)
 
 
+def _fuse_spaces(symmetry: Symmetry, spaces: list[VectorSpace], _is_dual: bool
+                 ) -> tuple[SectorArray, ndarray, ndarray, dict]:
+    """This function is called as part of ProductSpace.__init__.
+    The backend-specific metadata for the ProductSpace can be computed in parallel with the
+    sectors and multiplicities of the product space, which is why this function lives in the backend.
 
-VectorSpace.ProductSpaceCls = ProductSpace
+    This default implementation does not add any additional metadata.
+    Backends may override this.
+
+    Returns
+    -------
+    _sectors : 2D array of int
+        The sectors to be stored as self._sectors. May or may no be sorted, see `sector_perm`
+    multiplicities : 1D array of int
+        The multiplicities, in the order matching _sectors
+    sector_perm : None | 1D array of int
+        If the returned sectors are sorted, the :attr:`sector_perm` for self.
+        If _sectors are not sorted, this is None.
+    metadata : dict
+        A dictionary with string keys and arbitrary values.
+        These will be added as attributes of the ProductSpace
+    """
+    # TODO (JU) should we special case symmetry.fusion_style == FusionStyle.single ?
+    if _is_dual:
+        spaces = [s.dual for s in spaces] # directly fuse sectors of dual spaces.
+        # This yields overall dual `sectors` to return, which we directly save in
+        # self._sectors, such that `self.sectors` (which takes a dual!) yields correct sectors
+        # Overall, this ensures consistent sorting/order of sectors between dual ProductSpace!
+    fusion = {tuple(s): m for s, m in zip(spaces[0].sectors, spaces[0].multiplicities)}
+    for space in spaces[1:]:
+        new_fusion = {}
+        for t_a, m_a in fusion.items():
+            s_a = np.array(t_a)
+            for s_b, m_b in zip(space.sectors, space.multiplicities):
+                for s_c in symmetry.fusion_outcomes(s_a, s_b):
+                    t_c = tuple(s_c)
+                    n = symmetry._n_symbol(s_a, s_b, s_c)
+                    new_fusion[t_c] = new_fusion.get(t_c, 0) + m_a * m_b * n
+        fusion = new_fusion
+        # by convention fuse spaces left to right, i.e. (...((0,1), 2), ..., N)
+    _sectors = np.asarray(list(fusion.keys()))
+    multiplicities = np.asarray(list(fusion.values()))
+    sector_perm = None
+    metadata = {}
+    return _sectors, multiplicities, sector_perm, metadata
