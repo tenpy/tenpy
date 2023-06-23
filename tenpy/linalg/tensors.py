@@ -33,6 +33,12 @@ __all__ = ['Shape', 'AbstractTensor', 'Tensor', 'ChargedTensor', 'DiagonalTensor
 
 # svd, qr, eigen, exp, log, ... are implemented in matrix_operations.py
 
+
+# TODO where to put this? where to doc it?
+BOTH = object()  # sentinel value for the default behavior of DiagonalTensor.apply_mask
+KEEP_OLD_LABEL = object()  # sentinel value, e.g. for apply_mask
+
+
 class Shape:
     """An object storing the legs and labels of a tensor.
     When iterated or indexed, it behaves like a sequence of integers, the dimension of the legs.
@@ -986,13 +992,16 @@ class Tensor(AbstractTensor):
         data = backend.zero_data(legs=legs, dtype=dtype)
         return cls(data=data, backend=backend, legs=legs, labels=labels)
 
-    def apply_mask(self, mask: Mask, leg: int | str) -> Tensor:
+    def apply_mask(self, mask: Mask, leg: int | str, new_label: str = KEEP_OLD_LABEL) -> Tensor:
         leg_idx = self.get_leg_idx(leg)
         legs = self.legs[:]
         legs[leg_idx] = legs[leg_idx].project(mask.to_numpy_ndarray())
+        labels = self.labels[:]
+        if new_label is not KEEP_OLD_LABEL:
+            labels[leg_idx] = new_label
         return Tensor(
             data=self.backend.apply_mask_to_Tensor(self, mask, leg_idx),
-            legs=legs, backend=self.backend, labels=self.labels
+            legs=legs, backend=self.backend, labels=labels
         )
 
     def combine_legs(self,
@@ -1163,6 +1172,10 @@ class Tensor(AbstractTensor):
         if isinstance(other, DiagonalTensor):
             t1 = self.conj() if do_conj else self
             return t1.tdot(other, legs1=[0, 1], legs2=leg_order_2)
+        if isinstance(other, Mask):
+            # use that leg_order_2 is either [0, 1] or [1, 0]
+            # -> the leg to mask n is the one where leg_order_2[n] == 0, i.e. leg_order_2[0]
+            return self.apply_mask(other, leg=leg_order_2[0]).trace()
         raise TypeError(f'inner not supported for {type(self)} and {type(other)}')
 
     def outer(self, other: AbstractTensor, relabel1: dict[str, str] = None,
@@ -1202,6 +1215,25 @@ class Tensor(AbstractTensor):
         if len(leg_idcs1) == 0:
             return self.outer(other, relabel1, relabel2)
         backend = get_same_backend(self, other)
+        if isinstance(other, Mask):
+            if len(leg_idcs1) == 1:
+                new_label = other.labels[1]
+                if relabel2 is not None:
+                    new_label = relabel2.get(new_label, new_label)
+                res = self.apply_mask(other, leg_idcs1[0], new_label=new_label)
+                res = res.permute_legs([n for n in range(self.num_legs) if n != leg_idcs1[0]] + leg_idcs1)
+                if relabel2 is not None:
+                    res.set_labels([relabel2.get(l, l) for l in res.labels[:-1]] + [res.labels[-1]])
+                return res
+            if len(leg_idcs1) == 2:
+                # leg_idcs2 is [0, 1] or [1, 0]. we determine leg_idcs2[large_leg_idx] == 0
+                large_leg_idx = leg_idcs2[0]
+                res = self.apply_mask(other, leg_idcs1[large_leg_idx])
+                res = res.trace(*leg_idcs1)
+                if relabel2 is not None:
+                    res.set_labels([relabel2.get(l, l) for l in res.labels])
+                return res
+            raise RuntimeError  # should have caught all other cases already
         if isinstance(other, DiagonalTensor):
             if len(leg_idcs1) == 2:
                 # first contract leg that appears later in self.legs
@@ -1734,6 +1766,10 @@ class ChargedTensor(AbstractTensor):
             else:
                 res = backend.block_tdot(res, other.dumm_leg_state, 0, 0)
             return backend.block_item(res)
+        if isinstance(other, Mask):
+            # use that leg_order_2 is either [0, 1] or [1, 0]
+            # -> the leg n we need to mask is the one where leg_order_2[n] == 0, i.e. n == leg_order_2[0]
+            return self.apply_mask(other, leg=leg_order_2[0]).trace()
         raise TypeError(f'inner not supported for {type(self)} and {type(other)}')
     
     def outer(self, other: AbstractTensor, relabel1: dict[str, str] = None,
@@ -1764,7 +1800,7 @@ class ChargedTensor(AbstractTensor):
         # no need to do input checks, since we reduce to Tensor.tdot, which checks
         legs1 = self.get_leg_idcs(legs1)  # make sure we reference w.r.t. self, not self.invariant_part
         assert self.invariant_part.labels[-1] not in relabel1
-        if isinstance(other, (Tensor, DiagonalTensor)):
+        if isinstance(other, (Tensor, DiagonalTensor, Mask)):
             # In both of these cases, the main work is done by tdot(self.invariant_part, other, ...)
             invariant_part = self.invariant_part.tdot(other, legs1=legs1, legs2=legs2,
                                                       relabel1=relabel1, relabel2=relabel2)
@@ -1812,10 +1848,6 @@ class ChargedTensor(AbstractTensor):
             return 1.
         else:
             return self.backend.block_item(self.dummy_leg_state)
-
-
-# TODO where to put this? where to doc it?
-BOTH = object()  # sentinel value for the default behavior of DiagonalTensor.apply_mask
 
 
 class DiagonalTensor(AbstractTensor):
@@ -2281,6 +2313,19 @@ class DiagonalTensor(AbstractTensor):
             return res.trace(0, legs2[which_second])
         # now we know that exactly one leg should be contracted
         backend = get_same_backend(self, other)
+        if isinstance(other, Mask):
+            if legs2[0] == 1:
+                # OPTIMIZE ? dont need to convert to full but its easier for now
+                return self.tdot(other.to_full_tensor(), legs1=legs1, legs2=legs2, relabel1=relabel1, relabel2=relabel2)
+            # else: legs2[0] == 0, i.e. we contract the large leg of the Mask
+            new_label = other.labels[1]
+            if relabel1 is not None:
+                new_label = relabel1.get(new_label, new_label)
+            res = self.apply_mask(other, leg=legs1[0], new_label=new_label)
+            res = res.permute_legs(legs1)
+            if relabel2 is not None:
+                res.set_labels([relabel2.get(res.labels[0], res.labels[0]), res.labels[-1]])
+            return res
         if isinstance(other, DiagonalTensor):
             # note that contractible legs guarantee that self.legs[0] and other.legs[0] are either
             # equal or mutually dual and we can safely use elementwise_binary, no matter which of
@@ -2384,6 +2429,9 @@ class Mask(AbstractTensor):
         This function determines if this action is the same."""
         raise NotImplementedError  # TODO
 
+    def to_full_tensor(self) -> Tensor:
+        raise NotImplementedError  # TODO
+
     def _binary_operand(self, other: bool | Mask, func, operand: str, return_NotImplemented: bool = True
                         ) -> Mask:
         """Utility function for a shared implementation of binary functions, whose second argument
@@ -2454,12 +2502,29 @@ class Mask(AbstractTensor):
     # Implementing abstractmethods
     # --------------------------------------------
 
-    # TODO implement all
-    
+    @classmethod
+    def zero(cls, large_leg: VectorSpace, backend=None, labels: list[str | None] = None) -> Mask:
+        if backend is None:
+            backend = get_default_backend(large_leg.symmetry)
+        data = backend.zero_diagonal_data(leg=large_leg, dtype=Dtype.bool)
+        return cls(data=data, large_leg=large_leg, backend=backend)
+
     def apply_mask(self, mask: Mask, leg: int | str) -> Mask:
         # TODO do we even need this? its a bit hard and clunky to define
         raise NotImplementedError
         
+    def combine_legs(self, *legs: list[int | str],
+                     new_legs: list[ProductSpace]=None,
+                     product_spaces_dual: list[bool]=None,
+                     new_axes: list[int]=None) -> Tensor:
+        msg = 'Converting Mask to full Tensor for `combine_legs`. If this is what you wanted, ' \
+              'explicitly convert via Mask.to_full_tensor() first to supress the warning.'
+        warnings.warn(msg, stacklevel=2)
+        return self.to_full_tensor().combine_legs(*legs, new_legs, product_spaces_dual, new_axes)
+
+    def conj(self) -> Mask:
+        return self
+
     def copy(self, deep=True) -> Mask:
         if deep:
             return Mask(data=self.backend.copy_data(self.data),
@@ -2473,17 +2538,97 @@ class Mask(AbstractTensor):
                     backend=self.backend,
                     labels=self.labels)
 
+    def item(self) -> bool:
+        if self.large_leg.dim == 1:
+            return self.backend.item(self)
+        raise ValueError('Not a scalar')
+
+    def norm(self) -> float:
+        return float(np.sqrt(self.small_leg.dim))
+
+    def permute_legs(self, permutation: list[int]) -> Tensor:
+        msg = 'Converting Mask to full Tensor for `permute_legs`. If this is what you wanted, ' \
+              'explicitly convert via Mask.to_full_tensor() first to supress the warning.'
+        warnings.warn(msg, stacklevel=2)
+        return self.to_full_tensor().permute_legs(permutation)
+
+    def split_legs(self, legs: list[int | str] = None) -> NoReturn:
+        msg = 'Converting Mask to full Tensor for `split_legs`. If this is what you wanted, ' \
+              'explicitly convert via Mask.to_full_tensor() first to supress the warning.'
+        warnings.warn(msg, stacklevel=2)
+        return self.to_full_tensor().permute_legs(legs)
+
+    def squeeze_legs(self,legs: int | str | list[int | str] = None) -> Tensor:
+        msg = 'Converting Mask to full Tensor for `squeeze_legs`. If this is what you wanted, ' \
+              'explicitly convert via Mask.to_full_tensor() first to supress the warning.'
+        warnings.warn(msg, stacklevel=2)
+        return self.to_full_tensor().squeeze_legs(legs)
+
+    def to_dense_block(self, leg_order: list[int | str] = None) -> Block:
+        return self.to_full_tensor().to_dense_block(leg_order)
+
+    def trace(self, *a, **k) -> NoReturn:
+        raise TypeError('Can not perform trace of a Mask, they are not square.')
+
     def _get_element(self, idcs: list[int]) -> bool:
         raise NotImplementedError  # TODO
 
     def _set_element(self, idcs: list[int], value: bool) -> None:
         raise NotImplementedError  # TODO
 
+    def _mul_scalar(self, other: Number) -> Mask:
+        if isinstance(other, bool):
+            return self.__and__(other)
+        raise TypeError(f'Can not multiply Mask with {type(other)}.')
+
     # --------------------------------------------
     # Implementing binary tensor methods
     # --------------------------------------------
 
-    # TODO implement them
+    def almost_equal(self, other: AbstractTensor, atol: float = 1e-5, rtol: float = 1e-8) -> bool:
+        if isinstance(other, Mask):
+            return self.__eq__(other)
+        raise TypeError(f'almost_equal not supported for types {type(self)} and {type(other)}.')
+
+    def inner(self, other: AbstractTensor, do_conj: bool = True, legs1: list[int | str] = None,
+              legs2: list[int | str]  = None) -> float | complex:
+        leg_order_2 = self._input_checks_inner(other, do_conj=do_conj, legs1=legs1, legs2=legs2)
+        if isinstance(other, Mask):
+            return self.__and__(other).small_leg.dim
+        else:
+            return other.apply_mask(self, leg=leg_order_2[0]).trace()
+
+    def outer(self, other: AbstractTensor, relabel1: dict[str, str] = None,
+              relabel2: dict[str, str] = None) -> AbstractTensor:
+        raise TypeError(f'outer not supported for {type(self)} and {type(other)}')
+
+    def tdot(self, other: AbstractTensor, legs1: int | str | list[int | str] = -1,
+             legs2: int | str | list[int | str] = 0, relabel1: dict[str, str] = None,
+             relabel2: dict[str, str] = None) -> AbstractTensor | float | complex:
+        legs1, legs2 = self._input_checks_tdot(other, legs1, legs2)
+        if len(legs1) == 1:
+            if legs1[0] == 0:  # contracting the large leg
+                new_label = self.labels[1]
+                if relabel1 is not None:
+                    new_label = relabel1.get(new_label, new_label)
+                res = other.apply_mask(self, legs2[0], new_label=new_label)
+                res = res.permute_legs(legs2 + [n for n in range(res.num_legs) if n not in legs2])
+                if relabel2 is not None:
+                    res.set_labels([res.labels[0]] + [relabel2.get(l, l) for l in res.labels[1:]])
+                return res
+            
+            # OPTIMIZE the remaining case could be done more efficiently, by inserting zero-slice wherever the mask is False
+            return self.to_full_tensor().tdot(other, legs1, legs2, relabel1, relabel2)
+        if len(legs1) == 0:
+            raise TypeError(f'tdot with no contracted legs (i.e. outer) not supported for {type(self)} and {type(other)}')
+        if len(legs1) == 2:
+            large_leg_idx = legs1[0]  # since legs1 is [0, 1] or [1, 0], legs1[legs1[0]] == 0 is the large leg
+            res = other.apply_mask(self, legs2[large_leg_idx])
+            res = res.trace(*legs2)
+            if relabel2 is not None:
+                res.set_labels([relabel2.get(l, l) for l in res.labels])
+            return res
+        raise ValueError  # should have been caught by input checks
 
 
 # ##################################
