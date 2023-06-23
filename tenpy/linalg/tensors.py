@@ -340,6 +340,23 @@ class AbstractTensor(ABC):
                 raise ValueError(msg)
         return other_order
 
+    def _input_checks_tdot(self, other: AbstractTensor, legs1: int | str | list[int | str], legs2: int | str | list[int | str]
+                           ) -> tuple[list[int], list[int]]:
+        _legs1 = to_iterable(legs1)
+        _legs2 = to_iterable(legs2)
+        legs1 = list(map(self.get_leg_idx, _legs1))
+        legs2 = list(map(other.get_leg_idx, _legs2))
+        if len(legs1) != len(legs2):
+            raise ValueError('Mismatching number of legs')
+        incompatible = []
+        for _l1, _l2, l1, l2 in zip(_legs1, _legs2, legs1, legs2):
+            if not self.legs[l1].can_contract_with(other.legs[l2]):
+                incompatible.append((_l1, _l2))
+        if incompatible:
+            msg = f'{len(incompatible)} incompatible leg pairs: {", ".join(map(str, incompatible))}'
+            raise ValueError(msg)
+        return legs1, legs2
+
     def __repr__(self):
         indent = '  '
         lines = [f'{self.__class__.__name__}(']
@@ -1176,17 +1193,11 @@ class Tensor(AbstractTensor):
             invariant_part = self.tdot(other.invariant_part, legs1=legs1, legs2=legs2,
                                        relabel1=relabel1, relabel2=relabel2)
             return ChargedTensor(invariant_part=invariant_part, dummy_leg_state=other.dummy_leg_state)
-        leg_idcs1 = self.get_leg_idcs(legs1)
-        leg_idcs2 = other.get_leg_idcs(legs2)
+        leg_idcs1, leg_idcs2 = self._input_checks_tdot(other, legs1, legs2)
         open_legs1 = [leg for idx, leg in enumerate(self.legs) if idx not in leg_idcs1]
         open_legs2 = [leg for idx, leg in enumerate(other.legs) if idx not in leg_idcs2]
         open_labels1 = [leg for idx, leg in enumerate(self.labels) if idx not in leg_idcs1]
         open_labels2 = [leg for idx, leg in enumerate(other.labels) if idx not in leg_idcs2]
-        if len(leg_idcs1) != len(leg_idcs2):
-            # checking this for leg_idcs* instead of legs* allows us to assume that they are both lists
-            raise ValueError('Must specify the same number of legs for both tensors')
-        if not all(self.legs[idx1].can_contract_with(other.legs[idx2]) for idx1, idx2 in zip(leg_idcs1, leg_idcs2)):
-            raise ValueError('Incompatible legs.')
         # special case: outer()
         if len(leg_idcs1) == 0:
             return self.outer(other, relabel1, relabel2)
@@ -1750,6 +1761,7 @@ class ChargedTensor(AbstractTensor):
     def tdot(self, other: AbstractTensor, legs1: int | str | list[int | str] = -1,
              legs2: int | str | list[int | str] = 0, relabel1: dict[str, str] = None,
              relabel2: dict[str, str] = None) -> AbstractTensor | float | complex:
+        # no need to do input checks, since we reduce to Tensor.tdot, which checks
         legs1 = self.get_leg_idcs(legs1)  # make sure we reference w.r.t. self, not self.invariant_part
         assert self.invariant_part.labels[-1] not in relabel1
         if isinstance(other, (Tensor, DiagonalTensor)):
@@ -2175,7 +2187,7 @@ class DiagonalTensor(AbstractTensor):
                               backend=self.backend,
                               labels=self.labels)
 
-    def item(self) -> bool | float | complex:
+    def item(self) -> float | complex:
         if all(leg.dim == 1 for leg in self.legs):
             return self.backend.item(self)
         else:
@@ -2206,14 +2218,14 @@ class DiagonalTensor(AbstractTensor):
         # TODO should we check for invalid inputs? -> I think yes...
         return self.backend.diagonal_tensor_trace_full(self)
 
-    def _get_element(self, idcs: list[int]) -> bool | float | complex:
+    def _get_element(self, idcs: list[int]) -> float | complex:
         if idcs[0] != idcs[1]:
             return self.dtype.zero_scalar
         # TODO in tests, do the consistency check that it really doesnt matter which leg is used here
         data_idx = self.legs[0].index_perm[idcs[0]]
         return self.backend.get_element_diagonal(self, data_idx)
 
-    def _set_element(self, idcs: list[int], value: bool | float | complex) -> None:
+    def _set_element(self, idcs: list[int], value: float | complex) -> None:
         if idcs[0] != idcs[1]:
             raise IndexError('Off-diagonal entry can not be set for DiagonalTensor')
         self.data = self.backend.set_element_diagonal(self, idcs[0], value)
@@ -2257,8 +2269,7 @@ class DiagonalTensor(AbstractTensor):
             invariant_part = self.tdot(other.invariant_part, legs1=legs1, legs2=legs2,
                                        relabel1=relabel1, relabel2=relabel2)
             return ChargedTensor(invariant_part=invariant_part, dummy_leg_state=other.dummy_leg_state)
-        legs1 = self.get_leg_idcs(legs1)
-        legs2 = self.get_leg_idcs(legs2)
+        legs1, legs2 = self._input_checks_tdot(other, legs1, legs2)
         # deal with special cases
         if len(legs1) == 0:
             return self.outer(other, relabel1=relabel1, relabel2=relabel2)
@@ -2269,8 +2280,6 @@ class DiagonalTensor(AbstractTensor):
             # legs1[which_second] is not at position 0, legs2[which_second] has not moved
             return res.trace(0, legs2[which_second])
         # now we know that exactly one leg should be contracted
-        if not self.legs[legs1[0]].can_contract_with(other.legs[legs2[0]]):
-            raise ValueError('Incompatible legs.')
         backend = get_same_backend(self, other)
         if isinstance(other, DiagonalTensor):
             # note that contractible legs guarantee that self.legs[0] and other.legs[0] are either
