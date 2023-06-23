@@ -189,6 +189,9 @@ class AbstractNoSymmetryBackend(AbstractBackend, AbstractBlockBackend, ABC):
     def full_data_from_diagonal_tensor(self, a: DiagonalTensor) -> Data:
         return self.block_from_diagonal(a.data)
 
+    def full_data_from_mask(self, a: Mask) -> Data:
+        return self.block_from_block_mask(a.data)
+
     def scale_axis(self, a: Tensor, b: DiagonalTensor, leg: int) -> Data:
         return self.block_scale_axis(a, b, leg)
 

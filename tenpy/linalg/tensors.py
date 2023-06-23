@@ -2430,7 +2430,10 @@ class Mask(AbstractTensor):
         raise NotImplementedError  # TODO
 
     def to_full_tensor(self) -> Tensor:
-        raise NotImplementedError  # TODO
+        return Tensor(
+            data=self.backend.full_data_from_mask(self),
+            legs=self.legs, backend=self.backend, labels=self.labels
+        )
 
     def _binary_operand(self, other: bool | Mask, func, operand: str, return_NotImplemented: bool = True
                         ) -> Mask:

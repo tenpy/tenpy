@@ -191,6 +191,13 @@ class TorchBlockBackend(AbstractBlockBackend):
     def block_from_diagonal(self, diag: Block) -> Block:
         return torch_module.diag(diag)
 
+    def block_from_mask(self, mask: Block, dtype: Dtype) -> Block:
+        M, = mask.shape
+        N = torch_module.sum(mask)
+        res = torch_module.zeros((M, N), dtype=self.backend_dtype_map[dtype])
+        res[mask, torch_module.arange(N)] = 1
+        return res
+
     def block_sum_all(self, a: Block) -> float | complex:
         return torch_module.sum(a)
         

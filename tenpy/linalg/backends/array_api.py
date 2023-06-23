@@ -194,6 +194,9 @@ class ArrayApiBlockBackend(AbstractBlockBackend):
         raise NotImplementedError  # TODO
         # return np.diag(diag)
 
+    def block_from_mask(self, mask: Block, dtype: Dtype) -> Block:
+        raise NotImplementedError  # TODO
+
     def block_sum_all(self, a: Block) -> float | complex:
         return self._api.sum(a)
 

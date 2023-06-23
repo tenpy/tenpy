@@ -422,6 +422,10 @@ class AbstractBackend(ABC):
         ...
 
     @abstractmethod
+    def full_data_from_mask(self, a: Mask) -> Data:
+        ...
+
+    @abstractmethod
     def scale_axis(self, a: Tensor, b: DiagonalTensor, leg: int) -> Data:
         """Scale axis ``leg`` of ``a`` with ``b``, then permute legs to move the scaled leg to given position"""
         ...
@@ -662,6 +666,12 @@ class AbstractBlockBackend(ABC):
     @abstractmethod
     def block_from_diagonal(self, diag: Block) -> Block:
         """Return a 2D square block that has the 1D ``diag`` on the diagonal"""
+        ...
+
+    @abstractmethod
+    def block_from_mask(self, mask: Block, dtype: Dtype) -> Block:
+        """Return a (M, N) of numbers (floa or complex dtype) from a 1D bool-valued block shape (M,)
+        where N is the number of True entries. The result is the coefficient matrix of the projection map."""
         ...
 
     def block_scale_axis(self, block: Block, factors: Block, axis: int) -> Block:

@@ -1155,6 +1155,10 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
         # use self.block_from_diagonal(block)
         raise NotImplementedError  # TODO
 
+    def full_data_from_mask(self, a: Mask) -> Data:
+        # use self.block_from_mask(a_block), which gives a 2D block of shape (len(a_block), sum(a_block))
+        raise NotImplementedError  # TODO
+
     def scale_axis(self, a: Tensor, b: DiagonalTensor, leg: int) -> Data:
         # use self.block_scale_axis(a_block, b_1d_block, leg)
         raise NotImplementedError  # TODO

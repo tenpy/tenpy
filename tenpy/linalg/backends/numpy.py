@@ -202,6 +202,13 @@ class NumpyBlockBackend(AbstractBlockBackend):
     def block_from_diagonal(self, diag: Block) -> Block:
         return np.diag(diag)
 
+    def block_from_mask(self, mask: Block, dtype: Dtype) -> Block:
+        M, = mask.shape
+        N = np.sum(mask)
+        res = np.zeros((M, N), dtype=self.backend_dtype_map[dtype])
+        res[mask, np.arange(N)] = 1
+        return res
+
     def block_sum_all(self, a: Block) -> float | complex:
         return np.sum(a)
 
