@@ -1192,6 +1192,9 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
         # make vectorspace
         raise NotImplementedError  # TODO
 
+    def apply_mask_to_Tensor(self, tensor: Tensor, mask: Mask, leg_idx: int) -> Data:
+        raise NotImplementedError  # TODO
+
 
 def product_space_map_incoming_block_inds(space: ProductSpace, incoming_block_inds):
     """Map incoming block indices to indices of :attr:`block_ind_map`.

@@ -462,6 +462,10 @@ class AbstractBackend(ABC):
         """Infer the smaller leg that a mask with the given data projects to."""
         ...
 
+    @abstractmethod
+    def apply_mask_to_Tensor(self, tensor: Tensor, mask: Mask, leg_idx: int) -> Data:
+        ...
+
 
 class AbstractBlockBackend(ABC):
     svd_algorithms: list[str]  # first is default
@@ -675,4 +679,9 @@ class AbstractBlockBackend(ABC):
         If the block contains boolean values, this should return the number of ``True`` entries.
         """
         ...
+
+    def apply_mask_to_block(block: Block, mask: Block, ax: int) -> Block:
+        """Apply a mask (1D boolean block) to a block, slicing/projecting that axis"""
+        idx = (slice(None, None, None),) * (ax - 1) + (mask,)
+        return block[idx]
     

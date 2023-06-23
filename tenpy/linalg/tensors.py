@@ -970,7 +970,13 @@ class Tensor(AbstractTensor):
         return cls(data=data, backend=backend, legs=legs, labels=labels)
 
     def apply_mask(self, mask: Mask, leg: int | str) -> Tensor:
-        raise NotImplementedError  # TODO
+        leg_idx = self.get_leg_idx(leg)
+        legs = self.legs[:]
+        legs[leg_idx] = legs[leg_idx].project(mask.to_numpy_ndarray())
+        return Tensor(
+            data=self.backend.apply_mask_to_Tensor(self, mask, leg_idx),
+            legs=legs, backend=self.backend, labels=self.labels
+        )
 
     def combine_legs(self,
                      *legs: list[int | str],
@@ -1560,7 +1566,10 @@ class ChargedTensor(AbstractTensor):
         return cls(invariant_part=invariant_part, dummy_leg_state=dummy_leg_state)
 
     def apply_mask(self, mask: Mask, leg: int | str) -> ChargedTensor:
-        raise NotImplementedError  # TODO
+        return ChargedTensor(
+            invariant_part=self.invariant_part.apply_mask(mask, self.get_leg_idx(leg)),
+            dummy_leg_state=self.dummy_leg_state
+        )
 
     def combine_legs(self,
                      *legs: list[int | str],
@@ -2131,11 +2140,11 @@ class DiagonalTensor(AbstractTensor):
         """.. note ::
             For ``DiagonalTensor``s, :meth:`apply_mask` has a default argument for `legs` which
             causes the mask to be applied to *both* legs.
+            If it is only applied to a single leg, the result will be a `Tensor` instead if `DiagonalTensor`.
         """
         if leg is BOTH:
             return self._apply_mask_both_legs(mask)
-        
-        raise NotImplementedError  # TODO
+        return self.to_full_tensor().apply_mask(mask, leg)
 
     def combine_legs(self,
                      *legs: list[int | str],
@@ -2439,10 +2448,9 @@ class Mask(AbstractTensor):
     # TODO implement all
     
     def apply_mask(self, mask: Mask, leg: int | str) -> Mask:
-        # TODO what if masking makes the "large_leg" smaller than the small leg?
-        #  -> think about _take_mask_indices as well
+        # TODO do we even need this? its a bit hard and clunky to define
         raise NotImplementedError
-
+        
     def copy(self, deep=True) -> Mask:
         if deep:
             return Mask(data=self.backend.copy_data(self.data),

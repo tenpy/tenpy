@@ -274,6 +274,9 @@ class AbstractNonabelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
     def mask_infer_small_leg(self, mask_data: Data, large_leg: VectorSpace) -> VectorSpace:
         raise NotImplementedError  # TODO
 
+    def apply_mask_to_Tensor(self, tensor: Tensor, mask: Mask, leg_idx: int) -> Data:
+        raise NotImplementedError  # TODO
+
 
 def _block_pairs(a: NonAbelianData, b: NonAbelianData) -> Iterator[tuple[Sector, Block, Block]]:
     """yield all block pairs, if a coupled sector appears as a key in the blocks dictionary

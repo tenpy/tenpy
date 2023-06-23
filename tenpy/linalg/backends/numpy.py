@@ -204,6 +204,9 @@ class NumpyBlockBackend(AbstractBlockBackend):
 
     def block_sum_all(self, a: Block) -> float | complex:
         return np.sum(a)
+
+    def apply_mask_to_block(block: Block, mask: Block, ax: int) -> Block:
+        return np.compress(mask, block, ax)
     
 
 class NoSymmetryNumpyBackend(NumpyBlockBackend, AbstractNoSymmetryBackend):

@@ -213,3 +213,6 @@ class AbstractNoSymmetryBackend(AbstractBackend, AbstractBlockBackend, ABC):
         return VectorSpace.non_symmetric(dim=self.block_sum_all(mask_data),
                                          is_real=large_leg.is_real,
                                          _is_dual=large_leg.is_dual)
+
+    def apply_mask_to_Tensor(self, tensor: Tensor, mask: Mask, leg_idx: int) -> Data:
+        return self.apply_mask_to_block(tensor.data, mask.data, ax=leg_idx)
