@@ -2155,11 +2155,25 @@ class DiagonalTensor(AbstractTensor):
         warnings.warn('Converting DiagonalTensor to Tensor in order to apply mask', stacklevel=2)
         return self.to_full_tensor()._getitem_apply_masks(masks, legs)
 
+    def __getitem__(self, idcs):
+        # allow indexing by a single integer -> applied to both axes
+        # TODO doc this behavior
+        _idcs = to_iterable(idcs)
+        if len(_idcs) == 1 and isinstance(_idcs[0], int):
+            idcs = (_idcs[0], _idcs[0])
+        return AbstractTensor.__getitem__(self, idcs)
+
     def __mul__(self, other):
         if isinstance(other, DiagonalTensor):
             # _elementwise_binary performs input checks.
             return self._elementwise_binary(other, func=operator.mul, partial_zero_is_zero=True)
         return AbstractTensor.__mul__(self, other)
+
+    def __setitem__(self, idcs, value):
+        _idcs = to_iterable(idcs)
+        if len(_idcs) == 1 and isinstance(_idcs[0], int):
+            idcs = (_idcs[0], _idcs[0])
+        return AbstractTensor.__setitem__(self, idcs, value)
 
     def __truediv__(self, other):
         if isinstance(other, DiagonalTensor):
@@ -2261,6 +2275,7 @@ class DiagonalTensor(AbstractTensor):
     def _set_element(self, idcs: list[int], value: float | complex) -> None:
         if idcs[0] != idcs[1]:
             raise IndexError('Off-diagonal entry can not be set for DiagonalTensor')
+        data_idx = self.legs[0].index_perm[idcs[0]]
         self.data = self.backend.set_element_diagonal(self, idcs[0], value)
 
     def _mul_scalar(self, other: complex) -> DiagonalTensor:
@@ -2513,6 +2528,27 @@ class Mask(AbstractTensor):
     # Overriding methods from AbstractTensor
     # --------------------------------------------
 
+    def __getitem__(self, idcs):
+        # allow indexing by a single integer -> applied to both axes
+        # TODO doc this behavior
+        _idcs = to_iterable(idcs)
+        if len(_idcs) == 1 and isinstance(_idcs[0], int):
+            data_idx = self.legs[0].index_perm[_idcs[0]]
+            # the data of a mask is like the data of a DiagonalTensor
+            return self.backend.get_element_diagonal(self, data_idx)
+        return AbstractTensor.__getitem__(self, idcs)
+
+    def __setitem__(self, idcs, value):
+        _idcs = to_iterable(idcs)
+        if len(_idcs) == 1 and isinstance(_idcs[0], int):
+            data_idx = self.legs[0].index_perm[_idcs[0]]
+            assert isinstance(value, bool)
+            # the data of a mask is like the data of a DiagonalTensor
+            self.data = self.backend.set_element_diagonal(self, data_idx, value)
+            self.legs[1] = self.backend.mask_infer_small_leg(data=self.data, large_leg=self.legs[0])
+        else:
+            AbstractTensor.__setitem__(self, idcs, value)
+
     # --------------------------------------------
     # Implementing abstractmethods
     # --------------------------------------------
@@ -2589,6 +2625,7 @@ class Mask(AbstractTensor):
         raise NotImplementedError  # TODO
 
     def _set_element(self, idcs: list[int], value: bool) -> None:
+        assert isinstance(value, bool)
         raise NotImplementedError  # TODO
 
     def _mul_scalar(self, other: Number) -> Mask:
