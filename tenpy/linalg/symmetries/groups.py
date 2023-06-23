@@ -387,6 +387,10 @@ class AbelianGroup(GroupSymmetry, metaclass=_ABCFactorSymmetryMeta):
         GroupSymmetry.__init__(self, fusion_style=FusionStyle.single, trivial_sector=trivial_sector,
                        group_name=group_name, num_sectors=num_sectors, descriptive_name=descriptive_name)
 
+    def sector_str(self, a: Sector) -> str:
+        # we know sectors are labelled by a single number
+        return str(a.item())
+    
     def sector_dim(self, a: Sector) -> int:
         return 1
 
@@ -420,7 +424,7 @@ class NoSymmetry(AbelianGroup):
         return sectors
 
     def sector_str(self, a: Sector) -> str:
-        return '[0]'
+        return '0'
 
     def __repr__(self):
         return 'NoSymmetry()'
@@ -540,7 +544,7 @@ class SU2Symmetry(GroupSymmetry):
     def sector_str(self, a: Sector) -> str:
         jj = a[0]
         j_str = str(jj // 2) if jj % 2 == 0 else f'{jj}/2'
-        return f'[{jj} (J={j_str})]'
+        return f'{jj} (J={j_str})'
 
     def __repr__(self):
         name_str = '' if self.descriptive_name is None else f'"{self.descriptive_name}"'
@@ -586,7 +590,7 @@ class FermionParity(Symmetry):
         return 1
 
     def sector_str(self, a: Sector) -> str:
-        return '[even]' if a[0] == 0 else '[odd]'
+        return 'even' if a[0] == 0 else 'odd'
 
     def __repr__(self):
         return 'FermionParity()'

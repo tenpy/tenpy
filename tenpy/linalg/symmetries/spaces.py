@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING
 
 from .groups import Sector, SectorArray, Symmetry, no_symmetry
 from ...tools.misc import inverse_permutation
+from ...tools.string import vert_join
 
 if TYPE_CHECKING:
     from ..backends.abstract_backend import AbstractBackend
@@ -238,23 +239,22 @@ class VectorSpace:
 
     def __repr__(self):
         # TODO include sector_perm?
-        dual_str = '.dual' if self.is_dual else ''
-        is_real_str = ', is_real=True' if self.is_real else ''
-        sectors_str = repr(self._sectors)
-        if len(sectors_str) > 50:
-            sectors_str = '[...]'
-        return f'{self.__class__.__name__}({self.symmetry!r}, sectors={sectors_str}, ' \
-               f'multiplicities={self.multiplicities!s}{is_real_str}){dual_str}'
+        is_real_str = 'is_real=True, ' if self.is_real else ''
+        summarization_threshold = 20
+        sectors = np.array2string(self._sectors[self.inverse_sector_perm],
+                                  threshold=summarization_threshold, separator=', '
+                                  ).replace('\n', '')
+        mults = np.array2string(self.multiplicities[self.inverse_sector_perm],
+                                threshold=summarization_threshold, separator=', '
+                                ).replace('\n', '')
+        
+        sep = '\n   ' if self._sectors.size > 3 else ''
+        return f'VectorSpace({self.symmetry!r}, is_dual={self.is_dual},{sep} sectors={sectors},{sep} multiplicities={mults}{is_real_str}{sep[:1]})'
 
     def __str__(self):
-        # TODO include sector_perm?
-        field = 'ℝ' if self.is_real else 'ℂ'
-        if self.symmetry == no_symmetry:
-            symm_details = ''
-        else:
-            symm_details = f'[{self.symmetry}, {self.sectors_str()}]'
-        res = f'{field}^{self.dim}{symm_details}'
-        return f'dual({res})' if self.is_dual else res
+        sectors = '_sector\n' + '\n'.join(self.symmetry.sector_str(s) for s in self._sectors)
+        mults = 'multiplicity\n' + '\n'.join(map(str, self.multiplicities))
+        return f'symmetry: {self.symmetry!s}\nis_dual: {self.is_dual}\n' + vert_join([sectors, mults], delim=' | ')
 
     def __eq__(self, other):
         # TODO should we compare the perm_sectors?
@@ -578,8 +578,9 @@ class ProductSpace(VectorSpace):
 
     def __repr__(self):
         lines = [f'{self.__class__.__name__}([']
+        indent = '    '
         for s in self.spaces:
-            lines.append(f'  {repr(s)},')
+            lines.append(indent + repr(s).replace('\n', '\n' + indent))
         if self.is_dual:
             lines.append(']).dual')
         else:
@@ -587,9 +588,10 @@ class ProductSpace(VectorSpace):
         return '\n'.join(lines)
 
     def __str__(self):
-        res = ' ⊗ '.join(map(str, self.spaces))
-        if self.is_dual:
-            res = f'dual({res})'
+        res = f'ProductSpace(' \
+              f'shape: [{", ".join(str(s.dim) for s in self.spaces)}]->{self.dim}, ' \
+              f'is_dual: [{", ".join(str(s.is_dual) for s in self.spaces)}]->{self.is_dual}, ' \
+              f'# sectors: [{", ".join(str(s.num_sectors) for s in self.spaces)}]->{self.num_sectors})'
         return res
 
     def __eq__(self, other):

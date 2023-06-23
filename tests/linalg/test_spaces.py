@@ -146,3 +146,48 @@ def test_product_space(symmetry, symmetry_sectors_rng, np_random):
     p1_s = p1.as_VectorSpace()
     assert isinstance(p1_s, spaces.VectorSpace)
     assert p1_s == p1
+
+
+def all_str_repr_demos():
+    print()
+    print('----------------------')
+    print('VectorSpace.__repr__()')
+    print('----------------------')
+    demo_VectorSpace_repr(repr)
+    
+    print()
+    print('---------------------')
+    print('VectorSpace.__str__()')
+    print('---------------------')
+    demo_VectorSpace_repr(str)
+    
+    print()
+    print('-----------------------')
+    print('ProductSpace.__repr__()')
+    print('-----------------------')
+    demo_ProductSpace_repr(repr)
+    
+    print()
+    print('----------------------')
+    print('ProductSpace.__str__()')
+    print('----------------------')
+    demo_ProductSpace_repr(str)
+
+
+def demo_VectorSpace_repr(fun=repr):
+    from tests.linalg import conftest
+    for symmetry in conftest.symmetry._pytestfixturefunction.params:
+        space = conftest.random_vector_space(symmetry)
+        print()
+        print(fun(space))
+
+
+def demo_ProductSpace_repr(fun=repr):
+    from tests.linalg import conftest
+    for symmetry in conftest.symmetry._pytestfixturefunction.params:
+        num = 1 + np.random.choice(3)
+        is_dual = np.random.choice([True, False, None])
+        spaces_ = [conftest.random_vector_space(symmetry) for _ in range(num)]
+        space = spaces.ProductSpace(spaces_, _is_dual=is_dual)
+        print()
+        print(fun(space))
