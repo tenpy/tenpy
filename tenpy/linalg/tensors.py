@@ -235,7 +235,8 @@ class AbstractTensor(ABC):
         components_strs = []
         for leg, label in zip(self.legs, self.labels):
             if isinstance(leg, ProductSpace):
-                sublabels = [f'?{n}' if l is None else l for n, l in enumerate(_split_leg_label(label))]
+                sublabels = [f'?{n}' if l is None else l
+                             for n, l in enumerate(_split_leg_label(label, num=len(leg.spaces)))]
                 prefix = 'ProductSpace: '
                 components = prefix + join_as_many_as_possible(
                     [f'({l}: {s.dim})' for l, s in zip(sublabels, leg.spaces)],
@@ -1083,7 +1084,7 @@ class Tensor(AbstractTensor):
             new_legs.extend(old_legs[start:i])
             new_legs.extend(old_legs[i].spaces)
             new_labels.extend(old_labels[start:i])
-            new_labels.extend(_split_leg_label(old_labels[i]))
+            new_labels.extend(_split_leg_label(old_labels[i], num=len(old_legs[i].spaces)))
             start = i + 1
         new_legs.extend(old_legs[start:])
         new_labels.extend(old_labels[start:])
@@ -2959,10 +2960,13 @@ def _combine_leg_labels(labels: list[str | None]) -> str:
     return '(' + '.'.join(f'?{n}' if l is None else l for n, l in enumerate(labels)) + ')'
 
 
-def _split_leg_label(label: str) -> list[str | None]:
+def _split_leg_label(label: str | None, num: int) -> list[str | None]:
     """undo _combine_leg_labels, i.e. recover the original labels"""
+    if label is None:
+        return [None] * num
     if label.startswith('(') and label.endswith(')'):
         labels = label[1:-1].split('.')
+        assert len(labels) == num
         return [None if l.startswith('?') else l for l in labels]
     else:
         raise ValueError('Invalid format for a combined label')
