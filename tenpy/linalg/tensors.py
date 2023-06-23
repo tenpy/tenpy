@@ -2350,6 +2350,17 @@ class DiagonalTensor(AbstractTensor):
             
         raise TypeError(f'tdot not supported for {type(self)} and {type(other)}')
 
+    def _add_tensor(self, other: AbstractTensor) -> AbstractTensor:
+        if isinstance(other, Tensor):
+            return self.to_full_tensor()._add_tensor(other)
+        if isinstance(other, DiagonalTensor):
+            other_order = self._input_checks_add_tensor(other)
+            # by definition, permuting the legs does nothing to a DiagonalTensors data
+            backend = get_same_backend(self, other)
+            return DiagonalTensor(backend.add(self, other), first_leg=self.legs[0],
+                                  second_leg_dual=self.second_leg_dual, backend=backend,
+                                  labels=self.labels)
+        raise TypeError(f"unsupported operand type(s) for +: 'Tensor' and '{type(other)}'")
 
 class Mask(AbstractTensor):
     r"""A boolean mask that can be used to project a leg.
