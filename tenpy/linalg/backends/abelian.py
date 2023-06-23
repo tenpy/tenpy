@@ -22,7 +22,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Iterable, TypeVar, List, TYPE_CHECKING
+from typing import TYPE_CHECKING
 import numpy as np
 import copy
 import warnings
@@ -204,9 +204,20 @@ def _iter_common_noncommon_sorted_arrays(a, b):
 
 @dataclass
 class AbelianBackendData:
-    """Data stored in a Tensor for :class:`AbstractAbelianBackend`."""
+    """Data stored in a Tensor for :class:`AbstractAbelianBackend`.
+
+    Attributes
+    ----------
     dtype : Dtype
-    blocks : List[Block]  # The actual entries of the tensor. Formerly known as Array._data
+        The dtype of the data
+    blocks : list of block
+        A list of blocks containing the actual entries of the tensor.
+    block_inds : 2D ndarray
+        A 2D array of positive integers with shape (len(blocks), num_legs).
+        The block `blocks[n]` belongs to the `block_inds[n, m]`-th sector of the `m`-th leg.
+    """
+    dtype : Dtype
+    blocks : list[Block]  # The actual entries of the tensor. Formerly known as Array._data
     block_inds : ndarray  # For each of the blocks entries the block indices specifying to which
     # sector of the different legs it belongs
 
