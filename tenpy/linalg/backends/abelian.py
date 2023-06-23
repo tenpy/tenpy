@@ -676,13 +676,13 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
                 for blocks in blocks_list]
         return res
 
-    def svd(self, a: Tensor, new_vh_leg_dual: bool) -> tuple[Data, Data, Data, VectorSpace]:
+    def svd(self, a: Tensor, new_vh_leg_dual: bool) -> tuple[Data, DiagonalData, Data, VectorSpace]:
         leg_L, leg_R = a.legs
         u_blocks = []
         s_blocks = []
         vh_blocks = []
         for block in a.data.blocks:
-            u, s, vh = self.matrix_svd(block)
+            u, s, vh = self.matrix_svd(block, algorithm=None)  # TODO make algorithm configurable
             u_blocks.append(u)
             s_blocks.append(s)
             assert len(s) > 0
@@ -692,7 +692,7 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
         sectors = a.legs[1].sectors
         block_inds_L, block_inds_R = a.data.block_inds.T  # columns of block_inds
         # due to lexsort(a.data.block_inds.T), block_inds_R is sorted, but block_inds_L not.
-        block_inds_C = np.arange(len(s_blocks), int)
+        block_inds_C = np.arange(len(s_blocks), dtype=int)
         if new_vh_leg_dual != leg_R.is_dual:
             # opposite dual flag in legs of vH => same _sectors
             # project onto block indices in central leg which we kept, given by block_inds_R
@@ -712,9 +712,9 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
                                   _is_dual=new_vh_leg_dual)
             # new_leg has sorted _sectors in __init__, but that might have induced permutation
             block_inds_C = block_inds_C[new_leg.sector_perm]  # no longer sorted
-        u_block_inds = np.hstack(block_inds_L, block_inds_C)
-        s_block_inds = block_inds_C
-        vh_block_inds = np.hstack(block_inds_C, block_inds_R)  # sorted
+        u_block_inds = np.column_stack([block_inds_L, block_inds_C])
+        s_block_inds = block_inds_C[:, None]
+        vh_block_inds = np.column_stack([block_inds_C, block_inds_R])  # sorted
         if new_vh_leg_dual == leg_R.is_dual:
             # need to sort u_block_inds and s_block_inds
             # since we lexsort with last column changing slowest, we need to sort block_inds_C only

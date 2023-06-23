@@ -50,6 +50,7 @@ def svd(a: AbstractTensor, u_legs: list[int | str] = None, vh_legs: list[int | s
     l_u, l_su, l_sv, l_vh = _svd_new_labels(new_labels)
 
     need_combine = (len(u_idcs) != 1 or len(vh_idcs) != 1)
+    original_labels = a.labels
     if need_combine:
         a = a.combine_legs(u_idcs, vh_idcs, new_axes=[0, 1])
     elif u_idcs[0] == 1:   # both single entry, so v_idcs = [1]
@@ -59,14 +60,13 @@ def svd(a: AbstractTensor, u_legs: list[int | str] = None, vh_legs: list[int | s
     u_data, s_data, vh_data, new_leg = a.backend.svd(a, new_vh_leg_dual)
 
     U = Tensor(u_data, backend=a.backend, legs=[a.legs[0], new_leg.dual])
-    # TODO revisit this once DiagonalTensor is defined
-    S = DiagonalTensor(s_data, backend=a.backend, legs=[new_leg, new_leg.dual], labels=[l_su, l_sv])
+    S = DiagonalTensor(s_data, first_leg=new_leg, second_leg_dual=True, backend=a.backend, labels=[l_su, l_sv])
     Vh = Tensor(vh_data, backend=a.backend, legs=[new_leg, a.legs[1]])
     if need_combine:
-        U = U.split_leg(0)
-        Vh = Vh.split_leg(1)
-    U.set_labels([a.labels[n] for n in u_idcs] + [l_u])
-    Vh.set_labels([l_vh] + [a.labels[n] for n in vh_idcs])
+        U = U.split_legs(0)
+        Vh = Vh.split_legs(1)
+    U.set_labels([original_labels[n] for n in u_idcs] + [l_u])
+    Vh.set_labels([l_vh] + [original_labels[n] for n in vh_idcs])
     return U, S, Vh
 
 

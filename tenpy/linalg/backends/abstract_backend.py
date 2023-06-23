@@ -681,7 +681,7 @@ class AbstractBlockBackend(ABC):
         """
         idx = [None] * len(self.block_shape(block))
         idx[axis] = slice(None, None,  None)
-        return block * factors[idx]
+        return block * factors[tuple(idx)]
 
     @abstractmethod
     def block_sum_all(self, a: Block) -> float | complex:

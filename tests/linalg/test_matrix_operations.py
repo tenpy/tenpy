@@ -10,7 +10,15 @@ from tenpy.linalg import tensors, matrix_operations
 
 @pytest.mark.parametrize('new_vh_leg_dual', [True, False])
 def test_svd(tensor_rng, new_vh_leg_dual):
-    pytest.xfail("TODO: need to implement tdot for DiagonalTensor first")
+    # So far, I (Jakob) have traced the bug to this point:
+    #  - The U defined in matrix_operations.svd does not pass test_sanity()
+    #  - I think the problem is the new_leg returned by backend.matrix_svd()
+    #    It dictates shapes which are much large in the second axis than those of the u_data
+    #    Looks like it just takesthe right leg, even if the left leg is smaller.
+    #    Note that we should do "economic" (full_matrices=False) SVD, but even for full_matrices=True,
+    #    this would be inconsistent in the opposite case, i.e. if the right leg is smaller.
+    pytest.xfail("TODO: SVD currently fails")
+    
     # TODO test multiple transpose
     T = tensor_rng(labels=['l1', 'r2', 'l2', 'r1'], max_block_size=3)
     #  T_dense = T.to_numpy_ndarray()
@@ -21,17 +29,18 @@ def test_svd(tensor_rng, new_vh_leg_dual):
     U.test_sanity()
     S.test_sanity()
     Vd.test_sanity()
-    assert U.labels_are('l1', 'l2', 'cU*')
-    assert S.labels_are('cU', 'cV*')
-    assert Vd.labels_are('cV', 'r1', 'r2')
+    assert U.labels_are('l1', 'l2', 'cr')
+    assert S.labels_are('cl', 'cr')
+    assert Vd.labels_are('cl', 'r1', 'r2')
     assert Vd.legs[0].is_dual == new_vh_leg_dual
     assert isinstance(S, tensors.DiagonalTensor)
     U_S_Vd = tensors.tdot(U, tensors.tdot(S, Vd, 'cr', 'cl'), 'cr', 'cl')
     U_S_Vd.test_sanity()
 
     # check that U, Vd are isometries
-    assert tensors.almost_equal(T, U_S_Vd, atol=1.e-10)
+    # TODO should almost_equal automatically do this leg permutation, similar to __add__ ?
+    assert tensors.almost_equal(T, U_S_Vd.permute_legs(T.labels), atol=1.e-10)
     Ud_U = tensors.tdot(U.conj(), U, ['l1*', 'l2*'], ['l1', 'l2'])
-    Vd_V = tensors.tdot(Vd, Ud.conj(), ['r1', 'r2'], ['r1*', 'r2*'])
+    Vd_V = tensors.tdot(Vd, Vd.conj(), ['r1', 'r2'], ['r1*', 'r2*'])
     pytest.xfail("TODO need more checks")  # TODO compare with eye_like()
 

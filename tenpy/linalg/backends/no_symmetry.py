@@ -103,9 +103,9 @@ class AbstractNoSymmetryBackend(AbstractBackend, AbstractBlockBackend, ABC):
     def tdot(self, a: Tensor, b: Tensor, axs_a: list[int], axs_b: list[int]) -> Data:
         return self.block_tdot(a.data, b.data, axs_a, axs_b)
 
-    def svd(self, a: Tensor, new_vh_leg_dual: bool) -> tuple[Data, Data, Data, VectorSpace]:
-        u, s, vh = self.matrix_svd(a)
-        new_leg = VectorSpace.non_symmetric(len(s), is_dual=new_vh_leg_dual, is_real=a.legs[0].is_real)
+    def svd(self, a: Tensor, new_vh_leg_dual: bool) -> tuple[Data, DiagonalData, Data, VectorSpace]:
+        u, s, vh = self.matrix_svd(a.data, algorithm=None)
+        new_leg = VectorSpace.non_symmetric(len(s), is_real=a.legs[0].is_real, _is_dual=new_vh_leg_dual)
         return u, s, vh, new_leg
 
     def qr(self, a: Tensor, new_r_leg_dual: bool, full: bool) -> tuple[Data, Data, VectorSpace]:
@@ -193,7 +193,7 @@ class AbstractNoSymmetryBackend(AbstractBackend, AbstractBlockBackend, ABC):
         return self.block_from_block_mask(a.data)
 
     def scale_axis(self, a: Tensor, b: DiagonalTensor, leg: int) -> Data:
-        return self.block_scale_axis(a, b, leg)
+        return self.block_scale_axis(a.data, b.data, leg)
 
     def diagonal_elementwise_unary(self, a: DiagonalTensor, func, func_kwargs, maps_zero_to_zero: bool
                                    ) -> DiagonalData:
