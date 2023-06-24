@@ -355,6 +355,8 @@ class AbstractBackend(ABC):
     def get_element(self, a: Tensor, idcs: list[int]) -> complex | float | bool:
         """Get a single scalar element from a tensor.
 
+        TODO we might have a bit of redundancy in checking / parsing the indices
+
         Parameters
         ----------
         idcs
@@ -362,7 +364,6 @@ class AbstractBackend(ABC):
             - len(idcs) == a.num_legs
             - 0 <= idx < leg.dim
             - the indices reference an allowed (by the charge rule) entry.
-            The indices are w.r.t. the internal (sorted) order.
         """
         ...
 
@@ -375,7 +376,6 @@ class AbstractBackend(ABC):
         idx
             The index for both legs. Checks have already been performed, i.e. we may assume that
             - 0 <= idx < leg.dim
-            The index are w.r.t. the internal (sorted) order.
         """
         ...
 

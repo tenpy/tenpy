@@ -1130,8 +1130,7 @@ class Tensor(AbstractTensor):
     def _get_element(self, idcs: list[int]) -> float | complex:
         if not self.idcs_fulfill_charge_rule(idcs):
             return self.dtype.zero_scalar
-        data_idcs = [leg.inverse_index_perm[idx] for leg, idx in zip(self.legs, idcs)]
-        return self.backend.get_element(self, data_idcs)
+        return self.backend.get_element(self, idcs)
 
     def _mul_scalar(self, other: complex) -> Tensor:
         return Tensor(self.backend.mul(other, self), backend=self.backend, legs=self.legs,
@@ -1141,8 +1140,7 @@ class Tensor(AbstractTensor):
         if not self.idcs_fulfill_charge_rule(idcs):
             msg = f'Can not set element at indices {idcs}. They do not fulfill the charge rule.'
             raise ValueError(msg)
-        data_idcs = [leg.inverse_index_perm[idx] for leg, idx in zip(self.legs, idcs)]
-        self.data = self.backend.set_element(self, idcs=data_idcs, value=value)
+        self.data = self.backend.set_element(self, idcs=idcs, value=value)
 
     # --------------------------------------------
     # Implementing binary tensor methods

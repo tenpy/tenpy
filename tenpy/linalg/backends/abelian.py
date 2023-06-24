@@ -230,6 +230,25 @@ class AbelianBackendData:
         self.block_inds = self.block_inds[perm, :]
         self.blocks = [self.blocks[p] for p in perm]
 
+    def get_block_num(self, block_inds: ndarray) -> Block | None:
+        """Return the index ``n`` of the block which matches the block_inds.
+
+        I.e. such that ``all(self.block_inds[n, :] == block_inds)``.
+        Return None if no such ``n`` exists.
+        """
+        match = np.argwhere(np.all(self.block_inds == block_inds, axis=1))[:, 0]
+        if len(match) == 0:
+            return None
+        return match[0]
+
+    def get_block(self, block_inds: ndarray) -> Block | None:
+        """Return the block in :attr:`blocks` matching the given block_inds,
+        i.e. `self.blocks[n]` such that `all(self.block_inds[n, :] == blocks_inds)`
+        or None if no such block exists
+        """
+        block_num = self.get_block_num(block_inds)
+        return None if block_num is None else self.block[block_num]
+        
 
 class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
     """Backend for Abelian group symmetries.
@@ -1141,21 +1160,42 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
         #      return make_valid(q)  # TODO: leg.get_qindex, leg.get_charge
 
     def get_element(self, a: Tensor, idcs: list[int]) -> complex | float | bool:
-        # use self.get_block_element(block, idcs)
-        raise NotImplementedError  # TODO
+        pos = np.array([l.parse_index(idx) for l, idx in zip(a.legs, idcs)])
+        block = a.data.get_block(pos[:, 0])
+        if block is None:
+            return a.dtype.zero_scalar
+        return self.get_block_element(block, pos[:, 1])
 
     def get_element_diagonal(self, a: DiagonalTensor, idx: int) -> complex | float | bool:
-        # use self.get_block_element(block, idcs)
-        raise NotImplementedError  # TODO
-
+        block_idx, idx_within = a.legs[0].parse_index(idx)
+        block = a.data.get_block(np.array([block_idx]))
+        if block is None:
+            return a.dtype.zero_scalar
+        return self.get_block_element(block, [idx_within])
+            
     def set_element(self, a: Tensor, idcs: list[int], value: complex | float) -> Data:
-        # use self.set_block_element(block, idcs, value)
-        raise NotImplementedError  # TODO
+        pos = np.array([l.parse_index(idx) for l, idx in zip(a.legs, idcs)])
+        n = a.data.get_block_num(pos[:, 0])
+        if n is None:
+            shape = [leg.multiplicities[sector_idx] for leg, sector_idx in zip(a.legs, pos[:, 0])]
+            block = self.zero_block(shape, dtype=a.dtype)
+        else:
+            block = a.data.blocks[n]
+        blocks = a.data.blocks[:]
+        blocks[n] = self.set_block_element(block, pos[:, 1], value)
+        return AbelianBackendData(dtype=a.data.dtype, blocks=blocks, block_inds=a.data.blocks_inds)
 
     def set_element_diagonal(self, a: DiagonalTensor, idx: int, value: complex | float | bool
                              ) -> DiagonalData:
-        # use self.set_block_element(block, idcs, value)
-        raise NotImplementedError  # TODO
+        block_idx, idx_within = a.legs[0].parse_index(idx)
+        n = a.data.get_block_num(np.array([block_idx]))
+        if n is None:
+            block = self.zero_block(shape=[a.legs[0].multiplicities[block_idx]], dtype=a.dtype)
+        else:
+            block = a.data.blocks[n]
+        blocks = a.data.blocks[:]
+        blocks[n] = self.set_block_element(block, [idx_within], value)
+        return AbelianBackendData(dtype=a.data.dtype, blocks=blocks, block_inds=a.data.blocks_inds)
 
     def diagonal_data_from_full_tensor(self, a: Tensor, check_offdiagonal: bool) -> DiagonalData:
         # can assume that Tensor hast two legs, i.e. that a.data.blocks are 2D blocks

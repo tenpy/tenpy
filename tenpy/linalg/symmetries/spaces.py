@@ -6,6 +6,7 @@ from numpy import ndarray
 import copy
 from functools import cached_property
 import warnings
+import bisect
 from typing import TYPE_CHECKING
 
 from .groups import Sector, SectorArray, Symmetry, no_symmetry
@@ -203,22 +204,37 @@ class VectorSpace:
             return self.symmetry.dual_sector(sector)
         return sector
 
+    def parse_index(self, flat_idx: int) -> tuple[int, int]:
+        """For a given flat index, return the sector_ind and index within that sector
+
+        Parameters
+        ----------
+        flat_idx : int
+            A flat index of the leg, i.e. indexing self as if it had no symmetry structure.
+            This index labels an element of a basis of self.
+
+        Returns
+        -------
+        sector_idx : int
+            The index of the sector, indicating that the basis element lives in `self.sector(n)`.
+        multiplicitiy_idx : int
+            The index "within the sector", in `range(self.multiplicities[sector_index])`.
+        """
+        if not -self.dim <= flat_idx < self.dim:
+            raise IndexError(f'flat index {flat_idx} out of bounds for space of dimension {self.dim}')
+        if flat_idx < 0:
+            flat_idx = flat_idx + self.dim
+        sector_idx = bisect.bisect(self.slices, flat_idx) - 1
+        multiplicity_idx = flat_idx - self.slices[sector_idx]
+        return sector_idx, multiplicity_idx
+
     def idx_to_sector(self, idx: int) -> Sector:
         """Returns the sector associated with an index.
         
         The index is understood as an index of the dense array, not of the internal order.
         The result sector is from `self.sectors` *without* underscore.
         """
-        if not (-self.dim <= idx < self.dim):
-            raise ValueError(f'Index {idx} out of bounds for space of dimension {self.dim}.')
-        if idx < 0:
-            idx = self.dim + idx
-        for n, (start, stop) in enumerate(self.slices):
-            if start <= idx < stop:
-                return self.sector(n)
-        # for an in-bounds index, the above return should have triggered.
-        # getting here means that self.slices are inconsistend.
-        raise RuntimeError
+        return self.sector(self.parse_index(idx)[0])
 
     def sectors_str(self, separator=', ', max_len=70) -> str:
         """short str describing the self._sectors (note the underscore!) and their multiplicities"""
