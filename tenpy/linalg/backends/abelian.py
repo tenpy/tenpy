@@ -1298,12 +1298,15 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
         raise NotImplementedError  # TODO
 
     def mask_infer_small_leg(self, mask_data: Data, large_leg: VectorSpace) -> VectorSpace:
-        # loop over blocks of the data
-        # - count number of True (use self.block_sum_all)
-        # - if zero, skip
-        # - add the corresponding sector and multiplicity
-        # make vectorspace
-        raise NotImplementedError  # TODO
+        _sectors = []
+        mults = []
+        for block, block_ind in zip(mask_data.blocks, mask_data.block_inds):
+            mult = self.block_sum_all(block)
+            if mult > 0:
+                _sectors.append(large_leg._sectors[block_ind[0]])
+                mults.append(mult)
+        return VectorSpace(symmetry=large_leg.symmetry, sectors=_sectors, multiplicities=mults,
+                           is_real=large_leg.is_real, _is_dual=large_leg.is_dual)
 
     def apply_mask_to_Tensor(self, tensor: Tensor, mask: Mask, leg_idx: int) -> Data:
         raise NotImplementedError  # TODO
