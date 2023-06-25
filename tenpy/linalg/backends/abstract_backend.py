@@ -414,7 +414,8 @@ class AbstractBackend(ABC):
 
     @abstractmethod
     def diagonal_data_from_full_tensor(self, a: Tensor, check_offdiagonal: bool) -> DiagonalData:
-        """Get the DiagonalData corresponding to a tensor with two legs"""
+        """Get the DiagonalData corresponding to a tensor with two legs.
+        Can assume that the two legs are either equal or dual, such that their ._sectors match"""
         ...
 
     @abstractmethod
@@ -422,7 +423,7 @@ class AbstractBackend(ABC):
         ...
 
     @abstractmethod
-    def full_data_from_mask(self, a: Mask) -> Data:
+    def full_data_from_mask(self, a: Mask, dtype: Dtype) -> Data:
         ...
 
     @abstractmethod

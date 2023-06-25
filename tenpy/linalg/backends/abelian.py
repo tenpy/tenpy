@@ -1198,17 +1198,26 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
         return AbelianBackendData(dtype=a.data.dtype, blocks=blocks, block_inds=a.data.blocks_inds)
 
     def diagonal_data_from_full_tensor(self, a: Tensor, check_offdiagonal: bool) -> DiagonalData:
-        # can assume that Tensor hast two legs, i.e. that a.data.blocks are 2D blocks
-        # use self.block_get_diagonal(block, check_offdiagonal)
-        raise NotImplementedError  # TODO
+        assert np.all(a.data.block_inds[:, 0] == a.data.block_inds[:, 1])  # TODO remove this when tests run
+        return AbelianBackendData(
+            dtype=a.dtype,
+            blocks=[self.block_get_diagonal(block, check_offdiagonal) for block in a.data.blocks],
+            block_inds=a.data.block_inds[:, :1]
+        )
 
     def full_data_from_diagonal_tensor(self, a: DiagonalTensor) -> Data:
-        # use self.block_from_diagonal(block)
-        raise NotImplementedError  # TODO
+        return AbelianBackendData(
+            dtype=a.dtype,
+            blocks=[self.block_from_diagonal(block) for block in a.data.blocks],
+            block_inds=np.repeat(a.data.block_inds, 2, axis=1),
+        )
 
-    def full_data_from_mask(self, a: Mask) -> Data:
-        # use self.block_from_mask(a_block), which gives a 2D block of shape (len(a_block), sum(a_block))
-        raise NotImplementedError  # TODO
+    def full_data_from_mask(self, a: Mask, dtype: Dtype) -> Data:
+        return AbelianBackendData(
+            dtype=dtype,
+            blocks=[self.block_from_mask(block, dtype) for block in a.data.blocks],
+            block_inds=a.data.block_inds
+        )
 
     def scale_axis(self, a: Tensor, b: DiagonalTensor, leg: int) -> Data:
         # use self.block_scale_axis(a_block, b_1d_block, leg)
