@@ -430,7 +430,13 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
         return AbelianBackendData(dtype, blocks, block_inds)
 
     def diagonal_from_block_func(self, func, leg: VectorSpace, func_kwargs={}) -> DiagonalData:
-        raise NotImplementedError  # TODO
+        block_inds = np.arange(leg.num_sectors)[:, None]
+        blocks = [func((leg.multiplicities[i],), **func_kwargs) for i in block_inds[:, 0]]
+        if len(blocks) == 0:
+            dtype = self.block_dtype(func((1,), **func_kwargs))
+        else:
+            dtype = self.block_dtype(blocks[0])
+        return AbelianBackendData(dtype, blocks, block_inds)
 
     def zero_data(self, legs: list[VectorSpace], dtype: Dtype) -> AbelianBackendData:
         block_inds = np.zeros((0, len(legs)), dtype=int)
