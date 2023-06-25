@@ -2102,7 +2102,6 @@ class DiagonalTensor(AbstractTensor):
                               backend=self.backend, labels=self.labels)
 
     def _elementwise_binary(self, other: DiagonalTensor, func, func_kwargs={},
-                            partial_zero_is_identity: bool = False,
                             partial_zero_is_zero: bool = False) -> DiagonalTensor:
         """Wrap backend.diagonal_elementwise_binary
 
@@ -2113,7 +2112,6 @@ class DiagonalTensor(AbstractTensor):
         backend = get_same_backend(self, other)
         data = backend.diagonal_elementwise_binary(
             self, other, func=func, func_kwargs=func_kwargs,
-            partial_zero_is_identity=partial_zero_is_identity,
             partial_zero_is_zero=partial_zero_is_zero
         )
         return DiagonalTensor(data, first_leg=self.legs[0], second_leg_dual=self.second_leg_dual,

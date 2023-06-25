@@ -263,7 +263,7 @@ class AbstractNonabelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
         raise NotImplementedError  # TODO
 
     def diagonal_elementwise_binary(self, a: DiagonalTensor, b: DiagonalTensor, func,
-                                    func_kwargs, partial_zero_is_identity: bool, partial_zero_is_zero: bool
+                                    func_kwargs, partial_zero_is_zero: bool
                                     ) -> DiagonalData:
         raise NotImplementedError  # TODO
 

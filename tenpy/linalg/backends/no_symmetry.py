@@ -200,7 +200,7 @@ class AbstractNoSymmetryBackend(AbstractBackend, AbstractBlockBackend, ABC):
         return func(a.data, **func_kwargs)
 
     def diagonal_elementwise_binary(self, a: DiagonalTensor, b: DiagonalTensor, func,
-                                    func_kwargs, partial_zero_is_identity: bool, partial_zero_is_zero: bool
+                                    func_kwargs, partial_zero_is_zero: bool
                                     ) -> DiagonalData:
         return func(a.data, b.data, **func_kwargs)
 

@@ -1251,16 +1251,44 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
         return AbelianBackendData(dtype=dtype, blocks=blocks, block_inds=block_inds)
 
     def diagonal_elementwise_binary(self, a: DiagonalTensor, b: DiagonalTensor, func,
-                                    func_kwargs, partial_zero_is_identity: bool, partial_zero_is_zero: bool
+                                    func_kwargs, partial_zero_is_zero: bool
                                     ) -> DiagonalData:
-        # Apply a function ``func(a_block: Block, b_block: Block, **kwargs) -> Block`` to all
-        # pairs of elements.
-        # Input tensors are both DiagonalTensor and have equal legs.
-        # ``partial_zero_is_identity=True`` promises that ``func(any_block, zero_block) == any_block``,
-        # and similarly for the second argument.
-        # ``partial_zero_is_zero=True`` promises that ``func(any_block, zero_block) == zero_block``,
-        # and similarly for the second argument.
-        raise NotImplementedError  # TODO
+        a_blocks = a.data.blocks
+        b_blocks = b.data.blocks
+        a_block_inds = a.data.block_inds
+        b_block_inds = b.data.block_inds
+        a_mults = a.legs[0].multiplicities
+        b_mults = b.legs[0].multiplicities
+        
+        blocks = []
+        block_inds = []
+        if partial_zero_is_zero:
+            for i, j in _iter_common_sorted_arrays(a_block_inds, b_block_inds):
+                blocks.append(func(a_blocks[i], b_blocks[j], **func_kwargs))
+                block_inds.append(a_block_inds[i])
+        else:
+            for i, j in _iter_common_noncommon_sorted_arrays(a_block_inds, b_block_inds):
+                if i is None:
+                    a_block = self.zero_block([b_mults[b_block_inds[j, 0]]], dtype=a.dtype)
+                    b_block = b_blocks[j]
+                    block_inds.append(b_block_inds[j])
+                elif j is None:
+                    a_block = a_blocks[i]
+                    b_block = self.zero_block([a_mults[a_block_inds[i, 0]]], dtype=b.dtype)
+                    block_inds.append(a_block_inds[i])
+                else:
+                    a_block = a_blocks[i]
+                    b_block = b_blocks[j]
+                    block_inds.append(a_block_inds[i])
+                blocks.append(func(a_block, b_block, **func_kwargs))
+
+        if len(blocks) == 0:
+            block = func(self.ones_block([1], dtype=a.dtype), self.ones_block([1], dtype=b.dtype))
+            dtype = self.block_dtype(block)
+        else:
+            dtype = self.block_dtype(blocks[0])
+            
+        return AbelianBackendData(dtype=dtype, blocks=blocks, block_inds=block_inds)
 
     def fuse_states(self, state1: Block | None, state2: Block | None, space1: VectorSpace,
                     space2: VectorSpace, product_space: ProductSpace = None) -> Block | None:
