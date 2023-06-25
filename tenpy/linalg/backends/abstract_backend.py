@@ -439,7 +439,9 @@ class AbstractBackend(ABC):
     @abstractmethod
     def diagonal_elementwise_unary(self, a: DiagonalTensor, func, func_kwargs, maps_zero_to_zero: bool
                                    ) -> DiagonalData:
-        """Apply a function ``func(block: Block, **kwargs) -> Block`` to all elements of a diagonal tensor.
+        """Return a modified copy of the data, resulting from applying an elementwise function.
+
+        Apply ``func(block: Block, **kwargs) -> Block`` to all elements of a diagonal tensor.
         ``maps_zero_to_zero=True`` promises that ``func(zero_block) == zero_block``.
         """
         ...
@@ -448,7 +450,9 @@ class AbstractBackend(ABC):
     def diagonal_elementwise_binary(self, a: DiagonalTensor, b: DiagonalTensor, func,
                                     func_kwargs, partial_zero_is_identity: bool, partial_zero_is_zero: bool
                                     ) -> DiagonalData:
-        """Apply a function ``func(a_block: Block, b_block: Block, **kwargs) -> Block`` to all
+        """Return a modified copy of the data, resulting from applying an elementwise function.
+
+        Apply a function ``func(a_block: Block, b_block: Block, **kwargs) -> Block`` to all
         pairs of elements.
         Input tensors are both DiagonalTensor and have equal legs.
         ``partial_zero_is_identity=True`` promises that ``func(any_block, zero_block) == any_block``,

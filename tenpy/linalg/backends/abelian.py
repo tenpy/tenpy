@@ -1231,9 +1231,24 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
     
     def diagonal_elementwise_unary(self, a: DiagonalTensor, func, func_kwargs, maps_zero_to_zero: bool
                                    ) -> DiagonalData:
-        # Apply a function ``func(block: Block, **kwargs) -> Block`` to all elements of a diagonal tensor.
-        # ``maps_zero_to_zero=True`` promises that ``func(zero_block) == zero_block``
-        raise NotImplementedError  # TODO
+        if maps_zero_to_zero:
+            blocks = [func(block, **func_kwargs) for block in a.data.blocks]
+            block_inds = a.data.block_inds
+        else:
+            a_block_inds = a.data.block_inds
+            block_inds = np.arange(a.legs[0].num_sectors)[:, None]
+            blocks = []
+            for _, j in _iter_common_noncommon_sorted_arrays(block_inds, a_block_inds):
+                if j is None:
+                    block = self.zero_block([a.legs[0].multiplicities[a_block_inds[j, 0]]], dtype=a.dtype)
+                else:
+                    block = a.blocks[j]
+                blocks.append(func(block, **func_kwargs))
+        if len(blocks) == 0:
+            dtype = self.block_dtype(func(self.zero_block([1], dtype=a.dtype)))
+        else:
+            dtype = self.block_dtype(blocks[0])
+        return AbelianBackendData(dtype=dtype, blocks=blocks, block_inds=block_inds)
 
     def diagonal_elementwise_binary(self, a: DiagonalTensor, b: DiagonalTensor, func,
                                     func_kwargs, partial_zero_is_identity: bool, partial_zero_is_zero: bool
