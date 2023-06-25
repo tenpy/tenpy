@@ -1103,12 +1103,12 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
         block_norms = [self.block_norm(b) for b in a.data.blocks]
         return np.linalg.norm(block_norms)
 
-    def act_block_diagonal_square_matrix(self, a: Tensor, block_backend_fct: str) -> Data:
+    def act_block_diagonal_square_matrix(self, a: Tensor, block_method: str) -> Data:
         """Apply functions like exp() and log() on a (square) block-diagonal `a`."""
         block_method = getattr(self, block_method)
         res_blocks = [block_method(b) for b in a.data.blocks]
         dtype = a.data.dtype if len(res_blocks) == 0 else self.block_dtype(res_blocks[0])
-        return AbelianBackendData(a.data.dtype, res_blocks, a.data.block_inds)
+        return AbelianBackendData(dtype, res_blocks, a.data.block_inds)
 
     def add(self, a: Tensor, b: Tensor) -> Data:
         a_blocks = a.data.blocks
