@@ -608,7 +608,7 @@ class AbstractBlockBackend(ABC):
         """SVD of a 2D block.
 
         With full_matrices=False, i.e. shape ``(n,m) -> (n,k), (k,) (k,m)`` where
-        ``k <= min(n,m)``.
+        ``k = min(n,m)``.
         """
         ...
 

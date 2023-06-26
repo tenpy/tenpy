@@ -10,16 +10,6 @@ from tenpy.linalg import tensors, matrix_operations
 
 @pytest.mark.parametrize('new_vh_leg_dual', [True, False])
 def test_svd(tensor_rng, new_vh_leg_dual):
-    # So far, I (Jakob) have traced the bug to this point:
-    #  - The U defined in matrix_operations.svd does not pass test_sanity()
-    #  - I think the problem is the new_leg returned by backend.matrix_svd()
-    #    It dictates shapes which are much large in the second axis than those of the u_data
-    #    Looks like it just takesthe right leg, even if the left leg is smaller.
-    #    Note that we should do "economic" (full_matrices=False) SVD, but even for full_matrices=True,
-    #    this would be inconsistent in the opposite case, i.e. if the right leg is smaller.
-    pytest.xfail("TODO: SVD currently fails")
-    
-    # TODO test multiple transpose
     T = tensor_rng(labels=['l1', 'r2', 'l2', 'r1'], max_block_size=3)
     #  T_dense = T.to_numpy_ndarray()
 
@@ -42,5 +32,8 @@ def test_svd(tensor_rng, new_vh_leg_dual):
     assert tensors.almost_equal(T, U_S_Vd.permute_legs(T.labels), atol=1.e-10)
     Ud_U = tensors.tdot(U.conj(), U, ['l1*', 'l2*'], ['l1', 'l2'])
     Vd_V = tensors.tdot(Vd, Vd.conj(), ['r1', 'r2'], ['r1*', 'r2*'])
-    pytest.xfail("TODO need more checks")  # TODO compare with eye_like()
-
+    
+    pytest.xfail("need more checks")
+    # TODO
+    # - compare with eye_like()
+    # - test multiple transpose

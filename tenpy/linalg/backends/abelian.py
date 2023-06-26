@@ -298,7 +298,7 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
 
     def test_data_sanity(self, a: Tensor | DiagonalTensor | Mask, is_diagonal: bool):
         super().test_data_sanity(a, is_diagonal=is_diagonal)
-        assert a.data.block_inds.shape == (len(a.data.blocks), a.num_legs)
+        assert a.data.block_inds.shape == (len(a.data.blocks), 1 if is_diagonal else a.num_legs)
         # check expected tensor dimensions
         block_shapes = np.array([leg.multiplicities[i] for leg, i in zip(a.legs, a.data.block_inds.T)]).T
         for block, shape in zip(a.data.blocks, block_shapes):
@@ -729,7 +729,6 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
         return res
 
     def svd(self, a: Tensor, new_vh_leg_dual: bool) -> tuple[Data, DiagonalData, Data, VectorSpace]:
-        leg_L, leg_R = a.legs
         u_blocks = []
         s_blocks = []
         vh_blocks = []
@@ -739,31 +738,28 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
             s_blocks.append(s)
             assert len(s) > 0
             vh_blocks.append(vh)
-        # TODO: need second version with truncation, here we just keep everything
+        
+        leg_L, leg_R = a.legs
         symmetry = a.legs[0].symmetry
-        sectors = a.legs[1].sectors
         block_inds_L, block_inds_R = a.data.block_inds.T  # columns of block_inds
         # due to lexsort(a.data.block_inds.T), block_inds_R is sorted, but block_inds_L not.
+
+        # build new leg: add sectors in the order given by block_inds_R, which is sorted
+        leg_C_sectors = leg_R._sectors[block_inds_R]
+        # economic SVD (aka full_matrices=False) : len(s) = min(block.shape)
+        leg_C_mults = np.minimum(leg_L.multiplicities[block_inds_L], leg_R.multiplicities[block_inds_R])
         block_inds_C = np.arange(len(s_blocks), dtype=int)
         if new_vh_leg_dual != leg_R.is_dual:
             # opposite dual flag in legs of vH => same _sectors
-            # project onto block indices in central leg which we kept, given by block_inds_R
-            new_leg = VectorSpace(symmetry,
-                                  leg_R._sectors[block_inds_R, :],
-                                  leg_R.multiplicities[block_inds_R],
-                                  is_real=leg_R.is_real,
-                                  _is_dual=new_vh_leg_dual)
+            new_leg = VectorSpace(symmetry, leg_C_sectors, leg_C_mults, is_real=leg_R.is_real, _is_dual=new_vh_leg_dual)
             assert np.all(new_leg.sector_perm == block_inds_C), "new_leg sectors should be sorted"  # TODO remove this after tests ran
         else:  # new_vh_leg_dual == leg_R.is_dual
             # same dual flag in legs of vH => opposite _sectors => opposite sorting!!!
-            sectors = symmetry.dual_sectors(leg_R._sectors[block_inds_R, :])  # not sorted
-            new_leg = VectorSpace(symmetry,
-                                  sectors,
-                                  leg_R.multiplicities[block_inds_R],
-                                  is_real=leg_R.is_real,
-                                  _is_dual=new_vh_leg_dual)
+            leg_C_sectors = symmetry.dual_sectors(leg_C_sectors)  # not sorted
+            new_leg = VectorSpace(symmetry, leg_C_sectors, leg_C_mults, is_real=leg_R.is_real, _is_dual=new_vh_leg_dual)
             # new_leg has sorted _sectors in __init__, but that might have induced permutation
             block_inds_C = block_inds_C[new_leg.sector_perm]  # no longer sorted
+
         u_block_inds = np.column_stack([block_inds_L, block_inds_C])
         s_block_inds = block_inds_C[:, None]
         vh_block_inds = np.column_stack([block_inds_C, block_inds_R])  # sorted
