@@ -936,7 +936,11 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
         return AbelianBackendData(a.data.dtype, res_blocks, res_block_inds)
 
     def diagonal_tensor_trace_full(self, a: DiagonalTensor) -> float | complex:
-        raise NotImplementedError  # TODO
+        a_blocks = a.data.blocks
+        total_sum = a.data.dtype.zero_scalar
+        for block in a_blocks:
+            total_sum += self.block_sum_all(block)
+        return total_sum
 
     def conj(self, a: Tensor | DiagonalTensor) -> Data | DiagonalData:
         blocks = [self.block_conj(b) for b in a.data.blocks]
