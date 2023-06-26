@@ -412,8 +412,7 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
         if len(a.blocks) > 1:
             raise ValueError("More than 1 block!")
         if len(a.blocks) == 0:
-            #  assert all(leg.dim == 1 for leg in a.legs)
-            return 0.  # TODO dtype.zero_scalar?
+            return a.dtype.zero_scalar
         return self.block_item(a.blocks[0])
 
     def to_dense_block(self, a: Tensor) -> Block:
@@ -466,11 +465,10 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
         return AbelianBackendData(dtype, blocks, block_inds)
 
     def zero_data(self, legs: list[VectorSpace], dtype: Dtype) -> AbelianBackendData:
-        block_inds = np.zeros((0, len(legs)), dtype=int)
-        return AbelianBackendData(dtype, [], block_inds)
+        return AbelianBackendData(dtype, blocks=[], block_inds=np.zeros((0, len(legs)), dtype=int))
 
     def zero_diagonal_data(self, leg: VectorSpace, dtype: Dtype) -> DiagonalData:
-        raise NotImplementedError  # TODO
+        return AbelianBackendData(dtype, blocks=[], block_inds=np.zeros((0, 1), dtype=int))
 
     def eye_data(self, legs: list[VectorSpace], dtype: Dtype) -> Data:
         block_inds = np.indices((leg.num_sectors for leg in legs)).T.reshape(-1, len(legs))
@@ -772,7 +770,6 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
             u_blocks = [u_blocks[i] for i in sort]
             s_blocks = [s_blocks[i] for i in sort]
 
-        # TODO (JU) this assumes same dtype without explicitly checking. thats probably ok...
         dtype = a.data.dtype
         return (AbelianBackendData(dtype, u_blocks, u_block_inds),
                 AbelianBackendData(dtype.to_real, s_blocks, s_block_inds),
@@ -906,9 +903,7 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
         a_blocks = a.data.blocks
         a_block_inds_1 = a.data.block_inds[:, idcs1]
         a_block_inds_2 = a.data.block_inds[:, idcs2]
-        total_sum = 0.  # TODO: should this be 0.j if a.dtype
-        if not a.data.dtype.is_real:
-            total_sum = 0.j
+        total_sum = a.data.dtype.zero_scalar
         for block, i1, i2 in zip(a_blocks, a_block_inds_1, a_block_inds_2):
             # if len(idcs1) == 1, i1==i2 due to charge conservation,
             # but for multi-dimensional indices not clear

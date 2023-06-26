@@ -609,6 +609,8 @@ class AbstractBlockBackend(ABC):
 
         With full_matrices=False, i.e. shape ``(n,m) -> (n,k), (k,) (k,m)`` where
         ``k = min(n,m)``.
+        
+        Assumes that U and Vh have the same dtype as a, while S has a matching real dtype.
         """
         ...
 

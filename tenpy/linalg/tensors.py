@@ -121,15 +121,14 @@ class AbstractTensor(ABC):
     labels : list[str | None] | None
         Labels for the legs. If None, translates to ``[None, None, ...]`` of appropriate length
     """
-    #  backend.get_dtype_from_data(self.data)
     def __init__(self, legs: list[VectorSpace], backend: AbstractBackend, labels: list[str | None] | None,
                  dtype: Dtype):
         if backend is None:
-            self.backend = get_default_backend(legs[0].symmetry)
+            self.backend = backend = get_default_backend(legs[0].symmetry)
         else:
             self.backend = backend
-        self.legs = list(legs)
-        self.shape = Shape(legs=self.legs, labels=labels)
+        self.legs = legs = [backend.add_leg_metadata(l) for l in legs]
+        self.shape = Shape(legs=legs, labels=labels)
         self.num_legs = len(legs)
         self.symmetry = legs[0].symmetry
         self.dtype = dtype
@@ -374,11 +373,20 @@ class AbstractTensor(ABC):
 
     def __getitem__(self, idcs):
         # TODO tests
-        """We support two modes of indexing tensors for __getitem__:
+        """
+        TODO eventually we should document this at some high-level place, e.g. in one of the rst files
+        Collecting snippets here for noew
+
+        We support two modes of indexing tensors for __getitem__:
         - Getting single entries, i.e. giving one integer per leg
         - Getting a "masked" Tensor, i.e. giving a Mask for some or all legs.
           Legs not to be masked can be indicated via ``slice(None, None, None)``, i.e. typing ``:``,
           or ``Ellipsis``, i.e. typing ``...``.
+
+        For ``DiagonalTensor`` and ``Mask`` we additionally support indexing by a single integer `i`.
+        For ``DiagonalTensor``, this returns the diagonal element, i.e. ``diag[i] == diag[i, i]``.
+        For ``Mask``, this is the boolean entry that indicates if the ``i-th`` index is preserved
+        or pojected out by the mask, i.e. ``mask[i] == mask[i, j_i]`` where loosely ``j_i = sum(mask[:i])``.
         """
         idcs = _parse_idcs(idcs, length=self.num_legs)
         if isinstance(idcs[0], int):
@@ -481,7 +489,7 @@ class AbstractTensor(ABC):
 
     @abstractmethod
     def apply_mask(self, mask: Mask, leg: int | str) -> AbstractTensor:
-        """TODO write docstring
+        """Apply a mask to one of the legs, projecting to a smaller leg.
 
         Parameters
         ==========
@@ -1889,11 +1897,6 @@ class DiagonalTensor(AbstractTensor):
     # Additional methods (not in AbstractTensor)
     # --------------------------------------------
     
-    # TODO (JU) clearly define when legs need to be converted to backend-specific spaces
-    #      if possible (?), AbstractTensor.__init__ would be nice.
-    #      Tensor classmethods do it.
-    #      If that ends up being the place of choice, the classmethods below need to do it too.
-    
     @cached_property
     def diag_block(self) -> Block:
         return self.backend.diagonal_to_block(self)
@@ -2153,7 +2156,6 @@ class DiagonalTensor(AbstractTensor):
 
     def __getitem__(self, idcs):
         # allow indexing by a single integer -> applied to both axes
-        # TODO doc this behavior
         _idcs = to_iterable(idcs)
         if len(_idcs) == 1 and isinstance(_idcs[0], int):
             idcs = (_idcs[0], _idcs[0])
@@ -2258,7 +2260,12 @@ class DiagonalTensor(AbstractTensor):
 
     def trace(self, legs1: int | str | list[int | str] = -2, legs2: int | str | list[int | str] = -1
               ) -> float | complex:
-        # TODO should we check for invalid inputs? -> I think yes...
+        leg_idcs1 = self.get_leg_idcs(legs1)
+        leg_idcs2 = self.get_leg_idcs(legs2)
+        if not len(leg_idcs1) == 1 == len(leg_idcs2):
+            raise ValueError('Wrong number of legs.')
+        if leg_idcs1[0] == leg_idcs2[0]:
+            raise ValueError('Duplicate leg')
         return self.backend.diagonal_tensor_trace_full(self)
 
     def _get_element(self, idcs: list[int]) -> float | complex:
@@ -2379,7 +2386,6 @@ class Mask(AbstractTensor):
 
     As an AbstractTensor, the first leg is the larger leg and the second is a "slice" of it.
 
-    TODO put this piece of doc in the right place:
     Via `tdot`, the mask can be applied only to the *dual* of `large_leg`.
     With the  `apply_*` methods however, a mask can be applied to both `large_leg` and its dual.
 
@@ -2558,8 +2564,8 @@ class Mask(AbstractTensor):
         return cls(data=data, large_leg=large_leg, backend=backend)
 
     def apply_mask(self, mask: Mask, leg: int | str) -> Mask:
-        # TODO do we even need this? its a bit hard and clunky to define
-        raise NotImplementedError
+        # in principle, this is possible. it is cumbersome though, and i dont think we need it.
+        raise TypeError('apply_mask() is not supported for Mask')
         
     def combine_legs(self, *legs: list[int | str],
                      new_legs: list[ProductSpace]=None,
@@ -2845,7 +2851,12 @@ def tdot(t1: AbstractTensor, t2: AbstractTensor,
     """
     Contraction of two tensors.
 
-    TODO more details, e.g. that legs need to match, legorder of the result (like numpy)
+    A number of legs of `t1`, indicated by `legs1` are contracted with the *same* number of legs
+    of `t2`, indicated by `legs2`.
+    The pairs of legs need to be mutually dual (see :meth:`VectorSpace.can_contract_with`).
+
+    The legs of the resulting tensor are in "numpy-style" order, i.e. first the unconctracted legs
+    of `t1`, then those of `t2`.
 
     Parameters
     ----------
