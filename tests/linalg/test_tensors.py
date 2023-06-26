@@ -533,6 +533,18 @@ def test_squeeze_legs(tensor_rng, symmetry):
     npt.assert_array_equal(res.to_numpy_ndarray(), dense[:, 0, :, :, 0])
 
 
+def test_scale_axis(backend, vector_space_rng, backend_data_rng, tensor_rng):
+    # TODO eventually this will be covered by tdot tests, when allowing combinations of Tensor and DiagonalTensor
+    #  But I want to use it already now to debug backend.scale_axis()
+    a = vector_space_rng(max_num_blocks=4, max_block_size=4)
+    b = vector_space_rng(max_num_blocks=4, max_block_size=4)
+    t = tensor_rng([a, b, None], num_legs=3, max_num_blocks=4, max_block_size=4)
+    d = tensors.DiagonalTensor.random_uniform(a, second_leg_dual=True, backend=backend)
+    expect = np.tensordot(t.to_numpy_ndarray(), d.to_numpy_ndarray(), (0, 1))
+    res = tensors.tdot(t, d, 0, 1).to_numpy_ndarray()
+    npt.assert_almost_equal(expect, res)
+
+
 def demo_repr():
     # this is intended to generate a bunch of demo reprs
     # can not really make this an automated test, the point is for a human to have a look

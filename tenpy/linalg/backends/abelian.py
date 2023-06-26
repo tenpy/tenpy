@@ -171,6 +171,31 @@ def _iter_common_sorted_arrays(a, b):
     # done
 
 
+def _iter_common_nonstrict_sorted_arrays(a, b):
+    """Yield indices ``i, j`` for which ``a[i, :] == b[j, :]``.
+
+    Like _iter_common_sorted_arrays, but allows duplicate rows in `a`.
+    I.e. `a.T` is lex-sorted, but not strictly. `b.T` is still assumed to be strictly lexsorted.
+    """
+    l_a, d_a = a.shape
+    l_b, d_b = b.shape
+    assert d_a == d_b
+    i, j = 0, 0
+    while i < l_a and j < l_b:
+        for k in reversed(range(d_a)):
+            if a[i, k] < b[j, k]:
+                i += 1
+                break
+            elif b[j, k] < a[i, k]:
+                j += 1
+                break
+        else:  # (no break)
+            yield (i, j)
+            # difference to _iter_common_sorted_arrays:
+            # dont increase j because a[i + 1] might also match b[j]
+            i += 1
+
+
 def _iter_common_noncommon_sorted_arrays(a, b):
     """Return three list of indices ``i,j`` for which ``a[i, :] is not in b``, and ``b[j,:] is not in a``.
 
@@ -1228,8 +1253,47 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
         )
 
     def scale_axis(self, a: Tensor, b: DiagonalTensor, leg: int) -> Data:
-        # use self.block_scale_axis(a_block, b_1d_block, leg)
-        raise NotImplementedError  # TODO
+        a_blocks = a.data.blocks
+        b_blocks = b.data.blocks
+
+        a_block_inds = a.data.block_inds
+        a_block_inds_cont = a_block_inds[:, leg:leg+1]
+        if leg == a.num_legs - 1:
+            # due to lexsort(a_block_inds.T), a_block_inds_cont is sorted in this case
+            pass
+        else:
+            sort = np.lexsort(a_block_inds_cont.T)
+            a_blocks = [a_blocks[i] for i in sort]
+            a_block_inds = a_block_inds[sort, :]
+            a_block_inds_cont = a_block_inds_cont[sort, :]
+        b_block_inds = b.data.block_inds
+        
+        # ensure common dtypes
+        common_dtype = a.dtype.common(b.dtype)
+        if a.data.dtype != common_dtype:
+            a_blocks = [self.block_to_dtype(block, common_dtype) for block in a_blocks]
+        if b.data.dtype != common_dtype:
+            b_blocks = [self.block_to_dtype(block, common_dtype) for block in b_blocks]
+        
+        res_blocks = []
+        res_block_inds = []
+        # can assume that a.legs[leg] and b.legs[0] have same _sectors.
+        # only need to iterate over common blocks, the non-common multiply to 0.
+        # note: unlike the tdot implementation, we do not combine and reshape here.
+        #       this is because we know the result will have the same block-structure as `a`, and
+        #       we only need to scale the blocks on one axis, not perform a general tensordot.
+        #       but this also means that we may encounter duplicates in a_block_inds_cont,
+        #       i.e. multiple blocks of `a` which have the same sector on the leg to be scaled.
+        #       -> use _iter_common_nonstrict_sorted_arrays instead of _iter_common_sorted_arrays
+        for i, j in _iter_common_nonstrict_sorted_arrays(a_block_inds_cont, b_block_inds):
+            res_blocks.append(self.block_scale_axis(a_blocks[i], b_blocks[j], axis=leg))
+            res_block_inds.append(a_block_inds[i])
+        if len(res_block_inds) > 0:
+            res_block_inds = np.array(res_block_inds)
+        else:
+            res_block_inds = np.zeros((0, a.num_legs), int)
+            
+        return AbelianBackendData(common_dtype, res_blocks, res_block_inds)
     
     def diagonal_elementwise_unary(self, a: DiagonalTensor, func, func_kwargs, maps_zero_to_zero: bool
                                    ) -> DiagonalData:

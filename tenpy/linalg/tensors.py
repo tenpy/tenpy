@@ -1243,10 +1243,10 @@ class Tensor(AbstractTensor):
                 return res.trace(leg_idcs1[which_second], -1)
             assert len(leg_idcs1) == 1 # have already excluded all other possibilities
             res = Tensor(
-                data=backend.scale_axis(self, other, leg=leg_idcs2[0]),
-                legs=self.legs[:leg_idcs1[0]] + other.legs[1 - leg_idcs2[0]] + self.legs[leg_idcs1[0] + 1:],
+                data=backend.scale_axis(self, other, leg=leg_idcs1[0]),
+                legs=self.legs[:leg_idcs1[0]] + [other.legs[1 - leg_idcs2[0]]] + self.legs[leg_idcs1[0] + 1:],
                 backend=backend,
-                labels=self.labels[:leg_idcs1[0]] + other.labels[1 - leg_idcs2[0]] + self.labels[leg_idcs1[0] + 1:]
+                labels=self.labels[:leg_idcs1[0]] + [other.labels[1 - leg_idcs2[0]]] + self.labels[leg_idcs1[0] + 1:]
             )
             # move scaled leg to the back
             perm = list(range(leg_idcs1[0])) + list(range(leg_idcs1[0] + 1, res.num_legs)) + [leg_idcs1[0]]
@@ -2372,6 +2372,7 @@ class DiagonalTensor(AbstractTensor):
                                   second_leg_dual=self.second_leg_dual, backend=backend,
                                   labels=self.labels)
         raise TypeError(f"unsupported operand type(s) for +: 'Tensor' and '{type(other)}'")
+
 
 class Mask(AbstractTensor):
     r"""A boolean mask that can be used to project a leg.
