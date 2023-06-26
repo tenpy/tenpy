@@ -327,7 +327,8 @@ class AbstractBackend(ABC):
         ...
 
     @abstractmethod
-    def norm(self, a: Tensor | DiagonalTensor) -> float:
+    def norm(self, a: Tensor | DiagonalTensor, order: int | float = None) -> float:
+        """Norm of a tensor. order has already been parsed and is a number"""
         ...
 
     @abstractmethod
@@ -590,7 +591,7 @@ class AbstractBlockBackend(ABC):
         ...
 
     @abstractmethod
-    def block_norm(self, a: Block) -> float:
+    def block_norm(self, a: Block, order: int | float = None) -> float:
         ...
 
     @abstractmethod

@@ -193,7 +193,7 @@ class AbstractNonabelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
              ) -> NonAbelianData:
         raise NotImplementedError  # TODO
 
-    def svd(self, a: Tensor, axs1: list[int], axs2: list[int], new_leg: VectorSpace | None
+    def svd(self, a: Tensor, new_vh_leg_dual: bool, algorithm: str | None
             ) -> tuple[NonAbelianData, NonAbelianData, NonAbelianData, VectorSpace]:
         # can use self.matrix_svd
         raise NotImplementedError  # TODO
@@ -232,7 +232,7 @@ class AbstractNonabelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
     def squeeze_legs(self, a: Tensor, idcs: list[int]) -> NonAbelianData:
         raise NotImplementedError  # TODO
 
-    def norm(self, a: Tensor) -> float:
+    def norm(self, a: Tensor, order: int | float = None) -> float:
         raise NotImplementedError  # TODO
 
     def act_block_diagonal_square_matrix(self, a: Tensor, block_method: str) -> NonAbelianData:

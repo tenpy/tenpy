@@ -1120,10 +1120,9 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
         block_inds = block_inds[:, keep]
         return AbelianBackendData(a.data.dtype, blocks, block_inds)
 
-    def norm(self, a: Tensor | DiagonalTensor) -> float:
-        # TODO: argument for different p-norms?
-        block_norms = [self.block_norm(b) for b in a.data.blocks]
-        return np.linalg.norm(block_norms)
+    def norm(self, a: Tensor | DiagonalTensor, order: int | float = None) -> float:
+        block_norms = [self.block_norm(b, order=order) for b in a.data.blocks]
+        return np.linalg.norm(block_norms, ord=order)
 
     def act_block_diagonal_square_matrix(self, a: Tensor, block_method: str) -> Data:
         """Apply functions like exp() and log() on a (square) block-diagonal `a`."""

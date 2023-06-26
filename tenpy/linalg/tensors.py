@@ -10,7 +10,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 import operator
 from typing import TypeVar, Sequence, NoReturn
-from numbers import Number
+from numbers import Number, Real
 import numpy as np
 import warnings
 from functools import cached_property
@@ -525,7 +525,7 @@ class AbstractTensor(ABC):
         ...
 
     @abstractmethod
-    def norm(self) -> float:
+    def norm(self, order=None) -> float:
         """See tensors.norm"""
         ...
 
@@ -1062,9 +1062,9 @@ class Tensor(AbstractTensor):
         else:
             raise ValueError('Not a scalar')
 
-    def norm(self) -> float:
+    def norm(self, order=None) -> float:
         """See tensors.norm"""
-        return self.backend.norm(self)
+        return self.backend.norm(self, order=order)
 
     def permute_legs(self, permutation: list[int | str]) -> Tensor:
         permutation = self.get_leg_idcs(permutation)
@@ -1653,12 +1653,12 @@ class ChargedTensor(AbstractTensor):
             raise ValueError('Not a scalar')
         return self.backend.block_item(self.to_dense_block())
 
-    def norm(self) -> float:
+    def norm(self, order=None) -> float:
         if self.dummy_leg.dim == 1:
-            return self._dummy_leg_state_item() * self.invariant_part.norm()
+            return self._dummy_leg_state_item() * self.invariant_part.norm(order=order)
         else:
             warnings.warn('Converting ChargedTensor to dense block for `norm`', stacklevel=2)
-            return self.backend.block_norm(self.to_dense_block())
+            return self.backend.block_norm(self.to_dense_block(), order=order)
 
     def permute_legs(self, permutation: list[int | str]) -> ChargedTensor:
         permutation = self.get_leg_idcs(permutation)  # needed, since invariant_part does not have the same legs
@@ -2238,8 +2238,8 @@ class DiagonalTensor(AbstractTensor):
         else:
             raise ValueError('Not a scalar')
         
-    def norm(self) -> float:
-        return self.backend.norm(self)
+    def norm(self, order=None) -> float:
+        return self.backend.norm(self, order=order)
 
     def permute_legs(self, permutation: list[int | str]) -> DiagonalTensor:
         permutation = self.get_leg_idcs(permutation)
@@ -2597,8 +2597,18 @@ class Mask(AbstractTensor):
             return self.backend.item(self)
         raise ValueError('Not a scalar')
 
-    def norm(self) -> float:
-        return float(np.sqrt(self.small_leg.dim))
+    def norm(self, order=None) -> float:
+        num_true_entries = self.small_leg.dim
+        if order is None:
+            return float(np.sqrt(num_true_entries))
+        if order >= np.inf:
+            return 1.
+        if order <= -np.inf:
+            # TODO should this be 0 even for the "all-True" mask?
+            return 0.
+        if order == 0:
+            return num_true_entries
+        return num_true_entries ** (1. / order)
 
     def permute_legs(self, permutation: list[int]) -> Tensor:
         msg = 'Converting Mask to full Tensor for `permute_legs`. If this is what you wanted, ' \
@@ -2795,9 +2805,33 @@ def is_scalar(obj) -> bool:
     return False
 
 
-def norm(t: AbstractTensor) -> float:
-    """2-norm of a tensor, i.e. sqrt(inner(t, t))"""
-    return t.norm()
+def norm(t: AbstractTensor, order=None) -> float:
+    """Norm of a tensor.
+
+    Equivalent to ``np.linalg.norm(a.to_numpy_ndarray().flatten(), order)``.
+    TODO is this statement true for general nonabelian symmetries?
+
+    In contrast to numpy, we don't distinguish between matrices and vectors, but rather
+    compute the `order`-norm of the "flattened" coefficients `x` of `t` in the computational basis.
+
+    ==========  ======================================
+    ord         norm
+    ==========  ======================================
+    None        Frobenius norm (same as 2-norm)
+    np.inf      ``max(abs(x))``
+    -np.inf     ``min(abs(x))``
+    0           ``sum(x != 0) == np.count_nonzero(x)``
+    other       ususal p-norm with p=`order`
+    ==========  ======================================
+
+    Parameters
+    ----------
+    t : :class:`AbstractTensor`
+        The tensor of which the norm should be calculated
+    order :
+        The order of the norm. See table above.
+    """
+    return t.norm(order=order)
 
 
 def outer(t1: AbstractTensor, t2: AbstractTensor, relabel1: dict[str, str] = None,

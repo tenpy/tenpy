@@ -147,8 +147,8 @@ class AbstractNoSymmetryBackend(AbstractBackend, AbstractBlockBackend, ABC):
     def squeeze_legs(self, a: Tensor, idcs: list[int]) -> Data:
         return self.block_squeeze_legs(a.data, idcs)
 
-    def norm(self, a: Tensor | DiagonalTensor) -> float:
-        return self.block_norm(a.data)
+    def norm(self, a: Tensor | DiagonalTensor, order: int | float = None) -> float:
+        return self.block_norm(a.data, order=order)
 
     def act_block_diagonal_square_matrix(self, a: Tensor, block_method: str) -> Data:
         """Apply functions like exp() and log() on a (square) block-diagonal `a`."""
