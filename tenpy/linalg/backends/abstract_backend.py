@@ -238,7 +238,7 @@ class AbstractBackend(ABC):
         ...
 
     @abstractmethod
-    def svd(self, a: Tensor, new_vh_leg_dual: bool) -> tuple[Data, DiagonalData, Data, VectorSpace]:  # TODO: Data -> DiagonalData for S
+    def svd(self, a: Tensor, new_vh_leg_dual: bool, algorithm: str | None) -> tuple[Data, DiagonalData, Data, VectorSpace]:  # TODO: Data -> DiagonalData for S
         """
         SVD of a Matrix, `a` has only two legs (often ProductSpace).
 
@@ -248,6 +248,9 @@ class AbstractBackend(ABC):
             Data of corresponding tensors.
         new_leg :
             (Backend-specific) VectorSpace the new leg of vh.
+        algorithm : str
+            (Backend-specific) algorithm to use for computing the SVD.
+            See e.g. the :attr:`~AbstractBlockBackend.svd_algorithms` attribute.
         """
         ...
 

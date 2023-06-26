@@ -3,13 +3,14 @@
 from __future__ import annotations
 from .tensors import DiagonalTensor, AbstractTensor, Tensor, get_same_backend
 from ..tools.misc import inverse_permutation
+from ..tools.params import asConfig
 
 __all__ = ['svd', 'truncate_svd', 'svd_split', 'leg_bipartition', 'exp', 'log']
 
 
 def svd(a: AbstractTensor, u_legs: list[int | str] = None, vh_legs: list[int | str] = None,
         new_labels: tuple[str, ...] = None, new_vh_leg_dual=False,
-        options=None
+        options={}
         ) -> tuple[AbstractTensor, DiagonalTensor, AbstractTensor]:
     """SVD of a tensor, viewed as a linear map (i.e. matrix) from one set of its legs to the rest.
 
@@ -34,14 +35,15 @@ def svd(a: AbstractTensor, u_legs: list[int | str] = None, vh_legs: list[int | s
     new_vh_leg_dual : bool
         Whether the new leg of `vh` will be dual or not.
         TODO what is the intuitive default?
-    options : dict | Config | None
-        TODO: things like driver / stable / ... ?
+    options : dict | Config
+        TODO proper Config style doc
+        algorithm : str | None
 
     Returns
     -------
     tuple[Tensor, DiagonalTensor, Tensor]
         The tensors U, S, Vh that form the SVD, such that `tdot(U, tdot(S, Vh, 1, 0), -1, 0)` is equal
-        to `a` up to numerical precsision
+        to `a` up to numerical precision
     """
     if not isinstance(a, Tensor):
         raise NotImplementedError  # TODO ChargedTensor support
@@ -56,8 +58,9 @@ def svd(a: AbstractTensor, u_legs: list[int | str] = None, vh_legs: list[int | s
     elif u_idcs[0] == 1:   # both single entry, so v_idcs = [1]
         a = a.permute_legs([1, 0])
 
-    # TODO read algorithm etc from config
-    u_data, s_data, vh_data, new_leg = a.backend.svd(a, new_vh_leg_dual)
+    options = asConfig(options, 'SVD')  # TODO if algorithm remains the only key, consider just making it a kwarg
+    algorithm = options.get('algorithm', None)
+    u_data, s_data, vh_data, new_leg = a.backend.svd(a, new_vh_leg_dual, algorithm=algorithm)
 
     U = Tensor(u_data, backend=a.backend, legs=[a.legs[0], new_leg.dual])
     S = DiagonalTensor(s_data, first_leg=new_leg, second_leg_dual=True, backend=a.backend, labels=[l_su, l_sv])

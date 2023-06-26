@@ -103,8 +103,8 @@ class AbstractNoSymmetryBackend(AbstractBackend, AbstractBlockBackend, ABC):
     def tdot(self, a: Tensor, b: Tensor, axs_a: list[int], axs_b: list[int]) -> Data:
         return self.block_tdot(a.data, b.data, axs_a, axs_b)
 
-    def svd(self, a: Tensor, new_vh_leg_dual: bool) -> tuple[Data, DiagonalData, Data, VectorSpace]:
-        u, s, vh = self.matrix_svd(a.data, algorithm=None)
+    def svd(self, a: Tensor, new_vh_leg_dual: bool, algorithm: str | None) -> tuple[Data, DiagonalData, Data, VectorSpace]:
+        u, s, vh = self.matrix_svd(a.data, algorithm=algorithm)
         new_leg = VectorSpace.non_symmetric(len(s), is_real=a.legs[0].is_real, _is_dual=new_vh_leg_dual)
         return u, s, vh, new_leg
 

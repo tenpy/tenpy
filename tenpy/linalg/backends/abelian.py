@@ -726,12 +726,12 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
                 for blocks in blocks_list]
         return res
 
-    def svd(self, a: Tensor, new_vh_leg_dual: bool) -> tuple[Data, DiagonalData, Data, VectorSpace]:
+    def svd(self, a: Tensor, new_vh_leg_dual: bool, algorithm: str | None) -> tuple[Data, DiagonalData, Data, VectorSpace]:
         u_blocks = []
         s_blocks = []
         vh_blocks = []
         for block in a.data.blocks:
-            u, s, vh = self.matrix_svd(block, algorithm=None)  # TODO make algorithm configurable
+            u, s, vh = self.matrix_svd(block, algorithm=algorithm)
             u_blocks.append(u)
             s_blocks.append(s)
             assert len(s) > 0
