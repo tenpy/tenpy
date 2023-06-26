@@ -415,7 +415,9 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
 
     def diagonal_from_block(self, a: Block, leg: VectorSpace) -> DiagonalData:
         dtype = self.block_dtype(a)
-        raise NotImplementedError  # TODO
+        block_inds = np.arange(leg.num_sectors)[:, None]
+        blocks = [a[slice(*leg.slices[i])] for i in block_inds[:, 0]]
+        return AbelianBackendData(dtype, blocks, block_inds)
 
     def from_block_func(self, func, legs: list[VectorSpace], func_kwargs={}) -> AbelianBackendData:
         block_inds = _valid_block_indices(legs)
