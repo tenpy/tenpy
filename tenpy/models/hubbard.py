@@ -182,6 +182,9 @@ class FermiHubbardModel2(CouplingMPOModel):
         cons_N = model_params.get('cons_N', 'N')
         cons_Sz = model_params.get('cons_Sz', 'Sz')
         return spin_half_species(FermionSite, cons_N=cons_N, cons_Sz=cons_Sz)
+        # special syntax: returns tuple (sites, species_names) to cause
+        # CouplingMPOModel.init_lattice to initialize a MultiSpeciesLattice
+        # based on the lattice specified in the model parameters
 
     def init_terms(self, model_params):
         t = model_params.get('t', 1.)
