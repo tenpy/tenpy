@@ -26,6 +26,8 @@ Added
   correlation functions in :class:`~tenpy.networks.mps.MPS` and :class:`~tenpy.networks.mps.MPSEnvironment`
 - Abstract :class:`~tenpy.networks.mps.BaseEnvironment` parent class for :class:`~tenpy.networks.mps.MPSEnvironment`
   and :class:`~tenpy.networks.mpo.MPOEnvironment`
+- Add `phi_ext` parameter to :class:`~tenpy.models.fermions_spinless.FermionModel`,
+  :class:`~tenpy.models.hubbard.BoseHubbardModel` and :class:`~tenpy.models.hubbard.FermiHubbardModel`.
 
 
 Changed

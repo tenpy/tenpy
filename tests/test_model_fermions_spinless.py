@@ -7,6 +7,7 @@ from tenpy.models.spins import SpinChain
 
 def test_FermionModel():
     check_general_model(FermionModel, {'lattice': "Square", 'Lx': 2, 'Ly': 3}, {})
+    check_general_model(FermionModel, {'lattice': "Square", 'Lx': 2, 'Ly': 3, 'phi_ext': 1.}, {})
 
 
 def test_FermionChain():

@@ -146,6 +146,8 @@ class HofstadterFermions(CouplingMPOModel):
             Magnetic flux density, defined as a fraction ``(numerator, denominator)``
         phi_ext : float
             External magnetic flux 'threaded' through the cylinder.
+            Hopping amplitudes for bonds 'across' the periodic boundary are modified such that
+            particles hopping around the circumference of the cylinder acquire a phase `phi_ext`.
         gauge : 'landau_x' | 'landau_y' | 'symmetric'
             Choice of the gauge used for the magnetic field. This changes the
             magnetic unit cell. See :func:`gauge_hopping` for details.

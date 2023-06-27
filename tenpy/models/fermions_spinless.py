@@ -48,7 +48,11 @@ class FermionModel(CouplingMPOModel):
             For ``'best'``, we check the parameters what can be preserved.
         J, V, mu : float | array
             Hopping, interaction and chemical potential as defined for the Hamiltonian above.
-
+        phi_ext : float
+            For 2D lattices and periodic y boundary conditions only.
+            External magnetic flux 'threaded' through the cylinder.
+            Hopping amplitudes for bonds 'across' the periodic boundary are modified such that
+            particles hopping around the circumference of the cylinder acquire a phase `phi_ext`.
     """
     def init_sites(self, model_params):
         conserve = model_params.get('conserve', 'N')
@@ -62,10 +66,15 @@ class FermionModel(CouplingMPOModel):
         J = model_params.get('J', 1.)
         V = model_params.get('V', 1.)
         mu = model_params.get('mu', 0.)
+        phi_ext = model_params.get('phi_ext', None)
         for u in range(len(self.lat.unit_cell)):
             self.add_onsite(-mu, u, 'N')
         for u1, u2, dx in self.lat.pairs['nearest_neighbors']:
-            self.add_coupling(-J, u1, 'Cd', u2, 'C', dx, plus_hc=True)
+            if phi_ext is None:
+                hop = -J
+            else:
+                hop = self.coupling_strength_add_ext_flux(-J, dx, [0, phi_ext])
+            self.add_coupling(hop, u1, 'Cd', u2, 'C', dx, plus_hc=True)
             self.add_coupling(V, u1, 'N', u2, 'N', dx)
 
 
