@@ -24,16 +24,17 @@ def test_svd(tensor_rng, new_vh_leg_dual):
     assert Vd.labels_are('cl', 'r1', 'r2')
     assert Vd.legs[0].is_dual == new_vh_leg_dual
     assert isinstance(S, tensors.DiagonalTensor)
+
+    # check that U @ S @ Vd recovers the original tensor
     U_S_Vd = tensors.tdot(U, tensors.tdot(S, Vd, 'cr', 'cl'), 'cr', 'cl')
     U_S_Vd.test_sanity()
-
+    assert tensors.almost_equal(T, U_S_Vd, atol=1.e-10)
+    
     # check that U, Vd are isometries
-    # TODO should almost_equal automatically do this leg permutation, similar to __add__ ?
-    assert tensors.almost_equal(T, U_S_Vd.permute_legs(T.labels), atol=1.e-10)
     Ud_U = tensors.tdot(U.conj(), U, ['l1*', 'l2*'], ['l1', 'l2'])
     Vd_V = tensors.tdot(Vd, Vd.conj(), ['r1', 'r2'], ['r1*', 'r2*'])
+    # TODO compare with eye_like()
     
     pytest.xfail("need more checks")
     # TODO
-    # - compare with eye_like()
     # - test multiple transpose

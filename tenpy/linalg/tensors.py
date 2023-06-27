@@ -322,8 +322,8 @@ class AbstractTensor(ABC):
             raise ValueError('Incompatible legs')
         return leg_order_2
 
-    def _input_checks_add_tensor(self, other: AbstractTensor) -> list[int] | None:
-        """Check if inputs to _add_tensor are valid.
+    def _input_checks_same_legs(self, other: AbstractTensor) -> list[int] | None:
+        """Common input checks for functions that expect two tensors with the same set of legs.
 
         Returns
         -------
@@ -331,15 +331,17 @@ class AbstractTensor(ABC):
             The order of legs on other, such that they match the legs of self.
             None is equivalent to ``list(range(other.num_legs)`` and indicates that no permutation is needed.
         """
-        other_order = match_leg_order(self, other)  # TODO double check and cover in tests that this works
-        for n, (leg_self, leg_other) in enumerate(zip(self.legs, other.legs)):
+        other_order = match_leg_order(self, other)
+        for n in range(self.num_legs):
+            leg_self = self.legs[n]
+            leg_other = other.legs[n] if other_order is None else other.legs[other_order[n]]
             if leg_self != leg_other:
                 self_label = self.shape._labels[n]
                 self_label = '' if self_label is None else self_label + ': '
-                other_label = other.shape._label[n]
+                other_label = other.shape._labels[n]
                 other_label = '' if other_label is None else other_label + ': '
                 msg = '\n'.join([
-                    'Incompatible legs for +:',
+                    'Incompatible legs:',
                     self_label + str(leg_self),
                     other_label + str(leg_other)
                 ])
@@ -1159,8 +1161,9 @@ class Tensor(AbstractTensor):
             other = other.to_full_tensor()
         if not isinstance(other, Tensor):
             raise TypeError(f'almost_equal not supported for types {type(self)} and {type(other)}.')
-        if self.legs != other.legs:
-            raise ValueError('Mismatching shapes')
+        other_order = self._input_checks_same_legs(other)
+        if other_order is not None:
+            other = other.permute_legs(other_order)
         return get_same_backend(self, other).almost_equal(self, other, atol=atol, rtol=rtol)
 
     def inner(self, other: AbstractTensor, do_conj: bool = True, legs1: list[int | str] = None,
@@ -1280,7 +1283,7 @@ class Tensor(AbstractTensor):
             other = other.to_full_tensor()
         if isinstance(other, Tensor):
             backend = get_same_backend(self, other)
-            other_order = self._input_checks_add_tensor(other)
+            other_order = self._input_checks_same_legs(other)
             if other_order is not None:
                 other = permute_legs(other, other_order)
             res_data = backend.add(self, other)
@@ -1737,9 +1740,10 @@ class ChargedTensor(AbstractTensor):
             # so we cant just compare them individually.
             # OPTIMIZE (JU) is there a more efficient way?
             warnings.warn('Converting ChargedTensor to dense block for `almost_equal`', stacklevel=2)
+            other_order = self._input_checks_same_legs(other)
             backend = get_same_backend(self, other)
             self_block = self.to_dense_block()
-            other_block = other.to_dense_block(leg_order=match_leg_order(self, other))
+            other_block = other.to_dense_block(leg_order=other_order)
             return backend.block_allclose(self_block, other_block)
 
     def inner(self, other: AbstractTensor, do_conj: bool = True, legs1: list[int | str] = None,
@@ -2291,6 +2295,7 @@ class DiagonalTensor(AbstractTensor):
     
     def almost_equal(self, other: Tensor, atol: float = 1e-5, rtol: float = 1e-8) -> bool:
         if isinstance(other, DiagonalTensor):
+            _ = self._input_checks_same_legs(other)
             raise NotImplementedError  # TODO
         if isinstance(other, Tensor):
             return self.to_full_tensor().almost_equal(other, atol=atol, rtol=rtol)
@@ -2372,7 +2377,7 @@ class DiagonalTensor(AbstractTensor):
         if isinstance(other, Tensor):
             return self.to_full_tensor()._add_tensor(other)
         if isinstance(other, DiagonalTensor):
-            other_order = self._input_checks_add_tensor(other)
+            other_order = self._input_checks_same_legs(other)
             # by definition, permuting the legs does nothing to a DiagonalTensors data
             backend = get_same_backend(self, other)
             return DiagonalTensor(backend.add(self, other), first_leg=self.legs[0],
