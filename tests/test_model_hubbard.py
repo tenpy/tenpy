@@ -1,4 +1,5 @@
 # Copyright 2018-2023 TeNPy Developers, GNU GPLv3
+import pytest
 from tenpy.models import hubbard
 from test_model import check_general_model
 
@@ -14,9 +15,12 @@ def test_FermiHubbardModel():
 
 def test_FermiHubbardChain():
     check_general_model(hubbard.FermiHubbardChain, {}, {})
-      # on the chain phi_ext should not do anything and only emit a warning
-    check_general_model(hubbard.FermiHubbardChain, {'phi_ext': 1.}, {})
-
+    
+    # for a chain, adding phi_ext should raise
+    with pytest.raises(ValueError) as e_info:
+        check_general_model(hubbard.FermiHubbardChain, {'phi_ext': 1.}, {})
+    assert e_info.type is ValueError
+    assert e_info.value.args[0] == 'Expected one phase per lattice dimension.'
 
 def test_BoseHubbardModel():
     params = {
