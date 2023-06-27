@@ -73,6 +73,9 @@ cython_version = '{cython_ver!s}'
                              numpy_ver=numpy.version.full_version,
                              cython_ver=cython_version)
 
+    with open(filename, 'w') as f:
+        f.write(content)
+
 
 def setup_cython_extension():
     if cythonize is None:
