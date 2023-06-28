@@ -94,6 +94,10 @@ class Shape:
             raise ValueError(f'No leg with label {label}')
         return num
 
+    def relabel(self, mapping: dict[str, str]) -> None:
+        """Apply mapping to labels. In-place."""
+        self.set_labels([mapping.get(l, l) for l in self._labels])
+
     def __str__(self):
         dims = ','.join((f"{lbl}:{d:d}" if lbl is not None else str(d))
                         for lbl, d in zip(self._labels, self.dims))
@@ -195,6 +199,13 @@ class AbstractTensor(ABC):
         if len(labels) != len(self.shape._labels):
             return False
         return set(labels) == set(self.shape._labels)
+
+    def relabel(self, mapping: dict[str, str | None], inplace=True) -> AbstractTensor:
+        """Re-label by applying a mapping to the labels."""
+        if not inplace:
+            return self.copy(deep=False).relabel(mapping, inplace=True)
+        self.shape.relabel(mapping)
+        return self
 
     def set_labels(self, labels: list[str | None]) -> None:
         self.shape.set_labels(labels)
