@@ -1,7 +1,7 @@
 # Copyright 2023-2023 TeNPy Developers, GNU GPLv3
 
 from __future__ import annotations
-from .tensors import DiagonalTensor, AbstractTensor, Tensor, get_same_backend
+from numbers import Number
 from ..tools.misc import inverse_permutation
 from ..tools.params import asConfig
 
@@ -214,7 +214,13 @@ def exp(t: AbstractTensor | complex | float, legs1: list[int | str] = None,
     Requires the two groups of legs to be mutually dual.
     Contrary to numpy, this is *not* the element-wise exponential function.
     """
-    return _act_block_diagonal_square_matrix(t, legs1, legs2, 'matrix_exp')
+    if isinstance(t, Tensor):
+        return _act_block_diagonal_square_matrix(t, legs1, legs2, 'matrix_exp')
+    if isinstance(t, DiagonalTensor):
+        raise NotImplementedError  # TODO
+    if isinstance(t, Number):
+        raise NotImplementedError  # TODO
+    raise TypeError(f'Unsupported type for exp: {type(t)}')
 
 
 def log(t: AbstractTensor | complex | float, legs1: list[int | str] = None,
@@ -222,9 +228,15 @@ def log(t: AbstractTensor | complex | float, legs1: list[int | str] = None,
     """
     The (natural) logarithm of t, viewed as a linear map from legs1 to legs2.
     Requires the two groups of legs to be mutually dual.
-    Contrary to numpy, this is *not* the element-wise exponential function.
+    Contrary to numpy, this is *not* the element-wise logarithm function.
     """
-    return _act_block_diagonal_square_matrix(t, legs1, legs2, 'matrix_log')
+    if isinstance(t, Tensor):
+        return _act_block_diagonal_square_matrix(t, legs1, legs2, 'matrix_log')
+    if isinstance(t, DiagonalTensor):
+        raise NotImplementedError  # TODO
+    if isinstance(t, Number):
+        raise NotImplementedError  # TODO
+    raise TypeError(f'Unsupported type for log: {type(t)}')
 
 
 def _act_block_diagonal_square_matrix(t: AbstractTensor,
@@ -236,7 +248,7 @@ def _act_block_diagonal_square_matrix(t: AbstractTensor,
     block_method :
         Name of a BlockBackend method with signature ``block_method(a: Block) -> Block``.
     """
-    idcs1, idcs2 = leg_bipartition(legs1, legs2)
+    idcs1, idcs2 = leg_bipartition(t, legs1, legs2)
     assert len(idcs1) == len(idcs2)
     assert all(t.legs[i1].is_dual_of(t.legs[i2]) for i1, i2 in zip(idcs1, idcs2))
     if len(idcs1) > 1:

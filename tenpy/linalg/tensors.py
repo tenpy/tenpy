@@ -385,10 +385,9 @@ class AbstractTensor(ABC):
         return "\n".join(lines)
 
     def __getitem__(self, idcs):
-        # TODO tests
         """
         TODO eventually we should document this at some high-level place, e.g. in one of the rst files
-        Collecting snippets here for noew
+        Collecting snippets here for now
 
         We support two modes of indexing tensors for __getitem__:
         - Getting single entries, i.e. giving one integer per leg
@@ -429,7 +428,6 @@ class AbstractTensor(ABC):
             return self._getitem_apply_masks(masks=masks, legs=mask_legs)
 
     def __setitem__(self, idcs, value):
-        # TODO tests
         idcs = _parse_idcs(idcs, length=self.num_legs)
         for leg_num, idx in enumerate(idcs):
             if not isinstance(idx, int):
