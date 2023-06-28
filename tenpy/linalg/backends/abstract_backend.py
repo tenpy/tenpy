@@ -469,7 +469,8 @@ class AbstractBackend(ABC):
                     space2: VectorSpace, product_space: ProductSpace = None) -> Block | None:
         """Given states in two VectorSpaces, compute the respective state in the product space.
 
-        States can be specified as 1D blocks or as ``None``, which represents ``[1.]``.
+        States can be specified as 1D blocks.
+        If the space is one-dimensional, ``None`` is allowed and represents ``[1.]``.
         """
         ...
 
@@ -704,7 +705,7 @@ class AbstractBlockBackend(ABC):
         """
         ...
 
-    def apply_mask_to_block(block: Block, mask: Block, ax: int) -> Block:
+    def apply_mask_to_block(self, block: Block, mask: Block, ax: int) -> Block:
         """Apply a mask (1D boolean block) to a block, slicing/projecting that axis"""
         idx = (slice(None, None, None),) * (ax - 1) + (mask,)
         return block[idx]

@@ -1375,7 +1375,39 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
                            is_real=large_leg.is_real, _is_dual=large_leg.is_dual)
 
     def apply_mask_to_Tensor(self, tensor: Tensor, mask: Mask, leg_idx: int) -> Data:
-        raise NotImplementedError  # TODO
+        # implementation similar to scale_axis, see notes there
+        tensor_blocks = tensor.data.blocks
+        mask_blocks = mask.data.blocks
+        tensor_block_inds = tensor.data.block_inds
+        tensor_block_inds_cont = tensor_block_inds[:, leg_idx:leg_idx + 1]
+        if leg_idx != tensor.num_legs - 1:
+            # due to np.lexsort(tensor_block_inds.T), only tensor_block_inds[:, -1] is sorted
+            sort = np.lexsort(tensor_block_inds_cont.T)
+            tensor_blocks = [tensor_blocks[i] for i in sort]
+            tensor_block_inds = tensor_block_inds[sort]
+            tensor_block_inds_cont = tensor_block_inds_cont[sort]
+        mask_block_inds = mask.data.block_inds
+        mask_block_inds_cont = mask_block_inds[:, 0:1]
+        sort = np.lexsort(mask_block_inds_cont)
+        mask_blocks = [mask_blocks[i] for i in sort]
+        mask_block_inds = mask_block_inds[sort]
+        mask_block_inds_cont = mask_block_inds_cont[sort]
+
+        res_blocks = []
+        res_block_inds = []
+        # need only common blocks : zeros masks to zero, and a missing mask block means all False
+        for i, j in _iter_common_nonstrict_sorted_arrays(tensor_block_inds_cont, mask_block_inds_cont):
+            res_blocks.append(self.apply_mask_to_block(tensor_blocks[i], mask_blocks[j], ax=leg_idx))
+            block_inds = tensor_block_inds[i].copy()
+            # tensor_block_inds[i] refer to mask.legs[0]._sectors
+            # need to adjust to refer to mask.legs[1]._sectors
+            block_inds[leg_idx] = mask_block_inds[j, 1]
+            res_block_inds.append(block_inds)
+        if len(res_block_inds) > 0:
+            res_block_inds = np.array(res_block_inds)
+        else:
+            res_block_inds = np.zeros((0, tensor.num_legs), int)
+        return AbelianBackendData(tensor.dtype, res_blocks, res_block_inds)
 
 
 def product_space_map_incoming_block_inds(space: ProductSpace, incoming_block_inds):
