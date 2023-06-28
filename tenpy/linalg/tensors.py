@@ -2531,11 +2531,11 @@ class Mask(AbstractTensor):
 
     def __getitem__(self, idcs):
         # allow indexing by a single integer -> applied to both axes
-        # TODO doc this behavior
         _idcs = to_iterable(idcs)
         if len(_idcs) == 1 and isinstance(_idcs[0], int):
             # the data of a mask is like the data of a DiagonalTensor
             return self.backend.get_element_diagonal(self, _idcs[0])
+        # otherwise rely on standard indexing, in particular also for input checks etc
         return AbstractTensor.__getitem__(self, idcs)
 
     def __setitem__(self, idcs, value):
@@ -2544,9 +2544,10 @@ class Mask(AbstractTensor):
             assert isinstance(value, bool)
             # the data of a mask is like the data of a DiagonalTensor
             self.data = self.backend.set_element_diagonal(self, _idcs[0], value)
-            self.legs[1] = self.backend.mask_infer_small_leg(data=self.data, large_leg=self.legs[0])
         else:
             AbstractTensor.__setitem__(self, idcs, value)
+        # changing the values changes the small leg!
+        self.legs[1] = self.backend.mask_infer_small_leg(data=self.data, large_leg=self.legs[0])
 
     # --------------------------------------------
     # Implementing abstractmethods
