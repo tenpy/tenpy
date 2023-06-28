@@ -197,7 +197,11 @@ def _iter_common_nonstrict_sorted_arrays(a, b):
 
 
 def _iter_common_noncommon_sorted_arrays(a, b):
-    """Return three list of indices ``i,j`` for which ``a[i, :] is not in b``, and ``b[j,:] is not in a``.
+    """Yield the following pairs ``i, j`` of indices:
+
+    - Matching entries, i.e. ``(i, j)`` such that ``all(a[i, :] == b[j, :])``
+    - Entries only in `a`, i.e. ``(i, None)`` such that ``a[i, :]`` is not in `b`
+    - Entries only in `b`, i.e. ``(None, j)`` such that ``b[j, :]`` is not in `a`
 
     *Assumes* that `a` and `b` are strictly lex-sorted (according to ``np.lexsort(a.T)``).
     """
@@ -205,7 +209,7 @@ def _iter_common_noncommon_sorted_arrays(a, b):
     l_b, d_b = b.shape
     assert d_a == d_b
     i, j = 0, 0
-    both = []
+    both = []  # TODO (JU) @jhauschild : this variable is unused? did something get lost while copying from old tenpy?
     while i < l_a and j < l_b:
         for k in reversed(range(d_a)):
             if a[i, k] < b[j, k]:
