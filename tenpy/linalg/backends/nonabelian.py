@@ -185,7 +185,7 @@ class AbstractNonabelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
             domain_idcs=a.data.domain_idcs
         )
 
-    def _data_repr_lines(self, data: NonAbelianData, indent: str, max_width: int,
+    def _data_repr_lines(self, a: Tensor, indent: str, max_width: int,
                          max_lines: int) -> list[str]:
         raise NotImplementedError  # TODO
 

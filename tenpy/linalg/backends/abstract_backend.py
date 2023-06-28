@@ -226,7 +226,7 @@ class AbstractBackend(ABC):
         ...
 
     @abstractmethod
-    def _data_repr_lines(self, data: Data, indent: str, max_width: int, max_lines: int) -> list[str]:
+    def _data_repr_lines(self, a: Tensor, indent: str, max_width: int, max_lines: int) -> list[str]:
         """helper function for Tensor.__repr__ ; return a list of strs which are the lines
         comprising the ``"* Data:"``section.
         indent is to be placed in front of every line"""

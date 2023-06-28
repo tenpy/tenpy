@@ -369,7 +369,7 @@ class AbstractTensor(ABC):
         indent = '  '
         lines = [f'{self.__class__.__name__}(']
         lines.extend(self._repr_header_lines(indent=indent))
-        lines.extend(self.backend._data_repr_lines(self.data, indent=indent, max_width=70, max_lines=20))
+        lines.extend(self.backend._data_repr_lines(self, indent=indent, max_width=70, max_lines=20))
         lines.append(')')
         return "\n".join(lines)
 

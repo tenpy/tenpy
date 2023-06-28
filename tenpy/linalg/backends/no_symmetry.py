@@ -96,8 +96,8 @@ class AbstractNoSymmetryBackend(AbstractBackend, AbstractBlockBackend, ABC):
     def copy_data(self, a: Tensor | DiagonalTensor) -> Data | DiagonalData:
         return self.block_copy(a.data)
 
-    def _data_repr_lines(self, data: Data, indent: str, max_width: int, max_lines: int):
-        return [f'{indent}* Data:'] + self._block_repr_lines(data, indent=indent + '  ', max_width=max_width,
+    def _data_repr_lines(self, a: Tensor, indent: str, max_width: int, max_lines: int):
+        return [f'{indent}* Data:'] + self._block_repr_lines(a.data, indent=indent + '  ', max_width=max_width,
                                                             max_lines=max_lines - 1)
 
     def tdot(self, a: Tensor, b: Tensor, axs_a: list[int], axs_b: list[int]) -> Data:

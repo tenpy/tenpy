@@ -487,7 +487,8 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
                                   [self.block_copy(b) for b in self.blocks],
                                   a.data.block_inds.copy())
 
-    def _data_repr_lines(self, data: Data, indent: str, max_width: int, max_lines: int):
+    def _data_repr_lines(self, a: Tensor, indent: str, max_width: int, max_lines: int):
+        data = a.data
         if len(data.blocks) == 0:
             return [f'{indent}* Data : no non-zero block']
         if max_lines <= 1:
@@ -497,11 +498,9 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
         all_lines = [None]
         shown_blocks = 0
         for i in np.argsort(sizes):
-            bi = data.block_inds[i, :]
-            # TODO : would make sense to show sectors rather than block_inds
-            # but don't have access to legs
-            # sector = [symmetry.sector_str(leg.sectors[i]) for i, leg in zip(bi, legs)]
-            sector_line = f'{indent}  * block_inds {bi!s}'
+            sector = [a.symmetry.sector_str(leg._sorted_sectors[i])
+                      for i, leg in zip(data.block_inds[i, :], a.legs)]
+            sector_line = f'{indent}  * Sectors {sector}'
             all_lines.append(sector_line)
             all_lines.extend(self._block_repr_lines(data.blocks[i],
                                                     indent=indent + '    ',
