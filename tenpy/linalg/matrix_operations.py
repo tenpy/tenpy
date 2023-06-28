@@ -1,9 +1,13 @@
 # Copyright 2023-2023 TeNPy Developers, GNU GPLv3
 
 from __future__ import annotations
+import numpy as np
+import warnings
 from numbers import Number
+from .tensors import DiagonalTensor, AbstractTensor, Tensor, Mask
 from ..tools.misc import inverse_permutation
 from ..tools.params import asConfig
+from ..tools.hdf5_io import Hdf5Exportable
 
 __all__ = ['svd', 'truncate_svd', 'svd_split', 'leg_bipartition', 'exp', 'log']
 
@@ -12,7 +16,9 @@ def svd(a: AbstractTensor, u_legs: list[int | str] = None, vh_legs: list[int | s
         new_labels: tuple[str, ...] = None, new_vh_leg_dual=False,
         options={}
         ) -> tuple[AbstractTensor, DiagonalTensor, AbstractTensor]:
-    """SVD of a tensor, viewed as a linear map (i.e. matrix) from one set of its legs to the rest.
+    """Singular value decomposition of a tensor.
+
+    The tensor is viewed as a linear map (i.e. matrix) from one set of its legs to the rest.
 
     TODO: document input format for u_legs / vh_legs, can probably to it centrally for all matrix ops
 
@@ -41,7 +47,7 @@ def svd(a: AbstractTensor, u_legs: list[int | str] = None, vh_legs: list[int | s
 
     Returns
     -------
-    tuple[Tensor, DiagonalTensor, Tensor]
+    U, S, Vh
         The tensors U, S, Vh that form the SVD, such that `tdot(U, tdot(S, Vh, 1, 0), -1, 0)` is equal
         to `a` up to numerical precision
     """
@@ -71,6 +77,153 @@ def svd(a: AbstractTensor, u_legs: list[int | str] = None, vh_legs: list[int | s
     U.set_labels([original_labels[n] for n in u_idcs] + [l_u])
     Vh.set_labels([l_vh] + [original_labels[n] for n in vh_idcs])
     return U, S, Vh
+
+
+def truncated_svd(a: AbstractTensor, u_legs: list[int | str] = None, vh_legs: list[int | str] = None,
+                  new_labels: tuple[str, ...] = None, new_vh_leg_dual=False,
+                  options={}, truncation_options={}
+                  ) -> tuple[AbstractTensor, DiagonalTensor, AbstractTensor]:
+    """Truncated singular value decomposition of a tensor.
+
+    The tensor is viewed as a linear map (i.e. matrix) from one set of its legs to the rest.
+
+    Parameters
+    ----------
+    same as for :meth:`svd`
+    truncation_options : dict-like
+        Options that determine how many singular values are kept, see :cfg:config:`truncation`.
+
+    Returns
+    -------
+    U, S, Vh
+        The tensors U, S, Vh that form the truncated SVD, such that
+        `tdot(U, tdot(S, Vh, 1, 0), -1, 0)` is *aproximately* equal to `a`.
+        The singular values are renormalized to ``S.norm() == a.norm()``.
+    err : :class:`TruncationError`
+        the truncation error introduced
+    renormalization : float
+        Factor, by which `S` was renormalized.
+    """
+    U, S, V = svd(a, u_legs=u_legs, vh_legs=vh_legs, new_labels=new_labels, new_vh_leg_dual=new_vh_leg_dual,
+                  options=options)
+    S_norm = S.norm()
+    mask, renormalization, err = truncate_singular_values(S / S_norm, options=truncation_options)
+    U = U.apply_mask(mask, -1)
+    S = S._apply_mask_both_legs(mask)._mul_scalar(1. / renormalization)
+    # TODO (JU): unlike svd_theta this does not normalize to 1 but to norm(a).
+    #            could introduce an argument, `normalize_to: float | None`, where None means norm(a)
+    V = V.apply_mask(mask, 0)
+    return U, S, V, err, renormalization
+    
+
+def truncate_singular_values(S: DiagonalTensor, options) -> Mask:
+    """Given singular values, determine which to keep.
+
+    Options
+    -------
+    .. cfg:config:: truncation
+
+        chi_max : int
+            Keep at most `chi_max` singular values.
+        chi_min : int
+            Keep at least `chi_min` singular values
+        degeneracy_tol : float
+            Don't cut between neighboring singular values with
+            ``|log(S[i]/S[j])| < degeneracy_tol``, or equivalently
+            ``|S[i] - S[j]|/S[j] < exp(degeneracy_tol) - 1 ~= degeneracy_tol``
+            for small `degeneracy_tol`.
+            In other words, keep either both `i` and `j` or none, if the
+            Schmidt values are degenerate with a relative error smaller
+            than `degeneracy_tol`, which we expect to happen in the case
+            of symmetries.
+        svd_min : float
+            Discard all small singular values ``S[i] < svd_min``.
+        trunc_cut : float
+            Discard all small Schmidt values as long as
+            ``sum_{i discarded} S[i]**2 <= trunc_cut**2``.
+
+    Parameters
+    ----------
+    S : DiagonalTensor
+        Singular values, normalized to ``S.norm() == 1``.
+    options : dict-like
+        Config with constraints for the truncation, see :cfg:config:`truncation`.
+        If a constraint can not be fullfilled (without violating a previous one), it is ignored.
+        A value ``None`` indicates that the constraint should be ignored.
+
+    Returns
+    -------
+    mask : Mask
+        A mask, indicating which of the singular values to keep
+    new_norm : float
+        The norm of S after truncation
+    err : :class:`TruncationError`
+        the truncation error introduced
+    """
+    options = asConfig(options, "truncation")
+    # by default, only truncate values which are much closer to zero than machine precision.
+    # This is only to avoid problems with taking the inverse of `S`.
+    chi_max = options.get('chi_max', 100)
+    chi_min = options.get('chi_min', None)
+    deg_tol = options.get('degeneracy_tol', None)
+    svd_min = options.get('svd_min', 1.e-14)
+    trunc_cut = options.get('trunc_cut', 1.e-14)
+
+    # OPTIMIZE should we do all of this logic with block-backend instead of numpy?
+    S_block = S.to_numpy_ndarray()
+
+    if trunc_cut is not None and trunc_cut >= 1.:
+        raise ValueError("trunc_cut >=1.")
+    if S_block.backend.block_sum_all(S_block > 1.e-10) == 0:
+        warnings.warn("no Schmidt value above 1.e-10", stacklevel=2)
+    if S_block.backend.block_sum_all(S_block < 1.e-10) > 0:
+        warnings.warn("negative Schmidt values!", stacklevel=2)
+
+    # use 1.e-100 as replacement for <=0 values for a well-defined logarithm.
+    logS = np.log(np.choose(S_block <= 0., [S_block, 1.e-100 * np.ones(len(S_block))]))
+    piv = np.argsort(logS)  # sort *ascending*.
+    logS = logS[piv]
+    # goal: find an index 'cut' such that we keep piv[cut:], i.e. cut between `cut-1` and `cut`.
+    good = np.ones(len(piv), dtype=np.bool_)  # good[cut] = (is `cut` a good choice?)
+    # we choose the smallest 'good' cut.
+
+    if chi_max is not None:
+        # keep at most chi_max values
+        good2 = np.zeros(len(piv), dtype=np.bool_)
+        good2[-chi_max:] = True
+        good = _combine_constraints(good, good2, "chi_max")
+
+    if chi_min is not None and chi_min > 1:
+        # keep at most chi_max values
+        good2 = np.ones(len(piv), dtype=np.bool_)
+        good2[-chi_min + 1:] = False
+        good = _combine_constraints(good, good2, "chi_min")
+
+    if deg_tol:
+        # don't cut between values (cut-1, cut) with ``log(S[cut]/S[cut-1]) < deg_tol``
+        # this is equivalent to
+        # ``(S[cut] - S[cut-1])/S[cut-1] < exp(deg_tol) - 1 = deg_tol + O(deg_tol^2)``
+        good2 = np.empty(len(piv), np.bool_)
+        good2[0] = True
+        good2[1:] = np.greater_equal(logS[1:] - logS[:-1], deg_tol)
+        good = _combine_constraints(good, good2, "degeneracy_tol")
+
+    if svd_min is not None:
+        # keep only values S[i] >= svd_min
+        good2 = np.greater_equal(logS, np.log(svd_min))
+        good = _combine_constraints(good, good2, "svd_min")
+
+    if trunc_cut is not None:
+        good2 = (np.cumsum(S_block[piv]**2) > trunc_cut * trunc_cut)
+        good = _combine_constraints(good, good2, "trunc_cut")
+
+    cut = np.nonzero(good)[0][0]  # smallest possible cut: keep as many S as allowed
+    mask = np.zeros(len(S_block), dtype=np.bool_)
+    np.put(mask, piv[cut:], True)
+    new_norm = np.linalg.norm(S_block[mask])
+    err = TruncationError.from_S(S[np.logical_not(mask)])
+    
+    return Mask.from_flat_numpy(mask, large_leg=S.legs[0]), new_norm, err
 
 
 def qr(a: AbstractTensor, q_legs: list[int | str] = None, r_legs: list[int | str] = None,
@@ -118,35 +271,23 @@ def qr(a: AbstractTensor, q_legs: list[int | str] = None, r_legs: list[int | str
     return Q, R
 
 
-# TODO directly provide truncated SVD
-
-
-def truncate_svd(U: AbstractTensor, S: DiagonalTensor, Vh: AbstractTensor, options=None
-                 ) -> tuple[AbstractTensor, DiagonalTensor, AbstractTensor, float]:
-    """Truncate an SVD decomposition
-
-    Returns
-    -------
-    U, S, Vh, trunc_err
-    """
-    if not isinstance(U, Tensor) or not isinstance(Vh, Tensor):
-        raise NotImplementedError
-
-    backend = get_same_backend(U, S, Vh)
-    # TODO implement backend.truncate_svd
-    u_data, s_data, vh_data, new_leg, trunc_err = backend.truncate_svd(U, S, Vh, options)
-    U = Tensor(u_data, backend=backend, legs=U.legs[:-1] + [new_leg], labels=U.labels)
-    # TODO revisit this once DiagonalTensor is defined
-    S = DiagonalTensor(s_data, backend=backend, legs=[new_leg.dual, new_leg], labels=S.labels)
-    Vh = Tensor(vh_data, backend=backend, legs=[new_leg.dual] + Vh.legs[1:], labels=Vh.labels)
-    return U, S, Vh, trunc_err
-
-
 def svd_split(a: AbstractTensor, legs1: list[int | str] = None, legs2: list[int | str] = None,
               new_labels: tuple[str, str] = None, options=None, s_exponent: float = .5):
     """Split a tensor via (truncated) svd,
     i.e. compute (U @ S ** s_exponent) and (S ** (1 - s_exponent) @ Vh)"""
     raise NotImplementedError  # TODO
+
+
+def _combine_constraints(good1, good2, warn):
+    """return logical_and(good1, good2) if there remains at least one `True` entry.
+
+    Otherwise print a warning and return just `good1`.
+    """
+    res = np.logical_and(good1, good2)
+    if np.any(res):
+        return res
+    warnings.warn("truncation: can't satisfy constraint for " + warn, stacklevel=3)
+    return good1
 
 
 def _svd_new_labels(new_labels: tuple[str, ...] | None) -> tuple[str, str, str, str]:
@@ -262,3 +403,88 @@ def _act_block_diagonal_square_matrix(t: AbstractTensor,
         if any(i != j for i, j in enumerate(transposed)):
             res = res.permute_legs(inverse_permutation(transposed))
     return res
+
+
+class TruncationError(Hdf5Exportable):
+    r"""Class representing a truncation error.
+
+    The default initialization represents "no truncation".
+
+    .. warning ::
+        For imaginary time evolution, this is *not* the error you are interested in!
+
+    Parameters
+    ----------
+    eps, ov : float
+        See below.
+
+
+    Attributes
+    ----------
+    eps : float
+        The total sum of all discared Schmidt values squared.
+        Note that if you keep singular values up to 1.e-14 (= a bit more than machine precision
+        for 64bit floats), `eps` is on the order of 1.e-28 (due to the square)!
+    ov : float
+        A lower bound for the overlap :math:`|\langle \psi_{trunc} | \psi_{correct} \rangle|^2`
+        (assuming normalization of both states).
+        This is probably the quantity you are actually interested in.
+        Takes into account the factor 2 explained in the section on Errors in the
+        `TEBD Wikipedia article <https://en.wikipedia.org/wiki/Time-evolving_block_decimation>`.
+    """
+    def __init__(self, eps=0., ov=1.):
+        self.eps = eps
+        self.ov = ov
+
+    def copy(self):
+        """Return a copy of self."""
+        return TruncationError(self.eps, self.ov)
+
+    @classmethod
+    def from_norm(cls, norm_new, norm_old=1.):
+        r"""Construct TruncationError from norm after and before the truncation.
+
+        Parameters
+        ----------
+        norm_new : float
+            Norm of Schmidt values kept, :math:`\sqrt{\sum_{a kept} \lambda_a^2}`
+            (before re-normalization).
+        norm_old : float
+            Norm of all Schmidt values before truncation, :math:`\sqrt{\sum_{a} \lambda_a^2}`.
+        """
+        eps = 1. - norm_new**2 / norm_old**2  # = (norm_old**2 - norm_new**2)/norm_old**2
+        return cls(eps, 1. - 2. * eps)
+
+    @classmethod
+    def from_S(cls, S_discarded, norm_old=None):
+        r"""Construct TruncationError from discarded singular values.
+
+        Parameters
+        ----------
+        S_discarded : 1D numpy array
+            The singular values discarded.
+        norm_old : float
+            Norm of all Schmidt values before truncation, :math:`\sqrt{\sum_{a} \lambda_a^2}`.
+            Default (``None``) is 1.
+        """
+        eps = np.sum(np.square(S_discarded))
+        if norm_old:
+            eps /= norm_old * norm_old
+        return cls(eps, 1. - 2. * eps)
+
+    def __add__(self, other):
+        res = TruncationError()
+        res.eps = self.eps + other.eps  # whatever that actually means...
+        res.ov = self.ov * other.ov
+        return res
+
+    @property
+    def ov_err(self):
+        """Error ``1.-ov`` of the overlap with the correct state."""
+        return 1. - self.ov
+
+    def __repr__(self):
+        if self.eps != 0 or self.ov != 1.:
+            return "TruncationError(eps={eps:.4e}, ov={ov:.10f})".format(eps=self.eps, ov=self.ov)
+        else:
+            return "TruncationError()"

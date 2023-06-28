@@ -51,7 +51,8 @@ from ..tools.params import asConfig
 
 __all__ = ['TruncationError', 'truncate', 'svd_theta']
 
-
+# TODO (JU) most (all?) functionality of this module is now covered in matrix_operations.
+#  we should keep the module docstring though! maybe in Notes section of truncated_svd?
 
 class TruncationError(Hdf5Exportable):
     r"""Class representing a truncation error.
