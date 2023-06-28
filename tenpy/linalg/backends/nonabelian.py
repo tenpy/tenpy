@@ -475,6 +475,7 @@ def all_fusion_trees(space: VectorSpace, coupled: Sector = None) -> Iterator[Fus
         for coupled in coupled_sectors(space):
             yield from all_fusion_trees(space, coupled=coupled)
     else:
+        # TODO double checs this is the right spaces attribute!
         for uncoupled in space.sectors:
             yield from fusion_trees(uncoupled, coupled)
 
@@ -482,8 +483,8 @@ def all_fusion_trees(space: VectorSpace, coupled: Sector = None) -> Iterator[Fus
 def coupled_sectors(codomain: ProductSpace, domain: ProductSpace) -> SectorArray:
     """The coupled sectors which are admitted by both codomain and domain"""
     # TODO think about duality!
-    codomain_coupled = codomain._sectors
-    domain_coupled = domain._sectors
+    codomain_coupled = codomain._non_dual_sorted_sectors
+    domain_coupled = domain._non_dual_sorted_sectors
     # OPTIMIZE: find the sectors which appear in both codomain_coupled and domain_coupled
     #  can probably be done much more efficiently, in particular since they are sorted.
     #  look at np.intersect1d for inspiration?
