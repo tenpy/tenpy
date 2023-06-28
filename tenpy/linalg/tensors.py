@@ -110,7 +110,7 @@ class AbstractTensor(ABC):
     Common base class for tensors.
 
     .. note ::
-        TODO write clean text about VectorSpace.sector_perm and how it affects internal storage
+        TODO write clean text about VectorSpace._sector_perm and how it affects internal storage
 
     Parameters
     ----------
@@ -246,9 +246,9 @@ class AbstractTensor(ABC):
             else:
                 components = join_as_many_as_possible(
                     [f'({mult} * {leg.symmetry.sector_str(sect)})'
-                     for mult, sect in zip(leg.multiplicities, leg.sectors)],
+                     for mult, sect in zip(leg._sorted_multiplicities, leg.sectors)],
                     separator=' ⊕ ',
-                    priorities=leg.multiplicities,
+                    priorities=leg._sorted_multiplicities,
                     max_len=max_len
                 )
             components_strs.append(components)
@@ -1375,9 +1375,9 @@ class ChargedTensor(AbstractTensor):
         The symmetry-invariant part. the dummy leg is the last of its legs.
     dummy_leg_state: block | None
         The state that the dummy leg is contracted with.
+        These are coefficients in the basis described by ``dummy_leg``.
         Either a backend-specific block of shape ``(dummy_leg.dim,)``, or `None`,
         which is interpreted ``[1]`` if `dummmy_leg.dim == 1` and raises a `ValueError` otherwise.
-        This state is in the "public" basis of the dummy_leg, i.e. not considering its `index_perm`.
     """
     _DUMMY_LABEL = '!'  # canonical label for the dummy leg
 
@@ -1580,7 +1580,7 @@ class ChargedTensor(AbstractTensor):
         --------
         project_to_invariant
         """
-        if not np.all(self.dummy_leg._sectors[:] == self.symmetry.trivial_sector[None, :]):
+        if not np.all(self.dummy_leg._non_dual_sorted_sectors[:] == self.symmetry.trivial_sector[None, :]):
             raise ValueError('ChargedTensor with non-trivial charge could not be converted to Tensor.')
         if self.dummy_leg.dim == 1:
             return self._dummy_leg_state_item() * self.invariant_part.squeeze_legs(-1)
@@ -2275,14 +2275,11 @@ class DiagonalTensor(AbstractTensor):
     def _get_element(self, idcs: list[int]) -> float | complex:
         if idcs[0] != idcs[1]:
             return self.dtype.zero_scalar
-        # TODO in tests, do the consistency check that it really doesnt matter which leg is used here
-        data_idx = self.legs[0].index_perm[idcs[0]]
-        return self.backend.get_element_diagonal(self, data_idx)
+        return self.backend.get_element_diagonal(self, idcs[0])
 
     def _set_element(self, idcs: list[int], value: float | complex) -> None:
         if idcs[0] != idcs[1]:
             raise IndexError('Off-diagonal entry can not be set for DiagonalTensor')
-        data_idx = self.legs[0].index_perm[idcs[0]]
         self.data = self.backend.set_element_diagonal(self, idcs[0], value)
 
     def _mul_scalar(self, other: complex) -> DiagonalTensor:
@@ -2440,23 +2437,19 @@ class Mask(AbstractTensor):
     @classmethod
     def from_flat_block(cls, mask: np.ndarray, large_leg: VectorSpace) -> Mask:
         # TODO better name
-        # TODO remember to use large_leg.index_perm!
         ...  # TODO
         
     @classmethod
     def from_flat_numpy(cls, mask: np.ndaray, large_leg: VectorSpace) -> Mask:
         # TODO better name
-        # TODO remember to use large_leg.index_perm!
         ...  # TODO
 
     @classmethod
     def from_indices(cls, indices: list[int] | np.ndarray, large_leg: VectorSpace) -> Mask:
-        # TODO remember to use large_leg.index_perm!
         ...  # TODO
 
     @classmethod
     def from_slice(cls, s: slice, large_leg: VectorSpace) -> Mask:
-        # TODO remember to use large_leg.index_perm!
         ...  # TODO
 
     def same_mask_action(self, other: Mask) -> bool:
@@ -2541,18 +2534,16 @@ class Mask(AbstractTensor):
         # TODO doc this behavior
         _idcs = to_iterable(idcs)
         if len(_idcs) == 1 and isinstance(_idcs[0], int):
-            data_idx = self.legs[0].index_perm[_idcs[0]]
             # the data of a mask is like the data of a DiagonalTensor
-            return self.backend.get_element_diagonal(self, data_idx)
+            return self.backend.get_element_diagonal(self, _idcs[0])
         return AbstractTensor.__getitem__(self, idcs)
 
     def __setitem__(self, idcs, value):
         _idcs = to_iterable(idcs)
         if len(_idcs) == 1 and isinstance(_idcs[0], int):
-            data_idx = self.legs[0].index_perm[_idcs[0]]
             assert isinstance(value, bool)
             # the data of a mask is like the data of a DiagonalTensor
-            self.data = self.backend.set_element_diagonal(self, data_idx, value)
+            self.data = self.backend.set_element_diagonal(self, _idcs[0], value)
             self.legs[1] = self.backend.mask_infer_small_leg(data=self.data, large_leg=self.legs[0])
         else:
             AbstractTensor.__setitem__(self, idcs, value)

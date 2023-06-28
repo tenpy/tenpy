@@ -112,7 +112,7 @@ def _valid_block_indices(spaces: list[VectorSpace]):
     grid = np.indices((s.num_sectors for s in spaces), dtype=int)
     grid = grid.T.reshape((-1, len(spaces)))
     total_sectors = _fuse_abelian_charges(symmetry,
-                                          *(space.sectors[gr] for space, gr in zip(spaces, grid.T)))
+                                          *(space._sorted_sectors[gr] for space, gr in zip(spaces, grid.T)))
     valid = np.all(total_sectors == symmetry.trivial_sector[np.newaxis, :], axis=1)
     block_inds = grid[valid, :]
     perm = np.lexsort(block_inds.T)
@@ -300,7 +300,7 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
         super().test_data_sanity(a, is_diagonal=is_diagonal)
         assert a.data.block_inds.shape == (len(a.data.blocks), 1 if is_diagonal else a.num_legs)
         # check expected tensor dimensions
-        block_shapes = np.array([leg.multiplicities[i] for leg, i in zip(a.legs, a.data.block_inds.T)]).T
+        block_shapes = np.array([leg._sorted_multiplicities[i] for leg, i in zip(a.legs, a.data.block_inds.T)]).T
         for block, shape in zip(a.data.blocks, block_shapes):
             expect_shape = (shape[0],) if is_diagonal else tuple(shape)
             assert self.block_shape(block) == expect_shape
@@ -345,7 +345,7 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
         # the block size for given (i1, i2, ...) is the product of ``multiplicities[il]``
         # andvanced indexing:
         # ``grid.T[li]`` is a 1D array containing the qindex `q_li` of leg ``li`` for all blocks
-        multiplicities = np.prod([space.multiplicities[gr] for space, gr in zip(spaces, grid.T)],
+        multiplicities = np.prod([space._sorted_multiplicities[gr] for space, gr in zip(spaces, grid.T)],
                                  axis=0)
         # block_ind_map[:, :2] and [:, -1] is initialized after sort/bunch.
 
@@ -354,17 +354,17 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
             # overall fusion of sectors is equivalent to taking dual of each sector
             # in standard use cases, this can often avoid explicit
             # symmetry.dual_sector() calls in VectorSpace.sectors()
-            fuse_sectors = [s.dual.sectors for s in spaces]
+            fuse_sectors = [s.dual._sorted_sectors for s in spaces]
         else:
-            fuse_sectors = [s.sectors for s in spaces]
-        # _sectors are the ones saved in self._sectors, not the property self.sectors
-        _sectors = _fuse_abelian_charges(symmetry,
+            fuse_sectors = [s._sorted_sectors for s in spaces]
+
+        _non_dual_sorted_sectors = _fuse_abelian_charges(symmetry,
             *(sectors[gr] for sectors, gr in zip(fuse_sectors, grid.T)))
 
         # sort (non-dual) charge sectors. Similar code as in VectorSpace.__init__
-        sector_perm = np.lexsort(_sectors.T)
+        sector_perm = np.lexsort(_non_dual_sorted_sectors.T)
         block_ind_map = block_ind_map[sector_perm]
-        _sectors = _sectors[sector_perm]
+        _non_dual_sorted_sectors = _non_dual_sorted_sectors[sector_perm]
         multiplicities = multiplicities[sector_perm]
 
         slices = np.concatenate([[0], np.cumsum(multiplicities)], axis=0)
@@ -372,13 +372,13 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
         block_ind_map[:, 1] = slices[1:]
 
         # bunch sectors with equal charges together
-        diffs = _find_row_differences(_sectors, include_len=True)
+        diffs = _find_row_differences(_non_dual_sorted_sectors, include_len=True)
         metadata['block_ind_map_slices'] = diffs
         slices = slices[diffs]
         multiplicities = slices[1:] - slices[:-1]
         diffs = diffs[:-1]
 
-        _sectors = _sectors[diffs]
+        _non_dual_sorted_sectors = _non_dual_sorted_sectors[diffs]
 
         new_block_ind = np.zeros(len(block_ind_map), dtype=np.intp) # = J
         new_block_ind[diffs[1:]] = 1  # not for the first entry => np.cumsum starts with 0
@@ -386,7 +386,7 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
         # calculate the slices within blocks: subtract the start of each block
         block_ind_map[:, :2] -= slices[new_block_ind][:, np.newaxis]
         metadata['block_ind_map'] = block_ind_map  # finished
-        return _sectors, multiplicities, sector_perm, metadata
+        return _non_dual_sorted_sectors, multiplicities, sector_perm, metadata
 
     def add_leg_metadata(self, leg: VectorSpace) -> VectorSpace:
         if isinstance(leg, ProductSpace):
@@ -418,14 +418,14 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
     def to_dense_block(self, a: Tensor) -> Block:
         res = self.zero_block([leg.dim for leg in a.legs], a.data.dtype)
         for block, block_inds in zip(a.data.blocks, a.data.block_inds):
-            slices = [slice(*leg.slices[i]) for i, leg in zip(block_inds, a.legs)]
+            slices = [slice(*leg._sorted_slices[i]) for i, leg in zip(block_inds, a.legs)]
             res[tuple(slices)] = block
         return res
 
     def diagonal_to_block(self, a: DiagonalTensor) -> Block:
         res = self.zero_block([a.legs[0].dim], a.dtype)
         for block, block_idx in zip(a.data.block, a.data.block_inds):
-            res[slice(*a.legs[0].slices[block_idx])] = block
+            res[slice(*a.legs[0]._sorted_slices[block_idx])] = block
         return res
 
     def from_dense_block(self, a: Block, legs: list[VectorSpace], atol: float = 1e-8, rtol: float = 1e-5) -> AbelianBackendData:
@@ -433,21 +433,21 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
         block_inds = _valid_block_indices(legs)
         blocks = []
         for b_i in block_inds:
-            slices = [slice(*leg.slices[i]) for i, leg in zip(b_i, legs)]
+            slices = [slice(*leg._sorted_slices[i]) for i, leg in zip(b_i, legs)]
             blocks.append(a[tuple(slices)])
         return AbelianBackendData(dtype, blocks, block_inds)
 
     def diagonal_from_block(self, a: Block, leg: VectorSpace) -> DiagonalData:
         dtype = self.block_dtype(a)
         block_inds = np.arange(leg.num_sectors)[:, None]
-        blocks = [a[slice(*leg.slices[i])] for i in block_inds[:, 0]]
+        blocks = [a[slice(*leg._sorted_slices[i])] for i in block_inds[:, 0]]
         return AbelianBackendData(dtype, blocks, block_inds)
 
     def from_block_func(self, func, legs: list[VectorSpace], func_kwargs={}) -> AbelianBackendData:
         block_inds = _valid_block_indices(legs)
         blocks = []
         for b_i in block_inds:
-            shape = [leg.multiplicities[i] for i, leg in zip(b_i, legs)]
+            shape = [leg._sorted_multiplicities[i] for i, leg in zip(b_i, legs)]
             blocks.append(func(tuple(shape), **func_kwargs))
         if len(blocks) == 0:
             dtype = self.block_dtype(func((1,) * len(legs), **func_kwargs))
@@ -457,7 +457,7 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
 
     def diagonal_from_block_func(self, func, leg: VectorSpace, func_kwargs={}) -> DiagonalData:
         block_inds = np.arange(leg.num_sectors)[:, None]
-        blocks = [func((leg.multiplicities[i],), **func_kwargs) for i in block_inds[:, 0]]
+        blocks = [func((leg._sorted_multiplicities[i],), **func_kwargs) for i in block_inds[:, 0]]
         if len(blocks) == 0:
             dtype = self.block_dtype(func((1,), **func_kwargs))
         else:
@@ -473,7 +473,7 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
     def eye_data(self, legs: list[VectorSpace], dtype: Dtype) -> Data:
         block_inds = np.indices((leg.num_sectors for leg in legs)).T.reshape(-1, len(legs))
         # block_inds is by construction np.lexsort()-ed
-        dims = [leg.multiplicities[bi] for leg, bi in zip(legs, block_inds.T)]
+        dims = [leg._sorted_multiplicities[bi] for leg, bi in zip(legs, block_inds.T)]
         blocks = [self.eye_block(shape, dtype) for shape in zip(*dims)]
         return AbelianBackendData(dtype, blocks, np.hstack([block_inds, block_inds]))
 
@@ -586,11 +586,11 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
         # Step 3) loop over column/row of the result
         sym = a.legs[0].symmetry
         if cut_a > 0:
-            a_charges_keep = _fuse_abelian_charges(sym, *(leg.sectors[i] for leg, i in zip(a.legs[:cut_a], a_block_inds_keep.T)))
+            a_charges_keep = _fuse_abelian_charges(sym, *(leg._sorted_sectors[i] for leg, i in zip(a.legs[:cut_a], a_block_inds_keep.T)))
         else:
             a_charges_keep = np.zeros((len(a_block_inds_keep), sym.sector_ind_len), int)
         if cut_b < b.num_legs:
-            b_charges_keep_dual = _fuse_abelian_charges(sym, *(leg.dual.sectors[i] for leg, i in zip(b.legs[cut_b:], b_block_inds_keep.T)))
+            b_charges_keep_dual = _fuse_abelian_charges(sym, *(leg.dual._sorted_sectors[i] for leg, i in zip(b.legs[cut_b:], b_block_inds_keep.T)))
         else:
             b_charges_keep_dual = np.zeros((len(b_block_inds_keep), sym.sector_ind_len), int)
         # dual such that b_charges_keep_dual must match a_charges_keep
@@ -676,7 +676,7 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
         """
         # convert block_inds_contr over which we sum to a 1D array for faster lookup/iteration
         # F-style strides to preserve sorting
-        stride = _make_stride([len(l.sectors) for l in a.legs[cut_a:]], False)
+        stride = _make_stride([l.num_sectors for l in a.legs[cut_a:]], False)
         a_block_inds_contr = np.sum(a.data.block_inds[:, cut_a:] * stride, axis=1)
         # lex-sort a.data.block_inds, dominated by the axes kept, then the axes summed over.
         a_sort = np.lexsort(np.hstack([a_block_inds_contr[:, np.newaxis], a.data.block_inds[:, :cut_a]]).T)
@@ -743,20 +743,20 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
         # due to lexsort(a.data.block_inds.T), block_inds_R is sorted, but block_inds_L not.
 
         # build new leg: add sectors in the order given by block_inds_R, which is sorted
-        leg_C_sectors = leg_R._sectors[block_inds_R]
+        leg_C_sectors = leg_R._non_dual_sorted_sectors[block_inds_R]
         # economic SVD (aka full_matrices=False) : len(s) = min(block.shape)
-        leg_C_mults = np.minimum(leg_L.multiplicities[block_inds_L], leg_R.multiplicities[block_inds_R])
+        leg_C_mults = np.minimum(leg_L._sorted_multiplicities[block_inds_L], leg_R._sorted_multiplicities[block_inds_R])
         block_inds_C = np.arange(len(s_blocks), dtype=int)
         if new_vh_leg_dual != leg_R.is_dual:
             # opposite dual flag in legs of vH => same _sectors
             new_leg = VectorSpace(symmetry, leg_C_sectors, leg_C_mults, is_real=leg_R.is_real, _is_dual=new_vh_leg_dual)
-            assert np.all(new_leg.sector_perm == block_inds_C), "new_leg sectors should be sorted"  # TODO remove this after tests ran
+            assert np.all(new_leg._sector_perm == block_inds_C), "new_leg sectors should be sorted"  # TODO remove this after tests ran
         else:  # new_vh_leg_dual == leg_R.is_dual
             # same dual flag in legs of vH => opposite _sectors => opposite sorting!!!
             leg_C_sectors = symmetry.dual_sectors(leg_C_sectors)  # not sorted
             new_leg = VectorSpace(symmetry, leg_C_sectors, leg_C_mults, is_real=leg_R.is_real, _is_dual=new_vh_leg_dual)
             # new_leg has sorted _sectors in __init__, but that might have induced permutation
-            block_inds_C = block_inds_C[new_leg.sector_perm]  # no longer sorted
+            block_inds_C = block_inds_C[new_leg._sector_perm]  # no longer sorted
 
         u_block_inds = np.column_stack([block_inds_L, block_inds_C])
         s_block_inds = block_inds_C[:, None]
@@ -797,16 +797,16 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
                 dtype = a.data.dtype
                 for i, q in enumerate(q_blocks_full):
                     if q is None:
-                        q_blocks_full[i] = self.eye_block([q_leg_0.multiplicities[i]], dtype)
+                        q_blocks_full[i] = self.eye_block([q_leg_0._sorted_multiplicities[i]], dtype)
             q_block_inds = np.hstack([np.arange(q_leg_0.num_sectors, int)[:, np.newaxis]]*2)
             r_block_inds = a.data.block_inds.copy() # is already sorted...
             if new_r_leg_dual != new_leg.is_dual:
                 # similar as new_leg.flip_is_dual(), but also get permuation on the way
-                new_sectors = sym.dual_sectors(new_leg._sectors)  # ._sectors, not .sectors
+                new_sectors = sym.dual_sectors(new_leg._non_dual_sorted_sectors)
                 perm = np.lexsort(new_sectors.T)
                 new_leg = VectorSpace(sym,
                                       new_sectors[sort, :],
-                                      new_leg.multiplicities[sort],
+                                      new_leg._multiplicities[sort],
                                       new_leg.is_real,
                                       new_r_leg_dual)
                 inv_perm = inverse_permutation(perm)
@@ -826,7 +826,7 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
         else:
             # possibly skipping some sectors of q_leg_0 in new_leg
             keep = a.data.block_inds[:, 0] # not sorted
-            new_leg_sectors = q_leg_0._sectors[keep, :]
+            new_leg_sectors = q_leg_0._non_dual_sorted_sectors[keep, :]
             new_leg_mults = np.array([self.block_shape(q)[1] for q in q_blocks], int)
             if new_r_leg_dual != q_leg_0.is_dual:
                 new_leg_sectors = sym.dual_sectors(new_leg_sectors)
@@ -874,7 +874,7 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
     def inner(self, a: Tensor, b: Tensor, do_conj: bool, axs2: list[int] | None) -> complex:
         # a.legs[i] to be contracted with b.legs[axs2[i]]
         a_blocks = a.data.blocks
-        stride = _make_stride([len(l.sectors) for l in a.legs], False)
+        stride = _make_stride([l.num_sectors for l in a.legs], False)
         a_block_inds = np.sum(a.data.block_inds * stride, axis=1)
         if axs2 is not None:
             # permute strides to match the label order on b:
@@ -979,7 +979,7 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
         for i, leg in enumerate(final_legs):  # legs not in new_axes
             if i not in new_axes:
                 # block_slices[:, i, 0] = 0
-                block_slices[:, i, 1] = block_shape[:, i] = leg.multiplicities[res_block_inds[:, i]]
+                block_slices[:, i, 1] = block_shape[:, i] = leg._sorted_multiplicities[res_block_inds[:, i]]
         for i, product_space, map_ind in zip(new_axes, product_spaces, map_inds):  # legs in new_axes
             slices = product_space.block_ind_map[map_ind, :2]
             block_slices[:, i, :] = slices
@@ -991,7 +991,7 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
         res_block_inds = res_block_inds[diffs[:res_num_blocks], :]
         res_block_shapes = np.empty((res_num_blocks, len(final_legs)), int)
         for i, leg in enumerate(final_legs):
-            res_block_shapes[:, i] = leg.multiplicities[res_block_inds[:, i]]
+            res_block_shapes[:, i] = leg._sorted_multiplicities[res_block_inds[:, i]]
 
         # now the hard part: map data
         res_blocks = []
@@ -1062,7 +1062,7 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
                 j += 1
             else:
                 new_block_inds[:, i + shift] = nbi = old_block_inds[old_rows, i]
-                old_block_shapes[:, i] = a.legs[i].multiplicities[nbi]
+                old_block_shapes[:, i] = a.legs[i]._sorted_multiplicities[nbi]
         # sort new_block_inds
         sort = np.lexsort(new_block_inds.T)
         new_block_inds = new_block_inds[sort, :]
@@ -1072,7 +1072,7 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
 
         new_block_shapes = np.empty((res_num_blocks, res_num_legs), dtype=int)
         for i, leg in enumerate(final_legs):
-            new_block_shapes[:, i] = leg.multiplicities[new_block_inds[:, i]]
+            new_block_shapes[:, i] = leg._sorted_multiplicities[new_block_inds[:, i]]
 
         # the actual loop to split the blocks
         new_blocks = []
@@ -1187,24 +1187,24 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
         #      return make_valid(q)  # TODO: leg.get_qindex, leg.get_charge
 
     def get_element(self, a: Tensor, idcs: list[int]) -> complex | float | bool:
-        pos = np.array([l.parse_index(idx) for l, idx in zip(a.legs, idcs)])
+        pos = np.array([l._parse_index(idx) for l, idx in zip(a.legs, idcs)])
         block = a.data.get_block(pos[:, 0])
         if block is None:
             return a.dtype.zero_scalar
         return self.get_block_element(block, pos[:, 1])
 
     def get_element_diagonal(self, a: DiagonalTensor, idx: int) -> complex | float | bool:
-        block_idx, idx_within = a.legs[0].parse_index(idx)
+        block_idx, idx_within = a.legs[0]._parse_index(idx)
         block = a.data.get_block(np.array([block_idx]))
         if block is None:
             return a.dtype.zero_scalar
         return self.get_block_element(block, [idx_within])
             
     def set_element(self, a: Tensor, idcs: list[int], value: complex | float) -> Data:
-        pos = np.array([l.parse_index(idx) for l, idx in zip(a.legs, idcs)])
+        pos = np.array([l._parse_index(idx) for l, idx in zip(a.legs, idcs)])
         n = a.data.get_block_num(pos[:, 0])
         if n is None:
-            shape = [leg.multiplicities[sector_idx] for leg, sector_idx in zip(a.legs, pos[:, 0])]
+            shape = [leg._sorted_multiplicities[sector_idx] for leg, sector_idx in zip(a.legs, pos[:, 0])]
             block = self.zero_block(shape, dtype=a.dtype)
         else:
             block = a.data.blocks[n]
@@ -1214,10 +1214,10 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
 
     def set_element_diagonal(self, a: DiagonalTensor, idx: int, value: complex | float | bool
                              ) -> DiagonalData:
-        block_idx, idx_within = a.legs[0].parse_index(idx)
+        block_idx, idx_within = a.legs[0]._parse_index(idx)
         n = a.data.get_block_num(np.array([block_idx]))
         if n is None:
-            block = self.zero_block(shape=[a.legs[0].multiplicities[block_idx]], dtype=a.dtype)
+            block = self.zero_block(shape=[a.legs[0]._sorted_multiplicities[block_idx]], dtype=a.dtype)
         else:
             block = a.data.blocks[n]
         blocks = a.data.blocks[:]
@@ -1300,7 +1300,7 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
             blocks = []
             for _, j in _iter_common_noncommon_sorted_arrays(block_inds, a_block_inds):
                 if j is None:
-                    block = self.zero_block([a.legs[0].multiplicities[a_block_inds[j, 0]]], dtype=a.dtype)
+                    block = self.zero_block([a.legs[0]._sorted_multiplicities[a_block_inds[j, 0]]], dtype=a.dtype)
                 else:
                     block = a.blocks[j]
                 blocks.append(func(block, **func_kwargs))
@@ -1317,8 +1317,8 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
         b_blocks = b.data.blocks
         a_block_inds = a.data.block_inds
         b_block_inds = b.data.block_inds
-        a_mults = a.legs[0].multiplicities
-        b_mults = b.legs[0].multiplicities
+        a_mults = a.legs[0]._sorted_multiplicities
+        b_mults = b.legs[0]._sorted_multiplicities
         
         blocks = []
         block_inds = []
@@ -1352,9 +1352,9 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
 
     def fuse_states(self, state1: Block | None, state2: Block | None, space1: VectorSpace,
                     space2: VectorSpace, product_space: ProductSpace = None) -> Block | None:
-        # - consider state{1|2}.sector_perm // slices
+        # - consider state{1|2}._sector_perm // slices
         # - use block_kron (or trivial kron=state{1|2}, if the other is None)
-        # - if kron is not None, consider product_sapce.sector_perm // slices
+        # - if kron is not None, consider product_sapce._sector_perm // slices
         raise NotImplementedError  # TODO
 
     def mask_infer_small_leg(self, mask_data: Data, large_leg: VectorSpace) -> VectorSpace:
@@ -1363,7 +1363,7 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
         for block, block_ind in zip(mask_data.blocks, mask_data.block_inds):
             mult = self.block_sum_all(block)
             if mult > 0:
-                _sectors.append(large_leg._sectors[block_ind[0]])
+                _sectors.append(large_leg._non_dual_sorted_sectors[block_ind[0]])
                 mults.append(mult)
         return VectorSpace(symmetry=large_leg.symmetry, sectors=_sectors, multiplicities=mults,
                            is_real=large_leg.is_real, _is_dual=large_leg.is_dual)
@@ -1396,4 +1396,4 @@ def product_space_map_incoming_block_inds(space: ProductSpace, incoming_block_in
     # by using the appropriate strides
     inds_before_perm = np.sum(incoming_block_inds * space._strides[np.newaxis, :], axis=1)
     # now permute them to indices in block_ind_map
-    return space.inverse_sector_perm[inds_before_perm]
+    return space._inverse_sector_perm[inds_before_perm]

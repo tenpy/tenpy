@@ -145,8 +145,8 @@ def tensor_rng(backend, backend_data_rng, vector_space_rng, np_random):
             if compatible_leg.num_sectors > max_num_blocks:
                 keep = np_random.choice(compatible_leg.num_sectors, max_num_blocks, replace=False)
                 compatible_leg = spaces.VectorSpace(compatible_leg.symmetry,
-                                                    compatible_leg._sectors[keep, :],
-                                                    np.maximum(compatible_leg.multiplicities[keep],
+                                                    compatible_leg._non_dual_sorted_sectors[keep, :],
+                                                    np.maximum(compatible_leg._sorted_multiplicities[keep],
                                                                 max_block_size),
                                                     compatible_leg.is_real,
                                                     compatible_leg.is_dual)

@@ -161,7 +161,7 @@ class AbstractBackend(ABC):
     def to_dense_block(self, a: Tensor) -> Block:
         """Forget about symmetry structure and convert to a single block.
         This includes a permutation of the basis, specified by the legs of `a`.
-        (see VectorSpace.sector_perm or VectorSpace.index_perm).
+        (see e.g. VectorSpace._sector_perm).
         """
         ...
 
@@ -171,7 +171,7 @@ class AbstractBackend(ABC):
         to a single 1D block.
         This is the diagonal of the respective non-symmetric 2D tensor.
         This includes a permutation of the basis, specified by the legs of `a`.
-        (see VectorSpace.sector_perm or VectorSpace.index_perm).
+        (see e.g. VectorSpace._sector_perm).
 
         Equivalent to self.block_get_diagonal(a.to_full_tensor().to_dense_block())
         """
@@ -184,7 +184,7 @@ class AbstractBackend(ABC):
         If the block is not symmetric, measured by ``allclose(a, projected, atol, rtol)``,
         where ``projected`` is `a` projected to the space of symmetric tensors
         This includes a permutation of the basis, specified by the legs of `a`.
-        (see VectorSpace.sector_perm or VectorSpace.index_perm).
+        (see e.g. VectorSpace._sector_perm).
         """
         ...
 
@@ -192,7 +192,7 @@ class AbstractBackend(ABC):
     def diagonal_from_block(self, a: Block, leg: VectorSpace) -> DiagonalData:
         """DiagonalData from a 1D block.
         This includes a permutation of the basis, specified by the legs of `a`.
-        (see VectorSpace.sector_perm or VectorSpace.index_perm).
+        (see e.g. VectorSpace._sector_perm).
         """
         ...
 
@@ -384,7 +384,7 @@ class AbstractBackend(ABC):
         ----------
         idx
             The index for both legs. Checks have already been performed, i.e. we may assume that
-            - 0 <= idx < leg.dim
+            ``0 <= idx < leg.dim``
         """
         ...
 
@@ -424,7 +424,7 @@ class AbstractBackend(ABC):
     @abstractmethod
     def diagonal_data_from_full_tensor(self, a: Tensor, check_offdiagonal: bool) -> DiagonalData:
         """Get the DiagonalData corresponding to a tensor with two legs.
-        Can assume that the two legs are either equal or dual, such that their ._sectors match"""
+        Can assume that the two legs are either equal or dual, such that their ._non_dual_sorted_sectors match"""
         ...
 
     @abstractmethod
