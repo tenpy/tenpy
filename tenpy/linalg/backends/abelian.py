@@ -303,7 +303,9 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
 
     def test_data_sanity(self, a: Tensor | DiagonalTensor | Mask, is_diagonal: bool):
         super().test_data_sanity(a, is_diagonal=is_diagonal)
-        assert a.data.block_inds.shape == (len(a.data.blocks), 1 if is_diagonal else a.num_legs)
+        assert a.data.block_inds.shape == (len(a.data.blocks), a.num_legs)
+        if is_diagonal:
+            assert np.all(a.data.block_inds[:, 0] == a.data.block_inds[:, 1])
         # check expected tensor dimensions
         block_shapes = np.array([leg._sorted_multiplicities[i] for leg, i in zip(a.legs, a.data.block_inds.T)]).T
         for block, shape in zip(a.data.blocks, block_shapes):
@@ -444,7 +446,7 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
 
     def diagonal_from_block(self, a: Block, leg: VectorSpace) -> DiagonalData:
         dtype = self.block_dtype(a)
-        block_inds = np.arange(leg.num_sectors)[:, None]
+        block_inds = np.repeat(np.arange(leg.num_sectors)[:, None], 2, axis=1)
         blocks = [a[slice(*leg._sorted_slices[i])] for i in block_inds[:, 0]]
         return AbelianBackendData(dtype, blocks, block_inds)
 
@@ -461,7 +463,7 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
         return AbelianBackendData(dtype, blocks, block_inds)
 
     def diagonal_from_block_func(self, func, leg: VectorSpace, func_kwargs={}) -> DiagonalData:
-        block_inds = np.arange(leg.num_sectors)[:, None]
+        block_inds = np.repeat(np.arange(leg.num_sectors)[:, None], 2, axis=1)
         blocks = [func((leg._sorted_multiplicities[i],), **func_kwargs) for i in block_inds[:, 0]]
         if len(blocks) == 0:
             dtype = self.block_dtype(func((1,), **func_kwargs))
@@ -473,7 +475,7 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
         return AbelianBackendData(dtype, blocks=[], block_inds=np.zeros((0, len(legs)), dtype=int))
 
     def zero_diagonal_data(self, leg: VectorSpace, dtype: Dtype) -> DiagonalData:
-        return AbelianBackendData(dtype, blocks=[], block_inds=np.zeros((0, 1), dtype=int))
+        return AbelianBackendData(dtype, blocks=[], block_inds=np.zeros((0, 2), dtype=int))
 
     def eye_data(self, legs: list[VectorSpace], dtype: Dtype) -> Data:
         block_inds = np.indices((leg.num_sectors for leg in legs)).T.reshape(-1, len(legs))
@@ -763,7 +765,7 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
             block_inds_C = block_inds_C[new_leg._sector_perm]  # no longer sorted
 
         u_block_inds = np.column_stack([block_inds_L, block_inds_C])
-        s_block_inds = block_inds_C[:, None]
+        s_block_inds = np.repeat(block_inds_C[:, None], 2, axis=1)
         vh_block_inds = np.column_stack([block_inds_C, block_inds_R])  # sorted
         if new_vh_leg_dual == leg_R.is_dual:
             # need to sort u_block_inds and s_block_inds
@@ -1229,18 +1231,17 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
         return AbelianBackendData(dtype=a.data.dtype, blocks=blocks, block_inds=a.data.blocks_inds)
 
     def diagonal_data_from_full_tensor(self, a: Tensor, check_offdiagonal: bool) -> DiagonalData:
-        assert np.all(a.data.block_inds[:, 0] == a.data.block_inds[:, 1])  # TODO remove this when tests run
         return AbelianBackendData(
             dtype=a.dtype,
             blocks=[self.block_get_diagonal(block, check_offdiagonal) for block in a.data.blocks],
-            block_inds=a.data.block_inds[:, :1]
+            block_inds=a.data.block_inds
         )
 
     def full_data_from_diagonal_tensor(self, a: DiagonalTensor) -> Data:
         return AbelianBackendData(
             dtype=a.dtype,
             blocks=[self.block_from_diagonal(block) for block in a.data.blocks],
-            block_inds=np.repeat(a.data.block_inds, 2, axis=1),
+            block_inds=a.data.block_inds,
         )
 
     def full_data_from_mask(self, a: Mask, dtype: Dtype) -> Data:
@@ -1283,7 +1284,7 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
         #       but this also means that we may encounter duplicates in a_block_inds_cont,
         #       i.e. multiple blocks of `a` which have the same sector on the leg to be scaled.
         #       -> use _iter_common_nonstrict_sorted_arrays instead of _iter_common_sorted_arrays
-        for i, j in _iter_common_nonstrict_sorted_arrays(a_block_inds_cont, b_block_inds):
+        for i, j in _iter_common_nonstrict_sorted_arrays(a_block_inds_cont, b_block_inds[:, :1]):
             res_blocks.append(self.block_scale_axis(a_blocks[i], b_blocks[j], axis=leg))
             res_block_inds.append(a_block_inds[i])
         if len(res_block_inds) > 0:
@@ -1300,7 +1301,7 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
             block_inds = a.data.block_inds
         else:
             a_block_inds = a.data.block_inds
-            block_inds = np.arange(a.legs[0].num_sectors)[:, None]
+            block_inds = np.repeat(np.arange(a.legs[0].num_sectors)[:, None], 2, axis=1)
             blocks = []
             for _, j in _iter_common_noncommon_sorted_arrays(block_inds, a_block_inds):
                 if j is None:
@@ -1345,6 +1346,7 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
                     b_block = b_blocks[j]
                     block_inds.append(a_block_inds[i])
                 blocks.append(func(a_block, b_block, **func_kwargs))
+        block_inds = np.array(block_inds)
 
         if len(blocks) == 0:
             block = func(self.ones_block([1], dtype=a.dtype), self.ones_block([1], dtype=b.dtype))
