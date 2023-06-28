@@ -67,8 +67,8 @@ class VectorSpace:
         The permutation of sectors induced by the above sorting
     _sorted_multiplicities : 1D numpy array of int
         The multiplicities ordered like `_non_dual_sorted_sectors`, i.e. `_multiplicities == multiplicities[sector_perm]`.
-    _slices : 2D numpy array of int
-        The slices ordered like `_sectors`, i.e. `_slices == slices[sector_perm]`.
+    _sorted_slices : 2D numpy array of int
+        The slices ordered like `_sectors`, i.e. `_sorted_slices == slices[sector_perm]`.
         
     Parameters
     ----------
