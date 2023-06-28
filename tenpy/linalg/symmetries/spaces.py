@@ -617,7 +617,7 @@ class ProductSpace(VectorSpace):
               f'shape: [{", ".join(str(s.dim) for s in self.spaces)}]->{self.dim}, ' \
               f'is_dual: [{", ".join(str(s.is_dual) for s in self.spaces)}]->{self.is_dual}, ' \
               f'# sectors: [{", ".join(str(s.num_sectors) for s in self.spaces)}]->{self.num_sectors})'
-        return res
+        return res + '\n' + VectorSpace.__str__(self)
 
     def __eq__(self, other):
         if not isinstance(other, ProductSpace):
