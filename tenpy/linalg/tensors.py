@@ -2063,7 +2063,11 @@ class DiagonalTensor(AbstractTensor):
 
     def _apply_mask_both_legs(self, mask: Mask) -> DiagonalTensor:
         """Apply the same mask to both legs."""
-        raise NotImplementedError  # TODO
+        return DiagonalTensor(
+            data=self.backend.apply_mask_to_DiagonalTensor(self, mask),
+            first_leg=self.first_leg.project(mask.to_numpy_ndarray()),
+            second_leg_dual=self.second_leg_dual, backend=self.backend, labels=self.labels,
+        )
 
     def _binary_operand(self, other: Number | DiagonalTensor, func, operand: str,
                         is_bool_valued: bool, return_NotImplemented: bool = True

@@ -1409,6 +1409,28 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
             res_block_inds = np.zeros((0, tensor.num_legs), int)
         return AbelianBackendData(tensor.dtype, res_blocks, res_block_inds)
 
+    def apply_mask_to_DiagonalTensor(self, tensor: DiagonalTensor, mask: Mask) -> DiagonalData:
+        tensor_blocks = tensor.data.blocks
+        mask_blocks = mask.data.blocks
+        tensor_block_inds_cont = tensor.data.block_inds[:, :1]  # since tensor is Diagonal, this is sorted
+        mask_block_inds = mask.data.block_inds
+        mask_block_inds_cont = mask_block_inds[:, :1]
+        sort = np.lexsort(mask_block_inds_cont.T)
+        mask_blocks = [mask_blocks[i] for i in sort]
+        mask_block_inds = mask_block_inds[sort]
+        mask_block_inds_cont = mask_block_inds_cont[sort]
+        
+        res_blocks = []
+        res_block_inds = []  # gather only the entries of the first column in this list, repeat later
+        for i, j in _iter_common_sorted_arrays(tensor_block_inds_cont, mask_block_inds_cont):
+            res_blocks.append(self.apply_mask_to_block(tensor_blocks[i]), mask_blocks[j], ax=0)
+            res_block_inds.append(mask_block_inds[j, 1])
+        if len(res_block_inds) > 0:
+            res_block_inds = np.repeat(np.array(res_block_inds)[:, None], 2, axis=0)
+        else:
+            res_block_inds = np.zeros((0, 2), int)
+        return AbelianBackendData(tensor.dtype, res_blocks, res_block_inds)
+
 
 def product_space_map_incoming_block_inds(space: ProductSpace, incoming_block_inds):
     """Map incoming block indices to indices of :attr:`block_ind_map`.

@@ -483,6 +483,10 @@ class AbstractBackend(ABC):
     def apply_mask_to_Tensor(self, tensor: Tensor, mask: Mask, leg_idx: int) -> Data:
         ...
 
+    @abstractmethod
+    def apply_mask_to_DiagonalTensor(self, tensor: DiagonalTensor, mask: Mask) -> DiagonalData:
+        ...
+
 
 class AbstractBlockBackend(ABC):
     svd_algorithms: list[str]  # first is default

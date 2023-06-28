@@ -219,3 +219,6 @@ class AbstractNoSymmetryBackend(AbstractBackend, AbstractBlockBackend, ABC):
 
     def apply_mask_to_Tensor(self, tensor: Tensor, mask: Mask, leg_idx: int) -> Data:
         return self.apply_mask_to_block(tensor.data, mask.data, ax=leg_idx)
+
+    def apply_mask_to_DiagonalTensor(self, tensor: DiagonalTensor, mask: Mask) -> DiagonalData:
+        return self.apply_mask_to_block(tensor.data, mask.data, ax=0)
