@@ -94,27 +94,14 @@ def _get_version_summary():
     import scipy
     import warnings
 
-    try:
-        from . import _version
-        if _version.version != version:
-            raise ValueError("Version changed since installation/compilation")
-        if have_cython_functions:
-            cython_info = "compiled"
-            if compiled_with_MKL:
-                cython_info = cython_info + " with HAVE_MKL"
-            else:
-                cython_info = cython_info + " without HAVE_MKL"
-            if _version.git_revision != "unknown":
-                if git_revision != "unknown" and _version.git_revision != git_revision:
-                    warnings.warn("TeNPy is compiled from different git "
-                                  "version than the current HEAD. Recompile!")
-                    cython_info = cython_info + " from git rev. " + _version.git_revision
+    if have_cython_functions:
+        cython_info = "compiled"
+        if compiled_with_MKL:
+            cython_info = cython_info + " with HAVE_MKL"
         else:
-            cython_info = "not compiled"
-    except ImportError:
+            cython_info = cython_info + " without HAVE_MKL"
+    else:
         cython_info = "not compiled"
-        if have_cython_functions:
-            warnings.warn("Compiled, but tenpy/_version.py not available!")
 
     summary = ("tenpy {tenpy_ver!s} ({cython_info!s}),\n"
                "git revision {git_rev!s} using\n"

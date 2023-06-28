@@ -2,76 +2,11 @@
 from setuptools import setup, Extension
 try:
     from Cython.Build import cythonize
-    from Cython import __version__ as cython_version
 except:
     cythonize = None
-    cython_version = '(not available)'
+
 import os
 import numpy
-import subprocess
-
-# hardcode version for people without git
-MAJOR, MINOR, MICRO = 0, 10, 0
-RELEASED = False
-VERSION = '{0:d}.{1:d}.{2:d}'.format(MAJOR, MINOR, MICRO)
-
-
-def get_git_revision():
-    """Get revision hash from git."""
-    if not os.path.exists('.git'):
-        rev = "unknown"
-    else:
-        try:
-            rev = subprocess.check_output(['git', 'rev-parse', 'HEAD'],
-                                          stderr=subprocess.STDOUT).decode().strip()
-        except:
-            rev = "unknown"
-    return rev
-
-
-def get_git_description():
-    """Get number of commits since last git tag.
-    If unknown, return 0
-    """
-    if not os.path.exists('.git'):
-        return 0
-    try:
-        descr = subprocess.check_output(['git', 'describe', '--tags', '--long'],
-                                        stderr=subprocess.STDOUT).decode().strip()
-    except:
-        return 0
-    return int(descr.split('-')[1])
-
-
-def get_version_info():
-    full_version = VERSION
-    git_rev = get_git_revision()
-    if not RELEASED:
-        full_version += '.dev{0:d}+{1!s}'.format(get_git_description(), git_rev[:7])
-    return full_version, git_rev
-
-
-def write_underscore_version_py(filename='tenpy/_version.py'):
-    """Write the version at build time i.e. during compilation to file."""
-    full_version, git_rev = get_version_info()
-    content = """\
-# THIS FILE IS GENERATED FROM setup.py
-# thus, it contains the version during compilation
-# Copyright 2018-2023 TeNPy Developers, GNU GPLv3
-version = '{version!s}'
-short_version = 'v' + version
-released = {released!s}
-full_version = '{full_version!s}'
-git_revision = '{git_rev!s}'
-numpy_version = '{numpy_ver!s}'
-cython_version = '{cython_ver!s}'
-"""
-    content = content.format(version=VERSION,
-                             full_version=full_version,
-                             released=RELEASED,
-                             git_rev=git_rev,
-                             numpy_ver=numpy.version.full_version,
-                             cython_ver=cython_version)
 
 
 def setup_cython_extension():
