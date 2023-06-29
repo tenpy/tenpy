@@ -696,13 +696,14 @@ class Tensor(AbstractTensor):
         if backend is None:
             backend = get_default_backend(legs[0].symmetry)
         legs = to_iterable(legs)
+        half_leg_num = len(legs)
         legs = [backend.add_leg_metadata(leg) for leg in legs]
         data = backend.eye_data(legs=legs, dtype=dtype)
         legs = legs + [leg.dual for leg in legs]
         if labels is not None:
-            if len(labels) == len(legs):
+            if len(labels) == half_leg_num:
                 labels = labels + [_dual_leg_label(l) for l in labels]
-            elif len(labels) != 2 * len(legs):
+            elif len(labels) != 2 * half_leg_num:
                 msg = f'Wrong number of labels. Expected {len(legs)} or {2 * len(legs)}. Got {len(labels)}.'
                 raise ValueError(msg)
         return cls(data=data, backend=backend, legs=legs, labels=labels)
@@ -1924,6 +1925,9 @@ class DiagonalTensor(AbstractTensor):
             dtype: Dtype = Dtype.float64) -> DiagonalTensor:
         if backend is None:
             backend = get_default_backend(first_leg.symmetry)
+        if len(labels) == 1:
+            labels = [labels[0], _dual_leg_label(labels[0])]
+        assert len(labels) == 2
         return cls.from_block_func(
             func=backend.ones_block,
             first_leg=first_leg, second_leg_dual=True, backend=backend, labels=labels,
@@ -2091,7 +2095,9 @@ class DiagonalTensor(AbstractTensor):
         """
         if isinstance(other, Number):
             backend = self.backend
-            data = backend.diagonal_elementwise_unary(self, func=lambda block: func(block, other))
+            data = backend.diagonal_elementwise_unary(
+                self, func=lambda block: func(block, other), func_kwargs={}, maps_zero_to_zero=False
+            )
             labels = self.labels
         elif isinstance(other, DiagonalTensor):
             backend = get_same_backend(self, other)
@@ -2141,16 +2147,16 @@ class DiagonalTensor(AbstractTensor):
         return self._elementwise_unary(func=operator.abs, maps_zero_to_zero=True)
 
     def __ge__(self, other):
-        return self._binary_operand(self, other, func=operator.ge, operand='>=', is_bool_valued=True)
+        return self._binary_operand(other, func=operator.ge, operand='>=', is_bool_valued=True)
 
     def __gt__(self, other):
-        return self._binary_operand(self, other, func=operator.gt, operand='>', is_bool_valued=True)
+        return self._binary_operand(other, func=operator.gt, operand='>', is_bool_valued=True)
 
     def __le__(self, other):
-        return self._binary_operand(self, other, func=operator.le, operand='<=', is_bool_valued=True)
+        return self._binary_operand(other, func=operator.le, operand='<=', is_bool_valued=True)
 
     def __lt__(self, other):
-        return self._binary_operand(self, other, func=operator.lt, operand='<', is_bool_valued=True)
+        return self._binary_operand(other, func=operator.lt, operand='<', is_bool_valued=True)
 
     def __pow__(self, other):
         return self._binary_operand(other, func=operator.pow, operand='**', is_bool_valued=False)
@@ -2425,7 +2431,7 @@ class Mask(AbstractTensor):
         if backend is None:
             backend = get_default_backend(large_leg.symmetry)
         if small_leg is None:
-            small_leg = backend.mask_infer_small_leg(data=data, large_leg=large_leg)
+            small_leg = backend.mask_infer_small_leg(mask_data=data, large_leg=large_leg)
         AbstractTensor.__init__(self, legs=[large_leg, small_leg], backend=backend, labels=labels, dtype=Dtype.bool)
 
     def test_sanity(self) -> None:
@@ -2705,6 +2711,8 @@ class Mask(AbstractTensor):
             return res
         raise ValueError  # should have been caught by input checks
 
+    def _add_tensor(self, other: AbstractTensor) -> AbstractTensor:
+        raise TypeError(f"unsupported operand type(s) for +: '{type(self)}' and '{type(other)}'")
 
 # ##################################
 # API functions
@@ -2935,6 +2943,7 @@ def zero_like(tens: AbstractTensor) -> AbstractTensor:
 
 
 def eye_like(tens: AbstractTensor) -> Tensor | DiagonalTensor:
+    # TODO allow specification of leg bipartition ?
     if not isinstance(tens, (Tensor, DiagonalTensor)):
         raise TypeError(f'eye is not defined for type {type(tens)}')
     if tens.num_legs % 2 != 0:

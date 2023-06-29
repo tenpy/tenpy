@@ -431,7 +431,7 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
 
     def diagonal_to_block(self, a: DiagonalTensor) -> Block:
         res = self.zero_block([a.legs[0].dim], a.dtype)
-        for block, block_idx in zip(a.data.block, a.data.block_inds):
+        for block, block_idx in zip(a.data.blocks, a.data.block_inds[:, 0]):
             res[slice(*a.legs[0]._sorted_slices[block_idx])] = block
         return res
 
@@ -1296,6 +1296,7 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
     
     def diagonal_elementwise_unary(self, a: DiagonalTensor, func, func_kwargs, maps_zero_to_zero: bool
                                    ) -> DiagonalData:
+        a_blocks = a.data.blocks
         if maps_zero_to_zero:
             blocks = [func(block, **func_kwargs) for block in a.data.blocks]
             block_inds = a.data.block_inds
@@ -1307,7 +1308,7 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
                 if j is None:
                     block = self.zero_block([a.legs[0]._sorted_multiplicities[a_block_inds[j, 0]]], dtype=a.dtype)
                 else:
-                    block = a.blocks[j]
+                    block = a_blocks[j]
                 blocks.append(func(block, **func_kwargs))
         if len(blocks) == 0:
             dtype = self.block_dtype(func(self.zero_block([1], dtype=a.dtype)))

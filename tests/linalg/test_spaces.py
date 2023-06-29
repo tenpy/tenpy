@@ -141,7 +141,7 @@ def test_product_space(symmetry, symmetry_sectors_rng, np_random):
         assert p.can_contract_with(p.dual)
     assert p2 == spaces.ProductSpace([s1, s2], _is_dual=True).flip_is_dual()
     assert p2.can_contract_with(spaces.ProductSpace([s1.dual, s2.dual], _is_dual=False).flip_is_dual())
-    assert p2.can_contract_with(spaces.ProductSpace([s1.dual, s2.dual]))  # check defualt _is_dual
+    assert p2.can_contract_with(spaces.ProductSpace([s1.dual, s2.dual]))  # check default _is_dual
     assert p2.can_contract_with(spaces.ProductSpace([s1.dual, s2.dual], _is_dual=True))
     p1_s = p1.as_VectorSpace()
     assert isinstance(p1_s, spaces.VectorSpace)

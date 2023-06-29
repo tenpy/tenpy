@@ -170,17 +170,17 @@ def truncate_singular_values(S: DiagonalTensor, options) -> Mask:
     trunc_cut = options.get('trunc_cut', 1.e-14)
 
     # OPTIMIZE should we do all of this logic with block-backend instead of numpy?
-    S_block = S.to_numpy_ndarray()
+    S_np = S.diag_numpy
 
     if trunc_cut is not None and trunc_cut >= 1.:
         raise ValueError("trunc_cut >=1.")
-    if S_block.backend.block_sum_all(S_block > 1.e-10) == 0:
-        warnings.warn("no Schmidt value above 1.e-10", stacklevel=2)
-    if S_block.backend.block_sum_all(S_block < 1.e-10) > 0:
-        warnings.warn("negative Schmidt values!", stacklevel=2)
+    if not np.any(S_np > 1.e-10):
+        warnings.warn("no singular value above 1.e-10", stacklevel=2)
+    if np.any(S_np < -1.e-10):
+        warnings.warn("negative singular values!", stacklevel=2)
 
     # use 1.e-100 as replacement for <=0 values for a well-defined logarithm.
-    logS = np.log(np.choose(S_block <= 0., [S_block, 1.e-100 * np.ones(len(S_block))]))
+    logS = np.log(np.choose(S_np <= 0., [S_np, 1.e-100 * np.ones(len(S_np))]))
     piv = np.argsort(logS)  # sort *ascending*.
     logS = logS[piv]
     # goal: find an index 'cut' such that we keep piv[cut:], i.e. cut between `cut-1` and `cut`.
@@ -214,14 +214,14 @@ def truncate_singular_values(S: DiagonalTensor, options) -> Mask:
         good = _combine_constraints(good, good2, "svd_min")
 
     if trunc_cut is not None:
-        good2 = (np.cumsum(S_block[piv]**2) > trunc_cut * trunc_cut)
+        good2 = (np.cumsum(S_np[piv]**2) > trunc_cut * trunc_cut)
         good = _combine_constraints(good, good2, "trunc_cut")
 
     cut = np.nonzero(good)[0][0]  # smallest possible cut: keep as many S as allowed
-    mask = np.zeros(len(S_block), dtype=np.bool_)
+    mask = np.zeros(len(S_np), dtype=np.bool_)
     np.put(mask, piv[cut:], True)
-    new_norm = np.linalg.norm(S_block[mask])
-    err = TruncationError.from_S(S[np.logical_not(mask)])
+    new_norm = np.linalg.norm(S_np[mask])
+    err = TruncationError.from_S(S_np[np.logical_not(mask)])
     
     return Mask.from_flat_numpy(mask, large_leg=S.legs[0]), new_norm, err
 
@@ -283,6 +283,7 @@ def _combine_constraints(good1, good2, warn):
 
     Otherwise print a warning and return just `good1`.
     """
+    assert good1.shape == good2.shape, f'{good1.shape} != {good2.shape}'
     res = np.logical_and(good1, good2)
     if np.any(res):
         return res
