@@ -450,6 +450,40 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
         blocks = [a[slice(*leg._sorted_slices[i])] for i in block_inds[:, 0]]
         return AbelianBackendData(dtype, blocks, block_inds)
 
+    def mask_from_block(self, a: Block, large_leg: VectorSpace) -> tuple[DiagonalData, VectorSpace]:
+        # TODO thoroughly test this!
+        a = self.block_to_dtype(a, Dtype.bool)
+        block_inds_large = []
+        block_inds_small = []
+        blocks = []
+        small_leg_sectors = []
+        sector_order = []
+        small_leg_mults = []
+        block_counter = 0
+        for i in range(large_leg.num_sectors):
+            block = a[slice(*large_leg._sorted_slices[i])]
+            multiplicity = self.block_sum_all(block)
+            if multiplicity == 0:
+                continue
+            blocks.append(block)
+            block_inds_large.append(i)
+            block_inds_small.append(block_counter)
+            small_leg_sectors.append(large_leg._non_dual_sorted_sectors[i])
+            sector_order.append(large_leg._sector_perm[i])  # this is the position of the current sector in large_leg.sectors
+            small_leg_mults.append(multiplicity)
+            block_counter += 1
+        if len(blocks) == 0:
+            block_inds = np.zeros((0, 2), int)
+        else:
+            block_inds = np.array([block_inds_large, block_inds_small]).T
+        data = AbelianBackendData(dtype=Dtype.bool, blocks=blocks, block_inds=block_inds)
+        small_leg_sector_perm = inverse_permutation(np.argsort(sector_order))
+        small_leg = VectorSpace(
+            symmetry=large_leg.symmetry, sectors=small_leg_sectors, multiplicities=small_leg_mults,
+            is_real=large_leg.is_real, _is_dual=large_leg.is_dual, _sector_perm=small_leg_sector_perm
+        )
+        return data, small_leg
+
     def from_block_func(self, func, legs: list[VectorSpace], func_kwargs={}) -> AbelianBackendData:
         block_inds = _valid_block_indices(legs)
         blocks = []
@@ -1363,17 +1397,6 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
         # - use block_kron (or trivial kron=state{1|2}, if the other is None)
         # - if kron is not None, consider product_sapce._sector_perm // slices
         raise NotImplementedError  # TODO
-
-    def mask_infer_small_leg(self, mask_data: Data, large_leg: VectorSpace) -> VectorSpace:
-        _sectors = []
-        mults = []
-        for block, block_ind in zip(mask_data.blocks, mask_data.block_inds):
-            mult = self.block_sum_all(block)
-            if mult > 0:
-                _sectors.append(large_leg._non_dual_sorted_sectors[block_ind[0]])
-                mults.append(mult)
-        return VectorSpace(symmetry=large_leg.symmetry, sectors=_sectors, multiplicities=mults,
-                           is_real=large_leg.is_real, _is_dual=large_leg.is_dual)
 
     def apply_mask_to_Tensor(self, tensor: Tensor, mask: Mask, leg_idx: int) -> Data:
         # implementation similar to scale_axis, see notes there

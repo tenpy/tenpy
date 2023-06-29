@@ -197,6 +197,21 @@ class AbstractBackend(ABC):
         ...
 
     @abstractmethod
+    def mask_from_block(self, a: Block, large_leg: VectorSpace) -> tuple[DiagonalData, VectorSpace]:
+        """DiagonalData for a Mask from a 1D block.
+        This includes a permutation of the basis, specified by the legs of `a`.
+        (see e.g. VectorSpace._sector_perm).
+
+        Returns
+        -------
+        data
+            The data for the Mask
+        small_legs : VectorSpace
+            The small leg, i.e. large_leg after projection
+        """
+        ...
+
+    @abstractmethod
     def from_block_func(self, func, legs: list[VectorSpace], func_kwargs={}) -> Data:
         """Generate tensor data from a function ``func(shape: tuple[int]) -> Block``."""
         ...
@@ -472,11 +487,6 @@ class AbstractBackend(ABC):
         States can be specified as 1D blocks.
         If the space is one-dimensional, ``None`` is allowed and represents ``[1.]``.
         """
-        ...
-
-    @abstractmethod
-    def mask_infer_small_leg(self, mask_data: Data, large_leg: VectorSpace) -> VectorSpace:
-        """Infer the smaller leg that a mask with the given data projects to."""
         ...
 
     @abstractmethod

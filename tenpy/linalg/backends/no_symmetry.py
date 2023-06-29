@@ -78,6 +78,13 @@ class AbstractNoSymmetryBackend(AbstractBackend, AbstractBlockBackend, ABC):
     def diagonal_from_block(self, a: Block, leg: VectorSpace) -> DiagonalData:
         return a
 
+    def mask_from_block(self, a: Block, large_leg: VectorSpace) -> tuple[DiagonalData, VectorSpace]:
+        data = self.block_to_dtype(a, Dtype.bool)
+        small_leg = VectorSpace.non_symmetric(
+            dim=self.block_sum_all(data), is_real=large_leg.is_real, _is_dual=large_leg.is_dual
+        )
+        return data, small_leg
+
     def from_block_func(self, func, legs: list[VectorSpace], func_kwargs={}):
         return func(tuple(l.dim for l in legs), **func_kwargs)
 
@@ -211,11 +218,6 @@ class AbstractNoSymmetryBackend(AbstractBackend, AbstractBlockBackend, ABC):
         if state2 is None:
             return state1
         return self.block_kron(state1, state2)
-
-    def mask_infer_small_leg(self, mask_data: Data, large_leg: VectorSpace) -> VectorSpace:
-        return VectorSpace.non_symmetric(dim=self.block_sum_all(mask_data),
-                                         is_real=large_leg.is_real,
-                                         _is_dual=large_leg.is_dual)
 
     def apply_mask_to_Tensor(self, tensor: Tensor, mask: Mask, leg_idx: int) -> Data:
         return self.apply_mask_to_block(tensor.data, mask.data, ax=leg_idx)

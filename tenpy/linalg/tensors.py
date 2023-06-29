@@ -2416,8 +2416,7 @@ class Mask(AbstractTensor):
         The numerical data (i.e. boolean flags) comprising the mask. type is backend-specific
     large_leg : VectorSpace
         The larger leg, the source/domain of the projection.
-    small_leg : VectorSpace | None
-        To avoid recomputation, the resulting small leg can optionally be given.
+    small_leg : VectorSpace
         The small leg is entirely determined by the large leg and the data.
         It must have the same :attr:`is_dual`.
     backend: :class:`~tenpy.linalg.backends.abstract_backend.AbstractBackend`, optional
@@ -2425,13 +2424,11 @@ class Mask(AbstractTensor):
     labels : list[str | None] | None
         Labels for the legs. If None, translates to ``[None, None, ...]`` of appropriate length
     """
-    def __init__(self, data, large_leg: VectorSpace, small_leg: VectorSpace = None, backend=None,
+    def __init__(self, data, large_leg: VectorSpace, small_leg: VectorSpace, backend=None,
                  labels: list[str | None] = None):
         self.data = data
         if backend is None:
             backend = get_default_backend(large_leg.symmetry)
-        if small_leg is None:
-            small_leg = backend.mask_infer_small_leg(mask_data=data, large_leg=large_leg)
         AbstractTensor.__init__(self, legs=[large_leg, small_leg], backend=backend, labels=labels, dtype=Dtype.bool)
 
     def test_sanity(self) -> None:
@@ -2454,22 +2451,41 @@ class Mask(AbstractTensor):
         return self.spaces[1]
 
     @classmethod
-    def from_flat_block(cls, mask: np.ndarray, large_leg: VectorSpace) -> Mask:
-        # TODO better name
-        ...  # TODO
+    def from_flat_block(cls, mask: Block, large_leg: VectorSpace, backend: AbstractBackend = None,
+                        labels: list[str | None] = None) -> Mask:
+        """Create a Mask from a 1D boolean block.
+
+        Parameters
+        ----------
+        mask : 1D boolean block
+            Backend-specific block, where ``mask[i]`` indicates whether the ``i``-th element
+            of the computational basis of `large_leg` should be kept or discarded
+        large_leg : VectorSpace
+            The leg that can be projected by the resulting Mask
+        backend : :class:`~tenpy.linalg.backends.abstract_backend.AbstractBackend`, optional
+            The backend for the Mask
+        labels : list of {str | None}, optional
+            Labels associated with the `large_leg` and its projection. ``None`` for unnamed legs.
+        """
+        if backend is None:
+            backend = get_default_backend(symmetry=large_leg.symmetry)
+        data, small_leg = backend.mask_from_block(mask, leg=large_leg)
+        return cls(data=data, large_leg=large_leg, small_leg=small_leg, backend=backend, labels=labels)
         
     @classmethod
-    def from_flat_numpy(cls, mask: np.ndaray, large_leg: VectorSpace) -> Mask:
-        # TODO better name
-        ...  # TODO
+    def from_flat_numpy(cls, mask: np.ndaray, large_leg: VectorSpace, backend: AbstractBackend = None,
+                        labels: list[str | None] = None) -> Mask:
+        if backend is None:
+            backend = get_default_backend(symmetry=large_leg.symmetry)
+        block = backend.block_from_numpy(np.asarray(mask))
+        return cls.from_flat_block(mask=block, large_leg=large_leg, backend=backend, labels=labels)
 
     @classmethod
-    def from_indices(cls, indices: list[int] | np.ndarray, large_leg: VectorSpace) -> Mask:
-        ...  # TODO
-
-    @classmethod
-    def from_slice(cls, s: slice, large_leg: VectorSpace) -> Mask:
-        ...  # TODO
+    def from_indices(cls, indices: list[int] | np.ndarray | slice, large_leg: VectorSpace,
+                     backend: AbstractBackend = None, labels: list[str | None] = None) -> Mask:
+        mask = np.zeros(large_leg.dim, dtype=bool)
+        mask[indices] = True
+        return cls.from_flat_numpy(mask)
 
     def same_mask_action(self, other: Mask) -> bool:
         """A mask can act on both the large_leg or its dual.
@@ -2559,14 +2575,24 @@ class Mask(AbstractTensor):
 
     def __setitem__(self, idcs, value):
         _idcs = to_iterable(idcs)
-        if len(_idcs) == 1 and isinstance(_idcs[0], int):
-            assert isinstance(value, bool)
-            # the data of a mask is like the data of a DiagonalTensor
-            self.data = self.backend.set_element_diagonal(self, _idcs[0], value)
-        else:
-            AbstractTensor.__setitem__(self, idcs, value)
-        # changing the values changes the small leg!
-        self.legs[1] = self.backend.mask_infer_small_leg(data=self.data, large_leg=self.legs[0])
+        
+        # if len(_idcs) == 1 and isinstance(_idcs[0], int):
+        #     assert isinstance(value, bool)
+        #     # the data of a mask is like the data of a DiagonalTensor
+        #     self.data = self.backend.set_element_diagonal(self, _idcs[0], value)
+        # else:
+        #     AbstractTensor.__setitem__(self, idcs, value)
+
+        # TODO (JU) this is not as easy as a i thought.
+        #      Changing the entries should change the small leg, and in particular might add one
+        #      or remove one small_leg.sectors.
+        #      Not only do we have to adjust self.legs[1], but this might also make self.data.block_inds
+        #      inconsistent.
+        #      Should probably have a dedicated backend function to set items of a Mask that
+        #      also returns the new small_leg.
+        
+        raise NotImplementedError
+        
 
     # --------------------------------------------
     # Implementing abstractmethods

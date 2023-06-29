@@ -270,9 +270,6 @@ class AbstractNonabelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
     def fuse_states(self, state1: Block | None, state2: Block | None, space1: VectorSpace,
                     space2: VectorSpace, product_space: ProductSpace = None) -> Block | None:
         raise NotImplementedError  # TODO
-    
-    def mask_infer_small_leg(self, mask_data: Data, large_leg: VectorSpace) -> VectorSpace:
-        raise NotImplementedError  # TODO
 
     def apply_mask_to_Tensor(self, tensor: Tensor, mask: Mask, leg_idx: int) -> Data:
         raise NotImplementedError  # TODO
