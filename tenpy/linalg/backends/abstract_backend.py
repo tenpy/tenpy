@@ -111,6 +111,7 @@ class AbstractBackend(ABC):
 
     def test_leg_sanity(self, leg: VectorSpace):
         assert isinstance(leg, VectorSpace)
+        leg.test_sanity()
 
     def __repr__(self):
         return f'{type(self).__name__}'

@@ -147,12 +147,26 @@ class VectorSpace:
         self._sorted_slices = _sorted_slices
 
     def test_sanity(self):
+        # sectors : private attribute is _non_dual_sorted_sectors
+        assert all(self.symmetry.is_valid_sector(s) for s in self._non_dual_sorted_sectors)
+        assert len(self._non_dual_sorted_sectors) == self.num_sectors
         assert len(np.unique(self._non_dual_sorted_sectors, axis=0)) == self.num_sectors
         assert self._non_dual_sorted_sectors.shape == (self.num_sectors, self.symmetry.sector_ind_len)
-        assert self._sector_perm.shape == (self.num_sectors,)
-        assert np.all(np.sum(self._sector_perm == np.arange(self.num_sectors)[None, :], axis=0) == 1)
+        # multiplicities : private attribute is _sorted_multiplicities
         assert np.all(self._sorted_multiplicities > 0)
         assert self._sorted_multiplicities.shape == (self.num_sectors,)
+        # slices : private attribute is _sorted_slices
+        assert self._sorted_slices.shape == (self.num_sectors, 2)
+        slice_diffs = self._sorted_slices[:, 1] - self._sorted_slices[:, 0]
+        expect_diffs = self.symmetry.batch_sector_dim(self._non_dual_sorted_sectors) * self._sorted_multiplicities
+        assert np.all(slice_diffs == expect_diffs)
+        # slices should be consecutive
+        assert self.slices[0, 0] == 0
+        assert np.all(self.slices[1:, 0] == self.slices[:-1, 1])
+        assert self.slices[-1, 1] == self.dim
+        # _sector_perm
+        assert self._sector_perm.shape == (self.num_sectors,)
+        assert np.all(np.sum(self._sector_perm[:, None] == np.arange(self.num_sectors)[None, :], axis=0) == 1)
 
     @property
     def dim(self):
