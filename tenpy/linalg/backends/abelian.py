@@ -322,6 +322,65 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
 
     def _fuse_spaces(self, symmetry: Symmetry, spaces: list[VectorSpace], _is_dual: bool
                      ) -> tuple[SectorArray, ndarray, ndarray, dict]:
+        r"""
+        The abelian backend adds the following metadata:
+            _strides : 1D numpy array of int
+                F-style strides for the shape ``tuple(space.num_sectors for space in spaces)``.
+                This allows one-to-one mapping between multi-indices (one block_ind per space) to a single index.
+            block_ind_map_slices : 1D numpy array of int
+                Slices for embedding the unique fused sectors in the sorted list of all fusion outcomes.
+                Shape is ``(K,)`` where ``K == product_space.num_sectors + 1``.
+                Fusing all (non-dual) sectors of all spaces and sorting the outcomes gives a list
+                which contains (in general) duplicates.
+                The slice ``block_ind_map_slices[n]:block_ind_map_slices[n + 1]`` within this sorted
+                list contains the same entry, namely ``product_space._non_dual_sorted_sectors[n]``.
+            block_ind_map : 2D numpy array of int
+                Map for the embedding of uncoupled to coupled indices, see notes below.
+                Shape is ``(M, N)`` where ``M`` is the number of combinations of sectors,
+                i.e. ``M == prod(s.num_sectors for s in spaces)`` and ``N == 3 + len(spaces)``.
+
+
+        Notes
+        -----
+        For ``np.reshape``, taking, for example,  :math:`i,j,... \rightarrow k` amounted to
+        :math:`k = s_1*i + s_2*j + ...` for appropriate strides :math:`s_1,s_2`.
+        
+        In the charged case, however, we want to block :math:`k` by charge, so we must
+        implicitly permute as well.  This reordering is encoded in `block_ind_map` as follows.
+        
+        Each block index combination :math:`(i_1, ..., i_{nlegs})` of the `nlegs=len(spaces)`
+        input `VectorSpace`s will end up getting placed in some slice :math:`a_j:a_{j+1}` of the
+        resulting `ProductSpace`. Within this slice, the data is simply reshaped in usual row-major
+        fashion ('C'-order), i.e., with strides :math:`s_1 > s_2 > ...` given by the block size.
+        
+        It will be a subslice of a new total block in the `ProductSpace` labelled by block index
+        :math:`J`. We fuse charges according to the rule::
+        
+            ProductSpace.sectors[J] = fusion_outcomes(*[l.sectors[i_l]
+                for l, i_l, l in zip(incoming_block_inds, spaces)])
+                
+        Since many charge combinations can fuse to the same total charge,
+        in general there will be many tuples :math:`(i_1, ..., i_{nlegs})` belonging to the same
+        charge block :math:`J` in the `ProductSpace`.
+        
+        The rows of `block_ind_map` are precisely the collections of
+        ``[b_{J,k}, b_{J,k+1}, i_1, . . . , i_{nlegs}, J]``.
+        Here, :math:`b_k:b_{k+1}` denotes the slice of this block index combination *within*
+        the total block `J`, i.e., ``b_{J,k} = a_j - self._sorted_slices[J]``.
+        
+        The rows of `block_ind_map` are lex-sorted first by ``J``, then the ``i``.
+        Each ``J`` will have multiple rows, and the order in which they are stored in `block_inds`
+        is the order the data is stored in the actual tensor.
+        Thus, ``block_ind_map`` might look like ::
+        
+            [ ...,
+            [ b_{J,k},   b_{J,k+1},  i_1,    ..., i_{nlegs}   , J,   ],
+            [ b_{J,k+1}, b_{J,k+2},  i'_1,   ..., i'_{nlegs}  , J,   ],
+            [ 0,         b_{J,1},    i''_1,  ..., i''_{nlegs} , J + 1],
+            [ b_{J,1},   b_{J,2},    i'''_1, ..., i'''_{nlegs}, J + 1],
+            ...]
+
+        """
         
         # this function heavily uses numpys advanced indexing, for details see
         # http://docs.scipy.org/doc/numpy/reference/arrays.indexing.html
