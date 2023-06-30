@@ -317,10 +317,15 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
         assert not np.any(a.data.block_inds >= np.array([[leg.num_sectors for leg in a.legs]]))
 
     def test_leg_sanity(self, leg: VectorSpace):
-        if isinstance(leg, ProductSpace):
-            assert all(hasattr(leg, attr) for attr in ['_strides', '_block_ind_map_slices', '_block_ind_map', '_fusion_outcomes_inverse_sort'])
-            # TODO should we do some consistency checks on shapes / values?
+        assert self._leg_has_metadata(leg)
+        # TODO should we do some consistency checks on the metadata shapes / values?
         super().test_leg_sanity(leg)
+
+    def _leg_has_metadata(self, leg: VectorSpace) -> bool:
+        if isinstance(leg, ProductSpace):
+            return all(hasattr(leg, attr) for attr in ['_strides', '_block_ind_map_slices', '_block_ind_map', '_fusion_outcomes_inverse_sort'])
+        else:
+            return True
 
     def _fuse_spaces(self, symmetry: Symmetry, spaces: list[VectorSpace], _is_dual: bool
                      ) -> tuple[SectorArray, ndarray, ndarray, dict]:
@@ -462,7 +467,7 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
 
     def add_leg_metadata(self, leg: VectorSpace) -> VectorSpace:
         if isinstance(leg, ProductSpace):
-            if not all(hasattr(leg, attr) for attr in ['_strides', '_block_ind_map_slices', '_block_ind_map']):
+            if not self._leg_has_metadata(leg):
                 # OPTIMIZE write version that just calculates the metadata, without sectors?
                 _, _, metadata = self._fuse_spaces(symmetry=leg.symmetry, spaces=leg.spaces, _is_dual=leg._is_dual)
                 for key, val in metadata.items():
