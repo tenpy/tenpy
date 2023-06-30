@@ -80,9 +80,9 @@ def svd(a: AbstractTensor, u_legs: list[int | str] = None, vh_legs: list[int | s
 
 
 def truncated_svd(a: AbstractTensor, u_legs: list[int | str] = None, vh_legs: list[int | str] = None,
-                  new_labels: tuple[str, ...] = None, new_vh_leg_dual=False,
+                  new_labels: tuple[str, ...] = None, new_vh_leg_dual=False, normalize_to: float = None,
                   options={}, truncation_options={}
-                  ) -> tuple[AbstractTensor, DiagonalTensor, AbstractTensor]:
+                  ) -> tuple[AbstractTensor, DiagonalTensor, AbstractTensor, TruncationError, float]:
     """Truncated singular value decomposition of a tensor.
 
     The tensor is viewed as a linear map (i.e. matrix) from one set of its legs to the rest.
@@ -90,6 +90,10 @@ def truncated_svd(a: AbstractTensor, u_legs: list[int | str] = None, vh_legs: li
     Parameters
     ----------
     same as for :meth:`svd`
+    normalize_to: float or None
+        If ``None`` (default), the resulting singular values are not renormalized,
+        resulting in an approximation in terms of ``U, S, Vh`` which has smaller norm than `a`.
+        If a ``float``, the singular values are scaled such that ``norm(S) == normalize_to``.
     truncation_options : dict-like
         Options that determine how many singular values are kept, see :cfg:config:`truncation`.
 
@@ -107,13 +111,17 @@ def truncated_svd(a: AbstractTensor, u_legs: list[int | str] = None, vh_legs: li
     U, S, V = svd(a, u_legs=u_legs, vh_legs=vh_legs, new_labels=new_labels, new_vh_leg_dual=new_vh_leg_dual,
                   options=options)
     S_norm = S.norm()
-    mask, renormalization, err = truncate_singular_values(S / S_norm, options=truncation_options)
+    mask, new_norm, err = truncate_singular_values(S / S_norm, options=truncation_options)
     U = U.apply_mask(mask, -1)
-    S = S._apply_mask_both_legs(mask)._mul_scalar(1. / renormalization)
-    # TODO (JU): unlike svd_theta this does not normalize to 1 but to norm(a).
-    #            could introduce an argument, `normalize_to: float | None`, where None means norm(a)
+    S = S._apply_mask_both_legs(mask)
+    if normalize_to is None:
+        renormalize = 1
+    else:
+        # norm(S[mask]) == S_norm * new_norm
+        renormalize = normalize_to / S_norm / new_norm
+        S = S._mul_scalar(renormalize)
     V = V.apply_mask(mask, 0)
-    return U, S, V, err, renormalization
+    return U, S, V, err, renormalize
     
 
 def truncate_singular_values(S: DiagonalTensor, options) -> Mask:
