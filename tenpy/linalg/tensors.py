@@ -2071,7 +2071,7 @@ class DiagonalTensor(AbstractTensor):
         """Apply the same mask to both legs."""
         assert self.legs[0].is_equal_or_dual(mask.large_leg)
         res_leg = mask.small_leg
-        if self.legs[0].is_dual == res_leg.is_dual:
+        if self.legs[0].is_dual != res_leg.is_dual:
             res_leg = res_leg.dual
         return DiagonalTensor(
             data=self.backend.apply_mask_to_DiagonalTensor(self, mask),
@@ -2452,11 +2452,11 @@ class Mask(AbstractTensor):
 
     @property
     def large_leg(self) -> VectorSpace:
-        return self.spaces[0]
+        return self.legs[0]
 
     @property
     def small_leg(self) -> VectorSpace:
-        return self.spaces[1]
+        return self.legs[1]
 
     @classmethod
     def from_flat_block(cls, mask: Block, large_leg: VectorSpace, backend: AbstractBackend = None,
@@ -2477,7 +2477,7 @@ class Mask(AbstractTensor):
         """
         if backend is None:
             backend = get_default_backend(symmetry=large_leg.symmetry)
-        data, small_leg = backend.mask_from_block(mask, leg=large_leg)
+        data, small_leg = backend.mask_from_block(mask, large_leg=large_leg)
         return cls(data=data, large_leg=large_leg, small_leg=small_leg, backend=backend, labels=labels)
         
     @classmethod

@@ -7,9 +7,10 @@ Changes compared to old np_conserved:
 - standard `Tensor` have qtotal=0, only ChargedTensor can have non-zero qtotal
 - relabeling:
     - `Array.qdata`, "qind" and "qindices" to `AbelianBackendData.block_inds` and "block indices"
-    - `LegPipe.qmap` to `AbelianBackendProductSpace.block_ind_map` (witch changed column order!!!)
-    - `LegPipe._perm` to `ProductSpace._perm_block_inds_map`
-    - `LegCharge.get_block_sizes()` is just `VectorSpace.multiplicities`
+    - `LegPipe.qmap` to `ProductSpace._block_ind_map` (with changed column order!!!)
+    - `LegPipe._perm` to `ProductSpace._perm_block_inds_map`  TODO (JU) this is outdated np?
+    - `LegCharge.get_block_sizes()` is just `VectorSpace._sorted_multiplicities`
+- TODO point towards VectorSpace attributes
 - keep VectorSpace and ProductSpace "sorted" and "bunched",
   i.e. do not support legs with smaller blocks to effectively allow block-sparse tensors with
   smaller blocks than dictated by symmetries (which we actually have in H_MPO on the virtual legs...)
@@ -1482,7 +1483,7 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
             tensor_block_inds_cont = tensor_block_inds_cont[sort]
         mask_block_inds = mask.data.block_inds
         mask_block_inds_cont = mask_block_inds[:, 0:1]
-        sort = np.lexsort(mask_block_inds_cont)
+        sort = np.lexsort(mask_block_inds_cont.T)
         mask_blocks = [mask_blocks[i] for i in sort]
         mask_block_inds = mask_block_inds[sort]
         mask_block_inds_cont = mask_block_inds_cont[sort]
@@ -1491,7 +1492,7 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
         res_block_inds = []
         # need only common blocks : zeros masks to zero, and a missing mask block means all False
         for i, j in _iter_common_nonstrict_sorted_arrays(tensor_block_inds_cont, mask_block_inds_cont):
-            res_blocks.append(self.apply_mask_to_block(tensor_blocks[i], mask_blocks[j], ax=leg_idx))
+            res_blocks.append(self.apply_mask_to_block(block=tensor_blocks[i], mask=mask_blocks[j], ax=leg_idx))
             block_inds = tensor_block_inds[i].copy()
             # tensor_block_inds[i] refer to mask.legs[0]._sectors
             # need to adjust to refer to mask.legs[1]._sectors
@@ -1517,10 +1518,10 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
         res_blocks = []
         res_block_inds = []  # gather only the entries of the first column in this list, repeat later
         for i, j in _iter_common_sorted_arrays(tensor_block_inds_cont, mask_block_inds_cont):
-            res_blocks.append(self.apply_mask_to_block(tensor_blocks[i]), mask_blocks[j], ax=0)
+            res_blocks.append(self.apply_mask_to_block(block=tensor_blocks[i], mask=mask_blocks[j], ax=0))
             res_block_inds.append(mask_block_inds[j, 1])
         if len(res_block_inds) > 0:
-            res_block_inds = np.repeat(np.array(res_block_inds)[:, None], 2, axis=0)
+            res_block_inds = np.repeat(np.array(res_block_inds)[:, None], 2, axis=1)
         else:
             res_block_inds = np.zeros((0, 2), int)
         return AbelianBackendData(tensor.dtype, res_blocks, res_block_inds)
