@@ -73,18 +73,20 @@ def _make_stride(shape, cstyle=True):
 
 
 def _find_row_differences(sectors: SectorArray, include_len: bool=False):
-    """Return indices where the rows of the 2D array `qflat` change.
+    """Return indices where the rows of the 2D array `sectors` change.
 
     Parameters
     ----------
     sectors : 2D array
         The rows of this array are compared.
-
+    include_len : bool
+        If ``len(sectors)`` should be included or not.
+    
     Returns
     -------
     diffs: 1D array
         The indices where rows change, including the first and last. Equivalent to:
-        ``[0] + [i for i in range(1, len(qflat)) if np.any(qflat[i-1] != qflat[i])]``
+        ``[0] + [i for i in range(1, len(sectors)) if np.any(qflat[i-1] != qflat[i])]``
     """
     # note: by default remove last entry [len(sectors)] compared to old.charges
     len_sectors = len(sectors)
@@ -316,7 +318,7 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
 
     def test_leg_sanity(self, leg: VectorSpace):
         if isinstance(leg, ProductSpace):
-            assert all(hasattr(leg, attr) for attr in ['_strides', 'block_ind_map_slices', 'block_ind_map'])
+            assert all(hasattr(leg, attr) for attr in ['_strides', '_block_ind_map_slices', '_block_ind_map', '_fusion_outcomes_inverse_sort'])
             # TODO should we do some consistency checks on shapes / values?
         super().test_leg_sanity(leg)
 
@@ -327,18 +329,20 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
             _strides : 1D numpy array of int
                 F-style strides for the shape ``tuple(space.num_sectors for space in spaces)``.
                 This allows one-to-one mapping between multi-indices (one block_ind per space) to a single index.
-            block_ind_map_slices : 1D numpy array of int
+            _block_ind_map_slices : 1D numpy array of int
                 Slices for embedding the unique fused sectors in the sorted list of all fusion outcomes.
                 Shape is ``(K,)`` where ``K == product_space.num_sectors + 1``.
                 Fusing all (non-dual) sectors of all spaces and sorting the outcomes gives a list
                 which contains (in general) duplicates.
-                The slice ``block_ind_map_slices[n]:block_ind_map_slices[n + 1]`` within this sorted
+                The slice ``_block_ind_map_slices[n]:_block_ind_map_slices[n + 1]`` within this sorted
                 list contains the same entry, namely ``product_space._non_dual_sorted_sectors[n]``.
-            block_ind_map : 2D numpy array of int
+            _block_ind_map : 2D numpy array of int
                 Map for the embedding of uncoupled to coupled indices, see notes below.
                 Shape is ``(M, N)`` where ``M`` is the number of combinations of sectors,
                 i.e. ``M == prod(s.num_sectors for s in spaces)`` and ``N == 3 + len(spaces)``.
-
+            _fusion_outcomes_inverse_sort : 1D numpy array
+                The inverse of the permutation that sorts the above list of all fusion outcomes.
+                Shape is ``(M,)``.
 
         Notes
         -----
@@ -346,7 +350,7 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
         :math:`k = s_1*i + s_2*j + ...` for appropriate strides :math:`s_1,s_2`.
         
         In the charged case, however, we want to block :math:`k` by charge, so we must
-        implicitly permute as well.  This reordering is encoded in `block_ind_map` as follows.
+        implicitly permute as well.  This reordering is encoded in `_block_ind_map` as follows.
         
         Each block index combination :math:`(i_1, ..., i_{nlegs})` of the `nlegs=len(spaces)`
         input `VectorSpace`s will end up getting placed in some slice :math:`a_j:a_{j+1}` of the
@@ -363,15 +367,15 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
         in general there will be many tuples :math:`(i_1, ..., i_{nlegs})` belonging to the same
         charge block :math:`J` in the `ProductSpace`.
         
-        The rows of `block_ind_map` are precisely the collections of
+        The rows of `_block_ind_map` are precisely the collections of
         ``[b_{J,k}, b_{J,k+1}, i_1, . . . , i_{nlegs}, J]``.
         Here, :math:`b_k:b_{k+1}` denotes the slice of this block index combination *within*
         the total block `J`, i.e., ``b_{J,k} = a_j - self._sorted_slices[J]``.
         
-        The rows of `block_ind_map` are lex-sorted first by ``J``, then the ``i``.
+        The rows of `_block_ind_map` are lex-sorted first by ``J``, then the ``i``.
         Each ``J`` will have multiple rows, and the order in which they are stored in `block_inds`
         is the order the data is stored in the actual tensor.
-        Thus, ``block_ind_map`` might look like ::
+        Thus, ``_block_ind_map`` might look like ::
         
             [ ...,
             [ b_{J,k},   b_{J,k+1},  i_1,    ..., i_{nlegs}   , J,   ],
@@ -404,16 +408,16 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
         nblocks = grid.shape[0]  # number of blocks in ProductSpace = np.product(spaces_num_sectors)
         # this is different from num_sectors
         
-        # determine block_ind_map -- it's essentially the grid.
-        block_ind_map = np.zeros((nblocks, 3 + num_spaces), dtype=np.intp)
-        block_ind_map[:, 2:-1] = grid  # possible combinations of indices
+        # determine _block_ind_map -- it's essentially the grid.
+        _block_ind_map = np.zeros((nblocks, 3 + num_spaces), dtype=np.intp)
+        _block_ind_map[:, 2:-1] = grid  # possible combinations of indices
 
         # the block size for given (i1, i2, ...) is the product of ``multiplicities[il]``
         # andvanced indexing:
         # ``grid.T[li]`` is a 1D array containing the qindex `q_li` of leg ``li`` for all blocks
         multiplicities = np.prod([space._sorted_multiplicities[gr] for space, gr in zip(spaces, grid.T)],
                                  axis=0)
-        # block_ind_map[:, :2] and [:, -1] is initialized after sort/bunch.
+        # _block_ind_map[:, :2] and [:, -1] is initialized after sort/bunch.
 
         # calculate new non-dual sectors
         if _is_dual:
@@ -428,37 +432,39 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
             *(sectors[gr] for sectors, gr in zip(fuse_sectors, grid.T)))
 
         # sort (non-dual) charge sectors. Similar code as in VectorSpace.__init__
-        sector_perm = np.lexsort(_non_dual_sorted_sectors.T)
-        block_ind_map = block_ind_map[sector_perm]
-        _non_dual_sorted_sectors = _non_dual_sorted_sectors[sector_perm]
-        multiplicities = multiplicities[sector_perm]
+        sort = np.lexsort(_non_dual_sorted_sectors.T)
+        _block_ind_map = _block_ind_map[sort]
+        _non_dual_sorted_sectors = _non_dual_sorted_sectors[sort]
+        multiplicities = multiplicities[sort]
+        metadata['_fusion_outcomes_inverse_sort'] = inverse_permutation(sort)
 
         slices = np.concatenate([[0], np.cumsum(multiplicities)], axis=0)
-        block_ind_map[:, 0] = slices[:-1]  # start with 0
-        block_ind_map[:, 1] = slices[1:]
+        _block_ind_map[:, 0] = slices[:-1]  # start with 0
+        _block_ind_map[:, 1] = slices[1:]
 
         # bunch sectors with equal charges together
         diffs = _find_row_differences(_non_dual_sorted_sectors, include_len=True)
-        metadata['block_ind_map_slices'] = diffs
+        metadata['_block_ind_map_slices'] = diffs
         slices = slices[diffs]
         multiplicities = slices[1:] - slices[:-1]
         diffs = diffs[:-1]
 
         _non_dual_sorted_sectors = _non_dual_sorted_sectors[diffs]
 
-        new_block_ind = np.zeros(len(block_ind_map), dtype=np.intp) # = J
+        new_block_ind = np.zeros(len(_block_ind_map), dtype=np.intp) # = J
         new_block_ind[diffs[1:]] = 1  # not for the first entry => np.cumsum starts with 0
-        block_ind_map[:, -1] = new_block_ind = np.cumsum(new_block_ind)
+        _block_ind_map[:, -1] = new_block_ind = np.cumsum(new_block_ind)
         # calculate the slices within blocks: subtract the start of each block
-        block_ind_map[:, :2] -= slices[new_block_ind][:, np.newaxis]
-        metadata['block_ind_map'] = block_ind_map  # finished
-        return _non_dual_sorted_sectors, multiplicities, sector_perm, metadata
+        _block_ind_map[:, :2] -= slices[new_block_ind][:, np.newaxis]
+        metadata['_block_ind_map'] = _block_ind_map  # finished
+        
+        return _non_dual_sorted_sectors, multiplicities, metadata
 
     def add_leg_metadata(self, leg: VectorSpace) -> VectorSpace:
         if isinstance(leg, ProductSpace):
-            if not all(hasattr(leg, attr) for attr in ['_strides', 'block_ind_map_slices', 'block_ind_map']):
+            if not all(hasattr(leg, attr) for attr in ['_strides', '_block_ind_map_slices', '_block_ind_map']):
                 # OPTIMIZE write version that just calculates the metadata, without sectors?
-                _, _, _, metadata = self._fuse_spaces(symmetry=leg.symmetry, spaces=leg.spaces, _is_dual=leg._is_dual)
+                _, _, metadata = self._fuse_spaces(symmetry=leg.symmetry, spaces=leg.spaces, _is_dual=leg._is_dual)
                 for key, val in metadata.items():
                     setattr(leg, key, val)
         # for non-ProductSpace: no metadata to add
@@ -1059,7 +1065,7 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
         last_i = -1
         for i, (b, e), product_space, map_ind in zip(new_axes, combine_slices, product_spaces, map_inds):
             res_block_inds[:, last_i + 1:i] = old_block_inds[:, last_e:b]
-            res_block_inds[:, i] = product_space.block_ind_map[map_ind, -1]
+            res_block_inds[:, i] = product_space._block_ind_map[map_ind, -1]
             last_e = e
             last_i = i
         res_block_inds[:, last_i + 1:] = old_block_inds[:, last_e:]
@@ -1080,7 +1086,7 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
                 # block_slices[:, i, 0] = 0
                 block_slices[:, i, 1] = block_shape[:, i] = leg._sorted_multiplicities[res_block_inds[:, i]]
         for i, product_space, map_ind in zip(new_axes, product_spaces, map_inds):  # legs in new_axes
-            slices = product_space.block_ind_map[map_ind, :2]
+            slices = product_space._block_ind_map[map_ind, :2]
             block_slices[:, i, :] = slices
             block_shape[:, i] = slices[:, 1] - slices[:, 0]
 
@@ -1129,8 +1135,8 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
         map_slices_shape = np.zeros((len(old_blocks), n_split), int)  # = end - beg
         for j, product_space in enumerate(product_spaces):
             block_inds_j = old_block_inds[:, leg_idcs[j]]
-            map_slices_beg[:, j] = product_space.block_ind_map_slices[block_inds_j]
-            sizes = product_space.block_ind_map_slices[1:] - product_space.block_ind_map_slices[:-1]
+            map_slices_beg[:, j] = product_space._block_ind_map_slices[block_inds_j]
+            sizes = product_space._block_ind_map_slices[1:] - product_space._block_ind_map_slices[:-1]
             map_slices_shape[:, j] = sizes[block_inds_j]
         new_data_blocks_per_old_block = np.prod(map_slices_shape, axis=1)
 
@@ -1153,10 +1159,10 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
                 product_space = product_spaces[j]  # = a.legs[i]
                 k = i + shift  # = index where split legs begin in new tensor
                 k2 = k + len(product_space.spaces)  # = until where spaces go in new tensor
-                block_ind_map = product_space.block_ind_map[map_rows[:, j], :]
-                new_block_inds[:, k:k2] = block_ind_map[:, 2:-1]
-                old_block_beg[:, i] = block_ind_map[:, 0]
-                old_block_shapes[:, i] = block_ind_map[:, 1] - block_ind_map[:, 0]
+                _block_ind_map = product_space._block_ind_map[map_rows[:, j], :]
+                new_block_inds[:, k:k2] = _block_ind_map[:, 2:-1]
+                old_block_beg[:, i] = _block_ind_map[:, 0]
+                old_block_shapes[:, i] = _block_ind_map[:, 1] - _block_ind_map[:, 0]
                 shift += len(product_space.spaces) - 1
                 j += 1
             else:
@@ -1516,7 +1522,7 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
 
 
 def product_space_map_incoming_block_inds(space: ProductSpace, incoming_block_inds):
-    """Map incoming block indices to indices of :attr:`block_ind_map`.
+    """Map incoming block indices to indices of :attr:`_block_ind_map`.
 
     Needed for `combine_legs`.
 
@@ -1531,12 +1537,12 @@ def product_space_map_incoming_block_inds(space: ProductSpace, incoming_block_in
     -------
     block_inds: 1D array
         For each row j of `incoming_block_inds` an index `J` such that
-        ``self.block_ind_map[J, 2:-1] == block_inds[j]``.
+        ``self._block_ind_map[J, 2:-1] == block_inds[j]``.
     """
     assert incoming_block_inds.shape[1] == len(space.spaces)
-    # calculate indices of block_ind_map[inverse_sector_perm],
+    # calculate indices of _block_ind_map[inverse_sector_perm],
     # which is sorted by :math:`i_1, i_2, ...`,
     # by using the appropriate strides
     inds_before_perm = np.sum(incoming_block_inds * space._strides[np.newaxis, :], axis=1)
-    # now permute them to indices in block_ind_map
-    return space._inverse_sector_perm[inds_before_perm]
+    # now permute them to indices in _block_ind_map
+    return space._fusion_outcomes_inverse_sort[inds_before_perm]

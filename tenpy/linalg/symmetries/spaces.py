@@ -87,7 +87,6 @@ class VectorSpace:
         Before storing, the multiplicities are permuted along with the `sectors` to sort the latter.
     is_real : bool
         Whether the space is over the real numbers. Otherwise it is over the complex numbers (default).
-
     _is_dual : bool
         Whether this is the "normal" (i.e. ket) or dual (i.e. bra) space.
 
@@ -124,6 +123,7 @@ class VectorSpace:
         if multiplicities is None:
             multiplicities = np.ones((num_sectors,), dtype=int)
         else:
+            assert len(multiplicities) == num_sectors
             multiplicities = np.asarray(multiplicities, dtype=int)
 
         if _sector_perm is None:
@@ -132,18 +132,21 @@ class VectorSpace:
             self._non_dual_sorted_sectors = sectors[perm]
             self._sorted_multiplicities = multiplicities[perm]
         else:
-            perm = None
-            self._sector_perm = np.asarray(_sector_perm, dtype=np.intp)
+            assert len(_sector_perm) == num_sectors
+            self._sector_perm = perm = np.asarray(_sector_perm, dtype=np.intp)
             self._non_dual_sorted_sectors = sectors
             self._sorted_multiplicities = multiplicities
-        self._inverse_sector_perm = inverse_permutation(self._sector_perm)  # OPTIMIZE property? cached_property?
+        self._inverse_sector_perm = inv_perm = inverse_permutation(perm)  # OPTIMIZE property? cached_property?
 
         if _sorted_slices is None:
-            # note: need to use the sectors, multiplicities *before sorting* here
-            _sorted_slices = _calc_slices(symmetry, sectors, multiplicities)
-            if perm is not None:
-                # if sectors have been sorted above, we need to permute the slices accordingly
-                _sorted_slices = _sorted_slices[perm]
+            if _sector_perm is None:
+                slices = _calc_slices(symmetry, sectors, multiplicities)
+            else:
+                # need to use the "unsorted" sectors, multiplicities to get correct slices
+                slices = _calc_slices(symmetry, sectors[inv_perm], multiplicities[inv_perm])
+            _sorted_slices = slices[perm]
+        else:
+            assert len(_sorted_slices) == num_sectors
         self._sorted_slices = _sorted_slices
 
     def test_sanity(self):
@@ -161,7 +164,7 @@ class VectorSpace:
         expect_diffs = self.symmetry.batch_sector_dim(self._non_dual_sorted_sectors) * self._sorted_multiplicities
         assert np.all(slice_diffs == expect_diffs)
         # slices should be consecutive
-        assert self.slices[0, 0] == 0
+        assert self.slices[0, 0] == 0, str(self.slices)
         assert np.all(self.slices[1:, 0] == self.slices[:-1, 1])
         assert self.slices[-1, 1] == self.dim
         # _sector_perm
@@ -341,9 +344,6 @@ class VectorSpace:
         """If self can be contracted with other.
 
         Equivalent to ``self == other.dual``"""
-        # TODO should we compare the perm_sectors ?
-        #  I.e. can VectorSpace(sym, [s1, s2]) be contracted with VectorSpace(sym, [s2, s1]).dual ?
-        #  they have compatible _sectors and multiplicities, but different sector_perm
         if not isinstance(other, VectorSpace):
             return False
         if self.is_real != other.is_real:
@@ -356,7 +356,9 @@ class VectorSpace:
             return False
         # the _sectors (note the underscore!) of the dual space are the same as those of the
         # original space, while the other.sectors would be different.
-        return np.all(self._non_dual_sorted_sectors == other._non_dual_sorted_sectors) and np.all(self._sorted_multiplicities == other._sorted_multiplicities)
+        compatible_sectors = np.all(self._non_dual_sorted_sectors == other._non_dual_sorted_sectors)
+        same_mults = np.all(self._sorted_multiplicities == other._sorted_multiplicities)
+        return compatible_sectors and same_mults
 
     @property
     def is_trivial(self) -> bool:
@@ -485,19 +487,22 @@ class ProductSpace(VectorSpace):
         The factor spaces that multiply to this space.
         The resulting product space can always be split back into these.
     backend : AbstractBackend | None
-        If a backend is given, the backend-specific metadata will be set
-        via `backend._fuse_spaces` and `backend.add_leg_metadata`
+        If a backend is given, the backend-specific metadata will be set via ``backend._fuse_spaces``.
     _is_dual : bool | None
         Flag indicating wether the fusion space represents a dual (bra) space or a non-dual (ket) space.
         Per default (``_is_dual=None``), ``spaces[0].is_dual`` is used, i.e. the ``ProductSpace``
         will be a bra space if and only if its first factor is a bra space.
-
-        .. warning ::
-            When setting `_is_dual=True`, consider the notes below!
-
-    _sectors, _multiplicities, _sector_perm:
+        See notes on duality below.
+    _sectors, _multiplicities:
         These inputs to VectorSpace.__init__ can optionally be passed to avoid recomputation.
-        Specify either all or None of them.
+        _sectors need to be _non_dual_sorted_sectors and in particular are assumed to be sorted
+        (this is not checked!) and _multiplicities sorted accordingly.
+    _sector_perm:
+        This argument can be used to control the order of sectors.
+        The resulting order fulfills ``self.sectors[_sector_perm] = maybe_dual(_sectors)``.
+        If ``None`` (default), the trivial permutation ``[0, 1, 2, ...]`` is chosen, which
+        means the ``self.sectors`` are in the order that lex-sorts the non-dual sectors, i.e.
+        ``self.sectors == self._sorted_sectors``.
     _sorted_slices:
         inputs to VectorSpace.__init__ can optionally be passed to avoid recomputation
 
@@ -557,57 +562,63 @@ class ProductSpace(VectorSpace):
         assert all(space.is_real == is_real for space in spaces)
 
         if _sectors is None:
-            assert all(arg is None for arg in [_multiplicities, _sector_perm])
+            assert _multiplicities is None
             if backend is None:
-                _sectors, _multiplicities, _sector_perm, metadata = _fuse_spaces(
+                _sectors, _multiplicities, metadata = _fuse_spaces(
                     symmetry=spaces[0].symmetry, spaces=spaces, _is_dual=_is_dual
                 )
             else:
-                _sectors, _multiplicities, _sector_perm, metadata = backend._fuse_spaces(
+                _sectors, _multiplicities, metadata = backend._fuse_spaces(
                     symmetry=spaces[0].symmetry, spaces=spaces, _is_dual=_is_dual
                 )
             for key, val in metadata.items():
                 setattr(self, key, val)
         else:
             assert _multiplicities is not None
+            
+        if _sector_perm is None:
+            _sector_perm = np.arange(len(_sectors))
+        
         VectorSpace.__init__(self, symmetry=symmetry, sectors=_sectors, multiplicities=_multiplicities,
-                             is_real=is_real, _is_dual=_is_dual, _sector_perm=_sector_perm, _sorted_slices=_sorted_slices)
-        if backend is not None:
-            backend.add_leg_metadata(self)
+                             is_real=is_real, _is_dual=_is_dual, _sector_perm=_sector_perm,
+                             _sorted_slices=_sorted_slices)
 
     def test_sanity(self):
         assert all(s.symmetry == self.symmetry for s in self.spaces)
         return super().test_sanity()
 
-    # TODO python naming convention is snake case: as_vector_space
     def as_VectorSpace(self):
         """Forget about the substructure of the ProductSpace but view only as VectorSpace.
         This is necessary before truncation, after which the product-space structure is no
         longer necessarily given.
         """
         return VectorSpace(symmetry=self.symmetry,
-                           sectors=self._non_dual_sorted_sectors,  # underscore is important!
+                           sectors=self._non_dual_sorted_sectors,
                            multiplicities=self._sorted_multiplicities,
                            is_real=self.is_real,
-                           _is_dual=self.is_dual)
+                           _is_dual=self.is_dual,
+                           _sector_perm=self._sector_perm,
+                           _sorted_slices=self._sorted_slices)
 
     def flip_is_dual(self) -> ProductSpace:
         """Return a ProductSpace isomorphic to self, which has the opposite is_dual attribute.
 
         This realizes the isomorphism between ``V.dual * W.dual`` and ``(V * W).dual``
         for `VectorSpace` ``V`` and ``W``.
-        However, note that the returned space can often not be contracted with `self`
-        since the order of the :attr:`sectors` might have changed.
+        Note that the returned space is equal to neither ``self`` nor ``self.dual``.
+        See docstring of :class:`ProductSpace` for details.
 
         Backend-specific metadata may be lost.
+        TODO (JU) can we figure out how to keep it?
+                  alternatively: should we call backend.add_leg_metadata to add it again?
         """
-        # TODO test this
-        _sectors = self.symmetry.dual_sectors(self._non_dual_sorted_sectors)
-        
+        sectors = self.symmetry.dual_sectors(self._non_dual_sorted_sectors)
+        sort = np.lexsort(sectors.T)
         return ProductSpace(spaces=self.spaces, _is_dual=not self.is_dual,
-                            _sectors=self.symmetry.dual_sectors(self._non_dual_sorted_sectors),
-                            _multiplicities=self._sorted_multiplicities,
-                            _sector_perm=None, _sorted_slices=self._sorted_slices)
+                            _sectors=sectors[sort],
+                            _multiplicities=self._sorted_multiplicities[sort],
+                            _sorted_slices=self._sorted_slices[sort],
+                            _sector_perm=self._sector_perm[sort])
 
     def __len__(self):
         return len(self.spaces)
@@ -676,21 +687,20 @@ class ProductSpace(VectorSpace):
 def _fuse_spaces(symmetry: Symmetry, spaces: list[VectorSpace], _is_dual: bool
                  ) -> tuple[SectorArray, ndarray, ndarray, dict]:
     """This function is called as part of ProductSpace.__init__.
-    The backend-specific metadata for the ProductSpace can be computed in parallel with the
-    sectors and multiplicities of the product space, which is why this function lives in the backend.
-
-    This default implementation does not add any additional metadata.
-    Backends may override this.
+    
+    It determines the sectors and multiplicities of the ProductSpace.
+    There is also a verison of this function in the backends, i.e.
+    :meth:`~tenpy.linalg.backends.abstract_backend.AbstractBackend._fuse_spaces:, which may
+    customize this behavior and in particulat may return metadata, i.e. attributes to be added to
+    the ProductSpace.
+    This default implementation returns empty metadata ``{}``.
 
     Returns
     -------
-    _non_dual_sorted_sectors : 2D array of int
-        The sectors to be stored as self._non_dual_sorted_sectors. May or may no be sorted, see `sector_perm`
-    multiplicities : 1D array of int
-        The multiplicities, in the order matching _sectors
-    sector_perm : None | 1D array of int
-        If the returned sectors are sorted, the :attr:`sector_perm` for self.
-        If _sectors are not sorted, this is None.
+    sectors : 2D array of int
+        The :attr:`VectorSpace._non_dual_sorted_sectors`.
+    mutliplicities : 1D array of int
+        the :attr:`VectorSpace._sorted_multiplicities`.
     metadata : dict
         A dictionary with string keys and arbitrary values.
         These will be added as attributes of the ProductSpace
@@ -713,9 +723,8 @@ def _fuse_spaces(symmetry: Symmetry, spaces: list[VectorSpace], _is_dual: bool
                     new_fusion[t_c] = new_fusion.get(t_c, 0) + m_a * m_b * n
         fusion = new_fusion
         # by convention fuse spaces left to right, i.e. (...((0,1), 2), ..., N)
-    _non_dual_sorted_sectors = np.asarray(list(fusion.keys()))
+    non_dual_sectors = np.asarray(list(fusion.keys()))
     multiplicities = np.asarray(list(fusion.values()))
-    sector_perm = None  # note: in this implementation, this is always None, while in backend
-                        #       specific implementation it might be given
+    sort = np.lexsort(non_dual_sectors.T)
     metadata = {}
-    return _non_dual_sorted_sectors, multiplicities, sector_perm, metadata
+    return non_dual_sectors[sort], multiplicities[sort], metadata
