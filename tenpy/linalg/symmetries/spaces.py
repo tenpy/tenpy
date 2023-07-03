@@ -304,21 +304,12 @@ class VectorSpace:
         return f'symmetry: {self.symmetry!s}\nis_dual: {self.is_dual}\n' + vert_join([sectors, mults], delim=' | ')
 
     def __eq__(self, other):
-        # TODO should we compare the perm_sectors?
-        #  I.e. is VectorSpace(sym, sectors=[s1, s2]) == VectorSpace(sym, sectors=[s2, s1]) ?
         if not isinstance(other, VectorSpace):
             return NotImplemented
-        if self.is_real != other.is_real:
+        if isinstance(other, ProductSpace):
+            # ProductSpace overrides __eq__, so self is not a ProductSpace
             return False
-        if self.is_dual != other.is_dual:
-            return False
-        if self.num_sectors != other.num_sectors:
-            # now we may assume that checking all multiplicities of self is enough.
-            return False
-        if self.symmetry != other.symmetry:
-            return False
-        # _sectors are sorted, so we can just compare them elementwise.
-        return np.all(self._non_dual_sorted_sectors == other._non_dual_sorted_sectors) and np.all(self._sorted_multiplicities == other._sorted_multiplicities)
+        return self.is_dual == other.is_dual and self.is_equal_or_dual(other)
 
     @property
     def dual(self):
@@ -340,25 +331,38 @@ class VectorSpace:
                               self.is_real,
                               not self.is_dual)
 
-    def can_contract_with(self, other):
-        """If self can be contracted with other.
+    def is_equal_or_dual(self, other: VectorSpace) -> bool:
+        """If another VectorSpace is equal to *or* dual of `self`.
 
-        Equivalent to ``self == other.dual``"""
-        if not isinstance(other, VectorSpace):
-            return False
+        Assumes without checking that other is a VectorSpace.
+        Does not check for ProductSpace.
+        """
         if self.is_real != other.is_real:
-            return False
-        if self.is_dual == other.is_dual:
-            return False
-        if self.num_sectors != other.num_sectors:
             return False
         if self.symmetry != other.symmetry:
             return False
-        # the _sectors (note the underscore!) of the dual space are the same as those of the
-        # original space, while the other.sectors would be different.
-        compatible_sectors = np.all(self._non_dual_sorted_sectors == other._non_dual_sorted_sectors)
-        same_mults = np.all(self._sorted_multiplicities == other._sorted_multiplicities)
-        return compatible_sectors and same_mults
+        if self.num_sectors != other.num_sectors:
+            # now we may assume that checking all multiplicities of self is enough.
+            return False
+        if not np.all(self._non_dual_sorted_sectors == other._non_dual_sorted_sectors):
+            return False
+        if not np.all(self._sorted_multiplicities == other._sorted_multiplicities):
+            return False
+        if not np.all(self._sector_perm == other._sector_perm):
+            return False
+        return True
+
+    def can_contract_with(self, other):
+        """If self can be contracted with other.
+
+        Equivalent to ``self == other.dual`` if `other` is a :class:`VectorSpace`.
+        """
+        if not isinstance(other, VectorSpace):
+            return False
+        if isinstance(other, ProductSpace):
+            # ProductSpace overrides can_contract_with, so self is not a ProductSpace
+            return False
+        return self.is_dual != other.is_dual and self.is_equal_or_dual(other)
 
     @property
     def is_trivial(self) -> bool:
@@ -645,8 +649,10 @@ class ProductSpace(VectorSpace):
         return res + '\n' + VectorSpace.__str__(self)
 
     def __eq__(self, other):
-        if not isinstance(other, ProductSpace):
+        if not isinstance(other, VectorSpace):
             return NotImplemented
+        if not isinstance(other, ProductSpace):
+            return False
         if other.is_dual != self.is_dual:
             return False
         if len(other.spaces) != len(self.spaces):
@@ -663,6 +669,15 @@ class ProductSpace(VectorSpace):
     @property
     def is_trivial(self) -> bool:
         return all(s.is_trivial for s in self.spaces)
+
+    def can_contract_with(self, other):
+        if not isinstance(other, ProductSpace):
+            return False
+        if self.is_dual == other.is_dual:
+            return False
+        if len(self.spaces) != len(other.spaces):
+            return False
+        return all(s1.can_contract_with(s2) for s1, s2 in zip(self.spaces, other.spaces))
 
     def project(self, *args, **kwargs):
         """Convert self to VectorSpace and call :meth:`VectorSpace.project`.
