@@ -1015,8 +1015,12 @@ class Tensor(AbstractTensor):
 
     def apply_mask(self, mask: Mask, leg: int | str, new_label: str = KEEP_OLD_LABEL) -> Tensor:
         leg_idx = self.get_leg_idx(leg)
+        assert self.legs[leg_idx].is_equal_or_dual(mask.large_leg)
+        projected_leg = mask.small_leg
+        if self.legs[leg_idx].is_dual != projected_leg.is_dual:
+            projected_leg = projected_leg.dual
         legs = self.legs[:]
-        legs[leg_idx] = legs[leg_idx].project(mask.to_numpy_ndarray())
+        legs[leg_idx] = projected_leg
         labels = self.labels[:]
         if new_label is not KEEP_OLD_LABEL:
             labels[leg_idx] = new_label
@@ -2065,9 +2069,13 @@ class DiagonalTensor(AbstractTensor):
 
     def _apply_mask_both_legs(self, mask: Mask) -> DiagonalTensor:
         """Apply the same mask to both legs."""
+        assert self.legs[0].is_equal_or_dual(mask.large_leg)
+        res_leg = mask.small_leg
+        if self.legs[0].is_dual == res_leg.is_dual:
+            res_leg = res_leg.dual
         return DiagonalTensor(
             data=self.backend.apply_mask_to_DiagonalTensor(self, mask),
-            first_leg=self.first_leg.project(mask.to_numpy_ndarray()),
+            first_leg=res_leg,
             second_leg_dual=self.second_leg_dual, backend=self.backend, labels=self.labels,
         )
 
