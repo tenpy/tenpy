@@ -80,7 +80,7 @@ class AbstractNoSymmetryBackend(AbstractBackend, AbstractBlockBackend, ABC):
 
     def mask_from_block(self, a: Block, large_leg: VectorSpace) -> tuple[DiagonalData, VectorSpace]:
         data = self.block_to_dtype(a, Dtype.bool)
-        small_leg = VectorSpace.non_symmetric(
+        small_leg = VectorSpace.without_symmetry(
             dim=self.block_sum_all(data), is_real=large_leg.is_real, _is_dual=large_leg.is_dual
         )
         return data, small_leg
@@ -112,13 +112,13 @@ class AbstractNoSymmetryBackend(AbstractBackend, AbstractBlockBackend, ABC):
 
     def svd(self, a: Tensor, new_vh_leg_dual: bool, algorithm: str | None) -> tuple[Data, DiagonalData, Data, VectorSpace]:
         u, s, vh = self.matrix_svd(a.data, algorithm=algorithm)
-        new_leg = VectorSpace.non_symmetric(len(s), is_real=a.legs[0].is_real, _is_dual=new_vh_leg_dual)
+        new_leg = VectorSpace.without_symmetry(len(s), is_real=a.legs[0].is_real, _is_dual=new_vh_leg_dual)
         return u, s, vh, new_leg
 
     def qr(self, a: Tensor, new_r_leg_dual: bool, full: bool) -> tuple[Data, Data, VectorSpace]:
         q, r = self.matrix_qr(a, full=full)
         new_leg_dim = self.block_shape(r)[0]
-        new_leg = VectorSpace.non_symmetric(new_leg_dim, is_dual=new_r_leg_dual, is_real=a.legs[0].is_real)
+        new_leg = VectorSpace.without_symmetry(new_leg_dim, is_dual=new_r_leg_dual, is_real=a.legs[0].is_real)
         return q, r, new_leg
 
     def outer(self, a: Tensor, b: Tensor) -> Data:
@@ -174,7 +174,7 @@ class AbstractNoSymmetryBackend(AbstractBackend, AbstractBlockBackend, ABC):
         if more:
             raise ValueError('Can only infer one leg')
         dim = self.block_shape(block)[idx]
-        return VectorSpace.non_symmetric(dim, _is_dual=is_dual, is_real=is_real)
+        return VectorSpace.without_symmetry(dim, _is_dual=is_dual, is_real=is_real)
 
     def get_element(self, a: Tensor, idcs: list[int]) -> complex | float | bool:
         return self.get_block_element(a.data, idcs)

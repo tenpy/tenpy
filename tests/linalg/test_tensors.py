@@ -559,7 +559,7 @@ def demo_repr():
     backend = NoSymmetryNumpyBackend()
     dims = (5, 2, 5)
     data = random_block(dims, backend)
-    legs = [VectorSpace.non_symmetric(d) for d in dims]
+    legs = [VectorSpace.without_symmetry(d) for d in dims]
     tens1 = tensors.Tensor(data, legs=legs, backend=backend, labels=['vL', 'p', 'vR'])
     tens2 = tensors.combine_legs(tens1, ['p', 'vR'])
 

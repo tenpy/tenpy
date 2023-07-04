@@ -180,7 +180,8 @@ class VectorSpace:
         return len(self._non_dual_sorted_sectors)
 
     @classmethod
-    def non_symmetric(cls, dim: int, is_real: bool = False, _is_dual: bool = False):
+    def without_symmetry(cls, dim: int, is_real: bool = False, _is_dual: bool = False):
+        """Initialize a VectorSpace with no symmetry of a given dimension"""
         return cls(symmetry=no_symmetry, sectors=no_symmetry.trivial_sector[None, :],
                    multiplicities=[dim], is_real=is_real, _is_dual=_is_dual)
 
