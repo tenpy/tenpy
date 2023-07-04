@@ -392,42 +392,6 @@ class VectorSpace:
                 return m
         return 0
 
-    def project(self, mask: ndarray):
-        """Return a copy, keeping only the indices specified by `mask`.
-
-        Parameters
-        ----------
-        mask : 1D array(bool)
-            Whether to keep each of the indices in the *dense* array.
-
-        Returns
-        -------
-        sector_idx_map : 1D array
-            Map of sector indices.
-            A non-negative entry ``m = sector_idx_map[n]`` indicates that ``sectors_after[m] == sectors_before[n]``
-            and ``sector_idx_map[n] == -1`` indicates that ``sectors_before[n]`` is projected out entirely.
-        sector_masks: list of 1D array
-            For every *remaining* sector, the respective mask of length `sector_dim * old_multiplicity`.
-        projected : :class:`VectorSpace`
-            Copy of self after the projection, i.e. with ``projected.dim == np.sum(mask)``.
-        """
-        mask = np.asarray(mask, dtype=np.bool_)
-        projected = copy.copy(self)
-        sector_masks = [mask[start:stop] for start, stop in self.slices]
-        new_multiplicities = np.array([np.sum(sm) for sm in sector_masks])
-        keep = np.nonzero(new_multiplicities)[0]
-        sector_masks = [sector_masks[i] for i in keep]
-        new_sector_number = len(sector_masks)
-        sector_idx_map = np.full((new_sector_number,), -1, dtype=int)
-        sector_idx_map[keep] = np.arange(new_sector_number)
-        projected._sector_perm = perm = sector_idx_map[projected._sector_perm]
-        projected._non_dual_sorted_sectors = projected._non_dual_sorted_sectors[keep]
-        projected._sorted_multiplicities = new_multiplicities[keep]
-        inv_perm = inverse_permutation(perm)
-        unpermuted_slices = _calc_slices(self.symmetry, projected.sectors[inv_perm], projected._sorted_multiplicities[inv_perm])
-        projected.slices = unpermuted_slices[perm]
-        return sector_idx_map, sector_masks, projected
-
     def is_subspace_of(self, other: VectorSpace) -> bool:
         """Whether self is a subspace of other.
 
@@ -679,25 +643,6 @@ class ProductSpace(VectorSpace):
         if len(self.spaces) != len(other.spaces):
             return False
         return all(s1.can_contract_with(s2) for s1, s2 in zip(self.spaces, other.spaces))
-
-    def project(self, *args, **kwargs):
-        """Convert self to VectorSpace and call :meth:`VectorSpace.project`.
-
-        In general, this could be implemented for a ProductSpace, but would make
-        `split_legs` more complicated, thus we keep it simple.
-        If you really want to project and split afterwards, use the following work-around,
-        which is for example used in :class:`~tenpy.algorithms.exact_diagonalization`:
-
-        1) Create the full pipe and save it separately.
-        2) Convert the Pipe to a Leg & project the array with it.
-        3) [... do calculations ...]
-        4) To split the 'projected pipe' of `A`, create an empty array `B` with the legs of A,
-           but replace the projected leg by the full pipe. Set `A` as a slice of `B`.
-           Finally split the pipe.
-        """
-        warnings.warn("Converting ProductSpace to VectorSpace for `project`", stacklevel=2)
-        res = self.as_VectorSpace()
-        return res.project(*args, **kwargs)
 
 
 def _fuse_spaces(symmetry: Symmetry, spaces: list[VectorSpace], _is_dual: bool

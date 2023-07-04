@@ -502,12 +502,31 @@ class AbstractTensor(ABC):
     def apply_mask(self, mask: Mask, leg: int | str) -> AbstractTensor:
         """Apply a mask to one of the legs, projecting to a smaller leg.
 
+        If the masked leg is a :class:`ProductSpace`, the product structure is dropped while masking
+        and the masked leg will be only a :class:`VectorSpace`, not a :class:`ProductSpace`.
+        See notes below.
+
         Parameters
         ==========
         mask : Mask
             The mask to be applied
         leg : int | str
             Which leg to apply to
+
+        Notes
+        =====
+        It would be possible to implement Mask-application in a way that keeps the product structure.
+        TODO (JU) is this even true for non-abelian?
+        That would, however, make `split_legs` more complicated, thus we keep it simple.
+        If you really want to project and split afterwards, use the following work-around,
+        which is for example used in :class:`~tenpy.algorithms.exact_diagonalization`:
+
+        1) Save the unprojected ProductSpace separately.
+        2) Apply the mask, yielding a tensor with a non-ProductSpace leg
+        3) [... do calculations ...]
+        4) To split the 'projected ProductSpace' of `A`, create an zero Tensor `B` with the legs of A,
+           but replace the projected leg by the full ProductSpace. Set `A` as a slice of `B`.
+           Finally split the ProductSpace leg.
         """
         ...
 
