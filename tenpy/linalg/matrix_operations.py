@@ -4,7 +4,7 @@ from __future__ import annotations
 import numpy as np
 import warnings
 from numbers import Number
-from .tensors import DiagonalTensor, AbstractTensor, Tensor, Mask
+from .tensors import DiagonalTensor, AbstractTensor, Tensor, Mask, ChargedTensor
 from ..tools.misc import inverse_permutation
 from ..tools.params import asConfig
 from ..tools.hdf5_io import Hdf5Exportable
@@ -13,12 +13,18 @@ __all__ = ['svd', 'truncate_svd', 'svd_split', 'leg_bipartition', 'exp', 'log']
 
 
 def svd(a: AbstractTensor, u_legs: list[int | str] = None, vh_legs: list[int | str] = None,
-        new_labels: tuple[str, ...] = None, new_vh_leg_dual=False,
+        new_labels: tuple[str, ...] = None, new_vh_leg_dual=False, U_inherits_charge: bool = False,
         options={}
         ) -> tuple[AbstractTensor, DiagonalTensor, AbstractTensor]:
     """Singular value decomposition of a tensor.
 
     The tensor is viewed as a linear map (i.e. matrix) from one set of its legs to the rest.
+    Returns three tensors `U`, `S`, `Vh` such that::
+    
+      - `tdot(U, tdot(S, Vh, 1, 0), -1, 0)` is equal to `a` up to numerical precision
+      - `U` is an isometry, i.e. `tdot(U, conj(U), legs, legs)` is the identity (`legs` are all legs but `-1`)
+      - `S` is diagonal with real, non-negative entries
+      - `Vh` is an isometry, i.e. `tdot(Vh, conj(Vh), legs, legs)` is the identity (`legs` are all legs but `0`)
 
     TODO: document input format for u_legs / vh_legs, can probably to it centrally for all matrix ops
 
@@ -26,7 +32,12 @@ def svd(a: AbstractTensor, u_legs: list[int | str] = None, vh_legs: list[int | s
 
     Parameters
     ----------
-    a : Tensor
+    a : Tensor | ChargedTensor | DiagonalTensor
+        The tensor to decompose.
+        If `a` is a :class:`~tenpy.linalg.tensors.Tensor`, both `U` and `Vh` are `Tensor`s.
+        If `a` is a :class:`~tenpy.linalg.tensors.ChargedTensor`, so is one of `U` and `Vh`,
+        while the other is a ``Tensor``, see `U_inherits_charge`.
+        If `a` is a DiagonalTensor, so are `U` and `Vh`.
     u_legs : list[int  |  str], optional
         Which of the legs belong to "matrix rows" and end up as legs of U.
     vh_legs : list[int  |  str], optional
@@ -41,47 +52,97 @@ def svd(a: AbstractTensor, u_legs: list[int | str] = None, vh_legs: list[int | s
     new_vh_leg_dual : bool
         Whether the new leg of `vh` will be dual or not.
         TODO what is the intuitive default?
+    U_inherits_charge : bool
+        If `a` is a :class:`~tenpy.linalg.tensors.ChargedTensor`, this flag controls which of the
+        two resulting isometries, `U` or `Vh` will carry the charge.
+        It will be a :class:`~tenpy.linalg.tensors.ChargedTensor` while the other is a :class:`~tenpy.linalg.tensors.Tensor`
     options : dict | Config
         TODO proper Config style doc
         algorithm : str | None
 
     Returns
     -------
-    U, S, Vh
-        The tensors U, S, Vh that form the SVD, such that `tdot(U, tdot(S, Vh, 1, 0), -1, 0)` is equal
-        to `a` up to numerical precision
+    U : Tensor | ChargedTensor | DiagonalTensor
+    S : DiagonalTensor
+    Vh : Tensor | ChargedTensor | DiagonalTensor
     """
-    if not isinstance(a, Tensor):
-        raise NotImplementedError  # TODO ChargedTensor support
-
     u_idcs, vh_idcs = leg_bipartition(a, u_legs, vh_legs)
+    
+    if isinstance(a, ChargedTensor):
+        if U_inherits_charge:
+            u_idcs.append(-1)
+        else:
+            vh_idcs.append(-1)
+        U, S, Vh = svd(a.invariant_part, u_legs=u_idcs, vh_legs=vh_idcs, new_labels=new_labels,
+                       new_vh_leg_dual=new_vh_leg_dual)
+        if U_inherits_charge:
+            perm = list(range(U.num_legs))
+            perm[-2:] = [-1, -2]
+            U = ChargedTensor(U.permute_legs(perm), dummy_leg_state=a.dummy_leg_state)
+        else:
+            Vh = ChargedTensor(Vh, dummy_leg_state=a.dummy_leg_state)
+        return U, S, Vh
+    
     l_u, l_su, l_sv, l_vh = _svd_new_labels(new_labels)
+    
+    if isinstance(a, DiagonalTensor):
+        S = abs(a)
+        U = a / S  # the phases of a
+        Vh = DiagonalTensor.eye(first_leg=a.legs[0], backend=a.backend)
+        # all legs are either equal or dual, so we can just set them
+        if a.second_leg_dual:
+            if new_vh_leg_dual == a.legs[0].is_dual:
+                new_vh_leg = a.legs[0]
+                new_u_leg = a.legs[1]
+            else:
+                new_vh_leg = a.legs[1]
+                new_u_leg = a.legs[0]
+        elif new_vh_leg_dual == a.legs[0].is_dual:
+            new_vh_leg = a.legs[0]
+            new_u_leg = a.legs[0].dual
+        else:
+            new_vh_leg = a.legs[0].dual
+            new_u_leg = a.legs[0]
+        U.legs = [a.legs[u_idcs[0]], new_u_leg]
+        U.second_leg_dual = a.legs[u_idcs[0]].is_dual != new_u_leg.is_dual
+        S.legs = [new_vh_leg, new_u_leg]
+        S.second_leg_dual = True
+        Vh.legs = [new_vh_leg, a.legs[vh_idcs[0]]]
+        Vh.second_leg_dual = new_vh_leg.is_dual != a.legs[vh_idcs[0]].is_dual
+        # set labels
+        U.set_labels([a.labels[u_idcs[0]], l_u])
+        S.set_labels([l_su, l_sv])
+        Vh.set_labels([l_vh, a.labels[vh_idcs[0]]])
+        return U, S, Vh
+        
+    if isinstance(a, Tensor):
+        need_combine = (len(u_idcs) != 1 or len(vh_idcs) != 1)
+        original_labels = a.labels
+        if need_combine:
+            a = a.combine_legs(u_idcs, vh_idcs, new_axes=[0, 1])
+        elif u_idcs[0] == 1:   # both single entry, so v_idcs = [1]
+            a = a.permute_legs([1, 0])
 
-    need_combine = (len(u_idcs) != 1 or len(vh_idcs) != 1)
-    original_labels = a.labels
-    if need_combine:
-        a = a.combine_legs(u_idcs, vh_idcs, new_axes=[0, 1])
-    elif u_idcs[0] == 1:   # both single entry, so v_idcs = [1]
-        a = a.permute_legs([1, 0])
+        options = asConfig(options, 'SVD')  # TODO if algorithm remains the only key, consider just making it a kwarg
+        algorithm = options.get('algorithm', None)
+        u_data, s_data, vh_data, new_leg = a.backend.svd(a, new_vh_leg_dual, algorithm=algorithm)
 
-    options = asConfig(options, 'SVD')  # TODO if algorithm remains the only key, consider just making it a kwarg
-    algorithm = options.get('algorithm', None)
-    u_data, s_data, vh_data, new_leg = a.backend.svd(a, new_vh_leg_dual, algorithm=algorithm)
+        U = Tensor(u_data, backend=a.backend, legs=[a.legs[0], new_leg.dual])
+        S = DiagonalTensor(s_data, first_leg=new_leg, second_leg_dual=True, backend=a.backend, labels=[l_su, l_sv])
+        Vh = Tensor(vh_data, backend=a.backend, legs=[new_leg, a.legs[1]])
+        if need_combine:
+            U = U.split_legs(0)
+            Vh = Vh.split_legs(1)
+        U.set_labels([original_labels[n] for n in u_idcs] + [l_u])
+        Vh.set_labels([l_vh] + [original_labels[n] for n in vh_idcs])
+        return U, S, Vh
 
-    U = Tensor(u_data, backend=a.backend, legs=[a.legs[0], new_leg.dual])
-    S = DiagonalTensor(s_data, first_leg=new_leg, second_leg_dual=True, backend=a.backend, labels=[l_su, l_sv])
-    Vh = Tensor(vh_data, backend=a.backend, legs=[new_leg, a.legs[1]])
-    if need_combine:
-        U = U.split_legs(0)
-        Vh = Vh.split_legs(1)
-    U.set_labels([original_labels[n] for n in u_idcs] + [l_u])
-    Vh.set_labels([l_vh] + [original_labels[n] for n in vh_idcs])
-    return U, S, Vh
+    raise TypeError(f'svd not supported for {type(a)}')
 
 
 def truncated_svd(a: AbstractTensor, u_legs: list[int | str] = None, vh_legs: list[int | str] = None,
-                  new_labels: tuple[str, ...] = None, new_vh_leg_dual=False, normalize_to: float = None,
-                  options={}, truncation_options={}
+                  new_labels: tuple[str, ...] = None, new_vh_leg_dual=False, U_inherits_charge: bool = False,
+                  normalize_to: float = None, options={}, truncation_options={}
                   ) -> tuple[AbstractTensor, DiagonalTensor, AbstractTensor, TruncationError, float]:
     """Truncated singular value decomposition of a tensor.
 
@@ -109,7 +170,7 @@ def truncated_svd(a: AbstractTensor, u_legs: list[int | str] = None, vh_legs: li
         Factor, by which `S` was renormalized.
     """
     U, S, V = svd(a, u_legs=u_legs, vh_legs=vh_legs, new_labels=new_labels, new_vh_leg_dual=new_vh_leg_dual,
-                  options=options)
+                  U_inherits_charge=U_inherits_charge, options=options)
     S_norm = S.norm()
     mask, new_norm, err = truncate_singular_values(S / S_norm, options=truncation_options)
     U = U.apply_mask(mask, -1)
