@@ -140,6 +140,15 @@ def svd(a: AbstractTensor, u_legs: list[int | str] = None, vh_legs: list[int | s
     raise TypeError(f'svd not supported for {type(a)}')
 
 
+def svd_apply_mask(U: AbstractTensor, S: DiagonalTensor, Vh: AbstractTensor, mask: Mask
+                   ) -> tuple[AbstractTensor, DiagonalTensor, AbstractTensor]:
+    """Truncate an existing SVD"""
+    U = U.apply_mask(mask, -1)
+    S = S._apply_mask_both_legs(mask)
+    Vh = Vh.apply_mask(mask, 0)
+    return U, S, Vh
+
+
 def truncated_svd(a: AbstractTensor, u_legs: list[int | str] = None, vh_legs: list[int | str] = None,
                   new_labels: tuple[str, ...] = None, new_vh_leg_dual=False, U_inherits_charge: bool = False,
                   normalize_to: float = None, options={}, truncation_options={}
@@ -173,20 +182,18 @@ def truncated_svd(a: AbstractTensor, u_legs: list[int | str] = None, vh_legs: li
                   U_inherits_charge=U_inherits_charge, options=options)
     S_norm = S.norm()
     mask, new_norm, err = truncate_singular_values(S / S_norm, options=truncation_options)
-    U = U.apply_mask(mask, -1)
-    S = S._apply_mask_both_legs(mask)
+    U, S, V = svd_apply_mask(U, S, V, mask)
     if normalize_to is None:
         renormalize = 1
     else:
         # norm(S[mask]) == S_norm * new_norm
         renormalize = normalize_to / S_norm / new_norm
         S = S._mul_scalar(renormalize)
-    V = V.apply_mask(mask, 0)
     return U, S, V, err, renormalize
     
 
 def truncate_singular_values(S: DiagonalTensor, options) -> Mask:
-    """Given singular values, determine which to keep.
+    """Given *normalized* singular values, determine which to keep.
 
     Options
     -------
