@@ -4,12 +4,12 @@ from __future__ import annotations
 import numpy as np
 import warnings
 from numbers import Number
-from .tensors import DiagonalTensor, AbstractTensor, Tensor, Mask, ChargedTensor
+from .tensors import DiagonalTensor, AbstractTensor, Tensor, Mask, ChargedTensor, tdot
 from ..tools.misc import inverse_permutation
 from ..tools.params import asConfig
-from ..tools.hdf5_io import Hdf5Exportable
 
-__all__ = ['svd', 'truncate_svd', 'svd_split', 'leg_bipartition', 'exp', 'log']
+__all__ = ['svd', 'svd_apply_mask', 'truncated_svd', 'truncate_singular_values', 'qr', 'svd_split',
+           'pinv', 'leg_bipartition', 'exp', 'log']
 
 
 def svd(a: AbstractTensor, u_legs: list[int | str] = None, vh_legs: list[int | str] = None,
@@ -152,7 +152,7 @@ def svd_apply_mask(U: AbstractTensor, S: DiagonalTensor, Vh: AbstractTensor, mas
 def truncated_svd(a: AbstractTensor, u_legs: list[int | str] = None, vh_legs: list[int | str] = None,
                   new_labels: tuple[str, ...] = None, new_vh_leg_dual=False, U_inherits_charge: bool = False,
                   normalize_to: float = None, options={}, truncation_options={}
-                  ) -> tuple[AbstractTensor, DiagonalTensor, AbstractTensor, TruncationError, float]:
+                  ) -> tuple[AbstractTensor, DiagonalTensor, AbstractTensor, float, float]:
     """Truncated singular value decomposition of a tensor.
 
     The tensor is viewed as a linear map (i.e. matrix) from one set of its legs to the rest.
@@ -354,6 +354,20 @@ def svd_split(a: AbstractTensor, legs1: list[int | str] = None, legs2: list[int 
     """Split a tensor via (truncated) svd,
     i.e. compute (U @ S ** s_exponent) and (S ** (1 - s_exponent) @ Vh)"""
     raise NotImplementedError  # TODO
+
+
+def pinv(a: AbstractTensor, legs1: list[int | str] = None, legs2: list[int | str] = None, cutoff=1.e-15):
+    """The Moore-Penrose pseudo-inverse of a tensor.
+
+    The tensor is viewed as a linear map from (the duals of) `legs1` to `legs2`.
+    The resulting pseudo-inverse is a map from (the duals of) `legs2` to `legs1`,
+    i.e. it can be composed with `a`.
+    """
+    # TODO (JU) tests
+    legs1, legs2 = leg_bipartition(a, legs1, legs2)
+    U, S, Vh = svd(a, u_legs=legs1, vh_legs=legs2)
+    P = tdot(U, tdot(1. / S, Vh, 1, 0), -1, 0)
+    return P.conj().permute_legs([*legs2, *legs1])
 
 
 def _combine_constraints(good1, good2, warn):
