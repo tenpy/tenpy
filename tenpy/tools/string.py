@@ -91,3 +91,10 @@ def to_mathematica_lists(a):
         if isinstance(a, float) or isinstance(a, complex):
             return str(a).replace('e', '*^').replace('j', ' I')
         return str(a)
+
+
+def format_like_list(it) -> str:
+    """Format elements of an iterable as if it were a plain list.
+
+    This means surrounding them with brackets and separating them by `', '`."""
+    return f'[{", ".join(map(str, it))}]'

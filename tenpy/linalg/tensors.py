@@ -17,6 +17,7 @@ from functools import cached_property
 import logging
 logger = logging.getLogger(__name__)
 
+from .dummy_config import printoptions
 from .misc import duplicate_entries, force_str_len, join_as_many_as_possible
 from .dummy_config import config
 from .symmetries.groups import AbelianGroup
@@ -25,6 +26,7 @@ from .backends.backend_factory import get_default_backend
 from .backends.abstract_backend import Dtype, Block, AbstractBackend
 from ..tools.misc import to_iterable, to_iterable_of_len
 from ..tools.docs import amend_parent_docstring
+from ..tools.string import vert_join
 
 __all__ = ['Shape', 'AbstractTensor', 'Tensor', 'ChargedTensor', 'DiagonalTensor', 'Mask',
            'almost_equal', 'combine_legs', 'conj', 'inner', 'is_scalar', 'norm', 'outer',
@@ -266,23 +268,19 @@ class AbstractTensor(ABC):
         return components_strs
 
     def _repr_header_lines(self, indent: str) -> list[str]:
-        num_cols_label = min(10, max(5, *(len(str(l)) for l in self.labels)))
-        num_cols_dim = min(5, max(3, *(len(str(leg.dim)) for leg in self.legs)))
-
-        label_strs = [force_str_len(label, num_cols_label, rjust=False) for label in self.labels]
-        dim_strs = [force_str_len(leg.dim, num_cols_dim) for leg in self.legs]
-        dual_strs = ['dual' if leg.is_dual else '   /' for leg in self.legs]
-        components_strs = self._repr_leg_components(max_len=50)
-
+        # vertical table for the legs
+        labels = ['label'] + [str(l) for l in self.labels]
+        dims = ['    dim'] + [str(leg.dim) for leg in self.legs]
+        sector_nums = ['sectors'] + [str(leg.num_sectors) for leg in self.legs]
+        col_widths = [max(len(l), len(d), len(n)) for l, d, n in zip(labels, dims, sector_nums)]
+        
         lines = [
             f'{indent}* Backend: {self.backend}',
             f'{indent}* Symmetry: {self.symmetry}',
-            f'{indent}* Legs:  label{" " * (num_cols_label - 5)}  {" " * (num_cols_dim - 3)}dim  dual  components',
-            f'{indent}         {"=" * (10 + num_cols_label + num_cols_dim + max(10, *(len(c) for c in components_strs)))}',
+            f'{indent}* Legs: {" | ".join(x.rjust(w) for x, w in zip(labels, col_widths))}',
+            f'{indent}        {" | ".join(x.rjust(w) for x, w in zip(dims, col_widths))}',
+            f'{indent}        {" | ".join(x.rjust(w) for x, w in zip(sector_nums, col_widths))}',
         ]
-        for entries in zip(label_strs, dim_strs, dual_strs, components_strs):
-            lines.append(f'{indent}         {"  ".join(entries)}')
-
         return lines
 
     def _getitem_apply_masks(self, masks: list[Mask], legs: list[int]) -> AbstractTensor:
@@ -377,10 +375,14 @@ class AbstractTensor(ABC):
         return legs1, legs2
 
     def __repr__(self):
-        indent = '  '
+        indent = printoptions.indent * ' '
         lines = [f'{self.__class__.__name__}(']
         lines.extend(self._repr_header_lines(indent=indent))
-        lines.extend(self.backend._data_repr_lines(self, indent=indent, max_width=70, max_lines=20))
+        if not printoptions.skip_data:
+            lines.extend(self.backend._data_repr_lines(
+                self, indent=indent, max_width=printoptions.linewidth,
+                max_lines=printoptions.maxlines_tensors - len(lines) - 1
+            ))
         lines.append(')')
         return "\n".join(lines)
 
@@ -965,8 +967,8 @@ class Tensor(AbstractTensor):
         if backend is None:
             backend = get_default_backend(legs[0].symmetry)
         legs = [backend.add_leg_metadata(leg) for leg in legs]
-        return cls(data=backend.from_block_func(backend.block_random_uniform, legs, dtype=dtype),
-                   backend=backend, legs=legs, labels=labels)
+        data = backend.from_block_func(backend.block_random_uniform, legs, func_kwargs=dict(dtype=dtype))
+        return cls(data=data, backend=backend, legs=legs, labels=labels)
 
     def diagonal(self) -> DiagonalTensor:
         return DiagonalTensor.from_tensor(self, check_offdiagonal=False)

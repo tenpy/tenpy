@@ -14,6 +14,7 @@ from tenpy.linalg.backends.numpy import NumpyBlockBackend, NoSymmetryNumpyBacken
 from tenpy.linalg.symmetries.spaces import VectorSpace
 
 
+
 def random_block(shape, backend):
     if isinstance(backend, NumpyBlockBackend):
         return np.random.random(shape)
@@ -552,28 +553,17 @@ def demo_repr():
     #
     # run e.g. via the following command
     # python -c "from test_tensors import demo_repr; demo_repr()"
+    from tests.linalg import conftest
+    from tenpy.linalg.backends.backend_factory import get_backend
 
-    print()
-    separator = '=' * 80
-
-    backend = NoSymmetryNumpyBackend()
-    dims = (5, 2, 5)
-    data = random_block(dims, backend)
-    legs = [VectorSpace.without_symmetry(d) for d in dims]
-    tens1 = tensors.Tensor(data, legs=legs, backend=backend, labels=['vL', 'p', 'vR'])
-    tens2 = tensors.combine_legs(tens1, ['p', 'vR'])
-
-    for command in ['repr(tens1.legs[0])',
-                    'str(tens1.legs[0])',
-                    'repr(tens1)',
-                    'repr(tens2.legs[1])',
-                    'str(tens2.legs[1])',
-                    'repr(tens2)']:
-        output = eval(command)
-        print()
-        print(separator)
-        print(command)
-        print(separator)
-        print(output)
-        print(separator)
-        print()
+    labels = ['vL', 'p', 'vR*', 'a', 'q', 'x', 'y', 'z', 'i', 'o']
+    
+    for symmetry in conftest.symmetry._pytestfixturefunction.params:
+        backend = get_backend(symmetry)
+        for num_legs in [2, 4, 10]:
+            legs = [conftest.random_vector_space(symmetry, max_num_blocks=3, max_block_size=2) for _ in range(num_legs)]
+            tens = tensors.Tensor.random_uniform(legs, backend=backend, labels=labels[:num_legs])
+            print()
+            print('=' * 70)
+            print()
+            print(str(tens))

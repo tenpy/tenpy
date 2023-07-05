@@ -595,33 +595,77 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
                                   a.data.block_inds.copy())
 
     def _data_repr_lines(self, a: Tensor, indent: str, max_width: int, max_lines: int):
+        from ..dummy_config import printoptions
+        from ..misc import join_as_many_as_possible
+        
         data = a.data
         if len(data.blocks) == 0:
-            return [f'{indent}* Data : no non-zero block']
+            return [f'{indent}* Data : no non-zero blocks']
         if max_lines <= 1:
-            return [f'{indent}* Data : {len(data.blocks):d} blocks']
-        # show largest blocks first until we hit max_lines
-        sizes = np.prod([self.block_shape(block) for block in data.blocks], axis=1)
-        all_lines = [None]
-        shown_blocks = 0
-        for i in np.argsort(sizes):
-            sector = [a.symmetry.sector_str(leg._sorted_sectors[i])
-                      for i, leg in zip(data.block_inds[i, :], a.legs)]
-            sector_line = f'{indent}  * Sectors {sector}'
-            all_lines.append(sector_line)
-            all_lines.extend(self._block_repr_lines(data.blocks[i],
-                                                    indent=indent + '    ',
+            return [f'{indent}* Data : Showing none of {len(data.blocks):d} blocks']
+
+        line_start = f'{indent}* Data for sectors '
+
+        if not printoptions.summarize_blocks:
+            # try showing all blocks
+            lines = []
+            for block, block_inds in zip(data.blocks, data.block_inds):
+                sectors = join_as_many_as_possible(
+                    [a.symmetry.sector_str(leg._sorted_sectors[i]) for leg, i in zip(a.legs, block_inds)],
+                    separator=', ', max_len=printoptions.linewidth - len(line_start) - 1
+                )
+                lines.append(f'{line_start}[{sectors}]:')
+                lines.extend(self._block_repr_lines(block,
+                                                    indent=indent + printoptions.indent * ' ',
                                                     max_width=max_width,
-                                                    max_lines=max_lines - len(all_lines)))
-            shown_blocks += 1
-            if len(all_lines) + 1 >= max_lines:
+                                                    max_lines=max_lines))
+                if len(lines) > max_lines:
+                    break
+            else:  # (no break ocurred)
+                return lines
+            
+
+        # try showing shapes of all blocks
+        lines = []
+        for block, block_inds in zip(data.blocks, data.block_inds):
+            sectors = join_as_many_as_possible(
+                [a.symmetry.sector_str(leg._sorted_sectors[i]) for leg, i in zip(a.legs, block_inds)],
+                separator=', ', max_len=printoptions.linewidth - len(line_start) - 1
+            )
+            shape = str(self.block_shape(block))
+            if len(line_start) + len(sectors) + 10 + len(shape) <= printoptions.linewidth:
+                lines.append(f'{line_start}[{sectors}]: shape {shape}')
+            else:
+                lines.append(f'{line_start}[{sectors}]: shape {shape}')
+                lines.append(f'{indent}    shape {shape}')
+            if len(lines) > max_lines:
                 break
-        if shown_blocks == len(data.blocks):
-            shown = f'all {shown_blocks:d}'
-        else:
-            shown = f'largest {shown_blocks:d} of {len(data.blocks):d}'
-        all_lines[0] = f'{indent}* Data : {shown} blocks'
-        return all_lines
+        else:  # (no break ocurred)
+            return lines
+
+        # only show shapes of largest blocks
+        lines = []
+        sizes = np.prod([self.block_shape(block) for block in data.blocks], axis=1)
+        missing_blocks = len(a.data.blocks)
+        for j in np.argsort(sizes):
+            sectors = join_as_many_as_possible(
+                [a.symmetry.sector_str(leg._sorted_sectors[i])
+                 for leg, i in zip(a.legs, a.data.block_inds[j])],
+                separator=', ', max_len=printoptions.linewidth - len(line_start) - 1
+            )
+            shape = str(self.block_shape(a.data.blocks[j]))
+            if len(line_start) + len(sectors) + 10 + len(shape) <= printoptions.linewidth:
+                new_lines = [f'{line_start}[{sectors}]: shape {shape}']
+            else:
+                new_lines = [f'{line_start}[{sectors}]: shape {shape}',
+                             f'{indent}    shape {shape}']
+            if len(lines) + len(new_lines) >= max_lines:
+                lines.append(f'{indent}* Data for {missing_blocks} smaller blocks not shown')
+                return lines
+            lines.extend(new_lines)
+            missing_blocks -= 1
+
+        raise ValueError  # the above return should have triggered
 
     def tdot(self, a: Tensor, b: Tensor, axs_a: list[int], axs_b: list[int]) -> Data:
         #  Looking at the source of numpy's tensordot (which is just 62 lines of python code),

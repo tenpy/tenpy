@@ -12,7 +12,7 @@ from tenpy.linalg.dummy_config import printoptions
 
 from .groups import Sector, SectorArray, Symmetry, no_symmetry
 from ...tools.misc import inverse_permutation
-from ...tools.string import vert_join
+from ...tools.string import format_like_list
 
 if TYPE_CHECKING:
     from ..backends.abstract_backend import AbstractBackend
@@ -297,8 +297,8 @@ class VectorSpace:
             elements = [
                 f'VectorSpace({self.symmetry!r}',
                 *(['is_real=True'] if self.is_real else []),
-                f'sectors={_format_like_list(self.symmetry.sector_str(s) for s in self.sectors)}',
-                f'multiplicities={_format_like_list(self.multiplicities)}){is_dual_str}',
+                f'sectors={format_like_list(self.symmetry.sector_str(s) for s in self.sectors)}',
+                f'multiplicities={format_like_list(self.multiplicities)}){is_dual_str}',
             ]
             res = ', '.join(elements)
             if len(res) <= printoptions.linewidth:
@@ -310,8 +310,8 @@ class VectorSpace:
         if 3 * self.sectors.size < printoptions.linewidth:  # otherwise there is no chance anyway
             lines = [
                 f'VectorSpace({self.symmetry!r},{" is_real=True," if self.is_real else ""}',
-                f'{indent}sectors={_format_like_list(self.symmetry.sector_str(s) for s in self.sectors)},',
-                f'{indent}multiplicities={_format_like_list(self.multiplicities)}',
+                f'{indent}sectors={format_like_list(self.symmetry.sector_str(s) for s in self.sectors)},',
+                f'{indent}multiplicities={format_like_list(self.multiplicities)}',
                 f'){is_dual_str}'
             ]
             if all(len(l) <= printoptions.linewidth for l in lines):
@@ -342,8 +342,8 @@ class VectorSpace:
             for j in reversed(jumps):
                 sectors[j + 1:j + 1] = ['...']
                 mults[j + 1:j + 1] = ['...']
-            lines[1] = f'{indent}sectors={_format_like_list(sectors)},'
-            lines[2] = f'{indent}multiplicities={_format_like_list(mults)}'
+            lines[1] = f'{indent}sectors={format_like_list(sectors)},'
+            lines[2] = f'{indent}multiplicities={format_like_list(mults)}'
         raise RuntimeError  # the above return should always trigger
 
     def __str__(self):
@@ -824,10 +824,3 @@ def _fuse_spaces(symmetry: Symmetry, spaces: list[VectorSpace], _is_dual: bool
     sort = np.lexsort(non_dual_sectors.T)
     metadata = {}
     return non_dual_sectors[sort], multiplicities[sort], metadata
-
-
-def _format_like_list(it) -> str:
-    """Format elements of an iterable as if it were a plain list.
-
-    This means surrounding them with brackets and separating them by `', '`."""
-    return f'[{", ".join(map(str, it))}]'

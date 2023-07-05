@@ -10,9 +10,8 @@ class printoptions:
     precision: int = 8  # #digits
     maxlines_spaces: int = 15
     maxlines_tensors: int = 30
-    skip_data: bool = False
+    skip_data: bool = False  # skip Data section in Tensor prints
     summarize_blocks: bool = False  # True -> always summarize (show only shape, not entries)
-    show_blocks: bool = False  # Force showing all the blocks
 
 
 class config:
