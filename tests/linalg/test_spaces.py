@@ -182,7 +182,7 @@ def all_str_repr_demos():
 def demo_VectorSpace_repr(fun=repr):
     from tests.linalg import conftest
     for symmetry in conftest.symmetry._pytestfixturefunction.params:
-        space = conftest.random_vector_space(symmetry)
+        space = conftest.random_vector_space(symmetry, max_num_blocks=20)
         print()
         print(fun(space))
 

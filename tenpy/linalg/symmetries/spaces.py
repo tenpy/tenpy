@@ -8,6 +8,8 @@ import warnings
 import bisect
 from typing import TYPE_CHECKING
 
+from tenpy.linalg.dummy_config import printoptions
+
 from .groups import Sector, SectorArray, Symmetry, no_symmetry
 from ...tools.misc import inverse_permutation
 from ...tools.string import vert_join
@@ -286,23 +288,122 @@ class VectorSpace:
         raise RuntimeError  # a return should be triggered from within the for loop!
 
     def __repr__(self):
-        # TODO include sector_perm?
-        is_real_str = 'is_real=True, ' if self.is_real else ''
-        summarization_threshold = 20
-        sectors = np.array2string(self._non_dual_sorted_sectors[self._inverse_sector_perm],
-                                  threshold=summarization_threshold, separator=', '
-                                  ).replace('\n', '')
-        mults = np.array2string(self._sorted_multiplicities[self._inverse_sector_perm],
-                                threshold=summarization_threshold, separator=', '
-                                ).replace('\n', '')
+        # number of *entries* in sectors (num_sectors * num_charges) that triggers multiple lines
+        multiline_threshold = 4
         
-        sep = '\n   ' if self._non_dual_sorted_sectors.size > 3 else ''
-        return f'VectorSpace({self.symmetry!r}, is_dual={self.is_dual},{sep} sectors={sectors},{sep} multiplicities={mults}{is_real_str}{sep[:1]})'
+        is_dual_str = '.dual' if self.is_dual else ''
+
+        if self.sectors.size < multiline_threshold:
+            elements = [
+                f'VectorSpace({self.symmetry!r}',
+                *(['is_real=True'] if self.is_real else []),
+                f'sectors={_format_like_list(self.symmetry.sector_str(s) for s in self.sectors)}',
+                f'multiplicities={_format_like_list(self.multiplicities)}){is_dual_str}',
+            ]
+            res = ', '.join(elements)
+            if len(res) <= printoptions.linewidth:
+                return res
+
+        indent = printoptions.indent * ' '
+        
+        # check if printing all sectors fits within linewidth
+        if 3 * self.sectors.size < printoptions.linewidth:  # otherwise there is no chance anyway
+            lines = [
+                f'VectorSpace({self.symmetry!r},{" is_real=True," if self.is_real else ""}',
+                f'{indent}sectors={_format_like_list(self.symmetry.sector_str(s) for s in self.sectors)},',
+                f'{indent}multiplicities={_format_like_list(self.multiplicities)}',
+                f'){is_dual_str}'
+            ]
+            if all(len(l) <= printoptions.linewidth for l in lines):
+                return '\n'.join(lines)
+
+        # add as many sectors as possible before linewidth is reached
+        # save most recent suggestion in variabel res. if new suggestion is too long, return res.
+        res = f'VectorSpace({self.symmetry!r}, ...)'
+        if len(res) > printoptions.linewidth:
+            return 'VectorSpace(...)'
+        prio = self._sector_print_priorities(use_private_sectors=False)
+        lines = [
+            f'VectorSpace({self.symmetry!r},{" is_real=True," if self.is_real else ""}',
+            f'{indent}sectors=[...],',
+            f'{indent}multiplicities=[...]',
+            f'){is_dual_str}'
+        ]
+        for n in range(1, len(prio)):
+            # OPTIMIZE could optimize the search grid...
+            if any(len(l) > printoptions.linewidth for l in lines):
+                # this is the first time that printing all lines would be too long
+                return res
+            which = np.sort(prio[:n])
+            sectors = [self.symmetry.sector_str(s) for s in self.sectors[which]]
+            mults = list(self.multiplicities[which])
+            # insert '...' between non-consecutive sectors
+            jumps = np.where((which[1:] - which[:-1]) > 1)[0]
+            for j in reversed(jumps):
+                sectors[j + 1:j + 1] = ['...']
+                mults[j + 1:j + 1] = ['...']
+            lines[1] = f'{indent}sectors={_format_like_list(sectors)},'
+            lines[2] = f'{indent}multiplicities={_format_like_list(mults)}'
+        raise RuntimeError  # the above return should always trigger
 
     def __str__(self):
-        sectors = '_sector\n' + '\n'.join(self.symmetry.sector_str(s) for s in self._non_dual_sorted_sectors)
-        mults = 'multiplicity\n' + '\n'.join(map(str, self._sorted_multiplicities))
-        return f'symmetry: {self.symmetry!s}\nis_dual: {self.is_dual}\n' + vert_join([sectors, mults], delim=' | ')
+        return self._debugging_str(use_private_sectors=False)
+
+    def _debugging_str(self, use_private_sectors: bool = True):
+        """Version of ``str(self)`` intended for debugging the internals of ``tenpy.linalg``.
+
+        Instead of the :attr:`sectors`, it shows the "private" :attr:`_non_dual_sorted_sectors`.
+        """
+        return '\n'.join(self._debugging_str_lines(use_private_sectors=use_private_sectors))
+
+    def _debugging_str_lines(self, use_private_sectors: bool = True):
+        """Part of :meth:`_debugging_str`"""
+        if use_private_sectors:
+            sectors = self._non_dual_sorted_sectors
+            mults = self._sorted_multiplicities
+        else:
+            sectors = self.sectors
+            mults = self.multiplicities
+        indent = printoptions.indent * ' '
+        lines = [
+            'VectorSpace(',
+            *([f'{indent}is_real=True'] if self.is_real else []),
+            f'{indent}symmetry: {self.symmetry!s}',
+            f'{indent}dim: {self.dim}',
+            f'{indent}is_dual: {self.is_dual}',
+            f'{indent}num sectors: {self.num_sectors}',
+        ]
+        # determine sectors: list[str] and mults: list[str]
+        if len(lines) + self.num_sectors <= printoptions.maxlines_spaces:
+            sectors = [self.symmetry.sector_str(s) for s in sectors]
+            mults = [str(m) for m in mults]
+        else:
+            # not all sectors are shown. add how many there are
+            lines[4:4]= []
+            prio = self._sector_print_priorities(use_private_sectors=use_private_sectors)
+            which = []
+            jumps = []
+            for n in range(len(prio)):
+                _which = np.sort(prio[:n])
+                _jumps = np.where((_which[1:] - _which[:-1]) > 1)[0]
+                header = 1
+                if len(lines) + header + n + len(_jumps) > printoptions.maxlines_spaces:
+                    sectors = [self.symmetry.sector_str(s) for s in sectors[which]]
+                    mults = [str(m) for m in mults[which]]
+                    for j in reversed(jumps):
+                        sectors[j + 1:j + 1] = ['...']
+                        mults[j + 1:j + 1] = ['...']
+                    break
+                which = _which
+                jumps = _jumps
+            else:
+                raise RuntimeError  # break should have been reached
+        # done with sectors: list[str] and mults: list[str]
+        sector_col_width = max(len("sectors"), max(len(s) for s in sectors))
+        lines.append(f'{indent}{"sectors".ljust(sector_col_width)} | multiplicities')
+        lines.extend(f'{indent}{s.ljust(sector_col_width)} | {m}' for s, m in zip(sectors, mults))
+        lines.append(')')
+        return lines
 
     def __eq__(self, other):
         if not isinstance(other, VectorSpace):
@@ -416,6 +517,31 @@ class VectorSpace:
                 return True
         # reaching this line means self has sectors which other does not have
         return False
+
+    def _sector_print_priorities(self, use_private_sectors: bool):
+        """How to prioritize sectors if not all can be printed.
+
+        Used in `__repr__` and `__str__`.
+        Returns indices of either ``self._non_dual_sorted_sectors`` if `use_private_sectors`
+        or of ``self.sectors`` in order of priority"""
+        first = 0
+        last = self.num_sectors - 1
+        if use_private_sectors:
+            largest = np.argmax(self._sorted_multiplicities)
+            special = [first, last, largest, first + 1, last - 1, largest - 1, largest + 1]
+        else:
+            largest = self._inverse_sector_perm[np.argmax(self._sorted_multiplicities)]
+            extremal_charge_1 = self._inverse_sector_perm[0]  # i.e. _non_dual_sorted_sectors[0]
+            extremal_charge_2 = self._inverse_sector_perm[-1]
+            special = [first, last, largest, first + 1, last - 1, largest - 1, largest + 1,
+                       extremal_charge_1, extremal_charge_1 - 1, extremal_charge_1 + 1,
+                       extremal_charge_2, extremal_charge_2 - 1, extremal_charge_2 + 1]
+        which = []
+        for i in special:
+            if i not in which and 0 <= i < self.num_sectors:
+                which.append(i)
+        which.extend(i for i in range(self.num_sectors) if i not in which)
+        return np.array(which)
 
 
 def _calc_slices(symmetry: Symmetry, sectors: SectorArray, multiplicities: ndarray) -> ndarray:
@@ -596,22 +722,31 @@ class ProductSpace(VectorSpace):
         return iter(self.spaces)
 
     def __repr__(self):
-        lines = [f'{self.__class__.__name__}([']
-        indent = '    '
+        lines = [f'ProductSpace([']
+        indent = printoptions.indent * ' '
+        num_lines = 2  # first and last line
         for s in self.spaces:
-            lines.append(indent + repr(s).replace('\n', '\n' + indent))
+            next_space = indent + repr(s).replace('\n', '\n' + indent) + ','
+            additional_lines = 1 + next_space.count('\n')
+            if num_lines + additional_lines > printoptions.maxlines_spaces:
+                break
+            lines.append(next_space)
+            num_lines += additional_lines
         if self.is_dual:
             lines.append(']).dual')
         else:
             lines.append(f'])')
         return '\n'.join(lines)
 
-    def __str__(self):
-        res = f'ProductSpace(' \
-              f'shape: [{", ".join(str(s.dim) for s in self.spaces)}]->{self.dim}, ' \
-              f'is_dual: [{", ".join(str(s.is_dual) for s in self.spaces)}]->{self.is_dual}, ' \
-              f'# sectors: [{", ".join(str(s.num_sectors) for s in self.spaces)}]->{self.num_sectors})'
-        return res + '\n' + VectorSpace.__str__(self)
+    def _debugging_str_lines(self, use_private_sectors: bool = True):
+        indent = printoptions.indent * ' '
+        lines = VectorSpace._debugging_str_lines(self, use_private_sectors=use_private_sectors)
+        lines[0] = 'ProductSpace('
+        offset = 1 if self.is_real else 0
+        lines[2 + offset] = f'{indent}dim: [{", ".join(str(s.dim) for s in self.spaces)}] -> {self.dim}'
+        lines[3 + offset] = f'{indent}is_dual: [{", ".join(str(s.is_dual) for s in self.spaces)}] -> {self.is_dual}'
+        lines[4 + offset] = f'{indent}num sectors: [{", ".join(str(s.num_sectors) for s in self.spaces)}] -> {self.num_sectors}'
+        return lines
 
     def __eq__(self, other):
         if not isinstance(other, VectorSpace):
@@ -689,3 +824,10 @@ def _fuse_spaces(symmetry: Symmetry, spaces: list[VectorSpace], _is_dual: bool
     sort = np.lexsort(non_dual_sectors.T)
     metadata = {}
     return non_dual_sectors[sort], multiplicities[sort], metadata
+
+
+def _format_like_list(it) -> str:
+    """Format elements of an iterable as if it were a plain list.
+
+    This means surrounding them with brackets and separating them by `', '`."""
+    return f'[{", ".join(map(str, it))}]'
