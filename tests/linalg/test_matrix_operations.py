@@ -57,8 +57,7 @@ def test_svd(tensor_rng, new_vh_leg_dual):
         npt.assert_array_almost_equal(np.sort(S.diag_numpy)[::-1], S_np[:S.shape[0]])
         # check that U @ S @ Vd recovers the original tensor up to the error incurred
         T_approx = tensors.tdot(U, tensors.tdot(S, Vd, 'cr', 'cl'), 'cr', 'cl')
-        diff = tensors.norm(T - T_approx)
-        npt.assert_allclose(diff, tensors.norm(T) * np.sqrt(err.eps), atol=1e-12)
+        npt.assert_allclose(err, tensors.norm(T - T_approx), atol=1e-12)
         # check that U, Vd are isometries
         Ud_U = tensors.tdot(U.conj(), U, ['l1*', 'l2*'], ['l1', 'l2'])
         Vd_V = tensors.tdot(Vd, Vd.conj(), ['r1', 'r2'], ['r1*', 'r2*'])

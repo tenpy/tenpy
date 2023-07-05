@@ -172,9 +172,9 @@ def truncated_svd(a: AbstractTensor, u_legs: list[int | str] = None, vh_legs: li
     U, S, Vh
         The tensors U, S, Vh that form the truncated SVD, such that
         `tdot(U, tdot(S, Vh, 1, 0), -1, 0)` is *aproximately* equal to `a`.
-        The singular values are renormalized to ``S.norm() == a.norm()``.
-    err : :class:`TruncationError`
-        the truncation error introduced
+    err : float
+        The relative 2-norm truncation error ``norm(a - U_S_Vh) / norm(a)``.
+        This is the (relative) 2-norm weight of the discarded singular values.
     renormalization : float
         Factor, by which `S` was renormalized.
     """
@@ -193,7 +193,7 @@ def truncated_svd(a: AbstractTensor, u_legs: list[int | str] = None, vh_legs: li
     
 
 def truncate_singular_values(S: DiagonalTensor, options) -> Mask:
-    """Given *normalized* singular values, determine which to keep.
+    r"""Given *normalized* singular values, determine which to keep.
 
     Options
     -------
@@ -233,8 +233,10 @@ def truncate_singular_values(S: DiagonalTensor, options) -> Mask:
         A mask, indicating which of the singular values to keep
     new_norm : float
         The norm of S after truncation
-    err : :class:`TruncationError`
-        the truncation error introduced
+    err : float
+        the truncation error introduced, i.e. the norm(S_discarded) = sqrt(\sum_{i=k}^{N} S_i^2).
+        In the context of truncated SVD, this is the relative error in the 2-norm,
+        i.e. ``norm(T - T_approx) / norm(T)``.
     """
     options = asConfig(options, "truncation")
     # by default, only truncate values which are much closer to zero than machine precision.
@@ -297,7 +299,7 @@ def truncate_singular_values(S: DiagonalTensor, options) -> Mask:
     mask = np.zeros(len(S_np), dtype=np.bool_)
     np.put(mask, piv[cut:], True)
     new_norm = np.linalg.norm(S_np[mask])
-    err = TruncationError.from_S(S_np[np.logical_not(mask)])
+    err = np.linalg.norm(S_np[np.logical_not(mask)])
     
     return Mask.from_flat_numpy(mask, large_leg=S.legs[0]), new_norm, err
 
@@ -480,88 +482,3 @@ def _act_block_diagonal_square_matrix(t: AbstractTensor,
         if any(i != j for i, j in enumerate(transposed)):
             res = res.permute_legs(inverse_permutation(transposed))
     return res
-
-
-class TruncationError(Hdf5Exportable):
-    r"""Class representing a truncation error.
-
-    The default initialization represents "no truncation".
-
-    .. warning ::
-        For imaginary time evolution, this is *not* the error you are interested in!
-
-    Parameters
-    ----------
-    eps, ov : float
-        See below.
-
-
-    Attributes
-    ----------
-    eps : float
-        The total sum of all discared Schmidt values squared.
-        Note that if you keep singular values up to 1.e-14 (= a bit more than machine precision
-        for 64bit floats), `eps` is on the order of 1.e-28 (due to the square)!
-    ov : float
-        A lower bound for the overlap :math:`|\langle \psi_{trunc} | \psi_{correct} \rangle|^2`
-        (assuming normalization of both states).
-        This is probably the quantity you are actually interested in.
-        Takes into account the factor 2 explained in the section on Errors in the
-        `TEBD Wikipedia article <https://en.wikipedia.org/wiki/Time-evolving_block_decimation>`.
-    """
-    def __init__(self, eps=0., ov=1.):
-        self.eps = eps
-        self.ov = ov
-
-    def copy(self):
-        """Return a copy of self."""
-        return TruncationError(self.eps, self.ov)
-
-    @classmethod
-    def from_norm(cls, norm_new, norm_old=1.):
-        r"""Construct TruncationError from norm after and before the truncation.
-
-        Parameters
-        ----------
-        norm_new : float
-            Norm of Schmidt values kept, :math:`\sqrt{\sum_{a kept} \lambda_a^2}`
-            (before re-normalization).
-        norm_old : float
-            Norm of all Schmidt values before truncation, :math:`\sqrt{\sum_{a} \lambda_a^2}`.
-        """
-        eps = 1. - norm_new**2 / norm_old**2  # = (norm_old**2 - norm_new**2)/norm_old**2
-        return cls(eps, 1. - 2. * eps)
-
-    @classmethod
-    def from_S(cls, S_discarded, norm_old=None):
-        r"""Construct TruncationError from discarded singular values.
-
-        Parameters
-        ----------
-        S_discarded : 1D numpy array
-            The singular values discarded.
-        norm_old : float
-            Norm of all Schmidt values before truncation, :math:`\sqrt{\sum_{a} \lambda_a^2}`.
-            Default (``None``) is 1.
-        """
-        eps = np.sum(np.square(S_discarded))
-        if norm_old:
-            eps /= norm_old * norm_old
-        return cls(eps, 1. - 2. * eps)
-
-    def __add__(self, other):
-        res = TruncationError()
-        res.eps = self.eps + other.eps  # whatever that actually means...
-        res.ov = self.ov * other.ov
-        return res
-
-    @property
-    def ov_err(self):
-        """Error ``1.-ov`` of the overlap with the correct state."""
-        return 1. - self.ov
-
-    def __repr__(self):
-        if self.eps != 0 or self.ov != 1.:
-            return "TruncationError(eps={eps:.4e}, ov={ov:.10f})".format(eps=self.eps, ov=self.ov)
-        else:
-            return "TruncationError()"
