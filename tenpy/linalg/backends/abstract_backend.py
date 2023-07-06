@@ -272,14 +272,16 @@ class AbstractBackend(ABC):
 
     @abstractmethod
     def qr(self, a: Tensor, new_r_leg_dual: bool, full: bool) -> tuple[Data, Data, VectorSpace]:
-        """QR decomposition of a Matrix `a` with two legs (which may be ProductSpace)
+        """QR decomposition of a Tensor `a` with two legs.
+
+        The legs of `a` may be :class:`~tenpy.linalg.symmetries.spaces.ProductSpace`
 
         Returns
         -------
         q, r:
             Data of corresponding tensors.
-        new_leg :
-            (Backend-specific) VectorSpace the new leg of r.
+        new_leg : VectorSpace
+            the new leg of r.
         """
         ...
 

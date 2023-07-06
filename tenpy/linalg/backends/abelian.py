@@ -942,6 +942,10 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
         sym = a.symmetry
         if full:
             new_leg = q_leg_0.as_VectorSpace()
+            if new_leg.is_dual != new_r_leg_dual:
+                # taking the dual leaves _non_sorted_dual_sectors unaffected and
+                # thus we dont need to adjust anything else
+                new_leg = new_leg.dual
             # sort q_blocks
             q_blocks_full = [None] * q_leg_0.num_sectors
             for i, q in zip(a.data.block_inds[:, 0], q_blocks):
@@ -953,55 +957,39 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
                 for i, q in enumerate(q_blocks_full):
                     if q is None:
                         q_blocks_full[i] = self.eye_block([q_leg_0._sorted_multiplicities[i]], dtype)
-            q_block_inds = np.hstack([np.arange(q_leg_0.num_sectors, int)[:, np.newaxis]]*2)
+            q_block_inds = np.repeat(np.arange(q_leg_0.num_sectors, dtype=int)[:, None], 2, axis=1)  # sorted
             r_block_inds = a.data.block_inds.copy() # is already sorted...
-            if new_r_leg_dual != new_leg.is_dual:
-                # similar as new_leg.flip_is_dual(), but also get permuation on the way
-                new_sectors = sym.dual_sectors(new_leg._non_dual_sorted_sectors)
-                perm = np.lexsort(new_sectors.T)
-                new_leg = VectorSpace(sym,
-                                      new_sectors[sort, :],
-                                      new_leg._multiplicities[sort],
-                                      new_leg.is_real,
-                                      new_r_leg_dual)
-                inv_perm = inverse_permutation(perm)
-                #  perm[new_i] = old_i ;     inv_perm[old_i] = new_i
-                #  new_sectors[new_i] = old_sectors[old_i] = old_sectors[perm[new_i]]
-                #  old_q_block_inds[a, 1] = [some old_i, ...]
-                #  new_q_block_inds[a, 1] = [some_new_i, ...] =  [inv_perm[some_old_i] ...]
-                q_block_inds[:, 1] = inv_perm[q_block_inds[:, 1]]
-                r_block_inds[:, 0] = inv_perm[r_block_inds[:, 0]]
-                # and finally sort q_block_inds again
-                # lexsort(r_block_inds.T) is sorted: dominated by second column without duplicates
-                sort = np.lexsort(q_block_inds.T)
-                q_block_inds = q_block_inds[sort, :]
-                q_blocks_full = [q_blocks_full[i] for i in sort]
+
             q_data = AbelianBackendData(a.data.dtype, q_blocks_full, q_block_inds)
             r_data = AbelianBackendData(a.data.dtype, r_blocks, r_block_inds)
         else:
-            # possibly skipping some sectors of q_leg_0 in new_leg
-            keep = a.data.block_inds[:, 0] # not sorted
-            new_leg_sectors = q_leg_0._non_dual_sorted_sectors[keep, :]
-            new_leg_mults = np.array([self.block_shape(q)[1] for q in q_blocks], int)
-            if new_r_leg_dual != q_leg_0.is_dual:
-                new_leg_sectors = sym.dual_sectors(new_leg_sectors)
-            perm = np.lexsort(new_leg_sectors.T)
-            inv_perm = inverse_permutation(perm)
-            new_leg = VectorSpace(sym,
-                                  new_leg_sectors[perm, :],
-                                  new_leg_mults[perm],
-                                  q_leg_0.is_real,
-                                  q_leg_0.is_dual)
-            new_block_inds = inv_perm[keep][:, np.newaxis]
-            q_block_inds = np.hstack([keep[:, np.newaxis], new_block_inds]) # not sorted
-            r_block_inds = np.hstack([new_block_inds, a.data.block_inds[:, 1]])  # lexsorted
-            # lexsort(r_block_inds.T) is sorted: dominated by second column without duplicates
-            sort = np.lexsort(q_block_inds.T)
-            q_block_inds = q_block_inds[sort, :]
-            q_blocks = [q_blocks[i] for i in sort]
+            keep = a.data.block_inds[:, 0]
+
+            # fix the order of sectors on the new leg: by order of appearance in q_leg_0
+            keep_perm = np.argsort(keep)
+            keep_sorted = keep[keep_perm]  # this fixes the order! "by order of appearance in q_leg_0"
+
+            new_leg_sectors = q_leg_0._non_dual_sorted_sectors[keep_sorted, :]  # this is lexsort(x.T)-ed
+            new_leg_mults = np.array([self.block_shape(q)[1] for q in q_blocks], int)[keep_perm]
+            new_leg = VectorSpace(sym, new_leg_sectors, new_leg_mults, q_leg_0.is_real, new_r_leg_dual)
+
+            # determine block_inds for the new leg:
+            # for q_blocks[i], the relevant sector is the same as the sector on the 0 leg:
+            # q_leg_0._non_dual_sorted_sectors[a.data.block_inds[i, 0]]
+            #  == q_leg_0._non_dual_sorted_sectors[keep[i]]
+            #  == q_leg_0._non_dual_sorted_sectors[keep_sorted[inv_keep_perm[i]]]
+            #  == new_leg_sectors[inv_keep_perm[i]]
+            #  == new_leg._non_dual_sorted_sectors[inv_keep_perm[i]]
+            # Thus we have
+            new_block_inds = inverse_permutation(keep_perm)
+            
+            q_block_inds = np.hstack([keep[:, None], new_block_inds[:, None]])  # not sorted.
+            r_block_inds = np.hstack([new_block_inds[:, None], a.data.block_inds[:, 1:2]])  # lexsorted.
+            assert np.all(np.lexsort(r_block_inds.T) == np.arange(len(r_block_inds)))  # TODO remove test
             q_data = AbelianBackendData(a.dtype, q_blocks, q_block_inds)
+            q_data._sort_block_inds()
             r_data = AbelianBackendData(a.dtype, r_blocks, r_block_inds)
-        assert new_leg.is_dual == new_r_leg_dual  # TODO: remove this test
+
         return q_data, r_data, new_leg
 
     def outer(self, a: Tensor, b: Tensor) -> Data:
