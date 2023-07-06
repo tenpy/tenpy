@@ -518,6 +518,9 @@ class VectorSpace:
         # reaching this line means self has sectors which other does not have
         return False
 
+    def as_VectorSpace(self):
+        return self  # TODO mutability issue? should we shallow copy?
+
     def _sector_print_priorities(self, use_private_sectors: bool):
         """How to prioritize sectors if not all can be printed.
 
