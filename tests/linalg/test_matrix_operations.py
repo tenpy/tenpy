@@ -63,3 +63,35 @@ def test_svd(tensor_rng, new_vh_leg_dual):
         Vd_V = tensors.tdot(Vd, Vd.conj(), ['r1', 'r2'], ['r1*', 'r2*'])
         assert tensors.almost_equal(tensors.eye_like(Ud_U), Ud_U)
         assert tensors.almost_equal(tensors.eye_like(Vd_V), Vd_V)
+
+
+@pytest.mark.parametrize(['new_r_leg_dual', 'full'],
+                         list(zip([True, False], [True, False])))
+def test_qr(tensor_rng, new_r_leg_dual, full):
+    T: tensors.Tensor = tensor_rng(labels=['l1', 'r2', 'l2', 'r1'], max_block_size=3)
+
+    for comment, q_legs, r_legs in [
+        ('all labelled', ['l1', 'l2'], ['r1', 'r2']),
+        ('all numbered', [2, 0], [1, 3]),
+        ('Q labelled', ['l1', 'l2'], None),
+        ('R numbered', None, [1, 3]),
+    ]:
+        print(comment)
+        Q, R = matrix_operations.qr(T, q_legs=q_legs, r_legs=r_legs, new_labels=['q', 'q*'],
+                                    new_r_leg_dual=new_r_leg_dual, full=full)
+        Q.test_sanity()
+        R.test_sanity()
+        if q_legs is None:
+            expect_Q_labels = ['l1', 'l2', 'q']  # in order of appearance on T
+        else:
+            expect_Q_labels = [T.labels[n] for n in T.get_leg_idcs(q_legs)] + ['q']
+        assert Q.labels == expect_Q_labels
+        if r_legs is None:
+            expect_R_labels = ['q*', 'r2', 'r1']  # in order of appearance on T
+        else:
+            expect_R_labels = ['q*'] + [T.labels[n] for n in T.get_leg_idcs(r_legs)]
+        assert R.labels == expect_R_labels
+        assert tensors.almost_equal(T, tensors.tdot(Q, R, 'q', 'q*'))
+        Qd_Q = tensors.tdot(Q.conj(), Q, ['l1*', 'l2*'], ['l1', 'l2'])
+        assert tensors.almost_equal(Qd_Q, tensors.eye_like(Qd_Q))
+        # TODO should we check properties of R...?
