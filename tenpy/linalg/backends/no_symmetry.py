@@ -116,9 +116,9 @@ class AbstractNoSymmetryBackend(AbstractBackend, AbstractBlockBackend, ABC):
         return u, s, vh, new_leg
 
     def qr(self, a: Tensor, new_r_leg_dual: bool, full: bool) -> tuple[Data, Data, VectorSpace]:
-        q, r = self.matrix_qr(a, full=full)
+        q, r = self.matrix_qr(a.data, full=full)
         new_leg_dim = self.block_shape(r)[0]
-        new_leg = VectorSpace.without_symmetry(new_leg_dim, is_dual=new_r_leg_dual, is_real=a.legs[0].is_real)
+        new_leg = VectorSpace.without_symmetry(new_leg_dim, _is_dual=new_r_leg_dual, is_real=a.legs[0].is_real)
         return q, r, new_leg
 
     def outer(self, a: Tensor, b: Tensor) -> Data:

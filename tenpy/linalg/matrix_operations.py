@@ -342,10 +342,10 @@ def qr(a: AbstractTensor, q_legs: list[int | str] = None, r_legs: list[int | str
     Q = Tensor(q_data, legs=[a.legs[0], new_leg.dual], backend=a.backend)
     R = Tensor(r_data, legs=[new_leg, a.legs[1]], backend=a.backend)
     if need_combine:
-        R = R.split_leg(1)
-        Q = Q.split_leg(0)
+        R = R.split_legs(1)
+        Q = Q.split_legs(0)
     Q.set_labels([a_labels[n] for n in q_idcs] + [new_labels[0]])
-    R.set_labels([new_labels[1]], [a_labels[n] for n in r_idcs])
+    R.set_labels([new_labels[1], *[a_labels[n] for n in r_idcs]])
     return Q, R
 
 

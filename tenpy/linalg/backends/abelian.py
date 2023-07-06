@@ -935,7 +935,7 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
         q_leg_0, r_leg_1 = a.legs
         q_blocks = []
         r_blocks = []
-        for block in zip(a.data.blocks):
+        for block in a.data.blocks:
             q, r = self.matrix_qr(block, full=full)
             q_blocks.append(q)
             r_blocks.append(r)
