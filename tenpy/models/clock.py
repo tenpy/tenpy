@@ -10,6 +10,9 @@ from .lattice import Chain
 from ..networks.site import ClockSite
 
 
+__all__ = ['ClockModel', 'ClockChain']
+
+
 class ClockModel(CouplingMPOModel):
     r"""q-state Quantum clock model on a general lattice
 

@@ -24,8 +24,21 @@ so you propably won't need to import `charges` directly.
 # Copyright 2018-2023 TeNPy Developers, GNU GPLv3
 
 from . import charges, np_conserved, lanczos, random_matrix, sparse, svd_robust
+from .charges import *
+from .np_conserved import *
+from .lanczos import *
+from .random_matrix import *
+from .sparse import *
+from .svd_robust import *
 
-__all__ = ['charges', 'np_conserved', 'lanczos', 'random_matrix', 'sparse', 'svd_robust']
+__all__ = ['charges', 'np_conserved', 'lanczos', 'random_matrix', 'sparse', 'svd_robust',
+           *charges.__all__,
+           *np_conserved.__all__,
+           *lanczos.__all__,
+           *random_matrix.__all__,
+           *sparse.__all__,
+           *svd_robust.__all__,
+           ]
 
 from ..tools import optimization
 
