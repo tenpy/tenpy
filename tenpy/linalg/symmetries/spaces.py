@@ -166,9 +166,10 @@ class VectorSpace:
         expect_diffs = self.symmetry.batch_sector_dim(self._non_dual_sorted_sectors) * self._sorted_multiplicities
         assert np.all(slice_diffs == expect_diffs)
         # slices should be consecutive
-        assert self.slices[0, 0] == 0, str(self.slices)
-        assert np.all(self.slices[1:, 0] == self.slices[:-1, 1])
-        assert self.slices[-1, 1] == self.dim
+        if len(self.slices) > 0:
+            assert self.slices[0, 0] == 0, str(self.slices)
+            assert np.all(self.slices[1:, 0] == self.slices[:-1, 1])
+            assert self.slices[-1, 1] == self.dim
         # _sector_perm
         assert self._sector_perm.shape == (self.num_sectors,)
         assert np.all(np.sum(self._sector_perm[:, None] == np.arange(self.num_sectors)[None, :], axis=0) == 1)
