@@ -5,7 +5,7 @@ import tenpy.linalg.np_conserved as npc
 import numpy as np
 from tenpy.models.xxz_chain import XXZChain
 from tenpy.algorithms.exact_diag import ExactDiag
-from tenpy.linalg.lanczos import lanczos
+from tenpy.linalg.krylov_based import lanczos
 
 
 def test_ED():
