@@ -11,7 +11,7 @@ from ..linalg import np_conserved as npc
 from ..networks.mpo import MPOEnvironment, MPOTransferMatrix
 from ..networks.mps import InitialStateBuilder
 from ..algorithms.mps_common import ZeroSiteH
-from ..linalg import lanczos
+from ..linalg import krylov_based
 from ..linalg.sparse import SumNpcLinearOperator
 from ..tools.misc import find_subclass
 from ..tools.params import asConfig
@@ -370,7 +370,7 @@ class OrthogonalExcitations(GroundStateSearch):
                                       qtotal=switch_charge_sector,
                                       labels=['vL', 'vR'])
             lanczos_params = self.engine.lanczos_params
-            _, th0, _ = lanczos.LanczosGroundState(H0, th0, lanczos_params).run()
+            _, th0, _ = krylov_based.LanczosGroundState(H0, th0, lanczos_params).run()
             th0 = npc.tensordot(th0, self.psi.get_B(0, 'B'), axes=['vR', 'vL'])
             self.psi.set_B(0, th0, form='Th')
         qtotal_after = self.psi.get_total_charge()

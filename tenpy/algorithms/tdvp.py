@@ -31,7 +31,7 @@ Much of the code is very similar to DMRG, and also based on the
 """
 # Copyright 2019-2023 TeNPy Developers, GNU GPLv3
 
-from tenpy.linalg.lanczos import LanczosEvolution
+from tenpy.linalg.krylov_based import LanczosEvolution
 from tenpy.algorithms.truncation import svd_theta, TruncationError
 from tenpy.algorithms.mps_common import Sweep, ZeroSiteH, OneSiteH, TwoSiteH
 from tenpy.algorithms.algorithm import TimeEvolutionAlgorithm, TimeDependentHAlgorithm
