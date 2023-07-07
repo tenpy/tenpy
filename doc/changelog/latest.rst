@@ -26,7 +26,11 @@ Added
   correlation functions in :class:`~tenpy.networks.mps.MPS` and :class:`~tenpy.networks.mps.MPSEnvironment`
 - Abstract :class:`~tenpy.networks.mps.BaseEnvironment` parent class for :class:`~tenpy.networks.mps.MPSEnvironment`
   and :class:`~tenpy.networks.mpo.MPOEnvironment`
-
+- Most "important" objects (this obvious involves some judgement calls, regarding what counts as important)
+  are now directly exposed in the top-level namespace of the tenpy package, i.e. you can now
+  ``from tenpy import MPS, tensordot, TwoSiteDMRGEngine`` or ``import tenpy as tp`` and then use
+  ``tp.tensordot`` etc. All objects which are not "private" and/or "implementation details" are
+  exposed in the subpackage namespace, e.g. you can ``from tenpy.networks import MPOGraph``.
 
 Changed
 ^^^^^^^
