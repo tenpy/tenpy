@@ -121,11 +121,19 @@ class AbstractBackend(ABC):
 
     def _fuse_spaces(self, symmetry: Symmetry, spaces: list[VectorSpace], _is_dual: bool):
         """Backends may override the behavior of linalg.spaces._fuse_spaces in order to compute
-        their backend-specfic metadata alongside the sectors"""
+        their backend-specfic metadata alongside the sectors.
+
+        Note that the implementation of ``VectorSpace.dual`` assumes that the metadata of the
+        resulting dual space is the same as for the original space.
+        """
         return _fuse_spaces(symmetry=symmetry, spaces=spaces, _is_dual=_is_dual)
 
     def add_leg_metadata(self, leg: VectorSpace) -> VectorSpace:
-        """Add backend-specifc metadata to a leg (modifying it in-place) and returning it"""
+        """Add backend-specifc metadata to a leg (modifying it in-place) and returning it.
+
+        Note that the implementation of ``VectorSpace.dual`` assumes that the metadata of the
+        resulting dual space is the same as for the original space.
+        """
         return leg
 
     @abstractmethod

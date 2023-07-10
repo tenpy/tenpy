@@ -11,7 +11,7 @@ from tenpy.linalg.backends.no_symmetry import AbstractNoSymmetryBackend
 from tenpy.linalg.backends.abelian import AbstractAbelianBackend
 from tenpy.linalg.backends.torch import TorchBlockBackend
 from tenpy.linalg.backends.numpy import NumpyBlockBackend, NoSymmetryNumpyBackend
-from tenpy.linalg.symmetries.spaces import VectorSpace
+from tenpy.linalg.symmetries.spaces import VectorSpace, ProductSpace, _fuse_spaces
 
 
 
@@ -466,6 +466,33 @@ def test_combine_split(tensor_rng):
     split.test_sanity()
     assert split.labels == ['b', 'd', 'c', 'a']
     npt.assert_equal(split.to_numpy_ndarray(), dense.transpose([1, 3, 2, 0]))
+
+    print('check _fuse_spaces')
+    sectors1, mults1, metadata1 = _fuse_spaces(
+        symmetry=tens.symmetry, spaces=tens.get_legs(['b', 'd']), _is_dual=False
+    )
+    sectors2, mults2, metadata2 = tens.backend._fuse_spaces(
+        symmetry=tens.symmetry, spaces=tens.get_legs(['b', 'd']), _is_dual=False
+    )
+    _b, _d = tens.get_legs(['b', 'd'])
+    assert np.all(sectors1 == sectors2)
+    assert np.all(mults1 == mults2)
+    assert len(metadata1) == 0
+    assert len(metadata2) == (4 if isinstance(tens.backend, AbstractAbelianBackend) else 0)
+
+    for prod_space, comment in [
+        (ProductSpace(tens.get_legs(['b', 'd']), backend=tens.backend), 'metadata via ProductSpace.__init__'),
+        (tens.backend.add_leg_metadata(ProductSpace(tens.get_legs(['b', 'd']))), 'metadata via add_leg_metadata'),
+        (ProductSpace(tens.get_legs(['b', 'd'])), 'no metadata'),
+    ]:
+        print(f'check combine_legs with ProductSpace. {comment}')
+        res = tensors.combine_legs(tens, ['b', 'd'], product_spaces=[prod_space])
+        res.test_sanity()
+        assert res.labels == ['a', '(b.d)', 'c']
+        split = tensors.split_legs(res, '(b.d)')
+        split.test_sanity()
+        assert split.labels == ['a', 'b', 'd', 'c']
+        assert np.allclose(split.to_numpy_ndarray(), dense.transpose([0, 1, 3, 2]))
 
 
 def test_is_scalar(backend, tensor_rng, vector_space_rng):

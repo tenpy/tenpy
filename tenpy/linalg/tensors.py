@@ -1349,6 +1349,8 @@ class Tensor(AbstractTensor):
             if product_space is None:
                 product_spaces[i] = self.make_ProductSpace(leg_idcs, _is_dual=product_spaces_dual[i])
             else:
+                # add metadata in-place if it is missing. if it already exists, this does nothing.
+                self.backend.add_leg_metadata(product_spaces[i])
                 # test for compatibility
                 legs = [self.legs[a] for a in leg_idcs]
                 if len(legs) != len(product_space.spaces):

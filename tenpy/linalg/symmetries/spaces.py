@@ -416,7 +416,7 @@ class VectorSpace:
 
     @property
     def dual(self):
-        res = copy.copy(self)  # shallow copy, works for subclasses as well
+        res = copy.copy(self)  # shallow copy, works for subclasses as well and preserves metadata
         res.is_dual = not self.is_dual
         return res
 
