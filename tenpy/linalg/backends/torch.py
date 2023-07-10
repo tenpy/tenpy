@@ -200,6 +200,10 @@ class TorchBlockBackend(AbstractBlockBackend):
 
     def block_sum_all(self, a: Block) -> float | complex:
         return torch_module.sum(a)
+
+    def block_eigh(self, block: Block) -> tuple[Block, Block]:
+        Q, L = torch_module.linalg.eigh(block)
+        return Q, L
         
 
 class NoSymmetryTorchBackend(TorchBlockBackend, AbstractNoSymmetryBackend):

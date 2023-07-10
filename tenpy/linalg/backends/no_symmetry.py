@@ -224,3 +224,6 @@ class AbstractNoSymmetryBackend(AbstractBackend, AbstractBlockBackend, ABC):
 
     def apply_mask_to_DiagonalTensor(self, tensor: DiagonalTensor, mask: Mask) -> DiagonalData:
         return self.apply_mask_to_block(tensor.data, mask.data, ax=0)
+
+    def eigh(self, a: Tensor) -> tuple[DiagonalData, Data]:
+        return self.block_eigh(a.data)

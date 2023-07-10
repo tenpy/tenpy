@@ -500,6 +500,11 @@ class AbstractBackend(ABC):
     def apply_mask_to_DiagonalTensor(self, tensor: DiagonalTensor, mask: Mask) -> DiagonalData:
         ...
 
+    @abstractmethod
+    def eigh(self, a: Tensor) -> tuple[DiagonalData, Data]:
+        """Eigenvalue decomposition of a 2-leg hermitian tensor"""
+        ...
+
 
 class AbstractBlockBackend(ABC):
     svd_algorithms: list[str]  # first is default
@@ -726,4 +731,12 @@ class AbstractBlockBackend(ABC):
         """Apply a mask (1D boolean block) to a block, slicing/projecting that axis"""
         idx = (slice(None, None, None),) * (ax - 1) + (mask,)
         return block[idx]
+
+    @abstractmethod
+    def block_eigh(self, block: Block) -> tuple[Block, Block]:
+        """Eigenvalue decomposition of a 2D hermitian block.
+
+        Return a 1D block of eigenvalues and a 2D block of eigenvectors
+        """
+        ...
     

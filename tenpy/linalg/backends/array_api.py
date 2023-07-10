@@ -200,6 +200,9 @@ class ArrayApiBlockBackend(AbstractBlockBackend):
     def block_sum_all(self, a: Block) -> float | complex:
         return self._api.sum(a)
 
+    def block_eigh(self, block: Block) -> tuple[Block, Block]:
+        return self._api.linalg.eigh(block)
+
 
 class NoSymmetryArrayApiBackend(ArrayApiBlockBackend, AbstractNoSymmetryBackend):
     def __init__(self, api_namespace):

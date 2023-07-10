@@ -216,6 +216,9 @@ class NumpyBlockBackend(AbstractBlockBackend):
 
     def apply_mask_to_block(self, block: Block, mask: Block, ax: int) -> Block:
         return np.compress(mask, block, ax)
+
+    def block_eigh(self, block: Block) -> tuple[Block, Block]:
+        return np.linalg.eigh(block)
     
 
 class NoSymmetryNumpyBackend(NumpyBlockBackend, AbstractNoSymmetryBackend):

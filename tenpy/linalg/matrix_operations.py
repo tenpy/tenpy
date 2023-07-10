@@ -4,8 +4,9 @@ from __future__ import annotations
 import numpy as np
 import warnings
 from numbers import Number
-from .tensors import DiagonalTensor, AbstractTensor, Tensor, Mask, ChargedTensor, tdot
-from ..tools.misc import inverse_permutation
+from .symmetries.spaces import ProductSpace
+from .tensors import DiagonalTensor, AbstractTensor, Tensor, Mask, ChargedTensor, tdot, _dual_leg_label
+from ..tools.misc import inverse_permutation, to_iterable
 from ..tools.params import asConfig
 
 __all__ = ['svd', 'svd_apply_mask', 'truncated_svd', 'truncate_singular_values', 'qr', 'svd_split',
@@ -370,6 +371,81 @@ def pinv(a: AbstractTensor, legs1: list[int | str] = None, legs2: list[int | str
     return P.conj().permute_legs([*legs2, *legs1])
 
 
+def eigh(a: AbstractTensor, legs1: list[int | str] = None, legs2: list[int | str] = None,
+         new_labels: str | list[str] = None):
+    r"""Eigenvalue decomposition of a hermitian square tensor.
+
+    A tensor is considered square, if the `legs2` legs are the duals of the `legs1` legs,
+    i.e. if the tensor can be viewed as a linear map from a space (the product of those legs) to itself.
+    It is considered hermitian, if this linear map is hermitian.
+
+    The eigenvalue decomposition is :math:`a = U \cdot D \cdot U^\dagger`, i.e.
+    ``a == tdot(U, tdot(D, U.conj(), 1, 0), -1, 0)``.
+    where `U` is (up to combining/splitting legs) a unitary and `D` is diagonal, containing the eigenvalues.
+
+    Parameters
+    ----------
+    a : Tensor
+        The tensor two decompose. Has ``2 * N`` where the ``N`` legs specified by `legs1`
+        are duals of those specified by `legs2`.
+        Reshaped to a matrix (by combining `legs1` and `legs2`), `a` is assumed to be hermitian.
+        This is not checked.
+    legs1
+        Which of the legs belong to "matrix rows"
+    legs2
+        Which of the legs belong to "matrix columns"
+    new_labels: str or tuple of two str, optional
+        Either two labels, where `new_labels[0]` is used for the last leg of `U` and `D`, while
+        `new_labels[1]` is used for the first leg of `D`.
+        If only a single label, the second is the "dual of" the given one.
+
+    Returns
+    -------
+    D : DiagonalTensor
+        The eigenvalues as a DiagonalTensor with legs ``[new_leg, new_leg.dual]``.
+    U : Tensor
+        A tensor containing the normalized eigenvectors. It is unitary, in the sense that combining
+        the leading legs yields a unitary matrix. Legs are ``[*a.get_legs(legs1), new_leg.dual]``,
+        where ``new_leg = ProductSpace(*a.get_legs(leg1))``.
+    """
+    # TODO (JU) should we support `UPLO` arg? (use lower or upper triangular part)
+    # TODO (JU) should we support `sort` arg? (how to sort eigenvalues *within* charge blocks)
+    #           if not, should we fix a canonical order? -> enforce it in block_eigh for all backends.
+    if not isinstance(a, Tensor):
+        raise TypeError(f'eigh not supported for type {type(a)}')
+    idcs1, idcs2 = leg_bipartition(a, legs1, legs2)
+    assert len(idcs1) == len(idcs2)
+    incompatible = [(i1, i2) for i1, i2 in zip(idcs1, idcs2) if not a.legs[i1].can_contract_with(a.legs[i2])]
+    if incompatible:
+        raise ValueError(f'Incompatible leg pairs: {", ".join(map(str, incompatible))}')
+    need_combine = (len(idcs1) > 1)
+    backend = a.backend
+    if need_combine:
+        # TODO (JU) could do something like this here
+        #           but it causes bugs...
+        #           Looks like a seperate issue with combine_legs.
+        #           will revisit this here when it is resolved::
+        # new_leg = ProductSpace([a.legs[i1] for i1 in idcs1], backend=backend)
+        # a = a.combine_legs(idcs1, idcs2, product_spaces=[new_leg, new_leg.dual])
+        a = a.combine_legs(idcs1, idcs2)
+        new_leg = a.legs[0]
+        assert a.legs[1] == new_leg.dual  # TODO remove this check
+    else:
+        new_leg = a.legs[0]
+
+    if new_labels is None:
+        new_labels = a.labels[::-1]
+    new_labels = list(to_iterable(new_labels))
+    if len(new_labels) == 1:
+        new_labels = [new_labels[0], _dual_leg_label(new_labels[0])]
+    assert len(new_labels) == 2
+    d_data, u_data = backend.eigh(a)
+    D = DiagonalTensor(d_data, first_leg=new_leg, second_leg_dual=True, backend=backend, labels=new_labels[::-1])
+    U = Tensor(u_data, legs=[new_leg, new_leg.dual], backend=backend, labels=[a.labels[0], new_labels[0]])
+    U = U.split_legs(0)
+    return D, U
+
+
 def _combine_constraints(good1, good2, warn):
     """return logical_and(good1, good2) if there remains at least one `True` entry.
 
@@ -484,7 +560,7 @@ def _act_block_diagonal_square_matrix(t: AbstractTensor,
     """
     idcs1, idcs2 = leg_bipartition(t, legs1, legs2)
     assert len(idcs1) == len(idcs2)
-    assert all(t.legs[i1].is_dual_of(t.legs[i2]) for i1, i2 in zip(idcs1, idcs2))
+    assert all(t.legs[i1].can_contract_with(t.legs[i2]) for i1, i2 in zip(idcs1, idcs2))
     if len(idcs1) > 1:
         pipe = t.make_ProductSpace(idcs1)
         t = t.combine_legs([idcs1, idcs2], new_legs=[pipe.dual, pipe], new_axes=[0, 1])

@@ -5,7 +5,7 @@ import numpy.testing as npt
 import pytest
 import warnings
 
-from tenpy.linalg import tensors, matrix_operations
+from tenpy.linalg import tensors, matrix_operations, symmetries
 
 
 @pytest.mark.parametrize('new_vh_leg_dual', [True, False])
@@ -123,3 +123,40 @@ def test_qr(tensor_rng, new_r_leg_dual, full):
         Qd_Q = tensors.tdot(Q.conj(), Q, ['l1*', 'l2*'], ['l1', 'l2'])
         assert tensors.almost_equal(Qd_Q, tensors.eye_like(Qd_Q))
         # TODO should we check properties of R...?
+
+
+@pytest.mark.parametrize('real', [True, False])
+def test_eigh(tensor_rng, vector_space_rng, real):
+    a = vector_space_rng()
+    b = vector_space_rng()
+    T: tensors.Tensor = tensor_rng(legs=[a, b.dual, b, a.dual], real=real, labels=['a', 'b*', 'b', 'a*'])
+    T = .5 * (T + T.conj())
+
+    print('check that we have constructed a hermitian tensor')
+    T_np = T.to_numpy_ndarray(leg_order=['a', 'b', 'a*', 'b*'])
+    npt.assert_allclose(T_np, T_np.conj().transpose([2, 3, 0, 1]))
+
+    print('perform eigh and test_sanity')
+    D, U = matrix_operations.eigh(T, legs1=['a', 'b'], legs2=['a*', 'b*'], new_labels='c')
+    D.test_sanity()
+    U.test_sanity()
+    assert D.dtype.is_real
+    assert U.dtype == T.dtype
+
+    print('checking legs and labels')
+    new_leg = symmetries.spaces.ProductSpace([a, b])
+    assert D.legs == [new_leg, new_leg.dual]
+    assert D.labels == ['c*', 'c']
+    assert U.legs == [a, b, new_leg.dual]
+    assert U.labels == ['a', 'b', 'c']
+
+    print('checking eigen property')
+    T_v = tensors.tdot(T, U, ['b*', 'a*'], ['b', 'a'])
+    D_v = tensors.tdot(D, U, 'c*', 'c')
+    assert tensors.almost_equal(T_v, D_v)
+
+    print('checking normalization and completeness of eigenvectors (i.e. unitarity of U)')
+    U_Ud = tensors.tdot(U, U.conj(), 'c', 'c*').combine_legs(['a', 'b'], ['a*', 'b*'])
+    assert tensors.almost_equal(U_Ud, tensors.eye_like(U_Ud))
+    Ud_U = tensors.tdot(U.conj(), U, ['a*', 'b*'], ['a', 'b'])
+    assert tensors.almost_equal(Ud_U, tensors.eye_like(Ud_U))

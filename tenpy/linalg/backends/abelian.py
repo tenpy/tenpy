@@ -321,7 +321,10 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
 
     def test_data_sanity(self, a: Tensor | DiagonalTensor | Mask, is_diagonal: bool):
         super().test_data_sanity(a, is_diagonal=is_diagonal)
-        assert a.data.block_inds.shape == (len(a.data.blocks), a.num_legs)
+        if a.data.block_inds.shape != (len(a.data.blocks), a.num_legs):
+            msg = f'Wrong blocks_inds shape. ' \
+                  f'Expected {(len(a.data.blocks), a.num_legs)}, got {a.data.block_inds.shape}.'
+            raise ValueError(msg)
         if is_diagonal:
             assert np.all(a.data.block_inds[:, 0] == a.data.block_inds[:, 1])
         # check expected tensor dimensions
@@ -485,7 +488,7 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
         if isinstance(leg, ProductSpace):
             if not self._leg_has_metadata(leg):
                 # OPTIMIZE write version that just calculates the metadata, without sectors?
-                _, _, metadata = self._fuse_spaces(symmetry=leg.symmetry, spaces=leg.spaces, _is_dual=leg._is_dual)
+                _, _, metadata = self._fuse_spaces(symmetry=leg.symmetry, spaces=leg.spaces, _is_dual=leg.is_dual)
                 for key, val in metadata.items():
                     setattr(leg, key, val)
         # for non-ProductSpace: no metadata to add
@@ -1569,6 +1572,23 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
         else:
             res_block_inds = np.zeros((0, 2), int)
         return AbelianBackendData(tensor.dtype, res_blocks, res_block_inds, is_sorted=True)
+
+    def eigh(self, a: Tensor) -> tuple[DiagonalData, Data]:
+        # for missing blocks, i.e. a zero block, the eigenvalues are zero, so we can just skip adding
+        # that block to the eigenvalues.
+        # for the eigenvectors, we choose the computational basis vectors, i.e. the matrix
+        # representatnion within that block is the identity matrix.
+        # we initialize all blocks to eye and override those where a has blocks.
+        eigvects_data = self.eye_data(legs=a.legs[0:1], dtype=a.dtype)
+        eigvals_blocks = []
+        for block, bi in zip(a.data.blocks, a.data.block_inds):
+            vals, vects = self.block_eigh(block)
+            eigvals_blocks.append(vals)
+            assert bi[0] == bi[1]  # TODO remove this check
+            eigvects_data.blocks[bi[0]] = vects
+        eigvals_data = AbelianBackendData(dtype=a.dtype.to_real, blocks=eigvals_blocks,
+                                          block_inds=a.data.block_inds, is_sorted=True)
+        return eigvals_data, eigvects_data
 
 
 def product_space_map_incoming_block_inds(space: ProductSpace, incoming_block_inds):
