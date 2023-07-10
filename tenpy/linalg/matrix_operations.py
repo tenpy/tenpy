@@ -421,15 +421,8 @@ def eigh(a: AbstractTensor, legs1: list[int | str] = None, legs2: list[int | str
     need_combine = (len(idcs1) > 1)
     backend = a.backend
     if need_combine:
-        # TODO (JU) could do something like this here
-        #           but it causes bugs...
-        #           Looks like a seperate issue with combine_legs.
-        #           will revisit this here when it is resolved::
-        # new_leg = ProductSpace([a.legs[i1] for i1 in idcs1], backend=backend)
-        # a = a.combine_legs(idcs1, idcs2, product_spaces=[new_leg, new_leg.dual])
-        a = a.combine_legs(idcs1, idcs2)
-        new_leg = a.legs[0]
-        assert a.legs[1] == new_leg.dual  # TODO remove this check
+        new_leg = ProductSpace([a.legs[i1] for i1 in idcs1], backend=backend)
+        a = a.combine_legs(idcs1, idcs2, product_spaces=[new_leg, new_leg.dual])
     else:
         new_leg = a.legs[0]
 

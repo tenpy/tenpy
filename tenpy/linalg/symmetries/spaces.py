@@ -811,12 +811,12 @@ def _fuse_spaces(symmetry: Symmetry, spaces: list[VectorSpace], _is_dual: bool
         # This yields overall dual `sectors` to return, which we directly save in
         # self._non_dual_sorted_sectors, such that `self.sectors` (which takes a dual!) yields correct sectors
         # Overall, this ensures consistent sorting/order of sectors between dual ProductSpace!
-    fusion = {tuple(s): m for s, m in zip(spaces[0].sectors, spaces[0]._sorted_multiplicities)}
+    fusion = {tuple(s): m for s, m in zip(spaces[0]._sorted_sectors, spaces[0]._sorted_multiplicities)}
     for space in spaces[1:]:
         new_fusion = {}
         for t_a, m_a in fusion.items():
             s_a = np.array(t_a)
-            for s_b, m_b in zip(space.sectors, space._sorted_multiplicities):
+            for s_b, m_b in zip(space._sorted_sectors, space._sorted_multiplicities):
                 for s_c in symmetry.fusion_outcomes(s_a, s_b):
                     t_c = tuple(s_c)
                     n = symmetry._n_symbol(s_a, s_b, s_c)
