@@ -72,6 +72,11 @@ class Shape:
                 raise IndexError(f'No leg with label {key}.') from None
         return self.dims[key]
 
+    def __eq__(self, other):
+        if isinstance(other, Shape):
+            return self.legs == other.legs and self._labels == other._labels
+        return False
+
     def set_labels(self, labels: list[str | None]):
         assert not duplicate_entries(labels, ignore=[None])
         assert len(labels) == self.num_legs
