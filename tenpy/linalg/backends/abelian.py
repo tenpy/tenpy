@@ -879,9 +879,9 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
 
         res_dtype = a.data.dtype.common(b.data.dtype)
         if a.data.dtype != res_dtype:
-            a_blocks = [[self.block_to_dtype(T) for T in blocks] for blocks in a_blocks]
+            a_blocks = [[self.block_to_dtype(T, res_dtype) for T in blocks] for blocks in a_blocks]
         if b.data.dtype != res_dtype:
-            b_blocks = [[self.block_to_dtype(T) for T in blocks] for blocks in b_blocks]
+            b_blocks = [[self.block_to_dtype(T, res_dtype) for T in blocks] for blocks in b_blocks]
         # reshape a_blocks and b_blocks to matrix/vector
         a_blocks = self._tdot_pre_reshape(a_blocks, cut_a, a.num_legs)
         b_blocks = self._tdot_pre_reshape(b_blocks, cut_b, b.num_legs)
