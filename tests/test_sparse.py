@@ -3,7 +3,7 @@ import tenpy.linalg.np_conserved as npc
 import numpy as np
 
 from random_test import gen_random_legcharge
-from tenpy.linalg import sparse
+from tenpy.linalg.old import sparse
 import tenpy.linalg.random_matrix as rmat
 import scipy.sparse.linalg
 import scipy.linalg

@@ -5,7 +5,8 @@ import tenpy.linalg.np_conserved as npc
 import numpy as np
 
 from random_test import gen_random_legcharge
-from tenpy.linalg import lanczos, sparse
+from tenpy.linalg import lanczos
+from tenpy.linalg.old import sparse
 import tenpy.linalg.random_matrix as rmat
 from scipy.linalg import expm
 import pytest

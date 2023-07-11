@@ -7,14 +7,14 @@ implementations of these algorithms (e.g., :mod:`~tenpy.linalg.lanczos`). Moreov
 :class:`FlatLinearOperator` allows to use all the scipy sparse methods by providing functionality
 to convert flat numpy arrays to and from np_conserved arrays.
 """
-# Copyright 2018-2021 TeNPy Developers, GNU GPLv3
+# Copyright 2018-2023 TeNPy Developers, GNU GPLv3
 
 import numpy as np
-from tenpy.linalg import np_conserved as npc
+from .. import np_conserved as npc
 import scipy.sparse.linalg
 from scipy.sparse.linalg import LinearOperator as ScipyLinearOperator
-from tenpy.tools.math import speigs, speigsh
-from tenpy.tools.misc import argsort, group_by_degeneracy
+from ...tools.math import speigs, speigsh
+from ...tools.misc import argsort, group_by_degeneracy
 import warnings
 
 __all__ = [
@@ -187,7 +187,7 @@ class OrthogonalNpcLinearOperator(NpcLinearOperatorWrapper):
             warnings.warn("Empty `ortho_vecs`: no need to patch `OrthogonalNpcLinearOperator`",
                           stacklevel=2)
         super().__init__(orig_operator)
-        from .lanczos import gram_schmidt
+        from ..lanczos import gram_schmidt
         ortho_vecs = gram_schmidt(ortho_vecs)
         self.ortho_vecs = ortho_vecs
 

@@ -12,7 +12,7 @@ from ..networks.mpo import MPOEnvironment, MPOTransferMatrix
 from ..networks.mps import InitialStateBuilder
 from ..algorithms.mps_common import ZeroSiteH
 from ..linalg import lanczos
-from ..linalg.sparse import SumNpcLinearOperator
+from ..linalg.old.sparse import SumNpcLinearOperator
 from ..tools.misc import find_subclass
 from ..tools.params import asConfig
 

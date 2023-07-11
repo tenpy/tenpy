@@ -155,7 +155,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 from ..linalg import np_conserved as npc
-from ..linalg import sparse
+from ..linalg.old import sparse as sparse
 from ..linalg.lanczos import Arnoldi
 from .site import GroupedSite, group_sites
 from ..tools.misc import to_iterable, to_array, get_recursive

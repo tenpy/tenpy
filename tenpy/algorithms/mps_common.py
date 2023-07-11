@@ -21,7 +21,7 @@ implemented here also directly use the :class:`Sweep` class.
 # Copyright 2018-2023 TeNPy Developers, GNU GPLv3
 
 from .algorithm import Algorithm
-from ..linalg.sparse import NpcLinearOperator, SumNpcLinearOperator, OrthogonalNpcLinearOperator
+from ..linalg.old.sparse import NpcLinearOperator, SumNpcLinearOperator, OrthogonalNpcLinearOperator
 from ..networks.mpo import MPOEnvironment
 from ..networks.mps import MPSEnvironment, MPS
 from .truncation import svd_theta, TruncationError

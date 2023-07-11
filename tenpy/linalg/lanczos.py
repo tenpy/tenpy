@@ -5,7 +5,7 @@ import warnings
 import numpy as np
 from scipy.linalg import expm
 import scipy.sparse
-from .sparse import FlatHermitianOperator, OrthogonalNpcLinearOperator, ShiftNpcLinearOperator
+from .old.sparse import FlatHermitianOperator, OrthogonalNpcLinearOperator, ShiftNpcLinearOperator
 import logging
 logger = logging.getLogger(__name__)
 
