@@ -19,9 +19,10 @@ which provides the :class:`~tenpy.linalg.tensors.Tensor` class used by the rest 
 """
 # Copyright 2018-2023 TeNPy Developers, GNU GPLv3
 
+from .old import lanczos
 from . import old  # need to import old._npc_helper first!
 from . import symmetries
-from . import backends, tensors, lanczos, random_matrix, sparse
+from . import backends, tensors, random_matrix, sparse
 from . import charges, matrix_operations
 from ..tools import optimization
 

@@ -213,7 +213,7 @@ class ProjectedTenpyLinearOperator(TenpyLinearOperatorWrapper):
             warnings.warn('empty ortho_vecs: no need for ProjectedTenpyLinearOperator', stacklevel=2)
         super().__init__(original_operator=original_operator)
         assert all(v.shape == original_operator.vector_shape for v in ortho_vecs)
-        from .lanczos import gram_schmidt
+        from .old.lanczos import gram_schmidt
         self.ortho_vecs = gram_schmidt(ortho_vecs)
         self.penalty = penalty
 
