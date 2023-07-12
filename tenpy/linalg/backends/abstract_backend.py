@@ -31,8 +31,8 @@ class Dtype(Enum):
     bool = 2
     float32 = 8
     complex64 = 9
-    float64 = 10
-    complex128 = 11
+    float64 = 16
+    complex128 = 17
 
     @property
     def is_real(dtype):
@@ -65,6 +65,18 @@ class Dtype(Enum):
     @property
     def zero_scalar(dtype):
         return dtype.python_type(0)
+
+    @property
+    def eps(dtype):
+        # difference between 1.0 and the next representable floating point number at the given precision
+        if dtype.value == 2:
+            raise ValueError(f'{dtype} is not inexact')
+        n_bits = 8 * (dtype.value // 2)
+        if n_bits == 32:
+            return 2 ** -52
+        if n_bits == 64:
+            return 2 ** -23
+        raise NotImplementedError(f'Dtype.eps not implemented for n_bits={n_bits}')
 
     def common(*dtypes):
         res = Dtype(max(t.value for t in dtypes))
