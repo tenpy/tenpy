@@ -24,6 +24,12 @@ class ScalingDummyOperator(sparse.TenpyLinearOperator):
     def matvec(self, vec: AbstractTensor) -> AbstractTensor:
         return self.factor * vec
 
+    def to_tensor(self, backend=None) -> AbstractTensor:
+        assert backend is not None, 'backend kwarg is needed for ScalingDummyOperator.to_tensor'
+        return self.factor * Tensor.eye(
+            legs=self.vector_shape.legs, backend=backend, labels=self.vector_shape.labels
+        )
+
     def adjoint(self):
         return ScalingDummyOperator(np.conj(self.factor), self.vector_shape)
 
@@ -43,11 +49,23 @@ class TensorDummyOperator(sparse.TenpyLinearOperator):
     def matvec(self, vec: AbstractTensor) -> AbstractTensor:
         return self.tensor.tdot(vec, ['a*', 'b*'], ['a', 'b'])
 
+    def to_tensor(self, **kw) -> AbstractTensor:
+        return self.tensor.permute_legs(['a', 'b', 'a*', 'b*'])
+
     def adjoint(self):
         return TensorDummyOperator(self.tensor.conj())
 
 
-def test_SumTenpyLinearOperator(tensor_rng, vector_space_rng):
+def check_to_tensor(op: sparse.TenpyLinearOperator, vec: AbstractTensor, backend):
+    """perform common checks of the TenpyLinearOperator.to_tensor method"""
+    res_matvec = op.matvec(vec)
+    tensor = op.to_tensor(backend=backend)
+    _ = op.to_matrix(backend=backend)  # just check if it runs...
+    res_tensor = tensor.tdot(vec, range(vec.num_legs, 2 * vec.num_legs), range(vec.num_legs))
+    assert almost_equal(res_matvec, res_tensor)
+
+
+def test_SumTenpyLinearOperator(backend, tensor_rng, vector_space_rng):
     a = vector_space_rng()
     b = vector_space_rng()
     T = tensor_rng(legs=[a, b.dual, a.dual, b], real=False, labels=['a', 'b*', 'a*', 'b'])
@@ -66,23 +84,24 @@ def test_SumTenpyLinearOperator(tensor_rng, vector_space_rng):
     # check access to attributes of original_operator
     assert op.some_weird_attribute == 'arbitrary value'
     assert op.some_unrelated_function(2) == 4
+    check_to_tensor(op, vec, backend)
 
     print('two operators')
-    print(op1.vector_shape)
-    print(op2.vector_shape)
     op = sparse.SumTenpyLinearOperator(op2, op1)
     assert almost_equal(op.matvec(vec), factor1 *  vec + T.tdot(vec, ['a*', 'b*'], ['a', 'b']))
     assert op.some_weird_attribute == 42
     assert op.some_unrelated_function(2) == 'buzz'
+    check_to_tensor(op, vec, backend)
 
     print('three operators')
     op = sparse.SumTenpyLinearOperator(op1, op2, op3)
     assert almost_equal(op.matvec(vec), (factor1 + factor3) * vec + T.tdot(vec, ['a*', 'b*'], ['a', 'b']))
     assert op.some_weird_attribute == 'arbitrary value'
     assert op.some_unrelated_function(2) == 4
+    check_to_tensor(op, vec, backend)
 
 
-def test_ShiftedTenpyLinearOperator(tensor_rng, vector_space_rng):
+def test_ShiftedTenpyLinearOperator(backend, tensor_rng, vector_space_rng):
     a = vector_space_rng()
     b = vector_space_rng()
     vec = tensor_rng(legs=[a, b], labels=['a', 'b'])
@@ -94,6 +113,7 @@ def test_ShiftedTenpyLinearOperator(tensor_rng, vector_space_rng):
     assert almost_equal(op.matvec(vec), (factor + shift) * vec)
     assert op.some_weird_attribute == 'arbitrary value'
     assert op.some_unrelated_function(2) == 4
+    check_to_tensor(op, vec, backend)
 
 
 @pytest.mark.parametrize('penalty', [None, 2.-.3j])
@@ -200,3 +220,17 @@ def test_FlatHermitianOperator(n=30, k=5, tol=1.e-14):
     # psi0_H_psi0 = np.inner(psi0.conj(), H_sparse.matvec(psi0)).item()
     # print("<psi0|H|psi0> / E0 = 1. + ", psi0_H_psi0 / E0 - 1.)
     # assert (abs(psi0_H_psi0 / E0 - 1.) < tol)
+
+
+@pytest.mark.parametrize('num_legs', [1, 2])
+def test_gram_schmidt(tensor_rng, vector_space_rng, num_legs, num_vecs=5, tol=1e-15):
+    legs = [vector_space_rng() for _ in range(num_legs)]
+    n = np.prod([l.dim for l in legs])
+    vecs_old = [tensor_rng(legs) for _ in range(num_vecs)]
+    vecs_new = sparse.gram_schmidt(vecs_old, rcond=tol)
+    ovs = np.zeros((len(vecs_new), len(vecs_new)), dtype=np.complex128)
+    vecs = [v.to_numpy_ndarray().flatten() for v in vecs_new]
+    for i, v in enumerate(vecs):
+        for j, w in enumerate(vecs):
+            ovs[i, j] = np.inner(v.conj(), w)
+    npt.assert_allclose(ovs, np.eye(len(vecs_new)), atol=2 * n * (num_vecs) ** 2 * tol)

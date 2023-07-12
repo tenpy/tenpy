@@ -17,8 +17,10 @@ from numbers import Number
 import warnings
 import numpy as np
 
-from .tensors import AbstractTensor, Shape, Tensor
-from .backends.abstract_backend import Dtype
+from tenpy.linalg.tensors import AbstractTensor
+
+from .tensors import AbstractTensor, Shape, Tensor, tdot, eye_like, zero_like
+from .backends.abstract_backend import Dtype, AbstractBackend
 
 
 __all__ = ['TenpyLinearOperator', 'TenpyLinearOperatorWrapper', 'SumTenpyLinearOperator',
@@ -50,13 +52,21 @@ class TenpyLinearOperator(ABC):
         ...
 
     @abstractmethod
-    def to_matrix(self):
-        # TODO
-        #   - should the result be a "matrix", i.e. forced to have two legs?
-        #     if not, rename the method?
-        #   - implement in derived classes
-        #   - add tests
-        raise NotImplementedError
+    def to_tensor(self, **kw) -> AbstractTensor:
+        """Compute a full tensor representation of the linear operator.
+        
+        Returns
+        -------
+        A tensor `t` with ``2 * N`` legs where ``N == self.vector_shape.num_legs``, such that
+        ``self.matvec(vec)`` is equivalent to ``tdot(t, vec, list(range(N, 2 * N)), list(range(N)))``.
+        """
+        ...
+
+    def to_matrix(self, backend: AbstractBackend = None) -> AbstractTensor:
+        """The tensor representation of self, reshaped to a matrix."""
+        # OPTIMIZE could find a way to store the ProductSpace and use it here
+        N = self.vector_shape.num_legs
+        return self.to_tensor(backend=backend).combine_legs(list(range(N)), list(range(N, 2 * N)))
 
     def adjoint(self) -> TenpyLinearOperator:
         """Return the hermitian conjugate operator.
@@ -95,6 +105,11 @@ class TensorLinearOperator(TenpyLinearOperator):
     def matvec(self, vec: AbstractTensor) -> AbstractTensor:
         assert vec.num_legs == 1
         return self.tensor.tdot(vec, self.which_leg, 0)
+
+    def to_tensor(self, **kw) -> AbstractTensor:
+        if self.tensor.which_leg == 1:
+            return self.tensor
+        return self.tensor.permute_legs([1, 0])
 
     def adjoint(self) -> TensorLinearOperator:
         return TensorLinearOperator(tensor=self.tensor.conj(), which_leg=self.other_leg)
@@ -159,6 +174,10 @@ class SumTenpyLinearOperator(TenpyLinearOperatorWrapper):
     def matvec(self, vec: AbstractTensor) -> AbstractTensor:
         return sum((op.matvec(vec) for op in self.more_operators), self.original_operator.matvec(vec))
 
+    def to_tensor(self, **kw) -> AbstractTensor:
+        return sum((op.to_tensor(**kw) for op in self.more_operators),
+                   self.original_operator.to_tensor(**kw))
+
     def adjoint(self) -> TenpyLinearOperator:
         return SumTenpyLinearOperator(self.original_operator.adjoint(),
                                       *(op.adjoint() for op in self.more_operators))
@@ -179,6 +198,10 @@ class ShiftedTenpyLinearOperator(TenpyLinearOperatorWrapper):
 
     def matvec(self, vec: AbstractTensor) -> AbstractTensor:
         return self.original_operator.matvec(vec) + self.shift * vec
+
+    def to_tensor(self, **kw) -> AbstractTensor:
+        res = self.original_operator.to_tensor(**kw)
+        return res + self.shift * eye_like(res)
 
     def adjoint(self):
         return ShiftedTenpyLinearOperator(original_operator=self.original_operator.adjoint(),
@@ -213,7 +236,6 @@ class ProjectedTenpyLinearOperator(TenpyLinearOperatorWrapper):
             warnings.warn('empty ortho_vecs: no need for ProjectedTenpyLinearOperator', stacklevel=2)
         super().__init__(original_operator=original_operator)
         assert all(v.shape == original_operator.vector_shape for v in ortho_vecs)
-        from .old.lanczos import gram_schmidt
         self.ortho_vecs = gram_schmidt(ortho_vecs)
         self.penalty = penalty
 
@@ -238,6 +260,21 @@ class ProjectedTenpyLinearOperator(TenpyLinearOperatorWrapper):
             for c, o in zip(coefficients, self.ortho_vecs):
                 res = res + self.penalty * c * o
         return res
+
+    def to_tensor(self, **kw) -> AbstractTensor:
+        res = self.original_operator.to_tensor(**kw)
+        P_ortho = zero_like(res)
+        for o in self.ortho_vecs:
+            P_ortho += o.outer(o.conj())
+        P = eye_like(res) - P_ortho
+        N = self.vector_shape.num_legs
+        first = list(range(N))
+        last = list(range(N, 2 * N))
+        res = tdot(res, P, last, first)  # should we offer tdot(res, P, N) for this use case?
+        res = tdot(P, res, last, first)
+        if self.penalty is not None:
+            res = res + self.penalty * P_ortho
+        return res
         
     def adjoint(self) -> TenpyLinearOperator:
         return ProjectedTenpyLinearOperator(
@@ -248,3 +285,30 @@ class ProjectedTenpyLinearOperator(TenpyLinearOperatorWrapper):
 
 
 # TODO (JU) port FlatLinearOperator from old
+
+
+
+def gram_schmidt(vecs: list[AbstractTensor], rcond=1.e-14) -> list[AbstractTensor]:
+    """Gram-Schmidt orthonormalization of a list of tensors.
+
+    Parameters
+    ----------
+    vecs : list of :class:`~tenpy.linalg.tensors.AbstractTensor`
+        The list of vectors to be orthogonalized. All with the same legs.
+    rcond : _type_, optional
+        Vectors of ``norm < rcond`` (after projecting out previous vectors) are discarded.
+
+    Returns
+    -------
+    list of :class:`~tenpy.linalg.tensors.AbstractTensor`
+        A list of orthonormal vectors which span the same space as `vecs`.
+    """
+    res = []
+    for vec in vecs:
+        for other in res:
+            ov = other.inner(vec)
+            vec = vec - ov * other
+        n = vec.norm()
+        if n > rcond:
+            res.append(vec._mul_scalar(1. / n))
+    return res
