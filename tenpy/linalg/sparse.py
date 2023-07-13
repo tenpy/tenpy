@@ -17,7 +17,7 @@ from numbers import Number
 import warnings
 import numpy as np
 
-from .tensors import AbstractTensor, Shape, inner
+from .tensors import AbstractTensor, Shape, Tensor
 from .backends.abstract_backend import Dtype
 
 
@@ -65,6 +65,39 @@ class TenpyLinearOperator(ABC):
         the adjoint operator of `self` to be `self`.
         """
         raise NotImplementedError("No adjoint defined")
+
+
+class TensorLinearOperator(TenpyLinearOperator):
+    """Linear operator defined by a two-leg tensor with contractible legs.
+
+    The matvec is defined by contracting one of the two legs of this tensor with the vector.
+    This class is effectively a thin wrapper around tensors that allows them to be used as inputs
+    for sparse linear algebra routines, such as lanczos.
+
+    Parameter
+    ---------
+    tensor :
+        The tensor that is contracted with the vector on matvec
+    which_legs : int or str
+        Which leg of `tensor` is to be contracted on matvec.
+    """
+    def __init__(self, tensor: Tensor, which_leg: int | str = -1):
+        if tensor.num_legs > 2:
+            raise ValueError('Expected a two-leg tensor')
+        if not tensor.legs[0].can_contract_with(tensor.legs[1]):
+            raise ValueError('Expected contractible legs')
+        self.which_leg = which_leg = tensor.get_leg_idx(which_leg)
+        self.other_leg = other_leg = 1 - which_leg
+        self.tensor = tensor
+        vector_shape = Shape(legs=[tensor.legs[other_leg]], labels=tensor.labels[other_leg])
+        super().__init__(vector_shape=vector_shape, dtype=tensor.dtype)
+
+    def matvec(self, vec: AbstractTensor) -> AbstractTensor:
+        assert vec.num_legs == 1
+        return self.tensor.tdot(vec, self.which_leg, 0)
+
+    def adjoint(self) -> TensorLinearOperator:
+        return TensorLinearOperator(tensor=self.tensor.conj(), which_leg=self.other_leg)
 
 
 class TenpyLinearOperatorWrapper(TenpyLinearOperator, ABC):
@@ -189,7 +222,7 @@ class ProjectedTenpyLinearOperator(TenpyLinearOperatorWrapper):
         # form ``P vec`` and keep coefficients for later use in the penalty term
         coefficients = []
         for o in self.ortho_vecs:
-            c = inner(o, res)
+            c = o.inner(res)
             coefficients.append(c)
             res = res - c * o
         # ``H P vec``
@@ -200,7 +233,7 @@ class ProjectedTenpyLinearOperator(TenpyLinearOperatorWrapper):
             # TODO (JU) i dont see how the order makes a difference here or why reverse is better...
             #           @jhauschild, i just took this from the previous implementation.
             #           could you expand the explanation?
-            res = res - inner(o, res) * o
+            res = res - o.inner(res) * o
         if self.penalty is not None:
             for c, o in zip(coefficients, self.ortho_vecs):
                 res = res + self.penalty * c * o
