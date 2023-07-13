@@ -568,7 +568,7 @@ class AbstractTensor(ABC):
 
     @abstractmethod
     def permute_legs(self, permutation: list[int]) -> AbstractTensor:
-        """See tensors.transpose"""
+        """See tensors.permute_legs"""
         ...
 
     @abstractmethod
@@ -1240,7 +1240,7 @@ class Tensor(AbstractTensor):
                           backend=backend,
                           labels=_get_result_labels(self.labels, other.labels, relabel1, relabel2))
         if isinstance(other, ChargedTensor):
-            assert other.invariant_part.labels[-1] not in relabel2
+            assert relabel2 is None or other.invariant_part.labels[-1] not in relabel2
             return ChargedTensor(
                 invariant_part=self.outer(other.invariant_part, relabel1=relabel1, relabel2=relabel2),
                 dummy_leg_state=other.dummy_leg_state
@@ -1252,7 +1252,7 @@ class Tensor(AbstractTensor):
              relabel2: dict[str, str] = None) -> AbstractTensor | float | complex:
         if isinstance(other, ChargedTensor):
             legs2 = other.get_leg_idcs(legs2)  # make sure we reference w.r.t. other, not other.invariant_part
-            assert other.invariant_part.labels[-1] not in relabel2
+            assert relabel2 is None or other.invariant_part.labels[-1] not in relabel2
             invariant_part = self.tdot(other.invariant_part, legs1=legs1, legs2=legs2,
                                        relabel1=relabel1, relabel2=relabel2)
             return ChargedTensor(invariant_part=invariant_part, dummy_leg_state=other.dummy_leg_state)
@@ -1580,6 +1580,8 @@ class ChargedTensor(AbstractTensor):
     def random_uniform(cls, legs: VectorSpace | list[VectorSpace], dummy_leg: VectorSpace,
                        backend=None, labels: list[str | None] = None, dtype: Dtype = Dtype.float64,
                        dummy_leg_state=None) -> ChargedTensor:
+        if labels is None:
+            labels = [None] * len(legs)
         inv = Tensor.random_uniform(legs=legs + [dummy_leg], backend=backend, labels=labels + [cls._DUMMY_LABEL],
                                     dtype=dtype)
         return ChargedTensor(invariant_part=inv, dummy_leg_state=dummy_leg_state)
@@ -1724,7 +1726,7 @@ class ChargedTensor(AbstractTensor):
     def to_dense_block(self, leg_order: list[int | str] = None) -> Block:
         invariant_block = self.backend.to_dense_block(self.invariant_part)
         if self.dummy_leg_state is None:
-            block = self.backend.block_squeeze_legs(invariant_block, -1)
+            block = self.backend.block_squeeze_legs(invariant_block, [-1])
         else:
             block = self.backend.block_tdot(invariant_block, self.dummy_leg_state, [-1], [0])
         if leg_order is not None:
@@ -1809,13 +1811,13 @@ class ChargedTensor(AbstractTensor):
             res = res.to_dense_block()
             # contract with state on dummy leg of self
             if self.dummy_leg_state is None:
-                res = backend.block_squeeze_legs(res, 0)
+                res = backend.block_squeeze_legs(res, [0])
             else:
                 state = backend.block_conj(self.dummy_leg_state) if do_conj else self.dummy_leg_state
                 res = backend.block_tdot(state, res, 0, 0)
             # contract with state on dummy leg of other
             if other.dummy_leg_state is None:
-                res = backend.block_squeeze_legs(res, 0)
+                res = backend.block_squeeze_legs(res, [0])
             else:
                 res = backend.block_tdot(res, other.dumm_leg_state, 0, 0)
             return backend.block_item(res)
@@ -1827,7 +1829,7 @@ class ChargedTensor(AbstractTensor):
     
     def outer(self, other: AbstractTensor, relabel1: dict[str, str] = None,
               relabel2: dict[str, str] = None) -> AbstractTensor:
-        assert self.invariant_part.labels[-1] not in relabel1
+        assert relabel1 is None or self.invariant_part.labels[-1] not in relabel1
         if isinstance(other, DiagonalTensor):
             other = other.to_full_tensor()
         if isinstance(other, Tensor):
@@ -1839,7 +1841,7 @@ class ChargedTensor(AbstractTensor):
             inv_part = inv_part.permute_legs(self_normal + other_normal + self_dummy)
             return ChargedTensor(invariant_part=inv_part, dummy_leg_state=self.dummy_leg_state)
         if isinstance(other, ChargedTensor):
-            assert other.invariant_part.labels[-1] not in relabel2
+            assert relabel2 is None or other.invariant_part.labels[-1] not in relabel2
             invariant_part = self.invariant_part.outer(other.invariant_part, relabel1=relabel1, relabel2=relabel2)
             return ChargedTensor.from_two_dummy_legs(
                 invariant_part, leg1=self.num_legs, state1=self.dummy_leg_state, leg2=-1,
@@ -1852,7 +1854,7 @@ class ChargedTensor(AbstractTensor):
              relabel2: dict[str, str] = None) -> AbstractTensor | float | complex:
         # no need to do input checks, since we reduce to Tensor.tdot, which checks
         legs1 = self.get_leg_idcs(legs1)  # make sure we reference w.r.t. self, not self.invariant_part
-        assert self.invariant_part.labels[-1] not in relabel1
+        assert relabel1 is None or self.invariant_part.labels[-1] not in relabel1
         if isinstance(other, (Tensor, DiagonalTensor, Mask)):
             # In both of these cases, the main work is done by tdot(self.invariant_part, other, ...)
             invariant_part = self.invariant_part.tdot(other, legs1=legs1, legs2=legs2,
@@ -1866,7 +1868,7 @@ class ChargedTensor(AbstractTensor):
             return ChargedTensor(invariant_part=invariant_part, dummy_leg_state=self.dummy_leg_state)
         if isinstance(other, ChargedTensor):
             legs2 = other.get_leg_idcs(legs2)  # make sure we referecne w.r.t. other
-            assert other.invariant_part.labels[-1] not in relabel2
+            assert relabel2 is None or other.invariant_part.labels[-1] not in relabel2
             invariant = self.invariant_part.tdot(other.invariant_part, legs1=legs1, legs2=legs2,
                                                  relabel1=relabel1, relabel2=relabel2)
             return ChargedTensor.from_two_dummy_legs(
@@ -2373,7 +2375,7 @@ class DiagonalTensor(AbstractTensor):
              relabel2: dict[str, str] = None) -> AbstractTensor | float | complex:
         if isinstance(other, ChargedTensor):
             legs2 = other.get_leg_idcs(legs2)  # make sure we reference w.r.t. other, not other.invariant_part
-            assert other.invariant_part.labels[-1] not in relabel2
+            assert relabel2 is None or other.invariant_part.labels[-1] not in relabel2
             invariant_part = self.tdot(other.invariant_part, legs1=legs1, legs2=legs2,
                                        relabel1=relabel1, relabel2=relabel2)
             return ChargedTensor(invariant_part=invariant_part, dummy_leg_state=other.dummy_leg_state)

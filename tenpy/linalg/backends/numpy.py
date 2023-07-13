@@ -159,13 +159,13 @@ class NumpyBlockBackend(AbstractBlockBackend):
     def block_random_uniform(self, dims: list[int], dtype: Dtype) -> Block:
         res = np.random.uniform(-1, 1, size=dims)
         if not dtype.is_real:
-            res += 1.j * np.random.uniform(-1, 1, size=dims)
+            res = res + 1.j * np.random.uniform(-1, 1, size=dims)
         return res
 
     def block_random_normal(self, dims: list[int], dtype: Dtype, sigma: float) -> Block:
         res = np.random.normal(loc=0, scale=sigma, size=dims)
         if not dtype.is_real:
-            res += 1.j * np.random.normal(loc=0, scale=sigma, size=dims)
+            res = res + 1.j * np.random.normal(loc=0, scale=sigma, size=dims)
         return res
 
     def block_from_numpy(self, a: np.ndarray) -> Block:
