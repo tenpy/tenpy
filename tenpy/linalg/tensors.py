@@ -3051,8 +3051,10 @@ def match_leg_order(t1: AbstractTensor, t2: AbstractTensor) -> list[int] | None:
     In lax label mode, we want to match the legs "by order" and hence always return None.
     """
     if config.strict_labels:
+        if _no_userdefined_labels(t1) and _no_userdefined_labels(t2):
+            return None
         if not (t1.is_fully_labelled and t2.is_fully_labelled):
-            raise ValueError('Fully labelled tensors are required in strict label mode')
+            raise ValueError('In strict label mode, labelled tensors must be *fully* labelled.')
         if t1.shape._labels == t2.shape._labels:
             return None
         return t2.get_leg_idcs(t1.labels)
@@ -3143,6 +3145,33 @@ def _split_leg_label(label: str | None, num: int) -> list[str | None]:
         return [None if l.startswith('?') else l for l in labels]
     else:
         raise ValueError('Invalid format for a combined label')
+
+
+def _no_userdefined_labels(t: AbstractTensor) -> bool:
+    """If the labels of t are consistent with a user who never specifies labels.
+
+    This includes
+    - The label ``None``
+    - The labels '!' and '!*' (arising on the invariant part of a ChargedTensor)
+    - Results of combining legs that have consistent labels
+    """
+    if all(l is None for l in t.labels):
+        # the most common case
+        return True
+    to_check = list(zip(t.legs, t.labels))  # tuples of (leg, label) pairs to check
+    while len(to_check) > 0:
+        leg, label = to_check.pop(0)
+        if label is None or label in ['!', '!*']:
+            continue
+        if isinstance(leg, ProductSpace):
+            try:
+                split_labels = _split_leg_label(label, len(leg.spaces))
+            except (ValueError, AssertionError):
+                return False
+            to_check.extend(zip(leg.spaces, split_labels))
+            continue
+        return False
+    return True
 
 
 def _get_result_labels(legs1: list[str | None], legs2: list[str | None],

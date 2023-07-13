@@ -231,7 +231,7 @@ def test_Tensor_methods(backend, vector_space_rng, backend_data_rng, tensor_rng)
     b = 17
     with pytest.raises(ValueError) as err:
         res = a * tens1 - b * tens2
-    assert "required in strict label mode" in err.value.args[0]  # TODO: check other config values?
+    assert "labelled tensors must be *fully* labelled" in err.value.args[0]  # TODO: check other config values?
     tens1.set_labels(['foo', 'a', 'b'])
     tens2.set_labels(['foo', 'a', 'b'])
     res = a * tens1 - b * tens2
