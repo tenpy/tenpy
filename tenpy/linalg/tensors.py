@@ -20,8 +20,8 @@ logger = logging.getLogger(__name__)
 from .dummy_config import printoptions
 from .misc import duplicate_entries, force_str_len, join_as_many_as_possible
 from .dummy_config import config
-from .symmetries.groups import AbelianGroup
-from .symmetries.spaces import VectorSpace, ProductSpace, SectorArray
+from .symmetries.groups import AbelianGroup, Symmetry
+from .symmetries.spaces import VectorSpace, ProductSpace, Sector, SectorArray
 from .backends.backend_factory import get_default_backend
 from .backends.abstract_backend import Dtype, Block, AbstractBackend
 from ..tools.misc import to_iterable, to_iterable_of_len
@@ -1452,9 +1452,10 @@ class ChargedTensor(AbstractTensor):
     # --------------------------------------------
 
     @classmethod
-    def from_block_func(cls, func, legs: VectorSpace | list[VectorSpace], dummy_leg: VectorSpace,
+    def from_block_func(cls, func, legs: VectorSpace | list[VectorSpace], charge: VectorSpace | Sector,
                         backend=None, labels: list[str | None] = None, func_kwargs={},
                         shape_kw: str = None, dtype: Dtype = None) -> ChargedTensor:
+        dummy_leg = cls._dummy_leg_from_charge(charge, symmetry=legs[0].symmetry)
         inv = Tensor.from_block_func(func=func, legs=legs + [dummy_leg], backend=backend,
                                      labels=labels + [cls._DUMMY_LABEL], func_kwargs=func_kwargs,
                                      shape_kw=shape_kw, dtype=dtype)
@@ -1470,7 +1471,7 @@ class ChargedTensor(AbstractTensor):
     @classmethod
     def from_dense_block(cls, block, legs: list[VectorSpace], backend=None, dtype: Dtype=None,
                          labels: list[str | None] = None, atol: float = 1e-8, rtol: float = 1e-5,
-                         dummy_leg: VectorSpace = None, dummy_leg_state=None
+                         charge: VectorSpace | Sector = None, dummy_leg_state=None
                          ) -> ChargedTensor:
         """Convert a dense block of the backend to a ChargedTensor, if possible.
 
@@ -1492,8 +1493,13 @@ class ChargedTensor(AbstractTensor):
             Does not contain a label for the dummy leg.
         atol, rtol : float
             Absolute and relative tolerance for checking if the block is actually symmetric.
-        dummy_leg : VectorSpace
-            The dummy leg. If not given, it is inferred from the block.
+        charge : VectorSpace or Sector, optional
+            The charge, specified either via the dummy leg of the :class:`ChargedTensor` or
+            via the sector that the tensor should live in.
+            As such, a sector is equivalent to `VectorSpace(symmetry, sectors=[charge]).dual`.
+            Note the `.dual`! The charge-rule for the invariant part then forces the composite
+            ChargedTensor to be in the specified sector.
+            If not given, it is inferred from the largest (by magnitude) entry of the block.
         dummy_leg_state : block
             The state on the dummy leg. Defaults to ``None``, which represents the state ``[1.]``.
         """
@@ -1505,12 +1511,14 @@ class ChargedTensor(AbstractTensor):
             block = backend.block_to_dtype(block, dtype)
         # add 1-dim axis for the dummy leg
         block = backend.block_add_axis(block, -1)
-        if dummy_leg is None:
+        if charge is None:
             dummy_leg = backend.infer_leg(block, legs + [None])
+        else:
+            dummy_leg = cls._dummy_leg_from_charge(charge, symmetry=legs[0].symmetry)
         if dummy_leg_state is not None and backend.block_shape(dummy_leg_state) != (1,):
             msg = f'Wrong shape of dummy_leg_state. Expected (1,). Got {backend.block_shape(dummy_leg_state)}'
             raise ValueError(msg)
-        invariant_part = Tensor.from_dense_block(block, legs=legs + [dummy_leg], backend=backend,
+        invariant_part = Tensor.from_dense_block(block, legs=legs + [charge], backend=backend,
                                                  dtype=dtype, labels=labels + [cls._DUMMY_LABEL],
                                                  atol=atol, rtol=rtol)
         return cls(invariant_part, dummy_leg_state=dummy_leg_state)
@@ -1518,7 +1526,7 @@ class ChargedTensor(AbstractTensor):
     @classmethod
     def from_numpy(cls, array: np.ndarray, legs: list[VectorSpace], backend=None, dtype: Dtype=None,
                    labels: list[str | None] = None, atol: float = 1e-8, rtol: float = 1e-5,
-                   dummy_leg: VectorSpace = None, dummy_leg_state=None
+                   charge: VectorSpace | Sector = None, dummy_leg_state=None
                    ) -> ChargedTensor:
         """
         Like from_dense_block but `array` and `dummy_leg_state` are numpy arrays.
@@ -1529,12 +1537,14 @@ class ChargedTensor(AbstractTensor):
         if dummy_leg_state is not None:
             dummy_leg_state = backend.block_from_numpy(np.asarray(dummy_leg_state))
         return cls.from_dense_block(block, legs=legs, backend=backend, dtype=dtype, labels=labels,
-                                    atol=atol, rtol=rtol, dummy_leg=dummy_leg, dummy_leg_state=dummy_leg_state)
+                                    atol=atol, rtol=rtol, charge=charge, dummy_leg_state=dummy_leg_state)
 
     @classmethod
-    def from_numpy_func(cls, func, legs: VectorSpace | list[VectorSpace], dummy_leg: VectorSpace,
+    def from_numpy_func(cls, func, legs: VectorSpace | list[VectorSpace], charge: VectorSpace | Sector,
                         backend=None, labels: list[str | None] = None, func_kwargs={},
                         shape_kw: str = None, dtype: Dtype = None) -> ChargedTensor:
+        legs = to_iterable(legs)
+        dummy_leg = cls._dummy_leg_from_charge(charge, symmetry=legs[0].symmetry)
         inv = Tensor.from_numpy_func(func=func, legs=legs + [dummy_leg], backend=backend,
                                      labels=labels + [cls._DUMMY_LABEL], func_kwargs=func_kwargs,
                                      shape_kw=shape_kw, dtype=dtype)
@@ -1579,9 +1589,11 @@ class ChargedTensor(AbstractTensor):
         return res
     
     @classmethod
-    def random_uniform(cls, legs: VectorSpace | list[VectorSpace], dummy_leg: VectorSpace,
+    def random_uniform(cls, legs: VectorSpace | list[VectorSpace], charge: VectorSpace | Sector,
                        backend=None, labels: list[str | None] = None, dtype: Dtype = Dtype.float64,
                        dummy_leg_state=None) -> ChargedTensor:
+        legs = to_iterable(legs)
+        dummy_leg = cls._dummy_leg_from_charge(charge, symmetry=legs[0].symmetry)
         if labels is None:
             labels = [None] * len(legs)
         inv = Tensor.random_uniform(legs=legs + [dummy_leg], backend=backend, labels=labels + [cls._DUMMY_LABEL],
@@ -1910,6 +1922,13 @@ class ChargedTensor(AbstractTensor):
             return 1.
         else:
             return self.backend.block_item(self.dummy_leg_state)
+
+    @classmethod
+    def _dummy_leg_from_charge(cls, charge: VectorSpace | Sector, symmetry: Symmetry):
+        if isinstance(charge, VectorSpace):
+            return charge
+        assert symmetry.is_valid_sector(charge)
+        return VectorSpace(symmetry, sectors=[charge], multiplicities=[1]).dual
 
 
 class DiagonalTensor(AbstractTensor):
