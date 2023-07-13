@@ -384,13 +384,15 @@ class AbstractTensor(ABC):
         lines = [f'{self.__class__.__name__}(']
         lines.extend(self._repr_header_lines(indent=indent))
         if not printoptions.skip_data:
-            lines.extend(self.backend._data_repr_lines(
-                self, indent=indent, max_width=printoptions.linewidth,
-                max_lines=printoptions.maxlines_tensors - len(lines) - 1
-            ))
+            lines.extend(self._data_repr_lines(indent=indent, max_lines=printoptions.maxlines_tensors - len(lines) - 1))
         lines.append(')')
         return "\n".join(lines)
 
+    def _data_repr_lines(self, indent: str, max_lines: int) -> list[str]:
+        return self.backend._data_repr_lines(
+            self, indent=indent, max_width=printoptions.linewidth, max_lines=max_lines
+        )
+        
     def __getitem__(self, idcs):
         """
         TODO eventually we should document this at some high-level place, e.g. in one of the rst files
@@ -1634,6 +1636,11 @@ class ChargedTensor(AbstractTensor):
     # --------------------------------------------
     # Overriding methods from AbstractTensor
     # --------------------------------------------
+
+    def _data_repr_lines(self, indent: str, max_lines: int) -> list[str]:
+        return self.backend._data_repr_lines(
+            self.invariant_part, indent=indent, max_width=printoptions.linewidth, max_lines=max_lines
+        )
     
     def _repr_header_lines(self, indent: str) -> list[str]:
         lines = AbstractTensor._repr_header_lines(self, indent=indent)
