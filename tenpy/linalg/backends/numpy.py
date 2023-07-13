@@ -219,6 +219,9 @@ class NumpyBlockBackend(AbstractBlockBackend):
 
     def block_eigh(self, block: Block) -> tuple[Block, Block]:
         return np.linalg.eigh(block)
+
+    def block_abs_argmax(self, block: Block) -> list[int]:
+        return np.unravel_index(np.argmax(np.abs(block)), block.shape)
     
 
 class NoSymmetryNumpyBackend(NumpyBlockBackend, AbstractNoSymmetryBackend):

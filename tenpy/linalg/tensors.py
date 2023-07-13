@@ -21,7 +21,7 @@ from .dummy_config import printoptions
 from .misc import duplicate_entries, force_str_len, join_as_many_as_possible
 from .dummy_config import config
 from .symmetries.groups import AbelianGroup
-from .symmetries.spaces import VectorSpace, ProductSpace
+from .symmetries.spaces import VectorSpace, ProductSpace, SectorArray
 from .backends.backend_factory import get_default_backend
 from .backends.abstract_backend import Dtype, Block, AbstractBackend
 from ..tools.misc import to_iterable, to_iterable_of_len
@@ -2859,6 +2859,30 @@ def conj(t: AbstractTensor) -> AbstractTensor:
     Labels are adjuste as `'p'` -> `'p*'` and `'p*'` -> `'p'`
     """
     return t.conj()
+
+
+def detect_sector_idcs_from_block(block: Block, legs: list[VectorSpace], backend: AbstractBackend
+                                  ) -> list[int]:
+    """Detect the symmetry sectors of a dense block. Return their indices.
+
+    Given a `block` that represents a symmetric tensor with the given `legs`, return
+    the sectors (one sector per leg) of the larges (by magnitude) entry of the `block`.
+    """
+    idcs = backend.block_abs_argmax(block)
+    sector_idcs = [leg.parse_index(idx)[0] for leg, idx in zip(legs, idcs)]
+    return sector_idcs
+
+
+def detect_sectors_from_block(block: Block, legs: list[VectorSpace], backend: AbstractBackend
+                              ) -> SectorArray:
+    """Detect the symmetry sectors of a dense block.
+
+    Given a `block` that represents a symmetric tensor with the given `legs`, return
+    the sectors (one sector per leg) of the larges (by magnitude) entry of the `block`.
+    """
+    sector_idcs = detect_sector_idcs_from_block(block=block, legs=legs, backend=backend)
+    sectors = [leg.sectors[i] for leg, i in zip(legs, sector_idcs)]
+    return np.stack(sectors, axis=0)
 
 
 def inner(t1: AbstractTensor, t2: AbstractTensor, do_conj: bool = True,

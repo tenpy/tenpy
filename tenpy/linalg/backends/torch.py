@@ -204,6 +204,15 @@ class TorchBlockBackend(AbstractBlockBackend):
     def block_eigh(self, block: Block) -> tuple[Block, Block]:
         Q, L = torch_module.linalg.eigh(block)
         return Q, L
+
+    def block_abs_argmax(self, block: Block) -> list[int]:
+        flat_idx = torch_module.argmax(torch_module.abs(block))
+        # OPTIMIZE numpy has np.unravel_indices. no analogue here?
+        idcs = []
+        for dim in reversed(block.shape):
+            flat_idx, idx = divmod(flat_idx, dim)
+            idcs.append(idx)
+        return idcs
         
 
 class NoSymmetryTorchBackend(TorchBlockBackend, AbstractNoSymmetryBackend):

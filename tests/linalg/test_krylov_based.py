@@ -20,7 +20,7 @@ def test_lanczos_gs(backend, vector_space_rng, N_cache, tol):
     E0_np, psi0_np = E_np[0], psi_np[:, 0]
 
     # detect in which charge sector the groundstate lives
-    sector = leg.idx_to_sector(np.argmax(np.abs(psi0_np)))  # TODO use detect_qtotal when implemented
+    sector, = tensors.detect_sectors_from_block(backend.block_from_numpy(psi0_np), legs=[leg], backend=backend)
     # TODO having to take the dual here is pretty unintuitive...
     dummy_leg = spaces.VectorSpace(symmetry=leg.symmetry, sectors=[leg.symmetry.dual_sector(sector)])
     psi_init = tensors.ChargedTensor.random_uniform(legs=[leg], dummy_leg=dummy_leg, backend=backend)
@@ -44,7 +44,7 @@ def test_lanczos_gs(backend, vector_space_rng, N_cache, tol):
     orthogonal_to = [psi0]
     for i in range(1, len(E_np)):
         E1_np, psi1_np = E_np[i], psi_np[:, i]
-        _sector = leg.idx_to_sector(np.argmax(np.abs(psi1_np)))
+        _sector, = tensors.detect_sectors_from_block(backend.block_from_numpy(psi1_np), legs=[leg], backend=backend)
         if np.any(_sector != sector):
             continue  # psi1_np is in different sector
         print("--- excited state #", len(orthogonal_to))
@@ -126,8 +126,8 @@ def test_arnoldi(backend, vector_space_rng, which, N_max=20):
     elif which == 'SR':
         i = np.argmin(np.real(E_np))
     E0_np, psi0_np = E_np[i], psi_np[:, i]
-    
-    sector = leg.idx_to_sector(np.argmax(np.abs(psi0_np)))  # TODO use detect_qtotal when implemented
+
+    sector, = tensors.detect_sectors_from_block(backend.block_from_numpy(psi0_np), legs=[leg], backend=backend)
     dummy_leg = spaces.VectorSpace(symmetry=leg.symmetry, sectors=[leg.symmetry.dual_sector(sector)])
     psi_init = tensors.ChargedTensor.random_uniform(legs=[leg], dummy_leg=dummy_leg, backend=backend)
 

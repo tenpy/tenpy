@@ -203,6 +203,15 @@ class ArrayApiBlockBackend(AbstractBlockBackend):
     def block_eigh(self, block: Block) -> tuple[Block, Block]:
         return self._api.linalg.eigh(block)
 
+    def block_abs_argmax(self, block: Block) -> list[int]:
+        flat_idx = self._api.argmax(self._api.abs(block))
+        # OPTIMIZE numpy has np.unravel_indices. no analogue here?
+        idcs = []
+        for dim in reversed(block.shape):
+            flat_idx, idx = divmod(flat_idx, dim)
+            idcs.append(idx)
+        return idcs
+
 
 class NoSymmetryArrayApiBackend(ArrayApiBlockBackend, AbstractNoSymmetryBackend):
     def __init__(self, api_namespace):

@@ -759,4 +759,9 @@ class AbstractBlockBackend(ABC):
         Return a 1D block of eigenvalues and a 2D block of eigenvectors
         """
         ...
+
+    @abstractmethod
+    def block_abs_argmax(self, block: Block) -> list[int]:
+        """Return the indices (one per axis) of the largest entry (by magnitude) of the block"""
+        ...
     
