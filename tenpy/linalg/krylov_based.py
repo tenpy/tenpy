@@ -242,6 +242,7 @@ class Arnoldi(KrylovBased):
         h = self._h_krylov
         w = self.psi0  # initialize
         norm = w.norm()
+        self.psi0 = w / norm
         for k in range(self.N_max):
             w = w ._mul_scalar(1. / norm)
             self._to_cache(w)
@@ -380,6 +381,7 @@ class LanczosGroundState(KrylovBased):
         h = self._h_krylov
         w = self.psi0  # initialize
         beta = w.norm()
+        self.psi0 = w / beta
         if self._psi0_norm is None:
             # this is only needed for normalization in LanczosEvolution
             self._psi0_norm = beta
