@@ -77,6 +77,11 @@ class KrylovBased:
             is used: the orthogonal vectors are *exact* eigenvectors with eigenvalue 0 independent
             of the shift, so you can use it to ensure that the energy is smaller than zero
             to avoid getting those.
+        reortho : bool
+            For poorly conditioned matrices, one can quickly loose orthogonality of the
+            generated Krylov basis.
+            If `reortho` is True, we re-orthogonalize against all the
+            vectors kept in cache to avoid that problem.
 
     Attributes
     ----------
@@ -336,11 +341,6 @@ class LanczosGroundState(KrylovBased):
             Set this to a number >= 2 if you are short on memory.
             The penalty is that one needs another Lanczos iteration to
             determine the ground state in the end, i.e., runtime is large.
-        reortho : bool
-            For poorly conditioned matrices, one can quickly loose orthogonality of the
-            generated Krylov basis.
-            If `reortho` is True, we re-orthogonalize against all the
-            vectors kept in cache to avoid that problem.
 
 
     """
