@@ -115,6 +115,21 @@ class TensorLinearOperator(TenpyLinearOperator):
         return TensorLinearOperator(tensor=self.tensor.conj(), which_leg=self.other_leg)
 
 
+def as_linear_operator(obj: TenpyLinearOperator | AbstractTensor) -> TenpyLinearOperator:
+    """Converts an object to a :class:`TenpyLinearOperator`.
+
+    The following objects can be converted::
+        - :class:`TenpyLinearOperator` trivially
+        - :class:`~tenpy.linalg.tensors.AbstractTensor` if they have exactly two legs which are contractible,
+           by wrapping them in :class:`TensorLinearOperator`.
+    """
+    if isinstance(obj, TenpyLinearOperator):
+        return obj
+    if isinstance(obj, AbstractTensor):
+        return TensorLinearOperator(tensor=obj, which_leg=-1)
+    raise TypeError(f'Could not convert {type(obj)} to linear operator')
+
+
 class TenpyLinearOperatorWrapper(TenpyLinearOperator, ABC):
     """Base class for wrapping around another :class:`TenpyLinearOperator`.
 
@@ -221,7 +236,7 @@ class ProjectedTenpyLinearOperator(TenpyLinearOperatorWrapper):
 
     Parameters
     ----------
-    original_operator : :class:`TenpyLinearOperator`
+    original_operator : :class:`TenpyLinearOperator`-like
         The original operator, denoted ``H`` in the summary above.
     ortho_vecs : list of :class:`~tenpy.linalg.tensors.AbstractTensor`
         TODO (JU) different name?
@@ -234,6 +249,7 @@ class ProjectedTenpyLinearOperator(TenpyLinearOperatorWrapper):
                  penalty: Number = None):
         if len(ortho_vecs) == 0:
             warnings.warn('empty ortho_vecs: no need for ProjectedTenpyLinearOperator', stacklevel=2)
+        original_operator = as_linear_operator(original_operator)
         super().__init__(original_operator=original_operator)
         assert all(v.shape == original_operator.vector_shape for v in ortho_vecs)
         self.ortho_vecs = gram_schmidt(ortho_vecs)

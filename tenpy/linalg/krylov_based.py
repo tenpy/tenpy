@@ -6,7 +6,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 from .tensors import AbstractTensor
-from .sparse import (TenpyLinearOperator, ShiftedTenpyLinearOperator, ProjectedTenpyLinearOperator)
+from .sparse import ShiftedTenpyLinearOperator, ProjectedTenpyLinearOperator, as_linear_operator
 from ..tools.params import asConfig
 from ..tools.misc import argsort
 
@@ -34,9 +34,9 @@ class KrylovBased(ABC):
     Parameters
     ----------
     H : :class:`~tenpy.linalg.sparse.TenpyLinearOperator`-like
-        A hermitian linear operator. Must implement the method `matvec` acting on a
-        :class:`~tenpy.linalg.tensors.AbstractTensor`s; nothing else required.
-        The result has to have the same legs as the argument.
+        A hermitian linear operator.
+        The operator must map tensors to tensors with the same legs.
+        Must be a valid input to :meth:`~tenpy.linalg.sparse.as_linear_operator`.
     psi0 : :class:`~tenpy.linalg.tensors.AbstractTensor`
         The starting vector defining the Krylov basis.
         For finding the ground state, this should be the best guess available.
@@ -112,8 +112,8 @@ class KrylovBased(ABC):
     _dtype_h_krylov = np.complex128
     _dtype_E = np.complex128
 
-    def __init__(self, H: TenpyLinearOperator, psi0: AbstractTensor, options):
-        self.H = H
+    def __init__(self, H, psi0: AbstractTensor, options):
+        self.H = as_linear_operator(H)
         self.psi0 = psi0
         self._psi0_norm = None
         self.options = options = asConfig(options, self.__class__.__name__)
@@ -339,7 +339,7 @@ class LanczosGroundState(KrylovBased):
     _dtype_h_krylov = np.float64
     _dtype_E = np.float64
 
-    def __init__(self, H: TenpyLinearOperator, psi0: AbstractTensor, options):
+    def __init__(self, H, psi0: AbstractTensor, options):
         super().__init__(H=H, psi0=psi0, options=options)
         self.E_tol = self.options.get('E_tol', np.inf)
         self.N_cache = self.options.get('N_cache', self.N_max)
