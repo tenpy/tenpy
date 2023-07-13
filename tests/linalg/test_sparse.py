@@ -12,20 +12,20 @@ from tenpy.linalg.tensors import AbstractTensor, Tensor, Shape, Dtype, almost_eq
 # define a few simple operators to test the wrappers:
 
 
-class ConstantDummyOperator(sparse.TenpyLinearOperator):
-    def __init__(self, value):
-        super().__init__(vector_shape=value.shape, dtype=Dtype.complex128)
-        self.value = value
+class ScalingDummyOperator(sparse.TenpyLinearOperator):
+    def __init__(self, factor, vector_shape: Shape):
+        super().__init__(vector_shape=vector_shape, dtype=Dtype.complex128)
+        self.factor = factor
         self.some_weird_attribute = 'arbitrary value'
 
     def some_unrelated_function(self, x):
         return 2 * x
 
     def matvec(self, vec: AbstractTensor) -> AbstractTensor:
-        return self.value
+        return self.factor * vec
 
     def adjoint(self):
-        return ConstantDummyOperator(np.conj(self.value), self.vector_shape)
+        return ScalingDummyOperator(np.conj(self.factor), self.vector_shape)
 
 
 class TensorDummyOperator(sparse.TenpyLinearOperator):
@@ -51,18 +51,18 @@ def test_SumTenpyLinearOperator(tensor_rng, vector_space_rng):
     a = vector_space_rng()
     b = vector_space_rng()
     T = tensor_rng(legs=[a, b.dual, a.dual, b], real=False, labels=['a', 'b*', 'a*', 'b'])
-    vec1 = tensor_rng(legs=[a, b], labels=['a', 'b'])
-    vec3 = tensor_rng(legs=[a, b], labels=['a', 'b'])
     vec = tensor_rng(legs=[a, b], labels=['a', 'b'])
-    
-    op1 = ConstantDummyOperator(vec1)
+
+    factor1 = 2.4
+    factor3 = 3.1 - 42.j
+    op1 = ScalingDummyOperator(factor1, vec.shape)
     op2 = TensorDummyOperator(T)
-    op3 = ConstantDummyOperator(vec3)
+    op3 = ScalingDummyOperator(factor3, vec.shape)
 
     print('single operator')
     op = sparse.SumTenpyLinearOperator(op1)
     # check matvec correct
-    assert almost_equal(op.matvec(vec), vec1)
+    assert almost_equal(op.matvec(vec), factor1 *  vec)
     # check access to attributes of original_operator
     assert op.some_weird_attribute == 'arbitrary value'
     assert op.some_unrelated_function(2) == 4
@@ -71,13 +71,13 @@ def test_SumTenpyLinearOperator(tensor_rng, vector_space_rng):
     print(op1.vector_shape)
     print(op2.vector_shape)
     op = sparse.SumTenpyLinearOperator(op2, op1)
-    assert almost_equal(op.matvec(vec), vec1 + T.tdot(vec, ['a*', 'b*'], ['a', 'b']))
+    assert almost_equal(op.matvec(vec), factor1 *  vec + T.tdot(vec, ['a*', 'b*'], ['a', 'b']))
     assert op.some_weird_attribute == 42
     assert op.some_unrelated_function(2) == 'buzz'
 
     print('three operators')
     op = sparse.SumTenpyLinearOperator(op1, op2, op3)
-    assert almost_equal(op.matvec(vec), vec1 + vec3 + T.tdot(vec, ['a*', 'b*'], ['a', 'b']))
+    assert almost_equal(op.matvec(vec), (factor1 + factor3) * vec + T.tdot(vec, ['a*', 'b*'], ['a', 'b']))
     assert op.some_weird_attribute == 'arbitrary value'
     assert op.some_unrelated_function(2) == 4
 
@@ -86,12 +86,12 @@ def test_ShiftedTenpyLinearOperator(tensor_rng, vector_space_rng):
     a = vector_space_rng()
     b = vector_space_rng()
     vec = tensor_rng(legs=[a, b], labels=['a', 'b'])
-    vec1 = tensor_rng(legs=[a, b], labels=['a', 'b'])
-    op1 = ConstantDummyOperator(vec1)
+    factor = 3.2
+    op1 = ScalingDummyOperator(factor=factor, vector_shape=vec.shape)
     shift = 5.j
     
     op = sparse.ShiftedTenpyLinearOperator(op1, shift)
-    assert almost_equal(op.matvec(vec), vec1 + shift * vec)
+    assert almost_equal(op.matvec(vec), (factor + shift) * vec)
     assert op.some_weird_attribute == 'arbitrary value'
     assert op.some_unrelated_function(2) == 4
 
@@ -102,8 +102,8 @@ def test_ProjectedTenpyLinearOperator(tensor_rng, vector_space_rng, penalty):
     b = vector_space_rng()
     o1 = tensor_rng(legs=[a, b], labels=['a', 'b'])
     o2 = tensor_rng(legs=[a, b], labels=['a', 'b'])
-    vec1 = tensor_rng(legs=[a, b], labels=['a', 'b'])
-    op1 = ConstantDummyOperator(vec1)
+    factor = 3.2
+    op1 = ScalingDummyOperator(factor=factor, vector_shape=o1.shape)
 
     pytest.xfail('Need to port gram_schmidt first')  # TODO
     op = sparse.ProjectedTenpyLinearOperator(op1, [o1, o2], penalty=penalty)
