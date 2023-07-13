@@ -112,6 +112,16 @@ def test_vector_space(symmetry, symmetry_sectors_rng, np_random):
 
     # TODO (JU) test num_parameters when ready
 
+    print('check idx_to_sector and parse_idx')
+    idx = 0
+    for n, s in enumerate(s1.sectors):
+        for m in range(s1.multiplicities[n]):
+            sector_idx, mult_idx = s1.parse_index(idx)
+            assert sector_idx == n
+            assert mult_idx == m
+            assert np.all(s1.idx_to_sector(idx) == s)
+            idx += 1
+
 
 def test_product_space(symmetry, symmetry_sectors_rng, np_random):
     sectors = symmetry_sectors_rng(10)

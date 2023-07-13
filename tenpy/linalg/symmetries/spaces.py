@@ -239,12 +239,16 @@ class VectorSpace:
         -------
         sector_idx : int
             The index of the correspinding sector,
-            indicating that the `idx`-th basis element lives in `self.sector(n)`.
+            indicating that the `idx`-th basis element lives in ``self.sectors[sector_idx]``.
         multiplicity_idx : int
-            The index "within the sector", in `range(self.multiplicities[sector_index])`.
+            The index "within the sector", in ``range(self.multiplicities[sector_index])``.
         """
-        _sector_idx, multiplicity_idx = self._parse_index(idx)
-        sector_idx = self._sector_perm[_sector_idx]
+        if not -self.dim <= idx < self.dim:
+            raise IndexError(f'flat index {idx} out of bounds for space of dimension {self.dim}')
+        if idx < 0:
+            idx = idx + self.dim
+        sector_idx = bisect.bisect(self.slices[:, 0], idx) - 1
+        multiplicity_idx = idx - self.slices[sector_idx, 0]
         return sector_idx, multiplicity_idx
 
     def _parse_index(self, idx: int) -> tuple[int, int]:
@@ -253,13 +257,9 @@ class VectorSpace:
         In particular, this means that the `idx`-th basis element lives
         in ``self._non_dual_sorted_sectors[self._parse_index(idx)[0]]`` (note the underscores!).
         """
-        if not -self.dim <= idx < self.dim:
-            raise IndexError(f'flat index {idx} out of bounds for space of dimension {self.dim}')
-        if idx < 0:
-            idx = idx + self.dim
-        _sector_idx = bisect.bisect(self._sorted_slices, idx) - 1
-        multiplicity_idx = idx - self._sorted_slices[_sector_idx]
-        return _sector_idx, multiplicity_idx
+        # Implementing the "public" version is easier since self.slices is sorted
+        sector_idx, multiplicity_idx = self.parse_index(idx)
+        return self._inverse_sector_perm[sector_idx], multiplicity_idx
 
     def idx_to_sector(self, idx: int) -> Sector:
         """Returns the sector associated with an index.
