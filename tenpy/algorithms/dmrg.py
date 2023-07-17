@@ -40,7 +40,7 @@ logger = logging.getLogger(__name__)
 
 from ..linalg import np_conserved as npc
 from ..networks.mps import MPSEnvironment
-from ..linalg.lanczos import lanczos, lanczos_arpack
+from ..linalg.krylov_based import lanczos_arpack, LanczosGroundState
 from .truncation import truncate, svd_theta
 from ..tools.params import asConfig
 from ..tools.math import entropy
@@ -1206,9 +1206,9 @@ class DMRGEngine(Sweep):
             if self.eff_H.N < max_N:
                 E, theta = full_diag_effH(self.eff_H, theta_guess, keep_sector=True)
             else:
-                E, theta, N = lanczos(self.eff_H, theta_guess, self.lanczos_params)
+                E, theta, N = LanczosGroundState(self.eff_H, theta_guess, self.lanczos_params).run()
         elif self.diag_method == 'lanczos':
-            E, theta, N = lanczos(self.eff_H, theta_guess, self.lanczos_params)
+            E, theta, N = LanczosGroundState(self.eff_H, theta_guess, self.lanczos_params).run()
         elif self.diag_method == 'arpack':
             E, theta = lanczos_arpack(self.eff_H, theta_guess, self.lanczos_params)
         elif self.diag_method == 'ED_block':
