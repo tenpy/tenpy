@@ -2,12 +2,10 @@
 
 Some linear algebra algorithms, e.g. Lanczos, do not require the full representations of a linear
 operator, but only the action on a vector, i.e., a matrix-vector product `matvec`. Here we define
-the strucuture of such a general operator, :class:`NpcLinearOperator`, as it is used in our own
-implementations of these algorithms (e.g., :mod:`~tenpy.linalg.lanczos`). Moreover, the
+the strucuture of such a general operator, :class:`TenpyLinearOperator`, as it is used in our own
+implementations of these algorithms (e.g., :mod:`~tenpy.linalg.krylov_based`). Moreover, the
 :class:`FlatLinearOperator` allows to use all the scipy sparse methods by providing functionality
-to convert flat numpy arrays to and from np_conserved arrays.
-
-TODO revise docstring
+to convert flat numpy arrays to and from tenpy tensors.
 """
 # Copyright 2018-2021 TeNPy Developers, GNU GPLv3
 
@@ -232,14 +230,15 @@ class ProjectedTenpyLinearOperator(TenpyLinearOperatorWrapper):
     The result is that all vectors from the subspace spanned by the :attr:`ortho_vecs` are eigenvectors
     with eigenvalue `penalty`, while the eigensystem in the "rest" (i.e. in the orthogonal complement
     to that subspace) remains unchanged.
-    This can be used to exclude the :attr:`ortho_vecs` from extremal eigensolvers.
+    This can be used to exclude the :attr:`ortho_vecs` from extremal eigensolvers, i.e. to find
+    the extremal eigenvectors among those that are orthogonal to the :attr:`ortho_vecs`.
+    In previous versions of tenpy, this behavior was achieved by an argument called `orthogonal_to`.
 
     Parameters
     ----------
     original_operator : :class:`TenpyLinearOperator`-like
         The original operator, denoted ``H`` in the summary above.
     ortho_vecs : list of :class:`~tenpy.linalg.tensors.AbstractTensor`
-        TODO (JU) different name?
         The list of vectors spanning the projected space.
         They need not be orthonormal, as Gram-Schmidt is performed on them explicitly.
     penalty : complex, optional
