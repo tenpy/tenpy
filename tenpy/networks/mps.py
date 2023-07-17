@@ -3563,7 +3563,7 @@ class MPS(BaseMPSExpectationValue):
             ov, _ = TM.eigenvectors(**kwargs)
             return ov[0] * self.norm * other.norm
 
-    def expectation_value_terms_sum(self, term_list, prefactors=None):
+    def expectation_value_terms_sum(self, term_list):
         """Calculate expectation values for a bunch of terms and sum them up.
 
         This is equivalent to the following expression::
@@ -3573,18 +3573,10 @@ class MPS(BaseMPSExpectationValue):
         However, for efficiency, the term_list is converted to an MPO and the expectation value
         of the MPO is evaluated.
 
-        .. deprecated:: 0.4.0
-            `prefactor` will be removed in version 1.0.0.
-            Instead, directly give just ``TermList(term_list, prefactors)`` as argument.
-
         Parameters
         ----------
         term_list : :class:`~tenpy.networks.terms.TermList`
             The terms and prefactors (`strength`) to be summed up.
-        prefactors :
-            Instead of specifying a :class:`~tenpy.networks.terms.TermList`,
-            one can also specify the term_list and strength separately.
-            This is deprecated.
 
         Returns
         -------
@@ -3602,11 +3594,6 @@ class MPS(BaseMPSExpectationValue):
         tenpy.networks.mpo.MPO.expectation_value : expectation value density of an MPO.
         """
         from . import mpo, terms
-        if prefactors is not None:
-            warnings.warn(
-                "Deprecated argument prefactors: replace arguments with "
-                "``TermList(term_list, prefactors)``.", FutureWarning, 2)
-            term_list = terms.TermList(term_list, prefactors)
         L = self.L
         if not self.finite:
             copy = None
