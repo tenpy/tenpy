@@ -6,7 +6,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 from .tensors import AbstractTensor
-from .sparse import ShiftedTenpyLinearOperator, ProjectedTenpyLinearOperator, as_linear_operator
+from .sparse import ShiftedLinearOperator, ProjectedLinearOperator, as_linear_operator
 from ..tools.params import asConfig
 from ..tools.misc import argsort
 
@@ -33,7 +33,7 @@ class KrylovBased(ABC):
 
     Parameters
     ----------
-    H : :class:`~tenpy.linalg.sparse.TenpyLinearOperator`-like
+    H : :class:`~tenpy.linalg.sparse.LinearOperator`-like
         A hermitian linear operator.
         The operator must map tensors to tensors with the same legs.
         Must be a valid input to :meth:`~tenpy.linalg.sparse.as_linear_operator`.
@@ -66,9 +66,9 @@ class KrylovBased(ABC):
             tolerance for final values!
         E_shift : float
             Shift the energy (=eigenvalues) by that amount *during* the Lanczos run by using the
-            :class:`~tenpy.linalg.sparse.ShiftedTenpyLinearOperator`.
+            :class:`~tenpy.linalg.sparse.ShiftedLinearOperator`.
             The ground state energy `E0` returned by :meth:`run` is made independent of the shift.
-            This option is useful if the :class:`~tenpy.linalg.sparse.ProjectedTenpyLinearOperator`
+            This option is useful if the :class:`~tenpy.linalg.sparse.ProjectedLinearOperator`
             is used: the orthogonal vectors are *exact* eigenvectors with eigenvalue 0 independent
             of the shift, so you can use it to ensure that the energy is smaller than zero
             to avoid getting those.
@@ -82,7 +82,7 @@ class KrylovBased(ABC):
     ----------
     options : :class:`~tenpy.tools.params.Config`
         Optional parameters.
-    H : :class:`~tenpy.linalg.sparse.TenpyLinearOperator`
+    H : :class:`~tenpy.linalg.sparse.LinearOperator`
         The linear operator used for building the Krylov space.
     psi0 : :class:`~tenpy.linalg.tensors.AbstractTensor`
         The *normalized* starting vector.
@@ -128,12 +128,12 @@ class KrylovBased(ABC):
             raise ValueError("Should perform at least 2 steps.")
         self._cutoff = options.get('cutoff', psi0.dtype.eps * 100)
         if self.E_shift is not None:
-            if isinstance(self.H, ProjectedTenpyLinearOperator):
-                self.H.original_operator = ShiftedTenpyLinearOperator(
+            if isinstance(self.H, ProjectedLinearOperator):
+                self.H.original_operator = ShiftedLinearOperator(
                     self.H.original_operator, self.E_shift
                 )
             else:
-                self.H = ShiftedTenpyLinearOperator(self.H, self.E_shift)
+                self.H = ShiftedLinearOperator(self.H, self.E_shift)
         self._cache = []
         self.Es = np.zeros([self.N_max, self.N_max], dtype=self._dtype_E)
         self._h_krylov = np.zeros([self.N_max + 1, self.N_max + 1], dtype=self._dtype_h_krylov)
@@ -594,7 +594,7 @@ def lanczos_arpack(H, psi, options={}):
     """
     options = asConfig(options, "Lanczos")
     raise NotImplementedError  # TODO need to implement DenseArrayLinearOperator (f.k.a. FlatLinearOperator)
-    # H_dense = DenseArrayLinearOperator.from_TenpyLinearOperator(H)
+    # H_dense = DenseArrayLinearOperator.from_LinearOperator(H)
     # psi_dense = H_dense.tensor_to_dense(psi)
     # tol = options.get('P_tol', 1.e-14)
     # N_min = options.get('N_min', None)

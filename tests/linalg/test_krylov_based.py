@@ -50,7 +50,7 @@ def test_lanczos_gs(backend, vector_space_rng, N_cache, tol):
         lanczos_params = {'reortho': True}
         if E1_np > -0.01:
             lanczos_params['E_shift'] = -2. * E1_np - 0.2
-        H_proj = sparse.ProjectedTenpyLinearOperator(H, ortho_vecs=orthogonal_to[:])
+        H_proj = sparse.ProjectedLinearOperator(H, ortho_vecs=orthogonal_to[:])
         E1, psi1, N = krylov_based.lanczos(H_proj, psi_init, lanczos_params)
         print(f'E1 = {E1:.14f} vs exact {E1_np:.14f}')
         print(f'{abs((E1 - E1_np) / E1_np)=}')

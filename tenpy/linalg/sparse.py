@@ -21,11 +21,11 @@ from .tensors import AbstractTensor, Shape, Tensor, tdot, eye_like, zero_like
 from .backends.abstract_backend import Dtype, AbstractBackend
 
 
-__all__ = ['TenpyLinearOperator', 'TenpyLinearOperatorWrapper', 'SumTenpyLinearOperator',
-           'ShiftedTenpyLinearOperator', 'ProjectedTenpyLinearOperator']
+__all__ = ['LinearOperator', 'LinearOperatorWrapper', 'SumLinearOperator',
+           'ShiftedLinearOperator', 'ProjectedLinearOperator']
 
 
-class TenpyLinearOperator(ABC):
+class LinearOperator(ABC):
     """Base class for a linear operator acting on tenpy tensors.
 
     Attributes
@@ -66,7 +66,7 @@ class TenpyLinearOperator(ABC):
         N = self.vector_shape.num_legs
         return self.to_tensor(backend=backend).combine_legs(list(range(N)), list(range(N, 2 * N)))
 
-    def adjoint(self) -> TenpyLinearOperator:
+    def adjoint(self) -> LinearOperator:
         """Return the hermitian conjugate operator.
 
         If `self` is hermitian, subclasses *can* choose to implement this to define
@@ -75,7 +75,7 @@ class TenpyLinearOperator(ABC):
         raise NotImplementedError("No adjoint defined")
 
 
-class TensorLinearOperator(TenpyLinearOperator):
+class TensorLinearOperator(LinearOperator):
     """Linear operator defined by a two-leg tensor with contractible legs.
 
     The matvec is defined by contracting one of the two legs of this tensor with the vector.
@@ -113,44 +113,44 @@ class TensorLinearOperator(TenpyLinearOperator):
         return TensorLinearOperator(tensor=self.tensor.conj(), which_leg=self.other_leg)
 
 
-def as_linear_operator(obj: TenpyLinearOperator | AbstractTensor) -> TenpyLinearOperator:
-    """Converts an object to a :class:`TenpyLinearOperator`.
+def as_linear_operator(obj: LinearOperator | AbstractTensor) -> LinearOperator:
+    """Converts an object to a :class:`LinearOperator`.
 
     The following objects can be converted::
-        - :class:`TenpyLinearOperator` trivially
+        - :class:`LinearOperator` trivially
         - :class:`~tenpy.linalg.tensors.AbstractTensor` if they have exactly two legs which are contractible,
            by wrapping them in :class:`TensorLinearOperator`.
     """
-    if isinstance(obj, TenpyLinearOperator):
+    if isinstance(obj, LinearOperator):
         return obj
     if isinstance(obj, AbstractTensor):
         return TensorLinearOperator(tensor=obj, which_leg=-1)
     raise TypeError(f'Could not convert {type(obj)} to linear operator')
 
 
-class TenpyLinearOperatorWrapper(TenpyLinearOperator, ABC):
-    """Base class for wrapping around another :class:`TenpyLinearOperator`.
+class LinearOperatorWrapper(LinearOperator, ABC):
+    """Base class for wrapping around another :class:`LinearOperator`.
 
     Attributes which are not explicitly set, e.g. via `self.attribute = value` or by
     defining methods default to the attributes of the `original_operator`.
 
-    This behavior is particularly useful when wrapping some concrete subclass of TenpyLinearOperator,
+    This behavior is particularly useful when wrapping some concrete subclass of :class:`LinearOperator`,
     which defines additional attributes.
     Using this base class, we can define the wrappers below without considering those extra attributes.
 
     .. warning ::
         If there are multiple levels of wrapping operators, the order might be critical to get
-        correct results; e.g. :class:`OrthogonalTenpyLinearOperator` needs to be the outer-most
+        correct results; e.g. :class:`ProjectedLinearOperator` needs to be the outer-most
         wrapper to produce correct results and/or be efficient.
 
     Parameters
     ----------
-    original_operator : :class:`TenpyLinearOperator`
+    original_operator : :class:`LinearOperator`
         The original operator implementing the `matvec`.
     """
-    def __init__(self, original_operator: TenpyLinearOperator):
+    def __init__(self, original_operator: LinearOperator):
         self.original_operator = original_operator
-        # TODO (JU) should we call TenpyLinearOperator.__init__ or super().__init__ here?
+        # TODO (JU) should we call LinearOperator.__init__ or super().__init__ here?
         #      Its current implementation only sets attributes, which we dont need because
         #      we hack into __getattr__
 
@@ -159,10 +159,10 @@ class TenpyLinearOperatorWrapper(TenpyLinearOperator, ABC):
         #       found in the __dict__, so it is the fallback for attributes that are not explicitly set.
         return getattr(self.original_operator, name)
 
-    def unwrapped(self, recursive: bool = True) -> TenpyLinearOperator:
-        """Return the original `TenpyLinearOperator`
+    def unwrapped(self, recursive: bool = True) -> LinearOperator:
+        """Return the original :class:`LinearOperator`
 
-        By default, unwrapping is done recursively, such that the result is *not* a `TenpyLinearOperatorWrapper`.
+        By default, unwrapping is done recursively, such that the result is *not* a `LinearOperatorWrapper`.
         """
         parent = self.original_operator
         if not recursive:
@@ -176,9 +176,9 @@ class TenpyLinearOperatorWrapper(TenpyLinearOperator, ABC):
         raise ValueError('maximum recursion depth for unwrapping reached')
 
 
-class SumTenpyLinearOperator(TenpyLinearOperatorWrapper):
+class SumLinearOperator(LinearOperatorWrapper):
     """The sum of multiple operators"""
-    def __init__(self, original_operator: TenpyLinearOperator, *more_operators: TenpyLinearOperator):
+    def __init__(self, original_operator: LinearOperator, *more_operators: LinearOperator):
         super().__init__(original_operator=original_operator)
         assert all(op.vector_shape == original_operator.vector_shape for op in more_operators)
         self.more_operators = more_operators
@@ -191,19 +191,19 @@ class SumTenpyLinearOperator(TenpyLinearOperatorWrapper):
         return sum((op.to_tensor(**kw) for op in self.more_operators),
                    self.original_operator.to_tensor(**kw))
 
-    def adjoint(self) -> TenpyLinearOperator:
-        return SumTenpyLinearOperator(self.original_operator.adjoint(),
-                                      *(op.adjoint() for op in self.more_operators))
+    def adjoint(self) -> LinearOperator:
+        return SumLinearOperator(self.original_operator.adjoint(),
+                                 *(op.adjoint() for op in self.more_operators))
 
 
-class ShiftedTenpyLinearOperator(TenpyLinearOperatorWrapper):
+class ShiftedLinearOperator(LinearOperatorWrapper):
     """A shifted operator, i.e. ``original_operator + shift * identity``.
 
     This can be useful e.g. for better Lanczos convergence.
     """
-    def __init__(self, original_operator: TenpyLinearOperator, shift: Number):
+    def __init__(self, original_operator: LinearOperator, shift: Number):
         if shift in [0, 0.]:
-            warnings.warn('shift=0: no need for ShiftedTenpyLinearOperator', stacklevel=2)
+            warnings.warn('shift=0: no need for ShiftedLinearOperator', stacklevel=2)
         super().__init__(original_operator=original_operator)
         self.shift = shift
         if np.iscomplexobj(shift):
@@ -217,11 +217,11 @@ class ShiftedTenpyLinearOperator(TenpyLinearOperatorWrapper):
         return res + self.shift * eye_like(res)
 
     def adjoint(self):
-        return ShiftedTenpyLinearOperator(original_operator=self.original_operator.adjoint(),
+        return ShiftedLinearOperator(original_operator=self.original_operator.adjoint(),
                                           shift=np.conj(self.shift))
 
 
-class ProjectedTenpyLinearOperator(TenpyLinearOperatorWrapper):
+class ProjectedLinearOperator(LinearOperatorWrapper):
     """Projected version ``P H P + penalty * (1 - P)`` of an original operator ``H``.
 
     The projector ``P = 1 - sum_o |o> <o|`` is given in terms of a set :attr:`ortho_vecs` of vectors
@@ -236,7 +236,7 @@ class ProjectedTenpyLinearOperator(TenpyLinearOperatorWrapper):
 
     Parameters
     ----------
-    original_operator : :class:`TenpyLinearOperator`-like
+    original_operator : :class:`LinearOperator`-like
         The original operator, denoted ``H`` in the summary above.
     ortho_vecs : list of :class:`~tenpy.linalg.tensors.AbstractTensor`
         The list of vectors spanning the projected space.
@@ -244,10 +244,10 @@ class ProjectedTenpyLinearOperator(TenpyLinearOperatorWrapper):
     penalty : complex, optional
         See summary above. Defaults to ``None``, which is equivalent to ``0.``.
     """
-    def __init__(self, original_operator: TenpyLinearOperator, ortho_vecs: list[AbstractTensor],
+    def __init__(self, original_operator: LinearOperator, ortho_vecs: list[AbstractTensor],
                  penalty: Number = None):
         if len(ortho_vecs) == 0:
-            warnings.warn('empty ortho_vecs: no need for ProjectedTenpyLinearOperator', stacklevel=2)
+            warnings.warn('empty ortho_vecs: no need for ProjectedLinearOperator', stacklevel=2)
         original_operator = as_linear_operator(original_operator)
         super().__init__(original_operator=original_operator)
         assert all(v.shape == original_operator.vector_shape for v in ortho_vecs)
@@ -287,8 +287,8 @@ class ProjectedTenpyLinearOperator(TenpyLinearOperatorWrapper):
             res = res + self.penalty * P_ortho
         return res
         
-    def adjoint(self) -> TenpyLinearOperator:
-        return ProjectedTenpyLinearOperator(
+    def adjoint(self) -> LinearOperator:
+        return ProjectedLinearOperator(
             original_operator=self.original_operator.adjoint(),
             ortho_vecs=self.ortho_vecs,  # hc(|o> <o|) = |o> <o|  ->  can use same ortho_vecs
             penalty=None if self.penalty is None else np.conj(self.penalty)
