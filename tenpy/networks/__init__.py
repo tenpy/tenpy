@@ -23,7 +23,7 @@ from .mpo import *
 from .purification_mps import *
 from .terms import *
 
-__all__ = ['site', 'mps', 'mpo', 'terms', 'purification_mps', 'terms',
+__all__ = ['site', 'mps', 'mpo', 'terms', 'purification_mps',
            *site.__all__,
            *mps.__all__,
            *mpo.__all__,

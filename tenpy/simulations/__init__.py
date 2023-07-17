@@ -27,6 +27,6 @@ __all__ = [
     "time_evolution",
     *measurement.__all__,
     *simulation.__all__,
-    *ground_state_search.__all__,
-    *time_evolution.__all__,
+    *[n for n in ground_state_search.__all__ if n not in simulation.__all__],
+    *[n for n in time_evolution.__all__ if n not in simulation.__all__],
 ]
