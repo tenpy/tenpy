@@ -34,7 +34,11 @@ class LinearOperator(ABC):
         The shape of tensors that this operator can act on
     dtype : Dtype
         The dtype of a full representation of the operator
+    acts_on : list of str
+        Labels of the state on which the operator can act. NB: Class attribute.
     """
+    acts_on = None  # Derived classes should set this as a class attribute
+    
     def __init__(self, vector_shape: Shape, dtype: Dtype):
         self.vector_shape = vector_shape
         self.dtype = dtype
