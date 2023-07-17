@@ -42,7 +42,7 @@ def test_lanczos_gs(n, N_cache, tol=5.e-14):
     H_Op = H  # use `matvec` of the array
     psi_init = npc.Array.from_func(np.random.random, [leg], qtotal=qtotal)
 
-    E0, psi0, N = krylov_based.lanczos(H_Op, psi_init, {'N_cache': N_cache})
+    E0, psi0, N = krylov_based.LanczosGroundState(H_Op, psi_init, {'N_cache': N_cache}).run()
     print("full spectrum:", E_flat)
     print("E0 = {E0:.14f} vs exact {E0_flat:.14f}".format(E0=E0, E0_flat=E0_flat))
     print("|E0-E0_flat| / |E0_flat| =", abs((E0 - E0_flat) / E0_flat))
@@ -79,8 +79,10 @@ def test_lanczos_gs(n, N_cache, tol=5.e-14):
         lanczos_params = {'reortho': True}
         if E1_flat > -0.01:
             lanczos_params['E_shift'] = -2. * E1_flat - 0.2
-        E1, psi1, N = krylov_based.lanczos(sparse.OrthogonalNpcLinearOperator(H_Op, ortho_to), psi_init,
-                                           lanczos_params)
+        E1, psi1, N = krylov_based.LanczosGroundState(
+            sparse.OrthogonalNpcLinearOperator(H_Op, ortho_to),
+            psi_init, lanczos_params
+        ).run()
         print("E1 = {E1:.14f} vs exact {E1_flat:.14f}".format(E1=E1, E1_flat=E1_flat))
         print("|E1-E1_flat| / |E1_flat| =", abs((E1 - E1_flat) / E1_flat))
         psi1_H_psi1 = npc.inner(psi1, npc.tensordot(H, psi1, axes=[1, 0]), 'range', do_conj=True)

@@ -36,7 +36,7 @@ from .algorithms.tdvp import (SingleSiteTDVPEngine, TwoSiteTDVPEngine, TimeDepen
 from .algorithms.tebd import TEBDEngine, QRBasedTEBDEngine, RandomUnitaryEvolution, TimeDependentTEBD
 from .algorithms.truncation import TruncationError, truncate, svd_theta
 from .linalg.charges import ChargeInfo, LegCharge, LegPipe
-from .linalg.krylov_based import lanczos, lanczos_arpack
+from .linalg.krylov_based import lanczos_arpack
 from .linalg.np_conserved import (Array, zeros, ones, eye_like, diag,
                                   concatenate, grid_concat, grid_outer, detect_grid_outer_legcharge,
                                   detect_qtotal, detect_legcharge, trace, outer, inner, tensordot,

@@ -15,8 +15,8 @@ from ..tools.math import speigsh
 from ..tools.misc import argsort
 
 __all__ = [
-    'KrylovBased', 'Arnoldi', 'LanczosGroundState', 'LanczosEvolution', 'lanczos',
-    'lanczos_arpack', 'gram_schmidt', 'plot_stats'
+    'KrylovBased', 'Arnoldi', 'LanczosGroundState', 'LanczosEvolution', 'lanczos_arpack',
+    'gram_schmidt', 'plot_stats'
 ]
 
 
@@ -562,27 +562,6 @@ class LanczosEvolution(LanczosGroundState):
 
     def _converged(self, k):
         return np.abs(self._result_krylov[k]) < self.P_tol
-
-
-def lanczos(H, psi, options={}, orthogonal_to=[]):
-    """Simple wrapper calling ``LanczosGroundState(H, psi, options, orthogonal_to).run()``
-
-    .. deprecated :: 0.6.0
-        Going to remove the `orthogonal_to` argument.
-        Instead, replace H with `OrthogonalNpcLinearOperator(H, orthogonal_to)`
-        using the :class:`~tenpy.linalg.sparse.OrthogonalNpcLinearOperator`.
-
-    Parameters
-    ----------
-    H, psi, options, orthogonal_to :
-        See :class:`LanczosGroundState`.
-
-    Returns
-    -------
-    E0, psi0, N :
-        See :meth:`LanczosGroundState.run`.
-    """
-    return LanczosGroundState(H, psi, options, orthogonal_to).run()
 
 
 def lanczos_arpack(H, psi, options={}, orthogonal_to=[]):
