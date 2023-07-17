@@ -15,6 +15,7 @@ def test_lanczos_gs(backend, vector_space_rng, N_cache, tol):
     leg = vector_space_rng()
     H = tensors.Tensor.from_numpy_func(random_matrix.GUE, legs=[leg, leg.dual], backend=backend)
     H_np = H.to_numpy_ndarray()
+    H_op = sparse.TensorLinearOperator(H, which_leg=1)
     npt.assert_allclose(H_np, H_np.conj().transpose())  # make sure we generated a hermitian operator
     E_np, psi_np = np.linalg.eigh(H_np)
     E0_np, psi0_np = E_np[0], psi_np[:, 0]
@@ -24,7 +25,7 @@ def test_lanczos_gs(backend, vector_space_rng, N_cache, tol):
     # TODO having to take the dual here is pretty unintuitive...
     psi_init = tensors.ChargedTensor.random_uniform(legs=[leg], charge=sector, backend=backend)
 
-    E0, psi0, N = krylov_based.lanczos(H, psi_init, {'N_cache': N_cache})
+    E0, psi0, N = krylov_based.lanczos(H_op, psi_init, {'N_cache': N_cache})
     assert abs(psi0.norm() - 1.) < tol
     print(f'full spectrum: {E_np}')
     print(f'E0 = {E0:.14f} vs exact {E0_np:.14f}')
@@ -50,7 +51,7 @@ def test_lanczos_gs(backend, vector_space_rng, N_cache, tol):
         lanczos_params = {'reortho': True}
         if E1_np > -0.01:
             lanczos_params['E_shift'] = -2. * E1_np - 0.2
-        H_proj = sparse.ProjectedLinearOperator(H, ortho_vecs=orthogonal_to[:])
+        H_proj = sparse.ProjectedLinearOperator(H_op, ortho_vecs=orthogonal_to[:])
         E1, psi1, N = krylov_based.lanczos(H_proj, psi_init, lanczos_params)
         print(f'E1 = {E1:.14f} vs exact {E1_np:.14f}')
         print(f'{abs((E1 - E1_np) / E1_np)=}')
@@ -88,6 +89,7 @@ def test_lanczos_arpack():
 def test_lanczos_evolve(backend, vector_space_rng, N_cache, tol):
     leg = vector_space_rng()
     H = tensors.Tensor.from_numpy_func(random_matrix.GUE, legs=[leg, leg.dual], backend=backend)
+    H_op = sparse.TensorLinearOperator(H, which_leg=1)
     H_np = H.to_numpy_ndarray()
     npt.assert_allclose(H_np, H_np.conj().transpose())  # make sure we generated a hermitian operator
 
@@ -96,7 +98,7 @@ def test_lanczos_evolve(backend, vector_space_rng, N_cache, tol):
 
     psi_init_np = psi_init.to_numpy_ndarray()
 
-    lanc = krylov_based.LanczosEvolution(H, psi_init, {'N_cache': N_cache})
+    lanc = krylov_based.LanczosEvolution(H_op, psi_init, {'N_cache': N_cache})
     for delta in [-0.1j, 0.1j, 1.j, 0.1, 1.]:
         psi_final_np = expm(H_np * delta).dot(psi_init_np)
         norm = np.linalg.norm(psi_final_np)
@@ -115,6 +117,7 @@ def test_arnoldi(backend, vector_space_rng, which, N_max=20):
     # if looking for small/large real part, ensure hermitian H
     func = random_matrix.GUE if which[-1] == 'R' else random_matrix.standard_normal_complex
     H = tensors.Tensor.from_numpy_func(func, legs=[leg, leg.dual], backend=backend)
+    H_op = sparse.TensorLinearOperator(H, which_leg=1)
     H_np = H.to_numpy_ndarray()
     E_np, psi_np = np.linalg.eig(H_np)
     if which == 'LM':
@@ -128,7 +131,7 @@ def test_arnoldi(backend, vector_space_rng, which, N_max=20):
     sector, = tensors.detect_sectors_from_block(backend.block_from_numpy(psi0_np), legs=[leg], backend=backend)
     psi_init = tensors.ChargedTensor.random_uniform(legs=[leg], charge=sector, backend=backend)
 
-    engine = krylov_based.Arnoldi(H, psi_init, {'which': which, 'num_ev': 1, 'N_max': N_max})
+    engine = krylov_based.Arnoldi(H_op, psi_init, {'which': which, 'num_ev': 1, 'N_max': N_max})
     (E0,), (psi0,), N = engine.run()
     print("full spectrum:", E_np)
     print("E0 = {E0:.14f} vs exact {E0_flat:.14f}".format(E0=E0, E0_flat=E0_np))

@@ -6,7 +6,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 from .tensors import AbstractTensor
-from .sparse import ShiftedLinearOperator, ProjectedLinearOperator, as_linear_operator
+from .sparse import LinearOperator, ShiftedLinearOperator, ProjectedLinearOperator
 from ..tools.params import asConfig
 from ..tools.misc import argsort
 
@@ -33,10 +33,11 @@ class KrylovBased(ABC):
 
     Parameters
     ----------
-    H : :class:`~tenpy.linalg.sparse.LinearOperator`-like
+    H : :class:`~tenpy.linalg.sparse.LinearOperator`
         A hermitian linear operator.
+        In order to use :class:`~tenpy.linalg.tensors.Tensor`s or other
+        :class:`~tenpy.linalg.tensors.AbstractTensor` types, see :class:`~tenpy.linalg.sparse.TensorLinearOperator`.
         The operator must map tensors to tensors with the same legs.
-        Must be a valid input to :meth:`~tenpy.linalg.sparse.as_linear_operator`.
     psi0 : :class:`~tenpy.linalg.tensors.AbstractTensor`
         The starting vector defining the Krylov basis.
         For finding the ground state, this should be the best guess available.
@@ -112,8 +113,8 @@ class KrylovBased(ABC):
     _dtype_h_krylov = np.complex128
     _dtype_E = np.complex128
 
-    def __init__(self, H, psi0: AbstractTensor, options):
-        self.H = as_linear_operator(H)
+    def __init__(self, H: LinearOperator, psi0: AbstractTensor, options):
+        self.H = H
         self.psi0 = psi0
         self._psi0_norm = None
         self.options = options = asConfig(options, self.__class__.__name__)

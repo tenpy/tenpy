@@ -117,21 +117,6 @@ class TensorLinearOperator(LinearOperator):
         return TensorLinearOperator(tensor=self.tensor.conj(), which_leg=self.other_leg)
 
 
-def as_linear_operator(obj: LinearOperator | AbstractTensor) -> LinearOperator:
-    """Converts an object to a :class:`LinearOperator`.
-
-    The following objects can be converted::
-        - :class:`LinearOperator` trivially
-        - :class:`~tenpy.linalg.tensors.AbstractTensor` if they have exactly two legs which are contractible,
-           by wrapping them in :class:`TensorLinearOperator`.
-    """
-    if isinstance(obj, LinearOperator):
-        return obj
-    if isinstance(obj, AbstractTensor):
-        return TensorLinearOperator(tensor=obj, which_leg=-1)
-    raise TypeError(f'Could not convert {type(obj)} to linear operator')
-
-
 class LinearOperatorWrapper(LinearOperator, ABC):
     """Base class for wrapping around another :class:`LinearOperator`.
 
@@ -252,7 +237,6 @@ class ProjectedLinearOperator(LinearOperatorWrapper):
                  penalty: Number = None):
         if len(ortho_vecs) == 0:
             warnings.warn('empty ortho_vecs: no need for ProjectedLinearOperator', stacklevel=2)
-        original_operator = as_linear_operator(original_operator)
         super().__init__(original_operator=original_operator)
         assert all(v.shape == original_operator.vector_shape for v in ortho_vecs)
         self.ortho_vecs = gram_schmidt(ortho_vecs)
