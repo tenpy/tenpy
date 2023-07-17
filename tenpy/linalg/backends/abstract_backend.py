@@ -1,6 +1,6 @@
 # Copyright 2023-2023 TeNPy Developers, GNU GPLv3
 from __future__ import annotations
-from abc import ABC, abstractmethod
+from abc import ABCMeta, abstractmethod
 from enum import Enum, auto
 from typing import TypeVar, Any, TYPE_CHECKING, Type
 from numbers import Number
@@ -99,7 +99,7 @@ class Dtype(Enum):
         raise TypeError(f'Type {type(value)} is incompatible with dtype {dtype}')
 
 
-class AbstractBackend(ABC):
+class AbstractBackend(metaclass=ABCMeta):
     """
     Inheritance structure:
 
@@ -526,7 +526,7 @@ class AbstractBackend(ABC):
         ...
 
 
-class AbstractBlockBackend(ABC):
+class AbstractBlockBackend(metaclass=ABCMeta):
     svd_algorithms: list[str]  # first is default
 
     @abstractmethod

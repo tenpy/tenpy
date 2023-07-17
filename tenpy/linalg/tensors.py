@@ -7,7 +7,7 @@ The following characters have special meaning in labels and should be avoided:
 # Copyright 2023-2023 TeNPy Developers, GNU GPLv3
 
 from __future__ import annotations
-from abc import ABC, abstractmethod
+from abc import ABCMeta, abstractmethod
 import operator
 from typing import TypeVar, Sequence, NoReturn
 from numbers import Number, Real
@@ -116,7 +116,7 @@ class Shape:
 # ##################################
 
 
-class AbstractTensor(ABC):
+class AbstractTensor(metaclass=ABCMeta):
     """
     Common base class for tensors.
 

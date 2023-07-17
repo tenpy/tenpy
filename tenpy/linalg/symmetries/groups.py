@@ -1,7 +1,7 @@
 # Copyright 2023-2023 TeNPy Developers, GNU GPLv3
 
 from __future__ import annotations
-from abc import ABC, abstractmethod, ABCMeta
+from abc import abstractmethod, ABCMeta
 from enum import Enum
 from typing import TypeVar, Iterator
 from itertools import product, count
@@ -33,7 +33,7 @@ class BraidingStyle(Enum):
     no_braiding = 30  # braiding is not defined
 
 
-class Symmetry(ABC):
+class Symmetry(metaclass=ABCMeta):
     """Base class for symmetries that impose a block-structure on tensors"""
     def __init__(self, fusion_style: FusionStyle, braiding_style: BraidingStyle, trivial_sector: Sector,
                  group_name: str, num_sectors: int | float, descriptive_name: str | None = None):

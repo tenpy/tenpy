@@ -10,7 +10,7 @@ to convert flat numpy arrays to and from tenpy tensors.
 # Copyright 2018-2021 TeNPy Developers, GNU GPLv3
 
 from __future__ import annotations
-from abc import ABC, abstractmethod
+from abc import ABCMeta, abstractmethod
 from numbers import Number
 import warnings
 import numpy as np
@@ -25,7 +25,7 @@ __all__ = ['LinearOperator', 'LinearOperatorWrapper', 'SumLinearOperator',
            'ShiftedLinearOperator', 'ProjectedLinearOperator']
 
 
-class LinearOperator(ABC):
+class LinearOperator(metaclass=ABCMeta):
     """Base class for a linear operator acting on tenpy tensors.
 
     Attributes
@@ -117,7 +117,7 @@ class TensorLinearOperator(LinearOperator):
         return TensorLinearOperator(tensor=self.tensor.conj(), which_leg=self.other_leg)
 
 
-class LinearOperatorWrapper(LinearOperator, ABC):
+class LinearOperatorWrapper(LinearOperator):
     """Base class for wrapping around another :class:`LinearOperator`.
 
     Attributes which are not explicitly set, e.g. via `self.attribute = value` or by

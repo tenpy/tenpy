@@ -1,6 +1,6 @@
 """Krylov-based algorithms for tenpy tensors"""
 # Copyright 2023-2023 TeNPy Developers, GNU GPLv3
-from abc import ABC, abstractmethod
+from abc import ABCMeta, abstractmethod
 import numpy as np
 import logging
 logger = logging.getLogger(__name__)
@@ -15,7 +15,7 @@ __all__ = ['KrylovBased', 'Arnoldi', 'LanczosGroundstate', 'LanczosEvolution', '
            'lanczos_arpack']
 
 
-class KrylovBased(ABC):
+class KrylovBased(metaclass=ABCMeta):
     r"""Base class for iterativ algorithms building a Krylov basis with tenpy tensors.
 
     Algorithms like :class:`LanczosGroundState` and `:class:`ArnoldiDiagonalize`
