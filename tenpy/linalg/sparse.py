@@ -265,11 +265,7 @@ class ProjectedTenpyLinearOperator(TenpyLinearOperatorWrapper):
         # ``H P vec``
         res = self.original_operator.matvec(res)
         # ``P H P vec``
-        for o in reversed(self.ortho_vecs):
-            # reverse: more obviously Hermitian.
-            # TODO (JU) i dont see how the order makes a difference here or why reverse is better...
-            #           @jhauschild, i just took this from the previous implementation.
-            #           could you expand the explanation?
+        for o in self.ortho_vecs:
             res = res - o.inner(res) * o
         if self.penalty is not None:
             for c, o in zip(coefficients, self.ortho_vecs):
