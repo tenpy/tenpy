@@ -46,9 +46,9 @@ class BoseHubbardModel(CouplingMPOModel):
             Couplings as defined in the Hamiltonian above. Note the signs!
         phi_ext : float
             For 2D lattices and periodic y boundary conditions only.
-            External magnetic flux 'threaded' through the cylinder.
-            Hopping amplitudes for bonds 'across' the periodic boundary are modified such that
-            particles hopping around the circumference of the cylinder acquire a phase `phi_ext`.
+            External magnetic flux 'threaded' through the cylinder. Hopping amplitudes for bonds
+            'across' the periodic boundary are modified such that particles hopping around the
+            circumference of the cylinder acquire a phase ``2 pi phi_ext``.
     """
     def init_sites(self, model_params):
         n_max = model_params.get('n_max', 3)
@@ -74,7 +74,7 @@ class BoseHubbardModel(CouplingMPOModel):
             if phi_ext is None:
                 hop = -t
             else:
-                hop = self.coupling_strength_add_ext_flux(-t, dx, [0, phi_ext])
+                hop = self.coupling_strength_add_ext_flux(-t, dx, [0, 2 * np.pi * phi_ext])
             self.add_coupling(hop, u1, 'Bd', u2, 'B', dx, plus_hc=True)
             self.add_coupling(V, u1, 'N', u2, 'N', dx)
 
@@ -131,9 +131,9 @@ class FermiHubbardModel(CouplingMPOModel):
             Couplings as defined for the Hamiltonian above. Note the signs!
         phi_ext : float
             For 2D lattices and periodic y boundary conditions only.
-            External magnetic flux 'threaded' through the cylinder.
-            Hopping amplitudes for bonds 'across' the periodic boundary are modified such that
-            particles hopping around the circumference of the cylinder acquire a phase `phi_ext`.
+            External magnetic flux 'threaded' through the cylinder. Hopping amplitudes for bonds
+            'across' the periodic boundary are modified such that particles hopping around the
+            circumference of the cylinder acquire a phase ``2 pi phi_ext``.
     """
     def init_sites(self, model_params):
         cons_N = model_params.get('cons_N', 'N')
@@ -156,7 +156,7 @@ class FermiHubbardModel(CouplingMPOModel):
             if phi_ext is None:
                 hop = -t
             else:
-                hop = self.coupling_strength_add_ext_flux(-t, dx, [0, phi_ext])
+                hop = self.coupling_strength_add_ext_flux(-t, dx, [0, 2 * np.pi * phi_ext])
             self.add_coupling(hop, u1, 'Cdu', u2, 'Cu', dx, plus_hc=True)
             self.add_coupling(hop, u1, 'Cdd', u2, 'Cd', dx, plus_hc=True)
             self.add_coupling(V, u1, 'Ntot', u2, 'Ntot', dx)
@@ -219,7 +219,7 @@ class FermiHubbardModel2(CouplingMPOModel):
             if phi_ext is None:
                 hop = -t
             else:
-                hop = self.coupling_strength_add_ext_flux(-t, dx, [0, phi_ext])
+                hop = self.coupling_strength_add_ext_flux(-t, dx, [0, 2 * np.pi * phi_ext])
             self.add_coupling(hop, u1, 'Cd', u2, 'C', dx, plus_hc=True)
 
         for u1, u2, dx in self.lat.pairs['nearest_neighbors_all-all']:
