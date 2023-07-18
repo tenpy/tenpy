@@ -44,6 +44,11 @@ class BoseHubbardModel(CouplingMPOModel):
             What should be conserved. See :class:`~tenpy.networks.Site.BosonSite`.
         t, U, V, mu: float | array
             Couplings as defined in the Hamiltonian above. Note the signs!
+        phi_ext : float
+            For 2D lattices and periodic y boundary conditions only.
+            External magnetic flux 'threaded' through the cylinder. Hopping amplitudes for bonds
+            'across' the periodic boundary are modified such that particles hopping around the
+            circumference of the cylinder acquire a phase ``2 pi phi_ext``.
     """
     def init_sites(self, model_params):
         n_max = model_params.get('n_max', 3)
@@ -61,11 +66,16 @@ class BoseHubbardModel(CouplingMPOModel):
         U = model_params.get('U', 0.)
         V = model_params.get('V', 0.)
         mu = model_params.get('mu', 0)
+        phi_ext = model_params.get('phi_ext', None)
         for u in range(len(self.lat.unit_cell)):
             self.add_onsite(-mu - U / 2., u, 'N')
             self.add_onsite(U / 2., u, 'NN')
         for u1, u2, dx in self.lat.pairs['nearest_neighbors']:
-            self.add_coupling(-t, u1, 'Bd', u2, 'B', dx, plus_hc=True)
+            if phi_ext is None:
+                hop = -t
+            else:
+                hop = self.coupling_strength_add_ext_flux(-t, dx, [0, 2 * np.pi * phi_ext])
+            self.add_coupling(hop, u1, 'Bd', u2, 'B', dx, plus_hc=True)
             self.add_coupling(V, u1, 'N', u2, 'N', dx)
 
 
@@ -119,6 +129,11 @@ class FermiHubbardModel(CouplingMPOModel):
             see :class:`~tenpy.networks.site.SpinHalfFermionSite` for details.
         t, U, mu : float | array
             Couplings as defined for the Hamiltonian above. Note the signs!
+        phi_ext : float
+            For 2D lattices and periodic y boundary conditions only.
+            External magnetic flux 'threaded' through the cylinder. Hopping amplitudes for bonds
+            'across' the periodic boundary are modified such that particles hopping around the
+            circumference of the cylinder acquire a phase ``2 pi phi_ext``.
     """
     def init_sites(self, model_params):
         cons_N = model_params.get('cons_N', 'N')
@@ -132,13 +147,18 @@ class FermiHubbardModel(CouplingMPOModel):
         U = model_params.get('U', 0)
         V = model_params.get('V', 0)
         mu = model_params.get('mu', 0.)
+        phi_ext = model_params.get('phi_ext', None)
 
         for u in range(len(self.lat.unit_cell)):
             self.add_onsite(-mu, u, 'Ntot')
             self.add_onsite(U, u, 'NuNd')
         for u1, u2, dx in self.lat.pairs['nearest_neighbors']:
-            self.add_coupling(-t, u1, 'Cdu', u2, 'Cu', dx, plus_hc=True)
-            self.add_coupling(-t, u1, 'Cdd', u2, 'Cd', dx, plus_hc=True)
+            if phi_ext is None:
+                hop = -t
+            else:
+                hop = self.coupling_strength_add_ext_flux(-t, dx, [0, 2 * np.pi * phi_ext])
+            self.add_coupling(hop, u1, 'Cdu', u2, 'Cu', dx, plus_hc=True)
+            self.add_coupling(hop, u1, 'Cdd', u2, 'Cd', dx, plus_hc=True)
             self.add_coupling(V, u1, 'Ntot', u2, 'Ntot', dx)
 
 
@@ -191,6 +211,7 @@ class FermiHubbardModel2(CouplingMPOModel):
         U = model_params.get('U', 0)
         V = model_params.get('V', 0)
         mu = model_params.get('mu', 0.)
+        phi_ext = model_params.get('phi_ext', None)
 
         for u in range(len(self.lat.unit_cell)):
             self.add_onsite(-mu, u, 'N')
@@ -198,7 +219,11 @@ class FermiHubbardModel2(CouplingMPOModel):
             self.add_coupling(U, u1, 'N', u2, 'N', dx)
 
         for u1, u2, dx in self.lat.pairs['nearest_neighbors_diag']:
-            self.add_coupling(-t, u1, 'Cd', u2, 'C', dx, plus_hc=True)
+            if phi_ext is None:
+                hop = -t
+            else:
+                hop = self.coupling_strength_add_ext_flux(-t, dx, [0, 2 * np.pi * phi_ext])
+            self.add_coupling(hop, u1, 'Cd', u2, 'C', dx, plus_hc=True)
 
         for u1, u2, dx in self.lat.pairs['nearest_neighbors_all-all']:
             self.add_coupling(V, u1, 'N', u2, 'N', dx)

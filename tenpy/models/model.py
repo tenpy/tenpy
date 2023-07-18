@@ -1745,6 +1745,8 @@ class CouplingModel(Model):
         # make strength complex
         complex_dtype = np.result_type('c8', strength.dtype)
         strength = np.asarray(strength, complex_dtype)
+        if len(phase) != self.lat.dim:
+            raise ValueError('Expected one phase per lattice dimension.')
         for ax in range(self.lat.dim):
             if self.lat.bc[ax]:  # open boundary conditions
                 if phase[ax]:
