@@ -5,17 +5,15 @@ from test_model import check_general_model
 
 
 def test_FermiHubbardModel():
-    check_general_model(hubbard.FermiHubbardModel, {'lattice': "Square", 'Lx': 2, 'Ly': 3}, {})
-    check_general_model(hubbard.FermiHubbardModel, {'lattice': "Square", 'Lx': 2, 'Ly': 3, 'phi_ext': 1.}, {})
+    check_general_model(hubbard.FermiHubbardModel, {'lattice': "Square", 'Lx': 2, 'Ly': 3}, {'phi_ext': [None, 1.]})
 
 def test_FermiHubbardModel():
-    check_general_model(hubbard.FermiHubbardModel2, {'lattice': "Square", 'Lx': 2, 'Ly': 3}, {})
-    check_general_model(hubbard.FermiHubbardModel2, {'lattice': "Square", 'Lx': 2, 'Ly': 3, 'phi_ext': 1.}, {})
+    check_general_model(hubbard.FermiHubbardModel2, {'lattice': "Square", 'Lx': 2, 'Ly': 3}, {'phi_ext': [None, 1.]})
 
 
 def test_FermiHubbardChain():
     check_general_model(hubbard.FermiHubbardChain, {}, {})
-    
+
     # for a chain, adding phi_ext should raise
     with pytest.raises(ValueError) as e_info:
         check_general_model(hubbard.FermiHubbardChain, {'phi_ext': 1.}, {})
@@ -30,8 +28,7 @@ def test_BoseHubbardModel():
         'V': 0.1,
         'U': 0.3
     }
-    check_general_model(hubbard.BoseHubbardModel, params, {})
-    check_general_model(hubbard.BoseHubbardModel, {**params, 'phi_ext': 1.}, {})
+    check_general_model(hubbard.BoseHubbardModel, params, {'phi_ext': [None, 1.]})
 
 
 def test_BoseHubbardChain():
