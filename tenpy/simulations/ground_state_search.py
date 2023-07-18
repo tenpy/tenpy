@@ -14,8 +14,7 @@ from ..networks.mpo import MPOEnvironment, MPOTransferMatrix
 from ..networks.mps import MPS, InitialStateBuilder
 from ..networks.umps import uMPS
 from ..algorithms.mps_common import ZeroSiteH
-from ..algorithms.dmrg import TwoSiteDMRGEngine
-from ..linalg import lanczos
+from ..linalg import krylov_based
 from ..linalg.sparse import SumNpcLinearOperator
 from ..tools.misc import find_subclass, to_iterable, get_recursive
 from ..tools.params import asConfig
@@ -777,7 +776,7 @@ class OrthogonalExcitations(GroundStateSearch):
                                   qtotal=qtotal_change,
                                   labels=['vL', 'vR'])
         lanczos_params = self.options.subconfig('algorithm_params').subconfig('lanczos_params')
-        _, th0, _ = lanczos.LanczosGroundState(H0, th0, lanczos_params).run()
+        _, th0, _ = krylov_based.LanczosGroundState(H0, th0, lanczos_params).run()
 
         # Check norm after Lanczos so that it is one.
         # TODO: check this already before lanczos?
