@@ -75,32 +75,5 @@ def setup_cython_extension():
     return ext_modules
 
 
-def setup_package():
-    # change directory to root path of the repository
-    src_path = os.path.dirname(os.path.abspath(sys.argv[0]))
-    os.chdir(src_path)
-
-    # avoid warning from tenpy.tools.optimization.use_cython when we didn't compile yet.
-    os.environ.setdefault("TENPY_NO_CYTHON", "true")
-
-    full_version, git_rev = get_version_info()
-    write_version_py(full_version, git_rev)
-
-    ext_modules = setup_cython_extension()
-
-    extras_require = {
-        'extra': ['bottleneck', 'yapf==0.28.0', 'docformatter==1.3.1'],
-        'io': ['h5py', 'pyyaml'],
-        'plot': ['matplotlib>=2.0'],
-        'test': ['pytest', 'pytest-easyMPI'],
-    }
-    extras_require['all'] = [r for requ in extras_require.values() for r in requ]
-
-    setup(version=full_version,
-          ext_modules=ext_modules,
-          install_requires=read_requ_file('requirements.txt'),
-          extras_require=extras_require)
-
-
-if __name__ == "__main__":
-    setup_package()
+if __name__ == '__main__':
+    setup(ext_modules=setup_cython_extension())
