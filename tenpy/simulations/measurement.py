@@ -14,6 +14,7 @@ Full description and details in :doc:`/intro/measurements`.
 
 import numpy as np
 import warnings
+import functools
 
 from ..networks.mpo import MPOEnvironment
 from ..tools.misc import get_recursive
@@ -28,10 +29,18 @@ __all__ = [
 
 
 def measurement_wrapper(function, results_key, **kwargs):
+    """Decorator to transform a function into a measurement function.
+
+    As documented in :func:`m_measurement_index`, measurement functions need to take
+    positional arguments ``results, psi, model, simulation``.
+    This function is a decorator that wraps a given `function` not taking those arguments
+    into a measurment function by simply discarding these arguments
+    and saving the returned value in the `results`.
+    """
     if results_key is None:
         results_key = function.__name__
 
-    #  @functools.wraps(function)
+    @functools.wraps(function)
     def measurement_call(results, psi, model, simulation, **kwargs):
         if results_key in results:
             raise ValueError(f"key {results_key!r} already exists in `results`, "
@@ -49,7 +58,7 @@ def m_measurement_index(results, psi, model, simulation, results_key='measuremen
     The parameter description below documents the common interface of all measurement
     functions that can be registered to simulations.
 
-    See :doc:`/intro/simulations` for the general setup using measurements.
+    See :doc:`/intro/measurements` for the general setup using measurements.
 
     .. versionchanged:: 0.10.0
 

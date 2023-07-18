@@ -1,11 +1,11 @@
-"""A collection of tests for tenpy.linalg.lanczos."""
+"""A collection of tests for tenpy.linalg.krylov_based."""
 # Copyright 2018-2023 TeNPy Developers, GNU GPLv3
 
 import tenpy.linalg.np_conserved as npc
 import numpy as np
 
 from random_test import gen_random_legcharge
-from tenpy.linalg import lanczos, sparse
+from tenpy.linalg import krylov_based, sparse
 import tenpy.linalg.random_matrix as rmat
 from scipy.linalg import expm
 import pytest
@@ -17,9 +17,9 @@ def test_gramschmidt(n=30, k=5, tol=1.e-15):
     leg = gen_random_legcharge(ch, n)
     vecs_old = [npc.Array.from_func(rmat.standard_normal_complex, [leg], shape_kw='size')
                 for i in range(k)]
-    vecs_new = lanczos.gram_schmidt(vecs_old, rcond=0.)
+    vecs_new = krylov_based.gram_schmidt(vecs_old, rcond=0.)
     assert all([v is w for v, w in zip(vecs_new, vecs_old)])
-    vecs_new = lanczos.gram_schmidt(vecs_old, rcond=tol)
+    vecs_new = krylov_based.gram_schmidt(vecs_old, rcond=tol)
     vecs = [v.to_ndarray() for v in vecs_new]
     ovs = np.zeros((k, k), dtype=np.complex128)
     for i, v in enumerate(vecs):
@@ -42,7 +42,7 @@ def test_lanczos_gs(n, N_cache, tol=5.e-14):
     H_Op = H  # use `matvec` of the array
     psi_init = npc.Array.from_func(np.random.random, [leg], qtotal=qtotal)
 
-    E0, psi0, N = lanczos.lanczos(H_Op, psi_init, {'N_cache': N_cache})
+    E0, psi0, N = krylov_based.LanczosGroundState(H_Op, psi_init, {'N_cache': N_cache}).run()
     print("full spectrum:", E_flat)
     print("E0 = {E0:.14f} vs exact {E0_flat:.14f}".format(E0=E0, E0_flat=E0_flat))
     print("|E0-E0_flat| / |E0_flat| =", abs((E0 - E0_flat) / E0_flat))
@@ -56,7 +56,7 @@ def test_lanczos_gs(n, N_cache, tol=5.e-14):
     assert (abs(1. - abs(ov)) < tol)
 
     print("version with arpack")
-    E0a, psi0a = lanczos.lanczos_arpack(H_Op, psi_init, {})
+    E0a, psi0a = krylov_based.lanczos_arpack(H_Op, psi_init, {})
     print("E0a = {E0a:.14f} vs exact {E0_flat:.14f}".format(E0a=E0a, E0_flat=E0_flat))
     print("|E0a-E0_flat| / |E0_flat| =", abs((E0a - E0_flat) / E0_flat))
     psi0a_H_psi0a = npc.inner(psi0a, npc.tensordot(H, psi0a, axes=[1, 0]), 'range', do_conj=True)
@@ -79,8 +79,10 @@ def test_lanczos_gs(n, N_cache, tol=5.e-14):
         lanczos_params = {'reortho': True}
         if E1_flat > -0.01:
             lanczos_params['E_shift'] = -2. * E1_flat - 0.2
-        E1, psi1, N = lanczos.lanczos(sparse.OrthogonalNpcLinearOperator(H_Op, ortho_to), psi_init,
-                                      lanczos_params)
+        E1, psi1, N = krylov_based.LanczosGroundState(
+            sparse.OrthogonalNpcLinearOperator(H_Op, ortho_to),
+            psi_init, lanczos_params
+        ).run()
         print("E1 = {E1:.14f} vs exact {E1_flat:.14f}".format(E1=E1, E1_flat=E1_flat))
         print("|E1-E1_flat| / |E1_flat| =", abs((E1 - E1_flat) / E1_flat))
         psi1_H_psi1 = npc.inner(psi1, npc.tensordot(H, psi1, axes=[1, 0]), 'range', do_conj=True)
@@ -111,7 +113,7 @@ def test_lanczos_evolve(n, N_cache, tol=5.e-14):
     psi_init = npc.Array.from_func(np.random.random, [leg], qtotal=qtotal)
     #psi_init /= npc.norm(psi_init) # not necessary
     psi_init_flat = psi_init.to_ndarray()
-    lanc = lanczos.LanczosEvolution(H_Op, psi_init, {'N_cache': N_cache})
+    lanc = krylov_based.LanczosEvolution(H_Op, psi_init, {'N_cache': N_cache})
     for delta in [-0.1j, 0.1j, 1.j, 0.1, 1.]:
         psi_final_flat = expm(H_flat * delta).dot(psi_init_flat)
         norm = np.linalg.norm(psi_final_flat)
@@ -146,7 +148,7 @@ def test_arnoldi(n, which):
     H_Op = H  # use `matvec` of the array
     psi_init = npc.Array.from_func(np.random.random, [leg], qtotal=qtotal)
 
-    eng = lanczos.Arnoldi(H_Op, psi_init, {'which': which, 'num_ev': 1, 'N_max': 20})
+    eng = krylov_based.Arnoldi(H_Op, psi_init, {'which': which, 'num_ev': 1, 'N_max': 20})
     (E0,), (psi0,), N = eng.run()
     print("full spectrum:", E_flat)
     print("E0 = {E0:.14f} vs exact {E0_flat:.14f}".format(E0=E0, E0_flat=E0_flat))
@@ -160,4 +162,3 @@ def test_arnoldi(n, which):
     ov = np.inner(psi0.to_ndarray().conj(), psi0_flat)
     print("|<psi0|psi0_flat>|=", abs(ov))
     assert (abs(1. - abs(ov)) < tol)
-

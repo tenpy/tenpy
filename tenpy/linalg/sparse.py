@@ -187,7 +187,7 @@ class OrthogonalNpcLinearOperator(NpcLinearOperatorWrapper):
             warnings.warn("Empty `ortho_vecs`: no need to patch `OrthogonalNpcLinearOperator`",
                           stacklevel=2)
         super().__init__(orig_operator)
-        from .lanczos import gram_schmidt
+        from .krylov_based import gram_schmidt
         ortho_vecs = gram_schmidt(ortho_vecs)
         self.ortho_vecs = ortho_vecs
 

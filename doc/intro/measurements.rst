@@ -80,7 +80,7 @@ For example, say you want to measure local expectation values of both `Sz` and `
 
 .. code :: yaml
 
-    connect_measurement
+    connect_measurements:
         - - tenpy.simulations.measurement
           - m_onsite_expectation_value
           - opname: Sx
@@ -94,7 +94,7 @@ If you want other keys, you can explicitly specify them with the `results_key` a
 
 .. code :: yaml
 
-    connect_measurement:
+    connect_measurements:
         - - tenpy.simulations.measurement
           - m_onsite_expectation_value
           - opname: Sx
@@ -110,7 +110,7 @@ disable them with :cfg:option:`Simulation.use_default_measurements`); for exampl
 is measured for any simulation, as it appears in :attr:`~tenpy.simulations.simulation.Simulation.default_measurements`.
 
 Often, what you want to measure is just calling a method of the state `psi`, so there is a special syntax in the
-`connect_measurement` parameter:
+`connect_measurements` parameter:
 if you **specify the first entry to be** ``psi_method``, ``model_method`` or ``simulation_method``, you can call a method of the
 corresponding classes. 
 As for global measurement functions, we pass the corresponding ``results, psi, model, simulation`` keyword arguments,
@@ -129,7 +129,7 @@ To make this clearer, let's extend the example above with more measurements:
 
 .. code :: yaml
 
-    connect_measurement:
+    connect_measurements:
         - - tenpy.simulations.measurement
           - m_onsite_expectation_value
           - opname: Sx

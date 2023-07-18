@@ -22,7 +22,61 @@ from . import networks
 from . import models
 from . import simulations
 from . import version  # needs to be after linalg!
-from .simulations.simulation import run_simulation, resume_from_checkpoint, run_seq_simulations
+
+# provide the more important functions and classes directly from the main namespace:
+from .algorithms.dmrg_parallel import DMRGThreadPlusHC
+from .algorithms.dmrg import SingleSiteDMRGEngine, TwoSiteDMRGEngine
+from .algorithms.exact_diag import ExactDiag
+from .algorithms.mpo_evolution import ExpMPOEvolution, TimeDependentExpMPOEvolution
+from .algorithms.mps_common import VariationalCompression, VariationalApplyMPO
+from .algorithms.network_contractor import ncon, contract
+from .algorithms.purification import PurificationApplyMPO, PurificationTEBD, PurificationTEBD2
+from .algorithms.tdvp import (SingleSiteTDVPEngine, TwoSiteTDVPEngine, TimeDependentSingleSiteTDVP,
+                              TimeDependentTwoSiteTDVP)
+from .algorithms.tebd import TEBDEngine, QRBasedTEBDEngine, RandomUnitaryEvolution, TimeDependentTEBD
+from .algorithms.truncation import TruncationError, truncate, svd_theta
+from .linalg.charges import ChargeInfo, LegCharge, LegPipe
+from .linalg.krylov_based import Arnoldi, LanczosGroundState, LanczosEvolution, lanczos_arpack
+from .linalg.np_conserved import (Array, zeros, ones, eye_like, diag,
+                                  concatenate, grid_concat, grid_outer, detect_grid_outer_legcharge,
+                                  detect_qtotal, detect_legcharge, trace, outer, inner, tensordot,
+                                  svd, pinv, norm, eigh, eig, eigvalsh, eigvals, speigs, expm, qr)
+from .models.lattice import (Lattice, TrivialLattice, SimpleLattice, MultiSpeciesLattice,
+                             IrregularLattice, HelicalLattice, Chain, Ladder, NLegLadder, Square,
+                             Triangular, Honeycomb, Kagome, get_lattice)
+from .models.tf_ising import TFIModel, TFIChain
+from .models.xxz_chain import XXZChain, XXZChain2
+from .models.spins import SpinModel, SpinChain
+from .models.spins_nnn import SpinChainNNN, SpinChainNNN2
+from .models.fermions_spinless import FermionModel, FermionChain
+from .models.tj_model import tJModel, tJChain
+from .models.hofstadter import HofstadterBosons, HofstadterFermions
+from .models.clock import ClockModel, ClockChain
+from .models.hubbard import (BoseHubbardModel, BoseHubbardChain, FermiHubbardModel,
+                             FermiHubbardChain, FermiHubbardModel2)
+from .models.haldane import BosonicHaldaneModel, FermionicHaldaneModel
+from .models.toric_code import ToricCode
+from .models.aklt import AKLTChain
+from .models.mixed_xk import (MixedXKLattice, MixedXKModel, SpinlessMixedXKSquare,
+                              HubbardMixedXKSquare)
+from .networks.site import (Site, GroupedSite, group_sites, SpinHalfSite, SpinSite, FermionSite,
+                            SpinHalfFermionSite, SpinHalfHoleSite, BosonSite, ClockSite,
+                            spin_half_species, kron)
+from .networks.mps import (MPS, MPSEnvironment, TransferMatrix, InitialStateBuilder,
+                           build_initial_state)
+from .networks.mpo import MPO, MPOEnvironment, MPOTransferMatrix
+from .networks.purification_mps import PurificationMPS
+from .simulations.simulation import (Simulation, Skip, init_simulation, run_simulation,
+                                     init_simulation_from_checkpoint, resume_from_checkpoint,
+                                     run_seq_simulations)
+from .simulations.ground_state_search import (GroundStateSearch, OrthogonalExcitations,
+                                              ExcitationInitialState)
+from .simulations.time_evolution import RealTimeEvolution
+from .simulations.measurement import (m_measurement_index, m_bond_dimension, m_bond_energies,
+                                      m_simulation_parameter, m_energy_MPO, m_entropy,
+                                      m_onsite_expectation_value, m_correlation_length,
+                                      m_evolved_time)
+
 
 #: hard-coded version string
 __version__ = version.version
@@ -31,8 +85,43 @@ __version__ = version.version
 __full_version__ = version.full_version
 
 __all__ = [
-    "algorithms", "linalg", "models", "networks", "simulations", "tools", "version", "show_config",
-    "run_simulation", "resume_from_checkpoint", "run_seq_simulations", "console_main"
+    # subpackages
+    'algorithms', 'linalg', 'models', 'networks', 'simulations', 'tools', 'version',
+    # from tenpy.algorithms
+    'DMRGThreadPlusHC', 'SingleSiteDMRGEngine', 'TwoSiteDMRGEngine', 'ExactDiag', 'ExpMPOEvolution',
+    'TimeDependentExpMPOEvolution', 'VariationalCompression', 'VariationalApplyMPO', 'ncon',
+    'contract', 'PurificationApplyMPO', 'PurificationTEBD', 'PurificationTEBD2',
+    'SingleSiteTDVPEngine', 'TwoSiteTDVPEngine', 'TimeDependentSingleSiteTDVP',
+    'TimeDependentTwoSiteTDVP', 'TEBDEngine', 'QRBasedTEBDEngine', 'RandomUnitaryEvolution',
+    'TimeDependentTEBD', 'TruncationError', 'truncate', 'svd_theta',
+    # from tenpy.linalg
+    'ChargeInfo', 'LegCharge', 'LegPipe', 'Arnoldi', 'LanczosGroundState', 'LanczosEvolution',
+    'lanczos_arpack', 'Array', 'zeros', 'ones', 'eye_like', 'diag', 'concatenate', 'grid_concat',
+    'grid_outer', 'detect_grid_outer_legcharge', 'detect_qtotal', 'detect_legcharge', 'trace',
+    'outer', 'inner', 'tensordot', 'svd', 'pinv', 'norm', 'eigh', 'eig', 'eigvalsh', 'eigvals',
+    'speigs', 'expm', 'qr',
+    # from tenpy.models
+    'Lattice', 'TrivialLattice', 'SimpleLattice', 'MultiSpeciesLattice', 'IrregularLattice',
+    'HelicalLattice', 'Chain', 'Ladder', 'NLegLadder', 'Square', 'Triangular', 'Honeycomb',
+    'Kagome', 'get_lattice', 'TFIModel', 'TFIChain', 'XXZChain', 'XXZChain2', 'SpinModel',
+    'SpinChain', 'SpinChainNNN', 'SpinChainNNN2', 'FermionModel', 'FermionChain', 'tJModel',
+    'tJChain', 'HofstadterBosons', 'HofstadterFermions', 'ClockModel', 'ClockChain',
+    'BoseHubbardModel', 'BoseHubbardChain', 'FermiHubbardModel', 'FermiHubbardChain',
+    'FermiHubbardModel2', 'BosonicHaldaneModel', 'FermionicHaldaneModel', 'ToricCode', 'AKLTChain',
+    'MixedXKLattice', 'MixedXKModel', 'SpinlessMixedXKSquare', 'HubbardMixedXKSquare',
+    # from tenpy.networks
+    'Site', 'GroupedSite', 'group_sites', 'SpinHalfSite', 'SpinSite', 'FermionSite',
+    'SpinHalfFermionSite', 'SpinHalfHoleSite', 'BosonSite', 'ClockSite', 'spin_half_species',
+    'kron', 'MPS', 'MPSEnvironment', 'TransferMatrix', 'InitialStateBuilder', 'build_initial_state',
+    'MPO', 'MPOEnvironment', 'MPOTransferMatrix', 'PurificationMPS',
+    # from tenpy.simulations
+    'Simulation', 'Skip', 'init_simulation', 'run_simulation', 'init_simulation_from_checkpoint',
+    'resume_from_checkpoint', 'run_seq_simulations', 'GroundStateSearch', 'OrthogonalExcitations',
+    'ExcitationInitialState', 'RealTimeEvolution', 'm_measurement_index', 'm_bond_dimension',
+    'm_bond_energies', 'm_simulation_parameter', 'm_energy_MPO', 'm_entropy',
+    'm_onsite_expectation_value', 'm_correlation_length', 'm_evolved_time',
+    # from tenpy.__init__, i.e. defined below
+    'show_config', 'console_main',
 ]
 
 

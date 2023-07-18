@@ -18,14 +18,25 @@ so you propably won't need to import `charges` directly.
     svd_robust
     random_matrix
     sparse
-    lanczos
+    krylov_based
 
 """
 # Copyright 2018-2023 TeNPy Developers, GNU GPLv3
 
-from . import charges, np_conserved, lanczos, random_matrix, sparse, svd_robust
+from . import charges, np_conserved, krylov_based, random_matrix, sparse, svd_robust
+from .charges import *
+from .np_conserved import *
+from .krylov_based import *
+from .random_matrix import *
+from .sparse import *
 
-__all__ = ['charges', 'np_conserved', 'lanczos', 'random_matrix', 'sparse', 'svd_robust']
+__all__ = ['charges', 'np_conserved', 'krylov_based', 'random_matrix', 'sparse', 'svd_robust',
+           *charges.__all__,
+           *[n for n in np_conserved.__all__ if n not in ['ChargeInfo', 'LegCharge', 'LegPipe']],
+           *krylov_based.__all__,
+           *random_matrix.__all__,
+           *sparse.__all__,
+           ]
 
 from ..tools import optimization
 
