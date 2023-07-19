@@ -10,7 +10,7 @@ from __future__ import annotations
 from abc import ABCMeta, abstractmethod
 import operator
 from typing import TypeVar, Sequence, NoReturn
-from numbers import Number, Real
+from numbers import Number, Real, Integral
 import numpy as np
 import warnings
 from functools import cached_property
@@ -220,7 +220,7 @@ class AbstractTensor(metaclass=ABCMeta):
     def get_leg_idx(self, which_leg: int | str) -> int:
         if isinstance(which_leg, str):
             which_leg = self.shape.label_to_legnum(which_leg)
-        if isinstance(which_leg, (int, np.int32, np.int64)):
+        if isinstance(which_leg, Integral):
             if which_leg < 0:
                 which_leg = which_leg + self.num_legs
             if not 0 <= which_leg < self.num_legs:
@@ -230,7 +230,7 @@ class AbstractTensor(metaclass=ABCMeta):
             raise TypeError
 
     def get_leg_idcs(self, which_legs: int | str | list[int | str]) -> list[int]:
-        if isinstance(which_legs, (int, str)):
+        if isinstance(which_legs, (Integral, str)):
             return [self.get_leg_idx(which_legs)]
         else:
             return list(map(self.get_leg_idx, which_legs))
@@ -542,7 +542,7 @@ class AbstractTensor(metaclass=ABCMeta):
     @abstractmethod
     def combine_legs(self,
                      *legs: list[int | str],
-                     new_legs: list[ProductSpace]=None,
+                     product_spaces: list[ProductSpace]=None,
                      product_spaces_dual: list[bool]=None,
                      new_axes: list[int]=None) -> AbstractTensor:
         """See tensors.combine_legs"""
@@ -1818,7 +1818,7 @@ class ChargedTensor(AbstractTensor):
                              dummy_leg_state=self.dummy_leg_state)
 
     def split_legs(self, *legs: int | str) -> ChargedTensor:
-        legs = [self.get_leg_idcs(group) for group in legs]  # needed, since invariant_part does not have the same legs
+        legs = self.get_leg_idcs(legs)  # needed, since invariant_part does not have the same legs
         return ChargedTensor(invariant_part=self.invariant_part.split_legs(*legs),
                              dummy_leg_state=self.dummy_leg_state)
 
