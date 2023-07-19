@@ -13,16 +13,21 @@ from __future__ import annotations
 from abc import ABCMeta, abstractmethod
 from numbers import Number
 import warnings
+from typing import Literal
 import numpy as np
+from scipy.sparse.linalg import LinearOperator as ScipyLinearOperator, ArpackNoConvergence
 
-from tenpy.linalg.tensors import AbstractTensor
-
-from .tensors import AbstractTensor, Shape, Tensor, tdot, eye_like, zero_like
+from .symmetries.spaces import VectorSpace, ProductSpace, Sector
+from .tensors import AbstractTensor, Shape, Tensor, ChargedTensor, tdot, eye_like, zero_like
 from .backends.abstract_backend import Dtype, AbstractBackend
+from .backends.numpy import NumpyBlockBackend
+from ..tools.math import speigs, speigsh
+from ..tools.misc import argsort
 
 
 __all__ = ['LinearOperator', 'LinearOperatorWrapper', 'SumLinearOperator',
-           'ShiftedLinearOperator', 'ProjectedLinearOperator']
+           'ShiftedLinearOperator', 'ProjectedLinearOperator', 'NumpyArrayLinearOperator',
+           'HermitianNumpyArrayLinearOperator']
 
 
 class LinearOperator(metaclass=ABCMeta):
@@ -283,10 +288,344 @@ class ProjectedLinearOperator(LinearOperatorWrapper):
         )
 
 
-# TODO (JU) port FlatLinearOperator from old
+class NumpyArrayLinearOperator(ScipyLinearOperator):
+    """Square Linear operator acting on numpy arrays based on a matvec acting on tenpy tensors.
+
+    Note that this class represents a square linear operator.
+
+    Parameters
+    ----------
+    tenpy_matvec : callable
+        Function with signature ``tenpy_matvec(vec: AbstractTensor) -> AbstractTensor`.
+        Has to return a tensor with the same legs and has to be linear.
+        Unless `labels` are given, the leg order of the output must be the same as for the input.
+    legs : list of :class:`~tenpy.linalg.symmetries.spaces.VectorSpace`
+        The legs of a Tensor that `tenpy_matvec` can act on.
+    backend : :class:`~tenpy.linalg.backends.abstract_backend.AbstractBackend`
+        The backend for self
+    dtype
+        The numpy dtype for this operator.
+    labels : list of str, optional
+        The labels for inputs to `tenpy_matvec`.
+    charge_sector : None | Sector | 'trivial'
+        If given, only the specified charge sector is considered.
+        Per default, or if the string ``'trivial'`` is given, the trivial sector of the symmetry is used.
+        ``None`` stands for *all* sectors.
+
+    Attributes
+    ----------
+    tenpy_matvec : callable
+        Function with signature ``tenpy_matvec(vec: AbstractTensor) -> AbstractTensor`.
+    legs : list of :class:`~tenpy.linalg.symmetries.spaces.VectorSpace`
+        The legs of a Tensor that `tenpy_matvec` can act on.
+    backend : :class:`~tenpy.linalg.backends.abstract_backend.AbstractBackend`
+        The backend for self
+    dtype
+        The numpy dtype for this operator.
+    labels : list of str, optional
+        The labels for inputs to `tenpy_matvec`.
+    charge_sector : None | Sector | 'trivial'
+        If given, only the specified charge sector is considered.
+        If ``'trivial'`` is given, the trivial sector of the symmetry is used.
+        ``None`` stands for *all* sectors.
+    matvec_count : int
+        The number of times `tenpy_matvec` was called.
+    N : int
+        The length of the numpy vectors that this operator acts on
+    domain : :class:`~tenpy.linalg.symmetries.spaces.ProductSpace`
+        The product of the :attr:`legs`. Self is an operator on either this entire space,
+        or one of its sectors, as specified by :attr:`charge_sector`.
+    symmetry
+        The symmetry of all involved spaces
+    shape : (int, int)
+        The shape of self as an operator on 1D numpy arrays
+    """
+    def __init__(self, tenpy_matvec, legs: list[VectorSpace], backend: AbstractBackend, dtype,
+                 labels: list[str] = None,
+                 charge_sector: None | Sector | Literal['trivial'] = 'trivial'):
+        self.tenpy_matvec = tenpy_matvec
+        self.legs = legs
+        self.backend = backend
+        # even if there is just one leg, we form the ProductSpace anyway, so we dont have to distinguish
+        #  cases and use combine_legs / split_legs in np_to_tensor and tensor_to_np
+        self.domain = ProductSpace(legs, backend=backend)
+        self.symmetry = legs[0].symmetry
+        self.matvec_count = 0
+        self.labels = labels
+        
+        self.shape = None  # set by charge_sector.setter
+        self._charge_sector = None  # set by charge_sector.setter
+        self.charge_sector = charge_sector  # uses setter with its input checks and conversions
+        
+        ScipyLinearOperator.__init__(self, dtype=dtype, shape=self.shape)
+
+    @classmethod
+    def from_Tensor(cls, tensor: Tensor, legs1: list[int | str], legs2: list[int | str],
+                    charge_sector: None | Sector | Literal['trivial'] = 'trivial'
+                    ) -> NumpyArrayLinearOperator:
+        """Create a :class:`NumpyArrayLinearOperator` from a tensor that acts via contraction (`tdot`).
+
+        The `tenpy_matvec` acting on ``vec`` is given by ``tdot(tensor, vec, legs1, legs2)``.
+
+        Parameters
+        ----------
+        tensor : Tensor
+            A tensors whose legs specified by `legs1` are contractible with the remaining legs.
+        legs1 : list of {int | str}
+            Which legs of `tensor` should be contracted on matvec
+        legs2 : list of {int | str}
+            Which legs of the "vector" should be contracted on `matvec`
+        charge_sector : None | Sector | 'trivial'
+            If given, only the specified charge sector is considered.
+            If ``'trivial'`` is given, the trivial sector of the symmetry is used.
+            ``None`` stands for *all* sectors.
+        """
+        idcs1 = tensor.get_leg_idcs(legs1)
+        tensor_contr_legs = [tensor.legs[idx] for idx in idcs1]
+        res_legs = [tensor.legs[idx] for idx in range(tensor.num_legs) if idx not in idcs1]
+        res_labels = [tensor.labels[idx] for idx in range(tensor.num_legs) if idx not in idcs1]
+        if None in res_labels:
+            res_labels = None
+        vec_contr_legs = []
+        for l in legs2:
+            if isinstance(l, int):
+                vec_contr_legs.append(res_legs[l])
+            else:
+                vec_contr_legs.extend(tensor.get_legs(l))
+        if not all(l_t.can_contract_with(l_v) for l_t, l_v in zip(tensor_contr_legs, vec_contr_legs)):
+            raise ValueError('Expected contractible legs')
+
+        def tenpy_matvec(vec):
+            return tensor.tdot(vec, legs1, legs2)
+
+        dtype = NumpyBlockBackend.backend_dtype_map[tensor.dtype]
+        return cls(tenpy_matvec, legs=vec_contr_legs, backend=tensor.backend, dtype=dtype,
+                   labels=res_labels, charge_sector=charge_sector)
+
+    @classmethod
+    def from_matvec_and_vector(cls, tenpy_matvec, vector: AbstractTensor, dtype=None
+                               ) -> tuple[NumpyArrayLinearOperator, np.ndarray]:
+        """Create a :class:`NumpyArrayLinearOperator` from a matvec and a vector that it can act on.
+
+        This is a convenience wrapper around the constructor where arguments are inferred
+        from the example `vector` that is given.
+        Additionally, the `vector` is converted via :meth:`tensor_to_np`.
+        The resulting `NumpyArrayLinearOperator` has a `charge_sector` set to be the sector of
+        `vector`.
+
+        Parameters
+        ----------
+        tenpy_matvec : callable
+            Function with signature ``tenpy_matvec(vec: AbstractTensor) -> AbstractTensor`.
+            Has to return a tensor with the same leg and has to be linear.
+        vector : :class:`~tenpy.linalg.tensors.Tensor` | :class:`~tenpy.linalg.tensors.ChargedTensor`
+            A tensor that `tenpy_matvec` can act on.
+            If a ChargedTensor, expect a single sector on the dummy leg, which is used as the
+            :attr:`charge_sector`.
+        dtype
+            The *numpy* dtype of the operator. Per default, the dtype of `vector` is used.
+
+        Returns
+        -------
+        op : :class:`NumpyArrayLinearOperator`
+            The resulting operator
+        vec_flat : 1D ndarray
+            Flat numpy vector representing `vector` within its charge sector.
+        """
+        if isinstance(vector, ChargedTensor):
+            assert vector.dummy_leg.num_sectors == 1 and vector.dummy_leg.multiplicities[0] == 1
+            sector = vector.dummy_leg.sectors[0]
+        else:
+            sector = 'trivial'
+        if dtype is None:
+            dtype = NumpyBlockBackend.backend_dtype_map[vector.dtype]
+        op = cls(tenpy_matvec, legs=vector.legs, backend=vector.backend, dtype=dtype, charge_sector=sector)
+        vec_flat = op.tensor_to_flat_array(vector)
+        return op, vec_flat
+        
+    @property
+    def charge_sector(self):
+        return self._charge_sector
+
+    @charge_sector.setter
+    def charge_sector(self, value):
+        if isinstance(value, str) and value == 'trivial':
+            sector = self.symmetry.trivial_sector
+        elif value is None:
+            sector = None
+        else:
+            assert self.symmetry.is_valid_sector(value)
+            sector = value
+        self._charge_sector = value
+        if sector is None:
+            size = self.domain.dim
+        else:
+            sector_idx = self.domain.sectors_where(sector)
+            if sector_idx is None:
+                raise ValueError('Domain of linear operator does not have this sector')
+            size = (self.symmetry.sector_dim(sector) * self.domain.multiplicities[sector_idx]).item()
+        self.shape = (size, size)
+
+    def _matvec(self, vec):
+        """Matvec operation acting on a numpy ndarray of the selected charge sector.
+
+        Parameters
+        ----------
+        vec : np.ndarray
+            A length ``N`` vector (or ``N`` x 1 matrix) where ``N`` is the total dimension
+            of the selected charge sector in the parent space, or the total dimension of the
+            parent space if "all" charge sectors are selected.
+
+        Returns
+        -------
+        matvec_vec : 1D ndarray
+            The result of the linear operation as a length ``N`` vector
+        """
+        vec = np.asarray(vec)
+        if vec.ndim != 1:  # convert Nx1 matrix to vector
+            vec = np.squeeze(vec, axis=1)
+            assert vec.ndim == 1
+        tens = self.flat_array_to_tensor(vec)
+        tens = self.tenpy_matvec(tens)
+        self.matvec_count += 1
+        return self.tensor_to_flat_array(tens)
+
+    def flat_array_to_tensor(self, vec: np.ndarray) -> AbstractTensor:
+        """Convert flat numpy data to a tensor in the selected charge sector."""
+        assert vec.shape == (self.shape[1],)
+        if self._charge_sector is None:
+            # TODO this is a bit difficult.
+            #  We need to work with tensors which do not fulfill the charge rule.
+            #  I.e. they are not confined to live in the trivial sector of their parent space
+            #  but can have components in all of its sectors.
+            #  We could emulate this behaviour by using a ChargedTensor that has as a dummy leg
+            #  all sectors of the self.domain, with multiplicities all 1 and a state [1, 1, ..., 1]
+            #  One way to make conversion flat_array <-> such ChargedTensor work would be to
+            #  "stack" ChargedTensors?
+            raise NotImplementedError
+        elif isinstance(self._charge_sector, str) and self._charge_sector == 'trivial':
+            tens = Tensor.from_flat_block_trivial_sector(
+                leg=self.domain, block=self.backend.block_from_numpy(vec), backend=self.backend
+            )
+            res = tens.split_legs(0)
+        else:
+            tens = ChargedTensor.from_flat_block_single_sector(
+                leg=self.domain, block=self.backend.block_from_numpy(vec), sector=self._charge_sector,
+                backend=self.backend
+            )
+            res = tens.split_legs(0)
+        if self.labels is not None:
+            res.set_labels(self.labels)
+        return res
+
+    def tensor_to_flat_array(self, tens: AbstractTensor) -> np.ndarray:
+        """Convert a tensor in the selected charge sector to a flat numpy array."""
+        if self.labels is not None:
+            tens = tens.permute_legs(tens.get_leg_idcs(self.labels))
+        if self._charge_sector is None:
+            # TODO undo the conversion from flat_array_to_tensor
+            raise NotImplementedError
+        elif isinstance(self._charge_sector, str) and self._charge_sector == 'trivial':
+            res = tens.combine_legs(list(range(tens.num_legs)), product_spaces=[self.domain])
+            res = res.to_flat_block_trivial_sector()
+        else:
+            res = tens.combine_legs(list(range(tens.num_legs)), product_spaces=[self.domain])
+            res = res.to_flat_block_single_sector()
+        res = self.backend.block_to_numpy(res)
+        assert res.shape == (self.shape[0],)
+        return res
+
+    def eigenvectors(self, num_ev: int = 1, max_num_ev: int = None, max_tol: float = 1.e-12,
+                     which: str = 'LM', v0_np: np.ndarray = None, v0_tensor: AbstractTensor = None,
+                     cutoff: float = 1.e-10, hermitian: bool = False, **kwargs):
+        """Find the (dominant) eigenvector(s) of self using :func:`scipy.sparse.linalg.eigs`.
+
+        If a charge_sector was specified, these are the dominant eigenvectors *within that sector*.
+        Otherwise, we look in all charge sectors.
+
+        Parameters
+        ----------
+        num_ev : int
+            Number of eigenvalues/vectors to look for.
+        max_num_ev : int
+            :func:`scipy.sparse.linalg.speigs` somtimes raises a NoConvergenceError for small
+            `num_ev`, which might be avoided by increasing `num_ev`. As a work-around,
+            we try it again in the case of an error, just with larger `num_ev` up to `max_num_ev`.
+            ``None`` defaults to ``num_ev + 2``.
+        max_tol : float
+            After the first `NoConvergenceError` we increase the `tol` argument to that value.
+        which : str
+            Which eigenvalues to look for, see :func:`scipy.sparse.linalg.eigs`.
+            More details also in :func:`~tenpy.tools.misc.argsort`.
+        v0_np : 1D ndarray
+            Initial guess as a flat numpy array, i.e. a suitable input to :meth:`_matvec`.
+        v0_tensor : :class:`~tenpy.linalg.tensors.Tensor` | :class:`~tenpy.linalg.tensors.ChargedTensor`
+            Initial guess as a tensor, i.e. a suitable input to :meth:`tensor_to_np`.
+        cutoff : float
+            Only used if ``self.charge_sector is None``; in that case it determines when entries in
+            a given charge-block are considered nonzero, and what counts as degenerate.
+        hermitian : bool
+            If False (default), use :func:`scipy.sparse.linalg.eigs`
+            If True, assume that self is hermitian and use :func:`scipy.sparse.linalg.eigsh`.
+        **kwargs :
+            Further keyword arguments given to :func:`scipy.sparse.linalg.eigsh` or
+            :func:`scipy.sparse.linalg.eigs`, respectively.
+
+        Returns
+        -------
+        eta : 1D ndarray
+            The eigenvalues, sorted accoding to `which`.
+        w : list of :class:`~tenpy.linalg.tensors.Tensor` or :class:`~tenpy.linalg.tensors.ChargedTensor`
+            The corresponding eigenvectors as tensors.
+        """
+        if max_num_ev is None:
+            max_num_ev = num_ev + 2
+        if v0_tensor is not None:
+            assert v0_np is None
+            v0_np = self.tensor_to_flat_array(v0_tensor)
+        if v0_np is not None:
+            kwargs['v0'] = v0_np
+            
+        for k in range(num_ev, max_num_ev + 1):
+            if k > num_ev:
+                warnings.warn(f'Increasing `num_ev` to {k}')
+            try:
+                if hermitian:
+                    eta, A = speigsh(self, k=k, which=which, **kwargs)
+                else:
+                    eta, A = speigs(self, k=k, which=which, **kwargs)
+                break
+            except ArpackNoConvergence:
+                if k == max_num_ev:
+                    raise
+            kwargs['tol'] = max(max_tol, kwargs.get('tol', 0))
+        cutoff = max(cutoff, 10 * kwargs.get('tol', 1.e-16))
+        A = np.real_if_close(A)
+
+        if self._charge_sector is not None:
+            vecs = [self.flat_array_to_tensor(A[:, j]) for j in range(A.shape[1])]
+        else:
+            # TODO again this is comlicated. can and should select a single charge sector here.
+            raise NotImplementedError
+
+        perm = argsort(eta, which)
+        return np.array(eta)[perm], [vecs[j] for j in perm]
 
 
+class HermitianNumpyArrayLinearOperator(NumpyArrayLinearOperator):
+    """Hermitian variant of :class:`NumpyArrayLinearOperator`.
 
+    Note that we don't check hermicity of :meth:`matvec`.
+    """
+    def _adjoint(self):
+        return self
+
+    def eigenvectors(self, *args, **kwargs):
+        """Same as NumpyArrayLinearOperator.eigenvectors(..., hermitian=True)"""
+        kwargs['hermitian'] = True
+        return NumpyArrayLinearOperator.eigenvectors(self, *args, **kwargs)
+        
+        
 def gram_schmidt(vecs: list[AbstractTensor], rcond=1.e-14) -> list[AbstractTensor]:
     """Gram-Schmidt orthonormalization of a list of tensors.
 
