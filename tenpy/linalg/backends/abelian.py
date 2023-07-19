@@ -1589,6 +1589,48 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
         eigvals_data = AbelianBackendData(dtype=a.dtype.to_real, blocks=eigvals_blocks,
                                           block_inds=a.data.block_inds, is_sorted=True)
         return eigvals_data, eigvects_data
+    
+    def from_flat_block_trivial_sector(self, block: Block, leg: VectorSpace) -> Data:
+        return AbelianBackendData(
+            dtype=self.block_dtype(block), blocks=[block],
+            block_inds=np.array([[leg._non_dual_sorted_sectors_where(leg.symmetry.trivial_sector)]]),
+            is_sorted=True
+        )
+
+    def to_flat_block_trivial_sector(self, tensor: Tensor) -> Block:
+        num_blocks = len(tensor.data.blocks)
+        if num_blocks == 1:
+            return tensor.data.blocks[0]
+        if num_blocks == 0:
+            dim = tensor.legs[0]._non_dual_sector_multiplicity(tensor.symmetry.trivial_sector)
+            return self.zero_block(shape=[dim], dtype=tensor.data.dtype)
+        raise ValueError  # this should not happen for single-leg tensors
+
+    def inv_part_from_flat_block_single_sector(self, block: Block, leg: VectorSpace, dummy_leg: VectorSpace) -> Data:
+        assert dummy_leg.num_sectors == 1
+        sector = dummy_leg._non_dual_sorted_sectors[0]
+        if leg.is_dual == dummy_leg.is_dual:
+            sector = leg.symmetry.dual_sector(sector)
+        idx = leg._non_dual_sorted_sectors_where(sector)
+        assert idx is not None
+        return AbelianBackendData(
+            dtype=self.block_dtype(block),
+            blocks=[self.block_add_axis(block, pos=1)],
+            block_inds=np.array([[idx, 0]])
+        )
+
+    def inv_part_to_flat_block_single_sector(self, tensor: Tensor) -> Block:
+        num_blocks = len(tensor.data.blocks)
+        if num_blocks == 1:
+            return tensor.data.blocks[0][:, 0]
+        if num_blocks == 0:
+            assert tensor.legs[1].num_sectors == 1
+            sector = tensor.legs[1]._non_dual_sorted_sectors[0]
+            if tensor.legs[0].is_dual == tensor.legs[1].is_dual:
+                sector = tensor.symmetry.dual_sector(sector)
+            dim = tensor.symmetry.sector_dim(sector) * tensor.legs[0]._non_dual_sector_multiplicity(sector)
+            return self.zero_block(shape=[dim], dtype=tensor.data.dtype)
+        raise ValueError  # should have been caught by input checks in ChargedTensor.to_flat_block_single_sector
 
 
 def product_space_map_incoming_block_inds(space: ProductSpace, incoming_block_inds):

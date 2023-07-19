@@ -525,6 +525,26 @@ class AbstractBackend(metaclass=ABCMeta):
         """Eigenvalue decomposition of a 2-leg hermitian tensor"""
         ...
 
+    @abstractmethod
+    def from_flat_block_trivial_sector(self, block: Block, leg: VectorSpace) -> Data:
+        """Data of a single-leg `Tensor` from the *part of* the coefficients in the trivial sector."""
+        ...
+
+    @abstractmethod
+    def to_flat_block_trivial_sector(self, tensor: Tensor) -> Block:
+        """Single-leg tensor to the *part of* the coefficients in the trivial sector."""
+        ...
+
+    @abstractmethod
+    def inv_part_from_flat_block_single_sector(self, block: Block, leg: VectorSpace, dummy_leg: VectorSpace) -> Data:
+        """Data for the invariant part used in ChargedTesnor.from_flat_block_single_sector"""
+        ...
+
+    @abstractmethod
+    def inv_part_to_flat_block_single_sector(self, tensor: Tensor) -> Block:
+        """Inverse of inv_part_from_flat_block_single_sector"""
+        ...
+
 
 class AbstractBlockBackend(metaclass=ABCMeta):
     svd_algorithms: list[str]  # first is default

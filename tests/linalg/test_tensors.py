@@ -262,6 +262,50 @@ def test_Tensor_methods(backend, vector_space_rng, backend_data_rng, tensor_rng)
     # TODO check that float of a complex tensor raises a warning
 
 
+def test_Tensor_tofrom_flat_block_trivial_sector(vector_space_rng, tensor_rng):
+    # TODO move to some other tests after restructuring
+    for n in range(10):
+        leg = vector_space_rng()
+        block_size = leg.sector_multiplicity(leg.symmetry.trivial_sector)
+        if block_size > 0:
+            break
+    else:
+        pytest.xfail('Failed to generate a vector space that has the trivial sector')
+
+    tens = tensor_rng(legs=[leg], labels=['a'])
+    block = tens.to_flat_block_trivial_sector()
+    assert tens.backend.block_shape(block) == (block_size,)
+    tens2 = tensors.Tensor.from_flat_block_trivial_sector(leg=leg, block=block, backend=tens.backend, label='a')
+    tens2.test_sanity()
+    assert tensors.almost_equal(tens, tens2)
+
+
+def test_ChargedTensor_tofrom_flat_block_single_sector(vector_space_rng, symmetry_sectors_rng, tensor_rng):
+    # TODO move to some other tests after restructuring
+    leg = vector_space_rng()
+    sector = symmetry_sectors_rng(1)[0]
+
+    block_size = leg.sector_multiplicity(sector)
+    if block_size == 0:
+        block_size = 4
+        leg = VectorSpace(symmetry=leg.symmetry,
+                          sectors=np.concatenate([leg.sectors, sector[None, :]]),
+                          multiplicities=np.concatenate([leg.multiplicities, np.array([block_size])])
+                          )
+
+    dummy_leg = VectorSpace(symmetry=leg.symmetry, sectors=[sector]).dual
+    tens = tensors.ChargedTensor(invariant_part=tensor_rng(legs=[leg, dummy_leg]))
+
+    block = tens.to_flat_block_single_sector()
+    assert tens.backend.block_shape(block) == (block_size,)
+    tens2 = tensors.ChargedTensor.from_flat_block_single_sector(
+        leg=leg, block=block, sector=sector, backend=tens.backend
+    )
+    tens2.test_sanity()
+    assert tens2.dummy_leg == tens.dummy_leg
+    assert tensors.almost_equal(tens, tens2)
+
+
 def test_tdot(backend, vector_space_rng, backend_data_rng, tensor_rng):
     # define legs such that a tensor with the following combinations all allow non-zero num_parameters
     # [a, b] , [a, b, c] , [a, b, d]

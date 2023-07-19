@@ -227,3 +227,16 @@ class AbstractNoSymmetryBackend(AbstractBackend, AbstractBlockBackend, ABC):
 
     def eigh(self, a: Tensor) -> tuple[DiagonalData, Data]:
         return self.block_eigh(a.data)
+
+    def from_flat_block_trivial_sector(self, block: Block, leg: VectorSpace) -> Data:
+        assert self.block_shape(block) == (leg.dim,)
+        return block
+
+    def to_flat_block_trivial_sector(self, tensor: Tensor) -> Block:
+        return tensor.data
+
+    def inv_part_from_flat_block_single_sector(self, block: Block, leg: VectorSpace, dummy_leg: VectorSpace) -> Data:
+        return self.block_add_axis(block, pos=1)
+
+    def inv_part_to_flat_block_single_sector(self, tensor: Tensor) -> Block:
+        return tensor.data[:, 0]

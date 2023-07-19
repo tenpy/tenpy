@@ -836,6 +836,30 @@ class Tensor(AbstractTensor):
                                     rtol=rtol, dtype=dtype)
 
     @classmethod
+    def from_flat_block_trivial_sector(cls, leg: VectorSpace, block: Block, backend: AbstractBackend,
+                                       label: str = None) -> Tensor:
+        """Create a single-leg `Tensor` from the *part of* the coefficients in the trivial sector.
+
+        Parameters
+        ----------
+        leg : :class:`~tenpy.linalg.symmetries.spaces.VectorSpace`
+            The single leg of the resulting tensor
+        block : backend-specific Block
+            The block of shape ``(M,)`` where ``M`` is the multiplicity of the trivial sector in `leg`.
+            This is a slice of ``result.to_dense_block()``.
+        backend : :class:`~tenpy.linalg.backends.abstract_backend.AbstractBackend`
+            The backend of the resulting tensor
+        label : str | None
+            The label for the single leg
+
+        See Also
+        --------
+        to_flat_block_trivial_sector
+        """
+        return cls(data=backend.from_flat_block_trivial_sector(block, leg=leg), backend=backend,
+                   legs=[leg], labels=[label])
+
+    @classmethod
     def from_numpy_func(cls, func, legs: list[VectorSpace], backend=None,
                         labels: list[str | None] = None, func_kwargs={},
                         shape_kw: str = None, dtype: Dtype = None) -> Tensor:
@@ -1008,6 +1032,16 @@ class Tensor(AbstractTensor):
             raise NotImplementedError
 
         return np.any(np.all(coupled == self.symmetry.trivial_sector[None, :], axis=1))
+
+    def to_flat_block_trivial_sector(self) -> Block:
+        """Assumes self is a single-leg tensor and returns its components in the trivial sector.
+
+        See Also
+        --------
+        from_flat_block_trivial_sector
+        """
+        assert self.num_legs == 1
+        return self.backend.to_flat_block_trivial_sector(self)
 
     # --------------------------------------------
     # Overriding methods from AbstractTensor
@@ -1524,6 +1558,42 @@ class ChargedTensor(AbstractTensor):
         return cls(invariant_part, dummy_leg_state=dummy_leg_state)
 
     @classmethod
+    def from_flat_block_single_sector(cls, leg: VectorSpace, block: Block, sector: Sector,
+                                      backend: AbstractBackend, label: str = None) -> ChargedTensor:
+        """Create a single-leg `ChargedTensor` from the *part of* the coefficients in the given sector.
+
+        The resulting dummy leg will have the (dual of the) given sector with multiplicity 1.
+
+        Parameters
+        ----------
+        leg : :class:`~tenpy.linalg.symmetries.spaces.VectorSpace`
+            The single leg of the resulting tensor
+        block : backend-specific Block
+            The block of shape ``(D * M,)`` where ``M`` is the multiplicity of the given `sector`
+            in `leg` and ``D`` is its dimension.
+            This is a slice of ``result.to_dense_block()``.
+        sector : Sector
+            The charge of the resulting ChargedTensor, i.e. the sector it lives in
+        backend : :class:`~tenpy.linalg.backends.abstract_backend.AbstractBackend`
+            The backend of the resulting tensor
+        label : str | None
+            The label for the single leg
+
+        See Also
+        --------
+        to_flat_block_single_sector
+        """
+        if leg.symmetry.sector_dim(sector) > 1:
+            # TODO how to handle multi-dim sectors? which dummy leg state to give?
+            raise NotImplementedError
+        dummy_leg = cls._dummy_leg_from_charge(sector, symmetry=leg.symmetry)
+        inv_part = Tensor(
+            data=backend.inv_part_from_flat_block_single_sector(block=block, leg=leg, dummy_leg=dummy_leg),
+            legs=[leg, dummy_leg], backend=backend, labels=[label, cls._DUMMY_LABEL]
+        )
+        return cls(inv_part, dummy_leg_state=None)
+
+    @classmethod
     def from_numpy(cls, array: np.ndarray, legs: list[VectorSpace], backend=None, dtype: Dtype=None,
                    labels: list[str | None] = None, atol: float = 1e-8, rtol: float = 1e-5,
                    charge: VectorSpace | Sector = None, dummy_leg_state=None
@@ -1644,6 +1714,21 @@ class ChargedTensor(AbstractTensor):
             return self._dummy_leg_state_item() * self.invariant_part.squeeze_legs(-1)
         state = Tensor.from_dense_block(self.dummy_leg_state, legs=[self.dummy_leg], backend=self.backend)
         return self.invariant_part.tdot(state, -1, 0)
+
+    def to_flat_block_single_sector(self) -> Block:
+        """Assumes a single-leg tensor living in a single sector and returns its components within that sector.
+
+        See Also
+        --------
+        from_flat_block_single_sector
+        """
+        if self.dummy_leg.num_sectors != 1 or self.dummy_leg.multiplicities[0] != 1:
+            raise ValueError('Not a single sector')
+        if self.symmetry.sector_dim(self.dummy_leg.sectors[0]) > 1:
+            # TODO how to handle multi-dim sectors? should cooperate with from_flat_block_single_sector
+            raise NotImplementedError
+        block = self.backend.inv_part_to_flat_block_single_sector(self.invariant_part)
+        return self._dummy_leg_state_item() * block
 
     # --------------------------------------------
     # Overriding methods from AbstractTensor
