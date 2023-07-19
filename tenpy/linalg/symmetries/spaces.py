@@ -271,6 +271,48 @@ class VectorSpace:
             return self.symmetry.dual_sector(self._non_dual_sorted_sectors[_sector_idx])
         return self._non_dual_sorted_sectors[_sector_idx]
 
+    def sectors_where(self, sector: Sector) -> int | None:
+        """Find the index `i` s.t. ``self.sectors[i] == sector``, or ``None`` if no such ``i`` exists."""
+        where = np.where(np.all(self.sectors == sector, axis=1))[0]
+        if len(where) == 0:
+            return None
+        if len(where) == 1:
+            return where[0]
+        raise RuntimeError  # sectors should have unique entries, so this should not happen
+
+    def _non_dual_sorted_sectors_where(self, sector: Sector) -> int | None:
+        """Find the index `i` s.t. ``self._non_dual_sorted_sectors[i] == sector``.
+
+        Or ``None`` if no such ``i`` exists.
+        """
+        # OPTIMIZE use that _non_dual_sorted_sectors is sorted to speed up lookup?
+        where = np.where(np.all(self._non_dual_sorted_sectors == sector, axis=1))[0]
+        if len(where) == 0:
+            return None
+        if len(where) == 1:
+            return where[0]
+        raise RuntimeError  # sectors should have unique entries, so this should not happen
+
+    def sector_multiplicity(self, sector: Sector) -> int:
+        """The multiplicitiy of the given sector.
+
+        Returns 0 if self does not have that sector.
+        """
+        idx = self.sectors_where(sector)
+        if idx is None:
+            return 0
+        return self.multiplicities[idx]
+
+    def _non_dual_sector_multiplicity(self, sector: Sector) -> int:
+        """The multiplicitiy of the given _non_dual_sector.
+
+        Returns 0 if self does not have that sector.
+        """
+        idx = self._non_dual_sorted_sectors_where(sector)
+        if idx is None:
+            return 0
+        return self._sorted_multiplicities[idx]
+
     def sectors_str(self, separator=', ', max_len=70) -> str:
         """short str describing the self_non_dual_sorted_sectors (note the underscore!) and their multiplicities"""
         full = separator.join(f'{self.symmetry.sector_str(a)}: {mult}'

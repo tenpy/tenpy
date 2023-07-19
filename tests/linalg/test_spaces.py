@@ -122,6 +122,13 @@ def test_vector_space(symmetry, symmetry_sectors_rng, np_random):
             assert np.all(s1.idx_to_sector(idx) == s)
             idx += 1
 
+    print('check sector lookup')
+    for expect in [2, 3, 4]:
+        expect = expect % s1.num_sectors
+        assert s1.sectors_where(s1.sectors[expect]) == expect
+        assert s1._non_dual_sorted_sectors_where(s1._non_dual_sorted_sectors[expect]) == expect
+        assert s1.sector_multiplicity(s1.sectors[expect]) == s1.multiplicities[expect]
+
 
 def test_product_space(symmetry, symmetry_sectors_rng, np_random):
     sectors = symmetry_sectors_rng(10)
