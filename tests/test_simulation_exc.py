@@ -27,7 +27,7 @@ def test_OrthogonalExcitations(tmp_path, switch, group, eps=1.e-10, N_exc=3):
     L, g = 8, 1.2
     assert L % 2 == 0 # to ensure ground state is charge sector [0]
     # Z2 charge!
-    model_params = dict(L=L, J=1., g=g, bc_MPS='finite', conserve='parity')
+    model_params = dict(L=L, J=1., g=g, bc_MPS='finite', conserve='parity', sort_charge=True)
     M = TFIChain(model_params)
 
     # get exact diagonalization reference excitations

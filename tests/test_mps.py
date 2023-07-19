@@ -299,7 +299,7 @@ def test_apply_op(bc, eps=1.e-13):
     psi1 = psi0.copy()
     psi1.apply_local_op(1, 'Sigmax', understood_infinite=True)  #unitary
     psi1_expect = mps.MPS.from_singlets(s, 3, [(0, 2)], lonely=[1], bc=bc, lonely_state='down')
-    assert abs(psi1_expect.overlap(psi1) - 1.) < eps
+    assert abs(psi1_expect.overlap(psi1, understood_infinite=True) - 1.) < eps
     psi1 = psi0.copy()
     psi1.apply_local_op(1, 'Sm', understood_infinite=True)  #non-unitary
     assert abs(psi1_expect.overlap(psi1, understood_infinite=True) - 1.) < eps
@@ -321,10 +321,10 @@ def test_apply_op(bc, eps=1.e-13):
 
     psi1 = psi0.copy()
     psi1.apply_local_term([('Sigmax', 1)])
-    assert abs(psi1_expect.overlap(psi1) - 1.) < eps
+    assert abs(psi1_expect.overlap(psi1, understood_infinite=True) - 1.) < eps
     psi4 = psi0.copy()
     psi4.apply_local_term([('Sigmax', 0), ('Sigmax', 2)])  #unitary
-    assert abs(1. - (- psi0.overlap(psi4))) < eps  # expect  -1 * |psi0>
+    assert abs(1. - (- psi0.overlap(psi4, understood_infinite=True))) < eps  # expect  -1 * |psi0>
 
     psi5 = psi0.copy()
     th = psi5.get_theta(0, 3).to_ndarray().reshape((8, ))
@@ -337,14 +337,18 @@ def test_apply_op(bc, eps=1.e-13):
     f = site.FermionSite('N')
     psi6 = mps.MPS.from_singlets(f, 3, [(0, 2)], 'full', 'empty',
                                  lonely=[1], lonely_state='full', bc=bc)
-    ov1 = psi6.overlap(mps.MPS.from_product_state([f]*3, ['full', 'full', 'empty'], bc=bc))
-    ov2 = psi6.overlap(mps.MPS.from_product_state([f]*3, ['empty', 'full', 'full'], bc=bc))
+    ov1 = psi6.overlap(mps.MPS.from_product_state([f]*3, ['full', 'full', 'empty'], bc=bc),
+                       understood_infinite=True)
+    ov2 = psi6.overlap(mps.MPS.from_product_state([f]*3, ['empty', 'full', 'full'], bc=bc),
+                       understood_infinite=True)
     assert abs(ov1 - s2) < eps
     assert abs(ov2 - (-s2)) < eps
-    psi6.apply_local_op(1, 'C', unitary=True) # no need to canonicalize here
+    psi6.apply_local_op(1, 'C', unitary=True, understood_infinite=True) # no need to canonicalize here
     # Jordan-Wigner should imply a relative sign in the singlet!
-    ov1 = psi6.overlap(mps.MPS.from_product_state([f]*3, ['full', 'empty', 'empty'], bc=bc))
-    ov2 = psi6.overlap(mps.MPS.from_product_state([f]*3, ['full', 'empty', 'empty'], bc=bc))
+    ov1 = psi6.overlap(mps.MPS.from_product_state([f]*3, ['full', 'empty', 'empty'], bc=bc),
+                       understood_infinite=True)
+    ov2 = psi6.overlap(mps.MPS.from_product_state([f]*3, ['full', 'empty', 'empty'], bc=bc),
+                       understood_infinite=True)
     assert abs(ov1 - (-s2)) < eps
     assert abs(ov2 - (-s2)) < eps
 

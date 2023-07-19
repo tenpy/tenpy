@@ -19,12 +19,13 @@ For example an MPS represents the contraction along the 'virtual' legs/bonds of 
 
 from . import site, mps, umps, mpo, purification_mps, momentum_mps
 
-from . import site, mps, mpo, purification_mps, terms
 from .site import *
 from .mps import *
 from .mpo import *
 from .purification_mps import *
 from .terms import *
+from .umps import *
+from .momentum_mps import *
 
 __all__ = ['site', 'mps', 'mpo', 'terms', 'purification_mps', 'umps', 'momentum_mps',
            *site.__all__,

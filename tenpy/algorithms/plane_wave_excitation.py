@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 from ..linalg import np_conserved as npc
 from ..networks.momentum_mps import MomentumMPS
 from ..networks.mpo import MPOEnvironment, MPOTransferMatrix
-from ..linalg.lanczos import GMRES, LanczosGroundState, norm, inner
+from ..linalg.krylov_based import GMRES, LanczosGroundState, norm, inner
 from ..linalg.sparse import NpcLinearOperator, SumNpcLinearOperator, BoostNpcLinearOperator, ShiftNpcLinearOperator
 from ..tools.params import asConfig
 from ..tools.math import entropy

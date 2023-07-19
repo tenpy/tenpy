@@ -8,9 +8,6 @@ TODO: Summarize the most important changes
 If you have ever defined a custom model and used :meth:`~tenpy.models.model.CouplingModel.add_multi_coupling_term` with `plus_hc=True`,
 please note :issue:`218`!
 
-Note that measurment functions for simulations need to be updated to accept another `model` parameter
-
-
 Changelog
 ---------
 

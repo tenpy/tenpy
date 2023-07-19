@@ -15,7 +15,7 @@ from ..tools.math import speigsh
 from ..tools.misc import argsort
 
 __all__ = [
-    'KrylovBased', 'Arnoldi', 'LanczosGroundState', 'LanczosEvolution', 'lanczos_arpack',
+    'KrylovBased', 'Arnoldi', 'LanczosGroundState', 'LanczosEvolution', 'GMRES', 'lanczos_arpack',
     'gram_schmidt', 'plot_stats'
 ]
 

@@ -2,11 +2,9 @@
 # Copyright 2018-2023 TeNPy Developers, GNU GPLv3
 import warnings
 from .krylov_based import *
+from . import krylov_based
 
-__all__ = [
-    'KrylovBased', 'Arnoldi', 'LanczosGroundState', 'LanczosEvolution', 'lanczos',
-    'lanczos_arpack', 'gram_schmidt', 'norm', 'inner', 'iscale_prefactor', 'iadd_prefactor_other', 'plot_stats', 'GMRES'
-]
+__all__ = ['lanczos', *krylov_based.__all__]
 
 warnings.warn('The tenpy.linalg.lanczos module has been renamed to tenpy.linalg.krylov_based and ' \
               'will be removed in v1.0')

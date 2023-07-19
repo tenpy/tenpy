@@ -16,7 +16,7 @@ difference in norm of the first two is the ``'max_split_error'`` that is reporte
 
 There are two derived classes that implement the vumps algorithm, :class:`OneSiteVUMPSEngine` and
 :class:`TwoSiteVUMPSEngine`. The first implements the algorithm found in the original paper,
-where the uMPS is updated by 2 zero-site eigenvalue problems and 1 zero-site eigenvalue problem.
+where the uMPS is updated by 2 zero-site eigenvalue problems and 1 one-site eigenvalue problem.
 This algorithm works at FIXED bond dimension, so the starting uMPS must be prepared with desired
 bond dimension. Currently we do this with ``'MPS.from_desired_bond_dimension'`` which is NOT
 compatible with charge conservation, as it is implemented with random unitaries to artificially
@@ -24,7 +24,7 @@ grow $chi$. The single-site algorithm allows for optimization of a translational
 with a single-site unit cell, which is currently not possible in our iDMRG implementation.
 
 Charge conservation and dynamic control of bond dimension is enabled by a novel two-site algorithm, in
-which we solve a two=site eigenvalue problem and 2 one-site eigenvalue problems. This algorithm involves
+which we solve a two-site eigenvalue problem and 2 one-site eigenvalue problems. This algorithm involves
 an SVD, which allows us to dynamically grow the bond dimension. Thus, we can start the algorithm in a
 product state with charge conservation and enlarge the bond dimension based on max_chi or SVD cutoff.
 Best practices for multi-site unit cell uMPS would be to start with the 2-site algorithm and switch to
@@ -46,7 +46,7 @@ from ..networks.mpo import MPOEnvironment, MPOTransferMatrix
 from ..networks.mps import MPS, TransferMatrix
 from ..networks.umps import uMPS
 from ..linalg.sparse import SumNpcLinearOperator
-from ..linalg.lanczos import LanczosGroundState, lanczos_arpack
+from ..linalg.krylov_based import LanczosGroundState, lanczos_arpack
 from ..tools.params import asConfig
 from ..tools.math import entropy
 from ..tools.misc import find_subclass
@@ -75,10 +75,9 @@ class VUMPSEngine(Sweep):
 
     def __init__(self, psi, model, options, **kwargs):
         #options = asConfig(options, self.__class__.__name__)
-        if type(psi) != uMPS: #tenpy.networks.umps.uMPS:
-            assert type(psi) == MPS #tenpy.networks.mps.MPS
-            # psi is an MPS, so convert it to a uMPS
-            psi = uMPS.from_MPS(psi)
+        if not isinstance(psi, uMPS):
+            assert isinstance(psi, MPS)
+            psi = uMPS.from_MPS(psi)  # psi is an MPS, so convert it to a uMPS
         super().__init__(psi, model, options, **kwargs)
         self.guess_init_env_data = self.env.get_initialization_data()
         self.env.clear()
@@ -319,11 +318,12 @@ class VUMPSEngine(Sweep):
 
         return strange_left, strange_right
 
+
 class OneSiteVUMPSEngine(VUMPSEngine):
     EffectiveH = OneSiteH
 
-    def __init__(self, psi, model, options, **kwargs):
-        super().__init__(psi, model, options, **kwargs)
+    #  def __init__(self, psi, model, options, **kwargs):
+    #      super().__init__(psi, model, options, **kwargs)
 
     def update_env(self, **update_data):
         # Get guesses for the next LP and RP
@@ -416,7 +416,8 @@ class TwoSiteVUMPSEngine(VUMPSEngine):
     def __init__(self, psi, model, options, **kwargs):
         #options = asConfig(options, self.__class__.__name__)
         super().__init__(psi, model, options, **kwargs)
-        assert self.psi.L > 1, 'Two-site methods require a two-site unit cell.'
+        if not self.psi.L > 1:
+            raise ValueError("Two-site methods require a two-site unit cell.")
 
     def update_env(self, **update_data):
         # Get guesses for the next LP and RP

@@ -789,14 +789,14 @@ class OneSiteH(EffectiveH):
     @classmethod
     def from_LP_W0_RP(cls, LP, W0, RP, i0=0, combine=False, move_right=True):
         self = cls.__new__(cls)
-        assert combine==False, "TODO, do we need to implement this?"
+        if combine:
+            raise NotImplementedError("Shouldn't need this for vumps")
         self.i0 = i0
         self.LP = LP.itranspose(['vR*', 'wR', 'vR'])
         self.RP = RP.itranspose(['wL', 'vL', 'vL*'])
         self.W0 = W0.replace_labels(['p', 'p*'], ['p0', 'p0*'])
         self.dtype = LP.dtype
         self.combine = combine
-        assert move_right==True, "For VUMPS, we only move right"
         self.move_right = move_right
         self.N = (self.LP.get_leg('vR').ind_len * self.W0.get_leg('p0').ind_len *
                   self.RP.get_leg('vL').ind_len)
