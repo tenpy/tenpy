@@ -11,13 +11,19 @@ The :class:`IrregularLattice` provides a way to remove or add sites to an existi
 lattice.
 
 See also the :doc:`/intro/model` and :doc:`/intro/lattices`.
+
+Further, an overview with plots of the predefined models is given in
+:doc:`/notebooks/90_overview_predefined_lattices`
+
 """
-# Copyright 2018-2021 TeNPy Developers, GNU GPLv3
+# Copyright 2018-2023 TeNPy Developers, GNU GPLv3
 
 import numpy as np
 import itertools
 import warnings
 import copy
+import logging
+logger = logging.getLogger(__name__)
 
 from ..networks.site import Site
 from ..tools.misc import (to_iterable, to_array, to_iterable_of_len, inverse_permutation,
@@ -25,9 +31,9 @@ from ..tools.misc import (to_iterable, to_array, to_iterable_of_len, inverse_per
 from ..networks.mps import MPS  # only to check boundary conditions
 
 __all__ = [
-    'Lattice', 'TrivialLattice', 'IrregularLattice', 'HelicalLattice', 'SimpleLattice', 'Chain',
-    'Ladder', 'NLegLadder', 'Square', 'Triangular', 'Honeycomb', 'Kagome', 'get_lattice',
-    'get_order', 'get_order_grouped'
+    'Lattice', 'TrivialLattice', 'SimpleLattice', 'MultiSpeciesLattice', 'IrregularLattice',
+    'HelicalLattice', 'Chain', 'Ladder', 'NLegLadder', 'Square', 'Triangular', 'Honeycomb',
+    'Kagome', 'get_lattice', 'get_order', 'get_order_grouped'
 ]
 
 # (update module doc string if you add further lattices)
@@ -582,7 +588,7 @@ class Lattice:
         factor : int
             The new number of sites in the MPS unit cell will be increased from `N_sites` to
             ``factor*N_sites_per_ring``. Since MPS unit cells are repeated in the `x`-direction
-            in our convetion, the lattice shape goes from
+            in our convention, the lattice shape goes from
             ``(Lx, Ly, ..., Lu)`` to ``(Lx*factor, Ly, ..., Lu)``.
         """
         if self.bc_MPS != "infinite":
@@ -656,7 +662,7 @@ class Lattice:
         lat_idx : array
             First dimensions like `i`, last dimension has len `dim`+1 and contains the lattice
             indices ``(x_0, ..., x_{dim-1}, u)`` corresponding to `i`.
-            For `i` accross the MPS unit cell and "infinite" or "segment" `bc_MPS`,
+            For `i` across the MPS unit cell and "infinite" or "segment" `bc_MPS`,
             we shift `x_0` accordingly.
         """
         if self.bc_MPS != 'finite':
@@ -679,7 +685,7 @@ class Lattice:
             The last dimension corresponds to lattice indices ``(x_0, ..., x_{D-1}, u)``.
             All lattice indices should be positive and smaller than the corresponding entry in
             ``self.shape``. Exception: for "infinite" or "segment" `bc_MPS`,
-            an `x_0` outside indicates shifts accross the boundary.
+            an `x_0` outside indicates shifts across the boundary.
 
         Returns
         -------
@@ -762,7 +768,7 @@ class Lattice:
 
         Examples
         --------
-        Say you measure expection values of an onsite term for an MPS, which gives you an 1D array
+        Say you measure expectation values of an onsite term for an MPS, which gives you an 1D array
         `A`, where `A[i]` is the expectation value of the site given by ``self.mps2lat_idx(i)``.
         Then this function gives you the expectation values ordered by the lattice:
 
@@ -838,7 +844,7 @@ class Lattice:
             Specifies for each `axis` in `axes`, for which MPS indices we have values in the
             corresponding `axis` of `A`.
             Defaults to ``[np.arange(A.shape[ax]) for ax in axes]``.
-            For indices accross the MPS unit cell and "infinite" `bc_MPS`,
+            For indices across the MPS unit cell and "infinite" `bc_MPS`,
             we shift `x_0` accordingly.
         include_u : (list of) bool
             Specifies for each `axis` in `axes`, whether the `u` index of the lattice should be
@@ -977,7 +983,7 @@ class Lattice:
         :attr:`basis` and :attr:`unit_cell_positions` of the lattice).
 
         .. warning ::
-            This function ignores "wrapping" arround the cylinder in the case of periodic boundary
+            This function ignores "wrapping" around the cylinder in the case of periodic boundary
             conditions.
 
         Parameters
@@ -1121,16 +1127,16 @@ class Lattice:
         mps1, mps2 : 1D array
             For each possible two-site coupling the MPS indices for the `u1` and `u2`.
         strength_vals : 1D array
-            (Only returend if `strength` is not None.)
+            (Only returned if `strength` is not None.)
             Such that ``for (i, j, s) in zip(mps1, mps2, strength_vals):`` iterates over all
             possible couplings with `s` being the strength of that coupling.
             Couplings where ``strength_vals == 0.`` are filtered out.
         lat_indices : 2D int array
-            (Only returend if `strength` is None.)
+            (Only returned if `strength` is None.)
             Rows of `lat_indices` correspond to entries of `mps1` and `mps2` and contain the
             lattice indices of the "lower left corner" of the box containing the coupling.
         coupling_shape : tuple of int
-            (Only returend if `strength` is None.)
+            (Only returned if `strength` is None.)
             Len :attr:`dim`. The correct shape for an array specifying the coupling strength.
             `lat_indices` has only rows within this shape.
         """
@@ -1182,7 +1188,7 @@ class Lattice:
         """filter possible j sites of a coupling from :meth:`possible_couplings`"""
         return np.all(
             np.logical_or(
-                lat_j_shifted == lat_j,  # not accross the boundary
+                lat_j_shifted == lat_j,  # not across the boundary
                 np.logical_not(self.bc)),  # direction has PBC
             axis=1)
 
@@ -1234,16 +1240,16 @@ class Lattice:
             conditions of `self` (how much the `box` for given `dx` can be shifted around without
             hitting a boundary - these are the different rows).
         strength_vals : 1D array
-            (Only returend if `strength` is not None.)
+            (Only returned if `strength` is not None.)
             Such that ``for  (ijkl, s) in zip(mps_ijkl, strength_vals):`` iterates over all
             possible couplings with `s` being the strength of that coupling.
             Couplings where ``strength_vals == 0.`` are filtered out.
         lat_indices : 2D int array
-            (Only returend if `strength` is None.)
+            (Only returned if `strength` is None.)
             Rows of `lat_indices` correspond to rows of `mps_ijkl` and contain the lattice indices
             of the "lower left corner" of the box containing the coupling.
         coupling_shape : tuple of int
-            (Only returend if `strength` is None.)
+            (Only returned if `strength` is None.)
             Len :attr:`dim`. The correct shape for an array specifying the coupling strength.
             `lat_indices` has only rows within this shape.
         """
@@ -1292,11 +1298,11 @@ class Lattice:
         """Filter possible couplings from :meth:`possible_multi_couplings`"""
         return np.all(
             np.logical_or(
-                lat_ijkl_shifted == lat_ijkl,  # not accross the boundary
+                lat_ijkl_shifted == lat_ijkl,  # not across the boundary
                 np.logical_not(self.bc)),  # direction has PBC
             axis=(1, 2))
 
-    def plot_sites(self, ax, markers=['o', '^', 's', 'p', 'h', 'D'], **kwargs):
+    def plot_sites(self, ax, markers=['o', '^', 's', 'p', 'h', 'D'], labels=None, **kwargs):
         """Plot the sites of the lattice with markers.
 
         Parameters
@@ -1304,9 +1310,11 @@ class Lattice:
         ax : :class:`matplotlib.axes.Axes`
             The axes on which we should plot.
         markers : list
-            List of values for the keywork `marker` of ``ax.plot()`` to distinguish the different
+            List of values for the keyword `marker` of ``ax.plot()`` to distinguish the different
             sites in the unit cell, a site `u` in the unit cell is plotted with a marker
             ``markers[u % len(markers)]``.
+        labels : list of str
+            Labels for the different sites in the unit cell.
         **kwargs :
             Further keyword arguments given to ``ax.plot()``.
         """
@@ -1320,6 +1328,8 @@ class Lattice:
                 raise ValueError("can only plot in 2 dimensions.")
             if use_marker:
                 kwargs['marker'] = markers[u % len(markers)]
+            if labels is not None:
+                kwargs['label'] = labels[u % len(labels)]
             ax.plot(pos[:, 0], pos[:, 1], **kwargs)
 
     def plot_order(self, ax, order=None, textkwargs={}, **kwargs):
@@ -1360,7 +1370,7 @@ class Lattice:
             The axes on which we should plot.
         coupling : list of (u1, u2, dx)
             By default (``None``), use ``self.pairs['nearest_neighbors']``.
-            Specifies the connections to be plotted; iteating over lattice indices `(i0, i1, ...)`,
+            Specifies the connections to be plotted; iterating over lattice indices `(i0, i1, ...)`,
             we plot a connection from the site ``(i0, i1, ..., u1)`` to the site
             ``(i0+dx[0], i1+dx[1], ..., u2)``, taking into account the boundary conditions.
         wrap : bool
@@ -1441,7 +1451,7 @@ class Lattice:
         ax : :class:`matplotlib.axes.Axes`
             The axes on which we should plot.
         direction : int
-            The direction of the lattice along which we should mark the idenitified sites.
+            The direction of the lattice along which we should mark the identified sites.
             If ``None``, mark it along all directions with periodic boundary conditions.
         cylinder_axis : bool
             Whether to plot the cylinder axis as well.
@@ -1465,7 +1475,7 @@ class Lattice:
         x_y = []
         for i in dirs:
             if self.bc[i]:
-                raise ValueError("Boundary conditons are not periodic for given direction")
+                raise ValueError("Boundary conditions are not periodic for given direction")
             x_y.append(origin)
             x_y.append(origin + self.Ls[i] * self.basis[i])
             if self.bc_shift is not None and i > 0:
@@ -1529,7 +1539,7 @@ class Lattice:
 class TrivialLattice(Lattice):
     """Trivial lattice consisting of a single (possibly large) unit cell in 1D.
 
-    This is usefull if you need a valid :class:`Lattice` with given :meth:`mps_sites`
+    This is useful if you need a valid :class:`Lattice` with given :meth:`mps_sites`
     and don't care about the actual geometry, e.g, because you don't intend to use the
     :class:`~tenpy.models.model.CouplingModel`.
 
@@ -1542,6 +1552,286 @@ class TrivialLattice(Lattice):
     """
     def __init__(self, mps_sites, **kwargs):
         Lattice.__init__(self, [1], mps_sites, **kwargs)
+
+
+class SimpleLattice(Lattice):
+    """A lattice with a unit cell consisting of just a single site.
+
+    In many cases, the unit cell consists just of a single site, such that the the last entry of
+    `u` of an 'lattice index' can only be ``0``.
+    From the point of internal algorithms, we handle this class like a :class:`Lattice` --
+    in that way we don't need to distinguish special cases in the algorithms.
+
+    Yet, from the point of a tenpy user, for example if you measure an expectation value
+    on each site in a `SimpleLattice`, you expect to get an ndarray of dimensions ``self.Ls``,
+    not ``self.shape``. To avoid that problem, `SimpleLattice` overwrites just the meaning of
+    ``u=None`` in :meth:`mps2lat_values` to be the same as ``u=0``.
+
+    Parameters
+    ----------
+    Ls : list of int
+        the length in each direction
+    site : :class:`~tenpy.networks.site.Site`
+        the lattice site. The `unit_cell` of the :class:`Lattice` is just ``[site]``.
+    **kwargs :
+        Additional keyword arguments given to the :class:`Lattice`.
+        If `order` is specified in the form ``('standard', snake_windingi, priority)``,
+        the `snake_winding` and `priority` should only be specified for the spatial directions.
+        Similarly, `positions` can be specified as a single vector.
+    """
+    Lu = 1  #: the (expected) number of sites in the unit cell, ``len(unit_cell)``.
+
+    def __init__(self, Ls, site, **kwargs):
+        if 'positions' in kwargs:
+            Dim = len(kwargs['basis'][0]) if 'basis' in kwargs else len(Ls)
+            kwargs['positions'] = np.reshape(kwargs['positions'], (1, Dim))
+        if 'order' in kwargs and not isinstance(kwargs['order'], str):
+            descr, snake_winding, priority = kwargs['order']
+            assert descr == 'standard'
+            snake_winding = tuple(snake_winding) + (False, )
+            priority = tuple(priority) + (max(priority) + 1., )
+            kwargs['order'] = descr, snake_winding, priority
+        Lattice.__init__(self, Ls, [site], **kwargs)
+
+    def mps2lat_values(self, A, axes=0, u=None):
+        """same as :meth:`Lattice.mps2lat_values`, but ignore ``u``, setting it to ``0``."""
+        return super().mps2lat_values(A, axes, 0)
+
+
+class MultiSpeciesLattice(Lattice):
+    """A variant of a :class:`SimpleLattice` replacing the elementary site with a set of sites.
+
+
+    An initialized  `MultiSpeciesLattice` replaces each site in the given `simple_lattice` with
+    the `species_sites`. This is useful e.g. if you want to place spin-full fermions
+    (or bosons) on a regular lattice, without falling back to the
+    :class:`~tenpy.networks.site.GroupedSite` causing a larger, local dimension.
+
+    This class defines pairs with appended ``'_all'`` and the `species_names` for all existing
+    pairs in the `simple_lattice`; see the example below.
+
+    Parameters
+    ----------
+    simple_lattice : :class:`Lattice`
+        A regular lattice (not necessarily a :class:`SimpleLattice`).
+        Typically one of the predefined ones, e.g.,
+        :class:`Square`, :class:`Triangular` or :class:`Honeycomb`.
+        You can initialize the `simple_lattice` with any local sites, e.g. ``sites=None``, since
+        the sites of the MultiSpeciesLattice are defined below.
+    species_sites : list of :class:`~tenpy.networks.site.Site`
+        A collection of sites representing different species.
+    species_names : list of str | None
+        Names for the species. Defaults to ``['0', '1', ...]``.
+        Used to define separate :attr:`pairs` by appending ``'_{name}'`` to the lattice.
+
+    Attributes
+    ----------
+    N_species : int
+        Number of species
+    species_names : list of str
+        Names for the species.
+    simple_lattice : :class:`Lattice`
+        The regular lattice on which `self` is based.
+    simple_Lu : int
+        Length of the unit cell of the `simple_lattice`.
+
+    Examples
+    --------
+    .. testsetup :: MultiSpeciesLattice
+
+        from tenpy.models.lattice import *
+        import tenpy
+
+    When defining the sites, you should probably call
+    :func:`~tenpy.networks.site.set_common_charges` (see examples there!) to adjust the charges,
+    especially if you have different sites. Consider a combination of Fermions and Spins:
+
+    .. doctest :: MultiSpeciesLattice
+
+        >>> simple_lat = Square(2, 3, None)
+        >>> f = tenpy.networks.site.FermionSite(conserve='N')
+        >>> s = tenpy.networks.site.SpinHalfSite(conserve='Sz')
+        >>> tenpy.networks.site.set_common_charges([f, s], 'independent')
+        [array([0, 1]), array([1, 0])]
+        >>> fs_lat = MultiSpeciesLattice(simple_lat, [f, s], ['f', 's'])
+
+    There are corresponding coupling pairs defined:
+
+    .. doctest :: MultiSpeciesLattice
+
+        >>> for key in fs_lat.pairs.keys():
+        ...     if key.startswith('nearest'):
+        ...          print(key)
+        nearest_neighbors_f-f
+        nearest_neighbors_f-s
+        nearest_neighbors_s-f
+        nearest_neighbors_s-s
+        nearest_neighbors_all-all
+        nearest_neighbors_diag
+        >>> print(fs_lat.pairs['nearest_neighbors_diag'])
+        [(0, 0, array([1, 0])), (0, 0, array([0, 1])), (1, 1, array([1, 0])), (1, 1, array([0, 1]))]
+
+    We further have "onsite" terms for couplings between the species defined.
+    Here, there is no ``'onsite_s-f'``, as it would be the same as ``'onsite_f-s'``.
+
+    .. doctest :: MultiSpeciesLattice
+
+        >>> for key in fs_lat.pairs.keys():
+        ...     if key.startswith('onsite'):
+        ...          print(key)
+        onsite_f-s
+
+
+    Note that the "simple lattice" can also have a non-trivial unit cell itself, e.g.
+    the Honeycomb already has two sites in it's unit cell:
+
+    .. doctest :: MultiSpeciesLattice
+
+        >>> simple_lat = Honeycomb(2, 3, None)
+        >>> f = tenpy.networks.site.FermionSite(conserve='N')
+        >>> tenpy.networks.site.set_common_charges([f, f], 'same')  # same = total N conserved
+        [array([0, 1]), array([0, 1])]
+        >>> spinfull_fermion_Honeycomb = MultiSpeciesLattice(simple_lat, [f, f], ['up', 'down'])
+
+    In this case, you could also call :func:`tenpy.networks.site.spin_half_species`.
+    """
+    Lu = None  #: unknown number of sites in the unit cell
+
+    def __init__(self, simple_lattice, species_sites, species_names=None):
+        simple_Lu = simple_lattice.Lu
+        if simple_Lu is None:
+            simple_Lu = len(simple_lattice.unit_cell)
+        N_species = len(species_sites)
+        unit_cell = list(species_sites) * simple_Lu
+        if species_names is None:
+            species_names = [str(i) for i in range(N_species)]
+        if len(species_names) != N_species:
+            raise ValueError("need exactly one name for each species,"
+                             f"but got {species_names!r} for {species_sites!r}")
+        unit_cell_positions = np.repeat(simple_lattice.unit_cell_positions, N_species, axis=0)
+
+        self.N_species = N_species
+        self.species_names = species_names
+        self.simple_lattice = simple_lattice
+        self.simple_Lu = simple_Lu
+        new_pairs = self._generate_new_pairs()
+
+        Lattice.__init__(
+            self,
+            simple_lattice.Ls,
+            unit_cell,
+            bc=simple_lattice.boundary_conditions,
+            bc_MPS=simple_lattice.bc_MPS,
+            basis=simple_lattice.basis,
+            positions=unit_cell_positions,
+            pairs=new_pairs)
+
+    def _generate_new_pairs(self):
+        N_sp = self.N_species
+        names = self.species_names
+        new_pairs = {}
+        # note: inline species_u_to_simple_u and simple_u_to_species methods here
+        errmsg = "duplicate key %s for pairs; use different species names!"
+        for pair_key, pair_val in self.simple_lattice.pairs.items():
+            pair_val_all = []
+            pair_val_diag = []
+            for sp_idx1, sp_name1 in enumerate(names):
+                for sp_idx2, sp_name2 in enumerate(names):
+                    pair_key_sp = f"{pair_key}_{sp_name1}-{sp_name2}"
+                    if pair_key_sp in new_pairs:
+                        raise ValueError(errmsg % pair_key_sp)
+                    pair_val_sp = []
+                    for (u1, u2, dx) in pair_val:
+                        pair_val_sp.append((u1 * N_sp + sp_idx1, u2 * N_sp + sp_idx2, dx))
+                    new_pairs[pair_key_sp] = pair_val_sp
+                    pair_val_all.extend(pair_val_sp)
+                    if sp_idx1 == sp_idx2:
+                        pair_val_diag.extend(pair_val_sp)
+            for key_sum, pair_val_sum in [('all-all', pair_val_all), ('diag', pair_val_diag)]:
+                pair_key_sum = f"{pair_key}_{key_sum}"
+                if pair_key_sum in new_pairs:
+                    if pair_key_sp in new_pairs:
+                        raise ValueError(errmsg % pair_key_sum)
+                new_pairs[pair_key_sum] = pair_val_sum
+        dx = [0] * self.simple_lattice.dim
+        for sp_idx1, sp_name1 in enumerate(names):
+            for sp_idx2, sp_name2 in enumerate(names):
+                if sp_idx2 <= sp_idx1:
+                    continue # fully onsite!
+                onsite_pair_key = f"onsite_{sp_name1}-{sp_name2}"
+                onsite_pair_val = [(u * N_sp + sp_idx1, u * N_sp + sp_idx2, dx)
+                                   for u in range(self.simple_Lu)]
+                if onsite_pair_key in new_pairs:
+                    raise ValueError(errmsg % onsite_pair_key)
+                new_pairs[onsite_pair_key] = onsite_pair_val
+        return new_pairs
+
+    def ordering(self, order):
+        """Define orderings as for the `simple_lattice` with priority for within the unit cell.
+
+        See :meth:`Lattice.ordering` for arguments.
+        """
+        simple_order = self.simple_lattice.ordering(order)
+        return self._simple_order_to_self_order(simple_order)
+
+    def _simple_order_to_self_order(self, simple_order):
+        """Convert order of simple lattice to order for self.
+
+        C-style ordering, repeating whatever order we had before, and converting `u` index,
+        such that the species are always next to each other.
+        """
+        order = np.repeat(simple_order, self.N_species, axis=0)
+        species_idx = np.tile(np.arange(self.N_species, dtype=np.intp), len(simple_order))
+        order[:, -1] = self.simple_u_to_species_u(order[:, -1], species_idx)
+        return order
+
+
+    def self_u_to_simple_u(self, self_u):
+        """Get index `u` of the `simple_lattice` from index `u` in `self`.
+
+        Parameters
+        ----------
+        self_u : int
+            Unit cell index `u` in `self`.
+
+        Returns
+        -------
+        simple_u : int
+            Unit cell index `u` in the :attr:`simple_lattice`.
+        """
+        return self_u // self.N_species
+
+    def self_u_to_species_idx(self, self_u):
+        """Get species index for unit cell index.
+
+        Parameters
+        ----------
+        self_u : int
+            Unit cell index `u` in `self`.
+
+        Returns
+        -------
+        simple_u : int
+            Unit cell index `u` in the :attr:`simple_lattice`.
+        """
+        return self_u % self.N_species
+
+    def simple_u_to_species_u(self, simple_u, species_idx):
+        """Get index `u` in `self` from the `u` in the `simple_lattice` and the species index.
+
+        Parameters
+        ----------
+        simple_u : int
+            Unit cell index `u` in the :attr:`simple_lattice`.
+        species_idx : int
+            Index of the species.
+
+        Returns
+        -------
+        self_u : int
+            Unit cell index `u` in `self`.
+        """
+        return simple_u * self.N_species + species_idx
 
 
 class IrregularLattice(Lattice):
@@ -2034,51 +2324,6 @@ class HelicalLattice(Lattice):
         self.N_sites_per_ring = None  # shouldn't be used
         self.N_rings = None  # shouldn't be used - pointless for this case.
 
-
-class SimpleLattice(Lattice):
-    """A lattice with a unit cell consiting of just a single site.
-
-    In many cases, the unit cell consists just of a single site, such that the the last entry of
-    `u` of an 'lattice index' can only be ``0``.
-    From the point of internal algorithms, we handle this class like a :class:`Lattice` --
-    in that way we don't need to distinguish special cases in the algorithms.
-
-    Yet, from the point of a tenpy user, for example if you measure an expectation value
-    on each site in a `SimpleLattice`, you expect to get an ndarray of dimensions ``self.Ls``,
-    not ``self.shape``. To avoid that problem, `SimpleLattice` overwrites just the meaning of
-    ``u=None`` in :meth:`mps2lat_values` to be the same as ``u=0``.
-
-    Parameters
-    ----------
-    Ls : list of int
-        the length in each direction
-    site : :class:`~tenpy.networks.site.Site`
-        the lattice site. The `unit_cell` of the :class:`Lattice` is just ``[site]``.
-    **kwargs :
-        Additional keyword arguments given to the :class:`Lattice`.
-        If `order` is specified in the form ``('standard', snake_windingi, priority)``,
-        the `snake_winding` and `priority` should only be specified for the spatial directions.
-        Similarly, `positions` can be specified as a single vector.
-    """
-    Lu = 1  #: the (expected) number of sites in the unit cell, ``len(unit_cell)``.
-
-    def __init__(self, Ls, site, **kwargs):
-        if 'positions' in kwargs:
-            Dim = len(kwargs['basis'][0]) if 'basis' in kwargs else len(Ls)
-            kwargs['positions'] = np.reshape(kwargs['positions'], (1, Dim))
-        if 'order' in kwargs and not isinstance(kwargs['order'], str):
-            descr, snake_winding, priority = kwargs['order']
-            assert descr == 'standard'
-            snake_winding = tuple(snake_winding) + (False, )
-            priority = tuple(priority) + (max(priority) + 1., )
-            kwargs['order'] = descr, snake_winding, priority
-        Lattice.__init__(self, Ls, [site], **kwargs)
-
-    def mps2lat_values(self, A, axes=0, u=None):
-        """same as :meth:`Lattice.mps2lat_values`, but ignore ``u``, setting it to ``0``."""
-        return super().mps2lat_values(A, axes, 0)
-
-
 class Chain(SimpleLattice):
     """A chain of L equal sites.
 
@@ -2119,6 +2364,7 @@ class Chain(SimpleLattice):
             ax.set_ylim(-0.5, 0.5)
         plt.show()
 
+
     Parameters
     ----------
     L : int
@@ -2154,6 +2400,7 @@ class Chain(SimpleLattice):
             Thus, it avoids the ultra-long-range coupling from site 0 to L-1, at the expense of
             (almost) each nearest-neighbor coupling now being next-nearest-neighbors.
             Graphically::
+
                 |       PBC couplings on ring  --->        MPS order='folded'
                 |       number=physical site               number=position in MPS
                 |

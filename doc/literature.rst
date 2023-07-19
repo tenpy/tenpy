@@ -25,6 +25,9 @@ We have split example notebooks into [TeNPyNotebooks]_ to keep the git history o
     also below as :cite:`hauschild2018a`.
 .. [TeNPySource]
     https://github.com/tenpy/tenpy
+.. [TeNPyToycodes]
+    Collection of very simple toy code python scripts and tutorial notebooks at https://github.com/tenpy/tenpy_notbooks.
+    Included in the documentation under :doc:`/examples`
 .. [TeNPyNotebooks]
     Collection of example [jupyter]_ notebooks using TeNPy: https://github.com/tenpy/tenpy_notebooks
 .. [TeNPyDoc]
@@ -98,6 +101,7 @@ Algorithm developments
 :cite:`karrasch2013` gives some tricks to do finite-temperature simulations (DMRG), which is a bit extended in :cite:`hauschild2018a`.
 :cite:`vidal2007` introduced MERA.
 The scaling :math:`S=c/6 log(\chi)` at a 1D critical point is explained in :cite:`pollmann2009`.
+:cite:`vanderstraeten2019` gives a very good introductin to infinite, uniform MPS.
 
 
 References

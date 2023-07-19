@@ -70,7 +70,8 @@ def test_simulation_export_import(tmp_path):
         'XXZChain',
         'model_params': {
             'bc_MPS': 'infinite',
-            'L': 2
+            'L': 2,
+            'sort_charge': False,
         },
         'algorithm_class':
         'DummyAlgorithmSleep',
@@ -83,7 +84,7 @@ def test_simulation_export_import(tmp_path):
             'product_state': [['up'], ['down']]
         },
         'connect_measurements': [
-            ('tenpy.simulations.measurement', 'onsite_expectation_value', {
+            ('tenpy.simulations.measurement', 'm_onsite_expectation_value', {
                 'opname': 'Sz'
             }),
         ],

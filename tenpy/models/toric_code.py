@@ -3,7 +3,7 @@
 As we put the model on a cylinder, the name "toric code" is a bit misleading, but it is the
 established name for this model...
 """
-# Copyright 2018-2021 TeNPy Developers, GNU GPLv3
+# Copyright 2018-2023 TeNPy Developers, GNU GPLv3
 
 import numpy as np
 
@@ -119,6 +119,9 @@ class ToricCode(CouplingMPOModel):
             Dimension of the lattice, number of plaquettes around the cylinder.
         conserve : 'parity' | None
             What should be conserved. See :class:`~tenpy.networks.Site.SpinHalfSite`.
+        sort_charge : bool | None
+            Whether to sort by charges of physical legs.
+            See change comment in :class:`~tenpy.networks.site.Site`.
         Jv, Jp : float | array
             Couplings as defined for the Hamiltonian above.
         order : str
@@ -140,7 +143,8 @@ class ToricCode(CouplingMPOModel):
 
     def init_sites(self, model_params):
         conserve = model_params.get('conserve', 'parity')
-        site = SpinHalfSite(conserve)
+        sort_charge = model_params.get('sort_charge', None)
+        site = SpinHalfSite(conserve, sort_charge=sort_charge)
         return site
 
     def init_terms(self, model_params):

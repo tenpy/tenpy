@@ -1,16 +1,16 @@
 """A collection of tests to check the functionality of algorithms.exact_diagonalization."""
-# Copyright 2018-2021 TeNPy Developers, GNU GPLv3
+# Copyright 2018-2023 TeNPy Developers, GNU GPLv3
 
 import tenpy.linalg.np_conserved as npc
 import numpy as np
 from tenpy.models.xxz_chain import XXZChain
 from tenpy.algorithms.exact_diag import ExactDiag
-from tenpy.linalg.lanczos import lanczos
+from tenpy.linalg.krylov_based import LanczosGroundState
 
 
 def test_ED():
     # just quickly check that it runs without errors for a small system
-    xxz_pars = dict(L=4, Jxx=1., Jz=1., hz=0.0, bc_MPS='finite')
+    xxz_pars = dict(L=4, Jxx=1., Jz=1., hz=0.0, bc_MPS='finite', sort_charge=True)
     M = XXZChain(xxz_pars)
     ED = ExactDiag(M)
     ED.build_full_H_from_mpo()
@@ -37,7 +37,7 @@ def test_ED():
     # check if we can also do lanczos.
     np.random.seed(12345)
     psi3 = npc.Array.from_func(np.random.random, psi2.legs, qtotal=psi2.qtotal, shape_kw='size')
-    E0, psi3, N = lanczos(ED2, psi3)
+    E0, psi3, N = LanczosGroundState(ED2, psi3, {}).run()
     print("Lanczos E0 =", E0)
     ov = npc.inner(psi3, psi2, 'range', do_conj=True)
     print("overlab <psi2 | psi3> = 1. -", 1. - ov)

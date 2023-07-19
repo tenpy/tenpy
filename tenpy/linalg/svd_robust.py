@@ -34,7 +34,7 @@ The idea is that you just import the `svd` from this module and use it as replac
 >>> from tenpy.linalg.svd_robust import svd
 >>> U, S, VT = svd([[1., 1.], [0., 1.]])
 """
-# Copyright 2018-2021 TeNPy Developers, GNU GPLv3
+# Copyright 2018-2023 TeNPy Developers, GNU GPLv3
 
 import numpy as np
 import scipy

@@ -1,8 +1,9 @@
 """Defines a class describing the local physical Hilbert space.
 
 The :class:`Site` is the prototype, read it's docstring.
+
 """
-# Copyright 2018-2021 TeNPy Developers, GNU GPLv3
+# Copyright 2018-2023 TeNPy Developers, GNU GPLv3
 
 import numpy as np
 import itertools
@@ -10,12 +11,24 @@ import copy
 import warnings
 
 from ..linalg import np_conserved as npc
-from ..tools.misc import inverse_permutation
+from ..tools.misc import inverse_permutation, find_subclass
 from ..tools.hdf5_io import Hdf5Exportable
 
 __all__ = [
-    'Site', 'GroupedSite', 'group_sites', 'set_common_charges', 'multi_sites_combine_charges',
-    'SpinHalfSite', 'SpinSite', 'FermionSite', 'SpinHalfFermionSite', 'BosonSite', 'kron'
+    'Site',
+    'GroupedSite',
+    'group_sites',
+    'set_common_charges',
+    'multi_sites_combine_charges',
+    'kron',
+    'SpinHalfSite',
+    'SpinSite',
+    'FermionSite',
+    'SpinHalfFermionSite',
+    'SpinHalfHoleSite',
+    'BosonSite',
+    'ClockSite',
+    'spin_half_species',
 ]
 
 
@@ -26,13 +39,26 @@ class Site(Hdf5Exportable):
     defining the charges of the physical leg for this site.
     Moreover, it stores (local) on-site operators, which are directly available as attribute,
     e.g., ``self.Sz`` is the Sz operator for the :class:`SpinSite`.
-    Alternatively, operators can be obained with :meth:`get_op`.
-    The operator names ``Id`` and ``JW`` are reserved for the identy and Jordan-Wigner strings.
+    Alternatively, operators can be obtained with :meth:`get_op`.
+    The operator names ``Id`` and ``JW`` are reserved for the identity and Jordan-Wigner strings.
 
     .. warning ::
         The order of the local basis can change depending on the charge conservation!
         This is a *necessary* feature since we need to sort the basis by charges for efficiency.
         We use the :attr:`state_labels` and :attr:`perm` to keep track of these permutations.
+
+    .. versionchanged :: 0.10
+
+        Add the option `sort_charge`. Right now the default behavriou is ``False`` for
+        backwards compatibility, but we will change it for Version 1.0 to ``True``.
+        For now, we raise a warning in cases where it can lead to changes.
+        If you see this warning, just set the value explicitly to avoid breaking compatibility of
+        existing data with future releases.
+        Set it to `False`, if you already have data (for your particular model),
+        that you want to be able to load/compare to.
+        If you start a new project and don't have data yet, set it to `True`.
+        See also the `breaking changes` section in the release notes.
+
 
     Parameters
     ----------
@@ -45,6 +71,13 @@ class Site(Hdf5Exportable):
         The identity operator ``'Id'`` is automatically included.
         If no ``'JW'`` for the Jordan-Wigner string is given,
         ``'JW'`` is set as an alias to ``'Id'``.
+    sort_charge : bool | None
+        Whether :meth:`sort_charge` should be called at the end of initialization.
+        This is usually a good idea to reduce potential overhead when using charge conservation.
+        Note that this might permute the order of the local basis states!
+        For backwards compatibility with existing data, it is not (yet) enabled by default,
+        but we started to warn about the behaviour.
+        Explicitly set `sort_charge=False` to disable the warning.
 
     Attributes
     ----------
@@ -73,6 +106,10 @@ class Site(Hdf5Exportable):
     hc_ops : dict(str->str)
         Mapping from operator names to their hermitian conjugates.
         Use :meth:`get_hc_op_name` to obtain entries.
+    used_sort_charge : bool
+        Whether :meth:`sort_charge` was called.
+        Note that the default argument for `sort_dense` in :meth:`add_op` changes to True in that
+        case, to ensure a consistent use.
 
     Examples
     --------
@@ -80,7 +117,7 @@ class Site(Hdf5Exportable):
     Note that ``Sx = (Sp + Sm)/2`` violates Sz conservation and is thus not a valid
     on-site operator.
 
-    >>> chinfo = npc.ChargeInfo([1], ['Sz'])
+    >>> chinfo = npc.ChargeInfo([1], ['2*Sz'])
     >>> ch = npc.LegCharge.from_qflat(chinfo, [1, -1])
     >>> Sp = [[0, 1.], [0, 0]]
     >>> Sm = [[0, 0], [1., 0]]
@@ -96,7 +133,9 @@ class Site(Hdf5Exportable):
     [[1. 0.]
      [0. 0.]]
     """
-    def __init__(self, leg, state_labels=None, **site_ops):
+
+    def __init__(self, leg, state_labels=None, sort_charge=False, **site_ops):
+        self.used_sort_charge = False
         self.leg = leg
         self.state_labels = dict()
         if state_labels is not None:
@@ -106,15 +145,28 @@ class Site(Hdf5Exportable):
         self.opnames = set()
         self.need_JW_string = set(['JW'])
         self.hc_ops = {}
+        if not hasattr(self, 'perm'):  # default permutation for the local states
+            self.perm = np.arange(self.dim)
         self.add_op('Id', npc.diag(1., self.leg), hc='Id')
         for name, op in site_ops.items():
             self.add_op(name, op)
-        if not hasattr(self, 'perm'):  # default permutation for the local states
-            self.perm = np.arange(self.dim)
         if 'JW' not in self.opnames:
             # include trivial `JW` to allow combinations
             # of bosonic and fermionic sites in an MPS
             self.add_op('JW', self.Id, hc='JW')
+        if sort_charge:
+            self.sort_charge()
+        elif sort_charge is None:
+            if not (leg.sorted and leg.bunched):
+                msg = (f"LegCharge of physical leg in site {self!s} is not sorted. "
+                       "You should explicitly set `sort_charge`. "
+                       "Set it to False, if you already have saved data for your model and want "
+                       "to be able to load it/keep backwards compatibility. "
+                       "For new projects, if you don't have data yet, set it to `True`. "
+                       "We will switch the default from False to True in version 1.0, "
+                       "which breaks compatibility of existing data with "
+                       "code/models that don't explicitly set sort_legcharge.")
+                warnings.warn(msg, FutureWarning, 2)
         self.test_sanity()
 
     def change_charge(self, new_leg_charge=None, permute=None):
@@ -126,7 +178,7 @@ class Site(Hdf5Exportable):
             The new charges to be used. If ``None``, use trivial charges.
         permute : ndarray | None
             The permuation applied to the physical leg,
-            which gets used to adjust :attr:`state_labels` and :attr:`perm`.
+            which also gets used to adjust :attr:`state_labels` and :attr:`perm`.
             If you sorted the previous leg with ``perm_qind, new_leg_charge = leg.sort()``,
             use ``old_leg.perm_flat_from_perm_qind(perm_qind)``.
             Ignored if ``None``.
@@ -138,9 +190,7 @@ class Site(Hdf5Exportable):
             permute = np.asarray(permute, dtype=np.intp)
             inv_perm = inverse_permutation(permute)
             self.perm = self.perm[permute]
-            state_labels = self.state_labels.copy()
-            for label in state_labels:
-                self.state_labels[label] = inv_perm[state_labels[label]]
+            self.state_labels = dict((lbl, inv_perm[i]) for lbl, i in self.state_labels.items())
         for opname in self.opnames.copy():
             op = self.get_op(opname).to_ndarray()
             self.opnames.remove(opname)
@@ -148,8 +198,30 @@ class Site(Hdf5Exportable):
             if permute is not None:
                 op = op[np.ix_(permute, permute)]
             # need_JW and hc_ops are still set
-            self.add_op(opname, op, need_JW=False, hc=False)
+            self.add_op(opname, op, need_JW=False, hc=False, permute_dense=False)
         # done
+
+    def sort_charge(self, bunch=True):
+        """Sort the :attr:`leg` charges (in place).
+
+        Parameters
+        ----------
+        bunch : bool
+            Whether to also group equal charges into larger blocks (usually a good idea).
+
+        Returns
+        -------
+        perm : 1D ndarray
+            The permutation
+        """
+        if self.leg.sorted and (not bunch or self.leg.bunched):
+            return np.arange(self.dim, dtype=np.intp)  # nothing to do
+        perm_qind, leg_sorted = self.leg.sort(bunch)
+        perm_flat = self.leg.perm_flat_from_perm_qind(perm_qind)
+        self.change_charge(leg_sorted, perm_flat)
+        # change_charge updates self.state_label and self.perm
+        self.used_sort_charge = True
+        return perm_flat
 
     def test_sanity(self):
         """Sanity check, raises ValueErrors, if something is wrong."""
@@ -191,7 +263,7 @@ class Site(Hdf5Exportable):
         """
         return dict([(name, getattr(self, name)) for name in sorted(self.opnames)])
 
-    def add_op(self, name, op, need_JW=False, hc=None):
+    def add_op(self, name, op, need_JW=False, hc=None, permute_dense=None):
         """Add one on-site operators.
 
         Parameters
@@ -212,6 +284,12 @@ class Site(Hdf5Exportable):
             The name for the hermitian conjugate operator, to be used for :attr:`hc_ops`.
             By default (``None``), try to auto-determine it.
             If ``False``, disable adding antries to :attr:`hc_ops`.
+        permute_dense : bool | None
+            Flag to enable/disable permuations when converting `op` from numpy to
+            np_conserved arrays.
+            If True, the operator is permuted with :attr:`perm` to account for permutations
+            induced by sorting charges; False disables the permutations.
+            By default (``None``), the value of :attr:`used_sort_charge` is used.
         """
         name = str(name)
         if not name.isidentifier():
@@ -224,15 +302,20 @@ class Site(Hdf5Exportable):
             op = np.asarray(op)
             if op.shape != (self.dim, self.dim):
                 raise ValueError("wrong shape of on-site operator")
+            if permute_dense is None:
+                permute_dense = self.used_sort_charge
+            if permute_dense:
+                perm = self.perm
+                op = op[np.ix_(perm, perm)]
             try:
                 op = npc.Array.from_ndarray(op, [self.leg, self.leg.conj()])
             except ValueError as e:
                 # just add a more help-ful error message printing the operators
-                raise ValueError('\n'.join([f"Can't convert operator {name!r} to npc Array",
-                                            "Flat charges:",
-                                            str(self.leg.to_qflat()),
-                                            "Operator:",
-                                            str(op)])) from e
+                raise ValueError('\n'.join([
+                    f"Can't convert operator {name!r} to npc Array", "Flat charges:",
+                    str(self.leg.to_qflat()), "Operator:",
+                    str(op)
+                ])) from e
         if op.rank != 2:
             raise ValueError("only rank-2 on-site operators allowed")
         op.legs[0].test_equal(self.leg)
@@ -522,6 +605,7 @@ class GroupedSite(Site):
     labels: list of str
         The labels using which the single-site operators are added during construction.
     """
+
     def __init__(self, sites, labels=None, charges='same'):
         self.n_sites = n_sites = len(sites)
         self.sites = sites
@@ -566,6 +650,7 @@ class GroupedSite(Site):
 
         # initialize Site
         Site.__init__(self, pipe, None, JW=JW_all)
+        # note: the pipe is sorted, so sort_charge option doesn't matter
 
         # set state labels
         for states_labels in itertools.product(*[s.state_labels.items() for s in sites]):
@@ -652,7 +737,7 @@ def group_sites(sites, n=2, labels=None, charges='same'):
     return grouped_sites
 
 
-def set_common_charges(sites, new_charges='same', new_names=None, new_mod=None):
+def set_common_charges(sites, new_charges='same', new_names=None, new_mod=None, sort_charge=True):
     r"""Adjust the charges of the given sites *in place* such that they can be used together.
 
     Before we can contract operators (and tensors) corresponding to different :class:`Site`
@@ -695,11 +780,14 @@ def set_common_charges(sites, new_charges='same', new_names=None, new_mod=None):
     new_mod : list of int
         :attr:`~tenpy.linalg.charges.ChargeInfo.mod` for the new charges, one entry for each list
         in `new_charges`. Defaults to the `mod` of the old charges, if not specified otherwise.
+    sort_charge : bool
+        Whether to sort the physical legs by charges.
 
     Returns
     -------
     perms : list of ndarray
         For each site the permutation performed on the physical leg to sort by charges.
+        Only returned if `sort_charge` is True.
 
     Examples
     --------
@@ -828,7 +916,6 @@ def set_common_charges(sites, new_charges='same', new_names=None, new_mod=None):
         >>> set_common_charges([ferm, bos], [[(1, 0, 'N'), (2, 1, 'N')]], ['N_f + 2 N_b'])
         [array([0, 1]), array([0, 1, 2, 3])]
 
-    Finally, it can sometimes be convenient to change the charges of the
     The ``new_charges='drop'`` or ``new_charges=[]`` option is a quick way to remove any charges.
 
     .. doctest :: set_common_charges
@@ -912,11 +999,15 @@ def set_common_charges(sites, new_charges='same', new_names=None, new_mod=None):
                     new_qflat[:, new_i] += old_qflat_i
         # update the site with the new charges
         leg_unsorted = npc.LegCharge.from_qflat(new_chinfo, new_qflat, site.leg.qconj)
-        perm_qind, leg = leg_unsorted.sort()
-        perm_flat = leg_unsorted.perm_flat_from_perm_qind(perm_qind)
-        perms.append(perm_flat)
+        if sort_charge:
+            perm_qind, leg = leg_unsorted.sort()
+            perm_flat = leg_unsorted.perm_flat_from_perm_qind(perm_qind)
+            perms.append(perm_flat)
+        else:
+            perm_flat = None
         site.change_charge(leg, perm_flat)
-    return perms
+    if sort_charge:
+        return perms
 
 
 def multi_sites_combine_charges(sites, same_charges=[]):
@@ -927,7 +1018,7 @@ def multi_sites_combine_charges(sites, same_charges=[]):
     This function adjusts the charges of these sites such that they can be used together.
 
     .. deprecated :: 0.7.3
-        Deprecated in favore of the new, more powerful
+        Deprecated in favor of the new, more powerful
         :func:`~tenpy.networks.site.set_common_charges`.
         Be aware of the slightly different argument structure though, namely that
         this function keeps charges not included in `same_charges`, whereas you need
@@ -1036,6 +1127,35 @@ def multi_sites_combine_charges(sites, same_charges=[]):
     return perms
 
 
+def kron(*ops, group=True):
+    """Kronecker product of two or more local operators.
+
+    Parameters
+    ----------
+    *ops : :class:`~tenpy.linalg.np_conserved.Array`
+        Local operators with labels ``'p', 'p*'`` as defined in :class:`Site`.
+    group : bool
+        Whether to combine the in/outgoing legs.
+
+    Returns
+    -------
+    product : :class:`~tenpy.linalg.np_conserved.Array`
+        Outer product of the `ops`, with legs ``'p0', 'p0*', 'p1', 'p1*', ...`` (grouped=False)
+        or combined legs ``'(p0.p1...)', '(p0*.p1*...)'`` (grouped=True).
+    """
+    if len(ops) <= 1:
+        raise ValueError("need at least 2 ops")
+    product = npc.outer(ops[0].replace_labels(['p', 'p*'], ['p0', 'p0*']),
+                        ops[1].replace_labels(['p', 'p*'], ['p1', 'p1*']))
+    for i in range(2, len(ops)):
+        op = ops[i].replace_labels(['p', 'p*'], [f"p{i:d}", f"p{i:d}*"])
+        product = npc.outer(product, op)
+    if group:
+        labels = [[f"p{i:d}" for i in range(len(ops))], [f"p{i:d}*" for i in range(len(ops))]]
+        product = product.combine_legs(labels, qconj=[+1, -1])
+    return product
+
+
 # ------------------------------------------------------------------------------
 # The most common local sites.
 
@@ -1069,13 +1189,19 @@ class SpinHalfSite(Site):
     ----------
     conserve : str | None
         Defines what is conserved, see table above.
+    sort_charge : bool
+        Whether :meth:`sort_charge` should be called at the end of initialization.
+        This is usually a good idea to reduce potential overhead when using charge conservation.
+        Note that this permutes the order of the local basis states!
+        For backwards compatibility with existing data, it is not (yet) enabled by default.
 
     Attributes
     ----------
     conserve : str
         Defines what is conserved, see table above.
     """
-    def __init__(self, conserve='Sz'):
+
+    def __init__(self, conserve='Sz', sort_charge=None):
         if not conserve:
             conserve = 'None'
         if conserve not in ['Sz', 'parity', 'None']:
@@ -1098,7 +1224,7 @@ class SpinHalfSite(Site):
                 leg = npc.LegCharge.from_trivial(2)
         self.conserve = conserve
         # Specify Hermitian conjugates
-        Site.__init__(self, leg, ['up', 'down'], **ops)
+        Site.__init__(self, leg, ['up', 'down'], sort_charge=sort_charge, **ops)
         # further alias for state labels
         self.state_labels['-0.5'] = self.state_labels['down']
         self.state_labels['0.5'] = self.state_labels['up']
@@ -1143,6 +1269,11 @@ class SpinSite(Site):
     ----------
     conserve : str
         Defines what is conserved, see table above.
+    sort_charge : bool
+        Whether :meth:`sort_charge` should be called at the end of initialization.
+        This is usually a good idea to reduce potential overhead when using charge conservation.
+        Note that this permutes the order of the local basis states for ``conserve='parity'``!
+        For backwards compatibility with existing data, it is not (yet) enabled by default.
 
     Attributes
     ----------
@@ -1151,7 +1282,8 @@ class SpinSite(Site):
     conserve : str
         Defines what is conserved, see table above.
     """
-    def __init__(self, S=0.5, conserve='Sz'):
+
+    def __init__(self, S=0.5, conserve='Sz', sort_charge=None):
         if not conserve:
             conserve = 'None'
         if conserve not in ['Sz', 'parity', 'None']:
@@ -1193,7 +1325,7 @@ class SpinSite(Site):
                 leg = npc.LegCharge.from_trivial(d)
         self.conserve = conserve
         names = [str(i) for i in np.arange(-S, S + 1, 1.)]
-        Site.__init__(self, leg, names, **ops)
+        Site.__init__(self, leg, names, sort_charge=sort_charge, **ops)
         self.state_labels['down'] = self.state_labels[names[0]]
         self.state_labels['up'] = self.state_labels[names[-1]]
 
@@ -1246,6 +1378,7 @@ class FermionSite(Site):
     filling : float
         Average filling. Used to define ``dN``.
     """
+
     def __init__(self, conserve='N', filling=0.5):
         if not conserve:
             conserve = 'None'
@@ -1268,7 +1401,7 @@ class FermionSite(Site):
             leg = npc.LegCharge.from_trivial(2)
         self.conserve = conserve
         self.filling = filling
-        Site.__init__(self, leg, ['empty', 'full'], **ops)
+        Site.__init__(self, leg, ['empty', 'full'], sort_charge=True, **ops)
         # specify fermionic operators
         self.need_JW_string |= set(['C', 'Cd', 'JW'])
 
@@ -1356,6 +1489,7 @@ class SpinHalfFermionSite(Site):
     filling : float
         Average filling. Used to define ``dN``.
     """
+
     def __init__(self, cons_N='N', cons_Sz='Sz', filling=1.):
         if not cons_N:
             cons_N = 'None'
@@ -1435,20 +1569,182 @@ class SpinHalfFermionSite(Site):
             else:  # len(charges) == 2: need to transpose
                 charges = [[q1, q2] for q1, q2 in zip(charges[0], charges[1])]
             chinfo = npc.ChargeInfo(qmod, qnames)
-            leg_unsorted = npc.LegCharge.from_qflat(chinfo, charges)
-            # sort by charges
-            perm_qind, leg = leg_unsorted.sort()
-            perm_flat = leg_unsorted.perm_flat_from_perm_qind(perm_qind)
-            self.perm = perm_flat
-            # permute operators accordingly
-            for opname in ops:
-                ops[opname] = ops[opname][np.ix_(perm_flat, perm_flat)]
-            # and the states
-            states = [states[i] for i in perm_flat]
+            leg = npc.LegCharge.from_qflat(chinfo, charges)
         self.cons_N = cons_N
         self.cons_Sz = cons_Sz
         self.filling = filling
-        Site.__init__(self, leg, states, **ops)
+        Site.__init__(self, leg, states, sort_charge=True, **ops)
+        # specify fermionic operators
+        self.need_JW_string |= set(['Cu', 'Cdu', 'Cd', 'Cdd', 'JWu', 'JWd', 'JW'])
+
+    def __repr__(self):
+        """Debug representation of self."""
+        return "SpinHalfFermionSite({cN!r}, {cS!r}, {f:f})".format(cN=self.cons_N,
+                                                                   cS=self.cons_Sz,
+                                                                   f=self.filling)
+
+
+class SpinHalfHoleSite(Site):
+    r"""Create a :class:`Site` for spinful (spin-1/2) fermions, restricted to empty or singly occupied sites
+
+    Local states are:
+         ``empty``  (vacuum),
+         ``up``     (one spin-up electron),
+         ``down``   (one spin-down electron)
+
+    Local operators can be built from creation operators.
+
+    .. warning ::
+        Using the Jordan-Wigner string (``JW``) in the correct way is crucial to get correct
+        results, otherwise you just describe hardcore bosons!
+
+    ==============  =============================================================================
+    operator        description
+    ==============  =============================================================================
+    ``Id``          Identity :math:`\mathbb{1}`
+    ``JW``          Sign for the Jordan-Wigner string :math:`(-1)^{n_{\uparrow}+n_{\downarrow}}`
+    ``JWu``         Partial sign for the Jordan-Wigner string :math:`(-1)^{n_{\uparrow}}`
+    ``JWd``         Partial sign for the Jordan-Wigner string :math:`(-1)^{n_{\downarrow}}`
+    ``Cu``          Annihilation operator spin-up :math:`c_{\uparrow}`
+                    (up to 'JW'-string on sites left of it).
+    ``Cdu``         Creation operator spin-up :math:`c^\dagger_{\uparrow}`
+                    (up to 'JW'-string on sites left of it).
+    ``Cd``          Annihilation operator spin-down :math:`c_{\downarrow}`
+                    (up to 'JW'-string on sites left of it).
+                    Includes ``JWu`` such that it anti-commutes onsite with ``Cu, Cdu``.
+    ``Cdd``         Creation operator spin-down :math:`c^\dagger_{\downarrow}`
+                    (up to 'JW'-string on sites left of it).
+                    Includes ``JWu`` such that it anti-commutes onsite with ``Cu, Cdu``.
+    ``Nu``          Number operator :math:`n_{\uparrow}= c^\dagger_{\uparrow} c_{\uparrow}`
+    ``Nd``          Number operator :math:`n_{\downarrow}= c^\dagger_{\downarrow} c_{\downarrow}`
+    ``Ntot``        Total number operator :math:`n_t= n_{\uparrow} + n_{\downarrow}`
+    ``dN``          Total number operator compared to the filling :math:`\Delta n = n_t-filling`
+    ``Sx, Sy, Sz``  Spin operators :math:`S^{x,y,z}`, in particular
+                    :math:`S^z = \frac{1}{2}( n_\uparrow - n_\downarrow )`
+    ``Sp, Sm``      Spin flips :math:`S^{\pm} = S^{x} \pm i S^{y}`,
+                    e.g. :math:`S^{+} = c^\dagger_\uparrow c_\downarrow`
+    ==============  =============================================================================
+
+    The spin operators are defined as :math:`S^\gamma =
+    (c^\dagger_{\uparrow}, c^\dagger_{\downarrow}) \sigma^\gamma (c_{\uparrow}, c_{\downarrow})^T`,
+    where :math:`\sigma^\gamma` are spin-1/2 matrices (i.e. half the pauli matrices).
+
+    ============= ============= ======= =======================================
+    `cons_N`      `cons_Sz`     qmod    *excluded* onsite operators
+    ============= ============= ======= =======================================
+    ``'N'``       ``'Sz'``      [1, 1]  ``Sx, Sy``
+    ``'N'``       ``'parity'``  [1, 2]  --
+    ``'N'``       ``None``      [1]     --
+    ``'parity'``  ``'Sz'``      [2, 1]  ``Sx, Sy``
+    ``'parity'``  ``'parity'``  [2, 2]  --
+    ``'parity'``  ``None``      [2]     --
+    ``None``      ``'Sz'``      [1]     ``Sx, Sy``
+    ``None``      ``'parity'``  [2]     --
+    ``None``      ``None``      []      --
+    ============= ============= ======= =======================================
+
+    Parameters
+    ----------
+    cons_N : ``'N' | 'parity' | None``
+        Whether particle number is conserved, c.f. table above.
+    cons_Sz : ``'Sz' | 'parity' | None``
+        Whether spin is conserved, c.f. table above.
+    filling : float
+        Average filling. Used to define ``dN``.
+
+    Attributes
+    ----------
+    cons_N : ``'N' | 'parity' | None``
+        Whether particle number is conserved, c.f. table above.
+    cons_Sz : ``'Sz' | 'parity' | None``
+        Whether spin is conserved, c.f. table above.
+    filling : float
+        Average filling. Used to define ``dN``.
+    """
+
+    def __init__(self, cons_N='N', cons_Sz='Sz', filling=1.):
+        if not cons_N:
+            cons_N = 'None'
+        if cons_N not in ['N', 'parity', 'None']:
+            raise ValueError("invalid `cons_N`: " + repr(cons_N))
+        if not cons_Sz:
+            cons_Sz = 'None'
+        if cons_Sz not in ['Sz', 'parity', 'None']:
+            raise ValueError("invalid `cons_Sz`: " + repr(cons_Sz))
+        d = 3
+        states = ['empty', 'up', 'down']
+        # 0) Build the operators.
+        Nu_diag = np.array([0., 1., 0.], dtype=np.float64)
+        Nd_diag = np.array([0., 0., 1.], dtype=np.float64)
+        Nu = np.diag(Nu_diag)
+        Nd = np.diag(Nd_diag)
+        Ntot = np.diag(Nu_diag + Nd_diag)
+        dN = np.diag(Nu_diag + Nd_diag - filling)
+        JWu = np.diag(1. - 2 * Nu_diag)  # (-1)^Nu
+        JWd = np.diag(1. - 2 * Nd_diag)  # (-1)^Nd
+        JW = JWu * JWd  # (-1)^{Nu+Nd}
+
+        Cu = np.zeros((d, d))
+        Cu[0, 1] = 1
+        Cdu = np.transpose(Cu)
+        # For spin-down annihilation operator: include a Jordan-Wigner string JWu
+        # this ensures that Cdu.Cd = - Cd.Cdu
+        # c.f. the chapter on the Jordan-Wigner trafo in the userguide
+        Cd_noJW = np.zeros((d, d))
+        Cd_noJW[0, 2] = 1
+        Cd = np.dot(JWu, Cd_noJW)  # (don't do this for spin-up...)
+        Cdd = np.transpose(Cd)
+
+        # spin operators are defined as  (Cdu, Cdd) S^gamma (Cu, Cd)^T,
+        # where S^gamma is the 2x2 matrix for spin-half
+        Sz = np.diag(0.5 * (Nu_diag - Nd_diag))
+        Sp = np.dot(Cdu, Cd)
+        Sm = np.dot(Cdd, Cu)
+        Sx = 0.5 * (Sp + Sm)
+        Sy = -0.5j * (Sp - Sm)
+
+        ops = dict(JW=JW, JWu=JWu, JWd=JWd,
+                   Cu=Cu, Cdu=Cdu, Cd=Cd, Cdd=Cdd,
+                   Nu=Nu, Nd=Nd, Ntot=Ntot, dN=dN,
+                   Sx=Sx, Sy=Sy, Sz=Sz, Sp=Sp, Sm=Sm)  # yapf: disable
+
+        # handle charges
+        qmod = []
+        qnames = []
+        charges = []
+        if cons_N == 'N':
+            qnames.append('N')
+            qmod.append(1)
+            charges.append([0, 1, 1])
+        elif cons_N == 'parity':
+            qnames.append('parity_N')
+            qmod.append(2)
+            charges.append([0, 1, 1])
+        if cons_Sz == 'Sz':
+            qnames.append('2*Sz')  # factor 2 s.t. Cu, Cd have well-defined charges!
+            qmod.append(1)
+            charges.append([0, 1, -1])
+            del ops['Sx']
+            del ops['Sy']
+        elif cons_Sz == 'parity':
+            qnames.append('parity_Sz')  # the charge is (2*Sz) mod (2*2)
+            qmod.append(4)
+            charges.append([0, 1, 3])  # == [0, 1, -1, 0] mod 4
+            # e.g. terms like `Sp_i Sp_j + hc` with Sp=Cdu Cd have charges 'N', 'parity_Sz'.
+            # The `parity_Sz` is non-trivial in this case!
+        if len(qmod) == 0:
+            leg = npc.LegCharge.from_trivial(d)
+        else:
+            if len(qmod) == 1:
+                charges = charges[0]
+            else:  # len(charges) == 2: need to transpose
+                charges = [[q1, q2] for q1, q2 in zip(charges[0], charges[1])]
+            chinfo = npc.ChargeInfo(qmod, qnames)
+            leg = npc.LegCharge.from_qflat(chinfo, charges)
+        self.cons_N = cons_N
+        self.cons_Sz = cons_Sz
+        self.filling = filling
+        Site.__init__(self, leg, states, sort_charge=True, **ops)
         # specify fermionic operators
         self.need_JW_string |= set(['Cu', 'Cdu', 'Cd', 'Cdd', 'JWu', 'JWd', 'JW'])
 
@@ -1503,6 +1799,7 @@ class BosonSite(Site):
     filling : float
         Average filling. Used to define ``dN``.
     """
+
     def __init__(self, Nmax=1, conserve='N', filling=0.):
         if not conserve:
             conserve = 'None'
@@ -1529,22 +1826,13 @@ class BosonSite(Site):
             leg = npc.LegCharge.from_qflat(chinfo, range(dim))
         elif conserve == 'parity':
             chinfo = npc.ChargeInfo([2], ['parity_N'])
-            leg_unsorted = npc.LegCharge.from_qflat(chinfo, [i % 2 for i in range(dim)])
-            # sort by charges
-            perm_qind, leg = leg_unsorted.sort()
-            perm_flat = leg_unsorted.perm_flat_from_perm_qind(perm_qind)
-            self.perm = perm_flat
-            # permute operators accordingly
-            for opname in ops:
-                ops[opname] = ops[opname][np.ix_(perm_flat, perm_flat)]
-            # and the states
-            states = [states[i] for i in perm_flat]
+            leg = npc.LegCharge.from_qflat(chinfo, [i % 2 for i in range(dim)])
         else:
             leg = npc.LegCharge.from_trivial(dim)
         self.Nmax = Nmax
         self.conserve = conserve
         self.filling = filling
-        Site.__init__(self, leg, states, **ops)
+        Site.__init__(self, leg, states, sort_charge=True, **ops)
         self.state_labels['vac'] = self.state_labels['0']  # alias
 
     def __repr__(self):
@@ -1554,30 +1842,149 @@ class BosonSite(Site):
                                                        f=self.filling)
 
 
-def kron(*ops, group=True):
-    """Kronecker product of two or more local operators.
+def spin_half_species(SpeciesSite, cons_N, cons_Sz, **kwargs):
+    """Initialize two FermionSite to represent spin-1/2 species.
+
+    You can use this directly in the :meth:`tenpy.models.model.CouplingMPOModel.init_sites`,
+    e.g., as in the :meth:`tenpy.models.hubbard.FermiHubbardModel2.init_sites`::
+
+        cons_N = model_params.get('cons_N', 'N')
+        cons_Sz = model_params.get('cons_Sz', 'Sz')
+        return spin_half_species(FermionSite, cons_N=cons_N, cons_Sz=cons_Sz)
 
     Parameters
     ----------
-    *ops : :class:`~tenpy.linalg.np_conserved.Array`
-        Local operators with labels ``'p', 'p*'`` as defined in :class:`Site`.
-    group : bool
-        Whether to combine the in/outgoing legs.
+    SpeciesSite : :class:`Site` | str
+        The (name of the) site class for the species;
+        usually just :class:`FermionSite`.
+    cons_N : None | ``"N", "parity", "None"``
+        Whether to conserve the (parity of the) total particle number ``N_up + N_down``.
+    cons_Sz : None | ``"Sz", "parity", "None"``
+        Whether to conserve the (parity of the) total Sz spin ``N_up - N_down``.
 
     Returns
     -------
-    product : :class:`~tenpy.linalg.np_conserved.Array`
-        Outer product of the `ops`, with legs ``'p0', 'p0*', 'p1', 'p1*', ...`` (grouped=False)
-        or combined legs ``'(p0.p1...)', '(p0*.p1*...)'`` (grouped=True).
+    sites : list of `SpeciesSite`
+        Each one instance of the site for spin up and down.
+    species_names : list of str
+        Always ``['up', 'down']``. Included such that a ``return spin_half_species(...)``
+        in :meth:`~tenpy.models.model.CouplingMPOModel.init_sites` triggers the use of the
+        :class:`~tenpy.models.lattice.MultiSpeciesLattice`.
     """
-    if len(ops) <= 1:
-        raise ValueError("need at least 2 ops")
-    product = npc.outer(ops[0].replace_labels(['p', 'p*'], ['p0', 'p0*']),
-                        ops[1].replace_labels(['p', 'p*'], ['p1', 'p1*']))
-    for i in range(2, len(ops)):
-        op = ops[i].replace_labels(['p', 'p*'], [f"p{i:d}", f"p{i:d}*"])
-        product = npc.outer(product, op)
-    if group:
-        labels = [[f"p{i:d}" for i in range(len(ops))], [f"p{i:d}*" for i in range(len(ops))]]
-        product = product.combine_legs(labels, qconj=[+1, -1])
-    return product
+    SpeciesSite = find_subclass(Site, SpeciesSite)
+    if not cons_N:
+        cons_N = 'None'
+    if cons_N not in ['N', 'parity', 'None']:
+        raise ValueError("invalid `cons_N`: " + repr(cons_N))
+    if not cons_Sz:
+        cons_Sz = 'None'
+    if cons_Sz not in ['Sz', 'parity', 'None']:
+        raise ValueError("invalid `cons_Sz`: " + repr(cons_Sz))
+
+    conserve = None if cons_N == 'None' and cons_Sz == 'None' else 'N'
+
+    up_site = SpeciesSite(conserve=conserve, **kwargs)
+    down_site = SpeciesSite(conserve=conserve, **kwargs)
+
+    new_charges = []
+    new_names = []
+    new_mod = []
+    if cons_N == 'N':
+        new_charges.append([(1, 0, 0), (1, 1, 0)])
+        new_names.append('N')
+        new_mod.append(1)
+    elif cons_N == 'parity':
+        new_charges.append([(1, 0, 0), (1, 1, 0)])
+        new_names.append('parity_N')
+        new_mod.append(2)
+    if cons_Sz == 'Sz':
+        new_charges.append([(1, 0, 0), (-1, 1, 0)])
+        new_names.append('2*Sz')  # factor 2 s.t. Cu, Cd have well-defined charges!
+        new_mod.append(1)
+    elif cons_Sz == 'parity':
+        new_charges.append([(1, 0, 0), (-1, 1, 0)])
+        new_names.append('2*Sz')  # factor 2 s.t. Cu, Cd have well-defined charges!
+        new_mod.append(4)
+    set_common_charges([up_site, down_site], new_charges, new_names, new_mod)
+    return [up_site, down_site], ['up', 'down']
+
+
+class ClockSite(Site):
+    r"""Quantum clock site.
+
+    There are ``q`` local states, with labels ``['0', '1', ..., str(q-1)]``.
+    Special aliases are ``up`` (0), and if q is even ``down`` (q / 2).
+    Local operators are the clock operators ``Z = diag([w ** 0, w ** 1, ..., w ** (q - 1)])``
+    with ``w = exp(2.j * pi / q)`` and ``X = eye(q, k=1) + eye(q, k=1-q)``, which are not hermitian (!)
+
+    =========================== ================================================
+    operator                    description
+    =========================== ================================================
+    ``Id, JW``                  Identity :math:`\mathbb{1}`
+    ``X, Z``                    Clock operators
+    ``Xhc, Zhc``                Hermitian conjugates of clock operators
+    ``Xphc, Zphc``              Clock operator plus its hermitian conjugate
+    =========================== ================================================
+
+    ============== ====  ============================
+    `conserve`     qmod  *excluded* onsite operators
+    ============== ====  ============================
+    ``'Z'``        [q]   ``Xphc, Zphc``
+    ``'None'``     []    --
+    ============== ====  ============================
+
+    Parameters
+    ----------
+    q : int
+        Number of states per site
+    conserve : str | None
+        Defines what is conserved, see table above.
+    sort_charge : bool
+        Whether :meth:`sort_charge` should be called at the end of initialization.
+        This is usually a good idea to reduce potential overhead when using charge conservation.
+        Note that this permutes the order of the local basis states!
+        For backwards compatibility with existing data, it is not (yet) enabled by default.
+
+    Attributes
+    ----------
+    q : int
+        Number of states per site
+    conserve : str
+        Defines what is conserved, see table above.
+    """
+    def __init__(self, q, conserve='Z', sort_charge=None):
+        if not (isinstance(q, int) and q > 1):
+            raise ValueError(f'invalid q: {q}')
+        self.q = q
+        if not conserve:
+            conserve = 'None'
+        if conserve not in ['Z', 'None']:
+            raise ValueError("invalid `conserve`: " + repr(conserve))
+        X = np.eye(q, k=1) + np.eye(q, k=1-q)
+        Z = np.diag(np.exp(2.j * np.pi * np.arange(q, dtype=np.complex128) / q))
+        Xhc = X.conj().transpose()
+        Zhc = Z.conj().transpose()
+        Xphc = X + Xhc
+        Zphc = np.diag(2. * np.cos(2. * np.pi * np.arange(q, dtype=np.complex128) / q))
+        if conserve == 'Z':
+            # we store n as the charge where <Z> = exp(2.j * pi * n / q)
+            chinfo = npc.ChargeInfo([q], ['clock_phase'])
+            leg = npc.LegCharge.from_qflat(chinfo, list(range(q)))
+        else:
+            leg = npc.LegCharge.from_trivial(q)
+        self.conserve = conserve
+        names = [str(m) for m in range(q)]
+        Site.__init__(self, leg, names, sort_charge=sort_charge)
+        self.add_op('X', X, hc='Xhc')
+        self.add_op('Xhc', Xhc, hc='X')
+        self.add_op('Z', Z, hc='Zhc')
+        self.add_op('Zhc', Zhc, hc='Z')
+        if conserve != 'Z':
+            self.add_op('Xphc', Xphc, hc='Xphc')
+            self.add_op('Zphc', Zphc, hc='Zphc')
+        self.state_labels['up'] = self.state_labels['0']
+        if q % 2 == 0:
+            self.state_labels['down'] = self.state_labels[str(q // 2)]
+
+    def __repr__(self):
+        return f'ClockSite(q={self.q}, conserve={self.conserve})'

@@ -1,10 +1,11 @@
 """Check for consistencies."""
-# Copyright 2019-2021 TeNPy Developers, GNU GPLv3
+# Copyright 2019-2023 TeNPy Developers, GNU GPLv3
 
 import tenpy
 import types
 import os
 import re
+from datetime import date
 
 
 def test_all(check_module=tenpy):
@@ -70,7 +71,8 @@ def test_copyright():
     #  you can use the following:
     # tenpy_files = get_python_files(os.path.dirname(os.path.dirname(tenpy.__file__)))
     #  (but this doesn't work for the pip-installed tenpy, so you can only do it temporary!)
-    regex = re.compile(r'#\s[Cc]opyright 20[0-9\-]+\s+(TeNPy|tenpy) [dD]evelopers, GNU GPLv3')
+    current_year = date.today().year
+    regex = re.compile(r'#\s[Cc]opyright (20[0-9]{2}-)?' + str(current_year) + r' (TeNPy|tenpy) [dD]evelopers, GNU GPLv3')
     for fn in tenpy_files:
         with open(fn, 'r') as f:
             for line in f:
@@ -79,4 +81,4 @@ def test_copyright():
                     if match is not None:
                         break
             else:  # no break
-                raise AssertionError("No/wrong copyright notice in {0!s}".format(fn))
+                raise AssertionError(f'No/wrong copyright notice in {fn}.')

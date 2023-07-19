@@ -7,7 +7,7 @@ running the actual algorithm, possibly performing measurements and saving the re
 See :doc:`/intro/simulations` for an overview and
 :doc:`/examples` for a list of example parameter yaml files.
 """
-# Copyright 2020-2021 TeNPy Developers, GNU GPLv3
+# Copyright 2020-2023 TeNPy Developers, GNU GPLv3
 
 import os
 import sys
@@ -15,6 +15,7 @@ from pathlib import Path
 import time
 import importlib
 import warnings
+import functools
 import numpy as np
 import logging
 import copy
@@ -30,6 +31,8 @@ from ..tools.events import EventHandler
 from ..tools.misc import find_subclass, update_recursive, get_recursive, set_recursive
 from ..tools.misc import setup_logging as setup_logging_
 from .. import version
+from .measurement import (measurement_wrapper, _m_psi_method, _m_psi_method_wrapped,
+                          _m_model_method, _m_model_method_wrapped)
 
 __all__ = [
     'Simulation',
@@ -140,8 +143,11 @@ class Simulation:
     _backup_filename : str
         When writing a file a second time, instead of simply overwriting it, move it to there.
         In that way, we still have a non-corrupt version if something fails during saving.
+    _init_walltime : float
+        Walltime at initialization of the simulation class.
+        Used as reference point in :meth:`walltime`.
     _last_save : float
-        Time of the last call to :meth:`save_results`, initialized to startup time.
+        Time of the last call to :meth:`save_results`, initialized to :attr:`_init_walltime`.
     loaded_from_checkpoint : bool
         True when the simulation is loaded with :meth:`from_saved_checkpoint`.
     grouped : int
@@ -156,16 +162,17 @@ class Simulation:
     #: tuples as for :cfg:option:`Simulation.connect_measurements` that get added if
     #: the :cfg:option:`Simulation.use_default_measurements` is True.
     default_measurements = [
-        ('tenpy.simulations.measurement', 'measurement_index', {}, 1),
-        ('tenpy.simulations.measurement', 'bond_dimension'),
-        ('tenpy.simulations.measurement', 'energy_MPO'),
-        ('tenpy.simulations.measurement', 'entropy'),
+        ('tenpy.simulations.measurement', 'm_measurement_index', {}, 1),
+        ('tenpy.simulations.measurement', 'm_bond_dimension'),
+        ('tenpy.simulations.measurement', 'm_energy_MPO'),
+        ('tenpy.simulations.measurement', 'm_entropy'),
     ]
 
     #: logger : An instance of a logger; see :doc:`/intro/logging`. NB: class attribute.
     logger = logging.getLogger(__name__ + ".Simulation")
 
     def __init__(self, options, *, setup_logging=True, resume_data=None):
+        self._init_walltime = time.time()
         if not hasattr(self, 'loaded_from_checkpoint'):
             self.loaded_from_checkpoint = False
         self.options = options  # delay conversion to Config: avoid logging before setup_logging
@@ -208,7 +215,7 @@ class Simulation:
             'finished_run': False,
         }
         self._last_save = time.time()
-        self.measurement_event = EventHandler("psi, simulation, results")
+        self.measurement_event = EventHandler("psi, simulation, model, results")
         if resume_data is not None:
             if 'psi' in resume_data:
                 self.psi = resume_data['psi']
@@ -300,7 +307,9 @@ class Simulation:
             kwargs.setdefault('resume_data', checkpoint_results['resume_data'])
         sim.__init__(options, **kwargs)
         sim.results = checkpoint_results
-        sim.results['measurements'] = {k: list(v) for k, v in sim.results['measurements'].items()}
+        if 'measurements' in checkpoint_results:
+            sim.results['measurements'] = {k: list(v)
+                                           for k, v in sim.results['measurements'].items()}
         return sim
 
     def resume_run(self):
@@ -357,13 +366,15 @@ class Simulation:
                 :meth:`~tenpy.tools.cache.CacheFile.open`.
         """
         cache_threshold_chi = self.options.get("cache_threshold_chi", 2000)
-        cache_params = self.options.get("cache_params", {})
         chi = get_recursive(self.options, "algorithm_params.trunc_params.chi_max", default=None)
         if chi is not None and chi < cache_threshold_chi:
+            self.options.touch("cache_params")
+            self.logger.info("No cache due to chi=%d < cache_threshold_chi = %d",
+                             chi, cache_threshold_chi)
             self.cache = CacheFile.open()  # default = keep in RAM.
             return
         self.cache.close()
-        self.logger.info("initialize new cache")
+        cache_params = self.options.get("cache_params", {})
         self.cache = CacheFile.open(**cache_params)
         # note: can't use a `with self.cache` statement, but emulate it:
         # self.__enter__() calls this function followed by
@@ -438,7 +449,6 @@ class Simulation:
                 Use this if you want to run TEBD with a model that was originally next-nearest
                 neighbor.
         """
-        self.model_ungrouped = copy.copy(self.model)
         group_sites = self.grouped = self.options.get("group_sites", 1)
         to_NN = self.options.get("group_to_NearestNeighborModel", False)
         if group_sites < 1:
@@ -446,7 +456,7 @@ class Simulation:
         if group_sites > 1:
             if not self.loaded_from_checkpoint or self.psi.grouped < group_sites:
                 self.psi.group_sites(group_sites)
-            self.model_ungrouped = copy.copy(self.model)
+            self.model_ungrouped = self.model.copy()
             self.model.group_sites(group_sites)
             if to_NN:
                 self.model = NearestNeighborModel.from_MPOModel(self.model)
@@ -530,6 +540,16 @@ class Simulation:
             measure_initial: bool
                 Whether to perform a measurement on the initial state, i.e., before starting the
                 algorithm run.
+            measure_at_algorithm_checkpoints : bool
+                Defaults to False. If True, make measurements at each algorithm checkpoint.
+                This can be useful to study e.g. the DMRG convergence with the number of sweeps.
+                Note that (depending on the algorithm) `psi` might not be in canonical form during
+                the algorithm run. In that case, you might need to also enable the
+                `canonicalize_before_measurement` option to get correct e.g. correct
+                long-range correlation functions. (On the other hand, local onsite expectation
+                values are likely fine without the explicit canonical_form() call.)
+            canonicalize_before_measurement : bool
+                If True, call `psi.canonical_form()` on the state used for measurement.
         """
         self._connect_measurements()
         if self.options.get('measure_initial', True):
@@ -542,7 +562,54 @@ class Simulation:
             def_meas = []
         con_meas = list(self.options.get('connect_measurements', []))
         for entry in def_meas + con_meas:
-            self.measurement_event.connect_by_name(*entry)
+            # (module_name, func_name, kwargs=None, priority=0) = entry
+            self._connect_measurements_fct(*entry)
+        measure_at_alg = self.options.get('measure_at_algorithm_checkpoints', False)
+        if measure_at_alg:
+
+            def make_simulation_measurements(algorithm):
+                assert algorithm is self.engine
+                self.make_measurements()
+
+            self.engine.checkpoint.connect(make_simulation_measurements)
+
+    def _connect_measurements_fct(self, module_name, func_name, extra_kwargs=None, priority=0):
+        if extra_kwargs is None:
+            extra_kwargs = {}
+        wrap = False
+        if func_name.startswith('wrap'):
+            wrap = True
+            func_name = func_name.split()[1]
+
+        # find measurement function
+        if module_name == 'psi_method':
+            # psi might change/only be created at beginning of measurement
+            # so the function needs to be extracted dynamically during measurement
+            # this is done in `tenpy.simulations.measurement._m_psi_method{_wrapped}()`
+            extra_kwargs['func_name'] = func_name
+            func = _m_psi_method_wrapped if wrap else _m_psi_method
+            wrap = False
+        elif module_name == 'model_method':
+            # analogous to psi_method
+            extra_kwargs['func_name'] = func_name
+            func = _m_model_method_wrapped if wrap else _m_model_method
+            wrap = False
+        elif module_name == 'simulation_method':
+            # the simulation class already exists, so we can directly get the corresponding method
+            func = getattr(self, func_name)
+        else:
+            # global functions should also exist already, so we can directly get them
+            func = hdf5_io.find_global(module_name, func_name)
+
+        if wrap:
+            if 'results_key' in extra_kwargs:
+                results_key = extra_kwargs['results_key']
+                del extra_kwargs['results_key']
+            else:
+                results_key = func_name
+            func = measurement_wrapper(func, results_key=results_key)
+
+        self.measurement_event.connect(func, priority, extra_kwargs)
 
     def run_algorithm(self):
         """Run the algorithm.
@@ -563,12 +630,37 @@ class Simulation:
         """Perform measurements and merge the results into ``self.results['measurements']``."""
         self.logger.info("make measurements")
         results = self.perform_measurements()
+        self._merge_measurement_results(results)
+
+    def _merge_measurement_results(self, results):
+        """Merge dictionary `results` from measurements into ``self.results['measurement']``."""
+        # merge the results into self.results['measurements']
         previous_results = self.results.get('measurements', None)
         if previous_results is None:
             self.results['measurements'] = {k: [v] for k, v in results.items()}
-        else:
-            for k, v in results.items():
-                previous_results[k].append(v)
+            return
+
+        previous_keys = set(previous_results.keys())
+        new_keys = set(results.keys())
+        new_keys_not_previous = new_keys - previous_keys
+        if new_keys_not_previous:
+            warnings.warn(f"measurement gave new keys {new_keys_not_previous!r} "
+                            "fill up with `None` for previous measurements.")
+            some_previous_measurement = next(iter(previous_results.values()))
+            measurement_len = len(some_previous_measurement)
+            for key in new_keys_not_previous:
+                previous_results[key] = [None] * measurement_len
+
+        # actual merge
+        for k, v in results.items():   # only new keys
+            previous_results[k].append(v)
+
+        previous_keys_not_new = previous_keys - new_keys
+        if previous_keys_not_new:
+            warnings.warn(f"measurement didn't give keys {previous_keys_not_new!r} "
+                          "we have from previous measurements, fill up with `None`")
+            for key in previous_keys_not_new:
+                previous_results[key].append(None)
         # done
 
     def perform_measurements(self):
@@ -583,11 +675,12 @@ class Simulation:
         # in case of a failed measurement, we should raise the exception at the end of the
         # simulation?
         results = {}
-        if self.grouped > 1:
-            psi = self.psi.copy()
-            psi.group_split(self.options['algorithm_params']['trunc_params'])
+        psi, model = self.get_measurement_psi_model(self.psi, self.model)
 
-        returned = self.measurement_event.emit(results=results, simulation=self, psi=self.psi)
+        returned = self.measurement_event.emit(results=results,
+                                               psi=psi,
+                                               model=model,
+                                               simulation=self)
         # check for returned values, although there shouldn't be any
         returned = [entry for entry in returned if entry is not None]
         if len(returned) > 0:
@@ -596,6 +689,40 @@ class Simulation:
             warnings.warn(msg)
             results['UNKNOWN'] = returned
         return results
+
+    def get_measurement_psi_model(self, psi, model):
+        """Get psi for measurements.
+
+        Sometimes, the `psi` we want to use for measurements is different from the one the
+        algorithm actually acts on.
+        Here, we split sites, if they were grouped in :meth:`group_sites_for_algorithm`.
+
+        Parameters
+        ----------
+        psi :
+            Tensor network; initially just ``self.psi``.
+            The method should make a copy before modification.
+        model :
+            Model matching `psi` (in terms of indexing, MPS order, grouped sites, ...)
+            Initially just ``self.model``.
+
+        Returns
+        -------
+        psi :
+            The psi suitable as argument for generic measurement functions.
+        model :
+            Model matching `psi` (in terms of indexing, MPS order, grouped sites, ...)
+        """
+        if self.options.get("canonicalize_before_measurement", False):
+            if psi is self.psi:
+                psi = psi.copy()  # make copy before
+            psi.canonical_form()
+        if self.grouped > 1:
+            if psi is self.psi:
+                psi = psi.copy()  # make copy before
+            psi.group_split(self.options['algorithm_params']['trunc_params'])
+            model = self.model_ungrouped
+        return psi, model
 
     def final_measurements(self):
         """Perform a last set of measurements."""
@@ -610,7 +737,7 @@ class Simulation:
         else:
             # use the cwd of the file where the simulation class is defined
             module = importlib.import_module(sim_module)  # get module object
-            cwd = os.path.dirname(os.path.abspath(module.__file__)),
+            cwd = os.path.dirname(os.path.abspath(module.__file__))
         git_rev = version._get_git_revision(cwd)
 
         version_info = {
@@ -811,16 +938,16 @@ class Simulation:
         """
         results = self.results.copy()
         results['simulation_parameters'] = self.options.as_dict()
-        # try to convert measurements into sigle arrays
-        measurements = results['measurements'].copy()
-        results['measurements'] = measurements
-        for k, v in measurements.items():
-            try:
-                v = np.array(v)
-            except:
-                continue
-            if v.dtype != np.dtype(object):
-                measurements[k] = v
+        if 'measurements' in results:
+            # try to convert measurements into numpy arrays to store more compactly
+            results['measurements'] = measurements = results['measurements'].copy()
+            for k, v in measurements.items():
+                try:
+                    v = np.array(v)
+                except:
+                    continue
+                if v.dtype != np.dtype(object):
+                    measurements[k] = v
         if self.options.get('save_resume_data', self.options['save_psi']):
             results['resume_data'] = self.engine.get_resume_data()
         return results
@@ -859,6 +986,22 @@ class Simulation:
                     "Increase the latter to %.1f", save_every)
                 self.options['save_every_x_seconds'] = save_every
         # done
+
+    def walltime(self):
+        """Wall time evolved since initialization of the simulation class.
+
+        Utility measurement method. To measure it, add the following entry to the
+        :cfg:option:`Simulation.connect_measurements` option::
+
+            - - simulation_method
+              - wrap walltime
+
+        Returns
+        -------
+        seconds : float
+            Elapsed (wall clock) time in seconds since the initialization of the simulation.
+        """
+        return time.time() - self._init_walltime
 
 
 class Skip(ValueError):
