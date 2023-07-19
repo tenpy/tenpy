@@ -1,3 +1,11 @@
+"""Model of spin chains with three coupled chains on antiferromagnetically coupled sites on a triangle
+
+.. todo ::
+    test and validate code
+"""
+# Copyright 2018-2022 TeNPy Developers, GNU GPLv3
+
+
 from tenpy.models.model import CouplingMPOModel
 from tenpy.models.lattice import NLegLadder
 from tenpy.networks.site import SpinHalfSite

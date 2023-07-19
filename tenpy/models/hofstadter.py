@@ -23,6 +23,7 @@ def gauge_hopping(model_params):
     This phase is dependent on a choice of gauge, which simultaneously defines a
     'magnetic unit cell' (MUC).
 
+
     The magnetic unit cell is the smallest set of lattice plaquettes that
     encloses an integer number of flux quanta. It can be user-defined by setting
     mx and my, but for common gauge choices is computed based on the flux
@@ -95,7 +96,7 @@ def gauge_hopping(model_params):
         if mx is None:
             mx = phi_q
         else:
-            assert(mx, phi_q)
+            assert(mx % phi_q == 0)
         hop_x = -Jx
         hop_y = -Jy * np.exp(1.j * phi * np.arange(mx)[:, np.newaxis])  # has shape (mx, 1)
     elif gauge == 'landau_y':

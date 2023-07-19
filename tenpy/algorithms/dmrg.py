@@ -1060,7 +1060,7 @@ class DMRGEngine(Sweep):
         if self.chi_list is not None:
             chi_max = self.chi_list[max([k for k in self.chi_list.keys() if k <= self.sweeps])]
             self.trunc_params['chi_max'] = chi_max
-            logger.info("Setting chi_max =", chi_max)
+            logger.info("Setting chi_max = %d", chi_max)
         self.qramp_list = self.options.get('qramp_list', None)
         self.qramp_op = self.options.get('qramp_op', None)
         self.time0 = time.time()
