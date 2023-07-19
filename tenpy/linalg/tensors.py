@@ -1797,7 +1797,7 @@ class ChargedTensor(AbstractTensor):
 
         if self.dummy_leg.dim == 1:
             factor = self._dummy_leg_state_item() / other._dummy_leg_state_item()
-            return self.invariant_part.almost_equal(factor * other, atol=atol, rtol=rtol)
+            return self.invariant_part.almost_equal(factor * other.invariant_part, atol=atol, rtol=rtol)
         else:
             # The decomposition into invariant part and non-invariant state is not unique,
             # so we cant just compare them individually.
