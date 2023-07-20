@@ -1338,6 +1338,34 @@ class Array:
         res.test_sanity()
         return res
 
+    def replace_leg(self, label, new_leg_charge, new_label=None):
+        """Change the LegCharge of leg 'label' and optionally rename it.
+
+        Parameters
+        ----------
+        label: int | str
+            Number or `name` of the leg which is to be replaced.
+        new_leg_charges : LegCharge
+            The new LegCharge for the leg
+        new_name : str
+            (optional) The new name of the leg.
+
+        Returns
+        -------
+        changed : :class:`Array`
+            A copy of `self`, where the specified leg has been changed.
+            Note that the LegCharges are neither bunched or sorted;
+            you might want to use :meth:`sort_legcharge`.
+        """
+        res = self.copy(deep=True)
+        res.legs = self.legs
+        leg_index = self.get_leg_index(label)
+        res.legs[leg_index] = new_leg_charge
+        if new_label is not None:
+            res._labels[leg_index]=new_label
+        res.test_sanity()
+        return res
+
     def is_completely_blocked(self):
         """Return bool whether all legs are blocked by charge."""
         return all([l.is_blocked() for l in self.legs])
