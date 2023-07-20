@@ -422,9 +422,9 @@ class NumpyArrayLinearOperator(ScipyLinearOperator):
         def tenpy_matvec(vec):
             return tensor.tdot(vec, legs1, legs2)
 
-        dtype = NumpyBlockBackend.backend_dtype_map[tensor.dtype]
-        return cls(tenpy_matvec, legs=vec_contr_legs, backend=tensor.backend, dtype=dtype,
-                   labels=res_labels, charge_sector=charge_sector)
+        return cls(tenpy_matvec, legs=vec_contr_legs, backend=tensor.backend,
+                   dtype=tensor.dtype.to_numpy_dtype(), labels=res_labels,
+                   charge_sector=charge_sector)
 
     @classmethod
     def from_matvec_and_vector(cls, tenpy_matvec, vector: AbstractTensor, dtype=None
@@ -462,7 +462,7 @@ class NumpyArrayLinearOperator(ScipyLinearOperator):
         else:
             sector = 'trivial'
         if dtype is None:
-            dtype = NumpyBlockBackend.backend_dtype_map[vector.dtype]
+            dtype = vector.dtype.to_numpy_dtype()
         op = cls(tenpy_matvec, legs=vector.legs, backend=vector.backend, dtype=dtype, charge_sector=sector)
         vec_flat = op.tensor_to_flat_array(vector)
         return op, vec_flat

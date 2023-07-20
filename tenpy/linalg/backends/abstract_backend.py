@@ -25,6 +25,7 @@ DiagonalData = TypeVar('DiagonalData')
 # placeholder for a backend-specific type that represents the blocks of symmetric tensors
 Block = TypeVar('Block')
 
+
 class Dtype(Enum):
     # TODO expose those in some high-level init, maybe even as tenpy.float32 ?
     # value = num_bytes * 2 + int(not is_real)
@@ -97,6 +98,15 @@ class Dtype(Enum):
             if isinstance(value, Number):
                 return complex(value)
         raise TypeError(f'Type {type(value)} is incompatible with dtype {dtype}')
+
+    def to_numpy_dtype(dtype):
+        from .numpy import NumpyBlockBackend
+        return NumpyBlockBackend.backend_dtype_map[dtype]
+
+    @classmethod
+    def from_numpy_dtype(cls, dtype):
+        from .numpy import NumpyBlockBackend
+        return NumpyBlockBackend.tenpy_dtype_map[dtype]
 
 
 class AbstractBackend(metaclass=ABCMeta):
