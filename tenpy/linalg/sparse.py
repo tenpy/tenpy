@@ -224,9 +224,17 @@ class ProjectedLinearOperator(LinearOperatorWrapper):
     The result is that all vectors from the subspace spanned by the :attr:`ortho_vecs` are eigenvectors
     with eigenvalue `penalty`, while the eigensystem in the "rest" (i.e. in the orthogonal complement
     to that subspace) remains unchanged.
+    
     This can be used to exclude the :attr:`ortho_vecs` from extremal eigensolvers, i.e. to find
     the extremal eigenvectors among those that are orthogonal to the :attr:`ortho_vecs`.
     In previous versions of tenpy, this behavior was achieved by an argument called `orthogonal_to`.
+    If this is done, at least for krylov-based eigensolvers such as lanczos, the penalty should be chosen
+    such that the `ortho_vecs` are somwhere in the bulk of the spectrum.
+    This is because lanczos has best convergence for the extremal eigenvalues and we want to converge
+    the solutions well, not the `ortho_vecs`.
+    E.g. for a typical Hamiltonian with a spectrum symmetric around zero, ``project_operator=True``
+    and ``penalty=None`` shifts the `ortho_vecs` to eigenvalue zero, thus fulfilling this criterion.
+    However, for operators with e.g. strictly positive spectrum, this prescription might fail.
 
     Parameters
     ----------
@@ -235,34 +243,48 @@ class ProjectedLinearOperator(LinearOperatorWrapper):
     ortho_vecs : list of :class:`~tenpy.linalg.tensors.AbstractTensor`
         The list of vectors spanning the projected space.
         They need not be orthonormal, as Gram-Schmidt is performed on them explicitly.
+    project_operator: bool
+        If False (True per default), the projection of the operator ``H -> P H P`` is skipped
+        and ``H + penalty * (1 - P)`` is represented instead.
     penalty : complex, optional
         See summary above. Defaults to ``None``, which is equivalent to ``0.``.
     """
     def __init__(self, original_operator: LinearOperator, ortho_vecs: list[AbstractTensor],
-                 penalty: Number = None):
+                 project_operator: bool = True, penalty: Number = None):
         if len(ortho_vecs) == 0:
             warnings.warn('empty ortho_vecs: no need for ProjectedLinearOperator', stacklevel=2)
+        if not project_operator and penalty is None:
+            warnings.warn('project_operator=False and penalty=None means ' \
+                          'ProjectedLinearOperator does not do anything')
         super().__init__(original_operator=original_operator)
         assert all(v.shape == original_operator.vector_shape for v in ortho_vecs)
         self.ortho_vecs = gram_schmidt(ortho_vecs)
+        self.project_operator = project_operator
         self.penalty = penalty
 
     def matvec(self, vec: AbstractTensor) -> AbstractTensor:
         res = vec
-        # form ``P vec`` and keep coefficients for later use in the penalty term
-        coefficients = []
-        for o in self.ortho_vecs:
-            c = o.inner(res)
-            coefficients.append(c)
-            res = res - c * o
-        # ``H P vec``
+        # 1: res = P vec
+        if self.project_operator:
+            # form ``P vec`` and keep coefficients for later use in the penalty term
+            coefficients = []
+            for o in self.ortho_vecs:
+                c = o.inner(res)
+                coefficients.append(c)
+                res = res - c * o
+        else:
+            coefficients = [o.inner(res) for o in self.ortho_vecs]
+        # 2: res = H P vec
         res = self.original_operator.matvec(res)
-        # ``P H P vec``
-        for o in self.ortho_vecs:
-            res = res - o.inner(res) * o
+        # 3: res = P H P vec
+        if self.project_operator:
+            for o in self.ortho_vecs:
+                res = res - o.inner(res) * o
+        # 4: res = P H P vec + (1 - P) vec
         if self.penalty is not None:
             for c, o in zip(coefficients, self.ortho_vecs):
                 res = res + self.penalty * c * o
+        # done
         return res
 
     def to_tensor(self, **kw) -> AbstractTensor:
@@ -270,12 +292,14 @@ class ProjectedLinearOperator(LinearOperatorWrapper):
         P_ortho = zero_like(res)
         for o in self.ortho_vecs:
             P_ortho += o.outer(o.conj())
-        P = eye_like(res) - P_ortho
-        N = self.vector_shape.num_legs
-        first = list(range(N))
-        last = list(range(N, 2 * N))
-        res = tdot(res, P, last, first)  # should we offer tdot(res, P, N) for this use case?
-        res = tdot(P, res, last, first)
+        if self.project_operator:
+            P = eye_like(res) - P_ortho
+            N = self.vector_shape.num_legs
+            first = list(range(N))
+            last = list(range(N, 2 * N))
+            # TODO should we offer tdot(res, P, N) with N: int for this use case?
+            res = tdot(res, P, last, first)
+            res = tdot(P, res, last, first)
         if self.penalty is not None:
             res = res + self.penalty * P_ortho
         return res

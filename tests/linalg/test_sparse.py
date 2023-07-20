@@ -118,28 +118,40 @@ def test_ShiftedLinearOperator(backend, tensor_rng, vector_space_rng):
     check_to_tensor(op, vec, backend)
 
 
-@pytest.mark.parametrize('penalty', [None, 2.-.3j])
-def test_ProjectedLinearOperator(tensor_rng, vector_space_rng, penalty):
-    a = vector_space_rng()
-    b = vector_space_rng()
+@pytest.mark.parametrize(['penalty', 'project_operator'], [(None, True), (2.-.3j, True), (-4, False)])
+def test_ProjectedLinearOperator(tensor_rng, penalty, project_operator):
+    vec = tensor_rng(num_legs=2, labels=['a', 'b'])
+    a, b = vec.legs
     o1 = tensor_rng(legs=[a, b], labels=['a', 'b'])
+    o1_norm = o1.norm()
+    assert (o1_norm := o1.norm()) > 0
+    o1 = o1 / o1_norm
     o2 = tensor_rng(legs=[a, b], labels=['a', 'b'])
+    o2 = o2 - o1.inner(o2) * o1
+    assert (o2_norm := o2.norm()) > 0
+    o2 = o2 / o2_norm
     factor = 3.2
-    op1 = ScalingDummyOperator(factor=factor, vector_shape=o1.shape)
+    original_op = ScalingDummyOperator(factor=factor, vector_shape=o1.shape)
 
-    pytest.xfail('Need to port gram_schmidt first')  # TODO
-    op = sparse.ProjectedLinearOperator(op1, [o1, o2], penalty=penalty)
+    projected_op = sparse.ProjectedLinearOperator(original_op, [o1, o2], project_operator=project_operator, penalty=penalty)
 
     print('check vector in ortho_vecs subspace')
-    expect = 0. * o1 if penalty is None else penalty * o1
-    assert almost_equal(op.matvec(o1), expect)
+    if project_operator:
+        expect = 0. * o1
+    else:
+        expect = original_op.matvec(o1)
+    if penalty is not None:
+        expect += penalty * o1
+    assert almost_equal(projected_op.matvec(o1), expect)
 
     print('check vector orthogonal to ortho_vecs')
-    vec = vec1 - o1.inner(vec1) * o1 - o2.inner(vec) * o2
-    assert almost_equal(op.matvec(vec), op1.matvec(vec))
+    vec1 = vec - o1.inner(vec) * o1 - o2.inner(vec) * o2
+    expect = original_op.matvec(vec1)
+    res = projected_op.matvec(vec1)
+    assert almost_equal(res, expect)
 
-    assert op.some_weird_attribute == 'arbitrary value'
-    assert op.some_unrelated_function(2) == 4
+    assert projected_op.some_weird_attribute == 'arbitrary value'
+    assert projected_op.some_unrelated_function(2) == 4
 
 
 @pytest.mark.parametrize('use_hermitian', [True, False])
