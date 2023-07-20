@@ -465,16 +465,18 @@ class VectorSpace:
     def flip_is_dual(self) -> VectorSpace:
         """Return copy of `self` with same :attr:`sectors`, but opposite :attr:`is_dual` flag.
 
-        Note that this leg can often not be contracted with `self` since the order of the
-        :attr:`sectors` might have changed.
+        Note that this leg can not be contracted with `self`.
         """
-        # note: yields dual sectors so can have different sorting of _non_dual_sorted_sectors!
-        # sectors can get sorted in VectorSpace.__init__() (e.g. in AbelianBackendVectorSpace)
-        return self.__class__(self.symmetry,
-                              self.symmetry.dual_sectors(self._non_dual_sorted_sectors),
-                              self._sorted_multiplicities,
-                              self.is_real,
-                              not self.is_dual)
+        # TODO test coverage
+        _non_dual_sectors = self.symmetry.dual_sectors(self._non_dual_sorted_sectors)
+        sort = np.lexsort(_non_dual_sectors.T)
+        return VectorSpace(symmetry=self.symmetry,
+                           sectors=_non_dual_sectors[sort],
+                           multiplicities=self._sorted_multiplicities[sort],
+                           is_real=self.is_real,
+                           _is_dual=not self.is_dual,
+                           _sector_perm=self._sector_perm[sort],
+                           _sorted_slices=self._sorted_slices[sort])
 
     def is_equal_or_dual(self, other: VectorSpace) -> bool:
         """If another VectorSpace is equal to *or* dual of `self`.
