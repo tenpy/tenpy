@@ -627,7 +627,8 @@ class AbstractTensor(metaclass=ABCMeta):
     #  -> concrete implementations need to distinguish type of `other`
 
     @abstractmethod
-    def almost_equal(self, other: AbstractTensor, atol: float = 1e-5, rtol: float = 1e-8) -> bool:
+    def almost_equal(self, other: AbstractTensor, atol: float = 1e-5, rtol: float = 1e-8,
+                     allow_different_types: bool = False) -> bool:
         """See tensors.almost_equal"""
         ...
 
@@ -1232,11 +1233,24 @@ class Tensor(AbstractTensor):
     # Implementing binary tensor methods
     # --------------------------------------------
 
-    def almost_equal(self, other: Tensor, atol: float = 1e-5, rtol: float = 1e-8) -> bool:
-        if isinstance(other, DiagonalTensor):
-            other = other.to_full_tensor()
+    def almost_equal(self, other: AbstractTensor, atol: float = 1e-5, rtol: float = 1e-8,
+                     allow_different_types: bool = False) -> bool:
         if not isinstance(other, Tensor):
-            raise TypeError(f'almost_equal not supported for types {type(self)} and {type(other)}.')
+            if not allow_different_types:
+                raise TypeError(f'Different types: {type(self)} and {type(other)}.')
+            if isinstance(other, DiagonalTensor):
+                other = other.to_full()
+            elif isinstance(other, ChargedTensor):
+                try:
+                    other = other.convert_to_tensor()
+                except ValueError:
+                    other, original_other = other.project_to_invariant(), other
+                    if not other.almost_equal(original_other, atol, rtol):
+                        return False
+                # remains to check self.almost_equal(other, ...), which is done below
+            else:
+                raise TypeError(f'almost_equal not supported for types {type(self)} and {type(other)}.')
+        # can now assume that other is a Tensor
         other_order = self._input_checks_same_legs(other)
         if other_order is not None:
             other = other.permute_legs(other_order)
@@ -1870,11 +1884,24 @@ class ChargedTensor(AbstractTensor):
     # Implementing binary tensor methods
     # --------------------------------------------
 
-    def almost_equal(self, other: AbstractTensor, atol: float = 0.00001, rtol: float = 1e-8) -> bool:
+    def almost_equal(self, other: AbstractTensor, atol: float = 0.00001, rtol: float = 1e-8,
+                     allow_different_types: bool = False) -> bool:
         if not isinstance(other, ChargedTensor):
-            raise TypeError(f'almost_equal not supported for types {type(self)} and {type(other)}.')
+            if not allow_different_types:
+                raise TypeError(f'Different types: {type(self)} and {type(other)}.')
+            if isinstance(other, DiagonalTensor):
+                other = other.to_full()
+            if isinstance(other, Tensor):
+                try:
+                    s = self.to_full_tensor()
+                except ValueError:
+                    s_proj = self.project_to_invariant()
+                    return self.almost_equal(s_proj, atol, rtol) and s_proj.almost_equal(other, atol, rtol)
+                return s.almost_equal(other, atol, rtol)
+            else:
+                raise TypeError(f'almost_equal not supported for types {type(self)} and {type(other)}.')
+        
         # can now assume that isinstance(other, ChargedTensor)
-
         if self.legs != other.legs:
             raise ValueError('Mismatching shapes')
         if self.dummy_leg != other.dummy_leg:
@@ -1887,7 +1914,7 @@ class ChargedTensor(AbstractTensor):
             # The decomposition into invariant part and non-invariant state is not unique,
             # so we cant just compare them individually.
             # OPTIMIZE (JU) is there a more efficient way?
-            warnings.warn('Converting ChargedTensor to dense block for `almost_equal`', stacklevel=2)
+            warnings.warn('Converting ChargedTensor to dense block for `almost_equal`')
             other_order = self._input_checks_same_legs(other)
             backend = get_same_backend(self, other)
             self_block = self.to_dense_block()
@@ -2458,13 +2485,19 @@ class DiagonalTensor(AbstractTensor):
     # Implementing binary tensor methods
     # --------------------------------------------
     
-    def almost_equal(self, other: Tensor, atol: float = 1e-5, rtol: float = 1e-8) -> bool:
-        if isinstance(other, DiagonalTensor):
-            _ = self._input_checks_same_legs(other)
-            raise NotImplementedError  # TODO
-        if isinstance(other, Tensor):
-            return self.to_full_tensor().almost_equal(other, atol=atol, rtol=rtol)
-        raise TypeError(f'almost_equal not supported for types {type(self)} and {type(other)}.')
+    def almost_equal(self, other: DiagonalTensor, atol: float = 1e-5, rtol: float = 1e-8,
+                     allow_different_types: bool = False) -> bool:
+        if not isinstance(other, DiagonalTensor):
+            if not allow_different_types:
+                raise TypeError(f'Different types: {type(self)} and {type(other)}.')
+            if isinstance(other, (Tensor, ChargedTensor)):
+                return self.to_full_tensor().almost_equal(other, atol=atol, rtol=rtol, allow_different_types=True)
+            else:
+                raise TypeError(f'almost_equal not supported for types {type(self)} and {type(other)}.')
+
+        # can now assume that other is a DiagonalTensor
+        _ = self._input_checks_same_legs(other)
+        raise NotImplementedError  # TODO
 
     def inner(self, other: AbstractTensor, do_conj: bool = True, legs1: list[int | str] = None,
               legs2: list[int | str]  = None) -> float | complex:
@@ -2841,7 +2874,8 @@ class Mask(AbstractTensor):
     # Implementing binary tensor methods
     # --------------------------------------------
 
-    def almost_equal(self, other: AbstractTensor, atol: float = 1e-5, rtol: float = 1e-8) -> bool:
+    def almost_equal(self, other: AbstractTensor, atol: float = 1e-5, rtol: float = 1e-8,
+                     allow_different_types: bool = False) -> bool:
         if isinstance(other, Mask):
             return self.__eq__(other)
         raise TypeError(f'almost_equal not supported for types {type(self)} and {type(other)}.')
@@ -2904,7 +2938,8 @@ def add_trivial_leg(tens, pos: int = -1):
     raise NotImplementedError  # TODO
 
 
-def almost_equal(t1: AbstractTensor, t2: AbstractTensor, atol: float = 1e-5, rtol: float = 1e-8) -> bool:
+def almost_equal(t1: AbstractTensor, t2: AbstractTensor, atol: float = 1e-5, rtol: float = 1e-8,
+                 allow_different_types: bool = False) -> bool:
     """Checks if two tensors are equal up to numerical tolerance.
 
     The blocks of the two tensors are compared.
@@ -2917,8 +2952,19 @@ def almost_equal(t1: AbstractTensor, t2: AbstractTensor, atol: float = 1e-5, rto
     .. note ::
         The definition is not symmetric, so there may be edge-cases where
         ``almost_equal(t1, t2) != almost_equal(t2, t1)``
+
+    Parameters
+    ----------
+    t1, t2
+        The tensors to compare
+    atol, rtol
+        Absolute and relative tolerance, see above.
+    allow_different_types : bool
+        If ``False`` (default), comparing tensors of different types raises a ``TypeError``.
+        If ``True``, types are converted, *if possible*.
+        
     """
-    return t1.almost_equal(t2, atol=atol, rtol=rtol)
+    return t1.almost_equal(t2, atol=atol, rtol=rtol, allow_different_types=allow_different_types)
 
 
 def combine_legs(t: AbstractTensor,
