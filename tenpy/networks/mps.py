@@ -3281,7 +3281,7 @@ class MPS(BaseMPSExpectationValue):
     def canonical_form(self, **kwargs):
         """Bring self into canonical 'B' form, (re-)calculate singular values.
 
-        Simply calls :meth:`canonical_form_finite` or :meth:`canonical_form_infinite2`.
+        Simply calls :meth:`canonical_form_finite` or :meth:`canonical_form_infinite1`.
         Keyword arguments are passed on to the corrsponding specialized versions.
         """
         if self.finite:
