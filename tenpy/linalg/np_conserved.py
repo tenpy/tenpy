@@ -1338,7 +1338,7 @@ class Array:
         res.test_sanity()
         return res
 
-    def replace_leg(self, label, new_leg_charge, new_label=None):
+    def _replace_leg(self, label, new_leg_charge, new_label=None):
         """Change the LegCharge of leg 'label' and optionally rename it.
 
         Parameters
@@ -1358,7 +1358,6 @@ class Array:
             you might want to use :meth:`sort_legcharge`.
         """
         res = self.copy(deep=True)
-        res.legs = self.legs
         leg_index = self.get_leg_index(label)
         res.legs[leg_index] = new_leg_charge
         if new_label is not None:

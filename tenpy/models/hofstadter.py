@@ -62,6 +62,9 @@ def gauge_hopping(model_params):
     flux_q : int
         Denominator of magnetic flux density
 
+    .. deprecated :: 0.11.0
+        Magnetic flux previously defined as tuple 'phi' is now defined as two separate parameters for numerator flux_p and denominator flux_q
+
     Returns
     -------
     hop_x, hop_y : float | array
@@ -79,24 +82,23 @@ def gauge_hopping(model_params):
     Jx = model_params.get('Jx', 1.)
     Jy = model_params.get('Jy', 1.)
 # old doc-string and code for parameter 'phi'
-#     phi : tuple (int, int)
-#        Magnetic flux as a fraction p/q, defined as (p, q) (overriding flux_p, flux_q if present)
 #    if (model_params.has_nonzero('phi')):
-#        phi_p, phi_q = model_params.get('phi', (1, 3))
+#        phi_p, flux_q = model_params.get('phi', (1, 3))
 #    else:
 #        if (model_params.has_nonzero('flux_p') and model_params.has_nonzero('flux_q')):
-    phi_p = model_params.get('flux_p', 1)
-    phi_q = model_params.get('flux_q', 3)
-    phi = 2 * np.pi * phi_p / phi_q
+    model_params.deprecated_warning('phi'," please use -flux_p, -flux_q to define numerator and denominator of flux density, instead of phi")
+    flux_p = model_params.get('flux_p', 1)
+    flux_q = model_params.get('flux_q', 3)
+    phi = 2 * np.pi * flux_p / flux_q
 
     if gauge == 'landau_x':
         # hopping in x-direction: uniform
         # hopping in y-direction: depends on x, shape (mx, 1)
         # can be tiled to (Lx,Ly-1) for 'ladder' and (Lx, Ly) for 'cylinder' bc.
         if mx is None:
-            mx = phi_q
+            mx = flux_q
         else:
-            assert(mx % phi_q == 0)
+            assert(mx % flux_q == 0)
         hop_x = -Jx
         hop_y = -Jy * np.exp(1.j * phi * np.arange(mx)[:, np.newaxis])  # has shape (mx, 1)
     elif gauge == 'landau_y':
@@ -104,14 +106,14 @@ def gauge_hopping(model_params):
         # hopping in y-direction: uniform
         # can be tiled to (Lx,Ly-1) for 'ladder' and (Lx, Ly) for 'cylinder' bc.
         if my is None:
-            my = phi_q
+            my = flux_q
         hop_y = -Jy
         hop_x = -Jx * np.exp(-1.j * phi * np.arange(my)[np.newaxis, :])  # has shape (1, my)
     elif gauge == 'symmetric':
         # hopping in x-direction: depends on y, shape (mx, my)
         # hopping in y-direction: depends on x, shape (mx, my)
         if mx is None or my is None:
-            mx = my = phi_q
+            mx = my = flux_q
         hop_x = -Jx * np.exp(-1.j * (phi / 2) * np.arange(my)[np.newaxis, :])  # shape (1, my)
         hop_y = -Jy * np.exp(1.j * (phi / 2) * np.arange(mx)[:, np.newaxis])  # shape (mx, 1)
     else:

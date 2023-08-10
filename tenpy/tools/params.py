@@ -349,6 +349,14 @@ class Config(MutableMapping):
             self.unused.discard(old_key)
             self.unused.add(new_key)
 
+    def deprecated_warning(self, old_key, extra_msg=""):
+        if old_key in self.options.keys():
+            msg = "Ignoring deprecated option in {name!r}: {old!r} - see class documentation for replacement."
+            msg = msg.format(name=self.name, old=old_key)
+            if extra_msg:
+                msg = '\n'.join(msg, extra_msg)
+            warnings.warn(msg, FutureWarning, stacklevel=3)
+
     def any_nonzero(self, keys, log_msg=None):
         """Check for any non-zero or non-equal entries in some parameters.
 
