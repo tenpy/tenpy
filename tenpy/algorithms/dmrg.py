@@ -17,13 +17,13 @@ Currently, there are two derived classes implementing the contractions: :class:`
 and :class:`TwoSiteDMRGEngine`. They differ (as their name implies) in the number of sites which
 are optimized simultaneously.
 They should both give the same results (up to rounding errors). However, if started from a product
-state, :class:`SingleSiteDMRGEngine` depends critically on the use of a :class:`Mixer`, while
-:class:`TwoSiteDMRGEngine` is in principle more computationally expensive to run and has
-occasionally displayed some convergence issues..
+state, :class:`SingleSiteDMRGEngine` depends critically on the use of a
+:class:`~tenpy.algorithms.mps_common.Mixer`, while :class:`TwoSiteDMRGEngine` is in principle more
+computationally expensive to run and has occasionally displayed some convergence issues.
 Which one is preferred in the end is not obvious a priori and might depend on the used model.
 Just try both of them.
 
-A :class:`Mixer` should be used initially to avoid that the algorithm gets stuck in local energy
+A :class:`~tenpy.algorithms.mps_common.Mixer` should be used initially to avoid that the algorithm gets stuck in local energy
 minima, and then slowly turned off in the end. For :class:`SingleSiteDMRGEngine`, using a mixer is
 crucial, as the one-site algorithm cannot increase the MPS bond dimension by itself.
 
@@ -47,15 +47,13 @@ from ..tools.math import entropy
 from ..tools.misc import find_subclass
 from ..tools.process import memory_usage
 from .mps_common import Sweep, OneSiteH, TwoSiteH
+from . import mps_common
 
 __all__ = [
     'run',
     'DMRGEngine',
     'SingleSiteDMRGEngine',
     'TwoSiteDMRGEngine',
-    'Mixer',
-    'SubspaceExpansion',
-    'DensityMatrixMixer',
     'chi_list',
     'full_diag_effH',
     'SingleSiteMixer',
@@ -190,7 +188,7 @@ class Mixer:
 
         Returns
         -------
-        mixer : :class:`Mixer` | None
+        mixer : :class:`~tenpy.algorithms.mps_common.Mixer` | None
             Returns `self` if we should continue mixing, or ``None``, if the mixer
             should be disabled.
         """
@@ -624,7 +622,7 @@ class DMRGEngine(Sweep):
         See :cfg:option:`DMRGEngine.chi_list`
     eff_H : :class:`~tenpy.algorithms.mps_common.EffectiveH`
         Effective two-site Hamiltonian.
-    mixer : :class:`Mixer` | ``None``
+    mixer : :class:`~tenpy.algorithms.mps_common.Mixer` | ``None``
         If ``None``, no mixer is used (anymore), otherwise the mixer instance.
     shelve : bool
         If a simulation runs out of time (`time.time() - start_time > max_seconds`), the run will
@@ -1315,14 +1313,12 @@ class DMRGEngine(Sweep):
         .. cfg:configoptions :: DMRGEngine
 
             mixer : str | class | bool
-                Chooses the :class:`Mixer` to be used.
-                A string stands for one of the mixers defined in this module,
+                Chooses the :class:`~tenpy.algorithms.mps_common.Mixer` to be used.
+                A string stands for one of the mixers defined in :mod:`~tenpy.algorithms.mps_common`,
                 a class is used as custom mixer.
-                Default (``None``) uses no mixer, ``True`` uses
-                :class:`DensityMatrixMixer` for the 2-site case and
-                :class:`SubspaceExpansion` for the 1-site case.
-                :class:`TwoSiteDMRGEngine` only supports two-site mixers,
-                but :class:`SingleSiteDMRGEngine` supports both single-site and two-site mixers.
+                ``None`` (default for 2-site DMRG) uses no mixer, ``True`` (default for 1-site DMRG)
+                uses :class:`~tenpy.algorithms.mps_common.DensityMatrixMixer` for the 2-site case
+                and :class:`~tenpy.algorithms.mps_common.SubspaceExpansion` for the 1-site case.
             mixer_params : dict
                 Mixer parameters as described in :cfg:config:`Mixer`.
         """
@@ -1337,9 +1333,11 @@ class DMRGEngine(Sweep):
                     warnings.warn(msg, FutureWarning)
                     Mixer_class = self.DefaultMixer
                 else:
-                    Mixer_class = find_subclass(Mixer, Mixer_class)
+                    Mixer_class = find_subclass(mps_common.Mixer, Mixer_class)
             mixer_params = self.options.subconfig('mixer_params')
             self.mixer = Mixer_class(mixer_params, self.sweeps)
+            if self.mixer.decay == 1.:
+                warnings.warn("Mixer with decay=1. doesn't decay")
             self.S_inv_cutoff = 1.e-8
             logger.info("activate %s with initial amplitude %.1e", Mixer_class.__name__,
                         self.mixer.amplitude)
@@ -1347,7 +1345,8 @@ class DMRGEngine(Sweep):
     def mixer_cleanup(self):
         """Cleanup the effects of a mixer.
 
-        A :meth:`sweep` with an enabled :class:`Mixer` leaves the MPS `psi` with 2D arrays in `S`.
+        A :meth:`sweep` with an enabled :class:`~tenpy.algorithms.mps_common.Mixer` leaves the MPS
+        `psi` with 2D arrays in `S`.
         To recover the originial form, this function simply performs one sweep with disabled mixer.
         """
         if any([self.psi.get_SL(i).ndim > 1 for i in range(self.psi.L)]):
@@ -1378,7 +1377,7 @@ class TwoSiteDMRGEngine(DMRGEngine):
     ----------
     eff_H : :class:`~tenpy.algorithms.mps_common.EffectiveH`
         Effective two-site Hamiltonian.
-    mixer : :class:`Mixer` | ``None``
+    mixer : :class:`~tenpy.algorithms.mps_common.Mixer` | ``None``
         If ``None``, no mixer is used (anymore), otherwise the mixer instance.
     shelve : bool
         If a simulation runs out of time (`time.time() - start_time > max_seconds`), the run will
@@ -1432,7 +1431,7 @@ class TwoSiteDMRGEngine(DMRGEngine):
         ============= ===================================================================
     """
     EffectiveH = TwoSiteH
-    DefaultMixer = DensityMatrixMixer
+    DefaultMixer = mps_common.DensityMatrixMixer
 
     def prepare_svd(self, theta):
         """Transform theta into matrix for svd."""
@@ -1453,8 +1452,8 @@ class TwoSiteDMRGEngine(DMRGEngine):
 
         Without a mixer, this is done by a simple svd and truncation of Schmidt values.
 
-        With a mixer, the state is perturbed before the SVD.
-        The details of the perturbation are defined by the :class:`Mixer` class.
+        With a mixer, the state is perturbed before the SVD. The details of the perturbation are
+        defined by the :class:`~tenpy.algorithms.mps_common.Mixer` class.
 
         Note that the returned `S` is a general (not diagonal) matrix, with labels ``'vL', 'vR'``.
 
@@ -1482,50 +1481,18 @@ class TwoSiteDMRGEngine(DMRGEngine):
         update_LP, update_RP = self.update_LP_RP
         mixer = self.mixer
         if mixer is None:
-            # simple case: real svd, defined elsewhere.
             qtotal_i0 = self.env.bra.get_B(i0, form=None).qtotal
-            U, S, VH, err, _ = svd_theta(theta,
-                                         self.trunc_params,
-                                         qtotal_LR=[qtotal_i0, None],
-                                         inner_labels=['vR', 'vL'])
+            U, S, VH, err, _ = svd_theta(
+                theta, self.trunc_params, qtotal_LR=[qtotal_i0, None], inner_labels=['vR', 'vL']
+            )
             S_a = S
-        elif mixer.update_sites == 2:
-            U, S, VH, err, S_a = mixer.perturb_svd(self, theta, self.i0, update_LP, update_RP)
-        elif mixer.update_sites == 1:
-            if update_LP and update_RP:
-                # sub-space expand left site by treating p1 as part of vR leg
-                theta_L = theta.replace_label('(p1.vR)', 'vR')
-                U, _, _, err_L, S_a = mixer.perturb_svd(self, theta_L, self.i0, True)
-                U = U.gauge_total_charge(1, self.psi.get_B(i0, form=None).qtotal)
-                # sub-space expand right site by treating p0 as part of vL leg
-                theta_R = theta.replace_labels(['(vL.p0)', '(p1.vR)'], ['vL', '(p0.vR)'])
-                _, _, VH, err_R, S_a = mixer.perturb_svd(self, theta_R, self.i0 + 1, False)
-                VH = VH.gauge_total_charge(0, self.psi.get_B(i0 + 1, form=None).qtotal)
-                # calculate S = U^H theta V
-                theta = npc.tensordot(U.conj(), theta, axes=['(vL*.p0*)', '(vL.p0)'])
-                theta = npc.tensordot(theta, VH.conj(), axes=['(p1.vR)', '(p0*.vR*)'])
-                theta.ireplace_labels(['vR*', 'vL*'], ['vL', 'vR'])
-                theta /= np.linalg.norm(npc.svd(theta, compute_uv=False))
-                S = theta
-                err = err_L + err_R
-                VH.ireplace_label('(p0.vR)', '(p1.vR)')
-            elif update_LP:
-                # sub-space expand left site by treating p1 as part of vR leg
-                theta.ireplace_label('(p1.vR)', 'vR')
-                U, S, VH, err, S_a = mixer.perturb_svd(self, theta, self.i0, True)
-                # note: VH is not isometry, but we don't update_RP
-                VH.ireplace_label('vR', '(p1.vR)')
-            elif update_RP:
-                # sub-space expand right site by treating p0 as part of vL leg
-                theta.ireplace_labels(['(vL.p0)', '(p1.vR)'], ['vL', '(p0.vR)'])
-                U, S, VH, err, S_a = mixer.perturb_svd(self, theta, self.i0 + 1, False)
-                # note: U not isometry, but we don't update_LP
-                U.ireplace_label('vL', '(vL.p0)')
-                VH.ireplace_label('(p0.vR)', '(p1.vR)')
-            else:
-                assert False
         else:
-            assert False, "mixer acting on wired number of sites"
+            qtotal_LR = [self.psi.get_B(i0, form=None).qtotal,
+                         self.psi.get_B(i0 + 1, form=None).qtotal]
+            U, S, VH, err, S_a = mixer.mix_and_decompose_2site(
+                engine=self, theta=theta, i0=self.i0, mix_left=update_LP, mix_right=update_RP,
+                qtotal_LR=qtotal_LR
+            )
         U.ireplace_label('(vL.p0)', '(vL.p)')
         VH.ireplace_label('(p1.vR)', '(p.vR)')
         return U, S, VH, err, S_a
@@ -1576,7 +1543,7 @@ class SingleSiteDMRGEngine(DMRGEngine):
         `trunc_params['chi_list']``. By default (``None``) this feature is disabled.
     eff_H : :class:`~tenpy.algorithms.mps_common.EffectiveH`
         Effective two-site Hamiltonian.
-    mixer : :class:`Mixer` | ``None``
+    mixer : :class:`~tenpy.algorithms.mps_common.Mixer` | ``None``
         If ``None``, no mixer is used (anymore), otherwise the mixer instance.
     shelve : bool
         If a simulation runs out of time (`time.time() - start_time > max_seconds`), the run will
@@ -1630,7 +1597,7 @@ class SingleSiteDMRGEngine(DMRGEngine):
         ============= ===================================================================
     """
     EffectiveH = OneSiteH
-    DefaultMixer = SubspaceExpansion
+    DefaultMixer = mps_common.SubspaceExpansion
 
     def prepare_svd(self, theta):
         """Transform theta into matrix for svd.
@@ -1728,9 +1695,11 @@ class SingleSiteDMRGEngine(DMRGEngine):
                 # (unless next_A wasn't, but then we don't need to update_RP)
                 U = npc.tensordot(next_A, U, ['vR', 'vL'])
                 VH.ireplace_label('(p0.vR)', '(p.vR)')
-        elif mixer.update_sites == 1:
-            # single-site mixer
-            U, S, VH, err, S_a = mixer.perturb_svd(self, theta, self.i0, move_right)
+        elif mixer.can_decompose_1site:
+            U, S, VH, err = mixer.mix_and_decompose_1site(
+                engine=self, theta=theta, i0=self.i0, move_right=move_right
+            )
+            S_a = S
             # absorb VH/U into S
             if move_right:
                 # note: if update_RP, the `next_B` is a right-canonical B from the MPS.
@@ -1749,8 +1718,8 @@ class SingleSiteDMRGEngine(DMRGEngine):
                     S = U.iscale_axis(S, 'vR')
                 U = next_A
                 VH.ireplace_label('(p0.vR)', '(p.vR)')
-        elif mixer.update_sites == 2:
-            # two-site mixer -> just use two-site theta
+        else:
+            # just use two-site theta
             if self.move_right:
                 next_B.ireplace_label('(p.vR)', '(p1.vR)')
                 theta = npc.tensordot(theta, next_B, axes=['vR', 'vL'])
@@ -1760,12 +1729,14 @@ class SingleSiteDMRGEngine(DMRGEngine):
                 theta.ireplace_label('(p0.vR)', '(p1.vR)')
                 theta = npc.tensordot(next_A, theta, axes=['vR', 'vL'])
                 i0 = self.i0 - 1
-            # and do usual mixer
-            U, S, VH, err, S_a = mixer.perturb_svd(self, theta, i0, update_LP, update_RP)
+            qtotal_LR = [self.psi.get_B(i0, form=None).qtotal,
+                         self.psi.get_B(i0 + 1, form=None).qtotal]
+            U, S, VH, err, S_a = mixer.mixed_svd_2site(
+                engine=self, theta=theta, i0=i0, mix_left=update_LP, mix_right=update_RP,
+                qtotal_LR=qtotal_LR
+            )
             U.ireplace_label('(vL.p0)', '(vL.p)')
             VH.ireplace_label('(p1.vR)', '(p.vR)')
-        else:
-            assert False
         return U, S, VH, err, S_a
 
     def set_B(self, U, S, VH):
