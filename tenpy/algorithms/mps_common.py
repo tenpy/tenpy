@@ -1819,7 +1819,7 @@ class SubspaceExpansion(Mixer):
                 IdR = 0  # of the new, concatenated leg.
             theta_expand = theta_expand.combine_legs(['vL', 'wL'], qconj=+1)
             U, S, VH, err, _ = svd_theta(theta_expand, engine.trunc_params,
-                                         qtotal_LR=[theta.qtotal, None], inner_labels=['vR', 'vL'])
+                                         qtotal_LR=[None, theta.qtotal], inner_labels=['vR', 'vL'])
             U = U.split_legs('(vL.wL)')
             U = U.take_slice(IdR, 'wL')  # project back such that U-S-VH is original theta
 
