@@ -561,6 +561,9 @@ def find_subclass(base_class, subclass_name):
     elif len(found) == 1:
         return found.pop()
     else:
+        found_not_deprececated = [c for c in found if not getattr(c, 'deprecated', False)]
+        if len(found_not_deprececated) == 1:
+            return found_not_deprececated[0]
         msg = f"There exist multiple subclasses of {base_class!r} with name {subclass_name!r}:"
         raise ValueError('\n'.join([msg] + [repr(c) for c in found]))
 

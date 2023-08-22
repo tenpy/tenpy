@@ -122,6 +122,7 @@ class Mixer(mps_common.Mixer):
         Use :class:`~tenpy.algorithms.mps_common.Mixer` instead.
         Note the changed function names and signatures
     """
+    deprecated = True # disable class in find_subclass()
     update_sites = 2
 
     def __init__(self, options, sweep_activated):
