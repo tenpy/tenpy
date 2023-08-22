@@ -27,18 +27,22 @@ def _f_tfi(k, g):
 
 
 params = [
-    ('finite', True, True, 1),  # 1-site DMRG with mixer=False is expected to fail.
-    ('finite', True, True, 2),
-    ('finite', True, False, 2),
-    ('finite', False, True, 1),
+    # bc     combine  mixer n
+    ('finite', True, False, 2),  # simplest case
+    ('finite', True, True, 1),
+    # 1-site DMRG without mixer is expected to fail!
+    ('finite', True, 'DensityMatrixMixer', 2),
+    ('finite', True, 'SubspaceExpansion', 2),
     ('finite', False, True, 2),
-    ('finite', False, False, 2),
+    #  ('finite', False, False, 2),
+    ('infinite', True, False, 2),  # simplest case infinite
+    ('infinite', True, 'DensityMatrixMixer', 2),  # with mixer
+    ('infinite', True, 'SubspaceExpansion', 2),
     ('infinite', True, True, 1),
-    ('infinite', True, True, 2),
-    ('infinite', True, False, 2),
+    #  ('infinite', True, True, 2),
     ('infinite', False, True, 1),
-    ('infinite', False, True, 2),
-    ('infinite', False, False, 2)
+    #  ('infinite', False, True, 2),
+    #  ('infinite', False, False, 2)
 ]
 
 

@@ -1271,9 +1271,6 @@ class Mixer:
         We disable the mixer completely after this number of sweeps.
         ``None`` means to never disable the mixer.
 
-    Notes
-    -----
-    
     """
     can_decompose_1site = False
     _default_amplitude = 1.e-5
@@ -1388,7 +1385,7 @@ class Mixer:
         equivalent to the corresponding output of :meth:`mixed_svd_2site`.
         The other (e.g. `VH` for a right move) is in general not isometric.
         `S` are the usual singular values.
-        
+
         The mixer can be injected in a sweeping algorithm by replacing the usual SVD of `theta`
         that shifts the canonical form  with this method.
 
@@ -1397,10 +1394,10 @@ class Mixer:
         engine :  :class:`Sweep`
             The engine that is using this mixer.
         theta : 2D :class:`~tenpy.linalg.np_conserved.Array`
-            Single-site wavefunction prepared for SVD. Labels either ``'(vL.p0)', 'vR`` for a
+            Single-site wavefunction prepared for SVD. Labels either ``'(vL.p0)', 'vR'`` for a
             right move, or ``'vL', '(p0.vR)'`` for a left move.
         i0 : int
-            The site that ``theta`` lives on. The bond to be mixed is ``i0, i0 + 1`` for a right
+            The site that ``theta`` lives on. The bond to be expanded is ``i0, i0 + 1`` for a right
             move or ``i0 - 1, i0`` for a left move.
 
         Returns
@@ -1445,16 +1442,16 @@ class Mixer:
         if mix_left and mix_right:
             # mix left site by treating p1 as part of vR leg
             theta_L = theta.replace_label('(p1.vR)', 'vR')
-            U, _, _, err_L = self.mix_and_decompose_1site(theta_L, i0, move_right=True)
+            U, _, _, err_L = self.mix_and_decompose_1site(engine, theta_L, i0, move_right=True)
             U = U.gauge_total_charge(1, qtotal_LR[0])
             # mix right site by trating p0 as part of vL leg
             theta_R = theta.replace_labels(['(vL.p0)', '(p1.vR)'], ['vL', '(p0.vR)'])
-            _, _, VH, err_R = self.mix_and_decompose_2site(theta_R, i0 + 1, move_right=False)
+            _, S_approx, VH, err_R = self.mix_and_decompose_1site(engine, theta_R, i0 + 1, move_right=False)
             VH = VH.gauge_total_charge(0, qtotal_LR[1])
             VH.ireplace_label('(p0.vR)', '(p1.vR)')
             # calculate S = U^H theta V
             theta = npc.tensordot(U.conj(), theta, axes=['(vL*.p0*)', '(vL.p0)'])
-            theta = npc.tensordot(theta, VH.conj(), axes=['(p1.vR)', '(p0*.vR*)'])
+            theta = npc.tensordot(theta, VH.conj(), axes=['(p1.vR)', '(p1*.vR*)'])
             theta.ireplace_labels(['vR*', 'vL*'], ['vL', 'vR'])
             theta /= np.linalg.norm(npc.svd(theta, compute_uv=False))
             S = theta
@@ -1463,18 +1460,18 @@ class Mixer:
             theta_L = theta.replace_label('(p1.vR)', 'vR')
             U, S, VH, err = self.mix_and_decompose_1site(engine, theta_L, i0, move_right=True)
             # note: VH is not isometric
-            VH.ireplace_label('(p0.vR)', '(p1.vR)')
+            VH.ireplace_label('vR', '(p1.vR)')
+            S_approx = S
         elif mix_right:
             theta_R = theta.replace_labels(['(vL.p0)', '(p1.vR)'], ['vL', '(p0.vR)'])
-            U, S, VH, err_R = self.mix_and_decompose_1site(engine, theta_R, i0 + 1, move_right=False)
+            U, S, VH, err = self.mix_and_decompose_1site(engine, theta_R, i0 + 1, move_right=False)
             # note: U is not isometric
             U.ireplace_label('vL', '(vL.p0)')
             VH.ireplace_label('(p0.vR)', '(p1.vR)')
+            S_approx = S
         else:
             raise ValueError('Expected mix_left=True and/or mix_right=True.')
-
-        S_approx = S
-        return U, S, VH, err_R, S_approx
+        return U, S, VH, err, S_approx
 
 
 def _mix_LR(H, i0, amplitude):
@@ -1570,7 +1567,7 @@ class DensityMatrixMixer(Mixer):
     Note, however, that the eigenvalues of the perturbed `rho_L` are no longer related to the
     singular values of `theta`. Since we recover `theta` (at least up to truncation), the singular
     values are unchanged.
-    
+
     Pictorially, the left density matrix `rho_L` is given by::
 
         |     mix_left=False           mix_left=True
@@ -1668,8 +1665,8 @@ class DensityMatrixMixer(Mixer):
 
         Returns
         -------
-        U, S, VH, err, S_a:
-            As defined in :meth:`perturb_svd`.
+        U, S, VH, err, S_approx:
+            As defined in :meth:`mixed_svd_2site`.
         """
         rho_L.itranspose(['(vL.p0)', '(vL*.p0*)'])  # just to be sure of the order
         rho_R.itranspose(['(p1.vR)', '(p1*.vR*)'])  # just to be sure of the order
@@ -1750,7 +1747,7 @@ class SubspaceExpansion(Mixer):
     they calculate `U` and `V` internally.
     """
     can_decompose_1site = True
-    
+
     def __init__(self, options, sweep_activated=0):
         super().__init__(options, sweep_activated)
         assert self.amplitude <= 1.
