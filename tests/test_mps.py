@@ -685,6 +685,7 @@ def test_mps_compress(method, eps=1.e-13):
 def test_InitialStateBuilder():
     s0 = site.SpinHalfSite('Sz', sort_charge=True)
     lat = Chain(10, s0, bc_MPS='finite')
+    lat_odd = Chain(11, s0, bc_MPS='finite')
     psi1 = mps.InitialStateBuilder(
         lat, {
             'method': 'lat_product_state',
@@ -693,6 +694,21 @@ def test_InitialStateBuilder():
             'full_empty': ['up', 'down'],
         }).run()
     psi1.test_sanity()
+    with pytest.raises(ValueError) as excinfo:
+        psi1_odd = mps.InitialStateBuilder(
+            lat_odd, {
+                'method': 'lat_product_state',
+                'product_state': [['up'], ['down']],
+            }).run()
+        assert "incomensurate len" in str(excinfo.value)
+    psi1_odd = mps.InitialStateBuilder(
+        lat_odd, {
+            'method': 'lat_product_state',
+            'product_state': [['up'], ['down']],
+            'allow_incommensurate': True
+        }).run()
+    psi1_odd.test_sanity()
+    assert abs(np.sum(psi1_odd.expectation_value('Sz')) - 0.5) < 1.e-10
     psi2 = mps.InitialStateBuilder(
         lat, {
             'method': 'mps_product_state',

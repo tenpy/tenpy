@@ -28,6 +28,7 @@ Added
   and :class:`~tenpy.networks.mpo.MPOEnvironment`
 - Add `phi_ext` parameter to :class:`~tenpy.models.fermions_spinless.FermionModel`,
   :class:`~tenpy.models.hubbard.BoseHubbardModel` and :class:`~tenpy.models.hubbard.FermiHubbardModel`.
+- Option `allow_incommensurate` for :meth:`~tenpy.networks.mps.MPS.from_lat_product_state`.
 - Most "important" objects (this obvious involves some judgement calls, regarding what counts as important)
   are now directly exposed in the top-level namespace of the tenpy package, i.e. you can now
   ``from tenpy import MPS, tensordot, TwoSiteDMRGEngine`` or ``import tenpy as tp`` and then use

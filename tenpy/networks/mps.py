@@ -1453,7 +1453,7 @@ class MPS(BaseMPSExpectationValue):
         return obj
 
     @classmethod
-    def from_lat_product_state(cls, lat, p_state, **kwargs):
+    def from_lat_product_state(cls, lat, p_state, allow_incommensurate=False, **kwargs):
         """Construct an MPS from a product state given in lattice coordinates.
 
         This is a wrapper around :meth:`from_product_state`.
@@ -1469,6 +1469,12 @@ class MPS(BaseMPSExpectationValue):
             Should be of dimension `lat.dim`+1, entries are indexed by lattice indices.
             Entries of the array as for the `p_state` argument of :meth:`from_product_state`.
             It gets tiled to the shape ``lat.shape``, if it is smaller.
+        allow_incommensurate : bool
+            Allow an incommensurate tiling of `p_state` to the full lattice.
+            For example, if you pass ``p_state=[['up'], ['down']]` with a
+            :class:`tenpy.models.lattice.Chain`, this function raises an error for an odd number of
+            sites in the Chain, but if you set `allow_incommensurate=True`, it will still work
+            and give you a state with total Sz = +1/2 for odd sites (since total Sz=0 doesn't fit).
         **kwargs :
             Other keyword arguments as definied in :meth:`from_product_state`.
             `bc` is set by default from ``lat.bc_MPS``.
@@ -1525,14 +1531,14 @@ class MPS(BaseMPSExpectationValue):
         kwargs.setdefault("bc", lat.bc_MPS)
         p_state = np.array(p_state, dtype=object)
         if p_state.ndim == len(lat.shape):  # == lat.dim + 1
-            p_state = to_array(p_state, shape=lat.shape)  # tile to lattice shape
+            p_state = to_array(p_state, shape=lat.shape, allow_incommensurate=allow_incommensurate)  # tile to lattice shape
             p_state_flat = p_state[tuple(lat.order.T)]  # "advanced" numpy indexing
         elif p_state.ndim == len(lat.shape) + 1:
             # extra dimension could be from purely 1D array entries
             # make sure this is the case by converting to float
             p_state = np.array(p_state, kwargs.get("dtype", np.float64))
             # tile to lattice shape, ignore last dimension
-            p_state = to_array(p_state, shape=lat.shape + (None, ))
+            p_state = to_array(p_state, shape=lat.shape + (None, ), allow_incommensurate=allow_incommensurate)
             inds = tuple(lat.order.T) + (slice(None), )
             p_state_flat = p_state[inds]  # "advanced" numpy indexing
         else:
@@ -5551,12 +5557,16 @@ class InitialStateBuilder:
 
             product_state : array of str
                 The `p_state` passed on to :meth:`MPS.from_lat_product_state`.
+            allow_incommensurate : bool
+                See :meth:`MPS.from_lat_product_state`.
         """
         if p_state is None:
             p_state = self.options['product_state']
         self.check_filling(p_state)
         dtype = self.options.get('dtype', self.model_dtype)
-        psi = MPS.from_lat_product_state(self.lattice, p_state, dtype=dtype)
+        allow_incommensurate = self.options.get('allow_incommensurate', False)
+        psi = MPS.from_lat_product_state(self.lattice, p_state, dtype=dtype,
+                                         allow_incommensurate=allow_incommensurate)
         return psi
 
     def mps_product_state(self, p_state=None):
