@@ -178,7 +178,7 @@ class DensityMatrixMixer(Mixer, mps_common.DensityMatrixMixer):
     def perturb_svd(self, engine, theta, i0, update_LP, update_RP):
         qtotal_LR = [engine.psi.get_B(i0, form=None).qtotal,
                      engine.psi.get_B(i0 + 1, form=None).qtotal]
-        return self.mixes_svd_2site(engine, theta, i0, update_LP, update_RP, qtotal_LR)
+        return self.mixed_svd_2site(engine, theta, i0, update_LP, update_RP, qtotal_LR)
 
 
 class DMRGEngine(Sweep):
