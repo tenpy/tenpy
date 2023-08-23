@@ -78,7 +78,7 @@ def test_CouplingModel():
         M.test_sanity()
         M.calc_H_MPO()
         if bc == 'periodic':
-            with pytest.raises(ValueError, match="nearest neighbor"):
+            with pytest.raises(ValueError, match="initialize H_bond for a NearestNeighborModel"):
                 M.calc_H_bond()  # should raise a ValueError
                 # periodic bc but finite bc_MPS leads to a long-range coupling
         else:
