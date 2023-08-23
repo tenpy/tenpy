@@ -20,7 +20,7 @@ They should both give the same results (up to rounding errors). However, if star
 state, :class:`SingleSiteDMRGEngine` depends critically on the use of a :class:`Mixer`, while
 :class:`TwoSiteDMRGEngine` is in principle more computationally expensive to run and has
 occasionally displayed some convergence issues..
-Which one is preffered in the end is not obvious a priori and might depend on the used model.
+Which one is preferred in the end is not obvious a priori and might depend on the used model.
 Just try both of them.
 
 A :class:`Mixer` should be used initially to avoid that the algorithm gets stuck in local energy
@@ -30,7 +30,7 @@ crucial, as the one-site algorithm cannot increase the MPS bond dimension by its
 A generic protocol for approaching a physics question using DMRG is given in
 :doc:`/intro/dmrg-protocol`.
 """
-# Copyright 2018-2021 TeNPy Developers, GNU GPLv3
+# Copyright 2018-2023 TeNPy Developers, GNU GPLv3
 
 import numpy as np
 import time
@@ -40,7 +40,7 @@ logger = logging.getLogger(__name__)
 
 from ..linalg import np_conserved as npc
 from ..networks.mps import MPSEnvironment
-from ..linalg.lanczos import lanczos, lanczos_arpack
+from ..linalg.krylov_based import lanczos_arpack, LanczosGroundState
 from .truncation import truncate, svd_theta
 from ..tools.params import asConfig
 from ..tools.math import entropy
@@ -118,7 +118,7 @@ class Mixer:
     """Base class of a general Mixer.
 
     Since DMRG performs only local updates of the state, it can get stuck in "local minima",
-    in particular if the Hamiltonain is long-range -- which is the case if one
+    in particular if the Hamiltonian is long-range -- which is the case if one
     maps a 2D system ("infinite cylinder") to 1D -- or if one wants to do single-site updates.
     The idea of the mixer is to perturb the state with the terms of the Hamiltonian
     which have contributions in both the "left" and "right" side of the system.
@@ -427,7 +427,7 @@ class DensityMatrixMixer(Mixer):
         \rightarrow  tr_R(|\theta><\theta|) + a \sum_l h_l tr_R(|\theta><\theta|) h_l^\dagger
 
     where `a` is the (small) perturbation :attr:`amplitude` and `h_l` are the left parts of
-    the Hamiltonian going accross the center bond (i0, i0+1).
+    the Hamiltonian going across the center bond (i0, i0+1).
     This perturbs singular values on the order of that amplitude.
 
     Pictorially, the left density matrix `rho_L` is given by::
@@ -512,7 +512,6 @@ class DensityMatrixMixer(Mixer):
         # Thus, rho_L U = U S S, i.e. columns of U are the eigenvectors of rho_L,
         # eigenvalues are S^2.
         val_L, U = npc.eigh(rho_L)
-        U.legs[1] = U.legs[1].to_LegCharge()  # explicit conversion: avoid warning in `iproject`
         U.iset_leg_labels(['(vL.p0)', 'vR'])
         val_L[val_L < 0.] = 0.  # for stability reasons
         val_L /= np.sum(val_L)
@@ -523,7 +522,6 @@ class DensityMatrixMixer(Mixer):
         # rho_R ~=  theta^T theta^* = V^* S U^T U* S V^T = V^* S S V^T  (for mixer -> 0)
         # Thus, rho_R V^* = V^* S S, i.e. columns of V^* are eigenvectors of rho_R
         val_R, Vc = npc.eigh(rho_R)
-        Vc.legs[1] = Vc.legs[1].to_LegCharge()
         Vc.iset_leg_labels(['(p1.vR)', 'vL'])
         VH = Vc.itranspose(['vL', '(p1.vR)'])
         val_R[val_R < 0.] = 0.  # for stability reasons
@@ -723,7 +721,7 @@ class DMRGEngine(Sweep):
         .. cfg:configoptions :: DMRGEngine
 
             diag_method : str
-                Method to be used for diagonalzation, default ``'default'``.
+                Method to be used for diagonalization, default ``'default'``.
                 For possible arguments see :meth:`DMRGEngine.diag`.
             E_tol_to_trunc : float
                 It's reasonable to choose the Lanczos convergence criteria
@@ -787,7 +785,7 @@ class DMRGEngine(Sweep):
             P_tol_min : float
                 See `P_tol_to_trunc`
             update_env : int
-                Number of sweeps without bond optimizaiton to update the
+                Number of sweeps without bond optimization to update the
                 environment for infinite boundary conditions,
                 performed every `N_sweeps_check` sweeps.
         """
@@ -1208,9 +1206,9 @@ class DMRGEngine(Sweep):
             if self.eff_H.N < max_N:
                 E, theta = full_diag_effH(self.eff_H, theta_guess, keep_sector=True)
             else:
-                E, theta, N = lanczos(self.eff_H, theta_guess, self.lanczos_params)
+                E, theta, N = LanczosGroundState(self.eff_H, theta_guess, self.lanczos_params).run()
         elif self.diag_method == 'lanczos':
-            E, theta, N = lanczos(self.eff_H, theta_guess, self.lanczos_params)
+            E, theta, N = LanczosGroundState(self.eff_H, theta_guess, self.lanczos_params).run()
         elif self.diag_method == 'arpack':
             E, theta = lanczos_arpack(self.eff_H, theta_guess, self.lanczos_params)
         elif self.diag_method == 'ED_block':
@@ -1890,7 +1888,7 @@ def full_diag_effH(effH, theta_guess, keep_sector=True):
             E, V = np.linalg.eigh(block)
             E0 = E[0]
             theta = theta_guess.zeros_like()
-            theta.dtype = np.find_common_type([fullH.dtype, theta_guess.dtype], [])
+            theta.dtype = np.promote_types(fullH.dtype, theta_guess.dtype)
             theta_block = theta.get_block(np.array([qi], np.intp), insert=True)
             theta_block[:] = V[:, 0]  # copy data into theta
     else:  # allow to change charge sector!

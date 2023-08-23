@@ -19,7 +19,7 @@ For further details, see the definition of :func:`~tenpy.tools.optimization.use_
 
 .. autodata:: QTYPE
 """
-# Copyright 2018-2021 TeNPy Developers, GNU GPLv3
+# Copyright 2018-2023 TeNPy Developers, GNU GPLv3
 
 import numpy as np
 import copy
@@ -400,7 +400,7 @@ class LegCharge:
         self.charges = np.array(charges, dtype=QTYPE)
         self.block_number = self.charges.shape[0]
         self.qconj = int(qconj)
-        if self.block_number > 2:
+        if self.block_number > 1:
             self.sorted = False
             self.bunched = False
         else:  # just one block: trivially sorted
@@ -746,6 +746,13 @@ class LegCharge:
             raise ValueError("charges invalid for " + str(self.chinfo) + "\n" + str(self))
         if self.qconj != -1 and self.qconj != 1:
             raise ValueError("qconj has invalid value != +-1 :" + repr(self.qconj))
+        if not optimize(OptimizationFlag.default):
+            # the sorted and bunched flags only makes sense if we don't always check
+            # otherwise we should just always sort/bunch...
+            if self.sorted:
+                assert self.is_sorted()
+            if self.bunched:
+                assert self.is_bunched()
 
     def conj(self):
         """Return a (shallow) copy with opposite ``self.qconj``.

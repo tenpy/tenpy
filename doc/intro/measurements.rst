@@ -80,7 +80,7 @@ For example, say you want to measure local expectation values of both `Sz` and `
 
 .. code :: yaml
 
-    connect_measurement
+    connect_measurements:
         - - tenpy.simulations.measurement
           - m_onsite_expectation_value
           - opname: Sx
@@ -94,7 +94,7 @@ If you want other keys, you can explicitly specify them with the `results_key` a
 
 .. code :: yaml
 
-    connect_measurement:
+    connect_measurements:
         - - tenpy.simulations.measurement
           - m_onsite_expectation_value
           - opname: Sx
@@ -110,8 +110,8 @@ disable them with :cfg:option:`Simulation.use_default_measurements`); for exampl
 is measured for any simulation, as it appears in :attr:`~tenpy.simulations.simulation.Simulation.default_measurements`.
 
 Often, what you want to measure is just calling a method of the state `psi`, so there is a special syntax in the
-`connect_measurement` parameter:
-if you **specify the first entry for  to be `psi_method`, `model_method` or `simulation_method`**, you can call a method of the
+`connect_measurements` parameter:
+if you **specify the first entry to be** ``psi_method``, ``model_method`` or ``simulation_method``, you can call a method of the
 corresponding classes. 
 As for global measurement functions, we pass the corresponding ``results, psi, model, simulation`` keyword arguments,
 e.g. `psi_method` measurement functions need to accept ``results, model, simulation`` as arguments, and
@@ -122,14 +122,14 @@ yet methods of `psi` don't follow the measurement function call structure, but s
 For those cases, you can use another special syntax, namely to **simply add `wrap` before the function name**.
 In this case, we don't pass ``results, psi, model, simulation``, but simply save the return values of the function
 in the results, under the `results_key` that gets passed as extra keyword argument,
-see :func:`~tenpy.simulations.measurment.measurment_wrapper`.
+see (the source code of) :func:`~tenpy.simulations.measurment.measurement_wrapper`.
 The `results_key` defaults to the function name.
 
 To make this clearer, let's extend the example above with more measurements:
 
 .. code :: yaml
 
-    connect_measurement:
+    connect_measurements:
         - - tenpy.simulations.measurement
           - m_onsite_expectation_value
           - opname: Sx

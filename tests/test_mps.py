@@ -1,5 +1,5 @@
 """A collection of tests for :module:`tenpy.networks.mps`."""
-# Copyright 2018-2021 TeNPy Developers, GNU GPLv3
+# Copyright 2018-2023 TeNPy Developers, GNU GPLv3
 
 import numpy as np
 import numpy.testing as npt
@@ -7,6 +7,8 @@ import warnings
 from tenpy.models.xxz_chain import XXZChain
 from tenpy.models.lattice import Square, Chain, Honeycomb
 
+from tenpy.tools import misc
+from tenpy.algorithms import tebd
 from tenpy.networks import mps, site
 from tenpy.networks.terms import TermList
 from random_test import rand_permutation, random_MPS
@@ -288,16 +290,33 @@ def test_canonical_form(bc, method):
             print(A_err)
             assert A_err < 1.e-13
 
+
 @pytest.mark.parametrize("bc", ['finite', 'infinite'])
 def test_apply_op(bc, eps=1.e-13):
     s = site.SpinHalfSite(None)
     psi0 = mps.MPS.from_singlets(s, 3, [(0, 2)], lonely=[1], bc=bc, lonely_state='up')
+    # psi0 = 1/sqrt(2) ( | up up down> - | down up up> )
     psi1 = psi0.copy()
     psi1.apply_local_op(1, 'Sigmax', understood_infinite=True)  #unitary
     psi1_expect = mps.MPS.from_singlets(s, 3, [(0, 2)], lonely=[1], bc=bc, lonely_state='down')
     psi1 = psi0.copy()
     psi1.apply_local_op(1, 'Sm', understood_infinite=True)  #non-unitary
     assert abs(psi1_expect.overlap(psi1, understood_infinite=True) - 1.) < eps
+
+    psi1 = psi0.copy()
+    psi1.apply_local_op(2, 'Sm', understood_infinite=True)  # non-unitary, should change norm
+    assert abs(psi1.norm  - 0.5**0.5) < eps
+    psi1_expect  = mps.MPS.from_product_state([s]*3, ['down', 'up', 'down'], bc=bc)
+    # up to phase and norm
+    assert abs(- psi1_expect.overlap(psi1, understood_infinite=True) / psi1.norm - 1.) < eps
+
+    psi1 = psi0.copy()
+    SmSm = site.kron(s.Sm, s.Sm, group=False)
+    psi1.apply_local_op(1, SmSm, understood_infinite=True)  # non-unitary, should change norm
+    assert abs(psi1.norm  - 0.5**0.5) < eps
+    psi1_expect  = mps.MPS.from_product_state([s]*3, ['down', 'down', 'down'], bc=bc)
+    # up to phase and norm
+    assert abs(- psi1_expect.overlap(psi1, understood_infinite=True) / psi1.norm - 1.) < eps
 
     psi2 = psi0.copy()
     th = psi2.get_theta(0, 3).to_ndarray().reshape((8, ))
@@ -391,6 +410,44 @@ def test_group():
     assert abs(1. - ov) < 1.e-14
 
 
+def _get_grouped_corr(psi: mps.MPS, op: str, L: int, sites_to_group: int):
+    corr = np.zeros((L, L), dtype=np.complex128)
+    for i in range(sites_to_group):
+        for j in range(sites_to_group):
+            corr[i::sites_to_group, j::sites_to_group] = psi.correlation_function(f'{op}{i}', f'{op}{j}')
+    return corr
+
+
+def test_fixes_issue_197():
+    sites_to_group = 3
+    num_groups = 4
+    op = 'Sz'
+    conserve = None
+
+    L = sites_to_group * num_groups
+    s = site.SpinHalfSite(conserve=conserve, sort_charge=True)
+    psi = mps.MPS.from_product_state(sites=[s] * L, p_state=misc.to_array(['up', 'down'], (L,)))
+    tebd.RandomUnitaryEvolution(psi, options=dict(N_steps=4)).run()
+    chi_init = max(psi.chi)
+    corr_init = psi.correlation_function(op, op)
+
+    psi.canonical_form()
+    corr_canonical = psi.correlation_function(op, op)
+    assert np.allclose(corr_canonical, corr_init)
+
+    psi.group_sites(3)
+    corr_grouped = _get_grouped_corr(psi, op, L, sites_to_group)
+    assert np.allclose(corr_grouped, corr_init)
+
+    psi.group_split(dict(chi_max=chi_init))
+    corr_split = psi.correlation_function(op, op)
+    assert np.allclose(corr_split, corr_init)
+
+    psi.canonical_form()
+    corr_split_canonical = psi.correlation_function(op, op)
+    assert np.allclose(corr_split_canonical, corr_init)
+
+
 def test_expectation_value_term():
     s = spin_half
     psi1 = mps.MPS.from_singlets(s, 6, [(1, 3), (2, 5)], lonely=[0, 4], bc='finite')
@@ -417,8 +474,8 @@ def test_expectation_value_term():
     # terms_sum
     pref = np.random.random([5])
     term_list = TermList([[('Nd', 0)],
-                          [('Nu', 1), ('Nd', 2)],
-                          [('Nd', 2), ('Nu', 5)],
+                          [('Nu', 1-psi2.L), ('Nd', 2-psi2.L)],  # shift outside of unit cell
+                          [('Nd', 2+2*psi2.L), ('Nu', 5+2*psi2.L)],  # to test shift code block
                           [('Nu Nd', 3)],
                           [('Nu', 1), ('Nu', 5)]], pref)  # yapf: disable
     desired = sum(pref[1:])
@@ -514,12 +571,55 @@ def test_expectation_value_multisite():
     ev = env1.expectation_value(SpSm)
     npt.assert_almost_equal(ev, [-0.5, 0., -0.5, 0., -0.5])
 
-    psi1.apply_local_op(2, SpSm)  # multi-site operator
+    psi1.apply_local_op(2, SpSm)  # multi-site operator, not unitary!
+    assert abs(psi1.norm  - 0.5**0.5) < 1.e-14
     ev = psi1.expectation_value(SpSm)  # normalized!
     npt.assert_almost_equal(ev, [-0.5, 0., 0.0, 0., -0.5])
     env1 = mps.MPSEnvironment(psi1, psi)
-    ev = env1.expectation_value(SpSm) / psi1.overlap(psi)  # normalize
-    npt.assert_almost_equal(ev, [-0.5, 0., -1., 0., -0.5])
+    ev = env1.expectation_value(SpSm) # = <psi|dagger(SpSm)_2 SpSm_i |psi>
+    npt.assert_almost_equal(ev, np.array([+0.25, 0., 0.5, 0., 0.25]))
+
+
+def test_MPSEnvironment_expectation_values():
+    spin_half = site.SpinHalfSite(conserve=None)
+    up_state = ['up'] * 4
+    x_state = [[np.sqrt(0.5), np.sqrt(0.5)], [np.sqrt(0.5), -np.sqrt(0.5)]] * 2
+    psi_up = mps.MPS.from_product_state([spin_half] * 4, up_state)
+    psi_x = mps.MPS.from_product_state([spin_half] * 4, x_state)
+    env = mps.MPSEnvironment(psi_up, psi_x)
+    # expectation values
+    Sx = env.expectation_value('Sx')
+    Sz = env.expectation_value('Sz')
+    npt.assert_almost_equal(Sx, [1 / 8, -1 / 8, 1 / 8, -1 / 8])
+    npt.assert_almost_equal(Sz, [1 / 8, 1 / 8, 1 / 8, 1 / 8])
+    # expectation value multi site and terms
+    operators = ['Sx', 'Id', 'Sz']
+    a = env.expectation_value_multi_sites(operators, 1)
+    b = env.expectation_value_term([('Sx', 1), ('Sz', 3)])
+    term_list = TermList([[('Sx', 1), ('Sz', 3)]])
+    c, _ = env.expectation_value_terms_sum(term_list)
+    npt.assert_almost_equal(np.array([a, b, c]), -1 / 16)
+    # correlation function
+    corr_xz = env.correlation_function('Sx', 'Sz')
+    corr_exact = np.array([[ -1.,  1.,  1., 1.],
+                           [ -1.,  1.,  -1.,  -1.],
+                           [ 1.,  1.,  -1.,  1.],
+                           [ -1.,  -1.,  -1.,  1.]])  # yapf: disable
+    corr_exact /= 16
+    npt.assert_almost_equal(corr_xz, corr_exact)
+    #term correlation function
+    right = env.term_correlation_function_right([('Sz', 0)], [('Sx', 1)])
+    left = env.term_correlation_function_left([('Sx', 0)], [('Sz', 1)], i_L=[0, 1, 2], j_R=2)
+    npt.assert_almost_equal(left, [1 / 16, -1 / 16, 1 / 16])
+    npt.assert_almost_equal(right, [-1 / 16, 1 / 16, -1 / 16])
+
+    term_left = TermList([[('Sx', 0), ('Sz', 1)]])
+    term_right = TermList([[('Sz', 0)]])
+
+    a = env.term_list_correlation_function_right(term_left, term_right)
+    b = env.expectation_value_multi_sites(['Sx', 'Sz', 'Sz'], 0)
+    c = env.expectation_value_multi_sites(['Sx', 'Sz', 'Id', 'Sz'], 0)
+    npt.assert_almost_equal(a, [b, c])
 
 
 def test_sample_measurements(eps=1.e-14, seed=5):
@@ -585,6 +685,7 @@ def test_mps_compress(method, eps=1.e-13):
 def test_InitialStateBuilder():
     s0 = site.SpinHalfSite('Sz', sort_charge=True)
     lat = Chain(10, s0, bc_MPS='finite')
+    lat_odd = Chain(11, s0, bc_MPS='finite')
     psi1 = mps.InitialStateBuilder(
         lat, {
             'method': 'lat_product_state',
@@ -593,6 +694,21 @@ def test_InitialStateBuilder():
             'full_empty': ['up', 'down'],
         }).run()
     psi1.test_sanity()
+    with pytest.raises(ValueError) as excinfo:
+        psi1_odd = mps.InitialStateBuilder(
+            lat_odd, {
+                'method': 'lat_product_state',
+                'product_state': [['up'], ['down']],
+            }).run()
+        assert "incomensurate len" in str(excinfo.value)
+    psi1_odd = mps.InitialStateBuilder(
+        lat_odd, {
+            'method': 'lat_product_state',
+            'product_state': [['up'], ['down']],
+            'allow_incommensurate': True
+        }).run()
+    psi1_odd.test_sanity()
+    assert abs(np.sum(psi1_odd.expectation_value('Sz')) - 0.5) < 1.e-10
     psi2 = mps.InitialStateBuilder(
         lat, {
             'method': 'mps_product_state',
@@ -612,17 +728,37 @@ def test_InitialStateBuilder():
         }).run()
     psi3.test_sanity()
     assert abs(psi1.overlap(psi3) - 1) < 1.e-14
-    psi4 = mps.InitialStateBuilder(
-        lat, {
-            'method': 'randomized',
-            'randomized_from_method': 'lat_product_state',
-            'product_state': [['up'], ['down']],
-            'check_filling': 0.5,
-            'full_empty': ['up', 'down'],
-        }, model_dtype=np.float64).run()
+    psi4 = mps.InitialStateBuilder(lat, {
+        'method': 'randomized',
+        'randomized_from_method': 'lat_product_state',
+        'product_state': [['up'], ['down']],
+        'check_filling': 0.5,
+        'full_empty': ['up', 'down'],
+    },
+                                   model_dtype=np.float64).run()
     assert psi4.dtype == np.float64
     assert abs(psi4.overlap(psi1) - 1) > 0.1  # randomizing should lead to small overlap!
-    psi5 = mps.InitialStateBuilder(
+    psi5 = mps.InitialStateBuilder(lat, {
+        'method': 'randomized',
+        'randomized_from_method': 'lat_product_state',
+        'randomize_close_1': True,
+        'randomize_params': {
+            'N_steps': 2
+        },
+        'product_state': [['up'], ['down']],
+        'check_filling': 0.5,
+        'full_empty': ['up', 'down'],
+    },
+                                   model_dtype=np.complex128).run()
+    assert psi5.dtype == np.complex128
+    assert 1.e-8 < abs(psi5.overlap(psi1) - 1) < 0.1  # but here we randomize only a bit
+
+
+def test_fixes_181():
+    # See https://github.com/tenpy/tenpy/issues/181
+    s0 = site.SpinHalfSite('Sz', sort_charge=True)
+    lat = Chain(10, s0, bc_MPS='finite')
+    psi1 = mps.InitialStateBuilder(
         lat, {
             'method': 'randomized',
             'randomized_from_method': 'lat_product_state',
@@ -632,8 +768,7 @@ def test_InitialStateBuilder():
             'check_filling': 0.5,
             'full_empty': ['up', 'down'],
         }, model_dtype=np.complex128).run()
-    assert psi5.dtype == np.complex128
-    assert 1.e-8 < abs(psi5.overlap(psi1) - 1) < 0.1  # but here we randomize only a bit
+    psi1.enlarge_chi([0, 0, 0, 1, 2, 2, 2, 1, 0, 0, 0])
 
 
 if __name__ == "__main__":

@@ -14,8 +14,19 @@ For example an MPS represents the contraction along the 'virtual' legs/bonds of 
     terms
     purification_mps
 """
-# Copyright 2018-2021 TeNPy Developers, GNU GPLv3
+# Copyright 2018-2023 TeNPy Developers, GNU GPLv3
 
-from . import site, mps, mpo, purification_mps
+from . import site, mps, mpo, purification_mps, terms
+from .site import *
+from .mps import *
+from .mpo import *
+from .purification_mps import *
+from .terms import *
 
-__all__ = ['site', 'mps', 'mpo', 'terms', 'purification_mps']
+__all__ = ['site', 'mps', 'mpo', 'terms', 'purification_mps',
+           *site.__all__,
+           *mps.__all__,
+           *mpo.__all__,
+           *purification_mps.__all__,
+           *terms.__all__,
+           ]

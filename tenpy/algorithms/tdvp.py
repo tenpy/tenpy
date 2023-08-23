@@ -29,9 +29,9 @@ Much of the code is very similar to DMRG, and also based on the
 .. todo ::
     allow for increasing bond dimension in SingleSiteTDVPEngine, similar to DMRG Mixer
 """
-# Copyright 2019-2021 TeNPy Developers, GNU GPLv3
+# Copyright 2019-2023 TeNPy Developers, GNU GPLv3
 
-from tenpy.linalg.lanczos import LanczosEvolution
+from tenpy.linalg.krylov_based import LanczosEvolution
 from tenpy.algorithms.truncation import svd_theta, TruncationError
 from tenpy.algorithms.mps_common import Sweep, ZeroSiteH, OneSiteH, TwoSiteH
 from tenpy.algorithms.algorithm import TimeEvolutionAlgorithm, TimeDependentHAlgorithm
@@ -513,7 +513,7 @@ class OldTDVPEngine(TimeEvolutionAlgorithm):
             else:
                 B = self.psi.get_B(j, form='B')
                 #theta[vL,p,vR]=s[vL,vR]*self.psi[p,vL,vR]
-                theta = npc.tensordot(s, B, axes=('vR', 'vL'))
+                theta = npc.tensordot(s, B, axes=('vR', 'vL'))  # noqa: F821
             Lp = self.environment.get_LP(j)
             Rp = self.environment.get_RP(j)
             W1 = self.environment.H.get_W(j)
@@ -589,9 +589,8 @@ class OldTDVPEngine(TimeEvolutionAlgorithm):
             if j == self.L - 1:
                 theta = B
             else:
-                theta = npc.tensordot(B, s,
-                                      axes=('vR',
-                                            'vL'))  #theta[vL,p,vR]=s[vL,vR]*self.psi[p,vL,vR]
+                #theta[vL,p,vR]=s[vL,vR]*self.psi[p,vL,vR]
+                theta = npc.tensordot(B, s, axes=('vR', 'vL'))  # noqa: F821
 
             # Apply expm (-dt H) for 1-site
             chiB, chiA, d = theta.to_ndarray().shape
