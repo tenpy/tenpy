@@ -44,7 +44,6 @@ from ..linalg.krylov_based import lanczos_arpack, LanczosGroundState
 from .truncation import truncate, svd_theta
 from ..tools.params import asConfig
 from ..tools.math import entropy
-from ..tools.misc import find_subclass
 from ..tools.process import memory_usage
 from .mps_common import Sweep, OneSiteH, TwoSiteH
 from . import mps_common
@@ -211,8 +210,6 @@ class DMRGEngine(Sweep):
         See :cfg:option:`DMRGEngine.chi_list`
     eff_H : :class:`~tenpy.algorithms.mps_common.EffectiveH`
         Effective two-site Hamiltonian.
-    mixer : :class:`~tenpy.algorithms.mps_common.Mixer` | ``None``
-        If ``None``, no mixer is used (anymore), otherwise the mixer instance.
     shelve : bool
         If a simulation runs out of time (`time.time() - start_time > max_seconds`), the run will
         terminate with `shelve = True`.
@@ -278,11 +275,9 @@ class DMRGEngine(Sweep):
         instead to calculate the entanglement entropy and store it inside this list.
     """
     EffectiveH = None
-    DefaultMixer = None
 
     def __init__(self, psi, model, options, **kwargs):
         options = asConfig(options, self.__class__.__name__)
-        self.mixer = None
         self.diag_method = options.get('diag_method', 'default')
         self._entropy_approx = [None] * psi.L  # always left of a given site
         super().__init__(psi, model, options, **kwargs)
@@ -425,8 +420,7 @@ class DMRGEngine(Sweep):
                 else:
                     logger.info("Convergence criterium reached with enabled mixer. "
                                 "Disable mixer and continue")
-                    self.mixer = None
-                    self.S_inv_cutoff = 1.e-15
+                    self.mixer_deactivate()
             if loop_start_time - start_time > max_seconds:
                 self.shelve = True
                 logger.warning("DMRG: maximum time limit reached. Shelve simulation.")
@@ -595,51 +589,13 @@ class DMRGEngine(Sweep):
         }
 
     def sweep(self, optimize=True, meas_E_trunc=False):
-        """One 'sweep' of a the algorithm.
+        """One 'sweep' of the algorithm.
 
-        Iteratate over the bond which is optimized, to the right and
-        then back to the left to the starting point.
-
-        Parameters
-        ----------
-        optimize : bool, optional
-            Whether we actually optimize to find the ground state of the effective Hamiltonian.
-            (If False, just update the environments).
-        meas_E_trunc : bool, optional
-            Whether to measure truncation energies.
-
-        Options
-        -------
-        .. cfg:configoptions :: DMRGEngine
-
-            chi_list_reactivates_mixer : bool
-                If True, the mixer is reset/reactivated each time the bond dimension growths
-                due to :cfg:option:`DMRGEngine.chi_list`.
-
-        Returns
-        -------
-        max_trunc_err : float
-            Maximal truncation error introduced.
-        max_E_trunc : ``None`` | float
-            ``None`` if meas_E_trunc is False, else the maximal change of the energy due to the
-            truncation.
+        Thin wrapper around :meth:`tenpy.algorithms.mps_common.Sweep.sweep` with one additional
+        parameter `meas_E_trunc` specifiying whether to measure truncation energies.
         """
-        # wrapper around tenpy.algorithms.mps_common.Sweep.sweep()
         self._meas_E_trunc = meas_E_trunc
-        if (self.options.get('chi_list_reactivates_mixer', True) and optimize
-                and self.chi_list is not None):
-            new_chi_max = self.chi_list.get(self.sweeps, None)
-            if new_chi_max is not None:
-                # growing the bond dimension with chi_list, so we should also reactivate the mixer
-                self.mixer_activate()
-        res = super().sweep(optimize)
-        if optimize:
-            # update mixer
-            if self.mixer is not None:
-                self.mixer = self.mixer.update_amplitude(self.sweeps)
-                if self.mixer is None:  # deactivated
-                    self.S_inv_cutoff = 1.e-15
-        return res
+        return super().sweep(optimize)
 
     def update_local(self, theta, optimize=True):
         """Perform site-update on the site ``i0``.
@@ -896,54 +852,6 @@ class DMRGEngine(Sweep):
         axes.set_xlabel(xaxis)
         axes.set_ylabel(yaxis)
 
-    def mixer_activate(self):
-        """Set `self.mixer` to the class specified by `options['mixer']`.
-
-        .. cfg:configoptions :: DMRGEngine
-
-            mixer : str | class | bool
-                Chooses the :class:`~tenpy.algorithms.mps_common.Mixer` to be used.
-                A string stands for one of the mixers defined in :mod:`~tenpy.algorithms.mps_common`,
-                a class is used as custom mixer.
-                ``None`` (default for 2-site DMRG) uses no mixer, ``True`` (default for 1-site DMRG)
-                uses :class:`~tenpy.algorithms.mps_common.DensityMatrixMixer` for the 2-site case
-                and :class:`~tenpy.algorithms.mps_common.SubspaceExpansion` for the 1-site case.
-            mixer_params : dict
-                Mixer parameters as described in :cfg:config:`Mixer`.
-        """
-        default = True if isinstance(self, SingleSiteDMRGEngine) else None
-        Mixer_class = self.options.get('mixer', default)
-        if Mixer_class:
-            if Mixer_class is True:
-                Mixer_class = self.DefaultMixer
-            if isinstance(Mixer_class, str):
-                if Mixer_class == "Mixer":
-                    msg = 'Use `True` instead of "Mixer" for DMRG parameter "mixer"'
-                    warnings.warn(msg, FutureWarning)
-                    Mixer_class = self.DefaultMixer
-                else:
-                    Mixer_class = find_subclass(mps_common.Mixer, Mixer_class)
-            mixer_params = self.options.subconfig('mixer_params')
-            self.mixer = Mixer_class(mixer_params, self.sweeps)
-            if self.mixer.decay == 1.:
-                warnings.warn("Mixer with decay=1. doesn't decay")
-            self.S_inv_cutoff = 1.e-8
-            logger.info("activate %s with initial amplitude %.1e", Mixer_class.__name__,
-                        self.mixer.amplitude)
-
-    def mixer_cleanup(self):
-        """Cleanup the effects of a mixer.
-
-        A :meth:`sweep` with an enabled :class:`~tenpy.algorithms.mps_common.Mixer` leaves the MPS
-        `psi` with 2D arrays in `S`.
-        To recover the originial form, this function simply performs one sweep with disabled mixer.
-        """
-        if any([self.psi.get_SL(i).ndim > 1 for i in range(self.psi.L)]):
-            mixer = self.mixer
-            self.mixer = None  # disable the mixer
-            self.sweep(optimize=False)  # (discard return value)
-            self.mixer = mixer  # recover the original mixer
-
 
 class TwoSiteDMRGEngine(DMRGEngine):
     """Engine for the two-site DMRG algorithm.
@@ -1021,6 +929,7 @@ class TwoSiteDMRGEngine(DMRGEngine):
     """
     EffectiveH = TwoSiteH
     DefaultMixer = mps_common.DensityMatrixMixer
+    use_mixer_by_default = False
 
     def prepare_svd(self, theta):
         """Transform theta into matrix for svd."""
@@ -1187,6 +1096,7 @@ class SingleSiteDMRGEngine(DMRGEngine):
     """
     EffectiveH = OneSiteH
     DefaultMixer = mps_common.SubspaceExpansion
+    use_mixer_by_default = True
 
     def prepare_svd(self, theta):
         """Transform theta into matrix for svd.

@@ -28,6 +28,7 @@ from ..networks.mps import MPSEnvironment, MPS
 from .truncation import truncate, svd_theta, TruncationError
 from ..linalg import np_conserved as npc
 from ..tools.params import asConfig
+from ..tools.misc import find_subclass
 import numpy as np
 import time
 import warnings
@@ -119,7 +120,12 @@ class Sweep(Algorithm):
     chi_list : dict | ``None``
         A dictionary to gradually increase the `chi_max` parameter of `trunc_params`.
         See :cfg:option:`Sweep.chi_list`
+    mixer : :class:`Mixer` | ``None``
+        If ``None``, no mixer is used (anymore), otherwise the mixer instance.
     """
+    DefaultMixer = None
+    use_mixer_by_default = False  # The default for the "mixer" config option
+    
     def __init__(self, psi, model, options, *, orthogonal_to=None, **kwargs):
         if not hasattr(self, "EffectiveH"):
             raise NotImplementedError("Subclass needs to set EffectiveH")
@@ -130,6 +136,7 @@ class Sweep(Algorithm):
         self.finite = self.psi.finite
         self.S_inv_cutoff = 1.e-15
         self.lanczos_params = options.subconfig('lanczos_params')
+        self.mixer = None  # set to an actual mixer (if at all) in :meth:`mixer_activate``
 
         self.env = None
         self.ortho_to_envs = []
@@ -360,14 +367,20 @@ class Sweep(Algorithm):
 
         Iteratate over the bond which is optimized, to the right and
         then back to the left to the starting point.
-        If optimize=False, don't actually diagonalize the effective hamiltonian,
-        but only update the environment.
 
         Parameters
         ----------
         optimize : bool, optional
-            Whether we actually optimize to find the ground state of the effective Hamiltonian.
-            (If False, just update the environments).
+            Whether we actually optimize the state, e.g. to find the ground state of the effective
+            Hamiltonian in case of a DMRG. (If False, just update the environments).
+
+        Options
+        -------
+        .. cfg:configoptions :: Sweep
+
+            chi_list_reactivates_mixer : bool
+                If True, the mixer is reset/reactivated each time the bond dimension growths
+                due to :cfg:option:`Sweep.chi_list`.
 
         Returns
         -------
@@ -384,6 +397,8 @@ class Sweep(Algorithm):
             if new_chi_max is not None:
                 logger.info("Setting chi_max=%d", new_chi_max)
                 self.trunc_params['chi_max'] = new_chi_max
+                if self.options.get('chi_list_reactivates_mixer', True):
+                    self.mixer_activate()
 
         # the actual sweep
         for i0, move_right, update_LP_RP in schedule:
@@ -401,6 +416,14 @@ class Sweep(Algorithm):
 
         if optimize:  # count optimization sweeps
             self.sweeps += 1
+            # update mixer
+            if self.mixer is not None:
+                mixer = self.mixer.update_amplitude(self.sweeps)
+                if mixer is None:
+                    self.mixer_deactivate()
+                else:
+                    self.mixer = mixer
+            
         return np.max(self.trunc_err_list)
 
     def get_sweep_schedule(self):
@@ -624,6 +647,66 @@ class Sweep(Algorithm):
             assert False, "n_optimize != 1, 2"
         self.eff_H = None  # free references to environments held by eff_H
         # done
+
+    def mixer_activate(self):
+        """Set `self.mixer` to the class specified by `options['mixer']`.
+
+        .. cfg:configoptions :: Sweep
+
+            mixer : str | class | bool | None
+                Specifies which :class:`Mixer` to use, if any.
+                A string stands for one of the mixers defined in this module.
+                A class is assumed to have the same interface as :class:`Mixer` and is used
+                to instantiate the :attr:`mixer`.
+                ``None`` uses no mixer.
+                ``True`` uses the mixer specified by the :attr:`DefaultMixer` class attribute.
+                The default depends on the subclass of :class:`Sweep`.
+            mixer_params : dict
+                Mixer parameters as described in :cfg:config:`Mixer`.
+
+        See Also
+        --------
+        mixer_deactivate
+        """
+        Mixer_class = self.options.get('mixer', self.use_mixer_by_default)
+        if not Mixer_class:
+            return  # no mixer -> nothing to do
+        if Mixer_class is True:
+            Mixer_class = self.DefaultMixer
+        if isinstance(Mixer_class, str):
+            if Mixer_class == "Mixer":
+                msg = 'Use `True` instead of "Mixer" for DMRG parameter "mixer"'
+                warnings.warn(msg, FutureWarning)
+                Mixer_class = self.DefaultMixer
+            else:
+                Mixer_class = find_subclass(Mixer, Mixer_class)
+        mixer_params = self.options.subconfig('mixer_params')
+        self.mixer = Mixer_class(mixer_params, self.sweeps)
+        self.S_inv_cutoff = 1.e-8
+        logger.info(f'activate {Mixer_class.__name__} with initial amplitude {self.mixer.amplitude}')
+
+    def mixer_deactivate(self):
+        """Deactivate the mixer.
+
+        Set ``self.mixer=None`` and revert any other effects of :meth:`mixer_acitvate`.
+        """
+        logger.info(f'deactivate {self.mixer.__class__.__name__} with final amplitude ' \
+                    f'{self.mixer.amplitude}')
+        self.mixer = None
+        self.S_inv_cutoff = 1.e-15
+
+    def mixer_cleanup(self):
+        """Cleanup the effects of a mixer.
+
+        A :meth:`sweep` with an enabled :class:`~tenpy.algorithms.mps_common.Mixer` leaves the MPS
+        `psi` with 2D arrays in `S`.
+        To recover the originial form, this function simply performs one sweep with disabled mixer.
+        """
+        if any([self.psi.get_SL(i).ndim > 1 for i in range(self.psi.L)]):
+            mixer = self.mixer
+            self.mixer = None  # disable the mixer
+            self.sweep(optimize=False)  # (discard return value)
+            self.mixer = mixer  # recover the original mixer
 
 
 class EffectiveH(NpcLinearOperator):
@@ -1910,6 +1993,7 @@ class VariationalCompression(Sweep):
                     break
         if self.psi.finite:
             self.psi.norm *= max(self.renormalize)
+        self.mixer_cleanup()
         return TruncationError(max_trunc_err, 1. - 2. * max_trunc_err)
 
     def init_env(self, model=None, resume_data=None, orthogonal_to=None):
