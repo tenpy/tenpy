@@ -1471,7 +1471,7 @@ class MPS(BaseMPSExpectationValue):
             It gets tiled to the shape ``lat.shape``, if it is smaller.
         allow_incommensurate : bool
             Allow an incommensurate tiling of `p_state` to the full lattice.
-            For example, if you pass ``p_state=[['up'], ['down']]` with a
+            For example, if you pass ``p_state=[['up'], ['down']]`` with a
             :class:`tenpy.models.lattice.Chain`, this function raises an error for an odd number of
             sites in the Chain, but if you set `allow_incommensurate=True`, it will still work
             and give you a state with total Sz = +1/2 for odd sites (since total Sz=0 doesn't fit).
