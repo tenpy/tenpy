@@ -6,11 +6,12 @@ import numpy as np
 from tenpy.models.xxz_chain import XXZChain
 from tenpy.algorithms.exact_diag import ExactDiag
 from tenpy.linalg.krylov_based import LanczosGroundState
+import copy
 
 
 def test_ED():
     # just quickly check that it runs without errors for a small system
-    xxz_pars = dict(L=4, Jxx=1., Jz=1., hz=0.0, bc_MPS='finite', sort_charge=True)
+    xxz_pars = dict(L=4, Jxx=1., Jz=1., hz=0.1, bc_MPS='finite', sort_charge=True)
     M = XXZChain(xxz_pars)
     ED = ExactDiag(M)
     ED.build_full_H_from_mpo()
@@ -46,3 +47,11 @@ def test_ED():
     ED3 = ExactDiag.from_H_mpo(M.H_MPO)
     ED3.build_full_H_from_mpo()
     assert npc.norm(ED3.full_H - H, np.inf) < 1.e-14
+
+    xxz_pars_inf = copy.copy(xxz_pars)
+    xxz_pars_inf['bc_MPS'] = 'infinite'
+    xxz_pars_inf['L'] = 2
+    M_inf = XXZChain(xxz_pars_inf)
+    ED4 = ExactDiag.from_infinite_model(M_inf, enlarge=2)
+    ED4.build_full_H_from_mpo()
+    assert npc.norm(ED4.full_H - H, np.inf) < 1.e-14
