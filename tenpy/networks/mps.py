@@ -730,8 +730,7 @@ class BaseMPSExpectationValue(metaclass=ABCMeta):
                 B_ket = ket.get_B(k, form='B')
                 CL = npc.tensordot(CL, B_ket, axes=['vR', 'vL'])
                 if opstr is not None:
-                    opstr_k = self.sites[self._to_valid_index(k)].get_op(opstr)
-                    opstr_k = opstr_k.shift_charges(k - k % self.L)
+                    opstr_k = self.get_site(k).get_op(opstr)
                     CL = npc.tensordot(opstr_k, CL, axes=['p*', 'p'])
                 B_bra = bra.get_B(k, form='B')
                 CL = npc.tensordot(B_bra.conj(), CL, axes=axes_contr)
@@ -784,7 +783,7 @@ class BaseMPSExpectationValue(metaclass=ABCMeta):
                 B_ket = ket.get_B(k, form='B')
                 CR = npc.tensordot(B_ket, CR, axes=['vR', 'vL'])
                 if opstr is not None:
-                    opstr_k = self.sites[self._to_valid_index(k)].get_op(opstr)
+                    opstr_k = self.get_site(k).get_op(opstr)
                     CR = npc.tensordot(opstr_k, CR, axes=['p*', 'p'])
                 B_bra = bra.get_B(k, form='B')
                 CR = npc.tensordot(CR, B_bra.conj(), axes_contr)
@@ -907,7 +906,7 @@ class BaseMPSExpectationValue(metaclass=ABCMeta):
                     need_JW = key[0]
                     CL = npc.tensordot(CL, B_ket, axes=['vR', 'vL'])
                     if opstr_fill[need_JW] != 'Id':
-                        opstr_k = self.sites[self._to_valid_index(k)].get_op(opstr_fill[need_JW])
+                        opstr_k = self.get_site(k).get_op(opstr_fill[need_JW])
                         CL = npc.tensordot(opstr_k, CL, axes=['p*', 'p'])
                     CLs[key] = npc.tensordot(B_bra.conj(), CL, axes=axes_contr)
                 i = k + 1
@@ -928,6 +927,15 @@ class BaseMPSExpectationValue(metaclass=ABCMeta):
                 res = res + strength * npc.inner(CL, CR, axes=[['vR', 'vR*'], ['vL', 'vL*']])
             result.append(res)
         return self._normalize_exp_val(result)
+
+    def get_site(self, i):
+        """Get the `i`-th site.
+
+        This is ``self.sites[i]`` if `i` is in the unit cell and takes care of shifting the
+        charges otherwise.
+        """
+        i_valid = self._to_valid_index(i)
+        return self.sites[i_valid].shift_charges(i - i_valid)
 
     def _term_to_ops_list(self, term, autoJW=True, i_offset=0, JW_from_right=False):
         """Translate a `term` to a list of operators (one per site).
@@ -983,9 +991,7 @@ class BaseMPSExpectationValue(metaclass=ABCMeta):
             for op_i in ops:
                 op_i.append('JW')
         for j in range(len(ops)):
-            site = self.sites[self._to_valid_index(j + i_min + i_offset)]
-            i = j + i_min + i_offset
-            ops[j] = site.multiply_operators(ops[j]).shift_charges(i - i % self.L)
+            ops[j] = self.get_site(j + i_min + i_offset).multiply_operators(ops[j])
         return ops, i_min + i_offset, (count_JW % 2 == 1)
 
     def _corr_up_diag(self, ops1, ops2, i, j_gtr, opstr, str_on_first, apply_opstr_first):
@@ -1031,7 +1037,7 @@ class BaseMPSExpectationValue(metaclass=ABCMeta):
         """
         op = operators[0]
         if (isinstance(op, str)):
-            op = self.sites[self._to_valid_index(i0)].get_op(op)
+            op = self.get_site(i0).get_op(op)
         bra, ket = self._get_bra_ket()
         theta_ket = ket.get_B(i0, form='Th')
         theta_bra = bra.get_B(i0, form='Th')
@@ -1047,8 +1053,7 @@ class BaseMPSExpectationValue(metaclass=ABCMeta):
             C = npc.tensordot(C, B_ket, axes=['vR', 'vL'])
             if not (is_str and op == 'Id'):
                 if is_str:
-                    op = self.sites[self._to_valid_index(i)].get_op(op)
-                    op = op.shift_charges(i - i % self.L)
+                    op = self.get_site(i).get_op(op)
                 C = npc.tensordot(op, C, axes=['p*', 'p'])
             B_bra = bra.get_B(i, form='B')
             C = npc.tensordot(B_bra.conj(), C, axes=axes_contr)
@@ -1073,8 +1078,7 @@ class BaseMPSExpectationValue(metaclass=ABCMeta):
             C = npc.tensordot(B_ket, C, axes=['vR', 'vL'])
             if not (is_str and op == 'Id'):
                 if is_str:
-                    op = self.sites[self._to_valid_index(i)].get_op(op)
-                    op = op.shift_charges(i - i % self.L)
+                    op = self.get_site(i).get_op(op)
                 C = npc.tensordot(op, C, axes=['p*', 'p'])
             B_bra = bra.get_B(i, form='B')
             C = npc.tensordot(B_bra.conj(), C, axes=axes_contr)
@@ -1178,8 +1182,8 @@ class BaseMPSExpectationValue(metaclass=ABCMeta):
             raise ValueError("i = {0:d} out of bounds for finite MPS".format(i))
         op = op_list[i % len(op_list)]
         if (isinstance(op, str)):
-            op = self.sites[i % self.L].get_op(op)
-        if op is not None:
+            op = self.get_site(i).get_op(op)
+        elif isinstance(op, npc.Array):
             op = op.shift_charges(i - i % self.L)
         return op
 
@@ -1347,8 +1351,7 @@ class MPS(BaseMPSExpectationValue):
                         self._S[i+1].shape[0] != B.get_leg('vR').ind_len:
                     raise ValueError("shape of B incompatible with len of singular values")
                 if not self.finite or i + 1 < self.L:
-                    B2 = self._B[(i + 1) % self.L]
-                    B2 = B2.shift_charges((i + 1) - (i + 1) % self.L)
+                    B2 = self.get_B(i + 1, form=None)
                     B.get_leg('vR').test_contractible(B2.get_leg('vL'))
             else:
                 assert len(self._S[i + 1].shape) == 2  # special case during DMRG with mixer,
@@ -2233,9 +2236,9 @@ class MPS(BaseMPSExpectationValue):
         if self.bc == 'segment':
             raise ValueError("can't enlarge segment MPS")
         self._B = [self.get_B(j, form=None) for j in range(0, factor * self.L)]
-        self._S = factor * self._S[:-1] + [self._S[-1]]
-        self.sites = [self.sites[self._to_valid_index(j)].shift_charges(j - j % self.L)
-                      for j in range(0, factor * self.L)]
+        self._S = [self.get_SL(j) for j in range(0, factor * self.L)] \
+                  + [self.get_SR(factor * self.L - 1)]
+        self.sites = [self.get_site(j) for j in range(0, factor * self.L)]
         self.form = factor * self.form
         self.test_sanity()
 
@@ -2394,6 +2397,10 @@ class MPS(BaseMPSExpectationValue):
         (L-1)/2 (odd L) as a fixpoint.
         For infinite MPS, the bond between MPS unit cells is another fix point.
         """
+        if not self.chinfo.trivial_shift:
+            msg = ('A symmetry whose charges depend on position might change under inversion '
+                   'This is so far not considered within the implementation.')
+            raise NotImplementedError(msg)
         self.sites = self.sites[::-1]
         self.form = [(f if f is None else (f[1], f[0])) for f in self.form[::-1]]
         self._B = [
@@ -2555,7 +2562,7 @@ class MPS(BaseMPSExpectationValue):
             Copy of self with 'segment' boundary conditions.
         """
         L = self.L
-        sites = [self.sites[i % L].shift_charges(i - i % L) for i in range(first, last + 1)]
+        sites = [self.get_site(i) for i in range(first, last + 1)]
         B = [self.get_B(i) for i in range(first, last + 1)]
         S = [self.get_SL(i) for i in range(first, last + 1)]
         S.append(self.get_SR(last))
@@ -3219,8 +3226,7 @@ class MPS(BaseMPSExpectationValue):
         for i in range(first_site, last_site + 1):
             # theta = wave function in basis vL [sigmas...] p vR
             # where the `sigmas` are already fixed to the measurement results
-            i0 = self._to_valid_index(i)
-            site = self.sites[i0]
+            site = self.get_site(i)
             if ops is not None:
                 op_name = ops[(i - first_site) % len(ops)]
                 op = site.get_op(op_name).transpose(['p', 'p*'])
