@@ -1253,6 +1253,9 @@ class MPO:
         if not self.finite:
             return i % self.L
         if i < 0:
+            msg = ('Negative site indices for open boundary conditions are deprecated and will '
+                   'raise a ValueError in the future')
+            warnings.warn(msg, category=FutureWarning, stacklevel=3)
             i += self.L
         if i >= self.L + int(bond) or i < 0:
             raise KeyError("i = {0:d} out of bounds for finite MPO".format(i))
@@ -2278,6 +2281,9 @@ class MPOEnvironment(BaseEnvironment):
         if not self.finite:
             return i % self.L
         if i < 0:
+            msg = ('Negative site indices for open boundary conditions are deprecated and will '
+                   'raise a ValueError in the future')
+            warnings.warn(msg, category=FutureWarning, stacklevel=3)
             i += self.L
         if i >= self.L or i < 0:
             raise KeyError("i = {0:d} out of bounds for finite MPS".format(i))
