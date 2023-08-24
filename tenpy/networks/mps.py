@@ -2256,12 +2256,12 @@ class MPS(BaseMPSExpectationValue):
         """
         if self.finite:
             raise ValueError("makes only sense for infinite boundary conditions")
-        inds = np.roll(np.arange(self.L), shift)
-        self.sites = [self.sites[i] for i in inds]
-        self.form = [self.form[i] for i in inds]
-        self._B = [self._B[i] for i in inds]
-        self._S = [self._S[i] for i in inds]
-        self._S.append(self._S[0])
+        inds = np.arange(self.L) - shift
+        valid_inds = inds % self.L
+        self.sites = [self.sites[i] for i in valid_inds]
+        self.form = [self.form[i] for i in valid_inds]
+        self._B = [self.get_B(i) for i in inds]
+        self._S = [self.get_SL(i) for i in inds] + [self.get_SR(inds[-1])]
 
     def enlarge_chi(self, extra_legs, random_fct=np.random.normal):
         """Artifically enlarge the bond dimension by the specified extra legs/charges. In place.
