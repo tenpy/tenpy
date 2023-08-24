@@ -152,6 +152,7 @@ import warnings
 import random
 from functools import reduce
 import copy
+from collections.abc import Iterable
 import logging
 
 logger = logging.getLogger(__name__)
@@ -1699,7 +1700,7 @@ class MPS(BaseMPSExpectationValue):
             conservation gets enabled.
             If `permute` is True (default), we permute the given `Bflat` locally according to
             each site's :attr:`~tenpy.networks.Site.perm`.
-            The `p_state` argument should then always be given as if `conserve=None` in the Site.
+            The `Bflat` should then always be given as if `conserve=None` in the Site.
         form : (list of) {``'B' | 'A' | 'C' | 'G' | None`` | tuple(float, float)}
             Defines the canonical form of `Bflat`. See module doc-string.
             A single choice holds for all of the entries.
@@ -3714,11 +3715,16 @@ class MPS(BaseMPSExpectationValue):
         """
         assert (not self.finite)
         T = TransferMatrix(self, self, charge_sector=charge_sector, form='B')
+        if any(chi == 1 for chi in self.chi):
+            return 0.  # product states have zero correlation length
         num = max(target + 1, self._transfermatrix_keep)
         E, _ = T.eigenvectors(num, which='LM')
         E = E[np.argsort(-np.abs(E))]  # sort descending by magnitude
-        if charge_sector is not None and charge_sector != 0 and \
+
+        if charge_sector is not None and isinstance(charge_sector, Iterable) and \
                 any([c != 0 for c in charge_sector]):
+                # issue 289: iterable check excludes charge_sector=0,
+                # but works for numpy arrays as well.
             # need also dominant eigenvector: include 0 charge sector to results
             del T
             T = TransferMatrix(self, self, charge_sector=0, form='B')
@@ -3729,7 +3735,7 @@ class MPS(BaseMPSExpectationValue):
             logger.warning("Correlation length: largest eigenvalue not one. "
                            "Not in canonical form/normalized?")
         if len(E) < 2:
-            return 0.  # only a single eigenvector: zero correlation length
+            return 0.  # charge sector with only a single eigenvector: zero correlation length
         if target == 1:
             return -1. / np.log(abs(E[1] / E[0])) * self.L
         return -1. / np.log(np.abs(E[1:target + 1] / E[0])) * self.L

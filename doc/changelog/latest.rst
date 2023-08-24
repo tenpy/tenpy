@@ -68,3 +68,4 @@ Fixed
 - :issue:`265` that MPO methods :meth:`~tenpy.networks.mpo.MPO.make_U_I`, `make_U_II`, `apply_naively` and `apply_zipup` 
   just ignored the `explicit_plus_hc` flag of the MPO, possibly giving completely wrong results without raising errors.
 - Make sure that :func:`~tenpy.linalg.np_conserved.eigh` doesn't have a :class:`~tenpy.linalg.charges.LegPipe` on the second (=new) leg.
+- :issue:`289` that :meth:`~tenpy.networks.mps.MPS.correlation_length` raised errors for `charge_sector` np ndarrays.

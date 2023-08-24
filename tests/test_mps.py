@@ -5,6 +5,7 @@ import numpy as np
 import numpy.testing as npt
 import warnings
 from tenpy.models.xxz_chain import XXZChain
+from tenpy.models.aklt import AKLTChain
 from tenpy.models.lattice import Square, Chain, Honeycomb
 
 from tenpy.tools import misc
@@ -578,6 +579,20 @@ def test_expectation_value_multisite():
     env1 = mps.MPSEnvironment(psi1, psi)
     ev = env1.expectation_value(SpSm) # = <psi|dagger(SpSm)_2 SpSm_i |psi>
     npt.assert_almost_equal(ev, np.array([+0.25, 0., 0.5, 0., 0.25]))
+
+
+def test_correlation_length():
+    spin_half = site.SpinHalfSite(conserve=None, sort_charge=True)
+    up_state = ['up'] * 4
+    psi_product = mps.MPS.from_product_state([spin_half] * 4, up_state, bc='infinite')
+    assert psi_product.correlation_length() == 0.
+
+    # generate test-MPS with non-trivial correlation length
+    model_AKLT = AKLTChain({'bc_MPS': 'infinite', 'L': 2})
+    psi_AKLT = model_AKLT.psi_AKLT()
+    xi_AKLT = 1./np.log(3)
+    xi = psi_AKLT.correlation_length()
+    assert abs(xi - xi_AKLT) < 1.e-13
 
 
 def test_MPSEnvironment_expectation_values():
