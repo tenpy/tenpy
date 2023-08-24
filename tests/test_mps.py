@@ -590,9 +590,13 @@ def test_correlation_length():
     # generate test-MPS with non-trivial correlation length
     model_AKLT = AKLTChain({'bc_MPS': 'infinite', 'L': 2})
     psi_AKLT = model_AKLT.psi_AKLT()
+    # eigenvalues of AKLT single-site TM are [1, 1./3., 1./3., 1/3.] for charges [0, 0, +2, -2]
     xi_AKLT = 1./np.log(3)
     xi = psi_AKLT.correlation_length()
     assert abs(xi - xi_AKLT) < 1.e-13
+    xi = psi_AKLT.correlation_length(charge_sector=[-2])
+    assert abs(xi - xi_AKLT) < 1.e-13
+
 
 
 def test_MPSEnvironment_expectation_values():

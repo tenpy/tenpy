@@ -3740,6 +3740,40 @@ class MPS(BaseMPSExpectationValue):
             return -1. / np.log(abs(E[1] / E[0])) * self.L
         return -1. / np.log(np.abs(E[1:target + 1] / E[0])) * self.L
 
+    def correlation_length_charge_sectors(self, drop_symmetric=True, include_0=True):
+        """Return possible `charge_sector` argument for :meth:`correlation_length`.
+
+        The :meth:`correlation_length` is calculated from eigenvalues of the transfer matrix.
+        The left/right eigenvectors correspond to contraction of the left/right parts of
+        the transfer-matrix in the network of the :meth:`correlation_function`.
+        The `charge_sector` one can pass to the :meth:`correlation_length` (or
+        :class:`TransferMatrix`, respectively) is the `qtotal` that eigenvector.
+
+        Since bra and ket are identical for the :meth:`correlation_length`, one can flip
+        top and bottem and to an overall `conjugate`, and gets back to the same TransferMatrix,
+        hence eigenvalues of a given eigenvector and it's dagger (seen as a matrix with legs
+        ``'vL', 'vL*'``) are identical. Since that flips the sign of all charges, we can conclude
+        that the correlation length in a given charge sector and the negative charge sector are
+        identical.
+        The option `drop_symmetric` hence allows to only return charge sectors where the negative
+        charge sector was not yet returned.
+
+        Parameters
+        ----------
+        drop_symmetric : bool
+            See above.
+        """
+        vR = self.get_B(self.L - 1).get_leg('vR')
+        pipe = npc.LegPipe([vR, vR.conj()], qconj=-1).conj()
+        charges = pipe.charges  # this is lexsorted
+        if not drop_symmetric:
+            return charges
+        conj_charges = self.chinfo.make_valid(-charges)
+        perm = np.lexsort(conj_charges.T)
+        keep = (perm <= np.arange(len(perm)))
+        # note: the equal is necessary to include 0 and e.g. 2 for a Z_4 charge.
+        return charges[keep]
+
     def add(self, other, alpha, beta, cutoff=1.e-15):
         """Return an MPS which represents ``alpha|self> + beta |others>``.
 
