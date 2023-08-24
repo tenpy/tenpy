@@ -1427,8 +1427,9 @@ class Mixer:
             If the virtual index left of `S` should be expanded.
         mix_right : bool
             If the virtual index right of `S` should be expanded.
-        qtotal_LR : [{charges|None}, {charges|None}]
+        qtotal_LR : [{charges}, {charges}] | None
             The desired `qtotal` for `U` and `VH`, respectively.
+            If ``None``, the `qtotal` are arbitrary.
 
         Returns
         -------
@@ -1466,6 +1467,7 @@ class Mixer:
         The double lines (``===``) indicate the mixed/expanded bonds.
         Only the tensor with a physical leg (e.g. `U` for a right mive) is an isometry and is
         equivalent to the corresponding output of :meth:`mixed_svd_2site`.
+        It carries the `qtotal` of `theta`.
         The other (e.g. `VH` for a right move) is in general not isometric.
         `S` are the usual singular values.
 
@@ -1500,7 +1502,7 @@ class Mixer:
         raise NotImplementedError(msg)
 
     def mix_and_decompose_2site(self, engine: Sweep, theta: npc.Array, i0: int, mix_left: bool,
-                                mix_right: bool, qtotal_LR=[None, None]):
+                                mix_right: bool, qtotal_LR=None):
         """Decompose two-site wavefunction and expand/mix enclosed bond(s).
 
         This is a weaker version of :meth:`mixed_svd_2site`. The decomposition is also::
@@ -1526,11 +1528,13 @@ class Mixer:
             # mix left site by treating p1 as part of vR leg
             theta_L = theta.replace_label('(p1.vR)', 'vR')
             U, _, _, err_L = self.mix_and_decompose_1site(engine, theta_L, i0, move_right=True)
-            U = U.gauge_total_charge(1, qtotal_LR[0])
+            if qtotal_LR is not None:
+                U = U.gauge_total_charge(1, qtotal_LR[0])
             # mix right site by trating p0 as part of vL leg
             theta_R = theta.replace_labels(['(vL.p0)', '(p1.vR)'], ['vL', '(p0.vR)'])
             _, S_approx, VH, err_R = self.mix_and_decompose_1site(engine, theta_R, i0 + 1, move_right=False)
-            VH = VH.gauge_total_charge(0, qtotal_LR[1])
+            if qtotal_LR is not None:
+                VH = VH.gauge_total_charge(0, qtotal_LR[1])
             VH.ireplace_label('(p0.vR)', '(p1.vR)')
             # calculate S = U^H theta V
             theta = npc.tensordot(U.conj(), theta, axes=['(vL*.p0*)', '(vL.p0)'])
@@ -1764,7 +1768,8 @@ class DensityMatrixMixer(Mixer):
         S_a = np.sqrt(val_L)
         keep_L, _, err_L = truncate(S_a, engine.trunc_params)
         U.iproject(keep_L, axes='vR')  # in place
-        U = U.gauge_total_charge(1, qtotal_LR[0])
+        if qtotal_LR is not None:
+            U = U.gauge_total_charge(1, qtotal_LR[0])
         # rho_R ~=  theta^T theta^* = V^* S U^T U* S V^T = V^* S S V^T  (for mixer -> 0)
         # Thus, rho_R V^* = V^* S S, i.e. columns of V^* are eigenvectors of rho_R
         val_R, Vc = npc.eigh(rho_R)
@@ -1774,7 +1779,8 @@ class DensityMatrixMixer(Mixer):
         val_R /= np.sum(val_R)
         keep_R, _, err_R = truncate(np.sqrt(val_R), engine.trunc_params)
         VH.iproject(keep_R, axes='vL')
-        VH = VH.gauge_total_charge(0, qtotal_LR[1])
+        if qtotal_LR is not None:
+            VH = VH.gauge_total_charge(0, qtotal_LR[1])
 
         # calculate S = U^H theta V
         theta = npc.tensordot(U.conj(), theta, axes=['(vL*.p0*)', '(vL.p0)'])  # axes 0, 0
