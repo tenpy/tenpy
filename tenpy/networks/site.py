@@ -2008,3 +2008,205 @@ class ClockSite(Site):
 
     def __repr__(self):
         return f'ClockSite(q={self.q}, conserve={self.conserve})'
+
+
+class DipolarBosonSite(Site):
+    r"""Create a :class:`Site` for up to `Nmax` bosons with dipole conservation.
+    
+    Local states are ``vac, 1, 2, ... , Nc``.
+
+    ==============  ========================================
+    operator        description
+    ==============  ========================================
+    ``Id, JW``      Identity :math:`\mathbb{1}`
+    ``B``           Annihilation operator :math:`b`
+    ``Bd``          Creation operator :math:`b^\dagger`
+    ``N``           Number operator :math:`n= b^\dagger b`
+    ``NN``          :math:`n^2`
+    ``P``           Parity :math:`Id - 2 (n \mod 2)`.
+    ==============  ========================================
+
+    Parameters
+    ----------
+    j : int
+        Lattice site index
+    Nmax : int
+        Cutoff defining the maximum number of bosons per site.
+        The default ``Nmax=1`` describes hard-core bosons.
+    conserve_N : bool
+        Whether to conserve the total particle number
+    conserve_P : bool
+        Whether to conserve the total dipole moment
+
+    Attributes
+    ----------
+    j : int
+        The site index; required for dipole conservation.
+    Nmax : int
+        Cutoff defining the maximum number of bosons per site.
+    conserve : str
+        Defines what is conserved, see table above.
+    filling : float
+        Average filling. Used to define ``dN``.
+    """
+
+    def __init__(self, Nmax=1, conserve_N=True, conserve_P=True):
+        dim = Nmax + 1
+        states = [str(n) for n in range(0, dim)]
+        if dim < 2:
+            raise ValueError("local dimension should be larger than 1....")
+        B = np.zeros([dim, dim], dtype=np.float64)  # annihilation operator
+        for n in range(1, dim):
+            B[n - 1, n] = np.sqrt(n)
+        Bd = np.transpose(B)
+        Ndiag = np.arange(dim, dtype=np.float64)
+        N = np.diag(Ndiag)
+        NN = np.diag(Ndiag**2)
+        P = np.diag(1. - 2. * np.mod(Ndiag, 2))
+        ops = dict(B=B, Bd=Bd, N=N, NN=NN, P=P)
+        # define charges
+        qmod = []
+        qnames = []
+        charges = []
+        if conserve_N:
+            qmod.append(1)
+            qnames.append('N')
+            charges.append(list(range(dim)))
+        if conserve_P:
+            qmod.append(1)
+            qnames.append('P')
+            charges.append([0]*dim)  # initialize for j=0
+        if len(qmod) == 0:
+            leg = npc.LegCharge.from_trivial(dim)
+        else:
+            if len(qmod) == 1:
+                charges = charges[0]
+            else:
+                charges = [[q1, q2] for q1, q2 in zip(charges[0], charges[1])]
+            if conserve_P:
+                chinfo = npc.ChargeInfo(qmod, qnames, shift_charges_dipole)
+            else:
+                chinfo = npc.ChargeInfo(qmod, qnames)
+            # define leg
+            leg_unsorted = npc.LegCharge.from_qflat(chinfo, charges)
+            # sort by charges
+            perm_qind, leg = leg_unsorted.sort()
+            perm_flat = leg_unsorted.perm_flat_from_perm_qind(perm_qind)
+            self.perm = perm_flat
+            # permute operators accordingly
+            for opname in ops:
+                ops[opname] = ops[opname][np.ix_(perm_flat, perm_flat)]
+            # and the states
+            states = [states[i] for i in perm_flat]
+
+        self.Nmax = Nmax
+        self.conserve_N = conserve_N
+        self.conserve_P = conserve_P
+        Site.__init__(self, leg, states, **ops)
+        self.state_labels['vac'] = self.state_labels['0']  # alias
+
+    def __repr__(self):
+        """Debug representation of self."""
+        return f"DipolarBosonSite(Nmax={self.Nmax}, conserve_N={self.conserve_N}, conserve_P={self.conserve_P})"
+
+
+class DipolarSpinSite(Site):
+    r"""General Spin S site with dipole conservation.
+
+    There are `2S+1` local states range from ``down`` (0)  to ``up`` (2S+1),
+    corresponding to ``Sz=-S, -S+1, ..., S-1, S``.
+    Local operators are the spin-S operators,
+    e.g. ``Sz = [[0.5, 0.], [0., -0.5]]``,
+    ``Sx = 0.5*sigma_x`` for the Pauli matrix `sigma_x`.
+
+    ==============  ================================================
+    operator        description
+    ==============  ================================================
+    ``Id, JW``      Identity :math:`\mathbb{1}`
+    ``Sx, Sy, Sz``  Spin components :math:`S^{x,y,z}`,
+                    equal to half the Pauli matrices.
+    ``Sp, Sm``      Spin flips :math:`S^{\pm} = S^{x} \pm i S^{y}`
+    ==============  ================================================
+
+    ============== ====  ============================
+    `conserve`     qmod  *excluded* onsite operators
+    ============== ====  ============================
+    ``'Sz'``       [1]   ``Sx, Sy, Sigmax, Sigmay``
+    ``'parity'``   [2]   --
+    ``'None'``     []    --
+    ============== ====  ============================
+
+    Parameters
+    ----------
+    conserve : str
+        Defines what is conserved, see table above.
+    sort_charge : bool
+        Whether :meth:`sort_charge` should be called at the end of initialization.
+        This is usually a good idea to reduce potential overhead when using charge conservation.
+        Note that this permutes the order of the local basis states for ``conserve='parity'``!
+        For backwards compatibility with existing data, it is not (yet) enabled by default.
+
+    Attributes
+    ----------
+    S : {0.5, 1, 1.5, 2, ...}
+        The 2S+1 states range from m = -S, -S+1, ... +S.
+    conserve : str
+        Defines what is conserved, see table above.
+    """
+
+    def __init__(self, S=0.5, conserve='Sz', sort_charge=None):
+        if not conserve:
+            conserve = 'None'
+        if conserve not in ['P', 'Sz', 'parity', 'None']:
+            raise ValueError("invalid `conserve`: " + repr(conserve))
+        self.S = S = float(S)
+        d = 2 * S + 1
+        if d <= 1:
+            raise ValueError("negative S?")
+        if np.rint(d) != d:
+            raise ValueError("S is not half-integer or integer")
+        d = int(d)
+        Sz_diag = -S + np.arange(d)
+        Sz = np.diag(Sz_diag)
+        Sp = np.zeros([d, d])
+        for n in np.arange(d - 1):
+            # Sp |m> =sqrt( S(S+1)-m(m+1)) |m+1>
+            m = n - S
+            Sp[n + 1, n] = np.sqrt(S * (S + 1) - m * (m + 1))
+        Sm = np.transpose(Sp)
+        # Sp = Sx + i Sy, Sm = Sx - i Sy
+        Sx = (Sp + Sm) * 0.5
+        Sy = (Sm - Sp) * 0.5j
+        ops = dict(Sp=Sp, Sm=Sm, Sz=Sz)
+        if conserve == 'P':
+            qmod = [1, 1]
+            qnames = ['N', 'P']
+            charges = [[q1, q2] for q1, q2 in zip(np.array(2 * Sz_diag, dtype=np.int64), [0]*d)]
+            chinfo = npc.ChargeInfo(qmod, qnames, shift_charges_dipole)
+            leg = npc.LegCharge.from_qflat(chinfo, charges)
+        elif conserve == 'Sz':
+            chinfo = npc.ChargeInfo([1], ['2*Sz'])
+            leg = npc.LegCharge.from_qflat(chinfo, np.array(2 * Sz_diag, dtype=np.int64))
+        else:
+            ops.update(Sx=Sx, Sy=Sy)
+            if conserve == 'parity':
+                chinfo = npc.ChargeInfo([2], ['parity_Sz'])
+                leg = npc.LegCharge.from_qflat(chinfo, np.mod(np.arange(d), 2))
+            else:
+                leg = npc.LegCharge.from_trivial(d)
+        self.conserve = conserve
+        names = [str(i) for i in np.arange(-S, S + 1, 1.)]
+        # Site.__init__(self, leg, names, sort_charge=sort_charge, **ops)  # new tenpy version
+        Site.__init__(self, leg, names, **ops)
+        self.state_labels['down'] = self.state_labels[names[0]]
+        self.state_labels['up'] = self.state_labels[names[-1]]
+
+    def __repr__(self):
+        """Debug representation of self."""
+        return f"DipolarSpinSite(S={self.S}, conserve={self.conserve})"
+
+
+def shift_charges_dipole(charges, shift):
+    """Shift charges in accordance with dipole conservation."""
+    charges[:, 1] += shift * charges[:, 0]
+    return charges
