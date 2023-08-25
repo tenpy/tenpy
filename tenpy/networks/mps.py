@@ -161,7 +161,7 @@ from ..linalg import np_conserved as npc
 from ..linalg import sparse
 from ..linalg.krylov_based import Arnoldi
 from .site import GroupedSite, group_sites
-from ..tools.misc import to_iterable, to_array, get_recursive
+from ..tools.misc import argsort, to_iterable, to_array, get_recursive
 from ..tools.math import lcm, speigs, entropy
 from ..tools.params import asConfig
 from ..tools.cache import DictCache
@@ -3667,7 +3667,7 @@ class MPS(BaseMPSExpectationValue):
             Qs[i] = Q.split_legs()
         return Qs, R
 
-    def correlation_length(self, target=1, tol_ev0=1.e-8, charge_sector=0):
+    def correlation_length(self, target=1, tol_ev0=1.e-8, charge_sector=0, return_charges=False):
         r"""Calculate the correlation length by diagonalizing the transfer matrix.
 
         Assumes that `self` is in canonical form.
@@ -3698,12 +3698,19 @@ class MPS(BaseMPSExpectationValue):
         ----------
         target : int
             We look for the `target` + 1 largest eigenvalues.
-        tol_ev0 : float
+        tol_ev0 : float | None
             Print warning if largest eigenvalue deviates from 1 by more than `tol_ev0`.
-        charge_sector : None | charges | ``0``
-            Selects the charge sector in which the dominant eigenvector of the TransferMatrix is.
+            If `None`, **assume** dominant eigenvector in 0-charge-sector to be 1 for
+            non-zero `charge_sector`.
+        charge_sector : None | list of int | ``0`` | list of list of int
+            Selects the charge sector (=list of int) in which we look for the dominant eigenvalue
+            of the TransferMatrix.
             ``None`` stands for *all* sectors, ``0`` stands for the zero-charge sector.
-            Defaults to ``0``, i.e., *assumes* the dominant eigenvector is in charge sector 0.
+            Defaults to ``0``, i.e., **assumes** the dominant eigenvector is in charge sector 0.
+            If you pass a list of charge sectors (i.e. 2D array of int),
+            this function returns `target` dominant eigenvalues in each of those sectors.
+        return_charges : bool
+            If True, return the charge sectors along with the eigenvalues.
 
         Returns
         -------
@@ -3712,33 +3719,101 @@ class MPS(BaseMPSExpectationValue):
             otherwise an array of the `target` largest correlation lengths.
             It is measured in units of a single spacing between sites in the MPS language,
             see the warning above.
+        charge_sectors :  list of charge sectors
+            For each entry in `xi` the charge sector, i.e., qtotal of the dominant eigenvalue.
+
+        See also
+        --------
+        correlation_length_charge_sectors : lists possible charge sectors.
         """
         assert (not self.finite)
-        T = TransferMatrix(self, self, charge_sector=charge_sector, form='B')
+        zero_charge = self.chinfo.make_valid()
         if any(chi == 1 for chi in self.chi):
-            return 0.  # product states have zero correlation length
+            # product states have zero correlation length
+            if return_charges:
+                if target == 1:
+                    return 0, zero_charge
+                return [0] * target, [zero_charge] * target
+            return 0. if target == 1 else [0] * target
+        if charge_sector is not None and isinstance(charge_sector, Iterable):
+            # iterable check excludes charge_sector=0 (c.f. issue 289)
+            charge_sector = self.chinfo.make_valid(charge_sector)
+        elif charge_sector is None:
+            pass
+        else:
+            assert charge_sector == 0
+            charge_sector = zero_charge
         num = max(target + 1, self._transfermatrix_keep)
-        E, _ = T.eigenvectors(num, which='LM')
-        E = E[np.argsort(-np.abs(E))]  # sort descending by magnitude
+        # now charge_sector is None or 1D or 2D ndarray (but not 0)
+        if charge_sector is None or charge_sector.ndim == 1:
+            # a single charge sector or charge_sector=None -> (only dominant eigvals for all charge_sectors)
+            T = TransferMatrix(self, self, charge_sector=charge_sector, form='B')
+            E, V = T.eigenvectors(num, which='LM')
+            # note: LM implies E is sorted largest magnitude first
+            if return_charges:
+                V_charges = [vec.qtotal for vec in V]
+            looked_in_zero_charge_sector = charge_sector is None or np.all(charge_sector == 0)
+        else:
+            assert charge_sector.ndim == 2
+            # loop over different charge sectors
+            charge_sector_list = charge_sector
+            T = TransferMatrix(self, self, form='B')
+            E = []
+            V_charges = []
+            for charge_sector in charge_sector_list:
+                T.charge_sector = charge_sector
+                E_s, V_s = T.eigenvectors(num, which='LM')
+                E.extend(E_s)
+                if return_charges:
+                    V_charges.extend([vec.qtotal for vec in V_s])
+            sort = argsort(E, 'LM')
+            E = np.array(E)[sort]
+            if return_charges:
+                V_charges = [V_charges[i] for i in sort]
+            looked_in_zero_charge_sector = np.any(np.all(charge_sector_list == 0, axis=1))
 
-        if charge_sector is not None and isinstance(charge_sector, Iterable) and \
-                any([c != 0 for c in charge_sector]):
-                # issue 289: iterable check excludes charge_sector=0,
-                # but works for numpy arrays as well.
-            # need also dominant eigenvector: include 0 charge sector to results
-            del T
-            T = TransferMatrix(self, self, charge_sector=0, form='B')
-            E0, _ = T.eigenvectors(num, which='LM')
-            assert abs(E0[0]) > abs(E[0]), "dominant eigenvector in zero charge sector?"
-            E = np.array([E0[0]] + list(E))
-        if abs(E[0] - 1.) > tol_ev0:
-            logger.warning("Correlation length: largest eigenvalue not one. "
-                           "Not in canonical form/normalized?")
-        if len(E) < 2:
-            return 0.  # charge sector with only a single eigenvector: zero correlation length
-        if target == 1:
-            return -1. / np.log(abs(E[1] / E[0])) * self.L
-        return -1. / np.log(np.abs(E[1:target + 1] / E[0])) * self.L
+        if not looked_in_zero_charge_sector:
+            # need to add the eigval 1 from the 0 charge sector
+            if tol_ev0 is not None:
+                # diagonalize zero_charge sector
+                T.charge_sector = zero_charge
+                E0, _ = T.eigenvectors(num, which='LM')
+                E0 = E0[0]
+            else:
+                E0 = 1.   # explicitly set it by hand
+            if not abs(E0) > abs(E[0]):
+                # shouldn't happen... error handling or warning with only numerical errors?
+                if tol_ev0 is not None and abs(E[0]) - abs(E0) < tol_ev0:
+                    prec = tol_ev0
+                elif tol_ev0 is None and abs(E[0]) - abs(E0) < 1.e-5:
+                    prec = 1.e-5
+                else:
+                    prec = None
+                if prec is not None:
+                    logger.warning("correlation_length: other charge sector has eigenvalue "
+                                   " bigger than the eigenvalue 1. in the zero charge sector, "
+                                   "but still within precision {prec:.1e}")
+                    E0 = E[0] + prec
+                else:
+                    raise ValueError("dominant eigenvalue is not in zero charge sector???")
+            E = [E0] + list(E)
+            if return_charges:
+                V_charges = [None] + V_charges
+        if tol_ev0 is not None and abs(E[0] - 1.) > tol_ev0:
+            logger.warning(f"Correlation length: largest eigenvalue not one, but {E[0]:%.12f}. "
+                            "Not in canonical form/normalized?")
+        assert len(E) >= 2
+        E = np.array(E)
+        xis = -1. / np.log(np.abs(E[1:target + 1] / E[0])) * self.L
+        # finally return
+        if return_charges:
+            if target == 1:
+                return xis[0], V_charges[1]
+            return xis, V_charges[1:]
+        else:
+            if target == 1:
+                return xis[0]
+            return xis
 
     def correlation_length_charge_sectors(self, drop_symmetric=True, include_0=True):
         """Return possible `charge_sector` argument for :meth:`correlation_length`.
@@ -3763,6 +3838,8 @@ class MPS(BaseMPSExpectationValue):
         drop_symmetric : bool
             See above.
         """
+        if self.chinfo.qnumber == 0:
+            return []
         vR = self.get_B(self.L - 1).get_leg('vR')
         pipe = npc.LegPipe([vR, vR.conj()], qconj=-1).conj()
         charges = pipe.charges  # this is lexsorted
@@ -5254,6 +5331,8 @@ class TransferMatrix(sparse.NpcLinearOperator):
         Selects the charge sector of the vector onto which the Linear operator acts.
         ``None`` stands for *all* sectors, ``0`` stands for the zero-charge sector.
         Defaults to ``0``, i.e., **assumes** the dominant eigenvector is in charge sector 0.
+        Note that you can update the `charge_sector` after initialization
+        via the :attr:`charge_sector` property.
     form : ``'B' | 'A' | 'C' | 'G' | 'Th' | None`` | tuple(float, float)
         In which canonical form we take the `M` and `N` matrices.
 
@@ -5378,6 +5457,14 @@ class TransferMatrix(sparse.NpcLinearOperator):
         self.shift_bra = self.shift_ket = 0
         self._init_from_Ns_Ms(bra_N, ket_M, transpose, charge_sector, p_label)
         return self
+
+    @property
+    def charge_sector(self):
+        return self.flat_linop.charge_sector
+
+    @charge_sector.setter
+    def charge_sector(self, value):
+        self.flat_linop.charge_sector = value
 
     def matvec(self, vec):
         """Given `vec` as an npc.Array, apply the transfer matrix.
