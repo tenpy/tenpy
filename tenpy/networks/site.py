@@ -28,6 +28,8 @@ __all__ = [
     'SpinHalfHoleSite',
     'BosonSite',
     'ClockSite',
+    'DipolarBosonSite',
+    'DipolarSpinSite',
     'spin_half_species',
 ]
 
@@ -2084,7 +2086,7 @@ class DipolarBosonSite(Site):
             else:
                 charges = [[q1, q2] for q1, q2 in zip(charges[0], charges[1])]
             if conserve_P:
-                chinfo = npc.ChargeInfo(qmod, qnames, shift_charges_dipole)
+                chinfo = npc.ChargeInfo(qmod, qnames, _shift_charges_dipole)
             else:
                 chinfo = npc.ChargeInfo(qmod, qnames)
             # define leg
@@ -2182,7 +2184,7 @@ class DipolarSpinSite(Site):
             qmod = [1, 1]
             qnames = ['N', 'P']
             charges = [[q1, q2] for q1, q2 in zip(np.array(2 * Sz_diag, dtype=np.int64), [0]*d)]
-            chinfo = npc.ChargeInfo(qmod, qnames, shift_charges_dipole)
+            chinfo = npc.ChargeInfo(qmod, qnames, _shift_charges_dipole)
             leg = npc.LegCharge.from_qflat(chinfo, charges)
         elif conserve == 'Sz':
             chinfo = npc.ChargeInfo([1], ['2*Sz'])
@@ -2206,7 +2208,7 @@ class DipolarSpinSite(Site):
         return f"DipolarSpinSite(S={self.S}, conserve={self.conserve})"
 
 
-def shift_charges_dipole(charges, shift):
+def _shift_charges_dipole(charges, shift):
     """Shift charges in accordance with dipole conservation."""
     charges[:, 1] += shift * charges[:, 0]
     return charges

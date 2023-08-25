@@ -9,7 +9,7 @@ from ..tools.params import asConfig
 from ..networks.site import FermionSite, BosonSite, SpinHalfFermionSite, spin_half_species, DipolarBosonSite
 
 __all__ = ['BoseHubbardModel', 'BoseHubbardChain', 'FermiHubbardModel', 'FermiHubbardChain',
-           'FermiHubbardModel2']
+           'FermiHubbardModel2', 'DipolarBoseHubbardChain']
 
 
 class BoseHubbardModel(CouplingMPOModel):
