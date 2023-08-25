@@ -6,7 +6,7 @@ Uniform lattice of spin-S sites, coupled by nearest-neighbour interactions.
 
 import numpy as np
 
-from ..networks.site import SpinSite
+from ..networks.site import SpinSite, DipolarSpinSite
 from .model import CouplingMPOModel, NearestNeighborModel
 from .lattice import Chain
 from ..tools.params import asConfig
