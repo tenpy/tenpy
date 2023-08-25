@@ -6,7 +6,7 @@ import numpy as np
 from .model import CouplingMPOModel, NearestNeighborModel
 from .lattice import Chain
 from ..tools.params import asConfig
-from ..networks.site import FermionSite, BosonSite, SpinHalfFermionSite, spin_half_species
+from ..networks.site import FermionSite, BosonSite, SpinHalfFermionSite, spin_half_species, DipolarBosonSite
 
 __all__ = ['BoseHubbardModel', 'BoseHubbardChain', 'FermiHubbardModel', 'FermiHubbardChain',
            'FermiHubbardModel2']
@@ -227,3 +227,34 @@ class FermiHubbardModel2(CouplingMPOModel):
 
         for u1, u2, dx in self.lat.pairs['nearest_neighbors_all-all']:
             self.add_coupling(V, u1, 'N', u2, 'N', dx)
+
+
+class DipolarBoseHubbardChain(CouplingMPOModel):
+    """Dipolar Bose-Hubbard model with and without explicit dipole conservation"""
+
+    def init_lattice(self, model_params):
+        """Initialize a 1D lattice"""
+        L = model_params.get('L', 64)
+        Nmax = model_params.get('Nmax', 2)
+        cons_N = model_params.get('cons_N', True)
+        cons_P = model_params.get('cons_P',  True)
+        bc_MPS = model_params.get('bc_MPS', 'finite')
+        bc = 'periodic' if bc_MPS in ['infinite', 'segment'] else 'open'
+        bc = model_params.get('bc', bc)
+        return Chain(L, DipolarBosonSite(Nmax=Nmax, conserve_N=cons_N, conserve_P=cons_P), bc=bc, bc_MPS=bc_MPS)
+
+    def init_terms(self, model_params):
+        """Add the onsite and coupling terms to the model"""
+        L = model_params.get('L', 64)
+        U = model_params.get('U', 1)
+        t = model_params.get('t', 1)
+        t_4 = model_params.get('t_4', 0)
+        mu = model_params.get('mu', 0)
+
+        # dipole hopping
+        self.add_multi_coupling(-t, [('Bd', 0, 0), ('B', 1, 0), ('B', 1, 0), ('Bd', 2, 0)], plus_hc=True)
+        self.add_multi_coupling(-t_4, [('Bd', 0, 0), ('B', 1, 0), ('B', 2, 0), ('Bd', 3, 0)], plus_hc=True)
+
+        # on-site interactions and chemical potential
+        self.add_onsite(U/2., 0, 'NN')
+        self.add_onsite(-mu-U/2., 0, 'N')

@@ -106,3 +106,27 @@ class SpinChain(SpinModel, NearestNeighborModel):
     """
     default_lattice = Chain
     force_default_lattice = True
+
+
+class DipolarSpinChain(CouplingMPOModel):
+    """H3-H4 spin-S model with and without explicit dipole conservation"""
+
+    def init_lattice(self, model_params):
+        """Initialize a 1D lattice"""
+        L = model_params.get('L', 64)
+        S = model_params.get('S', 1)
+        cons_N = model_params.get('cons_Sz', True)
+        cons_P = model_params.get('cons_P',  True)
+        bc_MPS = model_params.get('bc_MPS', 'finite')
+        bc = 'periodic' if bc_MPS in ['infinite', 'segment'] else 'open'
+        bc = model_params.get('bc', bc)
+        cons = 'P' if (cons_N and cons_P) else ('Sz' if cons_N else None)
+        return Chain(L, DipolarSpinSite(S=S, conserve=cons), bc=bc, bc_MPS=bc_MPS)
+
+    def init_terms(self, model_params):
+        """Add the onsite and coupling terms to the model"""
+        J3 = model_params.get('J3', 1)
+        J4 = model_params.get('J4', 0)
+
+        self.add_multi_coupling(-J3, [('Sp', 0, 0), ('Sm', 1, 0), ('Sm', 1, 0), ('Sp', 2, 0)], plus_hc=True)
+        self.add_multi_coupling(-J4, [('Sp', 0, 0), ('Sm', 1, 0), ('Sm', 2, 0), ('Sp', 3, 0)], plus_hc=True)
