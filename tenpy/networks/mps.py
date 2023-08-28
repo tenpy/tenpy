@@ -1983,7 +1983,7 @@ class MPS(BaseMPSExpectationValue):
         elif self.bc == 'infinite':
             return slice(0, self.L)
 
-    def get_B(self, i, form='B', copy=False, cutoff=1.e-16, label_p=None):
+    def get_B(self, i, form='B', copy=False, cutoff=1.e-16, label_p=None, avoid_S_inverse=False):
         """Return (view of) `B` at site `i` in canonical form.
 
         Parameters
@@ -2005,6 +2005,9 @@ class MPS(BaseMPSExpectationValue):
             Otherwise replace the physical label ``'p'`` with ``'p'+label_p'``.
             (For derived classes with more than one "physical" leg, replace all the physical leg
             labels accordingly.)
+        avoid_S_inverse : bool
+            If True, try to avoid taking inverses of singular values at the cost of additional
+            SVDs to move the orthogonality center locally. See :meth:`get_B`.
 
         Returns
         -------
@@ -2026,12 +2029,66 @@ class MPS(BaseMPSExpectationValue):
         if new_form is not None and old_form != new_form:
             if old_form is None:
                 raise ValueError("can't convert form of non-canonical state!")
-            if new_form[0] is not None and new_form[0] - old_form[0] != 0.:
-                B = self._scale_axis_B(B, self.get_SL(i), new_form[0] - old_form[0], 'vL', cutoff)
-            if new_form[1] is not None and new_form[1] - old_form[1] != 0.:
-                B = self._scale_axis_B(B, self.get_SR(i), new_form[1] - old_form[1], 'vR', cutoff)
+            # try avoid inverses of singular values, see :issue:`???` # TODO
+            # typical case e.g. in iDMRG when inserting unit cells
+            if avoid_S_inverse and old_form == (1., 0.) and new_form == (0., 1.):
+                # got A, need B
+                B = self._scale_B_inverse_free(i, B, A_to_B=True)
+            elif avoid_S_inverse and old_form == (0., 1.) and new_form == (1., 0.):
+                # got B, need A
+                B = self._scale_B_inverse_free(i, B, A_to_B=False)
+            else:
+                # scale individual axes
+                if new_form[0] is not None:
+                    change_L = new_form[0] - old_form[0]
+                    if change_L != 0.:
+                        #  if change_L < 0:
+                        #      warnings.warn("inverse singular values!", stacklevel=2) # TODO: do we need this anywhere in TeNPy now?
+                        B = self._scale_axis_B(B, self.get_SL(i), change_L, 'vL', cutoff)
+                if new_form[1] is not None:
+                    change_R = new_form[1] - old_form[1]
+                    if change_R != 0.:
+                        #  if change_R < 0:
+                        #      warnings.warn("inverse singular values!", stacklevel=2) # TODO: do we need this anywhere in TeNPy now?
+                        B = self._scale_axis_B(B, self.get_SR(i), change_R, 'vR', cutoff)
         if label_p is not None:
             B = self._replace_p_label(B, label_p)
+        return B
+
+    def _scale_B_inverse_free(self, i, A, A_to_B=True):
+        """Change from A to B canonical form with extra SVD instead of inverses of singular values.
+
+        If `A_to_B` = True, we transfrom the given `A` to `B`-form.
+        If `A_to_B` = False, we assume we're given `B` form and return `A` form.
+
+        The returned B is an isometry, say for A_to_B (analogously statements for B_to_A),
+        if 1) the
+        """
+        SL = self.get_SL(i)
+        SR = self.get_SR(i)
+        # first get 1-site wave function theta
+        if A_to_B:  # convert A to B
+            th = self._scale_axis_B(A, SR, 1., 'vR', cutoff=None)
+            if isinstance(SL, npc.Array):
+                # mixer is on, so SL is a 2D array.
+                # The `A` includes the SL, so has the leg *left* of SL.
+                # `B` should have leg *right* of SL, so we need to apply the basis trafo from
+                # left of SL to right of SL on the `vL` leg of `th`
+                U, _, Vd = npc.svd(SL.transpose(['vL', 'vR']), inner_labels=['vR', 'vL'])
+                V_Ud = npc.tensordot(U, Vd, axes=['vR', 'vL']).conj().itranspose(['vR*', 'vL*'])
+                th = npc.tensordot(V_Ud, th, axes=['vL*', 'vL']).ireplace_label('vR*', 'vL')
+            th = th.combine_legs([['vL'], self._p_label + ['vR']], qconj=[+1, -1])
+        else:  # convert B to A
+            #  assert False, "where do we need this????"
+            th = self._scale_axis_B(A, SL, 1., 'vL', cutoff=None)
+            if isinstance(SR, npc.Array):
+                U, _, Vd = npc.svd(SR.transpose(['vL', 'vR']), inner_labels=['vR', 'vL'])
+                V_Ud = npc.tensordot(U, Vd, axes=['vR', 'vL']).conj().itranspose(['vR*', 'vL*'])
+                th = npc.tensordot(th, V_Ud, axes=['vR', 'vR*']).ireplace_label('vL*', 'vR')
+            th = th.combine_legs([['vL'] + self._p_label, ['vR']], qconj=[+1, -1])
+        # now svd-decompose to remove the S on the left(A_to_B=True)/right.
+        U, _, Vd = npc.svd(th, inner_labels=['vR', 'vL'])
+        B = npc.tensordot(U, Vd, axes=['vR', 'vL']).split_legs()
         return B
 
     def set_B(self, i, B, form='B'):
@@ -2117,7 +2174,7 @@ class MPS(BaseMPSExpectationValue):
         if not self.finite and i == self.L - 1:
             self._S[0] = S
 
-    def get_theta(self, i, n=2, cutoff=1.e-16, formL=1., formR=1.):
+    def get_theta(self, i, n=2, cutoff=1.e-16, formL=1., formR=1., avoid_S_inverse=False):
         """Calculates the `n`-site wavefunction on ``sites[i:i+n]``.
 
         Parameters
@@ -2134,6 +2191,9 @@ class MPS(BaseMPSExpectationValue):
             Exponent for the singular values to the left.
         formR : float
             Exponent for the singular values to the right.
+        avoid_S_inverse : bool
+            If True, try to avoid taking inverses of singular values at the cost of additional
+            SVDs to move the orthogonality center locally. See :meth:`get_B`.
 
         Returns
         -------
@@ -2147,16 +2207,17 @@ class MPS(BaseMPSExpectationValue):
             if self.form[j % self.L] is None:
                 raise ValueError("can't calculate theta for non-canonical form")
         if n == 1:
-            return self.get_B(i, (1., 1.), True, cutoff, '0')
+            return self.get_B(i, (1., 1.), True, cutoff, '0', avoid_S_inverse)
         elif n < 1:
             raise ValueError("n needs to be larger than 0")
         # n >= 2: contract some B's
-        theta = self.get_B(i, (formL, None), False, cutoff, '0')  # right form as stored
+        # get right form as stored
+        theta = self.get_B(i, (formL, None), False, cutoff, '0', avoid_S_inverse)
         _, old_fR = self.form[i]
         for k in range(1, n):  # non-empty range
             j = self._to_valid_index(i + k)
             new_fR = None if k + 1 < n else formR  # right form as stored, except for last B
-            B = self.get_B(j, (1. - old_fR, new_fR), False, cutoff, str(k))
+            B = self.get_B(j, (1. - old_fR, new_fR), False, cutoff, str(k), avoid_S_inverse)
             _, old_fR = self.form[j]
             theta = npc.tensordot(theta, B, axes=['vR', 'vL'])
         return theta
@@ -3949,7 +4010,6 @@ class MPS(BaseMPSExpectationValue):
         if not self.finite and not understood_infinite:
             warnings.warn("For infinite MPS, apply_local_op acts on *each* unit cell in parallel."
                           "See the warning in the docs of tenpy.networks.mps.")
-
         i = self._to_valid_index(i)
         if isinstance(op, str):
             op = self.sites[i].get_op(op)
@@ -4503,6 +4563,7 @@ class MPS(BaseMPSExpectationValue):
                 raise ValueError("Can't scale/tensordot a 2D `S` for non-integer `form_diff`")
 
             # Hack: mpo.MPOEnvironment.full_contraction uses ``axis_B == 'vL*'``
+            # TODO: this hack is no longer used, can we remove vL*, vR*???
             if axis_B == 'vL' or axis_B == 'vL*':
                 B = npc.tensordot(S, B, axes=[1, axis_B]).replace_label(0, axis_B)
             elif axis_B == 'vR' or axis_B == 'vR*':
