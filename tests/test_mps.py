@@ -292,6 +292,31 @@ def test_canonical_form(bc, method):
             assert A_err < 1.e-13
 
 
+def test_orthogonality_center():
+    s = site.SpinHalfSite(None)
+    L = 5
+    psi = mps.MPS.from_product_state([s]*L, ['up']*L, form='B')
+    assert psi.find_orthogonality_center() == 0
+    assert psi.find_orthogonality_center(strict=False) == 0
+    psi = mps.MPS.from_product_state([s]*L, ['up']*L, form='A')
+    assert psi.find_orthogonality_center() == psi.L - 1
+    assert psi.find_orthogonality_center(strict=False) == psi.L - 1
+    psi = mps.MPS.from_product_state([s]*L, ['up']*L, form=['A', 'A', 'B', 'A', 'B'])
+    with pytest.raises(ValueError) as excinfo:
+        c = psi.find_orthogonality_center()
+        assert "No strict orthogonality center" in str(excinfo.value)
+    cs = psi.find_orthogonality_center(strict=False, find_all=True)
+    assert cs == [1, 3]
+    psi = mps.MPS.from_product_state([s]*L, ['up']*L, form=['A', 'A', 'Th', 'B', 'B'])
+    assert psi.find_orthogonality_center() == 2
+    psi.move_orthogonality_center(to_i=1)
+    assert psi.find_orthogonality_center() == 1
+    psi.move_orthogonality_center(to_i=4)
+    assert psi.find_orthogonality_center() == 4
+    psi.move_orthogonality_center(to_i=0)
+    assert psi.find_orthogonality_center() == 0
+
+
 @pytest.mark.parametrize("bc", ['finite', 'infinite'])
 def test_apply_op(bc, eps=1.e-13):
     s = site.SpinHalfSite(None)

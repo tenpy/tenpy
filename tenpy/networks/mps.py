@@ -2240,6 +2240,121 @@ class MPS(BaseMPSExpectationValue):
             new_B = self.get_B(i, form=new_form, copy=False)  # calculates the desired form.
             self.set_B(i, new_B, form=new_form)
 
+    def find_orthogonality_center(self, strict=None, find_all=False):
+        """Find (the) orthogonality center.
+
+        Parameters
+        ----------
+        strict : bool | None
+            None defaults to `self.finite`.
+            If True, demand local site is `A` or `Th` and that all tensors left of the
+            orthogonality center are in `A` form and all tensors on the right are in `B` form.
+            Thus, with a transition with forms ``..., 'A', 'A', 'B', 'B', ...``, the last
+            ``'A'`` site is taken.
+            For all-`A` or all-`B` tensors, take the first and last site.
+            If `False`, define the orthogonality center more generally as a site where
+            the local tensor is in `A` or `Th` form (i.e. has singular values on the left),
+            and (if not the last site on finite system) the next tensor is in `B` form
+            Note that e.g. during the iDMRG sweep, there is no strict orthogonality center due to
+            the way the unit cells are inserted.
+        find_all : bool
+            If True, find any number of (non-strict) orthogonality centers and return a list.
+
+        Returns
+        -------
+        center : int  | (list of) int
+            If `find_all`, a list of int.
+        """
+        form = self.form
+        L = self.L
+        if any(f is None for f in form):
+            raise ValueError("some tensor is not in canonical form!")
+        if L == 1:
+            return 0 if not find_all else [0]
+        if strict is None:
+            strict = self.finite
+        centers = []
+        if strict:
+            # first check B from the right
+            for j in reversed(range(L)):
+                if form[j] != (0., 1.):
+                    center = j  # first tensor not a B, i.e. A or Th
+                    break
+            else:  # all sites are B's
+                center = 0
+            # note: all sites A gives `center = L-1`
+            for i in range(center):
+                if form[i] != (1., 0.):
+                    raise ValueError("No strict orthogonality center with only A left, B right")
+            centers = [center]
+        else:
+            for i in range(L - 1):
+                if form[i][0] == 1. and ((self.finite and i == L - 1)
+                                         or form[(i + 1) % L] == (0., 1.)):
+                    centers.append(i)
+            if len(centers) == 0:
+                if all(f == form[0] for f in form):
+                    if form[0] == (1., 0.):
+                        centers = [L - 1]
+                    elif form[0] == (0., 1.):
+                        centers = [0]
+        if find_all:
+            return centers
+        elif len(centers) == 0:
+            raise ValueError("No orthogonality center found!\nform = " + str(form))
+        elif len(centers) > 1:
+            raise ValueError("No unique orthogonality center!\nform = " + str(form))
+        return centers[0]
+
+    def move_orthogonality_center(self, to_i=0, from_i=None, cutoff=None):
+        """Move the orthogonality center by succesive SVDs.
+
+        Parameters
+        ----------
+        to_i : int
+            Site index where to move the orthogonality center to.
+            The resulting form there will be ``'Th'``.
+        from_i : int | None
+            Site index from where to move the orthogonality center.
+            If `None`, determine with :meth:`find_orthogonality_center`.
+        cutoff : None | float
+            Cutoff for singular values.
+        """
+        if from_i is None:
+            from_i = self.find_orthogonality_center()
+        if from_i > to_i:
+            th = self.get_B(from_i, form='Th')
+            U, S, V = npc.svd(th.combine_legs(self._p_label + ['vR'], qconj=-1, new_axes=1),
+                              cutoff=cutoff, inner_labels=['vR', 'vL'])
+            self.set_B(from_i, V.split_legs(1), form='B')
+            self.set_SL(from_i, S)
+            for i in range(from_i - 1, to_i, -1):
+                A = self.get_B(i, form='A')
+                th = npc.tensordot(A, U.iscale_axis(S, 'vR'), axes=['vR', 'vL'])
+                U, S, V = npc.svd(th.combine_legs(self._p_label + ['vR'], qconj=-1, new_axes=1),
+                                cutoff=cutoff, inner_labels=['vR', 'vL'])
+                self.set_B(i, V.split_legs(1), form='B')
+                self.set_SL(i, S)
+            A = self.get_B(to_i, form='A')
+            th = npc.tensordot(A, U.iscale_axis(S, 'vR'), axes=['vR', 'vL'])
+            self.set_B(to_i, th, form='Th')
+        elif from_i < to_i:
+            th = self.get_B(from_i, form='Th')
+            U, S, V = npc.svd(th.combine_legs(['vL'] + self._p_label, qconj=+1, new_axes=0),
+                              cutoff=cutoff, inner_labels=['vR', 'vL'])
+            self.set_B(from_i, U.split_legs(0), form='A')
+            self.set_SR(from_i, S)
+            for i in range(from_i + 1, to_i):
+                B = self.get_B(i, form='B')
+                th = npc.tensordot(V.iscale_axis(S, 'vL'), B, axes=['vR', 'vL'])
+                U, S, V = npc.svd(th.combine_legs(['vL'] + self._p_label, qconj=+1, new_axes=0),
+                                  cutoff=cutoff, inner_labels=['vR', 'vL'])
+                self.set_B(i, U.split_legs(0), form='A')
+                self.set_SR(i, S)
+            B = self.get_B(to_i, form='B')
+            th = npc.tensordot(V.iscale_axis(S, 'vL'), B, axes=['vR', 'vL'])
+            self.set_B(to_i, th, form='Th')
+
     def increase_L(self, new_L=None):
         """Modify `self` inplace to enlarge the MPS unit cell; in place.
 
