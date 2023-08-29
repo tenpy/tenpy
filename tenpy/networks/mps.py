@@ -3547,7 +3547,7 @@ class MPS(BaseMPSExpectationValue):
         M = self.get_B(L - 1, form)
         M = npc.tensordot(R, M, axes=['vR', 'vL'])
         if self.bc == 'segment':
-            # also neet to calculate new singular values on the very right
+            # also need to calculate new singular values on the very right
             U, S, VR_segment = npc.svd(M.combine_legs(['vL'] + self._p_label),
                                        cutoff=cutoff,
                                        inner_labels=['vR', 'vL'])
@@ -5442,17 +5442,17 @@ class MPSEnvironment(BaseEnvironment, BaseMPSExpectationValue):
         return contr * self.bra.norm * self.ket.norm
 
     def _contract_LP(self, i, LP):
-        LP = npc.tensordot(LP, self.ket.get_B(i, form='A'), axes=('vR', 'vL'))
+        LP = npc.tensordot(LP, self.ket.get_B(i, form='A', avoid_S_inverse=True), axes=('vR', 'vL'))
         axes = (self.ket._get_p_label('*') + ['vL*'], self.ket._p_label + ['vR*'])
         # for a ususal MPS, axes = (['p*', 'vL*'], ['p', 'vR*'])
-        LP = npc.tensordot(self.bra.get_B(i, form='A').conj(), LP, axes=axes)
+        LP = npc.tensordot(self.bra.get_B(i, form='A', avoid_S_inverse=True).conj(), LP, axes=axes)
         return LP  # labels 'vR*', 'vR'
 
     def _contract_RP(self, i, RP):
-        RP = npc.tensordot(self.ket.get_B(i, form='B'), RP, axes=('vR', 'vL'))
+        RP = npc.tensordot(self.ket.get_B(i, form='B', avoid_S_inverse=True), RP, axes=('vR', 'vL'))
         axes = (self.ket._p_label + ['vL*'], self.ket._get_p_label('*') + ['vR*'])
         # for a ususal MPS, axes = (['p', 'vL*'], ['p*', 'vR*'])
-        RP = npc.tensordot(RP, self.bra.get_B(i, form='B').conj(), axes=axes)
+        RP = npc.tensordot(RP, self.bra.get_B(i, form='B', avoid_S_inverse=True).conj(), axes=axes)
         return RP  # labels 'vL', 'vL*'
 
     # methods for Expectation values

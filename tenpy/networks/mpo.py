@@ -2218,21 +2218,21 @@ class MPOEnvironment(BaseEnvironment):
     def _contract_LP(self, i, LP):
         """Contract LP with the tensors on site `i` to form ``self._LP[i+1]``"""
         # same as MPSEnvironment._contract_LP, but also contract with `H.get_W(i)`
-        LP = npc.tensordot(LP, self.ket.get_B(i, form='A'), axes=('vR', 'vL'))
+        LP = npc.tensordot(LP, self.ket.get_B(i, form='A', avoid_S_inverse=True), axes=('vR', 'vL'))
         LP = npc.tensordot(self.H.get_W(i), LP, axes=(['p*', 'wL'], ['p', 'wR']))
         axes = (self.bra._get_p_label('*') + ['vL*'], self.ket._p_label + ['vR*'])
         # for a ususal MPS, axes = (['p*', 'vL*'], ['p', 'vR*'])
-        LP = npc.tensordot(self.bra.get_B(i, form='A').conj(), LP, axes=axes)
+        LP = npc.tensordot(self.bra.get_B(i, form='A', avoid_S_inverse=True).conj(), LP, axes=axes)
         return LP  # labels 'vR*', 'wR', 'vR'
 
     def _contract_RP(self, i, RP):
         """Contract RP with the tensors on site `i` to form ``self._RP[i-1]``"""
         # same as MPSEnvironment._contract_RP, but also contract with `H.get_W(i)`
-        RP = npc.tensordot(self.ket.get_B(i, form='B'), RP, axes=('vR', 'vL'))
+        RP = npc.tensordot(self.ket.get_B(i, form='B', avoid_S_inverse=True), RP, axes=('vR', 'vL'))
         RP = npc.tensordot(RP, self.H.get_W(i), axes=(['p', 'wL'], ['p*', 'wR']))
         axes = (self.ket._p_label + ['vL*'], self.ket._get_p_label('*') + ['vR*'])
         # for a ususal MPS, axes = (['p', 'vL*'], ['p*', 'vR*'])
-        RP = npc.tensordot(RP, self.bra.get_B(i, form='B').conj(), axes=axes)
+        RP = npc.tensordot(RP, self.bra.get_B(i, form='B', avoid_S_inverse=True).conj(), axes=axes)
         return RP  # labels 'vL', 'wL', 'vL*'
 
     def _contract_LHeff(self, i, label_p='p0', pipe=None):
