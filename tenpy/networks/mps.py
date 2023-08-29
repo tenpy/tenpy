@@ -2222,7 +2222,7 @@ class MPS(BaseMPSExpectationValue):
             theta = npc.tensordot(theta, B, axes=['vR', 'vL'])
         return theta
 
-    def convert_form(self, new_form='B'):
+    def convert_form(self, new_form='B', avoid_S_inverse=False):
         """Tranform self into different canonical form (by scaling the legs with singular values).
 
         Parameters
@@ -2230,6 +2230,9 @@ class MPS(BaseMPSExpectationValue):
         new_form : (list of) {``'B' | 'A' | 'C' | 'G' | 'Th' | None`` | tuple(float, float)}
             The form the stored 'matrices'. The table in module doc-string.
             A single choice holds for all of the entries.
+        avoid_S_inverse : bool
+            If True, try to avoid taking inverses of singular values at the cost of additional
+            SVDs to move the orthogonality center locally. See :meth:`get_B`.
 
         Raises
         ------
@@ -2237,7 +2240,8 @@ class MPS(BaseMPSExpectationValue):
         """
         new_forms = self._parse_form(new_form)
         for i, new_form in enumerate(new_forms):
-            new_B = self.get_B(i, form=new_form, copy=False)  # calculates the desired form.
+            # get_B() calculates the desired form.
+            new_B = self.get_B(i, form=new_form, copy=False, avoid_S_inverse=avoid_S_inverse)
             self.set_B(i, new_B, form=new_form)
 
     def find_orthogonality_center(self, strict=None, find_all=False):
