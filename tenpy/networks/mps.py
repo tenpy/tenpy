@@ -4153,6 +4153,8 @@ class MPS(BaseMPSExpectationValue):
             opB = npc.tensordot(op, self._B[i], axes=['p*', 'p'])
             self.set_B(i, opB, self.form[i])
         else:
+            if not unitary:
+                self.move_orthogonality_center(i)
             th = self.get_theta(i, n)
             th = npc.tensordot(op, th, axes=[pstar, p])
             # use MPS.from_full to split the sites
@@ -4164,6 +4166,8 @@ class MPS(BaseMPSExpectationValue):
                 self.set_B(i + j, split_th._B[j], split_th.form[j])
             for j in range(n - 1):
                 self.set_SR(i + j, split_th._S[j + 1])
+            if not unitary:
+                self.move_orthogonality_center(to_i=0, from_i=i)
         if not unitary:
             self.canonical_form(renormalize=renormalize)
 
