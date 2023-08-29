@@ -307,7 +307,8 @@ def test_orthogonality_center():
         assert "No strict orthogonality center" in str(excinfo.value)
     cs = psi.find_orthogonality_center(strict=False, find_all=True)
     assert cs == [1, 3]
-    psi = mps.MPS.from_product_state([s]*L, ['up']*L, form=['A', 'A', 'Th', 'B', 'B'])
+    psi = mps.MPS.from_singlets(s, L, [[0, 2], [3, 4]], lonely=[1],
+                                form=['A', 'A', 'Th', 'B', 'B'])
     assert psi.find_orthogonality_center() == 2
     psi.move_orthogonality_center(to_i=1)
     assert psi.find_orthogonality_center() == 1

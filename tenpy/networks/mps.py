@@ -1843,8 +1843,9 @@ class MPS(BaseMPSExpectationValue):
                       down='down',
                       lonely=[],
                       lonely_state='up',
-                      bc='finite'):
-        """Create an MPS of entangled singlets.
+                      bc='finite',
+                      form='B'):
+        """Create an MPS of entangled singlets, also known as valence bold solid.
 
         Parameters
         ----------
@@ -1864,6 +1865,8 @@ class MPS(BaseMPSExpectationValue):
             The state for the lonely sites.
         bc : {'infinite', 'finite', 'segment'}
             MPS boundary conditions. See docstring of :class:`MPS`.
+        form  : ``'B' | 'A' | 'C' | 'G' | None``
+            The canonical form of the resulting MPS, see module doc-string.
 
         Returns
         -------
@@ -1946,7 +1949,10 @@ class MPS(BaseMPSExpectationValue):
             Ss.append(np.ones(N) / (N**0.5))
             Ts = next_Ts
             labels_L = labels_R
-        return cls([site] * L, Bs, Ss, bc=bc, form=forms)
+        res = cls([site] * L, Bs, Ss, bc=bc, form=forms)
+        if form is not None:
+            res.convert_form(form, avoid_S_inverse=True)
+        return res
 
     @property
     def L(self):
