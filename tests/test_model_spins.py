@@ -24,3 +24,6 @@ def test_SpinChain():
         'conserve': [None, 'parity'],
         'bc_MPS': ['finite', 'infinite']
     })
+
+def test_DipolarSpinChain():
+    check_general_model(spins.DipolarSpinChain, {}, {'J4': [0, 1], 'cons_P': [True, False]})
