@@ -324,6 +324,42 @@ def test_clock_site():
         check_same_operators(sites)
 
 
+def test_dipolar_boson_site():
+    hcs = dict(Id='Id', JW='JW', B='Bd', Bd='B', N='N', NN='NN', dN='dN', dNdN='dNdN', P='P')
+    for Nmax in [1, 2, 5, 10]:
+        sites = []
+        for conserve_N, conserve_P in [(True, True), (True, False), (False, False)]:
+            S = site.DipolarBosonSite(Nmax, conserve_N=conserve_N, conserve_P=conserve_P)
+            S.test_sanity()
+            for op in S.onsite_ops:
+                assert S.hc_ops[op] == hcs[op]
+            npt.assert_array_almost_equal_nulp(np.dot(S.Bd.to_ndarray(), S.B.to_ndarray()),
+                                               S.N.to_ndarray(), 2)
+            sites.append(S)
+        check_same_operators(sites)
+
+
+def test_dipolar_spin_site():
+    hcs = dict(Id='Id', JW='JW', Sx='Sx', Sy='Sy', Sz='Sz', Sp='Sm', Sm='Sp')
+    for s in [0.5, 1, 1.5, 2, 5]:
+        print('s = ', s)
+        sites = []
+        for sort_charge in [True, False]:
+            for conserve in [None, 'P', 'Sz', 'parity']:
+                print("conserve = ", conserve)
+                S = site.DipolarSpinSite(s, conserve, sort_charge=sort_charge)
+                S.test_sanity()
+                for op in S.onsite_ops:
+                    assert S.hc_ops[op] == hcs[op]
+                if conserve not in ['P', 'Sz']:
+                    SxSy = ['Sx', 'Sy']
+                else:
+                    SxSy = None
+                check_spin_site(S, SxSy=SxSy)
+                sites.append(S)
+        check_same_operators(sites)
+
+
 def test_set_common_charges():
     spin = site.SpinSite(0.5, 'Sz')
     spin1 = site.SpinSite(1, 'Sz')
