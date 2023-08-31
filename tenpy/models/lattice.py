@@ -179,7 +179,7 @@ class Lattice:
                  next_nearest_neighbors=None,
                  next_next_nearest_neighbors=None,
                  pairs=None):
-        self.unit_cell = list(unit_cell)
+        self._unit_cell = list(unit_cell)
         self._set_Ls(Ls)  # after setting unit_cell
         if positions is None:
             positions = np.zeros((len(self.unit_cell), self.dim))
@@ -251,6 +251,15 @@ class Lattice:
                 np.sum(self._order * self._strides, axis=1)[self._perm] == np.arange(self.N_sites))
         if self.position_disorder is not None:
             assert self.position_disorder.shape == self.shape + (self.basis.shape[-1], )
+
+    @property
+    def unit_cell(self):
+        return self._unit_cell
+
+    @unit_cell.setter
+    def unit_cell(self, value):
+        self._mps_sites_cache = None
+        self._unit_cell = value
 
     def copy(self):
         """Shallow copy of `self`."""
