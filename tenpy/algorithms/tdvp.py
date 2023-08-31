@@ -164,9 +164,10 @@ class TwoSiteTDVPEngine(TDVPEngine):
         self.trunc_err = TruncationError()
 
     def get_sweep_schedule(self):
-        """Slightly different sweep schedule than DMRG"""
         L = self.psi.L
         if self.finite:
+            # might be the same as Sweep.get_sweep_schedule, but override in case upsteam changes:
+            # the `dt` chosen below needs to fit to the sweep schedule to ensure correct evolution
             i0s = list(range(0, L - 2)) + list(range(L - 2, -1, -1))
             move_right = [True] * (L - 2) + [False] * (L - 1)
             update_LP_RP = [[True, False]] * (L - 2) + [[False, True]] * (L - 2) + [[False, False]]
@@ -260,9 +261,10 @@ class SingleSiteTDVPEngine(TDVPEngine):
     EffectiveH = OneSiteH
 
     def get_sweep_schedule(self):
-        """slightly different sweep schedule than DMRG"""
         L = self.psi.L
         if self.finite:
+            # might be the same as Sweep.get_sweep_schedule, but override in case upsteam changes:
+            # the `dt` chosen below needs to fit to the sweep schedule to ensure correct evolution
             i0s = list(range(0, L - 1)) + list(range(L - 1, -1, -1))
             move_right = [True] * (L - 1) + [False] * L
             update_LP_RP = [[True, False]] * (L - 1) + [[False, True]] * (L - 1) + [[False, False]]

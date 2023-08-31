@@ -2035,7 +2035,7 @@ class MPS(BaseMPSExpectationValue):
         if new_form is not None and old_form != new_form:
             if old_form is None:
                 raise ValueError("can't convert form of non-canonical state!")
-            # try avoid inverses of singular values, see :issue:`???` # TODO
+            # try avoid inverses of singular values, see :issue:`292`
             # typical case e.g. in iDMRG when inserting unit cells
             if avoid_S_inverse and old_form == (1., 0.) and new_form == (0., 1.):
                 # got A, need B

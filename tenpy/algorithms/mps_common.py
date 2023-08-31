@@ -419,20 +419,20 @@ class Sweep(Algorithm):
         n = self.EffectiveH.length
         if self.finite:
             assert L > n
-            i0s = list(range(0, L - n)) + list(range(L - n, 0, -1))
-            move_right = [True] * (L - n) + [False] * (L - n)
-            update_LP_RP = [[True, False]] * (L - n) + [[False, True]] * (L - n)
+            i0s = list(range(0, L - n)) + list(range(L - n, -1, -1))
+            move_right = [True] * (L - n) + [False] * (L - n + 1)  + [True]
+            update_LP_RP = [[True, False]] * (L - n) + [[False, True]] * (L - n - 1) + [[False, False]]
         elif n == 2:
             assert L >= 2
-            i0s = list(range(0, L)) + list(range(L, 0, -1))
-            move_right = [True] * L + [False] * L
+            i0s = list(range(0, L)) + list(range(L, -1, -1))
+            move_right = [True] * L + [False] * L + [True]
             update_LP_RP = [[True, True]] * 2 + [[True, False]] * (L-2) + \
-                           [[True, True]] * 2 + [[False, True]] * (L-2)
+                           [[True, True]] * 2 + [[False, True]] * (L-2) + [[False, False]]
         elif n == 1:
-            i0s = list(range(0, L)) + list(range(L, 0, -1))
-            move_right = [True] * L + [False] * L
+            i0s = list(range(0, L)) + list(range(L, -1, -1))
+            move_right = [True] * L + [False] * L + [True]
             update_LP_RP = [[True, True]] + [[True, False]] * (L-1) + \
-                           [[True, True]] + [[False, True]] * (L-1)
+                           [[True, True]] + [[False, True]] * (L-1) + [[False, False]]
         else:
             assert False, "n_optimize is neither 1 nor 2!?"
         return zip(i0s, move_right, update_LP_RP)

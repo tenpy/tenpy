@@ -1523,7 +1523,14 @@ class TwoSiteDMRGEngine(DMRGEngine):
                 U.ireplace_label('vL', '(vL.p0)')
                 VH.ireplace_label('(p0.vR)', '(p1.vR)')
             else:
-                assert False
+                # special case at end of sweep where we don't expand
+                # same as no mixer
+                qtotal_i0 = self.env.bra.get_B(i0, form=None).qtotal
+                U, S, VH, err, _ = svd_theta(theta,
+                                            self.trunc_params,
+                                            qtotal_LR=[qtotal_i0, None],
+                                            inner_labels=['vR', 'vL'])
+                S_a = S
         else:
             assert False, "mixer acting on wired number of sites"
         U.ireplace_label('(vL.p0)', '(vL.p)')
