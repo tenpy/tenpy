@@ -262,14 +262,16 @@ class DipolarBoseHubbardChain(CouplingMPOModel):
         """Initialize a 1D lattice"""
         L = model_params.get('L', 64)
         Nmax = model_params.get('Nmax', 2)
-        cons_N = model_params.get('cons_N', True)
-        cons_P = model_params.get('cons_P',  True)
+        conserve = model_params.get('conserve', 'best')
+        if conserve == 'best':
+            conserve = 'dipole'
+            self.logger.info("%s: set conserve to %s", self.name, conserve)
         bc_MPS = model_params.get('bc_MPS', 'finite')
         bc = 'periodic' if bc_MPS in ['infinite', 'segment'] else 'open'
         bc = model_params.get('bc', bc)
-        site = DipolarBosonSite(Nmax=Nmax, conserve_N=cons_N, conserve_P=cons_P)
-        lattice =  Chain(L, site, bc=bc, bc_MPS=bc_MPS)
-        if cons_P:
+        site = DipolarBosonSite(Nmax=Nmax, conserve=conserve)
+        lattice = Chain(L, site, bc=bc, bc_MPS=bc_MPS)
+        if conserve == 'dipole':
             site.leg.chinfo.set_lattice(lattice)
         return lattice
 

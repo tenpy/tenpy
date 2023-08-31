@@ -328,8 +328,8 @@ def test_dipolar_boson_site():
     hcs = dict(Id='Id', JW='JW', B='Bd', Bd='B', N='N', NN='NN', dN='dN', dNdN='dNdN', P='P')
     for Nmax in [1, 2, 5, 10]:
         sites = []
-        for conserve_N, conserve_P in [(True, True), (True, False), (False, False)]:
-            S = site.DipolarBosonSite(Nmax, conserve_N=conserve_N, conserve_P=conserve_P)
+        for conserve in ['dipole', 'N', 'parity', None]:
+            S = site.DipolarBosonSite(Nmax, conserve=conserve)
             S.test_sanity()
             for op in S.onsite_ops:
                 assert S.hc_ops[op] == hcs[op]
@@ -345,13 +345,13 @@ def test_dipolar_spin_site():
         print('s = ', s)
         sites = []
         for sort_charge in [True, False]:
-            for conserve in [None, 'P', 'Sz', 'parity']:
+            for conserve in [None, 'dipole', 'Sz', 'parity']:
                 print("conserve = ", conserve)
                 S = site.DipolarSpinSite(s, conserve, sort_charge=sort_charge)
                 S.test_sanity()
                 for op in S.onsite_ops:
                     assert S.hc_ops[op] == hcs[op]
-                if conserve not in ['P', 'Sz']:
+                if conserve not in ['dipole', 'Sz']:
                     SxSy = ['Sx', 'Sy']
                 else:
                     SxSy = None

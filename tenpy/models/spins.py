@@ -129,10 +129,10 @@ class DipolarSpinChain(CouplingMPOModel):
 
         S : {0.5, 1, 1.5, 2, ...}
             The 2S+1 local states range from m = -S, -S+1, ... +S.
-        cons_Sz : bool
-            If Sz-conservation should be used. True by default.
-        cons_P : bool
-            If dipole-conservation should be used. True by default.
+        conserve : 'best' | 'dipole' | 'Sz' | 'parity' | None
+            What should be conserved. See :class:`~tenpy.networks.site.DipolarSpinSite`.
+            Note that dipole conservation necessarily includes Sz conservation.
+            For ``'best'``, we preserve ``'dipole'`.
         sort_charge : bool | None
             Whether to sort by charges of physical legs.
             See change comment in :class:`~tenpy.networks.site.Site`.
@@ -144,15 +144,17 @@ class DipolarSpinChain(CouplingMPOModel):
         """Initialize a 1D lattice"""
         L = model_params.get('L', 64)
         S = model_params.get('S', 1)
-        cons_N = model_params.get('cons_Sz', True)
-        cons_P = model_params.get('cons_P',  True)
+        conserve = model_params.get('conserve', 'best')
+        if conserve == 'best':
+            conserve = 'dipole'
+            self.logger.info("%s: set conserve to %s", self.name, conserve)
         bc_MPS = model_params.get('bc_MPS', 'finite')
         bc = 'periodic' if bc_MPS in ['infinite', 'segment'] else 'open'
         bc = model_params.get('bc', bc)
-        cons = 'P' if (cons_N and cons_P) else ('Sz' if cons_N else None)
-        site = DipolarSpinSite(S=S, conserve=cons)
+        sort_charge = model_params.get('sort_charge', None)
+        site = DipolarSpinSite(S=S, conserve=conserve, sort_charge=sort_charge)
         lattice = Chain(L, site, bc=bc, bc_MPS=bc_MPS)
-        if cons_P:
+        if conserve == 'dipole':
             site.leg.chinfo.set_lattice(lattice)
         return lattice
 
