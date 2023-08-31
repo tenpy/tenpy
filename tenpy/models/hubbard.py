@@ -6,7 +6,7 @@ import numpy as np
 from .model import CouplingMPOModel, NearestNeighborModel
 from .lattice import Chain
 from ..tools.params import asConfig
-from ..networks.site import FermionSite, BosonSite, SpinHalfFermionSite, spin_half_species, DipolarBosonSite
+from ..networks.site import FermionSite, BosonSite, SpinHalfFermionSite, spin_half_species
 
 __all__ = ['BoseHubbardModel', 'BoseHubbardChain', 'FermiHubbardModel', 'FermiHubbardChain',
            'FermiHubbardModel2', 'DipolarBoseHubbardChain']
@@ -253,7 +253,7 @@ class DipolarBoseHubbardChain(CouplingMPOModel):
         Nmax : int
             Maximum number of bosons per site.
         conserve : {'best' | 'dipole' | 'N' | 'parity' | None}
-            What should be conserved. See :class:`~tenpy.networks.site.DipolarBosonSite`.
+            What should be conserved. See :class:`~tenpy.networks.site.BosonSite`.
         t, t4, U, mu : float | array
             Couplings as defined in the Hamiltonian above. Note the signs!
     """
@@ -269,7 +269,7 @@ class DipolarBoseHubbardChain(CouplingMPOModel):
         bc_MPS = model_params.get('bc_MPS', 'finite')
         bc = 'periodic' if bc_MPS in ['infinite', 'segment'] else 'open'
         bc = model_params.get('bc', bc)
-        site = DipolarBosonSite(Nmax=Nmax, conserve=conserve)
+        site = BosonSite(Nmax=Nmax, conserve=conserve)
         lattice = Chain(L, site, bc=bc, bc_MPS=bc_MPS)
         if conserve == 'dipole':
             site.leg.chinfo.set_lattice(lattice)

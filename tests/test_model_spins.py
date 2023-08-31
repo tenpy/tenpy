@@ -26,4 +26,4 @@ def test_SpinChain():
     })
 
 def test_DipolarSpinChain():
-    check_general_model(spins.DipolarSpinChain, {}, {'J4': [0, 1], 'cons_P': [True, False]})
+    check_general_model(spins.DipolarSpinChain, {}, {'J4': [0, 1], 'conserve': ['dipole', 'Sz', None]})

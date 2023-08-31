@@ -28,8 +28,6 @@ __all__ = [
     'SpinHalfHoleSite',
     'BosonSite',
     'ClockSite',
-    'DipolarBosonSite',
-    'DipolarSpinSite',
     'spin_half_species',
 ]
 
@@ -1263,13 +1261,20 @@ class SpinSite(Site):
     ``Sp, Sm``      Spin flips :math:`S^{\pm} = S^{x} \pm i S^{y}`
     ==============  ================================================
 
-    ============== ====  ============================
-    `conserve`     qmod  *excluded* onsite operators
-    ============== ====  ============================
-    ``'Sz'``       [1]   ``Sx, Sy, Sigmax, Sigmay``
-    ``'parity'``   [2]   --
-    ``'None'``     []    --
-    ============== ====  ============================
+    ============== =======  ============================
+    `conserve`     qmod     *excluded* onsite operators
+    ============== =======  ============================
+    ``'dipole'``   [1, 1]   ``Sx, Sy, Sigmax, Sigmay``
+    ``'Sz'``       [1]      ``Sx, Sy, Sigmax, Sigmay``
+    ``'parity'``   [2]      --
+    ``'None'``     []       --
+    ============== =======  ============================
+    
+    .. warning ::
+        When using dipole conservation, make sure to
+        call :meth:`~tenpy.linalg.charges.DipolarChargeInfo.set_lattice` at some point during
+        initialization, e.g. during `init_lattice` when defining a model.
+        See e.g. :class:`~tenpy.models.spins.DipolarSpinChain`.
 
     Parameters
     ----------
@@ -1292,7 +1297,7 @@ class SpinSite(Site):
     def __init__(self, S=0.5, conserve='Sz', sort_charge=None):
         if not conserve:
             conserve = 'None'
-        if conserve not in ['Sz', 'parity', 'None']:
+        if conserve not in ['dipole', 'Sz', 'parity', 'None']:
             raise ValueError("invalid `conserve`: " + repr(conserve))
         self.S = S = float(S)
         d = 2 * S + 1
@@ -1319,7 +1324,11 @@ class SpinSite(Site):
         # at the Sz entries...
         # (The commutation relations are checked explicitly in `tests/test_site.py`)
         ops = dict(Sp=Sp, Sm=Sm, Sz=Sz)
-        if conserve == 'Sz':
+        if conserve == 'dipole':
+            chinfo = npc.DipolarChargeInfo([1, 1], ['2*Sz', 'dipole'], charge_idcs=[0], dipole_idcs=[1])
+            # define site at position 0 -> local dipole moments of all Sz sectors are 0
+            leg = npc.LegCharge.from_qflat(chinfo, [[int(_Sz), 0] for _Sz in 2 * Sz_diag])
+        elif conserve == 'Sz':
             chinfo = npc.ChargeInfo([1], ['2*Sz'])
             leg = npc.LegCharge.from_qflat(chinfo, np.array(2 * Sz_diag, dtype=np.int64))
         else:
@@ -1780,13 +1789,20 @@ class BosonSite(Site):
     ``P``           Parity :math:`Id - 2 (n \mod 2)`.
     ==============  ========================================
 
-    ============== ====  ==================================
-    `conserve`     qmod  *excluded* onsite operators
-    ============== ====  ==================================
-    ``'N'``        [1]   --
-    ``'parity'``   [2]   --
-    ``'None'``     []    --
-    ============== ====  ==================================
+    ============== =======  ==================================
+    `conserve`     qmod     *excluded* onsite operators
+    ============== =======  ==================================
+    ``'dipole'``   [1, 1]   --
+    ``'N'``        [1]      --
+    ``'parity'``   [2]      --
+    ``'None'``     []       --
+    ============== =======  ==================================
+    
+    .. warning ::
+        When using dipole conservation, make sure to
+        call :meth:`~tenpy.linalg.charges.DipolarChargeInfo.set_lattice` at some point during
+        initialization, e.g. during `init_lattice` when defining a model.
+        See e.g. :class:`~tenpy.models.spins.DipolarBoseHubbardModel`.
 
     Parameters
     ----------
@@ -1800,6 +1816,8 @@ class BosonSite(Site):
 
     Attributes
     ----------
+    Nmax : int
+        Cutoff defining the maximum number of bosons per site.
     conserve : str
         Defines what is conserved, see table above.
     filling : float
@@ -1809,7 +1827,7 @@ class BosonSite(Site):
     def __init__(self, Nmax=1, conserve='N', filling=0.):
         if not conserve:
             conserve = 'None'
-        if conserve not in ['N', 'parity', 'None']:
+        if conserve not in ['dipole', 'N', 'parity', 'None']:
             raise ValueError("invalid `conserve`: " + repr(conserve))
         dim = Nmax + 1
         states = [str(n) for n in range(0, dim)]
@@ -1827,7 +1845,12 @@ class BosonSite(Site):
         dNdN = np.diag((Ndiag - filling)**2)
         P = np.diag(1. - 2. * np.mod(Ndiag, 2))
         ops = dict(B=B, Bd=Bd, N=N, NN=NN, dN=dN, dNdN=dNdN, P=P)
-        if conserve == 'N':
+        if conserve == 'dipole':
+            chinfo = npc.DipolarChargeInfo([1, 1], ['N', 'dipole'], charge_idcs=[0], dipole_idcs=[1])
+            # define site at position 0 -> local dipole moments of all N sectors are 0
+            charges = [[n, 0] for n in range(dim)]
+            leg = npc.LegCharge.from_qflat(chinfo, charges)
+        elif conserve == 'N':
             chinfo = npc.ChargeInfo([1], ['N'])
             leg = npc.LegCharge.from_qflat(chinfo, range(dim))
         elif conserve == 'parity':
@@ -1994,195 +2017,3 @@ class ClockSite(Site):
 
     def __repr__(self):
         return f'ClockSite(q={self.q}, conserve={self.conserve})'
-
-
-class DipolarBosonSite(Site):
-    r"""Create a :class:`Site` for up to `Nmax` bosons with dipole conservation.
-    
-    Local states are ``vac, 1, 2, ... , Nc``.
-
-    ==============  ========================================
-    operator        description
-    ==============  ========================================
-    ``Id, JW``      Identity :math:`\mathbb{1}`
-    ``B``           Annihilation operator :math:`b`
-    ``Bd``          Creation operator :math:`b^\dagger`
-    ``N``           Number operator :math:`n= b^\dagger b`
-    ``NN``          :math:`n^2`
-    ``P``           Parity :math:`Id - 2 (n \mod 2)`.
-    ==============  ========================================
-
-    ============== =======  ==================================
-    `conserve`     qmod     *excluded* onsite operators
-    ============== =======  ==================================
-    ``'dipole'``   [1, 1]   --
-    ``'N'``        [1]      --
-    ``'parity'``   [2]      --
-    ``'None'``     []       --
-    ============== =======  ==================================
-
-    Note that dipole conservation necessarily includes charge (``'N'``) conservation.
-
-    .. warning ::
-        When defining a model using this site, make sure to call
-        :meth:`~tenpy.linalg.charges.DipolarChargeInfo.set_lattice` during `init_lattice` if
-        dipole conservation is used (i.e. if ``conserve == 'dipole'``).
-        See e.g. :class:`~tenpy.models.hubbard.DipolarBoseHubbardChain`.
-
-    Parameters
-    ----------
-    Nmax : int
-        Cutoff defining the maximum number of bosons per site.
-        The default ``Nmax=1`` describes hard-core bosons.
-    conserve : str
-        Defines what is conserved, see table above.
-
-    Attributes
-    ----------
-    Nmax : int
-        Cutoff defining the maximum number of bosons per site.
-    conserve : str
-        Defines what is conserved, see table above.
-    filling : float
-        Average filling. Used to define ``dN``.
-    """
-
-    def __init__(self, Nmax=1, conserve='dipole'):
-        dim = Nmax + 1
-        states = [str(n) for n in range(0, dim)]
-        if dim < 2:
-            raise ValueError("local dimension should be larger than 1....")
-        B = np.zeros([dim, dim], dtype=np.float64)  # annihilation operator
-        for n in range(1, dim):
-            B[n - 1, n] = np.sqrt(n)
-        Bd = np.transpose(B)
-        Ndiag = np.arange(dim, dtype=np.float64)
-        N = np.diag(Ndiag)
-        NN = np.diag(Ndiag**2)
-        P = np.diag(1. - 2. * np.mod(Ndiag, 2))
-        ops = dict(B=B, Bd=Bd, N=N, NN=NN, P=P)
-        if conserve == 'dipole':
-            qmod = [1, 1]
-            qnames = ['N', 'dipole']
-            charges = [[n, 0] for n in range(dim)]  # initialize at origin -> zero dipole
-            chinfo = npc.DipolarChargeInfo(qmod, qnames, charge_idcs=[0], dipole_idcs=[1])
-            leg = npc.LegCharge.from_qflat(chinfo, charges)
-        elif conserve == 'N':
-            chinfo = npc.ChargeInfo([1], ['N'])
-            leg = npc.LegCharge.from_qflat(chinfo, range(dim))
-        elif conserve == 'parity':
-            chinfo = npc.ChargeInfo([2], ['parity_N'])
-            leg = npc.LegCharge.from_qflat(chinfo, [i % 2 for i in range(dim)])
-        else:
-            leg = npc.LegCharge.from_trivial(dim)
-        self.Nmax = Nmax
-        self.conserve = conserve
-        Site.__init__(self, leg, states, **ops)
-        self.state_labels['vac'] = self.state_labels['0']  # alias
-
-    def __repr__(self):
-        """Debug representation of self."""
-        return f"DipolarBosonSite(Nmax={self.Nmax}, conserve={self.conserve})"
-
-
-class DipolarSpinSite(Site):
-    r"""General Spin S site with dipole conservation.
-
-    There are `2S+1` local states range from ``down`` (0)  to ``up`` (2S+1),
-    corresponding to ``Sz=-S, -S+1, ..., S-1, S``.
-    Local operators are the spin-S operators,
-    e.g. ``Sz = [[0.5, 0.], [0., -0.5]]``,
-    ``Sx = 0.5*sigma_x`` for the Pauli matrix `sigma_x`.
-
-    ==============  ================================================
-    operator        description
-    ==============  ================================================
-    ``Id, JW``      Identity :math:`\mathbb{1}`
-    ``Sx, Sy, Sz``  Spin components :math:`S^{x,y,z}`,
-                    equal to half the Pauli matrices.
-    ``Sp, Sm``      Spin flips :math:`S^{\pm} = S^{x} \pm i S^{y}`
-    ==============  ================================================
-
-    ============== =======  ============================
-    `conserve`     qmod     *excluded* onsite operators
-    ============== =======  ============================
-    ``'dipole'``   [1, 1]   ``Sx, Sy, Sigmax, Sigmay``
-    ``'Sz'``       [1]      ``Sx, Sy, Sigmax, Sigmay``
-    ``'parity'``   [2]      --
-    ``'None'``     []       --
-    ============== =======  ============================
-    
-    .. warning ::
-        When defining a model using this site, make sure to
-        call :meth:`~tenpy.linalg.charges.DipolarChargeInfo.set_lattice` during `init_lattice`
-        if dipole conservation is used (i.e. if ``conserve == 'dipole'``).
-        See e.g. :class:`~tenpy.models.spins.DipolarSpinChain`.
-
-    Parameters
-    ----------
-    conserve : str
-        Defines what is conserved, see table above.
-    sort_charge : bool
-        Whether :meth:`sort_charge` should be called at the end of initialization.
-        This is usually a good idea to reduce potential overhead when using charge conservation.
-        Note that this permutes the order of the local basis states for ``conserve='parity'``!
-        For backwards compatibility with existing data, it is not (yet) enabled by default.
-
-    Attributes
-    ----------
-    S : {0.5, 1, 1.5, 2, ...}
-        The 2S+1 states range from m = -S, -S+1, ... +S.
-    conserve : str
-        Defines what is conserved, see table above.
-    """
-
-    def __init__(self, S=0.5, conserve='dipole', sort_charge=None):
-        if not conserve:
-            conserve = 'None'
-        if conserve not in ['dipole', 'Sz', 'parity', 'None']:
-            raise ValueError("invalid `conserve`: " + repr(conserve))
-        self.S = S = float(S)
-        d = 2 * S + 1
-        if d <= 1:
-            raise ValueError("negative S?")
-        if np.rint(d) != d:
-            raise ValueError("S is not half-integer or integer")
-        d = int(d)
-        Sz_diag = -S + np.arange(d)
-        Sz = np.diag(Sz_diag)
-        Sp = np.zeros([d, d])
-        for n in np.arange(d - 1):
-            # Sp |m> =sqrt( S(S+1)-m(m+1)) |m+1>
-            m = n - S
-            Sp[n + 1, n] = np.sqrt(S * (S + 1) - m * (m + 1))
-        Sm = np.transpose(Sp)
-        # Sp = Sx + i Sy, Sm = Sx - i Sy
-        Sx = (Sp + Sm) * 0.5
-        Sy = (Sm - Sp) * 0.5j
-        ops = dict(Sp=Sp, Sm=Sm, Sz=Sz)
-        if conserve == 'dipole':
-            qmod = [1, 1]
-            qnames = ['N', 'dipole']
-            charges = [[q1, q2] for q1, q2 in zip(np.array(2 * Sz_diag, dtype=np.int64), [0]*d)]
-            chinfo = npc.DipolarChargeInfo(qmod, qnames, charge_idcs=[0], dipole_idcs=[1])
-            leg = npc.LegCharge.from_qflat(chinfo, charges)
-        elif conserve == 'Sz':
-            chinfo = npc.ChargeInfo([1], ['2*Sz'])
-            leg = npc.LegCharge.from_qflat(chinfo, np.array(2 * Sz_diag, dtype=np.int64))
-        else:
-            ops.update(Sx=Sx, Sy=Sy)
-            if conserve == 'parity':
-                chinfo = npc.ChargeInfo([2], ['parity_Sz'])
-                leg = npc.LegCharge.from_qflat(chinfo, np.mod(np.arange(d), 2))
-            else:
-                leg = npc.LegCharge.from_trivial(d)
-        self.conserve = conserve
-        names = [str(i) for i in np.arange(-S, S + 1, 1.)]
-        # Site.__init__(self, leg, names, sort_charge=sort_charge, **ops)  # new tenpy version
-        Site.__init__(self, leg, names, **ops)
-        self.state_labels['down'] = self.state_labels[names[0]]
-        self.state_labels['up'] = self.state_labels[names[-1]]
-
-    def __repr__(self):
-        """Debug representation of self."""
-        return f"DipolarSpinSite(S={self.S}, conserve={self.conserve})"

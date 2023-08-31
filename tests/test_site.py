@@ -160,13 +160,13 @@ def test_spin_site():
         print('s = ', s)
         sites = []
         for sort_charge in [True, False]:
-            for conserve in [None, 'Sz', 'parity']:
+            for conserve in [None, 'dipole', 'Sz', 'parity']:
                 print("conserve = ", conserve)
                 S = site.SpinSite(s, conserve, sort_charge=sort_charge)
                 S.test_sanity()
                 for op in S.onsite_ops:
                     assert S.hc_ops[op] == hcs[op]
-                if conserve != 'Sz':
+                if conserve not in ['dipole', 'Sz']:
                     SxSy = ['Sx', 'Sy']
                 else:
                     SxSy = None
@@ -284,7 +284,7 @@ def test_boson_site():
     hcs = dict(Id='Id', JW='JW', B='Bd', Bd='B', N='N', NN='NN', dN='dN', dNdN='dNdN', P='P')
     for Nmax in [1, 2, 5, 10]:
         sites = []
-        for conserve in ['N', 'parity', None]:
+        for conserve in ['dipole', 'N', 'parity', None]:
             S = site.BosonSite(Nmax, conserve=conserve)
             S.test_sanity()
             for op in S.onsite_ops:
@@ -321,42 +321,6 @@ def test_clock_site():
             npt.assert_array_almost_equal_nulp(Z_pow_q, np.eye(q), 3 * q)
 
             sites.append(S)
-        check_same_operators(sites)
-
-
-def test_dipolar_boson_site():
-    hcs = dict(Id='Id', JW='JW', B='Bd', Bd='B', N='N', NN='NN', dN='dN', dNdN='dNdN', P='P')
-    for Nmax in [1, 2, 5, 10]:
-        sites = []
-        for conserve in ['dipole', 'N', 'parity', None]:
-            S = site.DipolarBosonSite(Nmax, conserve=conserve)
-            S.test_sanity()
-            for op in S.onsite_ops:
-                assert S.hc_ops[op] == hcs[op]
-            npt.assert_array_almost_equal_nulp(np.dot(S.Bd.to_ndarray(), S.B.to_ndarray()),
-                                               S.N.to_ndarray(), 2)
-            sites.append(S)
-        check_same_operators(sites)
-
-
-def test_dipolar_spin_site():
-    hcs = dict(Id='Id', JW='JW', Sx='Sx', Sy='Sy', Sz='Sz', Sp='Sm', Sm='Sp')
-    for s in [0.5, 1, 1.5, 2, 5]:
-        print('s = ', s)
-        sites = []
-        for sort_charge in [True, False]:
-            for conserve in [None, 'dipole', 'Sz', 'parity']:
-                print("conserve = ", conserve)
-                S = site.DipolarSpinSite(s, conserve, sort_charge=sort_charge)
-                S.test_sanity()
-                for op in S.onsite_ops:
-                    assert S.hc_ops[op] == hcs[op]
-                if conserve not in ['dipole', 'Sz']:
-                    SxSy = ['Sx', 'Sy']
-                else:
-                    SxSy = None
-                check_spin_site(S, SxSy=SxSy)
-                sites.append(S)
         check_same_operators(sites)
 
 

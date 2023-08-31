@@ -36,4 +36,4 @@ def test_BoseHubbardChain():
 
 
 def test_DipolarBoseHubbardChain():
-    check_general_model(hubbard.DipolarBoseHubbardChain, {}, {'cons_P': [True, False],})
+    check_general_model(hubbard.DipolarBoseHubbardChain, {}, {'conserve': ['dipole', 'N', 'parity', None],})

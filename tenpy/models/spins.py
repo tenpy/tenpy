@@ -6,7 +6,7 @@ Uniform lattice of spin-S sites, coupled by nearest-neighbour interactions.
 
 import numpy as np
 
-from ..networks.site import SpinSite, DipolarSpinSite
+from ..networks.site import SpinSite
 from .model import CouplingMPOModel, NearestNeighborModel
 from .lattice import Chain
 from ..tools.params import asConfig
@@ -130,7 +130,7 @@ class DipolarSpinChain(CouplingMPOModel):
         S : {0.5, 1, 1.5, 2, ...}
             The 2S+1 local states range from m = -S, -S+1, ... +S.
         conserve : 'best' | 'dipole' | 'Sz' | 'parity' | None
-            What should be conserved. See :class:`~tenpy.networks.site.DipolarSpinSite`.
+            What should be conserved. See :class:`~tenpy.networks.site.SpinSite`.
             Note that dipole conservation necessarily includes Sz conservation.
             For ``'best'``, we preserve ``'dipole'`.
         sort_charge : bool | None
@@ -152,7 +152,7 @@ class DipolarSpinChain(CouplingMPOModel):
         bc = 'periodic' if bc_MPS in ['infinite', 'segment'] else 'open'
         bc = model_params.get('bc', bc)
         sort_charge = model_params.get('sort_charge', None)
-        site = DipolarSpinSite(S=S, conserve=conserve, sort_charge=sort_charge)
+        site = SpinSite(S=S, conserve=conserve, sort_charge=sort_charge)
         lattice = Chain(L, site, bc=bc, bc_MPS=bc_MPS)
         if conserve == 'dipole':
             site.leg.chinfo.set_lattice(lattice)
