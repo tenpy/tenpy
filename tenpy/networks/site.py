@@ -586,7 +586,7 @@ class GroupedSite(Site):
         identities on other sites with the name ``opname+labels[i]``.
         Similarly, set state labels for ``' '.join(state[i]+'_'+labels[i])``.
         Defaults to ``[str(i) for i in range(n_sites)]``, which for example grouping two SpinSites
-        gives operators name like ``"Sz0"`` and sites labels like ``'up_0 down_1'``.
+        gives operators name like ``"Sz0"`` and state labels like ``'up_0 down_1'``.
     charges : ``'same' | 'drop' | 'independent'``
         How to handle charges, defaults to 'same'.
         ``'same'`` means that all `sites` have the same `ChargeInfo`, and the total charge
@@ -747,7 +747,7 @@ def set_common_charges(sites, new_charges='same', new_names=None, new_mod=None, 
 
     A typical place to do this would be in :meth:`tenpy.models.model.CouplingMPOModel.init_sites`.
 
-    (This function replaces the now deprecated :func:`mutli_sites_combine_charges`.)
+    (This function replaces the now deprecated :func:`multi_sites_combine_charges`.)
 
     Parameters
     ----------

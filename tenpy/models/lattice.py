@@ -1576,7 +1576,7 @@ class SimpleLattice(Lattice):
         the lattice site. The `unit_cell` of the :class:`Lattice` is just ``[site]``.
     **kwargs :
         Additional keyword arguments given to the :class:`Lattice`.
-        If `order` is specified in the form ``('standard', snake_windingi, priority)``,
+        If `order` is specified in the form ``('standard', snake_winding, priority)``,
         the `snake_winding` and `priority` should only be specified for the spatial directions.
         Similarly, `positions` can be specified as a single vector.
     """
