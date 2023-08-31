@@ -32,7 +32,9 @@ from .sparse import *
 
 __all__ = ['charges', 'np_conserved', 'krylov_based', 'random_matrix', 'sparse', 'svd_robust',
            *charges.__all__,
-           *[n for n in np_conserved.__all__ if n not in ['ChargeInfo', 'LegCharge', 'LegPipe']],
+           *[n for n in np_conserved.__all__ if n not in [
+               'ChargeInfo', 'DipolarChargeInfo', 'LegCharge', 'LegPipe'
+            ]],
            *krylov_based.__all__,
            *random_matrix.__all__,
            *sparse.__all__,

@@ -558,25 +558,9 @@ class Site(Hdf5Exportable):
             op = npc.tensordot(op, next_op, axes=['p*', 'p'])
         return op
 
-    def shift_charges(self, shift):
-        """Return (shallow) copy with shifted charges
-
-        Parameters
-        ----------
-        shift : int
-            number of lattice sites to shift
-
-        Returns
-        -------
-        shifted : :class:`Site`
-            (Shallow) copy of self with shifted charges
-        """
-        shift = int(shift)
-        if shift == 0 or self.leg.chinfo.trivial_shift:
-            return self
-        cp = copy.copy(self)
-        cp.change_charge(self.leg.shift_charges(shift))
-        return cp
+    def shift_charges(self, mps_idx_before, mps_idx_after):
+        """Convenience wrapper around :meth:`ChargeInfo.shift_Site`."""
+        return self.leg.chinfo.shift_Site(self, mps_idx_before, mps_idx_after)
 
     def __repr__(self):
         """Debug representation of self."""
@@ -2028,6 +2012,11 @@ class DipolarBosonSite(Site):
     ``P``           Parity :math:`Id - 2 (n \mod 2)`.
     ==============  ========================================
 
+    .. warning ::
+        When defining a model using this site, make sure to
+        call :meth:`~tenpy.linalg.charges.DipolarChargeInfo.set_lattice` during `init_lattice`
+        if `conserve_P is True`. See e.g. :class:`~tenpy.models.hubbard.DipolarBoseHubbardChain`.
+
     Parameters
     ----------
     j : int
@@ -2086,7 +2075,7 @@ class DipolarBosonSite(Site):
             else:
                 charges = [[q1, q2] for q1, q2 in zip(charges[0], charges[1])]
             if conserve_P:
-                chinfo = npc.ChargeInfo(qmod, qnames, _shift_charges_dipole)
+                chinfo = npc.DipolarChargeInfo(qmod, qnames, charge_idcs=[0], dipole_idcs=[1])
             else:
                 chinfo = npc.ChargeInfo(qmod, qnames)
             # define leg
@@ -2137,6 +2126,11 @@ class DipolarSpinSite(Site):
     ``'parity'``   [2]   --
     ``'None'``     []    --
     ============== ====  ============================
+    
+    .. warning ::
+        When defining a model using this site, make sure to
+        call :meth:`~tenpy.linalg.charges.DipolarChargeInfo.set_lattice` during `init_lattice`
+        if `conserve_P is True`. See e.g. :class:`~tenpy.models.spins.DipolarSpinChain`.
 
     Parameters
     ----------
@@ -2184,7 +2178,7 @@ class DipolarSpinSite(Site):
             qmod = [1, 1]
             qnames = ['N', 'P']
             charges = [[q1, q2] for q1, q2 in zip(np.array(2 * Sz_diag, dtype=np.int64), [0]*d)]
-            chinfo = npc.ChargeInfo(qmod, qnames, _shift_charges_dipole)
+            chinfo = npc.DipolarChargeInfo(qmod, qnames, charge_idcs=[0], dipole_idcs=[1])
             leg = npc.LegCharge.from_qflat(chinfo, charges)
         elif conserve == 'Sz':
             chinfo = npc.ChargeInfo([1], ['2*Sz'])
@@ -2206,9 +2200,3 @@ class DipolarSpinSite(Site):
     def __repr__(self):
         """Debug representation of self."""
         return f"DipolarSpinSite(S={self.S}, conserve={self.conserve})"
-
-
-def _shift_charges_dipole(charges, shift):
-    """Shift charges in accordance with dipole conservation."""
-    charges[:, 1] += shift * charges[:, 0]
-    return charges

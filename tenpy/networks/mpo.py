@@ -420,14 +420,14 @@ class MPO:
     def get_W(self, i, copy=False):
         """Return `W` at site `i`."""
         W = self._W[self._to_valid_index(i)]
-        W = W.shift_charges(i - i % self.L)
+        W = W.shift_charges(i % self.L, i)
         if copy:
             return W.copy()
         return W
 
     def set_W(self, i, W):
         """Set `W` at site `i`."""
-        W.shift_charges(i % self.L - i)
+        W = W.shift_charges(i, i % self.L)
         i = self._to_valid_index(i)
         self._W[i] = W
 
@@ -463,8 +463,9 @@ class MPO:
             raise ValueError("can't enlarge finite MPO")
         factor = int(factor)
         L = self.L
-        self._W = [self.get_W(j) for j in range(0, factor*L)]
-        self.sites = [self.sites[self._to_valid_index(j)].shift_charges(j - j % L) for j in range(0, factor*L)]
+        self._W = [self.get_W(j) for j in range(0, factor * L)]
+        self.sites = [self.sites[self._to_valid_index(j)].shift_charges(j % L, j)
+                      for j in range(0, factor * L)]
         self.IdL = factor * self.IdL[:-1] + [self.IdL[-1]]
         self.IdR = factor * self.IdR[:-1] + [self.IdR[-1]]
         self.test_sanity()
@@ -1891,7 +1892,7 @@ class MPOGraph:
                         if infinite or i + 1 < L:
                             edge_stack.append(((i + 1) % L, keyR))
                         if infinite and i + 1 == L:  # copy and shift to the left leg
-                            charges[0][r] = chinfo.shift_charges(ch_r[r], -L, copy=True)
+                            charges[0][r] = chinfo.shift_charges(ch_r[r], L, 0, copy=True)
                 stack = edge_stack + stack
 
         travel_q_LR(0, 'IdL')
@@ -2433,13 +2434,14 @@ class MPOTransferMatrix(NpcLinearOperator):
                 vec = npc.tensordot(B, vec, axes=['vR', 'vL'])  # vL p wL vL*
                 vec = npc.tensordot(vec, W, axes=[['p', 'wL'], ['p*', 'wR']])  # vL vL* p wL
                 vec = npc.tensordot(vec, Bc, axes=[['vL*', 'p'], ['vR*', 'p*']])  # vL wL vL*
+            vec = vec.shift_charges(0, self.L)
         else:
             vec.itranspose(['vR*', 'wR', 'vR'])  # shouldn't do anything
             for Ac, W, A in zip(self._M_conj, self._W, self._M):
                 vec = npc.tensordot(vec, A, axes=['vR', 'vL'])  # vR* wR p vR
                 vec = npc.tensordot(W, vec, axes=[['wL', 'p*'], ['wR', 'p']])  # wR p vR* vR
                 vec = npc.tensordot(Ac, vec, axes=[['p*', 'vL*'], ['p', 'vR*']])  # vR* wR vR
-        vec = vec.shift_charges(self.L*(-1 if self.transpose else 1))
+            vec = vec.shift_charges(self.L, 0)
         if project:
             self._project(vec)
         return vec

@@ -544,7 +544,7 @@ def convert_model_purification_canonical_conserve_ancilla_charge(model):
 
     model.lat = model.lat.copy()
     model.lat.unit_cell = [_convert_site(s) for s in model.lat.unit_cell]
-    model.lat._cache_sites()
+    model.lat._mps_sites_cache = None
 
     if hasattr(model, 'H_MPO'):
         model.H_MPO = H_MPO = model.H_MPO.copy()

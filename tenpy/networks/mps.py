@@ -916,7 +916,7 @@ class BaseMPSExpectationValue(metaclass=ABCMeta):
                                                         term_list_R.strength):
                 chinfo = self.sites[0].leg.chinfo
                 if not chinfo.trivial_shift:
-                    # recalculate operators (should we do this more efficient?)
+                    # recalculate operators
                     ops_R, j_min, need_JW = self._term_to_ops_list(term_R, autoJW, j)  # <- note the j
                     if j_min > j + min_R:
                         ops_R = [opstr_fill[need_JW]] * (j_min - (j + min_R)) + ops_R
@@ -936,7 +936,7 @@ class BaseMPSExpectationValue(metaclass=ABCMeta):
         charges otherwise.
         """
         i_valid = self._to_valid_index(i)
-        return self.sites[i_valid].shift_charges(i - i_valid)
+        return self.sites[i_valid].shift_charges(i_valid, i)
 
     def _term_to_ops_list(self, term, autoJW=True, i_offset=0, JW_from_right=False):
         """Translate a `term` to a list of operators (one per site).
@@ -1188,7 +1188,7 @@ class BaseMPSExpectationValue(metaclass=ABCMeta):
         if (isinstance(op, str)):
             op = self.get_site(i).get_op(op)
         elif isinstance(op, npc.Array):
-            op = op.shift_charges(i - i % self.L)
+            op = op.shift_charges(i % self.L, i)
         return op
 
     @abstractmethod
@@ -2038,7 +2038,7 @@ class MPS(BaseMPSExpectationValue):
         new_form = self._to_valid_form(form)
         old_form = self.form[i_valid]
         B = self._B[i_valid]
-        B = B.shift_charges(i - i_valid)
+        B = B.shift_charges(i_valid, i)
         if copy:
             B = B.copy()
         if new_form is not None and old_form != new_form:
@@ -2067,7 +2067,7 @@ class MPS(BaseMPSExpectationValue):
             ``None`` stands for non-canonical form.
         """
         i_valid = self._to_valid_index(i)
-        B = B.shift_charges(i_valid - i)
+        B = B.shift_charges(i, i_valid)  # shift back into unit cell (if outside)
         self.form[i_valid] = self._to_valid_form(form)
         self.dtype = np.promote_types(self.dtype, B.dtype)
         self._B[i_valid] = B.itranspose(self._B_labels)
@@ -2113,7 +2113,7 @@ class MPS(BaseMPSExpectationValue):
         i_valid = self._to_valid_index(i)
         S = self._S[i_valid]
         if isinstance(S, npc.Array):
-            S = S.shift_charges(i - i_valid)
+            S = S.shift_charges(i_valid, i)
         return S
 
     def get_SR(self, i):
@@ -2122,7 +2122,7 @@ class MPS(BaseMPSExpectationValue):
         i = self._to_valid_index(i)
         S = self._S[i + 1]
         if isinstance(S, npc.Array):
-            S = S.shift_charges(shift)
+            S = S.shift_charges((i + 1) % self.L, i + 1)
         return S
 
     def set_SL(self, i, S):
@@ -2130,6 +2130,9 @@ class MPS(BaseMPSExpectationValue):
         i = self._to_valid_index(i)
         self._S[i] = S
         if not self.finite and i == 0:
+            if isinstance(S, npc.Array):
+                # with mixer, S might be an Array whose charges need to be shifted
+                S = S.shift_charges(0, self.L)
             self._S[self.L] = S
 
     def set_SR(self, i, S):
@@ -2137,6 +2140,9 @@ class MPS(BaseMPSExpectationValue):
         i = self._to_valid_index(i)
         self._S[i + 1] = S
         if not self.finite and i == self.L - 1:
+            if isinstance(S, npc.Array):
+                # with mixer, S might be an Array whose charge need to be shifted
+                S = S.shift_charges(self.L, 0)
             self._S[0] = S
 
     def get_theta(self, i, n=2, cutoff=1.e-16, formL=1., formR=1.):
@@ -2402,9 +2408,9 @@ class MPS(BaseMPSExpectationValue):
         For infinite MPS, the bond between MPS unit cells is another fix point.
         """
         if not self.chinfo.trivial_shift:
-            msg = ('A symmetry whose charges depend on position might change under inversion '
-                   'This is so far not considered within the implementation.')
-            raise NotImplementedError(msg)
+            # Similar to swap_sites, I (Jakob) dont think this is even possible.
+            raise RuntimeError('Can not invert if conserved charge has non-trivial shift.')
+
         self.sites = self.sites[::-1]
         self.form = [(f if f is None else (f[1], f[0])) for f in self.form[::-1]]
         self._B = [
@@ -3503,7 +3509,7 @@ class MPS(BaseMPSExpectationValue):
         # phase 1: bring bond (i1-1, i1) in canonical form
         # find dominant right eigenvector
         norm, Gr = self._canonical_form_dominant_gram_matrix(i1, False, tol_xi)
-        Gr = Gr.shift_charges(-self.L)
+        Gr = Gr.shift_charges(self.L, 0)
         self._B[i1] /= np.sqrt(norm)  # correct norm
         if not renormalize:
             self.norm *= np.sqrt(norm)
@@ -3522,7 +3528,7 @@ class MPS(BaseMPSExpectationValue):
             self.norm *= np.sqrt(norm)
         # bring bond to canonical form
         Gl, Yl, Yr = self._canonical_form_correct_left(i1, Gl, Wr)
-        Gl = Gl.shift_charges(-self.L)
+        Gl = Gl.shift_charges(self.L, 0)
         Wr = np.ones(Yr.legs[0].ind_len, np.float64)
         # now the bond (i1-1,i1) is in canonical form
         Wr_list[i1] = Wr  # diag(Wr) is right eigenvector on bond (i1-1, i1)
@@ -4182,6 +4188,19 @@ class MPS(BaseMPSExpectationValue):
                                              labels=['p1', 'p0', 'p0*', 'p1*'])
 
         """
+        if not self.chinfo.trivial_shift:
+            # I (Jakob) dont think this is possible in general and would require very complicated
+            # specialization on the details of the symmetry.
+            # If the conserved charge transforms non-trivially under spatial translations, then
+            # the swap gate that is effectively applied here does not preserve that charge (in general).
+            # There may, of course, be exceptions depending on the details of the symmetry.
+            # Example for dipole p of some charge q, both conserved::
+            #
+            #   (q1, p1) , (q2, p2)  --swap-->  (q2, p2 - q2) , (q1, p1 + q1)
+            #
+            # -> swap has no well defined qtotal! (p charge rule for a swap-Array depends on q1, q2)
+            raise RuntimeError('Can not swap sites if conserved charge has non-trivial shift.')
+        
         if trunc_par is None:
             trunc_par = {}
         siteL, siteR = self.sites[self._to_valid_index(i)], self.sites[self._to_valid_index(i + 1)]
@@ -4969,12 +4988,12 @@ class BaseEnvironment(metaclass=ABCMeta):
             raise ValueError("No left part in the system???")
         age = self.get_LP_age(i0)
         for j in range(i0, i):
-            LP = LP.shift_charges(j - j % self.L)  # shift if outside of unit cell
+            LP = LP.shift_charges(j % self.L, j)  # shift if outside of unit cell
             LP = self._contract_LP(j, LP)
             age = age + 1
             if store:
                 self.set_LP(j + 1, LP, age=age)
-        return LP.shift_charges(i - i % self.L)
+        return LP.shift_charges(i % self.L, i)
 
     def get_RP(self, i, store=True):
         """Calculate RP at given site from nearest available one.
@@ -5013,12 +5032,12 @@ class BaseEnvironment(metaclass=ABCMeta):
             raise ValueError("No right part in the system???")
         age = self.get_RP_age(i0)
         for j in range(i0, i, -1):
-            RP = RP.shift_charges(j - j % self.L) # shift if outside of unit cell
+            RP = RP.shift_charges(j % self.L, j) # shift if outside of unit cell
             RP = self._contract_RP(j, RP)
             age = age + 1
             if store:
                 self.set_RP(j - 1, RP, age=age)
-        return RP.shift_charges(i - i % self.L)
+        return RP.shift_charges(i % self.L, i)
 
     def get_LP_age(self, i):
         """Return number of physical sites in the contractions of get_LP(i).
@@ -5036,14 +5055,14 @@ class BaseEnvironment(metaclass=ABCMeta):
 
     def set_LP(self, i, LP, age):
         """Store part to the left of site `i`."""
-        LP = LP.shift_charges(i % self.L - i) # shift back into unit cell
+        LP = LP.shift_charges(i, i % self.L) # shift back into unit cell
         i = self._to_valid_index(i)
         self.cache[self._LP_keys[i]] = LP
         self._LP_age[i] = age
 
     def set_RP(self, i, RP, age):
         """Store part to the right of site `i`."""
-        RP = RP.shift_charges(i % self.L - i) # shift back into unit cell
+        RP = RP.shift_charges(i, i % self.L) # shift back into unit cell
         i = self._to_valid_index(i)
         self.cache[self._RP_keys[i]] = RP
         self._RP_age[i] = age
@@ -5287,7 +5306,6 @@ class MPSEnvironment(BaseEnvironment, BaseMPSExpectationValue):
         axes = (self.ket._get_p_label('*') + ['vL*'], self.ket._p_label + ['vR*'])
         # for a ususal MPS, axes = (['p*', 'vL*'], ['p', 'vR*'])
         LP = npc.tensordot(self.bra.get_B(i, form='A').conj(), LP, axes=axes)
-        # LP = LP.shift_charges(i % self.L - i)  # shift back into unit cell
         return LP  # labels 'vR*', 'vR'
 
     def _contract_RP(self, i, RP):
@@ -5295,7 +5313,6 @@ class MPSEnvironment(BaseEnvironment, BaseMPSExpectationValue):
         axes = (self.ket._p_label + ['vL*'], self.ket._get_p_label('*') + ['vR*'])
         # for a ususal MPS, axes = (['p', 'vL*'], ['p*', 'vR*'])
         RP = npc.tensordot(RP, self.bra.get_B(i, form='B').conj(), axes=axes)
-        # RP = RP.shift_charges(i % self.L - i) # shift back into unit cell
         return RP  # labels 'vL', 'vL*'
 
     # methods for Expectation values
@@ -5529,12 +5546,13 @@ class TransferMatrix(sparse.NpcLinearOperator):
             for N, M in zip(self._bra_N, self._ket_M):
                 vec = npc.tensordot(M, vec, axes=['vR', 'vL'])
                 vec = npc.tensordot(vec, N, axes=contract)  # [['p', 'vL*'], ['p*', 'vR*']]
+            vec = vec.shift_charges(0, self.L)
         else:  # left to right
             contract = [['vL*'] + self._pstar_label, ['vR*'] + self._p_label]
             for N, M in zip(self._bra_N, self._ket_M):
                 vec = npc.tensordot(vec, M, axes=['vR', 'vL'])
                 vec = npc.tensordot(N, vec, axes=contract)  # [['vL*', 'p*'], ['vR*', 'p']])
-        vec = vec.shift_charges(-self.L if self.transpose else self.L)
+            vec = vec.shift_charges(self.L, 0)
         if pipe is None:
             vec.itranspose(orig_labels)  # make sure we have the same labels/order as before
         else:

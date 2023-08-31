@@ -205,19 +205,8 @@ class Lattice:
             if name in self.pairs:
                 raise ValueError("{0!s} sepcified twice!".format(name))
             self.pairs[name] = NN
-        self._cache_sites()  # this must be called again if order is modified
+        self._mps_sites_cache = None
         self.test_sanity()  # check consistency
-
-    def _cache_sites(self):
-        """Helper function to cache the sites of the lattice"""
-        self._sites = []
-        for lat_indx in self.order[:, :]:
-            u = lat_indx[-1]
-            mps_indx = self.lat2mps_idx(lat_indx)
-            site = self.unit_cell[u]
-            if isinstance(site, Site):  # it can be None
-                site = site.shift_charges(mps_indx)
-            self._sites.append(site)
 
     def test_sanity(self):
         """Sanity check.
@@ -387,7 +376,7 @@ class Lattice:
             mps2lat_vals_idx[tuple(order_[mps_fix_u, :-1].T)] = np.arange(self.N_cells)
             self._mps2lat_vals_idx_fix_u.append(mps2lat_vals_idx)
         self._mps_fix_u = tuple(self._mps_fix_u)
-        self._cache_sites()
+        self._mps_sites_cache = None
 
     def ordering(self, order):
         """Provide possible orderings of the `N` lattice sites.
@@ -652,9 +641,9 @@ class Lattice:
 
     def site(self, i):
         """return :class:`~tenpy.networks.site.Site` instance corresponding to an MPS index `i`"""
-        if not hasattr(self, '_sites'):
-            self._cache_sites()
-        return self._sites[i]
+        if self._mps_sites_cache is None:
+            _ = self.mps_sites()  # populate cache
+        return self._mps_sites_cache[i]
 
     def mps_sites(self):
         """Return a list of sites for all MPS indices.
@@ -663,9 +652,19 @@ class Lattice:
 
         This should be used for `sites` of 1D tensor networks (MPS, MPO,...).
         """
-        if not hasattr(self, '_sites'):
-            self._cache_sites()
-        return self._sites
+        if self._mps_sites_cache is None:
+            self._mps_sites_cache = []
+            for lat_indx in self.order[:, :]:
+                u = lat_indx[-1]
+                mps_indx = self.lat2mps_idx(lat_indx)
+                reference_lat_indx = lat_indx.copy()
+                reference_lat_indx[:-1] = 0
+                reference_mps_indx = self.lat2mps_idx(reference_lat_indx)
+                site = self.unit_cell[u]
+                if isinstance(site, Site):  # it can be None
+                    site = site.shift_charges(reference_mps_indx, mps_indx)
+                self._mps_sites_cache.append(site)
+        return self._mps_sites_cache[:]
 
     def mps2lat_idx(self, i):
         """Translate MPS index `i` to lattice indices ``(x_0, ..., x_{dim-1}, u)``.

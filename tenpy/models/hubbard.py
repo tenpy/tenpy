@@ -241,7 +241,11 @@ class DipolarBoseHubbardChain(CouplingMPOModel):
         bc_MPS = model_params.get('bc_MPS', 'finite')
         bc = 'periodic' if bc_MPS in ['infinite', 'segment'] else 'open'
         bc = model_params.get('bc', bc)
-        return Chain(L, DipolarBosonSite(Nmax=Nmax, conserve_N=cons_N, conserve_P=cons_P), bc=bc, bc_MPS=bc_MPS)
+        site = DipolarBosonSite(Nmax=Nmax, conserve_N=cons_N, conserve_P=cons_P)
+        lattice =  Chain(L, site, bc=bc, bc_MPS=bc_MPS)
+        if cons_P:
+            site.leg.chinfo.set_lattice(lattice)
+        return lattice
 
     def init_terms(self, model_params):
         """Add the onsite and coupling terms to the model"""

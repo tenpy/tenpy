@@ -121,7 +121,11 @@ class DipolarSpinChain(CouplingMPOModel):
         bc = 'periodic' if bc_MPS in ['infinite', 'segment'] else 'open'
         bc = model_params.get('bc', bc)
         cons = 'P' if (cons_N and cons_P) else ('Sz' if cons_N else None)
-        return Chain(L, DipolarSpinSite(S=S, conserve=cons), bc=bc, bc_MPS=bc_MPS)
+        site = DipolarSpinSite(S=S, conserve=cons)
+        lattice = Chain(L, site, bc=bc, bc_MPS=bc_MPS)
+        if cons_P:
+            site.leg.chinfo.set_lattice(lattice)
+        return lattice
 
     def init_terms(self, model_params):
         """Add the onsite and coupling terms to the model"""
