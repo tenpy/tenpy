@@ -2019,8 +2019,6 @@ class DipolarBosonSite(Site):
 
     Parameters
     ----------
-    j : int
-        Lattice site index
     Nmax : int
         Cutoff defining the maximum number of bosons per site.
         The default ``Nmax=1`` describes hard-core bosons.
@@ -2031,8 +2029,6 @@ class DipolarBosonSite(Site):
 
     Attributes
     ----------
-    j : int
-        The site index; required for dipole conservation.
     Nmax : int
         Cutoff defining the maximum number of bosons per site.
     conserve : str
@@ -2119,13 +2115,14 @@ class DipolarSpinSite(Site):
     ``Sp, Sm``      Spin flips :math:`S^{\pm} = S^{x} \pm i S^{y}`
     ==============  ================================================
 
-    ============== ====  ============================
-    `conserve`     qmod  *excluded* onsite operators
-    ============== ====  ============================
-    ``'Sz'``       [1]   ``Sx, Sy, Sigmax, Sigmay``
-    ``'parity'``   [2]   --
-    ``'None'``     []    --
-    ============== ====  ============================
+    ============== =======  ============================
+    `conserve`     qmod     *excluded* onsite operators
+    ============== =======  ============================
+    ``'P'``        [1, 1]
+    ``'Sz'``       [1]      ``Sx, Sy, Sigmax, Sigmay``
+    ``'parity'``   [2]      --
+    ``'None'``     []       --
+    ============== =======  ============================
     
     .. warning ::
         When defining a model using this site, make sure to

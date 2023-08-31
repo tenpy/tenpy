@@ -109,7 +109,36 @@ class SpinChain(SpinModel, NearestNeighborModel):
 
 
 class DipolarSpinChain(CouplingMPOModel):
-    """H3-H4 spin-S model with and without explicit dipole conservation"""
+    r"""Dipole conserving H3-H4 spin-S chain.
+
+    The Hamitlonian reads:
+
+    .. math ::
+        H = - \mathtt{J3} \sum_{i} (S^+_i (S^-_{i + 1})^2 S^+_{i + 2} + \mathrm{h.c.})
+            - \mathtt{J4} \sum_{i} (S^+_i S^-_{i + 1} S^-_{i + 2} S^+_{i + 2} + \mathrm{h.c.})
+
+    Parameters
+    ----------
+    model_params : :class:`~tenpy.tools.params.Config`
+        Parameters for the model. See :cfg:config:`DipolarSpinChain` below.
+
+    Options
+    -------
+    .. cfg:config :: DipolarSpinChain
+        :include: CouplingMPOModel
+
+        S : {0.5, 1, 1.5, 2, ...}
+            The 2S+1 local states range from m = -S, -S+1, ... +S.
+        cons_Sz : bool
+            If Sz-conservation should be used. True by default.
+        cons_P : bool
+            If dipole-conservation should be used. True by default.
+        sort_charge : bool | None
+            Whether to sort by charges of physical legs.
+            See change comment in :class:`~tenpy.networks.site.Site`.
+        J3, J4 : float | array
+            Coupling as defined for the Hamiltonian above.
+    """
 
     def init_lattice(self, model_params):
         """Initialize a 1D lattice"""
