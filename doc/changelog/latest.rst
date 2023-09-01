@@ -46,6 +46,10 @@ Changed
   :meth:`~tenpy.models.mixed_xk.MixedXKModel.add_inter_ring_interaction`, and
   :meth:`~tenpy.models.mixed_xk.MixedXKModel.add_intre_ring_interaction` to vary with `x`.
 - Renamed the module :mod:`~tenpy.linalg.lanczos` to :mod:`tenpy.linalg.krylov_based`.
+- The :attr:`~tenpy.algorithms.mps_common.Sweep.move_right` attribute of
+  :class:`~tenpy.algorithms.mps_common.Sweep` now supports a third value, ``None``, in addition
+  to ``True, False``. ``None`` means that the sweep will not move at all, i.e. the next update
+  will be at the same position than the current one. This happens e.g. in TDVP.
 
 Fixed
 ^^^^^
