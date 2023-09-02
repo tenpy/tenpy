@@ -674,9 +674,6 @@ class EffectiveH(NpcLinearOperator):
     combine : bool
         Whether to combine legs into pipes as far as possible. This reduces the overhead of
         calculating charge combinations in the contractions.
-    move_right : bool | None
-        Whether the sweeping algorithm that calls for an `EffectiveH` is moving to the right,
-        to the left or not moving.
     """
     length = None
     acts_on = None
@@ -1139,8 +1136,6 @@ class ZeroSiteH(EffectiveH):
     acts_on : list of str
         Labels of the state on which `self` acts. NB: class attribute.
         Overwritten by normal attribute, if `combine`.
-    combine, move_right : bool
-        See above.
     LHeff, RHeff : :class:`~tenpy.linalg.np_conserved.Array`
         Only set if :attr:`combine`, and only one of them depending on :attr:`move_right`.
         If `move_right` was True, `LHeff` is set with labels ``'(vR*.p0)', 'wR', '(vR.p0*)'``
