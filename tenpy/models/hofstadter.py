@@ -23,6 +23,7 @@ def gauge_hopping(model_params):
     This phase is dependent on a choice of gauge, which simultaneously defines a
     'magnetic unit cell' (MUC).
 
+
     The magnetic unit cell is the smallest set of lattice plaquettes that
     encloses an integer number of flux quanta. It can be user-defined by setting
     mx and my, but for common gauge choices is computed based on the flux
@@ -56,8 +57,13 @@ def gauge_hopping(model_params):
     Jx, Jy: float
         'Bare' hopping amplitudes (without phase).
         Without any flux we have ``hop_x = -Jx`` and ``hop_y = -Jy``.
-    phi_pq : tuple (int, int)
-        Magnetic flux as a fraction p/q, defined as (p, q)
+    flux_p : int
+        Numerator of magnetic flux density
+    flux_q : int
+        Denominator of magnetic flux density
+
+    .. deprecated :: 0.11.0
+        Magnetic flux previously defined as tuple 'phi' is now defined as two separate parameters for numerator flux_p and denominator flux_q
 
     Returns
     -------
@@ -75,15 +81,24 @@ def gauge_hopping(model_params):
     my = model_params.get('my', None)
     Jx = model_params.get('Jx', 1.)
     Jy = model_params.get('Jy', 1.)
-    phi_p, phi_q = model_params.get('phi', (1, 3))
-    phi = 2 * np.pi * phi_p / phi_q
+# old doc-string and code for parameter 'phi'
+#    if (model_params.has_nonzero('phi')):
+#        phi_p, flux_q = model_params.get('phi', (1, 3))
+#    else:
+#        if (model_params.has_nonzero('flux_p') and model_params.has_nonzero('flux_q')):
+    model_params.deprecated_warning('phi'," please use -flux_p, -flux_q to define numerator and denominator of flux density, instead of phi")
+    flux_p = model_params.get('flux_p', 1)
+    flux_q = model_params.get('flux_q', 3)
+    phi = 2 * np.pi * flux_p / flux_q
 
     if gauge == 'landau_x':
         # hopping in x-direction: uniform
         # hopping in y-direction: depends on x, shape (mx, 1)
         # can be tiled to (Lx,Ly-1) for 'ladder' and (Lx, Ly) for 'cylinder' bc.
         if mx is None:
-            mx = phi_q
+            mx = flux_q
+        else:
+            assert(mx % flux_q == 0)
         hop_x = -Jx
         hop_y = -Jy * np.exp(1.j * phi * np.arange(mx)[:, np.newaxis])  # has shape (mx, 1)
     elif gauge == 'landau_y':
@@ -91,14 +106,14 @@ def gauge_hopping(model_params):
         # hopping in y-direction: uniform
         # can be tiled to (Lx,Ly-1) for 'ladder' and (Lx, Ly) for 'cylinder' bc.
         if my is None:
-            my = phi_q
+            my = flux_q
         hop_y = -Jy
         hop_x = -Jx * np.exp(-1.j * phi * np.arange(my)[np.newaxis, :])  # has shape (1, my)
     elif gauge == 'symmetric':
         # hopping in x-direction: depends on y, shape (mx, my)
         # hopping in y-direction: depends on x, shape (mx, my)
         if mx is None or my is None:
-            mx = my = phi_q
+            mx = my = flux_q
         hop_x = -Jx * np.exp(-1.j * (phi / 2) * np.arange(my)[np.newaxis, :])  # shape (1, my)
         hop_y = -Jy * np.exp(1.j * (phi / 2) * np.arange(mx)[:, np.newaxis])  # shape (mx, 1)
     else:
@@ -142,8 +157,10 @@ class HofstadterFermions(CouplingMPOModel):
             Hamiltonian parameter as defined above.
         conserve : {'N' | 'parity' | None}
             What quantum number to conserve.
-        phi : tuple
-            Magnetic flux density, defined as a fraction ``(numerator, denominator)``
+        flux_p : int
+            Numerator of magnetic flux density
+        flux_q : int
+            Denominator of magnetic flux density
         phi_ext : float
             External magnetic flux 'threaded' through the cylinder. Hopping amplitudes for bonds
             'across' the periodic boundary are modified such that particles hopping around the

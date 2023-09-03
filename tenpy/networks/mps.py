@@ -148,6 +148,7 @@ MPS.
 
 from abc import ABCMeta, abstractmethod
 import numpy as np
+import random
 import warnings
 import random
 from functools import reduce
@@ -2067,7 +2068,6 @@ class MPS(BaseMPSExpectationValue):
             Parameters for truncation, see :cfg:config:`truncation`.
             If ``None``, no truncation is done.
         update_norm : bool
-            If ``True``, multiply the norm of `theta` into :attr:`norm`.
         """
         i0 = self._to_valid_index(i)
         i1 = self._to_valid_index(i0 + 1)
@@ -4477,7 +4477,7 @@ class MPS(BaseMPSExpectationValue):
         If S is just 1D (as usual, e.g. during TEBD), this function just performs
         ``B.scale_axis(S**form_diff, axis_B)``.
 
-        However, during the DMRG with mixer, S might acutally be a 2D matrix.
+        However, during the DMRG with mixer, S might actually be a 2D matrix.
         For ``form_diff = -1``, we need to calculate the inverse of S, more precisely the
         (Moore-Penrose) pseudo inverse, see :func:`~tenpy.linalg.np_conserved.pinv`.
         The cutoff is only used in that case.
@@ -4491,7 +4491,10 @@ class MPS(BaseMPSExpectationValue):
             if form_diff == -1.:
                 S = 1. / S
             elif form_diff != 1.:
-                S = S**form_diff
+                if (form_diff<0.0):
+                    S = (S+1e-15)**form_diff
+                else:
+                    S = S**form_diff
             return B.scale_axis(S, axis_B)
         else:
             # e.g. during DMRG with a DensityMatrixMixer

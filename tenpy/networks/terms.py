@@ -10,10 +10,12 @@ prefactor when specifying e.g. a Hamiltonian.
 import numpy as np
 import warnings
 import itertools
+import copy
 
 from ..linalg import np_conserved as npc
 from ..tools.misc import add_with_None_0
 from ..tools.hdf5_io import Hdf5Exportable
+
 
 __all__ = [
     'TermList', 'OnsiteTerms', 'CouplingTerms', 'MultiCouplingTerms', 'ExponentiallyDecayingTerms',
@@ -681,6 +683,62 @@ class CouplingTerms(Hdf5Exportable):
                                                    strength_angle=np.angle(strength))
                             loc = np.dot(x_y.T, text_pos)
                             ax.text(loc[0], loc[1], annotate)
+        # done
+
+                            
+    def get_hopping_terms(self, lat):
+        """"Examine coupling terms for hoppings and get the corresponding current operators
+
+
+        Parameters
+        ----------
+        lat : :class:`~tenpy.models.lattice.Lattice`
+            The lattice on which the couplings are defined, most probably the ``M.lat`` of the
+            corresponding model ``M``, see :attr:`~tenpy.models.model.Model.lat`.
+        
+        returns: list of dictionaries describing all terms involving creation / annihilation operators contained in the term object
+
+        """
+        pos = lat.position(lat.order)  # row `i` gives position where to plot site `i`
+        N_sites = lat.N_sites
+        x_y = np.zeros((2, 2))  # columns=x,y, rows=i,j
+        current_terms=[]
+        for i in sorted(self.coupling_terms.keys()):
+            d1 = self.coupling_terms[i]
+            x_y[0, :] = pos[i]
+            for (op_i, op_string) in sorted(d1.keys()):
+                d2 = d1[(op_i, op_string)]
+                if (op_i.find('C')<0 and op_i.find('B')<0): # this checks for absence of creation/annihilation operators, but may not be fully reliable
+                    continue
+                for j in sorted(d2.keys()):
+                    d3 = d2[j]
+                    shift = j - j % N_sites
+                    if shift == 0:
+                        x_y[1, :] = pos[j]
+                    else:
+                        lat_idx_j = np.array(lat.order[j % N_sites])
+                        lat_idx_j[0] += (shift // N_sites) * lat.N_rings
+                        x_y[1, :] = lat.position(lat_idx_j)
+                    for op_j in sorted(d3.keys()):
+                        if isinstance(op_j, tuple):
+                            continue  # multi-site coupling!
+                        if (op_j.find('C')<0 and op_j.find('B')<0): # checks for absence of creation/annihilation operators for fermions (C) and bosons (B)
+                            continue
+                        strength = d3[op_j]
+                        print("term for {op_i}_{i}({xi},{yi})->{op_j}_{j}({xj},{yj}): {op_string} strength={strength} abs={strength_abs}, angle={strength_angle}".format(i=i,
+                                              j=j,
+                                              xi=x_y[0,0],
+                                              yi=x_y[0,1],
+                                              xj=x_y[1,0],
+                                              yj=x_y[1,1],
+                                              op_i=op_i,
+                                              op_string=op_string,
+                                              op_j=op_j,
+                                              strength=strength,
+           strength_abs=np.abs(strength),
+                                              strength_angle=np.angle(strength)))
+                        current_terms.append({'i':i, 'op_i':op_i, 'j':j, 'op_j':op_j, 'strength':strength, 'xi': copy.deepcopy(x_y[0,:]), 'xj': copy.deepcopy(x_y[1,:])})
+        return current_terms
         # done
 
     def add_to_graph(self, graph):

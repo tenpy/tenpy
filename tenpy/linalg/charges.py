@@ -1078,6 +1078,12 @@ class LegCharge:
         charges = charges[_find_row_differences(charges)[:-1], :]
         return charges
 
+    def is_trivial(self):
+        """Test whether the LegCharge has only trivial (0) charge and a single block
+           Returns : bool
+        """
+        return ((self.block_number == 0) or ((self.block_number == 1) and (self.chinfo.qnumber==0 or self.get_charge(0)==0)))
+
     def __str__(self):
         """Return a string of nicely formatted slices & charges."""
         qconj = " {0:+d}\n".format(self.qconj)

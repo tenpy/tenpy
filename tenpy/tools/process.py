@@ -55,7 +55,7 @@ def memory_usage():
     return -1.
 
 
-def load_omp_library(libs=["libiomp5.so",
+def load_omp_library(libs=["libiomp5.so","libiomp5.a","libiomp5.dylib",
                            find_library("libiomp5md"),
                            find_library("gomp")],
                      verbose=True):

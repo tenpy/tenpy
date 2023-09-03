@@ -15,6 +15,10 @@ def setup_cython_extension():
         return []
 
     include_dirs = [numpy.get_include()]
+    OSincludes=os.getenv('INCLUDE')        
+    if OSincludes is not None:
+        print ("adding further INCLUDE paths from environment: ",OSincludes)
+        include_dirs.append(OSincludes)
     libs = []
     lib_dirs = []
     macros = []  # C/C++ mmacros, #DEF ... in C/C++ code.

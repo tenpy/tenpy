@@ -93,6 +93,7 @@ from numbers import Integral
 # import public API from charges
 from .charges import ChargeInfo, LegCharge, LegPipe
 from . import charges  # for private functions
+from . import random_matrix  # for private functions
 from .svd_robust import svd as svd_flat
 
 from ..tools.misc import to_iterable, anynan, argsort, inverse_permutation, list_to_dict_list
@@ -1337,6 +1338,33 @@ class Array:
         res.test_sanity()
         return res
 
+    def _replace_leg(self, label, new_leg_charge, new_label=None):
+        """Change the LegCharge of leg 'label' and optionally rename it.
+
+        Parameters
+        ----------
+        label: int | str
+            Number or `name` of the leg which is to be replaced.
+        new_leg_charges : LegCharge
+            The new LegCharge for the leg
+        new_name : str
+            (optional) The new name of the leg.
+
+        Returns
+        -------
+        changed : :class:`Array`
+            A copy of `self`, where the specified leg has been changed.
+            Note that the LegCharges are neither bunched or sorted;
+            you might want to use :meth:`sort_legcharge`.
+        """
+        res = self.copy(deep=True)
+        leg_index = self.get_leg_index(label)
+        res.legs[leg_index] = new_leg_charge
+        if new_label is not None:
+            res._labels[leg_index]=new_label
+        res.test_sanity()
+        return res
+
     def is_completely_blocked(self):
         """Return bool whether all legs are blocked by charge."""
         return all([l.is_blocked() for l in self.legs])
@@ -1442,7 +1470,7 @@ class Array:
         ----------
         combine_legs : (iterable of) iterable of {str|int}
             Bundles of leg indices or labels, which should be combined into a new output pipes.
-            If multiple pipes should be created, use a list fore each new pipe.
+            If multiple pipes should be created, use a list for each new pipe.
         new_axes : None | (iterable of) int
             The leg-indices, at which the combined legs should appear in the resulting array.
             Default: for each pipe the position of its first pipe in the original array,
@@ -2229,6 +2257,19 @@ class Array:
         for a rank-2 matrix ``self`` and a rank-1 vector `other`.
         """
         return tensordot(self, other, axes=1)
+
+    def iorthogonalise(self):
+        """Run a Gram-Schmidt orthogonalisation for the case of a rank 2 tensor; otherwise exit.
+
+        The algorithm is run in place and supercedes the original data
+        """
+        if not optimize(OptimizationFlag.skip_arg_checks):
+            if self.rank != 2:
+                raise ValueError("iorthogonalise requires a rank 2 matrix!")
+
+        # if above tests succeed, we can step through blocks performing orthogonalisation one block at a time
+        self._data = [_orthogonalise_block(block) for block in self._data]
+        return self
 
     @use_cython(replacement="Array_iadd_prefactor_other")
     def iadd_prefactor_other(self, prefactor, other):
@@ -3493,6 +3534,7 @@ def tensordot(a, b, axes=2):
         Returns a scalar in case of a full contraction.
     """
     # for details on the implementation, see _tensordot_worker.
+    #print ("Calling worker for a=",a,", b=",b,", axes=",axes)
     a, b, axes = _tensordot_transpose_axes(a, b, axes)
 
     # optimize/check for special cases
@@ -3533,7 +3575,7 @@ def svd(a,
         qtotal_LR=[None, None],
         inner_labels=[None, None],
         inner_qconj=+1):
-    """Singualar value decomposition of an Array `a`.
+    """Singular value decomposition of an Array `a`.
 
     Factorizes ``U, S, VH = svd(a)``, such that ``a = U*diag(S)*VH`` (where ``*`` stands for
     a :func:`tensordot` and `diag` creates an correctly shaped Array with `S` on the diagonal).
@@ -4868,6 +4910,36 @@ def _eigvals_worker(hermitian, a, sort, UPLO='L'):
         resw[a.legs[0].get_slice(qi)] = rw  # replace eigenvalues
     return resw
 
+#@use_cython
+def _orthogonalise_block(block, insert_random = True):
+    """Worker function for ``iorthogonalise``, implementing
+       Gram-Schmidt orthonormalization of the rows of the given block.
+       insert_random : bool
+           if set, the function inserts random vectors in the case of linearly
+           dependent rows to ensure maximum rank
+    """
+    if not block.shape[0] <= block.shape[1]:
+        raise ValueError("iorthogonalise requires a matrix with each block satisfying block.shape[0] <= block.shape[1] - you have dimensions %d and %d!" % (block.shape[0],block.shape[1]))
+    dimCol = block.shape[1]
+    for i in range(0, block.shape[0]):
+        Bi = block[i]
+        while True:
+            for j in range(0, i):
+                Bi = Bi - block[j] * (np.conj(block[j]) @ Bi)
+            norm = np.linalg.norm(Bi)
+            if norm < 1e-15:
+                # column block[i] was a linear combination of columns block[:i-1]
+                # try a random vector instead:
+                if (insert_random):
+                    Bi = random_matrix.standard_normal_complex(dimCol)
+                    #np.reshape(np.random.normal(scale=1./np.sqrt(2.), size=[dimCol,2]).view(np.complex128), dimCol)
+                else:
+                    Bi = np.zeros(dimCol)
+                    break
+            else:
+                block[i] = Bi / np.linalg.norm(Bi)
+                break
+    return block
 
 def __pyx_unpickle_Array(type_, checksum, state):
     """Allow to unpickle Arrays created with Cython-compiled TenPy version 0.3.0."""

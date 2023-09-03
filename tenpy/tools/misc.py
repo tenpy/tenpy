@@ -16,7 +16,7 @@ import warnings
 __all__ = [
     'to_iterable', 'to_iterable_of_len', 'to_array', 'anynan', 'argsort', 'lexsort',
     'inverse_permutation', 'list_to_dict_list', 'atleast_2d_pad', 'transpose_list_list',
-    'zero_if_close', 'pad', 'any_nonzero', 'add_with_None_0', 'chi_list', 'group_by_degeneracy',
+    'zero_if_close', 'pad', 'any_nonzero', 'add_with_None_0', 'chi_list', 'qramp_list', 'group_by_degeneracy',
     'get_close', 'find_subclass', 'get_recursive', 'set_recursive', 'update_recursive',
     'merge_recursive', 'flatten', 'setup_logging', 'build_initial_state', 'setup_executable'
 ]
@@ -97,7 +97,7 @@ def to_array(a, shape=(None, ), dtype=None, allow_incommensurate=False):
                 crop[i] = slice(None, shape[i])
                 need_crop = True
             else:
-                raise ValueError("incomensurate len for tiling from {0:d} to {1:d}".format(
+                raise ValueError("incommensurate len for tiling from input argument shape {0:d} to target shape {1:d}".format(
                     a.shape[i], shape[i]))
     a = np.tile(a, reps)
     if need_crop:
@@ -443,7 +443,51 @@ def chi_list(chi_max, dchi=20, nsweeps=20, verbose=0):
         print("chi_list = ")
         pprint.pprint(chi_list)
     return chi_list
+    
+def qramp_list(nqramp, last_qramp, qramp_op, qramp_site, qramp_move_right):
+    """return a dictionary of sweep indices with entries corresponding to qramp_list 
+    in :class:`~tenpy.algorithms.dmrg.DMRGEngine`
+    Parameters
+    ----------
+    nqramp : int
+        Number of operators to be inserted in total
+    last_qrampp : int
+        The largest sweep index where an insertion occurs
+    qramp_op : str, npc.array
+        Description of the operator to insert, appropriate for the chosen DMRG algorithm
+    qramp_site : int
+    	Site of MPS where operators should be inserted
+    qramp_move_right : True | False
+    	Direction of movement during DMRG when operators should be inserted
 
+    Returns
+    -------
+    dictionary: {nsweep1: [i0, move_right, custom_op], nsweep2: [...]}
+    """
+    if (last_qramp<nqramp):
+    	raise ValueError("Error: multiple operator insertions per sweep not currently supported.")
+    if qramp_site is None:
+    	qramp_site = 0
+    if nqramp == 0:
+    	return {}
+    stride = int(last_qramp)//int(nqramp)
+    nlarger=last_qramp-stride*nqramp # number of steps with size (stride +1)
+    qramp_list = {}
+    for i in range (nqramp - nlarger):
+    	sweep = (i+1)*stride
+    	if (qramp_op is not None):
+    		qramp_list[sweep] = [qramp_site, qramp_move_right, qramp_op]
+    	else:
+            qramp_list[sweep] = [qramp_site, qramp_move_right]
+    offset = stride*(nqramp - nlarger)
+    for i in range (nlarger):
+    	sweep = offset + (i+1)*(stride+1)
+    	if (qramp_op is not None):
+    	    qramp_list[sweep] = [qramp_site, qramp_move_right, qramp_op]
+    	else:
+    		qramp_list[sweep] = [qramp_site, qramp_move_right]
+    print ("qramp_list=",qramp_list)
+    return qramp_list
 
 def group_by_degeneracy(E, *args, subset=None, cutoff=1.e-12):
     """Find groups of indices for which (energy) values are degenerate.
@@ -936,7 +980,7 @@ def build_initial_state(size, states, filling, mode='random', seed=None):
     return mps.build_initial_state(size, states, filling, mode, seed)
 
 
-def setup_executable(mod, run_defaults, identifier_list=None):
+def setup_executable(mod, run_defaults, identifier_list=None, only_list_supplied=False):
     """Read command line arguments and turn into useable dicts.
 
     .. warning ::
@@ -973,6 +1017,10 @@ def setup_executable(mod, run_defaults, identifier_list=None):
     args :
         namespace with raw arguments for some backwards compatibility with executables.
     """
+    warnings.warn(
+        "Attention: `setup_executable` was developed for a previous version of tenpy and not all options may be operational.",
+        category=FutureWarning,
+        stacklevel=2)
     warnings.warn("Deprecated: use `tenpy.run_simulation` and `tenpy.console_main` instead.",
                   category=FutureWarning,
                   stacklevel=2)
@@ -1020,19 +1068,46 @@ def setup_executable(mod, run_defaults, identifier_list=None):
     parser.add_argument('-seed', default=None)  # For anything random
 
     # The sim_par bit (for DMRG-related parameters). These don't vary, so we'll just define here.
+    if not 'active_sites' in run_defaults:
+        parser.add_argument('-active_sites', type=int, default=2)
     parser.add_argument('-chi', type=int, default=100)
     parser.add_argument('-dchi', type=int, default=20)  # Step size for chi ramp
     parser.add_argument('-dsweeps', type=int, default=20)  # Number of sweeps for chi step
-    parser.add_argument('-min_sweeps', type=int, default=30)
-    parser.add_argument('-max_sweeps', type=int, default=1000)
-    #parser.add_argument('-n_steps', type=int, default=10)
-    #parser.add_argument('-max_steps', type=int, default=2400)
+    parser.add_argument('-nqramp', type=int, default=0) # Number of insertions of qramp operator
+    parser.add_argument('-last_qramp', type=int, default=50) # Last sweep at which an operator is inserted
+    parser.add_argument('-qramp_op', type=str, default=None) # Operator to insert during ramp events
+    parser.add_argument('-qramp_site', type=str, default='0', help='The site index where ramp operators should be inserted, or "R" for random sites') # Site on which to insert the ramp operator
+    parser.add_argument('-qramp_move_left', action='store_true') # flag indicating the operators should be inserted while moving left
+    if run_defaults.get('min_sweeps') is None:
+        parser.add_argument('-min_sweeps', type=int, default=30)
+    if run_defaults.get('max_sweeps') is None:
+        parser.add_argument('-max_sweeps', type=int, default=1000)
+    if run_defaults.get('N_sweeps_check') is None:
+        parser.add_argument('-N_sweeps_check', type=int, default=10)
+    
+    # inputs for mixer parameters, as per https://tenpy.readthedocs.io/en/latest/reference/tenpy.algorithms.dmrg.Mixer.html#cfg-config-Mixer
     parser.add_argument('-mixer', action='store_true')  # To activate mixer
     parser.add_argument('-mix_str', type=float, default=1.e-3)
     parser.add_argument('-mix_dec', type=float, default=1.5)
     parser.add_argument('-mix_len', type=int, default=80)
-    parser.add_argument('-start_env', type=int, default=0)
-    parser.add_argument('-update_env', type=int)
+            
+    # control of tolerances:
+    if run_defaults.get('max_E_err') is None:
+        parser.add_argument('-max_E_err', type=float, default=1e-8) # DMRG Error tolerance
+    if run_defaults.get('max_S_err') is None:
+        parser.add_argument('-max_S_err', type=float, default=1e-5) # DMRG Entanglement tolerance
+
+    # DMRG norm tolerance: https://tenpy.readthedocs.io/en/latest/reference/tenpy.algorithms.dmrg.DMRGEngine.html#cfg-option-DMRGEngine.norm_tol
+    if not 'norm_tol' in run_defaults:        parser.add_argument('-norm_tol', type=float, default=1e-5) # After the DMRG run, update the environment with at most `norm_tol_iter` sweeps until ``np.linalg.norm(psi.norm_err()) < norm_tol``.
+    if not 'norm_tol_iter' in run_defaults:
+        parser.add_argument('-norm_tol_iter', type=float, default=5.0)
+	#Perform at most `norm_tol_iter`*`update_env` sweeps to converge the norm error below `norm_tol`
+    
+    # parameters controlling sweeps to reconstruct the environment
+    if run_defaults.get('start_env') is None:
+        parser.add_argument('-start_env', type=int, default=0)
+    if run_defaults.get('update_env') is None:
+        parser.add_argument('-update_env', type=int)
 
     # Now parse and turn into manageable dicts.
     args = parser.parse_args()
@@ -1047,18 +1122,32 @@ def setup_executable(mod, run_defaults, identifier_list=None):
         run_par[label] = par_dict[label]
 
     try:
+        from ..algorithms import dmrg
         sim_par = {
-            'chi_list': chi_list(args.chi, args.dchi, args.dsweeps),
-            'N_sweeps_check': 10,
+            'active_sites': args.active_sites,
+            'chi_list': dmrg.chi_list(args.chi, args.dchi, args.dsweeps),
+            'qramp_op': args.qramp_op,
+            'qramp_list': qramp_list(args.nqramp, args.last_qramp, args.qramp_op, args.qramp_site, not args.qramp_move_left),
             'min_sweeps': args.min_sweeps,
             'max_sweeps': args.max_sweeps,
+            'N_sweeps_check' : args.N_sweeps_check,
+            'start_env': args.start_env,
+            'max_E_err' : args.max_E_err,
+            'max_S_err' : args.max_S_err,
+            'norm_tol' : args.norm_tol,
+            'norm_tol_iter' : args.norm_tol_iter,
             'verbose': args.verbose,  # Take this from the model
             'lanczos_params': {
                 'N_min': 2,
                 'N_max': 40,
                 'E_tol': 10**(-12)
             }
-        }
+         }
+        if (args.update_env is None):
+            sim_par['update_env'] = args.N_sweeps_check // 2
+        else:
+            sim_par['update_env'] = args.update_env
+			
     except AttributeError as err:
         print(
             'sim_par parsing has failed, most likely because model does not define verbose parameter.'
@@ -1089,16 +1178,22 @@ def setup_executable(mod, run_defaults, identifier_list=None):
                                                         'num').replace('charge',
                                                                        'ch').replace('spin', 'S')
             identifier += shortened + "_"
-        elif model_par[varname] != 0:  # Parameters that are 0 are ignored. Only want supplied?
-            identifier += varname + "_" + str(model_par[varname]) + "_"
+        else:
+            if (only_list_supplied):
+                if model_par[varname] != model_defaults[varname]:
+                    identifier += varname + "_" + str(model_par[varname]) + "_"
+            else:
+                if model_par[varname] != 0:  # Parameters that are 0 are ignored. Only want supplied?
+                    identifier += varname + "_" + str(model_par[varname]) + "_"
     if args.mixer:
         identifier += 'mix_({},{},{})'.format(args.mix_str, args.mix_dec, args.mix_len)
     if identifier[-1] == "_":
         identifier = identifier[:-1]
     # Attempt to shorten the identifier
     identifier = identifier.replace('periodic', 'inf').replace('finite', 'fin').replace('.0_', '_')
+    identifier = identifier.replace('flux_p', 'p').replace('flux_q', 'q').replace('phi_ext_mode','pe-mode')
     if len(identifier) >= 144:
-        print("Warning: identifier has a lenght longer than max filename on encrypted Ubuntu!")
+        print("Warning: identifier has a length longer than max filename on encrypted Ubuntu! Try argument 'only_list_supplied'")
 
     run_par.update({
         'ncores': args.ncores,

@@ -987,10 +987,10 @@ class CouplingModel(Model):
         r"""Add twosite coupling terms to the Hamiltonian, summing over lattice sites.
 
         Represents couplings of the form
-        :math:`\sum_{x_0, ..., x_{dim-1}} strength[shift(\vec{x})] * OP0 * OP1`, where
-        ``OP0 := lat.unit_cell[u0].get_op(op0)`` acts on the site ``(x_0, ..., x_{dim-1}, u1)``,
-        and ``OP1 := lat.unit_cell[u1].get_op(op1)`` acts on the site
-        ``(x_0+dx[0], ..., x_{dim-1}+dx[dim-1], u1)``.
+        :math:`\sum_{x_0, ..., x_{dim-1}} strength[shift(\vec{x})] * OP1 * OP2`, where
+        ``OP1 := lat.unit_cell[u0].get_op(op1)`` acts on the site ``(x_0, ..., x_{dim-1}, u1)``,
+        and ``OP2 := lat.unit_cell[u1].get_op(op2)`` acts on the site
+        ``(x_0+dx[0], ..., x_{dim-1}+dx[dim-1], u2)``.
         Possible combinations ``x_0, ..., x_{dim-1}`` are determined from the boundary conditions
         in :meth:`~tenpy.models.lattice.Lattice.possible_couplings`.
 
@@ -1248,6 +1248,14 @@ class CouplingModel(Model):
         for t in self.coupling_terms.values():
             ct += t
         return ct
+
+    def get_hopping_terms(self):
+        """Return list of all :attr:`coupling_terms` that provide hopping terms."""
+        sites = self.lat.mps_sites()
+        hopping_terms=[]
+        for item in self.coupling_terms.values():
+            hopping_terms+=item.get_hopping_terms(self.lat)
+        return hopping_terms
 
     def add_multi_coupling(self,
                            strength,
@@ -1695,7 +1703,7 @@ class CouplingModel(Model):
         H_MPO.explicit_plus_hc = self.explicit_plus_hc
         return H_MPO
 
-    def coupling_strength_add_ext_flux(self, strength, dx, phase):
+    def coupling_strength_add_ext_flux(self, strength, dx, phase, mode='cut'):
         """Add an external flux to the coupling strength.
 
         When performing DMRG on a "cylinder" geometry, it might be useful to put an "external flux"
@@ -1721,6 +1729,9 @@ class CouplingModel(Model):
             E.g., if you want flux through the cylinder on which you have an infinite MPS,
             you should give ``phase=[0, phi]`` souch that particles pick up a phase `phi` when
             hopping around the cylinder.
+        mode : allowed values 'cut' (default) or 'uniform'
+            If 'cut', phase is applied only at the boundary of the simulation cell
+            If 'uniform', phase is uniformly spread out among all couplings
 
         Returns
         -------
@@ -1750,6 +1761,8 @@ class CouplingModel(Model):
             ...     self.add_coupling(strength_with_flux, u1, 'Cd', u2, 'C', dx)
             ...     self.add_coupling(np.conj(strength_with_flux), u2, 'Cd', u1, 'C', -dx)
         """
+        if ((mode != 'cut') and (mode != 'uniform')):
+            raise ValueError("Unknown mode for applying flux insertion in model.coupling_strength_add_ext_flux")
         c_shape = self.lat.coupling_shape(dx)[0]
         strength = to_array(strength, c_shape)
         # make strength complex
@@ -1764,15 +1777,20 @@ class CouplingModel(Model):
                 continue
             if abs(dx[ax]) == 0:
                 continue  # nothing to do
-            slices = [slice(None) for _ in range(self.lat.dim)]
-            slices[ax] = slice(-abs(dx[ax]), None)
-            # the last ``abs(dx[ax])`` entries in the axis `ax` correspond to hopping
-            # accross the periodic b.c.
-            slices = tuple(slices)
-            if dx[ax] > 0:
-                strength[slices] *= np.exp(-1.j * phase[ax])  # hopping in *negative* y-direction
-            else:
-                strength[slices] *= np.exp(1.j * phase[ax])  # hopping in *positive* y-direction
+            if (mode == 'cut'):
+                slices = [slice(None) for _ in range(self.lat.dim)]
+                slices[ax] = slice(-abs(dx[ax]), None)
+                # the last ``abs(dx[ax])`` entries in the axis `ax` correspond to hopping
+                # accross the periodic b.c.
+                slices = tuple(slices)
+                if dx[ax] > 0:
+                    strength[slices] *= np.exp(-1.j * phase[ax])  # hopping in *negative* y-direction
+                else:
+                    strength[slices] *= np.exp(1.j * phase[ax])  # hopping in *positive* y-direction
+            else: # mode is uniform
+                assert(mode == 'uniform')
+                # hoppings pick up a fraction -dx[ax]/c_shape[ax] of the total phase (sign conventions as above)
+                strength *= np.exp(-1.j * dx[ax] * phase[ax]/c_shape[ax])
         return strength
 
 
