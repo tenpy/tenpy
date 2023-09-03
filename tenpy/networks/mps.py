@@ -1887,6 +1887,12 @@ class MPS(BaseMPSExpectationValue):
         singlet_mps : :class:`MPS`
             An MPS representing singlets on the specified pairs of sites.
         """
+        if not site.leg.chinfo.trivial_shift:
+            # Singlet coverings may not be compatible with such symmetries.
+            # Consider e.g. the electric dipole moment where the "up" and "down" states have
+            # different electric charge. Then, a two-site singlet has no well-defined dipole moment.
+            raise ValueError('MPS.from_singlets does not support symmetries with non-trivial shift. '
+                             'Singlet state are not necessarily symmetric w.r.t. such symmetries.')
         # sort each pair s.t. i < j
         pairs = [((i, j) if i < j else (j, i)) for (i, j) in pairs]
         # sort by smaller site of the pair
