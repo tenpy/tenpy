@@ -132,7 +132,7 @@ class DipolarSpinChain(CouplingMPOModel):
         conserve : 'best' | 'dipole' | 'Sz' | 'parity' | None
             What should be conserved. See :class:`~tenpy.networks.site.SpinSite`.
             Note that dipole conservation necessarily includes Sz conservation.
-            For ``'best'``, we preserve ``'dipole'`.
+            For ``'best'``, we preserve ``'dipole'``.
         sort_charge : bool | None
             Whether to sort by charges of physical legs.
             See change comment in :class:`~tenpy.networks.site.Site`.

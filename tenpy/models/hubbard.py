@@ -247,8 +247,8 @@ class DipolarBoseHubbardChain(CouplingMPOModel):
 
     Options
     -------
-    .. cfg:config :: BoseHubbardModel
-        :include: DipolarBoseHubbardChain
+    .. cfg:config :: DipolarBoseHubbardChain
+        :include: CouplingMPOModel
 
         Nmax : int
             Maximum number of bosons per site.
