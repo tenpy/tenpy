@@ -213,6 +213,10 @@ class TorchBlockBackend(AbstractBlockBackend):
             flat_idx, idx = divmod(flat_idx, dim)
             idcs.append(idx)
         return idcs
+
+    def synchronize(self):
+        """Wait for asynchronous processes (if any) to finish"""
+        torch_module.cuda.synchronize(device=self.device)
         
 
 class NoSymmetryTorchBackend(TorchBlockBackend, AbstractNoSymmetryBackend):

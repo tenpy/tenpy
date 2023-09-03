@@ -794,4 +794,8 @@ class AbstractBlockBackend(metaclass=ABCMeta):
     def block_abs_argmax(self, block: Block) -> list[int]:
         """Return the indices (one per axis) of the largest entry (by magnitude) of the block"""
         ...
+
+    def synchronize(self):
+        """Wait for asynchronous processes (if any) to finish"""
+        pass
     
