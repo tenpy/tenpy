@@ -3376,7 +3376,7 @@ def _get_result_labels(legs1: list[str | None], legs2: list[str | None],
         labels2 = legs2
     else:
         labels2 = [relabel2.get(leg.label, leg.label) for leg in legs2]
-    conflicting = [label for label in labels1 if label in labels2]
+    conflicting = [label for label in labels1 if (label is not None) and (label in labels2)]
     labels = labels1 + labels2
     if conflicting:
         # stacklevel 1 is this function, 2 is the API function using it, 3 could be from the user.
