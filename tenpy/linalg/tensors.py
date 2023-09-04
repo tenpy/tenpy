@@ -368,6 +368,8 @@ class AbstractTensor(metaclass=ABCMeta):
         _legs2 = to_iterable(legs2)
         legs1 = list(map(self.get_leg_idx, _legs1))
         legs2 = list(map(other.get_leg_idx, _legs2))
+        if duplicate_entries(legs1) or duplicate_entries(legs2):
+            raise ValueError('legs may not contain duplicates')
         if len(legs1) != len(legs2):
             raise ValueError('Mismatching number of legs')
         incompatible = []
