@@ -297,8 +297,8 @@ class SubspaceExpansion(Mixer):
             right move, or ``'vL', '(p0.vR)'`` for left move.
         i0 : int
             The site index where `theta` lives.
-        move_right : bool
-            Whether we move to the right (``True``) or left (``False``).
+        move_right : bool | None
+            Whether we move to the right (``True``), left (``False``), or dont move (``None``).
 
         Returns
         -------
@@ -351,7 +351,7 @@ class SubspaceExpansion(Mixer):
                                          inner_labels=['vR', 'vL'])
             VH = VH.split_legs('(wR.vR)')
             VH = VH.take_slice(IdL, 'wR')  # project back such that U-S-VH is original theta
-        else:  # move left
+        else:  # move left (DMRG guarantees mover_right in [True, False])
             RHeff = _get_RHeff(engine.env, i0, engine.eff_H)  # on site i0, but with p1 label
             RHeff = RHeff.transpose(['(p1*.vL)', 'wL', '(p1.vL*)'])
             if not explicit_plus_hc and IdR is not None:
@@ -1046,6 +1046,7 @@ class DMRGEngine(Sweep):
                 # growing the bond dimension with chi_list, so we should also reactivate the mixer
                 self.mixer_activate()
         res = super().sweep(optimize)
+        assert self.move_right is not None  # Can assume move_right in [True, False] DMRG functions
         if optimize:
             # update mixer
             if self.mixer is not None:
