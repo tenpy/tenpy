@@ -789,7 +789,9 @@ class Tensor(AbstractTensor):
                 return block
 
         data = backend.from_block_func(block_func, legs)
-        return cls(data=data, backend=backend, legs=legs, labels=labels)
+        res = cls(data=data, backend=backend, legs=legs, labels=labels)
+        res.test_sanity()  # this catches e.g. errors where the block_func returns blocks of wrong shape
+        return res
 
     @classmethod
     def from_dense_block(cls, block, legs: list[VectorSpace], backend=None, dtype: Dtype=None,
@@ -2126,8 +2128,10 @@ class DiagonalTensor(AbstractTensor):
                 return block
 
         data = backend.diagonal_from_block_func(block_func, leg=first_leg)
-        return cls(data=data, first_leg=first_leg, second_leg_dual=second_leg_dual, backend=backend,
+        res = cls(data=data, first_leg=first_leg, second_leg_dual=second_leg_dual, backend=backend,
                    labels=labels)
+        res.test_sanity()
+        return res
 
     @classmethod
     def from_diag_block(cls, diag: Block, first_leg: VectorSpace, second_leg_dual: bool = True,
