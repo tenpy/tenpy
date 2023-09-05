@@ -19,6 +19,7 @@ import timeit
 import time
 import numpy as np
 import sys
+import os
 
 fn_template = '{mod_name!s}_benchmark_s_{sectors:d}_l_{legs:d}_b_{backend_str}_q_{symm_str}.txt'
 symmetry_short_names = dict(
@@ -123,6 +124,9 @@ def save_results(sizes, benchmark_results, filename=fn_template, **kwargs):
     symm_str = '_'.join(symmetry_short_names.get(s, s) for s in kwargs['symmetry'])
     backend_str = '_'.join([kwargs['symmetry_backend'], kwargs['block_backend']])
     filename = filename.format(symm_str=symm_str, backend_str=backend_str, **kwargs)
+    if not os.path.exists('results'):
+        os.makedirs('results')
+    filename = 'results/' + filename
     header = []
     for kw, arg in kwargs.items():
         header.append(kw + " = " + repr(arg))
@@ -137,6 +141,8 @@ def save_results(sizes, benchmark_results, filename=fn_template, **kwargs):
 
 def load_results(filename):
     """Load the results saved to a file with `save_results`."""
+    if not filename.startswith('results/'):
+        filename = 'results/' + filename
     # read header
     kwargs = {}
     with open(filename) as f:
