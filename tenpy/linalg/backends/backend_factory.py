@@ -29,8 +29,8 @@ _backend_lookup = dict(
         torch=(AbelianTorchBackend, {}),
         tensorflow=None,  # FUTURE
         jax=None,  # FUTURE
-        cpu=None,  # TODO: npc
-        gpu=None,  # TODO: quick-and-dirty npc + torch
+        cpu=(AbelianNumpyBackend, {}),
+        gpu=(AbelianTorchBackend, dict(device='cuda')),
         tpu=None,  # FUTURE
     ),
     #
