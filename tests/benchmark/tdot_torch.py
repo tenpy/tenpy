@@ -8,17 +8,20 @@ import tdot_tenpy
 
 
 def setup_benchmark(**kwargs):
-    kwargs = kwargs.copy()
-    kwargs['block_backend'] = 'torch'
+    assert kwargs.get('block_backend', 'torch') in ['torch', 'gpu']
     a, b, legs1, legs2 = tdot_tenpy.setup_benchmark(**kwargs)
     assert isinstance(a.backend, TorchBlockBackend)
-    return a.to_dense_block(), b.to_dense_block(), (tuple(legs1), tuple(legs2))
+    res = a.to_dense_block(), b.to_dense_block(), (tuple(legs1), tuple(legs2))
+
+    if torch.cuda.is_available():
+        torch.cuda.synchronize()  # wait for all GPU kernels to complete
+
+    return res
 
 
 def benchmark(data):
     a, b, axes = data
     _ = torch.tensordot(a, b, axes)
-    try:
+
+    if torch.cuda.is_available():
         torch.cuda.synchronize()  # wait for all GPU kernels to complete
-    except AssertionError:
-        pass  # synchronize raises if no GPU is available.

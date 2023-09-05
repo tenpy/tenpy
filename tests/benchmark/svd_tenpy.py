@@ -4,7 +4,7 @@
 from tenpy.linalg.matrix_operations import svd
 from tenpy.tools.misc import to_iterable
 
-from tdot_tenpy import _parse_symmetry, get_backend, get_random_tensor
+from tdot_tenpy import parse_symmetry, get_backend, get_random_tensor
 
 
 def setup_benchmark(symmetry_backend='abelian',  # no_symmetry, abelian, nonabelian
@@ -17,7 +17,7 @@ def setup_benchmark(symmetry_backend='abelian',  # no_symmetry, abelian, nonabel
                     ):
     if sectors > size:
         sectors = size
-    symmetry = _parse_symmetry(to_iterable(symmetry))
+    symmetry = parse_symmetry(to_iterable(symmetry))
     if sectors > symmetry.num_sectors:
         sectors = symmetry.num_sectors
     backend = get_backend(symmetry=symmetry, block_backend=block_backend, symmetry_backend=symmetry_backend)
@@ -26,6 +26,7 @@ def setup_benchmark(symmetry_backend='abelian',  # no_symmetry, abelian, nonabel
     a.test_sanity()
     u_legs = list(range(legs))
     vh_legs = list(range(legs, 2* legs))
+    a.backend.synchronize()
     return a, u_legs, vh_legs
 
 

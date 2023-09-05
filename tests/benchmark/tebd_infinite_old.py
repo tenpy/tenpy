@@ -1,15 +1,18 @@
 """To be used in the `-m` argument of benchmark.py."""
-# Copyright 2019-2023 TeNPy Developers, GNU GPLv3
-
+# Copyright 2023 TeNPy Developers, GNU GPLv3
 import numpy as np
+from tenpy.tools.misc import to_iterable
+from misc import get_qmod, parse_symmetry
 
-from tenpy.networks.mps import MPS
-from tenpy.models.spins import SpinChain
-from tenpy.algorithms import tebd
-from tenpy.tools import optimization
+try:
+    import old_tenpy as otp  # type: ignore
+except ModuleNotFoundError:
+    print('This benchmark expects you to have a compiled version of tenpy v0.10 in your '
+          '$PYTHONPATH under the name "old_tenpy".')
+    raise
 
 
-def setup_benchmark(mod_q=[1], legs=10, size=20, **kwargs):
+def get_tebd_engine(old_tenpy, mod_q=[1], legs=10, size=20, **kwargs):
     """Setup TEBD benchmark.
 
     Mapping of parameters:
@@ -26,9 +29,9 @@ def setup_benchmark(mod_q=[1], legs=10, size=20, **kwargs):
         conserve = 'Sz'
     model_params = dict(L=L, S=2., D=0.3, bc_MPS='infinite', conserve=conserve, verbose=0)
     #  print("conserve =", repr(conserve))
-    M = SpinChain(model_params)
+    M = old_tenpy.models.spins.SpinChain(model_params)
     initial_state = (['up', 'down'] * L)[:L]
-    psi = MPS.from_product_state(M.lat.mps_sites(), initial_state, bc='infinite')
+    psi = old_tenpy.networks.mps.MPS.from_product_state(M.lat.mps_sites(), initial_state, bc='infinite')
     local_dim = psi.sites[0].dim
     tebd_params = {
         'trunc_params': {
@@ -40,9 +43,9 @@ def setup_benchmark(mod_q=[1], legs=10, size=20, **kwargs):
         'dt': 0.1,
         'verbose': 0.,
     }
-    eng = tebd.TEBDEngine(psi, M, tebd_params)
+    eng = old_tenpy.algorithms.tebd.TEBDEngine(psi, M, tebd_params)
     eng.verbose = 0.02
-    optimization.set_level(3)
+    old_tenpy.tools.optimization.set_level(3)
     for i in range(5 + int(np.log(size) / np.log(local_dim))):
         eng.run()
         if eng.verbose > 0.1:
@@ -52,6 +55,11 @@ def setup_benchmark(mod_q=[1], legs=10, size=20, **kwargs):
     if eng.verbose > 0.1:
         print("set up tebd for size", size)
     return eng
+
+
+def setup_benchmark(symmetry='u1_symmetry', legs=10, size=20, **kwargs):
+    symmetry = parse_symmetry(to_iterable(symmetry))
+    return get_tebd_engine(old_tenpy=otp, mod_q=get_qmod(symmetry), legs=legs, size=size, **kwargs)
 
 
 def benchmark(data):

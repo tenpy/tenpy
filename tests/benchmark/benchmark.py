@@ -20,24 +20,9 @@ import time
 import numpy as np
 import sys
 import os
+from misc import parse_backend, symmetry_short_names
 
-fn_template = '{mod_name!s}_benchmark_s_{sectors:d}_l_{legs:d}_b_{backend_str}_q_{symm_str}.txt'
-symmetry_short_names = dict(
-    u1_symmetry='U1',
-    U1Symmetry='U1',
-    su2_symmetry='SU2',
-    SU2Symmetry='SU2',
-    fermion_parity='fermion',
-    FermionParity='fermion',
-    z2_symmetry='Z2',
-    z3_symmetry='Z3',
-    z4_symmetry='Z4',
-    z5_symmetry='Z5',
-    z6_symmetry='Z6',
-    z7_symmetry='Z7',
-    z8_symmetry='Z8',
-    z9_symmetry='Z9',
-)
+fn_template = '{mod_name!s}_benchmark_b_{backend_str}_q_{symm_str}_l_{legs:d}_s_{sectors:d}_.txt'
 
 sizes_choices = {
     'default': [1, 2, 3, 5, 7, 10, 12] + list(range(15, 50, 5)) + list(range(50, 200, 25)) + \
@@ -98,7 +83,6 @@ def perform_benchmark(mod_name,
     for size in sorted(sizes):
         kwargs_cpy = kwargs.copy()
         kwargs_cpy['size'] = size
-        t0 = time.time()
         results_seeds = []
         for seed in seeds:
             np.random.seed(seed)
@@ -111,10 +95,7 @@ def perform_benchmark(mod_name,
         used_sizes.append(size)
         results.append(np.mean(results_seeds))
         print("size {size: 4d}: {res:.2e}".format(size=size, res=results[-1]))
-        count = repeat_bestof * repeat_average * len(seeds)
-        if (results[-1] > max_time or  # benchmark time
-                time.time() - t0 >
-                count * max_time * 11):  # setup time shouldn't be too much longer
+        if results[-1] > max_time:
             break
     return used_sizes, results
 
@@ -213,25 +194,6 @@ def plot_many_results(filenames, fn_beg_until="_", fn_end_from="_l_", save=True)
         plt.show()
 
 
-def _parse_backend(backend: list[str]) -> tuple[str, str]:
-    """Translate --backend argparse argument to symmetry_backend and block_backend"""
-    # default first:
-    VALID_SYMMETRY_BACKENDS = ['abelian', 'no_symmetry', 'nonabelian']
-    VALID_BLOCK_BACKENDS = ['numpy', 'torch', 'gpu']
-    
-    if len(backend) == 1:
-        if backend[0] in VALID_SYMMETRY_BACKENDS:
-            return backend[0], VALID_BLOCK_BACKENDS[0]
-        if backend[0] in VALID_BLOCK_BACKENDS:
-            return VALID_SYMMETRY_BACKENDS[0], backend[0]
-    if len(backend) == 2:
-        if backend[0] in VALID_SYMMETRY_BACKENDS and backend[1] in VALID_BLOCK_BACKENDS:
-            return backend[0], backend[1]
-        if backend[0] in VALID_BLOCK_BACKENDS and backend[1] in VALID_SYMMETRY_BACKENDS:
-            return backend[1], backend[0]
-    raise ValueError(f'Invalid backend specification: {backend}')
-
-
 if __name__ == "__main__":
     # ``python benchmark.py --help`` prints a summary of the options
     import argparse
@@ -285,7 +247,7 @@ if __name__ == "__main__":
                         default=None,
                         help='Plot the produced benchmark results (saved in the given files).')
     args = parser.parse_args()
-    symmetry_backend, block_backend = _parse_backend(args.backend)
+    symmetry_backend, block_backend = parse_backend(args.backend)
     kwargs = dict(symmetry=args.symmetry,
                   symmetry_backend=symmetry_backend,
                   block_backend=block_backend,

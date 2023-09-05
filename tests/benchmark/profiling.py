@@ -15,8 +15,9 @@ import cProfile
 import pstats
 import sys
 import time
+from misc import parse_backend, symmetry_short_names
 
-fn_template = '{mod_name!s}_profile_S_{size:d}_s_{sectors:d}_l_{legs:d}_mod_q_{mod_q_str}.prof'
+fn_template = '{mod_name!s}_profile_S_{size:d}_b_{backend_str}_q_{symm_str}_l_{legs:d}_s_{sectors:d}.prof'
 
 
 def perform_profiling(mod_name, repeat=1, seed=0, filename=fn_template, **kwargs):
@@ -39,7 +40,9 @@ def perform_profiling(mod_name, repeat=1, seed=0, filename=fn_template, **kwargs
         Note: is formated to a string with ``repr(kwargs)``. Don't use too complicated arguements!
     """
     kwargs['mod_name'] = mod_name
-    filename = filename.format(mod_q_str='_'.join([str(q) for q in kwargs['mod_q']]), **kwargs)
+    symm_str = '_'.join(symmetry_short_names.get(s, s) for s in kwargs['symmetry'])
+    backend_str = '_'.join([kwargs['symmetry_backend'], kwargs['block_backend']])
+    filename = filename.format(symm_str=symm_str, backend_str=backend_str, **kwargs)
     np.random.seed(seed)
     setup_code = "import {mod_name!s}\ndata = {mod_name!s}.setup_benchmark(**{kwargs!r})"
     setup_code = setup_code.format(mod_name=mod_name, kwargs=kwargs)
@@ -79,13 +82,22 @@ if __name__ == "__main__":
     # ``python benchmark.py --help`` prints a summary of the options
     import argparse
     parser = argparse.ArgumentParser(description=__doc__)
+    # added backend
     parser.add_argument(
         '-q',
-        '--mod_q',
-        type=int,
+        '--symmetry',
         nargs='*',
-        default=[],
-        help="Nature of the charge, ``Charges.mod``. The length determines the number of charges.")
+        type=str,
+        default=['u1_symmetry'],
+        help="The conserved symmetry / symmetries. Instance names or class names from tenpy.linalg.symmetries.groups")
+    parser.add_argument(
+        '-b',
+        '--backend',
+        nargs='*',
+        type=str,
+        default=['abelian', 'numpy'],
+        help=("The backend to use. Can specify the symmetry backend {no_symmetry | abelian | nonabelian}, "
+              "the block backend {numpy | torch}, or both"))
     parser.add_argument('-l',
                         '--legs',
                         type=int,
@@ -126,7 +138,10 @@ if __name__ == "__main__":
                         default=None,
                         help="Print the functions calling the given function")
     args = parser.parse_args()
-    kwargs = dict(mod_q=args.mod_q, legs=args.legs, sectors=args.sectors, size=args.size)
+    symmetry_backend, block_backend = parse_backend(args.backend)
+    kwargs = dict(symmetry=args.symmetry, symmetry_backend=symmetry_backend,
+                  block_backend=block_backend, legs=args.legs, sectors=args.sectors,
+                  size=args.size)
     files = []
     if args.modules is not None:
         for mod_name in args.modules:

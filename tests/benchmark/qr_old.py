@@ -2,20 +2,20 @@
 # Copyright 2023 TeNPy Developers, GNU GPLv3
 
 try:
-    import old_tenpy as otp
+    import old_tenpy as otp  # type: ignore
 except ModuleNotFoundError:
     print('This benchmark expects you to have a compiled version of tenpy v0.10 in your '
           '$PYTHONPATH under the name "old_tenpy".')
     raise
-import tenpy as tp
-import svd_tenpy
-import tdot_old
+
+import qr_tenpy
+from misc import convert_Tensor_to_Array
 
 
 def setup_benchmark(**kwargs):
     assert kwargs.get('block_backend', 'numpy') == 'numpy'
-    a, q_legs, r_legs = svd_tenpy.setup_benchmark(**kwargs)
-    a = tdot_old.convert_Tensor_to_Array(a)
+    a, q_legs, r_legs = qr_tenpy.setup_benchmark(**kwargs)
+    a = convert_Tensor_to_Array(a, old_tenpy=otp)
     return a, q_legs, r_legs
 
 

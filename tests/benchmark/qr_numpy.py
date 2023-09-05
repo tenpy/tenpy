@@ -2,12 +2,12 @@
 # Copyright 2023 TeNPy Developers, GNU GPLv3
 
 import numpy as np
-import svd_tenpy
+import qr_tenpy
 
 
 def setup_benchmark(**kwargs):
     assert kwargs.get('block_backend', 'numpy') == 'numpy'
-    a, q_legs, r_legs = svd_tenpy.setup_benchmark(**kwargs)
+    a, q_legs, r_legs = qr_tenpy.setup_benchmark(**kwargs)
     return a.to_numpy_ndarray(), q_legs, r_legs
 
 
