@@ -31,12 +31,12 @@ Much of the code is very similar to DMRG, and also based on the
 """
 # Copyright 2019-2023 TeNPy Developers, GNU GPLv3
 
-from tenpy.linalg.krylov_based import LanczosEvolution
-from tenpy.algorithms.truncation import svd_theta, TruncationError
-from tenpy.algorithms.mps_common import Sweep, ZeroSiteH, OneSiteH, TwoSiteH
-from tenpy.algorithms.algorithm import TimeEvolutionAlgorithm, TimeDependentHAlgorithm
-from tenpy.networks.mpo import MPOEnvironment
-from tenpy.linalg import np_conserved as npc
+from ..linalg.krylov_based import LanczosEvolution
+from .truncation import svd_theta, TruncationError
+from .mps_common import Sweep, ZeroSiteH, OneSiteH, TwoSiteH
+from .algorithm import TimeEvolutionAlgorithm, TimeDependentHAlgorithm
+from ..networks.mpo import MPOEnvironment
+from ..linalg import np_conserved as npc
 import numpy as np
 import time
 import warnings
