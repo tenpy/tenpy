@@ -128,7 +128,7 @@ class Mixer(mps_common.Mixer):
         msg = ('The `Mixer`, `SubspaceExpansion` and `DensityMatrixMixer` have been moved '
                'to tenpy.algorithms.mps_common. Note the changed function names and signatures.')
         warnings.warn(msg, category=FutureWarning, stacklevel=2)
-        super().__init__(self, options, sweep_activated)
+        super().__init__(options, sweep_activated)
 
 
 class SubspaceExpansion(Mixer, mps_common.SubspaceExpansion):
@@ -1264,6 +1264,13 @@ class SingleSiteDMRGEngine(DMRGEngine):
         self.psi.set_B(i_R, B1, form='B')  # right-canonical
         self.psi.set_SR(i_L, S)
         # environments are cleaned/updated in :meth:`update_env`
+
+    def mixer_activate(self):
+        super().mixer_activate()
+        if not self.mixer.can_decompose_1site:
+            msg = (f'Using {self.mixer.__class__.__name__} with single-site DMRG is inefficient. '
+                   f'The resulting algorithm has two-site costs!')
+            warnings.warn(msg)
 
 
 class EngineCombine(TwoSiteDMRGEngine):
