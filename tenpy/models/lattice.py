@@ -19,6 +19,7 @@ Further, an overview with plots of the predefined models is given in
 # Copyright 2018-2023 TeNPy Developers, GNU GPLv3
 
 import numpy as np
+from scipy.spatial import ConvexHull, Voronoi
 import itertools
 import warnings
 import copy
@@ -33,7 +34,7 @@ from ..networks.mps import MPS  # only to check boundary conditions
 __all__ = [
     'Lattice', 'TrivialLattice', 'SimpleLattice', 'MultiSpeciesLattice', 'IrregularLattice',
     'HelicalLattice', 'Chain', 'Ladder', 'NLegLadder', 'Square', 'Triangular', 'Honeycomb',
-    'Kagome', 'get_lattice', 'get_order', 'get_order_grouped'
+    'Kagome', 'SimpleBZ', 'get_lattice', 'get_order', 'get_order_grouped'
 ]
 
 # (update module doc string if you add further lattices)
@@ -205,6 +206,8 @@ class Lattice:
             if name in self.pairs:
                 raise ValueError("{0!s} sepcified twice!".format(name))
             self.pairs[name] = NN
+        self._reciprocal_basis = self.get_reciprocal_basis()
+        self._BZ = None
         self.test_sanity()  # check consistency
 
     def test_sanity(self):
@@ -1442,6 +1445,37 @@ class Lattice:
             vec = basis[i]
             ax.arrow(origin[0], origin[1], vec[0], vec[1], **kwargs)
 
+    def plot_reciprocal_basis(self, ax, origin=(0., 0.), plot_symmetric=True, **kwargs):
+        """Plot arrows indicating the basis vectors of the reciprocal lattice.
+        (Same as :meth:`plot_basis`, but without shading, since BZ is drawn seperately)
+
+        Parameters
+        ----------
+        ax : :class:`matplotlib.axes.Axes`
+            The axes on which we should plot.
+        plot_symmetric : bool, default=True
+            if True, centers the plot around the origin
+        **kwargs :
+            Keyword arguments for ``ax.arrow``.
+        """
+        kwargs.setdefault("length_includes_head", True)
+        kwargs.setdefault("width", 0.05)
+        kwargs.setdefault("color", 'k')
+        origin = np.array(origin)
+        reciprocal_basis = np.array([self.reciprocal_basis[i] for i in range(self.dim)])
+        if reciprocal_basis.shape[1] == 1:
+            reciprocal_basis = reciprocal_basis * np.array([[1., 0]])
+            if reciprocal_basis.shape[1] != 2:
+                raise ValueError("can only plot in 2 dimensions.")
+        for i in range(self.dim):
+            vec = reciprocal_basis[i]
+            ax.arrow(origin[0], origin[1], vec[0], vec[1], **kwargs)
+        if plot_symmetric is True:
+            ylim = np.abs(ax.get_ylim()).max()
+            xlim = np.abs(ax.get_xlim()).max()
+            ax.set_ylim(-ylim, +ylim)
+            ax.set_xlim(-xlim, +xlim)
+
     def plot_bc_identified(self, ax, direction=-1, origin=None, cylinder_axis=False, **kwargs):
         """Mark two sites indified by periodic boundary conditions.
 
@@ -1495,6 +1529,59 @@ class Lattice:
             kwargs.setdefault('linestyle', '--')
             kwargs['marker'] = None
             ax.plot(x_y_cyl[:, 0], x_y_cyl[:, 1], **kwargs)
+
+    def plot_brillouin_zone(self, ax, draw_points=True, autoscale=True, **kwargs):
+        """Plot the brillouin zone of the lattice.
+        Parameters
+        ----------
+        ax : :class:`matplotlib.axes.Axes`
+            The axes on which we should plot.
+        draw_points : bool, default=True
+            draw edges of the polygon (BZ high symmetry points)
+        autoscale : bool, default=True
+            call to :meth:`autoscale_view` of :class:`matplotlib.axes.Axes`
+        **kwargs :
+            Keyword arguments for ``matplotlib.patches.Polygon``.
+        """
+        self.BZ.plot_brillouin_zone(ax, draw_points=True, autoscale=True, **kwargs)
+
+    @property
+    def BZ(self):
+        if self._BZ is None:
+            try:
+                self._BZ = SimpleBZ.from_recip_basis_vectors(self.reciprocal_basis)
+            except Exception:
+                raise ValueError("Couldn't create the BZ")
+        return self._BZ
+
+    @BZ.setter
+    def BZ(self, bz_object):
+        if isinstance(bz_object, SimpleBZ):
+            self._BZ = bz_object
+        else:
+            logger.info("Brillouin Zone is not an instance of :class:`SimpleBZ`")
+            logger.info(
+                "trying to construct an instance of :class:`SimpleBZ` from given vertices...")
+            try:
+                self._BZ = SimpleBZ(bz_object)
+            except Exception as e:
+                raise Exception("""The Brillouin Zone must be given either as :class:`Simple_BZ`
+                                or as vertices of the Brillouin Zone from which an instance of
+                                :class:`SimpleBZ` will be created""") from e
+
+        logger.info("Manually changed the Brillouin Zone")
+
+    def get_reciprocal_basis(self):
+        """Compute reciprocal basis vectors obeying :math:`a_i b_j = 2 \pi \delta_{i, j}`, such that
+        ``b_j = reciprocal_basis[j]``"""
+        if self.basis.shape[0] == 1:
+            return (2*np.pi/np.linalg.norm(self.basis)).reshape(1, 1)
+        else:
+            return (np.linalg.inv(self.basis)*2*np.pi).T
+
+    @property
+    def reciprocal_basis(self):
+        return self._reciprocal_basis
 
     def _asvalid_latidx(self, lat_idx):
         """convert lat_idx to an ndarray with correct last dimension."""
@@ -3013,6 +3100,219 @@ class Kagome(Lattice):
                 order = get_order_grouped(self.shape, [(0, 2), (1,)])
                 return order
         return super().ordering(order)
+
+
+class SimpleBZ:
+    r"""Helper class to provide an interface to the Brillouin Zone of a given lattice
+
+    The Brillouin Zone is the Wigner Seitz Cell of the reciprocal lattice. For a given lattice
+    with basis vectors a_i, the reciprocal lattice is generated through the reciprocal
+    basis vectors b_i, which obey :math:`a_i b_j = 2 \pi \delta_{i j}`.
+
+    Parameters
+    ----------
+    vertices : array_like
+        a list of the vertices of the 1st BZ.
+    """
+
+    def __init__(self, vertices):
+        self.vertices = self.order_vertices(vertices)
+        self.hull = ConvexHull(self.vertices)
+
+    @classmethod
+    def from_recip_basis_vectors(cls, basis, n_vecs_generated=30):
+        """Given a basis, consisting of two reciprocal basis vectors b1, b2; first perform a
+        Lagrange lattice reduction, ensuring the new basis will be reasonably orthogonal. Second,
+        Compute the Voronoi diagram of a set of lattice points and return the vertices of the
+        voronoi region including the origin. This will be the 1st Brillouin Zone.
+
+        Parameters
+        ----------
+        basis : array_like
+            basis of a lattice in reciprocal space, s.t. the basis vectors are b1 = basis[0],
+            b2 = basis[1]
+        n_vecs_generated : int, default=30
+            number of lattice points to generate around the origin
+
+        Returns
+        -------
+        LatticeClass : :class:`SimpleBZ`
+            an instance of the :class:`SimpleBZ` instantiated from a list of points (vertices)
+            (in ordered counterclockwise direction) defining the BZ
+        """
+        # make sure given lattice basis is reasonable orthogonal and short
+        b1, b2 = cls.lagrange_lattice_reduction(basis)
+        # generate list of lattice points
+        b1_list = np.array([b1 * i for i in range(-n_vecs_generated, n_vecs_generated + 1)])
+        b2_list = np.array([b2 * i for i in range(-n_vecs_generated, n_vecs_generated + 1)])
+        from itertools import product as prod
+        # generate lattice points around the origin (corresponds to i*b1+j*b2, i,j in {-10, -9, ..., 9, 10})
+        lattice_points = np.array(list(prod(b1_list, b2_list))).sum(axis=1)
+        vor = Voronoi(lattice_points)
+        # find index of the Voronoi region corresponding to the origin
+        idx_0 = np.argsort(np.linalg.norm(vor.points, axis=-1))[0]
+        assert np.allclose(vor.points[idx_0], np.array([0, 0])), "Origin is not included in Voronoi"
+        # get corresponding voronoi region
+        vor_region_point_0 = vor.point_region[idx_0]
+        vor_region_0 = vor.regions[vor_region_point_0]
+        vertices = vor.vertices[vor_region_0]
+        return cls(vertices)
+
+    @staticmethod
+    def lagrange_lattice_reduction(basis):
+        """Short implementation of Lagrange's algorithm for 2D lattice reduction.
+
+        Parameters
+        ----------
+        basis : array_like
+            basis of a lattice in reciprocal space, s.t. the basis vectors are b1 = basis[0],
+            b2 = basis[1]
+
+        Returns
+        -------
+        out : ndarray
+            the reduced basis. If :math:`\{i b_1 + j b_2 | i, j \in \mathbb{Z}\}` define a
+            lattice L,
+            the reduced basis vectors will generate the same lattice, albeit being the shortest
+            and "most orthogonal" ones to define the lattice
+        """
+        # shorthand to compute norm
+        norm = np.linalg.norm
+        # get basis vectors
+        u, v = basis
+        # assume norm(v) <= norm(u), otherwise swap them
+        if norm(v) > norm(u):
+            u, v = v, u
+        # subtract multiple of one basis vector from the other basis vector and swap them
+        while norm(v) < norm(u):
+            q = np.round(u.T @ (v / norm(v) ** 2))
+            r = u - q * v
+            u = v
+            v = r
+        return np.array([u, v])
+
+    def contains_points(self, points):
+        """Checks whether given points lie inside the 1st Brillouin Zone
+
+        Parameters
+        ----------
+        points : array_like
+            points of shape (N, 2) that will be checked
+
+        Returns
+        -------
+        ndarray | bool
+            boolean array of shape (N,) indicating whether the corresponding point in `points`
+            is contained in the Brillouin Zone
+        """
+        points = np.array(points).astype(float)  # accept also lists and tuples as input
+        # convert to expected shape
+        if points.ndim == 1:
+            points = points.reshape(1, -1)
+        assert points.shape[-1] == 2, "Points should be of dimension (N, 2)"
+
+        A = self.equations[:, :-1]
+        b = self.equations[:, -1]
+        # a point x = (x1, x2) is per definition
+        # (see qhull documentation: http://www.qhull.org/html/index.htm#definition)
+        # inside the hull, iff: A x + b <= [0, ...]
+        eps = np.finfo(points.dtype).eps  # account for precision errors
+        return np.all((np.tensordot(A, points, (-1, -1)) + b.reshape(-1, 1)).T < eps, axis=-1)
+
+    def order_vertices(self, vertices):
+        """Orders vertices in mathematical order"""
+        assert vertices.ndim == 2, "Pass vertices as list/array of points of x, y coordinates"
+        x_coords = vertices[:, 0]
+        y_coords = vertices[:, 1]
+        angles = np.arctan2(x_coords, y_coords)  # get angle
+        angles += (angles < 0) * 2 * np.pi  # shift angle range to [0, 2 pi]
+        return vertices[np.argsort(angles)]
+
+    @property
+    def area(self):
+        return self.hull.volume
+
+    @property
+    def equations(self):
+        return self.hull.equations
+
+    def reduce_points(self, points, basis):
+        """Bring given points into 1st BZ by applying multiples of the recip. basis vectors.
+
+        Parameters
+        ----------
+        points : array_like
+            points to reduce given in the shape (N, 2)
+        basis : array_like
+            basis of a lattice in reciprocal space, s.t. the basis vectors are b1 = basis[0],
+            b2 = basis[1]
+
+        Returns
+        -------
+        reduced_points : ndarray
+            of shape (N, 2) the array of the points no reduced to the 1st BZ
+        """
+        # parse points as numpy array with shape (N, 2)
+        points = np.array(points).astype(float)
+        if points.ndim == 1:
+            points = points.reshape(1, -1)
+        assert points.shape[-1] == 2, "Points should be of dimension (N, 2)"
+        # basis transformation
+        b1, b2 = basis
+        A = np.array([b1, b2]).T
+
+        # get points in transformed coordinates
+        points = (np.tensordot(np.linalg.inv(A), points, (-1, -1))).T
+        # shift the points into the parallelogram spanned by b1 and b2
+        points = points % 1
+        # express points again in the standard basis
+        points = (np.tensordot(A, points, (-1, -1))).T
+
+        #  get all points lying still outside the BZ
+        outside_bz = np.invert(self.contains_points(points))  # -> boolean array
+        points_outside_bz = points[outside_bz]
+        # all possible translation vectors to reduced points from parallelogram to
+        # 1st BZ as matrix
+        translation_vecs = -1 * np.array([b1, b2, b1 + b2])
+        # get all combinatorical results by applying translation_vecs to points_outside_bz
+        translated_point = points_outside_bz[:, np.newaxis, :] + translation_vecs
+        shape = translated_point.shape
+        translated_point = translated_point.reshape(-1, shape[-1])
+        reduced_points = translated_point[
+            self.contains_points(translated_point).reshape(shape[0] * shape[1])]
+
+        assert np.all(self.contains_points(reduced_points)), "Couldn't reduce points to 1st BZ!"
+        assert len(reduced_points) == np.sum(outside_bz), "Couldn't reduce all points!"
+
+        # overwrite points outside the BZ with their reduced form
+        points[outside_bz] = reduced_points
+        return points
+
+    def plot_brillouin_zone(self, ax, draw_points=True, autoscale=True, **kwargs):
+        """Plot the brillouin zone of the lattice.
+
+        Parameters
+        ----------
+        ax : :class:`matplotlib.axes.Axes`
+            The axes on which we should plot.
+        draw_points: bool, default=True
+            draw edges of the polygon (BZ high symmetry points)
+        autoscale : bool, default=True
+            call to :meth:`autoscale_view` of :class:`matplotlib.axes.Axes`
+        **kwargs :
+            Keyword arguments for ``matplotlib.patches.Polygon``.
+        """
+        from matplotlib.patches import Polygon
+        kwargs.setdefault("edgecolor", "black")
+        kwargs.setdefault("fill", False)
+        kwargs.setdefault("ls", "--")
+        # avoid drawing the polygon for 1 D
+        p = Polygon(self.vertices, **kwargs)
+        ax.add_patch(p)
+        if draw_points is True:
+            ax.plot(*self.vertices.T, 'o')
+        if autoscale is True:
+            ax.autoscale_view()
 
 
 def get_lattice(lattice_name):
