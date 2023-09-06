@@ -1641,7 +1641,17 @@ class CouplingModel(Model):
 
         ct = self.all_coupling_terms()
         ct.remove_zeros(tol_zero)
-        H_bond = ct.to_nn_bond_Arrays(sites)
+        try:
+            H_bond = ct.to_nn_bond_Arrays(sites)
+        except ValueError as e:
+            if e.args[0] == 'not nearest neighbor':
+                raise ValueError("Can't initialize H_bond for a NearestNeighborModel "
+                                 "with non-nearest neighbour couplings added. "
+                                 "If you just need the MPO (for DMRG,TDVP,...), just don't "
+                                 "subclass the NearestNeighborModel, "
+                                 "e.g., don't subclass SpinChain, but SpinModel.") from e
+            else:
+                raise  # original error
 
         ot = self.all_onsite_terms()
         ot.remove_zeros(tol_zero)

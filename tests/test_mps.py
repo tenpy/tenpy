@@ -5,6 +5,7 @@ import numpy as np
 import numpy.testing as npt
 import warnings
 from tenpy.models.xxz_chain import XXZChain
+from tenpy.models.aklt import AKLTChain
 from tenpy.models.lattice import Square, Chain, Honeycomb
 
 from tenpy.tools import misc
@@ -580,6 +581,38 @@ def test_expectation_value_multisite():
     npt.assert_almost_equal(ev, np.array([+0.25, 0., 0.5, 0., 0.25]))
 
 
+def test_correlation_length():
+    spin_half = site.SpinHalfSite(conserve=None, sort_charge=True)
+    up_state = ['up'] * 4
+    psi_product = mps.MPS.from_product_state([spin_half] * 4, up_state, bc='infinite')
+    assert psi_product.correlation_length() == 0.  # trivial
+    ch_s = psi_product.correlation_length_charge_sectors()
+
+    # generate test-MPS with non-trivial correlation length
+    model_AKLT = AKLTChain({'bc_MPS': 'infinite', 'L': 2})
+    psi_AKLT = model_AKLT.psi_AKLT()
+    # eigenvalues of AKLT single-site TM are [1, 1./3., 1./3., 1/3.] for charges [0, 0, +2, -2]
+    xi_AKLT = 1./np.log(3)
+    xi = psi_AKLT.correlation_length()
+    assert abs(xi - xi_AKLT) < 1.e-13
+    charges = psi_AKLT.correlation_length_charge_sectors()
+    npt.assert_array_equal(charges[np.argsort(charges[:, 0])], [[0], [2]]) # dropped [-2]
+    xis, charges = psi_AKLT.correlation_length(target=3, charge_sector=None, return_charges=True)
+    assert len(xis) == 3
+    assert np.all(np.abs(xi - xi_AKLT) < 1.e-13 )
+    charges = np.asarray(charges)
+    npt.assert_array_equal(charges[np.argsort(charges[:, 0])], [[-2], [0], [2]])
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", UserWarning)
+        xi_m2, charges = psi_AKLT.correlation_length(target=1, charge_sector=[-2], return_charges=True)
+        npt.assert_array_equal(charges, [-2])
+        assert abs(xi_m2 - xi_AKLT) < 1.e-13
+        # note: sectors have only one entry, so target only changes resulting
+        xi_p2 = psi_AKLT.correlation_length(target=2, charge_sector=np.array([+2]), tol_ev0=None)
+        assert abs(xi_p2[0] - xi_AKLT) < 1.e-13
+    assert abs(xi - xi_AKLT) < 1.e-13
+
+
 def test_MPSEnvironment_expectation_values():
     spin_half = site.SpinHalfSite(conserve=None)
     up_state = ['up'] * 4
@@ -685,6 +718,7 @@ def test_mps_compress(method, eps=1.e-13):
 def test_InitialStateBuilder():
     s0 = site.SpinHalfSite('Sz', sort_charge=True)
     lat = Chain(10, s0, bc_MPS='finite')
+    lat_odd = Chain(11, s0, bc_MPS='finite')
     psi1 = mps.InitialStateBuilder(
         lat, {
             'method': 'lat_product_state',
@@ -693,6 +727,21 @@ def test_InitialStateBuilder():
             'full_empty': ['up', 'down'],
         }).run()
     psi1.test_sanity()
+    with pytest.raises(ValueError) as excinfo:
+        psi1_odd = mps.InitialStateBuilder(
+            lat_odd, {
+                'method': 'lat_product_state',
+                'product_state': [['up'], ['down']],
+            }).run()
+        assert "incomensurate len" in str(excinfo.value)
+    psi1_odd = mps.InitialStateBuilder(
+        lat_odd, {
+            'method': 'lat_product_state',
+            'product_state': [['up'], ['down']],
+            'allow_incommensurate': True
+        }).run()
+    psi1_odd.test_sanity()
+    assert abs(np.sum(psi1_odd.expectation_value('Sz')) - 0.5) < 1.e-10
     psi2 = mps.InitialStateBuilder(
         lat, {
             'method': 'mps_product_state',

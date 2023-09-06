@@ -152,6 +152,7 @@ import warnings
 import random
 from functools import reduce
 import copy
+from collections.abc import Iterable
 import logging
 
 logger = logging.getLogger(__name__)
@@ -160,7 +161,7 @@ from ..linalg import np_conserved as npc
 from ..linalg import sparse
 from ..linalg.krylov_based import Arnoldi
 from .site import GroupedSite, group_sites
-from ..tools.misc import to_iterable, to_array, get_recursive
+from ..tools.misc import argsort, to_iterable, to_array, get_recursive
 from ..tools.math import lcm, speigs, entropy
 from ..tools.params import asConfig
 from ..tools.cache import DictCache
@@ -1453,7 +1454,7 @@ class MPS(BaseMPSExpectationValue):
         return obj
 
     @classmethod
-    def from_lat_product_state(cls, lat, p_state, **kwargs):
+    def from_lat_product_state(cls, lat, p_state, allow_incommensurate=False, **kwargs):
         """Construct an MPS from a product state given in lattice coordinates.
 
         This is a wrapper around :meth:`from_product_state`.
@@ -1469,6 +1470,12 @@ class MPS(BaseMPSExpectationValue):
             Should be of dimension `lat.dim`+1, entries are indexed by lattice indices.
             Entries of the array as for the `p_state` argument of :meth:`from_product_state`.
             It gets tiled to the shape ``lat.shape``, if it is smaller.
+        allow_incommensurate : bool
+            Allow an incommensurate tiling of `p_state` to the full lattice.
+            For example, if you pass ``p_state=[['up'], ['down']]`` with a
+            :class:`tenpy.models.lattice.Chain`, this function raises an error for an odd number of
+            sites in the Chain, but if you set `allow_incommensurate=True`, it will still work
+            and give you a state with total Sz = +1/2 for odd sites (since total Sz=0 doesn't fit).
         **kwargs :
             Other keyword arguments as definied in :meth:`from_product_state`.
             `bc` is set by default from ``lat.bc_MPS``.
@@ -1525,14 +1532,14 @@ class MPS(BaseMPSExpectationValue):
         kwargs.setdefault("bc", lat.bc_MPS)
         p_state = np.array(p_state, dtype=object)
         if p_state.ndim == len(lat.shape):  # == lat.dim + 1
-            p_state = to_array(p_state, shape=lat.shape)  # tile to lattice shape
+            p_state = to_array(p_state, shape=lat.shape, allow_incommensurate=allow_incommensurate)  # tile to lattice shape
             p_state_flat = p_state[tuple(lat.order.T)]  # "advanced" numpy indexing
         elif p_state.ndim == len(lat.shape) + 1:
             # extra dimension could be from purely 1D array entries
             # make sure this is the case by converting to float
             p_state = np.array(p_state, kwargs.get("dtype", np.float64))
             # tile to lattice shape, ignore last dimension
-            p_state = to_array(p_state, shape=lat.shape + (None, ))
+            p_state = to_array(p_state, shape=lat.shape + (None, ), allow_incommensurate=allow_incommensurate)
             inds = tuple(lat.order.T) + (slice(None), )
             p_state_flat = p_state[inds]  # "advanced" numpy indexing
         else:
@@ -1693,7 +1700,7 @@ class MPS(BaseMPSExpectationValue):
             conservation gets enabled.
             If `permute` is True (default), we permute the given `Bflat` locally according to
             each site's :attr:`~tenpy.networks.Site.perm`.
-            The `p_state` argument should then always be given as if `conserve=None` in the Site.
+            The `Bflat` should then always be given as if `conserve=None` in the Site.
         form : (list of) {``'B' | 'A' | 'C' | 'G' | None`` | tuple(float, float)}
             Defines the canonical form of `Bflat`. See module doc-string.
             A single choice holds for all of the entries.
@@ -3660,7 +3667,7 @@ class MPS(BaseMPSExpectationValue):
             Qs[i] = Q.split_legs()
         return Qs, R
 
-    def correlation_length(self, target=1, tol_ev0=1.e-8, charge_sector=0):
+    def correlation_length(self, target=1, tol_ev0=1.e-8, charge_sector=0, return_charges=False):
         r"""Calculate the correlation length by diagonalizing the transfer matrix.
 
         Assumes that `self` is in canonical form.
@@ -3691,12 +3698,19 @@ class MPS(BaseMPSExpectationValue):
         ----------
         target : int
             We look for the `target` + 1 largest eigenvalues.
-        tol_ev0 : float
+        tol_ev0 : float | None
             Print warning if largest eigenvalue deviates from 1 by more than `tol_ev0`.
-        charge_sector : None | charges | ``0``
-            Selects the charge sector in which the dominant eigenvector of the TransferMatrix is.
+            If `None`, **assume** dominant eigenvector in 0-charge-sector to be 1 for
+            non-zero `charge_sector`.
+        charge_sector : None | list of int | ``0`` | list of list of int
+            Selects the charge sector (=list of int) in which we look for the dominant eigenvalue
+            of the TransferMatrix.
             ``None`` stands for *all* sectors, ``0`` stands for the zero-charge sector.
-            Defaults to ``0``, i.e., *assumes* the dominant eigenvector is in charge sector 0.
+            Defaults to ``0``, i.e., **assumes** the dominant eigenvector is in charge sector 0.
+            If you pass a list of charge sectors (i.e. 2D array of int),
+            this function returns `target` dominant eigenvalues in each of those sectors.
+        return_charges : bool
+            If True, return the charge sectors along with the eigenvalues.
 
         Returns
         -------
@@ -3705,28 +3719,137 @@ class MPS(BaseMPSExpectationValue):
             otherwise an array of the `target` largest correlation lengths.
             It is measured in units of a single spacing between sites in the MPS language,
             see the warning above.
+        charge_sectors :  list of charge sectors
+            For each entry in `xi` the charge sector, i.e., qtotal of the dominant eigenvalue.
+
+        See also
+        --------
+        correlation_length_charge_sectors : lists possible charge sectors.
         """
         assert (not self.finite)
-        T = TransferMatrix(self, self, charge_sector=charge_sector, form='B')
+        zero_charge = self.chinfo.make_valid()
+        if any(chi == 1 for chi in self.chi):
+            # product states have zero correlation length
+            if return_charges:
+                if target == 1:
+                    return 0, zero_charge
+                return [0] * target, [zero_charge] * target
+            return 0. if target == 1 else [0] * target
+        if charge_sector is not None and isinstance(charge_sector, Iterable):
+            # iterable check excludes charge_sector=0 (c.f. issue 289)
+            charge_sector = self.chinfo.make_valid(charge_sector)
+        elif charge_sector is None:
+            pass
+        else:
+            assert charge_sector == 0
+            charge_sector = zero_charge
         num = max(target + 1, self._transfermatrix_keep)
-        E, _ = T.eigenvectors(num, which='LM')
-        E = E[np.argsort(-np.abs(E))]  # sort descending by magnitude
-        if charge_sector is not None and charge_sector != 0 and \
-                any([c != 0 for c in charge_sector]):
-            # need also dominant eigenvector: include 0 charge sector to results
-            del T
-            T = TransferMatrix(self, self, charge_sector=0, form='B')
-            E0, _ = T.eigenvectors(num, which='LM')
-            assert abs(E0[0]) > abs(E[0]), "dominant eigenvector in zero charge sector?"
-            E = np.array([E0[0]] + list(E))
-        if abs(E[0] - 1.) > tol_ev0:
-            logger.warning("Correlation length: largest eigenvalue not one. "
-                           "Not in canonical form/normalized?")
-        if len(E) < 2:
-            return 0.  # only a single eigenvector: zero correlation length
-        if target == 1:
-            return -1. / np.log(abs(E[1] / E[0])) * self.L
-        return -1. / np.log(np.abs(E[1:target + 1] / E[0])) * self.L
+        # now charge_sector is None or 1D or 2D ndarray (but not 0)
+        if charge_sector is None or charge_sector.ndim == 1:
+            # a single charge sector or charge_sector=None -> (only dominant eigvals for all charge_sectors)
+            T = TransferMatrix(self, self, charge_sector=charge_sector, form='B')
+            E, V = T.eigenvectors(num, which='LM')
+            # note: LM implies E is sorted largest magnitude first
+            if return_charges:
+                V_charges = [vec.qtotal for vec in V]
+            looked_in_zero_charge_sector = charge_sector is None or np.all(charge_sector == 0)
+        else:
+            assert charge_sector.ndim == 2
+            # loop over different charge sectors
+            charge_sector_list = charge_sector
+            T = TransferMatrix(self, self, form='B')
+            E = []
+            V_charges = []
+            for charge_sector in charge_sector_list:
+                T.charge_sector = charge_sector
+                E_s, V_s = T.eigenvectors(num, which='LM')
+                E.extend(E_s)
+                if return_charges:
+                    V_charges.extend([vec.qtotal for vec in V_s])
+            sort = argsort(E, 'LM')
+            E = np.array(E)[sort]
+            if return_charges:
+                V_charges = [V_charges[i] for i in sort]
+            looked_in_zero_charge_sector = np.any(np.all(charge_sector_list == 0, axis=1))
+
+        if not looked_in_zero_charge_sector:
+            # need to add the eigval 1 from the 0 charge sector
+            if tol_ev0 is not None:
+                # diagonalize zero_charge sector
+                T.charge_sector = zero_charge
+                E0, _ = T.eigenvectors(num, which='LM')
+                E0 = E0[0]
+            else:
+                E0 = 1.   # explicitly set it by hand
+            if not abs(E0) > abs(E[0]):
+                # shouldn't happen... error handling or warning with only numerical errors?
+                if tol_ev0 is not None and abs(E[0]) - abs(E0) < tol_ev0:
+                    prec = tol_ev0
+                elif tol_ev0 is None and abs(E[0]) - abs(E0) < 1.e-5:
+                    prec = 1.e-5
+                else:
+                    prec = None
+                if prec is not None:
+                    logger.warning("correlation_length: other charge sector has eigenvalue "
+                                   " bigger than the eigenvalue 1. in the zero charge sector, "
+                                   "but still within precision {prec:.1e}")
+                    E0 = E[0] + prec
+                else:
+                    raise ValueError("dominant eigenvalue is not in zero charge sector???")
+            E = [E0] + list(E)
+            if return_charges:
+                V_charges = [None] + V_charges
+        if tol_ev0 is not None and abs(E[0] - 1.) > tol_ev0:
+            logger.warning(f"Correlation length: largest eigenvalue not one, but {E[0]:%.12f}. "
+                            "Not in canonical form/normalized?")
+        assert len(E) >= 2
+        E = np.array(E)
+        xis = -1. / np.log(np.abs(E[1:target + 1] / E[0])) * self.L
+        # finally return
+        if return_charges:
+            if target == 1:
+                return xis[0], V_charges[1]
+            return xis, V_charges[1:]
+        else:
+            if target == 1:
+                return xis[0]
+            return xis
+
+    def correlation_length_charge_sectors(self, drop_symmetric=True, include_0=True):
+        """Return possible `charge_sector` argument for :meth:`correlation_length`.
+
+        The :meth:`correlation_length` is calculated from eigenvalues of the transfer matrix.
+        The left/right eigenvectors correspond to contraction of the left/right parts of
+        the transfer-matrix in the network of the :meth:`correlation_function`.
+        The `charge_sector` one can pass to the :meth:`correlation_length` (or
+        :class:`TransferMatrix`, respectively) is the `qtotal` that eigenvector.
+
+        Since bra and ket are identical for the :meth:`correlation_length`, one can flip
+        top and bottem and to an overall `conjugate`, and gets back to the same TransferMatrix,
+        hence eigenvalues of a given eigenvector and it's dagger (seen as a matrix with legs
+        ``'vL', 'vL*'``) are identical. Since that flips the sign of all charges, we can conclude
+        that the correlation length in a given charge sector and the negative charge sector are
+        identical.
+        The option `drop_symmetric` hence allows to only return charge sectors where the negative
+        charge sector was not yet returned.
+
+        Parameters
+        ----------
+        drop_symmetric : bool
+            See above.
+        """
+        if self.chinfo.qnumber == 0:
+            return []
+        vR = self.get_B(self.L - 1).get_leg('vR')
+        pipe = npc.LegPipe([vR, vR.conj()], qconj=-1).conj()
+        charges = pipe.charges  # this is lexsorted
+        if not drop_symmetric:
+            return charges
+        conj_charges = self.chinfo.make_valid(-charges)
+        perm = np.lexsort(conj_charges.T)
+        keep = (perm <= np.arange(len(perm)))
+        # note: the equal is necessary to include 0 and e.g. 2 for a Z_4 charge.
+        return charges[keep]
 
     def add(self, other, alpha, beta, cutoff=1.e-15):
         """Return an MPS which represents ``alpha|self> + beta |others>``.
@@ -5208,6 +5331,8 @@ class TransferMatrix(sparse.NpcLinearOperator):
         Selects the charge sector of the vector onto which the Linear operator acts.
         ``None`` stands for *all* sectors, ``0`` stands for the zero-charge sector.
         Defaults to ``0``, i.e., **assumes** the dominant eigenvector is in charge sector 0.
+        Note that you can update the `charge_sector` after initialization
+        via the :attr:`charge_sector` property.
     form : ``'B' | 'A' | 'C' | 'G' | 'Th' | None`` | tuple(float, float)
         In which canonical form we take the `M` and `N` matrices.
 
@@ -5332,6 +5457,14 @@ class TransferMatrix(sparse.NpcLinearOperator):
         self.shift_bra = self.shift_ket = 0
         self._init_from_Ns_Ms(bra_N, ket_M, transpose, charge_sector, p_label)
         return self
+
+    @property
+    def charge_sector(self):
+        return self.flat_linop.charge_sector
+
+    @charge_sector.setter
+    def charge_sector(self, value):
+        self.flat_linop.charge_sector = value
 
     def matvec(self, vec):
         """Given `vec` as an npc.Array, apply the transfer matrix.
@@ -5551,12 +5684,16 @@ class InitialStateBuilder:
 
             product_state : array of str
                 The `p_state` passed on to :meth:`MPS.from_lat_product_state`.
+            allow_incommensurate : bool
+                See :meth:`MPS.from_lat_product_state`.
         """
         if p_state is None:
             p_state = self.options['product_state']
         self.check_filling(p_state)
         dtype = self.options.get('dtype', self.model_dtype)
-        psi = MPS.from_lat_product_state(self.lattice, p_state, dtype=dtype)
+        allow_incommensurate = self.options.get('allow_incommensurate', False)
+        psi = MPS.from_lat_product_state(self.lattice, p_state, dtype=dtype,
+                                         allow_incommensurate=allow_incommensurate)
         return psi
 
     def mps_product_state(self, p_state=None):

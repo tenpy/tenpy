@@ -8,12 +8,12 @@ This class thus serves as an example how this can be done.
 
 import numpy as np
 
-import tenpy.linalg.np_conserved as npc
-from tenpy.networks.site import SpinSite, kron
-from tenpy.networks.mps import MPS
-from tenpy.models.lattice import Chain
-from tenpy.models.model import NearestNeighborModel, MPOModel
-from tenpy.tools.params import asConfig
+from ..linalg import np_conserved as npc
+from ..networks.site import SpinSite, kron
+from ..networks.mps import MPS
+from .lattice import Chain
+from .model import NearestNeighborModel, MPOModel
+from ..tools.params import asConfig
 
 __all__ = ['AKLTChain']
 

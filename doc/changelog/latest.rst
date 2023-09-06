@@ -28,6 +28,7 @@ Added
   and :class:`~tenpy.networks.mpo.MPOEnvironment`
 - Add `phi_ext` parameter to :class:`~tenpy.models.fermions_spinless.FermionModel`,
   :class:`~tenpy.models.hubbard.BoseHubbardModel` and :class:`~tenpy.models.hubbard.FermiHubbardModel`.
+- Option `allow_incommensurate` for :meth:`~tenpy.networks.mps.MPS.from_lat_product_state`.
 - Most "important" objects (this obvious involves some judgement calls, regarding what counts as important)
   are now directly exposed in the top-level namespace of the tenpy package, i.e. you can now
   ``from tenpy import MPS, tensordot, TwoSiteDMRGEngine`` or ``import tenpy as tp`` and then use
@@ -45,6 +46,10 @@ Changed
   :meth:`~tenpy.models.mixed_xk.MixedXKModel.add_inter_ring_interaction`, and
   :meth:`~tenpy.models.mixed_xk.MixedXKModel.add_intre_ring_interaction` to vary with `x`.
 - Renamed the module :mod:`~tenpy.linalg.lanczos` to :mod:`tenpy.linalg.krylov_based`.
+- The :attr:`~tenpy.algorithms.mps_common.Sweep.move_right` attribute of
+  :class:`~tenpy.algorithms.mps_common.Sweep` now supports a third value, ``None``, in addition
+  to ``True, False``. ``None`` means that the sweep will not move at all, i.e. the next update
+  will be at the same position than the current one. This happens e.g. in TDVP.
 - Mixers have been generalized and are no longer specialized for use in DMRG.
   Method names and signatures have been changed.
   The mixer classes are now implemented in :mod:`tenpy.linalg.algorithms.mps_common`.
@@ -72,3 +77,6 @@ Fixed
 - :issue:`265` that MPO methods :meth:`~tenpy.networks.mpo.MPO.make_U_I`, `make_U_II`, `apply_naively` and `apply_zipup` 
   just ignored the `explicit_plus_hc` flag of the MPO, possibly giving completely wrong results without raising errors.
 - Make sure that :func:`~tenpy.linalg.np_conserved.eigh` doesn't have a :class:`~tenpy.linalg.charges.LegPipe` on the second (=new) leg.
+- :issue:`289` that :meth:`~tenpy.networks.mps.MPS.correlation_length` raised errors for `charge_sector` np ndarrays.
+  Further, allow to pass multiplie charge sectors to loop over at once, add argument `return_charges`.
+  Also, provide a :meth:`~tenpy.networks.mps.MPS.correlation_length_charge_sectors` convenience function to return valid charge sectors.
