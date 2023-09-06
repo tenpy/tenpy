@@ -135,7 +135,6 @@ class Sweep(Algorithm):
 
         self.combine = options.get('combine', False)
         self.finite = self.psi.finite
-        self.S_inv_cutoff = 1.e-15
         self.lanczos_params = options.subconfig('lanczos_params')
         self.mixer = None  # set to an actual mixer (if at all) in :meth:`mixer_activate``
 
@@ -154,6 +153,12 @@ class Sweep(Algorithm):
     @property
     def _all_envs(self):
         return [self.env] + self.ortho_to_envs
+
+    @property
+    def S_inv_cutoff(self):
+        # high cutoff for regular inverse of S, higher cutoff if we need to (pseudo-) invert
+        # a matrix (S can be 2D while the mixer is on)
+        return 1.e-8 if any(isinstance(S, npc.Array) for S in self.psi._S) else 1.e-15
 
     def get_resume_data(self, sequential_simulations=False):
         data = super().get_resume_data(sequential_simulations)
@@ -692,7 +697,6 @@ class Sweep(Algorithm):
                 Mixer_class = find_subclass(Mixer, Mixer_class)
         mixer_params = self.options.subconfig('mixer_params')
         self.mixer = Mixer_class(mixer_params, self.sweeps)
-        self.S_inv_cutoff = 1.e-8
         logger.info(f'activate {Mixer_class.__name__} with initial amplitude {self.mixer.amplitude}')
 
     def mixer_deactivate(self):
@@ -703,7 +707,6 @@ class Sweep(Algorithm):
         logger.info(f'deactivate {self.mixer.__class__.__name__} with final amplitude ' \
                     f'{self.mixer.amplitude}')
         self.mixer = None
-        self.S_inv_cutoff = 1.e-15
 
     def mixer_cleanup(self):
         """Cleanup the effects of a mixer.
