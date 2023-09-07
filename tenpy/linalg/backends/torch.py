@@ -125,7 +125,7 @@ class TorchBlockBackend(AbstractBlockBackend):
         return torch_module.max(torch_module.max(a))
 
     def block_reshape(self, a: Block, shape: tuple[int]) -> Block:
-        return torch_module.reshape(a, shape)
+        return torch_module.reshape(a, tuple(shape))
 
     def matrix_dot(self, a: Block, b: Block) -> Block:
         return torch_module.matmul(a, b)
@@ -159,10 +159,10 @@ class TorchBlockBackend(AbstractBlockBackend):
         return torch_module.tensor(a, device=self.device)
 
     def zero_block(self, shape: list[int], dtype: Dtype) -> Block:
-        return torch_module.zeros(shape, dtype=self.backend_dtype_map[dtype], device=self.device)
+        return torch_module.zeros(list(shape), dtype=self.backend_dtype_map[dtype], device=self.device)
 
     def ones_block(self, shape: list[int], dtype: Dtype) -> Block:
-        return torch_module.ones(shape, dtype=self.backend_dtype_map[dtype], device=self.device)
+        return torch_module.ones(list(shape), dtype=self.backend_dtype_map[dtype], device=self.device)
 
     def eye_block(self, legs: list[int], dtype: Dtype) -> Data:
         matrix_dim = prod(legs)
