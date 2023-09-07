@@ -23,6 +23,9 @@ def benchmark(data):
     # v2.0 svd includes combining legs before the "matrix svd" and splitting them after.
     # so the v0.x version should include those steps too.
     a, u_legs, vh_legs = data
+    if len(a._data) == 0:
+        # size=1 sometimes has no blocks and causes an error without this speecial case
+        return
     a = a.combine_legs([u_legs, vh_legs])
     u, s, vh = otp.linalg.np_conserved.svd(a)
     u.split_legs(0)
