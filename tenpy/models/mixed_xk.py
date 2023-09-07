@@ -408,20 +408,23 @@ class MixedXKModel(CouplingMPOModel):
 
         Parameters
         ----------
-        couplings : ndarray, shape (Ly, N_orb, Ly, N_orb)
-            ``couplings[k1, l1, k2, l2]`` is the prefactor for a hopping term of the form
-            :math:`\sum_i c^\dagger_{x,k1,l1} c_{x,k2,l2}`.
-            Should fulfill ``couplings[k1, l1, k2, l2] == conj(couplings[k2, l2, k1, l1])``
+        couplings : ndarray, shape (N_rings, Ly, N_orb, Ly, N_orb)
+            Prefactors for a hopping terms of the form
+            :math:`\sum_x \mathtt{couplings[x, k1, l1, k2, l2]} c^\dagger_{x,k1,l1} c_{x,k2,l2}`.
+            Should fulfill ``couplings[x, k1, l1, k2, l2] == conj(couplings[x, k2, l2, k1, l1])``
             to make the Hamiltonian hermitian.
+            The x dependence (and corresponding dimension in `couplings`) can be ommited.
         """
         N_orb = self.lat.N_orb
+        Lx = self.lat.N_rings
         Ly = self.lat.Ly
         N_r = Ly * N_orb
-        couplings = to_array(couplings, (Ly, N_orb, Ly, N_orb))
-        couplings = np.reshape(couplings, (N_r, N_r), order='C')
-        for idx in zip(*couplings.nonzero()):
-            strength = couplings[idx]
-            u1, u2 = idx
+        if np.asarray(couplings).ndim == 4:
+            couplings = np.asarray(couplings)[np.newaxis, ...]
+        couplings = to_array(couplings, (Lx, Ly, N_orb, Ly, N_orb))
+        couplings = np.reshape(couplings, (Lx, N_r, N_r), order='C')
+        for u1, u2 in zip(*(np.linalg.norm(couplings, axis=0).nonzero())):
+            strength = couplings[:, u1, u2]  # only x dependence remaining
             if u1 == u2:
                 self.add_onsite(strength, u1, 'N')  # Cd C
             else:
@@ -432,21 +435,26 @@ class MixedXKModel(CouplingMPOModel):
 
         Parameters
         ----------
-        couplings : ndarray, shape (Ly, N_orb, Ly, N_orb)
-            ``couplings[k1, j1, k2, j2]`` is the prefactor for a hopping term of the form
-            :math:`\sum_x c^\dagger_{x,k1,l1} c_{x+dx,k2,l2} + h.c.`.
+        couplings : ndarray, shape (Nx, Ly, N_orb, Ly, N_orb)
+            Prefactors for a hopping term of the form
+            :math:`\sum_x couplings[x, k1, j1, k2, j2] c^\dagger_{x,k1,l1} c_{x+dx,k2,l2} + h.c.`.
+            Here, ``Nx = lat.N_rings if lat.bc_MPS == 'infinite' else lat.N_rings - abs(dx)``
+            gives the number of possible `x` values and ``lat.N_rings`` is the `Lx` model parameters.
+            The x dependence (and corresponding dimension in `couplings`) can be ommited.
         dx : int
             Distance between the rings; use dx > 1 for long-range hoppings.
         """
         assert dx != 0
         N_orb = self.lat.N_orb
+        Nx = self.lat.N_rings - int(self.lat.bc[0]) * abs(dx)
         Ly = self.lat.Ly
         N_r = Ly * N_orb
-        couplings = to_array(couplings, (Ly, N_orb, Ly, N_orb))
-        couplings = np.reshape(couplings, (N_r, N_r), order='C')
-        for idx in zip(*couplings.nonzero()):
-            strength = couplings[idx]
-            u1, u2 = idx
+        if np.asarray(couplings).ndim == 4:
+            couplings = np.asarray(couplings)[np.newaxis, ...]
+        couplings = to_array(couplings, (Nx, Ly, N_orb, Ly, N_orb))
+        couplings = np.reshape(couplings, (Nx, N_r, N_r), order='C')
+        for u1, u2 in zip(*(np.linalg.norm(couplings, axis=0).nonzero())):
+            strength = couplings[:, u1, u2]
             self.add_coupling(strength, u1, 'Cd', u2, 'C', dx, op_string='JW', plus_hc=True)
 
     def add_intra_ring_interaction(self, couplings, operators=('Cd', 'C', 'Cd', 'C')):
@@ -454,23 +462,29 @@ class MixedXKModel(CouplingMPOModel):
 
         Parameters
         ----------
-        couplings : ndarray, shape (Ly, N_orb, Ly, N_orb, Ly, N_orb, Ly, N_orb)
-            ``couplings[k1,j1, k2,j2, k3,j3, k4,j4]`` is the prefactor for a hopping term
-            of the form
-            :math:`\sum_i A_{i,k1,j1} B_{i,k2,j2} C_{i,k3,j3} D_{i,k4,j4}`.
+        couplings : ndarray, shape (N_rings, Ly, N_orb, Ly, N_orb, Ly, N_orb, Ly, N_orb)
+            Prefactors for an interaction term of the form
+
+            .. math ::
+                \sum_x \mathtt{couplings[x, k1,j1, k2,j2, k3,j3, k4,j4]}
+                        A_{x,k1,j1} B_{x,k2,j2} C_{x,k3,j3} D_{x,k4,j4}
+
+            The x dependence (and corresponding dimension in `couplings`) can be ommited.
         operators: tuple of 4 str
             The 4 operators `A,B,C,D` to be used, 'Cd' for (fermionic) creation and 'C' for
             annihilation operators of given ring, momentum and orbital.
         """
         N_orb = self.lat.N_orb
+        Lx = self.lat.N_rings
         Ly = self.lat.Ly
         N_r = Ly * N_orb
-        couplings = to_array(couplings, (Ly, N_orb, Ly, N_orb, Ly, N_orb, Ly, N_orb))
-        couplings = np.reshape(couplings, (N_r, N_r, N_r, N_r), order='C')
+        if np.asarray(couplings).ndim == 8:
+            couplings = np.asarray(couplings)[np.newaxis, ...]
+        couplings = to_array(couplings, (Lx, Ly, N_orb, Ly, N_orb, Ly, N_orb, Ly, N_orb))
+        couplings = np.reshape(couplings, (Lx, N_r, N_r, N_r, N_r), order='C')
         A, B, C, D = operators
-        for idx in zip(*couplings.nonzero()):
-            strength = couplings[idx]
-            u1, u2, u3, u4 = idx
+        for u1, u2, u3, u4 in zip(*(np.linalg.norm(couplings, axis=0).nonzero())):
+            strength = couplings[:, u1, u2, u3, u4]
             if u1 == u2 == u3 == u4:
                 self.add_onsite(strength, u1, ' '.join([A, B, C, D]))  # Cd C Cd C
             else:
@@ -481,31 +495,37 @@ class MixedXKModel(CouplingMPOModel):
 
         Parameters
         ----------
-        couplings : ndarray, shape (Ly, N_orb, Ly, N_orb, Ly, N_orb, Ly, N_orb)
-            ``couplings[k1, j1, k2, j2, k3, j3, k4, j4]`` is the prefactor for a term
+        couplings : ndarray, shape (Nx, Ly, N_orb, Ly, N_orb, Ly, N_orb, Ly, N_orb)
+            ``couplings[x, k1, j1, k2, j2, k3, j3, k4, j4]`` is the prefactor for a term
 
             .. math ::
-                \sum_i A_{i,k1,j1} B_{i,k2,j2} C_{i+dx,k3,j3} D_{i+dx,k4,j4}
+                \sum_x \mathtt{couplings[x, k1,j1, k2,j2, k3,j3, k4,j4]}
+                        A_{x,k1,j1} B_{x,k2,j2} C_{x+dx,k3,j3} D_{x+dx,k4,j4}
 
             For the default `operators`, it should fulfill
             ``coulings[k1,j1, k2,j2, k3,j3, k4,j4] = conj(coulings[k2,j2, k1,j1, k4,j4, k3,j3])``
             to make the Hamiltonian hermitian.
+            Here, ``Nx = lat.N_rings if lat.bc_MPS == 'infinite' else lat.N_rings - abs(dx)``
+            gives the number of possible `x` values and ``lat.N_rings`` is the `Lx` model parameters.
+            The x dependence (and corresponding dimension in `couplings`) can be ommited.
         dx : int
-            Distance between the rings; use dx > 1 for long-range interactions.
+            Distance between the rings; use dx > 1 for long(er)-range interactions.
         operators: tuple of 4 str
             The 4 operators `A,B,C,D` to be used, 'Cd' for (fermionic) creation and 'C' for
             annihilation operators of given ring, momentum and orbital.
         """
         assert dx != 0
+        Nx = self.lat.N_rings - int(self.lat.bc[0]) * abs(dx)
         N_orb = self.lat.N_orb
         Ly = self.lat.Ly
         N_r = Ly * N_orb
-        couplings = to_array(couplings, (Ly, N_orb, Ly, N_orb, Ly, N_orb, Ly, N_orb))
-        couplings = np.reshape(couplings, (N_r, N_r, N_r, N_r), order='C')
+        if np.asarray(couplings).ndim == 8:
+            couplings = np.asarray(couplings)[np.newaxis, ...]
+        couplings = to_array(couplings, (Nx, Ly, N_orb, Ly, N_orb, Ly, N_orb, Ly, N_orb))
+        couplings = np.reshape(couplings, (Nx, N_r, N_r, N_r, N_r), order='C')
         A, B, C, D = operators
-        for idx in zip(*couplings.nonzero()):
-            strength = couplings[idx]
-            u1, u2, u3, u4 = idx
+        for u1, u2, u3, u4 in zip(*(np.linalg.norm(couplings, axis=0).nonzero())):
+            strength = couplings[:, u1, u2, u3, u4]
             self.add_multi_coupling(strength, [(A, 0, u1), (B, 0, u2), (C, dx, u3), (D, dx, u4)])
 
     #==========================#

@@ -1,7 +1,7 @@
 r"""Time evolving block decimation (TEBD).
 
 The TEBD algorithm (proposed in :cite:`vidal2004`) uses a trotter decomposition of the
-Hamiltonian to perform a time evoltion of an MPS. It works only for nearest-neighbor hamiltonians
+Hamiltonian to perform a time evolution of an MPS. It works only for nearest-neighbor hamiltonians
 (in tenpy given by a :class:`~tenpy.models.model.NearestNeighborModel`),
 which can be written as :math:`H = H^{even} + H^{odd}`,  such that :math:`H^{even}` contains the
 the terms on even bonds (and similar :math:`H^{odd}` the terms on odd bonds).
@@ -34,7 +34,7 @@ If one chooses imaginary :math:`dt`, the exponential projects
 
 .. note ::
     The application of DMRG is typically much more efficient than imaginary TEBD!
-    Yet, imaginary TEBD might be usefull for cross-checks and testing.
+    Yet, imaginary TEBD might be useful for cross-checks and testing.
 
 """
 # Copyright 2018-2023 TeNPy Developers, GNU GPLv3
@@ -46,7 +46,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 from .algorithm import TimeEvolutionAlgorithm, TimeDependentHAlgorithm
-from ..linalg import np_conserved as npc
+from ..linalg.old import np_conserved as npc
 from .truncation import svd_theta, TruncationError, truncate
 from ..linalg import random_matrix
 
@@ -402,7 +402,7 @@ class TEBDEngine(TimeEvolutionAlgorithm):
         """Updates the B matrices on a given bond.
 
         Function that updates the B matrices, the bond matrix s between and the
-        bond dimension chi for bond i. The correponding tensor networks look like this::
+        bond dimension chi for bond i. The corresponding tensor networks look like this::
 
         |           --S--B1--B2--           --B1--B2--
         |                |   |                |   |
@@ -558,7 +558,7 @@ class TEBDEngine(TimeEvolutionAlgorithm):
         return trunc_err
 
     def _calc_U_bond(self, i_bond, dt, type_evo, E_offset):
-        """Calculate exponential of a bond Hamitonian.
+        """Calculate exponential of a bond Hamiltonian.
 
         * ``U_bond = exp(-i dt (H_bond-E_offset_bond))`` for ``type_evo='real'``, or
         * ``U_bond = exp(- dt H_bond)`` for ``type_evo='imag'``.
@@ -594,7 +594,7 @@ class Engine(TEBDEngine):
 
 class QRBasedTEBDEngine(TEBDEngine):
     r"""Version of TEBD that relies on QR decompositions rather than SVD.
-    
+
     As introduced in :arxiv:`2212.09782`.
 
     .. todo ::
@@ -615,7 +615,7 @@ class QRBasedTEBDEngine(TEBDEngine):
             Default is `0.1`.
         cbe_expand_0 : float
             Expansion rate at low ``chi``.
-            If given, the expansion rate decreases linearly from ``cbe_expand_0`` at ``chi == 1`` 
+            If given, the expansion rate decreases linearly from ``cbe_expand_0`` at ``chi == 1``
             to ``cbe_expand`` at ``chi == trunc_params['chi_max']``, then remains constant.
             If not given, the expansion rate is ``cbe_expand`` at all ``chi``.
         cbe_min_block_increase : int
@@ -630,8 +630,8 @@ class QRBasedTEBDEngine(TEBDEngine):
             Compared to SVD-based TEBD, computing the truncation error is significantly more expensive.
             If `True` (default), the full error is computed.
             Otherwise, the truncation error is set to NaN.
-    """         
-    
+    """
+
     def _expansion_rate(self, i):
         """get expansion rate for updating bond i"""
         expand = self.options.get('cbe_expand', 0.1)
@@ -646,7 +646,7 @@ class QRBasedTEBDEngine(TEBDEngine):
 
         chi = min(self.psi.get_SL(i).shape)
         return max(expand_0 - chi / chi_max * (expand_0 - expand), expand)
-             
+
     def update_bond(self, i, U_bond):
         i0, i1 = i - 1, i
         expand = self._expansion_rate(i)
@@ -659,15 +659,15 @@ class QRBasedTEBDEngine(TEBDEngine):
         theta = theta.combine_legs([('vL', 'p0'), ('p1', 'vR')], qconj=[+1, -1])
 
         min_block_increase = self.options.get('cbe_min_block_increase', 1)
-        Y0 = _qr_tebd_cbe_Y0(B_L=self.psi.get_B(i0, 'B'), B_R=self.psi.get_B(i1, 'B'), theta=theta, 
+        Y0 = _qr_tebd_cbe_Y0(B_L=self.psi.get_B(i0, 'B'), B_R=self.psi.get_B(i1, 'B'), theta=theta,
                              expand=expand, min_block_increase=min_block_increase)
         A_L, S, B_R, trunc_err, renormalize = _qr_based_decomposition(
             theta=theta, Y0=Y0, use_eig_based_svd=self.options.get('use_eig_based_svd', False),
             need_A_L=False, compute_err=self.options.get('compute_err', True),
             trunc_params=self.trunc_params
         )
-        B_L = npc.tensordot(C.combine_legs(('p1', 'vR'), pipes=theta.legs[1]), 
-                            B_R.conj(), 
+        B_L = npc.tensordot(C.combine_legs(('p1', 'vR'), pipes=theta.legs[1]),
+                            B_R.conj(),
                             axes=[['(p1.vR)'], ['(p*.vR*)']]) / renormalize
         B_L.ireplace_labels(['p0', 'vL*'], ['p', 'vR'])
         B_R = B_R.split_legs(1)
@@ -695,7 +695,7 @@ class QRBasedTEBDEngine(TEBDEngine):
             raise NotImplementedError('update_bond_imag does not (yet) support eig based SVD')
 
         min_block_increase = self.options.get('cbe_min_block_increase', 1)
-        Y0 = _qr_tebd_cbe_Y0(B_L=self.psi.get_B(i0, 'B'), B_R=self.psi.get_B(i1, 'B'), theta=theta, 
+        Y0 = _qr_tebd_cbe_Y0(B_L=self.psi.get_B(i0, 'B'), B_R=self.psi.get_B(i1, 'B'), theta=theta,
                              expand=expand, min_block_increase=min_block_increase)
         A_L, S, B_R, trunc_err, renormalize = _qr_based_decomposition(
             theta=theta, Y0=Y0, use_eig_based_svd=use_eig_based_svd,
@@ -740,7 +740,7 @@ def _qr_tebd_cbe_Y0(B_L: npc.Array, B_R: npc.Array, theta: npc.Array, expand: fl
         Y0.gauge_total_charge('vL', new_qtotal=B_R.qtotal)
     vL_old = B_R.get_leg('vL')
     if not vL_old.is_blocked():
-        vL_old = vL_old.sort()
+        vL_old = vL_old.sort()[1]
     vL_new = Y0.get_leg('vL')  # is blocked, since created from pipe
 
     # vL_old is guaranteed to be a slice of vL_new by charge rule in B_L
@@ -780,7 +780,7 @@ def _qr_tebd_cbe_Y0(B_L: npc.Array, B_R: npc.Array, theta: npc.Array, expand: fl
         qdata_idx += 1
         if qdata_idx >= Y0._qdata.shape[0]:
             break
-        
+
     Y0.iproject(piv, 'vL')
     return Y0
 
@@ -803,13 +803,13 @@ def _qr_based_decomposition(theta: npc.Array, Y0: npc.Array, use_eig_based_svd: 
     trunc_err : TruncationError
     renormalize : float
     """
-    
+
     if compute_err:
         need_A_L = True
 
     # QR based updates
     theta_i0 = npc.tensordot(theta, Y0.conj(), ['(p1.vR)', '(p1*.vR*)']).ireplace_label('vL*', 'vR')
-    A_L, _ = npc.qr(theta_i0, inner_labels=['vR', 'vL'])  
+    A_L, _ = npc.qr(theta_i0, inner_labels=['vR', 'vL'])
     # A_L: [(vL.p0), vR]
     theta_i1 = npc.tensordot(A_L.conj(), theta, ['(vL*.p0*)', '(vL.p0)']).ireplace_label('vR*', 'vL')
     theta_i1.itranspose(['(p1.vR)', 'vL'])
@@ -840,7 +840,7 @@ def _qr_based_decomposition(theta: npc.Array, Y0: npc.Array, use_eig_based_svd: 
     B_R = B_R.ireplace_label('(p1.vR)', '(p.vR)')
     if need_A_L:
         A_L = A_L.ireplace_label('(vL.p0)', '(vL.p)')
-        
+
     return A_L, S, B_R, trunc_err, renormalize
 
 
@@ -848,7 +848,7 @@ def _eig_based_svd(A, need_U: bool = True, need_Vd: bool = True, inner_labels=[N
                    trunc_params=None):
     """Computes the singular value decomposition of a matrix A via eigh
 
-    Singular values and vectors are obtained by diagonalizing the "square" A.hc @ A and/or A @ A.hc, 
+    Singular values and vectors are obtained by diagonalizing the "square" A.hc @ A and/or A @ A.hc,
     i.e. with two eigh calls instead of an svd call.
 
     Truncation if performed if and only if trunc_params are given.
@@ -903,7 +903,7 @@ def _eig_based_svd(A, need_U: bool = True, need_Vd: bool = True, inner_labels=[N
         trunc_err = TruncationError()
 
     return U, S, Vd, trunc_err, renormalize
-        
+
 
 class RandomUnitaryEvolution(TEBDEngine):
     """Evolution of an MPS with random two-site unitaries in a TEBD-like fashion.
@@ -917,7 +917,7 @@ class RandomUnitaryEvolution(TEBDEngine):
 
     On one hand, such an evolution is of interest in recent research (see eg. :arxiv:`1710.09827`).
     On the other hand, it also comes in handy to "randomize" an initial state, e.g. for DMRG.
-    Note that the entanglement grows very quickly, choose the truncation paramters accordingly!
+    Note that the entanglement grows very quickly, choose the truncation parameters accordingly!
 
     Options
     -------

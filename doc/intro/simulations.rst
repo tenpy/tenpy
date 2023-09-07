@@ -216,7 +216,10 @@ Note the indentation and minus signs here: this yaml syntax is equivalent to the
 The measurement functions add the values under the specified `key` to the `results` returned and saved by the
 simulation, e.g. for the above measurements you can now read out ``results['measurements']['<Sz>']`` (default key) and ``results['measurements']['<Sp_i Sm_j>']``.
 
-For more details, see the extra guide :doc:`/intro/measurements`.
+.. note ::
+
+    For more details, see the extra guide :doc:`/intro/measurements`.
+
 
 A full example with custom python code
 --------------------------------------

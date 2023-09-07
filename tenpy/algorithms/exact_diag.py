@@ -11,7 +11,7 @@ This might be used to obtain the spectrum, the ground state or highly excited st
     symmetries like translation symmetry, SU(2) symmetry or inversion symmetries.
     In other words, this code does not aim to provide state-of-the-art exact diagonalization,
     but just the ability to diagonalize the defined models for small system sizes
-    without addional extra work.
+    without additional extra work.
 """
 # Copyright 2018-2023 TeNPy Developers, GNU GPLv3
 
@@ -98,6 +98,36 @@ class ExactDiag:
         else:
             self.charge_sector = None
             self._mask = None
+
+    def possible_charge_sectors(self):
+        return self._pipe.charge_sectors()
+
+    @classmethod
+    def from_infinite_model(cls, model, first=0, last=None, enlarge=None,
+                                      **kwargs):
+        """Initialize by extracting a finite segment from a ``bc_MPS=infinite'`` model.
+
+        This method calls :meth:`~tenpy.models.model.Model.extract_segment` on the model and sets
+        the boundary conditions to 'finite'. For the ExactDiag, this little hack is equivalent
+        to extracting all the coupling terms fitting within the segment specified by
+        `first`, `last` and `None`, and generating a finite MPOModel from it.
+
+        Note that it drops the `H_bond` if existent, since :meth:`build_full_H_from_bonds` would
+        not include the correct, full onsite-terms at the boundaries if just drop the H_bond going
+        outside the segment. Hence you can only use the :meth:`build_full_H_from_mpo` method
+        when initializing the ExactDiag with this method.
+
+        Parameters
+        ----------
+        model : :class:`tenpy.models.model.Model`
+            Model with infinite bc and MPO.
+        """
+        model_segment = model.extract_segment(first, last, enlarge)
+        model_segment.lat.bc_MPS = 'finite'
+        model_segment.H_MPO.bc = 'finite'
+        if hasattr(model_segment, 'H_bond'):
+            del model_segment.H_bond  # invalid since it wouldn't terminate onsite terms correctly
+        return cls(model_segment, **kwargs)
 
     @classmethod
     def from_H_mpo(cls, H_MPO, *args, **kwargs):

@@ -145,7 +145,9 @@ class HofstadterFermions(CouplingMPOModel):
         phi : tuple
             Magnetic flux density, defined as a fraction ``(numerator, denominator)``
         phi_ext : float
-            External magnetic flux 'threaded' through the cylinder.
+            External magnetic flux 'threaded' through the cylinder. Hopping amplitudes for bonds
+            'across' the periodic boundary are modified such that particles hopping around the
+            circumference of the cylinder acquire a phase ``2 pi phi_ext``.
         gauge : 'landau_x' | 'landau_y' | 'symmetric'
             Choice of the gauge used for the magnetic field. This changes the
             magnetic unit cell. See :func:`gauge_hopping` for details.
@@ -175,7 +177,7 @@ class HofstadterFermions(CouplingMPOModel):
         self.add_coupling(hop_x, 0, 'Cd', 0, 'C', dx)
         self.add_coupling(np.conj(hop_x), 0, 'Cd', 0, 'C', -dx)  # h.c.
         dy = np.array([0, 1])
-        hop_y = self.coupling_strength_add_ext_flux(hop_y, dy, [0, phi_ext])
+        hop_y = self.coupling_strength_add_ext_flux(hop_y, dy, [0, 2. * np.pi * phi_ext])
         self.add_coupling(hop_y, 0, 'Cd', 0, 'C', dy)
         self.add_coupling(np.conj(hop_y), 0, 'Cd', 0, 'C', -dy)  # h.c.
         self.add_coupling(v, 0, 'N', 0, 'N', dx)
@@ -256,6 +258,6 @@ class HofstadterBosons(CouplingMPOModel):
         self.add_coupling(hop_x, 0, 'Bd', 0, 'B', dx)
         self.add_coupling(np.conj(hop_x), 0, 'Bd', 0, 'B', -dx)  # h.c.
         dy = np.array([0, 1])
-        hop_y = self.coupling_strength_add_ext_flux(hop_y, dy, [0, phi_ext])
+        hop_y = self.coupling_strength_add_ext_flux(hop_y, dy, [0, 2 * np.pi * phi_ext])
         self.add_coupling(hop_y, 0, 'Bd', 0, 'B', dy)
         self.add_coupling(np.conj(hop_y), 0, 'Bd', 0, 'B', -dy)  # h.c.

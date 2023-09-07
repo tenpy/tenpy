@@ -370,7 +370,7 @@ class OrthogonalExcitations(GroundStateSearch):
                                       qtotal=switch_charge_sector,
                                       labels=['vL', 'vR'])
             lanczos_params = self.engine.lanczos_params
-            _, th0, _ = lanczos.LanczosGroundState(H0, th0, lanczos_params).run()
+            _, th0, _ = krylov_based.LanczosGroundState(H0, th0, lanczos_params).run()
             th0 = npc.tensordot(th0, self.psi.get_B(0, 'B'), axes=['vR', 'vL'])
             self.psi.set_B(0, th0, form='Th')
         qtotal_after = self.psi.get_total_charge()

@@ -10,26 +10,33 @@ which provides the :class:`~tenpy.linalg.tensors.Tensor` class used by the rest 
     :toctree: .
 
     tensors
-    symmetry
+    symmetries
     random_matrix
     sparse
-    lanczos
+    krylov_based
     old
-
 """
 # Copyright 2018-2023 TeNPy Developers, GNU GPLv3
 
-from .old import lanczos
-from . import old  # need to import old._npc_helper first!
-from . import symmetries
-from . import backends, tensors, random_matrix, sparse
-from . import charges, matrix_operations
+from . import old
+from . import symmetries, backends, tensors, random_matrix, sparse, charges, matrix_operations
 from ..tools import optimization
+from .symmetries import *
+from .backends import *
+from .tensors import *
+from .random_matrix import *
+from .sparse import *
+from .matrix_operations import *
 
-
-__all__ = ['old', 'charges', 'np_conserved', 'lanczos', 'random_matrix', 'sparse', 
-           'matrix_operations', 'tensors', 'symmetries', 'backends', 
-           'dummy_config', 'misc']
+__all__ = ['old', 'symmetries', 'backends', 'tensors', 'random_matrix', 'sparse', 'charges',
+           'matrix_operations',
+           *symmetries.__all__,
+           *backends.__all__,
+           *tensors.__all__,
+           *random_matrix.__all__,
+           *sparse.__all__,
+           *matrix_operations.__all__,
+           ]
 
 
 def _patch_cython():

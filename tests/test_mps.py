@@ -5,6 +5,7 @@ import numpy as np
 import numpy.testing as npt
 import warnings
 from tenpy.models.xxz_chain import XXZChain
+from tenpy.models.aklt import AKLTChain
 from tenpy.models.lattice import Square, Chain, Honeycomb
 
 from tenpy.tools import misc
@@ -290,6 +291,7 @@ def test_canonical_form(bc, method):
             print(A_err)
             assert A_err < 1.e-13
 
+
 @pytest.mark.parametrize("bc", ['finite', 'infinite'])
 def test_apply_op(bc, eps=1.e-13):
     s = site.SpinHalfSite(None)
@@ -570,12 +572,87 @@ def test_expectation_value_multisite():
     ev = env1.expectation_value(SpSm)
     npt.assert_almost_equal(ev, [-0.5, 0., -0.5, 0., -0.5])
 
-    psi1.apply_local_op(2, SpSm)  # multi-site operator
+    psi1.apply_local_op(2, SpSm)  # multi-site operator, not unitary!
+    assert abs(psi1.norm  - 0.5**0.5) < 1.e-14
     ev = psi1.expectation_value(SpSm)  # normalized!
     npt.assert_almost_equal(ev, [-0.5, 0., 0.0, 0., -0.5])
     env1 = mps.MPSEnvironment(psi1, psi)
-    ev = env1.expectation_value(SpSm) / psi1.overlap(psi)  # normalize
-    npt.assert_almost_equal(ev, [-0.5, 0., -1., 0., -0.5])
+    ev = env1.expectation_value(SpSm) # = <psi|dagger(SpSm)_2 SpSm_i |psi>
+    npt.assert_almost_equal(ev, np.array([+0.25, 0., 0.5, 0., 0.25]))
+
+
+def test_correlation_length():
+    spin_half = site.SpinHalfSite(conserve=None, sort_charge=True)
+    up_state = ['up'] * 4
+    psi_product = mps.MPS.from_product_state([spin_half] * 4, up_state, bc='infinite')
+    assert psi_product.correlation_length() == 0.  # trivial
+    ch_s = psi_product.correlation_length_charge_sectors()
+
+    # generate test-MPS with non-trivial correlation length
+    model_AKLT = AKLTChain({'bc_MPS': 'infinite', 'L': 2})
+    psi_AKLT = model_AKLT.psi_AKLT()
+    # eigenvalues of AKLT single-site TM are [1, 1./3., 1./3., 1/3.] for charges [0, 0, +2, -2]
+    xi_AKLT = 1./np.log(3)
+    xi = psi_AKLT.correlation_length()
+    assert abs(xi - xi_AKLT) < 1.e-13
+    charges = psi_AKLT.correlation_length_charge_sectors()
+    npt.assert_array_equal(charges[np.argsort(charges[:, 0])], [[0], [2]]) # dropped [-2]
+    xis, charges = psi_AKLT.correlation_length(target=3, charge_sector=None, return_charges=True)
+    assert len(xis) == 3
+    assert np.all(np.abs(xi - xi_AKLT) < 1.e-13 )
+    charges = np.asarray(charges)
+    npt.assert_array_equal(charges[np.argsort(charges[:, 0])], [[-2], [0], [2]])
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", UserWarning)
+        xi_m2, charges = psi_AKLT.correlation_length(target=1, charge_sector=[-2], return_charges=True)
+        npt.assert_array_equal(charges, [-2])
+        assert abs(xi_m2 - xi_AKLT) < 1.e-13
+        # note: sectors have only one entry, so target only changes resulting
+        xi_p2 = psi_AKLT.correlation_length(target=2, charge_sector=np.array([+2]), tol_ev0=None)
+        assert abs(xi_p2[0] - xi_AKLT) < 1.e-13
+    assert abs(xi - xi_AKLT) < 1.e-13
+
+
+def test_MPSEnvironment_expectation_values():
+    spin_half = site.SpinHalfSite(conserve=None)
+    up_state = ['up'] * 4
+    x_state = [[np.sqrt(0.5), np.sqrt(0.5)], [np.sqrt(0.5), -np.sqrt(0.5)]] * 2
+    psi_up = mps.MPS.from_product_state([spin_half] * 4, up_state)
+    psi_x = mps.MPS.from_product_state([spin_half] * 4, x_state)
+    env = mps.MPSEnvironment(psi_up, psi_x)
+    # expectation values
+    Sx = env.expectation_value('Sx')
+    Sz = env.expectation_value('Sz')
+    npt.assert_almost_equal(Sx, [1 / 8, -1 / 8, 1 / 8, -1 / 8])
+    npt.assert_almost_equal(Sz, [1 / 8, 1 / 8, 1 / 8, 1 / 8])
+    # expectation value multi site and terms
+    operators = ['Sx', 'Id', 'Sz']
+    a = env.expectation_value_multi_sites(operators, 1)
+    b = env.expectation_value_term([('Sx', 1), ('Sz', 3)])
+    term_list = TermList([[('Sx', 1), ('Sz', 3)]])
+    c, _ = env.expectation_value_terms_sum(term_list)
+    npt.assert_almost_equal(np.array([a, b, c]), -1 / 16)
+    # correlation function
+    corr_xz = env.correlation_function('Sx', 'Sz')
+    corr_exact = np.array([[ -1.,  1.,  1., 1.],
+                           [ -1.,  1.,  -1.,  -1.],
+                           [ 1.,  1.,  -1.,  1.],
+                           [ -1.,  -1.,  -1.,  1.]])  # yapf: disable
+    corr_exact /= 16
+    npt.assert_almost_equal(corr_xz, corr_exact)
+    #term correlation function
+    right = env.term_correlation_function_right([('Sz', 0)], [('Sx', 1)])
+    left = env.term_correlation_function_left([('Sx', 0)], [('Sz', 1)], i_L=[0, 1, 2], j_R=2)
+    npt.assert_almost_equal(left, [1 / 16, -1 / 16, 1 / 16])
+    npt.assert_almost_equal(right, [-1 / 16, 1 / 16, -1 / 16])
+
+    term_left = TermList([[('Sx', 0), ('Sz', 1)]])
+    term_right = TermList([[('Sz', 0)]])
+
+    a = env.term_list_correlation_function_right(term_left, term_right)
+    b = env.expectation_value_multi_sites(['Sx', 'Sz', 'Sz'], 0)
+    c = env.expectation_value_multi_sites(['Sx', 'Sz', 'Id', 'Sz'], 0)
+    npt.assert_almost_equal(a, [b, c])
 
 
 def test_sample_measurements(eps=1.e-14, seed=5):
@@ -641,6 +718,7 @@ def test_mps_compress(method, eps=1.e-13):
 def test_InitialStateBuilder():
     s0 = site.SpinHalfSite('Sz', sort_charge=True)
     lat = Chain(10, s0, bc_MPS='finite')
+    lat_odd = Chain(11, s0, bc_MPS='finite')
     psi1 = mps.InitialStateBuilder(
         lat, {
             'method': 'lat_product_state',
@@ -649,6 +727,21 @@ def test_InitialStateBuilder():
             'full_empty': ['up', 'down'],
         }).run()
     psi1.test_sanity()
+    with pytest.raises(ValueError) as excinfo:
+        psi1_odd = mps.InitialStateBuilder(
+            lat_odd, {
+                'method': 'lat_product_state',
+                'product_state': [['up'], ['down']],
+            }).run()
+        assert "incomensurate len" in str(excinfo.value)
+    psi1_odd = mps.InitialStateBuilder(
+        lat_odd, {
+            'method': 'lat_product_state',
+            'product_state': [['up'], ['down']],
+            'allow_incommensurate': True
+        }).run()
+    psi1_odd.test_sanity()
+    assert abs(np.sum(psi1_odd.expectation_value('Sz')) - 0.5) < 1.e-10
     psi2 = mps.InitialStateBuilder(
         lat, {
             'method': 'mps_product_state',
@@ -668,26 +761,28 @@ def test_InitialStateBuilder():
         }).run()
     psi3.test_sanity()
     assert abs(psi1.overlap(psi3) - 1) < 1.e-14
-    psi4 = mps.InitialStateBuilder(
-        lat, {
-            'method': 'randomized',
-            'randomized_from_method': 'lat_product_state',
-            'product_state': [['up'], ['down']],
-            'check_filling': 0.5,
-            'full_empty': ['up', 'down'],
-        }, model_dtype=np.float64).run()
+    psi4 = mps.InitialStateBuilder(lat, {
+        'method': 'randomized',
+        'randomized_from_method': 'lat_product_state',
+        'product_state': [['up'], ['down']],
+        'check_filling': 0.5,
+        'full_empty': ['up', 'down'],
+    },
+                                   model_dtype=np.float64).run()
     assert psi4.dtype == np.float64
     assert abs(psi4.overlap(psi1) - 1) > 0.1  # randomizing should lead to small overlap!
-    psi5 = mps.InitialStateBuilder(
-        lat, {
-            'method': 'randomized',
-            'randomized_from_method': 'lat_product_state',
-            'randomize_close_1': True,
-            'randomize_params': {'N_steps': 2},
-            'product_state': [['up'], ['down']],
-            'check_filling': 0.5,
-            'full_empty': ['up', 'down'],
-        }, model_dtype=np.complex128).run()
+    psi5 = mps.InitialStateBuilder(lat, {
+        'method': 'randomized',
+        'randomized_from_method': 'lat_product_state',
+        'randomize_close_1': True,
+        'randomize_params': {
+            'N_steps': 2
+        },
+        'product_state': [['up'], ['down']],
+        'check_filling': 0.5,
+        'full_empty': ['up', 'down'],
+    },
+                                   model_dtype=np.complex128).run()
     assert psi5.dtype == np.complex128
     assert 1.e-8 < abs(psi5.overlap(psi1) - 1) < 0.1  # but here we randomize only a bit
 

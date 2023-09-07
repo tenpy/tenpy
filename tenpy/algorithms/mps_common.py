@@ -79,7 +79,7 @@ class Sweep(Algorithm):
     Attributes
     ----------
     EffectiveH : class
-        Class attribute; a sublcass of :class:`~tenpy.algorithms.mps_common.EffectiveH`.
+        Class attribute; a subclass of :class:`~tenpy.algorithms.mps_common.EffectiveH`.
         It's length attribute determines how many sites are optimized/updated at once,
         see also :attr:`n_optimize`.
     E_trunc_list : list
@@ -91,9 +91,10 @@ class Sweep(Algorithm):
     i0 : int
         Only set during sweep.
         Left-most of the `EffectiveH.length` sites to be updated in :meth:`update_local`.
-    move_right : bool
+    move_right : bool | None
         Only set during sweep.
-        Whether the next `i0` of the sweep will be right or left of the current one.
+        Whether the next `i0` of the sweep will be right (`True`), left (`False`) or at the same
+        position (`None`) as the current one.
     update_LP_RP : (bool, bool)
         Only set during a sweep, see :meth:`get_sweep_schedule`.
         Indicates whether it is necessary to update the `LP` and `RP` in :meth:`update_env`.
@@ -183,7 +184,7 @@ class Sweep(Algorithm):
         resume_data : None | dict
             Given when resuming a simulation, as returned by :meth:`get_resume_data`.
             Can contain another dict under the key `init_env_data`; the contents of
-            `init_env_data` get passed as keyword arguments to the environment initializaiton.
+            `init_env_data` get passed as keyword arguments to the environment initialization.
         orthogonal_to : None | list of :class:`~tenpy.networks.mps.MPS` | list of dict
             List of other matrix product states to orthogonalize against.
             Instead of just the state, you can specify a dict with the state as `ket`
@@ -409,8 +410,9 @@ class Sweep(Algorithm):
             Schedule for the sweep. Each entry is ``(i0, move_right, (update_LP, update_RP))``,
             where `i0` is the leftmost of the ``self.EffectiveH.length`` sites to be updated in
             :meth:`update_local`, `move_right` indicates whether the next `i0` in the schedule is
-            rigth (`True`) of the current one, and `update_LP`, `update_RP` indicate
-            whether it is necessary to update the `LP` and `RP` of the environments.
+            right (`True`), left (`False`) or equal (`None`) of the current one, and `update_LP`,
+            `update_RP` indicate whether it is necessary to update the `LP` and `RP` of the
+            environments.
         """
         # warning: set only those `LP` and `RP` to True, which can/will be used later again
         # otherwise, the assumptions in :meth:`free_no_longer_needed_envs` will not hold,
@@ -448,6 +450,8 @@ class Sweep(Algorithm):
             }
             if move_right:
                 kwargs['preload_RP'] = i0 + 2
+            elif move_right is None:
+                pass  # not moving. nothing to preload
             else:
                 kwargs['preload_LP'] = i0 - 1
         elif self.n_optimize == 1:
@@ -456,6 +460,11 @@ class Sweep(Algorithm):
                     'short_term_LP': [i0, i0 + 1],
                     'short_term_RP': [i0],
                     'preload_RP': i0 + 1,
+                }
+            elif move_right is None:
+                kwargs = {
+                    'short_term_LP': [i0],
+                    'short_term_RP': [i0],
                 }
             else:
                 kwargs = {
@@ -569,6 +578,7 @@ class Sweep(Algorithm):
             i_L = self.i0
             i_R = self.i0 + 1
         else:  # n == 1 and left moving
+            # TODO is this also correct if move_right is None?
             i_L = self.i0 - 1
             i_R = self.i0
         return i_L, i_R
@@ -610,7 +620,7 @@ class Sweep(Algorithm):
                 # so current LP[i_L] is useless
                 for env in all_envs:
                     env.del_LP(i_L)
-            elif not self.move_right and update_LP:
+            elif (self.move_right is False) and update_LP:
                 # will update site i_R coming from the right in the future
                 # so current RP[i_R] is useless
                 for env in all_envs:
@@ -644,8 +654,9 @@ class EffectiveH(NpcLinearOperator):
     combine : bool, optional
         Whether to combine legs into pipes as far as possible. This reduces the overhead of
         calculating charge combinations in the contractions.
-    move_right : bool, optional
-        Whether the sweeping algorithm that calls for an `EffectiveH` is moving to the right.
+    move_right : bool | None, optional
+        Whether the sweeping algorithm that calls for an `EffectiveH` is moving to the right,
+        to the left or not moving.
 
     Attributes
     ----------
@@ -663,8 +674,6 @@ class EffectiveH(NpcLinearOperator):
     combine : bool
         Whether to combine legs into pipes as far as possible. This reduces the overhead of
         calculating charge combinations in the contractions.
-    move_right : bool
-        Whether the sweeping algorithm that calls for an `EffectiveH` is moving to the right.
     """
     length = None
     acts_on = None
@@ -748,8 +757,9 @@ class OneSiteH(EffectiveH):
         into pipes. This reduces the overhead of calculating charge combinations in the
         contractions, but one :meth:`matvec` is formally more expensive, :math:`O(2 d^3 \chi^3 D)`.
         Is originally from the wo-site method; unclear if it works well for 1 site.
-    move_right : bool
-        Whether the the sweep is moving right or left for the next update.
+    move_right : bool | None
+        Whether the sweeping algorithm that calls for an `EffectiveH` is moving to the right,
+        to the left or not moving.
 
     Attributes
     ----------
@@ -900,7 +910,7 @@ class OneSiteH(EffectiveH):
             env.get_LP(i, store=True)
 
     def update_RP(self, env, i, VH=None):
-        if self.combine and not self.move_right:
+        if self.combine and (self.move_right is False):
             assert i == self.i0 - 1
             RP = npc.tensordot(VH, self.RHeff, axes=['(p.vR)', '(p0*.vL)'])
             RP = npc.tensordot(RP, VH.conj(), axes=['(p0.vL*)', '(p*.vR*)'])
@@ -934,8 +944,8 @@ class TwoSiteH(EffectiveH):
         physical leg for the left site (when moving right) or right side (when moving left)
         into pipes. This reduces the overhead of calculating charge combinations in the
         contractions, but one :meth:`matvec` is formally more expensive, :math:`O(2 d^3 \chi^3 D)`.
-    move_right : bool
-        Whether the the sweep is moving right or left for the next update.
+    move_right : bool | None
+        Whether the the sweep is moving right or left for the next update (or doesnt move).
         Ignored for the :class:`TwoSiteH`.
 
     Attributes
@@ -1110,7 +1120,7 @@ class ZeroSiteH(EffectiveH):
             |        .---    ---.
 
 
-    Note that this class has less funcitonality than the :class:`OneSiteH` and :class:`TwoSiteH`.
+    Note that this class has less functionality than the :class:`OneSiteH` and :class:`TwoSiteH`.
 
     Parameters
     ----------
@@ -1126,8 +1136,6 @@ class ZeroSiteH(EffectiveH):
     acts_on : list of str
         Labels of the state on which `self` acts. NB: class attribute.
         Overwritten by normal attribute, if `combine`.
-    combine, move_right : bool
-        See above.
     LHeff, RHeff : :class:`~tenpy.linalg.np_conserved.Array`
         Only set if :attr:`combine`, and only one of them depending on :attr:`move_right`.
         If `move_right` was True, `LHeff` is set with labels ``'(vR*.p0)', 'wR', '(vR.p0*)'``
@@ -1212,7 +1220,7 @@ class VariationalCompression(Sweep):
     except that we don't have an MPO in the networks - one can think of the MPO being trivial.
 
     .. deprecated :: 0.9.1
-        Renamed the optoin `N_sweeps` to `max_sweeps`.
+        Renamed the option `N_sweeps` to `max_sweeps`.
 
     Parameters
     ----------

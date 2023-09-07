@@ -540,6 +540,16 @@ class Simulation:
             measure_initial: bool
                 Whether to perform a measurement on the initial state, i.e., before starting the
                 algorithm run.
+            measure_at_algorithm_checkpoints : bool
+                Defaults to False. If True, make measurements at each algorithm checkpoint.
+                This can be useful to study e.g. the DMRG convergence with the number of sweeps.
+                Note that (depending on the algorithm) `psi` might not be in canonical form during
+                the algorithm run. In that case, you might need to also enable the
+                `canonicalize_before_measurement` option to get correct e.g. correct
+                long-range correlation functions. (On the other hand, local onsite expectation
+                values are likely fine without the explicit canonical_form() call.)
+            canonicalize_before_measurement : bool
+                If True, call `psi.canonical_form()` on the state used for measurement.
         """
         self._connect_measurements()
         if self.options.get('measure_initial', True):
@@ -554,6 +564,14 @@ class Simulation:
         for entry in def_meas + con_meas:
             # (module_name, func_name, kwargs=None, priority=0) = entry
             self._connect_measurements_fct(*entry)
+        measure_at_alg = self.options.get('measure_at_algorithm_checkpoints', False)
+        if measure_at_alg:
+
+            def make_simulation_measurements(algorithm):
+                assert algorithm is self.engine
+                self.make_measurements()
+
+            self.engine.checkpoint.connect(make_simulation_measurements)
 
     def _connect_measurements_fct(self, module_name, func_name, extra_kwargs=None, priority=0):
         if extra_kwargs is None:
@@ -695,6 +713,10 @@ class Simulation:
         model :
             Model matching `psi` (in terms of indexing, MPS order, grouped sites, ...)
         """
+        if self.options.get("canonicalize_before_measurement", False):
+            if psi is self.psi:
+                psi = psi.copy()  # make copy before
+            psi.canonical_form()
         if self.grouped > 1:
             if psi is self.psi:
                 psi = psi.copy()  # make copy before
@@ -715,7 +737,7 @@ class Simulation:
         else:
             # use the cwd of the file where the simulation class is defined
             module = importlib.import_module(sim_module)  # get module object
-            cwd = os.path.dirname(os.path.abspath(module.__file__)),
+            cwd = os.path.dirname(os.path.abspath(module.__file__))
         git_rev = version._get_git_revision(cwd)
 
         version_info = {

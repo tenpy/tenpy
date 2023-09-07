@@ -9,7 +9,7 @@ positional arguments:
         Yaml (*.yml) file with the simulation parameters/options. Multiple files get merged
         according to MERGE; see tenpy.tools.misc.merge_recursive for details.
 
-options:
+optional arguments:
     -h, --help
         show this help message and exit
     --import-module MODULE, -i MODULE
