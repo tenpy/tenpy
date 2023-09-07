@@ -22,7 +22,7 @@ import sys
 import os
 from misc import parse_backend, symmetry_short_names
 
-fn_template = '{mod_name!s}_benchmark_b_{backend_str}_q_{symm_str}_l_{legs:d}_s_{sectors:d}_.txt'
+fn_template = '{mod_name!s}_benchmark_b_{backend_str}_q_{symm_str}_l_{legs:d}_s_{sectors:d}.txt'
 
 sizes_choices = {
     'default': [1, 2, 3, 5, 7, 10, 12] + list(range(15, 50, 5)) + list(range(50, 200, 25)) + \

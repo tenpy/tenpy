@@ -25,6 +25,7 @@ tenpy/linalg/old/*.so
 tenpy/linalg/old/*.html
 tests/export_import_test/data/*
 tests/benchmark/results/*
+tests/benchmark/plots/*
 tests/benchmark/*.txt
 tests/benchmark/*.png
 hdf5_io/
