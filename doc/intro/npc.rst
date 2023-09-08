@@ -620,6 +620,46 @@ If ``_qdata_sorted == True``, ``_qdata`` and ``_data`` are guaranteed to be lexs
 If an algorithm modifies ``_qdata``, it **must** set ``_qdata_sorted = False`` (unless it gaurantees it is still sorted).
 The routine :meth:`~tenpy.linalg.np_conserved.Array.sort_qdata` brings the data to sorted form.
 
+Dipole Conservation
+-------------------
+
+Normally, a conserved charge has the form :math:`Q = \sum_i q_i` where the local charge :math:`q_i`
+is (the expectation value of) some operator which does not depend on the position of the site :math:`i`
+it acts on. E.g. :math:`q_i = 2 * S_i^z` is independent of :math:`i` in that sense.
+
+Some models, see e.g. :class:`~tenpy.models.spins.DipolarSpinChain`, have a symmetry which conserves
+a charge that does not follow the above scheme.
+The dipole charge of this model is :math:`P = \sum_i p_i = \sum_i r_i q_i`, where :math:`r_i` is the
+position of the site :math:`i`.
+
+We support a general framework for conserved charges where the local charge has some non-trivial
+transformation properties und spatial translations.
+We internally refer to such symmetries as "shift-symmetry" and we call the transformation of
+charges / legs / sites or arrays that results from spatial translations "shifting".
+The method :meth:`~tenpy.linalg.charges.ChargeInfo.shift_charges` implements how the local charge
+changes when "moved" from one site to another.
+For the base class, :class:`~tenpy.linalg.charges.ChargeInfo`, it does not change at all.
+For non-trivially transforming charges, subclasses may override this.
+
+The subclass :class:`~tenpy.linalg.charges.DipolarChargeInfo` supports one (or multiple) charges of
+the dipole form above, i.e. :math:`p_i = r_i q_i` where :math:`q_i` is another "normal" conserved
+charge. See its docstring for further details on how to use it
+and :class:`~tenpy.models.spins.DipolarSpinChain` as an example that does.
+
+Such a charge with non-:attr:`~tenpy.linalg.charges.ChargeInfo.trivial_shift` has the following main
+implications for MPS simulations in tenpy
+
+- The :attr:`~tenpy.networks.mps.MPS.sites` of an MPS are no longer just given by the sites in the
+  :attr:`~tenpy.models.lattice.Lattice.unit_cell`. If the MPS consists of multiple unit cells of the
+  lattice, the new positions of the site need be considered, since they affect the charge values
+  of the :math:`p_i` on the respective physical legs.
+  We perform this shift in :meth:`~tenpy.models.lattice.Lattice.mps_sites`.
+
+- For sweeping algorithms using infinite MPS, the charges also need to adjusted when neighbouring
+  unit cells are inserted, e.g. when a two-site update on sites ``L - 1, L`` is performed, the
+  (i)MPS tensor on site ``L`` is not the *same* as the one on site ``0``, but rather a shifted version.
+  We account for this in :meth:`~tenpy.networks.mps.MPS.get_B`, :meth:`~tenpy.networks.mps.MPS.set_B`
+  and in the similar methods for `S`.
 
 
 See also
