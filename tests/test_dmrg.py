@@ -4,7 +4,7 @@
 import itertools as it
 import tenpy.linalg.np_conserved as npc
 from tenpy.models.tf_ising import TFIChain
-from tenpy.models.spins import SpinChain
+from tenpy.models.spins import SpinChain, DipolarSpinChain
 from tenpy.algorithms import dmrg, dmrg_parallel
 from tenpy.algorithms.exact_diag import ExactDiag
 from tenpy.networks import mps
@@ -282,3 +282,34 @@ def test_dmrg_explicit_plus_hc(N, bc_MPS, tol=1.e-13, bc='finite'):
     ov = abs(psi1.overlap(psi3, understood_infinite=True))
     print("ov =", ov)
     assert abs(ov - 1) < tol
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize("N, bc_MPS", [(6, 'finite'), (2, 'infinite')])
+def test_dmrg_dipole_conservation(N, bc_MPS, S=1, tol=1.e-13, bc='finite'):
+    dmrg_params = dict(N_sweeps_check=2, mixer=True, trunc_params={'chi_max': 50})
+
+    if (N, bc_MPS) == (6, 'finite'):
+        gs_dipole = -5  # emprically: GS has dipole moment -5
+        prod_state = ['up', 'down', 'up', 'up', 'up', 'up', 'up', 'up', 'up', 'up', 'up', 'up']
+    elif (N, bc_MPS) == (2, 'infinite'):
+        gs_dipole = -2  # emprically: GS has dipole moment -2
+        prod_state = ['up', 'down', 'up', 'up']
+    else:
+        assert False
+
+    M_dip = DipolarSpinChain(dict(L=2 * N, S=S, J3=1., J4=.5, bc_MPS=bc_MPS, conserve='dipole'))
+    psi_dip = mps.MPS.from_product_state(M_dip.lat.mps_sites(), ['up', 'down'] * N, bc=bc_MPS)
+    E_dip, psi_dip = dmrg.TwoSiteDMRGEngine(psi_dip, M_dip, dmrg_params).run()
+
+    M = DipolarSpinChain(dict(L=2 * N, S=S, J3=1., J4=.5, bc_MPS=bc_MPS, conserve='Sz'))
+    psi = mps.MPS.from_product_state(M.lat.mps_sites(), ['up', 'down'] * N, bc=bc_MPS)
+    E, psi = dmrg.TwoSiteDMRGEngine(psi, M, dmrg_params).run()
+
+    # ov = abs(psi.overlap(psi_dip, understood_infinite=True))
+    # print("ov =", ov)
+    # assert abs(ov - 1) < tol
+    
+    print(E, E_dip, abs(E - E_dip))
+    assert abs(E - E_dip) < tol
+    
