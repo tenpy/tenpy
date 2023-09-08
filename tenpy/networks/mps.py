@@ -2124,17 +2124,18 @@ class MPS(BaseMPSExpectationValue):
 
     def get_SR(self, i):
         """Return singular values on the right of site `i`"""
-        shift = (i + 1) - (i + 1) % self.L
-        i = self._to_valid_index(i)
-        S = self._S[i + 1]
+        i_valid = self._to_valid_index(i)
+        S = self._S[i_valid + 1]
         if isinstance(S, npc.Array):
-            S = S.shift_charges((i + 1) % self.L, i + 1)
+            S = S.shift_charges(i_valid, i)
         return S
 
     def set_SL(self, i, S):
         """Set singular values on the left of site `i`"""
-        i = self._to_valid_index(i)
-        self._S[i] = S
+        i_valid = self._to_valid_index(i)
+        if isinstance(S, npc.Array):
+            S = S.shift_charges(i, i_valid)
+        self._S[i_valid] = S
         if not self.finite and i == 0:
             if isinstance(S, npc.Array):
                 # with mixer, S might be an Array whose charges need to be shifted
@@ -2143,8 +2144,10 @@ class MPS(BaseMPSExpectationValue):
 
     def set_SR(self, i, S):
         """Set singular values on the right of site `i`"""
-        i = self._to_valid_index(i)
-        self._S[i + 1] = S
+        i_valid = self._to_valid_index(i)
+        if isinstance(S, npc.Array):
+            S = S.shift_charges(i, i_valid)
+        self._S[i_valid + 1] = S
         if not self.finite and i == self.L - 1:
             if isinstance(S, npc.Array):
                 # with mixer, S might be an Array whose charge need to be shifted
