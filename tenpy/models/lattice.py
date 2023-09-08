@@ -1465,6 +1465,8 @@ class Lattice:
         reciprocal_basis = np.array([self.reciprocal_basis[i] for i in range(self.dim)])
         if reciprocal_basis.shape[1] == 1:
             reciprocal_basis = reciprocal_basis * np.array([[1., 0]])
+            kwargs.setdefault("head_length", 20*kwargs.get("width"))  # since reciprocal basis vecs
+            # are usually larger than basis vecs (in 1D), scale width of arrow head
             if reciprocal_basis.shape[1] != 2:
                 raise ValueError("can only plot in 2 dimensions.")
         for i in range(self.dim):
@@ -1530,44 +1532,53 @@ class Lattice:
             kwargs['marker'] = None
             ax.plot(x_y_cyl[:, 0], x_y_cyl[:, 1], **kwargs)
 
-    def plot_brillouin_zone(self, ax, draw_points=True, autoscale=True, **kwargs):
+    def plot_brillouin_zone(self, ax, *args, **kwargs):
         """Plot the brillouin zone of the lattice.
         Parameters
         ----------
         ax : :class:`matplotlib.axes.Axes`
             The axes on which we should plot.
-        draw_points : bool, default=True
-            draw edges of the polygon (BZ high symmetry points)
-        autoscale : bool, default=True
-            call to :meth:`autoscale_view` of :class:`matplotlib.axes.Axes`
+        *args :
+            arguments for :meth:`plot_brillouin_zone` of :class:``self.BZ.__class__``.
         **kwargs :
-            Keyword arguments for ``matplotlib.patches.Polygon``.
+            Keyword arguments for :meth:`plot_brillouin_zone` of :class:``self.BZ.__class__``.
         """
-        self.BZ.plot_brillouin_zone(ax, draw_points=True, autoscale=True, **kwargs)
+        self.BZ.plot_brillouin_zone(ax, *args, **kwargs)
 
     @property
     def BZ(self):
         if self._BZ is None:
             try:
-                self._BZ = SimpleBZ.from_recip_basis_vectors(self.reciprocal_basis)
+                if self.dim == 2:
+                    self._BZ = SimpleBZ.from_recip_basis_vectors(self.reciprocal_basis)
+                if self.dim == 1:
+                    self._BZ = SimpleBZ1D.from_recip_basis_vector(self.reciprocal_basis)
             except Exception:
                 raise ValueError("Couldn't create the BZ")
         return self._BZ
 
     @BZ.setter
     def BZ(self, bz_object):
-        if isinstance(bz_object, SimpleBZ):
+        if isinstance(bz_object, SimpleBZ) or isinstance(bz_object, SimpleBZ1D):
             self._BZ = bz_object
         else:
-            logger.info("Brillouin Zone is not an instance of :class:`SimpleBZ`")
-            logger.info(
-                "trying to construct an instance of :class:`SimpleBZ` from given vertices...")
+            logger.info("Brillouin Zone is not an instance of :class:`SimpleBZ` or "
+                        ":class:`SimpleBZ1D`")
+            logger.info("trying to construct an instance of :class:`SimpleBZ` or :class:`SimpleBZ1D`"
+                        " from given vertices...")
             try:
-                self._BZ = SimpleBZ(bz_object)
-            except Exception as e:
-                raise Exception("""The Brillouin Zone must be given either as :class:`Simple_BZ`
-                                or as vertices of the Brillouin Zone from which an instance of
-                                :class:`SimpleBZ` will be created""") from e
+                self._BZ = SimpleBZ1D(bz_object)
+            except ValueError:  # if 1D BZ can't be created try the 2D BZ
+                try:
+                    self._BZ = SimpleBZ(bz_object)
+                except Exception as e:
+                    raise Exception("""The Brillouin Zone must be given either as :class:`Simple_BZ`
+                                    or as vertices of the Brillouin Zone from which an instance of
+                                    :class:`SimpleBZ` will be created""") from e
+        if self.dim == 1:
+            assert isinstance(self._BZ, SimpleBZ1D), "For 1D lattices the Brillouin Zone is also 1D"
+        if self.dim == 2:
+            assert isinstance(self._BZ, SimpleBZ), "For 2D lattices the Brillouin Zone is also 2D"
 
         logger.info("Manually changed the Brillouin Zone")
 
@@ -3101,7 +3112,7 @@ class Kagome(Lattice):
                 return order
         return super().ordering(order)
 
-
+# TODO: get fourier k-space points from model!
 class SimpleBZ:
     r"""Helper class to provide an interface to the Brillouin Zone of a given lattice
 
@@ -3313,6 +3324,67 @@ class SimpleBZ:
             ax.plot(*self.vertices.T, 'o')
         if autoscale is True:
             ax.autoscale_view()
+
+
+class SimpleBZ1D:
+    """Simplified version of :class:`SimpleBZ` for the 1st BZ in 1 dimension
+
+    Parameters
+    ----------
+    vertices : array_like
+        a list of the 2 vertices (in 1D) of the 1st BZ.
+    """
+    def __init__(self, vertices):
+        self.vertices = self.format_vertices(vertices)
+        self.basis_vector = self.vertices[1]-self.vertices[0]
+
+    @classmethod
+    def from_recip_basis_vector(cls, basis_vector):
+        basis_vector = np.array(basis_vector).flatten()
+        if len(basis_vector) != 1:
+            raise ValueError("For Brillouin Zones in 1D, the basis vector must have dim 1")
+        vertices = np.array([-1, 1]) * basis_vector/2
+        return cls(vertices)
+
+    @staticmethod
+    def format_vertices(vertices):
+        vertices = np.array(vertices)
+        if len(vertices) != 2:
+            raise ValueError("For Brillouin Zones in 1D, there are only 2 vertices")
+        return np.sort(vertices)
+
+    def contains_points(self, points):
+        """Checks whether given points lie inside the 1st Brillouin Zone"""
+        points = np.array(points).astype(float)  # accept also lists and tuples as input
+        assert points.ndim == 1, "Points should be of dimension (N,)"
+        in_1st_bz = (points > self.vertices[0]) & (points < self.vertices[1])
+        return in_1st_bz
+
+    def reduce_points(self, points):
+        """Bring given points into 1st BZ by applying multiples of the recip. basis vector"""
+        points = np.array(points).astype(float)
+        assert points.ndim == 1, "Points should be of dimension (N,)"
+        red_to_basis_vec = (points/self.basis_vector) % 1
+        red_to_basis_vec[red_to_basis_vec > 0.5] -= 1
+        return red_to_basis_vec*self.basis_vector + self.vertices.mean()
+
+    def plot_brillouin_zone(self, ax, draw_points=True, **kwargs):
+        """Plot the brillouin zone of the lattice.
+
+        Parameters
+        ----------
+        ax : :class:`matplotlib.axes.Axes`
+            The axes on which we should plot.
+        draw_points: bool, default=True
+            draw edges of the polygon (BZ high symmetry points)
+        **kwargs :
+            Keyword arguments for ``matplotlib.axes.vlines``.
+        """
+        kwargs.setdefault("ls", "--")
+        kwargs.setdefault("color", "black")
+        if draw_points is True:
+            ax.plot(self.vertices, [0, 0], 'o')
+        ax.vlines(self.vertices, -0.5, 0.5, **kwargs)
 
 
 def get_lattice(lattice_name):
