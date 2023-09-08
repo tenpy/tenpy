@@ -5,8 +5,8 @@ import numpy as np
 
 from . import simulation
 from .simulation import *
-
-__all__ = simulation.__all__ + ['RealTimeEvolution']
+from ..networks.mps import MPSEnvironment, MPS
+__all__ = simulation.__all__ + ['RealTimeEvolution', 'SpectralSimulation']
 
 
 class RealTimeEvolution(Simulation):
@@ -76,100 +76,203 @@ class RealTimeEvolution(Simulation):
         pass
 
 
-class SpectralFunction(RealTimeEvolution):
-    """Calculate spectral functions through a time evolution.
+class SpectralSimulation(RealTimeEvolution):
+    """A subclass of :class:`RealTimeEvolution` to specifically calculate the time
+     dependent correlation function.
+
+    Parameters
+    ----------
+    options : dict-like
+        For command line use, a .yml file should hold the information.
+        These parameters are converted to a (dict-like) :class:`~tenpy.tools.params.Config`,
+        by the :class:`Simulation` parent class.
+        Must have: final_time: float and sensible to parse corr_fct: dict, example:
+            params = {'final_time': 1,
+                      'operator_t0': {'op': ['Sigmay', 'Sigmaz'], 'i': [5, 0] , 'idx_form': 'mps'},
+                      'operator_t': ['op2_1_name', 'op2_2_name'],
+                      'evolve_bra': False,
+                      'addJW': True}
+
+        It's necessary to provide a final_time, this is inherited from the RealTimeEvolution.
+        params['operator_t0']['op']: a list of operators to apply at the given 'i' (they all get applied before
+        the time evolution), when a more complicated operator is needed. For simple (one-site) operators simply parse
+        a string, e.g.: params['operator_t0']['op'] = 'Sigmay'
+        params['operator_t0']['i']: a list of indices either given in mps or lat form.
 
     Options
     -------
-    .. cfg:config :: ZeroTemperatureSpectralFunction
-
-        ground_state_filename :
-            File from which the ground state (and model parameters) should be loaded.
-
-
-    .. todo ::
-        Share code with OrthogonalExcitations as far as possible?
     """
+    default_measurements = RealTimeEvolution.default_measurements + [
+        ('simulation_method', 'm_spectral_function'),
+    ]
 
-    def __init__(self, options, *, gs_data=None, **kwargs):
+    def __init__(self, options, *, gs_data=None, **kwargs):  # * forces gs_data to be passed explicitly
         super().__init__(options, **kwargs)
-        self._gs_data = gs_data
+        self.psi_ground_state = self.options['gs_data']  # this is surely defined, since gs_data is kwarg
+        self.engine_ground_state = None
+        self.gs_energy = None
+        self.operator_t0_config = self.options.subconfig('operator_t0')
+        # generate info for spectral function as subconfig
+        self.evolve_bra = self.options.get('evolve_bra', False)
+        self.addJW = self.options.get('addJW', False)
+        self.psi = None
 
-    def run(self):
-        if not hasattr(self, 'ground_state_orig'):
-            self.init_from_groundstate()
-        return super().run()
+    def init_state(self):
+        # check first if psi is supplied
+        # TODO: get ground state from hdf5 file
 
-    def resume_run(self):
-        if not hasattr(self, 'ground_state_orig'):
-            self.init_from_groundstate()
-        return super().resume_run()
+        psi = self.options.get('psi', None)
+        if self.psi_ground_state is not None:
+            self.psi = self.psi_ground_state
+        elif isinstance(psi, MPS):
+            self.psi = psi
 
-    def init_from_groundstate(self):
-        gs_fn, gs_data = self._load_gs_data()
-        self.ground_state_orig = gs_data['psi']  # no copy!
-        self.psi = self.ground_state_orig.copy()
+        assert isinstance(self.psi, MPS), "psi must be an instance :class:`MPS`"
+        self.logger.info("Initialized Psi from given psi")
+        # super().init_state() won't reinitialize the state if psi is given
+        super().init_state()  # links to bare Simulation class
 
-        # copy ground state model parameters
-        gs_data_options = gs_data['simulation_parameters']
-        for key in gs_data_options.keys():
-            if not isinstance(key, str) or not key.startswith('model'):
-                continue
-            if key not in self.options:
-                self.options[key] = gs_data_options[key]
+        self.psi_ground_state = self.psi.copy()
+        # apply the operator before performing the time evolution
+        self.apply_op_list_to_psi()
 
-        # apply local operator
-        # TODO: generalize to allow more complicated ops
-        i0 = self.options['operator_t0']['i']
-        op0 = self.options['operator_t0']['op']
-        self._apply_local_op(psi, [i0, op0])
+        if self.options.get('save_psi', False):
+            self.results['psi'] = self.psi
+            self.results['psi_ground_state'] = self.psi_ground_state
 
-    def _load_gs_data(self):
-        """Load ground state data from `ground_state_filename` or use simulation kwargs."""
-        if self._gs_data is not None:
-            gs_fn = None
-            self.logger.info("use ground state data of simulation class arguments")
-            gs_data = self._gs_data
-            self._gs_data = None  # reset to None to potentially allow to free the memory
-            # even though this can only work if the call structure is
-            #      sim = OrthogonalExcitations(..., gs_data=gs_data)
-            #      del gs_data
-            #      with sim:
-            #          sim.run()
+    def apply_op_list_to_psi(self):
+        # TODO: think about segment boundary conditions
+        # TODO: make JW string consistent, watch for changes in apply_local_op to have autoJW
+        op_list = self._get_op_list_from_operator_t0()
+        if len(op_list) == 1:
+            op, i = op_list[0]
+            if self.model.lat.site(i).op_needs_JW(op):
+                self.psi.apply_local_op(i, 'JW')
+            self.psi.apply_local_op(i, op)  # TODO: check if renormalize=True makes sense here
         else:
-            gs_fn = self.options['ground_state_filename']
-            self.logger.info("loading ground state data from %s", gs_fn)
-            gs_data = hdf5_io.load(gs_fn)
-        return gs_fn, gs_data
+            ops, i_min, _ = self.psi._term_to_ops_list(op_list, True)
+            for i, op in enumerate(ops):
+                self.psi.apply_local_op(i_min + i, op)
 
-    def _apply_local_op(self, psi, apply_local_op):
-        #apply_local_op should have the form [site1, op1, site2, op2, ...]
-        assert len(apply_local_op) % 2 == 0
-        self.logger.info("apply local operators (to switch charge sector)")
-        first, last = self.results['segment_first_last']
-        term = list(zip(apply_local_op[-1::-2], apply_local_op[-2::-2]))  # [(op, site), ...]
-        for op, i in term:
-            j = int(i)  # error for apply_local_op=["Sz", i, ...] instead of [i, "Sz", ...]
-            j = j - first  # convert from original MPS index to segment MPS index
-            if not 0 <= j < psi.L:
-                raise ValueError(f"specified site {j:d} in segment = {i:d} in original MPS"
-                                 f"is not in segment [{first:d}, {last:d}]!")
-        psi.apply_local_term(term, i_offset=-first, canonicalize=False)
+    def _get_op_list_from_operator_t0(self):
+        idx = self.operator_t0_config.get('i', self.psi.L // 2)
+        ops = self.operator_t0_config.get('op', 'Sigmay')
+        ops = [ops] if type(ops) is not list else ops  # pass ops as list
+        form = self.operator_t0_config.get('idx_form', 'mps')
+        assert form == 'mps' or form == 'lat', "the idx_form must be either mps or lat"
+        if form == 'mps':
+            idx = list(idx if type(idx) is list else [idx])
+        else:
+            assert type(idx) == list, "for idx_form lat, i must be given as list [x, y, u] or list of lists"
+            if len(ops) == 1 and len(idx) != 1:
+                idx = [idx]
+            for i, lat_idx in enumerate(idx):
+                idx[i] = self.model.lat.lat2mps_idx(lat_idx)
+        op_list = list(zip(ops, idx))  # form [(op1, i_1), (op2, i_2)]...
+        return op_list
 
+    def init_algorithm(self, **kwargs):
+        super().init_algorithm(**kwargs)  # links to RealTimeEvolution class
+        algorithm_params = self.options.subconfig('algorithm_params')
+        # make sure second engine is used when evolving the bra
+        if self.evolve_bra is True:
+            # fetch engine that evolves ket
+            AlgorithmClass = self.engine.__class__
+            # instantiate the second engine for the ground state
+            self.engine_ground_state = AlgorithmClass(self.psi_ground_state, self.model, algorithm_params, **kwargs)
+        else:
+            # get the energy of the ground state
+            self.gs_energy = self.model.H_MPO.expectation_value(self.psi_ground_state)
+        # TODO: think about checkpoints
+        # TODO: resume data is handled by engine, how to pass this on to second engine?
 
-    def init_measurements(self):
-        # add measurements for overlaps
-        op = self.options['operator_t']  # TODO: could be daggger of operator_t0?
-        meas = list(self.options.get('connect_measurements', []))
-        # TODO add function to measure <psi_0 | op | psi>
-        raise NotImplementedError("TODO")
-        self.options['_connect_measurements'] = meas
-        super().init_measurements()
+    # TODO: specify run and possibly fall back to :meth:`run_algorithm` of :class: `RealTimeEvolution`
+    def run_algorithm(self):
+        while True:
+            if np.real(self.engine.evolved_time) >= self.final_time:
+                break
+            self.logger.info("evolve to time %.2f, max chi=%d", self.engine.evolved_time.real,
+                             max(self.psi.chi))
 
+            if self.evolve_bra is True:
+                # if threading is not used:
+                self.engine_ground_state.run()
+                self.engine.run()
+                # sanity check, bra and ket should evolve to same time
+                assert self.engine.evolved_time == self.engine.evolved_time, self.logger.warn(
+                    'Bra evolved to different time than ket')
+            else:
+                self.engine.run()
+            # for time-dependent H (TimeDependentExpMPOEvolution) the engine can re-init the model;
+            # use it for the measurements....
+            self.model = self.engine.model
+            # TODO: is this a good idea?
+            self.make_measurements()
+            # TODO: think about checkpoints
+            self.engine.checkpoint.emit(self.engine)  # TODO: is this a good idea?
 
-    def post_process(self):
-        # optionally use linear prediction
-        # TODO: fourier transform to calculate dynamic structure factor
+    def m_spectral_function(self, results, psi, model, simulation, **kwargs):
+        """Calculate the overlap <psi_0| e^{iHt} op2^j e^{-iHt} op1_idx |psi_0> between
+        op1 at MPS position idx and op2 at the MPS position j"""
+        self.logger.info("calling m_spectral_function")
+        env = MPSEnvironment(self.psi_ground_state, self.psi)
+        # TODO: how to parse this as input, should not be done every time the function is called.
+        self.operator_t = self.options.get('operator_t', 'Sigmay')  # operator_t might be a list of operators
+        # TODO: remove next two lines, depending on how results are stored
+        # if 'spectral_function_t' not in results.keys():
+        #    results['spectral_function_t'] = dict()
+        # TODO: get better naming convention
+        if isinstance(self.operator_t, list):
+            for i, op in enumerate(self.operator_t):
+                if isinstance(op, str):
+                    results[f'spectral_function_t_{op}'] = self._m_spectral_function_op(env, op)
+                else:
+                    results[f'spectral_function_t_{i}'] = self._m_spectral_function_op(env, op)
+        else:
+            if isinstance(self.operator_t, str):
+                results[f'spectral_function_t_{self.operator_t}'] = self._m_spectral_function_op(env, self.operator_t)
+            else:
+                results[f'spectral_function_t'] = self._m_spectral_function_op(env, self.operator_t)
+
+    def _m_spectral_function_op(self, env: MPSEnvironment, op):
+        """Calculate the overlap of <psi| op_j |phi>, where |phi> = e^{-iHt} op1_idx |psi_0>
+        (the time evolved state after op1 was applied at MPS position idx) and
+        <psi| is either <psi_0| e^{iHt} (if evolve_bra is True) or e^{i E_0 t} <psi| (if evolve_bra is False).
+
+        Returns
+        ----------
+        spectral_function_t : 1D array
+                              representing <psi_0| e^{iHt} op2^i_j e^{-iHt} op1_idx |psi_0>
+                              where op2^i is the i-th operator given in the list [op2^1, op2^2, ..., op2^N]
+                              and spectral_function_t[j] corresponds to this overlap at MPS site j at time t
+        """
+        # TODO: case dependent if op needs JW string
+        if self.addJW is False:
+            spectral_function_t = env.expectation_value(op)
+        else:
+            spectral_function_t = []
+            for i in range(self.psi.L):
+                term_list, i0, _ = env._term_to_ops_list([('Id', 0), (op, i)], True)
+                # this generates a list from left to right
+                # ["JW", "JW", ... "JW", "op (at idx)"], the problem is, that _term_to_ops_list does not generate
+                # a JW string for one operator, therefore insert Id at idx 0.
+                assert i0 == 0  # make sure to really start on the left site
+                spectral_function_t.append(env.expectation_value_multi_sites(term_list, i0))
+                # TODO: change when :meth:`expectation_value` of :class:`MPSEnvironment` automatically handles JW-string
+            spectral_function_t = np.array(spectral_function_t)
+
+        if self.evolve_bra is False:
+            phase = np.exp(1j * self.gs_energy * self.engine.evolved_time)
+            spectral_function_t = spectral_function_t * phase
+
+        return spectral_function_t
+
+    def fourier_transform_time(self):
+        raise NotImplementedError("TODO: currently outside :class:`SpectralSimulation`")
+
+    def fourier_transform_space(self):
+        """Fourier Transform in space already incorporating lattice geometry"""
+        raise NotImplementedError("TODO: currently outside :class:`SpectralSimulation`")
 
     def linear_prediction(self):
-        raise NotImplementedError("TODO")
+        raise NotImplementedError("TODO: currently outside :class:`SpectralSimulation`")
