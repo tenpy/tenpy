@@ -1570,7 +1570,7 @@ class ChargedTensor(AbstractTensor):
         if dummy_leg_state is not None and backend.block_shape(dummy_leg_state) != (1,):
             msg = f'Wrong shape of dummy_leg_state. Expected (1,). Got {backend.block_shape(dummy_leg_state)}'
             raise ValueError(msg)
-        invariant_part = Tensor.from_dense_block(block, legs=legs + [charge], backend=backend,
+        invariant_part = Tensor.from_dense_block(block, legs=legs + [dummy_leg], backend=backend,
                                                  dtype=dtype, labels=labels + [cls._DUMMY_LABEL],
                                                  atol=atol, rtol=rtol)
         return cls(invariant_part, dummy_leg_state=dummy_leg_state)
@@ -2461,6 +2461,7 @@ class DiagonalTensor(AbstractTensor):
 
     def to_dense_block(self, leg_order: list[int | str] = None) -> Block:
         # need to fill in the off-diagonal zeros anyway, so we may as well use to_full_tensor first.
+        # OPTIMIZE a specialized implementation could be slightly more efficient...
         return self.to_full_tensor().to_dense_block(leg_order)
 
     def trace(self, legs1: int | str | list[int | str] = -2, legs2: int | str | list[int | str] = -1
@@ -2673,7 +2674,7 @@ class Mask(AbstractTensor):
                      backend: AbstractBackend = None, labels: list[str | None] = None) -> Mask:
         mask = np.zeros(large_leg.dim, dtype=bool)
         mask[indices] = True
-        return cls.from_flat_numpy(mask)
+        return cls.from_flat_numpy(mask, large_leg=large_leg, backend=backend, labels=labels)
 
     def same_mask_action(self, other: Mask) -> bool:
         """A mask can act on both the large_leg or its dual.
@@ -2859,6 +2860,7 @@ class Mask(AbstractTensor):
         return self.to_full_tensor().squeeze_legs(legs)
 
     def to_dense_block(self, leg_order: list[int | str] = None) -> Block:
+        # OPTIMIZE a dedicated implementation could be slightly more efficient
         return self.to_full_tensor().to_dense_block(leg_order)
 
     def trace(self, *a, **k) -> NoReturn:
