@@ -6,7 +6,7 @@ import numpy as np
 import logging
 logger = logging.getLogger(__name__)
 
-import tenpy.linalg.np_conserved as npc
+from ..linalg import np_conserved as npc
 from . import tebd
 from ..tools.params import asConfig
 from .mps_common import VariationalApplyMPO, TwoSiteH
