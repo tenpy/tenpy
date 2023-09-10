@@ -121,7 +121,7 @@ class AbstractTensor(metaclass=ABCMeta):
     Common base class for tensors.
 
     .. note ::
-        TODO write clean text about VectorSpace._sector_perm and how it affects internal storage
+        TODO write clean text about VectorSpace.basis_perm and how it affects internal storage.
 
     Parameters
     ----------
@@ -264,9 +264,9 @@ class AbstractTensor(metaclass=ABCMeta):
             else:
                 components = join_as_many_as_possible(
                     [f'({mult} * {leg.symmetry.sector_str(sect)})'
-                     for mult, sect in zip(leg._sorted_multiplicities, leg.sectors)],
+                     for mult, sect in zip(leg.multiplicities, leg.sectors)],
                     separator=' ⊕ ',
-                    priorities=leg._sorted_multiplicities,
+                    priorities=leg.multiplicities,
                     max_len=max_len
                 )
             components_strs.append(components)
@@ -423,7 +423,7 @@ class AbstractTensor(metaclass=ABCMeta):
                     raise IndexError(msg)
                 if idx < 0:
                     idcs[leg_num] = idx + self.legs[leg_num].dim
-            return self._get_element(idcs)
+            return self._get_element([leg._inverse_basis_perm[i] for i, leg in zip(idcs, self.legs)])
         else:
             mask_legs = []
             masks = []
@@ -450,7 +450,7 @@ class AbstractTensor(metaclass=ABCMeta):
             if idx < 0:
                 idcs[leg_num] = idx + self.legs[leg_num].dim
         value = self.dtype.convert_python_scalar(value)
-        self._set_element(idcs, value)
+        self._set_element([leg._inverse_basis_perm[i] for i, leg in zip(idcs, self.legs)], value)
 
     def __neg__(self):
         return self._mul_scalar(-1)
@@ -607,7 +607,8 @@ class AbstractTensor(metaclass=ABCMeta):
         idcs
             Indices which are partially pre-processed, i.e. there is one integer index per leg
             and it is in the correct range, i.e. `0 <= idx < leg.dim`.
-            Indices are w.r.t. dense arrays, *not* the internal (sorted) order.
+            Indices are w.r.t. to the internal basis order, i.e. `basis_perm` is already accounted
+            for, but `sector_perm` is not.
         """
         ...
 
@@ -619,7 +620,9 @@ class AbstractTensor(metaclass=ABCMeta):
     def _set_element(self, idcs: list[int], value: bool | float | complex) -> None:
         """Helper function for __setitem__ after arguments were parsed.
         Can assume that idcs has correct length and entries are valid & non-negative (0 <= idx < dim).
-        Modifies self in-place with a modified copy of the underlying data
+        Indices are w.r.t. to the internal basis order, i.e. `basis_perm` is already accounted
+        for, but `sector_perm` is not.
+        Modifies self in-place with a modified copy of the underlying data.
         """
         ...
 
@@ -1726,7 +1729,7 @@ class ChargedTensor(AbstractTensor):
         --------
         project_to_invariant
         """
-        if not np.all(self.dummy_leg._non_dual_sorted_sectors[:] == self.symmetry.trivial_sector[None, :]):
+        if not np.all(self.dummy_leg._non_dual_sectors[:] == self.symmetry.trivial_sector[None, :]):
             raise ValueError('ChargedTensor with non-trivial charge could not be converted to Tensor.')
         if self.dummy_leg.dim == 1:
             return self._dummy_leg_state_item() * self.invariant_part.squeeze_legs(-1)
@@ -1734,12 +1737,15 @@ class ChargedTensor(AbstractTensor):
         return self.invariant_part.tdot(state, -1, 0)
 
     def to_flat_block_single_sector(self) -> Block:
-        """Assumes a single-leg tensor living in a single sector and returns its components within that sector.
+        """Assumes a single-leg tensor living in a single sector and returns its components within
+        that sector.
 
         See Also
         --------
         from_flat_block_single_sector
         """
+        if self.num_legs > 1:
+            raise ValueError('Expected a single leg')
         if self.dummy_leg.num_sectors != 1 or self.dummy_leg.multiplicities[0] != 1:
             raise ValueError('Not a single sector')
         if self.symmetry.sector_dim(self.dummy_leg.sectors[0]) > 1:
@@ -3019,27 +3025,16 @@ def conj(t: AbstractTensor) -> AbstractTensor:
     return t.conj()
 
 
-def detect_sector_idcs_from_block(block: Block, legs: list[VectorSpace], backend: AbstractBackend
-                                  ) -> list[int]:
-    """Detect the symmetry sectors of a dense block. Return their indices.
-
-    Given a `block` that represents a symmetric tensor with the given `legs`, return
-    the sectors (one sector per leg) of the larges (by magnitude) entry of the `block`.
-    """
-    idcs = backend.block_abs_argmax(block)
-    sector_idcs = [leg.parse_index(idx)[0] for leg, idx in zip(legs, idcs)]
-    return sector_idcs
-
-
 def detect_sectors_from_block(block: Block, legs: list[VectorSpace], backend: AbstractBackend
                               ) -> SectorArray:
     """Detect the symmetry sectors of a dense block.
 
     Given a `block` that represents a symmetric tensor with the given `legs`, return
-    the sectors (one sector per leg) of the larges (by magnitude) entry of the `block`.
+    the sectors (one sector per leg) of the largest (by magnitude) entry of the `block`.
     """
-    sector_idcs = detect_sector_idcs_from_block(block=block, legs=legs, backend=backend)
-    sectors = [leg.sectors[i] for leg, i in zip(legs, sector_idcs)]
+    assert backend.block_shape(block) == tuple(l.dim for l in legs)
+    idcs = backend.block_abs_argmax(block)
+    sectors = [leg.sectors[leg.parse_index(i)[0]] for leg, i in zip(legs, idcs)]
     return np.stack(sectors, axis=0)
 
 

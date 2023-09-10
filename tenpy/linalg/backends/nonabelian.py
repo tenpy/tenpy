@@ -109,6 +109,7 @@ class AbstractNonabelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
         return self.block_item(block)
 
     def to_dense_block(self, a: Tensor) -> Block:
+        raise NotImplementedError  # TODO use self.apply_basis_perm
         res = self.zero_block(a.shape, a.dtype)
         codomain = [a.legs[n] for n in a.data.codomain_legs]
         domain = [a.legs[n] for n in a.data.domain_legs]
@@ -480,8 +481,8 @@ def all_fusion_trees(space: VectorSpace, coupled: Sector = None) -> Iterator[Fus
 def coupled_sectors(codomain: ProductSpace, domain: ProductSpace) -> SectorArray:
     """The coupled sectors which are admitted by both codomain and domain"""
     # TODO think about duality!
-    codomain_coupled = codomain._non_dual_sorted_sectors
-    domain_coupled = domain._non_dual_sorted_sectors
+    codomain_coupled = codomain._non_dual_sectors
+    domain_coupled = domain._non_dual_sectors
     # OPTIMIZE: find the sectors which appear in both codomain_coupled and domain_coupled
     #  can probably be done much more efficiently, in particular since they are sorted.
     #  look at np.intersect1d for inspiration?

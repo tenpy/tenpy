@@ -6,7 +6,7 @@ from numpy import ndarray
 import copy
 import warnings
 import bisect
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Sequence
 
 from tenpy.linalg.dummy_config import printoptions
 
@@ -24,6 +24,23 @@ __all__ = ['VectorSpace', 'ProductSpace']
 class VectorSpace:
     r"""A vector space, which decomposes into sectors of a given symmetry.
 
+    A vector space is characterized by a basis, and in particular a defined order of basis elements.
+    Each basis vector lies in one of the sectors of the :attr:`symmetry`.
+
+    For efficiency we want to use a modified order of the basis, such that::
+
+        - The basis elements that belong to the same sector appear contigously.
+          This allows us to directly read-off the blocks that contain the free parameters.
+
+        - The sectors are sorted. This makes look-ups more efficient.
+          For a ket-space (``is_dual is False``), we sort according to ``np.lexsort(sectors.T)``.
+          For a bra-space (``is_dual is True``), we sort according
+          to ``np.lexsort(symmetry.dual_sectors(sectors).T)``.
+          This means that a space and its dual have compatible sector orders.
+     
+    A VectorSpace instance captures this information, i.e. the permutation of the basis that
+    achieves the above properties, which sectors appear and how often.
+
     .. note ::
         It is best to think of ``VectorSpace``s as immutable objects.
         In practice they are mutable, i.e. you could change their attributes.
@@ -31,62 +48,51 @@ class VectorSpace:
 
     Attributes
     ----------
+    symmetry: Symmetry
+        The symmetry associated with this space.
     sectors : 2D numpy array of int
-        The sectors that compose this space, in order of appearance in the space.
-        A 2D array of integers with axes [s, q] where s goes over different sectors and q over the
-        (one or more) numbers needed to label a sector.
-        The sectors (to be precise, the rows `sectors[i, :]`) are unique, i.e. the computational
-        basis needs to be ordered such that basis vectors that belong to the same sector appear
-        consecutively.
+        The sectors that compose this space. A 2D array of integers with axes [s, q] where s goes
+        over different sectors and q over the (one or more) numbers needed to label a sector.
+        The sectors (to be precise, the rows `sectors[i, :]`) are unique. The order is an
+        implementation detail and not physical, see :attr:`_non_dual_sectors`
     multiplicities : 1D numpy array of int
         How often each of the `sectors` appears. A 1D array of positive integers with axis [s].
         ``sectors[i, :]`` appears ``multiplicities[i]`` times.
     slices : 2D numpy array of int
-        For every sector ``sectors[n, :]``, this specifies the start (``slices[n, 0]``) and stop
-        (``slices[n, 1]``) of indices on a dense array into which the sector is embedded.
-        This means e.g. that
-        ``slices[n, 1] - slices[n, 0] == symmetry.sector_dim(sectors[n]) * multiplicities[n]``
+        For every sector ``sectors[n]``, the start ``slices[n, 0]`` and stop ``slices[n, 1]`` of
+        indices (in the *internal* basis order) that belong to this sector.
+        Conversely, ``basis_perm[slices[n, 0]:slices[n, 1]]`` are the elements of the public
+        basis that live in ``sectors[n]``.
     is_dual : bool
         Whether this is the dual (a.k.a. bra) space or the regular (a.k.a. ket) space.
+    basis_perm : ndarray
+        The permutation of basis elements such that ``basis_vectors[basis_perm]`` is grouped by
+        sector, i.e. such that ``basis_vectors[basis_perm][slices[n, 0]:slices[n, 1]]`` lie in
+        ``sectors[n]``. ``dense_data[basis_perm] == internal_data``.
+        All other attributes implicitly or explicitly assume this basis order.
+    sectors_of_basis : 2D numpy array of int
+        The sectors of every element of the "public" computational basis.
+    _non_dual_sectors : 2D numpy array of int
+        Internally stored version of :attr:`sectors`. For ket spaces (``is_dual=True``),
+        these are the same as :attr:`sectors`, for bra spaces these are their duals.
+        They are sorted such that ``np.lexsort(_non_dual_sectors.T)`` is trivial.
 
-    _non_dual_sorted_sectors : 2D numpy array of int
-        Internally stored version of :attr:`sectors`.
-        To simplify the internal functionality, we store the information given by `sectors` in a
-        different way.
-        Firstly, for bra spaces (`is_dual=True`), we store the duals of the sectors, i.e. the
-        sectors of the ket space that is isomorphic to self.
-        This means that mutually dual VectorSpaces have the same `_non_dual_sorted_sectors`, which
-        simplifies bookkeeping in contractions etc.
-        Secondly, we sort the sectors such that ``np.lexsort(_non_dual_sorted_sectors.T)`` is trivial.
-        This simplifies lookups.
-        Overall we have ``_non_dual_sorted_sectors == sectors[_sector_perm]`` for a ket space and
-        ``_non_dual_sorted_sectors == symmetry.dual_sectors(sectors[_sector_perm])`` for a bra space.
-    _sorted_sectors : 2D numpy array of int
-        Property. Same duality as :attr:`sectors` but in the order of :attr:`_sector_perm`,
-        such that ``space._sorted_sectors == space.sectors[space._sector_perm]``.
-    _sector_perm : 1D numpy array of int
-        The permutation of sectors induced by the above sorting
-    _sorted_multiplicities : 1D numpy array of int
-        The multiplicities ordered like `_non_dual_sorted_sectors`, i.e. `_multiplicities == multiplicities[sector_perm]`.
-    _sorted_slices : 2D numpy array of int
-        The slices ordered like `_sectors`, i.e. `_sorted_slices == slices[sector_perm]`.
-        
     Parameters
     ----------
     symmetry: Symmetry
         The symmetry associated with this space.
     sectors: 2D array_like of int
-        The sectors of the symmetry that compose this space.
-        A 2D array of integers with axes [s, q] where s goes over different sectors
-        and q over the different quantities needed to describe a sector.
-        E.g. if the symmetry is :math:`U(1) \times Z_2`, then ``sectors[s, 0]`` gives the :math:`U(1)`
-        charge for the `s`-th sector, and ``sectors[s, 1]`` the respective :math:`Z_2` charge.
+        For a ket-space (``_is_dual=False``), the sectors of the symmetry that compose this space.
+        For a bra-space, the duals of that.
+        Must be sorted such that ``np.lexsort(_non_dual_sectors.T)`` is trivial.
         Sectors may not contain duplicates. Multiplicity is specified via the separate arg below.
     multiplicities: 1D array_like of int, optional
         How often each of the `sectors` appears. A 1D array of positive integers with axis [s].
         ``sectors[i_s, :]`` appears ``multiplicities[i_s]`` times.
         If not given, a multiplicity ``1`` is assumed for all `sectors`.
-        Before storing, the multiplicities are permuted along with the `sectors` to sort the latter.
+    basis_perm : ndarray, optional
+        See the attribute :attr:`basis_perm`.
+        Per default the trivial permutation ``[0, 1, 2, ...]`` is used.
     is_real : bool
         Whether the space is over the real numbers. Otherwise it is over the complex numbers (default).
     _is_dual : bool
@@ -95,131 +101,126 @@ class VectorSpace:
         .. warning :
             For ``_is_dual is True``, the passed `sectors` are interpreted as the sectors of the
             ("non-dual") ket-space isomorphic to self.
-            These are the :attr:`_non_dual_sorted_sectors`, except they dont need to be sorted.
-            This means that to construct the dual of ``VectorSpace(..., some_sectors)``,
-            we need to call ``VectorSpace(..., some_sectors, _is_dual=True)`` and in particular
-            pass the *same* sectors.
-            Consider using ``VectorSpace(..., some_sectors).dual`` instead for more readable code.
-
-    _sector_perm : 1D array-like of int, optional
-        Allows to skip sorting of sectors, if the _sector_perm is already known.
-        If `_sector_perm` is given, the `sectors` and `multiplicities` are assumed to be in sorted
-        order, such that the following two calls are equivalent:
-        ``v1 = VectorSpace(..., sectors, mults, _sector_perm=None)``
-        ``v2 = VectorSpace(..., sectors[perm], mults[perm], _sector_perm=perm)``
-        where ``perm = np.lexsort(sectors.T)``.
-        TODO (JU) should test exactly this setup in pytest.
-    _sorted_slices : 2D array-like
-        Allows to skip recomputing the slices.
-        Note: These are the :attr:`_sorted_slices`, not :attr:`slices`!
     """
-
     def __init__(self, symmetry: Symmetry, sectors: SectorArray, multiplicities: ndarray = None,
-                 is_real: bool = False, _is_dual: bool = False, _sector_perm: ndarray = None,
-                 _sorted_slices: ndarray = None):
+                 basis_perm: ndarray = None, is_real: bool = False, _is_dual: bool = False):
         self.symmetry = symmetry
         self.is_real = is_real
         self.is_dual = _is_dual
-        sectors = np.asarray(sectors, dtype=int)
-        num_sectors = len(sectors)
+        self._non_dual_sectors = sectors = np.asarray(sectors, dtype=int)
+        self.num_sectors = num_sectors = len(sectors)
         if multiplicities is None:
-            multiplicities = np.ones((num_sectors,), dtype=int)
+            self.multiplicities = multiplicities = np.ones((num_sectors,), dtype=int)
         else:
-            assert len(multiplicities) == num_sectors
-            multiplicities = np.asarray(multiplicities, dtype=int)
+            self.multiplicities = multiplicities = np.asarray(multiplicities, dtype=int)
+        self.slices = _calc_slices(symmetry=symmetry, sectors=sectors, multiplicities=multiplicities)
+        self.dim = dim = np.sum(symmetry.batch_sector_dim(sectors) * multiplicities)
+        if basis_perm is None:
+            # OPTIMIZE special case this, where no permutation is needed?
+            self.basis_perm = basis_perm = np.arange(dim)
+        else:
+            self.basis_perm = basis_perm = np.asarray(basis_perm, dtype=int)
+        self._inverse_basis_perm = inverse_permutation(basis_perm)
 
-        if _sector_perm is None:
-            # sort the sectors
-            self._sector_perm = perm = np.lexsort(sectors.T)
-            self._non_dual_sorted_sectors = sectors[perm]
-            self._sorted_multiplicities = multiplicities[perm]
-        else:
-            assert len(_sector_perm) == num_sectors
-            self._sector_perm = perm = np.asarray(_sector_perm, dtype=np.intp)
-            self._non_dual_sorted_sectors = sectors
-            self._sorted_multiplicities = multiplicities
-        self._inverse_sector_perm = inv_perm = inverse_permutation(perm)  # OPTIMIZE property? cached_property?
+    @classmethod
+    def from_unsorted_sectors(cls, symmetry: Symmetry, sectors: SectorArray,
+                              multiplicities: ndarray = None, basis_perm: ndarray = None,
+                              is_real: bool = False):
+        """Like constructor, but allows `sectors` in any order and only creates ket-spaces."""
+        # OPTIMIZE : doing this in a cumbersome way right now...
+        #   The difficult part is figuring out the new basis_perm.
+        #   I think doing sth like basis_perm[slice(*s) for s in slices[sort]] might work...
+        sectors = np.asarray(sectors, dtype=int)
+        assert len(sectors.shape) == 2 and sectors.shape[1] == symmetry.sector_ind_len
+        if multiplicities is None:
+            multiplicities = np.ones((len(sectors),), dtype=int)
+        slices = _calc_slices(symmetry=symmetry, sectors=sectors, multiplicities=multiplicities)
+        dim = np.sum(symmetry.batch_sector_dim(sectors) * multiplicities)
+        if basis_perm is None:
+            basis_perm = np.arange(dim)
+        sectors_of_basis = np.zeros((dim, symmetry.sector_ind_len), dtype=int)
+        for sect, slc in zip(sectors, slices):
+            sectors_of_basis[basis_perm[slice(*slc)]] = sect[None, :]
+        return cls.from_basis(symmetry=symmetry, sectors_of_basis=sectors_of_basis, is_real=is_real)
 
-        if _sorted_slices is None:
-            if _sector_perm is None:
-                slices = _calc_slices(symmetry, sectors, multiplicities)
-            else:
-                # need to use the "unsorted" sectors, multiplicities to get correct slices
-                slices = _calc_slices(symmetry, sectors[inv_perm], multiplicities[inv_perm])
-            _sorted_slices = slices[perm]
-        else:
-            assert len(_sorted_slices) == num_sectors
-        self._sorted_slices = _sorted_slices
+    @classmethod
+    def from_basis(cls, symmetry: Symmetry, sectors_of_basis: Sequence[Sequence[int]],
+                   is_real: bool = False):
+        """Create a VectorSpace by specifying the sector of every basis element.
+
+        This classmethod always creates a ket-space (i.e. ``res.is_dual is False``).
+        Use ``VectorSpace.from_basis(...)
+
+        Parameters
+        ----------
+        sectors_of_basis : iterable of iterable of int
+            Specifies the basis. ``sectors[n]`` is the sector of the ``n``-th basis element.
+        symmetry, is_real
+            Same as parameters for :class:`VectorSpace`
+        """
+        sectors_of_basis = np.asarray(sectors_of_basis, dtype=int)
+        assert sectors_of_basis.shape[1] == symmetry.sector_ind_len
+        # unfortunately, np.unique has the opposite sorting convention ("first entry first")
+        # from np.lexsort ("last entry first").
+        # We thus reverse the order of every sector before calling unique.
+        unique, inv_idcs, mults = np.unique(sectors_of_basis[:, ::-1], axis=0, return_inverse=True,
+                                            return_counts=True)
+        sectors = unique[:, ::-1]
+        assert np.all(np.lexsort(sectors.T) == np.arange(len(sectors)))  # TODO remove check
+        basis_perm = np.argsort(inv_idcs)
+        return cls(symmetry=symmetry, sectors=sectors, multiplicities=mults, basis_perm=basis_perm,
+                   is_real=is_real, _is_dual=False)
 
     def test_sanity(self):
-        # sectors : private attribute is _non_dual_sorted_sectors
-        assert all(self.symmetry.is_valid_sector(s) for s in self._non_dual_sorted_sectors)
-        assert len(self._non_dual_sorted_sectors) == self.num_sectors
-        assert len(np.unique(self._non_dual_sorted_sectors, axis=0)) == self.num_sectors
-        assert self._non_dual_sorted_sectors.shape == (self.num_sectors, self.symmetry.sector_ind_len)
-        # multiplicities : private attribute is _sorted_multiplicities
-        assert np.all(self._sorted_multiplicities > 0)
-        assert self._sorted_multiplicities.shape == (self.num_sectors,)
-        # slices : private attribute is _sorted_slices
-        assert self._sorted_slices.shape == (self.num_sectors, 2)
-        slice_diffs = self._sorted_slices[:, 1] - self._sorted_slices[:, 0]
-        expect_diffs = self.symmetry.batch_sector_dim(self._non_dual_sorted_sectors) * self._sorted_multiplicities
+        # sectors
+        assert all(self.symmetry.is_valid_sector(s) for s in self._non_dual_sectors)
+        assert len(self._non_dual_sectors) == self.num_sectors
+        assert len(np.unique(self._non_dual_sectors, axis=0)) == self.num_sectors
+        assert self._non_dual_sectors.shape == (self.num_sectors, self.symmetry.sector_ind_len)
+        assert np.all(np.lexsort(self._non_dual_sectors.T) == np.arange(self.num_sectors))
+        # multiplicities
+        assert np.all(self.multiplicities > 0)
+        assert self.multiplicities.shape == (self.num_sectors,)
+        # slices
+        assert self.slices.shape == (self.num_sectors, 2)
+        slice_diffs = self.slices[:, 1] - self.slices[:, 0]
+        expect_diffs = self.symmetry.batch_sector_dim(self._non_dual_sectors) * self.multiplicities
         assert np.all(slice_diffs == expect_diffs)
         # slices should be consecutive
         if len(self.slices) > 0:
-            assert self.slices[0, 0] == 0, str(self.slices)
+            assert self.slices[0, 0] == 0
             assert np.all(self.slices[1:, 0] == self.slices[:-1, 1])
             assert self.slices[-1, 1] == self.dim
-        # _sector_perm
-        assert self._sector_perm.shape == (self.num_sectors,)
-        assert np.all(np.sum(self._sector_perm[:, None] == np.arange(self.num_sectors)[None, :], axis=0) == 1)
-
-    @property
-    def dim(self):
-        return np.sum(self.symmetry.batch_sector_dim(self._non_dual_sorted_sectors) * self._sorted_multiplicities)
-
-    @property
-    def num_sectors(self):
-        return len(self._non_dual_sorted_sectors)
+        # basis_perm
+        assert self.basis_perm.shape == (self.dim,)
+        assert len(np.unique(self.basis_perm)) == self.dim
+        assert np.all(self.basis_perm[self._inverse_basis_perm] == np.arange(self.dim))
 
     @classmethod
-    def without_symmetry(cls, dim: int, is_real: bool = False, _is_dual: bool = False):
+    def without_symmetry(cls, dim: int, is_real: bool = False, is_dual: bool = False):
         """Initialize a VectorSpace with no symmetry of a given dimension"""
         return cls(symmetry=no_symmetry, sectors=no_symmetry.trivial_sector[None, :],
-                   multiplicities=[dim], is_real=is_real, _is_dual=_is_dual)
-
-    @property
-    def multiplicities(self):
-        # OPTIMIZE cache?
-        return self._sorted_multiplicities[self._inverse_sector_perm]
+                   multiplicities=[dim], is_real=is_real, _is_dual=is_dual)
 
     @property
     def sectors(self):
         # OPTIMIZE cachedproperty?
         if self.is_dual:
-            res = self.symmetry.dual_sectors(self._non_dual_sorted_sectors)
+            return self.symmetry.dual_sectors(self._non_dual_sectors)
         else:
-            res = self._non_dual_sorted_sectors
-        return res[self._inverse_sector_perm]
+            return self._non_dual_sectors
 
     @property
-    def _sorted_sectors(self):
-        # OPTIMIZE cached?
-        if self.is_dual:
-            return self.symmetry.dual_sectors(self._non_dual_sorted_sectors)
-        return self._non_dual_sorted_sectors
-
-    @property
-    def slices(self):
-        # OPTIMIZE cache?
-        return self._sorted_slices[self._inverse_sector_perm]
+    def sectors_of_basis(self):
+        # build in internal basis, then permute
+        res = np.zeros((self.dim, self.symmetry.sector_ind_len), dtype=int)
+        for sect, slc in zip(self.sectors, self.slices):
+            res[slice(*slc)] = sect[None, :]
+        return res[self._inverse_basis_perm]
 
     def sector(self, i: int) -> Sector:
-        """Return the `i`-th sector.
-
-        Equivalent to ``self.sectors[i]``.
-        """
-        sector = self._non_dual_sorted_sectors[self._inverse_sector_perm[i], :]
+        """Return the `i`-th sector. Equivalent to ``self.sectors[i]``."""
+        sector = self._non_dual_sectors[i, :]
         if self.is_dual:
             return self.symmetry.dual_sector(sector)
         return sector
@@ -227,13 +228,10 @@ class VectorSpace:
     def parse_index(self, idx: int) -> tuple[int, int]:
         """Utility function to translate an index for this VectorSpace.
 
-        Checks that an index is in the appropriate range, translates negative indices
-        and splits it into a sector-part and a part within that sector.
-
         Parameters
         ----------
         idx : int
-            An index of the leg, labelling an element of the computational basis of self.
+            An index of the leg, labelling an element of the public computational basis of self.
 
         Returns
         -------
@@ -243,33 +241,18 @@ class VectorSpace:
         multiplicity_idx : int
             The index "within the sector", in ``range(self.multiplicities[sector_index])``.
         """
-        if not -self.dim <= idx < self.dim:
-            raise IndexError(f'flat index {idx} out of bounds for space of dimension {self.dim}')
-        if idx < 0:
-            idx = idx + self.dim
+        print(f'parsing index. input {idx}')
+        idx = self._inverse_basis_perm[idx]
         sector_idx = bisect.bisect(self.slices[:, 0], idx) - 1
         multiplicity_idx = idx - self.slices[sector_idx, 0]
         return sector_idx, multiplicity_idx
 
-    def _parse_index(self, idx: int) -> tuple[int, int]:
-        """Like :meth:`parse_index`, but the `sector_idx` is w.r.t. the private :attr:`_sectors`.
-
-        In particular, this means that the `idx`-th basis element lives
-        in ``self._non_dual_sorted_sectors[self._parse_index(idx)[0]]`` (note the underscores!).
-        """
-        # Implementing the "public" version is easier since self.slices is sorted
-        sector_idx, multiplicity_idx = self.parse_index(idx)
-        return self._inverse_sector_perm[sector_idx], multiplicity_idx
-
     def idx_to_sector(self, idx: int) -> Sector:
         """Returns the sector associated with an index.
         
-        This is the sector that the `idx`-th basis element of self lives in.
+        This is the sector that the `idx`-th element of the public computational basis of self lives in.
         """
-        _sector_idx, _ = self._parse_index(idx)
-        if self.is_dual:
-            return self.symmetry.dual_sector(self._non_dual_sorted_sectors[_sector_idx])
-        return self._non_dual_sorted_sectors[_sector_idx]
+        return self.sector(self.parse_index(idx)[0])
 
     def sectors_where(self, sector: Sector) -> int | None:
         """Find the index `i` s.t. ``self.sectors[i] == sector``, or ``None`` if no such ``i`` exists."""
@@ -280,13 +263,13 @@ class VectorSpace:
             return where[0]
         raise RuntimeError  # sectors should have unique entries, so this should not happen
 
-    def _non_dual_sorted_sectors_where(self, sector: Sector) -> int | None:
-        """Find the index `i` s.t. ``self._non_dual_sorted_sectors[i] == sector``.
+    def _non_dual_sectors_where(self, sector: Sector) -> int | None:
+        """Find the index `i` s.t. ``self._non_dual_sectors[i] == sector``.
 
         Or ``None`` if no such ``i`` exists.
         """
-        # OPTIMIZE use that _non_dual_sorted_sectors is sorted to speed up lookup?
-        where = np.where(np.all(self._non_dual_sorted_sectors == sector, axis=1))[0]
+        # OPTIMIZE use that _non_dual_sectors is sorted to speed up lookup?
+        where = np.where(np.all(self._non_dual_sectors == sector, axis=1))[0]
         if len(where) == 0:
             return None
         if len(where) == 1:
@@ -308,29 +291,13 @@ class VectorSpace:
 
         Returns 0 if self does not have that sector.
         """
-        idx = self._non_dual_sorted_sectors_where(sector)
+        idx = self._non_dual_sectors_where(sector)
         if idx is None:
             return 0
-        return self._sorted_multiplicities[idx]
-
-    def sectors_str(self, separator=', ', max_len=70) -> str:
-        """short str describing the self_non_dual_sorted_sectors (note the underscore!) and their multiplicities"""
-        full = separator.join(f'{self.symmetry.sector_str(a)}: {mult}'
-                              for a, mult in zip(self._non_dual_sorted_sectors, self._sorted_multiplicities))
-        if len(full) <= max_len:
-            return full
-
-        res = ''
-        end = '[...]'
-
-        for idx in np.argsort(self._sorted_multiplicities):
-            new = f'{self.symmetry.sector_str(self._non_dual_sorted_sectors[idx])}: {self._sorted_multiplicities[idx]}'
-            if len(res) + len(new) + len(end) + 2 * len(separator) > max_len:
-                return res + separator + end
-            res = res + separator + new
-        raise RuntimeError  # a return should be triggered from within the for loop!
+        return self.multiplicities[idx]
 
     def __repr__(self):
+        # TODO include basis_perm?
         # number of *entries* in sectors (num_sectors * num_charges) that triggers multiple lines
         multiline_threshold = 4
         
@@ -395,15 +362,15 @@ class VectorSpace:
     def _debugging_str(self, use_private_sectors: bool = True):
         """Version of ``str(self)`` intended for debugging the internals of ``tenpy.linalg``.
 
-        Instead of the :attr:`sectors`, it shows the "private" :attr:`_non_dual_sorted_sectors`.
+        Instead of the :attr:`sectors`, it shows the "private" :attr:`_non_dual_sectors`.
         """
         return '\n'.join(self._debugging_str_lines(use_private_sectors=use_private_sectors))
 
     def _debugging_str_lines(self, use_private_sectors: bool = True):
         """Part of :meth:`_debugging_str`"""
         if use_private_sectors:
-            sectors = self._non_dual_sorted_sectors
-            mults = self._sorted_multiplicities
+            sectors = self._non_dual_sectors
+            mults = self.multiplicities
         else:
             sectors = self.sectors
             mults = self.multiplicities
@@ -414,6 +381,7 @@ class VectorSpace:
             f'{indent}symmetry: {self.symmetry!s}',
             f'{indent}dim: {self.dim}',
             f'{indent}is_dual: {self.is_dual}',
+            f'{indent}basis_perm: {self.basis_perm}',
             f'{indent}num sectors: {self.num_sectors}',
         ]
         # determine sectors: list[str] and mults: list[str]
@@ -468,15 +436,17 @@ class VectorSpace:
         Note that this leg can not be contracted with `self`.
         """
         # TODO test coverage
-        _non_dual_sectors = self.symmetry.dual_sectors(self._non_dual_sorted_sectors)
-        sort = np.lexsort(_non_dual_sectors.T)
+        non_dual_sectors = self.symmetry.dual_sectors(self._non_dual_sectors)
+        sort = np.lexsort(non_dual_sectors.T)
+        raise NotImplementedError
+        # TODO need to figure out basis_perm...
+        #  I think one needs to do sth like basis_perm[slice(*s) for s in slices[sort]]
         return VectorSpace(symmetry=self.symmetry,
-                           sectors=_non_dual_sectors[sort],
-                           multiplicities=self._sorted_multiplicities[sort],
+                           sectors=non_dual_sectors[sort],
+                           multiplicities=self.multiplicities[sort],
+                           basis_perm=self.basis_perm,
                            is_real=self.is_real,
-                           _is_dual=not self.is_dual,
-                           _sector_perm=self._sector_perm[sort],
-                           _sorted_slices=self._sorted_slices[sort])
+                           _is_dual=not self.is_dual)
 
     def is_equal_or_dual(self, other: VectorSpace) -> bool:
         """If another VectorSpace is equal to *or* dual of `self`.
@@ -491,11 +461,11 @@ class VectorSpace:
         if self.num_sectors != other.num_sectors:
             # now we may assume that checking all multiplicities of self is enough.
             return False
-        if not np.all(self._non_dual_sorted_sectors == other._non_dual_sorted_sectors):
+        if not np.all(self._non_dual_sectors == other._non_dual_sectors):
             return False
-        if not np.all(self._sorted_multiplicities == other._sorted_multiplicities):
+        if not np.all(self.multiplicities == other.multiplicities):
             return False
-        if not np.all(self._sector_perm == other._sector_perm):
+        if not np.all(self.basis_perm == other.basis_perm):
             return False
         return True
 
@@ -518,22 +488,22 @@ class VectorSpace:
         The trivial space is the one-dimensional space which consists only of the trivial sector,
         appearing exactly once. In a mathematical sense, the trivial sector _is_ the trivial space.
         """
-        if self._non_dual_sorted_sectors.shape[0] != 1:
+        if self._non_dual_sectors.shape[0] != 1:
             return False
         # have already checked if there is more than 1 sector, so can assume self.multiplicities.shape == (1,)
-        if self._sorted_multiplicities[0] != 1:
+        if self.multiplicities[0] != 1:
             return False
-        if not np.all(self._non_dual_sorted_sectors[0] == self.symmetry.trivial_sector):
+        if not np.all(self._non_dual_sectors[0] == self.symmetry.trivial_sector):
             return False
         return True
 
     @property
     def num_parameters(self) -> int:
         """The number of free parameters, i.e. the number of linearly independent symmetric tensors in this space."""
-        # the trivial sector is by definition self-dual, so we can search self._non_dual_sorted_sectors,
+        # the trivial sector is by definition self-dual, so we can search self._non_dual_sectors,
         # even if self.is_dual is True.
-        # OPTIMIZE use that _non_dual_sorted_sectors are lexsorted to shorten the loop if trivial sector is not in _non_dual_sorted_sectors.
-        for s, m in zip(self._non_dual_sorted_sectors, self._sorted_multiplicities):
+        # OPTIMIZE use that _non_dual_sectors are lexsorted to shorten the loop.
+        for s, m in zip(self._non_dual_sectors, self.multiplicities):
             if np.all(s == self.symmetry.trivial_sector):
                 return m
         return 0
@@ -550,11 +520,11 @@ class VectorSpace:
         if self.symmetry != other.symmetry:
             return False
 
-        # the _sectors are lexsorted, so we can just iterate over both of them
+        # the _non_dual_sectors are lexsorted, so we can just iterate over both of them
         n_self = 0
-        for other_sector, other_mult in zip(other._non_dual_sorted_sectors, other._sorted_multiplicities):
-            if np.all(self._non_dual_sorted_sectors[n_self] == other_sector):
-                if self._sorted_multiplicities[n_self] > other_mult:
+        for other_sector, other_mult in zip(other._non_dual_sectors, other.multiplicities):
+            if np.all(self._non_dual_sectors[n_self] == other_sector):
+                if self.multiplicities[n_self] > other_mult:
                     return False
                 n_self += 1
             if n_self == self.num_sectors:
@@ -564,26 +534,18 @@ class VectorSpace:
         return False
 
     def as_VectorSpace(self):
-        return self  # TODO mutability issue? should we shallow copy?
+        return self
 
     def _sector_print_priorities(self, use_private_sectors: bool):
         """How to prioritize sectors if not all can be printed.
 
         Used in `__repr__` and `__str__`.
-        Returns indices of either ``self._non_dual_sorted_sectors`` if `use_private_sectors`
+        Returns indices of either ``self._non_dual_sectors`` if `use_private_sectors`
         or of ``self.sectors`` in order of priority"""
         first = 0
         last = self.num_sectors - 1
-        if use_private_sectors:
-            largest = np.argmax(self._sorted_multiplicities)
-            special = [first, last, largest, first + 1, last - 1, largest - 1, largest + 1]
-        else:
-            largest = self._inverse_sector_perm[np.argmax(self._sorted_multiplicities)]
-            extremal_charge_1 = self._inverse_sector_perm[0]  # i.e. _non_dual_sorted_sectors[0]
-            extremal_charge_2 = self._inverse_sector_perm[-1]
-            special = [first, last, largest, first + 1, last - 1, largest - 1, largest + 1,
-                       extremal_charge_1, extremal_charge_1 - 1, extremal_charge_1 + 1,
-                       extremal_charge_2, extremal_charge_2 - 1, extremal_charge_2 + 1]
+        largest = np.argmax(self.multiplicities)
+        special = [first, last, largest, first + 1, last - 1, largest - 1, largest + 1]
         which = []
         for i in special:
             if i not in which and 0 <= i < self.num_sectors:
@@ -597,7 +559,7 @@ def _calc_slices(symmetry: Symmetry, sectors: SectorArray, multiplicities: ndarr
     slices = np.zeros((len(sectors), 2), dtype=np.intp)
     # OPTIMIZE should we special case abelian symmetries to skip some multiplications by 1?
     slices[:, 1] = slice_ends = np.cumsum(multiplicities * symmetry.batch_sector_dim(sectors))
-    slices[1:, 0] = slice_ends[:-1]
+    slices[1:, 0] = slice_ends[:-1]  # slices[0, 0] remains 0, which is correct
     return slices
 
 
@@ -638,23 +600,16 @@ class ProductSpace(VectorSpace):
         See notes on duality below.
     _sectors, _multiplicities:
         These inputs to VectorSpace.__init__ can optionally be passed to avoid recomputation.
-        _sectors need to be _non_dual_sorted_sectors and in particular are assumed to be sorted
-        (this is not checked!) and _multiplicities sorted accordingly.
-    _sector_perm:
-        This argument can be used to control the order of sectors.
-        The resulting order fulfills ``self.sectors[_sector_perm] = maybe_dual(_sectors)``.
-        If ``None`` (default), the trivial permutation ``[0, 1, 2, ...]`` is chosen, which
-        means the ``self.sectors`` are in the order that lex-sorts the non-dual sectors, i.e.
-        ``self.sectors == self._sorted_sectors``.
-    _sorted_slices:
-        inputs to VectorSpace.__init__ can optionally be passed to avoid recomputation
+        _sectors need to be _non_dual_sectors and in particular are assumed to be sorted
+        (this is not checked!).
 
     Notes
     -----
     While mathematically the dual of the product :math:`(V \otimes W)^*` is the same as the
     product of the duals :math:`V^* \otimes W^*`, we distinguish these two objects in the
     implementation. This allows us to fulfill all of the following constraints
-    a) Have the same order of `_sectors` for a space and its dual, to make contractions easier.
+    a) Have the same order of :attr:`_non_dual_sectors` for a space and its dual,
+        to make contractions easier.
     b) Consistently view every ProductSpace as a VectorSpace, i.e. have proper subclass behavior
         and in particular a well-behaved `is_dual` attribute.
     c) A ProductSpace can always be split into its :attr:`spaces`.
@@ -663,12 +618,12 @@ class ProductSpace(VectorSpace):
     products::
 
         ==== ============================ ================== ========= ==================================
-             Mathematical Expression      .spaces            .is_dual  ._non_dual_sorted_sectors
+             Mathematical Expression      .spaces            .is_dual  ._non_dual_sectors
         ==== ============================ ================== ========= ==================================
-        P1   :math:`V \otimes W`          [V, W]             False     P1._non_dual_sorted_sectors
-        P2   :math:`(V \otimes W)^*`      [V.dual, W.dual]   True      P1._non_dual_sorted_sectors
-        P3   :math:`V^* \otimes W^*`      [V.dual, W.dual]   False     dual(P1._non_dual_sorted_sectors)
-        P4   :math:`(V^* \otimes W^*)^*`  [V, W]             True      dual(P1._non_dual_sorted_sectors)
+        P1   :math:`V \otimes W`          [V, W]             False     P1._non_dual_sectors
+        P2   :math:`(V \otimes W)^*`      [V.dual, W.dual]   True      P1._non_dual_sectors
+        P3   :math:`V^* \otimes W^*`      [V.dual, W.dual]   False     dual(P1._non_dual_sectors)
+        P4   :math:`(V^* \otimes W^*)^*`  [V, W]             True      dual(P1._non_dual_sectors)
         ==== ============================ ================== ========= ==================================
 
     They can be related to each other via the :attr:`dual` property or via :meth:`flip_is_dual`.
@@ -676,7 +631,7 @@ class ProductSpace(VectorSpace):
     ``P1.flip_is_dual() == P4`` and ``P2.flip_is_dual() == P3``.
 
     The mutually dual spaces, e.g. ``P1`` and ``P2``, can be contracted with each other, as they
-    have opposite :attr:`is_dual` and matching :attr:`_non_dual_sorted_sectors`.
+    have opposite :attr:`is_dual` and matching :attr:`_non_dual_sectors`.
     The spaces related by :meth:`flip_is_dual()`, e.g. ``P2`` and ``P3``, would be considered
     the same space mathematically, but in this implementation we have ``P2 != P3`` due to the
     different :attr:`is_dual` attribute. Since they represent the same space, they have the same
@@ -694,8 +649,7 @@ class ProductSpace(VectorSpace):
     `ProductSpace(some_space)` is contractible with `ProductSpace([s.dual for s in some_spaces])`.
     """
     def __init__(self, spaces: list[VectorSpace], backend: AbstractBackend = None, _is_dual: bool = None,
-                 _sectors: SectorArray = None, _multiplicities: ndarray = None, _sector_perm: ndarray = None,
-                 _sorted_slices: ndarray = None):
+                 _sectors: SectorArray = None, _multiplicities: ndarray = None):
         if _is_dual is None:
             _is_dual = spaces[0].is_dual
         self.spaces = spaces  # spaces can be themselves ProductSpaces
@@ -718,16 +672,18 @@ class ProductSpace(VectorSpace):
                 setattr(self, key, val)
         else:
             assert _multiplicities is not None
-            
-        if _sector_perm is None:
-            _sector_perm = np.arange(len(_sectors))
-        
+        # TODO we could fix the basis_perm, but we probably dont need to ...
         VectorSpace.__init__(self, symmetry=symmetry, sectors=_sectors, multiplicities=_multiplicities,
-                             is_real=is_real, _is_dual=_is_dual, _sector_perm=_sector_perm,
-                             _sorted_slices=_sorted_slices)
+                             is_real=is_real, _is_dual=_is_dual)
+
+    @classmethod
+    def from_basis(cls, symmetry: Symmetry, sectors: Sequence[Sequence[int]], is_real: bool = False):
+        raise NotImplementedError('from_basis can not create ProductSpaces')
 
     def test_sanity(self):
-        assert all(s.symmetry == self.symmetry for s in self.spaces)
+        for s in self.spaces:
+            assert s.symmetry == self.symmetry
+            s.test_sanity()
         return super().test_sanity()
 
     def as_VectorSpace(self):
@@ -736,12 +692,11 @@ class ProductSpace(VectorSpace):
         longer necessarily given.
         """
         return VectorSpace(symmetry=self.symmetry,
-                           sectors=self._non_dual_sorted_sectors,
-                           multiplicities=self._sorted_multiplicities,
+                           sectors=self._non_dual_sectors,
+                           multiplicities=self.multiplicities,
                            is_real=self.is_real,
-                           _is_dual=self.is_dual,
-                           _sector_perm=self._sector_perm,
-                           _sorted_slices=self._sorted_slices)
+                           basis_perm=None,
+                           _is_dual=self.is_dual,)
 
     def flip_is_dual(self) -> ProductSpace:
         """Return a ProductSpace isomorphic to self, which has the opposite is_dual attribute.
@@ -755,13 +710,12 @@ class ProductSpace(VectorSpace):
         TODO (JU) can we figure out how to keep it?
                   alternatively: should we call backend.add_leg_metadata to add it again?
         """
-        sectors = self.symmetry.dual_sectors(self._non_dual_sorted_sectors)
+        sectors = self.symmetry.dual_sectors(self._non_dual_sectors)
         sort = np.lexsort(sectors.T)
-        return ProductSpace(spaces=self.spaces, _is_dual=not self.is_dual,
+        return ProductSpace(spaces=self.spaces,
+                            _is_dual=not self.is_dual,
                             _sectors=sectors[sort],
-                            _multiplicities=self._sorted_multiplicities[sort],
-                            _sorted_slices=self._sorted_slices[sort],
-                            _sector_perm=self._sector_perm[sort])
+                            _multiplicities=self.multiplicities[sort])
 
     def __len__(self):
         return len(self.spaces)
@@ -842,9 +796,9 @@ def _fuse_spaces(symmetry: Symmetry, spaces: list[VectorSpace], _is_dual: bool
     Returns
     -------
     sectors : 2D array of int
-        The :attr:`VectorSpace._non_dual_sorted_sectors`.
+        The :attr:`VectorSpace._non_dual_sectors`.
     mutliplicities : 1D array of int
-        the :attr:`VectorSpace._sorted_multiplicities`.
+        the :attr:`VectorSpace.multiplicities`.
     metadata : dict
         A dictionary with string keys and arbitrary values.
         These will be added as attributes of the ProductSpace
@@ -853,14 +807,14 @@ def _fuse_spaces(symmetry: Symmetry, spaces: list[VectorSpace], _is_dual: bool
     if _is_dual:
         spaces = [s.dual for s in spaces] # directly fuse sectors of dual spaces.
         # This yields overall dual `sectors` to return, which we directly save in
-        # self._non_dual_sorted_sectors, such that `self.sectors` (which takes a dual!) yields correct sectors
+        # self._non_dual_sectors, such that `self.sectors` (which takes a dual!) yields correct sectors
         # Overall, this ensures consistent sorting/order of sectors between dual ProductSpace!
-    fusion = {tuple(s): m for s, m in zip(spaces[0]._sorted_sectors, spaces[0]._sorted_multiplicities)}
+    fusion = {tuple(s): m for s, m in zip(spaces[0].sectors, spaces[0].multiplicities)}
     for space in spaces[1:]:
         new_fusion = {}
         for t_a, m_a in fusion.items():
             s_a = np.array(t_a)
-            for s_b, m_b in zip(space._sorted_sectors, space._sorted_multiplicities):
+            for s_b, m_b in zip(space.sectors, space.multiplicities):
                 for s_c in symmetry.fusion_outcomes(s_a, s_b):
                     t_c = tuple(s_c)
                     n = symmetry._n_symbol(s_a, s_b, s_c)

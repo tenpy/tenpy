@@ -64,34 +64,6 @@ def test_Tensor_classmethods(backend, vector_space_rng, backend_data_rng, tensor
     numpy_block = T.to_numpy_ndarray()
     dense_block = backend.block_from_numpy(numpy_block)
 
-    if isinstance(backend, AbstractAbelianBackend):
-        # TODO (JU): there are two problems:
-        #  - We need to generate numpy_block and dense_block such that they are symmetric (up to tolerance),
-        #    i.e. only non-zero within the allowed blocks.
-        #    The easy way would be to generate them via Tensor.from_numpy_func(...).to_dense_block()
-        #    But that would go against the spirit of testing isolated features.
-        #    (JH): I think it's fine to use tensor_rng().to_dense_block() as a starting point.
-        #          general test structure of all tests (e.g. tdot) is:
-        #          1) generate random tensor T
-        #          2) convert T to numpy T_dense
-        #          3) do function to test (e.g. tdot) on both T and T_dense with numpy
-        #          4) convert result to dense and compare with numpy-only version
-        #
-        #          So if Tensor.to_dense_ndarray() doesn't work, all tensor tests will fail, but
-        #          that's okay - we just need a separate, hardcoded test that `to_dense_ndarray()`
-        #          is okay.
-        #  - Randomly generating the legs seems to be a bad idea.
-        #    Here, I get a combination of legs that allows no valid blocks...
-        #    I.e. `backends.abelian._valid_block_indices(legs)` is empty.
-        #    Idea: Generate N-1 legs randomly, then construct the last as follows;
-        #          Form the ProductSpace of those, convert to VectorSpace, take the dual, randomly remove some of the sectors,
-        #          add some additional random sectors.
-        #          This guarantees that at least for those sectors left untouched, we get allowed blocks.
-        #          So we probably want a "rng" that generates all legs at once?
-        #    (JH): makes sense - I implemented tensor_rng() to do this (roughly, not adding extra blocks)
-        #  pytest.xfail('Need to redesign tests')
-        pass
-
     print('checking from_dense_block')
     tens = tensors.Tensor.from_dense_block(dense_block, legs=legs, backend=backend)
     tens.test_sanity()
@@ -278,6 +250,10 @@ def test_Tensor_tofrom_flat_block_trivial_sector(vector_space_rng, tensor_rng):
     tens2 = tensors.Tensor.from_flat_block_trivial_sector(leg=leg, block=block, backend=tens.backend, label='a')
     tens2.test_sanity()
     assert tensors.almost_equal(tens, tens2)
+    block2 = tens2.to_flat_block_trivial_sector()
+    npt.assert_array_almost_equal_nulp(tens.backend.block_to_numpy(block),
+                                       tens.backend.block_to_numpy(block2),
+                                       100)
 
 
 def test_ChargedTensor_tofrom_flat_block_single_sector(vector_space_rng, symmetry_sectors_rng, tensor_rng):
@@ -288,10 +264,10 @@ def test_ChargedTensor_tofrom_flat_block_single_sector(vector_space_rng, symmetr
     block_size = leg.sector_multiplicity(sector)
     if block_size == 0:
         block_size = 4
-        leg = VectorSpace(symmetry=leg.symmetry,
-                          sectors=np.concatenate([leg.sectors, sector[None, :]]),
-                          multiplicities=np.concatenate([leg.multiplicities, np.array([block_size])])
-                          )
+        leg = VectorSpace.from_unsorted_sectors(
+            symmetry=leg.symmetry, sectors=np.concatenate([leg.sectors, sector[None, :]]),
+            multiplicities=np.concatenate([leg.multiplicities, np.array([block_size])])
+        )
 
     dummy_leg = VectorSpace(symmetry=leg.symmetry, sectors=[sector]).dual
     tens = tensors.ChargedTensor(invariant_part=tensor_rng(legs=[leg, dummy_leg]))
@@ -304,6 +280,50 @@ def test_ChargedTensor_tofrom_flat_block_single_sector(vector_space_rng, symmetr
     tens2.test_sanity()
     assert tens2.dummy_leg == tens.dummy_leg
     assert tensors.almost_equal(tens, tens2)
+    block2 = tens2.to_flat_block_single_sector()
+    npt.assert_array_almost_equal_nulp(tens.backend.block_to_numpy(block),
+                                       tens.backend.block_to_numpy(block2),
+                                       100)
+    # check detect_sectors_from_block while we are at it
+    dense_block = tens.to_dense_block()
+    detected, = tensors.detect_sectors_from_block(block=dense_block, legs=[leg], backend=tens.backend)
+    npt.assert_array_equal(detected, sector)
+
+
+def test_from_block(block_backend):
+    from tenpy.linalg.symmetries.groups import z4_symmetry
+    from tenpy.linalg.backends.backend_factory import get_backend
+    backend = get_backend(symmetry=z4_symmetry, block_backend=block_backend)
+
+    print('by constructing basis')
+    q0, q1, q2, q3 = z4_symmetry.all_sectors()
+    basis1 = [q3, q3, q2, q0, q3, q2]  # basis_perm [3, 2, 5, 0, 1, 4]
+    basis2 = [q2, q0, q1, q2, q3, q0, q1]  # basis_perm [1, 5, 2, 6, 0, 3, 4]
+    s1 = VectorSpace.from_basis(z4_symmetry, basis1)  # sectors = [0, 2, 3]
+    s2 = VectorSpace.from_basis(z4_symmetry, basis2)  # sectors = [0, 1, 2, 3]
+
+    #      q: 2,  0,  1,  2,  3,  0,  1      q
+    data = [[ 0,  0,  1,  0,  0,  0,  2],  # 3
+            [ 0,  0,  3,  0,  0,  0,  4],  # 3
+            [ 5,  0,  0,  6,  0,  0,  0],  # 2
+            [ 0,  7,  0,  0,  0,  8,  0],  # 0
+            [ 0,  0,  9,  0,  0,  0, 10],  # 3
+            [11,  0,  0, 12,  0,  0,  0]]  # 2
+    block = backend.block_from_numpy(np.asarray(data, dtype=float))
+    t = tensors.Tensor.from_dense_block(block, [s1, s2])
+
+    # block_i is the one with sector q_i on s1
+    block_0 = [[7, 8]]
+    block_1 = [[1, 2], [3, 4], [9, 10]]
+    block_2 = [[5, 6], [11, 12]]
+    block_3 = [[]]
+    expect_blocks = [block_0, block_1, block_2, block_3]  # can be indexed by block_inds[1]
+    expect_blocks = [backend.block_from_numpy(np.asarray(b, dtype=float)) for b in expect_blocks]
+
+    for block, ind in zip(t.data.blocks, t.data.block_inds):
+        print(block)
+        print(expect_blocks[ind[1]])
+        assert backend.block_allclose(block, expect_blocks[ind[1]], rtol=1e-5, atol=1e-8)
 
 
 def test_tdot(backend, vector_space_rng, backend_data_rng, tensor_rng):
@@ -615,6 +635,57 @@ def test_scale_axis(backend, vector_space_rng, backend_data_rng, tensor_rng):
     expect = np.tensordot(t.to_numpy_ndarray(), d.to_numpy_ndarray(), (0, 1))
     res = tensors.tdot(t, d, 0, 1).to_numpy_ndarray()
     npt.assert_almost_equal(expect, res)
+
+
+def test_detect_sectors_from_block(backend, symmetry, symmetry_sectors_rng, np_random):
+    num_sectors = int(min(4, symmetry.num_sectors))
+    leg_dim = 5
+    sectors = symmetry_sectors_rng(num_sectors, sort=True)
+
+    which_sectors_a = np_random.integers(num_sectors, size=(leg_dim,))  # indices of sectors
+    which_sectors_b = np_random.integers(num_sectors, size=(leg_dim + 1,))
+    sectors_of_basis_a = sectors[which_sectors_a]
+    sectors_of_basis_b = sectors[which_sectors_b]
+    a = VectorSpace.from_basis(symmetry=symmetry, sectors_of_basis=sectors_of_basis_a)
+    b = VectorSpace.from_basis(symmetry=symmetry, sectors_of_basis=sectors_of_basis_b)
+
+    target_sector_a = np_random.choice(which_sectors_a)
+    target_sector_b = np_random.choice(which_sectors_b)
+    
+    data = 1e-9 * np_random.random(size=(a.dim, b.dim))
+    for i in range(a.dim):
+        if which_sectors_a[i] != target_sector_a:
+            continue
+        for j in range(b.dim):
+            if which_sectors_b[j] != target_sector_b:
+                continue
+            data[i, j] = np_random.random()
+    assert np.max(np.abs(data)) > 1e-9  # make sure that at least one entry above was actually set
+
+    block = backend.block_from_numpy(data)
+    detected = tensors.detect_sectors_from_block(block, legs=[a, b], backend=backend)
+    npt.assert_array_equal(detected[0], sectors[target_sector_a])
+    npt.assert_array_equal(detected[1], sectors[target_sector_b])
+
+    print('check an explicit state')
+    if num_sectors >= 4:
+        #                         0  1  2  3  4  5  6  7  8  9
+        which_sectors = np.array([0, 1, 3, 0, 2, 1, 1, 2, 0, 3])
+        space = VectorSpace(symmetry=symmetry,
+                            sectors=sectors[:4],
+                            multiplicities=[3, 3, 2, 2],
+                            basis_perm=[0, 3, 8, 1, 5, 6, 4, 7, 2, 9])
+        # make sure setup is correct
+        space.test_sanity()
+        assert np.all(sectors[which_sectors] == space.sectors_of_basis)
+
+        for i, which in enumerate(which_sectors):
+            data = np.zeros((len(which_sectors),), dtype=float)
+            data[i] = 1.
+            sector, = tensors.detect_sectors_from_block(
+                backend.block_from_numpy(data), legs=[space], backend=backend
+            )
+            npt.assert_array_equal(sector, sectors[which])
 
 
 def demo_repr():

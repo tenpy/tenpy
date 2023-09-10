@@ -65,23 +65,24 @@ class AbstractNoSymmetryBackend(AbstractBackend, AbstractBlockBackend, ABC):
         return self.block_item(a)
 
     def to_dense_block(self, a: Tensor) -> Block:
-        return a.data
+        return self.apply_basis_perm(a.data, a.legs, inv=True)
 
     def diagonal_to_block(self, a: DiagonalTensor) -> Block:
-        return a.data
+        return self.apply_basis_perm(a.data, [a.legs[0]], inv=True)
 
     def from_dense_block(self, a: Block, legs: list[VectorSpace], atol: float = 1e-8, rtol: float = 1e-5
                          ) -> Data:
         assert all(leg.symmetry == no_symmetry for leg in legs)
-        return a  # TODO could this cause mutability issues?
+        return self.apply_basis_perm(a, legs)
 
     def diagonal_from_block(self, a: Block, leg: VectorSpace) -> DiagonalData:
-        return a
+        return self.apply_basis_perm(a, [leg])
 
     def mask_from_block(self, a: Block, large_leg: VectorSpace) -> tuple[DiagonalData, VectorSpace]:
         data = self.block_to_dtype(a, Dtype.bool)
+        data = self.apply_basis_perm(data, [large_leg])
         small_leg = VectorSpace.without_symmetry(
-            dim=self.block_sum_all(data), is_real=large_leg.is_real, _is_dual=large_leg.is_dual
+            dim=self.block_sum_all(data), is_real=large_leg.is_real, is_dual=large_leg.is_dual
         )
         return data, small_leg
 
@@ -112,13 +113,13 @@ class AbstractNoSymmetryBackend(AbstractBackend, AbstractBlockBackend, ABC):
 
     def svd(self, a: Tensor, new_vh_leg_dual: bool, algorithm: str | None) -> tuple[Data, DiagonalData, Data, VectorSpace]:
         u, s, vh = self.matrix_svd(a.data, algorithm=algorithm)
-        new_leg = VectorSpace.without_symmetry(len(s), is_real=a.legs[0].is_real, _is_dual=new_vh_leg_dual)
+        new_leg = VectorSpace.without_symmetry(len(s), is_real=a.legs[0].is_real, is_dual=new_vh_leg_dual)
         return u, s, vh, new_leg
 
     def qr(self, a: Tensor, new_r_leg_dual: bool, full: bool) -> tuple[Data, Data, VectorSpace]:
         q, r = self.matrix_qr(a.data, full=full)
         new_leg_dim = self.block_shape(r)[0]
-        new_leg = VectorSpace.without_symmetry(new_leg_dim, _is_dual=new_r_leg_dual, is_real=a.legs[0].is_real)
+        new_leg = VectorSpace.without_symmetry(new_leg_dim, is_dual=new_r_leg_dual, is_real=a.legs[0].is_real)
         return q, r, new_leg
 
     def outer(self, a: Tensor, b: Tensor) -> Data:
@@ -174,7 +175,7 @@ class AbstractNoSymmetryBackend(AbstractBackend, AbstractBlockBackend, ABC):
         if more:
             raise ValueError('Can only infer one leg')
         dim = self.block_shape(block)[idx]
-        return VectorSpace.without_symmetry(dim, _is_dual=is_dual, is_real=is_real)
+        return VectorSpace.without_symmetry(dim, is_dual=is_dual, is_real=is_real)
 
     def get_element(self, a: Tensor, idcs: list[int]) -> complex | float | bool:
         return self.get_block_element(a.data, idcs)
@@ -230,13 +231,14 @@ class AbstractNoSymmetryBackend(AbstractBackend, AbstractBlockBackend, ABC):
 
     def from_flat_block_trivial_sector(self, block: Block, leg: VectorSpace) -> Data:
         assert self.block_shape(block) == (leg.dim,)
-        return block
+        return self.apply_basis_perm(block, [leg])
 
     def to_flat_block_trivial_sector(self, tensor: Tensor) -> Block:
-        return tensor.data
+        return self.apply_basis_perm(tensor.data, tensor.legs, inv=True)
 
     def inv_part_from_flat_block_single_sector(self, block: Block, leg: VectorSpace, dummy_leg: VectorSpace) -> Data:
+        block = self.apply_basis_perm(block, [leg])
         return self.block_add_axis(block, pos=1)
 
     def inv_part_to_flat_block_single_sector(self, tensor: Tensor) -> Block:
-        return tensor.data[:, 0]
+        return self.apply_basis_perm(tensor.data[:, 0], [tensor.legs[0]], inv=True)

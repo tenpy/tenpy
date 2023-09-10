@@ -27,20 +27,22 @@ def symmetry(request):
     return request.param
 
 
-def random_symmetry_sectors(symmetry: groups.Symmetry, np_random: np.random.Generator, len_=None) -> groups.SectorArray:
-    """random non-sorted, but unique symmetry sectors"""
+def random_symmetry_sectors(symmetry: groups.Symmetry, np_random: np.random.Generator, len_=None,
+                            sort: bool = False) -> groups.SectorArray:
+    """random unique symmetry sectors, optionally sorted"""
     if len_ is None:
         len_ = np_random.integers(3,7)
     if isinstance(symmetry, groups.SU2Symmetry):
-        return np.arange(0, 2*len_, 2, dtype=int)[:, np.newaxis]
+        res = np.arange(0, 2*len_, 2, dtype=int)[:, np.newaxis]
     elif isinstance(symmetry, groups.U1Symmetry):
         vals = list(range(-len_, len_)) + [123]
-        return np_random.choice(vals, replace=False, size=(len_, 1))
+        res = np_random.choice(vals, replace=False, size=(len_, 1))
     elif symmetry.num_sectors < np.inf:
         if symmetry.num_sectors <= len_:
-            return np_random.permutation(symmetry.all_sectors())
-        which = np_random.choice(symmetry.num_sectors, replace=False, size=len_)
-        return symmetry.all_sectors()[which, :]
+            res = np_random.permutation(symmetry.all_sectors())
+        else:
+            which = np_random.choice(symmetry.num_sectors, replace=False, size=len_)
+            res = symmetry.all_sectors()[which, :]
     elif isinstance(symmetry, groups.ProductSymmetry):
         factor_len = max(3, len_ // len(symmetry.factors))
         factor_sectors = [random_symmetry_sectors(factor, np_random, factor_len)
@@ -49,15 +51,19 @@ def random_symmetry_sectors(symmetry: groups.Symmetry, np_random: np.random.Gene
         if len(combs) > len_:
             combs = np_random.choice(combs, replace=False, size=len_)
         res = np.hstack([fs[i] for fs, i in zip(factor_sectors, combs.T)])
-        return res
-    pytest.skip("don't know how to get symmetry sectors")  # raises Skipped
+    else:
+        pytest.skip("don't know how to get symmetry sectors")  # raises Skipped
+    if sort:
+        order = np.lexsort(res.T)
+        res = res[order]
+    return res
 
 
 @pytest.fixture
 def symmetry_sectors_rng(symmetry, np_random):
-    def generator(size: int):
+    def generator(size: int, sort: bool = False):
         """generate random symmetry sectors"""
-        return random_symmetry_sectors(symmetry, np_random, len_=size)
+        return random_symmetry_sectors(symmetry, np_random, len_=size, sort=sort)
     return generator
 
 
@@ -65,16 +71,23 @@ def random_vector_space(symmetry, max_num_blocks=5, max_block_size=5, np_random=
     if np_random is None:
         np_random = np.random.default_rng()
     len_ = np_random.integers(1, max_num_blocks, endpoint=True)
-    sectors = random_symmetry_sectors(symmetry, np_random, len_)
+    sectors = random_symmetry_sectors(symmetry, np_random, len_, sort=True)
     # if there are very few sectors, e.g. for symmetry==NoSymmetry(), dont let them be one-dimensional
     min_mult = min(max_block_size, max(4 - len(sectors), 1))
     mults = np_random.integers(min_mult, max_block_size, size=(len(sectors),), endpoint=True)
-    dual = np_random.random() < 0.5
-    return spaces.VectorSpace(symmetry, sectors, mults, is_real=False, _is_dual=dual)
+    dim = np.sum(symmetry.batch_sector_dim(sectors) * mults)
+    basis_perm = np_random.permutation(dim) if np_random.random() < 0.7 else None
+    res = spaces.VectorSpace(
+        symmetry, sectors, mults, basis_perm=basis_perm, is_real=False
+    )
+    if np_random.random() < 0.5:
+        res = res.dual
+    res.test_sanity()
+    return res
 
 
 @pytest.fixture
-def vector_space_rng(symmetry, symmetry_sectors_rng, np_random):
+def vector_space_rng(symmetry, np_random):
     def generator(max_num_blocks: int = 4, max_block_size=8):
         """generate random spaces.VectorSpace instances."""
         return random_vector_space(symmetry, max_num_blocks, max_block_size, np_random)
@@ -145,12 +158,14 @@ def tensor_rng(backend, backend_data_rng, vector_space_rng, np_random):
             compatible_leg = spaces.ProductSpace(compatible, backend=backend).as_VectorSpace().dual
             if compatible_leg.num_sectors > max_num_blocks:
                 keep = np_random.choice(compatible_leg.num_sectors, max_num_blocks, replace=False)
-                compatible_leg = spaces.VectorSpace(compatible_leg.symmetry,
-                                                    compatible_leg._non_dual_sorted_sectors[keep, :],
-                                                    np.maximum(compatible_leg._sorted_multiplicities[keep],
-                                                                max_block_size),
-                                                    compatible_leg.is_real,
-                                                    compatible_leg.is_dual)
+                keep = np.sort(keep)
+                compatible_leg = spaces.VectorSpace(
+                    symmetry=compatible_leg.symmetry,
+                    sectors=compatible_leg._non_dual_sectors[keep, :],
+                    multiplicities=np.maximum(compatible_leg.multiplicities[keep], max_block_size),
+                    is_real=compatible_leg.is_real,
+                    _is_dual=compatible_leg.is_dual
+                )
             legs[last_missing] = compatible_leg
         data = backend_data_rng(legs, real=real)
         return tensors.Tensor(data, backend=backend, legs=legs, labels=labels)

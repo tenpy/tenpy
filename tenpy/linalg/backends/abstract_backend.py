@@ -192,7 +192,7 @@ class AbstractBackend(metaclass=ABCMeta):
     def to_dense_block(self, a: Tensor) -> Block:
         """Forget about symmetry structure and convert to a single block.
         This includes a permutation of the basis, specified by the legs of `a`.
-        (see e.g. VectorSpace._sector_perm).
+        (see e.g. VectorSpace.basis_perm).
         """
         ...
 
@@ -202,7 +202,7 @@ class AbstractBackend(metaclass=ABCMeta):
         to a single 1D block.
         This is the diagonal of the respective non-symmetric 2D tensor.
         This includes a permutation of the basis, specified by the legs of `a`.
-        (see e.g. VectorSpace._sector_perm).
+        (see e.g. VectorSpace.basis_perm).
 
         Equivalent to self.block_get_diagonal(a.to_full_tensor().to_dense_block())
         """
@@ -215,7 +215,7 @@ class AbstractBackend(metaclass=ABCMeta):
         If the block is not symmetric, measured by ``allclose(a, projected, atol, rtol)``,
         where ``projected`` is `a` projected to the space of symmetric tensors
         This includes a permutation of the basis, specified by the legs of `a`.
-        (see e.g. VectorSpace._sector_perm).
+        (see e.g. VectorSpace.basis_perm).
         """
         ...
 
@@ -223,7 +223,7 @@ class AbstractBackend(metaclass=ABCMeta):
     def diagonal_from_block(self, a: Block, leg: VectorSpace) -> DiagonalData:
         """DiagonalData from a 1D block.
         This includes a permutation of the basis, specified by the legs of `a`.
-        (see e.g. VectorSpace._sector_perm).
+        (see e.g. VectorSpace.basis_perm).
         """
         ...
 
@@ -231,7 +231,7 @@ class AbstractBackend(metaclass=ABCMeta):
     def mask_from_block(self, a: Block, large_leg: VectorSpace) -> tuple[DiagonalData, VectorSpace]:
         """DiagonalData for a Mask from a 1D block.
         This includes a permutation of the basis, specified by the legs of `a`.
-        (see e.g. VectorSpace._sector_perm).
+        (see e.g. VectorSpace.basis_perm).
 
         Returns
         -------
@@ -472,7 +472,7 @@ class AbstractBackend(metaclass=ABCMeta):
     @abstractmethod
     def diagonal_data_from_full_tensor(self, a: Tensor, check_offdiagonal: bool) -> DiagonalData:
         """Get the DiagonalData corresponding to a tensor with two legs.
-        Can assume that the two legs are either equal or dual, such that their ._non_dual_sorted_sectors match"""
+        Can assume that the two legs are either equal or dual, such that their ._non_dual_sectors match"""
         ...
 
     @abstractmethod
@@ -798,4 +798,21 @@ class AbstractBlockBackend(metaclass=ABCMeta):
     def synchronize(self):
         """Wait for asynchronous processes (if any) to finish"""
         pass
-    
+
+    def apply_leg_permutations(self, block: Block, perms: list[np.ndarray]) -> Block:
+        """Apply permutations to every axis of a dense block"""
+        # OPTIMIZE could not figure out how to do this in one go in numpy...
+        for ax, p in enumerate(perms):
+            idx = (slice(None, None, None),) * ax + (p,)
+            block = block[idx]
+        return block
+
+    def apply_basis_perm(self, block: Block, legs: list[VectorSpace], inv: bool = False) -> Block:
+        """Apply basis_perm of a VectorSpace (or its inverse) on every axis of a dense block"""
+        # OPTIMIZE should we special-case None for "no permutation to do"?
+        if inv:
+            perms = [leg._inverse_basis_perm for leg in legs]
+        else:
+            perms = [leg.basis_perm for leg in legs]
+        return self.apply_leg_permutations(block, perms)
+        

@@ -32,6 +32,7 @@ def _get_four_sectors(symm: groups.Symmetry) -> groups.SectorArray:
 
 def test_vector_space(symmetry, symmetry_sectors_rng, np_random):
     sectors = symmetry_sectors_rng(10)
+    sectors = sectors[np.lexsort(sectors.T)]
     mults = np_random.integers(1, 10, size=len(sectors))
 
     # TODO (JU) test real (as in "not complex") vectorspaces
@@ -59,8 +60,7 @@ def test_vector_space(symmetry, symmetry_sectors_rng, np_random):
     else:
         wrong_mults[0] += 1
     assert s1 != spaces.VectorSpace(symmetry=symmetry, sectors=sectors, multiplicities=wrong_mults)
-    assert s1.dual == spaces.VectorSpace(symmetry=symmetry, sectors=sectors, multiplicities=mults,
-                                         _is_dual=True)
+    assert s1.dual == spaces.VectorSpace(symmetry=symmetry, sectors=sectors, multiplicities=mults, _is_dual=True)
     assert s1.can_contract_with(s1.dual)
     assert not s1.can_contract_with(s1)
     assert not s1.can_contract_with(s2)
@@ -72,7 +72,6 @@ def test_vector_space(symmetry, symmetry_sectors_rng, np_random):
     assert spaces.VectorSpace(symmetry=symmetry, sectors=symmetry.trivial_sector[np.newaxis, :]).is_trivial
 
     print('checking is_subspace_of')
-    print(f'{len(sectors)=}')
     same_sectors_less_mults = spaces.VectorSpace(
         symmetry=symmetry, sectors=sectors, multiplicities=[max(1, m - 1) for m in mults]
     )
@@ -126,8 +125,33 @@ def test_vector_space(symmetry, symmetry_sectors_rng, np_random):
     for expect in [2, 3, 4]:
         expect = expect % s1.num_sectors
         assert s1.sectors_where(s1.sectors[expect]) == expect
-        assert s1._non_dual_sorted_sectors_where(s1._non_dual_sorted_sectors[expect]) == expect
+        assert s1._non_dual_sectors_where(s1._non_dual_sectors[expect]) == expect
         assert s1.sector_multiplicity(s1.sectors[expect]) == s1.multiplicities[expect]
+
+    print('check from_basis')
+    if symmetry.num_sectors == 1:
+        which_sectors = np.array([0] * 9)
+        expect_basis_perm = np.arange(9)
+        expect_sectors = sectors[:1]
+    elif symmetry.num_sectors == 2:
+        #                         0  1  2  3  4  5  6  7  8
+        which_sectors = np.array([1, 0, 0, 1, 1, 0, 1, 1, 1])
+        expect_basis_perm = np.array([1, 2, 5, 0, 3, 4, 6, 7, 8])
+        expect_sectors = sectors[:2]
+    else:
+        assert len(np.unique(sectors[:3], axis=0)) == 3
+        #                         0  1  2  3  4  5  6  7  8  9
+        which_sectors = np.array([2, 0, 1, 2, 2, 2, 0, 0, 1, 2])
+        expect_basis_perm = np.array([1, 6, 7, 2, 8, 0, 3, 4, 5, 9])
+        expect_sectors = sectors[:3]
+    expect_mults = np.sum(which_sectors[:, None] == np.arange(len(expect_sectors))[None, :], axis=0)
+    sectors_of_basis = sectors[which_sectors]
+    space = spaces.VectorSpace.from_basis(symmetry=symmetry, sectors_of_basis=sectors_of_basis)
+    assert_array_equal(space.sectors, expect_sectors)
+    assert_array_equal(space.multiplicities, expect_mults)
+    assert_array_equal(space.basis_perm, expect_basis_perm)
+    # also check sectors_of_basis property
+    assert_array_equal(space.sectors_of_basis, sectors_of_basis)
 
 
 def test_product_space(symmetry, symmetry_sectors_rng, np_random):
@@ -136,9 +160,9 @@ def test_product_space(symmetry, symmetry_sectors_rng, np_random):
 
     # TODO (JU) test real (as in "not complex") vectorspaces
 
-    s1 = spaces.VectorSpace(symmetry=symmetry, sectors=sectors, multiplicities=mults)
-    s2 = spaces.VectorSpace(symmetry=symmetry, sectors=sectors[:2], multiplicities=mults[:2])
-    s3 = spaces.VectorSpace(symmetry=symmetry, sectors=sectors[::2], multiplicities=mults[::2])
+    s1 = spaces.VectorSpace.from_unsorted_sectors(symmetry=symmetry, sectors=sectors, multiplicities=mults)
+    s2 = spaces.VectorSpace.from_unsorted_sectors(symmetry=symmetry, sectors=sectors[:2], multiplicities=mults[:2])
+    s3 = spaces.VectorSpace.from_unsorted_sectors(symmetry=symmetry, sectors=sectors[::2], multiplicities=mults[::2])
 
     p1 = spaces.ProductSpace([s1, s2, s3])
     p2 = spaces.ProductSpace([s1, s2])

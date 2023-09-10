@@ -190,9 +190,9 @@ def convert_VectorSpace_to_LegCharge(leg: spaces.VectorSpace, old_tenpy, chinfo=
     """Convert a v2.0 VectorSpace to a v0.x LegCharge"""
     if chinfo is None:
         chinfo = old_tenpy.linalg.charges.ChargeInfo(get_qmod(leg.symmetry))
-    slices = np.insert(np.cumsum(leg._sorted_multiplicities), 0, 0)
+    slices = np.insert(np.cumsum(leg.multiplicities), 0, 0)
     assert slices.shape == (leg.num_sectors + 1,)
-    charges = leg._non_dual_sorted_sectors
+    charges = leg._non_dual_sectors
     assert charges.shape == (leg.num_sectors, leg.symmetry.sector_ind_len)
     qconj = -1 if leg.is_dual else +1
     if chinfo.qnumber == 0:
