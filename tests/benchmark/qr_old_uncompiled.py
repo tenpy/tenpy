@@ -24,6 +24,6 @@ def setup_benchmark(**kwargs):
 def benchmark(data):
     a, q_legs, r_legs = data
     a = a.combine_legs([q_legs, r_legs])
-    q, r = otp.linalg.np_conserved.qr(a)
+    q, r = otp.linalg.np_conserved.qr(a, mode='reduced')
     q = q.split_legs(0)
     r = r.split_legs(-1)

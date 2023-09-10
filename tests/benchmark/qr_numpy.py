@@ -17,7 +17,7 @@ def benchmark(data):
     q_dims = list(a.shape[:len(q_legs)])
     v_dims = list(a.shape[len(q_legs):])
     a = np.reshape(a, (np.prod(q_dims), -1))
-    q, r = np.linalg.qr(a)
+    q, r = np.linalg.qr(a, mode='reduced')
     new_dim = q.shape[-1]
     q = np.reshape(q, q_dims + [new_dim])
     r = np.reshape(r, [new_dim] + v_dims)

@@ -26,9 +26,10 @@ def benchmark(data):
     q_dims = list(a.shape[:len(q_legs)])
     r_dims = list(a.shape[len(q_dims):])
     a = torch.reshape(a, (prod(q_dims), -1))
-    u, s, vh = torch.linalg.svd(a)
-    u = torch.reshape(u, q_dims + [len(s)])
-    vh = torch.reshape(vh, [len(s)] + r_dims)
+    q, r = torch.qr(a, some=True)
+    new_dim = q.shape[-1]
+    q = torch.reshape(q, q_dims + [new_dim])
+    r = torch.reshape(r, [new_dim] + r_dims)
     
     if torch.cuda.is_available():
         torch.cuda.synchronize()  # wait for all GPU kernels to complete
