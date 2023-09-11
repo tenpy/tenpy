@@ -110,7 +110,7 @@ def test_ShiftedLinearOperator(backend, tensor_rng, vector_space_rng):
     factor = 3.2
     op1 = ScalingDummyOperator(factor=factor, vector_shape=vec.shape)
     shift = 5.j
-    
+
     op = sparse.ShiftedLinearOperator(op1, shift)
     assert almost_equal(op.matvec(vec), (factor + shift) * vec)
     assert op.some_weird_attribute == 'arbitrary value'
@@ -195,8 +195,11 @@ def test_NumpyArrayLinearOperator_sector(vector_space_rng, tensor_rng, use_hermi
 def test_gram_schmidt(tensor_rng, vector_space_rng, num_legs, num_vecs=5, tol=1e-15):
     legs = [vector_space_rng() for _ in range(num_legs)]
     n = np.prod([l.dim for l in legs])
-    vecs_old = [tensor_rng(legs) for _ in range(num_vecs)]
-    vecs_new = sparse.gram_schmidt(vecs_old, rcond=tol)
+    vecs_old = [tensor_rng(legs, real=False) for _ in range(num_vecs)]
+    # note: depending on the dimension of `legs` (which is random),
+    # some of those can be linearly dependent!
+    vecs_new = sparse.gram_schmidt(vecs_old)  # rtol=tol is too small for some random spaces
+    assert len(vecs_new) <= len(vecs_old)
     ovs = np.zeros((len(vecs_new), len(vecs_new)), dtype=np.complex128)
     vecs = [v.to_numpy_ndarray().flatten() for v in vecs_new]
     for i, v in enumerate(vecs):
