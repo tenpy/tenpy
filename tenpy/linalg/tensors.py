@@ -544,9 +544,10 @@ class AbstractTensor(metaclass=ABCMeta):
     @abstractmethod
     def combine_legs(self,
                      *legs: list[int | str],
-                     product_spaces: list[ProductSpace]=None,
-                     product_spaces_dual: list[bool]=None,
-                     new_axes: list[int]=None) -> AbstractTensor:
+                     product_spaces: list[ProductSpace] = None,
+                     product_spaces_dual: list[bool] = None,
+                     new_axes: list[int] = None,
+                     new_labels: list[str | None] = None) -> AbstractTensor:
         """See tensors.combine_legs"""
         ...
 
@@ -1101,9 +1102,10 @@ class Tensor(AbstractTensor):
 
     def combine_legs(self,
                      *legs: list[int | str],
-                     product_spaces: list[ProductSpace]=None,
-                     product_spaces_dual: list[bool]=None,
-                     new_axes: list[int]=None) -> Tensor:
+                     product_spaces: list[ProductSpace] = None,
+                     product_spaces_dual: list[bool] = None,
+                     new_axes: list[int] = None,
+                     new_labels: list[str | None] = None) -> Tensor:
         """See tensors.combine_legs"""
         combine_leg_idcs = [self.get_leg_idcs(ll) for ll in legs]
         for leg_idcs in combine_leg_idcs:
@@ -1120,9 +1122,13 @@ class Tensor(AbstractTensor):
 
         res_labels = list(res.labels)
         res_legs = list(res.legs)
-        for (b, e), new_leg in zip(reversed(combine_slices), reversed(product_spaces)):  # descending b:e!
-            res_labels[b:e] = [_combine_leg_labels(res_labels[b:e])]
-            res_legs[b:e] = [new_leg]
+        for n in reversed(range(len(product_spaces))):
+            b, e = combine_slices[n]
+            if new_labels is None:
+                res_labels[b:e] = [_combine_leg_labels(res_labels[b:e])]
+            else:
+                res_labels[b:e] = [new_labels[n]]
+            res_legs[b:e] = [product_spaces[n]]
         res_data = self.backend.combine_legs(res, combine_slices, product_spaces, new_axes, res_legs)
         return Tensor(res_data, backend=self.backend, legs=res_legs, labels=res_labels)
 
@@ -1798,12 +1804,14 @@ class ChargedTensor(AbstractTensor):
 
     def combine_legs(self,
                      *legs: list[int | str],
-                     product_spaces: list[ProductSpace]=None,
-                     product_spaces_dual: list[bool]=None,
-                     new_axes: list[int]=None) -> ChargedTensor:
+                     product_spaces: list[ProductSpace] = None,
+                     product_spaces_dual: list[bool] = None,
+                     new_axes: list[int] = None,
+                     new_labels: list[str | None] = None) -> ChargedTensor:
         legs = [self.get_leg_idcs(group) for group in legs]  # needed, since invariant_part does not have the same legs
         inv = self.invariant_part.combine_legs(*legs, product_spaces=product_spaces,
-                                               product_spaces_dual=product_spaces_dual, new_axes=new_axes)
+                                               product_spaces_dual=product_spaces_dual,
+                                               new_axes=new_axes, new_labels=new_labels)
         return ChargedTensor(invariant_part=inv, dummy_leg_state=self.dummy_leg_state)
 
     def conj(self) -> ChargedTensor:
@@ -2416,13 +2424,14 @@ class DiagonalTensor(AbstractTensor):
 
     def combine_legs(self,
                      *legs: list[int | str],
-                     product_spaces: list[ProductSpace]=None,
-                     product_spaces_dual: list[bool]=None,
-                     new_axes: list[int]=None) -> Tensor:
+                     product_spaces: list[ProductSpace] = None,
+                     product_spaces_dual: list[bool] = None,
+                     new_axes: list[int] = None,
+                     new_labels: list[str | None] = None) -> Tensor:
         warnings.warn('Converting DiagonalTensor to Tensor in order to combine legs', stacklevel=2)
         return self.to_full_tensor().combine_legs(
             *legs, product_spaces=product_spaces, product_spaces_dual=product_spaces_dual,
-            new_axes=new_axes
+            new_axes=new_axes, new_labels=new_labels
         )
 
     def conj(self) -> DiagonalTensor:
@@ -2803,15 +2812,19 @@ class Mask(AbstractTensor):
     def apply_mask(self, mask: Mask, leg: int | str) -> Mask:
         # in principle, this is possible. it is cumbersome though, and i dont think we need it.
         raise TypeError('apply_mask() is not supported for Mask')
-        
+
     def combine_legs(self, *legs: list[int | str],
-                     new_legs: list[ProductSpace]=None,
-                     product_spaces_dual: list[bool]=None,
-                     new_axes: list[int]=None) -> Tensor:
+                     product_spaces: list[ProductSpace] = None,
+                     product_spaces_dual: list[bool] = None,
+                     new_axes: list[int] = None,
+                     new_labels: list[str | None] = None) -> Tensor:
         msg = 'Converting Mask to full Tensor for `combine_legs`. If this is what you wanted, ' \
               'explicitly convert via Mask.to_full_tensor() first to supress the warning.'
         warnings.warn(msg, stacklevel=2)
-        return self.to_full_tensor().combine_legs(*legs, new_legs, product_spaces_dual, new_axes)
+        return self.to_full_tensor().combine_legs(
+            *legs, product_spaces=product_spaces, product_spaces_dual=product_spaces_dual,
+            new_axes=new_axes, new_labels=new_labels
+        )
 
     def conj(self) -> Mask:
         return self
@@ -2983,9 +2996,10 @@ def almost_equal(t1: AbstractTensor, t2: AbstractTensor, atol: float = 1e-5, rto
 
 def combine_legs(t: AbstractTensor,
                  *legs: list[int | str],
-                 product_spaces: list[ProductSpace]=None,
-                 product_spaces_dual: list[bool]=None,
-                 new_axes: list[int]=None):
+                 product_spaces: list[ProductSpace] = None,
+                 product_spaces_dual: list[bool] = None,
+                 new_axes: list[int] = None,
+                 new_labels: list[str | None] = None):
     """
     Combine (multiple) groups of legs on a tensor to (multiple) ProductSpaces.
 
@@ -3001,7 +3015,12 @@ def combine_legs(t: AbstractTensor,
     product_spaces_dual : list of bool
         For each group, whether the resulting ProductSpace should be dual. keyword only.
         Per default, it has the same is_dual as the first (by appearance in `legs`) of the combined legs.
-
+    TODO doc or remove new_axes
+    new_labels : list of str
+        A new label for each group of legs.
+        By default, the label is given by joining the original labels with dots ``'.'`` and
+        surrounding with parantheses. For example, combining legs ``'vL', 'p0', 'p1'`` results in
+        a leg with label ``'(vL.p0.p1)'``.
     Result
     ------
     combined :
@@ -3014,7 +3033,7 @@ def combine_legs(t: AbstractTensor,
     split_legs
     """
     return t.combine_legs(*legs, product_spaces=product_spaces, product_spaces_dual=product_spaces_dual,
-                          new_axes=new_axes)
+                          new_axes=new_axes, new_labels=new_labels)
 
 
 def conj(t: AbstractTensor) -> AbstractTensor:
