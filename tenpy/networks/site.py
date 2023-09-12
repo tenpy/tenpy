@@ -928,7 +928,7 @@ def set_common_charges(sites, new_charges='same', new_names=None, new_mod=None, 
         >>> assert ferm.leg.chinfo.qnumber == spin.leg.chinfo.qnumber == 0  # trivial: no charges
     """
     for s, site in enumerate(sites):
-        for site2 in enumerate(sites[s + 1:]):
+        for site2 in sites[s + 1:]:
             if site2 is site:
                 raise ValueError("`sites` contains the same object multiple times. Make copies!")
     old_chinfos = [site.leg.chinfo for site in sites]
