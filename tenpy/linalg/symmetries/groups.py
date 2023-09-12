@@ -175,6 +175,9 @@ class ProductSymmetry(Symmetry):
     The allowed sectors are "stacks" (using e.g. :func:`numpy.concatenate`) of sectors for the
     individual symmetries. For recoveering the individual sectors see :attr:`sector_slices`.
 
+    If all factors are `AbelianGroup` instances, instances of this class will mascerade as
+    instances of `AbelianGroup` too, meeaning they fulfill ``isinstance(s, AbelianGroup)``.
+    Same for `GroupSymmetry`.
 
     Attributes
     ----------
@@ -381,9 +384,15 @@ class _ABCFactorSymmetryMeta(ABCMeta):
 
 
 class GroupSymmetry(Symmetry, metaclass=_ABCFactorSymmetryMeta):
-    """
-    Base-class for symmetries that are described by a group via a faithful representation on the Hilbert space.
+    """Base-class for symmetries that are described by a group.
+
+    The symmetry is given via a faithful representation on the Hilbert space.
     Noteable counter-examples are fermionic parity or anyonic grading.
+
+    Products of of `GroupSymmetry`s are instances described by the `ProductSymmetry` class, which
+    is not a sub- or supeclass of `GroupSymmetry`. Nevertheless, instancechecks can be used to
+    check if a given `ProductSymmetry` *instance* is a group-symmetry.
+    See examples in :class:`AbelianGroup`.
     """
     def __init__(self, fusion_style: FusionStyle, trivial_sector: Sector, group_name: str,
                  num_sectors: int | float, descriptive_name: str | None = None):
@@ -393,10 +402,21 @@ class GroupSymmetry(Symmetry, metaclass=_ABCFactorSymmetryMeta):
 
 
 class AbelianGroup(GroupSymmetry, metaclass=_ABCFactorSymmetryMeta):
-    """
-    Base-class for abelian symmetry groups.
-    Note that a product of several abelian groups is also an abelian group, but represented by a ProductSymmetry,
-    which is not a subclass of AbelianGroup.
+    """Base-class for abelian symmetry groups.
+
+    Notes
+    -----
+    
+    A product of several abelian groups is also an abelian group, but represented by a
+    ProductSymmetry, which is not a subclass of AbelianGroup.
+    We have adjusted instancechecks accordingly, i.e. we have
+
+    .. doctest ::
+    
+        >>> s = ProductSymmetry([z3_symmetry, z5_symmetry])  # product of abelian groups
+        >>> isinstance(s, AbelianGroup)
+        True
+        >>> issubclass(type(s), AbelianGroup)
     """
 
     def __init__(self, trivial_sector: Sector, group_name: str, num_sectors: int | float,
