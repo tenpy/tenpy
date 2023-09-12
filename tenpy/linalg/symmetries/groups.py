@@ -172,25 +172,42 @@ class Symmetry(metaclass=ABCMeta):
 class ProductSymmetry(Symmetry):
     """Multiple symmetries.
 
-    The allowed sectors are "stacks" of sectors for the individual symmetries.
+    The allowed sectors are "stacks" (using e.g. :func:`numpy.concatenate`) of sectors for the
+    individual symmetries. For recoveering the individual sectors see :attr:`sector_slices`.
 
-    If all factors are AbelianGroup instances, instances of this class will mascerade as
-    instances of AbelianGroup too. Same for GroupSymmetry.
+
+    Attributes
+    ----------
+    factors : list of `Symmetry`
+        The individual symmetries. We do not allow nesting, i.e. the `factors` can not
+        be ``ProductSymmetry``s themselves.
+    sector_slices : 1D ndarray
+        Describes how the sectors of the `factors` are embedded in a sector of the product.
+        Indicates that the slice ``sector_slices[i]:sector_slices[i + 1]`` of a sector of the
+        product symmetry contains the entries of a sector of `factors[i]`.
+
+    Parameters
+    ----------
+    factors : list of `Symmetry`
+        The factors that comprise this symmetry. If any are `ProductSymmetries`, the
+        nesting is flattened, i.e. ``[*others, psymm]`` is equivalent to ``[*others, psymm.factors]``
+        for a `ProductSymmetry` ``psymm``.
     """
     def __init__(self, factors: list[Symmetry]):
-        self.factors = factors
+        syms = []
         for f in factors:
+            if isinstance(f, ProductSymmetry):
+                syms.extend(f.factors)
+            else:
+                syms.append(f)
+        self.factors = syms
+        for f in syms:
             assert not isinstance(f, ProductSymmetry)  # avoid unnecesary nesting
-        if all(f.descriptive_name is not None for f in factors):
-            descriptive_name = f'[{", ".join(f.descriptive_name for f in factors)}]'
+        if all(f.descriptive_name is not None for f in syms):
+            descriptive_name = f'[{", ".join(f.descriptive_name for f in syms)}]'
         else:
             descriptive_name = None
-
-        # define sector_slices such that
-        # s[sector_slices[i]:sector_slices[i+1]]
-        # gives the part of s (a sector of the ProductSymmetry) which describe a sector of factors[i]
-        self.sector_slices = np.cumsum([0] + [f.sector_ind_len for f in factors])
-
+        self.sector_slices = np.cumsum([0] + [f.sector_ind_len for f in syms])
         Symmetry.__init__(
             self,
             fusion_style=max((f.fusion_style for f in factors), key=lambda style: style.value),
