@@ -251,6 +251,39 @@ class VectorSpace:
             res[slice(*slc)] = sect[None, :]
         return res[self._inverse_basis_perm]
 
+    def as_VectorSpace(self):
+        return self
+
+    def change_symmetry(self, symmetry: Symmetry, sector_map: callable,
+                        backend: AbstractBackend = None) -> VectorSpace:
+        """Change the symmetry by specifying how the sectors change.
+
+        Parameters
+        ----------
+        symmetry : :class:`~tenpy.linalg.symmetries.groups.Symmetry`
+            The symmetry of the new space
+        sector_map : function (SectorArray,) -> (SectorArray,)
+            A mapping of sectors (2D ndarrays of int), such
+            that ``new_sectors = sector_map(old_sectors)``.
+            The map is assumed to cooperate with duality, i.e. we assume without checking that
+            ``symmetry.dual_sectors(sector_map(old_sectors))`` is the same as
+            ``sector_map(old_symmetry.dual_sectors(old_sectors))``.
+        backend : :class: `~tenpy.linalg.backends.abstract_backend.AbstractBackend`
+            This parameter is ignored. We only include it to have matching signatures
+            with :meth:`ProductSpace.change_symmetry`.
+
+        Returns
+        -------
+        :class:`VectorSpace`
+            A space with the new symmetry. The order of the basis is preserved, but every
+            basis element lives in a new sector, according to `sector_map`.
+        """
+        # use the assumption that sector map cooperates with duality here:
+        non_dual_sectors = sector_map(self._non_dual_sectors)
+        return VectorSpace(symmetry=symmetry, sectors=non_dual_sectors,
+                           multiplicities=self.multiplicities, basis_perm=self.basis_perm,
+                           is_real=self._is_real, _is_dual=self.is_dual)
+
     def sector(self, i: int) -> Sector:
         """Return the `i`-th sector. Equivalent to ``self.sectors[i]``."""
         sector = self._non_dual_sectors[i, :]
@@ -566,9 +599,6 @@ class VectorSpace:
         # reaching this line means self has sectors which other does not have
         return False
 
-    def as_VectorSpace(self):
-        return self
-
     def _sector_print_priorities(self, use_private_sectors: bool):
         """How to prioritize sectors if not all can be printed.
 
@@ -722,6 +752,29 @@ class ProductSpace(VectorSpace):
     @classmethod
     def from_independent_symmetries(cls, *a, **kw):
         raise NotImplementedError('from_independent_symmetries can not create ProductSpaces')
+
+    def apply_sector_map(self, symmetry: Symmetry, sector_map: callable,
+                         backend: AbstractBackend = None) -> ProductSpace:
+        """Return a new ProductSpace specified by mapping the sectors.
+
+        Each of the factor :attr:`spaces` is individually mapped via
+        :meth:`VectorSpace.change_symmetry`
+
+        Parameters
+        ----------
+        symmetry, sector_map
+            Same as for :meth:`VectorSpace.change_symmetry`.
+        backend : :class: `~tenpy.linalg.backends.abstract_backend.AbstractBackend`, optional
+            Is used to set the backend-specific metadata when fusing the mapped spaces.
+
+        Returns
+        -------
+        :class:`ProductSpace`
+        """
+        # TODO we could do _sectors=sector_map(self._non_dual_sectors), but need to assume that
+        #  sector_map cooperates with fusion
+        return ProductSpace([s.change_symmetry(symmetry=symmetry, sector_map=sector_map)
+                             for s in self.spaces], backend=backend, _is_dual=self.is_dual)
 
     def as_VectorSpace(self):
         """Forget about the substructure of the ProductSpace but view only as VectorSpace.
