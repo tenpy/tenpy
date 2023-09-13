@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING, Sequence
 from tenpy.linalg.dummy_config import printoptions
 
 from .groups import Sector, SectorArray, Symmetry, ProductSymmetry, no_symmetry
-from ...tools.misc import inverse_permutation
+from ...tools.misc import inverse_permutation, to_iterable
 from ...tools.string import format_like_list
 
 if TYPE_CHECKING:
@@ -294,6 +294,66 @@ class VectorSpace:
         return VectorSpace(symmetry=symmetry, sectors=non_dual_sectors,
                            multiplicities=self.multiplicities, basis_perm=self.basis_perm,
                            is_real=self._is_real, _is_dual=self.is_dual)
+
+    def drop_symmetry(self, which: int | list[int] = None, remaining_symmetry: Symmetry = None):
+        """Drop some or all symmetries.
+
+        Parameters
+        ----------
+        which : None | (list of) int
+            If ``None`` (default) the entire symmetry is dropped and the result has ``no_symmetry``.
+            An integer or list of integers assume that `self.symmetry` is a `ProductSymmetry` and
+            specify which of its factors to drop.
+        remaining_symmetry : :class:`~tenyp.linalg.symmetries.groups.Symmetry`, optional
+            The resulting symmetry can optionally be passed, e.g. to control its name.
+            Should be a :class:`~tenyp.linalg.symmetries.groups.NoSymmetry` if all symmetries are
+            dropped or :class:`~tenyp.linalg.symmetries.groups.ProductSymmetry` otherwise.
+            Is not checked for correctness (TODO or should we?).
+    
+        Returns
+        -------
+        A new VectorSpace instance with reduced `symmetry`.
+        """
+        if which is None:
+            pass
+        elif which == []:
+            return self
+        elif isinstance(self.symmetry, ProductSymmetry):
+            which = to_iterable(which)
+            num_factors = len(self.symmetry.factors)
+            # normalize negative indicses to be in range(num_factors)
+            for i, w in enumerate(which):
+                if not -num_factors <= w < num_factors:
+                    raise ValueError(f'which entry {w} out of bounds for {num_factors} symmetries.')
+                if w < 0:
+                    which[i] += num_factors
+            if len(which) == num_factors:
+                which = None
+        elif which == 0 or which == [0]:
+            which = None
+        else:
+            msg = f'Can not drop which={which} for a single (non-ProductSymmetry) symmetry.'
+            raise ValueError(msg)
+        
+        if which is None:
+            return VectorSpace(no_symmetry, sectors=[no_symmetry.trivial_sector],
+                               multiplicities=[self.dim], basis_perm=self.basis_perm,
+                               is_real=self.is_real, _is_dual=self.is_dual)
+
+        if remaining_symmetry is None:
+            factors = [f for i, f in enumerate(self.symmetry.factors) if i not in which]
+            if len(factors) == 1:
+                remaining_symmetry = factors[0]
+            else:
+                remaining_symmetry = ProductSymmetry(factors)
+
+        mask = np.ones((self.dim,), dtype=bool)
+        for i in which:
+            start, stop = self.symmetry.sector_slices[i:i + 2]
+            mask[start:stop] = False
+
+        return self.change_symmetry(symmtery=remaining_symmetry,
+                                     sector_map=lambda sectors: sectors[:, mask])
 
     def sector(self, i: int) -> Sector:
         """Return the `i`-th sector. Equivalent to ``self.sectors[i]``."""
@@ -768,6 +828,18 @@ class ProductSpace(VectorSpace):
     def from_trivial_sector(cls, *a, **kw):
         raise NotImplementedError('from_trivial_sector can not create ProductSpaces')
 
+    def as_VectorSpace(self):
+        """Forget about the substructure of the ProductSpace but view only as VectorSpace.
+        This is necessary before truncation, after which the product-space structure is no
+        longer necessarily given.
+        """
+        return VectorSpace(symmetry=self.symmetry,
+                           sectors=self._non_dual_sectors,
+                           multiplicities=self.multiplicities,
+                           is_real=self.is_real,
+                           basis_perm=None,
+                           _is_dual=self.is_dual,)
+
     def apply_sector_map(self, symmetry: Symmetry, sector_map: callable,
                          backend: AbstractBackend = None) -> ProductSpace:
         """Return a new ProductSpace specified by mapping the sectors.
@@ -791,17 +863,10 @@ class ProductSpace(VectorSpace):
         return ProductSpace([s.change_symmetry(symmetry=symmetry, sector_map=sector_map)
                              for s in self.spaces], backend=backend, _is_dual=self.is_dual)
 
-    def as_VectorSpace(self):
-        """Forget about the substructure of the ProductSpace but view only as VectorSpace.
-        This is necessary before truncation, after which the product-space structure is no
-        longer necessarily given.
-        """
-        return VectorSpace(symmetry=self.symmetry,
-                           sectors=self._non_dual_sectors,
-                           multiplicities=self.multiplicities,
-                           is_real=self.is_real,
-                           basis_perm=None,
-                           _is_dual=self.is_dual,)
+    def drop_symmetry(self, symmetry: Symmetry = None):
+        """Drop the symmetry to a NoSymmetry"""
+        # TODO do we need the backend arg of ProductSpace.__init__?
+        return ProductSpace([s.drop_symmetry() for s in self.spaces], _is_dual=self.is_dual)
 
     def flip_is_dual(self) -> ProductSpace:
         """Return a ProductSpace isomorphic to self, which has the opposite is_dual attribute.
