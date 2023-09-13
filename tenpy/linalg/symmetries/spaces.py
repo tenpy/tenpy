@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, Sequence
 
 from tenpy.linalg.dummy_config import printoptions
 
-from .groups import Sector, SectorArray, Symmetry, no_symmetry
+from .groups import Sector, SectorArray, Symmetry, ProductSymmetry, no_symmetry
 from ...tools.misc import inverse_permutation
 from ...tools.string import format_like_list
 
@@ -122,26 +122,30 @@ class VectorSpace:
             self.basis_perm = basis_perm = np.asarray(basis_perm, dtype=int)
         self._inverse_basis_perm = inverse_permutation(basis_perm)
 
-    @classmethod
-    def from_unsorted_sectors(cls, symmetry: Symmetry, sectors: SectorArray,
-                              multiplicities: ndarray = None, basis_perm: ndarray = None,
-                              is_real: bool = False):
-        """Like constructor, but allows `sectors` in any order and only creates ket-spaces."""
-        # OPTIMIZE : doing this in a cumbersome way right now...
-        #   The difficult part is figuring out the new basis_perm.
-        #   I think doing sth like basis_perm[slice(*s) for s in slices[sort]] might work...
-        sectors = np.asarray(sectors, dtype=int)
-        assert len(sectors.shape) == 2 and sectors.shape[1] == symmetry.sector_ind_len
-        if multiplicities is None:
-            multiplicities = np.ones((len(sectors),), dtype=int)
-        slices = _calc_slices(symmetry=symmetry, sectors=sectors, multiplicities=multiplicities)
-        dim = np.sum(symmetry.batch_sector_dim(sectors) * multiplicities)
-        if basis_perm is None:
-            basis_perm = np.arange(dim)
-        sectors_of_basis = np.zeros((dim, symmetry.sector_ind_len), dtype=int)
-        for sect, slc in zip(sectors, slices):
-            sectors_of_basis[basis_perm[slice(*slc)]] = sect[None, :]
-        return cls.from_basis(symmetry=symmetry, sectors_of_basis=sectors_of_basis, is_real=is_real)
+    def test_sanity(self):
+        # sectors
+        assert all(self.symmetry.is_valid_sector(s) for s in self._non_dual_sectors)
+        assert len(self._non_dual_sectors) == self.num_sectors
+        assert len(np.unique(self._non_dual_sectors, axis=0)) == self.num_sectors
+        assert self._non_dual_sectors.shape == (self.num_sectors, self.symmetry.sector_ind_len)
+        assert np.all(np.lexsort(self._non_dual_sectors.T) == np.arange(self.num_sectors))
+        # multiplicities
+        assert np.all(self.multiplicities > 0)
+        assert self.multiplicities.shape == (self.num_sectors,)
+        # slices
+        assert self.slices.shape == (self.num_sectors, 2)
+        slice_diffs = self.slices[:, 1] - self.slices[:, 0]
+        expect_diffs = self.symmetry.batch_sector_dim(self._non_dual_sectors) * self.multiplicities
+        assert np.all(slice_diffs == expect_diffs)
+        # slices should be consecutive
+        if len(self.slices) > 0:
+            assert self.slices[0, 0] == 0
+            assert np.all(self.slices[1:, 0] == self.slices[:-1, 1])
+            assert self.slices[-1, 1] == self.dim
+        # basis_perm
+        assert self.basis_perm.shape == (self.dim,)
+        assert len(np.unique(self.basis_perm)) == self.dim
+        assert np.all(self.basis_perm[self._inverse_basis_perm] == np.arange(self.dim))
 
     @classmethod
     def from_basis(cls, symmetry: Symmetry, sectors_of_basis: Sequence[Sequence[int]],
@@ -171,30 +175,59 @@ class VectorSpace:
         return cls(symmetry=symmetry, sectors=sectors, multiplicities=mults, basis_perm=basis_perm,
                    is_real=is_real, _is_dual=False)
 
-    def test_sanity(self):
-        # sectors
-        assert all(self.symmetry.is_valid_sector(s) for s in self._non_dual_sectors)
-        assert len(self._non_dual_sectors) == self.num_sectors
-        assert len(np.unique(self._non_dual_sectors, axis=0)) == self.num_sectors
-        assert self._non_dual_sectors.shape == (self.num_sectors, self.symmetry.sector_ind_len)
-        assert np.all(np.lexsort(self._non_dual_sectors.T) == np.arange(self.num_sectors))
-        # multiplicities
-        assert np.all(self.multiplicities > 0)
-        assert self.multiplicities.shape == (self.num_sectors,)
-        # slices
-        assert self.slices.shape == (self.num_sectors, 2)
-        slice_diffs = self.slices[:, 1] - self.slices[:, 0]
-        expect_diffs = self.symmetry.batch_sector_dim(self._non_dual_sectors) * self.multiplicities
-        assert np.all(slice_diffs == expect_diffs)
-        # slices should be consecutive
-        if len(self.slices) > 0:
-            assert self.slices[0, 0] == 0
-            assert np.all(self.slices[1:, 0] == self.slices[:-1, 1])
-            assert self.slices[-1, 1] == self.dim
-        # basis_perm
-        assert self.basis_perm.shape == (self.dim,)
-        assert len(np.unique(self.basis_perm)) == self.dim
-        assert np.all(self.basis_perm[self._inverse_basis_perm] == np.arange(self.dim))
+    @classmethod
+    def from_independent_symmetries(cls, independent_descriptions: list[VectorSpace],
+                                    symmetry: Symmetry = None):
+        """Create a VectorSpace with multiple independent symmetries.
+
+        Parameters
+        ----------
+        independent_descriptions : list of :class:`VectorSpace`
+            Each entry describes the resulting :class:`VectorSpace` in terms of *one* of
+            the independent symmetries.
+        symmetry: :class:`~tenpy.linalg.symmetries.groups.Symmetry`, optional
+            The resulting symmetry can optionally be passed. We assume without checking that
+            it :meth:`~tenyp.linalg.symmetries.groups.Symemtry.is_same_symmetry` as the default
+            ``ProductSymmetry.from_nested_factors([s.symmetry for s in independent_descriptions])``.
+
+        Returns
+        -------
+        :class:`VectorSpace`
+            A space with the overall `symmetry`.
+        """
+        if symmetry is None:
+            symmetry = ProductSymmetry.from_nested_factors(
+                [s.symmetry for s in independent_descriptions]
+            )
+        # OPTIMIZE could do this more efficiently in special cases if basis_perm and slices are equal
+        #  but we probably dont need to worry about optimizing this too much, should only be called
+        #  for physical legs of sites, which should not get very large.
+        basis = np.concatenate([s.sectors_of_basis for s in independent_descriptions])
+        is_real = any(s.is_real for s in independent_descriptions)
+        if is_real:
+            assert all(s.is_real for s in independent_descriptions)
+        return cls.from_basis(symmetry=symmetry, sectors_of_basis=basis, is_real=is_real)
+
+    @classmethod
+    def from_unsorted_sectors(cls, symmetry: Symmetry, sectors: SectorArray,
+                              multiplicities: ndarray = None, basis_perm: ndarray = None,
+                              is_real: bool = False):
+        """Like constructor, but allows `sectors` in any order and only creates ket-spaces."""
+        # OPTIMIZE : doing this in a cumbersome way right now...
+        #   The difficult part is figuring out the new basis_perm.
+        #   I think doing sth like basis_perm[slice(*s) for s in slices[sort]] might work...
+        sectors = np.asarray(sectors, dtype=int)
+        assert len(sectors.shape) == 2 and sectors.shape[1] == symmetry.sector_ind_len
+        if multiplicities is None:
+            multiplicities = np.ones((len(sectors),), dtype=int)
+        slices = _calc_slices(symmetry=symmetry, sectors=sectors, multiplicities=multiplicities)
+        dim = np.sum(symmetry.batch_sector_dim(sectors) * multiplicities)
+        if basis_perm is None:
+            basis_perm = np.arange(dim)
+        sectors_of_basis = np.zeros((dim, symmetry.sector_ind_len), dtype=int)
+        for sect, slc in zip(sectors, slices):
+            sectors_of_basis[basis_perm[slice(*slc)]] = sect[None, :]
+        return cls.from_basis(symmetry=symmetry, sectors_of_basis=sectors_of_basis, is_real=is_real)
 
     @classmethod
     def without_symmetry(cls, dim: int, is_real: bool = False, is_dual: bool = False):
@@ -676,15 +709,19 @@ class ProductSpace(VectorSpace):
         VectorSpace.__init__(self, symmetry=symmetry, sectors=_sectors, multiplicities=_multiplicities,
                              is_real=is_real, _is_dual=_is_dual)
 
-    @classmethod
-    def from_basis(cls, symmetry: Symmetry, sectors: Sequence[Sequence[int]], is_real: bool = False):
-        raise NotImplementedError('from_basis can not create ProductSpaces')
-
     def test_sanity(self):
         for s in self.spaces:
             assert s.symmetry == self.symmetry
             s.test_sanity()
         return super().test_sanity()
+
+    @classmethod
+    def from_basis(cls, *a, **kw):
+        raise NotImplementedError('from_basis can not create ProductSpaces')
+
+    @classmethod
+    def from_independent_symmetries(cls, *a, **kw):
+        raise NotImplementedError('from_independent_symmetries can not create ProductSpaces')
 
     def as_VectorSpace(self):
         """Forget about the substructure of the ProductSpace but view only as VectorSpace.
