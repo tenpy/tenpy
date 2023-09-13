@@ -38,7 +38,7 @@ def test_vector_space(symmetry, symmetry_sectors_rng, np_random):
     # TODO (JU) test real (as in "not complex") vectorspaces
 
     s1 = spaces.VectorSpace(symmetry=symmetry, sectors=sectors, multiplicities=mults)
-    s2 = spaces.VectorSpace.without_symmetry(dim=8)
+    s2 = spaces.VectorSpace.from_trivial_sector(dim=8)
 
     print('checking VectorSpace.sectors')
     assert_array_equal(s2.sectors, groups.no_symmetry.trivial_sector[None, :])
@@ -68,7 +68,7 @@ def test_vector_space(symmetry, symmetry_sectors_rng, np_random):
     print('checking is_trivial')
     assert not s1.is_trivial
     assert not s2.is_trivial
-    assert spaces.VectorSpace.without_symmetry(dim=1).is_trivial
+    assert spaces.VectorSpace.from_trivial_sector(dim=1).is_trivial
     assert spaces.VectorSpace(symmetry=symmetry, sectors=symmetry.trivial_sector[np.newaxis, :]).is_trivial
 
     print('checking is_subspace_of')

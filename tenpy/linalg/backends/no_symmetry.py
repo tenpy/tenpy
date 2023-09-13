@@ -81,7 +81,7 @@ class AbstractNoSymmetryBackend(AbstractBackend, AbstractBlockBackend, ABC):
     def mask_from_block(self, a: Block, large_leg: VectorSpace) -> tuple[DiagonalData, VectorSpace]:
         data = self.block_to_dtype(a, Dtype.bool)
         data = self.apply_basis_perm(data, [large_leg])
-        small_leg = VectorSpace.without_symmetry(
+        small_leg = VectorSpace.from_trivial_sector(
             dim=self.block_sum_all(data), is_real=large_leg.is_real, is_dual=large_leg.is_dual
         )
         return data, small_leg
@@ -113,13 +113,13 @@ class AbstractNoSymmetryBackend(AbstractBackend, AbstractBlockBackend, ABC):
 
     def svd(self, a: Tensor, new_vh_leg_dual: bool, algorithm: str | None) -> tuple[Data, DiagonalData, Data, VectorSpace]:
         u, s, vh = self.matrix_svd(a.data, algorithm=algorithm)
-        new_leg = VectorSpace.without_symmetry(len(s), is_real=a.legs[0].is_real, is_dual=new_vh_leg_dual)
+        new_leg = VectorSpace.from_trivial_sector(len(s), is_real=a.legs[0].is_real, is_dual=new_vh_leg_dual)
         return u, s, vh, new_leg
 
     def qr(self, a: Tensor, new_r_leg_dual: bool, full: bool) -> tuple[Data, Data, VectorSpace]:
         q, r = self.matrix_qr(a.data, full=full)
         new_leg_dim = self.block_shape(r)[0]
-        new_leg = VectorSpace.without_symmetry(new_leg_dim, is_dual=new_r_leg_dual, is_real=a.legs[0].is_real)
+        new_leg = VectorSpace.from_trivial_sector(new_leg_dim, is_dual=new_r_leg_dual, is_real=a.legs[0].is_real)
         return q, r, new_leg
 
     def outer(self, a: Tensor, b: Tensor) -> Data:
@@ -175,7 +175,7 @@ class AbstractNoSymmetryBackend(AbstractBackend, AbstractBlockBackend, ABC):
         if more:
             raise ValueError('Can only infer one leg')
         dim = self.block_shape(block)[idx]
-        return VectorSpace.without_symmetry(dim, is_dual=is_dual, is_real=is_real)
+        return VectorSpace.from_trivial_sector(dim, is_dual=is_dual, is_real=is_real)
 
     def get_element(self, a: Tensor, idcs: list[int]) -> complex | float | bool:
         return self.get_block_element(a.data, idcs)

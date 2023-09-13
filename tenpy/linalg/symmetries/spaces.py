@@ -209,6 +209,23 @@ class VectorSpace:
         return cls.from_basis(symmetry=symmetry, sectors_of_basis=basis, is_real=is_real)
 
     @classmethod
+    def from_trivial_sector(cls, dim: int, symmetry: Symmetry = no_symmetry, is_real: bool = False,
+                            is_dual: bool = False):
+        """Create a VectorSpace that lives in the trivial sector (i.e. it is symmetric).
+
+        Parameters
+        ----------
+        dim : int
+            The dimension of the space.
+        symmetry : :class:`~tenpy.linalg.symmetries.groups.Symmetry`
+            The symmetry of the space. By default, we use `no_symetry`.
+        is_real, is_dual : bool
+            If the space should be real / dual.
+        """
+        return cls(symmetry=symmetry, sectors=[symmetry.trivial_sector], multiplicities=[dim],
+                   is_real=is_real, _is_dual=is_dual)
+
+    @classmethod
     def from_unsorted_sectors(cls, symmetry: Symmetry, sectors: SectorArray,
                               multiplicities: ndarray = None, basis_perm: ndarray = None,
                               is_real: bool = False):
@@ -228,12 +245,6 @@ class VectorSpace:
         for sect, slc in zip(sectors, slices):
             sectors_of_basis[basis_perm[slice(*slc)]] = sect[None, :]
         return cls.from_basis(symmetry=symmetry, sectors_of_basis=sectors_of_basis, is_real=is_real)
-
-    @classmethod
-    def without_symmetry(cls, dim: int, is_real: bool = False, is_dual: bool = False):
-        """Initialize a VectorSpace with no symmetry of a given dimension"""
-        return cls(symmetry=no_symmetry, sectors=no_symmetry.trivial_sector[None, :],
-                   multiplicities=[dim], is_real=is_real, _is_dual=is_dual)
 
     @property
     def sectors(self):
@@ -752,6 +763,10 @@ class ProductSpace(VectorSpace):
     @classmethod
     def from_independent_symmetries(cls, *a, **kw):
         raise NotImplementedError('from_independent_symmetries can not create ProductSpaces')
+
+    @classmethod
+    def from_trivial_sector(cls, *a, **kw):
+        raise NotImplementedError('from_trivial_sector can not create ProductSpaces')
 
     def apply_sector_map(self, symmetry: Symmetry, sector_map: callable,
                          backend: AbstractBackend = None) -> ProductSpace:
