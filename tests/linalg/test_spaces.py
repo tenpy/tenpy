@@ -17,6 +17,7 @@ symmetries = dict(
 )
 
 
+# TODO (JU) unsused?
 def _get_four_sectors(symm: groups.Symmetry) -> groups.SectorArray:
     if isinstance(symm, groups.SU2Symmetry):
         res = np.arange(0, 8, 2, dtype=int)[:, None]

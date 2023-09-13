@@ -63,6 +63,8 @@ class VectorSpace:
         indices (in the *internal* basis order) that belong to this sector.
         Conversely, ``basis_perm[slices[n, 0]:slices[n, 1]]`` are the elements of the public
         basis that live in ``sectors[n]``.
+    is_real : bool
+        If the space is over the real or complex numbers.
     is_dual : bool
         Whether this is the dual (a.k.a. bra) space or the regular (a.k.a. ket) space.
     basis_perm : ndarray
@@ -94,7 +96,7 @@ class VectorSpace:
         See the attribute :attr:`basis_perm`.
         Per default the trivial permutation ``[0, 1, 2, ...]`` is used.
     is_real : bool
-        Whether the space is over the real numbers. Otherwise it is over the complex numbers (default).
+        If the space is over the real or complex (default) numbers.
     _is_dual : bool
         Whether this is the "normal" (i.e. ket) or dual (i.e. bra) space.
 
@@ -153,24 +155,29 @@ class VectorSpace:
         """Create a VectorSpace by specifying the sector of every basis element.
 
         This classmethod always creates a ket-space (i.e. ``res.is_dual is False``).
-        Use ``VectorSpace.from_basis(...)
+        Use ``VectorSpace.from_basis(...).dual`` for a bra-space.
 
         Parameters
         ----------
+        symmetry: Symmetry
+            The symmetry associated with this space.
         sectors_of_basis : iterable of iterable of int
-            Specifies the basis. ``sectors[n]`` is the sector of the ``n``-th basis element.
-        symmetry, is_real
-            Same as parameters for :class:`VectorSpace`
+            Specifies the basis. ``sectors_of_basis[n]`` is the sector of the ``n``-th basis element.
+        is_real : bool
+            If the space is over the real or complex (default) numbers.
         """
         sectors_of_basis = np.asarray(sectors_of_basis, dtype=int)
+        if np.any(symmetry.batch_sector_dim(sectors_of_basis) > 1):
+            # TODO the basis_perm calculation below assumes that every basis element has its own sector
+            #  need to work harder if multiple basis elements combine to a sectors.
+            raise NotImplementedError
         assert sectors_of_basis.shape[1] == symmetry.sector_ind_len
-        # unfortunately, np.unique has the opposite sorting convention ("first entry first")
-        # from np.lexsort ("last entry first").
+        # unfortunately, np.unique(x, axis=0) has the opposite sorting convention
+        # ("first entry varies slowest") from np.lexsort(x.T) ("last entry slowest").
         # We thus reverse the order of every sector before calling unique.
         unique, inv_idcs, mults = np.unique(sectors_of_basis[:, ::-1], axis=0, return_inverse=True,
                                             return_counts=True)
-        sectors = unique[:, ::-1]
-        assert np.all(np.lexsort(sectors.T) == np.arange(len(sectors)))  # TODO remove check
+        sectors = unique[:, ::-1]  # undo reverse from above
         basis_perm = np.argsort(inv_idcs)
         return cls(symmetry=symmetry, sectors=sectors, multiplicities=mults, basis_perm=basis_perm,
                    is_real=is_real, _is_dual=False)
@@ -203,6 +210,9 @@ class VectorSpace:
         #  but we probably dont need to worry about optimizing this too much, should only be called
         #  for physical legs of sites, which should not get very large.
         basis = np.concatenate([s.sectors_of_basis for s in independent_descriptions])
+        if np.any(symmetry.batch_sector_dim(basis) > 1):
+            # TODO I accidentaly assumed abelian symmetries when implementing this...
+            raise NotImplementedError
         is_real = any(s.is_real for s in independent_descriptions)
         if is_real:
             assert all(s.is_real for s in independent_descriptions)
@@ -234,6 +244,9 @@ class VectorSpace:
         #   The difficult part is figuring out the new basis_perm.
         #   I think doing sth like basis_perm[slice(*s) for s in slices[sort]] might work...
         sectors = np.asarray(sectors, dtype=int)
+        if np.any(symmetry.batch_sector_dim(sectors) > 1):
+            # TODO I accidentaly assumed abelian symmetries when implementing this...
+            raise NotImplementedError
         assert len(sectors.shape) == 2 and sectors.shape[1] == symmetry.sector_ind_len
         if multiplicities is None:
             multiplicities = np.ones((len(sectors),), dtype=int)
@@ -257,6 +270,9 @@ class VectorSpace:
     @property
     def sectors_of_basis(self):
         # build in internal basis, then permute
+        if np.any(self.symmetry.batch_sector_dim(self.sectors) > 1):
+            # TODO I accidentaly assumed abelian symmetries when implementing this...
+            raise NotImplementedError
         res = np.zeros((self.dim, self.symmetry.sector_ind_len), dtype=int)
         for sect, slc in zip(self.sectors, self.slices):
             res[slice(*slc)] = sect[None, :]
@@ -378,7 +394,6 @@ class VectorSpace:
         multiplicity_idx : int
             The index "within the sector", in ``range(self.multiplicities[sector_index])``.
         """
-        print(f'parsing index. input {idx}')
         idx = self._inverse_basis_perm[idx]
         sector_idx = bisect.bisect(self.slices[:, 0], idx) - 1
         multiplicity_idx = idx - self.slices[sector_idx, 0]
@@ -719,6 +734,17 @@ class ProductSpace(VectorSpace):
 
     It is the product space of the individual `spaces`,
     but with an associated basis change implied to allow preserving the symmetry.
+    TODO (JU) actually the product of graded spaces *is* associative up to a canonical isomorphism,
+         which is typically ignored. I think we can sweep this under the rug at this relatively
+         public level of docs...
+         As an implementation detail, it is useful to work with the trees, because you can then
+         build the basis transformation of an N-space fusion from the basis transformations of
+         successive pairwise fusions. If you want to use this strategy, again as an internal
+         implementation detail, not as a property of the product space, you should have a
+         canonical order of pairwise fusions, i.e. a tree.
+         I think the only thing people should be told at this level is that the order
+         of :attr:`spaces` has meaning and you shouldnt mess with it. But since that determines
+         the :attr:`basis_perm` of the ProductSpace, this should be clear anyway.
 
     Parameters
     ----------
@@ -778,6 +804,7 @@ class ProductSpace(VectorSpace):
     This convention has the downside that the mathematical notation :math:`P_2 = (V \otimes W)^*`
     does not transcribe trivially into a single call of ``ProductSpace.__init__``, since
     ``P2 = ProductSpace([V.dual, W.dual], _is_dual=True)``.
+    You can write ``P2 == ProductSpace([V, W]).dual``, though.
 
     Note that the default behavior of the `_is_dual` argument guarantees that
     `ProductSpace(some_space)` is contractible with `ProductSpace([s.dual for s in some_spaces])`.
