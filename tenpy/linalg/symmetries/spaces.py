@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING, Sequence
 from tenpy.linalg.dummy_config import printoptions
 
 from .groups import Sector, SectorArray, Symmetry, ProductSymmetry, no_symmetry
+from ..misc import make_stride
 from ...tools.misc import inverse_permutation, to_iterable
 from ...tools.string import format_like_list
 
@@ -68,10 +69,15 @@ class VectorSpace:
     is_dual : bool
         Whether this is the dual (a.k.a. bra) space or the regular (a.k.a. ket) space.
     basis_perm : ndarray
-        The permutation of basis elements such that ``basis_vectors[basis_perm]`` is grouped by
-        sector, i.e. such that ``basis_vectors[basis_perm][slices[n, 0]:slices[n, 1]]`` lie in
-        ``sectors[n]``. ``dense_data[basis_perm] == internal_data``.
-        All other attributes implicitly or explicitly assume this basis order.
+        The tensor manipulations of `tenpy.linalg` benefit from choosing a canonical order for the
+        basis of vector spaces. This attribute translates between the "public" order of the basis,
+        in which e.g. the inputs to :meth:`from_dense_block` are interpreted to this internal order,
+        such that ``public_basis[basis_perm] == internal_basis``.
+        This internal order is such that the basis vectors are grouped by sector and such that
+        sectors occur in the canonical sorted order, see :attr:`_non_dual_sectors`.
+        We store the inverse as `_inverse_basis_perm`.
+        For `ProductSpace`s we always set a trivial permutation.
+        TODO expand explanation?
     sectors_of_basis : 2D numpy array of int
         The sectors of every element of the "public" computational basis.
     _non_dual_sectors : 2D numpy array of int
@@ -583,16 +589,14 @@ class VectorSpace:
         return res
 
     def flip_is_dual(self) -> VectorSpace:
-        """Return copy of `self` with same :attr:`sectors`, but opposite :attr:`is_dual` flag.
+        """Return a copy with opposite :attr:`is_dual` flag.
 
-        Note that this leg can not be contracted with `self`.
+        The result has the same :attr:`sectors` and :attr:`basis_perm`.
+        Note that this leg is niether equal to `self` nor can it be contracted with `self`.
         """
         # TODO test coverage
         non_dual_sectors = self.symmetry.dual_sectors(self._non_dual_sectors)
         sort = np.lexsort(non_dual_sectors.T)
-        raise NotImplementedError
-        # TODO need to figure out basis_perm...
-        #  I think one needs to do sth like basis_perm[slice(*s) for s in slices[sort]]
         return VectorSpace(symmetry=self.symmetry,
                            sectors=non_dual_sectors[sort],
                            multiplicities=self.multiplicities[sort],
@@ -601,11 +605,11 @@ class VectorSpace:
                            _is_dual=not self.is_dual)
 
     def is_equal_or_dual(self, other: VectorSpace) -> bool:
-        """If another VectorSpace is equal to *or* dual of `self`.
-
-        Assumes without checking that other is a VectorSpace.
-        Does not check for ProductSpace.
-        """
+        """If another VectorSpace is equal to *or* dual of `self`."""
+        if not isinstance(other, VectorSpace):
+            return False
+        if isinstance(self, ProductSpace) != isinstance(other, ProductSpace):
+            return False
         if self.is_real != other.is_real:
             return False
         if self.symmetry != other.symmetry:
@@ -746,6 +750,11 @@ class ProductSpace(VectorSpace):
          of :attr:`spaces` has meaning and you shouldnt mess with it. But since that determines
          the :attr:`basis_perm` of the ProductSpace, this should be clear anyway.
 
+    Attributes
+    ----------
+    basis_perm : ndarray
+        For `ProductSpace`s, this is always the trivial permutation ``[0, 1, 2, 3, ...]``.
+
     Parameters
     ----------
     spaces:
@@ -833,7 +842,6 @@ class ProductSpace(VectorSpace):
                 setattr(self, key, val)
         else:
             assert _multiplicities is not None
-        # TODO we could fix the basis_perm, but we probably dont need to ...
         VectorSpace.__init__(self, symmetry=symmetry, sectors=_sectors, multiplicities=_multiplicities,
                              is_real=is_real, _is_dual=_is_dual)
 
@@ -841,6 +849,7 @@ class ProductSpace(VectorSpace):
         for s in self.spaces:
             assert s.symmetry == self.symmetry
             s.test_sanity()
+        assert np.all(self.basis_perm == np.arange(self.dim))
         return super().test_sanity()
 
     @classmethod
@@ -957,6 +966,14 @@ class ProductSpace(VectorSpace):
         if len(other.spaces) != len(self.spaces):
             return False
         return all(s1 == s2 for s1, s2 in zip(self.spaces, other.spaces))
+
+    def is_equal_or_dual(self, other: ProductSpace) -> bool:
+        """If another ProductSpace is equal to *or* dual of `self`."""
+        if not isinstance(other, ProductSpace):
+            return False
+        if len(other.spaces) != len(self.spaces):
+            return False
+        return all(s1.is_equal_or_dual(s2) for s1, s2 in zip(self.spaces, other.spaces))
 
     @property
     def dual(self):

@@ -6,7 +6,7 @@ import numpy as np
 from functools import wraps
 
 __all__ = ['force_str_len', 'UNSPECIFIED', 'inverse_permutation', 'duplicate_entries',
-           'join_as_many_as_possible']
+           'join_as_many_as_possible', 'make_stride']
 
 # TODO move somewhere else
 #  (for now i want to keep changes in refactor_npc branch contained to tenpy.linalg as much as possible
@@ -73,3 +73,32 @@ def join_as_many_as_possible(msgs: Sequence[str], separator: str, priorities: Se
     num_msgs = np.where(candidate_lengths > max_len)[0][0]
 
     return separator.join([msgs[n] for n in order[:num_msgs]] + [fill])
+
+
+_MAX_INT = np.iinfo(int).max
+
+
+def make_stride(shape, cstyle=True):
+    """Create the strides for C- (or F-style) arrays with a given shape.
+
+    Equivalent to ``x = np.zeros(shape); return np.array(x.strides, np.intp) // x.itemsize``.
+
+    Note that ``np.sum(inds * _make_stride(np.max(inds, axis=0), cstyle=False), axis=1)`` is
+    sorted for (positive) 2D `inds` if ``np.lexsort(inds.T)`` is sorted.
+    """
+    L = len(shape)
+    stride = 1
+    res = np.empty([L], np.intp)
+    if cstyle:
+        res[L - 1] = 1
+        for a in range(L - 1, 0, -1):
+            stride *= shape[a]
+            res[a - 1] = stride
+        assert stride * shape[0] < _MAX_INT
+    else:
+        res[0] = 1
+        for a in range(0, L - 1):
+            stride *= shape[a]
+            res[a + 1] = stride
+        assert stride * shape[0] < _MAX_INT
+    return res

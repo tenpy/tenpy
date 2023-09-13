@@ -29,6 +29,7 @@ import copy
 import warnings
 
 from .abstract_backend import AbstractBackend, AbstractBlockBackend, Data, DiagonalData, Block, Dtype
+from ..misc import make_stride
 from ..symmetries.groups import FusionStyle, BraidingStyle, Symmetry, Sector, SectorArray, AbelianGroup
 from numpy import ndarray
 from ..symmetries.spaces import VectorSpace, ProductSpace
@@ -42,35 +43,6 @@ if TYPE_CHECKING:
     # can not import Tensor at runtime, since it would be a circular import
     # this clause allows mypy etc to evaluate the type-hints anyway
     from ..tensors import Tensor, ChargedTensor, DiagonalTensor, Mask
-
-
-_MAX_INT = np.iinfo(int).max
-
-
-def _make_stride(shape, cstyle=True):
-    """Create the strides for C- (or F-style) arrays with a given shape.
-
-    Equivalent to ``x = np.zeros(shape); return np.array(x.strides, np.intp) // x.itemsize``.
-
-    Note that ``np.sum(inds * _make_stride(np.max(inds, axis=0), cstyle=False), axis=1)`` is
-    sorted for (positive) 2D `inds` if ``np.lexsort(inds.T)`` is sorted.
-    """
-    L = len(shape)
-    stride = 1
-    res = np.empty([L], np.intp)
-    if cstyle:
-        res[L - 1] = 1
-        for a in range(L - 1, 0, -1):
-            stride *= shape[a]
-            res[a - 1] = stride
-        assert stride * shape[0] < _MAX_INT
-    else:
-        res[0] = 1
-        for a in range(0, L - 1):
-            stride *= shape[a]
-            res[a + 1] = stride
-        assert stride * shape[0] < _MAX_INT
-    return res
 
 
 def _find_row_differences(sectors: SectorArray, include_len: bool=False):
@@ -417,7 +389,7 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
         
         num_spaces = len(spaces)
         spaces_num_sectors = tuple(space.num_sectors for space in spaces)
-        metadata['_strides'] = _make_stride(spaces_num_sectors, cstyle=False)
+        metadata['_strides'] = make_stride(spaces_num_sectors, cstyle=False)
         # (save strides for :meth:`product_space_map_incoming_block_inds`)
 
         # create a grid to select the multi-index sector
@@ -851,7 +823,7 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
         """
         # convert block_inds_contr over which we sum to a 1D array for faster lookup/iteration
         # F-style strides to preserve sorting
-        stride = _make_stride([l.num_sectors for l in a.legs[cut_a:]], False)
+        stride = make_stride([l.num_sectors for l in a.legs[cut_a:]], cstyle=False)
         a_block_inds_contr = np.sum(a.data.block_inds[:, cut_a:] * stride, axis=1)
         # lex-sort a.data.block_inds, dominated by the axes kept, then the axes summed over.
         a_sort = np.lexsort(np.hstack([a_block_inds_contr[:, np.newaxis], a.data.block_inds[:, :cut_a]]).T)
@@ -1038,7 +1010,7 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
     def inner(self, a: Tensor, b: Tensor, do_conj: bool, axs2: list[int] | None) -> complex:
         # a.legs[i] to be contracted with b.legs[axs2[i]]
         a_blocks = a.data.blocks
-        stride = _make_stride([l.num_sectors for l in a.legs], False)
+        stride = make_stride([l.num_sectors for l in a.legs], cstyle=False)
         a_block_inds = np.sum(a.data.block_inds * stride, axis=1)
         if axs2 is not None:
             # permute strides to match the label order on b:

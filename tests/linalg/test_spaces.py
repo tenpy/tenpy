@@ -189,8 +189,10 @@ def test_product_space(symmetry, symmetry_sectors_rng, np_random):
     assert p2.can_contract_with(spaces.ProductSpace([s1.dual, s2.dual], _is_dual=True))
     p1_s = p1.as_VectorSpace()
     assert isinstance(p1_s, spaces.VectorSpace)
-    assert p1_s.is_equal_or_dual(p1)  # this function does not check ProductSpace vs VectorSpace
-    assert p1_s != p1  # but direct comparison does
+    assert np.all(p1_s.sectors == p1.sectors)
+    assert np.all(p1_s.multiplicities == p1.multiplicities)
+    assert not p1_s.is_equal_or_dual(p1)
+    assert p1_s != p1
     assert p1 != p1_s
 
 
