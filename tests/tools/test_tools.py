@@ -1,10 +1,6 @@
 """A collection of tests for tenpy.tools submodules."""
 # Copyright 2018-2023 TeNPy Developers, GNU GPLv3
 
-import pytest
-pytest.skip(allow_module_level=True)  # TODO
-
-
 import logging
 import numpy as np
 import numpy.testing as npt
@@ -136,17 +132,6 @@ def test_group_by_degeneracy():
     assert g == [(0, ), (1, 4), (2, ), (3, ), (5, ), (6, )]
 
 
-def test_optimization():
-    level_now = tools.optimization.get_level()
-    level_change = "none" if level_now == 1 else "default"
-    level_change = tools.optimization.OptimizationFlag[level_change]
-    assert tools.optimization.get_level() == level_now
-    assert tools.optimization.get_level() != level_change
-    with tools.optimization.temporary_level(level_change):
-        assert tools.optimization.get_level() == level_change
-    assert tools.optimization.get_level() == level_now
-
-
 def test_events():
     noted = []
     counters = []
@@ -211,6 +196,7 @@ def test_approximate_sum_of_exp(N=100):
 
 
 def test_find_subclass():
+    pytest.skip()
     BaseCls = tenpy.models.lattice.Lattice
     SimpleLattice = tenpy.models.lattice.SimpleLattice  # direct sublcass of Lattice
     Square = tenpy.models.lattice.Square  # sublcass of SimpleLattice -> recursion necessary

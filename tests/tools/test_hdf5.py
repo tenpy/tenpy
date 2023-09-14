@@ -1,7 +1,5 @@
 """Test output to and import from hdf5."""
-
-import pytest
-pytest.skip(allow_module_level=True)  # TODO
+# Copyright 2018-2023 TeNPy Developers, GNU GPLv3
 
 import io_test
 import os

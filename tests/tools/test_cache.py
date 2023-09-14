@@ -1,7 +1,5 @@
+"""A test for tenpy.tools.cache."""
 # Copyright 2019-2020 TeNPy Developers, GNU GPLv3
-
-import pytest
-pytest.skip(allow_module_level=True)  # TODO
 
 import numpy as np
 import numpy.testing as npt

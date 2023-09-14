@@ -1,8 +1,4 @@
 """A test for tenpy.tools.params."""
-
-import pytest
-pytest.skip(allow_module_level=True)  # TODO
-
 # Copyright 2018-2023 TeNPy Developers, GNU GPLv3
 
 import warnings
