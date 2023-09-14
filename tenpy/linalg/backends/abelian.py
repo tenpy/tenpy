@@ -34,7 +34,6 @@ from ..symmetries.groups import FusionStyle, BraidingStyle, Symmetry, Sector, Se
 from numpy import ndarray
 from ..symmetries.spaces import VectorSpace, ProductSpace
 from ...tools.misc import inverse_permutation, list_to_dict_list
-from ...tools.optimization import use_cython
 
 __all__ = ['AbelianBackendData', 'AbstractAbelianBackend', 'detect_qtotal']
 

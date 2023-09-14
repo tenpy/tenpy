@@ -3,7 +3,10 @@
 
 import logging
 import numpy as np
-from .optimization import bottleneck
+try:
+    import bottleneck
+except:
+    bottleneck = None
 from .process import omp_set_nthreads
 from .params import Config
 from collections.abc import Mapping
