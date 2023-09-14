@@ -35,7 +35,7 @@ from numpy import ndarray
 from ..symmetries.spaces import VectorSpace, ProductSpace
 from ...tools.misc import inverse_permutation, list_to_dict_list
 
-__all__ = ['AbelianBackendData', 'AbstractAbelianBackend', 'detect_qtotal']
+__all__ = ['AbelianBackendData', 'AbstractAbelianBackend']
 
 
 if TYPE_CHECKING:

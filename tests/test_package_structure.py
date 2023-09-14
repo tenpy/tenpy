@@ -1,7 +1,7 @@
 """Check if subpackages define proper __all__."""
 # Copyright 2019-2023 TeNPy Developers, GNU GPLv3
-import types
 
+import types
 import tenpy
 
 
