@@ -11,7 +11,7 @@ from ..tools.params import asConfig
 from ..tools.misc import argsort
 
 
-__all__ = ['KrylovBased', 'Arnoldi', 'LanczosGroundstate', 'LanczosEvolution', 'lanczos',
+__all__ = ['KrylovBased', 'Arnoldi', 'LanczosGroundState', 'LanczosEvolution', 'lanczos',
            'lanczos_arpack']
 
 
@@ -427,7 +427,7 @@ class LanczosGroundState(KrylovBased):
                 for c in self._cache[:-1]:
                     w -= c.inner(w) * c
             elif k > 0:
-                w -= beta * self._cache[-2]
+                w -= beta * self._cache[-2]  # noqa: F821
             beta = h[k, k + 1]  # = norm(w)
             w = w._mul_scalar(1. /  beta)
             psif += vf[k + 1] * w

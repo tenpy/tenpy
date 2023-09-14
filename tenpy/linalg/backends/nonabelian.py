@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from typing import Iterable, Iterator, TYPE_CHECKING
 import numpy as np
 
-from .abstract_backend import AbstractBackend, AbstractBlockBackend, Block, Dtype
+from .abstract_backend import AbstractBackend, AbstractBlockBackend, Block, Dtype, Data, DiagonalData
 from ..symmetries.groups import FusionStyle, Sector, SectorArray, Symmetry
 from ..symmetries.spaces import VectorSpace, ProductSpace
 
@@ -302,7 +302,7 @@ def _block_pairs(a: NonAbelianData, b: NonAbelianData) -> Iterator[tuple[Sector,
 
 
 class FusionTree:
-    """
+    r"""
     A fusion tree, which represents the map from uncoupled to coupled sectors
 
     Example fusion tree with

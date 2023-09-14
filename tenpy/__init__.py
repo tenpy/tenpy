@@ -176,12 +176,12 @@ def console_main(*command_line_args):
                 options = yaml.safe_load(stream)
             options_files.append(options)
         if len(options_files) > 1:
-            options = tools.misc.merge_recursive(*options_files, conflict=args.merge)
+            options = tools.misc.merge_recursive(*options_files, conflict=args.merge)  # noqa: F821 (TODO remove when tools is imported again)
     # update extra options
     if args.option:
         for key, val_string in args.option:
             val = eval(val_string, context)
-            tools.misc.set_recursive(options, key, val, insert_dicts=True)
+            tools.misc.set_recursive(options, key, val, insert_dicts=True)  # noqa: F821 (TODO remove when tools is imported again)
     if len(options) == 0:
         raise ValueError("No options supplied! Check your command line arguments!")
     if 'output_filename' not in options and 'output_filename_params' not in options:
@@ -193,9 +193,9 @@ def console_main(*command_line_args):
             del options['simulation_class_name']
         options['simulation_class'] = args.sim_class
     if 'sequential' not in options:
-        run_simulation(**options)
+        run_simulation(**options)  # noqa: F821 (TODO remove when run_simulation is imported again)
     else:
-        run_seq_simulations(**options)
+        run_seq_simulations(**options)  # noqa: F821 (TODO remove when run_simulation is imported again)
 
 
 def _setup_arg_parser(width=None):

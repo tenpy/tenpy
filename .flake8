@@ -1,9 +1,10 @@
 [flake8]
-exclude = 
+exclude =
     .git,
     __pycache__,
     build,
     dist
+    doc
 max-complexity = 10
 select = E9,F63,F7,F82
 show-source = True
