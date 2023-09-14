@@ -5,8 +5,8 @@ from typing import TYPE_CHECKING
 from numpy import prod
 
 from .abstract_backend import AbstractBackend, AbstractBlockBackend, Data, DiagonalData, Block, Dtype
-from ..symmetries.groups import no_symmetry, Symmetry
-from ..symmetries.spaces import VectorSpace, ProductSpace
+from ..groups import no_symmetry, Symmetry
+from ..spaces import VectorSpace, ProductSpace
 
 __all__ = ['AbstractNoSymmetryBackend']
 

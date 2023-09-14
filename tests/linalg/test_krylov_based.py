@@ -5,8 +5,7 @@ from numpy import testing as npt
 import numpy as np
 from scipy.linalg import expm
 
-from tenpy.linalg import krylov_based, sparse, tensors, random_matrix
-from tenpy.linalg.symmetries import spaces
+from tenpy.linalg import krylov_based, sparse, tensors, random_matrix, spaces
 
 
 @pytest.mark.parametrize(['N_cache', 'tol'], [(10, 5.e-13), (20, 5.e-14)])

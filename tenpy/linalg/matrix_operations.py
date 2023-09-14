@@ -4,7 +4,7 @@ from __future__ import annotations
 import numpy as np
 import warnings
 from numbers import Number
-from .symmetries.spaces import ProductSpace
+from .spaces import ProductSpace
 from .tensors import DiagonalTensor, AbstractTensor, Tensor, Mask, ChargedTensor, tdot, _dual_leg_label
 from ..tools.misc import inverse_permutation, to_iterable
 from ..tools.params import asConfig

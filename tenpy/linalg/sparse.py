@@ -17,7 +17,7 @@ from typing import Literal
 import numpy as np
 from scipy.sparse.linalg import LinearOperator as ScipyLinearOperator, ArpackNoConvergence
 
-from .symmetries.spaces import VectorSpace, ProductSpace, Sector
+from .spaces import VectorSpace, ProductSpace, Sector
 from .tensors import AbstractTensor, Shape, Tensor, ChargedTensor, tdot, eye_like, zero_like
 from .backends.abstract_backend import Dtype, AbstractBackend
 from .backends.numpy import NumpyBlockBackend
@@ -323,7 +323,7 @@ class NumpyArrayLinearOperator(ScipyLinearOperator):
         Function with signature ``tenpy_matvec(vec: AbstractTensor) -> AbstractTensor`.
         Has to return a tensor with the same legs and has to be linear.
         Unless `labels` are given, the leg order of the output must be the same as for the input.
-    legs : list of :class:`~tenpy.linalg.symmetries.spaces.VectorSpace`
+    legs : list of :class:`~tenpy.linalg.spaces.VectorSpace`
         The legs of a Tensor that `tenpy_matvec` can act on.
     backend : :class:`~tenpy.linalg.backends.abstract_backend.AbstractBackend`
         The backend for self
@@ -340,7 +340,7 @@ class NumpyArrayLinearOperator(ScipyLinearOperator):
     ----------
     tenpy_matvec : callable
         Function with signature ``tenpy_matvec(vec: AbstractTensor) -> AbstractTensor`.
-    legs : list of :class:`~tenpy.linalg.symmetries.spaces.VectorSpace`
+    legs : list of :class:`~tenpy.linalg.spaces.VectorSpace`
         The legs of a Tensor that `tenpy_matvec` can act on.
     backend : :class:`~tenpy.linalg.backends.abstract_backend.AbstractBackend`
         The backend for self
@@ -356,7 +356,7 @@ class NumpyArrayLinearOperator(ScipyLinearOperator):
         The number of times `tenpy_matvec` was called.
     N : int
         The length of the numpy vectors that this operator acts on
-    domain : :class:`~tenpy.linalg.symmetries.spaces.ProductSpace`
+    domain : :class:`~tenpy.linalg.spaces.ProductSpace`
         The product of the :attr:`legs`. Self is an operator on either this entire space,
         or one of its sectors, as specified by :attr:`charge_sector`.
     symmetry

@@ -6,8 +6,8 @@ from typing import TypeVar, Any, TYPE_CHECKING, Type
 from numbers import Number
 import numpy as np
 
-from ..symmetries.groups import Symmetry
-from ..symmetries.spaces import VectorSpace, ProductSpace, _fuse_spaces
+from ..groups import Symmetry
+from ..spaces import VectorSpace, ProductSpace, _fuse_spaces
 
 __all__ = ['Data', 'Block', 'AbstractBackend', 'AbstractBlockBackend']
 
@@ -304,7 +304,7 @@ class AbstractBackend(metaclass=ABCMeta):
     def qr(self, a: Tensor, new_r_leg_dual: bool, full: bool) -> tuple[Data, Data, VectorSpace]:
         """QR decomposition of a Tensor `a` with two legs.
 
-        The legs of `a` may be :class:`~tenpy.linalg.symmetries.spaces.ProductSpace`
+        The legs of `a` may be :class:`~tenpy.linalg.spaces.ProductSpace`
 
         Returns
         -------

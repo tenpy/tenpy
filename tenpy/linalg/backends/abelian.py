@@ -30,9 +30,9 @@ import warnings
 
 from .abstract_backend import AbstractBackend, AbstractBlockBackend, Data, DiagonalData, Block, Dtype
 from ..misc import make_stride
-from ..symmetries.groups import FusionStyle, BraidingStyle, Symmetry, Sector, SectorArray, AbelianGroup
+from ..groups import FusionStyle, BraidingStyle, Symmetry, Sector, SectorArray, AbelianGroup
 from numpy import ndarray
-from ..symmetries.spaces import VectorSpace, ProductSpace
+from ..spaces import VectorSpace, ProductSpace
 from ...tools.misc import inverse_permutation, list_to_dict_list
 
 __all__ = ['AbelianBackendData', 'AbstractAbelianBackend']

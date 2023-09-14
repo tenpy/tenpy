@@ -5,8 +5,7 @@ import numpy.testing as npt
 import pytest
 import scipy
 
-from tenpy.linalg import sparse, tensors
-from tenpy.linalg.symmetries import spaces
+from tenpy.linalg import sparse, tensors, spaces
 from tenpy.linalg.backends.backend_factory import get_backend
 from tenpy.linalg.tensors import AbstractTensor, Tensor, Shape, Dtype, almost_equal
 

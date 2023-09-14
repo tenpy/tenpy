@@ -11,12 +11,12 @@ from typing import TYPE_CHECKING, Sequence
 from tenpy.linalg.dummy_config import printoptions
 
 from .groups import Sector, SectorArray, Symmetry, ProductSymmetry, no_symmetry
-from ..misc import make_stride
-from ...tools.misc import inverse_permutation, to_iterable
-from ...tools.string import format_like_list
+from .misc import make_stride
+from ..tools.misc import inverse_permutation, to_iterable
+from ..tools.string import format_like_list
 
 if TYPE_CHECKING:
-    from ..backends.abstract_backend import AbstractBackend
+    from .backends.abstract_backend import AbstractBackend
 
 
 __all__ = ['VectorSpace', 'ProductSpace']
@@ -198,9 +198,9 @@ class VectorSpace:
         independent_descriptions : list of :class:`VectorSpace`
             Each entry describes the resulting :class:`VectorSpace` in terms of *one* of
             the independent symmetries.
-        symmetry: :class:`~tenpy.linalg.symmetries.groups.Symmetry`, optional
+        symmetry: :class:`~tenpy.linalg.groups.Symmetry`, optional
             The resulting symmetry can optionally be passed. We assume without checking that
-            it :meth:`~tenyp.linalg.symmetries.groups.Symemtry.is_same_symmetry` as the default
+            it :meth:`~tenyp.linalg.groups.Symemtry.is_same_symmetry` as the default
             ``ProductSymmetry.from_nested_factors([s.symmetry for s in independent_descriptions])``.
 
         Returns
@@ -233,7 +233,7 @@ class VectorSpace:
         ----------
         dim : int
             The dimension of the space.
-        symmetry : :class:`~tenpy.linalg.symmetries.groups.Symmetry`
+        symmetry : :class:`~tenpy.linalg.groups.Symmetry`
             The symmetry of the space. By default, we use `no_symetry`.
         is_real, is_dual : bool
             If the space should be real / dual.
@@ -293,7 +293,7 @@ class VectorSpace:
 
         Parameters
         ----------
-        symmetry : :class:`~tenpy.linalg.symmetries.groups.Symmetry`
+        symmetry : :class:`~tenpy.linalg.groups.Symmetry`
             The symmetry of the new space
         sector_map : function (SectorArray,) -> (SectorArray,)
             A mapping of sectors (2D ndarrays of int), such
@@ -326,10 +326,10 @@ class VectorSpace:
             If ``None`` (default) the entire symmetry is dropped and the result has ``no_symmetry``.
             An integer or list of integers assume that `self.symmetry` is a `ProductSymmetry` and
             specify which of its factors to drop.
-        remaining_symmetry : :class:`~tenyp.linalg.symmetries.groups.Symmetry`, optional
+        remaining_symmetry : :class:`~tenyp.linalg.groups.Symmetry`, optional
             The resulting symmetry can optionally be passed, e.g. to control its name.
-            Should be a :class:`~tenyp.linalg.symmetries.groups.NoSymmetry` if all symmetries are
-            dropped or :class:`~tenyp.linalg.symmetries.groups.ProductSymmetry` otherwise.
+            Should be a :class:`~tenyp.linalg.groups.NoSymmetry` if all symmetries are
+            dropped or :class:`~tenyp.linalg.groups.ProductSymmetry` otherwise.
             Is not checked for correctness (TODO or should we?).
     
         Returns

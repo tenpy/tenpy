@@ -204,7 +204,7 @@ if __name__ == "__main__":
         nargs='*',
         type=str,
         default=['u1_symmetry'],
-        help="The conserved symmetry / symmetries. Instance names or class names from tenpy.linalg.symmetries.groups")
+        help="The conserved symmetry / symmetries. Instance names or class names from tenpy.linalg.groups")
     parser.add_argument(
         '-b',
         '--backend',

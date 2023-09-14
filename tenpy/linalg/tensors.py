@@ -20,8 +20,8 @@ logger = logging.getLogger(__name__)
 from .dummy_config import printoptions
 from .misc import duplicate_entries, force_str_len, join_as_many_as_possible
 from .dummy_config import config
-from .symmetries.groups import AbelianGroup, Symmetry
-from .symmetries.spaces import VectorSpace, ProductSpace, Sector, SectorArray
+from .groups import AbelianGroup, Symmetry
+from .spaces import VectorSpace, ProductSpace, Sector, SectorArray
 from .backends.backend_factory import get_default_backend
 from .backends.abstract_backend import Dtype, Block, AbstractBackend
 from ..tools.misc import to_iterable, to_iterable_of_len
@@ -672,8 +672,8 @@ class Tensor(AbstractTensor):
         of tensors with the given symmetry.
         data about the symmetry is contained in the legs.
     backend : :class:`~tenpy.linalg.backends.abstract_backend.AbstractBackend`
-    legs : list of :class:`~tenpy.linalg.symmetries.VectorSpace`
-        These may be instances of a backend-specifc subclass of :class:`~tenpy.linalg.symmetries.VectorSpace`
+    legs : list of :class:`~tenpy.linalg.spaces.VectorSpace`
+        These may be instances of a backend-specifc subclass of :class:`~tenpy.linalg.spaces.VectorSpace`
     labels : list of {``None``, str}
     """
 
@@ -812,7 +812,7 @@ class Tensor(AbstractTensor):
         ----------
         block : Block
             The data to be converted to a Tensor as a backend-specific block.
-        legs : list of :class:`~tenpy.linalg.symmetries.VectorSpace`, optional
+        legs : list of :class:`~tenpy.linalg.spaces.VectorSpace`, optional
             The vectorspaces associated with legs of the tensors. This specifies the symmetry.
         backend : :class:`~tenpy.linalg.backends.abstract_backend.AbstractBackend`, optional
             The backend for the Tensor
@@ -851,7 +851,7 @@ class Tensor(AbstractTensor):
 
         Parameters
         ----------
-        leg : :class:`~tenpy.linalg.symmetries.spaces.VectorSpace`
+        leg : :class:`~tenpy.linalg.spaces.VectorSpace`
             The single leg of the resulting tensor
         block : backend-specific Block
             The block of shape ``(M,)`` where ``M`` is the multiplicity of the trivial sector in `leg`.
@@ -1542,7 +1542,7 @@ class ChargedTensor(AbstractTensor):
         ----------
         block :
             The data to be converted, a backend-specific block.
-        legs : list of :class:`~tenpy.linalg.symmetries.VectorSpace`, optional
+        legs : list of :class:`~tenpy.linalg.spaces.VectorSpace`, optional
             The vectorspaces associated with legs of the tensors. Contains symmetry data.
             Does not contain the dummy leg.
         backend : :class:`~tenpy.linalg.backends.abstract_backend.AbstractBackend`, optional
@@ -1593,7 +1593,7 @@ class ChargedTensor(AbstractTensor):
 
         Parameters
         ----------
-        leg : :class:`~tenpy.linalg.symmetries.spaces.VectorSpace`
+        leg : :class:`~tenpy.linalg.spaces.VectorSpace`
             The single leg of the resulting tensor
         block : backend-specific Block
             The block of shape ``(D * M,)`` where ``M`` is the multiplicity of the given `sector`

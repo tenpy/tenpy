@@ -10,7 +10,8 @@ which provides the :class:`~tenpy.linalg.tensors.Tensor` class used by the rest 
     :toctree: .
 
     tensors
-    symmetries
+    groups
+    spaces
     random_matrix
     sparse
     krylov_based
@@ -18,16 +19,18 @@ which provides the :class:`~tenpy.linalg.tensors.Tensor` class used by the rest 
 """
 # Copyright 2018-2023 TeNPy Developers, GNU GPLv3
 
-from . import symmetries, backends, tensors, random_matrix, sparse, matrix_operations
-from .symmetries import *
+from . import groups, spaces, backends, tensors, random_matrix, sparse, matrix_operations
+from .groups import *
+from .spaces import *
 from .backends import *
 from .tensors import *
 from .random_matrix import *
 from .sparse import *
 from .matrix_operations import *
 
-__all__ = ['symmetries', 'backends', 'tensors', 'random_matrix', 'sparse', 'matrix_operations',
-           *symmetries.__all__,
+__all__ = ['groups', 'spaces', 'backends', 'tensors', 'random_matrix', 'sparse', 'matrix_operations',
+           *groups.__all__,
+           *spaces.__all__,
            *backends.__all__,
            *tensors.__all__,
            *random_matrix.__all__,

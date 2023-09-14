@@ -3,7 +3,7 @@
 
 import numpy as np
 
-from tenpy.linalg.symmetries import groups, spaces
+from tenpy.linalg import groups, spaces
 from tenpy.linalg.tensors import Tensor, tdot
 from tenpy.linalg.backends.abstract_backend import AbstractBackend
 from tenpy.linalg.backends.backend_factory import get_backend

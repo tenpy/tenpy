@@ -3,7 +3,7 @@ import pytest
 import numpy as np
 from numpy.testing import assert_array_equal
 
-from tenpy.linalg.symmetries import groups
+from tenpy.linalg import groups
 
 
 def common_checks(sym: groups.Symmetry, example_sectors):

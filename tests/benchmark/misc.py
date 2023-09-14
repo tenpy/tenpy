@@ -1,7 +1,7 @@
 """Common utility functions for benchmarks"""
 # Copyright 2023 TeNPy Developers, GNU GPLv3
 import numpy as np
-from tenpy.linalg.symmetries import groups, spaces
+from tenpy.linalg import groups, spaces
 from tenpy.linalg.backends.abstract_backend import AbstractBackend
 from tenpy.linalg.backends.numpy import NumpyBlockBackend
 from tenpy.linalg.backends.no_symmetry import AbstractNoSymmetryBackend

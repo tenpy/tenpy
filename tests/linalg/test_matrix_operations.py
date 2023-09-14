@@ -5,7 +5,7 @@ import numpy.testing as npt
 import pytest
 import warnings
 
-from tenpy.linalg import tensors, matrix_operations, symmetries
+from tenpy.linalg import tensors, matrix_operations, spaces
 
 
 @pytest.mark.parametrize('new_vh_leg_dual', [True, False])
@@ -144,7 +144,7 @@ def test_eigh(tensor_rng, vector_space_rng, real):
     assert U.dtype == T.dtype
 
     print('checking legs and labels')
-    new_leg = symmetries.spaces.ProductSpace([a, b])
+    new_leg = spaces.ProductSpace([a, b])
     assert D.legs == [new_leg, new_leg.dual]
     assert D.labels == ['c*', 'c']
     assert U.legs == [a, b, new_leg.dual]

@@ -6,8 +6,8 @@ from typing import Iterable, Iterator, TYPE_CHECKING
 import numpy as np
 
 from .abstract_backend import AbstractBackend, AbstractBlockBackend, Block, Dtype, Data, DiagonalData
-from ..symmetries.groups import FusionStyle, Sector, SectorArray, Symmetry
-from ..symmetries.spaces import VectorSpace, ProductSpace
+from ..groups import FusionStyle, Sector, SectorArray, Symmetry
+from ..spaces import VectorSpace, ProductSpace
 
 if TYPE_CHECKING:
     # can not import Tensor at runtime, since it would be a circular import

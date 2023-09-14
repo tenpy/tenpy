@@ -5,7 +5,7 @@ import numpy as np
 import pytest
 
 from tenpy.linalg import backends
-from tenpy.linalg.symmetries import groups, spaces
+from tenpy.linalg import groups, spaces
 from tenpy.linalg import tensors
 from tenpy.linalg.backends.abstract_backend import Dtype
 
