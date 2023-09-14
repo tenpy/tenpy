@@ -548,7 +548,7 @@ class AbstractTensor(metaclass=ABCMeta):
                      product_spaces_dual: list[bool] = None,
                      new_axes: list[int] = None,
                      new_labels: list[str | None] = None) -> AbstractTensor:
-        """See tensors.combine_legs"""
+        """See :func:`tenpy.linalg.tensors.combine_legs`."""
         ...
 
     @abstractmethod
@@ -1106,7 +1106,7 @@ class Tensor(AbstractTensor):
                      product_spaces_dual: list[bool] = None,
                      new_axes: list[int] = None,
                      new_labels: list[str | None] = None) -> Tensor:
-        """See tensors.combine_legs"""
+        """See :func:`tenpy.linalg.tensors.combine_legs`."""
         combine_leg_idcs = [self.get_leg_idcs(ll) for ll in legs]
         for leg_idcs in combine_leg_idcs:
             assert len(leg_idcs) > 0, "empty `legs` entry"
@@ -1808,6 +1808,7 @@ class ChargedTensor(AbstractTensor):
                      product_spaces_dual: list[bool] = None,
                      new_axes: list[int] = None,
                      new_labels: list[str | None] = None) -> ChargedTensor:
+        """See :func:`tenpy.linalg.tensors.combine_legs`."""
         legs = [self.get_leg_idcs(group) for group in legs]  # needed, since invariant_part does not have the same legs
         inv = self.invariant_part.combine_legs(*legs, product_spaces=product_spaces,
                                                product_spaces_dual=product_spaces_dual,
@@ -2428,6 +2429,7 @@ class DiagonalTensor(AbstractTensor):
                      product_spaces_dual: list[bool] = None,
                      new_axes: list[int] = None,
                      new_labels: list[str | None] = None) -> Tensor:
+        """See :func:`tenpy.linalg.tensors.combine_legs`."""
         warnings.warn('Converting DiagonalTensor to Tensor in order to combine legs', stacklevel=2)
         return self.to_full_tensor().combine_legs(
             *legs, product_spaces=product_spaces, product_spaces_dual=product_spaces_dual,
@@ -2818,6 +2820,7 @@ class Mask(AbstractTensor):
                      product_spaces_dual: list[bool] = None,
                      new_axes: list[int] = None,
                      new_labels: list[str | None] = None) -> Tensor:
+        """See :func:`tenpy.linalg.tensors.combine_legs`."""
         msg = 'Converting Mask to full Tensor for `combine_legs`. If this is what you wanted, ' \
               'explicitly convert via Mask.to_full_tensor() first to supress the warning.'
         warnings.warn(msg, stacklevel=2)
@@ -3002,6 +3005,13 @@ def combine_legs(t: AbstractTensor,
                  new_labels: list[str | None] = None):
     """
     Combine (multiple) groups of legs on a tensor to (multiple) ProductSpaces.
+
+    .. warning ::
+        Combining legs introduces a basis-transformation. This is important to consider if
+        you convert to a dense block (e.g. via :meth:`AbstractTensor.to_dense_block`). In
+        particular ``some_tens.combine_legs(...).to_dense_block()`` is not equivalent
+        to ``some_tens.to_dense_block().reshape(...)``.
+        TODO provide an example
 
     Parameters
     ----------
