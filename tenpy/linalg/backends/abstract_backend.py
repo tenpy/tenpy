@@ -513,13 +513,9 @@ class AbstractBackend(metaclass=ABCMeta):
         ...
 
     @abstractmethod
-    def fuse_states(self, state1: Block | None, state2: Block | None, space1: VectorSpace,
-                    space2: VectorSpace, product_space: ProductSpace = None) -> Block | None:
-        """Given states in two VectorSpaces, compute the respective state in the product space.
-
-        States can be specified as 1D blocks.
-        If the space is one-dimensional, ``None`` is allowed and represents ``[1.]``.
-        """
+    def fuse_states(self, state1: Block, state2: Block, space1: VectorSpace,
+                    space2: VectorSpace, product_space: ProductSpace = None) -> Block:
+        """Given states in two VectorSpaces, compute the respective state in the product space."""
         ...
 
     @abstractmethod

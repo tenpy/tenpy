@@ -1479,8 +1479,9 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
             
         return AbelianBackendData(dtype=dtype, blocks=blocks, block_inds=block_inds, is_sorted=True)
 
-    def fuse_states(self, state1: Block | None, state2: Block | None, space1: VectorSpace,
-                    space2: VectorSpace, product_space: ProductSpace = None) -> Block | None:
+    def fuse_states(self, state1: Block, state2: Block, space1: VectorSpace,
+                    space2: VectorSpace, product_space: ProductSpace = None) -> Block:
+        """Given states in two VectorSpaces, compute the respective state in the product space."""
         # - do we need to consider state{1|2}.basis_perm ?
         # - use block_kron (or trivial kron=state{1|2}, if the other is None)
         # - if kron is not None, consider product_space.basis_perm ? does it even have one?
