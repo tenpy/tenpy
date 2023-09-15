@@ -1642,6 +1642,7 @@ class MultiSpeciesLattice(Lattice):
 
         from tenpy.models.lattice import *
         import tenpy
+        from copy import copy
 
     When defining the sites, you should probably call
     :func:`~tenpy.networks.site.set_common_charges` (see examples there!) to adjust the charges,
@@ -1690,9 +1691,10 @@ class MultiSpeciesLattice(Lattice):
 
         >>> simple_lat = Honeycomb(2, 3, None)
         >>> f = tenpy.networks.site.FermionSite(conserve='N')
-        >>> tenpy.networks.site.set_common_charges([f, f], 'same')  # same = total N conserved
+        >>> sites = [f, copy(f)]
+        >>> tenpy.networks.site.set_common_charges(sites, 'same')  # same = total N conserved
         [array([0, 1]), array([0, 1])]
-        >>> spinfull_fermion_Honeycomb = MultiSpeciesLattice(simple_lat, [f, f], ['up', 'down'])
+        >>> spinfull_fermion_Honeycomb = MultiSpeciesLattice(simple_lat, sites, ['up', 'down'])
 
     In this case, you could also call :func:`tenpy.networks.site.spin_half_species`.
     """
