@@ -662,7 +662,12 @@ class AbstractTensor(metaclass=ABCMeta):
         ...
 
 
-class Tensor(AbstractTensor):
+class SymmetricTensor(AbstractTensor):
+    """Common base class for tensors which are symmetric (i.e. not charged)"""
+    pass
+
+
+class Tensor(SymmetricTensor):
     """
 
     Attributes
@@ -2062,7 +2067,7 @@ class ChargedTensor(AbstractTensor):
         return VectorSpace(symmetry, sectors=[charge], multiplicities=[1]).dual
 
 
-class DiagonalTensor(AbstractTensor):
+class DiagonalTensor(SymmetricTensor):
     r"""Special case of a tensor with two legs that is diagonal in the computational basis.
 
     TODO more "elementwise" methods (exp, log, sqrt, ...?)
