@@ -185,6 +185,14 @@ class AbstractTensor(metaclass=ABCMeta):
         if symmetries were ignored"""
         return self.parent_space.dim
 
+    def flip_leg_duality(self, which_leg: int | str, *more: int | str) -> AbstractTensor:
+        """See :func:`tensors.flip_leg_duality`"""
+        res = self.copy(deep=False)
+        res.legs = self.legs[:]
+        for i in self.get_leg_idcs([which_leg, *more]):
+            res.legs[i] = res.legs[i].flip_is_dual()
+        return res
+
     def index(self, *legs: int | str) -> _TensorIndexHelper:
         """This method allows indexing a tensor "by label".
 
@@ -1736,6 +1744,11 @@ class ChargedTensor(AbstractTensor):
     def random_normal(cls) -> ChargedTensor:
         raise NotImplementedError  # TODO
 
+    def flip_dummy_leg_duality(self) -> ChargedTensor:
+        """Like :func:`flip_leg_duality` but for the dummy leg"""
+        return ChargedTensor(invariant_part=self.invariant_part.flip_leg_duality(-1),
+                             dummy_leg_state=self.dummy_leg_state)
+
     def project_to_invariant(self) -> Tensor:
         """Project self into the invariant subspace of the parent space.
 
@@ -3013,10 +3026,6 @@ class Mask(AbstractTensor):
 # API functions
 # ##################################
 
-# TODO there should be an operation that converts only one or some of the legs to dual
-#  i.e. vectorization of density matrices
-#  formally, this is contraction with the (co-)evaluation map, aka cup or cap
-
 # TODO (JU) find a good way to write type hints for these, having in mind the possible combinations
 #           of AbstractTensor-subtypes.
 
@@ -3121,6 +3130,31 @@ def detect_sectors_from_block(block: Block, legs: list[VectorSpace], backend: Ab
     idcs = backend.block_abs_argmax(block)
     sectors = [leg.sectors[leg.parse_index(i)[0]] for leg, i in zip(legs, idcs)]
     return np.stack(sectors, axis=0)
+
+
+def flip_leg_duality(t: AbstractTensor, which_leg: int | str, *more: int | str) -> AbstractTensor:
+    r"""Flip the duality of one or more legs.
+
+    E.g. flipping the second leg of a three-leg tensor (assuming the first leg is ket-like) means
+
+    .. math ::
+        t = \sum_{i,j,k} c_{i, j, k} \ket{i} \otimes \ket{j} \otimes \bra{k}
+        \mapsto \sum_{i,j} c_{i, j} \ket{i} \otimes \bra{j} \otimes \bra{k}
+
+    Notes
+    -----
+    This is a basis-dependent notion. It depends on the choice of (co-)evaluation maps.
+    Here we choose the canonical maps
+
+    .. math ::
+        \varepsilon_V\colon V^* \otimes V \to \mathbb{C} , \bra{m} \otimes \bra{n} \mapsto \delta_{m, n}
+
+        \eta_V\colon \mathbb{C} \to V \otimes V^* , \alpha \mapsto \alpha \sum_n \ket{n} \otimes \bra{n}
+
+    which are defined by linear extension and depend on the basis :math:`\set{n}`.
+    """
+    # TODO test coverage
+    return t.flip_leg_duality(which_leg, *more)
 
 
 def inner(t1: AbstractTensor, t2: AbstractTensor, do_conj: bool = True,
