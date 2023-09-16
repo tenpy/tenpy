@@ -69,6 +69,11 @@ def test_Tensor_classmethods(backend, vector_space_rng, backend_data_rng, tensor
     tens.test_sanity()
     data = backend.block_to_numpy(tens.to_dense_block())
     npt.assert_array_equal(data, numpy_block)
+    #
+    if T.num_parameters < T.parent_space.dim:  # otherwise all blocks are symmetric
+        non_symmetric_block = dense_block + tens.backend.block_random_uniform(dims, dtype=T.dtype)
+        with pytest.raises(ValueError):
+            _ = tensors.Tensor.from_dense_block(non_symmetric_block, legs=legs, backend=backend)
 
     print('checking from_numpy')
     tens = tensors.Tensor.from_numpy(numpy_block, legs=legs, backend=backend)

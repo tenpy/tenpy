@@ -213,7 +213,7 @@ class AbstractBackend(metaclass=ABCMeta):
                          ) -> Data:
         """Convert a dense block to the data for a symmetric tensor.
         If the block is not symmetric, measured by ``allclose(a, projected, atol, rtol)``,
-        where ``projected`` is `a` projected to the space of symmetric tensors
+        where ``projected`` is `a` projected to the space of symmetric tensors, raise a ``ValueError``.
         This includes a permutation of the basis, specified by the legs of `a`.
         (see e.g. VectorSpace.basis_perm).
         """

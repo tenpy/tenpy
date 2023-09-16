@@ -498,12 +498,16 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
 
     def from_dense_block(self, a: Block, legs: list[VectorSpace], atol: float = 1e-8, rtol: float = 1e-5) -> AbelianBackendData:
         a = self.apply_basis_perm(a, legs)
+        projected = self.zero_block(self.block_shape(a), dtype=self.block_dtype(a))
         dtype = self.block_dtype(a)
         block_inds = _valid_block_indices(legs)
         blocks = []
         for b_i in block_inds:
-            slices = [slice(*leg.slices[i]) for i, leg in zip(b_i, legs)]
-            blocks.append(a[tuple(slices)])
+            slices = tuple(slice(*leg.slices[i]) for i, leg in zip(b_i, legs))
+            blocks.append(a[slices])
+            projected[slices] = a[slices]
+        if not self.block_allclose(a, projected, atol=atol, rtol=rtol):
+            raise ValueError('Block is not symmetric up to tolerance.')
         return AbelianBackendData(dtype, blocks, block_inds, is_sorted=True)
 
     def diagonal_from_block(self, a: Block, leg: VectorSpace) -> DiagonalData:
