@@ -797,11 +797,7 @@ class AbstractBlockBackend(metaclass=ABCMeta):
 
     def apply_leg_permutations(self, block: Block, perms: list[np.ndarray]) -> Block:
         """Apply permutations to every axis of a dense block"""
-        # OPTIMIZE could not figure out how to do this in one go in numpy...
-        for ax, p in enumerate(perms):
-            idx = (slice(None, None, None),) * ax + (p,)
-            block = block[idx]
-        return block
+        return block[np.ix_(*perms)]
 
     def apply_basis_perm(self, block: Block, legs: list[VectorSpace], inv: bool = False) -> Block:
         """Apply basis_perm of a VectorSpace (or its inverse) on every axis of a dense block"""
