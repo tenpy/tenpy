@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 from .dummy_config import printoptions
 from .misc import duplicate_entries, force_str_len, join_as_many_as_possible
 from .dummy_config import config
-from .groups import AbelianGroup, Symmetry
+from .groups import AbelianGroup, Symmetry, FusionStyle
 from .spaces import VectorSpace, ProductSpace, Sector, SectorArray
 from .backends.backend_factory import get_default_backend
 from .backends.abstract_backend import Dtype, Block, AbstractBackend
@@ -3363,6 +3363,47 @@ def match_leg_order(t1: AbstractTensor, t2: AbstractTensor) -> list[int] | None:
         return t2.get_leg_idcs(t1.labels)
     else:
         return None
+
+
+def tensor_from_block(block: Block, legs: list[VectorSpace], backend: AbstractBackend,
+                      labels: list[str] = None) -> ChargedTensor | Tensor:
+    """Assume the block lives in a single symmetry sector and convert to tensor.
+
+    Parameters
+    ----------
+    block : backend-specific block
+        The data to convert.
+    legs : list of :class:`VectorSpace`
+        The legs of the resulting tensor. Length must match number of axes of `block`.
+    backend : :class:`AbstractBackend`
+        The backend for the resulting tensor.
+    labels : list of str, optional
+        The labels for the resulting tensor.
+
+    Returns
+    -------
+    If the block is symmetric, i.e. lives in the trivial sector, returns a :class:`Tensor`.
+    Otherwise, returns a :class:`ChargedTensor`.
+    """
+    # TODO test
+    sectors = detect_sectors_from_block(block=block, legs=legs, backend=backend)
+    symmetry = legs[0].symmetry
+    if symmetry.fusion_style != FusionStyle.single:
+        # TODO in the non-abelian case we can not infer a single sector from the largest entry.
+        #  multiple sectors could have entries at that position.
+        #  The code below identifies all of these sectors and packages them in the dummy_leg.
+        #  We should either:
+        #   a) Assume the block is only in one of those sectors and identify which be calculating
+        #      overlaps.
+        #   b) leave that as is (allow multi-dimensional dummy_leg) and adjust docs accordingly
+        raise NotImplementedError
+    assert all(leg.symmetry == symmetry for leg in legs[1:])
+    dummy_leg = ProductSpace([VectorSpace(symmetry, s) for s in sectors]).dual.as_VectorSpace()
+    if np.all(dummy_leg.sectors == symmetry.trivial_sector[None, :]):
+        return Tensor.from_dense_block(block, legs=legs, backend=backend, labels=labels)
+    else:
+        return ChargedTensor.from_dense_block(block, legs=legs, backend=backend, labels=labels,
+                                              charge=dummy_leg)
 
 
 # ##################################
