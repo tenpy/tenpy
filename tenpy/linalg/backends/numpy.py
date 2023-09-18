@@ -101,6 +101,18 @@ class NumpyBlockBackend(AbstractBlockBackend):
     def block_conj(self, a: Block) -> Block:
         return np.conj(a)
 
+    def block_angle(self, a: Block) -> Block:
+        return np.angle(a)
+
+    def block_real(self, a: Block) -> Block:
+        return np.real(a)
+
+    def block_real_if_close(self, a: Block, tol: float) -> Block:
+        return np.real_if_close(a, tol=tol)
+
+    def block_imag(self, a: Block) -> Block:
+        return np.imag(a)
+
     def block_exp(self, a: Block) -> Block:
         return np.exp(a)
 

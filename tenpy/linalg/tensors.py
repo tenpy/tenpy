@@ -31,7 +31,7 @@ from ..tools.string import vert_join
 __all__ = ['Shape', 'AbstractTensor', 'Tensor', 'ChargedTensor', 'DiagonalTensor', 'Mask',
            'almost_equal', 'combine_legs', 'conj', 'inner', 'is_scalar', 'norm', 'outer',
            'permute_legs', 'split_legs', 'squeeze_legs', 'tdot', 'trace', 'zero_like',
-           'get_same_backend', 'match_leg_order']
+           'get_same_backend', 'match_leg_order', 'angle', 'real', 'imag', 'real_if_close']
 
 # svd, qr, eigen, exp, log, ... are implemented in matrix_operations.py
 
@@ -3326,6 +3326,68 @@ def eye_like(tens: AbstractTensor) -> Tensor | DiagonalTensor:
             raise ValueError(msg)
     return tens.eye(legs=legs_1, backend=tens.backend, labels=tens.labels, dtype=tens.dtype)
 
+
+# ##################################
+# element-wise function for DiagonalTensor
+# ##################################
+
+ElementwiseData = TypeVar('ElementwiseData', Number, DiagonalTensor)
+
+# TODO more functions?
+
+
+def angle(x: ElementwiseData) -> ElementwiseData:
+    """The angle of a complex number, applied elementwise to `DiagonalTensor`s.
+
+    The counterclockwise angle from the positive real axis on the complex plane in the
+    range (-pi, pi] with a real dtype. The angle of `0.` is `0.`.
+    """
+    if isinstance(x, DiagonalTensor):
+        return x._elementwise_unary(x.backend.block_angle, maps_zero_to_zero=True)
+    assert isinstance(x, Number)
+    return np.angle(x)
+    
+
+def real(x: ElementwiseData) -> ElementwiseData:
+    """The real part of a complex number, applied elementwise to `DiagonalTensor`s"""
+    if isinstance(x, DiagonalTensor):
+        return x._elementwise_unary(x.backend.block_real, maps_zero_to_zero=True)
+    assert isinstance(x, Number)
+    return np.real(x)
+
+
+def real_if_close(x: ElementwiseData, tol: float = 100) -> ElementwiseData:
+    """If the :func:`imag` part is close to 0, return the :func:`real` part.
+
+    Parameters
+    ----------
+    x : :class:`DiagonalTensor` | Number
+        The input complex number(s)
+    tol : float
+        The precision for considering the imaginary part "close to zero".
+        Multiples of machine epsilon for the dtype of `x`.
+
+    Returns
+    -------
+    If `x` is close to real, the real part of `x`. Otherwise the original complex `x`.
+    """
+    if isinstance(x, DiagonalTensor):
+        return x._elementwise_unary(x.backend.block_real_if_close, func_kwargs=dict(tol=tol),
+                                    maps_zero_to_zero=True)
+    assert isinstance(x, Number)
+    return np.real_if_close(x)
+
+
+def imag(x: ElementwiseData) -> ElementwiseData:
+    """The imaginary part of a complex number, applied elementwise to `DiagonalTensor`s"""
+    if isinstance(x, DiagonalTensor):
+        return x._elementwise_unary(x.backend.block_imag, maps_zero_to_zero=True)
+    assert isinstance(x, Number)
+    return np.imag(x)
+
+
+# we define abs via __abs__ on diagonal tensors
+    
 
 # ##################################
 # utility functions

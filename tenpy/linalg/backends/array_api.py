@@ -101,6 +101,18 @@ class ArrayApiBlockBackend(AbstractBlockBackend):
     def block_conj(self, a: Block) -> Block:
         return self._api.conj(a)
 
+    def block_angle(self, a: Block) -> Block:
+        raise NotImplementedError  # TODO
+
+    def block_real(self, a: Block) -> Block:
+        return self._api.real(a)
+
+    def block_real_if_close(self, a: Block, tol: float) -> Block:
+        raise NotImplementedError  # TODO
+
+    def block_imag(self, a: Block) -> Block:
+        return self._api.imag(a)
+
     def block_exp(self, a: Block) -> Block:
         return self._api.exp(a)
 

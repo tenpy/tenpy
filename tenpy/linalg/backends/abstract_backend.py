@@ -624,6 +624,27 @@ class AbstractBlockBackend(metaclass=ABCMeta):
         ...
 
     @abstractmethod
+    def block_angle(self, a: Block) -> Block:
+        """The angle of a complex number such that ``a == exp(1.j * angle(a))``. Elementwise."""
+        ...
+
+    @abstractmethod
+    def block_real(self, a: Block) -> Block:
+        """The real part of a complex number, elementwise."""
+        ...
+
+    @abstractmethod
+    def block_real_if_close(self, a: Block, tol: float) -> Block:
+        """If a block is close to its real part, return the real part. Otherwise the original block.
+        Elementwise."""
+        ...
+
+    @abstractmethod
+    def block_imag(self, a: Block) -> Block:
+        """The imaginary part of a complex number, elementwise."""
+        ...
+
+    @abstractmethod
     def block_exp(self, a: Block) -> Block:
         """The *elementwise* exponential. Not to be confused with :meth:`matrix_exp`, the *matrix*
         exponential."""

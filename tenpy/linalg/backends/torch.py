@@ -107,6 +107,18 @@ class TorchBlockBackend(AbstractBlockBackend):
     def block_conj(self, a: Block) -> Block:
         return torch_module.conj(a)
 
+    def block_angle(self, a: Block) -> Block:
+        return torch_module.angle(a)
+
+    def block_real(self, a: Block) -> Block:
+        return torch_module.real(a)
+
+    def block_real_if_close(self, a: Block, tol: float) -> Block:
+        raise NotImplementedError  # TODO
+
+    def block_imag(self, a: Block) -> Block:
+        return torch_module.imag(a)
+
     def block_exp(self, a: Block) -> Block:
         return torch_module.exp(a)
 

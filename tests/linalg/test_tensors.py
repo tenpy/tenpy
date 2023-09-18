@@ -693,6 +693,32 @@ def test_detect_sectors_from_block(backend, symmetry, symmetry_sectors_rng, np_r
             npt.assert_array_equal(sector, sectors[which])
 
 
+@pytest.mark.parametrize('function, data_imag', [('real', 0), ('real', 1),
+                                                 ('imag', 0), ('imag', 1),
+                                                 ('angle', 0), ('angle', 1.),
+                                                 ('real_if_close', 0), ('real_if_close', 1e-16),
+                                                 ('real_if_close', 1e-12), ('real_if_close', 1)
+                                                 ])
+def test_elementwise_functions(vector_space_rng, np_random, function, data_imag):
+    leg = vector_space_rng()
+    np_func = getattr(np, function)  # e.g. np.real
+    tp_func = getattr(tensors, function)  # e.g. tenpy.linalg.tensors.real
+    data = np_random.random((leg.dim,))
+    if data_imag > 0:
+        data = data + data_imag * np_random.random((leg.dim,))
+    tens = tensors.DiagonalTensor.from_diag_numpy(diag=data, first_leg=leg)
+
+    print('scalar input')
+    res = tp_func(data[0])
+    expect = np_func(data[0])
+    npt.assert_array_almost_equal_nulp(res, expect)
+
+    print('DiagonalTensor input')
+    res = tp_func(tens).diag_numpy
+    expect = np_func(data)
+    npt.assert_array_almost_equal_nulp(res, expect)
+
+
 def demo_repr():
     # this is intended to generate a bunch of demo reprs
     # can not really make this an automated test, the point is for a human to have a look
