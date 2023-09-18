@@ -1266,9 +1266,18 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
     def act_block_diagonal_square_matrix(self, a: Tensor, block_method: str) -> Data:
         """Apply functions like exp() and log() on a (square) block-diagonal `a`."""
         block_method = getattr(self, block_method)
-        res_blocks = [block_method(b) for b in a.data.blocks]
+        a_block_inds = a.data.block_inds
+        all_block_inds = np.repeat(np.arange(a.legs[0].num_sectors)[:, None], 2, axis=1)  # [[0, 0], [1, 1], ...]
+        res_blocks = []
+        for i, j in _iter_common_noncommon_sorted_arrays(a_block_inds, all_block_inds):
+            if i is None:
+                # use that all_block_inds is just ascending -> all_block_inds[j, 0] == j
+                block = self.zero_block(shape=[a.legs[0].multiplicities[j]] * 2, dtype=a.dtype)
+            else:
+                block = a.data.blocks[i]
+            res_blocks.append(block_method(block))
         dtype = a.data.dtype if len(res_blocks) == 0 else self.block_dtype(res_blocks[0])
-        return AbelianBackendData(dtype, res_blocks, a.data.block_inds, is_sorted=True)
+        return AbelianBackendData(dtype, res_blocks, all_block_inds, is_sorted=True)
 
     def add(self, a: Tensor, b: Tensor) -> Data:
         a_blocks = a.data.blocks
@@ -1430,9 +1439,10 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
             a_block_inds = a.data.block_inds
             block_inds = np.repeat(np.arange(a.legs[0].num_sectors)[:, None], 2, axis=1)
             blocks = []
-            for _, j in _iter_common_noncommon_sorted_arrays(block_inds, a_block_inds):
+            for i, j in _iter_common_noncommon_sorted_arrays(block_inds, a_block_inds):
                 if j is None:
-                    block = self.zero_block([a.legs[0].multiplicities[a_block_inds[j, 0]]], dtype=a.dtype)
+                    # use that block_inds is just arange -> block_inds[i, 0] == i
+                    block = self.zero_block([a.legs[0].multiplicities[i]], dtype=a.dtype)
                 else:
                     block = a_blocks[j]
                 blocks.append(func(block, **func_kwargs))

@@ -101,6 +101,12 @@ class NumpyBlockBackend(AbstractBlockBackend):
     def block_conj(self, a: Block) -> Block:
         return np.conj(a)
 
+    def block_exp(self, a: Block) -> Block:
+        return np.exp(a)
+
+    def block_log(self, a: Block) -> Block:
+        return np.log(a)
+
     def block_allclose(self, a: Block, b: Block, rtol: float, atol: float) -> bool:
         return np.allclose(a, b, rtol=rtol, atol=atol)
 

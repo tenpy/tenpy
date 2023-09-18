@@ -107,6 +107,12 @@ class TorchBlockBackend(AbstractBlockBackend):
     def block_conj(self, a: Block) -> Block:
         return torch_module.conj(a)
 
+    def block_exp(self, a: Block) -> Block:
+        return torch_module.exp(a)
+
+    def block_log(self, a: Block) -> Block:
+        return torch_module.log(a)
+
     def block_allclose(self, a: Block, b: Block, rtol: float, atol: float) -> bool:
         return torch_module.allclose(a, b, rtol=rtol, atol=atol)
 

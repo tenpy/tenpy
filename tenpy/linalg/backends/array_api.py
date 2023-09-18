@@ -101,6 +101,12 @@ class ArrayApiBlockBackend(AbstractBlockBackend):
     def block_conj(self, a: Block) -> Block:
         return self._api.conj(a)
 
+    def block_exp(self, a: Block) -> Block:
+        return self._api.exp(a)
+
+    def block_log(self, a: Block) -> Block:
+        return self._api.log(a)
+
     def block_allclose(self, a: Block, b: Block, rtol: float, atol: float) -> bool:
         res = self._api.all(self._api.abs(a - b) <= (atol + rtol * self._api.abs(b)))
         return self.block_item(res)

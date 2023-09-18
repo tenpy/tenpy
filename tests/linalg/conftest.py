@@ -1,4 +1,19 @@
-"""Provide test configuration for backends etc."""
+"""Provide test configuration for backends etc.
+
+TODO format this summary of fixtures:
+
+np_random : np.random.Generator
+symmetry : Symmetry
+symmetry_sectors_rng : function (size: int, sort: bool = False) -> SectorArray
+vector_space_rng : function (max_num_blocks: int = 4, max_block_size: int = 8) -> VectorSpace
+default_backend : AbstractBackend
+block_backend : str
+backend : AbstractBackend
+block_rng : function (size: list[int], real: bool = True) -> Block
+backend_data_rng : function (legs: list[VectorSpace], real: bool = True) -> BackendData
+tensor_rng : function (legs: list[VectorSpace] = None, num_legs: int = 2, labels: list[str] = None,
+                       max_num_block: int = 5, max_block_size: int = 5, real: bool = True) -> Tensor
+"""
 # Copyright 2023-2023 TeNPy Developers, GNU GPLv3
 
 import numpy as np

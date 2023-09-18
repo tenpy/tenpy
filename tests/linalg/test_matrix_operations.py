@@ -1,6 +1,7 @@
 """A collection of tests for tenpy.linalg.matrix_operations."""
 # Copyright 2023-2023 TeNPy Developers, GNU GPLv3
 import numpy as np
+import scipy
 import numpy.testing as npt
 import pytest
 import warnings
@@ -160,3 +161,30 @@ def test_eigh(tensor_rng, vector_space_rng, real):
     assert tensors.almost_equal(U_Ud, tensors.eye_like(U_Ud))
     Ud_U = tensors.tdot(U.conj(), U, ['a*', 'b*'], ['a', 'b'])
     assert tensors.almost_equal(Ud_U, tensors.eye_like(Ud_U))
+
+
+@pytest.mark.parametrize('func, mode', [(func, mode)
+                                        for func in ['exp']  # TODO add log
+                                        for mode in ['matrix', 'diagonal', 'scalar']])
+def test_power_series_funcs(vector_space_rng, tensor_rng, np_random, func, mode):
+    # common tests for matrix power series functions, such as exp, log etc
+    tp_func = getattr(matrix_operations, func)
+    np_func = dict(exp=scipy.linalg.expm, log=scipy.linalg.logm)[func]
+    leg = vector_space_rng()
+    if mode == 'matrix':
+        tens = tensor_rng(legs=[leg, leg.dual])
+        res = tp_func(tens).to_numpy_ndarray()
+        expect = np_func(tens.to_numpy_ndarray())
+    elif mode == 'diagonal':
+        data = np_random.random((leg.dim,))
+        tens = tensors.DiagonalTensor.from_diag_numpy(diag=data, first_leg=leg)
+        res = tp_func(tens).to_numpy_ndarray()
+        expect = np_func(np.diag(data))
+    elif mode == 'scalar':
+        data = np_random.random((1, 1))
+        res = tp_func(data.item())
+        expect = np_func(data).item()
+    else:
+        raise RuntimeError
+    npt.assert_array_almost_equal_nulp(res, expect, 100)
+    

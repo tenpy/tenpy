@@ -520,9 +520,9 @@ def exp(t: AbstractTensor | complex | float, legs1: list[int | str] = None,
     if isinstance(t, Tensor):
         return _act_block_diagonal_square_matrix(t, legs1, legs2, 'matrix_exp')
     if isinstance(t, DiagonalTensor):
-        raise NotImplementedError  # TODO
+        return t._elementwise_unary(t.backend.block_exp)
     if isinstance(t, Number):
-        raise NotImplementedError  # TODO
+        return np.exp(t)
     raise TypeError(f'Unsupported type for exp: {type(t)}')
 
 
@@ -536,9 +536,9 @@ def log(t: AbstractTensor | complex | float, legs1: list[int | str] = None,
     if isinstance(t, Tensor):
         return _act_block_diagonal_square_matrix(t, legs1, legs2, 'matrix_log')
     if isinstance(t, DiagonalTensor):
-        raise NotImplementedError  # TODO
+        return t._elementwise_unary(t.backend.block_log)
     if isinstance(t, Number):
-        raise NotImplementedError  # TODO
+        return np.log(t)
     raise TypeError(f'Unsupported type for log: {type(t)}')
 
 

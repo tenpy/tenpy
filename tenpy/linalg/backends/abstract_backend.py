@@ -623,6 +623,18 @@ class AbstractBlockBackend(metaclass=ABCMeta):
         """complex conjugate of a block"""
         ...
 
+    @abstractmethod
+    def block_exp(self, a: Block) -> Block:
+        """The *elementwise* exponential. Not to be confused with :meth:`matrix_exp`, the *matrix*
+        exponential."""
+        ...
+
+    @abstractmethod
+    def block_log(self, a: Block) -> Block:
+        """The *elementwise* natural logarithm. Not to be confused with :meth:`matrix_log`, the
+        *matrix* logarithm."""
+        ...
+
     def block_combine_legs(self, a: Block, legs_slices: list[tuple[int]]) -> Block:
         """no transpose, only reshape ``legs[b:e] for b,e in legs_slicse`` to single legs"""
         old_shape = self.block_shape(a)
