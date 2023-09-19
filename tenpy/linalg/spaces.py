@@ -369,6 +369,7 @@ class VectorSpace:
                 remaining_symmetry = factors[0]
             else:
                 remaining_symmetry = ProductSymmetry(factors)
+        # TODO check compatible otherwise?
 
         mask = np.ones((self.dim,), dtype=bool)
         for i in which:
@@ -1126,10 +1127,15 @@ class ProductSpace(VectorSpace):
         return ProductSpace([s.change_symmetry(symmetry=symmetry, sector_map=sector_map)
                              for s in self.spaces], backend=backend, _is_dual=self.is_dual)
 
-    def drop_symmetry(self, symmetry: Symmetry = None):
-        """Drop the symmetry to a NoSymmetry"""
+    def drop_symmetry(self, which: int | list[int] = None, remaining_symmetry: Symmetry = None):
         # TODO do we need the backend arg of ProductSpace.__init__?
-        return ProductSpace([s.drop_symmetry() for s in self.spaces], _is_dual=self.is_dual)
+        if len(self.spaces) == 0:
+            return ProductSpace([], _is_dual=self.is_dual)
+        first = self.spaces[0].drop_symmetry(which, remaining_symmetry)
+        if remaining_symmetry is None:
+            remaining_symmetry = first.symmetry
+        rest = [space.drop_symmetry(which, remaining_symmetry) for space in self.spaces[1:]]
+        return ProductSpace([first] + rest, _is_dual=self.is_dual)
 
     def flip_is_dual(self) -> ProductSpace:
         """Return a ProductSpace isomorphic to self, which has the opposite is_dual attribute.
