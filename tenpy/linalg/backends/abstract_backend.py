@@ -513,12 +513,6 @@ class AbstractBackend(metaclass=ABCMeta):
         ...
 
     @abstractmethod
-    def fuse_states(self, state1: Block, state2: Block, space1: VectorSpace,
-                    space2: VectorSpace, product_space: ProductSpace = None) -> Block:
-        """Given states in two VectorSpaces, compute the respective state in the product space."""
-        ...
-
-    @abstractmethod
     def apply_mask_to_Tensor(self, tensor: Tensor, mask: Mask, leg_idx: int) -> Data:
         ...
 

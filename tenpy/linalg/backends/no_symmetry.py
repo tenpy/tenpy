@@ -212,12 +212,6 @@ class AbstractNoSymmetryBackend(AbstractBackend, AbstractBlockBackend, ABC):
                                     ) -> DiagonalData:
         return func(a.data, b.data, **func_kwargs)
 
-    def fuse_states(self, state1: Block, state2: Block, space1: VectorSpace,
-                    space2: VectorSpace, product_space: ProductSpace = None) -> Block:
-        """Given states in two VectorSpaces, compute the respective state in the product space."""
-        raise NotImplementedError  # TODO what about basis_perm ?
-        # return self.block_kron(state1, state2)
-
     def apply_mask_to_Tensor(self, tensor: Tensor, mask: Mask, leg_idx: int) -> Data:
         return self.apply_mask_to_block(tensor.data, mask.data, ax=leg_idx)
 

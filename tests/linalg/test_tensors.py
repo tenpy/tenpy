@@ -564,6 +564,28 @@ def test_combine_split(tensor_rng):
         assert np.allclose(split.to_numpy_ndarray(), dense.transpose([0, 1, 3, 2]))
 
 
+@pytest.mark.xfail  # TODO
+def test_combine_legs_basis_trafo(tensor_rng):
+    tens = tensor_rng(labels=['a', 'b', 'c'], max_num_blocks=5, max_block_size=5)
+    a, b, c = tens.shape
+    dense = tens.to_numpy_ndarray()  # [a, b, c]
+    combined = tensors.combine_legs(tens, ['a', 'b'])
+    dense_combined = combined.to_dense_block()  # [(a.b), c]
+
+    print('check via perm')
+    perm = combined.get_legs('(a.b)')[0].get_basis_transformation_perm()
+    assert all(0 <= p < len(perm) for p in perm)
+    assert len(set(perm)) == len(perm)
+    reconstruct_combined = np.reshape(dense, (a * b, c))[perm, :]
+    
+    npt.assert_array_almost_equal_nulp(dense_combined, reconstruct_combined, 100)
+
+    print('check via trafo')
+    trafo = combined.get_legs('(a.b)')[0].get_basis_transformation()  # [a, b, (a.b)]
+    reconstruct_combined = np.tensordot(trafo, dense, [[0, 1], [0, 1]])  # [(a.b), c]
+    npt.assert_array_almost_equal_nulp(dense_combined, reconstruct_combined, 100)
+
+
 def test_is_scalar(backend, tensor_rng, vector_space_rng):
     for s in [1, 0., 1.+2.j, np.int64(123), np.float64(2.345), np.complex128(1.+3.j)]:
         assert tensors.is_scalar(s)

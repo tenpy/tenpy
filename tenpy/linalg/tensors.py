@@ -244,6 +244,7 @@ class AbstractTensor(metaclass=ABCMeta):
             return list(map(self.get_leg_idx, which_legs))
 
     def get_legs(self, which_legs: int | str | list[int | str]) -> list[VectorSpace]:
+        # TODO getting a single leg would be convenient...
         return [self.legs[idx] for idx in self.get_leg_idcs(which_legs)]
 
     def to_numpy_ndarray(self, leg_order: list[int | str] = None, numpy_dtype=None) -> np.ndarray:
@@ -1708,10 +1709,7 @@ class ChargedTensor(AbstractTensor):
         invariant_part = invariant_part.combine_legs(-2, -1)
         product_space: ProductSpace = invariant_part.legs[-1]
         if state1 is not None and state2 is not None:
-            state = invariant_part.backend.fuse_states(
-                state1=state1, state2=state2, space1=product_space.spaces[0],
-                space2=product_space[1].spaces, product_space=product_space
-            )
+            state = product_space.fuse_states([state1, state2], backend=invariant_part.backend)
         elif state1 is None and state2 is None:
             state = None
         elif state1 is None and leg1.dim == 1:  # state1 ~= [1.]
@@ -3076,7 +3074,7 @@ def combine_legs(t: AbstractTensor,
         you convert to a dense block (e.g. via :meth:`AbstractTensor.to_dense_block`). In
         particular ``some_tens.combine_legs(...).to_dense_block()`` is not equivalent
         to ``some_tens.to_dense_block().reshape(...)``.
-        TODO provide an example
+        See :meth:`ProductSpace.get_basis_transformation`.
 
     Parameters
     ----------

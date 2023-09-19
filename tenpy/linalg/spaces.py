@@ -4,19 +4,20 @@ from __future__ import annotations
 import numpy as np
 from numpy import ndarray
 import copy
-import warnings
+from functools import reduce
 import bisect
 from typing import TYPE_CHECKING, Sequence
 
 from tenpy.linalg.dummy_config import printoptions
 
-from .groups import Sector, SectorArray, Symmetry, ProductSymmetry, no_symmetry
-from .misc import make_stride, find_row_differences
+from .groups import (Sector, SectorArray, Symmetry, ProductSymmetry, NoSymmetry, no_symmetry,
+                     FusionStyle)
+from .misc import make_stride, find_row_differences, unstridify
 from ..tools.misc import inverse_permutation, to_iterable
 from ..tools.string import format_like_list
 
 if TYPE_CHECKING:
-    from .backends.abstract_backend import AbstractBackend
+    from .backends.abstract_backend import AbstractBackend, Block
 
 
 __all__ = ['VectorSpace', 'ProductSpace']
@@ -750,6 +751,8 @@ class ProductSpace(VectorSpace):
          of :attr:`spaces` has meaning and you shouldnt mess with it. But since that determines
          the :attr:`basis_perm` of the ProductSpace, this should be clear anyway.
 
+    TODO elaborate on basis transformation from uncoupled to coupled basis.
+
     Attributes
     ----------
     basis_perm : ndarray
@@ -883,6 +886,222 @@ class ProductSpace(VectorSpace):
                            is_real=self.is_real,
                            basis_perm=None,
                            _is_dual=self.is_dual,)
+
+    def get_basis_transformation(self) -> np.ndarray:
+        r"""Get the basis transformation from uncoupled to coupled basis.
+
+        The uncoupled basis of the ProductSpace :math:`P = V \otimes W \otimes \dots \otimes Z`
+        is given by products of the individual ("uncoupled") basis elements, i.e. by elements of
+        the form :math:`v_{i_1} \otimes w_{i_2} \otimes \dots \otimes z_{i_n}`.
+        In particular, the order for the uncoupled basis does *not*
+        consider :attr:`Vectorspace.basis_perm`, i.e. it is in general not grouped by sectors.
+        The coupled basis is organized by sectors. See the :class:`ProductSpace` docstring for
+        details.
+
+        Returns
+        -------
+        trafo : ndarray
+            A numpy array with shape ``(*space.dim for space in self.spaces, self.dim)``.
+            The first axes go over the basis for each of the :attr:`spaces` (in public order).
+            The last axis goes over the coupled basis of self.
+            The entries are coefficients of the basis trasnformation such that
+
+            .. math ::
+                \ket{c} = \sum_{i_1, \dots, i_N} \texttt{trafo[i1, ..., iN]}
+                          \ket{i_1} \otimes \dots \otimes \ket{i_n}
+
+        See Also
+        --------
+        get_basis_transformation_perm
+            For abelian symmetries, the basis transformation, when reshaped to a square matrix,
+            is just a permutation matrix. This method directly returns the permutation.
+
+        Examples
+        --------
+        See :meth:`get_basis_transformation_perm` for an example with an abelian symmetry.
+
+        Consider two spin-1/2 sites with SU(2) conservation.
+        For both sites, we choose the basis :math:`\set{\ket{\uparrow}, \ket{\downarrow}}`.
+        The uncoupled basis for the product is
+
+        .. math ::
+            \set{\ket{\uparrow;\uparrow}, \ket{\uparrow;\downarrow}, \ket{\downarrow;\uparrow},
+                 \ket{\downarrow;\downarrow}}
+
+        But the coupled basis is given by a basis transformation
+
+        .. math ::
+            \ket{s=0, m=0} = \frac{1}{\sqrt{2}}\left( \ket{\uparrow;\downarrow} - \ket{\downarrow;\uparrow} \right)
+            \ket{s=1, m=-1} = \ket{\downarrow;\downarrow}
+            \ket{s=1, m=0} = \frac{1}{\sqrt{2}}\left( \ket{\uparrow;\downarrow} + \ket{\downarrow;\uparrow} \right)
+            \ket{s=1, m=1} = \ket{\uparrow;\uparrow}
+
+        Such that we get
+
+        TODO unskip the doctest
+
+        .. testsetup :: get_basis_transformation
+            from tenpy.linalg import ProductSpace, VectorSpace, su2_symmetry
+
+        .. doctest :: get_basis_transformation
+            :options: +SKIP
+
+            >>> spin_one_half = [1]  # sectors are labelled by 2*S
+            >>> site = VectorSpace(z2_symmetry, [spin_one_half])
+            >>> prod_space = ProductSpace([site, site])
+            >>> trafo = prod_space.get_basis_transformation()
+            >>> trafo[:, :, 0]  # | s=0, m=0 >
+            array([[ 0.        ,  0.70710678],
+                   [-0.70710678,  0.        ]])
+            >>> trafo[:, :, 1]  # |s=0, m=-1 >
+            array([[0., 0.],
+                   [0., 1.]])
+            >>> trafo[:, :, 2]  # | s=1, m=0 >
+            array([[0.        , 0.70710678],
+                   [0.70710678, 0.        ]])
+            >>> trafo[:, :, 3]  # | s=1, m=1 >
+            array([[1., 0.],
+                   [0., 0.]])
+            
+        """
+        if self.symmetry.fusion_style == FusionStyle.single:
+            transform = np.zeros((self.dim, self.dim), dtype=np.intp)
+            perm = self.get_basis_transformation_perm()
+            transform[np.ix_(perm, range(self.dim))] = 1.
+            return np.reshape(transform, (*(s.dim for s in self.spaces), self.dim))
+        raise NotImplementedError  # TODO for nonabelian this is just fusion_tree.__array__, right?
+
+    def get_basis_transformation_perm(self):
+        r"""Get the permutation equivalent to :meth:`get_basis_transformation`.
+
+        This is only defined for abelian symmetries, since then :meth:`get_basis_transformation`
+        gives (up to reshaping) a permutation matrix::
+
+            permutation_matrix = self.get_basis_transformation().reshape((self.dim, self.dim))
+
+        which only has nonzero entries at ``permutation_matrix[perm[i], i] for i in range(self.dim)``.
+        This method returns the permutation ``perm``.
+
+        Examples
+        --------
+        Consider two spin-1 sites with Sz_parity conservation.
+        For both sites, we choose the basis :math:`\set{\ket{+}, \ket{0}, \ket{-}}`.
+        Now the uncoupled basis for the product is
+
+        .. math ::
+            \set{\ket{+;+}, \ket{+;0}, \ket{+;-}, \ket{0;+}, \ket{0;0}, \ket{0;-},
+                 \ket{-;+}, \ket{-;0}, \ket{-;-}}
+
+        Which becomes the following after grouping and sorting by sector
+
+        .. math ::
+            \set{\ket{+;+}, \ket{+;-}, \ket{0;0}, \ket{-;+}, \ket{-;-},
+                 \ket{+;0}, \ket{0;+}, \ket{0;-}, \ket{-;0}}
+
+        Such that we get
+
+        .. testsetup :: get_basis_transformation_perm
+            import numpy as np
+            from tenpy.linalg import ProductSpace, VectorSpace, z2_symmetry
+
+        .. doctest :: get_basis_transformation_perm
+
+            >>> even, odd = [0], [1]
+            >>> spin1 = VectorSpace.from_basis(z2_symmetry, [even, odd, even])
+            >>> product_space = ProductSpace([spin1, spin1])
+            >>> perm = product_space.get_basis_transformation_perm()
+            >>> perm
+            array([0, 2, 4, 6, 8, 1, 3, 5, 7])
+            >>> transform = np.zeros((9, 9))
+            >>> transform[np.ix_(perm, range(9))] = 1.
+            >>> np.all(product_space.get_basis_transformation() == transform.reshape((3, 3, 9)))
+            True
+        """
+        # TODO expand testing
+        if self.symmetry.fusion_style != FusionStyle.single:
+            raise ValueError('For non-abelian symmetries use get_basis_transformation instead.')
+        # C-style for compatibility with e.g. numpy.reshape
+        strides = make_stride(shape=[space.dim for space in self.spaces], cstyle=True)
+        order = unstridify(self._get_fusion_outcomes_perm(), strides).T  # indices of the internal bases
+        return sum(stride * space._inverse_basis_perm[p]
+                   for stride, space, p in zip(strides, self.spaces, order))
+
+    def _get_fusion_outcomes_perm(self):
+        r"""Get the permutation introduced by the fusion.
+
+        This permutation arises as follows:
+        For each of the :attr:`spaces` consider all sectors by order of appearance in the internal
+        order, i.e. in :attr:`VectorSpace.sectors``. Take all combinations of sectors from all the
+        spaces in C-style order, i.e. varying those from the last space the fastest.
+        For each combination, take all of its fusion outcomes (TODO define order for nonabelian).
+        The target permutation np.lexsort( .T)s the resulting list of sectors.
+        """
+        # OPTIMIZE this probably not the most efficient way to do this, but it hurts my brain
+        #  and i need to get this work, if only in an ugly way...
+        
+        # j : multi-index into the uncoupled private basis, i.e. into the C-style product of internal bases of the spaces
+        # i : index of self.spaces
+        # s : index of the list of all fusion outcomes / fusion channels
+        dim_strides = make_stride([sp.dim for sp in self.spaces])  # (num_spaces,)
+        sector_strides = make_stride([sp.num_sectors for sp in self.spaces])  # (num_spaces,)
+        num_sector_combinations = np.prod([space.num_sectors for space in self.spaces])
+        
+        # [i, j] :: position of the part of j in spaces[i] within its private basis
+        idcs = unstridify(np.arange(self.dim), dim_strides).T
+        
+        # [i, j] :: sector of the part of j in spaces[i] is spaces[i].sectors[sector_idcs[i, j]]
+        #           sector_idcs[i, j] = bisect.bisect(spaces[i].slices[:, 0], idcs[i, j]) - 1
+        sector_idcs = np.array(
+            [[bisect.bisect(sp.slices[:, 0], idx) - 1 for idx in idx_col]
+             for sp, idx_col in zip(self.spaces, idcs)]
+        )  # OPTIMIZE can bisect.bisect be broadcast somehow? is there a numpy alternative?
+        
+        # [i, j] :: the part of j in spaces[i] is the degeneracy_idcs[i, j]-th state within that sector
+        #           degeneracy_idcs[i, j] = idcs[i, j] - spaces[i].slices[sector_idcs[i, j], 0]
+        degeneracy_idcs = idcs - np.stack(
+            [sp.slices[si_col, 0] for sp, si_col in zip(self.spaces, sector_idcs)]
+        )
+        
+        # [i, j] :: strides for combining degeneracy indices.
+        #           degeneracy_strides[:, j] = make_stride([... mults with sector_idcs[:, j]])
+        degeneracy_strides = np.array(
+            [make_stride([sp.multiplicities[si] for sp, si in zip(self.spaces, si_row)])
+             for si_row in sector_idcs.T]
+        ).T  # OPTIMIZE make make_stride broadcast?
+        
+        # [j] :: position of j in the unsorted list of fusion outcomes
+        fusion_outcome = np.sum(sector_idcs * sector_strides[:, None], axis=0)
+
+        # [i, s] :: sector combination s has spaces[i].sectors[all_sector_idcs[i, s]]
+        all_sector_idcs = unstridify(np.arange(num_sector_combinations), sector_strides).T
+
+        # [i, s] :: all_mults[i, s] = spaces[i].multiplicities[all_sector_idcs[i, s]]
+        all_mults = np.array([sp.multiplicities[comb] for sp, comb in zip(self.spaces, all_sector_idcs)])
+
+        # [s] : total multiplicity of the fusion channel
+        fusion_outcome_multiplicities = np.prod(all_mults, axis=0)
+
+        # [s] : !!shape == (L_s + 1,)!!  ; starts ([s]) and stops ([s + 1]) of fusion channels in the sorted list
+        fusion_outcome_slices = np.concatenate(
+            [[0], np.cumsum(fusion_outcome_multiplicities[self._fusion_outcomes_sort])]
+        )
+
+        # [j] : position of fusion channel after sorting
+        sorted_pos = self._fusion_outcomes_inverse_sort[fusion_outcome]
+
+        # [j] :: contribution from the sector, i.e. start of all the js of the same fusion channel
+        sector_part = fusion_outcome_slices[sorted_pos]
+        
+        # [j] :: contribution from the multiplicities, i.e. position with all js of the same fusion channel
+        degeneracy_part = np.sum(degeneracy_idcs * degeneracy_strides, axis=0)
+
+        return inverse_permutation(sector_part + degeneracy_part)
+
+    def fuse_states(self, states: list[Block], backend: AbstractBackend) -> Block:
+        """TODO write docs"""
+        # if abelian first kron then use get_basis_transformation_perm()
+        # other wise contract get_basis_transformation() with the states
+        raise NotImplementedError  # TODO
 
     def apply_sector_map(self, symmetry: Symmetry, sector_map: callable,
                          backend: AbstractBackend = None) -> ProductSpace:
@@ -1039,7 +1258,7 @@ def _fuse_spaces(symmetry: Symmetry, spaces: list[VectorSpace], _is_dual: bool
         # Overall, this ensures consistent sorting/order of sectors between dual ProductSpace!
 
     if symmetry.fusion_style == FusionStyle.single:
-        # copying parts from AbstractAbelianBackend._fuse_states here...
+        # copying parts from AbstractAbelianBackend._fuse_spaces here...
         grid = np.indices(tuple(space.num_sectors for space in spaces), np.intp)
         grid = grid.T.reshape(-1, len(spaces))
         sectors = symmetry.multiple_fusion_broadcast(

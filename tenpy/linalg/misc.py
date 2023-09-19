@@ -6,7 +6,7 @@ import numpy as np
 from functools import wraps
 
 __all__ = ['force_str_len', 'UNSPECIFIED', 'inverse_permutation', 'duplicate_entries',
-           'join_as_many_as_possible', 'make_stride', 'find_row_differences']
+           'join_as_many_as_possible', 'make_stride', 'find_row_differences', 'unstridify']
 
 # TODO move somewhere else
 #  (for now i want to keep changes in refactor_npc branch contained to tenpy.linalg as much as possible
@@ -125,3 +125,26 @@ def find_row_differences(sectors, include_len: bool=False):
     diff = np.ones(len_sectors + int(include_len), dtype=np.bool_)
     diff[1:len_sectors] = np.any(sectors[1:] != sectors[:-1], axis=1)
     return np.nonzero(diff)[0]  # get the indices of True-values
+
+
+def unstridify(x, strides):
+    """Undo applying strides to an index.
+
+    Parameters
+    ----------
+    x : (..., M) ndarray
+        1D array of non-negative integers. Broadcast over leading axis.
+    strides : (N,) ndarray
+        C-style strides, i.e. positive integers such that ``strides[i]`` is an integer multiple
+        of ``strides[i + 1]``.
+
+    Returns
+    -------
+    (..., M, N) ndarray
+        The unique ``ys`` such that ``x == np.sum(strides * ys, axis=-1)``.
+    """
+    y_list = []
+    for s in strides:
+        y, x = np.divmod(x, s)
+        y_list.append(y)
+    return np.stack(y_list, axis=-1)

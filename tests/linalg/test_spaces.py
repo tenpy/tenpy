@@ -3,8 +3,7 @@ import pytest
 import numpy as np
 from numpy.testing import assert_array_equal
 
-from tenpy.linalg import spaces, groups
-from tenpy.linalg.backends import abelian
+from tenpy.linalg import spaces, groups, backends
 
 
 symmetries = dict(
@@ -195,6 +194,32 @@ def test_product_space(symmetry, symmetry_sectors_rng, np_random):
     assert p1_s != p1
     assert p1 != p1_s
 
+
+def test_get_basis_transformation(default_backend):
+    # TODO expand this
+    even, odd = [0], [1]
+    spin1 = spaces.VectorSpace.from_basis(groups.z2_symmetry, [even, odd, even])
+    assert np.array_equal(spin1.sectors, [even, odd])
+    assert np.array_equal(spin1.basis_perm, [0, 2, 1])
+    backend = backends.get_backend(block_backend='numpy', symmetry_backend='abelian')
+    product_space = spaces.ProductSpace([spin1, spin1], backend=backend)
+
+    perm = product_space._get_fusion_outcomes_perm()
+    # internal order of spin1: + - 0
+    # internal uncoupled:  ++  +-  +0  -+  --  -0  0+  0-  00
+    # coupled:  ++  +-  -+  --  00  +0  -0  0+  0-
+    expect = np.array([0, 1, 3, 4, 8, 2, 5, 6, 7])
+    print(perm)
+    assert np.all(perm == expect)
+
+    perm = product_space.get_basis_transformation_perm()
+    # public order of spin1 : + 0 -
+    # public coubpled : ++  +0  +-  0+  00  0-  -+  -0  --
+    # coupled:  ++  +-  -+  --  00  +0  -0  0+  0-
+    expect = np.array([0, 2, 6, 8, 4, 1, 7, 3, 5])
+    print(perm)
+    assert np.all(perm == expect)
+    
 
 def all_str_repr_demos():
     # python -c "import test_spaces; test_spaces.all_str_repr_demos()"
