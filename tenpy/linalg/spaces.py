@@ -1104,28 +1104,13 @@ class ProductSpace(VectorSpace):
         # other wise contract get_basis_transformation() with the states
         raise NotImplementedError  # TODO
 
-    def apply_sector_map(self, symmetry: Symmetry, sector_map: callable,
+    def change_symmetry(self, symmetry: Symmetry, sector_map: callable,
                          backend: AbstractBackend = None) -> ProductSpace:
-        """Return a new ProductSpace specified by mapping the sectors.
-
-        Each of the factor :attr:`spaces` is individually mapped via
-        :meth:`VectorSpace.change_symmetry`
-
-        Parameters
-        ----------
-        symmetry, sector_map
-            Same as for :meth:`VectorSpace.change_symmetry`.
-        backend : :class: `~tenpy.linalg.backends.abstract_backend.AbstractBackend`, optional
-            Is used to set the backend-specific metadata when fusing the mapped spaces.
-
-        Returns
-        -------
-        :class:`ProductSpace`
-        """
-        # TODO we could do _sectors=sector_map(self._non_dual_sectors), but need to assume that
-        #  sector_map cooperates with fusion
-        return ProductSpace([s.change_symmetry(symmetry=symmetry, sector_map=sector_map)
-                             for s in self.spaces], backend=backend, _is_dual=self.is_dual)
+        # TODO doc that we assume that the sector_map is compatible with fusion
+        spaces = [s.change_symmetry(symmetry=symmetry, sector_map=sector_map) for s in self.spaces]
+        return ProductSpace(spaces, backend=backend, _is_dual=self.is_dual,
+                            _sectors=sector_map(self._non_dual_sectors),
+                            _multiplicities=self.multiplicities)
 
     def drop_symmetry(self, which: int | list[int] = None, remaining_symmetry: Symmetry = None):
         # TODO do we need the backend arg of ProductSpace.__init__?
