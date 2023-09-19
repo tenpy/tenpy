@@ -5,6 +5,7 @@ from abc import abstractmethod, ABCMeta
 from enum import Enum
 from typing import TypeVar, Iterator
 from itertools import product, count
+from functools import reduce
 from numpy import typing as npt
 import numpy as np
 
@@ -70,6 +71,13 @@ class Symmetry(metaclass=ABCMeta):
         # self.fusion_outcomes(s_a, s_b) is a 2D array with with shape [1, num_q]
         # stack the outcomes along the trivial first axis
         return np.concatenate([self.fusion_outcomes(s_a, s_b) for s_a, s_b in zip(a, b)], axis=0)
+
+    def multiple_fusion_broadcast(self, *sectors: SectorArray) -> SectorArray:
+        """This method allows optimized fusion in the case of FusionStyle.single.
+
+        It generalizes :meth:`fusion_outcomes_broadcast` to more than two fusion inputs.
+        """
+        return reduce(self.fusion_outcomes_broadcast, sectors)
 
     def can_fuse_to(self, a: Sector, b: Sector, c: Sector) -> bool:
         """Whether c is a valid fusion outcome, i.e. if it appears in ``self.fusion_outcomes(a, b)``"""
@@ -274,6 +282,14 @@ class ProductSymmetry(Symmetry):
         # it remains to concatenate them along the last axis
         return np.concatenate(components, axis=-1)
 
+    def multiple_fusion_broadcast(self, *sectors: SectorArray) -> SectorArray:
+        components = []
+        for i, f_i in enumerate(self.factors):
+            sectors_i = (s[:, self.sector_slices[i]:self.sector_slices[i + 1]] for s in sectors)
+            c_i = f_i.multiple_fusion_broadcast(*sectors_i)
+            components.append(c_i)
+        return np.concatenate(components, axis=-1)
+
     def sector_dim(self, a: Sector) -> int:
         if self.fusion_style == FusionStyle.single:
             return 1
@@ -454,6 +470,9 @@ class NoSymmetry(AbelianGroup):
     def fusion_outcomes_broadcast(self, a: SectorArray, b: SectorArray) -> SectorArray:
         return a
 
+    def multiple_fusion_broadcast(self, *sectors: SectorArray) -> SectorArray:
+        return sectors[0]
+
     def dual_sector(self, a: Sector) -> Sector:
         return a
 
@@ -491,6 +510,9 @@ class U1Symmetry(AbelianGroup):
 
     def fusion_outcomes_broadcast(self, a: SectorArray, b: SectorArray) -> SectorArray:
         return a + b
+
+    def multiple_fusion_broadcast(self, *sectors: SectorArray) -> SectorArray:
+        return sum(sectors)
 
     def dual_sector(self, a: Sector) -> Sector:
         return -a
@@ -539,6 +561,9 @@ class ZNSymmetry(AbelianGroup):
 
     def fusion_outcomes_broadcast(self, a: SectorArray, b: SectorArray) -> SectorArray:
         return (a + b) % self.N
+
+    def multiple_fusion_broadcast(self, *sectors: SectorArray) -> SectorArray:
+        return sum(sectors) % self.N
 
     def dual_sector(self, a: Sector) -> Sector:
         return (-a) % self.N
@@ -622,6 +647,9 @@ class FermionParity(Symmetry):
         # equal sectors fuse to even parity, i.e. to `0 == (0 + 0) % 2 == (1 + 1) % 2`
         # unequal sectors fuse to odd parity i.e. to `1 == (0 + 1) % 2 == (1 + 0) % 2`
         return (a + b) % 2
+
+    def multiple_fusion_broadcast(self, *sectors: SectorArray) -> SectorArray:
+        return sum(sectors) % 2
 
     def sector_dim(self, a: Sector) -> int:
         return 1

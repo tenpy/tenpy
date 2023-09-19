@@ -67,15 +67,6 @@ def _find_row_differences(sectors: SectorArray, include_len: bool=False):
     return np.nonzero(diff)[0]  # get the indices of True-values
 
 
-def _fuse_abelian_charges(symmetry: AbelianGroup, *sector_arrays: SectorArray) -> SectorArray:
-    assert symmetry.fusion_style == FusionStyle.single
-    fusion = sector_arrays[0]
-    for sectors in sector_arrays[1:]:
-        fusion = symmetry.fusion_outcomes_broadcast(fusion, sectors)
-        # == fusion + space.sector, but mod N for ZN
-    return np.asarray(fusion)
-
-
 def _valid_block_indices(spaces: list[VectorSpace]):
     """Find block_inds where the charges of the `spaces` fuse to `symmetry.trivial_sector`.
     The resulting block_inds are lexsort( .T)-ed."""
@@ -86,8 +77,9 @@ def _valid_block_indices(spaces: list[VectorSpace]):
     # similar to `grid` in ProductSpace._fuse_spaces()
     grid = np.indices((s.num_sectors for s in spaces), dtype=int)
     grid = grid.T.reshape((-1, len(spaces)))
-    total_sectors = _fuse_abelian_charges(symmetry,
-                                          *(space.sectors[gr] for space, gr in zip(spaces, grid.T)))
+    total_sectors = symmetry.multiple_fusion_broadcast(
+        *(space.sectors[gr] for space, gr in zip(spaces, grid.T))
+    )
     valid = np.all(total_sectors == symmetry.trivial_sector[np.newaxis, :], axis=1)
     block_inds = grid[valid, :]
     perm = np.lexsort(block_inds.T)
@@ -423,8 +415,9 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
         else:
             fuse_sectors = [s.sectors for s in spaces]
 
-        _non_dual_sectors = _fuse_abelian_charges(symmetry,
-            *(sectors[gr] for sectors, gr in zip(fuse_sectors, grid.T)))
+        _non_dual_sectors = symmetry.multiple_fusion_broadcast(
+            *(sectors[gr] for sectors, gr in zip(fuse_sectors, grid.T))
+        )
 
         # sort (non-dual) charge sectors. Similar code as in VectorSpace.__init__
         sort = np.lexsort(_non_dual_sectors.T)
@@ -735,11 +728,15 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
         # Step 3) loop over column/row of the result
         sym = a.legs[0].symmetry
         if cut_a > 0:
-            a_charges_keep = _fuse_abelian_charges(sym, *(leg.sectors[i] for leg, i in zip(a.legs[:cut_a], a_block_inds_keep.T)))
+            a_charges_keep = sym.multiple_fusion_broadcast(
+                *(leg.sectors[i] for leg, i in zip(a.legs[:cut_a], a_block_inds_keep.T))
+            )
         else:
             a_charges_keep = np.zeros((len(a_block_inds_keep), sym.sector_ind_len), int)
         if cut_b < b.num_legs:
-            b_charges_keep_dual = _fuse_abelian_charges(sym, *(leg.dual.sectors[i] for leg, i in zip(b.legs[cut_b:], b_block_inds_keep.T)))
+            b_charges_keep_dual = sym.multiple_fusion_broadcast(
+                *(leg.dual.sectors[i] for leg, i in zip(b.legs[cut_b:], b_block_inds_keep.T))
+            )
         else:
             b_charges_keep_dual = np.zeros((len(b_block_inds_keep), sym.sector_ind_len), int)
         # dual such that b_charges_keep_dual must match a_charges_keep
