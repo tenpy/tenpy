@@ -6,7 +6,7 @@ import numpy as np
 from functools import wraps
 
 __all__ = ['force_str_len', 'UNSPECIFIED', 'inverse_permutation', 'duplicate_entries',
-           'join_as_many_as_possible', 'make_stride']
+           'join_as_many_as_possible', 'make_stride', 'find_row_differences']
 
 # TODO move somewhere else
 #  (for now i want to keep changes in refactor_npc branch contained to tenpy.linalg as much as possible
@@ -102,3 +102,26 @@ def make_stride(shape, cstyle=True):
             res[a + 1] = stride
         assert stride * shape[0] < _MAX_INT
     return res
+
+
+def find_row_differences(sectors, include_len: bool=False):
+    """Return indices where the rows of the 2D array `sectors` change.
+
+    Parameters
+    ----------
+    sectors : 2D array
+        The rows of this array are compared.
+    include_len : bool
+        If ``len(sectors)`` should be included or not.
+    
+    Returns
+    -------
+    diffs: 1D array
+        The indices where rows change, including the first and last. Equivalent to:
+        ``[0] + [i for i in range(1, len(sectors)) if np.any(qflat[i-1] != qflat[i])]``
+    """
+    # note: by default remove last entry [len(sectors)] compared to old.charges
+    len_sectors = len(sectors)
+    diff = np.ones(len_sectors + int(include_len), dtype=np.bool_)
+    diff[1:len_sectors] = np.any(sectors[1:] != sectors[:-1], axis=1)
+    return np.nonzero(diff)[0]  # get the indices of True-values

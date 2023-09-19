@@ -29,7 +29,7 @@ import copy
 import warnings
 
 from .abstract_backend import AbstractBackend, AbstractBlockBackend, Data, DiagonalData, Block, Dtype
-from ..misc import make_stride
+from ..misc import make_stride, find_row_differences
 from ..groups import FusionStyle, BraidingStyle, Symmetry, Sector, SectorArray, AbelianGroup
 from numpy import ndarray
 from ..spaces import VectorSpace, ProductSpace
@@ -42,29 +42,6 @@ if TYPE_CHECKING:
     # can not import Tensor at runtime, since it would be a circular import
     # this clause allows mypy etc to evaluate the type-hints anyway
     from ..tensors import Tensor, ChargedTensor, DiagonalTensor, Mask
-
-
-def _find_row_differences(sectors: SectorArray, include_len: bool=False):
-    """Return indices where the rows of the 2D array `sectors` change.
-
-    Parameters
-    ----------
-    sectors : 2D array
-        The rows of this array are compared.
-    include_len : bool
-        If ``len(sectors)`` should be included or not.
-    
-    Returns
-    -------
-    diffs: 1D array
-        The indices where rows change, including the first and last. Equivalent to:
-        ``[0] + [i for i in range(1, len(sectors)) if np.any(qflat[i-1] != qflat[i])]``
-    """
-    # note: by default remove last entry [len(sectors)] compared to old.charges
-    len_sectors = len(sectors)
-    diff = np.ones(len_sectors + int(include_len), dtype=np.bool_)
-    diff[1:len_sectors] = np.any(sectors[1:] != sectors[:-1], axis=1)
-    return np.nonzero(diff)[0]  # get the indices of True-values
 
 
 def _valid_block_indices(spaces: list[VectorSpace]):
@@ -431,7 +408,7 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
         _block_ind_map[:, 1] = slices[1:]
 
         # bunch sectors with equal charges together
-        diffs = _find_row_differences(_non_dual_sectors, include_len=True)
+        diffs = find_row_differences(_non_dual_sectors, include_len=True)
         metadata['_block_ind_map_slices'] = diffs
         slices = slices[diffs]
         multiplicities = slices[1:] - slices[:-1]
@@ -686,7 +663,7 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
         #  To identify the different indices `i` and `j`, it is easiest to lexsort in the `s`.
         #  Note that we give priority to the `{a,b}_block_inds_keep` over the `_contr`, such that
         #  equal rows of `i` are contiguous in `a_block_inds_keep`.
-        #  Then, they are identified with :func:`_find_row_differences`.
+        #  Then, they are identified with :func:`find_row_differences`.
 
         #  Now, the goal is to calculate the sums :math:`C_{i,j} = sum_k A_{i,k} B_{k,j}`,
         #  analogous to step 3) above. This is implemented directly in this function.
@@ -837,8 +814,8 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
         b_blocks = b.data.blocks
         b_block_inds_keep = b.data.block_inds[:, cut_b:]
         # find blocks where block_inds_a[not_axes_a] and block_inds_b[not_axes_b] change
-        a_slices = _find_row_differences(a_block_inds_keep, include_len=True)
-        b_slices = _find_row_differences(b_block_inds_keep, include_len=True)
+        a_slices = find_row_differences(a_block_inds_keep, include_len=True)
+        b_slices = find_row_differences(b_block_inds_keep, include_len=True)
         # the slices divide a_blocks and b_blocks into rows and columns of the final result
         a_blocks = [a_blocks[i:i2] for i, i2 in zip(a_slices[:-1], a_slices[1:])]
         b_blocks = [b_blocks[j:j2] for j, j2 in zip(b_slices[:-1], b_slices[1:])]
@@ -1118,7 +1095,7 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
             block_shape[:, i] = slices[:, 1] - slices[:, 0]
 
         # split res_block_inds into parts, which give a unique new blocks
-        diffs = _find_row_differences(res_block_inds, include_len=True)  # including 0 and len to have slices later
+        diffs = find_row_differences(res_block_inds, include_len=True)  # including 0 and len to have slices later
         res_num_blocks = len(diffs) - 1
         res_block_inds = res_block_inds[diffs[:res_num_blocks], :]
         res_block_shapes = np.empty((res_num_blocks, len(final_legs)), int)
