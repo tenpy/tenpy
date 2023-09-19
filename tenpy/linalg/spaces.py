@@ -10,8 +10,7 @@ from typing import TYPE_CHECKING, Sequence
 
 from tenpy.linalg.dummy_config import printoptions
 
-from .groups import (Sector, SectorArray, Symmetry, ProductSymmetry, NoSymmetry, no_symmetry,
-                     FusionStyle)
+from .groups import Sector, SectorArray, Symmetry, ProductSymmetry, NoSymmetry, no_symmetry
 from .misc import make_stride, find_row_differences, unstridify
 from ..tools.misc import inverse_permutation, to_iterable
 from ..tools.string import format_like_list
@@ -965,7 +964,7 @@ class ProductSpace(VectorSpace):
                    [0., 0.]])
             
         """
-        if self.symmetry.fusion_style == FusionStyle.single:
+        if self.symmetry.is_abelian:
             transform = np.zeros((self.dim, self.dim), dtype=np.intp)
             perm = self.get_basis_transformation_perm()
             transform[np.ix_(perm, range(self.dim))] = 1.
@@ -1019,7 +1018,7 @@ class ProductSpace(VectorSpace):
             True
         """
         # TODO expand testing
-        if self.symmetry.fusion_style != FusionStyle.single:
+        if not self.symmetry.is_abelian:
             raise ValueError('For non-abelian symmetries use get_basis_transformation instead.')
         # C-style for compatibility with e.g. numpy.reshape
         strides = make_stride(shape=[space.dim for space in self.spaces], cstyle=True)
@@ -1248,7 +1247,7 @@ def _fuse_spaces(symmetry: Symmetry, spaces: list[VectorSpace], _is_dual: bool
         # self._non_dual_sectors, such that `self.sectors` (which takes a dual!) yields correct sectors
         # Overall, this ensures consistent sorting/order of sectors between dual ProductSpace!
 
-    if symmetry.fusion_style == FusionStyle.single:
+    if symmetry.is_abelian:
         # copying parts from AbstractAbelianBackend._fuse_spaces here...
         grid = np.indices(tuple(space.num_sectors for space in spaces), np.intp)
         grid = grid.T.reshape(-1, len(spaces))

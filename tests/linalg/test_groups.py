@@ -140,7 +140,7 @@ def test_product_symmetry():
 
     print('checking fusion_outcomes_broadcast')
     with pytest.raises(AssertionError):
-        # sym does not have FusionStyle.single, so this should raise
+        # sym is not abelian, so this should raise
         _ = sym.fusion_outcomes_broadcast(s1[None, :], s2[None, :])
     outcomes = u1_z3.fusion_outcomes_broadcast(np.array([[42, 2], [-2, 0]]), np.array([[1, 1], [2, 1]]))
     assert_array_equal(outcomes, np.array([[43, 0], [0, 1]]))

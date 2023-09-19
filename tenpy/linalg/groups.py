@@ -45,7 +45,7 @@ class Symmetry(metaclass=ABCMeta):
         self.num_sectors = num_sectors
         self.descriptive_name = descriptive_name
         self.sector_ind_len = len(trivial_sector)  # how many entries are needed to describe a Sector
-        self.is_abelian = (fusion_style == FusionStyle.single)
+        self.is_abelian = (fusion_style == FusionStyle.single)  # TODO doc that this does not imply group!
 
     @abstractmethod
     def is_valid_sector(self, a: Sector) -> bool:
@@ -67,7 +67,7 @@ class Symmetry(metaclass=ABCMeta):
         which is a single unique Sector, as a new SectorArray.
         Subclasses may override this with more efficient implementations.
         """
-        assert self.fusion_style == FusionStyle.single
+        assert self.is_abelian
         # self.fusion_outcomes(s_a, s_b) is a 2D array with with shape [1, num_q]
         # stack the outcomes along the trivial first axis
         return np.concatenate([self.fusion_outcomes(s_a, s_b) for s_a, s_b in zip(a, b)], axis=0)
@@ -90,7 +90,7 @@ class Symmetry(metaclass=ABCMeta):
 
     def batch_sector_dim(self, a: SectorArray) -> npt.NDArray[np.int_]:
         """sector_dim of every sector (row) in a"""
-        if self.fusion_style == FusionStyle.single:
+        if self.is_abelian:
             return np.ones([a.shape[0]], dtype=int)
         return np.array([self.sector_dim(s) for s in a])
 
@@ -291,7 +291,7 @@ class ProductSymmetry(Symmetry):
         return np.concatenate(components, axis=-1)
 
     def sector_dim(self, a: Sector) -> int:
-        if self.fusion_style == FusionStyle.single:
+        if self.is_abelian:
             return 1
 
         dims = []
@@ -301,7 +301,7 @@ class ProductSymmetry(Symmetry):
         return np.prod(dims)
 
     def batch_sector_dim(self, a: SectorArray) -> npt.NDArray[np.int_]:
-        if self.fusion_style == FusionStyle.single:
+        if self.is_abelian:
             return np.ones([a.shape[0]], dtype=int)
         dims = []
         for i, f_i in enumerate(self.factors):

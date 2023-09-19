@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 from .dummy_config import printoptions
 from .misc import duplicate_entries, force_str_len, join_as_many_as_possible
 from .dummy_config import config
-from .groups import AbelianGroup, Symmetry, FusionStyle
+from .groups import AbelianGroup, Symmetry
 from .spaces import VectorSpace, ProductSpace, Sector, SectorArray
 from .backends.backend_factory import get_default_backend
 from .backends.abstract_backend import Dtype, Block, AbstractBackend
@@ -3448,7 +3448,7 @@ def tensor_from_block(block: Block, legs: list[VectorSpace], backend: AbstractBa
     # TODO test
     sectors = detect_sectors_from_block(block=block, legs=legs, backend=backend)
     symmetry = legs[0].symmetry
-    if symmetry.fusion_style != FusionStyle.single:
+    if not symmetry.is_abelian:
         # TODO in the non-abelian case we can not infer a single sector from the largest entry.
         #  multiple sectors could have entries at that position.
         #  The code below identifies all of these sectors and packages them in the dummy_leg.

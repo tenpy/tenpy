@@ -344,6 +344,7 @@ class FusionTree:
         self.multiplicities = [0] * (len(uncoupled) - 1) if multiplicities is None else multiplicities
 
         self.fusion_style = symmetry.fusion_style
+        self.is_abelian = symmetry.is_abelian
         self.braiding_style = symmetry.braiding_style
         self.num_uncoupled = len(uncoupled)
         self.num_vertices = max(len(uncoupled) - 1, 0)
