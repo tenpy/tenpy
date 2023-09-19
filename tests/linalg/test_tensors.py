@@ -537,17 +537,17 @@ def test_combine_split(tensor_rng):
     npt.assert_equal(split.to_numpy_ndarray(), dense.transpose([1, 3, 2, 0]))
 
     print('check _fuse_spaces')
-    sectors1, mults1, metadata1 = _fuse_spaces(
+    sectors1, mults1, fusion_outcomes_sort1, metadata1 = _fuse_spaces(
         symmetry=tens.symmetry, spaces=tens.get_legs(['b', 'd']), _is_dual=False
     )
-    sectors2, mults2, metadata2 = tens.backend._fuse_spaces(
+    sectors2, mults2, fusion_outcomes_sort2, metadata2 = tens.backend._fuse_spaces(
         symmetry=tens.symmetry, spaces=tens.get_legs(['b', 'd']), _is_dual=False
     )
-    _b, _d = tens.get_legs(['b', 'd'])
-    assert np.all(sectors1 == sectors2)
-    assert np.all(mults1 == mults2)
+    npt.assert_array_equal(fusion_outcomes_sort1, fusion_outcomes_sort2)
+    npt.assert_array_equal(sectors1, sectors2)
+    npt.assert_array_equal(mults1, mults2)
     assert len(metadata1) == 0
-    assert len(metadata2) == (4 if isinstance(tens.backend, AbstractAbelianBackend) else 0)
+    assert len(metadata2) == (3 if isinstance(tens.backend, AbstractAbelianBackend) else 0)
 
     for prod_space, comment in [
         (ProductSpace(tens.get_legs(['b', 'd']), backend=tens.backend), 'metadata via ProductSpace.__init__'),

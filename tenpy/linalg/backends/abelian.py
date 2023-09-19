@@ -304,9 +304,6 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
                 Map for the embedding of uncoupled to coupled indices, see notes below.
                 Shape is ``(M, N)`` where ``M`` is the number of combinations of sectors,
                 i.e. ``M == prod(s.num_sectors for s in spaces)`` and ``N == 3 + len(spaces)``.
-            _fusion_outcomes_inverse_sort : 1D numpy array
-                The inverse of the permutation that sorts the above list of all fusion outcomes.
-                Shape is ``(M,)``.
 
         Notes
         -----
@@ -397,11 +394,10 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
         )
 
         # sort (non-dual) charge sectors. Similar code as in VectorSpace.__init__
-        sort = np.lexsort(_non_dual_sectors.T)
-        _block_ind_map = _block_ind_map[sort]
-        _non_dual_sectors = _non_dual_sectors[sort]
-        multiplicities = multiplicities[sort]
-        metadata['_fusion_outcomes_inverse_sort'] = inverse_permutation(sort)
+        fusion_outcomes_sort = np.lexsort(_non_dual_sectors.T)
+        _block_ind_map = _block_ind_map[fusion_outcomes_sort]
+        _non_dual_sectors = _non_dual_sectors[fusion_outcomes_sort]
+        multiplicities = multiplicities[fusion_outcomes_sort]
 
         slices = np.concatenate([[0], np.cumsum(multiplicities)], axis=0)
         _block_ind_map[:, 0] = slices[:-1]  # start with 0
@@ -423,13 +419,13 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
         _block_ind_map[:, :2] -= slices[new_block_ind][:, np.newaxis]
         metadata['_block_ind_map'] = _block_ind_map  # finished
         
-        return _non_dual_sectors, multiplicities, metadata
+        return _non_dual_sectors, multiplicities, fusion_outcomes_sort, metadata
 
     def add_leg_metadata(self, leg: VectorSpace) -> VectorSpace:
         if isinstance(leg, ProductSpace):
             if not self._leg_has_metadata(leg):
                 # OPTIMIZE write version that just calculates the metadata, without sectors?
-                _, _, metadata = self._fuse_spaces(symmetry=leg.symmetry, spaces=leg.spaces, _is_dual=leg.is_dual)
+                _, _, _, metadata = self._fuse_spaces(symmetry=leg.symmetry, spaces=leg.spaces, _is_dual=leg.is_dual)
                 for key, val in metadata.items():
                     setattr(leg, key, val)
         # for non-ProductSpace: no metadata to add

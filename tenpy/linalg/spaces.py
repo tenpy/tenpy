@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING, Sequence
 from tenpy.linalg.dummy_config import printoptions
 
 from .groups import Sector, SectorArray, Symmetry, ProductSymmetry, no_symmetry
-from .misc import make_stride
+from .misc import make_stride, find_row_differences
 from ..tools.misc import inverse_permutation, to_iterable
 from ..tools.string import format_like_list
 
@@ -754,6 +754,12 @@ class ProductSpace(VectorSpace):
     ----------
     basis_perm : ndarray
         For `ProductSpace`s, this is always the trivial permutation ``[0, 1, 2, 3, ...]``.
+    _fusion_outcomes_sort : 1D array
+        The permutation that ``np.lexsort( .T)``s the list of all possible fusion outcomes.
+        Note that that list contains duplicates.
+        Shape is ``(np.prod([sp.num_sectors for sp in self.spaces]))``.  (TODO this true for nonabelian?)
+    _fusion_outcomes_inverse_sort : 1D ndarray
+        Inverse permutation of :attr:`_fusion_outcomes_sort`.
 
     Parameters
     ----------
@@ -831,13 +837,15 @@ class ProductSpace(VectorSpace):
         if _sectors is None:
             assert _multiplicities is None
             if backend is None:
-                _sectors, _multiplicities, metadata = _fuse_spaces(
+                _sectors, _multiplicities, fusion_outcomes_sort, metadata = _fuse_spaces(
                     symmetry=spaces[0].symmetry, spaces=spaces, _is_dual=_is_dual
                 )
             else:
-                _sectors, _multiplicities, metadata = backend._fuse_spaces(
+                _sectors, _multiplicities, fusion_outcomes_sort, metadata = backend._fuse_spaces(
                     symmetry=spaces[0].symmetry, spaces=spaces, _is_dual=_is_dual
                 )
+            self._fusion_outcomes_sort = fusion_outcomes_sort
+            self._fusion_outcomes_inverse_sort = inverse_permutation(fusion_outcomes_sort)
             for key, val in metadata.items():
                 setattr(self, key, val)
         else:
@@ -1013,30 +1021,62 @@ def _fuse_spaces(symmetry: Symmetry, spaces: list[VectorSpace], _is_dual: bool
         The :attr:`VectorSpace._non_dual_sectors`.
     mutliplicities : 1D array of int
         the :attr:`VectorSpace.multiplicities`.
+    fusion_outcomes_sort
+        the :attr:`ProductSpace._fusion_outcomes_sort`.
     metadata : dict
         A dictionary with string keys and arbitrary values.
         These will be added as attributes of the ProductSpace
     """
-    # TODO (JU) should we special case symmetry.fusion_style == FusionStyle.single ?
+    if isinstance(symmetry, NoSymmetry):
+        sectors = symmetry.trivial_sector[None, :]
+        multiplicities = [np.prod([sp.dim for sp in spaces])]
+        return sectors, multiplicities, np.arange(1), {}
+    
     if _is_dual:
         spaces = [s.dual for s in spaces] # directly fuse sectors of dual spaces.
         # This yields overall dual `sectors` to return, which we directly save in
         # self._non_dual_sectors, such that `self.sectors` (which takes a dual!) yields correct sectors
         # Overall, this ensures consistent sorting/order of sectors between dual ProductSpace!
-    fusion = {tuple(s): m for s, m in zip(spaces[0].sectors, spaces[0].multiplicities)}
-    for space in spaces[1:]:
-        new_fusion = {}
-        for t_a, m_a in fusion.items():
-            s_a = np.array(t_a)
-            for s_b, m_b in zip(space.sectors, space.multiplicities):
-                for s_c in symmetry.fusion_outcomes(s_a, s_b):
-                    t_c = tuple(s_c)
-                    n = symmetry._n_symbol(s_a, s_b, s_c)
-                    new_fusion[t_c] = new_fusion.get(t_c, 0) + m_a * m_b * n
-        fusion = new_fusion
-        # by convention fuse spaces left to right, i.e. (...((0,1), 2), ..., N)
-    non_dual_sectors = np.asarray(list(fusion.keys()))
-    multiplicities = np.asarray(list(fusion.values()))
-    sort = np.lexsort(non_dual_sectors.T)
-    metadata = {}
-    return non_dual_sectors[sort], multiplicities[sort], metadata
+
+    if symmetry.fusion_style == FusionStyle.single:
+        # copying parts from AbstractAbelianBackend._fuse_states here...
+        grid = np.indices(tuple(space.num_sectors for space in spaces), np.intp)
+        grid = grid.T.reshape(-1, len(spaces))
+        sectors = symmetry.multiple_fusion_broadcast(
+            *(sp.sectors[gr] for sp, gr in zip(spaces, grid.T))
+        )
+        multiplicities = np.prod([space.multiplicities[gr] for space, gr in zip(spaces, grid.T)],
+                                  axis=0)
+        fusion_outcomes_sort = np.lexsort(sectors.T)
+        multiplicities = multiplicities[fusion_outcomes_sort]
+        sectors = sectors[fusion_outcomes_sort]
+        slices = np.concatenate([[0], np.cumsum(multiplicities)], axis=0)
+        diffs = find_row_differences(sectors, include_len=True)
+        slices = slices[diffs]
+        multiplicities = slices[1:] - slices[:-1]
+        sectors = sectors[diffs[:-1]]
+        
+    else:
+        fusion = {tuple(s): m for s, m in zip(spaces[0].sectors, spaces[0].multiplicities)}
+        all_coupled_sectors = spaces[0].sectors
+        for space in spaces[1:]:
+            new_fusion = {}
+            for t_a, m_a in fusion.items():
+                s_a = np.array(t_a)
+                for s_b, m_b in zip(space.sectors, space.multiplicities):
+                    for s_c in symmetry.fusion_outcomes(s_a, s_b):
+                        all_coupled_sectors.append(s_c)
+                        t_c = tuple(s_c)
+                        n = symmetry._n_symbol(s_a, s_b, s_c)
+                        new_fusion[t_c] = new_fusion.get(t_c, 0) + m_a * m_b * n
+            fusion = new_fusion
+            # by convention fuse spaces left to right, i.e. (...((0,1), 2), ..., N)
+        non_dual_sectors = np.asarray(list(fusion.keys()))
+        multiplicities = np.asarray(list(fusion.values()))
+        sort = np.lexsort(non_dual_sectors.T)
+        sectors = non_dual_sectors[sort]
+        multiplicities = multiplicities[sort]
+        fusion_outcomes_sort = None  # TODO
+        raise NotImplementedError  # TODO sectors, multiplicities from above is ok, need to define fusion_outcomes_sort well
+
+    return sectors, multiplicities, fusion_outcomes_sort, {}
