@@ -56,7 +56,7 @@ class FermionicC3HaldaneModel(CouplingMPOModel):
     def init_sites(self, model_params):
         conserve = model_params.get('conserve', 'N')
         fs = FermionSite(conserve=conserve)
-        gs = GroupedSite([fs, fs], labels=['A', 'B'], charges='same')
+        gs = GroupedSite([fs, fs], labels=['A', 'B'], symmetry_combine='same')
         gs.add_op('Ntot', gs.NA + gs.NB, False)
         return gs
 

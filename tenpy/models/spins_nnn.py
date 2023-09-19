@@ -84,7 +84,7 @@ class SpinChainNNN(CouplingMPOModel, NearestNeighborModel):
                 conserve = None
             self.logger.info("%s: set conserve to %s", self.name, conserve)
         spinsite = SpinSite(S, conserve, sort_charge=False)  # GroupedSite does sort charges
-        site = GroupedSite([spinsite, spinsite], charges='same')
+        site = GroupedSite([spinsite, spinsite], symmetry_combine='same')
         return site
 
     def init_terms(self, model_params):
