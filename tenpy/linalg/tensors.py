@@ -3447,6 +3447,7 @@ def tensor_from_block(block: Block, legs: list[VectorSpace], backend: AbstractBa
     Otherwise, returns a :class:`ChargedTensor`.
     """
     # TODO test
+    block = backend.as_block(block)
     sectors = detect_sectors_from_block(block=block, legs=legs, backend=backend)
     symmetry = legs[0].symmetry
     if not symmetry.is_abelian:
@@ -3459,7 +3460,7 @@ def tensor_from_block(block: Block, legs: list[VectorSpace], backend: AbstractBa
         #   b) leave that as is (allow multi-dimensional dummy_leg) and adjust docs accordingly
         raise NotImplementedError
     assert all(leg.symmetry == symmetry for leg in legs[1:])
-    dummy_leg = ProductSpace([VectorSpace(symmetry, s) for s in sectors]).dual.as_VectorSpace()
+    dummy_leg = ProductSpace([VectorSpace(symmetry, [s]) for s in sectors]).dual.as_VectorSpace()
     if np.all(dummy_leg.sectors == symmetry.trivial_sector[None, :]):
         return Tensor.from_dense_block(block, legs=legs, backend=backend, labels=labels)
     else:
