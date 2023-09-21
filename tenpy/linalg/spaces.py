@@ -339,11 +339,13 @@ class VectorSpace:
             A space with the new symmetry. The order of the basis is preserved, but every
             basis element lives in a new sector, according to `sector_map`.
         """
-        # use the assumption that sector map cooperates with duality here:
-        non_dual_sectors = sector_map(self._non_dual_sectors)
-        return VectorSpace(symmetry=symmetry, sectors=non_dual_sectors,
-                           multiplicities=self.multiplicities, basis_perm=self.basis_perm,
-                           is_real=self.is_real, _is_dual=self.is_dual)
+        res = VectorSpace.from_sectors(
+            symmetry=symmetry, sectors=sector_map(self.sectors), multiplicities=self.multiplicities,
+            basis_perm=self.basis_perm, is_real=self.is_real
+        )
+        if self.is_dual:
+            res = res.dual
+        return res
 
     def drop_symmetry(self, which: int | list[int] = None, remaining_symmetry: Symmetry = None):
         """Drop some or all symmetries.
@@ -404,7 +406,7 @@ class VectorSpace:
             mask[start:stop] = False
 
         return self.change_symmetry(symmetry=remaining_symmetry,
-                                     sector_map=lambda sectors: sectors[:, mask])
+                                    sector_map=lambda sectors: sectors[:, mask])
 
     def sector(self, i: int) -> Sector:
         """Return the `i`-th sector. Equivalent to ``self.sectors[i]``."""
@@ -1133,11 +1135,8 @@ class ProductSpace(VectorSpace):
 
     def change_symmetry(self, symmetry: Symmetry, sector_map: callable,
                          backend: AbstractBackend = None) -> ProductSpace:
-        # TODO doc that we assume that the sector_map is compatible with fusion
         spaces = [s.change_symmetry(symmetry=symmetry, sector_map=sector_map) for s in self.spaces]
-        return ProductSpace(spaces, backend=backend, _is_dual=self.is_dual,
-                            _sectors=sector_map(self._non_dual_sectors),
-                            _multiplicities=self.multiplicities)
+        return ProductSpace(spaces, backend=backend, _is_dual=self.is_dual)
 
     def drop_symmetry(self, which: int | list[int] = None, remaining_symmetry: Symmetry = None):
         # TODO do we need the backend arg of ProductSpace.__init__?
