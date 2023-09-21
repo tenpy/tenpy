@@ -564,8 +564,12 @@ class AbstractTensor(metaclass=ABCMeta):
 
     @abstractmethod
     def conj(self) -> AbstractTensor:
-        """See tensors.conj"""
+        """See :funct:`tensors.conj`"""
         ...
+
+    def hconj(self) -> AbstractTensor:
+        """See :funct:`tensors.hconj`"""
+        return self.conj().permute_legs(permutation=[*range(self.num_legs - 2), -1, -2])
 
     @abstractmethod
     def copy(self, deep=True) -> AbstractTensor:
@@ -3114,9 +3118,20 @@ def combine_legs(t: AbstractTensor,
 def conj(t: AbstractTensor) -> AbstractTensor:
     """
     The conjugate of t, living in the dual space.
-    Labels are adjuste as `'p'` -> `'p*'` and `'p*'` -> `'p'`
+    Labels are adjusted as `'p'` -> `'p*'` and `'p*'` -> `'p'`
     """
     return t.conj()
+
+
+def hconj(t: AbstractTensor) -> AbstractTensor:
+    """Hermitian conjugate.
+
+    In strict label mode, this is the same as :func:`conj`, since exchanging legs is taken care of
+    by the relabelling. otherwise, the last two legs are swapped such that the result has the same
+    leg as `t`, if those two legs are contractible.
+    """
+    assert t.num_legs >= 2
+    return t.conj().permute_legs(permutation=[*range(t.num_legs - 2), -1, -2])
 
 
 def detect_sectors_from_block(block: Block, legs: list[VectorSpace], backend: AbstractBackend
