@@ -609,7 +609,7 @@ def test_norm(tensor_rng):
     assert np.allclose(res, expect)
 
 
-def test_almost_equal(tensor_rng):
+def test_almost_equal(tensor_rng, np_random):
     for i in range(10):
         t1 = tensor_rng(labels=['a', 'b', 'c'], real=False)
         t_diff = tensor_rng(t1.legs, labels=['a', 'b', 'c'])
@@ -620,6 +620,18 @@ def test_almost_equal(tensor_rng):
     t2 = t1 + 1.e-7 * t_diff
     assert tensors.almost_equal(t1, t2), "default a_tol should be > 1e-7!"
     assert not tensors.almost_equal(t1, t2, atol=1.e-10, rtol=1.e-10), "tensors differ by 1e-7!"
+
+    # TODO properly adapt test suite to the different tensor types
+    print('test DiagonalTensor.almost_equal')
+    leg = t1.legs[0]
+    data1 = np_random.random(leg.dim)
+    data2 = data1 + 1e-7 * np_random.random(leg.dim)
+    t1 = tensors.DiagonalTensor.from_diag_numpy(data1, leg)
+    t2 = tensors.DiagonalTensor.from_diag_numpy(data2, leg)
+    assert tensors.almost_equal(t1, t2)
+    assert not tensors.almost_equal(t1, t2, atol=1e-10, rtol=1e-10)
+
+    # TODO check all combinations of tensor types...
 
 
 def test_squeeze_legs(tensor_rng, symmetry):

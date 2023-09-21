@@ -368,6 +368,11 @@ class AbstractBackend(metaclass=ABCMeta):
     @abstractmethod
     def almost_equal(self, a: Tensor, b: Tensor, rtol: float, atol: float) -> bool:
         ...
+        
+    def almost_equal_diagonal(self, a: DiagonalTensor, b: DiagonalTensor, rtol: float, atol: float
+                              ) -> bool:
+        # for most backends, almost_equal will just work, but if not, backends may override this.
+        return self.almost_equal(a, b, rtol, atol)
 
     @abstractmethod
     def squeeze_legs(self, a: Tensor, idcs: list[int]) -> Data:

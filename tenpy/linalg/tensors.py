@@ -2610,7 +2610,8 @@ class DiagonalTensor(SymmetricTensor):
 
         # can now assume that other is a DiagonalTensor
         _ = self._input_checks_same_legs(other)
-        raise NotImplementedError  # TODO
+        # no need to permute legs, diagonal data is the same either way.
+        return get_same_backend(self, other).almost_equal_diagonal(self, other, atol, rtol)
 
     def inner(self, other: AbstractTensor, do_conj: bool = True, legs1: list[int | str] = None,
               legs2: list[int | str]  = None) -> float | complex:
