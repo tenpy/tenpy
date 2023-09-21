@@ -116,6 +116,7 @@ class VectorSpace:
         self.is_real = is_real
         self.is_dual = _is_dual
         self._non_dual_sectors = sectors = np.asarray(sectors, dtype=int)
+        assert sectors.ndim == 2 and sectors.shape[1] == symmetry.sector_ind_len
         self.num_sectors = num_sectors = len(sectors)
         if multiplicities is None:
             self.multiplicities = multiplicities = np.ones((num_sectors,), dtype=int)
@@ -315,7 +316,7 @@ class VectorSpace:
         non_dual_sectors = sector_map(self._non_dual_sectors)
         return VectorSpace(symmetry=symmetry, sectors=non_dual_sectors,
                            multiplicities=self.multiplicities, basis_perm=self.basis_perm,
-                           is_real=self._is_real, _is_dual=self.is_dual)
+                           is_real=self.is_real, _is_dual=self.is_dual)
 
     def drop_symmetry(self, which: int | list[int] = None, remaining_symmetry: Symmetry = None):
         """Drop some or all symmetries.
@@ -370,12 +371,12 @@ class VectorSpace:
                 remaining_symmetry = ProductSymmetry(factors)
         # TODO check compatible otherwise?
 
-        mask = np.ones((self.dim,), dtype=bool)
+        mask = np.ones((self.symmetry.sector_ind_len,), dtype=bool)
         for i in which:
             start, stop = self.symmetry.sector_slices[i:i + 2]
             mask[start:stop] = False
 
-        return self.change_symmetry(symmtery=remaining_symmetry,
+        return self.change_symmetry(symmetry=remaining_symmetry,
                                      sector_map=lambda sectors: sectors[:, mask])
 
     def sector(self, i: int) -> Sector:

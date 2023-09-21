@@ -1275,7 +1275,7 @@ class Tensor(SymmetricTensor):
             if not allow_different_types:
                 raise TypeError(f'Different types: {type(self)} and {type(other)}.')
             if isinstance(other, DiagonalTensor):
-                other = other.to_full()
+                other = other.as_Tensor()
             elif isinstance(other, ChargedTensor):
                 try:
                     other = other.convert_to_tensor()
@@ -1981,7 +1981,11 @@ class ChargedTensor(AbstractTensor):
                 return s.almost_equal(other, atol, rtol)
             else:
                 raise TypeError(f'almost_equal not supported for types {type(self)} and {type(other)}.')
-        
+
+        other_order = self._input_checks_same_legs(other)
+        if other_order is not None:
+            other = other.permute_legs(other_order)
+
         # can now assume that isinstance(other, ChargedTensor)
         if self.legs != other.legs:
             raise ValueError('Mismatching shapes')
@@ -2224,6 +2228,7 @@ class DiagonalTensor(SymmetricTensor):
                         backend=None, labels: list[str | None] = None) -> DiagonalTensor:
         if backend is None:
             backend = get_default_backend(first_leg.symmetry)
+        diag = backend.as_block(diag)
         assert backend.block_shape(diag) == (first_leg.dim,)
         data = backend.diagonal_from_block(diag, leg=first_leg)
         return cls(data=data, first_leg=first_leg, second_leg_dual=second_leg_dual, backend=backend,
@@ -2265,6 +2270,21 @@ class DiagonalTensor(SymmetricTensor):
 
     @classmethod
     def from_tensor(cls, tens: Tensor, check_offdiagonal: bool = True) -> DiagonalTensor:
+        """Create DiagonalTensor from a Tensor.
+
+        Parameters
+        ----------
+        tens : :class:`Tensor`
+            Must have two legs. Its diagonal entries ``tens[i, i]`` are used.
+        check_offdiagonal : bool
+            If the off-diagonal entries of `tens` shold be checked.
+        
+        Raises
+        ------
+        ValueError
+            If `check_offdiagonal` and any off-diagonal element is non-zero.
+            TODO should there be a tolerance?
+        """
         if tens.num_legs != 2:
             raise ValueError
         if tens.legs[1] == tens.legs[0]:
