@@ -623,17 +623,14 @@ class VectorSpace:
         """Return a copy with opposite :attr:`is_dual` flag.
 
         The result has the same :attr:`sectors` and :attr:`basis_perm`.
-        Note that this leg is niether equal to `self` nor can it be contracted with `self`.
+        Note that this leg is neither equal to `self` nor can it be contracted with `self`.
         """
-        # TODO test coverage
         non_dual_sectors = self.symmetry.dual_sectors(self._non_dual_sectors)
-        sort = np.lexsort(non_dual_sectors.T)
-        return VectorSpace(symmetry=self.symmetry,
-                           sectors=non_dual_sectors[sort],
-                           multiplicities=self.multiplicities[sort],
-                           basis_perm=self.basis_perm,
-                           is_real=self.is_real,
-                           _is_dual=not self.is_dual)
+        res = VectorSpace.from_sectors(symmetry=self.symmetry, sectors=non_dual_sectors,
+                                       multiplicities=self.multiplicities,
+                                       basis_perm=self.basis_perm, is_real=self.is_real)
+        res.is_dual = not self.is_dual
+        return res
 
     def is_equal_or_dual(self, other: VectorSpace) -> bool:
         """If another VectorSpace is equal to *or* dual of `self`."""
