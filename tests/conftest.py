@@ -38,7 +38,8 @@ def np_random() -> np.random.Generator:
                         # groups.su2_symmetry,  # TODO reintroduce once SU2 is implemented
                         ],
                 ids=repr)
-def symmetry(request):
+def symmetry(request, symmetry_backend):
+    # TODO can we make this depend on symmetry_backend fixture and exclude incompatible combinations?
     return request.param
 
 
@@ -118,6 +119,11 @@ def default_backend():
 def block_backend(request):
     if request.param == 'torch':
         torch = pytest.importorskip('torch', reason='torch not installed')
+    return request.param
+
+
+@pytest.fixture(params=['no_symmetry', 'abelian'])  # TODO include nonabelian
+def symmetry_backend(request):
     return request.param
 
 
