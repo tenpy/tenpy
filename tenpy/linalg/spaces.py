@@ -84,34 +84,39 @@ class VectorSpace:
         Internally stored version of :attr:`sectors`. For ket spaces (``is_dual=True``),
         these are the same as :attr:`sectors`, for bra spaces these are their duals.
         They are sorted such that ``np.lexsort(_non_dual_sectors.T)`` is trivial.
-
-    Parameters
-    ----------
-    symmetry: Symmetry
-        The symmetry associated with this space.
-    sectors: 2D array_like of int
-        For a ket-space (``_is_dual=False``), the sectors of the symmetry that compose this space.
-        For a bra-space, the duals of that.
-        Must be sorted such that ``np.lexsort(_non_dual_sectors.T)`` is trivial.
-        Sectors may not contain duplicates. Multiplicity is specified via the separate arg below.
-    multiplicities: 1D array_like of int, optional
-        How often each of the `sectors` appears. A 1D array of positive integers with axis [s].
-        ``sectors[i_s, :]`` appears ``multiplicities[i_s]`` times.
-        If not given, a multiplicity ``1`` is assumed for all `sectors`.
-    basis_perm : ndarray, optional
-        See the attribute :attr:`basis_perm`.
-        Per default the trivial permutation ``[0, 1, 2, ...]`` is used.
-    is_real : bool
-        If the space is over the real or complex (default) numbers.
-    _is_dual : bool
-        Whether this is the "normal" (i.e. ket) or dual (i.e. bra) space.
-
-        .. warning :
-            For ``_is_dual is True``, the passed `sectors` are interpreted as the sectors of the
-            ("non-dual") ket-space isomorphic to self.
     """
     def __init__(self, symmetry: Symmetry, sectors: SectorArray, multiplicities: ndarray = None,
                  basis_perm: ndarray = None, is_real: bool = False, _is_dual: bool = False):
+        """Initialize a VectorSpace
+
+        `VectorSpace.__init__` is not very user-friendly.
+        Consider using :meth:`from_sectors` instead.
+        
+        Parameters
+        ----------
+        symmetry: Symmetry
+            The symmetry associated with this space.
+        sectors: 2D array_like of int
+            For a ket-space (``_is_dual=False``), the sectors of the symmetry that compose this space.
+            For a bra-space, the duals of that.
+            Must be sorted such that ``np.lexsort(_non_dual_sectors.T)`` is trivial.
+            Sectors may not contain duplicates. Multiplicity is specified via the separate arg below.
+        multiplicities: 1D array_like of int, optional
+            How often each of the `sectors` appears. A 1D array of positive integers with axis [s].
+            ``sectors[i_s, :]`` appears ``multiplicities[i_s]`` times.
+            If not given, a multiplicity ``1`` is assumed for all `sectors`.
+        basis_perm : ndarray, optional
+            See the attribute :attr:`basis_perm`.
+            Per default the trivial permutation ``[0, 1, 2, ...]`` is used.
+        is_real : bool
+            If the space is over the real or complex (default) numbers.
+        _is_dual : bool
+            Whether this is the "normal" (i.e. ket) or dual (i.e. bra) space.
+
+            .. warning :
+                For ``_is_dual is True``, the passed `sectors` are interpreted as the sectors of the
+                ("non-dual") ket-space isomorphic to self.
+        """
         self.symmetry = symmetry
         self.is_real = is_real
         self.is_dual = _is_dual
@@ -243,28 +248,50 @@ class VectorSpace:
                    is_real=is_real, _is_dual=is_dual)
 
     @classmethod
-    def from_unsorted_sectors(cls, symmetry: Symmetry, sectors: SectorArray,
-                              multiplicities: ndarray = None, basis_perm: ndarray = None,
-                              is_real: bool = False):
-        """Like constructor, but allows `sectors` in any order and only creates ket-spaces."""
-        # OPTIMIZE : doing this in a cumbersome way right now...
-        #   The difficult part is figuring out the new basis_perm.
-        #   I think doing sth like basis_perm[slice(*s) for s in slices[sort]] might work...
+    def from_sectors(cls, symmetry: Symmetry, sectors: SectorArray, multiplicities: ndarray = None,
+                     basis_perm: ndarray = None, is_real: bool = False):
+        """Like constructor, but fewer requirements on `sectors`.
+
+        Parameters
+        ----------
+        symmetry: Symmetry
+            The symmetry associated with this space.
+        sectors: 2D array_like of int
+            The sectors of the symmetry that compose this space.
+            Can be in any order and may contain duplicates.
+        multiplicities: 1D array_like of int, optional
+            How often each of the `sectors` appears. A 1D array of positive integers with axis [s].
+            ``sectors[i_s, :]`` appears ``multiplicities[i_s]`` times.
+            If not given, a multiplicity ``1`` is assumed for all `sectors`.
+        basis_perm : ndarray, optional
+            The permutation from the desired public basis to the basis secribed by `sectors`
+            and `multiplicities`. Per default the trivial permutation ``[0, 1, 2, ...]`` is used.
+        is_real : bool
+            If the space is over the real or complex numbers.
+        """
         sectors = np.asarray(sectors, dtype=int)
-        if np.any(symmetry.batch_sector_dim(sectors) > 1):
-            # TODO I accidentaly assumed abelian symmetries when implementing this...
-            raise NotImplementedError
-        assert len(sectors.shape) == 2 and sectors.shape[1] == symmetry.sector_ind_len
+        assert sectors.ndim == 2 and sectors.shape[1] == symmetry.sector_ind_len
         if multiplicities is None:
             multiplicities = np.ones((len(sectors),), dtype=int)
-        slices = _calc_slices(symmetry=symmetry, sectors=sectors, multiplicities=multiplicities)
-        dim = np.sum(symmetry.batch_sector_dim(sectors) * multiplicities)
+        else:
+            multiplicities = np.asarray(multiplicities, dtype=int)
+            assert multiplicities.shape == ((len(sectors),))
         if basis_perm is None:
-            basis_perm = np.arange(dim)
-        sectors_of_basis = np.zeros((dim, symmetry.sector_ind_len), dtype=int)
-        for sect, slc in zip(sectors, slices):
-            sectors_of_basis[basis_perm[slice(*slc)]] = sect[None, :]
-        return cls.from_basis(symmetry=symmetry, sectors_of_basis=sectors_of_basis, is_real=is_real)
+            basis_perm = np.arange(np.sum(symmetry.batch_sector_dim(sectors) * multiplicities))
+        # sort sectors
+        sort = np.lexsort(sectors.T)
+        sectors = sectors[sort]
+        multiplicities = multiplicities[sort]
+        num_states = symmetry.batch_sector_dim(sectors) * multiplicities
+        basis_slices = np.concatenate([[0], np.cumsum(num_states)], axis=0)
+        mult_slices = np.concatenate([[0], np.cumsum(multiplicities)], axis=0)
+        basis_perm = np.concatenate([basis_perm[basis_slices[i]: basis_slices[i + 1]] for i in sort])
+        # merge duplicate sectors (does not affect basis_perm)
+        diffs = find_row_differences(sectors, include_len=True)
+        multiplicities = mult_slices[diffs[1:]] - mult_slices[diffs[:-1]]
+        sectors = sectors[diffs[:-1]]  # [:-1] to exclude len
+        return cls(symmetry=symmetry, sectors=sectors, multiplicities=multiplicities,
+                   basis_perm=basis_perm, is_real=is_real, _is_dual=False)
 
     @property
     def sectors(self):

@@ -160,9 +160,9 @@ def test_product_space(symmetry, symmetry_sectors_rng, np_random):
 
     # TODO (JU) test real (as in "not complex") vectorspaces
 
-    s1 = spaces.VectorSpace.from_unsorted_sectors(symmetry=symmetry, sectors=sectors, multiplicities=mults)
-    s2 = spaces.VectorSpace.from_unsorted_sectors(symmetry=symmetry, sectors=sectors[:2], multiplicities=mults[:2])
-    s3 = spaces.VectorSpace.from_unsorted_sectors(symmetry=symmetry, sectors=sectors[::2], multiplicities=mults[::2])
+    s1 = spaces.VectorSpace.from_sectors(symmetry=symmetry, sectors=sectors, multiplicities=mults)
+    s2 = spaces.VectorSpace.from_sectors(symmetry=symmetry, sectors=sectors[:2], multiplicities=mults[:2])
+    s3 = spaces.VectorSpace.from_sectors(symmetry=symmetry, sectors=sectors[::2], multiplicities=mults[::2])
 
     p1 = spaces.ProductSpace([s1, s2, s3])
     p2 = spaces.ProductSpace([s1, s2])

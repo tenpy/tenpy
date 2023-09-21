@@ -269,7 +269,7 @@ def test_ChargedTensor_tofrom_flat_block_single_sector(vector_space_rng, symmetr
     block_size = leg.sector_multiplicity(sector)
     if block_size == 0:
         block_size = 4
-        leg = VectorSpace.from_unsorted_sectors(
+        leg = VectorSpace.from_sectors(
             symmetry=leg.symmetry, sectors=np.concatenate([leg.sectors, sector[None, :]]),
             multiplicities=np.concatenate([leg.multiplicities, np.array([block_size])])
         )
