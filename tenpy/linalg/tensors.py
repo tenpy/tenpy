@@ -1529,6 +1529,7 @@ class ChargedTensor(AbstractTensor):
         else:
             dtype = Dtype.common(invariant_part.dtype,
                                  invariant_part.backend.get_dtype_from_data(dummy_leg_state))
+        assert invariant_part.labels[-1] == self._DUMMY_LABEL
         AbstractTensor.__init__(self, backend=invariant_part.backend, legs=invariant_part.legs[:-1],
                                 labels=invariant_part.labels[:-1], dtype=dtype)
         self.invariant_part = invariant_part
@@ -1728,8 +1729,8 @@ class ChargedTensor(AbstractTensor):
 
     def flip_dummy_leg_duality(self) -> ChargedTensor:
         """Like :func:`flip_leg_duality` but for the dummy leg"""
-        return ChargedTensor(invariant_part=self.invariant_part.flip_leg_duality(-1),
-                             dummy_leg_state=self.dummy_leg_state)
+        inv = self.invariant_part.flip_leg_duality(-1).relabel({'!*': '!'})
+        return ChargedTensor(invariant_part=inv, dummy_leg_state=self.dummy_leg_state)
 
     def project_to_invariant(self) -> Tensor:
         """Project self into the invariant subspace of the parent space.
@@ -1864,7 +1865,8 @@ class ChargedTensor(AbstractTensor):
                 raise NotImplementedError
         else:
             dummy_leg_state = self.backend.block_conj(self.dummy_leg_state)
-        return ChargedTensor(invariant_part=self.invariant_part.conj(), dummy_leg_state=dummy_leg_state)
+        inv = self.invariant_part.conj().relabel({'!*': '!'})
+        return ChargedTensor(invariant_part=inv, dummy_leg_state=dummy_leg_state)
 
     def copy(self, deep=True) -> ChargedTensor:
         if deep:
@@ -1972,6 +1974,8 @@ class ChargedTensor(AbstractTensor):
         # can now assume that isinstance(other, ChargedTensor)
         if self.legs != other.legs:
             raise ValueError('Mismatching shapes')
+        if self.dummy_leg.is_dual != other.dummy_leg.is_dual:
+            other = other.flip_dummy_leg_duality()
         if self.dummy_leg != other.dummy_leg:
             return False
 
