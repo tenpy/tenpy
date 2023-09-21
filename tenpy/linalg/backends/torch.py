@@ -11,7 +11,8 @@ from .nonabelian import AbstractNonabelianBackend
 from ..misc import inverse_permutation
 from ..spaces import VectorSpace
 
-__all__ = ['TorchBlockBackend', 'NoSymmetryTorchBackend', 'AbelianTorchBackend', 'NonabelianTorchBackend']
+__all__ = ['TorchBlockBackend', 'NoSymmetryTorchBackend', 'AbelianTorchBackend',
+           'NonabelianTorchBackend']
 
 
 if TYPE_CHECKING:

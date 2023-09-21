@@ -8,7 +8,7 @@ from .numpy import NoSymmetryNumpyBackend, AbelianNumpyBackend
 from .torch import NoSymmetryTorchBackend, AbelianTorchBackend
 from ..groups import Symmetry, no_symmetry, AbelianGroup
 
-__all__ = ['get_backend']
+__all__ = ['get_backend', 'get_default_backend', 'todo_get_backend']
 
 logger = logging.getLogger(__name__)
 
@@ -93,3 +93,12 @@ def get_default_backend(symmetry: Symmetry = None):
     # TODO: proper implementation
     kwargs = {} if symmetry is None else dict(symmetry=symmetry)
     return get_backend(**kwargs)
+
+
+def todo_get_backend():
+    """temporary tool during development. Allows to get a backend.
+
+    TODO revisit usages and decide if backends should be passed around through inits or a
+    global state of tenpy
+    """
+    return get_backend(block_backend='numpy', symmetry_backend='abelian')

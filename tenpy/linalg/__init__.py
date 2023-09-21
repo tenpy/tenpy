@@ -9,13 +9,13 @@ which provides the :class:`~tenpy.linalg.tensors.Tensor` class used by the rest 
 .. autosummary::
     :toctree: .
 
-    tensors
     groups
     spaces
+    backends
+    tensors
     random_matrix
     sparse
-    krylov_based
-    old
+    matix_operations
 """
 # Copyright 2018-2023 TeNPy Developers, GNU GPLv3
 

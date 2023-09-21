@@ -12,6 +12,10 @@ from .abelian import AbstractAbelianBackend
 import numpy as np
 
 
+__all__ = ['ArrayApiBlockBackend', 'NoSymmetryArrayApiBackend', 'AbelianArrayApiBackend',
+           'NonabelianArrayApiBackend']
+
+
 # TODO carry through device args?
 # TODO provide an example...
 

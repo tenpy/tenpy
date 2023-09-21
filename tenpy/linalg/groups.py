@@ -10,10 +10,11 @@ from numpy import typing as npt
 import numpy as np
 
 
-__all__ = ['Sector', 'FusionStyle', 'BraidingStyle', 'Symmetry', 'NoSymmetry', 'ProductSymmetry',
-           'GroupSymmetry', 'AbelianGroup', 'U1Symmetry', 'ZNSymmetry', 'SU2Symmetry', 'FermionParity',
-           'no_symmetry', 'z2_symmetry', 'z3_symmetry', 'z4_symmetry', 'z5_symmetry', 'z6_symmetry',
-           'z7_symmetry', 'z8_symmetry', 'z9_symmetry', 'u1_symmetry', 'su2_symmetry', 'fermion_parity',
+__all__ = ['Sector', 'SectorArray', 'FusionStyle', 'BraidingStyle', 'Symmetry', 'ProductSymmetry',
+           'GroupSymmetry', 'AbelianGroup', 'NoSymmetry', 'U1Symmetry', 'ZNSymmetry', 'SU2Symmetry',
+           'FermionParity', 'FibonacciGrading', 'no_symmetry', 'z2_symmetry', 'z3_symmetry',
+           'z4_symmetry', 'z5_symmetry', 'z6_symmetry', 'z7_symmetry', 'z8_symmetry', 'z9_symmetry',
+           'u1_symmetry', 'su2_symmetry', 'fermion_parity',
            ]
 
 

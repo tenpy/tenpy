@@ -249,7 +249,7 @@ def all_str_repr_demos():
 
 
 def demo_VectorSpace_repr(fun=repr):
-    from tests.linalg import conftest
+    from tests import conftest
     for symmetry in conftest.symmetry._pytestfixturefunction.params:
         space = conftest.random_vector_space(symmetry, max_num_blocks=20)
         print()
@@ -257,7 +257,7 @@ def demo_VectorSpace_repr(fun=repr):
 
 
 def demo_ProductSpace_repr(fun=repr):
-    from tests.linalg import conftest
+    from tests import conftest
     for symmetry in conftest.symmetry._pytestfixturefunction.params:
         num = 1 + np.random.choice(3)
         is_dual = np.random.choice([True, False, None])

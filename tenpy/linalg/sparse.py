@@ -25,9 +25,9 @@ from ..tools.math import speigs, speigsh
 from ..tools.misc import argsort
 
 
-__all__ = ['LinearOperator', 'LinearOperatorWrapper', 'SumLinearOperator',
+__all__ = ['LinearOperator', 'TensorLinearOperator', 'LinearOperatorWrapper', 'SumLinearOperator',
            'ShiftedLinearOperator', 'ProjectedLinearOperator', 'NumpyArrayLinearOperator',
-           'HermitianNumpyArrayLinearOperator']
+           'HermitianNumpyArrayLinearOperator', 'gram_schmidt']
 
 
 class LinearOperator(metaclass=ABCMeta):

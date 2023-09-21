@@ -10,7 +10,7 @@ from ..tools.misc import inverse_permutation, to_iterable
 from ..tools.params import asConfig
 
 __all__ = ['svd', 'svd_apply_mask', 'truncated_svd', 'truncate_singular_values', 'qr', 'svd_split',
-           'pinv', 'leg_bipartition', 'exp', 'log']
+           'pinv', 'eigh', 'leg_bipartition', 'exp', 'log']
 
 
 def svd(a: AbstractTensor, u_legs: list[int | str] = None, vh_legs: list[int | str] = None,

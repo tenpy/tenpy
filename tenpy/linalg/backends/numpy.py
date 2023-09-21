@@ -12,7 +12,8 @@ from .nonabelian import AbstractNonabelianBackend
 from ..misc import inverse_permutation
 from ..spaces import VectorSpace
 
-__all__ = ['NumpyBlockBackend', 'NoSymmetryNumpyBackend', 'AbelianNumpyBackend', 'NonabelianNumpyBackend']
+__all__ = ['NumpyBlockBackend', 'NoSymmetryNumpyBackend', 'AbelianNumpyBackend',
+           'NonabelianNumpyBackend']
 
 
 if TYPE_CHECKING:

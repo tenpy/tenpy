@@ -748,7 +748,7 @@ def demo_repr():
     #
     # run e.g. via the following command
     # python -c "from test_tensors import demo_repr; demo_repr()"
-    from tests.linalg import conftest
+    from tests import conftest
     from tenpy.linalg.backends.backend_factory import get_backend
 
     labels = ['vL', 'p', 'vR*', 'a', 'q', 'x', 'y', 'z', 'i', 'o']

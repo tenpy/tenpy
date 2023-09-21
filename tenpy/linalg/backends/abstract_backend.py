@@ -9,7 +9,7 @@ import numpy as np
 from ..groups import Symmetry
 from ..spaces import VectorSpace, ProductSpace, _fuse_spaces
 
-__all__ = ['Data', 'Block', 'AbstractBackend', 'AbstractBlockBackend']
+__all__ = ['Data', 'DiagonalData', 'Block', 'Dtype', 'AbstractBackend', 'AbstractBlockBackend']
 
 
 if TYPE_CHECKING:

@@ -28,10 +28,12 @@ from ..tools.misc import to_iterable, to_iterable_of_len
 from ..tools.docs import amend_parent_docstring
 from ..tools.string import vert_join
 
-__all__ = ['Shape', 'AbstractTensor', 'Tensor', 'ChargedTensor', 'DiagonalTensor', 'Mask',
-           'almost_equal', 'combine_legs', 'conj', 'inner', 'is_scalar', 'norm', 'outer',
-           'permute_legs', 'split_legs', 'squeeze_legs', 'tdot', 'trace', 'zero_like',
-           'get_same_backend', 'match_leg_order', 'angle', 'real', 'imag', 'real_if_close']
+__all__ = ['Shape', 'AbstractTensor', 'SymmetricTensor', 'Tensor', 'ChargedTensor',
+           'DiagonalTensor', 'Mask', 'add_trivial_leg', 'almost_equal', 'combine_legs', 'conj',
+           'detect_sectors_from_block', 'flip_leg_duality', 'inner', 'is_scalar', 'norm', 'outer',
+           'permute_legs', 'split_legs', 'squeeze_legs', 'tdot', 'trace', 'zero_like', 'eye_like',
+           'angle', 'real', 'imag', 'real_if_close', 'get_same_backend', 'match_leg_order',
+           'tensor_from_block']
 
 # svd, qr, eigen, exp, log, ... are implemented in matrix_operations.py
 
