@@ -45,6 +45,11 @@ class NumpyBlockBackend(AbstractBlockBackend):
         Dtype.complex128: np.complex128,
         Dtype.bool: np.bool_,
     }
+    
+    def as_block(self, a) -> Block:
+        block = np.asarray(a)
+        dtype = np.find_common_type([block.dtype], [float])
+        return block.astype(dtype, copy=False)
 
     def block_tdot(self, a: Block, b: Block, idcs_a: list[int], idcs_b: list[int]) -> Block:
         return np.tensordot(a, b, (idcs_a, idcs_b))

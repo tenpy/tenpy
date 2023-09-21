@@ -75,8 +75,8 @@ def test_Tensor_classmethods(backend, vector_space_rng, backend_data_rng, tensor
         with pytest.raises(ValueError):
             _ = tensors.Tensor.from_dense_block(non_symmetric_block, legs=legs, backend=backend)
 
-    print('checking from_numpy')
-    tens = tensors.Tensor.from_numpy(numpy_block, legs=legs, backend=backend)
+    print('checking from numpy')
+    tens = tensors.Tensor.from_dense_block(numpy_block, legs=legs, backend=backend)
     tens.test_sanity()
     data = tens.to_numpy_ndarray()
     npt.assert_array_equal(data, numpy_block)

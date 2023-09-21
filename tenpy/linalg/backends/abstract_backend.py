@@ -555,6 +555,12 @@ class AbstractBlockBackend(metaclass=ABCMeta):
     svd_algorithms: list[str]  # first is default
 
     @abstractmethod
+    def as_block(self, a) -> Block:
+        """Convert objects to blocks. Should support blocks, numpy arrays, nested python containers.
+        May support more."""
+        ...
+    
+    @abstractmethod
     def block_from_numpy(self, a: np.ndarray) -> Block:
         ...
 

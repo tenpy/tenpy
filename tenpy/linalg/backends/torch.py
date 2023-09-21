@@ -49,6 +49,10 @@ class TorchBlockBackend(AbstractBlockBackend):
         }
         self.BlockCls = torch.Tensor
         super().__init__(**kwargs)
+    
+    def as_block(self, a) -> Block:
+        block = torch_module.as_tensor(a, device=self.device)
+        return 1. * block  # OPTIMIZE convert type to at least float without multiplying?
 
     def block_tdot(self, a: Block, b: Block, idcs_a: list[int], idcs_b: list[int]) -> Block:
         return torch_module.tensordot(a, b, (idcs_a, idcs_b))

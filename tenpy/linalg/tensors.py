@@ -830,8 +830,9 @@ class Tensor(SymmetricTensor):
 
         Parameters
         ----------
-        block : Block
-            The data to be converted to a Tensor as a backend-specific block.
+        block : Block-like
+            The data to be converted to a Tensor as a backend-specific block or some data that
+            can be converted using :meth:`AbstractBlockBackend.as_block`.
         legs : list of :class:`~tenpy.linalg.spaces.VectorSpace`, optional
             The vectorspaces associated with legs of the tensors. This specifies the symmetry.
         backend : :class:`~tenpy.linalg.backends.abstract_backend.AbstractBackend`, optional
@@ -849,20 +850,11 @@ class Tensor(SymmetricTensor):
         """
         if backend is None:
             backend = get_default_backend(legs[0].symmetry)
+        block = backend.as_block(block)
         if dtype is not None:
             block = backend.block_to_dtype(block, dtype)
         data = backend.from_dense_block(block, legs=legs, atol=atol, rtol=rtol)
         return cls(data=data, backend=backend, legs=legs, labels=labels)
-
-    @classmethod
-    def from_numpy(cls, array: np.ndarray, legs: list[VectorSpace], backend=None, dtype: Dtype = None,
-                   labels: list[str | None] = None, atol: float = 1e-8, rtol: float = 1e-5) -> Tensor:
-        """Like from_dense_block but `array` is a numpy array(-like)"""
-        if backend is None:
-            backend = get_default_backend(legs[0].symmetry)
-        block = backend.block_from_numpy(np.asarray(array))
-        return cls.from_dense_block(block=block, legs=legs, backend=backend, labels=labels, atol=atol,
-                                    rtol=rtol, dtype=dtype)
 
     @classmethod
     def from_flat_block_trivial_sector(cls, leg: VectorSpace, block: Block, backend: AbstractBackend,
@@ -1580,7 +1572,8 @@ class ChargedTensor(AbstractTensor):
         Parameters
         ----------
         block :
-            The data to be converted, a backend-specific block.
+            The data to be converted, a backend-specific block or some data that
+            can be converted using :meth:`AbstractBlockBackend.as_block`.
         legs : list of :class:`~tenpy.linalg.spaces.VectorSpace`, optional
             The vectorspaces associated with legs of the tensors. Contains symmetry data.
             Does not contain the dummy leg.
@@ -1607,6 +1600,7 @@ class ChargedTensor(AbstractTensor):
             backend = get_default_backend(legs[0].symmetry)
         if labels is None:
             labels = [None] * len(legs)
+        block = backend.as_block(block)
         if dtype is not None:
             block = backend.block_to_dtype(block, dtype)
         # add 1-dim axis for the dummy leg
@@ -1655,22 +1649,6 @@ class ChargedTensor(AbstractTensor):
             legs=[leg, dummy_leg], backend=backend, labels=[label, cls._DUMMY_LABEL]
         )
         return cls(inv_part, dummy_leg_state=None)
-
-    @classmethod
-    def from_numpy(cls, array: np.ndarray, legs: list[VectorSpace], backend=None, dtype: Dtype=None,
-                   labels: list[str | None] = None, atol: float = 1e-8, rtol: float = 1e-5,
-                   charge: VectorSpace | Sector = None, dummy_leg_state=None
-                   ) -> ChargedTensor:
-        """
-        Like from_dense_block but `array` and `dummy_leg_state` are numpy arrays.
-        """
-        if backend is None:
-            backend = get_default_backend(legs[0].symmetry)
-        block = backend.block_from_numpy(np.asarray(array))
-        if dummy_leg_state is not None:
-            dummy_leg_state = backend.block_from_numpy(np.asarray(dummy_leg_state))
-        return cls.from_dense_block(block, legs=legs, backend=backend, dtype=dtype, labels=labels,
-                                    atol=atol, rtol=rtol, charge=charge, dummy_leg_state=dummy_leg_state)
 
     @classmethod
     def from_numpy_func(cls, func, legs: VectorSpace | list[VectorSpace], charge: VectorSpace | Sector,

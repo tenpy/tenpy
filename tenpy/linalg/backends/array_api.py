@@ -42,6 +42,10 @@ class ArrayApiBlockBackend(AbstractBlockBackend):
             Dtype.complex128: api_namespace.complex128,
             Dtype.bool:api_namespace.bool,
         }
+        
+    def as_block(self, a) -> Block:
+        # OPTIMIZE force float or complex dtype without multiplying
+        return 1. * self._api.asarray(a)
 
     def block_tdot(self, a: Block, b: Block, idcs_a: list[int], idcs_b: list[int]) -> Block:
         return self._api.tensordot(a, b, (idcs_a, idcs_b))
