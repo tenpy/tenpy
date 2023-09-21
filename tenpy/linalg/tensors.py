@@ -1801,7 +1801,8 @@ class ChargedTensor(AbstractTensor):
     
     def _repr_header_lines(self, indent: str) -> list[str]:
         lines = AbstractTensor._repr_header_lines(self, indent=indent)
-        lines.append(f'{indent}* Dummy Leg: {self.dummy_leg}')
+        lines.append(f'{indent}* Dummy Leg: dim={self.dummy_leg.dim}, '
+                     f'dual={self.dummy_leg.is_dual}, sectors={self.dummy_leg.sectors}')
         lines.append(f'{indent}* Dummy Leg state:')
         if self.dummy_leg_state is None:
             state_repr = '[1.]' if self.dummy_leg.dim == 1 else 'unspecified'
