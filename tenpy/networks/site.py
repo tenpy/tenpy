@@ -8,18 +8,17 @@ from __future__ import annotations
 import numpy as np
 import itertools
 import copy
-import warnings
-from functools import partial
+from functools import partial, reduce
 
 from ..linalg.tensors import (AbstractTensor, Tensor, SymmetricTensor, ChargedTensor,
                               DiagonalTensor, almost_equal, tensor_from_block, angle, real_if_close,
                               get_same_backend)
-from ..linalg.backends import AbstractBackend
+from ..linalg.backends import AbstractBackend, get_default_backend, Block
 from ..linalg.matrix_operations import exp
 from ..linalg.groups import (ProductSymmetry, Symmetry, SU2Symmetry, U1Symmetry, ZNSymmetry,
-                             no_symmetry)
+                             no_symmetry, SectorArray)
 from ..linalg.spaces import VectorSpace, ProductSpace
-from ..linalg.backends import todo_get_backend, Block
+from ..linalg.misc import make_stride
 from ..tools.misc import inverse_permutation, find_subclass
 from ..tools.hdf5_io import Hdf5Exportable
 
@@ -63,8 +62,25 @@ class Site(Hdf5Exportable):
             They are used as building blocks for non-local operators, e.g. Hamiltonians
             or e.g. :math:`S_i^{+} S_j^{-}` whose expectation value forms a correlation function.
 
+    .. _OperatorCategories:
+
+    In the docstrings of :class:`Site` subclasses, we include tables which assign the local
+    operators to one of the following sub-categories:
+
+    ==========  ====================================================================================
+    category    description
+    ==========  ====================================================================================
+    diag        A symmetric operator which is also diagonal, i.e. it is a :class:`DiagonalTensor`
+    sym         A non-diagonal symmetric operator, i.e. a :class:`Tensor`
+    gen         A general operator, i.e. a :class:`ChargedTensor` with a one-dimensional dummy-leg
+    gen(n)      A general operator with a dummy_leg of dimension ``n > 1``.
+                Always such that contracting two copies over the dummy leg gives the correct
+                two-body operator, as e.g. :math:`S^x_{i} S^x_{j}` for :class:`SpinSite`.
+    --          Operator not available
+    ==========  ====================================================================================
+
     All sites define the operators ``'Id'``, the identity, and ``'JW'``, the local contribution to
-    Jordan-Wigner strings, both of which are symmetric.
+    Jordan-Wigner strings, both of which are symmetric and diagonal.
 
     Parameters
     ----------
@@ -321,6 +337,7 @@ class Site(Hdf5Exportable):
                 op = getattr(self, name).to_dense_block(['p', 'p*'])
                 delattr(self, name)
                 self.add_op(name, op, backend=backend, need_JW=False, hc=False)  # need_JW and hc_ops are still set
+        return self
         
     def rename_op(self, old_name: str, new_name: str):
         """Rename an added operator.
@@ -497,10 +514,7 @@ class GroupedSite(Site):
             legs = [site.leg for site in sites]
             res_symmetry = sites[0].leg.symmetry
         elif symmetry_combine == 'drop':
-            legs = [sites[0].leg.drop_symmetry()]
-            res_symmetry = legs[0].symmetry
-            for site in sites[1:]:
-                legs.append(site.leg.drop_symmetry(symmetry=res_symmetry))
+            legs = [s.leg.drop_symmetry() for s in sites]
         elif symmetry_combine == 'independent':
             legs = []
             all_symmetries = [site.leg.symmetry for site in sites]
@@ -520,16 +534,16 @@ class GroupedSite(Site):
             # copy to avoid modifiyng the existing sites
             sites = [copy.copy(s).change_leg(l) for s, l in zip(sites, legs)]
         # eventhough Site.__init__ will also set self.leg, we need it earlier to use kroneckerproduct
-        self.leg = leg = ProductSpace(legs, backend=todo_get_backend())
+        backend = get_same_backend(*(s.Id for s in sites))
+        self.leg = leg = ProductSpace(legs, backend=backend)
         JW_all = self.kroneckerproduct([s.JW for s in sites])
         # initialize Site , will set labels and add ops below
-        Site.__init__(self, leg, backend=get_same_backend(*(s.Id for s in sites)),
-                      state_labels=None, ops=dict(JW=JW_all))
+        Site.__init__(self, leg, backend=backend, state_labels=None, JW=JW_all)
         # set state labels
         dims = np.array([site.dim for site in sites])
         if leg.symmetry.is_abelian:
             perm = leg.get_basis_transformation_perm()
-            strides = np.cumprod(dims[::-1])[::-1]  # C-style: first index has largest stride
+            strides = make_stride(dims, cstyle=True)
             for states_labels in itertools.product(*[s.state_labels.items() for s in sites]):
                 # states_labels is a list of (label, index) pairs for every site
                 inds = np.array([i for _, i in states_labels])
@@ -552,11 +566,11 @@ class GroupedSite(Site):
                 ops = JW_Ids if need_JW else Ids
                 ops[i] = op
                 self.add_op(name + labels[i], self.kroneckerproduct(ops), need_JW=need_JW, hc=hc)
-            for name, (op_in, op_out) in site.general_ops.items():
+            for name, op in site.general_ops.items():
                 need_JW = name in site.need_JW_string
                 hc = False if name not in site.hc_ops else site.hc_ops[name] + labels[i]
                 ops = JW_Ids if need_JW else Ids
-                ops[i] = op_in
+                ops[i] = op
                 self.add_op(name + labels[i], self.kroneckerproduct(ops), need_JW=need_JW, hc=hc)
             Ids[i] = site.symmetric_ops['Id']
             JW_Ids[i] = site.symmetric_ops['JW']
@@ -576,7 +590,16 @@ class GroupedSite(Site):
             Kronecker product :math:`ops[0] \otimes ops[1] \otimes \cdots`,
             with labels ``['p', 'p*']``.
         """
-        op = ops[0].relabel({'p': 'p0', 'p*': 'p0*'})
+        if all(isinstance(op, DiagonalTensor) for op in ops):
+            # TODO proper implementation? e.g. in tenpy.linalg.matrix_operations?
+            backend = get_same_backend(*ops)
+            # note that block_kron is associative, order does not matter
+            diag = reduce(backend.block_kron, (op.diag_block for op in ops))
+            return DiagonalTensor.from_diag_block(diag, self.leg, backend=backend, labels=['p', 'p*'])
+        for i, op in enumerate(ops):
+            if isinstance(op, DiagonalTensor):
+                ops[i] = op.as_Tensor()
+        op = ops[0].relabel({'p': 'p0', 'p*': 'p0*'}, inplace=False)
         for i, op_i in enumerate(ops[1:], start=1):
             op = op.outer(op_i, relabel2={'p': f'p{i}', 'p*': f'p{i}*'})
         return op.combine_legs([f'p{i}' for i in range(self.n_sites)],
@@ -616,7 +639,7 @@ def group_sites(sites, n=2, labels=None, symmetry_combine='same'):
     return grouped_sites
 
 
-def set_common_symmetry(sites: list[Site], symmetry_combine: callable | str = 'by_name',
+def set_common_symmetry(sites: list[Site], symmetry_combine: callable | str | list = 'by_name',
                         new_symmetry: Symmetry = None):
     """Adjust the symmetries of the given sites *in place* such that they can be used together.
 
@@ -632,19 +655,22 @@ def set_common_symmetry(sites: list[Site], symmetry_combine: callable | str = 'b
     sites : list of :class:`Site`
         The sites to be combined. The sites are modified **in place** and thus may not contain
         the same object multiple times.
-    symmetry_combine : ``'by_name'`` | ``'drop'`` | ``'independent'`` | function
+    symmetry_combine : ``'by_name'`` | ``'drop'`` | ``'independent'`` | function | list
         Defines how the new common symmetry arises from the individual symmetries.
-        We split any `ProducSymmetry` from the sites into their individual factors and build the
-        resulting symmetry from these factors of all sites.
 
         ``'by_name'``
-            Default. Considers equal factors (i.e. same mathematical group and same name) to
-            be the same symmetry (i.e. the sum of their charges is conserved). Different factors
-            are considered as independent (i.e. their charges are conserved individually).
-        ``'drop'``
-            Drop all symmetries.
+            Default. Any :class:`ProductSymmetry` is split into its factors. We then considers
+            equal symmetries (i.e. same mathematical group and same name) to be the same symmetry
+            (i.e. the sum of their charges is conserved). Unequal symmetries are considered as
+            independent (i.e. their charges are conserved individually).
+        
         ``'independent'``
             Consider all factors as independent, even if they have the same name.
+            Exception: any unneeded :class:`NoSymmetry` instances are ignored.
+        
+        ``'drop'``
+            Drop all symmetries.
+        
         function
             A function with call structure
 
@@ -653,9 +679,19 @@ def set_common_symmetry(sites: list[Site], symmetry_combine: callable | str = 'b
             That specifies how the sectors of the new symmetry arise from those of the old symmetry,
             i.e. ``old_sector`` is a sector of the old symmetry on the ``site_idx``-th site.
             Using this option makes the `new_symmetry` parameter required.
+
+        list of list of tuple
+            Specifies new sectors as linear combinations of the old ones. Requires `new_symmetry`.
+            Each entry of the outer list specifies a column of the resulting sectors, e.g. for one
+            factor of a resulting :class:`ProductSymmetry`. The inner list goes over terms to be
+            added up and its entries are tuples ``(prefactor, site_idx, old_col_idx)``, indicating
+            that ``prefactor * old_sectors[:, old_col_idx]`` of the ``site_idx``-th of the `sites`
+            is a term in the sum. The ``prefactor``s may be non-integer, as long as the resulting
+            sectors are integer.
+
     new_symmetry : :class:`Symmetry`, optional
         The new symmetry. Is ignored if `symmetry_combine` is one of the pre-defined (``str``)
-        options. Is required if `symmetry_combine` is a function.
+        options. Is required if `symmetry_combine` is a function or a list.
 
     TODO examples and doctests
     """
@@ -675,7 +711,7 @@ def set_common_symmetry(sites: list[Site], symmetry_combine: callable | str = 'b
                 sector_slices = site.leg.symmetry.sector_slices
             else:
                 new_factors = [site.leg.symmetry]
-                sector_slices = [0, site.leg.symmetry.ind_len]
+                sector_slices = [0, site.leg.symmetry.sector_ind_len]
             for n, f in enumerate(new_factors):
                 slc = slice(sector_slices[n], sector_slices[n + 1])
                 # Symmetry.__eq__ checks for same mathematical group *and* same descriptive_name
@@ -685,9 +721,13 @@ def set_common_symmetry(sites: list[Site], symmetry_combine: callable | str = 'b
                 else:
                     factors.append(f)
                     sites_and_slices.append([(i, slc)])
-        new_symmetry = ProductSymmetry(factors)
-        new_symm_slices = [slice(new_symmetry.sector_slices[n], new_symmetry.sector_slices[n + 1])
-                           for n in range(len(factors))]
+        if len(factors) == 1:
+            new_symmetry = factors[0]
+            new_symm_slices = [0, new_symmetry.sector_ind_len]
+        else:
+            new_symmetry = ProductSymmetry(factors)
+            new_symm_slices = [slice(new_symmetry.sector_slices[n], new_symmetry.sector_slices[n + 1])
+                               for n in range(len(factors))]
         for i, site in enumerate(sites):
             slice_tuples = []  # list of tuples (new_slice, old_slice) indicating that
                                # for this site, new_sector[new_slice] = old_sector[old_slice]
@@ -702,7 +742,7 @@ def set_common_symmetry(sites: list[Site], symmetry_combine: callable | str = 'b
                     mapped_sectors[:, mapped_slice] = s[:, old_slice]
                 return mapped_sectors
 
-            new_leg = site.leg.apply_sector_map(symmetry=new_symmetry, sector_map=symmetry_combine)
+            new_leg = site.leg.change_symmetry(symmetry=new_symmetry, sector_map=symmetry_combine)
             site.change_leg(new_leg)
         return
     
@@ -713,10 +753,29 @@ def set_common_symmetry(sites: list[Site], symmetry_combine: callable | str = 'b
         return
 
     if symmetry_combine == 'independent':
-        new_symmetry = ProductSymmetry.from_nested_factors([site.leg.symmetry for site in sites])
+        factors = []
+        ind_lens = []  # basically [site.leg.symmetry.sector_ind_len for site in sites]
+                       # but adjusted for the ignored no_symmetrys
+        for site in sites:
+            site_symmetry = site.symmetry
+            if isinstance(site_symmetry, ProductSymmetry):
+                new_factors = [f for f in site_symmetry.factors if f != no_symmetry]
+                ind_lens.append(sum(f.sector_ind_len for f in new_factors))
+                factors.extend(new_factors)
+            elif site_symmetry == no_symmetry:
+                ind_lens.append(0)
+            else:
+                ind_lens.append(site_symmetry.sector_ind_len)
+                factors.append(site_symmetry)
+        if len(factors) == 0:
+            new_symmetry = no_symmetry
+        elif len(factors) == 1:
+            new_symmetry = factors[0]
+        else:
+            new_symmetry = ProductSymmetry(factors)
+
         start = 0
-        for i, site in enumerate(sites):
-            ind_len = site.leg.symmetry.ind_len
+        for site, ind_len in zip(sites, ind_lens):
 
             def symmetry_combine(s):
                 res = np.tile(new_symmetry.trivial_sector[None, :], (len(s), 1))
@@ -724,10 +783,28 @@ def set_common_symmetry(sites: list[Site], symmetry_combine: callable | str = 'b
                 return res
 
             site.change_leg(site.leg.change_symmetry(symmetry=new_symmetry, sector_map=symmetry_combine))
+            start = start + ind_len
         return
 
     elif isinstance(symmetry_combine, str):
         raise ValueError(f'Unknown sector_map keyword: "{symmetry_combine}"')
+
+    if isinstance(symmetry_combine, list):
+        input_symmetry_combine = symmetry_combine[:]
+
+        def symmetry_combine(site_idx, old_sectors: SectorArray) -> SectorArray:
+            cols = []
+            for col_spec in input_symmetry_combine:
+                col = np.zeros((len(old_sectors),), dtype=int)
+                for factor, i, col_idx in col_spec:
+                    assert isinstance(col_idx, int)
+                    if i != site_idx:
+                        continue
+                    col = col + factor * old_sectors[:, col_idx]
+                cols.append(np.rint(col))
+                if not np.allclose(col, cols[-1]):
+                    raise ValueError(f'Sectors must have integer entries. Got {col}')
+            return np.stack(cols, axis=1)
         
     # can now assume that sector_map is an actual function
     # with signature (site_idx: int, sectors: SectorArray) -> SectorArray
@@ -747,59 +824,57 @@ class SpinHalfSite(Site):
 
     Local states are ``up`` (0) and ``down`` (1).
 
-    ==============  =================  ============  =========================
-    `conserve`      symmetry           sectors       meaning of sector label
-    ==============  =================  ============  =========================
-    ``'SU(2)'``     SU2Symmetry        ``[1]``       2 * S
-    ``'Sz'``        U1Symmetry         ``[1, -1]``   2 * Sz
-    ``'parity'``    ZNSymmetry(N=2)    ``[1, 0]``    (# spin up) mod 2
-    ``'None'``      NoSymmetry         ``[0, 0]``    --
-    ==============  =================  ============  =========================
+    ==============  =====================  =============  =========================
+    `conserve`      symmetry               sectors        meaning of sector label
+    ==============  =====================  =============  =========================
+    ``'Stot'``      ``SU2Symmetry``        ``[1]``        ``2 * S``
+    ``'Sz'``        ``U1Symmetry``         ``[1, -1]``    ``2 * Sz``
+    ``'parity'``    ``ZNSymmetry(N=2)``    ``[1, 0]``     ``(Sz + .5) % 2``
+    ``'None'``      ``NoSymmetry``         ``[0, 0]``     --
+    ==============  =====================  =============  =========================
 
     TODO include dipole symmetry here too?
     
     Local operators are the usual spin-1/2 operators, e.g. ``Sz = [[0.5, 0.], [0., -0.5]]``,
     ``Sx = 0.5 * Sigmax`` for the Pauli matrix `Sigmax`.
+    The following table lists all local operators and their :ref:`categories <OperatorCategories>`.
 
-    ====================  =====================================  =======  ====  ========  ======
-    operator              description                            SU(2)    Sz    parity    None
-    ====================  =====================================  =======  ====  ========  ======
-    ``Id, JW``            Identity :math:`\mathbb{1}`            sym      sym   sym       sym
-    ``Sx, Sy``            Spin components :math:`S^{x,y}`        --       gen!  gen!      sym
-    ``Sz``                Spin component :math:`S^{z}`           --       sym   sym       sym
-    ``Sigmax, Sigmay``    Pauli matrices :math:`\sigma^{x,y}`    --       gen!  gen!      sym
-    ``Sigmaz``            Pauli matrix :math:`\sigma^{z}`        --       sym   sym       sym
-    ``Sp, Sm``            :math:`S^{\pm} = S^{x} \pm i S^{y}`    --       gen   gen       sym
-    ``Svec``              The vector of spin operators.          gen      gen!  gen!      gen!
-    ====================  =====================================  =======  ====  ========  ======
-
-    TODO where should we explain the keys:
-    sym : symmetric
-    gen : general with dummy_leg.dim == 1
-    gen! : general with dummy_leg.dim > 1
+    ====================  =================================  ========  ========  ========  ========
+    operator              description                        Stot      Sz        parity    None
+    ====================  =================================  ========  ========  ========  ========
+    ``Id, JW``            Identity :math:`\mathbb{1}`        diag      diag      diag      diag
+    ``Sz``                Spin component :math:`S^z`         --        diag      diag      diag
+    ``Sx, Sy``            Spin components :math:`S^{x,y}`    --        gen(2)    gen(2)    sym
+    ``Sp, Sm``            :math:`S^{\pm} = S^x \pm i S^y`    --        gen       gen       sym
+    ``Svec``              The vector of spin operators.      gen       gen(3)    gen(3)    gen(3)
+    ``Sigmaz``            Pauli matrix :math:`\sigma^{z}`    --        diag      diag      diag
+    ``Sigmax, Sigmay``    Pauli matrices x & y               --        gen(2)    gen(2)    sym
+    ====================  =================================  ========  ========  ========  ========
 
     Parameters
     ----------
-    conserve : str | None
+    conserve : 'Stot' | 'Sz' | 'parity' | 'None'
         Defines what is conserved, see table above.
     backend : :class:`~tenpy.linalg.backends.AbstractBackend`, optional
         The backend used to create the operators.
     """
     def __init__(self, conserve: str = 'Sz', backend: AbstractBackend = None):
-        assert conserve in ['SU(2)', 'Sz', 'parity', 'None']
-        self.conserve = conserve
-        backend = todo_get_backend()
         # make leg
-        if conserve == 'SU(2)':
-            leg = VectorSpace(symmetry=SU2Symmetry('SU(2)_spin'), sectors=[[1]])
+        if conserve == 'Stot':
+            leg = VectorSpace(symmetry=SU2Symmetry('Stot'), sectors=[[1]])
         elif conserve == 'Sz':
-            leg = VectorSpace.from_basis(U1Symmetry('2*Sz'), [[1], [-1]])
+            leg = VectorSpace.from_sectors(U1Symmetry('2*Sz'), [[1], [-1]])
         elif conserve == 'parity':
-            leg = VectorSpace.from_basis(ZNSymmetry(2, 'parity_Sz'), [[1], [0]])
-        else:
+            leg = VectorSpace.from_sectors(ZNSymmetry(2, 'parity_Sz'), [[1], [0]])
+        elif conserve == 'None':
             leg = VectorSpace.from_trivial_sector(2)
-    
-        if conserve == 'SU(2)':
+        else:
+            raise ValueError(f'invalid `conserve`: {conserve}')
+        if backend is None:
+            backend = get_default_backend(symmetry=leg.symmetry)
+        # operators: Svec, Sz, Sp, Sm
+        if conserve == 'Stot':
+            # TODO test this operator!, e.g. compare Svec @ Svec vs dense expect
             dummy_leg = VectorSpace(leg.symmetry, sectors=[[2]])
             Svec_inv = Tensor.from_block_func(
                 backend.ones_block, backend=backend, legs=[leg, leg.dual, dummy_leg],
@@ -812,12 +887,13 @@ class SpinHalfSite(Site):
             ops = dict(Sz=Sz,
                        Sp=[[0., 1.], [0., 0.]],  # == Sx + i Sy
                        Sm=[[0., 0.], [1., 0.]])  # == Sx - i Sy
-
+        # operators : Sx, Sy
         if conserve == 'Sz':
             pass  # TODO add ChargedTensor versions of Sx, Sy with length 2 dummy legs. Then also Sigmax below.
         if conserve in ['parity', 'None']:
             ops.update(Sx=[[0., 0.5], [0.5, 0.]], Sy=[[0., -0.5j], [+0.5j, 0.]])
-        # Specify Hermitian conjugates
+        # initialize
+        self.conserve = conserve
         Site.__init__(self, leg=leg, backend=backend, state_labels=['up', 'down'], **ops)
         # further alias for state labels
         self.state_labels['-0.5'] = self.state_labels['down']
@@ -833,675 +909,712 @@ class SpinHalfSite(Site):
         return f'SpinHalfSite({self.conserve})'
 
 
-# TODO reintroduce the commented-out sites, implement and document like SpinHalfSite
-# class SpinSite(Site):
-#     r"""General Spin S site.
-
-#     There are `2S+1` local states range from ``down`` (0)  to ``up`` (2S+1),
-#     corresponding to ``Sz=-S, -S+1, ..., S-1, S``.
-#     Local operators are the spin-S operators,
-#     e.g. ``Sz = [[0.5, 0.], [0., -0.5]]``,
-#     ``Sx = 0.5*sigma_x`` for the Pauli matrix `sigma_x`.
-
-#     ==============  ================================================
-#     operator        description
-#     ==============  ================================================
-#     ``Id, JW``      Identity :math:`\mathbb{1}`
-#     ``Sx, Sy, Sz``  Spin components :math:`S^{x,y,z}`,
-#                     equal to half the Pauli matrices.
-#     ``Sp, Sm``      Spin flips :math:`S^{\pm} = S^{x} \pm i S^{y}`
-#     ==============  ================================================
-
-#     ============== ====  ============================
-#     `conserve`     qmod  *excluded* onsite operators
-#     ============== ====  ============================
-#     ``'Sz'``       [1]   ``Sx, Sy, Sigmax, Sigmay``
-#     ``'parity'``   [2]   --
-#     ``'None'``     []    --
-#     ============== ====  ============================
-
-#     Parameters
-#     ----------
-#     conserve : str
-#         Defines what is conserved, see table above.
-#     sort_charge : bool
-#         Whether :meth:`sort_charge` should be called at the end of initialization.
-#         This is usually a good idea to reduce potential overhead when using charge conservation.
-#         Note that this permutes the order of the local basis states for ``conserve='parity'``!
-#         For backwards compatibility with existing data, it is not (yet) enabled by default.
-
-#     Attributes
-#     ----------
-#     S : {0.5, 1, 1.5, 2, ...}
-#         The 2S+1 states range from m = -S, -S+1, ... +S.
-#     conserve : str
-#         Defines what is conserved, see table above.
-#     """
-
-#     def __init__(self, S=0.5, conserve='Sz', sort_charge=None):
-#         if not conserve:
-#             conserve = 'None'
-#         if conserve not in ['Sz', 'parity', 'None']:
-#             raise ValueError("invalid `conserve`: " + repr(conserve))
-#         self.S = S = float(S)
-#         d = 2 * S + 1
-#         if d <= 1:
-#             raise ValueError("negative S?")
-#         if np.rint(d) != d:
-#             raise ValueError("S is not half-integer or integer")
-#         d = int(d)
-#         Sz_diag = -S + np.arange(d)
-#         Sz = np.diag(Sz_diag)
-#         Sp = np.zeros([d, d])
-#         for n in np.arange(d - 1):
-#             # Sp |m> =sqrt( S(S+1)-m(m+1)) |m+1>
-#             m = n - S
-#             Sp[n + 1, n] = np.sqrt(S * (S + 1) - m * (m + 1))
-#         Sm = np.transpose(Sp)
-#         # Sp = Sx + i Sy, Sm = Sx - i Sy
-#         Sx = (Sp + Sm) * 0.5
-#         Sy = (Sm - Sp) * 0.5j
-#         # Note: For S=1/2, Sy might look wrong compared to the Pauli matrix or SpinHalfSite.
-#         # Don't worry, I'm 99.99% sure it's correct (J. Hauschild)
-#         # The reason it looks wrong is simply that this class orders the states as ['down', 'up'],
-#         # while the usual spin-1/2 convention is ['up', 'down'], as you can also see if you look
-#         # at the Sz entries...
-#         # (The commutation relations are checked explicitly in `tests/test_site.py`)
-#         ops = dict(Sp=Sp, Sm=Sm, Sz=Sz)
-#         if conserve == 'Sz':
-#             chinfo = npc.ChargeInfo([1], ['2*Sz'])
-#             leg = npc.LegCharge.from_qflat(chinfo, np.array(2 * Sz_diag, dtype=np.int64))
-#         else:
-#             ops.update(Sx=Sx, Sy=Sy)
-#             if conserve == 'parity':
-#                 chinfo = npc.ChargeInfo([2], ['parity_Sz'])
-#                 leg = npc.LegCharge.from_qflat(chinfo, np.mod(np.arange(d), 2))
-#             else:
-#                 leg = npc.LegCharge.from_trivial(d)
-#         self.conserve = conserve
-#         names = [str(i) for i in np.arange(-S, S + 1, 1.)]
-#         Site.__init__(self, leg, names, sort_charge=sort_charge, **ops)
-#         self.state_labels['down'] = self.state_labels[names[0]]
-#         self.state_labels['up'] = self.state_labels[names[-1]]
-
-#     def __repr__(self):
-#         """Debug representation of self."""
-#         return "SpinSite(S={S!s}, {c!r})".format(S=self.S, c=self.conserve)
-
-
-# class FermionSite(Site):
-#     r"""Create a :class:`Site` for spin-less fermions.
-
-#     Local states are ``empty`` and ``full``.
-
-#     .. warning ::
-#         Using the Jordan-Wigner string (``JW``) is crucial to get correct results,
-#         otherwise you just describe hardcore bosons!
-#         Further details in :doc:`/intro/JordanWigner`.
-
-#     ==============  ===================================================================
-#     operator        description
-#     ==============  ===================================================================
-#     ``Id``          Identity :math:`\mathbb{1}`
-#     ``JW``          Sign for the Jordan-Wigner string.
-#     ``C``           Annihilation operator :math:`c` (up to 'JW'-string left of it)
-#     ``Cd``          Creation operator :math:`c^\dagger` (up to 'JW'-string left of it)
-#     ``N``           Number operator :math:`n= c^\dagger c`
-#     ``dN``          :math:`\delta n := n - filling`
-#     ``dNdN``        :math:`(\delta n)^2`
-#     ==============  ===================================================================
-
-#     ============== ====  ===============================
-#     `conserve`     qmod  *exluded* onsite operators
-#     ============== ====  ===============================
-#     ``'N'``        [1]   --
-#     ``'parity'``   [2]   --
-#     ``'None'``     []    --
-#     ============== ====  ===============================
-
-#     Parameters
-#     ----------
-#     conserve : str
-#         Defines what is conserved, see table above.
-#     filling : float
-#         Average filling. Used to define ``dN``.
-
-#     Attributes
-#     ----------
-#     conserve : str
-#         Defines what is conserved, see table above.
-#     filling : float
-#         Average filling. Used to define ``dN``.
-#     """
-
-#     def __init__(self, conserve='N', filling=0.5):
-#         if not conserve:
-#             conserve = 'None'
-#         if conserve not in ['N', 'parity', 'None']:
-#             raise ValueError("invalid `conserve`: " + repr(conserve))
-#         JW = np.array([[1., 0.], [0., -1.]])
-#         C = np.array([[0., 1.], [0., 0.]])
-#         Cd = np.array([[0., 0.], [1., 0.]])
-#         N = np.array([[0., 0.], [0., 1.]])
-#         dN = np.array([[-filling, 0.], [0., 1. - filling]])
-#         dNdN = dN**2  # (element wise power is fine since dN is diagonal)
-#         ops = dict(JW=JW, C=C, Cd=Cd, N=N, dN=dN, dNdN=dNdN)
-#         if conserve == 'N':
-#             chinfo = npc.ChargeInfo([1], ['N'])
-#             leg = npc.LegCharge.from_qflat(chinfo, [0, 1])
-#         elif conserve == 'parity':
-#             chinfo = npc.ChargeInfo([2], ['parity_N'])
-#             leg = npc.LegCharge.from_qflat(chinfo, [0, 1])
-#         else:
-#             leg = npc.LegCharge.from_trivial(2)
-#         self.conserve = conserve
-#         self.filling = filling
-#         Site.__init__(self, leg, ['empty', 'full'], sort_charge=True, **ops)
-#         # specify fermionic operators
-#         self.need_JW_string |= set(['C', 'Cd', 'JW'])
-
-#     def __repr__(self):
-#         """Debug representation of self."""
-#         return "FermionSite({c!r}, {f:f})".format(c=self.conserve, f=self.filling)
-
-
-# class SpinHalfFermionSite(Site):
-#     r"""Create a :class:`Site` for spinful (spin-1/2) fermions.
-
-#     Local states are:
-#          ``empty``  (vacuum),
-#          ``up``     (one spin-up electron),
-#          ``down``   (one spin-down electron), and
-#          ``full``   (both electrons)
-
-#     Local operators can be built from creation operators.
-
-#     .. warning ::
-#         Using the Jordan-Wigner string (``JW``) in the correct way is crucial to get correct
-#         results, otherwise you just describe hardcore bosons!
-
-#     ==============  =============================================================================
-#     operator        description
-#     ==============  =============================================================================
-#     ``Id``          Identity :math:`\mathbb{1}`
-#     ``JW``          Sign for the Jordan-Wigner string :math:`(-1)^{n_{\uparrow}+n_{\downarrow}}`
-#     ``JWu``         Partial sign for the Jordan-Wigner string :math:`(-1)^{n_{\uparrow}}`
-#     ``JWd``         Partial sign for the Jordan-Wigner string :math:`(-1)^{n_{\downarrow}}`
-#     ``Cu``          Annihilation operator spin-up :math:`c_{\uparrow}`
-#                     (up to 'JW'-string on sites left of it).
-#     ``Cdu``         Creation operator spin-up :math:`c^\dagger_{\uparrow}`
-#                     (up to 'JW'-string on sites left of it).
-#     ``Cd``          Annihilation operator spin-down :math:`c_{\downarrow}`
-#                     (up to 'JW'-string on sites left of it).
-#                     Includes ``JWu`` such that it anti-commutes onsite with ``Cu, Cdu``.
-#     ``Cdd``         Creation operator spin-down :math:`c^\dagger_{\downarrow}`
-#                     (up to 'JW'-string on sites left of it).
-#                     Includes ``JWu`` such that it anti-commutes onsite with ``Cu, Cdu``.
-#     ``Nu``          Number operator :math:`n_{\uparrow}= c^\dagger_{\uparrow} c_{\uparrow}`
-#     ``Nd``          Number operator :math:`n_{\downarrow}= c^\dagger_{\downarrow} c_{\downarrow}`
-#     ``NuNd``        Dotted number operators :math:`n_{\uparrow} n_{\downarrow}`
-#     ``Ntot``        Total number operator :math:`n_t= n_{\uparrow} + n_{\downarrow}`
-#     ``dN``          Total number operator compared to the filling :math:`\Delta n = n_t-filling`
-#     ``Sx, Sy, Sz``  Spin operators :math:`S^{x,y,z}`, in particular
-#                     :math:`S^z = \frac{1}{2}( n_\uparrow - n_\downarrow )`
-#     ``Sp, Sm``      Spin flips :math:`S^{\pm} = S^{x} \pm i S^{y}`,
-#                     e.g. :math:`S^{+} = c^\dagger_\uparrow c_\downarrow`
-#     ==============  =============================================================================
-
-#     The spin operators are defined as :math:`S^\gamma =
-#     (c^\dagger_{\uparrow}, c^\dagger_{\downarrow}) \sigma^\gamma (c_{\uparrow}, c_{\downarrow})^T`,
-#     where :math:`\sigma^\gamma` are spin-1/2 matrices (i.e. half the pauli matrices).
-
-#     ============= ============= ======= =======================================
-#     `cons_N`      `cons_Sz`     qmod    *excluded* onsite operators
-#     ============= ============= ======= =======================================
-#     ``'N'``       ``'Sz'``      [1, 1]  ``Sx, Sy``
-#     ``'N'``       ``'parity'``  [1, 2]  --
-#     ``'N'``       ``None``      [1]     --
-#     ``'parity'``  ``'Sz'``      [2, 1]  ``Sx, Sy``
-#     ``'parity'``  ``'parity'``  [2, 2]  --
-#     ``'parity'``  ``None``      [2]     --
-#     ``None``      ``'Sz'``      [1]     ``Sx, Sy``
-#     ``None``      ``'parity'``  [2]     --
-#     ``None``      ``None``      []      --
-#     ============= ============= ======= =======================================
-
-#     Parameters
-#     ----------
-#     cons_N : ``'N' | 'parity' | None``
-#         Whether particle number is conserved, c.f. table above.
-#     cons_Sz : ``'Sz' | 'parity' | None``
-#         Whether spin is conserved, c.f. table above.
-#     filling : float
-#         Average filling. Used to define ``dN``.
-
-#     Attributes
-#     ----------
-#     cons_N : ``'N' | 'parity' | None``
-#         Whether particle number is conserved, c.f. table above.
-#     cons_Sz : ``'Sz' | 'parity' | None``
-#         Whether spin is conserved, c.f. table above.
-#     filling : float
-#         Average filling. Used to define ``dN``.
-#     """
-
-#     def __init__(self, cons_N='N', cons_Sz='Sz', filling=1.):
-#         if not cons_N:
-#             cons_N = 'None'
-#         if cons_N not in ['N', 'parity', 'None']:
-#             raise ValueError("invalid `cons_N`: " + repr(cons_N))
-#         if not cons_Sz:
-#             cons_Sz = 'None'
-#         if cons_Sz not in ['Sz', 'parity', 'None']:
-#             raise ValueError("invalid `cons_Sz`: " + repr(cons_Sz))
-#         d = 4
-#         states = ['empty', 'up', 'down', 'full']
-#         # 0) Build the operators.
-#         Nu_diag = np.array([0., 1., 0., 1.], dtype=np.float64)
-#         Nd_diag = np.array([0., 0., 1., 1.], dtype=np.float64)
-#         Nu = np.diag(Nu_diag)
-#         Nd = np.diag(Nd_diag)
-#         Ntot = np.diag(Nu_diag + Nd_diag)
-#         dN = np.diag(Nu_diag + Nd_diag - filling)
-#         NuNd = np.diag(Nu_diag * Nd_diag)
-#         JWu = np.diag(1. - 2 * Nu_diag)  # (-1)^Nu
-#         JWd = np.diag(1. - 2 * Nd_diag)  # (-1)^Nd
-#         JW = JWu * JWd  # (-1)^{Nu+Nd}
-
-#         Cu = np.zeros((d, d))
-#         Cu[0, 1] = Cu[2, 3] = 1
-#         Cdu = np.transpose(Cu)
-#         # For spin-down annihilation operator: include a Jordan-Wigner string JWu
-#         # this ensures that Cdu.Cd = - Cd.Cdu
-#         # c.f. the chapter on the Jordan-Wigner trafo in the userguide
-#         Cd_noJW = np.zeros((d, d))
-#         Cd_noJW[0, 2] = Cd_noJW[1, 3] = 1
-#         Cd = np.dot(JWu, Cd_noJW)  # (don't do this for spin-up...)
-#         Cdd = np.transpose(Cd)
-
-#         # spin operators are defined as  (Cdu, Cdd) S^gamma (Cu, Cd)^T,
-#         # where S^gamma is the 2x2 matrix for spin-half
-#         Sz = np.diag(0.5 * (Nu_diag - Nd_diag))
-#         Sp = np.dot(Cdu, Cd)
-#         Sm = np.dot(Cdd, Cu)
-#         Sx = 0.5 * (Sp + Sm)
-#         Sy = -0.5j * (Sp - Sm)
-
-#         ops = dict(JW=JW, JWu=JWu, JWd=JWd,
-#                    Cu=Cu, Cdu=Cdu, Cd=Cd, Cdd=Cdd,
-#                    Nu=Nu, Nd=Nd, Ntot=Ntot, NuNd=NuNd, dN=dN,
-#                    Sx=Sx, Sy=Sy, Sz=Sz, Sp=Sp, Sm=Sm)  # yapf: disable
-
-#         # handle charges
-#         qmod = []
-#         qnames = []
-#         charges = []
-#         if cons_N == 'N':
-#             qnames.append('N')
-#             qmod.append(1)
-#             charges.append([0, 1, 1, 2])
-#         elif cons_N == 'parity':
-#             qnames.append('parity_N')
-#             qmod.append(2)
-#             charges.append([0, 1, 1, 0])
-#         if cons_Sz == 'Sz':
-#             qnames.append('2*Sz')  # factor 2 s.t. Cu, Cd have well-defined charges!
-#             qmod.append(1)
-#             charges.append([0, 1, -1, 0])
-#             del ops['Sx']
-#             del ops['Sy']
-#         elif cons_Sz == 'parity':
-#             qnames.append('parity_Sz')  # the charge is (2*Sz) mod (2*2)
-#             qmod.append(4)
-#             charges.append([0, 1, 3, 0])  # == [0, 1, -1, 0] mod 4
-#             # e.g. terms like `Sp_i Sp_j + hc` with Sp=Cdu Cd have charges 'N', 'parity_Sz'.
-#             # The `parity_Sz` is non-trivial in this case!
-#         if len(qmod) == 0:
-#             leg = npc.LegCharge.from_trivial(d)
-#         else:
-#             if len(qmod) == 1:
-#                 charges = charges[0]
-#             else:  # len(charges) == 2: need to transpose
-#                 charges = [[q1, q2] for q1, q2 in zip(charges[0], charges[1])]
-#             chinfo = npc.ChargeInfo(qmod, qnames)
-#             leg = npc.LegCharge.from_qflat(chinfo, charges)
-#         self.cons_N = cons_N
-#         self.cons_Sz = cons_Sz
-#         self.filling = filling
-#         Site.__init__(self, leg, states, sort_charge=True, **ops)
-#         # specify fermionic operators
-#         self.need_JW_string |= set(['Cu', 'Cdu', 'Cd', 'Cdd', 'JWu', 'JWd', 'JW'])
-
-#     def __repr__(self):
-#         """Debug representation of self."""
-#         return "SpinHalfFermionSite({cN!r}, {cS!r}, {f:f})".format(cN=self.cons_N,
-#                                                                    cS=self.cons_Sz,
-#                                                                    f=self.filling)
-
-
-# class SpinHalfHoleSite(Site):
-#     r"""Create a :class:`Site` for spinful (spin-1/2) fermions, restricted to empty or singly occupied sites
-
-#     Local states are:
-#          ``empty``  (vacuum),
-#          ``up``     (one spin-up electron),
-#          ``down``   (one spin-down electron)
-
-#     Local operators can be built from creation operators.
-
-#     .. warning ::
-#         Using the Jordan-Wigner string (``JW``) in the correct way is crucial to get correct
-#         results, otherwise you just describe hardcore bosons!
-
-#     ==============  =============================================================================
-#     operator        description
-#     ==============  =============================================================================
-#     ``Id``          Identity :math:`\mathbb{1}`
-#     ``JW``          Sign for the Jordan-Wigner string :math:`(-1)^{n_{\uparrow}+n_{\downarrow}}`
-#     ``JWu``         Partial sign for the Jordan-Wigner string :math:`(-1)^{n_{\uparrow}}`
-#     ``JWd``         Partial sign for the Jordan-Wigner string :math:`(-1)^{n_{\downarrow}}`
-#     ``Cu``          Annihilation operator spin-up :math:`c_{\uparrow}`
-#                     (up to 'JW'-string on sites left of it).
-#     ``Cdu``         Creation operator spin-up :math:`c^\dagger_{\uparrow}`
-#                     (up to 'JW'-string on sites left of it).
-#     ``Cd``          Annihilation operator spin-down :math:`c_{\downarrow}`
-#                     (up to 'JW'-string on sites left of it).
-#                     Includes ``JWu`` such that it anti-commutes onsite with ``Cu, Cdu``.
-#     ``Cdd``         Creation operator spin-down :math:`c^\dagger_{\downarrow}`
-#                     (up to 'JW'-string on sites left of it).
-#                     Includes ``JWu`` such that it anti-commutes onsite with ``Cu, Cdu``.
-#     ``Nu``          Number operator :math:`n_{\uparrow}= c^\dagger_{\uparrow} c_{\uparrow}`
-#     ``Nd``          Number operator :math:`n_{\downarrow}= c^\dagger_{\downarrow} c_{\downarrow}`
-#     ``Ntot``        Total number operator :math:`n_t= n_{\uparrow} + n_{\downarrow}`
-#     ``dN``          Total number operator compared to the filling :math:`\Delta n = n_t-filling`
-#     ``Sx, Sy, Sz``  Spin operators :math:`S^{x,y,z}`, in particular
-#                     :math:`S^z = \frac{1}{2}( n_\uparrow - n_\downarrow )`
-#     ``Sp, Sm``      Spin flips :math:`S^{\pm} = S^{x} \pm i S^{y}`,
-#                     e.g. :math:`S^{+} = c^\dagger_\uparrow c_\downarrow`
-#     ==============  =============================================================================
-
-#     The spin operators are defined as :math:`S^\gamma =
-#     (c^\dagger_{\uparrow}, c^\dagger_{\downarrow}) \sigma^\gamma (c_{\uparrow}, c_{\downarrow})^T`,
-#     where :math:`\sigma^\gamma` are spin-1/2 matrices (i.e. half the pauli matrices).
-
-#     ============= ============= ======= =======================================
-#     `cons_N`      `cons_Sz`     qmod    *excluded* onsite operators
-#     ============= ============= ======= =======================================
-#     ``'N'``       ``'Sz'``      [1, 1]  ``Sx, Sy``
-#     ``'N'``       ``'parity'``  [1, 2]  --
-#     ``'N'``       ``None``      [1]     --
-#     ``'parity'``  ``'Sz'``      [2, 1]  ``Sx, Sy``
-#     ``'parity'``  ``'parity'``  [2, 2]  --
-#     ``'parity'``  ``None``      [2]     --
-#     ``None``      ``'Sz'``      [1]     ``Sx, Sy``
-#     ``None``      ``'parity'``  [2]     --
-#     ``None``      ``None``      []      --
-#     ============= ============= ======= =======================================
-
-#     Parameters
-#     ----------
-#     cons_N : ``'N' | 'parity' | None``
-#         Whether particle number is conserved, c.f. table above.
-#     cons_Sz : ``'Sz' | 'parity' | None``
-#         Whether spin is conserved, c.f. table above.
-#     filling : float
-#         Average filling. Used to define ``dN``.
-
-#     Attributes
-#     ----------
-#     cons_N : ``'N' | 'parity' | None``
-#         Whether particle number is conserved, c.f. table above.
-#     cons_Sz : ``'Sz' | 'parity' | None``
-#         Whether spin is conserved, c.f. table above.
-#     filling : float
-#         Average filling. Used to define ``dN``.
-#     """
-
-#     def __init__(self, cons_N='N', cons_Sz='Sz', filling=1.):
-#         if not cons_N:
-#             cons_N = 'None'
-#         if cons_N not in ['N', 'parity', 'None']:
-#             raise ValueError("invalid `cons_N`: " + repr(cons_N))
-#         if not cons_Sz:
-#             cons_Sz = 'None'
-#         if cons_Sz not in ['Sz', 'parity', 'None']:
-#             raise ValueError("invalid `cons_Sz`: " + repr(cons_Sz))
-#         d = 3
-#         states = ['empty', 'up', 'down']
-#         # 0) Build the operators.
-#         Nu_diag = np.array([0., 1., 0.], dtype=np.float64)
-#         Nd_diag = np.array([0., 0., 1.], dtype=np.float64)
-#         Nu = np.diag(Nu_diag)
-#         Nd = np.diag(Nd_diag)
-#         Ntot = np.diag(Nu_diag + Nd_diag)
-#         dN = np.diag(Nu_diag + Nd_diag - filling)
-#         JWu = np.diag(1. - 2 * Nu_diag)  # (-1)^Nu
-#         JWd = np.diag(1. - 2 * Nd_diag)  # (-1)^Nd
-#         JW = JWu * JWd  # (-1)^{Nu+Nd}
-
-#         Cu = np.zeros((d, d))
-#         Cu[0, 1] = 1
-#         Cdu = np.transpose(Cu)
-#         # For spin-down annihilation operator: include a Jordan-Wigner string JWu
-#         # this ensures that Cdu.Cd = - Cd.Cdu
-#         # c.f. the chapter on the Jordan-Wigner trafo in the userguide
-#         Cd_noJW = np.zeros((d, d))
-#         Cd_noJW[0, 2] = 1
-#         Cd = np.dot(JWu, Cd_noJW)  # (don't do this for spin-up...)
-#         Cdd = np.transpose(Cd)
-
-#         # spin operators are defined as  (Cdu, Cdd) S^gamma (Cu, Cd)^T,
-#         # where S^gamma is the 2x2 matrix for spin-half
-#         Sz = np.diag(0.5 * (Nu_diag - Nd_diag))
-#         Sp = np.dot(Cdu, Cd)
-#         Sm = np.dot(Cdd, Cu)
-#         Sx = 0.5 * (Sp + Sm)
-#         Sy = -0.5j * (Sp - Sm)
-
-#         ops = dict(JW=JW, JWu=JWu, JWd=JWd,
-#                    Cu=Cu, Cdu=Cdu, Cd=Cd, Cdd=Cdd,
-#                    Nu=Nu, Nd=Nd, Ntot=Ntot, dN=dN,
-#                    Sx=Sx, Sy=Sy, Sz=Sz, Sp=Sp, Sm=Sm)  # yapf: disable
-
-#         # handle charges
-#         qmod = []
-#         qnames = []
-#         charges = []
-#         if cons_N == 'N':
-#             qnames.append('N')
-#             qmod.append(1)
-#             charges.append([0, 1, 1])
-#         elif cons_N == 'parity':
-#             qnames.append('parity_N')
-#             qmod.append(2)
-#             charges.append([0, 1, 1])
-#         if cons_Sz == 'Sz':
-#             qnames.append('2*Sz')  # factor 2 s.t. Cu, Cd have well-defined charges!
-#             qmod.append(1)
-#             charges.append([0, 1, -1])
-#             del ops['Sx']
-#             del ops['Sy']
-#         elif cons_Sz == 'parity':
-#             qnames.append('parity_Sz')  # the charge is (2*Sz) mod (2*2)
-#             qmod.append(4)
-#             charges.append([0, 1, 3])  # == [0, 1, -1, 0] mod 4
-#             # e.g. terms like `Sp_i Sp_j + hc` with Sp=Cdu Cd have charges 'N', 'parity_Sz'.
-#             # The `parity_Sz` is non-trivial in this case!
-#         if len(qmod) == 0:
-#             leg = npc.LegCharge.from_trivial(d)
-#         else:
-#             if len(qmod) == 1:
-#                 charges = charges[0]
-#             else:  # len(charges) == 2: need to transpose
-#                 charges = [[q1, q2] for q1, q2 in zip(charges[0], charges[1])]
-#             chinfo = npc.ChargeInfo(qmod, qnames)
-#             leg = npc.LegCharge.from_qflat(chinfo, charges)
-#         self.cons_N = cons_N
-#         self.cons_Sz = cons_Sz
-#         self.filling = filling
-#         Site.__init__(self, leg, states, sort_charge=True, **ops)
-#         # specify fermionic operators
-#         self.need_JW_string |= set(['Cu', 'Cdu', 'Cd', 'Cdd', 'JWu', 'JWd', 'JW'])
-
-#     def __repr__(self):
-#         """Debug representation of self."""
-#         return "SpinHalfFermionSite({cN!r}, {cS!r}, {f:f})".format(cN=self.cons_N,
-#                                                                    cS=self.cons_Sz,
-#                                                                    f=self.filling)
-
-
-# class BosonSite(Site):
-#     r"""Create a :class:`Site` for up to `Nmax` bosons.
-
-#     Local states are ``vac, 1, 2, ... , Nc``.
-#     (Exception: for parity conservation, we sort as ``vac, 2, 4, ..., 1, 3, 5, ...``.)
-
-#     ==============  ========================================
-#     operator        description
-#     ==============  ========================================
-#     ``Id, JW``      Identity :math:`\mathbb{1}`
-#     ``B``           Annihilation operator :math:`b`
-#     ``Bd``          Creation operator :math:`b^\dagger`
-#     ``N``           Number operator :math:`n= b^\dagger b`
-#     ``NN``          :math:`n^2`
-#     ``dN``          :math:`\delta n := n - filling`
-#     ``dNdN``        :math:`(\delta n)^2`
-#     ``P``           Parity :math:`Id - 2 (n \mod 2)`.
-#     ==============  ========================================
-
-#     ============== ====  ==================================
-#     `conserve`     qmod  *excluded* onsite operators
-#     ============== ====  ==================================
-#     ``'N'``        [1]   --
-#     ``'parity'``   [2]   --
-#     ``'None'``     []    --
-#     ============== ====  ==================================
-
-#     Parameters
-#     ----------
-#     Nmax : int
-#         Cutoff defining the maximum number of bosons per site.
-#         The default ``Nmax=1`` describes hard-core bosons.
-#     conserve : str
-#         Defines what is conserved, see table above.
-#     filling : float
-#         Average filling. Used to define ``dN``.
-
-#     Attributes
-#     ----------
-#     conserve : str
-#         Defines what is conserved, see table above.
-#     filling : float
-#         Average filling. Used to define ``dN``.
-#     """
-
-#     def __init__(self, Nmax=1, conserve='N', filling=0.):
-#         if not conserve:
-#             conserve = 'None'
-#         if conserve not in ['N', 'parity', 'None']:
-#             raise ValueError("invalid `conserve`: " + repr(conserve))
-#         dim = Nmax + 1
-#         states = [str(n) for n in range(0, dim)]
-#         if dim < 2:
-#             raise ValueError("local dimension should be larger than 1....")
-#         B = np.zeros([dim, dim], dtype=np.float64)  # destruction/annihilation operator
-#         for n in range(1, dim):
-#             B[n - 1, n] = np.sqrt(n)
-#         Bd = np.transpose(B)  # .conj() wouldn't do anything
-#         # Note: np.dot(Bd, B) has numerical roundoff errors of eps~=4.4e-16.
-#         Ndiag = np.arange(dim, dtype=np.float64)
-#         N = np.diag(Ndiag)
-#         NN = np.diag(Ndiag**2)
-#         dN = np.diag(Ndiag - filling)
-#         dNdN = np.diag((Ndiag - filling)**2)
-#         P = np.diag(1. - 2. * np.mod(Ndiag, 2))
-#         ops = dict(B=B, Bd=Bd, N=N, NN=NN, dN=dN, dNdN=dNdN, P=P)
-#         if conserve == 'N':
-#             chinfo = npc.ChargeInfo([1], ['N'])
-#             leg = npc.LegCharge.from_qflat(chinfo, range(dim))
-#         elif conserve == 'parity':
-#             chinfo = npc.ChargeInfo([2], ['parity_N'])
-#             leg = npc.LegCharge.from_qflat(chinfo, [i % 2 for i in range(dim)])
-#         else:
-#             leg = npc.LegCharge.from_trivial(dim)
-#         self.Nmax = Nmax
-#         self.conserve = conserve
-#         self.filling = filling
-#         Site.__init__(self, leg, states, sort_charge=True, **ops)
-#         self.state_labels['vac'] = self.state_labels['0']  # alias
-
-#     def __repr__(self):
-#         """Debug representation of self."""
-#         return "BosonSite({N:d}, {c!r}, {f:f})".format(N=self.Nmax,
-#                                                        c=self.conserve,
-#                                                        f=self.filling)
-
-
-# def spin_half_species(SpeciesSite, cons_N, cons_Sz, **kwargs):
-#     """Initialize two FermionSite to represent spin-1/2 species.
-
-#     You can use this directly in the :meth:`tenpy.models.model.CouplingMPOModel.init_sites`,
-#     e.g., as in the :meth:`tenpy.models.hubbard.FermiHubbardModel2.init_sites`::
-
-#         cons_N = model_params.get('cons_N', 'N')
-#         cons_Sz = model_params.get('cons_Sz', 'Sz')
-#         return spin_half_species(FermionSite, cons_N=cons_N, cons_Sz=cons_Sz)
-
-#     Parameters
-#     ----------
-#     SpeciesSite : :class:`Site` | str
-#         The (name of the) site class for the species;
-#         usually just :class:`FermionSite`.
-#     cons_N : None | ``"N", "parity", "None"``
-#         Whether to conserve the (parity of the) total particle number ``N_up + N_down``.
-#     cons_Sz : None | ``"Sz", "parity", "None"``
-#         Whether to conserve the (parity of the) total Sz spin ``N_up - N_down``.
-
-#     Returns
-#     -------
-#     sites : list of `SpeciesSite`
-#         Each one instance of the site for spin up and down.
-#     species_names : list of str
-#         Always ``['up', 'down']``. Included such that a ``return spin_half_species(...)``
-#         in :meth:`~tenpy.models.model.CouplingMPOModel.init_sites` triggers the use of the
-#         :class:`~tenpy.models.lattice.MultiSpeciesLattice`.
-#     """
-#     SpeciesSite = find_subclass(Site, SpeciesSite)
-#     if not cons_N:
-#         cons_N = 'None'
-#     if cons_N not in ['N', 'parity', 'None']:
-#         raise ValueError("invalid `cons_N`: " + repr(cons_N))
-#     if not cons_Sz:
-#         cons_Sz = 'None'
-#     if cons_Sz not in ['Sz', 'parity', 'None']:
-#         raise ValueError("invalid `cons_Sz`: " + repr(cons_Sz))
-
-#     conserve = None if cons_N == 'None' and cons_Sz == 'None' else 'N'
-
-#     up_site = SpeciesSite(conserve=conserve, **kwargs)
-#     down_site = SpeciesSite(conserve=conserve, **kwargs)
-
-#     new_charges = []
-#     new_names = []
-#     new_mod = []
-#     if cons_N == 'N':
-#         new_charges.append([(1, 0, 0), (1, 1, 0)])
-#         new_names.append('N')
-#         new_mod.append(1)
-#     elif cons_N == 'parity':
-#         new_charges.append([(1, 0, 0), (1, 1, 0)])
-#         new_names.append('parity_N')
-#         new_mod.append(2)
-#     if cons_Sz == 'Sz':
-#         new_charges.append([(1, 0, 0), (-1, 1, 0)])
-#         new_names.append('2*Sz')  # factor 2 s.t. Cu, Cd have well-defined charges!
-#         new_mod.append(1)
-#     elif cons_Sz == 'parity':
-#         new_charges.append([(1, 0, 0), (-1, 1, 0)])
-#         new_names.append('2*Sz')  # factor 2 s.t. Cu, Cd have well-defined charges!
-#         new_mod.append(4)
-#     set_common_charges([up_site, down_site], new_charges, new_names, new_mod)
-#     return [up_site, down_site], ['up', 'down']
+class SpinSite(Site):
+    r"""General Spin S site.
+
+    There are `2S+1` local states range from ``down`` (0)  to ``up`` (2S+1),
+    corresponding to ``Sz=-S, -S+1, ..., S-1, S``.
+
+    ==============  =====================  ==========================  ==========================
+    `conserve`      symmetry               sectors                     meaning of sector label
+    ==============  =====================  ==========================  ==========================
+    ``'Stot'``      ``SU2Symmetry``        ``[2 * S] * S``             total spin ``2 * S``
+    ``'Sz'``        ``U1Symmetry``         ``[-2 * S, ..., 2 * S]``    magnetization ``2 * Sz``
+    ``'parity'``    ``ZNSymmetry(N=2)``    ``[0, 1, 0, 1, ...]``       parity ``(Sz + S) % 2``
+    ``'None'``      ``NoSymmetry``         ``[0] * S``                 --
+    ==============  =====================  ==========================  ==========================
+
+    Local operators are the spin-S operators,
+    e.g. ``Sz = [[0.5, 0.], [0., -0.5]]``, ``Sx = [[0., 0.5], [0.5, 0.]]`` for ``S=.5``.
+    The following table lists all local operators and their :ref:`categories <OperatorCategories>`.
+
+    ===============  =====================================  ========  ========  ========  ========
+    operator         description                            Stot      Sz        parity    None
+    ===============  =====================================  ========  ========  ========  ========
+    ``Id, JW``       Identity :math:`\mathbb{1}`            sym       sym       sym       sym
+    ``Sz``           Spin component :math:`S^{z}`           --        sym       sym       sym
+    ``Sx, Sy``       Spin components :math:`S^{x,y}`        --        gen(2)    gen(2)    sym
+    ``Sp, Sm``       :math:`S^{\pm} = S^{x} \pm i S^{y}`    --        gen       gen       sym
+    ``Svec``         The vector of spin operators.          gen       gen(3)    gen(3)    gen(3)
+    ===============  =====================================  ========  ========  ========  ========
+
+    Parameters
+    ----------
+    S : {0.5, 1, 1.5, 2, ...}
+        The 2S+1 states range from m = -S, -S+1, ... +S.
+    conserve : 'Stot' | 'Sz' | 'parity' | 'None'
+        Defines what is conserved, see table above.
+    backend : :class:`~tenpy.linalg.backends.AbstractBackend`, optional
+        The backend used to create the operators.
+    """
+
+    def __init__(self, S: float = 0.5, conserve: str = 'Sz', backend: AbstractBackend = None):
+        self.S = S = float(S)
+        d = 2 * S + 1
+        if d <= 1:
+            raise ValueError("negative S?")
+        if np.rint(d) != d:
+            raise ValueError("S is not half-integer or integer")
+        d = int(d)
+        two_Sz = np.arange(1 - d, d + 1, 2)
+        Sp = np.zeros([d, d], dtype=float)
+        for n in range(d - 1):
+            # Sp |m> = sqrt( S(S+1)-m(m+1)) |m>
+            m = n - S
+            Sp[n + 1, n] = np.sqrt(S * (S + 1) - m * (m + 1))
+        Sm = np.transpose(Sp)  # no need to conj, Sp is real
+        # make leg
+        if conserve == 'Stot':
+            leg = VectorSpace(symmetry=SU2Symmetry('Stot'), sectors=[[d - 1]])
+        elif conserve == 'Sz':
+            leg = VectorSpace.from_sectors(U1Symmetry('2*Sz'), two_Sz[:, None])
+        elif conserve == 'parity':
+            leg = VectorSpace.from_basis(ZNSymmetry(2, 'parity_Sz'), np.arange(d)[:, None] % 2)
+        elif conserve == 'None':
+            leg = VectorSpace.from_trivial_sector(d)
+        else:
+            raise ValueError(f'invalid `conserve`: {conserve}')
+        if backend is None:
+            backend = get_default_backend(symmetry=leg.symmetry)
+        # operators: Svec, Sz, Sp, Sm
+        if conserve == 'Stot':
+            dummy_leg = VectorSpace(leg.symmetry, sectors=[[2]])
+            Svec_inv = Tensor.from_block_func(
+                backend.ones_block, backend=backend, legs=[leg, leg.dual, dummy_leg],
+                labels=['p', 'p*', '!']
+            )
+            ops = dict(Svec=ChargedTensor(Svec_inv))
+        else:
+            # TODO also add Svec, with a 3-dim dummy leg
+            Sz = DiagonalTensor.from_diag_block(two_Sz / 2., leg, backend=backend, labels=['p', 'p*'])
+            ops=dict(Sz=Sz, Sp=Sp, Sm=Sm)
+        # operators: Sx, Sy
+        if conserve == 'Sz':
+            pass # TODO add ChargedTensor versions of Sx, Sy with length 2 dummy legs.
+        if conserve in ['parity', 'None']:
+            # Sp = Sx + i Sy, Sm = Sx - i Sy
+            ops.update(Sx=0.5 * (Sp + Sm), Sy=0.5j * (Sm - Sp))
+            # Note: For S=1/2, Sy might look wrong compared to the Pauli matrix or SpinHalfSite.
+            # Don't worry, I'm 99.99% sure it's correct (J. Hauschild). Mee too (J. Unfried).
+            # The reason it looks wrong is simply that this class orders the states as ['down', 'up'],
+            # while the usual spin-1/2 convention is ['up', 'down'], as you can also see if you look
+            # at the Sz entries...
+            # (The commutation relations are checked explicitly in `tests/test_site.py`)
+        names = [str(i) for i in np.arange(-S, S + 1, 1.)]
+        Site.__init__(self, leg=leg, backend=backend, state_labels=names, **ops)
+        self.state_labels['down'] = self.state_labels[names[0]]
+        self.state_labels['up'] = self.state_labels[names[-1]]
+
+    def __repr__(self):
+        """Debug representation of self."""
+        return f'SpinSite(S={self.S}, {self.conserve})'
+
+
+class FermionSite(Site):
+    r"""A site with a single species of spin-less fermions.
+
+    Local states are ``empty`` and ``full``.
+    
+    .. warning ::
+        Using the Jordan-Wigner string (``JW``) is crucial to get correct results,
+        otherwise you just describe hardcore bosons!
+        Further details in :doc:`/intro/JordanWigner`.
+
+    ==============  =====================  ============  ==========================
+    `conserve`      symmetry               sectors       meaning of sector label
+    ==============  =====================  ============  ==========================
+    ``'N'``         ``U1Symmetry``         ``[0, 1]``    number of fermions
+    ``'parity'``    ``ZNSymmetry(N=2)``    ``[0, 1]``    parity of fermion number
+    ``'None'``      ``NoSymmetry``         ``[0, 0]``    --
+    ==============  =====================  ============  ==========================
+
+    TODO how to control if tenpy should use JW-strings or tenpy.linalg.groups.FermionParity?
+
+    Local operators are composed of the fermionic creation ``'Cd'`` and annihilation ``'C'``
+    operators. Note that the local operators do *not* include the Jordan-Wigner strings that
+    make them fulfill the proper commutation relations.
+    The following table lists all local operators and their :ref:`categories <OperatorCategories>`.
+
+    ===========  =======================================  ========  ========  ========
+    operator     description                              N         parity    None
+    ===========  =======================================  ========  ========  ========
+    ``Id``       Identity :math:`\mathbb{1}`              diag      diag      diag
+    ``JW``       Sign for the Jordan-Wigner string.       diag      diag      diag
+    ``C``        Annihilation operator :math:`c`          gen       gen       sym
+    ``Cd``       Creation operator :math:`c^\dagger`      gen       gen       sym
+    ``N``        Number operator :math:`n= c^\dagger c`   diag      diag      diag
+    ``dN``       :math:`\delta n := n - filling`          diag      diag      diag
+    ``dNdN``     :math:`(\delta n)^2`                     diag      diag      diag
+    ===========  =======================================  ========  ========  ========
+
+    Parameters
+    ----------
+    conserve : 'N' | 'parity' | 'None'
+        Defines what is conserved, see table above.
+    filling : float
+        Average filling. Used to define ``dN``.
+    backend : :class:`~tenpy.linalg.backends.AbstractBackend`, optional
+        The backend used to create the operators.
+    """
+
+    def __init__(self, conserve: str = 'N', filling: float = 0.5, backend: AbstractBackend = None):
+        if conserve == 'N':
+            leg = VectorSpace.from_sectors(U1Symmetry('N'), [[0], [1]])
+        elif conserve == 'parity':
+            leg = VectorSpace.from_sectors(ZNSymmetry(2, 'parity_N'), [[0], [1]])
+        elif conserve == 'None':
+            leg = VectorSpace.from_trivial_sector(2)
+        else:
+            raise ValueError(f'invalid `conserve`: {conserve}')
+        if backend is None:
+            backend = get_default_backend(symmetry=leg.symmetry)
+        JW = DiagonalTensor.from_diag_block([1., -1.], leg, backend=backend, labels=['p', 'p*'])
+        C = np.array([[0., 1.], [0., 0.]])
+        Cd = np.array([[0., 0.], [1., 0.]])
+        N_diag = np.array([0., 1.])
+        N = DiagonalTensor.from_diag_block(N_diag, leg, backend=backend, labels=['p', 'p*'])
+        dN = DiagonalTensor.from_diag_block(N_diag - filling, leg, backend=backend,
+                                            labels=['p', 'p*'])
+        dNdN = DiagonalTensor.from_diag_block((N_diag - filling) ** 2, leg, backend=backend,
+                                              labels=['p', 'p*'])
+        ops = dict(JW=JW, C=C, Cd=Cd, N=N, dN=dN, dNdN=dNdN)
+        self.filling = filling
+        self.conserve = conserve
+        Site.__init__(self, leg, backend=backend, state_labels=['empty', 'full'], **ops)
+        self.need_JW_string |= set(['C', 'Cd', 'JW'])  # pipe (``|``) for sets is union
+
+    def __repr__(self):
+        """Debug representation of self."""
+        return f'FermionSite({self.conserve}, filling={self.filling:f})'
+
+
+class SpinHalfFermionSite(Site):
+    r"""A site with a single species of spinful (spin-1/2) fermions.
+
+    Local states are:
+        ``empty``  (vacuum),
+        ``up``     (one spin-up electron),
+        ``down``   (one spin-down electron), and
+        ``full``   (both electrons)
+
+    .. warning ::
+        Using the Jordan-Wigner string (``JW``) in the correct way is crucial to get correct
+        results, otherwise you just describe hardcore bosons!
+
+    The possible symmetries factorize into the occupation number and spin sectors
+
+    ==============  =====================  =====================  ==================================
+    `conserve_N`    symmetry               sectors of basis       meaning of sector label
+    ==============  =====================  =====================  ==================================
+    ``'N'``         ``U1Symmetry``         ``[0, 1, 1, 2]``       total number ``N`` of fermions
+    ``'parity'``    ``ZNSymmetry(N=2)``    ``[0, 1, 1, 0]``       parity ``N % 2`` of fermion number
+    ``'None'``      --                     ``[0, 0, 0, 0]``       --
+    ==============  =====================  =====================  ==================================
+
+    ==============  =====================  =====================  ==============================
+    `conserve_S`    symmetry               sectors of basis       meaning of sector label
+    ==============  =====================  =====================  ==============================
+    ``'Stot'``      ``SU2Symmetry``        ``[0, 1, 1, 0]``       total spin : ``2 * S``
+    ``'Sz'``        ``U1Symmetry``         ``[0, 1, -1, 0]``      magnetization: ``2 * Sz``
+    ``'parity'``    ``ZNSymmetry(N=4)``    ``[0, 1, 3, 0]``       ``(2 * Sz) % 4``
+    ``'None'``      --                     ``[0, 0, 0, 0]``       --
+    ==============  =====================  =====================  ==============================
+
+    Local operators are composed of the fermionic creation operators ``Cdd, Cdu`` of up (down)
+    spin electrons and corresponding annihilation operators ``Cu, Cd``.
+    The spin operators are defined as :math:`S^\gamma =
+    (c^\dagger_{\uparrow}, c^\dagger_{\downarrow}) \sigma^\gamma (c_{\uparrow}, c_{\downarrow})^T`,
+    where :math:`\sigma^\gamma` are spin-1/2 matrices (i.e. half the pauli matrices).
+    TODO its a bit unfortunate to abbreviate "down" and "dagger" with the same letter "d"...
+    Note that the local operators do *not* include the Jordan-Wigner strings that
+    make them fulfill the proper commutation relations.
+
+    ===========  ===================================================================================
+    operator     description
+    ===========  ===================================================================================
+    ``Id``       Identity :math:`\mathbb{1}`
+    ``JW``       Jordan-Wigner sign :math:`(-1)^{n_{\uparrow} + n_{\downarrow}}`
+    ``JWu``      Partial sign :math:`(-1)^{n_{\uparrow}}`
+    ``JWd``      Partial sign :math:`(-1)^{n_{\downarrow}}`
+    ``Cu``       Spin-up annihilation operator :math:`c_{\uparrow}` (up to JW string)
+    ``Cdu``      Spin-up creation operator :math:`c^\dagger_{\uparrow}` (up to JW string)
+    ``Cd``       Spin-down annihilation operator :math:`c_{\downarrow}` (up to JW string)
+    ``Cdd``      Spin-down creation operator :math:`c^\dagger_{\downarrow}` (up to JW string)
+    ``Nu``       Spin-up occupation number :math:`n_{\uparrow}= c^\dagger_{\uparrow} c_{\uparrow}`
+    ``Nd``       Spin-down occ. number :math:`n_{\downarrow}= c^\dagger_{\downarrow} c_{\downarrow}`
+    ``NuNd``     Product of occupations :math:`n_{\uparrow} n_{\downarrow}`
+    ``Ntot``     Total occupation number :math:`n_t = n_{\uparrow} + n_{\downarrow}`
+    ``dN``       Occupation imbalance :math:`\delta n = n_t - \mathtt{filling}`
+    ``Sz``       Spin z-components :math:`S^z = \frac{1}{2}( n_\uparrow - n_\downarrow )`
+    ``Sp, Sm``   Spin flips :math:`S^+ = c^\dagger_{\uparrow} c_{\downarrow} = (S^-)^\dagger`
+    ``Sx, Sy``   Spin components such that e.g. :math:`S^{\pm} = S^{x} \pm i S^{y}`
+    TODO         TODO include spin vector operators
+    ===========  ===================================================================================
+
+    For the :ref:`categories <OperatorCategories>` of operators, we distinguish the following
+    different cases of what is conserved:
+        (a)  ``conserve_S == 'Stot'`` and any `conserve_N`
+        (b)  ``conserve_S == 'Sz'`` and any `conserve_N`
+        (c)  ``conserve_S == 'parity'`` and any `conserve_N`
+        (d)  ``conserve_S == 'None'`` and `conserve_N in ['N', 'parity]`
+        (e)  ``conserve_S == 'None'`` and ``conserve_N == 'None'``
+
+    ========================  ========  ========  ========  ========  =======
+    operator                  (a)       (b)       (c)       (d)       (e)
+    ========================  ========  ========  ========  ========  =======
+    Id, JW, NuNd, Ntot, dN    diag      diag      diag      diag      diag
+    JWu, Jwd, Nu, Nd, Sz      --        diag      diag      diag      diag
+    Cu, Cdu, Cd, Cdd          --        gen       gen       gen       sym
+    Sp, Sm                    --        gen       gen       sym       sym
+    Sx, Sy                    --        gen(2)    gen       sym       sym
+    ========================  ========  ========  ========  ========  =======
+
+    Parameters
+    ----------
+    cons_N : ``'N' | 'parity' | 'None'``
+        Whether particle number is conserved, c.f. table above.
+    cons_Sz : ``'Sz' | 'parity' | 'None'``
+        Whether spin is conserved, c.f. table above.
+    filling : float
+        Average filling. Used to define ``dN``.
+    backend : :class:`~tenpy.linalg.backends.AbstractBackend`, optional
+        The backend used to create the operators.
+    """
+
+    def __init__(self, conserve_N: str = 'N', conserve_S: str = 'Sz', filling: float = 1.,
+                 backend: AbstractBackend = None):
+        # parse conserve_N
+        if conserve_N == 'N':
+            sectors_N = np.array([0, 1, 1, 2])
+            sym_N = U1Symmetry('N')
+        elif conserve_N == 'parity':
+            sectors_N = np.array([0, 1, 1, 0])
+            sym_N = ZNSymmetry(2, 'parity_N')
+        elif conserve_N == 'None':
+            sectors_N = None
+            sym_N = None
+        else:
+            raise ValueError(f'invalid `conserve_N`: {conserve_N}')
+        # parse conserve_S
+        if conserve_S == 'Stot':
+            # empty is a spin-0 singlet, [up, down] are a spin-1/2 doublet
+            # full is spin-0. to see this consider e.g. that all spin operators S^{x,y,z} annihilate
+            # |full>, thus \vect{S}^2 |full> = 0.
+            sectors_S = np.array([0, 1, 1, 0])
+            sym_S = SU2Symmetry('Stot')
+            raise NotImplementedError  # TODO, need to special case the operator construction too..
+        elif conserve_S == 'Sz':
+            sectors_S = np.array([0, 1, -1, 0])
+            sym_S = U1Symmetry('2*Sz')
+        elif conserve_S == 'parity':
+            sectors_S = np.array([0, 1, 3, 0])
+            sym_S = ZNSymmetry(4, 'parity_Sz')
+        elif conserve_S == 'None':
+            sectors_S = None
+            sym_S = None
+        else:
+            raise ValueError(f'invalid `conserve_S`: {conserve_S}')
+        # build leg
+        if sym_N is None and sym_S is None:
+            leg = VectorSpace.from_trivial_sector(4)
+        elif sym_N is None:
+            leg = VectorSpace.from_basis(sym_S, sectors_S[:, None])
+        elif sym_S is None:
+            leg = VectorSpace.from_basis(sym_N, sectors_N[:, None])
+        else:
+            leg = VectorSpace.from_basis(sym_N * sym_S, np.stack([sectors_N, sectors_S], axis=1))
+        if backend is None:
+            backend = get_default_backend(symmetry=leg.symmetry)
+        # diagonal operators : Nu, Nd, Ntot, dN, NuNd, JWu, JWd, JW, Sz
+        Nu = np.array([0., 1., 0., 1.])
+        Nd = np.array([0., 0., 1., 1.])
+        Ntot = Nu + Nd
+        dN = Ntot - filling
+        NuNd = Nu * Nd
+        JWu = 1. - 2 * Nu  # (-1)^Nu  == [1, -1, 1, -1]
+        JWd = 1. - 2 * Nd  # (-1)^Nd  == [1, 1, -1, -1]
+        JW = JWu * JWd  # (-1)^{Nu+Nd} == [1, -1, -1, 1]
+        Sz = .5 * (Nu - Nd)
+        ops = dict(JW=JW, NuNd=NuNd, Ntot=Ntot, dN=dN)
+        if conserve_S != 'Stot':
+            ops.update(JWu=JWu, JWd=JWd, Nu=Nu, Nd=Nd, Sz=Sz)
+        ops = {name: DiagonalTensor.from_diag_numpy(op, leg, backend=backend, labels=['p', 'p*'])
+               for name, op in ops.items()}
+        # sym / gen[1] operators : Cu, Cdu, Cd, Cdd, Sp, Sm
+        if conserve_S != 'Stot':
+            Cu = np.zeros((4, 4), dtype=float)
+            Cu[0, 1] = Cu[2, 3] = 1.  # up -> emtpy , full -> down
+            Cdu = np.transpose(Cu)
+            # For spin-down annihilation operator: include a Jordan-Wigner string JWu
+            # this ensures that Cdu.Cd = - Cd.Cdu
+            # c.f. the chapter on the Jordan-Wigner trafo in the userguide
+            Cd_noJW = np.zeros((4, 4), dtype=float)
+            Cd_noJW[0, 2] = Cd_noJW[1, 3] = 1.
+            Cd = JWu[:, None] * Cd_noJW
+            Cdd = np.transpose(Cd)
+            Sp = np.dot(Cdu, Cd)
+            Sm = np.dot(Cdd, Cu)
+            ops.update(Cu=Cu, Cdu=Cdu, Cd=Cd, Cdd=Cdd, Sp=Sp, Sm=Sm)
+        # build Sx, Sy
+        if conserve_S in ['parity', 'None']:
+            ops.update(Sx=.5 * (Sp + Sm), Sy=-.5j * (Sp - Sm))
+        elif conserve_S == 'Sz':
+            pass  # TODO build gen(2) version
+        # build Svec
+        if conserve_S == 'Stot':
+            sector = [2]  # spin 1
+            # sectors [0, 0, 2] do not fulfill the charge rule, so this operator only acts
+            # non-trivially on the [up, down] spin doublet where the sectors are [1, 1, 2].
+            # this is what the Svec operator should do.
+            # this also means that the same construction as for the SpinHalfSite works here too.
+            if sym_N is not None:
+                sector.append(0)
+            dummy_leg = VectorSpace(leg.symmetry, sectors=[sector])
+            Svec_inv = Tensor.from_block_func(
+                backend.ones_block, backend=backend, legs=[leg, leg.dual, dummy_leg],
+                labels=['p', 'p*', '!']
+            )
+            ops.update(Svec=ChargedTensor(Svec_inv))
+        else:
+            pass  # TODO build gen(3) version
+        # initialize
+        self.conserve_N = conserve_N
+        self.conserve_S = conserve_S
+        self.filling = filling
+        states = ['empty', 'up', 'down', 'full']
+        Site.__init__(self, leg=leg, backend=backend, state_labels=states, **ops)
+        # specify fermionic operators
+        self.need_JW_string |= set(['Cu', 'Cdu', 'Cd', 'Cdd', 'JWu', 'JWd', 'JW'])
+
+    def __repr__(self):
+        """Debug representation of self."""
+        return f'SpinHalfFermionSite({self.conserve_N}, {self.conserve_S}, {self.filling})'
+
+
+class SpinHalfHoleSite(Site):
+    r"""A :class:`SpinHalfFermionSite` but restricted to empty or singly occupied sites.
+
+    Local states are:
+         ``empty``  (vacuum),
+         ``up``     (one spin-up electron),
+         ``down``   (one spin-down electron)
+
+    .. warning ::
+        Using the Jordan-Wigner string (``JW``) in the correct way is crucial to get correct
+        results, otherwise you just describe hardcore bosons!
+
+
+    The possible symmetries factorize into the occupation number and spin sectors
+
+    ==============  =====================  =====================  ==================================
+    `conserve_N`    symmetry               sectors of basis       meaning of sector label
+    ==============  =====================  =====================  ==================================
+    ``'N'``         ``U1Symmetry``         ``[0, 1, 1]``          total number ``N`` of fermions
+    ``'parity'``    ``ZNSymmetry(N=2)``    ``[0, 1, 1]``          parity ``N % 2`` of fermion number
+    ``'None'``      --                     ``[0, 0, 0]``          --
+    ==============  =====================  =====================  ==================================
+
+    ==============  =====================  =====================  ==============================
+    `conserve_S`    symmetry               sectors of basis       meaning of sector label
+    ==============  =====================  =====================  ==============================
+    ``'Stot'``      ``SU2Symmetry``        ``[0, 1, 1]``          total spin : ``2 * S``
+    ``'Sz'``        ``U1Symmetry``         ``[0, 1, -1]``         magnetization: ``2 * Sz``
+    ``'parity'``    ``ZNSymmetry(N=4)``    ``[0, 1, 3]``          ``(2 * Sz) % 4``
+    ``'None'``      --                     ``[0, 0, 0]``          --
+    ==============  =====================  =====================  ==============================
+
+    The local operators are the same as for the :class:`SpinHalfFermionSite`, namely
+    ``Id, JW, JWu, JWd, Cu, Cdu, Cd, Cdd, Nu, Nd, Ntot, dN, Sz, Sp, Sm, Sx, Sy``.
+    The definitions and categories of operators in :class:`SpinHalfFermionSite` apply here verbatim,
+    see its docstring. The only difference is that ``NdNu`` is excluded since it vanishes when the
+    double occupied state is excluded.
+
+    Parameters
+    ----------
+    cons_N : ``'N' | 'parity' | 'None'``
+        Whether particle number is conserved, c.f. table above.
+    cons_Sz : ``'Sz' | 'parity' | 'None'``
+        Whether spin is conserved, c.f. table above.
+    filling : float
+        Average filling. Used to define ``dN``.
+    backend : :class:`~tenpy.linalg.backends.AbstractBackend`, optional
+        The backend used to create the operators.
+    """
+
+    def __init__(self, conserve_N: str = 'N', conserve_S: str = 'Sz', filling: float = 1.,
+                 backend: AbstractBackend = None):
+        # parse conserve_N
+        if conserve_N == 'N':
+            sectors_N = np.array([0, 1, 1])
+            sym_N = U1Symmetry('N')
+        elif conserve_N == 'parity':
+            sectors_N = np.array([0, 1, 1])
+            sym_N = ZNSymmetry(2, 'parity_N')
+        elif conserve_N == 'None':
+            sectors_N = None
+            sym_N = None
+        else:
+            raise ValueError(f'invalid `conserve_N`: {conserve_N}')
+        # parse conserve_S
+        if conserve_S == 'Stot':
+            sectors_S = np.array([0, 1, 1])
+            sym_S = SU2Symmetry('Stot')
+            raise NotImplementedError  # TODO, need to special case the operator construction too..
+        elif conserve_S == 'Sz':
+            sectors_S = np.array([0, 1, -1])
+            sym_S = U1Symmetry('2*Sz')
+        elif conserve_S == 'parity':
+            sectors_S = np.array([0, 1, 3])
+            sym_S = ZNSymmetry(4, 'parity_Sz')
+        elif conserve_S == 'None':
+            sectors_S = None
+            sym_S = None
+        else:
+            raise ValueError(f'invalid `conserve_S`: {conserve_S}')
+        # build leg
+        if sym_N is None and sym_S is None:
+            leg = VectorSpace.from_trivial_sector(3)
+        elif sym_N is None:
+            leg = VectorSpace.from_basis(sym_S, sectors_S[:, None])
+        elif sym_S is None:
+            leg = VectorSpace.from_basis(sym_N, sectors_N[:, None])
+        else:
+            leg = VectorSpace.from_basis(sym_N * sym_S, np.stack([sectors_N, sectors_S], axis=1))
+        if backend is None:
+            backend = get_default_backend(symmetry=leg.symmetry)
+        # diagonal operators : Nu, Nd, Ntot, dN, NuNd, JWu, JWd, JW, Sz
+        Nu = np.array([0., 1., 0.])
+        Nd = np.array([0., 0., 1.])
+        Ntot = Nu + Nd
+        dN = Ntot - filling
+        JWu = 1. - 2 * Nu  # (-1)^Nu  == [1, -1, 1]
+        JWd = 1. - 2 * Nd  # (-1)^Nd  == [1, 1, -1]
+        JW = JWu * JWd  # (-1)^{Nu+Nd} == [1, -1, -1]
+        Sz = .5 * (Nu - Nd)
+        ops = dict(JW=JW, Ntot=Ntot, dN=dN)
+        if conserve_S != 'Stot':
+            ops.update(JWu=JWu, JWd=JWd, Nu=Nu, Nd=Nd, Sz=Sz)
+        ops = {name: DiagonalTensor.from_diag_numpy(op, leg, backend=backend, labels=['p', 'p*'])
+               for name, op in ops.items()}
+        # sym / gen[1] operators : Cu, Cdu, Cd, Cdd, Sp, Sm
+        if conserve_S != 'Stot':
+            Cu = np.zeros((3, 3), dtype=float)
+            Cu[0, 1] = 1.  # up -> emtpy
+            Cdu = np.transpose(Cu)
+            # For spin-down annihilation operator: include a Jordan-Wigner string JWu
+            # this ensures that Cdu.Cd = - Cd.Cdu
+            # c.f. the chapter on the Jordan-Wigner trafo in the userguide
+            Cd_noJW = np.zeros((3, 3), dtype=float)
+            Cd_noJW[0, 2] = 1.
+            Cd = JWu[:, None] * Cd_noJW
+            Cdd = np.transpose(Cd)
+            Sp = np.dot(Cdu, Cd)
+            Sm = np.dot(Cdd, Cu)
+            ops.update(Cu=Cu, Cdu=Cdu, Cd=Cd, Cdd=Cdd, Sp=Sp, Sm=Sm)
+        # build Sx, Sy
+        if conserve_S in ['parity', 'None']:
+            ops.update(Sx=.5 * (Sp + Sm), Sy=-.5j * (Sp - Sm))
+        elif conserve_S == 'Sz':
+            pass  # TODO build gen(2) version
+        # build Svec
+        if conserve_S == 'Stot':
+            sector = [2]  # spin 1
+            # sectors [0, 0, 2] do not fulfill the charge rule, so this operator only acts
+            # non-trivially on the [up, down] spin doublet where the sectors are [1, 1, 2].
+            # this is what the Svec operator should do.
+            # this also means that the same construction as for the SpinHalfSite works here too.
+            if sym_N is not None:
+                sector.append(0)
+            dummy_leg = VectorSpace(leg.symmetry, sectors=[sector])
+            Svec_inv = Tensor.from_block_func(
+                backend.ones_block, backend=backend, legs=[leg, leg.dual, dummy_leg],
+                labels=['p', 'p*', '!']
+            )
+            ops.update(Svec=ChargedTensor(Svec_inv))
+        else:
+            pass  # TODO build gen(3) version
+        # initialize
+        self.conserve_N = conserve_N
+        self.conserve_S = conserve_S
+        self.filling = filling
+        states = ['empty', 'up', 'down']
+        Site.__init__(self, leg=leg, backend=backend, state_labels=states, **ops)
+        # specify fermionic operators
+        self.need_JW_string |= set(['Cu', 'Cdu', 'Cd', 'Cdd', 'JWu', 'JWd', 'JW'])
+
+    def __repr__(self):
+        """Debug representation of self."""
+        return f'SpinHalfHoleSite({self.cons_N}, {self.cons_Sz}, {self.filling})'
+
+
+class BosonSite(Site):
+    r"""A site with a single species of spin-less bosons.
+
+    The "true" local Hilbert space is infinite dimensional and we need to restrict to a maximal
+    occupation number `Nmax` for simulations.
+    Local states are ``vac, 1, 2, ... , Nmax``.
+
+    ==============  =====================  =======================  ================================
+    `conserve`      symmetry               sectors of basis         meaning of sector label
+    ==============  =====================  =======================  ================================
+    ``'N'``         ``U1Symmetry``         ``[0, 1, ..., Nmax]``    total number ``N`` of bosons
+    ``'parity'``    ``ZNSymmetry(N=2)``    ``[0, 1, 0, 1, ...]``    boson number parity ``N % 2``
+    ``'None'``      --                     ``[0, 0, 0, 0, ...]``    --
+    ==============  =====================  =======================  ================================
+
+    The following table lists all local operators and their :ref:`categories <OperatorCategories>`.
+
+    ============  =======================================  ========  ========  ========
+    operator      description                              N         parity    None
+    ============  =======================================  ========  ========  ========
+    ``Id, JW``    Identity :math:`\mathbb{1}`              diag      diag      diag
+    ``B``         Annihilation operator :math:`b`          gen       gen       sym
+    ``Bd``        Creation operator :math:`b^\dagger`      gen       gen       sym
+    ``N``         Number operator :math:`n= b^\dagger b`   diag      diag      diag
+    ``NN``        :math:`n^2`                              diag      diag      diag
+    ``dN``        :math:`\delta n := n - filling`          diag      diag      diag
+    ``dNdN``      :math:`(\delta n)^2`                     diag      diag      diag
+    ``P``         Parity :math:`(-1)^n`                    diag      diag      diag
+    ============  =======================================  ========  ========  ========
+
+    Parameters
+    ----------
+    Nmax : int
+        Cutoff defining the maximum number of bosons per site.
+        The default ``Nmax=1`` describes hard-core bosons.
+    conserve : 'N' | 'parity' | 'None'
+        Defines what is conserved, see table above.
+    filling : float
+        Average filling. Used to define ``dN``.
+    backend : :class:`~tenpy.linalg.backends.AbstractBackend`, optional
+        The backend used to create the operators.
+    """
+
+    def __init__(self, Nmax: int = 1, conserve: str = 'N', filling: float = 0.,
+                 backend: AbstractBackend = None):
+        assert Nmax > 0
+        d = Nmax + 1
+        N = np.arange(d)
+        # build leg
+        if conserve == 'N':
+            leg = VectorSpace.from_sectors(U1Symmetry('N'), N[:, None])
+        elif conserve == 'parity':
+            leg = VectorSpace.from_sectors(ZNSymmetry(2, 'parity_N'), N[:, None] % 2)
+        elif conserve == 'None':
+            leg = VectorSpace.from_trivial_sector(d)
+        else:
+            raise ValueError(f'invalid `conserve`: {conserve}')
+        if backend is None:
+            backend = get_default_backend(symmetry=leg.symmetry)
+        # diagonal operators
+        ops = dict(N=N, NN=N ** 2, dN=(N - filling), dNdN=(N - filling) ** 2, P=1. - 2. * (N % 2))
+        ops = {name: DiagonalTensor.from_diag_numpy(op, leg, backend=backend, labels=['p', 'p*'])
+               for name, op in ops.items()}
+        # remaining ops: B, Bd
+        B = np.zeros([d, d], dtype=float)
+        for n in range(1, d):
+            B[n - 1, n] = np.sqrt(n)
+        ops.update(B=B, Bd=np.transpose(B))
+        # initialize
+        labels = [str(n) for n in range(d)]
+        self.Nmax = Nmax
+        self.conserve = conserve
+        self.filling = filling
+        Site.__init__(self, leg, backend=backend, state_labels=labels, **ops)
+        self.state_labels['vac'] = self.state_labels['0']  # alias
+
+    def __repr__(self):
+        """Debug representation of self."""
+        return f'BosonSite({self.Nmax}, {self.conserve}, {self.filling})'
+
+
+def spin_half_species(SpeciesSite: type[Site], conserve_N: str, conserve_S: str, **kwargs):
+    """Initialize two sites of a spinless species to form a spin-1/2 doublet.
+
+    You can use this directly in the :meth:`tenpy.models.model.CouplingMPOModel.init_sites`,
+    e.g., as in the :meth:`tenpy.models.hubbard.FermiHubbardModel2.init_sites`::
+
+        cons_N = model_params.get('cons_N', 'N')
+        cons_Sz = model_params.get('cons_Sz', 'Sz')
+        return spin_half_species(FermionSite, cons_N=cons_N, cons_Sz=cons_Sz)
+
+    Parameters
+    ----------
+    SpeciesSite : :class:`Site` | str
+        The (name of the) site class (the class itself, not an instance!) for the species;
+        usually just :class:`FermionSite`.
+    conserve_N : 'N' | 'parity' | 'None'
+        Whether to conserve the (parity of the) total particle number ``N_up + N_down``.
+    conserve_S :  'Sz' | 'parity' | 'None'
+        Whether to conserve the (parity of the) total Sz spin ``N_up - N_down``.
+        Using seperate sites for spin up and down excludes ``'Stot'`` conservation.
+        Use :class:`SpinHalfFermionSite` instead.
+    **kwargs
+        Keyword arguments used when initializing `SpeciesSite`.
+
+    Returns
+    -------
+    sites : list of `SpeciesSite`
+        Two instance of the site, one for spin up and one for down.
+    species_names : list of str
+        Always ``['up', 'down']``. Included such that a ``return spin_half_species(...)``
+        in :meth:`~tenpy.models.model.CouplingMPOModel.init_sites` triggers the use of the
+        :class:`~tenpy.models.lattice.MultiSpeciesLattice`.
+    """
+    SpeciesSite = find_subclass(Site, SpeciesSite)
+    conserve = conserve_N if conserve_S == 'None' else 'N'
+    up_site = SpeciesSite(conserve=conserve, **kwargs)
+    down_site = SpeciesSite(conserve=conserve, **kwargs)
+
+    if conserve_N == 'N':
+        sym_N = U1Symmetry('N')
+    elif conserve_N == 'parity':
+        sym_N = ZNSymmetry(2, 'parity_N')
+    elif conserve_N == 'None':
+        sym_N = None
+    else:
+        raise ValueError(f'invalid `conserve_N`: {conserve_N}')
+    
+    if conserve_S == 'Sz':
+        sym_S = U1Symmetry('2*Sz')
+    elif conserve_S == 'parity':
+        sym_S = ZNSymmetry(4, 'parity_Sz')
+    elif conserve_S == 'None':
+        sym_S = None
+    else:
+        raise ValueError(f'invalid `conserve_S`: {conserve_S}')
+    
+    if sym_N is None and sym_S is None:
+        sym = no_symmetry
+        symmetry_combine = 'drop'
+    elif sym_N is None:
+        sym = sym_S
+
+        def symmetry_combine(site_idx: int, N_sectors: SectorArray) -> SectorArray:
+            sign = 1 - 2 * site_idx  # +1 for up, -1 for down
+            S_sectors = sign * N_sectors  # 2 * Sz = N_up - N_down
+            if conserve_S == 'parity':
+                S_sectors = S_sectors % 4
+            return S_sectors
+        
+    elif sym_S is None:
+        sym = sym_N
+        assert up_site.symmetry == down_site.symmetry
+        symmetry_combine = 'by_name'
+    else:
+        sym = sym_N * sym_S
+
+        def symmetry_combine(site_idx: int, N_sectors: SectorArray) -> SectorArray:
+            sign = 1 - 2 * site_idx  # +1 for up, -1 for down
+            S_sectors = sign * N_sectors  # 2 * Sz = N_up - N_down
+            if conserve_S == 'parity':
+                S_sectors = S_sectors % 4
+            if conserve_N == 'parity':
+                N_sectors = N_sectors % 2
+            return np.concatenate([N_sectors, S_sectors], axis=1)
+
+    set_common_symmetry([up_site, down_site], symmetry_combine=symmetry_combine, new_symmetry=sym)
+    return [up_site, down_site], ['up', 'down']
 
 
 class ClockSite(Site):
@@ -1510,56 +1623,70 @@ class ClockSite(Site):
     There are ``q`` local states, with labels ``['0', '1', ..., str(q-1)]``.
     Special aliases are ``up`` (0), and if q is even ``down`` (q / 2).
 
-    ==============  =================  ============  =========================
-    `conserve`      symmetry           sectors       meaning of sector label
-    ==============  =================  ============  =========================
-    ``'Z'``         ZNSymmetry(N=q)    ``range(q)``  sector n has Z = w ** n
-    ``'None'``      NoSymmetry         ``[0, ...]``  --
-    ==============  =================  ============  =========================
+    ============  =====================  ==============  =================================
+    `conserve`    symmetry               sectors         meaning of sector label
+    ============  =====================  ==============  =================================
+    ``'Z'``       ``ZNSymmetry(N=q)``    ``range(q)``    sector ``n`` has ``Z = w ** n``
+    ``'None'``    ``NoSymmetry``         ``[0, ...]``    --
+    ============  =====================  ==============  =================================
 
     Local operators are the clock operators ``Z = diag([w ** 0, w ** 1, ..., w ** (q - 1)])``
     with ``w = exp(2.j * pi / q)`` and ``X = eye(q, k=1) + eye(q, k=1-q)``, which are not hermitian.
+    They are generalizations of the pauli operators and fulfill the clock algebra
+    :math:`X Z = \mathtt{w} Z X` and :math:`X^q = \mathbb{1} = Z^q`.
+    The following table lists all local operators and their :ref:`categories <OperatorCategories>`.
 
-    ====================  =====================================  ====  ======
-    operator              description                            Z     None
-    ====================  =====================================  ====  ======
-    ``Id, JW``            Identity :math:`\mathbb{1}`            sym   sym
-    ``Z, Zhc``            Clock operator Z & its conjugate       sym   sym
-    ``Zphc``              "Real part" :math:`Z + Z^\dagger`      sym   sym
-    ``X, Xhc``            Clock operator X & its conjugate       gen   sym
-    ``Xphc``              "Real part" :math:`X + X^\dagger`      gen!  sym
-    ====================  =====================================  ====  ======
+    ============  =====================================  ========  ========
+    operator      description                            Z         None
+    ============  =====================================  ========  ========
+    ``Id, JW``    Identity :math:`\mathbb{1}`            diag      diag
+    ``Z, Zhc``    Clock operator Z & its conjugate       diag      diag
+    ``Zphc``      "Real part" :math:`Z + Z^\dagger`      diag      diag
+    ``X, Xhc``    Clock operator X & its conjugate       gen       sym
+    ``Xphc``      "Real part" :math:`X + X^\dagger`      gen(2)    sym
+    ============  =====================================  ========  ========
 
     Parameters
     ----------
     q : int
         Number of states per site
-    conserve : str
+    conserve : 'Z' | 'None'
         Defines what is conserved, see table above.
     backend : :class:`~tenpy.linalg.backends.AbstractBackend`, optional
         The backend used to create the operators.
     """
-    def __init__(self, q, conserve='Z', backend: AbstractBackend = None):
+    def __init__(self, q: int, conserve: str = 'Z', backend: AbstractBackend = None):
         if not (isinstance(q, int) and q > 1):
             raise ValueError(f'invalid q: {q}')
-        self.q = q
-        assert conserve in ['Z', 'None']
-        self.conserve = conserve
+        # build leg
         if conserve == 'Z':
             leg = VectorSpace.from_basis(ZNSymmetry(q, 'clock_phase'), np.arange(q)[:, None])
-        else:
+        elif conserve == 'None':
             leg = VectorSpace.from_trivial_sector(q)
+        else:
+            raise ValueError(f'invalid `conserve`: {conserve}')
+        if backend is None:
+            backend = get_default_backend(symmetry=leg.symmetry)
+        # diagonal operators : Z, Zhc, Zphc
+        Z = np.exp(2.j * np.pi * np.arange(q, dtype=np.complex128) / q)
+        Zhc = Z.conj()
+        Zphc = 2. * np.cos(2. * np.pi * np.arange(q, dtype=np.complex128) / q)
+        ops = dict(Z=Z, Zhc=Zhc, Zphc=Zphc)
+        ops = {name: DiagonalTensor.from_diag_numpy(op, leg, backend=backend, labels=['p', 'p*'])
+               for name, op in ops.items()}
+        # build operators X, Xhc
         X = np.eye(q, k=1) + np.eye(q, k=1-q)
-        Z = np.diag(np.exp(2.j * np.pi * np.arange(q, dtype=np.complex128) / q))
         Xhc = X.conj().transpose()
-        Zhc = Z.conj().transpose()
-        Zphc = np.diag(2. * np.cos(2. * np.pi * np.arange(q, dtype=np.complex128) / q))
-        ops = dict(X=X, Z=Z, Xhc=Xhc, Zhc=Zhc, Zphc=Zphc)
+        ops.update(X=X, Xhc=Xhc)
+        # build Xphc
         if conserve == 'Z':
             pass  # TODO add Xphc as gen!
         else:
-            ops['Xphc'] = X + Xhc
+            ops.update(Xphc=X + Xhc)
+        # initialize
         names = [str(m) for m in range(q)]
+        self.q = q
+        self.conserve = conserve
         Site.__init__(self, leg=leg, backend=backend, state_labels=names, **ops)
         self.state_labels['up'] = self.state_labels['0']
         if q % 2 == 0:
