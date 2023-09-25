@@ -388,6 +388,13 @@ class ProductSymmetry(Symmetry):
             results[lhs_idx] = f_i.all_sectors()[rhs_idx]
         return np.reshape(results, (np.prod(results_shape[:-1]), results_shape[-1]))
 
+    def factor_where(self, descriptive_name: str) -> int:
+        """Return the index of the first factor with that name. Raises if not found."""
+        for i, factor in enumerate(self.factors):
+            if factor.descriptive_name == descriptive_name:
+                return i
+        raise ValueError(f'Name not found: {descriptive_name}')
+
 
 class _ABCFactorSymmetryMeta(ABCMeta):
     """Metaclass for the AbstractBaseClasses which can be factors of a ProductSymmetry.
