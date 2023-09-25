@@ -3624,16 +3624,18 @@ def _get_result_labels(legs1: list[str | None], legs2: list[str | None],
     if relabel1 is None:
         labels1 = legs1
     else:
-        labels1 = [relabel1.get(leg.label, leg.label) for leg in legs1]
+        labels1 = [relabel1.get(leg, leg) for leg in legs1]
     if relabel2 is None:
         labels2 = legs2
     else:
-        labels2 = [relabel2.get(leg.label, leg.label) for leg in legs2]
+        labels2 = [relabel2.get(leg, leg) for leg in legs2]
     conflicting = [label for label in labels1 if (label is not None) and (label in labels2)]
     labels = labels1 + labels2
     if conflicting:
+        loglevel = logging.WARNING if config.strict_labels else logging.DEBUG
+        msg = f'Conflicting labels {", ".join(conflicting)} are dropped.'
         # stacklevel 1 is this function, 2 is the API function using it, 3 could be from the user.
-        logger.debug(f'Conflicting labels {", ".join(conflicting)} are dropped.', stacklevel=3)
+        logger.log(loglevel, msg, stacklevel=3)
         labels = [None if label in conflicting else label for label in labels]
     return labels
 
