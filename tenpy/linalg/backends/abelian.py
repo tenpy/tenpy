@@ -961,9 +961,9 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
         a_blocks = a.data.blocks
         b_blocks = b.data.blocks
         if a.data.dtype != res_dtype:
-            a_blocks = [self.block_to_dtype(T) for T in a_blocks]
+            a_blocks = [self.block_to_dtype(T, res_dtype) for T in a_blocks]
         if b.data.dtype != res_dtype:
-            b_blocks = [self.block_to_dtype(T) for T in b_blocks]
+            b_blocks = [self.block_to_dtype(T, res_dtype) for T in b_blocks]
         a_block_inds = a.data.block_inds
         b_block_inds = b.data.block_inds
         l_a, num_legs_a = a_block_inds.shape

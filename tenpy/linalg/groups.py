@@ -202,31 +202,31 @@ class ProductSymmetry(Symmetry):
     ----------
     factors : list of `Symmetry`
         The factors that comprise this symmetry. If any are `ProductSymmetries`, the
-        nesting is flattened, i.e. ``[*others, psymm]`` is equivalent to ``[*others, psymm.factors]``
-        for a `ProductSymmetry` ``psymm``.
+        nesting is flattened, i.e. ``[*others, psymm]`` is translated to
+        ``[*others, *psymm.factors]`` for a :class:`ProductSymmetry` ``psymm``.
     """
     def __init__(self, factors: list[Symmetry]):
-        syms = []
+        flat_factors = []
         for f in factors:
             if isinstance(f, ProductSymmetry):
-                syms.extend(f.factors)
+                flat_factors.extend(f.factors)
             else:
-                syms.append(f)
-        self.factors = syms
-        for f in syms:
+                flat_factors.append(f)
+        self.factors = flat_factors
+        for f in flat_factors:
             assert not isinstance(f, ProductSymmetry)  # avoid unnecesary nesting
-        if all(f.descriptive_name is not None for f in syms):
-            descriptive_name = f'[{", ".join(f.descriptive_name for f in syms)}]'
+        if all(f.descriptive_name is not None for f in flat_factors):
+            descriptive_name = f'[{", ".join(f.descriptive_name for f in flat_factors)}]'
         else:
             descriptive_name = None
-        self.sector_slices = np.cumsum([0] + [f.sector_ind_len for f in syms])
+        self.sector_slices = np.cumsum([0] + [f.sector_ind_len for f in flat_factors])
         Symmetry.__init__(
             self,
-            fusion_style=max((f.fusion_style for f in factors), key=lambda style: style.value),
-            braiding_style=max((f.braiding_style for f in factors), key=lambda style: style.value),
-            trivial_sector=np.concatenate([f.trivial_sector for f in factors]),
-            group_name=' ⨉ '.join(f.group_name for f in factors),
-            num_sectors=np.prod([symm.num_sectors for symm in factors]),
+            fusion_style=max((f.fusion_style for f in flat_factors), key=lambda style: style.value),
+            braiding_style=max((f.braiding_style for f in flat_factors), key=lambda style: style.value),
+            trivial_sector=np.concatenate([f.trivial_sector for f in flat_factors]),
+            group_name=' ⨉ '.join(f.group_name for f in flat_factors),
+            num_sectors=np.prod([symm.num_sectors for symm in flat_factors]),
             descriptive_name=descriptive_name
         )
 
@@ -318,9 +318,17 @@ class ProductSymmetry(Symmetry):
         return f'[{", ".join(strs)}]'
 
     def __repr__(self):
+        if len(self.factors) == 0:
+            return f'ProductSymmetry([])'
+        if len(self.factors) == 1:
+            return f'ProductSymmetry({self.factors[0]!r})'
         return ' * '.join(repr(f) for f in self.factors)
 
     def __str__(self):
+        if len(self.factors) == 0:
+            return f'ProductSymmetry([])'
+        if len(self.factors) == 1:
+            return f'ProductSymmetry({self.factors[0]!s})'
         return ' ⨉ '.join(str(f) for f in self.factors)
 
     def __eq__(self, other):
@@ -434,6 +442,7 @@ class AbelianGroup(GroupSymmetry, metaclass=_ABCFactorSymmetryMeta):
         >>> isinstance(s, AbelianGroup)
         True
         >>> issubclass(type(s), AbelianGroup)
+        False
     """
 
     def __init__(self, trivial_sector: Sector, group_name: str, num_sectors: int | float,
@@ -459,8 +468,8 @@ class NoSymmetry(AbelianGroup):
     """
 
     def __init__(self):
-        AbelianGroup.__init__(self, trivial_sector=np.array([0], dtype=int), group_name='NoSymmetry',
-                              num_sectors=1, descriptive_name=None)
+        AbelianGroup.__init__(self, trivial_sector=np.array([0], dtype=int),
+                              group_name='no_symmetry', num_sectors=1, descriptive_name=None)
 
     def is_valid_sector(self, a: Sector) -> bool:
         return getattr(a, 'shape', ()) == (1,) and a[0] == 0
