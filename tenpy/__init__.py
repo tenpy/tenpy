@@ -122,7 +122,7 @@ __all__ = [
     # 'm_bond_energies', 'm_simulation_parameter', 'm_energy_MPO', 'm_entropy',
     # 'm_onsite_expectation_value', 'm_correlation_length', 'm_evolved_time',
     # # from tenpy.__init__, i.e. defined below
-    # 'show_config', 'console_main',
+    'show_config', 'console_main',
 ]
 
 

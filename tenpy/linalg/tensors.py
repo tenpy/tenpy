@@ -30,10 +30,10 @@ from ..tools.string import vert_join
 
 __all__ = ['Shape', 'AbstractTensor', 'SymmetricTensor', 'Tensor', 'ChargedTensor',
            'DiagonalTensor', 'Mask', 'add_trivial_leg', 'almost_equal', 'combine_legs', 'conj',
-           'detect_sectors_from_block', 'flip_leg_duality', 'inner', 'is_scalar', 'norm', 'outer',
-           'permute_legs', 'split_legs', 'squeeze_legs', 'tdot', 'trace', 'zero_like', 'eye_like',
-           'angle', 'real', 'imag', 'real_if_close', 'get_same_backend', 'match_leg_order',
-           'tensor_from_block']
+           'detect_sectors_from_block', 'flip_leg_duality', 'hconj', 'inner', 'is_scalar', 'norm',
+           'outer', 'permute_legs', 'split_legs', 'squeeze_legs', 'tdot', 'trace', 'zero_like',
+           'eye_like', 'angle', 'real', 'imag', 'real_if_close', 'get_same_backend',
+           'match_leg_order', 'tensor_from_block']
 
 # svd, qr, eigen, exp, log, ... are implemented in matrix_operations.py
 
@@ -3141,17 +3141,6 @@ def conj(t: AbstractTensor) -> AbstractTensor:
     return t.conj()
 
 
-def hconj(t: AbstractTensor) -> AbstractTensor:
-    """Hermitian conjugate.
-
-    In strict label mode, this is the same as :func:`conj`, since exchanging legs is taken care of
-    by the relabelling. otherwise, the last two legs are swapped such that the result has the same
-    leg as `t`, if those two legs are contractible.
-    """
-    assert t.num_legs >= 2
-    return t.conj().permute_legs(permutation=[*range(t.num_legs - 2), -1, -2])
-
-
 def detect_sectors_from_block(block: Block, legs: list[VectorSpace], backend: AbstractBackend
                               ) -> SectorArray:
     """Detect the symmetry sectors of a dense block.
@@ -3188,6 +3177,17 @@ def flip_leg_duality(t: AbstractTensor, which_leg: int | str, *more: int | str) 
     """
     # TODO test coverage
     return t.flip_leg_duality(which_leg, *more)
+
+
+def hconj(t: AbstractTensor) -> AbstractTensor:
+    """Hermitian conjugate.
+
+    In strict label mode, this is the same as :func:`conj`, since exchanging legs is taken care of
+    by the relabelling. otherwise, the last two legs are swapped such that the result has the same
+    leg as `t`, if those two legs are contractible.
+    """
+    assert t.num_legs >= 2
+    return t.conj().permute_legs(permutation=[*range(t.num_legs - 2), -1, -2])
 
 
 def inner(t1: AbstractTensor, t2: AbstractTensor, do_conj: bool = True,
