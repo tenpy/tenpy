@@ -203,7 +203,7 @@ class VectorSpace:
         ----------
         independent_descriptions : list of :class:`VectorSpace`
             Each entry describes the resulting :class:`VectorSpace` in terms of *one* of
-            the independent symmetries.
+            the independent symmetries. Spaces with a :class:`NoSymmetry` are ignored.
         symmetry: :class:`~tenpy.linalg.groups.Symmetry`, optional
             The resulting symmetry can optionally be passed. We assume without checking that
             it :meth:`~tenyp.linalg.groups.Symemtry.is_same_symmetry` as the default
@@ -214,6 +214,13 @@ class VectorSpace:
         :class:`VectorSpace`
             A space with the overall `symmetry`.
         """
+        dims = [s.dim for s in independent_descriptions]
+        dim = dims[0]
+        assert all(d == dim for d in dims[1:])
+        # ignore independent_descriptions with no_symmetry
+        independent_descriptions = [s for s in independent_descriptions if s.symmetry != no_symmetry]
+        if len(independent_descriptions) == 0:
+            return cls.from_trivial_sector(dim)
         if symmetry is None:
             symmetry = ProductSymmetry.from_nested_factors(
                 [s.symmetry for s in independent_descriptions]
@@ -221,7 +228,7 @@ class VectorSpace:
         # OPTIMIZE could do this more efficiently in special cases if basis_perm and slices are equal
         #  but we probably dont need to worry about optimizing this too much, should only be called
         #  for physical legs of sites, which should not get very large.
-        basis = np.concatenate([s.sectors_of_basis for s in independent_descriptions])
+        basis = np.concatenate([s.sectors_of_basis for s in independent_descriptions], axis=1)
         if np.any(symmetry.batch_sector_dim(basis) > 1):
             # TODO I accidentaly assumed abelian symmetries when implementing this...
             raise NotImplementedError
