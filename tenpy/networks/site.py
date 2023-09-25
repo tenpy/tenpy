@@ -582,7 +582,7 @@ class GroupedSite(Site):
     sites : list of :class:`Site`
         The individual sites being grouped together. Copied before use if ``charges!='same'``.
     labels :
-        Include the Kronecker product of the each onsite operator `op` on ``sites[i]`` and
+        Include the Kronecker product of each onsite operator `op` on ``sites[i]`` and
         identities on other sites with the name ``opname+labels[i]``.
         Similarly, set state labels for ``' '.join(state[i]+'_'+labels[i])``.
         Defaults to ``[str(i) for i in range(n_sites)]``, which for example grouping two SpinSites
@@ -1461,13 +1461,13 @@ class SpinHalfFermionSite(Site):
     `cons_N`      `cons_Sz`     qmod    *excluded* onsite operators
     ============= ============= ======= =======================================
     ``'N'``       ``'Sz'``      [1, 1]  ``Sx, Sy``
-    ``'N'``       ``'parity'``  [1, 2]  --
+    ``'N'``       ``'parity'``  [1, 4]  --
     ``'N'``       ``None``      [1]     --
     ``'parity'``  ``'Sz'``      [2, 1]  ``Sx, Sy``
-    ``'parity'``  ``'parity'``  [2, 2]  --
+    ``'parity'``  ``'parity'``  [2, 4]  --
     ``'parity'``  ``None``      [2]     --
     ``None``      ``'Sz'``      [1]     ``Sx, Sy``
-    ``None``      ``'parity'``  [2]     --
+    ``None``      ``'parity'``  [4]     --
     ``None``      ``None``      []      --
     ============= ============= ======= =======================================
 
@@ -1633,13 +1633,13 @@ class SpinHalfHoleSite(Site):
     `cons_N`      `cons_Sz`     qmod    *excluded* onsite operators
     ============= ============= ======= =======================================
     ``'N'``       ``'Sz'``      [1, 1]  ``Sx, Sy``
-    ``'N'``       ``'parity'``  [1, 2]  --
+    ``'N'``       ``'parity'``  [1, 4]  --
     ``'N'``       ``None``      [1]     --
     ``'parity'``  ``'Sz'``      [2, 1]  ``Sx, Sy``
-    ``'parity'``  ``'parity'``  [2, 2]  --
+    ``'parity'``  ``'parity'``  [2, 4]  --
     ``'parity'``  ``None``      [2]     --
     ``None``      ``'Sz'``      [1]     ``Sx, Sy``
-    ``None``      ``'parity'``  [2]     --
+    ``None``      ``'parity'``  [4]     --
     ``None``      ``None``      []      --
     ============= ============= ======= =======================================
 
@@ -1750,7 +1750,7 @@ class SpinHalfHoleSite(Site):
 
     def __repr__(self):
         """Debug representation of self."""
-        return "SpinHalfFermionSite({cN!r}, {cS!r}, {f:f})".format(cN=self.cons_N,
+        return "SpinHalfHoleSite({cN!r}, {cS!r}, {f:f})".format(cN=self.cons_N,
                                                                    cS=self.cons_Sz,
                                                                    f=self.filling)
 
@@ -1758,7 +1758,7 @@ class SpinHalfHoleSite(Site):
 class BosonSite(Site):
     r"""Create a :class:`Site` for up to `Nmax` bosons.
 
-    Local states are ``vac, 1, 2, ... , Nc``.
+    Local states are ``vac, 1, 2, ... , Nmax``.
     (Exception: for parity conservation, we sort as ``vac, 2, 4, ..., 1, 3, 5, ...``.)
 
     ==============  ========================================
