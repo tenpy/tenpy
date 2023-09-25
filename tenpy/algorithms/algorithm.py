@@ -182,12 +182,18 @@ class Algorithm:
         else:
             return {'psi': self.psi}
 
-    def estimate_RAM(self, mini=50_000):
+    def estimate_RAM(self, saving_factor=None, mini=50_000):
         """Gives an approximate prediction for the required memory usage.
-        This calculation is based on the requested bond dimension, local Hilbert space dimension, the number of sites and the boundary conditions.
+        This calculation is based on the requested bond dimension, the local Hilbert space dimension, the number of sites, and the boundary conditions.
 
         Parameters
         ----------
+        saving_factor : float
+            Represents the amount of RAM saved due to conservation laws. By default, it is 'None' and is extracted from the model automatically. However, this is only possible in a few cases and needs to be estimated in most cases. This is due to the fact that it is dependent on the model parameters.
+            If one has a better estimate, one can pass the value directly.
+            This value can be extracted by building the initial state 'psi' (usually by performing DMRG ) and then calling
+            ''print(psi.get_B(0).sparse_stats())''
+            TeNPy will automatically print the fraction of nonzero entries in the first line (for example, 6 of 16 entries (=0.375) nonzero). This fraction corresponds to the saving_factor; in our example, it is 0.375.
         mini : float
             The minimum amount of RAM in kB to be returned. By default 50 MB.
 
@@ -245,12 +251,35 @@ class Algorithm:
                 # The shape is ordered like (wL, wR, p, p*)
                 env_RAM += chis[i]**2 * max(W.shape[0], W.shape[1])
 
+            lanczos_RAM = 0
+            # Additional RAM, if Lanczos is performed
+            # We need to construct (1) the effective Hamiltonian and (2) the two-site wave-function
+            # (1) H_eff
+            W = MPO.get_W(L//2)
+            # Left and right part from H_eff -> 2 times environment
+            # The third comes from the first contraction from 2-site wave function to left H_eff
+            lanczos_RAM += 3 * H_dim[L//2]**2 * (chis[L//2]**2 * max(W.shape[0], W.shape[1]))
+            #              |         |                          | 
+            #       occurrences   from W                environment RAM
+            #                    contraction
+
+            # (2) 2-site wave-function
+
+            lanczos_RAM += 2 * chis[L//2]**2 * H_dim[L//2]**2
+            #              |            |           | 
+            #         occurrences    virtual     physical
+            #       (top & bottom)    legs         legs
+
+
             logger.debug("Extracted MPS environment RAM usage as\t%d kB" % (env_RAM*entry_size // 1024))
             logger.debug("Extracted MPO RAM usage as\t\t%d kB" % (MPO_RAM // 128))
+            logger.debug("Extracted extra RAM from Lanczos as\t%d kB" % (lanczos_RAM // 128))
             RAM += env_RAM
             RAM += MPO_RAM
+            RAM += lanczos_RAM
 
-        saving_factor = self.model.estimate_RAM_saving_factor()
+        if saving_factor == None:
+            saving_factor = self.model.estimate_RAM_saving_factor()
         logger.debug("Each entry uses %d byte" % (entry_size))
         RAM *= entry_size
         logger.debug("We have a saving factor of %d" % (1/saving_factor))

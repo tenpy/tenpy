@@ -44,6 +44,7 @@ def test_bosonic_model_DMRG():
     # environment:
     MPS_env_vmem = sum(np.array([5, 25, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 25])**2 * 4) * 8 / 1024
     MPO_vmem = (4**2*5**2 * (L-2) + 2*4*5**2 * 2) * 8 / 1024
-
-    assert engine.estimate_RAM(mini=0) == (MPS_vmem+MPS_env_vmem+MPO_vmem)/8, "DMRG RAM did not match expectation (expected: %d, gotten:%d)" % ((MPS_vmem+MPS_env_vmem+MPO_vmem)/8, engine.estimate_RAM(mini=0))
+    # add lanczos:
+    RAM_lanczos = (3 * 5**2 * (99**2 * 4) + 2 * 99**2 * 5**2) * 8 / 1024
+    assert engine.estimate_RAM(mini=0) == (MPS_vmem+MPS_env_vmem+MPO_vmem+RAM_lanczos)/8, "DMRG RAM did not match expectation (expected: %d, gotten:%d)" % ((MPS_vmem+MPS_env_vmem+MPO_vmem+RAM_lanczos)/8, engine.estimate_RAM(mini=0))
 
