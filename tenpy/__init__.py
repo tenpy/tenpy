@@ -192,7 +192,9 @@ def console_main(*command_line_args):
             del options['simulation_class_name']
         options['simulation_class'] = args.sim_class
     if 'RAM' in options:
-        print(simulation.estimate_RAM())
+        # get simulation
+        sim = simulations.init_simulation(**options)
+        print(sim.estimate_RAM())
         exit(0)
     if 'sequential' not in options:
         run_simulation(**options)
