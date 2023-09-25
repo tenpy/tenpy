@@ -1529,7 +1529,11 @@ class ChargedTensor(AbstractTensor):
         else:
             dtype = Dtype.common(invariant_part.dtype,
                                  invariant_part.backend.get_dtype_from_data(dummy_leg_state))
-        assert invariant_part.labels[-1] == self._DUMMY_LABEL
+        if invariant_part.labels[-1] is None:
+            invariant_part = invariant_part.copy(deep=False)
+            invariant_part.set_labels(invariant_part.labels[:-1] + [self._DUMMY_LABEL])
+        else:
+            assert invariant_part.labels[-1] == self._DUMMY_LABEL
         AbstractTensor.__init__(self, backend=invariant_part.backend, legs=invariant_part.legs[:-1],
                                 labels=invariant_part.labels[:-1], dtype=dtype)
         self.invariant_part = invariant_part
@@ -1799,6 +1803,15 @@ class ChargedTensor(AbstractTensor):
     # Overriding methods from AbstractTensor
     # --------------------------------------------
 
+    def relabel(self, mapping: dict[str, str | None], inplace=True) -> AbstractTensor:
+        assert self._DUMMY_LABEL not in mapping
+        if inplace:
+            self.shape.relabel(mapping)
+            self.invariant_part.relabel(mapping, inplace=True)
+            return self
+        return ChargedTensor(invariant_part=self.invariant_part.relabel(mapping, inplace=False),
+                             dummy_leg_state=self.dummy_leg_state)
+
     def _data_repr_lines(self, indent: str, max_lines: int) -> list[str]:
         return self.backend._data_repr_lines(
             self.invariant_part, indent=indent, max_width=printoptions.linewidth, max_lines=max_lines
@@ -1876,7 +1889,8 @@ class ChargedTensor(AbstractTensor):
                 dummy_leg_state = self.backend.block_copy(self.dummy_leg_state)
             return ChargedTensor(invariant_part=self.invariant_part.copy(deep=True),
                                  dummy_leg_state=dummy_leg_state)
-        return ChargedTensor(invariant_part=self.invariant_part, dummy_leg_state=self.dummy_leg_state)
+        return ChargedTensor(invariant_part=self.invariant_part.copy(deep=False),
+                             dummy_leg_state=self.dummy_leg_state)
 
     def item(self) -> float | complex:
         if not all(leg.dim == 1 for leg in self.invariant_part.legs[:-1]):
