@@ -22,7 +22,7 @@ from .misc import duplicate_entries, force_str_len, join_as_many_as_possible
 from .dummy_config import config
 from .groups import AbelianGroup, Symmetry
 from .spaces import VectorSpace, ProductSpace, Sector, SectorArray
-from .backends.backend_factory import get_default_backend
+from .backends.backend_factory import get_backend
 from .backends.abstract_backend import Dtype, Block, AbstractBackend
 from ..tools.misc import to_iterable, to_iterable_of_len
 from ..tools.docs import amend_parent_docstring
@@ -137,7 +137,7 @@ class AbstractTensor(metaclass=ABCMeta):
     def __init__(self, legs: list[VectorSpace], backend: AbstractBackend, labels: list[str | None] | None,
                  dtype: Dtype):
         if backend is None:
-            self.backend = backend = get_default_backend(legs[0].symmetry)
+            self.backend = backend = get_backend(legs[0].symmetry)
         else:
             self.backend = backend
         self.legs = legs = [backend.add_leg_metadata(l) for l in legs]
@@ -719,7 +719,7 @@ class Tensor(SymmetricTensor):
             Labels for the legs. If None, translates to ``[None, None, ...]`` of appropriate length
         """
         if backend is None:
-            backend = get_default_backend(legs[0].symmetry)
+            backend = get_backend(legs[0].symmetry)
         dtype = backend.get_dtype_from_data(data)
         AbstractTensor.__init__(self, backend=backend, legs=legs, labels=labels, dtype=dtype)
         self.data = data
@@ -753,7 +753,7 @@ class Tensor(SymmetricTensor):
             The data type of the Tensor entries.
         """
         if backend is None:
-            backend = get_default_backend(legs[0].symmetry)
+            backend = get_backend(legs[0].symmetry)
         legs = to_iterable(legs)
         half_leg_num = len(legs)
         legs = [backend.add_leg_metadata(leg) for leg in legs]
@@ -802,7 +802,7 @@ class Tensor(SymmetricTensor):
         from_numpy_func
         """
         if backend is None:
-            backend = get_default_backend(legs[0].symmetry)
+            backend = get_backend(legs[0].symmetry)
         legs = [backend.add_leg_metadata(leg) for leg in legs]
 
         if shape_kw is not None:
@@ -853,7 +853,7 @@ class Tensor(SymmetricTensor):
         from_numpy
         """
         if backend is None:
-            backend = get_default_backend(legs[0].symmetry)
+            backend = get_backend(legs[0].symmetry)
         block = backend.as_block(block)
         if dtype is not None:
             block = backend.block_to_dtype(block, dtype)
@@ -920,7 +920,7 @@ class Tensor(SymmetricTensor):
         from_block_func
         """
         if backend is None:
-            backend = get_default_backend(legs[0].symmetry)
+            backend = get_backend(legs[0].symmetry)
         legs = [backend.add_leg_metadata(leg) for leg in legs]
 
         if shape_kw is not None:
@@ -988,7 +988,7 @@ class Tensor(SymmetricTensor):
                                             labels=mean.labels, dtype=dtype)
 
         if backend is None:
-            backend = get_default_backend(legs[0].symmetry)
+            backend = get_backend(legs[0].symmetry)
         if dtype is None:
             dtype = Dtype.float64
         legs = [backend.add_leg_metadata(leg) for leg in legs]
@@ -1021,7 +1021,7 @@ class Tensor(SymmetricTensor):
             The dtype for the tensor
         """
         if backend is None:
-            backend = get_default_backend(legs[0].symmetry)
+            backend = get_backend(legs[0].symmetry)
         legs = [backend.add_leg_metadata(leg) for leg in legs]
         data = backend.from_block_func(backend.block_random_uniform, legs, func_kwargs=dict(dtype=dtype))
         return cls(data=data, backend=backend, legs=legs, labels=labels)
@@ -1096,7 +1096,7 @@ class Tensor(SymmetricTensor):
         """
         legs = [backend.add_leg_metadata(leg) for leg in legs]
         if backend is None:
-            backend = get_default_backend(legs[0].symmetry)
+            backend = get_backend(legs[0].symmetry)
         data = backend.zero_data(legs=legs, dtype=dtype)
         return cls(data=data, backend=backend, legs=legs, labels=labels)
 
@@ -1606,7 +1606,7 @@ class ChargedTensor(AbstractTensor):
             The state on the dummy leg. May be ``None`` ("unspecified").
         """
         if backend is None:
-            backend = get_default_backend(legs[0].symmetry)
+            backend = get_backend(legs[0].symmetry)
         if labels is None:
             labels = [None] * len(legs)
         block = backend.as_block(block)
@@ -2162,7 +2162,7 @@ class DiagonalTensor(SymmetricTensor):
         self.second_leg_dual = second_leg_dual
         second_leg = first_leg.dual if second_leg_dual else first_leg
         if backend is None:
-            backend = get_default_backend(first_leg.symmetry)
+            backend = get_backend(first_leg.symmetry)
         dtype = backend.get_dtype_from_data(data)
         AbstractTensor.__init__(self, legs=[first_leg, second_leg], backend=backend, labels=labels,
                                 dtype=dtype)
@@ -2189,7 +2189,7 @@ class DiagonalTensor(SymmetricTensor):
     def eye(cls, first_leg: VectorSpace, backend=None, labels: list[str | None] = None,
             dtype: Dtype = Dtype.float64) -> DiagonalTensor:
         if backend is None:
-            backend = get_default_backend(first_leg.symmetry)
+            backend = get_backend(first_leg.symmetry)
         if len(labels) == 1:
             labels = [labels[0], _dual_leg_label(labels[0])]
         assert len(labels) == 2
@@ -2204,7 +2204,7 @@ class DiagonalTensor(SymmetricTensor):
                         backend=None, labels: list[str | None] = None, func_kwargs={},
                         shape_kw: str = None, dtype: Dtype = None) -> DiagonalTensor:
         if backend is None:
-            backend = get_default_backend(first_leg.symmetry)
+            backend = get_backend(first_leg.symmetry)
         if shape_kw is not None:
             def block_func(shape):
                 block = func(**{shape_kw: shape}, **func_kwargs)
@@ -2228,7 +2228,7 @@ class DiagonalTensor(SymmetricTensor):
     def from_diag_block(cls, diag: Block, first_leg: VectorSpace, second_leg_dual: bool = True,
                         backend=None, labels: list[str | None] = None) -> DiagonalTensor:
         if backend is None:
-            backend = get_default_backend(first_leg.symmetry)
+            backend = get_backend(first_leg.symmetry)
         diag = backend.as_block(diag)
         assert backend.block_shape(diag) == (first_leg.dim,)
         data = backend.diagonal_from_block(diag, leg=first_leg)
@@ -2239,7 +2239,7 @@ class DiagonalTensor(SymmetricTensor):
     def from_diag_numpy(cls, diag: np.ndarray, first_leg: VectorSpace, second_leg_dual: bool = True,
                         backend=None, labels: list[str | None] = None) -> DiagonalTensor:
         if backend is None:
-            backend = get_default_backend(first_leg.symmetry)
+            backend = get_backend(first_leg.symmetry)
         return cls.from_diag_block(diag=backend.block_from_numpy(diag), first_leg=first_leg,
                                    second_leg_dual=second_leg_dual, backend=backend, labels=labels)
 
@@ -2248,7 +2248,7 @@ class DiagonalTensor(SymmetricTensor):
                         backend=None, labels: list[str | None] = None, func_kwargs={},
                         shape_kw: str = None, dtype: Dtype = None) -> DiagonalTensor:
         if backend is None:
-            backend = get_default_backend(first_leg.symmetry)
+            backend = get_backend(first_leg.symmetry)
         if shape_kw is not None:
             def block_func(shape):
                 arr = func(**{shape_kw: shape}, **func_kwargs)
@@ -2320,7 +2320,7 @@ class DiagonalTensor(SymmetricTensor):
             )
 
         if backend is None:
-            backend = get_default_backend(first_leg.symmetry)
+            backend = get_backend(first_leg.symmetry)
         if dtype is None:
             dtype = Dtype.float64
         data = backend.diagonal_from_block_func(backend.block_random_normal, leg=first_leg,
@@ -2333,7 +2333,7 @@ class DiagonalTensor(SymmetricTensor):
                        labels: list[str | None] = None, dtype: Dtype = Dtype.float64
                        ) -> DiagonalTensor:
         if backend is None:
-            backend = get_default_backend(first_leg.symmetry)
+            backend = get_backend(first_leg.symmetry)
         data = backend.diagonal_from_block_func(backend.block_random_uniform, leg=first_leg,
                                                 func_kwargs=dict(dtype=dtype))
         return cls(data=data, first_leg=first_leg, second_leg_dual=second_leg_dual, backend=backend,
@@ -2490,7 +2490,7 @@ class DiagonalTensor(SymmetricTensor):
     def zero(cls, first_leg: VectorSpace, second_leg_dual: bool = True, backend=None,
              labels: list[str | None] = None, dtype: Dtype = Dtype.float64) -> DiagonalTensor:
         if backend is None:
-            backend = get_default_backend(first_leg.symmetry)
+            backend = get_backend(first_leg.symmetry)
         data = backend.zero_diagonal_data(leg=first_leg, dtype=dtype)
         return cls(data=data, first_leg=first_leg, second_leg_dual=second_leg_dual, backend=backend,
                    labels=labels)
@@ -2725,7 +2725,7 @@ class Mask(AbstractTensor):
                  labels: list[str | None] = None):
         self.data = data
         if backend is None:
-            backend = get_default_backend(large_leg.symmetry)
+            backend = get_backend(large_leg.symmetry)
         AbstractTensor.__init__(self, legs=[large_leg, small_leg], backend=backend, labels=labels, dtype=Dtype.bool)
 
     def test_sanity(self) -> None:
@@ -2765,7 +2765,7 @@ class Mask(AbstractTensor):
             Labels associated with the `large_leg` and its projection. ``None`` for unnamed legs.
         """
         if backend is None:
-            backend = get_default_backend(symmetry=large_leg.symmetry)
+            backend = get_backend(symmetry=large_leg.symmetry)
         data, small_leg = backend.mask_from_block(mask, large_leg=large_leg)
         return cls(data=data, large_leg=large_leg, small_leg=small_leg, backend=backend, labels=labels)
         
@@ -2773,7 +2773,7 @@ class Mask(AbstractTensor):
     def from_flat_numpy(cls, mask: np.ndaray, large_leg: VectorSpace, backend: AbstractBackend = None,
                         labels: list[str | None] = None) -> Mask:
         if backend is None:
-            backend = get_default_backend(symmetry=large_leg.symmetry)
+            backend = get_backend(symmetry=large_leg.symmetry)
         block = backend.block_from_numpy(np.asarray(mask))
         return cls.from_flat_block(mask=block, large_leg=large_leg, backend=backend, labels=labels)
 
@@ -2898,7 +2898,7 @@ class Mask(AbstractTensor):
     @classmethod
     def zero(cls, large_leg: VectorSpace, backend=None, labels: list[str | None] = None) -> Mask:
         if backend is None:
-            backend = get_default_backend(large_leg.symmetry)
+            backend = get_backend(large_leg.symmetry)
         data = backend.zero_diagonal_data(leg=large_leg, dtype=Dtype.bool)
         return cls(data=data, large_leg=large_leg, backend=backend)
 

@@ -25,7 +25,7 @@ def setup_benchmark(symmetry_backend='abelian',  # no_symmetry, abelian, nonabel
     symmetry = parse_symmetry(to_iterable(symmetry))
     if sectors > symmetry.num_sectors:
         sectors = symmetry.num_sectors
-    backend = get_backend(symmetry=symmetry, block_backend=block_backend, symmetry_backend=symmetry_backend)
+    backend = get_backend(symmetry=symmetry_backend, block_backend=block_backend)
     legs1 = np.random.choice(2 * legs, legs, replace=False)
     legs2 = np.random.choice(2 * legs, legs, replace=False)
     a = get_random_tensor(symmetry=symmetry, backend=backend, legs=[None] * (2 * legs), leg_dim=size,

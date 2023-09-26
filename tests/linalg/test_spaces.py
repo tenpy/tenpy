@@ -201,7 +201,7 @@ def test_get_basis_transformation(default_backend):
     spin1 = spaces.VectorSpace.from_basis(groups.z2_symmetry, [even, odd, even])
     assert np.array_equal(spin1.sectors, [even, odd])
     assert np.array_equal(spin1.basis_perm, [0, 2, 1])
-    backend = backends.get_backend(block_backend='numpy', symmetry_backend='abelian')
+    backend = backends.get_backend(block_backend='numpy', symmetry='abelian')
     product_space = spaces.ProductSpace([spin1, spin1], backend=backend)
 
     perm = product_space._get_fusion_outcomes_perm()

@@ -8,7 +8,7 @@ from .numpy import NoSymmetryNumpyBackend, AbelianNumpyBackend
 from .torch import NoSymmetryTorchBackend, AbelianTorchBackend
 from ..groups import Symmetry, no_symmetry, AbelianGroup
 
-__all__ = ['get_backend', 'get_default_backend', 'todo_get_backend']
+__all__ = ['get_backend', 'todo_get_backend']
 
 logger = logging.getLogger(__name__)
 
@@ -48,30 +48,32 @@ _backend_lookup = dict(
 _instantiated_backends = {}  # keys: (symmetry_backend, block_backend, kwargs)
 
 
-def get_backend(symmetry: Symmetry = no_symmetry, block_backend: str = 'numpy',
-                symmetry_backend: str = None) -> AbstractBackend:
+def get_backend(symmetry: Symmetry | str = None, block_backend: str = None) -> AbstractBackend:
     """
     Parameters
     ----------
-    symmetry : AbstractSymmetry
-    block_backend : {'numpy', 'torch', 'tensorflow', 'jax', 'cpu', 'gpu', 'tpu'}
-    symmetry_backend : {None, 'no_symmetry', 'abelian', 'nonabelian'}
-        None means select based on the symmetry.
-        It is possible though, to request the non-abelian backend even though the symmetry is
-        actually abelian.
+    symmetry : {'no_symmetry', 'abelian', 'nonabelian'} | Symmetry
+    block_backend : {None, 'numpy', 'torch', 'tensorflow', 'jax', 'cpu', 'gpu', 'tpu'}
     """
-    # TODO cache these instances, make sure there is only ever one.
-    #  -> need hash for AbstractSymmetry instances
-    assert block_backend in ['numpy', 'torch', 'tensorflow', 'jax', 'cpu', 'gpu', 'tpu']
-    if symmetry_backend is None:
+    # TODO these are a dummys, in the future we should have some mechanism to store the default
+    # values in some state-ful global config of tenpy
+    if symmetry is None:
+        symmetry = 'abelian'
+    if block_backend is None:
+        block_backend = 'numpy'
+
+    if isinstance(symmetry, Symmetry):
+        # figure out minimal symmetry_backend that supports that symmetry
         if symmetry == no_symmetry:
             symmetry_backend = 'no_symmetry'
-        # TODO (JU) should instancheck abelian group instead.
-        #  abelian backend does not support general abelian fusion categories, e.g. fermion parity
-        elif symmetry.is_abelian:
+        elif isinstance(symmetry, AbelianGroup):
             symmetry_backend = 'abelian'
         else:
             symmetry_backend = 'nonabelian'
+    else:
+        symmetry_backend = symmetry
+
+    assert block_backend in ['numpy', 'torch', 'tensorflow', 'jax', 'cpu', 'gpu', 'tpu']
     assert symmetry_backend in ['no_symmetry', 'abelian', 'nonabelian']
 
     res = _backend_lookup[symmetry_backend][block_backend]
@@ -85,14 +87,11 @@ def get_backend(symmetry: Symmetry = no_symmetry, block_backend: str = 'numpy',
         _instantiated_backends[key] = backend
     else:
         backend = _instantiated_backends[key]
+
+    if isinstance(symmetry, Symmetry):
+        assert backend.supports_symmetry(symmetry)
+        
     return backend
-
-
-def get_default_backend(symmetry: Symmetry = None):
-    """dummy implementation for a settable backend global through all of tenpy"""
-    # TODO: proper implementation
-    kwargs = {} if symmetry is None else dict(symmetry=symmetry)
-    return get_backend(**kwargs)
 
 
 def todo_get_backend():

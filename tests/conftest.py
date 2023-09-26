@@ -112,7 +112,7 @@ def vector_space_rng(symmetry, np_random):
 
 @pytest.fixture
 def default_backend():
-    return backends.backend_factory.get_default_backend()
+    return backends.backend_factory.get_backend()
 
 
 @pytest.fixture(params=['numpy']) # TODO: reintroduce 'torch'])

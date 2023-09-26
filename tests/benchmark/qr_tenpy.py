@@ -21,7 +21,7 @@ def setup_benchmark(symmetry_backend='abelian',  # no_symmetry, abelian, nonabel
     symmetry = parse_symmetry(to_iterable(symmetry))
     if sectors > symmetry.num_sectors:
         sectors = symmetry.num_sectors
-    backend = get_backend(symmetry=symmetry, block_backend=block_backend, symmetry_backend=symmetry_backend)
+    backend = get_backend(symmetry=symmetry_backend, block_backend=block_backend)
     a = get_random_tensor(symmetry=symmetry, backend=backend, legs=[None] * (2 * legs), leg_dim=size,
                           sectors_per_leg=sectors)
     a.test_sanity()
