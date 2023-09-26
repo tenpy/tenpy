@@ -19,7 +19,8 @@ which provides the :class:`~tenpy.linalg.tensors.Tensor` class used by the rest 
 """
 # Copyright 2018-2023 TeNPy Developers, GNU GPLv3
 
-from . import groups, spaces, backends, tensors, random_matrix, sparse, matrix_operations
+from . import (groups, spaces, backends, tensors, random_matrix, sparse, matrix_operations,
+               krylov_based)
 from .groups import *
 from .spaces import *
 from .backends import *
@@ -27,8 +28,10 @@ from .tensors import *
 from .random_matrix import *
 from .sparse import *
 from .matrix_operations import *
+from .krylov_based import *
 
-__all__ = ['groups', 'spaces', 'backends', 'tensors', 'random_matrix', 'sparse', 'matrix_operations',
+__all__ = ['groups', 'spaces', 'backends', 'tensors', 'random_matrix', 'sparse',
+           'matrix_operations', 'krylov_based',
            *groups.__all__,
            *spaces.__all__,
            *backends.__all__,
@@ -36,4 +39,5 @@ __all__ = ['groups', 'spaces', 'backends', 'tensors', 'random_matrix', 'sparse',
            *random_matrix.__all__,
            *sparse.__all__,
            *matrix_operations.__all__,
+           *krylov_based.__all__,
            ]

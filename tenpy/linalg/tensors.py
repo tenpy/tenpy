@@ -33,7 +33,7 @@ __all__ = ['Shape', 'AbstractTensor', 'SymmetricTensor', 'Tensor', 'ChargedTenso
            'detect_sectors_from_block', 'flip_leg_duality', 'hconj', 'inner', 'is_scalar', 'norm',
            'outer', 'permute_legs', 'split_legs', 'squeeze_legs', 'tdot', 'trace', 'zero_like',
            'eye_like', 'angle', 'real', 'imag', 'real_if_close', 'get_same_backend',
-           'match_leg_order', 'tensor_from_block']
+           'tensor_from_block']
 
 # svd, qr, eigen, exp, log, ... are implemented in matrix_operations.py
 
@@ -321,7 +321,7 @@ class AbstractTensor(metaclass=ABCMeta):
             raise ValueError('Tensors need to have the same number of legs')
         # determine leg_order_2
         if legs1 is None and legs2 is None:
-            leg_order_2 = match_leg_order(self, other)
+            leg_order_2 = _match_leg_order(self, other)
         else:
             if legs1 is None:
                 legs1 = np.arange(self.num_legs, dtype=int)
@@ -356,7 +356,7 @@ class AbstractTensor(metaclass=ABCMeta):
             The order of legs on other, such that they match the legs of self.
             None is equivalent to ``list(range(other.num_legs)`` and indicates that no permutation is needed.
         """
-        other_order = match_leg_order(self, other)
+        other_order = _match_leg_order(self, other)
         for n in range(self.num_legs):
             leg_self = self.legs[n]
             leg_other = other.legs[n] if other_order is None else other.legs[other_order[n]]
@@ -3205,7 +3205,7 @@ def inner(t1: AbstractTensor, t2: AbstractTensor, do_conj: bool = True,
     legs1, legs2 : list of int or str, optional
         Specify which legs are to be contracted with which ones.
         If both are ``None`` (default), legs are identified "by label" in strict label mode or "by order"
-        in lax label mode, like in :meth:`match_leg_order`.
+        in lax label mode, like in :meth:`_match_leg_order`.
         Otherwise, ``legs1[n]`` of ``t1`` is contracted with ``legs2[n]`` of ``t2``, where
         a single ``None``/unspecified list is interpreted as ``list(range(num_legs))``.
     """
@@ -3439,27 +3439,6 @@ def get_same_backend(*tensors: AbstractTensor, error_msg: str = 'Incompatible ba
     return backend
 
 
-def match_leg_order(t1: AbstractTensor, t2: AbstractTensor) -> list[int] | None:
-    """Utility function to determine how to match legs of two tensors.
-
-    In strict label mode, returns the permutation ``perm`` that matches the legs "by label",
-    i.e. such that ``t2.labels[perm[n]] == t1.labels[n]``.
-    In other words, it is the order of legs on ``t2``, such that they match those on ``t1``.
-    None is returned instead of a trivial permutation.
-    In lax label mode, we want to match the legs "by order" and hence always return None.
-    """
-    if config.strict_labels:
-        if _no_userdefined_labels(t1) and _no_userdefined_labels(t2):
-            return None
-        if not (t1.is_fully_labelled and t2.is_fully_labelled):
-            raise ValueError('In strict label mode, labelled tensors must be *fully* labelled.')
-        if t1.shape._labels == t2.shape._labels:
-            return None
-        return t2.get_leg_idcs(t1.labels)
-    else:
-        return None
-
-
 def tensor_from_block(block: Block, legs: list[VectorSpace], backend: AbstractBackend,
                       labels: list[str] = None) -> ChargedTensor | Tensor:
     """Assume the block lives in a single symmetry sector and convert to tensor.
@@ -3505,6 +3484,27 @@ def tensor_from_block(block: Block, legs: list[VectorSpace], backend: AbstractBa
 # ##################################
 # "private" helper functions
 # ##################################
+
+
+def _match_leg_order(t1: AbstractTensor, t2: AbstractTensor) -> list[int] | None:
+    """Utility function to determine how to match legs of two tensors.
+
+    In strict label mode, returns the permutation ``perm`` that matches the legs "by label",
+    i.e. such that ``t2.labels[perm[n]] == t1.labels[n]``.
+    In other words, it is the order of legs on ``t2``, such that they match those on ``t1``.
+    None is returned instead of a trivial permutation.
+    In lax label mode, we want to match the legs "by order" and hence always return None.
+    """
+    if config.strict_labels:
+        if _no_userdefined_labels(t1) and _no_userdefined_labels(t2):
+            return None
+        if not (t1.is_fully_labelled and t2.is_fully_labelled):
+            raise ValueError('In strict label mode, labelled tensors must be *fully* labelled.')
+        if t1.shape._labels == t2.shape._labels:
+            return None
+        return t2.get_leg_idcs(t1.labels)
+    else:
+        return None
 
 
 T = TypeVar('T')

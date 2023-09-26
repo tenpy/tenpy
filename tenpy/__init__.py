@@ -20,9 +20,9 @@ logger = logging.getLogger(__name__)  # main logger for tenpy
 # TODO revise this whole structure for v2
 
 # from . import tools
-from . import linalg
+from . import linalg  #, networks
+from .linalg import backends
 # from . import algorithms
-# from . import networks
 # from . import models
 # from . import simulations
 from . import version  # needs to be after linalg! (TODO this still true?)
@@ -39,6 +39,14 @@ from . import version  # needs to be after linalg! (TODO this still true?)
 #                               TimeDependentTwoSiteTDVP)
 # from .algorithms.tebd import TEBDEngine, QRBasedTEBDEngine, RandomUnitaryEvolution, TimeDependentTEBD
 # from .algorithms.truncation import TruncationError, truncate, svd_theta
+from .linalg.backends.abstract_backend import Dtype
+from .linalg.backends.backend_factory import get_backend
+from .linalg.groups import *
+from .linalg.spaces import *
+from .linalg.tensors import *
+from .linalg import random_matrix
+from .linalg.sparse import *
+from .linalg.matrix_operations import *
 # from .linalg.krylov_based import Arnoldi, LanczosGroundState, LanczosEvolution, lanczos_arpack
 # from .models.lattice import (Lattice, TrivialLattice, SimpleLattice, MultiSpeciesLattice,
 #                              IrregularLattice, HelicalLattice, Chain, Ladder, NLegLadder, Square,
@@ -58,9 +66,7 @@ from . import version  # needs to be after linalg! (TODO this still true?)
 # from .models.aklt import AKLTChain
 # from .models.mixed_xk import (MixedXKLattice, MixedXKModel, SpinlessMixedXKSquare,
 #                               HubbardMixedXKSquare)
-# from .networks.site import (Site, GroupedSite, group_sites, SpinHalfSite, SpinSite, FermionSite,
-#                             SpinHalfFermionSite, SpinHalfHoleSite, BosonSite, ClockSite,
-#                             spin_half_species, kron)
+# from .networks.site import *
 # from .networks.mps import (MPS, MPSEnvironment, TransferMatrix, InitialStateBuilder,
 #                            build_initial_state)
 # from .networks.mpo import MPO, MPOEnvironment, MPOTransferMatrix
@@ -85,9 +91,9 @@ __full_version__ = version.full_version
 
 __all__ = [
     # subpackages
-    # 'algorithms',
-    'linalg',
-    # 'models', 'networks', 'simulations', 'tools', 'version',
+    'linalg', 'tools', 'version', # 'algorithms', 'models', 'simulations', 'networks',
+    # subpackage-modules
+    'backends', 'random_matrix',
     # # from tenpy.algorithms
     # 'DMRGThreadPlusHC', 'SingleSiteDMRGEngine', 'TwoSiteDMRGEngine', 'ExactDiag', 'ExpMPOEvolution',
     # 'TimeDependentExpMPOEvolution', 'VariationalCompression', 'VariationalApplyMPO', 'ncon',
@@ -96,11 +102,8 @@ __all__ = [
     # 'TimeDependentTwoSiteTDVP', 'TEBDEngine', 'QRBasedTEBDEngine', 'RandomUnitaryEvolution',
     # 'TimeDependentTEBD', 'TruncationError', 'truncate', 'svd_theta',
     # # from tenpy.linalg
-    # 'ChargeInfo', 'LegCharge', 'LegPipe', 'Arnoldi', 'LanczosGroundState', 'LanczosEvolution',
-    # 'lanczos_arpack', 'Array', 'zeros', 'ones', 'eye_like', 'diag', 'concatenate', 'grid_concat',
-    # 'grid_outer', 'detect_grid_outer_legcharge', 'detect_qtotal', 'detect_legcharge', 'trace',
-    # 'outer', 'inner', 'tensordot', 'svd', 'pinv', 'norm', 'eigh', 'eig', 'eigvalsh', 'eigvals',
-    # 'speigs', 'expm', 'qr',
+    'Dtype', 'get_backend', *linalg.groups.__all__, *linalg.spaces.__all__, *linalg.tensors.__all__,
+     *linalg.sparse.__all__,  *linalg.matrix_operations.__all__,
     # # from tenpy.models
     # 'Lattice', 'TrivialLattice', 'SimpleLattice', 'MultiSpeciesLattice', 'IrregularLattice',
     # 'HelicalLattice', 'Chain', 'Ladder', 'NLegLadder', 'Square', 'Triangular', 'Honeycomb',
@@ -111,8 +114,7 @@ __all__ = [
     # 'FermiHubbardModel2', 'BosonicHaldaneModel', 'FermionicHaldaneModel', 'ToricCode', 'AKLTChain',
     # 'MixedXKLattice', 'MixedXKModel', 'SpinlessMixedXKSquare', 'HubbardMixedXKSquare',
     # # from tenpy.networks
-    # 'Site', 'GroupedSite', 'group_sites', 'SpinHalfSite', 'SpinSite', 'FermionSite',
-    # 'SpinHalfFermionSite', 'SpinHalfHoleSite', 'BosonSite', 'ClockSite', 'spin_half_species',
+    # *networks.site.__all__,
     # 'kron', 'MPS', 'MPSEnvironment', 'TransferMatrix', 'InitialStateBuilder', 'build_initial_state',
     # 'MPO', 'MPOEnvironment', 'MPOTransferMatrix', 'PurificationMPS',
     # # from tenpy.simulations

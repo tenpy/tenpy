@@ -23,7 +23,7 @@ Common to all tools is that they are not just useful for a single algorithm but 
 """
 # Copyright 2018-2023 TeNPy Developers, GNU GPLv3
 
-from . import events, fit, hdf5_io, math, misc, params, process, string, cache, thread
+from . import events, fit, hdf5_io, math, misc, params, process, string, cache, thread, docs
 from .events import *
 from .fit import *
 from .hdf5_io import *
@@ -34,6 +34,7 @@ from .process import *
 from .string import *
 from .cache import *
 from .thread import *
+from .docs import *
 
 __all__ = [
     'events',
@@ -46,6 +47,7 @@ __all__ = [
     'string',
     'cache',
     'thread',
+    'docs',
     *events.__all__,
     *fit.__all__,
     *hdf5_io.__all__,
@@ -56,4 +58,5 @@ __all__ = [
     *string.__all__,
     *cache.__all__,
     *thread.__all__,
+    *docs.__all__,
 ]
