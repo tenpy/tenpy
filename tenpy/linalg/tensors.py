@@ -3603,6 +3603,8 @@ def _dual_leg_label(label: str) -> str:
     """the label that a leg should have after conjugation"""
     if label is None:
         return None
+    if label.startswith('(') and label.endswith(')'):
+        return _combine_leg_labels([_dual_leg_label(l) for l in _split_leg_label(label)])
     if label.endswith('*'):
         return label[:-1]
     else:
@@ -3614,13 +3616,14 @@ def _combine_leg_labels(labels: list[str | None]) -> str:
     return '(' + '.'.join(f'?{n}' if l is None else l for n, l in enumerate(labels)) + ')'
 
 
-def _split_leg_label(label: str | None, num: int) -> list[str | None]:
+def _split_leg_label(label: str | None, num: int = None) -> list[str | None]:
     """undo _combine_leg_labels, i.e. recover the original labels"""
     if label is None:
+        assert num is not None
         return [None] * num
     if label.startswith('(') and label.endswith(')'):
         labels = label[1:-1].split('.')
-        assert len(labels) == num
+        assert num is None or len(labels) == num
         return [None if l.startswith('?') else l for l in labels]
     else:
         raise ValueError('Invalid format for a combined label')
