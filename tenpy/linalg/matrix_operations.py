@@ -435,7 +435,8 @@ def eigh(a: AbstractTensor, legs1: list[int | str] = None, legs2: list[int | str
     d_data, u_data = backend.eigh(a)
     D = DiagonalTensor(d_data, first_leg=new_leg, second_leg_dual=True, backend=backend, labels=new_labels[::-1])
     U = Tensor(u_data, legs=[new_leg, new_leg.dual], backend=backend, labels=[a.labels[0], new_labels[0]])
-    U = U.split_legs(0)
+    if need_combine:
+        U = U.split_legs(0)
     return D, U
 
 
@@ -556,7 +557,7 @@ def _act_block_diagonal_square_matrix(t: AbstractTensor,
     assert all(t.legs[i1].can_contract_with(t.legs[i2]) for i1, i2 in zip(idcs1, idcs2))
     if len(idcs1) > 1:
         pipe = t.make_ProductSpace(idcs1)
-        t = t.combine_legs([idcs1, idcs2], new_legs=[pipe.dual, pipe], new_axes=[0, 1])
+        t = t.combine_legs(idcs1, idcs2, product_spaces=[pipe, pipe.dual], new_axes=[0, 1])
     res_data = t.backend.act_block_diagonal_square_matrix(t, block_method)
     res = Tensor(res_data, backend=t.backend, legs=t.legs, labels=t.labels)
     if len(idcs1) > 1:
