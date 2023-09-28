@@ -727,11 +727,16 @@ def test_detect_sectors_from_block(backend, symmetry, symmetry_sectors_rng, np_r
             npt.assert_array_equal(sector, sectors[which])
 
 
+def test_elementwise_function_decorator():
+    assert tensors.sqrt.__doc__ == 'The square root of a number, elementwise.'
+
+
 @pytest.mark.parametrize('function, data_imag', [('real', 0), ('real', 1),
                                                  ('imag', 0), ('imag', 1),
                                                  ('angle', 0), ('angle', 1.),
                                                  ('real_if_close', 0), ('real_if_close', 1e-16),
-                                                 ('real_if_close', 1e-12), ('real_if_close', 1)
+                                                 ('real_if_close', 1e-12), ('real_if_close', 1),
+                                                 ('sqrt', 0),
                                                  ])
 def test_elementwise_functions(vector_space_rng, np_random, function, data_imag):
     leg = vector_space_rng()

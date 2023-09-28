@@ -645,6 +645,11 @@ class AbstractBlockBackend(metaclass=ABCMeta):
         ...
 
     @abstractmethod
+    def block_sqrt(self, a: Block) -> Block:
+        """The elementwise square root"""
+        ...
+
+    @abstractmethod
     def block_imag(self, a: Block) -> Block:
         """The imaginary part of a complex number, elementwise."""
         ...

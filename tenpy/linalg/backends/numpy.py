@@ -116,6 +116,9 @@ class NumpyBlockBackend(AbstractBlockBackend):
     def block_real_if_close(self, a: Block, tol: float) -> Block:
         return np.real_if_close(a, tol=tol)
 
+    def block_sqrt(self, a: Block) -> Block:
+        return np.sqrt(a)
+
     def block_imag(self, a: Block) -> Block:
         return np.imag(a)
 

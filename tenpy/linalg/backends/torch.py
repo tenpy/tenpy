@@ -121,6 +121,9 @@ class TorchBlockBackend(AbstractBlockBackend):
     def block_real_if_close(self, a: Block, tol: float) -> Block:
         raise NotImplementedError  # TODO
 
+    def block_sqrt(self, a: Block) -> Block:
+        return torch_module.sqrt(a)
+
     def block_imag(self, a: Block) -> Block:
         return torch_module.imag(a)
 

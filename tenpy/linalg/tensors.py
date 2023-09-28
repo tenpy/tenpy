@@ -13,7 +13,7 @@ from typing import TypeVar, Sequence, NoReturn
 from numbers import Number, Real, Integral
 import numpy as np
 import warnings
-from functools import cached_property
+import functools
 import logging
 logger = logging.getLogger(__name__)
 
@@ -32,7 +32,7 @@ __all__ = ['Shape', 'AbstractTensor', 'SymmetricTensor', 'Tensor', 'ChargedTenso
            'DiagonalTensor', 'Mask', 'add_trivial_leg', 'almost_equal', 'combine_legs', 'conj',
            'detect_sectors_from_block', 'flip_leg_duality', 'hconj', 'inner', 'is_scalar', 'norm',
            'outer', 'permute_legs', 'split_legs', 'squeeze_legs', 'tdot', 'trace', 'zero_like',
-           'eye_like', 'angle', 'real', 'imag', 'real_if_close', 'get_same_backend',
+           'eye_like', 'angle', 'real', 'imag', 'real_if_close', 'sqrt', 'get_same_backend',
            'tensor_from_block']
 
 # svd, qr, eigen, exp, log, ... are implemented in matrix_operations.py
@@ -176,7 +176,7 @@ class AbstractTensor(metaclass=ABCMeta):
         tensors with the same legs"""
         return self.parent_space.num_parameters
 
-    @cached_property
+    @functools.cached_property
     def parent_space(self) -> ProductSpace:
         """The space that the tensor lives in"""
         return ProductSpace(self.legs, backend=self.backend)
@@ -2176,11 +2176,11 @@ class DiagonalTensor(SymmetricTensor):
     # Additional methods (not in AbstractTensor)
     # --------------------------------------------
     
-    @cached_property
+    @functools.cached_property
     def diag_block(self) -> Block:
         return self.backend.diagonal_to_block(self)
 
-    @cached_property
+    @functools.cached_property
     def diag_numpy(self) -> np.ndarray:
         block = self.diag_block
         return self.backend.block_to_numpy(block)
@@ -3366,31 +3366,70 @@ def eye_like(tens: AbstractTensor) -> Tensor | DiagonalTensor:
 
 ElementwiseData = TypeVar('ElementwiseData', Number, DiagonalTensor)
 
-# TODO more functions?
+
+def elementwise_function(block_func: str, func_kwargs={}, maps_zero_to_zero=False):
+    """Decorator factory used to define elementwise functions.
+
+    The resulting decorator can take a ``function(x: Number, *a, **kw) -> Number`` that is defined
+    on numbers and turns it into a function ``wrapped`` that is roughly equivalent to::
+
+        |   def wrapped(x, *a, **kw):
+        |       if isinstance(x, DiagonalTensor):
+        |           return DiagonalTensor(...)  # uses ``block_func(old_block, *a, **kw)``
+        |       return function(x, *a, **kw)
+
+    Parameters
+    ----------
+    block_func : str
+        The name of a :class:`BlockBackend` method that implements the elementwise function on
+        the level of backend-specifc blocks, e.g. ``'block_real'``
+        for :meth:`BlockBackend.block_real`.
+    func_kwargs : dict
+        Additional kwargs for the `block_func`, in addition to any kwargs given to the
+        decorated function itself. The explicit kwargs, i.e. ``kw`` in the above summary,
+        take priority.
+    maps_zero_to_zero : bool
+        If the function maps zero entries to zero.
+
+    Returns
+    -------
+    decorator
+        A function, to be used as a decorator, see summary above.
+    """
+    def decorator(function):
+        @functools.wraps(function)
+        def wrapped(x: ElementwiseData, *args, **kwargs) -> ElementwiseData:
+            if isinstance(x, DiagonalTensor):
+                return x._elementwise_unary(
+                    functools.partial(getattr(x.backend, block_func), *args),
+                    func_kwargs={**kwargs, **func_kwargs}, maps_zero_to_zero=maps_zero_to_zero
+                )
+            elif is_scalar(x):
+                return function(x, *args, **kwargs)
+            raise TypeError(f'Expected DiagonalTensor or scalar. Got {type(x)}')
+        return wrapped
+    return decorator
 
 
+@elementwise_function('block_angle', maps_zero_to_zero=True)
 def angle(x: ElementwiseData) -> ElementwiseData:
-    """The angle of a complex number, applied elementwise to `DiagonalTensor`s.
+    """The angle of a complex number, elementwise.
 
     The counterclockwise angle from the positive real axis on the complex plane in the
     range (-pi, pi] with a real dtype. The angle of `0.` is `0.`.
     """
-    if isinstance(x, DiagonalTensor):
-        return x._elementwise_unary(x.backend.block_angle, maps_zero_to_zero=True)
-    assert isinstance(x, Number)
     return np.angle(x)
     
 
+@elementwise_function('block_real', maps_zero_to_zero=True)
 def real(x: ElementwiseData) -> ElementwiseData:
-    """The real part of a complex number, applied elementwise to `DiagonalTensor`s"""
-    if isinstance(x, DiagonalTensor):
-        return x._elementwise_unary(x.backend.block_real, maps_zero_to_zero=True)
-    assert isinstance(x, Number)
+    """The real part of a complex number, elementwise."""
     return np.real(x)
 
 
+@elementwise_function('block_real_if_close', func_kwargs=dict(tol=100), maps_zero_to_zero=True)
 def real_if_close(x: ElementwiseData, tol: float = 100) -> ElementwiseData:
-    """If the :func:`imag` part is close to 0, return the :func:`real` part.
+    """If the :func:`imag` part is close to 0, return the :func:`real` part. Elementwise.
 
     Parameters
     ----------
@@ -3404,18 +3443,18 @@ def real_if_close(x: ElementwiseData, tol: float = 100) -> ElementwiseData:
     -------
     If `x` is close to real, the real part of `x`. Otherwise the original complex `x`.
     """
-    if isinstance(x, DiagonalTensor):
-        return x._elementwise_unary(x.backend.block_real_if_close, func_kwargs=dict(tol=tol),
-                                    maps_zero_to_zero=True)
-    assert isinstance(x, Number)
-    return np.real_if_close(x)
+    return np.real_if_close(x, tol=tol)
 
 
+@elementwise_function('block_sqrt', maps_zero_to_zero=True)
+def sqrt(x: ElementwiseData) -> ElementwiseData:
+    """The square root of a number, elementwise."""
+    return np.sqrt(x)
+
+
+@elementwise_function('block_imag', maps_zero_to_zero=True)
 def imag(x: ElementwiseData) -> ElementwiseData:
-    """The imaginary part of a complex number, applied elementwise to `DiagonalTensor`s"""
-    if isinstance(x, DiagonalTensor):
-        return x._elementwise_unary(x.backend.block_imag, maps_zero_to_zero=True)
-    assert isinstance(x, Number)
+    """The imaginary part of a complex number, elementwise."""
     return np.imag(x)
 
 
