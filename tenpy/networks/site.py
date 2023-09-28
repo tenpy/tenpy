@@ -13,7 +13,7 @@ from functools import partial, reduce
 from ..linalg.tensors import (AbstractTensor, Tensor, SymmetricTensor, ChargedTensor,
                               DiagonalTensor, almost_equal, tensor_from_block, angle, real_if_close,
                               get_same_backend)
-from ..linalg.backends import AbstractBackend, get_default_backend, Block
+from ..linalg.backends import AbstractBackend, get_backend, Block
 from ..linalg.matrix_operations import exp
 from ..linalg.groups import (ProductSymmetry, Symmetry, SU2Symmetry, U1Symmetry, ZNSymmetry,
                              no_symmetry, SectorArray)
@@ -28,14 +28,13 @@ __all__ = [
     'group_sites',
     'set_common_symmetry',
     'SpinHalfSite',
-    # TODO uncomment all
-    # 'SpinSite',
-    # 'FermionSite',
-    # 'SpinHalfFermionSite',
-    # 'SpinHalfHoleSite',
-    # 'BosonSite',
-    # 'ClockSite',
-    # 'spin_half_species',
+    'SpinSite',
+    'FermionSite',
+    'SpinHalfFermionSite',
+    'SpinHalfHoleSite',
+    'BosonSite',
+    'ClockSite',
+    'spin_half_species',
 ]
 
 
@@ -871,7 +870,7 @@ class SpinHalfSite(Site):
         else:
             raise ValueError(f'invalid `conserve`: {conserve}')
         if backend is None:
-            backend = get_default_backend(symmetry=leg.symmetry)
+            backend = get_backend(symmetry=leg.symmetry)
         # operators: Svec, Sz, Sp, Sm
         if conserve == 'Stot':
             # TODO test this operator!, e.g. compare Svec @ Svec vs dense expect
@@ -975,7 +974,7 @@ class SpinSite(Site):
         else:
             raise ValueError(f'invalid `conserve`: {conserve}')
         if backend is None:
-            backend = get_default_backend(symmetry=leg.symmetry)
+            backend = get_backend(symmetry=leg.symmetry)
         # operators: Svec, Sz, Sp, Sm
         if conserve == 'Stot':
             dummy_leg = VectorSpace(leg.symmetry, sectors=[[2]])
@@ -1067,7 +1066,7 @@ class FermionSite(Site):
         else:
             raise ValueError(f'invalid `conserve`: {conserve}')
         if backend is None:
-            backend = get_default_backend(symmetry=leg.symmetry)
+            backend = get_backend(symmetry=leg.symmetry)
         JW = DiagonalTensor.from_diag_block([1., -1.], leg, backend=backend, labels=['p', 'p*'])
         C = np.array([[0., 1.], [0., 0.]])
         Cd = np.array([[0., 0.], [1., 0.]])
@@ -1224,7 +1223,7 @@ class SpinHalfFermionSite(Site):
         else:
             leg = VectorSpace.from_basis(sym_N * sym_S, np.stack([sectors_N, sectors_S], axis=1))
         if backend is None:
-            backend = get_default_backend(symmetry=leg.symmetry)
+            backend = get_backend(symmetry=leg.symmetry)
         # diagonal operators : Nu, Nd, Ntot, dN, NuNd, JWu, JWd, JW, Sz
         Nu = np.array([0., 1., 0., 1.])
         Nd = np.array([0., 0., 1., 1.])
@@ -1381,7 +1380,7 @@ class SpinHalfHoleSite(Site):
         else:
             leg = VectorSpace.from_basis(sym_N * sym_S, np.stack([sectors_N, sectors_S], axis=1))
         if backend is None:
-            backend = get_default_backend(symmetry=leg.symmetry)
+            backend = get_backend(symmetry=leg.symmetry)
         # diagonal operators : Nu, Nd, Ntot, dN, NuNd, JWu, JWd, JW, Sz
         Nu = np.array([0., 1., 0.])
         Nd = np.array([0., 0., 1.])
@@ -1505,7 +1504,7 @@ class BosonSite(Site):
         else:
             raise ValueError(f'invalid `conserve`: {conserve}')
         if backend is None:
-            backend = get_default_backend(symmetry=leg.symmetry)
+            backend = get_backend(symmetry=leg.symmetry)
         # diagonal operators
         ops = dict(N=N, NN=N ** 2, dN=(N - filling), dNdN=(N - filling) ** 2, P=1. - 2. * (N % 2))
         ops = {name: DiagonalTensor.from_diag_numpy(op, leg, backend=backend, labels=['p', 'p*'])
@@ -1666,7 +1665,7 @@ class ClockSite(Site):
         else:
             raise ValueError(f'invalid `conserve`: {conserve}')
         if backend is None:
-            backend = get_default_backend(symmetry=leg.symmetry)
+            backend = get_backend(symmetry=leg.symmetry)
         # diagonal operators : Z, Zhc, Zphc
         Z = np.exp(2.j * np.pi * np.arange(q, dtype=np.complex128) / q)
         Zhc = Z.conj()

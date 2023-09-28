@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)  # main logger for tenpy
 # TODO revise this whole structure for v2
 
 # from . import tools
-from . import linalg  #, networks
+from . import linalg, networks
 from .linalg import backends
 # from . import algorithms
 # from . import models
@@ -66,7 +66,7 @@ from .linalg.matrix_operations import *
 # from .models.aklt import AKLTChain
 # from .models.mixed_xk import (MixedXKLattice, MixedXKModel, SpinlessMixedXKSquare,
 #                               HubbardMixedXKSquare)
-# from .networks.site import *
+from .networks.site import *
 # from .networks.mps import (MPS, MPSEnvironment, TransferMatrix, InitialStateBuilder,
 #                            build_initial_state)
 # from .networks.mpo import MPO, MPOEnvironment, MPOTransferMatrix
@@ -89,9 +89,10 @@ __version__ = version.version
 #: full version from git description, and numpy/scipy/python versions
 __full_version__ = version.full_version
 
+# TODO is there any meaning in the order?
 __all__ = [
     # subpackages
-    'linalg', 'tools', 'version', # 'algorithms', 'models', 'simulations', 'networks',
+    'linalg', 'tools', 'version', 'networks', # 'algorithms', 'models', 'simulations',
     # subpackage-modules
     'backends', 'random_matrix',
     # # from tenpy.algorithms
@@ -114,7 +115,7 @@ __all__ = [
     # 'FermiHubbardModel2', 'BosonicHaldaneModel', 'FermionicHaldaneModel', 'ToricCode', 'AKLTChain',
     # 'MixedXKLattice', 'MixedXKModel', 'SpinlessMixedXKSquare', 'HubbardMixedXKSquare',
     # # from tenpy.networks
-    # *networks.site.__all__,
+    *networks.site.__all__,
     # 'kron', 'MPS', 'MPSEnvironment', 'TransferMatrix', 'InitialStateBuilder', 'build_initial_state',
     # 'MPO', 'MPOEnvironment', 'MPOTransferMatrix', 'PurificationMPS',
     # # from tenpy.simulations

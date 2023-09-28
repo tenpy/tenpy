@@ -25,7 +25,7 @@ def anticommutator(A, B):
 @pytest.mark.parametrize('symmetry_backend, use_sym',
                          [('abelian', True), ('abelian', False), ('no_symmetry', False)])
 def test_site(np_random, symmetry_backend, block_backend, use_sym):
-    backend = la.get_backend(block_backend=block_backend, symmetry_backend=symmetry_backend)
+    backend = la.get_backend(block_backend=block_backend, symmetry=symmetry_backend)
     if use_sym:
         sym = la.u1_symmetry * la.z3_symmetry
     else:
@@ -73,7 +73,7 @@ def test_site(np_random, symmetry_backend, block_backend, use_sym):
 
 
 def test_double_site(symmetry_backend, block_backend):
-    backend = la.get_backend(block_backend=block_backend, symmetry_backend=symmetry_backend)
+    backend = la.get_backend(block_backend=block_backend, symmetry=symmetry_backend)
     if symmetry_backend == 'no_symmetry':
         all_conserve = ['None']
         fs_conserve = 'None'
@@ -131,7 +131,7 @@ def check_same_operators(sites):
 
 
 def test_spin_half_site(block_backend, symmetry_backend):
-    backend = la.get_backend(block_backend=block_backend, symmetry_backend=symmetry_backend)
+    backend = la.get_backend(block_backend=block_backend, symmetry=symmetry_backend)
     hcs = dict(Id='Id', JW='JW', Sx='Sx', Sy='Sy', Sz='Sz', Sp='Sm', Sm='Sp', Sigmax='Sigmax',
                Sigmay='Sigmay', Sigmaz='Sigmaz')
     if symmetry_backend == 'no_symmetry':
@@ -160,7 +160,7 @@ def test_spin_half_site(block_backend, symmetry_backend):
 
 @pytest.mark.parametrize('S', [0.5, 1, 1.5, 2, 5])
 def test_spin_site(block_backend, symmetry_backend, S):
-    backend = la.get_backend(block_backend=block_backend, symmetry_backend=symmetry_backend)
+    backend = la.get_backend(block_backend=block_backend, symmetry=symmetry_backend)
     hcs = dict(Id='Id', JW='JW', Sx='Sx', Sy='Sy', Sz='Sz', Sp='Sm', Sm='Sp')
     if symmetry_backend == 'no_symmetry':
         all_conserve = ['None']
@@ -185,7 +185,7 @@ def test_spin_site(block_backend, symmetry_backend, S):
 
 
 def test_fermion_site(block_backend, symmetry_backend):
-    backend = la.get_backend(block_backend=block_backend, symmetry_backend=symmetry_backend)
+    backend = la.get_backend(block_backend=block_backend, symmetry=symmetry_backend)
     hcs = dict(Id='Id', JW='JW', C='Cd', Cd='C', N='N', dN='dN', dNdN='dNdN')
     if symmetry_backend == 'no_symmetry':
         all_conserve = ['None']
@@ -220,7 +220,7 @@ def test_fermion_site(block_backend, symmetry_backend):
 
 
 def test_spin_half_fermion_site(block_backend, symmetry_backend):
-    backend = la.get_backend(block_backend=block_backend, symmetry_backend=symmetry_backend)
+    backend = la.get_backend(block_backend=block_backend, symmetry=symmetry_backend)
     hcs = dict(Id='Id', JW='JW', JWu='JWu', JWd='JWd',
                Cu='Cdu', Cdu='Cu', Cd='Cdd', Cdd='Cd',
                Nu='Nu', Nd='Nd', NuNd='NuNd', Ntot='Ntot', dN='dN',
@@ -270,7 +270,7 @@ def test_spin_half_fermion_site(block_backend, symmetry_backend):
 
 
 def test_spin_half_hole_site(block_backend, symmetry_backend):
-    backend = la.get_backend(block_backend=block_backend, symmetry_backend=symmetry_backend)
+    backend = la.get_backend(block_backend=block_backend, symmetry=symmetry_backend)
     hcs = dict(Id='Id', JW='JW', JWu='JWu', JWd='JWd',
                Cu='Cdu', Cdu='Cu', Cd='Cdd', Cdd='Cd',
                Nu='Nu', Nd='Nd', Ntot='Ntot', dN='dN',
@@ -316,7 +316,7 @@ def test_spin_half_hole_site(block_backend, symmetry_backend):
 
 @pytest.mark.parametrize('Nmax', [1, 2, 5, 10])
 def test_boson_site(block_backend, symmetry_backend, Nmax):
-    backend = la.get_backend(block_backend=block_backend, symmetry_backend=symmetry_backend)
+    backend = la.get_backend(block_backend=block_backend, symmetry=symmetry_backend)
     if symmetry_backend == 'no_symmetry':
         all_conserve = ['None']
     elif symmetry_backend in ['abelian', 'nonabelian']:
@@ -343,7 +343,7 @@ def test_boson_site(block_backend, symmetry_backend, Nmax):
 
 @pytest.mark.parametrize('q', [2, 3, 5, 10])
 def test_clock_site(block_backend, symmetry_backend, q):
-    backend = la.get_backend(block_backend=block_backend, symmetry_backend=symmetry_backend)
+    backend = la.get_backend(block_backend=block_backend, symmetry=symmetry_backend)
     if symmetry_backend == 'no_symmetry':
         all_conserve = ['None']
     elif symmetry_backend in ['abelian', 'nonabelian']:
@@ -383,7 +383,7 @@ def test_clock_site(block_backend, symmetry_backend, q):
 
 
 def test_set_common_symmetry(block_backend, symmetry_backend):
-    backend = la.get_backend(block_backend=block_backend, symmetry_backend=symmetry_backend)
+    backend = la.get_backend(block_backend=block_backend, symmetry=symmetry_backend)
     if symmetry_backend == 'no_symmetry':
         conserve_S = conserve_N = 'None'
         expect_symm_Sz = expect_symm_Sz_N = expect_symm_Sz_N_Sz = la.no_symmetry
