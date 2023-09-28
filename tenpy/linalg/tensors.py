@@ -100,7 +100,7 @@ class Shape:
     def label_to_legnum(self, label: str) -> int:
         num = self._labelmap.get(label, None)
         if num is None:
-            raise ValueError(f'No leg with label {label}')
+            raise ValueError(f'No leg with label {label}. Labels are {self.labels}')
         return num
 
     def relabel(self, mapping: dict[str, str]) -> None:
@@ -237,7 +237,7 @@ class AbstractTensor(metaclass=ABCMeta):
                 raise ValueError(f'Leg index out of bounds: {which_leg}.') from None
             return which_leg
         else:
-            raise TypeError
+            raise TypeError(f'Expected int or str. Got {type(which_leg)}')
 
     def get_leg_idcs(self, which_legs: int | str | list[int | str]) -> list[int]:
         if isinstance(which_legs, (Integral, str)):
