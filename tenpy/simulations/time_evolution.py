@@ -5,9 +5,9 @@ import numpy as np
 
 from . import simulation
 from .simulation import *
-from ..networks.mps import MPSEnvironment, MPS
+from ..networks.mps import MPSEnvironment, MPS, MPSEnvironmentJW
 from ..tools import hdf5_io
-import logging
+
 __all__ = simulation.__all__ + ['RealTimeEvolution', 'SpectralSimulation']
 
 
@@ -202,8 +202,8 @@ class SpectralSimulation(RealTimeEvolution):
                 assert isinstance(psi_gs, MPS), "psi must be an instance of :class:`MPS`"
                 self.psi_groundstate = psi_gs
             else:
-                self.logger.warning("No ground state data is supplied, calling the initial state builder on"
-                                    "SpectralSimulation class. You probably want to supply a ground state")
+                self.logger.warning("No ground state data is supplied, calling the initial state builder on\
+                                     SpectralSimulation class. You probably want to supply a ground state")
                 super().init_state()  # this sets self.psi from init state builder (should be avoided)
                 self.psi_groundstate = self.psi.copy()
                 delattr(self, 'psi')  # free memory
@@ -340,6 +340,60 @@ class SpectralSimulation(RealTimeEvolution):
                 # TODO: change when :meth:`expectation_value` of :class:`MPSEnvironment` automatically handles JW-string
             spectral_function_t = np.array(spectral_function_t)
 
+        if self.evolve_bra is False:
+            phase = np.exp(1j * self.gs_energy * self.engine.evolved_time)
+            spectral_function_t = spectral_function_t * phase
+
+        return spectral_function_t
+
+
+class SpectralSimulationExperimental(SpectralSimulation):
+    """Improved version of :class:`SpectralSimulation`, which gives an advantage
+    for calculating the correlation function of Fermions. This is done
+    by calling the :class:`MPSEnvironmentJW` instead of the usual :class:`MPSEnvironment`.
+    This class automatically adds a (hanging) JW string to each LP (only) when moving
+    the environment to the right; otherwise the advantage of the MPS environment is lost
+    (since only the overlap with the full operator string is calculated).
+    """
+    def __int__(self, options, *, gs_data=None, **kwargs):
+        super().__init__(options, gs_data=gs_data, **kwargs)
+
+    def m_spectral_function(self, results, psi, model, simulation, **kwargs):
+        """Calculate the overlap <psi_0| e^{iHt} op2^j e^{-iHt} op1_idx |psi_0> between
+        op1 at MPS position idx and op2 at the MPS position j"""
+        self.logger.info("calling m_spectral_function")
+        if self.addJW is False:
+            env = MPSEnvironment(self.psi_groundstate, self.psi)
+        else:
+            env = MPSEnvironmentJW(self.psi_groundstate, self.psi)
+            self.logger.info("Using JW Environement %%%%%%")
+
+        # TODO: get better naming convention, store this in dict ?
+        if isinstance(self.operator_t, list):
+            for i, op in enumerate(self.operator_t):
+                if isinstance(op, str):
+                    results[f'spectral_function_t_{op}'] = self._m_spectral_function_op(env, op)
+                else:
+                    results[f'spectral_function_t_{i}'] = self._m_spectral_function_op(env, op)
+        else:
+            if isinstance(self.operator_t, str):
+                results[f'spectral_function_t_{self.operator_t}'] = self._m_spectral_function_op(env, self.operator_t)
+            else:
+                results[f'spectral_function_t'] = self._m_spectral_function_op(env, self.operator_t)
+
+    def _m_spectral_function_op(self, env, op): # type hint for either mps env or mps env jw
+        """Calculate the overlap of <psi| op_j |phi>, where |phi> = e^{-iHt} op1_idx |psi_0>
+        (the time evolved state after op1 was applied at MPS position idx) and
+        <psi| is either <psi_0| e^{iHt} (if evolve_bra is True) or e^{i E_0 t} <psi| (if evolve_bra is False).
+
+        Returns
+        ----------
+        spectral_function_t : 1D array
+                              representing <psi_0| e^{iHt} op2^i_j e^{-iHt} op1_idx |psi_0>
+                              where op2^i is the i-th operator given in the list [op2^1, op2^2, ..., op2^N]
+                              and spectral_function_t[j] corresponds to this overlap at MPS site j at time t
+        """
+        spectral_function_t = env.expectation_value(op)
         if self.evolve_bra is False:
             phase = np.exp(1j * self.gs_energy * self.engine.evolved_time)
             spectral_function_t = spectral_function_t * phase

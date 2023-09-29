@@ -168,7 +168,7 @@ from ..tools.cache import DictCache
 from ..tools import hdf5_io
 from ..algorithms.truncation import TruncationError, svd_theta, _machine_prec_trunc_par
 
-__all__ = ['BaseMPSExpectationValue', 'MPS', 'BaseEnvironment', 'MPSEnvironment', 'TransferMatrix',
+__all__ = ['BaseMPSExpectationValue', 'MPS', 'BaseEnvironment', 'MPSEnvironment', 'MPSEnvironmentJW', 'TransferMatrix',
            'InitialStateBuilder', 'build_initial_state']
 
 
@@ -301,6 +301,9 @@ class BaseMPSExpectationValue(metaclass=ABCMeta):
         E = []
         for i in sites:
             op = self.get_op(ops, i)
+            if isinstance(op, str):  # TODO: check if op is ndarray ?
+                # Check for MPSEnvironmentJW
+                self._check_compatible_with_has_JW_in_LP(self.sites[i].op_needs_JW(op))
             op = op.replace_labels(op_ax_p + op_ax_pstar, ax_p + ax_pstar)
             theta_ket = ket.get_theta(i, n)
             C = npc.tensordot(op, theta_ket, axes=[ax_pstar, ax_p])  # C has same labels as theta
@@ -310,6 +313,19 @@ class BaseMPSExpectationValue(metaclass=ABCMeta):
             theta_bra = bra.get_theta(i, n)
             E.append(npc.inner(theta_bra, C, axes='labels', do_conj=True))
         return self._normalize_exp_val(E)
+
+    has_JW_in_LP = False
+
+    # TODO: apply _check_compatible_with_has_JW_in_LP for all methods which need it
+    def _check_compatible_with_has_JW_in_LP(self, need_JW_on_left: bool):
+        if need_JW_on_left != self.has_JW_in_LP:
+            if not self.has_JW_in_LP:
+                raise ValueError("""Operator needs JW string on left, but this class doesn't provide such LP 
+                                  You could initialize :class:`MPSEnvironmentJW` to calculate the 
+                                  corresponding expectation values!""")
+            else:
+                raise ValueError("""Operator needs no JW string on left, use plain MPS/MPSExpectationValue
+                                  rather than MPSEnvironmentJW!""")
 
     def expectation_value_multi_sites(self, operators, i0):
         r"""Expectation value  ``<bra|op0_{i0}op1_{i0+1}...opN_{i0+N}|ket>``.
@@ -3603,6 +3619,7 @@ class MPS(BaseMPSExpectationValue):
             # get better guess for L with Arnoldi
             arnoldi_params['E_tol'] = err / 10.
             TM = TransferMatrix.from_Ns_Ms(new_As, self._B, transpose=True)
+            TM = TransferMatrix.from_Ns_Ms(new_As, self._B, transpose=True)
             L.ireplace_label('vL', 'vR*')
             E, Ls, N = Arnoldi(TM, L, arnoldi_params).run()
             L = Ls[0]
@@ -4830,7 +4847,7 @@ class BaseEnvironment(metaclass=ABCMeta):
         """Build initial left part ``LP``.
 
         If `bra` and `ket` are the same and in left canonical form, this is the environment
-        you get contracting he overlaps from the left infinity up to bond left of site `i`.
+        you get contracting the overlaps from the left infinity up to bond left of site `i`.
 
         For segment MPS, the :attr:`~tenpy.networks.mps.MPS.segment_boundaries` are read out
         (if set).
@@ -5287,6 +5304,26 @@ class MPSEnvironment(BaseEnvironment, BaseMPSExpectationValue):
         RP = self.get_RP(i, store=True)
         C = npc.tensordot(C, RP, axes=['vR', 'vL'])  # axes_p + (vL, vL*)
         return C
+
+
+class MPSEnvironmentJW(MPSEnvironment):
+    """Class similar to :class:`MPSEnvironment`, but overwriting the method
+    :meth:`_contract_LP` in a way that the JW string is automatically added when
+    contracting the left environment only -> expectation values should only
+    be calculated from left to right with this class. This works for finite MPS."""
+    has_JW_in_LP = True
+    def _contract_LP(self, i, LP):
+        i = self.ket._to_valid_index(i)  # redundant?
+        B_without_JW = self.ket.get_B(i, form='A')
+        JW = self.ket.sites[i].get_op('JW')  # JW might be different for different sites
+        # JW is unitary by def. so form should not be affected
+        B_with_JW = npc.tensordot(B_without_JW, JW, axes=(['p'], ['p*']))
+        # B_with_JW has axes ['vL', 'vR', 'p']
+        LP = npc.tensordot(LP, B_with_JW, axes=('vR', 'vL'))
+        axes = (self.ket._get_p_label('*') + ['vL*'], self.ket._p_label + ['vR*'])
+        # for a usual MPS, axes = (['p*', 'vL*'], ['p', 'vR*'])
+        LP = npc.tensordot(self.bra.get_B(i, form='A').conj(), LP, axes=axes)
+        return LP  # labels 'vR*', 'vR'
 
 
 class TransferMatrix(sparse.NpcLinearOperator):
