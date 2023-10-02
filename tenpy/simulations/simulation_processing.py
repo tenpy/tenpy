@@ -1,4 +1,5 @@
 import numpy as np
+import scipy
 import logging
 from ..tools import hdf5_io
 from ..tools.misc import update_recursive
@@ -115,9 +116,17 @@ class SpectralFunctionProcessor(SimulationPostProcessor):
 
     Attributes
     ----------
+    linear_prediction : Config
+        holding all parameters for a linear prediction, example:
+        linear_prediction = {'m': 50,
+                             'p': 30,
+                             'cyclic: False,
+                             'trunc_mode': 'cutoff',  # or 'renormalize', or 'conjugate'
+                             'epsilon': 10e-7,
+                             'mode': 'individual'}  # or 'full'
     windowing_function : Config
-        holding all parameters for a windowing function
-        windowing_function = {'window': gaussian,
+        holding all parameters for a windowing function, example:
+        windowing_function = {'window': 'gaussian',
                               'sigma': 0.4}
     """
 
@@ -163,11 +172,9 @@ class SpectralFunctionProcessor(SimulationPostProcessor):
         ft_space, k = self.fourier_transform_space(m_corr_lat)
 
         if hasattr(self, 'linear_prediction_params'):
-            raise NotImplementedError("Linear prediction is not yet implemented")
-            # ft_space = self._to_mps_geometry(ft_space)
-            # TODO: provide linear prediction
-            # ft_space = self.linear_predict(ft_space)
-            # ft_space = self._to_lat_geometry(ft_space)
+            ft_space = self._to_mps_geometry(ft_space)
+            ft_space = self.linear_predict(ft_space)
+            ft_space = self._to_lat_geometry(ft_space)
 
         if hasattr(self, 'windowing_function_params'):
             ft_space = self.apply_windowing_function(ft_space)
@@ -214,6 +221,26 @@ class SpectralFunctionProcessor(SimulationPostProcessor):
         window = window.reshape(window.shape + (1,) * (len(a.shape) - 1))
         self.windowing_function_params.warn_unused(True)
         return np.swapaxes(np.swapaxes(a, 0, axis) * window, axis, 0)
+
+    def linear_predict(self, x):
+        args = self.readout_linear_pred_params(x)  # m, p, trunc_mode, cyclic, epsilon, mode
+        return linear_prediction(x, *args)
+
+    def readout_linear_pred_params(self, data):
+        x_length = len(data)
+        m = self.linear_prediction_params.get('m', x_length // 2)
+        cyclic = self.linear_prediction_params.get('cyclic', False)
+        p = self.linear_prediction_params.get('p', (x_length - 1) // 2)
+        epsilon = self.linear_prediction_params.get('epsilon', 10e-7)
+        trunc_mode = self.linear_prediction_params.get('trunc_mode', 'cutoff')
+        mode = self.linear_prediction_params.get('mode', 'full')
+        self.linear_prediction_params.warn_unused(True)
+        assert isinstance(cyclic, bool), "Cyclic must be either true or false"
+        assert isinstance(m, int) and isinstance(p, int), "m and p must be integers"
+        assert trunc_mode == 'cutoff' or trunc_mode == 'renormalize' or trunc_mode == 'conjugate', "trunc_mode \
+        must be either 'cutoff' or 'renormalize' or 'conjugate'"
+        assert mode == 'full' or mode == 'individual', "mode must be either 'full' or 'individual'"
+        return m, p, trunc_mode, cyclic, epsilon, mode
 
     def fourier_transform_space(self, a):
         if self.lat.dim == 1:
@@ -320,3 +347,186 @@ def init_simulation_for_processing(*,
     sim = SimClass.from_saved_checkpoint(checkpoint_results=checkpoint_results,
                                         **simulation_class_kwargs)
     return sim
+
+
+# Linear Prediction
+def linear_prediction(x, m, p, trunc_mode='cutoff', cyclic=False, epsilon=10e-7, mode='full'):
+    """Linear prediction for m time steps, based on the last p data points
+    of the time series x.
+
+    Parameters
+    ----------
+    x : ndarray
+        time series data (n_tsteps, other)
+    m : int
+        number of timesteps to predict
+    p : int
+        number of last points to base linear prediction on
+    trunc_mode : str
+        the truncation mode (default is 'cutoff', which means that those eigenvalues will be cut)
+        used for truncating the eigenvalues. Other options are 'renormalize' (meaning their absolute
+        value will be set to 1) and 'conjugate'
+    cyclic : bool
+        whether to use the cyclic autocorrelation or not (see :meth:`autocorrelation`
+    epsilon : float
+        regularization constant, in case matrix can not be inverted
+    mode : str
+        the mode to use for 2D data (default is 'full', in which case the mse of the entire datapoints
+        along the second (non-time) direction is taken). An alternative is 'individual', where the
+        mse calculation is only base on the time series data points along each 'row' in the second dimension
+
+    Returns
+    -------
+    ndarray
+    """
+    if mode == 'full':
+        correlations = get_correlations(x, p, cyclic=cyclic)
+        lpc = get_lpc(correlations, epsilon=epsilon)
+        alpha, c = alpha_and_c(x, lpc, trunc_mode=trunc_mode)
+        predictions = [np.tensordot(c, alpha ** m_i, axes=(0, 0)) for m_i in range(1, m + 1)]
+        return np.concatenate([x, predictions])
+    else:
+        predictions = list()
+        if x.ndim == 1:
+            x = x.reshape(-1, 1)
+        for x_indiv_site in x.T:  # transpose array since it is given in (t_steps, site)
+            correlations = get_correlations(x_indiv_site, p, cyclic=cyclic)
+            lpc = get_lpc(correlations, epsilon=epsilon)
+            alpha, c = alpha_and_c(x_indiv_site, lpc, trunc_mode=trunc_mode)
+            predictions_site = [np.tensordot(c, alpha ** m_i, axes=(0, 0)) for m_i in range(1, m + 1)]
+            predictions.append(np.concatenate([x_indiv_site, predictions_site]))
+        return np.array(predictions).T  # transpose back
+
+
+def autocorrelation(x, i, j, cyclic=False):
+    """Compute the autocorrelation :math:`R_{XX}(i, j) = E\{x(n-i) \cdot x(n-j)\}`. Note
+    that this can be rewritten as :math:`R_{XX}(i - j) = E\{x(n) \cdot x(n-(j-i))\}`
+
+    Parameters
+    ----------
+    x : ndarray
+        time series data, first dimension must be corresponding to the time
+    i: delay of i steps of input signal
+    j: delay of j steps of copy of input signal
+    cyclic : bool
+        whether the cyclic autocorrelation is used or not. If set to False (default), the
+        data points with indices smaller than 0 are all set to zero. If set to True all indices
+        are interpreted mod N (where N is the length of x) -> cyclic.
+
+    Returns
+    -------
+    float
+    """
+    N = len(x)
+    if cyclic is True:  # interprets the indices mod N+
+        # TODO: make numpy version/scipy
+        return np.sum([np.sum(x[n - i] * np.conj(x[n - j])) for n in range(N)])
+    else:
+        if x.ndim == 1:
+            return np.correlate(x, x, mode='full')[x.size - 1 + (j - i)]  # TODO: is numpy version for 1D necessary?
+        else:  # also works for 2D
+            corrs = []
+            for n in range(N):
+                if (n - j + i) < 0 or (n - j + i) >= N:
+                    corrs.append(0)
+                else:
+                    corrs.append(np.sum(x[n] * np.conj(x[n - j + i])))
+            return np.sum(corrs)
+
+
+def get_correlations(x, p, cyclic=False):
+    """Get the last p correlations of the time series x.
+
+    Parameters
+    ----------
+    x : ndarray
+        time series data (n_tsteps, other)
+    p : int
+        number of last points to base linear prediction on
+    cyclic : bool
+        whether to use the cyclic autocorrelation or not
+
+    Returns
+    -------
+    corrs : ndarry
+    """
+    corrs = list()
+    for j in range(p+1):
+        corrs.append(autocorrelation(x, 0, j, cyclic=cyclic))
+    return np.array(corrs)
+
+
+def get_lpc(correlations, epsilon=10e-7):
+    """Function to obtain the linear prediction coefficients (lpc),
+    for given correlations of a time series x.
+
+    Parameters
+    ----------
+    correlations : ndarray
+        containing the last p+1 correlations of the time series
+        [E{x(n)*x(n-0)}, E{x(n)*x(n-1)}, ..., E{x(n)*x(n-p)}
+    epsilon : float
+        regularization constant, in case matrix can not be inverted
+
+    Returns
+    -------
+    ndarray
+        1D array containing the p linear prediction coefficients [a_p, a_{p-1}, ..., a_1] from
+        the correlations of the time series x
+    """
+    r = correlations[1:]
+    R = scipy.linalg.toeplitz(correlations[:-1])
+    # getting array of coefficients
+    try:
+        R_inv = np.linalg.inv(R)
+    except np.linalg.LinAlgError:
+        try:
+            R_inv = np.linalg.inv(R + np.eye(len(R))*epsilon)
+        except Exception:
+            raise Exception(f"Matrix could not be inverted, even after applying regularization \
+                            with epsilon = {epsilon}, maybe try a higher regularization parameter.")
+    return R_inv @ r
+
+
+def alpha_and_c(x, lpc, trunc_mode: str = 'cutoff'):
+    """Get the eigenvalues and coefficients for linearly predicting the time series x.
+    If necessary, truncate the eigenvalues.
+
+    Parameters
+    ----------
+    x : ndarray
+        time series data (n_tsteps, other)
+    lpc : ndarray
+        1D array containing the p linear prediction coefficients [a_p, a_{p-1}, ..., a_1] from the correlations of x
+    trunc_mode : str
+        the truncation mode (default is 'cutoff', which means that those eigenvalues will be cut)
+        used for truncating the eigenvalues. Other options are 'renormalize' (meaning their absolute
+        value will be set to 1) and 'conjugate'
+
+    Returns
+    -------
+    evals : ndarray
+    c : ndarray
+    """
+    A = np.diag(np.ones(len(lpc) - 1), -1).astype(lpc.dtype)
+    A[0] = lpc
+
+    evals, evects = np.linalg.eig(A)  # Note that A is not symmetric!
+    if trunc_mode == 'renormalize':
+        evals[np.abs(evals) > 1] = evals[np.abs(evals) > 1] / np.abs(evals[np.abs(evals) > 1])
+    elif trunc_mode == 'cutoff':
+        evals[np.abs(evals) > 1] = 0
+    elif trunc_mode == 'conjugate':
+        evals[np.abs(evals) > 1] = 1 / np.conj(evals[np.abs(evals) > 1])
+
+    x_tilde_N = x[-len(lpc):][::-1]
+    shape = (-1,) + (x.ndim - 1) * (1,)
+    try:
+        evects_inv = np.linalg.inv(evects)
+    except np.linalg.LinAlgError:
+        # Regularization is only done here to avoid an Exception for ill defined correlations (e.g. all zero)
+        evects_inv = np.linalg.inv(evects + np.eye(len(evects))*10e-07)
+        logging.warning("Matrix of eigenvectors could not be inverted, linear prediction will probably fail...")
+
+    c = np.tensordot(evects_inv, x_tilde_N, axes=(1, 0)) * evects[0, :].reshape(shape)
+    return evals, c
