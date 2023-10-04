@@ -207,6 +207,26 @@ class AbstractTensor(metaclass=ABCMeta):
         """
         return _TensorIndexHelper(self, legs)
 
+    def hconj(self, legs1: int | str | list[int | str] = -1,
+              legs2: int | str | list[int | str] = None) -> AbstractTensor:
+        """See :func:`tensors.hconj`"""
+        legs1 = np.array(self.get_leg_idcs(legs1))
+        if legs2 is None:
+            # TODO match by labels instead?
+            legs2 = [n for n in range(self.num_legs) if n not in legs1]
+        else:
+            legs2 = np.array(self.get_leg_idcs(legs2))
+        assert not duplicate_entries(legs1 + legs2)
+        assert len(legs1) == len(legs2) == self.num_legs // 2
+        labels = self.labels
+        permutation = np.zeros((self.num_legs,), dtype=int)
+        for i1, i2 in zip(legs1, legs2):
+            assert self.legs[i1] == self.legs[i2].dual
+            assert labels[i1] == _dual_leg_label(labels[i2])  # accepts None as well
+            permutation[i1] = i2
+            permutation[i2] = i1
+        return self.conj().permute_legs(permutation)
+
     def has_label(self, label: str, *more: str) -> bool:
         return label in self.shape._labels and all(l in self.shape._labels for l in more)
 
@@ -570,12 +590,8 @@ class AbstractTensor(metaclass=ABCMeta):
 
     @abstractmethod
     def conj(self) -> AbstractTensor:
-        """See :funct:`tensors.conj`"""
+        """See :func:`tensors.conj`"""
         ...
-
-    def hconj(self) -> AbstractTensor:
-        """See :funct:`tensors.hconj`"""
-        return self.conj().permute_legs(permutation=[*range(self.num_legs - 2), -1, -2])
 
     @abstractmethod
     def copy(self, deep=True) -> AbstractTensor:
@@ -1896,7 +1912,6 @@ class ChargedTensor(AbstractTensor):
         return ChargedTensor(invariant_part=inv, dummy_leg_state=self.dummy_leg_state)
 
     def conj(self) -> ChargedTensor:
-        # TODO should we flip the dummy_leg after invariant_part.conj() to preserve dummy_leg.is_dual?
         if self.dummy_leg_state is None:
             if self.dummy_leg.dim == 1:
                 dummy_leg_state = None  # conj([1.]) == [1.]
@@ -1910,6 +1925,11 @@ class ChargedTensor(AbstractTensor):
             dummy_leg_state = self.backend.block_conj(self.dummy_leg_state)
         inv = self.invariant_part.conj().relabel({'!*': '!'})
         return ChargedTensor(invariant_part=inv, dummy_leg_state=dummy_leg_state)
+
+    def hconj(self) -> ChargedTensor:
+        # TODO is this expected behavior? i.e. that conj() has opposite dummy_leg.is_dual
+        #      but hconj gives the same?
+        return super().hconj().flip_dummy_leg_duality()
 
     def copy(self, deep=True) -> ChargedTensor:
         if deep:
@@ -3218,15 +3238,14 @@ def flip_leg_duality(t: AbstractTensor, which_leg: int | str, *more: int | str) 
     return t.flip_leg_duality(which_leg, *more)
 
 
-def hconj(t: AbstractTensor) -> AbstractTensor:
+def hconj(t: AbstractTensor, legs1: int | str | list[int | str] = -1,
+          legs2: int | str | list[int | str] = None) -> AbstractTensor:
     """Hermitian conjugate.
 
-    In strict label mode, this is the same as :func:`conj`, since exchanging legs is taken care of
-    by the relabelling. otherwise, the last two legs are swapped such that the result has the same
-    leg as `t`, if those two legs are contractible.
+    This is basically :func:`conj` with additional input checks and a :func:`permute_legs`, such
+    that the result has the same legs as `t`, and can e.g. be added to `t`.
     """
-    assert t.num_legs >= 2
-    return t.conj().permute_legs(permutation=[*range(t.num_legs - 2), -1, -2])
+    return t.hconj(legs1=legs1, legs2=legs2)
 
 
 def inner(t1: AbstractTensor, t2: AbstractTensor, do_conj: bool = True,

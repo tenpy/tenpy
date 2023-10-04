@@ -474,7 +474,7 @@ def test_trace(backend, vector_space_rng, tensor_rng):
     npt.assert_array_almost_equal_nulp(res.to_numpy_ndarray(), expected, 100)
 
 
-def test_conj(tensor_rng):
+def test_conj_hconj(tensor_rng):
     tens = tensor_rng(labels=['a', 'b', None], real=False)
     expect = np.conj(tens.to_numpy_ndarray())
     assert np.linalg.norm(expect.imag) > 0 , "expect complex data!"
@@ -484,6 +484,28 @@ def test_conj(tensor_rng):
     assert [l1.can_contract_with(l2) for l1, l2 in zip(res.legs, tens.legs)]
     assert np.allclose(res.to_numpy_ndarray(), expect)
 
+    print('hconj 1-site operator')
+    leg_a = tens.legs[0]
+    op = tensor_rng(legs=[leg_a, leg_a.dual], labels=['p', 'p*'], real=False)
+    op_hc = tensors.hconj(op)
+    op_hc.test_sanity()
+    assert op_hc.labels == op.labels
+    assert op_hc.legs == op.legs
+    _ = op + op_hc  # just check if it runs
+    npt.assert_array_equal(op_hc.to_numpy_ndarray(), np.conj(op.to_numpy_ndarray()).T)
+    
+    print('hconj 2-site op')
+    leg_b = tens.legs[1]
+    op2 = tensor_rng(legs=[leg_a, leg_b.dual, leg_a.dual, leg_b], labels=['a', 'b*', 'a*', 'b'],
+                     real=False)
+    op2_hc = op2.hconj(['a', 'b'], ['a*', 'b*'])
+    op2_hc.test_sanity()
+    assert op2_hc.labels == op2.labels
+    assert op2_hc.legs == op2.legs
+    _ = op2 + op2_hc  # just check if it runs
+    expect = np.transpose(np.conj(op2.to_numpy_ndarray()), [2, 3, 0, 1])
+    npt.assert_array_equal(op2_hc.to_numpy_ndarray(), expect)
+    
 
 def test_combine_split(tensor_rng):
     tens = tensor_rng(labels=['a', 'b', 'c', 'd'], max_num_blocks=5, max_block_size=5)
