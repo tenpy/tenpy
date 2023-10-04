@@ -301,8 +301,8 @@ def truncate_singular_values(S: DiagonalTensor, options) -> Mask:
     np.put(mask, piv[cut:], True)
     new_norm = np.linalg.norm(S_np[mask])
     err = np.linalg.norm(S_np[np.logical_not(mask)])
-    
-    return Mask.from_flat_numpy(mask, large_leg=S.legs[0]), new_norm, err
+    mask = Mask.from_flat_numpy(mask, large_leg=S.legs[0], backend=S.backend)
+    return mask, new_norm, err
 
 
 def qr(a: AbstractTensor, q_legs: list[int | str] = None, r_legs: list[int | str] = None,
