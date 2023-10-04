@@ -122,7 +122,6 @@ def test_ProjectedLinearOperator(tensor_rng, penalty, project_operator):
     vec = tensor_rng(num_legs=2, labels=['a', 'b'])
     a, b = vec.legs
     o1 = tensor_rng(legs=[a, b], labels=['a', 'b'])
-    o1_norm = o1.norm()
     assert (o1_norm := o1.norm()) > 0
     o1 = o1 / o1_norm
     o2 = tensor_rng(legs=[a, b], labels=['a', 'b'])

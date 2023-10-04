@@ -150,6 +150,9 @@ def backend_data_rng(backend, block_rng, np_random):
             if np_random.random() < 0.5:  # with 50% probability
                 # keep roughly half of the blocks
                 keep = (np_random.random(len(data.blocks)) < 0.5)
+                if not np.any(keep):
+                    # but keep at least one
+                    keep[0] = True
                 data.blocks = [block for block, k in zip(data.blocks, keep) if k]
                 data.block_inds = data.block_inds[keep]
         return data
