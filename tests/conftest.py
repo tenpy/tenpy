@@ -19,15 +19,34 @@ tensor_rng : function (legs: list[VectorSpace] = None, num_legs: int = 2, labels
 import numpy as np
 import pytest
 
-from tenpy.linalg import backends
-from tenpy.linalg import groups, spaces
-from tenpy.linalg import tensors
-from tenpy.linalg.backends.abstract_backend import Dtype
+from tenpy.linalg import backends, groups, spaces, tensors
 
 
 @pytest.fixture
 def np_random() -> np.random.Generator:
     return np.random.default_rng(seed=12345)
+
+
+@pytest.fixture(params=['numpy']) # TODO: reintroduce 'torch'])
+def block_backend(request):
+    if request.param == 'torch':
+        torch = pytest.importorskip('torch', reason='torch not installed')
+    return request.param
+
+
+@pytest.fixture(params=['no_symmetry', 'abelian'])  # TODO include nonabelian
+def symmetry_backend(request):
+    return request.param
+
+
+@pytest.fixture
+def backend(symmetry_backend, block_backend):
+    return backends.backend_factory.get_backend(symmetry_backend, block_backend)
+
+
+@pytest.fixture
+def default_backend():
+    return backends.backend_factory.get_backend()
 
 
 @pytest.fixture(params=[groups.no_symmetry,
@@ -37,10 +56,18 @@ def np_random() -> np.random.Generator:
                         groups.ProductSymmetry([groups.u1_symmetry, groups.z3_symmetry]),
                         # groups.su2_symmetry,  # TODO reintroduce once SU2 is implemented
                         ],
-                ids=repr)
-def symmetry(request, symmetry_backend):
-    # TODO can we make this depend on symmetry_backend fixture and exclude incompatible combinations?
-    return request.param
+                ids=['NoSymm', 'U(1)', 'Z2', 'Z4', 'U(1)xZ3'])
+def symmetry(request, backend):
+    symm = request.param
+    if not backend.supports_symmetry(symm):
+        # TODO find a way to hide this in the report, i.e. to not show it as skipped.
+        #      hope and pray that pytest merges https://github.com/pytest-dev/pytest/issues/3730
+        #      i guess?
+        #
+        #      I also found approaches that use the pytest_collection_modifyitems hook
+        #      but it looks impossible to get the fixture values at collect time
+        pytest.skip('Backend does not support symmetry')
+    return symm
 
 
 def random_symmetry_sectors(symmetry: groups.Symmetry, np_random: np.random.Generator, len_=None,
@@ -111,28 +138,6 @@ def vector_space_rng(symmetry, np_random):
 
 
 @pytest.fixture
-def default_backend():
-    return backends.backend_factory.get_backend()
-
-
-@pytest.fixture(params=['numpy']) # TODO: reintroduce 'torch'])
-def block_backend(request):
-    if request.param == 'torch':
-        torch = pytest.importorskip('torch', reason='torch not installed')
-    return request.param
-
-
-@pytest.fixture(params=['no_symmetry', 'abelian'])  # TODO include nonabelian
-def symmetry_backend(request):
-    return request.param
-
-
-@pytest.fixture
-def backend(symmetry, block_backend):
-    return backends.backend_factory.get_backend(symmetry, block_backend)
-
-
-@pytest.fixture
 def block_rng(backend, np_random):
     def generator(size, real=True):
         block = np_random.normal(size=size)
@@ -144,7 +149,7 @@ def block_rng(backend, np_random):
 
 @pytest.fixture
 def backend_data_rng(backend, block_rng, np_random):
-    def generator(legs, real=True):
+    def generator(legs, real=True, empty_ok=False):
         data = backend.from_block_func(block_rng, legs, func_kwargs=dict(real=real))
         if isinstance(backend, backends.abelian.AbstractAbelianBackend):
             if np_random.random() < 0.5:  # with 50% probability
@@ -152,20 +157,33 @@ def backend_data_rng(backend, block_rng, np_random):
                 keep = (np_random.random(len(data.blocks)) < 0.5)
                 if not np.any(keep):
                     # but keep at least one
-                    keep[0] = True
+                    # note that using [0:1] instead of [0] is robust in case ``keep.shape == (0,)``
+                    keep[0:1] = True
                 data.blocks = [block for block, k in zip(data.blocks, keep) if k]
                 data.block_inds = data.block_inds[keep]
+            if (not empty_ok) and (len(data.blocks) == 0):
+                raise ValueError('Empty data was generated. If thats ok, supress with `empty_ok=True`')
         return data
     return generator
 
 
 @pytest.fixture
-def tensor_rng(backend, backend_data_rng, vector_space_rng, np_random):
-    def generator(legs=None, num_legs=2, labels=None, max_num_blocks=5, max_block_size=5, real=True):
+def tensor_rng(backend, backend_data_rng, vector_space_rng, symmetry, np_random):
+    def generator(legs=None, num_legs=None, labels=None, max_num_blocks=5, max_block_size=5,
+                  real=True, empty_ok=False):
+        if num_legs is None:
+            if legs is not None:
+                num_legs = len(legs)
+            elif labels is not None:
+                num_legs = len(labels)
+            else:
+                num_legs = 2
         if labels is not None:
-            num_legs = len(labels)
+            assert len(labels) == num_legs
         if legs is None:
             legs = [None] * num_legs
+        else:
+            assert len(legs) == num_legs
         legs = list(legs)
         missing_legs = [i for i, leg in enumerate(legs) if leg is None]
         last_missing = missing_legs[-1] if len(missing_legs) > 0 and len(legs) > 1 else -1
@@ -175,7 +193,15 @@ def tensor_rng(backend, backend_data_rng, vector_space_rng, np_random):
                     legs[i] = vector_space_rng(max_num_blocks, max_block_size)
             else:
                 legs[i] = backend.add_leg_metadata(leg)
-        if last_missing != -1:
+        if len(legs) == len(missing_legs) == 1:
+            # the recipe below assumes that there are some non-missing legs.
+            # so we need to deal with this special case first.
+            compatible_leg = vector_space_rng(max_num_blocks, max_block_size)
+            # ensure that the leg has the trivial sector, so we can have blocks
+            if not np.any(np.all(compatible_leg.sectors == symmetry.trivial_sector[None, :], axis=1)):
+                compatible_leg._non_dual_sectors[0, :] = symmetry.trivial_sector
+            legs[last_missing] = compatible_leg
+        elif last_missing != -1:
             # generate compatible leg such that tensor can have non-zero blocks given the charges
             compatible = legs[:]
             compatible.pop(last_missing)
@@ -191,6 +217,6 @@ def tensor_rng(backend, backend_data_rng, vector_space_rng, np_random):
                     _is_dual=compatible_leg.is_dual
                 )
             legs[last_missing] = compatible_leg
-        data = backend_data_rng(legs, real=real)
+        data = backend_data_rng(legs, real=real, empty_ok=empty_ok)
         return tensors.Tensor(data, backend=backend, legs=legs, labels=labels)
     return generator

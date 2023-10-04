@@ -66,11 +66,10 @@ def check_to_tensor(op: sparse.LinearOperator, vec: AbstractTensor, backend):
     assert almost_equal(res_matvec, res_tensor)
 
 
-def test_SumLinearOperator(backend, tensor_rng, vector_space_rng):
-    a = vector_space_rng()
-    b = vector_space_rng()
+def test_SumLinearOperator(backend, tensor_rng):
+    vec = tensor_rng(labels=['a', 'b'])
+    a, b = vec.legs
     T = tensor_rng(legs=[a, b.dual, a.dual, b], real=False, labels=['a', 'b*', 'a*', 'b'])
-    vec = tensor_rng(legs=[a, b], labels=['a', 'b'])
 
     factor1 = 2.4
     factor3 = 3.1 - 42.j
@@ -102,10 +101,8 @@ def test_SumLinearOperator(backend, tensor_rng, vector_space_rng):
     check_to_tensor(op, vec, backend)
 
 
-def test_ShiftedLinearOperator(backend, tensor_rng, vector_space_rng):
-    a = vector_space_rng()
-    b = vector_space_rng()
-    vec = tensor_rng(legs=[a, b], labels=['a', 'b'])
+def test_ShiftedLinearOperator(backend, tensor_rng):
+    vec = tensor_rng(labels=['a', 'b'])
     factor = 3.2
     op1 = ScalingDummyOperator(factor=factor, vector_shape=vec.shape)
     shift = 5.j
@@ -191,9 +188,8 @@ def test_NumpyArrayLinearOperator_sector(vector_space_rng, tensor_rng, use_hermi
 
 @pytest.mark.parametrize('num_legs', [1, 2])
 def test_gram_schmidt(tensor_rng, vector_space_rng, num_legs, num_vecs=5, tol=1e-15):
-    legs = [vector_space_rng() for _ in range(num_legs)]
-    n = np.prod([l.dim for l in legs])
-    vecs_old = [tensor_rng(legs, real=False) for _ in range(num_vecs)]
+    first = tensor_rng(num_legs=num_legs, real=False)
+    vecs_old = [first] + [tensor_rng(first.legs, real=False) for _ in range(num_vecs - 1)]
     # note: depending on the dimension of `legs` (which is random),
     # some of those can be linearly dependent!
     vecs_new = sparse.gram_schmidt(vecs_old)  # rtol=tol is too small for some random spaces
@@ -203,4 +199,5 @@ def test_gram_schmidt(tensor_rng, vector_space_rng, num_legs, num_vecs=5, tol=1e
     for i, v in enumerate(vecs):
         for j, w in enumerate(vecs):
             ovs[i, j] = np.inner(v.conj(), w)
-    npt.assert_allclose(ovs, np.eye(len(vecs_new)), atol=2 * n * (num_vecs) ** 2 * tol)
+    atol = 2 * first.num_parameters * (num_vecs) ** 2 * tol
+    npt.assert_allclose(ovs, np.eye(len(vecs_new)), atol=atol)

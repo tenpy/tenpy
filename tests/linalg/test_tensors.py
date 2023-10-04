@@ -441,12 +441,11 @@ def test_inner(tensor_rng):
 def test_trace(backend, vector_space_rng, tensor_rng):
     a = vector_space_rng(3, 3)
     b = vector_space_rng(4, 3)
-    c = vector_space_rng(2, 2)
     t1 = tensor_rng(legs=[a, a.dual], labels=['a', 'a*'])
     d1 = t1.to_numpy_ndarray()
     t2 = tensor_rng(legs=[a, b, a.dual, b.dual], labels=['a', 'b', 'a*', 'b*'])
     d2 = t2.to_numpy_ndarray()
-    t3 = tensor_rng(legs=[a, c, b, a.dual, b.dual], labels=['a', 'c', 'b', 'a*', 'b*'])
+    t3 = tensor_rng(legs=[a, None, b, a.dual, b.dual], labels=['a', 'c', 'b', 'a*', 'b*'])
     d3 = t3.to_numpy_ndarray()
 
     print('single legpair - full')
