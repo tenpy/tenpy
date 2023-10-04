@@ -1193,6 +1193,12 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
 
         return AbelianBackendData(a.data.dtype, new_blocks, new_block_inds, is_sorted=True)
 
+    def add_trivial_leg(self, a: Tensor, pos: int) -> Data:
+        blocks = [self.block_add_axis(block, pos) for block in a.data.blocks]
+        block_inds = np.insert(a.data.block_inds, pos, 0, axis=1)
+        # since the new column is constant, block_inds are still sorted.
+        return AbelianBackendData(a.data.dtype, blocks, block_inds, is_sorted=True)
+
     def almost_equal(self, a: Tensor, b: Tensor, rtol: float, atol: float) -> bool:
         a_blocks = a.data.blocks
         b_blocks = b.data.blocks

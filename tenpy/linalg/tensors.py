@@ -521,6 +521,12 @@ class AbstractTensor(metaclass=ABCMeta):
         ...
 
     @abstractmethod
+    def add_trivial_leg(self, label: str = None, is_dual: bool = False, pos: int = -1
+                        ) -> AbstractTensor:
+        """See tensors.add_trivial_leg"""
+        ...
+
+    @abstractmethod
     def apply_mask(self, mask: Mask, leg: int | str) -> AbstractTensor:
         """Apply a mask to one of the legs, projecting to a smaller leg.
 
@@ -1099,6 +1105,19 @@ class Tensor(SymmetricTensor):
             backend = get_backend(legs[0].symmetry)
         data = backend.zero_data(legs=legs, dtype=dtype)
         return cls(data=data, backend=backend, legs=legs, labels=labels)
+
+    def add_trivial_leg(self, label: str = None, is_dual: bool = False, pos: int = -1
+                        ) -> Tensor:
+        # pos is w.r.t. new tensor which has (self.num_legs + 1) legs
+        if pos < 0:
+            pos = self.num_legs + 1 + pos
+        assert 0 <= pos < (self.num_legs + 1)
+        data = self.backend.add_trivial_leg(self, pos=pos)
+        new_leg = VectorSpace.from_trivial_sector(1, symmetry=self.symmetry, is_dual=is_dual)
+        legs = self.legs[:pos] + [new_leg] + self.legs[pos:]
+        labels = self.labels[:pos] + [label] + self.labels[pos:]
+        res = Tensor(data=data, legs=legs, backend=self.backend, labels=labels)
+        return res
 
     def apply_mask(self, mask: Mask, leg: int | str, new_label: str = KEEP_OLD_LABEL) -> Tensor:
         leg_idx = self.get_leg_idx(leg)
@@ -1846,6 +1865,17 @@ class ChargedTensor(AbstractTensor):
                                      labels=labels + [cls._DUMMY_LABEL], dtype=dtype)
         return cls(invariant_part=invariant_part, dummy_leg_state=dummy_leg_state)
 
+    def add_trivial_leg(self, label: str = None, is_dual: bool = False, pos: int = -1
+                        ) -> ChargedTensor:
+        # parse pos now, since it is w.r.t. ``self.num_legs``, not ``self.invariant_part.num_legs``.
+        res_num_legs = self.num_legs + 1
+        if not (-res_num_legs <= pos < res_num_legs):
+            raise ValueError(f'`pos` out of bounds: {pos}')
+        if pos < 0:
+            pos = pos + res_num_legs
+        inv = self.invariant_part.add_trivial_leg(label=label, is_dual=is_dual, pos=pos)
+        return ChargedTensor(inv, self.dummy_leg_state)
+
     def apply_mask(self, mask: Mask, leg: int | str) -> ChargedTensor:
         return ChargedTensor(
             invariant_part=self.invariant_part.apply_mask(mask, self.get_leg_idx(leg)),
@@ -2495,6 +2525,11 @@ class DiagonalTensor(SymmetricTensor):
         return cls(data=data, first_leg=first_leg, second_leg_dual=second_leg_dual, backend=backend,
                    labels=labels)
 
+    def add_trivial_leg(self, label: str = None, is_dual: bool = False, pos: int = -1
+                        ) -> DiagonalTensor:
+        warnings.warn('Converting DiagonalTensor to Tensor for add_trivial_leg', stacklevel=2)
+        return self.as_Tensor.add_trivial_leg(label=label, is_dual=is_dual, pos=pos)
+
     @amend_parent_docstring(parent=AbstractTensor.apply_mask)
     def apply_mask(self, mask: Mask, leg: int | str = BOTH) -> DiagonalTensor | Tensor:
         """.. note ::
@@ -2902,6 +2937,10 @@ class Mask(AbstractTensor):
         data = backend.zero_diagonal_data(leg=large_leg, dtype=Dtype.bool)
         return cls(data=data, large_leg=large_leg, backend=backend)
 
+    def add_trivial_leg(self, label: str = None, is_dual: bool = False, pos: int = -1
+                        ) -> DiagonalTensor:
+        raise TypeError(f'add_trivial_leg not supported for types {type(self)}.')
+
     def apply_mask(self, mask: Mask, leg: int | str) -> Mask:
         # in principle, this is possible. it is cumbersome though, and i dont think we need it.
         raise TypeError('apply_mask() is not supported for Mask')
@@ -3051,8 +3090,8 @@ class Mask(AbstractTensor):
 # TODO (JU) find a good way to write type hints for these, having in mind the possible combinations
 #           of AbstractTensor-subtypes.
 
-def add_trivial_leg(tens, pos: int = -1):
-    raise NotImplementedError  # TODO
+def add_trivial_leg(tens: AbstractTensor, label: str = None, is_dual: bool = False, pos: int = -1):
+    return tens.add_trivial_leg(label=label, is_dual=is_dual, pos=pos)
 
 
 def almost_equal(t1: AbstractTensor, t2: AbstractTensor, atol: float = 1e-5, rtol: float = 1e-8,

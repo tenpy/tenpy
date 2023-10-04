@@ -149,6 +149,9 @@ class AbstractNoSymmetryBackend(AbstractBackend, AbstractBlockBackend, ABC):
     def split_legs(self, a: Tensor, leg_idcs: list[int], final_legs: list[VectorSpace]) -> Data:
         return self.block_split_legs(a.data, leg_idcs, [[s.dim for s in a.legs[i].spaces] for i in leg_idcs])
 
+    def add_trivial_leg(self, a: Tensor, pos: int) -> Data:
+        return self.block_add_axis(a.data, pos)
+
     def almost_equal(self, a: Tensor, b: Tensor, rtol: float, atol: float) -> bool:
         return self.block_allclose(a.data, b.data, rtol=rtol, atol=atol)
 

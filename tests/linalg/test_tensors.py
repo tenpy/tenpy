@@ -664,6 +664,21 @@ def test_squeeze_legs(tensor_rng, symmetry):
     npt.assert_array_equal(res.to_numpy_ndarray(), dense[:, 0, :, :, 0])
 
 
+def test_add_trivial_leg(tensor_rng):
+    A = tensor_rng(num_legs=2, labels=['a', 'b'])
+    B = tensors.add_trivial_leg(A, 'c', is_dual=True)
+    B.test_sanity()
+    B = tensors.add_trivial_leg(B, 'xY', pos=1)
+    B.test_sanity()
+    assert B.labels == ['a', 'xY', 'b', 'c']
+    assert [leg.is_dual for leg in B.legs] == [A.legs[0].is_dual, False, A.legs[1].is_dual, True]
+    expect = A.to_numpy_ndarray()[:, None, :, None]
+    B_np = B.to_numpy_ndarray()
+    npt.assert_array_equal(B_np, expect)
+    C = B.squeeze_legs()
+    assert tensors.almost_equal(A, C)
+
+
 def test_scale_axis(backend, vector_space_rng, backend_data_rng, tensor_rng):
     # TODO eventually this will be covered by tdot tests, when allowing combinations of Tensor and DiagonalTensor
     #  But I want to use it already now to debug backend.scale_axis()
