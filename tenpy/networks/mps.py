@@ -1989,6 +1989,12 @@ class MPS(BaseMPSExpectationValue):
         elif self.bc == 'infinite':
             return slice(0, self.L)
 
+    @property
+    def form_as_str(self):
+        """Human-readable version of :attr:`form` as list of ``'A', 'B', 'Th'`` etc."""
+        inverse_valid_form = dict((v, k) for k, v in self._valid_forms.items())
+        return [inverse_valid_form.get(tuple(f), tuple(f)) for f in self.form]
+
     def get_B(self, i, form='B', copy=False, cutoff=1.e-16, label_p=None, avoid_S_inverse=False):
         """Return (view of) `B` at site `i` in canonical form.
 
