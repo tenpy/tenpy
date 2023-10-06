@@ -685,6 +685,10 @@ def test_MPSEnvironment_expectation_values():
 def test_sample_measurements(eps=1.e-14, seed=5):
     spin_half = site.SpinHalfSite('Sz', sort_charge=True)
     u, d = spin_half.state_indices(['up', 'down'])
+
+    def opposite_spin(a, b):
+        return (a, b) == (u, d) or (a, b) == (d, u)
+
     spin_half.add_op('Pup', spin_half.Sz + 0.5 * spin_half.Id)
     psi = mps.MPS.from_singlets(spin_half, 6, [(0, 1), (2, 5)], lonely=[3, 4], bc='finite')
     rng = np.random.default_rng(seed)
@@ -693,13 +697,13 @@ def test_sample_measurements(eps=1.e-14, seed=5):
         assert tuple(sigmas) == (u, u)
         assert abs(weight - 1) < eps
         sigmas, weight = psi.sample_measurements(0, 1, rng=rng)
-        assert sigmas[0] == 1 - sigmas[1]
+        assert opposite_spin(sigmas[0], sigmas[1])
         print(sigmas)
         assert abs(weight - 0.5**0.5) < eps
         sigmas, weight = psi.sample_measurements(rng=rng)
         print(sigmas)
-        assert sigmas[0] == 1 - sigmas[1]
-        assert sigmas[2] == 1 - sigmas[5]
+        assert opposite_spin(sigmas[0], sigmas[1])
+        assert opposite_spin(sigmas[2], sigmas[5])
         sign = (+1 if sigmas[0] == u else -1) * (+1 if sigmas[2] == u else -1)
         print(sign, weight)
         assert abs(weight - 0.5 * sign) < eps
@@ -717,6 +721,31 @@ def test_sample_measurements(eps=1.e-14, seed=5):
         print(sigmas)
         npt.assert_allclose(sigmas, [1., -0.5, 0.5, -1.])
         assert abs(abs(weight) - 1.) < eps
+
+    spin_half_fermion = site.SpinHalfFermionSite('N', 'Sz')
+    psi = mps.MPS.from_singlets(spin_half_fermion, 6, [(0, 1), (2, 5)], lonely=[3, 4], bc='finite')
+    u, d = spin_half_fermion.state_indices(['up', 'down'])
+    spin_half_fermion.add_op('Pup', spin_half_fermion.Sz + 0.5 * spin_half_fermion.Id)
+    for i in range(4):
+        sigmas, weight = psi.sample_measurements(3, 4, rng=rng)
+        assert tuple(sigmas) == (u, u)
+        assert abs(weight - 1) < eps
+        sigmas, weight = psi.sample_measurements(0, 1, rng=rng)
+        assert opposite_spin(sigmas[0], sigmas[1])
+        print(sigmas)
+        assert abs(weight - 0.5**0.5) < eps
+        sigmas, weight = psi.sample_measurements(rng=rng)
+        print(sigmas)
+        assert opposite_spin(sigmas[0], sigmas[1])
+        assert opposite_spin(sigmas[2], sigmas[5])
+        sign = (+1 if sigmas[0] == u else -1) * (+1 if sigmas[2] == u else -1)
+        print(sign, weight)
+        assert abs(weight - 0.5 * sign) < eps
+        sigmas, weight = psi.sample_measurements(ops=['Sz', 'Pup'], rng=rng)
+        print(sigmas)
+        assert sigmas[4] == 0.5  # Sz
+        assert sigmas[3] == 1  # Pup
+
 
 
 @pytest.mark.parametrize('method', ['SVD', 'variational'])
