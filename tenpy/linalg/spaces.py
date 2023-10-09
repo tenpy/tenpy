@@ -285,12 +285,12 @@ class VectorSpace:
             assert multiplicities.shape == ((len(sectors),))
         if basis_perm is None:
             basis_perm = np.arange(np.sum(symmetry.batch_sector_dim(sectors) * multiplicities))
+        num_states = symmetry.batch_sector_dim(sectors) * multiplicities
+        basis_slices = np.concatenate([[0], np.cumsum(num_states)], axis=0)
         # sort sectors
         sort = np.lexsort(sectors.T)
         sectors = sectors[sort]
         multiplicities = multiplicities[sort]
-        num_states = symmetry.batch_sector_dim(sectors) * multiplicities
-        basis_slices = np.concatenate([[0], np.cumsum(num_states)], axis=0)
         mult_slices = np.concatenate([[0], np.cumsum(multiplicities)], axis=0)
         basis_perm = np.concatenate([basis_perm[basis_slices[i]: basis_slices[i + 1]] for i in sort])
         # merge duplicate sectors (does not affect basis_perm)

@@ -219,6 +219,11 @@ def test_get_basis_transformation(default_backend):
     expect = np.array([0, 2, 6, 8, 4, 1, 7, 3, 5])
     print(perm)
     assert np.all(perm == expect)
+
+
+# TODO systematically test VectorSpace class methods
+
+
     
 
 def all_str_repr_demos():
