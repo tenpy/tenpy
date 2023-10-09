@@ -741,6 +741,39 @@ class VectorSpace:
         which.extend(i for i in range(self.num_sectors) if i not in which)
         return np.array(which)
 
+    def direct_sum(self, *others: VectorSpace) -> VectorSpace:
+        """Form the direct sum (i.e. stacking).
+
+        TODO elaborate on the basis: just the bases of the summand spaces "concatenated".
+        
+        Spaces must have the same symmetry, is_dual and is_real.
+        The result is a space with the same symmetry, is_dual and is_real, whose sectors are those
+        that appear in any of the spaces and multiplicities are the sum of the multiplicities
+        in each of the spaces. Any ProductSpace structure is lost.
+        """
+        if not others:
+            return self.as_VectorSpace()
+
+        symmetry = self.symmetry
+        assert all(o.symmetry == symmetry for o in others)
+        is_real = self.is_real
+        assert all(o.is_real == is_real for o in others)
+        is_dual = self.is_dual
+        assert all(o.is_dual == is_dual for o in others)
+
+        offsets = np.cumsum([self.dim, *(o.dim for o in others)])
+        basis_perm = np.concatenate(
+            [self.basis_perm] + [o.basis_perm + n for o, n in zip(others, offsets)]
+        )
+        print(f'direct_sum :: {offsets=}  {basis_perm=}')
+        sectors = np.concatenate([self._non_dual_sectors, *(o._non_dual_sectors for o in others)])
+        multiplicties = np.concatenate([self.multiplicities, *(o.multiplicities for o in others)])
+        res = VectorSpace.from_sectors(symmetry=symmetry, sectors=sectors,
+                                       multiplicities=multiplicties,basis_perm=basis_perm,
+                                       is_real=is_real)
+        res.is_dual = is_dual
+        return res
+
 
 def _calc_slices(symmetry: Symmetry, sectors: SectorArray, multiplicities: ndarray) -> ndarray:
     """Calculate the slices given sectors and multiplicities *in the dense order*, i.e. not sorted."""

@@ -1,7 +1,7 @@
 # Copyright 2023-2023 TeNPy Developers, GNU GPLv3
 import pytest
 import numpy as np
-from numpy.testing import assert_array_equal
+from numpy import testing as npt
 
 from tenpy.linalg import spaces, groups, backends
 
@@ -41,8 +41,8 @@ def test_vector_space(symmetry, symmetry_sectors_rng, np_random):
     s2 = spaces.VectorSpace.from_trivial_sector(dim=8)
 
     print('checking VectorSpace.sectors')
-    assert_array_equal(s2.sectors, groups.no_symmetry.trivial_sector[None, :])
-    assert_array_equal(s1.dual.sectors, symmetry.dual_sectors(s1.sectors))
+    npt.assert_array_equal(s2.sectors, groups.no_symmetry.trivial_sector[None, :])
+    npt.assert_array_equal(s1.dual.sectors, symmetry.dual_sectors(s1.sectors))
 
     print('checking str and repr')
     _ = str(s1)
@@ -147,11 +147,11 @@ def test_vector_space(symmetry, symmetry_sectors_rng, np_random):
     expect_mults = np.sum(which_sectors[:, None] == np.arange(len(expect_sectors))[None, :], axis=0)
     sectors_of_basis = sectors[which_sectors]
     space = spaces.VectorSpace.from_basis(symmetry=symmetry, sectors_of_basis=sectors_of_basis)
-    assert_array_equal(space.sectors, expect_sectors)
-    assert_array_equal(space.multiplicities, expect_mults)
-    assert_array_equal(space.basis_perm, expect_basis_perm)
+    npt.assert_array_equal(space.sectors, expect_sectors)
+    npt.assert_array_equal(space.multiplicities, expect_mults)
+    npt.assert_array_equal(space.basis_perm, expect_basis_perm)
     # also check sectors_of_basis property
-    assert_array_equal(space.sectors_of_basis, sectors_of_basis)
+    npt.assert_array_equal(space.sectors_of_basis, sectors_of_basis)
 
 
 def test_product_space(symmetry, symmetry_sectors_rng, np_random):
@@ -168,7 +168,7 @@ def test_product_space(symmetry, symmetry_sectors_rng, np_random):
     p2 = spaces.ProductSpace([s1, s2])
     p3 = spaces.ProductSpace([spaces.ProductSpace([s1, s2]), s3])
 
-    assert_array_equal(p1.sectors, p3.sectors)
+    npt.assert_array_equal(p1.sectors, p3.sectors)
 
     _ = str(p1)
     _ = str(p3)
@@ -224,6 +224,16 @@ def test_get_basis_transformation(default_backend):
 # TODO systematically test VectorSpace class methods
 
 
+def test_direct_sum(vector_space_rng, max_block_size=5, max_num_blocks=5):
+    a = vector_space_rng(max_block_size=max_block_size, max_num_blocks=max_num_blocks)
+    b = vector_space_rng(max_block_size=max_block_size, max_num_blocks=max_num_blocks,
+                         is_dual=a.is_dual)
+    c = vector_space_rng(max_block_size=max_block_size, max_num_blocks=max_num_blocks,
+                         is_dual=a.is_dual)
+    assert a == spaces.VectorSpace.direct_sum(a)
+    d = a.direct_sum(b, c)
+    expect = np.concatenate([leg.sectors_of_basis for leg in [a, b, c]], axis=0)
+    npt.assert_array_equal(d.sectors_of_basis, expect)
     
 
 def all_str_repr_demos():
