@@ -110,7 +110,7 @@ def symmetry_sectors_rng(symmetry, np_random):
     return generator
 
 
-def random_vector_space(symmetry, max_num_blocks=5, max_block_size=5, np_random=None):
+def random_vector_space(symmetry, max_num_blocks=5, max_block_size=5, is_dual=None, np_random=None):
     if np_random is None:
         np_random = np.random.default_rng()
     len_ = np_random.integers(1, max_num_blocks, endpoint=True)
@@ -123,7 +123,7 @@ def random_vector_space(symmetry, max_num_blocks=5, max_block_size=5, np_random=
     res = spaces.VectorSpace(
         symmetry, sectors, mults, basis_perm=basis_perm, is_real=False
     )
-    if np_random.random() < 0.5:
+    if (is_dual is None and np_random.random() < 0.5) or (is_dual is True):
         res = res.dual
     res.test_sanity()
     return res
@@ -131,9 +131,10 @@ def random_vector_space(symmetry, max_num_blocks=5, max_block_size=5, np_random=
 
 @pytest.fixture
 def vector_space_rng(symmetry, np_random):
-    def generator(max_num_blocks: int = 4, max_block_size=8):
+    def generator(max_num_blocks: int = 4, max_block_size=8, is_dual=None):
         """generate random spaces.VectorSpace instances."""
-        return random_vector_space(symmetry, max_num_blocks, max_block_size, np_random)
+        return random_vector_space(symmetry, max_num_blocks, max_block_size, is_dual=is_dual,
+                                   np_random=np_random)
     return generator
 
 
