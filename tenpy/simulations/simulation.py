@@ -251,7 +251,7 @@ class Simulation:
         Returns
         -------
         RAM : int
-            The expected RAM usage in MB.
+            The expected RAM usage in kB.
         """
         self.init_model()       # model, required for algorithm
         self.init_state()       # psi, required for algorithm

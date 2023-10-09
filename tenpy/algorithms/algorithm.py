@@ -199,7 +199,7 @@ class Algorithm:
 
         Returns
         -------
-        usage : float
+        usage : int
             Required RAM in kB. It always returns a minimum of mini=50 MB.
         """
         import numpy as np
@@ -286,7 +286,7 @@ class Algorithm:
         RAM *= saving_factor
         logger.info("Total RAM expectation:\t\t\t%d kB" % (RAM//1024))
 
-        return max(RAM / 1024, mini) # in kB
+        return int(max(RAM / 1024, mini)) # in kB
 
 
 
