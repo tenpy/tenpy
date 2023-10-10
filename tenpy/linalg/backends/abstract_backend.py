@@ -703,7 +703,11 @@ class AbstractBlockBackend(metaclass=ABCMeta):
         ...
 
     @abstractmethod
-    def block_norm(self, a: Block, order: int | float = None) -> float:
+    def block_norm(self, a: Block, order: int | float = None, axis: int | None = None) -> float:
+        """
+        axis=None means "all axes", i.e. norm of the flattened block.
+        axis: int means to broadcast the norm over all other axes.
+        """
         ...
 
     @abstractmethod

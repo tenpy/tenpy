@@ -144,8 +144,8 @@ class TorchBlockBackend(AbstractBlockBackend):
     def block_add_axis(self, a: Block, pos: int) -> Block:
         return torch_module.unsqueeze(a, pos)
 
-    def block_norm(self, a: Block, order: int | float = None) -> float:
-        return torch_module.norm(a, p=order)
+    def block_norm(self, a: Block, order: int | float = None, axis: int | None = None) -> float:
+        return torch_module.norm(a, p=order, dim=axis)
 
     def block_max_abs(self, a: Block) -> float:
         return torch_module.max(torch_module.max(a))
