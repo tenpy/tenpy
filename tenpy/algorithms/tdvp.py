@@ -204,13 +204,14 @@ class TwoSiteTDVPEngine(TDVPEngine):
         # earlier update of environments, since they are needed for the one_site_update()
         super().update_env(**update_data)  # new environments, e.g. LP[i0+1] on right move.
 
-        if self.move_right:
-            # note that i0 == L-2 is left-moving
+        if self.move_right is True:  # and i0 != L-2, but that is left-moving
             self.one_site_update(i0 + 1, 0.5j * self.dt)
-        elif (self.move_right is False):
+        elif (self.move_right is False):  # and i0 != 0, but that has `move_right is None`
             self.one_site_update(i0, 0.5j * self.dt)
-        # for the last update of the sweep, where move_right is None, there is no one_site_update
-        
+        elif self.move_right is None:
+            pass
+        else:
+            assert False, "Invalid move_right={move_right!r}"
         return update_data
 
     def update_env(self, **update_data):
@@ -284,9 +285,9 @@ class SingleSiteTDVPEngine(TDVPEngine):
 
         # update one-site wavefunction
         theta, N = LanczosEvolution(self.eff_H, theta, self.lanczos_options).run(-0.5j * dt)
-        if self.move_right:
+        if self.move_right is True:
             self.right_moving_update(i0, theta)
-        else:
+        elif self.move_right is False or self.move_right is None:
             # note: left_moving_update() also covers the "non-moving" case move_right=None
             # of the last update in a sweep
             self.left_moving_update(i0, theta)
@@ -324,6 +325,7 @@ class SingleSiteTDVPEngine(TDVPEngine):
         self.psi.set_B(i0, B1, form='B')  # right-canonical
         self.psi.set_SL(i0, S)
 
+        assert (i0 == 0) == (self.move_right is None), "unexpected sweep schedule"
         if i0 != 0:  # left-moving, but not the last site of the update
             super().update_env(VH=VH)  # note: no update needed if i0=0!
             theta = U.iscale_axis(S, 'vR')
@@ -356,6 +358,7 @@ class TimeDependentSingleSiteTDVP(TimeDependentHAlgorithm,SingleSiteTDVPEngine):
     See details in :class:`~tenpy.algorithms.algorithm.TimeDependentHAlgorithm` as well.
     """
     def reinit_model(self):
+        # note: this fct is also used in TimeDependentTwoSiteTDVP
         # recreate model
         TimeDependentHAlgorithm.reinit_model(self)
         # and reinitializie environment accordingly
@@ -369,7 +372,7 @@ class TimeDependentTwoSiteTDVP(TimeDependentHAlgorithm,TwoSiteTDVPEngine):
     """
 
     def reinit_model(self):
-        TimeDependentSingleSiteTDVP.reinit_model(self)
+        TimeDependentSingleSiteTDVP.reinit_model(self)  # call the code a few lines above
 
 
 class OldTDVPEngine(TimeEvolutionAlgorithm):

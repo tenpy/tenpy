@@ -41,7 +41,7 @@ logger = logging.getLogger(__name__)
 from ..linalg import np_conserved as npc
 from ..networks.mps import MPSEnvironment
 from ..linalg.krylov_based import lanczos_arpack, LanczosGroundState
-from .truncation import truncate, svd_theta
+from .truncation import truncate, svd_theta, TruncationError
 from ..tools.params import asConfig
 from ..tools.math import entropy
 from ..tools.process import memory_usage
@@ -645,7 +645,8 @@ class DMRGEngine(Sweep):
             E0, N, ov_change = None, 0, 0.
         theta = self.prepare_svd(theta)
         U, S, VH, err, S_approx = self.mixed_svd(theta)
-        self._entropy_approx[(i0 + n_opt - 1) % self.psi.L] = entropy(S_approx**2)
+        if S_approx is not None:
+            self._entropy_approx[(i0 + n_opt - 1) % self.psi.L] = entropy(S_approx**2)
         self.set_B(U, S, VH)
         update_data = {
             'E0': E0,
@@ -672,7 +673,7 @@ class DMRGEngine(Sweep):
         i0 = self.i0
         E_trunc = None
         if self._meas_E_trunc or E0 is None:
-            i = i0 if self.n_optimize == 2 or self.move_right else i0 - 1
+            i = i0 if self.n_optimize == 2 or self.move_right is not False else i0 - 1
             E_trunc = self.env.full_contraction(i).real  # uses updated LP/RP (if calculated)
             if E0 is None:
                 E0 = E_trunc
@@ -1115,12 +1116,12 @@ class SingleSiteDMRGEngine(DMRGEngine):
         if self.combine:
             if self.move_right:
                 theta.itranspose(['(vL.p0)', 'vR'])  # ensure the order.
-            else:
+            else:  # left move or no move
                 theta.itranspose(['vL', '(p0.vR)'])  # ensure the order.
         else:
             if self.move_right:
                 theta = theta.combine_legs(['vL', 'p0'], qconj=+1, new_axes=0)
-            else:
+            else:  # left move or no move
                 theta = theta.combine_legs(['p0', 'vR'], qconj=-1, new_axes=1)
         return theta
 
@@ -1129,12 +1130,12 @@ class SingleSiteDMRGEngine(DMRGEngine):
 
         The goal is to split theta and truncate it. For a move to the right::
 
-            |             -- theta -- next_B --   ==>    -- U -- S -- VH --
+            |             -- theta -- next_B --   ==>    -- U -- S == VH --
             |                  |        |                   |         |
 
         For a move to the left::
 
-            |   -- next_A -- theta --   ==>    -- U -- S -- VH --
+            |   -- next_A -- theta --   ==>    -- U -- S == VH --
             |        |         |                  |         |
 
         Note that `theta` lives on the same site :attr:`i0` in both cases,
@@ -1144,7 +1145,9 @@ class SingleSiteDMRGEngine(DMRGEngine):
         Without a mixer, this is done by a simple svd and truncation of Schmidt values of theta
         followed by the absorption of `VH` into `next_B` (`U` into `next_A`).
 
-        With a mixer, the state/density matrix is perturbed before the SVD.
+        With a mixer, the state/density matrix is perturbed before the SVD, in particular to
+        increase the bond dimension on the bold legs above (or even both legs around S, if both
+        `update_LP` and `update_RP` are true).
         The details of the perturbation are defined by the :class:`Mixer` class.
 
         Parameters
@@ -1171,18 +1174,24 @@ class SingleSiteDMRGEngine(DMRGEngine):
         mixer = self.mixer
         move_right = self.move_right
         update_LP, update_RP = self.update_LP_RP
-        if self.move_right:
+        if self.move_right is True:
             next_B = self.psi.get_B(self.i0 + 1, form='B')
             next_B = next_B.combine_legs(['p', 'vR'], qconj=-1, new_axes=1)
             if update_RP:
                 # make sure that `next_B` is in right-canonical form
                 assert self.psi.form[(self.i0 + 1) % self.psi.L] == (0., 1.)
-        else:
+        elif self.move_right is False:
             next_A = self.psi.get_B(self.i0 - 1, form='A')
             next_A = next_A.combine_legs(['vL', 'p'], qconj=1, new_axes=0)
             if update_LP:
                 # make sure that `next_A` is in left-canonical form
                 assert self.psi.form[(self.i0 - 1) % self.psi.L] == (1., 0.)
+        elif self.move_right is None:
+            # special case when not moving at all.
+            return None, theta.ireplace_label('(p0.vR)', '(p.vR)'), None, TruncationError(), None
+        else:
+            assert False, "invalid move_right"
+        # assert self.move_right is not None, "not-moving case handled above"
 
         if mixer is None:
             qtotal = [theta.qtotal, None] if move_right else [None, theta.qtotal]
@@ -1226,7 +1235,7 @@ class SingleSiteDMRGEngine(DMRGEngine):
                 U = next_A
                 VH.ireplace_label('(p0.vR)', '(p.vR)')
         else:
-            # just use two-site theta
+            # fallback: just use two-site theta for mixer decomposition
             if self.move_right:
                 next_B.ireplace_label('(p.vR)', '(p1.vR)')
                 theta = npc.tensordot(theta, next_B, axes=['vR', 'vL'])
@@ -1257,6 +1266,12 @@ class SingleSiteDMRGEngine(DMRGEngine):
             The middle part returned by the SVD, ``theta = U S VH``.
             Without a mixer just the singular values, with enabled `mixer` a 2D array.
         """
+        if self.move_right is None:
+            # special case if not moving at all
+            assert U is None and VH is None
+            theta = S.split_legs(['(p.vR)'])
+            self.psi.set_B(self.i0, theta, 'Th')
+            return
         i_L, i_R = self._update_env_inds()  # left and right updated sites
         A0 = U.split_legs(['(vL.p)'])
         B1 = VH.split_legs(['(p.vR)'])

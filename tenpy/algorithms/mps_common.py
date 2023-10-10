@@ -98,7 +98,7 @@ class Sweep(Algorithm):
         Only set during sweep.
         Left-most of the `EffectiveH.length` sites to be updated in :meth:`update_local`.
     move_right : bool | None
-        Only set during sweep.
+        Only set during sweep, see :meth:`get_sweep_schedule`.
         Whether the next `i0` of the sweep will be right (`True`), left (`False`) or at the same
         position (`None`) as the current one.
     update_LP_RP : (bool, bool)
@@ -126,7 +126,7 @@ class Sweep(Algorithm):
     """
     DefaultMixer = None
     use_mixer_by_default = False  # The default for the "mixer" config option
-    
+
     def __init__(self, psi, model, options, *, orthogonal_to=None, **kwargs):
         if not hasattr(self, "EffectiveH"):
             raise NotImplementedError("Subclass needs to set EffectiveH")
@@ -142,8 +142,8 @@ class Sweep(Algorithm):
         self.ortho_to_envs = []
         self.init_env(model, resume_data=self.resume_data, orthogonal_to=orthogonal_to)
         self.i0 = 0
-        self.move_right = True
-        self.update_LP_RP = (True, False)
+        self.move_right = None
+        self.update_LP_RP = (False, False)
 
     @property
     def engine_params(self):
@@ -429,7 +429,7 @@ class Sweep(Algorithm):
                     self.mixer_deactivate()
                 else:
                     self.mixer = mixer
-            
+
         return np.max(self.trunc_err_list)
 
     def get_sweep_schedule(self):
@@ -455,21 +455,22 @@ class Sweep(Algorithm):
         if self.finite:
             assert L > n
             i0s = list(range(0, L - n)) + list(range(L - n, -1, -1))
-            move_right = [True] * (L - n) + [False] * (L - n + 1)  + [True]
-            update_LP_RP = [[True, False]] * (L - n) + [[False, True]] * (L - n - 1) + [[False, False]]
+            move_right = [True] * (L - n) + [False] * (L - n)  + [None]
+            update_LP_RP = [[True, False]] * (L - n) + [[False, True]] * (L - n) + [[False, False]]
         elif n == 2:
             assert L >= 2
             i0s = list(range(0, L)) + list(range(L, -1, -1))
-            move_right = [True] * L + [False] * L + [True]
+            move_right = [True] * L + [False] * L + [None]
             update_LP_RP = [[True, True]] * 2 + [[True, False]] * (L-2) + \
                            [[True, True]] * 2 + [[False, True]] * (L-2) + [[False, False]]
         elif n == 1:
             i0s = list(range(0, L)) + list(range(L, -1, -1))
-            move_right = [True] * L + [False] * L + [True]
+            move_right = [True] * L + [False] * L + [None]
             update_LP_RP = [[True, True]] + [[True, False]] * (L-1) + \
                            [[True, True]] + [[False, True]] * (L-1) + [[False, False]]
         else:
             assert False, "n_optimize is neither 1 nor 2!?"
+        # TODO: check whether VariationalCompression.get_sweep_schedule() is compatible/necessary?
         return zip(i0s, move_right, update_LP_RP)
 
     def _cache_optimize(self):
@@ -481,14 +482,16 @@ class Sweep(Algorithm):
                 'short_term_LP': [i0, i0 + 1],
                 'short_term_RP': [i0, i0 + 1],
             }
-            if move_right:
+            if move_right is True:
                 kwargs['preload_RP'] = i0 + 2
             elif move_right is None:
                 pass  # not moving. nothing to preload
-            else:
+            elif move_right is False:
                 kwargs['preload_LP'] = i0 - 1
+            else:
+                assert False, f"invalid move_right = {move_right!r}"
         elif self.n_optimize == 1:
-            if move_right:
+            if move_right is True:
                 kwargs = {
                     'short_term_LP': [i0, i0 + 1],
                     'short_term_RP': [i0],
@@ -499,12 +502,14 @@ class Sweep(Algorithm):
                     'short_term_LP': [i0],
                     'short_term_RP': [i0],
                 }
-            else:
+            elif move_right is False:
                 kwargs = {
                     'short_term_LP': [i0],
                     'short_term_RP': [i0 - 1, i0],
                     'preload_LP': i0 - 1,
                 }
+            else:
+                assert False, f"invalid move_right = {move_right!r}"
         else:
             raise ValueError(f"unexpected `n_optimize` = {self.n_optimize!r}")
         for env in self._all_envs:
@@ -559,11 +564,14 @@ class Sweep(Algorithm):
         For two-site algorithms with :attr:`n_optimize` = 2, this always optimizes the
         sites :attr:`i0` and `i0` + 1.
         For single-site algorithms, the effective H only acts on site `i0`, but afterwards it
-        also updates the bond to the *right* if :attr:`move_right` is True,
-        or the bond to the left if :attr:`move_right` is False.
+        might also need to updates the bond to the *right* if :attr:`move_right` is True,
+        or the bond to the *left* if :attr:`move_right` is False,
+        (or just site `i0` if :attr:`move_right` is None).
         Since the svd for truncation gives tensors to be multiplied into the tensors on both sides
         of the bond, tensors of two sites are updated even for single-site algorithms:
         when right-moving, site `i0` + 1 is also updated; site `i0` - 1 when left-moving.
+        When ``move_right is None``, the `update_local` should update site only site `i0`,
+        often to `Th` form.
 
         Parameters
         ----------
@@ -588,13 +596,15 @@ class Sweep(Algorithm):
             Whatever is returned by :meth:`update_local`.
         """
         i_L, i_R = self._update_env_inds()  # left and right updated sites
-        all_envs = self._all_envs
-        for env in all_envs:
-            # clean up the updated center bond
-            env.del_LP(i_R)
-            env.del_RP(i_L)
-        # possibly recalculated updated center bonds
         update_LP, update_RP = self.update_LP_RP
+        if self.move_right is not None:
+            for env in self._all_envs:
+                # clean up the updated center bond
+                env.del_LP(i_R)
+                env.del_RP(i_L)
+        else:
+            assert not update_LP and not update_RP, "update LP/RP when not moving"
+        # possibly recalculate updated center bonds
         if update_LP:
             self.eff_H.update_LP(self.env, i_R, update_data['U'])  # possibly optimized
             for env in self.ortho_to_envs:
@@ -607,13 +617,20 @@ class Sweep(Algorithm):
     def _update_env_inds(self):
         n = self.n_optimize  # = 1 or 2
         move_right = self.move_right
-        if n == 2 or move_right:
+        if n == 2:
             i_L = self.i0
             i_R = self.i0 + 1
-        else:  # n == 1 and left moving
-            # TODO is this also correct if move_right is None?
-            i_L = self.i0 - 1
-            i_R = self.i0
+        else:
+            if move_right is True:
+                i_L = self.i0
+                i_R = self.i0 + 1
+            elif move_right is False:
+                i_L = self.i0 - 1
+                i_R = self.i0
+            elif move_right is None:
+                i_L = self.i0 - 1
+                i_R = self.i0 + 1
+            else: assert False, "invalid move_right"
         return i_L, i_R
 
     def post_update_local(self, err, **update_data):
@@ -630,6 +647,8 @@ class Sweep(Algorithm):
         For large MPO bond dimensions, these environments are by far the biggest part in memory,
         so this is a valuable optimiztion to reduce memory requirements.
         """
+        if self.move_right is None:
+            return  # no movement: still need the envs!
         i_L, i_R = self._update_env_inds()  # left and right updated site
         # envs between `i_L` and `i_R` where already deleted and updated in `update_env`
         i0 = self.i0
@@ -747,7 +766,7 @@ class EffectiveH(NpcLinearOperator):
         calculating charge combinations in the contractions.
     move_right : bool | None, optional
         Whether the sweeping algorithm that calls for an `EffectiveH` is moving to the right,
-        to the left or not moving.
+        to the left or not moving. See also :attr:`Sweep.move_right`.
 
     Attributes
     ----------
@@ -769,7 +788,7 @@ class EffectiveH(NpcLinearOperator):
     length = None
     acts_on = None
 
-    def __init__(self, env, i0, combine=False, move_right=True):
+    def __init__(self, env, i0, combine=False, move_right=None):
         raise NotImplementedError("This function should be implemented in derived classes")
 
     def combine_theta(self, theta):
@@ -871,7 +890,7 @@ class OneSiteH(EffectiveH):
     length = 1
     acts_on = ['vL', 'p0', 'vR']
 
-    def __init__(self, env, i0, combine=False, move_right=True):
+    def __init__(self, env, i0, combine=False, move_right=None):
         self.i0 = i0
         self.LP = env.get_LP(i0)
         self.RP = env.get_RP(i0)
@@ -905,7 +924,7 @@ class OneSiteH(EffectiveH):
                 # '(vR*.p0)', 'wR', 'vR'
                 theta = npc.tensordot(theta, self.RP, axes=[['wR', 'vR'], ['wL', 'vL']])
                 theta.ireplace_labels(['(vR*.p0)', 'vL*'], ['(vL.p0)', 'vR'])
-            else:
+            else:  # left move or no move
                 theta = npc.tensordot(theta, self.RHeff, axes=['(p0.vR)', '(p0*.vL)'])
                 # 'vL', 'wL', '(p0.vL*)'
                 theta = npc.tensordot(self.LP, theta, axes=[['vR', 'wR'], ['vL', 'wL']])
@@ -933,7 +952,7 @@ class OneSiteH(EffectiveH):
             self.LHeff = env._contract_LHeff(self.i0, 'p0')
             self.pipeL = self.LHeff.get_leg('(vR*.p0)')
             self.acts_on = ['(vL.p0)', 'vR']
-        else:
+        else:  # left move or no move
             self.RHeff = env._contract_RHeff(self.i0, 'p0')
             self.pipeR = self.RHeff.get_leg('(p0.vL*)')
             self.acts_on = ['vL', '(p0.vR)']
@@ -954,7 +973,7 @@ class OneSiteH(EffectiveH):
         if self.combine:
             if self.move_right:
                 theta = theta.combine_legs(['vL', 'p0'], pipes=self.pipeL)
-            else:
+            else:  # left move or no move
                 theta = theta.combine_legs(['p0', 'vR'], pipes=self.pipeR)
         return theta.itranspose(self.acts_on)
 
@@ -965,7 +984,7 @@ class OneSiteH(EffectiveH):
                 contr = npc.tensordot(self.LHeff, self.RP, axes=['wR', 'wL'])
                 contr = contr.combine_legs([['(vR*.p0)', 'vL*'], ['(vR.p0*)', 'vL']],
                                            qconj=[+1, -1])
-            else:
+            else:  # left move or no move
                 contr = npc.tensordot(self.LP, self.RHeff, axes=['wR', 'wL'])
                 contr = contr.combine_legs([['vR*', '(p0.vL*)'], ['vR', '(p0*.vL)']],
                                            qconj=[+1, -1])
@@ -993,7 +1012,7 @@ class OneSiteH(EffectiveH):
 
     def update_LP(self, env, i, U=None):
         if self.combine and self.move_right:
-            assert i == self.i0 + 1  # TODO: hit this in single-site?!?
+            assert i == self.i0 + 1
             LP = npc.tensordot(self.LHeff, U, axes=['(vR.p0*)', '(vL.p)'])
             LP = npc.tensordot(U.conj(), LP, axes=['(vL*.p*)', '(vR*.p0)'])
             env.set_LP(i, LP, age=env.get_LP_age(i - 1) + 1)
@@ -1001,7 +1020,7 @@ class OneSiteH(EffectiveH):
             env.get_LP(i, store=True)
 
     def update_RP(self, env, i, VH=None):
-        if self.combine and (self.move_right is False):
+        if self.combine and not self.move_right:
             assert i == self.i0 - 1
             RP = npc.tensordot(VH, self.RHeff, axes=['(p.vR)', '(p0*.vL)'])
             RP = npc.tensordot(RP, VH.conj(), axes=['(p0.vL*)', '(p*.vR*)'])
@@ -1226,6 +1245,7 @@ class ZeroSiteH(EffectiveH):
         Number of (MPS) sites the effective hamiltonian covers.
     acts_on : list of str
         Labels of the state on which `self` acts. NB: class attribute.
+        Overwritten by normal attribute, if `combine`.wL', '(p0, vL*)'``
         Overwritten by normal attribute, if `combine`.
     LHeff, RHeff : :class:`~tenpy.linalg.np_conserved.Array`
         Only set if :attr:`combine`, and only one of them depending on :attr:`move_right`.
@@ -1476,7 +1496,7 @@ class Mixer:
 
         The LHS is equal to the RHS up to truncation and rescaling (we normalize to ``norm(S)==1``).
         The double lines (``===``) indicate the mixed/expanded bonds.
-        Only the tensor with a physical leg (e.g. `U` for a right mive) is an isometry and is
+        Only the tensor with a physical leg (e.g. `U` for a right move) is an isometry and is
         equivalent to the corresponding output of :meth:`mixed_svd_2site`.
         It carries the `qtotal` of `theta`.
         The other (e.g. `VH` for a right move) is in general not isometric.
@@ -1496,7 +1516,7 @@ class Mixer:
             The site that ``theta`` lives on. The bond to be expanded is ``i0, i0 + 1`` for a right
             move or ``i0 - 1, i0`` for a left move.
         move_right : bool | None
-            Whether we move to the right (``True``), left (``False``), or dont move (``None``).
+            Whether we move to the right (``True``), left (``False``), or don't move (``None``).
 
         Returns
         -------
@@ -2049,8 +2069,13 @@ class VariationalCompression(Sweep):
         This is done to ensure proper convergence after each sweep, even if that implies that
         the site 0 is then updated twice per sweep.
         """
-        extra = (0, True, [False, False])
-        return itertools.chain(super().get_sweep_schedule(), [extra])
+        extra = (0, None, [False, False])
+        schedule = list(super().get_sweep_schedule())
+        if schedule[-1] != extra:
+            schedule.append(extra)
+        return schedule
+        # TODO should we keep the above?
+        # return itertools.chain(super().get_sweep_schedule(), [extra])
 
     def update_local(self, _, optimize=True):
         """Perform local update.
