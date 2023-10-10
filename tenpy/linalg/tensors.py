@@ -265,8 +265,32 @@ class AbstractTensor(metaclass=ABCMeta):
         else:
             return list(map(self.get_leg_idx, which_legs))
 
+    def get_leg(self, which_leg: int | str) -> VectorSpace:
+        """Get a single leg of the tensor
+
+        Parameters
+        ----------
+        which_leg : int | str
+            Either the position (``int``) or label (``str``) of the desired leg.
+
+        See Also
+        --------
+        get_legs
+        """
+        return self.legs[self.get_leg_idx(which_leg)]
+
     def get_legs(self, which_legs: int | str | list[int | str]) -> list[VectorSpace]:
-        # TODO getting a single leg would be convenient...
+        """Get a number of legs of the tensor
+
+        Parameters
+        ----------
+        which_legs : int | str | list of int | list of str
+            For every desired leg, either the position (``int``) or label (``str``).
+
+        See Also
+        --------
+        get_leg
+        """
         return [self.legs[idx] for idx in self.get_leg_idcs(which_legs)]
 
     def to_numpy_ndarray(self, leg_order: list[int | str] = None, numpy_dtype=None) -> np.ndarray:

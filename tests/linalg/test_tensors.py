@@ -594,7 +594,7 @@ def test_combine_legs_basis_trafo(tensor_rng):
     dense_combined = combined.to_dense_block()  # [(a.b), c]
 
     print('check via perm')
-    perm = combined.get_legs('(a.b)')[0].get_basis_transformation_perm()
+    perm = combined.get_leg('(a.b)').get_basis_transformation_perm()
     assert all(0 <= p < len(perm) for p in perm)
     assert len(set(perm)) == len(perm)
     reconstruct_combined = np.reshape(dense, (a * b, c))[perm, :]
