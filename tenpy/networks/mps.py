@@ -2043,12 +2043,9 @@ class MPS(BaseMPSExpectationValue):
                 raise ValueError("can't convert form of non-canonical state!")
             # try avoid inverses of singular values, see :issue:`292`
             # typical case e.g. in iDMRG when inserting unit cells
-            if avoid_S_inverse and old_form == (1., 0.) and new_form == (0., 1.):
-                # got A, need B
-                B = self._scale_B_inverse_free(i, B, A_to_B=True)
-            elif avoid_S_inverse and old_form == (0., 1.) and new_form == (1., 0.):
-                # got B, need A
-                B = self._scale_B_inverse_free(i, B, A_to_B=False)
+            if avoid_S_inverse and (old_form in ((1., 0.), (1., 1.), (1., 0.)) and
+                                    new_form in ((0., 1.), (1., 0.)) and new_form != old_form):
+                B = self._scale_B_inverse_free(i, B, old_form, new_form)
             else:
                 # scale individual axes
                 if new_form[0] is not None:
@@ -2067,13 +2064,13 @@ class MPS(BaseMPSExpectationValue):
             B = self._replace_p_label(B, label_p)
         return B
 
-    def _scale_B_inverse_free(self, i, A, A_to_B=True):
+    def _scale_B_inverse_free(self, i, th, old_form, new_form):
         """Change from A to B canonical form with extra SVD instead of inverses of singular values.
 
-        If `A_to_B` = True, we transfrom the given `A` to `B`-form.
-        If `A_to_B` = False, we assume we're given `B` form and return `A` form.
+        This function should only be called when we need to remove S on one side.
 
-        Consider the case `A_to_B`. We start with multiplying `SR` to `A` to get theta `Th`.
+        Consider the case of transforming an `A` to `B` form.
+        We start with multiplying `SR` to `A` to get theta `Th`.
 
         With a mixer, the `SL` is not a diagonal matrix, and we need to account for a
         basis transformation part of it - the left environments have the leg on the left of `SL`,
@@ -2111,11 +2108,19 @@ class MPS(BaseMPSExpectationValue):
         if `U` is a unitary, which should be the case if `Z` is a unitary, i.e. if
         ``SL.shape[0] <= SL.shape[1]``.
         """
+        assert (old_form in ((0., 1.), (1., 0.), (1., 1.)) and new_form in ((1., 0.), (0., 1.)) and
+                new_form != old_form), "we can convert A or Th to B; or convert B or Th to A"
         SL = self.get_SL(i)
         SR = self.get_SR(i)
+        # first convert to Th
+        if old_form[0] < new_form[0]:
+            th = self._scale_axis_B(th, SL, 1., 'vL', cutoff=None)
+        if old_form[1] < new_form[1]:
+            th = self._scale_axis_B(th, SR, 1., 'vR', cutoff=None)
+        # now `th` is in theta form (1., 1.)
+
         # first get 1-site wave function theta
-        if A_to_B:  # convert A to B
-            th = self._scale_axis_B(A, SR, 1., 'vR', cutoff=None)
+        if old_form[0] > new_form[0]:  # convert theta to B form
             if isinstance(SL, npc.Array):
                 # mixer is on, so SL is a 2D array.
                 # The `A` includes the SL, so has the leg *left* of SL.
@@ -2125,14 +2130,13 @@ class MPS(BaseMPSExpectationValue):
                 Zd_Xd = npc.tensordot(X, Z, axes=['vR', 'vL']).conj().itranspose(['vR*', 'vL*'])
                 th = npc.tensordot(Zd_Xd, th, axes=['vL*', 'vL']).ireplace_label('vR*', 'vL')
             th = th.combine_legs([['vL'], self._p_label + ['vR']], qconj=[+1, -1])
-        else:  # convert B to A
-            th = self._scale_axis_B(A, SL, 1., 'vL', cutoff=None)
+        elif old_form[1] > new_form[1]:  # convert theta to A form
             if isinstance(SR, npc.Array):
                 X, _, Z = npc.svd(SR.transpose(['vL', 'vR']), inner_labels=['vR', 'vL'])
                 Zd_Xd = npc.tensordot(X, Z, axes=['vR', 'vL']).conj().itranspose(['vR*', 'vL*'])
                 th = npc.tensordot(th, Zd_Xd, axes=['vR', 'vR*']).ireplace_label('vL*', 'vR')
             th = th.combine_legs([['vL'] + self._p_label, ['vR']], qconj=[+1, -1])
-        # now svd-decompose to remove the S on the left(A_to_B=True)/right.
+        # now svd-decompose to remove the S on the left/right.
         U, _, V = npc.svd(th, inner_labels=['vR', 'vL'])
         B = npc.tensordot(U, V, axes=['vR', 'vL']).split_legs()
         return B
