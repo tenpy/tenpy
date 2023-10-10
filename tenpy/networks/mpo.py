@@ -1056,7 +1056,7 @@ class MPO:
             return VariationalApplyMPO(psi, self, options).run()
         elif method == 'zip_up':
             trunc_err = self.apply_zipup(psi, options)
-            return trunc_err + psi.compress_svd(trunc_params)
+            return trunc_err + psi.compress_svd(trunc_params, _right_to_left_only=True)
         # TODO: zipup method infinite?
         raise ValueError("Unknown compression method: " + repr(method))
 

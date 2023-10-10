@@ -2051,15 +2051,20 @@ class MPS(BaseMPSExpectationValue):
                 if new_form[0] is not None:
                     change_L = new_form[0] - old_form[0]
                     if change_L != 0.:
-                        #  if change_L < 0:
-                        #      warnings.warn("inverse singular values!", stacklevel=2) # TODO: do we need this anywhere in TeNPy now?
                         B = self._scale_axis_B(B, self.get_SL(i), change_L, 'vL', cutoff)
                 if new_form[1] is not None:
                     change_R = new_form[1] - old_form[1]
                     if change_R != 0.:
-                        #  if change_R < 0:
-                        #      warnings.warn("inverse singular values!", stacklevel=2) # TODO: do we need this anywhere in TeNPy now?
                         B = self._scale_axis_B(B, self.get_SR(i), change_R, 'vR', cutoff)
+                #  if ((new_form[0] is not None and change_L < 0) or
+                #      (new_form[1] is not None and change_R < 0)):
+                #      # this warning triggers still at many TeNPy functions,
+                #      # e.g. for expectation values/correlation functions, transfer matrices etc.
+                #      # However, if the state is in canonical form, the inverse of S is not so
+                #      # problematic - it's only an issue when psi is far from canonical form,
+                #      # i.e. mostly during variational update algorithms like DMRG.
+                #      warnings.warn(f"inverse singular values {old_form!r} -> {new_form!r}!",
+                #                    stacklevel=2)
         if label_p is not None:
             B = self._replace_p_label(B, label_p)
         return B
@@ -4636,7 +4641,7 @@ class MPS(BaseMPSExpectationValue):
             return VariationalCompression(self, options).run()
         raise ValueError("Unknown compression method: " + repr(method))
 
-    def compress_svd(self, trunc_par):
+    def compress_svd(self, trunc_par, _right_to_left_only=False):
         """Compress `self` with a single sweep of SVDs; in place.
 
         Perform a single right-sweep of QR/SVD without truncation, followed by a left-sweep with
@@ -4649,18 +4654,25 @@ class MPS(BaseMPSExpectationValue):
         ----------
         trunc_par : dict
             Parameters for truncation, see :cfg:config:`truncation`.
+        _right_to_left_only : bool
+            Defaults to False. If True, only perform the second half going right-to-left.
+            Should only be done after a left-to-right sweep, e.g. by
+            :meth:`~tenpy.networks.mpo.MPO.apply_zipup`.
         """
         trunc_err = TruncationError()
         if self.bc == 'finite':
-            # Do QR starting from the left
-            B = self.get_B(0, form='Th')
-            for i in range(self.L - 1):
-                B = B.combine_legs(['vL', 'p'])
-                q, r = npc.qr(B, inner_labels=['vR', 'vL'])
-                B = q.split_legs()
-                self.set_B(i, B, form=None)
-                B = self.get_B(i + 1, form='B')
-                B = npc.tensordot(r, B, axes=('vR', 'vL'))
+            if not _right_to_left_only:
+                # Do QR starting from the left
+                B = self.get_B(0, form='Th')
+                for i in range(self.L - 1):
+                    B = B.combine_legs(['vL', 'p'])
+                    q, r = npc.qr(B, inner_labels=['vR', 'vL'])
+                    B = q.split_legs()
+                    self.set_B(i, B, form=None)
+                    B = self.get_B(i + 1, form='B')
+                    B = npc.tensordot(r, B, axes=('vR', 'vL'))
+            else:
+                B = self.get_B(self.L - 1, 'Th')
             # Do SVD from right to left & truncate
             for i in range(self.L - 1, 0, -1):
                 B = B.combine_legs(['p', 'vR'])
@@ -4675,10 +4687,11 @@ class MPS(BaseMPSExpectationValue):
                 self.set_SL(i, S)
             self.set_B(0, B, form='Th')
         elif self.bc == 'infinite':
-            for i in range(self.L):
-                theta = self.get_theta(i, n=2)
-                theta = theta.combine_legs([['vL', 'p0'], ['p1', 'vR']], qconj=[+1, -1])
-                self.set_svd_theta(i, theta, _machine_prec_trunc_par, update_norm=False)
+            if not _right_to_left_only:
+                for i in range(self.L):
+                    theta = self.get_theta(i, n=2)
+                    theta = theta.combine_legs([['vL', 'p0'], ['p1', 'vR']], qconj=[+1, -1])
+                    self.set_svd_theta(i, theta, _machine_prec_trunc_par, update_norm=False)
             for i in range(self.L - 1, -1, -1):
                 theta = self.get_theta(i, n=2)
                 theta = theta.combine_legs([['vL', 'p0'], ['p1', 'vR']], qconj=[+1, -1])

@@ -2098,7 +2098,7 @@ class VariationalCompression(Sweep):
         """Given a new two-site wave function `theta`, split it and save it in :attr:`psi`."""
         i0 = self.i0
         new_psi = self.psi
-        old_A0 = new_psi.get_B(i0, form='A')
+        old_A0 = new_psi.get_B(i0, form=None)
         U, S, VH, err, renormalize = svd_theta(theta,
                                                self.trunc_params,
                                                qtotal_LR=[old_A0.qtotal, None],
