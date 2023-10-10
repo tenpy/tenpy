@@ -527,7 +527,8 @@ class Sweep(Algorithm):
         """
         self.make_eff_H()  # self.eff_H represents tensors LP, W0, RP
         # make theta
-        theta = self.psi.get_theta(self.i0, n=self.n_optimize, cutoff=self.S_inv_cutoff)
+        theta = self.psi.get_theta(self.i0, n=self.n_optimize, cutoff=self.S_inv_cutoff,
+                                   avoid_S_inverse=True)
         theta = self.eff_H.combine_theta(theta)
         return theta
 

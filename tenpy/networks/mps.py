@@ -2043,8 +2043,8 @@ class MPS(BaseMPSExpectationValue):
                 raise ValueError("can't convert form of non-canonical state!")
             # try avoid inverses of singular values, see :issue:`292`
             # typical case e.g. in iDMRG when inserting unit cells
-            if avoid_S_inverse and (old_form in ((1., 0.), (1., 1.), (1., 0.)) and
-                                    new_form in ((0., 1.), (1., 0.)) and new_form != old_form):
+            if avoid_S_inverse and (old_form in ((0., 1.), (1., 0.), (1., 1.)) and
+                                    new_form in ((0., 1.), (1., 0.))):
                 B = self._scale_B_inverse_free(i, B, old_form, new_form)
             else:
                 # scale individual axes
@@ -2108,8 +2108,8 @@ class MPS(BaseMPSExpectationValue):
         if `U` is a unitary, which should be the case if `Z` is a unitary, i.e. if
         ``SL.shape[0] <= SL.shape[1]``.
         """
-        assert (old_form in ((0., 1.), (1., 0.), (1., 1.)) and new_form in ((1., 0.), (0., 1.)) and
-                new_form != old_form), "we can convert A or Th to B; or convert B or Th to A"
+        assert (old_form in ((0., 1.), (1., 0.), (1., 1.)) and new_form in ((0., 1.), (1., 0.))
+                and new_form != old_form), "we can convert A or Th to B; or convert B or Th to A"
         SL = self.get_SL(i)
         SR = self.get_SR(i)
         # first convert to Th

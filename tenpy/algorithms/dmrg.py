@@ -1175,13 +1175,13 @@ class SingleSiteDMRGEngine(DMRGEngine):
         move_right = self.move_right
         update_LP, update_RP = self.update_LP_RP
         if self.move_right is True:
-            next_B = self.psi.get_B(self.i0 + 1, form='B')
+            next_B = self.psi.get_B(self.i0 + 1, form='B', avoid_S_inverse=True)
             next_B = next_B.combine_legs(['p', 'vR'], qconj=-1, new_axes=1)
             if update_RP:
                 # make sure that `next_B` is in right-canonical form
                 assert self.psi.form[(self.i0 + 1) % self.psi.L] == (0., 1.)
         elif self.move_right is False:
-            next_A = self.psi.get_B(self.i0 - 1, form='A')
+            next_A = self.psi.get_B(self.i0 - 1, form='A', avoid_S_inverse=True)
             next_A = next_A.combine_legs(['vL', 'p'], qconj=1, new_axes=0)
             if update_LP:
                 # make sure that `next_A` is in left-canonical form
