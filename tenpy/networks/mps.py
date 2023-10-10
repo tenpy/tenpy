@@ -2019,7 +2019,7 @@ class MPS(BaseMPSExpectationValue):
             labels accordingly.)
         avoid_S_inverse : bool
             If True, try to avoid taking inverses of singular values at the cost of additional
-            SVDs to move the orthogonality center locally. See :meth:`get_B`.
+            SVDs to move the orthogonality center locally.
 
         Returns
         -------
@@ -2073,8 +2073,43 @@ class MPS(BaseMPSExpectationValue):
         If `A_to_B` = True, we transfrom the given `A` to `B`-form.
         If `A_to_B` = False, we assume we're given `B` form and return `A` form.
 
-        The returned B is an isometry, say for A_to_B (analogously statements for B_to_A),
-        if 1) the
+        Consider the case `A_to_B`. We start with multiplying `SR` to `A` to get theta `Th`.
+
+        With a mixer, the `SL` is not a diagonal matrix, and we need to account for a
+        basis transformation part of it - the left environments have the leg on the left of `SL`,
+        while right environments on that bond have the leg between `SL` and the `Th`.
+        (If SL is diagonal, the `X` and `Z` in the following would be identities.)
+        We use an SVD of it to derive what to do::
+
+            |   --SL--   =   --X--Y--Z--
+
+        with isometric ``X, Z`` and diagonal ``Y``.
+        We compute an SVD of the following matrix::
+
+            |   --M--   :=   --hc(Z)--hc(X)--theta--   =   --U--S--V--
+            |     |                            |                   |
+
+        But we can obtain a different SVD from the canonical form, using ``theta = SL @ B``::
+
+            |   --M--   =   --hc(Z)--Y--Z--B--
+            |     |                        |
+
+        where ``Z @ B`` is the right isometry.
+        Two SVDs of the same matrix are related by a gauge transformation,
+        a (block-)diagonal unitary matrix ``phi`` [commuting with S, only complex phases if there
+        are no degeneracies in S] such that::
+
+            |   --U--   =   --hc(Z)--phi--     ;     S = Y     ;     --V--   =   --hc(phi)--Z--B--
+            |                                                          |                       |
+
+        Therefore we have::
+
+            |   --U--V--   =   --hc(Z)--phi--hc(phi)--Z--B--   =   --B--
+            |        |                                   |           |
+
+        This is how we get `B`. It is of right-orthonormal form  ``B @ B^dagger = 1``
+        if `U` is a unitary, which should be the case if `Z` is a unitary, i.e. if
+        ``SL.shape[0] <= SL.shape[1]``.
         """
         SL = self.get_SL(i)
         SR = self.get_SR(i)
@@ -2086,21 +2121,20 @@ class MPS(BaseMPSExpectationValue):
                 # The `A` includes the SL, so has the leg *left* of SL.
                 # `B` should have leg *right* of SL, so we need to apply the basis trafo from
                 # left of SL to right of SL on the `vL` leg of `th`
-                U, _, Vd = npc.svd(SL.transpose(['vL', 'vR']), inner_labels=['vR', 'vL'])
-                V_Ud = npc.tensordot(U, Vd, axes=['vR', 'vL']).conj().itranspose(['vR*', 'vL*'])
-                th = npc.tensordot(V_Ud, th, axes=['vL*', 'vL']).ireplace_label('vR*', 'vL')
+                X, _, Z = npc.svd(SL.transpose(['vL', 'vR']), inner_labels=['vR', 'vL'])
+                Zd_Xd = npc.tensordot(X, Z, axes=['vR', 'vL']).conj().itranspose(['vR*', 'vL*'])
+                th = npc.tensordot(Zd_Xd, th, axes=['vL*', 'vL']).ireplace_label('vR*', 'vL')
             th = th.combine_legs([['vL'], self._p_label + ['vR']], qconj=[+1, -1])
         else:  # convert B to A
-            #  assert False, "where do we need this????"
             th = self._scale_axis_B(A, SL, 1., 'vL', cutoff=None)
             if isinstance(SR, npc.Array):
-                U, _, Vd = npc.svd(SR.transpose(['vL', 'vR']), inner_labels=['vR', 'vL'])
-                V_Ud = npc.tensordot(U, Vd, axes=['vR', 'vL']).conj().itranspose(['vR*', 'vL*'])
-                th = npc.tensordot(th, V_Ud, axes=['vR', 'vR*']).ireplace_label('vL*', 'vR')
+                X, _, Z = npc.svd(SR.transpose(['vL', 'vR']), inner_labels=['vR', 'vL'])
+                Zd_Xd = npc.tensordot(X, Z, axes=['vR', 'vL']).conj().itranspose(['vR*', 'vL*'])
+                th = npc.tensordot(th, Zd_Xd, axes=['vR', 'vR*']).ireplace_label('vL*', 'vR')
             th = th.combine_legs([['vL'] + self._p_label, ['vR']], qconj=[+1, -1])
         # now svd-decompose to remove the S on the left(A_to_B=True)/right.
-        U, _, Vd = npc.svd(th, inner_labels=['vR', 'vL'])
-        B = npc.tensordot(U, Vd, axes=['vR', 'vL']).split_legs()
+        U, _, V = npc.svd(th, inner_labels=['vR', 'vL'])
+        B = npc.tensordot(U, V, axes=['vR', 'vL']).split_legs()
         return B
 
     def set_B(self, i, B, form='B'):
@@ -2219,7 +2253,7 @@ class MPS(BaseMPSExpectationValue):
             if self.form[j % self.L] is None:
                 raise ValueError("can't calculate theta for non-canonical form")
         if n == 1:
-            return self.get_B(i, (1., 1.), True, cutoff, '0', avoid_S_inverse)
+            return self.get_B(i, (formL, formR), True, cutoff, '0', avoid_S_inverse)
         elif n < 1:
             raise ValueError("n needs to be larger than 0")
         # n >= 2: contract some B's
