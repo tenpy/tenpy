@@ -286,11 +286,15 @@ def test_canonical_form(bc, method):
     if method in ['canonical_form_finite', 'canonical_form_infinite2']:
         # check that A = SB S^-1 is orthonormal
         for i in range(psi.L):
-            A = psi.get_B(i, 'A')
-            c = npc.tensordot(A, A.conj(), axes=[['vL', 'p'], ['vL*', 'p*']])
-            A_err = (c - npc.diag(1., c.legs[0])).norm()
-            print(A_err)
-            assert A_err < 1.e-13
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", UserWarning)
+                A1 = psi.get_B(i, 'A')
+            A2 = psi.get_B(i, 'A', avoid_S_inverse=True)
+            for A in [A1, A2]:
+                c = npc.tensordot(A, A.conj(), axes=[['vL', 'p'], ['vL*', 'p*']])
+                A_err = (c - npc.diag(1., c.legs[0])).norm()
+                print(A_err)
+                assert A_err < 1.e-13
 
 
 def test_orthogonality_center():
@@ -385,6 +389,7 @@ def test_roll_mps_unit_cell():
     npt.assert_equal(psi_m_1.expectation_value('Sigmaz'), [1., 1., 1., -1.])
     psi3 = psi.copy()
     psi3.spatial_inversion()
+    psi3.convert_form('B', avoid_S_inverse=True)
     psi3.test_sanity()
     ov = psi3.overlap(psi_m_1, understood_infinite=True)
     assert abs(ov - 1.) < 1.e-14
