@@ -150,10 +150,10 @@ def block_rng(backend, np_random):
 
 @pytest.fixture
 def backend_data_rng(backend, block_rng, np_random):
-    def generator(legs, real=True, empty_ok=False):
+    def generator(legs, real=True, empty_ok=False, all_blocks=False):
         data = backend.from_block_func(block_rng, legs, func_kwargs=dict(real=real))
         if isinstance(backend, backends.abelian.AbstractAbelianBackend):
-            if np_random.random() < 0.5:  # with 50% probability
+            if (not all_blocks) and (np_random.random() < 0.5):  # with 50% probability
                 # keep roughly half of the blocks
                 keep = (np_random.random(len(data.blocks)) < 0.5)
                 if not np.any(keep):
@@ -171,7 +171,7 @@ def backend_data_rng(backend, block_rng, np_random):
 @pytest.fixture
 def tensor_rng(backend, backend_data_rng, vector_space_rng, symmetry, np_random):
     def generator(legs=None, num_legs=None, labels=None, max_num_blocks=5, max_block_size=5,
-                  real=True, empty_ok=False):
+                  real=True, empty_ok=False, all_blocks=False):
         if num_legs is None:
             if legs is not None:
                 num_legs = len(legs)
@@ -218,6 +218,6 @@ def tensor_rng(backend, backend_data_rng, vector_space_rng, symmetry, np_random)
                     _is_dual=compatible_leg.is_dual
                 )
             legs[last_missing] = compatible_leg
-        data = backend_data_rng(legs, real=real, empty_ok=empty_ok)
+        data = backend_data_rng(legs, real=real, empty_ok=empty_ok, all_blocks=all_blocks)
         return tensors.Tensor(data, backend=backend, legs=legs, labels=labels)
     return generator
