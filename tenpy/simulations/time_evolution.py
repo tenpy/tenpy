@@ -5,6 +5,7 @@ import numpy as np
 
 from . import simulation
 from .simulation import *
+from .simulation_processing import SpectralFunctionProcessor
 from ..networks.mps import MPSEnvironment, MPS, MPSEnvironmentJW
 from ..tools import hdf5_io
 
@@ -105,6 +106,7 @@ class SpectralSimulation(RealTimeEvolution):
     default_measurements = RealTimeEvolution.default_measurements + [
         ('simulation_method', 'm_spectral_function'),
     ]
+    post_processor = SpectralFunctionProcessor
 
     def __init__(self, options, *, gs_data=None, **kwargs):
         super().__init__(options, **kwargs)
@@ -180,7 +182,7 @@ class SpectralSimulation(RealTimeEvolution):
                 if options[key] != sim_params[key]:
                     # TODO: change this to output warning in logger only ?
                     raise Exception("Different Model and/or parameters for GroundStateSearch and SpectralSimulation!")
-        # update dictionary paramters
+        # update dictionary parameters
         options.update(sim_params)
 
         sim = cls(options, **kwargs)
@@ -295,6 +297,17 @@ class SpectralSimulation(RealTimeEvolution):
                 self.make_measurements()
                 self.engine.checkpoint.emit(self.engine)
 
+    def prepare_results_for_save(self):
+        """Wrapper around :meth:`prepare_results_for_save` of :class:`Simulation`.
+        Makes it possible to include post-processing run during the run of the
+        actual simulation.
+        """
+        if self.post_processor is not None:
+            processing_params = self.options.get('post_processing_params', None)
+            post_processor_cls = self.post_processor.from_simulation(self, processing_params=processing_params)
+            post_processor_cls.run()
+        return super().prepare_results_for_save()
+
     def m_spectral_function(self, results, psi, model, simulation, **kwargs):
         """Calculate the overlap <psi_0| e^{iHt} op2^j e^{-iHt} op1_idx |psi_0> between
         op1 at MPS position idx and op2 at the MPS position j"""
@@ -366,7 +379,6 @@ class SpectralSimulationExperimental(SpectralSimulation):
             env = MPSEnvironment(self.psi_groundstate, self.psi)
         else:
             env = MPSEnvironmentJW(self.psi_groundstate, self.psi)
-            self.logger.info("Using JW Environement %%%%%%")
 
         # TODO: get better naming convention, store this in dict ?
         if isinstance(self.operator_t, list):
@@ -381,7 +393,7 @@ class SpectralSimulationExperimental(SpectralSimulation):
             else:
                 results[f'spectral_function_t'] = self._m_spectral_function_op(env, self.operator_t)
 
-    def _m_spectral_function_op(self, env, op): # type hint for either mps env or mps env jw
+    def _m_spectral_function_op(self, env, op):  # type hint for either mps env or mps env jw
         """Calculate the overlap of <psi| op_j |phi>, where |phi> = e^{-iHt} op1_idx |psi_0>
         (the time evolved state after op1 was applied at MPS position idx) and
         <psi| is either <psi_0| e^{iHt} (if evolve_bra is True) or e^{i E_0 t} <psi| (if evolve_bra is False).

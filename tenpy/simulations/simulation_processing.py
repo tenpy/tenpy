@@ -1,6 +1,17 @@
+"""This module contains classes for post-processing for tenpy :class:`Simulation`.
+
+The :class:`SimulationPostProcessor` mostly handles initialization and is
+meant as a base class for post-processing. The :class:`SpectralPostProcessor`
+should be used together with the simulation :class:`SpectralSimulation`.
+This module also provides basic function for linear prediction for multidimensional time
+series data.
+"""
+
 import numpy as np
 import scipy
 import logging
+
+from .simulation import Simulation
 from ..tools import hdf5_io
 from ..tools.misc import update_recursive
 from ..tools.params import asConfig
@@ -16,7 +27,7 @@ class SimulationPostProcessor:
 
     Parameters
     ----------
-    sim_results : str
+    sim_results : str or None
         Filename of a finished simulation run # TODO: include option to pass as dictionary
     processing_params : dict-like
         For command line use, a .yml file should hold the information.
@@ -37,17 +48,22 @@ class SimulationPostProcessor:
     """
 
     logger = logging.getLogger(__name__ + ".PostProcessing")
+    inside_simulation = False
 
     def __init__(self, sim_results, *, processing_params: dict = None):
+        if processing_params is None:
+            processing_params = dict()  # Config can't take None, but empty dict
         # convert parameters to Config object
         self.options = asConfig(processing_params, self.__class__.__name__)
         # setup_logging_()
-        self.logger.info("Initializing\n%s\n%s\n%s", "=" * 80, self.__class__.__name__, "=" * 80)
+        self.logger.info("Initializing post-processing:\n%s\n%s\n%s", "=" * 80, self.__class__.__name__, "=" * 80)
 
         # TODO: fix logging of simulation ... why does simulation_class_kwargs disable logging not work (see below)
-        self.sim = init_simulation_for_processing(filename=sim_results, simulation_class_kwargs={'setup_logging': False})
-        self.sim.init_model()
-        # self.sim.init_state() # TODO: do we want to initialize the state again (e.g., for measurements) ?
+        if not self.inside_simulation:
+            self.sim = init_simulation_for_processing(filename=sim_results, simulation_class_kwargs={'setup_logging': False})
+            self.sim.init_model()
+            # self.sim.init_state()
+            # TODO: do we want to initialize the state again (e.g., for measurements) ?
 
         self.model = self.sim.model
         self.lat = self.sim.model.lat
@@ -55,6 +71,17 @@ class SimulationPostProcessor:
 
         self.measurements = self.sim.results['measurements']
         self.sim_params = self.sim.results['simulation_parameters']
+
+    @classmethod
+    def from_simulation(cls, sim: Simulation, processing_params: dict = None):
+        if (not hasattr(sim, 'model')) or (not hasattr(sim, 'results')):
+            raise TypeError("Can't perform post-processing on simulation w/o model or results")
+
+        post_processing_sim = cls.__new__(cls)
+        post_processing_sim.inside_simulation = True
+        post_processing_sim.sim = sim  # TODO: bad idea?
+        post_processing_sim.__init__(None, processing_params=processing_params)
+        return post_processing_sim
 
     @classmethod
     def from_file(cls):
@@ -65,7 +92,51 @@ class SimulationPostProcessor:
         raise NotImplementedError("Not yet implemented")
 
     def run(self):
-        raise NotImplementedError("Subclass must define :meth:`run`for post-processing")
+        results, key = self.run_processing()
+        self.save_results(results, key)
+        self.logger.info('finished post-processing run\n%s', "=" * 80)
+
+    def run_processing(self):
+        raise NotImplementedError("Subclass must define :meth:`run` for post-processing")
+
+    def save_results(self, results, key: str):
+        """Saving results from a post-processing step.
+        If post-processing was done inside a simulation, append results
+        to dictionary of simulation results.
+
+        Parameters
+        ----------
+        results : dict or ndarray
+        key : str
+            The name under which the results should be stored.
+        """
+        if self.sim.results.get(key) is not None:
+            self.logger.warning('Overwriting previous post_processing_results')
+
+        if self.inside_simulation:
+            self.sim.results[key] = results
+            # saving is handled by Simulation class
+            return None
+
+        if self.options.get('append_results', False) is True:
+            self.sim.results[key] = results
+            results = self.sim.save_results(results=self.sim.results)
+            # TODO: unnecessarily writes all results ?
+            # if we don't pass results, we still need to avoid:
+            # if self.options.get('save_resume_data', self.options['save_psi']):
+            #     results['resume_data'] = self.engine.get_resume_data()
+            # in prepare_results_for_save()
+        else:
+            output_filename = self.options.get('output_filename', None)
+            if output_filename is None:
+                self.logger.warning("Missing an output filename, results are returned\
+                                     but not saved")
+            # TODO: generate output filename automatically and don't overwrite output filename
+            results_dict = dict()
+            results_dict['simulation_parameters'] = self.sim_params
+            results_dict['key'] = results
+            hdf5_io.save(results_dict, output_filename)
+        return results
 
     @staticmethod
     def convert_to_ndarray(value):
@@ -78,28 +149,10 @@ class SimulationPostProcessor:
             raise Exception("Can't convert results to numpy array")
         return value
 
-    def save_results(self, results, key: str):
-        self.sim.results[key] = results
-        if self.options.get('append_results', True) is True:
-            results = self.sim.save_results(results=self.sim.results)
-            # if we don't pass results, we still need to avoid:
-            # if self.options.get('save_resume_data', self.options['save_psi']):
-            #     results['resume_data'] = self.engine.get_resume_data()
-            # in prepare_results_for_save()
-        else:
-            output_filename = self.options.get('output_filename', None)
-            if output_filename is None:
-                raise KeyError("Missing an output filename")
-            # TODO: generate output filename automatically
-            # don't overwrite output filename
-            results['simulation_parameters'] = self.sim_params
-            hdf5_io.save(results, output_filename)
-        return results
-
 
 class SpectralFunctionProcessor(SimulationPostProcessor):
     """Post-processing class for the :class:`SpectralSimulation`.
-    This class helps calculating spectral functions from the given correlations of
+    This class helps to calculate spectral functions from the given correlations of
     a run of a :class:`SpectralSimulation`. The options to perform additional post-processing steps,
     namely applying a windowing function and using linear prediction are provided and
     controlled by the processing_params of the class.
@@ -140,7 +193,7 @@ class SpectralFunctionProcessor(SimulationPostProcessor):
         if self.windowing_function is not None:
             self.windowing_function_params = asConfig(self.windowing_function, "Windowing function setup")
 
-    def run(self):
+    def run_processing(self):
         results = {'post_process_params': dict()}
         if hasattr(self, "linear_pred_params"):
             results['post_process_params']['linear_prediction'] = self.linear_pred_params.as_dict()
@@ -152,20 +205,25 @@ class SpectralFunctionProcessor(SimulationPostProcessor):
                 # convert results to numpy array if possible, should we just copy the result here?
                 value = self.convert_to_ndarray(value)
                 # compute spectral function
+                self.logger.info(f'computing spectral function of {key}')
                 S, k, w = self.compute_spectral_function(value)
                 # store results
                 results[key] = dict()
                 results[key]['spectral_function'] = S
                 results[key]['k'] = k
-                results[key]['k_reduced'] = self.BZ.reduce_points(k)
+                if k.ndim == 2:
+                    k_reduced = self.BZ.reduce_points(k, self.lat.reciprocal_basis)
+                else:
+                    # following lines in case k is 3-dimensional, indexed by (kx_idx, ky_idx)
+                    # pass as (N, 2)
+                    k_reduced = self.BZ.reduce_points(k.reshape(-1, k.shape[-1]), self.lat.reciprocal_basis)
+                    k_reduced = k_reduced.reshape(k.shape)
+                results[key]['k_reduced'] = k_reduced
                 results[key]['w'] = w
                 # TODO: storing simulation output again, should only be a hard link for .hdf5
                 results[key]['raw_sim_data'] = value
-
-        if self.sim.results.get('spectral_function') is not None:
-            self.logger.warning('Overwriting previous post_processing_results')
-        # save results
-        self.save_results(results, 'spectral_function')
+        dict_key = 'spectral_function'
+        return results, dict_key
 
     def compute_spectral_function(self, m_corr):
         m_corr_lat = self._to_lat_geometry(m_corr)
@@ -306,7 +364,7 @@ def init_simulation_for_processing(*,
         You can either specify the `filename` or the `checkpoint_results`.
     checkpoint_results : None | dict
         Alternatively to `filename` the results of the simulation so far, i.e. directly the data
-        dicitonary saved at a simulation checkpoint.
+        dictionary saved at a simulation checkpoint.
     update_sim_params : None | dict
         Allows to update specific :cfg:config:`Simulation` parameters; ignored if `None`.
         Uses :func:`~tenpy.tools.misc.update_recursive` to update values, such that the keys of
@@ -367,7 +425,7 @@ def linear_prediction(x, m, p, trunc_mode='cutoff', cyclic=False, epsilon=10e-7,
         used for truncating the eigenvalues. Other options are 'renormalize' (meaning their absolute
         value will be set to 1) and 'conjugate'
     cyclic : bool
-        whether to use the cyclic autocorrelation or not (see :meth:`autocorrelation`
+        whether to use the cyclic autocorrelation or not (see :meth:`autocorrelation`)
     epsilon : float
         regularization constant, in case matrix can not be inverted
     mode : str
