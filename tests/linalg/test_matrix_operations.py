@@ -176,19 +176,25 @@ def test_power_series_funcs(vector_space_rng, tensor_rng, np_random, func, mode,
         tens = tensor_rng(legs=[leg, leg2.dual, leg2, leg.dual], real=real, all_blocks=True)
         d1, d2 = leg.dim, leg2.dim
         d = leg.dim * leg2.dim
-        res = tp_func(tens, legs1=[0, 2], legs2=[3, 1]).to_numpy_ndarray()
+        res = tp_func(tens, legs1=[0, 2], legs2=[3, 1])
+        res.test_sanity()
+        res = res.to_numpy_ndarray()
         np_matrix = tens.to_numpy_ndarray().transpose([0, 2, 3, 1]).reshape([d, d])
         expect = np_func(np_matrix).reshape([d1, d2, d1, d2]).transpose([0, 3, 1, 2])
     elif mode == 'matrix':
         tens = tensor_rng(legs=[leg, leg.dual], real=real, all_blocks=True)
-        res = tp_func(tens).to_numpy_ndarray()
+        res = tp_func(tens)
+        res.test_sanity()
+        res = res.to_numpy_ndarray()
         expect = np_func(tens.to_numpy_ndarray())
     elif mode == 'diagonal':
         data = np_random.random((leg.dim,))
         if not real:
             data = data + 1.j * np_random.random((leg.dim,))
         tens = tensors.DiagonalTensor.from_diag_numpy(diag=data, first_leg=leg)
-        res = tp_func(tens).to_numpy_ndarray()
+        res = tp_func(tens)
+        res.test_sanity()
+        res = res.to_numpy_ndarray()
         expect = np_func(np.diag(data))
     elif mode == 'scalar':
         data = np_random.random((1, 1))

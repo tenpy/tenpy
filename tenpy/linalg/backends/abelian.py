@@ -272,6 +272,8 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
         for block, shape in zip(a.data.blocks, block_shapes):
             expect_shape = (shape[0],) if is_diagonal else tuple(shape)
             assert self.block_shape(block) == expect_shape
+        # check matching dtypes´
+        assert all(self.block_dtype(block) == a.data.dtype for block in a.data.blocks)
         assert not np.any(a.data.block_inds < 0)
         assert not np.any(a.data.block_inds >= np.array([[leg.num_sectors for leg in a.legs]]))
 
@@ -1252,7 +1254,8 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
             else:
                 block = a.data.blocks[i]
             res_blocks.append(block_method(block))
-        dtype = a.data.dtype if len(res_blocks) == 0 else self.block_dtype(res_blocks[0])
+        dtype = Dtype.common(*(self.block_dtype(block) for block in res_blocks))
+        res_blocks = [self.block_to_dtype(block, dtype) for block in res_blocks]
         return AbelianBackendData(dtype, res_blocks, all_block_inds, is_sorted=True)
 
     def add(self, a: Tensor, b: Tensor) -> Data:
