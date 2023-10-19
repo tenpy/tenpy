@@ -48,7 +48,7 @@ class NumpyBlockBackend(AbstractBlockBackend):
     
     def as_block(self, a) -> Block:
         block = np.asarray(a)
-        dtype = np.find_common_type([block.dtype], [float])
+        dtype = np.promote_types(block.dtype, float)  # at least float
         return block.astype(dtype, copy=False)
 
     def block_tdot(self, a: Block, b: Block, idcs_a: list[int], idcs_b: list[int]) -> Block:

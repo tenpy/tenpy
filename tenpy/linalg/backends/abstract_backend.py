@@ -673,7 +673,7 @@ class AbstractBlockBackend(metaclass=ABCMeta):
         last_e = 0
         for b, e in legs_slices:  # ascending!
             new_shape.extend(old_shape[last_e:b])
-            new_shape.append(np.product(old_shape[b:e]))
+            new_shape.append(np.prod(old_shape[b:e]))
             last_e = e
         new_shape.extend(old_shape[last_e:])
         return self.block_reshape(a, tuple(new_shape))
