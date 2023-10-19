@@ -172,12 +172,13 @@ def truncated_svd(a: AbstractTensor, u_legs: list[int | str] = None, vh_legs: li
     -------
     U, S, Vh
         The tensors U, S, Vh that form the truncated SVD, such that
-        `tdot(U, tdot(S, Vh, 1, 0), -1, 0)` is *aproximately* equal to `a`.
+        `tdot(U, tdot(S, Vh, 1, 0), -1, 0)` is *approximately* equal to `a`.
     err : float
         The relative 2-norm truncation error ``norm(a - U_S_Vh) / norm(a)``.
         This is the (relative) 2-norm weight of the discarded singular values.
     renormalization : float
-        Factor, by which `S` was renormalized.
+        Factor, by which `S` was renormalized, i.e. `norm(S) / norm(a)`, such that
+        ``U @ S @ Vh / renormalization`` has the same norm as `a`.
     """
     U, S, V = svd(a, u_legs=u_legs, vh_legs=vh_legs, new_labels=new_labels, new_vh_leg_dual=new_vh_leg_dual,
                   U_inherits_charge=U_inherits_charge, options=options)
@@ -225,7 +226,7 @@ def truncate_singular_values(S: DiagonalTensor, options) -> Mask:
         Singular values, normalized to ``S.norm() == 1``.
     options : dict-like
         Config with constraints for the truncation, see :cfg:config:`truncation`.
-        If a constraint can not be fullfilled (without violating a previous one), it is ignored.
+        If a constraint can not be fulfilled (without violating a previous one), it is ignored.
         A value ``None`` indicates that the constraint should be ignored.
 
     Returns
