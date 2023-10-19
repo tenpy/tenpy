@@ -20,7 +20,7 @@ implemented here also directly use the :class:`Sweep` class.
 """
 # Copyright 2018-2023 TeNPy Developers, GNU GPLv3
 
-from tenpy.linalg import np_conserved as npc
+from ..linalg import np_conserved as npc
 from .algorithm import Algorithm
 from ..linalg.sparse import NpcLinearOperator, SumNpcLinearOperator, OrthogonalNpcLinearOperator
 from ..networks.mpo import MPOEnvironment
