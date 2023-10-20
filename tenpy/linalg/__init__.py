@@ -15,7 +15,7 @@ which provides the :class:`~tenpy.linalg.tensors.Tensor` class used by the rest 
     tensors
     random_matrix
     sparse
-    matix_operations
+    matrix_operations
 """
 # Copyright 2018-2023 TeNPy Developers, GNU GPLv3
 

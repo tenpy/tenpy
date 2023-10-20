@@ -67,7 +67,7 @@ def join_as_many_as_possible(msgs: Sequence[str], separator: str, priorities: Se
     else:
         order = np.argsort(-np.array(priorities))
 
-    # build arrays whose n-th elemnt represent the resulting length if n+1 msgs are kept
+    # build arrays whose n-th element represent the resulting length if n+1 msgs are kept
     cum_lengths = np.cumsum([len(msgs[n]) for n in order])
     candidate_lengths = cum_lengths + np.arange(1, len(msgs) + 1) * len(separator) + len(fill)
     num_msgs = np.where(candidate_lengths > max_len)[0][0]

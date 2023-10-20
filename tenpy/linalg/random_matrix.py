@@ -166,7 +166,7 @@ def O_close_1(size, a=0.01):
     Returns
     -------
     O : ndarray
-        Orthogonal matrix close to the identiy (for small `a`).
+        Orthogonal matrix close to the identity (for small `a`).
     """
     n, m = size
     assert n == m
@@ -192,7 +192,7 @@ def U_close_1(size, a=0.01):
     Returns
     -------
     U : ndarray
-        Unitary matrix close to the identiy (for small `a`).
+        Unitary matrix close to the identity (for small `a`).
         Eigenvalues are chosen i.i.d. as ``exp(1.j*a*x)`` with `x` uniform in [-1, 1].
     """
     n, m = size

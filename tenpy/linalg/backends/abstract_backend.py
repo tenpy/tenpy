@@ -143,7 +143,7 @@ class AbstractBackend(metaclass=ABCMeta):
 
     def _fuse_spaces(self, symmetry: Symmetry, spaces: list[VectorSpace], _is_dual: bool):
         """Backends may override the behavior of linalg.spaces._fuse_spaces in order to compute
-        their backend-specfic metadata alongside the sectors.
+        their backend-specific metadata alongside the sectors.
 
         Note that the implementation of ``VectorSpace.dual`` assumes that the metadata of the
         resulting dual space is the same as for the original space.
@@ -151,7 +151,7 @@ class AbstractBackend(metaclass=ABCMeta):
         return _fuse_spaces(symmetry=symmetry, spaces=spaces, _is_dual=_is_dual)
 
     def add_leg_metadata(self, leg: VectorSpace) -> VectorSpace:
-        """Add backend-specifc metadata to a leg (modifying it in-place) and returning it.
+        """Add backend-specific metadata to a leg (modifying it in-place) and returning it.
 
         Note that the implementation of ``VectorSpace.dual`` assumes that the metadata of the
         resulting dual space is the same as for the original space.
@@ -542,7 +542,7 @@ class AbstractBackend(metaclass=ABCMeta):
 
     @abstractmethod
     def inv_part_from_flat_block_single_sector(self, block: Block, leg: VectorSpace, dummy_leg: VectorSpace) -> Data:
-        """Data for the invariant part used in ChargedTesnor.from_flat_block_single_sector"""
+        """Data for the invariant part used in ChargedTensor.from_flat_block_single_sector"""
         ...
 
     @abstractmethod
@@ -667,7 +667,7 @@ class AbstractBlockBackend(metaclass=ABCMeta):
         ...
 
     def block_combine_legs(self, a: Block, legs_slices: list[tuple[int]]) -> Block:
-        """no transpose, only reshape ``legs[b:e] for b,e in legs_slicse`` to single legs"""
+        """no transpose, only reshape ``legs[b:e] for b,e in legs_slice`` to single legs"""
         old_shape = self.block_shape(a)
         new_shape = []
         last_e = 0
@@ -800,7 +800,7 @@ class AbstractBlockBackend(metaclass=ABCMeta):
 
     @abstractmethod
     def block_from_mask(self, mask: Block, dtype: Dtype) -> Block:
-        """Return a (M, N) of numbers (floa or complex dtype) from a 1D bool-valued block shape (M,)
+        """Return a (M, N) of numbers (float or complex dtype) from a 1D bool-valued block shape (M,)
         where N is the number of True entries. The result is the coefficient matrix of the projection map."""
         ...
 

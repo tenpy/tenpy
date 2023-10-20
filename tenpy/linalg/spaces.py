@@ -30,7 +30,7 @@ class VectorSpace:
 
     For efficiency we want to use a modified order of the basis, such that::
 
-        - The basis elements that belong to the same sector appear contigously.
+        - The basis elements that belong to the same sector appear contiguously.
           This allows us to directly read-off the blocks that contain the free parameters.
 
         - The sectors are sorted. This makes look-ups more efficient.
@@ -206,7 +206,7 @@ class VectorSpace:
             the independent symmetries. Spaces with a :class:`NoSymmetry` are ignored.
         symmetry: :class:`~tenpy.linalg.groups.Symmetry`, optional
             The resulting symmetry can optionally be passed. We assume without checking that
-            it :meth:`~tenyp.linalg.groups.Symemtry.is_same_symmetry` as the default
+            it :meth:`~tenpy.linalg.groups.Symmetry.is_same_symmetry` as the default
             ``ProductSymmetry.from_nested_factors([s.symmetry for s in independent_descriptions])``.
 
         Returns
@@ -230,7 +230,7 @@ class VectorSpace:
         #  for physical legs of sites, which should not get very large.
         basis = np.concatenate([s.sectors_of_basis for s in independent_descriptions], axis=1)
         if np.any(symmetry.batch_sector_dim(basis) > 1):
-            # TODO I accidentaly assumed abelian symmetries when implementing this...
+            # TODO I accidentally assumed abelian symmetries when implementing this...
             raise NotImplementedError
         is_real = any(s.is_real for s in independent_descriptions)
         if is_real:
@@ -247,7 +247,7 @@ class VectorSpace:
         dim : int
             The dimension of the space.
         symmetry : :class:`~tenpy.linalg.groups.Symmetry`
-            The symmetry of the space. By default, we use `no_symetry`.
+            The symmetry of the space. By default, we use `no_symmetry`.
         is_real, is_dual : bool
             If the space should be real / dual.
         """
@@ -271,7 +271,7 @@ class VectorSpace:
             ``sectors[i_s, :]`` appears ``multiplicities[i_s]`` times.
             If not given, a multiplicity ``1`` is assumed for all `sectors`.
         basis_perm : ndarray, optional
-            The permutation from the desired public basis to the basis secribed by `sectors`
+            The permutation from the desired public basis to the basis described by `sectors`
             and `multiplicities`. Per default the trivial permutation ``[0, 1, 2, ...]`` is used.
         is_real : bool
             If the space is over the real or complex numbers.
@@ -312,7 +312,7 @@ class VectorSpace:
     def sectors_of_basis(self):
         # build in internal basis, then permute
         if np.any(self.symmetry.batch_sector_dim(self.sectors) > 1):
-            # TODO I accidentaly assumed abelian symmetries when implementing this...
+            # TODO I accidentally assumed abelian symmetries when implementing this...
             raise NotImplementedError
         res = np.zeros((self.dim, self.symmetry.sector_ind_len), dtype=int)
         for sect, slc in zip(self.sectors, self.slices):
@@ -363,10 +363,10 @@ class VectorSpace:
             If ``None`` (default) the entire symmetry is dropped and the result has ``no_symmetry``.
             An integer or list of integers assume that `self.symmetry` is a `ProductSymmetry` and
             specify which of its factors to drop.
-        remaining_symmetry : :class:`~tenyp.linalg.groups.Symmetry`, optional
+        remaining_symmetry : :class:`~tenpy.linalg.groups.Symmetry`, optional
             The resulting symmetry can optionally be passed, e.g. to control its name.
-            Should be a :class:`~tenyp.linalg.groups.NoSymmetry` if all symmetries are
-            dropped or :class:`~tenyp.linalg.groups.ProductSymmetry` otherwise.
+            Should be a :class:`~tenpy.linalg.groups.NoSymmetry` if all symmetries are
+            dropped or :class:`~tenpy.linalg.groups.ProductSymmetry` otherwise.
             Is not checked for correctness (TODO or should we?).
     
         Returns
@@ -380,7 +380,7 @@ class VectorSpace:
         elif isinstance(self.symmetry, ProductSymmetry):
             which = to_iterable(which)
             num_factors = len(self.symmetry.factors)
-            # normalize negative indicses to be in range(num_factors)
+            # normalize negative indices to be in range(num_factors)
             for i, w in enumerate(which):
                 if not -num_factors <= w < num_factors:
                     raise ValueError(f'which entry {w} out of bounds for {num_factors} symmetries.')
@@ -433,7 +433,7 @@ class VectorSpace:
         Returns
         -------
         sector_idx : int
-            The index of the correspinding sector,
+            The index of the corresponding sector,
             indicating that the `idx`-th basis element lives in ``self.sectors[sector_idx]``.
         multiplicity_idx : int
             The index "within the sector", in ``range(self.multiplicities[sector_index])``.
@@ -473,7 +473,7 @@ class VectorSpace:
         raise RuntimeError  # sectors should have unique entries, so this should not happen
 
     def sector_multiplicity(self, sector: Sector) -> int:
-        """The multiplicitiy of the given sector.
+        """The multiplicity of the given sector.
 
         Returns 0 if self does not have that sector.
         """
@@ -483,7 +483,7 @@ class VectorSpace:
         return self.multiplicities[idx]
 
     def _non_dual_sector_multiplicity(self, sector: Sector) -> int:
-        """The multiplicitiy of the given _non_dual_sector.
+        """The multiplicity of the given _non_dual_sector.
 
         Returns 0 if self does not have that sector.
         """
@@ -524,7 +524,7 @@ class VectorSpace:
                 return '\n'.join(lines)
 
         # add as many sectors as possible before linewidth is reached
-        # save most recent suggestion in variabel res. if new suggestion is too long, return res.
+        # save most recent suggestion in variable res. if new suggestion is too long, return res.
         res = f'VectorSpace({self.symmetry!r}, ...)'
         if len(res) > printoptions.linewidth:
             return 'VectorSpace(...)'
@@ -767,9 +767,9 @@ class VectorSpace:
         )
         print(f'direct_sum :: {offsets=}  {basis_perm=}')
         sectors = np.concatenate([self._non_dual_sectors, *(o._non_dual_sectors for o in others)])
-        multiplicties = np.concatenate([self.multiplicities, *(o.multiplicities for o in others)])
+        multiplicities = np.concatenate([self.multiplicities, *(o.multiplicities for o in others)])
         res = VectorSpace.from_sectors(symmetry=symmetry, sectors=sectors,
-                                       multiplicities=multiplicties,basis_perm=basis_perm,
+                                       multiplicities=multiplicities,basis_perm=basis_perm,
                                        is_real=is_real)
         res.is_dual = is_dual
         return res
@@ -815,7 +815,7 @@ class ProductSpace(VectorSpace):
          implementation detail, not as a property of the product space, you should have a
          canonical order of pairwise fusions, i.e. a tree.
          I think the only thing people should be told at this level is that the order
-         of :attr:`spaces` has meaning and you shouldnt mess with it. But since that determines
+         of :attr:`spaces` has meaning and you should not mess with it. But since that determines
          the :attr:`basis_perm` of the ProductSpace, this should be clear anyway.
 
     TODO elaborate on basis transformation from uncoupled to coupled basis.
@@ -961,7 +961,7 @@ class ProductSpace(VectorSpace):
         is given by products of the individual ("uncoupled") basis elements, i.e. by elements of
         the form :math:`v_{i_1} \otimes w_{i_2} \otimes \dots \otimes z_{i_n}`.
         In particular, the order for the uncoupled basis does *not*
-        consider :attr:`Vectorspace.basis_perm`, i.e. it is in general not grouped by sectors.
+        consider :attr:`VectorSpace.basis_perm`, i.e. it is in general not grouped by sectors.
         The coupled basis is organized by sectors. See the :class:`ProductSpace` docstring for
         details.
 
@@ -971,7 +971,7 @@ class ProductSpace(VectorSpace):
             A numpy array with shape ``(*space.dim for space in self.spaces, self.dim)``.
             The first axes go over the basis for each of the :attr:`spaces` (in public order).
             The last axis goes over the coupled basis of self.
-            The entries are coefficients of the basis trasnformation such that
+            The entries are coefficients of the basis transformation such that
 
             .. math ::
                 \ket{c} = \sum_{i_1, \dots, i_N} \texttt{trafo[i1, ..., iN]}
@@ -1282,9 +1282,9 @@ def _fuse_spaces(symmetry: Symmetry, spaces: list[VectorSpace], _is_dual: bool
     """This function is called as part of ProductSpace.__init__.
     
     It determines the sectors and multiplicities of the ProductSpace.
-    There is also a verison of this function in the backends, i.e.
+    There is also a version of this function in the backends, i.e.
     :meth:`~tenpy.linalg.backends.abstract_backend.AbstractBackend._fuse_spaces:, which may
-    customize this behavior and in particulat may return metadata, i.e. attributes to be added to
+    customize this behavior and in particular may return metadata, i.e. attributes to be added to
     the ProductSpace.
     This default implementation returns empty metadata ``{}``.
 
@@ -1292,7 +1292,7 @@ def _fuse_spaces(symmetry: Symmetry, spaces: list[VectorSpace], _is_dual: bool
     -------
     sectors : 2D array of int
         The :attr:`VectorSpace._non_dual_sectors`.
-    mutliplicities : 1D array of int
+    multiplicities : 1D array of int
         the :attr:`VectorSpace.multiplicities`.
     fusion_outcomes_sort
         the :attr:`ProductSpace._fusion_outcomes_sort`.

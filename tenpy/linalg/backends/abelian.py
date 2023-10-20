@@ -272,7 +272,9 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
         for block, shape in zip(a.data.blocks, block_shapes):
             expect_shape = (shape[0],) if is_diagonal else tuple(shape)
             assert self.block_shape(block) == expect_shape
-        # check matching dtypes´
+        # check matching dtypes
+        print(f'{a.data.dtype=}')
+        print([block.dtype for block in a.data.blocks])  # FIXME dbg
         assert all(self.block_dtype(block) == a.data.dtype for block in a.data.blocks)
         assert not np.any(a.data.block_inds < 0)
         assert not np.any(a.data.block_inds >= np.array([[leg.num_sectors for leg in a.legs]]))
@@ -362,10 +364,10 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
         # create a grid to select the multi-index sector
         grid = np.indices(spaces_num_sectors, np.intp)
         # grid is an array with shape ``(num_spaces, *spaces_num_sectors)``,
-        # with grid[li, ...] = {np.arange(space_block_numbers[li]) increasing in li-th direcion}
+        # with grid[li, ...] = {np.arange(space_block_numbers[li]) increasing in li-th direction}
         # collapse the different directions into one.
         grid = grid.T.reshape(-1, num_spaces)  # *this* is the actual `reshaping`
-        # *rows* of grid are now all possible cominations of qindices.
+        # *rows* of grid are now all possible combinations of qindices.
         # transpose before reshape ensures that grid.T is np.lexsort()-ed
 
         nblocks = grid.shape[0]  # number of blocks in ProductSpace = np.product(spaces_num_sectors)
@@ -376,7 +378,7 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
         _block_ind_map[:, 2:-1] = grid  # possible combinations of indices
 
         # the block size for given (i1, i2, ...) is the product of ``multiplicities[il]``
-        # andvanced indexing:
+        # advanced indexing:
         # ``grid.T[li]`` is a 1D array containing the qindex `q_li` of leg ``li`` for all blocks
         multiplicities = np.prod([space.multiplicities[gr] for space, gr in zip(spaces, grid.T)],
                                  axis=0)
@@ -455,6 +457,16 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
         res = self.zero_block([leg.dim for leg in a.legs], a.data.dtype)
         for block, block_inds in zip(a.data.blocks, a.data.block_inds):
             slices = [slice(*leg.slices[i]) for i, leg in zip(block_inds, a.legs)]
+            
+            # FIXME debugging
+            import warnings
+            warnings.filterwarnings(action="error", category=np.ComplexWarning)
+            print(a.dtype)
+            print(a.data.dtype)
+            for b in a.data.blocks:
+                print(b.dtype)
+            print(f'{block.dtype=}')
+            
             res[tuple(slices)] = block
         return self.apply_basis_perm(res, a.legs, inv=True)
 
@@ -1534,7 +1546,7 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
         # for missing blocks, i.e. a zero block, the eigenvalues are zero, so we can just skip adding
         # that block to the eigenvalues.
         # for the eigenvectors, we choose the computational basis vectors, i.e. the matrix
-        # representatnion within that block is the identity matrix.
+        # representation within that block is the identity matrix.
         # we initialize all blocks to eye and override those where a has blocks.
         eigvects_data = self.eye_data(legs=a.legs[0:1], dtype=a.dtype)
         eigvals_blocks = []

@@ -55,7 +55,7 @@ def get_backend(symmetry: Symmetry | str = None, block_backend: str = None) -> A
     symmetry : {'no_symmetry', 'abelian', 'nonabelian'} | Symmetry
     block_backend : {None, 'numpy', 'torch', 'tensorflow', 'jax', 'cpu', 'gpu', 'tpu'}
     """
-    # TODO these are a dummys, in the future we should have some mechanism to store the default
+    # TODO these are a dummies, in the future we should have some mechanism to store the default
     # values in some state-ful global config of tenpy
     if symmetry is None:
         symmetry = 'abelian'

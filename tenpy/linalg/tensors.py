@@ -464,12 +464,12 @@ class AbstractTensor(metaclass=ABCMeta):
         For ``DiagonalTensor`` and ``Mask`` we additionally support indexing by a single integer `i`.
         For ``DiagonalTensor``, this returns the diagonal element, i.e. ``diag[i] == diag[i, i]``.
         For ``Mask``, this is the boolean entry that indicates if the ``i-th`` index is preserved
-        or pojected out by the mask, i.e. ``mask[i] == mask[i, j_i]`` where loosely ``j_i = sum(mask[:i])``.
+        or projected out by the mask, i.e. ``mask[i] == mask[i, j_i]`` where loosely ``j_i = sum(mask[:i])``.
         """
         idcs = _parse_idcs(idcs, length=self.num_legs)
         if isinstance(idcs[0], int):
             if not all(isinstance(idx, int) for idx in idcs[1:]):
-                msg = 'Invalid index type. If tensors are indexed by integer, all legs need to be indexed by an intger.'
+                msg = 'Invalid index type. If tensors are indexed by integer, all legs need to be indexed by an integer.'
                 raise IndexError(msg)
             for leg_num, idx in enumerate(idcs):
                 if not -self.legs[leg_num].dim <= idx < self.legs[leg_num].dim:
@@ -538,7 +538,7 @@ class AbstractTensor(metaclass=ABCMeta):
 
     def __truediv__(self, other):
         if not isinstance(other, Number):
-            raise TypeError(f'Tensors can only be divived by scalars, not {type(other)}.') from None
+            raise TypeError(f'Tensors can only be divided by scalars, not {type(other)}.') from None
         try:
             other_inv = 1. / other
         except Exception:
@@ -743,7 +743,7 @@ class Tensor(SymmetricTensor):
         data about the symmetry is contained in the legs.
     backend : :class:`~tenpy.linalg.backends.abstract_backend.AbstractBackend`
     legs : list of :class:`~tenpy.linalg.spaces.VectorSpace`
-        These may be instances of a backend-specifc subclass of :class:`~tenpy.linalg.spaces.VectorSpace`
+        These may be instances of a backend-specific subclass of :class:`~tenpy.linalg.spaces.VectorSpace`
     labels : list of {``None``, str}
     """
 
@@ -819,7 +819,7 @@ class Tensor(SymmetricTensor):
                         shape_kw: str = None, dtype: Dtype = None) -> Tensor:
         """Create a Tensor from a block function.
 
-        This function ceates a tensor by filling the blocks, i.e. the free paramaters of the tensors
+        This function creates a tensor by filling the blocks, i.e. the free parameters of the tensors
         using `func`, which is a function returning backend-specific blocks.
 
         Parameters
@@ -936,7 +936,7 @@ class Tensor(SymmetricTensor):
                         shape_kw: str = None, dtype: Dtype = None) -> Tensor:
         """Create a Tensor from a numpy function.
 
-        This function ceates a tensor by filling the blocks, i.e. the free paramaters of the tensors
+        This function creates a tensor by filling the blocks, i.e. the free parameters of the tensors
         using `func`, which is a function returning numpy arrays, e.g. ``np.ones`` or
         ``np.random.standard_normal``
 
@@ -2113,7 +2113,7 @@ class ChargedTensor(AbstractTensor):
                 raise ValueError('Can not inner with unspecified dummy_leg_state')
             # contract with state on dummy leg of other
             if other.dummy_leg_state is not None:
-                res = backend.block_tdot(res, other.dumm_leg_state, 0, 0)
+                res = backend.block_tdot(res, other.dummy_leg_state, 0, 0)
             elif other.dummy_leg.dim == 1:
                 res = other._dummy_leg_state_item() * backend.block_squeeze_legs(res, [0])
             else:
@@ -2165,7 +2165,7 @@ class ChargedTensor(AbstractTensor):
             invariant_part = invariant_part.permute_legs(permutation)
             return ChargedTensor(invariant_part=invariant_part, dummy_leg_state=self.dummy_leg_state)
         if isinstance(other, ChargedTensor):
-            legs2 = other.get_leg_idcs(legs2)  # make sure we referecne w.r.t. other
+            legs2 = other.get_leg_idcs(legs2)  # make sure we reference w.r.t. other
             assert relabel2 is None or other.invariant_part.labels[-1] not in relabel2
             invariant = self.invariant_part.tdot(other.invariant_part, legs1=legs1, legs2=legs2,
                                                  relabel1=relabel1, relabel2=relabel2)
@@ -2193,7 +2193,7 @@ class ChargedTensor(AbstractTensor):
     # --------------------------------------------
 
     def _dummy_leg_state_item(self) -> float | complex:
-        """If the dummy leg is one-dimensonal, return the single item of the dummy_leg_state.
+        """If the dummy leg is one-dimensional, return the single item of the dummy_leg_state.
         Otherwise raise a ValueError"""
         if self.dummy_leg.dim != 1:
             raise ValueError('Leg is not one-dimensional')
@@ -2352,7 +2352,7 @@ class DiagonalTensor(SymmetricTensor):
         tens : :class:`Tensor`
             Must have two legs. Its diagonal entries ``tens[i, i]`` are used.
         check_offdiagonal : bool
-            If the off-diagonal entries of `tens` shold be checked.
+            If the off-diagonal entries of `tens` should be checked.
         
         Raises
         ------
@@ -2849,7 +2849,7 @@ class Mask(AbstractTensor):
         return cls(data=data, large_leg=large_leg, small_leg=small_leg, backend=backend, labels=labels)
         
     @classmethod
-    def from_flat_numpy(cls, mask: np.ndaray, large_leg: VectorSpace, backend: AbstractBackend = None,
+    def from_flat_numpy(cls, mask: np.ndarray, large_leg: VectorSpace, backend: AbstractBackend = None,
                         labels: list[str | None] = None) -> Mask:
         if backend is None:
             backend = get_backend(symmetry=large_leg.symmetry)
@@ -2996,7 +2996,7 @@ class Mask(AbstractTensor):
                      new_labels: list[str | None] = None) -> Tensor:
         """See :func:`tenpy.linalg.tensors.combine_legs`."""
         msg = 'Converting Mask to full Tensor for `combine_legs`. If this is what you wanted, ' \
-              'explicitly convert via Mask.to_full_tensor() first to supress the warning.'
+              'explicitly convert via Mask.to_full_tensor() first to suppress the warning.'
         warnings.warn(msg, stacklevel=2)
         return self.to_full_tensor().combine_legs(
             *legs, product_spaces=product_spaces, product_spaces_dual=product_spaces_dual,
@@ -3039,19 +3039,19 @@ class Mask(AbstractTensor):
 
     def permute_legs(self, permutation: list[int]) -> Tensor:
         msg = 'Converting Mask to full Tensor for `permute_legs`. If this is what you wanted, ' \
-              'explicitly convert via Mask.to_full_tensor() first to supress the warning.'
+              'explicitly convert via Mask.to_full_tensor() first to suppress the warning.'
         warnings.warn(msg, stacklevel=2)
         return self.to_full_tensor().permute_legs(permutation)
 
     def split_legs(self, legs: list[int | str] = None) -> NoReturn:
         msg = 'Converting Mask to full Tensor for `split_legs`. If this is what you wanted, ' \
-              'explicitly convert via Mask.to_full_tensor() first to supress the warning.'
+              'explicitly convert via Mask.to_full_tensor() first to suppress the warning.'
         warnings.warn(msg, stacklevel=2)
         return self.to_full_tensor().permute_legs(legs)
 
     def squeeze_legs(self,legs: int | str | list[int | str] = None) -> Tensor:
         msg = 'Converting Mask to full Tensor for `squeeze_legs`. If this is what you wanted, ' \
-              'explicitly convert via Mask.to_full_tensor() first to supress the warning.'
+              'explicitly convert via Mask.to_full_tensor() first to suppress the warning.'
         warnings.warn(msg, stacklevel=2)
         return self.to_full_tensor().squeeze_legs(legs)
 
@@ -3199,7 +3199,7 @@ def combine_legs(t: AbstractTensor,
     new_labels : list of str
         A new label for each group of legs.
         By default, the label is given by joining the original labels with dots ``'.'`` and
-        surrounding with parantheses. For example, combining legs ``'vL', 'p0', 'p1'`` results in
+        surrounding with parentheses. For example, combining legs ``'vL', 'p0', 'p1'`` results in
         a leg with label ``'(vL.p0.p1)'``.
     Result
     ------
@@ -3321,7 +3321,7 @@ def norm(t: AbstractTensor, order=None) -> float:
     np.inf      ``max(abs(x))``
     -np.inf     ``min(abs(x))``
     0           ``sum(x != 0) == np.count_nonzero(x)``
-    other       ususal p-norm with p=`order`
+    other       usual p-norm with p=`order`
     ==========  ======================================
 
     Parameters
@@ -3464,7 +3464,7 @@ def elementwise_function(block_func: str, func_kwargs={}, maps_zero_to_zero=Fals
     ----------
     block_func : str
         The name of a :class:`BlockBackend` method that implements the elementwise function on
-        the level of backend-specifc blocks, e.g. ``'block_real'``
+        the level of backend-specific blocks, e.g. ``'block_real'``
         for :meth:`BlockBackend.block_real`.
     func_kwargs : dict
         Additional kwargs for the `block_func`, in addition to any kwargs given to the

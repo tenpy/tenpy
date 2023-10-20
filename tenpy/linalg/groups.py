@@ -182,10 +182,10 @@ class ProductSymmetry(Symmetry):
     """Multiple symmetries.
 
     The allowed sectors are "stacks" (using e.g. :func:`numpy.concatenate`) of sectors for the
-    individual symmetries. For recoveering the individual sectors see :attr:`sector_slices`.
+    individual symmetries. For recovering the individual sectors see :attr:`sector_slices`.
 
-    If all factors are `AbelianGroup` instances, instances of this class will mascerade as
-    instances of `AbelianGroup` too, meeaning they fulfill ``isinstance(s, AbelianGroup)``.
+    If all factors are `AbelianGroup` instances, instances of this class will masquerade as
+    instances of `AbelianGroup` too, meaning they fulfill ``isinstance(s, AbelianGroup)``.
     Same for `GroupSymmetry`.
 
     Attributes
@@ -214,7 +214,7 @@ class ProductSymmetry(Symmetry):
                 flat_factors.append(f)
         self.factors = flat_factors
         for f in flat_factors:
-            assert not isinstance(f, ProductSymmetry)  # avoid unnecesary nesting
+            assert not isinstance(f, ProductSymmetry)  # avoid unnecessary nesting
         if all(f.descriptive_name is not None for f in flat_factors):
             descriptive_name = f'[{", ".join(f.descriptive_name for f in flat_factors)}]'
         else:
@@ -419,10 +419,10 @@ class GroupSymmetry(Symmetry, metaclass=_ABCFactorSymmetryMeta):
     """Base-class for symmetries that are described by a group.
 
     The symmetry is given via a faithful representation on the Hilbert space.
-    Noteable counter-examples are fermionic parity or anyonic grading.
+    Notable counter-examples are fermionic parity or anyonic grading.
 
     Products of of `GroupSymmetry`s are instances described by the `ProductSymmetry` class, which
-    is not a sub- or supeclass of `GroupSymmetry`. Nevertheless, instancechecks can be used to
+    is not a sub- or superclass of `GroupSymmetry`. Nevertheless, instancechecks can be used to
     check if a given `ProductSymmetry` *instance* is a group-symmetry.
     See examples in :class:`AbelianGroup`.
     """

@@ -573,7 +573,8 @@ class GroupedSite(Site):
                 self.add_op(name + labels[i], self.kroneckerproduct(ops), need_JW=need_JW, hc=hc)
             Ids[i] = site.symmetric_ops['Id']
             JW_Ids[i] = site.symmetric_ops['JW']
-   
+
+    # FIXME rename
     def kroneckerproduct(self, ops):
         r"""Return the Kronecker product :math:`op0 \otimes op1` of local operators.
 
@@ -594,7 +595,7 @@ class GroupedSite(Site):
             backend = get_same_backend(*ops)
             # note that block_kron is associative, order does not matter
             diag = reduce(backend.block_kron, (op.diag_block for op in ops))
-            return DiagonalTensor.from_diag_block(diag, self.leg, backend=backend, labels=['p', 'p*'])
+            return DiagonalTensor.from_diag(diag, self.leg, backend=backend, labels=['p', 'p*'])
         for i, op in enumerate(ops):
             if isinstance(op, DiagonalTensor):
                 ops[i] = op.as_Tensor()
@@ -882,7 +883,7 @@ class SpinHalfSite(Site):
             ops = dict(Svec=ChargedTensor(Svec_inv))
         else:
             # TODO also add Svec, with a 3-dim dummy leg
-            Sz = DiagonalTensor.from_diag_block([.5, -.5], leg, backend=backend, labels=['p', 'p*'])
+            Sz = DiagonalTensor.from_diag([.5, -.5], leg, backend=backend, labels=['p', 'p*'])
             ops = dict(Sz=Sz,
                        Sp=[[0., 1.], [0., 0.]],  # == Sx + i Sy
                        Sm=[[0., 0.], [1., 0.]])  # == Sx - i Sy
@@ -985,7 +986,7 @@ class SpinSite(Site):
             ops = dict(Svec=ChargedTensor(Svec_inv))
         else:
             # TODO also add Svec, with a 3-dim dummy leg
-            Sz = DiagonalTensor.from_diag_block(two_Sz / 2., leg, backend=backend, labels=['p', 'p*'])
+            Sz = DiagonalTensor.from_diag(two_Sz / 2., leg, backend=backend, labels=['p', 'p*'])
             ops=dict(Sz=Sz, Sp=Sp, Sm=Sm)
         # operators: Sx, Sy
         if conserve == 'Sz':
@@ -1067,14 +1068,14 @@ class FermionSite(Site):
             raise ValueError(f'invalid `conserve`: {conserve}')
         if backend is None:
             backend = get_backend(symmetry=leg.symmetry)
-        JW = DiagonalTensor.from_diag_block([1., -1.], leg, backend=backend, labels=['p', 'p*'])
+        JW = DiagonalTensor.from_diag([1., -1.], leg, backend=backend, labels=['p', 'p*'])
         C = np.array([[0., 1.], [0., 0.]])
         Cd = np.array([[0., 0.], [1., 0.]])
         N_diag = np.array([0., 1.])
-        N = DiagonalTensor.from_diag_block(N_diag, leg, backend=backend, labels=['p', 'p*'])
-        dN = DiagonalTensor.from_diag_block(N_diag - filling, leg, backend=backend,
+        N = DiagonalTensor.from_diag(N_diag, leg, backend=backend, labels=['p', 'p*'])
+        dN = DiagonalTensor.from_diag(N_diag - filling, leg, backend=backend,
                                             labels=['p', 'p*'])
-        dNdN = DiagonalTensor.from_diag_block((N_diag - filling) ** 2, leg, backend=backend,
+        dNdN = DiagonalTensor.from_diag((N_diag - filling) ** 2, leg, backend=backend,
                                               labels=['p', 'p*'])
         ops = dict(JW=JW, C=C, Cd=Cd, N=N, dN=dN, dNdN=dNdN)
         self.filling = filling

@@ -2,7 +2,7 @@
 
 Some linear algebra algorithms, e.g. Lanczos, do not require the full representations of a linear
 operator, but only the action on a vector, i.e., a matrix-vector product `matvec`. Here we define
-the strucuture of such a general operator, :class:`TenpyLinearOperator`, as it is used in our own
+the structure of such a general operator, :class:`TenpyLinearOperator`, as it is used in our own
 implementations of these algorithms (e.g., :mod:`~tenpy.linalg.krylov_based`). Moreover, the
 :class:`FlatLinearOperator` allows to use all the scipy sparse methods by providing functionality
 to convert flat numpy arrays to and from tenpy tensors.
@@ -229,7 +229,7 @@ class ProjectedLinearOperator(LinearOperatorWrapper):
     the extremal eigenvectors among those that are orthogonal to the :attr:`ortho_vecs`.
     In previous versions of tenpy, this behavior was achieved by an argument called `orthogonal_to`.
     If this is done, at least for krylov-based eigensolvers such as lanczos, the penalty should be chosen
-    such that the `ortho_vecs` are somwhere in the bulk of the spectrum.
+    such that the `ortho_vecs` are somewhere in the bulk of the spectrum.
     This is because lanczos has best convergence for the extremal eigenvalues and we want to converge
     the solutions well, not the `ortho_vecs`.
     E.g. for a typical Hamiltonian with a spectrum symmetric around zero, ``project_operator=True``
@@ -522,7 +522,7 @@ class NumpyArrayLinearOperator(ScipyLinearOperator):
             #  We need to work with tensors which do not fulfill the charge rule.
             #  I.e. they are not confined to live in the trivial sector of their parent space
             #  but can have components in all of its sectors.
-            #  We could emulate this behaviour by using a ChargedTensor that has as a dummy leg
+            #  We could emulate this behavior by using a ChargedTensor that has as a dummy leg
             #  all sectors of the self.domain, with multiplicities all 1 and a state [1, 1, ..., 1]
             #  One way to make conversion flat_array <-> such ChargedTensor work would be to
             #  "stack" ChargedTensors?
@@ -572,7 +572,7 @@ class NumpyArrayLinearOperator(ScipyLinearOperator):
         num_ev : int
             Number of eigenvalues/vectors to look for.
         max_num_ev : int
-            :func:`scipy.sparse.linalg.speigs` somtimes raises a NoConvergenceError for small
+            :func:`scipy.sparse.linalg.speigs` sometimes raises a NoConvergenceError for small
             `num_ev`, which might be avoided by increasing `num_ev`. As a work-around,
             we try it again in the case of an error, just with larger `num_ev` up to `max_num_ev`.
             ``None`` defaults to ``num_ev + 2``.
@@ -598,7 +598,7 @@ class NumpyArrayLinearOperator(ScipyLinearOperator):
         Returns
         -------
         eta : 1D ndarray
-            The eigenvalues, sorted accoding to `which`.
+            The eigenvalues, sorted according to `which`.
         w : list of :class:`~tenpy.linalg.tensors.Tensor` or :class:`~tenpy.linalg.tensors.ChargedTensor`
             The corresponding eigenvectors as tensors.
         """
@@ -629,7 +629,7 @@ class NumpyArrayLinearOperator(ScipyLinearOperator):
         if self._charge_sector is not None:
             vecs = [self.flat_array_to_tensor(A[:, j]) for j in range(A.shape[1])]
         else:
-            # TODO again this is comlicated. can and should select a single charge sector here.
+            # TODO again this is complicated. can and should select a single charge sector here.
             raise NotImplementedError
 
         perm = argsort(eta, which)

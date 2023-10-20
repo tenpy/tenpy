@@ -121,7 +121,7 @@ class AbstractNonabelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
                     Y = self.block_conj(self.fusion_tree_to_block(splitting_tree))  # [a1,...,aM,c]
                     # symmetric tensors are the identity on the coupled sectors; so we can contract
                     symmetry_data = self.block_tdot(Y, X, [-1], [-1])  # [a1,...,aM , b1,...,bN]
-                    # kron into combined indeces [(a1,j1), ..., (aM,jM) , (b1,k1),...,(bN,kN)]
+                    # kron into combined indices [(a1,j1), ..., (aM,jM) , (b1,k1),...,(bN,kN)]
                     contribution = self.block_kron(symmetry_data, degeneracy_data)
 
                     # TODO: get_slice implementation?
@@ -470,7 +470,7 @@ def all_fusion_trees(space: VectorSpace, coupled: Sector = None) -> Iterator[Fus
         for coupled in coupled_sectors(space):
             yield from all_fusion_trees(space, coupled=coupled)
     else:
-        # TODO double checs this is the right spaces attribute!
+        # TODO double check this is the right spaces attribute!
         for uncoupled in space.sectors:
             yield from fusion_trees(uncoupled, coupled)
 
