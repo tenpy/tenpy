@@ -273,8 +273,6 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
             expect_shape = (shape[0],) if is_diagonal else tuple(shape)
             assert self.block_shape(block) == expect_shape
         # check matching dtypes
-        print(f'{a.data.dtype=}')
-        print([block.dtype for block in a.data.blocks])  # FIXME dbg
         assert all(self.block_dtype(block) == a.data.dtype for block in a.data.blocks)
         assert not np.any(a.data.block_inds < 0)
         assert not np.any(a.data.block_inds >= np.array([[leg.num_sectors for leg in a.legs]]))
@@ -457,16 +455,6 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
         res = self.zero_block([leg.dim for leg in a.legs], a.data.dtype)
         for block, block_inds in zip(a.data.blocks, a.data.block_inds):
             slices = [slice(*leg.slices[i]) for i, leg in zip(block_inds, a.legs)]
-            
-            # FIXME debugging
-            import warnings
-            warnings.filterwarnings(action="error", category=np.ComplexWarning)
-            print(a.dtype)
-            print(a.data.dtype)
-            for b in a.data.blocks:
-                print(b.dtype)
-            print(f'{block.dtype=}')
-            
             res[tuple(slices)] = block
         return self.apply_basis_perm(res, a.legs, inv=True)
 
@@ -1618,7 +1606,6 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
             if tensor.legs[0].basis_perm is not None:
                 # see comment in to_flat_block_trivial_sector
                 perm = np.argsort(tensor.legs[0].basis_perm[slice(*tensor.legs[0].slices[bi])])
-                print(f'inv_part_to_flat_block_single_sector : {bi=} {perm=}')
                 res = self.apply_leg_permutations(res, [perm])
             return res
         elif num_blocks == 0:

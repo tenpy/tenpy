@@ -765,7 +765,6 @@ class VectorSpace:
         basis_perm = np.concatenate(
             [self.basis_perm] + [o.basis_perm + n for o, n in zip(others, offsets)]
         )
-        print(f'direct_sum :: {offsets=}  {basis_perm=}')
         sectors = np.concatenate([self._non_dual_sectors, *(o._non_dual_sectors for o in others)])
         multiplicities = np.concatenate([self.multiplicities, *(o.multiplicities for o in others)])
         res = VectorSpace.from_sectors(symmetry=symmetry, sectors=sectors,
