@@ -647,8 +647,8 @@ def test_almost_equal(tensor_rng, np_random):
     leg = t1.legs[0]
     data1 = np_random.random(leg.dim)
     data2 = data1 + 1e-7 * np_random.random(leg.dim)
-    t1 = tensors.DiagonalTensor.from_diag_numpy(data1, leg)
-    t2 = tensors.DiagonalTensor.from_diag_numpy(data2, leg)
+    t1 = tensors.DiagonalTensor.from_diag(data1, leg)
+    t2 = tensors.DiagonalTensor.from_diag(data2, leg)
     assert tensors.almost_equal(t1, t2)
     assert not tensors.almost_equal(t1, t2, atol=1e-10, rtol=1e-10)
 
@@ -781,7 +781,7 @@ def test_elementwise_functions(vector_space_rng, np_random, function, data_imag)
     data = np_random.random((leg.dim,))
     if data_imag > 0:
         data = data + data_imag * np_random.random((leg.dim,))
-    tens = tensors.DiagonalTensor.from_diag_numpy(diag=data, first_leg=leg)
+    tens = tensors.DiagonalTensor.from_diag(diag=data, first_leg=leg)
 
     print('scalar input')
     res = tp_func(data[0])

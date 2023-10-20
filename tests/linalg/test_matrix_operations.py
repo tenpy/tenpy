@@ -191,7 +191,7 @@ def test_power_series_funcs(vector_space_rng, tensor_rng, np_random, func, mode,
         data = np_random.random((leg.dim,))
         if not real:
             data = data + 1.j * np_random.random((leg.dim,))
-        tens = tensors.DiagonalTensor.from_diag_numpy(diag=data, first_leg=leg)
+        tens = tensors.DiagonalTensor.from_diag(diag=data, first_leg=leg)
         res = tp_func(tens)
         res.test_sanity()
         res = res.to_numpy_ndarray()

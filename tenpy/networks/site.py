@@ -1238,7 +1238,7 @@ class SpinHalfFermionSite(Site):
         ops = dict(JW=JW, NuNd=NuNd, Ntot=Ntot, dN=dN)
         if conserve_S != 'Stot':
             ops.update(JWu=JWu, JWd=JWd, Nu=Nu, Nd=Nd, Sz=Sz)
-        ops = {name: DiagonalTensor.from_diag_numpy(op, leg, backend=backend, labels=['p', 'p*'])
+        ops = {name: DiagonalTensor.from_diag(op, leg, backend=backend, labels=['p', 'p*'])
                for name, op in ops.items()}
         # sym / gen[1] operators : Cu, Cdu, Cd, Cdd, Sp, Sm
         if conserve_S != 'Stot':
@@ -1394,7 +1394,7 @@ class SpinHalfHoleSite(Site):
         ops = dict(JW=JW, Ntot=Ntot, dN=dN)
         if conserve_S != 'Stot':
             ops.update(JWu=JWu, JWd=JWd, Nu=Nu, Nd=Nd, Sz=Sz)
-        ops = {name: DiagonalTensor.from_diag_numpy(op, leg, backend=backend, labels=['p', 'p*'])
+        ops = {name: DiagonalTensor.from_diag(op, leg, backend=backend, labels=['p', 'p*'])
                for name, op in ops.items()}
         # sym / gen[1] operators : Cu, Cdu, Cd, Cdd, Sp, Sm
         if conserve_S != 'Stot':
@@ -1508,7 +1508,7 @@ class BosonSite(Site):
             backend = get_backend(symmetry=leg.symmetry)
         # diagonal operators
         ops = dict(N=N, NN=N ** 2, dN=(N - filling), dNdN=(N - filling) ** 2, P=1. - 2. * (N % 2))
-        ops = {name: DiagonalTensor.from_diag_numpy(op, leg, backend=backend, labels=['p', 'p*'])
+        ops = {name: DiagonalTensor.from_diag(op, leg, backend=backend, labels=['p', 'p*'])
                for name, op in ops.items()}
         # remaining ops: B, Bd
         B = np.zeros([d, d], dtype=float)
@@ -1672,7 +1672,7 @@ class ClockSite(Site):
         Zhc = Z.conj()
         Zphc = 2. * np.cos(2. * np.pi * np.arange(q, dtype=np.complex128) / q)
         ops = dict(Z=Z, Zhc=Zhc, Zphc=Zphc)
-        ops = {name: DiagonalTensor.from_diag_numpy(op, leg, backend=backend, labels=['p', 'p*'])
+        ops = {name: DiagonalTensor.from_diag(op, leg, backend=backend, labels=['p', 'p*'])
                for name, op in ops.items()}
         # build operators X, Xhc
         X = np.eye(q, k=1) + np.eye(q, k=1-q)
