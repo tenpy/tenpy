@@ -882,7 +882,8 @@ class Tensor(SymmetricTensor):
         ----------
         block : Block-like
             The data to be converted to a Tensor as a backend-specific block or some data that
-            can be converted using :meth:`AbstractBlockBackend.as_block`.
+            can be converted using :meth:`AbstractBlockBackend.as_block`. This includes e.g. nested python iterables
+            or numpy arrays.
         legs : list of :class:`~tenpy.linalg.spaces.VectorSpace`, optional
             The vectorspaces associated with legs of the tensors. This specifies the symmetry.
         backend : :class:`~tenpy.linalg.backends.abstract_backend.AbstractBackend`, optional
@@ -1641,7 +1642,8 @@ class ChargedTensor(AbstractTensor):
         ----------
         block :
             The data to be converted, a backend-specific block or some data that
-            can be converted using :meth:`AbstractBlockBackend.as_block`.
+            can be converted using :meth:`AbstractBlockBackend.as_block`. This includes e.g.
+            nested python iterables or numpy arrays.
         legs : list of :class:`~tenpy.linalg.spaces.VectorSpace`, optional
             The vectorspaces associated with legs of the tensors. Contains symmetry data.
             Does not contain the dummy leg.
@@ -2299,8 +2301,19 @@ class DiagonalTensor(SymmetricTensor):
         return res
 
     @classmethod
-    def from_diag_block(cls, diag: Block, first_leg: VectorSpace, second_leg_dual: bool = True,
-                        backend=None, labels: list[str | None] = None) -> DiagonalTensor:
+    def from_diag(cls, diag: Block, first_leg: VectorSpace, second_leg_dual: bool = True,
+                  backend=None, labels: list[str | None] = None) -> DiagonalTensor:
+        """Convert a dense 1D block containing the diagonal entries to a DiagonalTensor.
+
+        Parameters
+        ----------
+        diag : Block-like
+            The diagonal entries as a backend-specific block or some data that can be converted
+            using :meth:`AbstractBlockBackend.as_block`. This includes e.g. nested python iterables
+            or numpy arrays.
+        first_leg, second_leg_dual, backend, labels
+            Same as in constructor of :class:`DiagonalTensor`.
+        """
         if backend is None:
             backend = get_backend(first_leg.symmetry)
         diag = backend.as_block(diag)
@@ -2308,14 +2321,6 @@ class DiagonalTensor(SymmetricTensor):
         data = backend.diagonal_from_block(diag, leg=first_leg)
         return cls(data=data, first_leg=first_leg, second_leg_dual=second_leg_dual, backend=backend,
                    labels=labels)
-
-    @classmethod
-    def from_diag_numpy(cls, diag: np.ndarray, first_leg: VectorSpace, second_leg_dual: bool = True,
-                        backend=None, labels: list[str | None] = None) -> DiagonalTensor:
-        if backend is None:
-            backend = get_backend(first_leg.symmetry)
-        return cls.from_diag_block(diag=backend.block_from_numpy(diag), first_leg=first_leg,
-                                   second_leg_dual=second_leg_dual, backend=backend, labels=labels)
 
     @classmethod
     def from_numpy_func(cls, func, first_leg: VectorSpace, second_leg_dual: bool = True,
