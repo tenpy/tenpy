@@ -2868,7 +2868,7 @@ class Mask(AbstractTensor):
         This function determines if this action is the same."""
         raise NotImplementedError  # TODO
 
-    def to_full_tensor(self, dtype=Dtype.float64) -> Tensor:
+    def as_Tensor(self, dtype=Dtype.float64) -> Tensor:
         return Tensor(
             data=self.backend.full_data_from_mask(self, dtype=dtype),
             legs=self.legs, backend=self.backend, labels=self.labels
