@@ -9,8 +9,8 @@ from .tensors import DiagonalTensor, AbstractTensor, Tensor, Mask, ChargedTensor
 from ..tools.misc import inverse_permutation, to_iterable
 from ..tools.params import asConfig
 
-__all__ = ['svd', 'svd_apply_mask', 'truncated_svd', 'truncate_singular_values', 'qr', 'svd_split',
-           'pinv', 'eigh', 'leg_bipartition', 'exp', 'log']
+__all__ = ['svd', 'svd_apply_mask', 'truncated_svd', 'truncate_singular_values', 'qr', 'lq',
+           'svd_split', 'pinv', 'eigh', 'leg_bipartition', 'exp', 'log']
 
 
 def svd(a: AbstractTensor, u_legs: list[int | str] = None, vh_legs: list[int | str] = None,
@@ -326,6 +326,10 @@ def qr(a: AbstractTensor, q_legs: list[int | str] = None, r_legs: list[int | str
         TODO what is the intuitive default? -> match convention with SVD
     full: bool
         Whether the full QR decomposition should be computed
+
+    See Also
+    --------
+    lq
     """
     if not isinstance(a, Tensor):
         raise NotImplementedError  # TODO ChargedTensor support
@@ -349,6 +353,57 @@ def qr(a: AbstractTensor, q_legs: list[int | str] = None, r_legs: list[int | str
     Q.set_labels([a_labels[n] for n in q_idcs] + [new_labels[0]])
     R.set_labels([new_labels[1], *[a_labels[n] for n in r_idcs]])
     return Q, R
+
+
+def lq(a: AbstractTensor, l_legs: list[int | str] = None, q_legs: list[int | str] = None,
+       new_labels: tuple[str, str] = [None, None], new_l_leg_dual: bool = False,
+       full: bool = False):
+    """LQ decomposition of a tensor, viewed as a linear map.
+
+    TODO list properties, link to a central explanation of leg_bipartition. Same in QR.
+
+    Parameters
+    ----------
+    a : Tensor
+        The tensor to decompose
+    l_legs :
+        Which of the legs belong to "matrix rows" and end up as legs of L.
+    q_legs :
+        Which of the legs belong to "matrix columns" and end up as legs of Q.
+    new_labels : tuple[str, str], optional
+        Labels for the new legs on L and Q.
+    new_l_leg_dual: bool
+        Whether the new leg on L will be dual or not. This is purely conventional.
+        TODO what is the intuitive default? -> match convention with SVD
+    full: bool
+        Whether the full LQ decomposition should be computed
+
+    See Also
+    --------
+    qr
+    """
+    if not isinstance(a, Tensor):
+        raise NotImplementedError  # TODO ChargedTensor support
+    
+    a_labels = a.labels
+    l_idcs, q_idcs = leg_bipartition(a, l_legs, q_legs)
+    need_combine = (len(q_idcs) > 1 or len(l_idcs) > 1)
+    # if needed, transpose to [(q_legs), (l_legs)]
+    if need_combine:
+        a = a.combine_legs(q_idcs, l_idcs, new_axes=[0, 1])
+    elif q_idcs[0] == 1:  # this implies q_idcs == [1] and l_idcs == [0]
+        a = a.permute_legs([1, 0])
+
+    q_data, r_data, new_leg = a.backend.qr(a, new_r_leg_dual=new_l_leg_dual, full=full)
+    # transpose back, since we build the LQ from RQ of a.T
+    Q = Tensor(q_data, legs=[a.legs[0], new_leg.dual], backend=a.backend).permute_legs([1, 0])
+    L = Tensor(r_data, legs=[new_leg, a.legs[1]], backend=a.backend).permute_legs([1, 0])
+    if need_combine:
+        Q = Q.split_legs(1)
+        L = L.split_legs(0)
+    L.set_labels([a_labels[n] for n in l_idcs] + [new_labels[0]])
+    Q.set_labels([new_labels[1]] + [a_labels[n] for n in q_idcs])
+    return L, Q
 
 
 def svd_split(a: AbstractTensor, legs1: list[int | str] = None, legs2: list[int | str] = None,

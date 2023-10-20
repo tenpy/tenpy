@@ -126,6 +126,45 @@ def test_qr(tensor_rng, new_r_leg_dual, full):
         # TODO should we check properties of R...?
 
 
+@pytest.mark.parametrize(['new_l_leg_dual', 'full'],
+                         list(zip([True, False], [True, False])))
+def test_lq(tensor_rng, new_l_leg_dual, full):
+    T: tensors.Tensor = tensor_rng(labels=['l1', 'r2', 'l2', 'r1'], max_block_size=3)
+
+    for comment, l_legs, q_legs in [
+        ('all labelled', ['l1', 'l2'], ['r1', 'r2']),
+        ('all numbered', [2, 0], [1, 3]),
+        ('Q labelled', ['l1', 'l2'], None),
+        ('R numbered', None, [1, 3]),
+    ]:
+        print(comment)
+        L, Q = matrix_operations.lq(T, l_legs=l_legs, q_legs=q_legs, new_labels=['q*', 'q'],
+                                    new_l_leg_dual=new_l_leg_dual, full=full)
+        L.test_sanity()
+        Q.test_sanity()
+        if l_legs is None:
+            expect_L_labels = ['l1', 'l2', 'q*']  # in order of appearance on T
+        else:
+            expect_L_labels = [T.labels[n] for n in T.get_leg_idcs(l_legs)] + ['q*']
+        if q_legs is None:
+            expect_Q_labels = ['q', 'r2', 'r1']  # in order of appearance on T
+        else:
+            expect_Q_labels = ['q'] + [T.labels[n] for n in T.get_leg_idcs(q_legs)]
+        assert L.labels == expect_L_labels
+        assert Q.labels == expect_Q_labels
+        # T == L @ Q ?
+        assert tensors.almost_equal(T, tensors.tdot(L, Q, 'q*', 'q'))
+        # Q isometric?
+        Qd_Q = tensors.tdot(Q.conj(), Q, ['r1*', 'r2*'], ['r1', 'r2'])
+        assert tensors.almost_equal(Qd_Q, tensors.eye_like(Qd_Q))
+        if full:
+            # Q unitary?
+            Q_Qd = tensors.tdot(Q, Q.conj(), 'q', 'q*')
+            expect = tensors.Tensor.eye(Q.get_legs(['r1', 'r2']), backend=T.backend,
+                                        labels=['r1', 'r2', 'r1*', 'r2*'])
+            assert tensors.almost_equal(Q_Qd, expect)
+
+
 @pytest.mark.parametrize('real', [True, False])
 def test_eigh(tensor_rng, vector_space_rng, real):
     a = vector_space_rng()
