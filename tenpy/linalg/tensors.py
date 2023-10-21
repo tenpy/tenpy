@@ -30,10 +30,10 @@ from ..tools.string import vert_join
 
 __all__ = ['Shape', 'AbstractTensor', 'SymmetricTensor', 'Tensor', 'ChargedTensor',
            'DiagonalTensor', 'Mask', 'add_trivial_leg', 'almost_equal', 'combine_legs', 'conj',
-           'detect_sectors_from_block', 'flip_leg_duality', 'hconj', 'inner', 'is_scalar', 'norm',
-           'outer', 'permute_legs', 'split_legs', 'squeeze_legs', 'tdot', 'trace', 'zero_like',
-           'eye_like', 'angle', 'real', 'imag', 'real_if_close', 'sqrt', 'get_same_backend',
-           'tensor_from_block']
+           'detect_sectors_from_block', 'entropy', 'flip_leg_duality', 'hconj', 'inner',
+           'is_scalar', 'norm', 'outer', 'permute_legs', 'split_legs', 'squeeze_legs', 'tdot',
+           'trace', 'zero_like', 'eye_like', 'angle', 'real', 'imag', 'real_if_close', 'sqrt',
+           'get_same_backend', 'tensor_from_block']
 
 # svd, qr, eigen, exp, log, ... are implemented in matrix_operations.py
 
@@ -3240,6 +3240,39 @@ def detect_sectors_from_block(block: Block, legs: list[VectorSpace], backend: Ab
     idcs = backend.block_abs_argmax(block)
     sectors = [leg.sectors[leg.parse_index(i)[0]] for leg, i in zip(legs, idcs)]
     return np.stack(sectors, axis=0)
+
+
+def entropy(p: DiagonalTensor | Sequence[float], n: float = 1):
+    r"""Entropy of a probability distribution.
+
+    Assumes that `p` is a normalized (``sum(p) == 1``) probability distribution (real, non-negative).
+
+    Parameters
+    ----------
+    p : :class:`DiagonalTensor` | iterable of float
+        A normalized distribution.
+    n : 1 | float | np.inf
+        Selects the entropy, see below.
+
+    Returns
+    -------
+    entropy : float
+        Shannon-entropy :math:`-\sum_i p_i \log(p_i)` (n=1) or
+        Renyi-entropy :math:`\frac{1}{1-n} \log(\sum_i p_i^n)` (n != 1)
+        of the distribution `p`.
+    """
+    if isinstance(p, DiagonalTensor):
+        p = p.diag_numpy
+    else:
+        p = np.array(p)
+    assert len(p.shape) == 1
+    p = p[p > 1e-30]  # for stability reasons / to avoid NaN in log
+    if n == 1:
+        return -np.inner(np.log(p), p)
+    elif n == np.inf:
+        return -np.log(np.max(p))
+    else:  # general n != 1, inf
+        return np.log(np.sum(p**n)) / (1. - n)
 
 
 def flip_leg_duality(t: AbstractTensor, which_leg: int | str, *more: int | str) -> AbstractTensor:
