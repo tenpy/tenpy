@@ -550,7 +550,8 @@ class VectorSpace:
                 mults[j + 1:j + 1] = ['...']
             lines[1] = f'{indent}sectors={format_like_list(sectors)},'
             lines[2] = f'{indent}multiplicities={format_like_list(mults)}'
-        raise RuntimeError  # the above return should always trigger
+            res = '\n'.join(lines)
+        return res
 
     def __str__(self):
         return self._debugging_str(use_private_sectors=False)

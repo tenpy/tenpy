@@ -2473,7 +2473,7 @@ class DiagonalTensor(SymmetricTensor):
 
         if is_bool_valued:
             return Mask(data, large_leg=self.legs[0], small_leg=None, backend=backend, labels=self.labels)
-        return DiagonalTensor(data, first_leg=self.first_leg, second_leg_dual=self.second_leg_dual,
+        return DiagonalTensor(data, first_leg=self.legs[0], second_leg_dual=self.second_leg_dual,
                               backend=backend, labels=labels)
 
     def _elementwise_unary(self, func, func_kwargs={}, maps_zero_to_zero: bool = False) -> DiagonalTensor:

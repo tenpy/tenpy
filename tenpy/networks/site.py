@@ -574,7 +574,6 @@ class GroupedSite(Site):
             Ids[i] = site.symmetric_ops['Id']
             JW_Ids[i] = site.symmetric_ops['JW']
 
-    # FIXME rename
     def kroneckerproduct(self, ops):
         r"""Return the Kronecker product :math:`op0 \otimes op1` of local operators.
 

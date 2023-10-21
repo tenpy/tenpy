@@ -194,7 +194,7 @@ def truncated_svd(a: AbstractTensor, u_legs: list[int | str] = None, vh_legs: li
     return U, S, V, err, renormalize
     
 
-def truncate_singular_values(S: DiagonalTensor, options) -> Mask:
+def truncate_singular_values(S: DiagonalTensor, options) -> tuple[Mask, float, float]:
     r"""Given *normalized* singular values, determine which to keep.
 
     Options
