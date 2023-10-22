@@ -870,13 +870,13 @@ def _eig_based_svd(A, need_U: bool = True, need_Vd: bool = True, inner_labels=[N
         Vd = None
         A_Ahc = npc.tensordot(A, A.conj(), [1, 1])
         L, U = npc.eigh(A_Ahc, sort='>')
-        S = np.sqrt(np.abs(L))  # abs to avoid `nan` due to accidentially negative values close to zero
+        S = np.sqrt(np.abs(L))  # abs to avoid `nan` due to accidentally negative values close to zero
         U = U.ireplace_label('eig', inner_labels[0])
     elif need_Vd:
         U = None
         Ahc_A = npc.tensordot(A.conj(), A, [0, 0])
         L, V = npc.eigh(Ahc_A, sort='>')
-        S = np.sqrt(np.abs(L))  # abs to avoid `nan` due to accidentially negative values close to zero
+        S = np.sqrt(np.abs(L))  # abs to avoid `nan` due to accidentally negative values close to zero
         Vd = V.iconj().itranspose().ireplace_label('eig*', inner_labels[1])
     else:
         U = None
@@ -887,7 +887,7 @@ def _eig_based_svd(A, need_U: bool = True, need_Vd: bool = True, inner_labels=[N
         else:
             A2 = npc.tensordot(A.conj(), A, [1, 0])
         L = npc.eigvalsh(A2)
-        S = np.sqrt(np.abs(L))  # abs to avoid `nan` due to accidentially negative values close to zero
+        S = np.sqrt(np.abs(L))  # abs to avoid `nan` due to accidentally negative values close to zero
 
     if trunc_params is not None:
         piv, renormalize, trunc_err = truncate(S, trunc_params)

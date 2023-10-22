@@ -183,7 +183,7 @@ def truncated_svd(a: AbstractTensor, u_legs: list[int | str] = None, vh_legs: li
     U, S, V = svd(a, u_legs=u_legs, vh_legs=vh_legs, new_labels=new_labels, new_vh_leg_dual=new_vh_leg_dual,
                   U_inherits_charge=U_inherits_charge, options=options)
     S_norm = S.norm()
-    mask, new_norm, err = truncate_singular_values(S / S_norm, options=truncation_options)
+    mask, err, new_norm = truncate_singular_values(S / S_norm, options=truncation_options)
     U, S, V = svd_apply_mask(U, S, V, mask)
     if normalize_to is None:
         renormalize = 1
@@ -233,12 +233,12 @@ def truncate_singular_values(S: DiagonalTensor, options) -> tuple[Mask, float, f
     -------
     mask : Mask
         A mask, indicating which of the singular values to keep
-    new_norm : float
-        The norm of S after truncation
     err : float
         the truncation error introduced, i.e. the norm(S_discarded) = sqrt(\sum_{i=k}^{N} S_i^2).
         In the context of truncated SVD, this is the relative error in the 2-norm,
         i.e. ``norm(T - T_approx) / norm(T)``.
+    new_norm : float
+        The norm of S after truncation
     """
     options = asConfig(options, "truncation")
     # by default, only truncate values which are much closer to zero than machine precision.
@@ -303,7 +303,7 @@ def truncate_singular_values(S: DiagonalTensor, options) -> tuple[Mask, float, f
     new_norm = np.linalg.norm(S_np[mask])
     err = np.linalg.norm(S_np[np.logical_not(mask)])
     mask = Mask.from_flat_numpy(mask, large_leg=S.legs[0], backend=S.backend)
-    return mask, new_norm, err
+    return mask, err, new_norm
 
 
 def qr(a: AbstractTensor, q_legs: list[int | str] = None, r_legs: list[int | str] = None,
