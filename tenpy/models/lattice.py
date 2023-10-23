@@ -58,7 +58,7 @@ class Lattice:
     The **MPS index** `i` corresponds thus to the lattice sites given by
     ``(x_0, ..., x_{dim-1}, u) = tuple(self.order[i])``.
     Infinite boundary conditions of the MPS repeat in the first spatial direction of the lattice,
-    i.e., if the site at ``(x_0, x_1, ..., x_{dim-1},u)`` has MPS index `i`, the site at
+    i.e., if the site at ``(x_0, x_1, ..., x_{dim-1},u)`` has MPS index `i`, the site
     at ``(x_0 + Ls[0], x_1, ..., x_{dim-1}, u)`` corresponds to MPS index ``i + N_sites``.
     Use :meth:`mps2lat_idx` and :meth:`lat2mps_idx` for conversion of indices.
     The function :meth:`mps2lat_values` performs the necessary reshaping and re-ordering from
@@ -206,7 +206,7 @@ class Lattice:
             if name in self.pairs:
                 raise ValueError("{0!s} sepcified twice!".format(name))
             self.pairs[name] = NN
-        self._reciprocal_basis = self.get_reciprocal_basis()
+        self._reciprocal_basis = None # lazy evaluation of recip. basis
         self._BZ = None
         self.test_sanity()  # check consistency
 
@@ -297,7 +297,6 @@ class Lattice:
         position_disorder = getattr(self, 'position_disorder', None)
         if position_disorder is not None:
             hdf5_saver.save(self.position_disorder, subpath + "position_disorder")
-
 
     @classmethod
     def from_hdf5(cls, hdf5_loader, h5gr, subpath):
@@ -1447,7 +1446,7 @@ class Lattice:
 
     def plot_reciprocal_basis(self, ax, origin=(0., 0.), plot_symmetric=True, **kwargs):
         """Plot arrows indicating the basis vectors of the reciprocal lattice.
-        (Same as :meth:`plot_basis`, but without shading, since BZ is drawn seperately)
+        (Same as :meth:`plot_basis`, but without shading, since BZ is drawn separately)
 
         Parameters
         ----------
@@ -1465,8 +1464,8 @@ class Lattice:
         reciprocal_basis = np.array([self.reciprocal_basis[i] for i in range(self.dim)])
         if reciprocal_basis.shape[1] == 1:
             reciprocal_basis = reciprocal_basis * np.array([[1., 0]])
-            kwargs.setdefault("head_length", 20*kwargs.get("width"))  # since reciprocal basis vecs
-            # are usually larger than basis vecs (in 1D), scale width of arrow head
+            # change scaling in 1D
+            kwargs.setdefault("head_length", 20*kwargs.get("width"))
             if reciprocal_basis.shape[1] != 2:
                 raise ValueError("can only plot in 2 dimensions.")
         for i in range(self.dim):
@@ -1546,53 +1545,24 @@ class Lattice:
         self.BZ.plot_brillouin_zone(ax, *args, **kwargs)
 
     @property
+    def reciprocal_basis(self):
+        """The reciprocal basis vectors obey :math:`a_i b_j = 2 \pi \delta_{i, j}`, such that
+        ``b_j = reciprocal_basis[j]``"""
+        if self._reciprocal_basis is None:
+            if self.dim == 1:
+                self._reciprocal_basis = (2*np.pi/np.linalg.norm(self.basis)).reshape(1, 1)
+            else:
+                self._reciprocal_basis = (np.linalg.inv(self.basis)*2*np.pi).T
+        return self._reciprocal_basis
+
+    @property
     def BZ(self):
         if self._BZ is None:
             try:
-                if self.dim == 2:
-                    self._BZ = SimpleBZ.from_recip_basis_vectors(self.reciprocal_basis)
-                if self.dim == 1:
-                    self._BZ = SimpleBZ1D.from_recip_basis_vector(self.reciprocal_basis)
+                self._BZ = SimpleBZ.from_recip_basis_vectors(self.reciprocal_basis, self.dim)
             except Exception:
-                raise ValueError("Couldn't create the BZ")
+                raise ValueError("Couldn't create the Brillouin Zone")
         return self._BZ
-
-    @BZ.setter
-    def BZ(self, bz_object):
-        if isinstance(bz_object, SimpleBZ) or isinstance(bz_object, SimpleBZ1D):
-            self._BZ = bz_object
-        else:
-            logger.info("Brillouin Zone is not an instance of :class:`SimpleBZ` or "
-                        ":class:`SimpleBZ1D`")
-            logger.info("trying to construct an instance of :class:`SimpleBZ` or :class:`SimpleBZ1D`"
-                        " from given vertices...")
-            try:
-                self._BZ = SimpleBZ1D(bz_object)
-            except ValueError:  # if 1D BZ can't be created try the 2D BZ
-                try:
-                    self._BZ = SimpleBZ(bz_object)
-                except Exception as e:
-                    raise Exception("""The Brillouin Zone must be given either as :class:`Simple_BZ`
-                                    or as vertices of the Brillouin Zone from which an instance of
-                                    :class:`SimpleBZ` will be created""") from e
-        if self.dim == 1:
-            assert isinstance(self._BZ, SimpleBZ1D), "For 1D lattices the Brillouin Zone is also 1D"
-        if self.dim == 2:
-            assert isinstance(self._BZ, SimpleBZ), "For 2D lattices the Brillouin Zone is also 2D"
-
-        logger.info("Manually changed the Brillouin Zone")
-
-    def get_reciprocal_basis(self):
-        """Compute reciprocal basis vectors obeying :math:`a_i b_j = 2 \pi \delta_{i, j}`, such that
-        ``b_j = reciprocal_basis[j]``"""
-        if self.basis.shape[0] == 1:
-            return (2*np.pi/np.linalg.norm(self.basis)).reshape(1, 1)
-        else:
-            return (np.linalg.inv(self.basis)*2*np.pi).T
-
-    @property
-    def reciprocal_basis(self):
-        return self._reciprocal_basis
 
     def _asvalid_latidx(self, lat_idx):
         """convert lat_idx to an ndarray with correct last dimension."""
@@ -1656,7 +1626,7 @@ class TrivialLattice(Lattice):
 class SimpleLattice(Lattice):
     """A lattice with a unit cell consisting of just a single site.
 
-    In many cases, the unit cell consists just of a single site, such that the the last entry of
+    In many cases, the unit cell consists just of a single site, such that the last entry of
     `u` of an 'lattice index' can only be ``0``.
     From the point of internal algorithms, we handle this class like a :class:`Lattice` --
     in that way we don't need to distinguish special cases in the algorithms.
@@ -2425,6 +2395,7 @@ class HelicalLattice(Lattice):
         self.N_sites_per_ring = None  # shouldn't be used
         self.N_rings = None  # shouldn't be used - pointless for this case.
 
+
 class Chain(SimpleLattice):
     """A chain of L equal sites.
 
@@ -3000,7 +2971,7 @@ class Honeycomb(Lattice):
                 priority = (0, 2, 1)
                 snake_winding = (False, False, False)
                 return get_order(self.shape, snake_winding, priority)
-            elif order == "snake" or order== "snake_rings":
+            elif order == "snake" or order == "snake_rings":
                 priority = (0, 2, 1)
                 snake_winding = (False, False, True)
                 return get_order(self.shape, snake_winding, priority)
@@ -3114,26 +3085,62 @@ class Kagome(Lattice):
                 return order
         return super().ordering(order)
 
-# TODO: get fourier k-space points from model!
-class SimpleBZ:
-    r"""Helper class to provide an interface to the Brillouin Zone of a given lattice
 
-    The Brillouin Zone is the Wigner Seitz Cell of the reciprocal lattice. For a given lattice
+class SimpleBZ:
+    """Helper base class to provide an interface for the Brillouin Zone of a given lattice.
+    The Brillouin Zone is the Wigner-Seitz Cell of the reciprocal lattice. For a given lattice
     with basis vectors a_i, the reciprocal lattice is generated through the reciprocal
     basis vectors b_i, which obey :math:`a_i b_j = 2 \pi \delta_{i j}`.
 
     Parameters
     ----------
     vertices : array_like
-        a list of the vertices of the 1st BZ.
+        a list of the vertices of the 1st BZ with shape (N, d) where d is the dimension
+        and N the number of vertices.
+    basis : array_like
+        the reciprocal basis of the real space lattice, i.e. the basis in reciprocal space
     """
-
-    def __init__(self, vertices):
+    def __init__(self, vertices, basis, dim: int):
+        assert dim == 1 or dim == 2, 'SimpleBZ is only defined for dimensions 1 and 2'
+        self.dim = dim
         self.vertices = self.order_vertices(vertices)
-        self.hull = ConvexHull(self.vertices)
+        self.basis = basis
+        if self.dim == 2:
+            self.hull = ConvexHull(self.vertices)
+
+    def order_vertices(self, vertices):
+        vertices = np.array(vertices)
+        if self.dim == 1:
+            if len(vertices) != 2:
+                raise ValueError("For Brillouin Zones in 1D, there are only 2 vertices")
+            return np.sort(vertices)
+        else:
+            assert vertices.ndim == 2, "Pass vertices as list/array of points of x, y coordinates"
+            x_coords = vertices[:, 0]
+            y_coords = vertices[:, 1]
+            angles = np.arctan2(x_coords, y_coords)
+            angles += (angles < 0) * 2 * np.pi  # shift angle into interval [0, 2 pi]
+            return vertices[np.argsort(angles)]
 
     @classmethod
-    def from_recip_basis_vectors(cls, basis, n_vecs_generated=30):
+    def from_recip_basis_vectors(cls, basis_vectors, dim):
+        if dim == 1:
+            return cls.from_recip_basis_vectors1d(basis_vectors)
+        elif dim == 2:
+            return cls.from_recip_basis_vectors2d(basis_vectors)
+        else:
+            raise ValueError("Only dimensions 1 and 2 are supported")
+
+    @classmethod
+    def from_recip_basis_vectors1d(cls, basis_vector):
+        basis_vector = np.array(basis_vector).flatten()
+        if len(basis_vector) != 1:
+            raise ValueError("For Brillouin Zones in 1D, the basis vector must have dim 1")
+        vertices = np.array([-1, 1]) * basis_vector/2
+        return cls(vertices, basis_vector, dim=1)
+
+    @classmethod
+    def from_recip_basis_vectors2d(cls, basis, n_vecs_generated=30):
         """Given a basis, consisting of two reciprocal basis vectors b1, b2; first perform a
         Lagrange lattice reduction, ensuring the new basis will be reasonably orthogonal. Second,
         Compute the Voronoi diagram of a set of lattice points and return the vertices of the
@@ -3155,12 +3162,18 @@ class SimpleBZ:
         """
         # make sure given lattice basis is reasonable orthogonal and short
         b1, b2 = cls.lagrange_lattice_reduction(basis)
-        # generate list of lattice points
-        b1_list = np.array([b1 * i for i in range(-n_vecs_generated, n_vecs_generated + 1)])
-        b2_list = np.array([b2 * i for i in range(-n_vecs_generated, n_vecs_generated + 1)])
-        from itertools import product as prod
-        # generate lattice points around the origin (corresponds to i*b1+j*b2, i,j in {-10, -9, ..., 9, 10})
-        lattice_points = np.array(list(prod(b1_list, b2_list))).sum(axis=1)
+
+        # list of multiple of vectors
+        n_vecs_list = np.arange(-n_vecs_generated, n_vecs_generated + 1)
+        # generate lists of lattice points
+        b1_list = np.outer(n_vecs_list, b1)
+        b2_list = np.outer(n_vecs_list, b2)
+
+        # get all combinations of lattice points (around the origin)
+        # (corresponds to i*b1+j*b2, i,j in {-10, -9, ..., 9, 10})
+        lattice_points = b1_list[:, np.newaxis] + b2_list[np.newaxis, :]
+        lattice_points = lattice_points.reshape(-1, lattice_points.shape[-1])
+
         vor = Voronoi(lattice_points)
         # find index of the Voronoi region corresponding to the origin
         idx_0 = np.argsort(np.linalg.norm(vor.points, axis=-1))[0]
@@ -3169,7 +3182,147 @@ class SimpleBZ:
         vor_region_point_0 = vor.point_region[idx_0]
         vor_region_0 = vor.regions[vor_region_point_0]
         vertices = vor.vertices[vor_region_0]
-        return cls(vertices)
+        return cls(vertices, basis, dim=2)
+
+    @property
+    def area(self):
+        if self.dim == 2:
+            return self.hull.volume
+
+    @property
+    def equations(self):
+        if self.dim == 2:
+            return self.hull.equations
+
+    def contains_points(self, points):
+        """Checks whether given points lie inside the 1st Brillouin Zone
+
+        Parameters
+        ----------
+        points : array_like
+            points of shape (..., 2) for 2D or shape(...) for 1D that will be checked
+
+        Returns
+        -------
+        ndarray | bool
+            boolean array of shape points.shape[:-1] if 2D or points.shape if 1D, indicating
+            whether the corresponding point in `points` is contained in the Brillouin Zone
+        """
+        points = np.array(points).astype(float)  # accept also lists and tuples as input
+        if self.dim == 1:
+            in_1st_bz = (points >= self.vertices[0]) & (points <= self.vertices[1])
+            return in_1st_bz
+        else:
+            # convert to expected shape
+            if points.ndim == 1:
+                points = points.reshape(1, -1)
+            assert points.shape[-1] == 2, "Points should be of dimension (..., 2)"
+            A = self.equations[:, :-1]
+            b = self.equations[:, -1]
+            # a point x = (x1, x2) is per definition
+            # (see qhull documentation: http://www.qhull.org/html/index.htm#definition)
+            # inside the hull, iff: A x + b <= [0, ...]
+            eps = np.finfo(points.dtype).eps  # account for precision errors
+            return np.all((np.tensordot(points, A, (-1, -1)) + b) < eps, axis=-1)
+
+    def reduce_points(self, points):
+        """Bring given points into 1st BZ by applying multiples of the reciprocal basis vectors.
+
+        Parameters
+        ----------
+        points : array_like
+            points to reduce given in the shape (..., 2) for 2D or (...) for 1D
+
+        Returns
+        -------
+        reduced_points : ndarray
+            of shape points.shape the array of the points now reduced to the 1st BZ
+        """
+        points = np.array(points).astype(float)
+        if self.dim == 1:
+            red_to_basis_vec = (points/self.basis) % 1
+            red_to_basis_vec[red_to_basis_vec > 0.5] -= 1
+            return red_to_basis_vec*self.basis + self.vertices.mean()
+        else:
+            if points.ndim == 1:
+                points = points.reshape(1, -1)
+            assert points.shape[-1] == 2, "Points should be of dimension (N, 2)"
+
+            b1, b2 = self.basis
+            # basis transformation matrix
+            A = np.array([b1, b2]).T
+            # get points in transformed coordinates
+            points = np.tensordot(points, np.linalg.inv(A), (-1, -1))
+            # shift the points into the parallelogram spanned by b1 and b2
+            points = points % 1
+            # express points again in the standard basis
+            points = np.tensordot(points, A, (-1, -1))
+            #  get all points lying still outside the BZ
+            outside_bz = np.invert(self.contains_points(points))  # -> boolean array
+            points_outside_bz = points[outside_bz]  # -> shape (N_outside, 2)
+            # all possible translation vectors to reduced points from parallelogram to
+            # 1st BZ as matrix
+            translation_vecs = -1 * np.array([b1, b2, b1 + b2])
+            # get all  combinatorial results by applying translation_vecs to points_outside_bz
+            translated_point = points_outside_bz[:, np.newaxis, :] + translation_vecs
+            shape = translated_point.shape
+            translated_point = translated_point.reshape(-1, shape[-1])
+            reduced_points = translated_point[self.contains_points(translated_point)]
+            assert np.all(self.contains_points(reduced_points)), "Couldn't reduce points to 1st BZ!"
+            assert len(reduced_points) == np.sum(outside_bz), "Couldn't reduce all points!"
+            # overwrite points outside the BZ with their reduced form
+            points[outside_bz] = reduced_points
+            return points
+
+    def plot_brillouin_zone(self, *args, **kwargs):
+        if self.dim == 1:
+            self.plot_brillouin_zone1d(*args, **kwargs)
+        else:
+            self.plot_brillouin_zone2d(*args, **kwargs)
+
+    def plot_brillouin_zone1d(self, ax, draw_points=True, **kwargs):
+        """Plot the brillouin zone of the lattice.
+
+        Parameters
+        ----------
+        ax : :class:`matplotlib.axes.Axes`
+            The axes on which we should plot.
+        draw_points: bool, default=True
+            draw edges of the polygon (BZ high symmetry points)
+        **kwargs :
+            Keyword arguments for ``matplotlib.axes.vlines``.
+        """
+        kwargs.setdefault("ls", "--")
+        kwargs.setdefault("color", "black")
+        if draw_points is True:
+            ax.plot(self.vertices, [0, 0], 'o')
+        ax.vlines(self.vertices, -0.5, 0.5, **kwargs)
+
+    def plot_brillouin_zone2d(self, ax, draw_points=True, autoscale=True, **kwargs):
+        """Plot the brillouin zone of the lattice.
+
+        Parameters
+        ----------
+        ax : :class:`matplotlib.axes.Axes`
+            The axes on which we should plot.
+        draw_points: bool, default=True
+            draw edges of the polygon (BZ high symmetry points)
+        autoscale : bool, default=True
+            call to :meth:`autoscale_view` of :class:`matplotlib.axes.Axes`
+        **kwargs :
+            Keyword arguments for ``matplotlib.patches.Polygon``.
+        """
+        from matplotlib.patches import Polygon
+        kwargs.setdefault("edgecolor", "black")
+        kwargs.setdefault("fill", False)
+        kwargs.setdefault("ls", "--")
+        # avoid drawing the polygon for 1 D
+        p = Polygon(self.vertices, **kwargs)
+        ax.add_patch(p)
+        if draw_points is True:
+            ax.plot(*self.vertices.T, 'o')
+        if autoscale is True:
+            ax.autoscale_view()
 
     @staticmethod
     def lagrange_lattice_reduction(basis):
@@ -3200,193 +3353,8 @@ class SimpleBZ:
         while norm(v) < norm(u):
             q = np.round(u.T @ (v / norm(v) ** 2))
             r = u - q * v
-            u = v
-            v = r
+            u, v = v, r
         return np.array([u, v])
-
-    def contains_points(self, points):
-        """Checks whether given points lie inside the 1st Brillouin Zone
-
-        Parameters
-        ----------
-        points : array_like
-            points of shape (N, 2) that will be checked
-
-        Returns
-        -------
-        ndarray | bool
-            boolean array of shape (N,) indicating whether the corresponding point in `points`
-            is contained in the Brillouin Zone
-        """
-        points = np.array(points).astype(float)  # accept also lists and tuples as input
-        # convert to expected shape
-        if points.ndim == 1:
-            points = points.reshape(1, -1)
-        assert points.shape[-1] == 2, "Points should be of dimension (N, 2)"
-
-        A = self.equations[:, :-1]
-        b = self.equations[:, -1]
-        # a point x = (x1, x2) is per definition
-        # (see qhull documentation: http://www.qhull.org/html/index.htm#definition)
-        # inside the hull, iff: A x + b <= [0, ...]
-        eps = np.finfo(points.dtype).eps  # account for precision errors
-        return np.all((np.tensordot(A, points, (-1, -1)) + b.reshape(-1, 1)).T < eps, axis=-1)
-
-    def order_vertices(self, vertices):
-        """Orders vertices in mathematical order"""
-        assert vertices.ndim == 2, "Pass vertices as list/array of points of x, y coordinates"
-        x_coords = vertices[:, 0]
-        y_coords = vertices[:, 1]
-        angles = np.arctan2(x_coords, y_coords)  # get angle
-        angles += (angles < 0) * 2 * np.pi  # shift angle range to [0, 2 pi]
-        return vertices[np.argsort(angles)]
-
-    @property
-    def area(self):
-        return self.hull.volume
-
-    @property
-    def equations(self):
-        return self.hull.equations
-
-    def reduce_points(self, points, basis):
-        """Bring given points into 1st BZ by applying multiples of the recip. basis vectors.
-
-        Parameters
-        ----------
-        points : array_like
-            points to reduce given in the shape (N, 2)
-        basis : array_like
-            basis of a lattice in reciprocal space, s.t. the basis vectors are b1 = basis[0],
-            b2 = basis[1]
-
-        Returns
-        -------
-        reduced_points : ndarray
-            of shape (N, 2) the array of the points no reduced to the 1st BZ
-        """
-        # parse points as numpy array with shape (N, 2)
-        points = np.array(points).astype(float)
-        if points.ndim == 1:
-            points = points.reshape(1, -1)
-        assert points.shape[-1] == 2, "Points should be of dimension (N, 2)"
-        # basis transformation
-        b1, b2 = basis
-        A = np.array([b1, b2]).T
-
-        # get points in transformed coordinates
-        points = (np.tensordot(np.linalg.inv(A), points, (-1, -1))).T
-        # shift the points into the parallelogram spanned by b1 and b2
-        points = points % 1
-        # express points again in the standard basis
-        points = (np.tensordot(A, points, (-1, -1))).T
-
-        #  get all points lying still outside the BZ
-        outside_bz = np.invert(self.contains_points(points))  # -> boolean array
-        points_outside_bz = points[outside_bz]
-        # all possible translation vectors to reduced points from parallelogram to
-        # 1st BZ as matrix
-        translation_vecs = -1 * np.array([b1, b2, b1 + b2])
-        # get all combinatorical results by applying translation_vecs to points_outside_bz
-        translated_point = points_outside_bz[:, np.newaxis, :] + translation_vecs
-        shape = translated_point.shape
-        translated_point = translated_point.reshape(-1, shape[-1])
-        reduced_points = translated_point[
-            self.contains_points(translated_point).reshape(shape[0] * shape[1])]
-
-        assert np.all(self.contains_points(reduced_points)), "Couldn't reduce points to 1st BZ!"
-        assert len(reduced_points) == np.sum(outside_bz), "Couldn't reduce all points!"
-
-        # overwrite points outside the BZ with their reduced form
-        points[outside_bz] = reduced_points
-        return points
-
-    def plot_brillouin_zone(self, ax, draw_points=True, autoscale=True, **kwargs):
-        """Plot the brillouin zone of the lattice.
-
-        Parameters
-        ----------
-        ax : :class:`matplotlib.axes.Axes`
-            The axes on which we should plot.
-        draw_points: bool, default=True
-            draw edges of the polygon (BZ high symmetry points)
-        autoscale : bool, default=True
-            call to :meth:`autoscale_view` of :class:`matplotlib.axes.Axes`
-        **kwargs :
-            Keyword arguments for ``matplotlib.patches.Polygon``.
-        """
-        from matplotlib.patches import Polygon
-        kwargs.setdefault("edgecolor", "black")
-        kwargs.setdefault("fill", False)
-        kwargs.setdefault("ls", "--")
-        # avoid drawing the polygon for 1 D
-        p = Polygon(self.vertices, **kwargs)
-        ax.add_patch(p)
-        if draw_points is True:
-            ax.plot(*self.vertices.T, 'o')
-        if autoscale is True:
-            ax.autoscale_view()
-
-
-class SimpleBZ1D:
-    """Simplified version of :class:`SimpleBZ` for the 1st BZ in 1 dimension
-
-    Parameters
-    ----------
-    vertices : array_like
-        a list of the 2 vertices (in 1D) of the 1st BZ.
-    """
-    def __init__(self, vertices):
-        self.vertices = self.format_vertices(vertices)
-        self.basis_vector = self.vertices[1]-self.vertices[0]
-
-    @classmethod
-    def from_recip_basis_vector(cls, basis_vector):
-        basis_vector = np.array(basis_vector).flatten()
-        if len(basis_vector) != 1:
-            raise ValueError("For Brillouin Zones in 1D, the basis vector must have dim 1")
-        vertices = np.array([-1, 1]) * basis_vector/2
-        return cls(vertices)
-
-    @staticmethod
-    def format_vertices(vertices):
-        vertices = np.array(vertices)
-        if len(vertices) != 2:
-            raise ValueError("For Brillouin Zones in 1D, there are only 2 vertices")
-        return np.sort(vertices)
-
-    def contains_points(self, points):
-        """Checks whether given points lie inside the 1st Brillouin Zone"""
-        points = np.array(points).astype(float)  # accept also lists and tuples as input
-        assert points.ndim == 1, "Points should be of dimension (N,)"
-        in_1st_bz = (points > self.vertices[0]) & (points < self.vertices[1])
-        return in_1st_bz
-
-    def reduce_points(self, points):
-        """Bring given points into 1st BZ by applying multiples of the recip. basis vector"""
-        points = np.array(points).astype(float)
-        assert points.ndim == 1, "Points should be of dimension (N,)"
-        red_to_basis_vec = (points/self.basis_vector) % 1
-        red_to_basis_vec[red_to_basis_vec > 0.5] -= 1
-        return red_to_basis_vec*self.basis_vector + self.vertices.mean()
-
-    def plot_brillouin_zone(self, ax, draw_points=True, **kwargs):
-        """Plot the brillouin zone of the lattice.
-
-        Parameters
-        ----------
-        ax : :class:`matplotlib.axes.Axes`
-            The axes on which we should plot.
-        draw_points: bool, default=True
-            draw edges of the polygon (BZ high symmetry points)
-        **kwargs :
-            Keyword arguments for ``matplotlib.axes.vlines``.
-        """
-        kwargs.setdefault("ls", "--")
-        kwargs.setdefault("color", "black")
-        if draw_points is True:
-            ax.plot(self.vertices, [0, 0], 'o')
-        ax.vlines(self.vertices, -0.5, 0.5, **kwargs)
 
 
 def get_lattice(lattice_name):
