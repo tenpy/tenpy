@@ -14,8 +14,8 @@ __all__ = ['svd', 'svd_apply_mask', 'truncated_svd', 'truncate_singular_values',
 
 
 def svd(a: AbstractTensor, u_legs: list[int | str] = None, vh_legs: list[int | str] = None,
-        new_labels: tuple[str, ...] = None, new_vh_leg_dual=False, U_inherits_charge: bool = False,
-        options={}
+        new_labels: tuple[str, ...] = None, new_vh_leg_dual: bool =False,
+        U_inherits_charge: bool = False, options={}
         ) -> tuple[AbstractTensor, DiagonalTensor, AbstractTensor]:
     """Singular value decomposition of a tensor.
 
@@ -39,10 +39,8 @@ def svd(a: AbstractTensor, u_legs: list[int | str] = None, vh_legs: list[int | s
         If `a` is a :class:`~tenpy.linalg.tensors.ChargedTensor`, so is one of `U` and `Vh`,
         while the other is a ``Tensor``, see `U_inherits_charge`.
         If `a` is a DiagonalTensor, so are `U` and `Vh`.
-    u_legs : list[int  |  str], optional
-        Which of the legs belong to "matrix rows" and end up as legs of U.
-    vh_legs : list[int  |  str], optional
-        Which of the legs belong to "matrix columns" and end up as legs of Vh.
+    u_legs, vh_legs : list[int | str], optional
+        Which of the legs belong to "matrix rows" vs "columns". See :func:`leg_bipartition`.
     new_labels : tuple[str, ...], optional
         Specification for the labels of the newly generated leg, i.e. those legs that would need to
         be contracted to recover `a`.
@@ -52,7 +50,7 @@ def svd(a: AbstractTensor, u_legs: list[int | str] = None, vh_legs: list[int | s
         If None (default), the new legs will not be labelled
     new_vh_leg_dual : bool
         Whether the new leg of `vh` will be dual or not.
-        TODO what is the intuitive default?
+        TODO what is the intuitive default? coordinate with eigh!
     U_inherits_charge : bool
         If `a` is a :class:`~tenpy.linalg.tensors.ChargedTensor`, this flag controls which of the
         two resulting isometries, `U` or `Vh` will carry the charge.
@@ -160,7 +158,8 @@ def truncated_svd(a: AbstractTensor, u_legs: list[int | str] = None, vh_legs: li
 
     Parameters
     ----------
-    same as for :meth:`svd`
+    a, u_legs, vh_legs, new_labels, new_vh_leg_dual, U_inherits_charge
+        Same as for :func:`svd`.
     normalize_to: float or None
         If ``None`` (default), the resulting singular values are not renormalized,
         resulting in an approximation in terms of ``U, S, Vh`` which has smaller norm than `a`.
@@ -315,10 +314,8 @@ def qr(a: AbstractTensor, q_legs: list[int | str] = None, r_legs: list[int | str
     ----------
     a : Tensor
         The tensor to decompose
-    q_legs :
-        Which of the legs belong to "matrix rows" and end up as legs of Q.
-    r_legs :
-        Which of the legs belong to "matrix columns" and end up as legs of R.
+    q_legs, r_legs : list[int | str], optional
+        Which of the legs belong to "matrix rows" vs "columns". See :func:`leg_bipartition`.
     new_labels : tuple[str, str], optional
         Labels for the new legs on Q and R.
     new_r_leg_dual: bool
@@ -366,10 +363,8 @@ def lq(a: AbstractTensor, l_legs: list[int | str] = None, q_legs: list[int | str
     ----------
     a : Tensor
         The tensor to decompose
-    l_legs :
-        Which of the legs belong to "matrix rows" and end up as legs of L.
-    q_legs :
-        Which of the legs belong to "matrix columns" and end up as legs of Q.
+    l_legs, q_legs : list[int | str], optional
+        Which of the legs belong to "matrix rows" vs "columns". See :func:`leg_bipartition`.
     new_labels : tuple[str, str], optional
         Labels for the new legs on L and Q.
     new_l_leg_dual: bool
@@ -530,10 +525,11 @@ def _svd_new_labels(new_labels: tuple[str, ...] | None) -> tuple[str, str, str, 
 def leg_bipartition(a: AbstractTensor, legs1: list[int | str] | None, legs2: list[int | str] | None
                     ) -> tuple[list[int] | list[int]]:
     """Utility function for partitioning the legs of a Tensor into two groups.
-    The tensor can then unambiguously be understood as a linear map, and linear algebra concepts
-    such as SVD, eigensystems, ... make sense.
+    
+    The tensor can then unambiguously be understood as a linear map or matrix, and linear algebra
+    concepts such as SVD, eigensystems, ... make sense.
 
-    The lists `legs1` and `legs2` can bother either be a list, describing via indices (`int`)
+    The leg groups are defined by two optional lists, describing via indices (`int`)
     or via labels (`str`) a subset of the legs of `a`, or they can be `None`.
     - if both are `None`, use the default `legs1=[0]` and `legs2=[1]`, which requires `a` to be a
       two-leg tensor, which we understand as a matrix
@@ -569,10 +565,20 @@ def leg_bipartition(a: AbstractTensor, legs1: list[int | str] | None, legs2: lis
 
 def exp(t: AbstractTensor | complex | float, legs1: list[int | str] = None,
         legs2: list[int | str] = None) -> AbstractTensor | complex | float:
-    """
-    The exponential of t, viewed as a linear map from legs1 to legs2.
-    Requires the two groups of legs to be mutually dual.
-    Contrary to numpy, this is *not* the element-wise exponential function.
+    """The exponential function.
+
+    For a tensor, viewed as a linear map from legs1 to legs2, the exponential function is
+    defined via its power series. Requires the two groups of legs to be mutually dual.
+
+    .. warning ::
+        Contrary to numpy, this is *not* the element-wise exponential function.
+
+    Parameters
+    ----------
+    t : Tensor | DiagonalTensor | complex | float
+        The tensor or number to exponentiate.
+    legs1, legs2 : list[int | str], optional
+        Which of the legs belong to "matrix rows" vs "columns". See :func:`leg_bipartition`.
     """
     if isinstance(t, Tensor):
         return _act_block_diagonal_square_matrix(t, legs1, legs2, 'matrix_exp')
@@ -585,11 +591,23 @@ def exp(t: AbstractTensor | complex | float, legs1: list[int | str] = None,
 
 def log(t: AbstractTensor | complex | float, legs1: list[int | str] = None,
         legs2: list[int | str] = None) -> AbstractTensor | complex | float:
+    """The (natural) logarithm of t.
+
+    For a tensor, viewed as a linear map from legs1 to legs2, the logarithm is defined via its
+    power series. Requires the two groups of legs to be mutually dual.
+
+    .. warning ::
+        Contrary to numpy, this is *not* the element-wise logarithm function.
+
+    Parameters
+    ----------
+    t : Tensor | DiagonalTensor | complex | float
+        The tensor or number to take the logarithm of
+    legs1, legs2 : list[int | str], optional
+        Which of the legs belong to "matrix rows" vs "columns". See :func:`leg_bipartition`.
     """
-    The (natural) logarithm of t, viewed as a linear map from legs1 to legs2.
-    Requires the two groups of legs to be mutually dual.
-    Contrary to numpy, this is *not* the element-wise logarithm function.
-    """
+    # TODO it is a bit annoying that the dtype depends on values for real inputs.
+    #      we get a real log for positive definite matrices and complex otherwise.
     if isinstance(t, Tensor):
         return _act_block_diagonal_square_matrix(t, legs1, legs2, 'matrix_log')
     if isinstance(t, DiagonalTensor):
