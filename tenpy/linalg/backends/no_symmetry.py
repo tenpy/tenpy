@@ -1,7 +1,7 @@
 # Copyright 2023-2023 TeNPy Developers, GNU GPLv3
 from __future__ import annotations
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Callable
 from numpy import prod
 
 from .abstract_backend import AbstractBackend, AbstractBlockBackend, Data, DiagonalData, Block, Dtype
@@ -161,9 +161,8 @@ class AbstractNoSymmetryBackend(AbstractBackend, AbstractBlockBackend, ABC):
     def norm(self, a: Tensor | DiagonalTensor, order: int | float = None) -> float:
         return self.block_norm(a.data, order=order)
 
-    def act_block_diagonal_square_matrix(self, a: Tensor, block_method: str) -> Data:
-        """Apply functions like exp() and log() on a (square) block-diagonal `a`."""
-        block_method = getattr(self, block_method)
+    def act_block_diagonal_square_matrix(self, a: Tensor, block_method: Callable[[Block], Block]
+                                         ) -> Data:
         return block_method(a.data)
 
     def add(self, a: Tensor, b: Tensor) -> Data:

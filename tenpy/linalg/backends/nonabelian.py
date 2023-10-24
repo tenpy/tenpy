@@ -236,7 +236,8 @@ class AbstractNonabelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
     def norm(self, a: Tensor, order: int | float = None) -> float:
         raise NotImplementedError  # TODO
 
-    def act_block_diagonal_square_matrix(self, a: Tensor, block_method: str) -> NonAbelianData:
+    def act_block_diagonal_square_matrix(self, a: Tensor, block_method: Callable[[Block], Block]
+                                         ) -> NonAbelianData:
         raise NotImplementedError  # TODO
 
     def add(self, a: Tensor, b: Tensor) -> NonAbelianData:

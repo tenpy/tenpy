@@ -4,8 +4,10 @@ from __future__ import annotations
 import numpy as np
 import warnings
 from numbers import Number
+from typing import Callable
 from .spaces import ProductSpace
 from .tensors import DiagonalTensor, AbstractTensor, Tensor, Mask, ChargedTensor, tdot, _dual_leg_label
+from .backends.abstract_backend import Block
 from ..tools.misc import inverse_permutation, to_iterable
 from ..tools.params import asConfig
 
@@ -581,7 +583,7 @@ def exp(t: AbstractTensor | complex | float, legs1: list[int | str] = None,
         Which of the legs belong to "matrix rows" vs "columns". See :func:`leg_bipartition`.
     """
     if isinstance(t, Tensor):
-        return _act_block_diagonal_square_matrix(t, legs1, legs2, 'matrix_exp')
+        return _act_block_diagonal_square_matrix(t, legs1, legs2, t.backend.matrix_exp)
     if isinstance(t, DiagonalTensor):
         return t._elementwise_unary(t.backend.block_exp)
     if isinstance(t, Number):
@@ -609,7 +611,7 @@ def log(t: AbstractTensor | complex | float, legs1: list[int | str] = None,
     # TODO it is a bit annoying that the dtype depends on values for real inputs.
     #      we get a real log for positive definite matrices and complex otherwise.
     if isinstance(t, Tensor):
-        return _act_block_diagonal_square_matrix(t, legs1, legs2, 'matrix_log')
+        return _act_block_diagonal_square_matrix(t, legs1, legs2, t.backend.matrix_log)
     if isinstance(t, DiagonalTensor):
         return t._elementwise_unary(t.backend.block_log)
     if isinstance(t, Number):
@@ -620,11 +622,18 @@ def log(t: AbstractTensor | complex | float, legs1: list[int | str] = None,
 def _act_block_diagonal_square_matrix(t: AbstractTensor,
                                       legs1: list[int | str],
                                       legs2: list[int | str],
-                                      block_method: str) -> AbstractTensor:
-    """
+                                      block_method: Callable[[Block], Block]) -> AbstractTensor:
+    """Helper function to act on a block-diagonal two-leg tensor.
 
-    block_method :
-        Name of a BlockBackend method with signature ``block_method(a: Block) -> Block``.
+    Parameters
+    ----------
+    t : Tensor
+        A two-leg tensor, where `legs1` are contractible with `legs2`.
+        This means after grouping those legs, we get a block-diagonal (by charge rule) matrix.
+    legs1, legs2 : list[int | str], optional
+        Which of the legs belong to "matrix rows" vs "columns". See :func:`leg_bipartition`.
+    block_method : function
+        A function with signature ``block_method(a: Block) -> Block`` acting on backend-blocks.
     """
     idcs1, idcs2 = leg_bipartition(t, legs1, legs2)
     assert len(idcs1) == len(idcs2)

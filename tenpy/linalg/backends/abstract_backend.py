@@ -2,7 +2,7 @@
 from __future__ import annotations
 from abc import ABCMeta, abstractmethod
 from enum import Enum, auto
-from typing import TypeVar, Any, TYPE_CHECKING, Type
+from typing import TypeVar, Any, TYPE_CHECKING, Type, Callable
 from numbers import Number
 import numpy as np
 
@@ -385,16 +385,16 @@ class AbstractBackend(metaclass=ABCMeta):
         ...
 
     @abstractmethod
-    def act_block_diagonal_square_matrix(self, a: Tensor, block_method: str) -> Data:
+    def act_block_diagonal_square_matrix(self, a: Tensor, block_method: Callable[[Block], Block]
+                                         ) -> Data:
         """Apply functions like exp() and log() on a (square) block-diagonal `a`.
 
-        TODO why pass the name and not the method itself?
-        can always replace ``backend.act_block_diagonal_square_matrix(a, 'block_exp')``
-        with ``backend.act_block_diagonal_square_matrix(a, backend.block_exp)``.
-        The latter is more general (allows non-predefined functions) and better for static checks.
-        
-        block_method :
-            Name of a BlockBackend method with signature ``block_method(a: Block) -> Block``.
+        Parameters
+        ----------
+        a : Tensor
+            The tensor to act on
+        block_method : function
+            A function with signature ``block_method(a: Block) -> Block`` acting on backend-blocks.
         """
         ...
 

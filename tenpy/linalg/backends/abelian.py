@@ -23,7 +23,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Callable
 import numpy as np
 import copy
 import warnings
@@ -1241,9 +1241,8 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
         block_norms = [self.block_norm(b, order=order) for b in a.data.blocks]
         return np.linalg.norm(block_norms, ord=order)
 
-    def act_block_diagonal_square_matrix(self, a: Tensor, block_method: str) -> Data:
-        """Apply functions like exp() and log() on a (square) block-diagonal `a`."""
-        block_method = getattr(self, block_method)
+    def act_block_diagonal_square_matrix(self, a: Tensor, block_method: Callable[[Block], Block]
+                                         ) -> Data:
         a_block_inds = a.data.block_inds
         all_block_inds = np.repeat(np.arange(a.legs[0].num_sectors)[:, None], 2, axis=1)  # [[0, 0], [1, 1], ...]
         res_blocks = []
