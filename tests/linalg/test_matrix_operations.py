@@ -52,25 +52,13 @@ def test_svd(tensor_rng, new_vh_leg_dual):
         npt.assert_array_almost_equal(S_np[:S.legs[0].dim], np.sort(S.diag_numpy)[::-1])
 
 
-@pytest.mark.parametrize(['new_vh_leg_dual', 'truncation'], list(zip([True, False], ['strong', 'weak', 'normalize'])))
-def test_truncated_svd(tensor_rng, new_vh_leg_dual, truncation):
+@pytest.mark.parametrize('svd_min, normalize_to', [(1e-14, None), (1e-4, None), (1e-4, 2.7)])
+@pytest.mark.parametrize('new_vh_leg_dual', [True, False])
+def test_truncated_svd(tensor_rng, new_vh_leg_dual, svd_min, normalize_to):
     T: tensors.Tensor = tensor_rng(labels=['l1', 'r2', 'l2', 'r1'], max_block_size=3)
-    
-    if truncation == 'weak':
-        options = dict(svd_min=1e-14)
-        normalize_to = None
-    elif truncation == 'strong':
-        options = dict(svd_min=1e-4)
-        normalize_to = None
-    elif truncation == 'normalize':
-        options = dict(svd_min=1e-4)
-        normalize_to = 2.7
-    else:
-        raise ValueError
-        
     U, S, Vd, err, renormalize = matrix_operations.truncated_svd(
         T, ['l1', 'l2'], ['r1', 'r2'], new_labels=['cr', 'cl'], new_vh_leg_dual=new_vh_leg_dual,
-        truncation_options=options, normalize_to=normalize_to
+        truncation_options=dict(svd_min=svd_min), normalize_to=normalize_to
     )
     U.test_sanity()
     S.test_sanity()
@@ -94,8 +82,8 @@ def test_truncated_svd(tensor_rng, new_vh_leg_dual, truncation):
     assert tensors.almost_equal(tensors.eye_like(Vd_V), Vd_V)
 
 
-@pytest.mark.parametrize(['new_r_leg_dual', 'full'],
-                         list(zip([True, False], [True, False])))
+@pytest.mark.parametrize('full', [True, False])
+@pytest.mark.parametrize('new_r_leg_dual', [True, False])
 def test_qr(tensor_rng, new_r_leg_dual, full):
     T: tensors.Tensor = tensor_rng(labels=['l1', 'r2', 'l2', 'r1'], max_block_size=3)
 
@@ -126,8 +114,8 @@ def test_qr(tensor_rng, new_r_leg_dual, full):
         # TODO should we check properties of R...?
 
 
-@pytest.mark.parametrize(['new_l_leg_dual', 'full'],
-                         list(zip([True, False], [True, False])))
+@pytest.mark.parametrize('full', [True, False])
+@pytest.mark.parametrize('new_l_leg_dual', [True, False])
 def test_lq(tensor_rng, new_l_leg_dual, full):
     T: tensors.Tensor = tensor_rng(labels=['l1', 'r2', 'l2', 'r1'], max_block_size=3)
 
