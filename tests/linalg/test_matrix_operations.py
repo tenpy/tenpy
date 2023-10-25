@@ -70,10 +70,10 @@ def test_truncated_svd(tensor_rng, new_vh_leg_dual, svd_min, normalize_to):
     if normalize_to is None:
         npt.assert_array_almost_equal(np.sort(S.diag_numpy)[::-1], S_np[:S.shape[0]])
     else:
-        npt.assert_array_almost_equal(renormalize * np.sort(S.diag_numpy)[::-1], S_np[:S.shape[0]])
+        npt.assert_array_almost_equal(np.sort(S.diag_numpy)[::-1] / renormalize, S_np[:S.shape[0]])
         npt.assert_almost_equal(tensors.norm(S), normalize_to)
     # check that U @ S @ Vd recovers the original tensor up to the error incurred
-    T_approx = tensors.tdot(U, tensors.tdot(S, Vd, 'cr', 'cl'), 'cr', 'cl')
+    T_approx = tensors.tdot(U, tensors.tdot(S, Vd, 'cr', 'cl'), 'cr', 'cl') / renormalize
     npt.assert_allclose(err, tensors.norm(T - T_approx), atol=1e-12)
     # check that U, Vd are isometries
     Ud_U = tensors.tdot(U.conj(), U, ['l1*', 'l2*'], ['l1', 'l2'])

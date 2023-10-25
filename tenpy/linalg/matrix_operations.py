@@ -177,9 +177,9 @@ def truncated_svd(a: AbstractTensor, u_legs: list[int | str] = None, vh_legs: li
     err : float
         The relative 2-norm truncation error ``norm(a - U_S_Vh) / norm(a)``.
         This is the (relative) 2-norm weight of the discarded singular values.
-    renormalization : float
+    renormalize : float
         Factor, by which `S` was renormalized, i.e. `norm(S) / norm(a)`, such that
-        ``U @ S @ Vh / renormalization`` has the same norm as `a`.
+        ``U @ S @ Vh / renormalize`` has the same norm as `a`.
     """
     U, S, V = svd(a, u_legs=u_legs, vh_legs=vh_legs, new_labels=new_labels, new_vh_leg_dual=new_vh_leg_dual,
                   U_inherits_charge=U_inherits_charge, options=options)
