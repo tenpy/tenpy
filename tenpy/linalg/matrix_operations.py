@@ -11,8 +11,8 @@ from .backends.abstract_backend import Block
 from ..tools.misc import inverse_permutation, to_iterable
 from ..tools.params import asConfig
 
-__all__ = ['svd', 'svd_apply_mask', 'truncated_svd', 'truncate_singular_values', 'qr', 'lq',
-           'svd_split', 'pinv', 'eigh', 'leg_bipartition', 'exp', 'log']
+__all__ = ['svd', 'svd_apply_mask', 'eig_based_svd', 'truncated_svd', 'truncate_singular_values',
+           'qr', 'lq', 'svd_split', 'pinv', 'eigh', 'leg_bipartition', 'exp', 'log']
 
 
 def svd(a: AbstractTensor, u_legs: list[int | str] = None, vh_legs: list[int | str] = None,
@@ -149,6 +149,119 @@ def svd_apply_mask(U: AbstractTensor, S: DiagonalTensor, Vh: AbstractTensor, mas
     Vh = Vh.apply_mask(mask, 0)
     return U, S, Vh
 
+
+def eig_based_svd(a: AbstractTensor, compute_u: bool = False, compute_vh: bool = False,
+                  u_legs: list[int | str] = None, vh_legs: list[int | str] = None,
+                  new_labels: tuple[str, ...] = None, new_vh_leg_dual=None,
+                  U_inherits_charge: bool = False):
+    """Compute an SVD-like decomposition via an eigen-decomposition of the hermitian square.
+
+    SVDs are (as of 2023) notoriously slow on GPU hardware.
+    This decomposition can replace the SVD in some settings, such that GPU acceleration can be used.
+
+    .. warning ::
+        The eig-based decomposition has two drawbacks compared to standard SVD.
+        Firstly, we can not compute both isometries `U` and `Vh`.
+        Secondly, the singular values are computed with less precision (TODO is this actually true?).
+        This is because the we need to take the square root of the computed eigenvalues.
+        (Accuracy of the isometries should be comparable).
+
+    Parameters
+    ----------
+    a, u_legs, vh_legs, new_labels, new_vh_leg_dual, U_inherits_charge
+        Same as for :func:`svd`.
+    compute_u, compute_vh : bool
+        If the isometries `U` and `Vh` should be computed. Can not both be ``True``.
+
+    Returns
+    -------
+    U : AbstractTensor | None
+        The `U` isometry of an SVD of `a`, or ``None`` if not computed.
+    S : DiagonalTensor
+        The singular values of `a`.
+    Vh : AbstractTensor | None
+        The `Vh` isometry of an SVD of `a`, or ``None`` if not computed.
+    """
+
+    if isinstance(a, DiagonalTensor):
+        # the computation is trivial, same as in :func:`svd`.
+        return svd(a, u_legs=u_legs, vh_legs=vh_legs, new_labels=new_labels,
+                   new_vh_leg_dual=new_vh_leg_dual)
+        
+    u_idcs, vh_idcs = leg_bipartition(a, u_legs, vh_legs)
+    
+    if isinstance(a, ChargedTensor):
+        # note: it is important to parse leg idcs w.r.t. a first, then they are correct as leg
+        # idcs for a.invariant_part
+        if U_inherits_charge:
+            u_idcs.append(-1)
+        else:
+            vh_idcs.append(-1)
+            
+        U, S, Vh = eig_based_svd(a.invariant_part, compute_u=compute_u, compute_vh=compute_vh,
+                                 u_legs=u_idcs, vh_legs=vh_idcs, new_labels=new_labels,
+                                 new_vh_leg_dual=new_vh_leg_dual)
+        if U_inherits_charge and compute_u:
+            # U legs : [..., dummy, new]  ->  [..., new, dummy]
+            perm = list(range(U.num_legs))
+            perm[-2:] = [-1, -2]
+            U = ChargedTensor(U.permute_legs(perm), dummy_leg_state=a.dummy_leg_state)
+        if (not U_inherits_charge) and compute_vh:
+            Vh = ChargedTensor(Vh, dummy_leg_state=a.dummy_leg_state)
+        return U, S, Vh
+    
+    if not isinstance(a, Tensor):
+        raise TypeError(f'eig_based_svd not supported for type {type(a)}')
+    
+    l_u, l_su, l_sv, l_vh = _svd_new_labels(new_labels)
+    
+    need_combine = (len(u_idcs) != 1 or len(vh_idcs) != 1)
+    if need_combine:
+        a = a.combine_legs(u_idcs, vh_idcs, new_axes=[0, 1])
+    elif u_idcs[0] == 1:   # this implies v_idcs = [1]
+        a = a.permute_legs([1, 0])
+
+    if compute_u and compute_vh:
+        raise ValueError('Can not compute both U and Vh.')
+    if (not compute_u) and (not compute_vh):
+        u_dim, vh_dim = a.shape
+        # TODO : if we have an implementation of eigvals without eigenvectors, can use that
+        if u_dim > vh_dim:
+            compute_vh = True
+        else:
+            compute_u = True
+
+    if compute_u:  # decompose a @ a.hc = U @ S**2 @ U.hc
+        S_sq, U = eigh(a.tdot(a.conj(), 1, 1), new_labels=[l_u, l_su, l_sv], sort='>')
+        if need_combine:
+            U = U.split_legs(0)
+        Vh = None
+    else:  # decompose a.hc @ a = V @ S**2 @ V.hc  (note that we want V.hc !)
+        S_sq, V = eigh(a.conj().tdot(a, 0, 0), new_labels=[_dual_leg_label(l_vh), l_sv, l_su], sort='>')
+        Vh = V.conj().permute_legs([1, 0])
+        if need_combine:
+            Vh = Vh.split_legs(1)
+        U = None
+
+    if new_vh_leg_dual is not None:
+        # TODO use flip_leg_duality. it is currently buggy though.
+        raise NotImplementedError
+
+    # by truncating S_sq here instead of S later we can get rid of those eigenvalues which are close
+    # to 0 and have become negative due to numerical error
+    mask, err, new_norm = truncate_singular_values(S_sq, dict(chi_max=min(a.shape), svd_min=0.))
+    assert err < 1e-14 * new_norm
+    S_sq = S_sq._apply_mask_both_legs(mask)
+    if compute_u:
+        U = U.apply_mask(mask, -1)
+    if compute_vh:
+        Vh = Vh.apply_mask(mask, 0)
+
+    from .tensors import sqrt  # TODO change module structure so we can avoid this fix?
+    S = sqrt(abs(S_sq))
+
+    return U, S, Vh
+      
 
 def truncated_svd(a: AbstractTensor, u_legs: list[int | str] = None, vh_legs: list[int | str] = None,
                   new_labels: tuple[str, ...] = None, new_vh_leg_dual=False, U_inherits_charge: bool = False,

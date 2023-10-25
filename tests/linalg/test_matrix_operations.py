@@ -82,6 +82,36 @@ def test_truncated_svd(tensor_rng, new_vh_leg_dual, svd_min, normalize_to):
     assert tensors.almost_equal(tensors.eye_like(Vd_V), Vd_V)
 
 
+@pytest.mark.parametrize('compute_u, compute_vh', [(True, False), (False, True), (False, False)])
+def test_eig_based_svd(tensor_rng, compute_u, compute_vh):
+    T: tensors.Tensor = tensor_rng(labels=['l1', 'r2', 'l2', 'r1'], max_block_size=3)
+    u_legs = ['l1', 'l2']
+    vh_legs = ['r1', 'r2']
+    new_labels = ['cr', 'cl']
+    
+    svd_U, svd_S, svd_Vh = matrix_operations.svd(T, u_legs=u_legs, new_labels=new_labels,
+                                                 vh_legs=vh_legs)
+    U, S, Vh = matrix_operations.eig_based_svd(T, u_legs=u_legs, new_labels=new_labels,
+                                               vh_legs=vh_legs,
+                                               compute_u=compute_u, compute_vh=compute_vh)
+    npt.assert_almost_equal(S.diag_numpy, svd_S.diag_numpy)
+    
+    # TODO to reinstate something like this:
+    #     assert tensors.almost_equal(S, svd_S)
+    # we need control over leg duality in eig_based_svd, which is not yet implemented
+    
+    if compute_u:
+        # different SVDs may differ up to a phase.
+        # hc(U) @ svd_U should give a diagonal matrix of these phases
+        phases = U.conj().tdot(svd_U, ['l1*', 'l2*'], ['l1', 'l2'])
+        expect_eye = np.abs(phases.to_numpy_ndarray())
+        npt.assert_almost_equal(expect_eye, np.eye(expect_eye.shape[0]))
+    if compute_vh:
+        phases = Vh.tdot(svd_Vh.conj(), ['r1', 'r2'], ['r1*', 'r2*'])
+        expect_eye = np.abs(phases.to_numpy_ndarray())
+        npt.assert_almost_equal(expect_eye, np.eye(expect_eye.shape[0]))
+    
+
 @pytest.mark.parametrize('full', [True, False])
 @pytest.mark.parametrize('new_r_leg_dual', [True, False])
 def test_qr(tensor_rng, new_r_leg_dual, full):
