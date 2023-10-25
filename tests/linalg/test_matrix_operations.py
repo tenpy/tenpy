@@ -6,7 +6,7 @@ import numpy.testing as npt
 import pytest
 import warnings
 
-from tenpy.linalg import tensors, matrix_operations, spaces, ProductSymmetry
+from tenpy.linalg import tensors, matrix_operations, spaces, ProductSymmetry, backends
 
 
 @pytest.mark.parametrize('new_vh_leg_dual', [True, False])
@@ -153,8 +153,9 @@ def test_lq(tensor_rng, new_l_leg_dual, full):
             assert tensors.almost_equal(Q_Qd, expect)
 
 
+@pytest.mark.parametrize('sort', [None, 'm>', 'm<', '>', '<'])
 @pytest.mark.parametrize('real', [True, False])
-def test_eigh(tensor_rng, vector_space_rng, real):
+def test_eigh(tensor_rng, vector_space_rng, real, sort):
     a = vector_space_rng()
     b = vector_space_rng()
     T: tensors.Tensor = tensor_rng(legs=[a, b.dual, b, a.dual], real=real, labels=['a', 'b*', 'b', 'a*'])
@@ -165,7 +166,7 @@ def test_eigh(tensor_rng, vector_space_rng, real):
     npt.assert_allclose(T_np, T_np.conj().transpose([2, 3, 0, 1]))
 
     print('perform eigh and test_sanity')
-    D, U = matrix_operations.eigh(T, legs1=['a', 'b'], legs2=['a*', 'b*'], new_labels='c')
+    D, U = matrix_operations.eigh(T, legs1=['a', 'b'], legs2=['a*', 'b*'], new_labels='c', sort=sort)
     D.test_sanity()
     U.test_sanity()
     assert D.dtype.is_real
@@ -182,6 +183,29 @@ def test_eigh(tensor_rng, vector_space_rng, real):
     T_v = tensors.tdot(T, U, ['b*', 'a*'], ['b', 'a'])
     D_v = tensors.tdot(D, U, 'c*', 'c')
     assert tensors.almost_equal(T_v, D_v)
+
+    print('check sorting of eigenvalues')
+    if isinstance(T.backend, backends.AbstractNoSymmetryBackend):
+        D_blocks = [D.data]
+    elif isinstance(T.backend, backends.AbstractAbelianBackend):
+        D_blocks = D.data.blocks
+    else:
+        raise NotImplementedError
+    for block in D_blocks:
+        arr = T.backend.block_to_numpy(block)
+        if sort is None:
+            continue
+        elif sort == 'm>':
+            should_be_ascending = -np.abs(arr)
+        elif sort == 'm<':
+            should_be_ascending = np.abs(arr)
+        elif sort == '>':
+            should_be_ascending = -np.real(arr)
+        elif sort == '<':
+            should_be_ascending = np.real(arr)
+        else:
+            raise NotImplementedError
+        assert np.all(should_be_ascending[1:] >= should_be_ascending[:-1])
 
     print('checking normalization and completeness of eigenvectors (i.e. unitarity of U)')
     U_Ud = tensors.tdot(U, U.conj(), 'c', 'c*').combine_legs(['a', 'b'], ['a*', 'b*'])

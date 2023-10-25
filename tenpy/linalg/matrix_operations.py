@@ -425,7 +425,7 @@ def pinv(a: AbstractTensor, legs1: list[int | str] = None, legs2: list[int | str
 
 
 def eigh(a: AbstractTensor, legs1: list[int | str] = None, legs2: list[int | str] = None,
-         new_labels: str | list[str] = None):
+         new_labels: str | list[str] = 'eig', sort: str = None):
     r"""Eigenvalue decomposition of a hermitian square tensor.
 
     A tensor is considered square, if the `legs2` legs are the duals of the `legs1` legs,
@@ -443,14 +443,8 @@ def eigh(a: AbstractTensor, legs1: list[int | str] = None, legs2: list[int | str
         are duals of those specified by `legs2`.
         Reshaped to a matrix (by combining `legs1` and `legs2`), `a` is assumed to be hermitian.
         This is not checked.
-    legs1
-        Which of the legs belong to "matrix rows"
-    legs2
-        Which of the legs belong to "matrix columns"
-    new_labels: str or tuple of two str, optional
-        Either two labels, where `new_labels[0]` is used for the last leg of `U` and `D`, while
-        `new_labels[1]` is used for the first leg of `D`.
-        If only a single label, the second is the "dual of" the given one.
+    sort : {'m>', 'm<', '>', '<', ``None``}
+        How the eigenvalues are sorted *within* each charge block. See :func:`argsort` for details.
 
     Returns
     -------
@@ -462,8 +456,6 @@ def eigh(a: AbstractTensor, legs1: list[int | str] = None, legs2: list[int | str
         where ``new_leg = ProductSpace(*a.get_legs(leg1))``.
     """
     # TODO (JU) should we support `UPLO` arg? (use lower or upper triangular part)
-    # TODO (JU) should we support `sort` arg? (how to sort eigenvalues *within* charge blocks)
-    #           if not, should we fix a canonical order? -> enforce it in block_eigh for all backends.
     if not isinstance(a, Tensor):
         raise TypeError(f'eigh not supported for type {type(a)}')
     idcs1, idcs2 = leg_bipartition(a, legs1, legs2)
@@ -485,7 +477,7 @@ def eigh(a: AbstractTensor, legs1: list[int | str] = None, legs2: list[int | str
     if len(new_labels) == 1:
         new_labels = [new_labels[0], _dual_leg_label(new_labels[0])]
     assert len(new_labels) == 2
-    d_data, u_data = backend.eigh(a)
+    d_data, u_data = backend.eigh(a, sort=sort)
     D = DiagonalTensor(d_data, first_leg=new_leg, second_leg_dual=True, backend=backend, labels=new_labels[::-1])
     U = Tensor(u_data, legs=[new_leg, new_leg.dual], backend=backend, labels=[a.labels[0], new_labels[0]])
     if need_combine:

@@ -229,9 +229,14 @@ class ArrayApiBlockBackend(AbstractBlockBackend):
     def block_sum_all(self, a: Block) -> float | complex:
         return self._api.sum(a)
 
-    def block_eigh(self, block: Block) -> tuple[Block, Block]:
-        return self._api.linalg.eigh(block)
-
+    def block_eigh(self, block: Block, sort: str = None) -> tuple[Block, Block]:
+        w, v = self._api.linalg.eigh(block)
+        if sort is not None:
+            perm = self.block_argsort(w, sort)
+            w = w[perm]
+            v = v[:, perm]
+        return w, v
+            
     def block_abs_argmax(self, block: Block) -> list[int]:
         flat_idx = self._api.argmax(self._api.abs(block))
         # OPTIMIZE numpy has np.unravel_indices. no analogue here?

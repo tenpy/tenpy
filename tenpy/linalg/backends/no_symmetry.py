@@ -220,8 +220,8 @@ class AbstractNoSymmetryBackend(AbstractBackend, AbstractBlockBackend, ABC):
     def apply_mask_to_DiagonalTensor(self, tensor: DiagonalTensor, mask: Mask) -> DiagonalData:
         return self.apply_mask_to_block(tensor.data, mask.data, ax=0)
 
-    def eigh(self, a: Tensor) -> tuple[DiagonalData, Data]:
-        return self.block_eigh(a.data)
+    def eigh(self, a: Tensor, sort: str = None) -> tuple[DiagonalData, Data]:
+        return self.block_eigh(a.data, sort=sort)
 
     def from_flat_block_trivial_sector(self, block: Block, leg: VectorSpace) -> Data:
         assert self.block_shape(block) == (leg.dim,)

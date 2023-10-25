@@ -1529,7 +1529,7 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
             res_block_inds = np.zeros((0, 2), int)
         return AbelianBackendData(tensor.dtype, res_blocks, res_block_inds, is_sorted=True)
 
-    def eigh(self, a: Tensor) -> tuple[DiagonalData, Data]:
+    def eigh(self, a: Tensor, sort: str = None) -> tuple[DiagonalData, Data]:
         # for missing blocks, i.e. a zero block, the eigenvalues are zero, so we can just skip adding
         # that block to the eigenvalues.
         # for the eigenvectors, we choose the computational basis vectors, i.e. the matrix
@@ -1538,7 +1538,7 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
         eigvects_data = self.eye_data(legs=a.legs[0:1], dtype=a.dtype)
         eigvals_blocks = []
         for block, bi in zip(a.data.blocks, a.data.block_inds):
-            vals, vects = self.block_eigh(block)
+            vals, vects = self.block_eigh(block, sort=sort)
             eigvals_blocks.append(vals)
             assert bi[0] == bi[1]  # TODO remove this check
             eigvects_data.blocks[bi[0]] = vects

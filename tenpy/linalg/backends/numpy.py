@@ -245,8 +245,13 @@ class NumpyBlockBackend(AbstractBlockBackend):
     def apply_mask_to_block(self, block: Block, mask: Block, ax: int) -> Block:
         return np.compress(mask, block, ax)
 
-    def block_eigh(self, block: Block) -> tuple[Block, Block]:
-        return np.linalg.eigh(block)
+    def block_eigh(self, block: Block, sort: str = None) -> tuple[Block, Block]:
+        w, v = np.linalg.eigh(block)
+        if sort is not None:
+            perm = self.block_argsort(w, sort)
+            w = np.take(w, perm)
+            v = np.take(v, perm, axis=1)
+        return w, v
 
     def block_abs_argmax(self, block: Block) -> list[int]:
         return np.unravel_index(np.argmax(np.abs(block)), block.shape)

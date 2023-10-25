@@ -526,8 +526,16 @@ class AbstractBackend(metaclass=ABCMeta):
         ...
 
     @abstractmethod
-    def eigh(self, a: Tensor) -> tuple[DiagonalData, Data]:
-        """Eigenvalue decomposition of a 2-leg hermitian tensor"""
+    def eigh(self, a: Tensor, sort: str = None) -> tuple[DiagonalData, Data]:
+        """Eigenvalue decomposition of a 2-leg hermitian tensor
+
+        Parameters
+        ----------
+        a
+        sort : {'m>', 'm<', '>', '<'}
+            How the eigenvalues are sorted *within* each charge block.
+            See :func:`argsort` for details.
+        """
         ...
 
     @abstractmethod
@@ -826,10 +834,16 @@ class AbstractBlockBackend(metaclass=ABCMeta):
         return block[idx]
 
     @abstractmethod
-    def block_eigh(self, block: Block) -> tuple[Block, Block]:
+    def block_eigh(self, block: Block, sort: str = None) -> tuple[Block, Block]:
         """Eigenvalue decomposition of a 2D hermitian block.
 
         Return a 1D block of eigenvalues and a 2D block of eigenvectors
+        Parameters
+        ----------
+        block : Block
+            The block to decompose
+        sort : {'m>', 'm<', '>', '<'}
+            How the eigenvalues are sorted
         """
         ...
 

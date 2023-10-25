@@ -227,9 +227,13 @@ class TorchBlockBackend(AbstractBlockBackend):
     def block_sum_all(self, a: Block) -> float | complex:
         return torch_module.sum(a)
 
-    def block_eigh(self, block: Block) -> tuple[Block, Block]:
-        Q, L = torch_module.linalg.eigh(block)
-        return Q, L
+    def block_eigh(self, block: Block, sort: str = None) -> tuple[Block, Block]:
+        w, v = torch_module.linalg.eigh(block)
+        if sort is not None:
+            perm = self.block_argsort(w, sort)
+            w = w[perm]
+            v = v[:, perm]
+        return w, v
 
     def block_abs_argmax(self, block: Block) -> list[int]:
         flat_idx = torch_module.argmax(torch_module.abs(block))
