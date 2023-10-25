@@ -854,4 +854,59 @@ class AbstractBlockBackend(metaclass=ABCMeta):
         else:
             perms = [leg.basis_perm for leg in legs]
         return self.apply_leg_permutations(block, perms)
+
+    def block_argsort(self, block: Block, sort: str = None, axis: int = 0) -> Block:
+        """Return the permutation that would sort a block along one axis.
+
+        Parameters
+        ----------
+        block : Block
+            The block to sort.
+        sort : str
+            Specify how the arguments should be sorted.
+
+            ==================== =============================
+            `sort`               order
+            ==================== =============================
+            ``'m>', 'LM'``       Largest magnitude first
+            -------------------- -----------------------------
+            ``'m<', 'SM'``       Smallest magnitude first
+            -------------------- -----------------------------
+            ``'>', 'LR', 'LA'``  Largest real part first
+            -------------------- -----------------------------
+            ``'<', 'SR', 'SA'``  Smallest real part first
+            -------------------- -----------------------------
+            ``'LI'``             Largest imaginary part first
+            -------------------- -----------------------------
+            ``'SI'``             Smallest imaginary part first
+            ==================== =============================
+
+        axis : int
+            The axis along which to sort
+
+        Returns
+        -------
+        1D block of int
+            The indices that would sort the block
+        """
+        if sort == 'm<' or sort == 'SM':
+            block = np.abs(block)
+        elif sort == 'm>' or sort == 'LM':
+            block = -np.abs(block)
+        elif sort == '<' or sort == 'SR' or sort == 'SA':
+            block = np.real(block)
+        elif sort == '>' or sort == 'LR' or sort == 'LA':
+            block = -np.real(block)
+        elif sort == 'SI':
+            block = np.imag(block)
+        elif sort == 'LI':
+            block = -np.imag(block)
+        else:
+            raise ValueError("unknown sort option " + repr(sort))
+        return self._block_argsort(block, axis=axis)
+
+    @abstractmethod
+    def _block_argsort(self, block: Block, axis: int) -> Block:
+        """Like :meth:`block_argsort` but can assume real valued block, and sort ascending"""
+        ...
         

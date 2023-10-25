@@ -117,6 +117,7 @@ else:
         return np.isnan(np.sum(a))  # still faster than 'np.isnan(a).any()'
 
 
+# TODO remove in favor of backend.block_argsort?
 def argsort(a, sort=None, **kwargs):
     """wrapper around np.argsort to allow sorting ascending/descending and by magnitude.
 

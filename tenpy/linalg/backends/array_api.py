@@ -241,6 +241,9 @@ class ArrayApiBlockBackend(AbstractBlockBackend):
             idcs.append(idx)
         return idcs
 
+    def _block_argsort(self, block: Block, axis: int) -> Block:
+        return self._api.argsort(block, axis=axis)
+
 
 class NoSymmetryArrayApiBackend(ArrayApiBlockBackend, AbstractNoSymmetryBackend):
     def __init__(self, api_namespace):

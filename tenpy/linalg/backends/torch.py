@@ -243,6 +243,9 @@ class TorchBlockBackend(AbstractBlockBackend):
     def synchronize(self):
         """Wait for asynchronous processes (if any) to finish"""
         torch_module.cuda.synchronize(device=self.device)
+
+    def _block_argsort(self, block: Block, axis: int) -> Block:
+        return torch_module.argsort(block, dim=axis)
         
 
 class NoSymmetryTorchBackend(TorchBlockBackend, AbstractNoSymmetryBackend):

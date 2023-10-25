@@ -250,6 +250,9 @@ class NumpyBlockBackend(AbstractBlockBackend):
 
     def block_abs_argmax(self, block: Block) -> list[int]:
         return np.unravel_index(np.argmax(np.abs(block)), block.shape)
+
+    def _block_argsort(self, block: Block, axis: int) -> Block:
+        return np.argsort(block, axis=axis)
     
 
 class NoSymmetryNumpyBackend(NumpyBlockBackend, AbstractNoSymmetryBackend):
