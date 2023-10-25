@@ -108,9 +108,14 @@ class Shape:
         self.set_labels([mapping.get(l, l) for l in self._labels])
 
     def __str__(self):
-        dims = ','.join((f"{lbl}:{d:d}" if lbl is not None else str(d))
+        dims = ', '.join((f"{lbl}:{d:d}" if lbl is not None else str(d))
                         for lbl, d in zip(self._labels, self.dims))
         return f"({dims})"
+
+    def __repr__(self) -> str:
+        dims = ', '.join((f"{lbl}:{d:d}" if lbl is not None else str(d))
+                         for lbl, d in zip(self._labels, self.dims))
+        return f'Shape({dims})'
 
 
 # ##################################
