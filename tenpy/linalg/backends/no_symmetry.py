@@ -2,6 +2,7 @@
 from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, Callable
+import numpy as np
 from numpy import prod
 
 from .abstract_backend import AbstractBackend, AbstractBlockBackend, Data, DiagonalData, Block, Dtype
@@ -236,3 +237,7 @@ class AbstractNoSymmetryBackend(AbstractBackend, AbstractBlockBackend, ABC):
 
     def inv_part_to_flat_block_single_sector(self, tensor: Tensor) -> Block:
         return self.apply_basis_perm(tensor.data[:, 0], [tensor.legs[0]], inv=True)
+
+    def flip_leg_duality(self, tensor: Tensor, which_legs: list[int],
+                         flipped_legs: list[VectorSpace], perms: list[np.ndarray]) -> Data:
+        return tensor.data

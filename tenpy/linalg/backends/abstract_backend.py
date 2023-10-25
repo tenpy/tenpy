@@ -558,6 +558,11 @@ class AbstractBackend(metaclass=ABCMeta):
         """Inverse of inv_part_from_flat_block_single_sector"""
         ...
 
+    @abstractmethod
+    def flip_leg_duality(self, tensor: Tensor, which_legs: list[int],
+                         flipped_legs: list[VectorSpace], perms: list[np.ndarray]) -> Data:
+        ...
+
 
 class AbstractBlockBackend(metaclass=ABCMeta):
     svd_algorithms: list[str]  # first is default

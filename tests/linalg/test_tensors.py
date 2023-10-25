@@ -794,6 +794,23 @@ def test_elementwise_functions(vector_space_rng, np_random, function, data_imag)
     npt.assert_array_almost_equal_nulp(res, expect)
 
 
+@pytest.mark.parametrize('which_legs', [[0], [-1], ['b'], ['a', 'b', 'c', 'd'], ['b', -2]])
+def test_flip_leg_duality(tensor_rng, which_legs):
+    T: tensors.Tensor = tensor_rng(labels=['a', 'b', 'c', 'd'])
+    res = tensors.flip_leg_duality(T, *which_legs)
+    res.test_sanity()
+    flipped = T.get_leg_idcs(which_legs)
+    for i in range(T.num_legs):
+        if i in flipped:
+            assert np.all(res.legs[i].sectors_of_basis == T.legs[i].sectors_of_basis)
+            assert res.legs[i].is_dual == (not T.legs[i].is_dual)
+        else:
+            assert res.legs[i] == T.legs[i]
+    T_np = T.to_numpy_ndarray()
+    res_np = res.to_numpy_ndarray()
+    npt.assert_array_almost_equal_nulp(T_np, res_np, 100)
+
+
 def demo_repr():
     # this is intended to generate a bunch of demo reprs
     # can not really make this an automated test, the point is for a human to have a look

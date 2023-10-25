@@ -1613,6 +1613,15 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
             return self.zero_block(shape=[dim], dtype=tensor.data.dtype)
         raise ValueError  # should have been caught by input checks in ChargedTensor.to_flat_block_single_sector
 
+    def flip_leg_duality(self, tensor: Tensor, which_legs: list[int],
+                         flipped_legs: list[VectorSpace], perms: list[np.ndarray]) -> Data:
+        block_inds = np.copy(tensor.data.block_inds)
+        for i, perm in zip(which_legs, perms):
+            # old_sector_idx = perm[new_sector_idx]
+            block_inds[:, i] = inverse_permutation(perm)[block_inds[:, i]]
+        return AbelianBackendData(dtype=tensor.data.dtype, blocks=tensor.data.blocks,
+                                  block_inds=block_inds, is_sorted=False)
+
 
 def product_space_map_incoming_block_inds(space: ProductSpace, incoming_block_inds):
     """Map incoming block indices to indices of :attr:`_block_ind_map`.
@@ -1632,6 +1641,7 @@ def product_space_map_incoming_block_inds(space: ProductSpace, incoming_block_in
         For each row j of `incoming_block_inds` an index `J` such that
         ``self._block_ind_map[J, 2:-1] == block_inds[j]``.
     """
+    # FIXME move this back to ProductSpace?
     assert incoming_block_inds.shape[1] == len(space.spaces)
     # calculate indices of _block_ind_map by using the appropriate strides
     inds_before_perm = np.sum(incoming_block_inds * space._strides[np.newaxis, :], axis=1)

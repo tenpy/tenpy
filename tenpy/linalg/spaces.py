@@ -256,7 +256,8 @@ class VectorSpace:
 
     @classmethod
     def from_sectors(cls, symmetry: Symmetry, sectors: SectorArray, multiplicities: ndarray = None,
-                     basis_perm: ndarray = None, is_real: bool = False):
+                     basis_perm: ndarray = None, is_real: bool = False, return_perm: bool = False,
+                     _is_dual: bool = False):
         """Like constructor, but fewer requirements on `sectors`.
 
         Parameters
@@ -275,6 +276,18 @@ class VectorSpace:
             and `multiplicities`. Per default the trivial permutation ``[0, 1, 2, ...]`` is used.
         is_real : bool
             If the space is over the real or complex numbers.
+        _is_dual : bool
+            Whether this is the "normal" (i.e. ket) or dual (i.e. bra) space.
+
+            .. warning :
+                For ``_is_dual is True``, the passed `sectors` are interpreted as the sectors of the
+                ("non-dual") ket-space isomorphic to self.
+
+        Returns
+        -------
+        space : VectorSpace
+        sector_sort : bool, optional
+            Only returned `if return_perm`. The permutation that sorts the `sectors`.
         """
         sectors = np.asarray(sectors, dtype=int)
         assert sectors.ndim == 2 and sectors.shape[1] == symmetry.sector_ind_len
@@ -297,8 +310,11 @@ class VectorSpace:
         diffs = find_row_differences(sectors, include_len=True)
         multiplicities = mult_slices[diffs[1:]] - mult_slices[diffs[:-1]]
         sectors = sectors[diffs[:-1]]  # [:-1] to exclude len
-        return cls(symmetry=symmetry, sectors=sectors, multiplicities=multiplicities,
-                   basis_perm=basis_perm, is_real=is_real, _is_dual=False)
+        res = cls(symmetry=symmetry, sectors=sectors, multiplicities=multiplicities,
+                  basis_perm=basis_perm, is_real=is_real, _is_dual=_is_dual)
+        if return_perm:
+            return res, sort
+        return res
 
     @property
     def sectors(self):
@@ -627,18 +643,28 @@ class VectorSpace:
         res.is_dual = not self.is_dual
         return res
 
-    def flip_is_dual(self) -> VectorSpace:
+    def flip_is_dual(self, return_perm: bool = False) -> VectorSpace:
         """Return a copy with opposite :attr:`is_dual` flag.
 
-        The result has the same :attr:`sectors` and :attr:`basis_perm`.
+        The result has the same :attr:`sectors` and :attr:`multiplicities` *up to permutation*,
+        such that they have the exact same :attr:`sectors_of_basis`.
+        Therefore, the result can replace `self` on a tensor without affecting the charge rule.
         Note that this leg is neither equal to `self` nor can it be contracted with `self`.
+
+        Returns
+        -------
+        flipped : VectorSpace
+            The flipped space.
+        sector_sort : bool, optional
+            Only returned `if return_perm`.
+            The permutation that sorts the sectors after taking the duals.
+
         """
-        non_dual_sectors = self.symmetry.dual_sectors(self._non_dual_sectors)
-        res = VectorSpace.from_sectors(symmetry=self.symmetry, sectors=non_dual_sectors,
-                                       multiplicities=self.multiplicities,
-                                       basis_perm=self.basis_perm, is_real=self.is_real)
-        res.is_dual = not self.is_dual
-        return res
+        return VectorSpace.from_sectors(
+            symmetry=self.symmetry, sectors=self.symmetry.dual_sectors(self._non_dual_sectors),
+            multiplicities=self.multiplicities, basis_perm=self.basis_perm, is_real=self.is_real,
+            return_perm=return_perm, _is_dual=not self.is_dual
+        )
 
     def is_equal_or_dual(self, other: VectorSpace) -> bool:
         """If another VectorSpace is equal to *or* dual of `self`."""

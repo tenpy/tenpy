@@ -194,10 +194,18 @@ class AbstractTensor(metaclass=ABCMeta):
 
     def flip_leg_duality(self, which_leg: int | str, *more: int | str) -> AbstractTensor:
         """See :func:`tensors.flip_leg_duality`"""
+        which_legs = self.get_leg_idcs([which_leg, *more])
+        flipped_legs = []
+        perms = []
+        for i in which_legs:
+            flipped, perm = self.legs[i].flip_is_dual(return_perm=True)
+            flipped_legs.append(flipped)
+            perms.append(perm)
         res = self.copy(deep=False)
-        res.legs = self.legs[:]
-        for i in self.get_leg_idcs([which_leg, *more]):
-            res.legs[i] = res.legs[i].flip_is_dual()
+        res.data = self.backend.flip_leg_duality(self, which_legs=which_legs,
+                                                 flipped_legs=flipped_legs, perms=perms)
+        for i, leg in zip(which_legs, flipped_legs):
+            res.legs[i] = leg
         return res
 
     def index(self, *legs: int | str) -> _TensorIndexHelper:
@@ -3301,7 +3309,6 @@ def flip_leg_duality(t: AbstractTensor, which_leg: int | str, *more: int | str) 
 
     which are defined by linear extension and depend on the basis :math:`\set{n}`.
     """
-    # TODO test coverage
     return t.flip_leg_duality(which_leg, *more)
 
 
