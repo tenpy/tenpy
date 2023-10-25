@@ -439,21 +439,29 @@ def eigh(a: AbstractTensor, legs1: list[int | str] = None, legs2: list[int | str
     Parameters
     ----------
     a : Tensor
-        The tensor two decompose. Has ``2 * N`` where the ``N`` legs specified by `legs1`
+        The tensor to decompose. Has ``2 * N`` legs where the ``N`` legs specified by `legs1`
         are duals of those specified by `legs2`.
         Reshaped to a matrix (by combining `legs1` and `legs2`), `a` is assumed to be hermitian.
         This is not checked.
+    legs1, legs2 : list[int | str], optional
+        Which of the legs belong to "matrix rows" vs "columns". See :func:`leg_bipartition`.
+    new_labels : (iterable of) str
+        Specify the labels of the newly created legs. Either one, two or three ``str`` labels.
+        If a single label ``a``, then we have ``U.labels == [..., a]`` and ``D.labels == [a*, a]``.
+        If two ``(a, b)``, then we have ``U.labels == [..., a]`` and ``D.labels == [b, a]``.
+        If three ``(a, b, c)``, then we have ``U.labels == [..., a]`` and ``D.labels == [b, c]``.
     sort : {'m>', 'm<', '>', '<', ``None``}
         How the eigenvalues are sorted *within* each charge block. See :func:`argsort` for details.
 
     Returns
     -------
     D : DiagonalTensor
-        The eigenvalues as a DiagonalTensor with legs ``[new_leg, new_leg.dual]``.
+        The eigenvalues as a DiagonalTensor with legs ``[new_leg.dual, new_leg]``.
     U : Tensor
         A tensor containing the normalized eigenvectors. It is unitary, in the sense that combining
-        the leading legs yields a unitary matrix. Legs are ``[*a.get_legs(legs1), new_leg.dual]``,
-        where ``new_leg = ProductSpace(*a.get_legs(leg1))``.
+        the leading legs yields a unitary matrix. Legs are ``[*a.get_legs(legs1), new_leg]``,
+        where ``new_leg = ProductSpace(*a.get_legs(leg1)).as_VectorSpace().dual``.
+        In particular, the new leg is always a plain `VectorSpace`, never a `ProductSpace`.
     """
     # TODO (JU) should we support `UPLO` arg? (use lower or upper triangular part)
     if not isinstance(a, Tensor):
@@ -466,20 +474,35 @@ def eigh(a: AbstractTensor, legs1: list[int | str] = None, legs2: list[int | str
     need_combine = (len(idcs1) > 1)
     backend = a.backend
     if need_combine:
-        new_leg = ProductSpace([a.legs[i1] for i1 in idcs1], backend=backend)
-        a = a.combine_legs(idcs1, idcs2, product_spaces=[new_leg, new_leg.dual])
+        U_leg_0 = ProductSpace([a.legs[i1] for i1 in idcs1], backend=backend)
+        a = a.combine_legs(idcs1, idcs2, product_spaces=[U_leg_0, U_leg_0.dual])
+        D_leg_0 = U_leg_0.as_VectorSpace()
+        U_leg_1 = D_leg_0.dual
     else:
-        new_leg = a.legs[0]
-
-    if new_labels is None:
-        new_labels = a.labels[::-1]
-    new_labels = list(to_iterable(new_labels))
-    if len(new_labels) == 1:
-        new_labels = [new_labels[0], _dual_leg_label(new_labels[0])]
-    assert len(new_labels) == 2
+        if idcs1[0] == 1:  # implies idcs1 == [1], idcs2 == [0]
+            a = a.permute_legs([1, 0])
+        U_leg_0 = a.legs[0]
+        D_leg_0 = U_leg_0.as_VectorSpace()
+        U_leg_1 = a.legs[1].as_VectorSpace()
+    
     d_data, u_data = backend.eigh(a, sort=sort)
-    D = DiagonalTensor(d_data, first_leg=new_leg, second_leg_dual=True, backend=backend, labels=new_labels[::-1])
-    U = Tensor(u_data, legs=[new_leg, new_leg.dual], backend=backend, labels=[a.labels[0], new_labels[0]])
+
+    new_labels = to_iterable(new_labels)
+    if len(new_labels) == 1:
+        la = lc = new_labels[0]
+        lb = _dual_leg_label(la)
+    elif len(new_labels) == 2:
+        la, lb = new_labels
+        lc = la
+    elif len(new_labels) == 3:
+        la, lb, lc = new_labels
+    else:
+        msg = f'Expected one, two, or three `new_labels`. Got {len(new_labels)}.'
+        raise ValueError(msg)
+    D = DiagonalTensor(d_data, first_leg=D_leg_0, second_leg_dual=True, backend=backend,
+                       labels=[lb, lc])
+    U = Tensor(u_data, legs=[U_leg_0, U_leg_1], backend=backend, labels=[a.labels[0], la])
+
     if need_combine:
         U = U.split_legs(0)
     return D, U

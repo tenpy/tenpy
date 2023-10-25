@@ -173,10 +173,10 @@ def test_eigh(tensor_rng, vector_space_rng, real, sort):
     assert U.dtype == T.dtype
 
     print('checking legs and labels')
-    new_leg = spaces.ProductSpace([a, b])
-    assert D.legs == [new_leg, new_leg.dual]
+    new_leg = spaces.ProductSpace([a, b]).as_VectorSpace().dual
+    assert D.legs == [new_leg.dual, new_leg]
     assert D.labels == ['c*', 'c']
-    assert U.legs == [a, b, new_leg.dual]
+    assert U.legs == [a, b, new_leg]
     assert U.labels == ['a', 'b', 'c']
 
     print('checking eigen property')
