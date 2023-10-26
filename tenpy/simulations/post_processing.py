@@ -245,13 +245,19 @@ class SpectralFunctionProcessor(SimulationPostProcessor):
         return self.lat.mps2lat_values(a, axes=-1)
 
     def _to_mps_geometry(self, a):
-        # if length of the unit cell is 1, order still returns it
+        """This assumes that the array a has shape (..., Lx, Ly, Lu), if Lu = 1, (..., Lx, Ly)"""
+        mps_idx_flattened = np.ravel_multi_index(tuple(self.lat.order.T), self.lat.shape)
+        dims_until_lat_dims = a.ndim - (self.lat.dim + 1)  # add unit cell dim
         if self.lat.Lu == 1:
-            order_tuple = tuple(self.lat.order[..., :-1].T)
-            return a[:, *order_tuple]
-        else:
-            order_tuple = tuple(self.lat.order.T)
-            return a[:, *order_tuple]
+            dims_until_lat_dims += 1
+        a = a.reshape(a.shape[:dims_until_lat_dims] + (-1,))
+        a = np.take(a, mps_idx_flattened, axis=-1)
+        return a
+        # this is the same as (which linting doesn't accept unfortunately)
+        # order = self.lat.order
+        # if self.lat.Lu == 1:
+        #     order = order[..., :-1]
+        # return a[..., *order.T]
 
     def gaussian(self, n_steps: int):
         """Simple gaussian windowing function. Applying a windowing function
@@ -402,7 +408,8 @@ def init_simulation_for_processing(*,
 
 
 # Linear Prediction
-def linear_prediction(x, m, p, split=0, trunc_mode='renormalize', two_d_mode='individual', cyclic=False, epsilon=10e-7):
+def linear_prediction(x: np.ndarray, m: int, p: int, split: float = 0, trunc_mode: str = 'renormalize',
+                      two_d_mode: str = 'individual', cyclic: bool = False, epsilon: float = 10e-7) -> np.ndarray:
     """Linear prediction for m time steps, based on the last p data points
     of the time series x.
 
@@ -477,7 +484,7 @@ def linear_prediction(x, m, p, split=0, trunc_mode='renormalize', two_d_mode='in
         return np.array(predictions).T  # transpose back
 
 
-def autocorrelation(x, i, j, cyclic=False, cut_idx : int = 0, cut_pad_zero :bool = False):
+def autocorrelation(x, i, j, cyclic=False, cut_idx= 0, cut_pad_zero: bool = False):
     """Compute the autocorrelation :math:`R_{XX}(i, j) = E\{x(n-i) \cdot x(n-j)\}`. Note
     that this can be rewritten as :math:`R_{XX}(i - j) = E\{x(n) \cdot x(n-(j-i))\}`
 
@@ -548,7 +555,7 @@ def get_lpc(correlations, epsilon=10e-7):
     return R_inv @ r
 
 
-def alpha_and_c(x, lpc, trunc_mode: str = 'cutoff'):
+def alpha_and_c(x, lpc, trunc_mode='cutoff'):
     """Get the eigenvalues and coefficients for linearly predicting the time series x.
     If necessary, truncate the eigenvalues.
 
