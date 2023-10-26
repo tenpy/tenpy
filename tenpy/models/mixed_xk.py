@@ -32,14 +32,14 @@ We use the indices ``k = 0, ... Ly-1`` and define the actual momentum as
 :math:`k_y = 2 \pi i / L_y * k` for :math:`k \leq Ly/2` and
 and shift to :math:`k_y = 2 \pi i * (k-L_y) / L_y ` for :math:`k > Ly/2` such that
 :math:`k_y \in (-\pi, pi]`.
-The momenta fullfill the usual relations
+The momenta fulfill the usual relations
 
 .. math ::
     \sum_y \exp(\pm \frac{2 \pi i}{L_y} (k1 - k2) y)  = L \delta_{k1, k2}
     \\
     \sum_k \exp(\pm \frac{2 \pi i}{L_y} k (y1 - y2))  = L \delta_{y1, y2}
 
-which transfrom the anti-commutation relations from real to momentum space and vice versa,
+which transform the anti-commutation relations from real to momentum space and vice versa,
 
 .. math ::
     [c_{x1,y1,l1}, c^\dagger_{x2,y2,l2}]_+ = \delta_{x1,x2} \delta_{y1,y2} \delta_{l1,l2}
@@ -82,7 +82,7 @@ class MixedXKLattice(Lattice):
     r"""Lattice for fermions with mixed real and momentum space on a cylinder.
 
     This class represents a square lattice cylinder with a unit cell of `N_orb` fermionic orbitals,
-    where we indentify the y-direction (around the cylinder) as momentum space.
+    where we identify the y-direction (around the cylinder) as momentum space.
     The full lattice unit cell consists of a 'ring', which is repeated in cylinder direction:
     indices :math:`(x, u= k * N_{orb} + l)` in the lattice correspond to the ring :math:`x`,
     momentum :math:`k_y = 2\pi k/L_y` around the cylinder, and orbital `l`.
@@ -184,7 +184,7 @@ class MixedXKLattice(Lattice):
                                  conserve_k=True,
                                  ring_order=None,
                                  **kwargs):
-        """Initialize from chages, defining default Sites.
+        """Initialize from charges, defining default Sites.
 
         Parameters
         ----------
@@ -198,7 +198,7 @@ class MixedXKLattice(Lattice):
             The nature of the charges. If `conserve_k` is True, the charge ``"ky"`` for the
             momentum around the cylinder is added.
         charges : array_like of shape (N_orb, chinfo.qnumber)
-            For each of the oribals the value of each charges (except ``"ky"``),
+            For each of the orbitals the value of each charges (except ``"ky"``),
             when the orbital is occupied.
         ring_order : 1D array, len Ly*N_orb
             Gives the order of the sites within a ring for the DMRG snake;
@@ -295,7 +295,7 @@ class MixedXKLattice(Lattice):
         return obj
 
     def get_u(self, k, l):
-        """Return unit cell index `u` as a function of momenutm index `k` and orbital `l`."""
+        """Return unit cell index `u` as a function of momentum index `k` and orbital `l`."""
         # note: MixedXKModel explicitly uses that this is "c-style" ordering of (k, l)
         return k * self.N_orb + l  # don't change this!
 
@@ -314,7 +314,7 @@ class MixedXKLattice(Lattice):
         return self._exp_2pi_Ly[np.mod(ky, self.Ly)]
 
     def mps2lat_values_k(self, A, axes=0):
-        """Like :meth:`Lattice.mps2lat_values`, but indtroduce `k` as separate lattice index."""
+        """Like :meth:`Lattice.mps2lat_values`, but introduce `k` as separate lattice index."""
         axes = to_iterable(axes)
         A_res = self.mps2lat_values(A, axes)
         changed_axes = sorted([(ax + A.ndim if ax < 0 else ax) for ax in axes])
@@ -342,7 +342,7 @@ class MixedXKLattice(Lattice):
         return A_res.reshape(A_res_reshape)
 
     def _init_extra_attributes(self, Ly):
-        """Set a few usefull extra attributes defined by Ly only."""
+        """Set a few useful extra attributes defined by Ly only."""
         self._exp_2pi_Ly = np.exp(2.j * np.pi / Ly * np.arange(Ly))
         self.delta_q = np.zeros((Ly, Ly, Ly))
         for q, delta_q in enumerate(self.delta_q):
@@ -379,7 +379,7 @@ class MixedXKModel(CouplingMPOModel):
         chinfo : :class:`~tenpy.linalg.charges.ChargeInfo`
             The charges to be conserved, excluding the momentum in y direction "ky".
         charges : array_like of shape (N_orb, chinfo.qnumber)
-            For each of the oribals the value of each charges (except ``"ky"``),
+            For each of the orbitals the value of each charges (except ``"ky"``),
             when the orbital is occupied.
         """
         xy_lattice = model_params.get('xy_lattice', "Square")
@@ -413,7 +413,7 @@ class MixedXKModel(CouplingMPOModel):
             :math:`\sum_x \mathtt{couplings[x, k1, l1, k2, l2]} c^\dagger_{x,k1,l1} c_{x,k2,l2}`.
             Should fulfill ``couplings[x, k1, l1, k2, l2] == conj(couplings[x, k2, l2, k1, l1])``
             to make the Hamiltonian hermitian.
-            The x dependence (and corresponding dimension in `couplings`) can be ommited.
+            The x dependence (and corresponding dimension in `couplings`) can be omitted.
         """
         N_orb = self.lat.N_orb
         Lx = self.lat.N_rings
@@ -440,7 +440,7 @@ class MixedXKModel(CouplingMPOModel):
             :math:`\sum_x couplings[x, k1, j1, k2, j2] c^\dagger_{x,k1,l1} c_{x+dx,k2,l2} + h.c.`.
             Here, ``Nx = lat.N_rings if lat.bc_MPS == 'infinite' else lat.N_rings - abs(dx)``
             gives the number of possible `x` values and ``lat.N_rings`` is the `Lx` model parameters.
-            The x dependence (and corresponding dimension in `couplings`) can be ommited.
+            The x dependence (and corresponding dimension in `couplings`) can be omitted.
         dx : int
             Distance between the rings; use dx > 1 for long-range hoppings.
         """
@@ -469,7 +469,7 @@ class MixedXKModel(CouplingMPOModel):
                 \sum_x \mathtt{couplings[x, k1,j1, k2,j2, k3,j3, k4,j4]}
                         A_{x,k1,j1} B_{x,k2,j2} C_{x,k3,j3} D_{x,k4,j4}
 
-            The x dependence (and corresponding dimension in `couplings`) can be ommited.
+            The x dependence (and corresponding dimension in `couplings`) can be omitted.
         operators: tuple of 4 str
             The 4 operators `A,B,C,D` to be used, 'Cd' for (fermionic) creation and 'C' for
             annihilation operators of given ring, momentum and orbital.
@@ -503,11 +503,11 @@ class MixedXKModel(CouplingMPOModel):
                         A_{x,k1,j1} B_{x,k2,j2} C_{x+dx,k3,j3} D_{x+dx,k4,j4}
 
             For the default `operators`, it should fulfill
-            ``coulings[k1,j1, k2,j2, k3,j3, k4,j4] = conj(coulings[k2,j2, k1,j1, k4,j4, k3,j3])``
+            ``couplings[k1,j1, k2,j2, k3,j3, k4,j4] = conj(couplings[k2,j2, k1,j1, k4,j4, k3,j3])``
             to make the Hamiltonian hermitian.
             Here, ``Nx = lat.N_rings if lat.bc_MPS == 'infinite' else lat.N_rings - abs(dx)``
             gives the number of possible `x` values and ``lat.N_rings`` is the `Lx` model parameters.
-            The x dependence (and corresponding dimension in `couplings`) can be ommited.
+            The x dependence (and corresponding dimension in `couplings`) can be omitted.
         dx : int
             Distance between the rings; use dx > 1 for long(er)-range interactions.
         operators: tuple of 4 str
@@ -723,7 +723,7 @@ class MixedXKModel(CouplingMPOModel):
 
 
 class SpinlessMixedXKSquare(MixedXKModel):
-    """Spin-less fermionic Hubbbard model on a square lattice in x-k-basis.
+    """Spin-less fermionic Hubbard model on a square lattice in x-k-basis.
 
     Spinless Fermions with a single orbital (`N_orb` = 1) on a square lattice,
     nearest neighbor hopping (`t`) and nearest-neighbor interaction (`V`).
@@ -772,7 +772,7 @@ class SpinlessMixedXKSquare(MixedXKModel):
 class HubbardMixedXKSquare(MixedXKModel):
     """Example: Spin-full Hubbard model on a square lattice in x-k-Basis.
 
-    Spinfull fermions, no extra orbitals (`N_orb` = 2 for up and down), on a square lattice,
+    Spinful fermions, no extra orbitals (`N_orb` = 2 for up and down), on a square lattice,
     nearest-neighbor hopping (`t`) + onsite interactions (`U`)
     """
     def init_lattice(self, model_params):

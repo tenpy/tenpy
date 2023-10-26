@@ -144,7 +144,7 @@ class Lattice:
         possibly introducing a disorder of each site.
         It is *only* used by :meth:`position` (e.g. when plotting lattice sites)
         and :meth:`distance`. To use this, you can set the `position_disorder` in a model,
-        and then read out and use the :meth:`distance` to possibly rescale the couling strengths.
+        and then read out and use the :meth:`distance` to possibly rescale the coupling strengths.
         The correct shape  is ``Ls[0], Ls[1], ..., len(unit_cell), Dim``, where `Dim` is the same
         dimension as for the `unit_cell_positions` and `basis`.
     pairs : dict
@@ -192,7 +192,7 @@ class Lattice:
         self.position_disorder = None  # no disorder by default
         # calculate order for MPS
         self.order = self.ordering(order)
-        # uses attribute setter to calculte _mps2lat_vals_idx_fix_u etc and lat2mps
+        # uses attribute setter to calculate _mps2lat_vals_idx_fix_u etc and lat2mps
         self.pairs = pairs if pairs is not None else {}
         for name, NN in [('nearest_neighbors', nearest_neighbors),
                          ('next_nearest_neighbors', next_nearest_neighbors),
@@ -203,7 +203,7 @@ class Lattice:
             msg = msg.format(name)
             warnings.warn(msg, FutureWarning)
             if name in self.pairs:
-                raise ValueError("{0!s} sepcified twice!".format(name))
+                raise ValueError("{0!s} specified twice!".format(name))
             self.pairs[name] = NN
         self.test_sanity()  # check consistency
 
@@ -284,7 +284,7 @@ class Lattice:
         hdf5_saver.save(self.bc_MPS, subpath + "boundary_condition_MPS")
         hdf5_saver.save(self.order, subpath + "order_for_MPS")
         hdf5_saver.save(self.pairs, subpath + "pairs")
-        # not necessary for loading, but still usefull
+        # not necessary for loading, but still useful
         h5gr.attrs["dim"] = self.dim
         h5gr.attrs["N_sites"] = self.N_sites
         if hasattr(self, 'segment_first_last'):
@@ -383,7 +383,7 @@ class Lattice:
 
         Possible strings for the `order` defined here are:
 
-            ``'Csyle', 'default'`` :
+            ``'Cstyle', 'default'`` :
                 Recommended in most cases. First within the unit cell, then along y, then x.
                 ``priority=(0, 1, ..., dim-1, dim)``.
             ``'snake', 'snakeCstyle'`` :
@@ -554,7 +554,7 @@ class Lattice:
             if cp.bc_MPS != 'infinite':
                 raise ValueError("enlarge only possible for infinite MPS")
             if last is not None or first != 0:
-                raise ValueError("specifiy either `first`+`last` or `enlarge`!")
+                raise ValueError("specify either `first`+`last` or `enlarge`!")
             assert enlarge > 0
             last = enlarge * L - 1
         elif last is None:
@@ -667,7 +667,7 @@ class Lattice:
             we shift `x_0` accordingly.
         """
         if self.bc_MPS != 'finite':
-            # allow `i` outsit of MPS unit cell for bc_MPS infinite
+            # allow `i` outside of MPS unit cell for bc_MPS infinite
             i0 = i
             i = np.mod(i, self.N_sites)
             if np.any(i0 != i):
@@ -763,7 +763,7 @@ class Lattice:
         Returns
         -------
         res_A : ndarray
-            Reshaped and reordered verions of A. Such that MPS indices along the specified axes
+            Reshaped and reordered version of A. Such that MPS indices along the specified axes
             are replaced by lattice indices, i.e., if MPS index `j` maps to lattice site
             `(x0, x1, x2)`, then ``res_A[..., x0, x1, x2, ...] = A[..., j, ...]``.
 
@@ -870,7 +870,7 @@ class Lattice:
             if include_u is None:
                 include_u = [None] * len(axes)
             if len(axes) != len(mps_inds) or len(axes) != len(include_u):
-                raise ValueError("Lenght of `axes`, `mps_inds` and `include_u` different")
+                raise ValueError("Length of `axes`, `mps_inds` and `include_u` different")
         # sort axes ascending
         axes = [(ax + A.ndim if ax < 0 else ax) for ax in axes]
 
@@ -1004,7 +1004,7 @@ class Lattice:
             is compatible with the shape/indexing required for
             :meth:`~tenpy.models.CouplingModel.add_coupling`.
             For example to add a Z-Z interaction of strength `J/r` with r the distance,
-            you can do something like this in :meth:`~tenpy.models.CoulingModel.init_terms`:
+            you can do something like this in :meth:`~tenpy.models.CouplingModel.init_terms`:
 
                 for u1, u2, dx in self.lat.pairs['nearest_neighbors']:
                     dist = self.lat.distance(u1, u2, dx)
@@ -1237,7 +1237,7 @@ class Lattice:
         -------
         mps_ijkl : 2D int array
             Each row contains MPS indices `i,j,k,l,...`` for each of the operators positions.
-            The positions are defined by `dx` (j,k,l,... relative to `i`) and boundary coundary
+            The positions are defined by `dx` (j,k,l,... relative to `i`) and boundary
             conditions of `self` (how much the `box` for given `dx` can be shifted around without
             hitting a boundary - these are the different rows).
         strength_vals : 1D array
@@ -1258,7 +1258,7 @@ class Lattice:
         Nops = len(ops)
         Ls = np.array(self.Ls)
         # make 3D arrays ["iteration over lattice", "operator", "spatial direction"]
-        # recall numpy broadcasing: 1D equivalent to [np.newaxis, np.newaxis, :]
+        # recall numpy broadcasting: 1D equivalent to [np.newaxis, np.newaxis, :]
         dx = np.array([op_dx for _, op_dx, op_u in ops], dtype=np.int_).reshape([1, Nops, D])
         u = np.array([op_u for _, op_dx, op_u in ops], dtype=np.int_).reshape([1, Nops, 1])
         coupling_shape, shift_lat_indices = self.multi_coupling_shape(dx[0, :, :])
@@ -1443,7 +1443,7 @@ class Lattice:
             ax.arrow(origin[0], origin[1], vec[0], vec[1], **kwargs)
 
     def plot_bc_identified(self, ax, direction=-1, origin=None, cylinder_axis=False, **kwargs):
-        """Mark two sites indified by periodic boundary conditions.
+        """Mark two sites identified by periodic boundary conditions.
 
         Works only for lattice with a 2-dimensional basis.
 
@@ -1694,7 +1694,7 @@ class MultiSpeciesLattice(Lattice):
         >>> sites = [f, copy(f)]
         >>> tenpy.networks.site.set_common_charges(sites, 'same')  # same = total N conserved
         [array([0, 1]), array([0, 1])]
-        >>> spinfull_fermion_Honeycomb = MultiSpeciesLattice(simple_lat, sites, ['up', 'down'])
+        >>> spinful_fermion_Honeycomb = MultiSpeciesLattice(simple_lat, sites, ['up', 'down'])
 
     In this case, you could also call :func:`tenpy.networks.site.spin_half_species`.
     """
@@ -1856,7 +1856,7 @@ class IrregularLattice(Lattice):
         Each row is a lattice index ``(x_0, ..., x_{dim-1}, u)`` of a site to be removed.
         If ``None``, don't remove something.
     add : Tuple[2D array, list] | None
-        Each row of the 2D array is a lattice index ``(x_0, ..., x_{dim-1}, u)`` specifiying
+        Each row of the 2D array is a lattice index ``(x_0, ..., x_{dim-1}, u)`` specifying
         where a site is to be added; `u` is the index of the site within the final
         :attr:`unit_cell` of the irregular lattice.
         For each row of the 2D array, there is one entry in the list specifying where the site
@@ -2371,7 +2371,7 @@ class Chain(SimpleLattice):
     Parameters
     ----------
     L : int
-        The lenght of the chain.
+        The length of the chain.
     site : :class:`~tenpy.networks.site.Site`
         The local lattice site. The `unit_cell` of the :class:`Lattice` is just ``[site]``.
     **kwargs :
@@ -2397,7 +2397,7 @@ class Chain(SimpleLattice):
             Just along the chain, ``0, 1, 2, 3, 4, ... ,L-1``.
         ``'folded'`` :
             Yields ``0, L-1, 1, L-2, ... , L//2``.
-            This order might be usefull if you want to consider a ring with periodic boundary
+            This order might be useful if you want to consider a ring with periodic boundary
             conditions with a finite MPS: if you squeeze this ring to a long oval and zig-zag
             through the top and bottom, you get this order.
             Thus, it avoids the ultra-long-range coupling from site 0 to L-1, at the expense of
@@ -2781,7 +2781,7 @@ class Triangular(SimpleLattice):
     **kwargs :
         Additional keyword arguments given to the :class:`Lattice`.
         `pairs` are set accordingly.
-        If `order` is specified in the form ``('standard', snake_windingi, priority)``,
+        If `order` is specified in the form ``('standard', snake_winding, priority)``,
         the `snake_winding` and `priority` should only be specified for the spatial directions.
         Similarly, `positions` can be specified as a single vector.
     """
@@ -3039,7 +3039,7 @@ def get_order(shape, snake_winding, priority=None):
     """Built the :attr:`Lattice.order` in (Snake-) C-Style for a given lattice shape.
 
     .. note ::
-        In this doc-string, the word 'direction' referst to a physical direction of the lattice
+        In this doc-string, the word 'direction' refers to a physical direction of the lattice
         or the index `u` of the unit cell as an "artificial direction".
 
     Parameters
@@ -3054,10 +3054,10 @@ def get_order(shape, snake_winding, priority=None):
         Otherwise, this defines the priority along which direction to wind first;
         the direction with the highest priority increases fastest.
         For example, "C-Style" order is enforced by ``priority=(0, 1, 2, ...)``,
-        and Fortrans F-style order is enforced by ``priority=(dim, dim-1, ..., 1, 0)``
+        and Fortran F-style order is enforced by ``priority=(dim, dim-1, ..., 1, 0)``
     group : ``None`` | tuple of tuple
         If ``None`` (default), ignore it.
-        Otherwise, it specifies that we group the fastests changing dimension
+        Otherwise, it specifies that we group the fastest changing dimension
 
     Returns
     -------
@@ -3118,7 +3118,7 @@ def get_order(shape, snake_winding, priority=None):
 def get_order_grouped(shape, groups, priority=None):
     """Variant of :func:`get_order`, grouping some sites of the unit cell.
 
-    This function is usefull for lattices with a unit cell of more than 2 sites (e.g. Kagome).
+    This function is useful for lattices with a unit cell of more than 2 sites (e.g. Kagome).
     For 2D lattices with a unit cell, the ordering goes
     first within a group , then along y,
     then the next group (for the same x-value), again along y,
@@ -3148,7 +3148,7 @@ def get_order_grouped(shape, groups, priority=None):
         plt.show()
 
     .. note ::
-        In this doc-string, the word 'direction' referst to a physical direction of the lattice
+        In this doc-string, the word 'direction' refers to a physical direction of the lattice
         or the index `u` of the unit cell as an "artificial direction".
 
     Parameters

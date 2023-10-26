@@ -74,7 +74,7 @@ def alg_decay_fit(x, y, npts=5, power_range=(0.01, 4.), power_mesh=[60, 10]):
         A range that restricts the possible values of the fit exponent ``b``
     power_mesh : list of float
         Number of points in the search grid for the fit exponent ``b``.
-        The ``power_range`` is first divded into ``power_mesh[0]`` many intervals.
+        The ``power_range`` is first divided into ``power_mesh[0]`` many intervals.
         Then, for each subsequent entry of ``power_mesh`` the smaller region around the best
         previous guess is further divided into as many intervals.
 
@@ -124,7 +124,7 @@ def alg_decay_fits(x, ys, npts=5, power_range=(0.01, 4.), power_mesh=[60, 10]):
     x : array_like [M]
         The independent variable where the data is measured.
     y : array_like [M, N]
-        ``N`` distinct sets of data for the dependent variable. ``N`` seperate fits will be performed.
+        ``N`` distinct sets of data for the dependent variable. ``N`` separate fits will be performed.
     *args :
         Same as for :func:`~tenpy.tools.fit.alg_decay`.
 
@@ -221,7 +221,7 @@ def fit_with_sum_of_exp(f, n, N=50):
     MPOs can naturally represent long-range interactions with an exponential decay.
     A common technique for other (e.g. powerlaw) long-range interactions is to approximate them
     by sums of exponentials and to include them into the MPOs.
-    This funciton allows to do that.
+    This function allows to do that.
 
     The algorithm/implementation follows the appendix of :cite:`murg2010`.
 

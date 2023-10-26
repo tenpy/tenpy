@@ -1,4 +1,4 @@
-"""Functions to perform measurments during simulations.
+"""Functions to perform measurements during simulations.
 
 All measurement functions provided in this module support the interface used by the simulation
 class, i.e. they take the parameters ``results, psi, model, simulation`` as keyword arguments,
@@ -34,7 +34,7 @@ def measurement_wrapper(function, results_key, **kwargs):
     As documented in :func:`m_measurement_index`, measurement functions need to take
     positional arguments ``results, psi, model, simulation``.
     This function is a decorator that wraps a given `function` not taking those arguments
-    into a measurment function by simply discarding these arguments
+    into a measurement function by simply discarding these arguments
     and saving the returned value in the `results`.
     """
     if results_key is None:
@@ -53,7 +53,7 @@ def measurement_wrapper(function, results_key, **kwargs):
 
 
 def m_measurement_index(results, psi, model, simulation, results_key='measurement_index'):
-    """'Measure' the index of how many mearuements have been performed so far.
+    """'Measure' the index of how many measurements have been performed so far.
 
     The parameter description below documents the common interface of all measurement
     functions that can be registered to simulations.
@@ -114,7 +114,7 @@ def m_bond_energies(results, psi, model, simulation, results_key='bond_energies'
 
 
 def m_simulation_parameter(results, psi, model, simulation, recursive_key, results_key=None, **kwargs):
-    """Dummy meausurement of a simulation parameter.
+    """Dummy measurement of a simulation parameter.
 
     This can be useful e.g. if you have a time-dependent hamiltonian parameter.
 
@@ -226,7 +226,7 @@ def m_correlation_length(results, psi, model, simulation, results_key='correlati
             or along ``lattice.basis[0]`` (for "ladders" with open boundary conditions).
 
     **kwargs :
-        Further keywoard arguments given to :meth:`~tenpy.networks.mps.MPS.correlation_length`.
+        Further keyword arguments given to :meth:`~tenpy.networks.mps.MPS.correlation_length`.
     """
     corr = psi.correlation_length(**kwargs)
     if unit is None:
@@ -394,7 +394,7 @@ def energy_MPO(results, psi, model, simulation, key='energy_MPO'):
 
 
 def entropy(results, psi, model, simulation, key='entropy'):
-    """Deprecated version of :func:`m_entroy`."""
+    """Deprecated version of :func:`m_entropy`."""
     warnings.warn(_deprecated_msg.format("entropy"), FutureWarning)
     m_entropy(results, psi, model, simulation, key)
 

@@ -177,7 +177,7 @@ class MPO:
         hdf5_saver.save(self.bc, subpath + "boundary_condition")
         hdf5_saver.save(self.max_range, subpath + "max_range")
         h5gr.attrs["explicit_plus_hc"] = self.explicit_plus_hc
-        h5gr.attrs["L"] = self.L  # not needed for loading, but still usefull metadata
+        h5gr.attrs["L"] = self.L  # not needed for loading, but still useful metadata
         h5gr.attrs["max_bond_dimension"] = np.max(self.chi)  # same
 
     @classmethod
@@ -306,7 +306,7 @@ class MPO:
     def from_wavepacket(cls, sites, coeff, op, eps=1.e-15):
         r"""Create a (finite) MPO wave packet representing ``sum_i coeff[i] op_i``.
 
-        Note that we define it only for finite systems; a generalization to fininite systems
+        Note that we define it only for finite systems; a generalization to infinite systems
         is not straight forward due to normalization issues: the individual terms vanish in
         the thermodynamic limit!
 
@@ -324,7 +324,7 @@ class MPO:
         Examples
         --------
         Say you have fermions, so ``op='Cd'``, and want to create
-        a gaussian wave paket :math:`\sum_x \alpha_x c^\dagger_x` with
+        a gaussian wave packet :math:`\sum_x \alpha_x c^\dagger_x` with
         :math:`\alpha_x \propto e^{-0.5(x-x_0)^2/\sigma^2} e^{i k_0 x}`.
         Then you would use
 
@@ -349,8 +349,8 @@ class MPO:
             psi = MPS.from_product_state([sites] * L, ['empty'] * L)
             wp.apply(psi, dict(compression_method='SVD'))
             C = psi.correlation_function('Cd', 'C')
-            C_expexcted = np.conj(coeff)[:, np.newaxis] * coeff[np.newaxis, :]
-            asssert np.max(np.abs(C - C_expected) ) < 1.e-10
+            C_expected = np.conj(coeff)[:, np.newaxis] * coeff[np.newaxis, :]
+            assert np.max(np.abs(C - C_expected) ) < 1.e-10
         """
         coeff = np.asarray(coeff)
         assert coeff.shape == (len(sites), )
@@ -583,7 +583,7 @@ class MPO:
 
         Returns
         -------
-        U : :class:`~tepy.networks.mpo.MPO`
+        U : :class:`~tenpy.networks.mpo.MPO`
             The propagator, i.e. approximation :math:`U ~= exp(H*dt)`
         """
         if approximation == 'II':
@@ -943,7 +943,7 @@ class MPO:
         return np.real_if_close(contr - exp_val**2)
 
     def dagger(self):
-        """Return hermition conjugate copy of self."""
+        """Return hermitian conjugate copy of self."""
         # complex conjugate and transpose everything
         Ws = [w.conj().itranspose(['wL*', 'wR*', 'p', 'p*']) for w in self._W]
         # and now revert conjugation of the wL/wR legs
@@ -1289,7 +1289,7 @@ class MPO:
             # else
             return block_[l, r]
 
-        # l/r = left/rigth,  s/o = self/other
+        # l/r = left/right,  s/o = self/other
         Ws = []
         IdL = [None] * (L + 1)
         IdL[0] = 0
@@ -1329,7 +1329,7 @@ class MPO:
         return MPO(self.sites, Ws, self.bc, IdL, IdR, max_range)
 
     def _get_block_projections(self, i):
-        """projecteions onto (IdL, other, IdR) on bond `i` in range(0, L+1)"""
+        """projections onto (IdL, other, IdR) on bond `i` in range(0, L+1)"""
         if self.finite:  # allows i = L for finite bc
             if i < self.L:
                 length = self._W[i].get_leg('wL').ind_len
@@ -1398,7 +1398,7 @@ def make_W_II(t, A, B, C, D):
     Brc = np.kron(b, b)
     for r in range(Nr):  #double loop over row / column of A
         for c in range(Nc):
-            #Select relevent part of virtual space and extend by hardcore bosons
+            #Select relevant part of virtual space and extend by hardcore bosons
             h = np.kron(Brc, A[r, c, :, :]) + np.kron(Br, tB * B[r, :, :]) + np.kron(
                 Bc, tC * C[c, :, :]) + t * np.kron(Id, D)
             w = expm(h)  #Exponentiate in the extended Hilbert space
@@ -2181,7 +2181,7 @@ class MPOEnvironment(BaseEnvironment):
         Parameters
         ----------
         i : int
-            The returned `RP` will contain the contraction *strictly* rigth of site `i`.
+            The returned `RP` will contain the contraction *strictly* right of site `i`.
         store : bool
             Whether to store the calculated `RP` in `self` (``True``) or discard them (``False``).
 
@@ -2221,7 +2221,7 @@ class MPOEnvironment(BaseEnvironment):
         LP = npc.tensordot(LP, self.ket.get_B(i, form='A'), axes=('vR', 'vL'))
         LP = npc.tensordot(self.H.get_W(i), LP, axes=(['p*', 'wL'], ['p', 'wR']))
         axes = (self.bra._get_p_label('*') + ['vL*'], self.ket._p_label + ['vR*'])
-        # for a ususal MPS, axes = (['p*', 'vL*'], ['p', 'vR*'])
+        # for a usual MPS, axes = (['p*', 'vL*'], ['p', 'vR*'])
         LP = npc.tensordot(self.bra.get_B(i, form='A').conj(), LP, axes=axes)
         return LP  # labels 'vR*', 'wR', 'vR'
 
@@ -2231,7 +2231,7 @@ class MPOEnvironment(BaseEnvironment):
         RP = npc.tensordot(self.ket.get_B(i, form='B'), RP, axes=('vR', 'vL'))
         RP = npc.tensordot(RP, self.H.get_W(i), axes=(['p', 'wL'], ['p*', 'wR']))
         axes = (self.ket._p_label + ['vL*'], self.ket._get_p_label('*') + ['vR*'])
-        # for a ususal MPS, axes = (['p', 'vL*'], ['p*', 'vR*'])
+        # for a usual MPS, axes = (['p', 'vL*'], ['p*', 'vR*'])
         RP = npc.tensordot(RP, self.bra.get_B(i, form='B').conj(), axes=axes)
         return RP  # labels 'vL', 'wL', 'vL*'
 
@@ -2497,7 +2497,7 @@ class MPOTransferMatrix(NpcLinearOperator):
         calc_E : bool
             Wether to calculate and return the energy.
         tol_ev0 : float
-            Tolerance to trigg a warning about non-unit eigenvalue.
+            Tolerance to trigger a warning about non-unit eigenvalue.
         guess : None | dict
             Possible `init_env_data` with the guess/result of DMRG updates.
             If some legs are incompatible, trigger a warning and ignore.

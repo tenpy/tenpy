@@ -62,7 +62,7 @@ class ChargeInfo:
     _mask : 1D array bool
         mask ``(mod == 1)``, to speed up `make_valid` in pure python.
     _mod_masked : 1D array QTYPE
-        Equivalent to ``self.mod[self._maks_mod1]``
+        Equivalent to ``self.mod[self._mask]``
     _qnumber, _mod :
         Storage of :attr:`qnumber` and :attr:`mod`.
 
@@ -317,7 +317,7 @@ class LegCharge:
     chargeinfo : :class:`ChargeInfo`
         The nature of the charge.
     slices: 1D array_like, len(block_number+1)
-        A block with 'qindex' ``qi`` correspondes to the leg indices in
+        A block with 'qindex' ``qi`` corresponds to the leg indices in
         ``slice(slices[qi], slices[qi+1])``.
     charges : 2D array_like, shape(block_number, chargeinfo.qnumber)
         ``charges[qi]`` gives the charges for a block with 'qindex' ``qi``.
@@ -333,7 +333,7 @@ class LegCharge:
     chinfo : :class:`ChargeInfo` instance
         The nature of the charge. Can be shared between LegCharges.
     slices : ndarray[np.intp_t,ndim=1] (block_number+1)
-        A block with 'qindex' ``qi`` correspondes to the leg indices in
+        A block with 'qindex' ``qi`` corresponds to the leg indices in
         ``slice(self.slices[qi], self.slices[qi+1])``. See :meth:`get_slice`.
     charges : ndarray[QTYPE_t,ndim=1] (block_number, chinfo.qnumber)
         ``charges[qi]`` gives the charges for a block with 'qindex' ``qi``.
@@ -395,7 +395,7 @@ class LegCharge:
 
         This method saves all the data it needs to reconstruct `self` with :meth:`from_hdf5`.
 
-        Checks :class:`~tenpy.tools.hdf5_io.Hdf5Saver.format` for an ouput format key ``"LegCharge"``.
+        Checks :class:`~tenpy.tools.hdf5_io.Hdf5Saver.format` for an output format key ``"LegCharge"``.
         Possible choices are:
 
         ``"blocks"`` (default)
@@ -769,7 +769,7 @@ class LegCharge:
         return (len(s) == self.block_number)
 
     def is_sorted(self):
-        """Returns whether `self.charges` is sorted lexiographically."""
+        """Returns whether `self.charges` is sorted lexicographically."""
         if self.chinfo._qnumber == 0:
             return True
         res = lexsort(self.charges.T)
@@ -785,7 +785,7 @@ class LegCharge:
         Parameters
         ----------
         other : :class:`LegCharge`
-            The LegCharge of the other leg condsidered for contraction.
+            The LegCharge of the other leg considered for contraction.
 
         Raises
         ------
@@ -952,7 +952,7 @@ class LegCharge:
         -------
         perm_qind : array (self.block_len,)
             The permutation of the qindices (before bunching) used for the sorting.
-            To obtain the flat permuation such that
+            To obtain the flat permutation such that
             ``sorted_array[..., :] = unsorted_array[..., perm_flat]``, use
             ``perm_flat = unsorted_leg.perm_flat_from_perm_qind(perm_qind)``
         sorted_copy : :class:`LegCharge`
@@ -997,7 +997,7 @@ class LegCharge:
             return np.arange(self.block_number + 1, dtype=np.intp), self
         cp = self.copy()
         idx = _find_row_differences(self.charges)
-        cp._set_charges(cp.charges[idx[:-1]])  # avanced indexing -> copy
+        cp._set_charges(cp.charges[idx[:-1]])  # advanced indexing -> copy
         cp._set_slices(cp.slices[idx])
         cp.bunched = True
         return idx, cp
@@ -1034,7 +1034,7 @@ class LegCharge:
         return map_qind, block_masks, cp
 
     def extend(self, extra):
-        """Return a new :class:`LegCharge`, which extends self with futher charges.
+        """Return a new :class:`LegCharge`, which extends self with further charges.
 
         This is needed to formally increase the dimension of an Array.
 
@@ -1143,7 +1143,7 @@ class LegPipe(LegCharge):
     r"""A `LegPipe` combines multiple legs of a tensor to one.
 
     Often, it is necessary to "combine" multiple legs into one:
-    for example to perfom a SVD, the tensor needs to be viewed as a matrix.
+    for example to perform a SVD, the tensor needs to be viewed as a matrix.
 
     This class does exactly this job: it combines multiple LegCharges ('incoming legs')
     into one 'pipe' (*the* 'outgoing leg').
@@ -1391,7 +1391,7 @@ class LegPipe(LegCharge):
         simple.  If you really want to project and split afterwards, use the following work-around,
         which is for example used in :class:`~tenpy.algorithms.exact_diagonalization`:
 
-        1) Create the full pipe and save it separetely.
+        1) Create the full pipe and save it separately.
         2) Convert the Pipe to a Leg & project the array with it.
         3) [... do calculations ...]
         4) To split the 'projected pipe' of `A`, create and empty array `B` with the legs of A,
@@ -1456,7 +1456,7 @@ class LegPipe(LegCharge):
     def _init_from_legs(self, sort=True, bunch=True):
         """Calculate ``self.qind``, ``self.q_map`` and ``self.q_map_slices`` from ``self.legs``.
 
-        `qind` is constructed to fullfill the charge fusion rule stated in the class doc-string.
+        `qind` is constructed to fulfill the charge fusion rule stated in the class doc-string.
         """
         # this function heavily uses numpys advanced indexing, for details see
         # `http://docs.scipy.org/doc/numpy/reference/arrays.indexing.html`_
@@ -1468,11 +1468,11 @@ class LegPipe(LegCharge):
         # create a grid to select the multi-index sector
         grid = np.indices(self.subqshape, np.intp)
         # grid is an array with shape ``(nlegs,) + subqshape``,
-        # with grid[li, ...] = {np.arange(subqshape[li]) increasing in the li-th direcion}
+        # with grid[li, ...] = {np.arange(subqshape[li]) increasing in the li-th direction}
         # save the strides of grid, which is needed for :meth:`_map_incoming_qind`
         # collapse the different directions into one.
         grid = grid.reshape(nlegs, -1)  # *this* is the actual `reshaping`
-        # *columns* of grid are now all possible cominations of qindices.
+        # *columns* of grid are now all possible combinations of qindices.
 
         nblocks = grid.shape[1]  # number of blocks in the pipe = np.product(self.subqshape)
         # determine q_map -- it's essentially the grid.
@@ -1480,7 +1480,7 @@ class LegPipe(LegCharge):
         q_map[:, 3:] = grid.T  # transpose -> rows are possible combinations.
         # the block size for given (i1, i2, ...) is the product of ``legs.get_block_sizes()[il]``
         legbs = [l.get_block_sizes() for l in self.legs]
-        # andvanced indexing:
+        # advanced indexing:
         # ``grid[li]`` is a 1D array containing the qindex `q_li` of leg ``li`` for all blocks
         blocksizes = np.prod([lbs[gr] for lbs, gr in zip(legbs, grid)], axis=0)
         # q_map[:, :3] is initialized after sort/bunch.
@@ -1643,7 +1643,7 @@ def _sliced_copy(dest, dest_beg, src, src_beg, slice_shape):
     src_beg : intp[ndim]
         Entries are start of the slices used for `src`
     slice_shape : intp[ndim]
-        The lenght of the slices.
+        The length of the slices.
     """
     if dest_beg is None:
         dest_beg = [0] * dest.ndim

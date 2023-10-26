@@ -1,4 +1,4 @@
-"""Tools to handle config options/paramters for algorithms.
+"""Tools to handle config options/parameters for algorithms.
 
 See the doc-string of :class:`Config` for details.
 """
@@ -77,7 +77,7 @@ class Config(MutableMapping):
     def as_dict(self):
         """Return a copy of the options as a dictionary.
 
-        Subconfigs are recursivley converted to dict.
+        Subconfigs are recursively converted to dict.
         """
         res = dict(self.options)
         for k, v in res.items():
@@ -309,7 +309,7 @@ class Config(MutableMapping):
         return subconfig
 
     def touch(self, *keys):
-        """Mark `keys` as read out to supress warnings about those keys being unused.
+        """Mark `keys` as read out to suppress warnings about those keys being unused.
 
         Parameters
         ----------
@@ -448,7 +448,7 @@ def get_parameter(params, key, default, descr, asarray=False):
 
     Moreover, a special entry with the key ``'verbose'`` *in* the `params`
     can trigger this function to also print the used value.
-    A higer `verbose` level implies more output.
+    A higher `verbose` level implies more output.
     If `verbose` >= 100, it is printed every time it's used.
     If `verbose` >= 2., its printed for the first time time its used.
     and for `verbose` >= 1, non-default values are printed the first time they are used.
@@ -461,7 +461,7 @@ def get_parameter(params, key, default, descr, asarray=False):
     Parameters
     ----------
     params : dict
-        A dicionary of the parameters as provided by the user.
+        A dictionary of the parameters as provided by the user.
         If `key` is not a valid key, ``params[key]`` is set to `default`.
     key : string
         The key for the parameter which should be read out from the dictionary.

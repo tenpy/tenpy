@@ -9,9 +9,9 @@ Let me start with a `quote <http://wiki.c2.com/?RulesOfOptimization>`_ of "Miche
 
 Luckily, following the third optimization rule, namely profiling code, is
 fairly simple in python, see the `documentation <https://docs.python.org/3/library/profile.html>`_.
-If you have a python skript running your code, you can simply call it with
-``python -m "cProfile" -s "tottime" your_skript.py``. Alternatively, save the profiling statistics
-with ``python -m "cProfile" -o "profile_data.stat" your_skript.py`` and
+If you have a python script running your code, you can simply call it with
+``python -m "cProfile" -s "tottime" your_script.py``. Alternatively, save the profiling statistics
+with ``python -m "cProfile" -o "profile_data.stat" your_script.py`` and
 run these few lines of python code::
 
     import pstats
@@ -46,7 +46,7 @@ knobs you can turn to tweak the most out of this library, explained in the follo
 4) One of the great things about python is its dynamical nature - anything can be done at runtime.
    In that spirit, this module allows to set a global  "optimization level" which can be changed
    *dynamically* (i.e., during runtime) with :func:`set_level`. The library will then try some
-   extra optimiztion, most notably skip sanity checks of arguments.
+   extra optimization, most notably skip sanity checks of arguments.
    The possible choices for this global level are given by the :class:`OptimizationFlag`.
    The default initial value for the global optimization level can be adjusted by the environment
    variable `TENPY_OPTIMIZE`.
@@ -54,8 +54,8 @@ knobs you can turn to tweak the most out of this library, explained in the follo
    .. warning ::
         When this optimizing is enabled, we skip (some) sanity checks.
         Thus, errors will not be detected that easily, and debugging is much harder!
-        We recommend to use this kind of optimization only for code which you succesfully have run
-        before with (very) similar parmeters!
+        We recommend to use this kind of optimization only for code which you successfully have run
+        before with (very) similar parameters!
         Enable this optimization only during the parts of the code where it is really necessary.
         The context manager :class:`temporary_level` can help with that.
         Check whether it actually helps - if it doesn't, keep the optimization disabled!
@@ -131,8 +131,8 @@ class OptimizationFlag(IntEnum):
     .. warning ::
         When unsafe optimizations are enabled, errors will not be detected that easily,
         debugging is much harder, and you might even get segmentation faults in the compiled parts.
-        Use this kind of optimization only for code which you succesfully ran before
-        with (very) similar parmeters and disabled optimiztions!
+        Use this kind of optimization only for code which you successfully ran before
+        with (very) similar parameters and disabled optimizations!
         Enable this optimization only during the parts of the code where it is really necessary.
         Check whether it actually helps - if it doesn't, keep the optimization disabled!
     """
