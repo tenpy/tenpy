@@ -344,7 +344,7 @@ class AbstractTensor(metaclass=ABCMeta):
         # vertical table for the legs
         labels = ['label'] + [str(l) for l in self.labels]
         dims = ['    dim'] + [str(leg.dim) for leg in self.legs]
-        sector_nums = ['sectors'] + [str(leg.num_sectors) for leg in self.legs]
+        sector_nums = ['is_dual'] + [{True: 'yes', False: ' no'}[leg.is_dual] for leg in self.legs]
         col_widths = [max(len(l), len(d), len(n)) for l, d, n in zip(labels, dims, sector_nums)]
         
         lines = [
