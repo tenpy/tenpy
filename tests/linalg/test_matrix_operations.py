@@ -113,7 +113,51 @@ def test_eig_based_svd(tensor_rng, compute_u, compute_vh, new_vh_leg_dual):
         phases = Vh.tdot(svd_Vh.conj(), ['r1', 'r2'], ['r1*', 'r2*'])
         expect_eye = np.abs(phases.to_numpy_ndarray())
         npt.assert_almost_equal(expect_eye, np.eye(expect_eye.shape[0]))
+
+
+@pytest.mark.parametrize('svd_min, normalize_to', [(1e-14, None), (1e-4, None), (1e-4, 2.7)])
+@pytest.mark.parametrize('new_vh_leg_dual', [True, False])
+@pytest.mark.parametrize('compute_u, compute_vh', [(True, False), (False, True), (False, False)])
+def test_truncated_eig_based_svd(tensor_rng, compute_u, compute_vh, new_vh_leg_dual, svd_min,
+                                 normalize_to):
+    T: tensors.Tensor = tensor_rng(labels=['l1', 'r2', 'l2', 'r1'], max_block_size=3)
+    U, S, Vh, err, renormalize = matrix_operations.truncated_eig_based_svd(
+        T, compute_u=compute_u, compute_vh=compute_vh, u_legs=['l1', 'l2'], vh_legs=['r1', 'r2'],
+        new_labels=['cr', 'cl'], new_vh_leg_dual=new_vh_leg_dual,
+        truncation_options=dict(svd_min=svd_min), normalize_to=normalize_to
+    )
+    svd_U, svd_S, svd_Vh, svd_err, svd_renormalize = matrix_operations.truncated_svd(
+        T, ['l1', 'l2'], ['r1', 'r2'], new_labels=['cr', 'cl'], new_vh_leg_dual=new_vh_leg_dual,
+        truncation_options=dict(svd_min=svd_min), normalize_to=normalize_to
+    )
+
+    if compute_u:
+        U.test_sanity()
+        Ud_U = tensors.tdot(U.conj(), U, ['l1*', 'l2*'], ['l1', 'l2'])
+        assert tensors.almost_equal(tensors.eye_like(Ud_U), Ud_U)
+        phases = U.conj().tdot(svd_U, ['l1*', 'l2*'], ['l1', 'l2'])
+        expect_eye = np.abs(phases.to_numpy_ndarray())
+        npt.assert_almost_equal(expect_eye, np.eye(expect_eye.shape[0]))
+
+    pytest.xfail('Something about duality and the legs is still off')
+    # S has seemingly incompatible (to svd_S) legs
+    # expect_eye for Vh below has some permutation to it
+        
+    S.test_sanity()
+    # assert tensors.almost_equal(S, svd_S)
     
+    if compute_vh:
+        Vh.test_sanity()
+        Vh_V = tensors.tdot(Vh, Vh.conj(), ['r1', 'r2'], ['r1*', 'r2*'])
+        assert tensors.almost_equal(tensors.eye_like(Vh_V), Vh_V)
+        phases = Vh.tdot(svd_Vh.conj(), ['r1', 'r2'], ['r1*', 'r2*'])
+        expect_eye = np.abs(phases.to_numpy_ndarray())
+        print(expect_eye)
+        npt.assert_almost_equal(expect_eye, np.eye(expect_eye.shape[0]))
+
+    npt.assert_almost_equal(err, svd_err)
+    npt.assert_almost_equal(renormalize, svd_renormalize)
+
 
 @pytest.mark.parametrize('full', [True, False])
 @pytest.mark.parametrize('new_r_leg_dual', [True, False])

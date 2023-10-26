@@ -11,8 +11,9 @@ from .backends.abstract_backend import Block
 from ..tools.misc import inverse_permutation, to_iterable
 from ..tools.params import asConfig
 
-__all__ = ['svd', 'svd_apply_mask', 'eig_based_svd', 'truncated_svd', 'truncate_singular_values',
-           'qr', 'lq', 'svd_split', 'pinv', 'eigh', 'leg_bipartition', 'exp', 'log']
+__all__ = ['svd', 'svd_apply_mask', 'eig_based_svd', 'truncated_svd', 'truncated_eig_based_svd',
+           'truncate_singular_values', 'qr', 'lq', 'svd_split', 'pinv', 'eigh', 'leg_bipartition',
+           'exp', 'log']
 
 
 def svd(a: AbstractTensor, u_legs: list[int | str] = None, vh_legs: list[int | str] = None,
@@ -304,6 +305,58 @@ def truncated_svd(a: AbstractTensor, u_legs: list[int | str] = None, vh_legs: li
         renormalize = normalize_to / S_norm / new_norm
         S = S._mul_scalar(renormalize)
     return U, S, V, err, renormalize
+
+
+def truncated_eig_based_svd(a: AbstractTensor, compute_u: bool = False, compute_vh: bool = False,
+                            u_legs: list[int | str] = None, vh_legs: list[int | str] = None,
+                            new_labels: tuple[str, ...] = None, new_vh_leg_dual: bool = False,
+                            U_inherits_charge: bool = False, normalize_to: float = None,
+                            truncation_options={}):
+    """Truncated version of :func:`eig_based_svd`.
+
+    Parameters
+    ----------
+    a, compute_u, compute_vh, u_legs, vh_legs, new_labels, new_vh_leg_dual, U_inherits_charge
+        Same as for :func:`eig_based_svd`.
+    normalize_to: float or None
+        If ``None`` (default), the resulting singular values are not renormalized,
+        resulting in an approximation in terms of ``U, S, Vh`` which has smaller norm than `a`.
+        If a ``float``, the singular values are scaled such that ``norm(S) == normalize_to``.
+    truncation_options : dict-like
+        Options that determine how many singular values are kept, see :cfg:config:`truncation`.
+
+    Returns
+    -------
+    U : AbstractTensor | None
+        The `U` isometry of an SVD of `a`, or ``None`` if not computed.
+    S : DiagonalTensor
+        The singular values of `a`.
+    Vh : AbstractTensor | None
+        The `Vh` isometry of an SVD of `a`, or ``None`` if not computed.
+    err : float
+        The relative 2-norm truncation error ``norm(a - U_S_Vh) / norm(a)``.
+        This is the (relative) 2-norm weight of the discarded singular values.
+    renormalize : float
+        Factor, by which `S` was renormalized, i.e. `norm(S) / norm(a)`, such that
+        ``U @ S @ Vh / renormalize`` has the same norm as `a`.
+    """
+    U, S, Vh = eig_based_svd(a, compute_u=compute_u, compute_vh=compute_vh, u_legs=u_legs,
+                             vh_legs=vh_legs, new_labels=new_labels,
+                             new_vh_leg_dual=new_vh_leg_dual, U_inherits_charge=U_inherits_charge)
+    S_norm = S.norm()
+    mask, err, new_norm = truncate_singular_values(S / S_norm, options=truncation_options)
+    if compute_u:
+        U = U.apply_mask(mask, -1)
+    S = S._apply_mask_both_legs(mask)
+    if compute_vh:
+        Vh = Vh.apply_mask(mask, 0)
+    if normalize_to is None:
+        renormalize = 1
+    else:
+        # norm(S[mask]) == S_norm * new_norm
+        renormalize = normalize_to / S_norm / new_norm
+        S = S._mul_scalar(renormalize)
+    return U, S, Vh, err, renormalize
     
 
 def truncate_singular_values(S: DiagonalTensor, options) -> tuple[Mask, float, float]:
