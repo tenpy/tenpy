@@ -75,7 +75,7 @@ class Worker:
 
     def __exit__(self, exc_type, exc, tb):
         if self.worker_thread.is_alive():
-            # no error occured in subthread, terminate it gracefully
+            # no error occurred in subthread, terminate it gracefully
             self.exit.set()
             self.worker_thread.join()
 
@@ -115,7 +115,7 @@ class Worker:
         if not self._entered:
             raise ValueError("Worker needs to be started in `with` statement.")
         if self.exit.is_set() or not self.worker_thread.is_alive():
-            raise WorkerDied(self.name + ": either exception occured or close() was called.")
+            raise WorkerDied(self.name + ": either exception occurred or close() was called.")
 
     def put_task(self, fct, *args, return_dict=None, return_key=None, **kwargs):
         """Add a task to be done by the worker.
@@ -127,7 +127,7 @@ class Worker:
                 return_dict[return_key] = res
 
         It is unclear at which exact moment this happens, but after :meth:`join_tasks` was called,
-        it is guaranteed to be done (or an exception was raised that the workder died).
+        it is guaranteed to be done (or an exception was raised that the worker died).
         """
         task = (fct, args, kwargs, return_dict, return_key)
         while True:

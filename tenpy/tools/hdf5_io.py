@@ -126,7 +126,7 @@ def save(data, filename, mode='w'):
         The name of the file where to save the data.
     mode : str
         File mode for opening the file. ``'w'`` for write (discard existing file),
-        ``'a'`` for append (add data to exisiting file).
+        ``'a'`` for append (add data to existing file).
         See :py:func:`open` for more details.
     """
     filename = str(filename)
@@ -140,7 +140,7 @@ def save(data, filename, mode='w'):
         with h5py.File(filename, mode) as f:
             save_to_hdf5(f, data)
     else:
-        raise ValueError("Don't recognise file ending of " + repr(filename))
+        raise ValueError("Don't recognize file ending of " + repr(filename))
 
 
 def load(filename):
@@ -169,7 +169,7 @@ def load(filename):
         with h5py.File(filename, 'r') as f:
             data = load_from_hdf5(f)
     else:
-        raise ValueError("Don't recognise file ending of " + repr(filename))
+        raise ValueError("Don't recognize file ending of " + repr(filename))
     return data
 
 
@@ -191,7 +191,7 @@ def find_global(module, qualified_name):
 
 
 # =================================================================================
-# everything below is for our export/import with our self-definded HDF5 format.
+# everything below is for our export/import with our self-defined HDF5 format.
 # =================================================================================
 
 REPR_IGNORED = "ignore"  #: ignore the object/dataset during loading and saving
@@ -938,7 +938,7 @@ class Hdf5Loader:
     def load_str(self, h5gr, type_info, subpath):
         """Load a string from a h5py :class:`Dataset`."""
         # `asstr()` is a new method for handling strings introduced in h5py version 3.0
-        # if asstr() is not used, the returned data is a raw bindary/ascii string.
+        # if asstr() is not used, the returned data is a raw binary/ascii string.
         obj = h5gr.asstr()[()]
         self.memorize_load(h5gr, obj)
         return obj
@@ -1010,7 +1010,7 @@ class Hdf5Loader:
         for i in range(length):
             sub_obj = self.load(subpath + str(i))
             obj.append(sub_obj)
-        # now conjvert the list to tuple
+        # now convert the list to tuple
         obj = tuple(obj)
         self.memo_load[h5gr.id] = obj  # overwrite the memo entry to point to the tuple,
         # not the list

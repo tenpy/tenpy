@@ -371,7 +371,7 @@ class Sweep(Algorithm):
     def sweep(self, optimize=True):
         """One 'sweep' of a sweeper algorithm.
 
-        Iteratate over the bond which is optimized, to the right and
+        Iterate over the bond which is optimized, to the right and
         then back to the left to the starting point.
 
         Parameters
@@ -473,7 +473,7 @@ class Sweep(Algorithm):
         return zip(i0s, move_right, update_LP_RP)
 
     def _cache_optimize(self):
-        """call ``env.cache_optimize`` to preload next env tensors and avoid unncessary reads."""
+        """call ``env.cache_optimize`` to preload next env tensors and avoid unnecessary reads."""
         i0 = self.i0
         move_right = self.move_right
         if self.n_optimize == 2:
@@ -628,7 +628,7 @@ class Sweep(Algorithm):
 
         This allows to minimize the number of environments to be kept.
         For large MPO bond dimensions, these environments are by far the biggest part in memory,
-        so this is a valuable optimiztion to reduce memory requirements.
+        so this is a valuable optimization to reduce memory requirements.
         """
         i_L, i_R = self._update_env_inds()  # left and right updated site
         # envs between `i_L` and `i_R` where already deleted and updated in `update_env`
@@ -702,7 +702,7 @@ class Sweep(Algorithm):
     def mixer_deactivate(self):
         """Deactivate the mixer.
 
-        Set ``self.mixer=None`` and revert any other effects of :meth:`mixer_acitvate`.
+        Set ``self.mixer=None`` and revert any other effects of :meth:`mixer_activate`.
         """
         logger.info(f'deactivate {self.mixer.__class__.__name__} with final amplitude ' \
                     f'{self.mixer.amplitude}')
@@ -713,7 +713,7 @@ class Sweep(Algorithm):
 
         A :meth:`sweep` with an enabled :class:`~tenpy.algorithms.mps_common.Mixer` leaves the MPS
         `psi` with 2D arrays in `S`.
-        To recover the originial form, this function simply performs one sweep with disabled mixer.
+        To recover the original form, this function simply performs one sweep with disabled mixer.
         """
         if any([self.psi.get_SL(i).ndim > 1 for i in range(self.psi.L)]):
             mixer = self.mixer
@@ -1036,7 +1036,7 @@ class TwoSiteH(EffectiveH):
         into pipes. This reduces the overhead of calculating charge combinations in the
         contractions, but one :meth:`matvec` is formally more expensive, :math:`O(2 d^3 \chi^3 D)`.
     move_right : bool | None
-        Whether the the sweep is moving right or left for the next update (or doesnt move).
+        Whether the the sweep is moving right or left for the next update (or doesn't move).
         Ignored for the :class:`TwoSiteH`.
 
     Attributes
@@ -1308,7 +1308,7 @@ class Mixer:
     Mixers are optional algorithmic steps during sweeping MPS algorithms that increase the
     variational power and / or improve convergence.
     They expand the virtual Hilbert space associated with a single bond of the MPS, while keeping
-    the phyiscal state itself unchanged (up to possible truncation).
+    the physical state itself unchanged (up to possible truncation).
     This allows subsequent updates adjacent to that bond to explore a larger variational space.
     In particular, applying the mixer to a bond ``i0, i0 + 1`` of an MPS with tensors `M_i` --
     a.k.a. expanding that bond -- gives us two new tensors `M_new_i0` and `M_new_i1` such that::
@@ -1325,7 +1325,7 @@ class Mixer:
     Namely the SVD of a `theta` wave function (either on 1 or on 2 sites) that is usually done in
     sweeping algorithms anyway, together with the expansion of a bond, as shown above. This
     simplifies the implementation and different Mixer subclasses may choose to perform these steps
-    in different orders or even inseperably.
+    in different orders or even inseparably.
 
     Different mixers typically implement _either_ :meth:`mixed_svd_2site` _or_
     :meth:`mix_and_decompose_1site` but not both. This in turn means that all mixers offer
@@ -1453,7 +1453,7 @@ class Mixer:
         err : :class:`~tenpy.algorithms.truncation.TruncationError`
             The truncation error introduced.
         S_approx : ndarray
-            Approximation of the singular values of `theta`. Exact if avaible.
+            Approximation of the singular values of `theta`. Exact if available.
 
         See Also
         --------
@@ -1476,7 +1476,7 @@ class Mixer:
 
         The LHS is equal to the RHS up to truncation and rescaling (we normalize to ``norm(S)==1``).
         The double lines (``===``) indicate the mixed/expanded bonds.
-        Only the tensor with a physical leg (e.g. `U` for a right mive) is an isometry and is
+        Only the tensor with a physical leg (e.g. `U` for a right move) is an isometry and is
         equivalent to the corresponding output of :meth:`mixed_svd_2site`.
         It carries the `qtotal` of `theta`.
         The other (e.g. `VH` for a right move) is in general not isometric.
@@ -1543,7 +1543,7 @@ class Mixer:
             U, _, _, err_L = self.mix_and_decompose_1site(engine, theta_L, i0, move_right=True)
             if qtotal_LR is not None:
                 U = U.gauge_total_charge(1, qtotal_LR[0])
-            # mix right site by trating p0 as part of vL leg
+            # mix right site by treating p0 as part of vL leg
             theta_R = theta.replace_labels(['(vL.p0)', '(p1.vR)'], ['vL', '(p0.vR)'])
             _, S_approx, VH, err_R = self.mix_and_decompose_1site(engine, theta_R, i0 + 1, move_right=False)
             if qtotal_LR is not None:
@@ -1761,7 +1761,7 @@ class DensityMatrixMixer(Mixer):
         just performs an SVD by diagonalizing `rho_L` with U and `rho_R` with `VH` and then
         rewriting `theta == U (U^\dagger theta VH^\dagger VH) = U S V``.
         Since the actual `rho_L` and `rho_R` passed as arguments are perturbed by `mix_rho`,
-        we get a similar decomposition but `S` is a general (non-diagoanl) bond matrix.
+        we get a similar decomposition but `S` is a general (non-diagonal) bond matrix.
 
         Returns
         -------
@@ -1954,15 +1954,17 @@ class VariationalCompression(Sweep):
 
         trunc_params : dict
             Truncation parameters as described in :cfg:config:`truncation`.
-        min_sweeps, max_sweeps : int
-            Minimum and maximum number of sweeps to perform for the compression.
+        min_sweeps : int
+            Minimum number of sweeps to perform for the compression.
+        max_sweeps : int
+             Maximum number of sweeps to perform for the compression.
         tol_theta_diff: float | None
             Stop after less than `max_sweeps` sweeps if the 1-site wave function changed by less
             than this value, ``1.-|<theta_old|theta_new>| < tol_theta_diff``, where
             theta_old/new are two-site wave functions during the sweep to the left.
             ``None`` disables this convergence check, always performing `max_sweeps` sweeps.
         start_env_sites : int
-            Number of sites to contract for the inital LP/RP environment in case of infinite MPS.
+            Number of sites to contract for the initial LP/RP environment in case of infinite MPS.
 
     Attributes
     ----------

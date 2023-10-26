@@ -24,7 +24,7 @@ __all__ = simulation.__all__ + [
 
 
 class GroundStateSearch(Simulation):
-    """Simutions for variational ground state searches.
+    """Simulation for variational ground state searches.
 
     Parameters
     ----------
@@ -72,13 +72,13 @@ class GroundStateSearch(Simulation):
 
 
 class OrthogonalExcitations(GroundStateSearch):
-    """Find excitations by another GroundStateSearch orthogalizing against previous states.
+    """Find excitations by another GroundStateSearch orthogonalizing against previous states.
 
     If the ground state is an infinite MPS, it is converted to `segment` boundary conditions
     at the beginning of this simulation.
 
     For finite systems, the first algorithm (say DMRG) run when switching the charge sector
-    can be replaced by a normal DMRG run with a different intial state (in the desired sector).
+    can be replaced by a normal DMRG run with a different initial state (in the desired sector).
     For infinite systems, the conversion to segment boundary conditions leads to a *different*
     state! Using the 'segment' boundary conditions, this class can e.g. study a single spin flip
     excitation in the background of the ground state, localized by the segment environments.
@@ -105,7 +105,7 @@ class OrthogonalExcitations(GroundStateSearch):
     ----------
     orthogonal_to : list
         States to orthogonalize against.
-    exctiations : list
+    excitations : list
         Tensor network states representing the excitations.
         The ground state in `orthogonal_to` is not included in the `excitations`.
         While being optimized, a state is saved as :attr:`psi` and not yet included in
@@ -171,7 +171,7 @@ class OrthogonalExcitations(GroundStateSearch):
                 keyword arguments to change the charge sector compared to the ground state.
                 Alternatively, use `switch_charge_sector`.
             switch_charge_sector : list of int | None
-                If given, change the charge sector of the exciations compared to the ground state.
+                If given, change the charge sector of the excitations compared to the ground state.
                 Alternative to `apply_local_op` where we run a small zero-site diagonalization on
                 the left-most bond in the desired charge sector to update the state.
             write_back_converged_ground_state_environments : bool
@@ -202,7 +202,7 @@ class OrthogonalExcitations(GroundStateSearch):
         self.ground_state = psi0 = data['psi']
         resume_data = data.get('resume_data', {})
         if np.linalg.norm(psi0.norm_test()) > self.options.get('orthogonal_norm_tol', 1.e-12):
-            self.logger.info("call psi.canonicalf_form() on ground state")
+            self.logger.info("call psi.canonical_form() on ground state")
             psi0.canonical_form()
         if psi0.bc == 'infinite':
             write_back = self.extract_segment_from_infinite(psi0, self.model, resume_data)
@@ -220,7 +220,7 @@ class OrthogonalExcitations(GroundStateSearch):
             self.results['ground_state_energy'] = E0
         else:
             # we will switch charge sector
-            self.orthogonal_to = []  # so we don't need to orthognalize against original g.s.
+            self.orthogonal_to = []  # so we don't need to orthogonalize against original g.s.
             # optimization: delay calculation of the reference ground_state_energy
             # until self.switch_charge_sector() is called by self.init_algorithm()
         return data
@@ -336,7 +336,7 @@ class OrthogonalExcitations(GroundStateSearch):
     def switch_charge_sector(self):
         """Change the charge sector of :attr:`psi` in place."""
         if self.psi.chinfo.qnumber == 0:
-            raise ValuerError("can't switch charge sector with trivial charges!")
+            raise ValueError("can't switch charge sector with trivial charges!")
         self.logger.info("switch charge sector of the ground state "
                          "[contracts environments from right]")
         apply_local_op = self.options.get("apply_local_op", None)
@@ -384,7 +384,7 @@ class OrthogonalExcitations(GroundStateSearch):
         self.logger.info("reference ground state energy: %.14f", ground_state_energy)
         if ground_state_energy > - 1.e-7:
             # the orthogonal projection does not lead to a different ground state!
-            lanczos_params = self.engine.lancozs_params
+            lanczos_params = self.engine.lanczos_params
             if self.engine.diag_method != 'lanczos' or \
                     ground_state_energy + 0.5 * lanczos_params.get('E_shift', 0.) > 0:
                 # the factor of 0.5 is somewhat arbitrary, to ensure that
@@ -408,7 +408,7 @@ class OrthogonalExcitations(GroundStateSearch):
                 break
 
             self.make_measurements()
-            self.logger.info("got %d excitations so far, proceeed to next excitation.\n%s",
+            self.logger.info("got %d excitations so far, proceed to next excitation.\n%s",
                              len(self.excitations), "+" * 80)
             self.init_state()  # initialize a new state to be optimized
             self.init_algorithm()
@@ -442,7 +442,7 @@ class ExcitationInitialState(InitialStateBuilder):
         randomize_params : dict-like
             Parameters for the random unitary evolution used to perturb the state a little bit
             in :meth:`~tenpy.networks.mps.MPS.perturb`.
-        ranomzize_close_1 : bool
+        randomize_close_1 : bool
             Whether to randomize/perturb with unitaries close to the identity.
         use_highest_excitation : bool
             If True, start from  the last state in :attr:`orthogonal_to` and perturb it.

@@ -103,7 +103,7 @@ class AKLTChain(NearestNeighborModel, MPOModel):
         if self.lat.bc_MPS == 'finite':
             # project onto one of the two virtual states on the left/right most state.
             # It's a ground state whatever you choose here,
-            # but we project to different indices to allow Sz convservation
+            # but we project to different indices to allow Sz conservation
             # and fix overall Sz=0 sector
             Bs[0] = Bs[0][:, :1, :]
             Bs[-1] = Bs[-1][:, :, :-1]

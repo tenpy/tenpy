@@ -545,7 +545,7 @@ def ChargeInfo_check_valid(self, charges):
 def LegPipe__init_from_legs(self, bint sort=True, bint bunch=True):
     """Calculate ``self.qind``, ``self.q_map`` and ``self.q_map_slices`` from ``self.legs``.
 
-    `qind` is constructed to fullfill the charge fusion rule stated in the class doc-string.
+    `qind` is constructed to fulfill the charge fusion rule stated in the class doc-string.
     """
     # this function heavily uses numpys advanced indexing, for details see
     # `http://docs.scipy.org/doc/numpy/reference/arrays.indexing.html`_
@@ -779,7 +779,7 @@ cpdef void _sliced_copy(np.ndarray dest, intp_t[::1] dest_beg, np.ndarray src, i
     src_beg : intp[ndim]
         Entries are start of the slices used for `src`
     slice_shape : intp[ndim]
-        The lenght of the slices.
+        The length of the slices.
     """
     cdef char *dest_data = np.PyArray_BYTES(dest)
     cdef char *src_data = np.PyArray_BYTES(src)
@@ -997,10 +997,11 @@ def Array_iscale_prefactor(self, prefactor):
 
 @cython.binding(True)
 def Array__imake_contiguous(self):
-    """Make each of the blocks c-style contigous in memory.
+    """Make each of the blocks c-style contiguous in memory.
 
-    Might speed up subsequent tensordot & co by fixing the memory layout to contigous blocks.
-    (No need to call it manually: it's called from tensordot & co anyways!)"""
+    Might speed up subsequent tensordot & co by fixing the memory layout to contiguous blocks.
+    (No need to call it manually: it's called from tensordot & co anyways!)
+    """
     cdef np.ndarray t
     self._data = [np.PyArray_GETCONTIGUOUS(t) for t in self._data]
     return self

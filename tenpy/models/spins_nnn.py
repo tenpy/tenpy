@@ -1,6 +1,6 @@
-"""Next-Nearest-neighbour spin-S models.
+"""Next-Nearest-neighbor spin-S models.
 
-Uniform lattice of spin-S sites, coupled by next-nearest-neighbour interactions.
+Uniform lattice of spin-S sites, coupled by next-nearest-neighbor interactions.
 We have two variants implementing the same hamiltonian.
 The :class:`SpinChainNNN` uses the
 :class:`~tenpy.networks.site.GroupedSite` to keep it a
@@ -11,7 +11,7 @@ range couplings twice for the grouped sites.
 
 Note that you can also get a :class:`~tenpy.models.model.NearestNeighborModel` for TEBD from the
 latter by using :meth:`~tenpy.models.model.MPOModel.group_sites` and
-:meth:`~tenpy.models.model.NearestNeighbormodel.from_MPOModel`.
+:meth:`~tenpy.models.model.NearestNeighborModel.from_MPOModel`.
 An example for such a case is given in the file ``examples/c_tebd.py``.
 """
 # Copyright 2018-2023 TeNPy Developers, GNU GPLv3
@@ -27,7 +27,7 @@ __all__ = ['SpinChainNNN', 'SpinChainNNN2']
 
 
 class SpinChainNNN(CouplingMPOModel, NearestNeighborModel):
-    r"""Spin-S sites coupled by (next-)nearest neighbour interactions on a `GroupedSite`.
+    r"""Spin-S sites coupled by (next-)nearest neighbor interactions on a `GroupedSite`.
 
     The Hamiltonian reads:
 
@@ -63,7 +63,7 @@ class SpinChainNNN(CouplingMPOModel, NearestNeighborModel):
             What should be conserved. See :class:`~tenpy.networks.Site.SpinSite`.
         Jx, Jy, Jz, Jxp, Jyp, Jzp, hx, hy, hz : float | array
             Coupling as defined for the Hamiltonian above.
-        bc_MPS : {'finite' | 'infinte'}
+        bc_MPS : {'finite' | 'infinite'}
             MPS boundary conditions. Coupling boundary conditions are chosen appropriately.
 
     """
@@ -125,7 +125,7 @@ class SpinChainNNN(CouplingMPOModel, NearestNeighborModel):
 
 
 class SpinChainNNN2(CouplingMPOModel):
-    r"""Spin-S sites coupled by next-nearest neighbour interactions.
+    r"""Spin-S sites coupled by next-nearest neighbor interactions.
 
     The Hamiltonian reads:
 

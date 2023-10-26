@@ -224,9 +224,9 @@ def _partial_trace(tensor, tensor_links, loc):
     used_values: np.ndarray
         the entries of `tensor_links` that indicated the trace and are missing in the returned `tensor_links`
     """
-    num_ocurrences = np.sum(tensor_links[:, None] == tensor_links[None, :], axis=1)
-    trace_links = np.unique(tensor_links[np.where(num_ocurrences > 1)[0]])
-    res_links = tensor_links[np.where(num_ocurrences == 1)[0]]
+    num_occurrences = np.sum(tensor_links[:, None] == tensor_links[None, :], axis=1)
+    trace_links = np.unique(tensor_links[np.where(num_occurrences > 1)[0]])
+    res_links = tensor_links[np.where(num_occurrences == 1)[0]]
     num_traces = len(trace_links)
     assert num_traces > 0
 
@@ -266,7 +266,7 @@ def _ncon_do_binary_contractions(tensor_list, leg_links, sequence):
         try:
             res = npc.tensordot(tensor_a, tensor_b, (a_axes, b_axes))
         except Exception as e:
-            msg = (f'An error occured while performing the pairwise contraction indicated by '
+            msg = (f'An error occurred while performing the pairwise contraction indicated by '
                    f'values {", ".join(common_values)} in leg_links. '
                    f'Original stacktrace below.')
             raise type(e)(msg) from e
@@ -288,7 +288,7 @@ def _ncon_do_outer_products(tensor_list, leg_links):
         try:
             tensor_list[-1] = npc.outer(tensor_list[-1], tensor_b)
         except Exception as e:
-            msg = (f'An error occured while performing a final outer product between the last two '
+            msg = (f'An error occurred while performing a final outer product between the last two '
                    f'of {len(tensor_list) + 1} remaining tensors. '
                    f'Original stacktrace below.')
             raise type(e)(msg) from e

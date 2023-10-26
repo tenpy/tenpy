@@ -47,7 +47,7 @@ from numpy.core import single, double, csingle, cdouble, isfinite  # for those, 
 
 from numpy.linalg.linalg import LinAlgError
 
-# check the scipy version wheter it includes LAPACK's 'gesvd'
+# check the scipy version whether it includes LAPACK's 'gesvd'
 try:
     # simply check wether scipy.linalg.svd has the keyword it should have
     scipy.linalg.svd([[1.]], lapack_driver='gesvd')
@@ -63,12 +63,12 @@ except:
     if _old_scipy:
         warnings.warn("Import problems: the work-around `svd_gesvd` will fail.")
     # If you get this warning, you might still be lucky and not need the workaround,
-    # for examply, if you have a recent version of scipy....
+    # for example, if you have a recent version of scipy....
 
     # If you can't upgrade your scipy, you might try to copy&paste the corresponding functions
     # from the numpy code (version 1.11.0 works for me) on github.
 
-# (NumpyVersion parses the argument for version comparsion, not ``numpy.__version__``)
+# (NumpyVersion parses the argument for version comparison, not ``numpy.__version__``)
 
 #: will be the the CLAPACK library loaded with _load_lapack()
 _lapack_lib = None
@@ -195,7 +195,7 @@ def svd_gesvd(a, full_matrices=True, compute_uv=True, check_finite=True):
     lwork = c_int(-1)  # first call with lwork=-1
     args = [option, option, m, n, a, m, s, u, lu, vt, lvt, work, lwork, INFO]
     if is_complex:
-        # differnt call signature: additional array 'rwork' of fixed size
+        # different call signature: additional array 'rwork' of fixed size
         rwork = np.zeros((5 * min(N, M), ), real_t)
         args.insert(-1, rwork)
     lapack_routine(*args)  # first call: just calculate the required `work` size

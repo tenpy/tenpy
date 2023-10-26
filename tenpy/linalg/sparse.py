@@ -2,7 +2,7 @@
 
 Some linear algebra algorithms, e.g. Lanczos, do not require the full representations of a linear
 operator, but only the action on a vector, i.e., a matrix-vector product `matvec`. Here we define
-the strucuture of such a general operator, :class:`NpcLinearOperator`, as it is used in our own
+the structure of such a general operator, :class:`NpcLinearOperator`, as it is used in our own
 implementations of these algorithms (e.g., :mod:`~tenpy.linalg.lanczos`). Moreover, the
 :class:`FlatLinearOperator` allows to use all the scipy sparse methods by providing functionality
 to convert flat numpy arrays to and from np_conserved arrays.
@@ -149,7 +149,7 @@ class SumNpcLinearOperator(NpcLinearOperatorWrapper):
 
 
 class ShiftNpcLinearOperator(NpcLinearOperatorWrapper):
-    """Representes ``original_operator + shift * identity``.
+    """Represents ``original_operator + shift * identity``.
 
     This can be useful e.g. for better Lanczos convergence.
     """
@@ -270,11 +270,11 @@ class FlatLinearOperator(ScipyLinearOperator):
     _compact_qdata : 2D array
         The `qdata` for the npc vector, in case `compact_flat` is True.
     _npc_matvec_multileg : function | None
-        Only set if initalized with :meth:`from_guess_with_pipe`.
+        Only set if initialized with :meth:`from_guess_with_pipe`.
         The `npc_matvec` function to be wrapped around. Takes the npc Array in multidimensional
         form and returns it that way.
     _labels_split : list of str
-        Only set if initalized with :meth:`from_guess_with_pipe`.
+        Only set if initialized with :meth:`from_guess_with_pipe`.
         Labels of the guess before combining them into a pipe (stored as `leg`).
     """
     def __init__(self, npc_matvec, leg, dtype, charge_sector=0, vec_label=None, compact_flat=None):
@@ -632,7 +632,7 @@ class FlatLinearOperator(ScipyLinearOperator):
         num_ev : int
             Number of eigenvalues/vectors to look for.
         max_num_ev : int
-            :func:`scipy.sparse.linalg.speigs` somtimes raises a NoConvergenceError for small
+            :func:`scipy.sparse.linalg.speigs` sometimes raises a NoConvergenceError for small
             `num_ev`, which might be avoided by increasing `num_ev`. As a work-around,
             we try it again in the case of an error, just with larger `num_ev` up to `max_num_ev`.
             ``None`` defaults to ``num_ev + 2``.
@@ -697,7 +697,7 @@ class FlatLinearOperator(ScipyLinearOperator):
             # they can be arbitrarily rotated in degenerate subspaces.
             # To make things worse, we only have `k` of them which might cut a degenerate subspace
             # and we are not even aware of it.
-            # Luckily, within degenerat subspaces we know we can just project into a given charge
+            # Luckily, within degenerate subspaces we know we can just project into a given charge
             # sector, and get an (numerically) exact eigenstate of both charge and `self`!
             # The tricky thing is to ensure we have enough orthogonal states left!
 

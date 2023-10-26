@@ -30,7 +30,7 @@ class Disentangler:
     r"""Prototype for a disentangler. Trivial, does nothing.
 
     In purification, we write :math:`\rho_P = Tr_Q{|\psi_{P,Q}><\psi_{P,Q}|}`. Thus, we
-    can actually apply any unitary to the auxiliar `Q` space of :math:`|\psi>` without
+    can actually apply any unitary to the auxiliary `Q` space of :math:`|\psi>` without
     changing the physical expectation values.
 
     .. note ::
@@ -40,7 +40,7 @@ class Disentangler:
     However, the unitary can strongly influence the entanglement structure of :math:`|\psi>`.
     Therefore, the :class:`PurificationTEBD` includes a hook in
     :meth:`PurificationTEBD.update_bond` (and similar methods) to find and apply a disentangling
-    unitary to the auxiliar indices of a two-site wave function by calling (``__call__`` method)
+    unitary to the auxiliary indices of a two-site wave function by calling (``__call__`` method)
     a `Disentangler`.
 
     This class is a 'trivial' disentangler which does *nothing* to the two-site wave function;
@@ -158,9 +158,9 @@ class RenyiDisentangler(Disentangler):
     def iter(self, theta, U):
         r"""Given `theta` and `U`, find another `U` which reduces the 2nd Renyi entropy.
 
-        Temporarily view the different `U` as independt and mimizied one of them -
+        Temporarily view the different `U` as independent and minimized one of them -
         this corresponds to a linearization of the cost function.
-        Defining `Utheta` as the application of `U` to `theata`, and combining the `p` legs of
+        Defining `Utheta` as the application of `U` to `theta`, and combining the `p` legs of
         `theta` with ``'vL', 'vR'``, this function contracts::
 
             |     .----theta----.
@@ -190,7 +190,7 @@ class RenyiDisentangler(Disentangler):
         Returns
         -------
         S2 : float
-            Renyi entopy (n=2), :math:`S2 = \frac{1}{1-2} \log tr(\rho_L^2)` of `U theta`.
+            Renyi entropy (n=2), :math:`S2 = \frac{1}{1-2} \log tr(\rho_L^2)` of `U theta`.
         new_U : :class:`~tenpy.linalg.np_conserved.Array`
             Unitary with legs ``'q0', 'q1', 'q0*', 'q1*'``, which should disentangle `theta`.
         """
@@ -362,7 +362,7 @@ class GradientDescentDisentangler(Disentangler):
     def iter(self, theta):
         r"""Given `theta`, find a unitary `U` towards minimizing the n-th Renyi entropy.
 
-        This function calulates the gradiant :math:`dS = \partial S(U theta, n) /\partial U`.
+        This function calculates the gradient :math:`dS = \partial S(U theta, n) /\partial U`.
         and then ``U(t) = exp(-t*dS)``, where we choose the `t` from stepsizes which
         minimizes the entropy of ``U(t) theta``.
 
@@ -385,7 +385,7 @@ class GradientDescentDisentangler(Disentangler):
         Returns
         -------
         S : float
-            n-th Renyi entopy of new_theta
+            n-th Renyi entropy of new_theta
         theta : :class:`~tenpy.linalg.np_conserved.Array`
             The *disentangled* wave function ``new_U theta``.
         new_U : :class:`~tenpy.linalg.np_conserved.Array`
@@ -468,7 +468,7 @@ class LastDisentangler(Disentangler):
 
 
 class DiagonalizeDisentangler(Disentangler):
-    """Disentangle by diagonalizing the two-site density matrix in the auxiliar space.
+    """Disentangle by diagonalizing the two-site density matrix in the auxiliary space.
 
     See :arxiv:`1704.01974`.
     Problem: Sorting by eigenvalues breaks the charge conservation!

@@ -1,6 +1,6 @@
 """Definitions of tensor networks like MPS and MPO.
 
-Here, 'tensor network' refers just to the (parital) contraction of tensors.
+Here, 'tensor network' refers just to the (partial) contraction of tensors.
 For example an MPS represents the contraction along the 'virtual' legs/bonds of its `B`.
 
 .. rubric:: Submodules

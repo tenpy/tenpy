@@ -38,7 +38,7 @@ is the discarded part (orthogonal to the kept part) and the
 
 .. warning ::
     This module takes only track of the errors coming from the truncation of Schmidt values.
-    There might be other sources of error as well, for example TEBD has also an discretisation
+    There might be other sources of error as well, for example TEBD has also an discretization
     error depending on the chosen time step.
 """
 # Copyright 2018-2023 TeNPy Developers, GNU GPLv3
@@ -70,7 +70,7 @@ class TruncationError(Hdf5Exportable):
     Attributes
     ----------
     eps : float
-        The total sum of all discared Schmidt values squared.
+        The total sum of all discarded Schmidt values squared.
         Note that if you keep singular values up to 1.e-14 (= a bit more than machine precision
         for 64bit floats), `eps` is on the order of 1.e-28 (due to the square)!
     ov : float
@@ -175,7 +175,7 @@ def truncate(S, options):
         Should be normalized to ``np.sum(S*S) == 1.``.
     options: dict-like
         Config with constraints for the truncation, see :cfg:config:`truncation`.
-        If a constraint can not be fullfilled (without violating a previous one), it is ignored.
+        If a constraint can not be fulfilled (without violating a previous one), it is ignored.
         A value ``None`` indicates that the constraint should be ignored.
 
     Returns
@@ -279,8 +279,8 @@ def svd_theta(theta, trunc_par, qtotal_LR=[None, None], inner_labels=['vR', 'vL'
         Matrix with left singular vectors as columns.
         Shape ``(M, M)`` or ``(M, K)`` depending on `full_matrices`.
     S : 1D ndarray
-        The singluar values of the array.
-        If no `cutoff` is given, it has lenght ``min(M, N)``.
+        The singular values of the array.
+        If no `cutoff` is given, it has length ``min(M, N)``.
         Normalized to ``np.linalg.norm(S)==1``.
     VH : :class:`~tenpy.linalg.np_conserved.Array`
         Matrix with right singular vectors as rows.
