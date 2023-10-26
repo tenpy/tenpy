@@ -82,18 +82,21 @@ def test_truncated_svd(tensor_rng, new_vh_leg_dual, svd_min, normalize_to):
     assert tensors.almost_equal(tensors.eye_like(Vd_V), Vd_V)
 
 
+@pytest.mark.parametrize('new_vh_leg_dual', [True, False])
 @pytest.mark.parametrize('compute_u, compute_vh', [(True, False), (False, True), (False, False)])
-def test_eig_based_svd(tensor_rng, compute_u, compute_vh):
+def test_eig_based_svd(tensor_rng, compute_u, compute_vh, new_vh_leg_dual):
     T: tensors.Tensor = tensor_rng(labels=['l1', 'r2', 'l2', 'r1'], max_block_size=3)
     u_legs = ['l1', 'l2']
     vh_legs = ['r1', 'r2']
     new_labels = ['cr', 'cl']
     
-    svd_U, svd_S, svd_Vh = matrix_operations.svd(T, u_legs=u_legs, new_labels=new_labels,
-                                                 vh_legs=vh_legs)
-    U, S, Vh = matrix_operations.eig_based_svd(T, u_legs=u_legs, new_labels=new_labels,
-                                               vh_legs=vh_legs,
-                                               compute_u=compute_u, compute_vh=compute_vh)
+    svd_U, svd_S, svd_Vh = matrix_operations.svd(
+        T, u_legs=u_legs, new_labels=new_labels, vh_legs=vh_legs, new_vh_leg_dual=new_vh_leg_dual
+    )
+    U, S, Vh = matrix_operations.eig_based_svd(
+        T, u_legs=u_legs, new_labels=new_labels, vh_legs=vh_legs, compute_u=compute_u,
+        compute_vh=compute_vh, new_vh_leg_dual=new_vh_leg_dual
+    )
     npt.assert_almost_equal(S.diag_numpy, svd_S.diag_numpy)
     
     # TODO to reinstate something like this:
@@ -183,9 +186,10 @@ def test_lq(tensor_rng, new_l_leg_dual, full):
             assert tensors.almost_equal(Q_Qd, expect)
 
 
+@pytest.mark.parametrize('new_leg_dual', [True, False])
 @pytest.mark.parametrize('sort', [None, 'm>', 'm<', '>', '<'])
 @pytest.mark.parametrize('real', [True, False])
-def test_eigh(tensor_rng, vector_space_rng, real, sort):
+def test_eigh(tensor_rng, vector_space_rng, real, sort, new_leg_dual):
     a = vector_space_rng()
     b = vector_space_rng()
     T: tensors.Tensor = tensor_rng(legs=[a, b.dual, b, a.dual], real=real, labels=['a', 'b*', 'b', 'a*'])
@@ -196,7 +200,8 @@ def test_eigh(tensor_rng, vector_space_rng, real, sort):
     npt.assert_allclose(T_np, T_np.conj().transpose([2, 3, 0, 1]))
 
     print('perform eigh and test_sanity')
-    D, U = matrix_operations.eigh(T, legs1=['a', 'b'], legs2=['a*', 'b*'], new_labels='c', sort=sort)
+    D, U = matrix_operations.eigh(T, legs1=['a', 'b'], legs2=['a*', 'b*'], new_labels='c',
+                                  sort=sort, new_leg_dual=new_leg_dual)
     D.test_sanity()
     U.test_sanity()
     assert D.dtype.is_real
@@ -204,6 +209,8 @@ def test_eigh(tensor_rng, vector_space_rng, real, sort):
 
     print('checking legs and labels')
     new_leg = spaces.ProductSpace([a, b]).as_VectorSpace().dual
+    if new_leg.is_dual != new_leg_dual:
+        new_leg = new_leg.flip_is_dual()
     assert D.legs == [new_leg.dual, new_leg]
     assert D.labels == ['c*', 'c']
     assert U.legs == [a, b, new_leg]

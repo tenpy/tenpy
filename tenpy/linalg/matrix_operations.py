@@ -152,7 +152,7 @@ def svd_apply_mask(U: AbstractTensor, S: DiagonalTensor, Vh: AbstractTensor, mas
 
 def eig_based_svd(a: AbstractTensor, compute_u: bool = False, compute_vh: bool = False,
                   u_legs: list[int | str] = None, vh_legs: list[int | str] = None,
-                  new_labels: tuple[str, ...] = None, new_vh_leg_dual=None,
+                  new_labels: tuple[str, ...] = None, new_vh_leg_dual: bool = False,
                   U_inherits_charge: bool = False):
     """Compute an SVD-like decomposition via an eigen-decomposition of the hermitian square.
 
@@ -232,20 +232,18 @@ def eig_based_svd(a: AbstractTensor, compute_u: bool = False, compute_vh: bool =
             compute_u = True
 
     if compute_u:  # decompose a @ a.hc = U @ S**2 @ U.hc
-        S_sq, U = eigh(a.tdot(a.conj(), 1, 1), new_labels=[l_u, l_su, l_sv], sort='>')
+        S_sq, U = eigh(a.tdot(a.conj(), 1, 1), new_labels=[l_u, l_su, l_sv], sort='>',
+                       new_leg_dual=not new_vh_leg_dual)
         if need_combine:
             U = U.split_legs(0)
         Vh = None
     else:  # decompose a.hc @ a = V @ S**2 @ V.hc  (note that we want V.hc !)
-        S_sq, V = eigh(a.conj().tdot(a, 0, 0), new_labels=[_dual_leg_label(l_vh), l_sv, l_su], sort='>')
+        S_sq, V = eigh(a.conj().tdot(a, 0, 0), new_labels=[_dual_leg_label(l_vh), l_sv, l_su],
+                       sort='>', new_leg_dual=not new_vh_leg_dual)
         Vh = V.conj().permute_legs([1, 0])
         if need_combine:
             Vh = Vh.split_legs(1)
         U = None
-
-    if new_vh_leg_dual is not None:
-        # TODO use flip_leg_duality. it is currently buggy though.
-        raise NotImplementedError
 
     # by truncating S_sq here instead of S later we can get rid of those eigenvalues which are close
     # to 0 and have become negative due to numerical error
@@ -538,7 +536,7 @@ def pinv(a: AbstractTensor, legs1: list[int | str] = None, legs2: list[int | str
 
 
 def eigh(a: AbstractTensor, legs1: list[int | str] = None, legs2: list[int | str] = None,
-         new_labels: str | list[str] = 'eig', sort: str = None):
+         new_labels: str | list[str] = 'eig', sort: str = None, new_leg_dual: bool = True):
     r"""Eigenvalue decomposition of a hermitian square tensor.
 
     A tensor is considered square, if the `legs2` legs are the duals of the `legs1` legs,
@@ -565,6 +563,9 @@ def eigh(a: AbstractTensor, legs1: list[int | str] = None, legs2: list[int | str
         If three ``(a, b, c)``, then we have ``U.labels == [..., a]`` and ``D.labels == [b, c]``.
     sort : {'m>', 'm<', '>', '<', ``None``}
         How the eigenvalues are sorted *within* each charge block. See :func:`argsort` for details.
+    new_leg_dual : bool
+        If the newly created leg on `U` is dual or not.
+        TODO what is the intuitive default? coordinate with svd!
 
     Returns
     -------
@@ -615,6 +616,11 @@ def eigh(a: AbstractTensor, legs1: list[int | str] = None, legs2: list[int | str
     D = DiagonalTensor(d_data, first_leg=D_leg_0, second_leg_dual=True, backend=backend,
                        labels=[lb, lc])
     U = Tensor(u_data, legs=[U_leg_0, U_leg_1], backend=backend, labels=[a.labels[0], la])
+
+    if U_leg_1.is_dual != new_leg_dual:
+        # OPTIMIZE is it better to do this directly in the backend.eigh? like for svd?
+        U = U.flip_leg_duality(1)
+        D = D.flip_leg_duality(0, 1)
 
     if need_combine:
         U = U.split_legs(0)
