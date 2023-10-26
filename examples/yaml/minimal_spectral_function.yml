@@ -1,21 +1,33 @@
 #!/usr/bin/env -S python -m tenpy 
 
-simulation_class : GroundStateSearch
+simulation_class : SpectralSimulation
 
-ground_state_filename : a_minimal_DMRG.h5
+ground_state_filename : results/a_minimal_DMRG.h5
+
+directory: results
+output_filename : a_minimal_Spectral_Function.h5
 
 operator_t0:
-    i: 0
+    i: 16  # otherwise defaults to L//2
     op: Sz
 
 operator_t: Sz
+
+final_time: 1
 
 algorithm_class: TEBDEngine
 algorithm_params:
     trunc_params:
         chi_max: 120
-    dt : 0.05
+    dt : 0.1
     N_steps : 2  # measurements every dt*N_steps
 
-
-
+post_processing_params:
+    output_filename: post_processed_results.h5
+    linear_prediction:
+        m: 50
+        p: 5
+        trunc_mode: renormalize
+    windowing_function:
+        window: gaussian
+        sigma: 0.4

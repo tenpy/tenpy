@@ -1,15 +1,17 @@
 """Simulations for (real) time evolution."""
+import logging
+
 # Copyright 2020-2023 TeNPy Developers, GNU GPLv3
 
 import numpy as np
 
 from . import simulation
 from .simulation import *
-from .simulation_processing import SpectralFunctionProcessor
+from .post_processing import SpectralFunctionProcessor
 from ..networks.mps import MPSEnvironment, MPS, MPSEnvironmentJW
 from ..tools import hdf5_io
 
-__all__ = simulation.__all__ + ['RealTimeEvolution', 'SpectralSimulation']
+__all__ = simulation.__all__ + ['RealTimeEvolution', 'SpectralSimulation', 'SpectralSimulationExperimental']
 
 
 class RealTimeEvolution(Simulation):
@@ -38,6 +40,8 @@ class RealTimeEvolution(Simulation):
 
     def __init__(self, options, **kwargs):
         super().__init__(options, **kwargs)
+        if 'final_time' not in self.options.keys():
+            raise KeyError("A 'final_time' must be supplied for a time evolution.")
         self.final_time = self.options['final_time'] - 1.e-10  # subtract eps: roundoff errors
 
     def run_algorithm(self):
@@ -98,7 +102,8 @@ class SpectralSimulation(RealTimeEvolution):
         :class:`RealTimeEvolution`.
 
         Parameters example for this class
-        params = {'final_time': 1,
+        params = {'ground_state_filename': 'ground_state.h5',
+                  'final_time': 1,
                   'operator_t0': {'op': 'Sigmay', 'i': 20 , 'idx_form': 'mps'},
                   'operator_t': ['Sigmax', 'Sigmay', 'Sigmaz'], # TODO: handle custom operators (not specified by name)
                   'evolve_bra': False,
@@ -119,17 +124,23 @@ class SpectralSimulation(RealTimeEvolution):
     post_processor = SpectralFunctionProcessor
 
     def __init__(self, options, *, gs_data=None, **kwargs):
+        # option to pass ground_state_filename
+        ground_state_filename = options.get('ground_state_filename', None)
+        if ground_state_filename is not None:
+            options, gs_data = self.update_params_from_gs_search(ground_state_filename, options)
         super().__init__(options, **kwargs)
+        if ground_state_filename is not None:
+            self.options.touch('ground_state_filename')
         # gs_data is not (yet) the ground_state, but will be read in init_state
         self.gs_data = gs_data
-        self.gs_energy = None
+        self.gs_energy = self.options.get('gs_energy', None)
         self.engine_ground_state = None
         if 'operator_t' and 'operator_t0' and 'final_time' not in self.options.keys():
             raise KeyError("operator_t and operator_t0 must be supplied")
-        self.operator_t = self.options.get('operator_t')
+        self.operator_t = self.options['operator_t']
         # generate info for operator before time evolution as subconfig
         self.operator_t0_config = self.options.subconfig('operator_t0')
-        self.operator_t0 = self._get_operator_t0()
+        self.operator_t0 = None  # read out config later, since defaults depend on model parameters
         self.evolve_bra = self.options.get('evolve_bra', False)
         self.addJW = self.options.get('addJW', False)
         # for resuming simulation from checkpoint # this is provided in super().__init__
@@ -138,32 +149,6 @@ class SpectralSimulation(RealTimeEvolution):
         if resume_data:
             if 'psi_groundstate' in self.results['simulation_parameters'].keys():
                 self.psi_groundstate = self.results['simulation_parameters']['psi_groundstate']
-
-    @property
-    def gs_data(self):
-        return self._gs_data
-
-    @gs_data.setter
-    def gs_data(self, data):
-        if data is not None:
-            if isinstance(data, MPS):
-                self._gs_data = data
-                return
-            elif isinstance(data, str):
-                dict_data = hdf5_io.load(data)
-            elif isinstance(data, dict):
-                dict_data = data
-            else:
-                raise TypeError("Can't read out ground state MPS, make sure to supply either an instance\
-                                 of an MPS, a valid filename or a dictionary containing the ground state\
-                                 data (as an MPS) with key `psi` or `psi_groundstate`.")
-            if 'psi_groundstate' in dict_data.keys():
-                self._gs_data = dict_data.get('psi')
-            elif 'psi' in dict_data.keys():
-                self._gs_data = dict_data.get('psi_groundstate')
-            else:
-                raise KeyError("Passed results to gs_data must contain 'psi_groundstate' or\
-                                'psi' as key")
 
     @classmethod
     def from_gs_search(cls, filename, sim_params, **kwargs):
@@ -183,19 +168,30 @@ class SpectralSimulation(RealTimeEvolution):
         **kwargs :
             Further keyword arguments given to :meth:`__init__` of the class :class:`SpectralSimulation`.
         """
-        if isinstance(filename, dict):
-            gs_results = filename
-        else:
-            gs_results = hdf5_io.load(filename)
+        options, psi = cls.update_params_from_gs_search(filename, sim_params)
+        if 'ground_state_filename' in options.keys():
+            logging.warning("ground_state_filename in Simulation params and passed explicitly")
+            del options['ground_state_filename']
+        sim = cls(options, gs_data=psi, **kwargs)
+        return sim
 
+    @staticmethod
+    def update_params_from_gs_search(filename, sim_params):
+        gs_results = hdf5_io.load(filename) if not isinstance(filename, dict) else filename
         sim_class = gs_results['version_info']['simulation_class']
-        if sim_class is not 'GroundStateSearch':
+        if sim_class != 'GroundStateSearch':
             raise ValueError("Must be loaded from a GS search")
 
         if 'psi' not in gs_results.keys():
             raise ValueError("MPS for ground state not found")
+        psi = gs_results['psi']
+        if not isinstance(psi, MPS):
+            raise TypeError("Ground state must be an MPS")
 
         options = dict()
+        if 'energy' in gs_results.keys():
+            options['gs_energy'] = gs_results['energy']
+
         options['model_class'] = gs_results['simulation_parameters']['model_class']
         options['model_params'] = gs_results['simulation_parameters']['model_params']
 
@@ -207,11 +203,33 @@ class SpectralSimulation(RealTimeEvolution):
         # update dictionary parameters
         options.update(sim_params)
 
-        sim = cls(options, gs_data=gs_results['psi'], **kwargs)
-        # already update the attributes of the class
-        if 'energy' in gs_results.keys():
-            sim.gs_energy = gs_results['energy']
-        return sim
+        return options, psi
+
+    @property
+    def gs_data(self):
+        return self._gs_data
+
+    @gs_data.setter
+    def gs_data(self, data):
+        if data is not None:
+            if isinstance(data, MPS):
+                self._gs_data = data
+                return
+            elif isinstance(data, str):
+                dict_data = hdf5_io.load(data)
+            elif isinstance(data, dict):
+                dict_data = data
+            else:
+                raise TypeError("Can't read out ground state MPS, make sure to supply either an instance\
+                                 of an MPS, a valid filename or a dictionary containing the ground state\
+                                 data (as an MPS) with key 'psi' or 'psi_groundstate'.")
+            if 'psi_groundstate' in dict_data.keys():
+                self._gs_data = dict_data.get("psi")
+            elif 'psi' in dict_data.keys():
+                self._gs_data = dict_data.get("psi_groundstate")
+            else:
+                raise KeyError("Passed results to gs_data must contain 'psi_groundstate' or\
+                                'psi' as key")
 
     def init_state(self):
         # make sure state is not reinitialized if psi and psi_groundstate are given
@@ -219,14 +237,14 @@ class SpectralSimulation(RealTimeEvolution):
             if hasattr(self, 'gs_data'):
                 self.psi_groundstate = self.gs_data
                 if 'psi_groundstate' in self.options.keys():
-                    raise KeyError("Supplied gs_data explicitly and in options")
+                    raise KeyError("Supplied gs_data explicitly and 'psi_groundstate' in options")
             elif 'psi_groundstate' in self.options.keys():
                 self.psi_groundstate = self.options['psi_groundstate']
             else:
                 self.logger.warning("No ground state data is supplied, calling the initial state builder on\
                                      SpectralSimulation class. You probably want to supply a ground state")
 
-                super().init_state()  # this sets self.psi from init state builder (should be avoided)
+                super().init_state()  # this sets self.psi from init_state_builder (should be avoided)
                 self.psi_groundstate = self.psi.copy()
                 delattr(self, 'psi')  # free memory
 
@@ -271,6 +289,7 @@ class SpectralSimulation(RealTimeEvolution):
     def apply_operator_t0_to_psi(self):
         # TODO: think about segment boundary conditions
         # TODO: make JW string consistent, watch for changes in apply_local_op to have autoJW
+        self.operator_t0 = self._get_operator_t0()
         operator_t0 = self.operator_t0
         if len(operator_t0) == 1:
             op, i = operator_t0[0]
@@ -333,9 +352,10 @@ class SpectralSimulation(RealTimeEvolution):
                 post_processor_cls = self.post_processor.from_simulation(self, processing_params=processing_params)
                 # TODO: make sure this is written into self.results
                 post_processor_cls.run()
-            except Exception:
-                self.logger.warning("Could not post-process the results, continuing saving\
-                                     results without post-processing")
+            except Exception as e:
+                self.logger.info("Could not post-process the results because of the following exception:")
+                self.logger.warning(e)
+                self.logger.info("continuing saving results without post-processing")
         return super().prepare_results_for_save()
 
     def get_mps_environment(self):
