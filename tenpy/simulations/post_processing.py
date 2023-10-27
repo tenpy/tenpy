@@ -6,6 +6,7 @@ should be used together with the simulation :class:`SpectralSimulation`.
 This module also provides basic function for linear prediction for multidimensional time
 series data.
 """
+# Copyright 2020-2023 TeNPy Developers, GNU GPLv3
 
 import numpy as np
 import scipy
@@ -17,7 +18,9 @@ from ..tools import hdf5_io
 from ..tools.misc import update_recursive
 from ..tools.params import asConfig
 
-__all__ = simulation.__all__ + ['SimulationPostProcessor', 'SpectralFunctionProcessor']
+# __all__ = simulation.__all__ + ['SimulationPostProcessor', 'SpectralFunctionProcessor']
+__all__ = ['SimulationPostProcessor', 'SpectralFunctionProcessor', 'init_simulation_for_processing',
+           'linear_prediction', 'get_lpc', 'alpha_and_c', 'autocorrelation']
 
 
 class SimulationPostProcessor:
@@ -54,26 +57,33 @@ class SimulationPostProcessor:
     inside_simulation = False
 
     def __init__(self, sim_results, *, processing_params: dict = None):
-        if processing_params is None:
-            processing_params = dict()  # Config can't take None, but empty dict
+        # Config can't take None, but empty dict
+        processing_params = processing_params if processing_params is not None else dict()
         # convert parameters to Config object
         self.options = asConfig(processing_params, self.__class__.__name__)
         # setup_logging_()
-        self.logger.info("Initializing post-processing:\n%s\n%s\n%s", "=" * 80, self.__class__.__name__, "=" * 80)
-
+        self.logger.info("Initializing post-processing:\n%s\n%s\n%s", "=" * 80, self.__class__.__name__,
+                         "=" * 80)
         # TODO: fix logging of simulation ... why does simulation_class_kwargs disable logging not work (see below)
         if not self.inside_simulation:
-            self.sim = init_simulation_for_processing(filename=sim_results, simulation_class_kwargs={'setup_logging': False})
+            self.sim = init_simulation_for_processing(filename=sim_results,
+                                                      simulation_class_kwargs={'setup_logging': False})
             self.sim.init_model()
-            # self.sim.init_state()
             # TODO: do we want to initialize the state again (e.g., for measurements) ?
-
+            # self.sim.init_state()
+        # shorthand notation
         self.model = self.sim.model
         self.lat = self.sim.model.lat
         self.BZ = self.sim.model.lat.BZ
 
         self.measurements = self.sim.results['measurements']
         self.sim_params = self.sim.results['simulation_parameters']
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        self.options.warn_unused(True)
 
     @classmethod
     def from_simulation(cls, sim: Simulation, *, processing_params: dict = None):
@@ -85,18 +95,11 @@ class SimulationPostProcessor:
         post_processing_sim.__init__(None, processing_params=processing_params)
         return post_processing_sim
 
-    @classmethod
-    def from_file(cls):
-        raise NotImplementedError("Not yet implemented")
-
-    @classmethod
-    def from_dict(cls):
-        raise NotImplementedError("Not yet implemented")
-
     def run(self):
         results, key = self.run_processing()
-        self.save_results(results, key)
+        results = self.save_results(results, key)
         self.logger.info('finished post-processing run\n%s', "=" * 80)
+        return results
 
     def run_processing(self):
         raise NotImplementedError("Subclass must define :meth:`run` for post-processing")
@@ -112,32 +115,33 @@ class SimulationPostProcessor:
         key : str
             The name under which the results should be stored.
         """
-        if self.sim.results.get(key) is not None:
-            self.logger.warning('Overwriting previous post_processing_results')
-
-        if self.inside_simulation:
-            self.sim.results[key] = results
-            # saving is handled by Simulation class
-            return None
-
-        if self.options.get('append_results', False) is True:
-            self.sim.results[key] = results
-            results = self.sim.save_results(results=self.sim.results)
-            # TODO: unnecessarily writes all results ?
-            # if we don't pass results, we still need to avoid:
-            # if self.options.get('save_resume_data', self.options['save_psi']):
-            #     results['resume_data'] = self.engine.get_resume_data()
-            # in prepare_results_for_save()
-        else:
-            output_filename = self.options.get('output_filename', None)
-            if output_filename is None:
-                self.logger.warning("Missing an output filename, results are returned\
-                                     but not saved")
-            # TODO: generate output filename automatically and don't overwrite output filename
+        if self.options.get('append_results', False) is False:
             results_dict = dict()
             results_dict['simulation_parameters'] = self.sim_params
             results_dict[key] = results
-            hdf5_io.save(results_dict, output_filename)
+            # TODO: generate output filename automatically and don't overwrite output filename
+            output_filename = self.options.get('output_filename', None)
+            if output_filename is not None:
+                hdf5_io.save(results_dict, output_filename)
+            else:
+                self.logger.warning("Missing an output filename, results are returned\
+                                     but not saved")
+            results = results_dict
+        else:
+            if self.sim.results.get(key, None) is not None:
+                self.logger.warning('Overwriting previous post_processing_results')
+            # append results to sim.results
+            self.sim.results[key] = results
+            if self.inside_simulation:
+                # saving is handled by Simulation class
+                results = None
+            else:
+                results = self.sim.save_results(results=self.sim.results)
+                # TODO: unnecessarily writes all results to disk again ?
+                # if we don't pass results, we still need to avoid:
+                # if self.options.get('save_resume_data', self.options['save_psi']):
+                #     results['resume_data'] = self.engine.get_resume_data()
+                # in prepare_results_for_save()
         return results
 
     @staticmethod
@@ -402,8 +406,7 @@ def init_simulation_for_processing(*,
     if update_sim_params is not None:
         update_recursive(options, update_sim_params)
 
-    sim = SimClass.from_saved_checkpoint(checkpoint_results=checkpoint_results,
-                                        **simulation_class_kwargs)
+    sim = SimClass.from_saved_checkpoint(checkpoint_results=checkpoint_results, **simulation_class_kwargs)
     return sim
 
 
@@ -484,7 +487,7 @@ def linear_prediction(x: np.ndarray, m: int, p: int, split: float = 0, trunc_mod
         return np.array(predictions).T  # transpose back
 
 
-def autocorrelation(x, i, j, cyclic=False, cut_idx= 0, cut_pad_zero: bool = False):
+def autocorrelation(x, i, j, cyclic=False, cut_idx=0):  # TODO: introduce cut_pad_zero: bool = False
     """Compute the autocorrelation :math:`R_{XX}(i, j) = E\{x(n-i) \cdot x(n-j)\}`. Note
     that this can be rewritten as :math:`R_{XX}(i - j) = E\{x(n) \cdot x(n-(j-i))\}`
 
@@ -498,7 +501,8 @@ def autocorrelation(x, i, j, cyclic=False, cut_idx= 0, cut_pad_zero: bool = Fals
         whether the cyclic autocorrelation is used or not. If set to False (default), the
         data points with indices smaller than 0 are all set to zero. If set to True all indices
         are interpreted mod N (where N is the length of x) -> cyclic.
-
+    cut_idx : int
+        index at which data is cut off (e.g. to remove short time effects)
     Returns
     -------
     float
