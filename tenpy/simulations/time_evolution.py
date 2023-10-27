@@ -1,5 +1,4 @@
 """Simulations for (real) time evolution."""
-import logging
 
 # Copyright 2020-2023 TeNPy Developers, GNU GPLv3
 
@@ -9,7 +8,6 @@ from . import simulation
 from .simulation import *
 from .post_processing import SpectralFunctionProcessor
 from ..networks.mps import MPSEnvironment, MPS, MPSEnvironmentJW
-from ..tools import hdf5_io
 
 __all__ = simulation.__all__ + ['RealTimeEvolution', 'SpectralSimulation', 'SpectralSimulationExperimental']
 
@@ -106,7 +104,6 @@ class SpectralSimulation(RealTimeEvolution):
                   'final_time': 1,
                   'operator_t0': {'op': 'Sigmay', 'i': 20 , 'idx_form': 'mps'},
                   'operator_t': ['Sigmax', 'Sigmay', 'Sigmaz'], # TODO: handle custom operators (not specified by name)
-                  'evolve_bra': False,
                   'addJW': False}
 
         params['operator_t0']['op']: a list of operators to apply at the given indices 'i' (they all get applied before
@@ -124,31 +121,24 @@ class SpectralSimulation(RealTimeEvolution):
     post_processor = SpectralFunctionProcessor
 
     def __init__(self, options, *, gs_data=None, **kwargs):
-        # option to pass ground_state_filename
-        ground_state_filename = options.get('ground_state_filename', None)
-        if ground_state_filename is not None:
-            options, gs_data = self.update_params_from_gs_search(ground_state_filename, options)
         super().__init__(options, **kwargs)
-        if ground_state_filename is not None:
-            self.options.touch('ground_state_filename')
-        # gs_data is not (yet) the ground_state, but will be read in init_state
-        self.gs_data = gs_data
+        self.gs_data = self._load_data_from_gs(gs_data)
+        # should be a dict with model params and psi_ground_state but allows passing an MPS
+        # will be read out in init_state
         self.gs_energy = self.options.get('gs_energy', None)
-        self.engine_ground_state = None
         if 'operator_t' and 'operator_t0' and 'final_time' not in self.options.keys():
-            raise KeyError("operator_t and operator_t0 must be supplied")
+            raise KeyError("`operator_t`, `operator_t0` and a `final_time` must be supplied")
         self.operator_t = self.options['operator_t']
         # generate info for operator before time evolution as subconfig
         self.operator_t0_config = self.options.subconfig('operator_t0')
         self.operator_t0 = None  # read out config later, since defaults depend on model parameters
-        self.evolve_bra = self.options.get('evolve_bra', False)
         self.addJW = self.options.get('addJW', False)
         # for resuming simulation from checkpoint # this is provided in super().__init__
         # TODO: How to ensure resuming from checkpoint works, when evolve_bra is True ?
         resume_data = self.results.get("resume_data", None)
         if resume_data:
-            if 'psi_groundstate' in self.results['simulation_parameters'].keys():
-                self.psi_groundstate = self.results['simulation_parameters']['psi_groundstate']
+            if 'psi_ground_state' in self.results['simulation_parameters'].keys():
+                self.psi_ground_state = self.results['simulation_parameters']['psi_ground_state']
 
     @classmethod
     def from_gs_search(cls, filename, sim_params, **kwargs):
@@ -168,95 +158,74 @@ class SpectralSimulation(RealTimeEvolution):
         **kwargs :
             Further keyword arguments given to :meth:`__init__` of the class :class:`SpectralSimulation`.
         """
-        options, psi = cls.update_params_from_gs_search(filename, sim_params)
-        if 'ground_state_filename' in options.keys():
-            logging.warning("ground_state_filename in Simulation params and passed explicitly")
-            del options['ground_state_filename']
-        sim = cls(options, gs_data=psi, **kwargs)
-        return sim
-
-    @staticmethod
-    def update_params_from_gs_search(filename, sim_params):
-        gs_results = hdf5_io.load(filename) if not isinstance(filename, dict) else filename
-        sim_class = gs_results['version_info']['simulation_class']
-        if sim_class != 'GroundStateSearch':
-            raise ValueError("Must be loaded from a GS search")
-
-        if 'psi' not in gs_results.keys():
-            raise ValueError("MPS for ground state not found")
-        psi = gs_results['psi']
-        if not isinstance(psi, MPS):
-            raise TypeError("Ground state must be an MPS")
-
-        options = dict()
-        if 'energy' in gs_results.keys():
-            options['gs_energy'] = gs_results['energy']
-
-        options['model_class'] = gs_results['simulation_parameters']['model_class']
-        options['model_params'] = gs_results['simulation_parameters']['model_params']
-
-        # check that model_class and model_params do not differ in sim_params
-        for key in ['model_class', 'model_params']:
-            if key in sim_params.keys():
-                if options[key] != sim_params[key]:
-                    raise ValueError("Different Model and/or parameters for GroundStateSearch and SpectralSimulation!")
-        # update dictionary parameters
-        options.update(sim_params)
-
-        return options, psi
-
-    @property
-    def gs_data(self):
-        return self._gs_data
-
-    @gs_data.setter
-    def gs_data(self, data):
-        if data is not None:
-            if isinstance(data, MPS):
-                self._gs_data = data
-                return
-            elif isinstance(data, str):
-                dict_data = hdf5_io.load(data)
-            elif isinstance(data, dict):
-                dict_data = data
-            else:
-                raise TypeError("Can't read out ground state MPS, make sure to supply either an instance\
-                                 of an MPS, a valid filename or a dictionary containing the ground state\
-                                 data (as an MPS) with key 'psi' or 'psi_groundstate'.")
-            if 'psi_groundstate' in dict_data.keys():
-                self._gs_data = dict_data.get("psi")
-            elif 'psi' in dict_data.keys():
-                self._gs_data = dict_data.get("psi_groundstate")
-            else:
-                raise KeyError("Passed results to gs_data must contain 'psi_groundstate' or\
-                                'psi' as key")
+        return cls(options=sim_params, gs_data=filename, **kwargs)
 
     def init_state(self):
-        # make sure state is not reinitialized if psi and psi_groundstate are given
-        if not hasattr(self, 'psi_groundstate'):
-            if hasattr(self, 'gs_data'):
-                self.psi_groundstate = self.gs_data
-                if 'psi_groundstate' in self.options.keys():
-                    raise KeyError("Supplied gs_data explicitly and 'psi_groundstate' in options")
-            elif 'psi_groundstate' in self.options.keys():
-                self.psi_groundstate = self.options['psi_groundstate']
+        # make sure state is not reinitialized if psi and psi_ground_state are given
+        if not hasattr(self, 'psi_ground_state'):
+            gs_data = self.gs_data
+            if gs_data is not None:
+                if isinstance(gs_data, MPS):
+                    self.psi_ground_state = gs_data
+                else:
+                    self.psi_ground_state = gs_data['psi']
+                delattr(self, 'gs_data')  # possibly free memory
             else:
                 self.logger.warning("No ground state data is supplied, calling the initial state builder on\
                                      SpectralSimulation class. You probably want to supply a ground state")
 
                 super().init_state()  # this sets self.psi from init_state_builder (should be avoided)
-                self.psi_groundstate = self.psi.copy()
+                self.psi_ground_state = self.psi.copy()
                 delattr(self, 'psi')  # free memory
 
         if not hasattr(self, 'psi'):
             # copy is essential, since time evolution is probably only performed on psi
-            self.psi = self.psi_groundstate.copy()
+            self.psi = self.psi_ground_state.copy()
             self.apply_operator_t0_to_psi()
 
         # check for saving
         if self.options.get('save_psi', False):
             self.results['psi'] = self.psi
-            self.results['psi_groundstate'] = self.psi_groundstate
+            self.results['psi_ground_state'] = self.psi_ground_state
+
+    def init_algorithm(self, **kwargs):
+        super().init_algorithm(**kwargs)  # links to RealTimeEvolution class, not to Simulation
+        # get the energy of the ground state
+        if self.gs_energy is None:
+            self.gs_energy = self.model.H_MPO.expectation_value(self.psi_ground_state)
+
+    def _load_data_from_gs(self, gs_data_kwarg):
+        # we don't need the ground_state_filename
+        key = 'ground_state_filename'
+        message = 'ground state data'
+        if isinstance(gs_data_kwarg, MPS):
+            gs_data = gs_data_kwarg
+        else:
+            _, gs_data = self._load_data_from_kwarg_or_options(gs_data_kwarg, key, message=message, is_mandatory=True)
+            # update model parameters here!
+            self.check_and_update_params_from_gs_data(gs_data)
+        return gs_data
+
+    def check_and_update_params_from_gs_data(self, gs_data):
+        sim_class = gs_data['version_info']['simulation_class']
+        if sim_class != 'GroundStateSearch':
+            raise ValueError("Must be loaded from a GS search")
+        if 'psi' not in gs_data.keys():
+            raise ValueError("MPS for ground state not found")
+        elif not isinstance(gs_data['psi'], MPS):
+            raise TypeError("Ground state must be an MPS")
+
+        data_options = gs_data['simulation_parameters']
+        for key in data_options.keys():
+            if not isinstance(key, str) or not key.startswith('model'):
+                continue
+            if key not in self.options:
+                self.options[key] = data_options[key]
+            elif self.options[key] != data_options[key]:
+                raise ValueError("Different model parameters in GroundStateSearch and GroundStateSearch")
+
+        if 'energy' in gs_data.keys():
+            self.gs_energy = self.options['gs_energy'] = gs_data['energy']
 
     def _get_operator_t0(self):
         """Converts the specified operators and indices into a list of tuples [(op1, i_1), (op2, i_2)]"""
@@ -302,43 +271,6 @@ class SpectralSimulation(RealTimeEvolution):
             for i, op in enumerate(ops):
                 self.psi.apply_local_op(i_min + i, op)
 
-    def init_algorithm(self, **kwargs):
-        super().init_algorithm(**kwargs)  # links to RealTimeEvolution class, not to Simulation
-        # make sure a second engine is used when evolving the bra
-        if self.evolve_bra is True:
-            # fetch engine that evolves ket
-            AlgorithmClass = self.engine.__class__
-            # instantiate the second engine for the ground state
-            algorithm_params = self.options.subconfig('algorithm_params')
-            self.engine_ground_state = AlgorithmClass(self.psi_groundstate, self.model, algorithm_params, **kwargs)
-        else:
-            # get the energy of the ground state
-            if self.gs_energy is None:
-                self.gs_energy = self.model.H_MPO.expectation_value(self.psi_groundstate)
-        # TODO: think about checkpoints
-        # TODO: resume data is handled by engine, how to pass this on to second engine?
-
-    def run_algorithm(self):
-        if self.evolve_bra is False:
-            super().run_algorithm()
-        else:
-            while True:
-                if np.real(self.engine.evolved_time) >= self.final_time:
-                    break
-                self.logger.info("evolve to time %.2f, max chi=%d", self.engine.evolved_time.real,
-                                 max(self.psi.chi))
-
-                self.engine_ground_state.run()
-                self.engine.run()
-                # sanity check, bra and ket should evolve to same time
-                assert self.engine.evolved_time == self.engine.evolved_time, 'Bra evolved to different time than ket'
-                # for time-dependent H (TimeDependentExpMPOEvolution) the engine can re-init the model;
-                # use it for the measurements....
-                # TODO: is this a good idea?
-                self.model = self.engine.model
-                self.make_measurements()
-                self.engine.checkpoint.emit(self.engine)
-
     def prepare_results_for_save(self):
         """Wrapper around :meth:`prepare_results_for_save` of :class:`Simulation`.
         Makes it possible to include post-processing run during the run of the
@@ -359,7 +291,7 @@ class SpectralSimulation(RealTimeEvolution):
         return super().prepare_results_for_save()
 
     def get_mps_environment(self):
-        return MPSEnvironment(self.psi_groundstate, self.psi)
+        return MPSEnvironment(self.psi_ground_state, self.psi)
 
     def m_spectral_function(self, results, psi, model, simulation, **kwargs):
         """Calculate the overlap :math:`<psi_0| e^{iHt} op2^j e^{-iHt} op1_idx |psi_0>` between
@@ -380,7 +312,7 @@ class SpectralSimulation(RealTimeEvolution):
             else:
                 results[f'spectral_function_t'] = self._m_spectral_function_op(env, operator_t)
 
-    def _m_spectral_function_op(self, env: MPSEnvironment, op):
+    def _m_spectral_function_op(self, env: MPSEnvironment, op) -> np.ndarray:
         """Calculate the overlap of <psi| op_j |phi>, where |phi> = e^{-iHt} op1_idx |psi_0>
         (the time evolved state after op1 was applied at MPS position idx) and
         <psi| is either <psi_0| e^{iHt} (if evolve_bra is True) or e^{i E_0 t} <psi| (if evolve_bra is False).
@@ -407,9 +339,9 @@ class SpectralSimulation(RealTimeEvolution):
                 # TODO: change when :meth:`expectation_value` of :class:`MPSEnvironment` automatically handles JW-string
             spectral_function_t = np.array(spectral_function_t)
 
-        if self.evolve_bra is False:
-            phase = np.exp(1j * self.gs_energy * self.engine.evolved_time)
-            spectral_function_t = spectral_function_t * phase
+        # multiply evolution of bra (eigenstate) into spectral function
+        phase = np.exp(1j * self.gs_energy * self.engine.evolved_time)
+        spectral_function_t = spectral_function_t * phase
 
         return spectral_function_t
 
@@ -421,17 +353,56 @@ class SpectralSimulationExperimental(SpectralSimulation):
     This class automatically adds a (hanging) JW string to each LP (only) when moving the
     environment to the right; if this wouldn't be done, much of the advantage of an MPS
     environment is lost (since only the overlap with the full operator string is calculated).
+
+    Options:
+    evolve_bra : bool
+        default False. If True, instantiates a second engine and performs time_evolution on the (eigenstate) bra.
     """
     def __int__(self, options, *, gs_data=None, **kwargs):
         super().__init__(options, gs_data=gs_data, **kwargs)
+        self.engine_ground_state = None
+        self.evolve_bra = self.options.get('evolve_bra', False)
+
+    def init_algorithm(self, **kwargs):
+        super().init_algorithm(**kwargs)  # links to RealTimeEvolution class, not to Simulation
+        # make sure a second engine is used when evolving the bra
+        if self.evolve_bra is True:
+            # fetch engine that evolves ket
+            AlgorithmClass = self.engine.__class__
+            # instantiate the second engine for the ground state
+            algorithm_params = self.options.subconfig('algorithm_params')
+            self.engine_ground_state = AlgorithmClass(self.psi_ground_state, self.model, algorithm_params, **kwargs)
+        # TODO: think about checkpoints
+        # TODO: resume data is handled by engine, how to pass this on to second engine?
+
+    def run_algorithm(self):
+        if self.evolve_bra is True:
+            while True:
+                if np.real(self.engine.evolved_time) >= self.final_time:
+                    break
+                self.logger.info("evolve to time %.2f, max chi=%d", self.engine.evolved_time.real,
+                                 max(self.psi.chi))
+
+                self.engine_ground_state.run()
+                self.engine.run()
+                # sanity check, bra and ket should evolve to same time
+                assert self.engine.evolved_time == self.engine.evolved_time, 'Bra evolved to different time than ket'
+                # for time-dependent H (TimeDependentExpMPOEvolution) the engine can re-init the model;
+                # use it for the measurements....
+                # TODO: is this a good idea?
+                self.model = self.engine.model
+                self.make_measurements()
+                self.engine.checkpoint.emit(self.engine)
+        else:
+            super().run_algorithm()
 
     def get_mps_environment(self):
         if self.addJW is False:
-            return MPSEnvironment(self.psi_groundstate, self.psi)
+            return MPSEnvironment(self.psi_ground_state, self.psi)
         else:
-            return MPSEnvironmentJW(self.psi_groundstate, self.psi)
+            return MPSEnvironmentJW(self.psi_ground_state, self.psi)
 
-    def _m_spectral_function_op(self, env, op):
+    def _m_spectral_function_op(self, env, op) -> np.ndarray:
         """Calculate the overlap of <psi| op_j |phi>, where |phi> = e^{-iHt} op1_idx |psi_0>
         (the time evolved state after op1 was applied at MPS position idx) and
         <psi| is either <psi_0| e^{iHt} (if evolve_bra is True) or e^{i E_0 t} <psi| (if evolve_bra is False).
