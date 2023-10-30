@@ -24,9 +24,10 @@ __all__ = ['SimulationPostProcessor', 'SpectralFunctionProcessor', 'init_simulat
 
 
 class SimulationPostProcessor:
-    """Base class for post-processing. This class is intended to mostly handle
-    data loading from a result of a :class:`Simulation`. This is done by reinitializing parts
-    of the simulation under the attribute :attr:`sim` and reinitializing the model.
+    """Base class for post-processing.
+
+    This class is intended to mostly handle data loading from a result of a :class:`Simulation`.
+    This is done by reinitializing parts of the simulation under the attribute :attr:`sim` and reinitializing the model.
     This way, the post-processing steps of a quantity directly have access to the model parameters and
     the simulation parameters. The post-processing results are either saved in the same file, or written
     into a different file.
@@ -40,9 +41,9 @@ class SimulationPostProcessor:
         These parameters are converted to a (dict-like Config object) :class:`~tenpy.tools.params.Config`.
         This should hold the following information
         processing_params = {'append_results': False,
-                             'output_filename': 'post_processed_results.h5',
-                             'processing_step1': {...}, # (of subclass)
-                             'processing_step2': {...}, # (of subclass)}
+        'output_filename': 'post_processed_results.h5',
+        'processing_step1': {...}, # (of subclass)
+        'processing_step2': {...}, # (of subclass)}
 
     Attributes
     ----------
@@ -50,7 +51,6 @@ class SimulationPostProcessor:
         Instance of a :class:`Simulation`
     measurements
         Computed measurements from running the simulation
-    ...
     """
 
     logger = logging.getLogger(__name__ + ".PostProcessing")
@@ -106,6 +106,7 @@ class SimulationPostProcessor:
 
     def save_results(self, results, key: str):
         """Saving results from a post-processing step.
+
         If post-processing was done inside a simulation, append results
         to dictionary of simulation results.
 
@@ -158,6 +159,7 @@ class SimulationPostProcessor:
 
 class SpectralFunctionProcessor(SimulationPostProcessor):
     """Post-processing class for the :class:`SpectralSimulation`.
+
     This class helps to calculate spectral functions from the given correlations of
     a run of a :class:`SpectralSimulation`. The options to perform additional post-processing steps,
     namely applying a windowing function and using linear prediction are provided and
@@ -168,24 +170,25 @@ class SpectralFunctionProcessor(SimulationPostProcessor):
     sim_results : dict-like
     processing_params : dict-like
         processing_params = {'linear_prediction': {...},
-                             'windowing_function': {...},
-                             'append_results': False,
-                             'output_filename': 'post_processed_results.h5'}
+        'windowing_function': {...},
+        'append_results': False,
+        'output_filename': 'post_processed_results.h5'}
 
     Attributes
     ----------
     linear_prediction : Config
         holding all parameters for a linear prediction, example:
         linear_prediction = {'m': 50,
-                             'p': 30,
-                             'cyclic: False,
-                             'trunc_mode': 'cutoff',  # or 'renormalize', or 'conjugate'
-                             'epsilon': 10e-7,
-                             'mode': 'individual'}  # or 'full'
+        'p': 30,
+        'cyclic: False,
+        'trunc_mode': 'cutoff',  # or 'renormalize', or 'conjugate'
+        'epsilon': 10e-7,
+        'mode': 'individual'}  # or 'full'
+
     windowing_function : Config
         holding all parameters for a windowing function, example:
         windowing_function = {'window': 'gaussian',
-                              'sigma': 0.4}
+        'sigma': 0.4}
     """
 
     def __init__(self, sim_results, *, processing_params: dict = None):
@@ -356,6 +359,7 @@ def init_simulation_for_processing(*,
                                     update_sim_params=None,
                                     simulation_class_kwargs=None):
     """Re-initialize a simulation from a given checkpoint without running it.
+
     This is the same as :func:`init_simulation_from_checkpoint` but still initializes
     the simulation if finished_run is True.
 
@@ -413,8 +417,7 @@ def init_simulation_for_processing(*,
 # Linear Prediction
 def linear_prediction(x: np.ndarray, m: int, p: int, split: float = 0, trunc_mode: str = 'renormalize',
                       two_d_mode: str = 'individual', cyclic: bool = False, epsilon: float = 10e-7) -> np.ndarray:
-    """Linear prediction for m time steps, based on the last p data points
-    of the time series x.
+    """Linear prediction for m time steps, based on the last p data points of the time series x.
 
     Parameters
     ----------

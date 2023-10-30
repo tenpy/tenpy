@@ -18,6 +18,7 @@ class RealTimeEvolution(Simulation):
     Parameters
     ----------
     options : dict-like
+        params : 
         The simulation parameters. Ideally, these options should be enough to fully specify all
         parameters of a simulation to ensure reproducibility.
 
@@ -102,10 +103,10 @@ class SpectralSimulation(RealTimeEvolution):
 
         Parameters example for this class
         params = {'ground_state_filename': 'ground_state.h5',
-                  'final_time': 1,
-                  'operator_t0': {'op': 'Sigmay', 'i': 20 , 'idx_form': 'mps'},
-                  'operator_t': ['Sigmax', 'Sigmay', 'Sigmaz'], # TODO: handle custom operators (not specified by name)
-                  'addJW': False}
+        'final_time': 1,
+        'operator_t0': {'op': 'Sigmay', 'i': 20 , 'idx_form': 'mps'},
+        'operator_t': ['Sigmax', 'Sigmay', 'Sigmaz'], # TODO: handle custom operators (not specified by name)
+        'addJW': False}
 
         params['operator_t0']['op']: a list of operators to apply at the given indices 'i' (they all get applied before
         the time evolution), when a more complicated operator is needed. For simple (one-site) operators simply pass
@@ -356,7 +357,7 @@ class SpectralSimulationExperimental(SpectralSimulation):
     environment to the right; if this wouldn't be done, much of the advantage of an MPS
     environment is lost (since only the overlap with the full operator string is calculated).
 
-    Options:
+    Options
     -------
     evolve_bra : bool
         default False. If True, instantiates a second engine and performs time_evolution on the (eigenstate) bra.
