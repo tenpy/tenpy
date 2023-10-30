@@ -11,7 +11,7 @@ The classes provided here provide a structure for the whole setup of simulations
     measurement
     ground_state_search
     time_evolution
-    processing
+    post_processing
 """
 # Copyright 2020-2023 TeNPy Developers, GNU GPLv3
 

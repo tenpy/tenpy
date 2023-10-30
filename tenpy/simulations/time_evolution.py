@@ -82,13 +82,14 @@ class RealTimeEvolution(Simulation):
 
 
 class SpectralSimulation(RealTimeEvolution):
-    """A subclass of :class:`RealTimeEvolution` to specifically calculate the time
-     dependent correlation function. In general this subclass calculates an overlap
-     of the form :math:`C(r, t) <psi_0| B_r(t) A_r0 |psi_0>` where A_r0 can be
-     passed as a simple on-site operator (on site r0) or as a product operator acting on
-     several sites. The operator B is currently restricted to a single-site operator.
-     However, calculating passing B as a list [B_1, B_2, B_3] to calculate several overlaps
-     is possible.
+    """A subclass of :class:`RealTimeEvolution` to specifically calculate the time dependent correlation function.
+
+    In general this subclass calculates an overlap
+    of the form :math:`C(r, t) <psi_0| B_r(t) A_r0 |psi_0>` where A_r0 can be
+    passed as a simple on-site operator (on site r0) or as a product operator acting on
+    several sites. The operator B is currently restricted to a single-site operator.
+    However, calculating passing B as a list [B_1, B_2, B_3] to calculate several overlaps
+    is possible.
 
     Parameters
     ----------
@@ -347,14 +348,16 @@ class SpectralSimulation(RealTimeEvolution):
 
 
 class SpectralSimulationExperimental(SpectralSimulation):
-    """Improved version of :class:`SpectralSimulation`, which gives an advantage
-    for calculating the correlation function of Fermions. This is done by calling
-    the :class:`MPSEnvironmentJW` instead of the usual :class:`MPSEnvironment`.
+    """Improved/Experimental version of :class:`SpectralSimulation`.
+
+    This class gives an advantage when calculating the correlation function of Fermions. This is done by
+    calling the :class:`MPSEnvironmentJW` instead of the usual :class:`MPSEnvironment`.
     This class automatically adds a (hanging) JW string to each LP (only) when moving the
     environment to the right; if this wouldn't be done, much of the advantage of an MPS
     environment is lost (since only the overlap with the full operator string is calculated).
 
     Options:
+    -------
     evolve_bra : bool
         default False. If True, instantiates a second engine and performs time_evolution on the (eigenstate) bra.
     """
