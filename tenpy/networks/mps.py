@@ -1843,8 +1843,9 @@ class MPS(BaseMPSExpectationValue):
                       down='down',
                       lonely=[],
                       lonely_state='up',
-                      bc='finite'):
-        """Create an MPS of entangled singlets.
+                      bc='finite',
+                      form='B'):
+        """Create an MPS of entangled singlets, also known as valence bold solid.
 
         Parameters
         ----------
@@ -1864,6 +1865,8 @@ class MPS(BaseMPSExpectationValue):
             The state for the lonely sites.
         bc : {'infinite', 'finite', 'segment'}
             MPS boundary conditions. See docstring of :class:`MPS`.
+        form  : ``'B' | 'A' | 'C' | 'G' | None``
+            The canonical form of the resulting MPS, see module doc-string.
 
         Returns
         -------
@@ -1946,7 +1949,10 @@ class MPS(BaseMPSExpectationValue):
             Ss.append(np.ones(N) / (N**0.5))
             Ts = next_Ts
             labels_L = labels_R
-        return cls([site] * L, Bs, Ss, bc=bc, form=forms)
+        res = cls([site] * L, Bs, Ss, bc=bc, form=forms)
+        if form is not None:
+            res.convert_form(form, avoid_S_inverse=True)
+        return res
 
     @property
     def L(self):
@@ -1983,7 +1989,13 @@ class MPS(BaseMPSExpectationValue):
         elif self.bc == 'infinite':
             return slice(0, self.L)
 
-    def get_B(self, i, form='B', copy=False, cutoff=1.e-16, label_p=None):
+    @property
+    def form_as_str(self):
+        """Human-readable version of :attr:`form` as list of ``'A', 'B', 'Th'`` etc."""
+        inverse_valid_form = dict((v, k) for k, v in self._valid_forms.items())
+        return [inverse_valid_form.get(tuple(f), tuple(f)) for f in self.form]
+
+    def get_B(self, i, form='B', copy=False, cutoff=1.e-16, label_p=None, avoid_S_inverse=False):
         """Return (view of) `B` at site `i` in canonical form.
 
         Parameters
@@ -2005,6 +2017,9 @@ class MPS(BaseMPSExpectationValue):
             Otherwise replace the physical label ``'p'`` with ``'p'+label_p'``.
             (For derived classes with more than one "physical" leg, replace all the physical leg
             labels accordingly.)
+        avoid_S_inverse : bool
+            If True, try to avoid taking inverses of singular values at the cost of additional
+            SVDs to move the orthogonality center locally.
 
         Returns
         -------
@@ -2026,12 +2041,109 @@ class MPS(BaseMPSExpectationValue):
         if new_form is not None and old_form != new_form:
             if old_form is None:
                 raise ValueError("can't convert form of non-canonical state!")
-            if new_form[0] is not None and new_form[0] - old_form[0] != 0.:
-                B = self._scale_axis_B(B, self.get_SL(i), new_form[0] - old_form[0], 'vL', cutoff)
-            if new_form[1] is not None and new_form[1] - old_form[1] != 0.:
-                B = self._scale_axis_B(B, self.get_SR(i), new_form[1] - old_form[1], 'vR', cutoff)
+            # try avoid inverses of singular values, see :issue:`292`
+            # typical case e.g. in iDMRG when inserting unit cells
+            if avoid_S_inverse and (old_form in ((0., 1.), (1., 0.), (1., 1.)) and
+                                    new_form in ((0., 1.), (1., 0.))):
+                B = self._scale_B_inverse_free(i, B, old_form, new_form)
+            else:
+                # scale individual axes
+                if new_form[0] is not None:
+                    change_L = new_form[0] - old_form[0]
+                    if change_L != 0.:
+                        B = self._scale_axis_B(B, self.get_SL(i), change_L, 'vL', cutoff)
+                if new_form[1] is not None:
+                    change_R = new_form[1] - old_form[1]
+                    if change_R != 0.:
+                        B = self._scale_axis_B(B, self.get_SR(i), change_R, 'vR', cutoff)
+                #  if ((new_form[0] is not None and change_L < 0) or
+                #      (new_form[1] is not None and change_R < 0)):
+                #      # this warning triggers still at many TeNPy functions,
+                #      # e.g. for expectation values/correlation functions, transfer matrices etc.
+                #      # However, if the state is in canonical form, the inverse of S is not so
+                #      # problematic - it's only an issue when psi is far from canonical form,
+                #      # i.e. mostly during variational update algorithms like DMRG.
+                #      warnings.warn(f"inverse singular values {old_form!r} -> {new_form!r}!",
+                #                    stacklevel=2)
         if label_p is not None:
             B = self._replace_p_label(B, label_p)
+        return B
+
+    def _scale_B_inverse_free(self, i, th, old_form, new_form):
+        """Change from A to B canonical form with extra SVD instead of inverses of singular values.
+
+        This function should only be called when we need to remove S on one side.
+
+        Consider the case of transforming an `A` to `B` form.
+        We start with multiplying `SR` to `A` to get theta `Th`.
+
+        With a mixer, the `SL` is not a diagonal matrix, and we need to account for a
+        basis transformation part of it - the left environments have the leg on the left of `SL`,
+        while right environments on that bond have the leg between `SL` and the `Th`.
+        (If SL is diagonal, the `X` and `Z` in the following would be identities.)
+        We use an SVD of it to derive what to do::
+
+            |   --SL--   =   --X--Y--Z--
+
+        with isometric ``X, Z`` and diagonal ``Y``.
+        We compute an SVD of the following matrix::
+
+            |   --M--   :=   --hc(Z)--hc(X)--theta--   =   --U--S--V--
+            |     |                            |                   |
+
+        But we can obtain a different SVD from the canonical form, using ``theta = SL @ B``::
+
+            |   --M--   =   --hc(Z)--Y--Z--B--
+            |     |                        |
+
+        where ``Z @ B`` is the right isometry.
+        Two SVDs of the same matrix are related by a gauge transformation,
+        a (block-)diagonal unitary matrix ``phi`` [commuting with S, only complex phases if there
+        are no degeneracies in S] such that::
+
+            |   --U--   =   --hc(Z)--phi--     ;     S = Y     ;     --V--   =   --hc(phi)--Z--B--
+            |                                                          |                       |
+
+        Therefore we have::
+
+            |   --U--V--   =   --hc(Z)--phi--hc(phi)--Z--B--   =   --B--
+            |        |                                   |           |
+
+        This is how we get `B`. It is of right-orthonormal form  ``B @ B^dagger = 1``
+        if `U` is a unitary, which should be the case if `Z` is a unitary, i.e. if
+        ``SL.shape[0] <= SL.shape[1]``.
+        """
+        assert (old_form in ((0., 1.), (1., 0.), (1., 1.)) and new_form in ((0., 1.), (1., 0.))
+                and new_form != old_form), "we can convert A or Th to B; or convert B or Th to A"
+        SL = self.get_SL(i)
+        SR = self.get_SR(i)
+        # first convert to Th
+        if old_form[0] < new_form[0]:
+            th = self._scale_axis_B(th, SL, 1., 'vL', cutoff=None)
+        if old_form[1] < new_form[1]:
+            th = self._scale_axis_B(th, SR, 1., 'vR', cutoff=None)
+        # now `th` is in theta form (1., 1.)
+
+        # first get 1-site wave function theta
+        if old_form[0] > new_form[0]:  # convert theta to B form
+            if isinstance(SL, npc.Array):
+                # mixer is on, so SL is a 2D array.
+                # The `A` includes the SL, so has the leg *left* of SL.
+                # `B` should have leg *right* of SL, so we need to apply the basis trafo from
+                # left of SL to right of SL on the `vL` leg of `th`
+                X, _, Z = npc.svd(SL.transpose(['vL', 'vR']), inner_labels=['vR', 'vL'])
+                Zd_Xd = npc.tensordot(X, Z, axes=['vR', 'vL']).conj().itranspose(['vR*', 'vL*'])
+                th = npc.tensordot(Zd_Xd, th, axes=['vL*', 'vL']).ireplace_label('vR*', 'vL')
+            th = th.combine_legs([['vL'], self._p_label + ['vR']], qconj=[+1, -1])
+        elif old_form[1] > new_form[1]:  # convert theta to A form
+            if isinstance(SR, npc.Array):
+                X, _, Z = npc.svd(SR.transpose(['vL', 'vR']), inner_labels=['vR', 'vL'])
+                Zd_Xd = npc.tensordot(X, Z, axes=['vR', 'vL']).conj().itranspose(['vR*', 'vL*'])
+                th = npc.tensordot(th, Zd_Xd, axes=['vR', 'vR*']).ireplace_label('vL*', 'vR')
+            th = th.combine_legs([['vL'] + self._p_label, ['vR']], qconj=[+1, -1])
+        # now svd-decompose to remove the S on the left/right.
+        U, _, V = npc.svd(th, inner_labels=['vR', 'vL'])
+        B = npc.tensordot(U, V, axes=['vR', 'vL']).split_legs()
         return B
 
     def set_B(self, i, B, form='B'):
@@ -2117,7 +2229,7 @@ class MPS(BaseMPSExpectationValue):
         if not self.finite and i == self.L - 1:
             self._S[0] = S
 
-    def get_theta(self, i, n=2, cutoff=1.e-16, formL=1., formR=1.):
+    def get_theta(self, i, n=2, cutoff=1.e-16, formL=1., formR=1., avoid_S_inverse=False):
         """Calculates the `n`-site wavefunction on ``sites[i:i+n]``.
 
         Parameters
@@ -2134,6 +2246,9 @@ class MPS(BaseMPSExpectationValue):
             Exponent for the singular values to the left.
         formR : float
             Exponent for the singular values to the right.
+        avoid_S_inverse : bool
+            If True, try to avoid taking inverses of singular values at the cost of additional
+            SVDs to move the orthogonality center locally. See :meth:`get_B`.
 
         Returns
         -------
@@ -2147,21 +2262,22 @@ class MPS(BaseMPSExpectationValue):
             if self.form[j % self.L] is None:
                 raise ValueError("can't calculate theta for non-canonical form")
         if n == 1:
-            return self.get_B(i, (1., 1.), True, cutoff, '0')
+            return self.get_B(i, (formL, formR), True, cutoff, '0', avoid_S_inverse)
         elif n < 1:
             raise ValueError("n needs to be larger than 0")
         # n >= 2: contract some B's
-        theta = self.get_B(i, (formL, None), False, cutoff, '0')  # right form as stored
+        # get right form as stored
+        theta = self.get_B(i, (formL, None), False, cutoff, '0', avoid_S_inverse)
         _, old_fR = self.form[i]
         for k in range(1, n):  # non-empty range
             j = self._to_valid_index(i + k)
             new_fR = None if k + 1 < n else formR  # right form as stored, except for last B
-            B = self.get_B(j, (1. - old_fR, new_fR), False, cutoff, str(k))
+            B = self.get_B(j, (1. - old_fR, new_fR), False, cutoff, str(k), avoid_S_inverse)
             _, old_fR = self.form[j]
             theta = npc.tensordot(theta, B, axes=['vR', 'vL'])
         return theta
 
-    def convert_form(self, new_form='B'):
+    def convert_form(self, new_form='B', avoid_S_inverse=False):
         """Tranform self into different canonical form (by scaling the legs with singular values).
 
         Parameters
@@ -2169,6 +2285,9 @@ class MPS(BaseMPSExpectationValue):
         new_form : (list of) {``'B' | 'A' | 'C' | 'G' | 'Th' | None`` | tuple(float, float)}
             The form the stored 'matrices'. The table in module doc-string.
             A single choice holds for all of the entries.
+        avoid_S_inverse : bool
+            If True, try to avoid taking inverses of singular values at the cost of additional
+            SVDs to move the orthogonality center locally. See :meth:`get_B`.
 
         Raises
         ------
@@ -2176,8 +2295,124 @@ class MPS(BaseMPSExpectationValue):
         """
         new_forms = self._parse_form(new_form)
         for i, new_form in enumerate(new_forms):
-            new_B = self.get_B(i, form=new_form, copy=False)  # calculates the desired form.
+            # get_B() calculates the desired form.
+            new_B = self.get_B(i, form=new_form, copy=False, avoid_S_inverse=avoid_S_inverse)
             self.set_B(i, new_B, form=new_form)
+
+    def find_orthogonality_center(self, strict=None, find_all=False):
+        """Find (the) orthogonality center.
+
+        Parameters
+        ----------
+        strict : bool | None
+            None defaults to `self.finite`.
+            If True, demand local site is `A` or `Th` and that all tensors left of the
+            orthogonality center are in `A` form and all tensors on the right are in `B` form.
+            Thus, with a transition with forms ``..., 'A', 'A', 'B', 'B', ...``, the last
+            ``'A'`` site is taken.
+            For all-`A` or all-`B` tensors, take the first and last site.
+            If `False`, define the orthogonality center more generally as a site where
+            the local tensor is in `A` or `Th` form (i.e. has singular values on the left),
+            and (if not the last site on finite system) the next tensor is in `B` form
+            Note that e.g. during the iDMRG sweep, there is no strict orthogonality center due to
+            the way the unit cells are inserted.
+        find_all : bool
+            If True, find any number of (non-strict) orthogonality centers and return a list.
+
+        Returns
+        -------
+        center : int  | (list of) int
+            If `find_all`, a list of int.
+        """
+        form = self.form
+        L = self.L
+        if any(f is None for f in form):
+            raise ValueError("some tensor is not in canonical form!")
+        if L == 1:
+            return 0 if not find_all else [0]
+        if strict is None:
+            strict = self.finite
+        centers = []
+        if strict:
+            # first check B from the right
+            for j in reversed(range(L)):
+                if form[j] != (0., 1.):
+                    center = j  # first tensor not a B, i.e. A or Th
+                    break
+            else:  # all sites are B's
+                center = 0
+            # note: all sites A gives `center = L-1`
+            for i in range(center):
+                if form[i] != (1., 0.):
+                    raise ValueError("No strict orthogonality center with only A left, B right")
+            centers = [center]
+        else:
+            for i in range(L - 1):
+                if form[i][0] == 1. and ((self.finite and i == L - 1)
+                                         or form[(i + 1) % L] == (0., 1.)):
+                    centers.append(i)
+            if len(centers) == 0:
+                if all(f == form[0] for f in form):
+                    if form[0] == (1., 0.):
+                        centers = [L - 1]
+                    elif form[0] == (0., 1.):
+                        centers = [0]
+        if find_all:
+            return centers
+        elif len(centers) == 0:
+            raise ValueError("No orthogonality center found!\nform = " + str(form))
+        elif len(centers) > 1:
+            raise ValueError("No unique orthogonality center!\nform = " + str(form))
+        return centers[0]
+
+    def move_orthogonality_center(self, to_i=0, from_i=None, cutoff=None):
+        """Move the orthogonality center by succesive SVDs.
+
+        Parameters
+        ----------
+        to_i : int
+            Site index where to move the orthogonality center to.
+            The resulting form there will be ``'Th'``.
+        from_i : int | None
+            Site index from where to move the orthogonality center.
+            If `None`, determine with :meth:`find_orthogonality_center`.
+        cutoff : None | float
+            Cutoff for singular values.
+        """
+        if from_i is None:
+            from_i = self.find_orthogonality_center()
+        if from_i > to_i:
+            th = self.get_B(from_i, form='Th')
+            U, S, V = npc.svd(th.combine_legs(self._p_label + ['vR'], qconj=-1, new_axes=1),
+                              cutoff=cutoff, inner_labels=['vR', 'vL'])
+            self.set_B(from_i, V.split_legs(1), form='B')
+            self.set_SL(from_i, S)
+            for i in range(from_i - 1, to_i, -1):
+                A = self.get_B(i, form='A')
+                th = npc.tensordot(A, U.iscale_axis(S, 'vR'), axes=['vR', 'vL'])
+                U, S, V = npc.svd(th.combine_legs(self._p_label + ['vR'], qconj=-1, new_axes=1),
+                                cutoff=cutoff, inner_labels=['vR', 'vL'])
+                self.set_B(i, V.split_legs(1), form='B')
+                self.set_SL(i, S)
+            A = self.get_B(to_i, form='A')
+            th = npc.tensordot(A, U.iscale_axis(S, 'vR'), axes=['vR', 'vL'])
+            self.set_B(to_i, th, form='Th')
+        elif from_i < to_i:
+            th = self.get_B(from_i, form='Th')
+            U, S, V = npc.svd(th.combine_legs(['vL'] + self._p_label, qconj=+1, new_axes=0),
+                              cutoff=cutoff, inner_labels=['vR', 'vL'])
+            self.set_B(from_i, U.split_legs(0), form='A')
+            self.set_SR(from_i, S)
+            for i in range(from_i + 1, to_i):
+                B = self.get_B(i, form='B')
+                th = npc.tensordot(V.iscale_axis(S, 'vL'), B, axes=['vR', 'vL'])
+                U, S, V = npc.svd(th.combine_legs(['vL'] + self._p_label, qconj=+1, new_axes=0),
+                                  cutoff=cutoff, inner_labels=['vR', 'vL'])
+                self.set_B(i, U.split_legs(0), form='A')
+                self.set_SR(i, S)
+            B = self.get_B(to_i, form='B')
+            th = npc.tensordot(V.iscale_axis(S, 'vL'), B, axes=['vR', 'vL'])
+            self.set_B(to_i, th, form='Th')
 
     def increase_L(self, new_L=None):
         """Modify `self` inplace to enlarge the MPS unit cell; in place.
@@ -3361,7 +3596,7 @@ class MPS(BaseMPSExpectationValue):
         M = self.get_B(L - 1, form)
         M = npc.tensordot(R, M, axes=['vR', 'vL'])
         if self.bc == 'segment':
-            # also neet to calculate new singular values on the very right
+            # also need to calculate new singular values on the very right
             U, S, VR_segment = npc.svd(M.combine_legs(['vL'] + self._p_label),
                                        cutoff=cutoff,
                                        inner_labels=['vR', 'vL'])
@@ -3949,7 +4184,6 @@ class MPS(BaseMPSExpectationValue):
         if not self.finite and not understood_infinite:
             warnings.warn("For infinite MPS, apply_local_op acts on *each* unit cell in parallel."
                           "See the warning in the docs of tenpy.networks.mps.")
-
         i = self._to_valid_index(i)
         if isinstance(op, str):
             op = self.sites[i].get_op(op)
@@ -3968,6 +4202,8 @@ class MPS(BaseMPSExpectationValue):
             opB = npc.tensordot(op, self._B[i], axes=['p*', 'p'])
             self.set_B(i, opB, self.form[i])
         else:
+            if not unitary:
+                self.move_orthogonality_center(i)
             th = self.get_theta(i, n)
             th = npc.tensordot(op, th, axes=[pstar, p])
             # use MPS.from_full to split the sites
@@ -3979,6 +4215,8 @@ class MPS(BaseMPSExpectationValue):
                 self.set_B(i + j, split_th._B[j], split_th.form[j])
             for j in range(n - 1):
                 self.set_SR(i + j, split_th._S[j + 1])
+            if not unitary:
+                self.move_orthogonality_center(to_i=0, from_i=i)
         if not unitary:
             self.canonical_form(renormalize=renormalize)
 
@@ -4403,7 +4641,7 @@ class MPS(BaseMPSExpectationValue):
             return VariationalCompression(self, options).run()
         raise ValueError("Unknown compression method: " + repr(method))
 
-    def compress_svd(self, trunc_par):
+    def compress_svd(self, trunc_par, _right_to_left_only=False):
         """Compress `self` with a single sweep of SVDs; in place.
 
         Perform a single right-sweep of QR/SVD without truncation, followed by a left-sweep with
@@ -4416,18 +4654,25 @@ class MPS(BaseMPSExpectationValue):
         ----------
         trunc_par : dict
             Parameters for truncation, see :cfg:config:`truncation`.
+        _right_to_left_only : bool
+            Defaults to False. If True, only perform the second half going right-to-left.
+            Should only be done after a left-to-right sweep, e.g. by
+            :meth:`~tenpy.networks.mpo.MPO.apply_zipup`.
         """
         trunc_err = TruncationError()
         if self.bc == 'finite':
-            # Do QR starting from the left
-            B = self.get_B(0, form='Th')
-            for i in range(self.L - 1):
-                B = B.combine_legs(['vL', 'p'])
-                q, r = npc.qr(B, inner_labels=['vR', 'vL'])
-                B = q.split_legs()
-                self.set_B(i, B, form=None)
-                B = self.get_B(i + 1, form='B')
-                B = npc.tensordot(r, B, axes=('vR', 'vL'))
+            if not _right_to_left_only:
+                # Do QR starting from the left
+                B = self.get_B(0, form='Th')
+                for i in range(self.L - 1):
+                    B = B.combine_legs(['vL', 'p'])
+                    q, r = npc.qr(B, inner_labels=['vR', 'vL'])
+                    B = q.split_legs()
+                    self.set_B(i, B, form=None)
+                    B = self.get_B(i + 1, form='B')
+                    B = npc.tensordot(r, B, axes=('vR', 'vL'))
+            else:
+                B = self.get_B(self.L - 1, 'Th')
             # Do SVD from right to left & truncate
             for i in range(self.L - 1, 0, -1):
                 B = B.combine_legs(['p', 'vR'])
@@ -4442,10 +4687,11 @@ class MPS(BaseMPSExpectationValue):
                 self.set_SL(i, S)
             self.set_B(0, B, form='Th')
         elif self.bc == 'infinite':
-            for i in range(self.L):
-                theta = self.get_theta(i, n=2)
-                theta = theta.combine_legs([['vL', 'p0'], ['p1', 'vR']], qconj=[+1, -1])
-                self.set_svd_theta(i, theta, _machine_prec_trunc_par, update_norm=False)
+            if not _right_to_left_only:
+                for i in range(self.L):
+                    theta = self.get_theta(i, n=2)
+                    theta = theta.combine_legs([['vL', 'p0'], ['p1', 'vR']], qconj=[+1, -1])
+                    self.set_svd_theta(i, theta, _machine_prec_trunc_par, update_norm=False)
             for i in range(self.L - 1, -1, -1):
                 theta = self.get_theta(i, n=2)
                 theta = theta.combine_legs([['vL', 'p0'], ['p1', 'vR']], qconj=[+1, -1])
@@ -4503,6 +4749,7 @@ class MPS(BaseMPSExpectationValue):
                 raise ValueError("Can't scale/tensordot a 2D `S` for non-integer `form_diff`")
 
             # Hack: mpo.MPOEnvironment.full_contraction uses ``axis_B == 'vL*'``
+            # TODO: this hack is no longer used, can we remove vL*, vR*???
             if axis_B == 'vL' or axis_B == 'vL*':
                 B = npc.tensordot(S, B, axes=[1, axis_B]).replace_label(0, axis_B)
             elif axis_B == 'vR' or axis_B == 'vR*':
@@ -5252,17 +5499,17 @@ class MPSEnvironment(BaseEnvironment, BaseMPSExpectationValue):
         return contr * self.bra.norm * self.ket.norm
 
     def _contract_LP(self, i, LP):
-        LP = npc.tensordot(LP, self.ket.get_B(i, form='A'), axes=('vR', 'vL'))
+        LP = npc.tensordot(LP, self.ket.get_B(i, form='A', avoid_S_inverse=True), axes=('vR', 'vL'))
         axes = (self.ket._get_p_label('*') + ['vL*'], self.ket._p_label + ['vR*'])
         # for a ususal MPS, axes = (['p*', 'vL*'], ['p', 'vR*'])
-        LP = npc.tensordot(self.bra.get_B(i, form='A').conj(), LP, axes=axes)
+        LP = npc.tensordot(self.bra.get_B(i, form='A', avoid_S_inverse=True).conj(), LP, axes=axes)
         return LP  # labels 'vR*', 'vR'
 
     def _contract_RP(self, i, RP):
-        RP = npc.tensordot(self.ket.get_B(i, form='B'), RP, axes=('vR', 'vL'))
+        RP = npc.tensordot(self.ket.get_B(i, form='B', avoid_S_inverse=True), RP, axes=('vR', 'vL'))
         axes = (self.ket._p_label + ['vL*'], self.ket._get_p_label('*') + ['vR*'])
         # for a ususal MPS, axes = (['p', 'vL*'], ['p*', 'vR*'])
-        RP = npc.tensordot(RP, self.bra.get_B(i, form='B').conj(), axes=axes)
+        RP = npc.tensordot(RP, self.bra.get_B(i, form='B', avoid_S_inverse=True).conj(), axes=axes)
         return RP  # labels 'vL', 'vL*'
 
     # methods for Expectation values

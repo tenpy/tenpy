@@ -42,6 +42,7 @@ def test_mps():
         npt.assert_array_almost_equal_nulp(C, np.outer(E, E), 100)
         norm_err = psi.norm_test()
         assert (np.linalg.norm(norm_err) < 1.e-13)
+        assert psi.form_as_str == ['B'] * L
     # example of doc in `from_product_state`
     L = 8
     theta, phi = np.pi / 3, np.pi / 6
@@ -285,11 +286,41 @@ def test_canonical_form(bc, method):
     if method in ['canonical_form_finite', 'canonical_form_infinite2']:
         # check that A = SB S^-1 is orthonormal
         for i in range(psi.L):
-            A = psi.get_B(i, 'A')
-            c = npc.tensordot(A, A.conj(), axes=[['vL', 'p'], ['vL*', 'p*']])
-            A_err = (c - npc.diag(1., c.legs[0])).norm()
-            print(A_err)
-            assert A_err < 1.e-13
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", UserWarning)
+                A1 = psi.get_B(i, 'A')
+            A2 = psi.get_B(i, 'A', avoid_S_inverse=True)
+            for A in [A1, A2]:
+                c = npc.tensordot(A, A.conj(), axes=[['vL', 'p'], ['vL*', 'p*']])
+                A_err = (c - npc.diag(1., c.legs[0])).norm()
+                print(A_err)
+                assert A_err < 1.e-13
+
+
+def test_orthogonality_center():
+    s = site.SpinHalfSite(None)
+    L = 5
+    psi = mps.MPS.from_product_state([s]*L, ['up']*L, form='B')
+    assert psi.find_orthogonality_center() == 0
+    assert psi.find_orthogonality_center(strict=False) == 0
+    psi = mps.MPS.from_product_state([s]*L, ['up']*L, form='A')
+    assert psi.find_orthogonality_center() == psi.L - 1
+    assert psi.find_orthogonality_center(strict=False) == psi.L - 1
+    psi = mps.MPS.from_product_state([s]*L, ['up']*L, form=['A', 'A', 'B', 'A', 'B'])
+    with pytest.raises(ValueError) as excinfo:
+        c = psi.find_orthogonality_center()
+        assert "No strict orthogonality center" in str(excinfo.value)
+    cs = psi.find_orthogonality_center(strict=False, find_all=True)
+    assert cs == [1, 3]
+    psi = mps.MPS.from_singlets(s, L, [[0, 2], [3, 4]], lonely=[1],
+                                form=['A', 'A', 'Th', 'B', 'B'])
+    assert psi.find_orthogonality_center() == 2
+    psi.move_orthogonality_center(to_i=1)
+    assert psi.find_orthogonality_center() == 1
+    psi.move_orthogonality_center(to_i=4)
+    assert psi.find_orthogonality_center() == 4
+    psi.move_orthogonality_center(to_i=0)
+    assert psi.find_orthogonality_center() == 0
 
 
 @pytest.mark.parametrize("bc", ['finite', 'infinite'])
@@ -358,6 +389,7 @@ def test_roll_mps_unit_cell():
     npt.assert_equal(psi_m_1.expectation_value('Sigmaz'), [1., 1., 1., -1.])
     psi3 = psi.copy()
     psi3.spatial_inversion()
+    psi3.convert_form('B', avoid_S_inverse=True)
     psi3.test_sanity()
     ov = psi3.overlap(psi_m_1, understood_infinite=True)
     assert abs(ov - 1.) < 1.e-14
@@ -658,6 +690,10 @@ def test_MPSEnvironment_expectation_values():
 def test_sample_measurements(eps=1.e-14, seed=5):
     spin_half = site.SpinHalfSite('Sz', sort_charge=True)
     u, d = spin_half.state_indices(['up', 'down'])
+
+    def opposite_spin(a, b):
+        return (a, b) == (u, d) or (a, b) == (d, u)
+
     spin_half.add_op('Pup', spin_half.Sz + 0.5 * spin_half.Id)
     psi = mps.MPS.from_singlets(spin_half, 6, [(0, 1), (2, 5)], lonely=[3, 4], bc='finite')
     rng = np.random.default_rng(seed)
@@ -666,13 +702,13 @@ def test_sample_measurements(eps=1.e-14, seed=5):
         assert tuple(sigmas) == (u, u)
         assert abs(weight - 1) < eps
         sigmas, weight = psi.sample_measurements(0, 1, rng=rng)
-        assert sigmas[0] == 1 - sigmas[1]
+        assert opposite_spin(sigmas[0], sigmas[1])
         print(sigmas)
         assert abs(weight - 0.5**0.5) < eps
         sigmas, weight = psi.sample_measurements(rng=rng)
         print(sigmas)
-        assert sigmas[0] == 1 - sigmas[1]
-        assert sigmas[2] == 1 - sigmas[5]
+        assert opposite_spin(sigmas[0], sigmas[1])
+        assert opposite_spin(sigmas[2], sigmas[5])
         sign = (+1 if sigmas[0] == u else -1) * (+1 if sigmas[2] == u else -1)
         print(sign, weight)
         assert abs(weight - 0.5 * sign) < eps
@@ -690,6 +726,31 @@ def test_sample_measurements(eps=1.e-14, seed=5):
         print(sigmas)
         npt.assert_allclose(sigmas, [1., -0.5, 0.5, -1.])
         assert abs(abs(weight) - 1.) < eps
+
+    spin_half_fermion = site.SpinHalfFermionSite('N', 'Sz')
+    psi = mps.MPS.from_singlets(spin_half_fermion, 6, [(0, 1), (2, 5)], lonely=[3, 4], bc='finite')
+    u, d = spin_half_fermion.state_indices(['up', 'down'])
+    spin_half_fermion.add_op('Pup', spin_half_fermion.Sz + 0.5 * spin_half_fermion.Id)
+    for i in range(4):
+        sigmas, weight = psi.sample_measurements(3, 4, rng=rng)
+        assert tuple(sigmas) == (u, u)
+        assert abs(weight - 1) < eps
+        sigmas, weight = psi.sample_measurements(0, 1, rng=rng)
+        assert opposite_spin(sigmas[0], sigmas[1])
+        print(sigmas)
+        assert abs(weight - 0.5**0.5) < eps
+        sigmas, weight = psi.sample_measurements(rng=rng)
+        print(sigmas)
+        assert opposite_spin(sigmas[0], sigmas[1])
+        assert opposite_spin(sigmas[2], sigmas[5])
+        sign = (+1 if sigmas[0] == u else -1) * (+1 if sigmas[2] == u else -1)
+        print(sign, weight)
+        assert abs(weight - 0.5 * sign) < eps
+        sigmas, weight = psi.sample_measurements(ops=['Sz', 'Pup'], rng=rng)
+        print(sigmas)
+        assert sigmas[4] == 0.5  # Sz
+        assert sigmas[3] == 1  # Pup
+
 
 
 @pytest.mark.parametrize('method', ['SVD', 'variational'])
