@@ -492,7 +492,7 @@ class Simulation:
                 Dictionary with parameters for the algorithm; see the documentation of the
                 `algorithm_class`.
             connect_algorithm_checkpoint : list of tuple
-                Functions to connect to the :attr:`~tenpy.algorithms.Algorith.checkpoint` event
+                Functions to connect to the :attr:`~tenpy.algorithms.Algorithm.checkpoint` event
                 of the algorithm.
                 Each tuple can be of length 2 to 4, with entries
                 ``(module, function, kwargs, priority)``, the last two optionally.

@@ -193,7 +193,7 @@ class Lattice:
         self.position_disorder = None  # no disorder by default
         # calculate order for MPS
         self.order = self.ordering(order)
-        # uses attribute setter to calculte _mps2lat_vals_idx_fix_u etc and lat2mps
+        # uses attribute setter to calculate _mps2lat_vals_idx_fix_u etc and lat2mps
         self.pairs = pairs if pairs is not None else {}
         for name, NN in [('nearest_neighbors', nearest_neighbors),
                          ('next_nearest_neighbors', next_nearest_neighbors),
@@ -204,7 +204,7 @@ class Lattice:
             msg = msg.format(name)
             warnings.warn(msg, FutureWarning)
             if name in self.pairs:
-                raise ValueError("{0!s} sepcified twice!".format(name))
+                raise ValueError("{0!s} specified twice!".format(name))
             self.pairs[name] = NN
         self._reciprocal_basis = None  # lazy evaluation of recip. basis
         self._BZ = None
@@ -385,7 +385,7 @@ class Lattice:
 
         Possible strings for the `order` defined here are:
 
-            ``'Csyle', 'default'`` :
+            ``'Cstyle', 'default'`` :
                 Recommended in most cases. First within the unit cell, then along y, then x.
                 ``priority=(0, 1, ..., dim-1, dim)``.
             ``'snake', 'snakeCstyle'`` :
@@ -556,7 +556,7 @@ class Lattice:
             if cp.bc_MPS != 'infinite':
                 raise ValueError("enlarge only possible for infinite MPS")
             if last is not None or first != 0:
-                raise ValueError("specifiy either `first`+`last` or `enlarge`!")
+                raise ValueError("specify either `first`+`last` or `enlarge`!")
             assert enlarge > 0
             last = enlarge * L - 1
         elif last is None:
@@ -669,7 +669,7 @@ class Lattice:
             we shift `x_0` accordingly.
         """
         if self.bc_MPS != 'finite':
-            # allow `i` outsit of MPS unit cell for bc_MPS infinite
+            # allow `i` outside of MPS unit cell for bc_MPS infinite
             i0 = i
             i = np.mod(i, self.N_sites)
             if np.any(i0 != i):
@@ -765,7 +765,7 @@ class Lattice:
         Returns
         -------
         res_A : ndarray
-            Reshaped and reordered verions of A. Such that MPS indices along the specified axes
+            Reshaped and reordered version of A. Such that MPS indices along the specified axes
             are replaced by lattice indices, i.e., if MPS index `j` maps to lattice site
             `(x0, x1, x2)`, then ``res_A[..., x0, x1, x2, ...] = A[..., j, ...]``.
 
@@ -1260,7 +1260,7 @@ class Lattice:
         Nops = len(ops)
         Ls = np.array(self.Ls)
         # make 3D arrays ["iteration over lattice", "operator", "spatial direction"]
-        # recall numpy broadcasing: 1D equivalent to [np.newaxis, np.newaxis, :]
+        # recall numpy broadcasting: 1D equivalent to [np.newaxis, np.newaxis, :]
         dx = np.array([op_dx for _, op_dx, op_u in ops], dtype=np.int_).reshape([1, Nops, D])
         u = np.array([op_u for _, op_dx, op_u in ops], dtype=np.int_).reshape([1, Nops, 1])
         coupling_shape, shift_lat_indices = self.multi_coupling_shape(dx[0, :, :])
@@ -1766,7 +1766,7 @@ class MultiSpeciesLattice(Lattice):
         >>> sites = [f, copy(f)]
         >>> tenpy.networks.site.set_common_charges(sites, 'same')  # same = total N conserved
         [array([0, 1]), array([0, 1])]
-        >>> spinfull_fermion_Honeycomb = MultiSpeciesLattice(simple_lat, sites, ['up', 'down'])
+        >>> spinful_fermion_Honeycomb = MultiSpeciesLattice(simple_lat, sites, ['up', 'down'])
 
     In this case, you could also call :func:`tenpy.networks.site.spin_half_species`.
     """
@@ -1928,7 +1928,7 @@ class IrregularLattice(Lattice):
         Each row is a lattice index ``(x_0, ..., x_{dim-1}, u)`` of a site to be removed.
         If ``None``, don't remove something.
     add : Tuple[2D array, list] | None
-        Each row of the 2D array is a lattice index ``(x_0, ..., x_{dim-1}, u)`` specifiying
+        Each row of the 2D array is a lattice index ``(x_0, ..., x_{dim-1}, u)`` specifying
         where a site is to be added; `u` is the index of the site within the final
         :attr:`unit_cell` of the irregular lattice.
         For each row of the 2D array, there is one entry in the list specifying where the site
@@ -2857,7 +2857,7 @@ class Triangular(SimpleLattice):
     **kwargs :
         Additional keyword arguments given to the :class:`Lattice`.
         `pairs` are set accordingly.
-        If `order` is specified in the form ``('standard', snake_windingi, priority)``,
+        If `order` is specified in the form ``('standard', snake_winding, priority)``,
         the `snake_winding` and `priority` should only be specified for the spatial directions.
         Similarly, `positions` can be specified as a single vector.
     """
@@ -3407,10 +3407,10 @@ def get_order(shape, snake_winding, priority=None):
         Otherwise, this defines the priority along which direction to wind first;
         the direction with the highest priority increases fastest.
         For example, "C-Style" order is enforced by ``priority=(0, 1, 2, ...)``,
-        and Fortrans F-style order is enforced by ``priority=(dim, dim-1, ..., 1, 0)``
+        and Fortran F-style order is enforced by ``priority=(dim, dim-1, ..., 1, 0)``
     group : ``None`` | tuple of tuple
         If ``None`` (default), ignore it.
-        Otherwise, it specifies that we group the fastests changing dimension
+        Otherwise, it specifies that we group the fastest changing dimension
 
     Returns
     -------

@@ -186,7 +186,7 @@ class ExactDiag:
             Ids_R.append(npc.outer(Ids[L - j - 1], Ids_R[-1]))
         full_H = None
         for i in range(1, L):
-            # H_bond[i] lifes on sites (i-1, i)
+            # H_bond[i] lives on sites (i-1, i)
             lL, lLc = self._labels_p[i - 1], self._labels_pconj[i - 1]
             lR, lRc = self._labels_p[i], self._labels_pconj[i]
             Hb = H_bond[i]

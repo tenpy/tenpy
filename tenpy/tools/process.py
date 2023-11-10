@@ -4,13 +4,13 @@ If your python is compiled against MKL (e.g. if you use *anaconda* as recommende
 it will by default use as many threads as CPU cores are available.
 If you run a job on a cluster, you should limit this to the number of cores you reserved --
 otherwise your colleagues might get angry...
-A simple way to achieve this is to set a suitable enviornment variable before calling your
+A simple way to achieve this is to set a suitable environment variable before calling your
 python program, e.g. on the linux bash ``export OMP_NUM_THREADS=4`` for 4 threads.
 (MKL used OpenMP and thus respects its settings.)
 
 Alternatively, this module provides :func:`omp_get_nthreads` and :func:`omp_set_nthreads`,
 which give their best to get and set the number of threads at runtime,
-while still being failsave if the shared OpenMP library is not found.  In the latter case,
+while still being failsafe if the shared OpenMP library is not found.  In the latter case,
 you might also try the equivalent :func:`mkl_get_nthreads` and :func:`mkl_set_nthreads`.
 """
 # Copyright 2018-2023 TeNPy Developers, GNU GPLv3
@@ -66,13 +66,13 @@ def load_omp_library(libs=["libiomp5.so",
     libs :
         list of possible library names we should try to load (with ctypes.CDLL).
     verbose : bool
-        wheter to print the name of the loaded library.
+        whether to print the name of the loaded library.
 
     Returns
     -------
     omp : CDLL | None
-        OpenMP shared libary if found, otherwise None.
-        Once it was sucessfully imported, no re-imports are tried.
+        OpenMP shared library if found, otherwise None.
+        Once it was successfully imported, no re-imports are tried.
     """
     global _omp_lib
     if _omp_lib is None:

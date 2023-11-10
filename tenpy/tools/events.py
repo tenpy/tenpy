@@ -148,7 +148,7 @@ class EventHandler:
             The callback function exactly as given.
         """
         if callback is None:
-            # hande the case that we got called as property like this::
+            # handle the case that we got called as property like this::
             # @ev_handler.connect(priority=2)
             # def my_function():
             #     pass
@@ -205,7 +205,7 @@ class EventHandler:
         ----------
         *args, **kwargs:
             (Keyword) arguments to give to the callback functions.
-            Recall that there can also be addiontal `extra_kwargs` for each callback function.
+            Recall that there can also be additional `extra_kwargs` for each callback function.
 
         Returns
         -------

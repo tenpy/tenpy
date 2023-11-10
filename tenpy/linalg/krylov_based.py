@@ -21,7 +21,7 @@ __all__ = [
 
 
 class KrylovBased:
-    r"""Base class for iterativ algorithms building a Krylov basis with np_conserved arrays.
+    r"""Base class for iterative algorithms building a Krylov basis with np_conserved arrays.
 
     Algorithms like :class:`LanczosGroundState` and `:class:`ArnoldiDiagonalize`
     are based on iteratively building an orthonormal basis of the Krylov space spanned by
@@ -29,7 +29,7 @@ class KrylovBased:
     performed so far, and ``|psi0>`` is an initial guess and starting vector.
     During that iteration, the projection of `H` into the Krylov space is built, where it can
     be solved effectively (with `H` being just a N by N matrix), yielding the "Ritz" eigenvalues/
-    eigenvectors. Finally, the solution can be translated back into the orginal space using the
+    eigenvectors. Finally, the solution can be translated back into the original space using the
     basis.
 
     An important strategy is also to (implicitly) restart the algorithm after some number of steps.
@@ -66,7 +66,7 @@ class KrylovBased:
         min_gap : float
             Lower cutoff for the gap estimate used in the P_tol criterion.
         cutoff : float
-            Cutoff to abort if the norm of the new krylov vecotr is too small.
+            Cutoff to abort if the norm of the new krylov vector is too small.
             This is necessary if the rank of `H` is smaller than `N_max`, but it's *not* the error
             tolerance for final values!
         E_shift : float

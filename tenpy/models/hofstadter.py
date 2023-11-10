@@ -36,7 +36,7 @@ def gauge_hopping(model_params):
         * 'landau_y': Landau gauge along the y-axis. The magnetic unit cell will
           have shape :math`(1, \mathtt{my})`. For flux densities :math`p/q`, `my` will default to q.
           Example: at a flux density :math:`3/7`, the magnetic unit cell will have shape
-          :math:`(1,7)`, so it encloses axactly 3 flux quanta.
+          :math:`(1,7)`, so it encloses exactly 3 flux quanta.
         * 'symmetric': symmetric gauge. The magnetic unit cell will have shape
           :math:`(\mathtt{mx}, \mathtt{my})`, with :math:`mx = my`. For flux densities :math:`p/q`,
           `mx` and `my` will default to :math:`q`
@@ -102,7 +102,7 @@ def gauge_hopping(model_params):
         hop_x = -Jx * np.exp(-1.j * (phi / 2) * np.arange(my)[np.newaxis, :])  # shape (1, my)
         hop_y = -Jy * np.exp(1.j * (phi / 2) * np.arange(mx)[:, np.newaxis])  # shape (mx, 1)
     else:
-        raise ValueError("Undefinied gauge " + repr(gauge))
+        raise ValueError("Undefined gauge " + repr(gauge))
     return hop_x, hop_y
 
 

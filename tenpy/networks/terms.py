@@ -74,7 +74,7 @@ class TermList(Hdf5Exportable):
         1.30000 * N_1
 
     If you have a :class:`~tenpy.models.lattice.Lattice`, you might also want to specify
-    the location of the operators by lattice indices insted of MPS indices.
+    the location of the operators by lattice indices instead of MPS indices.
     For example, you can obtain the nearest-neighbor density terms
     **without double counting each pair**) on a :class:`~tenpy.models.lattice.TriangularLattice`:
 
@@ -111,7 +111,7 @@ class TermList(Hdf5Exportable):
         terms : list of list of (str, tuple)
             List of terms, where each `term` is a tuple ``(opname, lat_idx)`` with
             `lat_idx` itself being a tuple ``(x, y, u)`` (for a 2D lattice) of the lattice
-            corrdinates.
+            coordinates.
         strengths : (list of) float/complex
             For each term in `terms` an associated prefactor or strength.
             A single number holds for all terms equally.
@@ -503,7 +503,7 @@ class CouplingTerms(Hdf5Exportable):
         Returns
         -------
         max_range : int
-            The maximum of ``j - i`` for the `i`, `j` occuring in a term of :attr:`coupling_terms`.
+            The maximum of ``j - i`` for the `i`, `j` occurring in a term of :attr:`coupling_terms`.
         """
         max_range = 0
         for i, d1 in self.coupling_terms.items():
@@ -828,7 +828,7 @@ class MultiCouplingTerms(CouplingTerms):
     an arbitrary recursion depth of the dictionary and build the
     :class:`~tenpy.networks.mpo.MPOGraph` simultaneously from the left and right.
     Doing this from both sides simultaneously is necessary to keep the scaling of the MPO bond
-    dimension optimial, which we try to acchieve by reusing states of the MPO graph as much as
+    dimension optimal, which we try to achieve by reusing states of the MPO graph as much as
     possible as follows.
 
     Each individual term gets split up at site `switchLR` (default: center of the coupling).
@@ -908,7 +908,7 @@ class MultiCouplingTerms(CouplingTerms):
         Returns
         -------
         max_range : int
-            The maximum of ``j - i`` for the `i`, `j` occuring in a term of :attr:`coupling_terms`.
+            The maximum of ``j - i`` for the `i`, `j` occurring in a term of :attr:`coupling_terms`.
         """
         return self._max_range
 
@@ -924,7 +924,7 @@ class MultiCouplingTerms(CouplingTerms):
             The MPS indices of the sites on which the operators acts. With ``i, j, k, ... = ijkl``,
             we require that they are ordered ascending, ``i < j < k < ...`` and
             that ``0 <= i < N_sites``.
-            Inidces >= N_sites indicate couplings between different unit cells of an infinite MPS.
+            Indices >= N_sites indicate couplings between different unit cells of an infinite MPS.
         ops_ijkl : list of str
             Names of the involved operators on sites ``i, j, k, ...``.
         op_string : (list of) str
@@ -936,7 +936,7 @@ class MultiCouplingTerms(CouplingTerms):
             coupling from the right for an efficient MPO representation.
             This has implications for the final MPO bond dimension, but the optimal value depends
             on what other terms there are in the Hamiltonian. We therefore provide a few
-            heurisitic choices that can be given as the following strings.
+            heuristic choices that can be given as the following strings.
 
             middle_i :
                 The overall middle index ``(ijkl[0] + ijkl[-1] + 1) // 2``, the default choice.

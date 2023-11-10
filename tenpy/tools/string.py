@@ -17,13 +17,13 @@ def is_non_string_iterable(x):
 
 
 def vert_join(strlist, valign='t', halign='l', delim=' '):
-    r"""Join strings with multilines vertically such that they appear next to each other.
+    r"""Join multiline strings vertically such that they appear next to each other.
 
     Parameters
     ----------
     strlist : list of str
         the strings to be joined vertically
-    valing : ``'t', 'c', 'b'``
+    valign : ``'t', 'c', 'b'``
         vertical alignment of the strings: top, center, or bottom
     halign : ``'l', 'c', 'r'``
         horizontal alignment of the strings: left, center, or right
@@ -52,7 +52,7 @@ def vert_join(strlist, valign='t', halign='l', delim=' '):
     numlines = [len(lines) for lines in strlist]
     # maximum number of lines = total number of lines in the resulting string
     totallines = max([0] + numlines)
-    # width for each of thestrings
+    # width for each of the strings
     widths = [max([len(l) for l in lines]) for lines in strlist]
     # translate halign to string format mini language
     halign = {'l': '<', 'c': '^', 'r': '>'}[halign]

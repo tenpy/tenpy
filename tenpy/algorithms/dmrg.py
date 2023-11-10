@@ -303,7 +303,7 @@ class DMRGEngine(Sweep):
         E : float
             The energy of the resulting ground state MPS.
         psi : :class:`~tenpy.networks.mps.MPS`
-            The MPS representing the ground state after the simluation,
+            The MPS representing the ground state after the simulation,
             i.e. just a reference to :attr:`psi`.
 
         Options
@@ -357,7 +357,7 @@ class DMRGEngine(Sweep):
             norm_tol_final : float
                 After performing `norm_tol_iter`*`update_env` sweeps, if
                 ``np.linalg.norm(psi.norm_err()) < norm_tol_final``, call
-                :meth:`~tenpy.networks.mps.canonical_form` to canonicalise
+                :meth:`~tenpy.networks.mps.canonical_form` to canonicalize
                 instead. This tolerance should be stricter than `norm_tol`
                 to ensure canonical form even if DMRG cannot fully converge.
             P_tol_to_trunc : float
@@ -426,7 +426,7 @@ class DMRGEngine(Sweep):
                 if self.mixer is None:
                     break
                 else:
-                    logger.info("Convergence criterium reached with enabled mixer. "
+                    logger.info("Convergence criterion reached with enabled mixer. "
                                 "Disable mixer and continue")
                     self.mixer_deactivate()
             if loop_start_time - start_time > max_seconds:
@@ -442,7 +442,7 @@ class DMRGEngine(Sweep):
             max_trunc_err = self.sweep(meas_E_trunc=True)
             max_E_trunc = np.max(self.E_trunc_list)
             # --------------------------------------
-            # update lancos_params depending on truncation error(s)
+            # update lanczos_params depending on truncation error(s)
             if p_tol_to_trunc is not None and max_trunc_err > p_tol_min:
                 P_tol = max(p_tol_min, min(p_tol_max, max_trunc_err * p_tol_to_trunc))
                 self.lanczos_params['P_tol'] = P_tol
@@ -600,7 +600,7 @@ class DMRGEngine(Sweep):
         """One 'sweep' of the algorithm.
 
         Thin wrapper around :meth:`tenpy.algorithms.mps_common.Sweep.sweep` with one additional
-        parameter `meas_E_trunc` specifiying whether to measure truncation energies.
+        parameter `meas_E_trunc` specifying whether to measure truncation energies.
         """
         self._meas_E_trunc = meas_E_trunc
         return super().sweep(optimize)
@@ -700,7 +700,7 @@ class DMRGEngine(Sweep):
                 up to which the ``'default'`` `diag_method` uses ED instead of
                 Lanczos.
             diag_method : str
-                One of the folloing strings:
+                One of the following strings:
 
                 'default'
                       Same as ``'lanczos'`` for large bond dimensions, but if the
@@ -783,7 +783,7 @@ class DMRGEngine(Sweep):
             ``'N_updates'`` is just enumerating the number of bond updates,
             and ``'sweep'`` corresponds to the sweep number (including environment sweeps).
         yaxis : ``'E'`` | keys of :attr:`update_stats`
-            Key of :attr:`update_stats` to be used for the y-axisof the plots.
+            Key of :attr:`update_stats` to be used for the y-axis of the plots.
             For 'E', use the energy (per site for infinite systems).
         y_exact : float
             Exact value for the quantity on the y-axis for comparison.
@@ -973,7 +973,7 @@ class TwoSiteDMRGEngine(DMRGEngine):
         U : :class:`~tenpy.linalg.np_conserved.Array`
             Left-canonical part of `theta`. Labels ``'(vL.p)', 'vR'``.
         S : 1D ndarray | 2D :class:`~tenpy.linalg.np_conserved.Array`
-            Without mixer just the singluar values of the array; with mixer it might be a general
+            Without mixer just the singular values of the array; with mixer it might be a general
             matrix with labels ``'vL', 'vR'``; see comment above.
         VH : :class:`~tenpy.linalg.np_conserved.Array`
             Right-canonical part of `theta`. Labels ``'vL', '(p.vR)'``.
@@ -1158,7 +1158,7 @@ class SingleSiteDMRGEngine(DMRGEngine):
         U : :class:`~tenpy.linalg.np_conserved.Array`
             Left-canonical part of `theta`. Labels ``'(vL.p)', 'vR'``
         S : 1D ndarray | 2D :class:`~tenpy.linalg.np_conserved.Array`
-            Without mixer just the singluar values of the array; with mixer it might be a general
+            Without mixer just the singular values of the array; with mixer it might be a general
             matrix with labels ``'vL', 'vR'``; see comment above.
         VH : :class:`~tenpy.linalg.np_conserved.Array`
             Right-canonical part of `theta`. Labels ``'vL', '(p.vR)'``.

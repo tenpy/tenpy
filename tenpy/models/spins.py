@@ -1,6 +1,6 @@
-"""Nearest-neighbour spin-S models.
+"""Nearest-neighbor spin-S models.
 
-Uniform lattice of spin-S sites, coupled by nearest-neighbour interactions.
+Uniform lattice of spin-S sites, coupled by nearest-neighbor interactions.
 """
 # Copyright 2018-2023 TeNPy Developers, GNU GPLv3
 
@@ -15,7 +15,7 @@ __all__ = ['SpinModel', 'SpinChain']
 
 
 class SpinModel(CouplingMPOModel):
-    r"""Spin-S sites coupled by nearest neighbour interactions.
+    r"""Spin-S sites coupled by nearest neighbor interactions.
 
     The Hamiltonian reads:
 

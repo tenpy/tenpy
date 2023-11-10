@@ -31,6 +31,7 @@ All other modules in this folder contain model classes derived from these base c
     haldane
     toric_code
     mixed_xk
+    clock
 """
 # Copyright 2018-2023 TeNPy Developers, GNU GPLv3
 

@@ -19,7 +19,7 @@ network ansätze (representing pure states= to finite temperatures (and mixed st
 
 
 Here, we follow the third approach.
-In addition to the physical space `P`, we introduce a second 'auxiliar' space `Q`
+In addition to the physical space `P`, we introduce a second 'auxiliary' space `Q`
 and define the density matrix
 of the physical system as :math:`\rho = Tr_Q(|\phi><\phi|)`, where :math:`|\phi>` is a pure state
 in the combined physical and auxiliary system.
@@ -87,7 +87,7 @@ Time evolution algorithms (TEBD and MPO application) are adjusted in the module
 :mod:`~tenpy.algorithms.purification`.
 
 See also :cite:`karrasch2013` for additional tricks! One of their crucial observations is, that
-one can apply arbitrary unitaries on the auxiliar space (i.e. the `q`) without changing the result.
+one can apply arbitrary unitaries on the auxiliary space (i.e. the `q`) without changing the result.
 This can actually be used to reduce the necessary virtual bond dimensions:
 From the definition, it is easy to see that if we apply :math:`exp(-i H t)` to the `p` legs of
 :math:`|\phi>`, and :math:`\exp(+iHt)` to the `q` legs, they just cancel out!
@@ -113,7 +113,7 @@ see :cite:`hauschild2018`.
     Here, we use instead the identity :math:`\delta_{p,q}`, since it is easier to
     generalize for `p` running over more than two indices, and allows a simple use of charge
     conservation with the above `qconj` convention.
-    Moreover, we don't split the physical and auxiliar space into separate sites, which makes
+    Moreover, we don't split the physical and auxiliary space into separate sites, which makes
     TEBD as costly as :math:`O(d^6 \chi^3)`.
 """
 # Copyright 2018-2023 TeNPy Developers, GNU GPLv3
@@ -347,7 +347,7 @@ class PurificationMPS(MPS):
             otherwise the `n`-th Renyi entropy.
         leg : 'p', 'q', 'pq'
             Whether we look at the entanglement entropy in both (`pq`) or
-            only one of auxiliar (`q`) and physical (`p`) space.
+            only one of auxiliary (`q`) and physical (`p`) space.
 
         Returns
         -------
@@ -403,7 +403,7 @@ class PurificationMPS(MPS):
             Selects the entropy to use, see :func:`~tenpy.tools.math.entropy`.
         leg : 'p', 'q', 'pq'
             Whether we look at the entanglement entropy in both (`pq`) or
-            only one of auxiliar (`q`) and physical (`p`) space.
+            only one of auxiliary (`q`) and physical (`p`) space.
 
         Returns
         -------

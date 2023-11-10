@@ -49,7 +49,7 @@ class Site(Hdf5Exportable):
 
     .. versionchanged :: 0.10
 
-        Add the option `sort_charge`. Right now the default behavriou is ``False`` for
+        Add the option `sort_charge`. Right now the default behavior is ``False`` for
         backwards compatibility, but we will change it for Version 1.0 to ``True``.
         For now, we raise a warning in cases where it can lead to changes.
         If you see this warning, just set the value explicitly to avoid breaking compatibility of
@@ -76,7 +76,7 @@ class Site(Hdf5Exportable):
         This is usually a good idea to reduce potential overhead when using charge conservation.
         Note that this might permute the order of the local basis states!
         For backwards compatibility with existing data, it is not (yet) enabled by default,
-        but we started to warn about the behaviour.
+        but we started to warn about the behavior.
         Explicitly set `sort_charge=False` to disable the warning.
 
     Attributes
@@ -177,7 +177,7 @@ class Site(Hdf5Exportable):
         new_leg_charge : :class:`LegCharge` | None
             The new charges to be used. If ``None``, use trivial charges.
         permute : ndarray | None
-            The permuation applied to the physical leg,
+            The permutation applied to the physical leg,
             which also gets used to adjust :attr:`state_labels` and :attr:`perm`.
             If you sorted the previous leg with ``perm_qind, new_leg_charge = leg.sort()``,
             use ``old_leg.perm_flat_from_perm_qind(perm_qind)``.
@@ -283,9 +283,9 @@ class Site(Hdf5Exportable):
         hc : None | False | str
             The name for the hermitian conjugate operator, to be used for :attr:`hc_ops`.
             By default (``None``), try to auto-determine it.
-            If ``False``, disable adding antries to :attr:`hc_ops`.
+            If ``False``, disable adding entries to :attr:`hc_ops`.
         permute_dense : bool | None
-            Flag to enable/disable permuations when converting `op` from numpy to
+            Flag to enable/disable permutations when converting `op` from numpy to
             np_conserved arrays.
             If True, the operator is permuted with :attr:`perm` to account for permutations
             induced by sorting charges; False disables the permutations.
@@ -397,7 +397,7 @@ class Site(Hdf5Exportable):
         Parameters
         ----------
         label : int | string
-            eather the index directly or a label (string) set before.
+            either the index directly or a label (string) set before.
 
         Returns
         -------
@@ -449,14 +449,14 @@ class Site(Hdf5Exportable):
         Parameters
         ----------
         name : str
-            The name of the operator to be returned.
+            The name of the operator to be conjugated.
             Multiple operators separated by whitespace are interpreted as an operator product,
             exactly as :meth:`get_op` does.
 
         Returns
         -------
         hc_op_name : str
-            Operator name for the hermi such that :meth:`get_op` of
+            Operator name for the hermitian conjugate operator.
         """
         names = name.split(' ')
         hc_names = []
@@ -521,7 +521,7 @@ class Site(Hdf5Exportable):
         -------
         combined_opname : str
             A valid operator name
-            Operatorname representing the product of operators in `names`.
+            Operator name representing the product of operators in `names`.
         """
         if len(names) == 0:
             return 'Id'
@@ -571,7 +571,7 @@ class GroupedSite(Site):
     operators) getting more complicated/computationally expensive.
 
     If the individual sites indicate fermionic operators (with entries in `need_JW_string`),
-    we construct the new on-site oerators of `site1` to include the JW string of `site0`,
+    we construct the new on-site operators of `site1` to include the JW string of `site0`,
     i.e., we use the Kronecker product of ``[JW, op]`` instead of ``[Id, op]`` if necessary
     (but always ``[op, Id]``).
     In that way the onsite operators of this DoubleSite automatically fulfill the
@@ -816,7 +816,7 @@ def set_common_charges(sites, new_charges='same', new_names=None, new_mod=None, 
          [ 2]]
 
     With the default ``new_charges='same'``, this function will combine charges with the same name,
-    and hence we will have two conserved quantities, namley
+    and hence we will have two conserved quantities, namely
     the fermion particle number
     ``'N' = N_{up_fermions} + N_{down-fermions}``,
     and the total Sz spin
@@ -1357,7 +1357,7 @@ class FermionSite(Site):
     ==============  ===================================================================
 
     ============== ====  ===============================
-    `conserve`     qmod  *exluded* onsite operators
+    `conserve`     qmod  *excluded* onsite operators
     ============== ====  ===============================
     ``'N'``        [1]   --
     ``'parity'``   [2]   --

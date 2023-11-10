@@ -88,9 +88,9 @@ Consider a (properly normalized) iMPS representing some state :math:`\ket{\psi}`
 If we make a copy and change just one number of the MPS by some small :math:`\epsilon`,
 we get a new iMPS wave function :math:`\ket{\phi}`. Clearly, this is "almost" the same state.
 Indeed, if we construct the :class:`TransferMatrix` between :math:`\phi` and :math:`\psi` and
-check the eigenvalues, we will find a dominat eigenvalue :math:`\eta \approx 1`
+check the eigenvalues, we will find a dominant eigenvalue :math:`\eta \approx 1`
 up to an error depending on :math:`\epsilon`.
-However, since it is not quite 1, the formal overlap bewteen the iMPS vanishes
+However, since it is not quite 1, the formal overlap between the iMPS vanishes
 in the thermodynamic limit :math:`N \rightarrow \infty`,
 
 .. math ::
@@ -113,15 +113,15 @@ are.
     an iMPS, calculate the overlap and expect to get the same as if you calculate
     the expectation value of that operator!
 
-In fact, there are more issues in this naive aproach, hidden in the "apply an operator".
+In fact, there are more issues in this naive approach, hidden in the "apply an operator".
 How the "apply" has to work internally, depends crucially on the form of the operator.
 First, you can can have a *single local operator*, e.g. a single :math:`S^z_i`.
 Applying such an operator breaks translation invariance,
-so you can not write the result as iMPS. (Rather, you would need to considere a different unit
+so you can not write the result as iMPS. (Rather, you would need to consider a different unit
 cell in a background of an iMPS, which we define as "segment" boundary conditions.)
 
 Second, you might have an extensive "sum of local operators",
-e.g. :math:`M = \sum_i S^z_i` or directly the Hamiltonain.
+e.g. :math:`M = \sum_i S^z_i` or directly the Hamiltonian.
 Again, the local terms break translation invariance. While in this case the sum can recover the
 translation invariance, the result is again not an iMPS, but in the tangent space of iMPS
 (or a generalization thereof if the local terms have more than one site).
@@ -206,7 +206,7 @@ class BaseMPSExpectationValue(metaclass=ABCMeta):
         Parameters
         ----------
         ops : (list of) { :class:`~tenpy.linalg.np_conserved.Array` | str }
-            The operators, for wich the expectation value should be taken,
+            The operators, for which the expectation value should be taken,
             All operators should all have the same number of legs (namely `2 n`).
             If less than ``len(sites)`` operators are given, we repeat them periodically.
             Strings (like ``'Id', 'Sz'``) are translated into single-site operators defined by
@@ -540,7 +540,7 @@ class BaseMPSExpectationValue(metaclass=ABCMeta):
         if ((len(sites1) > 2 * len(sites2) and min(sites2) > max(sites1) - len(sites2))
                 or (len(sites2) > 2 * len(sites1) and min(sites1) > max(sites2) - len(sites1))):
             warnings.warn(
-                "Inefficent evaluation of MPS.correlation_function(), "
+                "Inefficient evaluation of MPS.correlation_function(), "
                 "it's probably faster to use MPS.term_correlation_function_left()",
                 stacklevel=2)
         if autoJW and not all([isinstance(op1, str) for op1 in ops1]):
@@ -1424,7 +1424,7 @@ class MPS(BaseMPSExpectationValue):
         h5gr.attrs["norm"] = self.norm
         h5gr.attrs["grouped"] = self.grouped
         h5gr.attrs["transfermatrix_keep"] = self._transfermatrix_keep
-        h5gr.attrs["L"] = self.L  # not needed for loading, but still usefull metadata
+        h5gr.attrs["L"] = self.L  # not needed for loading, but still useful metadata
         h5gr.attrs["max_bond_dimension"] = np.max(self.chi)  # same
 
     @classmethod
@@ -1493,7 +1493,7 @@ class MPS(BaseMPSExpectationValue):
             sites in the Chain, but if you set `allow_incommensurate=True`, it will still work
             and give you a state with total Sz = +1/2 for odd sites (since total Sz=0 doesn't fit).
         **kwargs :
-            Other keyword arguments as definied in :meth:`from_product_state`.
+            Other keyword arguments as defined in :meth:`from_product_state`.
             `bc` is set by default from ``lat.bc_MPS``.
 
         Returns
@@ -2178,7 +2178,7 @@ class MPS(BaseMPSExpectationValue):
         return theta
 
     def convert_form(self, new_form='B'):
-        """Tranform self into different canonical form (by scaling the legs with singular values).
+        """Transform self into different canonical form (by scaling the legs with singular values).
 
         Parameters
         ----------
@@ -2241,7 +2241,7 @@ class MPS(BaseMPSExpectationValue):
         self.test_sanity()
 
     def roll_mps_unit_cell(self, shift=1):
-        """Shift the section we define as unit cellof an infinite MPS; in place.
+        """Shift the section we define as unit cell of an infinite MPS; in place.
 
         Suppose we have a unit cell with tensors ``[A, B, C, D]`` (repeated on both sites).
         With ``shift = 1``, the new unit cell will be ``[D, A, B, C]``,
@@ -2262,7 +2262,7 @@ class MPS(BaseMPSExpectationValue):
         self._S.append(self._S[0])
 
     def enlarge_chi(self, extra_legs, random_fct=np.random.normal):
-        """Artifically enlarge the bond dimension by the specified extra legs/charges. In place.
+        """Artificially enlarge the bond dimension by the specified extra legs/charges. In place.
 
         First converts the MPS in B form.
         This function then fills up the 'vR' leg with zeros, and then groups physical and vR legs
@@ -2610,7 +2610,7 @@ class MPS(BaseMPSExpectationValue):
             case we adjust the total charge to match these legs.
         vL_leg, vR_leg: None | LegCharge
             Desired new virtual leg on the very left and right.
-            Needs to have the same block strucuture as the current legs, but can have shifted
+            Needs to have the same block structure as the current legs, but can have shifted
             charge entries.
             For infinite MPS, we need `vL_leg` to be the conjugate leg of `vR_leg`.
             For segment MPS, these legs are the *outer-most* legs, possibly including the
@@ -2662,7 +2662,7 @@ class MPS(BaseMPSExpectationValue):
     def entanglement_entropy(self, n=1, bonds=None, for_matrix_S=False):
         r"""Calculate the (half-chain) entanglement entropy for all nontrivial bonds.
 
-        Consider a bipartition of the sytem into :math:`A = \{ j: j <= i_b \}` and
+        Consider a bipartition of the system into :math:`A = \{ j: j <= i_b \}` and
         :math:`B = \{ j: j > i_b\}` and the reduced density matrix :math:`\rho_A = tr_B(\rho)`.
         The von-Neumann entanglement entropy is defined as
         :math:`S(A, n=1) = -tr(\rho_A \log(\rho_A)) = S(B, n=1)`.
@@ -2677,14 +2677,14 @@ class MPS(BaseMPSExpectationValue):
         ----------
         n : int/float
             Selects which entropy to calculate;
-            `n=1` (default) is the ususal von-Neumann entanglement entropy.
+            `n=1` (default) is the usual von-Neumann entanglement entropy.
         bonds : ``None`` | (iterable of) int
             Selects the bonds at which the entropy should be calculated.
             ``None`` defaults to ``range(0, L+1)[self.nontrivial_bonds]``,
             i.e., ``range(1, L)`` for 'finite' MPS and ``range(0, L)`` for 'infinite' MPS.
         for_matrix_S : bool
             Switch calculate the entanglement entropy even if the `_S` are matrices.
-            Since :math:`O(\chi^3)` is expensive compared to the ususal :math:`O(\chi)`,
+            Since :math:`O(\chi^3)` is expensive compared to the usual :math:`O(\chi)`,
             we raise an error by default.
 
         Returns
@@ -2727,7 +2727,7 @@ class MPS(BaseMPSExpectationValue):
         This function is similar as :meth:`entanglement_entropy`,
         but for more general geometry of the region `A` to be a segment of a *few* sites.
 
-        This is acchieved by explicitly calculating the reduced density matrix of `A`
+        This is achieved by explicitly calculating the reduced density matrix of `A`
         and thus works only for small segments.
         The alternative :meth:`entanglement_entropy_segment2` might work for larger segments
         at small enough bond dimensions.
@@ -2742,7 +2742,7 @@ class MPS(BaseMPSExpectationValue):
             or `range(L)` for infinite boundary conditions.
         n : int | float
             Selects which entropy to calculate;
-            `n=1` (default) is the ususal von-Neumann entanglement entropy,
+            `n=1` (default) is the usual von-Neumann entanglement entropy,
             otherwise the `n`-th Renyi entropy.
 
         Returns
@@ -2787,7 +2787,7 @@ class MPS(BaseMPSExpectationValue):
             the full reduced density matrix of the *complement* of `A`.
         n : int | float
             Selects which entropy to calculate;
-            `n=1` (default) is the ususal von-Neumann entanglement entropy,
+            `n=1` (default) is the usual von-Neumann entanglement entropy,
             otherwise the `n`-th Renyi entropy.
 
         Returns
@@ -2906,12 +2906,12 @@ class MPS(BaseMPSExpectationValue):
         return rho
 
     def probability_per_charge(self, bond=0):
-        """Return probabilites of charge value on the left of a given bond.
+        """Return probabilities of charge value on the left of a given bond.
 
         For example for particle number conservation, define
         :math:`N_b = sum_{i<b} n_i` for a given bond `b`.
         This function returns the possible values of `N_b` as rows of `charge_values`,
-        and for each row the probabilty that this combination occurs in the given state.
+        and for each row the probability that this combination occurs in the given state.
 
         Parameters
         ----------
@@ -2924,7 +2924,7 @@ class MPS(BaseMPSExpectationValue):
             Columns correspond to the different charges in `self.chinfo`.
             Rows are the different charge fluctuations at this bond
         probabilities : 1D array
-            For each row of `charge_values` the probablity for these values of charge fluctuations.
+            For each row of `charge_values` the probability for these values of charge fluctuations.
         """
         if self.bc == 'segment' and bond == self.L:
             S = self.get_SR(self.L - 1)**2
@@ -2941,7 +2941,7 @@ class MPS(BaseMPSExpectationValue):
             ps.append(np.sum(S[sl]))
         ps = np.array(ps)
         if abs(np.sum(ps) - 1.) > 1.e-10:
-            warnings.warn("Probability_per_charge: Sum of probabilites not 1. Canonical form?",
+            warnings.warn("Probability_per_charge: Sum of probabilities not 1. Canonical form?",
                           stacklevel=2)
         return leg.charges.copy(), ps
 
@@ -3104,7 +3104,7 @@ class MPS(BaseMPSExpectationValue):
 
             sum([self.expectation_value_term(term)*strength for term, strength in term_list])
 
-        However, for effiency, the term_list is converted to an MPO and the expectation value
+        However, for efficiency, the term_list is converted to an MPO and the expectation value
         of the MPO is evaluated.
 
         .. deprecated:: 0.4.0
@@ -3172,12 +3172,12 @@ class MPS(BaseMPSExpectationValue):
                             norm_tol=1.e-12):
         """Sample measurement results in the computational basis.
 
-        This function samples projective measurements on a continguous range of sites,
+        This function samples projective measurements on a contiguous range of sites,
         tracing out the remaining sites.
 
-        Note that for infinite boundary conditions, the probablility of sampling
+        Note that for infinite boundary conditions, the probability of sampling
         a set of `sigmas` is **not** ``|psi.overlap(MPS.from_product_state(sigmas, ...))|^2``,
-        because the latter would poject to the set `sigmas` on *each* (translated) MPS unit cell,
+        because the latter would project to the set `sigmas` on *each* (translated) MPS unit cell,
         while this function is only projecting to them in a *single* MPS unit cell.
 
         Parameters
@@ -3198,12 +3198,12 @@ class MPS(BaseMPSExpectationValue):
         -------
         sigmas : list of int | list of float
             On each site the index of the local basis that was measured,
-            as specified in the corrsponding :class:`~tenpy.networks.site.Site` in :attr:`sites`.
+            as specified in the corresponding :class:`~tenpy.networks.site.Site` in :attr:`sites`.
             Note that this can change depending on whether/what charges you conserve!
             Explicitly specifying the measurement operator will avoid that issue.
         weight : float
             The weight ``sqrt(trace(|psi><psi|sigmas...><sigmas...|))``, i.e.,
-            the probability of measuring ``|sigmas...>`` is ``weigth**2``.
+            the probability of measuring ``|sigmas...>`` is ``weight**2``.
             For a finite system where we sample all sites (i.e., the trace over the compliment of
             the sites is trivial), this is the actual overlap ``<sigmas...|psi>``
             including the phase.
@@ -3270,7 +3270,7 @@ class MPS(BaseMPSExpectationValue):
                 |       |        |    vs         |
                 |   --theta*[i]--.       --s[i]--.
 
-            Similarly, ``norm_errror[i, 1]`` is the norm-difference of::
+            Similarly, ``norm_error[i, 1]`` is the norm-difference of::
 
                 |   .--theta[i]---         .--s[i+1]--
                 |   |    |          vs     |
@@ -3305,7 +3305,7 @@ class MPS(BaseMPSExpectationValue):
         """Bring self into canonical 'B' form, (re-)calculate singular values.
 
         Simply calls :meth:`canonical_form_finite` or :meth:`canonical_form_infinite1`.
-        Keyword arguments are passed on to the corrsponding specialized versions.
+        Keyword arguments are passed on to the corresponding specialized versions.
         """
         if self.finite:
             return self.canonical_form_finite(**kwargs)
@@ -3328,7 +3328,7 @@ class MPS(BaseMPSExpectationValue):
         ----------
         renormalize: bool
             Whether a change in the norm should be discarded or used to *update* :attr:`norm`.
-            Note that even `renoramlize=True` *does not reset* the :attr:`norm` to 1.
+            Note that even `renormalize=True` *does not reset* the :attr:`norm` to 1.
             To do that, you would rather have to set ``psi.norm = 1`` explicitly!
         cutoff : float | None
             Cutoff of singular values used in the SVDs.
@@ -3377,7 +3377,7 @@ class MPS(BaseMPSExpectationValue):
         M = self.get_B(L - 1, form)
         M = npc.tensordot(R, M, axes=['vR', 'vL'])
         if self.bc == 'segment':
-            # also neet to calculate new singular values on the very right
+            # also need to calculate new singular values on the very right
             U, S, VR_segment = npc.svd(M.combine_legs(['vL'] + self._p_label),
                                        cutoff=cutoff,
                                        inner_labels=['vR', 'vL'])
@@ -3472,7 +3472,7 @@ class MPS(BaseMPSExpectationValue):
         ----------
         renormalize: bool
             Whether a change in the norm should be discarded or used to update :attr:`norm`.
-            Note that even `renoramlize=True` *does not reset* the :attr:`norm` to 1.
+            Note that even `renormalize=True` *does not reset* the :attr:`norm` to 1.
             To do that, you would rather have to set ``psi.norm = 1`` explicitly!
         tol_xi : float
             Raise an error if the correlation length is larger than that
@@ -3550,7 +3550,7 @@ class MPS(BaseMPSExpectationValue):
         ----------
         renormalize: bool
             Whether a change in the norm should be discarded or used to update :attr:`norm`.
-            Note that even `renoramlize=True` *does not reset* the :attr:`norm` to 1.
+            Note that even `renormalize=True` *does not reset* the :attr:`norm` to 1.
             To do that, you would rather have to set ``psi.norm = 1`` explicitly!
         tol : float
             Precision down to which the state should be in canonical form.
@@ -3579,7 +3579,7 @@ class MPS(BaseMPSExpectationValue):
         # now we have old_Bs R = R new_Bs with right-orthonormal new_Bs
         self._B = new_Bs
         C_guess = npc.diag(self.get_SL(0), self._B[0].get_leg('vL'), labels=['vL', 'vR'])
-        # TODO: we sometimes got a legchare error when using R_guess instead off C_guess,
+        # TODO: we sometimes got a legcharge error when using R_guess instead off C_guess,
         # so the oder of the indices might have changed (from sorting legs?)
         # reflect this in permutation of singular values
         new_As, C, _ = self._canonical_form_left_orthogonalize(C_guess, tol, arnoldi_params)
@@ -3841,7 +3841,7 @@ class MPS(BaseMPSExpectationValue):
         :class:`TransferMatrix`, respectively) is the `qtotal` that eigenvector.
 
         Since bra and ket are identical for the :meth:`correlation_length`, one can flip
-        top and bottem and to an overall `conjugate`, and gets back to the same TransferMatrix,
+        top and bottom and to an overall `conjugate`, and gets back to the same TransferMatrix,
         hence eigenvalues of a given eigenvector and it's dagger (seen as a matrix with legs
         ``'vL', 'vL*'``) are identical. Since that flips the sign of all charges, we can conclude
         that the correlation length in a given charge sector and the negative charge sector are
@@ -4087,11 +4087,11 @@ class MPS(BaseMPSExpectationValue):
         i : int
             Swap the two sites at positions `i` and `i+1`.
         swap_op : ``None`` | ``'auto', 'autoInv'`` | :class:`~tenpy.linalg.np_conserved.Array`
-            The operator used to swap the phyiscal legs of the two-site wave function `theta`.
+            The operator used to swap the physical legs of the two-site wave function `theta`.
             For ``None``, just transpose/relabel the legs.
             Alternative give an npc :class:`~tenpy.linalg.np_conserved.Array`
             which represents the full operator used for the swap.
-            Should have legs ``['p0', 'p1', 'p0*', 'p1*']`` whith ``'p0', 'p1*'`` contractible.
+            Should have legs ``['p0', 'p1', 'p0*', 'p1*']`` with ``'p0', 'p1*'`` contractible.
             For ``'auto'`` we try to be smart about fermionic signs, see note below.
         trunc_par : dict
             Parameters for truncation, see :cfg:config:`truncation`.
@@ -4124,7 +4124,7 @@ class MPS(BaseMPSExpectationValue):
         .. math ::
             |\psi> = \sum_{[n_j]} \psi_{[n_j]} \prod_j (c^\dagger_j)^{n_j}  |vac>
 
-        where ``[n_j]`` denontes a set of :math:`n_j \in [0, 1]` for
+        where ``[n_j]`` denotes a set of :math:`n_j \in [0, 1]` for
         each physical site `j` and the product over `j` is taken in increasing order.
         Let :math:`P` be the operator switching ``i <-> i+1``, with inverse :math:`P^\dagger`.
         Then:
@@ -4231,7 +4231,7 @@ class MPS(BaseMPSExpectationValue):
             The applied permutation, such that ``psi.permute_sites(perm)[i] = psi[perm[i]]``
             (where ``[i]`` indicates the `i`-th site).
         swap_op : ``None`` | ``'auto', 'autoInv'`` | :class:`~tenpy.linalg.np_conserved.Array`
-            The operator used to swap the phyiscal legs of a two-site wave function `theta`,
+            The operator used to swap the physical legs of a two-site wave function `theta`,
             see :meth:`swap_sites`.
         trunc_par : dict
             Parameters for truncation, see :cfg:config:`truncation`.
@@ -4292,13 +4292,13 @@ class MPS(BaseMPSExpectationValue):
         Parameters
         ----------
         perm : 1D ndarray | :class:`~tenpy.models.lattice.Lattice`
-            Permuation to be applied to the physical indices, see :meth:`permute_sites`.
+            Permutation to be applied to the physical indices, see :meth:`permute_sites`.
             If a lattice is given, we use it to read out the lattice structure and shift
             each site by one lattice-vector in y-direction (assuming periodic boundary conditions).
             (If you have a :class:`~tenpy.models.model.CouplingModel`,
             give its `lat` attribute for this argument)
         swap_op : ``None`` | ``'auto', 'autoInv'`` | :class:`~tenpy.linalg.np_conserved.Array`
-            The operator used to swap the phyiscal legs of a two-site wave function `theta`,
+            The operator used to swap the physical legs of a two-site wave function `theta`,
             see :meth:`swap_sites`.
         trunc_par : dict
             Parameters for truncation, see :cfg:config:`truncation`.
@@ -4371,7 +4371,7 @@ class MPS(BaseMPSExpectationValue):
         W = npc.eigvals(sUs_blocked, sort='m>')
         # W = s[j]^2 exp(i K[j]) up to overall scaling and phase
         # (as an eigenvector, sUS has arbitrary/unknown prefactor!)
-        W = W / np.sum(np.abs(W))  # fix overal scaling by normalization np.sum(S[i]**2) == 1.
+        W = W / np.sum(np.abs(W))  # fix overall scaling by normalization np.sum(S[i]**2) == 1.
         mean_exp_ik = np.sum(W)
         if np.abs(mean_exp_ik) > 1.e-5:
             W *= np.conj(mean_exp_ik) / np.abs(mean_exp_ik)
@@ -4395,7 +4395,7 @@ class MPS(BaseMPSExpectationValue):
         return "\n".join(res)
 
     def compress(self, options):
-        """Compresss an MPS.
+        """Compress an MPS.
 
         Options
         -------
@@ -4493,7 +4493,7 @@ class MPS(BaseMPSExpectationValue):
         If S is just 1D (as usual, e.g. during TEBD), this function just performs
         ``B.scale_axis(S**form_diff, axis_B)``.
 
-        However, during the DMRG with mixer, S might acutally be a 2D matrix.
+        However, during the DMRG with mixer, S might actually be a 2D matrix.
         For ``form_diff = -1``, we need to calculate the inverse of S, more precisely the
         (Moore-Penrose) pseudo inverse, see :func:`~tenpy.linalg.np_conserved.pinv`.
         The cutoff is only used in that case.
@@ -4563,7 +4563,7 @@ class MPS(BaseMPSExpectationValue):
     def _canonical_form_correct_right(self, i1, Gr, eps=2. * np.finfo(np.double).eps):
         """Given the right gram matrix Gr, updated the bond (i0, i1), where i0 = i1 - 1.
 
-        Diagonalise Gr = X^H Wr X and update
+        Diagonalize Gr = X^H Wr X and update
         ``B[i0] -> B[i0] X^H / norm``,
         ``B[i1] -> X B[i1] * norm``, where norm = sqrt(chi/sum(Wr)) == sqrt(chi/tr(Gr))
         If `Wr` has (almost) zero entries, reduce the bond dimension at the given bond.
@@ -4676,7 +4676,7 @@ class MPS(BaseMPSExpectationValue):
 
 
 class BaseEnvironment(metaclass=ABCMeta):
-    """Base class for :class:`MPSEnvironement` storing partial contractions between MPS.
+    """Base class for :class:`MPSEnvironment` storing partial contractions between MPS.
 
     When `bra` and `ket` are the same, a suitable canonical form simplifies `LP` and `RP` tensors
     to identities, but for different `bra` and `ket`, or if we sandwich a whole MPO between the
@@ -4704,7 +4704,7 @@ class BaseEnvironment(metaclass=ABCMeta):
     cache : :class:`~tenpy.tools.cache.DictCache` | None
         Cache in which the tensors should be saved. If ``None``, a new `DictCache` is generated.
     **init_env_data :
-        Further keyword arguments with initializaiton data, as returned by
+        Further keyword arguments with initialization data, as returned by
         :meth:`get_initialization_data`.
         See :meth:`initialize_first_LP_last_RP` for details on these parameters.
 
@@ -4735,11 +4735,11 @@ class BaseEnvironment(metaclass=ABCMeta):
         (or ``None``, if we don't have it calculated).
     _LP_age : list of int | ``None``
         Used for book-keeping, how large the DMRG system grew:
-        ``_LP_age[i]`` stores the number of physical sites invovled into the contraction
+        ``_LP_age[i]`` stores the number of physical sites involved into the contraction
         network which yields ``self.get_LP(i)``.
     _RP_age : list of int | ``None``
         Used for book-keeping, how large the DMRG system grew:
-        ``_RP_age[i]`` stores the number of physical sites invovled into the contraction
+        ``_RP_age[i]`` stores the number of physical sites involved into the contraction
         network which yields ``self._RP[i]``.
     """
 
@@ -5040,7 +5040,7 @@ class BaseEnvironment(metaclass=ABCMeta):
         self._LP_age[i] = None
 
     def del_RP(self, i):
-        """Delete stored part scrictly to the right of site `i`."""
+        """Delete stored part strictly to the right of site `i`."""
         i = self._to_valid_index(i)
         del self.cache[self._RP_keys[i]]
         self._RP_age[i] = None
@@ -5071,7 +5071,7 @@ class BaseEnvironment(metaclass=ABCMeta):
             look-up could happen, i.e., for which tensors should be kept in RAM until the next
             call to this function.
         preload_LP, preload_RP : int | None
-            If not None, preload the tensors for the corrsponding :meth:`get_LP` and :meth:`get_RP`
+            If not None, preload the tensors for the corresponding :meth:`get_LP` and :meth:`get_RP`
             call, respectively, from disk.
         """
         LP_keys = self._LP_keys
@@ -5170,7 +5170,7 @@ class BaseEnvironment(metaclass=ABCMeta):
 
             sum([self.expectation_value_term(term)*strength for term, strength in term_list])
 
-        However, for effiency, the term_list is converted to an MPO and the expectation value
+        However, for efficiency, the term_list is converted to an MPO and the expectation value
         of the MPO is evaluated.
 
          .. warning ::
@@ -5270,14 +5270,14 @@ class MPSEnvironment(BaseEnvironment, BaseMPSExpectationValue):
     def _contract_LP(self, i, LP):
         LP = npc.tensordot(LP, self.ket.get_B(i, form='A'), axes=('vR', 'vL'))
         axes = (self.ket._get_p_label('*') + ['vL*'], self.ket._p_label + ['vR*'])
-        # for a ususal MPS, axes = (['p*', 'vL*'], ['p', 'vR*'])
+        # for a usual MPS, axes = (['p*', 'vL*'], ['p', 'vR*'])
         LP = npc.tensordot(self.bra.get_B(i, form='A').conj(), LP, axes=axes)
         return LP  # labels 'vR*', 'vR'
 
     def _contract_RP(self, i, RP):
         RP = npc.tensordot(self.ket.get_B(i, form='B'), RP, axes=('vR', 'vL'))
         axes = (self.ket._p_label + ['vL*'], self.ket._get_p_label('*') + ['vR*'])
-        # for a ususal MPS, axes = (['p', 'vL*'], ['p*', 'vR*'])
+        # for a usual MPS, axes = (['p', 'vL*'], ['p*', 'vR*'])
         RP = npc.tensordot(RP, self.bra.get_B(i, form='B').conj(), axes=axes)
         return RP  # labels 'vL', 'vL*'
 
@@ -5287,7 +5287,7 @@ class MPSEnvironment(BaseEnvironment, BaseMPSExpectationValue):
 
     def _normalize_exp_val(self, value):
         # this ensures that
-        #     MPSEnvironment(psi, psi.apply_local_op('B', i)).expecation_value('A', j)
+        #     MPSEnvironment(psi, psi.apply_local_op('B', i)).expectation_value('A', j)
         # gives the same as
         #     psi.correlation_function('A', 'B', sites1=[i], sites2=[j])
         # and psi.apply_local_op('Adagger', i).overlap(psi.apply_local_op('B', j)
@@ -5404,7 +5404,7 @@ class TransferMatrix(sparse.NpcLinearOperator):
         Pipe corresponding to ``'(vL.vL*)'`` for ``transpose=False``
         or to ``'(vR.vR*)'`` for ``transpose=True``.
     label_split :
-        ``['vL', 'vL*']`` if ``tranpose=False`` or ``['vR', 'vR*']`` if ``transpose=True``.
+        ``['vL', 'vL*']`` if ``transpose=False`` or ``['vR', 'vR*']`` if ``transpose=True``.
     _bra_N : list of npc.Array
         Complex conjugated matrices of the bra, transposed for fast `matvec`.
     _ket_M : list of npc.Array
@@ -5444,7 +5444,7 @@ class TransferMatrix(sparse.NpcLinearOperator):
         self.L = len(bra_N)
         assert len(ket_M) == self.L
         self.transpose = transpose
-        self._p_label = p = p_label  # for ususal MPS just ['p']
+        self._p_label = p = p_label  # for usual MPS just ['p']
         self._pstar_label = pstar = [lbl + '*' for lbl in self._p_label]
         if not transpose:  # right to left
             label = '(vL.vL*)'  # what we act on
@@ -5526,7 +5526,7 @@ class TransferMatrix(sparse.NpcLinearOperator):
         Returns
         -------
         mat_vec : :class:`~tenpy.linalg.np_conserved.Array`
-            The tranfer matrix acted on `vec`, in the same form as given.
+            The transfer matrix acted on `vec`, in the same form as given.
         """
         pipe = None
         if self.label_split[0] not in vec._labels:
@@ -5580,7 +5580,7 @@ class TransferMatrix(sparse.NpcLinearOperator):
 
 
 class InitialStateBuilder:
-    """Class to simplify providing common sets of intial states.
+    """Class to simplify providing common sets of initial states.
 
     This class is used by the :class:`~tenpy.simulations.simulation.Simulation` to initialize MPS.
     The idea is that you can fully specify the initial state by a few parameters and possibly
@@ -5628,7 +5628,7 @@ class InitialStateBuilder:
         >>> psi = InitialStateBuilder(lat, options).run()
 
     Note that the `method` options is mandatory, it selects which other method :meth:`run` calls.
-    This allows to define custum initial states with the same interface by defining your own
+    This allows to define custom initial states with the same interface by defining your own
     subclass, e.g. to get a short-hand for the Neel state:
 
     .. doctest :: InitialStateBuilder
@@ -5656,7 +5656,7 @@ class InitialStateBuilder:
     def run(self):
         """Build an initial state from a specified method.
 
-        Reads out the option :cfg:option:`InitialStateBuilder.method` to chooce a method of the
+        Reads out the option :cfg:option:`InitialStateBuilder.method` to choose a method of the
         class which generates the state.
 
         Returns
@@ -5695,7 +5695,7 @@ class InitialStateBuilder:
         assert check_charge == has_charge
 
     def from_file(self):
-        """Load the initial state from an exisiting file.
+        """Load the initial state from an existing file.
 
         Options
         -------
@@ -5705,7 +5705,7 @@ class InitialStateBuilder:
                 The filename from which to load the state
             data_key : str
                 Key within the file to be used for loading the data.
-                Can be recursive (separted by '/'), see :func:`tenpy.tools.misc.get_recursive`.
+                Can be recursive (separated by '/'), see :func:`tenpy.tools.misc.get_recursive`.
         """
         filename = self.options['filename']
         data_key = self.options.get('data_key', "psi")
@@ -5773,7 +5773,7 @@ class InitialStateBuilder:
                 The desired filling as float ``p/q``, or by a tuple ``(p, q)``.
                 ``None`` (default) disables the check.
             full_empty : (str, str)
-                Definition of which local states are "full" and "emtpy".
+                Definition of which local states are "full" and "empty".
                 For example you can use ``full_empty=('up', 'down')`` if you have spin sites.
         """
         check_filling = self.options.get("check_filling", None)
@@ -5812,7 +5812,7 @@ class InitialStateBuilder:
                 A string specifying the condition where to fill sites.
                 See examples in :meth:`fill_where`.
             full_empty : (str, str)
-                Definition of which local states are "full" and "emtpy".
+                Definition of which local states are "full" and "empty".
                 For example you can use ``full_empty=('up', 'down')`` if you have spin sites.
 
         Examples
@@ -5838,7 +5838,7 @@ class InitialStateBuilder:
             print(condition)
             print(">>> available variables:")
             print(sorted(variables.keys()))
-            raise  # re-throw the error, we just print usefull debugging info
+            raise  # re-throw the error, we just print useful debugging info
         p_state = np.where(fill_array, to_array([full], shape=shape, dtype=object),
                            to_array([empty], shape=shape, dtype=object))
         return self.lat_product_state(p_state)
@@ -5973,7 +5973,7 @@ def build_initial_state(size, states, filling, mode='random', seed=None):
     Raises
     ------
     ValueError
-        If fractonal fillings are incommensurate with system size.
+        If fractional fillings are incommensurate with system size.
     AssertionError
         If the total filling is not equal to 1, or the length of `filling`
         does not equal the length of `states`.

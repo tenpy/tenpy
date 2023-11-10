@@ -100,7 +100,7 @@ class PurificationTEBD(tebd.TEBDEngine):
     Attributes
     ----------
     used_disentangler : :class:`Disentangler`
-        The disentangler to be used on the auxiliar indices.
+        The disentangler to be used on the auxiliary indices.
         Chosen by :func:`~tenpy.algorithms.disentangler.get_disentangler`,
         called with the TEBD parameter ``'disentangle'``.
         Defaults to the trivial disentangler for ``options['disentangle']=None``.
@@ -265,14 +265,14 @@ class PurificationTEBD(tebd.TEBDEngine):
         r"""Disentangle `theta` before splitting with svd.
 
         For the purification we write :math:`\rho_P = Tr_Q{|\psi_{P,Q}><\psi_{P,Q}|}`. Thus, we
-        can actually apply any unitary to the auxiliar `Q` space of :math:`|\psi>` without
+        can actually apply any unitary to the auxiliary `Q` space of :math:`|\psi>` without
         changing the result.
 
         .. note ::
             We have to apply the *same* unitary to the 'bra' and 'ket' used for expectation values
             / correlation functions!
 
-        The behaviour of this function is set by :attr:`used_disentangler`,
+        The behavior of this function is set by :attr:`used_disentangler`,
         which in turn is obtained from ``get_disentangler(options['disentangle'])``,
         see :func:`~tenpy.algorithms.disentangler.get_disentangler` for details on the syntax.
 
@@ -298,7 +298,7 @@ class PurificationTEBD(tebd.TEBDEngine):
     def disentangle_global(self, pair=None):
         """Try global disentangling by determining the maximally entangled pairs of sites.
 
-        Calculate the mutual information (in the auxiliar space) between two sites and determine
+        Calculate the mutual information (in the auxiliary space) between two sites and determine
         where it is maximal. Disentangle these two sites with :meth:`disentangle`
         """
         max_range = self.options.get('disent_gl_maxrange', 10)

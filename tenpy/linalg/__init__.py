@@ -2,11 +2,11 @@ r"""Linear-algebra tools for tensor networks.
 
 Most notably is the module :mod:`~tenpy.linalg.np_conserved`,
 which contains everything needed to make use of
-charge conservervation in the context of tensor networks.
+charge conservation in the context of tensor networks.
 
 Relevant contents of :mod:`~tenpy.linalg.charges`
 are imported to :mod:`~tenpy.linalg.np_conserved`,
-so you propably won't need to import `charges` directly.
+so you probably won't need to import `charges` directly.
 
 .. rubric:: Submodules
 
