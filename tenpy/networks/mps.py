@@ -3619,7 +3619,6 @@ class MPS(BaseMPSExpectationValue):
             # get better guess for L with Arnoldi
             arnoldi_params['E_tol'] = err / 10.
             TM = TransferMatrix.from_Ns_Ms(new_As, self._B, transpose=True)
-            TM = TransferMatrix.from_Ns_Ms(new_As, self._B, transpose=True)
             L.ireplace_label('vL', 'vR*')
             E, Ls, N = Arnoldi(TM, L, arnoldi_params).run()
             L = Ls[0]
@@ -5307,11 +5306,21 @@ class MPSEnvironment(BaseEnvironment, BaseMPSExpectationValue):
 
 
 class MPSEnvironmentJW(MPSEnvironment):
-    """Class similar to :class:`MPSEnvironment`, but overwriting the method
-    :meth:`_contract_LP` in a way that the JW string is automatically added when
+    """MPSEnvironment with Jordan Wigner strings in left LP.
+
+    Class similar to :class:`MPSEnvironment`, but overwriting the method
+    :meth:`_contract_LP` in a way that the Jordan Wigner string is automatically added when
     contracting the left environment only -> expectation values should only
-    be calculated from left to right with this class. This works for finite MPS."""
+    be calculated from left to right with this class. This class only works for finite MPS.
+    """
     has_JW_in_LP = True
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.bc != 'finite':
+            raise ValueError("The boundary conditions for a MPSEnvironment with Jordan Wigner strings in left LP"
+                             "must be finite")
+
     def _contract_LP(self, i, LP):
         i = self.ket._to_valid_index(i)  # redundant?
         B_without_JW = self.ket.get_B(i, form='A')

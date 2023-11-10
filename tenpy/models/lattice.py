@@ -145,7 +145,7 @@ class Lattice:
         possibly introducing a disorder of each site.
         It is *only* used by :meth:`position` (e.g. when plotting lattice sites)
         and :meth:`distance`. To use this, you can set the `position_disorder` in a model,
-        and then read out and use the :meth:`distance` to possibly rescale the couling strengths.
+        and then read out and use the :meth:`distance` to possibly rescale the coupling strengths.
         The correct shape  is ``Ls[0], Ls[1], ..., len(unit_cell), Dim``, where `Dim` is the same
         dimension as for the `unit_cell_positions` and `basis`.
     pairs : dict
@@ -206,7 +206,7 @@ class Lattice:
             if name in self.pairs:
                 raise ValueError("{0!s} sepcified twice!".format(name))
             self.pairs[name] = NN
-        self._reciprocal_basis = None # lazy evaluation of recip. basis
+        self._reciprocal_basis = None  # lazy evaluation of recip. basis
         self._BZ = None
         self.test_sanity()  # check consistency
 
@@ -287,7 +287,7 @@ class Lattice:
         hdf5_saver.save(self.bc_MPS, subpath + "boundary_condition_MPS")
         hdf5_saver.save(self.order, subpath + "order_for_MPS")
         hdf5_saver.save(self.pairs, subpath + "pairs")
-        # not necessary for loading, but still usefull
+        # not necessary for loading, but still useful
         h5gr.attrs["dim"] = self.dim
         h5gr.attrs["N_sites"] = self.N_sites
         if hasattr(self, 'segment_first_last'):
@@ -872,7 +872,7 @@ class Lattice:
             if include_u is None:
                 include_u = [None] * len(axes)
             if len(axes) != len(mps_inds) or len(axes) != len(include_u):
-                raise ValueError("Lenght of `axes`, `mps_inds` and `include_u` different")
+                raise ValueError("Length of `axes`, `mps_inds` and `include_u` different")
         # sort axes ascending
         axes = [(ax + A.ndim if ax < 0 else ax) for ax in axes]
 
@@ -1006,7 +1006,7 @@ class Lattice:
             is compatible with the shape/indexing required for
             :meth:`~tenpy.models.CouplingModel.add_coupling`.
             For example to add a Z-Z interaction of strength `J/r` with r the distance,
-            you can do something like this in :meth:`~tenpy.models.CoulingModel.init_terms`:
+            you can do something like this in :meth:`~tenpy.models.CouplingModel.init_terms`:
 
                 for u1, u2, dx in self.lat.pairs['nearest_neighbors']:
                     dist = self.lat.distance(u1, u2, dx)
@@ -1239,7 +1239,7 @@ class Lattice:
         -------
         mps_ijkl : 2D int array
             Each row contains MPS indices `i,j,k,l,...`` for each of the operators positions.
-            The positions are defined by `dx` (j,k,l,... relative to `i`) and boundary coundary
+            The positions are defined by `dx` (j,k,l,... relative to `i`) and boundary
             conditions of `self` (how much the `box` for given `dx` can be shifted around without
             hitting a boundary - these are the different rows).
         strength_vals : 1D array
@@ -1446,7 +1446,8 @@ class Lattice:
 
     def plot_reciprocal_basis(self, ax, origin=(0., 0.), plot_symmetric=True, **kwargs):
         """Plot arrows indicating the basis vectors of the reciprocal lattice.
-        (Same as :meth:`plot_basis`, but without shading, since BZ is drawn separately)
+
+        (Same as :meth:`plot_basis`, but without shading, since Brillouin zone is drawn separately)
 
         Parameters
         ----------
@@ -1461,7 +1462,7 @@ class Lattice:
         kwargs.setdefault("width", 0.05)
         kwargs.setdefault("color", 'k')
         origin = np.array(origin)
-        reciprocal_basis = np.array([self.reciprocal_basis[i] for i in range(self.dim)])
+        reciprocal_basis = self.reciprocal_basis
         if reciprocal_basis.shape[1] == 1:
             reciprocal_basis = reciprocal_basis * np.array([[1., 0]])
             # change scaling in 1D
@@ -1478,7 +1479,7 @@ class Lattice:
             ax.set_xlim(-xlim, +xlim)
 
     def plot_bc_identified(self, ax, direction=-1, origin=None, cylinder_axis=False, **kwargs):
-        """Mark two sites indified by periodic boundary conditions.
+        """Mark two sites identified by periodic boundary conditions.
 
         Works only for lattice with a 2-dimensional basis.
 
@@ -1532,7 +1533,8 @@ class Lattice:
             ax.plot(x_y_cyl[:, 0], x_y_cyl[:, 1], **kwargs)
 
     def plot_brillouin_zone(self, ax, *args, **kwargs):
-        """Plot the brillouin zone of the lattice.
+        """Plot the Brillouin Zone of the lattice.
+
         Parameters
         ----------
         ax : :class:`matplotlib.axes.Axes`
@@ -1546,7 +1548,9 @@ class Lattice:
 
     @property
     def reciprocal_basis(self):
-        """The reciprocal basis vectors obey :math:`a_i b_j = 2 \pi \delta_{i, j}`, such that
+        """Reciprocal basis vectors of the lattice.
+
+        The reciprocal basis vectors obey :math:`a_i b_j = 2 \pi \delta_{i, j}`, such that
         ``b_j = reciprocal_basis[j]``"""
         if self._reciprocal_basis is None:
             if self.dim == 1:
@@ -1557,6 +1561,7 @@ class Lattice:
 
     @property
     def BZ(self):
+        """The Brillouin Zone as :class:`SimpleBZ`"""
         if self._BZ is None:
             try:
                 self._BZ = SimpleBZ.from_recip_basis_vectors(self.reciprocal_basis, self.dim)
@@ -1669,7 +1674,6 @@ class SimpleLattice(Lattice):
 
 class MultiSpeciesLattice(Lattice):
     """A variant of a :class:`SimpleLattice` replacing the elementary site with a set of sites.
-
 
     An initialized  `MultiSpeciesLattice` replaces each site in the given `simple_lattice` with
     the `species_sites`. This is useful e.g. if you want to place spin-full fermions
@@ -2440,7 +2444,7 @@ class Chain(SimpleLattice):
     Parameters
     ----------
     L : int
-        The lenght of the chain.
+        The length of the chain.
     site : :class:`~tenpy.networks.site.Site`
         The local lattice site. The `unit_cell` of the :class:`Lattice` is just ``[site]``.
     **kwargs :
@@ -2466,7 +2470,7 @@ class Chain(SimpleLattice):
             Just along the chain, ``0, 1, 2, 3, 4, ... ,L-1``.
         ``'folded'`` :
             Yields ``0, L-1, 1, L-2, ... , L//2``.
-            This order might be usefull if you want to consider a ring with periodic boundary
+            This order might be useful if you want to consider a ring with periodic boundary
             conditions with a finite MPS: if you squeeze this ring to a long oval and zig-zag
             through the top and bottom, you get this order.
             Thus, it avoids the ultra-long-range coupling from site 0 to L-1, at the expense of
@@ -2580,6 +2584,9 @@ class Ladder(Lattice):
         kwargs['pairs'].setdefault('leg_NN', [(0, 0, np.array([1])), (1, 1, np.array([1]))])
         kwargs['pairs'].setdefault('diagonal', nNN)
         Lattice.__init__(self, [L], sites, **kwargs)
+        # set reciprocal basis and BZ explicitly, since the basis vector is 2D for plotting
+        self._reciprocal_basis = np.array([[2*np.pi, 0]])
+        self._BZ = SimpleBZ.from_recip_basis_vectors(np.array([[2*np.pi]]), self.dim)
 
     def ordering(self, order):
         """Provide possible orderings of the `N` lattice sites.
@@ -3087,10 +3094,11 @@ class Kagome(Lattice):
 
 
 class SimpleBZ:
-    """Helper base class to provide an interface for the Brillouin Zone of a given lattice.
+    """Helper class to provide an interface for the Brillouin Zone of a given lattice.
+
     The Brillouin Zone is the Wigner-Seitz Cell of the reciprocal lattice. For a given lattice
-    with basis vectors a_i, the reciprocal lattice is generated through the reciprocal
-    basis vectors b_i, which obey :math:`a_i b_j = 2 \pi \delta_{i j}`.
+    with basis vectors :math:`a_i`, the reciprocal lattice is generated by the reciprocal
+    basis vectors :math:`b_i`, which obey :math:`a_i b_j = 2 \pi \delta_{i j}`.
 
     Parameters
     ----------
@@ -3103,8 +3111,8 @@ class SimpleBZ:
     def __init__(self, vertices, basis, dim: int):
         assert dim == 1 or dim == 2, 'SimpleBZ is only defined for dimensions 1 and 2'
         self.dim = dim
-        self.vertices = self.order_vertices(vertices)
         self.basis = basis
+        self.vertices = self.order_vertices(vertices)
         if self.dim == 2:
             self.hull = ConvexHull(self.vertices)
 
@@ -3125,14 +3133,14 @@ class SimpleBZ:
     @classmethod
     def from_recip_basis_vectors(cls, basis_vectors, dim):
         if dim == 1:
-            return cls.from_recip_basis_vectors1d(basis_vectors)
+            return cls.from_recip_basis_vectors_1d(basis_vectors)
         elif dim == 2:
-            return cls.from_recip_basis_vectors2d(basis_vectors)
+            return cls.from_recip_basis_vectors_2d(basis_vectors)
         else:
             raise ValueError("Only dimensions 1 and 2 are supported")
 
     @classmethod
-    def from_recip_basis_vectors1d(cls, basis_vector):
+    def from_recip_basis_vectors_1d(cls, basis_vector):
         basis_vector = np.array(basis_vector).flatten()
         if len(basis_vector) != 1:
             raise ValueError("For Brillouin Zones in 1D, the basis vector must have dim 1")
@@ -3140,11 +3148,13 @@ class SimpleBZ:
         return cls(vertices, basis_vector, dim=1)
 
     @classmethod
-    def from_recip_basis_vectors2d(cls, basis, n_vecs_generated=30):
-        """Given a basis, consisting of two reciprocal basis vectors b1, b2; first perform a
-        Lagrange lattice reduction, ensuring the new basis will be reasonably orthogonal. Second,
-        Compute the Voronoi diagram of a set of lattice points and return the vertices of the
-        voronoi region including the origin. This will be the 1st Brillouin Zone.
+    def from_recip_basis_vectors_2d(cls, basis, n_vecs_generated=30):
+        """Construct the Brillouin Zone in 2D from the lattices basis vectors.
+
+        Given a basis, consisting of two reciprocal basis vectors b1, b2; first perform a
+        Lagrange lattice reduction, ensuring the new basis will be reasonably orthogonal.
+        Second, compute the Voronoi diagram of a set of lattice points and return the vertices of the
+        Voronoi region including the origin. This will be the 1st Brillouin Zone.
 
         Parameters
         ----------
@@ -3188,14 +3198,11 @@ class SimpleBZ:
     def area(self):
         if self.dim == 2:
             return self.hull.volume
-
-    @property
-    def equations(self):
-        if self.dim == 2:
-            return self.hull.equations
+        else:
+            raise ValueError("The area of a Brillouin Zone is not defined in 1 dimension")
 
     def contains_points(self, points):
-        """Checks whether given points lie inside the 1st Brillouin Zone
+        """Checks whether given points lie inside the 1st Brillouin Zone.
 
         Parameters
         ----------
@@ -3204,29 +3211,32 @@ class SimpleBZ:
 
         Returns
         -------
-        ndarray | bool
+        ndarray : bool
             boolean array of shape points.shape[:-1] if 2D or points.shape if 1D, indicating
             whether the corresponding point in `points` is contained in the Brillouin Zone
         """
         points = np.array(points).astype(float)  # accept also lists and tuples as input
         if self.dim == 1:
-            in_1st_bz = (points >= self.vertices[0]) & (points <= self.vertices[1])
+            in_1st_bz = np.logical_and(points >= self.vertices[0], points <= self.vertices[1])
             return in_1st_bz
         else:
             # convert to expected shape
             if points.ndim == 1:
                 points = points.reshape(1, -1)
             assert points.shape[-1] == 2, "Points should be of dimension (..., 2)"
-            A = self.equations[:, :-1]
-            b = self.equations[:, -1]
+            A = self.hull.equations[:, :-1]
+            b = self.hull.equations[:, -1]
             # a point x = (x1, x2) is per definition
             # (see qhull documentation: http://www.qhull.org/html/index.htm#definition)
             # inside the hull, iff: A x + b <= [0, ...]
-            eps = np.finfo(points.dtype).eps  # account for precision errors
+            eps = 2*np.finfo(points.dtype).eps  # account for precision errors
             return np.all((np.tensordot(points, A, (-1, -1)) + b) < eps, axis=-1)
 
     def reduce_points(self, points):
-        """Bring given points into 1st BZ by applying multiples of the reciprocal basis vectors.
+        """Bring a set of points into 1st Brillouin Zone.
+
+        This is done by applying multiples of the reciprocal basis vectors, for points that
+        lie outside the 1st Brillouin Zone.
 
         Parameters
         ----------
@@ -3238,11 +3248,14 @@ class SimpleBZ:
         reduced_points : ndarray
             of shape points.shape the array of the points now reduced to the 1st BZ
         """
-        points = np.array(points).astype(float)
+        all_points = np.array(points).astype(float)
+        not_in_BZ = np.invert(self.contains_points(all_points))
+        points = all_points[not_in_BZ]
+
         if self.dim == 1:
             red_to_basis_vec = (points/self.basis) % 1
             red_to_basis_vec[red_to_basis_vec > 0.5] -= 1
-            return red_to_basis_vec*self.basis + self.vertices.mean()
+            points = red_to_basis_vec*self.basis + self.vertices.mean()
         else:
             if points.ndim == 1:
                 points = points.reshape(1, -1)
@@ -3264,23 +3277,23 @@ class SimpleBZ:
             # 1st BZ as matrix
             translation_vecs = -1 * np.array([b1, b2, b1 + b2])
             # get all  combinatorial results by applying translation_vecs to points_outside_bz
-            translated_point = points_outside_bz[:, np.newaxis, :] + translation_vecs
+            translated_point = points_outside_bz[..., np.newaxis, :] + translation_vecs
             shape = translated_point.shape
             translated_point = translated_point.reshape(-1, shape[-1])
             reduced_points = translated_point[self.contains_points(translated_point)]
             assert np.all(self.contains_points(reduced_points)), "Couldn't reduce points to 1st BZ!"
-            assert len(reduced_points) == np.sum(outside_bz), "Couldn't reduce all points!"
             # overwrite points outside the BZ with their reduced form
             points[outside_bz] = reduced_points
-            return points
+        all_points[not_in_BZ] = points
+        return all_points
 
     def plot_brillouin_zone(self, *args, **kwargs):
         if self.dim == 1:
-            self.plot_brillouin_zone1d(*args, **kwargs)
+            self.plot_brillouin_zone_1d(*args, **kwargs)
         else:
-            self.plot_brillouin_zone2d(*args, **kwargs)
+            self.plot_brillouin_zone_2d(*args, **kwargs)
 
-    def plot_brillouin_zone1d(self, ax, draw_points=True, **kwargs):
+    def plot_brillouin_zone_1d(self, ax, draw_points=True, **kwargs):
         """Plot the brillouin zone of the lattice.
 
         Parameters
@@ -3298,7 +3311,7 @@ class SimpleBZ:
             ax.plot(self.vertices, [0, 0], 'o')
         ax.vlines(self.vertices, -0.5, 0.5, **kwargs)
 
-    def plot_brillouin_zone2d(self, ax, draw_points=True, autoscale=True, **kwargs):
+    def plot_brillouin_zone_2d(self, ax, draw_points=True, autoscale=True, **kwargs):
         """Plot the brillouin zone of the lattice.
 
         Parameters
@@ -3379,7 +3392,7 @@ def get_order(shape, snake_winding, priority=None):
     """Built the :attr:`Lattice.order` in (Snake-) C-Style for a given lattice shape.
 
     .. note ::
-        In this doc-string, the word 'direction' referst to a physical direction of the lattice
+        In this doc-string, the word 'direction' refers to a physical direction of the lattice
         or the index `u` of the unit cell as an "artificial direction".
 
     Parameters
@@ -3458,7 +3471,7 @@ def get_order(shape, snake_winding, priority=None):
 def get_order_grouped(shape, groups, priority=None):
     """Variant of :func:`get_order`, grouping some sites of the unit cell.
 
-    This function is usefull for lattices with a unit cell of more than 2 sites (e.g. Kagome).
+    This function is useful for lattices with a unit cell of more than 2 sites (e.g. Kagome).
     For 2D lattices with a unit cell, the ordering goes
     first within a group , then along y,
     then the next group (for the same x-value), again along y,
@@ -3488,7 +3501,7 @@ def get_order_grouped(shape, groups, priority=None):
         plt.show()
 
     .. note ::
-        In this doc-string, the word 'direction' referst to a physical direction of the lattice
+        In this doc-string, the word 'direction' refers to a physical direction of the lattice
         or the index `u` of the unit cell as an "artificial direction".
 
     Parameters

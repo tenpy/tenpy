@@ -1,6 +1,5 @@
 #!/usr/bin/env -S python -m tenpy 
-# This can only run if there is an output `a_minimal_DMRG.h5` in director results
-# Run this only after running minimal_DMRG.yml
+# This can only run if there is an output `results/a_minimal_DMRG.h5`
 
 simulation_class : SpectralSimulation
 
