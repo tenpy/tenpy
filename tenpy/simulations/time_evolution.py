@@ -1,4 +1,8 @@
-"""Simulations for (real) time evolution."""
+"""Simulations for (real) time evolution and for time dependent correlation functions.
+
+This
+
+"""
 
 # Copyright 2020-2023 TeNPy Developers, GNU GPLv3
 
@@ -9,7 +13,7 @@ from .simulation import *
 from .post_processing import SpectralFunctionProcessor
 from ..networks.mps import MPSEnvironment, MPS, MPSEnvironmentJW
 
-__all__ = simulation.__all__ + ['RealTimeEvolution', 'SpectralSimulation', 'SpectralSimulationExperimental']
+__all__ = simulation.__all__ + ['RealTimeEvolution', 'TimeDependentCorrelation', 'TimeDependentCorrelationExperimental']
 
 
 class RealTimeEvolution(Simulation):
@@ -18,7 +22,6 @@ class RealTimeEvolution(Simulation):
     Parameters
     ----------
     options : dict-like
-        params : 
         The simulation parameters. Ideally, these options should be enough to fully specify all
         parameters of a simulation to ensure reproducibility.
 
@@ -39,8 +42,6 @@ class RealTimeEvolution(Simulation):
 
     def __init__(self, options, **kwargs):
         super().__init__(options, **kwargs)
-        if 'final_time' not in self.options.keys():
-            raise KeyError("A 'final_time' must be supplied for a time evolution.")
         self.final_time = self.options['final_time'] - 1.e-10  # subtract eps: roundoff errors
 
     def run_algorithm(self):
@@ -82,11 +83,11 @@ class RealTimeEvolution(Simulation):
         pass
 
 
-class SpectralSimulation(RealTimeEvolution):
+class TimeDependentCorrelation(RealTimeEvolution):
     """A subclass of :class:`RealTimeEvolution` to specifically calculate the time dependent correlation function.
 
     In general this subclass calculates an overlap
-    of the form :math:`C(r, t) <psi_0| B_r(t) A_r0 |psi_0>` where A_r0 can be
+    of the form :math:`C(r, t) = <\psi_0| B_r(t) A_{r0} |\psi_0>` where :math:`A_{r0}` can be
     passed as a simple on-site operator (on site r0) or as a product operator acting on
     several sites. The operator B is currently restricted to a single-site operator.
     However, calculating passing B as a list [B_1, B_2, B_3] to calculate several overlaps
@@ -95,32 +96,27 @@ class SpectralSimulation(RealTimeEvolution):
     Parameters
     ----------
     options : dict-like
-        For command line use, a .yml file should hold the information.
+        The simulation parameters. Ideally, these options should be enough to fully specify all
+        parameters of a simulation to ensure reproducibility.
         These parameters are converted to a (dict-like) :class:`~tenpy.tools.params.Config`.
-        The parameters should hold information about the model, (time-evolution) algorithm and the operators
-        for the correlation function. It's necessary to provide a final_time, this is inherited from the
-        :class:`RealTimeEvolution`.
+        For command line use, a .yml file should hold the information.
 
-        Parameters example for this class
-        params = {'ground_state_filename': 'ground_state.h5',
-        'final_time': 1,
-        'operator_t0': {'op': 'Sigmay', 'i': 20 , 'idx_form': 'mps'},
-        'operator_t': ['Sigmax', 'Sigmay', 'Sigmaz'], # TODO: handle custom operators (not specified by name)
-        'addJW': False}
+    Options
+    -------
+    .. cfg:config :: TimeDependentCorrelation
+        :include: TimeEvolution
 
-        params['operator_t0']['op']: a list of operators to apply at the given indices 'i' (they all get applied before
-        the time evolution), when a more complicated operator is needed. For simple (one-site) operators simply pass
-        a string.
-        e.g. operator_t0 = {'op': ['Sigmax', 'Sigmay'], 'i': [[10, 3, 0], [10, 3, 1]], 'idx_form': 'lat'}
+        addJW : bool
+            boolean flag whether to add the Jordan Wigner String or not
+        ground_state_filename : str
+            a filename of a given ground state search (ideally a hdf5 file coming from finished
+            run of a :class:`GroundStateSearch`)
 
-        for 'idx_form': 'lat', the list of indices must contain d+1 elements (due to the unit cell index)
-        for example 2d system indices are [x, y, u]
     """
     default_measurements = RealTimeEvolution.default_measurements + [
-        ('simulation_method', 'm_spectral_function'),
-    ]
-    # class attribute linking SpectralSimulation to its post-processor
-    post_processor = SpectralFunctionProcessor
+        ('simulation_method', 'm_correlation_function'),
+    ]  # TODO: this breaks when use default measurements is set to False in options.
+       # possibly just override _connect_measurements function of Simulation class
 
     def __init__(self, options, *, gs_data=None, **kwargs):
         super().__init__(options, **kwargs)
@@ -144,7 +140,9 @@ class SpectralSimulation(RealTimeEvolution):
 
     @classmethod
     def from_gs_search(cls, filename, sim_params, **kwargs):
-        """Initialize an instance of a :class:`SpectralSimulation` from
+        """"Create class based on file containing the ground state.
+
+        Initialize an instance of a :class:`SpectralSimulation` from
         a finished run of :class:`GroundStateSearch`. This simply fetches
         the relevant parameters ('model_params', 'psi')
 
@@ -230,7 +228,22 @@ class SpectralSimulation(RealTimeEvolution):
             self.gs_energy = self.options['gs_energy'] = gs_data['energy']
 
     def _get_operator_t0(self):
-        """Converts the specified operators and indices into a list of tuples [(op1, i_1), (op2, i_2)]"""
+        """Converts the specified operators and indices into a list of tuples [(op1, i_1), (op2, i_2)]
+
+        Options
+        -------
+        .. cfg:configoptions :: TimeDependentCorrelation
+
+            operator_t0 : dict
+                Mandatory, this should specify the operator initially applied to the MPS.
+                A single site operator should be applied with op = str(opname).
+                Furthermore either a lattice index ``lat_idx`` or a ``mps_idx`` can be passed.
+
+                .. note ::
+                The ``lat_idx`` must have (dim+1) i.e. [x, y, u],
+                where u = 0 for a single-site unit cell
+
+        """
         idx = self.operator_t0_config.get('i', self.psi.L // 2)
         ops = self.operator_t0_config.get('op', 'Sigmay')
         ops = [ops] if not isinstance(ops, list) else ops  # pass ops as list
@@ -273,83 +286,77 @@ class SpectralSimulation(RealTimeEvolution):
             for i, op in enumerate(ops):
                 self.psi.apply_local_op(i_min + i, op)
 
-    def prepare_results_for_save(self):
-        """Wrapper around :meth:`prepare_results_for_save` of :class:`Simulation`.
-        Makes it possible to include post-processing run during the run of the
-        actual simulation.
-        """
-        if self.post_processor is not None:
-            self.logger.info(f"calling post-processing with {self.post_processor}")
-            processing_params = self.options.get('post_processing_params', None)
-            # try, except clause to not lose simulation results if post_processing fails
-            try:
-                post_processor_cls = self.post_processor.from_simulation(self, processing_params=processing_params)
-                # TODO: make sure this is written into self.results
-                post_processor_cls.run()
-            except Exception as e:
-                self.logger.info("Could not post-process the results because of the following exception:")
-                self.logger.warning(e)
-                self.logger.info("continuing saving results without post-processing")
-        return super().prepare_results_for_save()
-
     def get_mps_environment(self):
         return MPSEnvironment(self.psi_ground_state, self.psi)
 
-    def m_spectral_function(self, results, psi, model, simulation, **kwargs):
-        """Calculate the overlap :math:`<psi_0| e^{iHt} op2^j e^{-iHt} op1_idx |psi_0>` between
-        op1 at MPS position idx and op2 at the MPS position j"""
-        self.logger.info("calling m_spectral_function")
+    def m_correlation_function(self, results, psi, model, simulation, **kwargs):
+        """Measurement function for time dependent correlations.
+
+        Wrapper around :meth:`_m_correlation_function_op` to loop over several operators.
+
+        Options
+        -------
+        .. cfg:configoptions :: TimeDependentCorrelation
+
+            operator_t : str | list
+                The (on-site) operator as string to apply at each measurement step to calculate the overlap with.
+                If a list is passed i.e.: ['op1', 'op2'], it will be iterated through the operators
+
+        """
+        self.logger.info("calling m_correlation_function")
         operator_t = self.operator_t
         env = self.get_mps_environment()  # custom method for subclass Experimental
         # TODO: get better naming convention, store this in dict ?
         if isinstance(operator_t, list):
             for i, op in enumerate(operator_t):
                 if isinstance(op, str):
-                    results[f'spectral_function_t_{op}'] = self._m_spectral_function_op(env, op)
+                    results[f'correlation_function_t_{op}'] = self._m_correlation_function_op(env, op)
                 else:
-                    results[f'spectral_function_t_{i}'] = self._m_spectral_function_op(env, op)
+                    results[f'correlation_function_t_{i}'] = self._m_correlation_function_op(env, op)
         else:
             if isinstance(operator_t, str):
-                results[f'spectral_function_t_{operator_t}'] = self._m_spectral_function_op(env, operator_t)
+                results[f'correlation_function_t_{operator_t}'] = self._m_correlation_function_op(env, operator_t)
             else:
-                results[f'spectral_function_t'] = self._m_spectral_function_op(env, operator_t)
+                results[f'correlation_function_t'] = self._m_correlation_function_op(env, operator_t)
 
-    def _m_spectral_function_op(self, env: MPSEnvironment, op) -> np.ndarray:
-        """Calculate the overlap of <psi| op_j |phi>, where |phi> = e^{-iHt} op1_idx |psi_0>
+    def _m_correlation_function_op(self, env: MPSEnvironment, op) -> np.ndarray:
+        """Measurement function for time dependent correlations.
+
+        This calculates the overlap of <psi| op_j |phi>, where |phi> = e^{-iHt} op1_idx |psi_0>
         (the time evolved state after op1 was applied at MPS position idx) and
         <psi| is either <psi_0| e^{iHt} (if evolve_bra is True) or e^{i E_0 t} <psi| (if evolve_bra is False).
 
         Returns
         ----------
-        spectral_function_t : 1D array
-                              representing <psi_0| e^{iHt} op2^i_j e^{-iHt} op1_idx |psi_0>
-                              where op2^i is the i-th operator given in the list [op2^1, op2^2, ..., op2^N]
-                              and spectral_function_t[j] corresponds to this overlap at MPS site j at time t
+        correlation_function_t : 1D array
+            representing <psi_0| e^{iHt} op2^i_j e^{-iHt} op1_idx |psi_0>
+            where op2^i is the i-th operator given in the list [op2^1, op2^2, ..., op2^N]
+            and spectral_function_t[j] corresponds to this overlap at MPS site j at time t
         """
         # TODO: case dependent if op needs JW string
         if self.addJW is False:
-            spectral_function_t = env.expectation_value(op)
+            correlation_function_t = env.expectation_value(op)
         else:
-            spectral_function_t = list()
+            correlation_function_t = list()
             for i in range(self.psi.L):
                 term_list, i0, _ = env._term_to_ops_list([('Id', 0), (op, i)], True)
                 # this generates a list from left to right
                 # ["JW", "JW", ... "JW", "op (at idx)"], the problem is, that _term_to_ops_list does not generate
                 # a JW string for one operator, therefore insert Id at idx 0.
                 assert i0 == 0  # make sure to really start on the left site
-                spectral_function_t.append(env.expectation_value_multi_sites(term_list, i0))
+                correlation_function_t.append(env.expectation_value_multi_sites(term_list, i0))
                 # TODO: change when :meth:`expectation_value` of :class:`MPSEnvironment` automatically handles JW-string
-            spectral_function_t = np.array(spectral_function_t)
+            spectral_function_t = np.array(correlation_function_t)
 
         # multiply evolution of bra (eigenstate) into spectral function
         phase = np.exp(1j * self.gs_energy * self.engine.evolved_time)
-        spectral_function_t = spectral_function_t * phase
+        correlation_function_t = correlation_function_t * phase
 
-        return spectral_function_t
+        return correlation_function_t
 
 
-class SpectralSimulationExperimental(SpectralSimulation):
-    """Improved/Experimental version of :class:`SpectralSimulation`.
+class TimeDependentCorrelationExperimental(TimeDependentCorrelation):
+    """Improved/Experimental version of :class:`TimeDependentCorrelation`.
 
     This class gives an advantage when calculating the correlation function of Fermions. This is done by
     calling the :class:`MPSEnvironmentJW` instead of the usual :class:`MPSEnvironment`.
@@ -359,8 +366,11 @@ class SpectralSimulationExperimental(SpectralSimulation):
 
     Options
     -------
-    evolve_bra : bool
-        default False. If True, instantiates a second engine and performs time_evolution on the (eigenstate) bra.
+    .. cfg:config :: TimeDependentCorrelationExperimental
+        :include: TimeDependentCorrelation
+
+        evolve_bra : bool=False
+            If True, instantiates a second engine and performs time_evolution on the (eigenstate) bra.
     """
     def __int__(self, options, *, gs_data=None, **kwargs):
         super().__init__(options, gs_data=gs_data, **kwargs)
@@ -406,17 +416,14 @@ class SpectralSimulationExperimental(SpectralSimulation):
         else:
             return MPSEnvironmentJW(self.psi_ground_state, self.psi)
 
-    def _m_spectral_function_op(self, env, op) -> np.ndarray:
-        """Calculate the overlap of <psi| op_j |phi>, where |phi> = e^{-iHt} op1_idx |psi_0>
-        (the time evolved state after op1 was applied at MPS position idx) and
-        <psi| is either <psi_0| e^{iHt} (if evolve_bra is True) or e^{i E_0 t} <psi| (if evolve_bra is False).
+    def _m_correlation_function_op(self, env, op) -> np.ndarray:
+        """Measurement function for time dependent correlations.
+
+        See also :meth:`TimeDependentCorrelation._m_correlation_function_op`
 
         Returns
         ----------
-        spectral_function_t : 1D array
-                              representing <psi_0| e^{iHt} op2^i_j e^{-iHt} op1_idx |psi_0>
-                              where op2^i is the i-th operator given in the list [op2^1, op2^2, ..., op2^N]
-                              and spectral_function_t[j] corresponds to this overlap at MPS site j at time t
+        correlation_function_t : 1D array
         """
         spectral_function_t = env.expectation_value(op)
         if self.evolve_bra is False:
@@ -424,3 +431,64 @@ class SpectralSimulationExperimental(SpectralSimulation):
             spectral_function_t = spectral_function_t * phase
 
         return spectral_function_t
+
+
+class SpectralSimulation(TimeDependentCorrelation):
+    """Simulation class to calculate Spectral Functions.
+
+    The interface to the class is the same as to :class:`TimeDependentCorrelation`.
+
+    Options
+    -------
+    .. cfg:config :: SpectralFunction
+        :include: TimeDependentCorrelation
+
+    Attributes
+    ----------
+    post_processor : :class:`SpectralFunctionProcessor`
+        A class attribute defining a Post Processor to be used.
+    """
+    # class attribute linking SpectralSimulation to its post-processor
+    post_processor = SpectralFunctionProcessor
+
+    def __int__(self, options, *, gs_data=None, **kwargs):
+        super().__init__(options, gs_data=gs_data, **kwargs)
+
+    def _post_processing(self):
+        """Read-out and apply post-processing
+
+        .. cfg:configoptions :: SpectralSimulation
+
+        linear_prediction : dict
+            parameters for linear prediction
+
+            .. note ::
+            There are several parameters to specify:
+            m: number of time steps to predict
+            p: number of time steps to use for predictions
+
+        windowing : dict
+            parameters for a windowing function
+    """
+        self.logger.info(f"calling post-processing with {self.post_processor}")
+        processing_params = self.options.get('post_processing_params', None)
+        # try, except clause to not lose simulation results if post_processing fails
+        try:
+            post_processor_cls = self.post_processor.from_simulation(self, processing_params=processing_params)
+            # TODO: make sure this is written into self.results
+            post_processor_cls.run()
+        except Exception as e:
+            self.logger.info("Could not post-process the results because of the following exception:")
+            self.logger.warning(e)
+            self.logger.info("continuing saving results without post-processing")
+
+    def prepare_results_for_save(self):
+        """Post process results and prepare them for saving.
+
+        Wrapper around :meth:`Simulation.prepare_results_for_save`.
+        Makes it possible to include post-processing run during the run of the
+        actual simulation.
+        """
+        if hasattr(self, 'post_processor'):
+            self._post_processing()
+        return super().prepare_results_for_save()
