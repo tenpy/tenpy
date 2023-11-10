@@ -20,6 +20,7 @@ Common to all tools is that they are not just useful for a single algorithm but 
     optimization
     cache
     thread
+    prediction
 """
 # Copyright 2018-2023 TeNPy Developers, GNU GPLv3
 
@@ -36,6 +37,7 @@ from .string import *
 from .optimization import *
 from .cache import *
 from .thread import *
+from .prediction import *
 
 __all__ = [
     'events',
@@ -49,6 +51,7 @@ __all__ = [
     'optimization',
     'cache',
     'thread',
+    'prediction',
     *events.__all__,
     *fit.__all__,
     *hdf5_io.__all__,
@@ -60,4 +63,5 @@ __all__ = [
     *optimization.__all__,
     *cache.__all__,
     *thread.__all__,
+    *prediction.__all__
 ]
