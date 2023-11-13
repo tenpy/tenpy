@@ -1,19 +1,18 @@
-"""Simulations for (real) time evolution and for time dependent correlation functions.
-
-This
-
-"""
+"""Simulations for (real) time evolution and for time dependent correlation functions."""
 
 # Copyright 2020-2023 TeNPy Developers, GNU GPLv3
 
 import numpy as np
+import traceback
 
 from . import simulation
 from .simulation import *
 from .post_processing import SpectralFunctionProcessor
 from ..networks.mps import MPSEnvironment, MPS, MPSEnvironmentJW
+from ..tools.misc import to_iterable
 
-__all__ = simulation.__all__ + ['RealTimeEvolution', 'TimeDependentCorrelation', 'TimeDependentCorrelationExperimental']
+__all__ = simulation.__all__ + ['RealTimeEvolution', 'SpectralSimulation', 'TimeDependentCorrelation',
+                                'TimeDependentCorrelationExperimental', 'SpectralSimulationExperimental']
 
 
 class RealTimeEvolution(Simulation):
@@ -87,10 +86,10 @@ class TimeDependentCorrelation(RealTimeEvolution):
     """A subclass of :class:`RealTimeEvolution` to specifically calculate the time dependent correlation function.
 
     In general this subclass calculates an overlap
-    of the form :math:`C(r, t) = <\psi_0| B_r(t) A_{r0} |\psi_0>` where :math:`A_{r0}` can be
-    passed as a simple on-site operator (on site r0) or as a product operator acting on
+    of the form :math:`C(r, t) = <\psi_0| B_r(t) A_{r_0} |\psi_0>` where :math:`A_{r_0}` can be
+    passed as a simple on-site operator (on site `r0`) or as a product operator acting on
     several sites. The operator B is currently restricted to a single-site operator.
-    However, calculating passing B as a list [B_1, B_2, B_3] to calculate several overlaps
+    However, passing `B` as a list ``[B_1, B_2, B_3]`` to calculate several overlaps
     is possible.
 
     Parameters
@@ -113,10 +112,10 @@ class TimeDependentCorrelation(RealTimeEvolution):
             run of a :class:`GroundStateSearch`)
 
     """
-    default_measurements = RealTimeEvolution.default_measurements + [
-        ('simulation_method', 'm_correlation_function'),
-    ]  # TODO: this breaks when use default measurements is set to False in options.
-       # possibly just override _connect_measurements function of Simulation class
+    default_measurements = (RealTimeEvolution.default_measurements +
+                            [('simulation_method', 'm_correlation_function')])
+    # TODO: this breaks when use default measurements is set to False in options.
+    # possibly just override _connect_measurements function of Simulation class
 
     def __init__(self, options, *, gs_data=None, **kwargs):
         super().__init__(options, **kwargs)
@@ -124,18 +123,14 @@ class TimeDependentCorrelation(RealTimeEvolution):
         # should be a dict with model params and psi_ground_state but allows passing an MPS
         # will be read out in init_state
         self.gs_energy = self.options.get('gs_energy', None)
-        if 'operator_t' and 'operator_t0' and 'final_time' not in self.options.keys():
-            raise KeyError("`operator_t`, `operator_t0` and a `final_time` must be supplied")
         self.operator_t = self.options['operator_t']
         # generate info for operator before time evolution as subconfig
         self.operator_t0_config = self.options.subconfig('operator_t0')
         self.operator_t0 = None  # read out config later, since defaults depend on model parameters
         self.addJW = self.options.get('addJW', False)
-        # for resuming simulation from checkpoint # this is provided in super().__init__
-        # TODO: How to ensure resuming from checkpoint works, when evolve_bra is True ?
         resume_data = self.results.get("resume_data", None)
         if resume_data:
-            if 'psi_ground_state' in self.results['simulation_parameters'].keys():
+            if 'psi_ground_state' in self.results['simulation_parameters']:
                 self.psi_ground_state = self.results['simulation_parameters']['psi_ground_state']
 
     @classmethod
@@ -209,7 +204,7 @@ class TimeDependentCorrelation(RealTimeEvolution):
     def check_and_update_params_from_gs_data(self, gs_data):
         sim_class = gs_data['version_info']['simulation_class']
         if sim_class != 'GroundStateSearch':
-            raise ValueError("Must be loaded from a GS search")
+            self.logger.warning("The Simulation is not loaded from a GroundStateSearch...")
         if 'psi' not in gs_data.keys():
             raise ValueError("MPS for ground state not found")
         elif not isinstance(gs_data['psi'], MPS):
@@ -235,29 +230,28 @@ class TimeDependentCorrelation(RealTimeEvolution):
         .. cfg:configoptions :: TimeDependentCorrelation
 
             operator_t0 : dict
-                Mandatory, this should specify the operator initially applied to the MPS.
-                A single site operator should be applied with op = str(opname).
-                Furthermore either a lattice index ``lat_idx`` or a ``mps_idx`` can be passed.
+                Mandatory, this should specify the operator initially applied to the MPS (i.e. before a time evolution).
+                For more than one single-site operator, a list of operator names should be passed, otherwise just the
+                string ``name``.
+                Furthermore the corresponding position(s) to apply the operator(s) should also be passed as a list.
+                Either a lattice index ``lat_idx`` or a ``mps_idx`` should be passed.
 
                 .. note ::
                 The ``lat_idx`` must have (dim+1) i.e. [x, y, u],
                 where u = 0 for a single-site unit cell
-
         """
-        idx = self.operator_t0_config.get('i', self.psi.L // 2)
-        ops = self.operator_t0_config.get('op', 'Sigmay')
-        ops = [ops] if not isinstance(ops, list) else ops  # pass ops as list
-        form = self.operator_t0_config.get('idx_form', 'mps')
-        if form not in ['mps', 'lat']:
-            raise ValueError("the idx_form must be either mps or lat")
-        if form == 'mps':
-            idx = list(idx if isinstance(idx, list) else [idx])
+        ops = to_iterable(self.operator_t0_config['name'])
+        mps_idx = self.operator_t0_config.get('mps_idx', None)
+        lat_idx = self.operator_t0_config.get('lat_idx', None)
+        if mps_idx and lat_idx is not None:
+            raise KeyError("Either a mps_idx or a lat_idx should be passed")
+        elif mps_idx is not None:
+            idx = to_iterable(mps_idx)
+        elif lat_idx is not None:
+            idx = to_iterable(self.model.lat.lat2mps_idx(lat_idx))
         else:
-            if not isinstance(idx, list):
-                raise TypeError("for idx_form lat, i must be given as list [x, y, u] or list of lists")
-            mps_idx = self.model.lat.lat2mps_idx(idx)
-            idx = list(mps_idx) if isinstance(mps_idx, np.ndarray) else [mps_idx]  # convert to mps index
-
+            idx = to_iterable(self.model.lat.Ls // 2)
+        # tiling
         if len(ops) > len(idx):
             if len(idx) != 1:
                 raise ValueError("Ill-defined tiling: ops is longer than idx, and idx is not one")
@@ -304,20 +298,14 @@ class TimeDependentCorrelation(RealTimeEvolution):
 
         """
         self.logger.info("calling m_correlation_function")
-        operator_t = self.operator_t
+        operator_t = to_iterable(self.operator_t)
         env = self.get_mps_environment()  # custom method for subclass Experimental
         # TODO: get better naming convention, store this in dict ?
-        if isinstance(operator_t, list):
-            for i, op in enumerate(operator_t):
-                if isinstance(op, str):
-                    results[f'correlation_function_t_{op}'] = self._m_correlation_function_op(env, op)
-                else:
-                    results[f'correlation_function_t_{i}'] = self._m_correlation_function_op(env, op)
-        else:
-            if isinstance(operator_t, str):
-                results[f'correlation_function_t_{operator_t}'] = self._m_correlation_function_op(env, operator_t)
+        for i, op in enumerate(operator_t):
+            if isinstance(op, str):
+                results[f'correlation_function_t_{op}'] = self._m_correlation_function_op(env, op)
             else:
-                results[f'correlation_function_t'] = self._m_correlation_function_op(env, operator_t)
+                results[f'correlation_function_t_{i}'] = self._m_correlation_function_op(env, op)
 
     def _m_correlation_function_op(self, env: MPSEnvironment, op) -> np.ndarray:
         """Measurement function for time dependent correlations.
@@ -346,7 +334,7 @@ class TimeDependentCorrelation(RealTimeEvolution):
                 assert i0 == 0  # make sure to really start on the left site
                 correlation_function_t.append(env.expectation_value_multi_sites(term_list, i0))
                 # TODO: change when :meth:`expectation_value` of :class:`MPSEnvironment` automatically handles JW-string
-            spectral_function_t = np.array(correlation_function_t)
+            correlation_function_t = np.array(correlation_function_t)
 
         # multiply evolution of bra (eigenstate) into spectral function
         phase = np.exp(1j * self.gs_energy * self.engine.evolved_time)
@@ -372,10 +360,12 @@ class TimeDependentCorrelationExperimental(TimeDependentCorrelation):
         evolve_bra : bool=False
             If True, instantiates a second engine and performs time_evolution on the (eigenstate) bra.
     """
-    def __int__(self, options, *, gs_data=None, **kwargs):
+    def __init__(self, options, *, gs_data=None, **kwargs):
         super().__init__(options, gs_data=gs_data, **kwargs)
         self.engine_ground_state = None
         self.evolve_bra = self.options.get('evolve_bra', False)
+        # for resuming simulation from checkpoint # this is provided in super().__init__
+        # TODO: How to ensure resuming from checkpoint works, when evolve_bra is True ?
 
     def init_algorithm(self, **kwargs):
         super().init_algorithm(**kwargs)  # links to RealTimeEvolution class, not to Simulation
@@ -451,10 +441,10 @@ class SpectralSimulation(TimeDependentCorrelation):
     # class attribute linking SpectralSimulation to its post-processor
     post_processor = SpectralFunctionProcessor
 
-    def __int__(self, options, *, gs_data=None, **kwargs):
+    def __init__(self, options, *, gs_data=None, **kwargs):
         super().__init__(options, gs_data=gs_data, **kwargs)
 
-    def _post_processing(self):
+    def post_processing(self):
         """Read-out and apply post-processing
 
         .. cfg:configoptions :: SpectralSimulation
@@ -477,9 +467,9 @@ class SpectralSimulation(TimeDependentCorrelation):
             post_processor_cls = self.post_processor.from_simulation(self, processing_params=processing_params)
             # TODO: make sure this is written into self.results
             post_processor_cls.run()
-        except Exception as e:
+        except Exception:
             self.logger.info("Could not post-process the results because of the following exception:")
-            self.logger.warning(e)
+            self.logger.warning(traceback.format_exc())
             self.logger.info("continuing saving results without post-processing")
 
     def prepare_results_for_save(self):
@@ -490,5 +480,9 @@ class SpectralSimulation(TimeDependentCorrelation):
         actual simulation.
         """
         if hasattr(self, 'post_processor'):
-            self._post_processing()
+            self.post_processing()
         return super().prepare_results_for_save()
+
+
+class SpectralSimulationExperimental(TimeDependentCorrelationExperimental, SpectralSimulation):
+    pass

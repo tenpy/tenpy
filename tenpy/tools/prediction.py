@@ -85,9 +85,9 @@ def linear_prediction(x: np.ndarray, m: int, p: int, split: float = 0, trunc_mod
 
 
 def autocorrelation(x, i, j, cyclic=False, cut_idx=0):  # TODO: introduce cut_pad_zero: bool = False
-    """Compute the autocorrelation :math:`R_{XX}(i, j) = E\{x(n-i) \cdot x(n-j)\}`.
+    """Compute the autocorrelation :math:`R_{XX}(i, j) = E[x(n-i) \cdot x(n-j)]`.
 
-    Note that this can be rewritten as :math:`R_{XX}(i - j) = E\{x(n) \cdot x(n-(j-i))\}`
+    Note that this can be rewritten as :math:`R_{XX}(i - j) = E[x(n) \cdot x(n-(j-i))]`
 
     Parameters
     ----------
@@ -192,10 +192,10 @@ def alpha_and_c(x, lpc, trunc_mode='cutoff'):
     shape = (-1,) + (x.ndim - 1) * (1,)
     try:
         evects_inv = np.linalg.inv(evects)
-    except np.linalg.LinAlgError:
+    except np.linalg.LinAlgError as e:
         # Regularization is only done here to avoid an Exception for ill defined correlations (e.g. all zero)
         evects_inv = np.linalg.inv(evects + np.eye(len(evects))*10e-07)
-        logger.warning("Matrix of eigenvectors could not be inverted, linear prediction will probably fail...")
+        logger.warning(f"Matrix inversion failed: {e}. Linear prediction will probably fail.")
 
     c = np.tensordot(evects_inv, x_tilde_N, axes=(1, 0)) * evects[0, :].reshape(shape)
     return evals, c
