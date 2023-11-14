@@ -3478,20 +3478,25 @@ def zero_like(tens: AbstractTensor) -> AbstractTensor:
 
 def eye_like(tens: AbstractTensor) -> Tensor | DiagonalTensor:
     # TODO allow specification of leg bipartition ?
-    if not isinstance(tens, (Tensor, DiagonalTensor)):
-        raise TypeError(f'eye is not defined for type {type(tens)}')
-    if tens.num_legs % 2 != 0:
-        raise ValueError('eye is not defined for an odd number of legs')
-    legs_1 = tens.legs[:tens.num_legs // 2]
-    legs_2 = tens.legs[tens.num_legs // 2:]
-    for l1, l2 in zip(legs_1, legs_2):
-        if not l1.can_contract_with(l2):
-            if len(legs_1) == 1:
-                msg = 'Second leg must be the dual of the first leg'
-            else:
-                msg = 'Second half of legs must be the dual of the first half'
-            raise ValueError(msg)
-    return tens.eye(legs=legs_1, backend=tens.backend, labels=tens.labels, dtype=tens.dtype)
+    if isinstance(tens, Tensor):
+        if tens.num_legs % 2 != 0:
+            raise ValueError('eye is not defined for an odd number of legs')
+        legs_1 = tens.legs[:tens.num_legs // 2]
+        legs_2 = tens.legs[tens.num_legs // 2:]
+        for l1, l2 in zip(legs_1, legs_2):
+            if not l1.can_contract_with(l2):
+                if len(legs_1) == 1:
+                    msg = 'Second leg must be the dual of the first leg'
+                else:
+                    msg = 'Second half of legs must be the dual of the first half'
+                raise ValueError(msg)
+        return Tensor.eye(legs=legs_1, backend=tens.backend, labels=tens.labels, dtype=tens.dtype)
+    if isinstance(tens, DiagonalTensor):
+        if tens.legs[0].is_dual == tens.legs[1].is_dual:
+            raise ValueError('Second leg must be the dual of the first leg')
+        return DiagonalTensor.eye(tens.legs[0], backend=tens.backend, labels=tens.labels,
+                                  dtype=tens.dtype)
+    raise TypeError(f'eye is not defined for type {type(tens)}')
 
 
 # ##################################
