@@ -1519,7 +1519,9 @@ class Tensor(SymmetricTensor):
                     # TODO: should we just implicitly flip?
                     raise ValueError("Wrong `is_dual` flag of ProductSpace")
                 for self_leg, given_space in zip(legs, product_space.spaces):
-                    assert self_leg == given_space, f"Incompatible `self.legs` and product_spaces[{i:d}].spaces"
+                    if self_leg != given_space:
+                        msg = f'`product_spaces[{i:d}]` is incompatible with the legs to be combined'
+                        raise ValueError(msg)
         return product_spaces
 
     def _combine_legs_new_axes(self, combine_leg_idcs, new_axes):
@@ -2664,7 +2666,7 @@ class DiagonalTensor(SymmetricTensor):
         raise TypeError(f'{type(self)} does not support squeeze_legs')
 
     def to_dense_block(self, leg_order: list[int | str] = None) -> Block:
-        # need to fill in the off-diagonal zeros anyway, so we may as well use to_full_tensor first.
+        # need to fill in the off-diagonal zeros anyway, so we may as well use as_Tensor first.
         # OPTIMIZE a specialized implementation could be slightly more efficient...
         return self.as_Tensor().to_dense_block(leg_order)
 
@@ -2750,7 +2752,7 @@ class DiagonalTensor(SymmetricTensor):
         if isinstance(other, Mask):
             if legs2[0] == 1:
                 # OPTIMIZE ? dont need to convert to full but its easier for now
-                return self.tdot(other.to_full_tensor(), legs1=legs1, legs2=legs2, relabel1=relabel1, relabel2=relabel2)
+                return self.tdot(other.as_Tensor(), legs1=legs1, legs2=legs2, relabel1=relabel1, relabel2=relabel2)
             # else: legs2[0] == 0, i.e. we contract the large leg of the Mask
             new_label = other.labels[1]
             if relabel1 is not None:
@@ -3014,9 +3016,9 @@ class Mask(AbstractTensor):
                      new_labels: list[str | None] = None) -> Tensor:
         """See :func:`tenpy.linalg.tensors.combine_legs`."""
         msg = 'Converting Mask to full Tensor for `combine_legs`. If this is what you wanted, ' \
-              'explicitly convert via Mask.to_full_tensor() first to suppress the warning.'
+              'explicitly convert via Mask.as_Tensor() first to suppress the warning.'
         warnings.warn(msg, stacklevel=2)
-        return self.to_full_tensor().combine_legs(
+        return self.as_Tensor().combine_legs(
             *legs, product_spaces=product_spaces, product_spaces_dual=product_spaces_dual,
             new_axes=new_axes, new_labels=new_labels
         )
@@ -3057,25 +3059,25 @@ class Mask(AbstractTensor):
 
     def permute_legs(self, permutation: list[int]) -> Tensor:
         msg = 'Converting Mask to full Tensor for `permute_legs`. If this is what you wanted, ' \
-              'explicitly convert via Mask.to_full_tensor() first to suppress the warning.'
+              'explicitly convert via Mask.as_Tensor() first to suppress the warning.'
         warnings.warn(msg, stacklevel=2)
-        return self.to_full_tensor().permute_legs(permutation)
+        return self.as_Tensor().permute_legs(permutation)
 
     def split_legs(self, legs: list[int | str] = None) -> NoReturn:
         msg = 'Converting Mask to full Tensor for `split_legs`. If this is what you wanted, ' \
-              'explicitly convert via Mask.to_full_tensor() first to suppress the warning.'
+              'explicitly convert via Mask.as_Tensor() first to suppress the warning.'
         warnings.warn(msg, stacklevel=2)
-        return self.to_full_tensor().permute_legs(legs)
+        return self.as_Tensor().permute_legs(legs)
 
     def squeeze_legs(self,legs: int | str | list[int | str] = None) -> Tensor:
         msg = 'Converting Mask to full Tensor for `squeeze_legs`. If this is what you wanted, ' \
-              'explicitly convert via Mask.to_full_tensor() first to suppress the warning.'
+              'explicitly convert via Mask.as_Tensor() first to suppress the warning.'
         warnings.warn(msg, stacklevel=2)
-        return self.to_full_tensor().squeeze_legs(legs)
+        return self.as_Tensor().squeeze_legs(legs)
 
     def to_dense_block(self, leg_order: list[int | str] = None) -> Block:
         # OPTIMIZE a dedicated implementation could be slightly more efficient
-        return self.to_full_tensor().to_dense_block(leg_order)
+        return self.as_Tensor().to_dense_block(leg_order)
 
     def trace(self, *a, **k) -> NoReturn:
         raise TypeError('Can not perform trace of a Mask, they are not square.')
@@ -3130,7 +3132,7 @@ class Mask(AbstractTensor):
                 return res
             
             # OPTIMIZE the remaining case could be done more efficiently, by inserting zero-slice wherever the mask is False
-            return self.to_full_tensor().tdot(other, legs1, legs2, relabel1, relabel2)
+            return self.as_Tensor().tdot(other, legs1, legs2, relabel1, relabel2)
         if len(legs1) == 0:
             raise TypeError(f'tdot with no contracted legs (i.e. outer) not supported for {type(self)} and {type(other)}')
         if len(legs1) == 2:

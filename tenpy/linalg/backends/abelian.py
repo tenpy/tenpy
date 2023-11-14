@@ -1641,7 +1641,7 @@ def product_space_map_incoming_block_inds(space: ProductSpace, incoming_block_in
         For each row j of `incoming_block_inds` an index `J` such that
         ``self._block_ind_map[J, 2:-1] == block_inds[j]``.
     """
-    # FIXME move this back to ProductSpace?
+    # TODO move this back to ProductSpace?
     assert incoming_block_inds.shape[1] == len(space.spaces)
     # calculate indices of _block_ind_map by using the appropriate strides
     inds_before_perm = np.sum(incoming_block_inds * space._strides[np.newaxis, :], axis=1)
