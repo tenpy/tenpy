@@ -163,7 +163,7 @@ class Site(Hdf5Exportable):
             if other_op is not None:
                 are_equivalent = other_op.can_use_alone  # now it suffices to check op_L
                 try:
-                    op_L = other_op.op_L.convert_to_tensor()
+                    op_L = other_op.op_L.as_Tensor()
                 except ValueError:
                     are_equivalent = False
                 else:
@@ -282,7 +282,7 @@ class Site(Hdf5Exportable):
                     pass
         elif issubclass(cls, SymmetricTensor):
             if isinstance(op, ChargedTensor):
-                op = op.convert_to_tensor()
+                op = op.as_Tensor()
             assert isinstance(op, SymmetricTensor)
             if (cls is not Tensor) and isinstance(op, Tensor):
                 try:

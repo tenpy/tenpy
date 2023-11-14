@@ -616,6 +616,11 @@ class AbstractTensor(metaclass=ABCMeta):
         ...
 
     @abstractmethod
+    def as_Tensor(self) -> Tensor:
+        """Convert to Tensor."""
+        ...
+
+    @abstractmethod
     def combine_legs(self,
                      *legs: list[int | str],
                      product_spaces: list[ProductSpace] = None,
@@ -738,11 +743,7 @@ class AbstractTensor(metaclass=ABCMeta):
 
 class SymmetricTensor(AbstractTensor):
     """Common base class for tensors which are symmetric (i.e. not charged)"""
-    
-    @abstractmethod
-    def as_Tensor(self) -> Tensor:
-        """Convert to Tensor."""
-        ...
+    pass
 
 
 class Tensor(SymmetricTensor):
@@ -1347,7 +1348,7 @@ class Tensor(SymmetricTensor):
                 other = other.as_Tensor()
             elif isinstance(other, ChargedTensor):
                 try:
-                    other = other.convert_to_tensor()
+                    other = other.as_Tensor()
                 except ValueError:
                     other, original_other = other.project_to_invariant(), other
                     if not other.almost_equal(original_other, atol, rtol):
@@ -1786,7 +1787,7 @@ class ChargedTensor(AbstractTensor):
         res = ChargedTensor(invariant_part=invariant_part, dummy_leg_state=state)
         if convert_to_tensor_if_possible:
             try:
-                res = res.convert_to_tensor()
+                res = res.as_Tensor()
             except ValueError:
                 pass  # if its not possible to convert to Tensor, just leave it as ChargedTensor
         return res
@@ -1836,8 +1837,7 @@ class ChargedTensor(AbstractTensor):
         """
         raise NotImplementedError  # TODO
 
-    # TODO rename to as_Tensor , to match DiagonalTensor.as_Tensor?
-    def convert_to_tensor(self) -> Tensor:
+    def as_Tensor(self) -> Tensor:
         """If possible, convert self to a Tensor. Otherwise raise a ValueError.
 
         It is possible to convert a ChargedTensor to a Tensor if and only if the dummy leg only
@@ -2064,7 +2064,7 @@ class ChargedTensor(AbstractTensor):
                 other = other.to_full()
             if isinstance(other, Tensor):
                 try:
-                    s = self.to_full_tensor()
+                    s = self.as_Tensor()
                 except ValueError:
                     s_proj = self.project_to_invariant()
                     return self.almost_equal(s_proj, atol, rtol) and s_proj.almost_equal(other, atol, rtol)
