@@ -33,6 +33,7 @@ class RealTimeEvolution(Simulation):
             Mandatory. Perform time evolution until ``engine.evolved_time`` reaches this value.
             Note that we can go (slightly) beyond this time if it is not a multiple of
             the individual time steps.
+
     """
     default_algorithm = 'TEBDEngine'
     default_measurements = Simulation.default_measurements + [
@@ -237,8 +238,9 @@ class TimeDependentCorrelation(RealTimeEvolution):
                 Either a lattice index ``lat_idx`` or a ``mps_idx`` should be passed.
 
                 .. note ::
-                The ``lat_idx`` must have (dim+1) i.e. [x, y, u],
-                where u = 0 for a single-site unit cell
+                    The ``lat_idx`` must have (dim+1) i.e. [x, y, u],
+                    where u = 0 for a single-site unit cell
+
         """
         ops = to_iterable(self.operator_t0_config['name'])
         mps_idx = self.operator_t0_config.get('mps_idx', None)
@@ -430,12 +432,13 @@ class SpectralSimulation(TimeDependentCorrelation):
 
     Options
     -------
-    .. cfg:config :: SpectralFunction
+    .. cfg:config :: SpectralSimulation
         :include: TimeDependentCorrelation
 
     Attributes
     ----------
     post_processor : :class:`SpectralFunctionProcessor`
+        :noindex:
         A class attribute defining a Post Processor to be used.
     """
     # class attribute linking SpectralSimulation to its post-processor
@@ -453,9 +456,9 @@ class SpectralSimulation(TimeDependentCorrelation):
             parameters for linear prediction
 
             .. note ::
-            There are several parameters to specify:
-            m: number of time steps to predict
-            p: number of time steps to use for predictions
+                There are several parameters to specify:
+                m: number of time steps to predict
+                p: number of time steps to use for predictions
 
         windowing : dict
             parameters for a windowing function
