@@ -84,7 +84,7 @@ class RealTimeEvolution(Simulation):
 
 
 class TimeDependentCorrelation(RealTimeEvolution):
-    """A subclass of :class:`RealTimeEvolution` to specifically calculate the time dependent correlation function.
+    r"""A subclass of :class:`RealTimeEvolution` to specifically calculate the time dependent correlation function.
 
     In general this subclass calculates an overlap
     of the form :math:`C(r, t) = <\psi_0| B_r(t) A_{r_0} |\psi_0>` where :math:`A_{r_0}` can be
@@ -136,7 +136,7 @@ class TimeDependentCorrelation(RealTimeEvolution):
 
     @classmethod
     def from_gs_search(cls, filename, sim_params, **kwargs):
-        """"Create class based on file containing the ground state.
+        r"""Create class based on file containing the ground state.
 
         Initialize an instance of a :class:`SpectralSimulation` from
         a finished run of :class:`GroundStateSearch`. This simply fetches
@@ -224,7 +224,7 @@ class TimeDependentCorrelation(RealTimeEvolution):
             self.gs_energy = self.options['gs_energy'] = gs_data['energy']
 
     def _get_operator_t0(self):
-        """Converts the specified operators and indices into a list of tuples [(op1, i_1), (op2, i_2)]
+        r"""Converts the specified operators and indices into a list of tuples [(op1, i_1), (op2, i_2)]
 
         Options
         -------
@@ -234,7 +234,7 @@ class TimeDependentCorrelation(RealTimeEvolution):
                 Mandatory, this should specify the operator initially applied to the MPS (i.e. before a time evolution).
                 For more than one single-site operator, a list of operator names should be passed, otherwise just the
                 string ``name``.
-                Furthermore the corresponding position(s) to apply the operator(s) should also be passed as a list.
+                Furthermore, the corresponding position(s) to apply the operator(s) should also be passed as a list.
                 Either a lattice index ``lat_idx`` or a ``mps_idx`` should be passed.
 
                 .. note ::
@@ -252,7 +252,7 @@ class TimeDependentCorrelation(RealTimeEvolution):
         elif lat_idx is not None:
             idx = to_iterable(self.model.lat.lat2mps_idx(lat_idx))
         else:
-            idx = to_iterable(self.model.lat.Ls // 2)
+            idx = to_iterable(self.model.lat.N_sites // 2)
         # tiling
         if len(ops) > len(idx):
             if len(idx) != 1:
@@ -286,7 +286,7 @@ class TimeDependentCorrelation(RealTimeEvolution):
         return MPSEnvironment(self.psi_ground_state, self.psi)
 
     def m_correlation_function(self, results, psi, model, simulation, **kwargs):
-        """Measurement function for time dependent correlations.
+        r"""Measurement function for time dependent correlations.
 
         Wrapper around :meth:`_m_correlation_function_op` to loop over several operators.
 
@@ -310,7 +310,7 @@ class TimeDependentCorrelation(RealTimeEvolution):
                 results[f'correlation_function_t_{i}'] = self._m_correlation_function_op(env, op)
 
     def _m_correlation_function_op(self, env: MPSEnvironment, op) -> np.ndarray:
-        """Measurement function for time dependent correlations.
+        r"""Measurement function for time dependent correlations.
 
         This calculates the overlap of <psi| op_j |phi>, where |phi> = e^{-iHt} op1_idx |psi_0>
         (the time evolved state after op1 was applied at MPS position idx) and
@@ -346,7 +346,7 @@ class TimeDependentCorrelation(RealTimeEvolution):
 
 
 class TimeDependentCorrelationExperimental(TimeDependentCorrelation):
-    """Improved/Experimental version of :class:`TimeDependentCorrelation`.
+    r"""Improved/Experimental version of :class:`TimeDependentCorrelation`.
 
     This class gives an advantage when calculating the correlation function of Fermions. This is done by
     calling the :class:`MPSEnvironmentJW` instead of the usual :class:`MPSEnvironment`.
@@ -462,7 +462,7 @@ class SpectralSimulation(TimeDependentCorrelation):
 
         windowing : dict
             parameters for a windowing function
-    """
+        """
         self.logger.info(f"calling post-processing with {self.post_processor}")
         processing_params = self.options.get('post_processing_params', None)
         # try, except clause to not lose simulation results if post_processing fails

@@ -15,7 +15,7 @@ __all__ = ['DataLoader']
 
 
 class DataLoader:
-    """PostProcessor class to handle IO and instantiating a model.
+    r"""PostProcessor class to handle IO and instantiating a model.
 
     Parameters
     ----------
@@ -29,26 +29,30 @@ class DataLoader:
     sim_params : dict
         Simulation parameters loaded from the hdf5 file.
         This includes the model parameters and algorithm parameters
-    measurements : dict
-        dictionary of loaded measurements results (i.e. from results)
     results : list or str
         List or str of passed measurements results
     """
+    logger = logging.getLogger(__name__ + ".DataLoader")
     # somehow read out all keys of a filename recursively
     # set filename=None, simulation=None, results=None in init,
     # then load based on whether ... instead of classmethod from simulation, from_file...
     # provide method to .get_data('key') and .get_simulation('key')
 
     def __init__(self, filename=None, simulation=None, results=None):
+        self.logger.info("Initializing\n%s\n%s\n%s", "=" * 80, self.__class__.__name__,
+                         "=" * 80)
         if filename is not None:
             self.filename = filename
+            self.logger.info(f"Loading data from {self.filename}")
             if not (self.filename.endswith('.h5') or self.filename.endswith('.hdf5')):
+                self.logger.info(f"Not using hdf5 data-format.\nLoading data can be slow")
                 self.data = hdf5_io.load(self.filename)
 
             self.sim_params = self.load('simulation_parameters')['simulation_parameters']
 
         elif simulation is not None:
             self.sim = simulation
+            self.logger.info(f"Initializing from {self.sim.__class__.__name__}")
             self.sim_params = self.sim.simulation_parameters
             self._model = self.sim.model
             if hasattr(self.sim, 'psi'):
@@ -103,7 +107,7 @@ class DataLoader:
                         value = self.convert_list_to_ndarray(value)
                     set_recursive(res, path, value, separator='/', insert_dicts=True)
                 except KeyError:
-                    logging.warning(f"{key} does not exist!")
+                    self.logger.warning(f"{key} does not exist!")
             return res
 
         with h5py.File(self.filename, 'r') as h5group:
@@ -117,7 +121,7 @@ class DataLoader:
                         value = self.convert_list_to_ndarray(value)
                     set_recursive(res, path, value, separator='/', insert_dicts=True)
                 except KeyError:
-                    logging.warning(f"{key} does not exist!")
+                    self.logger.warning(f"{key} does not exist!")
         return res
 
     @staticmethod
@@ -133,7 +137,7 @@ class DataLoader:
 
     def save(self):
         filename = self.generate_unique_filename(self.filename, append_str='_processed')
-        logging.info(f"Saving Results to file: {filename}")
+        self.logger.info(f"Saving Results to file: {filename}")
         return hdf5_io.save(self.results, filename)
 
     @staticmethod
@@ -148,7 +152,7 @@ class DataLoader:
         return value
 
     def get_data(self, key):
-        return self.load('key')
+        return self.load(key)
 
     @property
     def model(self):
@@ -203,7 +207,7 @@ class DataLoader:
     #     args : tuple
     #         Positional arguments for the function.
     #     save_as : str, optional
-    #         Key to save the result in the results dictionary.
+    #         Key to save the result in the results' dictionary.
     #     kwargs : dict
     #         Keyword arguments for the function.
     #
@@ -218,7 +222,7 @@ class DataLoader:
     #         return result
 
 
-def spectral_function(DL : DataLoader, time_dep_corr_key,
+def spectral_function(DL: DataLoader, time_dep_corr_key,
                       *, linear_predict: bool = False, gaussian_window: bool = False,
                       m: int = None, p: int = None, split: float = 0,
                       trunc_mode: str = 'renormalize', two_d_mode: str = 'individual',
@@ -306,7 +310,8 @@ def fourier_transform_time(a, dt, axis=0):
 def gaussian(n_tsteps: int, sigma: float = 0.4):
     """Simple gaussian windowing function.
 
-    Applying a windowing function avoids Gibbs oscillation. tn are time steps 0, 1, ..., N"""
+    Applying a windowing function avoids Gibbs oscillation. tn are time steps 0, 1, ..., N
+    """
     tn = np.arange(n_tsteps)
     return np.exp(-0.5 * (tn / (n_tsteps * sigma)) ** 2)
 

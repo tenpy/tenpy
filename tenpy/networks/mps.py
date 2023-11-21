@@ -5317,7 +5317,8 @@ class MPSEnvironmentJW(MPSEnvironment):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        if self.bc != 'finite':
+        # TODO: self.bc for an MPSEnvironment?
+        if self.ket.bc != 'finite':
             raise ValueError("The boundary conditions for a MPSEnvironment with Jordan Wigner strings in left LP"
                              "must be finite")
 
