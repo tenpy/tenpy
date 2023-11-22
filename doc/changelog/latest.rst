@@ -34,6 +34,7 @@ Added
   ``from tenpy import MPS, tensordot, TwoSiteDMRGEngine`` or ``import tenpy as tp`` and then use
   ``tp.tensordot`` etc. All objects which are not "private" and/or "implementation details" are
   exposed in the subpackage namespace, e.g. you can ``from tenpy.networks import MPOGraph``.
+- Overlaps of finite, shifted/translated MPS in :meth:`~tenpy.networks.mps.MPS.overlap_translate_finite`.
 
 Changed
 ^^^^^^^
