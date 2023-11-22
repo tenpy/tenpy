@@ -2245,6 +2245,66 @@ class MPS(BaseMPSExpectationValue):
         self._S = [self._S[i] for i in inds]
         self._S.append(self._S[0])
 
+    def overlap_translate_finite(self, psi, shift=1):
+        """Contract ``<self|T^N|psi>`` for translation `T` with finite, periodic boundaries.
+
+        Looks like this for ``shift=1``, with the open virtuals legs contracted in the end::
+
+           --B[L-1] Th[0] -- B[1] -- B[2] -- ..... B[L-2] --
+              |      |       |       |             |
+            Th*[0] --B*[1] --B*[2] --B*[3] --..... B*[L-1]
+
+
+        An alternative to calling this method would be to call :meth:`permute_sites` followed by
+        :meth:`overlap`. Note that `permute_sites` uses truncation on the way, though,
+        which could severely affect the precision especially for general (non-local)
+        permutations while this function contracts everything exactly
+        (possibly at higher numerical cost).
+
+        Parameters
+        ----------
+        psi : :class:`MPS`
+            MPS to take overlap with.
+        shift : int
+            Translation by how many sites. Note that for large shift, the contraction is
+            :math:`O(\chi^4)` compared to DMRG etc scaling as :math:`O(\chi^3)`.
+
+        Returns
+        -------
+        self_Tn_psi : float
+            Contraction of ``<self|T^N|psi>``.
+
+        See also
+        --------
+        permute_sites : Allows more general permutations of the sites.
+        overlap : Directly the overlap between two MPS without translation.
+        roll_mps_unit_cell : Effectively applies ``T^shift`` on inifinite MPS.
+        """
+        assert self.bc == psi.bc == 'finite'
+        L = self.L
+        assert L == psi.L
+        if shift < 0:
+            shift = shift + self.L
+        assert 0 < shift < self.L
+        forms = ['Th'] + ['B'] * (L-1)
+        inds = np.roll(np.arange(self.L), shift)  # consistent with `roll_mps_unit_cell`!
+        B_bra = self.get_B(0, forms[0])
+        B_ket = psi.get_B(inds[0], forms[inds[0]])
+        C = npc.tensordot(B_bra.conj(), B_ket, axes=[self._get_p_label('*'), self._get_p_label('')])
+        for i in range(1, L):
+            j = inds[i]
+            B_ket = psi.get_B(j, forms[j])
+            if i != shift:
+                C = npc.tensordot(C, B_ket, axes=['vR', 'vL'])
+            else:
+                # here, B_ket is the Th[0] - handle the open left/rightmost, trivial virtual legs
+                C.ireplace_label('vR', 'openR')
+                C = npc.tensordot(C, B_ket, axes=['vL*', 'vL'])  # contract trivial left legs
+            B_bra = self.get_B(i, forms[i])
+            C = npc.tensordot(C, B_bra.conj(), axes=[['vR*'] + self._get_p_label(''),
+                                                     ['vL*'] + self._get_p_label('*')])
+        return npc.trace(npc.trace(C, 'vR', 'vL'), 'openR', 'vR*')
+
     def enlarge_chi(self, extra_legs, random_fct=np.random.normal):
         """Artificially enlarge the bond dimension by the specified extra legs/charges. In place.
 

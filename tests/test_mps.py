@@ -78,6 +78,22 @@ def test_mps_add():
     psi_sum_prime = psi1.add(psi2_prime, 0.5**0.5, -0.5**0.5)
     npt.assert_almost_equal(psi_sum_prime.overlap(psi), 1.)
 
+def test_mps_overlap_translate_finite():
+    s = site.SpinHalfSite(conserve='Sz', sort_charge=True)
+    u, d = 'up', 'down'
+    psi1 = mps.MPS.from_product_state([s] * 4, [u, u, d, u], bc='finite')
+    psi2 = mps.MPS.from_product_state([s] * 4, [u, d, u, u], bc='finite')
+    psi_sum = psi1.add(psi2, 0.5**0.5, -0.5**0.5)
+    psi3 = mps.MPS.from_product_state([s] * 6, [u, u, d, u, d, u], bc='finite')
+    psi4 = mps.MPS.from_product_state([s] * 6, [d, u, d, u, u, u], bc='finite')
+
+    npt.assert_almost_equal(psi1.overlap_translate_finite(psi2, shift=1), 1.)
+    npt.assert_almost_equal(psi2.overlap_translate_finite(psi1, shift=-1), 1.)
+    npt.assert_almost_equal(psi2.overlap_translate_finite(psi1, shift=1), 0.)
+    npt.assert_almost_equal(psi1.overlap_translate_finite(psi_sum, shift=1), -0.5**0.5)
+    npt.assert_almost_equal(psi_sum.overlap_translate_finite(psi_sum, shift=1), -0.5)
+    npt.assert_almost_equal(psi3.overlap_translate_finite(psi4, shift=2), 1.)
+
 
 def test_MPSEnvironment():
     xxz_pars = dict(L=4, Jxx=1., Jz=1.1, hz=0.1, bc_MPS='finite', sort_charge=True)
