@@ -152,7 +152,7 @@ class SimulationPostProcessor:
 
 
 class SpectralFunctionProcessor(SimulationPostProcessor):
-    """Post-processing class for the :class:`SpectralSimulation`.
+    r"""Post-processing class for the :class:`SpectralSimulation`.
 
     This class helps to calculate spectral functions from the given correlations of
     a run of a :class:`SpectralSimulation`. The options to perform additional post-processing steps,

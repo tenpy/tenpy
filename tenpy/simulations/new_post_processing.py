@@ -3,13 +3,18 @@
 
 import os
 import numpy as np
-import h5py
 import logging
 
 from ..tools import hdf5_io
 from ..tools.misc import to_iterable, set_recursive, find_subclass
 from ..tools.prediction import linear_prediction
 from ..models import Model
+
+try:
+    import h5py
+    h5py_version = h5py.version.version_tuple
+except ImportError:
+    h5py_version = (0, 0)
 
 __all__ = ['DataLoader']
 
@@ -29,24 +34,30 @@ class DataLoader:
     sim_params : dict
         Simulation parameters loaded from the hdf5 file.
         This includes the model parameters and algorithm parameters
-    results : list or str
+    measurement_keys : list or str
         List or str of passed measurements results
     """
     logger = logging.getLogger(__name__ + ".DataLoader")
     # somehow read out all keys of a filename recursively
-    # set filename=None, simulation=None, results=None in init,
+    # set filename=None, simulation=None, measurement_keys=None in init,
     # then load based on whether ... instead of classmethod from simulation, from_file...
     # provide method to .get_data('key') and .get_simulation('key')
 
-    def __init__(self, filename=None, simulation=None, results=None):
+    def __init__(self, filename=None, simulation=None, measurement_keys=None):
         self.logger.info("Initializing\n%s\n%s\n%s", "=" * 80, self.__class__.__name__,
                          "=" * 80)
         if filename is not None:
             self.filename = filename
             self.logger.info(f"Loading data from {self.filename}")
-            if not (self.filename.endswith('.h5') or self.filename.endswith('.hdf5')):
+            if self.filename.endswith('.h5') or self.filename.endswith('.hdf5'):
+                # create a h5group (which is open)
+                self.logger.info(f'Open file {self.filename}, when no context manager is used, it might be useful to '
+                                 f'call self.close()')
+                self.h5group = h5py.File(self.filename, 'r')
+            else:
                 self.logger.info(f"Not using hdf5 data-format.\nLoading data can be slow")
-                self.data = hdf5_io.load(self.filename)
+                # all data is loaded as other filenames
+                self._all_data = hdf5_io.load(self.filename)
 
             self.sim_params = self.load('simulation_parameters')['simulation_parameters']
 
@@ -59,19 +70,25 @@ class DataLoader:
                 self._psi = self.sim.psi
             self._measurements = self.sim.results['measurements']
 
-        self.results = results
+        self.measurement_keys = measurement_keys
 
     def __enter__(self):
         return self
 
     def __exit__(self, exc_type, exc_value, traceback):
+        self.close()
         self.save()
+
+    def close(self):
+        if hasattr(self, '_h5group'):
+            self.h5group.close()
+            self.logger.info(f"Closed {self.filename}")
 
     @property
     def measurements(self):
         if not hasattr(self, '_measurements'):
-            if self.results is not None:
-                self._measurements = self.load(self.results, prefix='measurements/', convert_to_numpy=True)
+            if self.measurement_keys is not None:
+                self._measurements = self.load(self.measurement_keys, prefix='measurements/', convert_to_numpy=True)
             else:
                 self._measurements = self.load('measurements', convert_to_numpy=True)['measurements']
         return self._measurements
@@ -97,12 +114,18 @@ class DataLoader:
             data loaded from paths
         """
         paths = to_iterable(paths)
-        if hasattr(self, 'data'):
+        if hasattr(self, '_h5group'):
+            return self._load_not_hdf5(paths, prefix, convert_to_numpy)
+        else:
+            return self._load_not_hdf5(paths, prefix, convert_to_numpy)
+
+    def _load_not_hdf5(self, paths, prefix='', convert_to_numpy=False):
+        if hasattr(self, '_all_data'):
             res = dict()
             for path in paths:
                 key = prefix + path
                 try:
-                    value = self.data[key]
+                    value = self._all_data[key]
                     if convert_to_numpy is True:
                         value = self.convert_list_to_ndarray(value)
                     set_recursive(res, path, value, separator='/', insert_dicts=True)
@@ -110,18 +133,18 @@ class DataLoader:
                     self.logger.warning(f"{key} does not exist!")
             return res
 
-        with h5py.File(self.filename, 'r') as h5group:
-            h5_object = hdf5_io.Hdf5Loader(h5group)
-            res = dict()
-            for path in paths:
-                key = prefix + path
-                try:
-                    value = h5_object.load(key)
-                    if convert_to_numpy is True:
-                        value = self.convert_list_to_ndarray(value)
-                    set_recursive(res, path, value, separator='/', insert_dicts=True)
-                except KeyError:
-                    self.logger.warning(f"{key} does not exist!")
+    def _load_hdf5(self, paths, prefix: str, convert_to_numpy: bool):
+        h5_object = hdf5_io.Hdf5Loader(self.h5group)
+        res = dict()
+        for path in paths:
+            key = prefix + path
+            try:
+                value = h5_object.load(key)
+                if convert_to_numpy is True:
+                    value = self.convert_list_to_ndarray(value)
+                set_recursive(res, path, value, separator='/', insert_dicts=True)
+            except KeyError:
+                self.logger.warning(f"{key} does not exist!")
         return res
 
     @staticmethod
@@ -138,7 +161,7 @@ class DataLoader:
     def save(self):
         filename = self.generate_unique_filename(self.filename, append_str='_processed')
         self.logger.info(f"Saving Results to file: {filename}")
-        return hdf5_io.save(self.results, filename)
+        return hdf5_io.save(self.measurement_keys, filename)
 
     @staticmethod
     def convert_list_to_ndarray(value):

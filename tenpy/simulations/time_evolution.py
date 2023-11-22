@@ -361,6 +361,7 @@ class TimeDependentCorrelationExperimental(TimeDependentCorrelation):
 
         evolve_bra : bool=False
             If True, instantiates a second engine and performs time_evolution on the (eigenstate) bra.
+
     """
     def __init__(self, options, *, gs_data=None, **kwargs):
         super().__init__(options, gs_data=gs_data, **kwargs)
@@ -437,9 +438,9 @@ class SpectralSimulation(TimeDependentCorrelation):
 
     Attributes
     ----------
-    post_processor : :class:`SpectralFunctionProcessor`
-        :noindex:
-        A class attribute defining a Post Processor to be used.
+    post_processor :
+        A class attribute defining a :class:`SpectralFunctionProcessor` to be used.
+
     """
     # class attribute linking SpectralSimulation to its post-processor
     post_processor = SpectralFunctionProcessor
@@ -462,6 +463,7 @@ class SpectralSimulation(TimeDependentCorrelation):
 
         windowing : dict
             parameters for a windowing function
+
         """
         self.logger.info(f"calling post-processing with {self.post_processor}")
         processing_params = self.options.get('post_processing_params', None)
