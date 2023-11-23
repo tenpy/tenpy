@@ -208,7 +208,7 @@ class AbstractTensor(metaclass=ABCMeta):
             res.legs[i] = leg
         return res
 
-    def index(self, *legs: int | str) -> _TensorIndexHelper:
+    def with_legs(self, *legs: int | str) -> _TensorIndexHelper:
         """This method allows indexing a tensor "by label".
 
         It returns a helper object, that can be indexed instead of self.
