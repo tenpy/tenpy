@@ -9,47 +9,46 @@ import warnings
 from tenpy.linalg import tensors, matrix_operations, spaces, ProductSymmetry, backends
 
 
+@pytest.mark.parametrize('all_labels, l_labels, r_labels', [
+    (['l1', 'r2', 'l2', 'r1'], ['l1', 'l2'], ['r1', 'r2']),
+    (['l1', 'r1', 'l2'], ['l2', 'l1'], ['r1']),
+    (['l', 'r'], ['l'], ['r'])
+])
 @pytest.mark.parametrize('new_vh_leg_dual', [True, False])
-def test_svd(tensor_rng, new_vh_leg_dual):
-    # also covers truncated_svd and truncate_singular_values
-
-    for labels, l_labels, r_labels in [
-        (['l1', 'r2', 'l2', 'r1'], ['l1', 'l2'], ['r1', 'r2']),
-        (['l1', 'r1', 'l2'], ['l2', 'l1'], ['r1']),
-        (['l', 'r'], ['l'], ['r']),
-    ]:
-        assert set(l_labels + r_labels) == set(labels)
-        print(f'leg bipartition {labels} -> {l_labels} & {r_labels}')
-
-        T: tensors.Tensor = tensor_rng(labels=labels, max_block_size=3)
-        #  T_dense = T.to_numpy_ndarray()
-
-        U, S, Vd = matrix_operations.svd(
-            T, l_labels, r_labels, new_labels=['cr', 'cl'], new_vh_leg_dual=new_vh_leg_dual
-        )
-        U.test_sanity()
-        S.test_sanity()
-        Vd.test_sanity()
-        assert U.labels_are(*l_labels, 'cr')
-        assert S.labels_are('cl', 'cr')
-        assert Vd.labels_are('cl', *r_labels)
-        assert Vd.legs[0].is_dual == new_vh_leg_dual
-        assert isinstance(S, tensors.DiagonalTensor)
-        # check that U @ S @ Vd recovers the original tensor
-        U_S_Vd = tensors.tdot(U, tensors.tdot(S, Vd, 'cr', 'cl'), 'cr', 'cl')
-        U_S_Vd.test_sanity()
-        assert tensors.almost_equal(T, U_S_Vd, atol=1.e-10)
-        # check that U, Vd are isometries
-        Ud_U = tensors.tdot(U.conj(), U, [f'{l}*' for l in l_labels], l_labels)
-        Vd_V = tensors.tdot(Vd, Vd.conj(), r_labels, [f'{r}*' for r in r_labels])
-        assert tensors.almost_equal(tensors.eye_like(Ud_U), Ud_U)
-        assert tensors.almost_equal(tensors.eye_like(Vd_V), Vd_V)
-        # check singular values
-        T_np = T.to_numpy_ndarray(leg_order=l_labels + r_labels)
-        l_dim = np.prod(T_np.shape[:len(l_labels)])
-        r_dim = np.prod(T_np.shape[len(l_labels):])
-        S_np = np.linalg.svd(T_np.reshape(l_dim, r_dim), compute_uv=False, full_matrices=False)
-        npt.assert_array_almost_equal(S_np[:S.legs[0].dim], np.sort(S.diag_numpy)[::-1])
+def test_svd(tensor_rng, new_vh_leg_dual, all_labels, l_labels, r_labels):
+    assert set(l_labels + r_labels) == set(all_labels)
+    print(f'leg bipartition {all_labels} -> {l_labels} & {r_labels}')
+    T: tensors.Tensor = tensor_rng(labels=all_labels, max_block_size=3)
+    #  T_dense = T.to_numpy_ndarray()
+    U, S, Vd = matrix_operations.svd(
+        T, l_labels, r_labels, new_labels=['cr', 'cl'], new_vh_leg_dual=new_vh_leg_dual
+    )
+    U.test_sanity()
+    S.test_sanity()
+    Vd.test_sanity()
+    assert U.labels_are(*l_labels, 'cr')
+    assert S.labels_are('cl', 'cr')
+    assert Vd.labels_are('cl', *r_labels)
+    assert U.get_leg('cr').is_dual == (not new_vh_leg_dual)
+    assert S.legs[0].is_dual == new_vh_leg_dual
+    assert S.legs[1].is_dual == (not new_vh_leg_dual)
+    assert Vd.get_leg('cl').is_dual == new_vh_leg_dual
+    assert isinstance(S, tensors.DiagonalTensor)
+    # check that U @ S @ Vd recovers the original tensor
+    U_S_Vd = tensors.tdot(U, tensors.tdot(S, Vd, 'cr', 'cl'), 'cr', 'cl')
+    U_S_Vd.test_sanity()
+    assert tensors.almost_equal(T, U_S_Vd, atol=1.e-10)
+    # check that U, Vd are isometries
+    Ud_U = tensors.tdot(U.conj(), U, [f'{l}*' for l in l_labels], l_labels)
+    Vd_V = tensors.tdot(Vd, Vd.conj(), r_labels, [f'{r}*' for r in r_labels])
+    assert tensors.almost_equal(tensors.eye_like(Ud_U), Ud_U)
+    assert tensors.almost_equal(tensors.eye_like(Vd_V), Vd_V)
+    # check singular values
+    T_np = T.to_numpy_ndarray(leg_order=l_labels + r_labels)
+    l_dim = np.prod(T_np.shape[:len(l_labels)])
+    r_dim = np.prod(T_np.shape[len(l_labels):])
+    S_np = np.linalg.svd(T_np.reshape(l_dim, r_dim), compute_uv=False, full_matrices=False)
+    npt.assert_array_almost_equal(S_np[:S.legs[0].dim], np.sort(S.diag_numpy)[::-1])
 
 
 @pytest.mark.parametrize('svd_min, normalize_to', [(1e-14, None), (1e-4, None), (1e-4, 2.7)])
@@ -63,6 +62,13 @@ def test_truncated_svd(tensor_rng, new_vh_leg_dual, svd_min, normalize_to):
     U.test_sanity()
     S.test_sanity()
     Vd.test_sanity()
+    assert U.labels_are('l1', 'l2', 'cr')
+    assert S.labels_are('cl', 'cr')
+    assert Vd.labels_are('cl', 'r1', 'r2')
+    assert U.get_leg('cr').is_dual == (not new_vh_leg_dual)
+    assert S.legs[0].is_dual == new_vh_leg_dual
+    assert S.legs[1].is_dual == (not new_vh_leg_dual)
+    assert Vd.get_leg('cl').is_dual == new_vh_leg_dual
     T_np = T.to_numpy_ndarray(leg_order=['l1', 'l2', 'r1', 'r2'])
     l_dim = np.prod(T_np.shape[:2])
     r_dim = np.prod(T_np.shape[2:])
@@ -97,19 +103,26 @@ def test_eig_based_svd(tensor_rng, compute_u, compute_vh, new_vh_leg_dual):
         T, u_legs=u_legs, new_labels=new_labels, vh_legs=vh_legs, compute_u=compute_u,
         compute_vh=compute_vh, new_vh_leg_dual=new_vh_leg_dual
     )
-    npt.assert_almost_equal(S.diag_numpy, svd_S.diag_numpy)
-    
-    # TODO to reinstate something like this:
-    #     assert tensors.almost_equal(S, svd_S)
-    # we need control over leg duality in eig_based_svd, which is not yet implemented
-    
+    # check U
     if compute_u:
-        # different SVDs may differ up to a phase.
-        # hc(U) @ svd_U should give a diagonal matrix of these phases
+        U.test_sanity()
+        assert U.get_leg('cr').is_dual == (not new_vh_leg_dual)
+        Ud_U = tensors.tdot(U.conj(), U, ['l1*', 'l2*'], ['l1', 'l2'])
+        assert tensors.almost_equal(tensors.eye_like(Ud_U), Ud_U)
         phases = U.conj().tdot(svd_U, ['l1*', 'l2*'], ['l1', 'l2'])
         expect_eye = np.abs(phases.to_numpy_ndarray())
         npt.assert_almost_equal(expect_eye, np.eye(expect_eye.shape[0]))
+    # check S
+    S.test_sanity()
+    assert S.legs[0].is_dual == new_vh_leg_dual
+    assert S.legs[1].is_dual == (not new_vh_leg_dual)
+    assert tensors.almost_equal(S, svd_S)
+    # check Vh
     if compute_vh:
+        Vh.test_sanity()
+        assert Vh.get_leg('cl').is_dual == new_vh_leg_dual
+        Vh_V = tensors.tdot(Vh, Vh.conj(), ['r1', 'r2'], ['r1*', 'r2*'])
+        assert tensors.almost_equal(tensors.eye_like(Vh_V), Vh_V)
         phases = Vh.tdot(svd_Vh.conj(), ['r1', 'r2'], ['r1*', 'r2*'])
         expect_eye = np.abs(phases.to_numpy_ndarray())
         npt.assert_almost_equal(expect_eye, np.eye(expect_eye.shape[0]))
@@ -117,7 +130,7 @@ def test_eig_based_svd(tensor_rng, compute_u, compute_vh, new_vh_leg_dual):
 
 @pytest.mark.parametrize('svd_min, normalize_to', [(1e-14, None), (1e-4, None), (1e-4, 2.7)])
 @pytest.mark.parametrize('new_vh_leg_dual', [True, False])
-@pytest.mark.parametrize('compute_u, compute_vh', [(True, False), (False, True), (False, False)])
+@pytest.mark.parametrize('compute_u, compute_vh', [(False, True), (True, False), (False, False)])
 def test_truncated_eig_based_svd(tensor_rng, compute_u, compute_vh, new_vh_leg_dual, svd_min,
                                  normalize_to):
     T: tensors.Tensor = tensor_rng(labels=['l1', 'r2', 'l2', 'r1'], max_block_size=3)
@@ -130,31 +143,30 @@ def test_truncated_eig_based_svd(tensor_rng, compute_u, compute_vh, new_vh_leg_d
         T, ['l1', 'l2'], ['r1', 'r2'], new_labels=['cr', 'cl'], new_vh_leg_dual=new_vh_leg_dual,
         truncation_options=dict(svd_min=svd_min), normalize_to=normalize_to
     )
-
+    # check U
     if compute_u:
         U.test_sanity()
+        assert U.get_leg('cr').is_dual == (not new_vh_leg_dual)
         Ud_U = tensors.tdot(U.conj(), U, ['l1*', 'l2*'], ['l1', 'l2'])
         assert tensors.almost_equal(tensors.eye_like(Ud_U), Ud_U)
         phases = U.conj().tdot(svd_U, ['l1*', 'l2*'], ['l1', 'l2'])
         expect_eye = np.abs(phases.to_numpy_ndarray())
         npt.assert_almost_equal(expect_eye, np.eye(expect_eye.shape[0]))
-
-    pytest.xfail('Something about duality and the legs is still off')
-    # S has seemingly incompatible (to svd_S) legs
-    # expect_eye for Vh below has some permutation to it
-        
+    # check S
     S.test_sanity()
-    # assert tensors.almost_equal(S, svd_S)
-    
+    assert S.legs[0].is_dual == new_vh_leg_dual
+    assert S.legs[1].is_dual == (not new_vh_leg_dual)
+    assert tensors.almost_equal(S, svd_S)
+    # check Vh
     if compute_vh:
         Vh.test_sanity()
+        assert Vh.get_leg('cl').is_dual == new_vh_leg_dual
         Vh_V = tensors.tdot(Vh, Vh.conj(), ['r1', 'r2'], ['r1*', 'r2*'])
         assert tensors.almost_equal(tensors.eye_like(Vh_V), Vh_V)
         phases = Vh.tdot(svd_Vh.conj(), ['r1', 'r2'], ['r1*', 'r2*'])
         expect_eye = np.abs(phases.to_numpy_ndarray())
-        print(expect_eye)
         npt.assert_almost_equal(expect_eye, np.eye(expect_eye.shape[0]))
-
+    # check other outputs
     npt.assert_almost_equal(err, svd_err)
     npt.assert_almost_equal(renormalize, svd_renormalize)
 

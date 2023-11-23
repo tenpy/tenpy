@@ -239,7 +239,7 @@ def eig_based_svd(a: AbstractTensor, compute_u: bool = False, compute_vh: bool =
             U = U.split_legs(0)
         Vh = None
     else:  # decompose a.hc @ a = V @ S**2 @ V.hc  (note that we want V.hc !)
-        S_sq, V = eigh(a.conj().tdot(a, 0, 0), new_labels=[_dual_leg_label(l_vh), l_sv, l_su],
+        S_sq, V = eigh(a.conj().tdot(a, 0, 0), new_labels=[_dual_leg_label(l_vh), l_su, l_sv],
                        sort='>', new_leg_dual=not new_vh_leg_dual)
         Vh = V.conj().permute_legs([1, 0])
         if need_combine:
