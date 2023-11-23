@@ -6,6 +6,8 @@ This class thus serves as an example how this can be done.
 """
 # Copyright 2021-2023 TeNPy Developers, GNU GPLv3
 
+raise NotImplementedError(f'{__file__} is not ported to v2.0 yet.')  # TODO
+
 import numpy as np
 
 from ..linalg import np_conserved as npc

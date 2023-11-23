@@ -4,6 +4,8 @@ Generalization of transverse field Ising model to higher dimensional on-site Hil
 """
 # Copyright 2023 TeNPy Developers, GNU GPLv3
 
+raise NotImplementedError(f'{__file__} is not ported to v2.0 yet.')  # TODO
+
 import numpy as np
 from .model import CouplingMPOModel, NearestNeighborModel
 from .lattice import Chain

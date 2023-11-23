@@ -64,6 +64,8 @@ The Jordan-Wigner strings follow the *final* DMRG snake.
 """
 # Copyright 2021-2023 TeNPy Developers, GNU GPLv3
 
+raise NotImplementedError(f'{__file__} is not ported to v2.0 yet.')  # TODO
+
 import numpy as np
 import itertools as it
 import warnings

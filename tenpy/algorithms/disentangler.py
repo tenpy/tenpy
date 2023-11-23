@@ -9,6 +9,8 @@ For now, this is written for disentangling purifications; could be generalized t
 """
 # Copyright 2018-2023 TeNPy Developers, GNU GPLv3
 
+raise NotImplementedError(f'{__file__} is not ported to v2.0 yet.')  # TODO
+
 import numpy as np
 import logging
 logger = logging.getLogger(__name__)

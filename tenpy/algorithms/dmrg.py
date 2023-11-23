@@ -32,6 +32,8 @@ A generic protocol for approaching a physics question using DMRG is given in
 """
 # Copyright 2018-2023 TeNPy Developers, GNU GPLv3
 
+raise NotImplementedError(f'{__file__} is not ported to v2.0 yet.')  # TODO
+
 import numpy as np
 import time
 import warnings

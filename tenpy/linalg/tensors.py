@@ -213,7 +213,7 @@ class AbstractTensor(metaclass=ABCMeta):
 
         It returns a helper object, that can be indexed instead of self.
         For example, if we have a tensor with labels 'a', 'b' and 'c', but we are not sure about
-        their order, we can call ``tensor.index('a', 'b')[0, 1]``.
+        their order, we can call ``tensor.with_legs('a', 'b')[0, 1]``.
         If ``tensors.labels == ['a', 'b', 'c']`` in alphabetic order, we get ``tensor[0, 1]``.
         However if the order of labels happens to be different, e.g.
         ``tensor.labels == ['b', 'c', 'a']`` we get ``tensor[1, :, 0]``.
@@ -3718,7 +3718,7 @@ def _parse_idcs(idcs: T | Sequence[T | Ellipsis], length: int, fill: T = slice(N
 class _TensorIndexHelper:
     """A helper class that redirects __getitem__ and __setitem__ to an AbstractTensor.
 
-    See :meth:`~tenpy.linalg.tensors.AbstractTensor.index`.
+    See :meth:`~tenpy.linalg.tensors.AbstractTensor.with_legs`.
     """
     def __init__(self, tensor: AbstractTensor, which_legs: list[int | str]):
         self.tensor = tensor

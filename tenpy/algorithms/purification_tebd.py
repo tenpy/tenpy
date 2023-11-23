@@ -8,6 +8,8 @@ and the various disentanglers are in :mod:`tenpy.algorithms.disentangler`
 """
 # Copyright 2020-2023 TeNPy Developers, GNU GPLv3
 
+raise NotImplementedError(f'{__file__} is not ported to v2.0 yet.')  # TODO
+
 from .purification import PurificationTEBD, PurificationTEBD2
 from .disentangler import *
 

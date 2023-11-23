@@ -43,6 +43,8 @@ is the discarded part (orthogonal to the kept part) and the
 """
 # Copyright 2018-2023 TeNPy Developers, GNU GPLv3
 
+raise NotImplementedError(f'{__file__} is not ported to v2.0 yet.')
+
 import numpy as np
 from ..linalg import np_conserved as npc
 from ..tools.hdf5_io import Hdf5Exportable
@@ -53,6 +55,8 @@ __all__ = ['TruncationError', 'truncate', 'svd_theta']
 
 # TODO (JU) most (all?) functionality of this module is now covered in matrix_operations.
 #  we should keep the module docstring though! maybe in Notes section of truncated_svd?
+
+
 
 class TruncationError(Hdf5Exportable):
     r"""Class representing a truncation error.
