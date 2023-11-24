@@ -432,7 +432,7 @@ class Site(Hdf5Exportable):
             The operator given by `name`, with labels ``'p', 'p*'``.
             If name already was an npc Array, it's directly returned.
         """
-        names = name.split(' ')
+        names = name.split()
         op = getattr(self, names[0], None)
         if op is None:
             raise ValueError("{0!r} doesn't have the operator {1!r}".format(self, names[0]))
@@ -458,7 +458,7 @@ class Site(Hdf5Exportable):
         hc_op_name : str
             Operator name for the hermitian conjugate operator.
         """
-        names = name.split(' ')
+        names = name.split()
         hc_names = []
         for name2 in reversed(names):
             hc_name_2 = self.hc_ops.get(name2)
