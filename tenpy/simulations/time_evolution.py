@@ -439,6 +439,7 @@ class SpectralSimulation(TimeDependentCorrelation):
     Attributes
     ----------
     post_processor :
+        :noindex:
         A class attribute defining a :class:`SpectralFunctionProcessor` to be used.
 
     """

@@ -18,7 +18,7 @@ __all__ = ['SimulationPostProcessor', 'SpectralFunctionProcessor', 'init_simulat
 
 
 class SimulationPostProcessor:
-    """Base class for post-processing.
+    r"""Base class for post-processing.
 
     This class is intended to mostly handle data loading from a result of a :class:`Simulation`.
     This is done by reinitializing parts of the simulation under the attribute :attr:`sim` and reinitializing the model.
@@ -175,7 +175,7 @@ class SpectralFunctionProcessor(SimulationPostProcessor):
         linear_prediction = {'m': 50,
         'p': 30,
         'cyclic: False,
-        'trunc_mode': 'cutoff',  # or 'renormalize', or 'conjugate'
+        'truncation_mode': 'cutoff',  # or 'renormalize', or 'conjugate'
         'epsilon': 10e-7,
         'mode': 'individual'}  # or 'full'
 
@@ -286,7 +286,7 @@ class SpectralFunctionProcessor(SimulationPostProcessor):
         return np.swapaxes(np.swapaxes(a, 0, axis) * window, axis, 0)
 
     def linear_predict(self, x):
-        args = self.readout_linear_pred_params(x)  # m, p, trunc_mode, cyclic, epsilon, mode
+        args = self.readout_linear_pred_params(x)  # m, p, truncation_mode, cyclic, epsilon, mode
         return linear_prediction(x, *args)
 
     def readout_linear_pred_params(self, data):
@@ -297,7 +297,7 @@ class SpectralFunctionProcessor(SimulationPostProcessor):
         cyclic = self.linear_prediction_params.get('cyclic', False)
         p = self.linear_prediction_params.get('p', (x_length - 1) // 3)
         epsilon = self.linear_prediction_params.get('epsilon', 10e-7)
-        trunc_mode = self.linear_prediction_params.get('trunc_mode', 'cutoff')
+        trunc_mode = self.linear_prediction_params.get('truncation_mode', 'cutoff')
         mode = self.linear_prediction_params.get('mode', 'individual')
         self.linear_prediction_params.warn_unused(True)
         return m, p, split, trunc_mode, mode, cyclic, epsilon
@@ -353,7 +353,7 @@ def init_simulation_for_processing(*,
                                     checkpoint_results=None,
                                     update_sim_params=None,
                                     simulation_class_kwargs=None):
-    """Re-initialize a simulation from a given checkpoint without running it.
+    r"""Re-initialize a simulation from a given checkpoint without running it.
 
     This is the same as :func:`init_simulation_from_checkpoint` but still initializes
     the simulation if finished_run is True.

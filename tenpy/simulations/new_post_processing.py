@@ -6,17 +6,19 @@ import numpy as np
 import logging
 
 from ..tools import hdf5_io
-from ..tools.misc import to_iterable, set_recursive, find_subclass
+from ..tools.misc import to_iterable, get_recursive, set_recursive, find_subclass
 from ..tools.prediction import linear_prediction
 from ..models import Model
 
 try:
     import h5py
+
     h5py_version = h5py.version.version_tuple
 except ImportError:
     h5py_version = (0, 0)
 
-__all__ = ['DataLoader']
+__all__ = ['DataLoader', 'to_lat_geometry', 'to_mps_geometry', 'spectral_function', 'fourier_transform_space',
+           'fourier_transform_time', 'apply_gaussian_windowing', 'get_all_hdf5_keys']
 
 
 class DataLoader:
@@ -38,6 +40,7 @@ class DataLoader:
         List or str of passed measurements results
     """
     logger = logging.getLogger(__name__ + ".DataLoader")
+
     # somehow read out all keys of a filename recursively
     # set filename=None, simulation=None, measurement_keys=None in init,
     # then load based on whether ... instead of classmethod from simulation, from_file...
@@ -53,13 +56,15 @@ class DataLoader:
                 # create a h5group (which is open)
                 self.logger.info(f'Open file {self.filename}, when no context manager is used, it might be useful to '
                                  f'call self.close()')
-                self.h5group = h5py.File(self.filename, 'r')
+
+                h5group = h5py.File(self.filename, 'r')
+                self._Hdf5Loader = hdf5_io.Hdf5Loader(h5group)
             else:
                 self.logger.info(f"Not using hdf5 data-format.\nLoading data can be slow")
                 # all data is loaded as other filenames
                 self._all_data = hdf5_io.load(self.filename)
 
-            self.sim_params = self.load('simulation_parameters')['simulation_parameters']
+            self.sim_params = self._load_recursive('simulation_parameters')['simulation_parameters']
 
         elif simulation is not None:
             self.sim = simulation
@@ -80,29 +85,52 @@ class DataLoader:
         self.save()
 
     def close(self):
-        if hasattr(self, '_h5group'):
-            self.h5group.close()
+        if hasattr(self, '_Hdf5Loader'):
+            self._Hdf5Loader.h5group.close()
             self.logger.info(f"Closed {self.filename}")
 
     @property
     def measurements(self):
         if not hasattr(self, '_measurements'):
             if self.measurement_keys is not None:
-                self._measurements = self.load(self.measurement_keys, prefix='measurements/', convert_to_numpy=True)
+                self._measurements = self._load_recursive(self.measurement_keys, prefix='measurements/',
+                                                          convert_to_numpy=True)
             else:
-                self._measurements = self.load('measurements', convert_to_numpy=True)['measurements']
+                self._measurements = self._load('measurements', convert_to_numpy=True)
         return self._measurements
 
-    def load(self, paths, prefix='', convert_to_numpy=False):
-        """Load data from a hdf5 file.
-
-        This function enables one to load data from a file, without loading the whole file.
-        I.e. only the data written into ``file[path]`` for path in paths is loaded.
+    def _load_recursive(self, paths, **kwargs):
+        """Load data recursively into a dictionary
 
         Parameters
         ----------
         paths : str or list of str
             Path(s) to load from the hdf5 file.
+        **kwargs :
+            keyword arguments to :meth:`_load`
+
+        Returns
+        -------
+        dict
+            data loaded from paths as dictionary
+        """
+        paths = to_iterable(paths)
+        res = dict()
+        for path in paths:
+            value = self._load(path, **kwargs)
+            set_recursive(res, path, value, separator='/', insert_dicts=True)
+        return res
+
+    def _load(self, path, prefix='', convert_to_numpy=False):
+        """Load data from either the hdf5 file or from _all_data.
+
+        For hdf5 files, this function enables one to load data from a file, without loading the whole file.
+        I.e. only the data written into ``file[path]`` for path in paths is loaded.
+
+        Parameters
+        ----------
+        path : str
+            Path to load from either the hdf5 file or _all_data
         prefix : str, optional
             Prefix for paths.
         convert_to_numpy : bool, optional
@@ -110,42 +138,25 @@ class DataLoader:
 
         Returns
         -------
-        dict
-            data loaded from paths
+        res :
+            data corresponding to path`
         """
-        paths = to_iterable(paths)
-        if hasattr(self, '_h5group'):
-            return self._load_not_hdf5(paths, prefix, convert_to_numpy)
-        else:
-            return self._load_not_hdf5(paths, prefix, convert_to_numpy)
+        key = prefix + path
+        try:
+            if hasattr(self, '_Hdf5Loader'):
+                value = self._Hdf5Loader.load(key)
+            elif hasattr(self, '_all_data'):
+                value = get_recursive(self._all_data, key, separator='/')
+            else:
+                raise ValueError("Can't find any results.")
+            if convert_to_numpy is True:
+                value = self.convert_list_to_ndarray(value)
+            return value
+        except KeyError:
+            self.logger.warning(f"{key} does not exist!")
 
-    def _load_not_hdf5(self, paths, prefix='', convert_to_numpy=False):
-        if hasattr(self, '_all_data'):
-            res = dict()
-            for path in paths:
-                key = prefix + path
-                try:
-                    value = self._all_data[key]
-                    if convert_to_numpy is True:
-                        value = self.convert_list_to_ndarray(value)
-                    set_recursive(res, path, value, separator='/', insert_dicts=True)
-                except KeyError:
-                    self.logger.warning(f"{key} does not exist!")
-            return res
-
-    def _load_hdf5(self, paths, prefix: str, convert_to_numpy: bool):
-        h5_object = hdf5_io.Hdf5Loader(self.h5group)
-        res = dict()
-        for path in paths:
-            key = prefix + path
-            try:
-                value = h5_object.load(key)
-                if convert_to_numpy is True:
-                    value = self.convert_list_to_ndarray(value)
-                set_recursive(res, path, value, separator='/', insert_dicts=True)
-            except KeyError:
-                self.logger.warning(f"{key} does not exist!")
-        return res
+    def get_data(self, key, prefix='measurements/', convert_to_numpy=True):
+        return self._load(key, prefix=prefix, convert_to_numpy=convert_to_numpy)
 
     @staticmethod
     def generate_unique_filename(filename, append_str=''):
@@ -173,9 +184,6 @@ class DataLoader:
         except Exception as e:
             logging.warning(f"{e}, proceeding without converting")
         return value
-
-    def get_data(self, key):
-        return self.load(key)
 
     @property
     def model(self):
@@ -206,18 +214,14 @@ class DataLoader:
     def get_psi(self):
         raise NotImplementedError()
 
-    # def get_all_keys_as_dict(self, h5_group):
-    #     results = dict()
-    #     for key in h5_group.keys():
-    #         if isinstance(h5_group[key], h5py.Group):
-    #             results[key] = self.get_all_keys_as_dict(h5_group[key])
-    #         else:
-    #             results[key] = h5_group[key]
-    #
-    #     # if we are on the lowest recursion level, we only give the keys as sets
-    #     if not any([isinstance(h5_group[key], h5py.Group) for key in h5_group.keys()]):
-    #         results = set(results)
-    #     return results
+    def get_all_keys_as_dict(self):
+        if hasattr(self, '_Hdf5Loader'):
+            h5_group = self._Hdf5Loader.h5group
+            return get_all_hdf5_keys(h5_group)
+        elif hasattr(self, '_all_data'):
+            return self._all_data
+        else:
+            raise ValueError("Can't find any results.")
 
     # def apply(self, function: callable, *args, save_as: str = None, **kwargs):
     #     """
@@ -245,38 +249,32 @@ class DataLoader:
     #         return result
 
 
-def spectral_function(DL: DataLoader, time_dep_corr_key,
-                      *, linear_predict: bool = False, gaussian_window: bool = False,
-                      m: int = None, p: int = None, split: float = 0,
-                      trunc_mode: str = 'renormalize', two_d_mode: str = 'individual',
-                      cyclic: bool = False, epsilon: float = 1e-06, sigma: float = 0.4):
+def spectral_function(DL: DataLoader, time_dep_corr_key, *,
+                      gaussian_window: bool = False, sigma: float = 0.4,
+                      linear_predict: bool = False, m: int = None, p: int = None,
+                      truncation_mode: str = 'renormalize', split: float = 0):
     # get lattice
     lat = DL.lat
     dt = DL.sim_params['algorithm_params']['dt']
-    time_dep_corr = DL.measurements[time_dep_corr_key]
+    time_dep_corr = DL.get_data(time_dep_corr_key)
 
     # first we fourier transform in space C(r, t) -> C(k, t)
-    time_dep_corr_lat = to_lat_geometry(lat, time_dep_corr, axis=-1)
+    time_dep_corr_lat = to_lat_geometry(lat, time_dep_corr, axes=-1)
     ft_space, k = fourier_transform_space(lat, time_dep_corr_lat)
     k_reduced = lat.BZ.reduce_points(k)
     # optional linear prediction
     if linear_predict is True:
-        # bring back to 2D array
-        ft_space = to_mps_geometry(lat, ft_space)
-        n_tsteps = ft_space.shape[0]
+        axis = 0  # since we assume that the time-series values are along the first dimension (n_tsteps, n_sites, ...)
+        n_tsteps = ft_space.shape[axis]
         # linear prediction parameters
         if m is None:
             m = n_tsteps
         if p is None:
             p = n_tsteps // 3
-        # linear prediction
-        ft_space = linear_prediction(ft_space, m, p, split, trunc_mode, two_d_mode,
-                                     cyclic, epsilon)
-        # bring back to lattice geometry
-        ft_space = to_lat_geometry(lat, ft_space)
+        ft_space = linear_prediction(ft_space, m, p, axis=axis, truncation_mode=truncation_mode, split=split)
     # optional gaussian windowing
     if gaussian_window is True:
-        ft_space = apply_gaussian_windowing(ft_space, sigma, axis=0)
+        ft_space = apply_gaussian_windowing(ft_space, sigma, axes=0)
     # fourier transform in time C(k, t) -> C(k, w) = S
     s_k_w, w = fourier_transform_time(ft_space, dt)
     return {'S': s_k_w, 'k': k, 'k_reduced': k_reduced, 'w': w}
@@ -330,33 +328,43 @@ def fourier_transform_time(a, dt, axis=0):
     return ft_time, w
 
 
-def gaussian(n_tsteps: int, sigma: float = 0.4):
-    """Simple gaussian windowing function.
+def apply_gaussian_windowing(a, sigma: float = 0.4, axes=0):
+    """Simple gaussian windowing function along an axes.
 
     Applying a windowing function avoids Gibbs oscillation. tn are time steps 0, 1, ..., N
+
+    Parameters
+    ----------
+    a : ndarray
+        a ndarray where the time series is along axis `axes`
+    sigma : float
+        sigma used in gaussian window
+    axes : int
+        axes along which to apply the gaussian window
+
+    Returns
+    -------
+    np.ndarray
     """
+    # extract number of time-steps
+    n_tsteps = a.shape[axes]
     tn = np.arange(n_tsteps)
-    return np.exp(-0.5 * (tn / (n_tsteps * sigma)) ** 2)
-
-
-def apply_gaussian_windowing(a, sigma: float = 0.4, axis=0):
-    # create gaussian window with right shape
-    n_tsteps = a.shape[axis]
-    window = gaussian(n_tsteps, sigma)
-    assert window.ndim == 1, "windowing function must be one dimensional"
+    # create gaussian windowing function with the right shape
+    gaussian_window = np.exp(-0.5 * (tn / (n_tsteps * sigma)) ** 2)
     # swap dimension which should be weighted (window applied to)
     # to last dim, so np broadcasting can be used
-    swapped_a = np.swapaxes(a, -1, axis)
+    swapped_a = np.swapaxes(a, -1, axes)
     # apply window
-    weighted_arr = swapped_a * window
+    weighted_arr = swapped_a * gaussian_window
     # swap back to original position
-    return np.swapaxes(weighted_arr, axis, -1)
+    return np.swapaxes(weighted_arr, axes, -1)
 
 
-def to_lat_geometry(lat, a, axis=-1):
-    return lat.mps2lat_values(a, axes=axis)
+def to_lat_geometry(lat, a, axes=-1):
+    return lat.mps2lat_values(a, axes=axes)
 
 
+# TODO: make this function available on the lattice level, but allow an axis parameter for that
 def to_mps_geometry(lat, a):
     """Bring measurement in lattice geometry to mps geometry.
 
@@ -370,3 +378,18 @@ def to_mps_geometry(lat, a):
     a = a.reshape(a.shape[:dims_until_lat_dims] + (-1,))
     a = np.take(a, mps_idx_flattened, axis=-1)
     return a
+
+
+# TODO: move this to hdf5_io
+def get_all_hdf5_keys(h5_group):
+    results = dict()
+    for key in h5_group.keys():
+        if isinstance(h5_group[key], h5py.Group):
+            results[key] = get_all_hdf5_keys(h5_group[key])
+        else:
+            results[key] = h5_group[key]
+
+    # if we are on the lowest recursion level, we only give the keys as sets
+    if not any([isinstance(h5_group[key], h5py.Group) for key in h5_group.keys()]):
+        results = set(results)
+    return results
