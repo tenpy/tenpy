@@ -8,6 +8,7 @@ import logging
 from ..tools import hdf5_io
 from ..tools.misc import to_iterable, get_recursive, set_recursive, find_subclass
 from ..tools.prediction import linear_prediction
+from ..tools.params import Config
 from ..models import Model
 
 try:
@@ -26,8 +27,12 @@ class DataLoader:
 
     Parameters
     ----------
-    filename : str
+    filename : str, optional
         Path to a hdf5 file.
+    simulation :
+        An instance of a :class:`tenpy.simulations.simulation.Simulation`
+    data : dict, optional
+        dictionary of simulation results (to be used in e.g. Jupyter Notebooks)
 
     Attributes
     ----------
@@ -36,17 +41,10 @@ class DataLoader:
     sim_params : dict
         Simulation parameters loaded from the hdf5 file.
         This includes the model parameters and algorithm parameters
-    measurement_keys : list or str
-        List or str of passed measurements results
     """
     logger = logging.getLogger(__name__ + ".DataLoader")
 
-    # somehow read out all keys of a filename recursively
-    # set filename=None, simulation=None, measurement_keys=None in init,
-    # then load based on whether ... instead of classmethod from simulation, from_file...
-    # provide method to .get_data('key') and .get_simulation('key')
-
-    def __init__(self, filename=None, simulation=None, measurement_keys=None):
+    def __init__(self, filename=None, simulation=None, data=None):
         self.logger.info("Initializing\n%s\n%s\n%s", "=" * 80, self.__class__.__name__,
                          "=" * 80)
         if filename is not None:
@@ -64,18 +62,23 @@ class DataLoader:
                 # all data is loaded as other filenames
                 self._all_data = hdf5_io.load(self.filename)
 
-            self.sim_params = self._load_recursive('simulation_parameters')['simulation_parameters']
+            self.sim_params = self._load('simulation_parameters')
 
         elif simulation is not None:
             self.sim = simulation
             self.logger.info(f"Initializing from {self.sim.__class__.__name__}")
-            self.sim_params = self.sim.simulation_parameters
+            self.sim_params = self.sim.options.as_dict()
+            self._all_data = self.sim.results
+
             self._model = self.sim.model
             if hasattr(self.sim, 'psi'):
                 self._psi = self.sim.psi
-            self._measurements = self.sim.results['measurements']
 
-        self.measurement_keys = measurement_keys
+        elif data is not None:
+            self.logger.info(f"Initializing data loader from passed results")
+            # all data is loaded as other filenames
+            self._all_data = data
+            self.sim_params = self._load('simulation_parameters')
 
     def __enter__(self):
         return self
@@ -92,11 +95,7 @@ class DataLoader:
     @property
     def measurements(self):
         if not hasattr(self, '_measurements'):
-            if self.measurement_keys is not None:
-                self._measurements = self._load_recursive(self.measurement_keys, prefix='measurements/',
-                                                          convert_to_numpy=True)
-            else:
-                self._measurements = self._load('measurements', convert_to_numpy=True)
+            self._measurements = self._load('measurements', convert_to_numpy=True)
         return self._measurements
 
     def _load_recursive(self, paths, **kwargs):
@@ -149,6 +148,8 @@ class DataLoader:
                 value = get_recursive(self._all_data, key, separator='/')
             else:
                 raise ValueError("Can't find any results.")
+            if isinstance(value, Config):
+                value = value.as_dict()
             if convert_to_numpy is True:
                 value = self.convert_list_to_ndarray(value)
             return value
@@ -170,9 +171,10 @@ class DataLoader:
         return new_filename
 
     def save(self):
+        # TODO: for hdf5 files, should we specify a hdf5 saver?
         filename = self.generate_unique_filename(self.filename, append_str='_processed')
         self.logger.info(f"Saving Results to file: {filename}")
-        return hdf5_io.save(self.measurement_keys, filename)
+        raise NotImplementedError()
 
     @staticmethod
     def convert_list_to_ndarray(value):
