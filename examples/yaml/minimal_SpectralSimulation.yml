@@ -9,8 +9,7 @@ directory: results
 output_filename : a_minimal_SpectralSimulation.h5
 
 operator_t0:
-    i: 16  # otherwise defaults to L//2
-    op: Sz
+    name: Sz
 
 operator_t: Sz
 
@@ -24,11 +23,9 @@ algorithm_params:
     N_steps : 2  # measurements every dt*N_steps
 
 post_processing_params:
-    output_filename: post_processed_results.h5
-    linear_prediction:
-        m: 50
-        p: 5
-        trunc_mode: renormalize
-    windowing_function:
-        window: gaussian
-        sigma: 0.4
+    linear_predict: True
+    m: 50
+    p: 5
+    truncation_mode: renormalize
+    gaussian_window: True
+    sigma: 0.4

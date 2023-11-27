@@ -1,409 +1,410 @@
-"""This module contains classes for post-processing of Simulations.
-
-The :class:`SimulationPostProcessor` mostly handles initialization and is
-meant as a base class for post-processing. The :class:`SpectralPostProcessor`
-should be used together with the simulation :class:`SpectralSimulation`.
-"""
+"""Simple post-processing"""
 # Copyright 2020-2023 TeNPy Developers, GNU GPLv3
 
+import os
 import numpy as np
 import logging
 
-from .simulation import *
 from ..tools import hdf5_io
-from ..tools.misc import update_recursive
-from ..tools.params import asConfig
+from ..tools.misc import to_iterable, get_recursive, set_recursive, find_subclass
 from ..tools.prediction import linear_prediction
-__all__ = ['SimulationPostProcessor', 'SpectralFunctionProcessor', 'init_simulation_for_processing']
+from ..tools.params import Config
+from ..models import Model
+
+try:
+    import h5py
+
+    h5py_version = h5py.version.version_tuple
+except ImportError:
+    h5py_version = (0, 0)
+
+__all__ = ['DataLoader', 'to_lat_geometry', 'to_mps_geometry', 'spectral_function', 'fourier_transform_space',
+           'fourier_transform_time', 'apply_gaussian_windowing', 'get_all_hdf5_keys']
 
 
-class SimulationPostProcessor:
-    r"""Base class for post-processing.
-
-    This class is intended to mostly handle data loading from a result of a :class:`Simulation`.
-    This is done by reinitializing parts of the simulation under the attribute :attr:`sim` and reinitializing the model.
-    This way, the post-processing steps of a quantity directly have access to the model parameters and
-    the simulation parameters. The post-processing results are either saved in the same file, or written
-    into a different file.
+class DataLoader:
+    r"""PostProcessor class to handle IO and instantiating a model.
 
     Parameters
     ----------
-    sim_results : str or None
-        Filename of a finished simulation run # TODO: include option to pass as dictionary
-    processing_params : dict-like
-        For command line use, a .yml file should hold the information.
-        These parameters are converted to a (dict-like Config object) :class:`~tenpy.tools.params.Config`.
-        This should hold the following information
-        processing_params = {'append_results': False,
-        'output_filename': 'post_processed_results.h5',
-        'processing_step1': {...}, # (of subclass)
-        'processing_step2': {...}, # (of subclass)}
+    filename : str, optional
+        Path to a hdf5 file.
+    simulation :
+        An instance of a :class:`tenpy.simulations.simulation.Simulation`
+    data : dict, optional
+        dictionary of simulation results (to be used in e.g. Jupyter Notebooks)
 
     Attributes
     ----------
-    sim
-        Instance of a :class:`Simulation`
-    measurements
-        Computed measurements from running the simulation
+    filename : str
+        Path to the hdf5 file.
+    sim_params : dict
+        Simulation parameters loaded from the hdf5 file.
+        This includes the model parameters and algorithm parameters
     """
+    logger = logging.getLogger(__name__ + ".DataLoader")
 
-    logger = logging.getLogger(__name__ + ".PostProcessing")
-    inside_simulation = False
-
-    def __init__(self, sim_results, *, processing_params: dict = None):
-        # Config can't take None, but empty dict
-        processing_params = processing_params if processing_params is not None else dict()
-        # convert parameters to Config object
-        self.options = asConfig(processing_params, self.__class__.__name__)
-        # setup_logging_()
-        self.logger.info("Initializing post-processing:\n%s\n%s\n%s", "=" * 80, self.__class__.__name__,
+    def __init__(self, filename=None, simulation=None, data=None):
+        self.logger.info("Initializing\n%s\n%s\n%s", "=" * 80, self.__class__.__name__,
                          "=" * 80)
-        # TODO: fix logging of simulation ... why does simulation_class_kwargs disable logging not work (see below)
-        if not self.inside_simulation:
-            self.sim = init_simulation_for_processing(filename=sim_results,
-                                                      simulation_class_kwargs={'setup_logging': False})
-            self.sim.init_model()
-            # TODO: do we want to initialize the state again (e.g., for measurements) ?
-            # self.sim.init_state()
-        # shorthand notation
-        self.model = self.sim.model
-        self.lat = self.sim.model.lat
-        self.BZ = self.sim.model.lat.BZ
+        if filename is not None:
+            self.filename = filename
+            self.logger.info(f"Loading data from {self.filename}")
+            if self.filename.endswith('.h5') or self.filename.endswith('.hdf5'):
+                # create a h5group (which is open)
+                self.logger.info(f'Open file {self.filename}, when no context manager is used, it might be useful to '
+                                 f'call self.close()')
 
-        self.measurements = self.sim.results['measurements']
-        self.sim_params = self.sim.results['simulation_parameters']
+                h5group = h5py.File(self.filename, 'r')
+                self._Hdf5Loader = hdf5_io.Hdf5Loader(h5group)
+            else:
+                self.logger.info(f"Not using hdf5 data-format.\nLoading data can be slow")
+                # all data is loaded as other filenames
+                self._all_data = hdf5_io.load(self.filename)
+
+            self.sim_params = self._load('simulation_parameters')
+
+        elif simulation is not None:
+            self.sim = simulation
+            self.logger.info(f"Initializing from {self.sim.__class__.__name__}")
+            self.sim_params = self.sim.options.as_dict()
+            self._all_data = self.sim.results
+
+            self._model = self.sim.model
+            if hasattr(self.sim, 'psi'):
+                self._psi = self.sim.psi
+
+        elif data is not None:
+            self.logger.info(f"Initializing data loader from passed results")
+            # all data is loaded as other filenames
+            self._all_data = data
+            self.sim_params = self._load('simulation_parameters')
 
     def __enter__(self):
         return self
 
     def __exit__(self, exc_type, exc_value, traceback):
-        self.options.warn_unused(True)
+        self.close()
+        self.save()
 
-    @classmethod
-    def from_simulation(cls, sim: Simulation, *, processing_params: dict = None):
-        if (not hasattr(sim, 'model')) or (not hasattr(sim, 'results')):
-            raise TypeError("Can't perform post-processing on simulation w/o model or results")
-        post_processing_sim = cls.__new__(cls)
-        post_processing_sim.inside_simulation = True
-        post_processing_sim.sim = sim  # TODO: bad idea?
-        post_processing_sim.__init__(None, processing_params=processing_params)
-        return post_processing_sim
+    def close(self):
+        if hasattr(self, '_Hdf5Loader'):
+            self._Hdf5Loader.h5group.close()
+            self.logger.info(f"Closed {self.filename}")
 
-    def run(self):
-        results, key = self.run_processing()
-        results = self.save_results(results, key)
-        self.logger.info('finished post-processing run\n%s', "=" * 80)
-        return results
+    @property
+    def measurements(self):
+        if not hasattr(self, '_measurements'):
+            self._measurements = self._load('measurements', convert_to_numpy=True)
+        return self._measurements
 
-    def run_processing(self):
-        raise NotImplementedError("Subclass must define :meth:`run` for post-processing")
-
-    def save_results(self, results, key: str):
-        """Saving results from a post-processing step.
-
-        If post-processing was done inside a simulation, append results
-        to dictionary of simulation results.
+    def _load_recursive(self, paths, **kwargs):
+        """Load data recursively into a dictionary
 
         Parameters
         ----------
-        results : dict or ndarray
-        key : str
-            The name under which the results should be stored.
+        paths : str or list of str
+            Path(s) to load from the hdf5 file.
+        **kwargs :
+            keyword arguments to :meth:`_load`
+
+        Returns
+        -------
+        dict
+            data loaded from paths as dictionary
         """
-        if self.options.get('append_results', False) is False:
-            results_dict = dict()
-            results_dict['simulation_parameters'] = self.sim_params
-            results_dict[key] = results
-            # TODO: generate output filename automatically and don't overwrite output filename
-            output_filename = self.options.get('output_filename', None)
-            if output_filename is not None:
-                hdf5_io.save(results_dict, output_filename)
+        paths = to_iterable(paths)
+        res = dict()
+        for path in paths:
+            value = self._load(path, **kwargs)
+            set_recursive(res, path, value, separator='/', insert_dicts=True)
+        return res
+
+    def _load(self, path, prefix='', convert_to_numpy=False):
+        """Load data from either the hdf5 file or from _all_data.
+
+        For hdf5 files, this function enables one to load data from a file, without loading the whole file.
+        I.e. only the data written into ``file[path]`` for path in paths is loaded.
+
+        Parameters
+        ----------
+        path : str
+            Path to load from either the hdf5 file or _all_data
+        prefix : str, optional
+            Prefix for paths.
+        convert_to_numpy : bool, optional
+            Try to convert loaded data to NumPy arrays.
+
+        Returns
+        -------
+        res :
+            data corresponding to path`
+        """
+        key = prefix + path
+        try:
+            if hasattr(self, '_Hdf5Loader'):
+                value = self._Hdf5Loader.load(key)
+            elif hasattr(self, '_all_data'):
+                value = get_recursive(self._all_data, key, separator='/')
             else:
-                self.logger.warning("Missing an output filename, results are returned\
-                                     but not saved")
-            results = results_dict
-        else:
-            if self.sim.results.get(key, None) is not None:
-                self.logger.warning('Overwriting previous post_processing_results')
-            # append results to sim.results
-            self.sim.results[key] = results
-            if self.inside_simulation:
-                # saving is handled by Simulation class
-                results = None
-            else:
-                results = self.sim.save_results(results=self.sim.results)
-                # TODO: unnecessarily writes all results to disk again ?
-                # if we don't pass results, we still need to avoid:
-                # if self.options.get('save_resume_data', self.options['save_psi']):
-                #     results['resume_data'] = self.engine.get_resume_data()
-                # in prepare_results_for_save()
-        return results
+                raise ValueError("Can't find any results.")
+            if isinstance(value, Config):
+                value = value.as_dict()
+            if convert_to_numpy is True:
+                value = self.convert_list_to_ndarray(value)
+            return value
+        except KeyError:
+            self.logger.warning(f"{key} does not exist!")
+
+    def get_data(self, key, prefix='measurements/', convert_to_numpy=True):
+        return self._load(key, prefix=prefix, convert_to_numpy=convert_to_numpy)
 
     @staticmethod
-    def convert_to_ndarray(value):
+    def generate_unique_filename(filename, append_str=''):
+        base, extension = os.path.splitext(filename)
+        base += append_str
+        new_filename = f"{base}{extension}"
+        count_append_number = 1
+        while os.path.exists(new_filename):
+            new_filename = f"{base}_{count_append_number}{extension}"
+            count_append_number += 1
+        return new_filename
+
+    def save(self):
+        # TODO: for hdf5 files, should we specify a hdf5 saver?
+        filename = self.generate_unique_filename(self.filename, append_str='_processed')
+        self.logger.info(f"Saving Results to file: {filename}")
+        raise NotImplementedError()
+
+    @staticmethod
+    def convert_list_to_ndarray(value):
         try:
-            if not isinstance(value, np.ndarray):
+            if isinstance(value, list):
                 value = np.array(value)
                 if value.dtype == np.dtype(object):
                     raise Exception("Can't convert results to numpy array")
-        except Exception:
-            raise Exception("Can't convert results to numpy array")
+        except Exception as e:
+            logging.warning(f"{e}, proceeding without converting")
         return value
 
+    @property
+    def model(self):
+        if not hasattr(self, '_model'):
+            self._model = self.get_model()
+        return self._model
 
-class SpectralFunctionProcessor(SimulationPostProcessor):
-    r"""Post-processing class for the :class:`SpectralSimulation`.
+    def get_model(self):
+        model_class_name = self.sim_params['model_class']
+        model_params = self.sim_params['model_params']
+        model_class = find_subclass(Model, model_class_name)
+        return model_class(model_params)
 
-    This class helps to calculate spectral functions from the given correlations of
-    a run of a :class:`SpectralSimulation`. The options to perform additional post-processing steps,
-    namely applying a windowing function and using linear prediction are provided and
-    controlled by the processing_params of the class.
+    @property
+    def lat(self):
+        return self.model.lat
 
-    Parameters
-    ----------
-    sim_results : dict-like
-    processing_params : dict-like
-        processing_params = {'linear_prediction': {...},
-        'windowing_function': {...},
-        'append_results': False,
-        'output_filename': 'post_processed_results.h5'}
+    @property
+    def BZ(self):
+        return self.lat.BZ
 
-    Attributes
-    ----------
-    linear_prediction : Config
-        holding all parameters for a linear prediction, example:
-        linear_prediction = {'m': 50,
-        'p': 30,
-        'cyclic: False,
-        'truncation_mode': 'cutoff',  # or 'renormalize', or 'conjugate'
-        'epsilon': 10e-7,
-        'mode': 'individual'}  # or 'full'
+    @property
+    def psi(self):
+        if not hasattr(self, '_psi'):
+            self._psi = self.get_psi()
+        return self._psi
 
-    windowing_function : Config
-        holding all parameters for a windowing function, example:
-        windowing_function = {'window': 'gaussian',
-        'sigma': 0.4}
-    """
+    def get_psi(self):
+        raise NotImplementedError()
 
-    def __init__(self, sim_results, *, processing_params: dict = None):
-        super().__init__(sim_results, processing_params=processing_params)
-        self.linear_prediction = self.options.get('linear_prediction', default=None)
-        self.windowing_function = self.options.get('windowing_function', default=None)
-        # convert processing steps to Config, if used.
-        if self.linear_prediction is not None:
-            self.linear_prediction_params = asConfig(self.linear_prediction, "Linear Prediction setup")
-        if self.windowing_function is not None:
-            self.windowing_function_params = asConfig(self.windowing_function, "Windowing function setup")
-
-    def run_processing(self):
-        results = {'post_process_params': dict()}
-        if hasattr(self, "linear_prediction_params"):
-            results['post_process_params']['linear_prediction'] = self.linear_prediction_params.as_dict()
-        if hasattr(self, "windowing_function_params"):
-            results['post_process_params']['windowing'] = self.windowing_function_params.as_dict()
-
-        for key, value in self.measurements.items():
-            if "spectral_function_t" in key:
-                # convert results to numpy array if possible, should we just copy the result here?
-                value = self.convert_to_ndarray(value)
-                # compute spectral function
-                self.logger.info(f'computing spectral function of {key}')
-                S, k, w = self.compute_spectral_function(value)
-                k_reduced = self.BZ.reduce_points(k)
-                # store results
-                results[key] = dict()
-                results[key]['spectral_function'] = S
-                results[key]['k'] = k
-                results[key]['k_reduced'] = k_reduced
-                results[key]['w'] = w
-                # TODO: storing simulation output again, should only be a hard link for .hdf5
-                results[key]['raw_sim_data'] = value
-        dict_key = 'spectral_function'
-        return results, dict_key
-
-    def compute_spectral_function(self, m_corr):
-        m_corr_lat = self._to_lat_geometry(m_corr)
-        ft_space, k = self.fourier_transform_space(m_corr_lat)
-
-        if hasattr(self, 'linear_prediction_params'):
-            ft_space = self._to_mps_geometry(ft_space)
-            ft_space = self.linear_predict(ft_space)
-            ft_space = self._to_lat_geometry(ft_space)
-
-        if hasattr(self, 'windowing_function_params'):
-            ft_space = self.apply_windowing_function(ft_space)
-
-        S, w = self.fourier_transform_time(ft_space)
-        return S, k, w
-
-    def check_lattice_consistency(self, a):
-        assert isinstance(a, np.ndarray), "Result should be given back as a numpy array"
-        assert a.ndim == 2, "result of Spectral Simulation should be of shape (t_steps, mps_idx)"
-        assert a.shape[1] == self.lat.N_sites, "Number of Sites differs from number of MPS tensors"
-
-    def _to_lat_geometry(self, a):
-        self.check_lattice_consistency(a)
-        return self.lat.mps2lat_values(a, axes=-1)
-
-    def _to_mps_geometry(self, a):
-        """This assumes that the array a has shape (..., Lx, Ly, Lu), if Lu = 1, (..., Lx, Ly)"""
-        mps_idx_flattened = np.ravel_multi_index(tuple(self.lat.order.T), self.lat.shape)
-        dims_until_lat_dims = a.ndim - (self.lat.dim + 1)  # add unit cell dim
-        if self.lat.Lu == 1:
-            dims_until_lat_dims += 1
-        a = a.reshape(a.shape[:dims_until_lat_dims] + (-1,))
-        a = np.take(a, mps_idx_flattened, axis=-1)
-        return a
-        # this is the same as (which linting doesn't accept unfortunately)
-        # order = self.lat.order
-        # if self.lat.Lu == 1:
-        #     order = order[..., :-1]
-        # return a[..., *order.T]
-
-    def gaussian(self, n_steps: int):
-        """Simple gaussian windowing function.
-
-        Applying a windowing function avoids Gibbs oscillation. tn are time steps 0, 1, ..., N"""
-        tn = np.arange(n_steps)
-        sigma = self.windowing_function_params.get("sigma", 0.4)
-        return np.exp(-0.5 * (tn/(n_steps * sigma)) ** 2)
-
-    def lorentzian(self):
-        eta = self.windowing_function_params.get("eta", 0.4)
-        raise NotImplementedError("More windowing functions will be implemented in the future")
-
-    def apply_windowing_function(self, a, axis=0):
-        # TODO: include other options (Lorentzian, ...)
-        window_name = self.windowing_function_params.get('window', 'gaussian')
-        if not hasattr(self, window_name):
-            self.logger.warning(f"{window_name} not defined, continuing without applying a windowing function.")
-            return a
-        window_function = getattr(self, window_name)
-        window = window_function(a.shape[axis])
-        # make window compatible with numpy broadcasting
-        window = window.reshape(window.shape + (1,) * (len(a.shape) - 1))
-        self.windowing_function_params.warn_unused(True)
-        return np.swapaxes(np.swapaxes(a, 0, axis) * window, axis, 0)
-
-    def linear_predict(self, x):
-        args = self.readout_linear_pred_params(x)  # m, p, truncation_mode, cyclic, epsilon, mode
-        return linear_prediction(x, *args)
-
-    def readout_linear_pred_params(self, data):
-        split = self.linear_prediction_params.get('split', 0)
-        assert split < 1, "Split must be a float between 0 and 1"
-        x_length = int(len(data)*split)
-        m = self.linear_prediction_params.get('m', x_length // 2)
-        cyclic = self.linear_prediction_params.get('cyclic', False)
-        p = self.linear_prediction_params.get('p', (x_length - 1) // 3)
-        epsilon = self.linear_prediction_params.get('epsilon', 10e-7)
-        trunc_mode = self.linear_prediction_params.get('truncation_mode', 'cutoff')
-        mode = self.linear_prediction_params.get('mode', 'individual')
-        self.linear_prediction_params.warn_unused(True)
-        return m, p, split, trunc_mode, mode, cyclic, epsilon
-
-    def fourier_transform_space(self, a):
-        if self.lat.dim == 1:
-            ft_space = np.fft.fftn(a, axes=(1,))
-            k = np.fft.fftfreq(ft_space.shape[1])
-            # shifting
-            ft_space = np.fft.fftshift(ft_space, axes=1)
-            k = np.fft.fftshift(k)
-            # make sure k is returned in correct basis
-            k = (k*self.lat.reciprocal_basis).flatten()  # model is 1d
+    def get_all_keys_as_dict(self):
+        if hasattr(self, '_Hdf5Loader'):
+            h5_group = self._Hdf5Loader.h5group
+            return get_all_hdf5_keys(h5_group)
+        elif hasattr(self, '_all_data'):
+            return self._all_data
         else:
-            # only transform over dims (1, 2), since 3 could hold unit cell index
-            ft_space = np.fft.fftn(a, axes=(1, 2))
-            k_x = np.fft.fftfreq(ft_space.shape[1])
-            k_y = np.fft.fftfreq(ft_space.shape[2])
-            # shifting
-            ft_space = np.fft.fftshift(ft_space, axes=(1, 2))
-            k_x = np.fft.fftshift(k_x)
-            k_y = np.fft.fftshift(k_y)
-            # make sure k is returned in correct basis
-            b1, b2 = self.lat.reciprocal_basis
-            k_x = b1*k_x.reshape(-1, 1)  # multiply k_x by its basis vector (b1)
-            k_y = b2*k_y.reshape(-1, 1)  # multiply k_y by its basis vector (b2)
-            # if k is indexed like (kx, ky) a coordinate (2d) is returned.
-            k = k_x[:, np.newaxis, :] + k_y[np.newaxis, :, :]
-            # e.g., if k_x, k_y hold the following (2d) points, the above is equivalent to
-            # k_x = np.array([[1, 2, 3], [1, 1, 1]]).T
-            # k_y = np.array([[-2, -2], [1, 2]]).T
-            # k = np.zeros((3, 2, 2))
-            # for i in range(len(k_y)):
-            #     k[:, i, :] = k_x + k_y[i]
-            # # or equivalently
-            # # for i in range(len(k_x)):
-            # #     k[i, :, :] = k_x[i] + k_y
-        return ft_space, k
-
-    def fourier_transform_time(self, a):
-        # fourier transform in time (note that ifft is used, resulting in a minus sign in the exponential)
-        ft_time = np.fft.ifftn(a, axes=(0,)) * a.shape[0]  # renormalize
-        dt = self.sim_params['algorithm_params']['dt']
-        w = np.fft.fftfreq(len(ft_time), dt/(2*np.pi))
-        # shifting
-        ft_time = np.fft.fftshift(ft_time, axes=0)
-        w = np.fft.fftshift(w)
-        return ft_time, w
+            raise ValueError("Can't find any results.")
 
 
-def init_simulation_for_processing(*,
-                                    filename=None,
-                                    checkpoint_results=None,
-                                    update_sim_params=None,
-                                    simulation_class_kwargs=None):
-    r"""Re-initialize a simulation from a given checkpoint without running it.
+def spectral_function(DL: DataLoader, correlation_key, *,
+                      gaussian_window: bool = False, sigma: float = 0.4,
+                      linear_predict: bool = False, m: int = None, p: int = None,
+                      truncation_mode: str = 'renormalize', split: float = 0):
+    r"""Given a time dependent correlation function C(t, r), calculate its Spectral Function.
 
-    This is the same as :func:`init_simulation_from_checkpoint` but still initializes
-    the simulation if finished_run is True.
-
-    (All parameters have to be given as keyword arguments.)
+    After a run of :class:`tenpy.simulations.time_evolution.TimeDependentCorrelation`, a :class:`DataLoader` instance
+    should be passed, from which the underlying lattice and additional parameters (e.g. ``dt``) can be extracted.
+    The `correlation_key` must coincide with the key of the time-dep. correlation function in the output of the
+    Simulation.
 
     Parameters
     ----------
-    filename : None | str
-        The filename of the checkpoint to be loaded.
-        You can either specify the `filename` or the `checkpoint_results`.
-    checkpoint_results : None | dict
-        Alternatively to `filename` the results of the simulation so far, i.e. directly the data
-        dictionary saved at a simulation checkpoint.
-    update_sim_params : None | dict
-        Allows to update specific :cfg:config:`Simulation` parameters; ignored if `None`.
-        Uses :func:`~tenpy.tools.misc.update_recursive` to update values, such that the keys of
-        `update_sim_params` can be recursive, e.g. `algorithm_params/max_sweeps`.
-    simulation_class_kwargs : None | dict
-        Further keyword arguments given to the simulation class, ignored if `None`.
+    DL : DataLoader
+    correlation_key : str
+    gaussian_window : bool
+        boolean flag to apply gaussian windowing
+    sigma : float
+        standard-deviation used for the gaussian window
+    linear_predict : bool
+        boolean flag to apply linear prediction
+    m : int
+        number of time steps to predict
+    p : int
+        number of last time steps to base linear prediction upon
+    truncation_mode : str
+    split : float
+
+    Returns
+    -------
+    dict:
+        dictionary of keys for `k`, `k_reduced`, `w` and for the spectral function `S`
 
     Notes
     -----
-    The `checkpoint_filename` should be relative to the current working directory. If you use the
-    :cfg:option:`Simulation.directory`, the simulation class will attempt to change to that
-    directory during initialization. Hence, either resume the simulation from the same directory
-    where you originally started, or update the :cfg:option:`Simulation.directory`
-    (and :cfg:option`Simulation.output_filename`) parameter with `update_sim_params`.
+    The Spectral Function is given by the fourier transform in space and time of the (time-dep.) correlation function.
+    For a e.g. translationally invariant system, this is
+    .. math ::
+
+        S(w, \mathbf{k}) = \int dt e^{-iwt} \int d\mathbf{r} e^{i \mathbf{k} \mathbf{r} C(t, \mathbf{r})
+
     """
-    if filename is not None:
-        if checkpoint_results is not None:
-            raise ValueError("pass either filename or checkpoint_results")
-        checkpoint_results = hdf5_io.load(filename)
-    if checkpoint_results is None:
-        raise ValueError("you need to pass `filename` or `checkpoint_results`")
-    # TODO: handle logging correctly
-    if checkpoint_results['finished_run'] is False:
-        logging.warning("Performing post-processing on an unfinished simulation run")
+    # get lattice
+    lat = DL.lat
+    dt = DL.sim_params['algorithm_params']['dt']
+    time_dep_corr = DL.get_data(correlation_key)
 
-    sim_class_mod = checkpoint_results['version_info']['simulation_module']
-    sim_class_name = checkpoint_results['version_info']['simulation_class']
-    SimClass = hdf5_io.find_global(sim_class_mod, sim_class_name)
+    # first we fourier transform in space C(r, t) -> C(k, t)
+    time_dep_corr_lat = to_lat_geometry(lat, time_dep_corr, axes=-1)
+    ft_space, k = fourier_transform_space(lat, time_dep_corr_lat)
+    k_reduced = lat.BZ.reduce_points(k)
+    # optional linear prediction
+    if linear_predict is True:
+        axis = 0  # since we assume that the time-series values are along the first dimension (n_tsteps, n_sites, ...)
+        n_tsteps = ft_space.shape[axis]
+        # linear prediction parameters
+        if m is None:
+            m = n_tsteps
+        if p is None:
+            p = n_tsteps // 3
+        ft_space = linear_prediction(ft_space, m, p, axis=axis, truncation_mode=truncation_mode, split=split)
+    # optional gaussian windowing
+    if gaussian_window is True:
+        ft_space = apply_gaussian_windowing(ft_space, sigma, axes=0)
+    # fourier transform in time C(k, t) -> C(k, w) = S
+    s_k_w, w = fourier_transform_time(ft_space, dt)
+    return {'S': s_k_w, 'k': k, 'k_reduced': k_reduced, 'w': w}
 
-    if simulation_class_kwargs is None:
-        simulation_class_kwargs = {}
 
-    # TODO: does it make sense to update parameters for post-processing ? -> probably not
-    options = checkpoint_results['simulation_parameters']
-    if update_sim_params is not None:
-        update_recursive(options, update_sim_params)
+def fourier_transform_space(lat, a):
+    # make sure a is in lattice form not mps form
+    if lat.dim == 1:
+        ft_space = np.fft.fftn(a, axes=(1,))
+        k = np.fft.fftfreq(ft_space.shape[1])
+        # shifting
+        ft_space = np.fft.fftshift(ft_space, axes=1)
+        k = np.fft.fftshift(k)
+        # make sure k is returned in correct basis
+        k = (k * lat.reciprocal_basis).flatten()  # model is 1d
+    else:
+        # only transform over dims (1, 2), since 3 could hold unit cell index
+        ft_space = np.fft.fftn(a, axes=(1, 2))
+        k_x = np.fft.fftfreq(ft_space.shape[1])
+        k_y = np.fft.fftfreq(ft_space.shape[2])
+        # shifting
+        ft_space = np.fft.fftshift(ft_space, axes=(1, 2))
+        k_x = np.fft.fftshift(k_x)
+        k_y = np.fft.fftshift(k_y)
+        # make sure k is returned in correct basis
+        b1, b2 = lat.reciprocal_basis
+        k_x = b1 * k_x.reshape(-1, 1)  # multiply k_x by its basis vector (b1)
+        k_y = b2 * k_y.reshape(-1, 1)  # multiply k_y by its basis vector (b2)
+        # if k is indexed like (kx, ky) a coordinate (2d) is returned.
+        k = k_x[:, np.newaxis, :] + k_y[np.newaxis, :, :]
+        # e.g., if k_x, k_y hold the following (2d) points, the above is equivalent to
+        # k_x = np.array([[1, 2, 3], [1, 1, 1]]).T
+        # k_y = np.array([[-2, -2], [1, 2]]).T
+        # k = np.zeros((3, 2, 2))
+        # for i in range(len(k_y)):
+        #     k[:, i, :] = k_x + k_y[i]
+        # # or equivalently
+        # # for i in range(len(k_x)):
+        # #     k[i, :, :] = k_x[i] + k_y
+    return ft_space, k
 
-    sim = SimClass.from_saved_checkpoint(checkpoint_results=checkpoint_results, **simulation_class_kwargs)
-    return sim
+
+def fourier_transform_time(a, dt, axis=0):
+    # fourier transform in time
+    # (note that ifft is used, resulting in a minus sign in the exponential)
+    ft_time = np.fft.ifft(a, axis=axis) * a.shape[axis]  # renormalize
+    w = np.fft.fftfreq(len(ft_time), dt / (2 * np.pi))
+    # shifting
+    ft_time = np.fft.fftshift(ft_time, axes=axis)
+    w = np.fft.fftshift(w)
+    return ft_time, w
+
+
+def apply_gaussian_windowing(a, sigma: float = 0.4, axes=0):
+    """Simple gaussian windowing function along an axes.
+
+    Applying a windowing function avoids Gibbs oscillation. tn are time steps 0, 1, ..., N
+
+    Parameters
+    ----------
+    a : ndarray
+        a ndarray where the time series is along axis `axes`
+    sigma : float
+        standard-deviation used for the gaussian window
+    axes : int
+        axes along which to apply the gaussian window
+
+    Returns
+    -------
+    np.ndarray
+    """
+    # extract number of time-steps
+    n_tsteps = a.shape[axes]
+    tn = np.arange(n_tsteps)
+    # create gaussian windowing function with the right shape
+    gaussian_window = np.exp(-0.5 * (tn / (n_tsteps * sigma)) ** 2)
+    # swap dimension which should be weighted (window applied to)
+    # to last dim, so np broadcasting can be used
+    swapped_a = np.swapaxes(a, -1, axes)
+    # apply window
+    weighted_arr = swapped_a * gaussian_window
+    # swap back to original position
+    return np.swapaxes(weighted_arr, axes, -1)
+
+
+def to_lat_geometry(lat, a, axes=-1):
+    return lat.mps2lat_values(a, axes=axes)
+
+
+# TODO: make this function available on the lattice level, but allow an axis parameter for that
+def to_mps_geometry(lat, a):
+    """Bring measurement in lattice geometry to mps geometry.
+
+    This assumes that the array a has shape (..., Lx, Ly, Lu),
+    or if Lu = 1, (..., Lx, Ly)
+    """
+    mps_idx_flattened = np.ravel_multi_index(tuple(lat.order.T), lat.shape)
+    dims_until_lat_dims = a.ndim - (lat.dim + 1)  # add unit cell dim
+    if lat.Lu == 1:
+        dims_until_lat_dims += 1
+    a = a.reshape(a.shape[:dims_until_lat_dims] + (-1,))
+    a = np.take(a, mps_idx_flattened, axis=-1)
+    return a
+
+
+# TODO: move this to hdf5_io
+def get_all_hdf5_keys(h5_group):
+    results = dict()
+    for key in h5_group.keys():
+        if isinstance(h5_group[key], h5py.Group):
+            results[key] = get_all_hdf5_keys(h5_group[key])
+        else:
+            results[key] = h5_group[key]
+
+    # if we are on the lowest recursion level, we only give the keys as sets
+    if not any([isinstance(h5_group[key], h5py.Group) for key in h5_group.keys()]):
+        results = set(results)
+    return results

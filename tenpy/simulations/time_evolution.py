@@ -7,7 +7,7 @@ import traceback
 
 from . import simulation
 from .simulation import *
-from .post_processing import SpectralFunctionProcessor
+from .post_processing import DataLoader, spectral_function
 from ..networks.mps import MPSEnvironment, MPS, MPSEnvironmentJW
 from ..tools.misc import to_iterable
 
@@ -169,7 +169,6 @@ class TimeDependentCorrelation(RealTimeEvolution):
             else:
                 self.logger.warning("No ground state data is supplied, calling the initial state builder on\
                                      SpectralSimulation class. You probably want to supply a ground state")
-
                 super().init_state()  # this sets self.psi from init_state_builder (should be avoided)
                 self.psi_ground_state = self.psi.copy()
                 delattr(self, 'psi')  # free memory
@@ -238,6 +237,7 @@ class TimeDependentCorrelation(RealTimeEvolution):
                 Either a lattice index ``lat_idx`` or a ``mps_idx`` should be passed.
 
                 .. note ::
+
                     The ``lat_idx`` must have (dim+1) i.e. [x, y, u],
                     where u = 0 for a single-site unit cell
 
@@ -436,15 +436,7 @@ class SpectralSimulation(TimeDependentCorrelation):
     .. cfg:config :: SpectralSimulation
         :include: TimeDependentCorrelation
 
-    Attributes
-    ----------
-    post_processor :
-        :noindex:
-        A class attribute defining a :class:`SpectralFunctionProcessor` to be used.
-
     """
-    # class attribute linking SpectralSimulation to its post-processor
-    post_processor = SpectralFunctionProcessor
 
     def __init__(self, options, *, gs_data=None, **kwargs):
         super().__init__(options, gs_data=gs_data, **kwargs)
@@ -458,6 +450,7 @@ class SpectralSimulation(TimeDependentCorrelation):
             parameters for linear prediction
 
             .. note ::
+
                 There are several parameters to specify:
                 m: number of time steps to predict
                 p: number of time steps to use for predictions
@@ -466,13 +459,16 @@ class SpectralSimulation(TimeDependentCorrelation):
             parameters for a windowing function
 
         """
-        self.logger.info(f"calling post-processing with {self.post_processor}")
+
         processing_params = self.options.get('post_processing_params', None)
         # try, except clause to not lose simulation results if post_processing fails
         try:
-            post_processor_cls = self.post_processor.from_simulation(self, processing_params=processing_params)
-            # TODO: make sure this is written into self.results
-            post_processor_cls.run()
+            DL = DataLoader(simulation=self)
+            for key in self.results['measurements'].keys():
+                if key.startswith('correlation_function_t'):
+                    self.logger.info(f"calling post-processing on {key} with {DL}")
+                    pp_result = spectral_function(DL, key, **processing_params)
+                    self.results[f"{key}_processed"] = pp_result
         except Exception:
             self.logger.info("Could not post-process the results because of the following exception:")
             self.logger.warning(traceback.format_exc())
@@ -485,8 +481,7 @@ class SpectralSimulation(TimeDependentCorrelation):
         Makes it possible to include post-processing run during the run of the
         actual simulation.
         """
-        if hasattr(self, 'post_processor'):
-            self.post_processing()
+        self.post_processing()
         return super().prepare_results_for_save()
 
 
