@@ -7,9 +7,9 @@ Calls to the `benchmark` function are repeated a few times for better statistics
 The `setup_benchmark` may use `np.random`, which is initialized with different seeds.
 
 Call this file with arguments, e.g,::
-    python benchmark.py -m tensordot_npc tensordot_numpy -l 2 -s 20 -q u1_symmetry
+    python benchmark.py -m tdot_tenpy tensordot_numpy -l 2 -s 20 -q u1_symmetry
 Afterwards, you can plot the produced files::
-    python benchmark.py -p tensordot_*_benchmark_*.txt
+    python benchmark.py -p tdot_*_benchmark_*.txt
 """
 # Copyright 2018-2023 TeNPy Developers, GNU GPLv3
 
