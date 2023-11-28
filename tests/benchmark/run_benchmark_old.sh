@@ -9,7 +9,7 @@
 # Usage:
 #  ./run_benchmark_old.sh [MOD]
 #
-# MOD : prefix of the modules to run, default "tdot"
+# MOD : prefix of the modules to run (default "tdot")
 # runs "$MOD"_tenpy.py and "$MOD"_numpy.py
 #
 # Requires:

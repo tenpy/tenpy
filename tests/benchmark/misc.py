@@ -1,5 +1,6 @@
 """Common utility functions for benchmarks"""
 # Copyright 2023 TeNPy Developers, GNU GPLv3
+from __future__ import annotations
 import numpy as np
 from tenpy.linalg import groups, spaces
 from tenpy.linalg.backends.abstract_backend import AbstractBackend
@@ -114,7 +115,9 @@ def get_random_leg(symmetry: groups.Symmetry, dim: int, num_sectors: int):
     assert len(multiplicities) == num_sectors
     sectors = random_symmetry_sectors(symmetry=symmetry, np_random=np.random, len_=num_sectors)
     assert len(sectors) == num_sectors
-    return spaces.VectorSpace(symmetry=symmetry, sectors=sectors, multiplicities=multiplicities)
+    res = spaces.VectorSpace.from_sectors(symmetry=symmetry, sectors=sectors, multiplicities=multiplicities)
+    res.test_sanity()
+    return res
 
 
 def get_compatible_leg(legs: list[spaces.VectorSpace]) -> spaces.VectorSpace:
@@ -140,10 +143,12 @@ def get_compatible_leg(legs: list[spaces.VectorSpace]) -> spaces.VectorSpace:
     assert len(np.unique(sectors, axis=0)) == len(sectors)
 
     assert sectors.shape == (num_sectors, fully_compatible.symmetry.sector_ind_len)
-    return spaces.VectorSpace(
+    res = spaces.VectorSpace.from_sectors(
         symmetry=fully_compatible.symmetry, sectors=sectors,
         multiplicities=get_random_multiplicities(dim=dim, num_sectors=num_sectors),
     )
+    res.test_sanity()
+    return res
 
 
 def get_random_tensor(symmetry: groups.Symmetry, backend: AbstractBackend,

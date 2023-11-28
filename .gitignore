@@ -28,5 +28,6 @@ tests/benchmark/results/*
 tests/benchmark/plots/*
 tests/benchmark/*.txt
 tests/benchmark/*.png
+tests/benchmark/*.sge
 hdf5_io/
 examples/yaml/results

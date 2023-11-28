@@ -7,7 +7,7 @@ Calls to the `benchmark` function are repeated a few times for better statistics
 The `setup_benchmark` may use `np.random`, which is initialized with different seeds.
 
 Call this file with arguments, e.g,::
-    python benchmark.py -m tensordot_npc tensordot_numpy -l 2 -s 20 -q 1 1
+    python benchmark.py -m tensordot_npc tensordot_numpy -l 2 -s 20 -q u1_symmetry
 Afterwards, you can plot the produced files::
     python benchmark.py -p tensordot_*_benchmark_*.txt
 """
@@ -16,7 +16,6 @@ Afterwards, you can plot the produced files::
 from __future__ import print_function  # (backwards compatibility to python 2)
 
 import timeit
-import time
 import numpy as np
 import sys
 import os
@@ -61,10 +60,10 @@ def perform_benchmark(mod_name,
         Get the average time per call of the benchmark function for `repeat_average` repetitions.
     repeat_bestof : int
         Perform `rep_bestof` benchmarks and take the best of the them.
-        Reduces noice due to other factors during the benchmark.
+        Reduces noise due to other factors during the benchmark.
     **kwargs :
         Further arguments given to the `setup_benchmark` function.
-        Note: is formated to a string with ``repr(kwargs)``. Don't use too complicated arguements!
+        Note: is formatted to a string with ``repr(kwargs)``. Don't use too complicated arguments!
 
     Returns
     -------
