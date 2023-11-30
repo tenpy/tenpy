@@ -156,7 +156,10 @@ class DataLoader:
         except KeyError:
             self.logger.warning(f"{key} does not exist!")
 
-    def get_data(self, key, prefix='measurements/', convert_to_numpy=True):
+    def get_data_m(self, key, prefix='measurements/', convert_to_numpy=True):
+        return self._load(key, prefix=prefix, convert_to_numpy=convert_to_numpy)
+
+    def get_data(self, key, prefix='', convert_to_numpy=False):
         return self._load(key, prefix=prefix, convert_to_numpy=convert_to_numpy)
 
     @staticmethod
@@ -271,7 +274,7 @@ def spectral_function(DL: DataLoader, correlation_key, *,
     # get lattice
     lat = DL.lat
     dt = DL.sim_params['algorithm_params']['dt']
-    time_dep_corr = DL.get_data(correlation_key)
+    time_dep_corr = DL.get_data_m(correlation_key)
 
     # first we fourier transform in space C(r, t) -> C(k, t)
     time_dep_corr_lat = to_lat_geometry(lat, time_dep_corr, axes=-1)

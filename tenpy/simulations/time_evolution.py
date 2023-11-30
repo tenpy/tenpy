@@ -460,19 +460,19 @@ class SpectralSimulation(TimeDependentCorrelation):
 
         """
 
-        processing_params = self.options.get('post_processing_params', None)
+        processing_params = self.options['post_processing_params']
         # try, except clause to not lose simulation results if post_processing fails
-        try:
-            DL = DataLoader(simulation=self)
-            for key in self.results['measurements'].keys():
-                if key.startswith('correlation_function_t'):
-                    self.logger.info(f"calling post-processing on {key} with {DL}")
-                    pp_result = spectral_function(DL, key, **processing_params)
-                    self.results[f"{key}_processed"] = pp_result
-        except Exception:
-            self.logger.info("Could not post-process the results because of the following exception:")
-            self.logger.warning(traceback.format_exc())
-            self.logger.info("continuing saving results without post-processing")
+        DL = DataLoader(simulation=self)
+        for key in self.results['measurements'].keys():
+            if key.startswith('correlation_function_t'):
+                self.logger.info(f"calling post-processing on {key} with {DL}")
+                pp_result = spectral_function(DL, key, **processing_params)
+                # TODO: make this more general, s.t. in a yml file we can have:
+                # post_processing:
+                #   function: processing_function
+                #   module: my_module.py
+                #   post_processing_params: ...
+                self.results[f"{key}_processed"] = pp_result
 
     def prepare_results_for_save(self):
         """Post process results and prepare them for saving.
@@ -481,7 +481,13 @@ class SpectralSimulation(TimeDependentCorrelation):
         Makes it possible to include post-processing run during the run of the
         actual simulation.
         """
-        self.post_processing()
+        if self.options.get('post_processing_params', None) is not None:
+            try:
+                self.post_processing()
+            except Exception:
+                self.logger.info("Could not post-process the results because of the following exception:")
+                self.logger.warning(traceback.format_exc())
+                self.logger.info("continuing saving results without post-processing")
         return super().prepare_results_for_save()
 
 
