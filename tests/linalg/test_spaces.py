@@ -154,6 +154,13 @@ def test_vector_space(symmetry, symmetry_sectors_rng, np_random):
     npt.assert_array_equal(space.sectors_of_basis, sectors_of_basis)
 
 
+def test_take_slice(vector_space_rng, np_random):
+    space: spaces.VectorSpace = vector_space_rng()
+    mask = np_random.choice([True, False], size=space.dim)
+    small = space.take_slice(mask)
+    npt.assert_array_equal(small.sectors_of_basis, space.sectors_of_basis[mask])
+
+
 def test_product_space(symmetry, symmetry_sectors_rng, np_random):
     sectors = symmetry_sectors_rng(10)
     mults = np_random.integers(1, 10, size=len(sectors))

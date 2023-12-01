@@ -4,7 +4,6 @@ from __future__ import annotations
 import numpy as np
 from numpy import ndarray
 import copy
-from functools import reduce
 import bisect
 from typing import TYPE_CHECKING, Sequence
 
@@ -12,7 +11,7 @@ from tenpy.linalg.dummy_config import printoptions
 
 from .groups import Sector, SectorArray, Symmetry, ProductSymmetry, NoSymmetry, no_symmetry
 from .misc import make_stride, find_row_differences, unstridify
-from ..tools.misc import inverse_permutation, to_iterable
+from ..tools.misc import inverse_permutation, rank_data, to_iterable
 from ..tools.string import format_like_list
 
 if TYPE_CHECKING:
@@ -77,6 +76,7 @@ class VectorSpace:
         sectors occur in the canonical sorted order, see :attr:`_non_dual_sectors`.
         We store the inverse as `_inverse_basis_perm`.
         For `ProductSpace`s we always set a trivial permutation.
+        We can translate indices as ``public_idx == basis_perm[internal_idx]``.
         TODO expand explanation?
     sectors_of_basis : 2D numpy array of int
         The sectors of every element of the "public" computational basis.
@@ -90,7 +90,7 @@ class VectorSpace:
         """Initialize a VectorSpace
 
         `VectorSpace.__init__` is not very user-friendly.
-        Consider using :meth:`from_sectors` instead.
+        Consider using :meth:`from_sectors` or :meth:`from_basis` instead.
         
         Parameters
         ----------
@@ -121,6 +121,10 @@ class VectorSpace:
         self.is_real = is_real
         self.is_dual = _is_dual
         self._non_dual_sectors = sectors = np.asarray(sectors, dtype=int)
+        if sectors.ndim != 2 or sectors.shape[1] != symmetry.sector_ind_len:
+            msg = (f'Wrong sectors.shape: Expected (*, {symmetry.sector_ind_len}), '
+                   f'got {sectors.shape}.')
+            raise ValueError(msg)
         assert sectors.ndim == 2 and sectors.shape[1] == symmetry.sector_ind_len
         self.num_sectors = num_sectors = len(sectors)
         if multiplicities is None:
@@ -134,7 +138,6 @@ class VectorSpace:
             self.basis_perm = basis_perm = np.arange(dim)
         else:
             self.basis_perm = basis_perm = np.asarray(basis_perm, dtype=int)
-        self._inverse_basis_perm = inverse_permutation(basis_perm)
 
     def test_sanity(self):
         # sectors
@@ -438,6 +441,50 @@ class VectorSpace:
             return self.symmetry.dual_sector(sector)
         return sector
 
+    def take_slice(self, blockmask) -> VectorSpace:
+        """Take a "slice" of the leg, keeping only some of the basis states.
+
+        Any ProductSpace structure is lost.
+
+        Parameters
+        ----------
+        blockmask : 1D array-like of bool
+            For every basis state of self, if it should be kept (``True``) or discarded (``False``).
+        """
+        blockmask = np.asarray(blockmask, dtype=bool)
+        blockmask = blockmask[self.basis_perm]
+        sectors = []
+        mults = []
+        for n, s in enumerate(self._non_dual_sectors):
+            m = np.sum(blockmask[self.slices[n, 0]:self.slices[n, 1]])
+            if m > 0:
+                sectors.append(s)
+                mults.append(m)
+        if len(sectors) == 0:
+            sectors = np.zeros(shape=(0, self.symmetry.sector_ind_len),
+                               dtype=self.symmetry.trivial_sector.dtype)
+            mults = np.zeros(0, int)
+        # build basis_perm for small leg.
+        # it is determined by demanding
+        #    a) that the following diagram commutes
+        #
+        #        (self, public) ---- self.basis_perm ---->  (self, internal)
+        #         |                                           |
+        #         v public_blockmask                          v projection_internal
+        #         |                                           |
+        #        (res, public) ----- small_leg_perm ----->  (res, internal)
+        #
+        #    b) that projection_internal is also just a mask (i.e it preserves ordering)
+        #       which is given by public_blockmask[self.basis_perm]
+        #
+        # this allows us to internally (e.g. in the abelian backend) store only 1D boolean masks
+        # as blocks.
+        #
+        # note that we have already converted blockmask to public_blockmask[self.basis_perm] above
+        basis_perm = rank_data(self.basis_perm[blockmask])
+        return VectorSpace(symmetry=self.symmetry, sectors=sectors, multiplicities=mults,
+                           basis_perm=basis_perm, is_real=self.is_real, _is_dual=self.is_dual)
+
     def parse_index(self, idx: int) -> tuple[int, int]:
         """Utility function to translate an index for this VectorSpace.
 
@@ -698,6 +745,13 @@ class VectorSpace:
             # ProductSpace overrides can_contract_with, so self is not a ProductSpace
             return False
         return self.is_dual != other.is_dual and self.is_equal_or_dual(other)
+
+    @property
+    def _inverse_basis_perm(self):
+        # OPTIMIZE cache?
+        # TODO alternatively, make basis_perm a property with a setter that also sets
+        #      _inverse_basis_perm
+        return inverse_permutation(self.basis_perm)
 
     @property
     def is_trivial(self) -> bool:
