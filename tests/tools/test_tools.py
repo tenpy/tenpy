@@ -13,6 +13,9 @@ import os.path
 import sys
 
 
+# TODO use fixtures, e.g. np_random
+
+
 def test_inverse_permutation(N=10):
     x = np.random.random(N)
     p = np.arange(N)
@@ -24,6 +27,27 @@ def test_inverse_permutation(N=10):
     npt.assert_equal(p[pinv], np.arange(N))
     pinv2 = tools.misc.inverse_permutation(tuple(p))
     npt.assert_equal(pinv, pinv2)
+
+
+def test_rank_data(N=10):
+    float_data = np.random.random(N)
+    int_data = np.random.randint(2 * N, size=N)
+    int_data[-2] = int_data[2]  # make sure there is a duplicate to check stability
+    for data in [int_data, float_data]:
+        ranks = tools.misc.rank_data(data)
+        # check vs known implementation
+        ranks2 = np.argsort(np.argsort(data))
+        npt.assert_array_equal(ranks, ranks2)
+        # check defining property
+        for i, ai in enumerate(data):
+            for j, aj in enumerate(data):
+                if ai < aj:
+                    assert ranks[i] < ranks[j]
+                elif ai > aj:
+                    assert ranks[i] > ranks[j]
+                else:
+                    assert (i < j) == (ranks[i] < ranks[j])
+                    assert (i > j) == (ranks[i] > ranks[j])
 
 
 def test_argsort():

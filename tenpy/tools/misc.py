@@ -18,10 +18,11 @@ import warnings
 
 __all__ = [
     'to_iterable', 'to_iterable_of_len', 'to_array', 'anynan', 'argsort', 'lexsort',
-    'inverse_permutation', 'list_to_dict_list', 'atleast_2d_pad', 'transpose_list_list',
-    'zero_if_close', 'pad', 'any_nonzero', 'add_with_None_0', 'chi_list', 'group_by_degeneracy',
-    'get_close', 'find_subclass', 'get_recursive', 'set_recursive', 'update_recursive',
-    'merge_recursive', 'flatten', 'setup_logging', 'build_initial_state', 'setup_executable'
+    'inverse_permutation', 'rank_data', 'list_to_dict_list', 'atleast_2d_pad',
+    'transpose_list_list', 'zero_if_close', 'pad', 'any_nonzero', 'add_with_None_0', 'chi_list',
+    'group_by_degeneracy', 'get_close', 'find_subclass', 'get_recursive', 'set_recursive',
+    'update_recursive', 'merge_recursive', 'flatten', 'setup_logging', 'build_initial_state',
+    'setup_executable'
 ]
 
 
@@ -197,12 +198,41 @@ def inverse_permutation(perm):
     -------
     inv_perm : 1D array (int)
         The inverse permutation of `perm` such that ``inv_perm[perm[j]] = j = perm[inv_perm[j]]``.
+
+    Notes
+    -----
+    This is equivalent to ``numpy.argsort``, but has O(N) complexity instead of O(N log(N))
     """
     perm = np.asarray(perm, dtype=np.intp)
     inv_perm = np.empty_like(perm)
     inv_perm[perm] = np.arange(perm.shape[0], dtype=perm.dtype)
     return inv_perm
-    # equivalently: return np.argsort(perm) # would be O(N log(N))
+
+
+def rank_data(a):
+    """Assign ranks to data.
+
+    For equal values, the first one has lower rank.
+    This is equivalent to ``a.argsort().argsort()`` but should have better scaling.
+
+    Parameters
+    ----------
+    a : 1D array-like
+        The data to rank. TODO support multi-dimensional data?
+
+    Returns
+    -------
+    ranks : 1D array of int
+        The ranks of the data, such that ``a[i] > a[j]`` implies ``ranks[i] > ranks[j]``.
+        For ``a[i] == a[j]`` we have ``ranks[i] > ranks[j]`` iff ``i > j``.
+        The result is a permutation of ``range(len(a))``.
+    """
+    # basically np.argsort(np.argsort(a)),
+    # but use same trick as inverse_permutation for the outer argsort call
+    order = np.argsort(a)
+    ranks = np.empty_like(order)
+    ranks[order] = np.arange(len(a))
+    return ranks
 
 
 def list_to_dict_list(l):
