@@ -156,7 +156,7 @@ class TorchBlockBackend(AbstractBlockBackend):
     def matrix_dot(self, a: Block, b: Block) -> Block:
         return torch_module.matmul(a, b)
 
-    def matrix_svd(self, a: Block, algorithm: str | None) -> tuple[Block, Block, Block]:
+    def _matrix_svd(self, a: Block, algorithm: str | None) -> tuple[Block, Block, Block]:
         if algorithm is None:
             algorithm = 'gesvd'
         assert algorithm in self.svd_algorithms
@@ -234,6 +234,13 @@ class TorchBlockBackend(AbstractBlockBackend):
             w = w[perm]
             v = v[:, perm]
         return w, v
+
+    def block_eigvalsh(self, block: Block, sort: str = None) -> Block:
+        w = torch_module.linalg.eigvalsh(block)
+        if sort is not None:
+            perm = self.block_argsort(w, sort)
+            w = w[perm]
+        return w
 
     def block_abs_argmax(self, block: Block) -> list[int]:
         flat_idx = torch_module.argmax(torch_module.abs(block))

@@ -863,12 +863,13 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
                 for blocks in blocks_list]
         return res
 
-    def svd(self, a: Tensor, new_vh_leg_dual: bool, algorithm: str | None) -> tuple[Data, DiagonalData, Data, VectorSpace]:
+    def svd(self, a: Tensor, new_vh_leg_dual: bool, algorithm: str | None, compute_u: bool,
+            compute_vh: bool) -> tuple[Data, DiagonalData, Data, VectorSpace]:
         u_blocks = []
         s_blocks = []
         vh_blocks = []
         for block in a.data.blocks:
-            u, s, vh = self.matrix_svd(block, algorithm=algorithm)
+            u, s, vh = self.matrix_svd(block, algorithm=algorithm, compute_u=compute_u, compute_vh=compute_vh)
             u_blocks.append(u)
             s_blocks.append(s)
             assert len(s) > 0
@@ -905,12 +906,17 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
             s_block_inds = s_block_inds[sort, :]
             u_blocks = [u_blocks[i] for i in sort]
             s_blocks = [s_blocks[i] for i in sort]
-
         dtype = a.data.dtype
-        return (AbelianBackendData(dtype, u_blocks, u_block_inds, is_sorted=True),
-                AbelianBackendData(dtype.to_real, s_blocks, s_block_inds, is_sorted=True),
-                AbelianBackendData(dtype, vh_blocks, vh_block_inds, is_sorted=True),
-                new_leg)
+        if compute_u:
+            u_data = AbelianBackendData(dtype, u_blocks, u_block_inds, is_sorted=True)
+        else:
+            u_data = None
+        s_data = AbelianBackendData(dtype.to_real, s_blocks, s_block_inds, is_sorted=True)
+        if compute_vh:
+            vh_data = AbelianBackendData(dtype, vh_blocks, vh_block_inds, is_sorted=True)
+        else:
+            vh_data = None
+        return u_data, s_data, vh_data, new_leg
 
     def qr(self, a: Tensor, new_r_leg_dual: bool, full: bool) -> tuple[Data, Data, VectorSpace]:
         q_leg_0, r_leg_1 = a.legs

@@ -283,19 +283,25 @@ class AbstractBackend(metaclass=ABCMeta):
         ...
 
     @abstractmethod
-    def svd(self, a: Tensor, new_vh_leg_dual: bool, algorithm: str | None) -> tuple[Data, DiagonalData, Data, VectorSpace]:  # TODO: Data -> DiagonalData for S
-        """
-        SVD of a Matrix, `a` has only two legs (often ProductSpace).
-
+    def svd(self, a: Tensor, new_vh_leg_dual: bool, algorithm: str | None, compute_u: bool,
+            compute_vh: bool) -> tuple[Data, DiagonalData, Data, VectorSpace]:
+        """SVD of a Matrix, `a` has only two legs (often ProductSpace).
+        
+        Parameters
+        ----------
+        algorithm : str
+            (Backend-specific) algorithm to use for computing the SVD.
+            See e.g. the :attr:`~AbstractBlockBackend.svd_algorithms` attribute.
+            We also implement ``'eigh'`` for all backends.
+        compute_u, compute_vh : bool
+            Only for ``algorithm='eigh'``.
+        
         Returns
         -------
         u, s, vh :
             Data of corresponding tensors.
         new_leg :
             (Backend-specific) VectorSpace the new leg of vh.
-        algorithm : str
-            (Backend-specific) algorithm to use for computing the SVD.
-            See e.g. the :attr:`~AbstractBlockBackend.svd_algorithms` attribute.
         """
         ...
 
@@ -735,8 +741,8 @@ class AbstractBlockBackend(metaclass=ABCMeta):
         """As in numpy.dot, both a and b might be matrix or vector."""
         ...
 
-    @abstractmethod
-    def matrix_svd(self, a: Block, algorithm: str | None) -> tuple[Block, Block, Block]:
+    def matrix_svd(self, a: Block, algorithm: str | None, compute_u: bool, compute_vh: bool
+                   ) -> tuple[Block, Block, Block]:
         """SVD of a 2D block.
 
         With full_matrices=False, i.e. shape ``(n,m) -> (n,k), (k,) (k,m)`` where
@@ -744,7 +750,51 @@ class AbstractBlockBackend(metaclass=ABCMeta):
         
         Assumes that U and Vh have the same dtype as a, while S has a matching real dtype.
         """
+        if algorithm == 'eigh':
+            return self.matrix_eig_based_svd(a, compute_u=compute_u, compute_vh=compute_vh)
+        return self._matrix_svd(a, algorithm)
+
+    @abstractmethod
+    def _matrix_svd(self, a: Block, algorithm: str | None) -> tuple[Block, Block, Block]:
+        """Internal version of :meth:`matrix_svd`, to be implemented by subclasses."""
         ...
+
+    def matrix_eig_based_svd(self, a: Block, compute_u: bool, compute_vh: bool
+                             ) -> tuple[Block, Block, Block]:
+        """Eig-based SVD of a 2D block.
+
+        With full_matrices=False, i.e. shape ``(n,m) -> (n,k), (k,) (k,m)`` where
+        ``k = min(n,m)``.
+        
+        Assumes that U and Vh have the same dtype as a, while S has a matching real dtype.
+        """
+        # TODO should we actually contract the full square a.hc @ a or can we work with the
+        #      factored form?
+        #      consider discussion in https://www.math.wsu.edu/math/faculty/watkins/pdfiles/1-44311.pdf
+        m, n = self.block_shape(a)
+        k = min(m, n)
+        if compute_u and compute_vh:
+            raise ValueError('Can not compute both U and Vh.')
+        if (not compute_u) and (not compute_vh):
+            if m > n:  # a.hc @ a is n x n, thus its cheaper to compute its eigenvalues
+                square = self.block_tdot(self.block_conj(a), a, [0], [0])
+            else:
+                square = self.block_tdot(a, self.block_conj(a), [1], [1])
+            S_sq = self.block_eigvalsh(square)
+            U = Vh = None
+        if compute_u:  # decompose a @ a.hc = U @ S**2 @ U.hc
+            a_ahc = self.block_tdot(a, self.block_conj(a), [1], [1])
+            S_sq, U = self.block_eigh(a_ahc, sort='>')
+            U = U[:, :k]
+            Vh = None
+        else:  # decompose a.hc @ a = V @ S**2 @ V.hc  (note that we want V.hc !)
+            ahc_a = self.block_tdot(self.block_conj(a), a, [0], [0])
+            S_sq, V = self.block_eigh(ahc_a, sort='>')
+            Vh = self.block_permute_axes(self.block_conj(V), [1, 0])[:k, :]
+            U = None
+        # economic SVD: only k=min(m, n) singular values
+        S = self.block_sqrt(abs(S_sq[:k]))
+        return U, S, Vh
 
     @abstractmethod
     def matrix_qr(self, a: Block, full: bool) -> tuple[Block, Block]:
@@ -842,6 +892,22 @@ class AbstractBlockBackend(metaclass=ABCMeta):
         """Eigenvalue decomposition of a 2D hermitian block.
 
         Return a 1D block of eigenvalues and a 2D block of eigenvectors
+        
+        Parameters
+        ----------
+        block : Block
+            The block to decompose
+        sort : {'m>', 'm<', '>', '<'}
+            How the eigenvalues are sorted
+        """
+        ...
+
+    @abstractmethod
+    def block_eigvalsh(self, block: Block, sort: str = None) -> Block:
+        """Eigenvalues of a 2D hermitian block.
+
+        Return a 1D block of eigenvalues
+        
         Parameters
         ----------
         block : Block

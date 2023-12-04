@@ -9,6 +9,20 @@ import warnings
 from tenpy.linalg import tensors, matrix_operations, spaces, ProductSymmetry, backends
 
 
+def assert_permuted_eye(arr):
+    """If the input 2D array is approximately equal to the identity up to independent
+    permutations of rows and columns"""
+    n = arr.shape[0]
+    assert arr.shape == (n, n)
+    for i in range(n):
+        # i-th row: exactly one 1., rest 0.
+        assert np.sum(np.isclose(arr[i], 1.)) == 1
+        assert np.sum(np.isclose(arr[i], 0.)) == n - 1
+        # i-th column: exactly one 1., rest 0.
+        assert np.sum(np.isclose(arr[:, i], 1.)) == 1
+        assert np.sum(np.isclose(arr[:, i], 0.)) == n - 1
+
+
 @pytest.mark.parametrize('all_labels, l_labels, r_labels', [
     (['l1', 'r2', 'l2', 'r1'], ['l1', 'l2'], ['r1', 'r2']),
     (['l1', 'r1', 'l2'], ['l2', 'l1'], ['r1']),
@@ -103,29 +117,53 @@ def test_eig_based_svd(tensor_rng, compute_u, compute_vh, new_vh_leg_dual):
         T, u_legs=u_legs, new_labels=new_labels, vh_legs=vh_legs, compute_u=compute_u,
         compute_vh=compute_vh, new_vh_leg_dual=new_vh_leg_dual
     )
+    # basis of the new leg is arbitrary, but its symmetry sectors should match
+    npt.assert_array_equal(S.legs[0].sectors, svd_S.legs[0].sectors)
+    npt.assert_array_equal(S.legs[0].multiplicities, svd_S.legs[0].multiplicities)
+    # check S
+    S.test_sanity()
+    assert S.labels == ['cl', 'cr']
+    assert S.legs[0].is_dual == new_vh_leg_dual
+    assert S.legs[1].is_dual == (not new_vh_leg_dual)
+    npt.assert_almost_equal(np.sort(S.diag_numpy), np.sort(svd_S.diag_numpy))
     # check U
     if compute_u:
         U.test_sanity()
+        assert U.labels == [*u_legs, new_labels[0]]
         assert U.get_leg('cr').is_dual == (not new_vh_leg_dual)
+        # check U is isometry
         Ud_U = tensors.tdot(U.conj(), U, ['l1*', 'l2*'], ['l1', 'l2'])
         assert tensors.almost_equal(tensors.eye_like(Ud_U), Ud_U)
-        phases = U.conj().tdot(svd_U, ['l1*', 'l2*'], ['l1', 'l2'])
-        expect_eye = np.abs(phases.to_numpy_ndarray())
-        npt.assert_almost_equal(expect_eye, np.eye(expect_eye.shape[0]))
-    # check S
-    S.test_sanity()
-    assert S.legs[0].is_dual == new_vh_leg_dual
-    assert S.legs[1].is_dual == (not new_vh_leg_dual)
-    assert tensors.almost_equal(S, svd_S)
+        # check :: Uhc @ T @ Thc @ U == S ** 2
+        expect_S_sq = U.conj().tdot(T, ['l1*', 'l2*'], ['l1', 'l2'])
+        expect_S_sq = expect_S_sq.tdot(T.conj(), ['r1', 'r2'], ['r1*', 'r2*'])
+        expect_S_sq = expect_S_sq.tdot(U, ['l1*', 'l2*'], ['l1', 'l2'])
+        expect_S_sq.relabel({'cr*': 'cl'})
+        assert tensors.almost_equal(expect_S_sq, S ** 2, allow_different_types=True)
+        # check that U and svd_U contain the same singular vectors.
+        # they may be permuted, since the basis of the new leg is arbitrary
+        # and they may differ by phase factors, which is a gauge freedom of the SVD
+        overlaps = U.conj().tdot(svd_U, ['l1*', 'l2*'], ['l1', 'l2'])
+        assert_permuted_eye(np.abs(overlaps.to_numpy_ndarray()))
     # check Vh
     if compute_vh:
         Vh.test_sanity()
+        assert Vh.labels == [new_labels[1], *vh_legs]
         assert Vh.get_leg('cl').is_dual == new_vh_leg_dual
+        # check V is isometry
         Vh_V = tensors.tdot(Vh, Vh.conj(), ['r1', 'r2'], ['r1*', 'r2*'])
         assert tensors.almost_equal(tensors.eye_like(Vh_V), Vh_V)
-        phases = Vh.tdot(svd_Vh.conj(), ['r1', 'r2'], ['r1*', 'r2*'])
-        expect_eye = np.abs(phases.to_numpy_ndarray())
-        npt.assert_almost_equal(expect_eye, np.eye(expect_eye.shape[0]))
+        # check :: Vhc @ Thc @ T @ V == S ** 2
+        expect_S_sq = Vh.tdot(T.conj(), ['r1', 'r2'], ['r1*', 'r2*'])
+        expect_S_sq = expect_S_sq.tdot(T, ['l1*', 'l2*'], ['l1', 'l2'])
+        expect_S_sq = expect_S_sq.tdot(Vh.conj(), ['r1', 'r2'], ['r1*', 'r2*'])
+        expect_S_sq.relabel({'cl*': 'cr'})
+        assert tensors.almost_equal(expect_S_sq, S ** 2, allow_different_types=True)
+        # check that Vh and svd_Vh contain the same singular vectors.
+        # they may be permuted, since the basis of the new leg is arbitrary
+        # and they may differ by phase factors, which is a gauge freedom of the SVD
+        overlaps = Vh.tdot(svd_Vh.conj(), ['r1', 'r2'], ['r1*', 'r2*'])
+        assert_permuted_eye(np.abs(overlaps.to_numpy_ndarray()))
 
 
 @pytest.mark.parametrize('svd_min, normalize_to', [(1e-14, None), (1e-4, None), (1e-4, 2.7)])
@@ -143,29 +181,55 @@ def test_truncated_eig_based_svd(tensor_rng, compute_u, compute_vh, new_vh_leg_d
         T, ['l1', 'l2'], ['r1', 'r2'], new_labels=['cr', 'cl'], new_vh_leg_dual=new_vh_leg_dual,
         truncation_options=dict(svd_min=svd_min), normalize_to=normalize_to
     )
+    # basis of the new leg is arbitrary, but its symmetry sectors should match
+    npt.assert_array_equal(S.legs[0].sectors, svd_S.legs[0].sectors)
+    npt.assert_array_equal(S.legs[0].multiplicities, svd_S.legs[0].multiplicities)
+    # check S
+    S.test_sanity()
+    assert S.labels == ['cl', 'cr']
+    assert S.legs[0].is_dual == new_vh_leg_dual
+    assert S.legs[1].is_dual == (not new_vh_leg_dual)
+    npt.assert_almost_equal(np.sort(S.diag_numpy), np.sort(svd_S.diag_numpy))
     # check U
     if compute_u:
         U.test_sanity()
+        assert U.labels == ['l1', 'l2', 'cr']
         assert U.get_leg('cr').is_dual == (not new_vh_leg_dual)
+        # check U is isometry
         Ud_U = tensors.tdot(U.conj(), U, ['l1*', 'l2*'], ['l1', 'l2'])
         assert tensors.almost_equal(tensors.eye_like(Ud_U), Ud_U)
-        phases = U.conj().tdot(svd_U, ['l1*', 'l2*'], ['l1', 'l2'])
-        expect_eye = np.abs(phases.to_numpy_ndarray())
-        npt.assert_almost_equal(expect_eye, np.eye(expect_eye.shape[0]))
-    # check S
-    S.test_sanity()
-    assert S.legs[0].is_dual == new_vh_leg_dual
-    assert S.legs[1].is_dual == (not new_vh_leg_dual)
-    assert tensors.almost_equal(S, svd_S)
+        # check :: Uhc @ T @ Thc @ U == S ** 2, up to truncation and renormalization
+        expect_S_sq = U.conj().tdot(T, ['l1*', 'l2*'], ['l1', 'l2'])
+        expect_S_sq = expect_S_sq.tdot(T.conj(), ['r1', 'r2'], ['r1*', 'r2*'])
+        expect_S_sq = expect_S_sq.tdot(U, ['l1*', 'l2*'], ['l1', 'l2'])
+        expect_S_sq.relabel({'cr*': 'cl'})
+        expect_S_sq = expect_S_sq * (renormalize ** 2)
+        npt.assert_allclose(err ** 2, tensors.norm(expect_S_sq - S ** 2), atol=1e-10)
+        # check that U and svd_U contain the same singular vectors.
+        # they may be permuted, since the basis of the new leg is arbitrary
+        # and they may differ by phase factors, which is a gauge freedom of the SVD
+        overlaps = U.conj().tdot(svd_U, ['l1*', 'l2*'], ['l1', 'l2'])
+        assert_permuted_eye(np.abs(overlaps.to_numpy_ndarray()))
     # check Vh
     if compute_vh:
         Vh.test_sanity()
+        assert Vh.labels == ['cl', 'r1', 'r2']
         assert Vh.get_leg('cl').is_dual == new_vh_leg_dual
+        # check V is isometry
         Vh_V = tensors.tdot(Vh, Vh.conj(), ['r1', 'r2'], ['r1*', 'r2*'])
         assert tensors.almost_equal(tensors.eye_like(Vh_V), Vh_V)
-        phases = Vh.tdot(svd_Vh.conj(), ['r1', 'r2'], ['r1*', 'r2*'])
-        expect_eye = np.abs(phases.to_numpy_ndarray())
-        npt.assert_almost_equal(expect_eye, np.eye(expect_eye.shape[0]))
+         # check :: Vhc @ Thc @ T @ V == S ** 2, up to truncation and renormalization
+        expect_S_sq = Vh.tdot(T.conj(), ['r1', 'r2'], ['r1*', 'r2*'])
+        expect_S_sq = expect_S_sq.tdot(T, ['l1*', 'l2*'], ['l1', 'l2'])
+        expect_S_sq = expect_S_sq.tdot(Vh.conj(), ['r1', 'r2'], ['r1*', 'r2*'])
+        expect_S_sq.relabel({'cl*': 'cr'})
+        expect_S_sq = expect_S_sq * (renormalize ** 2)
+        npt.assert_allclose(err ** 2, tensors.norm(expect_S_sq - S ** 2), atol=1e-10)
+        # check that Vh and svd_Vh contain the same singular vectors.
+        # they may be permuted, since the basis of the new leg is arbitrary
+        # and they may differ by phase factors, which is a gauge freedom of the SVD
+        overlaps = Vh.tdot(svd_Vh.conj(), ['r1', 'r2'], ['r1*', 'r2*'])
+        assert_permuted_eye(np.abs(overlaps.to_numpy_ndarray()))
     # check other outputs
     npt.assert_almost_equal(err, svd_err)
     npt.assert_almost_equal(renormalize, svd_renormalize)

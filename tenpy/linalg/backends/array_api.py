@@ -154,7 +154,7 @@ class ArrayApiBlockBackend(AbstractBlockBackend):
         return self._api.matmul(a, b)
 
     # noinspection PyTypeChecker
-    def matrix_svd(self, a: Block, algorithm: str | None) -> tuple[Block, Block, Block]:
+    def _matrix_svd(self, a: Block, algorithm: str | None) -> tuple[Block, Block, Block]:
         if algorithm is None:
             algorithm = 'default'
 
@@ -236,6 +236,13 @@ class ArrayApiBlockBackend(AbstractBlockBackend):
             w = w[perm]
             v = v[:, perm]
         return w, v
+
+    def block_eigvalsh(self, block: Block, sort: str = None) -> Block:
+        w = self._api.linalg.eigvalsh(block)
+        if sort is not None:
+            perm = self.block_argsort(w, sort)
+            w = w[perm]
+        return w
             
     def block_abs_argmax(self, block: Block) -> list[int]:
         flat_idx = self._api.argmax(self._api.abs(block))

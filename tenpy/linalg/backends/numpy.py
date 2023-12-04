@@ -153,7 +153,7 @@ class NumpyBlockBackend(AbstractBlockBackend):
         return np.dot(a, b)
 
     # noinspection PyTypeChecker
-    def matrix_svd(self, a: Block, algorithm: str | None) -> tuple[Block, Block, Block]:
+    def _matrix_svd(self, a: Block, algorithm: str | None) -> tuple[Block, Block, Block]:
         if algorithm is None:
             algorithm = 'gesdd'
 
@@ -252,6 +252,13 @@ class NumpyBlockBackend(AbstractBlockBackend):
             w = np.take(w, perm)
             v = np.take(v, perm, axis=1)
         return w, v
+
+    def block_eigvalsh(self, block: Block, sort: str = None) -> Block:
+        w = np.linalg.eigvalsh(block)
+        if sort is not None:
+            perm = self.block_argsort(w, sort)
+            w = np.take(w, perm)
+        return w
 
     def block_abs_argmax(self, block: Block) -> list[int]:
         return np.unravel_index(np.argmax(np.abs(block)), block.shape)
