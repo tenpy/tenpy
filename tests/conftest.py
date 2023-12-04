@@ -12,7 +12,8 @@ backend : AbstractBackend
 block_rng : function (size: list[int], real: bool = True) -> Block
 backend_data_rng : function (legs: list[VectorSpace], real: bool = True) -> BackendData
 tensor_rng : function (legs: list[VectorSpace] = None, num_legs: int = 2, labels: list[str] = None,
-                       max_num_block: int = 5, max_block_size: int = 5, real: bool = True) -> Tensor
+                       max_num_block: int = 5, max_block_size: int = 5, real: bool = True,
+                       cls: Type[T] = Tensor) -> T
 """
 # Copyright 2023-2023 TeNPy Developers, GNU GPLv3
 
@@ -148,30 +149,43 @@ def block_rng(backend, np_random):
     return generator
 
 
+def abelian_data_drop_some_blocks(data, np_random, empty_ok=False, all_blocks=False):
+    """Randomly drop some blocks, in-place"""
+    # unless all_blocks=True, drop some blocks with 50% probability
+    if (not all_blocks) and (np_random.random() < .5):
+        keep = (np_random.random(len(data.blocks)) < 0.5)
+        if not np.any(keep):
+            # keep at least one
+            # note that using [0:1] instead of [0] is robust in case ``keep.shape == (0,)``
+            keep[0:1] = True
+        data.blocks = [block for block, k in zip(data.blocks, keep) if k]
+        data.block_inds = data.block_inds[keep]
+    if (not empty_ok) and (len(data.blocks) == 0):
+        raise ValueError('Empty data was generated. If thats ok, suppress with `empty_ok=True`')
+    return data
+
+
 @pytest.fixture
 def backend_data_rng(backend, block_rng, np_random):
+    """Generate random data for a Tensor"""
     def generator(legs, real=True, empty_ok=False, all_blocks=False):
         data = backend.from_block_func(block_rng, legs, func_kwargs=dict(real=real))
         if isinstance(backend, backends.abelian.AbstractAbelianBackend):
-            if (not all_blocks) and (np_random.random() < 0.5):  # with 50% probability
-                # keep roughly half of the blocks
-                keep = (np_random.random(len(data.blocks)) < 0.5)
-                if not np.any(keep):
-                    # but keep at least one
-                    # note that using [0:1] instead of [0] is robust in case ``keep.shape == (0,)``
-                    keep[0:1] = True
-                data.blocks = [block for block, k in zip(data.blocks, keep) if k]
-                data.block_inds = data.block_inds[keep]
-            if (not empty_ok) and (len(data.blocks) == 0):
-                raise ValueError('Empty data was generated. If thats ok, supress with `empty_ok=True`')
+            data = abelian_data_drop_some_blocks(data, np_random=np_random, empty_ok=empty_ok,
+                                                 all_blocks=all_blocks)
         return data
     return generator
 
 
 @pytest.fixture
-def tensor_rng(backend, backend_data_rng, vector_space_rng, symmetry, np_random):
+def tensor_rng(backend, symmetry, np_random, block_rng, vector_space_rng, symmetry_sectors_rng):
+    """TODO proper documentation
+
+    ChargedTensor: only creates one-dimensional dummy legs
+    """
     def generator(legs=None, num_legs=None, labels=None, max_num_blocks=5, max_block_size=5,
-                  real=True, empty_ok=False, all_blocks=False):
+                  real=True, empty_ok=False, all_blocks=False, cls=tensors.Tensor):
+        # parse legs
         if num_legs is None:
             if legs is not None:
                 num_legs = len(legs)
@@ -179,13 +193,77 @@ def tensor_rng(backend, backend_data_rng, vector_space_rng, symmetry, np_random)
                 num_legs = len(labels)
             else:
                 num_legs = 2
-        if labels is not None:
+        if labels is None:
+            labels = [None] * num_legs
+        else:
             assert len(labels) == num_legs
         if legs is None:
             legs = [None] * num_legs
         else:
             assert len(legs) == num_legs
         legs = list(legs)
+
+        # deal with other classes
+        if cls is tensors.DiagonalTensor:
+            second_leg_dual = True
+            if len(legs) == 1:
+                leg = legs[0]
+            elif len(legs) == 2:
+                if legs[0] is None:
+                    leg = legs[1]
+                elif legs[1] is None:
+                    leg = legs[0]
+                else:
+                    leg = legs[0]
+                    assert leg.is_equal_or_dual(legs[1])
+                    second_leg_dual = (leg.is_dual != legs[1].is_dual)
+            else:
+                raise ValueError('Invalid legs. Expected none, one or two')
+            if leg is None:
+                leg = vector_space_rng(max_num_blocks, max_block_size)
+            assert num_legs in [None, 2]
+            data = backend.diagonal_from_block_func(block_rng, leg=leg, func_kwargs=dict(real=real))
+            if isinstance(backend, backends.abelian.AbstractAbelianBackend):
+                data = abelian_data_drop_some_blocks(data, np_random=np_random, empty_ok=empty_ok,
+                                                     all_blocks=all_blocks)
+            return tensors.DiagonalTensor(data, first_leg=leg, second_leg_dual=second_leg_dual,
+                                          backend=backend, labels=labels)
+        elif cls is tensors.ChargedTensor:
+            sectors = symmetry_sectors_rng(1)
+            dummy_leg = spaces.VectorSpace(symmetry=symmetry, sectors=sectors, multiplicities=[1])
+            inv_part = generator(legs=legs + [dummy_leg], labels=labels + ['!'],
+                                 max_num_blocks=max_num_blocks, max_block_size=max_block_size,
+                                 real=real, empty_ok=empty_ok, all_blocks=all_blocks,
+                                 cls=tensors.Tensor)
+            return tensors.ChargedTensor(inv_part)
+        elif cls is tensors.Mask:
+            assert len(legs) == 1
+            if legs[0] is None:
+                leg = vector_space_rng(max_num_blocks, max_block_size)
+            else:
+                leg = legs[0]
+            leg: spaces.VectorSpace
+            blockmask = np_random.choice([True, False], size=leg.dim)
+            if np.all(blockmask):
+                blockmask[len(blockmask) // 2] = False
+            if not np.any(blockmask):
+                blockmask[len(blockmask) // 2] = True
+            if isinstance(backend, backends.abelian.AbstractAbelianBackend):
+                # "drop" some blocks, i.e. set them to False
+                if (not all_blocks) and (np_random.random() < .5):
+                    drop = (np_random.random(leg.num_sectors) < 0.5)
+                    if np.all(drop):  # keep at least one
+                        drop[0:1] = False
+                    for slc in leg.slices[drop]:
+                        blockmask[leg.basis_perm[slice(*slc)]] = False
+                if (not empty_ok) and (not np.any(blockmask)):
+                    msg = 'Empty data was generated. If thats ok, suppress with `empty_ok=True`'
+                    raise ValueError(msg)
+            return tensors.Mask.from_blockmask(blockmask, large_leg=leg, backend=backend)
+        elif cls is not tensors.Tensor:
+            raise ValueError(f'Illegal tensor cls: {cls}')
+
+        # fill in missing legs
         missing_legs = [i for i, leg in enumerate(legs) if leg is None]
         last_missing = missing_legs[-1] if len(missing_legs) > 0 and len(legs) > 1 else -1
         for i, leg in enumerate(legs):
@@ -218,6 +296,11 @@ def tensor_rng(backend, backend_data_rng, vector_space_rng, symmetry, np_random)
                     _is_dual=compatible_leg.is_dual
                 )
             legs[last_missing] = compatible_leg
-        data = backend_data_rng(legs, real=real, empty_ok=empty_ok, all_blocks=all_blocks)
+        
+        data = backend.from_block_func(block_rng, legs, func_kwargs=dict(real=real))
+        if isinstance(backend, backends.abelian.AbstractAbelianBackend):
+            data = abelian_data_drop_some_blocks(data, np_random=np_random, empty_ok=empty_ok,
+                                                 all_blocks=all_blocks)
+        
         return tensors.Tensor(data, backend=backend, legs=legs, labels=labels)
     return generator
