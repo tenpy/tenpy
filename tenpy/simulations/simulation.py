@@ -16,6 +16,7 @@ import time
 import importlib
 import warnings
 import functools
+import traceback
 import numpy as np
 import logging
 import copy
@@ -28,6 +29,7 @@ from ..tools import hdf5_io
 from ..tools.cache import CacheFile
 from ..tools.params import asConfig
 from ..tools.events import EventHandler
+from .post_processing import DataLoader
 from ..tools.misc import find_subclass, update_recursive, get_recursive, set_recursive
 from ..tools.misc import setup_logging as setup_logging_
 from .. import version
@@ -729,7 +731,7 @@ class Simulation:
         self.make_measurements()
 
     def _load_data_from_kwarg_or_options(self, kwarg_data, key: str, message="", is_mandatory=False) -> (str, dict):
-        """ Load data from either a provided kwarg (prioritized) or from a filename provided in options.
+        """Load data from either a provided kwarg (prioritized) or from a filename provided in options.
         Function should only be called after conversion of :class:`Simulation` parameters to a
         :class:`tenpy.tools.misc.Config` stored in self.options.
 
@@ -771,6 +773,76 @@ class Simulation:
                 raise KeyError(f"{message} must be passed either as kwarg or in options")
 
         return fn, data
+
+    def run_post_processing(self):
+        """Apply (several) post-processing steps.
+
+        .. cfg:configoptions :: SpectralSimulation
+
+        post_processing : list of tuple
+            Functions to perform post-processing with the :class:`DataLoader`.
+            This uses a similar syntax to the attr:`connect_measurements` in meth:`init_measurements`.
+            Each tuple can be of length 2 to 3, with entries ``(module, function, kwargs)``.
+            The kwargs can contain a ``results_key`` under which the results (unless None is returned)
+            are saved. All other kwargs are passed on to the function.
+
+            .. note ::
+
+                All post-processing functions should follow the syntax:
+                ``def pp_function(DL, *, kwarg1, kwarg_2=default_2):``
+                where ``DL`` is an instance of the :class:`DataLoader`, ``kwarg_1`` is a necessary
+                keyword argument (no default value), while ``kwarg_2`` is an optional keyword argument (with
+                default value)
+
+        """
+        if hasattr(self, 'default_post_processing'):
+            def_pp = self.default_post_processing
+        else:
+            def_pp = []
+        man_pp = list(self.options.get('post_processing', []))
+
+        all_pp = def_pp + man_pp
+
+        if len(all_pp) > 0:
+            DL = DataLoader(simulation=self)
+            for pp_step in all_pp:
+                # pp_step : module_name, func_name, extra_kwargs=None
+                # use try, except, so we don't abort a Simulation if post-processing is not working
+                try:
+                    self._post_processing(DL, *pp_step)
+                except Exception:
+                    self.logger.info("Could not post-process the results because of the following exception:")
+                    self.logger.warning(traceback.format_exc())
+                    self.logger.info("continuing saving results without post-processing")
+
+    def _post_processing(self, DL, module_name, func_name, extra_kwargs={}):
+        """Apply only one post-processing step."""
+        # get function / from module_name namespace
+        function = hdf5_io.find_global(module_name, func_name)
+        # check if results_key is supplied
+        if 'results_key' in extra_kwargs:
+            results_key = extra_kwargs['results_key']
+            del extra_kwargs['results_key']
+        else:
+            results_key = func_name
+        # perform post-processing
+        self.logger.info(f"calling post-processing function {func_name}")
+        pp_result = function(DL, **extra_kwargs)
+        # pp_result might be None, skip saving
+        if pp_result is not None:
+            # make sure we don't override any results
+            all_result_keys = self.results.keys()
+            if results_key in all_result_keys:
+                key_to_save = results_key + '_1'
+                while results_key in all_result_keys:
+                    old_idx = key_to_save[-1]
+                    new_idx = str(int(old_idx) + 1)  # increase by one
+                    results_key = results_key[:-1] + new_idx
+            else:
+                key_to_save = results_key
+
+            self.logger.info(f"Saving post-processing result under {key_to_save}")
+            self.results[key_to_save] = pp_result
 
     def get_version_info(self):
         """Try to save version info which is necessary to allow reproducibility."""
@@ -961,7 +1033,7 @@ class Simulation:
         hdf5_io.save(results, output_filename)
 
     def prepare_results_for_save(self):
-        """Bring the `results` into a state suitable for saving.
+        """Bring the `results` into a state suitable for saving. Perform post-processing on results.
 
         For example, this can be used to convert lists to numpy arrays, to add more meta-data,
         or to clean up unnecessarily large entries.
@@ -980,6 +1052,7 @@ class Simulation:
             A copy of :attr:`results` containing everything to be saved.
             Measurement results are converted into a numpy array (if possible).
         """
+        self.run_post_processing()
         results = self.results.copy()
         results['simulation_parameters'] = self.options.as_dict()
         if 'measurements' in results:

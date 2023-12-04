@@ -3,17 +3,24 @@
 
 simulation_class : SpectralSimulation
 
-ground_state_filename : results/a_minimal_DMRG.h5
+ground_state_filename : a_minimal_DMRG.h5
 
 directory: results
 output_filename : a_minimal_SpectralSimulation.h5
 
 operator_t0:
-    name: Sz
+    opname: Sz
+    # mps_idx:
+    # lat_idx:
+    #### or
+    # multi_op: [Sx, Sy, Sz]
+    # key_name: name
 
 operator_t: Sz
 
 final_time: 1
+
+addJW: False # no JW string needed (spin-model)
 
 algorithm_class: TEBDEngine
 algorithm_params:
@@ -22,10 +29,11 @@ algorithm_params:
     dt : 0.1
     N_steps : 2  # measurements every dt*N_steps
 
-post_processing_params:
+spectral_function_params:
     linear_predict: True
-    m: 50
-    p: 5
-    truncation_mode: renormalize
+    # m: 50
+    # p: 5
+    # truncation_mode: renormalize
+    # split: 0.1
     gaussian_window: True
-    sigma: 0.4
+    # sigma: 0.4

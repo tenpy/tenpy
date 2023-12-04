@@ -229,7 +229,7 @@ class DataLoader:
             raise ValueError("Can't find any results.")
 
 
-def spectral_function(DL: DataLoader, correlation_key, *,
+def spectral_function(DL: DataLoader, *, correlation_key, conjugate_correlation=False,
                       gaussian_window: bool = False, sigma: float = 0.4,
                       linear_predict: bool = False, m: int = None, p: int = None,
                       truncation_mode: str = 'renormalize', split: float = 0):
@@ -273,8 +273,16 @@ def spectral_function(DL: DataLoader, correlation_key, *,
     """
     # get lattice
     lat = DL.lat
+
     dt = DL.sim_params['algorithm_params']['dt']
+    N_steps = DL.sim_params['algorithm_params'].get('N_steps', None)
+    if N_steps is not None:
+        dt *= N_steps
+
     time_dep_corr = DL.get_data_m(correlation_key)
+    # conjugate correlation (i.e. to put r_0 to the right site)
+    if conjugate_correlation is True:
+        time_dep_corr = np.conjugate(time_dep_corr)
 
     # first we fourier transform in space C(r, t) -> C(k, t)
     time_dep_corr_lat = to_lat_geometry(lat, time_dep_corr, axes=-1)
@@ -411,3 +419,114 @@ def get_all_hdf5_keys(h5_group):
     if not any([isinstance(h5_group[key], h5py.Group) for key in h5_group.keys()]):
         results = set(results)
     return results
+
+
+###### Plotting section
+
+
+def plot_correlations_on_lattice(ax, lat, correlations, pairs='nearest_neighbors',
+                                 scale=1, color_pos='r', color_neg='g', color=None, zorder=0):
+    """Function to plot correlations on a lattice
+
+    Parameters
+    ----------
+    ax :
+        `matplotlib.axes.Axes`
+    lat :
+        a (TeNPy) lattice to plot the correlations on
+    correlations : array-like
+        an array of correlations (in mps_form)
+    pairs: str
+    scale: float
+    color_pos: str
+    color_neg: str
+    color: str
+    zorder: float
+    """
+    from matplotlib.collections import LineCollection
+
+    mps_is = list()
+    mps_js = list()
+    for pair in lat.pairs[pairs]:
+        coupling = lat.possible_couplings(*pair)
+        mps_i = coupling[0]
+        mps_j = coupling[1]
+        mps_is.append(mps_i)
+        mps_js.append(mps_j)
+
+    all_mps_js = np.concatenate(mps_js)
+    all_mps_is = np.concatenate(mps_is)
+
+    pos_i = lat.position(lat.mps2lat_idx(all_mps_is))
+    pos_j = lat.position(lat.mps2lat_idx(all_mps_js))
+
+    pos_x = np.array([pos_i[:, 0], pos_j[:, 0]])
+    pos_y = np.array([pos_i[:, 1], pos_j[:, 1]])
+
+    connections = np.array(list(zip(all_mps_is, all_mps_js)))
+    strenghts = correlations[*connections.T]
+    # plotting
+    scaled_strengths = strenghts * scale
+
+    # differentiate between correlations larger than zero
+    where_pos = scaled_strengths >= 0
+    where_neg = np.bitwise_not(where_pos)
+
+    if color is not None:
+        color_pos = color_neg = color
+
+    lc_pos = LineCollection(np.array([pos_x, pos_y]).T[where_pos], linewidths=np.abs(scaled_strengths)[where_pos],
+                            color=color_pos, zorder=zorder)
+    lc_neg = LineCollection(np.array([pos_x, pos_y]).T[where_neg], linewidths=np.abs(scaled_strengths)[where_neg],
+                            color=color_neg, zorder=zorder)
+
+    ax.add_collection(lc_pos)
+    ax.add_collection(lc_neg)
+
+
+def pp_plot_correlations_on_lattice(DL, *, data_key, t_step=0, save_as: str = 'Correlations.pdf',
+                                    default_dir: str = 'plots',
+                                    keys=['nearest_neighbors'],
+                                    markers=['D'], figsize=(8, 8), **kwargs):
+    """Save a plot during post-processing to plot correlations on a lattice
+
+    Parameters
+    ----------
+    DL : :class:`DataLoader`
+    data_key: str
+        key for correlation function
+    t_step: int
+        time step to plot correlations on
+    keys : list
+        a list specifing which pairs to plot, default is ['nearest_neighbors'],
+        other options are ['next_nearest_neighbors', 'next_next_nearest_neighbors']
+    markers : list
+          a list of symbols for different sites within a unit cell given to plot sites
+    figsize : tuple
+    save_as : str
+        string under which to save the plot (and extension)
+    default_dir : str
+        default (sub-) directory under which to save the plot
+    kwargs :
+        kwargs to :func:`plot_correlations_on_lattice`
+    """
+    import matplotlib.pyplot as plt
+    import os
+    if not os.path.exists(default_dir):
+        os.mkdir(default_dir)
+    # import os ?
+    lat = DL.lat
+    if lat.dim != 2:
+        raise NotImplementedError("Only implemented for two-dimensional lattices")
+    correlations = DL.get_data_m(data_key)
+    # loop over nearest_neighbors, next_nearest_neighbors, etc.
+    fig, ax = plt.subplots(figsize=figsize)
+    ax.set_title(f'Correlations {data_key}')
+    if correlations.ndim == 3:
+        correlations = correlations[t_step]
+        ax.set_title(f'Correlations {data_key}, timestep {t_step}')
+    for key in keys:
+        plot_correlations_on_lattice(ax, DL.lat, correlations, pairs=key, **kwargs)
+    lat.plot_sites(ax, markers=markers)
+    saving_path = os.path.join(default_dir, save_as)
+    plt.savefig(saving_path, bbox_inches='tight')

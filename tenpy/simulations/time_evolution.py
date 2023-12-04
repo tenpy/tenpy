@@ -3,13 +3,13 @@
 # Copyright 2020-2023 TeNPy Developers, GNU GPLv3
 
 import numpy as np
-import traceback
+
 
 from . import simulation
 from .simulation import *
-from .post_processing import DataLoader, spectral_function
 from ..networks.mps import MPSEnvironment, MPS, MPSEnvironmentJW
 from ..tools.misc import to_iterable
+
 
 __all__ = simulation.__all__ + ['RealTimeEvolution', 'SpectralSimulation', 'TimeDependentCorrelation',
                                 'TimeDependentCorrelationExperimental', 'SpectralSimulationExperimental']
@@ -128,6 +128,7 @@ class TimeDependentCorrelation(RealTimeEvolution):
         # generate info for operator before time evolution as subconfig
         self.operator_t0_config = self.options.subconfig('operator_t0')
         self.operator_t0 = None  # read out config later, since defaults depend on model parameters
+        self.operator_t0_name = None  # will be set in get_operator_t0
         self.addJW = self.options.get('addJW', False)
         resume_data = self.results.get("resume_data", None)
         if resume_data:
@@ -242,7 +243,23 @@ class TimeDependentCorrelation(RealTimeEvolution):
                     where u = 0 for a single-site unit cell
 
         """
-        ops = to_iterable(self.operator_t0_config['name'])
+        # specify: opname: Sx
+        # lat_idx:
+        # mps_idx
+
+        # or specify:
+        # multi_op: [Sx, Sy, Sz]
+        # key_name: name
+        # lat_idx:
+        # mps_idx:
+        opname = self.operator_t0_config['opname']
+        ops = to_iterable(opname)
+        if len(ops) == 1:
+            key_name = opname
+        else:
+            key_name = self.operator_t0_config['key_name']
+        self.operator_t0_name = key_name
+
         mps_idx = self.operator_t0_config.get('mps_idx', None)
         lat_idx = self.operator_t0_config.get('lat_idx', None)
         if mps_idx and lat_idx is not None:
@@ -302,12 +319,10 @@ class TimeDependentCorrelation(RealTimeEvolution):
         self.logger.info("calling m_correlation_function")
         operator_t = to_iterable(self.operator_t)
         env = self.get_mps_environment()  # custom method for subclass Experimental
-        # TODO: get better naming convention, store this in dict ?
         for i, op in enumerate(operator_t):
-            if isinstance(op, str):
-                results[f'correlation_function_t_{op}'] = self._m_correlation_function_op(env, op)
-            else:
-                results[f'correlation_function_t_{i}'] = self._m_correlation_function_op(env, op)
+            # op is a str
+            results_key = f"correlation_function_t_{op}_{self.operator_t0_name}"
+            results[results_key] = self._m_correlation_function_op(env, op)
 
     def _m_correlation_function_op(self, env: MPSEnvironment, op) -> np.ndarray:
         r"""Measurement function for time dependent correlations.
@@ -343,6 +358,17 @@ class TimeDependentCorrelation(RealTimeEvolution):
         correlation_function_t = correlation_function_t * phase
 
         return correlation_function_t
+
+    # TODO: remove when this works in bare Simulation class
+    # def prepare_results_for_save(self):
+    #     """Post process results and prepare them for saving.
+    #
+    #     Wrapper around :meth:`Simulation.prepare_results_for_save`.
+    #     Makes it possible to include post-processing run during the run of the
+    #     actual simulation.
+    #     """
+    #     self.run_post_processing()
+    #     return super().prepare_results_for_save()
 
 
 class TimeDependentCorrelationExperimental(TimeDependentCorrelation):
@@ -437,58 +463,21 @@ class SpectralSimulation(TimeDependentCorrelation):
         :include: TimeDependentCorrelation
 
     """
+    default_post_processing = []
 
     def __init__(self, options, *, gs_data=None, **kwargs):
         super().__init__(options, gs_data=gs_data, **kwargs)
 
-    def post_processing(self):
-        """Read-out and apply post-processing
-
-        .. cfg:configoptions :: SpectralSimulation
-
-        linear_prediction : dict
-            parameters for linear prediction
-
-            .. note ::
-
-                There are several parameters to specify:
-                m: number of time steps to predict
-                p: number of time steps to use for predictions
-
-        windowing : dict
-            parameters for a windowing function
-
-        """
-
-        processing_params = self.options['post_processing_params']
-        # try, except clause to not lose simulation results if post_processing fails
-        DL = DataLoader(simulation=self)
+    def run_post_processing(self):
+        extra_kwargs = self.options.get('spectral_function_params', {})
         for key in self.results['measurements'].keys():
-            if key.startswith('correlation_function_t'):
-                self.logger.info(f"calling post-processing on {key} with {DL}")
-                pp_result = spectral_function(DL, key, **processing_params)
-                # TODO: make this more general, s.t. in a yml file we can have:
-                # post_processing:
-                #   function: processing_function
-                #   module: my_module.py
-                #   post_processing_params: ...
-                self.results[f"{key}_processed"] = pp_result
-
-    def prepare_results_for_save(self):
-        """Post process results and prepare them for saving.
-
-        Wrapper around :meth:`Simulation.prepare_results_for_save`.
-        Makes it possible to include post-processing run during the run of the
-        actual simulation.
-        """
-        if self.options.get('post_processing_params', None) is not None:
-            try:
-                self.post_processing()
-            except Exception:
-                self.logger.info("Could not post-process the results because of the following exception:")
-                self.logger.warning(traceback.format_exc())
-                self.logger.info("continuing saving results without post-processing")
-        return super().prepare_results_for_save()
+            if 'correlation_function_t' in key:
+                results_key = 'spectral_function'+key.removeprefix('correlation_function_t')
+                kwargs_dict = {'results_key': results_key, 'correlation_key': key}
+                kwargs_dict.update(extra_kwargs)  # add parameters for linear prediction etc.
+                pp_entry = ('tenpy.simulations.post_processing', 'spectral_function', kwargs_dict)
+                self.default_post_processing.append(pp_entry)
+        return super().run_post_processing()
 
 
 class SpectralSimulationExperimental(TimeDependentCorrelationExperimental, SpectralSimulation):
