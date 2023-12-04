@@ -2486,10 +2486,11 @@ class DiagonalTensor(SymmetricTensor):
             msg = f'Invalid types for operand "{operand}": {type(self)} and {type(other)}'
             raise TypeError(msg)
 
+        res = DiagonalTensor(data, first_leg=self.legs[0], second_leg_dual=self.second_leg_dual,
+                             backend=backend, labels=labels)
         if is_bool_valued:
-            return Mask(data, large_leg=self.legs[0], small_leg=None, backend=backend, labels=self.labels)
-        return DiagonalTensor(data, first_leg=self.legs[0], second_leg_dual=self.second_leg_dual,
-                              backend=backend, labels=labels)
+            res = Mask.from_DiagonalTensor(res)
+        return res
 
     def _elementwise_unary(self, func, func_kwargs={}, maps_zero_to_zero: bool = False) -> DiagonalTensor:
         """Wrap backend.diagonal_elementwise_unary
@@ -2546,7 +2547,7 @@ class DiagonalTensor(SymmetricTensor):
 
     def _getitem_apply_masks(self, masks: list[Mask], legs: list[int]) -> Tensor | DiagonalTensor:
         if len(masks) == 2:
-            if masks[0].same_mask_action(masks[1]):
+            if masks[0].same_mask(masks[1]):
                 return self._apply_mask_both_legs(masks[0])
         warnings.warn('Converting DiagonalTensor to Tensor in order to apply mask', stacklevel=2)
         return self.as_Tensor()._getitem_apply_masks(masks, legs)
@@ -2801,20 +2802,23 @@ class DiagonalTensor(SymmetricTensor):
 class Mask(AbstractTensor):
     r"""A boolean mask that can be used to project a leg.
 
-    As an AbstractTensor, the first leg is the larger leg and the second is a "slice" of it.
-
-    Via `tdot`, the mask can be applied only to the *dual* of `large_leg`.
-    With the  `apply_*` methods however, a mask can be applied to both `large_leg` and its dual.
+    Projecting a leg can be done via `tdot`, which views the projection, which is a linear map,
+    as an :class:`AbstractTensor`. Then, it can only project the :attr:`large_leg`.
+    Using :meth:`AbstractTensor.apply_mask` on the other hand allows a mask to be applied either
+    to :attr:`large_leg` or its dual.
 
     Parameters
     ----------
     data
-        The numerical data (i.e. boolean flags) comprising the mask. type is backend-specific
+        The numerical data (i.e. boolean flags) comprising the mask. type is backend-specific.
+        Should have boolean dtype.
     large_leg : VectorSpace
-        The larger leg, the source/domain of the projection.
+        The larger leg that can be projected with this mask.
+        The resulting mask has `mask.legs[0] == large_leg.dual`, which can be contracted with
+        the `large_leg`.
     small_leg : VectorSpace
-        The small leg is entirely determined by the large leg and the data.
-        It must have the same :attr:`is_dual`.
+        The small leg, i.e. the masked / projected version of `large_leg`.
+        Should have same :attr:`VectorSpace.is_dual` as `large_leg`.
     backend: :class:`~tenpy.linalg.backends.abstract_backend.AbstractBackend`, optional
         The backend for the Tensor
     labels : list[str | None] | None
@@ -2822,16 +2826,18 @@ class Mask(AbstractTensor):
     """
     def __init__(self, data, large_leg: VectorSpace, small_leg: VectorSpace, backend=None,
                  labels: list[str | None] = None):
+        assert small_leg.is_subspace_of(large_leg)
         self.data = data
         if backend is None:
             backend = get_backend(large_leg.symmetry)
-        AbstractTensor.__init__(self, legs=[large_leg, small_leg], backend=backend, labels=labels, dtype=Dtype.bool)
+        AbstractTensor.__init__(self, legs=[large_leg.dual, small_leg], backend=backend,
+                                labels=labels, dtype=Dtype.bool)
 
     def test_sanity(self) -> None:
         super().test_sanity()
-        self.backend.test_data_sanity(self, is_diagonal=True)
-        assert self.legs[0].is_dual == self.legs[1].is_dual
-        assert self.legs[1].is_subspace_of(self.legs[0])
+        self.backend.test_mask_sanity(self)
+        assert self.large_leg.is_dual == self.small_leg.is_dual
+        assert self.small_leg.is_subspace_of(self.large_leg)
         assert self.dtype == Dtype.bool
 
     # --------------------------------------------
@@ -2839,60 +2845,105 @@ class Mask(AbstractTensor):
     # --------------------------------------------
 
     @property
+    def blockmask(self) -> Block:
+        """1D block of bools, indicating which basis elements are kept."""
+        return self.backend.diagonal_to_block(self)
+    
+    @property
     def large_leg(self) -> VectorSpace:
-        return self.legs[0]
+        """The large leg that can be projected using this mask."""
+        return self.legs[0].dual
+
+    @property
+    def numpymask(self) -> np.ndarray:
+        """1D numpy array of bools, indicating which basis elements are kept."""
+        return self.backend.block_to_numpy(self.blockmask)
 
     @property
     def small_leg(self) -> VectorSpace:
+        """The slice of :attr:`large_leg` that the mask projects to."""
         return self.legs[1]
 
     @classmethod
-    def from_flat_block(cls, mask: Block, large_leg: VectorSpace, backend: AbstractBackend = None,
-                        labels: list[str | None] = None) -> Mask:
+    def eye(cls, large_leg: VectorSpace, backend=None, labels: list[str | None] = None) -> Mask:
+        """The identity mask, that keeps all basis elements."""
+        # OPTIMIZE
+        return cls.from_blockmask(np.ones(large_leg.dim, dtype=bool), large_leg=large_leg,
+                                  backend=backend, labels=labels)
+
+    @classmethod
+    def from_blockmask(cls, blockmask: Block, large_leg: VectorSpace, backend: AbstractBackend = None,
+                   labels: list[str | None] = None) -> Mask:
         """Create a Mask from a 1D boolean block.
+
+        TODO find a better word than blockmask. Use it everywhere else too.
+             We need to distinguish the concepts of the 2D rectangular block and this 1D blockmask.
+             Consider renaming numpymask property too.
 
         Parameters
         ----------
-        mask : 1D boolean block
-            Backend-specific block, where ``mask[i]`` indicates whether the ``i``-th element
-            of the computational basis of `large_leg` should be kept or discarded
-        large_leg : VectorSpace
-            The leg that can be projected by the resulting Mask
-        backend : :class:`~tenpy.linalg.backends.abstract_backend.AbstractBackend`, optional
-            The backend for the Mask
-        labels : list of {str | None}, optional
-            Labels associated with the `large_leg` and its projection. ``None`` for unnamed legs.
+        blockmask : 1D Block-like of bool
+            A block with boolean entries, where ``blockmask[i]`` indicates if the ``i``-th element
+            of the computational basis of `large_leg` should be kept.
+        large_leg, backend, labels
+            Same as for :meth:`Mask.__init__`.
         """
+        small_leg = large_leg.take_slice(np.asarray(blockmask, bool))
         if backend is None:
             backend = get_backend(symmetry=large_leg.symmetry)
-        data, small_leg = backend.mask_from_block(mask, large_leg=large_leg)
-        return cls(data=data, large_leg=large_leg, small_leg=small_leg, backend=backend, labels=labels)
-        
-    @classmethod
-    def from_flat_numpy(cls, mask: np.ndarray, large_leg: VectorSpace, backend: AbstractBackend = None,
-                        labels: list[str | None] = None) -> Mask:
-        if backend is None:
-            backend = get_backend(symmetry=large_leg.symmetry)
-        block = backend.block_from_numpy(np.asarray(mask))
-        return cls.from_flat_block(mask=block, large_leg=large_leg, backend=backend, labels=labels)
+        blockmask = backend.block_to_dtype(backend.as_block(blockmask), Dtype.bool)
+        return cls(backend.mask_from_block(blockmask, large_leg=large_leg, small_leg=small_leg),
+                   large_leg=large_leg, small_leg=small_leg, backend=backend, labels=labels)
 
     @classmethod
-    def from_indices(cls, indices: list[int] | np.ndarray | slice, large_leg: VectorSpace,
+    def from_DiagonalTensor(cls, diag: DiagonalTensor) -> Mask:
+        """Create a Mask from a bool-valued DiagonalTensor"""
+        # OPTIMIZE could do this "directly", without converting to block, but its easier for now...
+        return cls.from_blockmask(diag.backend.block_to_dtype(diag.diag_block, Dtype.bool),
+                                  large_leg=diag.legs[0], backend=diag.backend, labels=diag.labels)
+
+    @classmethod
+    def from_indices(cls, indices: int | list[int] | np.ndarray | slice, large_leg: VectorSpace,
                      backend: AbstractBackend = None, labels: list[str | None] = None) -> Mask:
+        """Create a Mask from the indices that are kept.
+
+        Parameters
+        ----------
+        indices
+            Valid index/indices for a 1D numpy array. The elements of the computational basis of
+            `large_leg` with these indices are kept by the projection.
+        large_leg, backend, labels
+            Same as for :meth:`Mask.__init__`.
+        """
         mask = np.zeros(large_leg.dim, dtype=bool)
         mask[indices] = True
-        return cls.from_flat_numpy(mask, large_leg=large_leg, backend=backend, labels=labels)
+        return cls.from_blockmask(mask, large_leg=large_leg, backend=backend, labels=labels)
 
-    def same_mask_action(self, other: Mask) -> bool:
-        """A mask can act on both the large_leg or its dual.
-        This function determines if this action is the same."""
-        raise NotImplementedError  # TODO
+    def all(self) -> bool:
+        """If the mask keeps all basis elements"""
+        return self.small_leg.dim == self.large_leg.dim
+
+    def any(self) -> bool:
+        """If the mask keeps any basis elements"""
+        return self.small_leg.dim > 0
 
     def as_Tensor(self, dtype=Dtype.float64) -> Tensor:
         return Tensor(
             data=self.backend.full_data_from_mask(self, dtype=dtype),
             legs=self.legs, backend=self.backend, labels=self.labels
         )
+
+    def same_mask(self, other: Mask) -> bool:
+        return (self.large_leg == other.large_leg) and Mask.all(self == other)
+
+    def logical_not(self) -> Mask:
+        """The opposite mask that keeps exactly what self discard.
+
+        Viewing masks as projectors, this is the orthogonal complement.
+        """
+        # OPTIMIZE
+        return Mask.from_blockmask(~self.blockmask, large_leg=self.large_leg,
+                                   backend=self.backend, labels=self.labels)
 
     def _binary_operand(self, other: bool | Mask, func, operand: str, return_NotImplemented: bool = True
                         ) -> Mask:
@@ -2912,34 +2963,35 @@ class Mask(AbstractTensor):
             Whether `NotImplemented` should be returned on a non-scalar and non-`AbstractTensor` other.
         """
         if isinstance(other, bool):
-            backend = self.backend
-            data = backend.diagonal_elementwise_unary(self, func=lambda block: func(block, other))
-            labels = self.labels
+            backend = backend
+            data = self.backend.diagonal_elementwise_unary(self, lambda block: func(block, other),
+                                                           func_kwargs={}, maps_zero_to_zero=False)
+            return Mask(data, large_leg=self.large_leg, small_leg=None, backend=backend,
+                        labels=self.labels)
         elif isinstance(other, Mask):
             backend = get_same_backend(self, other)
             if self.legs[0] != other.legs[0]:
                 raise ValueError('Incompatible legs!')
-            data = backend.diagonal_elementwise_binary(self, other, func=func)
-            labels = _get_same_labels(self.labels, other.labels)
+            # OPTIMIZE
+            return Mask.from_blockmask(func(self.blockmask, other.blockmask),
+                                       large_leg=self.large_leg, backend=backend,
+                                       labels=_get_same_labels(self.labels, other.labels))
         elif return_NotImplemented and not isinstance(other, (AbstractTensor, Number)):
             return NotImplemented
-        else:
-            msg = f'Invalid types for operand "{operand}": {type(self)} and {type(other)}'
-            raise TypeError(msg)
-        return Mask(data, large_leg=self.large_leg, small_leg=None, backend=backend, labels=labels)
+        msg = f'Invalid types for operand "{operand}": {type(self)} and {type(other)}'
+        raise TypeError(msg)
 
     def __and__(self, other) -> bool:
         return self._binary_operand(other, func=operator.and_, operand='&')
 
+    def __bool__(self):
+        raise ValueError('The truth value of a mask is undefined. Use Mask.any() or Mask.all().')
+
     def __eq__(self, other) -> bool:
-        if isinstance(other, Mask):
-            return self.large_leg == other.large_leg and self.same_mask_action(other)
-        raise TypeError(f'{type(self)} does not support == comparison with {type(other)}')
+        return self._binary_operand(other, func=operator.eq, operand='==')
 
     def __ne__(self, other) -> bool:
-        if isinstance(other, Mask):
-            return self.large_leg != other.large_leg or not self.same_mask_action(other)
-        raise TypeError(f'{type(self)} does not support != comparison with {type(other)}')
+        return self._binary_operand(other, func=operator.ne, operand='!=')
 
     def __rand__(self, other) -> bool:
         return self._binary_operand(other, func=operator.and_, operand='&')
@@ -2961,45 +3013,26 @@ class Mask(AbstractTensor):
     # --------------------------------------------
 
     def __getitem__(self, idcs):
-        # allow indexing by a single integer -> applied to both axes
-        _idcs = to_iterable(idcs)
-        if len(_idcs) == 1 and isinstance(_idcs[0], int):
-            # the data of a mask is like the data of a DiagonalTensor
-            return self.backend.get_element_diagonal(self, _idcs[0])
-        # otherwise rely on standard indexing, in particular also for input checks etc
-        return AbstractTensor.__getitem__(self, idcs)
+        # TODO what even is the expected behavior here?
+        raise NotImplementedError
 
     def __setitem__(self, idcs, value):
-        _idcs = to_iterable(idcs)
-        
-        # if len(_idcs) == 1 and isinstance(_idcs[0], int):
-        #     assert isinstance(value, bool)
-        #     # the data of a mask is like the data of a DiagonalTensor
-        #     self.data = self.backend.set_element_diagonal(self, _idcs[0], value)
-        # else:
-        #     AbstractTensor.__setitem__(self, idcs, value)
-
-        # TODO (JU) this is not as easy as a i thought.
-        #      Changing the entries should change the small leg, and in particular might add one
-        #      or remove one small_leg.sectors.
-        #      Not only do we have to adjust self.legs[1], but this might also make self.data.block_inds
-        #      inconsistent.
-        #      Should probably have a dedicated backend function to set items of a Mask that
-        #      also returns the new small_leg.
-        
+        # TODO what even is the expected behavior here?
         raise NotImplementedError
-        
 
     # --------------------------------------------
     # Implementing abstractmethods
     # --------------------------------------------
-
+    
     @classmethod
     def zero(cls, large_leg: VectorSpace, backend=None, labels: list[str | None] = None) -> Mask:
+        """The zero mask, that discards all basis elements."""
         if backend is None:
-            backend = get_backend(large_leg.symmetry)
+            backend = get_backend(symmetry=large_leg.symmetry)
         data = backend.zero_diagonal_data(leg=large_leg, dtype=Dtype.bool)
-        return cls(data=data, large_leg=large_leg, backend=backend)
+        small_leg = VectorSpace.null_space(symmetry=large_leg.symmetry, is_real=large_leg.is_real,
+                                           is_dual=large_leg.is_dual)
+        return cls(data=data, large_leg=large_leg, small_leg=small_leg, backend=backend)
 
     def add_trivial_leg(self, label: str = None, is_dual: bool = False, pos: int = -1
                         ) -> DiagonalTensor:
@@ -3049,10 +3082,9 @@ class Mask(AbstractTensor):
         if order is None:
             return float(np.sqrt(num_true_entries))
         if order >= np.inf:
-            return 1.
+            return 1. if num_true_entries > 0 else 0.
         if order <= -np.inf:
-            # TODO should this be 0 even for the "all-True" mask?
-            return 0.
+            return 0. if num_true_entries < self.large_leg.dim else 1.
         if order == 0:
             return num_true_entries
         return num_true_entries ** (1. / order)
@@ -3069,7 +3101,7 @@ class Mask(AbstractTensor):
         warnings.warn(msg, stacklevel=2)
         return self.as_Tensor().permute_legs(legs)
 
-    def squeeze_legs(self,legs: int | str | list[int | str] = None) -> Tensor:
+    def squeeze_legs(self, legs: int | str | list[int | str] = None) -> Tensor:
         msg = 'Converting Mask to full Tensor for `squeeze_legs`. If this is what you wanted, ' \
               'explicitly convert via Mask.as_Tensor() first to suppress the warning.'
         warnings.warn(msg, stacklevel=2)
@@ -3101,7 +3133,7 @@ class Mask(AbstractTensor):
     def almost_equal(self, other: AbstractTensor, atol: float = 1e-5, rtol: float = 1e-8,
                      allow_different_types: bool = False) -> bool:
         if isinstance(other, Mask):
-            return self.__eq__(other)
+            return self.same_mask(other)
         raise TypeError(f'almost_equal not supported for types {type(self)} and {type(other)}.')
 
     def inner(self, other: AbstractTensor, do_conj: bool = True, legs1: list[int | str] = None,

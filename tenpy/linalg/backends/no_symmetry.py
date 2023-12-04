@@ -6,7 +6,7 @@ import numpy as np
 from numpy import prod
 
 from .abstract_backend import AbstractBackend, AbstractBlockBackend, Data, DiagonalData, Block, Dtype
-from ..groups import no_symmetry, Symmetry
+from ..groups import no_symmetry, Symmetry, NoSymmetry
 from ..spaces import VectorSpace, ProductSpace
 
 __all__ = ['AbstractNoSymmetryBackend']
@@ -53,6 +53,11 @@ class AbstractNoSymmetryBackend(AbstractBackend, AbstractBlockBackend, ABC):
         else:
             assert self.block_shape(a.data) == tuple(a.shape), f'{self.block_shape(a)} != {tuple(a.shape.dims)}'
 
+    def test_mask_sanity(self, a: Mask):
+        super().test_mask_sanity(a)
+        assert self.block_shape(a.data) == (a.legs[0].dim,)
+        assert self.block_sum_all(a.data) == a.legs[1].dim
+
     def get_dtype_from_data(self, a: Data) -> Dtype:
         return self.block_dtype(a)
 
@@ -79,13 +84,11 @@ class AbstractNoSymmetryBackend(AbstractBackend, AbstractBlockBackend, ABC):
     def diagonal_from_block(self, a: Block, leg: VectorSpace) -> DiagonalData:
         return self.apply_basis_perm(a, [leg])
 
-    def mask_from_block(self, a: Block, large_leg: VectorSpace) -> tuple[DiagonalData, VectorSpace]:
+    def mask_from_block(self, a: Block, large_leg: VectorSpace, small_leg: VectorSpace
+                        ) -> DiagonalData:
         data = self.block_to_dtype(a, Dtype.bool)
         data = self.apply_basis_perm(data, [large_leg])
-        small_leg = VectorSpace.from_trivial_sector(
-            dim=self.block_sum_all(data), is_real=large_leg.is_real, is_dual=large_leg.is_dual
-        )
-        return data, small_leg
+        return data
 
     def from_block_func(self, func, legs: list[VectorSpace], func_kwargs={}):
         return func(tuple(l.dim for l in legs), **func_kwargs)
@@ -201,7 +204,7 @@ class AbstractNoSymmetryBackend(AbstractBackend, AbstractBlockBackend, ABC):
         return self.block_from_diagonal(a.data)
 
     def full_data_from_mask(self, a: Mask, dtype: Dtype) -> Data:
-        return self.block_from_block_mask(a.data, dtype=dtype)
+        return self.block_from_mask(a.data, dtype=dtype)
 
     def scale_axis(self, a: Tensor, b: DiagonalTensor, leg: int) -> Data:
         return self.block_scale_axis(a.data, b.data, leg)

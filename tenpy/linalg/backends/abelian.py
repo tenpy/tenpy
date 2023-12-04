@@ -276,6 +276,24 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
         assert all(self.block_dtype(block) == a.data.dtype for block in a.data.blocks)
         assert not np.any(a.data.block_inds < 0)
         assert not np.any(a.data.block_inds >= np.array([[leg.num_sectors for leg in a.legs]]))
+        
+    def test_mask_sanity(self, a: Mask):
+        super().test_mask_sanity(a)
+        if a.data.block_inds.shape != (len(a.data.blocks), 2):
+            msg = f'Wrong blocks_inds shape. ' \
+                  f'Expected {(len(a.data.blocks), 2)}, got {a.data.block_inds.shape}.'
+            raise ValueError(msg)
+        assert a.dtype == a.data.dtype == Dtype.bool
+        large_leg = a.large_leg
+        small_leg = a.small_leg
+        for block, (bi_large, bi_small) in zip(a.data.blocks, a.data.block_inds):
+            assert bi_large >= bi_small >= 0
+            assert bi_large < large_leg.num_sectors
+            assert bi_small < small_leg.num_sectors
+            assert np.all(large_leg.sector(bi_large) == small_leg.sector(bi_small))
+            assert self.block_shape(block) == (large_leg.multiplicities[bi_large],)
+            assert self.block_sum_all(block) == small_leg.multiplicities[bi_small]
+            assert self.block_dtype(block) == Dtype.bool
 
     def test_leg_sanity(self, leg: VectorSpace):
         assert self._leg_has_metadata(leg)
@@ -485,39 +503,36 @@ class AbstractAbelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
         blocks = [a[slice(*leg.slices[i])] for i in block_inds[:, 0]]
         return AbelianBackendData(dtype, blocks, block_inds, is_sorted=True)
 
-    def mask_from_block(self, a: Block, large_leg: VectorSpace) -> tuple[DiagonalData, VectorSpace]:
+    def mask_from_block(self, a: Block, large_leg: VectorSpace, small_leg: VectorSpace
+                        ) -> DiagonalData:
         # TODO thoroughly test this!
         a = self.block_to_dtype(a, Dtype.bool)
         a = self.apply_basis_perm(a, [large_leg])
-        block_inds_large = []
-        block_inds_small = []
         blocks = []
-        small_leg_sectors = []
-        small_leg_mults = []
-        block_counter = 0
-        for i in range(large_leg.num_sectors):
-            block = a[slice(*large_leg.slices[i])]
-            multiplicity = self.block_sum_all(block)
-            if multiplicity == 0:
+        block_inds = []
+        bi_small = 0
+        for bi_large, slc in enumerate(large_leg.slices):
+            block = a[slice(*slc)]
+            if self.block_sum_all(block) == 0:
                 continue
+            # TODO remove this check after testing
+            assert all(large_leg._non_dual_sectors[bi_large] == small_leg._non_dual_sectors[bi_small])
             blocks.append(block)
-            block_inds_large.append(i)
-            block_inds_small.append(block_counter)
-            small_leg_sectors.append(large_leg._non_dual_sectors[i])
-            small_leg_mults.append(multiplicity)
-            block_counter += 1
-        if len(blocks) == 0:
-            block_inds = np.zeros((0, 2), int)
+            block_inds.append([bi_large, bi_small])
+            bi_small += 1
+        if len(block_inds) == 0:
+            block_inds = np.zeros(shape=(0, 2), dtype=int)
         else:
-            block_inds = np.array([block_inds_large, block_inds_small]).T
-        # OPTIMIZE (JU) block_inds might be sorted but i am not sure right now
-        data = AbelianBackendData(dtype=Dtype.bool, blocks=blocks, block_inds=block_inds, is_sorted=False)
-        small_leg = VectorSpace(
-            symmetry=large_leg.symmetry, sectors=small_leg_sectors, multiplicities=small_leg_mults,
-            is_real=large_leg.is_real, _is_dual=large_leg.is_dual
-        )
-        return data, small_leg
+            block_inds = np.array(block_inds, dtype=int)
 
+        # TODO remove this check after testing
+        if len(block_inds) > 0:
+            perm = np.lexsort(block_inds.T)
+            assert np.all(perm == np.arange(len(perm)))
+
+        return AbelianBackendData(dtype=Dtype.bool, blocks=blocks, block_inds=block_inds,
+                                  is_sorted=True)
+        
     def from_block_func(self, func, legs: list[VectorSpace], func_kwargs={}) -> AbelianBackendData:
         block_inds = _valid_block_indices(legs)
         blocks = []

@@ -4,6 +4,7 @@ import numpy as np
 import numpy.testing as npt
 import pytest
 import warnings
+import operator
 
 from tenpy.linalg import tensors
 from tenpy.linalg.backends.abstract_backend import Dtype
@@ -388,7 +389,6 @@ def test_tdot(backend, vector_space_rng, backend_data_rng, tensor_rng):
     #  - same dim and sectors but same is_dual
 
 
-# TODO (JH): continue to fix tests below to work with new fixtures for any backend
 def test_outer(tensor_rng):
     tensors_ = [tensor_rng(labels=labels) for labels in [['a'], ['b'], ['c', 'd']]]
     dense_ = [t.to_numpy_ndarray() for t in tensors_]
@@ -832,3 +832,116 @@ def demo_repr():
             print('=' * 70)
             print()
             print(str(tens))
+
+
+def test_Mask(np_random, vector_space_rng, backend):
+    large_leg = vector_space_rng()
+    blockmask = np_random.choice([True, False], size=large_leg.dim)
+    num_kept = sum(blockmask)
+    mask = tensors.Mask.from_blockmask(blockmask, large_leg=large_leg, backend=backend)
+    mask.test_sanity()
+
+    npt.assert_array_equal(mask.numpymask, blockmask)
+    assert mask.large_leg == large_leg
+    assert mask.small_leg.dim == np.sum(blockmask)
+
+    # mask2 : same mask, but build from indices
+    indices = np.where(blockmask)[0]
+    mask2 = tensors.Mask.from_indices(indices, large_leg=large_leg, backend=backend)
+    mask2.test_sanity()
+    npt.assert_array_equal(mask2.numpymask, blockmask)
+    assert mask.same_mask(mask2)
+    assert tensors.almost_equal(mask, mask2)
+
+    # mask3 : different in exactly one entry
+    print(f'{indices=}')
+    indices3 = indices.copy()
+    indices3[len(indices3) // 2] = not indices3[len(indices3) // 2]
+    mask3 = tensors.Mask.from_indices(indices3, large_leg=large_leg, backend=backend)
+    mask3.test_sanity()
+    assert not mask.same_mask(mask3)
+    assert not tensors.almost_equal(mask, mask3)
+
+    # mask4: independent random mask
+    blockmask4 = np_random.choice([True, False], size=large_leg.dim)
+    mask4 = tensors.Mask.from_blockmask(blockmask4, large_leg=large_leg, backend=backend)
+    mask4.test_sanity()
+
+    mask_all = tensors.Mask.eye(large_leg=large_leg, backend=backend)
+    mask_none = tensors.Mask.zero(large_leg=large_leg, backend=backend)
+    assert mask_all.all()
+    assert mask_all.any()
+    assert not mask_none.all()
+    assert not mask_none.any()
+    assert mask.all() == np.all(blockmask)
+    assert mask.any() == np.any(blockmask)
+
+    as_tensor_arr = mask.as_Tensor().to_numpy_ndarray()
+    as_tensor_expect = np.zeros((len(blockmask), num_kept))
+    as_tensor_expect[indices, np.arange(num_kept)] = 1.
+    npt.assert_array_equal(as_tensor_arr, as_tensor_expect)
+
+    npt.assert_array_equal(mask.logical_not().numpymask, np.logical_not(blockmask))
+    for op in [operator.and_, operator.eq, operator.ne, operator.or_, operator.xor]:
+        res = op(mask, mask4)
+        res.test_sanity()
+        npt.assert_array_equal(res.numpymask, op(blockmask, blockmask4))
+    # illegal usages (those would cast bool(mask))
+    with pytest.raises(ValueError):
+        _ = mask and mask4
+    with pytest.raises(ValueError):
+        if mask == mask4:  # this is invalid
+            pass
+    # legal version:
+    if tensors.Mask.all(mask == mask4):
+        pass
+
+    eye = tensors.Mask.eye(large_leg=large_leg, backend=backend)
+    eye.test_sanity()
+    assert eye.all()
+    npt.assert_array_equal(eye.numpymask, np.ones(large_leg.dim, bool))
+
+    diag = tensors.DiagonalTensor.from_diag(blockmask, first_leg=large_leg, backend=backend)
+    diag.test_sanity()
+    mask5 = tensors.Mask.from_DiagonalTensor(diag)
+    npt.assert_array_equal(mask5.numpymask, mask.numpymask)
+    assert tensors.almost_equal(mask5, mask)
+
+
+@pytest.mark.parametrize('num_legs', [1, 3])
+def test_apply_Mask_Tensor(tensor_rng, num_legs):
+    T: tensors.Tensor = tensor_rng(num_legs=num_legs)
+    mask = tensor_rng(legs=[T.legs[0]], cls=tensors.Mask)
+    masked = T.apply_mask(mask, 0)
+    masked.test_sanity()
+    npt.assert_array_equal(T.to_numpy_ndarray()[mask.numpymask], masked.to_numpy_ndarray())
+
+
+def test_apply_Mask_DiagonalTensor(tensor_rng):
+    T: tensors.DiagonalTensor = tensor_rng(cls=tensors.DiagonalTensor)
+    mask = tensor_rng(legs=[T.legs[0]], cls=tensors.Mask)
+    # mask only one leg
+    masked = T.apply_mask(mask, 0)
+    assert isinstance(masked, tensors.Tensor)
+    masked.test_sanity()
+    npt.assert_array_equal(T.to_numpy_ndarray()[mask.numpymask], masked.to_numpy_ndarray())
+    # mask both legs
+    masked = T._apply_mask_both_legs(mask)
+    assert isinstance(masked, tensors.DiagonalTensor)
+    masked.test_sanity()
+    npt.assert_array_equal(T.diag_numpy[mask.numpymask], masked.diag_numpy)
+
+
+@pytest.mark.parametrize('num_legs', [1, 3])
+def test_apply_Mask_ChargedTensor(tensor_rng, num_legs):
+    T: tensors.ChargedTensor = tensor_rng(num_legs=num_legs, cls=tensors.ChargedTensor)
+    # first leg
+    mask = tensor_rng(legs=[T.legs[0]], cls=tensors.Mask)
+    masked = T.apply_mask(mask, 0)
+    masked.test_sanity()
+    npt.assert_array_equal(T.to_numpy_ndarray()[mask.numpymask], masked.to_numpy_ndarray())
+    # last leg
+    mask = tensor_rng(legs=[T.legs[-1]], cls=tensors.Mask)
+    masked = T.apply_mask(mask, -1)
+    masked.test_sanity()
+    npt.assert_array_equal(T.to_numpy_ndarray()[..., mask.numpymask], masked.to_numpy_ndarray())

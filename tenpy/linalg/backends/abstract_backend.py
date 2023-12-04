@@ -124,14 +124,18 @@ class AbstractBackend(metaclass=ABCMeta):
     Where Xxx describes the symmetry, e.g. NoSymmetry, Abelian, Nonabelian
     and Yyy describes the numerical routines that handle the blocks, e.g. numpy, torch, ...
     """
-    DataCls = Block
+    DataCls = None  # to be set by subclasses
 
-    def test_data_sanity(self, a: Tensor | DiagonalTensor | Mask, is_diagonal: bool):
-        assert isinstance(a.data, self.DataCls)
-        # note: no super(), this is the top you reach!
+    def test_data_sanity(self, a: Tensor | DiagonalTensor, is_diagonal: bool):
         # subclasses will typically call super().test_data_sanity(a)
+        assert isinstance(a.data, self.DataCls), str(type(a.data))
+
+    def test_mask_sanity(self, a: Mask):
+        # subclasses will typically call super().test_mask_sanity(a)
+        assert isinstance(a.data, self.DataCls), str(type(a.data))
 
     def test_leg_sanity(self, leg: VectorSpace):
+        # subclasses will typically call super().test_leg_sanity(a)
         assert isinstance(leg, VectorSpace)
         leg.test_sanity()
 
@@ -228,17 +232,12 @@ class AbstractBackend(metaclass=ABCMeta):
         ...
 
     @abstractmethod
-    def mask_from_block(self, a: Block, large_leg: VectorSpace) -> tuple[DiagonalData, VectorSpace]:
+    def mask_from_block(self, a: Block, large_leg: VectorSpace, small_leg: VectorSpace
+                        ) -> DiagonalData:
         """DiagonalData for a Mask from a 1D block.
+        
         This includes a permutation of the basis, specified by the legs of `a`.
         (see e.g. VectorSpace.basis_perm).
-
-        Returns
-        -------
-        data
-            The data for the Mask
-        small_legs : VectorSpace
-            The small leg, i.e. large_leg after projection
         """
         ...
 

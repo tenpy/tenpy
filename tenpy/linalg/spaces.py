@@ -319,6 +319,15 @@ class VectorSpace:
             return res, sort
         return res
 
+    @classmethod
+    def null_space(cls, symmetry: Symmetry, is_real: bool = False, is_dual: bool = False
+                   ) -> VectorSpace:
+        """The zero-dimensional space, i.e. the span of the empty set."""
+        sectors = np.zeros((0, symmetry.sector_ind_len), dtype=symmetry.trivial_sector.dtype)
+        multiplicities = np.zeros(0, int)
+        return cls(symmetry=symmetry, sectors=sectors, multiplicities=multiplicities,
+                   is_real=is_real, _is_dual=is_dual)
+
     @property
     def sectors(self):
         # OPTIMIZE cachedproperty?
@@ -759,6 +768,9 @@ class VectorSpace:
 
         The trivial space is the one-dimensional space which consists only of the trivial sector,
         appearing exactly once. In a mathematical sense, the trivial sector _is_ the trivial space.
+
+        TODO name is maybe not ideal... the VectorSpace.null_space could also be called "trivial"
+             this space is the unit of fusion
         """
         if self._non_dual_sectors.shape[0] != 1:
             return False
@@ -786,12 +798,16 @@ class VectorSpace:
         This function considers both spaces purely as `VectorSpace`s and ignores a possible
         `ProductSpace` structure.
         Per convention, self is never a subspace of other, if the :attr:`is_dual` are different
+
+        TODO what about basis_perms ?
         """
         if self.is_dual != other.is_dual:
             return False
         if self.symmetry != other.symmetry:
             return False
-
+        if self.num_sectors == 0:
+            return True
+        
         # the _non_dual_sectors are lexsorted, so we can just iterate over both of them
         n_self = 0
         for other_sector, other_mult in zip(other._non_dual_sectors, other.multiplicities):
