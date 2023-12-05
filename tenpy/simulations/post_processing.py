@@ -231,8 +231,8 @@ class DataLoader:
 
 def spectral_function(DL: DataLoader, *, correlation_key, conjugate_correlation=False,
                       gaussian_window: bool = False, sigma: float = 0.4,
-                      linear_predict: bool = False, m: int = None, p: int = None,
-                      truncation_mode: str = 'renormalize', split: float = 0):
+                      linear_predict: bool = False, rel_prediction_time: float = 1, rel_num_points: float = 0.3,
+                      truncation_mode: str = 'renormalize', rel_split: float = 0):
     r"""Given a time dependent correlation function C(t, r), calculate its Spectral Function.
 
     After a run of :class:`tenpy.simulations.time_evolution.TimeDependentCorrelation`, a :class:`DataLoader` instance
@@ -250,12 +250,12 @@ def spectral_function(DL: DataLoader, *, correlation_key, conjugate_correlation=
         standard-deviation used for the gaussian window
     linear_predict : bool
         boolean flag to apply linear prediction
-    m : int
-        number of time steps to predict
-    p : int
-        number of last time steps to base linear prediction upon
+    rel_prediction_time : float
+        relative time to predict, defaults to 1
+    rel_num_points : float
+        relative percentage of last points to base linear prediction on
     truncation_mode : str
-    split : float
+    rel_split : float
 
     Returns
     -------
@@ -291,13 +291,8 @@ def spectral_function(DL: DataLoader, *, correlation_key, conjugate_correlation=
     # optional linear prediction
     if linear_predict is True:
         axis = 0  # since we assume that the time-series values are along the first dimension (n_tsteps, n_sites, ...)
-        n_tsteps = ft_space.shape[axis]
-        # linear prediction parameters
-        if m is None:
-            m = n_tsteps
-        if p is None:
-            p = n_tsteps // 3
-        ft_space = linear_prediction(ft_space, m, p, axis=axis, truncation_mode=truncation_mode, split=split)
+        ft_space = linear_prediction(ft_space, rel_prediction_time=rel_prediction_time, rel_num_points=rel_num_points,
+                                     axis=axis, truncation_mode=truncation_mode, rel_split=rel_split)
     # optional gaussian windowing
     if gaussian_window is True:
         ft_space = apply_gaussian_windowing(ft_space, sigma, axes=0)
@@ -421,9 +416,6 @@ def get_all_hdf5_keys(h5_group):
     return results
 
 
-###### Plotting section
-
-
 def plot_correlations_on_lattice(ax, lat, correlations, pairs='nearest_neighbors',
                                  scale=1, color_pos='r', color_neg='g', color=None, zorder=0):
     """Function to plot correlations on a lattice
@@ -461,12 +453,15 @@ def plot_correlations_on_lattice(ax, lat, correlations, pairs='nearest_neighbors
     pos_j = lat.position(lat.mps2lat_idx(all_mps_js))
 
     pos_x = np.array([pos_i[:, 0], pos_j[:, 0]])
-    pos_y = np.array([pos_i[:, 1], pos_j[:, 1]])
+    if lat.dim == 1:
+        pos_y = np.zeros(pos_x.shape)
+    else:
+        pos_y = np.array([pos_i[:, 1], pos_j[:, 1]])
 
     connections = np.array(list(zip(all_mps_is, all_mps_js)))
-    strenghts = correlations[*connections.T]
+    strengths = correlations[*connections.T]
     # plotting
-    scaled_strengths = strenghts * scale
+    scaled_strengths = strengths * scale
 
     # differentiate between correlations larger than zero
     where_pos = scaled_strengths >= 0
@@ -486,8 +481,8 @@ def plot_correlations_on_lattice(ax, lat, correlations, pairs='nearest_neighbors
 
 def pp_plot_correlations_on_lattice(DL, *, data_key, t_step=0, save_as: str = 'Correlations.pdf',
                                     default_dir: str = 'plots',
-                                    keys=['nearest_neighbors'],
-                                    markers=['D'], figsize=(8, 8), **kwargs):
+                                    keys='nearest_neighbors',
+                                    markers='D', figsize=(8, 8), **kwargs):
     """Save a plot during post-processing to plot correlations on a lattice
 
     Parameters
@@ -497,11 +492,11 @@ def pp_plot_correlations_on_lattice(DL, *, data_key, t_step=0, save_as: str = 'C
         key for correlation function
     t_step: int
         time step to plot correlations on
-    keys : list
-        a list specifing which pairs to plot, default is ['nearest_neighbors'],
-        other options are ['next_nearest_neighbors', 'next_next_nearest_neighbors']
-    markers : list
-          a list of symbols for different sites within a unit cell given to plot sites
+    keys : str or list
+        either a single string, or a list specifying which pairs to plot,
+        default is 'nearest_neighbors', other options are ['next_nearest_neighbors', 'next_next_nearest_neighbors']
+    markers : str or list
+          a str for a single or a list of symbols for different sites within a unit cell given to plot sites
     figsize : tuple
     save_as : str
         string under which to save the plot (and extension)
@@ -514,10 +509,10 @@ def pp_plot_correlations_on_lattice(DL, *, data_key, t_step=0, save_as: str = 'C
     import os
     if not os.path.exists(default_dir):
         os.mkdir(default_dir)
-    # import os ?
+
+    keys = to_iterable(keys)
+    markers = to_iterable(markers)
     lat = DL.lat
-    if lat.dim != 2:
-        raise NotImplementedError("Only implemented for two-dimensional lattices")
     correlations = DL.get_data_m(data_key)
     # loop over nearest_neighbors, next_nearest_neighbors, etc.
     fig, ax = plt.subplots(figsize=figsize)

@@ -37,40 +37,44 @@ def linear_prediction(x, *args, axis=0, **kwargs):
     return pred_along_axis_concat
 
 
-def simple_linear_prediction_1D(x: np.ndarray, m: int, p: int, truncation_mode: str = 'renormalize', split: float = 0):
+def simple_linear_prediction_1D(x: np.ndarray, rel_prediction_time: float = 1, rel_num_points: float = 0.3,
+                                truncation_mode: str = 'renormalize', rel_split: float = 0):
     """Linear prediction of a one-dimensional time series data.
 
     Parameters
     ----------
     x : ndarray
         one-dimensional time series data
-    m : int
-        number of time-steps to predict
-    p : int
-        number of last points to base linear prediction on
+    rel_prediction_time : float
+        relative time to predict, defaults to 1
+    rel_num_points : float
+        relative percentage of last points to base linear prediction on
     truncation_mode : str
         the truncation mode (default is 'renormalize', meaning their absolute
         value will be set to 1) used for truncating the eigenvalues. Other options are 'cutoff'  and 'conjugate'
-    split: float
+    rel_split: float
         between [0, 1) which is the proportion of data that should be discarded, i.e. short timescale effects
 
     Returns
     -------
     np.ndarray
     """
-    if not isinstance(m, int) or not isinstance(p, int):
-        raise TypeError("Parameters 'm' and 'p' must be integers.")
+    assert x.ndim == 1, "This version assumes a one-dimensional time series"
+    assert 0 <= rel_split < 1, "rel_split must be between 0 and 1"
+    assert 0 < rel_num_points < 1
+    if rel_num_points + rel_split > 1:
+        raise ValueError(f"Can't split data by {rel_split} and use last {rel_num_points} of data")
     if truncation_mode.casefold() not in ('cutoff', 'renormalize', 'conjugate'):
         raise ValueError("Parameter 'truncation_mode' must be 'renormalize' (default), 'cutoff', or 'conjugate'.")
 
-    assert x.ndim == 1, "This version assumes a one-dimensional time series"
-    assert 0 <= split < 1, "split must be between 0 and 1"
     N = len(x)
-    split_idx = int(N * split)
+    # convert relative values (percentages) into integers
+    m = int(N * rel_prediction_time)
+    p = int(N * rel_num_points)
+    split_idx = int(N * rel_split)
+
+    # split the "training" data
     x = x[split_idx:]
-    N -= split_idx
-    if not p <= N:
-        raise ValueError("p must be less or equal to the length of the time series")
 
     # get coefficients
     lpc = get_lpc(x, p)

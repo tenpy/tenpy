@@ -31,9 +31,9 @@ algorithm_params:
 
 spectral_function_params:
     linear_predict: True
-    # m: 50
-    # p: 5
+    # rel_prediction_time: 1
+    # rel_num_points: 0.3
     # truncation_mode: renormalize
-    # split: 0.1
+    # rel_split: 0.1
     gaussian_window: True
     # sigma: 0.4
