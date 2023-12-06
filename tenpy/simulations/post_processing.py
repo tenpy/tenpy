@@ -1,13 +1,13 @@
-"""Simple post-processing"""
+"""Simple post-processing."""
 # Copyright 2020-2023 TeNPy Developers, GNU GPLv3
 
 import os
 import numpy as np
 import logging
 
+from ..tools.spectral_function_tools import spectral_function, plot_correlations_on_lattice
 from ..tools import hdf5_io
 from ..tools.misc import to_iterable, get_recursive, set_recursive, find_subclass
-from ..tools.prediction import linear_prediction
 from ..tools.params import Config
 from ..models import Model
 
@@ -18,8 +18,7 @@ try:
 except ImportError:
     h5py_version = (0, 0)
 
-__all__ = ['DataLoader', 'to_lat_geometry', 'to_mps_geometry', 'spectral_function', 'fourier_transform_space',
-           'fourier_transform_time', 'apply_gaussian_windowing', 'get_all_hdf5_keys']
+__all__ = ['DataLoader', 'pp_spectral_function', 'pp_plot_correlations_on_lattice', 'get_all_hdf5_keys']
 
 
 class DataLoader:
@@ -229,178 +228,6 @@ class DataLoader:
             raise ValueError("Can't find any results.")
 
 
-def spectral_function(DL: DataLoader, *, correlation_key, conjugate_correlation=False,
-                      gaussian_window: bool = False, sigma: float = 0.4,
-                      linear_predict: bool = False, rel_prediction_time: float = 1, rel_num_points: float = 0.3,
-                      truncation_mode: str = 'renormalize', rel_split: float = 0):
-    r"""Given a time dependent correlation function C(t, r), calculate its Spectral Function.
-
-    After a run of :class:`tenpy.simulations.time_evolution.TimeDependentCorrelation`, a :class:`DataLoader` instance
-    should be passed, from which the underlying lattice and additional parameters (e.g. ``dt``) can be extracted.
-    The `correlation_key` must coincide with the key of the time-dep. correlation function in the output of the
-    Simulation.
-
-    Parameters
-    ----------
-    DL : DataLoader
-    correlation_key : str
-    gaussian_window : bool
-        boolean flag to apply gaussian windowing
-    sigma : float
-        standard-deviation used for the gaussian window
-    linear_predict : bool
-        boolean flag to apply linear prediction
-    rel_prediction_time : float
-        relative time to predict, defaults to 1
-    rel_num_points : float
-        relative percentage of last points to base linear prediction on
-    truncation_mode : str
-    rel_split : float
-
-    Returns
-    -------
-    dict:
-        dictionary of keys for `k`, `k_reduced`, `w` and for the spectral function `S`
-
-    Notes
-    -----
-    The Spectral Function is given by the fourier transform in space and time of the (time-dep.) correlation function.
-    For a e.g. translationally invariant system, this is
-    .. math ::
-
-        S(w, \mathbf{k}) = \int dt e^{-iwt} \int d\mathbf{r} e^{i \mathbf{k} \mathbf{r} C(t, \mathbf{r})
-
-    """
-    # get lattice
-    lat = DL.lat
-
-    dt = DL.sim_params['algorithm_params']['dt']
-    N_steps = DL.sim_params['algorithm_params'].get('N_steps', None)
-    if N_steps is not None:
-        dt *= N_steps
-
-    time_dep_corr = DL.get_data_m(correlation_key)
-    # conjugate correlation (i.e. to put r_0 to the right site)
-    if conjugate_correlation is True:
-        time_dep_corr = np.conjugate(time_dep_corr)
-
-    # first we fourier transform in space C(r, t) -> C(k, t)
-    time_dep_corr_lat = to_lat_geometry(lat, time_dep_corr, axes=-1)
-    ft_space, k = fourier_transform_space(lat, time_dep_corr_lat)
-    k_reduced = lat.BZ.reduce_points(k)
-    # optional linear prediction
-    if linear_predict is True:
-        axis = 0  # since we assume that the time-series values are along the first dimension (n_tsteps, n_sites, ...)
-        ft_space = linear_prediction(ft_space, rel_prediction_time=rel_prediction_time, rel_num_points=rel_num_points,
-                                     axis=axis, truncation_mode=truncation_mode, rel_split=rel_split)
-    # optional gaussian windowing
-    if gaussian_window is True:
-        ft_space = apply_gaussian_windowing(ft_space, sigma, axes=0)
-    # fourier transform in time C(k, t) -> C(k, w) = S
-    s_k_w, w = fourier_transform_time(ft_space, dt)
-    return {'S': s_k_w, 'k': k, 'k_reduced': k_reduced, 'w': w}
-
-
-def fourier_transform_space(lat, a):
-    # make sure a is in lattice form not mps form
-    if lat.dim == 1:
-        ft_space = np.fft.fftn(a, axes=(1,))
-        k = np.fft.fftfreq(ft_space.shape[1])
-        # shifting
-        ft_space = np.fft.fftshift(ft_space, axes=1)
-        k = np.fft.fftshift(k)
-        # make sure k is returned in correct basis
-        k = (k * lat.reciprocal_basis).flatten()  # model is 1d
-    else:
-        # only transform over dims (1, 2), since 3 could hold unit cell index
-        ft_space = np.fft.fftn(a, axes=(1, 2))
-        k_x = np.fft.fftfreq(ft_space.shape[1])
-        k_y = np.fft.fftfreq(ft_space.shape[2])
-        # shifting
-        ft_space = np.fft.fftshift(ft_space, axes=(1, 2))
-        k_x = np.fft.fftshift(k_x)
-        k_y = np.fft.fftshift(k_y)
-        # make sure k is returned in correct basis
-        b1, b2 = lat.reciprocal_basis
-        k_x = b1 * k_x.reshape(-1, 1)  # multiply k_x by its basis vector (b1)
-        k_y = b2 * k_y.reshape(-1, 1)  # multiply k_y by its basis vector (b2)
-        # if k is indexed like (kx, ky) a coordinate (2d) is returned.
-        k = k_x[:, np.newaxis, :] + k_y[np.newaxis, :, :]
-        # e.g., if k_x, k_y hold the following (2d) points, the above is equivalent to
-        # k_x = np.array([[1, 2, 3], [1, 1, 1]]).T
-        # k_y = np.array([[-2, -2], [1, 2]]).T
-        # k = np.zeros((3, 2, 2))
-        # for i in range(len(k_y)):
-        #     k[:, i, :] = k_x + k_y[i]
-        # # or equivalently
-        # # for i in range(len(k_x)):
-        # #     k[i, :, :] = k_x[i] + k_y
-    return ft_space, k
-
-
-def fourier_transform_time(a, dt, axis=0):
-    # fourier transform in time
-    # (note that ifft is used, resulting in a minus sign in the exponential)
-    ft_time = np.fft.ifft(a, axis=axis) * a.shape[axis]  # renormalize
-    w = np.fft.fftfreq(len(ft_time), dt / (2 * np.pi))
-    # shifting
-    ft_time = np.fft.fftshift(ft_time, axes=axis)
-    w = np.fft.fftshift(w)
-    return ft_time, w
-
-
-def apply_gaussian_windowing(a, sigma: float = 0.4, axes=0):
-    """Simple gaussian windowing function along an axes.
-
-    Applying a windowing function avoids Gibbs oscillation. tn are time steps 0, 1, ..., N
-
-    Parameters
-    ----------
-    a : ndarray
-        a ndarray where the time series is along axis `axes`
-    sigma : float
-        standard-deviation used for the gaussian window
-    axes : int
-        axes along which to apply the gaussian window
-
-    Returns
-    -------
-    np.ndarray
-    """
-    # extract number of time-steps
-    n_tsteps = a.shape[axes]
-    tn = np.arange(n_tsteps)
-    # create gaussian windowing function with the right shape
-    gaussian_window = np.exp(-0.5 * (tn / (n_tsteps * sigma)) ** 2)
-    # swap dimension which should be weighted (window applied to)
-    # to last dim, so np broadcasting can be used
-    swapped_a = np.swapaxes(a, -1, axes)
-    # apply window
-    weighted_arr = swapped_a * gaussian_window
-    # swap back to original position
-    return np.swapaxes(weighted_arr, axes, -1)
-
-
-def to_lat_geometry(lat, a, axes=-1):
-    return lat.mps2lat_values(a, axes=axes)
-
-
-# TODO: make this function available on the lattice level, but allow an axis parameter for that
-def to_mps_geometry(lat, a):
-    """Bring measurement in lattice geometry to mps geometry.
-
-    This assumes that the array a has shape (..., Lx, Ly, Lu),
-    or if Lu = 1, (..., Lx, Ly)
-    """
-    mps_idx_flattened = np.ravel_multi_index(tuple(lat.order.T), lat.shape)
-    dims_until_lat_dims = a.ndim - (lat.dim + 1)  # add unit cell dim
-    if lat.Lu == 1:
-        dims_until_lat_dims += 1
-    a = a.reshape(a.shape[:dims_until_lat_dims] + (-1,))
-    a = np.take(a, mps_idx_flattened, axis=-1)
-    return a
-
-
 # TODO: move this to hdf5_io
 def get_all_hdf5_keys(h5_group):
     results = dict()
@@ -416,72 +243,38 @@ def get_all_hdf5_keys(h5_group):
     return results
 
 
-def plot_correlations_on_lattice(ax, lat, correlations, pairs='nearest_neighbors',
-                                 scale=1, color_pos='r', color_neg='g', color=None, zorder=0):
-    """Function to plot correlations on a lattice
+def pp_spectral_function(DL: DataLoader, *, correlation_key, conjugate_correlation=False, **kwargs):
+    r"""Given a time dependent correlation function C(t, r), calculate its Spectral Function.
+
+    After a run of :class:`tenpy.simulations.time_evolution.TimeDependentCorrelation`, a :class:`DataLoader` instance
+    should be passed, from which the underlying lattice and additional parameters (e.g. ``dt``) can be extracted.
+    The `correlation_key` must coincide with the key of the time-dep. correlation function in the output of the
+    Simulation.
 
     Parameters
     ----------
-    ax :
-        `matplotlib.axes.Axes`
-    lat :
-        a (TeNPy) lattice to plot the correlations on
-    correlations : array-like
-        an array of correlations (in mps_form)
-    pairs: str
-    scale: float
-    color_pos: str
-    color_neg: str
-    color: str
-    zorder: float
+    DL : DataLoader
+    correlation_key : str
+    **kwargs
+        keyword arguments to :func:`tenpy.tools.spectral_function_tools.spectral_function`
     """
-    from matplotlib.collections import LineCollection
+    lat = DL.lat
 
-    mps_is = list()
-    mps_js = list()
-    for pair in lat.pairs[pairs]:
-        coupling = lat.possible_couplings(*pair)
-        mps_i = coupling[0]
-        mps_j = coupling[1]
-        mps_is.append(mps_i)
-        mps_js.append(mps_j)
+    dt = DL.sim_params['algorithm_params']['dt']
+    N_steps = DL.sim_params['algorithm_params'].get('N_steps', None)
+    if N_steps is not None:
+        dt *= N_steps
 
-    all_mps_js = np.concatenate(mps_js)
-    all_mps_is = np.concatenate(mps_is)
+    time_dep_corr = DL.get_data_m(correlation_key)
+    # conjugate correlation (i.e. to put r_0 to the right site)
+    if conjugate_correlation is True:
+        time_dep_corr = np.conjugate(time_dep_corr)
 
-    pos_i = lat.position(lat.mps2lat_idx(all_mps_is))
-    pos_j = lat.position(lat.mps2lat_idx(all_mps_js))
-
-    pos_x = np.array([pos_i[:, 0], pos_j[:, 0]])
-    if lat.dim == 1:
-        pos_y = np.zeros(pos_x.shape)
-    else:
-        pos_y = np.array([pos_i[:, 1], pos_j[:, 1]])
-
-    connections = np.array(list(zip(all_mps_is, all_mps_js)))
-    strengths = correlations[*connections.T]
-    # plotting
-    scaled_strengths = strengths * scale
-
-    # differentiate between correlations larger than zero
-    where_pos = scaled_strengths >= 0
-    where_neg = np.bitwise_not(where_pos)
-
-    if color is not None:
-        color_pos = color_neg = color
-
-    lc_pos = LineCollection(np.array([pos_x, pos_y]).T[where_pos], linewidths=np.abs(scaled_strengths)[where_pos],
-                            color=color_pos, zorder=zorder)
-    lc_neg = LineCollection(np.array([pos_x, pos_y]).T[where_neg], linewidths=np.abs(scaled_strengths)[where_neg],
-                            color=color_neg, zorder=zorder)
-
-    ax.add_collection(lc_pos)
-    ax.add_collection(lc_neg)
+    return spectral_function(time_dep_corr, lat, dt, **kwargs)
 
 
-def pp_plot_correlations_on_lattice(DL, *, data_key, t_step=0, save_as: str = 'Correlations.pdf',
-                                    default_dir: str = 'plots',
-                                    keys='nearest_neighbors',
+def pp_plot_correlations_on_lattice(DL, *, data_key, t_step=0, keys='nearest_neighbors',
+                                    default_dir: str = 'plots', save_as: str = 'Correlations.pdf',
                                     markers='D', figsize=(8, 8), **kwargs):
     """Save a plot during post-processing to plot correlations on a lattice
 
@@ -503,10 +296,9 @@ def pp_plot_correlations_on_lattice(DL, *, data_key, t_step=0, save_as: str = 'C
     default_dir : str
         default (sub-) directory under which to save the plot
     kwargs :
-        kwargs to :func:`plot_correlations_on_lattice`
+        kwargs to :func:`tenpy.tools.spectral_function_tools.plot_correlations_on_lattice`
     """
     import matplotlib.pyplot as plt
-    import os
     if not os.path.exists(default_dir):
         os.mkdir(default_dir)
 

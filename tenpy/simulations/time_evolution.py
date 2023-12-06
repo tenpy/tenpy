@@ -475,8 +475,9 @@ class SpectralSimulation(TimeDependentCorrelation):
                 results_key = 'spectral_function'+key.removeprefix('correlation_function_t')
                 kwargs_dict = {'results_key': results_key, 'correlation_key': key}
                 kwargs_dict.update(extra_kwargs)  # add parameters for linear prediction etc.
-                pp_entry = ('tenpy.simulations.post_processing', 'spectral_function', kwargs_dict)
-                self.default_post_processing.append(pp_entry)
+                pp_entry = ('tenpy.simulations.post_processing', 'pp_spectral_function', kwargs_dict)
+                # create a new list here! (otherwise this is added to all instances within that session)
+                self.default_post_processing = self.default_post_processing + [pp_entry]
         return super().run_post_processing()
 
 
