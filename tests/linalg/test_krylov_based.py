@@ -12,7 +12,7 @@ from tenpy.linalg import krylov_based, sparse, tensors, random_matrix, spaces
 def test_lanczos_gs(backend, vector_space_rng, N_cache, tol):
     # generate hermitian test array
     leg = vector_space_rng()
-    H = tensors.Tensor.from_numpy_func(random_matrix.GUE, legs=[leg, leg.dual], backend=backend)
+    H = tensors.BlockDiagonalTensor.from_numpy_func(random_matrix.GUE, legs=[leg, leg.dual], backend=backend)
     H_np = H.to_numpy_ndarray()
     H_op = sparse.TensorLinearOperator(H, which_leg=1)
     npt.assert_allclose(H_np, H_np.conj().transpose())  # make sure we generated a hermitian operator
@@ -87,7 +87,7 @@ def test_lanczos_arpack():
 @pytest.mark.parametrize(['N_cache', 'tol'], [(10, 5.e-13), (20, 5.e-14)])
 def test_lanczos_evolve(backend, vector_space_rng, N_cache, tol):
     leg = vector_space_rng()
-    H = tensors.Tensor.from_numpy_func(random_matrix.GUE, legs=[leg, leg.dual], backend=backend)
+    H = tensors.BlockDiagonalTensor.from_numpy_func(random_matrix.GUE, legs=[leg, leg.dual], backend=backend)
     H_op = sparse.TensorLinearOperator(H, which_leg=1)
     H_np = H.to_numpy_ndarray()
     npt.assert_allclose(H_np, H_np.conj().transpose())  # make sure we generated a hermitian operator
@@ -115,7 +115,7 @@ def test_arnoldi(backend, vector_space_rng, which, N_max=20):
     tol = 5.e-14 if leg.dim <= N_max else 1.e-10
     # if looking for small/large real part, ensure hermitian H
     func = random_matrix.GUE if which[-1] == 'R' else random_matrix.standard_normal_complex
-    H = tensors.Tensor.from_numpy_func(func, legs=[leg, leg.dual], backend=backend)
+    H = tensors.BlockDiagonalTensor.from_numpy_func(func, legs=[leg, leg.dual], backend=backend)
     H_op = sparse.TensorLinearOperator(H, which_leg=1)
     H_np = H.to_numpy_ndarray()
     E_np, psi_np = np.linalg.eig(H_np)

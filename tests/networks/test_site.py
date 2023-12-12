@@ -33,7 +33,7 @@ def test_site(np_random, block_backend, symmetry_backend, use_sym):
     some_sectors = random_symmetry_sectors(sym, np_random, len_=dim, sort=False)
     leg = la.VectorSpace.from_basis(sym, np_random.choice(some_sectors, size=dim, replace=True))
     assert leg.dim == dim
-    op1 = la.Tensor.random_uniform([leg, leg.dual], backend, labels=['p', 'p*'])
+    op1 = la.BlockDiagonalTensor.random_uniform([leg, leg.dual], backend, labels=['p', 'p*'])
     labels = [f'x{i:d}' for i in range(10, 10 + dim)]
     s = site.Site(leg, backend=backend, state_labels=labels)
     s.add_symmetric_operator('silly_op', op1)
@@ -43,7 +43,7 @@ def test_site(np_random, block_backend, symmetry_backend, use_sym):
     assert s.all_op_names == {'silly_op', 'Id', 'JW'}
     assert s['silly_op'] is op1
     assert s.get_op('silly_op') is op1
-    op2 = la.Tensor.random_uniform([leg, leg.dual], backend, labels=['p', 'p*'])
+    op2 = la.BlockDiagonalTensor.random_uniform([leg, leg.dual], backend, labels=['p', 'p*'])
     s.add_symmetric_operator('op2', op2)
     assert s['op2'] is op2
     assert s.get_op('op2') is op2

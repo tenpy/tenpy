@@ -3,11 +3,11 @@
 from __future__ import annotations
 import numpy as np
 from tenpy.linalg import groups, spaces
-from tenpy.linalg.backends.abstract_backend import AbstractBackend
+from tenpy.linalg.backends.abstract_backend import Backend
 from tenpy.linalg.backends.numpy import NumpyBlockBackend
-from tenpy.linalg.backends.no_symmetry import AbstractNoSymmetryBackend
-from tenpy.linalg.backends.abelian import AbstractAbelianBackend
-from tenpy.linalg.tensors import Tensor
+from tenpy.linalg.backends.no_symmetry import NoSymmetryBackend
+from tenpy.linalg.backends.abelian import AbelianBackend
+from tenpy.linalg.tensors import BlockDiagonalTensor
 
 
 def random_symmetry_sectors(symmetry: groups.Symmetry, np_random: np.random.Generator, len_=None
@@ -151,7 +151,7 @@ def get_compatible_leg(legs: list[spaces.VectorSpace]) -> spaces.VectorSpace:
     return res
 
 
-def get_random_tensor(symmetry: groups.Symmetry, backend: AbstractBackend,
+def get_random_tensor(symmetry: groups.Symmetry, backend: Backend,
                       legs: list[spaces.VectorSpace | None], leg_dim: int, sectors_per_leg: int,
                       real: bool = False):
     assert sectors_per_leg <= leg_dim
@@ -172,7 +172,7 @@ def get_random_tensor(symmetry: groups.Symmetry, backend: AbstractBackend,
             res = res + 1.j * np.random.normal(size=size)
         return res
 
-    return Tensor.from_numpy_func(func=random_block, legs=legs, backend=backend)
+    return BlockDiagonalTensor.from_numpy_func(func=random_block, legs=legs, backend=backend)
 
 
 def get_qmod(sym):
@@ -205,7 +205,7 @@ def convert_VectorSpace_to_LegCharge(leg: spaces.VectorSpace, old_tenpy, chinfo=
     return old_tenpy.linalg.charges.LegCharge(chinfo, slices, charges, qconj)
 
 
-def convert_Tensor_to_Array(a: Tensor, old_tenpy, chinfo=None):
+def convert_Tensor_to_Array(a: BlockDiagonalTensor, old_tenpy, chinfo=None):
     """Convert a v2.0 Tensor to a v0.x Array
 
     If given, use chinfo, otherwise generate it from `a.symmetry`.
@@ -213,9 +213,9 @@ def convert_Tensor_to_Array(a: Tensor, old_tenpy, chinfo=None):
     if not isinstance(a.backend, NumpyBlockBackend):
         # would need to convert blocks to numpy
         raise NotImplementedError
-    if isinstance(a.backend, AbstractNoSymmetryBackend):
+    if isinstance(a.backend, NoSymmetryBackend):
         return old_tenpy.linalg.np_conserved.Array.from_ndarray_trivial(a.data)
-    assert isinstance(a.backend, AbstractAbelianBackend)
+    assert isinstance(a.backend, AbelianBackend)
     if chinfo is None:
         chinfo = old_tenpy.linalg.charges.ChargeInfo(get_qmod(a.symmetry))
     legs = [convert_VectorSpace_to_LegCharge(l, old_tenpy, chinfo) for l in a.legs]

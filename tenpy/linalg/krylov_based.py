@@ -5,7 +5,7 @@ import numpy as np
 import logging
 logger = logging.getLogger(__name__)
 
-from .tensors import AbstractTensor
+from .tensors import Tensor
 from .sparse import LinearOperator, ShiftedLinearOperator, ProjectedLinearOperator
 from ..tools.params import asConfig
 from ..tools.misc import argsort
@@ -36,9 +36,9 @@ class KrylovBased(metaclass=ABCMeta):
     H : :class:`~tenpy.linalg.sparse.LinearOperator`
         A hermitian linear operator.
         In order to use :class:`~tenpy.linalg.tensors.Tensor`s or other
-        :class:`~tenpy.linalg.tensors.AbstractTensor` types, see :class:`~tenpy.linalg.sparse.TensorLinearOperator`.
+        :class:`~tenpy.linalg.tensors.Tensor` types, see :class:`~tenpy.linalg.sparse.TensorLinearOperator`.
         The operator must map tensors to tensors with the same legs.
-    psi0 : :class:`~tenpy.linalg.tensors.AbstractTensor`
+    psi0 : :class:`~tenpy.linalg.tensors.Tensor`
         The starting vector defining the Krylov basis.
         For finding the ground state, this should be the best guess available.
         Note that it does not have to be a 1D "vector"; we are fine with viewing
@@ -85,7 +85,7 @@ class KrylovBased(metaclass=ABCMeta):
         Optional parameters.
     H : :class:`~tenpy.linalg.sparse.LinearOperator`
         The linear operator used for building the Krylov space.
-    psi0 : :class:`~tenpy.linalg.tensors.AbstractTensor`
+    psi0 : :class:`~tenpy.linalg.tensors.Tensor`
         The *normalized* starting vector.
     N_min, N_max, P_tol, min_gap, _cutoff, E_shift:
         Parameters as described in the options.
@@ -113,7 +113,7 @@ class KrylovBased(metaclass=ABCMeta):
     _dtype_h_krylov = np.complex128
     _dtype_E = np.complex128
 
-    def __init__(self, H: LinearOperator, psi0: AbstractTensor, options):
+    def __init__(self, H: LinearOperator, psi0: Tensor, options):
         self.H = H
         self.psi0 = psi0
         self._psi0_norm = None
@@ -151,7 +151,7 @@ class KrylovBased(metaclass=ABCMeta):
     def _calc_result_krylov(self, k):
         ...
 
-    def _calc_result_full(self, N: int) -> AbstractTensor:
+    def _calc_result_full(self, N: int) -> Tensor:
         """Transform the :attr:`_result_krylov` from the Krylov ONB to the original basis.
 
         Construct the result ``psi_f = sum_k  _result_krylov[k] psi[k]``, where ``psi[k]``
@@ -160,7 +160,7 @@ class KrylovBased(metaclass=ABCMeta):
         # this implementation assumes there is a single state
         vf = self._result_krylov
         assert N == len(vf) > 1
-        psif: AbstractTensor = vf[0] * self.psi0  # the start vector psi0 has been normalized by now
+        psif: Tensor = vf[0] * self.psi0  # the start vector psi0 has been normalized by now
         len_cache = len(self._cache)
         # and the len_cache vectors have been cached
         for k in range(1, min(len_cache + 1, N)):
@@ -270,7 +270,7 @@ class Arnoldi(KrylovBased):
             self.Es[k, :k + 1] = E_kr[sort]
             self._result_krylov = v_kr[:, sort]  # ground state of _h_krylov
 
-    def _calc_result_full(self, N: int) -> AbstractTensor:
+    def _calc_result_full(self, N: int) -> Tensor:
         """Transform the :attr:`_result_krylov` from the Krylov ONB to the original basis.
 
         Construct the result ``psi_f = sum_k  _result_krylov[k] psi[k]``, where ``psi[k]``
@@ -341,7 +341,7 @@ class LanczosGroundState(KrylovBased):
     _dtype_h_krylov = np.float64
     _dtype_E = np.float64
 
-    def __init__(self, H, psi0: AbstractTensor, options):
+    def __init__(self, H, psi0: Tensor, options):
         super().__init__(H=H, psi0=psi0, options=options)
         self.E_tol = self.options.get('E_tol', np.inf)
         self.N_cache = self.options.get('N_cache', self.N_max)
@@ -355,7 +355,7 @@ class LanczosGroundState(KrylovBased):
         -------
         E0 : float
             Ground state energy (estimate).
-        psi0 : :class:`~tenpy.linalg.tensors.AbstractTensor`
+        psi0 : :class:`~tenpy.linalg.tensors.Tensor`
             Ground state vector (estimate).
         N : int
             Used dimension of the Krylov space, i.e., how many iterations where performed.
@@ -497,7 +497,7 @@ class LanczosEvolution(LanczosGroundState):
 
         Returns
         -------
-        psi_f : :class:`~tenpy.linalg.tensors.AbstractTensor`
+        psi_f : :class:`~tenpy.linalg.tensors.Tensor`
             Best approximation for ``expm(delta H).dot(psi0)``.
             If :cfg:option:`Lanczos.E_shift` is used, it's an approximation for
             ``expm(delta (H + E_shift)).dot(psi)``.
@@ -577,7 +577,7 @@ def lanczos_arpack(H, psi, options={}):
 
     .. warning ::
         This function is mostly intended for debugging, since it requires to convert the vector
-        from tenpy :class:`~tenpy.linalg.tensors.AbstractTensor` to a numpy array and back during
+        from tenpy :class:`~tenpy.linalg.tensors.Tensor` to a numpy array and back during
         *each* `matvec`-operation!
 
     Parameters
@@ -590,7 +590,7 @@ def lanczos_arpack(H, psi, options={}):
     -------
     E0 : float
         Ground state energy.
-    psi0 : :class:`~tenpy.linalg.tensors.AbstractTensor`
+    psi0 : :class:`~tenpy.linalg.tensors.Tensor`
         Ground state vector.
     """
     options = asConfig(options, "Lanczos")

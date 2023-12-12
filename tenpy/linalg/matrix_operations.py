@@ -6,7 +6,7 @@ import warnings
 from numbers import Number
 from typing import Callable
 from .spaces import ProductSpace
-from .tensors import DiagonalTensor, AbstractTensor, Tensor, Mask, ChargedTensor, tdot, _dual_leg_label
+from .tensors import DiagonalTensor, Tensor, BlockDiagonalTensor, Mask, ChargedTensor, tdot, _dual_leg_label
 from .backends.abstract_backend import Block
 from ..tools.misc import inverse_permutation, to_iterable
 from ..tools.params import asConfig
@@ -16,7 +16,7 @@ __all__ = ['svd', 'svd_apply_mask', 'eig_based_svd', 'truncated_svd', 'truncated
            'exp', 'log']
 
 
-def _svd(a: AbstractTensor, u_legs: list[int | str], vh_legs: list[int | str],
+def _svd(a: Tensor, u_legs: list[int | str], vh_legs: list[int | str],
          new_labels: tuple[str, ...], new_vh_leg_dual: bool, U_inherits_charge: bool,
          compute_u: bool, compute_vh: bool, algorithm: str):
     """Common implementation of :func:`svd` and :func:`eig_based_svd`."""
@@ -70,7 +70,7 @@ def _svd(a: AbstractTensor, u_legs: list[int | str], vh_legs: list[int | str],
         Vh.set_labels([l_vh, a.labels[vh_idcs[0]]])
         return U, S, Vh
 
-    if isinstance(a, Tensor):
+    if isinstance(a, BlockDiagonalTensor):
         need_combine = (len(u_idcs) != 1 or len(vh_idcs) != 1)
         original_labels = a.labels
         if need_combine:
@@ -81,7 +81,7 @@ def _svd(a: AbstractTensor, u_legs: list[int | str], vh_legs: list[int | str],
                                                          algorithm=algorithm, compute_u=compute_u,
                                                          compute_vh=compute_vh)
         if compute_u:
-            U = Tensor(u_data, backend=a.backend, legs=[a.legs[0], new_leg.dual])
+            U = BlockDiagonalTensor(u_data, backend=a.backend, legs=[a.legs[0], new_leg.dual])
             if need_combine:
                 U = U.split_legs(0)
             U.set_labels([original_labels[n] for n in u_idcs] + [l_u])
@@ -89,7 +89,7 @@ def _svd(a: AbstractTensor, u_legs: list[int | str], vh_legs: list[int | str],
             U = None
         S = DiagonalTensor(s_data, first_leg=new_leg, second_leg_dual=True, backend=a.backend, labels=[l_su, l_sv])
         if compute_vh:
-            Vh = Tensor(vh_data, backend=a.backend, legs=[new_leg, a.legs[1]])
+            Vh = BlockDiagonalTensor(vh_data, backend=a.backend, legs=[new_leg, a.legs[1]])
             if need_combine:
                 Vh = Vh.split_legs(1)
             Vh.set_labels([l_vh] + [original_labels[n] for n in vh_idcs])
@@ -100,10 +100,10 @@ def _svd(a: AbstractTensor, u_legs: list[int | str], vh_legs: list[int | str],
     raise TypeError(f'svd not supported for {type(a)}')
 
 
-def svd(a: AbstractTensor, u_legs: list[int | str] = None, vh_legs: list[int | str] = None,
+def svd(a: Tensor, u_legs: list[int | str] = None, vh_legs: list[int | str] = None,
         new_labels: tuple[str, ...] = None, new_vh_leg_dual: bool =False,
         U_inherits_charge: bool = False, options={}
-        ) -> tuple[AbstractTensor, DiagonalTensor, AbstractTensor]:
+        ) -> tuple[Tensor, DiagonalTensor, Tensor]:
     """Singular value decomposition of a tensor.
 
     The tensor is viewed as a linear map (i.e. matrix) from one set of its legs to the rest.
@@ -168,8 +168,8 @@ def svd(a: AbstractTensor, u_legs: list[int | str] = None, vh_legs: list[int | s
                 compute_u=True, compute_vh=True, algorithm=algorithm)
 
 
-def svd_apply_mask(U: AbstractTensor, S: DiagonalTensor, Vh: AbstractTensor, mask: Mask
-                   ) -> tuple[AbstractTensor, DiagonalTensor, AbstractTensor]:
+def svd_apply_mask(U: Tensor, S: DiagonalTensor, Vh: Tensor, mask: Mask
+                   ) -> tuple[Tensor, DiagonalTensor, Tensor]:
     """Truncate an existing SVD"""
     U = U.apply_mask(mask, -1)
     S = S._apply_mask_both_legs(mask)
@@ -177,7 +177,7 @@ def svd_apply_mask(U: AbstractTensor, S: DiagonalTensor, Vh: AbstractTensor, mas
     return U, S, Vh
 
 
-def eig_based_svd(a: AbstractTensor, compute_u: bool = False, compute_vh: bool = False,
+def eig_based_svd(a: Tensor, compute_u: bool = False, compute_vh: bool = False,
                   u_legs: list[int | str] = None, vh_legs: list[int | str] = None,
                   new_labels: tuple[str, ...] = None, new_vh_leg_dual: bool = False,
                   U_inherits_charge: bool = False):
@@ -207,11 +207,11 @@ def eig_based_svd(a: AbstractTensor, compute_u: bool = False, compute_vh: bool =
 
     Returns
     -------
-    U : AbstractTensor | None
+    U : Tensor | None
         The `U` isometry of an SVD of `a`, or ``None`` if not computed.
     S : DiagonalTensor
         The singular values of `a`.
-    Vh : AbstractTensor | None
+    Vh : Tensor | None
         The `Vh` isometry of an SVD of `a`, or ``None`` if not computed.
 
     See Also
@@ -224,10 +224,10 @@ def eig_based_svd(a: AbstractTensor, compute_u: bool = False, compute_vh: bool =
                 compute_u=compute_u, compute_vh=compute_vh, algorithm='eigh')
       
 
-def truncated_svd(a: AbstractTensor, u_legs: list[int | str] = None, vh_legs: list[int | str] = None,
+def truncated_svd(a: Tensor, u_legs: list[int | str] = None, vh_legs: list[int | str] = None,
                   new_labels: tuple[str, ...] = None, new_vh_leg_dual=False, U_inherits_charge: bool = False,
                   normalize_to: float = None, options={}, truncation_options={}
-                  ) -> tuple[AbstractTensor, DiagonalTensor, AbstractTensor, float, float]:
+                  ) -> tuple[Tensor, DiagonalTensor, Tensor, float, float]:
     """Truncated version of :func:`svd`, read its docstring.
 
     TODO elaborate on what truncation means?
@@ -274,7 +274,7 @@ def truncated_svd(a: AbstractTensor, u_legs: list[int | str] = None, vh_legs: li
     return U, S, V, err, renormalize
 
 
-def truncated_eig_based_svd(a: AbstractTensor, compute_u: bool = False, compute_vh: bool = False,
+def truncated_eig_based_svd(a: Tensor, compute_u: bool = False, compute_vh: bool = False,
                             u_legs: list[int | str] = None, vh_legs: list[int | str] = None,
                             new_labels: tuple[str, ...] = None, new_vh_leg_dual: bool = False,
                             U_inherits_charge: bool = False, normalize_to: float = None,
@@ -409,7 +409,7 @@ def truncate_singular_values(S: DiagonalTensor, options) -> tuple[Mask, float, f
         good = _combine_constraints(good, good2, "chi_max")
 
     if chi_min is not None and chi_min > 1:
-        # keep at most chi_max values
+        # keep at least chi_min values
         good2 = np.ones(len(piv), dtype=np.bool_)
         good2[-chi_min + 1:] = False
         good = _combine_constraints(good, good2, "chi_min")
@@ -441,7 +441,7 @@ def truncate_singular_values(S: DiagonalTensor, options) -> tuple[Mask, float, f
     return mask, err, new_norm
 
 
-def qr(a: AbstractTensor, q_legs: list[int | str] = None, r_legs: list[int | str] = None,
+def qr(a: Tensor, q_legs: list[int | str] = None, r_legs: list[int | str] = None,
        new_labels: tuple[str, str] = [None, None], new_r_leg_dual: bool = False,
        full: bool = False):
     """QR decomposition of a tensor, viewed as a linear map.
@@ -464,7 +464,7 @@ def qr(a: AbstractTensor, q_legs: list[int | str] = None, r_legs: list[int | str
     --------
     lq
     """
-    if not isinstance(a, Tensor):
+    if not isinstance(a, BlockDiagonalTensor):
         raise NotImplementedError  # TODO ChargedTensor support
 
     a_labels = a.labels
@@ -478,8 +478,8 @@ def qr(a: AbstractTensor, q_legs: list[int | str] = None, r_legs: list[int | str
 
     q_data, r_data, new_leg = a.backend.qr(a, new_r_leg_dual, full=full)
 
-    Q = Tensor(q_data, legs=[a.legs[0], new_leg.dual], backend=a.backend)
-    R = Tensor(r_data, legs=[new_leg, a.legs[1]], backend=a.backend)
+    Q = BlockDiagonalTensor(q_data, legs=[a.legs[0], new_leg.dual], backend=a.backend)
+    R = BlockDiagonalTensor(r_data, legs=[new_leg, a.legs[1]], backend=a.backend)
     if need_combine:
         R = R.split_legs(1)
         Q = Q.split_legs(0)
@@ -488,7 +488,7 @@ def qr(a: AbstractTensor, q_legs: list[int | str] = None, r_legs: list[int | str
     return Q, R
 
 
-def lq(a: AbstractTensor, l_legs: list[int | str] = None, q_legs: list[int | str] = None,
+def lq(a: Tensor, l_legs: list[int | str] = None, q_legs: list[int | str] = None,
        new_labels: tuple[str, str] = [None, None], new_l_leg_dual: bool = False,
        full: bool = False):
     """LQ decomposition of a tensor, viewed as a linear map.
@@ -513,7 +513,7 @@ def lq(a: AbstractTensor, l_legs: list[int | str] = None, q_legs: list[int | str
     --------
     qr
     """
-    if not isinstance(a, Tensor):
+    if not isinstance(a, BlockDiagonalTensor):
         raise NotImplementedError  # TODO ChargedTensor support
     
     a_labels = a.labels
@@ -527,8 +527,8 @@ def lq(a: AbstractTensor, l_legs: list[int | str] = None, q_legs: list[int | str
 
     q_data, r_data, new_leg = a.backend.qr(a, new_r_leg_dual=new_l_leg_dual, full=full)
     # transpose back, since we build the LQ from RQ of a.T
-    Q = Tensor(q_data, legs=[a.legs[0], new_leg.dual], backend=a.backend).permute_legs([1, 0])
-    L = Tensor(r_data, legs=[new_leg, a.legs[1]], backend=a.backend).permute_legs([1, 0])
+    Q = BlockDiagonalTensor(q_data, legs=[a.legs[0], new_leg.dual], backend=a.backend).permute_legs([1, 0])
+    L = BlockDiagonalTensor(r_data, legs=[new_leg, a.legs[1]], backend=a.backend).permute_legs([1, 0])
     if need_combine:
         Q = Q.split_legs(1)
         L = L.split_legs(0)
@@ -537,14 +537,14 @@ def lq(a: AbstractTensor, l_legs: list[int | str] = None, q_legs: list[int | str
     return L, Q
 
 
-def svd_split(a: AbstractTensor, legs1: list[int | str] = None, legs2: list[int | str] = None,
+def svd_split(a: Tensor, legs1: list[int | str] = None, legs2: list[int | str] = None,
               new_labels: tuple[str, str] = None, options=None, s_exponent: float = .5):
     """Split a tensor via (truncated) svd,
     i.e. compute (U @ S ** s_exponent) and (S ** (1 - s_exponent) @ Vh)"""
     raise NotImplementedError  # TODO
 
 
-def pinv(a: AbstractTensor, legs1: list[int | str] = None, legs2: list[int | str] = None, cutoff=1.e-15):
+def pinv(a: Tensor, legs1: list[int | str] = None, legs2: list[int | str] = None, cutoff=1.e-15):
     """The Moore-Penrose pseudo-inverse of a tensor.
 
     The tensor is viewed as a linear map from (the duals of) `legs1` to `legs2`.
@@ -558,7 +558,7 @@ def pinv(a: AbstractTensor, legs1: list[int | str] = None, legs2: list[int | str
     return P.conj().permute_legs([*legs2, *legs1])
 
 
-def eigh(a: AbstractTensor, legs1: list[int | str] = None, legs2: list[int | str] = None,
+def eigh(a: Tensor, legs1: list[int | str] = None, legs2: list[int | str] = None,
          new_labels: str | list[str] = 'eig', sort: str = None, new_leg_dual: bool = True):
     r"""Eigenvalue decomposition of a hermitian square tensor.
 
@@ -601,7 +601,7 @@ def eigh(a: AbstractTensor, legs1: list[int | str] = None, legs2: list[int | str
         In particular, the new leg is always a plain `VectorSpace`, never a `ProductSpace`.
     """
     # TODO (JU) should we support `UPLO` arg? (use lower or upper triangular part)
-    if not isinstance(a, Tensor):
+    if not isinstance(a, BlockDiagonalTensor):
         raise TypeError(f'eigh not supported for type {type(a)}')
     idcs1, idcs2 = leg_bipartition(a, legs1, legs2)
     assert len(idcs1) == len(idcs2)
@@ -638,7 +638,7 @@ def eigh(a: AbstractTensor, legs1: list[int | str] = None, legs2: list[int | str
         raise ValueError(msg)
     D = DiagonalTensor(d_data, first_leg=D_leg_0, second_leg_dual=True, backend=backend,
                        labels=[lb, lc])
-    U = Tensor(u_data, legs=[U_leg_0, U_leg_1], backend=backend, labels=[a.labels[0], la])
+    U = BlockDiagonalTensor(u_data, legs=[U_leg_0, U_leg_1], backend=backend, labels=[a.labels[0], la])
 
     if U_leg_1.is_dual != new_leg_dual:
         # OPTIMIZE is it better to do this directly in the backend.eigh? like for svd?
@@ -681,7 +681,7 @@ def _svd_new_labels(new_labels: tuple[str, ...] | None) -> tuple[str, str, str, 
     return l_u, l_su, l_sv, l_vh
 
 
-def leg_bipartition(a: AbstractTensor, legs1: list[int | str] | None, legs2: list[int | str] | None
+def leg_bipartition(a: Tensor, legs1: list[int | str] | None, legs2: list[int | str] | None
                     ) -> tuple[list[int] | list[int]]:
     """Utility function for partitioning the legs of a Tensor into two groups.
     
@@ -722,8 +722,8 @@ def leg_bipartition(a: AbstractTensor, legs1: list[int | str] | None, legs2: lis
     return idcs1, idcs2
 
 
-def exp(t: AbstractTensor | complex | float, legs1: list[int | str] = None,
-        legs2: list[int | str] = None) -> AbstractTensor | complex | float:
+def exp(t: Tensor | complex | float, legs1: list[int | str] = None,
+        legs2: list[int | str] = None) -> Tensor | complex | float:
     """The exponential function.
 
     For a tensor, viewed as a linear map from legs1 to legs2, the exponential function is
@@ -739,7 +739,7 @@ def exp(t: AbstractTensor | complex | float, legs1: list[int | str] = None,
     legs1, legs2 : list[int | str], optional
         Which of the legs belong to "matrix rows" vs "columns". See :func:`leg_bipartition`.
     """
-    if isinstance(t, Tensor):
+    if isinstance(t, BlockDiagonalTensor):
         return _act_block_diagonal_square_matrix(t, legs1, legs2, t.backend.matrix_exp)
     if isinstance(t, DiagonalTensor):
         return t._elementwise_unary(t.backend.block_exp)
@@ -748,8 +748,8 @@ def exp(t: AbstractTensor | complex | float, legs1: list[int | str] = None,
     raise TypeError(f'Unsupported type for exp: {type(t)}')
 
 
-def log(t: AbstractTensor | complex | float, legs1: list[int | str] = None,
-        legs2: list[int | str] = None) -> AbstractTensor | complex | float:
+def log(t: Tensor | complex | float, legs1: list[int | str] = None,
+        legs2: list[int | str] = None) -> Tensor | complex | float:
     """The (natural) logarithm of t.
 
     For a tensor, viewed as a linear map from legs1 to legs2, the logarithm is defined via its
@@ -767,7 +767,7 @@ def log(t: AbstractTensor | complex | float, legs1: list[int | str] = None,
     """
     # TODO it is a bit annoying that the dtype depends on values for real inputs.
     #      we get a real log for positive definite matrices and complex otherwise.
-    if isinstance(t, Tensor):
+    if isinstance(t, BlockDiagonalTensor):
         return _act_block_diagonal_square_matrix(t, legs1, legs2, t.backend.matrix_log)
     if isinstance(t, DiagonalTensor):
         return t._elementwise_unary(t.backend.block_log)
@@ -776,10 +776,10 @@ def log(t: AbstractTensor | complex | float, legs1: list[int | str] = None,
     raise TypeError(f'Unsupported type for log: {type(t)}')
 
 
-def _act_block_diagonal_square_matrix(t: AbstractTensor,
+def _act_block_diagonal_square_matrix(t: Tensor,
                                       legs1: list[int | str],
                                       legs2: list[int | str],
-                                      block_method: Callable[[Block], Block]) -> AbstractTensor:
+                                      block_method: Callable[[Block], Block]) -> Tensor:
     """Helper function to act on a block-diagonal two-leg tensor.
 
     Parameters
@@ -799,7 +799,7 @@ def _act_block_diagonal_square_matrix(t: AbstractTensor,
         pipe = t.make_ProductSpace(idcs1)
         t = t.combine_legs(idcs1, idcs2, product_spaces=[pipe, pipe.dual], new_axes=[0, 1])
     res_data = t.backend.act_block_diagonal_square_matrix(t, block_method)
-    res = Tensor(res_data, backend=t.backend, legs=t.legs, labels=t.labels)
+    res = BlockDiagonalTensor(res_data, backend=t.backend, legs=t.legs, labels=t.labels)
     if len(idcs1) > 1:
         res = res.split_legs()
         transposed = idcs1 + idcs2

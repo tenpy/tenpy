@@ -15,7 +15,7 @@ from ..tools.misc import inverse_permutation, rank_data, to_iterable
 from ..tools.string import format_like_list
 
 if TYPE_CHECKING:
-    from .backends.abstract_backend import AbstractBackend, Block
+    from .backends.abstract_backend import Backend, Block
 
 
 __all__ = ['VectorSpace', 'ProductSpace']
@@ -351,7 +351,7 @@ class VectorSpace:
         return self
 
     def change_symmetry(self, symmetry: Symmetry, sector_map: callable,
-                        backend: AbstractBackend = None) -> VectorSpace:
+                        backend: Backend = None) -> VectorSpace:
         """Change the symmetry by specifying how the sectors change.
 
         Parameters
@@ -364,7 +364,7 @@ class VectorSpace:
             The map is assumed to cooperate with duality, i.e. we assume without checking that
             ``symmetry.dual_sectors(sector_map(old_sectors))`` is the same as
             ``sector_map(old_symmetry.dual_sectors(old_sectors))``.
-        backend : :class: `~tenpy.linalg.backends.abstract_backend.AbstractBackend`
+        backend : :class: `~tenpy.linalg.backends.abstract_backend.Backend`
             This parameter is ignored. We only include it to have matching signatures
             with :meth:`ProductSpace.change_symmetry`.
 
@@ -932,7 +932,7 @@ class ProductSpace(VectorSpace):
     spaces:
         The factor spaces that multiply to this space.
         The resulting product space can always be split back into these.
-    backend : AbstractBackend | None
+    backend : Backend | None
         If a backend is given, the backend-specific metadata will be set via ``backend._fuse_spaces``.
     _is_dual : bool | None
         Flag indicating wether the fusion space represents a dual (bra) space or a non-dual (ket) space.
@@ -990,7 +990,7 @@ class ProductSpace(VectorSpace):
     Note that the default behavior of the `_is_dual` argument guarantees that
     `ProductSpace(some_space)` is contractible with `ProductSpace([s.dual for s in some_spaces])`.
     """
-    def __init__(self, spaces: list[VectorSpace], backend: AbstractBackend = None, _is_dual: bool = None,
+    def __init__(self, spaces: list[VectorSpace], backend: Backend = None, _is_dual: bool = None,
                  _sectors: SectorArray = None, _multiplicities: ndarray = None):
         if _is_dual is None:
             _is_dual = spaces[0].is_dual
@@ -1260,14 +1260,14 @@ class ProductSpace(VectorSpace):
 
         return inverse_permutation(sector_part + degeneracy_part)
 
-    def fuse_states(self, states: list[Block], backend: AbstractBackend) -> Block:
+    def fuse_states(self, states: list[Block], backend: Backend) -> Block:
         """TODO write docs"""
         # if abelian first kron then use get_basis_transformation_perm()
         # other wise contract get_basis_transformation() with the states
         raise NotImplementedError  # TODO
 
     def change_symmetry(self, symmetry: Symmetry, sector_map: callable,
-                         backend: AbstractBackend = None) -> ProductSpace:
+                         backend: Backend = None) -> ProductSpace:
         spaces = [s.change_symmetry(symmetry=symmetry, sector_map=sector_map) for s in self.spaces]
         return ProductSpace(spaces, backend=backend, _is_dual=self.is_dual)
 
@@ -1379,7 +1379,7 @@ def _fuse_spaces(symmetry: Symmetry, spaces: list[VectorSpace], _is_dual: bool
     
     It determines the sectors and multiplicities of the ProductSpace.
     There is also a version of this function in the backends, i.e.
-    :meth:`~tenpy.linalg.backends.abstract_backend.AbstractBackend._fuse_spaces:, which may
+    :meth:`~tenpy.linalg.backends.abstract_backend.Backend._fuse_spaces:, which may
     customize this behavior and in particular may return metadata, i.e. attributes to be added to
     the ProductSpace.
     This default implementation returns empty metadata ``{}``.
@@ -1408,7 +1408,7 @@ def _fuse_spaces(symmetry: Symmetry, spaces: list[VectorSpace], _is_dual: bool
         # Overall, this ensures consistent sorting/order of sectors between dual ProductSpace!
 
     if symmetry.is_abelian:
-        # copying parts from AbstractAbelianBackend._fuse_spaces here...
+        # copying parts from AbelianBackend._fuse_spaces here...
         grid = np.indices(tuple(space.num_sectors for space in spaces), np.intp)
         grid = grid.T.reshape(-1, len(spaces))
         sectors = symmetry.multiple_fusion_broadcast(

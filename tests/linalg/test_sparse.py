@@ -7,7 +7,7 @@ import scipy
 
 from tenpy.linalg import sparse, tensors, spaces
 from tenpy.linalg.backends.backend_factory import get_backend
-from tenpy.linalg.tensors import AbstractTensor, Tensor, Shape, Dtype, almost_equal
+from tenpy.linalg.tensors import Tensor, BlockDiagonalTensor, Shape, Dtype, almost_equal
 
 
 # define a few simple operators to test the wrappers:
@@ -22,12 +22,12 @@ class ScalingDummyOperator(sparse.LinearOperator):
     def some_unrelated_function(self, x):
         return 2 * x
 
-    def matvec(self, vec: AbstractTensor) -> AbstractTensor:
+    def matvec(self, vec: Tensor) -> Tensor:
         return self.factor * vec
 
-    def to_tensor(self, backend=None) -> AbstractTensor:
+    def to_tensor(self, backend=None) -> Tensor:
         assert backend is not None, 'backend kwarg is needed for ScalingDummyOperator.to_tensor'
-        return self.factor * Tensor.eye(
+        return self.factor * BlockDiagonalTensor.eye(
             legs=self.vector_shape.legs, backend=backend, labels=self.vector_shape.labels
         )
 
@@ -36,7 +36,7 @@ class ScalingDummyOperator(sparse.LinearOperator):
 
 
 class TensorDummyOperator(sparse.LinearOperator):
-    def __init__(self, tensor: Tensor):
+    def __init__(self, tensor: BlockDiagonalTensor):
         assert tensor.labels == ['a', 'b*', 'a*', 'b']
         acts_on = ['a', 'b']
         vector_shape = Shape(legs=tensor.get_legs(acts_on), labels=acts_on)
@@ -47,17 +47,17 @@ class TensorDummyOperator(sparse.LinearOperator):
     def some_unrelated_function(self, x):
         return 'buzz'
 
-    def matvec(self, vec: AbstractTensor) -> AbstractTensor:
+    def matvec(self, vec: Tensor) -> Tensor:
         return self.tensor.tdot(vec, ['a*', 'b*'], ['a', 'b'])
 
-    def to_tensor(self, **kw) -> AbstractTensor:
+    def to_tensor(self, **kw) -> Tensor:
         return self.tensor.permute_legs(['a', 'b', 'a*', 'b*'])
 
     def adjoint(self):
         return TensorDummyOperator(self.tensor.conj())
 
 
-def check_to_tensor(op: sparse.LinearOperator, vec: AbstractTensor, backend):
+def check_to_tensor(op: sparse.LinearOperator, vec: Tensor, backend):
     """perform common checks of the LinearOperator.to_tensor method"""
     res_matvec = op.matvec(vec)
     tensor = op.to_tensor(backend=backend)

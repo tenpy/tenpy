@@ -5,10 +5,10 @@ from typing import Any, TYPE_CHECKING
 import numpy as np
 import scipy
 
-from .abelian import AbstractAbelianBackend
-from .abstract_backend import AbstractBlockBackend, Block, Data, Dtype
-from .no_symmetry import AbstractNoSymmetryBackend
-from .nonabelian import AbstractNonabelianBackend
+from .abelian import AbelianBackend
+from .abstract_backend import BlockBackend, Block, Data, Dtype
+from .no_symmetry import NoSymmetryBackend
+from .nonabelian import NonabelianBackend
 from ..misc import inverse_permutation
 from ..spaces import VectorSpace
 
@@ -19,10 +19,10 @@ __all__ = ['NumpyBlockBackend', 'NoSymmetryNumpyBackend', 'AbelianNumpyBackend',
 if TYPE_CHECKING:
     # can not import Tensor at runtime, since it would be a circular import
     # this clause allows mypy etc to evaluate the type-hints anyway
-    from ..tensors import Tensor
+    from ..tensors import BlockDiagonalTensor
 
 
-class NumpyBlockBackend(AbstractBlockBackend):
+class NumpyBlockBackend(BlockBackend):
     BlockCls = np.ndarray
     svd_algorithms = ['gesdd', 'gesvd', 'robust', 'robust_silent']
 
@@ -267,15 +267,15 @@ class NumpyBlockBackend(AbstractBlockBackend):
         return np.argsort(block, axis=axis)
     
 
-class NoSymmetryNumpyBackend(NumpyBlockBackend, AbstractNoSymmetryBackend):
+class NoSymmetryNumpyBackend(NumpyBlockBackend, NoSymmetryBackend):
     pass
 
 
-class AbelianNumpyBackend(NumpyBlockBackend, AbstractAbelianBackend):
+class AbelianNumpyBackend(NumpyBlockBackend, AbelianBackend):
     pass
 
 
-class NonabelianNumpyBackend(NumpyBlockBackend, AbstractNonabelianBackend):
+class NonabelianNumpyBackend(NumpyBlockBackend, NonabelianBackend):
     pass
 
 

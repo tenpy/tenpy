@@ -4,10 +4,10 @@ https://data-apis.org/array-api/latest/purpose_and_scope.html
 # Copyright 2023-2023 TeNPy Developers, GNU GPLv3
 from __future__ import annotations
 
-from .abstract_backend import AbstractBlockBackend, Block, Data, Dtype
-from .no_symmetry import AbstractNoSymmetryBackend
-from .nonabelian import AbstractNonabelianBackend
-from .abelian import AbstractAbelianBackend
+from .abstract_backend import BlockBackend, Block, Data, Dtype
+from .no_symmetry import NoSymmetryBackend
+from .nonabelian import NonabelianBackend
+from .abelian import AbelianBackend
 
 import numpy as np
 
@@ -20,7 +20,7 @@ __all__ = ['ArrayApiBlockBackend', 'NoSymmetryArrayApiBackend', 'AbelianArrayApi
 # TODO provide an example...
 
 
-class ArrayApiBlockBackend(AbstractBlockBackend):
+class ArrayApiBlockBackend(BlockBackend):
 
     svd_algorithms = ['default']  # can not specify algorithms through the array API
 
@@ -257,16 +257,16 @@ class ArrayApiBlockBackend(AbstractBlockBackend):
         return self._api.argsort(block, axis=axis)
 
 
-class NoSymmetryArrayApiBackend(ArrayApiBlockBackend, AbstractNoSymmetryBackend):
+class NoSymmetryArrayApiBackend(ArrayApiBlockBackend, NoSymmetryBackend):
     def __init__(self, api_namespace):
         ArrayApiBlockBackend.__init__(self, api_namespace=api_namespace)
 
 
-class AbelianArrayApiBackend(ArrayApiBlockBackend, AbstractAbelianBackend):
+class AbelianArrayApiBackend(ArrayApiBlockBackend, AbelianBackend):
     def __init__(self, api_namespace):
         ArrayApiBlockBackend.__init__(self, api_namespace=api_namespace)
 
 
-class NonabelianArrayApiBackend(ArrayApiBlockBackend, AbstractNonabelianBackend):
+class NonabelianArrayApiBackend(ArrayApiBlockBackend, NonabelianBackend):
     def __init__(self, api_namespace):
         ArrayApiBlockBackend.__init__(self, api_namespace=api_namespace)

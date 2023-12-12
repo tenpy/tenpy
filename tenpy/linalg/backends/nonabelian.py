@@ -5,17 +5,17 @@ from dataclasses import dataclass
 from typing import Iterable, Iterator, TYPE_CHECKING
 import numpy as np
 
-from .abstract_backend import AbstractBackend, AbstractBlockBackend, Block, Dtype, Data, DiagonalData
+from .abstract_backend import Backend, BlockBackend, Block, Dtype, Data, DiagonalData
 from ..groups import FusionStyle, Sector, SectorArray, Symmetry
 from ..spaces import VectorSpace, ProductSpace
 
 if TYPE_CHECKING:
     # can not import Tensor at runtime, since it would be a circular import
     # this clause allows mypy etc to evaluate the type-hints anyway
-    from ..tensors import Tensor, DiagonalTensor, Mask
+    from ..tensors import BlockDiagonalTensor, DiagonalTensor, Mask
 
 
-__all__ = ['AbstractNonabelianBackend', 'NonAbelianData', 'FusionTree', 'fusion_trees',
+__all__ = ['NonabelianBackend', 'NonAbelianData', 'FusionTree', 'fusion_trees',
            'all_fusion_trees', 'coupled_sectors']
 
 
@@ -67,12 +67,12 @@ class NonAbelianData:
         return block[idx]
 
 
-# TODO eventually remove AbstractBlockBackend inheritance, it is not needed,
+# TODO eventually remove BlockBackend inheritance, it is not needed,
 #  jakob only keeps it around to make his IDE happy
-class AbstractNonabelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
+class NonabelianBackend(Backend, BlockBackend, ABC):
     DataCls = NonAbelianData
 
-    def test_data_sanity(self, a: Tensor | DiagonalTensor | Mask, is_diagonal: bool):
+    def test_data_sanity(self, a: BlockDiagonalTensor | DiagonalTensor | Mask, is_diagonal: bool):
         if is_diagonal:
             raise NotImplementedError  # TODO
         super().test_data_sanity(a, is_diagonal=is_diagonal)
@@ -88,7 +88,7 @@ class AbstractNonabelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
     def get_dtype_from_data(self, a: NonAbelianData) -> Dtype:
         return a.dtype
 
-    def to_dtype(self, a: Tensor, dtype: Dtype) -> NonAbelianData:
+    def to_dtype(self, a: BlockDiagonalTensor, dtype: Dtype) -> NonAbelianData:
         blocks = {sector: self.block_to_dtype(block, dtype)
                   for sector, block in a.data.blocks.items()}
         return NonAbelianData(blocks=blocks, codomain=a.data.codomain, domain=a.data.domain, dtype=dtype)
@@ -96,7 +96,7 @@ class AbstractNonabelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
     def supports_symmetry(self, symmetry: Symmetry) -> bool:
         return isinstance(symmetry, Symmetry)
 
-    def is_real(self, a: Tensor) -> bool:
+    def is_real(self, a: BlockDiagonalTensor) -> bool:
         # TODO (JU) this may not even be well-defined if a.symmetry is not a group ...
         #  I think we should take the POV that we are always working over the complex numbers,
         #  even if the dtype is real. in that case, imaginary parts just happen to be 0.
@@ -108,7 +108,7 @@ class AbstractNonabelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
         block = next(iter(a.blocks.values()))
         return self.block_item(block)
 
-    def to_dense_block(self, a: Tensor) -> Block:
+    def to_dense_block(self, a: BlockDiagonalTensor) -> Block:
         raise NotImplementedError  # TODO use self.apply_basis_perm
         res = self.zero_block(a.shape, a.dtype)
         codomain = [a.legs[n] for n in a.data.codomain_legs]
@@ -179,74 +179,74 @@ class AbstractNonabelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
                               codomain_idcs=list(range(codomain.spaces)), domain_idcs=[],
                               dtype=dtype)
 
-    def copy_data(self, a: Tensor) -> NonAbelianData:
+    def copy_data(self, a: BlockDiagonalTensor) -> NonAbelianData:
         return NonAbelianData(
             blocks={sector: self.block_copy(block) for sector, block in a.data.blocks.values()},
             codomain=a.data.codomain, domain=a.data.domain, codomain_idcs=a.data.codomain_idcs,
             domain_idcs=a.data.domain_idcs
         )
 
-    def _data_repr_lines(self, a: Tensor, indent: str, max_width: int,
+    def _data_repr_lines(self, a: BlockDiagonalTensor, indent: str, max_width: int,
                          max_lines: int) -> list[str]:
         raise NotImplementedError  # TODO
 
-    def tdot(self, a: Tensor, b: Tensor, axs_a: list[int], axs_b: list[int]
+    def tdot(self, a: BlockDiagonalTensor, b: BlockDiagonalTensor, axs_a: list[int], axs_b: list[int]
              ) -> NonAbelianData:
         raise NotImplementedError  # TODO
 
-    def svd(self, a: Tensor, new_vh_leg_dual: bool, algorithm: str | None
+    def svd(self, a: BlockDiagonalTensor, new_vh_leg_dual: bool, algorithm: str | None
             ) -> tuple[NonAbelianData, NonAbelianData, NonAbelianData, VectorSpace]:
         # can use self.matrix_svd
         raise NotImplementedError  # TODO
 
-    def qr(self, a: Tensor, new_r_leg_dual: bool, full: bool) -> tuple[NonAbelianData, NonAbelianData, VectorSpace]:
+    def qr(self, a: BlockDiagonalTensor, new_r_leg_dual: bool, full: bool) -> tuple[NonAbelianData, NonAbelianData, VectorSpace]:
         raise NotImplementedError  # TODO
 
-    def outer(self, a: Tensor, b: Tensor) -> NonAbelianData:
+    def outer(self, a: BlockDiagonalTensor, b: BlockDiagonalTensor) -> NonAbelianData:
         raise NotImplementedError  # TODO
 
-    def inner(self, a: Tensor, b: Tensor, do_conj: bool, axs2: list[int] | None) -> complex:
+    def inner(self, a: BlockDiagonalTensor, b: BlockDiagonalTensor, do_conj: bool, axs2: list[int] | None) -> complex:
         raise NotImplementedError  # TODO
 
-    def permute_legs(self, a: Tensor, permutation: list[int]) -> NonAbelianData:
+    def permute_legs(self, a: BlockDiagonalTensor, permutation: list[int]) -> NonAbelianData:
         raise NotImplementedError  # TODO
 
-    def trace_full(self, a: Tensor, idcs1: list[int], idcs2: list[int]) -> float | complex:
+    def trace_full(self, a: BlockDiagonalTensor, idcs1: list[int], idcs2: list[int]) -> float | complex:
         raise NotImplementedError  # TODO
 
-    def trace_partial(self, a: Tensor, idcs1: list[int], idcs2: list[int], remaining_idcs: list[int]) -> NonAbelianData:
+    def trace_partial(self, a: BlockDiagonalTensor, idcs1: list[int], idcs2: list[int], remaining_idcs: list[int]) -> NonAbelianData:
         raise NotImplementedError  # TODO
 
-    def conj(self, a: Tensor) -> NonAbelianData:
+    def conj(self, a: BlockDiagonalTensor) -> NonAbelianData:
         raise NotImplementedError  # TODO
 
-    def combine_legs(self, a: Tensor, combine_slices: list[int, int], product_spaces: list[ProductSpace],
+    def combine_legs(self, a: BlockDiagonalTensor, combine_slices: list[int, int], product_spaces: list[ProductSpace],
                      new_axes: list[int], final_legs: list[VectorSpace]) -> NonAbelianData:
         raise NotImplementedError  # TODO
 
-    def split_legs(self, a: Tensor, leg_idcs: list[int], final_legs: list[VectorSpace]) -> NonAbelianData:
+    def split_legs(self, a: BlockDiagonalTensor, leg_idcs: list[int], final_legs: list[VectorSpace]) -> NonAbelianData:
         raise NotImplementedError  # TODO
 
-    def almost_equal(self, a: Tensor, b: Tensor, rtol: float, atol: float) -> bool:
+    def almost_equal(self, a: BlockDiagonalTensor, b: BlockDiagonalTensor, rtol: float, atol: float) -> bool:
         raise NotImplementedError  # TODO
 
-    def squeeze_legs(self, a: Tensor, idcs: list[int]) -> NonAbelianData:
+    def squeeze_legs(self, a: BlockDiagonalTensor, idcs: list[int]) -> NonAbelianData:
         raise NotImplementedError  # TODO
 
-    def norm(self, a: Tensor, order: int | float = None) -> float:
+    def norm(self, a: BlockDiagonalTensor, order: int | float = None) -> float:
         raise NotImplementedError  # TODO
 
-    def act_block_diagonal_square_matrix(self, a: Tensor, block_method: Callable[[Block], Block]
+    def act_block_diagonal_square_matrix(self, a: BlockDiagonalTensor, block_method: Callable[[Block], Block]
                                          ) -> NonAbelianData:
         raise NotImplementedError  # TODO
 
-    def add(self, a: Tensor, b: Tensor) -> NonAbelianData:
+    def add(self, a: BlockDiagonalTensor, b: BlockDiagonalTensor) -> NonAbelianData:
         # TODO: not checking leg compatibility. ok?
         blocks = {coupled: block_a + block_b
                   for coupled, block_a, block_b in _block_pairs(a.data, b.data)}
         return NonAbelianData(blocks, codomain=a.data.codomain, domain=a.data.domain, dtype=a.dtype)
 
-    def mul(self, a: float | complex, b: Tensor) -> NonAbelianData:
+    def mul(self, a: float | complex, b: BlockDiagonalTensor) -> NonAbelianData:
         blocks = {coupled: a * block for coupled, block in b.data.blocks.items()}
         return NonAbelianData(blocks, codomain=b.data.codomain, domain=b.data.domain, dtype=b.dtype)
 
@@ -257,7 +257,7 @@ class AbstractNonabelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
     def full_data_from_diagonal_tensor(self, a: DiagonalTensor) -> Data:
         raise NotImplementedError  # TODO
 
-    def scale_axis(self, a: Tensor, b: DiagonalTensor, leg: int) -> Data:
+    def scale_axis(self, a: BlockDiagonalTensor, b: DiagonalTensor, leg: int) -> Data:
         raise NotImplementedError  # TODO
     
     def diagonal_elementwise_unary(self, a: DiagonalTensor, func, func_kwargs, maps_zero_to_zero: bool
@@ -269,7 +269,7 @@ class AbstractNonabelianBackend(AbstractBackend, AbstractBlockBackend, ABC):
                                     ) -> DiagonalData:
         raise NotImplementedError  # TODO
 
-    def apply_mask_to_Tensor(self, tensor: Tensor, mask: Mask, leg_idx: int) -> Data:
+    def apply_mask_to_Tensor(self, tensor: BlockDiagonalTensor, mask: Mask, leg_idx: int) -> Data:
         raise NotImplementedError  # TODO
 
 

@@ -32,7 +32,7 @@ def assert_permuted_eye(arr):
 def test_svd(tensor_rng, new_vh_leg_dual, all_labels, l_labels, r_labels):
     assert set(l_labels + r_labels) == set(all_labels)
     print(f'leg bipartition {all_labels} -> {l_labels} & {r_labels}')
-    T: tensors.Tensor = tensor_rng(labels=all_labels, max_block_size=3)
+    T: tensors.BlockDiagonalTensor = tensor_rng(labels=all_labels, max_block_size=3)
     #  T_dense = T.to_numpy_ndarray()
     U, S, Vd = matrix_operations.svd(
         T, l_labels, r_labels, new_labels=['cr', 'cl'], new_vh_leg_dual=new_vh_leg_dual
@@ -68,7 +68,7 @@ def test_svd(tensor_rng, new_vh_leg_dual, all_labels, l_labels, r_labels):
 @pytest.mark.parametrize('svd_min, normalize_to', [(1e-14, None), (1e-4, None), (1e-4, 2.7)])
 @pytest.mark.parametrize('new_vh_leg_dual', [True, False])
 def test_truncated_svd(tensor_rng, new_vh_leg_dual, svd_min, normalize_to):
-    T: tensors.Tensor = tensor_rng(labels=['l1', 'r2', 'l2', 'r1'], max_block_size=3)
+    T: tensors.BlockDiagonalTensor = tensor_rng(labels=['l1', 'r2', 'l2', 'r1'], max_block_size=3)
     U, S, Vd, err, renormalize = matrix_operations.truncated_svd(
         T, ['l1', 'l2'], ['r1', 'r2'], new_labels=['cr', 'cl'], new_vh_leg_dual=new_vh_leg_dual,
         truncation_options=dict(svd_min=svd_min), normalize_to=normalize_to
@@ -105,7 +105,7 @@ def test_truncated_svd(tensor_rng, new_vh_leg_dual, svd_min, normalize_to):
 @pytest.mark.parametrize('new_vh_leg_dual', [True, False])
 @pytest.mark.parametrize('compute_u, compute_vh', [(True, False), (False, True), (False, False)])
 def test_eig_based_svd(tensor_rng, compute_u, compute_vh, new_vh_leg_dual):
-    T: tensors.Tensor = tensor_rng(labels=['l1', 'r2', 'l2', 'r1'], max_block_size=3)
+    T: tensors.BlockDiagonalTensor = tensor_rng(labels=['l1', 'r2', 'l2', 'r1'], max_block_size=3)
     u_legs = ['l1', 'l2']
     vh_legs = ['r1', 'r2']
     new_labels = ['cr', 'cl']
@@ -171,7 +171,7 @@ def test_eig_based_svd(tensor_rng, compute_u, compute_vh, new_vh_leg_dual):
 @pytest.mark.parametrize('compute_u, compute_vh', [(False, True), (True, False), (False, False)])
 def test_truncated_eig_based_svd(tensor_rng, compute_u, compute_vh, new_vh_leg_dual, svd_min,
                                  normalize_to):
-    T: tensors.Tensor = tensor_rng(labels=['l1', 'r2', 'l2', 'r1'], max_block_size=3)
+    T: tensors.BlockDiagonalTensor = tensor_rng(labels=['l1', 'r2', 'l2', 'r1'], max_block_size=3)
     U, S, Vh, err, renormalize = matrix_operations.truncated_eig_based_svd(
         T, compute_u=compute_u, compute_vh=compute_vh, u_legs=['l1', 'l2'], vh_legs=['r1', 'r2'],
         new_labels=['cr', 'cl'], new_vh_leg_dual=new_vh_leg_dual,
@@ -238,7 +238,7 @@ def test_truncated_eig_based_svd(tensor_rng, compute_u, compute_vh, new_vh_leg_d
 @pytest.mark.parametrize('full', [True, False])
 @pytest.mark.parametrize('new_r_leg_dual', [True, False])
 def test_qr(tensor_rng, new_r_leg_dual, full):
-    T: tensors.Tensor = tensor_rng(labels=['l1', 'r2', 'l2', 'r1'], max_block_size=3)
+    T: tensors.BlockDiagonalTensor = tensor_rng(labels=['l1', 'r2', 'l2', 'r1'], max_block_size=3)
 
     for comment, q_legs, r_legs in [
         ('all labelled', ['l1', 'l2'], ['r1', 'r2']),
@@ -270,7 +270,7 @@ def test_qr(tensor_rng, new_r_leg_dual, full):
 @pytest.mark.parametrize('full', [True, False])
 @pytest.mark.parametrize('new_l_leg_dual', [True, False])
 def test_lq(tensor_rng, new_l_leg_dual, full):
-    T: tensors.Tensor = tensor_rng(labels=['l1', 'r2', 'l2', 'r1'], max_block_size=3)
+    T: tensors.BlockDiagonalTensor = tensor_rng(labels=['l1', 'r2', 'l2', 'r1'], max_block_size=3)
 
     for comment, l_legs, q_legs in [
         ('all labelled', ['l1', 'l2'], ['r1', 'r2']),
@@ -301,7 +301,7 @@ def test_lq(tensor_rng, new_l_leg_dual, full):
         if full:
             # Q unitary?
             Q_Qd = tensors.tdot(Q, Q.conj(), 'q', 'q*')
-            expect = tensors.Tensor.eye(Q.get_legs(['r1', 'r2']), backend=T.backend,
+            expect = tensors.BlockDiagonalTensor.eye(Q.get_legs(['r1', 'r2']), backend=T.backend,
                                         labels=['r1', 'r2', 'r1*', 'r2*'])
             assert tensors.almost_equal(Q_Qd, expect)
 
@@ -312,7 +312,7 @@ def test_lq(tensor_rng, new_l_leg_dual, full):
 def test_eigh(tensor_rng, vector_space_rng, real, sort, new_leg_dual):
     a = vector_space_rng()
     b = vector_space_rng()
-    T: tensors.Tensor = tensor_rng(legs=[a, b.dual, b, a.dual], real=real, labels=['a', 'b*', 'b', 'a*'])
+    T: tensors.BlockDiagonalTensor = tensor_rng(legs=[a, b.dual, b, a.dual], real=real, labels=['a', 'b*', 'b', 'a*'])
     T = .5 * (T + T.conj())
 
     print('check that we have constructed a hermitian tensor')
@@ -342,9 +342,9 @@ def test_eigh(tensor_rng, vector_space_rng, real, sort, new_leg_dual):
     assert tensors.almost_equal(T_v, D_v)
 
     print('check sorting of eigenvalues')
-    if isinstance(T.backend, backends.AbstractNoSymmetryBackend):
+    if isinstance(T.backend, backends.NoSymmetryBackend):
         D_blocks = [D.data]
-    elif isinstance(T.backend, backends.AbstractAbelianBackend):
+    elif isinstance(T.backend, backends.AbelianBackend):
         D_blocks = D.data.blocks
     else:
         raise NotImplementedError

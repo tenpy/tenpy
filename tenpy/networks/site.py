@@ -24,10 +24,10 @@ import copy
 from typing import TypeVar, Type
 from functools import partial, reduce
 
-from ..linalg.tensors import (AbstractTensor, Tensor, SymmetricTensor, ChargedTensor,
+from ..linalg.tensors import (Tensor, BlockDiagonalTensor, SymmetricTensor, ChargedTensor,
                               DiagonalTensor, almost_equal, eye_like, tensor_from_block, angle,
                               real_if_close)
-from ..linalg.backends import AbstractBackend, Block
+from ..linalg.backends import Backend, Block
 from ..linalg.matrix_operations import exp
 from ..linalg.groups import (ProductSymmetry, Symmetry, SU2Symmetry, U1Symmetry, ZNSymmetry,
                              no_symmetry, SectorArray)
@@ -95,9 +95,9 @@ class Site(Hdf5Exportable):
     ----------
     leg : :class:`~tenpy.linalg.spaces.VectorSpace`
         The Hilbert space associated with the site. Defines the basis and the symmetry.
-    backend : :class:`~tenpy.linalg.backends.AbstractBackend`, optional
+    backend : :class:`~tenpy.linalg.backends.Backend`, optional
         The backend used to create the identity operator and possibly convert non-tensor operators
-        to :class:`~tenpy.linalg.tensors.AbstractTensor`s.
+        to :class:`~tenpy.linalg.tensors.Tensor`s.
     state_labels : None | list of str
         Optionally, a label for each local basis state.
     JW : :class:`DiagonalTensor` | Block
@@ -127,7 +127,7 @@ class Site(Hdf5Exportable):
         their hermitian conjugates. Use :meth:`get_hc_op_name` to obtain entries.
     """
     
-    def __init__(self, leg: VectorSpace, backend: AbstractBackend = None,
+    def __init__(self, leg: VectorSpace, backend: Backend = None,
                  state_labels: list[str] = None, JW: DiagonalTensor | Block = None):
         self.leg = leg
         self.state_labels = {}
@@ -202,7 +202,7 @@ class Site(Hdf5Exportable):
             return self.get_op(key)
         raise TypeError
 
-    def check_valid_operator(self, op: AbstractTensor, test_sanity: bool = True):
+    def check_valid_operator(self, op: Tensor, test_sanity: bool = True):
         """Check if `op` is a valid operator for this site. Raise if not."""
         if op.num_legs != 2:
             raise ValueError('wrong number of legs.')
@@ -250,33 +250,33 @@ class Site(Hdf5Exportable):
         """The JW operator, the local contribution to Jordan-Wigner strings"""
         return self.symmetric_ops['JW']
 
-    def as_operator(self, op: Block | AbstractTensor, cls: Type[_T] | str = AbstractTensor) -> _T:
+    def as_operator(self, op: Block | Tensor, cls: Type[_T] | str = Tensor) -> _T:
         """Convert object to tensor that is a valid operator for this site.
 
         Parameters
         ----------
         op : tensor-like
             object to be converted
-        cls : :class:`AbstractTensor`-type | str
+        cls : :class:`Tensor`-type | str
             The tensor class (type, not instance) to convert to, or its name.
-            If one of the superclasses ``AbstractTensor, SymmetricTensor``, we prioritize returning
+            If one of the superclasses ``Tensor, SymmetricTensor``, we prioritize returning
             a ``DiagonalTensor``, if the data is diagonal.
 
         Returns
         -------
-        op : :class:`AbstractTensor`
+        op : :class:`Tensor`
             Converted tensor. Is an instance of `cls`.
         """
-        cls = find_subclass(AbstractTensor, cls)
-        if not isinstance(op, AbstractTensor):
+        cls = find_subclass(Tensor, cls)
+        if not isinstance(op, Tensor):
             op = self.backend.as_block(op)
             if len(self.backend.block_shape(op)) == 1:
                 op = DiagonalTensor.from_diag(op, self.leg, backend=self.backend, labels=['p', 'p*'])
             else:
                 op = tensor_from_block(op, legs=[self.leg, self.leg.dual], backend=self.backend,
                                        labels=['p', 'p*'])
-        if cls is AbstractTensor:
-            if isinstance(op, Tensor):
+        if cls is Tensor:
+            if isinstance(op, BlockDiagonalTensor):
                 try:
                     op = DiagonalTensor.from_tensor(op, check_offdiagonal=True)
                 except ValueError:
@@ -285,14 +285,14 @@ class Site(Hdf5Exportable):
             if isinstance(op, ChargedTensor):
                 op = op.as_Tensor()
             assert isinstance(op, SymmetricTensor)
-            if (cls is not Tensor) and isinstance(op, Tensor):
+            if (cls is not BlockDiagonalTensor) and isinstance(op, BlockDiagonalTensor):
                 try:
                     op = DiagonalTensor.from_tensor(op, check_offdiagonal=True)
                 except ValueError:
                     # if cls is SymmetricTensor, we try converting to diagonal and ignore failure
                     if cls is DiagonalTensor:
                         raise
-            if (cls is Tensor) and isinstance(op, DiagonalTensor):
+            if (cls is BlockDiagonalTensor) and isinstance(op, DiagonalTensor):
                 op = op.as_Tensor()
         elif cls is ChargedTensor:
             if isinstance(op, SymmetricTensor):
@@ -441,7 +441,7 @@ class Site(Hdf5Exportable):
         if isinstance(op, ChargedOperator):
             op = self.add_charged_operator(name, op, need_JW=need_JW, hc=hc)
             return op.op_L
-        op = self.as_operator(op, cls=AbstractTensor)
+        op = self.as_operator(op, cls=Tensor)
         if isinstance(op, SymmetricTensor):
             return self.add_symmetric_operator(name, op, need_JW=need_JW, hc=hc,
                                                also_as_charged=True)
@@ -449,7 +449,7 @@ class Site(Hdf5Exportable):
             op = self.add_charged_operator(name, op, need_JW=need_JW, hc=hc)
             return op.op_L
 
-    def _auto_detect_hc(self, name: str, op: AbstractTensor) -> str | None:
+    def _auto_detect_hc(self, name: str, op: Tensor) -> str | None:
         """Automatically detect which (if any) of the existing operators is the hc of a new op
 
         Parameters
@@ -570,7 +570,7 @@ class Site(Hdf5Exportable):
         """Same as :meth:`state_index`, but for multiple labels."""
         return [self.state_index(lbl) for lbl in labels]
 
-    def get_op(self, name: str, use_left_version: bool = None) -> AbstractTensor:
+    def get_op(self, name: str, use_left_version: bool = None) -> Tensor:
         """Obtain an on-site operator.
 
         TODO expand docstring
@@ -626,7 +626,7 @@ class Site(Hdf5Exportable):
     def multiply_op_names(self, names: list[str]) -> str:
         raise NotImplementedError  # TODO redesign the operator mini language?
 
-    def multiply_operators(self, operators: list[str | AbstractTensor]) -> AbstractTensor:
+    def multiply_operators(self, operators: list[str | Tensor]) -> Tensor:
         raise NotImplementedError  # TODO redesign the operator mini language?
 
     def __repr__(self):
@@ -773,13 +773,13 @@ class GroupedSite(Site):
 
         Parameters
         ----------
-        ops : list of :class:`~tenpy.linalg.tensor.AbstractTensor`
+        ops : list of :class:`~tenpy.linalg.tensor.Tensor`
             One operator (or operator name) on each of the ungrouped sites.
             Each operator should have labels ``['p', 'p*']``.
 
         Returns
         -------
-        prod : :class:`~tenpy.linalg.tensor.AbstractTensor`
+        prod : :class:`~tenpy.linalg.tensor.Tensor`
             Kronecker product :math:`ops[0] \otimes ops[1] \otimes \cdots`,
             with labels ``['p', 'p*']``.
         """
@@ -1096,7 +1096,7 @@ class ChargedOperator:
         self.op_R.test_sanity()
 
     @property
-    def backend(self) -> AbstractBackend:
+    def backend(self) -> Backend:
         return self.op_L.backend
 
     @property
@@ -1158,10 +1158,10 @@ class SpinHalfSite(Site):
     ----------
     conserve : 'Stot' | 'Sz' | 'parity' | 'None'
         Defines what is conserved, see table above.
-    backend : :class:`~tenpy.linalg.backends.AbstractBackend`, optional
+    backend : :class:`~tenpy.linalg.backends.Backend`, optional
         The backend used to create the operators.
     """
-    def __init__(self, conserve: str = 'Sz', backend: AbstractBackend = None):
+    def __init__(self, conserve: str = 'Sz', backend: Backend = None):
         # make leg
         if conserve == 'Stot':
             leg = VectorSpace(symmetry=SU2Symmetry('Stot'), sectors=[[1]])
@@ -1183,7 +1183,7 @@ class SpinHalfSite(Site):
         if conserve == 'Stot':
             # vector transforms under spin-1 irrep -> sector == [2 * J] == [2]
             dummy_leg = VectorSpace(leg.symmetry, sectors=[[2]])
-            Svec_inv = Tensor.from_block_func(
+            Svec_inv = BlockDiagonalTensor.from_block_func(
                 self.backend.ones_block, backend=self.backend, legs=[leg, leg.dual, dummy_leg],
                 labels=['p', 'p*', '!']
             )
@@ -1257,11 +1257,11 @@ class SpinSite(Site):
         The 2S+1 states range from m = -S, -S+1, ... +S.
     conserve : 'Stot' | 'Sz' | 'parity' | 'None'
         Defines what is conserved, see table above.
-    backend : :class:`~tenpy.linalg.backends.AbstractBackend`, optional
+    backend : :class:`~tenpy.linalg.backends.Backend`, optional
         The backend used to create the operators.
     """
 
-    def __init__(self, S: float = 0.5, conserve: str = 'Sz', backend: AbstractBackend = None):
+    def __init__(self, S: float = 0.5, conserve: str = 'Sz', backend: Backend = None):
         self.S = S = float(S)
         d = 2 * S + 1
         if d <= 1:
@@ -1295,7 +1295,7 @@ class SpinSite(Site):
         # operators : Svec, Sz, Sp, Sm
         if conserve == 'Stot':
             dummy_leg = VectorSpace(leg.symmetry, sectors=[[2]])
-            Svec_inv = Tensor.from_block_func(
+            Svec_inv = BlockDiagonalTensor.from_block_func(
                 self.backend.ones_block, legs=[leg, leg.dual, dummy_leg],
                 labels=['p', 'p*', '!']
             )
@@ -1380,11 +1380,11 @@ class FermionSite(Site):
         Defines what is conserved, see table above.
     filling : float
         Average filling. Used to define ``dN``.
-    backend : :class:`~tenpy.linalg.backends.AbstractBackend`, optional
+    backend : :class:`~tenpy.linalg.backends.Backend`, optional
         The backend used to create the operators.
     """
 
-    def __init__(self, conserve: str = 'N', filling: float = 0.5, backend: AbstractBackend = None):
+    def __init__(self, conserve: str = 'N', filling: float = 0.5, backend: Backend = None):
         # make leg
         if conserve == 'N':
             leg = VectorSpace.from_sectors(U1Symmetry('N'), [[0], [1]])
@@ -1512,12 +1512,12 @@ class SpinHalfFermionSite(Site):
         Whether spin is conserved, c.f. table above.
     filling : float
         Average filling. Used to define ``dN``.
-    backend : :class:`~tenpy.linalg.backends.AbstractBackend`, optional
+    backend : :class:`~tenpy.linalg.backends.Backend`, optional
         The backend used to create the operators.
     """
 
     def __init__(self, conserve_N: str = 'N', conserve_S: str = 'Sz', filling: float = 1.,
-                 backend: AbstractBackend = None):
+                 backend: Backend = None):
         # parse conserve_N
         if conserve_N == 'N':
             sectors_N = np.array([0, 1, 1, 2])
@@ -1576,7 +1576,7 @@ class SpinHalfFermionSite(Site):
             # the only allowed blocks by charge rule for legs [p, p*, dummy] the sectors [1, 1, 2],
             # i.e. acting on the spin 1/2 doublet [up, down].
             # This means that the same construction as for the SpinHalfSite works here too.
-            Svec_invariant_part = Tensor.from_block_func(
+            Svec_invariant_part = BlockDiagonalTensor.from_block_func(
                 self.backend.ones_block, backend=self.backend, legs=[leg, leg.dual, dummy_leg],
                 labels=['p', 'p*', '!']
             )
@@ -1660,12 +1660,12 @@ class SpinHalfHoleSite(Site):
         Whether spin is conserved, c.f. table above.
     filling : float
         Average filling. Used to define ``dN``.
-    backend : :class:`~tenpy.linalg.backends.AbstractBackend`, optional
+    backend : :class:`~tenpy.linalg.backends.Backend`, optional
         The backend used to create the operators.
     """
 
     def __init__(self, conserve_N: str = 'N', conserve_S: str = 'Sz', filling: float = 1.,
-                 backend: AbstractBackend = None):
+                 backend: Backend = None):
         # parse conserve_N
         if conserve_N == 'N':
             sectors_N = np.array([0, 1, 1])
@@ -1721,7 +1721,7 @@ class SpinHalfHoleSite(Site):
             # the only allowed blocks by charge rule for legs [p, p*, dummy] the sectors [1, 1, 2],
             # i.e. acting on the spin 1/2 doublet [up, down].
             # This means that the same construction as for the SpinHalfSite works here too.
-            Svec_inv = Tensor.from_block_func(
+            Svec_inv = BlockDiagonalTensor.from_block_func(
                 self.backend.ones_block, backend=self.backend, legs=[leg, leg.dual, dummy_leg],
                 labels=['p', 'p*', '!']
             )
@@ -1807,12 +1807,12 @@ class BosonSite(Site):
         Defines what is conserved, see table above.
     filling : float
         Average filling. Used to define ``dN``.
-    backend : :class:`~tenpy.linalg.backends.AbstractBackend`, optional
+    backend : :class:`~tenpy.linalg.backends.Backend`, optional
         The backend used to create the operators.
     """
 
     def __init__(self, Nmax: int = 1, conserve: str = 'N', filling: float = 0.,
-                 backend: AbstractBackend = None):
+                 backend: Backend = None):
         assert Nmax > 0
         d = Nmax + 1
         N = np.arange(d)
@@ -1983,10 +1983,10 @@ class ClockSite(Site):
         Number of states per site
     conserve : 'Z' | 'None'
         Defines what is conserved, see table above.
-    backend : :class:`~tenpy.linalg.backends.AbstractBackend`, optional
+    backend : :class:`~tenpy.linalg.backends.Backend`, optional
         The backend used to create the operators.
     """
-    def __init__(self, q: int, conserve: str = 'Z', backend: AbstractBackend = None):
+    def __init__(self, q: int, conserve: str = 'Z', backend: Backend = None):
         if not (isinstance(q, int) and q > 1):
             raise ValueError(f'invalid q: {q}')
         # make leg

@@ -9,13 +9,13 @@ import numpy as np
 from ..groups import Symmetry
 from ..spaces import VectorSpace, ProductSpace, _fuse_spaces
 
-__all__ = ['Data', 'DiagonalData', 'Block', 'Dtype', 'AbstractBackend', 'AbstractBlockBackend']
+__all__ = ['Data', 'DiagonalData', 'Block', 'Dtype', 'Backend', 'BlockBackend']
 
 
 if TYPE_CHECKING:
     # can not import Tensor at runtime, since it would be a circular import
     # this clause allows mypy etc to evaluate the type-hints anyway
-    from ..tensors import Tensor, DiagonalTensor, Mask
+    from ..tensors import BlockDiagonalTensor, DiagonalTensor, Mask
 
 # placeholder for a backend-specific type that holds all data of a tensor
 #  (except the symmetry data stored in its legs)
@@ -109,24 +109,38 @@ class Dtype(Enum):
         return NumpyBlockBackend.tenpy_dtype_map[dtype]
 
 
-class AbstractBackend(metaclass=ABCMeta):
-    """
-    Inheritance structure:
+class Backend(metaclass=ABCMeta):
+    """Abstract base class for backends.
 
-            AbstractBackend           AbstractBlockBackend
-                  |                            |
-          AbstractXxxBackend            YyyBlockBackend
-                  |                            |
-                  ------------------------------
-                                |
-                          XxxYyyBackend
+    A backend implements functions that acts on tensors.
+    We abstract two separate concepts for a backend.
+    There is a block backend, that abstracts what the numerical data format (numpy array,
+    torch Tensor, CUDA tensor, ...) and a SymmetryBackend that abstracts how block-sparse
+    structures that arise from symmetries are accounted for.
+
+    The implementation strategy is then to implement a BlockBackend subclass for every type of
+    block we want to support. Similarly, we implement a direct subclass of Backend for every
+    class of symmetry (no symmetry, abelian symmetry, nonabelian symmetry, more general grading)
+    that uses the methods provided by the BlockBackend.
+    In the simplest case, a concrete backend with a specific block type and symmetry class can
+    then by implemented simply by inheriting from both of those, e.g. ::
+    
+        |           Backend                    BlockBackend
+        |              |                            |
+        |          XxxBackend                 YyyBlockBackend
+        |              |                            |
+        |              ------------------------------
+        |                            |
+        |                      XxxYyyBackend
 
     Where Xxx describes the symmetry, e.g. NoSymmetry, Abelian, Nonabelian
     and Yyy describes the numerical routines that handle the blocks, e.g. numpy, torch, ...
+
+    However, the ``XxxYyyBackend`` class may also override any of the methods, if needed.
     """
     DataCls = None  # to be set by subclasses
 
-    def test_data_sanity(self, a: Tensor | DiagonalTensor, is_diagonal: bool):
+    def test_data_sanity(self, a: BlockDiagonalTensor | DiagonalTensor, is_diagonal: bool):
         # subclasses will typically call super().test_data_sanity(a)
         assert isinstance(a.data, self.DataCls), str(type(a.data))
 
@@ -167,7 +181,7 @@ class AbstractBackend(metaclass=ABCMeta):
         ...
 
     @abstractmethod
-    def to_dtype(self, a: Tensor, dtype: Dtype) -> Data:
+    def to_dtype(self, a: BlockDiagonalTensor, dtype: Dtype) -> Data:
         """cast to given dtype. No copy if already has dtype."""
         ...
 
@@ -175,13 +189,13 @@ class AbstractBackend(metaclass=ABCMeta):
     def supports_symmetry(self, symmetry: Symmetry) -> bool:
         ...
 
-    def is_real(self, a: Tensor) -> bool:
+    def is_real(self, a: BlockDiagonalTensor) -> bool:
         """If the Tensor is comprised of real numbers.
         Complex numbers with small or zero imaginary part still cause a `False` return."""
         # NonAbelian backend might implement this differently.
         return a.dtype.is_real
 
-    def item(self, a: Tensor | DiagonalTensor) -> float | complex:
+    def item(self, a: BlockDiagonalTensor | DiagonalTensor) -> float | complex:
         """Assumes that tensor is a scalar (i.e. has only one entry).
         Returns that scalar as python float or complex"""
         return self.data_item(a.data)
@@ -193,7 +207,7 @@ class AbstractBackend(metaclass=ABCMeta):
         ...
 
     @abstractmethod
-    def to_dense_block(self, a: Tensor) -> Block:
+    def to_dense_block(self, a: BlockDiagonalTensor) -> Block:
         """Forget about symmetry structure and convert to a single block.
         This includes a permutation of the basis, specified by the legs of `a`.
         (see e.g. VectorSpace.basis_perm).
@@ -266,24 +280,24 @@ class AbstractBackend(metaclass=ABCMeta):
         ...
 
     @abstractmethod
-    def copy_data(self, a: Tensor | DiagonalTensor) -> Data | DiagonalData:
+    def copy_data(self, a: BlockDiagonalTensor | DiagonalTensor) -> Data | DiagonalData:
         """Return a copy, such that future in-place operations on the output data do not affect the input data"""
         ...
 
     @abstractmethod
-    def _data_repr_lines(self, a: Tensor, indent: str, max_width: int, max_lines: int) -> list[str]:
+    def _data_repr_lines(self, a: BlockDiagonalTensor, indent: str, max_width: int, max_lines: int) -> list[str]:
         """helper function for Tensor.__repr__ ; return a list of strs which are the lines
         comprising the ``"* Data:"``section.
         indent is to be placed in front of every line"""
         ...
 
     @abstractmethod
-    def tdot(self, a: Tensor, b: Tensor, axs_a: list[int], axs_b: list[int]) -> Data:
+    def tdot(self, a: BlockDiagonalTensor, b: BlockDiagonalTensor, axs_a: list[int], axs_b: list[int]) -> Data:
         """Tensordot i.e. pairwise contraction"""
         ...
 
     @abstractmethod
-    def svd(self, a: Tensor, new_vh_leg_dual: bool, algorithm: str | None, compute_u: bool,
+    def svd(self, a: BlockDiagonalTensor, new_vh_leg_dual: bool, algorithm: str | None, compute_u: bool,
             compute_vh: bool) -> tuple[Data, DiagonalData, Data, VectorSpace]:
         """SVD of a Matrix, `a` has only two legs (often ProductSpace).
         
@@ -291,7 +305,7 @@ class AbstractBackend(metaclass=ABCMeta):
         ----------
         algorithm : str
             (Backend-specific) algorithm to use for computing the SVD.
-            See e.g. the :attr:`~AbstractBlockBackend.svd_algorithms` attribute.
+            See e.g. the :attr:`~BlockBackend.svd_algorithms` attribute.
             We also implement ``'eigh'`` for all backends.
         compute_u, compute_vh : bool
             Only for ``algorithm='eigh'``.
@@ -306,7 +320,7 @@ class AbstractBackend(metaclass=ABCMeta):
         ...
 
     @abstractmethod
-    def qr(self, a: Tensor, new_r_leg_dual: bool, full: bool) -> tuple[Data, Data, VectorSpace]:
+    def qr(self, a: BlockDiagonalTensor, new_r_leg_dual: bool, full: bool) -> tuple[Data, Data, VectorSpace]:
         """QR decomposition of a Tensor `a` with two legs.
 
         The legs of `a` may be :class:`~tenpy.linalg.spaces.ProductSpace`
@@ -321,11 +335,11 @@ class AbstractBackend(metaclass=ABCMeta):
         ...
 
     @abstractmethod
-    def outer(self, a: Tensor, b: Tensor) -> Data:
+    def outer(self, a: BlockDiagonalTensor, b: BlockDiagonalTensor) -> Data:
         ...
 
     @abstractmethod
-    def inner(self, a: Tensor, b: Tensor, do_conj: bool, axs2: list[int] | None) -> float | complex:
+    def inner(self, a: BlockDiagonalTensor, b: BlockDiagonalTensor, do_conj: bool, axs2: list[int] | None) -> float | complex:
         """
         inner product of <a|b>, both of which are given as ket-like vectors
         (i.e. in C^N, the entries of a would need to be conjugated before multiplying with entries of b)
@@ -336,15 +350,15 @@ class AbstractBackend(metaclass=ABCMeta):
         ...
 
     @abstractmethod
-    def permute_legs(self, a: Tensor, permutation: list[int]) -> Data:
+    def permute_legs(self, a: BlockDiagonalTensor, permutation: list[int]) -> Data:
         ...
 
     @abstractmethod
-    def trace_full(self, a: Tensor, idcs1: list[int], idcs2: list[int]) -> float | complex:
+    def trace_full(self, a: BlockDiagonalTensor, idcs1: list[int], idcs2: list[int]) -> float | complex:
         ...
 
     @abstractmethod
-    def trace_partial(self, a: Tensor, idcs1: list[int], idcs2: list[int], remaining_idcs: list[int]) -> Data:
+    def trace_partial(self, a: BlockDiagonalTensor, idcs1: list[int], idcs2: list[int], remaining_idcs: list[int]) -> Data:
         ...
 
     @abstractmethod
@@ -352,11 +366,11 @@ class AbstractBackend(metaclass=ABCMeta):
         ...
 
     @abstractmethod
-    def conj(self, a: Tensor | DiagonalTensor) -> Data | DiagonalData:
+    def conj(self, a: BlockDiagonalTensor | DiagonalTensor) -> Data | DiagonalData:
         ...
 
     @abstractmethod
-    def combine_legs(self, a: Tensor, combine_slices: list[int, int], product_spaces: list[ProductSpace], new_axes: list[int], final_legs: list[VectorSpace]) -> Data:
+    def combine_legs(self, a: BlockDiagonalTensor, combine_slices: list[int, int], product_spaces: list[ProductSpace], new_axes: list[int], final_legs: list[VectorSpace]) -> Data:
         """combine legs of `a` (without transpose).
 
         ``combine_slices[i]=(begin, end)`` sorted in ascending order of `begin` indicates that
@@ -366,12 +380,12 @@ class AbstractBackend(metaclass=ABCMeta):
         ...
 
     @abstractmethod
-    def split_legs(self, a: Tensor, leg_idcs: list[int], final_legs: list[VectorSpace]) -> Data:
+    def split_legs(self, a: BlockDiagonalTensor, leg_idcs: list[int], final_legs: list[VectorSpace]) -> Data:
         """split multiple product space legs."""
         ...
 
     @abstractmethod
-    def almost_equal(self, a: Tensor, b: Tensor, rtol: float, atol: float) -> bool:
+    def almost_equal(self, a: BlockDiagonalTensor, b: BlockDiagonalTensor, rtol: float, atol: float) -> bool:
         ...
         
     def almost_equal_diagonal(self, a: DiagonalTensor, b: DiagonalTensor, rtol: float, atol: float
@@ -380,17 +394,17 @@ class AbstractBackend(metaclass=ABCMeta):
         return self.almost_equal(a, b, rtol, atol)
 
     @abstractmethod
-    def squeeze_legs(self, a: Tensor, idcs: list[int]) -> Data:
+    def squeeze_legs(self, a: BlockDiagonalTensor, idcs: list[int]) -> Data:
         """Assume the legs at given indices are trivial and get rid of them"""
         ...
 
     @abstractmethod
-    def norm(self, a: Tensor | DiagonalTensor, order: int | float = None) -> float:
+    def norm(self, a: BlockDiagonalTensor | DiagonalTensor, order: int | float = None) -> float:
         """Norm of a tensor. order has already been parsed and is a number"""
         ...
 
     @abstractmethod
-    def act_block_diagonal_square_matrix(self, a: Tensor, block_method: Callable[[Block], Block]
+    def act_block_diagonal_square_matrix(self, a: BlockDiagonalTensor, block_method: Callable[[Block], Block]
                                          ) -> Data:
         """Apply functions like exp() and log() on a (square) block-diagonal `a`.
 
@@ -404,11 +418,11 @@ class AbstractBackend(metaclass=ABCMeta):
         ...
 
     @abstractmethod
-    def add(self, a: Tensor, b: Tensor) -> Data:
+    def add(self, a: BlockDiagonalTensor, b: BlockDiagonalTensor) -> Data:
         ...
 
     @abstractmethod
-    def mul(self, a: float | complex, b: Tensor) -> Data:
+    def mul(self, a: float | complex, b: BlockDiagonalTensor) -> Data:
         ...
 
     @abstractmethod
@@ -419,7 +433,7 @@ class AbstractBackend(metaclass=ABCMeta):
         ...
 
     @abstractmethod
-    def get_element(self, a: Tensor, idcs: list[int]) -> complex | float | bool:
+    def get_element(self, a: BlockDiagonalTensor, idcs: list[int]) -> complex | float | bool:
         """Get a single scalar element from a tensor.
 
         TODO we might have a bit of redundancy in checking / parsing the indices
@@ -447,7 +461,7 @@ class AbstractBackend(metaclass=ABCMeta):
         ...
 
     @abstractmethod
-    def set_element(self, a: Tensor, idcs: list[int], value: complex | float) -> Data:
+    def set_element(self, a: BlockDiagonalTensor, idcs: list[int], value: complex | float) -> Data:
         """Return a copy of the data of a tensor, with a single element changed.
 
         Parameters
@@ -480,7 +494,7 @@ class AbstractBackend(metaclass=ABCMeta):
         ...
 
     @abstractmethod
-    def diagonal_data_from_full_tensor(self, a: Tensor, check_offdiagonal: bool) -> DiagonalData:
+    def diagonal_data_from_full_tensor(self, a: BlockDiagonalTensor, check_offdiagonal: bool) -> DiagonalData:
         """Get the DiagonalData corresponding to a tensor with two legs.
         Can assume that the two legs are either equal or dual, such that their ._non_dual_sectors match"""
         ...
@@ -494,7 +508,7 @@ class AbstractBackend(metaclass=ABCMeta):
         ...
 
     @abstractmethod
-    def scale_axis(self, a: Tensor, b: DiagonalTensor, leg: int) -> Data:
+    def scale_axis(self, a: BlockDiagonalTensor, b: DiagonalTensor, leg: int) -> Data:
         """Scale axis ``leg`` of ``a`` with ``b``, then permute legs to move the scaled leg to given position"""
         ...
 
@@ -523,7 +537,7 @@ class AbstractBackend(metaclass=ABCMeta):
         ...
 
     @abstractmethod
-    def apply_mask_to_Tensor(self, tensor: Tensor, mask: Mask, leg_idx: int) -> Data:
+    def apply_mask_to_Tensor(self, tensor: BlockDiagonalTensor, mask: Mask, leg_idx: int) -> Data:
         ...
 
     @abstractmethod
@@ -531,7 +545,7 @@ class AbstractBackend(metaclass=ABCMeta):
         ...
 
     @abstractmethod
-    def eigh(self, a: Tensor, sort: str = None) -> tuple[DiagonalData, Data]:
+    def eigh(self, a: BlockDiagonalTensor, sort: str = None) -> tuple[DiagonalData, Data]:
         """Eigenvalue decomposition of a 2-leg hermitian tensor
 
         Parameters
@@ -549,7 +563,7 @@ class AbstractBackend(metaclass=ABCMeta):
         ...
 
     @abstractmethod
-    def to_flat_block_trivial_sector(self, tensor: Tensor) -> Block:
+    def to_flat_block_trivial_sector(self, tensor: BlockDiagonalTensor) -> Block:
         """Single-leg tensor to the *part of* the coefficients in the trivial sector."""
         ...
 
@@ -559,17 +573,18 @@ class AbstractBackend(metaclass=ABCMeta):
         ...
 
     @abstractmethod
-    def inv_part_to_flat_block_single_sector(self, tensor: Tensor) -> Block:
+    def inv_part_to_flat_block_single_sector(self, tensor: BlockDiagonalTensor) -> Block:
         """Inverse of inv_part_from_flat_block_single_sector"""
         ...
 
     @abstractmethod
-    def flip_leg_duality(self, tensor: Tensor, which_legs: list[int],
+    def flip_leg_duality(self, tensor: BlockDiagonalTensor, which_legs: list[int],
                          flipped_legs: list[VectorSpace], perms: list[np.ndarray]) -> Data:
         ...
 
 
-class AbstractBlockBackend(metaclass=ABCMeta):
+class BlockBackend(metaclass=ABCMeta):
+    """Abstract base class that defines the operation on dense blocks."""
     svd_algorithms: list[str]  # first is default
 
     @abstractmethod

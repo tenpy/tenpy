@@ -18,8 +18,8 @@ import numpy as np
 from scipy.sparse.linalg import LinearOperator as ScipyLinearOperator, ArpackNoConvergence
 
 from .spaces import VectorSpace, ProductSpace, Sector
-from .tensors import AbstractTensor, Shape, Tensor, ChargedTensor, tdot, eye_like, zero_like
-from .backends.abstract_backend import Dtype, AbstractBackend
+from .tensors import Tensor, Shape, BlockDiagonalTensor, ChargedTensor, tdot, eye_like, zero_like
+from .backends.abstract_backend import Dtype, Backend
 from .backends.numpy import NumpyBlockBackend
 from ..tools.math import speigs, speigsh
 from ..tools.misc import argsort
@@ -49,7 +49,7 @@ class LinearOperator(metaclass=ABCMeta):
         self.dtype = dtype
 
     @abstractmethod
-    def matvec(self, vec: AbstractTensor) -> AbstractTensor:
+    def matvec(self, vec: Tensor) -> Tensor:
         """Apply the linear operator to a "vector".
 
         We consider as vectors all tensors of the shape given by :attr:`vector_shape`,
@@ -59,7 +59,7 @@ class LinearOperator(metaclass=ABCMeta):
         ...
 
     @abstractmethod
-    def to_tensor(self, **kw) -> AbstractTensor:
+    def to_tensor(self, **kw) -> Tensor:
         """Compute a full tensor representation of the linear operator.
         
         Returns
@@ -69,7 +69,7 @@ class LinearOperator(metaclass=ABCMeta):
         """
         ...
 
-    def to_matrix(self, backend: AbstractBackend = None) -> AbstractTensor:
+    def to_matrix(self, backend: Backend = None) -> Tensor:
         """The tensor representation of self, reshaped to a matrix."""
         # OPTIMIZE could find a way to store the ProductSpace and use it here
         N = self.vector_shape.num_legs
@@ -98,7 +98,7 @@ class TensorLinearOperator(LinearOperator):
     which_legs : int or str
         Which leg of `tensor` is to be contracted on matvec.
     """
-    def __init__(self, tensor: Tensor, which_leg: int | str = -1):
+    def __init__(self, tensor: BlockDiagonalTensor, which_leg: int | str = -1):
         if tensor.num_legs > 2:
             raise ValueError('Expected a two-leg tensor')
         if not tensor.legs[0].can_contract_with(tensor.legs[1]):
@@ -109,11 +109,11 @@ class TensorLinearOperator(LinearOperator):
         vector_shape = Shape(legs=[tensor.legs[other_leg]], labels=tensor.labels[other_leg])
         super().__init__(vector_shape=vector_shape, dtype=tensor.dtype)
 
-    def matvec(self, vec: AbstractTensor) -> AbstractTensor:
+    def matvec(self, vec: Tensor) -> Tensor:
         assert vec.num_legs == 1
         return self.tensor.tdot(vec, self.which_leg, 0)
 
-    def to_tensor(self, **kw) -> AbstractTensor:
+    def to_tensor(self, **kw) -> Tensor:
         if self.tensor.which_leg == 1:
             return self.tensor
         return self.tensor.permute_legs([1, 0])
@@ -178,10 +178,10 @@ class SumLinearOperator(LinearOperatorWrapper):
         self.more_operators = more_operators
         self.dtype = Dtype.common(original_operator.dtype, *(op.dtype for op in more_operators))
 
-    def matvec(self, vec: AbstractTensor) -> AbstractTensor:
+    def matvec(self, vec: Tensor) -> Tensor:
         return sum((op.matvec(vec) for op in self.more_operators), self.original_operator.matvec(vec))
 
-    def to_tensor(self, **kw) -> AbstractTensor:
+    def to_tensor(self, **kw) -> Tensor:
         return sum((op.to_tensor(**kw) for op in self.more_operators),
                    self.original_operator.to_tensor(**kw))
 
@@ -203,10 +203,10 @@ class ShiftedLinearOperator(LinearOperatorWrapper):
         if np.iscomplexobj(shift):
             self.dtype = original_operator.dtype.to_complex
 
-    def matvec(self, vec: AbstractTensor) -> AbstractTensor:
+    def matvec(self, vec: Tensor) -> Tensor:
         return self.original_operator.matvec(vec) + self.shift * vec
 
-    def to_tensor(self, **kw) -> AbstractTensor:
+    def to_tensor(self, **kw) -> Tensor:
         res = self.original_operator.to_tensor(**kw)
         return res + self.shift * eye_like(res)
 
@@ -240,7 +240,7 @@ class ProjectedLinearOperator(LinearOperatorWrapper):
     ----------
     original_operator : :class:`LinearOperator`-like
         The original operator, denoted ``H`` in the summary above.
-    ortho_vecs : list of :class:`~tenpy.linalg.tensors.AbstractTensor`
+    ortho_vecs : list of :class:`~tenpy.linalg.tensors.Tensor`
         The list of vectors spanning the projected space.
         They need not be orthonormal, as Gram-Schmidt is performed on them explicitly.
     project_operator: bool
@@ -249,7 +249,7 @@ class ProjectedLinearOperator(LinearOperatorWrapper):
     penalty : complex, optional
         See summary above. Defaults to ``None``, which is equivalent to ``0.``.
     """
-    def __init__(self, original_operator: LinearOperator, ortho_vecs: list[AbstractTensor],
+    def __init__(self, original_operator: LinearOperator, ortho_vecs: list[Tensor],
                  project_operator: bool = True, penalty: Number = None):
         if len(ortho_vecs) == 0:
             warnings.warn('empty ortho_vecs: no need for ProjectedLinearOperator', stacklevel=2)
@@ -262,7 +262,7 @@ class ProjectedLinearOperator(LinearOperatorWrapper):
         self.project_operator = project_operator
         self.penalty = penalty
 
-    def matvec(self, vec: AbstractTensor) -> AbstractTensor:
+    def matvec(self, vec: Tensor) -> Tensor:
         res = vec
         # 1: res = P vec
         if self.project_operator:
@@ -287,7 +287,7 @@ class ProjectedLinearOperator(LinearOperatorWrapper):
         # done
         return res
 
-    def to_tensor(self, **kw) -> AbstractTensor:
+    def to_tensor(self, **kw) -> Tensor:
         res = self.original_operator.to_tensor(**kw)
         P_ortho = zero_like(res)
         for o in self.ortho_vecs:
@@ -320,12 +320,12 @@ class NumpyArrayLinearOperator(ScipyLinearOperator):
     Parameters
     ----------
     tenpy_matvec : callable
-        Function with signature ``tenpy_matvec(vec: AbstractTensor) -> AbstractTensor`.
+        Function with signature ``tenpy_matvec(vec: Tensor) -> Tensor`.
         Has to return a tensor with the same legs and has to be linear.
         Unless `labels` are given, the leg order of the output must be the same as for the input.
     legs : list of :class:`~tenpy.linalg.spaces.VectorSpace`
         The legs of a Tensor that `tenpy_matvec` can act on.
-    backend : :class:`~tenpy.linalg.backends.abstract_backend.AbstractBackend`
+    backend : :class:`~tenpy.linalg.backends.abstract_backend.Backend`
         The backend for self
     dtype
         The numpy dtype for this operator.
@@ -339,10 +339,10 @@ class NumpyArrayLinearOperator(ScipyLinearOperator):
     Attributes
     ----------
     tenpy_matvec : callable
-        Function with signature ``tenpy_matvec(vec: AbstractTensor) -> AbstractTensor`.
+        Function with signature ``tenpy_matvec(vec: Tensor) -> Tensor`.
     legs : list of :class:`~tenpy.linalg.spaces.VectorSpace`
         The legs of a Tensor that `tenpy_matvec` can act on.
-    backend : :class:`~tenpy.linalg.backends.abstract_backend.AbstractBackend`
+    backend : :class:`~tenpy.linalg.backends.abstract_backend.Backend`
         The backend for self
     dtype
         The numpy dtype for this operator.
@@ -364,7 +364,7 @@ class NumpyArrayLinearOperator(ScipyLinearOperator):
     shape : (int, int)
         The shape of self as an operator on 1D numpy arrays
     """
-    def __init__(self, tenpy_matvec, legs: list[VectorSpace], backend: AbstractBackend, dtype,
+    def __init__(self, tenpy_matvec, legs: list[VectorSpace], backend: Backend, dtype,
                  labels: list[str] = None,
                  charge_sector: None | Sector | Literal['trivial'] = 'trivial'):
         self.tenpy_matvec = tenpy_matvec
@@ -384,7 +384,7 @@ class NumpyArrayLinearOperator(ScipyLinearOperator):
         ScipyLinearOperator.__init__(self, dtype=dtype, shape=self.shape)
 
     @classmethod
-    def from_Tensor(cls, tensor: Tensor, legs1: list[int | str], legs2: list[int | str],
+    def from_Tensor(cls, tensor: BlockDiagonalTensor, legs1: list[int | str], legs2: list[int | str],
                     charge_sector: None | Sector | Literal['trivial'] = 'trivial'
                     ) -> NumpyArrayLinearOperator:
         """Create a :class:`NumpyArrayLinearOperator` from a tensor that acts via contraction (`tdot`).
@@ -427,7 +427,7 @@ class NumpyArrayLinearOperator(ScipyLinearOperator):
                    charge_sector=charge_sector)
 
     @classmethod
-    def from_matvec_and_vector(cls, tenpy_matvec, vector: AbstractTensor, dtype=None
+    def from_matvec_and_vector(cls, tenpy_matvec, vector: Tensor, dtype=None
                                ) -> tuple[NumpyArrayLinearOperator, np.ndarray]:
         """Create a :class:`NumpyArrayLinearOperator` from a matvec and a vector that it can act on.
 
@@ -440,7 +440,7 @@ class NumpyArrayLinearOperator(ScipyLinearOperator):
         Parameters
         ----------
         tenpy_matvec : callable
-            Function with signature ``tenpy_matvec(vec: AbstractTensor) -> AbstractTensor`.
+            Function with signature ``tenpy_matvec(vec: Tensor) -> Tensor`.
             Has to return a tensor with the same leg and has to be linear.
         vector : :class:`~tenpy.linalg.tensors.Tensor` | :class:`~tenpy.linalg.tensors.ChargedTensor`
             A tensor that `tenpy_matvec` can act on.
@@ -514,7 +514,7 @@ class NumpyArrayLinearOperator(ScipyLinearOperator):
         self.matvec_count += 1
         return self.tensor_to_flat_array(tens)
 
-    def flat_array_to_tensor(self, vec: np.ndarray) -> AbstractTensor:
+    def flat_array_to_tensor(self, vec: np.ndarray) -> Tensor:
         """Convert flat numpy data to a tensor in the selected charge sector."""
         assert vec.shape == (self.shape[1],)
         if self._charge_sector is None:
@@ -528,7 +528,7 @@ class NumpyArrayLinearOperator(ScipyLinearOperator):
             #  "stack" ChargedTensors?
             raise NotImplementedError
         elif isinstance(self._charge_sector, str) and self._charge_sector == 'trivial':
-            tens = Tensor.from_flat_block_trivial_sector(
+            tens = BlockDiagonalTensor.from_flat_block_trivial_sector(
                 leg=self.domain, block=self.backend.block_from_numpy(vec), backend=self.backend
             )
             res = tens.split_legs(0)
@@ -542,7 +542,7 @@ class NumpyArrayLinearOperator(ScipyLinearOperator):
             res.set_labels(self.labels)
         return res
 
-    def tensor_to_flat_array(self, tens: AbstractTensor) -> np.ndarray:
+    def tensor_to_flat_array(self, tens: Tensor) -> np.ndarray:
         """Convert a tensor in the selected charge sector to a flat numpy array."""
         if self.labels is not None:
             tens = tens.permute_legs(tens.get_leg_idcs(self.labels))
@@ -560,7 +560,7 @@ class NumpyArrayLinearOperator(ScipyLinearOperator):
         return res
 
     def eigenvectors(self, num_ev: int = 1, max_num_ev: int = None, max_tol: float = 1.e-12,
-                     which: str = 'LM', v0_np: np.ndarray = None, v0_tensor: AbstractTensor = None,
+                     which: str = 'LM', v0_np: np.ndarray = None, v0_tensor: Tensor = None,
                      cutoff: float = 1.e-10, hermitian: bool = False, **kwargs):
         """Find the (dominant) eigenvector(s) of self using :func:`scipy.sparse.linalg.eigs`.
 
@@ -650,19 +650,19 @@ class HermitianNumpyArrayLinearOperator(NumpyArrayLinearOperator):
         return NumpyArrayLinearOperator.eigenvectors(self, *args, **kwargs)
         
         
-def gram_schmidt(vecs: list[AbstractTensor], rcond=1.e-14) -> list[AbstractTensor]:
+def gram_schmidt(vecs: list[Tensor], rcond=1.e-14) -> list[Tensor]:
     """Gram-Schmidt orthonormalization of a list of tensors.
 
     Parameters
     ----------
-    vecs : list of :class:`~tenpy.linalg.tensors.AbstractTensor`
+    vecs : list of :class:`~tenpy.linalg.tensors.Tensor`
         The list of vectors to be orthogonalized. All with the same legs.
     rcond : _type_, optional
         Vectors of ``norm < rcond`` (after projecting out previous vectors) are discarded.
 
     Returns
     -------
-    list of :class:`~tenpy.linalg.tensors.AbstractTensor`
+    list of :class:`~tenpy.linalg.tensors.Tensor`
         A list of orthonormal vectors which span the same space as `vecs`.
     """
     res = []

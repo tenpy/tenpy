@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import logging
 
-from .abstract_backend import AbstractBackend
+from .abstract_backend import Backend
 from .numpy import NoSymmetryNumpyBackend, AbelianNumpyBackend
 from .torch import NoSymmetryTorchBackend, AbelianTorchBackend
 from ..groups import Symmetry, no_symmetry, AbelianGroup
@@ -48,7 +48,7 @@ _backend_lookup = dict(
 _instantiated_backends = {}  # keys: (symmetry_backend, block_backend, kwargs)
 
 
-def get_backend(symmetry: Symmetry | str = None, block_backend: str = None) -> AbstractBackend:
+def get_backend(symmetry: Symmetry | str = None, block_backend: str = None) -> Backend:
     """
     Parameters
     ----------

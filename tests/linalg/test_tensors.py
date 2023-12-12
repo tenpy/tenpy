@@ -8,8 +8,8 @@ import operator
 
 from tenpy.linalg import tensors
 from tenpy.linalg.backends.abstract_backend import Dtype
-from tenpy.linalg.backends.no_symmetry import AbstractNoSymmetryBackend
-from tenpy.linalg.backends.abelian import AbstractAbelianBackend
+from tenpy.linalg.backends.no_symmetry import NoSymmetryBackend
+from tenpy.linalg.backends.abelian import AbelianBackend
 from tenpy.linalg.backends.torch import TorchBlockBackend
 from tenpy.linalg.backends.numpy import NumpyBlockBackend, NoSymmetryNumpyBackend
 from tenpy.linalg.spaces import VectorSpace, ProductSpace, _fuse_spaces
@@ -66,7 +66,7 @@ def test_Tensor_classmethods(backend, vector_space_rng, backend_data_rng, tensor
     dense_block = backend.block_from_numpy(numpy_block)
 
     print('checking from_dense_block')
-    tens = tensors.Tensor.from_dense_block(dense_block, legs=legs, backend=backend)
+    tens = tensors.BlockDiagonalTensor.from_dense_block(dense_block, legs=legs, backend=backend)
     tens.test_sanity()
     data = backend.block_to_numpy(tens.to_dense_block())
     npt.assert_array_equal(data, numpy_block)
@@ -74,10 +74,10 @@ def test_Tensor_classmethods(backend, vector_space_rng, backend_data_rng, tensor
     if T.num_parameters < T.parent_space.dim:  # otherwise all blocks are symmetric
         non_symmetric_block = dense_block + tens.backend.block_random_uniform(dims, dtype=T.dtype)
         with pytest.raises(ValueError):
-            _ = tensors.Tensor.from_dense_block(non_symmetric_block, legs=legs, backend=backend)
+            _ = tensors.BlockDiagonalTensor.from_dense_block(non_symmetric_block, legs=legs, backend=backend)
 
     print('checking from numpy')
-    tens = tensors.Tensor.from_dense_block(numpy_block, legs=legs, backend=backend)
+    tens = tensors.BlockDiagonalTensor.from_dense_block(numpy_block, legs=legs, backend=backend)
     tens.test_sanity()
     data = tens.to_numpy_ndarray()
     npt.assert_array_equal(data, numpy_block)
@@ -87,15 +87,15 @@ def test_Tensor_classmethods(backend, vector_space_rng, backend_data_rng, tensor
     # TODO random_uniform, random_normal
 
     print('checking zero')
-    tens = tensors.Tensor.zero(legs, backend=backend)
+    tens = tensors.BlockDiagonalTensor.zero(legs, backend=backend)
     tens.test_sanity()
     npt.assert_array_equal(tens.to_numpy_ndarray(), np.zeros(dims))
 
     print('checking eye')
-    tens = tensors.Tensor.eye(legs[0], backend=backend)
+    tens = tensors.BlockDiagonalTensor.eye(legs[0], backend=backend)
     tens.test_sanity()
     npt.assert_array_equal(tens.to_numpy_ndarray(), np.eye(legs[0].dim))
-    tens = tensors.Tensor.eye(legs[:2], backend=backend)
+    tens = tensors.BlockDiagonalTensor.eye(legs[:2], backend=backend)
     tens.test_sanity()
     npt.assert_array_equal(tens.to_numpy_ndarray(), np.eye(np.prod(dims[:2])).reshape(dims[:2] + dims[:2]))
 
@@ -109,17 +109,17 @@ def test_Tensor_methods(backend, vector_space_rng, backend_data_rng, tensor_rng)
     data2 = backend_data_rng(legs)
 
     print('checking __init__ with labels=None')
-    tens1 = tensors.Tensor(data1, legs=legs, backend=backend, labels=None)
+    tens1 = tensors.BlockDiagonalTensor(data1, legs=legs, backend=backend, labels=None)
     tens1.test_sanity()
 
     print('checking __init__, partially labelled')
     labels2 = [None, 'a', 'b']
-    tens2 = tensors.Tensor(data2, legs=legs, backend=backend, labels=labels2)
+    tens2 = tensors.BlockDiagonalTensor(data2, legs=legs, backend=backend, labels=labels2)
     tens2.test_sanity()
 
     print('checking __init__, fully labelled')
     labels3 = ['foo', 'a', 'b']
-    tens3 = tensors.Tensor(data1, legs=legs, backend=backend, labels=labels3)
+    tens3 = tensors.BlockDiagonalTensor(data1, legs=legs, backend=backend, labels=labels3)
     tens3.test_sanity()
 
     check_shape(tens1.shape, dims=dims, labels=[None, None, None])
@@ -130,10 +130,10 @@ def test_Tensor_methods(backend, vector_space_rng, backend_data_rng, tensor_rng)
     assert tens3.size == np.prod(dims)
 
     print('check num_parameters')
-    if isinstance(backend, AbstractNoSymmetryBackend):
+    if isinstance(backend, NoSymmetryBackend):
         expect = np.prod(backend.block_shape(data1))
-    elif isinstance(backend, AbstractAbelianBackend):
-        tensor_with_all_blocks = tensors.Tensor.from_block_func(
+    elif isinstance(backend, AbelianBackend):
+        tensor_with_all_blocks = tensors.BlockDiagonalTensor.from_block_func(
             func=backend.zero_block, legs=legs, backend=backend,
             func_kwargs=dict(dtype=Dtype.float64)
         )
@@ -186,7 +186,7 @@ def test_Tensor_methods(backend, vector_space_rng, backend_data_rng, tensor_rng)
         triv_legs.append(leg.dual)
     assert all(leg.dim == 1 for leg in triv_legs)
     data4 = backend_data_rng(triv_legs)
-    tens4 = tensors.Tensor(data4, backend=backend, legs=triv_legs)
+    tens4 = tensors.BlockDiagonalTensor(data4, backend=backend, legs=triv_legs)
     tens4_item = backend.data_item(data4)
     # not a good test, but the best we can do backend independent:
     assert tens4.item() == tens4_item
@@ -253,7 +253,7 @@ def test_Tensor_tofrom_flat_block_trivial_sector(vector_space_rng, tensor_rng):
     tens = tensor_rng(legs=[leg], labels=['a'])
     block = tens.to_flat_block_trivial_sector()
     assert tens.backend.block_shape(block) == (block_size,)
-    tens2 = tensors.Tensor.from_flat_block_trivial_sector(leg=leg, block=block, backend=tens.backend, label='a')
+    tens2 = tensors.BlockDiagonalTensor.from_flat_block_trivial_sector(leg=leg, block=block, backend=tens.backend, label='a')
     tens2.test_sanity()
     assert tensors.almost_equal(tens, tens2)
     block2 = tens2.to_flat_block_trivial_sector()
@@ -316,7 +316,7 @@ def test_from_block(block_backend):
             [ 0,  0,  9,  0,  0,  0, 10],  # 3
             [11,  0,  0, 12,  0,  0,  0]]  # 2
     block = backend.block_from_numpy(np.asarray(data, dtype=float))
-    t = tensors.Tensor.from_dense_block(block, [s1, s2])
+    t = tensors.BlockDiagonalTensor.from_dense_block(block, [s1, s2])
 
     # block_i is the one with sector q_i on s1
     block_0 = [[7, 8]]
@@ -351,7 +351,7 @@ def test_tdot(backend, vector_space_rng, backend_data_rng, tensor_rng):
                ['a', 'b']
                ]
     data_ = [backend_data_rng(l) for l in legs_]
-    tensors_ = [tensors.Tensor(data, legs, backend, labels) for data, legs, labels in
+    tensors_ = [tensors.BlockDiagonalTensor(data, legs, backend, labels) for data, legs, labels in
                 zip(data_, legs_, labels_)]
     for n, t in enumerate(tensors_):
         # make sure we are defining tensors which actually contain blocks and are not just zero by
@@ -568,7 +568,7 @@ def test_combine_split(tensor_rng):
     npt.assert_array_equal(sectors1, sectors2)
     npt.assert_array_equal(mults1, mults2)
     assert len(metadata1) == 0
-    assert len(metadata2) == (3 if isinstance(tens.backend, AbstractAbelianBackend) else 0)
+    assert len(metadata2) == (3 if isinstance(tens.backend, AbelianBackend) else 0)
 
     for prod_space, comment in [
         (ProductSpace(tens.get_legs(['b', 'd']), backend=tens.backend), 'metadata via ProductSpace.__init__'),
@@ -796,7 +796,7 @@ def test_elementwise_functions(vector_space_rng, np_random, function, data_imag)
 
 @pytest.mark.parametrize('which_legs', [[0], [-1], ['b'], ['a', 'b', 'c', 'd'], ['b', -2]])
 def test_flip_leg_duality(tensor_rng, which_legs):
-    T: tensors.Tensor = tensor_rng(labels=['a', 'b', 'c', 'd'])
+    T: tensors.BlockDiagonalTensor = tensor_rng(labels=['a', 'b', 'c', 'd'])
     res = tensors.flip_leg_duality(T, *which_legs)
     res.test_sanity()
     flipped = T.get_leg_idcs(which_legs)
@@ -827,7 +827,7 @@ def demo_repr():
         backend = get_backend(symmetry)
         for num_legs in [2, 4, 10]:
             legs = [conftest.random_vector_space(symmetry, max_num_blocks=3, max_block_size=2) for _ in range(num_legs)]
-            tens = tensors.Tensor.random_uniform(legs, backend=backend, labels=labels[:num_legs])
+            tens = tensors.BlockDiagonalTensor.random_uniform(legs, backend=backend, labels=labels[:num_legs])
             print()
             print('=' * 70)
             print()
@@ -910,7 +910,7 @@ def test_Mask(np_random, vector_space_rng, backend):
 
 @pytest.mark.parametrize('num_legs', [1, 3])
 def test_apply_Mask_Tensor(tensor_rng, num_legs):
-    T: tensors.Tensor = tensor_rng(num_legs=num_legs)
+    T: tensors.BlockDiagonalTensor = tensor_rng(num_legs=num_legs)
     mask = tensor_rng(legs=[T.legs[0]], cls=tensors.Mask)
     masked = T.apply_mask(mask, 0)
     masked.test_sanity()
@@ -922,7 +922,7 @@ def test_apply_Mask_DiagonalTensor(tensor_rng):
     mask = tensor_rng(legs=[T.legs[0]], cls=tensors.Mask)
     # mask only one leg
     masked = T.apply_mask(mask, 0)
-    assert isinstance(masked, tensors.Tensor)
+    assert isinstance(masked, tensors.BlockDiagonalTensor)
     masked.test_sanity()
     npt.assert_array_equal(T.to_numpy_ndarray()[mask.numpymask], masked.to_numpy_ndarray())
     # mask both legs

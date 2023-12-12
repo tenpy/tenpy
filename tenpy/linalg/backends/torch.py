@@ -4,10 +4,10 @@ from numpy import prod
 import numpy
 from typing import Any, TYPE_CHECKING
 
-from .abelian import AbstractAbelianBackend
-from .abstract_backend import AbstractBlockBackend, Block, Data, Dtype
-from .no_symmetry import AbstractNoSymmetryBackend
-from .nonabelian import AbstractNonabelianBackend
+from .abelian import AbelianBackend
+from .abstract_backend import BlockBackend, Block, Data, Dtype
+from .no_symmetry import NoSymmetryBackend
+from .nonabelian import NonabelianBackend
 from ..misc import inverse_permutation
 from ..spaces import VectorSpace
 
@@ -18,10 +18,10 @@ __all__ = ['TorchBlockBackend', 'NoSymmetryTorchBackend', 'AbelianTorchBackend',
 if TYPE_CHECKING:
     # can not import Tensor at runtime, since it would be a circular import
     # this clause allows mypy etc to evaluate the type-hints anyway
-    from ..tensors import Tensor
+    from ..tensors import BlockDiagonalTensor
 
 
-class TorchBlockBackend(AbstractBlockBackend):
+class TorchBlockBackend(BlockBackend):
 
     svd_algorithms = ['gesvdj', 'gesvd']
 
@@ -259,19 +259,19 @@ class TorchBlockBackend(AbstractBlockBackend):
         return torch_module.argsort(block, dim=axis)
         
 
-class NoSymmetryTorchBackend(TorchBlockBackend, AbstractNoSymmetryBackend):
+class NoSymmetryTorchBackend(TorchBlockBackend, NoSymmetryBackend):
     def __init__(self, device: str = 'cpu'):
         TorchBlockBackend.__init__(self, device=device)
-        AbstractNoSymmetryBackend.__init__(self)
+        NoSymmetryBackend.__init__(self)
 
 
-class AbelianTorchBackend(TorchBlockBackend, AbstractAbelianBackend):
+class AbelianTorchBackend(TorchBlockBackend, AbelianBackend):
     def __init__(self, device: str = 'cpu'):
         TorchBlockBackend.__init__(self, device=device)
-        AbstractAbelianBackend.__init__(self)
+        AbelianBackend.__init__(self)
 
 
-class NonabelianTorchBackend(TorchBlockBackend, AbstractNonabelianBackend):
+class NonabelianTorchBackend(TorchBlockBackend, NonabelianBackend):
     def __init__(self, device: str = 'cpu'):
         TorchBlockBackend.__init__(self, device=device)
-        AbstractNonabelianBackend.__init__(self)
+        NonabelianBackend.__init__(self)

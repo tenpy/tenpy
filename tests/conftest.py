@@ -6,9 +6,9 @@ np_random : np.random.Generator
 symmetry : Symmetry
 symmetry_sectors_rng : function (size: int, sort: bool = False) -> SectorArray
 vector_space_rng : function (max_num_blocks: int = 4, max_block_size: int = 8) -> VectorSpace
-default_backend : AbstractBackend
+default_backend : Backend
 block_backend : str
-backend : AbstractBackend
+backend : Backend
 block_rng : function (size: list[int], real: bool = True) -> Block
 backend_data_rng : function (legs: list[VectorSpace], real: bool = True) -> BackendData
 tensor_rng : function (legs: list[VectorSpace] = None, num_legs: int = 2, labels: list[str] = None,
@@ -170,7 +170,7 @@ def backend_data_rng(backend, block_rng, np_random):
     """Generate random data for a Tensor"""
     def generator(legs, real=True, empty_ok=False, all_blocks=False):
         data = backend.from_block_func(block_rng, legs, func_kwargs=dict(real=real))
-        if isinstance(backend, backends.abelian.AbstractAbelianBackend):
+        if isinstance(backend, backends.abelian.AbelianBackend):
             data = abelian_data_drop_some_blocks(data, np_random=np_random, empty_ok=empty_ok,
                                                  all_blocks=all_blocks)
         return data
@@ -184,7 +184,7 @@ def tensor_rng(backend, symmetry, np_random, block_rng, vector_space_rng, symmet
     ChargedTensor: only creates one-dimensional dummy legs
     """
     def generator(legs=None, num_legs=None, labels=None, max_num_blocks=5, max_block_size=5,
-                  real=True, empty_ok=False, all_blocks=False, cls=tensors.Tensor):
+                  real=True, empty_ok=False, all_blocks=False, cls=tensors.BlockDiagonalTensor):
         # parse legs
         if num_legs is None:
             if legs is not None:
@@ -223,7 +223,7 @@ def tensor_rng(backend, symmetry, np_random, block_rng, vector_space_rng, symmet
                 leg = vector_space_rng(max_num_blocks, max_block_size)
             assert num_legs in [None, 2]
             data = backend.diagonal_from_block_func(block_rng, leg=leg, func_kwargs=dict(real=real))
-            if isinstance(backend, backends.abelian.AbstractAbelianBackend):
+            if isinstance(backend, backends.abelian.AbelianBackend):
                 data = abelian_data_drop_some_blocks(data, np_random=np_random, empty_ok=empty_ok,
                                                      all_blocks=all_blocks)
             return tensors.DiagonalTensor(data, first_leg=leg, second_leg_dual=second_leg_dual,
@@ -234,7 +234,7 @@ def tensor_rng(backend, symmetry, np_random, block_rng, vector_space_rng, symmet
             inv_part = generator(legs=legs + [dummy_leg], labels=labels + ['!'],
                                  max_num_blocks=max_num_blocks, max_block_size=max_block_size,
                                  real=real, empty_ok=empty_ok, all_blocks=all_blocks,
-                                 cls=tensors.Tensor)
+                                 cls=tensors.BlockDiagonalTensor)
             return tensors.ChargedTensor(inv_part)
         elif cls is tensors.Mask:
             assert len(legs) == 1
@@ -248,7 +248,7 @@ def tensor_rng(backend, symmetry, np_random, block_rng, vector_space_rng, symmet
                 blockmask[len(blockmask) // 2] = False
             if not np.any(blockmask):
                 blockmask[len(blockmask) // 2] = True
-            if isinstance(backend, backends.abelian.AbstractAbelianBackend):
+            if isinstance(backend, backends.abelian.AbelianBackend):
                 # "drop" some blocks, i.e. set them to False
                 if (not all_blocks) and (np_random.random() < .5):
                     drop = (np_random.random(leg.num_sectors) < 0.5)
@@ -260,7 +260,7 @@ def tensor_rng(backend, symmetry, np_random, block_rng, vector_space_rng, symmet
                     msg = 'Empty data was generated. If thats ok, suppress with `empty_ok=True`'
                     raise ValueError(msg)
             return tensors.Mask.from_blockmask(blockmask, large_leg=leg, backend=backend)
-        elif cls is not tensors.Tensor:
+        elif cls is not tensors.BlockDiagonalTensor:
             raise ValueError(f'Illegal tensor cls: {cls}')
 
         # fill in missing legs
@@ -298,9 +298,9 @@ def tensor_rng(backend, symmetry, np_random, block_rng, vector_space_rng, symmet
             legs[last_missing] = compatible_leg
         
         data = backend.from_block_func(block_rng, legs, func_kwargs=dict(real=real))
-        if isinstance(backend, backends.abelian.AbstractAbelianBackend):
+        if isinstance(backend, backends.abelian.AbelianBackend):
             data = abelian_data_drop_some_blocks(data, np_random=np_random, empty_ok=empty_ok,
                                                  all_blocks=all_blocks)
         
-        return tensors.Tensor(data, backend=backend, legs=legs, labels=labels)
+        return tensors.BlockDiagonalTensor(data, backend=backend, legs=legs, labels=labels)
     return generator
