@@ -161,7 +161,7 @@ from ..linalg import np_conserved as npc
 from ..linalg import sparse
 from ..linalg.krylov_based import Arnoldi
 from .site import GroupedSite, group_sites
-from ..tools.misc import argsort, to_iterable, to_array, get_recursive
+from ..tools.misc import argsort, to_iterable, to_array, get_recursive, inverse_permutation
 from ..tools.math import lcm, speigs, entropy
 from ..tools.params import asConfig
 from ..tools.cache import DictCache
@@ -1309,6 +1309,7 @@ class MPS(BaseMPSExpectationValue):
 
     def __init__(self, sites, Bs, SVs, bc='finite', form='B', norm=1.):
         self.sites = list(sites)
+        assert len(self.sites) > 0, "MPS need at least one site"
         self.chinfo = self.sites[0].leg.chinfo
         self.dtype = dtype = np.result_type(*[B.dtype for B in Bs])
         self.form = self._parse_form(form)
@@ -1870,7 +1871,8 @@ class MPS(BaseMPSExpectationValue):
             The number of sites.
         pairs : list of (int, int)
             Pairs of sites to be entangled; the returned MPS will have a singlet
-            for each pair in `pairs`.
+            for each pair in `pairs`. For ``bc='infinite'`` MPS, some indices can be outside
+            the range [0, L) to indicate couplings accross infinte MPS unit cells.
         up, down : int | str
             A singlet is defined as ``(|up down> - |down up>)/2**0.5``,
             ``up`` and ``down`` give state indices or labels defined on the corresponding site.
@@ -1886,83 +1888,159 @@ class MPS(BaseMPSExpectationValue):
         singlet_mps : :class:`MPS`
             An MPS representing singlets on the specified pairs of sites.
         """
-        # sort each pair s.t. i < j
-        pairs = [((i, j) if i < j else (j, i)) for (i, j) in pairs]
-        # sort by smaller site of the pair
-        pairs.sort(key=lambda x: x[0])
-        pairs.append((L, L))
-        lonely = sorted(lonely) + [L]
-        # generate building block tensors
-        up = site.state_index(up)
-        down = site.state_index(down)
-        lonely_state = site.state_index(lonely_state)
-        mask = np.zeros(site.dim, dtype=np.bool_)
-        mask[up] = mask[down] = True
-        Open = npc.diag(1., site.leg)[:, mask]
-        Close = np.zeros([site.dim, site.dim], dtype=np.float_)
-        Close[up, down] = 1.
-        Close[down, up] = -1.
-        Close = npc.Array.from_ndarray(Close, [site.leg, site.leg])  # no conj() !
-        Close = Close[mask, :]
-        Id = npc.eye_like(Close, 0)
-        Lonely = np.zeros(site.dim, dtype=np.float_)
-        Lonely[lonely_state] = 1
-        Lonely = npc.Array.from_ndarray(Lonely, [site.leg])
+        assert 2 * len(pairs) + len(lonely) == L, "incompatible indices"
+        psi_up_down = MPS.from_product_state([site]* 2, [up, down])
+        psi_down_up = MPS.from_product_state([site]* 2, [down, up])
+        psi_singlet = psi_up_down.add(psi_down_up, 0.5**0.5, -0.5**0.5)
+        mps_covering = [psi_singlet]*len(pairs)
+        index_map = list(pairs)
+        if len(lonely) > 0:
+            psi_lonely = MPS.from_product_state([site], [lonely_state])
+            mps_covering.extend([psi_lonely] * len(lonely))
+            index_map.extend([(i, ) for i in lonely])
+        psi = cls.from_product_mps_covering(mps_covering, index_map, bc=bc)
+        assert psi.L == L
+        return psi
+
+    @classmethod
+    def from_product_mps_covering(cls, mps_covering, index_map, bc='finite'):
+        """Create an MPS as a product of (many) local mps covering all sites to be created.
+
+        This is a generalization of :meth:`from_singlets` to allow arbitrary local, entangled
+        states over multiple sites. Those local states are represented by MPS in `mps_covering`,
+        such that each site in the final MPS gets it state from exactly one local MPS.
+
+        For example to reproduce :meth:`from_singlets`,
+        you define L/2 local two-site mps in a singlet state, and use the `pairs` as `index_map`.
+        (If you have `lonely` states not entangled into a singlet, add a trivial one-site MPS
+        for them as well.) Indeed, if you look into the source code of :meth:`from_singlets`,
+        this is exactly what it does (at least since this method was implemented).
+
+        More generally, you can easily initialize any kind of valence bond solid state, if you
+        just initialize the corresponding local states and generate a corresponding `index_map`
+        of the geometry of pairs, see the example below.
+
+        Parameters
+        ----------
+        mps_covering : list of :class:`MPS`
+            List of local, 'finite' MPS.
+        index_map : list of tuple of int
+            For each `local_psi` in `mps_covering`, add one tuple with ``local_psi.L`` entries
+            which sites in the returned `psi` should
+
+        Returns
+        -------
+        psi : :class:`MPS`
+            An MPS constructed as explained above.
+
+        Example
+        -------
+        Say you have three local MPS with ``mps_covering = [psi_A, psi_B, psi_C]``
+        with `A`, `B` and `C` tensors on 3, 2, and 2 sites, respectively.
+        Using the ``index_map=[[0, 1, 3], [2, 5], [4, 6]]`` would combine them as:
+
+            A0-A1----A2 C0----C1
+            |  |     |  |     |
+            |  |  B0-|--|--B1 |
+            |  |  |  |  |  |  |
+            0  1  2  3  4  5  6
+
+        Using the ``index_map=[[1, 2, 0], [3, 5], [6, 4]]`` would rather combine them as:
+
+            A2----.     C1----C0
+            |     |     |     |
+            |  A0-A1 B0-|--B1 |
+            |  |  |  |  |  |  |
+            0  1  2  3  4  5  6
+
+        As another example, let's generalize :meth:`from_singlets` to "spin-full" fermions
+        represented by the (spin-less!) :class:`~tenpy.networks.site.FermionSite` with an extra
+        index for the spin, here `u=0,1` on a 2D square lattice.
+
+        .. testsetup :: product_mps_covering
+
+            from tenpy.networks.mps import MPS
+            from tenpy.networks.site import FermionSite
+            from tenpy.networks.lattice import SquareLattice, MultiSpeciesLattice
+
+        .. doctest :: product_mps_covering
+
+            >>> ferm = FermionSite(conserve='N')
+            >>> lat = MultiSpeciesLattice(Square(4, 2, None), [ferm]*2, ['up', 'down'])
+            >>> ferm_up_down = MPS.from_product_state([ferm]*4, ['full', 'empty', 'empty', 'full'])
+            >>> ferm_down_up = MPS.from_product_state([ferm]*4, ['empty', 'full', 'full', 'empty'])
+            >>> ferm_singlet = ferm_up_down.add(ferm_down_up, 0.5**0.5, -0.5**0.5)
+            >>> index_map = [[(x, y, 0), (x, y, 1), (x+1, y, 0), (x+1, y, 1)]
+            ...    for (x, y) in [(0, 0), (0, 1), (2, 0), (2, 1)]]
+            >>> index_map = [[lat.lat2mps_idx(x_y_u) for x_y_u in pairs] for pairs in index_map]
+            >>> psi = MPS.from_product_mps_covering([ferm_singlet]*4, index_map)
+
+        This will generate a singlet valence bold solid (VBS) state looking like this::
+
+            |    x--x  x--x
+            |
+            |    x--x  x--x
+
+        """
+        assert len(mps_covering) == len(index_map)
+        L = sum([len(x) for x in index_map])
+        sites = [None] * L
+        for local_psi, ind_map in zip(mps_covering, index_map):
+            assert local_psi.bc == 'finite'
+            for site, i in zip(local_psi.sites, ind_map):
+                if sites[i % L] is not None:
+                    raise ValueError(f"duplicate index {i:d} for {L:d}-site index_map\n{index_map!r}")
+                sites[i % L] = site
+        chinfo = sites[0].leg.chinfo
+        for site in sites:
+            assert site.leg.chinfo == chinfo, "incompatible types of charges"
+        # first extract tensors from local mps
+        # i = index in new psi to be constructed, j = index in local_psi
+        B_parts = [[] for _ in range(L)]
+        SR_parts = [[] for _ in range(L)]
+        for local_psi, ind_map in zip(mps_covering, index_map):
+            local_psi = local_psi.copy()
+            argsort = np.argsort(ind_map)
+            if not np.all(argsort == np.arange(len(argsort))):
+                local_psi.permute_sites(argsort)
+                ind_map = [ind_map[i] for i in argsort]
+            local_psi.convert_form('B')
+            triv_leg = npc.LegCharge(chinfo, [0, 1], [chinfo.make_valid()])  # trivial leg
+            local_psi.gauge_total_charge(vL_leg=triv_leg, vR_leg=triv_leg.conj())
+            for j, i in enumerate(ind_map):
+                B = local_psi.get_B(j, 'B')
+                B_parts[i % L].append(B)
+                SR = local_psi.get_SR(j)
+                SR_parts[i % L].append(SR)
+                if j + 1 < len(ind_map):
+                    next_i = ind_map[j + 1]
+                    vR_leg = B.get_leg('vR')
+                    Triv = npc.diag(1., vR_leg.conj(), labels=['vL', 'vR'])
+                    for i2 in range(i + 1, next_i):
+                        B_parts[i2 % L].append(Triv)
+                        SR_parts[i2 % L].append(SR)
+        # combine B_parts and SR_parts to big tensors Bs and SVs
         Bs = []
-        Ss = [np.ones(1)]
-        forms = []
-        open_singlets = []  # the k-th open singlet should be closed at site open_singlets[k]
-        Ts = []  # the tensors on the current site
-        labels_L = []
-        for i in range(L):
-            labels_R = labels_L[:]
-            next_Ts = Ts[:]
-            if i == pairs[0][0]:  # open a new singlet
-                j = pairs[0][1]
-                lbl = 's{0:d}-{1:d}'.format(i, j)
-                pairs.pop(0)
-                open_singlets.append(j)
-                next_Ts.append(Id.copy().iset_leg_labels([lbl + 'L', lbl]))
-                Open.iset_leg_labels(['p', lbl])
-                Ts.append(Open.copy(deep=False))
-                labels_R.append(lbl)
-                forms.append('A')
-            elif i == lonely[0]:  # just a lonely state
-                Ts.append(Lonely)
-                lonely.pop(0)
-                forms.append('B')
-            else:  # close a singlet
-                k = open_singlets.index(i)
-                Close.iset_leg_labels([labels_L[k] + 'L', 'p'])
-                Ts[k] = Close
-                next_Ts.pop(k)
-                open_singlets.pop(k)
-                labels_R.pop(k)
-                forms.append('B')
-            # generate `B` from `Ts`
-            B = reduce(npc.outer, Ts)
-            labels_L = [lbl_ + 'L' for lbl_ in labels_L]
-            if len(labels_L) > 0 and len(labels_R) > 0:
-                B = B.combine_legs([labels_L, labels_R], new_axes=[0, 2], qconj=[+1, -1])
-                B.iset_leg_labels(['vL', 'p', 'vR'])
-            elif len(labels_L) == 0 and len(labels_R) == 0:
-                B = B.add_trivial_leg(0, label='vL', qconj=+1)
-                B = B.add_trivial_leg(2, label='vR', qconj=-1)
-                B.iset_leg_labels(['vL', 'p', 'vR'])
-            elif len(labels_L) == 0:
-                B = B.combine_legs([labels_R], new_axes=[1], qconj=[-1])
-                B.iset_leg_labels(['p', 'vR'])
-                B = B.add_trivial_leg(0, label='vL', qconj=+1)
-            else:  # len(labels_R) == 0
-                B = B.combine_legs([labels_L], new_axes=[0], qconj=[+1])
-                B.iset_leg_labels(['vL', 'p'])
-                B = B.add_trivial_leg(2, label='vR', qconj=-1)
+        SVs = [None]
+        for B_p, S_p in zip(B_parts, SR_parts):
+            B = B_p[0]
+            SR = S_p[0]
+            for B2, SR2 in zip(B_p[1:], S_p[1:]):
+                B2 = B2.replace_labels(['vL', 'vR'], ['vL2', 'vR2'])
+                B = npc.outer(B, B2).combine_legs([['vL', 'vL2'], ['vR', 'vR2']], qconj=[+1, -1])
+                B.ireplace_labels(['(vL.vL2)', '(vR.vR2)'], ['vL', 'vR'])
+                pipeR = B.get_leg('vR')
+                d, d2 = (len(SR), len(SR2))
+                inds = np.indices([d, d2]).transpose([1, 2, 0]).reshape([d*d2, 2])
+                SR = SR[inds[:, 0]] * SR2[inds[:, 1]] # = np.outer(SR, SR2).flatten()
+                perm = [pipeR.map_incoming_flat(ind) for ind in inds]
+                SR = SR[inverse_permutation(perm)]
+                B.legs[B.get_leg_index('vR')] = pipeR.to_LegCharge()
+                B.legs[B.get_leg_index('vL')] = B.get_leg('vL').to_LegCharge()
             Bs.append(B)
-            N = 2**len(labels_R)
-            Ss.append(np.ones(N) / (N**0.5))
-            Ts = next_Ts
-            labels_L = labels_R
-        return cls([site] * L, Bs, Ss, bc=bc, form=forms)
+            SVs.append(SR)
+        SVs[0] = SVs[-1]
+        return cls(sites, Bs, SVs, bc=bc, form='B')
 
     @property
     def L(self):
@@ -2262,7 +2340,7 @@ class MPS(BaseMPSExpectationValue):
         self._S.append(self._S[0])
 
     def overlap_translate_finite(self, psi, shift=1):
-        """Contract ``<self|T^N|psi>`` for translation `T` with finite, periodic boundaries.
+        r"""Contract ``<self|T^N|psi>`` for translation `T` with finite, periodic boundaries.
 
         Looks like this for ``shift=1``, with the open virtuals legs contracted in the end::
 
@@ -3404,7 +3482,7 @@ class MPS(BaseMPSExpectationValue):
         """
         assert (self.finite)
         L = self.L
-        assert (L > 2)  # otherwise implement yourself...
+        assert (L > 1)  # otherwise implement yourself...
         # normalize very left singular values
         S = self.get_SL(0)
         if self.bc == 'segment':

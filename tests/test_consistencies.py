@@ -72,7 +72,7 @@ def test_copyright():
     # tenpy_files = get_python_files(os.path.dirname(os.path.dirname(tenpy.__file__)))
     #  (but this doesn't work for the pip-installed tenpy, so you can only do it temporary!)
     current_year = date.today().year
-    regex = re.compile(r'#\s[Cc]opyright (20[0-9]{2}-)?' + str(current_year) + r' (TeNPy|tenpy) [dD]evelopers, GNU GPLv3')
+    regex = re.compile(r'#\s[Cc]opyright (20[0-9]{2}-)?20[0-9]{2} (TeNPy|tenpy) [dD]evelopers, GNU GPLv3')
     for fn in tenpy_files:
         with open(fn, 'r') as f:
             for line in f:

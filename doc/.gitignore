@@ -2,3 +2,4 @@ sphinx_build
 reference/
 examples/
 toycode_stubs/
+*_zotero.bib
