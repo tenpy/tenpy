@@ -96,7 +96,8 @@ def fourier_transform_space(lat, a):
         ft_space = np.fft.fftshift(ft_space, axes=1)
         k = np.fft.fftshift(k)
         # make sure k is returned in correct basis
-        k = (k * lat.reciprocal_basis).flatten()  # model is 1d
+        # use the norm for the reciprocal basis, in case the basis is 2d (e.g. the ladder lattice)
+        k = k * np.linalg.norm(lat.reciprocal_basis)
     else:
         # only transform over dims (1, 2), since 3 could hold unit cell index
         ft_space = np.fft.fftn(a, axes=(1, 2))

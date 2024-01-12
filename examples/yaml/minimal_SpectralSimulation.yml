@@ -1,4 +1,4 @@
-#!/usr/bin/env -S python -m tenpy 
+#!/usr/bin/env -S python -m tenpy
 # This can only run if there is an output `results/a_minimal_DMRG.h5`
 
 simulation_class : SpectralSimulation

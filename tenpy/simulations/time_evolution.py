@@ -218,7 +218,7 @@ class TimeDependentCorrelation(RealTimeEvolution):
             if key not in self.options:
                 self.options[key] = data_options[key]
             elif self.options[key] != data_options[key]:
-                raise ValueError("Different model parameters in GroundStateSearch and GroundStateSearch")
+                raise ValueError("Different model parameters in Simulation and GroundStateSearch data")
 
         if 'energy' in gs_data.keys():
             self.gs_energy = self.options['gs_energy'] = gs_data['energy']
@@ -358,17 +358,6 @@ class TimeDependentCorrelation(RealTimeEvolution):
         correlation_function_t = correlation_function_t * phase
 
         return correlation_function_t
-
-    # TODO: remove when this works in bare Simulation class
-    # def prepare_results_for_save(self):
-    #     """Post process results and prepare them for saving.
-    #
-    #     Wrapper around :meth:`Simulation.prepare_results_for_save`.
-    #     Makes it possible to include post-processing run during the run of the
-    #     actual simulation.
-    #     """
-    #     self.run_post_processing()
-    #     return super().prepare_results_for_save()
 
 
 class TimeDependentCorrelationExperimental(TimeDependentCorrelation):

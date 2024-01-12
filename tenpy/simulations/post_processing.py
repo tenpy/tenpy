@@ -273,7 +273,7 @@ def pp_spectral_function(DL: DataLoader, *, correlation_key, conjugate_correlati
     return spectral_function(time_dep_corr, lat, dt, **kwargs)
 
 
-def pp_plot_correlations_on_lattice(DL, *, data_key, t_step=0, keys='nearest_neighbors',
+def pp_plot_correlations_on_lattice(DL: DataLoader, *, data_key, t_step=0, keys='nearest_neighbors',
                                     default_dir: str = 'plots', save_as: str = 'Correlations.pdf',
                                     markers='D', figsize=(8, 8), **kwargs):
     """Save a plot during post-processing to plot correlations on a lattice
