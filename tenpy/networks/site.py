@@ -98,9 +98,10 @@ class Site(Hdf5Exportable):
     [[1. 0.]
      [0. 0.]]
     """
-    def __init__(self, leg, state_labels=None, **site_ops):
+    def __init__(self, leg, state_labels=None, parallelize_add_ops=False, **site_ops):
         self.leg = leg
         self.state_labels = dict()
+        self._parallelize_add_ops = parallelize_add_ops
         if state_labels is not None:
             for i, v in enumerate(state_labels):
                 if v is not None:
@@ -275,17 +276,19 @@ class Site(Hdf5Exportable):
             If ``None``, update :attr:`hc_ops` indentifying eventual conjugates of `ops`.
             If ``False``, disable adding entries to :attr:`hc_ops`.
         """
-        names = list(ops)
-        ops = [ops[k] for k in names]
-        not_npc = [not isinstance(op, npc.Array) for op in ops]
-        nproc = max(omp_get_nthreads(), mkl_get_nthreads())
-        if sum(not_npc) > 1 and (nproc < 0 or nproc > 1):
-            legs = [self.leg, self.leg.conj()]
-            args = ((ops[i], legs) for i, b in enumerate(not_npc) if b)
-            with multiprocessing.Pool(nproc if nproc > 0 else None) as pool:
-                res = iter(pool.starmap(npc.Array.from_ndarray, args))
-            ops = [next(res) if b else ops[i] for i, b in enumerate(not_npc)]
-        for name, op in zip(names, ops):
+        if self._parallelize_add_ops:
+            names = list(ops)
+            _ops = [ops[k] for k in names]
+            not_npc_list = [not isinstance(op, npc.Array) for op in _ops]
+            nproc = max(omp_get_nthreads(), mkl_get_nthreads())
+            if sum(not_npc_list) > 1 and (nproc < 0 or nproc > 1):
+                legs = [self.leg, self.leg.conj()]
+                args = ((_ops[i], legs) for i, not_npc in enumerate(not_npc_list) if not_npc)
+                with multiprocessing.Pool(nproc if nproc > 0 else None) as pool:
+                    res = iter(pool.starmap(npc.Array.from_ndarray, args))
+                _ops = [next(res) if not_npc else _ops[i] for i, not_npc in enumerate(not_npc_list)]
+                ops = dict(zip(names, _ops))
+        for name, op in ops.item():
             self.add_op(name, op, hc=hc)
 
     def rename_op(self, old_name, new_name):
@@ -505,6 +508,7 @@ class Site(Hdf5Exportable):
     def __repr__(self):
         """Debug representation of self."""
         return "<Site, d={dim:d}, ops={ops!r}>".format(dim=self.dim, ops=self.opnames)
+
 
 class GroupedSite(Site):
     """Group two or more :class:`Site` into a larger one.
