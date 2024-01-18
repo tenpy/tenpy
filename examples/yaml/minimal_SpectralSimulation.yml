@@ -10,12 +10,15 @@ output_filename : a_minimal_SpectralSimulation.h5
 
 operator_t0:
     opname: Sz
-    # mps_idx:
+    # either specify:
+    # opname: Sx
     # lat_idx:
-    #### or
+    # mps_idx
+    # or specify:
     # multi_op: [Sx, Sy, Sz]
     # key_name: name
-
+    # lat_idx:
+    # mps_idx:
 operator_t: Sz
 
 final_time: 1

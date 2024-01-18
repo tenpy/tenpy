@@ -243,15 +243,6 @@ class TimeDependentCorrelation(RealTimeEvolution):
                     where u = 0 for a single-site unit cell
 
         """
-        # specify: opname: Sx
-        # lat_idx:
-        # mps_idx
-
-        # or specify:
-        # multi_op: [Sx, Sy, Sz]
-        # key_name: name
-        # lat_idx:
-        # mps_idx:
         opname = self.operator_t0_config['opname']
         ops = to_iterable(opname)
         if len(ops) == 1:
@@ -299,10 +290,7 @@ class TimeDependentCorrelation(RealTimeEvolution):
             for i, op in enumerate(ops):
                 self.psi.apply_local_op(i_min + i, op)
 
-    def get_mps_environment(self):
-        return MPSEnvironment(self.psi_ground_state, self.psi)
-
-    def m_correlation_function(self, results, psi, model, simulation, **kwargs):
+    def m_correlation_function(self, results, psi, model, simulation, **kwargs):  # simulation=self
         r"""Measurement function for time dependent correlations.
 
         Wrapper around :meth:`_m_correlation_function_op` to loop over several operators.
@@ -318,7 +306,9 @@ class TimeDependentCorrelation(RealTimeEvolution):
         """
         self.logger.info("calling m_correlation_function")
         operator_t = to_iterable(self.operator_t)
-        env = self.get_mps_environment()  # custom method for subclass Experimental
+        psi_gs = self.psi_ground_state
+        env = MPSEnvironment(psi_gs, psi)
+
         for i, op in enumerate(operator_t):
             # op is a str
             results_key = f"correlation_function_t_{op}_{self.operator_t0_name}"
@@ -418,11 +408,29 @@ class TimeDependentCorrelationExperimental(TimeDependentCorrelation):
         else:
             super().run_algorithm()
 
-    def get_mps_environment(self):
-        if self.addJW is False:
-            return MPSEnvironment(self.psi_ground_state, self.psi)
-        else:
-            return MPSEnvironmentJW(self.psi_ground_state, self.psi)
+    def m_correlation_function(self, results, psi, model, simulation, **kwargs):
+        r"""Measurement function for time dependent correlations.
+
+        Wrapper around :meth:`_m_correlation_function_op` to loop over several operators.
+
+        Options
+        -------
+        .. cfg:configoptions :: TimeDependentCorrelation
+
+            operator_t : str | list
+                The (on-site) operator as string to apply at each measurement step to calculate the overlap with.
+                If a list is passed i.e.: ['op1', 'op2'], it will be iterated through the operators
+
+        """
+        self.logger.info("calling m_correlation_function")
+        operator_t = to_iterable(self.operator_t)
+        psi_gs = self.psi_ground_state
+        env = MPSEnvironmentJW(psi_gs, psi) if self.addJW else MPSEnvironment(psi_gs, psi)
+
+        for i, op in enumerate(operator_t):
+            # op is a str
+            results_key = f"correlation_function_t_{op}_{self.operator_t0_name}"
+            results[results_key] = self._m_correlation_function_op(env, op)
 
     def _m_correlation_function_op(self, env, op) -> np.ndarray:
         """Measurement function for time dependent correlations.

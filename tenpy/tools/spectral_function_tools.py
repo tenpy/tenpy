@@ -67,15 +67,11 @@ def spectral_function(time_dep_corr, lat, dt: float, gaussian_window: bool = Fal
         S(w, \mathbf{k}) = \int dt e^{-iwt} \int d\mathbf{r} e^{i \mathbf{k} \mathbf{r} C(t, \mathbf{r})
 
     """
-
-    # transform mps array to lattice array
-    time_dep_corr_lat = lat.mps2lat_values(time_dep_corr, axes=axis_space)
     # first we fourier transform in space C(r, t) -> C(k, t)
-    ft_space, k = fourier_transform_space(lat, time_dep_corr_lat)
+    ft_space, k = fourier_transform_space(lat, time_dep_corr, axis=axis_space)
     k_reduced = lat.BZ.reduce_points(k)
     # optional linear prediction
     if linear_predict is True:
-        axis = 0  # since we assume that the time-series values are along the first dimension (n_tsteps, n_sites, ...)
         ft_space = linear_prediction(ft_space, rel_prediction_time=rel_prediction_time, rel_num_points=rel_num_points,
                                      axis=axis_time, truncation_mode=truncation_mode, rel_split=rel_split)
     # optional gaussian windowing
@@ -86,9 +82,9 @@ def spectral_function(time_dep_corr, lat, dt: float, gaussian_window: bool = Fal
     return {'S': s_k_w, 'k': k, 'k_reduced': k_reduced, 'w': w}
 
 
-def fourier_transform_space(lat, a):
-    # TODO: make this available for an arbitrary axis
-    # make sure a is in lattice form not mps form
+def fourier_transform_space(lat, a, axis=1):
+    # transform mps array to lattice array
+    a = lat.mps2lat_values(a, axes=axis)  # axis is only an int, since MPS is always "flattened"
     if lat.dim == 1:
         ft_space = np.fft.fftn(a, axes=(1,))
         k = np.fft.fftfreq(ft_space.shape[1])

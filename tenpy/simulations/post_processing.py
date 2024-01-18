@@ -4,7 +4,6 @@
 import os
 import numpy as np
 import logging
-
 from ..tools.spectral_function_tools import spectral_function, plot_correlations_on_lattice
 from ..tools import hdf5_io
 from ..tools.misc import to_iterable, get_recursive, set_recursive, find_subclass
@@ -13,7 +12,6 @@ from ..models import Model
 
 try:
     import h5py
-
     h5py_version = h5py.version.version_tuple
 except ImportError:
     h5py_version = (0, 0)
@@ -236,7 +234,6 @@ def get_all_hdf5_keys(h5_group):
             results[key] = get_all_hdf5_keys(h5_group[key])
         else:
             results[key] = h5_group[key]
-
     # if we are on the lowest recursion level, we only give the keys as sets
     if not any([isinstance(h5_group[key], h5py.Group) for key in h5_group.keys()]):
         results = set(results)
@@ -255,11 +252,11 @@ def pp_spectral_function(DL: DataLoader, *, correlation_key, conjugate_correlati
     ----------
     DL : DataLoader
     correlation_key : str
+    conjugate_correlation : bool | False
     **kwargs
         keyword arguments to :func:`tenpy.tools.spectral_function_tools.spectral_function`
     """
     lat = DL.lat
-
     dt = DL.sim_params['algorithm_params']['dt']
     N_steps = DL.sim_params['algorithm_params'].get('N_steps', None)
     if N_steps is not None:
