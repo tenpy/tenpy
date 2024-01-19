@@ -10,7 +10,7 @@ As briefly explained in :doc:`/intro/simulations`, you can easily add custom mea
 
 Full description and details in :doc:`/intro/measurements`.
 """
-# Copyright 2020-2023 TeNPy Developers, GNU GPLv3
+# Copyright 2020-2024 TeNPy Developers, GNU GPLv3
 
 import numpy as np
 import warnings
