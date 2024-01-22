@@ -58,6 +58,9 @@ Changed
   The mixer classes are now implemented in :mod:`tenpy.linalg.algorithms.mps_common`.
   Backwads-compatible wrappers with the old method names and signatures will be kept in
   :mod:`tenpy.linalg.algorithms.dmrg` until v1.0.
+- Introduce :class:`~tenpy.algorithms.mps_common.IterativeSweeps` to generalize algorithms that
+  repeat sweeps until convergence. In particular this makes the convergence check a modular
+  method which can be easily adapted via subclass.
 
 Fixed
 ^^^^^
