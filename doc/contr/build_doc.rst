@@ -1,5 +1,5 @@
 Building the documentation
-=========================
+==========================
 
 You can use `Sphinx <https://www.sphinx-doc.org>`_ to generate the full documentation 
 in various formats (including HTML or PDF) yourself, as described in the following.
