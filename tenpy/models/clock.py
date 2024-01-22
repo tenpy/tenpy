@@ -2,7 +2,7 @@
 
 Generalization of transverse field Ising model to higher dimensional on-site Hilbert space.
 """
-# Copyright 2023 TeNPy Developers, GNU GPLv3
+# Copyright 2024 TeNPy Developers, GNU GPLv3
 
 import numpy as np
 from .model import CouplingMPOModel, NearestNeighborModel
