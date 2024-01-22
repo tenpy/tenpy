@@ -420,7 +420,7 @@ class DMRGEngine(IterativeSweeps):
         E = self.sweep_stats['E'][-1]
         Delta_E = self.sweep_stats['Delta_E'][-1]
         Delta_S = self.sweep_stats['Delta_S'][-1]
-        return -Delta_E < max_E_err * max(abs(E), 1.) and abs(Delta_S) < max_S_err
+        return abs(Delta_E / max(E, 1.)) < max_E_err and abs(Delta_S) < max_S_err
     
     def post_run_cleanup(self):
         super().post_run_cleanup()
@@ -462,8 +462,8 @@ class DMRGEngine(IterativeSweeps):
                 See `E_tol_to_trunc`
             max_E_err : float
                 Convergence if the change of the energy in each step
-                satisfies ``-Delta E / max(|E|, 1) < max_E_err``. Note that
-                this is also satisfied if ``Delta E > 0``,
+                satisfies ``|Delta E / max(E, 1)| < max_E_err``. Note that
+                this might be satisfied even if ``Delta E > 0``,
                 i.e., if the energy increases (due to truncation).
             max_hours : float
                 If the DMRG took longer (measured in wall-clock time),

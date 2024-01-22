@@ -86,3 +86,4 @@ Fixed
 - :issue:`289` that :meth:`~tenpy.networks.mps.MPS.correlation_length` raised errors for `charge_sector` np ndarrays.
   Further, allow to pass multiplie charge sectors to loop over at once, add argument `return_charges`.
   Also, provide a :meth:`~tenpy.networks.mps.MPS.correlation_length_charge_sectors` convenience function to return valid charge sectors.
+- :issue:`153` that DMRG energy convergence criterion was verified after an arbitrarily large energy increase.
