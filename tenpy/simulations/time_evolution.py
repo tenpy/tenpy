@@ -4,11 +4,11 @@
 
 import numpy as np
 
-
 from . import simulation
 from .simulation import *
 from ..networks.mps import MPSEnvironment, MPS, MPSEnvironmentJW
 from ..tools.misc import to_iterable
+from ..tools import hdf5_io
 
 
 __all__ = simulation.__all__ + ['RealTimeEvolution', 'SpectralSimulation', 'TimeDependentCorrelation',
@@ -99,7 +99,7 @@ class TimeDependentCorrelation(RealTimeEvolution):
         The simulation parameters. Ideally, these options should be enough to fully specify all
         parameters of a simulation to ensure reproducibility.
         These parameters are converted to a (dict-like) :class:`~tenpy.tools.params.Config`.
-        For command line use, a .yml file should hold the information.
+        For command line use, a ``.yml`` file should hold the information.
 
     Options
     -------
@@ -109,38 +109,80 @@ class TimeDependentCorrelation(RealTimeEvolution):
         addJW : bool
             boolean flag whether to add the Jordan Wigner String or not
         ground_state_filename : str
-            a filename of a given ground state search (ideally a hdf5 file coming from finished
-            run of a :class:`GroundStateSearch`)
+            a filename of a given ground state search (ideally a hdf5 file coming from a finished
+            run of a :class:`~tenpy.simulations.ground_state_search.GroundStateSearch`)
 
     """
-    default_measurements = (RealTimeEvolution.default_measurements +
-                            [('simulation_method', 'm_correlation_function')])
-    # TODO: this breaks when use default measurements is set to False in options.
-    # possibly just override _connect_measurements function of Simulation class
 
-    def __init__(self, options, *, gs_data=None, **kwargs):
+    def __init__(self, options, *, ground_state_data=None, **kwargs):
         super().__init__(options, **kwargs)
-        self.gs_data = self._load_data_from_gs(gs_data)
-        # should be a dict with model params and psi_ground_state but allows passing an MPS
+
+        resume_data = kwargs.get("resume_data", None)
+        if resume_data is not None:
+            if 'psi_ground_state' in resume_data:
+                self.psi_ground_state = resume_data['psi_ground_state']
+            else:
+                self.logger.warning("psi_ground_state not in resume data")
+            if 'gs_energy' in resume_data:
+                self.gs_energy = resume_data['gs_energy']
+            else:
+                self.logger.warning("ground-state energy not in resume data")
+
+        if not self.loaded_from_checkpoint:
+            self.ground_state_filename = self.options.get('ground_state_filename', None)
+            if self.ground_state_filename is not None:
+                if ground_state_data is None:
+                    ground_state_data = hdf5_io.load(self.ground_state_filename)
+                else:
+                    self.logger.warning("Supplied a 'ground_state_filename' and ground_state_data as kwarg. "
+                                        "Ignoring 'ground_state_filename'.")
+            self.logger.info("Initializing from ground state data")
+            self.init_from_gs_data(ground_state_data)
+
         # will be read out in init_state
-        self.gs_energy = self.options.get('gs_energy', None)
+        self.gs_energy = self.options.get('gs_energy', 0)
         self.operator_t = self.options['operator_t']
         # generate info for operator before time evolution as subconfig
         self.operator_t0_config = self.options.subconfig('operator_t0')
+        self.operator_t0_name = self._get_operator_t0_name()
         self.operator_t0 = None  # read out config later, since defaults depend on model parameters
-        self.operator_t0_name = None  # will be set in get_operator_t0
         self.addJW = self.options.get('addJW', False)
-        resume_data = self.results.get("resume_data", None)
-        if resume_data:
-            if 'psi_ground_state' in self.results['simulation_parameters']:
-                self.psi_ground_state = self.results['simulation_parameters']['psi_ground_state']
+
+    def resume_run(self):
+        if not hasattr(self, 'psi_ground_state'):
+            # didn't get psi_ground_state in resume_data, but might still have it in the results
+            if 'psi_ground_state' not in self.results:
+                raise ValueError("psi_ground_state not saved in checkpoint results: can't resume!")
+            if 'gs_energy' not in self.results:
+                self.logger.warning("Ground state energy not saved in checkpoint results")
+        super().resume_run()
+
+    def prepare_results_for_save(self):
+        # include psi_ground_state in resume data
+        results = super().prepare_results_for_save()
+        if self.options.get('save_resume_data', self.options['save_psi']):
+            results['resume_data'].update({'psi_ground_state': self.psi_ground_state})
+            results['resume_data'].update({'gs_energy': self.gs_energy})
+        return results
+
+    def init_from_gs_data(self, gs_data):
+        if gs_data is not None:
+            if isinstance(gs_data, MPS):
+                # self.psi_ground_state = gs_data ?
+                raise NotImplementedError("Only hdf5 and dictionaries are supported as ground state input")
+            self.check_and_update_params_from_gs_data(gs_data)
+
+    def _connect_measurements(self):
+        """Connect :func:`m_correlation_function` to measurements."""
+        self._connect_measurements_fct('simulation_method', 'm_correlation_function', priority=1)
+        super()._connect_measurements()
 
     @classmethod
     def from_gs_search(cls, filename, sim_params, **kwargs):
         r"""Create class based on file containing the ground state.
 
         Initialize an instance of a :class:`SpectralSimulation` from
-        a finished run of :class:`GroundStateSearch`. This simply fetches
+        a finished run of :class:`~tenpy.simulation.ground_state_search.GroundStateSearch`. This simply fetches
         the relevant parameters ('model_params', 'psi')
 
         Parameters
@@ -160,19 +202,11 @@ class TimeDependentCorrelation(RealTimeEvolution):
     def init_state(self):
         # make sure state is not reinitialized if psi and psi_ground_state are given
         if not hasattr(self, 'psi_ground_state'):
-            gs_data = self.gs_data
-            if gs_data is not None:
-                if isinstance(gs_data, MPS):
-                    self.psi_ground_state = gs_data
-                else:
-                    self.psi_ground_state = gs_data['psi']
-                delattr(self, 'gs_data')  # possibly free memory
-            else:
-                self.logger.warning("No ground state data is supplied, calling the initial state builder on\
-                                     SpectralSimulation class. You probably want to supply a ground state")
-                super().init_state()  # this sets self.psi from init_state_builder (should be avoided)
-                self.psi_ground_state = self.psi.copy()
-                delattr(self, 'psi')  # free memory
+            self.logger.warning(f"No ground state data is supplied, calling the initial state builder on "
+                                f"{self.__class__.__name__} class - you probably want to supply a ground state!")
+            super().init_state()  # this sets self.psi from init_state_builder (should be avoided)
+            self.psi_ground_state = self.psi.copy()
+            delattr(self, 'psi')  # free memory
 
         if not hasattr(self, 'psi'):
             # copy is essential, since time evolution is probably only performed on psi
@@ -190,40 +224,43 @@ class TimeDependentCorrelation(RealTimeEvolution):
         if self.gs_energy is None:
             self.gs_energy = self.model.H_MPO.expectation_value(self.psi_ground_state)
 
-    def _load_data_from_gs(self, gs_data_kwarg):
-        # we don't need the ground_state_filename
-        key = 'ground_state_filename'
-        message = 'ground state data'
-        if isinstance(gs_data_kwarg, MPS):
-            gs_data = gs_data_kwarg
-        else:
-            _, gs_data = self._load_data_from_kwarg_or_options(gs_data_kwarg, key, message=message, is_mandatory=True)
-            # update model parameters here!
-            self.check_and_update_params_from_gs_data(gs_data)
-        return gs_data
-
     def check_and_update_params_from_gs_data(self, gs_data):
         sim_class = gs_data['version_info']['simulation_class']
         if sim_class != 'GroundStateSearch':
             self.logger.warning("The Simulation is not loaded from a GroundStateSearch...")
-        if 'psi' not in gs_data.keys():
-            raise ValueError("MPS for ground state not found")
-        elif not isinstance(gs_data['psi'], MPS):
-            raise TypeError("Ground state must be an MPS")
 
         data_options = gs_data['simulation_parameters']
-        for key in data_options.keys():
+        for key in data_options:
             if not isinstance(key, str) or not key.startswith('model'):
                 continue
             if key not in self.options:
                 self.options[key] = data_options[key]
             elif self.options[key] != data_options[key]:
-                raise ValueError("Different model parameters in Simulation and GroundStateSearch data")
+                self.logger.warning("Different model parameters in Simulation and data from file. Ignoring parameters "
+                                    "in data from file")
+        if 'energy' in gs_data:
+            self.options['gs_energy'] = gs_data['energy']
 
-        if 'energy' in gs_data.keys():
-            self.gs_energy = self.options['gs_energy'] = gs_data['energy']
+        if 'psi' not in gs_data:
+            raise ValueError("MPS for ground state not found")
+        psi_ground_state = gs_data['psi']
+        if not isinstance(psi_ground_state, MPS):
+            raise TypeError("Ground state must be an MPS class")
 
-    def _get_operator_t0(self):
+        if not hasattr(self, 'psi_ground_state'):
+            self.psi_ground_state = psi_ground_state
+
+    def _get_operator_t0_name(self):
+        operator_t0_name = self.operator_t0_config.get('key_name', None)
+        if operator_t0_name is None:
+            opname = self.operator_t0_config['opname']  # opname is mandatory
+            if len(to_iterable(opname)) == 1:
+                operator_t0_name = opname
+            else:
+                raise KeyError("A key_name must be passed for multiple operators")
+        return operator_t0_name
+
+    def _get_operator_t0_list(self):
         r"""Converts the specified operators and indices into a list of tuples [(op1, i_1), (op2, i_2)]
 
         Options
@@ -233,8 +270,10 @@ class TimeDependentCorrelation(RealTimeEvolution):
             operator_t0 : dict
                 Mandatory, this should specify the operator initially applied to the MPS (i.e. before a time evolution).
                 For more than one single-site operator, a list of operator names should be passed, otherwise just the
-                string ``name``.
-                Furthermore, the corresponding position(s) to apply the operator(s) should also be passed as a list.
+                string ``opname``. For several operators it is necessary to pass a ``key_name``, this
+                determines the name of the corresponding measurement output see :meth:`_get_operator_t0_name`.
+                The corresponding position(s) to apply the operator(s) should also be passed as
+                a list (or string for a single operator).
                 Either a lattice index ``lat_idx`` or a ``mps_idx`` should be passed.
 
                 .. note ::
@@ -243,32 +282,26 @@ class TimeDependentCorrelation(RealTimeEvolution):
                     where u = 0 for a single-site unit cell
 
         """
-        opname = self.operator_t0_config['opname']
-        ops = to_iterable(opname)
-        if len(ops) == 1:
-            key_name = opname
-        else:
-            key_name = self.operator_t0_config['key_name']
-        self.operator_t0_name = key_name
-
+        ops = to_iterable(self.operator_t0_config['opname'])  # opname is mandatory
         mps_idx = self.operator_t0_config.get('mps_idx', None)
         lat_idx = self.operator_t0_config.get('lat_idx', None)
-        if mps_idx and lat_idx is not None:
+        if mps_idx is not None and lat_idx is not None:
             raise KeyError("Either a mps_idx or a lat_idx should be passed")
         elif mps_idx is not None:
             idx = to_iterable(mps_idx)
         elif lat_idx is not None:
             idx = to_iterable(self.model.lat.lat2mps_idx(lat_idx))
         else:
+            # default to the middle of the MPS sites
             idx = to_iterable(self.model.lat.N_sites // 2)
         # tiling
         if len(ops) > len(idx):
             if len(idx) != 1:
-                raise ValueError("Ill-defined tiling: ops is longer than idx, and idx is not one")
-            idx = idx*len(ops)
+                raise ValueError("Ill-defined tiling: num. of operators must be equal to num. of indices or one")
+            idx = idx * len(ops)
         elif len(ops) < len(idx):
             if len(ops) != 1:
-                raise ValueError("Ill-defined tiling: idx is longer than ops, and ops is not one")
+                raise ValueError("Ill-defined tiling: num. of operators must be equal to num. of indices or one")
             ops = ops * len(idx)
         # generate list of tuples of form [(op1, i_1), (op2, i_2), ...]
         op_list = list(zip(ops, idx))
@@ -277,16 +310,16 @@ class TimeDependentCorrelation(RealTimeEvolution):
     def apply_operator_t0_to_psi(self):
         # TODO: think about segment boundary conditions
         # TODO: make JW string consistent, watch for changes in apply_local_op to have autoJW
-        self.operator_t0 = self._get_operator_t0()
-        operator_t0 = self.operator_t0
-        if len(operator_t0) == 1:
-            op, i = operator_t0[0]
+        self.operator_t0 = self._get_operator_t0_list()
+        ops = self.operator_t0
+        if len(ops) == 1:
+            op, i = ops[0]
             if self.model.lat.site(i).op_needs_JW(op):
                 for j in range(i):
                     self.psi.apply_local_op(j, 'JW')
-            self.psi.apply_local_op(i, op)  # TODO: check if renormalize=True makes sense here
+            self.psi.apply_local_op(i, op)
         else:
-            ops, i_min, _ = self.psi._term_to_ops_list(operator_t0, True)  # applies JW string automatically
+            ops, i_min, _ = self.psi._term_to_ops_list(ops, True)  # applies JW string automatically
             for i, op in enumerate(ops):
                 self.psi.apply_local_op(i_min + i, op)
 
@@ -300,8 +333,8 @@ class TimeDependentCorrelation(RealTimeEvolution):
         .. cfg:configoptions :: TimeDependentCorrelation
 
             operator_t : str | list
-                The (on-site) operator as string to apply at each measurement step to calculate the overlap with.
-                If a list is passed i.e.: ['op1', 'op2'], it will be iterated through the operators
+                The (on-site) operator(s) as string(s) to apply at each measurement step.
+                If a list is passed i.e.: ``['op1', 'op2']``, it will be iterated through the operators
 
         """
         self.logger.info("calling m_correlation_function")
@@ -409,19 +442,7 @@ class TimeDependentCorrelationExperimental(TimeDependentCorrelation):
             super().run_algorithm()
 
     def m_correlation_function(self, results, psi, model, simulation, **kwargs):
-        r"""Measurement function for time dependent correlations.
-
-        Wrapper around :meth:`_m_correlation_function_op` to loop over several operators.
-
-        Options
-        -------
-        .. cfg:configoptions :: TimeDependentCorrelation
-
-            operator_t : str | list
-                The (on-site) operator as string to apply at each measurement step to calculate the overlap with.
-                If a list is passed i.e.: ['op1', 'op2'], it will be iterated through the operators
-
-        """
+        """Equivalent to :meth:`TimeDependentCorrelation._m_correlation_function`."""
         self.logger.info("calling m_correlation_function")
         operator_t = to_iterable(self.operator_t)
         psi_gs = self.psi_ground_state
@@ -435,7 +456,7 @@ class TimeDependentCorrelationExperimental(TimeDependentCorrelation):
     def _m_correlation_function_op(self, env, op) -> np.ndarray:
         """Measurement function for time dependent correlations.
 
-        See also :meth:`TimeDependentCorrelation._m_correlation_function_op`
+        Simplified version of :meth:`TimeDependentCorrelation._m_correlation_function_op`
 
         Returns
         ----------
@@ -459,11 +480,16 @@ class SpectralSimulation(TimeDependentCorrelation):
     .. cfg:config :: SpectralSimulation
         :include: TimeDependentCorrelation
 
+        spectral_function_params: dict
+            Additional parameters for post-processing of the spectral function (i.e. applying
+            linear prediction or gaussian windowing. The keys correspond to the kwargs of
+            :func:`tenpy.tools.spectral_function_tools.spectral_function`.
+
     """
     default_post_processing = []
 
-    def __init__(self, options, *, gs_data=None, **kwargs):
-        super().__init__(options, gs_data=gs_data, **kwargs)
+    def __init__(self, options, *, ground_state_data=None, **kwargs):
+        super().__init__(options, ground_state_data=ground_state_data, **kwargs)
 
     def run_post_processing(self):
         extra_kwargs = self.options.get('spectral_function_params', {})

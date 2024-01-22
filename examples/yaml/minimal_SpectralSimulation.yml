@@ -9,21 +9,15 @@ directory: results
 output_filename : a_minimal_SpectralSimulation.h5
 
 operator_t0:
-    opname: Sz
-    # either specify:
-    # opname: Sx
-    # lat_idx:
-    # mps_idx
-    # or specify:
-    # multi_op: [Sx, Sy, Sz]
-    # key_name: name
-    # lat_idx:
+    opname: Sz  # can also be a list
+    # lat_idx: [x, y, u]  (or a 2d list for multi operators)
     # mps_idx:
+    # key_name:
 operator_t: Sz
 
 final_time: 1
 
-addJW: False # no JW string needed (spin-model)
+addJW: False  # default (no JW string needed (spin-model))
 
 algorithm_class: TEBDEngine
 algorithm_params:

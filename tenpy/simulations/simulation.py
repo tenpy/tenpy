@@ -730,50 +730,6 @@ class Simulation:
         """Perform a last set of measurements."""
         self.make_measurements()
 
-    def _load_data_from_kwarg_or_options(self, kwarg_data, key: str, message="", is_mandatory=False) -> (str, dict):
-        """Load data from either a provided kwarg (prioritized) or from a filename provided in options.
-        Function should only be called after conversion of :class:`Simulation` parameters to a
-        :class:`tenpy.tools.misc.Config` stored in self.options.
-
-        Parameters
-        ----------
-        kwarg_data : dict, str, or None
-            Data provided as a kwarg or None if not provided.
-        key : str
-            key to look for in self.options.
-        message : str, optional
-            message for logging purpose
-        is_mandatory : bool, optional
-            If True, raising an error is mandatory if data is neither provided as filename in options nor as kwarg
-
-        Returns
-        -------
-        fn : str or None
-            The filename loaded.
-        data : dict or None
-            The loaded data or None if not found.
-        """
-        fn, data = None, None
-
-        if kwarg_data is not None:  # Prioritize the filename from kwargs if provided
-            if isinstance(kwarg_data, str):
-                fn = kwarg_data
-                self.logger.info(f"Loading {message} from {fn}")
-                data = hdf5_io.load(kwarg_data)
-                self.options[key] = fn
-                self.options.touch(key)
-            else:
-                data = kwarg_data
-        elif key in self.options:  # Check if the key exists in self.options
-            fn = self.options.get(key, None)
-            self.logger.info(f"Loading {message} from {fn}")
-            data = hdf5_io.load(fn)
-        else:
-            if is_mandatory:
-                raise KeyError(f"{message} must be passed either as kwarg or in options")
-
-        return fn, data
-
     def run_post_processing(self):
         """Apply (several) post-processing steps.
 
@@ -1052,7 +1008,7 @@ class Simulation:
             A copy of :attr:`results` containing everything to be saved.
             Measurement results are converted into a numpy array (if possible).
         """
-        self.run_post_processing()
+        self.run_post_processing()  # TODO: when checkpointing this gets called every time!!
         results = self.results.copy()
         results['simulation_parameters'] = self.options.as_dict()
         if 'measurements' in results:

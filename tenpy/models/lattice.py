@@ -1548,7 +1548,7 @@ class Lattice:
 
     @property
     def reciprocal_basis(self):
-        """Reciprocal basis vectors of the lattice.
+        r"""Reciprocal basis vectors of the lattice.
 
         The reciprocal basis vectors obey :math:`a_i b_j = 2 \pi \delta_{i, j}`, such that
         ``b_j = reciprocal_basis[j]``"""
