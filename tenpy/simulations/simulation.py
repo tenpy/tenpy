@@ -164,7 +164,6 @@ class Simulation:
     default_measurements = [
         ('tenpy.simulations.measurement', 'm_measurement_index', {}, 1),
         ('tenpy.simulations.measurement', 'm_bond_dimension'),
-        ('tenpy.simulations.measurement', 'm_energy_MPO'),
         ('tenpy.simulations.measurement', 'm_entropy'),
     ]
 
@@ -557,7 +556,7 @@ class Simulation:
 
     def _connect_measurements(self):
         if self.options.get('use_default_measurements', True):
-            def_meas = self.default_measurements
+            def_meas = self.default_measurements + self.model.get_extra_default_measurements()
         else:
             def_meas = []
         con_meas = list(self.options.get('connect_measurements', []))

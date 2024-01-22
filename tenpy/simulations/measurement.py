@@ -110,7 +110,9 @@ def m_bond_energies(results, psi, model, simulation, results_key='bond_energies'
     results, psi, model, simulation, results_key :
         See :func:`~tenpy.simulation.measurement.measurement_index`.
     """
-    results[results_key] = model.bond_energies(psi)
+    # use simulation.psi and simulation.model since default 'energy' measurement is
+    # obtained from model.get_extra_default_measurements() in _connect_measurements() after regrouping
+    results[results_key] = simulation.model.bond_energies(simulation.psi)
 
 
 def m_simulation_parameter(results, psi, model, simulation, recursive_key, results_key=None, **kwargs):

@@ -224,6 +224,24 @@ class Model(Hdf5Exportable):
         self.lat = TrivialLattice(grouped_sites, bc_MPS=self.lat.bc_MPS, bc='periodic')
         return grouped_sites
 
+    def get_extra_default_measurements(self):
+        """Get list of model-dependent extra default measurements.
+
+        Extra measurements for a :class:`~tenpy.simulations.simulation.Simulation`, which depend on the
+        model itself - subclasses should override this method).
+        E.g., a :class:`~tenpy.models.model.MPOModel` should measure the energy w.r.t.
+        the `MPO` (See :func:`~tenpy.simulation.measurement.m_energy_MPO`). However, a
+        :class:`~tenpy.models.model.NearestNeighborModel` should use the function
+        :func:`~tenpy.simulation.measurement.m_bond_energies`. The extra measurements are
+        added to the default measurements in :func:`~tenpy.simulation.Simulation._connect_measurements`.
+
+        Returns
+        -------
+        m_extra_default_list : list
+        """
+        m_extra_default_list = []
+        return m_extra_default_list
+
     def update_time_parameter(self, new_time):
         """Reconstruct Hamiltonian for time-dependent models, potentially (!) in-place.
 
@@ -585,6 +603,11 @@ class NearestNeighborModel(Model):
         H_MPO = mpo.MPO(sites, Ws, bc, 0, -1, max_range=2)
         return H_MPO
 
+    def get_extra_default_measurements(self):
+        m_extra_default_list = super().get_extra_default_measurements()
+        m_extra_default_list.append(('tenpy.simulations.measurement', 'm_bond_energies'))
+        return m_extra_default_list
+
 
 class MPOModel(Model):
     """Base class for a model with an MPO representation of the Hamiltonian.
@@ -749,6 +772,11 @@ class MPOModel(Model):
                 if Hb is not None:
                     H_bond[i] = Hb + Hb.conj().itranspose(Hb.get_leg_labels())
         return H_bond
+
+    def get_extra_default_measurements(self):
+        m_extra_default_list = super().get_extra_default_measurements()
+        m_extra_default_list.append(('tenpy.simulations.measurement', 'm_energy_MPO'))
+        return m_extra_default_list
 
 
 class CouplingModel(Model):
