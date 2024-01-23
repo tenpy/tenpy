@@ -999,8 +999,7 @@ class Simulation:
         :cfg:configoptions :: Simulation
 
             save_resume_data : bool
-                If True, include data from :meth:`~tenpy.algorithms.Algorithm.get_resume_data`
-                into the output as `resume_data`.
+                If True, include data returned by :meth:`get_resume_data` into the output as `resume_data`.
 
         Returns
         -------
@@ -1022,8 +1021,18 @@ class Simulation:
                 if v.dtype != np.dtype(object):
                     measurements[k] = v
         if self.options.get('save_resume_data', self.options['save_psi']):
-            results['resume_data'] = self.engine.get_resume_data()
+            results['resume_data'] = self.get_resume_data()
         return results
+
+    def get_resume_data(self) -> dict:
+        """"Get resume data for a Simulation.
+
+        Return data from :meth:`~tenpy.algorithms.Algorithm.get_resume_data` in base :class:`Simulation`.
+        Subclasses should override this with ``resume_data = super().get_resume_data()``, s.t.
+        :class:`Simulation` specific data can easily be returned for ``resume_data``.
+        """
+        resume_data = self.engine.get_resume_data()
+        return resume_data
 
     def save_at_checkpoint(self, alg_engine):
         """Save the intermediate results at the checkpoint of an algorithm.

@@ -3133,14 +3133,14 @@ class SimpleBZ:
     @classmethod
     def from_recip_basis_vectors(cls, basis_vectors, dim):
         if dim == 1:
-            return cls.from_recip_basis_vectors_1d(basis_vectors)
+            return cls._from_recip_basis_vectors_1d(basis_vectors)
         elif dim == 2:
-            return cls.from_recip_basis_vectors_2d(basis_vectors)
+            return cls._from_recip_basis_vectors_2d(basis_vectors)
         else:
             raise ValueError("Only dimensions 1 and 2 are supported")
 
     @classmethod
-    def from_recip_basis_vectors_1d(cls, basis_vector):
+    def _from_recip_basis_vectors_1d(cls, basis_vector):
         basis_vector = np.array(basis_vector).flatten()
         if len(basis_vector) != 1:
             raise ValueError("For Brillouin Zones in 1D, the basis vector must have dim 1")
@@ -3148,7 +3148,7 @@ class SimpleBZ:
         return cls(vertices, basis_vector, dim=1)
 
     @classmethod
-    def from_recip_basis_vectors_2d(cls, basis, n_vecs_generated=30):
+    def _from_recip_basis_vectors_2d(cls, basis, n_vecs_generated=30):
         """Construct the Brillouin Zone in 2D from the lattices basis vectors.
 
         Given a basis, consisting of two reciprocal basis vectors b1, b2; first perform a
@@ -3300,12 +3300,16 @@ class SimpleBZ:
         return all_points
 
     def plot_brillouin_zone(self, *args, **kwargs):
-        if self.dim == 1:
-            self.plot_brillouin_zone_1d(*args, **kwargs)
-        else:
-            self.plot_brillouin_zone_2d(*args, **kwargs)
+        """Plot the brillouin zone of the lattice.
 
-    def plot_brillouin_zone_1d(self, ax, draw_points=True, **kwargs):
+        See :meth:`_plot_brillouin_zone_1d` and :meth:`_plot_brillouin_zone_2d`.
+        """
+        if self.dim == 1:
+            self._plot_brillouin_zone_1d(*args, **kwargs)
+        else:
+            self._plot_brillouin_zone_2d(*args, **kwargs)
+
+    def _plot_brillouin_zone_1d(self, ax, draw_points=True, **kwargs):
         """Plot the brillouin zone of the lattice.
 
         Parameters
@@ -3323,7 +3327,7 @@ class SimpleBZ:
             ax.plot(self.vertices, [0, 0], 'o')
         ax.vlines(self.vertices, -0.5, 0.5, **kwargs)
 
-    def plot_brillouin_zone_2d(self, ax, draw_points=True, autoscale=True, **kwargs):
+    def _plot_brillouin_zone_2d(self, ax, draw_points=True, autoscale=True, **kwargs):
         """Plot the brillouin zone of the lattice.
 
         Parameters

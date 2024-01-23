@@ -100,6 +100,9 @@ class TimeDependentCorrelation(RealTimeEvolution):
         parameters of a simulation to ensure reproducibility.
         These parameters are converted to a (dict-like) :class:`~tenpy.tools.params.Config`.
         For command line use, a ``.yml`` file should hold the information.
+    **kwargs : dict
+        ground_state_data: dict
+        ground_state_filename: str
 
     Options
     -------
@@ -114,7 +117,7 @@ class TimeDependentCorrelation(RealTimeEvolution):
 
     """
 
-    def __init__(self, options, *, ground_state_data=None, **kwargs):
+    def __init__(self, options, *, ground_state_data=None, ground_state_filename=None, **kwargs):
         super().__init__(options, **kwargs)
 
         resume_data = kwargs.get("resume_data", None)
@@ -129,13 +132,15 @@ class TimeDependentCorrelation(RealTimeEvolution):
                 self.logger.warning("ground-state energy not in resume data")
 
         if not self.loaded_from_checkpoint:
-            self.ground_state_filename = self.options.get('ground_state_filename', None)
-            if self.ground_state_filename is not None:
-                if ground_state_data is None:
-                    ground_state_data = hdf5_io.load(self.ground_state_filename)
-                else:
-                    self.logger.warning("Supplied a 'ground_state_filename' and ground_state_data as kwarg. "
-                                        "Ignoring 'ground_state_filename'.")
+            if ground_state_filename is None:
+                ground_state_filename = self.options.get('ground_state_filename', None)
+            if ground_state_data is None and ground_state_filename is not None:
+                self.logger.info(f"loading data from 'ground_state_filename'='{ground_state_filename}'")
+                ground_state_data = hdf5_io.load(ground_state_filename)
+            elif ground_state_data is not None and ground_state_filename is not None:
+                self.logger.warning("Supplied a 'ground_state_filename' and ground_state_data as kwarg. "
+                                    "Ignoring 'ground_state_filename'.")
+
             self.logger.info("Initializing from ground state data")
             self.init_from_gs_data(ground_state_data)
 
@@ -157,47 +162,23 @@ class TimeDependentCorrelation(RealTimeEvolution):
                 self.logger.warning("Ground state energy not saved in checkpoint results")
         super().resume_run()
 
-    def prepare_results_for_save(self):
-        # include psi_ground_state in resume data
-        results = super().prepare_results_for_save()
-        if self.options.get('save_resume_data', self.options['save_psi']):
-            results['resume_data'].update({'psi_ground_state': self.psi_ground_state})
-            results['resume_data'].update({'gs_energy': self.gs_energy})
-        return results
+    def get_resume_data(self):
+        resume_data = super().get_resume_data()
+        resume_data['psi_ground_state'] = self.psi_ground_state
+        resume_data['gs_energy'] = self.gs_energy
+        return resume_data
 
     def init_from_gs_data(self, gs_data):
         if gs_data is not None:
             if isinstance(gs_data, MPS):
                 # self.psi_ground_state = gs_data ?
                 raise NotImplementedError("Only hdf5 and dictionaries are supported as ground state input")
-            self.check_and_update_params_from_gs_data(gs_data)
+            self._check_and_update_params_from_gs_data(gs_data)
 
     def _connect_measurements(self):
         """Connect :func:`m_correlation_function` to measurements."""
         self._connect_measurements_fct('simulation_method', 'm_correlation_function', priority=1)
         super()._connect_measurements()
-
-    @classmethod
-    def from_gs_search(cls, filename, sim_params, **kwargs):
-        r"""Create class based on file containing the ground state.
-
-        Initialize an instance of a :class:`SpectralSimulation` from
-        a finished run of :class:`~tenpy.simulation.ground_state_search.GroundStateSearch`. This simply fetches
-        the relevant parameters ('model_params', 'psi')
-
-        Parameters
-        ----------
-        filename : str or dict
-            The filename of the ground state search output to be loaded.
-            Alternatively the results as dictionary.
-        sim_params : dict
-            The necessary simulation parameters, it is necessary to specify final_time (inherited from
-            :class:`RealTimeEvolution`). The parameters of the spectral simulation should also be given similar
-            to the example params in the :class:`SpectralSimulation`.
-        **kwargs :
-            Further keyword arguments given to :meth:`__init__` of the class :class:`SpectralSimulation`.
-        """
-        return cls(options=sim_params, gs_data=filename, **kwargs)
 
     def init_state(self):
         # make sure state is not reinitialized if psi and psi_ground_state are given
@@ -224,7 +205,7 @@ class TimeDependentCorrelation(RealTimeEvolution):
         if self.gs_energy is None:
             self.gs_energy = self.model.H_MPO.expectation_value(self.psi_ground_state)
 
-    def check_and_update_params_from_gs_data(self, gs_data):
+    def _check_and_update_params_from_gs_data(self, gs_data):
         sim_class = gs_data['version_info']['simulation_class']
         if sim_class != 'GroundStateSearch':
             self.logger.warning("The Simulation is not loaded from a GroundStateSearch...")
@@ -401,11 +382,11 @@ class TimeDependentCorrelationExperimental(TimeDependentCorrelation):
             If True, instantiates a second engine and performs time_evolution on the (eigenstate) bra.
 
     """
-    def __init__(self, options, *, gs_data=None, **kwargs):
-        super().__init__(options, gs_data=gs_data, **kwargs)
+    def __init__(self, options, *, ground_state_data=None, ground_state_filename=None, **kwargs):
+        super().__init__(options, ground_state_data=ground_state_data,
+                         ground_state_filename=ground_state_filename, **kwargs)
         self.engine_ground_state = None
         self.evolve_bra = self.options.get('evolve_bra', False)
-        # for resuming simulation from checkpoint # this is provided in super().__init__
         # TODO: How to ensure resuming from checkpoint works, when evolve_bra is True ?
 
     def init_algorithm(self, **kwargs):
@@ -483,13 +464,14 @@ class SpectralSimulation(TimeDependentCorrelation):
         spectral_function_params: dict
             Additional parameters for post-processing of the spectral function (i.e. applying
             linear prediction or gaussian windowing. The keys correspond to the kwargs of
-            :func:`tenpy.tools.spectral_function_tools.spectral_function`.
+            :func:`~tenpy.tools.spectral_function_tools.spectral_function`.
 
     """
     default_post_processing = []
 
-    def __init__(self, options, *, ground_state_data=None, **kwargs):
-        super().__init__(options, ground_state_data=ground_state_data, **kwargs)
+    def __init__(self, options, *, ground_state_data=None, ground_state_filename=None, **kwargs):
+        super().__init__(options, ground_state_data=ground_state_data,
+                         ground_state_filename=ground_state_filename, **kwargs)
 
     def run_post_processing(self):
         extra_kwargs = self.options.get('spectral_function_params', {})
