@@ -268,6 +268,7 @@ class Simulation:
 
         self.group_split()
         self.final_measurements()
+        self.run_post_processing()
         self.results['finished_run'] = True
         results = self.save_results()
         self.logger.info('finished simulation run\n' + "=" * 80)
@@ -343,6 +344,7 @@ class Simulation:
         self.resume_run_algorithm()  # continue with the actual algorithm
         self.group_split()
         self.final_measurements()
+        self.run_post_processing()
         self.results['finished_run'] = True
         results = self.save_results()
         self.logger.info('finished simulation (resume_)run\n' + "=" * 80)
@@ -771,9 +773,11 @@ class Simulation:
                     self.logger.warning(traceback.format_exc())
                     self.logger.info("continuing saving results without post-processing")
 
-    def _post_processing(self, DL, module_name, func_name, extra_kwargs={}):
+    def _post_processing(self, DL: DataLoader, module_name: str, func_name: str, extra_kwargs: dict = None):
         """Apply only one post-processing step."""
         # get function / from module_name namespace
+        if extra_kwargs is None:
+            extra_kwargs = {}
         function = hdf5_io.find_global(module_name, func_name)
         # check if results_key is supplied
         if 'results_key' in extra_kwargs:
@@ -989,7 +993,7 @@ class Simulation:
         hdf5_io.save(results, output_filename)
 
     def prepare_results_for_save(self):
-        """Bring the `results` into a state suitable for saving. Perform post-processing on results.
+        """Bring the `results` into a state suitable for saving.
 
         For example, this can be used to convert lists to numpy arrays, to add more meta-data,
         or to clean up unnecessarily large entries.
@@ -1007,7 +1011,6 @@ class Simulation:
             A copy of :attr:`results` containing everything to be saved.
             Measurement results are converted into a numpy array (if possible).
         """
-        self.run_post_processing()  # TODO: when checkpointing this gets called every time!!
         results = self.results.copy()
         results['simulation_parameters'] = self.options.as_dict()
         if 'measurements' in results:
@@ -1025,7 +1028,7 @@ class Simulation:
         return results
 
     def get_resume_data(self) -> dict:
-        """"Get resume data for a Simulation.
+        """Get resume data for a Simulation.
 
         Return data from :meth:`~tenpy.algorithms.Algorithm.get_resume_data` in base :class:`Simulation`.
         Subclasses should override this with ``resume_data = super().get_resume_data()``, s.t.
