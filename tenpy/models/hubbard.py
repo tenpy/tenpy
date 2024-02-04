@@ -98,12 +98,6 @@ class BoseHubbardChain(BoseHubbardModel, NearestNeighborModel):
         factor : int
             saving factor, due to conservation
 
-        Options
-        -------
-        .. cfg:configoptions :: Model
-
-            saving_factor :: None | int
-                Quantizes the RAM saving, due to conservation laws. By default it is 1/8 for the BoseHubbardChain. However, this factor might be overwritten, if a better approximation is known. In this case one can pass it via the argument ''saving_factor'' to the model.
 
         """
         chinfo = self.lat.unit_cell[0].leg.chinfo
@@ -111,7 +105,7 @@ class BoseHubbardChain(BoseHubbardModel, NearestNeighborModel):
         for mod in chinfo.mod:
             if mod == 1:
                 savings *= 1/8 # this is what we found empirically
-        return self.options.get("saving_factor", savings)
+        return savings
 
 
 class FermiHubbardModel(CouplingMPOModel):
