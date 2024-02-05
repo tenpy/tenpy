@@ -110,7 +110,7 @@ Boundary conditions
 -------------------
 
 The :class:`~tenpy.models.lattice.Lattice` defines the **boundary conditions** `bc` in each direction. 
-It can be one of the usual ``'open'`` or ``'periodic'`` in each direcetion and will be used by the
+It can be one of the usual ``'open'`` or ``'periodic'`` in each direction and will be used by the
 :class:`~tenpy.models.model.CouplingModel` to determine whether there should be added periodic couplings in the
 corresponding directions.
 
@@ -162,7 +162,7 @@ The :class:`~tenpy.models.lattice.IrregularLattice` allows you to add or remove 
 The doc-string of :class:`~tenpy.models.lattice.IrregularLattice` contains several examples. Let us consider another one
 here, where we use the IrregularLattice to "fix" the boundary of the Honeycomb lattice.
 When we use ``"open"`` boundary conditions for a finite system, there are two sites (shown on the lower left, and upper right corners of the figure below),
-wich are not included into any hexagonal. The following example shows how to remove them from the system:
+which are not included into any hexagonal. The following example shows how to remove them from the system:
 
 .. plot ::
     :include-source:

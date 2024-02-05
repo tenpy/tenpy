@@ -12,7 +12,7 @@ tenpy
     (This file is also necessary to mark the folder as part of the python package.
     Consequently, other subfolders of the git repo should not include a ``__init__.py`` file.)
 toycodes
-    Simple toy codes completely independet of the remaining library (i.e., codes in ``tenpy/``).
+    Simple toy codes completely independent of the remaining library (i.e., codes in ``tenpy/``).
     These codes should be quite readable and try to give a flavor of how (some of) the algorithms work.
 examples
     Some example files demonstrating the usage and interface of the library, including pure python files, jupyter
@@ -53,10 +53,10 @@ High-level simulations
 ----------------------
 The high-level interface is given by simulations, which probably handle everything you want to run on a computing cluster job:
 Given a set of parameters (often in the form of a parameter input file), 
-the simulation consists of initialiing the model, tensor network and algorithms, running the algorithm,
+the simulation consists of initializing the model, tensor network and algorithms, running the algorithm,
 performing some measurements and finally saving the results to disk.
 It also provides some extra functionality like the ability to resume an interrupted simulation, 
-e.g., if your job got killed on the cluster due to runtime limitis.
+e.g., if your job got killed on the cluster due to runtime limits.
 Ideally, the simulation (sub) class represents the whole simulation from start to end, giving reproducible results
 depending only on the parameters given to it.
 
