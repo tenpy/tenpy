@@ -12,7 +12,7 @@ Getting the source
 The following instructions are for (some kind of) Linux, and tested on Ubuntu. 
 However, the code itself should work on other operating systems as well (in particular MacOS and Windows).
 
-The offical repository is at https://github.com/tenpy/tenpy.git.
+The official repository is at https://github.com/tenpy/tenpy.git.
 To get the latest version of the code, you can clone it with [git]_ using the following commands::
 
     git clone https://github.com/tenpy/tenpy.git $HOME/TeNPy

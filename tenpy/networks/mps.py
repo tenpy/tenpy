@@ -144,7 +144,7 @@ After applying such an evolution operator, you indeed stay in the form of a tran
 iMPS, so this is the form *assumed* when calling MPO :meth:`~tenpy.networks.mpo.MPO.apply` on an
 MPS.
 """
-# Copyright 2018-2023 TeNPy Developers, GNU GPLv3
+# Copyright 2018-2024 TeNPy Developers, GNU GPLv3
 
 from abc import ABCMeta, abstractmethod
 import numpy as np
@@ -1937,21 +1937,21 @@ class MPS(BaseMPSExpectationValue):
         -------
         Say you have three local MPS with ``mps_covering = [psi_A, psi_B, psi_C]``
         with `A`, `B` and `C` tensors on 3, 2, and 2 sites, respectively.
-        Using the ``index_map=[[0, 1, 3], [2, 5], [4, 6]]`` would combine them as:
+        Using the ``index_map=[[0, 1, 3], [2, 5], [4, 6]]`` would combine them as::
 
-            A0-A1----A2 C0----C1
-            |  |     |  |     |
-            |  |  B0-|--|--B1 |
-            |  |  |  |  |  |  |
-            0  1  2  3  4  5  6
+            |    A0-A1----A2 C0----C1
+            |    |  |     |  |     |
+            |    |  |  B0-|--|--B1 |
+            |    |  |  |  |  |  |  |
+            |    0  1  2  3  4  5  6
 
-        Using the ``index_map=[[1, 2, 0], [3, 5], [6, 4]]`` would rather combine them as:
+        Using the ``index_map=[[1, 2, 0], [3, 5], [6, 4]]`` would rather combine them as::
 
-            A2----.     C1----C0
-            |     |     |     |
-            |  A0-A1 B0-|--B1 |
-            |  |  |  |  |  |  |
-            0  1  2  3  4  5  6
+            |    A2----.     C1----C0
+            |    |     |     |     |
+            |    |  A0-A1 B0-|--B1 |
+            |    |  |  |  |  |  |  |
+            |    0  1  2  3  4  5  6
 
         As another example, let's generalize :meth:`from_singlets` to "spin-full" fermions
         represented by the (spin-less!) :class:`~tenpy.networks.site.FermionSite` with an extra
@@ -1961,7 +1961,7 @@ class MPS(BaseMPSExpectationValue):
 
             from tenpy.networks.mps import MPS
             from tenpy.networks.site import FermionSite
-            from tenpy.networks.lattice import SquareLattice, MultiSpeciesLattice
+            from tenpy.models.lattice import Square, MultiSpeciesLattice
 
         .. doctest :: product_mps_covering
 
