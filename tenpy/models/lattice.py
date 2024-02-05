@@ -187,7 +187,9 @@ class Lattice:
         if basis is None:
             basis = np.eye(self.dim)
         self.unit_cell_positions = np.array(positions)
-        self.basis = np.array(basis)
+        self._basis = np.array(basis)
+        self._reciprocal_basis = None  # lazy evaluation of recip. basis
+        self._BZ = None
         self.boundary_conditions = bc  # property setter for self.bc and self.bc_shift
         self.bc_MPS = bc_MPS
         self.position_disorder = None  # no disorder by default
@@ -206,8 +208,6 @@ class Lattice:
             if name in self.pairs:
                 raise ValueError("{0!s} specified twice!".format(name))
             self.pairs[name] = NN
-        self._reciprocal_basis = None  # lazy evaluation of recip. basis
-        self._BZ = None
         self.test_sanity()  # check consistency
 
     def test_sanity(self):
@@ -340,6 +340,16 @@ class Lattice:
             obj.position_disorder = None
         obj.test_sanity()
         return obj
+
+    @property
+    def basis(self):
+        return self._basis
+
+    @basis.setter
+    def basis(self, new_basis):
+        self._basis = np.array(new_basis)
+        self._reciprocal_basis = None  # reset reciprocal basis
+        self._BZ = None
 
     @property
     def dim(self):
@@ -1455,6 +1465,8 @@ class Lattice:
             The axes on which we should plot.
         plot_symmetric : bool, default=True
             if True, centers the plot around the origin
+        origin : iterable
+            coordinates of the origin
         **kwargs :
             Keyword arguments for ``ax.arrow``.
         """
@@ -1551,7 +1563,8 @@ class Lattice:
         r"""Reciprocal basis vectors of the lattice.
 
         The reciprocal basis vectors obey :math:`a_i b_j = 2 \pi \delta_{i, j}`, such that
-        ``b_j = reciprocal_basis[j]``"""
+        ``b_j = reciprocal_basis[j]``
+        """
         if self._reciprocal_basis is None:
             if self.dim == 1:
                 self._reciprocal_basis = (2*np.pi/np.linalg.norm(self.basis)).reshape(1, 1)
@@ -3107,6 +3120,8 @@ class SimpleBZ:
         and N the number of vertices.
     basis : array_like
         the reciprocal basis of the real space lattice, i.e. the basis in reciprocal space
+    dim : int
+        dimension of the Brillouin Zone
     """
     def __init__(self, vertices, basis, dim: int):
         assert dim == 1 or dim == 2, 'SimpleBZ is only defined for dimensions 1 and 2'
@@ -3126,7 +3141,7 @@ class SimpleBZ:
             assert vertices.ndim == 2, "Pass vertices as list/array of points of x, y coordinates"
             x_coords = vertices[:, 0]
             y_coords = vertices[:, 1]
-            angles = np.arctan2(x_coords, y_coords)
+            angles = np.arctan2(y_coords, x_coords)  # note that x and y coords are changed
             angles += (angles < 0) * 2 * np.pi  # shift angle into interval [0, 2 pi]
             return vertices[np.argsort(angles)]
 
@@ -3159,8 +3174,8 @@ class SimpleBZ:
         Parameters
         ----------
         basis : array_like
-            basis of a lattice in reciprocal space, s.t. the basis vectors are b1 = basis[0],
-            b2 = basis[1]
+            basis of a lattice in reciprocal space, s.t. the basis vectors are ``b1 = basis[0]``,
+            ``b2 = basis[1]``
         n_vecs_generated : int, default=30
             number of lattice points to generate around the origin
 
@@ -3201,7 +3216,7 @@ class SimpleBZ:
         else:
             raise ValueError("The area of a Brillouin Zone is not defined in 1 dimension")
 
-    def contains_points(self, points):
+    def contains_points(self, points) -> np.ndarray:
         """Checks whether given points lie inside the 1st Brillouin Zone.
 
         Parameters
@@ -3211,9 +3226,9 @@ class SimpleBZ:
 
         Returns
         -------
-        ndarray : bool
-            boolean array of shape points.shape[:-1] if 2D or points.shape if 1D, indicating
-            whether the corresponding point in `points` is contained in the Brillouin Zone
+        ndarray :
+            boolean array of shape ``points.shape[:-1]`` if 2D or points.shape if 1D, indicating
+            whether the corresponding point in ``points`` is contained in the Brillouin Zone
         """
         points = np.array(points).astype(float)  # accept also lists and tuples as input
         if self.dim == 1:
@@ -3246,7 +3261,7 @@ class SimpleBZ:
         Returns
         -------
         reduced_points : ndarray
-            of shape points.shape the array of the points now reduced to the 1st BZ
+            of shape ``points.shape`` the array of the points now reduced to the 1st BZ
         """
         all_points = np.array(points).astype(float)
         not_in_BZ = np.invert(self.contains_points(all_points))
@@ -3360,8 +3375,8 @@ class SimpleBZ:
         Parameters
         ----------
         basis : array_like
-            basis of a lattice in reciprocal space, s.t. the basis vectors are b1 = basis[0],
-            b2 = basis[1]
+            basis of a lattice in reciprocal space, s.t. the basis vectors are ``b1 = basis[0]``,
+            ``b2 = basis[1]``
 
         Returns
         -------
