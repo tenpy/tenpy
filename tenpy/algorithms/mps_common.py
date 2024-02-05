@@ -29,6 +29,7 @@ from .truncation import truncate, svd_theta, TruncationError
 from ..linalg import np_conserved as npc
 from ..tools.params import asConfig
 from ..tools.misc import find_subclass
+from ..tools.process import memory_usage
 import numpy as np
 import time
 import warnings
@@ -40,6 +41,7 @@ logger = logging.getLogger(__name__)
 
 __all__ = [
     'Sweep',
+    'IterativeSweeps',
     'EffectiveH',
     'OneSiteH',
     'TwoSiteH',
@@ -721,6 +723,124 @@ class Sweep(Algorithm):
             self.sweep(optimize=False)  # (discard return value)
             self.mixer = mixer  # recover the original mixer
 
+
+class IterativeSweeps(Sweep):
+    r"""Prototype class for algorithms that iterate the same sweep until convergence.
+
+    Examples for such algorithms are DMRG and variational compression.
+    This is a base class, implementing :meth:`run` in terms of other methods.
+    Subclasses should implement :meth:`run_iteration` and :meth:`is_converged`.
+    It might be useful to overwrite :meth:`pre_run_initialize`, :meth:`status_update`,
+    :meth:`stopping_criterion` or :meth:`post_run_cleanup`.
+    """
+
+    def run(self):
+        self.shelve = False
+        result = self.pre_run_initialize()
+        is_first_sweep = True
+        while True:
+            iteration_start_time = time.time()
+            if self.stopping_criterion(iteration_start_time=iteration_start_time):
+                break
+            if not is_first_sweep:
+                self.checkpoint.emit(self)
+            result = self.run_iteration()
+            self.status_update(iteration_start_time=iteration_start_time)
+            is_first_sweep = False
+        self.post_run_cleanup()
+        return result
+
+    def pre_run_initialize(self):
+        """Perform preparations before :meth:`run_iteration` is iterated.
+
+        Returns
+        -------
+        result
+            The object to be returned by :meth:`run` in case of immediate convergence, i.e.
+            if no iterations are performed.
+        """
+        self.mixer_activate()
+        return None
+
+    def run_iteration(self):
+        """Perform a single iteration.
+
+        Returns
+        -------
+        result
+            The object to be returned by :meth:`run` if the main loop terminates after this
+            iteration
+        """
+        raise NotImplementedError("Subclasses should implement this.")
+    
+    def status_update(self, iteration_start_time: float):
+        """Emits a status message to the logging system after an iteration.
+
+        Parameters
+        ----------
+        iteration_start_time: float
+            The ``time.time()`` at the start of the last iteration
+        """
+        # only print the bare bones information that is guaranteed to be available
+        # subclasses should overwrite this
+        logger.info(
+            "checkpoint after sweep %(sweeps)d\n"
+            "Current memory usage %(mem).1fMB, wall time: %(wall_time).1fs\n"
+            "chi: %(chi)s\n"
+            "%(sep)s", {
+                'sweeps': self.sweeps,
+                'mem': memory_usage(),
+                'wall_time': time.time() - iteration_start_time,
+                'chi': self.psi.chi if self.psi.L < 40 else max(self.psi.chi),
+                'sep': "=" * 80,
+            }
+        )
+        
+    def stopping_criterion(self, iteration_start_time: float) -> bool:
+        """Determines if the main loop should be terminated.
+
+        Parameters
+        ----------
+        iteration_start_time : float
+            The ``time.time()`` at the start of the last iteration
+
+        Returns
+        -------
+        should_break : bool
+            If ``True``, the main loop in :meth:`run` is broken.
+        """
+        min_sweeps = self.options.get('min_sweeps', 1)
+        max_sweeps = self.options.get('max_sweeps', 1000)
+        max_seconds = 3600 * self.options.get('max_hours', 24 * 365)
+        
+        if self.sweeps > max_sweeps:
+            return True
+        if self.sweeps > min_sweeps and self.is_converged():
+            if self.mixer is None:
+                return True
+            else:
+                logger.info("Convergence criterion reached with enabled mixer. "
+                            "Disable mixer and continue")
+                self.mixer_deactivate()
+        if iteration_start_time - self.time0 > max_seconds:
+            self.shelve = True
+            logger.warning(f'{self.__class__.__name__}: maximum time limit reached. '
+                           f'Shelve simulation.')
+            return True
+        return False
+
+    def is_converged(self) -> bool:
+        """Determines if the algorithm is converged.
+
+        Does not cover any other reasons to abort, such as reaching a time limit.
+        Such checks are covered by :meth:`stopping_condition`.
+        """
+        raise NotImplementedError("Subclasses should implement this.")
+    
+    def post_run_cleanup(self):
+        """Perform any final steps or clean up after the main loop has terminated."""
+        self.mixer_cleanup()
+        
 
 class EffectiveH(NpcLinearOperator):
     """Prototype class for local effective Hamiltonians used in sweep algorithms.
@@ -1925,7 +2045,7 @@ class SubspaceExpansion(Mixer):
         return U, S, VH, err
 
 
-class VariationalCompression(Sweep):
+class VariationalCompression(IterativeSweeps):
     """Variational compression of an MPS (in place).
 
     To compress an MPS `psi`, use ``VariationalCompression(psi, options).run()``.
@@ -1977,6 +2097,40 @@ class VariationalCompression(Sweep):
         super().__init__(psi, None, options, resume_data=resume_data)
         self.renormalize = []
         self._theta_diff = []
+        self.options.setdefault('max_sweeps', 2)
+
+    def pre_run_initialize(self):
+        super().pre_run_initialize()
+        self.options.deprecated_alias("N_sweeps", "max_sweeps",
+                                      "Also check out the other new convergence parameters "
+                                      "min_N_sweeps and tol_theta_diff!")
+        max_sweeps = self._max_sweeps = self.options.get("max_sweeps", 2)
+        min_sweeps = self._min_sweeps = self.options.get("min_sweeps", 1)
+        tol_diff = self._tol_theta_diff = self.options.get("tol_theta_diff", 1.e-8)
+        if min_sweeps == max_sweeps and tol_diff is not None:
+            warnings.warn("VariationalCompression with min_sweeps=max_sweeps: "
+                          "we recommend to set tol_theta_diff=None to avoid overhead")
+        return TruncationError()
+
+    def run_iteration(self):
+        self.renormalize = []
+        self._theta_diff = []
+        max_trunc_err = self.sweep()
+        return TruncationError(max_trunc_err, 1. - 2. * max_trunc_err)
+
+    def is_converged(self):
+        if self.sweeps >= self._min_sweeps and self._tol_theta_diff is not None:
+            max_diff = max(self._theta_diff[-(self.psi.L - self.n_optimize):])
+            if max_diff < self._tol_theta_diff:
+                logger.debug(f'VariationalCompression converged after {self.sweeps} sweeps '
+                             f'with theta_diff={max_diff}')
+                return True
+        return False
+
+    def post_run_cleanup(self):
+        super().post_run_cleanup()
+        if self.psi.finite:
+            self.psi.norm *= max(self.renormalize)
 
     def run(self):
         """Run the compression.
@@ -1992,30 +2146,7 @@ class VariationalCompression(Sweep):
         max_trunc_err : :class:`~tenpy.algorithms.truncation.TruncationError`
             The maximal truncation error of a two-site wave function.
         """
-        self.options.deprecated_alias("N_sweeps", "max_sweeps",
-                                      "Also check out the other new convergence parameters "
-                                      "min_N_sweeps and tol_theta_diff!")
-        max_sweeps = self.options.get("max_sweeps", 2)
-        min_sweeps = self.options.get("min_sweeps", 1)
-        tol_diff = self._tol_theta_diff = self.options.get("tol_theta_diff", 1.e-8)
-        if min_sweeps == max_sweeps and tol_diff is not None:
-            warnings.warn("VariationalCompression with min_sweeps=max_sweeps: "
-                          "we recommend to set tol_theta_diff=None to avoid overhead")
-
-        for i in range(max_sweeps):
-            self.renormalize = []
-            self._theta_diff = []
-            max_trunc_err = self.sweep()
-            if i + 1 >= min_sweeps and tol_diff is not None:
-                max_diff = max(self._theta_diff[-(self.psi.L - self.n_optimize):])
-                if max_diff < tol_diff:
-                    logger.debug("break VariationalCompression after %d sweeps "
-                                "with theta_diff=%.2e", i + 1, max_diff)
-                    break
-        if self.psi.finite:
-            self.psi.norm *= max(self.renormalize)
-        self.mixer_cleanup()
-        return TruncationError(max_trunc_err, 1. - 2. * max_trunc_err)
+        return super().run()
 
     def init_env(self, model=None, resume_data=None, orthogonal_to=None):
         """Initialize the environment.

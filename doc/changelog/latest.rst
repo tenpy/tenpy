@@ -58,6 +58,9 @@ Changed
   The mixer classes are now implemented in :mod:`tenpy.linalg.algorithms.mps_common`.
   Backwards-compatible wrappers with the old method names and signatures will be kept in
   :mod:`tenpy.linalg.algorithms.dmrg` until v1.0.
+- Introduce :class:`~tenpy.algorithms.mps_common.IterativeSweeps` to generalize algorithms that
+  repeat sweeps until convergence. In particular this makes the convergence check a modular
+  method which can be easily adapted via subclass.
 
 Fixed
 ^^^^^
@@ -83,3 +86,4 @@ Fixed
 - :issue:`289` that :meth:`~tenpy.networks.mps.MPS.correlation_length` raised errors for `charge_sector` np ndarrays.
   Further, allow to pass multiple charge sectors to loop over at once, add argument `return_charges`.
   Also, provide a :meth:`~tenpy.networks.mps.MPS.correlation_length_charge_sectors` convenience function to return valid charge sectors.
+- :issue:`153` that DMRG energy convergence criterion was verified after an arbitrarily large energy increase.
