@@ -1,5 +1,5 @@
 """A collection of tests for tenpy.linalg.krylov_based."""
-# Copyright 2018-2023 TeNPy Developers, GNU GPLv3
+# Copyright 2018-2024 TeNPy Developers, GNU GPLv3
 
 import tenpy.linalg.np_conserved as npc
 import numpy as np
