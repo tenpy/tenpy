@@ -1,9 +1,10 @@
 """Simple post-processing."""
-# Copyright 2020-2023 TeNPy Developers, GNU GPLv3
+# Copyright 2023-2024 TeNPy Developers, GNU GPLv3
 
 import os
 import numpy as np
 import logging
+
 from ..tools.spectral_function_tools import spectral_function, plot_correlations_on_lattice
 from ..tools import hdf5_io
 from ..tools.misc import to_iterable, get_recursive, set_recursive, find_subclass
@@ -20,14 +21,14 @@ __all__ = ['DataLoader', 'pp_spectral_function', 'pp_plot_correlations_on_lattic
 
 
 class DataLoader:
-    r"""PostProcessor class to handle IO and instantiating a model.
+    r"""Post-processing class to handle IO more easily and to directly instantiating a model/mps from a Simulation.
 
     Parameters
     ----------
     filename : str, optional
         Path to a hdf5 file.
     simulation :
-        An instance of a :class:`tenpy.simulations.simulation.Simulation`
+        An instance of a :class:`~tenpy.simulations.simulation.Simulation`
     data : dict, optional
         dictionary of simulation results (to be used in e.g. Jupyter Notebooks)
 
@@ -44,6 +45,10 @@ class DataLoader:
     def __init__(self, filename=None, simulation=None, data=None):
         self.logger.info("Initializing\n%s\n%s\n%s", "=" * 80, self.__class__.__name__,
                          "=" * 80)
+
+        self._measurements = None
+        self.sim_params = None
+
         if filename is not None:
             self.filename = filename
             self.logger.info(f"Loading data from {self.filename}")
@@ -91,7 +96,7 @@ class DataLoader:
 
     @property
     def measurements(self):
-        if not hasattr(self, '_measurements'):
+        if self._measurements is None:
             self._measurements = self._load('measurements', convert_to_numpy=True)
         return self._measurements
 
@@ -159,6 +164,12 @@ class DataLoader:
     def get_data(self, key, prefix='', convert_to_numpy=False):
         return self._load(key, prefix=prefix, convert_to_numpy=convert_to_numpy)
 
+    def save(self):
+        # TODO: for hdf5 files, should we specify a hdf5 saver?
+        filename = self.generate_unique_filename(self.filename, append_str='_processed')
+        self.logger.info(f"Saving Results to file: {filename}")
+        raise NotImplementedError()
+
     @staticmethod
     def generate_unique_filename(filename, append_str=''):
         base, extension = os.path.splitext(filename)
@@ -170,12 +181,6 @@ class DataLoader:
             count_append_number += 1
         return new_filename
 
-    def save(self):
-        # TODO: for hdf5 files, should we specify a hdf5 saver?
-        filename = self.generate_unique_filename(self.filename, append_str='_processed')
-        self.logger.info(f"Saving Results to file: {filename}")
-        raise NotImplementedError()
-
     @staticmethod
     def convert_list_to_ndarray(value):
         try:
@@ -184,7 +189,7 @@ class DataLoader:
                 if value.dtype == np.dtype(object):
                     raise Exception("Can't convert results to numpy array")
         except Exception as e:
-            logging.warning(f"{e}, proceeding without converting")
+            logging.exception(f"{e}, proceeding without converting")
         return value
 
     @property
@@ -214,7 +219,8 @@ class DataLoader:
         return self._psi
 
     def get_psi(self):
-        raise NotImplementedError()
+        raise NotImplementedError("Getting psi automatically is not supported yet. "
+                                  "If 'psi' is a key in your data, consider using ``get_data('psi')`` for now.")
 
     def get_all_keys_as_dict(self):
         if hasattr(self, '_Hdf5Loader'):
@@ -243,7 +249,7 @@ def get_all_hdf5_keys(h5_group):
 def pp_spectral_function(DL: DataLoader, *, correlation_key, conjugate_correlation=False, **kwargs):
     r"""Given a time dependent correlation function C(t, r), calculate its Spectral Function.
 
-    After a run of :class:`tenpy.simulations.time_evolution.TimeDependentCorrelation`, a :class:`DataLoader` instance
+    After a run of :class:`~tenpy.simulations.time_evolution.TimeDependentCorrelation`, a :class:`DataLoader` instance
     should be passed, from which the underlying lattice and additional parameters (e.g. ``dt``) can be extracted.
     The `correlation_key` must coincide with the key of the time-dep. correlation function in the output of the
     Simulation.
@@ -254,7 +260,7 @@ def pp_spectral_function(DL: DataLoader, *, correlation_key, conjugate_correlati
     correlation_key : str
     conjugate_correlation : bool | False
     **kwargs
-        keyword arguments to :func:`tenpy.tools.spectral_function_tools.spectral_function`
+        keyword arguments to :func:`~tenpy.tools.spectral_function_tools.spectral_function`
     """
     lat = DL.lat
     dt = DL.sim_params['algorithm_params']['dt']
@@ -293,7 +299,7 @@ def pp_plot_correlations_on_lattice(DL: DataLoader, *, data_key, t_step=0, keys=
     default_dir : str
         default (sub-) directory under which to save the plot
     kwargs :
-        kwargs to :func:`tenpy.tools.spectral_function_tools.plot_correlations_on_lattice`
+        kwargs to :func:`~tenpy.tools.spectral_function_tools.plot_correlations_on_lattice`
     """
     import matplotlib.pyplot as plt
     if not os.path.exists(default_dir):
