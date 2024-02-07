@@ -15,7 +15,6 @@ from pathlib import Path
 import time
 import importlib
 import warnings
-import functools
 import traceback
 import numpy as np
 import logging
@@ -1041,7 +1040,7 @@ class Simulation:
         ----------
         alg_engine : :class:`~tenpy.algorithms.Algorithm`
             The engine of the algorithm. Not used in this function, mostly there for compatibility
-            with the :attr:`tenpy.algorithms.Algorithm.checkpoint` event.
+            with the :attr:`~tenpy.algorithms.Algorithm.checkpoint` event.
 
         Options
         -------
@@ -1050,7 +1049,7 @@ class Simulation:
             save_every_x_seconds : float | None
                 By default (``None``), this feature is disabled.
                 If given, save the :attr:`results` obtained so far at each
-                :attr:`tenpy.algorithm.Algorithm.checkpoint` when at least `save_every_x_seconds`
+                :attr:`~tenpy.algorithm.Algorithm.checkpoint` when at least `save_every_x_seconds`
                 seconds evolved since the last save (or since starting the algorithm).
                 To avoid unnecessary, slow disk input/output, the value will be increased if
                 saving takes longer than 10% of `save_every_x_seconds`.
@@ -1131,7 +1130,7 @@ def init_simulation(simulation_class='GroundStateSearch',
     -------
     results : dict
         The results of the Simulation, i.e., what
-        :meth:`tenpy.simulations.simulation.Simulation.run()` returned.
+        :meth:`~tenpy.simulations.simulation.Simulation.run()` returned.
     """
     SimClass = find_subclass(Simulation, simulation_class)
     if simulation_class_kwargs is None:
@@ -1165,7 +1164,7 @@ def run_simulation(simulation_class='GroundStateSearch',
     -------
     results : dict
         The results of the Simulation, i.e., what
-        :meth:`tenpy.simulations.simulation.Simulation.run()` returned.
+        :meth:`~tenpy.simulations.simulation.Simulation.run()` returned.
     """
     if simulation_class_name is not _deprecated_not_set:
         assert simulation_class == 'GroundStateSearch'
@@ -1213,7 +1212,7 @@ def init_simulation_from_checkpoint(*,
     -------
     results :
         The results from running the simulation, i.e.,
-        what :meth:`tenpy.simulations.Simulation.resume_run()` returned.
+        what :meth:`~tenpy.simulations.Simulation.resume_run()` returned.
 
     Notes
     -----
@@ -1274,7 +1273,7 @@ def resume_from_checkpoint(*,
     -------
     results :
         The results from running the simulation, i.e.,
-        what :meth:`tenpy.simulations.Simulation.resume_run()` returned.
+        what :meth:`~tenpy.simulations.Simulation.resume_run()` returned.
 
     Notes
     -----

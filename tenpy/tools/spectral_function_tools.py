@@ -1,14 +1,17 @@
 """Tools around spectral functions.
 
-This includes fourier transforms on a lattice, a function to get the spectral function from
-time-dependent correlation function, as well as several plotting functions.
-Those functions are used for and in the classes :class:`tenpy.simulations.time_evolution.TimeDependentCorrelation`
-and :class:`tenpy.simulations.time_evolution.SpectralFunction`.
-However, they can also be used in a standalone way on direct results (i.e. in an interactive ipython or
+This includes (spatial) fourier transforms on a :class:`~tenpy.models.lattice.Lattice`,
+a :func:`spectral_function` to compute the spectral function from time dependent correlations
+on a lattice (which incorporates linear prediction and gaussian windowing directly).
+Those functions are used for the classes :class:`~tenpy.simulations.time_evolution.TimeDependentCorrelation`
+and :class:`~tenpy.simulations.time_evolution.SpectralFunction`.
+However, they can also be used in a standalone way on available results (i.e. in an interactive ipython or
 jupyter notebook session).
 """
-# Copyright 2020-2023 TeNPy Developers, GNU GPLv3
+# Copyright 2023-2024 TeNPy Developers, GNU GPLv3
+
 import numpy as np
+
 from .prediction import linear_prediction
 
 __all__ = ['spectral_function', 'fourier_transform_space', 'fourier_transform_time',
@@ -18,10 +21,11 @@ __all__ = ['spectral_function', 'fourier_transform_space', 'fourier_transform_ti
 
 def spectral_function(time_dep_corr, lat, dt: float, gaussian_window: bool = False, sigma: float = 0.4,
                       linear_predict: bool = False, rel_prediction_time: float = 1, rel_num_points: float = 0.3,
-                      truncation_mode: str = 'renormalize', rel_split: float = 0, axis_time=0, axis_space=1):
+                      truncation_mode: str = 'renormalize', rel_split: float = 0,
+                      axis_time: int = 0, axis_space: int = 1):
     r"""Given a time dependent correlation function C(t, r), calculate its Spectral Function.
 
-    After a run of :class:`tenpy.simulations.time_evolution.TimeDependentCorrelation`, a :class:`DataLoader` instance
+    After a run of :class:`~tenpy.simulations.time_evolution.TimeDependentCorrelation`, a :class:`DataLoader` instance
     should be passed, from which the underlying lattice and additional parameters (e.g. ``dt``) can be extracted.
     The `correlation_key` must coincide with the key of the time-dep. correlation function in the output of the
     Simulation.
@@ -30,7 +34,7 @@ def spectral_function(time_dep_corr, lat, dt: float, gaussian_window: bool = Fal
     ----------
     time_dep_corr : np.ndarray
         Time dependent correlation :math`C(t, r)`
-    lat : :class:`tenpy.models.lattice.Lattice`
+    lat : :class:`~tenpy.models.lattice.Lattice`
         instance of a lattice
     dt : float
         time-step discretization of the ``t_dep_correlation``
@@ -45,7 +49,7 @@ def spectral_function(time_dep_corr, lat, dt: float, gaussian_window: bool = Fal
     rel_num_points : float
         relative percentage of last points to base linear prediction on
     truncation_mode : str
-        truncation_mode of :func:`tenpy.tools.prediction.get_alpha_and_c`
+        truncation_mode of :func:`~tenpy.tools.prediction.get_alpha_and_c`
     rel_split : float
         percentage of the data to be discarded during training
     axis_time :
@@ -76,7 +80,7 @@ def spectral_function(time_dep_corr, lat, dt: float, gaussian_window: bool = Fal
                                      axis=axis_time, truncation_mode=truncation_mode, rel_split=rel_split)
     # optional gaussian windowing
     if gaussian_window is True:
-        ft_space = apply_gaussian_windowing(ft_space, sigma, axes=axis_time)
+        ft_space = apply_gaussian_windowing(ft_space, sigma, axis=axis_time)
     # fourier transform in time C(k, t) -> C(k, w) = S
     s_k_w, w = fourier_transform_time(ft_space, dt)
     return {'S': s_k_w, 'k': k, 'k_reduced': k_reduced, 'w': w}
@@ -103,21 +107,12 @@ def fourier_transform_space(lat, a, axis=1):
         ft_space = np.fft.fftshift(ft_space, axes=(1, 2))
         k_x = np.fft.fftshift(k_x)
         k_y = np.fft.fftshift(k_y)
-        # make sure k is returned in correct basis
+        # make sure k is returned in correct basis (-> transform into reciprocal basis)
         b1, b2 = lat.reciprocal_basis
         k_x = b1 * k_x.reshape(-1, 1)  # multiply k_x by its basis vector (b1)
         k_y = b2 * k_y.reshape(-1, 1)  # multiply k_y by its basis vector (b2)
         # if k is indexed like (kx, ky) a coordinate (2d) is returned.
         k = k_x[:, np.newaxis, :] + k_y[np.newaxis, :, :]
-        # e.g., if k_x, k_y hold the following (2d) points, the above is equivalent to
-        # k_x = np.array([[1, 2, 3], [1, 1, 1]]).T
-        # k_y = np.array([[-2, -2], [1, 2]]).T
-        # k = np.zeros((3, 2, 2))
-        # for i in range(len(k_y)):
-        #     k[:, i, :] = k_x + k_y[i]
-        # # or equivalently
-        # # for i in range(len(k_x)):
-        # #     k[i, :, :] = k_x[i] + k_y
     return ft_space, k
 
 
@@ -132,7 +127,7 @@ def fourier_transform_time(a, dt, axis=0):
     return ft_time, w
 
 
-def apply_gaussian_windowing(a, sigma: float = 0.4, axes=0):
+def apply_gaussian_windowing(a, sigma: float = 0.4, axis=0):
     """Simple gaussian windowing function along an axes.
 
     Applying a windowing function avoids Gibbs oscillation. tn are time steps 0, 1, ..., N
@@ -143,7 +138,7 @@ def apply_gaussian_windowing(a, sigma: float = 0.4, axes=0):
         a ndarray where the time series is along axis `axes`
     sigma : float
         standard-deviation used for the gaussian window
-    axes : int
+    axis : int
         axes along which to apply the gaussian window
 
     Returns
@@ -151,20 +146,16 @@ def apply_gaussian_windowing(a, sigma: float = 0.4, axes=0):
     np.ndarray
     """
     # extract number of time-steps
-    n_tsteps = a.shape[axes]
+    n_tsteps = a.shape[axis]
     tn = np.arange(n_tsteps)
-    # create gaussian windowing function with the right shape
+    # create gaussian windowing function with the right length
     gaussian_window = np.exp(-0.5 * (tn / (n_tsteps * sigma)) ** 2)
-    # swap dimension which should be weighted (window applied to)
-    # to last dim, so np broadcasting can be used
-    swapped_a = np.swapaxes(a, -1, axes)
-    # apply window
-    weighted_arr = swapped_a * gaussian_window
-    # swap back to original position
-    return np.swapaxes(weighted_arr, axes, -1)
+    # swap dimension which should be weighted (window applied to) to last dim (for np broadcasting)
+    swapped_a = np.swapaxes(a, -1, axis)
+    weighted_arr = swapped_a * gaussian_window  # apply window
+    return np.swapaxes(weighted_arr, axis, -1)
 
 
-# TODO: make this function available on the lattice level, but allow an axis parameter for that
 def to_mps_geometry(lat, a):
     """Bring measurement in lattice geometry to mps geometry.
 
@@ -179,9 +170,12 @@ def to_mps_geometry(lat, a):
     a = np.take(a, mps_idx_flattened, axis=-1)
     return a
 
+
 def plot_correlations_on_lattice(ax, lat, correlations, pairs='nearest_neighbors',
                                  scale=1, color_pos='r', color_neg='g', color=None, zorder=0):
-    """Function to plot correlations on a lattice
+    """Function to plot correlations on a lattice.
+
+    The strength of the correlations is given by the thickness of connecting lines.
 
     Parameters
     ----------
@@ -222,7 +216,6 @@ def plot_correlations_on_lattice(ax, lat, correlations, pairs='nearest_neighbors
         pos_y = np.array([pos_i[:, 1], pos_j[:, 1]])
 
     strengths = correlations[all_mps_is, all_mps_js]
-    # plotting
     scaled_strengths = strengths * scale
 
     # differentiate between correlations larger than zero

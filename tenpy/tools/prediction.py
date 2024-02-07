@@ -1,5 +1,5 @@
 """This module contains functions for linear prediction."""
-# Copyright 2020-2023 TeNPy Developers, GNU GPLv3
+# Copyright 2023-2024 TeNPy Developers, GNU GPLv3
 
 import numpy as np
 from scipy.linalg import solve_toeplitz
@@ -8,7 +8,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-__all__ = ["linear_prediction", "simple_linear_prediction_1D", "get_lpc", "get_alpha_and_c"]
+__all__ = ["linear_prediction", "simple_linear_prediction_1d", "get_lpc", "get_alpha_and_c"]
 
 
 def linear_prediction(x, *args, axis=0, **kwargs):
@@ -32,12 +32,12 @@ def linear_prediction(x, *args, axis=0, **kwargs):
     np.ndarray
         Predictions along the given axis (default 0), concatenated with the original input
     """
-    pred_along_axis = np.apply_along_axis(simple_linear_prediction_1D, axis, x, *args, **kwargs)
+    pred_along_axis = np.apply_along_axis(simple_linear_prediction_1d, axis, x, *args, **kwargs)
     pred_along_axis_concat = np.concatenate([x, pred_along_axis], axis=axis)
     return pred_along_axis_concat
 
 
-def simple_linear_prediction_1D(x: np.ndarray, rel_prediction_time: float = 1, rel_num_points: float = 0.3,
+def simple_linear_prediction_1d(x: np.ndarray, rel_prediction_time: float = 1, rel_num_points: float = 0.3,
                                 truncation_mode: str = 'renormalize', rel_split: float = 0):
     """Linear prediction of a one-dimensional time series data.
 
@@ -73,13 +73,9 @@ def simple_linear_prediction_1D(x: np.ndarray, rel_prediction_time: float = 1, r
     p = int(N * rel_num_points)
     split_idx = int(N * rel_split)
 
-    # split the "training" data
-    x = x[split_idx:]
-
-    # get coefficients
-    lpc = get_lpc(x, p)
-    # get eigenvalues and eigenvectors
-    alpha, c = get_alpha_and_c(x, lpc, truncation_mode)
+    x = x[split_idx:]  # split the "training" data
+    lpc = get_lpc(x, p)  # get coefficients
+    alpha, c = get_alpha_and_c(x, lpc, truncation_mode)  # get eigenvalues and eigenvectors
     # fast version of the equivalent
     # predictions = [np.tensordot(c, alpha ** m_i, axes=(0, 0)) for m_i in range(1, m + 1)]
     multi_power = alpha[:, np.newaxis] ** np.arange(1, m + 1)
@@ -115,11 +111,11 @@ def get_lpc(x, p):
 
     """
     N = len(x)
-    correlations = correlate(x, x, mode='full')[N - 1:N + p]  # scipy version uses fft
+    correlations = correlate(x, x, mode='full')[N - 1:N + p]
     r = correlations[1:]
     R = correlations[:-1]
-    # getting array of coefficients
-    lpc = solve_toeplitz(R, r)
+
+    lpc = solve_toeplitz(R, r)  # getting array of coefficients
     # which is just solving:
     #    r = correlations[1:]
     #    R = scipy.linalg.toeplitz(correlations[:-1]) # Toeplitz matrix
@@ -139,7 +135,7 @@ def get_alpha_and_c(x, lpc, truncation_mode='cutoff', epsilon=10e-07):
     x : ndarray
         one-dimensional time series data
     lpc : ndarray
-        1D array containing the p linear prediction coefficients [a_p, a_{p-1}, ..., a_1] from the correlations of x
+        1D array containing the p linear prediction coefficients ``[a_p, a_{p-1}, ..., a_1]`` from the correlations of x
     truncation_mode : str
         the truncation mode (default is 'cutoff', which means that those eigenvalues will be cut)
         used for truncating the eigenvalues. Other options are 'renormalize' (meaning their absolute
