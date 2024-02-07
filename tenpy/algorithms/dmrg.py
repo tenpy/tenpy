@@ -45,7 +45,7 @@ from .truncation import truncate, svd_theta
 from ..tools.params import asConfig
 from ..tools.math import entropy
 from ..tools.process import memory_usage
-from .mps_common import Sweep, OneSiteH, TwoSiteH
+from .mps_common import IterativeSweeps, OneSiteH, TwoSiteH
 from . import mps_common
 
 __all__ = [
@@ -180,7 +180,7 @@ class DensityMatrixMixer(Mixer, mps_common.DensityMatrixMixer):
         return self.mixed_svd_2site(engine, theta, i0, update_LP, update_RP, qtotal_LR)
 
 
-class DMRGEngine(Sweep):
+class DMRGEngine(IterativeSweeps):
     """DMRG base class with common methods for the TwoSiteDMRG and SingleSiteDMRG.
 
     This engine is implemented as a subclass of :class:`~tenpy.algorithms.mps_common.Sweep`.
@@ -254,7 +254,11 @@ class DMRGEngine(Sweep):
         ------------- -------------------------------------------------------------------
         E             The energy *before* truncation (as calculated by Lanczos).
         ------------- -------------------------------------------------------------------
+        Delta_E       The change in `E` (above) since the last iteration.
+        ------------- -------------------------------------------------------------------
         S             Mean entanglement entropy (over bonds).
+        ------------- -------------------------------------------------------------------
+        Delta_S       The change in `S` (above) since the last iteration.
         ------------- -------------------------------------------------------------------
         max_S         Max entanglement entropy (over bonds).
         ------------- -------------------------------------------------------------------
@@ -281,6 +285,11 @@ class DMRGEngine(Sweep):
         self.diag_method = options.get('diag_method', 'default')
         self._entropy_approx = [None] * psi.L  # always left of a given site
         super().__init__(psi, model, options, **kwargs)
+        self.N_sweeps_check = self.options.get('N_sweeps_check', 1 if self.psi.finite else 10)
+        default_min_sweeps = int(1.5 * self.N_sweeps_check)
+        if self.chi_list is not None:
+            default_min_sweeps = max(max(self.chi_list.keys()), default_min_sweeps)
+        self.options.setdefault('min_sweeps', default_min_sweeps)
         mixer_options = self.options.subconfig('mixer_params')
         mixer_options.setdefault('amplitude', 1.e-5)
         disable_finite = 15
@@ -294,6 +303,130 @@ class DMRGEngine(Sweep):
     def DMRG_params(self):
         warnings.warn("renamed self.DMRG_params -> self.options", FutureWarning, stacklevel=2)
         return self.options
+
+    def pre_run_initialize(self):
+        super().pre_run_initialize()
+        E = np.nan
+        return E, self.psi
+
+    def run_iteration(self):
+        options = self.options
+        # parameters for lanczos
+        p_tol_to_trunc = options.get('P_tol_to_trunc', 0.05)
+        if p_tol_to_trunc is not None:
+            svd_min = self.trunc_params.silent_get('svd_min', 0.)
+            svd_min = 0. if svd_min is None else svd_min
+            trunc_cut = self.trunc_params.silent_get('trunc_cut', 0.)
+            trunc_cut = 0. if trunc_cut is None else trunc_cut
+            p_tol_min = max(1.e-30, svd_min**2 * p_tol_to_trunc, trunc_cut**2 * p_tol_to_trunc)
+            p_tol_min = options.get('P_tol_min', p_tol_min)
+            p_tol_max = options.get('P_tol_max', 1.e-4)
+        e_tol_to_trunc = options.get('E_tol_to_trunc', None)
+        if e_tol_to_trunc is not None:
+            e_tol_min = options.get('E_tol_min', 5.e-16)
+            e_tol_max = options.get('E_tol_max', 1.e-4)
+
+        # energy and entropy before the iteration:
+        if len(self.sweep_stats['E']) < 1:  # first iteration
+            E_old = np.nan
+            S_old = np.mean(self.psi.entanglement_entropy())
+        else:
+            E_old = self.sweep_stats['E'][-1]
+            S_old = self.sweep_stats['S'][-1]
+        
+        # perform sweeps
+        logger.info('Running sweep with optimization')
+        for i in range(self.N_sweeps_check - 1):
+            self.sweep(meas_E_trunc=False)
+        max_trunc_err = self.sweep(meas_E_trunc=True)
+        max_E_trunc = np.max(self.E_trunc_list)
+
+        # update lanczos_params depending on truncation error(s)
+        if p_tol_to_trunc is not None and max_trunc_err > p_tol_min:
+            P_tol = max(p_tol_min, min(p_tol_max, max_trunc_err * p_tol_to_trunc))
+            self.lanczos_params['P_tol'] = P_tol
+            self.lanczos_params.touch('P_tol')  # don't warn about unused P_tol, since
+            # the optimization might not even use the normal lanczos function.
+            logger.debug("set lanczos_params['P_tol'] = %.2e", P_tol)
+        if e_tol_to_trunc is not None and max_E_trunc > e_tol_min:
+            E_tol = max(e_tol_min, min(e_tol_max, max_E_trunc * e_tol_to_trunc))
+            self.lanczos_params['E_tol'] = E_tol
+            self.lanczos_params.touch('E_tol')
+            logger.debug("set lanczos_params['E_tol'] = %.2e", E_tol)
+
+        # update environment
+        if not self.finite:
+            update_env = options.get('update_env', self.N_sweeps_check // 2)
+            self.environment_sweeps(update_env)
+
+        # update statistics
+        entropy_bonds = self._entropy_approx
+        if self.finite:
+            entropy_bonds = entropy_bonds[1:]
+        max_S = max(entropy_bonds)
+        S = np.mean(entropy_bonds)
+        if not self.finite:  # iDMRG: need energy density
+            Es = self.update_stats['E_total']
+            age = self.update_stats['age']
+            delta = min(1 + 2 * self.env.L, len(age))
+            growth = (age[-1] - age[-delta])
+            E = (Es[-1] - Es[-delta]) / growth
+        else:
+            E = self.update_stats['E_total'][-1]
+        norm_err = np.linalg.norm(self.psi.norm_test())
+
+        self.sweep_stats['sweep'].append(self.sweeps)
+        self.sweep_stats['N_updates'].append(len(self.update_stats['i0']))
+        self.sweep_stats['E'].append(E)
+        self.sweep_stats['Delta_E'].append((E - E_old) / self.N_sweeps_check)
+        self.sweep_stats['S'].append(S)
+        self.sweep_stats['Delta_S'].append((S - S_old) / self.N_sweeps_check)
+        self.sweep_stats['max_S'].append(max_S)
+        self.sweep_stats['time'].append(time.time() - self.time0)
+        self.sweep_stats['max_trunc_err'].append(max_trunc_err)
+        self.sweep_stats['max_E_trunc'].append(max_E_trunc)
+        self.sweep_stats['max_chi'].append(np.max(self.psi.chi))
+        self.sweep_stats['norm_err'].append(norm_err)
+
+        return E, self.psi
+
+    def status_update(self, iteration_start_time: float):
+        logger.info(
+            "checkpoint after sweep %(sweeps)d\n"
+            "energy=%(E).16f, max S=%(max_S).16f, age=%(age)d, norm_err=%(norm_err).1e\n"
+            "Current memory usage %(mem).1fMB, wall time: %(wall_time).1fs\n"
+            "Delta E = %(dE).4e, Delta S = %(dS).4e (per sweep)\n"
+            "max trunc_err = %(trunc_err).4e, max E_trunc = %(E_trunc).4e\n"
+            "chi: %(chi)s\n"
+            "%(sep)s", {
+                'sweeps': self.sweeps,
+                'E': self.sweep_stats['E'][-1],
+                'max_S': self.sweep_stats['max_S'][-1],
+                'age': self.update_stats['age'][-1],
+                'norm_err': self.sweep_stats['norm_err'][-1],
+                'mem': memory_usage(),
+                'wall_time': time.time() - iteration_start_time,
+                'dE': self.sweep_stats['Delta_E'][-1],
+                'dS': self.sweep_stats['Delta_S'][-1],
+                'trunc_err': self.sweep_stats['max_trunc_err'][-1],
+                'E_trunc': self.sweep_stats['max_E_trunc'][-1],
+                'chi': self.psi.chi if self.psi.L < 40 else max(self.psi.chi),
+                'sep': "=" * 80,
+            })
+
+    def is_converged(self):
+        max_E_err = self.options.get('max_E_err', 1.e-8)
+        max_S_err = self.options.get('max_S_err', 1.e-5)
+        E = self.sweep_stats['E'][-1]
+        Delta_E = self.sweep_stats['Delta_E'][-1]
+        Delta_S = self.sweep_stats['Delta_S'][-1]
+        return abs(Delta_E / max(E, 1.)) < max_E_err and abs(Delta_S) < max_S_err
+    
+    def post_run_cleanup(self):
+        super().post_run_cleanup()
+        self._canonicalize(True)
+        logger.info(f'{self.__class__.__name__} finished after {self.sweeps} sweeps, '
+                    f'max chi={max(self.psi.chi)}')
 
     def run(self):
         """Run the DMRG simulation to find the ground state.
@@ -329,8 +462,8 @@ class DMRGEngine(Sweep):
                 See `E_tol_to_trunc`
             max_E_err : float
                 Convergence if the change of the energy in each step
-                satisfies ``-Delta E / max(|E|, 1) < max_E_err``. Note that
-                this is also satisfied if ``Delta E > 0``,
+                satisfies ``|Delta E / max(E, 1)| < max_E_err``. Note that
+                this might be satisfied even if ``Delta E > 0``,
                 i.e., if the energy increases (due to truncation).
             max_hours : float
                 If the DMRG took longer (measured in wall-clock time),
@@ -379,149 +512,8 @@ class DMRGEngine(Sweep):
                 environment for infinite boundary conditions,
                 performed every `N_sweeps_check` sweeps.
         """
-        options = self.options
-        start_time = self.time0
-        self.shelve = False
-        # parameters for lanczos
-        p_tol_to_trunc = options.get('P_tol_to_trunc', 0.05)
-        if p_tol_to_trunc is not None:
-            svd_min = self.trunc_params.silent_get('svd_min', 0.)
-            svd_min = 0. if svd_min is None else svd_min
-            trunc_cut = self.trunc_params.silent_get('trunc_cut', 0.)
-            trunc_cut = 0. if trunc_cut is None else trunc_cut
-            p_tol_min = max(1.e-30, svd_min**2 * p_tol_to_trunc, trunc_cut**2 * p_tol_to_trunc)
-            p_tol_min = options.get('P_tol_min', p_tol_min)
-            p_tol_max = options.get('P_tol_max', 1.e-4)
-        e_tol_to_trunc = options.get('E_tol_to_trunc', None)
-        if e_tol_to_trunc is not None:
-            e_tol_min = options.get('E_tol_min', 5.e-16)
-            e_tol_max = options.get('E_tol_max', 1.e-4)
-
-        # parameters for DMRG convergence criteria
-        N_sweeps_check = options.get('N_sweeps_check', 1 if self.psi.finite else 10)
-        min_sweeps = int(1.5 * N_sweeps_check)
-        if self.chi_list is not None:
-            min_sweeps = max(max(self.chi_list.keys()), min_sweeps)
-        min_sweeps = options.get('min_sweeps', min_sweeps)
-        max_sweeps = options.get('max_sweeps', 1000)
-        max_E_err = options.get('max_E_err', 1.e-8)
-        max_S_err = options.get('max_S_err', 1.e-5)
-        max_seconds = 3600 * options.get('max_hours', 24 * 365)
-        if not self.finite:
-            update_env = options.get('update_env', N_sweeps_check // 2)
-        E_old, S_old = np.nan, np.mean(self.psi.entanglement_entropy())  # initial dummy values
-        E, Delta_E, Delta_S = 1., 1., 1.
-        self.diag_method = options['diag_method']
-
-        self.mixer_activate()
-        is_first_sweep = True
-        # loop over sweeps
-        while True:
-            loop_start_time = time.time()
-            # check convergence criteria
-            if self.sweeps >= max_sweeps:
-                break
-            if (self.sweeps > min_sweeps and -Delta_E < max_E_err * max(abs(E), 1.)
-                    and abs(Delta_S) < max_S_err):
-                if self.mixer is None:
-                    break
-                else:
-                    logger.info("Convergence criterion reached with enabled mixer. "
-                                "Disable mixer and continue")
-                    self.mixer_deactivate()
-            if loop_start_time - start_time > max_seconds:
-                self.shelve = True
-                logger.warning("DMRG: maximum time limit reached. Shelve simulation.")
-                break
-            if not is_first_sweep:
-                self.checkpoint.emit(self)
-            # --------- the main work --------------
-            logger.info('Running sweep with optimization')
-            for i in range(N_sweeps_check - 1):
-                self.sweep(meas_E_trunc=False)
-            max_trunc_err = self.sweep(meas_E_trunc=True)
-            max_E_trunc = np.max(self.E_trunc_list)
-            # --------------------------------------
-            # update lanczos_params depending on truncation error(s)
-            if p_tol_to_trunc is not None and max_trunc_err > p_tol_min:
-                P_tol = max(p_tol_min, min(p_tol_max, max_trunc_err * p_tol_to_trunc))
-                self.lanczos_params['P_tol'] = P_tol
-                self.lanczos_params.touch('P_tol')  # don't warn about unused P_tol, since
-                # the optimization might not even use the normal lanczos function.
-                logger.debug("set lanczos_params['P_tol'] = %.2e", P_tol)
-            if e_tol_to_trunc is not None and max_E_trunc > e_tol_min:
-                E_tol = max(e_tol_min, min(e_tol_max, max_E_trunc * e_tol_to_trunc))
-                self.lanczos_params['E_tol'] = E_tol
-                self.lanczos_params.touch('E_tol')
-                logger.debug("set lanczos_params['E_tol'] = %.2e", E_tol)
-            # update environment
-            if not self.finite:
-                self.environment_sweeps(update_env)
-
-            # update values for checking the convergence
-            entropy_bonds = self._entropy_approx
-            if self.finite:
-                entropy_bonds = entropy_bonds[1:]
-            max_S = max(entropy_bonds)
-            S = sum(entropy_bonds) / len(entropy_bonds)  # mean
-            Delta_S = (S - S_old) / N_sweeps_check
-            S_old = S
-            if not self.finite:  # iDMRG: need energy density
-                Es = self.update_stats['E_total']
-                age = self.update_stats['age']
-                delta = min(1 + 2 * self.env.L, len(age))
-                growth = (age[-1] - age[-delta])
-                E = (Es[-1] - Es[-delta]) / growth
-            else:
-                E = self.update_stats['E_total'][-1]
-            Delta_E = (E - E_old) / N_sweeps_check
-            E_old = E
-            norm_err = np.linalg.norm(self.psi.norm_test())
-
-            # update statistics
-            self.sweep_stats['sweep'].append(self.sweeps)
-            self.sweep_stats['N_updates'].append(len(self.update_stats['i0']))
-            self.sweep_stats['E'].append(E)
-            self.sweep_stats['S'].append(S)
-            self.sweep_stats['max_S'].append(max_S)
-            self.sweep_stats['time'].append(time.time() - start_time)
-            self.sweep_stats['max_trunc_err'].append(max_trunc_err)
-            self.sweep_stats['max_E_trunc'].append(max_E_trunc)
-            self.sweep_stats['max_chi'].append(np.max(self.psi.chi))
-            self.sweep_stats['norm_err'].append(norm_err)
-
-            # status update
-            logger.info(
-                "checkpoint after sweep %(sweeps)d\n"
-                "energy=%(E).16f, max S=%(S).16f, age=%(age)d, norm_err=%(norm_err).1e\n"
-                "Current memory usage %(mem).1fMB, wall time: %(wall_time).1fs\n"
-                "Delta E = %(dE).4e, Delta S = %(dS).4e (per sweep)\n"
-                "max trunc_err = %(trunc_err).4e, max E_trunc = %(E_trunc).4e\n"
-                "chi: %(chi)s\n"
-                "%(sep)s", {
-                    'sweeps': self.sweeps,
-                    'E': E,
-                    'S': max_S,
-                    'age': self.update_stats['age'][-1],
-                    'norm_err': norm_err,
-                    'mem': memory_usage(),
-                    'wall_time': time.time() - loop_start_time,
-                    'dE': Delta_E,
-                    'dS': Delta_S,
-                    'trunc_err': max_trunc_err,
-                    'E_trunc': max_E_trunc,
-                    'chi': self.psi.chi if self.psi.L < 40 else max(self.psi.chi),
-                    'sep': "=" * 80,
-                })
-            is_first_sweep = False
-
-        # clean up from mixer
-        self.mixer_cleanup()
-
-        self._canonicalize(True)
-        logger.info("DMRG finished after %d sweeps, max chi=%d", self.sweeps, max(self.psi.chi))
-        return E, self.psi
-
+        return super().run()
+    
     def _canonicalize(self, warn=False):
         #Update environment until norm_tol is reached. If norm_tol_final
         #is not reached, call canonical_form.
@@ -587,7 +579,9 @@ class DMRGEngine(Sweep):
             'sweep': [],
             'N_updates': [],
             'E': [],
+            'Delta_E': [],
             'S': [],
+            'Delta_S': [],
             'max_S': [],
             'time': [],
             'max_trunc_err': [],
@@ -922,7 +916,11 @@ class TwoSiteDMRGEngine(DMRGEngine):
         ------------- -------------------------------------------------------------------
         E             The energy *before* truncation (as calculated by Lanczos).
         ------------- -------------------------------------------------------------------
+        Delta_E       The change in `E` (above) since the last iteration.
+        ------------- -------------------------------------------------------------------
         S             Maximum entanglement entropy.
+        ------------- -------------------------------------------------------------------
+        Delta_S       The change in `S` (above) since the last iteration.
         ------------- -------------------------------------------------------------------
         time          Wallclock time evolved since :attr:`time0` (in seconds).
         ------------- -------------------------------------------------------------------
@@ -1089,7 +1087,11 @@ class SingleSiteDMRGEngine(DMRGEngine):
         ------------- -------------------------------------------------------------------
         E             The energy *before* truncation (as calculated by Lanczos).
         ------------- -------------------------------------------------------------------
+        Delta_E       The change in `E` (above) since the last iteration.
+        ------------- -------------------------------------------------------------------
         S             Maximum entanglement entropy.
+        ------------- -------------------------------------------------------------------
+        Delta_S       The change in `S` (above) since the last iteration.
         ------------- -------------------------------------------------------------------
         time          Wallclock time evolved since :attr:`time0` (in seconds).
         ------------- -------------------------------------------------------------------
