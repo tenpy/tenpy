@@ -3,7 +3,7 @@
 The :class:`Site` is the prototype, read it's docstring.
 
 """
-# Copyright 2018-2023 TeNPy Developers, GNU GPLv3
+# Copyright 2018-2024 TeNPy Developers, GNU GPLv3
 
 import numpy as np
 import itertools
@@ -49,7 +49,7 @@ class Site(Hdf5Exportable):
 
     .. versionchanged :: 0.10
 
-        Add the option `sort_charge`. Right now the default behavriou is ``False`` for
+        Add the option `sort_charge`. Right now the default behavior is ``False`` for
         backwards compatibility, but we will change it for Version 1.0 to ``True``.
         For now, we raise a warning in cases where it can lead to changes.
         If you see this warning, just set the value explicitly to avoid breaking compatibility of
@@ -76,7 +76,7 @@ class Site(Hdf5Exportable):
         This is usually a good idea to reduce potential overhead when using charge conservation.
         Note that this might permute the order of the local basis states!
         For backwards compatibility with existing data, it is not (yet) enabled by default,
-        but we started to warn about the behaviour.
+        but we started to warn about the behavior.
         Explicitly set `sort_charge=False` to disable the warning.
 
     Attributes
@@ -177,7 +177,7 @@ class Site(Hdf5Exportable):
         new_leg_charge : :class:`LegCharge` | None
             The new charges to be used. If ``None``, use trivial charges.
         permute : ndarray | None
-            The permuation applied to the physical leg,
+            The permutation applied to the physical leg,
             which also gets used to adjust :attr:`state_labels` and :attr:`perm`.
             If you sorted the previous leg with ``perm_qind, new_leg_charge = leg.sort()``,
             use ``old_leg.perm_flat_from_perm_qind(perm_qind)``.
@@ -283,9 +283,9 @@ class Site(Hdf5Exportable):
         hc : None | False | str
             The name for the hermitian conjugate operator, to be used for :attr:`hc_ops`.
             By default (``None``), try to auto-determine it.
-            If ``False``, disable adding antries to :attr:`hc_ops`.
+            If ``False``, disable adding entries to :attr:`hc_ops`.
         permute_dense : bool | None
-            Flag to enable/disable permuations when converting `op` from numpy to
+            Flag to enable/disable permutations when converting `op` from numpy to
             np_conserved arrays.
             If True, the operator is permuted with :attr:`perm` to account for permutations
             induced by sorting charges; False disables the permutations.
@@ -397,7 +397,7 @@ class Site(Hdf5Exportable):
         Parameters
         ----------
         label : int | string
-            eather the index directly or a label (string) set before.
+            either the index directly or a label (string) set before.
 
         Returns
         -------
@@ -432,7 +432,7 @@ class Site(Hdf5Exportable):
             The operator given by `name`, with labels ``'p', 'p*'``.
             If name already was an npc Array, it's directly returned.
         """
-        names = name.split(' ')
+        names = name.split()
         op = getattr(self, names[0], None)
         if op is None:
             raise ValueError("{0!r} doesn't have the operator {1!r}".format(self, names[0]))
@@ -449,16 +449,16 @@ class Site(Hdf5Exportable):
         Parameters
         ----------
         name : str
-            The name of the operator to be returned.
+            The name of the operator to be conjugated.
             Multiple operators separated by whitespace are interpreted as an operator product,
             exactly as :meth:`get_op` does.
 
         Returns
         -------
         hc_op_name : str
-            Operator name for the hermi such that :meth:`get_op` of
+            Operator name for the hermitian conjugate operator.
         """
-        names = name.split(' ')
+        names = name.split()
         hc_names = []
         for name2 in reversed(names):
             hc_name_2 = self.hc_ops.get(name2)
@@ -521,7 +521,7 @@ class Site(Hdf5Exportable):
         -------
         combined_opname : str
             A valid operator name
-            Operatorname representing the product of operators in `names`.
+            Operator name representing the product of operators in `names`.
         """
         if len(names) == 0:
             return 'Id'
@@ -571,7 +571,7 @@ class GroupedSite(Site):
     operators) getting more complicated/computationally expensive.
 
     If the individual sites indicate fermionic operators (with entries in `need_JW_string`),
-    we construct the new on-site oerators of `site1` to include the JW string of `site0`,
+    we construct the new on-site operators of `site1` to include the JW string of `site0`,
     i.e., we use the Kronecker product of ``[JW, op]`` instead of ``[Id, op]`` if necessary
     (but always ``[op, Id]``).
     In that way the onsite operators of this DoubleSite automatically fulfill the
@@ -582,11 +582,11 @@ class GroupedSite(Site):
     sites : list of :class:`Site`
         The individual sites being grouped together. Copied before use if ``charges!='same'``.
     labels :
-        Include the Kronecker product of the each onsite operator `op` on ``sites[i]`` and
+        Include the Kronecker product of each onsite operator `op` on ``sites[i]`` and
         identities on other sites with the name ``opname+labels[i]``.
         Similarly, set state labels for ``' '.join(state[i]+'_'+labels[i])``.
         Defaults to ``[str(i) for i in range(n_sites)]``, which for example grouping two SpinSites
-        gives operators name like ``"Sz0"`` and sites labels like ``'up_0 down_1'``.
+        gives operators name like ``"Sz0"`` and state labels like ``'up_0 down_1'``.
     charges : ``'same' | 'drop' | 'independent'``
         How to handle charges, defaults to 'same'.
         ``'same'`` means that all `sites` have the same `ChargeInfo`, and the total charge
@@ -747,7 +747,7 @@ def set_common_charges(sites, new_charges='same', new_names=None, new_mod=None, 
 
     A typical place to do this would be in :meth:`tenpy.models.model.CouplingMPOModel.init_sites`.
 
-    (This function replaces the now deprecated :func:`mutli_sites_combine_charges`.)
+    (This function replaces the now deprecated :func:`multi_sites_combine_charges`.)
 
     Parameters
     ----------
@@ -816,7 +816,7 @@ def set_common_charges(sites, new_charges='same', new_names=None, new_mod=None, 
          [ 2]]
 
     With the default ``new_charges='same'``, this function will combine charges with the same name,
-    and hence we will have two conserved quantities, namley
+    and hence we will have two conserved quantities, namely
     the fermion particle number
     ``'N' = N_{up_fermions} + N_{down-fermions}``,
     and the total Sz spin
@@ -928,7 +928,7 @@ def set_common_charges(sites, new_charges='same', new_names=None, new_mod=None, 
         >>> assert ferm.leg.chinfo.qnumber == spin.leg.chinfo.qnumber == 0  # trivial: no charges
     """
     for s, site in enumerate(sites):
-        for site2 in enumerate(sites[s + 1:]):
+        for site2 in sites[s + 1:]:
             if site2 is site:
                 raise ValueError("`sites` contains the same object multiple times. Make copies!")
     old_chinfos = [site.leg.chinfo for site in sites]
@@ -1357,7 +1357,7 @@ class FermionSite(Site):
     ==============  ===================================================================
 
     ============== ====  ===============================
-    `conserve`     qmod  *exluded* onsite operators
+    `conserve`     qmod  *excluded* onsite operators
     ============== ====  ===============================
     ``'N'``        [1]   --
     ``'parity'``   [2]   --
@@ -1461,13 +1461,13 @@ class SpinHalfFermionSite(Site):
     `cons_N`      `cons_Sz`     qmod    *excluded* onsite operators
     ============= ============= ======= =======================================
     ``'N'``       ``'Sz'``      [1, 1]  ``Sx, Sy``
-    ``'N'``       ``'parity'``  [1, 2]  --
+    ``'N'``       ``'parity'``  [1, 4]  --
     ``'N'``       ``None``      [1]     --
     ``'parity'``  ``'Sz'``      [2, 1]  ``Sx, Sy``
-    ``'parity'``  ``'parity'``  [2, 2]  --
+    ``'parity'``  ``'parity'``  [2, 4]  --
     ``'parity'``  ``None``      [2]     --
     ``None``      ``'Sz'``      [1]     ``Sx, Sy``
-    ``None``      ``'parity'``  [2]     --
+    ``None``      ``'parity'``  [4]     --
     ``None``      ``None``      []      --
     ============= ============= ======= =======================================
 
@@ -1633,13 +1633,13 @@ class SpinHalfHoleSite(Site):
     `cons_N`      `cons_Sz`     qmod    *excluded* onsite operators
     ============= ============= ======= =======================================
     ``'N'``       ``'Sz'``      [1, 1]  ``Sx, Sy``
-    ``'N'``       ``'parity'``  [1, 2]  --
+    ``'N'``       ``'parity'``  [1, 4]  --
     ``'N'``       ``None``      [1]     --
     ``'parity'``  ``'Sz'``      [2, 1]  ``Sx, Sy``
-    ``'parity'``  ``'parity'``  [2, 2]  --
+    ``'parity'``  ``'parity'``  [2, 4]  --
     ``'parity'``  ``None``      [2]     --
     ``None``      ``'Sz'``      [1]     ``Sx, Sy``
-    ``None``      ``'parity'``  [2]     --
+    ``None``      ``'parity'``  [4]     --
     ``None``      ``None``      []      --
     ============= ============= ======= =======================================
 
@@ -1750,7 +1750,7 @@ class SpinHalfHoleSite(Site):
 
     def __repr__(self):
         """Debug representation of self."""
-        return "SpinHalfFermionSite({cN!r}, {cS!r}, {f:f})".format(cN=self.cons_N,
+        return "SpinHalfHoleSite({cN!r}, {cS!r}, {f:f})".format(cN=self.cons_N,
                                                                    cS=self.cons_Sz,
                                                                    f=self.filling)
 
@@ -1758,7 +1758,7 @@ class SpinHalfHoleSite(Site):
 class BosonSite(Site):
     r"""Create a :class:`Site` for up to `Nmax` bosons.
 
-    Local states are ``vac, 1, 2, ... , Nc``.
+    Local states are ``vac, 1, 2, ... , Nmax``.
     (Exception: for parity conservation, we sort as ``vac, 2, 4, ..., 1, 3, 5, ...``.)
 
     ==============  ========================================

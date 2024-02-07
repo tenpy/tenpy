@@ -1,5 +1,5 @@
 """Miscellaneous tools, somewhat random mix yet often helpful."""
-# Copyright 2018-2023 TeNPy Developers, GNU GPLv3
+# Copyright 2018-2024 TeNPy Developers, GNU GPLv3
 
 import logging
 import numpy as np
@@ -208,7 +208,7 @@ def list_to_dict_list(l):
 
     Parameters
     ----------
-    l: iterable of iterabele of immutable
+    l: iterable of iterable of immutable
         A list of objects that can be converted to tuples to be used as keys for a dictionary.
 
     Returns
@@ -366,7 +366,7 @@ def any_nonzero(params, keys, verbose_msg=None):
 
     .. deprecated :: 0.8.0
         This method will be removed in version 1.0.0.
-        Use :meth:`tenpy.toosl.params.Config.any_nonzero` instead.
+        Use :meth:`tenpy.tools.params.Config.any_nonzero` instead.
 
     Parameters
     ----------
@@ -509,7 +509,7 @@ def group_by_degeneracy(E, *args, subset=None, cutoff=1.e-12):
     idx_groups : list of tuple of int
         Each tuple `group` contains indices ``i, j, k, ...`` for which the values are closer than
         `cutoff`, i.e., ``|E[j, k, ...] - E[i]| <= cutoff``.
-        Each index appears exactly once (if it is containted in `subset`).
+        Each index appears exactly once (if it is contained in `subset`).
 
     .. testsetup ::
 
@@ -547,7 +547,7 @@ def get_close(values, target, default=None, eps=1.e-13):
 
     Parameters
     ----------
-    values : interable of float
+    values : iterable of float
         Values to compare to.
     target : float
         Value to find.
@@ -605,6 +605,9 @@ def find_subclass(base_class, subclass_name):
     elif len(found) == 1:
         return found.pop()
     else:
+        found_not_deprecated = [c for c in found if not getattr(c, 'deprecated', False)]
+        if len(found_not_deprecated) == 1:
+            return found_not_deprecated[0]
         msg = f"There exist multiple subclasses of {base_class!r} with name {subclass_name!r}:"
         raise ValueError('\n'.join([msg] + [repr(c) for c in found]))
 
@@ -641,7 +644,7 @@ def get_recursive(nested_data, recursive_key, separator=".", default=_UNSET):
     Returns
     -------
     entry :
-        For example, ``recursive_key="some.sub.key"`` will result in extracing
+        For example, ``recursive_key="some.sub.key"`` will result in extracting
         ``nested_data["some"]["sub"]["key"]``.
 
     See also
@@ -845,7 +848,7 @@ def setup_logging(options=None,
         classes sequentially (e.g., :func:`~tenpy.simulations.simulation.run_seq_simulations`).
 
     .. deprecated :: 0.9.0
-        The arguments were previously collected in a dicitonary `options`.
+        The arguments were previously collected in a dictionary `options`.
         Now they should be given directly as keyword arguments.
 
     Parameters
@@ -862,7 +865,7 @@ def setup_logging(options=None,
 
         skip_setup: bool
             If True, don't change anything in the logging setup; just return.
-            This is usefull for testing purposes, where `pytest` handles the logging setup.
+            This is useful for testing purposes, where `pytest` handles the logging setup.
             All other options are ignored in this case.
         to_stdout : None | ``"DEBUG" | "INFO" | "WARNING" | "ERROR" | "CRITICAL"``
             If not None, print log with (at least) the given level to stdout.
@@ -880,12 +883,12 @@ def setup_logging(options=None,
             tenpy.
             For example, setting the level for `tenpy.simulations` will change the level
             for all loggers in any of those submodules, including the one provided as
-            ``Simluation.logger`` class attribute. Hence, all messages from Simulation class
+            ``Simulation.logger`` class attribute. Hence, all messages from Simulation class
             methods calling ``self.logger.info(...)`` will be affected by that.
         format : str
             Formatting string, `fmt` argument of :class:`logging.Formatter`.
             You can for example use ``"{loglevel:.4s} {asctime} {message}"`` to include the time
-            stamp of each message into the log - this is usefull to get an idea where code hangs.
+            stamp of each message into the log - this is useful to get an idea where code hangs.
             Find
             `allowed keys <https://docs.python.org/3/library/logging.html#logrecord-attributes>`_
             here. The style of the formatter is chosen depending on whether the format string
@@ -987,7 +990,7 @@ def setup_executable(mod, run_defaults, identifier_list=None, only_list_supplied
 
         this is a deprecated interface. Use the :class:`~tenpy.simulations.simulation.Simulation`
         interface in combination with :func:`~tenpy.console_main` instead.
-        You can invoce that from the command line as ``python -m tenpy ...``.
+        You can invoke that from the command line as ``python -m tenpy ...``.
 
     Uses default values defined at:
     - model class for model_par
@@ -1007,7 +1010,7 @@ def setup_executable(mod, run_defaults, identifier_list=None, only_list_supplied
         Model class (or instance) OR a dictionary containing model defaults
     run_defaults : dict
         default values for executable file parameters
-    identifier_list : ieterable
+    identifier_list : iterable
         Used only if mod is a dict. Contains the identifier variables
 
     Returns
@@ -1017,10 +1020,6 @@ def setup_executable(mod, run_defaults, identifier_list=None, only_list_supplied
     args :
         namespace with raw arguments for some backwards compatibility with executables.
     """
-    warnings.warn(
-        "Attention: `setup_executable` was developed for a previous version of tenpy and not all options may be operational.",
-        category=FutureWarning,
-        stacklevel=2)
     warnings.warn("Deprecated: use `tenpy.run_simulation` and `tenpy.console_main` instead.",
                   category=FutureWarning,
                   stacklevel=2)
@@ -1032,7 +1031,7 @@ def setup_executable(mod, run_defaults, identifier_list=None, only_list_supplied
             model_defaults = mod.defaults
             identifier_list = mod.identifier
         except AttributeError as err:
-            print("Cannot get model defaults and identifer list from mod. Is mod a class/instance?")
+            print("Cannot get model defaults and identifier list from mod. Is mod a class/instance?")
             print(err)
             raise AttributeError
     elif type(mod) == dict and hasattr(identifier_list, '__iter__'):

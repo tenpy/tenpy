@@ -1,4 +1,4 @@
-# Copyright 2023 TeNPy Developers, GNU GPLv3
+# Copyright 2024 TeNPy Developers, GNU GPLv3
 
 from tenpy.models.clock import ClockModel, ClockChain
 from test_model import check_general_model

@@ -3,15 +3,15 @@ Parameters and options
 
 (We use `parameter` and `option` synonymously. See also the section on parameters in :doc:`/intro/simulations`.
 
-Standard simulations in TeNPy can be defined by just set of options collected in a dictionary (possibly containing
+Standard simulations in TeNPy can be defined by just a set of options collected in a dictionary (possibly containing
 other parameter dictionaries).
 It can be convenient to represent these options in a [yaml]_ file, say ``parameters.yml``, which might look like this:
 
 .. literalinclude:: /../examples/userguide/i_dmrg_parameters.yml
 
 Note that the default values and even the allowed/used option names often depend on other parameters.
-For example, the `model_class` parameter above given to a :class:`~tenpy.simulations.Simulation` selects a model class,
-and diffent model classes might have completely different parameters.
+For example, the `model_class` parameter above given to a :class:`~tenpy.simulations.simulation.Simulation` selects a model class,
+and different model classes might have completely different parameters.
 This gives you freedom to easily define your own parameters when you implement a model, 
 but it also makes it a little bit harder to keep track of allowed values.
 
@@ -26,7 +26,7 @@ into the :cfg:config:`TEBDEngine` config, similarly to the sub-classing used.
 During runtime, the :class:`~tenpy.tools.params.Config` class logs the first use of any parameter (with DEBUG log-level, if
 the default is used, and with INFO log-level, if it is non-default). Moreover, the default is saved into the parameter
 dictionary. Hence, it will contain the *full set of all used parameters*, default and non-default, at the end of a
-simulation, e.g., in the `sim_params` of the `results` returned by :meth:`tenpy.simulations.Simulation.run`.
+simulation, e.g., in the `sim_params` of the `results` returned by :meth:`~tenpy.simulations.Simulation.run`.
 
 .. note ::
 

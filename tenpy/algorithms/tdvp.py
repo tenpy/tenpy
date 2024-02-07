@@ -8,7 +8,7 @@ e.g. it conserves the unitarity of the time evolution and the energy (for the si
 and it is suitable for time evolution of Hamiltonian with arbitrary long range in the form of MPOs.
 We have implemented:
 
-1. The one-site formulation following the TDVP princible in :class:`SingleSiteTDVPEngine`,
+1. The one-site formulation following the TDVP principle in :class:`SingleSiteTDVPEngine`,
    which **does not** allow for growth of the bond dimension.
 
 2. The two-site algorithm in the :class:`TwoSiteTDVPEngine`, which does allow the bond
@@ -29,14 +29,14 @@ Much of the code is very similar to DMRG, and also based on the
 .. todo ::
     allow for increasing bond dimension in SingleSiteTDVPEngine, similar to DMRG Mixer
 """
-# Copyright 2019-2023 TeNPy Developers, GNU GPLv3
+# Copyright 2019-2024 TeNPy Developers, GNU GPLv3
 
-from tenpy.linalg.krylov_based import LanczosEvolution
-from tenpy.algorithms.truncation import svd_theta, TruncationError
-from tenpy.algorithms.mps_common import Sweep, ZeroSiteH, OneSiteH, TwoSiteH
-from tenpy.algorithms.algorithm import TimeEvolutionAlgorithm, TimeDependentHAlgorithm
-from tenpy.networks.mpo import MPOEnvironment
-from tenpy.linalg import np_conserved as npc
+from ..linalg.krylov_based import LanczosEvolution
+from .truncation import svd_theta, TruncationError
+from .mps_common import Sweep, ZeroSiteH, OneSiteH, TwoSiteH
+from .algorithm import TimeEvolutionAlgorithm, TimeDependentHAlgorithm
+from ..networks.mpo import MPOEnvironment
+from ..linalg import np_conserved as npc
 import numpy as np
 import time
 import warnings
@@ -168,7 +168,7 @@ class TwoSiteTDVPEngine(TDVPEngine):
         L = self.psi.L
         if self.finite:
             i0s = list(range(0, L - 2)) + list(range(L - 2, -1, -1))
-            move_right = [True] * (L - 2) + [False] * (L - 1)
+            move_right = [True] * (L - 2) + [False] * (L - 2) + [None]
             update_LP_RP = [[True, False]] * (L - 2) + [[False, True]] * (L - 2) + [[False, False]]
         else:
             raise NotImplementedError("Only finite TDVP is implemented")
@@ -206,8 +206,10 @@ class TwoSiteTDVPEngine(TDVPEngine):
         if self.move_right:
             # note that i0 == L-2 is left-moving
             self.one_site_update(i0 + 1, 0.5j * self.dt)
-        elif i0 != 0:  # no one-site update on last update of the sweep
+        elif (self.move_right is False):
             self.one_site_update(i0, 0.5j * self.dt)
+        # for the last update of the sweep, where move_right is None, there is no one_site_update
+        
         return update_data
 
     def update_env(self, **update_data):
@@ -264,7 +266,7 @@ class SingleSiteTDVPEngine(TDVPEngine):
         L = self.psi.L
         if self.finite:
             i0s = list(range(0, L - 1)) + list(range(L - 1, -1, -1))
-            move_right = [True] * (L - 1) + [False] * L
+            move_right = [True] * (L - 1) + [False] * (L - 1) + [None]
             update_LP_RP = [[True, False]] * (L - 1) + [[False, True]] * (L - 1) + [[False, False]]
         else:
             raise NotImplementedError("Only finite TDVP is implemented")
@@ -283,6 +285,8 @@ class SingleSiteTDVPEngine(TDVPEngine):
         if self.move_right:
             self.right_moving_update(i0, theta)
         else:
+            # note: left_moving_update() also covers the "non-moving" case move_right=None
+            # of the last update in a sweep
             self.left_moving_update(i0, theta)
         return {}  # no truncation error in single-site TDVP!
 
@@ -328,7 +332,7 @@ class SingleSiteTDVPEngine(TDVPEngine):
             # note: this zero-site update can change the singular values on the bond left of i0.
             # however, we *don't* save them in psi: it turns out that the right singular
             # values for correct expectation values/entropies are the ones set before the if above.
-            # (Belive me - I had that coded up and spent days looking for the bug...)
+            # (Believe me - I had that coded up and spent days looking for the bug...)
 
     def update_env(self, **update_data):
         """Do nothing; super().update_env() is called explicitly in :meth:`update_local`."""
@@ -352,7 +356,7 @@ class TimeDependentSingleSiteTDVP(TimeDependentHAlgorithm,SingleSiteTDVPEngine):
     def reinit_model(self):
         # recreate model
         TimeDependentHAlgorithm.reinit_model(self)
-        # and reinitializie environment accordingly
+        # and reinitialize environment accordingly
         self.init_env(self.model)
 
 

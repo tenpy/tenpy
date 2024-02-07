@@ -32,7 +32,7 @@ However, you should definitely know a few basic facts about the usage of charge 
   This class is defined in :mod:`~tenpy.linalg.np_conserved` (the name standing for "numpy with charge conservation").
   Internally, it stores only non-zero blocks of the tensor, which are "compatible" with the charges of the indices.
   It **has to have a well defined overall charge** :class:`~tenpy.linalg.np_conserved.Array.qtotal`.
-  This **expludes certain operators** (like :math:`S^x` for Sz conservation) and MPS which are a superpositions of states in different charge sectors.
+  This **excludes certain operators** (like :math:`S^x` for Sz conservation) and MPS which are a superpositions of states in different charge sectors.
 - There is a class :class:`~tenpy.linalg.charges.ChargeInfo` holding the general information what kind of charges we have,
   and a :class:`~tenpy.linalg.charges.LegCharge` for the charge data on a given leg. The leg holds a flag `qconj` which
   is +1 or -1, depending on whether the leg goes into the tensor (representing a vector space) 
@@ -42,7 +42,7 @@ However, you should definitely know a few basic facts about the usage of charge 
   These function have a very similar call structure as the corresponding numpy functions, but they act on our tensor
   Array class, and preserve the block structure (and exploit it for speed, wherever possible).
 - The only allowed "reshaping" operations for those tensors are to combine legs and to split previously combined legs.
-  See the correspoding :ref:`section below <leg_pipes>`.
+  See the corresponding :ref:`section below <leg_pipes>`.
 - It is convenient to use string labels instead of numbers to refer to the various legs of a tensor.
   The rules how these labels change during the various operations are also described a :ref:`section below <leg_labeling>`.
 
@@ -52,7 +52,7 @@ However, you should definitely know a few basic facts about the usage of charge 
 Introduction to combine_legs, split_legs and LegPipes
 -----------------------------------------------------
 
-Often, it is necessary to "combine" multiple legs into one: for example to perfom a SVD, a tensor needs to be viewed as a matrix.
+Often, it is necessary to "combine" multiple legs into one: for example to perform a SVD, a tensor needs to be viewed as a matrix.
 For a flat array, this can be done with ``np.reshape``, e.g., if ``A`` has shape ``(10, 3, 7)`` then ``B = np.reshape(A, (30, 7))`` will
 result in a (view of the) array with one less dimension, but a "larger" first leg. By default (``order='C'``), this
 results in ::
@@ -120,7 +120,7 @@ So here is how it works:
 - Labels will be intelligently inherited through the various operations of `np_conserved`.
     - Under `transpose`, labels are permuted.
     - Under `tensordot`, labels are inherited from uncontracted legs. If there is a collision, both labels are dropped.
-    - Under `combine_legs`, labels get concatenated with a ``.`` delimiter and sourrounded by brackets.
+    - Under `combine_legs`, labels get concatenated with a ``.`` delimiter and surrounded by brackets.
       Example: let ``a.labels = {'a': 1, 'b': 2, 'c': 3}``.
       Then if ``b = a.combine_legs([[0, 1], [2]])``, it will have ``b.labels = {'(a.b)': 0, '(c)': 1}``.
       If some sub-leg of a combined leg isn't named, then a ``'?#'`` label is inserted (with ``#`` the leg index), e.g., ``'a.?0.c'``.
@@ -160,7 +160,7 @@ The 'indices' can be:
 - a ``slice(start, stop, step)`` or ``start:stop:step``: keep only the indices specified by the slice. This is also implemented with `iproject`.
 - an 1D int `ndarray` ``mask``: keep only the indices specified by the array. This is also implemented with `iproject`.
 
-For slices and 1D arrays, additional permuations may be perfomed with the help of :meth:`~tenpy.linalg.np_conserved.Array.permute`.
+For slices and 1D arrays, additional permutations may be performed with the help of :meth:`~tenpy.linalg.np_conserved.Array.permute`.
 
 If the number of indices is less than `rank`, the remaining axes remain free, so for a rank 4 Array ``A``, ``A[i0, i1] == A[i0, i1, ...] == A[i0, i1, :, :]``.
 
@@ -199,9 +199,9 @@ An **index** of a leg is a particular value :math:`a_i \in \lbrace 0, ... ,n_i-1
 
 The **rank** is the number of legs, the **shape** is :math:`(n_0, ..., n_{rank-1})`.
 
-We restrict ourselfes to abelian charges with entries in :math:`\mathbb{Z}` or in :math:`\mathbb{Z}_m`.
+We restrict ourselves to abelian charges with entries in :math:`\mathbb{Z}` or in :math:`\mathbb{Z}_m`.
 The nature of a charge is specified by :math:`m`; we set :math:`m=1` for charges corresponding to :math:`\mathbb{Z}`.
-The number of charges is refered to as **qnumber** as a short hand, and the collection of :math:`m` for each charge is called **qmod**.
+The number of charges is referred to as **qnumber** as a short hand, and the collection of :math:`m` for each charge is called **qmod**.
 The qnumber, qmod and possibly descriptive names of the charges are saved in an instance of :class:`~tenpy.linalg.charges.ChargeInfo`.
 
 To each index of each leg, a value of the charge(s) is associated.
@@ -261,7 +261,7 @@ The different formats for LegCharge
 +++++++++++++++++++++++++++++++++++
 As mentioned above, we assign charges to each index of each leg of a tensor.
 This can be done in three formats: **qflat**, as **qind** and as **qdict**.
-Let me explain them with examples, for simplicity considereing only a single charge (the most inner array has one entry
+Let me explain them with examples, for simplicity considering only a single charge (the most inner array has one entry
 for each charge).
 
 **qflat** form: simply a list of charges for each index. 
@@ -417,7 +417,7 @@ This leads to the following convention:
 
    When an npc algorithm makes tensors which share a bond (either with the input tensors, as for tensordot, or amongst the output tensors, as for SVD),
    the algorithm is free, but not required, to use the **same** :class:`LegCharge` for the tensors sharing the bond, *without* making a copy.
-   Thus, if you want to modify a LegCharge, you **must** make a copy first (e.g. by using methods of LegCharge for what you want to acchive).
+   Thus, if you want to modify a LegCharge, you **must** make a copy first (e.g. by using methods of LegCharge for what you want to achieve).
 
 
 Assigning charges to non-physical legs
@@ -435,7 +435,7 @@ As a concrete example, consider an MPS on just two spin 1/2 sites::
     |          |p            |p
 
 The two legs ``p`` are the physical legs and share the same charge, as they both describe the same local Hilbert space.
-For better distincition, let me label the indices of them by :math:`\uparrow=0` and :math:`\downarrow=1`.
+For better distinction, let me label the indices of them by :math:`\uparrow=0` and :math:`\downarrow=1`.
 As noted above, we can associate the charges 1 (:math:`p=\uparrow`) and -1 (:math:`p=\downarrow`), respectively, so we define::
 
     chinfo = npc.ChargeInfo([1], ['2*Sz'])
@@ -443,7 +443,7 @@ As noted above, we can associate the charges 1 (:math:`p=\uparrow`) and -1 (:mat
 
 For the ``qconj`` signs, we stick to the convention used in our MPS code and indicated by the
 arrows in above 'picture': physical legs are incoming (``qconj=+1``), and from left to right on the virtual bonds.
-This is acchieved by using ``[p, x, y.conj()]`` as `legs` for ``A``, and ``[p, y, z.conj()]`` for ``B``, with the
+This is achieved by using ``[p, x, y.conj()]`` as `legs` for ``A``, and ``[p, y, z.conj()]`` for ``B``, with the
 default ``qconj=+1`` for all ``p, x, y, z``: ``y.conj()`` has the same charges as ``y``, but opposite ``qconj=-1``.
 
 The legs ``x`` and ``z`` of an ``L=2`` MPS, are 'dummy' legs with just one index ``0``.
@@ -515,7 +515,7 @@ and a :class:`~tenpy.linalg.charges.LegCharge` instance for each of the legs.
 Indirect creation by manipulating existing arrays
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Of course, a new :class:`~tenpy.linalg.np_conserved.Array` can also created using the charge data from exisiting Arrays,
+Of course, a new :class:`~tenpy.linalg.np_conserved.Array` can also created using the charge data from existing Arrays,
 for example with :meth:`~tenpy.linalg.np_conserved.Array.zeros_like` or creating a (deep or shallow) :meth:`~tenpy.linalg.np_conserved.Array.copy`.
 Further, there are many higher level functions like :func:`~tenpy.linalg.np_conserved.tensordot` or :func:`~tenpy.linalg.np_conserved.svd`,
 which also return new Arrays.
@@ -616,8 +616,8 @@ So, if sorted (with :meth:`~tenpy.linalg.np_conserved.Array.isort_qdata`, the ``
 
 Note that `np.lexsort` chooses the right-most column to be the dominant key, a convention we follow throughout.
 
-If ``_qdata_sorted == True``, ``_qdata`` and ``_data`` are guaranteed to be lexsorted. If ``_qdata_sorted == False``, there is no gaurantee.
-If an algorithm modifies ``_qdata``, it **must** set ``_qdata_sorted = False`` (unless it gaurantees it is still sorted).
+If ``_qdata_sorted == True``, ``_qdata`` and ``_data`` are guaranteed to be lexsorted. If ``_qdata_sorted == False``, there is no guarantee.
+If an algorithm modifies ``_qdata``, it **must** set ``_qdata_sorted = False`` (unless it guarantees it is still sorted).
 The routine :meth:`~tenpy.linalg.np_conserved.Array.sort_qdata` brings the data to sorted form.
 
 
@@ -625,7 +625,7 @@ The routine :meth:`~tenpy.linalg.np_conserved.Array.sort_qdata` brings the data 
 See also
 --------
 - The module :mod:`tenpy.linalg.np_conserved` should contain all the API needed from the point of view of the algorithms.
-  It contians the fundamental :class:`~tenpy.linalg.np_conserved.Array` class and functions for working with them (creating and manipulating).
+  It contains the fundamental :class:`~tenpy.linalg.np_conserved.Array` class and functions for working with them (creating and manipulating).
 - The module :mod:`tenpy.linalg.charges` contains implementations for the charge structure, for example the classes
   :class:`~tenpy.linalg.charges.ChargeInfo`, :class:`~tenpy.linalg.charges.LegCharge`, and :class:`~tenpy.linalg.charges.LegPipe`.
   As noted above, the 'public' API is imported to (and accessible from) :mod:`~tenpy.linalg.np_conserved`.

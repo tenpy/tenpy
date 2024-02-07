@@ -18,7 +18,7 @@
     exact_diag
     disentangler
 """
-# Copyright 2018-2023 TeNPy Developers, GNU GPLv3
+# Copyright 2018-2024 TeNPy Developers, GNU GPLv3
 
 from . import algorithm, truncation, dmrg, dmrg_parallel, disentangler, mps_common, tebd, tdvp, \
     exact_diag, purification, network_contractor, mpo_evolution
@@ -50,7 +50,7 @@ __all__ = [
     "disentangler",
     *algorithm.__all__,
     *truncation.__all__,
-    *dmrg.__all__,
+    *[n for n in dmrg.__all__ if n not in ['Mixer', 'SubspaceExpansion', 'DensityMatrixMixer']],
     *dmrg_parallel.__all__,
     *disentangler.__all__,
     *mps_common.__all__,
