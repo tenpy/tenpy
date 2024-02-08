@@ -54,11 +54,11 @@ As outlined in :doc:`/install/conda`, on Linux/Mac you also need to pin blas to 
 
 Compile linking agains MKL
 --------------------------
-When you compile the Cython files of TeNPy, you have the option to explicilty link against MKL, such
+When you compile the Cython files of TeNPy, you have the option to explicitly link against MKL, such
 that e.g. :func:`tenpy.linalg.np_conserved.tensordot` is guaranteed to call the corresponding `dgemm` or `zgemm`
 function in the BLAS from MKL.
 To link against MKL, the MKL library *including the headers* must be available during the compilation of TeNPy's Cython
-files. If you have the MKL library installed, you can export the environemnt variable `MKLROOT` to point to the
+files. If you have the MKL library installed, you can export the environment variable `MKLROOT` to point to the
 root folder.
 Alternatively, TeNPy will recognise if you are in an active conda environment and have the `mkl` *and* `mkl-devel` conda
 packages installed during compilation. In this case, it will link against the MKL provided as conda package.

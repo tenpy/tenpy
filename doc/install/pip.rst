@@ -7,7 +7,7 @@ Preparation: install requirements
 If you have the [conda]_ package manager from `anaconda <https://www.anaconda.com/distribution>`_, you can just download the 
 `environment.yml <https://raw.githubusercontent.com/tenpy/tenpy/main/environment.yml>`_ file (using the `conda-forge`
 channel, or the `environment_other.yml <https://raw.githubusercontent.com/tenpy/tenpy/main/environment_other.yml>`_ for all other channels) out of the repository
-and create a new environment (called ``tenpy``, if you don't speficy another name) for TeNPy with all the required packages::
+and create a new environment (called ``tenpy``, if you don't specify another name) for TeNPy with all the required packages::
 
     conda env create -f environment.yml
     conda activate tenpy
@@ -52,7 +52,7 @@ To get the latest development version from the github main branch, you can use::
 
     pip install git+git://github.com/tenpy/tenpy.git
 
-This should already have the lastest features described in :doc:`/changelog/latest`.
+This should already have the latest features described in :doc:`/changelog/latest`.
 Disclaimer: this might sometimes be broken, although we do our best to keep to keep it stable as well.
 
 Installation from the downloaded source folder

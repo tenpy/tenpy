@@ -1,5 +1,5 @@
 """This module contains some base classes for algorithms."""
-# Copyright 2020-2023 TeNPy Developers, GNU GPLv3
+# Copyright 2020-2024 TeNPy Developers, GNU GPLv3
 
 import warnings
 import time
@@ -142,7 +142,7 @@ class Algorithm:
         allows to resume the :meth:`run` of the algorithm (after re-initialization with the
         `resume_data`).
         Since most algorithms just have a while loop with break conditions,
-        the default behaviour implemented here is to just call :meth:`run`.
+        the default behavior implemented here is to just call :meth:`run`.
         """
         if self._resume_psi is not None:
             self.psi = self._resume_psi

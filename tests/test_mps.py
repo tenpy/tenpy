@@ -1,12 +1,12 @@
 """A collection of tests for :module:`tenpy.networks.mps`."""
-# Copyright 2018-2023 TeNPy Developers, GNU GPLv3
+# Copyright 2018-2024 TeNPy Developers, GNU GPLv3
 
 import numpy as np
 import numpy.testing as npt
 import warnings
 from tenpy.models.xxz_chain import XXZChain
 from tenpy.models.aklt import AKLTChain
-from tenpy.models.lattice import Square, Chain, Honeycomb
+from tenpy.models.lattice import Square, Chain, Honeycomb, MultiSpeciesLattice
 
 from tenpy.tools import misc
 from tenpy.algorithms import tebd
@@ -77,6 +77,22 @@ def test_mps_add():
     # can MPS.add handle this?
     psi_sum_prime = psi1.add(psi2_prime, 0.5**0.5, -0.5**0.5)
     npt.assert_almost_equal(psi_sum_prime.overlap(psi), 1.)
+
+def test_mps_overlap_translate_finite():
+    s = site.SpinHalfSite(conserve='Sz', sort_charge=True)
+    u, d = 'up', 'down'
+    psi1 = mps.MPS.from_product_state([s] * 4, [u, u, d, u], bc='finite')
+    psi2 = mps.MPS.from_product_state([s] * 4, [u, d, u, u], bc='finite')
+    psi_sum = psi1.add(psi2, 0.5**0.5, -0.5**0.5)
+    psi3 = mps.MPS.from_product_state([s] * 6, [u, u, d, u, d, u], bc='finite')
+    psi4 = mps.MPS.from_product_state([s] * 6, [d, u, d, u, u, u], bc='finite')
+
+    npt.assert_almost_equal(psi1.overlap_translate_finite(psi2, shift=1), 1.)
+    npt.assert_almost_equal(psi2.overlap_translate_finite(psi1, shift=-1), 1.)
+    npt.assert_almost_equal(psi2.overlap_translate_finite(psi1, shift=1), 0.)
+    npt.assert_almost_equal(psi1.overlap_translate_finite(psi_sum, shift=1), -0.5**0.5)
+    npt.assert_almost_equal(psi_sum.overlap_translate_finite(psi_sum, shift=1), -0.5)
+    npt.assert_almost_equal(psi3.overlap_translate_finite(psi4, shift=2), 1.)
 
 
 def test_MPSEnvironment():
@@ -149,6 +165,45 @@ def test_singlet_mps():
         product_state[k] = u
     psi2 = mps.MPS.from_product_state([spin_half] * L, product_state, bc='finite')
     npt.assert_almost_equal(psi.overlap(psi2), 0.5**(0.5 * len(pairs)))
+
+
+def test_from_mps_covering():
+    spin = site.SpinSite(conserve=None)
+    GHZ = mps.MPS.from_product_state([spin]*3, ['up', 'up', 'up']).add(
+        mps.MPS.from_product_state([spin]*3, ['down', 'down', 'down']), 0.5**0.5, -0.5**0.5)
+    psi = mps.MPS.from_product_mps_covering([GHZ], [(0, 1, 2)], bc='infinite')
+    corrs = psi.correlation_function('Sz', 'Sz', [0, 1, 2], range(9))
+    npt.assert_almost_equal(corrs, 0.25*np.array([[1., 1., 1., 0., 0., 0., 0., 0., 0.],
+                                                  [1., 1., 1., 0., 0., 0., 0., 0., 0.],
+                                                  [1., 1., 1., 0., 0., 0., 0., 0., 0.]]))
+    # check accross multiple MPS unit cells (still of L=3)
+    psi = mps.MPS.from_product_mps_covering([GHZ], [(0, 4, 8)], bc='infinite')
+    corrs = psi.correlation_function('Sz', 'Sz', [0, 1, 2], range(9))
+    npt.assert_almost_equal(corrs, 0.25*np.array([[1., 0., 0., 0., 1., 0., 0., 0., 1.],
+                                                  [0., 1., 0., 0., 0., 1., 0., 0., 0.],
+                                                  [0., 0., 1., 0., 0., 0., 0., 0., 0.]]))
+
+    # this code is also an example in MPS.from_product_mps_covering
+    ferm = site.FermionSite(conserve='N')
+    lat = MultiSpeciesLattice(Square(4, 2, None), [ferm]*2, ['up', 'down'])
+    ferm_up_down = mps.MPS.from_product_state([ferm]*4, ['full', 'empty', 'empty', 'full'])
+    ferm_down_up = mps.MPS.from_product_state([ferm]*4, ['empty', 'full', 'full', 'empty'])
+    ferm_singlet = ferm_up_down.add(ferm_down_up, 0.5**0.5, -0.5**0.5)
+    index_map = [[(x, y, 0), (x, y, 1), (x+1, y, 0), (x+1, y, 1)]
+       for (x, y) in [(0, 0), (0, 1), (2, 0), (2, 1)]]
+    index_map = [[lat.lat2mps_idx(x_y_u) for x_y_u in pairs] for pairs in index_map]
+    psi = mps.MPS.from_product_mps_covering([ferm_singlet]*4, index_map)
+    # (the following checks are not included in the example)
+    corrs = psi.correlation_function('N', 'N', [0, 1, 2, 3], range(8))
+    npt.assert_almost_equal(corrs, 0.25*np.array([[2., 0., 1., 1., 0., 2., 1., 1., ],
+                                                  [0., 2., 1., 1., 2., 0., 1., 1., ],
+                                                  [1., 1., 2., 0., 1., 1., 0., 2., ],
+                                                  [1., 1., 0., 2., 1., 1., 2., 0., ]]))
+    corrs = psi.term_correlation_function_right([('Cd', 1), ('C', 0)], [('Cd', 0), ('C', 1)],
+                                                0, [2, 4, 6])
+    npt.assert_almost_equal(corrs, [0., -0.5, 0.])
+
+
 
 
 def test_charge_fluctuations():

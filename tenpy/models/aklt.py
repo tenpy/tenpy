@@ -4,7 +4,7 @@ The AKLT model is famous for having a very simple ground state MPS of bond dimen
 Writing down the Hamiltonian is easiest done in terms of bond couplings.
 This class thus serves as an example how this can be done.
 """
-# Copyright 2021-2023 TeNPy Developers, GNU GPLv3
+# Copyright 2021-2024 TeNPy Developers, GNU GPLv3
 
 import numpy as np
 
@@ -103,7 +103,7 @@ class AKLTChain(NearestNeighborModel, MPOModel):
         if self.lat.bc_MPS == 'finite':
             # project onto one of the two virtual states on the left/right most state.
             # It's a ground state whatever you choose here,
-            # but we project to different indices to allow Sz convservation
+            # but we project to different indices to allow Sz conservation
             # and fix overall Sz=0 sector
             Bs[0] = Bs[0][:, :1, :]
             Bs[-1] = Bs[-1][:, :, :-1]
