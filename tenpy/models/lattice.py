@@ -118,7 +118,7 @@ class Lattice:
     N_sites : int
         the number of sites in the lattice, ``np.prod(self.shape)``.
     N_sites_per_ring : int
-        Defined as ``N_sites / Ls[0]``, for an infinite system the number of cites per "ring".
+        Defined as ``N_sites / Ls[0]``, for an infinite system the number of sites per "ring".
     N_rings : int
         Alias for ``Ls[0]``, for an infinite system the number of "rings" in the unit cell.
     unit_cell : list of :class:`~tenpy.networks.site.Site`

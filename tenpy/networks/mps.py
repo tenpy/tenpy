@@ -1858,7 +1858,7 @@ class MPS(BaseMPSExpectationValue):
         pairs : list of (int, int)
             Pairs of sites to be entangled; the returned MPS will have a singlet
             for each pair in `pairs`. For ``bc='infinite'`` MPS, some indices can be outside
-            the range [0, L) to indicate couplings accross infinte MPS unit cells.
+            the range [0, L) to indicate couplings across infinite MPS unit cells.
         up, down : int | str
             A singlet is defined as ``(|up down> - |down up>)/2**0.5``,
             ``up`` and ``down`` give state indices or labels defined on the corresponding site.
@@ -2328,7 +2328,7 @@ class MPS(BaseMPSExpectationValue):
     def overlap_translate_finite(self, psi, shift=1):
         r"""Contract ``<self|T^N|psi>`` for translation `T` with finite, periodic boundaries.
 
-        Looks like this for ``shift=1``, with the open virtuals legs contracted in the end::
+        Looks like this for ``shift=1``, with the open virtual legs contracted in the end::
 
            --B[L-1] Th[0] -- B[1] -- B[2] -- ..... B[L-2] --
               |      |       |       |             |
@@ -2358,7 +2358,7 @@ class MPS(BaseMPSExpectationValue):
         --------
         permute_sites : Allows more general permutations of the sites.
         overlap : Directly the overlap between two MPS without translation.
-        roll_mps_unit_cell : Effectively applies ``T^shift`` on inifinite MPS.
+        roll_mps_unit_cell : Effectively applies ``T^shift`` on infinite MPS.
         """
         assert self.bc == psi.bc == 'finite'
         L = self.L
