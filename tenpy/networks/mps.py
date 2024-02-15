@@ -1745,7 +1745,11 @@ class MPS(BaseMPSExpectationValue):
             # so we need to gauge `qtotal` of the last `B` such that the right leg matches.
             chdiff = Bs[-1].get_leg('vR').charges[0] - Bs[0].get_leg('vL').charges[0]
             Bs[-1] = Bs[-1].gauge_total_charge('vR', ci.make_valid(chdiff))
-        return cls(sites, Bs, SVs, form=form, bc=bc)
+        res = cls(sites, Bs, SVs, form=form, bc=bc)
+        if res.L > 1 and max(res.chi) > 1:
+            # the SVs set above are not the correct Schmidt values if chi > 1.
+            res.canonical_form()
+        return res
 
     @classmethod
     def from_full(cls,
