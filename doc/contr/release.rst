@@ -8,6 +8,10 @@ Follow this checklist when creating a new release, i.e. updating the version num
    A convenient way to check this is to re-run the github.com actions on the latest commit.
 
 2. Update the changelog and release notes.
+   - Make sure all important changes are listed in ``docs/changelog/latest.rst``.
+   - Rename that file to the next version number.
+   - Add it to the toctree in ``docs/releases.rst``.
+   - Create a new ``docs/changelog/latest.rst`` from the template.
 
 3. In the files ``setup.py`` and ``tenpy/version.py``, update the release number and set released=True.
 
@@ -16,7 +20,7 @@ Follow this checklist when creating a new release, i.e. updating the version num
      git commit -m "VERSION 0.42.1"
      git tag -s "v0.42.1"
     
-   Change the version number appropriately. 
+   Change the version number appropriately.
    You should GPG sign the commit.
 
 5. Reset the released=False flag in ``setup.py`` and ``tenpy/version.py``.
@@ -66,7 +70,7 @@ Then we can upload to test.pypi.org via::
 
    python -m twine upload -r testpypi dist/*
 
-The twine command will prompt for a test.pypi.ort credentials.
+The twine command will prompt for test.pypi.org credentials.
 Double check the project page on test.pypi.
 Finally, we upload to the live PyPI::
 
