@@ -1,6 +1,6 @@
 """Time evolution using the WI or WII approximation of the time evolution operator."""
 
-# Copyright 2020-2024 TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, GNU GPLv3
 
 import numpy as np
 import time

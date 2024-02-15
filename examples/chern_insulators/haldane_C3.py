@@ -3,7 +3,7 @@
 Based on the model in [Yang2012]_
 """
 
-# Copyright 2019-2024 TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, GNU GPLv3
 
 import numpy as np
 
