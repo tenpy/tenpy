@@ -1,5 +1,5 @@
 """Simulations for ground state searches."""
-# Copyright 2020-2024 TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, GNU GPLv3
 
 import numpy as np
 from pathlib import Path
