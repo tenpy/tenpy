@@ -14,9 +14,10 @@ We use the following label convention for the `B` (where arrows indicate `qconj`
 
 We store one 3-leg tensor `_B[i]` with labels ``'vL', 'vR', 'p'`` for each of the `L` sites
 ``0 <= i < L``.
-Additionally, we store ``L+1`` singular value arrays `_S[ib]` on each bond ``0 <= ib <= L``,
-independent of the boundary conditions.
-``_S[ib]`` gives the singular values on the bond ``i-1, i``.
+Additionally, we store singular value arrays `_S[ib]` on each bond ``0 <= ib < L + int(finite)``,
+i.e. ``L + 1`` arrays for finite systems and ``L`` arrays for infinite systems.
+Note that for infinite systems, the bond ``ib == L`` to the right of the unit cell is equivalent
+to the bond ``ib == 0``. ``_S[ib]`` gives the singular values on the bond ``ib-1, ib``.
 However, be aware that e.g. :attr:`~tenpy.networks.mps.MPS.chi` returns only the dimensions of the
 :attr:`~tenpy.networks.mps.MPS.nontrivial_bonds` depending on the boundary conditions.
 
@@ -1153,7 +1154,13 @@ class BaseMPSExpectationValue(metaclass=ABCMeta):
             #  return [lbl + str(k) for k in range(ks) for lbl in self._p_label]
 
     def _to_valid_index(self, i):
-        """Make sure `i` is a valid index (depending on `finite`)."""
+        """Make sure `i` is a valid index of a site.
+
+        For finite MPS, we just check if ``i`` is within bounds.
+        For infinite MPS, we return the index *within* the MPS unit cell that is equivalent to
+        ``i``, by adding a suitable multiple of ``self.L``.
+        """
+        # TODO this is the same implementation as in BaseEnvironment... can/should we unify?
         if not self.finite:
             return i % self.L
         if i < 0:
@@ -1321,15 +1328,14 @@ class MPS(BaseMPSExpectationValue):
 
         # make copies of Bs and SVs
         self._B = [B.astype(dtype, copy=True).itranspose(self._B_labels) for B in Bs]
-        self._S = [None] * (self.L + 1)
+        num_S = self.L + 1 if self.finite else self.L
+        self._S = [None] * (num_S)
         for i in range(self.L + 1)[self.nontrivial_bonds]:
             if isinstance(SVs[i], npc.Array):
                 self._S[i] = SVs[i].copy()
             else:
                 self._S[i] = np.array(SVs[i], dtype=np.float64)
-        if self.bc == 'infinite':
-            self._S[-1] = self._S[0]
-        elif self.bc == 'finite':
+        if self.bc == 'finite':
             self._S[0] = self._S[-1] = np.ones([1], dtype=np.float64)
         self._transfermatrix_keep = 1
         self.test_sanity()
@@ -1340,7 +1346,7 @@ class MPS(BaseMPSExpectationValue):
             raise ValueError("invalid boundary condition: " + repr(self.bc))
         if len(self._B) != self.L:
             raise ValueError("wrong len of self._B")
-        if len(self._S) != self.L + 1:
+        if len(self._S) != (self.L + 1 if self.finite else self.L):
             raise ValueError("wrong len of self._S")
         assert len(self.form) == self.L
         for f in self.form:
@@ -1351,15 +1357,16 @@ class MPS(BaseMPSExpectationValue):
             if B.get_leg_labels() != self._B_labels:
                 raise ValueError("B has wrong labels {0!r}, expected {1!r}".format(
                     B.get_leg_labels(), self._B_labels))
-            if len(self._S[i + 1].shape) == 1:
+            i2 = (i + 1) if self.finite else (i + 1) % self.L
+            if len(self._S[i2].shape) == 1:
                 if self._S[i].shape[-1] != B.get_leg('vL').ind_len or \
-                        self._S[i+1].shape[0] != B.get_leg('vR').ind_len:
+                        self._S[i2].shape[0] != B.get_leg('vR').ind_len:
                     raise ValueError("shape of B incompatible with len of singular values")
                 if not self.finite or i + 1 < self.L:
                     B2 = self.get_B(i + 1, form=None)
                     B.get_leg('vR').test_contractible(B2.get_leg('vL'))
             else:
-                assert len(self._S[i + 1].shape) == 2  # special case during DMRG with mixer,
+                assert len(self._S[i2].shape) == 2  # special case during DMRG with mixer,
                 # important for simulation resume while mixer is on
                 # we should have a well-defined form everywhere
                 B = self.get_B(i, form='Th')
@@ -1373,9 +1380,6 @@ class MPS(BaseMPSExpectationValue):
         if self.bc == 'finite':
             if len(self._S[0]) != 1 or len(self._S[-1]) != 1:
                 raise ValueError("non-trivial outer bonds for finite MPS")
-        elif self.bc == 'infinite':
-            if np.any(self._S[self.L] != self._S[0]):
-                raise ValueError("iMPS with S[0] != S[L]")
 
     def copy(self):
         """Returns a copy of `self`.
@@ -1742,7 +1746,8 @@ class MPS(BaseMPSExpectationValue):
             legL = legL.bunch()[1]
         if SVs is None:
             SVs = [np.ones(B.shape[1]) / np.sqrt(B.shape[1]) for B in Bflat]
-            SVs.append(np.ones(Bflat[-1].shape[2]) / np.sqrt(Bflat[-1].shape[2]))
+            if bc != 'infinite':
+                SVs.append(np.ones(Bflat[-1].shape[2]) / np.sqrt(Bflat[-1].shape[2]))
         Bs = []
         if dtype is None:
             dtype = np.dtype(np.common_type(*Bflat))
@@ -2047,6 +2052,8 @@ class MPS(BaseMPSExpectationValue):
             Bs.append(B)
             SVs.append(SR)
         SVs[0] = SVs[-1]
+        if bc == 'infinite':
+            SVs = SVs[:-1]
         return cls(sites, Bs, SVs, bc=bc, form='B')
 
     @property
@@ -2202,11 +2209,13 @@ class MPS(BaseMPSExpectationValue):
 
     def get_SR(self, i):
         """Return singular values on the right of site `i`"""
-        i_valid = self._to_valid_index(i)
-        S = self._S[i_valid + 1]
-        if isinstance(S, npc.Array):
-            S = S.shift_charges(i_valid, i)
-        return S
+        # TODO package this in some _to_valid_bond_index or similar ?
+        if self.finite:
+            i_site = self._to_valid_index(i)
+            # no need to shift, since for any valid index we have i_site == i.
+            return self._S[i_site + 1]
+        else:
+            return self.get_SL(i + 1)
 
     def set_SL(self, i, S):
         """Set singular values on the left of site `i`"""
@@ -2214,23 +2223,15 @@ class MPS(BaseMPSExpectationValue):
         if isinstance(S, npc.Array):
             S = S.shift_charges(i, i_valid)
         self._S[i_valid] = S
-        if not self.finite and i == 0:
-            if isinstance(S, npc.Array):
-                # with mixer, S might be an Array whose charges need to be shifted
-                S = S.shift_charges(0, self.L)
-            self._S[self.L] = S
 
     def set_SR(self, i, S):
         """Set singular values on the right of site `i`"""
-        i_valid = self._to_valid_index(i)
-        if isinstance(S, npc.Array):
-            S = S.shift_charges(i, i_valid)
-        self._S[i_valid + 1] = S
-        if not self.finite and i == self.L - 1:
-            if isinstance(S, npc.Array):
-                # with mixer, S might be an Array whose charge need to be shifted
-                S = S.shift_charges(self.L, 0)
-            self._S[0] = S
+        if self.finite:
+            i_site = self._to_valid_index(i)
+            # no need to shift, since for any valid index we have i_site == i.
+            self._S[i_site + 1] = S
+        else:
+            self.set_SL(i + 1, S)
 
     def get_theta(self, i, n=2, cutoff=1.e-16, formL=1., formR=1.):
         """Calculates the `n`-site wavefunction on ``sites[i:i+n]``.
@@ -2333,8 +2334,9 @@ class MPS(BaseMPSExpectationValue):
         if self.bc == 'segment':
             raise ValueError("can't enlarge segment MPS")
         self._B = [self.get_B(j, form=None) for j in range(0, factor * self.L)]
-        self._S = [self.get_SL(j) for j in range(0, factor * self.L)] \
-                  + [self.get_SR(factor * self.L - 1)]
+        self._S = [self.get_SL(j) for j in range(0, factor * self.L)]
+        if self.finite:
+            self._S.append([self.get_SR(factor * self.L - 1)])
         self.sites = [self.get_site(j) for j in range(0, factor * self.L)]
         self.form = factor * self.form
         self.test_sanity()
@@ -2358,7 +2360,9 @@ class MPS(BaseMPSExpectationValue):
         self.sites = [self.sites[i] for i in valid_inds]
         self.form = [self.form[i] for i in valid_inds]
         self._B = [self.get_B(i) for i in inds]
-        self._S = [self.get_SL(i) for i in inds] + [self.get_SR(inds[-1])]
+        self._S = [self.get_SL(i) for i in inds]
+        if self.finite:
+            self._S.append([self.get_SR(inds[-1])])
 
     def overlap_translate_finite(self, psi, shift=1):
         r"""Contract ``<self|T^N|psi>`` for translation `T` with finite, periodic boundaries.
@@ -2666,7 +2670,8 @@ class MPS(BaseMPSExpectationValue):
             Bs.append(new_B.iset_leg_labels(self._B_labels))  # ['vL', 'p', 'vR']
             Ss.append(self._S[i])
             i += n_sites
-        Ss.append(self._S[-1])  # right-most singular values: need L+1 entries
+        if self.finite:
+            Ss.append(self._S[-1])  # right-most singular values: need L+1 entries
         self._B = Bs
         self._S = Ss
         self.sites = grouped_sites
@@ -5462,6 +5467,25 @@ class BaseEnvironment(metaclass=ABCMeta):
     def _contract_RP(self, i, RP):
         """Contract RP with the tensors on site `i` to form ``self.get_RP(i-1)``"""
         ...
+
+    def _to_valid_index(self, i):
+        """Make sure `i` is a valid index of a site.
+
+        For finite MPS, we just check if ``i`` is within bounds.
+        For infinite MPS, we return the index *within* the unit cell that is equivalent to
+        ``i``, by adding a suitable multiple of ``self.L``.
+        """
+        # TODO this is the same implementation as in BaseMPSExpectationValue... can/should we unify?
+        if not self.finite:
+            return i % self.L
+        if i < 0:
+            msg = ('Negative site indices for open boundary conditions are deprecated and will '
+                   'raise a ValueError in the future')
+            warnings.warn(msg, category=FutureWarning, stacklevel=3)
+            i += self.L
+        if i >= self.L or i < 0:
+            raise KeyError("i = {0:d} out of bounds for finite MPS".format(i))
+        return i
 
 
 class MPSEnvironment(BaseEnvironment, BaseMPSExpectationValue):

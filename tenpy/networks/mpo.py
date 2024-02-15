@@ -1250,7 +1250,12 @@ class MPO:
         return npc.trace(singlesitempo.get_W(0), axes=[['wL'], ['wR']])
 
     def _to_valid_index(self, i, bond=False):
-        """Make sure `i` is a valid index (depending on `self.bc`)."""
+        """Make sure `i` is a valid index of a site.
+
+        For finite systems, we just check if ``i`` is within bounds.
+        For infinite systems, we return the index *within* the MPS unit cell that is equivalent to
+        ``i``, by adding a suitable multiple of ``self.L``.
+        """
         if not self.finite:
             return i % self.L
         if i < 0:
@@ -2276,19 +2281,6 @@ class MPOEnvironment(BaseEnvironment):
                                    pipes=[pipe, pipe.conj()],
                                    new_axes=[2, 1])
         return RHeff
-
-    def _to_valid_index(self, i):
-        """Make sure `i` is a valid index (depending on `finite`)."""
-        if not self.finite:
-            return i % self.L
-        if i < 0:
-            msg = ('Negative site indices for open boundary conditions are deprecated and will '
-                   'raise a ValueError in the future')
-            warnings.warn(msg, category=FutureWarning, stacklevel=3)
-            i += self.L
-        if i >= self.L or i < 0:
-            raise KeyError("i = {0:d} out of bounds for finite MPS".format(i))
-        return i
 
 
 class MPOTransferMatrix(NpcLinearOperator):
