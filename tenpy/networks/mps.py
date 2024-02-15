@@ -1350,9 +1350,7 @@ class MPS(BaseMPSExpectationValue):
                 # and be able to contract Th-B
                 B.get_leg('vR').test_contractible(B2.get_leg('vL'))
                 # (but not necessarily A-B, as we have it on the first bond at DMRG checkpoints)
-            form = self.form[i]
-            if form is not None:
-                nuL, nuR = form
+            assert self.form[i] in self._valid_forms.values()
         if self.bc == 'finite':
             if len(self._S[0]) != 1 or len(self._S[-1]) != 1:
                 raise ValueError("non-trivial outer bonds for finite MPS")
