@@ -197,7 +197,7 @@ class DMRGEngine(IterativeSweeps):
     Options
     -------
     .. cfg:config :: DMRGEngine
-        :include: Sweep
+        :include: IterativeSweeps
 
     Attributes
     ----------
@@ -310,6 +310,55 @@ class DMRGEngine(IterativeSweeps):
         return E, self.psi
 
     def run_iteration(self):
+        """Perform a single iteration, consisting of ``N_sweeps_check`` sweeps.
+
+        Options
+        -------
+        .. cfg:configoptions :: DMRGEngine
+        
+            E_tol_to_trunc : float
+                It's reasonable to choose the Lanczos convergence criteria
+                ``'E_tol'`` not many magnitudes lower than the current
+                truncation error. Therefore, if `E_tol_to_trunc` is not
+                ``None``, we update `E_tol` of `lanczos_params` to
+                ``max_E_trunc*E_tol_to_trunc``,
+                restricted to the interval [`E_tol_min`, `E_tol_max`],
+                where ``max_E_trunc`` is the maximal energy difference due to
+                truncation right after each Lanczos optimization during the
+                sweeps.
+            E_tol_max : float
+                See `E_tol_to_trunc`
+            E_tol_min : float
+                See `E_tol_to_trunc`
+            N_sweeps_check : int
+                Number of sweeps to perform between checking convergence
+                criteria and giving a status update.
+            P_tol_to_trunc : float
+                It's reasonable to choose the Lanczos convergence criteria
+                ``'P_tol'`` not many magnitudes lower than the current
+                truncation error. Therefore, if `P_tol_to_trunc` is not
+                ``None``, we update `P_tol` of `lanczos_params` to
+                ``max_trunc_err*P_tol_to_trunc``,
+                restricted to the interval [`P_tol_min`, `P_tol_max`],
+                where ``max_trunc_err`` is the maximal truncation error
+                (discarded weight of the Schmidt values) due to truncation
+                right after each Lanczos optimization during the sweeps.
+            P_tol_max : float
+                See `P_tol_to_trunc`
+            P_tol_min : float
+                See `P_tol_to_trunc`
+            update_env : int
+                Number of sweeps without bond optimization to update the
+                environment for infinite boundary conditions,
+                performed every `N_sweeps_check` sweeps.
+
+        Returns
+        -------
+        E : float
+            The energy of the current ground state approximation.
+        psi : :class:`~tenpy.networks.mps.MPS`
+            The current ground state approximation, i.e. just a reference to :attr:`psi`.
+        """
         options = self.options
         # parameters for lanczos
         p_tol_to_trunc = options.get('P_tol_to_trunc', 0.05)
@@ -415,6 +464,24 @@ class DMRGEngine(IterativeSweeps):
             })
 
     def is_converged(self):
+        """Determines if the algorithm is converged.
+
+        Does not cover any other reasons to abort, such as reaching a time limit.
+        Such checks are covered by :meth:`stopping_condition`.
+
+        Options
+        -------
+        .. cfg:configoptions :: DMRGEngine
+        
+            max_E_err : float
+                Convergence if the change of the energy in each step
+                satisfies ``|Delta E / max(E, 1)| < max_E_err``. Note that
+                this might be satisfied even if ``Delta E > 0``,
+                i.e., if the energy increases (due to truncation).
+            max_S_err : float
+                Convergence if the relative change of the entropy in each step
+                satisfies ``|Delta S|/S < max_S_err``
+        """
         max_E_err = self.options.get('max_E_err', 1.e-8)
         max_S_err = self.options.get('max_S_err', 1.e-5)
         E = self.sweep_stats['E'][-1]
@@ -423,6 +490,27 @@ class DMRGEngine(IterativeSweeps):
         return abs(Delta_E / max(E, 1.)) < max_E_err and abs(Delta_S) < max_S_err
     
     def post_run_cleanup(self):
+        """Perform any final steps or clean up after the main loop has terminated.
+
+        Options
+        -------
+        .. cfg:configoptions :: DMRGEngine
+        
+            norm_tol : float
+                After the DMRG run, update the environment with at most
+                `norm_tol_iter` sweeps until
+                ``np.linalg.norm(psi.norm_err()) < norm_tol``.
+            norm_tol_iter : float
+                Perform at most `norm_tol_iter`*`update_env` sweeps to
+                converge the norm error below `norm_tol`.
+            norm_tol_final : float
+                After performing `norm_tol_iter`*`update_env` sweeps, if
+                ``np.linalg.norm(psi.norm_err()) < norm_tol_final``, call
+                :meth:`~tenpy.networks.mps.canonical_form` to canonicalize
+                instead. This tolerance should be stricter than `norm_tol`
+                to ensure canonical form even if DMRG cannot fully converge.
+        
+        """
         super().post_run_cleanup()
         self._canonicalize(True)
         logger.info(f'{self.__class__.__name__} finished after {self.sweeps} sweeps, '
@@ -438,79 +526,6 @@ class DMRGEngine(IterativeSweeps):
         psi : :class:`~tenpy.networks.mps.MPS`
             The MPS representing the ground state after the simulation,
             i.e. just a reference to :attr:`psi`.
-
-        Options
-        -------
-        .. cfg:configoptions :: DMRGEngine
-
-            diag_method : str
-                Method to be used for diagonalization, default ``'default'``.
-                For possible arguments see :meth:`DMRGEngine.diag`.
-            E_tol_to_trunc : float
-                It's reasonable to choose the Lanczos convergence criteria
-                ``'E_tol'`` not many magnitudes lower than the current
-                truncation error. Therefore, if `E_tol_to_trunc` is not
-                ``None``, we update `E_tol` of `lanczos_params` to
-                ``max_E_trunc*E_tol_to_trunc``,
-                restricted to the interval [`E_tol_min`, `E_tol_max`],
-                where ``max_E_trunc`` is the maximal energy difference due to
-                truncation right after each Lanczos optimization during the
-                sweeps.
-            E_tol_max : float
-                See `E_tol_to_trunc`
-            E_tol_min : float
-                See `E_tol_to_trunc`
-            max_E_err : float
-                Convergence if the change of the energy in each step
-                satisfies ``|Delta E / max(E, 1)| < max_E_err``. Note that
-                this might be satisfied even if ``Delta E > 0``,
-                i.e., if the energy increases (due to truncation).
-            max_hours : float
-                If the DMRG took longer (measured in wall-clock time),
-                'shelve' the simulation, i.e. stop and return with the flag
-                ``shelve=True``.
-            max_S_err : float
-                Convergence if the relative change of the entropy in each step
-                satisfies ``|Delta S|/S < max_S_err``
-            max_sweeps : int
-                Maximum number of sweeps to be performed.
-            min_sweeps : int
-                Minimum number of sweeps to be performed.
-                Defaults to 1.5*N_sweeps_check.
-            N_sweeps_check : int
-                Number of sweeps to perform between checking convergence
-                criteria and giving a status update.
-            norm_tol : float
-                After the DMRG run, update the environment with at most
-                `norm_tol_iter` sweeps until
-                ``np.linalg.norm(psi.norm_err()) < norm_tol``.
-            norm_tol_iter : float
-                Perform at most `norm_tol_iter`*`update_env` sweeps to
-                converge the norm error below `norm_tol`.
-            norm_tol_final : float
-                After performing `norm_tol_iter`*`update_env` sweeps, if
-                ``np.linalg.norm(psi.norm_err()) < norm_tol_final``, call
-                :meth:`~tenpy.networks.mps.canonical_form` to canonicalize
-                instead. This tolerance should be stricter than `norm_tol`
-                to ensure canonical form even if DMRG cannot fully converge.
-            P_tol_to_trunc : float
-                It's reasonable to choose the Lanczos convergence criteria
-                ``'P_tol'`` not many magnitudes lower than the current
-                truncation error. Therefore, if `P_tol_to_trunc` is not
-                ``None``, we update `P_tol` of `lanczos_params` to
-                ``max_trunc_err*P_tol_to_trunc``,
-                restricted to the interval [`P_tol_min`, `P_tol_max`],
-                where ``max_trunc_err`` is the maximal truncation error
-                (discarded weight of the Schmidt values) due to truncation
-                right after each Lanczos optimization during the sweeps.
-            P_tol_max : float
-                See `P_tol_to_trunc`
-            P_tol_min : float
-                See `P_tol_to_trunc`
-            update_env : int
-                Number of sweeps without bond optimization to update the
-                environment for infinite boundary conditions,
-                performed every `N_sweeps_check` sweeps.
         """
         return super().run()
     

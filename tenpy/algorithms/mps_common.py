@@ -732,6 +732,12 @@ class IterativeSweeps(Sweep):
     Subclasses should implement :meth:`run_iteration` and :meth:`is_converged`.
     It might be useful to overwrite :meth:`pre_run_initialize`, :meth:`status_update`,
     :meth:`stopping_criterion` or :meth:`post_run_cleanup`.
+
+    Options
+    -------
+    .. cfg:config :: IterativeSweeps
+        :include: Sweep
+    
     """
 
     def run(self):
@@ -804,6 +810,19 @@ class IterativeSweeps(Sweep):
         iteration_start_time : float
             The ``time.time()`` at the start of the last iteration
 
+        Options
+        -------
+        .. cfg:configoptions :: IterativeSweeps
+        
+            min_sweeps : int
+                Minimum number of sweeps to perform.
+            max_sweeps : int
+                Maximum number of sweeps to perform.
+            max_hours : float
+                If the DMRG took longer (measured in wall-clock time),
+                'shelve' the simulation, i.e. stop and return with the flag
+                ``shelve=True``.
+
         Returns
         -------
         should_break : bool
@@ -814,14 +833,19 @@ class IterativeSweeps(Sweep):
         max_seconds = 3600 * self.options.get('max_hours', 24 * 365)
         
         if self.sweeps > max_sweeps:
+            if self.is_converged():
+                logger.info(f'{self.__class__.__name__}: Converged.')
+            else:
+                logger.info(f'{self.__class__.__name__}: Maximum number of sweeps reached')
             return True
         if self.sweeps > min_sweeps and self.is_converged():
             if self.mixer is None:
                 return True
             else:
-                logger.info("Convergence criterion reached with enabled mixer. "
-                            "Disable mixer and continue")
+                logger.info(f"{self.__class__.__name__}: Convergence criterion reached with "
+                            "enabled mixer. Disable mixer and continue.")
                 self.mixer_deactivate()
+                return False
         if iteration_start_time - self.time0 > max_seconds:
             self.shelve = True
             logger.warning(f'{self.__class__.__name__}: maximum time limit reached. '
@@ -2070,14 +2094,10 @@ class VariationalCompression(IterativeSweeps):
     Options
     -------
     .. cfg:config :: VariationalCompression
-        :include: Sweep
+        :include: IterativeSweeps
 
         trunc_params : dict
             Truncation parameters as described in :cfg:config:`truncation`.
-        min_sweeps : int
-            Minimum number of sweeps to perform for the compression.
-        max_sweeps : int
-             Maximum number of sweeps to perform for the compression.
         tol_theta_diff: float | None
             Stop after less than `max_sweeps` sweeps if the 1-site wave function changed by less
             than this value, ``1.-|<theta_old|theta_new>| < tol_theta_diff``, where
