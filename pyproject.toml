@@ -85,6 +85,7 @@ version = {attr = "tenpy.__version__"}
 filterwarnings = "always"
 markers = [
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+    "example: marks tests as example (deselect with '-m \"not example\"')",
 ]
 #{slow = "marks tests as slow (deselect with `-m 'not slow'`)"}
 log_level = "INFO"
