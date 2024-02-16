@@ -7,9 +7,11 @@
 
     \part{User guide}
 
+If you're new here, start with the :doc:`readme_wrap`.
+
 .. toctree::
     :caption: User guide
-    :maxdepth: 2
+    :maxdepth: 1
 
     readme_wrap
     INSTALL
@@ -27,6 +29,7 @@
 
 .. toctree::
     :caption: Reference
+    :maxdepth: 1
 
     main
 
@@ -54,8 +57,7 @@
     Indices and Tables
     ==================
 
-    * :ref:`genindex`
-    * :ref:`modindex`
     * :ref:`cfg-config-index`
     * :ref:`cfg-option-index`
-    * :ref:`search`
+    * :ref:`modindex`
+    * :ref:`genindex`
