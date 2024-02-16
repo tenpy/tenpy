@@ -14,7 +14,7 @@ jobs:
 
     steps:
     - name: Checkout
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
       with:
         submodules: false
     - name: Update submodules
@@ -22,7 +22,7 @@ jobs:
         git submodule update --init --recursive
         git submodule update --remote --merge --recursive
     - name: Set up Python 3.8
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@v5
       with:
         python-version: 3.8
     - name: Install dependencies
