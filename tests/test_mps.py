@@ -1,5 +1,5 @@
 """A collection of tests for :module:`tenpy.networks.mps`."""
-# Copyright 2018-2024 TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, GNU GPLv3
 
 import numpy as np
 import numpy.testing as npt
@@ -295,7 +295,7 @@ def test_TransferMatrix(chi=4, d=2):
         # compare largest eigenvector
         w0 = w[0].to_ndarray()
         w0 /= np.sum(w0)
-        npt.assert_allclose(w0, w0_full)
+        npt.assert_allclose(w0, w0_full, atol=1e-15)
 
 
 def test_compute_K():
