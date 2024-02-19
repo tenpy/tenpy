@@ -1112,3 +1112,37 @@ def setup_executable(mod, run_defaults, identifier_list=None):
     })
 
     return model_par, sim_par, run_par, args
+
+
+def convert_memory_units(value, unit_from='bytes', unit_to=None):
+    """Convert between different memory units.
+
+    Parameters
+    ----------
+    value : float
+        The value to convert.
+    unit_from : ``'bytes'| 'KB'| 'MB'| 'GB'| 'TB'``
+        The unit to convert from.
+    unit_to : ``None | 'bytes'| 'KB'| 'MB'| 'GB'| 'TB'``
+        The unit to convert to.
+        The default ``None`` chooses a human-readable largest unit smaller than `value`.
+        In that case, the used `unit_to` is returned as well.
+
+    Returns
+    -------
+    value : float
+        The value in the unit `unit_to`.
+    unit_to : str
+        Only returned if the passed `unit_to` is ``None``.
+        The unit to which `value` was converted.
+    """
+    units = ['bytes', 'KB', 'MB', 'GB', 'TB']
+    factors = [1024**i for i in range(len(units))]
+    value = value * factors[units.index(unit_from)]  # first convert to bytes
+    if unit_to is None:
+        for f, unit_to in reversed(zip(factors, units)):
+            if value > f:
+                break
+        return value / f, unit_to
+    value = value / factors[units.index(unit_to)]  # now convert back to unit_to
+    return value

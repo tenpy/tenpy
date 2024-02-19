@@ -292,3 +292,10 @@ def test_logging_setup(tmp_path, capsys):
     stdout_text = capture.out
     assert test_message % 'warning' in stdout_text
     assert test_message % 'info' in stdout_text
+
+
+def test_convert_memory_units():
+    assert tools.misc.convert_memory_units(12.5*1024, 'bytes', 'bytes') == 12.5 * 1024
+    assert tools.misc.convert_memory_units(12.5*1024, 'KB', 'MB') == 12.5
+    assert tools.misc.convert_memory_units(12.5*1024, 'MB', 'KB') == 12.5 * 1024**2
+    assert tools.misc.convert_memory_units(12.5*1024, 'MB', 'KB') == 12.5 * 1024**2
