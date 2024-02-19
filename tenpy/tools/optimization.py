@@ -141,6 +141,16 @@ class OptimizationFlag(IntEnum):
     safe = 2
     skip_arg_checks = 3
 
+    @classmethod
+    def from_bytes(cls, bytes, byteorder, *, signed = False):
+        """Like ``int.from_bytes``, which has a docstring which sphinx cant parse"""
+        return super(OptimizationFlag, cls).from_bytes(bytes, byteorder, signed=signed)
+
+
+    def to_bytes(self, length = 1, byteorder="big", *, signed=False):
+        """Like ``int.to_bytes``, which has a docstring which sphinx cant parse"""
+        return super().to_bytes(length, byteorder, signed=signed)
+
 
 class temporary_level:
     """Context manager to temporarily set the optimization level to a different value.
