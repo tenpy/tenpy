@@ -191,6 +191,17 @@ def console_main(*command_line_args):
                           FutureWarning)
             del options['simulation_class_name']
         options['simulation_class'] = args.sim_class
+    if args.RAM:
+        # get simulation
+        sim = simulations.init_simulation(**options)
+        ram = sim.estimate_RAM()
+        if ram < 1024:      # if less then 1MB: print in kB
+            print("Estimated RAM usage: %d kB" % ram)
+        elif ram < 1024**2: # if less then 1GB: print in MB
+            print("Estimated RAM usage: %d MB" % (ram/1024))
+        else:               # if larger than 1MB print in GB
+            print("Estimated RAM usage: %.1f GB" % (ram/(1024**2)))
+        exit(0)
     if 'sequential' not in options:
         run_simulation(**options)
     else:
@@ -246,6 +257,10 @@ def _setup_arg_parser(width=None):
                         default='error',
                         help="Selects how to merge conflicts in case of multiple yaml files. "
                         "Options are 'error', 'first' or 'last'.")
+    parser.add_argument('--RAM',
+                        '-M',
+                        action="store_true",
+                        help="Estimates the required RAM. This argument does not execute any code, but prints the prediction in kB and then exits.")
     parser.add_argument('parameters_file',
                         nargs='*',
                         help="Yaml (*.yml) file with the simulation parameters/options. "

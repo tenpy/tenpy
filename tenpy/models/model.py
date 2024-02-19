@@ -254,6 +254,22 @@ class Model(Hdf5Exportable):
         model_params['time'] = new_time
         return cls(model_params)
 
+    def estimate_RAM_saving_factor(self):
+        """Returns the expected saving factor for RAM based on charge conservation.
+
+        Returns
+        -------
+        factor : int
+            saving factor, due to conservation
+        """
+        chinfo = self.lat.unit_cell[0].leg.chinfo
+        savings = 1
+        for mod in chinfo.mod:
+            if mod == 1:
+                savings *= 1/4 # this is what we found empirically
+            else:
+                savings *= 1/mod
+        return savings
 
 class NearestNeighborModel(Model):
     r"""Base class for a model of nearest neighbor interactions w.r.t. the MPS index.
@@ -1887,6 +1903,12 @@ class CouplingMPOModel(CouplingModel, MPOModel):
         self.init_H_from_terms()
         # finally checks for misspelled parameter names
         model_params.warn_unused()
+
+
+    def estimate_RAM_saving_factor(self):
+        est = super().estimate_RAM_saving_factor()
+        return self.options.get("RAM_saving_factor", est)
+
 
     @property
     def verbose(self):

@@ -245,6 +245,20 @@ class Simulation:
             "See https://tenpy.readthedocs.io/en/latest/intro/logging.html", FutureWarning, 2)
         return self.options.get('verbose', 1.)
 
+    def estimate_RAM(self):
+        """Estimates the RAM usage for the simulation, without running it.
+
+        Returns
+        -------
+        RAM : int
+            The expected RAM usage in kB.
+        """
+        self.init_model()       # model, required for algorithm
+        self.init_state()       # psi, required for algorithm
+        self.init_algorithm()   # create engine (subclass of Algorithm)
+
+        return self.engine.estimate_RAM()
+
     def run(self):
         """Run the whole simulation.
 
