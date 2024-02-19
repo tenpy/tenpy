@@ -21,6 +21,7 @@ __all__ = [
     'merge_recursive', 'flatten', 'setup_logging', 'build_initial_state', 'setup_executable'
 ]
 
+_not_set = object()  # sentinel
 
 def to_iterable(a):
     """If `a` is a not iterable or a string, return ``[a]``, else return ``a``."""
@@ -756,7 +757,7 @@ skip_logging_setup = False
 def setup_logging(options=None,
                   output_filename=None,
                   *,
-                  filename=None,
+                  filename=_not_set,
                   to_stdout="INFO",
                   to_file="INFO",
                   format="%(levelname)-8s: %(message)s",
@@ -830,7 +831,7 @@ def setup_logging(options=None,
             The filename is given by `filename`.
         filename : str
             Filename for the logfile.
-            It defaults  to `output_filename` with the extension replaced to ".log".
+            If not set, it defaults  to `output_filename` with the extension replaced to ".log".
             If ``None``, no log-file will be created, even with `to_file` set.
         logger_levels : dict(str, str)
             Set levels for certain loggers, e.g. ``{'tenpy.tools.params': 'WARNING'}`` to suppress
@@ -862,7 +863,7 @@ def setup_logging(options=None,
     if options is not None:
         warnings.warn("Give logging parameters directly as keyword arguments!", FutureWarning, 2)
         locals().update(**options)
-    if filename is None:
+    if filename is _not_set:
         if output_filename is not None:
             root, ext = os.path.splitext(output_filename)
             assert ext != '.log'

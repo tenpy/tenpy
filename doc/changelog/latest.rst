@@ -87,3 +87,5 @@ Fixed
   Further, allow to pass multiple charge sectors to loop over at once, add argument `return_charges`.
   Also, provide a :meth:`~tenpy.networks.mps.MPS.correlation_length_charge_sectors` convenience function to return valid charge sectors.
 - :issue:`153` that DMRG energy convergence criterion was verified after an arbitrarily large energy increase.
+- :func:`~tenpy.tools.misc.setup_logging` did not suppress logging file output with ``filename=None`` as documented, but
+  just derived the log output filename from the `output_filename`.
