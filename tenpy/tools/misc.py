@@ -18,7 +18,8 @@ __all__ = [
     'inverse_permutation', 'list_to_dict_list', 'atleast_2d_pad', 'transpose_list_list',
     'zero_if_close', 'pad', 'any_nonzero', 'add_with_None_0', 'chi_list', 'group_by_degeneracy',
     'get_close', 'find_subclass', 'get_recursive', 'set_recursive', 'update_recursive',
-    'merge_recursive', 'flatten', 'setup_logging', 'build_initial_state', 'setup_executable'
+    'merge_recursive', 'flatten', 'setup_logging', 'build_initial_state', 'setup_executable',
+    'convert_memory_units'
 ]
 
 _not_set = object()  # sentinel
@@ -1127,23 +1128,21 @@ def convert_memory_units(value, unit_from='bytes', unit_to=None):
     unit_to : ``None | 'bytes'| 'KB'| 'MB'| 'GB'| 'TB'``
         The unit to convert to.
         The default ``None`` chooses a human-readable largest unit smaller than `value`.
-        In that case, the used `unit_to` is returned as well.
 
     Returns
     -------
     value : float
         The value in the unit `unit_to`.
     unit_to : str
-        Only returned if the passed `unit_to` is ``None``.
         The unit to which `value` was converted.
     """
     units = ['bytes', 'KB', 'MB', 'GB', 'TB']
     factors = [1024**i for i in range(len(units))]
     value = value * factors[units.index(unit_from)]  # first convert to bytes
     if unit_to is None:
-        for f, unit_to in reversed(zip(factors, units)):
+        for f, unit_to in reversed(list(zip(factors, units))):
             if value > f:
                 break
         return value / f, unit_to
     value = value / factors[units.index(unit_to)]  # now convert back to unit_to
-    return value
+    return value, unit_to

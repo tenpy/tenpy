@@ -302,10 +302,10 @@ def test_logging_setup(tmp_path):
 
 
 def test_convert_memory_units():
-    assert tools.misc.convert_memory_units(12.5*1024, 'bytes', 'bytes') == 12.5 * 1024
-    assert tools.misc.convert_memory_units(12.5*1024, 'KB', 'MB') == 12.5
-    assert tools.misc.convert_memory_units(12.5*1024, 'MB', 'KB') == 12.5 * 1024**2
-    assert tools.misc.convert_memory_units(12.5*1024, 'MB', 'KB') == 12.5 * 1024**2
+    assert tools.misc.convert_memory_units(12.5*1024, 'bytes', 'bytes') == (12.5 * 1024, 'bytes')
+    assert tools.misc.convert_memory_units(12.5*1024, 'KB', 'MB') == (12.5, 'MB')
+    assert tools.misc.convert_memory_units(12.5*1024, 'MB', 'KB') == (12.5 * 1024**2, 'KB')
+    assert tools.misc.convert_memory_units(12.5*1024, 'MB', None) == (12.5, 'GB')
 
 if __name__ == "__main__":
     import tempfile
