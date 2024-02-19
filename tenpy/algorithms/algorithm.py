@@ -182,29 +182,43 @@ class Algorithm:
         else:
             return {'psi': self.psi}
 
-    def estimate_RAM(self, saving_factor=None, mini=50_000):
+    def estimate_RAM(self, saving_factor=None):
         """Gives an approximate prediction for the required memory usage.
-        This calculation is based on the requested bond dimension, the local Hilbert space dimension, the number of sites, and the boundary conditions.
+
+        This calculation is based on the requested bond dimension,
+        the local Hilbert space dimension, the number of sites, and the boundary conditions.
 
         Parameters
         ----------
         saving_factor : float
-            Represents the amount of RAM saved due to conservation laws. By default, it is 'None' and is extracted from the model automatically. However, this is only possible in a few cases and needs to be estimated in most cases. This is due to the fact that it is dependent on the model parameters.
+            Represents the amount of RAM saved due to conservation laws.
+            By default, it is 'None' and is extracted from the model automatically.
+            However, this is only possible in a few cases and needs to be estimated in most cases.
+            This is due to the fact that it is dependent on the model parameters.
             If one has a better estimate, one can pass the value directly.
-            This value can be extracted by building the initial state 'psi' (usually by performing DMRG ) and then calling
-            ''print(psi.get_B(0).sparse_stats())''
-            TeNPy will automatically print the fraction of nonzero entries in the first line (for example, 6 of 16 entries (=0.375) nonzero). This fraction corresponds to the saving_factor; in our example, it is 0.375.
-        mini : float
-            The minimum amount of RAM in kB to be returned. By default 50 MB.
+            This value can be extracted by building the initial state `psi`
+            (usually by performing DMRG) and then calling
+            ``print(psi.get_B(0).sparse_stats())``
+            TeNPy will automatically print the fraction of nonzero entries in the first line,
+            for example, ``6 of 16 entries (=0.375) nonzero``.
+            This fraction corresponds to the saving_factor; in our example, it is 0.375.
 
         Returns
         -------
-        usage : int
-            Required RAM in kB. It always returns a minimum of mini=50 MB.
+        usage : float
+            Required RAM in MB.
         """
-        import numpy as np
-        # get memory per item
-        entry_size = self.psi.dtype.itemsize
+        # first get memory per tensor entry in bytes
+        dtypes = [self.psi.dtype]
+        if hasattr(self, 'H_MPO'):
+            dtypes.append(self.H_MPO.dtype)
+        if hasattr(self, 'H_bond'):
+            dtypes.append([h.dtype for h in self.H_bond if h is not None])
+        if isinstance(self, TimeEvolutionAlgorithm):
+            # time evolution needs complex states
+            dtypes.append(np.dtype('complex128'))
+        common_dtype = np.result_type(*dtypes)
+        entry_size = common_dtype.itemsize  # likely 8 or 16 bytes for np.float64/np.complex128
 
         # get info from model & params
         L = self.psi.L
@@ -225,69 +239,77 @@ class Algorithm:
         else:
             chis = [chi_max]*(L+1)
 
+        # now start counting number of tensor entries
+        total_entries = 0
+
         # MPS ram:
-        num_entries = 0
+        psi_entries = 0
         for i in range(len(self.model.lat.mps_sites())):
             site_i = self.model.lat.mps_sites()[i]
-            num_entries += site_i.dim * chis[i] * chis[i+1]
+            psi_entries += site_i.dim * chis[i] * chis[i+1]
 
-        RAM = num_entries   # store number of entries first, multiply with memory per entry later.
-                            # This is because the algorithm's MPS RAM would increase if the MPO had a greater floating-point number than the MPS.
-        logger.debug("Extracted MPS RAM usage as\t\t%d kB" % (RAM*entry_size // 1024))
+        total_entries += psi_entries
+
+        logger.debug("Extracted MPS RAM usage as             %10.0f entries", psi_entries)
 
         from .mps_common import Sweep
         from .mpo_evolution import ExpMPOEvolution
 
         if isinstance(self, (Sweep, ExpMPOEvolution)):
+            # need to sweep -> MPO environments are often biggest contribution!
 
             MPO = self.model.H_MPO
             entry_size = MPO.dtype.itemsize if MPO.dtype.itemsize > entry_size else entry_size
-            MPO_RAM = 0
-            env_RAM = 0
+            MPO_entries = 0
+            env_entries = 0
             for i in range(MPO.L):
                 W = MPO.get_W(i)
-                MPO_RAM += np.prod(W.shape)
-                # Size of each environment: chi_{i}**2 * D_i or chi_{i+1}**2 * D_i (depending on left/right environment)
+                MPO_entries += np.prod(W.shape)
+                # Size of each environment: chi_{i}**2 * D_i or chi_{i+1}**2 * D_i
+                #                           (depending on left/right environment)
                 # The shape is ordered like (wL, wR, p, p*)
-                env_RAM += chis[i]**2 * max(W.shape[0], W.shape[1])
+                env_entries += chis[i]**2 * max(W.shape[0], W.shape[1])
+                # max: sweeps need only L, not 2L env tensors
 
-            lanczos_RAM = 0
+            lanczos_entries = 0
             # Additional RAM, if Lanczos is performed
             # We need to construct (1) the effective Hamiltonian and (2) the two-site wave-function
             # (1) H_eff
             W = MPO.get_W(L//2)
             # Left and right part from H_eff -> 2 times environment
             # The third comes from the first contraction from 2-site wave function to left H_eff
-            lanczos_RAM += 3 * H_dim[L//2]**2 * (chis[L//2]**2 * max(W.shape[0], W.shape[1]))
-            #              |         |                          | 
-            #       occurrences   from W                environment RAM
-            #                    contraction
+            lanczos_entries += 3 * H_dim[L//2]**2 * (chi_max**2 * max(W.shape[0], W.shape[1]))
+            #                  |         |                          |
+            #           occurrences   from W                environment RAM
+            #                        contraction
 
             # (2) 2-site wave-function
 
-            lanczos_RAM += 2 * chis[L//2]**2 * H_dim[L//2]**2
-            #              |            |           | 
-            #         occurrences    virtual     physical
-            #       (top & bottom)    legs         legs
+            lanczos_entries += 2 * chi_max**2 * H_dim[L//2]**2
+            #              |          |           |
+            #         occurrences  virtual     physical
+            #       (top & bottom)  legs         legs
 
 
-            logger.debug("Extracted MPS environment RAM usage as\t%d kB" % (env_RAM*entry_size // 1024))
-            logger.debug("Extracted MPO RAM usage as\t\t%d kB" % (MPO_RAM // 128))
-            logger.debug("Extracted extra RAM from Lanczos as\t%d kB" % (lanczos_RAM // 128))
-            RAM += env_RAM
-            RAM += MPO_RAM
-            RAM += lanczos_RAM
+            logger.debug("Extracted MPS environment RAM usage as %10.0f kB", env_entries)
+            logger.debug("Extracted MPO RAM usage as             %10.0f kB", MPO_entries)
+            logger.debug("Extracted extra RAM from Lanczos as    %10.0f kB", lanczos_entries)
+            total_entries += env_entries
+            total_entries += MPO_entries
+            total_entries += lanczos_entries
 
-        if saving_factor == None:
+        if saving_factor is None:
             saving_factor = self.model.estimate_RAM_saving_factor()
-        logger.debug("Each entry uses %d byte" % (entry_size))
-        RAM *= entry_size
-        logger.debug("We have a saving factor of %d" % (1/saving_factor))
+
+        logger.debug("We get a total of %.3e = %d entries for the RAM esitmate", entry_size, entry_size)
+        logger.debug("Each entry uses %d byte", entry_size)
+        RAM = total_entries * entry_size
+        logger.debug("We have a saving factor of %.5f ~= 1/%d",
+                     saving_factor, int(1./saving_factor + 0.5))
         RAM *= saving_factor
-        logger.info("Total RAM expectation:\t\t\t%d kB" % (RAM//1024))
-
-        return int(max(RAM / 1024, mini)) # in kB
-
+        RAM_MB = RAM / 1024**2
+        logger.info("Total RAM estimate: %8d MB", RAM_MB)
+        return RAM_MB
 
 
 class TimeEvolutionAlgorithm(Algorithm):

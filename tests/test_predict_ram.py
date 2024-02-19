@@ -23,28 +23,33 @@ def test_bosonic_model_TEBD():
     num_entries = 5*25 + 25*33 + 33*33 + 33*33 + 33*33 + 33*33 + 33*33 + 33*33 + 33*33 + 33*33 + 33*33 + 33*33 + 33*33 + 33*25 + 25*5
     num_entries *= 5 # physical leg
     # expected MPS vmem:
-    MPS_vmem = (num_entries * 8) / 1024
-    assert abs(engine.estimate_RAM(mini=0) - int(MPS_vmem)) < 1e-10, "TEBD RAM did not match expectation (expected: %d, gotten:%d)" % (MPS_vmem, engine.estimate_RAM(mini=0))
+    exact = (num_entries * np.dtype('complex128').itemsize) / 1024**2  # in MB
+    estimate = engine.estimate_RAM()
+    assert abs(estimate - exact) < 1e-10, \
+            "TEBD RAM did not match expectation (expected: %f, gotten:%f)" % (exact, estimate)
 
 
 def test_bosonic_model_DMRG():
     """Test with a bosonic chain."""
     L = 15
-    model = mods.hubbard.BoseHubbardChain({"U":1, "t":1, "bc_MPS": "finite", "L": L, "n_max": 4})
+    model = mods.hubbard.BoseHubbardChain({"conserve":None, "U":1, "t":1, "bc_MPS": "finite", "L": L, "n_max": 4})
     psi = mps.MPS.from_product_state(model.lat.mps_sites(), [0]*L)
     engine = algo.dmrg.TwoSiteDMRGEngine(psi, model, {"trunc_params": {"chi_max": 99}})
     # expected value:
     # bond | 0   | 1  | 2  | 3  | 4  | 5  | 6  | 7  | 8  | 9  | 10 | 11 | 12 | 13 | 14 | 15 |
     # chi  | 5   | 25 | 99 | 99 | 99 | 99 | 99 | 99 | 99 | 99 | 99 | 99 | 99 | 99 | 25 | 5  |
+    chis = np.array([5, 25, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 25])
     # add matrices:
-    num_entries = 5*25 + 25*99 + 99*99 + 99*99 + 99*99 + 99*99 + 99*99 + 99*99 + 99*99 + 99*99 + 99*99 + 99*99 + 99*99 + 99*25 + 25*5
-    num_entries *= 5 # physical leg
-    # expected MPS vmem:
-    MPS_vmem = (num_entries * 8) / 1024
+    psi_entries = 5*25 + 25*99 + 99*99 + 99*99 + 99*99 + 99*99 + 99*99 + 99*99 + 99*99 + 99*99 + 99*99 + 99*99 + 99*99 + 99*25 + 25*5
+    psi_entries *= 5 # physical leg
     # environment:
-    MPS_env_vmem = sum(np.array([5, 25, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 25])**2 * 4) * 8 / 1024
-    MPO_vmem = (4**2*5**2 * (L-2) + 2*4*5**2 * 2) * 8 / 1024
+    MPS_env_entries = sum(chis**2 * 4)
+    MPO_entries = (4**2*5**2 * (L-2) + 2*4*5**2 * 2)
     # add lanczos:
-    RAM_lanczos = (3 * 5**2 * (99**2 * 4) + 2 * 99**2 * 5**2) * 8 / 1024
-    assert engine.estimate_RAM(mini=0) == int((MPS_vmem+MPS_env_vmem+MPO_vmem+RAM_lanczos)/8), "DMRG RAM did not match expectation (expected: %d, gotten:%d)" % ((MPS_vmem+MPS_env_vmem+MPO_vmem+RAM_lanczos)/8, engine.estimate_RAM(mini=0))
+    lanczos_entries = (3 * 5**2 * (99**2 * 4) + 2 * 99**2 * 5**2)
+    total_entries = (psi_entries + MPS_env_entries + MPO_entries + lanczos_entries)
+    exact = total_entries * np.dtype('float64').itemsize / 1024**2  # in MB
+    estimate = engine.estimate_RAM()
+    assert abs(estimate - exact) < 1.e-10, \
+        "DMRG RAM did not match expectation (expected: %d, gotten:%d)" % (exact, estimate)
 
