@@ -261,6 +261,14 @@ class Model(Hdf5Exportable):
         -------
         factor : int
             saving factor, due to conservation
+
+        Options
+        -------
+        .. cfg:configoptions :: Model
+
+            saving_factor :: None | float
+                Quantizes the RAM saving, due to conservation laws. By default it is 1/mod, or 1/4 in case of mod=1. However, for some classes this factor might be overwritten, if a better approximation is known. In the best case, the user has a good approximation and can pass it via the argument ``saving_factor`` to the model.
+
         """
         chinfo = self.lat.unit_cell[0].leg.chinfo
         savings = 1

@@ -97,6 +97,8 @@ class BoseHubbardChain(BoseHubbardModel, NearestNeighborModel):
         -------
         factor : int
             saving factor, due to conservation
+
+
         """
         chinfo = self.lat.unit_cell[0].leg.chinfo
         savings = 1
