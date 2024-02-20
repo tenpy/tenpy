@@ -7,7 +7,7 @@ name = "physics-tenpy"
 dynamic = ["version"]
 description = "Simulation of quantum many-body systems with tensor networks in Python"
 readme = {file = "README.rst", content-type = "text/x-rst"}
-requires-python = ">=3.6"
+requires-python = ">=3.7"
 license = {text = "GPLv3"}
 authors = [
     {name = "TeNPy Developer Team"},
@@ -26,7 +26,6 @@ classifiers = [
     "Programming Language :: C",
     "Programming Language :: Python",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.6",
     "Programming Language :: Python :: 3.7",
     "Programming Language :: Python :: 3.8",
     "Programming Language :: Python :: 3.9",
