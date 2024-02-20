@@ -8,7 +8,7 @@ dependencies:
   - mkl-devel
   - bottleneck
   - pip
-  - setuptools>=30.3.0
+  - setuptools>=68.0.0
   - h5py
   - pyyaml
   - pytest>=0.6
