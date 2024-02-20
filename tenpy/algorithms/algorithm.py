@@ -182,7 +182,7 @@ class Algorithm:
         else:
             return {'psi': self.psi}
 
-    def estimate_RAM(self, saving_factor=None):
+    def estimate_RAM(self, mem_saving_factor=None):
         """Gives an approximate prediction for the required memory usage.
 
         This calculation is based on the requested bond dimension,
@@ -190,7 +190,7 @@ class Algorithm:
 
         Parameters
         ----------
-        saving_factor : float
+        mem_saving_factor : float
             Represents the amount of RAM saved due to conservation laws.
             By default, it is 'None' and is extracted from the model automatically.
             However, this is only possible in a few cases and needs to be estimated in most cases.
@@ -201,12 +201,16 @@ class Algorithm:
             ``print(psi.get_B(0).sparse_stats())``
             TeNPy will automatically print the fraction of nonzero entries in the first line,
             for example, ``6 of 16 entries (=0.375) nonzero``.
-            This fraction corresponds to the saving_factor; in our example, it is 0.375.
+            This fraction corresponds to the `mem_saving_factor`; in our example, it is 0.375.
 
         Returns
         -------
         usage : float
             Required RAM in MB.
+
+        See also
+        --------
+        tenpy.simulations.simulation.estimate_simulation_RAM: global function calling this.
         """
         # first get memory per tensor entry in bytes
         dtypes = [self.psi.dtype]
@@ -298,15 +302,15 @@ class Algorithm:
             total_entries += MPO_entries
             total_entries += lanczos_entries
 
-        if saving_factor is None:
-            saving_factor = self.model.estimate_RAM_saving_factor()
+        if mem_saving_factor is None:
+            mem_saving_factor = self.model.estimate_RAM_saving_factor()
 
         logger.debug("We get a total of %.3e = %d entries for the RAM esitmate", entry_size, entry_size)
         logger.debug("Each entry uses %d byte", entry_size)
         RAM = total_entries * entry_size
         logger.debug("We have a saving factor of %.5f ~= 1/%d",
-                     saving_factor, int(1./saving_factor + 0.5))
-        RAM *= saving_factor
+                     mem_saving_factor, int(1./mem_saving_factor + 0.5))
+        RAM *= mem_saving_factor
         RAM_MB = RAM / 1024**2
         logger.info("Total RAM estimate: %8d MB", RAM_MB)
         return RAM_MB

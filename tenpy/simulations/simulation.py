@@ -43,6 +43,7 @@ __all__ = [
     'init_simulation_from_checkpoint',
     'resume_from_checkpoint',
     'run_seq_simulations',
+    'estimate_simulation_RAM',
     'output_filename_from_dict',
 ]
 
@@ -1415,6 +1416,8 @@ def estimate_simulation_RAM(*,
     Large-scale simulations need to be submitted to a simulation cluster, which often requires to
     give an estimate of the required RAM before actually running the simulation.
 
+    See also the model parameter :cfg:option:`Model.mem_saving_factor`.
+
     Parameters
     ----------
     suppress_non_RAM_output : bool
@@ -1432,6 +1435,10 @@ def estimate_simulation_RAM(*,
     unit : str
         Unit of the estimate
 
+    See also
+    --------
+    Simulation.estimate_RAM : Corresponding simulation method
+    tenpy.algorithms.algorithm.Algorithm.estimate_RAM : corresponding algorithm method.
     """
     offset_val, offset_unit = const_offset
     offset_MB, _ = convert_memory_units(offset_val, offset_unit, 'MB')

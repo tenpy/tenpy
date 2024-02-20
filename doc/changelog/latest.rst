@@ -37,6 +37,8 @@ Added
 - Overlaps of finite, shifted/translated MPS in :meth:`~tenpy.networks.mps.MPS.overlap_translate_finite`.
 - New MPS construction method :meth:`~tenpy.networks.mps.MPS.from_product_mps_covering` as a generalization of
   `from_singlets`.
+- New :func:`~tenpy.simulations.simulation.estimate_simulation_RAM` to estimate the RAM requiremensts of a simulation
+  before actually running it (:issue:`305` and :issue:`342`).
 
 Changed
 ^^^^^^^
