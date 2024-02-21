@@ -198,7 +198,7 @@ class Simulation:
         self.options = asConfig(self.options, self.__class__.__name__)
         self.options.touch('directory', 'output_filename', 'output_filename_params',
                            'overwrite_output', 'skip_if_output_exists', 'safe_write', 'log_params',
-                           'logging_params')
+                           'logging_params', 'estimate_RAM_const_offset')
         if cwd is not None:
             self.logger.info("change directory to %s", cwd)  # os.chdir(cwd) above
         self.logger.info("output filename: %s", self.output_filename)
@@ -1408,8 +1408,8 @@ def run_seq_simulations(sequential,
 
 def estimate_simulation_RAM(*,
                             suppress_non_RAM_output=True,
-                            output_unit=None,
-                            const_offset=(100, "MB"),
+                            RAM_output_unit=None,
+                            estimate_RAM_const_offset=(100, "MB"),
                             **simulation_params):
     """Pre-simulation RAM estimate.
 
@@ -1422,8 +1422,11 @@ def estimate_simulation_RAM(*,
     ----------
     suppress_non_RAM_output : bool
         If True (default), suppress all other output (except for error messages).
-    output_unit : None | str
+    RAM_output_unit : None | str
         Memory unit to be used for the output. ``None`` defaults to human-readable rounding.
+    estimate_RAM_const_offset : ``(int, str)``
+        Defaults to ``(100, "MB")`` which gets added to the scaling estimates.
+        This constant needs to account for loading python libraries etc.
     **simulation_params :
         Other simulation parameters as they would be pass to :func:`run_simulation` to run the
         simulation.
@@ -1431,7 +1434,7 @@ def estimate_simulation_RAM(*,
     Returns
     -------
     estimate : float
-        Estimated RAM requirements including the `const_offset`.
+        Estimated RAM requirements including the `estimate_RAM_const_offset`.
     unit : str
         Unit of the estimate
 
@@ -1440,7 +1443,7 @@ def estimate_simulation_RAM(*,
     Simulation.estimate_RAM : Corresponding simulation method
     tenpy.algorithms.algorithm.Algorithm.estimate_RAM : corresponding algorithm method.
     """
-    offset_val, offset_unit = const_offset
+    offset_val, offset_unit = estimate_RAM_const_offset
     offset_MB, _ = convert_memory_units(offset_val, offset_unit, 'MB')
     # suppress in this case undesired output
     if suppress_non_RAM_output:
