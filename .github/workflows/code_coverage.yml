@@ -41,9 +41,23 @@ jobs:
         python -m coverage run -m pytest
         python -m coverage report -m --skip-covered
         python -m coverage json
+    - name: Set environment variable for badge
+      # note: this cuts off digits instead of rounding
+      run: echo "COV_PERCENT=$(jq .totals.percent_covered coverage.json | xargs printf "%.0f")" >> $GITHUB_ENV
     - name: Archive code coverage results
       uses: actions/upload-artifact@v4
       with:
         name: code-coverage-report
         path: coverage.json
         if-no-files-found: error
+    - name: Create Badge
+      uses: schneegans/dynamic-badges-action@v1.7.0
+      with:
+        auth: ${{ secrets.JAKOB_UNFRIED_GIST_TOKEN }}
+        gistID: 9e2e197d6a2e6e2c9440b2c0eda04d5c
+        filename: tenpy_coverage_badge.json
+        label: Code Coverage
+        message: ${{ env.COV_PERCENT }}%
+        minColorRange: 50
+        maxColorRange: 100
+        valColorRange: ${{ env.COV_PERCENT }}
