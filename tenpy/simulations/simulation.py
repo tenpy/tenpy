@@ -1460,8 +1460,8 @@ def estimate_simulation_RAM(*,
         estimate_MB = sim.estimate_RAM()
     total_MB = estimate_MB + offset_MB
 
-    est, est_unit = convert_memory_units(estimate_MB, 'MB', output_unit)
-    total, total_unit = convert_memory_units(total_MB, 'MB', output_unit)
+    est, est_unit = convert_memory_units(estimate_MB, 'MB', RAM_output_unit)
+    total, total_unit = convert_memory_units(total_MB, 'MB', RAM_output_unit)
     print(f"  {est:5.1f} {est_unit} estimated usage for tensors")
     print(f"+ {offset_val:5.1f} {offset_unit} constant offset for loading python etc")
     print(f"= {total:5.1f} {total_unit} total estimated RAM")
