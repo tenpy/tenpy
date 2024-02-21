@@ -261,6 +261,19 @@ class Model(Hdf5Exportable):
         -------
         factor : int
             saving factor, due to conservation
+
+        Options
+        -------
+        .. cfg:configoptions :: Model
+
+            mem_saving_factor :: None | float
+                Quantizes the RAM saving, due to conservation laws, to be used by
+                :func:`~tenpy.simulations.simulation.estimate_simulation_RAM`.
+                By default it is 1/mod, or 1/4 in case of mod=1.
+                However, for some classes this factor might be overwritten,
+                if a better approximation is known.
+                In the best case, the user can adjust this model parameter to enhance the estimate.
+
         """
         chinfo = self.lat.unit_cell[0].leg.chinfo
         savings = 1
@@ -269,7 +282,8 @@ class Model(Hdf5Exportable):
                 savings *= 1/4 # this is what we found empirically
             else:
                 savings *= 1/mod
-        return savings
+        return self.options.get("mem_saving_factor", savings)
+
 
 class NearestNeighborModel(Model):
     r"""Base class for a model of nearest neighbor interactions w.r.t. the MPS index.
@@ -1903,12 +1917,6 @@ class CouplingMPOModel(CouplingModel, MPOModel):
         self.init_H_from_terms()
         # finally checks for misspelled parameter names
         model_params.warn_unused()
-
-
-    def estimate_RAM_saving_factor(self):
-        est = super().estimate_RAM_saving_factor()
-        return self.options.get("RAM_saving_factor", est)
-
 
     @property
     def verbose(self):

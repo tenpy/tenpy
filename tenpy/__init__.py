@@ -68,7 +68,7 @@ from .networks.mpo import MPO, MPOEnvironment, MPOTransferMatrix
 from .networks.purification_mps import PurificationMPS
 from .simulations.simulation import (Simulation, Skip, init_simulation, run_simulation,
                                      init_simulation_from_checkpoint, resume_from_checkpoint,
-                                     run_seq_simulations)
+                                     run_seq_simulations, estimate_simulation_RAM)
 from .simulations.ground_state_search import (GroundStateSearch, OrthogonalExcitations,
                                               ExcitationInitialState)
 from .simulations.time_evolution import RealTimeEvolution
@@ -192,20 +192,12 @@ def console_main(*command_line_args):
             del options['simulation_class_name']
         options['simulation_class'] = args.sim_class
     if args.RAM:
-        # get simulation
-        sim = simulations.init_simulation(**options)
-        ram = sim.estimate_RAM()
-        if ram < 1024:      # if less then 1MB: print in kB
-            print("Estimated RAM usage: %d kB" % ram)
-        elif ram < 1024**2: # if less then 1GB: print in MB
-            print("Estimated RAM usage: %d MB" % (ram/1024))
-        else:               # if larger than 1MB print in GB
-            print("Estimated RAM usage: %.1f GB" % (ram/(1024**2)))
-        exit(0)
+        # exit immediately
+        return estimate_simulation_RAM(suppress_non_RAM_output=True, unit='MB', **options)
     if 'sequential' not in options:
-        run_simulation(**options)
+        return run_simulation(**options)
     else:
-        run_seq_simulations(**options)
+        return run_seq_simulations(**options)
 
 
 def _setup_arg_parser(width=None):
@@ -258,9 +250,10 @@ def _setup_arg_parser(width=None):
                         help="Selects how to merge conflicts in case of multiple yaml files. "
                         "Options are 'error', 'first' or 'last'.")
     parser.add_argument('--RAM',
-                        '-M',
                         action="store_true",
-                        help="Estimates the required RAM. This argument does not execute any code, but prints the prediction in kB and then exits.")
+                        help="Estimates the required RAM. "
+                        "This argument does not execute any simulation, but just initializes it "
+                        "to predict the necessary RAM in MB and then exits.")
     parser.add_argument('parameters_file',
                         nargs='*',
                         help="Yaml (*.yml) file with the simulation parameters/options. "

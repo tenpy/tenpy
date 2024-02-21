@@ -263,21 +263,27 @@ def test_merge_recursive():
 
 
 @pytest.mark.skip(reason="interferes with pytest logging setup")
-def test_logging_setup(tmp_path, capsys):
+def test_logging_setup(tmp_path):
+    from contextlib import redirect_stdout
     import logging.config
     logger = logging.getLogger('tenpy.test_logging')
     root = logging.getLogger()
-    output_filename = tmp_path / 'output.pkl'
     logging_params = {
+        'output_filename': tmp_path / 'output.pkl',
         'to_stdout': 'INFO',
         'to_file': 'WARNING',
         'skip_setup': False,
     }
-    tools.misc.setup_logging(logging_params, output_filename)
 
-    test_message = "test %s message 12345"
-    logger.info(test_message, 'info')
-    logger.warning(test_message, 'warning')
+
+    with open(tmp_path / 'stdout.txt', 'w') as stdout:
+        with redirect_stdout(stdout):
+            # example logging code
+            tools.misc.setup_logging(**logging_params)
+
+            test_message = "test %s message 12345"
+            logger.info(test_message, 'info')
+            logger.warning(test_message, 'warning')
 
     # clean up loggers -> close file handlers (?)
     logging.config.dictConfig({'version': 1, 'disable_existing_loggers': False})
@@ -288,7 +294,21 @@ def test_logging_setup(tmp_path, capsys):
     assert test_message % 'warning' in file_text
     assert test_message % 'info' not in file_text  # should have filtered that out
 
-    capture = capsys.readouterr()
-    stdout_text = capture.out
+    with open(tmp_path / 'stdout.txt', 'r') as stdout:
+        stdout_text = stdout.read()
     assert test_message % 'warning' in stdout_text
     assert test_message % 'info' in stdout_text
+    print("test_logging_setup() finished without errors")
+
+
+def test_convert_memory_units():
+    assert tools.misc.convert_memory_units(12.5*1024, 'bytes', 'bytes') == (12.5 * 1024, 'bytes')
+    assert tools.misc.convert_memory_units(12.5*1024, 'KB', 'MB') == (12.5, 'MB')
+    assert tools.misc.convert_memory_units(12.5*1024, 'MB', 'KB') == (12.5 * 1024**2, 'KB')
+    assert tools.misc.convert_memory_units(12.5*1024, 'MB', None) == (12.5, 'GB')
+
+if __name__ == "__main__":
+    import tempfile
+    from pathlib import Path
+    with tempfile.TemporaryDirectory() as tmp_path:
+        test_logging_setup(Path(tmp_path))

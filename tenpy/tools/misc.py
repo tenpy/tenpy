@@ -18,9 +18,11 @@ __all__ = [
     'inverse_permutation', 'list_to_dict_list', 'atleast_2d_pad', 'transpose_list_list',
     'zero_if_close', 'pad', 'any_nonzero', 'add_with_None_0', 'chi_list', 'group_by_degeneracy',
     'get_close', 'find_subclass', 'get_recursive', 'set_recursive', 'update_recursive',
-    'merge_recursive', 'flatten', 'setup_logging', 'build_initial_state', 'setup_executable'
+    'merge_recursive', 'flatten', 'setup_logging', 'build_initial_state', 'setup_executable',
+    'convert_memory_units'
 ]
 
+_not_set = object()  # sentinel
 
 def to_iterable(a):
     """If `a` is a not iterable or a string, return ``[a]``, else return ``a``."""
@@ -759,7 +761,7 @@ skip_logging_setup = False
 def setup_logging(options=None,
                   output_filename=None,
                   *,
-                  filename=None,
+                  filename=_not_set,
                   to_stdout="INFO",
                   to_file="INFO",
                   format="%(levelname)-8s: %(message)s",
@@ -833,7 +835,7 @@ def setup_logging(options=None,
             The filename is given by `filename`.
         filename : str
             Filename for the logfile.
-            It defaults  to `output_filename` with the extension replaced to ".log".
+            If not set, it defaults  to `output_filename` with the extension replaced to ".log".
             If ``None``, no log-file will be created, even with `to_file` set.
         logger_levels : dict(str, str)
             Set levels for certain loggers, e.g. ``{'tenpy.tools.params': 'WARNING'}`` to suppress
@@ -865,7 +867,7 @@ def setup_logging(options=None,
     if options is not None:
         warnings.warn("Give logging parameters directly as keyword arguments!", FutureWarning, 2)
         locals().update(**options)
-    if filename is None:
+    if filename is _not_set:
         if output_filename is not None:
             root, ext = os.path.splitext(output_filename)
             assert ext != '.log'
@@ -1115,3 +1117,35 @@ def setup_executable(mod, run_defaults, identifier_list=None):
     })
 
     return model_par, sim_par, run_par, args
+
+
+def convert_memory_units(value, unit_from='bytes', unit_to=None):
+    """Convert between different memory units.
+
+    Parameters
+    ----------
+    value : float
+        The value to convert.
+    unit_from : ``'bytes'| 'KB'| 'MB'| 'GB'| 'TB'``
+        The unit to convert from.
+    unit_to : ``None | 'bytes'| 'KB'| 'MB'| 'GB'| 'TB'``
+        The unit to convert to.
+        The default ``None`` chooses a human-readable largest unit smaller than `value`.
+
+    Returns
+    -------
+    value : float
+        The value in the unit `unit_to`.
+    unit_to : str
+        The unit to which `value` was converted.
+    """
+    units = ['bytes', 'KB', 'MB', 'GB', 'TB']
+    factors = [1024**i for i in range(len(units))]
+    value = value * factors[units.index(unit_from)]  # first convert to bytes
+    if unit_to is None:
+        for f, unit_to in reversed(list(zip(factors, units))):
+            if value > f:
+                break
+        return value / f, unit_to
+    value = value / factors[units.index(unit_to)]  # now convert back to unit_to
+    return value, unit_to

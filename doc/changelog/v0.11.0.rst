@@ -68,6 +68,8 @@ Changed
 - Introduce :class:`~tenpy.algorithms.mps_common.IterativeSweeps` to generalize algorithms that
   repeat sweeps until convergence. In particular this makes the convergence check a modular
   method which can be easily adapted via subclass.
+- New :func:`~tenpy.simulations.simulation.estimate_simulation_RAM` to estimate the RAM requiremensts of a simulation
+  before actually running it (:issue:`305` and :issue:`342`).
 
 Fixed
 ^^^^^
