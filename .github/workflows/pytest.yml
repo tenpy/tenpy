@@ -11,9 +11,10 @@ jobs:
 
     runs-on: ubuntu-latest
     strategy:
-      max-parallel: 6
+      max-parallel: 5
       matrix:
-        python-version: ["3.7", "3.8", "3.9", "3.10", "3.11", "3.12"]
+        # Note: python 3.12 is covered by code_coverage.yml, which runs pytest with coverage.
+        python-version: ["3.7", "3.8", "3.9", "3.10", "3.11"]
 
     steps:
     - name: Checkout
