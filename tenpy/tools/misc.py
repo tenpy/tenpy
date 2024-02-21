@@ -108,7 +108,10 @@ def to_array(a, shape=(None, ), dtype=None, allow_incommensurate=False):
 
 
 if bottleneck is not None:
-    anynan = bottleneck.anynan
+    
+    def anynan(a):
+        """check whether any entry of a ndarray `a` is 'NaN'."""
+        return bottleneck.anynan(a)
 else:
 
     def anynan(a):
