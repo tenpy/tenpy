@@ -1,5 +1,5 @@
 """This module contains functions for linear prediction."""
-# Copyright 2023-2024 TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, GNU GPLv3
 
 import numpy as np
 from scipy.linalg import solve_toeplitz

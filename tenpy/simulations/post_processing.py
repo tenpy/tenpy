@@ -1,5 +1,5 @@
 """Simple post-processing."""
-# Copyright 2023-2024 TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, GNU GPLv3
 
 import os
 import numpy as np
