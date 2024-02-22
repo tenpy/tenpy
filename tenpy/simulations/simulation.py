@@ -7,7 +7,7 @@ running the actual algorithm, possibly performing measurements and saving the re
 See :doc:`/intro/simulations` for an overview and
 :doc:`/examples` for a list of example parameter yaml files.
 """
-# Copyright 2020-2024 TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, GNU GPLv3
 
 import os
 import sys
@@ -28,10 +28,11 @@ from ..tools import hdf5_io
 from ..tools.cache import CacheFile
 from ..tools.params import asConfig
 from ..tools.events import EventHandler
-from .post_processing import DataLoader
-from ..tools.misc import find_subclass, update_recursive, get_recursive, set_recursive
+from ..tools.misc import find_subclass, convert_memory_units
+from ..tools.misc import update_recursive, get_recursive, set_recursive, merge_recursive
 from ..tools.misc import setup_logging as setup_logging_
 from .. import version
+from .post_processing import DataLoader
 from .measurement import (measurement_wrapper, _m_psi_method, _m_psi_method_wrapped,
                           _m_model_method, _m_model_method_wrapped)
 
@@ -43,6 +44,7 @@ __all__ = [
     'init_simulation_from_checkpoint',
     'resume_from_checkpoint',
     'run_seq_simulations',
+    'estimate_simulation_RAM',
     'output_filename_from_dict',
 ]
 
@@ -197,7 +199,7 @@ class Simulation:
         self.options = asConfig(self.options, self.__class__.__name__)
         self.options.touch('directory', 'output_filename', 'output_filename_params',
                            'overwrite_output', 'skip_if_output_exists', 'safe_write', 'log_params',
-                           'logging_params')
+                           'logging_params', 'estimate_RAM_const_offset')
         if cwd is not None:
             self.logger.info("change directory to %s", cwd)  # os.chdir(cwd) above
         self.logger.info("output filename: %s", self.output_filename)
@@ -245,6 +247,21 @@ class Simulation:
             "verbose is deprecated, we're using logging now! \n"
             "See https://tenpy.readthedocs.io/en/latest/intro/logging.html", FutureWarning, 2)
         return self.options.get('verbose', 1.)
+
+    def estimate_RAM(self):
+        """Estimates the RAM usage for the simulation, without running it.
+
+        Returns
+        -------
+        RAM : int
+            The expected RAM usage in kB.
+        """
+        self.init_model()       # model, required for algorithm
+        self.init_state()       # psi, required for algorithm
+        self.group_sites_for_algorithm()  # algorithm might only work if grouped
+        self.init_algorithm()   # create engine (subclass of Algorithm)
+
+        return self.engine.estimate_RAM()
 
     def run(self):
         """Run the whole simulation.
@@ -1471,6 +1488,68 @@ def run_seq_simulations(sequential,
         return all_results
     else:
         return results
+
+
+def estimate_simulation_RAM(*,
+                            suppress_non_RAM_output=True,
+                            RAM_output_unit=None,
+                            estimate_RAM_const_offset=(100, "MB"),
+                            **simulation_params):
+    """Pre-simulation RAM estimate.
+
+    Large-scale simulations need to be submitted to a simulation cluster, which often requires to
+    give an estimate of the required RAM before actually running the simulation.
+
+    See also the model parameter :cfg:option:`Model.mem_saving_factor`.
+
+    Parameters
+    ----------
+    suppress_non_RAM_output : bool
+        If True (default), suppress all other output (except for error messages).
+    RAM_output_unit : None | str
+        Memory unit to be used for the output. ``None`` defaults to human-readable rounding.
+    estimate_RAM_const_offset : ``(int, str)``
+        Defaults to ``(100, "MB")`` which gets added to the scaling estimates.
+        This constant needs to account for loading python libraries etc.
+    **simulation_params :
+        Other simulation parameters as they would be pass to :func:`run_simulation` to run the
+        simulation.
+
+    Returns
+    -------
+    estimate : float
+        Estimated RAM requirements including the `estimate_RAM_const_offset`.
+    unit : str
+        Unit of the estimate
+
+    See also
+    --------
+    Simulation.estimate_RAM : Corresponding simulation method
+    tenpy.algorithms.algorithm.Algorithm.estimate_RAM : corresponding algorithm method.
+    """
+    offset_val, offset_unit = estimate_RAM_const_offset
+    offset_MB, _ = convert_memory_units(offset_val, offset_unit, 'MB')
+    # suppress in this case undesired output
+    if suppress_non_RAM_output:
+        for key in ['output_filename', 'output_filename_params']:  # ignore the output filename
+            if key in simulation_params:
+                del simulation_params[key]
+        overwrite = {'log_params': {'filename': None,
+                                    'to_stdout': 'ERROR'
+                                    # ERROR level suppresses unused parameters warning as well
+                                    }}
+        simulation_params = merge_recursive(simulation_params, overwrite, conflict='last')
+    # get simulation
+    with init_simulation(**simulation_params) as sim:
+        estimate_MB = sim.estimate_RAM()
+    total_MB = estimate_MB + offset_MB
+
+    est, est_unit = convert_memory_units(estimate_MB, 'MB', RAM_output_unit)
+    total, total_unit = convert_memory_units(total_MB, 'MB', RAM_output_unit)
+    print(f"  {est:5.1f} {est_unit} estimated usage for tensors")
+    print(f"+ {offset_val:5.1f} {offset_unit} constant offset for loading python etc")
+    print(f"= {total:5.1f} {total_unit} total estimated RAM")
+    return total, total_unit
 
 
 def output_filename_from_dict(options,

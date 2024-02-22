@@ -81,7 +81,7 @@ Overview
     speigs
 
 """
-# Copyright 2018-2024 TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, GNU GPLv3
 
 import numpy as np
 import scipy.linalg
@@ -2339,6 +2339,7 @@ class Array:
         """
         if self is other:
             return True
+        if not isinstance(other, Array): return NotImplemented
         if other.chinfo != self.chinfo:
             raise ValueError("other array has different charges!")
         other = other._transpose_same_labels(self._labels)

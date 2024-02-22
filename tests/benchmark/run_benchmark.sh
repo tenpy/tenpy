@@ -1,5 +1,5 @@
 #!/bin/bash
-# Copyright 2018 TeNPy Developers
+# Copyright (C) TeNPy Developers, GNU GPLv3
 set -e
 DIR="$(dirname ${BASH_SOURCE[0]})"
 

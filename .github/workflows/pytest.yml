@@ -11,13 +11,14 @@ jobs:
 
     runs-on: ubuntu-latest
     strategy:
-      max-parallel: 6
+      max-parallel: 5
       matrix:
-        python-version: ["3.7", "3.8", "3.9", "3.10", "3.11", "3.12"]
+        # Note: python 3.12 is covered by code_coverage.yml, which runs pytest with coverage.
+        python-version: ["3.7", "3.8", "3.9", "3.10", "3.11"]
 
     steps:
     - name: Checkout
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
       with:
         submodules: false
     - name: Update submodules
@@ -25,7 +26,7 @@ jobs:
         git submodule update --init --recursive
         git submodule update --remote --merge --recursive
     - name: Set up Python ${{ matrix.python-version }}
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@v5
       with:
         python-version: ${{ matrix.python-version }}
     - name: Install dependencies

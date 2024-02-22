@@ -27,7 +27,7 @@ as base class in (most of) the predefined models in TeNPy.
 
 See also the introduction in :doc:`/intro/model`.
 """
-# Copyright 2018-2024 TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, GNU GPLv3
 
 import numpy as np
 import warnings
@@ -253,6 +253,36 @@ class Model(Hdf5Exportable):
         model_params = self.options
         model_params['time'] = new_time
         return cls(model_params)
+
+    def estimate_RAM_saving_factor(self):
+        """Returns the expected saving factor for RAM based on charge conservation.
+
+        Returns
+        -------
+        factor : int
+            saving factor, due to conservation
+
+        Options
+        -------
+        .. cfg:configoptions :: Model
+
+            mem_saving_factor :: None | float
+                Quantizes the RAM saving, due to conservation laws, to be used by
+                :func:`~tenpy.simulations.simulation.estimate_simulation_RAM`.
+                By default it is 1/mod, or 1/4 in case of mod=1.
+                However, for some classes this factor might be overwritten,
+                if a better approximation is known.
+                In the best case, the user can adjust this model parameter to enhance the estimate.
+
+        """
+        chinfo = self.lat.unit_cell[0].leg.chinfo
+        savings = 1
+        for mod in chinfo.mod:
+            if mod == 1:
+                savings *= 1/4 # this is what we found empirically
+            else:
+                savings *= 1/mod
+        return self.options.get("mem_saving_factor", savings)
 
 
 class NearestNeighborModel(Model):

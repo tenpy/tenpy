@@ -23,7 +23,7 @@ Common to all tools is that they are not just useful for a single algorithm but 
     spectral_function_tools
     prediction
 """
-# Copyright 2018-2024 TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, GNU GPLv3
 
 from . import (events, fit, hdf5_io, math, misc, params, process, string, optimization, cache,
                thread)

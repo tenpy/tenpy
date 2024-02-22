@@ -1,5 +1,5 @@
 """Simulations for (real) time evolution and for time dependent correlation functions."""
-# Copyright 2020-2023 TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, GNU GPLv3
 
 
 import numpy as np

@@ -28,3 +28,6 @@ examples/yaml/results
 */.ipynb_checkpoints/*
 .idea
 */.idea/*
+.coverage
+htmlcov
+coverage.*
