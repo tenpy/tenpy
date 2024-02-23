@@ -3,7 +3,7 @@
 The files are only imported, so please protect example code from running with standard ``if
 __name__ == "__main__": ...`` clauses, if you want to demonstrate an interactive code.
 """
-# Copyright 2018-2024 TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, GNU GPLv3
 
 import sys
 import os
@@ -13,50 +13,49 @@ import warnings
 
 # get directory where the examples can be found
 examples_dir = os.path.join(os.path.dirname(__file__), '..', 'examples')
-toycodes_dir = os.path.join(os.path.dirname(__file__), '..', 'toycodes')
+toycodes_path = os.path.join(os.path.dirname(__file__), '..', 'toycodes')
+toycodes_dir = os.path.join(toycodes_path, 'tenpy_toycodes')
 
 exclude = ["__pycache__"]
 
+examples = [fn for fn in os.listdir(examples_dir) if fn[-3:] == '.py' and fn not in exclude]
+if os.path.exists(toycodes_dir):
+    toycodes = [fn for fn in os.listdir(toycodes_dir) if fn[-3:] == '.py' and fn not in exclude]
+else:
+    toycodes = []
 
-def import_file(filename, dir):
-    """Import the module given by `filename`.
 
-    Since the examples are not protected  by ``if __name__ == "__main__": ...``,
-    they run immediately at import. Thus an ``import filename`` (where filename is the actual name,
-    not a string) executes the example.
-
-    Parameters
-    ----------
-    filename : str
-        the name of the file (without the '.py' ending) to import.
-    """
+@pytest.mark.example  # allow to skip the examples with ``$> pytest -m "not example"``
+@pytest.mark.slow
+@pytest.mark.parametrize('filename', examples)
+def test_examples_import(filename):
+    assert filename[-3:] == '.py'
     old_sys_path = sys.path[:]
-    if dir not in sys.path:
-        sys.path[:0] = [dir]  # add the directory to sys.path
-    # to make sure the examples are found first with ``import``.
-    print("importing file ", os.path.join(dir, filename))
+    if examples_dir not in sys.path:
+        sys.path[:0] = [examples_dir]  # add the directory to sys.path
+    try:
+        with open(os.path.join(examples_dir, filename)) as f:
+            script = f.read()
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore')  # disable warngings temporarily
+            scope = {}
+            exec(script, scope, scope)
+    finally:
+        sys.path[:] = old_sys_path
+
+
+@pytest.mark.example  # allow to skip the examples with ``$> pytest -m "not example"``
+@pytest.mark.slow
+@pytest.mark.parametrize('filename', toycodes)
+def test_toycodes_import(filename):
+    assert filename[-3:] == '.py'
+    old_sys_path = sys.path[:]
+    if toycodes_path not in sys.path:
+        sys.path[:0] = [toycodes_path]  # add the directory to sys.path
     try:
         with warnings.catch_warnings():
             warnings.simplefilter('ignore')  # disable warngings temporarily
-            mod = importlib.import_module(filename)
+            importlib.import_module('tenpy_toycodes.' + filename[:-3])
     finally:
         sys.path[:] = old_sys_path
-    return mod
 
-
-@pytest.mark.example  # allow to skip the examples with ``$> pytest -m "not example"``
-@pytest.mark.slow
-def test_examples_import():
-    for fn in sorted(os.listdir(examples_dir)):
-        if fn in exclude:
-            continue
-        if fn[-3:] == '.py':
-            import_file(fn[:-3], examples_dir)
-
-
-@pytest.mark.example  # allow to skip the examples with ``$> pytest -m "not example"``
-@pytest.mark.slow
-def test_toycodes_import():
-    for fn in sorted(os.listdir(toycodes_dir)):
-        if fn[-3:] == '.py' and fn not in exclude:
-            import_file(fn[:-3], toycodes_dir)

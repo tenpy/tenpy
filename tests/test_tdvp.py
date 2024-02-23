@@ -1,5 +1,5 @@
 #!/usr/bin/python2
-# Copyright 2019-2024 TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, GNU GPLv3
 import numpy as np
 import pytest
 from tenpy.models.spins import SpinChain

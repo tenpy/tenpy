@@ -34,7 +34,7 @@ We store these indices in `IdL` and `IdR` (if there are such indices).
 Similar as for the MPS, a bond index ``i`` is *left* of site `i`,
 i.e. between sites ``i-1`` and ``i``.
 """
-# Copyright 2018-2024 TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, GNU GPLv3
 
 import numpy as np
 from scipy.linalg import expm
@@ -338,21 +338,27 @@ class MPO(MPSGeometry):
             import numpy as np
 
         .. doctest :: from_wavepacket
-            L, k0, x0, sigma, = 50, np.pi/8., 10., 5.
-            x = np.arange(L)
-            coeff = np.exp(-1.j * k0 * x) * np.exp(- 0.5 * (x - x0)**2 / sigma**2)
-            coeff /= np.linalg.norm(coeff)
-            site = FermionSite(conserve='N')
-            wp = MPO.from_wavepacket([site] * L, coeff, 'Cd')
+        
+            >>> L, k0, x0, sigma, = 50, np.pi/8., 10., 5.
+            >>> x = np.arange(L)
+            >>> coeff = np.exp(-1.j * k0 * x) * np.exp(- 0.5 * (x - x0)**2 / sigma**2)
+            >>> coeff /= np.linalg.norm(coeff)
+            >>> site = FermionSite(conserve='N')
+            >>> wp = MPO.from_wavepacket([site] * L, coeff, 'Cd')
+            >>> wp.chi == [1] + [2] * (L - 1) + [1]
+            True
 
         Indeed, we can apply this to a (vacuum) MPS and get the correct state:
 
         .. doctest :: from_wavepacket
-            psi = MPS.from_product_state([sites] * L, ['empty'] * L, N_rings=L)
-            wp.apply(psi, dict(compression_method='SVD'))
-            C = psi.correlation_function('Cd', 'C')
-            C_expected = np.conj(coeff)[:, np.newaxis] * coeff[np.newaxis, :]
-            assert np.max(np.abs(C - C_expected) ) < 1.e-10
+        
+            >>> psi = MPS.from_product_state([site] * L, ['empty'] * L, N_rings=L)
+            >>> wp.apply(psi, dict(compression_method='SVD'))
+            TruncationError()
+            >>> C = psi.correlation_function('Cd', 'C')
+            >>> C_expected = np.conj(coeff)[:, np.newaxis] * coeff[np.newaxis, :]
+            >>> np.max(np.abs(C - C_expected) ) < 1.e-10
+            True
         """
         coeff = np.asarray(coeff)
         assert coeff.shape == (len(sites), )

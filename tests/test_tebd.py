@@ -1,5 +1,5 @@
 """A collection of tests to check the functionality of `tenpy.tebd`"""
-# Copyright 2018-2024 TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, GNU GPLv3
 
 import numpy.testing as npt
 import tenpy.linalg.np_conserved as npc

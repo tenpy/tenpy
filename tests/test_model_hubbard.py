@@ -1,4 +1,4 @@
-# Copyright 2018-2024 TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, GNU GPLv3
 import pytest
 import numpy as np
 from tenpy.models import hubbard

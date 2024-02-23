@@ -145,7 +145,7 @@ After applying such an evolution operator, you indeed stay in the form of a tran
 iMPS, so this is the form *assumed* when calling MPO :meth:`~tenpy.networks.mpo.MPO.apply` on an
 MPS.
 """
-# Copyright 2018-2024 TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, GNU GPLv3
 
 from abc import ABCMeta, abstractmethod
 import numpy as np
@@ -1632,9 +1632,7 @@ class MPS(BaseMPSExpectationValue):
                 # and be able to contract Th-B
                 B.get_leg('vR').test_contractible(B2.get_leg('vL'))
                 # (but not necessarily A-B, as we have it on the first bond at DMRG checkpoints)
-            form = self.form[i]
-            if form is not None:
-                nuL, nuR = form
+            assert self.form[i] in self._valid_forms.values()
         if self.bc == 'finite':
             if len(self._S[0]) != 1 or len(self._S[-1]) != 1:
                 raise ValueError("non-trivial outer bonds for finite MPS")
@@ -2041,7 +2039,11 @@ class MPS(BaseMPSExpectationValue):
             # so we need to gauge `qtotal` of the last `B` such that the right leg matches.
             chdiff = Bs[-1].get_leg('vR').charges[0] - Bs[0].get_leg('vL').charges[0]
             Bs[-1] = Bs[-1].gauge_total_charge('vR', ci.make_valid(chdiff))
-        return cls(sites, Bs, SVs, form=form, bc=bc, N_rings=N_rings)
+        res = cls(sites, Bs, SVs, form=form, bc=bc, N_rings=N_rings)
+        if res.L > 1 and max(res.chi) > 1:
+            # the SVs set above are not the correct Schmidt values if chi > 1.
+            res.canonical_form()
+        return res
 
     @classmethod
     def from_full(cls,
@@ -2159,7 +2161,7 @@ class MPS(BaseMPSExpectationValue):
         pairs : list of (int, int)
             Pairs of sites to be entangled; the returned MPS will have a singlet
             for each pair in `pairs`. For ``bc='infinite'`` MPS, some indices can be outside
-            the range [0, L) to indicate couplings accross infinte MPS unit cells.
+            the range [0, L) to indicate couplings across infinite MPS unit cells.
         up, down : int | str
             A singlet is defined as ``(|up down> - |down up>)/2**0.5``,
             ``up`` and ``down`` give state indices or labels defined on the corresponding site.
@@ -2649,7 +2651,7 @@ class MPS(BaseMPSExpectationValue):
     def overlap_translate_finite(self, psi, shift=1):
         r"""Contract ``<self|T^N|psi>`` for translation `T` with finite, periodic boundaries.
 
-        Looks like this for ``shift=1``, with the open virtuals legs contracted in the end::
+        Looks like this for ``shift=1``, with the open virtual legs contracted in the end::
 
            --B[L-1] Th[0] -- B[1] -- B[2] -- ..... B[L-2] --
               |      |       |       |             |
@@ -2679,67 +2681,7 @@ class MPS(BaseMPSExpectationValue):
         --------
         permute_sites : Allows more general permutations of the sites.
         overlap : Directly the overlap between two MPS without translation.
-        roll_mps_unit_cell : Effectively applies ``T^shift`` on inifinite MPS.
-        """
-        assert self.bc == psi.bc == 'finite'
-        L = self.L
-        assert L == psi.L
-        if shift < 0:
-            shift = shift + self.L
-        assert 0 < shift < self.L
-        forms = ['Th'] + ['B'] * (L-1)
-        inds = np.roll(np.arange(self.L), shift)  # consistent with `roll_mps_unit_cell`!
-        B_bra = self.get_B(0, forms[0])
-        B_ket = psi.get_B(inds[0], forms[inds[0]])
-        C = npc.tensordot(B_bra.conj(), B_ket, axes=[self._get_p_label('*'), self._get_p_label('')])
-        for i in range(1, L):
-            j = inds[i]
-            B_ket = psi.get_B(j, forms[j])
-            if i != shift:
-                C = npc.tensordot(C, B_ket, axes=['vR', 'vL'])
-            else:
-                # here, B_ket is the Th[0] - handle the open left/rightmost, trivial virtual legs
-                C.ireplace_label('vR', 'openR')
-                C = npc.tensordot(C, B_ket, axes=['vL*', 'vL'])  # contract trivial left legs
-            B_bra = self.get_B(i, forms[i])
-            C = npc.tensordot(C, B_bra.conj(), axes=[['vR*'] + self._get_p_label(''),
-                                                     ['vL*'] + self._get_p_label('*')])
-        return npc.trace(npc.trace(C, 'vR', 'vL'), 'openR', 'vR*')
-
-    def overlap_translate_finite(self, psi, shift=1):
-        r"""Contract ``<self|T^N|psi>`` for translation `T` with finite, periodic boundaries.
-
-        Looks like this for ``shift=1``, with the open virtuals legs contracted in the end::
-
-           --B[L-1] Th[0] -- B[1] -- B[2] -- ..... B[L-2] --
-              |      |       |       |             |
-            Th*[0] --B*[1] --B*[2] --B*[3] --..... B*[L-1]
-
-
-        An alternative to calling this method would be to call :meth:`permute_sites` followed by
-        :meth:`overlap`. Note that `permute_sites` uses truncation on the way, though,
-        which could severely affect the precision especially for general (non-local)
-        permutations while this function contracts everything exactly
-        (possibly at higher numerical cost).
-
-        Parameters
-        ----------
-        psi : :class:`MPS`
-            MPS to take overlap with.
-        shift : int
-            Translation by how many sites. Note that for large shift, the contraction is
-            :math:`O(\chi^4)` compared to DMRG etc scaling as :math:`O(\chi^3)`.
-
-        Returns
-        -------
-        self_Tn_psi : float
-            Contraction of ``<self|T^N|psi>``.
-
-        See also
-        --------
-        permute_sites : Allows more general permutations of the sites.
-        overlap : Directly the overlap between two MPS without translation.
-        roll_mps_unit_cell : Effectively applies ``T^shift`` on inifinite MPS.
+        roll_mps_unit_cell : Effectively applies ``T^shift`` on infinite MPS.
         """
         assert self.bc == psi.bc == 'finite'
         L = self.L
