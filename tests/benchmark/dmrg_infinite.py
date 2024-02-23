@@ -28,7 +28,7 @@ def setup_benchmark(mod_q=[1], legs=10, size=20, diag_method='lanczos', **kwargs
     #  print("conserve =", repr(conserve))
     M = SpinChain(model_params)
     initial_state = (['up', 'down'] * L)[:L]
-    psi = MPS.from_product_state(M.lat.mps_sites(), initial_state, bc='infinite')
+    psi = MPS.from_product_state(M.lat.mps_sites(), initial_state, bc='infinite', N_rings=M.lat.N_rings)
     dmrg_params = {
         'trunc_params': {
             'chi_max': size,

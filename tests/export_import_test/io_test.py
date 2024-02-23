@@ -64,7 +64,7 @@ def gen_example_data(version=tenpy.version.full_version):
         'Sz': s.Sz
     }
     if parse_version(version) >= parse_version('0.5.0.dev25'):
-        psi = tenpy.networks.mps.MPS.from_singlets(s, 6, [(0, 3), (1, 2), (4, 5)])
+        psi = tenpy.networks.mps.MPS.from_singlets(s, 6, [(0, 3), (1, 2), (4, 5)], N_rings=6)
         psi.test_sanity()
         M = tenpy.models.tf_ising.TFIChain({'L': 3, 'bc_MPS': 'infinite', 'sort_charge': False})
         data.update({

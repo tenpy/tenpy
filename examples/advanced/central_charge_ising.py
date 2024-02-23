@@ -20,7 +20,7 @@ def example_DMRG_tf_ising_infinite_S_xi_scaling(g):
     model_params = dict(L=2, J=1., g=g, bc_MPS='infinite', conserve='best')
     M = TFIChain(model_params)
     product_state = ["up"] * M.lat.N_sites
-    psi = MPS.from_product_state(M.lat.mps_sites(), product_state, bc=M.lat.bc_MPS)
+    psi = MPS.from_product_state(M.lat.mps_sites(), product_state, bc=M.lat.bc_MPS, N_rings=M.lat.N_rings)
     dmrg_params = {
         'start_env': 10,
         'mixer': False,

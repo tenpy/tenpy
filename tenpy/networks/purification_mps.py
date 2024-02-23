@@ -163,7 +163,7 @@ class PurificationMPS(MPS):
         super().test_sanity()
 
     @classmethod
-    def from_infiniteT(cls, sites, bc='finite', form='B', dtype=np.float64):
+    def from_infiniteT(cls, sites, bc='finite', form='B', dtype=np.float64, N_rings=None):
         """Initial state corresponding to grand-canonical infinite-temperature ensemble.
 
         Parameters
@@ -178,6 +178,11 @@ class PurificationMPS(MPS):
             A single choice holds for all of the entries.
         dtype : type or string
             The data type of the array entries.
+        N_rings : int
+            Number of rings of the lattice, see :attr:`~tenpy.models.lattice.Lattice.N_rings`.
+            For a higher-dimensional lattice, this is the number of lattice spacings that an
+            MPS unit cell covers in the first (horizontal) dimension.
+            For a :class:`~tenpy.models.lattice.Chain` geometry, this is just the length of the chain.
 
         Returns
         -------
@@ -195,12 +200,12 @@ class PurificationMPS(MPS):
             # leg `q` has the physical leg with opposite `qconj`
             B = B.add_trivial_leg(0, label='vL', qconj=+1).add_trivial_leg(1, label='vR', qconj=-1)
             Bs[i] = B
-        res = cls(sites, Bs, S, bc, form)
+        res = cls(sites, Bs, S, bc, form, N_rings=N_rings)
         return res
 
     @classmethod
     def from_infiniteT_canonical(cls, sites, charge_sector, dtype=np.float64,
-                                 conserve_ancilla_charge=False):
+                                 conserve_ancilla_charge=False, N_rings=None):
         """Initial state corresponding to *canonical* infinite-temperature ensemble.
 
         Works only for finite boundary conditions, following the idea outlined in
@@ -223,6 +228,11 @@ class PurificationMPS(MPS):
             In that case, use the function
             :func:`convert_model_purification_canonical_conserve_ancilla_charge`
             to get a converted model before using algorithms like the `PurificationTEBD`.
+        N_rings : int
+            Number of rings of the lattice, see :attr:`~tenpy.models.lattice.Lattice.N_rings`.
+            For a higher-dimensional lattice, this is the number of lattice spacings that an
+            MPS unit cell covers in the first (horizontal) dimension.
+            For a :class:`~tenpy.models.lattice.Chain` geometry, this is just the length of the chain.
 
         Returns
         -------
@@ -320,7 +330,7 @@ class PurificationMPS(MPS):
 
         if conserve_ancilla_charge:
             sites = sites_cac
-        res = cls(sites, Bs, Ss, 'finite', form='B')
+        res = cls(sites, Bs, Ss, 'finite', form='B', N_rings=N_rings)
         res.canonical_form_finite()  # calculate S values and normalize
         return res
 

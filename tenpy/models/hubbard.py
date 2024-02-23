@@ -271,8 +271,6 @@ class DipolarBoseHubbardChain(CouplingMPOModel):
         bc = model_params.get('bc', bc)
         site = BosonSite(Nmax=Nmax, conserve=conserve)
         lattice = Chain(L, site, bc=bc, bc_MPS=bc_MPS)
-        if conserve == 'dipole':
-            site.leg.chinfo.set_lattice(lattice)
         return lattice
 
     def init_terms(self, model_params):

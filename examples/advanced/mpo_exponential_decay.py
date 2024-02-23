@@ -108,7 +108,7 @@ class ExponentiallyDecayingHeisenberg(MPOModel):
         # Generate the MPO from the grid. Note that it is not necessary to specify
         # the physical legs and their charges, since the from_grids method can extract
         # this information from the position of the operators inside the grid.
-        H = MPO.from_grids(lat.mps_sites(), grids, bc='infinite', IdL=0, IdR=-1)
+        H = MPO.from_grids(lat.mps_sites(), grids, bc='infinite', IdL=0, IdR=-1, N_rings=lat.N_rings)
         MPOModel.__init__(self, lat, H)
 
 
@@ -116,7 +116,8 @@ def example_run_dmrg():
     """Use iDMRG to extract information about the ground state of the system."""
     model_params = dict(L=2, Jxx=1, Jz=1.5, xi=0.8)
     model = ExponentiallyDecayingHeisenberg(model_params)
-    psi = MPS.from_product_state(model.lat.mps_sites(), ["up", "down"], bc='infinite')
+    psi = MPS.from_product_state(model.lat.mps_sites(), ["up", "down"], bc='infinite',
+                                 N_rings=model.lat.N_rings)
     dmrg_params = {
         'mixer': True,
         'chi_list': {

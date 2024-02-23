@@ -21,7 +21,7 @@ ferm = site.FermionSite(conserve='N')
 def test_purification_mps():
     for L in [4, 2, 1]:
         print(L)
-        psi = purification_mps.PurificationMPS.from_infiniteT([spin_half] * L, bc='finite')
+        psi = purification_mps.PurificationMPS.from_infiniteT([spin_half] * L, bc='finite', N_rings=L)
         psi.test_sanity()
         if L > 1:
             npt.assert_equal(psi.entanglement_entropy(), 0.)  # product state has no entanglement.
@@ -51,7 +51,8 @@ def test_purification_mps():
 def test_canoncial_purification(conserve_ancilla, L=6, charge_sector=0, eps=1.e-14):
     site = spin_half
     psi = purification_mps.PurificationMPS.from_infiniteT_canonical(
-        [site] * L, [charge_sector], conserve_ancilla_charge=conserve_ancilla)
+        [site] * L, [charge_sector], conserve_ancilla_charge=conserve_ancilla, N_rings=L
+    )
     psi.test_sanity()
     Szs = psi.expectation_value('Sz')
     assert abs(sum(Szs) - charge_sector) < 1.e-13
@@ -101,7 +102,9 @@ def test_purification_TEBD(L=3):
     for disent in [
             None, 'backwards', 'min(None,last)-renyi', 'noise-norm', 'renyi-min(None,noise-renyi)'
     ]:
-        psi = purification_mps.PurificationMPS.from_infiniteT(M.lat.mps_sites(), bc='finite')
+        psi = purification_mps.PurificationMPS.from_infiniteT(
+            M.lat.mps_sites(), bc='finite', N_rings=M.lat.N_rings
+        )
         TEBD_params = {
             'trunc_params': {
                 'chi_max': 16,
@@ -126,7 +129,8 @@ def test_purification_TEBD(L=3):
 def test_purification_MPO(L=6):
     xxz_pars = dict(L=L, Jxx=1., Jz=2., hz=0., bc_MPS='finite', sort_charge=True)
     M = XXZChain(xxz_pars)
-    psi = purification_mps.PurificationMPS.from_infiniteT(M.lat.mps_sites(), bc='finite')
+    psi = purification_mps.PurificationMPS.from_infiniteT(M.lat.mps_sites(), bc='finite',
+                                                          N_rings=M.lat.N_rings)
     options = {'trunc_params': {'chi_max': 50, 'svd_min': 1.e-8}}
     U = M.H_MPO.make_U_II(dt=0.1)
     PurificationApplyMPO(psi, U, options).run()
@@ -137,7 +141,8 @@ def test_purification_MPO(L=6):
 def test_renyi_disentangler(L=4, eps=1.e-15):
     xxz_pars = dict(L=L, Jxx=1., Jz=3., hz=0., bc_MPS='finite', sort_charge=True)
     M = XXZChain(xxz_pars)
-    psi = purification_mps.PurificationMPS.from_infiniteT(M.lat.mps_sites(), bc='finite')
+    psi = purification_mps.PurificationMPS.from_infiniteT(M.lat.mps_sites(), bc='finite',
+                                                          N_rings=M.lat.N_rings)
     eng = PurificationTEBD(psi, M, {'disentangle': 'renyi'})
     theta = eng.psi.get_theta(1, 2)
     print(theta[0, :, :, 0, :, :])
@@ -191,10 +196,10 @@ def gen_disentangler_psi_singlets(site_P, L, max_range=10, product_P=True):
             pairs.append((i, j))
     # generate singlet mps in P and Q
     if product_P:
-        psiP = MPS.from_product_state([site_P] * L, [0, 1] * (L // 2))
+        psiP = MPS.from_product_state([site_P] * L, [0, 1] * (L // 2), N_rings=L)
     else:
-        psiP = MPS.from_singlets(site_P, L, pairs_PQ[0])
-    psiQ = MPS.from_singlets(site_P, L, pairs_PQ[1])
+        psiP = MPS.from_singlets(site_P, L, pairs_PQ[0], N_rings=L)
+    psiQ = MPS.from_singlets(site_P, L, pairs_PQ[1], N_rings=L)
     # generate BS for PurificationMPS
     return gen_disentangler_psi_prod(psiP, psiQ), pairs_PQ
 

@@ -939,7 +939,7 @@ class RandomUnitaryEvolution(TEBDEngine):
         >>> from tenpy.networks.mps import MPS
         >>> L = 8
         >>> spin_half = tenpy.networks.site.SpinHalfSite(conserve='Sz')
-        >>> psi = MPS.from_product_state([spin_half]*L, ["up", "down"]*(L//2), bc='finite')  # Neel
+        >>> psi = MPS.from_product_state([spin_half]*L, ["up", "down"]*(L//2), bc='finite', N_rings=L)  # Neel
         >>> print(psi.chi)
         [1, 1, 1, 1, 1, 1, 1]
         >>> options = dict(N_steps=2, trunc_params={'chi_max':10})
@@ -954,7 +954,7 @@ class RandomUnitaryEvolution(TEBDEngine):
 
     .. doctest :: RandomUnitaryEvolution
 
-        >>> psi2 = MPS.from_product_state([spin_half]*L, ["up"]*L, bc='finite')  # all spins up
+        >>> psi2 = MPS.from_product_state([spin_half]*L, ["up"]*L, bc='finite', N_rings=L)  # all spins up
         >>> print(psi2.chi)
         [1, 1, 1, 1, 1, 1, 1]
         >>> eng2 = RandomUnitaryEvolution(psi2, options)

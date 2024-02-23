@@ -1449,16 +1449,6 @@ class Array:
         res.qtotal = map_func(self.qtotal, *func_args, **func_kwargs)
         return res
 
-    def shift_charges(self, mps_idx_before, mps_idx_after):
-        """Convenience wrapper around :meth:`~tenpy.linalg.charges.ChargeInfo.shift_Array`."""
-        # Implementing the actual function in ChargeInfo allows us to have different implementations
-        # for subclasses, such as DipolarChargeInfo
-        # Having this wrapper allows easier and more readable usage
-        #   arr.shift_charges(i, j)
-        # instead of
-        #   arr.chinfo.shift_Array(arr, i, j)
-        return self.chinfo.shift_Array(self, mps_idx_before, mps_idx_after)
-
     # reshaping ===============================================================
 
     def make_pipe(self, axes, **kwargs):

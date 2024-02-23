@@ -294,31 +294,28 @@ class ChargeInfo:
         charges = np.asarray(charges, dtype=QTYPE)[..., self._mask]
         return np.all(np.logical_and(0 <= charges, charges < self._mod_masked))
 
-    def shift_charges(self, charges, mps_idx_before, mps_idx_after, copy=False):
+    def shift_charges(self, charges, dx, guarantee_copy=False):
         """Spatial translation acting on charges.
 
         Some conserved charges, such as e.g. an electric dipole moment, transform non-trivially
-        under spatial translations. This method, along with its companions :meth:`shift_LegCharge`,
-        :meth:`shift_Site` and :meth:`shift_Array` allow subclasses of :class:`ChargeInfo` to
-        implement this behavior, see e.g. :class:`DipolarChargeInfo`.
-        The base class :class:`ChargeInfo` only implements trivial versions of these methods,
-        that dont actually do any shifting.
+        under spatial translations. This method defines how the charges transform.
+        See the notes on :ref:`shift_symmetry`.
+        The base class :class:`ChargeInfo` only implements a trivial version,
+        that does not change the charges.
 
-        As positions are mapped::
+        As positions are mapped ``pos -> pos + dx``, the charges are mapped::
 
-            lattice.positions[mps_idx_before] -> lattice.positions[mps_idx_after]
-
-        The charges are mapped::
-
-            charges -> shift_charges(charges, mps_idx_before, mps_idx_after)
+            charges -> shift_charges(charges, dx)
 
         Parameters
         ----------
         charges : 2D ndarray of dtype QTYPE
             The charges to map.
-        mps_idx_before, mps_idx_after : int
-            MPS indices of the sites before and after the translation.
-        copy : bool
+        dx : (dim + 1)D ndarray
+            The difference of lattice indices, i.e.
+            ``dx == lat_idx_before - lat_idx_after == [dx_0, ..., dx_{D-1}, du]``.
+            Note that these are integer values in units of the lattice vectors.
+        guarantee_copy : bool
             If the charges should be copied. If not, they are acted on in-place.
 
         Returns
@@ -326,68 +323,29 @@ class ChargeInfo:
         charges : 2D ndarray of dtype QTYPE
             The mapped charges.
         """
-        if copy:
+        if guarantee_copy:
             charges = charges.copy()
         return charges
 
-    def shift_LegCharge(self, leg, mps_idx_before, mps_idx_after):
-        """Spatial translation according to :meth:`shift_charges` acting on a LegCharge.
+    def shift_charges_horizontal(self, charges, dx_0, guarantee_copy=False):
+        """Like :meth:`shift_charges`, but restricted to the first dimension.
+        
+        The base class :class:`ChargeInfo` only implements a trivial version,
+        that does not change the charges.
 
         Parameters
         ----------
-        leg : :class:`LegCharge`
-            The leg to act on.
-        mps_idx_before, mps_idx_after : int
-            MPS indices of the sites before and after the translation.
-
-        Returns
-        -------
-        :class:`LegCharge`
-            Either `leg` itself if the mapping is known to be trivial or a modified shallow copy.
+        charges : 2D ndarray of dtype QTYPE
+            The charges to map.
+        dx_0 : float
+            Number of lattice indices of the translation.
+            Horizontal shift is a general shift by ``dx=[dx_0] + [0] * dim``.
+        guarantee_copy : bool
+            If the charges should be copied. If not, they are acted on in-place.
         """
-        return leg
-    
-    def shift_Site(self, site, mps_idx_before, mps_idx_after):
-        """Spatial translation according to :meth:`shift_charges` acting on a Site.
-
-        Parameters
-        ----------
-        site : :class:`~tenpy.networks.site.Site`
-            The site to act on.
-        mps_idx_before, mps_idx_after : int
-            MPS indices of the sites before and after the translation.
-
-        Returns
-        -------
-        :class:`~tenpy.networks.site.Site`
-            Either `site` itself if the mapping is known to be trivial or a modified shallow copy.
-        """
-        return site
-
-    def shift_Array(self, arr, mps_idx_before, mps_idx_after):
-        """Spatial translation according to :meth:`shift_charges` acting on an Array.
-
-        Parameters
-        ----------
-        arr : :class:`~tenpy.linalg.np_conserved.Array`
-            The array to act on.
-        mps_idx_before, mps_idx_after : int
-            MPS indices of the sites before and after the translation.
-
-        Returns
-        -------
-        :class:`~tenpy.linalg.np_conserved.Array`
-            Either `arr` itself if the mapping is known to be trivial or a modified shallow copy.
-
-        See Also
-        --------
-        :meth:`tenpy.linalg.np_conserved.Array.shift_charges`
-            Convenience wrapper around this method
-        :meth:`tenpy.linalg.np_conserved.Array.apply_charge_mapping`
-            General mapping of charges on an Array.
-            This method is the special case where the mapping is :meth:`shift_charges`.
-        """
-        return arr
+        if guarantee_copy:
+            charges = charges.copy()
+        return charges
 
     def __repr__(self):
         """Full string representation."""
@@ -416,6 +374,7 @@ class DipolarChargeInfo(ChargeInfo):
 
     Assumes that one (or more) of the charges is the dipole moment associated with another charge.
     This results in non-trivial behavior under spatial translations.
+    See the notes on :ref:`shift_symmetry`.
 
     Given charges ``q_i`` on sites ``i``, the associated local dipole moment is ``p_i = r_i * q_i``,
     where ``r_i`` is the position (or e.g. its x- or y- component) of site ``i``.
@@ -430,11 +389,6 @@ class DipolarChargeInfo(ChargeInfo):
         that may carry charge ``q_i != 0`` are at the same spatial position, e.g. if there is only
         one site per unit cell.
 
-    .. warning ::
-        Using this ChargeInfo requires :meth:`set_lattice` to be called at some point during the
-        initialization. The recommended pattern is to do it during ``init_lattice`` of the model
-        that may use dipole charges. See e.g. :class:`~tenpy.models.spins.DipolarSpinChain`.
-
     Parameters
     ----------
     mod, names
@@ -447,19 +401,16 @@ class DipolarChargeInfo(ChargeInfo):
         For every dipole charge, which spatial component of the dipole moment is conserved.
         An entry ``dim`` indicates that the ``r_i`` as described above are integer coefficients
         of ``lattice.basis[dim]``, i.e. that the dipole moment in that direction is conserved.
-        Defaults to ``[0] * qnumber``.
+        Defaults to all ``0``, i.e. x-component of the dipole moment.
 
     Attributes
     ----------
-    lattice : :class:`~tenpy.models.lattice.Lattice` | None
-        The lattice that defines the real-space geometry.
     _charge_idcs, _dipole_idcs, _dipole_dims
         Like parameters of same name
     """
     trivial_shift = False  # If shift_charges acts trivially
     
     def __init__(self, mod=[], names=None, charge_idcs=[], dipole_idcs=[], dipole_dims=None):
-        self._lattice = None  # to be set later
         if dipole_dims is None:
             dipole_dims = [0] * len(dipole_idcs)
         self._charge_idcs = charge_idcs
@@ -467,68 +418,45 @@ class DipolarChargeInfo(ChargeInfo):
         self._dipole_dims = dipole_dims
         super().__init__(mod=mod, names=names)
 
-    @property
-    def lattice(self):
-        if self._lattice is None:
-            raise RuntimeError('Need to set_lattice() first.')
-        return self._lattice
-
-    def set_lattice(self, lattice, understood_warning=False):
-        if (len(lattice.unit_cell) > 1) and (not understood_warning):
-            msg = ('Using DipolarChargeInfo with multiple sites per unit cell may lead to '
-                   'unexpected results. Consult the class docstring. Use `understood_warning=True` '
-                   'to suppress this warning')
-            warnings.warn(msg)
-        self._lattice = lattice
-        self.test_sanity()
-
-    def shift_charges(self, charges, mps_idx_before, mps_idx_after, copy=False):
-        if copy:
-            charges = charges.copy()
-        dx = self.lattice.mps2lat_idx(mps_idx_after) - self.lattice.mps2lat_idx(mps_idx_before)
+    def shift_charges_horizontal(self, charges, dx_0, guarantee_copy=False):
+        charges = charges.copy()
         for c_idx, d_idx, dim in zip(self._charge_idcs, self._dipole_idcs, self._dipole_dims):
-            # local dipole moment  p_i = x_i * q_i  with position x_i and charge density q_i
-            # x_i -> x_i + dx   =>   p_i -> p_i + dx * q_i
+            if dim != 0:
+                continue
+            charges[..., d_idx] += dx_0 * charges[..., c_idx]
+        return charges
+
+    def shift_charges(self, charges, dx, guarantee_copy=False):
+        charges = charges.copy()
+        if dx[-1] != 0:
+            # shifting between different sublattice indices requires details about the lattice
+            # geometry, and causes headaches since we need *integer* translations...
+            raise NotImplementedError
+        for c_idx, d_idx, dim in zip(self._charge_idcs, self._dipole_idcs, self._dipole_dims):
+            # local dipole moment p_i = x_i[dim] * q_i  with position x_i and charge density q_i
+            # x_i -> x_i + dx   =>   p_i -> p_i + dx[dim] * q_i
             charges[..., d_idx] += dx[dim] * charges[..., c_idx]
         return charges
 
-    def shift_LegCharge(self, leg, mps_idx_before, mps_idx_after):
-        return leg.apply_charge_mapping(self.shift_charges,
-                                        func_args=(mps_idx_before, mps_idx_after),
-                                        func_kwargs=dict(copy=True))
-
-    def shift_Site(self, site, mps_idx_before, mps_idx_after):
-        res = copy.copy(site)  # shallow
-        res.change_charge(self.shift_LegCharge(site.leg, mps_idx_before, mps_idx_after))
-        return res
-
-    def shift_Array(self, arr, mps_idx_before, mps_idx_after):
-        return arr.apply_charge_mapping(self.shift_charges,
-                                        func_args=(mps_idx_before, mps_idx_after),
-                                        func_kwargs=dict(copy=True))
-
     def __getstate__(self):
-        rest = (self._lattice, self._charge_idcs, self._dipole_idcs, self._dipole_dims)
+        rest = (self._charge_idcs, self._dipole_idcs, self._dipole_dims)
         return (super().__getstate__(), rest)
 
     def __setstate__(self, state):
-        super_state, (lattice, charge_idcs, dipole_idcs, dipole_dims) = state
+        super_state, (charge_idcs, dipole_idcs, dipole_dims) = state
         super().__setstate__(super_state)
-        self._lattice = lattice
         self._charge_idcs = charge_idcs
         self._dipole_idcs = dipole_idcs
         self._dipole_dims = dipole_dims
 
     def __repr__(self):
-        lattice_str = 'no lattice' if self._lattice is None else self._lattice.__class__.__name__
-        return (f'<DipolarChargeInfo({list(self.mod)}, {self.names}, {self._charge_idcs}, '
-                f'{self._dipole_idcs}, {self._dipole_dims}) with {lattice_str}>')
+        return (f'DipolarChargeInfo({list(self.mod)}, {self.names}, {self._charge_idcs}, '
+                f'{self._dipole_idcs}, {self._dipole_dims})')
         
     def save_hdf5(self, hdf5_saver, h5gr, subpath):
         h5gr.attrs['num_charges'] = self._qnumber
         hdf5_saver.save(self._mod, subpath + "U1_ZN")
         hdf5_saver.save(self.names, subpath + "names")
-        hdf5_saver.save(self._lattice, subpath + "lattice")
         hdf5_saver.save(self._charge_idcs, subpath + "charge_idcs")
         hdf5_saver.save(self._dipole_idcs, subpath + "dipole_idcs")
         hdf5_saver.save(self._dipole_dims, subpath + "dipole_dims")
@@ -540,7 +468,6 @@ class DipolarChargeInfo(ChargeInfo):
         qmod = hdf5_loader.load(subpath + "U1_ZN")
         qmod = np.asarray(qmod, dtype=QTYPE)
         qnumber = len(qmod)
-        lattice = hdf5_loader.load(subpath + "lattice")
         charge_idcs = hdf5_loader.load(subpath + "charge_idcs")
         dipole_idcs = hdf5_loader.load(subpath + "dipole_idcs")
         dipole_dims = hdf5_loader.load(subpath + "dipole_dims")
@@ -548,7 +475,7 @@ class DipolarChargeInfo(ChargeInfo):
             names = hdf5_loader.load(subpath + "names")
         else:
             names = [''] * qnumber
-        obj.__setstate__((qnumber, qmod, names), (lattice, charge_idcs, dipole_idcs, dipole_dims))
+        obj.__setstate__((qnumber, qmod, names), (charge_idcs, dipole_idcs, dipole_dims))
         obj.test_sanity()
         return obj
 
@@ -560,10 +487,6 @@ class DipolarChargeInfo(ChargeInfo):
             raise ValueError('dipole_dims has wrong length')
         if len(set(self._dipole_idcs)) != num_dipole_charges:
             raise ValueError('duplicates in dipole_idcs')
-        if self._lattice is not None:
-            self.lattice.test_sanity()
-            if not all(0 <= dim < self.lattice.dim for dim in self._dipole_dims):
-                raise ValueError('invalid dipole_dims')
         super().test_sanity()
 
 
@@ -1424,16 +1347,6 @@ class LegCharge:
         if np.any(perm_flat != self.perm_flat_from_perm_qind(perm_qind)):
             raise ValueError("Permutation mixes qind")
         return perm_qind
-
-    def shift_charges(self, mps_idx_before, mps_idx_after):
-        """Convenience wrapper around :meth:`ChargeInfo.shift_LegCharge`."""
-        # Implementing the actual function in ChargeInfo allows us to have different implementations
-        # for subclasses, such as DipolarChargeInfo
-        # Having this wrapper allows easier and more readable usage
-        #   leg.shift_charges(i, j)
-        # instead of
-        #   leg.chinfo.shift_LegCharge(site, i, j)
-        return self.chinfo.shift_LegCharge(self, mps_idx_before, mps_idx_after)
 
 
 class LegPipe(LegCharge):

@@ -182,6 +182,10 @@ class Site(Hdf5Exportable):
             If you sorted the previous leg with ``perm_qind, new_leg_charge = leg.sort()``,
             use ``old_leg.perm_flat_from_perm_qind(perm_qind)``.
             Ignored if ``None``.
+
+        Returns
+        -------
+        The modified ``self``.
         """
         if new_leg_charge is None:
             new_leg_charge = npc.LegCharge.from_trivial(self.dim)
@@ -199,6 +203,7 @@ class Site(Hdf5Exportable):
                 op = op[np.ix_(permute, permute)]
             # need_JW and hc_ops are still set
             self.add_op(opname, op, need_JW=False, hc=False, permute_dense=False)
+        return self
         # done
 
     def sort_charge(self, bunch=True):
@@ -555,10 +560,6 @@ class Site(Hdf5Exportable):
                 next_op = self.get_op(next_op)
             op = npc.tensordot(op, next_op, axes=['p*', 'p'])
         return op
-
-    def shift_charges(self, mps_idx_before, mps_idx_after):
-        """Convenience wrapper around :meth:`ChargeInfo.shift_Site`."""
-        return self.leg.chinfo.shift_Site(self, mps_idx_before, mps_idx_after)
 
     def __repr__(self):
         """Debug representation of self."""
@@ -1269,12 +1270,6 @@ class SpinSite(Site):
     ``'parity'``   [2]      --
     ``'None'``     []       --
     ============== =======  ============================
-    
-    .. warning ::
-        When using dipole conservation, make sure to
-        call :meth:`~tenpy.linalg.charges.DipolarChargeInfo.set_lattice` at some point during
-        initialization, e.g. during `init_lattice` when defining a model.
-        See e.g. :class:`~tenpy.models.spins.DipolarSpinChain`.
 
     Parameters
     ----------
@@ -1797,12 +1792,6 @@ class BosonSite(Site):
     ``'parity'``   [2]      --
     ``'None'``     []       --
     ============== =======  ==================================
-    
-    .. warning ::
-        When using dipole conservation, make sure to
-        call :meth:`~tenpy.linalg.charges.DipolarChargeInfo.set_lattice` at some point during
-        initialization, e.g. during `init_lattice` when defining a model.
-        See e.g. :class:`~tenpy.models.spins.DipolarBoseHubbardModel`.
 
     Parameters
     ----------

@@ -620,26 +620,39 @@ If ``_qdata_sorted == True``, ``_qdata`` and ``_data`` are guaranteed to be lexs
 If an algorithm modifies ``_qdata``, it **must** set ``_qdata_sorted = False`` (unless it guarantees it is still sorted).
 The routine :meth:`~tenpy.linalg.np_conserved.Array.sort_qdata` brings the data to sorted form.
 
+
+.. _shift_symmetry:
+
 Dipole Conservation
 -------------------
 
 Normally, a conserved charge has the form :math:`Q = \sum_i q_i` where the local charge :math:`q_i`
-is (the expectation value of) some operator which does not depend on the position of the site :math:`i`
-it acts on. E.g. :math:`q_i = 2 * S_i^z` is independent of :math:`i` in that sense.
+is (the expectation value of) some operator which does not explicitly depend on the position of the
+site :math:`i` it acts on. E.g. :math:`q_i = 2 * S_i^z` is independent of :math:`i` in that sense.
 
 Some models, see e.g. :class:`~tenpy.models.spins.DipolarSpinChain`, have a symmetry which conserves
 a charge that does not follow the above scheme.
 The dipole charge of this model is :math:`P = \sum_i p_i = \sum_i r_i q_i`, where :math:`r_i` is the
-position of the site :math:`i`.
+position of the site :math:`i`. Clearly, the local charge :math:`p_i` depends in the position of
+the site :math:`i`.
 
 We support a general framework for conserved charges where the local charge has some non-trivial
-transformation properties und spatial translations.
+transformation properties under spatial translations.
+We do require, however, that the effect of spatial translation on a charge is independent of
+the starting position and only depends on the vector of translation.
+Relaxing this assumption (e.g. to conserve quadrupole moments) would require substantially more
+book-keeping and I (Jakob Unfried) am not even sure infinite MPS with such charges can be well
+defined.
+
 We internally refer to such symmetries as "shift-symmetry" and we call the transformation of
 charges / legs / sites or arrays that results from spatial translations "shifting".
-The method :meth:`~tenpy.linalg.charges.ChargeInfo.shift_charges` implements how the local charge
-changes when "moved" from one site to another.
-For the base class, :class:`~tenpy.linalg.charges.ChargeInfo`, it does not change at all.
-For non-trivially transforming charges, subclasses may override this.
+We implement methods in :class:`~tenpy.linalg.charges.ChargeInfo` that define how the charges
+transform. The base class :class:`~tenpy.linalg.charges.ChargeInfo` implements only trivial
+versions of these methods, that do not change the charges at all.
+It models charges with trivial translation properties, indicated by
+:attr:`~tenpy.linalg.charges.ChargeInfo.trivial_shift` being ``True``.
+Non-trivially transforming charges should then by implemented in subclasses, such as
+:class:`~tenpy.linalg.charges.DipolarChargeInfo`.
 
 The subclass :class:`~tenpy.linalg.charges.DipolarChargeInfo` supports one (or multiple) charges of
 the dipole form above, i.e. :math:`p_i = r_i q_i` where :math:`q_i` is another "normal" conserved
@@ -655,12 +668,27 @@ implications for MPS simulations in tenpy
   of the :math:`p_i` on the respective physical legs.
   We perform this shift in :meth:`~tenpy.models.lattice.Lattice.mps_sites`.
 
-- For sweeping algorithms using infinite MPS, the charges also need to adjusted when neighbouring
+- For sweeping algorithms using infinite MPS, the charges also need to adjusted when neighboring
   unit cells are inserted, e.g. when a two-site update on sites ``L - 1, L`` is performed, the
   (i)MPS tensor on site ``L`` is not the *same* as the one on site ``0``, but rather a shifted version.
   We account for this in :meth:`~tenpy.networks.mps.MPS.get_B`, :meth:`~tenpy.networks.mps.MPS.set_B`
   and in the similar methods for `S`.
+  Generally speaking , whenever the identification of arrays, sites or any quantity that carries
+  charge, between different unit cells of the iMPS is used, shifting needs to be taken into account.
 
+The method :meth:`tenpy.ChargeInfo.shift_charges` implements how the local charge
+changes when moved from one site to another. It takes an arbitrary translation vector as an
+argument. It is used, e.g., to create the :meth:`~tenpy.linalg.models.lattice.Lattice.mps_sites`
+from the :attr:`~tenpy.linalg.models.lattice.Lattice.unit_cell` of the lattice.
+It turns out that the MPS algorithms only need a specialized version,
+:meth:`tenpy.ChargeInfo.shift_charges_horizontal`, which restricts to translations that are purely
+along the first dimension of the lattice.
+
+In the setting of using MPS in algorithms, we want to be as agnostic of the lattice geometry as
+possible. It turns out that in the concrete algorithms, and only for infinite MPS, we only need
+to shift Arrays / sites / charged by whole MPS unit cells (of length :attr:`tenpy.MPS.L`).
+This is implemented in :meth:`tenpy.MPS.shift_Array`, etc., which uses
+the :attr:`tenpy.Lattice.N_rings` of the lattice, which is now also an attr of MPS.
 
 See also
 --------

@@ -5,7 +5,7 @@ from tenpy.models.tf_ising import TFIChain
 from tenpy.algorithms import tebd
 
 M = TFIChain({"L": 2, "J": 1., "g": 1.5, "bc_MPS": "infinite"})
-psi = MPS.from_product_state(M.lat.mps_sites(), [0] * 2, "infinite")
+psi = MPS.from_product_state(M.lat.mps_sites(), [0] * 2, "infinite", N_rings=M.lat.N_rings)
 tebd_params = {
     "order": 2,
     "delta_tau_list": [0.1, 0.001, 1.e-5],

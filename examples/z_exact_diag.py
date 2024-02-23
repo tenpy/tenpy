@@ -17,7 +17,7 @@ def example_exact_diagonalization(L, Jz):
     M = XXZChain(xxz_pars)
 
     product_state = ["up", "down"] * (xxz_pars['L'] // 2)  # this selects a charge sector!
-    psi_DMRG = MPS.from_product_state(M.lat.mps_sites(), product_state)
+    psi_DMRG = MPS.from_product_state(M.lat.mps_sites(), product_state, N_rings=M.lat.N_rings)
     charge_sector = psi_DMRG.get_total_charge(True)  # ED charge sector should match
 
     ED = ExactDiag(M, charge_sector=charge_sector, max_size=2.e6)

@@ -25,7 +25,8 @@ import copy
 import logging
 logger = logging.getLogger(__name__)
 
-from ..linalg.charges import DipolarChargeInfo
+from ..linalg.charges import DipolarChargeInfo, LegCharge
+from ..linalg.np_conserved import Array
 from ..networks.site import Site
 from ..tools.misc import (to_iterable, to_array, to_iterable_of_len, inverse_permutation,
                           get_close, find_subclass)
@@ -232,8 +233,8 @@ class Lattice:
                                  " Call tenpy.networks.site.set_common_charges() before "
                                  "giving them to the lattice!")
             if isinstance(chinfo, DipolarChargeInfo):
-                if chinfo._lattice is not None and chinfo._lattice is not self:
-                    raise ValueError('Incompatible chinfo.lattice')
+                for dim in chinfo._dipole_dims:
+                    assert 0 <= dim < self.dim
         if self.basis.shape[0] != self.dim:
             raise ValueError("Need one basis vector for each direction!")
         if self.unit_cell_positions.shape[0] != len(self.unit_cell):
@@ -668,14 +669,11 @@ class Lattice:
         if self._mps_sites_cache is None:
             self._mps_sites_cache = []
             for lat_indx in self.order[:, :]:
-                u = lat_indx[-1]
-                mps_indx = self.lat2mps_idx(lat_indx)
-                reference_lat_indx = lat_indx.copy()
-                reference_lat_indx[:-1] = 0
-                reference_mps_indx = self.lat2mps_idx(reference_lat_indx)
-                site = self.unit_cell[u]
-                if isinstance(site, Site):  # it can be None
-                    site = site.shift_charges(reference_mps_indx, mps_indx)
+                site = self.unit_cell[lat_indx[-1]]
+                if isinstance(site, Site) and not site.leg.chinfo.trivial_shift:  # it can be None
+                    leg = site.leg.apply_charge_mapping(site.leg.chinfo.shift_charges,
+                                                        func_kwargs=dict(dx=lat_indx))
+                    site = copy.copy(site).change_charge(leg)
                 self._mps_sites_cache.append(site)
         return self._mps_sites_cache[:]
 
@@ -2176,6 +2174,9 @@ class HelicalLattice(Lattice):
         if regular_lattice.N_cells % N_unit_cells != 0:
             raise ValueError("N_unit_cells incommensurate with regular_lattice.N_cells: "
                              "increase Lx of regular_lattice!")
+        if not regular_lattice.unit_cell[0].leg.chinfo.trivial_shift:
+            # maybe this can be done, but would need to think about it very carefully
+            raise ValueError('Helical lattice does not support symmetries with non-trivial shift.')
         self._N_cells = N_unit_cells
         Lattice.__init__(
             self,
@@ -2353,8 +2354,6 @@ class HelicalLattice(Lattice):
         super()._set_Ls(Ls)
         self.N_cells = self._N_cells
         self.N_sites = len(self.unit_cell) * self._N_cells
-        self.N_sites_per_ring = None  # shouldn't be used
-        self.N_rings = None  # shouldn't be used - pointless for this case.
 
 class Chain(SimpleLattice):
     """A chain of L equal sites.

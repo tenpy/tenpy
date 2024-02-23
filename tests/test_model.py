@@ -167,7 +167,8 @@ def test_CouplingModel_explicit():
     #                                                        M.all_coupling_terms(),
     #                                                        M.exp_decaying_terms),
     #                                                       M.lat.mps_sites(),
-    #                                                       M.lat.bc_MPS)
+    #                                                       M.lat.bc_MPS,
+    #                                                       N_rings=M.lat.N_rings)
     #  H_MPO_graph._set_ordered_states()
     #  from pprint import pprint
     #  pprint(H_MPO_graph._ordered_states)
@@ -257,7 +258,8 @@ def test_CouplingModel_multi_couplings_explicit(use_plus_hc, JW):
                                                           M.all_coupling_terms(),
                                                           M.exp_decaying_terms),
                                                          M.lat.mps_sites(),
-                                                         M.lat.bc_MPS)
+                                                         M.lat.bc_MPS,
+                                                         N_rings=M.lat.N_rings)
     H_MPO_graph._set_ordered_states()
     from pprint import pprint
     pprint(H_MPO_graph._ordered_states)

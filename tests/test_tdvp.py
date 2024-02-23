@@ -29,7 +29,8 @@ def test_tdvp(eps=1.e-5):
     M = SpinChain(parameters)
     # prepare system in product state
     product_state = ["up", "down"] * (L // 2)
-    psi_tebd = MPS.from_product_state(M.lat.mps_sites(), product_state, bc=M.lat.bc_MPS)
+    psi_tebd = MPS.from_product_state(M.lat.mps_sites(), product_state, bc=M.lat.bc_MPS,
+                                      N_rings=M.lat.N_rings)
 
     N_steps = 2
     tebd_params = {

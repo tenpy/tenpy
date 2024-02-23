@@ -33,7 +33,8 @@ def run(Jzs):
     }
 
     M = SpinChain(model_params)
-    psi = MPS.from_product_state(M.lat.mps_sites(), (["up", "down"] * L)[:L], M.lat.bc_MPS)
+    psi = MPS.from_product_state(M.lat.mps_sites(), (["up", "down"] * L)[:L], M.lat.bc_MPS,
+                                 N_rings=M.lat.N_rings)
 
     engine = dmrg.TwoSiteDMRGEngine(psi, M, dmrg_params)
     np.set_printoptions(linewidth=120)

@@ -72,7 +72,8 @@ def run(model_params, phi_ext=np.linspace(0, 1.0, 7)):
 
         if eng is None:  # first time in the loop
             M = FermionicHaldaneModel(model_params)
-            psi = MPS.from_product_state(M.lat.mps_sites(), prod_state, bc=M.lat.bc_MPS)
+            psi = MPS.from_product_state(M.lat.mps_sites(), prod_state, bc=M.lat.bc_MPS,
+                                         N_rings=M.lat.N_rings)
             eng = dmrg.TwoSiteDMRGEngine(psi, M, dmrg_params)
         else:
             del eng.options['chi_list']

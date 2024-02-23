@@ -29,8 +29,8 @@ def test_MPO():
             if bc == 'finite':
                 Ws[0] = Ws[0][0:1, :, :, :]
                 Ws[-1] = Ws[-1][:, 3:4, :, :]
-            H = mpo.MPO([s] * L, Ws, bc=bc, IdL=[0] * L + [None], IdR=[None] + [-1] * (L))
-            H_copy = mpo.MPO([s] * L, Ws, bc=bc, IdL=[0] * L + [None], IdR=[None] + [-1] * (L))
+            H = mpo.MPO([s] * L, Ws, bc=bc, IdL=[0] * L + [None], IdR=[None] + [-1] * (L), N_rings=L)
+            H_copy = mpo.MPO([s] * L, Ws, bc=bc, IdL=[0] * L + [None], IdR=[None] + [-1] * (L), N_rings=L)
             H.test_sanity()
             print(H.dim)
             print(H.chi)
@@ -49,7 +49,7 @@ def test_MPOGraph():
     for bc in ['finite', 'infinite']:
         for L in [2, 4]:
             print("L =", L)
-            g = mpo.MPOGraph([spin_half] * L, bc)
+            g = mpo.MPOGraph([spin_half] * L, bc, N_rings=L)
             g.add(0, 'IdL', 'IdR', 'Sz', 0.1)
             g.add(0, 'IdL', 'Sz0', 'Sz', 1.)
             g.add(1, 'Sz0', 'IdR', 'Sz', 0.5)
@@ -70,7 +70,7 @@ def test_MPOGraph():
 def test_MPOGraph_term_conversion():
     L = 4
 
-    g1 = mpo.MPOGraph([spin_half] * L, 'infinite')
+    g1 = mpo.MPOGraph([spin_half] * L, 'infinite', N_rings=L)
     g1.test_sanity()
     for i in range(L):
         g1.add(i, 'IdL', 'IdR', 'Sz', 0.5)
@@ -81,14 +81,14 @@ def test_MPOGraph_term_conversion():
     terms += [[("Sp", i), ("Sm", i + 1)] for i in range(L)]
     prefactors = [0.5] * L + [1.5] * L
     term_list = TermList(terms, prefactors)
-    g2 = mpo.MPOGraph.from_term_list(term_list, [spin_half] * L, 'infinite')
+    g2 = mpo.MPOGraph.from_term_list(term_list, [spin_half] * L, 'infinite', N_rings=L)
     g2.test_sanity()
     assert g1.graph == g2.graph
     terms[3:3] = [[("Sm", 2), ("Sp", 0), ("Sz", 1)]]
     prefactors[3:3] = [3.]
     term_list = TermList(terms, prefactors)
-    g3 = mpo.MPOGraph.from_term_list(term_list, [spin_half] * L, 'infinite')
-    g4 = mpo.MPOGraph([spin_half] * L, 'infinite')
+    g3 = mpo.MPOGraph.from_term_list(term_list, [spin_half] * L, 'infinite', N_rings=L)
+    g4 = mpo.MPOGraph([spin_half] * L, 'infinite', N_rings=L)
     g4.test_sanity()
     for i in range(L):
         g4.add(i, 'IdL', 'IdR', 'Sz', 0.5)
@@ -118,7 +118,7 @@ def test_MPO_conversion():
     ]
     prefactors = [0.25, 10., 11., 101., 102., 103.]
     term_list = TermList(terms, prefactors)
-    g1 = mpo.MPOGraph.from_term_list(term_list, sites, bc='finite', insert_all_id=False)
+    g1 = mpo.MPOGraph.from_term_list(term_list, sites, bc='finite', insert_all_id=False, N_rings=L)
     ct_add = MultiCouplingTerms(L)
     ct_add.add_coupling_term(12., 4, 5, "X_4", "X_5")
     ct_add.add_multi_coupling_term(0.5, [4, 5, 7], ["X_4", "Y_5", "X_7"], "Id")
@@ -162,7 +162,8 @@ def test_MPO_conversion():
             ['Id']
         ]
     ]
-    H2 = mpo.MPO.from_grids(sites, grids, 'finite', [0] * 4 + [None] * 5, [None] * 5 + [-1] * 4)
+    H2 = mpo.MPO.from_grids(sites, grids, 'finite', [0] * 4 + [None] * 5, [None] * 5 + [-1] * 4,
+                            N_rings=len(sites))
     for w1, w2 in zip(H1._W, H2._W):
         assert npc.norm(w1 - w2, np.inf) == 0.
     pass
@@ -173,7 +174,7 @@ def test_MPOEnvironment():
     L = xxz_pars['L']
     M = XXZChain(xxz_pars)
     state = ([0, 1] * L)[:L]  # Neel
-    psi = mps.MPS.from_product_state(M.lat.mps_sites(), state, bc='finite')
+    psi = mps.MPS.from_product_state(M.lat.mps_sites(), state, bc='finite', N_rings=M.lat.N_rings)
     env = mpo.MPOEnvironment(psi, M.H_MPO, psi)
     env.get_LP(3, True)
     env.get_RP(0, True)
@@ -186,45 +187,49 @@ def test_MPOEnvironment():
 
 
 def test_MPO_hermitian():
+    L = 4
+    N_rings = L  # implicitly assuming a Chain geometry
     s = spin_half
-    ot = OnsiteTerms(4)
-    ct = CouplingTerms(4)
+    ot = OnsiteTerms(L)
+    ct = CouplingTerms(L)
     ct.add_coupling_term(1., 2, 3, 'Sm', 'Sp')
-    H = mpo.MPOGraph.from_terms((ot, ct), [s] * 4, 'infinite').build_MPO()
+    H = mpo.MPOGraph.from_terms((ot, ct), [s] * L, 'infinite', N_rings=N_rings).build_MPO()
     assert not H.is_hermitian()
     assert H.is_equal(H)
     ct.add_coupling_term(1., 2, 3, 'Sp', 'Sm')
-    H = mpo.MPOGraph.from_terms((ot, ct), [s] * 4, 'infinite').build_MPO()
+    H = mpo.MPOGraph.from_terms((ot, ct), [s] * L, 'infinite', N_rings=N_rings).build_MPO()
     assert H.is_hermitian()
     assert H.is_equal(H)
 
     ct.add_coupling_term(1., 3, 18, 'Sm', 'Sp')
-    H = mpo.MPOGraph.from_terms((ot, ct), [s] * 4, 'infinite').build_MPO()
+    H = mpo.MPOGraph.from_terms((ot, ct), [s] * L, 'infinite', N_rings=N_rings).build_MPO()
     assert not H.is_hermitian()
     assert H.is_equal(H)
     ct.add_coupling_term(1., 3, 18, 'Sp', 'Sm')
-    H = mpo.MPOGraph.from_terms((ot, ct), [s] * 4, 'infinite').build_MPO()
+    H = mpo.MPOGraph.from_terms((ot, ct), [s] * L, 'infinite', N_rings=N_rings).build_MPO()
     assert H.is_hermitian()
     assert H.is_equal(H)
 
 
 def test_MPO_addition():
+    L = 4
+    N_rings = L  # implicitly assuming a Chain geometry
     for bc in ['infinite', 'finite']:
         print('bc = ', bc, '-' * 40)
         s = spin_half
-        ot1 = OnsiteTerms(4)
-        ct1 = CouplingTerms(4)
+        ot1 = OnsiteTerms(L)
+        ct1 = CouplingTerms(L)
         ct1.add_coupling_term(2., 2, 3, 'Sm', 'Sp')
         ct1.add_coupling_term(2., 2, 3, 'Sp', 'Sm')
         ct1.add_coupling_term(2., 1, 2, 'Sz', 'Sz')
         ot1.add_onsite_term(3., 1, 'Sz')
-        H1 = mpo.MPOGraph.from_terms((ot1, ct1), [s] * 4, bc).build_MPO()
+        H1 = mpo.MPOGraph.from_terms((ot1, ct1), [s] * L, bc, N_rings=N_rings).build_MPO()
         ot2 = OnsiteTerms(4)
         ct2 = CouplingTerms(4)
         ct2.add_coupling_term(4., 0, 2, 'Sz', 'Sz')
         ct2.add_coupling_term(4., 1, 2, 'Sz', 'Sz')
         ot2.add_onsite_term(5., 1, 'Sz')
-        H2 = mpo.MPOGraph.from_terms((ot2, ct2), [s] * 4, bc).build_MPO()
+        H2 = mpo.MPOGraph.from_terms((ot2, ct2), [s] * L, bc, N_rings=N_rings).build_MPO()
         H12_sum = H1 + H2
         ot12 = OnsiteTerms(4)
         ot12 += ot1
@@ -232,22 +237,23 @@ def test_MPO_addition():
         ct12 = CouplingTerms(4)
         ct12 += ct1
         ct12 += ct2
-        H12 = mpo.MPOGraph.from_terms((ot12, ct12), [s] * 4, bc).build_MPO()
+        H12 = mpo.MPOGraph.from_terms((ot12, ct12), [s] * L, bc, N_rings=N_rings).build_MPO()
         assert H12.is_equal(H12_sum)
 
 
 def test_MPO_expectation_value(tol=1.e-15):
+    L_mpo = 4
     s = spin_half
-    psi1 = mps.MPS.from_singlets(s, 6, [(1, 3), (2, 5)], lonely=[0, 4], bc='infinite')
+    psi1 = mps.MPS.from_singlets(s, 6, [(1, 3), (2, 5)], lonely=[0, 4], bc='infinite', N_rings=6)
     psi1.test_sanity()
-    ot = OnsiteTerms(4) # H.L != psi.L, consider L = lcm(4, 6) = 12
+    ot = OnsiteTerms(L_mpo) # H.L != psi.L, consider L = lcm(4, 6) = 12
     ot.add_onsite_term(0.1, 0, 'Sz')  # -> 0.5 * 2 (sites 0, 4, not 8)
     ot.add_onsite_term(0.2, 3, 'Sz')  # -> 0.  (not sites 4, 7, 11)
-    ct = CouplingTerms(4)  # note: ct.L != psi1.L
+    ct = CouplingTerms(L_mpo)  # note: ct.L != psi1.L
     ct.add_coupling_term(1., 2, 3, 'Sz', 'Sz')  # -> 0. (not 2-3, 6-7, 10-11)
     ct.add_coupling_term(1.5, 1, 3, 'Sz', 'Sz')  # -> 1.5*(-0.25) (1-3, not 5-7, not 9-11)
     ct.add_coupling_term(2.5, 0, 6, 'Sz', 'Sz')  # -> 2.5*0.25*3 (0-6, 4-10, not 8-14)
-    H = mpo.MPOGraph.from_terms((ot, ct), [s] * 4, 'infinite').build_MPO()
+    H = mpo.MPOGraph.from_terms((ot, ct), [s] * L_mpo, 'infinite', N_rings=L_mpo).build_MPO()
     desired_ev = (0.1 * 0.5 * 2 + 0.2 * 0. + 1. * 0. + 1.5 * -0.25 + 2.5 * 0.25 * 2) / 12
     ev_power = H.expectation_value_power(psi1, tol=tol)
     assert abs(ev_power - desired_ev) < tol
@@ -262,8 +268,9 @@ def test_MPO_expectation_value(tol=1.e-15):
         [None, 0.1 * s.Id, s.Sz],
         [None, None, s.Id],
     ]
-    L = 1
-    exp_dec_H = mpo.MPO.from_grids([s] * L, [grid] * L, bc='infinite', IdL=0, IdR=2)
+    L_mpo = 1
+    exp_dec_H = mpo.MPO.from_grids([s] * L_mpo, [grid] * L_mpo, bc='infinite', IdL=0, IdR=2,
+                                   N_rings=L_mpo)
     desired_ev = (3 * 0.5 * 2 + # Sz onsite
                   0.25 * (0.1**3 + 0.1**5 + 0.1**9 + 0.1**11 + 0.1**15 +  # Z_0 Z_i
                           0.1**1 + 0.1**5 + 0.1**7 + 0.1**11 + 0.1**13) +  # Z_4 Z_i
@@ -277,8 +284,9 @@ def test_MPO_expectation_value(tol=1.e-15):
     assert abs(ev_TM - desired_ev) < tol
     ev = exp_dec_H.expectation_value(psi1, tol=tol)
     assert abs(ev - desired_ev) < tol
-    L = 3  # should give exactly the same answer!
-    exp_dec_H = mpo.MPO.from_grids([s] * L, [grid] * L, bc='infinite', IdL=0, IdR=2)
+    L_mpo = 3  # should give exactly the same answer!
+    exp_dec_H = mpo.MPO.from_grids([s] * L_mpo, [grid] * L_mpo, bc='infinite', IdL=0, IdR=2,
+                                   N_rings=L_mpo)
     ev_power = exp_dec_H.expectation_value_power(psi1, tol=tol)
     ev_TM = exp_dec_H.expectation_value_TM(psi1, tol=tol)
     assert abs(ev_power - desired_ev) < tol
@@ -326,7 +334,7 @@ def test_apply_mpo(method):
     model_pars = dict(L=L, Jx=0., Jy=0., Jz=-4., hx=2. * g, bc_MPS=bc_MPS, conserve=None)
     M = SpinChain(model_pars)
     state = ([[1 / np.sqrt(2), -1 / np.sqrt(2)]] * L)  # pointing in (-x)-direction
-    psi = mps.MPS.from_product_state(M.lat.mps_sites(), state, bc=bc_MPS)
+    psi = mps.MPS.from_product_state(M.lat.mps_sites(), state, bc=bc_MPS, N_rings=M.lat.N_rings)
     H = M.H_MPO
     Eexp = H.expectation_value(psi)
     psi2 = psi.copy()
@@ -351,8 +359,8 @@ def test_MPOTransferMatrix(eps=1.e-13):
             [None, None, None, None, Jxy*0.5*s.Sp],
             [None, None, None, gamma*s.Id, Jz*s.Sz],
             [None, None, None, None, s.Id]]  # yapf: disable
-    H = mpo.MPO.from_grids([s] * 3, [grid] * 3, 'infinite', 0, 4, max_range=np.inf)
-    psi = mps.MPS.from_singlets(s, 3, [(0, 1)], lonely=[2], bc='infinite')
+    H = mpo.MPO.from_grids([s] * 3, [grid] * 3, 'infinite', 0, 4, max_range=np.inf, N_rings=3)
+    psi = mps.MPS.from_singlets(s, 3, [(0, 1)], lonely=[2], bc='infinite', N_rings=3)
     psi.roll_mps_unit_cell(-1)  # -> nontrivial chi at the cut between unit cells
     exact_E = ((-0.25 - 0.25) * Jxy  # singlet <0.5*Sp_i Sm_{i+1}> = 0.25 = <0.5*Sm_i Sp_{i+1}>
                - 0.25 * Jz   # singlet <Sz_i Sz_{i+1}>
@@ -408,8 +416,8 @@ def test_MPO_from_wavepacket(L=10):
     coeff = np.exp(-1.j * k0 * x) * np.exp(- 0.5 * (x - x0)**2 / sigma**2)
     coeff /= np.linalg.norm(coeff)
     s = site.FermionSite(conserve='N')
-    wp = mpo.MPO.from_wavepacket([s] * L, coeff, 'Cd')
-    psi = mps.MPS.from_product_state([s] * L, ['empty'] * L)
+    wp = mpo.MPO.from_wavepacket([s] * L, coeff, 'Cd', N_rings=L)
+    psi = mps.MPS.from_product_state([s] * L, ['empty'] * L, N_rings=L)
     wp.apply(psi, dict(compression_method='SVD'))
     C = psi.correlation_function('Cd', 'C')
     C_expexcted = np.conj(coeff)[:, np.newaxis] * coeff[np.newaxis, :]

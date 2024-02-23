@@ -38,7 +38,8 @@ def example_TDVP():
     psi = MPS.from_product_state(heisenberg.lat.mps_sites(),
                                  product_state,
                                  bc=heisenberg.lat.bc_MPS,
-                                 form='B')
+                                 form='B',
+                                 N_rings=heisenberg.lat.N_rings)
 
     tdvp_params = {
         'start_time': 0,

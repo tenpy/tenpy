@@ -582,7 +582,7 @@ class NearestNeighborModel(Model):
                 X, _ = bond_XYZ[j]
                 W[0, 1:-1, :, :] = X.itranspose(['wR', 'p0', 'p0*'])
             Ws[i] = W
-        H_MPO = mpo.MPO(sites, Ws, bc, 0, -1, max_range=2)
+        H_MPO = mpo.MPO(sites, Ws, bc, 0, -1, max_range=2, N_rings=self.lat.N_rings)
         return H_MPO
 
 
@@ -1689,7 +1689,8 @@ class CouplingModel(Model):
         ct.remove_zeros(tol_zero)
         edt = self.exp_decaying_terms
 
-        H_MPO_graph = mpo.MPOGraph.from_terms((ot, ct, edt), self.lat.mps_sites(), self.lat.bc_MPS)
+        H_MPO_graph = mpo.MPOGraph.from_terms((ot, ct, edt), self.lat.mps_sites(), self.lat.bc_MPS,
+                                              N_rings=self.lat.N_rings)
         H_MPO = H_MPO_graph.build_MPO()
         H_MPO.max_range = ct.max_range()
         H_MPO.explicit_plus_hc = self.explicit_plus_hc

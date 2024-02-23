@@ -18,7 +18,7 @@ def example_TEBD_gs_tf_ising_finite(L, g):
     model_params = dict(L=L, J=1., g=g, bc_MPS='finite', conserve=None)
     M = TFIChain(model_params)
     product_state = ["up"] * M.lat.N_sites
-    psi = MPS.from_product_state(M.lat.mps_sites(), product_state, bc=M.lat.bc_MPS)
+    psi = MPS.from_product_state(M.lat.mps_sites(), product_state, bc=M.lat.bc_MPS, N_rings=lat.N_rings)
     tebd_params = {
         'order': 2,
         'delta_tau_list': [0.1, 0.01, 0.001, 1.e-4, 1.e-5],
@@ -55,7 +55,7 @@ def example_TEBD_gs_tf_ising_infinite(g):
     model_params = dict(L=2, J=1., g=g, bc_MPS='infinite', conserve=None)
     M = TFIChain(model_params)
     product_state = ["up"] * M.lat.N_sites
-    psi = MPS.from_product_state(M.lat.mps_sites(), product_state, bc=M.lat.bc_MPS)
+    psi = MPS.from_product_state(M.lat.mps_sites(), product_state, bc=M.lat.bc_MPS, N_rings=lat.N_rings)
     tebd_params = {
         'order': 2,
         'delta_tau_list': [0.1, 0.01, 0.001, 1.e-4, 1.e-5],
@@ -151,7 +151,7 @@ def example_TEBD_gs_tf_ising_next_nearest_neighbor(L, g, Jp):
     # we start with the non-grouped sites, but next-nearest neighbor interactions, building the MPO
     M = SpinChainNNN2(model_params)
     product_state = ["up"] * M.lat.N_sites
-    psi = MPS.from_product_state(M.lat.mps_sites(), product_state, bc=M.lat.bc_MPS)
+    psi = MPS.from_product_state(M.lat.mps_sites(), product_state, bc=M.lat.bc_MPS, N_rings=lat.N_rings)
 
     # now we group each to sites ...
     psi.group_sites(n=2)  # ... in the state

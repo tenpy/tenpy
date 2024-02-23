@@ -129,6 +129,7 @@ class DipolarSpinChain(CouplingMPOModel):
 
         S : {0.5, 1, 1.5, 2, ...}
             The 2S+1 local states range from m = -S, -S+1, ... +S.
+            Defaults to ``S=1``.
         conserve : 'best' | 'dipole' | 'Sz' | 'parity' | None
             What should be conserved. See :class:`~tenpy.networks.site.SpinSite`.
             Note that dipole conservation necessarily includes Sz conservation.
@@ -154,14 +155,11 @@ class DipolarSpinChain(CouplingMPOModel):
         sort_charge = model_params.get('sort_charge', None)
         site = SpinSite(S=S, conserve=conserve, sort_charge=sort_charge)
         lattice = Chain(L, site, bc=bc, bc_MPS=bc_MPS)
-        if conserve == 'dipole':
-            site.leg.chinfo.set_lattice(lattice)
         return lattice
 
     def init_terms(self, model_params):
         """Add the onsite and coupling terms to the model"""
         J3 = model_params.get('J3', 1)
         J4 = model_params.get('J4', 0)
-
         self.add_multi_coupling(-J3, [('Sp', 0, 0), ('Sm', 1, 0), ('Sm', 1, 0), ('Sp', 2, 0)], plus_hc=True)
         self.add_multi_coupling(-J4, [('Sp', 0, 0), ('Sm', 1, 0), ('Sm', 2, 0), ('Sp', 3, 0)], plus_hc=True)
