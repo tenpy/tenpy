@@ -644,7 +644,7 @@ def test_correlation_length():
     spin_half = site.SpinHalfSite(conserve=None, sort_charge=True)
     up_state = ['up'] * 4
     psi_product = mps.MPS.from_product_state([spin_half] * 4, up_state, bc='infinite', N_rings=4)
-    assert psi_product.correlation_length() == 0.  # trivial
+    assert psi_product.correlation_length2() == 0.  # trivial
     ch_s = psi_product.correlation_length_charge_sectors()
 
     # generate test-MPS with non-trivial correlation length
@@ -652,22 +652,22 @@ def test_correlation_length():
     psi_AKLT = model_AKLT.psi_AKLT()
     # eigenvalues of AKLT single-site TM are [1, 1./3., 1./3., 1/3.] for charges [0, 0, +2, -2]
     xi_AKLT = 1./np.log(3)
-    xi = psi_AKLT.correlation_length()
+    xi = psi_AKLT.correlation_length2()
     assert abs(xi - xi_AKLT) < 1.e-13
     charges = psi_AKLT.correlation_length_charge_sectors()
     npt.assert_array_equal(charges[np.argsort(charges[:, 0])], [[0], [2]]) # dropped [-2]
-    xis, charges = psi_AKLT.correlation_length(target=3, charge_sector=None, return_charges=True)
+    xis, charges = psi_AKLT.correlation_length2(target=3, charge_sector=None, return_charges=True)
     assert len(xis) == 3
     assert np.all(np.abs(xi - xi_AKLT) < 1.e-13 )
     charges = np.asarray(charges)
     npt.assert_array_equal(charges[np.argsort(charges[:, 0])], [[-2], [0], [2]])
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", UserWarning)
-        xi_m2, charges = psi_AKLT.correlation_length(target=1, charge_sector=[-2], return_charges=True)
+        xi_m2, charges = psi_AKLT.correlation_length2(target=1, charge_sector=[-2], return_charges=True)
         npt.assert_array_equal(charges, [-2])
         assert abs(xi_m2 - xi_AKLT) < 1.e-13
         # note: sectors have only one entry, so target only changes resulting
-        xi_p2 = psi_AKLT.correlation_length(target=2, charge_sector=np.array([+2]), tol_ev0=None)
+        xi_p2 = psi_AKLT.correlation_length2(target=2, charge_sector=np.array([+2]), tol_ev0=None)
         assert abs(xi_p2[0] - xi_AKLT) < 1.e-13
     assert abs(xi - xi_AKLT) < 1.e-13
 

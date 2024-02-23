@@ -4143,7 +4143,7 @@ class MPS(BaseMPSExpectationValue):
             Qs[i] = Q.split_legs()
         return Qs, R
 
-    def correlation_length(self, target=1, tol_ev0=1.e-8, charge_sector=0, return_charges=False):
+    def correlation_length2(self, target=1, tol_ev0=1.e-8, charge_sector=0, return_charges=False):
         r"""Calculate the correlation length by diagonalizing the transfer matrix.
 
         Assumes that `self` is in canonical form.
@@ -4159,16 +4159,10 @@ class MPS(BaseMPSExpectationValue):
         Thus :math:`\lambda_2 = \exp(-\frac{1}{\xi})`.
 
         More general for a `L`-site unit cell we get :math:`\lambda_2 = \exp(-\frac{L}{\xi})`,
-        where the `xi` is given in units of 1 lattice spacing in the MPS.
+        where the `xi` is given in units of the horizontal lattice spacing.
 
-        .. warning ::
-            For a higher-dimensional lattice (which the MPS class doesn't know about),
-            the correct unit is the lattice spacing in x-direction, and the correct formula is
-            :math:`\lambda_2 = \exp(-\frac{L_x}{\xi})`,
-            where `L_x` is the number of lattice spacings in the infinite direction within the
-            MPS unit cell, e.g. the number of "rings" of a cylinder in the MPS unit cell.
-            To get to these units, divide the returned `xi` by the number of sites within a "ring",
-            for a lattice given in :attr:`~tenpy.models.lattice.Lattice.N_sites_per_ring`.
+        Unlike the old :meth:`correlation_length`, this method returns the correlation length in
+        correct units, even for higher-dimensional lattices.
 
         Parameters
         ----------
@@ -4193,14 +4187,64 @@ class MPS(BaseMPSExpectationValue):
         xi : float | 1D array
             If `target` = 1, return just the correlation length,
             otherwise an array of the `target` largest correlation lengths.
-            It is measured in units of a single spacing between sites in the MPS language,
-            see the warning above.
-        charge_sectors :  list of charge sectors
+            It is measured in units of the horizontal spacing of the lattice.
+        charge_sectors :  list of charge sectors, optional
             For each entry in `xi` the charge sector, i.e., qtotal of the dominant eigenvalue.
+            Only returned if `return_charges`.
 
         See also
         --------
         correlation_length_charge_sectors : lists possible charge sectors.
+        """
+        res = self._correlation_length(target, tol_ev0, charge_sector, return_charges,
+                                       _ignore_warning=True)
+        if return_charges:
+            xi, charges = res
+        else:
+            xi = res
+        xi = xi / self.N_sites_per_ring
+        if return_charges:
+            return xi, charges
+        return xi
+
+    def correlation_length(self, target=1, tol_ev0=1.e-8, charge_sector=0, return_charges=False):
+        r"""Calculate the correlation length by diagonalizing the transfer matrix.
+
+        .. deprecated ::
+            This is an old implementation, from before MPS had access to ``N_sites_per_ring``.
+            It is only kept for backwards compatibility. Use :meth:`correlation_length2` instead.
+
+        .. warning ::
+            For higher-dimensional lattices, this function does not return the correlation length
+            in correct units. Use :meth:`correlation_length2` or read the documentation of the
+            return value carefully.
+
+        Parameters
+        ----------
+        target, tol_ev0, charge_sector, return_charges
+            same as for :meth:`correlation_length2`.
+        _ignore_warning : bool
+            Flag to suppress the ``DeprecationWarning``.
+
+        Returns
+        -------
+        xi : float | 1D array
+            The correlation length(s) in units of "lattice spacing per MPS site", i.e.
+            ``self.correlation_length(*a) == self.correlation_length2(*a) * self.N_sites_per_ring``.
+        charge_sectors :  list of charge sectors, optional
+            For each entry in `xi` the charge sector, i.e., qtotal of the dominant eigenvalue.
+            Only returned if `return_charges`.
+        """
+        msg = ('The method `correlation_length` is deprecated. Use `correlation_length2` instead. '
+               'Note the different units of the output for higher-dimensional lattices!')
+        warnings.warn(msg, DeprecationWarning, 2)
+        return self._correlation_length(target, tol_ev0, charge_sector, return_charges)
+
+    def _correlation_length(self, target, tol_ev0, charge_sector, return_charges, _ignore_warning):
+        """Internal implementation of :meth:`correlation_length2` and :meth:`correlation_length`.
+
+        Returns like :meth:`correlation_length`, in particular *without* accounting for
+        lattice geometry.
         """
         assert (not self.finite)
         zero_charge = self.chinfo.make_valid()

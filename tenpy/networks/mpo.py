@@ -407,13 +407,11 @@ class MPO(MPSGeometry):
     def get_W(self, i, copy=False):
         """Return `W` at site `i`."""
         i_in_unit_cell, num_unit_cells = self._to_valid_site_index(i, return_num_unit_cells=True)
-        # TODO double check sign
         return self.shift_Array(self._W[i_in_unit_cell], num_unit_cells=num_unit_cells, copy=copy)
 
     def set_W(self, i, W):
         """Set `W` at site `i`."""
         i_in_unit_cell, num_unit_cells = self._to_valid_site_index(i, return_num_unit_cells=True)
-        # TODO double check sign
         self._W[i_in_unit_cell] = self.shift_Array(W, -num_unit_cells, copy=False)
 
     def get_IdL(self, i):
@@ -2472,14 +2470,14 @@ class MPOTransferMatrix(NpcLinearOperator):
                 vec = npc.tensordot(B, vec, axes=['vR', 'vL'])  # vL p wL vL*
                 vec = npc.tensordot(vec, W, axes=[['p', 'wL'], ['p*', 'wR']])  # vL vL* p wL
                 vec = npc.tensordot(vec, Bc, axes=[['vL*', 'p'], ['vR*', 'p*']])  # vL wL vL*
-            vec = self.shift_Array(vec, num_unit_cells=1, copy=False)  # TODO check sign
+            vec = self.shift_Array(vec, num_unit_cells=1, copy=False)
         else:
             vec.itranspose(['vR*', 'wR', 'vR'])  # shouldn't do anything
             for Ac, W, A in zip(self._M_conj, self._W, self._M):
                 vec = npc.tensordot(vec, A, axes=['vR', 'vL'])  # vR* wR p vR
                 vec = npc.tensordot(W, vec, axes=[['wL', 'p*'], ['wR', 'p']])  # wR p vR* vR
                 vec = npc.tensordot(Ac, vec, axes=[['p*', 'vL*'], ['p', 'vR*']])  # vR* wR vR
-            vec = self.shift_Array(vec, num_unit_cells=-1, copy=False)  # TODO check sign
+            vec = self.shift_Array(vec, num_unit_cells=-1, copy=False)
         if project:
             self._project(vec)
         return vec
