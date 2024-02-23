@@ -370,7 +370,7 @@ class ChargeInfo:
 
 
 class DipolarChargeInfo(ChargeInfo):
-    """Version of :class:`ChargeInfo` that supports dipole conservation.
+    r"""Version of :class:`ChargeInfo` that supports dipole conservation.
 
     Assumes that one (or more) of the charges is the dipole moment associated with another charge.
     This results in non-trivial behavior under spatial translations.
@@ -388,6 +388,21 @@ class DipolarChargeInfo(ChargeInfo):
         This only gives a valid proxy for the physical dipole moment if all sites of the unit cell
         that may carry charge ``q_i != 0`` are at the same spatial position, e.g. if there is only
         one site per unit cell.
+
+    .. warning ::
+        The possible `mod` for the dipole charge is restricted as follows;
+        Consider the ``n``-th dipole charge ``p`` specified by ``dipole_idcs[n]``, with the
+        underlying charge ``q`` specified by ``charge_idcs[n]``.
+        First, if ``q`` has ``qmod_q > 1``, i.e. if it is a :math:`\mathbb{Z}_N` charge, the dipole
+        moment can at most by conserved module ``qmod_q``, thus ``qmod_p`` must divide ``qmod_q``.
+        Second, for the dipole moment along a ``dipole_dims[n] > 0``, e.g. along the circumference
+        of a cylinder, the periodic boundary conditions imply that (at most) the dipole moment
+        modulo ``L_pbc * e`` can be conserved, where ``L_pbc`` is the length of the periodic
+        direction and ``e`` is the "unit" of the original charge ``q`` specified by , i.e. the GCD
+        of its charge values.
+        Lastly, if both cases apply, i.e. if ``qmod_q > 1`` and ``dipole_dims[n] > 0``, we can
+        conserve the dipole only modulo ``gcd(L_pbc * e, qmod_q)``.
+        If that GCD is one, no non-trivial symmetry remains.
 
     Parameters
     ----------
@@ -413,6 +428,26 @@ class DipolarChargeInfo(ChargeInfo):
     def __init__(self, mod=[], names=None, charge_idcs=[], dipole_idcs=[], dipole_dims=None):
         if dipole_dims is None:
             dipole_dims = [0] * len(dipole_idcs)
+        for n, i in enumerate(charge_idcs):
+            if not (0 <= i < len(mod)):
+                raise ValueError(f'charge_idcs[{n}] out of bounds')
+        for n, i in enumerate(dipole_idcs):
+            if not (0 <= i < len(mod)):
+                raise ValueError(f'charge_idcs[{n}] out of bounds')
+            if i in charge_idcs:
+                raise ValueError('dipole_idcs and charge_idcs must be disjoint.')
+        for n_dip, i in enumerate(dipole_idcs):
+            # can not check full restriction on dipole qmod, since we do not have access to L_pbc
+            # -> check as much as possible
+            qmod_dip = mod[i]
+            qmod_charge = mod[charge_idcs[n_dip]]
+            if dipole_dims[n_dip] > 0 and qmod_dip == 1:
+                msg = 'Can not conserve U(1) dipole charge (qmod==1) along dipole_dim > 0.'
+                raise ValueError(msg)
+            if not _is_subgroup_by_qmod(qmod_dip, qmod_charge):
+                msg = (f'Dipole charge can not have qmod={qmod_dip} if underlying charge has '
+                       f'qmod={qmod_charge}. (Not a subgroup)')
+                raise ValueError(msg)
         self._charge_idcs = charge_idcs
         self._dipole_idcs = dipole_idcs
         self._dipole_dims = dipole_dims
@@ -424,7 +459,7 @@ class DipolarChargeInfo(ChargeInfo):
             if dim != 0:
                 continue
             charges[..., d_idx] += dx_0 * charges[..., c_idx]
-        return charges
+        return self.make_valid(charges)
 
     def shift_charges(self, charges, dx, guarantee_copy=False):
         charges = charges.copy()
@@ -436,7 +471,7 @@ class DipolarChargeInfo(ChargeInfo):
             # local dipole moment p_i = x_i[dim] * q_i  with position x_i and charge density q_i
             # x_i -> x_i + dx   =>   p_i -> p_i + dx[dim] * q_i
             charges[..., d_idx] += dx[dim] * charges[..., c_idx]
-        return charges
+        return self.make_valid(charges)
 
     def __getstate__(self):
         rest = (self._charge_idcs, self._dipole_idcs, self._dipole_dims)
@@ -1767,6 +1802,17 @@ class LegPipe(LegCharge):
         if self._perm is None:
             return inds_before_perm  # no permutation necessary
         return self._perm[inds_before_perm]
+
+
+def _is_subgroup_by_qmod(qmod1, qmod2):
+    """If the group given by ``qmod1`` is a subgroup of the group given by ``qmod2``."""
+    # deal with U(1) special cases
+    if qmod2 == 1:
+        return True
+    if qmod1 == 1:  # and we have qmod2 != 1
+        return False
+    # remaining cases: both groups are some Z_N -> subgroup if qmod1 divides qmod2
+    return qmod2 % qmod1 == 0
 
 
 # (in cython, but with different arguments)
