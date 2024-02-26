@@ -123,6 +123,11 @@ class Lattice:
         Defined as ``N_sites / Ls[0]``, for an infinite system the number of sites per "ring".
     N_rings : int
         Alias for ``Ls[0]``, for an infinite system the number of "rings" in the unit cell.
+    mps_unit_cell_width : int
+        The width (length along the first dimension) of an MPS unit cell.
+        This is the same as :attr:`N_rings` in most cases, except that it is unchanged by grouping
+        sites. It always provides the horizontal distance traversed by an MPS unit cell,
+        e.g. for the purpose of :ref:`shift_symmetry` or :meth:`~tenpy.networks.mps.MPS..
     unit_cell : list of :class:`~tenpy.networks.site.Site`
         the sites making up a unit cell of the lattice.
     bc : bool ndarray
@@ -309,7 +314,6 @@ class Lattice:
         position_disorder = getattr(self, 'position_disorder', None)
         if position_disorder is not None:
             hdf5_saver.save(self.position_disorder, subpath + "position_disorder")
-
 
     @classmethod
     def from_hdf5(cls, hdf5_loader, h5gr, subpath):
@@ -1536,6 +1540,7 @@ class Lattice:
         self.shape = self.Ls + (len(self.unit_cell), )
         self.N_sites = int(np.prod(self.shape))
         self.N_rings = self.Ls[0]
+        self.mps_unit_cell_width = self.Ls[0]
         self.N_sites_per_ring = int(self.N_sites // self.N_rings)
         strides = [1]
         for L in self.Ls:
@@ -1562,6 +1567,27 @@ class Lattice:
                "Use ``lattice.pairs['next_next_nearest_neighbors']`` instead.")
         warnings.warn(msg, FutureWarning)
         return self.pairs['next_next_nearest_neighbors']
+
+    def with_grouped_sites(self, grouped_sites):
+        """Return a lattice with sites given by `grouped_sites`.
+
+        .. todo :
+            We could actually keep the lattice structure if the order is (default) Cstyle.
+
+        Attributes
+        ----------
+        grouped_sites : list of :class:`~tenpy.networks.site.GroupedSite`
+            The sites grouped together.
+
+        Returns
+        -------
+        :class:`~tenpy.models.lattice.TrivialLattice`
+            A trivial lattice with the `grouped_sites` as sites and the same :attr:`bc_MPS` as `self`.
+        """
+        res = TrivialLattice(grouped_sites, bc_MPS=self.bc_MPS, bc='periodic')
+        res._mps_sites_cache = grouped_sites[:]
+        res.mps_unit_cell_width = self.mps_unit_cell_width
+        return res
 
 
 class TrivialLattice(Lattice):
@@ -2354,6 +2380,9 @@ class HelicalLattice(Lattice):
         super()._set_Ls(Ls)
         self.N_cells = self._N_cells
         self.N_sites = len(self.unit_cell) * self._N_cells
+        self.N_sites_per_ring = None  # shouldn't be used
+        self.N_rings = None  # shouldn't be used - pointless for this case.
+
 
 class Chain(SimpleLattice):
     """A chain of L equal sites.

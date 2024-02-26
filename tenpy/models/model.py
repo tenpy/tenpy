@@ -202,9 +202,6 @@ class Model(Hdf5Exportable):
 
         This has to be done after finishing initialization and can not be reverted.
 
-        .. todo :
-            We could actually keep the lattice structure if the order is (default) Cstyle.
-
         Parameters
         ----------
         n : int
@@ -221,7 +218,7 @@ class Model(Hdf5Exportable):
             grouped_sites = group_sites(self.lat.mps_sites(), n, charges='same')
         else:
             assert grouped_sites[0].n_sites == n
-        self.lat = TrivialLattice(grouped_sites, bc_MPS=self.lat.bc_MPS, bc='periodic')
+        self.lat = self.lat.with_grouped_sites(grouped_sites=grouped_sites)
         return grouped_sites
 
     def update_time_parameter(self, new_time):
