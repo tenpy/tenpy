@@ -42,9 +42,9 @@ The documentation is roughly split in two parts: on one hand the full "reference
 classes, methods, etc., and on the other hand the "user guide" containing some `introductions <https://tenpy.readthedocs.io/en/latest/introductions.html>`_ with additional explanations and `examples <https://tenpy.readthedocs.io/en/latest/examples.html>`_.
 
 The documentation is based on Python's docstrings, and some additional ``*.rst`` files located in the folder `doc/` of the repository.
-All documentation is formated as `reStructuredText <http://www.sphinx-doc.org/en/stable/rest.html>`_,
+All documentation is formatted as `reStructuredText <http://www.sphinx-doc.org/en/stable/rest.html>`_,
 which means it is quite readable in the source plain text, but can also be converted to other formats.
-If you like it simple, you can just use intective python `help()`, Python IDEs of your choice or jupyter notebooks, or just read the source.
+If you like it simple, you can just use interactive python `help()`, Python IDEs of your choice or jupyter notebooks, or just read the source.
 Moreover, the documentation gets converted into HTML using `Sphinx <http://www.sphinx-doc.org>`_, and is made available online at https://tenpy.readthedocs.io/.
 The big advantages of the (online) HTML documentation are a lot of cross-links between different functions, and even a search function.
 If you prefer yet another format, you can try to build the documentation yourself, as described in ``doc/contr/build_doc.rst``.
@@ -54,7 +54,7 @@ Help - I looked at the documentation, but I don't understand how ...?
 We have set up a **community forum** at https://tenpy.johannes-hauschild.de/,
 where you can post questions and hopefully find answers.
 Once you got some experience with TeNPy, you might also be able to contribute to the community and answer some questions yourself ;-)
-We also use this forum for official annoucements, for example when we release a new version.
+We also use this forum for official announcements, for example when we release a new version.
 
 I found a bug
 -------------

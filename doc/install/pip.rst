@@ -31,7 +31,7 @@ required packages with the following command (after downloading the
     
     It might just be a temporary problem, but I found that the `pip` version of numpy is incompatible with 
     the python distribution of anaconda. 
-    If you have installed the intelpython or anaconda distribution, use the `conda` packagemanager instead of `pip` for updating the packages whenever possible!
+    If you have installed the intelpython or anaconda distribution, use the `conda` package manager instead of `pip` for updating the packages whenever possible!
 
 Installing the latest stable TeNPy package
 ------------------------------------------

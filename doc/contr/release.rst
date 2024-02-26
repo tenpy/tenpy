@@ -26,7 +26,7 @@ Follow this checklist when creating a new release, i.e. updating the version num
 5. Reset the released=False flag in ``setup.py`` and ``tenpy/version.py``.
    Commit and push these changes::
    
-     git add setup.py tenpy/version.py
+     git add tenpy/version.py
      git commit -m "reset released=False"
      git push
      git push origin v0.42.1 # also push the tag

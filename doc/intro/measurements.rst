@@ -73,7 +73,7 @@ The :cfg:option:`Simulation.connect_measurements` parameter is a list with one e
 used. Each function is specified by a tuple ``module, func_name, extra_kwargs, priority``.
 Here, `module` and `func` specify the module and name of the function, `extra_kwargs` are (optional) additional keyword
 arguments to be given to the function, and `priority` allows to control the order in which the measurement functions get
-called. The latter is usefull if you want to "post-process" results of another measurement function.
+called. The latter is useful if you want to "post-process" results of another measurement function.
 
 For example, say you want to measure local expectation values of both `Sz` and `Sx` with
 :func:`~tenpy.simulations.measurement.m_onsite_expectation_value`, then you could use
@@ -117,12 +117,12 @@ As for global measurement functions, we pass the corresponding ``results, psi, m
 e.g. `psi_method` measurement functions need to accept ``results, model, simulation`` as arguments, and
 `simulation_method` measurement functions should accept ``results, psi, model``.
 
-This is already very usefull to call measurement functions defined inside (custom) models or simulation classes, 
+This is already very useful to call measurement functions defined inside (custom) models or simulation classes,
 yet methods of `psi` don't follow the measurement function call structure, but simply return values.
 For those cases, you can use another special syntax, namely to **simply add `wrap` before the function name**.
 In this case, we don't pass ``results, psi, model, simulation``, but simply save the return values of the function
 in the results, under the `results_key` that gets passed as extra keyword argument,
-see (the source code of) :func:`~tenpy.simulations.measurment.measurement_wrapper`.
+see (the source code of) :func:`~tenpy.simulations.measurement.measurement_wrapper`.
 The `results_key` defaults to the function name.
 
 To make this clearer, let's extend the example above with more measurements:

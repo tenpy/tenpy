@@ -98,7 +98,7 @@ The geometry : lattice class
 ----------------------------
 
 The geometry is usually given by some kind of **lattice** structure how the sites are arranged,
-e.g. implicitly with the sum over nearest neighbours :math:`\sum_{<i, j>}`.
+e.g. implicitly with the sum over nearest neighbors :math:`\sum_{<i, j>}`.
 In TeNPy, this is specified by a :class:`~tenpy.models.lattice.Lattice` class, which contains a unit cell of
 a few :class:`~tenpy.networks.site.Site` which are shifted periodically by its basis vectors to form a regular lattice.
 Again, we have pre-defined some basic lattices like a :class:`~tenpy.models.lattice.Chain`,
