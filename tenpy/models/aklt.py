@@ -119,7 +119,7 @@ class AKLTChain(NearestNeighborModel, MPOModel):
             legL = None
 
         res = MPS.from_Bflat(self.lat.mps_sites(), Bs, bc=self.lat.bc_MPS, permute=True, form=form,
-                             legL=legL, N_rings=self.lat.N_rings)
+                             legL=legL, mps_unit_cell_width=self.lat.mps_unit_cell_width)
         if form is None:
             res.canonical_form()
         return res

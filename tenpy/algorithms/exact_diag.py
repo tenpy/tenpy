@@ -301,7 +301,7 @@ class ExactDiag:
             psi = full_psi
         psi.iset_leg_labels(['(' + '.'.join(self._labels_p) + ')'])
         psi = psi.split_legs([0])  # split the combined leg into the physical legs of the sites
-        return MPS.from_full(self._sites, psi, form=canonical_form, N_rings=self.model.lat.N_rings)
+        return MPS.from_full(self._sites, psi, form=canonical_form, unit_cell_width=self.model.lat.mps_unit_cell_width)
 
     def matvec(self, psi):
         """Allow to use `self` as LinearOperator for lanczos.

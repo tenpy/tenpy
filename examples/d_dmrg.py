@@ -19,7 +19,7 @@ def example_DMRG_tf_ising_finite(L, g):
     model_params = dict(L=L, J=1., g=g, bc_MPS='finite', conserve=None)
     M = TFIChain(model_params)
     product_state = ["up"] * M.lat.N_sites
-    psi = MPS.from_product_state(M.lat.mps_sites(), product_state, bc=M.lat.bc_MPS, N_rings=M.lat.N_rings)
+    psi = MPS.from_product_state(M.lat.mps_sites(), product_state, bc=M.lat.bc_MPS, unit_cell_width=M.lat.mps_unit_cell_width)
     dmrg_params = {
         'mixer': None,  # setting this to True helps to escape local minima
         'max_E_err': 1.e-10,
@@ -51,7 +51,7 @@ def example_1site_DMRG_tf_ising_finite(L, g):
     model_params = dict(L=L, J=1., g=g, bc_MPS='finite', conserve=None)
     M = TFIChain(model_params)
     product_state = ["up"] * M.lat.N_sites
-    psi = MPS.from_product_state(M.lat.mps_sites(), product_state, bc=M.lat.bc_MPS, N_rings=M.lat.N_rings)
+    psi = MPS.from_product_state(M.lat.mps_sites(), product_state, bc=M.lat.bc_MPS, unit_cell_width=M.lat.mps_unit_cell_width)
     dmrg_params = {
         'mixer': True,  # setting this to True is essential for the 1-site algorithm to work.
         'max_E_err': 1.e-10,
@@ -84,7 +84,7 @@ def example_DMRG_tf_ising_infinite(g):
     model_params = dict(L=2, J=1., g=g, bc_MPS='infinite', conserve=None)
     M = TFIChain(model_params)
     product_state = ["up"] * M.lat.N_sites
-    psi = MPS.from_product_state(M.lat.mps_sites(), product_state, bc=M.lat.bc_MPS, N_rings=M.lat.N_rings)
+    psi = MPS.from_product_state(M.lat.mps_sites(), product_state, bc=M.lat.bc_MPS, unit_cell_width=M.lat.mps_unit_cell_width)
     dmrg_params = {
         'mixer': True,  # setting this to True helps to escape local minima
         'trunc_params': {
@@ -117,7 +117,7 @@ def example_1site_DMRG_tf_ising_infinite(g):
     model_params = dict(L=2, J=1., g=g, bc_MPS='infinite', conserve=None)
     M = TFIChain(model_params)
     product_state = ["up"] * M.lat.N_sites
-    psi = MPS.from_product_state(M.lat.mps_sites(), product_state, bc=M.lat.bc_MPS, N_rings=M.lat.N_rings)
+    psi = MPS.from_product_state(M.lat.mps_sites(), product_state, bc=M.lat.bc_MPS, unit_cell_width=M.lat.mps_unit_cell_width)
     dmrg_params = {
         'mixer': True,  # setting this to True is essential for the 1-site algorithm to work.
         'trunc_params': {
@@ -156,7 +156,7 @@ def example_DMRG_heisenberg_xxz_infinite(Jz, conserve='best'):
         conserve=conserve)
     M = SpinModel(model_params)
     product_state = ["up", "down"]  # initial Neel state
-    psi = MPS.from_product_state(M.lat.mps_sites(), product_state, bc=M.lat.bc_MPS, N_rings=M.lat.N_rings)
+    psi = MPS.from_product_state(M.lat.mps_sites(), product_state, bc=M.lat.bc_MPS, unit_cell_width=M.lat.mps_unit_cell_width)
     dmrg_params = {
         'mixer': True,  # setting this to True helps to escape local minima
         'trunc_params': {

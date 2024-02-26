@@ -25,7 +25,7 @@ Added
 - A new base class :class:`~tenpy.networks.mps.MPSGeometry` that abstracts common properties and
   methods of tensor networks with the linear geometry of e.g. MPS. The MPO class, as well as
   Environments also subclass from :class:`~tenpy.networks.mps.MPSGeometry`.
-  Most notably, a new attribute :attr:`~tenpy.networks.mps.MPSGeometry.N_rings` was introduced.
+  Most notably, a new attribute :attr:`~tenpy.networks.mps.MPSGeometry.unit_cell_width` was introduced.
   It is also an argument to the ``__init__``s and most classmethods of MPS, MPO, etc.
   For backwards-compatibility, it is optional for now, with a default value that assumes a Chain
   lattice. It will become mandatory in some future release.

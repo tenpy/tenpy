@@ -313,8 +313,8 @@ def test_exp_decaying_terms():
 
     # check whether the MPO construction works by comparing MPOs
     # constructed from ts vs. directly
-    H1 = mpo.MPOGraph.from_term_list(ts, sites, bc='finite', N_rings=L).build_MPO()  # Chain geometry
-    G = mpo.MPOGraph(sites, bc='finite', N_rings=len(sites))
+    H1 = mpo.MPOGraph.from_term_list(ts, sites, bc='finite', unit_cell_width=L).build_MPO()  # Chain geometry
+    G = mpo.MPOGraph(sites, bc='finite', unit_cell_width=len(sites))
     edt.add_to_graph(G)
     G.test_sanity()
     G.add_missing_IdL_IdR()
@@ -333,10 +333,10 @@ def test_exp_decaying_terms():
     assert ts.terms == ts_desired
     strength_desired = np.tile(l**np.arange(1, cutoff_range + 1) * p, 4)
     assert np.all(ts.strength == strength_desired)
-    G = mpo.MPOGraph(sites, bc='infinite', N_rings=len(sites))
+    G = mpo.MPOGraph(sites, bc='infinite', unit_cell_width=len(sites))
     edt.add_to_graph(G)
     G.test_sanity()
     G.add_missing_IdL_IdR()
     H2 = G.build_MPO()
-    H1 = mpo.MPOGraph.from_term_list(ts, sites, bc='infinite', N_rings=L).build_MPO()
+    H1 = mpo.MPOGraph.from_term_list(ts, sites, bc='infinite', unit_cell_width=L).build_MPO()
     assert H1.is_equal(H2, cutoff)

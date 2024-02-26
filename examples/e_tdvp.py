@@ -39,7 +39,7 @@ def example_TDVP():
                                  product_state,
                                  bc=heisenberg.lat.bc_MPS,
                                  form='B',
-                                 N_rings=heisenberg.lat.N_rings)
+                                 unit_cell_width=heisenberg.lat.mps_unit_cell_width)
 
     tdvp_params = {
         'start_time': 0,

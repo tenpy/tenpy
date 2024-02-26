@@ -79,11 +79,8 @@ class MPO(MPSGeometry):
     explicit_plus_hc : bool
         If True, this flag indicates that the hermitian conjugate of the MPO should be
         computed and added at runtime, i.e., `self` is not (necessarily) hermitian.
-    N_rings : int
-        Number of rings of the lattice, see :attr:`~tenpy.models.lattice.Lattice.N_rings`.
-        For a higher-dimensional lattice, this is the number of lattice spacings that an
-        MPS unit cell covers in the first (horizontal) dimension.
-        For a :class:`~tenpy.models.lattice.Chain` geometry, this is just the length of the chain.
+    unit_cell_width : int
+        See :attr:`~tenpy.models.lattice.Lattice.mps_unit_cell_width`.
 
     Attributes
     ----------
@@ -121,8 +118,8 @@ class MPO(MPSGeometry):
                  IdR=None,
                  max_range=None,
                  explicit_plus_hc=False,
-                 N_rings=None):
-        super().__init__(sites, bc, N_rings=N_rings)
+                 mps_unit_cell_width=None):
+        super().__init__(sites, bc, unit_cell_width=mps_unit_cell_width)
         self.dtype = dtype = np.result_type(*[W.dtype for W in Ws])
         self._W = [W.astype(dtype, copy=True) for W in Ws]
         self.IdL = self._get_Id(IdL, len(sites))
@@ -145,7 +142,7 @@ class MPO(MPSGeometry):
         :attr:`sites`,
         :attr:`chinfo`,
         :attr:`max_range`,
-        :attr:`N_rings` (under these names),
+        :attr:`unit_cell_width` (under these names),
         :attr:`_W` as ``"tensors"``,
         :attr:`IdL` as ``"index_identity_left"``,
         :attr:`IdR` as ``"index_identity_right"``, and
@@ -170,7 +167,7 @@ class MPO(MPSGeometry):
         h5gr.attrs["grouped"] = self.grouped
         hdf5_saver.save(self.bc, subpath + "boundary_condition")
         hdf5_saver.save(self.max_range, subpath + "max_range")
-        hdf5_saver.save(self.N_rings, subpath + "N_rings")
+        hdf5_saver.save(self.unit_cell_width, subpath + "unit_cell_width")
         h5gr.attrs["explicit_plus_hc"] = self.explicit_plus_hc
         h5gr.attrs["L"] = self.L  # not needed for loading, but still useful metadata
         h5gr.attrs["max_bond_dimension"] = np.max(self.chi)  # same
@@ -207,7 +204,7 @@ class MPO(MPSGeometry):
         obj.grouped = hdf5_loader.get_attr(h5gr, "grouped")
         obj.bc = hdf5_loader.load(subpath + "boundary_condition")
         obj.max_range = hdf5_loader.load(subpath + "max_range")
-        obj.N_rings = hdf5_loader.load(subpath + "N_rings")
+        obj.unit_cell_width = hdf5_loader.load(subpath + "unit_cell_width")
         obj.explicit_plus_hc = h5gr.attrs.get("explicit_plus_hc", False)
         obj.test_sanity()
         return obj
@@ -223,7 +220,7 @@ class MPO(MPSGeometry):
                    legs=None,
                    max_range=None,
                    explicit_plus_hc=False,
-                   N_rings=None):
+                   mps_unit_cell_width=None):
         """Initialize an MPO from `grids`.
 
         Parameters
@@ -255,11 +252,8 @@ class MPO(MPSGeometry):
         explicit_plus_hc : bool
             If True, the Hermitian conjugate of the MPO is computed at runtime,
             rather than saved in the MPO.
-        N_rings : int
-            Number of rings of the lattice, see :attr:`~tenpy.models.lattice.Lattice.N_rings`.
-            For a higher-dimensional lattice, this is the number of lattice spacings that an
-            MPS unit cell covers in the first (horizontal) dimension.
-            For a :class:`~tenpy.models.lattice.Chain` geometry, this is just the length of the chain.
+        unit_cell_width : int
+            See :attr:`~tenpy.models.lattice.Lattice.mps_unit_cell_width`.
 
         See also
         --------
@@ -302,10 +296,10 @@ class MPO(MPSGeometry):
         for i in range(L):
             W = npc.grid_outer(grids[i], [legs[i], legs[i + 1].conj()], Ws_qtotal[i], ['wL', 'wR'])
             Ws.append(W)
-        return cls(sites, Ws, bc, IdL, IdR, max_range, explicit_plus_hc, N_rings)
+        return cls(sites, Ws, bc, IdL, IdR, max_range, explicit_plus_hc, mps_unit_cell_width)
 
     @classmethod
-    def from_wavepacket(cls, sites, coeff, op, eps=1.e-15, N_rings=None):
+    def from_wavepacket(cls, sites, coeff, op, eps=1.e-15, unit_cell_width=None):
         r"""Create a (finite) MPO wave packet representing ``sum_i coeff[i] op_i``.
 
         Note that we define it only for finite systems; a generalization to infinite systems
@@ -352,7 +346,7 @@ class MPO(MPSGeometry):
 
         .. doctest :: from_wavepacket
         
-            >>> psi = MPS.from_product_state([site] * L, ['empty'] * L, N_rings=L)
+            >>> psi = MPS.from_product_state([site] * L, ['empty'] * L, unit_cell_width=L)
             >>> wp.apply(psi, dict(compression_method='SVD'))
             TruncationError()
             >>> C = psi.correlation_function('Cd', 'C')
@@ -383,7 +377,7 @@ class MPO(MPSGeometry):
         # MPO to an MPS would need a non-trivial modification that is not captured when setting
         # IdL=0!
         IdR = [None] * L + [0]
-        return cls.from_grids(sites, grids, 'finite', IdL, IdR, N_rings=N_rings)
+        return cls.from_grids(sites, grids, 'finite', IdL, IdR, mps_unit_cell_width=unit_cell_width)
 
     def test_sanity(self):
         """Sanity check, raises ValueErrors, if something is wrong."""
@@ -451,7 +445,7 @@ class MPO(MPSGeometry):
         self.sites = [self.get_site(j) for j in range(0, factor * self.L)]
         self.IdL = factor * self.IdL[:-1] + [self.IdL[-1]]
         self.IdR = factor * self.IdR[:-1] + [self.IdR[-1]]
-        self.N_rings *= factor
+        self.unit_cell_width *= factor
         self.test_sanity()
 
     def group_sites(self, n=2, grouped_sites=None):
@@ -514,10 +508,10 @@ class MPO(MPSGeometry):
         --------
         tenpy.networks.mps.MPS.extract_segment : similar method for MPS.
         """
-        sites_per_ring = self.L // self.N_rings
-        N_rings, remainder = divmod(last + 1 - first, sites_per_ring)
+        sites_per_ring = self.L // self.unit_cell_width
+        unit_cell_width, remainder = divmod(last + 1 - first, sites_per_ring)
         if remainder != 0:
-            raise ValueError(f'Number of sites must be an integer multiple of {N_rings=}.')
+            raise ValueError(f'Number of sites must be an integer multiple of {unit_cell_width=}.')
         L = self.L
         sites = [self.sites[i % L] for i in range(first, last + 1)]
         W = [self.get_W(i) for i in range(first, last + 1)]
@@ -526,7 +520,7 @@ class MPO(MPSGeometry):
         IdR = [self.IdR[i % L] for i in range(first, last + 1)]
         IdR.append(self.IdR[last % L + 1])
         cp = self.__class__(sites, W, 'segment', IdL, IdR, self.max_range, self.explicit_plus_hc,
-                            N_rings)
+                            unit_cell_width)
         cp.grouped = self.grouped
         return cp
 
@@ -640,7 +634,7 @@ class MPO(MPSGeometry):
             IdLR_0 = IdL
         IdLR = [IdLR_0] + IdLR
 
-        return MPO(self.sites, U, self.bc, IdLR, IdLR, np.inf, N_rings=self.N_rings)
+        return MPO(self.sites, U, self.bc, IdLR, IdLR, np.inf, mps_unit_cell_width=self.unit_cell_width)
 
     def make_U_II(self, dt):
         r"""Creates the :math:`U_II` propagator.
@@ -704,7 +698,7 @@ class MPO(MPSGeometry):
             # TODO: could sort by charges.
             U.append(W_II)
         Id = [0] * (self.L + 1)
-        return MPO(self.sites, U, self.bc, Id, Id, max_range=self.max_range, N_rings=self.N_rings)
+        return MPO(self.sites, U, self.bc, Id, Id, max_range=self.max_range, mps_unit_cell_width=self.unit_cell_width)
 
     def expectation_value(self, psi, tol=1.e-10, max_range=100, init_env_data={}):
         """Calculate ``<psi|self|psi>/<psi|psi>`` (or density for infinite).
@@ -952,7 +946,7 @@ class MPO(MPSGeometry):
             Ws[0].legs[0] = Ws[0].legs[0].flip_charges_qconj()
         else:
             Ws[0].legs[0] = wR.conj()
-        return MPO(self.sites, Ws, self.bc, self.IdL, self.IdR, self.max_range, N_rings=self.N_rings)
+        return MPO(self.sites, Ws, self.bc, self.IdL, self.IdR, self.max_range, mps_unit_cell_width=self.unit_cell_width)
 
     def is_hermitian(self, eps=1.e-10, max_range=None):
         """Check if `self` is a hermitian MPO.
@@ -1296,7 +1290,7 @@ class MPO(MPSGeometry):
         """
         L = self.L
         assert self.bc == other.bc
-        assert self.N_rings == other.N_rings
+        assert self.unit_cell_width == other.unit_cell_width
         assert other.L == L
 
         ps = [self._get_block_projections(i) for i in range(L + 1)]
@@ -1348,7 +1342,7 @@ class MPO(MPSGeometry):
             max_range = max(self.max_range, other.max_range)
         else:
             max_range = None
-        return MPO(self.sites, Ws, self.bc, IdL, IdR, max_range, N_rings=self.N_rings)
+        return MPO(self.sites, Ws, self.bc, IdL, IdR, max_range, mps_unit_cell_width=self.unit_cell_width)
 
     def _get_block_projections(self, i):
         """projections onto (IdL, other, IdR) on bond `i` in range(0, L+1)"""
@@ -1484,11 +1478,8 @@ class MPOGraph(MPSGeometry):
         MPO boundary conditions.
     max_range : int | np.inf | None
         Maximum range of hopping/interactions (in unit of sites) of the MPO. ``None`` for unknown.
-    N_rings : int
-        Number of rings of the lattice, see :attr:`~tenpy.models.lattice.Lattice.N_rings`.
-        For a higher-dimensional lattice, this is the number of lattice spacings that an
-        MPS unit cell covers in the first (horizontal) dimension.
-        For a :class:`~tenpy.models.lattice.Chain` geometry, this is just the length of the chain.
+    unit_cell_width : int
+        See :attr:`~tenpy.models.lattice.Lattice.num_unit_cell_width`.
 
     Attributes
     ----------
@@ -1506,8 +1497,8 @@ class MPOGraph(MPSGeometry):
 
     _valid_bc = ['finite', 'infinite']  # segment makes no sense for MPOGraph
 
-    def __init__(self, sites, bc='finite', max_range=None, N_rings=None):
-        super().__init__(sites=sites, bc=bc, N_rings=N_rings)
+    def __init__(self, sites, bc='finite', max_range=None, unit_cell_width=None):
+        super().__init__(sites=sites, bc=bc, unit_cell_width=unit_cell_width)
         self.max_range = max_range
         # empty graph
         self.states = [set() for _ in range(self.L + 1)]
@@ -1516,7 +1507,7 @@ class MPOGraph(MPSGeometry):
         self.test_sanity()
 
     @classmethod
-    def from_terms(cls, terms, sites, bc, insert_all_id=True, N_rings=None):
+    def from_terms(cls, terms, sites, bc, insert_all_id=True, unit_cell_width=None):
         """Initialize an :class:`MPOGraph` from OnsiteTerms and CouplingTerms.
 
         Parameters
@@ -1534,11 +1525,8 @@ class MPOGraph(MPSGeometry):
         insert_all_id : bool
             Whether to insert identities such that `IdL` and `IdR` are defined on each bond.
             See :meth:`add_missing_IdL_IdR`.
-        N_rings : int
-            Number of rings of the lattice, see :attr:`~tenpy.models.lattice.Lattice.N_rings`.
-            For a higher-dimensional lattice, this is the number of lattice spacings that an
-            MPS unit cell covers in the first (horizontal) dimension.
-            For a :class:`~tenpy.models.lattice.Chain` geometry, this is just the length of the chain.
+        unit_cell_width : int
+            See :attr:`~tenpy.models.lattice.Lattice.mps_unit_cell_width`.
 
         Returns
         -------
@@ -1551,14 +1539,14 @@ class MPOGraph(MPSGeometry):
             equivalent for representation by :class:`~tenpy.networks.terms.TermList`.
         """
         max_range = max([t.max_range() for t in terms])
-        graph = cls(sites, bc, max_range, N_rings=N_rings)
+        graph = cls(sites, bc, max_range, unit_cell_width=unit_cell_width)
         for term in terms:
             term.add_to_graph(graph)
         graph.add_missing_IdL_IdR(insert_all_id)
         return graph
 
     @classmethod
-    def from_term_list(cls, term_list, sites, bc, insert_all_id=True, N_rings=None):
+    def from_term_list(cls, term_list, sites, bc, insert_all_id=True, unit_cell_width=None):
         """Initialize from a list of operator terms and prefactors.
 
         Parameters
@@ -1572,11 +1560,8 @@ class MPOGraph(MPSGeometry):
         insert_all_id : bool
             Whether to insert identities such that `IdL` and `IdR` are defined on each bond.
             See :meth:`add_missing_IdL_IdR`.
-        N_rings : int
-            Number of rings of the lattice, see :attr:`~tenpy.models.lattice.Lattice.N_rings`.
-            For a higher-dimensional lattice, this is the number of lattice spacings that an
-            MPS unit cell covers in the first (horizontal) dimension.
-            For a :class:`~tenpy.models.lattice.Chain` geometry, this is just the length of the chain.
+        unit_cell_width : int
+            See :attr:`~tenpy.models.lattice.Lattice.mps_unit_cell_width`.
 
         Returns
         -------
@@ -1588,7 +1573,7 @@ class MPOGraph(MPSGeometry):
         from_terms : equivalent for other representation of terms.
         """
         ot_ct = term_list.to_OnsiteTerms_CouplingTerms(sites)
-        return cls.from_terms(ot_ct, sites, bc, insert_all_id, N_rings=N_rings)
+        return cls.from_terms(ot_ct, sites, bc, insert_all_id, unit_cell_width=unit_cell_width)
 
     def test_sanity(self):
         """Sanity check, raises ValueErrors, if something is wrong."""
@@ -1761,11 +1746,8 @@ class MPOGraph(MPSGeometry):
         Ws_qtotal : None | (list of) charges
             The `qtotal` for each of the Ws to be generated, default (``None``) means 0 charge.
             A single qtotal holds for each site.
-        N_rings : int
-            Number of rings of the lattice, see :attr:`~tenpy.models.lattice.Lattice.N_rings`.
-            For a higher-dimensional lattice, this is the number of lattice spacings that an
-            MPS unit cell covers in the first (horizontal) dimension.
-            For a :class:`~tenpy.models.lattice.Chain` geometry, this is just the length of the chain.
+        unit_cell_width : int
+            See :attr:`~tenpy.models.lattice.Lattice.mps_unit_cell_width`.
 
         Returns
         -------
@@ -1780,7 +1762,7 @@ class MPOGraph(MPSGeometry):
         IdR = [s.get('IdR', None) for s in self._ordered_states]
         legs, Ws_qtotal = self._calc_legcharges(Ws_qtotal)
         H = MPO.from_grids(self.sites, grids, self.bc, IdL, IdR, Ws_qtotal, legs, self.max_range,
-                           N_rings=self.N_rings)
+                           mps_unit_cell_width=self.unit_cell_width)
         return H
 
     def __repr__(self):
@@ -2329,11 +2311,8 @@ class MPOTransferMatrix(NpcLinearOperator):
         Wrapper to allow calling scipy sparse functions.
     flat_guess :
         Initial guess suitable for `flat_linop` in non-tenpy form.
-    N_rings : int
-        Number of rings of the lattice, see :attr:`~tenpy.models.lattice.Lattice.N_rings`.
-        For a higher-dimensional lattice, this is the number of lattice spacings that an
-        MPS unit cell covers in the first (horizontal) dimension.
-        For a :class:`~tenpy.models.lattice.Chain` geometry, this is just the length of the chain.
+    unit_cell_width : int
+        See :attr:`~tenpy.models.lattice.Lattice.mps_unit_cell_width`.
     """
 
     def __init__(self, H, psi, transpose=False, guess=None):
@@ -2351,7 +2330,7 @@ class MPOTransferMatrix(NpcLinearOperator):
         self._W = []
         self.IdL = H.get_IdL(0)
         self.IdR = H.get_IdR(-1)  # on bond between MPS unit cells
-        self.N_rings = H.N_rings * (L // H.L)
+        self.unit_cell_width = H.unit_cell_width * (L // H.L)
         if self.IdL is None or self.IdR is None:
             raise ValueError("MPO needs to have structure with IdL/IdR")
         S2 = psi.get_SL(0)**2
@@ -2427,7 +2406,7 @@ class MPOTransferMatrix(NpcLinearOperator):
         See the notes on :ref:`shift_symmetry`.
 
         A unit cell has length :attr:`~tenpy.networks.mpo.MPOTransferMatrix.L` and a shift by one
-        unit cell is purely horizontal and shifts by :attr:`~tenpy.networks.mpo.MPOTransferMatrix.N_rings`
+        unit cell is purely horizontal and shifts by :attr:`~tenpy.networks.mpo.MPOTransferMatrix.unit_cell_width`
         lattice spacings.
 
         Parameters
@@ -2450,7 +2429,7 @@ class MPOTransferMatrix(NpcLinearOperator):
             return arr
         return arr.apply_charge_mapping(
             arr.chinfo.shift_charges_horizontal,
-            func_kwargs=dict(dx_0=num_unit_cells * self.N_rings)
+            func_kwargs=dict(dx_0=num_unit_cells * self.unit_cell_width)
         )
 
     def matvec(self, vec, project=True):

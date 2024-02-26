@@ -182,11 +182,8 @@ class MPSGeometry:
         Defines the local Hilbert space for each site.
     bc : ``'finite' | 'segment' | 'infinite'``
         Boundary conditions as described in the table of the module doc-string.
-    N_rings : int
-        Number of rings of the lattice, see :attr:`~tenpy.models.lattice.Lattice.N_rings`.
-        For a higher-dimensional lattice, this is the number of lattice spacings that an
-        MPS unit cell covers in the first (horizontal) dimension.
-        For a :class:`~tenpy.models.lattice.Chain` geometry, this is just the length of the chain.
+    unit_cell_width : int
+        See :attr:`~tenpy.models.lattice.Lattice.mps_unit_cell_width`.
 
     Attributes
     ----------
@@ -196,45 +193,36 @@ class MPSGeometry:
         Defines the local Hilbert space for each site.
     bc : ``'finite' | 'segment' | 'infinite'``
         Boundary conditions as described in the table of the module doc-string.
-    N_rings : int
-        Number of rings of the lattice, see :attr:`~tenpy.models.lattice.Lattice.N_rings`.
-        For a higher-dimensional lattice, this is the number of lattice spacings that an
-        MPS unit cell covers in the first (horizontal) dimension.
-        For a :class:`~tenpy.models.lattice.Chain` geometry, this is just the length of the chain.
+    unit_cell_width : int
+        The width (i.e. length along the first dimension) of an MPS unit cell, in units of the
+        lattice spacing. It is given by :attr:`~tenpy.models.lattice.Lattice.mps_unit_cell_width`.
+        For a :class:`~tenpy.models.lattice.Chain`, this is just the length of the chain.
+        Is used for :ref:`shift_symmetry` or :meth:`MPS.correlation_length2`.
+        
     """
     
     _valid_bc = ('finite', 'segment', 'infinite')  # valid boundary conditions. Dont overwrite this!
 
-    def __init__(self, sites, bc, N_rings = None):
+    def __init__(self, sites, bc, unit_cell_width = None):
         self.sites = list(sites)
         self.chinfo = self.sites[0].leg.chinfo
         self.bc = bc
-        if N_rings is None:
+        if unit_cell_width is None:
             # TODO: deprecate the default value.
             #       when doing so, remove the default in other __init__, classmethods, ...
-            warnings.warn('N_rings is a new argument for MPS and similar classes. '
+            warnings.warn('unit_cell_width is a new argument for MPS and similar classes. '
                           'It is optional for now, but will become mandatory in a future release. '
-                          'The default value (N_rings=len(sites)) is correct, iff the lattice is a '
-                          'Chain. For other lattices, it is incorrect. '
+                          'The default value (unit_cell_width=len(sites)) is correct, iff the '
+                          'lattice is a Chain. For other lattices, it is incorrect. '
                           'It is used for dipolar charges and correlation_function2.')
-            N_rings = len(sites)
-        self.N_rings = N_rings
+            unit_cell_width = len(sites)
+        self.unit_cell_width = unit_cell_width
 
     def test_sanity(self):
         if self.bc not in self._valid_bc:
             raise ValueError("invalid boundary condition: " + repr(self.bc))
-        if not (isinstance(self.N_rings, int) and self.N_rings > 0):
-            raise ValueError(f'invalid N_rings: {self.N_rings}')
-        grouped = getattr(self, 'grouped', 1)
-        num_original_sites = grouped * self.L  # number of sites before grouping
-        if grouped > 1:
-            num_original_sites = sum(s.n_sites for s in self.sites)
-            L_descr = f'the number {num_original_sites} of original sites before grouping'
-        else:
-            num_original_sites = self.L
-            L_descr = f'L={self.L}'
-        if num_original_sites % self.N_rings != 0:
-            raise ValueError(f'N_rings={self.N_rings} must be a divisor of {L_descr}')
+        if not (isinstance(self.unit_cell_width, int) and self.unit_cell_width > 0):
+            raise ValueError(f'invalid unit_cell_width: {self.unit_cell_width}')
         for i, site in enumerate(self.sites):
             if site.leg.chinfo != self.chinfo:
                 raise ValueError(f'Invalid ChargeInfo for site {i}.')
@@ -269,14 +257,14 @@ class MPSGeometry:
             return slice(0, self.L)
 
     @property
-    def N_sites_per_ring(self):
-        """Number of sites per ring, s.t. ``self.N_rings * N_sites_per_ring == self.L``
-
-        This is the number of MPS sites one has to traverse to travel one lattice spacing
-        in the first dimension.
+    def N_sites_per_hor_spacing(self):
+        """Number of sites per horizontal lattice spacing.
+        
+        This is the number of MPS sites one has to traverse to travel one lattice spacing in the
+        first dimension, such that ``self.unit_cell_width * N_sites_per_hor_spacing == self.L``.
         """
-        # Note: self.L % self.N_rings == 0 guaranteed by test_sanity
-        return self.L // self.N_rings
+        # Note: self.L % self.unit_cell_width == 0 guaranteed by test_sanity
+        return self.L // self.unit_cell_width
 
     def _to_valid_site_index(self, i, return_num_unit_cells=False):
         """Make sure `i` is a valid index of a site.
@@ -355,7 +343,7 @@ class MPSGeometry:
         See the notes on :ref:`shift_symmetry`.
         
         A unit cell has length :attr:`~tenpy.networks.mps.MPSGeometry.L` and a shift by one
-        unit cell is purely horizontal and shifts by :attr:`~tenpy.networks.mps.MPSGeometry.N_rings`
+        unit cell is purely horizontal and shifts by :attr:`~tenpy.networks.mps.MPSGeometry.unit_cell_width`
         lattice spacings.
 
         Essentially, this is a convenience wrapper around
@@ -374,7 +362,7 @@ class MPSGeometry:
             The shifted charges.
         """
         return self.chinfo.shift_charges_horizontal(
-            charges, dx_0=num_unit_cells * self.N_rings, guarantee_copy=copy
+            charges, dx_0=num_unit_cells * self.unit_cell_width, guarantee_copy=copy
         )
 
     def shift_Site(self, site, num_unit_cells):
@@ -383,7 +371,7 @@ class MPSGeometry:
         See the notes on :ref:`shift_symmetry`.
 
         A unit cell has length :attr:`~tenpy.networks.mps.MPSGeometry.L` and a shift by one
-        unit cell is purely horizontal and shifts by :attr:`~tenpy.networks.mps.MPSGeometry.N_rings`
+        unit cell is purely horizontal and shifts by :attr:`~tenpy.networks.mps.MPSGeometry.unit_cell_width`
         lattice spacings.
 
         Parameters
@@ -401,7 +389,7 @@ class MPSGeometry:
         if num_unit_cells == 0 or site.leg.chinfo.trivial_shift:
             return site
         leg = site.leg.apply_charge_mapping(leg.chinfo.shift_charges_horizontal,
-                                            func_kwargs=dict(dx_0=num_unit_cells * self.N_rings))
+                                            func_kwargs=dict(dx_0=num_unit_cells * self.unit_cell_width))
         return copy.copy(site).change_charge(leg)  # shallow copy
 
     def shift_Array(self, arr, num_unit_cells, copy=False):
@@ -410,7 +398,7 @@ class MPSGeometry:
         See the notes on :ref:`shift_symmetry`.
 
         A unit cell has length :attr:`~tenpy.networks.mps.MPSGeometry.L` and a shift by one
-        unit cell is purely horizontal and shifts by :attr:`~tenpy.networks.mps.MPSGeometry.N_rings`
+        unit cell is purely horizontal and shifts by :attr:`~tenpy.networks.mps.MPSGeometry.unit_cell_width`
         lattice spacings.
 
         Parameters
@@ -434,7 +422,7 @@ class MPSGeometry:
             return arr
         return arr.apply_charge_mapping(
             arr.chinfo.shift_charges_horizontal,
-            func_kwargs=dict(dx_0=num_unit_cells * self.N_rings)
+            func_kwargs=dict(dx_0=num_unit_cells * self.unit_cell_width)
         )
 
     def get_site(self, i):
@@ -519,7 +507,7 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
 
             >>> spin_half = tenpy.networks.site.SpinHalfSite(conserve=None)
             >>> p_state = ['up', [np.sqrt(0.5), -np.sqrt(0.5)]]*3
-            >>> psi = tenpy.networks.mps.MPS.from_product_state([spin_half]*6, p_state, N_rings=6)
+            >>> psi = tenpy.networks.mps.MPS.from_product_state([spin_half]*6, p_state, unit_cell_width=6)
 
         One site examples (n=1):
 
@@ -561,7 +549,7 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
 
             >>> spin_half = tenpy.networks.site.SpinHalfSite(conserve=None)
             >>> p2_state = [[np.sqrt(0.5), -np.sqrt(0.5)], 'up']*3
-            >>> phi = tenpy.networks.mps.MPS.from_product_state([spin_half]*6, p2_state, N_rings=6)
+            >>> phi = tenpy.networks.mps.MPS.from_product_state([spin_half]*6, p2_state, unit_cell_width=6)
             >>> env = tenpy.networks.mps.MPSEnvironment(phi, psi)
             >>> Sz = env.expectation_value('Sz')
             >>> print(Sz)
@@ -751,7 +739,7 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
 
             >>> spin_half = tenpy.networks.site.SpinHalfSite(conserve=None)
             >>> p_state = ['up', [np.sqrt(0.5), -np.sqrt(0.5)]]*3
-            >>> psi = tenpy.networks.mps.MPS.from_product_state([spin_half]*6, p_state, "infinite", N_rings=6)
+            >>> psi = tenpy.networks.mps.MPS.from_product_state([spin_half]*6, p_state, "infinite", unit_cell_width=6)
 
         Default arguments calculate correlations for all `i` and `j` within the MPS unit cell.
         To evaluate the correlation function for a single `i`, you can use ``sites1=[i]``.
@@ -779,7 +767,7 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
 
             >>> fermion = tenpy.networks.site.FermionSite(conserve='N')
             >>> p_state = ['empty', 'full'] * 3
-            >>> psi = tenpy.networks.mps.MPS.from_product_state([fermion]*6, p_state, "finite", N_rings=6)
+            >>> psi = tenpy.networks.mps.MPS.from_product_state([fermion]*6, p_state, "finite", unit_cell_width=6)
             >>> CdC = psi.correlation_function("Cd", "C")  # optionally: use `hermitian=True`
             >>> psi.correlation_function("C", "Cd")[1, 2] == -CdC[2, 1]
             True
@@ -899,7 +887,7 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
         .. testsetup :: MPS.expectation_value_term
 
             spin_half = tenpy.networks.site.SpinHalfSite(conserve=None)
-            psi = tenpy.networks.mps.MPS.from_product_state([spin_half]*8, ['up']*8, N_rings=8)
+            psi = tenpy.networks.mps.MPS.from_product_state([spin_half]*8, ['up']*8, unit_cell_width=8)
 
         .. doctest :: MPS.expectation_value_term
 
@@ -1458,13 +1446,13 @@ class BaseMPSExpectationValue(MPSGeometry, metaclass=ABCMeta):
         if (isinstance(op, str)):
             op = self.get_site(i).get_op(op)
         elif isinstance(op, npc.Array) and (not op.chinfo.trivial_shift):
-            N_rings_per_op_list, remainder = divmod(len(op_list), self.N_sites_per_ring)
+            N_rings_per_op_list, remainder = divmod(len(op_list), self.N_sites_per_hor_spacing)
             if remainder != 0:
                 msg = (f'For a symmetry with non-trivial shift, need to specify operators for a '
                        f'whole number of rings. That is len(op_list) needs to be a multiple '
-                       f'of {self.N_sites_per_ring}.')
+                       f'of {self.N_sites_per_hor_spacing}.')
                 raise ValueError(msg)
-            dx_0 = num_unit_cells * self.N_rings + num_op_lists * N_rings_per_op_list
+            dx_0 = num_unit_cells * self.unit_cell_width + num_op_lists * N_rings_per_op_list
             op = op.apply_charge_mapping(op.chinfo.shift_charges_horizontal,
                                          func_kwargs=dict(dx_0=dx_0))
         return op
@@ -1576,8 +1564,8 @@ class MPS(BaseMPSExpectationValue):
     # All labels of each tensor in _B (order is used!)
     _B_labels = ['vL', 'p', 'vR']
 
-    def __init__(self, sites, Bs, SVs, bc='finite', form='B', norm=1., N_rings=None):
-        super().__init__(sites, bc, N_rings)
+    def __init__(self, sites, Bs, SVs, bc='finite', form='B', norm=1., unit_cell_width=None):
+        super().__init__(sites, bc, unit_cell_width)
         assert len(self.sites) > 0, "MPS need at least one site"
         self.dtype = dtype = np.result_type(*[B.dtype for B in Bs])
         self.form = self._parse_form(form)
@@ -1644,7 +1632,7 @@ class MPS(BaseMPSExpectationValue):
         B and S are deeply copied.
         """
         # __init__ makes deep copies of B, S
-        cp = self.__class__(self.sites, self._B, self._S, self.bc, self.form, self.norm, self.N_rings)
+        cp = self.__class__(self.sites, self._B, self._S, self.bc, self.form, self.norm, self.unit_cell_width)
         cp.grouped = self.grouped
         cp._transfermatrix_keep = self._transfermatrix_keep
         cp.segment_boundaries = self.segment_boundaries
@@ -1658,7 +1646,7 @@ class MPS(BaseMPSExpectationValue):
         Specifically, it saves
         :attr:`sites`,
         :attr:`chinfo`,
-        :attr:`N_rings` (under these names),
+        :attr:`unit_cell_width` (under these names),
         :attr:`_B` as ``"tensors"``,
         :attr:`_S` as ``"singular_values"``,
         :attr:`bc` as ``"boundary_condition"``,
@@ -1682,7 +1670,7 @@ class MPS(BaseMPSExpectationValue):
         hdf5_saver.save(self.bc, subpath + "boundary_condition")
         hdf5_saver.save(np.array(self.form), subpath + "canonical_form")
         hdf5_saver.save(self.chinfo, subpath + "chinfo")
-        hdf5_saver.save(self.N_rings, subpath + "N_rings")
+        hdf5_saver.save(self.unit_cell_width, subpath + "unit_cell_width")
         
         segment_boundaries = getattr(self, "segment_boundaries", (None, None))
         hdf5_saver.save(self.segment_boundaries, subpath + "segment_boundaries")
@@ -1726,7 +1714,7 @@ class MPS(BaseMPSExpectationValue):
         obj.grouped = hdf5_loader.get_attr(h5gr, "grouped")
         obj._transfermatrix_keep = hdf5_loader.get_attr(h5gr, "transfermatrix_keep")
         obj.chinfo = hdf5_loader.load(subpath + "chinfo")
-        obj.N_rings = hdf5_loader.load(subpath + "N_rings")
+        obj.unit_cell_width = hdf5_loader.load(subpath + "unit_cell_width")
         obj.dtype = np.result_type(*[B.dtype for B in obj._B])
         if "segment_boundaries" in h5gr:
             obj.segment_boundaries = hdf5_loader.load(subpath + "segment_boundaries")
@@ -1837,7 +1825,7 @@ class MPS(BaseMPSExpectationValue):
                 shifted_p_state_flat = p_state[shifted_inds]
                 if not np.all(p_state_flat == shifted_p_state_flat):
                     raise ValueError("`p_state` not translation invariant w.r.t. HelicalLattice")
-        return cls.from_product_state(lat.mps_sites(), p_state_flat, **kwargs, N_rings=lat.N_rings)
+        return cls.from_product_state(lat.mps_sites(), p_state_flat, **kwargs, unit_cell_width=lat.mps_unit_cell_width)
 
     @classmethod
     def from_product_state(cls,
@@ -1848,7 +1836,7 @@ class MPS(BaseMPSExpectationValue):
                            permute=True,
                            form='B',
                            chargeL=None,
-                           N_rings=None):
+                           unit_cell_width=None):
         """Construct a matrix product state from a given product state.
 
         Parameters
@@ -1877,11 +1865,8 @@ class MPS(BaseMPSExpectationValue):
             A single choice holds for all of the entries.
         chargeL : charges
             Leg charges at bond 0, which are purely conventional.
-        N_rings : int
-            Number of rings of the lattice, see :attr:`~tenpy.models.lattice.Lattice.N_rings`.
-            For a higher-dimensional lattice, this is the number of lattice spacings that an
-            MPS unit cell covers in the first (horizontal) dimension.
-            For a :class:`~tenpy.models.lattice.Chain` geometry, this is just the length of the chain.
+        unit_cell_width : int
+            See :attr:`~tenpy.models.lattice.Lattice.mps_unit_cell_width`.
 
         Returns
         -------
@@ -1898,7 +1883,7 @@ class MPS(BaseMPSExpectationValue):
             >>> L = 10
             >>> M = tenpy.models.tf_ising.TFIChain({'L': L})
             >>> p_state = ["up", "down"] * (L//2)  # repeats entries L/2 times
-            >>> psi = MPS.from_product_state(M.lat.mps_sites(), p_state, bc=M.lat.bc_MPS, N_rings=M.lat.N_rings)
+            >>> psi = MPS.from_product_state(M.lat.mps_sites(), p_state, bc=M.lat.bc_MPS, unit_cell_width=M.lat.mps_unit_cell_width)
 
         The meaning of the labels ``"up","down"`` is defined by the :class:`~tenpy.networks.Site`,
         in this example a :class:`~tenpy.networks.site.SpinHalfSite`.
@@ -1916,7 +1901,7 @@ class MPS(BaseMPSExpectationValue):
             >>> theta, phi = np.pi/4, np.pi/6
             >>> bloch_sphere_state = np.array([np.cos(theta/2), np.exp(1.j*phi)*np.sin(theta/2)])
             >>> p_state[L//2] = bloch_sphere_state   # replace one spin in center
-            >>> psi = MPS.from_product_state([spin]*L, p_state, bc=M.lat.bc_MPS, dtype=complex, N_rings=M.lat.N_rings)
+            >>> psi = MPS.from_product_state([spin]*L, p_state, bc=M.lat.bc_MPS, dtype=complex, unit_cell_width=M.lat.mps_unit_cell_width)
 
         Note that for the more general :class:`~tenpy.models.spins.SpinChain`,
         the order of the two entries for the ``bloch_sphere_state`` would be *exactly the opposite*
@@ -1954,7 +1939,7 @@ class MPS(BaseMPSExpectationValue):
                 B = B[site.perm, :, :]
             Bs.append(B)
         SVs = [[1.]] * (L + 1)
-        return cls.from_Bflat(sites, Bs, SVs, bc, dtype, False, form, legL, N_rings)
+        return cls.from_Bflat(sites, Bs, SVs, bc, dtype, False, form, legL, unit_cell_width)
 
     @classmethod
     def from_Bflat(cls,
@@ -1966,7 +1951,7 @@ class MPS(BaseMPSExpectationValue):
                    permute=True,
                    form='B',
                    legL=None,
-                   N_rings=None):
+                   mps_unit_cell_width=None):
         """Construct a matrix product state from a set of numpy arrays `Bflat` and singular vals.
 
         Parameters
@@ -1996,11 +1981,8 @@ class MPS(BaseMPSExpectationValue):
         leg_L : LegCharge | ``None``
             Leg charges at bond 0, which are purely conventional.
             If ``None``, use trivial charges.
-        N_rings : int
-            Number of rings of the lattice, see :attr:`~tenpy.models.lattice.Lattice.N_rings`.
-            For a higher-dimensional lattice, this is the number of lattice spacings that an
-            MPS unit cell covers in the first (horizontal) dimension.
-            For a :class:`~tenpy.models.lattice.Chain` geometry, this is just the length of the chain.
+        unit_cell_width : int
+            See :attr:`~tenpy.models.lattice.Lattice.mps_unit_cell_width`.
 
         Returns
         -------
@@ -2039,7 +2021,7 @@ class MPS(BaseMPSExpectationValue):
             # so we need to gauge `qtotal` of the last `B` such that the right leg matches.
             chdiff = Bs[-1].get_leg('vR').charges[0] - Bs[0].get_leg('vL').charges[0]
             Bs[-1] = Bs[-1].gauge_total_charge('vR', ci.make_valid(chdiff))
-        res = cls(sites, Bs, SVs, form=form, bc=bc, N_rings=N_rings)
+        res = cls(sites, Bs, SVs, form=form, bc=bc, unit_cell_width=mps_unit_cell_width)
         if res.L > 1 and max(res.chi) > 1:
             # the SVs set above are not the correct Schmidt values if chi > 1.
             res.canonical_form()
@@ -2054,7 +2036,7 @@ class MPS(BaseMPSExpectationValue):
                   normalize=True,
                   bc='finite',
                   outer_S=None,
-                  N_rings=None):
+                  unit_cell_width=None):
         """Construct an MPS from a single tensor `psi` with one leg per physical site.
 
         Performs a sequence of SVDs of psi to split off the `B` matrices and obtain the singular
@@ -2082,11 +2064,8 @@ class MPS(BaseMPSExpectationValue):
         outer_S : None | (array, array)
             For 'segment' `bc` the singular values on the left and right of the considered segment,
             `None` for 'finite' boundary conditions.
-        N_rings : int
-            Number of rings of the lattice, see :attr:`~tenpy.models.lattice.Lattice.N_rings`.
-            For a higher-dimensional lattice, this is the number of lattice spacings that an
-            MPS unit cell covers in the first (horizontal) dimension.
-            For a :class:`~tenpy.models.lattice.Chain` geometry, this is just the length of the chain.
+        unit_cell_width : int
+            See :attr:`~tenpy.models.lattice.Lattice.mps_unit_cell_width`.
 
         Returns
         -------
@@ -2134,7 +2113,7 @@ class MPS(BaseMPSExpectationValue):
             S_list[0] = S_list[-1] = np.ones([1], dtype=np.float64)
         elif outer_S is not None:
             S_list[0], S_list[-1] = outer_S
-        res = cls(sites, B_list, S_list, bc=bc, form=B_form, norm=norm, N_rings=N_rings)
+        res = cls(sites, B_list, S_list, bc=bc, form=B_form, norm=norm, unit_cell_width=unit_cell_width)
         if form is not None:
             res.convert_form(form)
         return res
@@ -2149,7 +2128,7 @@ class MPS(BaseMPSExpectationValue):
                       lonely=[],
                       lonely_state='up',
                       bc='finite',
-                      N_rings=None):
+                      unit_cell_width=None):
         """Create an MPS of entangled singlets.
 
         Parameters
@@ -2171,11 +2150,8 @@ class MPS(BaseMPSExpectationValue):
             The state for the lonely sites.
         bc : {'infinite', 'finite', 'segment'}
             MPS boundary conditions. See docstring of :class:`MPS`.
-        N_rings : int
-            Number of rings of the lattice, see :attr:`~tenpy.models.lattice.Lattice.N_rings`.
-            For a higher-dimensional lattice, this is the number of lattice spacings that an
-            MPS unit cell covers in the first (horizontal) dimension.
-            For a :class:`~tenpy.models.lattice.Chain` geometry, this is just the length of the chain.
+        unit_cell_width : int
+            See :attr:`~tenpy.models.lattice.Lattice.mps_unit_cell_width`.
 
         Returns
         -------
@@ -2189,22 +2165,22 @@ class MPS(BaseMPSExpectationValue):
             raise ValueError('MPS.from_singlets does not support symmetries with non-trivial shift. '
                              'Singlet state are not necessarily symmetric w.r.t. such symmetries.')
         assert 2 * len(pairs) + len(lonely) == L, "incompatible indices"
-        # set N_rings as if on a Chain.
-        psi_up_down = MPS.from_product_state([site]* 2, [up, down], N_rings=2)
-        psi_down_up = MPS.from_product_state([site]* 2, [down, up], N_rings=2)
+        # set unit_cell_width as if on a Chain. Will not be used by from_product_mps_covering
+        psi_up_down = MPS.from_product_state([site]* 2, [up, down], unit_cell_width=2)
+        psi_down_up = MPS.from_product_state([site]* 2, [down, up], unit_cell_width=2)
         psi_singlet = psi_up_down.add(psi_down_up, 0.5**0.5, -0.5**0.5)
         mps_covering = [psi_singlet]*len(pairs)
         index_map = list(pairs)
         if len(lonely) > 0:
-            psi_lonely = MPS.from_product_state([site], [lonely_state], N_rings=1)
+            psi_lonely = MPS.from_product_state([site], [lonely_state], unit_cell_width=1)
             mps_covering.extend([psi_lonely] * len(lonely))
             index_map.extend([(i, ) for i in lonely])
-        psi = cls.from_product_mps_covering(mps_covering, index_map, bc=bc, N_rings=N_rings)
+        psi = cls.from_product_mps_covering(mps_covering, index_map, bc=bc, unit_cell_width=unit_cell_width)
         assert psi.L == L
         return psi
 
     @classmethod
-    def from_product_mps_covering(cls, mps_covering, index_map, bc='finite', N_rings=None):
+    def from_product_mps_covering(cls, mps_covering, index_map, bc='finite', unit_cell_width=None):
         """Create an MPS as a product of (many) local mps covering all sites to be created.
 
         This is a generalization of :meth:`from_singlets` to allow arbitrary local, entangled
@@ -2230,11 +2206,8 @@ class MPS(BaseMPSExpectationValue):
             which sites in the returned `psi` should
         bc : {'infinite', 'finite', 'segment'}
             MPS boundary conditions. See docstring of :class:`MPS`.
-        N_rings : int
-            Number of rings of the lattice, see :attr:`~tenpy.models.lattice.Lattice.N_rings`.
-            For a higher-dimensional lattice, this is the number of lattice spacings that an
-            MPS unit cell covers in the first (horizontal) dimension.
-            For a :class:`~tenpy.models.lattice.Chain` geometry, this is just the length of the chain.
+        unit_cell_width : int
+            See :attr:`~tenpy.models.lattice.Lattice.mps_unit_cell_width`.
 
         Returns
         -------
@@ -2275,13 +2248,13 @@ class MPS(BaseMPSExpectationValue):
 
             >>> ferm = FermionSite(conserve='N')
             >>> lat = MultiSpeciesLattice(Square(4, 2, None), [ferm]*2, ['up', 'down'])
-            >>> ferm_up_down = MPS.from_product_state([ferm]*4, ['full', 'empty', 'empty', 'full'], N_rings=4)
-            >>> ferm_down_up = MPS.from_product_state([ferm]*4, ['empty', 'full', 'full', 'empty'], N_rings=4)
+            >>> ferm_up_down = MPS.from_product_state([ferm]*4, ['full', 'empty', 'empty', 'full'], unit_cell_width=4)
+            >>> ferm_down_up = MPS.from_product_state([ferm]*4, ['empty', 'full', 'full', 'empty'], unit_cell_width=4)
             >>> ferm_singlet = ferm_up_down.add(ferm_down_up, 0.5**0.5, -0.5**0.5)
             >>> index_map = [[(x, y, 0), (x, y, 1), (x+1, y, 0), (x+1, y, 1)]
             ...    for (x, y) in [(0, 0), (0, 1), (2, 0), (2, 1)]]
             >>> index_map = [[lat.lat2mps_idx(x_y_u) for x_y_u in pairs] for pairs in index_map]
-            >>> psi = MPS.from_product_mps_covering([ferm_singlet]*4, index_map, N_rings=4)
+            >>> psi = MPS.from_product_mps_covering([ferm_singlet]*4, index_map, unit_cell_width=4)
 
         This will generate a singlet valence bold solid (VBS) state looking like this::
 
@@ -2350,7 +2323,7 @@ class MPS(BaseMPSExpectationValue):
         SVs[0] = SVs[-1]
         if bc == 'infinite':
             SVs = SVs[:-1]
-        return cls(sites, Bs, SVs, bc=bc, form='B', N_rings=N_rings)
+        return cls(sites, Bs, SVs, bc=bc, form='B', unit_cell_width=unit_cell_width)
 
     @property
     def chi(self):
@@ -2622,7 +2595,7 @@ class MPS(BaseMPSExpectationValue):
             self._S.append([self.get_SR(factor * self.L - 1)])
         self.sites = [self.get_site(j) for j in range(0, factor * self.L)]
         self.form = factor * self.form
-        self.N_rings *= factor
+        self.unit_cell_width *= factor
         self.test_sanity()
 
     def roll_mps_unit_cell(self, shift=1):
@@ -2902,8 +2875,7 @@ class MPS(BaseMPSExpectationValue):
         self.sites = grouped_sites
         self.form = [B_form] * len(grouped_sites)
         self.grouped = self.grouped * n
-        enlarge = self.L 
-        # note: grouping leaves N_rings unchanged
+        # note: grouping leaves unit_cell_width unchanged
 
     def group_split(self, trunc_par=None):
         """Modify `self` inplace to split previously grouped sites.
@@ -2978,7 +2950,7 @@ class MPS(BaseMPSExpectationValue):
         self.grouped = max(self.grouped // n0, 1)
         self.form = [self._valid_forms['B']] * len(sites)
         self.test_sanity()
-        # note: grouping / un-grouping leaves N_rings unchanged
+        # note: grouping / un-grouping leaves unit_cell_width unchanged
         return trunc_err
 
     def get_grouped_mps(self, blocklen):
@@ -3011,15 +2983,15 @@ class MPS(BaseMPSExpectationValue):
         psi_segment : :class:`MPS`
             Copy of self with 'segment' boundary conditions.
         """
-        N_rings, remainder = divmod(last - first, self.N_sites_per_ring)
+        unit_cell_width, remainder = divmod(last - first, self.N_sites_per_hor_spacing)
         if remainder != 0:
-            raise ValueError(f'Number of sites must be an integer multiple of {self.N_sites_per_ring=}.')
+            raise ValueError(f'Number of sites must be an integer multiple of {self.N_sites_per_hor_spacing=}.')
         sites = [self.get_site(i) for i in range(first, last + 1)]
         B = [self.get_B(i) for i in range(first, last + 1)]
         S = [self.get_SL(i) for i in range(first, last + 1)]
         S.append(self.get_SR(last))
         # note: __init__ makes deep copies of B, S
-        cp = self.__class__(sites, B, S, 'segment', 'B', self.norm, N_rings=N_rings)
+        cp = self.__class__(sites, B, S, 'segment', 'B', self.norm, unit_cell_width=unit_cell_width)
         cp.grouped = self.grouped
         return cp
 
@@ -3615,7 +3587,7 @@ class MPS(BaseMPSExpectationValue):
         # conversion
         ot, ct = term_list.to_OnsiteTerms_CouplingTerms(self.sites)
         bc = 'finite' if self.finite else 'infinite'
-        mpo_graph = mpo.MPOGraph.from_terms((ot, ct), self.sites, bc, N_rings=self.N_rings)
+        mpo_graph = mpo.MPOGraph.from_terms((ot, ct), self.sites, bc, unit_cell_width=self.unit_cell_width)
         mpo_ = mpo_graph.build_MPO()
         terms_sum = mpo_.expectation_value(self, max_range=ct.max_range())
         if not self.finite:
@@ -4078,7 +4050,7 @@ class MPS(BaseMPSExpectationValue):
                 break
             # get better guess for L with Arnoldi
             arnoldi_params['E_tol'] = err / 10.
-            TM = TransferMatrix.from_Ns_Ms(new_As, self._B, transpose=True, N_rings=self.N_rings)
+            TM = TransferMatrix.from_Ns_Ms(new_As, self._B, transpose=True, unit_cell_width=self.unit_cell_width)
             L.ireplace_label('vL', 'vR*')
             E, Ls, N = Arnoldi(TM, L, arnoldi_params).run()
             L = Ls[0]
@@ -4102,7 +4074,7 @@ class MPS(BaseMPSExpectationValue):
             if err <= tol:
                 break
             #  _, R = self._canonical_form_arnoldi(new_Bs, R, err/10.)
-            TM = TransferMatrix.from_Ns_Ms(new_Bs, self._B, transpose=False, N_rings=self.N_rings)
+            TM = TransferMatrix.from_Ns_Ms(new_Bs, self._B, transpose=False, unit_cell_width=self.unit_cell_width)
             R.ireplace_label('vR', 'vL*')
             arnoldi_params['E_tol'] = err / 10.
             E, Rs, N = Arnoldi(TM, R, arnoldi_params).run()
@@ -4202,7 +4174,7 @@ class MPS(BaseMPSExpectationValue):
             xi, charges = res
         else:
             xi = res
-        xi = xi / self.N_sites_per_ring
+        xi = xi / self.N_sites_per_hor_spacing
         if return_charges:
             return xi, charges
         return xi
@@ -4211,7 +4183,7 @@ class MPS(BaseMPSExpectationValue):
         r"""Calculate the correlation length by diagonalizing the transfer matrix.
 
         .. deprecated ::
-            This is an old implementation, from before MPS had access to ``N_sites_per_ring``.
+            This is an old implementation, from before MPS had access to ``N_sites_per_hor_spacing``.
             It is only kept for backwards compatibility. Use :meth:`correlation_length2` instead.
 
         .. warning ::
@@ -4230,7 +4202,7 @@ class MPS(BaseMPSExpectationValue):
         -------
         xi : float | 1D array
             The correlation length(s) in units of "lattice spacing per MPS site", i.e.
-            ``self.correlation_length(*a) == self.correlation_length2(*a) * self.N_sites_per_ring``.
+            ``self.correlation_length(*a) == self.correlation_length2(*a) * self.N_sites_per_hor_spacing``.
         charge_sectors :  list of charge sectors, optional
             For each entry in `xi` the charge sector, i.e., qtotal of the dominant eigenvalue.
             Only returned if `return_charges`.
@@ -4426,7 +4398,7 @@ class MPS(BaseMPSExpectationValue):
             Bs.append(npc.grid_concat(grid, [0, 1]))
         Bs.append(npc.grid_concat([[last_B_self], [last_B_other]], axes=[0, 1]))
         Ss = [np.ones(Bs[0].shape[0])] + [np.ones(B.shape[1]) for B in Bs]
-        psi = self.__class__(self.sites, Bs, Ss, self.bc, form=None, N_rings=self.N_rings)  # new class instance
+        psi = self.__class__(self.sites, Bs, Ss, self.bc, form=None, unit_cell_width=self.unit_cell_width)  # new class instance
         # bring to canonical form, calculate Ss
         psi.canonical_form_finite(renormalize=False, cutoff=cutoff)
         return psi
@@ -4495,7 +4467,7 @@ class MPS(BaseMPSExpectationValue):
             # use MPS.from_full to split the sites
             split_th = self.from_full(self.sites[i:i + n], th, None, cutoff, renormalize,
                                       'segment', (self.get_SL(i), self.get_SR(i + n - 1)),
-                                      N_rings=n  # dummy value, this MPS is not exposed.
+                                      unit_cell_width=n  # dummy value, this MPS is not exposed.
                                       )
             if not renormalize:
                 self.norm *= split_th.norm
@@ -5281,7 +5253,7 @@ class BaseEnvironment(MPSGeometry, metaclass=ABCMeta):
         else:
             bc = 'infinite'
         sites = self.ket.sites * (L // self.ket.L)
-        super().__init__(sites=sites, bc=bc, N_rings=ket.N_rings * (L // ket.L))
+        super().__init__(sites=sites, bc=bc, unit_cell_width=ket.unit_cell_width * (L // ket.L))
         self._LP_keys = ['LP_{0:d}'.format(i) for i in range(L)]
         self._RP_keys = ['RP_{0:d}'.format(i) for i in range(L)]
         self._LP_age = [None] * L
@@ -5342,8 +5314,8 @@ class BaseEnvironment(MPSGeometry, metaclass=ABCMeta):
         """Sanity check, raises ValueErrors, if something is wrong."""
         super().test_sanity()
         assert (self.bra.finite == self.ket.finite == self.finite)
-        assert self.N_rings == self.ket.N_rings * (self.L // self.ket.L)
-        assert self.N_rings == self.bra.N_rings * (self.L // self.bra.L)
+        assert self.unit_cell_width == self.ket.unit_cell_width * (self.L // self.ket.L)
+        assert self.unit_cell_width == self.bra.unit_cell_width * (self.L // self.bra.L)
         assert any(key in self.cache for key in self._LP_keys)
         assert any(key in self.cache for key in self._RP_keys)
 
@@ -5747,7 +5719,7 @@ class BaseEnvironment(MPSGeometry, metaclass=ABCMeta):
         # conversion
         ot, ct = term_list.to_OnsiteTerms_CouplingTerms(self.sites)
         bc = 'finite' if self.finite else 'infinite'
-        mpo_graph = mpo.MPOGraph.from_terms((ot, ct), self.sites, bc, N_rings=self.N_rings)
+        mpo_graph = mpo.MPOGraph.from_terms((ot, ct), self.sites, bc, unit_cell_width=self.unit_cell_width)
         mpo_ = mpo_graph.build_MPO()
 
         env = mpo.MPOEnvironment(self.bra, mpo_, self.ket)
@@ -5950,7 +5922,7 @@ class TransferMatrix(sparse.NpcLinearOperator):
                  charge_sector=0,
                  form='B'):
         L = lcm(bra.L, ket.L)
-        N_rings = ket.N_rings * (L // ket.L)
+        unit_cell_width = ket.unit_cell_width * (L // ket.L)
         if ket.chinfo != bra.chinfo:
             raise ValueError("incompatible charges")
         if shift_ket is None:
@@ -5966,26 +5938,26 @@ class TransferMatrix(sparse.NpcLinearOperator):
         bra_N = [bra.get_B(i, form=form) for i in range(shift_bra, shift_bra + L)]
 
         self._init_from_Ns_Ms(bra_N, ket_M, transpose, charge_sector, ket._p_label, not ket.finite,
-                              N_rings)
+                              unit_cell_width)
 
     def _init_from_Ns_Ms(self, bra_N, ket_M, transpose, charge_sector, p_label, infinite=True,
-                         N_rings=None):
+                         unit_cell_width=None):
         """Initialize directly from N and M.
 
         bra_N and ket_M are *not* reversed for transpose=False, i.e. ordered left to right.
         """
         self.L = L = len(bra_N)
-        if N_rings is None:
+        if unit_cell_width is None:
             # TODO: deprecate the default value.
             #       when doing so, remove the default in other __init__, classmethods, ...
-            warnings.warn('N_rings is a new argument for MPS and similar classes. '
+            warnings.warn('unit_cell_width is a new argument for MPS and similar classes. '
                           'It is optional for now, but will become mandatory in a future release. '
-                          'The default value (N_rings=len(sites)) is correct, iff the lattice is a '
-                          'Chain. For other lattices, it is incorrect. '
+                          'The default value (unit_cell_width=len(sites)) is correct, iff the '
+                          'lattice is a Chain. For other lattices, it is incorrect. '
                           'It is used for dipolar charges and correlation_function2.')
-            N_rings = len(bra_N)
-        assert isinstance(N_rings, int) and 0 < N_rings <= L and L % N_rings == 0, f'{N_rings=} {L=}'
-        self.N_rings = N_rings
+            unit_cell_width = len(bra_N)
+        assert isinstance(unit_cell_width, int) and 0 < unit_cell_width <= L and L % unit_cell_width == 0, f'{unit_cell_width=} {L=}'
+        self.unit_cell_width = unit_cell_width
         assert len(ket_M) == L
         self.transpose = transpose
         self._p_label = p = p_label  # for usual MPS just ['p']
@@ -6026,7 +5998,7 @@ class TransferMatrix(sparse.NpcLinearOperator):
                              "by a factor of " + str(lcm(enlarge_factors)))
 
     @classmethod
-    def from_Ns_Ms(cls, bra_N, ket_M, transpose=False, charge_sector=0, p_label=['p'], N_rings=None):
+    def from_Ns_Ms(cls, bra_N, ket_M, transpose=False, charge_sector=0, p_label=['p'], unit_cell_width=None):
         """Initialize a TransferMatrix directly from the MPS tensors.
 
         Parameters
@@ -6042,13 +6014,12 @@ class TransferMatrix(sparse.NpcLinearOperator):
             Defaults to ``0``, i.e., **assumes** the dominant eigenvector is in charge sector 0.
         p_label : list of str
             Physical label(s) of the tensors.
-        N_rings : int
-            Number of rings of the lattice, see :attr:`~tenpy.models.lattice.Lattice.N_rings`.
-            For a :class:`~tenpy.models.lattice.Chain` geometry, this is just the length of the chain.
+        unit_cell_width : int
+            See :attr:`~tenpy.models.lattice.Lattice.mps_unit_cell_width`.
         """
         self = cls.__new__(cls)
         self.shift_bra = self.shift_ket = 0
-        self._init_from_Ns_Ms(bra_N, ket_M, transpose, charge_sector, p_label, N_rings=N_rings)
+        self._init_from_Ns_Ms(bra_N, ket_M, transpose, charge_sector, p_label, unit_cell_width=unit_cell_width)
         return self
 
     @property
@@ -6078,10 +6049,9 @@ class TransferMatrix(sparse.NpcLinearOperator):
         """
         if num_unit_cells == 0 or arr.chinfo.trivial_shift:
             return arr
-        print(f'TM.shift_Array : {self.N_rings=} dx_0={num_unit_cells * self.N_rings}')
         return arr.apply_charge_mapping(
             arr.chinfo.shift_charges_horizontal,
-            func_kwargs=dict(dx_0=num_unit_cells * self.N_rings)
+            func_kwargs=dict(dx_0=num_unit_cells * self.unit_cell_width)
         )
 
     def matvec(self, vec):
@@ -6334,7 +6304,7 @@ class InitialStateBuilder:
         dtype = self.options.get('dtype', self.model_dtype)
         lat = self.lattice
         psi = MPS.from_product_state(lat.mps_sites(), p_state, bc=lat.bc_MPS, dtype=dtype,
-                                     N_rings=lat.N_rings)
+                                     unit_cell_width=lat.mps_unit_cell_width)
         return psi
 
     def check_filling(self, p_state):

@@ -9,7 +9,7 @@ spin = SpinHalfSite(conserve="Sz")
 N = 6  # number of sites
 sites = [spin] * N  # repeat entry of list N times
 pstate = ["up", "down"] * (N // 2)  # Neel state
-psi = MPS.from_product_state(sites, pstate, bc="finite", N_rings=N)
+psi = MPS.from_product_state(sites, pstate, bc="finite", unit_cell_width=N)
 print("<Sz> =", psi.expectation_value("Sz"))
 # <Sz> = [ 0.5 -0.5  0.5 -0.5]
 print("<Sp_i Sm_j> =", psi.correlation_function("Sp", "Sm"), sep="\n")
@@ -30,6 +30,6 @@ W_bulk = [[Id, Sp, Sm, Sz, -hz * Sz], [None, None, None, None, 0.5 * J * Sm],
 W_first = [W_bulk[0]]  # first row
 W_last = [[row[-1]] for row in W_bulk]  # last column
 Ws = [W_first] + [W_bulk] * (N - 2) + [W_last]
-H = MPO.from_grids([spin] * N, Ws, bc='finite', IdL=0, IdR=-1, N_rings=N)
+H = MPO.from_grids([spin] * N, Ws, bc='finite', IdL=0, IdR=-1, mps_unit_cell_width=N)
 print("<psi|H|psi> =", H.expectation_value(psi))
 # <psi|H|psi> = -1.25

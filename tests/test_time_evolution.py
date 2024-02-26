@@ -42,7 +42,7 @@ def test_ExpMPOEvolution(bc_MPS, approximation, compression, g=1.5):
     model_pars = dict(L=L, Jx=1., Jy=1., Jz=1., hz=0.2, bc_MPS=bc_MPS, conserve='best')
     state = ['up', 'down'] * (L//2)  # Neel
     M = SpinChain(model_pars)
-    psi = MPS.from_product_state(M.lat.mps_sites(), state, bc=bc_MPS, N_rings=M.lat.N_rings)
+    psi = MPS.from_product_state(M.lat.mps_sites(), state, bc=bc_MPS, unit_cell_width=M.lat.mps_unit_cell_width)
 
     options = {
         'dt': dt,
@@ -204,7 +204,8 @@ def test_time_methods(algorithm):
     model_params = dict(L=L, J=1., g=g, bc_MPS='finite', conserve=None)
     M = TFIChain(model_params)
     product_state = ["up"] * L  # prepare system in spin polarized state
-    psi = MPS.from_product_state(M.lat.mps_sites(), product_state, bc=M.lat.bc_MPS, N_rings=M.lat.N_rings)
+    psi = MPS.from_product_state(M.lat.mps_sites(), product_state, bc=M.lat.bc_MPS,
+                                 unit_cell_width=M.lat.mps_unit_cell_width)
 
     dt = 0.01
     N_steps = 2
@@ -280,7 +281,8 @@ def test_time_dependent_evolution(om=0.2*np.pi, om0=np.pi, om1=0.5*np.pi, eps=1.
     model_params = dict(L=L, omega=om, omega0=om0, omega1=om1, bc_MPS='finite')
     M = RabiOscillations(model_params)
     product_state = ["up"] * L  # prepare system in spin polarized state
-    psi = MPS.from_product_state(M.lat.mps_sites(), product_state, bc=M.lat.bc_MPS, N_rings=M.lat.N_rings)
+    psi = MPS.from_product_state(M.lat.mps_sites(), product_state, bc=M.lat.bc_MPS,
+                                 unit_cell_width=M.lat.mps_unit_cell_width)
 
     dt = 0.025
     N_steps = 2

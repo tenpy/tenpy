@@ -53,7 +53,8 @@ def test_dmrg(bc_MPS, combine, mixer, n, g=1.2):
     model_params = dict(L=L, J=1., g=g, bc_MPS=bc_MPS, conserve=None)
     M = TFIChain(model_params)
     state = [0] * L  # Ferromagnetic Ising
-    psi = mps.MPS.from_product_state(M.lat.mps_sites(), state, bc=bc_MPS, N_rings=M.lat.N_rings)
+    psi = mps.MPS.from_product_state(M.lat.mps_sites(), state, bc=bc_MPS,
+                                     unit_cell_width=M.lat.mps_unit_cell_width)
     dmrg_pars = {
         'combine': combine,
         'mixer': mixer,
@@ -112,7 +113,8 @@ def test_dmrg_rerun(L=2):
     bc_MPS = 'infinite'
     model_params = dict(L=L, J=1., g=1.5, bc_MPS=bc_MPS, conserve=None)
     M = TFIChain(model_params)
-    psi = mps.MPS.from_product_state(M.lat.mps_sites(), [0] * L, bc=bc_MPS, N_rings=M.lat.N_rings)
+    psi = mps.MPS.from_product_state(M.lat.mps_sites(), [0] * L, bc=bc_MPS,
+                                     unit_cell_width=M.lat.mps_unit_cell_width)
     dmrg_pars = {'chi_list': {0: 5, 5: 10}, 'N_sweeps_check': 4, 'combine': True}
     eng = dmrg.TwoSiteDMRGEngine(psi, M, dmrg_pars)
     E1, _ = eng.run()
@@ -142,7 +144,7 @@ def test_dmrg_diag_method(engine, diag_method, tol=1.e-6):
     # chose total Sz= 4, not 3=6/2, i.e. not the sector with lowest energy!
     # make sure below that we stay in that sector, if we're supposed to.
     init_Sz_4 = ['up', 'down', 'up', 'up', 'up', 'down']
-    psi_Sz_4 = mps.MPS.from_product_state(M.lat.mps_sites(), init_Sz_4, bc=bc_MPS, N_rings=M.lat.N_rings)
+    psi_Sz_4 = mps.MPS.from_product_state(M.lat.mps_sites(), init_Sz_4, bc=bc_MPS, unit_cell_width=M.lat.mps_unit_cell_width)
     dmrg_pars = {
         'N_sweeps_check': 1,
         'combine': True,
@@ -191,7 +193,8 @@ def test_dmrg_excited(eps=1.e-12):
     print("charges : ", [psi.qtotal for psi in psi_ED])
 
     # first DMRG run
-    psi0 = mps.MPS.from_product_state(M.lat.mps_sites(), [0] * L, bc=bc, N_rings=M.lat.N_rings)
+    psi0 = mps.MPS.from_product_state(M.lat.mps_sites(), [0] * L, bc=bc,
+                                      unit_cell_width=M.lat.mps_unit_cell_width)
     dmrg_pars = {
         'N_sweeps_check': 1,
         'lanczos_params': {
@@ -206,7 +209,8 @@ def test_dmrg_excited(eps=1.e-12):
     ov = npc.inner(psi_ED[0], ED.mps_to_full(psi0), 'range', do_conj=True)
     assert abs(abs(ov) - 1.) < eps  # unique groundstate: finite size gap!
     # second DMRG run for first excited state
-    psi1 = mps.MPS.from_product_state(M.lat.mps_sites(), [0] * L, bc=bc, N_rings=M.lat.N_rings)
+    psi1 = mps.MPS.from_product_state(M.lat.mps_sites(), [0] * L, bc=bc,
+                                      unit_cell_width=M.lat.mps_unit_cell_width)
     eng1 = dmrg.TwoSiteDMRGEngine(psi1, M, dmrg_pars, orthogonal_to=[psi0])
     E1, psi1 = eng1.run()
     assert abs((E1 - ED.E[1]) / ED.E[1]) < eps
@@ -214,7 +218,8 @@ def test_dmrg_excited(eps=1.e-12):
     assert abs(abs(ov) - 1.) < eps  # unique groundstate: finite size gap!
     # and a third one to check with 2 eigenstates
     # note: different intitial state necessary, otherwise H is 0
-    psi2 = mps.MPS.from_singlets(psi0.sites[0], L, [(0, 1), (2, 3), (4, 5), (6, 7)], bc=bc, N_rings=M.lat.N_rings)
+    psi2 = mps.MPS.from_singlets(psi0.sites[0], L, [(0, 1), (2, 3), (4, 5), (6, 7)], bc=bc,
+                                 unit_cell_width=M.lat.mps_unit_cell_width)
     eng2 = dmrg.TwoSiteDMRGEngine(psi2, M, dmrg_pars, orthogonal_to=[psi0, psi1])
     E2, psi2 = eng2.run()
     print(E2)
@@ -231,8 +236,10 @@ def test_enlarge_mps_unit_cell():
     M_2 = TFIChain(model_params)
     M_4 = TFIChain(model_params)
     M_4.enlarge_mps_unit_cell(2)
-    psi_2 = mps.MPS.from_product_state(M_2.lat.mps_sites(), ['up', 'up'], bc=bc_MPS, N_rings=M_2.lat.N_rings)
-    psi_4 = mps.MPS.from_product_state(M_2.lat.mps_sites(), ['up', 'up'], bc=bc_MPS, N_rings=M_2.lat.N_rings)
+    psi_2 = mps.MPS.from_product_state(M_2.lat.mps_sites(), ['up', 'up'], bc=bc_MPS,
+                                       unit_cell_width=M_2.lat.mps_unit_cell_width)
+    psi_4 = mps.MPS.from_product_state(M_2.lat.mps_sites(), ['up', 'up'], bc=bc_MPS,
+                                       unit_cell_width=M_2.lat.mps_unit_cell_width)
     psi_4.enlarge_mps_unit_cell(2)
     dmrg_params = {
         'combine': True,
@@ -269,9 +276,11 @@ def test_dmrg_explicit_plus_hc(N, bc_MPS, tol=1.e-13, bc='finite'):
     model_params['explicit_plus_hc'] = True
     M2 = SpinChain(model_params)
     assert M2.H_MPO.explicit_plus_hc
-    psi1 = mps.MPS.from_product_state(M1.lat.mps_sites(), ['up', 'down'] * N, bc=bc_MPS, N_rings=M1.lat.N_rings)
+    psi1 = mps.MPS.from_product_state(M1.lat.mps_sites(), ['up', 'down'] * N, bc=bc_MPS,
+                                      unit_cell_width=M1.lat.mps_unit_cell_width)
     E1, psi1 = dmrg.TwoSiteDMRGEngine(psi1, M1, dmrg_params).run()
-    psi2 = mps.MPS.from_product_state(M2.lat.mps_sites(), ['up', 'down'] * N, bc=bc_MPS, N_rings=M2.lat.N_rings)
+    psi2 = mps.MPS.from_product_state(M2.lat.mps_sites(), ['up', 'down'] * N, bc=bc_MPS,
+                                      unit_cell_width=M2.lat.mps_unit_cell_width)
     E2, psi2 = dmrg.TwoSiteDMRGEngine(psi2, M2, dmrg_params).run()
     print(E1, E2, abs(E1 - E2))
     assert abs(E1 - E2) < tol
@@ -279,7 +288,8 @@ def test_dmrg_explicit_plus_hc(N, bc_MPS, tol=1.e-13, bc='finite'):
     print("ov =", ov)
     assert abs(ov - 1) < tol
     dmrg_params['combine'] = True
-    psi3 = mps.MPS.from_product_state(M2.lat.mps_sites(), ['up', 'down'] * N, bc=bc_MPS, N_rings=M2.lat.N_rings)
+    psi3 = mps.MPS.from_product_state(M2.lat.mps_sites(), ['up', 'down'] * N, bc=bc_MPS,
+                                      unit_cell_width=M2.lat.mps_unit_cell_width)
     E3, psi3 = dmrg_parallel.DMRGThreadPlusHC(psi3, M2, dmrg_params).run()
     print(E1, E3, abs(E1 - E3))
     assert abs(E1 - E3) < tol

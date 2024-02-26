@@ -99,7 +99,7 @@ def random_MPS(L, d, chimax, func=randmat.standard_normal_complex, bc='finite', 
         B /= np.sqrt(chi[i + 1]) * d
         Bs.append(B)
     dtype = np.common_type(*Bs)
-    psi = MPS.from_Bflat([site] * L, Bs, bc=bc, dtype=dtype, form=None, N_rings=L)
+    psi = MPS.from_Bflat([site] * L, Bs, bc=bc, dtype=dtype, form=None, mps_unit_cell_width=L)
     if form is not None:
         psi.canonical_form()
         psi.convert_form(form)

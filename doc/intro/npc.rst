@@ -687,8 +687,8 @@ along the first dimension of the lattice.
 In the setting of using MPS in algorithms, we want to be as agnostic of the lattice geometry as
 possible. It turns out that in the concrete algorithms, and only for infinite MPS, we only need
 to shift Arrays / sites / charged by whole MPS unit cells (of length :attr:`tenpy.MPS.L`).
-This is implemented in :meth:`tenpy.MPS.shift_Array`, etc., which uses
-the :attr:`tenpy.Lattice.N_rings` of the lattice, which is now also an attr of MPS.
+This is implemented in :meth:`tenpy.MPS.shift_Array`, etc., which uses the
+:attr:`~tenpy.networks.mps.MPSGeometry.unit_cell_width` of the MPS, which is now also an attr of MPS.
 
 See also
 --------
