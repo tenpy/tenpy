@@ -111,7 +111,7 @@ class SpinChain(SpinModel, NearestNeighborModel):
 class DipolarSpinChain(CouplingMPOModel):
     r"""Dipole conserving H3-H4 spin-S chain.
 
-    The Hamitlonian reads:
+    The Hamiltonian reads:
 
     .. math ::
         H = - \mathtt{J3} \sum_{i} (S^+_i (S^-_{i + 1})^2 S^+_{i + 2} + \mathrm{h.c.})

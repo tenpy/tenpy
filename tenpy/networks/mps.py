@@ -388,7 +388,7 @@ class MPSGeometry:
         """
         if num_unit_cells == 0 or site.leg.chinfo.trivial_shift:
             return site
-        leg = site.leg.apply_charge_mapping(leg.chinfo.shift_charges_horizontal,
+        leg = site.leg.apply_charge_mapping(site.leg.chinfo.shift_charges_horizontal,
                                             func_kwargs=dict(dx_0=num_unit_cells * self.unit_cell_width))
         return copy.copy(site).change_charge(leg)  # shallow copy
 
@@ -2943,7 +2943,8 @@ class MPS(BaseMPSExpectationValue):
             Ss_new.append(self.get_SL(i))
             Bs.extend(Bs_new[::-1])
             Ss.extend(Ss_new[::-1])
-        Ss.append(self._S[-1])
+        if self.finite:
+            Ss.append(self._S[-1])
         self.sites = sites
         self._B = Bs
         self._S = Ss
@@ -2985,7 +2986,7 @@ class MPS(BaseMPSExpectationValue):
         """
         unit_cell_width, remainder = divmod(last - first, self.N_sites_per_hor_spacing)
         if remainder != 0:
-            raise ValueError(f'Number of sites must be an integer multiple of {self.N_sites_per_hor_spacing=}.')
+            raise ValueError(f'Number of sites must be an integer multiple of {self.N_sites_per_hor_spacing}.')
         sites = [self.get_site(i) for i in range(first, last + 1)]
         B = [self.get_B(i) for i in range(first, last + 1)]
         S = [self.get_SL(i) for i in range(first, last + 1)]

@@ -674,9 +674,11 @@ class Lattice:
             self._mps_sites_cache = []
             for lat_indx in self.order[:, :]:
                 site = self.unit_cell[lat_indx[-1]]
+                dx = np.copy(lat_indx)
+                dx[-1] = 0
                 if isinstance(site, Site) and not site.leg.chinfo.trivial_shift:  # it can be None
                     leg = site.leg.apply_charge_mapping(site.leg.chinfo.shift_charges,
-                                                        func_kwargs=dict(dx=lat_indx))
+                                                        func_kwargs=dict(dx=dx))
                     site = copy.copy(site).change_charge(leg)
                 self._mps_sites_cache.append(site)
         return self._mps_sites_cache[:]
