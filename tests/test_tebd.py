@@ -5,7 +5,8 @@ import numpy.testing as npt
 import tenpy.linalg.np_conserved as npc
 import numpy as np
 from tenpy.networks.mps import MPS
-from tenpy.models.spins import SpinChain
+from tenpy.models.model import NearestNeighborModel
+from tenpy.models.spins import SpinChain, DipolarSpinChain
 import tenpy.algorithms.tebd as tebd
 from tenpy.networks.site import SpinHalfSite
 from tenpy.algorithms.exact_diag import ExactDiag
@@ -145,3 +146,20 @@ def test_fixes_issue_220(S):
     options = dict(order=2, trunc_params=trunc_params, N_steps=5, dt=0.01)
     engine = tebd.QRBasedTEBDEngine(psi=psi_init, model=model, options=options)
     engine.run()
+
+
+@pytest.mark.parametrize("L, bc_MPS", [(12, 'finite'), (6, 'infinite')])
+def test_tebd_dipole_conservation(L, bc_MPS, S=1, tol=1.e-13, J4=0.):
+    #
+    model_params = dict(L=L, S=S, J3=1., J4=J4, bc_MPS=bc_MPS, conserve='dipole')
+    tebd_params = dict(order=2, )
+    model = DipolarSpinChain(model_params)
+    psi = MPS.from_lat_product_state(model.lat, [['up'], ['down']])
+    #
+    group = 3  # such that H4 becomes nearest neighbor
+    model.group_sites(group)
+    psi.group_sites(group)
+    model = NearestNeighborModel.from_MPOModel(model)
+    #
+    eng = tebd.TEBDEngine(psi, model, tebd_params)
+    eng.run()

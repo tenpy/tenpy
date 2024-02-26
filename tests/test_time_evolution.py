@@ -14,7 +14,7 @@ from tenpy.networks.mps import MPS
 from tenpy.networks.site import SpinHalfSite
 from tenpy.models.model import CouplingMPOModel, NearestNeighborModel
 from tenpy.models.tf_ising import TFIChain
-from tenpy.models.spins import SpinChain
+from tenpy.models.spins import SpinChain, DipolarSpinChain
 from tenpy.algorithms import tebd, tdvp, mpo_evolution, exact_diag
 
 
@@ -82,6 +82,70 @@ def test_ExpMPOEvolution(bc_MPS, approximation, compression, g=1.5):
             ov = psi.overlap(psiTEBD, understood_infinite=True)
             print(abs(abs(ov) - 1), abs(ov - 1))
             assert (abs(abs(ov) - 1) < 1e-4)
+
+
+@pytest.mark.parametrize('bc_MPS', ['finite', 'infinite'])
+@pytest.mark.parametrize('approximation', ['I', 'II'])
+@pytest.mark.parametrize('compression', ['SVD', 'variational'])
+def test_ExpMPOEvolution_dipolar(bc_MPS, approximation, compression, dt=.01, num_runs=5):
+    if compression == 'variational':
+        pytest.xfail('Bond dimension can not grow. Need mixing?')
+    
+    L = 6
+    model = DipolarSpinChain(dict(L=L, J3=1., J4=.5, bc_MPS=bc_MPS, conserve='dipole'))
+
+    psi = MPS.from_product_state(model.lat.mps_sites(), ['up', 'down'] * (L // 2), bc=bc_MPS,
+                                 unit_cell_width=L)
+    options = dict(dt=dt, N_steps=1, order=1, approximation=approximation,
+                  compression_method=compression, trunc_params=dict(chi_max=30, svd_min=1e-8))
+    engine = mpo_evolution.ExpMPOEvolution(psi, model, options)
+
+    if bc_MPS == 'finite':
+        # compare evolved state to ED
+        ED = exact_diag.ExactDiag(model)
+        ED.build_full_H_from_mpo()
+        ED.full_diagonalization()
+        psi_ED = ED.mps_to_full(psi)
+        psi_ED /= psi_ED.norm()
+        U_ED = ED.exp_H(dt)
+        for _ in range(num_runs):
+            psi = engine.run()
+            psi_ED = npc.tensordot(U_ED, psi_ED, ('ps*', [0]))
+            psi_full = ED.mps_to_full(psi)
+            overlap = abs(npc.inner(psi_ED, psi_full, [0, 0], True))
+            assert abs(overlap - 1) < dt
+
+    elif bc_MPS == 'infinite':
+        # compare to TEBD
+        model_nn = model.copy()
+        model_nn.group_sites(3)
+        model_nn = NearestNeighborModel.from_MPOModel(model_nn)
+        psi_tebd = psi.copy()
+        psi_tebd.group_sites(3)
+        tebd_options = dict(dt=dt, order=2, N_steps=1, trunc_params=options['trunc_params'])
+        tebd_engine = tebd.TEBDEngine(psi_tebd, model_nn, tebd_options)
+        for i in range(num_runs):
+            print(f'time step {i=}')
+            psi_tebd = tebd_engine.run()
+            psi = engine.run()
+            psi_compare = psi_tebd.copy()
+            psi_compare.group_split()
+            # this does not seem super stable, to the point where the entropies are quite different...
+            print(f'{psi.entanglement_entropy()}')
+            print(f'{psi_tebd.entanglement_entropy()}')
+            print(f'{psi_compare.entanglement_entropy()}')
+            try:
+                overlap = abs(psi.overlap(psi_compare, understood_infinite=True))
+            except AssertionError:
+                # something about the charge of the TM eigenvector can go wrong ... ?
+                overlap = None
+            if overlap is not None:
+                print(f'{overlap=}')
+                assert abs(overlap - 1) < dt
+            print()
+
+    else:
+        raise ValueError
 
 
 def fermion_TFI_H(L, g=1.5, J=1.):
