@@ -31,3 +31,6 @@ tests/benchmark/*.png
 tests/benchmark/*.sge
 hdf5_io/
 examples/yaml/results
+.coverage
+htmlcov
+coverage.*
