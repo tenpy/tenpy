@@ -138,7 +138,7 @@ with the `j`-th entry entry in the list acting on site `j`, the relations are::
     ["JW", ..., "JW", "Cdu",  "Id", ..., "Id"]   # for the creation operator spin-up
     ["JW", ..., "JW", "Cdd",  "Id", ..., "Id"]   # for the creation operator spin-down
 
-As you can see, the asymmetry regaring the spins in the definition of the local onsite operators ``"Cu", "Cd", "Cdu", "Cdd"`` lead to a symmetric definition in the global sense.
+As you can see, the asymmetry regarding the spins in the definition of the local onsite operators ``"Cu", "Cd", "Cdu", "Cdd"`` lead to a symmetric definition in the global sense.
 If you look at the definitions very closely, you can see that in terms like ``["Id", "Cd JW", "JW", "Cd"]`` the
 Jordan-Wigner sign :math:`(-1)^{n_\uparrow,2}` appears twice (namely once in the definition of ``"Cd"`` and once in the ``"JW"`` on site
 2) and could in principle be canceled, however in favor of a simplified handling in the code we do not recommend you to cancel it.

@@ -1,7 +1,7 @@
 Logging and terminal output
 ===========================
 
-By default, calling (almost) any function in TeNPy will not print output, appart from error messages, tracebacks, and warnings.
+By default, calling (almost) any function in TeNPy will not print output, apart from error messages, tracebacks, and warnings.
 Instead, we use Python's :mod:`logging` module to allow fine-grained redirecting of status messages etc.
 
 Of course, when you get an error message, you should be concerned to find out what it is about and how to fix it. 
@@ -27,7 +27,7 @@ instead of stdout. Note that you should call `basicConfig` only once; subsequent
 
 
 More detailed configurations can be made through :mod:`logging.config`.
-For example, the following both prints log messages to stdout and saves them to`ouput_filename.log`::
+For example, the following both prints log messages to stdout and saves them to`output_filename.log`::
 
     import logging.config
     conf = {
@@ -66,7 +66,7 @@ Moreover, you can easily adjust the log levels with simple parameters, for examp
         to_stdout:     # nothing in yaml -> None in python => no logging to stdout
         to_file: INFO
         logger_levels:
-            tenpy.tools.params : WARNING  # suppres INFO/DEBUG output for any logging of parameters
+            tenpy.tools.params : WARNING  # suppress INFO/DEBUG output for any logging of parameters
 
 Of course, you can also explicitly call the :func:`~tenpy.tools.misc.setup_logging` yourself, if you don't use the `Simulation` classes::
 
@@ -111,7 +111,7 @@ but it's actually straight-forward, and just requires at most two steps.
         n_steps = do_calculation()
         if something_bad_happened():
             # the user can't do anything about it
-            logger.warning("Something bad happend")
+            logger.warning("Something bad happened")
         logger.info("calculation finished after %d steps", n_steps)
 
     You can use `printf-formatting <https://docs.python.org/3/library/stdtypes.html#printf-style-string-formatting>`_

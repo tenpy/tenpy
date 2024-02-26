@@ -3,7 +3,7 @@
 TeNPy is a library for algorithms working with tensor networks,
 e.g., matrix product states and -operators,
 designed to study the physics of strongly correlated quantum systems.
-The code is intended to be accessible for newcommers
+The code is intended to be accessible for newcomers
 and yet powerful enough for day-to-day research.
 """
 # Copyright (C) TeNPy Developers, GNU GPLv3
@@ -13,7 +13,7 @@ import warnings
 import logging
 logger = logging.getLogger(__name__)  # main logger for tenpy
 
-# load and provide subpackages on first input
+# load and provide sub packages on first input
 # note that the order matters!
 from . import tools
 from . import linalg
