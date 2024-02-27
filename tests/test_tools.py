@@ -307,6 +307,11 @@ def test_convert_memory_units():
     assert tools.misc.convert_memory_units(12.5*1024, 'MB', 'KB') == (12.5 * 1024**2, 'KB')
     assert tools.misc.convert_memory_units(12.5*1024, 'MB', None) == (12.5, 'GB')
 
+
+def test_setup_logging():
+    tenpy.tools.misc.setup_logging(to_stdout="INFO", skip_setup=False)
+    
+
 if __name__ == "__main__":
     import tempfile
     from pathlib import Path
