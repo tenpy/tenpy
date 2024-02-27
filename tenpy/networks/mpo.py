@@ -511,7 +511,8 @@ class MPO(MPSGeometry):
         sites_per_ring = self.L // self.unit_cell_width
         unit_cell_width, remainder = divmod(last + 1 - first, sites_per_ring)
         if remainder != 0:
-            raise ValueError(f'Number of sites must be an integer multiple of {unit_cell_width=}.')
+            msg = f'Number of sites must be an integer multiple of unit_cell_width={unit_cell_width}.'
+            raise ValueError(msg)
         L = self.L
         sites = [self.sites[i % L] for i in range(first, last + 1)]
         W = [self.get_W(i) for i in range(first, last + 1)]

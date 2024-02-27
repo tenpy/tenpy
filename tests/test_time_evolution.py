@@ -125,7 +125,7 @@ def test_ExpMPOEvolution_dipolar(bc_MPS, approximation, compression, dt=.01, num
         tebd_options = dict(dt=dt, order=2, N_steps=1, trunc_params=options['trunc_params'])
         tebd_engine = tebd.TEBDEngine(psi_tebd, model_nn, tebd_options)
         for i in range(num_runs):
-            print(f'time step {i=}')
+            print(f'time step {i}')
             psi_tebd = tebd_engine.run()
             psi = engine.run()
             psi_compare = psi_tebd.copy()
@@ -140,7 +140,7 @@ def test_ExpMPOEvolution_dipolar(bc_MPS, approximation, compression, dt=.01, num
                 # something about the charge of the TM eigenvector can go wrong ... ?
                 overlap = None
             if overlap is not None:
-                print(f'{overlap=}')
+                print(f'overlap={overlap}')
                 assert abs(overlap - 1) < dt
             print()
 

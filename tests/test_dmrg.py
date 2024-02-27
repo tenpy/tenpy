@@ -330,8 +330,8 @@ def test_dmrg_dipole_conservation(N, bc_MPS, S=1, tol=1.e-13, J4=0.):
 
     # can not compute overlap easily due to different chinfo...
     
-    print(f'{E=}')
-    print(f'{E_dip=}')
-    print(f'{abs(E - E_dip)=}')
+    print(f'E={E}')
+    print(f'E_dip={E_dip}')
+    print(f'diff : {abs(E - E_dip)}')
     assert abs(E - E_dip) < tol
     

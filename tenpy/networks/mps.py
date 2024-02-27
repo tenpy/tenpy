@@ -5957,7 +5957,7 @@ class TransferMatrix(sparse.NpcLinearOperator):
                           'lattice is a Chain. For other lattices, it is incorrect. '
                           'It is used for dipolar charges and correlation_function2.')
             unit_cell_width = len(bra_N)
-        assert isinstance(unit_cell_width, int) and 0 < unit_cell_width <= L and L % unit_cell_width == 0, f'{unit_cell_width=} {L=}'
+        assert isinstance(unit_cell_width, int) and 0 < unit_cell_width <= L and L % unit_cell_width == 0
         self.unit_cell_width = unit_cell_width
         assert len(ket_M) == L
         self.transpose = transpose
