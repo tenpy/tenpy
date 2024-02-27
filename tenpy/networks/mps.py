@@ -4449,6 +4449,9 @@ class MPS(BaseMPSExpectationValue):
         else:
             op = self.shift_Array(op, -num_unit_cells)
         n = op.rank // 2  # same as int(rank/2)
+        if self.finite and i + n - 1 >= self.L:
+            msg = f'Operator acting on sites {i}-{i + n - 1} out of bounds for L={self.L}'
+            raise ValueError(msg)
         if n == 1:
             pstar, p = 'p*', 'p'
         else:
@@ -4466,7 +4469,8 @@ class MPS(BaseMPSExpectationValue):
             th = self.get_theta(i, n)
             th = npc.tensordot(op, th, axes=[pstar, p])
             # use MPS.from_full to split the sites
-            split_th = self.from_full(self.sites[i:i + n], th, None, cutoff, renormalize,
+            sites = [self.get_site(j) for j in range(i, i + n)]
+            split_th = self.from_full(sites, th, None, cutoff, renormalize,
                                       'segment', (self.get_SL(i), self.get_SR(i + n - 1)),
                                       unit_cell_width=n  # dummy value, this MPS is not exposed.
                                       )

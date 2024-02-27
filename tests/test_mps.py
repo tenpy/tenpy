@@ -387,6 +387,19 @@ def test_apply_op(bc, eps=1.e-13):
     th = psi2.get_theta(0, 3).to_ndarray().reshape((8, ))
     assert np.linalg.norm(th - [0., 0., 0., -s2, 0., 0., s2, 0.]) < eps
 
+    # check applying multi-site operator across unit cells
+    psi3 = psi0.copy()
+    SmSp = site.kron(s.Sm, s.Sp, group=False)
+    if bc == 'finite':
+        expect_err_msg = 'Operator acting on sites 2-3 out of bounds for L=3'
+        with pytest.raises(ValueError, match=expect_err_msg):
+            psi3.apply_local_op(2, SmSp, understood_infinite=True)
+    else:
+        psi3.apply_local_op(2, SmSp, understood_infinite=True)
+        # result : -1/sqrt(2) |up up down>
+        ov = mps.MPS.from_product_state([s] * 3, ['up', 'up', 'down'], bc=bc).overlap(psi3, understood_infinite=True)
+        assert abs(-ov / psi3.norm - 1.) < eps
+    
 
 def test_enlarge_mps_unit_cell():
     s = site.SpinHalfSite(conserve='Sz', sort_charge=True)
@@ -793,7 +806,7 @@ def test_InitialStateBuilder():
                 'method': 'lat_product_state',
                 'product_state': [['up'], ['down']],
             }).run()
-        assert "incomensurate len" in str(excinfo.value)
+    assert "incomensurate len" in str(excinfo.value)
     psi1_odd = mps.InitialStateBuilder(
         lat_odd, {
             'method': 'lat_product_state',
