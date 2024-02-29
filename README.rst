@@ -13,10 +13,10 @@ TeNPy: Tensor Network Python
 .. image:: https://img.shields.io/github/issues/tenpy/tenpy
     :alt: GitHub issues
     :target: https://github.com/tenpy/tenpy/issues
-.. image:: https://img.shields.io/conda/vn/conda-forge/physics-tenpy
+.. image:: https://img.shields.io/conda/vn/conda-forge/physics-tenpy?color=blue
     :alt: conda
     :target: https://anaconda.org/conda-forge/physics-tenpy
-.. image:: https://img.shields.io/pypi/v/physics-tenpy
+.. image:: https://img.shields.io/pypi/v/physics-tenpy?color=blue
     :alt: PyPi
     :target: https://pypi.org/project/physics-tenpy/
 .. image:: https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/Jakob-Unfried/9e2e197d6a2e6e2c9440b2c0eda04d5c/raw/tenpy_coverage_badge.json

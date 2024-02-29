@@ -1,56 +1,76 @@
-name: code_coverage
+name: Code Coverage
+# Run pytest with code coverage and make a badge for the README from coverage percentage
 
-# Note: the pytest action assumes that this workflow runs the full pytest
-#       suite for the most recent python version.
+# Note: The pytest.yml workflow runs pytest *without* coverage.
+#       This workflow is supposed to run tests for the most recent python version.
+#       That version can then be omitted in pytest.yml.
 
 on:
+  # pushes to main
   push:
     branches:
       - main
+  # PRs
   pull_request:
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      # make pytest output in color
+      PY_COLORS: 1
     steps:
+
     - name: Checkout
       uses: actions/checkout@v4
-      with:
-        submodules: false
-    - name: Update submodules
-      run: |
-        git submodule update --init --recursive
-        git submodule update --remote --merge --recursive
+
     - name: Set up Python
       uses: actions/setup-python@v5
       with:
         python-version: "3.12"
+    
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
         python -m pip install --upgrade setuptools build
         python -m pip install --upgrade pytest
         python -m pip install --upgrade coverage
+    
     - name: Build and install tenpy
       run: |
         python -m build .
         python -m pip install .
+    
     - name: Run pytest with coverage
-      # configuration in pyproject.toml
+      # pytest configuration in pyproject.toml
+      # Note: This runs in the repo root directory, which contains the uncompiled tenpy package.
+      #       To use the version we just installed, it is important to run `coverage`
+      #       instead of `python -m coverage`.
       run: |
-        python -m coverage run -m pytest
-        python -m coverage report -m --skip-covered
-        python -m coverage json
+        coverage run -m pytest .
+        coverage report -m --skip-covered
+        coverage json
+      # Note: to get a nicely rendered html page, you can run the following on your local machine:
+      #         python -m coverage run -m pytest
+      #         python -m coverage html
+      #       It will write to htmlcov.
+      #       We choose not to provide this html report from the workflow, because it generates
+      #       quite large files.
+    
     - name: Set environment variable for badge
       # note: this cuts off digits instead of rounding
       run: echo "COV_PERCENT=$(jq .totals.percent_covered coverage.json | xargs printf "%.0f")" >> $GITHUB_ENV
+    
     - name: Archive code coverage results
       uses: actions/upload-artifact@v4
       with:
         name: code-coverage-report
         path: coverage.json
         if-no-files-found: error
-    - name: Create Badge
+    
+    - name: Create badge
+      # Only on pushes to the main branch
+      if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
       uses: schneegans/dynamic-badges-action@v1.7.0
       with:
         auth: ${{ secrets.JAKOB_UNFRIED_GIST_TOKEN }}
