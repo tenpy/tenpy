@@ -140,11 +140,12 @@ class TimeDependentCorrelation(RealTimeEvolution):
                 self.logger.warning("Supplied a 'ground_state_filename' and ground_state_data as kwarg. "
                                     "Ignoring 'ground_state_filename'.")
 
-            self.logger.info("Initializing from ground state data")
-            self.init_from_gs_data(ground_state_data)
+            if ground_state_data is not None:
+                self.logger.info("Initializing from ground state data")
+                self._init_from_gs_data(ground_state_data)
 
         # will be read out in init_state
-        self.gs_energy = self.options.get('gs_energy', 0)
+        self.gs_energy = self.options.get('gs_energy', None)
         self.operator_t = self.options['operator_t']
         # generate info for operator before time evolution as subconfig
         self.operator_t0_config = self.options.subconfig('operator_t0')
@@ -167,13 +168,6 @@ class TimeDependentCorrelation(RealTimeEvolution):
         resume_data['gs_energy'] = self.gs_energy
         return resume_data
 
-    def init_from_gs_data(self, gs_data):
-        if gs_data is not None:
-            if isinstance(gs_data, MPS):
-                # self.psi_ground_state = gs_data ?
-                raise NotImplementedError("Only hdf5 and dictionaries are supported as ground state input")
-            self._check_and_update_params_from_gs_data(gs_data)
-
     def _connect_measurements(self):
         """Connect :func:`m_correlation_function` to measurements."""
         self._connect_measurements_fct('simulation_method', 'm_correlation_function', priority=1)
@@ -194,17 +188,23 @@ class TimeDependentCorrelation(RealTimeEvolution):
             self.apply_operator_t0_to_psi()
 
         # check for saving
-        if self.options.get('save_psi', False):
+        if self.options.get('save_psi', True):
             self.results['psi'] = self.psi
             self.results['psi_ground_state'] = self.psi_ground_state
 
     def init_algorithm(self, **kwargs):
         super().init_algorithm(**kwargs)  # links to RealTimeEvolution class, not to Simulation
-        # get the energy of the ground state
+        # make sure to get the energy of the ground state, this is needed for the correlation_function
         if self.gs_energy is None:
             self.gs_energy = self.model.H_MPO.expectation_value(self.psi_ground_state)
+        if self.engine.psi.bc != 'finite':
+            raise NotImplementedError('Only finite MPS boundary conditions are currently implemented for '
+                                      f'{self.__class__.__name__}')
 
-    def _check_and_update_params_from_gs_data(self, gs_data):
+    def _init_from_gs_data(self, gs_data):
+        if isinstance(gs_data, MPS):
+            # self.psi_ground_state = gs_data ?
+            raise NotImplementedError("Only hdf5 and dictionaries are supported as ground state input")
         sim_class = gs_data['version_info']['simulation_class']
         if sim_class != 'GroundStateSearch':
             self.logger.warning("The Simulation is not loaded from a GroundStateSearch...")
@@ -288,8 +288,6 @@ class TimeDependentCorrelation(RealTimeEvolution):
         return op_list
 
     def apply_operator_t0_to_psi(self):
-        # TODO: think about segment boundary conditions
-        # TODO: make JW string consistent, watch for changes in apply_local_op to have autoJW
         self.operator_t0 = self._get_operator_t0_list()
         ops = self.operator_t0
         if len(ops) == 1:
@@ -397,8 +395,7 @@ class TimeDependentCorrelationExperimental(TimeDependentCorrelation):
             # instantiate the second engine for the ground state
             algorithm_params = self.options.subconfig('algorithm_params')
             self.engine_ground_state = AlgorithmClass(self.psi_ground_state, self.model, algorithm_params, **kwargs)
-        # TODO: think about checkpoints
-        # TODO: resume data is handled by engine, how to pass this on to second engine?
+        # TODO: think about checkpoints; resume data is handled by engine, how to pass this on to second engine?
 
     def run_algorithm(self):
         if self.evolve_bra is True:
@@ -412,9 +409,6 @@ class TimeDependentCorrelationExperimental(TimeDependentCorrelation):
                 self.engine.run()
                 # sanity check, bra and ket should evolve to same time
                 assert self.engine.evolved_time == self.engine.evolved_time, 'Bra evolved to different time than ket'
-                # for time-dependent H (TimeDependentExpMPOEvolution) the engine can re-init the model;
-                # use it for the measurements....
-                # TODO: is this a good idea?
                 self.model = self.engine.model
                 self.make_measurements()
                 self.engine.checkpoint.emit(self.engine)

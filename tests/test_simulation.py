@@ -273,12 +273,13 @@ def test_SpectralSimulation():
     del sim_params['initial_state_params'], sim_params['model_class'], sim_params['model_params']
     # first run a gs_search
     sim_params_gs = copy.deepcopy(groundstate_params)
+    sim_params_gs['model_params']['bc_MPS'] = 'finite'
     sim = GroundStateSearch(sim_params_gs)
     gs_results = sim.run()
     # run the simulation from the results of the gs_search
     sim = SpectralSimulation(sim_params, ground_state_data=gs_results)
     results = sim.run()
-    assert sim.model.lat.bc_MPS == 'infinite'  # check whether model parameters were used
+    assert sim.model.lat.bc_MPS == 'finite'  # check whether model parameters were used
     assert 'psi' and 'psi_ground_state' in results  # should be by default
     assert 'spectral_function_Sz_Sz' in results  # output of SpectralSimulation for sim_params
     meas = results['measurements']
