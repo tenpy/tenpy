@@ -10,7 +10,7 @@ import tenpy
 from tenpy.algorithms.algorithm import Algorithm
 from tenpy.simulations.simulation import *
 from tenpy.simulations.ground_state_search import GroundStateSearch
-from tenpy.simulations.time_evolution import RealTimeEvolution
+from tenpy.simulations.time_evolution import RealTimeEvolution, SpectralSimulation
 
 import pytest
 
@@ -233,6 +233,54 @@ def test_RealTimeEvolution():
     results = sim.run()
     assert sim.model.lat.bc_MPS == 'infinite'  # check whether model parameters were used
     assert 'psi' in results  # should be by default
+    meas = results['measurements']
+    # expect two measurements: once in `init_measurements` and in `final_measurement`.
+    alg_params = sim_params['algorithm_params']
+    expected_times = np.arange(0., sim_params['final_time'] + 1.e-10,
+                               alg_params['N_steps'] * alg_params['dt'])
+    N = len(expected_times)
+    assert np.allclose(meas['evolved_time'], expected_times)
+    assert np.all(meas['measurement_index'] == np.arange(N))
+    assert np.all(meas['dummy_value'] == [-1] + [expected_dummy_value] * (N - 1))
+
+
+spectral_sim_params = copy.deepcopy(timeevol_params)
+spectral_sim_params['operator_t0'] = {'opname': 'Sz'}
+spectral_sim_params['operator_t'] = 'Sz'
+spectral_sim_params['model_params']['bc_MPS'] = 'finite'
+
+
+def test_SpectralSimulation():
+    # building with initial state passed in sim params
+    sim_params = copy.deepcopy(spectral_sim_params)
+    sim = SpectralSimulation(sim_params)
+    results = sim.run()
+    assert sim.model.lat.bc_MPS == 'finite'  # check whether model parameters were used
+    assert 'psi' and 'psi_ground_state' in results  # should be by default
+    assert 'spectral_function_Sz_Sz' in results  # output of SpectralSimulation for sim_params
+    meas = results['measurements']
+    # expect two measurements: once in `init_measurements` and in `final_measurement`.
+    alg_params = sim_params['algorithm_params']
+    expected_times = np.arange(0., sim_params['final_time'] + 1.e-10,
+                               alg_params['N_steps'] * alg_params['dt'])
+    N = len(expected_times)
+    assert np.allclose(meas['evolved_time'], expected_times)
+    assert np.all(meas['measurement_index'] == np.arange(N))
+    assert np.all(meas['dummy_value'] == [-1] + [expected_dummy_value] * (N - 1))
+
+    # remove init_state_builder and model and pull from gs_search
+    sim_params = copy.deepcopy(spectral_sim_params)
+    del sim_params['initial_state_params'], sim_params['model_class'], sim_params['model_params']
+    # first run a gs_search
+    sim_params_gs = copy.deepcopy(groundstate_params)
+    sim = GroundStateSearch(sim_params_gs)
+    gs_results = sim.run()
+    # run the simulation from the results of the gs_search
+    sim = SpectralSimulation(sim_params, ground_state_data=gs_results)
+    results = sim.run()
+    assert sim.model.lat.bc_MPS == 'infinite'  # check whether model parameters were used
+    assert 'psi' and 'psi_ground_state' in results  # should be by default
+    assert 'spectral_function_Sz_Sz' in results  # output of SpectralSimulation for sim_params
     meas = results['measurements']
     # expect two measurements: once in `init_measurements` and in `final_measurement`.
     alg_params = sim_params['algorithm_params']
