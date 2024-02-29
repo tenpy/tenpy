@@ -44,6 +44,6 @@ jobs:
       # TODO: Excluding 13 and 14 temporarily, until they are debugged.
       run: |
         pytest --nbmake notebooks \
-          --ignore=notebooks/12_dmrg_mixer.ipynb
-          --ignore=notebooks/13_time_dependent_H_evolution.ipynb
+          --ignore=notebooks/12_dmrg_mixer.ipynb \
+          --ignore=notebooks/13_time_dependent_H_evolution.ipynb \
           --ignore=notebooks/14_segment_half_infinite.ipynb

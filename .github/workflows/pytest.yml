@@ -48,4 +48,7 @@ jobs:
     
     - name: Run pytest
       # configuration in pyproject.toml
+      # Note: This runs in the repo root directory, which contains the uncompiled tenpy package.
+      #       To use the version we just installed, it is important to run `pytest`
+      #       instead of `python -m pytest`.
       run: pytest

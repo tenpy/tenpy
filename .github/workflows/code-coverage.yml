@@ -43,15 +43,13 @@ jobs:
     
     - name: Run pytest with coverage
       # pytest configuration in pyproject.toml
-      # Note: It seems that coverage prioritizes the uncompiled version of tenpy
-      #       that sits in the repo over the pip-installed, compiled version.
-      #       cd into tests directory to avoid that.
+      # Note: This runs in the repo root directory, which contains the uncompiled tenpy package.
+      #       To use the version we just installed, it is important to run `coverage`
+      #       instead of `python -m coverage`.
       run: |
-        cd tests
-        python -m coverage run -m pytest .
-        python -m coverage report -m --skip-covered
-        python -m coverage json
-        cd -
+        coverage run -m pytest .
+        coverage report -m --skip-covered
+        coverage json
       # Note: to get a nicely rendered html page, you can run the following on your local machine:
       #         python -m coverage run -m pytest
       #         python -m coverage html
