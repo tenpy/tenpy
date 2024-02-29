@@ -141,7 +141,7 @@ However, accessing single entries is quite slow and usually not recommended. For
 back to flat numpy arrays with :meth:`~tenpy.linalg.np_conserved.Array.to_ndarray`.
 
 On top of that very basic indexing, `Array` supports slicing and some kind of advanced indexing, which is however
-different from the one of numpy arrarys (described `here <http://docs.scipy.org/doc/numpy/reference/arrays.indexing.html>`_).
+different from the one of numpy arrays (described `here <http://docs.scipy.org/doc/numpy/reference/arrays.indexing.html>`_).
 Unlike numpy arrays, our Array class does not broadcast existing index arrays -- this would be terribly slow.
 Also, `np.newaxis` is not supported, since inserting new axes requires additional information for the charges.
 
@@ -209,7 +209,7 @@ A **charge block** is a contiguous slice corresponding to the same charge(s) of 
 A **qindex** is an index in the list of charge blocks for a certain leg.
 A **charge sector** is for given charge(s) is the set of all qindices of that charge(s).
 A leg is **blocked** if all charge sectors map one-to-one to qindices.
-Finally, a leg is **sorted**, if the charges are sorted lexiographically.
+Finally, a leg is **sorted**, if the charges are sorted lexicographically.
 Note that a `sorted` leg is always `blocked`.
 We can also speak of the complete array to be **blocked by charges** or **legcharge-sorted**,  which means that all of its legs are blocked or sorted, respectively.
 The charge data for a single leg is collected in the class :class:`~tenpy.linalg.charges.LegCharge`.
@@ -219,7 +219,7 @@ point *inward* (+1) or *outward* (-1). What that means, is explained later in :r
 For completeness, let us also summarize also the internal structure of an :class:`~tenpy.linalg.np_conserved.Array` here:
 The array saves only non-zero **blocks**, collected as a list of `np.array` in ``self._data``.
 The qindices necessary to map these blocks to the original leg indices are collected in ``self._qdata``
-An array is said to be **qdata-sorted** if its ``self._qdata`` is lexiographically sorted.
+An array is said to be **qdata-sorted** if its ``self._qdata`` is lexicographically sorted.
 More details on this follow :ref:`later <array_storage_schema>`.
 However, note that you usually shouldn't access `_qdata` and `_data` directly - this
 is only necessary from within `tensordot`, `svd`, etc.
@@ -317,7 +317,7 @@ The following example is also a valid `qind` form::
     charges = [[-2], [-1], [0], [0], [3]]
 
 This leads to the *same* `qflat` form as the above examples, thus representing the same charges on the leg indices.
-However, regarding our Arrays, this is quite different, since it diveds the leg into 5 (instead of previously 4)
+However, regarding our Arrays, this is quite different, since it divides the leg into 5 (instead of previously 4)
 charge blocks. We say the latter example is `not bunched`, while the former one is `bunched`.
 
 To make the different notions of `sorted` and `bunched` clearer, consider the following (valid) examples:
@@ -347,7 +347,7 @@ But how is this 'compatible' defined?
 
 Assume you have a tensor, call it :math:`T`, and the :class:`~tenpy.linalg.charges.LegCharge` for all of its legs, say :math:`a, b, c, ...`.
 
-Remeber that the LegCharge associates to each index of the leg a charge value (for each of the charges, if `qnumber` > 1).
+Remember that the LegCharge associates to each index of the leg a charge value (for each of the charges, if `qnumber` > 1).
 Let ``a.to_qflat()[ia]`` denote the charge(s) of index ``ia`` for leg ``a``, and similar for other legs.
 
 In addition, the LegCharge has a flag :attr:`~tenpy.linalg.charges.LegCharge.qconj`. This flag **qconj** is only a sign,
@@ -370,7 +370,7 @@ All indices ``ia, ib, ic, ...`` for which the above defined ``qtotal[ia, ib, ic,
 are said to be **compatible with the charges** and can be non-zero. 
 All other indices are **incompatible with the charges** and must be zero.
 
-In case of multiple charges, `qnumber` > 1, is a straigth-forward generalization:
+In case of multiple charges, `qnumber` > 1, is a straight-forward generalization:
 an entry can only be non-zero if it is `compatible` with each of the defined charges.
 
 
@@ -389,7 +389,7 @@ What are the implications of the above rule for non-zero entries?
 Or rather, how can we ensure that ``C`` complies with the above rule?
 An entry ``C[ia,ic]`` will only be non-zero, 
 if there is an ``ib`` such that both ``A[ia,ib]`` and ``B[ib,ic]`` are non-zero, i.e., both of the following equations are
-fullfilled::
+fulfilled::
 
     A.qtotal == A.legs[0].to_qflat()[ia] * A.legs[0].qconj + A.legs[1].to_qflat()[ib] * A.legs[1].qconj  modulo qmod
     B.qtotal == B.legs[0].to_qflat()[ib] * B.legs[0].qconj + B.legs[1].to_qflat()[ic] * B.legs[1].qconj  modulo qmod
@@ -400,7 +400,7 @@ For the uncontracted legs, we just keep the charges as they are::
 
     C.legs = [A.legs[0], B.legs[1]]
 
-It is then straight-forward to check, that the rule is fullfilled for :math:`C`, if the following condition is met::
+It is then straight-forward to check, that the rule is fulfilled for :math:`C`, if the following condition is met::
 
    A.qtotal + B.qtotal - C.qtotal == A.legs[1].to_qflat()[ib] A.b.qconj + B.legs[0].to_qflat()[ib] B.b.qconj  modulo qmod
 
@@ -475,7 +475,7 @@ For the non-zero entry :math:`(b, y, z) = (\uparrow, 1, 0)`, we want::
                  = 1                * (+1)    + (-1)            * (+1)    + z.conj().to_qflat()[0] * (-1)
 
 This implies the charge 0 for `z` = 0, thus ``z = npc.LegCharge.form_qflat(chinfo, [0], qconj=+1)``.
-Finally, note that the rule for :math:`(b, y, z) = (\downarrow, 0, 0)` is automatically fullfilled!
+Finally, note that the rule for :math:`(b, y, z) = (\downarrow, 0, 0)` is automatically fulfilled!
 This is an implication of the fact that the singlet has a well defined value for :math:`S^z_a + S^z_b`.
 For other states without fixed magnetization (e.g., :math:`|\uparrow \uparrow\rangle + |\downarrow \downarrow\rangle`)
 this would not be the case, and we could not use charge conservation.
@@ -543,7 +543,7 @@ Nevertheless, the algorithms were not designed with this in mind, so it is not r
 
 If you haven't created the array yet, you can call :meth:`~tenpy.linalg.charges.LegCharge.sort` (with ``bunch=True``)
 on each :class:`~tenpy.linalg.charges.LegCharge` which you want to block.
-This sorts by charges and thus induces a permution of the indices, which is also returned as an 1D array ``perm``.
+This sorts by charges and thus induces a permutation of the indices, which is also returned as an 1D array ``perm``.
 For consistency, you have to apply this permutation to your flat data as well. 
 
 Alternatively, you can simply call :meth:`~tenpy.linalg.np_conserved.Array.sort_legcharge` on an existing :class:`~tenpy.linalg.np_conserved.Array`.

@@ -117,7 +117,7 @@ corresponding directions.
 On top of that, there is the `bc_MPS` boundary condition of the MPS, one of ``'finite', 'segment', 'infinite'``.
 For an ``'infinite'`` MPS, the whole lattice is repeated in the direction of the *first* basis vector of the lattice.
 For ``bc_MPS='infinite'``, the first direction should always be ``'periodic'``, but you *can* also define a lattice with
-``bc_MPS='finite', bc=['periodic', 'perioid']`` for a finite system on the torus.
+``bc_MPS='finite', bc=['periodic', 'periodic']`` for a finite system on the torus.
 This is discouraged, though, because the ground state MPS will require the *squared* bond dimension for the *same precision* in this
 case!
 
