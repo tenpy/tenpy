@@ -10,8 +10,8 @@ Changelog
 
 Backwards incompatible changes
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-- For infinite MPS (:class:`~tenpy.networks.mps.MPS` with ``bs='infinite'``), we now only store
-  ``L`` singular values instead of ``L + 1`` in the :attr:``~tenpy.networks.mps.MPS._S`` attribute.
+- For infinite MPS (:class:`~tenpy.networks.mps.MPS` with ``bc='infinite'``), we now only store
+  ``L`` singular values instead of ``L + 1`` in the :attr:`~tenpy.networks.mps.MPS._S` attribute.
   The ``_S[L]`` entry always was equal to ``_S[0]`` anyway. With the incorporation of shift-symmetry,
   i.e. symmetries that depend on spatial position, we need to distinguish the concept of
   the singular values to the right of the last site from the singular values left of the first site,
@@ -26,7 +26,7 @@ Added
   methods of tensor networks with the linear geometry of e.g. MPS. The MPO class, as well as
   Environments also subclass from :class:`~tenpy.networks.mps.MPSGeometry`.
   Most notably, a new attribute :attr:`~tenpy.networks.mps.MPSGeometry.unit_cell_width` was introduced.
-  It is also an argument to the ``__init__``s and most classmethods of MPS, MPO, etc.
+  It is also an argument to the ``__init__`` and most classmethods of MPS, MPO, etc.
   For backwards-compatibility, it is optional for now, with a default value that assumes a Chain
   lattice. It will become mandatory in some future release.
 

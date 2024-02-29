@@ -5206,9 +5206,6 @@ class BaseEnvironment(MPSGeometry, metaclass=ABCMeta):
 
     Attributes
     ----------
-    L : int
-        Number of physical sites involved into the Environment, i.e. the least common multiple
-        of ``bra.L`` and ``ket.L``.
     bra, ket : :class:`~tenpy.networks.mps.MPS`
         The two MPS for the contraction.
     dtype : type

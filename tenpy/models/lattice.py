@@ -127,7 +127,8 @@ class Lattice:
         The width (length along the first dimension) of an MPS unit cell.
         This is the same as :attr:`N_rings` in most cases, except that it is unchanged by grouping
         sites. It always provides the horizontal distance traversed by an MPS unit cell,
-        e.g. for the purpose of :ref:`shift_symmetry` or :meth:`~tenpy.networks.mps.MPS..
+        e.g. for the purpose of :ref:`shift_symmetry` or
+        :meth:`~tenpy.networks.mps.MPS.correlation_length2`.
     unit_cell : list of :class:`~tenpy.networks.site.Site`
         the sites making up a unit cell of the lattice.
     bc : bool ndarray
