@@ -806,7 +806,7 @@ def test_InitialStateBuilder():
                 'method': 'lat_product_state',
                 'product_state': [['up'], ['down']],
             }).run()
-    assert "incomensurate len" in str(excinfo.value)
+    assert "incommensurate len" in str(excinfo.value)
     psi1_odd = mps.InitialStateBuilder(
         lat_odd, {
             'method': 'lat_product_state',
