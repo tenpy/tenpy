@@ -4169,8 +4169,7 @@ class MPS(BaseMPSExpectationValue):
         --------
         correlation_length_charge_sectors : lists possible charge sectors.
         """
-        res = self._correlation_length(target, tol_ev0, charge_sector, return_charges,
-                                       _ignore_warning=True)
+        res = self._correlation_length(target, tol_ev0, charge_sector, return_charges)
         if return_charges:
             xi, charges = res
         else:
@@ -4213,7 +4212,7 @@ class MPS(BaseMPSExpectationValue):
         warnings.warn(msg, DeprecationWarning, 2)
         return self._correlation_length(target, tol_ev0, charge_sector, return_charges)
 
-    def _correlation_length(self, target, tol_ev0, charge_sector, return_charges, _ignore_warning):
+    def _correlation_length(self, target, tol_ev0, charge_sector, return_charges):
         """Internal implementation of :meth:`correlation_length2` and :meth:`correlation_length`.
 
         Returns like :meth:`correlation_length`, in particular *without* accounting for
