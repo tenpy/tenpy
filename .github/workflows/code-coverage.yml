@@ -66,6 +66,8 @@ jobs:
         if-no-files-found: error
     
     - name: Create badge
+      # Only on pushes to the main branch
+      if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
       uses: schneegans/dynamic-badges-action@v1.7.0
       with:
         auth: ${{ secrets.JAKOB_UNFRIED_GIST_TOKEN }}
