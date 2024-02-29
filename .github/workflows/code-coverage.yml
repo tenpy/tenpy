@@ -43,16 +43,21 @@ jobs:
     
     - name: Run pytest with coverage
       # pytest configuration in pyproject.toml
+      # Note: It seems that coverage prioritizes the uncompiled version of tenpy
+      #       that sits in the repo over the pip-installed, compiled version.
+      #       cd into tests directory to avoid that.
       run: |
-        python -m coverage run -m pytest
+        cd tests
+        python -m coverage run -m pytest .
         python -m coverage report -m --skip-covered
         python -m coverage json
+        cd -
       # Note: to get a nicely rendered html page, you can run the following on your local machine:
-      #   python -m coverage run -m pytest
-      #   python -m coverage html
-      # It will write to htmlcov.
-      # We choose not to provide this html report from the workflow, because it generates quite
-      # large files.
+      #         python -m coverage run -m pytest
+      #         python -m coverage html
+      #       It will write to htmlcov.
+      #       We choose not to provide this html report from the workflow, because it generates
+      #       quite large files.
     
     - name: Set environment variable for badge
       # note: this cuts off digits instead of rounding
