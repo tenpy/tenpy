@@ -872,6 +872,8 @@ def setup_logging(options=None,
             root, ext = os.path.splitext(output_filename)
             assert ext != '.log'
             filename = root + '.log'
+        else:
+            filename = None
     if capture_warnings is None:
         capture_warnings = dict_config is not None or to_stdout or to_file
     if skip_setup is None:
