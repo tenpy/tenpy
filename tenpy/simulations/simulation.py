@@ -751,7 +751,7 @@ class Simulation:
     def run_post_processing(self):
         """Apply (several) post-processing steps.
 
-        .. cfg:configoptions :: SpectralSimulation
+        .. cfg:configoptions :: Simulation
 
         post_processing : list of tuple
             Functions to perform post-processing with the :class:`DataLoader`.
@@ -790,7 +790,7 @@ class Simulation:
                     self.logger.info("continuing saving results without post-processing")
 
     def _post_processing(self, DL: DataLoader, module_name: str, func_name: str, extra_kwargs: dict = None):
-        """Apply only one post-processing step."""
+        """Apply one post-processing step."""
         # get function / from module_name namespace
         if extra_kwargs is None:
             extra_kwargs = {}

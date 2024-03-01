@@ -1,5 +1,5 @@
 """Simulations for (real) time evolution and for time dependent correlation
-functions."""
+functions and spectral functions."""
 # Copyright (C) TeNPy Developers, GNU GPLv3
 
 import numpy as np
@@ -348,7 +348,6 @@ class TimeDependentCorrelation(RealTimeEvolution):
             where op2^i is the i-th operator given in the list [op2^1, op2^2, ..., op2^N]
             and spectral_function_t[j] corresponds to this overlap at MPS site j at time t
         """
-        # TODO: case dependent if op needs JW string
         if self.addJW is False:
             correlation_function_t = env.expectation_value(op)
         else:
@@ -395,7 +394,6 @@ class TimeDependentCorrelationExperimental(TimeDependentCorrelation):
                          **kwargs)
         self.engine_ground_state = None
         self.evolve_bra = self.options.get('evolve_bra', False)
-        # TODO: How to ensure resuming from checkpoint works, when evolve_bra is True ?
 
     def init_algorithm(self, **kwargs):
         super().init_algorithm(**kwargs)  # links to RealTimeEvolution class, not to Simulation
@@ -408,6 +406,7 @@ class TimeDependentCorrelationExperimental(TimeDependentCorrelation):
             self.engine_ground_state = AlgorithmClass(self.psi_ground_state, self.model,
                                                       algorithm_params, **kwargs)
         # TODO: think about checkpoints; resume data is handled by engine, how to pass this on to second engine?
+        # How to ensure resuming from checkpoint works, when evolve_bra is True ?
 
     def run_algorithm(self):
         if self.evolve_bra is True:
