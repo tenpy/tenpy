@@ -37,8 +37,11 @@ def linear_prediction(x, *args, axis=0, **kwargs):
     return pred_along_axis_concat
 
 
-def simple_linear_prediction_1d(x: np.ndarray, rel_prediction_time: float = 1, rel_num_points: float = 0.3,
-                                truncation_mode: str = 'renormalize', rel_split: float = 0):
+def simple_linear_prediction_1d(x: np.ndarray,
+                                rel_prediction_time: float = 1,
+                                rel_num_points: float = 0.3,
+                                truncation_mode: str = 'renormalize',
+                                rel_split: float = 0):
     """Linear prediction of a one-dimensional time series data.
 
     Parameters
@@ -65,7 +68,9 @@ def simple_linear_prediction_1d(x: np.ndarray, rel_prediction_time: float = 1, r
     if rel_num_points + rel_split > 1:
         raise ValueError(f"Can't split data by {rel_split} and use last {rel_num_points} of data")
     if truncation_mode.casefold() not in ('cutoff', 'renormalize', 'conjugate'):
-        raise ValueError("Parameter 'truncation_mode' must be 'renormalize' (default), 'cutoff', or 'conjugate'.")
+        raise ValueError(
+            "Parameter 'truncation_mode' must be 'renormalize' (default), 'cutoff', or 'conjugate'."
+        )
 
     N = len(x)
     # convert relative values (percentages) into integers
@@ -78,13 +83,14 @@ def simple_linear_prediction_1d(x: np.ndarray, rel_prediction_time: float = 1, r
     alpha, c = get_alpha_and_c(x, lpc, truncation_mode)  # get eigenvalues and eigenvectors
     # fast version of the equivalent
     # predictions = [np.tensordot(c, alpha ** m_i, axes=(0, 0)) for m_i in range(1, m + 1)]
-    multi_power = alpha[:, np.newaxis] ** np.arange(1, m + 1)
+    multi_power = alpha[:, np.newaxis]**np.arange(1, m + 1)
     predictions = np.tensordot(c, multi_power, axes=(0, 0))
     return predictions
 
 
 def get_lpc(x, p):
-    r"""Function to obtain the linear prediction coefficients (lpc) from the (last p) correlations of a time series x.
+    r"""Function to obtain the linear prediction coefficients (lpc) from the
+    (last p) correlations of a time series x.
 
     First, the last p correlations are obtained, then the system of equations R x = r (which is in toeplitz form)
     is solved.
@@ -108,7 +114,6 @@ def get_lpc(x, p):
     ..math ::
 
         [E\{x(n)*x(n-0)\}, E\{x(n)*x(n-1)\}, ..., E\{x(n)*x(n-p)\}]
-
     """
     N = len(x)
     correlations = correlate(x, x, mode='full')[N - 1:N + p]
@@ -125,7 +130,8 @@ def get_lpc(x, p):
 
 
 def get_alpha_and_c(x, lpc, truncation_mode='cutoff', epsilon=10e-07):
-    r"""Get the eigenvalues and coefficients from a vector of linear prediction coefficients for the time series x.
+    r"""Get the eigenvalues and coefficients from a vector of linear prediction
+    coefficients for the time series x.
 
     This follows the approach taken in :arxiv:`0901.2342`. If necessary, the eigenvalues are truncated
     according to the `truncation_mode`
@@ -161,7 +167,7 @@ def get_alpha_and_c(x, lpc, truncation_mode='cutoff', epsilon=10e-07):
         evals[np.abs(evals) > 1] = 1 / np.conj(evals[np.abs(evals) > 1])
 
     x_tilde_N = x[-len(lpc):][::-1]
-    shape = (-1,) + (x.ndim - 1) * (1,)
+    shape = (-1, ) + (x.ndim - 1) * (1, )
     try:
         evects_inv = np.linalg.inv(evects)
     except np.linalg.LinAlgError as e:

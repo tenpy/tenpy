@@ -14,16 +14,26 @@ import numpy as np
 
 from .prediction import linear_prediction
 
-__all__ = ['spectral_function', 'fourier_transform_space', 'fourier_transform_time',
-           'to_mps_geometry', 'apply_gaussian_windowing',
-           'plot_correlations_on_lattice']
+__all__ = [
+    'spectral_function', 'fourier_transform_space', 'fourier_transform_time', 'to_mps_geometry',
+    'apply_gaussian_windowing', 'plot_correlations_on_lattice'
+]
 
 
-def spectral_function(time_dep_corr, lat, dt: float, gaussian_window: bool = False, sigma: float = 0.4,
-                      linear_predict: bool = False, rel_prediction_time: float = 1, rel_num_points: float = 0.3,
-                      truncation_mode: str = 'renormalize', rel_split: float = 0,
-                      axis_time: int = 0, axis_space: int = 1):
-    r"""Given a time dependent correlation function C(t, r), calculate its Spectral Function.
+def spectral_function(time_dep_corr,
+                      lat,
+                      dt: float,
+                      gaussian_window: bool = False,
+                      sigma: float = 0.4,
+                      linear_predict: bool = False,
+                      rel_prediction_time: float = 1,
+                      rel_num_points: float = 0.3,
+                      truncation_mode: str = 'renormalize',
+                      rel_split: float = 0,
+                      axis_time: int = 0,
+                      axis_space: int = 1):
+    r"""Given a time dependent correlation function C(t, r), calculate its
+    Spectral Function.
 
     After a run of :class:`~tenpy.simulations.time_evolution.TimeDependentCorrelation`, a :class:`DataLoader` instance
     should be passed, from which the underlying lattice and additional parameters (e.g. ``dt``) can be extracted.
@@ -69,15 +79,18 @@ def spectral_function(time_dep_corr, lat, dt: float, gaussian_window: bool = Fal
     .. math ::
 
         S(w, \mathbf{k}) = \int dt e^{-iwt} \int d\mathbf{r} e^{i \mathbf{k} \mathbf{r} C(t, \mathbf{r})
-
     """
     # first we fourier transform in space C(r, t) -> C(k, t)
     ft_space, k = fourier_transform_space(lat, time_dep_corr, axis=axis_space)
     k_reduced = lat.BZ.reduce_points(k)
     # optional linear prediction
     if linear_predict is True:
-        ft_space = linear_prediction(ft_space, rel_prediction_time=rel_prediction_time, rel_num_points=rel_num_points,
-                                     axis=axis_time, truncation_mode=truncation_mode, rel_split=rel_split)
+        ft_space = linear_prediction(ft_space,
+                                     rel_prediction_time=rel_prediction_time,
+                                     rel_num_points=rel_num_points,
+                                     axis=axis_time,
+                                     truncation_mode=truncation_mode,
+                                     rel_split=rel_split)
     # optional gaussian windowing
     if gaussian_window is True:
         ft_space = apply_gaussian_windowing(ft_space, sigma, axis=axis_time)
@@ -90,7 +103,7 @@ def fourier_transform_space(lat, a, axis=1):
     # transform mps array to lattice array
     a = lat.mps2lat_values(a, axes=axis)  # axis is only an int, since MPS is always "flattened"
     if lat.dim == 1:
-        ft_space = np.fft.fftn(a, axes=(1,))
+        ft_space = np.fft.fftn(a, axes=(1, ))
         k = np.fft.fftfreq(ft_space.shape[1])
         # shifting
         ft_space = np.fft.fftshift(ft_space, axes=1)
@@ -149,7 +162,7 @@ def apply_gaussian_windowing(a, sigma: float = 0.4, axis=0):
     n_tsteps = a.shape[axis]
     tn = np.arange(n_tsteps)
     # create gaussian windowing function with the right length
-    gaussian_window = np.exp(-0.5 * (tn / (n_tsteps * sigma)) ** 2)
+    gaussian_window = np.exp(-0.5 * (tn / (n_tsteps * sigma))**2)
     # swap dimension which should be weighted (window applied to) to last dim (for np broadcasting)
     swapped_a = np.swapaxes(a, -1, axis)
     weighted_arr = swapped_a * gaussian_window  # apply window
@@ -166,13 +179,20 @@ def to_mps_geometry(lat, a):
     dims_until_lat_dims = a.ndim - (lat.dim + 1)  # add unit cell dim
     if lat.Lu == 1:
         dims_until_lat_dims += 1
-    a = a.reshape(a.shape[:dims_until_lat_dims] + (-1,))
+    a = a.reshape(a.shape[:dims_until_lat_dims] + (-1, ))
     a = np.take(a, mps_idx_flattened, axis=-1)
     return a
 
 
-def plot_correlations_on_lattice(ax, lat, correlations, pairs='nearest_neighbors',
-                                 scale=1, color_pos='r', color_neg='g', color=None, zorder=0):
+def plot_correlations_on_lattice(ax,
+                                 lat,
+                                 correlations,
+                                 pairs='nearest_neighbors',
+                                 scale=1,
+                                 color_pos='r',
+                                 color_neg='g',
+                                 color=None,
+                                 zorder=0):
     """Function to plot correlations on a lattice.
 
     The strength of the correlations is given by the thickness of connecting lines.
@@ -225,10 +245,14 @@ def plot_correlations_on_lattice(ax, lat, correlations, pairs='nearest_neighbors
     if color is not None:
         color_pos = color_neg = color
 
-    lc_pos = LineCollection(np.array([pos_x, pos_y]).T[where_pos], linewidths=np.abs(scaled_strengths)[where_pos],
-                            color=color_pos, zorder=zorder)
-    lc_neg = LineCollection(np.array([pos_x, pos_y]).T[where_neg], linewidths=np.abs(scaled_strengths)[where_neg],
-                            color=color_neg, zorder=zorder)
+    lc_pos = LineCollection(np.array([pos_x, pos_y]).T[where_pos],
+                            linewidths=np.abs(scaled_strengths)[where_pos],
+                            color=color_pos,
+                            zorder=zorder)
+    lc_neg = LineCollection(np.array([pos_x, pos_y]).T[where_neg],
+                            linewidths=np.abs(scaled_strengths)[where_neg],
+                            color=color_neg,
+                            zorder=zorder)
 
     ax.add_collection(lc_pos)
     ax.add_collection(lc_neg)

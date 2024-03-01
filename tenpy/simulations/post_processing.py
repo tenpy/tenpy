@@ -17,11 +17,14 @@ try:
 except ImportError:
     h5py_version = (0, 0)
 
-__all__ = ['DataLoader', 'pp_spectral_function', 'pp_plot_correlations_on_lattice', 'get_all_hdf5_keys']
+__all__ = [
+    'DataLoader', 'pp_spectral_function', 'pp_plot_correlations_on_lattice', 'get_all_hdf5_keys'
+]
 
 
 class DataLoader:
-    r"""Post-processing class to handle IO more easily and to directly instantiating a model/mps from a Simulation.
+    r"""Post-processing class to handle IO more easily and to directly
+    instantiating a model/mps from a Simulation.
 
     Parameters
     ----------
@@ -43,8 +46,7 @@ class DataLoader:
     logger = logging.getLogger(__name__ + ".DataLoader")
 
     def __init__(self, filename=None, simulation=None, data=None):
-        self.logger.info("Initializing\n%s\n%s\n%s", "=" * 80, self.__class__.__name__,
-                         "=" * 80)
+        self.logger.info("Initializing\n%s\n%s\n%s", "=" * 80, self.__class__.__name__, "=" * 80)
 
         self._measurements = None
         self.sim_params = None
@@ -54,8 +56,9 @@ class DataLoader:
             self.logger.info(f"Loading data from {self.filename}")
             if self.filename.endswith('.h5') or self.filename.endswith('.hdf5'):
                 # create a h5group (which is open)
-                self.logger.info(f'Open file {self.filename}, when no context manager is used, it might be useful to '
-                                 f'call self.close()')
+                self.logger.info(
+                    f'Open file {self.filename}, when no context manager is used, it might be useful to '
+                    f'call self.close()')
 
                 h5group = h5py.File(self.filename, 'r')
                 self._Hdf5Loader = hdf5_io.Hdf5Loader(h5group)
@@ -101,7 +104,7 @@ class DataLoader:
         return self._measurements
 
     def _load_recursive(self, paths, **kwargs):
-        """Load data recursively into a dictionary
+        """Load data recursively into a dictionary.
 
         Parameters
         ----------
@@ -219,8 +222,9 @@ class DataLoader:
         return self._psi
 
     def get_psi(self):
-        raise NotImplementedError("Getting psi automatically is not supported yet. "
-                                  "If 'psi' is a key in your data, consider using ``get_data('psi')`` for now.")
+        raise NotImplementedError(
+            "Getting psi automatically is not supported yet. "
+            "If 'psi' is a key in your data, consider using ``get_data('psi')`` for now.")
 
     def get_all_keys_as_dict(self):
         if hasattr(self, '_Hdf5Loader'):
@@ -246,8 +250,13 @@ def get_all_hdf5_keys(h5_group):
     return results
 
 
-def pp_spectral_function(DL: DataLoader, *, correlation_key, conjugate_correlation=False, **kwargs):
-    r"""Given a time dependent correlation function C(t, r), calculate its Spectral Function.
+def pp_spectral_function(DL: DataLoader,
+                         *,
+                         correlation_key,
+                         conjugate_correlation=False,
+                         **kwargs):
+    r"""Given a time dependent correlation function C(t, r), calculate its
+    Spectral Function.
 
     After a run of :class:`~tenpy.simulations.time_evolution.TimeDependentCorrelation`, a :class:`DataLoader` instance
     should be passed, from which the underlying lattice and additional parameters (e.g. ``dt``) can be extracted.
@@ -276,10 +285,17 @@ def pp_spectral_function(DL: DataLoader, *, correlation_key, conjugate_correlati
     return spectral_function(time_dep_corr, lat, dt, **kwargs)
 
 
-def pp_plot_correlations_on_lattice(DL: DataLoader, *, data_key, t_step=0, keys='nearest_neighbors',
-                                    default_dir: str = 'plots', save_as: str = 'Correlations.pdf',
-                                    markers='D', figsize=(8, 8), **kwargs):
-    """Save a plot during post-processing to plot correlations on a lattice
+def pp_plot_correlations_on_lattice(DL: DataLoader,
+                                    *,
+                                    data_key,
+                                    t_step=0,
+                                    keys='nearest_neighbors',
+                                    default_dir: str = 'plots',
+                                    save_as: str = 'Correlations.pdf',
+                                    markers='D',
+                                    figsize=(8, 8),
+                                    **kwargs):
+    """Save a plot during post-processing to plot correlations on a lattice.
 
     Parameters
     ----------

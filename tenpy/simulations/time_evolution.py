@@ -1,4 +1,5 @@
-"""Simulations for (real) time evolution and for time dependent correlation functions."""
+"""Simulations for (real) time evolution and for time dependent correlation
+functions."""
 # Copyright (C) TeNPy Developers, GNU GPLv3
 
 import numpy as np
@@ -9,9 +10,10 @@ from ..networks.mps import MPSEnvironment, MPS, MPSEnvironmentJW
 from ..tools.misc import to_iterable
 from ..tools import hdf5_io
 
-
-__all__ = simulation.__all__ + ['RealTimeEvolution', 'SpectralSimulation', 'TimeDependentCorrelation',
-                                'TimeDependentCorrelationExperimental', 'SpectralSimulationExperimental']
+__all__ = simulation.__all__ + [
+    'RealTimeEvolution', 'SpectralSimulation', 'TimeDependentCorrelation',
+    'TimeDependentCorrelationExperimental', 'SpectralSimulationExperimental'
+]
 
 
 class RealTimeEvolution(Simulation):
@@ -32,7 +34,6 @@ class RealTimeEvolution(Simulation):
             Mandatory. Perform time evolution until ``engine.evolved_time`` reaches this value.
             Note that we can go (slightly) beyond this time if it is not a multiple of
             the individual time steps.
-
     """
     default_algorithm = 'TEBDEngine'
     default_measurements = Simulation.default_measurements + [
@@ -83,7 +84,8 @@ class RealTimeEvolution(Simulation):
 
 
 class TimeDependentCorrelation(RealTimeEvolution):
-    r"""A subclass of :class:`RealTimeEvolution` to specifically calculate the time dependent correlation function.
+    r"""A subclass of :class:`RealTimeEvolution` to specifically calculate the
+    time dependent correlation function.
 
     In general this subclass calculates an overlap
     of the form :math:`C(r, t) = <\psi_0| B_r(t) A_{r_0} |\psi_0>` where :math:`A_{r_0}` can be
@@ -113,7 +115,6 @@ class TimeDependentCorrelation(RealTimeEvolution):
         ground_state_filename : str
             a filename of a given ground state search (ideally a hdf5 file coming from a finished
             run of a :class:`~tenpy.simulations.ground_state_search.GroundStateSearch`)
-
     """
 
     def __init__(self, options, *, ground_state_data=None, ground_state_filename=None, **kwargs):
@@ -134,11 +135,13 @@ class TimeDependentCorrelation(RealTimeEvolution):
             if ground_state_filename is None:
                 ground_state_filename = self.options.get('ground_state_filename', None)
             if ground_state_data is None and ground_state_filename is not None:
-                self.logger.info(f"loading data from 'ground_state_filename'='{ground_state_filename}'")
+                self.logger.info(
+                    f"loading data from 'ground_state_filename'='{ground_state_filename}'")
                 ground_state_data = hdf5_io.load(ground_state_filename)
             elif ground_state_data is not None and ground_state_filename is not None:
-                self.logger.warning("Supplied a 'ground_state_filename' and ground_state_data as kwarg. "
-                                    "Ignoring 'ground_state_filename'.")
+                self.logger.warning(
+                    "Supplied a 'ground_state_filename' and ground_state_data as kwarg. "
+                    "Ignoring 'ground_state_filename'.")
 
             if ground_state_data is not None:
                 self.logger.info("Initializing from ground state data")
@@ -176,8 +179,9 @@ class TimeDependentCorrelation(RealTimeEvolution):
     def init_state(self):
         # make sure state is not reinitialized if psi and psi_ground_state are given
         if not hasattr(self, 'psi_ground_state'):
-            self.logger.warning(f"No ground state data is supplied, calling the initial state builder on "
-                                f"{self.__class__.__name__} class - you probably want to supply a ground state!")
+            self.logger.warning(
+                f"No ground state data is supplied, calling the initial state builder on "
+                f"{self.__class__.__name__} class - you probably want to supply a ground state!")
             super().init_state()  # this sets self.psi from init_state_builder (should be avoided)
             self.psi_ground_state = self.psi.copy()
             delattr(self, 'psi')  # free memory
@@ -198,13 +202,15 @@ class TimeDependentCorrelation(RealTimeEvolution):
         if self.gs_energy is None:
             self.gs_energy = self.model.H_MPO.expectation_value(self.psi_ground_state)
         if self.engine.psi.bc != 'finite':
-            raise NotImplementedError('Only finite MPS boundary conditions are currently implemented for '
-                                      f'{self.__class__.__name__}')
+            raise NotImplementedError(
+                'Only finite MPS boundary conditions are currently implemented for '
+                f'{self.__class__.__name__}')
 
     def _init_from_gs_data(self, gs_data):
         if isinstance(gs_data, MPS):
             # self.psi_ground_state = gs_data ?
-            raise NotImplementedError("Only hdf5 and dictionaries are supported as ground state input")
+            raise NotImplementedError(
+                "Only hdf5 and dictionaries are supported as ground state input")
         sim_class = gs_data['version_info']['simulation_class']
         if sim_class != 'GroundStateSearch':
             self.logger.warning("The Simulation is not loaded from a GroundStateSearch...")
@@ -216,8 +222,9 @@ class TimeDependentCorrelation(RealTimeEvolution):
             if key not in self.options:
                 self.options[key] = data_options[key]
             elif self.options[key] != data_options[key]:
-                self.logger.warning("Different model parameters in Simulation and data from file. Ignoring parameters "
-                                    "in data from file")
+                self.logger.warning(
+                    "Different model parameters in Simulation and data from file. Ignoring parameters "
+                    "in data from file")
         if 'energy' in gs_data:
             self.options['gs_energy'] = gs_data['energy']
 
@@ -241,7 +248,8 @@ class TimeDependentCorrelation(RealTimeEvolution):
         return operator_t0_name
 
     def _get_operator_t0_list(self):
-        r"""Converts the specified operators and indices into a list of tuples [(op1, i_1), (op2, i_2)]
+        r"""Converts the specified operators and indices into a list of tuples
+        [(op1, i_1), (op2, i_2)]
 
         Options
         -------
@@ -260,7 +268,6 @@ class TimeDependentCorrelation(RealTimeEvolution):
 
                     The ``lat_idx`` must have (dim+1) i.e. [x, y, u],
                     where u = 0 for a single-site unit cell
-
         """
         ops = to_iterable(self.operator_t0_config['opname'])  # opname is mandatory
         mps_idx = self.operator_t0_config.get('mps_idx', None)
@@ -277,11 +284,13 @@ class TimeDependentCorrelation(RealTimeEvolution):
         # tiling
         if len(ops) > len(idx):
             if len(idx) != 1:
-                raise ValueError("Ill-defined tiling: num. of operators must be equal to num. of indices or one")
+                raise ValueError(
+                    "Ill-defined tiling: num. of operators must be equal to num. of indices or one")
             idx = idx * len(ops)
         elif len(ops) < len(idx):
             if len(ops) != 1:
-                raise ValueError("Ill-defined tiling: num. of operators must be equal to num. of indices or one")
+                raise ValueError(
+                    "Ill-defined tiling: num. of operators must be equal to num. of indices or one")
             ops = ops * len(idx)
         # generate list of tuples of form [(op1, i_1), (op2, i_2), ...]
         op_list = list(zip(ops, idx))
@@ -297,7 +306,8 @@ class TimeDependentCorrelation(RealTimeEvolution):
                     self.psi.apply_local_op(j, 'JW')
             self.psi.apply_local_op(i, op)
         else:
-            ops, i_min, _ = self.psi._term_to_ops_list(ops, True)  # applies JW string automatically
+            ops, i_min, _ = self.psi._term_to_ops_list(ops,
+                                                       True)  # applies JW string automatically
             for i, op in enumerate(ops):
                 self.psi.apply_local_op(i_min + i, op)
 
@@ -313,7 +323,6 @@ class TimeDependentCorrelation(RealTimeEvolution):
             operator_t : str | list
                 The (on-site) operator(s) as string(s) to apply at each measurement step.
                 If a list is passed i.e.: ``['op1', 'op2']``, it will be iterated through the operators
-
         """
         self.logger.info("calling m_correlation_function")
         operator_t = to_iterable(self.operator_t)
@@ -377,11 +386,13 @@ class TimeDependentCorrelationExperimental(TimeDependentCorrelation):
 
         evolve_bra : bool=False
             If True, instantiates a second engine and performs time_evolution on the (eigenstate) bra.
-
     """
+
     def __init__(self, options, *, ground_state_data=None, ground_state_filename=None, **kwargs):
-        super().__init__(options, ground_state_data=ground_state_data,
-                         ground_state_filename=ground_state_filename, **kwargs)
+        super().__init__(options,
+                         ground_state_data=ground_state_data,
+                         ground_state_filename=ground_state_filename,
+                         **kwargs)
         self.engine_ground_state = None
         self.evolve_bra = self.options.get('evolve_bra', False)
         # TODO: How to ensure resuming from checkpoint works, when evolve_bra is True ?
@@ -394,7 +405,8 @@ class TimeDependentCorrelationExperimental(TimeDependentCorrelation):
             AlgorithmClass = self.engine.__class__
             # instantiate the second engine for the ground state
             algorithm_params = self.options.subconfig('algorithm_params')
-            self.engine_ground_state = AlgorithmClass(self.psi_ground_state, self.model, algorithm_params, **kwargs)
+            self.engine_ground_state = AlgorithmClass(self.psi_ground_state, self.model,
+                                                      algorithm_params, **kwargs)
         # TODO: think about checkpoints; resume data is handled by engine, how to pass this on to second engine?
 
     def run_algorithm(self):
@@ -416,7 +428,8 @@ class TimeDependentCorrelationExperimental(TimeDependentCorrelation):
             super().run_algorithm()
 
     def m_correlation_function(self, results, psi, model, simulation, **kwargs):
-        """Equivalent to :meth:`TimeDependentCorrelation._m_correlation_function`."""
+        """Equivalent to
+        :meth:`TimeDependentCorrelation._m_correlation_function`."""
         self.logger.info("calling m_correlation_function")
         operator_t = to_iterable(self.operator_t)
         psi_gs = self.psi_ground_state
@@ -458,22 +471,24 @@ class SpectralSimulation(TimeDependentCorrelation):
             Additional parameters for post-processing of the spectral function (i.e. applying
             linear prediction or gaussian windowing. The keys correspond to the kwargs of
             :func:`~tenpy.tools.spectral_function_tools.spectral_function`.
-
     """
     default_post_processing = []
 
     def __init__(self, options, *, ground_state_data=None, ground_state_filename=None, **kwargs):
-        super().__init__(options, ground_state_data=ground_state_data,
-                         ground_state_filename=ground_state_filename, **kwargs)
+        super().__init__(options,
+                         ground_state_data=ground_state_data,
+                         ground_state_filename=ground_state_filename,
+                         **kwargs)
 
     def run_post_processing(self):
         extra_kwargs = self.options.get('spectral_function_params', {})
         for key in self.results['measurements'].keys():
             if 'correlation_function_t' in key:
-                results_key = 'spectral_function'+key.removeprefix('correlation_function_t')
+                results_key = 'spectral_function' + key.removeprefix('correlation_function_t')
                 kwargs_dict = {'results_key': results_key, 'correlation_key': key}
                 kwargs_dict.update(extra_kwargs)  # add parameters for linear prediction etc.
-                pp_entry = ('tenpy.simulations.post_processing', 'pp_spectral_function', kwargs_dict)
+                pp_entry = ('tenpy.simulations.post_processing', 'pp_spectral_function',
+                            kwargs_dict)
                 # create a new list here! (otherwise this is added to all instances within that session)
                 self.default_post_processing = self.default_post_processing + [pp_entry]
         return super().run_post_processing()
