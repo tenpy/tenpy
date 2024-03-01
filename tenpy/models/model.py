@@ -282,7 +282,9 @@ class Model(Hdf5Exportable):
                 savings *= 1/4 # this is what we found empirically
             else:
                 savings *= 1/mod
-        return self.options.get("mem_saving_factor", savings)
+        if hasattr(self, 'options'):
+            savings = self.options.get("mem_saving_factor", savings)
+        return savings
 
 
 class NearestNeighborModel(Model):
