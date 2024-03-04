@@ -34,3 +34,15 @@ Other output formats are available as other make targets, e.g., ``make latexpdf`
    Building the documentation with sphinx requires loading the TeNPy modules.
    The `conf.py` adjusts the python `sys.path` to include the `/tenpy` folder from root directory of the git repository.
    It will not use the cython-compiled parts.
+
+Troubleshooting
+---------------
+
+If you get an error along the lines of ::
+
+    Exception occurred:
+    File "/home/runner/work/tenpy/tenpy/doc/sphinx_ext/sphinx_cfg_options.py", line 227, in run
+        assert isinstance(desc_content, addnodes.desc_content)
+
+Make sure that the config directives, such as e.g. ``.. cfg:config ::`` or ``.. cfg:configoptions ::``
+are followed by an empty line.
