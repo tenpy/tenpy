@@ -169,6 +169,96 @@ class Symmetry(metaclass=ABCMeta):
         """
         ...
 
+    @abstractmethod
+    def _f_symbol(self, a: Sector, b: Sector, c: Sector, d: Sector, e: Sector, f: Sector
+                  ) -> np.ndarray:
+        r"""The F symbol related to re-coupling of fusion.
+
+        Parameters
+        ----------
+        a, b, c, d, e, f
+            Sectors. Must be compatible with the fusion described above. This is not checked!
+
+        Returns
+        -------
+        F : 4D array
+            The F symbol as an array of the multiplicity indices [μ,ν,κ,λ]
+        """
+        ...
+
+    @abstractmethod
+    def frobenius_schur(self, a: Sector) -> int:
+        """The Frobenius Schur indicator of a sector."""
+        # TODO fallback implementation from f symbol
+        ...
+
+    @abstractmethod
+    def qdim(self, a: Sector) -> float:
+        """The quantum dimension ``Tr(id_a)`` of a sector"""
+        # TODO fallback implementation from f symbol
+        ...
+
+    def sqrt_qdim(self, a: Sector) -> float:
+        """The square root of the quantum dimension."""
+        return np.sqrt(self.qdim(a))
+
+    def inv_sqrt_qdim(self, a: Sector) -> float:
+        """The inverse square root of the quantum dimension."""
+        return 1. / self.sqrt_qdim(a)
+
+    def _b_symbol(self, a: Sector, b: Sector, c: Sector) -> np.ndarray:
+        r"""Coefficients related to bending the right leg on a fusion tensor.
+
+        The related A-symbol for bending left legs is not needed, since we always
+        work with fusion trees in form
+
+        Parameters
+        ----------
+        a, b, c
+            Sectors. Must be compatible with the fusion described above. This is not checked!
+
+        Returns
+        -------
+        B : 2D array
+            The B symbol as an array of the multiplicity indices [μ,ν]
+        """
+        # TODO double check this!
+        prefactor = self.sqrt_qdim(a) * self.sqrt_qdim(b) * self.inv_sqrt_qdim(c)
+        f = self._f_symbol(a, b, self.dual_sector(b), a, c, self.trivial_sector)
+        return prefactor * f[:, :, 0, 0]
+
+    @abstractmethod
+    def _r_symbol(self, a: Sector, b: Sector, c: Sector) -> np.ndarray:
+        r"""Coefficients related to braiding the legs on a fusion tensor
+
+        Parameters
+        ----------
+        a, b, c
+            Sectors. Must be compatible with the fusion described above. This is not checked!
+
+        Returns
+        -------
+        R : 2D array
+            The R symbol as an array of the multiplicity indices [μ,ν]
+        """
+        ...
+
+    def _c_symbol(self, a: Sector, b: Sector, c: Sector, d: Sector, e: Sector, f: Sector) -> np.ndarray:
+        r"""Coefficients related to braiding the legs on a pair of fusion tensors
+
+        Parameters
+        ----------
+        a, b, c, d, e, f
+            Sectors. Must be compatible with the fusion described above. This is not checked!
+
+        Returns
+        -------
+        C : 4D array
+            The C symbol as an array of the multiplicity indices [μ,ν,κ,λ]
+        """
+        # TODO fallback implementation in terms of F and R symbols
+        raise NotImplementedError
+
     def all_sectors(self) -> SectorArray:
         """If there are finitely many sectors, return all of them. Else raise a ValueError."""
         if self.num_sectors == np.inf:
