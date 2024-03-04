@@ -14,7 +14,7 @@ from tenpy.models.xxz_chain import XXZChain
 tenpy.tools.misc.skip_logging_setup = True  # skip logging setup
 
 
-class DummyAlgorithm(Algorithm):
+class DummyAlgorithmPP(Algorithm):
     def __init__(self, psi, model, options, *, resume_data=None, cache=None):
         super().__init__(psi, model, options, resume_data=resume_data)
         self.dummy_value = -1
@@ -50,7 +50,7 @@ simulation_params = {
         'sort_charge': True,
     },
     'algorithm_class':
-    'DummyAlgorithm',
+    'DummyAlgorithmPP',
     'algorithm_params': {
         'N_steps': 2,
         'dt': 0.5,
@@ -85,7 +85,7 @@ def test_Simulation_with_post_processing():
 
 def test_init_of_DataLoader(tmp_path):
     sim_params = copy.deepcopy(simulation_params)
-    sim_params['directory'] = tmp_path
+    sim_params['directory'] = tmp_path.as_posix()
     sim_params['output_filename'] = '_test.h5'
     sim = Simulation(sim_params)
     results = sim.run()
