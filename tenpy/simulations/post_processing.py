@@ -60,7 +60,7 @@ class DataLoader:
     """
     logger = logging.getLogger(__name__ + ".DataLoader")
 
-    def __init__(self, filename: str | Path = None, simulation=None, data=None):
+    def __init__(self, filename=None, simulation=None, data=None):
         self.logger.info("Initializing\n%s\n%s\n%s", "=" * 80, self.__class__.__name__, "=" * 80)
 
         self._measurements = None
