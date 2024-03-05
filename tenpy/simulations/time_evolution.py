@@ -361,7 +361,7 @@ class SpectralSimulation(TimeDependentCorrelation):
         extra_kwargs = self.options.get('spectral_function_params', {})
         for key in self.results['measurements'].keys():
             if 'correlation_function_t' in key:
-                results_key = 'spectral_function' + key.removeprefix('correlation_function_t')
+                results_key = key.replace('correlation_function_t', 'spectral_function')
                 kwargs_dict = {'results_key': results_key, 'correlation_key': key}
                 kwargs_dict.update(extra_kwargs)  # add parameters for linear prediction etc.
                 pp_entry = ('tenpy.simulations.post_processing', 'pp_spectral_function',
