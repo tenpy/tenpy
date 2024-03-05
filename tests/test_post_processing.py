@@ -86,12 +86,12 @@ def test_Simulation_with_post_processing():
 def test_init_of_DataLoader(tmp_path):
     sim_params = copy.deepcopy(simulation_params)
     sim_params['directory'] = tmp_path.as_posix()
-    sim_params['output_filename'] = '_test.h5'
+    sim_params['output_filename'] = '_test.pkl'
     sim = Simulation(sim_params)
     results = sim.run()
     DL_1 = DataLoader(data=results)
     DL_2 = DataLoader(simulation=sim)
-    DL_3 = DataLoader(filename=tmp_path / '_test.h5')
+    DL_3 = DataLoader(filename=tmp_path / '_test.pkl')
     # check that model was correctly instantiated
     assert isinstance(DL_1.model, XXZChain)
     assert isinstance(DL_2.model, XXZChain)

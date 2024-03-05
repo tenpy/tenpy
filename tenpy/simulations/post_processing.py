@@ -69,7 +69,7 @@ class DataLoader:
         if filename is not None:
             self.filename = Path(filename)
             self.logger.info(f"Loading data from {self.filename.name}")
-            if self.filename.suffix == '.h5' or '.hdf5':
+            if self.filename.suffix == '.h5' or self.filename.suffix == '.hdf5':
                 # create a h5group (which is open)
                 self.logger.info(
                     f'Open file {self.filename.name}, when no context manager is used, it might be useful to '
