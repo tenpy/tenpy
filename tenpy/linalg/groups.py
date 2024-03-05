@@ -176,7 +176,7 @@ class Symmetry(metaclass=ABCMeta):
     @abstractmethod
     def _f_symbol(self, a: Sector, b: Sector, c: Sector, d: Sector, e: Sector, f: Sector
                   ) -> np.ndarray:
-        r"""Coefficients :math:`F^{abc}_d` related to recoupling of fusion.
+        r"""Coefficients :math:`[F^{abc}_d]^e_f` related to recoupling of fusion.
 
         The F symbol relates the following two maps::
 
@@ -272,7 +272,7 @@ class Symmetry(metaclass=ABCMeta):
         ...
 
     def _c_symbol(self, a: Sector, b: Sector, c: Sector, d: Sector, e: Sector, f: Sector) -> np.ndarray:
-        r"""Coefficients :math:`C^{abc}_d` related to braiding on a pair of fusion tensors.
+        r"""Coefficients :math:`[C^{abc}_d]^e_f` related to braiding on a pair of fusion tensors.
 
         The C symbol relates the following two maps::
 
@@ -291,8 +291,15 @@ class Symmetry(metaclass=ABCMeta):
         C : 4D array
             The C symbol as an array of the multiplicity indices [μ,ν,κ,λ]
         """
-        # TODO fallback implementation in terms of F and R symbols
-        raise NotImplementedError
+        R1 = self._r_symbol(e, c, d)
+        F = self._f_symbol(c, a, b, d, e, f)
+        R2 = self._r_symbol(c, a, f)
+        # [nu, (al)] & [mu, (al), bet, lam] -> [nu, mu, bet, lam]
+        res = np.tensordot(R1, F, (1, 1))
+        # [nu, mu, (bet), lam] & [kap, (bet)] -> [nu, mu, lam, kap]
+        res = np.tensordot(F, np.conj(R2), (2, 1))
+        # [nu, mu, lam, kap] -> [mu, nu, kap, lam]
+        return np.transpose(res, [1, 0, 3, 2])
 
     def all_sectors(self) -> SectorArray:
         """If there are finitely many sectors, return all of them. Else raise a ValueError."""
