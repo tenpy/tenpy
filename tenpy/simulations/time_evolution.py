@@ -1,4 +1,4 @@
-"""Simulations for (real) time evolution and for time dependent correlation
+"""Simulations for (real) time evolution, time dependent correlation
 functions and spectral functions."""
 # Copyright (C) TeNPy Developers, GNU GPLv3
 
@@ -11,8 +11,7 @@ from ..tools.misc import to_iterable
 from ..tools import hdf5_io
 
 __all__ = simulation.__all__ + [
-    'RealTimeEvolution', 'SpectralSimulation', 'TimeDependentCorrelation',
-    'TimeDependentCorrelationExperimental', 'SpectralSimulationExperimental'
+    'RealTimeEvolution', 'SpectralSimulation', 'TimeDependentCorrelation'
 ]
 
 
@@ -203,8 +202,8 @@ class TimeDependentCorrelation(RealTimeEvolution):
             self.gs_energy = self.model.H_MPO.expectation_value(self.psi_ground_state)
         if self.engine.psi.bc != 'finite':
             raise NotImplementedError(
-                'Only finite MPS boundary conditions are currently implemented for '
-                f'{self.__class__.__name__}')
+                "Only finite MPS boundary conditions are currently implemented for "
+                f"{self.__class__.__name__}")
 
     def _init_from_gs_data(self, gs_data):
         if isinstance(gs_data, MPS):
@@ -213,7 +212,7 @@ class TimeDependentCorrelation(RealTimeEvolution):
                 "Only hdf5 and dictionaries are supported as ground state input")
         sim_class = gs_data['version_info']['simulation_class']
         if sim_class != 'GroundStateSearch':
-            self.logger.warning("The Simulation is not loaded from a GroundStateSearch...")
+            self.logger.warning("The Simulation is not loaded from a GroundStateSearch.")
 
         data_options = gs_data['simulation_parameters']
         for key in data_options:
@@ -248,8 +247,7 @@ class TimeDependentCorrelation(RealTimeEvolution):
         return operator_t0_name
 
     def _get_operator_t0_list(self):
-        r"""Converts the specified operators and indices into a list of tuples
-        [(op1, i_1), (op2, i_2)]
+        r"""Converts the specified operators and indices into a list of tuples ``[(op1, i_1), (op2, i_2)]``.
 
         Options
         -------
@@ -266,8 +264,8 @@ class TimeDependentCorrelation(RealTimeEvolution):
 
                 .. note ::
 
-                    The ``lat_idx`` must have (dim+1) i.e. [x, y, u],
-                    where u = 0 for a single-site unit cell
+                    The ``lat_idx`` must have (dim+1) i.e. ``[x, y, u]``,
+                    where ``u = 0`` for a single-site unit cell
         """
         ops = to_iterable(self.operator_t0_config['opname'])  # opname is mandatory
         mps_idx = self.operator_t0_config.get('mps_idx', None)
@@ -306,15 +304,17 @@ class TimeDependentCorrelation(RealTimeEvolution):
                     self.psi.apply_local_op(j, 'JW')
             self.psi.apply_local_op(i, op)
         else:
-            ops, i_min, _ = self.psi._term_to_ops_list(ops,
-                                                       True)  # applies JW string automatically
+            ops, i_min, _ = self.psi._term_to_ops_list(ops, True)  # applies JW string automatically
             for i, op in enumerate(ops):
                 self.psi.apply_local_op(i_min + i, op)
 
-    def m_correlation_function(self, results, psi, model, simulation, **kwargs):  # simulation=self
+    def m_correlation_function(self, results, psi, model, simulation, **kwargs):
         r"""Measurement function for time dependent correlations.
 
-        Wrapper around :meth:`_m_correlation_function_op` to loop over several operators.
+        For each operator in ``operator_t```, his calculates the overlap of
+        :math:`<\psi| op_j |\phi>`, where :math:`|phi> = e^{-iHt} op1_{idx} |\psi_0>`
+        (the time evolved state after op1 was applied at MPS position idx) and
+        :math:`<psi| = e^{i E_0 t} <\psi|`.
 
         Options
         -------
@@ -327,133 +327,11 @@ class TimeDependentCorrelation(RealTimeEvolution):
         self.logger.info("calling m_correlation_function")
         operator_t = to_iterable(self.operator_t)
         psi_gs = self.psi_ground_state
-        env = MPSEnvironment(psi_gs, psi)
-
-        for i, op in enumerate(operator_t):
-            # op is a str
-            results_key = f"correlation_function_t_{op}_{self.operator_t0_name}"
-            results[results_key] = self._m_correlation_function_op(env, op)
-
-    def _m_correlation_function_op(self, env: MPSEnvironment, op) -> np.ndarray:
-        r"""Measurement function for time dependent correlations.
-
-        This calculates the overlap of <psi| op_j |phi>, where |phi> = e^{-iHt} op1_idx |psi_0>
-        (the time evolved state after op1 was applied at MPS position idx) and
-        <psi| is either <psi_0| e^{iHt} (if evolve_bra is True) or e^{i E_0 t} <psi| (if evolve_bra is False).
-
-        Returns
-        ----------
-        correlation_function_t : 1D array
-            representing <psi_0| e^{iHt} op2^i_j e^{-iHt} op1_idx |psi_0>
-            where op2^i is the i-th operator given in the list [op2^1, op2^2, ..., op2^N]
-            and spectral_function_t[j] corresponds to this overlap at MPS site j at time t
-        """
-        if self.addJW is False:
-            correlation_function_t = env.expectation_value(op)
-        else:
-            correlation_function_t = list()
-            for i in range(self.psi.L):
-                term_list, i0, _ = env._term_to_ops_list([('Id', 0), (op, i)], True)
-                # this generates a list from left to right
-                # ["JW", "JW", ... "JW", "op (at idx)"], the problem is, that _term_to_ops_list does not generate
-                # a JW string for one operator, therefore insert Id at idx 0.
-                assert i0 == 0  # make sure to really start on the left site
-                correlation_function_t.append(env.expectation_value_multi_sites(term_list, i0))
-                # TODO: change when :meth:`expectation_value` of :class:`MPSEnvironment` automatically handles JW-string
-            correlation_function_t = np.array(correlation_function_t)
-
-        # multiply evolution of bra (eigenstate) into spectral function
-        phase = np.exp(1j * self.gs_energy * self.engine.evolved_time)
-        correlation_function_t = correlation_function_t * phase
-
-        return correlation_function_t
-
-
-class TimeDependentCorrelationExperimental(TimeDependentCorrelation):
-    r"""Improved/Experimental version of :class:`TimeDependentCorrelation`.
-
-    This class gives an advantage when calculating the correlation function of Fermions. This is done by
-    calling the :class:`MPSEnvironmentJW` instead of the usual :class:`MPSEnvironment`.
-    This class automatically adds a (hanging) JW string to each LP (only) when moving the
-    environment to the right; if this wouldn't be done, much of the advantage of an MPS
-    environment is lost (since only the overlap with the full operator string is calculated).
-
-    Options
-    -------
-    .. cfg:config :: TimeDependentCorrelationExperimental
-        :include: TimeDependentCorrelation
-
-        evolve_bra : bool=False
-            If True, instantiates a second engine and performs time_evolution on the (eigenstate) bra.
-    """
-
-    def __init__(self, options, *, ground_state_data=None, ground_state_filename=None, **kwargs):
-        super().__init__(options,
-                         ground_state_data=ground_state_data,
-                         ground_state_filename=ground_state_filename,
-                         **kwargs)
-        self.engine_ground_state = None
-        self.evolve_bra = self.options.get('evolve_bra', False)
-
-    def init_algorithm(self, **kwargs):
-        super().init_algorithm(**kwargs)  # links to RealTimeEvolution class, not to Simulation
-        # make sure a second engine is used when evolving the bra
-        if self.evolve_bra is True:
-            # fetch engine that evolves ket
-            AlgorithmClass = self.engine.__class__
-            # instantiate the second engine for the ground state
-            algorithm_params = self.options.subconfig('algorithm_params')
-            self.engine_ground_state = AlgorithmClass(self.psi_ground_state, self.model,
-                                                      algorithm_params, **kwargs)
-        # TODO: think about checkpoints; resume data is handled by engine, how to pass this on to second engine?
-        # How to ensure resuming from checkpoint works, when evolve_bra is True ?
-
-    def run_algorithm(self):
-        if self.evolve_bra is True:
-            while True:
-                if np.real(self.engine.evolved_time) >= self.final_time:
-                    break
-                self.logger.info("evolve to time %.2f, max chi=%d", self.engine.evolved_time.real,
-                                 max(self.psi.chi))
-
-                self.engine_ground_state.run()
-                self.engine.run()
-                # sanity check, bra and ket should evolve to same time
-                assert self.engine.evolved_time == self.engine.evolved_time, 'Bra evolved to different time than ket'
-                self.model = self.engine.model
-                self.make_measurements()
-                self.engine.checkpoint.emit(self.engine)
-        else:
-            super().run_algorithm()
-
-    def m_correlation_function(self, results, psi, model, simulation, **kwargs):
-        """Equivalent to
-        :meth:`TimeDependentCorrelation._m_correlation_function`."""
-        self.logger.info("calling m_correlation_function")
-        operator_t = to_iterable(self.operator_t)
-        psi_gs = self.psi_ground_state
         env = MPSEnvironmentJW(psi_gs, psi) if self.addJW else MPSEnvironment(psi_gs, psi)
-
-        for i, op in enumerate(operator_t):
-            # op is a str
-            results_key = f"correlation_function_t_{op}_{self.operator_t0_name}"
-            results[results_key] = self._m_correlation_function_op(env, op)
-
-    def _m_correlation_function_op(self, env, op) -> np.ndarray:
-        """Measurement function for time dependent correlations.
-
-        Simplified version of :meth:`TimeDependentCorrelation._m_correlation_function_op`
-
-        Returns
-        ----------
-        correlation_function_t : 1D array
-        """
-        spectral_function_t = env.expectation_value(op)
-        if self.evolve_bra is False:
-            phase = np.exp(1j * self.gs_energy * self.engine.evolved_time)
-            spectral_function_t = spectral_function_t * phase
-
-        return spectral_function_t
+        phase = np.exp(1j * self.gs_energy * self.engine.evolved_time)
+        for op in operator_t:
+            results_key = f"correlation_function_t_{op}_{self.operator_t0_name}"  # as op is a str
+            results[results_key] = env.expectation_value(op)*phase
 
 
 class SpectralSimulation(TimeDependentCorrelation):
@@ -491,7 +369,3 @@ class SpectralSimulation(TimeDependentCorrelation):
                 # create a new list here! (otherwise this is added to all instances within that session)
                 self.default_post_processing = self.default_post_processing + [pp_entry]
         return super().run_post_processing()
-
-
-class SpectralSimulationExperimental(TimeDependentCorrelationExperimental, SpectralSimulation):
-    pass
