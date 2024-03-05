@@ -186,17 +186,13 @@ class Symmetry(metaclass=ABCMeta):
         """
         ...
 
-    @abstractmethod
     def frobenius_schur(self, a: Sector) -> int:
         """The Frobenius Schur indicator of a sector."""
-        # TODO fallback implementation from f symbol
-        ...
+        return self._f_symbol(a, self.dual_sector(a), a, a, self.trivial_sector, self.trivial_sector)[0,0,0,0] * self.qdim(a)
 
-    @abstractmethod
     def qdim(self, a: Sector) -> float:
         """The quantum dimension ``Tr(id_a)`` of a sector"""
-        # TODO fallback implementation from f symbol
-        ...
+        return abs(self._f_symbol(a, self.dual_sector(a), a, a, self.trivial_sector, self.trivial_sector)[0,0,0,0])**-1
 
     def sqrt_qdim(self, a: Sector) -> float:
         """The square root of the quantum dimension."""
@@ -790,6 +786,12 @@ class FibonacciGrading(Symmetry):
 
     Allowed sectors are 1D arrays with a single entry of either `0` ("vacuum") or `1` ("tau anyon").
     `[0]`, `[1]`
+
+    `handedness` : ``'left' | 'right'``
+        Specifies the chirality / handedness of the anyons. Changing the handedness corresponds to
+        complex conjugating the R-symbols, which also affects, e.g., the braid-symbols.
+        Considering anyons of different handedness is necessary for doubled models like,
+        e.g., the anyons realized in the Levin-Wen string-net models.
     """
 
     _fusion_map = {  # key: number of tau in fusion input
@@ -798,8 +800,14 @@ class FibonacciGrading(Symmetry):
         2: np.array([[0], [1]]),  # t x t = 1 + t
     }
     _phi = .5 * (1 + np.sqrt(5))  # the golden ratio
+    _f = np.expand_dims([_phi**-1, _phi**-0.5, -_phi**-1], axis=(1,2,3,4))  # nontrivial F-symbols
+    _r = np.expand_dims([np.exp(-4j*np.pi/5), np.exp(3j*np.pi/5)], axis=(1,2))  # nontrivial R-symbols
 
-    def __init__(self):
+    def __init__(self, handedness = 'left'):
+        assert handedness in ['left', 'right']
+        self.handedness = handedness
+        if handedness == 'right':
+            self._r = self._r.conj()
         Symmetry.__init__(self,
                           fusion_style=FusionStyle.multiple_unique,
                           braiding_style=BraidingStyle.anyonic,
@@ -814,7 +822,7 @@ class FibonacciGrading(Symmetry):
         return self._fusion_map[a[0] + b[0]]
 
     def sector_dim(self, a: Sector) -> int:
-        return 1 if a[0] == 0 else self._phi
+        return 1
 
     def sector_str(self, a: Sector) -> str:
         return 'vac' if a[0] == 0 else 'tau'
@@ -833,6 +841,23 @@ class FibonacciGrading(Symmetry):
 
     def _n_symbol(self, a: Sector, b: Sector, c: Sector) -> int:
         return 1
+
+    def _f_symbol(self, a: Sector, b: Sector, c: Sector, d: Sector, e: Sector, f: Sector
+                  ) -> np.ndarray:
+        if np.all(np.concatenate([a, b, c, d])):
+            return self._f[e[0] + f[0]]
+        return np.ones((1, 1, 1, 1))
+
+    def frobenius_schur(self, a: Sector) -> int:
+        return 1
+
+    def qdim(self, a: Sector) -> float:
+        return 1 if a[0] == 0 else self._phi
+
+    def _r_symbol(self, a: Sector, b: Sector, c: Sector) -> np.ndarray:
+        if np.all(np.concatenate([a, b])):
+            return self._r[c[0], :, :]
+        return np.ones((1, 1))
 
     def all_sectors(self) -> SectorArray:
         return np.arange(2, dtype=int)[:, None]
