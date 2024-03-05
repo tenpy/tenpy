@@ -49,10 +49,9 @@ from ..linalg import np_conserved as npc
 from ..linalg.sparse import NpcLinearOperator, FlatLinearOperator
 from .site import group_sites, Site
 from ..tools.string import vert_join
-from .mps import MPS as _MPS  # only for MPS._valid_bc
-from .mps import BaseEnvironment
+from .mps import BaseEnvironment, MPSGeometry
 from .terms import OnsiteTerms, CouplingTerms, MultiCouplingTerms
-from ..tools.misc import add_with_None_0
+from ..tools.misc import add_with_None_0, inverse_permutation
 from ..tools.math import lcm
 from ..tools.params import asConfig
 from ..algorithms.truncation import TruncationError, svd_theta
@@ -62,18 +61,14 @@ __all__ = [
 ]
 
 
-class MPO:
+class MPO(MPSGeometry):
     """Matrix product operator, finite (MPO) or infinite (iMPO).
 
     Parameters
     ----------
-    sites : list of :class:`~tenpy.models.lattice.Site`
-        Defines the local Hilbert space for each site.
     Ws : list of :class:`~tenpy.linalg.np_conserved.Array`
         The matrices of the MPO. Should have labels ``wL, wR, p, p*``.
-    bc : {'finite' | 'segment' | 'infinite'}
-        Boundary conditions as described in :mod:`~tenpy.networks.mps`.
-        ``'finite'`` requires ``Ws[0].get_leg('wL').ind_len = 1``.
+        Finite boundary conditions require ``Ws[0].get_leg('wL').ind_len = 1``.
     IdL : (iterable of) {int | None}
         Indices on the bonds, which correspond to 'only identities to the left'.
         A single entry holds for all bonds.
@@ -84,13 +79,11 @@ class MPO:
     explicit_plus_hc : bool
         If True, this flag indicates that the hermitian conjugate of the MPO should be
         computed and added at runtime, i.e., `self` is not (necessarily) hermitian.
+    unit_cell_width : int
+        See :attr:`~tenpy.models.lattice.Lattice.mps_unit_cell_width`.
 
     Attributes
     ----------
-    chinfo : :class:`~tenpy.linalg.np_conserved.ChargeInfo`
-        The nature of the charge.
-    sites : list of :class:`~tenpy.models.lattice.Site`
-        Defines the local Hilbert space for each site.
     dtype : type
         The data type of the `_W`.
     bc : {'finite' | 'segment' | 'infinite'}
@@ -117,8 +110,6 @@ class MPO:
         Class attribute. Valid boundary conditions; the same as for an MPS.
     """
 
-    _valid_bc = _MPS._valid_bc  # same valid boundary conditions as an MPS.
-
     def __init__(self,
                  sites,
                  Ws,
@@ -126,15 +117,14 @@ class MPO:
                  IdL=None,
                  IdR=None,
                  max_range=None,
-                 explicit_plus_hc=False):
-        self.sites = list(sites)
-        self.chinfo = self.sites[0].leg.chinfo
+                 explicit_plus_hc=False,
+                 mps_unit_cell_width=None):
+        super().__init__(sites, bc, unit_cell_width=mps_unit_cell_width)
         self.dtype = dtype = np.result_type(*[W.dtype for W in Ws])
         self._W = [W.astype(dtype, copy=True) for W in Ws]
         self.IdL = self._get_Id(IdL, len(sites))
         self.IdR = self._get_Id(IdR, len(sites))
         self.grouped = 1
-        self.bc = bc
         self.max_range = max_range
         self.explicit_plus_hc = explicit_plus_hc
         self.test_sanity()
@@ -151,7 +141,8 @@ class MPO:
         Specifically, it saves
         :attr:`sites`,
         :attr:`chinfo`,
-        :attr:`max_range` (under these names),
+        :attr:`max_range`,
+        :attr:`unit_cell_width` (under these names),
         :attr:`_W` as ``"tensors"``,
         :attr:`IdL` as ``"index_identity_left"``,
         :attr:`IdR` as ``"index_identity_right"``, and
@@ -176,6 +167,7 @@ class MPO:
         h5gr.attrs["grouped"] = self.grouped
         hdf5_saver.save(self.bc, subpath + "boundary_condition")
         hdf5_saver.save(self.max_range, subpath + "max_range")
+        hdf5_saver.save(self.unit_cell_width, subpath + "unit_cell_width")
         h5gr.attrs["explicit_plus_hc"] = self.explicit_plus_hc
         h5gr.attrs["L"] = self.L  # not needed for loading, but still useful metadata
         h5gr.attrs["max_bond_dimension"] = np.max(self.chi)  # same
@@ -212,6 +204,7 @@ class MPO:
         obj.grouped = hdf5_loader.get_attr(h5gr, "grouped")
         obj.bc = hdf5_loader.load(subpath + "boundary_condition")
         obj.max_range = hdf5_loader.load(subpath + "max_range")
+        obj.unit_cell_width = hdf5_loader.load(subpath + "unit_cell_width")
         obj.explicit_plus_hc = h5gr.attrs.get("explicit_plus_hc", False)
         obj.test_sanity()
         return obj
@@ -226,7 +219,8 @@ class MPO:
                    Ws_qtotal=None,
                    legs=None,
                    max_range=None,
-                   explicit_plus_hc=False):
+                   explicit_plus_hc=False,
+                   mps_unit_cell_width=None):
         """Initialize an MPO from `grids`.
 
         Parameters
@@ -258,6 +252,8 @@ class MPO:
         explicit_plus_hc : bool
             If True, the Hermitian conjugate of the MPO is computed at runtime,
             rather than saved in the MPO.
+        unit_cell_width : int
+            See :attr:`~tenpy.models.lattice.Lattice.mps_unit_cell_width`.
 
         See also
         --------
@@ -300,10 +296,10 @@ class MPO:
         for i in range(L):
             W = npc.grid_outer(grids[i], [legs[i], legs[i + 1].conj()], Ws_qtotal[i], ['wL', 'wR'])
             Ws.append(W)
-        return cls(sites, Ws, bc, IdL, IdR, max_range, explicit_plus_hc)
+        return cls(sites, Ws, bc, IdL, IdR, max_range, explicit_plus_hc, mps_unit_cell_width)
 
     @classmethod
-    def from_wavepacket(cls, sites, coeff, op, eps=1.e-15):
+    def from_wavepacket(cls, sites, coeff, op, eps=1.e-15, unit_cell_width=None):
         r"""Create a (finite) MPO wave packet representing ``sum_i coeff[i] op_i``.
 
         Note that we define it only for finite systems; a generalization to infinite systems
@@ -350,7 +346,7 @@ class MPO:
 
         .. doctest :: from_wavepacket
         
-            >>> psi = MPS.from_product_state([site] * L, ['empty'] * L)
+            >>> psi = MPS.from_product_state([site] * L, ['empty'] * L, unit_cell_width=L)
             >>> wp.apply(psi, dict(compression_method='SVD'))
             TruncationError()
             >>> C = psi.correlation_function('Cd', 'C')
@@ -381,16 +377,14 @@ class MPO:
         # MPO to an MPS would need a non-trivial modification that is not captured when setting
         # IdL=0!
         IdR = [None] * L + [0]
-        return cls.from_grids(sites, grids, 'finite', IdL, IdR)
+        return cls.from_grids(sites, grids, 'finite', IdL, IdR, mps_unit_cell_width=unit_cell_width)
 
     def test_sanity(self):
         """Sanity check, raises ValueErrors, if something is wrong."""
-        assert self.L == len(self.sites)
-        if self.bc not in self._valid_bc:
-            raise ValueError("invalid MPO boundary conditions: " + repr(self.bc))
+        super().test_sanity()
         for i in range(self.L):
             S = self.sites[i]
-            W = self._W[i]
+            W = self.get_W(i)
             S.leg.test_equal(W.get_leg('p'))
             S.leg.test_contractible(W.get_leg('p*'))
             if self.bc == 'infinite' or i + 1 < self.L:
@@ -400,56 +394,36 @@ class MPO:
             raise ValueError("wrong len of `IdL`/`IdR`")
 
     @property
-    def L(self):
-        """Number of physical sites; for an iMPO the len of the MPO unit cell."""
-        return len(self.sites)
-
-    @property
-    def dim(self):
-        """List of local physical dimensions."""
-        return [site.dim for site in self.sites]
-
-    @property
-    def finite(self):
-        """Distinguish MPO vs iMPO.
-
-        True for an MPO (``bc='finite', 'segment'``), False for an iMPO (``bc='infinite'``).
-        """
-        assert (self.bc in self._valid_bc)
-        return self.bc != 'infinite'
-
-    @property
     def chi(self):
         """Dimensions of the virtual bonds."""
         return [W.get_leg('wL').ind_len for W in self._W] + [self._W[-1].get_leg('wR').ind_len]
 
     def get_W(self, i, copy=False):
         """Return `W` at site `i`."""
-        i = self._to_valid_index(i)
-        if copy:
-            return self._W[i].copy()
-        return self._W[i]
+        i_in_unit_cell, num_unit_cells = self._to_valid_site_index(i, return_num_unit_cells=True)
+        return self.shift_Array(self._W[i_in_unit_cell], num_unit_cells=num_unit_cells, copy=copy)
 
     def set_W(self, i, W):
         """Set `W` at site `i`."""
-        i = self._to_valid_index(i)
-        self._W[i] = W
+        i_in_unit_cell, num_unit_cells = self._to_valid_site_index(i, return_num_unit_cells=True)
+        self._W[i_in_unit_cell] = self.shift_Array(W, -num_unit_cells, copy=False)
 
     def get_IdL(self, i):
         """Return index of `IdL` at bond to the *left* of site `i`.
 
         May be ``None``.
         """
-        i = self._to_valid_index(i, bond=True)
-        return self.IdL[i]
+        return self.IdL[self._to_valid_site_index(i)]
 
     def get_IdR(self, i):
         """Return index of `IdR` at bond to the *right* of site `i`.
 
         May be ``None``.
         """
-        i = self._to_valid_index(i, bond=True)
-        return self.IdR[i + 1]
+        # The convention for the order of IdR is incompatible with something like
+        #  self.IdR[self._to_valid_bond_index(i, is_left=False)]
+        return self.IdR[self._to_valid_site_index(i) + 1]
+        
 
     def enlarge_mps_unit_cell(self, factor=2):
         """Repeat the unit cell for infinite MPS boundary conditions; in place.
@@ -466,10 +440,12 @@ class MPO:
         if self.finite:
             raise ValueError("can't enlarge finite MPO")
         factor = int(factor)
-        self.sites = factor * self.sites
-        self._W = factor * self._W
+        L = self.L
+        self._W = [self.get_W(j) for j in range(0, factor * L)]
+        self.sites = [self.get_site(j) for j in range(0, factor * self.L)]
         self.IdL = factor * self.IdL[:-1] + [self.IdL[-1]]
         self.IdR = factor * self.IdR[:-1] + [self.IdR[-1]]
+        self.unit_cell_width *= factor
         self.test_sanity()
 
     def group_sites(self, n=2, grouped_sites=None):
@@ -532,6 +508,11 @@ class MPO:
         --------
         tenpy.networks.mps.MPS.extract_segment : similar method for MPS.
         """
+        sites_per_ring = self.L // self.unit_cell_width
+        unit_cell_width, remainder = divmod(last + 1 - first, sites_per_ring)
+        if remainder != 0:
+            msg = f'Number of sites must be an integer multiple of unit_cell_width={unit_cell_width}.'
+            raise ValueError(msg)
         L = self.L
         sites = [self.sites[i % L] for i in range(first, last + 1)]
         W = [self.get_W(i) for i in range(first, last + 1)]
@@ -539,7 +520,8 @@ class MPO:
         IdL.append(self.IdL[last % L + 1])
         IdR = [self.IdR[i % L] for i in range(first, last + 1)]
         IdR.append(self.IdR[last % L + 1])
-        cp = self.__class__(sites, W, 'segment', IdL, IdR, self.max_range, self.explicit_plus_hc)
+        cp = self.__class__(sites, W, 'segment', IdL, IdR, self.max_range, self.explicit_plus_hc,
+                            unit_cell_width)
         cp.grouped = self.grouped
         return cp
 
@@ -653,7 +635,7 @@ class MPO:
             IdLR_0 = IdL
         IdLR = [IdLR_0] + IdLR
 
-        return MPO(self.sites, U, self.bc, IdLR, IdLR, np.inf)
+        return MPO(self.sites, U, self.bc, IdLR, IdLR, np.inf, mps_unit_cell_width=self.unit_cell_width)
 
     def make_U_II(self, dt):
         r"""Creates the :math:`U_II` propagator.
@@ -717,7 +699,7 @@ class MPO:
             # TODO: could sort by charges.
             U.append(W_II)
         Id = [0] * (self.L + 1)
-        return MPO(self.sites, U, self.bc, Id, Id, max_range=self.max_range)
+        return MPO(self.sites, U, self.bc, Id, Id, max_range=self.max_range, mps_unit_cell_width=self.unit_cell_width)
 
     def expectation_value(self, psi, tol=1.e-10, max_range=100, init_env_data={}):
         """Calculate ``<psi|self|psi>/<psi|psi>`` (or density for infinite).
@@ -965,7 +947,7 @@ class MPO:
             Ws[0].legs[0] = Ws[0].legs[0].flip_charges_qconj()
         else:
             Ws[0].legs[0] = wR.conj()
-        return MPO(self.sites, Ws, self.bc, self.IdL, self.IdR, self.max_range)
+        return MPO(self.sites, Ws, self.bc, self.IdL, self.IdR, self.max_range, mps_unit_cell_width=self.unit_cell_width)
 
     def is_hermitian(self, eps=1.e-10, max_range=None):
         """Check if `self` is a hermitian MPO.
@@ -1109,6 +1091,18 @@ class MPO:
                 B.legs[B.get_leg_index('vR')] = B.get_leg('vR').to_LegCharge()
             psi.set_B(i, B, 'B')
 
+        # fix right leg of last tensor (reason: combine_legs sorts charges)
+        if not psi.finite:
+            left_leg = psi.get_B(psi.L).get_leg('vL')
+            right_leg = psi.get_B(psi.L-1).get_leg('vR')
+            perm, _ = left_leg.sort()
+            inv_perm = inverse_permutation(perm)
+            inv_perm_flat = right_leg.perm_flat_from_perm_qind(inv_perm)
+            # TODO: Do it without using `permute`. We do not need to touch the
+            # blocks anyway, so we can just re-order B._qdata and the leg charges.
+            B = psi.get_B(psi.L-1).permute(inv_perm_flat, axis='vR')
+            psi.set_B(psi.L-1, B, 'B')
+
         if bc == 'infinite':
             # calculate (rather arbitrary) guess for S[0] (no we don't like it either)
             weight = np.ones(self.get_W(0).shape[self.get_W(0).get_leg_index('wL')]) * 0.05
@@ -1240,10 +1234,26 @@ class MPO:
         return npc.trace(singlesitempo.get_W(0), axes=[['wL'], ['wR']])
 
     def _to_valid_index(self, i, bond=False):
-        """Make sure `i` is a valid index (depending on `self.bc`)."""
+        """Make sure `i` is a valid index of a site.
+
+        .. deprecated :: 1.0.0
+            Use :meth:`~tenpy.networks.mps.MPSGeometry._to_valid_site_index`
+            or :meth:`~tenpy.networks.mps.MPSGeometry._to_valid_bond_index` instead.
+            Note that they have an additional return value.
+
+        For finite systems, we just check if ``i`` is within bounds.
+        For infinite systems, we return the index *within* the MPS unit cell that is equivalent to
+        ``i``, by adding a suitable multiple of ``self.L``.
+        """
+        msg = ('_to_valid_index methods have been deprecated. '
+               'Use _to_valid_site_index or _to_valid_bond_index instead.')
+        warnings.warn(msg, category=FutureWarning, stacklevel=2)
         if not self.finite:
             return i % self.L
         if i < 0:
+            msg = ('Negative site indices for open boundary conditions are deprecated and will '
+                   'raise a ValueError in the future')
+            warnings.warn(msg, category=FutureWarning, stacklevel=3)
             i += self.L
         if i >= self.L + int(bond) or i < 0:
             raise KeyError("i = {0:d} out of bounds for finite MPO".format(i))
@@ -1281,6 +1291,7 @@ class MPO:
         """
         L = self.L
         assert self.bc == other.bc
+        assert self.unit_cell_width == other.unit_cell_width
         assert other.L == L
 
         ps = [self._get_block_projections(i) for i in range(L + 1)]
@@ -1332,7 +1343,7 @@ class MPO:
             max_range = max(self.max_range, other.max_range)
         else:
             max_range = None
-        return MPO(self.sites, Ws, self.bc, IdL, IdR, max_range)
+        return MPO(self.sites, Ws, self.bc, IdL, IdR, max_range, mps_unit_cell_width=self.unit_cell_width)
 
     def _get_block_projections(self, i):
         """projections onto (IdL, other, IdR) on bond `i` in range(0, L+1)"""
@@ -1439,7 +1450,7 @@ def make_W_II(t, A, B, C, D):
     return W
 
 
-class MPOGraph:
+class MPOGraph(MPSGeometry):
     """Representation of an MPO by a graph, based on a 'finite state machine'.
 
     This representation is used for building H_MPO from the interactions.
@@ -1468,15 +1479,11 @@ class MPOGraph:
         MPO boundary conditions.
     max_range : int | np.inf | None
         Maximum range of hopping/interactions (in unit of sites) of the MPO. ``None`` for unknown.
+    unit_cell_width : int
+        See :attr:`~tenpy.models.lattice.Lattice.num_unit_cell_width`.
 
     Attributes
     ----------
-    sites : list of :class:`~tenpy.models.lattice.Site`
-        Defines the local Hilbert space for each site.
-    chinfo : :class:`~tenpy.linalg.np_conserved.ChargeInfo`
-        The nature of the charge.
-    bc : {'finite', 'infinite'}
-        MPO boundary conditions.
     max_range : int | np.inf | None
         Maximum range of hopping/interactions (in unit of sites) of the MPO. ``None`` for unknown.
     states : list of set of keys
@@ -1489,10 +1496,10 @@ class MPOGraph:
         The charges for the MPO
     """
 
-    def __init__(self, sites, bc='finite', max_range=None):
-        self.sites = list(sites)
-        self.chinfo = self.sites[0].leg.chinfo
-        self.bc = bc
+    _valid_bc = ['finite', 'infinite']  # segment makes no sense for MPOGraph
+
+    def __init__(self, sites, bc='finite', max_range=None, unit_cell_width=None):
+        super().__init__(sites=sites, bc=bc, unit_cell_width=unit_cell_width)
         self.max_range = max_range
         # empty graph
         self.states = [set() for _ in range(self.L + 1)]
@@ -1501,7 +1508,7 @@ class MPOGraph:
         self.test_sanity()
 
     @classmethod
-    def from_terms(cls, terms, sites, bc, insert_all_id=True):
+    def from_terms(cls, terms, sites, bc, insert_all_id=True, unit_cell_width=None):
         """Initialize an :class:`MPOGraph` from OnsiteTerms and CouplingTerms.
 
         Parameters
@@ -1519,6 +1526,8 @@ class MPOGraph:
         insert_all_id : bool
             Whether to insert identities such that `IdL` and `IdR` are defined on each bond.
             See :meth:`add_missing_IdL_IdR`.
+        unit_cell_width : int
+            See :attr:`~tenpy.models.lattice.Lattice.mps_unit_cell_width`.
 
         Returns
         -------
@@ -1531,14 +1540,14 @@ class MPOGraph:
             equivalent for representation by :class:`~tenpy.networks.terms.TermList`.
         """
         max_range = max([t.max_range() for t in terms])
-        graph = cls(sites, bc, max_range)
+        graph = cls(sites, bc, max_range, unit_cell_width=unit_cell_width)
         for term in terms:
             term.add_to_graph(graph)
         graph.add_missing_IdL_IdR(insert_all_id)
         return graph
 
     @classmethod
-    def from_term_list(cls, term_list, sites, bc, insert_all_id=True):
+    def from_term_list(cls, term_list, sites, bc, insert_all_id=True, unit_cell_width=None):
         """Initialize from a list of operator terms and prefactors.
 
         Parameters
@@ -1552,6 +1561,8 @@ class MPOGraph:
         insert_all_id : bool
             Whether to insert identities such that `IdL` and `IdR` are defined on each bond.
             See :meth:`add_missing_IdL_IdR`.
+        unit_cell_width : int
+            See :attr:`~tenpy.models.lattice.Lattice.mps_unit_cell_width`.
 
         Returns
         -------
@@ -1563,17 +1574,14 @@ class MPOGraph:
         from_terms : equivalent for other representation of terms.
         """
         ot_ct = term_list.to_OnsiteTerms_CouplingTerms(sites)
-        return cls.from_terms(ot_ct, sites, bc, insert_all_id)
+        return cls.from_terms(ot_ct, sites, bc, insert_all_id, unit_cell_width=unit_cell_width)
 
     def test_sanity(self):
         """Sanity check, raises ValueErrors, if something is wrong."""
+        super().test_sanity()
         assert len(self.graph) == self.L
         assert len(self.states) == self.L + 1
-        if self.bc not in MPO._valid_bc:
-            raise ValueError("invalid MPO boundary conditions: " + repr(self.bc))
         for i, site in enumerate(self.sites):
-            if site.leg.chinfo != self.chinfo:
-                raise ValueError("invalid ChargeInfo for site {i:d}".format(i=i))
             stL, stR = self.states[i:i + 2]
             # check graph
             gr = self.graph[i]
@@ -1584,11 +1592,6 @@ class MPOGraph:
                     for opname, strength in gr[keyL][keyR]:
                         assert site.valid_opname(opname)
         # done
-
-    @property
-    def L(self):
-        """Number of physical sites; for infinite boundaries the length of the unit cell."""
-        return len(self.sites)
 
     def add(self, i, keyL, keyR, opname, strength, check_op=True, skip_existing=False):
         """Insert an edge into the graph.
@@ -1744,6 +1747,8 @@ class MPOGraph:
         Ws_qtotal : None | (list of) charges
             The `qtotal` for each of the Ws to be generated, default (``None``) means 0 charge.
             A single qtotal holds for each site.
+        unit_cell_width : int
+            See :attr:`~tenpy.models.lattice.Lattice.mps_unit_cell_width`.
 
         Returns
         -------
@@ -1757,7 +1762,8 @@ class MPOGraph:
         IdL = [s.get('IdL', None) for s in self._ordered_states]
         IdR = [s.get('IdR', None) for s in self._ordered_states]
         legs, Ws_qtotal = self._calc_legcharges(Ws_qtotal)
-        H = MPO.from_grids(self.sites, grids, self.bc, IdL, IdR, Ws_qtotal, legs, self.max_range)
+        H = MPO.from_grids(self.sites, grids, self.bc, IdL, IdR, Ws_qtotal, legs, self.max_range,
+                           mps_unit_cell_width=self.unit_cell_width)
         return H
 
     def __repr__(self):
@@ -1849,8 +1855,6 @@ class MPOGraph:
 
         charges = [[None] * len(st) for st in states]
         charges[0][states[0]['IdL']] = chinfo.make_valid(None)  # default charge = 0.
-        if infinite:
-            charges[-1] = charges[0]  # bond is identical
 
         def travel_q_LR(i, keyL):
             """Transport charges from left to right through the MPO graph.
@@ -1880,6 +1884,8 @@ class MPOGraph:
                         ch_r[r] = qL_Wq + op_qtotal  # solve chargerule for q_right
                         if infinite or i + 1 < L:
                             edge_stack.append(((i + 1) % L, keyR))
+                        if infinite and i + 1 == L:  # copy and shift to the left leg
+                            charges[0][r] = self.shift_charges(ch_r[r], -1, copy=True)
                 stack = edge_stack + stack
 
         travel_q_LR(0, 'IdL')
@@ -1936,8 +1942,6 @@ class MPOGraph:
             ch = chinfo.make_valid(ch)
             leg = npc.LegCharge.from_qflat(chinfo, ch, qconj=+1)
             legs.append(leg)
-        if infinite:
-            legs[-1] = legs[0]  # identical charges
         return legs, Ws_qtotal
 
 
@@ -2058,6 +2062,7 @@ class MPOEnvironment(BaseEnvironment):
 
     def test_sanity(self):
         """Sanity check, raises ValueErrors, if something is wrong."""
+        super().test_sanity()
         assert (self.bra.finite == self.ket.finite == self.H.finite == self.finite)
         # check that the physical legs are contractable
         for b_s, H_s, k_s in zip(self.bra.sites, self.H.sites, self.ket.sites):
@@ -2266,16 +2271,6 @@ class MPOEnvironment(BaseEnvironment):
                                    new_axes=[2, 1])
         return RHeff
 
-    def _to_valid_index(self, i):
-        """Make sure `i` is a valid index (depending on `finite`)."""
-        if not self.finite:
-            return i % self.L
-        if i < 0:
-            i += self.L
-        if i >= self.L or i < 0:
-            raise KeyError("i = {0:d} out of bounds for finite MPS".format(i))
-        return i
-
 
 class MPOTransferMatrix(NpcLinearOperator):
     """Transfermatrix of a Hamiltonian-like MPO sandwiched between canonicalized MPS.
@@ -2304,7 +2299,7 @@ class MPOTransferMatrix(NpcLinearOperator):
     Attributes
     ----------
     transpose : bool
-        Whether `self.matvec` acts on `RP` (``True``) or `LP` (``False``).
+        Whether `self.matvec` acts on `RP` (``False``) or `LP` (``True``).
     dtype :
         Common dtype of `H` and `psi`.
     IdL, IdR : int
@@ -2317,12 +2312,14 @@ class MPOTransferMatrix(NpcLinearOperator):
         Wrapper to allow calling scipy sparse functions.
     flat_guess :
         Initial guess suitable for `flat_linop` in non-tenpy form.
+    unit_cell_width : int
+        See :attr:`~tenpy.models.lattice.Lattice.mps_unit_cell_width`.
     """
 
     def __init__(self, H, psi, transpose=False, guess=None):
         if psi.finite or H.bc != 'infinite':
             raise ValueError("Only makes sense for infinite MPS")
-        self.L = lcm(H.L, psi.L)
+        self.L = L = lcm(H.L, psi.L)
         if np.linalg.norm(psi.norm_test()) > 1.e-10:
             raise ValueError("psi should be in canonical form!")
         if psi._p_label != ['p']:
@@ -2334,12 +2331,13 @@ class MPOTransferMatrix(NpcLinearOperator):
         self._W = []
         self.IdL = H.get_IdL(0)
         self.IdR = H.get_IdR(-1)  # on bond between MPS unit cells
+        self.unit_cell_width = H.unit_cell_width * (L // H.L)
         if self.IdL is None or self.IdR is None:
             raise ValueError("MPO needs to have structure with IdL/IdR")
-        wL = H.get_W(0).get_leg('wL')
-        wR = wL.conj()
         S2 = psi.get_SL(0)**2
         if not transpose:  # right to left
+            wR = H.get_W(self.L - 1).get_leg('wR')
+            wL = wR.conj()
             self.acts_on = ['vL', 'wL', 'vL*']  # vec: vL wL vL*
             for i in reversed(range(self.L)):
                 # optimize: transpose arrays to mostly avoid it in matvec
@@ -2369,6 +2367,8 @@ class MPOTransferMatrix(NpcLinearOperator):
                 guess = guess.transpose(['vL', 'wL', 'vL*'])  # copy!
                 self._project(guess)
         else:  # left to right
+            wL = H.get_W(0).get_leg('wL')
+            wR = wL.conj()
             self.acts_on = ['vR*', 'wR', 'vR']  # labels of the vec
             for i in range(self.L):
                 A = psi.get_B(i, 'A').astype(dtype, False)
@@ -2401,6 +2401,38 @@ class MPOTransferMatrix(NpcLinearOperator):
                                                                                    dtype=dtype)
         self._explicit_plus_hc = H.explicit_plus_hc
 
+    def shift_Array(self, arr, num_unit_cells, copy):
+        """Shift an Array by an integer multiple of unit cells.
+        
+        See the notes on :ref:`shift_symmetry`.
+
+        A unit cell has length :attr:`~tenpy.networks.mpo.MPOTransferMatrix.L` and a shift by one
+        unit cell is purely horizontal and shifts by :attr:`~tenpy.networks.mpo.MPOTransferMatrix.unit_cell_width`
+        lattice spacings.
+
+        Parameters
+        ----------
+        arr : :class:`~tenpy.linalg.np_conserved.Array`
+            The site to shift.
+        num_unit_cells : int
+            The number of unit cells.
+        copy : bool
+            If ``True``, we return a copy of the array, even if the shift is trivial.
+            If ``False``, we return the same instance, if the shift is trivial.
+
+        Returns
+        -------
+        :class:`~tenpy.linalg.np_conserved.Array`
+            The shifted array."""
+        if num_unit_cells == 0 or arr.chinfo.trivial_shift:
+            if copy:
+                arr = arr.copy()
+            return arr
+        return arr.apply_charge_mapping(
+            arr.chinfo.shift_charges_horizontal,
+            func_kwargs=dict(dx_0=num_unit_cells * self.unit_cell_width)
+        )
+
     def matvec(self, vec, project=True):
         """One matvec-operation.
 
@@ -2418,12 +2450,14 @@ class MPOTransferMatrix(NpcLinearOperator):
                 vec = npc.tensordot(B, vec, axes=['vR', 'vL'])  # vL p wL vL*
                 vec = npc.tensordot(vec, W, axes=[['p', 'wL'], ['p*', 'wR']])  # vL vL* p wL
                 vec = npc.tensordot(vec, Bc, axes=[['vL*', 'p'], ['vR*', 'p*']])  # vL wL vL*
+            vec = self.shift_Array(vec, num_unit_cells=1, copy=False)
         else:
             vec.itranspose(['vR*', 'wR', 'vR'])  # shouldn't do anything
             for Ac, W, A in zip(self._M_conj, self._W, self._M):
                 vec = npc.tensordot(vec, A, axes=['vR', 'vL'])  # vR* wR p vR
                 vec = npc.tensordot(W, vec, axes=[['wL', 'p*'], ['wR', 'p']])  # wR p vR* vR
                 vec = npc.tensordot(Ac, vec, axes=[['p*', 'vL*'], ['p', 'vR*']])  # vR* wR vR
+            vec = self.shift_Array(vec, num_unit_cells=-1, copy=False)
         if project:
             self._project(vec)
         return vec

@@ -182,6 +182,10 @@ class Site(Hdf5Exportable):
             If you sorted the previous leg with ``perm_qind, new_leg_charge = leg.sort()``,
             use ``old_leg.perm_flat_from_perm_qind(perm_qind)``.
             Ignored if ``None``.
+
+        Returns
+        -------
+        The modified ``self``.
         """
         if new_leg_charge is None:
             new_leg_charge = npc.LegCharge.from_trivial(self.dim)
@@ -199,6 +203,7 @@ class Site(Hdf5Exportable):
                 op = op[np.ix_(permute, permute)]
             # need_JW and hc_ops are still set
             self.add_op(opname, op, need_JW=False, hc=False, permute_dense=False)
+        return self
         # done
 
     def sort_charge(self, bunch=True):
@@ -1257,13 +1262,14 @@ class SpinSite(Site):
     ``Sp, Sm``      Spin flips :math:`S^{\pm} = S^{x} \pm i S^{y}`
     ==============  ================================================
 
-    ============== ====  ============================
-    `conserve`     qmod  *excluded* onsite operators
-    ============== ====  ============================
-    ``'Sz'``       [1]   ``Sx, Sy, Sigmax, Sigmay``
-    ``'parity'``   [2]   --
-    ``'None'``     []    --
-    ============== ====  ============================
+    ============== =======  ============================
+    `conserve`     qmod     *excluded* onsite operators
+    ============== =======  ============================
+    ``'dipole'``   [1, 1]   ``Sx, Sy, Sigmax, Sigmay``
+    ``'Sz'``       [1]      ``Sx, Sy, Sigmax, Sigmay``
+    ``'parity'``   [2]      --
+    ``'None'``     []       --
+    ============== =======  ============================
 
     Parameters
     ----------
@@ -1286,7 +1292,7 @@ class SpinSite(Site):
     def __init__(self, S=0.5, conserve='Sz', sort_charge=None):
         if not conserve:
             conserve = 'None'
-        if conserve not in ['Sz', 'parity', 'None']:
+        if conserve not in ['dipole', 'Sz', 'parity', 'None']:
             raise ValueError("invalid `conserve`: " + repr(conserve))
         self.S = S = float(S)
         d = 2 * S + 1
@@ -1313,7 +1319,11 @@ class SpinSite(Site):
         # at the Sz entries...
         # (The commutation relations are checked explicitly in `tests/test_site.py`)
         ops = dict(Sp=Sp, Sm=Sm, Sz=Sz)
-        if conserve == 'Sz':
+        if conserve == 'dipole':
+            chinfo = npc.DipolarChargeInfo([1, 1], ['2*Sz', 'dipole'], charge_idcs=[0], dipole_idcs=[1])
+            # define site at position 0 -> local dipole moments of all Sz sectors are 0
+            leg = npc.LegCharge.from_qflat(chinfo, [[int(_Sz), 0] for _Sz in 2 * Sz_diag])
+        elif conserve == 'Sz':
             chinfo = npc.ChargeInfo([1], ['2*Sz'])
             leg = npc.LegCharge.from_qflat(chinfo, np.array(2 * Sz_diag, dtype=np.int64))
         else:
@@ -1774,13 +1784,14 @@ class BosonSite(Site):
     ``P``           Parity :math:`Id - 2 (n \mod 2)`.
     ==============  ========================================
 
-    ============== ====  ==================================
-    `conserve`     qmod  *excluded* onsite operators
-    ============== ====  ==================================
-    ``'N'``        [1]   --
-    ``'parity'``   [2]   --
-    ``'None'``     []    --
-    ============== ====  ==================================
+    ============== =======  ==================================
+    `conserve`     qmod     *excluded* onsite operators
+    ============== =======  ==================================
+    ``'dipole'``   [1, 1]   --
+    ``'N'``        [1]      --
+    ``'parity'``   [2]      --
+    ``'None'``     []       --
+    ============== =======  ==================================
 
     Parameters
     ----------
@@ -1794,6 +1805,8 @@ class BosonSite(Site):
 
     Attributes
     ----------
+    Nmax : int
+        Cutoff defining the maximum number of bosons per site.
     conserve : str
         Defines what is conserved, see table above.
     filling : float
@@ -1803,7 +1816,7 @@ class BosonSite(Site):
     def __init__(self, Nmax=1, conserve='N', filling=0.):
         if not conserve:
             conserve = 'None'
-        if conserve not in ['N', 'parity', 'None']:
+        if conserve not in ['dipole', 'N', 'parity', 'None']:
             raise ValueError("invalid `conserve`: " + repr(conserve))
         dim = Nmax + 1
         states = [str(n) for n in range(0, dim)]
@@ -1821,7 +1834,12 @@ class BosonSite(Site):
         dNdN = np.diag((Ndiag - filling)**2)
         P = np.diag(1. - 2. * np.mod(Ndiag, 2))
         ops = dict(B=B, Bd=Bd, N=N, NN=NN, dN=dN, dNdN=dNdN, P=P)
-        if conserve == 'N':
+        if conserve == 'dipole':
+            chinfo = npc.DipolarChargeInfo([1, 1], ['N', 'dipole'], charge_idcs=[0], dipole_idcs=[1])
+            # define site at position 0 -> local dipole moments of all N sectors are 0
+            charges = [[n, 0] for n in range(dim)]
+            leg = npc.LegCharge.from_qflat(chinfo, charges)
+        elif conserve == 'N':
             chinfo = npc.ChargeInfo([1], ['N'])
             leg = npc.LegCharge.from_qflat(chinfo, range(dim))
         elif conserve == 'parity':

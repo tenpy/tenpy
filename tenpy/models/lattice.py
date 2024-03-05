@@ -25,6 +25,8 @@ import copy
 import logging
 logger = logging.getLogger(__name__)
 
+from ..linalg.charges import DipolarChargeInfo, LegCharge
+from ..linalg.np_conserved import Array
 from ..networks.site import Site
 from ..tools.misc import (to_iterable, to_array, to_iterable_of_len, inverse_permutation,
                           get_close, find_subclass)
@@ -121,6 +123,12 @@ class Lattice:
         Defined as ``N_sites / Ls[0]``, for an infinite system the number of sites per "ring".
     N_rings : int
         Alias for ``Ls[0]``, for an infinite system the number of "rings" in the unit cell.
+    mps_unit_cell_width : int
+        The width (length along the first dimension) of an MPS unit cell.
+        This is the same as :attr:`N_rings` in most cases, except that it is unchanged by grouping
+        sites. It always provides the horizontal distance traversed by an MPS unit cell,
+        e.g. for the purpose of :ref:`shift_symmetry` or
+        :meth:`~tenpy.networks.mps.MPS.correlation_length2`.
     unit_cell : list of :class:`~tenpy.networks.site.Site`
         the sites making up a unit cell of the lattice.
     bc : bool ndarray
@@ -179,7 +187,7 @@ class Lattice:
                  next_nearest_neighbors=None,
                  next_next_nearest_neighbors=None,
                  pairs=None):
-        self.unit_cell = list(unit_cell)
+        self._unit_cell = list(unit_cell)
         self._set_Ls(Ls)  # after setting unit_cell
         if positions is None:
             positions = np.zeros((len(self.unit_cell), self.dim))
@@ -205,6 +213,7 @@ class Lattice:
             if name in self.pairs:
                 raise ValueError("{0!s} specified twice!".format(name))
             self.pairs[name] = NN
+        self._mps_sites_cache = None
         self.test_sanity()  # check consistency
 
     def test_sanity(self):
@@ -229,6 +238,9 @@ class Lattice:
                 raise ValueError("All sites in the lattice must have the same ChargeInfo!"
                                  " Call tenpy.networks.site.set_common_charges() before "
                                  "giving them to the lattice!")
+            if isinstance(chinfo, DipolarChargeInfo):
+                for dim in chinfo._dipole_dims:
+                    assert 0 <= dim < self.dim
         if self.basis.shape[0] != self.dim:
             raise ValueError("Need one basis vector for each direction!")
         if self.unit_cell_positions.shape[0] != len(self.unit_cell):
@@ -250,6 +262,15 @@ class Lattice:
                 np.sum(self._order * self._strides, axis=1)[self._perm] == np.arange(self.N_sites))
         if self.position_disorder is not None:
             assert self.position_disorder.shape == self.shape + (self.basis.shape[-1], )
+
+    @property
+    def unit_cell(self):
+        return self._unit_cell
+
+    @unit_cell.setter
+    def unit_cell(self, value):
+        self._mps_sites_cache = None
+        self._unit_cell = value
 
     def copy(self):
         """Shallow copy of `self`."""
@@ -294,7 +315,6 @@ class Lattice:
         position_disorder = getattr(self, 'position_disorder', None)
         if position_disorder is not None:
             hdf5_saver.save(self.position_disorder, subpath + "position_disorder")
-
 
     @classmethod
     def from_hdf5(cls, hdf5_loader, h5gr, subpath):
@@ -375,6 +395,7 @@ class Lattice:
             mps2lat_vals_idx[tuple(order_[mps_fix_u, :-1].T)] = np.arange(self.N_cells)
             self._mps2lat_vals_idx_fix_u.append(mps2lat_vals_idx)
         self._mps_fix_u = tuple(self._mps_fix_u)
+        self._mps_sites_cache = None
 
     def ordering(self, order):
         """Provide possible orderings of the `N` lattice sites.
@@ -639,7 +660,9 @@ class Lattice:
 
     def site(self, i):
         """return :class:`~tenpy.networks.site.Site` instance corresponding to an MPS index `i`"""
-        return self.unit_cell[self.order[i, -1]]
+        if self._mps_sites_cache is None:
+            _ = self.mps_sites()  # populate cache
+        return self._mps_sites_cache[i]
 
     def mps_sites(self):
         """Return a list of sites for all MPS indices.
@@ -648,7 +671,18 @@ class Lattice:
 
         This should be used for `sites` of 1D tensor networks (MPS, MPO,...).
         """
-        return [self.unit_cell[u] for u in self.order[:, -1]]
+        if self._mps_sites_cache is None:
+            self._mps_sites_cache = []
+            for lat_indx in self.order[:, :]:
+                site = self.unit_cell[lat_indx[-1]]
+                dx = np.copy(lat_indx)
+                dx[-1] = 0
+                if isinstance(site, Site) and not site.leg.chinfo.trivial_shift:  # it can be None
+                    leg = site.leg.apply_charge_mapping(site.leg.chinfo.shift_charges,
+                                                        func_kwargs=dict(dx=dx))
+                    site = copy.copy(site).change_charge(leg)
+                self._mps_sites_cache.append(site)
+        return self._mps_sites_cache[:]
 
     def mps2lat_idx(self, i):
         """Translate MPS index `i` to lattice indices ``(x_0, ..., x_{dim-1}, u)``.
@@ -1509,6 +1543,7 @@ class Lattice:
         self.shape = self.Ls + (len(self.unit_cell), )
         self.N_sites = int(np.prod(self.shape))
         self.N_rings = self.Ls[0]
+        self.mps_unit_cell_width = self.Ls[0]
         self.N_sites_per_ring = int(self.N_sites // self.N_rings)
         strides = [1]
         for L in self.Ls:
@@ -1535,6 +1570,27 @@ class Lattice:
                "Use ``lattice.pairs['next_next_nearest_neighbors']`` instead.")
         warnings.warn(msg, FutureWarning)
         return self.pairs['next_next_nearest_neighbors']
+
+    def with_grouped_sites(self, grouped_sites):
+        """Return a lattice with sites given by `grouped_sites`.
+
+        .. todo :
+            We could actually keep the lattice structure if the order is (default) Cstyle.
+
+        Attributes
+        ----------
+        grouped_sites : list of :class:`~tenpy.networks.site.GroupedSite`
+            The sites grouped together.
+
+        Returns
+        -------
+        :class:`~tenpy.models.lattice.TrivialLattice`
+            A trivial lattice with the `grouped_sites` as sites and the same :attr:`bc_MPS` as `self`.
+        """
+        res = TrivialLattice(grouped_sites, bc_MPS=self.bc_MPS, bc='periodic')
+        res._mps_sites_cache = grouped_sites[:]
+        res.mps_unit_cell_width = self.mps_unit_cell_width
+        return res
 
 
 class TrivialLattice(Lattice):
@@ -2147,6 +2203,9 @@ class HelicalLattice(Lattice):
         if regular_lattice.N_cells % N_unit_cells != 0:
             raise ValueError("N_unit_cells incommensurate with regular_lattice.N_cells: "
                              "increase Lx of regular_lattice!")
+        if not regular_lattice.unit_cell[0].leg.chinfo.trivial_shift:
+            # maybe this can be done, but would need to think about it very carefully
+            raise ValueError('Helical lattice does not support symmetries with non-trivial shift.')
         self._N_cells = N_unit_cells
         Lattice.__init__(
             self,
@@ -2326,6 +2385,7 @@ class HelicalLattice(Lattice):
         self.N_sites = len(self.unit_cell) * self._N_cells
         self.N_sites_per_ring = None  # shouldn't be used
         self.N_rings = None  # shouldn't be used - pointless for this case.
+
 
 class Chain(SimpleLattice):
     """A chain of L equal sites.

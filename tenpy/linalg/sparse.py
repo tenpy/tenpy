@@ -679,7 +679,7 @@ class FlatLinearOperator(ScipyLinearOperator):
                 else:
                     eta, A = speigs(self, k=k, which=which, **kwargs)
                 break
-            except scipy.sparse.linalg.eigen.arpack.ArpackNoConvergence:
+            except scipy.sparse.linalg.ArpackNoConvergence:
                 if k == max_num_ev:
                     raise
             kwargs['tol'] = max(max_tol, kwargs.get('tol', 0))

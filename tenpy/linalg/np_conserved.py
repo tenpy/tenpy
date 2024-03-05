@@ -91,7 +91,7 @@ import itertools
 from numbers import Integral
 
 # import public API from charges
-from .charges import ChargeInfo, LegCharge, LegPipe
+from .charges import ChargeInfo, DipolarChargeInfo, LegCharge, LegPipe
 from . import charges  # for private functions
 from .svd_robust import svd as svd_flat
 
@@ -102,10 +102,10 @@ from ..tools.string import vert_join, is_non_string_iterable
 from ..tools.optimization import optimize, OptimizationFlag, use_cython
 
 __all__ = [
-    'QCUTOFF', 'ChargeInfo', 'LegCharge', 'LegPipe', 'Array', 'zeros', 'ones', 'eye_like', 'diag',
-    'concatenate', 'grid_concat', 'grid_outer', 'detect_grid_outer_legcharge', 'detect_qtotal',
-    'detect_legcharge', 'trace', 'outer', 'inner', 'tensordot', 'svd', 'pinv', 'norm', 'eigh',
-    'eig', 'eigvalsh', 'eigvals', 'speigs', 'expm', 'qr', 'orthogonal_columns',
+    'QCUTOFF', 'ChargeInfo', 'DipolarChargeInfo', 'LegCharge', 'LegPipe', 'Array', 'zeros', 'ones',
+    'eye_like', 'diag', 'concatenate', 'grid_concat', 'grid_outer', 'detect_grid_outer_legcharge',
+    'detect_qtotal', 'detect_legcharge', 'trace', 'outer', 'inner', 'tensordot', 'svd', 'pinv',
+    'norm', 'eigh', 'eig', 'eigvalsh', 'eigvals', 'speigs', 'expm', 'qr', 'orthogonal_columns',
     'to_iterable_arrays'
 ]
 
@@ -1414,6 +1414,41 @@ class Array:
         self._data = [self._data[p] for p in perm]
         self._qdata_sorted = True
 
+    def apply_charge_mapping(self, map_func, func_args=(), func_kwargs={}):
+        """Apply a mapping to the charges of all legs and to qtotal.
+
+        The resulting Array is a shallow copy with the same block structure and the same numerical
+        entries, but the charges, i.e. the labels of the different blocks, are changed.
+        
+        The mapping needs to be compatible with charge rules, i.e. applying the mapping must
+        commute with charge fusion::
+
+                map_func((q1 + q2) % qmod) == (map_func(q1) + map_func(q2)) % qmod
+
+        and duality::
+
+            map_func((-q) % qmod) == (-map_func(q)) % qmod
+
+        Parameters
+        ----------
+        map_func : function
+            The mapping to be applied to the charges.
+            Signature ``mapped_charges = map_func(charges, *args, **kwargs)``, where ``charges``
+            are 2D ndarrays. Must not mutate its input.
+        func_args : tuple, optional
+            Positional arguments for `map_func`.
+        func_kwargs : dict, optional
+            Keyword arguments for `map_func`.
+
+        Returns
+        -------
+        Shallow copy with mapped charges.
+        """
+        res = self.copy(deep=False)
+        res.legs = [leg.apply_charge_mapping(map_func, func_args, func_kwargs) for leg in self.legs]
+        res.qtotal = map_func(self.qtotal, *func_args, **func_kwargs)
+        return res
+
     # reshaping ===============================================================
 
     def make_pipe(self, axes, **kwargs):
@@ -1904,7 +1939,7 @@ class Array:
                     new_data_ind = qdata.setdefault(tuple(new_qindices), len(data))
                     if new_data_ind == len(data):
                         # insert new block
-                        data.append(np.zeros(res._get_block_shape(new_qindices)))
+                        data.append(np.zeros(res._get_block_shape(new_qindices), dtype=old_block.dtype))
                     new_block = data[new_data_ind]
                     # copy data
                     new_block_idx[axis] = within_new
