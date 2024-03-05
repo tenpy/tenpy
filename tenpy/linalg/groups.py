@@ -277,7 +277,7 @@ class Symmetry(metaclass=ABCMeta):
         The C symbol relates the following two maps::
 
             m1 := [a ⊗ c ⊗ b] --(1 ⊗ τ)--> [a ⊗ b ⊗ c] --(X_μ ⊗ 1)--> [e ⊗ c] --X_ν--> d
-            m2 := [a ⊗ c ⊗ b] --(X_κ ⊗ 1)--> [f ⊗ c] --X_λ--> d
+            m2 := [a ⊗ c ⊗ b] --(X_κ ⊗ 1)--> [f ⊗ b] --X_λ--> d
 
         such that :math:`m_1 = \sum_{f\kappa\lambda} C^{e\mu\nu}_{f\kappa\lambda} m_2`.
 
@@ -297,7 +297,7 @@ class Symmetry(metaclass=ABCMeta):
         # [nu, (al)] & [mu, (al), bet, lam] -> [nu, mu, bet, lam]
         res = np.tensordot(R1, F, (1, 1))
         # [nu, mu, (bet), lam] & [kap, (bet)] -> [nu, mu, lam, kap]
-        res = np.tensordot(F, np.conj(R2), (2, 1))
+        res = np.tensordot(res, np.conj(R2), (2, 1))
         # [nu, mu, lam, kap] -> [mu, nu, kap, lam]
         return np.transpose(res, [1, 0, 3, 2])
 
@@ -854,6 +854,12 @@ class FibonacciGrading(Symmetry):
         self.handedness = handedness
         if handedness == 'right':
             self._r = self._r.conj()
+        self._c = [super()._c_symbol([0], [1], [1], [0], [1], [1]), 0, 0,  # nontrivial C-symbols
+                   super()._c_symbol([0], [1], [1], [1], [1], [1]), 0, 0,
+                   super()._c_symbol([1], [1], [1], [0], [1], [1]),
+                   super()._c_symbol([1], [1], [1], [1], [0], [0]),
+                   super()._c_symbol([1], [1], [1], [1], [1], [0]),
+                   super()._c_symbol([1], [1], [1], [1], [1], [1])]
         Symmetry.__init__(self,
                           fusion_style=FusionStyle.multiple_unique,
                           braiding_style=BraidingStyle.anyonic,
@@ -904,6 +910,11 @@ class FibonacciGrading(Symmetry):
         if np.all(np.concatenate([a, b])):
             return self._r[c[0], :, :]
         return np.ones((1, 1))
+
+    def _c_symbol(self, a: Sector, b: Sector, c: Sector, d: Sector, e: Sector, f: Sector) -> np.ndarray:
+        if np.all(np.concatenate([b, c])):
+            return self._c[6 * a[0] + 3 * d[0] + e[0] + f[0] - 2]
+        return np.ones((1, 1, 1, 1))
 
     def all_sectors(self) -> SectorArray:
         return np.arange(2, dtype=int)[:, None]
