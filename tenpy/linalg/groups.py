@@ -787,7 +787,7 @@ class FibonacciGrading(Symmetry):
     Allowed sectors are 1D arrays with a single entry of either `0` ("vacuum") or `1` ("tau anyon").
     `[0]`, `[1]`
 
-    `handedness` : ``'left' | 'right'``
+    `handedness`: ``'left' | 'right'``
         Specifies the chirality / handedness of the anyons. Changing the handedness corresponds to
         complex conjugating the R-symbols, which also affects, e.g., the braid-symbols.
         Considering anyons of different handedness is necessary for doubled models like,
@@ -857,6 +857,96 @@ class FibonacciGrading(Symmetry):
     def _r_symbol(self, a: Sector, b: Sector, c: Sector) -> np.ndarray:
         if np.all(np.concatenate([a, b])):
             return self._r[c[0], :, :]
+        return np.ones((1, 1))
+
+    def all_sectors(self) -> SectorArray:
+        return np.arange(2, dtype=int)[:, None]
+
+
+class IsingGrading(Symmetry):
+    """Grading of Ising anyons
+
+    Allowed sectors are 1D arrays with a single entry of either `0` ("vacuum"), `1` ("Ising anyon")
+    or `2` ("fermion").
+    `[0]`, `[1]`, `[2]`
+
+    `nu`: odd `int`
+        In total, there are 8 distinct Ising models, i.e., `nu` and `nu + 16` describe the same
+        anyon model. Different `nu` correspond to different topological twists of the Ising anyons.
+        The Ising anyon model of opposite handedness is obtained for `-nu`.
+    """
+
+    _fusion_map = {  # 1: vacuum, σ: Ising anyon, ψ: fermion
+        0: np.array([[0]]),  # 1 x 1 = 1
+        1: np.array([[1]]),  # 1 x σ = σ = σ x 1
+        2: np.array([[0], [2]]),  # σ x σ = 1 + ψ
+        4: np.array([[2]]),  # 1 x ψ = ψ = 1 x ψ
+        5: np.array([[1]]),  # σ x ψ = σ = σ x ψ
+        8: np.array([[0]])  # ψ x ψ = 1
+    }
+
+    def __init__(self, nu: int = 1):
+        assert nu % 2 == 1
+        self.nu = nu % 16
+        self.frobenius = [1, int((-1)**((self.nu**2-1)/8)), 1]
+        self._f = (np.expand_dims([1, 0, 1, 0, -1], axis=(1,2,3,4))
+                            * self.frobenius[1] / np.sqrt(2))  # nontrivial F-symbols
+        self._r = np.expand_dims([(-1j)**self.nu, -1, np.exp(3j*self.nu*np.pi/8) * self.frobenius[1],
+                    np.exp(-1j*self.nu*np.pi/8) * self.frobenius[1], 0], axis=(1,2))  # nontrivial R-symbols
+        Symmetry.__init__(self,
+                          fusion_style=FusionStyle.multiple_unique,
+                          braiding_style=BraidingStyle.anyonic,
+                          trivial_sector=np.array([0], dtype=int),
+                          group_name='IsingGrading',
+                          num_sectors=3, descriptive_name=None)
+
+    def is_valid_sector(self, a: Sector) -> bool:
+        return getattr(a, 'shape', ()) == (1,) and (a[0] in [0, 1, 2])
+
+    def fusion_outcomes(self, a: Sector, b: Sector) -> SectorArray:
+        return self._fusion_map[a[0]**2 + b[0]**2]
+
+    def sector_dim(self, a: Sector) -> int:
+        return 1
+
+    def sector_str(self, a: Sector) -> str:
+        if a[0] == 1:
+            return 'sigma'
+        return 'vac' if a[0] == 0 else 'psi'
+
+    def __repr__(self):
+        return 'IsingGrading()'
+
+    def is_same_symmetry(self, other) -> bool:
+        return isinstance(other, IsingGrading)
+
+    def dual_sector(self, a: Sector) -> Sector:
+        return a
+
+    def dual_sectors(self, sectors: SectorArray) -> SectorArray:
+        return sectors
+
+    def _n_symbol(self, a: Sector, b: Sector, c: Sector) -> int:
+        return 1
+
+    def _f_symbol(self, a: Sector, b: Sector, c: Sector, d: Sector, e: Sector, f: Sector
+                  ) -> np.ndarray:
+        if not np.any(np.concatenate([a, b, c, d]) - [1, 1, 1, 1]):
+            return self._f[e[0] + f[0]]
+        elif (not np.any(np.concatenate([a, b, c, d]) - [2, 1, 2, 1])
+                or not np.any(np.concatenate([a, b, c, d]) - [1, 2, 1, 2])):
+            return -1 * np.ones((1, 1, 1, 1))
+        return np.ones((1, 1, 1, 1))
+
+    def frobenius_schur(self, a: Sector) -> int:
+        return self.frobenius[a[0]]
+
+    def qdim(self, a: Sector) -> float:
+        return np.sqrt(2) if a[0] == 1 else 1
+
+    def _r_symbol(self, a: Sector, b: Sector, c: Sector) -> np.ndarray:
+        if np.all(np.concatenate([a, b])):
+            return self._r[(a[0] + b[0]) * (c[0] - 1), :, :]
         return np.ones((1, 1))
 
     def all_sectors(self) -> SectorArray:
