@@ -86,7 +86,7 @@ class Symmetry(metaclass=ABCMeta):
 
     @abstractmethod
     def sector_dim(self, a: Sector) -> int:
-        """The dimension of a sector as a subspace of the hilbert space"""
+        """The dimension of a sector as a subspace of the hilbert space."""
         ...
 
     def batch_sector_dim(self, a: SectorArray) -> npt.NDArray[np.int_]:
@@ -145,7 +145,12 @@ class Symmetry(metaclass=ABCMeta):
 
     @abstractmethod
     def dual_sector(self, a: Sector) -> Sector:
-        """The sector dual to a, such that N^{a,dual(a)}_u = 1."""
+        r"""The sector dual to a, such that N^{a,dual(a)}_u = 1.
+
+        Note that the dual space :math:`a^\star` to a sector :math:`a` may not itself be one of
+        the sectors, but it must be isomorphic to one of the sectors. This method returns that
+        representative :math:`\bar{a}` of the equivalence class.
+        """
         ...
 
     def dual_sectors(self, sectors: SectorArray) -> SectorArray:
@@ -164,15 +169,24 @@ class Symmetry(metaclass=ABCMeta):
     @abstractmethod
     def _n_symbol(self, a: Sector, b: Sector, c: Sector) -> int:
         """Optimized version of self.n_symbol that assumes that c is a valid fusion outcome.
-        If it is not, the results (which should be 0), may be nonsensical.
-        We do this for optimization purposes
+        If it is not, the results may be nonsensical. We do this for optimization purposes
         """
         ...
 
     @abstractmethod
     def _f_symbol(self, a: Sector, b: Sector, c: Sector, d: Sector, e: Sector, f: Sector
                   ) -> np.ndarray:
-        r"""The F symbol related to re-coupling of fusion.
+        r"""Coefficients :math:`F^{abc}_d` related to recoupling of fusion.
+
+        The F symbol relates the following two maps::
+
+            m1 := [a ⊗ b ⊗ c] --(1 ⊗ X_μ)--> [a ⊗ e] --(X_ν)--> d
+            m2 := [a ⊗ b ⊗ c] --(X_κ ⊗ 1)--> [f ⊗ c] --(X_λ)--> d
+
+        Such that :math:`m_1 = \sum_{f\kappa\lambda} [F^{abc}_d]^{e\mu\nu}_{f\kappa\lambda} m_2`.
+
+        The F symbol is unitary as a matrix from indices :math:`(f\kappa\lambda)`
+        to :math:`(e\mu\nu)`.
 
         Parameters
         ----------
@@ -203,7 +217,14 @@ class Symmetry(metaclass=ABCMeta):
         return 1. / self.sqrt_qdim(a)
 
     def _b_symbol(self, a: Sector, b: Sector, c: Sector) -> np.ndarray:
-        r"""Coefficients related to bending the right leg on a fusion tensor.
+        r"""Coefficients :math:`B^{ab}_c` related to bending the right leg on a fusion tensor.
+
+        The B symbol relates the following two maps::
+
+            m1 := a --(1 ⊗ η_b)--> [a ⊗ b ⊗ b^*] --(X_μ ⊗ 1)--> [c ⊗ b^*]
+            m2 := a --(Y_ν)--> [c ⊗ \bar{b}] --(1 ⊗ Z_b^†)--> [c ⊗ b^*]
+
+        such that :math:`m_1 = \sum_{\nu} [B^{ab}_c]^\mu_\nu m_2`.
 
         The related A-symbol for bending left legs is not needed, since we always
         work with fusion trees in form
@@ -225,7 +246,18 @@ class Symmetry(metaclass=ABCMeta):
 
     @abstractmethod
     def _r_symbol(self, a: Sector, b: Sector, c: Sector) -> np.ndarray:
-        r"""Coefficients related to braiding the legs on a fusion tensor
+        r"""Coefficients :math:`R^{ab}_c` related to braiding on a single fusion tensor.
+
+        The R symbol relates the following two maps::
+
+            m1 := [b ⊗ a] --τ--> [a ⊗ b] --X_μ--> c
+            m2 := [b ⊗ a] --X_ν--> c
+
+        such that :math:`m_1 = \sum_{\nu} [R^{ab}_c]^\mu_\nu m_2`.
+
+        .. todo ::
+            Nico said (and Jakob agrees) that it should be possible to gauge the fusion tensors
+            such that the R symbols are diagonal in the multiplicity index.
 
         Parameters
         ----------
@@ -240,7 +272,14 @@ class Symmetry(metaclass=ABCMeta):
         ...
 
     def _c_symbol(self, a: Sector, b: Sector, c: Sector, d: Sector, e: Sector, f: Sector) -> np.ndarray:
-        r"""Coefficients related to braiding the legs on a pair of fusion tensors
+        r"""Coefficients :math:`C^{abc}_d` related to braiding on a pair of fusion tensors.
+
+        The C symbol relates the following two maps::
+
+            m1 := [a ⊗ c ⊗ b] --(1 ⊗ τ)--> [a ⊗ b ⊗ c] --(X_μ ⊗ 1)--> [e ⊗ c] --X_ν--> d
+            m2 := [a ⊗ c ⊗ b] --(X_κ ⊗ 1)--> [f ⊗ c] --X_λ--> d
+
+        such that :math:`m_1 = \sum_{f\kappa\lambda} C^{e\mu\nu}_{f\kappa\lambda} m_2`.
 
         Parameters
         ----------
