@@ -22,7 +22,7 @@ Sector = npt.NDArray[np.int_] # 1D array, axis [q], containing the an integer re
 SectorArray = npt.NDArray[np.int_]  # 2D array, axes [s, q], where s goes over different sectors
 
 
-class FusionStyle(Enum):
+class FusionStyle(Enum): 
     single = 0  # only one resulting sector, a ⊗ b = c, e.g. abelian symmetry groups
     multiple_unique = 10  # every sector appears at most once in pairwise fusion, N^{ab}_c \in {0,1}
     general = 20  # no assumptions N^{ab}_c = 0, 1, 2, ...
@@ -584,6 +584,9 @@ class AbelianGroup(GroupSymmetry, metaclass=_ABCFactorSymmetryMeta):
         False
     """
 
+    _one_2D = np.ones((1, 1), dtype=int)
+    _one_4D = np.ones((1, 1, 1, 1), dtype=int)
+
     def __init__(self, trivial_sector: Sector, group_name: str, num_sectors: int | float,
                  descriptive_name: str | None = None):
         GroupSymmetry.__init__(self, fusion_style=FusionStyle.single, trivial_sector=trivial_sector,
@@ -598,6 +601,30 @@ class AbelianGroup(GroupSymmetry, metaclass=_ABCFactorSymmetryMeta):
 
     def _n_symbol(self, a: Sector, b: Sector, c: Sector) -> int:
         return 1
+
+    def _f_symbol(self, a: Sector, b: Sector, c: Sector, d: Sector, e: Sector, f: Sector) -> np.ndarray:
+        return self._one_4D
+
+    def frobenius_schur(self, a: Sector) -> int:
+        return 1
+
+    def qdim(self, a: Sector) -> float:
+        return 1
+
+    def sqrt_qdim(self, a: Sector) -> float:
+        return 1
+
+    def inv_sqrt_qdim(self, a: Sector) -> float:
+        return 1
+
+    def _b_symbol(self, a: Sector, b: Sector, c: Sector) -> np.ndarray:
+        return self._one_2D
+
+    def _r_symbol(self, a: Sector, b: Sector, c: Sector) -> np.ndarray:
+        return self._one_2D
+
+    def _c_symbol(self, a: Sector, b: Sector, c: Sector, d: Sector, e: Sector, f: Sector) -> np.ndarray:
+        return self._one_4D
 
 
 class NoSymmetry(AbelianGroup):
