@@ -950,6 +950,14 @@ class IsingGrading(Symmetry):
                             * self.frobenius[1] / np.sqrt(2))  # nontrivial F-symbols
         self._r = np.expand_dims([(-1j)**self.nu, -1, np.exp(3j*self.nu*np.pi/8) * self.frobenius[1],
                     np.exp(-1j*self.nu*np.pi/8) * self.frobenius[1], 0], axis=(1,2))  # nontrivial R-symbols
+        self._c = [(-1j)**self.nu * np.ones((1, 1, 1, 1)), -1 * (-1j)**self.nu * np.ones((1, 1, 1, 1)),
+                   super()._c_symbol([0], [1], [1], [0], [1], [1]),  # nontrivial C-symbols
+                   super()._c_symbol([0], [1], [1], [2], [1], [1]),
+                   super()._c_symbol([1], [1], [1], [1], [0], [0]),
+                   super()._c_symbol([1], [1], [1], [1], [0], [2]),
+                   super()._c_symbol([1], [1], [1], [1], [2], [2]), 0,
+                   super()._c_symbol([2], [1], [1], [0], [1], [1]),
+                   super()._c_symbol([2], [1], [1], [2], [1], [1]), -1 * np.ones((1, 1, 1, 1))]
         Symmetry.__init__(self,
                           fusion_style=FusionStyle.multiple_unique,
                           braiding_style=BraidingStyle.anyonic,
@@ -1005,6 +1013,13 @@ class IsingGrading(Symmetry):
         if np.all(np.concatenate([a, b])):
             return self._r[(a[0] + b[0]) * (c[0] - 1), :, :]
         return np.ones((1, 1))
+
+    def _c_symbol(self, a: Sector, b: Sector, c: Sector, d: Sector, e: Sector, f: Sector) -> np.ndarray:
+        if np.all(np.concatenate([b, c])):
+            factor = -1 * (b[0] - c[0] - 1) * (b[0] - c[0] + 1)  # = 0 if σ and ψ or σ and ψ, 1 else
+            factor *= ( 1 - a[0]//2 - d[0]//2 + 9 * (b[0] - 1) + (2 - b[0]) * ((e[0] + f[0])//2 + d[0]//2 + 3 * a[0]) )
+            return self._c[factor + a[0]//2 + d[0]//2]
+        return np.ones((1, 1, 1, 1))
 
     def all_sectors(self) -> SectorArray:
         return np.arange(2, dtype=int)[:, None]
