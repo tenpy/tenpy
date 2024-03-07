@@ -3,6 +3,7 @@ functions and spectral functions."""
 # Copyright (C) TeNPy Developers, GNU GPLv3
 
 import numpy as np
+import warnings
 
 from . import simulation
 from .simulation import *
@@ -160,8 +161,6 @@ class TimeDependentCorrelation(RealTimeEvolution):
             # didn't get psi_ground_state in resume_data, but might still have it in the results
             if 'psi_ground_state' not in self.results:
                 raise ValueError("psi_ground_state not saved in checkpoint results: can't resume!")
-            if 'gs_energy' not in self.results:
-                self.logger.warning("Ground state energy not saved in checkpoint results")
         super().resume_run()
 
     def get_resume_data(self):
@@ -178,7 +177,7 @@ class TimeDependentCorrelation(RealTimeEvolution):
     def init_state(self):
         # make sure state is not reinitialized if psi and psi_ground_state are given
         if not hasattr(self, 'psi_ground_state'):
-            self.logger.warning(
+            warnings.warn(
                 f"No ground state data is supplied, calling the initial state builder on "
                 f"{self.__class__.__name__} class - you probably want to supply a ground state!")
             super().init_state()  # this sets self.psi from init_state_builder (should be avoided)
@@ -212,7 +211,7 @@ class TimeDependentCorrelation(RealTimeEvolution):
                 "Only hdf5 and dictionaries are supported as ground state input")
         sim_class = gs_data['version_info']['simulation_class']
         if sim_class != 'GroundStateSearch':
-            self.logger.warning("The Simulation is not loaded from a GroundStateSearch.")
+            warnings.warn("The Simulation is not loaded from a GroundStateSearch.")
 
         data_options = gs_data['simulation_parameters']
         for key in data_options:
@@ -221,7 +220,7 @@ class TimeDependentCorrelation(RealTimeEvolution):
             if key not in self.options:
                 self.options[key] = data_options[key]
             elif self.options[key] != data_options[key]:
-                self.logger.warning(
+                warnings.warn(
                     "Different model parameters in Simulation and data from file. Ignoring parameters "
                     "in data from file")
         if 'energy' in gs_data:

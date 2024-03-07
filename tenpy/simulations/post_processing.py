@@ -13,6 +13,7 @@ the simulation class in a post-processing step. They follow the syntax
 
 
 import os
+import warnings
 from pathlib import Path
 import numpy as np
 import logging
@@ -173,7 +174,7 @@ class DataLoader:
                 value = self.convert_list_to_ndarray(value)
             return value
         except KeyError:
-            self.logger.warning(f"{key} does not exist!")
+            warnings.warn(f"{key} does not exist!")
 
     def get_data_m(self, key, prefix='measurements/', convert_to_numpy=True):
         return self._load(key, prefix=prefix, convert_to_numpy=convert_to_numpy)
