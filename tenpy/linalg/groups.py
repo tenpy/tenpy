@@ -926,6 +926,86 @@ class FermionParity(Symmetry):
         return self._one_4D
 
 
+class ZNAnyonModel(Symmetry):
+    """Abelian anyon model with fusion rules corresponding to the Z_N group;
+    also written as :math:`Z_N^{(n)}`.
+
+    Allowed sectors are 1D arrays with a single integer entry between `0` and `N-1`.
+    `[0]`, `[1]`, ..., `[N-1]`
+
+    While `N` determines number of anyons, `n` determines the R-symbols, i.e., the exchange
+    statistics. Since `n` and `n+N` describe the same statistics, :math:`n \in Z_N`.
+    Reduces to the Z_N abelian group symmetry for `n = 0`. Use `ZNSymmetry` for this case!
+
+    The anyon model corresponding to opposite handedness is obtained for `N` and `N-n` (or `-n`).
+    """
+
+    _one_2D = np.ones((1, 1), dtype=int)
+    _one_4D = np.ones((1, 1, 1, 1), dtype=int)
+
+    def __init__(self, N: int, n: int):
+        assert type(N) == int
+        assert type(n) == int
+        self.N = N
+        self.n = n % N
+        self._phase = np.exp(2j * np.pi * self.n / self.N)
+        Symmetry.__init__(self,
+                          fusion_style=FusionStyle.single,
+                          braiding_style=BraidingStyle.anyonic,
+                          trivial_sector=np.array([0], dtype=int),
+                          group_name='ZNAnyonModel',
+                          num_sectors=N, descriptive_name=None)
+
+    def is_valid_sector(self, a: Sector) -> bool:
+        return getattr(a, 'shape', ()) == (1,) and (0 <= a[0] < self.N)
+
+    def fusion_outcomes(self, a: Sector, b: Sector) -> SectorArray:
+        return self.fusion_outcomes_broadcast(a[np.newaxis, :], b[np.newaxis, :])
+
+    def fusion_outcomes_broadcast(self, a: SectorArray, b: SectorArray) -> SectorArray:
+        return (a + b) % self.N
+
+    def multiple_fusion_broadcast(self, *sectors: SectorArray) -> SectorArray:
+        return sum(sectors) % self.N
+
+    def sector_dim(self, a: Sector) -> int:
+        return 1
+
+    def __repr__(self):
+        return f'ZNAnyonModel(N={self.N}, n={self.n})'
+
+    def is_same_symmetry(self, other) -> bool:
+        return isinstance(other, ZNAnyonModel) and other.N == self.N and other.n == self.n
+
+    def dual_sector(self, a: Sector) -> Sector:
+        return (-a) % self.N
+
+    def dual_sectors(self, sectors: SectorArray) -> SectorArray:
+        return (-sectors) % self.N
+
+    def _n_symbol(self, a: Sector, b: Sector, c: Sector) -> int:
+        return 1
+
+    def _f_symbol(self, a: Sector, b: Sector, c: Sector, d: Sector, e: Sector, f: Sector
+                  ) -> np.ndarray:
+        return self._one_4D
+
+    def frobenius_schur(self, a: Sector) -> int:
+        return 1
+
+    def qdim(self, a: Sector) -> float:
+        return 1
+
+    def _r_symbol(self, a: Sector, b: Sector, c: Sector) -> np.ndarray:
+        return self._phase**(a[0] * b[0]) * self._one_2D
+
+    def _c_symbol(self, a: Sector, b: Sector, c: Sector, d: Sector, e: Sector, f: Sector) -> np.ndarray:
+        return self._phase**(b[0] * c[0]) * self._one_4D
+
+    def all_sectors(self) -> SectorArray:
+        return np.arange(self.N, dtype=int)[:, None]
+
+
 class FibonacciGrading(Symmetry):
     """Grading of Fibonacci anyons
 
