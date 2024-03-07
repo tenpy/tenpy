@@ -12,7 +12,8 @@ from ..tools.misc import to_iterable
 from ..tools import hdf5_io
 
 __all__ = simulation.__all__ + [
-    'RealTimeEvolution', 'SpectralSimulation', 'TimeDependentCorrelation'
+    'RealTimeEvolution', 'SpectralSimulation', 'TimeDependentCorrelation',
+    'TimeDependentCorrelationEvolveBraKet', 'SpectralSimulationEvolveBraKet'
 ]
 
 
