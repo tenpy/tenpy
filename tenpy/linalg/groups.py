@@ -950,6 +950,8 @@ class FibonacciGrading(Symmetry):
     _phi = .5 * (1 + np.sqrt(5))  # the golden ratio
     _f = np.expand_dims([_phi**-1, _phi**-0.5, -_phi**-1], axis=(1,2,3,4))  # nontrivial F-symbols
     _r = np.expand_dims([np.exp(-4j*np.pi/5), np.exp(3j*np.pi/5)], axis=(1,2))  # nontrivial R-symbols
+    _one_2D = np.ones((1, 1), dtype=int)
+    _one_4D = np.ones((1, 1, 1, 1), dtype=int)
 
     def __init__(self, handedness = 'left'):
         assert handedness in ['left', 'right']
@@ -1000,7 +1002,7 @@ class FibonacciGrading(Symmetry):
                   ) -> np.ndarray:
         if np.all(np.concatenate([a, b, c, d])):
             return self._f[e[0] + f[0]]
-        return np.ones((1, 1, 1, 1))
+        return self._one_4D
 
     def frobenius_schur(self, a: Sector) -> int:
         return 1
@@ -1011,12 +1013,12 @@ class FibonacciGrading(Symmetry):
     def _r_symbol(self, a: Sector, b: Sector, c: Sector) -> np.ndarray:
         if np.all(np.concatenate([a, b])):
             return self._r[c[0], :, :]
-        return np.ones((1, 1))
+        return self._one_2D
 
     def _c_symbol(self, a: Sector, b: Sector, c: Sector, d: Sector, e: Sector, f: Sector) -> np.ndarray:
         if np.all(np.concatenate([b, c])):
             return self._c[6 * a[0] + 3 * d[0] + e[0] + f[0] - 2]
-        return np.ones((1, 1, 1, 1))
+        return self._one_4D
 
     def all_sectors(self) -> SectorArray:
         return np.arange(2, dtype=int)[:, None]
@@ -1046,6 +1048,8 @@ class IsingGrading(Symmetry):
         5: np.array([[1]]),  # σ x ψ = σ = σ x ψ
         8: np.array([[0]])  # ψ x ψ = 1
     }
+    _one_2D = np.ones((1, 1), dtype=int)
+    _one_4D = np.ones((1, 1, 1, 1), dtype=int)
 
     def __init__(self, nu: int = 1):
         assert nu % 2 == 1
@@ -1055,14 +1059,14 @@ class IsingGrading(Symmetry):
                             * self.frobenius[1] / np.sqrt(2))  # nontrivial F-symbols
         self._r = np.expand_dims([(-1j)**self.nu, -1, np.exp(3j*self.nu*np.pi/8) * self.frobenius[1],
                     np.exp(-1j*self.nu*np.pi/8) * self.frobenius[1], 0], axis=(1,2))  # nontrivial R-symbols
-        self._c = [(-1j)**self.nu * np.ones((1, 1, 1, 1)), -1 * (-1j)**self.nu * np.ones((1, 1, 1, 1)),
+        self._c = [(-1j)**self.nu * self._one_4D, -1 * (-1j)**self.nu * self._one_4D,
                    super()._c_symbol([0], [1], [1], [0], [1], [1]),  # nontrivial C-symbols
                    super()._c_symbol([0], [1], [1], [2], [1], [1]),
                    super()._c_symbol([1], [1], [1], [1], [0], [0]),
                    super()._c_symbol([1], [1], [1], [1], [0], [2]),
                    super()._c_symbol([1], [1], [1], [1], [2], [2]), 0,
                    super()._c_symbol([2], [1], [1], [0], [1], [1]),
-                   super()._c_symbol([2], [1], [1], [2], [1], [1]), -1 * np.ones((1, 1, 1, 1))]
+                   super()._c_symbol([2], [1], [1], [2], [1], [1]), -1 * self._one_4D]
         Symmetry.__init__(self,
                           fusion_style=FusionStyle.multiple_unique,
                           braiding_style=BraidingStyle.anyonic,
@@ -1105,8 +1109,8 @@ class IsingGrading(Symmetry):
             return self._f[e[0] + f[0]]
         elif (not np.any(np.concatenate([a, b, c, d]) - [2, 1, 2, 1])
                 or not np.any(np.concatenate([a, b, c, d]) - [1, 2, 1, 2])):
-            return -1 * np.ones((1, 1, 1, 1))
-        return np.ones((1, 1, 1, 1))
+            return -1 * self._one_4D
+        return self._one_4D
 
     def frobenius_schur(self, a: Sector) -> int:
         return self.frobenius[a[0]]
@@ -1117,17 +1121,170 @@ class IsingGrading(Symmetry):
     def _r_symbol(self, a: Sector, b: Sector, c: Sector) -> np.ndarray:
         if np.all(np.concatenate([a, b])):
             return self._r[(a[0] + b[0]) * (c[0] - 1), :, :]
-        return np.ones((1, 1))
+        return self._one_2D
 
     def _c_symbol(self, a: Sector, b: Sector, c: Sector, d: Sector, e: Sector, f: Sector) -> np.ndarray:
         if np.all(np.concatenate([b, c])):
-            factor = -1 * (b[0] - c[0] - 1) * (b[0] - c[0] + 1)  # = 0 if σ and ψ or σ and ψ, 1 else
+            factor = -1 * (b[0] - c[0] - 1) * (b[0] - c[0] + 1)  # = 0 if σ and ψ or σ and ψ, 1 otherwise
             factor *= ( 1 - a[0]//2 - d[0]//2 + 9 * (b[0] - 1) + (2 - b[0]) * ((e[0] + f[0])//2 + d[0]//2 + 3 * a[0]) )
             return self._c[factor + a[0]//2 + d[0]//2]
-        return np.ones((1, 1, 1, 1))
+        return self._one_4D
 
     def all_sectors(self) -> SectorArray:
         return np.arange(3, dtype=int)[:, None]
+
+
+class SU2_kGrading(Symmetry):
+    """:math:`SU(2)_k` anyons.
+
+    .. todo ::
+        Implement C-symbols without fallback? -> need to save them
+        We probably want to introduce the option to save and load R-symbols, F-symbols, etc.
+        Otherwise, for "large" k, constructing the data takes too much time
+
+    The anyons can be associated with the spins `0`, `1/2`, `1`, ..., `k/2`.
+    Unlike regular SU(2), there is a cutoff at `k/2`.
+
+    Allowed sectors are 1D arrays ``[jj]`` of positive integers `jj` = `0`, `1`, `2`, ..., `k`
+    corresponding to `jj/2` listed above.
+
+    `handedness`: ``'left' | 'right'``
+        Specifies the chirality / handedness of the anyons. Changing the handedness corresponds to
+        complex conjugating the R-symbols, which also affects, e.g., the braid-symbols.
+        Considering anyons of different handedness is necessary for doubled models like,
+        e.g., the anyons realized in the Levin-Wen string-net models.
+    """
+
+    _one_2D = np.ones((1, 1), dtype=int)
+    _one_4D = np.ones((1, 1, 1, 1), dtype=int)
+
+    def __init__(self, k: int, handedness = 'left'):
+        assert type(k) == int
+        assert handedness in ['left', 'right']
+        self.k = k
+        self.handedness = handedness
+        self._q = np.exp(2j * np.pi / (k + 2))
+
+        self._r = {}
+        for i in range((self.k + 1)**3):
+            jj1 = i % (self.k + 1)
+            jj2 = i // (self.k + 1) % (self.k + 1)
+            jj = i // (self.k + 1)**2 % (self.k + 1)
+            if jj > jj1 + jj2 or jj < abs(jj1 - jj2) or jj1 * jj2 == 0:
+                continue  # do not save trivial R-symbols
+            factor = (-1)**((jj - jj1 - jj2) / 2)
+            factor *= self._q**(( jj*(jj+2) - jj1*(jj1+2) - jj2*(jj2+2) ) / 8)
+            self._r[i] = factor * self._one_2D
+
+        self._f = {}
+        self._convert_to_key = np.array([(self.k + 1)**i for i in range(6)])
+        for i in range((self.k + 1)**6):
+            jj1 = i % (self.k + 1)
+            jj2 = i // (self.k + 1) % (self.k + 1)
+            jj3 = i // (self.k + 1)**2 % (self.k + 1)
+            jj12 = i // (self.k + 1)**3 % (self.k + 1)
+            jj23 = i // (self.k + 1)**4 % (self.k + 1)
+            jj = i // (self.k + 1)**5 % (self.k + 1)
+            if jj1 * jj2 * jj3 == 0:  # do not save trivial F-symbols
+                continue
+            jsymbol = self._j_symbol(jj1, jj2, jj12, jj3, jj, jj23)
+            if jsymbol != 0:
+                prefactor = (-1)**((jj + jj1 + jj2 + jj3) / 2)
+                prefactor *= np.sqrt(self._n_q(jj12 + 1) * self._n_q(jj23 + 1))
+                self._f[i] = prefactor * jsymbol * self._one_4D
+
+        Symmetry.__init__(self,
+                          fusion_style=FusionStyle.multiple_unique,
+                          braiding_style=BraidingStyle.anyonic,
+                          trivial_sector=np.array([0], dtype=int),
+                          group_name='SU2_kGrading',
+                          num_sectors=self.k+1, descriptive_name=None)
+
+    def _n_q(self, n: int) -> float:
+        return (self._q**(.5*n) - self._q**(-.5*n)) / (self._q**.5 - self._q**-.5)
+
+    def _n_q_fac(self, n: int) -> float:
+        fac = 1
+        for i in range(n):
+            fac *= self._n_q(i + 1)
+        return fac
+
+    def _delta(self, jj1: int, jj2: int, jj3: int) -> float:
+        res = self._n_q_fac( round(-1*jj1/2 + jj2/2 + jj3/2) ) * self._n_q_fac( round(jj1/2 - jj2/2 + jj3/2) )
+        res *= self._n_q_fac( round(jj1/2 + jj2/2 - jj3/2) ) / self._n_q_fac( round(jj1/2 + jj2/2 + jj3/2 + 1) )
+        return np.sqrt(res)
+
+    def _j_symbol(self, jj1: int, jj2: int, jj12: int, jj3: int, jj: int, jj23: int) -> float:
+        for triad in [[jj1, jj2, jj12], [jj1, jj, jj23], [jj3, jj2, jj23], [jj3, jj, jj12]]:
+            if triad[0] > triad[1] + triad[2] or triad[0] < abs(triad[1] - triad[2]):
+                return 0
+        start = max([jj1 + jj2 + jj12, jj12 + jj3 + jj, jj2 + jj3 + jj23, jj1 + jj23 + jj]) // 2
+        stop = min([jj1 + jj2 + jj3 + jj, jj1 + jj12 + jj3 + jj23, jj2 + jj12 + jj + jj23]) // 2
+        res = 0
+        for z in range(start, stop + 1):  # runs over all integers for which the factorials have non-negative arguments
+            factor = self._n_q_fac( round(z - jj1/2 - jj2/2 - jj12/2) ) * self._n_q_fac( round(z - jj12/2 - jj3/2 - jj/2) )
+            factor *= self._n_q_fac( round(z - jj2/2 - jj3/2 - jj23/2) ) * self._n_q_fac( round(z - jj1/2 - jj23/2 - jj/2) )
+            factor *= self._n_q_fac( round(jj1/2 + jj2/2 + jj3/2 + jj/2 - z) )
+            factor *= self._n_q_fac( round(jj1/2 + jj12/2 + jj3/2 + jj23/2 - z) )
+            factor *= self._n_q_fac( round(jj2/2 + jj12/2 + jj/2 + jj23/2 - z) )
+            res += (-1)**z * self._n_q_fac(z + 1) / factor
+        return res * (self._delta(jj1, jj2, jj12) * self._delta(jj12, jj3, jj)
+                      * self._delta(jj2, jj3, jj23) * self._delta(jj1, jj23, jj))
+
+    def is_valid_sector(self, a: Sector) -> bool:
+        return getattr(a, 'shape', ()) == (1,) and a[0] >= 0 and a[0] <= self.k
+
+    def fusion_outcomes(self, a: Sector, b: Sector) -> SectorArray:
+        upper_limit = min(a[0] + b[0], 2 * self.k - a[0] - b[0])
+        return np.arange(abs(a[0] - b[0]), upper_limit + 2, 2)[:, np.newaxis]
+
+    def sector_dim(self, a: Sector) -> int:
+        return 1
+
+    def sector_str(self, a: Sector) -> str:
+        jj = a[0]
+        j_str = str(jj // 2) if jj % 2 == 0 else f'{jj}/2'
+        return f'{jj} (j={j_str})'
+
+    def __repr__(self):
+        return f'SU2_kGrading({self.k}, {self.handedness})'
+
+    def is_same_symmetry(self, other) -> bool:
+        return isinstance(other, SU2_kGrading) and other.k == self.k and other.handedness == self.handedness
+
+    def dual_sector(self, a: Sector) -> Sector:
+        return a
+
+    def dual_sectors(self, sectors: SectorArray) -> SectorArray:
+        return sectors
+
+    def _n_symbol(self, a: Sector, b: Sector, c: Sector) -> int:
+        return 1
+
+    def _f_symbol(self, a: Sector, b: Sector, c: Sector, d: Sector, e: Sector, f: Sector
+                  ) -> np.ndarray:
+        try:  # nontrivial F-symbols
+            return self._f[np.sum(self._convert_to_key * np.concatenate([a, b, c, e, f, d]))]
+        except KeyError:
+            return self._one_4D
+
+    def frobenius_schur(self, a: Sector) -> int:
+        return -1 if a[0] % 2 == 1 else 1
+
+    def qdim(self, a: Sector) -> float:
+        return np.sin((a[0] + 1) * np.pi / (self.k + 2)) / np.sin(np.pi / (self.k + 2))
+
+    def _r_symbol(self, a: Sector, b: Sector, c: Sector) -> np.ndarray:
+        try:  # nontrivial R-symbols
+            return self._r[np.sum(self._convert_to_key[:3] * np.concatenate([a, b, c]))]
+        except KeyError:
+            return self._one_2D
+
+    def _c_symbol(self, a: Sector, b: Sector, c: Sector, d: Sector, e: Sector, f: Sector) -> np.ndarray:
+        return super()._c_symbol(a, b, c, d, e, f)
+
+    def all_sectors(self) -> SectorArray:
+        return np.arange(self.k + 1, dtype=int)[:, None]
 
 
 no_symmetry = NoSymmetry()
