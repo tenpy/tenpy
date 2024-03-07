@@ -810,6 +810,9 @@ class FermionParity(Symmetry):
     `[0]`, `[1]`
     """
 
+    _one_2D = np.ones((1, 1), dtype=int)
+    _one_4D = np.ones((1, 1, 1, 1), dtype=int)
+
     def __init__(self):
         Symmetry.__init__(self, fusion_style=FusionStyle.single, braiding_style=BraidingStyle.fermionic,
                           trivial_sector=np.array([0], dtype=int), group_name='FermionParity',
@@ -849,6 +852,34 @@ class FermionParity(Symmetry):
 
     def _n_symbol(self, a: Sector, b: Sector, c: Sector) -> int:
         return 1
+
+    def _f_symbol(self, a: Sector, b: Sector, c: Sector, d: Sector, e: Sector, f: Sector) -> np.ndarray:
+        return self._one_4D
+
+    def frobenius_schur(self, a: Sector) -> int:
+        return 1
+
+    def qdim(self, a: Sector) -> float:
+        return 1
+
+    def sqrt_qdim(self, a: Sector) -> float:
+        return 1
+
+    def inv_sqrt_qdim(self, a: Sector) -> float:
+        return 1
+
+    def _b_symbol(self, a: Sector, b: Sector, c: Sector) -> np.ndarray:
+        # sqrt(d_a) [F^{a b dual(b)}_a]^{111}_{c,mu,nu} = sqrt(1) * 1 = 1
+        return 1
+
+    def _r_symbol(self, a: Sector, b: Sector, c: Sector) -> np.ndarray:
+        # if a and b are fermionic -1, otherwise +1
+        return (1 - 2 * a * b)[None, :]
+
+    def _c_symbol(self, a: Sector, b: Sector, c: Sector, d: Sector, e: Sector, f: Sector) -> np.ndarray:
+        # R^{ec}_d conj(R)^{ca}_f
+        C = (1 - 2 * e * c) * (1 - 2 * c * a)
+        return C[None, None, None, :]
 
     def all_sectors(self) -> SectorArray:
         return np.arange(2, dtype=int)[:, None]
