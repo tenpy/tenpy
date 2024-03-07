@@ -202,11 +202,13 @@ class Symmetry(metaclass=ABCMeta):
 
     def frobenius_schur(self, a: Sector) -> int:
         """The Frobenius Schur indicator of a sector."""
-        return self._f_symbol(a, self.dual_sector(a), a, a, self.trivial_sector, self.trivial_sector)[0,0,0,0] * self.qdim(a)
+        F = self._f_symbol(a, self.dual_sector(a), a, a, self.trivial_sector, self.trivial_sector)
+        return np.sign(F[0, 0, 0, 0])
 
     def qdim(self, a: Sector) -> float:
         """The quantum dimension ``Tr(id_a)`` of a sector"""
-        return abs(self._f_symbol(a, self.dual_sector(a), a, a, self.trivial_sector, self.trivial_sector)[0,0,0,0])**-1
+        F = self._f_symbol(a, self.dual_sector(a), a, a, self.trivial_sector, self.trivial_sector)
+        return 1. / np.abs(F[0, 0, 0, 0])
 
     def sqrt_qdim(self, a: Sector) -> float:
         """The square root of the quantum dimension."""
@@ -239,10 +241,8 @@ class Symmetry(metaclass=ABCMeta):
         B : 2D array
             The B symbol as an array of the multiplicity indices [μ,ν]
         """
-        # TODO double check this!
-        prefactor = self.sqrt_qdim(a) * self.sqrt_qdim(b) * self.inv_sqrt_qdim(c)
-        f = self._f_symbol(a, b, self.dual_sector(b), a, c, self.trivial_sector)
-        return prefactor * f[:, :, 0, 0]
+        F = self._f_symbol(a, b, self.dual_sector(b), a, self.trivial_sector, c)
+        return self.sqrt_qdim(a) * F[0, 0, :, :]
 
     @abstractmethod
     def _r_symbol(self, a: Sector, b: Sector, c: Sector) -> np.ndarray:
