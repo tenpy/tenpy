@@ -888,6 +888,9 @@ class FermionParity(Symmetry):
 class FibonacciGrading(Symmetry):
     """Grading of Fibonacci anyons
 
+    .. todo ::
+        Is "grading" a sensible name here?
+
     Allowed sectors are 1D arrays with a single entry of either `0` ("vacuum") or `1` ("tau anyon").
     `[0]`, `[1]`
 
@@ -938,7 +941,7 @@ class FibonacciGrading(Symmetry):
         return 'vac' if a[0] == 0 else 'tau'
 
     def __repr__(self):
-        return 'FibonacciGrading()'
+        return f'FibonacciGrading(handedness={self.handedness})'
 
     def is_same_symmetry(self, other) -> bool:
         return isinstance(other, FibonacciGrading)
@@ -980,6 +983,9 @@ class FibonacciGrading(Symmetry):
 
 class IsingGrading(Symmetry):
     """Grading of Ising anyons
+
+    .. todo ::
+        Is "grading" a sensible name here?
 
     Allowed sectors are 1D arrays with a single entry of either `0` ("vacuum"), `1` ("Ising anyon")
     or `2` ("fermion").
@@ -1038,7 +1044,7 @@ class IsingGrading(Symmetry):
         return 'vac' if a[0] == 0 else 'psi'
 
     def __repr__(self):
-        return 'IsingGrading()'
+        return f'IsingGrading(nu={self.nu})'
 
     def is_same_symmetry(self, other) -> bool:
         return isinstance(other, IsingGrading)
@@ -1095,3 +1101,5 @@ z9_symmetry = ZNSymmetry(N=9)
 u1_symmetry = U1Symmetry()
 su2_symmetry = SU2Symmetry()
 fermion_parity = FermionParity()
+fibonacci_grading = FibonacciGrading(handedness='left')
+ising_grading = IsingGrading(nu=1)
