@@ -333,6 +333,123 @@ class TimeDependentCorrelation(RealTimeEvolution):
             results[results_key] = env.expectation_value(op)*phase
 
 
+class TimeDependentCorrelationEvolveBraKet(TimeDependentCorrelation):
+    r"""Evolving the bra and ket state in :class:`TimeDependentCorrelation`.
+
+    This class allows the calculation of a time-dependent correlation function for a state that is not the ground-state.
+    Which is :math:`C(r, t) = <\psi| e^{i H t} A e^{-i H t} B |\psi>` where `A` is an operator out of the list
+    of ``operator_t`` and `B` is the ``operator_t0`` at the given site.
+
+    .. note ::
+
+        Any (custom) measurement function and default measurement are measuring with respect to the
+        state where the ``opeartor_t0`` was already applied, that is w.r.t. :math:`B |\psi>`
+
+
+    Options
+    -------
+    .. cfg:config :: TimeDependentCorrelationEvolveBraKet
+        :include: TimeDependentCorrelation
+
+    """
+
+    def __init__(self, *args, **kwargs):
+        self.engine_bra = None  # a second engine will be instantiated in :meth:`init_algorithm`
+        resume_data = kwargs.get('resume_data', None)
+        if resume_data is not None:
+            if 'resume_data_bra' in resume_data:
+                if 'psi' in resume_data['resume_data_bra']:
+                    resume_data['psi_ground_state'] = resume_data['resume_data_bra']['psi']
+        super().__init__(*args, **kwargs)
+
+    def init_algorithm(self, **kwargs):
+        resume_data_bra = None
+        if 'resume_data' in self.results:
+            if 'resume_data_bra' in self.results['resume_data']:
+                self.logger.info("use `resume_data` for initializing the algorithm engine")
+                resume_data_bra = self.results['resume_data']['resume_data_bra'].copy()
+                # clean up: they are no longer up to date after algorithm initialization!
+                # up to date resume_data is added in :meth:`prepare_results_for_save`
+                self.results['resume_data']['resume_data_bra'].clear()
+                del self.results['resume_data']['resume_data_bra']
+
+        super().init_algorithm(**kwargs)  # links to Simulation
+        if resume_data_bra is not None:
+            kwargs.setdefault('resume_data', resume_data_bra)
+            if 'psi' in resume_data_bra:
+                self.psi_ground_state = resume_data_bra['psi']  # make sure to use resume data of bra
+        kwargs.setdefault('cache', self.cache)  # TODO: can we use the same cache
+        # make sure a second engine is used when evolving the bra
+        # fetch engine that evolves ket
+        AlgorithmClass = self.engine.__class__
+        # instantiate the second engine for the ground state
+        algorithm_params = self.options.subconfig('algorithm_params')
+        self.engine_bra = AlgorithmClass(self.psi_ground_state, self.model,
+                                         algorithm_params, **kwargs)
+
+    def run_algorithm(self):
+        while True:
+            if np.real(self.engine.evolved_time) >= self.final_time:
+                break
+            self.logger.info("evolve to time %.2f, max chi=%d", self.engine.evolved_time.real,
+                             max(self.psi.chi))
+            self.engine_bra.run()  # first evolve bra
+            # call engine_bra_resume_data in case something else is done here....
+            self.engine.run()  # evolve ket (psi)
+            # sanity check, bra and ket should evolve to same time
+            assert np.isclose(self.engine_bra.evolved_time, self.engine.evolved_time), ('Bra evolved to different time '
+                                                                                        'than ket')
+            self.model = self.engine.model
+            self.make_measurements()
+            self.engine.checkpoint.emit(self.engine)  # set up in init_algorithm of Simulation class
+            # and connects to self.save_at_checkpoint which ultimately calls self.save_results()
+            # if there are no results self.prepare_results_for_save() which calls get_resume_data() which
+            # calls engine.get_resume_data
+
+    def m_correlation_function(self, results, psi, model, simulation, **kwargs):
+        """Equivalent to :meth:`TimeDependentCorrelation.m_correlation_function`."""
+        self.logger.info("calling m_correlation_function")
+        operator_t = to_iterable(self.operator_t)
+        psi_bra = self.engine_bra.psi.copy()  # make copy since algorithm might use grouped bra
+        if self.grouped > 1:
+            psi_bra.group_split(self.options['algorithm_params']['trunc_params'])
+        env = MPSEnvironmentJW(psi_bra, psi) if self.addJW else MPSEnvironment(psi_bra, psi)
+        for op in operator_t:
+            results_key = f"correlation_function_t_{op}_{self.operator_t0_name}"  # as op is a str
+            results[results_key] = env.expectation_value(op)
+
+    def get_resume_data(self) -> dict:
+        """Get resume data for a Simulation for two engines."""
+        resume_data = super(TimeDependentCorrelation, self).get_resume_data()  # call Simulation's method
+        # in order not to write the ground-state twice into the resume_data
+        resume_data_bra = self.engine_bra.get_resume_data()
+        resume_data['resume_data_bra'] = resume_data_bra
+        resume_data['gs_energy'] = self.gs_energy
+        return resume_data
+
+    def estimate_RAM(self):
+        engine_ket_RAM = super().estimate_RAM()
+        engine_bra_RAM = self.engine_bra.estimate_RAM()
+        return engine_ket_RAM + engine_bra_RAM
+
+    def group_sites_for_algorithm(self):
+        super().group_sites_for_algorithm()
+        bra = self.psi_ground_state
+        if self.grouped > 1:
+            if not self.loaded_from_checkpoint or bra.grouped < self.grouped:
+                bra.group_sites(self.grouped)
+
+    def group_split(self):
+        """Split sites of psi that were grouped in  :meth:`group_sites_for_algorithm`."""
+        bra = self.psi_ground_state
+        if self.grouped > 1:
+            bra.group_split(self.options['algorithm_params']['trunc_params'])
+            self.psi.group_split(self.options['algorithm_params']['trunc_params'])
+            self.model = self.model_ungrouped
+            del self.model_ungrouped
+            self.grouped = 1
+
+
 class SpectralSimulation(TimeDependentCorrelation):
     """Simulation class to calculate Spectral Functions.
 
@@ -368,3 +485,7 @@ class SpectralSimulation(TimeDependentCorrelation):
                 # create a new list here! (otherwise this is added to all instances within that session)
                 self.default_post_processing = self.default_post_processing + [pp_entry]
         return super().run_post_processing()
+
+
+class SpectralSimulationEvolveBraKet(SpectralSimulation, TimeDependentCorrelationEvolveBraKet):
+    pass
