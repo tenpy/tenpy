@@ -22,7 +22,7 @@ Sector = npt.NDArray[np.int_] # 1D array, axis [q], containing the an integer re
 SectorArray = npt.NDArray[np.int_]  # 2D array, axes [s, q], where s goes over different sectors
 
 
-class FusionStyle(Enum): 
+class FusionStyle(Enum):
     single = 0  # only one resulting sector, a ⊗ b = c, e.g. abelian symmetry groups
     multiple_unique = 10  # every sector appears at most once in pairwise fusion, N^{ab}_c \in {0,1}
     general = 20  # no assumptions N^{ab}_c = 0, 1, 2, ...
@@ -300,6 +300,26 @@ class Symmetry(metaclass=ABCMeta):
         res = np.tensordot(res, np.conj(R2), (2, 1))
         # [nu, mu, lam, kap] -> [mu, nu, kap, lam]
         return np.transpose(res, [1, 0, 3, 2])
+
+    def fusion_tensor(self, a: Sector, b: Sector, c: Sector) -> np.ndarray:
+        r"""Matrix elements of the fusion tensor :math:`X^{ab}_{c,\mu}` for all :math:`\mu`.
+
+        May not be well defined for anyons.
+
+        Returns
+        -------
+        X : 4D ndarray
+            Axis [μ, m_a, m_b, m_c] where μ is the multiplicity index of the fusion tensor and
+            m_a goes over a basis for sector a, etc.
+        """
+        if not self.can_fuse_to(a, b, c):
+            raise ValueError('Incompatible sectors')
+        return self._fusion_tensor(a, b, c)
+
+    def _fusion_tensor(self, a: Sector, b: Sector, c: Sector) -> np.ndarray:
+        r"""Internal implementation of :meth:`fusion_tensor` without the input checks."""
+        msg = f'fusion_tensor is not implemented for {self.__class__.__name__}'
+        raise NotImplementedError(msg)
 
     def all_sectors(self) -> SectorArray:
         """If there are finitely many sectors, return all of them. Else raise a ValueError."""
@@ -626,6 +646,9 @@ class AbelianGroup(GroupSymmetry, metaclass=_ABCFactorSymmetryMeta):
     def _c_symbol(self, a: Sector, b: Sector, c: Sector, d: Sector, e: Sector, f: Sector) -> np.ndarray:
         return self._one_4D
 
+    def _fusion_tensor(self, a: Sector, b: Sector, c: Sector) -> np.ndarray:
+        return self._one_4D
+
 
 class NoSymmetry(AbelianGroup):
     """Trivial symmetry group that doesn't do anything.
@@ -883,6 +906,9 @@ class FermionParity(Symmetry):
 
     def all_sectors(self) -> SectorArray:
         return np.arange(2, dtype=int)[:, None]
+
+    def _fusion_tensor(self, a: Sector, b: Sector, c: Sector) -> np.ndarray:
+        return self._one_4D
 
 
 class FibonacciGrading(Symmetry):
