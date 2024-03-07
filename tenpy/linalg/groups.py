@@ -547,6 +547,13 @@ class ProductSymmetry(Symmetry):
                 return i
         raise ValueError(f'Name not found: {descriptive_name}')
 
+    def _f_symbol(self, a: Sector, b: Sector, c: Sector, d: Sector, e: Sector, f: Sector
+                  ) -> np.ndarray:
+        raise NotImplementedError  # TODO
+
+    def _r_symbol(self, a: Sector, b: Sector, c: Sector) -> np.ndarray:
+        raise NotImplementedError  # TODO
+
 
 class _ABCFactorSymmetryMeta(ABCMeta):
     """Metaclass for the AbstractBaseClasses which can be factors of a ProductSymmetry.
@@ -583,6 +590,10 @@ class GroupSymmetry(Symmetry, metaclass=_ABCFactorSymmetryMeta):
         Symmetry.__init__(self, fusion_style=fusion_style, braiding_style=BraidingStyle.bosonic,
                           trivial_sector=trivial_sector, group_name=group_name, num_sectors=num_sectors,
                           descriptive_name=descriptive_name)
+
+    def _r_symbol(self, a: Sector, b: Sector, c: Sector) -> np.ndarray:
+        # TODO could we return np.ones((1, 1)) and rely on broadcasting?
+        return np.eye(self._n_symbol(a, b, c))
 
 
 class AbelianGroup(GroupSymmetry, metaclass=_ABCFactorSymmetryMeta):
@@ -825,6 +836,10 @@ class SU2Symmetry(GroupSymmetry):
     def _n_symbol(self, a: Sector, b: Sector, c: Sector) -> int:
         raise NotImplementedError  # TODO port su2calc
 
+    def _f_symbol(self, a: Sector, b: Sector, c: Sector, d: Sector, e: Sector, f: Sector
+                  ) -> np.ndarray:
+        raise NotImplementedError  # TODO
+
 
 class FermionParity(Symmetry):
     """Fermionic Parity.
@@ -970,7 +985,7 @@ class FibonacciGrading(Symmetry):
         return f'FibonacciGrading(handedness={self.handedness})'
 
     def is_same_symmetry(self, other) -> bool:
-        return isinstance(other, FibonacciGrading)
+        return isinstance(other, FibonacciGrading) and other.handedness == self.handedness
 
     def dual_sector(self, a: Sector) -> Sector:
         return a
@@ -1073,7 +1088,7 @@ class IsingGrading(Symmetry):
         return f'IsingGrading(nu={self.nu})'
 
     def is_same_symmetry(self, other) -> bool:
-        return isinstance(other, IsingGrading)
+        return isinstance(other, IsingGrading) and other.nu == self.nu
 
     def dual_sector(self, a: Sector) -> Sector:
         return a
@@ -1112,7 +1127,7 @@ class IsingGrading(Symmetry):
         return np.ones((1, 1, 1, 1))
 
     def all_sectors(self) -> SectorArray:
-        return np.arange(2, dtype=int)[:, None]
+        return np.arange(3, dtype=int)[:, None]
 
 
 no_symmetry = NoSymmetry()

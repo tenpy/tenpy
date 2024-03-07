@@ -7,11 +7,13 @@ from tenpy.linalg import groups
 
 
 def common_checks(sym: groups.Symmetry, example_sectors):
-    # common consistency checks to be performed on a symmetry instance
+    """common consistency checks to be performed on a symmetry instance"""
     assert sym.trivial_sector.shape == (sym.sector_ind_len,)
     assert sym.is_valid_sector(sym.trivial_sector)
     assert not sym.is_valid_sector(np.zeros(shape=(sym.sector_ind_len + 2), dtype=int))
-    for invalid_sector in [0, 1, 42., None, False, 'foo', [0], ['foo'], [None], (), []]:
+    # objects which are not 1D arrays should not be valid sectors
+    for invalid_sector in [0, 1, 42., None, False, 'foo', [0], ['foo'], [None], (), [],
+                           np.zeros((1, 1), dtype=int)]:
         assert not sym.is_valid_sector(invalid_sector)
     assert sym.sector_dim(sym.trivial_sector) == 1
     assert sym.num_sectors == np.inf or (isinstance(sym.num_sectors, int) and sym.num_sectors > 0)
@@ -44,6 +46,25 @@ def common_checks(sym: groups.Symmetry, example_sectors):
     except NotImplementedError:
         pytest.xfail("NotImplementedError")
         pass  # TODO SU(2) does not implement n_symbol yet
+
+    # TODO checks of topological data (decide if checking all combinations of all example_sectors is
+    # fast enough, if not pick some randomly):
+    # - if fusion_tensor available: orthonormal, complete, identity when one input is trivial sector
+    # - N symbol consistency:
+    #    - associativity: \sum_e N(a, b, e) N(e, c, d) == \sum_f N(b, c, d) N(a, f, d)
+    #    - left and right unitor : N(a, 1, b) = delta_{a, b} = N(1, a, b)
+    #    - duality N(a, b, 1) == delta_{b, dual(a)}
+    # - F symbol consistency:
+    #    - triangle equation
+    #    - pentagon equation
+    #    - unitarity
+    # - all data with fallback implementations: compare actual implementation,
+    #   e.g. ``sym.frobenius_schur(a) == Symmetry.frobenius_schur(sym, a)``
+    # - B symbol normalization
+    # - R symbol consistency:
+    #   - hexagon equation
+    #   - unitarity
+    #   - consistency with twist (twist not implemented yet...)
 
 
 def test_generic_symmetry(symmetry, symmetry_sectors_rng):
@@ -386,3 +407,84 @@ def test_fermion_parity():
     print('checking dual_sectors')
     assert_array_equal(sym.dual_sectors(np.stack([odd, even, odd])),
                        np.stack([odd, even, odd]))
+
+
+@pytest.mark.parametrize('handedness', ['left', 'right'])
+def test_fibonacci_grading(handedness):
+    sym = groups.FibonacciGrading(handedness)
+    vac = np.array([0])
+    tau = np.array([1])
+    common_checks(sym, example_sectors=sym.all_sectors())
+
+    print('instancecheck and is_abelian')
+    assert not isinstance(sym, groups.AbelianGroup)
+    assert not isinstance(sym, groups.GroupSymmetry)
+    assert not sym.is_abelian
+
+    print('checking valid sectors')
+    assert sym.is_valid_sector(tau)
+    assert not sym.is_valid_sector(np.array([3]))
+    assert not sym.is_valid_sector(np.array([-1]))
+    assert not sym.is_valid_sector(np.array([0, 0]))
+
+    print('checking fusion rules')
+    assert_array_equal(sym.fusion_outcomes(vac, tau), tau[None, :])
+    assert_array_equal(sym.fusion_outcomes(tau, tau), np.stack([vac, tau]))
+
+    print('checking equality')
+    assert sym == sym
+    assert (sym == groups.fibonacci_grading) == (handedness == 'left')
+    assert sym != groups.no_symmetry
+    assert sym != groups.su2_symmetry
+
+    print('checking is_same_symmetry')
+    assert sym.is_same_symmetry(sym)
+    assert sym.is_same_symmetry(groups.fibonacci_grading) == (handedness == 'left')
+    assert not sym.is_same_symmetry(groups.no_symmetry)
+    assert not sym.is_same_symmetry(groups.su2_symmetry)
+
+    print('checking dual_sector')
+    assert_array_equal(sym.dual_sector(tau), tau)
+
+
+@pytest.mark.parametrize('nu', [*range(1, 16, 2)])
+def test_ising_grading(nu):
+    sym = groups.IsingGrading(nu)
+    vac = np.array([0])
+    anyon = np.array([1])
+    fermion = np.array([2])
+    common_checks(sym, example_sectors=sym.all_sectors())
+
+    print('instancecheck and is_abelian')
+    assert not isinstance(sym, groups.AbelianGroup)
+    assert not isinstance(sym, groups.GroupSymmetry)
+    assert not sym.is_abelian
+
+    print('checking valid sectors')
+    assert sym.is_valid_sector(anyon)
+    assert sym.is_valid_sector(fermion)
+    assert not sym.is_valid_sector(np.array([3]))
+    assert not sym.is_valid_sector(np.array([-1]))
+    assert not sym.is_valid_sector(np.array([0, 0]))
+
+    print('checking fusion rules')
+    assert_array_equal(sym.fusion_outcomes(vac, anyon), anyon[None, :])
+    assert_array_equal(sym.fusion_outcomes(vac, fermion), fermion[None, :])
+    assert_array_equal(sym.fusion_outcomes(anyon, fermion), anyon[None, :])
+    assert_array_equal(sym.fusion_outcomes(anyon, anyon), np.stack([vac, fermion]))
+
+    print('checking equality')
+    assert sym == sym
+    assert (sym == groups.ising_grading) == (nu == 1)
+    assert sym != groups.no_symmetry
+    assert sym != groups.su2_symmetry
+
+    print('checking is_same_symmetry')
+    assert sym.is_same_symmetry(sym)
+    assert sym.is_same_symmetry(groups.ising_grading) == (nu == 1)
+    assert not sym.is_same_symmetry(groups.no_symmetry)
+    assert not sym.is_same_symmetry(groups.su2_symmetry)
+
+    print('checking dual_sector')
+    assert_array_equal(sym.dual_sector(anyon), anyon)
+    assert_array_equal(sym.dual_sector(fermion), fermion)
