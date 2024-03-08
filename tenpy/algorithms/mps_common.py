@@ -714,14 +714,77 @@ class Sweep(Algorithm):
         """Cleanup the effects of a mixer.
 
         A :meth:`sweep` with an enabled :class:`~tenpy.algorithms.mps_common.Mixer` leaves the MPS
-        `psi` with 2D arrays in `S`.
-        To recover the original form, this function simply performs one sweep with disabled mixer.
+        `psi` with 2D arrays in `S`. This method recovers the original form by performing SVDs
+        of the `S` and updating the MPS tensors accordingly.
         """
-        if any([self.psi.get_SL(i).ndim > 1 for i in range(self.psi.L)]):
-            mixer = self.mixer
-            self.mixer = None  # disable the mixer
-            self.sweep(optimize=False)  # (discard return value)
-            self.mixer = mixer  # recover the original mixer
+        # Do SVDs ::  S[i] = U[i] * new_S[i] * V[i]
+        # Keep state consistent by absorbing into Gammas:
+        #   new_G[i] = V[i] * G[i] * U[i + 1]
+        # For Th form tensors this means
+        #   new_Th[i] = new_S[i] * new_G[i] * new_S[i + 1]
+        #             = hc(U[i]) * S[i] * G[i] * S[i + 1] * hc(V[i])
+        #             = hc(U[i]) * Th[i] * hc(V[i])
+        # For A and B form tensors, we get a mix of the above, i.e.
+        #   new_A[i] = hc(U[i]) * A[i] * U[i + 1]
+        #   new_B[i] = V[i] * B[i] * hc(V[i + 1])
+        # LP environments transform like A tensors on the vR(*) leg(s)
+        # RP environments transform like B tensors on the vL(*) leg(s)
+        
+        if self.psi.finite:
+            assert self.psi.get_SL(0).ndim == 1
+            assert self.psi.get_SR(self.psi.L - 1).ndim == 1
+            first = 1
+        else:
+            first = 0
+        
+        for i in range(first, self.psi.L):  # converting S to the left of site i
+            S = self.psi.get_SL(i)
+            if S.ndim == 1:
+                # nothing to do
+                continue
+            U, S, V = npc.svd(S, full_matrices=False, inner_labels=['vR', 'vL'])
+            _, form_L = self.psi.form[self.psi._to_valid_index(i - 1)]
+            form_R, _ = self.psi.form[i]
+            B_L = self.psi.get_B(i - 1, form=None)
+            B_R = self.psi.get_B(i, form=None)
+            # Update psi._B to the left and right
+            if form_L == 0.:  # A or Gamma to the left
+                B_L = npc.tensordot(B_L, U, ['vR', 'vL'])
+            elif form_L == 1.:  # B or C to the left
+                X_L = V.conj().replace_labels(['vR*', 'vL*'], ['vL', 'vR'])
+                B_L = npc.tensordot(B_L, X_L, ['vR', 'vL'])
+            else:
+                msg = (f'Array S are only supported in A, B, Th or G form. '
+                       f'Got form {self.psi.form[self.psi._to_valid_index(i - 1)]} on site {i - 1}.')
+                raise RuntimeError(msg)
+            if form_R == 0.:  # B or Gamma to the right
+                B_R = npc.tensordot(V, B_R, ['vR', 'vL'])
+            elif form_R == 1.:  # A or C to the left
+                X_R = U.conj().replace_labels(['vR*', 'vL*'], ['vL', 'vR'])
+                B_R = npc.tensordot(X_R, B_R, ['vR', 'vL'])
+            else:
+                msg = (f'Array S are only supported in A, B, Th or G form. '
+                       f'Got form {self.psi.form[i]} on site {i}.')
+                raise RuntimeError(msg)
+            self.psi.set_B(i - 1, B_L, form=self.psi.form[i - 1])
+            self.psi.set_SL(i, S)
+            self.psi.set_B(i, B_R, form=self.psi.form[i])
+            
+            # Update environment LP and RP
+            assert self.env.bra is self.psi
+            update_env_ket_leg = (self.env.ket is self.psi)
+            if self.env.has_LP(i):
+                LP = self.env.get_LP(i)
+                LP = npc.tensordot(LP, U.conj(), ['vR*', 'vL*'])
+                if update_env_ket_leg:
+                    LP = npc.tensordot(LP, U, ['vR', 'vL'])
+                self.env.set_LP(i, LP, age=self.env.get_LP_age(i))
+            if self.env.has_RP(i - 1):
+                RP = self.env.get_RP(i - 1)
+                RP = npc.tensordot(V.conj(), RP, ['vR*', 'vL*'])
+                if update_env_ket_leg:
+                    RP = npc.tensordot(V, RP, ['vR', 'vL'])
+                self.env.set_RP(i - 1, RP, age=self.env.get_RP_age(i - 1))
 
 
 class IterativeSweeps(Sweep):
