@@ -120,8 +120,9 @@ class TDVPEngine(TimeEvolutionAlgorithm, Sweep):
         self.dt = dt
         trunc_err = TruncationError()
         for _ in range(N_steps):
-            max_err = self.sweep()
-            trunc_err += TruncationError(max_err, 1.-2*max_err)  # TODO update definition of TruncationError
+            self.sweep()
+            for eps in self.trunc_err_list:
+                trunc_err += TruncationError(eps, 1 - 2 * eps)
         self.evolved_time = self.evolved_time + N_steps * self.dt
         return trunc_err
 
@@ -222,10 +223,6 @@ class TwoSiteTDVPEngine(TDVPEngine):
         theta = H1.combine_theta(theta)
         theta, _ = LanczosEvolution(H1, theta, self.lanczos_options).run(dt)
         self.psi.set_B(i, theta.replace_label('p0', 'p'), form='Th')
-
-    def post_update_local(self, err, **update_data):
-        self.trunc_err = self.trunc_err + err
-        self.trunc_err_list.append(err.eps)  # avoid error in return of sweep()
 
 
 class SingleSiteTDVPEngine(TDVPEngine):
