@@ -4092,6 +4092,9 @@ class MPS(BaseMPSExpectationValue):
 
         i = self._to_valid_index(i)
         if isinstance(op, str):
+            if self.sites[i].op_needs_JW(op):
+                msg = 'Applying operators that need JW strings is not supported yet'
+                raise NotImplementedError(msg)
             op = self.sites[i].get_op(op)
         n = op.rank // 2  # same as int(rank/2)
         if n == 1:
