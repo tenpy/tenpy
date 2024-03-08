@@ -446,7 +446,8 @@ class Array:
         data_flat = np.asarray(data_flat)  # unspecified dtype
         if dtype is None:
             dtype = data_flat.dtype
-        data_flat = data_flat.astype(dtype, copy=False)
+        # make copy so we can safely modify
+        data_flat = data_flat.astype(dtype, copy=True)
         res = cls(legcharges, dtype, qtotal, labels)  # without any data
         if res.shape != data_flat.shape:
             raise ValueError("Incompatible shapes: legcharges {0!s} vs flat {1!s} ".format(
@@ -459,13 +460,15 @@ class Array:
             sl = res._get_block_slices(qindices)
             if np.all(res._get_block_charge(qindices) == qtotal):
                 data.append(np.array(data_flat[sl], dtype=res.dtype))  # copy data
+                data_flat[sl] = 0
                 qdata.append(qindices)
-            elif np.any(np.abs(data_flat[sl]) > cutoff):
-                if raise_wrong_sector:
-                    raise ValueError("wrong sector with non-zero entries")
-                if warn_wrong_sector:
-                    warnings.warn("flat array has non-zero entries in blocks "
-                                  "incompatible with charge",  stacklevel=2)
+        # have set all those entries that were read out to zero. Only zeros should remain
+        if np.any(np.abs(data_flat) > cutoff):
+            if raise_wrong_sector:
+                raise ValueError("wrong sector with non-zero entries")
+            if warn_wrong_sector:
+                msg = "flat array has non-zero entries in blocks incompatible with charge"
+                warnings.warn(msg,  stacklevel=2)
         res._data = data
         res._qdata = np.array(qdata, dtype=np.intp, order='C').reshape((len(qdata), res.rank))
         res._qdata_sorted = True
