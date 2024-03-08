@@ -293,7 +293,7 @@ class Symmetry(metaclass=ABCMeta):
         """
         R1 = self._r_symbol(e, c, d)
         F = self._f_symbol(c, a, b, d, e, f)
-        R2 = self._r_symbol(c, a, f)
+        R2 = self._r_symbol(a, c, f)
         # [nu, (al)] & [mu, (al), bet, lam] -> [nu, mu, bet, lam]
         res = np.tensordot(R1, F, (1, 1))
         # [nu, mu, (bet), lam] & [kap, (bet)] -> [nu, mu, lam, kap]
