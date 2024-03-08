@@ -463,8 +463,8 @@ class PurificationMPS(MPS):
     def _corr_up_diag(self, ops1, ops2, i, j_gtr, opstr, str_on_first, apply_opstr_first):
         """correlation function above the diagonal: for fixed i and all j in j_gtr, j > i."""
         # compared to MPS._corr_up_diag just perform additional contractions of the 'q'
-        op1 = self.get_op(ops1, i)
-        opstr1 = self.get_op(opstr, i)
+        op1, _ = self.get_op(ops1, i)
+        opstr1, _ = self.get_op(opstr, i)
         if opstr1 is not None:
             axes = ['p*', 'p'] if apply_opstr_first else ['p', 'p*']
             op1 = npc.tensordot(op1, opstr1, axes=axes)
@@ -478,14 +478,15 @@ class PurificationMPS(MPS):
             B = self.get_B(r, form='B')
             C = npc.tensordot(C, B, axes=['vR', 'vL'])
             if r == js[-1]:
-                Cij = npc.tensordot(self.get_op(ops2, r), C, axes=['p*', 'p'])
+                op2, _ = self.get_op(ops2, r)
+                Cij = npc.tensordot(op2, C, axes=['p*', 'p'])
                 Cij = npc.inner(B.conj(),
                                 Cij,
                                 axes=[['vL*', 'p*', 'q*', 'vR*'], ['vR*', 'p', 'q', 'vR']])
                 res.append(Cij)
                 js.pop()
             if len(js) > 0:
-                op = self.get_op(opstr, r)
+                op, _ = self.get_op(opstr, r)
                 if op is not None:
                     C = npc.tensordot(op, C, axes=['p*', 'p'])
                 C = npc.tensordot(B.conj(), C, axes=[['vL*', 'p*', 'q*'], ['vR*', 'p', 'q']])

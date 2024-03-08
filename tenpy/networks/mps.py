@@ -300,7 +300,10 @@ class BaseMPSExpectationValue(metaclass=ABCMeta):
         bra, ket = self._get_bra_ket()
         E = []
         for i in sites:
-            op = self.get_op(ops, i)
+            op, needs_JW = self.get_op(ops, i)
+            if needs_JW:
+                msg = 'Expectation value of operator that needs JW string is not (yet?) supported.'
+                raise NotImplementedError(msg)
             op = op.replace_labels(op_ax_p + op_ax_pstar, ax_p + ax_pstar)
             theta_ket = ket.get_theta(i, n)
             C = npc.tensordot(op, theta_ket, axes=[ax_pstar, ax_p])  # C has same labels as theta
@@ -558,7 +561,9 @@ class BaseMPSExpectationValue(metaclass=ABCMeta):
             j_eq = sites2[sites2 == i]
             if len(j_eq) > 0:
                 # on-site correlation function
-                op12 = npc.tensordot(self.get_op(ops1, i), self.get_op(ops2, i), axes=['p*', 'p'])
+                op1, _ = self.get_op(ops1, i)
+                op2, _ = self.get_op(ops2, i)
+                op12 = npc.tensordot(op1, op2, axes=['p*', 'p'])
                 C[x, (sites2 == i)] = self.expectation_value(op12, i, [['p'], ['p*']])
         if not hermitian:
             #  j < i
@@ -983,8 +988,8 @@ class BaseMPSExpectationValue(metaclass=ABCMeta):
 
     def _corr_up_diag(self, ops1, ops2, i, j_gtr, opstr, str_on_first, apply_opstr_first):
         """correlation function above the diagonal: for fixed i and all j in j_gtr, j > i."""
-        op1 = self.get_op(ops1, i)
-        opstr1 = self.get_op(opstr, i)
+        op1, _ = self.get_op(ops1, i)
+        opstr1, _ = self.get_op(opstr, i)
         if opstr1 is not None and str_on_first:
             axes = ['p*', 'p'] if apply_opstr_first else ['p', 'p*']
             op1 = npc.tensordot(op1, opstr1, axes=axes)
@@ -1003,14 +1008,15 @@ class BaseMPSExpectationValue(metaclass=ABCMeta):
             B_bra = bra.get_B(r, form='B')
             C = npc.tensordot(C, B_ket, axes=['vR', 'vL'])
             if r == js[-1]:
-                Cij = npc.tensordot(self.get_op(ops2, r), C, axes=['p*', 'p'])
+                op2, _ = self.get_op(ops2, r)
+                Cij = npc.tensordot(op2, C, axes=['p*', 'p'])
                 Cij = self._contract_with_RP(Cij, r)
                 Cij.ireplace_labels(['vR*', 'vL*'], ['vL', 'vR'])
                 Cij = npc.inner(B_bra.conj(), Cij, axes='labels')
                 res.append(Cij)
                 js.pop()
             if len(js) > 0:
-                op = self.get_op(opstr, r)
+                op, _ = self.get_op(opstr, r)
                 if op is not None:
                     C = npc.tensordot(op, C, axes=['p*', 'p'])
                 C = npc.tensordot(B_bra.conj(), C, axes=axes_contr)
@@ -1165,13 +1171,20 @@ class BaseMPSExpectationValue(metaclass=ABCMeta):
         -------
         op : npc.array
             One of the entries in `op_list`, not copied.
+        needs_JW : bool
+            If the operator needs a JW string. Always ``False`` if the entry of ``op_list`` is
+            an array.
         """
         if self.finite and (i > self.L or i < 0):
             raise ValueError("i = {0:d} out of bounds for finite MPS".format(i))
         op = op_list[i % len(op_list)]
         if (isinstance(op, str)):
-            op = self.sites[i % self.L].get_op(op)
-        return op
+            site = self.sites[i % self.L]
+            needs_JW = site.op_needs_JW(op)
+            op = site.get_op(op)
+        else:
+            needs_JW = False
+        return op, needs_JW
 
 
     @abstractmethod
