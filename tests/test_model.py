@@ -417,7 +417,10 @@ def test_model_plus_hc(L=6):
             m.H_MPO = m.calc_H_MPO()
         assert m1.H_MPO.is_hermitian()
         assert m2.H_MPO.is_hermitian()
-        assert not m3.H_MPO.is_hermitian()
+        m3_explicit_MPO = m3.H_MPO.copy()
+        m3_explicit_MPO.explicit_plus_hc = False  # now this is an MPO without the +hc part
+        assert not m3_explicit_MPO.is_hermitian()
+        assert m3.H_MPO.is_hermitian()
         assert m3.H_MPO.chi[3] < m2.H_MPO.chi[3]   # check for smaller MPO bond dimension
         ED1 = ExactDiag(m1)
         ED2 = ExactDiag(m2)

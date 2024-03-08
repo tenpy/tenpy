@@ -950,6 +950,8 @@ class MPO:
 
     def dagger(self):
         """Return hermitian conjugate copy of self."""
+        if self.explicit_plus_hc:
+            return self.copy()
         # complex conjugate and transpose everything
         Ws = [w.conj().itranspose(['wL*', 'wR*', 'p', 'p*']) for w in self._W]
         # and now revert conjugation of the wL/wR legs
@@ -972,6 +974,8 @@ class MPO:
 
         Shorthand for ``self.is_equal(self.dagger(), eps, max_range)``.
         """
+        if self.explicit_plus_hc:
+            return True
         return self.is_equal(self.dagger(), eps, max_range)
 
     def is_equal(self, other, eps=1.e-10, max_range=None):
@@ -1279,6 +1283,9 @@ class MPO:
         sum_mpo : :class:`MPO`
             The sum `self + other`.
         """
+        if self.explicit_plus_hc != other.explicit_plus_hc:
+            raise ValueError('Can not add MPOs with different explicit_plus_hc flags')
+        
         L = self.L
         assert self.bc == other.bc
         assert other.L == L
@@ -1332,7 +1339,7 @@ class MPO:
             max_range = max(self.max_range, other.max_range)
         else:
             max_range = None
-        return MPO(self.sites, Ws, self.bc, IdL, IdR, max_range)
+        return MPO(self.sites, Ws, self.bc, IdL, IdR, max_range, self.explicit_plus_hc)
 
     def _get_block_projections(self, i):
         """projections onto (IdL, other, IdR) on bond `i` in range(0, L+1)"""
