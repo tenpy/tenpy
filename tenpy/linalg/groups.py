@@ -1006,6 +1006,81 @@ class ZNAnyonModel(Symmetry):
         return np.arange(self.N, dtype=int)[:, None]
 
 
+class QuantumDoubleZNAnyonModel(Symmetry):
+    """Doubled abelian anyon model with fusion rules corresponding to the Z_N group;
+    also written as :math:`D(Z_N)`.
+
+    Allowed sectors are 1D arrays with two integers between `0` and `N-1`.
+    `[0, 0]`, `[0, 1]`, ..., `[N-1, N-1]`
+
+    This is not a simple product for two `ZNAnyonModel`s; there are nontrivial R-symbols.
+    """
+
+    _one_2D = np.ones((1, 1), dtype=int)
+    _one_4D = np.ones((1, 1, 1, 1), dtype=int)
+
+    def __init__(self, N: int):
+        assert type(N) == int
+        self.N = N
+        self._phase = np.exp(2j * np.pi / self.N)
+        Symmetry.__init__(self,
+                          fusion_style=FusionStyle.single,
+                          braiding_style=BraidingStyle.anyonic,
+                          trivial_sector=np.array([0], dtype=int),
+                          group_name='QuantumDoubleZNAnyonModel',
+                          num_sectors=N**2, descriptive_name=None)
+
+    def is_valid_sector(self, a: Sector) -> bool:
+        return getattr(a, 'shape', ()) == (2,) and (0 <= a[0] < self.N) and (0 <= a[1] < self.N)
+
+    def fusion_outcomes(self, a: Sector, b: Sector) -> SectorArray:
+        return self.fusion_outcomes_broadcast(a[np.newaxis, :], b[np.newaxis, :])
+
+    def fusion_outcomes_broadcast(self, a: SectorArray, b: SectorArray) -> SectorArray:
+        return (a + b) % self.N
+
+    def multiple_fusion_broadcast(self, *sectors: SectorArray) -> SectorArray:
+        return sum(sectors) % self.N
+
+    def sector_dim(self, a: Sector) -> int:
+        return 1
+
+    def __repr__(self):
+        return f'QuantumDoubleZNAnyonModel(N={self.N})'
+
+    def is_same_symmetry(self, other) -> bool:
+        return isinstance(other, QuantumDoubleZNAnyonModel) and other.N == self.N
+
+    def dual_sector(self, a: Sector) -> Sector:
+        return (-a) % self.N
+
+    def dual_sectors(self, sectors: SectorArray) -> SectorArray:
+        return (-sectors) % self.N
+
+    def _n_symbol(self, a: Sector, b: Sector, c: Sector) -> int:
+        return 1
+
+    def _f_symbol(self, a: Sector, b: Sector, c: Sector, d: Sector, e: Sector, f: Sector
+                  ) -> np.ndarray:
+        return self._one_4D
+
+    def frobenius_schur(self, a: Sector) -> int:
+        return 1
+
+    def qdim(self, a: Sector) -> float:
+        return 1
+
+    def _r_symbol(self, a: Sector, b: Sector, c: Sector) -> np.ndarray:
+        return self._phase**(a[0] * b[1]) * self._one_2D
+
+    def _c_symbol(self, a: Sector, b: Sector, c: Sector, d: Sector, e: Sector, f: Sector) -> np.ndarray:
+        return self._phase**(b[0] * c[1]) * self._one_4D
+
+    def all_sectors(self) -> SectorArray:
+        x = np.arange(self.N, dtype=int)
+        return np.dstack(np.meshgrid(x, x)).reshape(-1, 2)
+
+
 class FibonacciGrading(Symmetry):
     """Grading of Fibonacci anyons
 
@@ -1379,5 +1454,6 @@ z9_symmetry = ZNSymmetry(N=9)
 u1_symmetry = U1Symmetry()
 su2_symmetry = SU2Symmetry()
 fermion_parity = FermionParity()
+toric_code = QuantumDoubleZNAnyonModel(2)
 fibonacci_grading = FibonacciGrading(handedness='left')
 ising_grading = IsingGrading(nu=1)
