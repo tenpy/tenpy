@@ -2028,6 +2028,91 @@ class MPS(BaseMPSExpectationValue):
         SVs[0] = SVs[-1]
         return cls(sites, Bs, SVs, bc=bc, form='B')
 
+    @classmethod
+    def project_onto_charge_sector(cls, sites, p_state_list, charge_sector, dtype=float):
+        """Generates an MPS from a product state list which is projected onto a given charge sector.
+
+        Parameters
+        ----------
+        sites : list of :class:`~tenpy.networks.site.Site`
+            The sites defining the local Hilbert space. The sites should conserve *some* charge,
+            otherwise projecting onto a charge sector is meaningless.
+        p_state_list : list
+            list defining the product state out of which to project
+        charge_sector : tuple of int
+        dtype : type
+
+        Returns
+        -------
+        projected_MPS : :class:`~tenpy.networks.mps.MPS`
+        """
+        # TODO: possibly change sites here, so that they are compatible with charge conservation
+        charge_tree = cls.get_charge_tree_for_given_charge_sector(sites, charge_sector)
+        return cls._project_onto_sector_from_charge_tree(sites, p_state_list, charge_tree, dtype)
+
+    @classmethod
+    def _project_onto_sector_from_charge_tree(cls, sites, p_state_list, charge_tree, dtype=float):
+        """Select entries in a product state that are in a charge tree.
+
+        Parameters
+        ----------
+        sites : list of :class:`~tenpy.networks.site.Site`
+            The sites defining the local Hilbert space. The sites should conserve *some* charge,
+            otherwise projecting onto a charge sector is meaningless.
+        p_state_list : list
+            list defining the product state out of which to project
+        charge_tree : list
+            a list containing a set of possible charges at each site
+        dtype : type
+
+        Returns
+        -------
+        projected_state : :class:`~tenpy.networks.mps.MPS`
+        """
+        p_state_list = np.array(p_state_list)  # convert (possible list) to ndarray for indexing
+        # check chiinfo
+        chinfo = sites[0].leg.chinfo
+        assert all(s.leg.chinfo == chinfo for s in sites), "Charge Info for all sites must be identical"
+
+        # init tensors and schmidt values
+        Bs = []
+        Ss = [np.ones(1, dtype=np.float64)]
+
+        # go through connections from left to right in the charge_tree
+        for i, (Q_L, Q_R) in enumerate(zip(charge_tree, charge_tree[1:])):
+            # dictionary holding indices of charges
+            Q_R_idx_map = dict((charge, i) for i, charge in enumerate(Q_R))
+
+            if i == 0:  # initial right leg for first charge
+                leg_R = npc.LegCharge.from_qflat(chinfo, np.array(list(Q_L)), qconj=-1)
+
+            # set legs
+            leg_L = leg_R.conj()
+            leg_R = npc.LegCharge.from_qflat(chinfo, np.array(list(Q_R)), qconj=-1)
+            # physical leg
+            leg_p = sites[i].leg
+            Q_p = leg_p.to_qflat()  # array of charges of physical leg
+
+            B = npc.zeros([leg_L, leg_R, leg_p],
+                          dtype=dtype,
+                          labels=['vL', 'vR', 'p'])
+
+            for j in range(leg_p.ind_len):  # iterate through possible charges of physical leg
+                value = p_state_list[i, - (j + 1)]  # go through values reversed
+                Q_p_j = Q_p[j]
+                for vL, Q_v_L in enumerate(np.array(list(Q_L))):
+                    Q_v_R = tuple(chinfo.make_valid(Q_v_L + Q_p_j))
+                    vR = Q_R_idx_map.get(Q_v_R, None)  # get index corresponding to vR
+                    if vR is not None:
+                        B[vL, vR, j] = value  # add an entry in the tensor
+
+            Bs.append(B)
+            Ss.append(np.ones(B.shape[1], np.float64))
+
+        projected_state = cls(sites, Bs, Ss, 'finite', form='B')
+        projected_state.canonical_form_finite()  # calculate S values and normalize
+        return projected_state
+    
     @property
     def L(self):
         """Number of physical sites; for an iMPS the len of the MPS unit cell."""
