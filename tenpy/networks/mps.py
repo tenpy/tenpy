@@ -161,7 +161,7 @@ from ..linalg import np_conserved as npc
 from ..linalg import sparse
 from ..linalg.krylov_based import Arnoldi
 from .site import GroupedSite, group_sites
-from ..tools.misc import argsort, to_iterable, to_array, get_recursive, inverse_permutation
+from ..tools.misc import argsort, to_iterable, to_array, get_recursive, inverse_permutation, lexsort
 from ..tools.math import lcm, speigs, entropy
 from ..tools.params import asConfig
 from ..tools.cache import DictCache
@@ -3113,6 +3113,64 @@ class MPS(BaseMPSExpectationValue):
         charges_mean = self.average_charge(bond)
         charges, ps = self.probability_per_charge(bond)
         return np.sum(ps[:, np.newaxis] * (charges - charges_mean[np.newaxis, :])**2, axis=0)
+
+    @staticmethod
+    def get_charge_tree_for_given_charge_sector(sites: list, charge_sector: tuple):
+        """Construct the charge-tree for a given charge sector.
+
+        This is a tree of possible charges for each site s.t. the MPS lies in the given `charge_sector`.
+
+        Parameters
+        ----------
+        sites : list of :class:`~tenpy.networks.site.Site`
+            The sites defining the local Hilbert space. The sites should conserve *some* charge,
+            otherwise projecting onto a charge sector is meaningless.
+        charge_sector : tuple of int
+
+        Returns
+        -------
+        charge_tree : list
+        """
+        # TODO: should we accept an integer as charge sector? charge_sector = tuple([charge_sector]) ?
+        L = len(sites)
+        assert L > 0, "sites must contain a :class:`Site` with conserved charges"
+        # check that all have same chiinfo
+        chinfo = sites[0].leg.chinfo
+        assert all(s.leg.chinfo == chinfo for s in sites), "Charge Info for all sites must be identical"
+
+        charge_sector_left = chinfo.make_valid(None)  # zero charges
+        charge_sector_right = chinfo.make_valid(charge_sector)
+
+        assert charge_sector_right.ndim == 1
+        # get bounds for the maximal and minimal charge values at each bond
+        Q_from_right = [None] * L + [set([tuple(charge_sector_right)])]  # all bonds 0, ... L
+
+        for i in reversed(range(L)):
+            Q_R = np.array(list(Q_from_right[i + 1]))
+            # find new charges possible on left of site i, coming from the right
+            Q_L = set()
+            for Q_p in sites[i].leg.charges:
+                Q_L_add = chinfo.make_valid(Q_R - Q_p[np.newaxis, :])
+                Q_L_add = set([tuple(q) for q in Q_L_add])
+                Q_L = Q_L.union(Q_L_add)
+            Q_from_right[i] = Q_L
+        if tuple(charge_sector_left) not in Q_from_right[0]:
+            raise ValueError("can't get desired charge sector {charge_sector!r} "
+                             "for the given charges on physical sites!")
+        Q_from_left = [set([tuple(charge_sector_left)])] + [None] * L
+        for i in range(L):
+            Q_L = np.array(list(Q_from_left[i]))
+            Q_L = Q_L[lexsort(Q_L.T), :]
+            Q_R = set()
+            for Q_p in sites[i].leg.charges:
+                Q_R_add = chinfo.make_valid(Q_L + Q_p[:, np.newaxis])
+                Q_R_add = set([tuple(q) for q in Q_R_add])
+                Q_R = Q_R.union(Q_R_add)
+            Q_from_left[i + 1] = Q_R.intersection(Q_from_right[i + 1])
+
+        assert Q_from_left[-1] == Q_from_right[-1]  # should match charge_sector on the right
+
+        return Q_from_left
 
     def mutinf_two_site(self, max_range=None, n=1):
         """Calculate the two-site mutual information :math:`I(i:j)`.
