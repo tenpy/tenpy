@@ -1006,6 +1006,90 @@ class ZNAnyonModel(Symmetry):
         return np.arange(self.N, dtype=int)[:, None]
 
 
+class ZNAnyonModel2(Symmetry):
+    """Abelian anyon model with fusion rules corresponding to the Z_N group;
+    also written as :math:`Z_N^{(n+1/2)}`. `N` must be even.
+
+    .. todo ::
+        find better name or include in `ZNAnyonModel`?
+
+    Allowed sectors are 1D arrays with a single integer entry between `0` and `N-1`.
+    `[0]`, `[1]`, ..., `[N-1]`
+
+    While `N` determines number of anyons, `n` determines the R-symbols, i.e., the exchange
+    statistics. Since `n` and `n+N` describe the same statistics, :math:`n \in Z_N`.
+    Reduces to the Z_N abelian group symmetry for `n = 0`. Use `ZNSymmetry` for this case!
+
+    The anyon model corresponding to opposite handedness is obtained for `N` and `N-n` (or `-n`).
+    """
+
+    _one_2D = np.ones((1, 1), dtype=int)
+    _one_4D = np.ones((1, 1, 1, 1), dtype=int)
+
+    def __init__(self, N: int, n: int):
+        assert type(N) == int
+        assert N % 2 == 0
+        assert type(n) == int
+        self.N = N
+        self.n = n % N
+        self._phase = np.exp(2j * np.pi * (self.n + .5) / self.N)
+        Symmetry.__init__(self,
+                          fusion_style=FusionStyle.single,
+                          braiding_style=BraidingStyle.anyonic,
+                          trivial_sector=np.array([0], dtype=int),
+                          group_name='ZNAnyonModel2',
+                          num_sectors=N, descriptive_name=None)
+
+    def is_valid_sector(self, a: Sector) -> bool:
+        return getattr(a, 'shape', ()) == (1,) and (0 <= a[0] < self.N)
+
+    def fusion_outcomes(self, a: Sector, b: Sector) -> SectorArray:
+        return self.fusion_outcomes_broadcast(a[np.newaxis, :], b[np.newaxis, :])
+
+    def fusion_outcomes_broadcast(self, a: SectorArray, b: SectorArray) -> SectorArray:
+        return (a + b) % self.N
+
+    def multiple_fusion_broadcast(self, *sectors: SectorArray) -> SectorArray:
+        return sum(sectors) % self.N
+
+    def sector_dim(self, a: Sector) -> int:
+        return 1
+
+    def __repr__(self):
+        return f'ZNAnyonModel2(N={self.N}, n={self.n})'
+
+    def is_same_symmetry(self, other) -> bool:
+        return isinstance(other, ZNAnyonModel2) and other.N == self.N and other.n == self.n
+
+    def dual_sector(self, a: Sector) -> Sector:
+        return (-a) % self.N
+
+    def dual_sectors(self, sectors: SectorArray) -> SectorArray:
+        return (-sectors) % self.N
+
+    def _n_symbol(self, a: Sector, b: Sector, c: Sector) -> int:
+        return 1
+
+    def _f_symbol(self, a: Sector, b: Sector, c: Sector, d: Sector, e: Sector, f: Sector
+                  ) -> np.ndarray:
+        return (-1)**(a[0] * ((b[0] + c[0])//self.N)) * self._one_4D
+
+    def frobenius_schur(self, a: Sector) -> int:
+        return (-1)**a[0]
+
+    def qdim(self, a: Sector) -> float:
+        return 1
+
+    def _r_symbol(self, a: Sector, b: Sector, c: Sector) -> np.ndarray:
+        return self._phase**(a[0] * b[0]) * self._one_2D
+
+    def _c_symbol(self, a: Sector, b: Sector, c: Sector, d: Sector, e: Sector, f: Sector) -> np.ndarray:
+        return (self._phase**(b[0] * c[0])) * self._one_4D
+
+    def all_sectors(self) -> SectorArray:
+        return np.arange(self.N, dtype=int)[:, None]
+
+
 class QuantumDoubleZNAnyonModel(Symmetry):
     """Doubled abelian anyon model with fusion rules corresponding to the Z_N group;
     also written as :math:`D(Z_N)`.
@@ -1454,6 +1538,8 @@ z9_symmetry = ZNSymmetry(N=9)
 u1_symmetry = U1Symmetry()
 su2_symmetry = SU2Symmetry()
 fermion_parity = FermionParity()
+semion_model = ZNAnyonModel2(2, 0)
 toric_code = QuantumDoubleZNAnyonModel(2)
+double_semion_model = ProductSymmetry([ZNAnyonModel2(2, 0), ZNAnyonModel2(2, 1)])
 fibonacci_grading = FibonacciGrading(handedness='left')
 ising_grading = IsingGrading(nu=1)
