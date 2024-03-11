@@ -40,6 +40,7 @@ logger = logging.getLogger(__name__)
 
 from ..linalg import np_conserved as npc
 from ..networks.mps import MPSEnvironment
+from ..linalg.sparse import OrthogonalNpcLinearOperator
 from ..linalg.krylov_based import lanczos_arpack, LanczosGroundState
 from .truncation import truncate, svd_theta
 from ..tools.params import asConfig
@@ -515,6 +516,17 @@ class DMRGEngine(IterativeSweeps):
         self._canonicalize(True)
         logger.info(f'{self.__class__.__name__} finished after {self.sweeps} sweeps, '
                     f'max chi={max(self.psi.chi)}')
+        if (len(self.ortho_to_envs) > 0) and (self.sweep_stats['E'][-1] > -1e-8):
+            msg = (f'{self.__class__.__name__} with orthogonal_to, i.e. searching for excited '
+                   f'states, terminated with an energy consistent with zero. '
+                   f'Orthogonality can not be guaranteed. Consider adding a negative constant to '
+                   f'the Hamiltonian such that the target state has negative energy. '
+                   f'See https://github.com/tenpy/tenpy/issues/329 for more information.')
+            # stacklevel: (1) this
+            #             (2) DMRGEngine.run()
+            #             (3) IterativeSweeps.run()
+            #             (4) user context
+            warnings.warn(msg, stacklevel=4)
 
     def run(self):
         """Run the DMRG simulation to find the ground state.
