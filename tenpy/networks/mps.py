@@ -593,37 +593,73 @@ class MPS:
     @classmethod
     def from_desired_bond_dimension(cls,
                                     sites,
-                                    chi,
+                                    chis,
                                     bc='finite',
                                     dtype=np.float64,
                                     permute=True,
                                     chargeL=None):
+        """Construct a matrix product state with given bond dimensions from random matrices (no charge conservation).
+
+        Parameters
+        ----------
+        sites : list of :class:`~tenpy.networks.site.Site`
+            The sites defining the local Hilbert space.
+        chis : (list of) {int}
+            Desired bond dimensions. For a single int, the same bond dimension is used on every bond.
+        bc : {'infinite', 'finite'}
+            MPS boundary conditions. See docstring of :class:`MPS`. For 'finite' chi is capped to the maximum possible at each bond.
+        dtype : type or string
+            The data type of the array entries.
+        permute : bool
+            The :class:`~tenpy.networks.Site` might permute the local basis states if charge
+            conservation gets enabled.
+            If `permute` is True (default), we permute the given `p_state` locally according to
+            each site's :attr:`~tenpy.networks.Site.perm`.
+            The `p_state` entries should then always be given as if `conserve=None` in the Site.
+        chargeL : charges
+            Leg charges at bond 0, which are purely conventional.
+
+        Returns
+        -------
+        mps : :class:`MPS`
+            An MPS with the desired bond dimension.
+        """
         sites = list(sites)
         L = len(sites)
         # TODO: what happens if we have charge conservation?
+        assert sites[0].leg.chinfo.qnumber == 0, "does not work with conserved charges"
         if bc == 'finite':
+            if isinstance(chis, int):
+                chi_uniform = chis
+                chis = [chi_uniform] * (L-1)
+            assert len(chis) == L-1, "wrong length of chi list"
+            chis.append(1)
             SVs = [np.ones(1)]
-            Q, _ = np.linalg.qr(np.random.rand(sites[0].dim, chi))
-            Bflat = [Q.reshape(sites[0].dim, 1, Q.shape[1])] #TODO: this only does real entries
+            Q, _ = np.linalg.qr(np.random.rand(sites[0].dim, chis[0]))
+            Bflat = [Q.reshape(sites[0].dim, 1, Q.shape[1])] # TODO: this only does real entries
             for i in range(1, L-1):
                 B_vR = Bflat[-1].shape[2]
                 SV = np.random.rand(B_vR)
                 SVs.append(SV/np.linalg.norm(SV))
-                Q, _ = np.linalg.qr(np.random.rand(sites[i].dim*B_vR, chi))
+                Q, _ = np.linalg.qr(np.random.rand(sites[i].dim*B_vR, chis[i]))
                 Bflat.append(Q.reshape(sites[i].dim, B_vR, Q.shape[1]))
             B_vR = Bflat[-1].shape[2]
             SV = np.random.rand(B_vR)
             SVs.append(SV/np.linalg.norm(SV))
-            Bflat.append(np.random.rand(sites[-1].dim*chi).reshape(sites[-1].dim, B_vR, 1))
+            Bflat.append(np.random.rand(sites[-1].dim*chis[L-2]).reshape(sites[-1].dim, B_vR, 1))
             SVs = [np.ones(1)]
         elif bc == 'infinite':
+            if isinstance(chis, int):
+                chi_uniform = chis
+                chis = [chi_uniform] * L
+            assert len(chis) == L, "wrong length of chi list"
             Bflat = []
             SVs = []
             for i in range(L):
-                SV = np.random.rand(chi)
+                SV = np.random.rand(chis[i])
                 SVs.append(SV/np.linalg.norm(SV))
-                Q, _ = np.linalg.qr(np.random.rand(sites[i].dim*chi, chi))
-                Bflat.append(Q.reshape(sites[i].dim, chi, chi))
+                Q, _ = np.linalg.qr(np.random.rand(sites[i].dim*chis[i], chis[(i+1)%L]))
+                Bflat.append(Q.reshape(sites[i].dim, chis[i], chis[(i+1)%L]))
             SVs.append(SVs[0])
         else:
             raise NotImplementedError("MPS.from_desired_bond_dimension not implemented for segment BC.")
@@ -1255,8 +1291,9 @@ class MPS:
         self.sites = [self.sites[i] for i in inds]
         self.form = [self.form[i] for i in inds]
         self._B = [self._B[i] for i in inds]
-        self._S = [self._S[i] for i in inds]
-        self._S.append(self._S[0])
+        S_new = [self._S[i] for i in inds]
+        S_new.append(self._S[0])
+        self._S = S_new
 
     def enlarge_chi(self, extra_legs, random_fct=np.random.normal):
         """Artifically enlarge the bond dimension by the specified extra legs/charges. In place.
@@ -2593,9 +2630,9 @@ class MPS:
                 i_min = min([i for _, i in term])
                 if not 0 <= i_min < L:
                     if copy is None:
-                        # make explicit copy to not modify exicisting term_list
-                        copy = terms.TermList(term_list.terms, term_list.prefactors)
-                    shift = i % L - i_min
+                        # make explicit copy to not modify existing term_list
+                        copy = terms.TermList(term_list.terms, term_list.strength)
+                    shift = i_min % L - i_min
                     copy.terms[a] = [(op, i + shift) for op, i in term]
             if copy is not None:
                 term_list = copy
