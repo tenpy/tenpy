@@ -358,7 +358,7 @@ class Arnoldi(KrylovBased):
         """
         h = self._h_krylov
         w = self.psi0  # initialize
-        norm = npc.norm(w)
+        norm = self.norm(w)
         for k in range(self.N_max):
             self.iscale_prefactor(w, 1. / norm)
             self._to_cache(w)
@@ -366,7 +366,7 @@ class Arnoldi(KrylovBased):
             for i, v_i in enumerate(self._cache):
                 h[i, k] = ov = self.inner(v_i, w)
                 self.iadd_prefactor_other(w, -ov, v_i)
-            h[k + 1, k] = norm = npc.norm(w)
+            h[k + 1, k] = norm = self.norm(w)
             self._calc_result_krylov(k)
             if norm < self._cutoff or (k + 1 >= self.N_min and self._converged(k)):
                 break
@@ -747,7 +747,7 @@ def lanczos_arpack(H, psi, options={}, orthogonal_to=[]):
         msg = ("Lanczos argument `orthogonal_to` is deprecated and will be removed.\n"
                "Instead, replace `H` with  `OrthogonalNpcLinearOperator(H, orthogonal_to)`.")
         warnings.warn(msg, category=FutureWarning, stacklevel=2)
-        H = OrthogonalNpcLinearOperator(self.H, orthogonal_to)
+        H = OrthogonalNpcLinearOperator(H, orthogonal_to)
     options = asConfig(options, "Lanczos")
     H_flat, psi_flat = FlatHermitianOperator.from_guess_with_pipe(H.matvec, psi, dtype=H.dtype)
     tol = options.get('P_tol', 1.e-14)
