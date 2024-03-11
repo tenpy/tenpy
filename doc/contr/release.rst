@@ -3,27 +3,27 @@ Checklist for a new release
 
 Follow this checklist when creating a new release, i.e. updating the version number.
 
-1. Check deprecated features, e.g. full-text search for ``.. deprecated ::``, ``DeprecationWarning``
+#. Check deprecated features, e.g. full-text search for ``.. deprecated ::``, ``DeprecationWarning``
    and ``FutureWarning``. They should mention at which release the deprecated implementations will
    be removed. If they are due, remove them.
 
-1. Make sure that tenpy can be compiled (``bash ./compile.sh``) and installed (``pip install .``).
+#. Make sure that tenpy can be compiled (``bash ./compile.sh``) and installed (``pip install .``).
    Make sure that *all* tests run successfully.
    A convenient way to check this is to re-run the github.com actions on the latest commit.
 
-1. Update the changelog and release notes.
+#. Update the changelog and release notes.
 
    - Make sure all important changes are listed in ``doc/changelog/latest.rst``.
    - Rename that file to the next version number.
    - Add it to the toctree in ``doc/releases.rst``.
    - Create a new ``doc/changelog/latest.rst`` from the template.
 
-1. Update ``tenpy/version.py``
+#. Update ``tenpy/version.py``
   
    - Update the release number.
    - set ``released=True``.
 
-1. Create the version commit and a tag::
+#. Create the version commit and a tag::
     
      git commit -m "VERSION 0.42.1"
      git tag -s "v0.42.1"
@@ -31,7 +31,7 @@ Follow this checklist when creating a new release, i.e. updating the version num
    Change the version number appropriately.
    You should GPG sign the commit.
 
-1. Reset the ``released=False`` flag in ``tenpy/version.py``.
+#. Reset the ``released=False`` flag in ``tenpy/version.py``.
    Commit and push these changes::
    
      git add tenpy/version.py
@@ -39,11 +39,11 @@ Follow this checklist when creating a new release, i.e. updating the version num
      git push
      git push origin v0.42.1  # also push the tag
 
-1. Pushing a tag should cause a github action to publish to test.pypi.org.
+#. Pushing a tag should cause a github action to publish to test.pypi.org.
    It executes ``.github/workflows/publish-test-pypi.yml``.
    Double check that everything looks ok there.
 
-1. Perform a test installation.
+#. Perform a test installation.
 
    This is best done in a dedicated fresh environment.
    Since the dependencies (numpy, scipy) are not available on TestPyPI, we need to pre-install them.
@@ -72,11 +72,11 @@ Follow this checklist when creating a new release, i.e. updating the version num
 
       pytest path/to/local/repo/tests
 
-1. Create a release with release notes on github.
+#. Create a release with release notes on github.
    The release triggers the github action for uploading the package to PyPI.
    It executes ``.github/workflows/publish-pypi.yml``.
 
-1. Wait for conda-forge bot to create a pull request in the `feedstock repo <https://github.com/conda-forge/physics-tenpy-feedstock>`_
+#. Wait for conda-forge bot to create a pull request in the `feedstock repo <https://github.com/conda-forge/physics-tenpy-feedstock>`_
    and merge it.
 
 
