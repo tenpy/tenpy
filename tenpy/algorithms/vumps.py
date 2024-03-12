@@ -46,6 +46,7 @@ from ..networks.mpo import MPOEnvironment, MPOTransferMatrix
 from ..networks.mps import MPS, TransferMatrix
 from ..networks.uniform_mps import UniformMPS
 from ..linalg.sparse import SumNpcLinearOperator
+from ..algorithms.mps_common import DensityMatrixMixer, SubspaceExpansion
 from ..linalg.krylov_based import LanczosGroundState, lanczos_arpack
 from ..tools.params import asConfig
 from ..tools.math import entropy
@@ -555,6 +556,11 @@ class SingleSiteVUMPSEngine(VUMPSEngine):
     """
     EffectiveH = OneSiteH
 
+    def __init__(self, psi, model, options, **kwargs):
+        super().__init__(psi, model, options, **kwargs)
+        if self.mixer is not None:
+            raise NotImplementedError("No mixer for SingleSiteVUMPS implemented")
+
     def update_env(self, **update_data):
         # Get guesses for the next LP and RP
         self.guess_init_env_data = self.env.get_initialization_data()
@@ -693,11 +699,15 @@ class TwoSiteVUMPSEngine(VUMPSEngine):
         :include: DMRGEngine
     """
     EffectiveH = TwoSiteH
+    DefaultMixer = SubspaceExpansion
+    use_mixer_by_default = False
 
     def __init__(self, psi, model, options, **kwargs):
         super().__init__(psi, model, options, **kwargs)
         if not self.psi.L > 1:
             raise ValueError("Two-site methods require a two-site unit cell.")
+        if not self.psi.L > 2 and isinstance(self.mixer, DensityMatrixMixer):
+            raise NotImplementedError("DensityMatrixMixer currently only works for unit cells larger than 2")
 
     def update_env(self, **update_data):
         # Get guesses for the next LP and RP
@@ -726,14 +736,10 @@ class TwoSiteVUMPSEngine(VUMPSEngine):
         E0_1, theta0_1, N0_1 = LanczosGroundState(H0_1, C1, lanczos_options).run()
         E0_2, theta0_2, N0_2 = LanczosGroundState(H0_2, C2, lanczos_options).run()
         E2, theta2, N2 = LanczosGroundState(H2, AC, lanczos_options).run()
-        U, S, VH, err, S_approx = svd_theta(theta2.combine_legs([['vL', 'p0'], ['vR', 'p1']], qconj=[+1, -1]),
-                                     self.trunc_params,
-                                     qtotal_LR=[theta2.qtotal, None],
-                                     inner_labels=['vR', 'vL'])
-        AL1 = U.split_legs().ireplace_label('p0', 'p')
-        AR2 = VH.split_legs().ireplace_label('p1', 'p')
 
-        S = npc.diag(S, AL1.get_leg('vR').conj(), labels=['vL', 'vR'])
+        U, S, VH, err, S_approx = self.mixed_svd(theta2.combine_legs([['vL', 'p0'], ['p1', 'vR']], qconj=[+1, -1]))
+        AL1 = U.split_legs()
+        AR2 = VH.split_legs()
 
         AC1 = npc.tensordot(AL1, S, axes=['vR', 'vL'])
         AC2 = npc.tensordot(S, AR2, axes=['vR', 'vL'])
@@ -819,3 +825,93 @@ class TwoSiteVUMPSEngine(VUMPSEngine):
         entropy_right = entropy(s2**2, n=1)
 
         return AL2, AR1, eps_L, eps_R, entropy_left, entropy_right
+    
+    def mixed_svd(self, theta):
+        """Get (truncated) `B` from the new theta (as returned by diag).
+
+        The goal is to split theta and truncate it::
+
+            |   -- theta --   ==>    -- U -- S --  VH -
+            |      |   |                |          |
+
+        Without a mixer, this is done by a simple svd and truncation of Schmidt values.
+
+        With a mixer, the state is perturbed before the SVD. The details of the perturbation are
+        defined by the :class:`~tenpy.algorithms.mps_common.Mixer` class.
+
+        Note that the returned `S` is a general (not diagonal) matrix, with labels ``'vL', 'vR'``.
+
+        Parameters
+        ----------
+        theta : :class:`~tenpy.linalg.np_conserved.Array`
+            The optimized wave function, prepared for svd.
+
+        Returns
+        -------
+        U : :class:`~tenpy.linalg.np_conserved.Array`
+            Left-canonical part of `theta`. Labels ``'(vL.p)', 'vR'``.
+        S : 1D ndarray | 2D :class:`~tenpy.linalg.np_conserved.Array`
+            Without mixer just the singular values of the array; with mixer it might be a general
+            matrix with labels ``'vL', 'vR'``; see comment above.
+        VH : :class:`~tenpy.linalg.np_conserved.Array`
+            Right-canonical part of `theta`. Labels ``'vL', '(p.vR)'``.
+        err : :class:`~tenpy.algorithms.truncation.TruncationError`
+            The truncation error introduced.
+        S_approx : ndarray
+            Just the `S` if a 1D ndarray, or an approximation of the correct S (which was used for
+            truncation) in case `S` is 2D Array.
+        """
+        i0 = self.i0
+        update_LP, update_RP = False, True
+        mixer = self.mixer
+        if mixer is None:
+            # simple case: real svd, defined elsewhere.
+            qtotal_i0 = self.env.bra.get_B(i0, form=None).qtotal
+            U, S, VH, err, _ = svd_theta(theta,
+                                        self.trunc_params,
+                                        qtotal_LR=[qtotal_i0, None],
+                                        inner_labels=['vR', 'vL'])
+            S_a = S
+            S = npc.diag(S, U.split_legs().get_leg('vR').conj(), labels=['vL', 'vR'])
+        elif mixer.update_sites == 2:
+            U, S, VH, err, S_a = mixer.perturb_svd(self, theta, self.i0, update_LP, update_RP)
+        elif mixer.update_sites == 1:
+            if update_LP and update_RP:
+                # sub-space expand left site by treating p1 as part of vR leg
+                theta_L = theta.replace_label('(p1.vR)', 'vR')
+                U, _, _, err_L, S_a = mixer.perturb_svd(self, theta_L, self.i0, True)
+                U = U.gauge_total_charge(1, self.psi.get_B(i0, form=None).qtotal)
+                # sub-space expand right site by treating p0 as part of vL leg
+                theta_R = theta.replace_labels(['(vL.p0)', '(p1.vR)'], ['vL', '(p0.vR)'])
+                _, _, VH, err_R, S_a = mixer.perturb_svd(self, theta_R, self.i0 + 1, False)
+                VH = VH.gauge_total_charge(0, self.psi.get_B(i0 + 1, form=None).qtotal)
+                # calculate S = U^H theta V
+                theta = npc.tensordot(U.conj(), theta, axes=['(vL*.p0*)', '(vL.p0)'])
+                theta = npc.tensordot(theta, VH.conj(), axes=['(p1.vR)', '(p0*.vR*)'])
+                theta.ireplace_labels(['vR*', 'vL*'], ['vL', 'vR'])
+                theta /= np.linalg.norm(npc.svd(theta, compute_uv=False))
+                S = theta
+                err = err_L + err_R
+                VH.ireplace_label('(p0.vR)', '(p1.vR)')
+            elif update_LP:
+                # sub-space expand left site by treating p1 as part of vR leg
+                theta.ireplace_label('(p1.vR)', 'vR')
+                U, S, VH, err, S_a = mixer.perturb_svd(self, theta, self.i0, True)
+                S = npc.diag(S, U.get_leg('vR').conj(), labels=['vL', 'vR'])
+                # note: VH is not isometry, but we don't update_RP
+                VH.ireplace_label('vR', '(p1.vR)')
+            elif update_RP:
+                # sub-space expand right site by treating p0 as part of vL leg
+                theta.ireplace_labels(['(vL.p0)', '(p1.vR)'], ['vL', '(p0.vR)'])
+                U, S, VH, err, S_a = mixer.perturb_svd(self, theta, self.i0 + 1, False)
+                S = npc.diag(S, U.get_leg('vR').conj(), labels=['vL', 'vR'])
+                # note: U not isometry, but we don't update_LP
+                U.ireplace_label('vL', '(vL.p0)')
+                VH.ireplace_label('(p0.vR)', '(p1.vR)')
+            else:
+                assert False
+        else:
+            assert False, "mixer acting on weird number of sites"
+        U.ireplace_label('(vL.p0)', '(vL.p)')
+        VH.ireplace_label('(p1.vR)', '(p.vR)')
+        return U, S, VH, err, S_a
