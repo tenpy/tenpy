@@ -7,7 +7,7 @@ running the actual algorithm, possibly performing measurements and saving the re
 See :doc:`/intro/simulations` for an overview and
 :doc:`/examples` for a list of example parameter yaml files.
 """
-# Copyright 2020-2021 TeNPy Developers, GNU GPLv3
+# Copyright 2020-2023 TeNPy Developers, GNU GPLv3
 
 import os
 import sys
@@ -15,6 +15,7 @@ from pathlib import Path
 import time
 import importlib
 import warnings
+import functools
 import numpy as np
 import logging
 import copy
@@ -30,6 +31,8 @@ from ..tools.events import EventHandler
 from ..tools.misc import find_subclass, update_recursive, get_recursive, set_recursive
 from ..tools.misc import setup_logging as setup_logging_
 from .. import version
+from .measurement import (measurement_wrapper, _m_psi_method, _m_psi_method_wrapped,
+                          _m_model_method, _m_model_method_wrapped)
 
 __all__ = [
     'Simulation',
@@ -39,6 +42,7 @@ __all__ = [
     'init_simulation_from_checkpoint',
     'resume_from_checkpoint',
     'run_seq_simulations',
+    'expand_sequential_simulation_params',
     'output_filename_from_dict',
 ]
 
@@ -77,10 +81,10 @@ class Simulation:
 
         simulation_class : str | class
             Name or class of the Simulation Class to be used.
-            Read out before class initialization in :meth:`run_simulation` or similar functions.
+            Read out before class initialization in :func:`run_simulation` or similar functions.
         simulation_class_kwargs : dict
             Keyword arguemnts to be given to the simulation class.
-            Read out before class initialization in :meth:`run_simulation` or similar functions.
+            Read out before class initialization in :func:`run_simulation` or similar functions.
         directory : str
             If not None (default), switch to that directory at the beginning of the simulation.
         log_params : dict
@@ -149,8 +153,11 @@ class Simulation:
     _backup_filename : str
         When writing a file a second time, instead of simply overwriting it, move it to there.
         In that way, we still have a non-corrupt version if something fails during saving.
+    _init_walltime : float
+        Walltime at initialization of the simulation class.
+        Used as reference point in :meth:`walltime`.
     _last_save : float
-        Time of the last call to :meth:`save_results`, initialized to startup time.
+        Time of the last call to :meth:`save_results`, initialized to :attr:`_init_walltime`.
     loaded_from_checkpoint : bool
         True when the simulation is loaded with :meth:`from_saved_checkpoint`.
     grouped : int
@@ -168,16 +175,17 @@ class Simulation:
     #: tuples as for :cfg:option:`Simulation.connect_measurements` that get added if
     #: the :cfg:option:`Simulation.use_default_measurements` is True.
     default_measurements = [
-        ('tenpy.simulations.measurement', 'measurement_index', {}, 1),
-        ('tenpy.simulations.measurement', 'bond_dimension'),
-        ('tenpy.simulations.measurement', 'energy_MPO'),
-        ('tenpy.simulations.measurement', 'entropy'),
+        ('tenpy.simulations.measurement', 'm_measurement_index', {}, 1),
+        ('tenpy.simulations.measurement', 'm_bond_dimension'),
+        ('tenpy.simulations.measurement', 'm_energy_MPO'),
+        ('tenpy.simulations.measurement', 'm_entropy'),
     ]
 
     #: logger : An instance of a logger; see :doc:`/intro/logging`. NB: class attribute.
     logger = logging.getLogger(__name__ + ".Simulation")
 
     def __init__(self, options, *, setup_logging=True, resume_data=None):
+        self._init_walltime = time.time()
         if not hasattr(self, 'loaded_from_checkpoint'):
             self.loaded_from_checkpoint = False
         self.options = options  # delay conversion to Config: avoid logging before setup_logging
@@ -221,7 +229,7 @@ class Simulation:
                 'finished_run': False,
             }
         self._last_save = time.time()
-        self.measurement_event = EventHandler("psi, simulation, results")
+        self.measurement_event = EventHandler("psi, simulation, model, results")
         if resume_data is not None:
             if 'psi' in resume_data:
                 self.psi = resume_data['psi']
@@ -314,7 +322,9 @@ class Simulation:
         sim.results = checkpoint_results
         sim.__init__(options, **kwargs)
         # convert measurement arrays back to lists to allow easy appending
-        sim.results['measurements'] = {k: list(v) for k, v in sim.results['measurements'].items()}
+        if 'measurements' in checkpoint_results:
+            sim.results['measurements'] = {k: list(v)
+                                           for k, v in sim.results['measurements'].items()}
         return sim
 
     def resume_run(self):
@@ -371,13 +381,15 @@ class Simulation:
                 :meth:`~tenpy.tools.cache.CacheFile.open`.
         """
         cache_threshold_chi = self.options.get("cache_threshold_chi", 2000)
-        cache_params = self.options.get("cache_params", {})
         chi = get_recursive(self.options, "algorithm_params.trunc_params.chi_max", default=None)
         if chi is not None and chi < cache_threshold_chi:
+            self.options.touch("cache_params")
+            self.logger.info("No cache due to chi=%d < cache_threshold_chi = %d",
+                             chi, cache_threshold_chi)
             self.cache = CacheFile.open()  # default = keep in RAM.
             return
         self.cache.close()
-        self.logger.info("initialize new cache")
+        cache_params = self.options.get("cache_params", {})
         self.cache = CacheFile.open(**cache_params)
         # note: can't use a `with self.cache` statement, but emulate it:
         # self.__enter__() calls this function followed by
@@ -545,6 +557,16 @@ class Simulation:
             measure_initial: bool
                 Whether to perform a measurement on the initial state, i.e., before starting the
                 algorithm run.
+            measure_at_algorithm_checkpoints : bool
+                Defaults to False. If True, make measurements at each algorithm checkpoint.
+                This can be useful to study e.g. the DMRG convergence with the number of sweeps.
+                Note that (depending on the algorithm) `psi` might not be in canonical form during
+                the algorithm run. In that case, you might need to also enable the
+                `canonicalize_before_measurement` option to get correct e.g. correct
+                long-range correlation functions. (On the other hand, local onsite expectation
+                values are likely fine without the explicit canonical_form() call.)
+            canonicalize_before_measurement : bool
+                If True, call `psi.canonical_form()` on the state used for measurement.
         """
         self._connect_measurements()
         if self.options.get('measure_initial', True):
@@ -557,7 +579,54 @@ class Simulation:
             def_meas = []
         con_meas = list(self.options.get('connect_measurements', []))
         for entry in def_meas + con_meas:
-            self.measurement_event.connect_by_name(*entry)
+            # (module_name, func_name, kwargs=None, priority=0) = entry
+            self._connect_measurements_fct(*entry)
+        measure_at_alg = self.options.get('measure_at_algorithm_checkpoints', False)
+        if measure_at_alg:
+
+            def make_simulation_measurements(algorithm):
+                assert algorithm is self.engine
+                self.make_measurements()
+
+            self.engine.checkpoint.connect(make_simulation_measurements)
+
+    def _connect_measurements_fct(self, module_name, func_name, extra_kwargs=None, priority=0):
+        if extra_kwargs is None:
+            extra_kwargs = {}
+        wrap = False
+        if func_name.startswith('wrap'):
+            wrap = True
+            func_name = func_name.split()[1]
+
+        # find measurement function
+        if module_name == 'psi_method':
+            # psi might change/only be created at beginning of measurement
+            # so the function needs to be extracted dynamically during measurement
+            # this is done in `tenpy.simulations.measurement._m_psi_method{_wrapped}()`
+            extra_kwargs['func_name'] = func_name
+            func = _m_psi_method_wrapped if wrap else _m_psi_method
+            wrap = False
+        elif module_name == 'model_method':
+            # analogous to psi_method
+            extra_kwargs['func_name'] = func_name
+            func = _m_model_method_wrapped if wrap else _m_model_method
+            wrap = False
+        elif module_name == 'simulation_method':
+            # the simulation class already exists, so we can directly get the corresponding method
+            func = getattr(self, func_name)
+        else:
+            # global functions should also exist already, so we can directly get them
+            func = hdf5_io.find_global(module_name, func_name)
+
+        if wrap:
+            if 'results_key' in extra_kwargs:
+                results_key = extra_kwargs['results_key']
+                del extra_kwargs['results_key']
+            else:
+                results_key = func_name
+            func = measurement_wrapper(func, results_key=results_key)
+
+        self.measurement_event.connect(func, priority, extra_kwargs)
 
     def run_algorithm(self):
         """Run the algorithm.
@@ -578,12 +647,37 @@ class Simulation:
         """Perform measurements and merge the results into ``self.results['measurements']``."""
         self.logger.info("make measurements")
         results = self.perform_measurements()
+        self._merge_measurement_results(results)
+
+    def _merge_measurement_results(self, results):
+        """Merge dictionary `results` from measurements into ``self.results['measurement']``."""
+        # merge the results into self.results['measurements']
         previous_results = self.results.get('measurements', None)
         if previous_results is None:
             self.results['measurements'] = {k: [v] for k, v in results.items()}
-        else:
-            for k, v in results.items():
-                previous_results[k].append(v)
+            return
+
+        previous_keys = set(previous_results.keys())
+        new_keys = set(results.keys())
+        new_keys_not_previous = new_keys - previous_keys
+        if new_keys_not_previous:
+            warnings.warn(f"measurement gave new keys {new_keys_not_previous!r} "
+                            "fill up with `None` for previous measurements.")
+            some_previous_measurement = next(iter(previous_results.values()))
+            measurement_len = len(some_previous_measurement)
+            for key in new_keys_not_previous:
+                previous_results[key] = [None] * measurement_len
+
+        # actual merge
+        for k, v in results.items():   # only new keys
+            previous_results[k].append(v)
+
+        previous_keys_not_new = previous_keys - new_keys
+        if previous_keys_not_new:
+            warnings.warn(f"measurement didn't give keys {previous_keys_not_new!r} "
+                          "we have from previous measurements, fill up with `None`")
+            for key in previous_keys_not_new:
+                previous_results[key].append(None)
         # done
 
     def perform_measurements(self):
@@ -601,9 +695,9 @@ class Simulation:
         psi, model = self.get_measurement_psi_model(self.psi, self.model)
 
         returned = self.measurement_event.emit(results=results,
-                                               simulation=self,
                                                psi=psi,
-                                               model=model)
+                                               model=model,
+                                               simulation=self)
         # check for returned values, although there shouldn't be any
         returned = [entry for entry in returned if entry is not None]
         if len(returned) > 0:
@@ -636,6 +730,10 @@ class Simulation:
         model :
             Model matching `psi` (in terms of indexing, MPS order, grouped sites, ...)
         """
+        if self.options.get("canonicalize_before_measurement", False):
+            if psi is self.psi:
+                psi = psi.copy()  # make copy before
+            psi.canonical_form()
         if self.grouped > 1:
             if psi is self.psi:
                 psi = psi.copy()  # make copy before
@@ -656,7 +754,7 @@ class Simulation:
         else:
             # use the cwd of the file where the simulation class is defined
             module = importlib.import_module(sim_module)  # get module object
-            cwd = os.path.dirname(os.path.abspath(module.__file__)),
+            cwd = os.path.dirname(os.path.abspath(module.__file__))
         git_rev = version._get_git_revision(cwd)
 
         version_info = {
@@ -857,16 +955,16 @@ class Simulation:
         """
         results = self.results.copy()
         results['simulation_parameters'] = self.options.as_dict()
-        # try to convert measurements into sigle arrays
-        measurements = results['measurements'].copy()
-        results['measurements'] = measurements
-        for k, v in measurements.items():
-            try:
-                v = np.array(v)
-            except:
-                continue
-            if v.dtype != np.dtype(object):
-                measurements[k] = v
+        if 'measurements' in results:
+            # try to convert measurements into numpy arrays to store more compactly
+            results['measurements'] = measurements = results['measurements'].copy()
+            for k, v in measurements.items():
+                try:
+                    v = np.array(v)
+                except:
+                    continue
+                if v.dtype != np.dtype(object):
+                    measurements[k] = v
         if self.options.get('save_resume_data', self.options['save_psi']):
             results['resume_data'] = self.get_resume_data()
             # note: we don't add this to self.results, but only once we save.
@@ -930,6 +1028,22 @@ class Simulation:
                     "Increase the latter to %.1f", save_every)
                 self.options['save_every_x_seconds'] = save_every
         # done
+
+    def walltime(self):
+        """Wall time evolved since initialization of the simulation class.
+
+        Utility measurement method. To measure it, add the following entry to the
+        :cfg:option:`Simulation.connect_measurements` option::
+
+            - - simulation_method
+              - wrap walltime
+
+        Returns
+        -------
+        seconds : float
+            Elapsed (wall clock) time in seconds since the initialization of the simulation.
+        """
+        return time.time() - self._init_walltime
 
 
 class Skip(ValueError):
@@ -1176,9 +1290,8 @@ def run_seq_simulations(sequential,
     .. cfg:config :: sequential
 
         recursive_keys : list of str
-            Mandatory.
-            The list of recursive keys for the `simulation_params` to be changed.
-            for example an entry ``'model_params.Jz'`` indicates that
+            Mandatory. The list of recursive keys for the `simulation_params` to be changed.
+            For example an entry ``'model_params.Jz'`` indicates that
             ``simulation_params['model_params']['Jz']`` should be changed,
             see :func:`~tenpy.tools.misc.get_recursive`.
         value_lists : list of list
@@ -1230,12 +1343,75 @@ def run_seq_simulations(sequential,
         simulation. Otherwise just the results of the last simulation run.
     """
     sequential = asConfig(sequential, 'sequential')
+
+    if simulation_class_name is not _deprecated_not_set:
+        assert simulation_class == 'GroundStateSearch'
+        warnings.warn(
+            "The `simulation_class_name` argument has been renamed to `simulation_class`"
+            " for more consistency with remaining parameters.", FutureWarning)
+        simulation_class = simulation_class_name
+
+    SimClass = find_subclass(Simulation, simulation_class)
+    if simulation_class_kwargs is None:
+        simulation_class_kwargs = {}
+
+    if collect_results_in_memory:
+        all_results = []
+    else:
+        results = None
+
+    # main loop over simulations
+    for sim_params in expand_sequential_simulation_params(sequential, simulation_params):
+        del results  # free memory
+        if resume_data is not None:
+            simulation_class_kwargs['resume_data'] = resume_data
+
+        with SimClass(sim_params, **simulation_class_kwargs) as sim:
+            results = sim.run()
+            if collect_results_in_memory:
+                all_results.append(results)
+            # save results for the next simulation
+            resume_data = sim.get_resume_data(sequential_simulations=True)
+        assert resume_data['sequential_simulations'], \
+            "super().get_resume_data() without sequential_simulations argument"
+        del sim  # but free memory to avoid too many copies (e.g. the whole environment)
+    # all simulations are done!
+    if collect_results_in_memory:
+        return all_results
+    else:
+        return results
+
+
+def expand_sequential_simulation_params(sequential, simulation_params, chdir=True):
+    """Generator for expand sequential simulation parameters used for :func:`run_seq_simulations`.
+
+    The intended call structure is roughly::
+
+        for sim_params in sequential_simulation_params(sequential, simulation_params):
+            run_simulation(**sim_params)
+
+
+    Parameters
+    ----------
+    sequential : dict-like
+        The sequential parameters as specified in :cfg:config:`sequential`.
+    simulation_params : dict
+        The simulation parameters to be expanded.
+    chdir : bool
+        Flag to disable changing the current work directory to back to the
+        :cfg:option:`sequential.base_directory`.
+
+    Yields
+    ------
+    sim_params : dict
+        Deep copy of the `simulation_params`.
+    """
     separator = sequential.get('separator', '.')
     recursive_keys = sequential['recursive_keys']
     N_keys = len(recursive_keys)
     format_strs = [rkey.split(separator)[-1] + '_{0!s}' for rkey in recursive_keys]
     format_strs = sequential.get('format_strs', format_strs)
-    value_lists = [get_recursive(simulation_params, r_key) for r_key in recursive_keys]
+    value_lists = [get_recursive(simulation_params, r_key, separator) for r_key in recursive_keys]
     value_lists = sequential.get('value_lists', value_lists)
     index = sequential.get('index', 0)
     base_directory = sequential.get('base_directory', os.getcwd())
@@ -1251,17 +1427,6 @@ def run_seq_simulations(sequential,
                 assert not k.startswith(check), "really?!?"
     else:
         N_sims = 1
-
-    if simulation_class_name is not _deprecated_not_set:
-        assert simulation_class == 'GroundStateSearch'
-        warnings.warn(
-            "The `simulation_class_name` argument has been renamed to `simulation_class`"
-            " for more consistency with remaining parameters.", FutureWarning)
-        simulation_class = simulation_class_name
-
-    SimClass = find_subclass(Simulation, simulation_class)
-    if simulation_class_kwargs is None:
-        simulation_class_kwargs = {}
 
     # try to create varying output filenames
     # do we save to file at all?
@@ -1285,14 +1450,12 @@ def run_seq_simulations(sequential,
     else:  # we don't save results to files
         if not collect_results_in_memory:
             raise ValueError("Refuse to run without producing output")
-    if collect_results_in_memory:
-        all_results = []
 
     simulation_params['sequential'] = sequential
 
-    # main loop over simulations
     for index in range(index, N_sims):
-        os.chdir(base_directory)
+        if chdir:
+            os.chdir(base_directory)
         # update simulation parameters
         sequential['index'] = index
         sim_params = copy.deepcopy(simulation_params)
@@ -1300,25 +1463,9 @@ def run_seq_simulations(sequential,
             val = values[index]
             set_recursive(sim_params, rec_key, val, separator, insert_dicts=True)
 
-        if resume_data is not None:
-            simulation_class_kwargs['resume_data'] = resume_data
-
-        with SimClass(sim_params, **simulation_class_kwargs) as sim:
-            results = sim.run()
-            if collect_results_in_memory:
-                all_results.append(results)
-            # save results for the next simulation
-            resume_data = sim.get_resume_data(sequential_simulations=True)
-        assert resume_data['sequential_simulations'], \
-            "super().get_resume_data() without sequential_simulations argument"
-        del sim  # but free memory to avoid too many copies (e.g. the whole environment)
-        if index + 1 < N_sims:
-            del results
-    # all simulations are done!
-    if collect_results_in_memory:
-        return all_results
-    else:
-        return results
+        # yield the copy of sim_params such that the next simulation can run
+        yield sim_params
+    # done
 
 
 def output_filename_from_dict(options,

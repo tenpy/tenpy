@@ -1,5 +1,5 @@
 """Simulations for ground state searches."""
-# Copyright 2020-2021 TeNPy Developers, GNU GPLv3
+# Copyright 2020-2023 TeNPy Developers, GNU GPLv3
 
 import numpy as np
 from pathlib import Path
@@ -14,8 +14,7 @@ from ..networks.mpo import MPOEnvironment, MPOTransferMatrix
 from ..networks.mps import MPS, InitialStateBuilder
 from ..networks.umps import uMPS
 from ..algorithms.mps_common import ZeroSiteH
-from ..algorithms.dmrg import TwoSiteDMRGEngine
-from ..linalg import lanczos
+from ..linalg import krylov_based
 from ..linalg.sparse import SumNpcLinearOperator
 from ..tools.misc import find_subclass, to_iterable, get_recursive
 from ..tools.params import asConfig
@@ -777,7 +776,7 @@ class OrthogonalExcitations(GroundStateSearch):
                                   qtotal=qtotal_change,
                                   labels=['vL', 'vR'])
         lanczos_params = self.options.subconfig('algorithm_params').subconfig('lanczos_params')
-        _, th0, _ = lanczos.LanczosGroundState(H0, th0, lanczos_params).run()
+        _, th0, _ = krylov_based.LanczosGroundState(H0, th0, lanczos_params).run()
 
         # Check norm after Lanczos so that it is one.
         # TODO: check this already before lanczos?
@@ -1521,6 +1520,10 @@ class TopologicalExcitations(OrthogonalExcitations):
         return correction
 
     def arbitrary_shift_left(self, i, psi, LP):
+        # TODO JH while merging vumps branch, I saw that this function is not used, instead
+        # get_reference_energy() uses arbitrary_shift_right() twice (since git commit 35f6771b81)
+        # I think it's correct and we can
+        # remove this function, but I should first double-check this again
         dtype = np.promote_types(psi.dtype, self.model_orig.H_MPO.dtype)
         wL = self.model.H_MPO.get_W(i % self.model.H_MPO.L).get_leg('wL')
         IdR = self.model_orig.H_MPO.get_IdR((i-1) % self.model.H_MPO.L)
@@ -1596,6 +1599,7 @@ class TopologicalExcitations(OrthogonalExcitations):
             self.logger.info("Correction term for mismatched GSs: %.14f", correction)
             self.results['ground_state_energy'] = E_alpha - eta_R_alpha + eta_R_beta + correction
 
+        self.logger.info("Correction term for mismatched GSs: %.14f", correction)
         self.logger.info("Reference Ground State Energy: %.14f", self.results['ground_state_energy'])
 
         return self.results['ground_state_energy']
@@ -1691,7 +1695,7 @@ class ExcitationInitialState(InitialStateBuilder):
                              filename, key_ortho, key_offset)
             data = hdf5_io.load(filename)
             self._previous_ortho = previous_ortho = data['resume_data']['orthogonal_to']
-            self._previous_offset = data['resume_data']['offset']
+            self._previous_offset = data['resume_data']['ortho_offset']
             self._previous_first_last = data['segment_first_last']
         # else: we already loaded the corresponding data
         psi = previous_ortho[self._previous_offset + len(self.sim.excitations)]

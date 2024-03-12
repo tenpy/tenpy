@@ -1,4 +1,14 @@
-# Copyright 2022 TeNPy Developers, GNU GPLv3
+"""Plane wave excitations ansatz.
+
+
+.. todo ::
+
+    (1) Regulated transfer matrix for unit cell > 1
+    (2) Multi site excitation tensor
+    (3) Restarted Lanczos
+    (5) DMRG over the segment
+"""
+# Copyright 2022-2023 TeNPy Developers, GNU GPLv3
 
 import numpy as np
 import time
@@ -9,29 +19,23 @@ logger = logging.getLogger(__name__)
 from ..linalg import np_conserved as npc
 from ..networks.momentum_mps import MomentumMPS
 from ..networks.mpo import MPOEnvironment, MPOTransferMatrix
-from ..linalg.lanczos import GMRES, LanczosGroundState, norm, inner
+from ..linalg.krylov_based import GMRES, LanczosGroundState, norm, inner
 from ..linalg.sparse import NpcLinearOperator, SumNpcLinearOperator, BoostNpcLinearOperator, ShiftNpcLinearOperator
 from ..tools.params import asConfig
 from ..tools.math import entropy
 from ..algorithms.algorithm import Algorithm
 from ..algorithms.mps_common import ZeroSiteH
 
-__all__ = ['TR_general', 'LT_general', 'construct_orthogonal', 'PlaneWaveExcitationEngine', 'TopologicalPlaneWaveExcitationEngine']
+__all__ = ['TR_general', 'LT_general', 'construct_orthogonal', 'PlaneWaveExcitationEngine',
+           'MultiSitePlaneWaveExcitationEngine', 'TopologicalPlaneWaveExcitationEngine']
 
-"""
-TODO - 04/01/2022
-(1) Regulated transfer matrix for unit cell > 1
-(2) Multi site excitation tensor
-(3) Restarted Lanczos
-(5) DMRG over the segment
-"""
 
 def TR_general(As, Bs, R, Ws=None):
     temp = R.copy()
     for i in reversed(range(len(As))):
         temp = npc.tensordot(Bs[i].conj(), temp, axes=(['vR*'], ['vL*']))
         if Ws is not None:
-            temp = npc.tensordot(Ws[i], temp, axes=(['wR', 'p'], ['wL', 'p*']))
+            temp = npc.tensordot(Ws[i % len(Ws)], temp, axes=(['wR', 'p'], ['wL', 'p*']))
         temp = npc.tensordot(As[i], temp, axes=(['vR', 'p'], ['vL', 'p*']))
     return temp
 
@@ -40,7 +44,7 @@ def LT_general(As, Bs, L, Ws=None):
     for i in range(len(As)):
         temp = npc.tensordot(temp, Bs[i].conj(), axes=(['vR*'], ['vL*']))
         if Ws is not None:
-            temp = npc.tensordot(temp, Ws[i], axes=(['wR', 'p*'], ['wL', 'p']))
+            temp = npc.tensordot(temp, Ws[i % len(Ws)], axes=(['wR', 'p*'], ['wL', 'p']))
         temp = npc.tensordot(temp, As[i], axes=(['vR', 'p*'], ['vL', 'p']))
     return temp
 
@@ -59,19 +63,22 @@ class PlaneWaveExcitationEngine(Algorithm):
     def __init__(self, psi, model, options, **kwargs):
         super().__init__(psi, model, options, **kwargs)
 
-        assert self.psi.L == self.model.H_MPO.L
+        # assert self.psi.L == self.model.H_MPO.L # If we have doubled unit cell, this will be false
         self.L = self.psi.L
+        self.HL = self.model.H_MPO.L
 
         self.ALs = [self.psi.get_AL(i) for i in range(self.L)]
         self.ARs = [self.psi.get_AR(i) for i in range(self.L)]
         self.ACs = [self.psi.get_AC(i) for i in range(self.L)]
         self.Cs = [self.psi.get_C(i) for i in range(self.L)] # C on the left
         self.H = self.model.H_MPO
-        self.Ws = [self.H.get_W(i) for i in range(self.L)]
+        self.Ws = [self.H.get_W(i) for i in range(self.HL)]
+        """
+        # Instead I just index via mod.
         if len(self.Ws) < len(self.ALs):
             assert len(self.ALs) % len(self.Ws)
             self.Ws = self.Ws * len(self.ALs) // len(self.Ws)
-
+        """
         self.IdL = self.H.get_IdL(0)
         self.IdR = self.H.get_IdR(-1)
 
@@ -150,7 +157,7 @@ class PlaneWaveExcitationEngine(Algorithm):
         for i in range(self.L):
             temp_L = self.GS_env.get_LP(i) # LT_general(self.ALs[:i], self.ALs[:i], self.LW, Ws=self.Ws[:i])
             temp_R = self.GS_env.get_RP(i) # TR_general(self.ARs[i+1:], self.ARs[i+1:], self.RW, Ws=self.Ws[i+1:])
-            temp = LT_general([self.VLs[i]], [self.ACs[i]], temp_L, Ws=[self.Ws[i]])
+            temp = LT_general([self.VLs[i]], [self.ACs[i]], temp_L, Ws=[self.Ws[i % self.HL]])
             temp = npc.tensordot(temp, temp_R, axes=(['wR', 'vR*'], ['wL', 'vL*']))
             strange.append(npc.norm(temp))
         logger.info("Norm of H|psi> projected into the tangent space on each site: %r.", strange)
@@ -225,11 +232,11 @@ class PlaneWaveExcitationEngine(Algorithm):
         sum_method = self.options.get('sum_method', 'explicit')
 
         B = npc.tensordot(self.VLs[self.L-1], X[self.L-1], axes=(['vR'], ['vL']))
-        RB = TR_general([B], [self.ARs[self.L-1]], self.RW, Ws=[self.Ws[self.L-1]])
+        RB = TR_general([B], [self.ARs[self.L-1]], self.RW, Ws=[self.Ws[(self.L-1) % self.HL]])
         for i in reversed(range(0, self.L-1)):
             B = npc.tensordot(self.VLs[i], X[i], axes=(['vR'], ['vL']))
-            RB = TR_general([B], [self.ARs[i]], self.GS_env_R.get_RP(i), Ws=[self.Ws[i]]) + \
-                 TR_general([self.ALs[i]], [self.ARs[i]], RB, Ws=[self.Ws[i]])
+            RB = TR_general([B], [self.ARs[i]], self.GS_env_R.get_RP(i), Ws=[self.Ws[i % self.HL]]) + \
+                 TR_general([self.ALs[i]], [self.ARs[i]], RB, Ws=[self.Ws[i % self.HL]])
         R = RB
 
         assert not np.isclose(npc.norm(R), 0)
@@ -275,8 +282,8 @@ class PlaneWaveExcitationEngine(Algorithm):
         LB = LT_general([B], [self.ALs[0]], self.LW, Ws=[self.Ws[0]])
         for i in range(1, self.L):
             B = npc.tensordot(self.VLs[i], X[i], axes=(['vR'], ['vL']))
-            LB = LT_general([B], [self.ALs[i]], self.GS_env_L.get_LP(i), Ws=[self.Ws[i]]) + \
-                 LT_general([self.ARs[i]], [self.ALs[i]], LB, Ws=[self.Ws[i]])
+            LB = LT_general([B], [self.ALs[i]], self.GS_env_L.get_LP(i), Ws=[self.Ws[i % self.HL]]) + \
+                 LT_general([self.ARs[i]], [self.ALs[i]], LB, Ws=[self.Ws[i % self.HL]])
         L = LB
 
         assert not np.isclose(npc.norm(L), 0)
@@ -336,23 +343,23 @@ class PlaneWaveExcitationEngine(Algorithm):
                 for j in range(i):
                     B = npc.tensordot(self.VLs[j], vec[j], axes=(['vR'], ['vL']))
                     if j > 0:
-                        LB = LT_general([B], [self.ALs[j]], self.outer.GS_env_L.get_LP(j), Ws=[self.Ws[j]]) + \
-                             LT_general([self.ARs[j]], [self.ALs[j]], LB, Ws=[self.Ws[j]]) # Does one extra multiplication when i = 0
+                        LB = LT_general([B], [self.ALs[j]], self.outer.GS_env_L.get_LP(j), Ws=[self.Ws[j % self.outer.HL]]) + \
+                             LT_general([self.ARs[j]], [self.ALs[j]], LB, Ws=[self.Ws[j % self.outer.HL]]) # Does one extra multiplication when i = 0
                     else:
-                        LB = LT_general([B], [self.ALs[j]], self.outer.GS_env_L.get_LP(j), Ws=[self.Ws[j]])
+                        LB = LT_general([B], [self.ALs[j]], self.outer.GS_env_L.get_LP(j), Ws=[self.Ws[j % self.outer.HL]])
 
                 B = npc.tensordot(self.VLs[i], vec[i], axes=(['vR'], ['vL']))
-                LB = LT_general([self.ARs[i]], [self.VLs[i]], LB, Ws=[self.Ws[i]])
-                LP1 = LT_general([self.ALs[i]], [self.VLs[i]], self.outer.GS_env_L.get_LP(i), Ws=[self.Ws[i]])
-                LP2 = LT_general([B], [self.VLs[i]], self.outer.GS_env_L.get_LP(i), Ws=[self.Ws[i]])
+                LB = LT_general([self.ARs[i]], [self.VLs[i]], LB, Ws=[self.Ws[i % self.outer.HL]])
+                LP1 = LT_general([self.ALs[i]], [self.VLs[i]], self.outer.GS_env_L.get_LP(i), Ws=[self.Ws[i % self.outer.HL]])
+                LP2 = LT_general([B], [self.VLs[i]], self.outer.GS_env_L.get_LP(i), Ws=[self.Ws[i % self.outer.HL]])
 
                 for j in reversed(range(i+1, self.outer.L)):
                     B = npc.tensordot(self.VLs[j], vec[j], axes=(['vR'], ['vL']))
                     if j < self.outer.L - 1:
-                        RB = TR_general([B], [self.ARs[j]], self.outer.GS_env_R.get_RP(j), Ws=[self.Ws[j]]) + \
-                             TR_general([self.ALs[j]], [self.ARs[j]], RB, Ws=[self.Ws[j]])
+                        RB = TR_general([B], [self.ARs[j]], self.outer.GS_env_R.get_RP(j), Ws=[self.Ws[j % self.outer.HL]]) + \
+                             TR_general([self.ALs[j]], [self.ARs[j]], RB, Ws=[self.Ws[j % self.outer.HL]])
                     else:
-                        RB = TR_general([B], [self.ARs[j]], self.outer.GS_env_R.get_RP(j), Ws=[self.Ws[j]])
+                        RB = TR_general([B], [self.ARs[j]], self.outer.GS_env_R.get_RP(j), Ws=[self.Ws[j % self.outer.HL]])
                 if i > 0:
                     total_vec[i] += npc.tensordot(LB, self.outer.GS_env_R.get_RP(i), axes=(['vR', 'wR'], ['vL', 'wL']))
                 if i < self.outer.L-1:
@@ -381,9 +388,9 @@ class PlaneWaveExcitationEngine(Algorithm):
             inf_sum_TLR = self.outer.infinite_sum_TLR(vec, self.p)
             cached_TLR = [inf_sum_TLR]
             for i in reversed(range(1, self.outer.L)):
-                cached_TLR.insert(0, TR_general([self.ALs[i]], [self.ARs[i]], cached_TLR[0], Ws=[self.Ws[i]]))
+                cached_TLR.insert(0, TR_general([self.ALs[i]], [self.ARs[i]], cached_TLR[0], Ws=[self.Ws[i % self.outer.HL]]))
             for i in range(self.outer.L):
-                LP_VL = LT_general([self.ALs[i]], [self.VLs[i]], self.outer.GS_env_L.get_LP(i), Ws=[self.Ws[i]])
+                LP_VL = LT_general([self.ALs[i]], [self.VLs[i]], self.outer.GS_env_L.get_LP(i), Ws=[self.Ws[i % self.outer.HL]])
                 X_out_left = np.exp(-1.0j*self.p*self.outer.L) * npc.tensordot(LP_VL, cached_TLR[i], axes=(['vR', 'wR'], ['vL', 'wL']))
                 X_out_left.ireplace_labels(['vR*', 'vL*'], ['vL', 'vR'])
                 total[i] += X_out_left
@@ -392,9 +399,9 @@ class PlaneWaveExcitationEngine(Algorithm):
             inf_sum_TRL = self.outer.infinite_sum_TRL(vec, self.p)
             cached_TRL = [inf_sum_TRL]
             for i in range(0, self.outer.L-1):
-                cached_TRL.append(LT_general([self.ARs[i]], [self.ALs[i]], cached_TRL[-1], Ws=[self.Ws[i]]))
+                cached_TRL.append(LT_general([self.ARs[i]], [self.ALs[i]], cached_TRL[-1], Ws=[self.Ws[i % self.outer.HL]]))
             for i in reversed(range(self.outer.L)):
-                TRL_VL = LT_general([self.ARs[i]], [self.VLs[i]], cached_TRL[i], Ws=[self.Ws[i]])
+                TRL_VL = LT_general([self.ARs[i]], [self.VLs[i]], cached_TRL[i], Ws=[self.Ws[i % self.outer.HL]])
                 X_out_left = np.exp(1.0j*self.p*self.outer.L) * npc.tensordot(TRL_VL, self.outer.GS_env_R.get_RP(i), axes=(['vR', 'wR'], ['vL', 'wL']))
                 X_out_left.ireplace_labels(['vR*', 'vL*'], ['vL', 'vR'])
                 total[i] += X_out_left
@@ -420,7 +427,7 @@ class PlaneWaveExcitationEngine(Algorithm):
                 valid_charge = True
                 LP = self.GS_env_L.get_LP(i, store=True)
                 RP = self.GS_env_R.get_RP(i, store=True)
-                LP = LT_general([self.VLs[i]], [self.VLs[i]], LP, Ws=[self.Ws[i]])
+                LP = LT_general([self.VLs[i]], [self.VLs[i]], LP, Ws=[self.Ws[i % self.HL]])
 
                 H0 = ZeroSiteH.from_LP_RP(LP, RP)
                 if self.model.H_MPO.explicit_plus_hc:

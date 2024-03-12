@@ -3,7 +3,7 @@
 A 'model' is supposed to represent a Hamiltonian in a generalized way.
 The :class:`~tenpy.models.lattice.Lattice` specifies the geometry and
 underlying Hilbert space, and is thus common to all models.
-It is needed to intialize the common base class :class:`Model` of all models.
+It is needed to initialize the common base class :class:`Model` of all models.
 
 Different algorithms require different representations of the Hamiltonian.
 For example for DMRG, the Hamiltonian needs to be given as an MPO,
@@ -27,7 +27,7 @@ as base class in (most of) the predefined models in TeNPy.
 
 See also the introduction in :doc:`/intro/model`.
 """
-# Copyright 2018-2021 TeNPy Developers, GNU GPLv3
+# Copyright 2018-2023 TeNPy Developers, GNU GPLv3
 
 import numpy as np
 import warnings
@@ -224,6 +224,36 @@ class Model(Hdf5Exportable):
         self.lat = TrivialLattice(grouped_sites, bc_MPS=self.lat.bc_MPS, bc='periodic')
         return grouped_sites
 
+    def update_time_parameter(self, new_time):
+        """Reconstruct Hamiltonian for time-dependent models, potentially (!) in-place.
+
+        For :class:`~tenpy.algorithms.algorithm.TimeDependentHAlgorithm`, we assume that the model
+        reads out the parameter ``self.options['time']``, and reinitialize/update the model
+        calling this method.
+
+        Parameters
+        ----------
+        new_time : float
+            Time at which the (time-dependent) Hamiltonian should be constructed.
+
+        Returns
+        -------
+        updated_model : :class:`model`
+            Model of the same class as `self` with Hamiltonian at time `new_time`.
+            Note that it *can* just be a reference to `self` if modified in place, or an entirely
+            new constructed model.
+        """
+        # eventually, we should implement
+        if not hasattr(self, 'options'):
+            msg = ("update_time_parameter assumes that the model has `options` defined, reads out "
+                   "`options['time']` and can be reinitialized from the options alone. "
+                   "However, the model {name:s} does not define options.")
+            raise NotImplementedError(msg.format(name=self.__class__.__name__))
+        cls = self.__class__
+        model_params = self.options
+        model_params['time'] = new_time
+        return cls(model_params)
+
 
 class NearestNeighborModel(Model):
     r"""Base class for a model of nearest neigbor interactions w.r.t. the MPS index.
@@ -295,7 +325,7 @@ class NearestNeighborModel(Model):
         .. doctest :: from_MPOModel
 
             >>> from tenpy.models.spins_nnn import SpinChainNNN2
-            >>> nnn_chain = SpinChainNNN2({'L': 20})
+            >>> nnn_chain = SpinChainNNN2({'L': 20, 'sort_charge': True})
             >>> print(isinstance(nnn_chain, NearestNeighborModel))
             False
             >>> print("range before grouping:", nnn_chain.H_MPO.max_range)
@@ -485,7 +515,7 @@ class NearestNeighborModel(Model):
             MPO representation of the Hamiltonian.
         """
         H_bond = self.H_bond  # entry i acts on sites (i-1,i)
-        dtype = np.find_common_type([Hb.dtype for Hb in H_bond if Hb is not None], [])
+        dtype = np.result_type(*[Hb.dtype for Hb in H_bond if Hb is not None])
         bc = self.lat.bc_MPS
         sites = self.lat.mps_sites()
         L = len(sites)
@@ -931,7 +961,7 @@ class CouplingModel(Model):
         ot.add_onsite_term(strength, i, op)
         if plus_hc:
             site = self.lat.unit_cell[self.lat.order[i, -1]]
-            hc_op = site.get_hc_op_name(opname)
+            hc_op = site.get_hc_op_name(op)
             ot.add_onsite_term(np.conj(strength), i, hc_op)
 
     def all_onsite_terms(self):
@@ -1056,7 +1086,7 @@ class CouplingModel(Model):
             >>> for u1, u2, dx in self.lat.pairs['nearest_neighbors']:
             ...     self.add_coupling(t, u1, 'Cd', u2, 'C', dx, plus_hc=True)
 
-        Alternatively, you can add the hermitian conjugate terms explictly. The correct way is to
+        Alternatively, you can add the hermitian conjugate terms explicitly. The correct way is to
         complex conjugate the strength, take the hermitian conjugate of the operators and swap the
         order (including a swap `u1` <-> `u2`), and use the opposite direction ``-dx``, i.e.
         the `h.c.` of ``add_coupling(t, u1, 'A', u2, 'B', dx)`` is
@@ -1411,6 +1441,9 @@ class CouplingModel(Model):
             This function does not handle Jordan-Wigner strings!
             You might want to use :meth:`add_local_term` instead.
 
+        .. versionchanged :: 0.10.1
+            Fix a bug that `plus_hc` didn't correcly add the hermitian conjugate terms.
+
         Parameters
         ----------
         strength : float
@@ -1419,7 +1452,7 @@ class CouplingModel(Model):
             The MPS indices of the sites on which the operators acts. With `i, j, k, ... = ijkl`,
             we require that they are ordered ascending, ``i < j < k < ...`` and
             that ``0 <= i < N_sites``.
-            Inidces >= N_sites indicate couplings between different unit cells of an infinite MPS.
+            Indices >= N_sites indicate couplings between different unit cells of an infinite MPS.
         ops_ijkl : list of str
             Names of the involved operators on sites `i, j, k, ...`.
         op_string : list of str
@@ -1457,7 +1490,11 @@ class CouplingModel(Model):
             hc_ops = [site.get_hc_op_name(op) for site, op in zip(sites_ijkl, ops_ijkl)]
             # NB: op_string should be defined on all sites in the unit cell...
             hc_op_string = [site.get_hc_op_name(op) for site, op in zip(sites_ijkl, op_string)]
-            ct.add_multi_coupling_term(np.conj(strength), ijkl, ops_ijkl, op_string, switchLR)
+            ct.add_multi_coupling_term(np.conj(strength),
+                                       ijkl,
+                                       hc_ops,
+                                       hc_op_string,
+                                       switchLR)
 
     def add_exponentially_decaying_coupling(self,
                                             strength,
@@ -1706,8 +1743,10 @@ class CouplingModel(Model):
         c_shape = self.lat.coupling_shape(dx)[0]
         strength = to_array(strength, c_shape)
         # make strength complex
-        complex_dtype = np.find_common_type([strength.dtype], [np.dtype('complex128')])
+        complex_dtype = np.result_type('c8', strength.dtype)
         strength = np.asarray(strength, complex_dtype)
+        if len(phase) != self.lat.dim:
+            raise ValueError('Expected one phase per lattice dimension.')
         for ax in range(self.lat.dim):
             if self.lat.bc[ax]:  # open boundary conditions
                 if phase[ax]:
@@ -1828,7 +1867,7 @@ class CouplingMPOModel(CouplingModel, MPOModel):
         self._called_CouplingMPOModel_init = True
         self.manually_call_init_H = getattr(self, 'manually_call_init_H', False)
         explicit_plus_hc = model_params.get('explicit_plus_hc', False)
-        # 1-4) iniitalize lattice
+        # 1-4) initalize lattice
         lat = self.init_lattice(model_params)
         # 5) initialize CouplingModel
         CouplingModel.__init__(self, lat, explicit_plus_hc=explicit_plus_hc)
@@ -1971,7 +2010,7 @@ class CouplingMPOModel(CouplingModel, MPOModel):
                 raise ValueError("Can't auto-determine parameters for the lattice. "
                                  "Overwrite the `init_lattice` in your model!")
 
-            # possibly modify/generalize the already iniialized lattice
+            # possibly modify/generalize the already initialized lattice
             if species_sites is not None:
                 lat = MultiSpeciesLattice(lat, species_sites, species_names)
             helical = model_params.get('helical_lattice', None)

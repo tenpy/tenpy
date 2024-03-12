@@ -2,7 +2,7 @@
 
 .. todo ::     Make this a nice toycode! For the test, use some pre-defined values.
 """
-# Copyright 2019-2021 TeNPy Developers, GNU GPLv3
+# Copyright 2019-2023 TeNPy Developers, GNU GPLv3
 
 from scipy.linalg import expm
 from scipy.sparse.linalg import expm_multiply
@@ -189,18 +189,6 @@ def evolve_lanczos(H, psiI, dt, krylovDim):
         psiF = np.dot(expm(dt * M), psiI)
 
     return psiF
-
-
-def expm_multiply(A, v, time, m):
-    iflag = np.array([1])
-    tol = 0.0
-    n = A.shape[0]
-    anorm = 1
-    wsp = np.zeros(7 + n * (m + 2) + 5 * (m + 2) * (m + 2), dtype=complex)
-    iwsp = np.zeros(m + 2, dtype=int)
-
-    output_vec, tol0, iflag0 = zgexpv(m, time, v, tol, anorm, wsp, iwsp, A.matvec, 0)
-    return output_vec
 
 
 def MPO_TFI(Jx, Jz, hx, hz):

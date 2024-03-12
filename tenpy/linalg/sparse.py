@@ -3,11 +3,11 @@
 Some linear algebra algorithms, e.g. Lanczos, do not require the full representations of a linear
 operator, but only the action on a vector, i.e., a matrix-vector product `matvec`. Here we define
 the strucuture of such a general operator, :class:`NpcLinearOperator`, as it is used in our own
-implementations of these algorithms (e.g., :mod:`~tenpy.linalg.lanczos`). Moreover, the
+implementations of these algorithms (e.g., :mod:`~tenpy.linalg.krylov_based`). Moreover, the
 :class:`FlatLinearOperator` allows to use all the scipy sparse methods by providing functionality
 to convert flat numpy arrays to and from np_conserved arrays.
 """
-# Copyright 2018-2021 TeNPy Developers, GNU GPLv3
+# Copyright 2018-2023 TeNPy Developers, GNU GPLv3
 
 import numpy as np
 from . import np_conserved as npc
@@ -15,7 +15,7 @@ import scipy.sparse.linalg
 from scipy.sparse.linalg import LinearOperator as ScipyLinearOperator
 from ..tools.math import speigs, speigsh
 from ..tools.misc import argsort, group_by_degeneracy
-from . import lanczos
+from . import krylov_based
 import warnings
 
 __all__ = [
@@ -167,7 +167,7 @@ class ShiftNpcLinearOperator(NpcLinearOperatorWrapper):
 
     def matvec(self, vec):
         temp = self.orig_operator.matvec(vec)
-        lanczos.iadd_prefactor_other(temp, self.shift, vec)
+        krylov_based.iadd_prefactor_other(temp, self.shift, vec)
         return temp
         # return self.orig_operator.matvec(vec) + self.shift * vec
 
@@ -177,8 +177,8 @@ class ShiftNpcLinearOperator(NpcLinearOperatorWrapper):
 
     def adjoint(self):
         return ShiftNpcLinearOperator(self.orig_operator.adjoint(), np.conj(self.shift))
-    
-    
+
+
 class BoostNpcLinearOperator(NpcLinearOperatorWrapper):
     """Representes ``original_operator + shift_i * |vec_i><vec_i|``.
 
@@ -195,7 +195,7 @@ class BoostNpcLinearOperator(NpcLinearOperatorWrapper):
     def matvec(self, vec):
         temp = self.orig_operator.matvec(vec)
         for b, bv in zip(self.boosts, self.boost_vecs):
-            lanczos.iadd_prefactor_other(temp, b * lanczos.inner(bv, vec), bv)
+            krylov_based.iadd_prefactor_other(temp, b * krylov_based.inner(bv, vec), bv)
         return temp
         # return self.orig_operator.matvec(vec) + self.shift * vec
 
@@ -224,7 +224,7 @@ class OrthogonalNpcLinearOperator(NpcLinearOperatorWrapper):
             warnings.warn("Empty `ortho_vecs`: no need to patch `OrthogonalNpcLinearOperator`",
                           stacklevel=2)
         super().__init__(orig_operator)
-        from .lanczos import gram_schmidt
+        from .krylov_based import gram_schmidt
         ortho_vecs = gram_schmidt(ortho_vecs)
         self.ortho_vecs = ortho_vecs
 
@@ -234,12 +234,12 @@ class OrthogonalNpcLinearOperator(NpcLinearOperatorWrapper):
         for o in self.ortho_vecs:  # Project out
             #for a, b in zip(vec, o):
             #    a.iadd_prefactor_other(-npc.inner(b, a, axes='range', do_conj=True), b)
-            lanczos.iadd_prefactor_other(vec, -lanczos.inner(o, vec), o)
+            krylov_based.iadd_prefactor_other(vec, -krylov_based.inner(o, vec), o)
         vec = self.orig_operator.matvec(vec)
         for o in self.ortho_vecs[::-1]:  # reverse: more obviously Hermitian.
             #for a, b in zip(vec, o):
             #    a.iadd_prefactor_other(-npc.inner(b, a, axes='range', do_conj=True), b)
-            lanczos.iadd_prefactor_other(vec, -lanczos.inner(o, vec), o)
+            krylov_based.iadd_prefactor_other(vec, -krylov_based.inner(o, vec), o)
         return vec
 
     def to_matrix(self):

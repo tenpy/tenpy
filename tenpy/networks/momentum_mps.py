@@ -1,4 +1,4 @@
-# Copyright 2022-2022 TeNPy Developers, GNU GPLv3
+# Copyright 2022-2023 TeNPy Developers, GNU GPLv3
 
 import numpy as np
 import logging

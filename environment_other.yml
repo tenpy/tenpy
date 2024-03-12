@@ -11,4 +11,4 @@ dependencies:
   - setuptools>=30.3.0
   - h5py
   - pyyaml
-  - pytest
+  - pytest>=0.6

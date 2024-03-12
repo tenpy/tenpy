@@ -20,6 +20,6 @@ class XXZChain(CouplingModel, NearestNeighborModel, MPOModel):
 
         # finish initialization
         # generate MPO for DMRG
-        MPOModel.__init__(self, lat, self.calc_H_MPO())
+        MPOModel.__init__(self, lattice, self.calc_H_MPO())
         # generate H_bond for TEBD
-        NearestNeighborModel.__init__(self, lat, self.calc_H_bond())
+        NearestNeighborModel.__init__(self, lattice, self.calc_H_bond())

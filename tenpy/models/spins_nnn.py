@@ -14,7 +14,7 @@ latter by using :meth:`~tenpy.models.model.MPOModel.group_sites` and
 :meth:`~tenpy.models.model.NearestNeighbormodel.from_MPOModel`.
 An example for such a case is given in the file ``examples/c_tebd.py``.
 """
-# Copyright 2018-2021 TeNPy Developers, GNU GPLv3
+# Copyright 2018-2023 TeNPy Developers, GNU GPLv3
 
 import numpy as np
 
@@ -83,7 +83,7 @@ class SpinChainNNN(CouplingMPOModel, NearestNeighborModel):
             else:
                 conserve = None
             self.logger.info("%s: set conserve to %s", self.name, conserve)
-        spinsite = SpinSite(S, conserve)
+        spinsite = SpinSite(S, conserve, sort_charge=False)  # GroupedSite does sort charges
         site = GroupedSite([spinsite, spinsite], charges='same')
         return site
 
@@ -157,6 +157,9 @@ class SpinChainNNN2(CouplingMPOModel):
         conserve : 'best' | 'Sz' | 'parity' | None
             What should be conserved. See :class:`~tenpy.networks.Site.SpinSite`.
             For ``'best'``, we check the parameters what can be preserved.
+        sort_charge : bool | None
+            Whether to sort by charges of physical legs.
+            See change comment in :class:`~tenpy.networks.site.Site`.
         Jx, Jy, Jz, Jxp, Jyp, Jzp, hx, hy, hz : float | array
             Coupling as defined for the Hamiltonian above.
     """
@@ -173,7 +176,8 @@ class SpinChainNNN2(CouplingMPOModel):
             else:
                 conserve = None
             self.logger.info("%s: set conserve to %s", self.name, conserve)
-        site = SpinSite(S, conserve)
+        sort_charge = model_params.get('sort_charge', None)
+        site = SpinSite(S, conserve, sort_charge=sort_charge)
         return site
 
     def init_terms(self, model_params):

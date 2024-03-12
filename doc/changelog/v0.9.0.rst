@@ -11,6 +11,8 @@ Apart form that, there are not major incompatibilities compared to v0.8.4
 
 Special thanks go to Wilhelm Kadow for great work on the mixed real- and momentum-space representation for models!
 
+Support Python 3.6 to 3.9
+
 Changelog
 ---------
 

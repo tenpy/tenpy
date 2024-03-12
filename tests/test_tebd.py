@@ -1,5 +1,5 @@
 """A collection of tests to check the functionality of `tenpy.tebd`"""
-# Copyright 2018-2021 TeNPy Developers, GNU GPLv3
+# Copyright 2018-2023 TeNPy Developers, GNU GPLv3
 
 import numpy.testing as npt
 import tenpy.linalg.np_conserved as npc
@@ -24,10 +24,15 @@ def test_trotter_decomposition():
                 evolved[k] += dt[j]
             npt.assert_array_almost_equal_nulp(evolved, N * np.ones([2]), N * 2)
 
-
+            
 @pytest.mark.slow
-@pytest.mark.parametrize('bc_MPS', ['finite', 'infinite'])
-def test_tebd(bc_MPS, g=0.5):
+@pytest.mark.parametrize('bc_MPS, which_engine, compute_err',
+                         [('finite', 'standard', None),
+                          ('infinite', 'standard', None),
+                          ('finite', 'qr', True),
+                          ('infinite', 'qr', True),
+                          ('finite', 'qr', False)])
+def test_tebd(bc_MPS, which_engine, compute_err, g=0.5):
     L = 2 if bc_MPS == 'infinite' else 6
     #  xxz_pars = dict(L=L, Jxx=1., Jz=3., hz=0., bc_MPS=bc_MPS)
     #  M = XXZChain(xxz_pars)
@@ -45,10 +50,27 @@ def test_tebd(bc_MPS, g=0.5):
         'trunc_params': {
             'chi_max': 50,
             'trunc_cut': 1.e-13
-        }
+        },
     }
-    engine = tebd.TEBDEngine(psi, M, tebd_param)
+    if which_engine == 'standard':
+        engine = tebd.TEBDEngine(psi, M, tebd_param)
+    elif which_engine == 'qr':
+        tebd_param.update(
+            compute_err=compute_err,
+            cbe_expand=0.1,
+            cbe_expand_0=0.2,
+        )
+        engine = tebd.QRBasedTEBDEngine(psi, M, tebd_param)
+    else:
+        raise RuntimeError
+    
     engine.run_GS()
+
+    if compute_err is False:
+        assert np.isnan(engine.trunc_err.eps)
+        assert np.isnan(engine.trunc_err.ov)
+    else:
+        assert engine.trunc_err.eps >= 0
 
     print("norm_test", psi.norm_test())
     if bc_MPS == 'finite':
@@ -89,7 +111,7 @@ def test_tebd(bc_MPS, g=0.5):
 
 def test_RandomUnitaryEvolution():
     L = 8
-    spin_half = SpinHalfSite(conserve='Sz')
+    spin_half = SpinHalfSite(conserve='Sz', sort_charge=True)
     psi = MPS.from_product_state([spin_half] * L, [0, 1] * (L // 2), bc='finite')  # Neel state
     assert tuple(psi.chi) == (1, 1, 1, 1, 1, 1, 1)
     TEBD_params = dict(N_steps=2, trunc_params={'chi_max': 10})
@@ -109,3 +131,16 @@ def test_RandomUnitaryEvolution():
     eng.run()
     print(eng.psi.chi)
     assert tuple(eng.psi.chi) == (16, 8)
+
+
+@pytest.mark.parametrize('S', [.5, 2.5, 5])
+def test_fixes_issue_220(S):
+    L = 20
+    
+    model = SpinChain(dict(S=S, conserve=None, sort_charge=True, Jx=1., Jy=1., Jz=1., L=L))
+    neel = ['up', 'up'] * (L // 2) + ['up'] * (L % 2)
+    psi_init = MPS.from_product_state(sites=model.lat.unit_cell * L, p_state=neel)
+    trunc_params=dict(chi_max=50, svd_min=1e-10, trunc_cut=None)
+    options = dict(order=2, trunc_params=trunc_params, N_steps=5, dt=0.01)
+    engine = tebd.QRBasedTEBDEngine(psi=psi_init, model=model, options=options)
+    engine.run()

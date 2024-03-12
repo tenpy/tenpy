@@ -1,18 +1,20 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-# Copyright 2019-2021 TeNPy Developers, GNU GPLv3
+# Copyright 2019-2023 TeNPy Developers, GNU GPLv3
 #
 import sys
 import os
 import inspect
 import sphinx_rtd_theme
 import io
+import warnings
 
 # ensure parent folder is in sys.path to allow import of tenpy
 REPO_PREFIX = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 sys.path.insert(0, REPO_PREFIX)
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), 'sphinx_ext')))
 GITHUBBASE = "https://github.com/tenpy/tenpy"
+GITHUBTOYCODES = "https://github.com/tenpy/tenpy_toycodes"
 
 if not sys.version_info >= (3, 5):
     print("ERROR: old python version, called by python version\n" + sys.version)
@@ -87,13 +89,12 @@ exclude_patterns = [
 
 
 def create_example_stubs():
-    """create stub files for examples and toycodes to include them in the documentation."""
+    """create stub files for examples to include them in the documentation."""
     folders = [
         (['examples'], '.py', []),
         (['examples'], '.yml', []),
         (['examples', 'advanced'], '.py', []),
         (['examples', 'chern_insulators'], '.py', []),
-        (['toycodes'], '.py', []),
         (['examples', 'yaml'], '.yml', []),
     ]
     for subfolders, extension, excludes in folders:
@@ -116,8 +117,36 @@ def create_example_stubs():
                 f.write(text)
     # done
 
+def create_toycode_stubs():
+    """create stub files for examples to include them in the documentation."""
+    outdir = os.path.join(os.path.dirname(__file__), 'toycode_stubs')
+    if not os.path.isdir(outdir):
+        os.mkdir(outdir)
+    folder = os.path.join(os.path.dirname(__file__), 'toycodes', 'tenpy_toycodes')
+    if not os.path.isdir(folder):
+        warnings.warn(f"didn't clone git submodule doc/toycodes from {GITHUBTOYCODES} \n"
+                      "Use `git clone --recursive` or after cloning "
+                      "`git submodule init && git submodule update`.")
+        return
+    files = os.listdir(folder)
+    excludes = ['__init__.py']
+    files = sorted([fn for fn in files if fn.endswith('.py') if fn not in excludes])
+    for fn in files:
+        outfile = os.path.join(outdir, os.path.splitext(fn)[0] + '.rst')
+        if os.path.exists(outfile):
+            continue
+        sentence = ("`on github <{base}/blob/main/tenpy_toycodes/{fn!s}>`_ "
+                    "(`download <{base}/raw/main/tenpy_toycodes/{fn!s}>`_).")
+        sentence = sentence.format(fn=fn, base=GITHUBTOYCODES)
+        include = '.. literalinclude:: /toycodes/tenpy_toycodes/{fn!s}'.format(fn=fn)
+        text = '\n'.join([fn, '=' * len(fn), '', sentence, '', include, ''])
+        with open(outfile, 'w') as f:
+            f.write(text)
+    # done
+
 
 create_example_stubs()
+create_toycode_stubs()
 
 # -- include output of command line help ----------------------------------
 
@@ -144,22 +173,16 @@ html_favicon = "images/logo.ico"
 html_static_path = ['_static']
 html_last_updated_fmt = '%b %d, %Y'
 
-# used by tenpy.readthedocs.io
+html_css_files = [
+    "custom.css",  # to highlight targets
+]
+
 html_context = {
-    "display_github":
-    True,  # Integrate GitHub
-    "github_user":
-    "tenpy",  # Username
-    "github_repo":
-    "tenpy",  # Repo name
-    "github_version":
-    "main",  # Version
-    "conf_py_path":
-    "/doc/",  # Path in the checkout to the docs root
-    "css_files": [
-        "_static/custom.css",  # to highlight targets
-        "_static/copybutton.css",  # somehow this didn't get included otherwise
-    ],
+    "display_github": True,  # Integrate GitHub
+    "github_user": "tenpy",  # Username
+    "github_repo": "tenpy",  # Repo name
+    "github_version": "main",  # Version
+    "conf_py_path": "/doc/",  # Path in the checkout to the docs root
 }
 
 html_theme_options = {
@@ -167,11 +190,6 @@ html_theme_options = {
     'style_external_links': True,
 }
 
-# Custom sidebar templates, maps document names to template names.
-#html_sidebars = {}
-html_sidebars = {
-    '**': ['localtoc.html', 'relations.html', 'searchbox.html', 'globaltoc.html'],
-}
 
 # == Options for extensions ===============================================
 
@@ -181,15 +199,26 @@ nbsphinx_execute = 'never'
 
 # This is processed by Jinja2 and inserted before each notebook
 nbsphinx_prolog = r"""
-{% set docname = env.doc2path(env.docname, base=False)[10:] %}
 
 .. raw :: html
 
+{% if env.doc2path(env.docname, base=False)[:9] == "notebooks" %}
+{% set docname = env.doc2path(env.docname, base=False)[10:] %}
     <div class="admonition note">
       This page was generated from
       <a class="reference external" href="https://github.com/tenpy/tenpy_notebooks/blob/main/{{ docname|e }}">{{ docname|e }}</a>
       (<a class="reference external" href="https://github.com/tenpy/tenpy_notebooks/raw/main/{{ docname|e }}" download="{{docname | e}}">download</a>).
     </div>
+{% elif env.doc2path(env.docname, base=False)[:8] == "toycodes"  %}
+{% set docname = env.doc2path(env.docname, base=False)[9:] %}
+    <div class="admonition note">
+      This page was generated from
+      <a class="reference external" href="https://github.com/tenpy/tenpy_toycodes/blob/main/{{ docname|e }}">{{ docname|e }}</a>
+      (<a class="reference external" href="https://github.com/tenpy/tenpy_toycodes/raw/main/{{ docname|e }}" download="{{docname | e}}">download</a>).
+    </div>
+{% else %}
+    This page was generated from the notebook
+{% endif %}
 """
 
 # -- sphinx.ext.autodoc ---------------------------------------------------

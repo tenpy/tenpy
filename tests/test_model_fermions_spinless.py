@@ -1,4 +1,4 @@
-# Copyright 2018-2021 TeNPy Developers, GNU GPLv3
+# Copyright 2018-2023 TeNPy Developers, GNU GPLv3
 import numpy as np
 from tenpy.models.fermions_spinless import FermionChain, FermionModel
 from test_model import check_general_model
@@ -6,7 +6,9 @@ from tenpy.models.spins import SpinChain
 
 
 def test_FermionModel():
-    check_general_model(FermionModel, {'lattice': "Square", 'Lx': 2, 'Ly': 3}, {})
+    check_general_model(FermionModel,
+                        {'lattice': "Square", 'Lx': 2, 'Ly': 3},
+                        {'phi_ext': [None, 1.]})
 
 
 def test_FermionChain():

@@ -18,7 +18,7 @@ effective Hamiltonians mentioned above. Currently, effective Hamiltonians for
 The :class:`VariationalCompression` and :class:`VariationalApplyMPO`
 implemented here also directly use the :class:`Sweep` class.
 """
-# Copyright 2018-2021 TeNPy Developers, GNU GPLv3
+# Copyright 2018-2023 TeNPy Developers, GNU GPLv3
 
 from .algorithm import Algorithm
 from ..linalg.sparse import NpcLinearOperator, SumNpcLinearOperator, OrthogonalNpcLinearOperator
@@ -79,7 +79,7 @@ class Sweep(Algorithm):
     Attributes
     ----------
     EffectiveH : class
-        Class attribute; a sublcass of :class:`~tenpy.algorithms.mps_common.EffectiveH`.
+        Class attribute; a subclass of :class:`~tenpy.algorithms.mps_common.EffectiveH`.
         It's length attribute determines how many sites are optimized/updated at once,
         see also :attr:`n_optimize`.
     E_trunc_list : list
@@ -183,7 +183,7 @@ class Sweep(Algorithm):
         resume_data : None | dict
             Given when resuming a simulation, as returned by :meth:`get_resume_data`.
             Can contain another dict under the key `init_env_data`; the contents of
-            `init_env_data` get passed as keyword arguments to the environment initializaiton.
+            `init_env_data` get passed as keyword arguments to the environment initialization.
         orthogonal_to : None | list of :class:`~tenpy.networks.mps.MPS` | list of dict
             List of other matrix product states to orthogonalize against.
             Instead of just the state, you can specify a dict with the state as `ket`
@@ -251,8 +251,7 @@ class Sweep(Algorithm):
                     init_env_data[key_new] = self.options[key_old]
 
         # actually initialize the environment
-        cache = self.cache.create_subcache('env')
-        self.env = MPOEnvironment(self.psi, H, self.psi, cache=cache, **init_env_data)
+        self._init_mpo_env(H, init_env_data)
         self._init_ortho_to_envs(orthogonal_to, resume_data)
 
         self.reset_stats(resume_data)
@@ -261,6 +260,14 @@ class Sweep(Algorithm):
         if not self.finite:
             start_env = self.options.get('start_env', 1)
             self.environment_sweeps(start_env)
+
+    def _init_mpo_env(self, H, init_env_data):
+        if self.env is None:
+            cache = self.cache.create_subcache('env')
+        else:
+            cache = self.env.cache  # re-initialize and reuse the cache!
+            cache.clear()  # remove old entries which might no longer be valid
+        self.env = MPOEnvironment(self.psi, H, self.psi, cache=cache, **init_env_data)
 
     def _init_ortho_to_envs(self, orthogonal_to, resume_data):
         # (re)initialize ortho_to_envs
@@ -384,7 +391,7 @@ class Sweep(Algorithm):
             self._cache_optimize()
             logger.debug("in sweep: i0 =%d", i0)
             # --------- the main work --------------
-            theta = self.prepare_update()
+            theta = self.prepare_update_local()
             update_data = self.update_local(theta, optimize=optimize)
             self.update_env(**update_data)
             self.post_update_local(**update_data)
@@ -405,7 +412,7 @@ class Sweep(Algorithm):
             Schedule for the sweep. Each entry is ``(i0, move_right, (update_LP, update_RP))``,
             where `i0` is the leftmost of the ``self.EffectiveH.length`` sites to be updated in
             :meth:`update_local`, `move_right` indicates whether the next `i0` in the schedule is
-            rigth (`True`) of the current one, and `update_LP`, `update_RP` indicate
+            right (`True`) of the current one, and `update_LP`, `update_RP` indicate
             whether it is necessary to update the `LP` and `RP` of the environments.
         """
         # warning: set only those `LP` and `RP` to True, which can/will be used later again
@@ -464,7 +471,7 @@ class Sweep(Algorithm):
         for env in self._all_envs:
             env.cache_optimize(**kwargs)
 
-    def prepare_update(self):
+    def prepare_update_local(self):
         """Prepare `self` for calling :meth:`update_local`.
 
         Returns
@@ -522,7 +529,7 @@ class Sweep(Algorithm):
         Parameters
         ----------
         theta : :class:`~tenpy.linalg.np_conserved.Array`
-            Local single- or two-site wave function, as returned by :meth:`prepare_update`.
+            Local single- or two-site wave function, as returned by :meth:`prepare_update_local`.
 
         Returns
         -------
@@ -782,14 +789,14 @@ class OneSiteH(EffectiveH):
     @classmethod
     def from_LP_W0_RP(cls, LP, W0, RP, i0=0, combine=False, move_right=True):
         self = cls.__new__(cls)
-        assert combine==False, "TODO, do we need to implement this?"
+        if combine:
+            raise NotImplementedError("Shouldn't need this for vumps")
         self.i0 = i0
         self.LP = LP.itranspose(['vR*', 'wR', 'vR'])
         self.RP = RP.itranspose(['wL', 'vL', 'vL*'])
         self.W0 = W0.replace_labels(['p', 'p*'], ['p0', 'p0*'])
         self.dtype = LP.dtype
         self.combine = combine
-        assert move_right==True, "For VUMPS, we only move right"
         self.move_right = move_right
         self.N = (self.LP.get_leg('vR').ind_len * self.W0.get_leg('p0').ind_len *
                   self.RP.get_leg('vL').ind_len)
@@ -1122,7 +1129,7 @@ class ZeroSiteH(EffectiveH):
             |        .---    ---.
 
 
-    Note that this class has less funcitonality than the :class:`OneSiteH` and :class:`TwoSiteH`.
+    Note that this class has less functionality than the :class:`OneSiteH` and :class:`TwoSiteH`.
 
     Parameters
     ----------
@@ -1224,7 +1231,7 @@ class VariationalCompression(Sweep):
     except that we don't have an MPO in the networks - one can think of the MPO being trivial.
 
     .. deprecated :: 0.9.1
-        Renamed the optoin `N_sweeps` to `max_sweeps`.
+        Renamed the option `N_sweeps` to `max_sweeps`.
 
     Parameters
     ----------
@@ -1321,7 +1328,11 @@ class VariationalCompression(Sweep):
         start_env_sites = self.options.get('start_env_sites', 2)
         if start_env_sites is not None and not self.psi.finite:
             init_env_data['start_env_sites'] = start_env_sites
-        cache = self.cache.create_subcache('env')
+        if self.env is None:
+            cache = self.cache.create_subcache('env')
+        else:
+            cache = self.env.cache
+            cache.clear()
         self.env = MPSEnvironment(self.psi, old_psi, cache=cache, **init_env_data)
         self._init_ortho_to_envs(orthogonal_to, resume_data)
         self.reset_stats()

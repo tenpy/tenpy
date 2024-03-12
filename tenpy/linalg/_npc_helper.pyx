@@ -8,7 +8,7 @@ functions/classes defined here to overwrite those written in pure Python wheneve
 decorator ``@use_cython`` is used in other python files of tenpy.
 If this module was not compiled and could not be imported, a warning is issued.
 """
-# Copyright 2018-2021 TeNPy Developers, GNU GPLv3
+# Copyright 2018-2023 TeNPy Developers, GNU GPLv3
 
 DEF DEBUG_PRINT = 0  # set this to 1 for debug output (e.g. benchmark timings within the functions)
 DEF USE_MKL_GEMM_BATCH = 1 # whether to use ?gemm_batch function of MKL
@@ -409,7 +409,7 @@ cdef void _sliced_strided_copy(char* dest_data, intp_t* dest_strides,
 
 def _find_calc_dtype(a_dtype, b_dtype):
     """return calc_dtype, res_dtype suitable for BLAS calculations."""
-    res_dtype = np.find_common_type([a_dtype, b_dtype], [])
+    res_dtype = np.promote_types(a_dtype, b_dtype)
     prefix, _, _ = find_best_blas_type(dtype=res_dtype)
     # always use 64-bit precision floating points
     if prefix == 's' or prefix == 'd':
@@ -876,7 +876,7 @@ def Array_iadd_prefactor_other(self, prefactor, other):
     other.isort_qdata()
     other = other._transpose_same_labels(self._labels)
     # convert to equal types
-    calc_dtype = np.find_common_type([self.dtype, other.dtype], [type(prefactor)])
+    calc_dtype = np.result_type(self.dtype, other.dtype, prefactor)
     cdef int calc_dtype_num = calc_dtype.num  # can be compared to np.NPY_FLOAT64/NPY_COMPLEX128
     if self.dtype.num != calc_dtype_num:
         self.dtype = calc_dtype
@@ -972,7 +972,7 @@ def Array_iscale_prefactor(self, prefactor):
         self._qdata = np.empty((0, self.rank), np.intp)
         self._qdata_sorted = True
         return self
-    calc_dtype = np.find_common_type([self.dtype], [type(prefactor)])
+    calc_dtype = np.result_type(self.dtype, prefactor)
     cdef int calc_dtype_num = calc_dtype.num  # can be compared to np.NPY_FLOAT64/NPY_COMPLEX128
     if self.dtype.num != calc_dtype_num:
         self.dtype = calc_dtype
