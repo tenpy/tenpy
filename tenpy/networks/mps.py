@@ -948,31 +948,6 @@ class MPS:
             labels_L = labels_R
         return cls([site] * L, Bs, Ss, bc=bc, form=forms)
 
-    """
-    @classmethod
-    def from_uMPS(cls, psi):
-        obj = cls.__new__(cls)
-        obj.sites = list(psi.sites)
-        obj.chinfo = psi.sites[0].leg.chinfo
-        obj.dtype = psi.dtype
-        obj.form = self._parse_form('B') * len(sites)
-        obj.bc = psi.bc # only 'infinite' allowed
-        obj.norm = psi.norm
-        obj.grouped = psi.grouped
-        obj.segment_boundaries = psi.segment_boundaries
-        assert psi.valid_umps, "Can't be converting an invalid uMPS to an MPS!"
-        obj._S = [None] * (psi.L + 1)
-        # make copies of 4 types of tensors
-        obj._B = [psi.get_B(i, form='B').astype(dtype, copy=True).itranspose(obj._B_labels) for i in range(psi.L)]
-        C = psi.get_C(0)
-        U, s, V = C = npc.svd(C, inner_labels=['vR', 'vL'])
-
-        # center matrix on the left of site `i`
-
-        obj._transfermatrix_keep = psi._transfermatrix_keep
-        obj.test_sanity()
-    """
-
     @property
     def L(self):
         """Number of physical sites; for an iMPS the len of the MPS unit cell."""

@@ -1,10 +1,10 @@
-r"""This module contains a base class for a Uniform Matrix Product State (uMPS).
+r"""This module contains a base class for a Uniform Matrix Product State.
 
-This is an extension of the matrix product state (MPS) class for tangent space
+This is an extension of the MPS class for tangent space
 algorithms like VUMPS and TDVP (even though the current TDVP algorithm does not
 use this).
 
-A uMPS differs from a canonical MPS in the tensors that are stored on each site.
+A uniform MPS differs from a canonical MPS in the tensors that are stored on each site.
 In a canonical MPS, we store a single tensor on each site and diagonal Schmidt
 coefficients on each bond. From these, we can construct any desired form of a tensor
 on each site; e.g. given B_i, we can construct A_i = S_i B_i S_{i+1}^{-1}. On every
@@ -14,7 +14,7 @@ condition holds. Instead, we store an AL tensor (left canonical, A in MPS notati
 AR tensor (right canonical, B), and an AC tensor (one-site orthogonality center, Theta)
 on each site. On each bond we store a C tensor that is not guaranteed to be diagonal.
 
-A uMPS is only defined in the thermodynamic limit.
+A uniform MPS is only defined in the thermodynamic limit.
 
 The functions in the class are mostly trivial copies of the functions from MPS that
 account for the additional type of tensor structure.
@@ -32,13 +32,69 @@ logger = logging.getLogger(__name__)
 from ..linalg import np_conserved as npc
 from .mps import MPS
 
-__all__ = ['uMPS']
+__all__ = ['UniformMPS']
 
 
-class uMPS(MPS):
-    r"""A Uniform Matrix Product State, only defined in the thermodynamic limit
+class UniformMPS(MPS):
+    r"""A Uniform Matrix Product State, only defined in the thermodynamic limit.
 
-    See MPS documentation for details.
+
+    Parameters
+    ----------
+    sites : list of :class:`~tenpy.networks.site.Site`
+        Defines the local Hilbert space for each site.
+    Bs : list of :class:`~tenpy.linalg.np_conserved.Array`
+        The 'matrices' of the MPS. Labels are ``vL, vR, p`` (in any order).
+    SVs : list of 1D array
+        The singular values on *each* bond. Should always have length `L+1`.
+        Entries out of :attr:`nontrivial_bonds` are ignored.
+    bc : ``'finite' | 'segment' | 'infinite'``
+        Boundary conditions as described in the tabel of the module doc-string.
+    form : (list of) {``'B' | 'A' | 'C' | 'G' | 'Th' | None`` | tuple(float, float)}
+        The form of the stored 'matrices', see table in module doc-string.
+        A single choice holds for all of the entries.
+
+    Attributes
+    ----------
+    sites : list of :class:`~tenpy.networks.site.Site`
+        Defines the local Hilbert space for each site.
+    bc : {'infinite'}
+        For uniform MPS only infinite bc are allowed.
+    chinfo : :class:`~tenpy.linalg.np_conserved.ChargeInfo`
+        The nature of the charge.
+    dtype : type
+        The data type of the ``_B``.
+    norm : float
+        The norm of the state, i.e. ``sqrt(<psi|psi>)``.
+        Ignored for (normalized) :meth:`expectation_value`, but important for :meth:`overlap`.
+    grouped : int
+        Number of sites grouped together, see :meth:`group_sites`.
+    segment_boundaries : tuple of :class:`~tenpy.linalg.np_conserved.Array` | (None, None)
+        Only defined for 'segment' `bc` if :meth:`canonical_form_finite` has been called.
+        If defined, it contains the `U_L` and `V_R` that would be returned by that function.
+    _AC : list of :class:`npc.Array`
+        The 'center-site' tensors of the MPS. Labels are ``vL, vR, p`` (in any order).
+    _AL : list of :class:`npc.Array`
+        The 'left-orthonormal' tensors of the MPS. Labels are ``vL, vR, p`` (in any order).
+    _AR : list of :class:`npc.Array`
+        The 'right-orthonormal' tensors of the MPS. Labels are ``vL, vR, p`` (in any order).
+    _C : list of :class:`npc.Array`
+        The center matrices on the left of site `i`, Labels are ``vL, vR`` (in any order).
+    _valid_forms : dict
+        Class attribute.
+        Mapping for canonical forms to a tuple ``(nuL, nuR)`` indicating that
+        ``self._B[i] = s[i]**nuL -- Gamma[i] -- s[i]**nuR`` is saved.
+    _valid_bc : tuple of str
+        Class attribute. Possible valid boundary conditions.
+    _transfermatrix_keep : int
+        How many states to keep at least when diagonalizing a :class:`TransferMatrix`.
+        Important if the state develops a near-degeneracy.
+    _p_label, _B_labels : list of str
+        Class attribute. `_p_label` defines the physical legs of the B-tensors, `_B_labels` lists
+        all the labels of the B tensors. Used by methods like :meth:`get_theta` to avoid
+        the necessity of re-implementations for derived classes like the
+        :class:`~tenpy.networks.purification_mps.Purification_MPS` if just the number of physical
+        legs changed.
     """
 
     # valid boundary conditions. Don't overwrite this!
@@ -63,7 +119,7 @@ class uMPS(MPS):
         self._AR = [AR.astype(dtype, copy=True).itranspose(self._B_labels) for AR in ARs]
         self._AL = [AL.astype(dtype, copy=True).itranspose(self._B_labels) for AL in ALs]
         self._AC = [AC.astype(dtype, copy=True).itranspose(self._B_labels) for AC in ACs]
-        self._C = [C.astype(dtype, copy=True).itranspose(self._C_labels) for C in Cs] # TODO, same initialization as S?
+        self._C = [C.astype(dtype, copy=True).itranspose(self._C_labels) for C in Cs]
         # center matrix on the left of site `i`
 
         self._transfermatrix_keep = 1
@@ -102,9 +158,6 @@ class uMPS(MPS):
             AL.get_leg('vR').test_contractible(self._C[(i + 1) % self.L].get_leg('vL'))
             AL.get_leg('vR').test_contractible(self._AC[(i + 1) % self.L].get_leg('vL'))
 
-        #if np.any(self._C[self.L].to_ndarray() != self._C[0].to_ndarray()): # TODO: There has got to be a better way to check equality of npc arrays.
-        #    raise ValueError("uMPS with C[0] != C[L]")
-
         self.test_validity()
 
     def test_validity(self, cutoff=1.e-8):
@@ -128,7 +181,11 @@ class uMPS(MPS):
         return err
 
     def copy(self):
-        # __init__ makes deep copies of 4 types of tensors.
+        """Returns a copy of `self`.
+
+        The copy still shares the sites, chinfo, and LegCharges, but the values of
+        the tensors are deeply copied.
+        """
         cp = self.__class__(self.sites, self._AL, self._AR, self._AC, self._C, self.norm)
         cp.grouped = self.grouped
         cp._transfermatrix_keep = self._transfermatrix_keep
@@ -136,6 +193,30 @@ class uMPS(MPS):
         return cp
 
     def save_hdf5(self, hdf5_saver, h5gr, subpath):
+        """Export `self` into a HDF5 file.
+
+        This method saves all the data it needs to reconstruct `self` with :meth:`from_hdf5`.
+
+        Specifically, it saves
+        :attr:`sites`,
+        :attr:`chinfo` (under these names),
+        :attr:`_AL` as ``"tensors_AL"``,
+        :attr:`_AR` as ``"tensors_AR"``,
+        :attr:`_AC` as ``"tensors_AC"``,
+        :attr:`_C` as ``"tensors_C"``,
+        Moreover, it saves :attr:`norm`, :attr:`L`, :attr:`grouped` and
+        :attr:`_transfermatrix_keep` (as "transfermatrix_keep") as HDF5 attributes, as well as
+        the maximum of :attr:`chi` under the name "max_bond_dimension".
+
+        Parameters
+        ----------
+        hdf5_saver : :class:`~tenpy.tools.hdf5_io.Hdf5Saver`
+            Instance of the saving engine.
+        h5gr : :class`Group`
+            HDF5 group which is supposed to represent `self`.
+        subpath : str
+            The `name` of `h5gr` with a ``'/'`` in the end.
+        """
         hdf5_saver.save(self.sites, subpath + "sites")
         hdf5_saver.save(self._AL, subpath + "tensors_AL")
         hdf5_saver.save(self._AR, subpath + "tensors_AR")
@@ -151,50 +232,71 @@ class uMPS(MPS):
         h5gr.attrs["L"] = self.L  # not needed for loading, but still usefull metadata
         h5gr.attrs["max_bond_dimension"] = np.max(self.chi)  # same
 
-    def to_MPS(self, SV_cutoff=0., overlap=False):
+    def to_MPS(self, cutoff=1.e-16, check_overlap=False):
         """
-        Convert uMPS to MPS. We return the AR matrix for each site and the DIAGONAL S
+        Convert UniformMPS to MPS. We return the AR matrix for each site and the DIAGONAL S
         matrix to the right of each site. Thus we must make sure that the C matrices
         are converted to diagonal matrices first.
 
-        Since AL C = C AR is not identically true, the MPS defined by AL and AR are not exactly the same.
-        We can compute the overlap of the two to check.
+        Parameters
+        ----------
+        cutoff : float
+            During DMRG with a mixer, `S` may be a matrix for which we need the inverse.
+            This is calculated as the Penrose pseudo-inverse, which uses a cutoff for the
+            singular values.
+        check_overlap: bool
+            Since AL C = C AR is not identically true, the MPS defined by AL and AR are not exactly the same.
+            We can compute the overlap of the two to check.
+        
+        Returns
+        -------
+        psi : :class:`~tenpy.networks.mps.MPS`
+            The right-canonical form converted from the uniform MPS. If the check_overlap fails, return the uniform MPS instead.
         """
 
         if self.diagonal_gauge == False:
-            self.to_diagonal_gauge(SV_cutoff=SV_cutoff, overlap=overlap)
+            self.to_diagonal_gauge(cutoff=cutoff, check_overlap=check_overlap)
 
         self.test_validity()
 
-        MPS_A = MPS(self.sites, self._AL, self._S, bc='infinite', form='A', norm=1.)
         MPS_B = MPS(self.sites, self._AR, self._S, bc='infinite', form='B', norm=1.)
-
-        MPS_A.canonical_form() # [TODO] should we do this? It might be expensive.
+        
         MPS_B.canonical_form()
-        if overlap:
+        if check_overlap:
+            MPS_A = MPS(self.sites, self._AL, self._S, bc='infinite', form='A', norm=1.)
+            MPS_A.canonical_form() # [TODO] should we do this? It might be expensive.
             overlap_AB = np.abs(MPS_B.overlap(MPS_A))
             logger.info('Overlap of uMPS constructed from ARs with uMPS constructed with ALs: %.10e.', overlap_AB)
-            assert np.isclose(overlap_AB, 1)
+            if not np.isclose(overlap_AB, 1):
+                logger.warn(f"overlap not close to 1: {overlap_AB}, returning uniform MPS instead")
+                return self.copy()
         return MPS_B
 
-    def to_diagonal_gauge(self, SV_cutoff=0., overlap=False):
+    def to_diagonal_gauge(self, cutoff=1.e-16, check_overlap=False):
         """
         Convert a uMPS to diagonal gauge, i.e. where all of the bond matrices are diagonal.
+        
+        Parameters
+        ----------
+        cutoff : float
+            Cutoff for the singular values.
+        check_overlap: bool
+            Check the overlap between the state before and after changing to diagonal gauge.
         """
-        if overlap:
+        if check_overlap:
             old_uMPS = self.copy()
 
         self._S = []    # Empty out np.arrays on each bond.
 
-        if self.L > 1 and SV_cutoff > 0.0:
+        if self.L > 1 and cutoff > 0.0:
             warnings.warn("'sv_cutoff' cannot be non-zero for multi-site unit cell as this messes with the transfer matrix.")
-            SV_cutoff = 0.0
+            cutoff = 0.0
 
 
         for i in range(self.L):
             # For each bond matrix,
             C = self.get_C(i)
-            U, VH = self._diagonal_gauge_C(C, i, SV_cutoff)
+            U, VH = self._diagonal_gauge_C(C, i, cutoff)
             if i % self.L == 0:
                 self.left_U = U
                 self.right_U = VH
@@ -206,17 +308,16 @@ class uMPS(MPS):
 
         self.diagonal_gauge = True
 
-        if overlap:
+        if check_overlap:
             overlap = self.overlap(old_uMPS)
             logger.info('Overlap of original uMPS with diagonal uMPS: %.10e.', overlap)
-            assert np.isclose(overlap, 1)
 
-    def _diagonal_gauge_C(self, theta, i0, SV_cutoff):
+    def _diagonal_gauge_C(self, theta, i0, cutoff):
         """
         Diagonalize bond matrix theta and update ALs and ARs on sites on the boundary of the bond.
         """
         U, S, VH = npc.svd(theta,
-                           cutoff=SV_cutoff,
+                           cutoff=cutoff,
                            qtotal_LR=[theta.qtotal, None],
                            inner_labels=['vR', 'vL'])
 
@@ -233,6 +334,9 @@ class uMPS(MPS):
         return U, VH
 
     def _diagonal_gauge_AC(self, U, VH, i0):
+        """
+        Given U and VH from diagoanlizing the center matrix C compute the corresponding AC.
+        """
 
         theta = self.get_B(i0, 'AC')
         theta = npc.tensordot(U.conj(), theta, axes=(['vL*'], ['vL'])).ireplace_label('vR*', 'vL')
@@ -244,6 +348,24 @@ class uMPS(MPS):
 
     @classmethod
     def from_hdf5(cls, hdf5_loader, h5gr, subpath):
+        """Load instance from a HDF5 file.
+
+        This method reconstructs a class instance from the data saved with :meth:`save_hdf5`.
+
+        Parameters
+        ----------
+        hdf5_loader : :class:`~tenpy.tools.hdf5_io.Hdf5Loader`
+            Instance of the loading engine.
+        h5gr : :class:`Group`
+            HDF5 group which is represent the object to be constructed.
+        subpath : str
+            The `name` of `h5gr` with a ``'/'`` in the end.
+
+        Returns
+        -------
+        obj : cls
+            Newly generated class instance containing the required data.
+        """
         obj = cls.__new__(cls)  # create class instance, no __init__() call
         hdf5_loader.memorize_load(h5gr, obj)
 
@@ -270,6 +392,19 @@ class uMPS(MPS):
 
     @classmethod
     def from_MPS(cls, psi):
+        """
+        Convert an infinite MPS to a uniform MPS.
+
+        Parameters
+        ----------
+        psi : :class:`~tenpy.networks.mps.MPS`
+            Infinite MPS which we want to change to a uniform one.
+        
+        Returns
+        -------
+        psi : :class:`UniformMPS`
+            The resulting uniform MPS.
+        """
         obj = cls.__new__(cls)
         obj.sites = list(psi.sites)
         obj.chinfo = psi.sites[0].leg.chinfo
@@ -286,8 +421,6 @@ class uMPS(MPS):
         obj._AC = [psi.get_B(i, form='Th').astype(obj.dtype, copy=True).itranspose(obj._B_labels) for i in range(psi.L)]
         obj._AL = [psi.get_B(i, form='A').astype(obj.dtype, copy=True).itranspose(obj._B_labels) for i in range(psi.L)]
         obj._C = []
-        # There are L+1 S matrices in an MPS, which the first and last presumably the same. For infinite MPS, the last is ignored I believe.
-        # We only store L in uMPS.
         for i in range(psi.L):
             C = npc.diag(psi.get_SL(i), obj._AL[i].get_leg('vL'), labels=['vL', 'vR']) # center matrix on the left of site `i`
             obj._C.append(C.astype(obj.dtype, copy=True).itranspose(obj._C_labels))
@@ -298,7 +431,7 @@ class uMPS(MPS):
 
     @classmethod
     def from_lat_product_state(cls, lat, p_state, **kwargs):
-        raise NotImplementedError("Not valid for UMPS!")
+        raise NotImplementedError("Not valid for UniformMPS!")
 
     @classmethod
     def from_product_state(cls,
@@ -309,7 +442,7 @@ class uMPS(MPS):
                            permute=True,
                            form='B',
                            chargeL=None):
-        raise NotImplementedError("Not valid for UMPS.")
+        raise NotImplementedError("Not valid for UniformMPS.")
 
     @classmethod
     def from_Bflat(cls,
@@ -321,17 +454,17 @@ class uMPS(MPS):
                    dtype=None,
                    permute=True,
                    legL=None):
-        """Construct a matrix product state from a set of numpy arrays `Bflat` and singular vals.
+        """Construct a matrix product state from a set of numpy arrays and singular vals.
 
         Parameters
         ----------
         sites : list of :class:`~tenpy.networks.site.Site`
             The sites defining the local Hilbert space.
         A{L,R,C}flat : iterable of numpy ndarrays
-            The matrix defining the MPS on each site, with legs ``'p', 'vL', 'vR'``
+            The matrices defining the MPS on each site, with legs ``'p', 'vL', 'vR'``
             (physical, virtual left/right).
         Cflat : iterable of numpy ndarrays
-            The matrix defining the bond matrix on each site, with legs ``'vL', 'vR'``
+            The matrices defining the bond matrix on each site, with legs ``'vL', 'vR'``
             (virtual left/right).
         dtype : type or string
             The data type of the array entries. Defaults to the common dtype of `Bflat`.
@@ -347,8 +480,8 @@ class uMPS(MPS):
 
         Returns
         -------
-        mps : :class:`MPS`
-            An MPS with the matrices `Bflat` converted to npc arrays.
+        mps : :class:`UniformMPS`
+            An MPS with the `flat` matrices converted to npc arrays.
         """
         sites = list(sites)
         L = len(sites)
@@ -412,8 +545,7 @@ class uMPS(MPS):
             legL = ALlegs[-1].conj()  # prepare for next `i`
 
         # for an iMPS, the last leg has to match the first one.
-        # so we need to gauge `qtotal` of the last `B` such that the right leg matches.
-        # TODO Ask Johannes!
+        # so we need to gauge `qtotal` of the last tensors such that the right leg matches.
         chdiff = ALs[-1].get_leg('vR').charges[0] - AL[0].get_leg('vL').charges[0]
         ALs[-1] = ALs[-1].gauge_total_charge('vR', ci.make_valid(chdiff))
         ACs[-1] = ACs[-1].gauge_total_charge('vR', ci.make_valid(chdiff))
@@ -431,7 +563,7 @@ class uMPS(MPS):
                   normalize=True,
                   bc='finite',
                   outer_S=None):
-        raise NotImplementedError("Not valid for UMPS.")
+        raise NotImplementedError("Not valid for UniformMPS.")
 
     @classmethod
     def from_singlets(cls,
@@ -443,16 +575,7 @@ class uMPS(MPS):
                       lonely=[],
                       lonely_state='up',
                       bc='finite'):
-        raise NotImplementedError("Not valid for UMPS.")
-
-    #@property
-    #def L(self):
-
-    #@property
-    #def dim(self):
-
-    #@property
-    #def finite(self):
+        raise NotImplementedError("Not valid for UniformMPS.")
 
     @property
     def chi(self):
@@ -467,10 +590,9 @@ class uMPS(MPS):
         ----------
         i : int
             Index choosing the site.
-        form : ``'B' | 'A' | 'C' | 'G' | 'Th' | None`` | tuple(float, float)
+        form : ``'B'/'AR' | 'A'/'AL' | 'Th'/'AC' | None`` | tuple(float, float)
             The (canonical) form of the returned B.
-            For ``None``, return the matrix in whatever form it is.
-            If any of the tuple entry is None, also don't scale on the corresponding axis.
+            For ``None``, return the matrix in 'B'-form.
         copy : bool
             Whether to return a copy even if `form` matches the current form.
         cutoff : float
@@ -489,26 +611,22 @@ class uMPS(MPS):
             The MPS 'matrix' `B` at site `i` with leg labels ``'vL', 'p', 'vR'``.
             May be a view of the matrix (if ``copy=False``),
             or a copy (if the form changed or ``copy=True``).
-
-        Raises
-        ------
-        ValueError : if self is not in canoncial form and `form` is not None.
         """
         if form is None:
-            return self.get_AR(i, copy=False, label_p=label_p)
+            return self.get_AR(i, copy=copy, label_p=label_p)
         elif form=='A' or form==(1., 0.) or form=='AL':
-            return self.get_AL(i, copy=False, label_p=label_p)
+            return self.get_AL(i, copy=copy, label_p=label_p)
         elif form=='B' or form==(0., 1.) or form=='AR':
-            return self.get_AR(i, copy=False, label_p=label_p)
+            return self.get_AR(i, copy=copy, label_p=label_p)
         elif form=='Th' or form==(1., 1.) or form=='AC':
-            return self.get_AC(i, copy=False, label_p=label_p)
+            return self.get_AC(i, copy=copy, label_p=label_p)
         else:
-            raise NotImplementedError("Form {0!r} is not valid for VUMPS.".format(form))
-
-    #@property
-    #def nontrivial_bonds(self):
+            raise NotImplementedError(f"Form {form!r} is not valid for UniformMPS.")
 
     def get_AL(self, i, copy=False, label_p=None):
+        """
+        Return (view of) `AL` at site `i` in canonical form.
+        """
         i = self._to_valid_index(i)
         AL = self._AL[i]
         if copy:
@@ -518,6 +636,9 @@ class uMPS(MPS):
         return AL
 
     def get_AR(self, i, copy=False, label_p=None):
+        """
+        Return (view of) `AR` at site `i` in canonical form.
+        """
         i = self._to_valid_index(i)
         AR = self._AR[i]
         if copy:
@@ -527,6 +648,9 @@ class uMPS(MPS):
         return AR
 
     def get_AC(self, i, copy=False, label_p=None):
+        """
+        Return (view of) `AC` at site `i` in canonical form.
+        """
         i = self._to_valid_index(i)
         AC = self._AC[i]
         if copy:
@@ -536,7 +660,7 @@ class uMPS(MPS):
         return AC
 
     def get_C(self, i, copy=False):
-        """Return center matrix on the left of site `i`"""
+        """Return center matrix C on the left of site `i`"""
         i = self._to_valid_index(i)
         C = self._C[i]
         if copy:
@@ -544,6 +668,18 @@ class uMPS(MPS):
         return C
 
     def set_B(self, i, B, form='B'):
+        """Set tensor `B` at site `i`.
+
+        Parameters
+        ----------
+        i : int
+            Index choosing the site.
+        B : :class:`~tenpy.linalg.np_conserved.Array`
+            The 'matrix' at site `i`. No copy is made!
+            Should have leg labels ``'vL', 'p', 'vR'`` (not necessarily in that order).
+        form : ``'B'/'AR' | 'A'/'AL' | 'Th'/'AC'`` | tuple(float, float)
+            The (canonical) form of the `B` to set.
+        """
         if form=='A' or form==(1., 0.) or form=='AL':
             return self.set_AL(i, B)
         elif form=='B' or form==(0., 1.) or form=='AR':
@@ -554,27 +690,39 @@ class uMPS(MPS):
             raise NotImplementedError("Form {0!r} is not valid for VUMPS.".format(list(form)))
 
     def set_AL(self, i, AL):
+        """
+        Set `AL` at site `i`
+        """
         i = self._to_valid_index(i)
         self.dtype = np.find_common_type([self.dtype, AL.dtype], [])
         self._AL[i] = AL.itranspose(self._B_labels)
 
     def set_AR(self, i, AR):
+        """
+        Set `AR` at site `i`
+        """
         i = self._to_valid_index(i)
         self.dtype = np.find_common_type([self.dtype, AR.dtype], [])
         self._AR[i] = AR.itranspose(self._B_labels)
 
     def set_AC(self, i, AC):
+        """
+        Set `AC` at site `i`
+        """
         i = self._to_valid_index(i)
         self.dtype = np.find_common_type([self.dtype, AC.dtype], [])
         self._AC[i] = AC.itranspose(self._B_labels)
 
     def set_C(self, i, C):
+        """
+        Set `C` left of site `i`
+        """
         i = self._to_valid_index(i)
         self.dtype = np.find_common_type([self.dtype, C.dtype], [])
         self._C[i] = C.itranspose(self._C_labels)
 
     def set_svd_theta(self, i, theta, trunc_par=None, update_norm=False):
-        raise NotImplementedError("Not valid for UMPS.")
+        raise NotImplementedError("Not valid for UniformMPS.")
 
     def get_SL(self, i):
         return self.get_C(i)
@@ -588,16 +736,23 @@ class uMPS(MPS):
     def set_SR(self, i, S):
         self.set_C(i+1, S)
 
-    #def get_op(self, op_list, i):
-
     def get_theta(self, i, n=2, cutoff=1.e-16, formL=1., formR=1.):
         """Calculates the `n`-site wavefunction on ``sites[i:i+n]``.
+
         Parameters
         ----------
         i : int
             Site index.
         n : int
             Number of sites. The result lives on ``sites[i:i+n]``.
+        cutoff : float
+            During DMRG with a mixer, `S` may be a matrix for which we need the inverse.
+            This is calculated as the Penrose pseudo-inverse, which uses a cutoff for the
+            singular values.
+        formL : float
+            Exponent for the singular values to the left. (Not used for UniformMPS)
+        formR : float
+            Exponent for the singular values to the right. (Not used for UniformMPS)
         Returns
         -------
         theta : :class:`~tenpy.linalg.np_conserved.Array`
@@ -619,9 +774,7 @@ class uMPS(MPS):
         return theta
 
     def convert_form(self, new_form='B'):
-        raise NotImplementedError("Not valid for UMPS.")
-
-    #def increase_L(self, new_L=None):
+        raise NotImplementedError("Not valid for UniformMPS.")
 
     def enlarge_mps_unit_cell(self, factor=2):
         """Repeat the unit cell for infinite uMPS boundary conditions; in place.
@@ -695,16 +848,16 @@ class uMPS(MPS):
         return self
 
     def group_sites(self, n=2, grouped_sites=None):
-        raise NotImplementedError("Not valid for UMPS.")
+        raise NotImplementedError("Not valid for UniformMPS.")
 
     def group_split(self, trunc_par=None):
-        raise NotImplementedError("Not valid for UMPS.")
+        raise NotImplementedError("Not valid for UniformMPS.")
 
     def get_grouped_mps(self, blocklen):
-        raise NotImplementedError("Not valid for UMPS.")
+        raise NotImplementedError("Not valid for UniformMPS.")
 
     def extract_segment(self, first, last):
-        raise NotImplementedError("Not valid for UMPS.")
+        raise NotImplementedError("Not valid for UniformMPS.")
 
     def get_total_charge(self, only_physical_legs=False):
         """Calculate and return the `qtotal` of the whole MPS (when contracted).
@@ -716,15 +869,14 @@ class uMPS(MPS):
         only_physical_legs : bool
             For ``'finite'`` boundary conditions, the total charge can be gauged away
             by changing the LegCharge of the trivial legs on the left and right of the MPS.
-            This option allows to project out the trivial legs to get the actual "physical"
-            total charge.
+            (Not possible for UniformMPS)
 
         Returns
         -------
         qtotal : charges
             The sum of the `qtotal` of the individual `B` tensors.
         """
-        assert only_physical_legs == False
+        assert only_physical_legs == False, "Not possible for UniformMPS"
         # Assume self.segment_boundaries is None, None for UMPS
         tensors_AL = self._AL
         qtotal_AL = np.sum([AL.qtotal for AL in tensors_AL], axis=0)
@@ -738,41 +890,64 @@ class uMPS(MPS):
         return qtotal_AR
 
     def gauge_total_charge(self, qtotal=None, vL_leg=None, vR_leg=None):
-        raise NotImplementedError("Who knows if this is valid for UMPS?")
+        raise NotImplementedError("Who knows if this is valid for UniformMPS?")
 
     def entanglement_entropy(self, n=1, bonds=None, for_matrix_S=True):
         #assert self.valid_umps
-        assert for_matrix_S, "uMPS do not have diagonal C matrices."
+        assert for_matrix_S, "UniformMPS do not have diagonal C matrices."
         return super().entanglement_entropy(n, bonds, for_matrix_S)
 
     def entanglement_entropy_segment(self, segment=[0], first_site=None, n=1):
-        raise NotImplementedError("Convert uMPS to MPS for calculations involving S.")
+        raise NotImplementedError("Convert UniformMPS to MPS for calculations involving S.")
 
     def entanglement_entropy_segment2(self, segment, n=1):
-        raise NotImplementedError("Convert uMPS to MPS for calculations involving S.")
+        raise NotImplementedError("Convert UniformMPS to MPS for calculations involving S.")
 
     def entanglement_spectrum(self, by_charge=False):
-        raise NotImplementedError("Convert uMPS to MPS for calculations involving S.")
+        raise NotImplementedError("Convert uMUniformMPSPS to MPS for calculations involving S.")
 
     def get_rho_segment(self, segment):
-        raise NotImplementedError("Convert uMPS to MPS for calculations involving S.")
+        raise NotImplementedError("Convert UniformMPS to MPS for calculations involving S.")
 
     def probability_per_charge(self, bond=0):
-        raise NotImplementedError("Convert uMPS to MPS for calculations involving S.")
+        raise NotImplementedError("Convert UniformMPS to MPS for calculations involving S.")
 
     def average_charge(self, bond=0):
-        raise NotImplementedError("Convert uMPS to MPS for calculations involving S.")
+        raise NotImplementedError("Convert UniformMPS to MPS for calculations involving S.")
 
     def charge_variance(self, bond=0):
-        raise NotImplementedError("Convert uMPS to MPS for calculations involving S.")
+        raise NotImplementedError("Convert UniformMPS to MPS for calculations involving S.")
 
     def mutinf_two_site(self, max_range=None, n=1):
-        raise NotImplementedError("Convert uMPS to MPS for calculations involving S.")
+        raise NotImplementedError("Convert UniformMPS to MPS for calculations involving S.")
 
     def overlap(self, other, charge_sector=None, ignore_form=False, **kwargs):
-        #assert self.valid_umps     # We want to take overlap of non-valid uMPS when doing diagonal gauge conversion.
-        assert not ignore_form, "uMPS have both forms. Use one."
-        return super().overlap(other, charge_sector=None, ignore_form=False, **kwargs)
+        """Compute overlap ``<self|other>``.
+
+        Parameters
+        ----------
+        other : :class:`MPS`
+            An MPS with the same physical sites.
+        charge_sector : None | charges | ``0``
+            Selects the charge sector in which the dominant eigenvector of the TransferMatrix is.
+            ``None`` stands for *all* sectors, ``0`` stands for the sector of zero charges.
+            If a sector is given, it *assumes* the dominant eigenvector is in that charge sector.
+        ignore_form : bool
+            For UniformMPS only ``False`` is possible.
+        **kwargs :
+            Further keyword arguments given to :meth:`TransferMatrix.eigenvectors`;
+            only used for infinite boundary conditions.
+
+        Returns
+        -------
+        overlap : dtype.type
+            The contraction ``<self|other> * self.norm * other.norm``
+            (i.e., taking into account the :attr:`norm` of both MPS).
+            For an infinite MPS, ``<self|other>`` is the overlap per unit cell, i.e.,
+            the largest eigenvalue of the TransferMatrix.
+        """
+        assert not ignore_form, "UniformMPS have both forms. Use one."
+        return super().overlap(other, charge_sector=charge_sector, ignore_form=ignore_form, **kwargs)
 
     def expectation_value(self, ops, sites=None, axes=None):
         assert self.valid_umps
@@ -782,15 +957,9 @@ class uMPS(MPS):
         assert self.valid_umps
         return super().expectation_value_term(term, autoJW=autoJW)
 
-    #def _term_to_ops_list(self, term, autoJW=True, i_offset=0, JW_from_right=False):
-
     def expectation_value_multi_sites(self, operators, i0):
         assert self.valid_umps
         return super().expectation_value_multi_sites(operators, i0)
-
-    #def _corr_ops_LP(self, operators, i0):
-
-    #def _corr_ops_RP(self, operators, i0):
 
     def expectation_value_terms_sum(self, term_list, prefactors=None):
         assert self.valid_umps
@@ -806,7 +975,7 @@ class uMPS(MPS):
                              hermitian=False,
                              autoJW=True):
         assert self.valid_umps
-        return super().correlation_function(op1,
+        return super().correlation_function(ops1,
                                             ops2,
                                             sites1=sites1,
                                             sites2=sites2,
@@ -882,35 +1051,35 @@ class uMPS(MPS):
             return super().norm_test()
 
     def canonical_form(self, **kwargs):
-        raise NotImplementedError("Not valid for UMPS.")
+        raise NotImplementedError("Not valid for UniformMPS.")
 
     def canonical_form_finite(self, renormalize=True, cutoff=0., envs_to_update=None):
-        raise NotImplementedError("Not valid for UMPS.")
+        raise NotImplementedError("Not valid for UniformMPS.")
 
     def canonical_form_infinite(self, renormalize=True, tol_xi=1.e6):
-        raise NotImplementedError("Not valid for UMPS.")
+        raise NotImplementedError("Not valid for UniformMPS.")
 
     def correlation_length(self, target=1, tol_ev0=1.e-8, charge_sector=0):
         assert self.valid_umps
         return super().correlation_length(self, target=1, tol_ev0=1.e-8, charge_sector=0)
 
     def add(self, other, alpha, beta, cutoff=1.e-15):
-        raise NotImplementedError("Not valid for UMPS.")
+        raise NotImplementedError("Not valid for UniformMPS.")
 
     def apply_local_op(self, i, op, unitary=None, renormalize=False, cutoff=1.e-13):
-        raise NotImplementedError("Not valid for UMPS.")
+        raise NotImplementedError("Not valid for UniformMPS.")
 
     def apply_product_op(self, ops, unitary=None, renormalize=False):
-        raise NotImplementedError("Not valid for UMPS.")
+        raise NotImplementedError("Not valid for UniformMPS.")
 
     def perturb(self, randomize_params=None, close_1=True, canonicalize=None):
-        raise NotImplementedError("Not valid for UMPS.")
+        raise NotImplementedError("Not valid for UniformMPS.")
 
     def swap_sites(self, i, swap_op='auto', trunc_par=None):
-        raise NotImplementedError("Not valid for UMPS.")
+        raise NotImplementedError("Not valid for UniformMPS.")
 
     def permute_sites(self, perm, swap_op='auto', trunc_par=None, verbose=None):
-        raise NotImplementedError("Not valid for UMPS.")
+        raise NotImplementedError("Not valid for UniformMPS.")
 
     def compute_K(self,
                   perm,
@@ -919,13 +1088,13 @@ class uMPS(MPS):
                   canonicalize=1.e-6,
                   verbose=None,
                   expected_mean_k=0.):
-        raise NotImplementedError("Convert uMPS to MPS for calculations involving S.")
+        raise NotImplementedError("Convert UniformMPS to MPS for calculations involving S.")
 
     def __str__(self):
-        """Some status information about the uMPS."""
-        res = ["uMPS, L={L:d}, bc={bc!r}.".format(L=self.L, bc=self.bc)]
-        res.append("chi: " + str(self.chi))
-        res.append("valid: " + str(self.valid_umps))
+        """Some status information about the UniformMPS."""
+        res = [f"UniformMPS, L={self.L:d}, bc={self.bc!r}."]
+        res.append(f"chi: {self.chi}")
+        res.append(f"valid: {self.valid_umps}")
         if self.L > 10:
             res.append("first two sites: " + repr(self.sites[0]) + " " + repr(self.sites[1]))
         else:
@@ -933,43 +1102,25 @@ class uMPS(MPS):
         return "\n".join(res)
 
     def compress(self, options):
-        raise NotImplementedError("Not valid for UMPS.")
+        raise NotImplementedError("Not valid for UniformMPS.")
 
     def compress_svd(self, trunc_par):
-        raise NotImplementedError("Not valid for UMPS.")
-
-    #def _to_valid_index(self, i):
-
-    #def _parse_form(self, form):
-
-    #def _to_valid_form(self, form):
+        raise NotImplementedError("Not valid for UniformMPS.")
 
     def _scale_axis_B(self, B, S, form_diff, axis_B, cutoff):
-        raise NotImplementedError("Not valid for UMPS.")
-
-    #def _replace_p_label(self, A, s):
-
-    #def _get_p_label(self, s):
-
-    #def _get_p_labels(self, ks, star=False):
-
-    #def _expectation_value_args(self, ops, sites, axes):
-
-    #def _correlation_function_args(self, ops1, ops2, sites1, sites2, opstr):
-
-    #def _corr_up_diag(self, ops1, ops2, i, j_gtr, opstr, str_on_first, apply_opstr_first):
+        raise NotImplementedError("Not valid for UniformMPS.")
 
     def _canonical_form_dominant_gram_matrix(self, bond0, transpose, tol_xi, guess=None):
-        raise NotImplementedError("Not valid for UMPS.")
+        raise NotImplementedError("Not valid for UniformMPS.")
 
     def _canonical_form_correct_right(self, i1, Gr, eps=2. * np.finfo(np.double).eps):
-        raise NotImplementedError("Not valid for UMPS.")
+        raise NotImplementedError("Not valid for UniformMPS.")
 
     def _canonical_form_correct_left(self, i1, Gl, Wr, eps=2. * np.finfo(np.double).eps):
-        raise NotImplementedError("Not valid for UMPS.")
+        raise NotImplementedError("Not valid for UniformMPS.")
 
     def _gauge_compatible_vL_vR(self, other):
-        raise NotImplementedError("Not valid for UMPS.")
+        raise NotImplementedError("Not valid for UniformMPS.")
 
     def outer_virtual_legs(self):
         vL = self._AR[0].get_leg('vL')
