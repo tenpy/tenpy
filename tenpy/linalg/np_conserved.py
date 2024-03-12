@@ -3739,6 +3739,8 @@ def norm(a, ord=None, convert_to_float=True):
             new_type = np.result_type('f4', a.dtype)  # int -> float
             a = np.asarray(a, new_type)  # doesn't copy, if the dtype did not change.
         return np.linalg.norm(a.reshape((-1, )), ord)
+    elif isinstance(a, list):
+        np.linalg.norm([norm(p) for p in a] + [0])
     else:
         raise ValueError("unknown type of a")
 

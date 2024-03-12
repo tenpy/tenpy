@@ -164,7 +164,7 @@ class KrylovBased:
 
         self._rebuild_krylov_for_result_full(psif, N - len_cache - 1)
 
-        psif_norm = self.norm(psif)
+        psif_norm = npc.norm(psif)
         if abs(1. - psif_norm) > 1.e-5:
             # One reason can be that `H` is not Hermitian
             # Otherwise, the matrix (even if small) might be ill conditioned.
@@ -183,9 +183,6 @@ class KrylovBased:
 
     def _calc_result_krylov(self, k):
         raise NotImplementedError("subclasses should implement this")
-
-    def norm(self, w):
-        return norm(w)
 
     def iscale_prefactor(self, w, scale):
         iscale_prefactor(w, scale)
@@ -412,7 +409,7 @@ class Arnoldi(KrylovBased):
             for k in range(1, N):
                 self.iadd_prefactor_other(psi, vf[k], krylov_basis[k])
 
-            psi_norm = self.norm(psi)
+            psi_norm = npc.norm(psi)
             if abs(1. - psi_norm) > 1.e-5:
                 # One reason can be that `H` is not Hermitian
                 # Otherwise, the matrix (even if small) might be ill conditioned.
@@ -524,7 +521,7 @@ class LanczosGroundState(KrylovBased):
         """
         h = self._h_krylov
         w = self.psi0  # initialize
-        beta = self.norm(w)
+        beta = npc.norm(w)
         if self._psi0_norm is None:
             # this is only needed for normalization in LanczosEvolution
             self._psi0_norm = beta
@@ -541,7 +538,7 @@ class LanczosGroundState(KrylovBased):
                     self.iadd_prefactor_other(w, -self.inner(c, w), c)
             elif k > 0:
                 self.iadd_prefactor_other(w, -beta, self._cache[-2])
-            beta = self.norm(w)
+            beta = npc.norm(w)
             h[k, k + 1] = h[k + 1, k] = beta  # needed for the next step and convergence criteria
             if abs(beta) < self._cutoff or (k + 1 >= self.N_min and self._converged(k)):
                 break
@@ -765,19 +762,12 @@ def gram_schmidt(vecs, rcond=1.e-14, verbose=None):
         for other in res:
             ov = inner(other, vec, 'range', do_conj=True)
             iadd_prefactor_other(vec, -ov, other)
-        n = norm(vec)
+        n = npc.norm(vec)
         if n > rcond:
             iscale_prefactor(vec, 1. / n)
             res.append(vec)
     return res
 
-
-def norm(w):
-    if not isinstance(w, list):
-        return npc.norm(w)
-    else:
-        # Assumed to be list of npc array for now)
-        return np.linalg.norm([npc.norm(a) for a in w] + [0])
 
 def iscale_prefactor(w, scale):
     if not isinstance(w, list):
