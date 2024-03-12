@@ -4888,7 +4888,6 @@ class MPS(BaseMPSExpectationValue):
 
     def compress(self, options):
         """Compress an MPS.
-        """Compresss an MPS; in place.
 
         Options
         -------

@@ -413,6 +413,7 @@ class UniformMPS(MPS):
         obj.norm = psi.norm
         obj.grouped = psi.grouped
         obj.segment_boundaries = psi.segment_boundaries
+        obj.diagonal_gauge = True
         obj.valid_umps = False # Need to check that AL[n] C[n+1] = AC[n] and C[n] AR[n] = AC[n]
 
         # make copies of 4 types of tensors

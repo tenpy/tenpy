@@ -7,7 +7,7 @@ we look for the optimal ground state in the manifold of fixed bond dimension MPS
 
 The VUMPS algorithm was introduced in 2017 :cite:`zauner-stauber2017`, where it was shown
 that VUMPS outperforms both iTEBD and iDMRG as ground state search algorithms for both
-1D and quasi-1D models. The VUMPS algorithm uses the network :class:`uMPS` to represent
+1D and quasi-1D models. The VUMPS algorithm uses the network :class:`~tenpy.networks.uniform_mps.UniformMPS` to represent
 the current state of the uniform MPS during optimization. On each site, left canonical AL,
 right canonical AR, and single-site orthogonality center AC is stored; on each bond a center
 matrix C is stored. During the algorithm, the canonical form equality AL_i C_{i+1} = C_i AR_i = AC_i
@@ -51,7 +51,7 @@ from ..tools.params import asConfig
 from ..tools.math import entropy
 from ..tools.misc import find_subclass
 from ..tools.process import memory_usage
-from .mps_common import Sweep, ZeroSiteH, OneSiteH, TwoSiteH
+from .mps_common import IterativeSweeps, ZeroSiteH, OneSiteH, TwoSiteH
 from .truncation import truncate, svd_theta
 from .plane_wave_excitation import LT_general, TR_general, construct_orthogonal
 
@@ -62,13 +62,103 @@ __all__ = [
 ]
 
 
-class VUMPSEngine(Sweep):
+class VUMPSEngine(IterativeSweeps):
     """ VUMPS base class with common methods for the TwoSiteVUMPS and SingleSiteVUMPS.
 
     This engine is implemented as a subclass of :class:`~tenpy.algorithms.mps_common.Sweep`.
     It contains all methods that are generic between :class:`SingleSiteVUMPSEngine` and
     :class:`TwoSiteVUMPSEngine`.
     Use the latter two classes for actual VUMPS runs.
+
+    Options
+    -------
+    .. cfg:config :: VUMPSEngine
+        :include: IterativeSweeps
+
+    Attributes
+    ----------
+    EffectiveH : class type
+        Class for the effective Hamiltonian, i.e., a subclass of
+        :class:`~tenpy.algorithms.mps_common.EffectiveH`. Has a `length` class attribute which
+        specifies the number of sites updated at once (e.g., whether we do single-site vs. two-site
+        VUMPS).
+    chi_list : dict | ``None``
+        See :cfg:option:`DMRGEngine.chi_list`
+    eff_H : :class:`~tenpy.algorithms.mps_common.EffectiveH`
+        Effective single-site or two-site Hamiltonian.
+    shelve : bool
+        If a simulation runs out of time (`time.time() - start_time > max_seconds`), the run will
+        terminate with `shelve = True`.
+    sweeps : int
+        The number of sweeps already performed. (Useful for re-start).
+    time0 : float
+        Time marker for the start of the run.
+    update_stats : dict
+        A dictionary with detailed statistics of the convergence at local update-level.
+        For each key in the following table, the dictionary contains a list where one value is
+        added each time :meth:`VUMPSEngine.update_bond` is called.
+
+        =========== ===================================================================
+        key         description
+        =========== ===================================================================
+        i0          An update was performed on sites ``i0, i0+1``.
+        ----------- -------------------------------------------------------------------
+        e_L         Energy from left transfer matrix.
+        ----------- -------------------------------------------------------------------
+        e_R         Energy from right transfer matrix.
+        ----------- -------------------------------------------------------------------
+        e_C1        Energy from the left center matrix.
+        ----------- -------------------------------------------------------------------
+        e_C2        Energy from the right center matrix.
+        ----------- -------------------------------------------------------------------
+        e_theta     Energy from the single-site or two-site wave function.
+        ----------- -------------------------------------------------------------------
+        N_lanczos   Dimension of the Krylov space used in the lanczos diagonalization.
+        ----------- -------------------------------------------------------------------
+        split_err_L Error between AC_i and AL_i C_{i+1}
+        ----------- -------------------------------------------------------------------
+        split_err_R Error between AC_i and C_i AR_i
+        ----------- -------------------------------------------------------------------
+        time        Wallclock time evolved since :attr:`time0` (in seconds).
+        =========== ===================================================================
+
+    sweep_stats : dict
+        A dictionary with detailed statistics at the sweep level.
+        For each key in the following table, the dictionary contains a list where one value is
+        added each time :meth:`VUMPSEngine.sweep` is called (with ``optimize=True``).
+
+        ============= ===================================================================
+        key           description
+        ============= ===================================================================
+        sweep         Number of sweeps (excluding environment sweeps) performed so far.
+        ------------- -------------------------------------------------------------------
+        N_updates     Number of updates (including environment sweeps) performed so far.
+        ------------- -------------------------------------------------------------------
+        E             The energy obtained from the contracted environments.
+        ------------- -------------------------------------------------------------------
+        Delta_E       The change in `E` (above) since the last iteration.
+        ------------- -------------------------------------------------------------------
+        S             Mean entanglement entropy (over bonds).
+        ------------- -------------------------------------------------------------------
+        Delta_S       The change in `S` (above) since the last iteration.
+        ------------- -------------------------------------------------------------------
+        max_S         Max entanglement entropy (over bonds).
+        ------------- -------------------------------------------------------------------
+        time          Wallclock time evolved since :attr:`time0` (in seconds).
+        ------------- -------------------------------------------------------------------
+        max_split_err The maximum split error in the last sweep.
+        ------------- -------------------------------------------------------------------
+        max_N_lanczos Maximum number of used Lanczos vectors in last sweep.
+        ------------- -------------------------------------------------------------------
+        max_chi       Maximum bond dimension used.
+        ------------- -------------------------------------------------------------------
+        norm_err      Error of canonical form ``np.linalg.norm(psi.norm_test())``.
+        ============= ===================================================================
+
+    _entropy_approx : list of {None, 1D array}
+        While the mixer is on, the `S` stored in the MPS is a non-diagonal 2D array.
+        To check convergence, we use the approximate singular values based on which we truncated
+        instead to calculate the entanglement entropy and store it inside this list.
 
     """
     EffectiveH = None
@@ -85,97 +175,229 @@ class VUMPSEngine(Sweep):
         assert psi.L % model.H_MPO.L == 0
         self.tangent_projector_test(self.env.get_initialization_data())
         self.psi.left_U, self.psi.right_U = None, None
-
-    def run(self):
-        options = self.options
-        start_time = self.time0
-        self.shelve = False
-
-        check_overlap = options.get('check_overlap', True)
-        min_sweeps = options.get('min_sweeps', 1)
-        max_sweeps = options.get('max_sweeps', 1000)
-        max_E_err = options.get('max_E_err', 1.e-8)
-        max_S_err = options.get('max_S_err', 1.e-5)
-        split_err_tol = options.get('max_split_err', 1.e-8)
-
-        diagonal_gauge_frequency = options.get('diagonal_gauge_frequency', 0)
-        SV_cutoff = options.get('SV_cutoff', 0.)
-
-        E, Delta_E, Delta_S, Error = 1., 1., 1., 1.
-        E_old, S_old = np.nan, np.nan  # initial dummy values
-        max_split_error = 1
-        is_first_sweep = True
         self.psi.valid_umps = False
-        while True:
-            loop_start_time = time.time()
-            #Check convergence criteria
-            if self.sweeps >= max_sweeps:
-                break
-            if (self.sweeps >= min_sweeps and np.abs(Delta_E) < max_E_err * max(abs(E), 1.)
-                    and abs(Delta_S) < max_S_err and max_split_error < split_err_tol):
-                break
-            if not is_first_sweep:
-                self.checkpoint.emit(self)
-            # --------- the main work --------------
-            logger.info('Running sweep with optimization')
+
+        self.N_sweeps_check = self.options.get('N_sweeps_check', 1)
+        default_min_sweeps = int(1.5 * self.N_sweeps_check)
+        if self.chi_list is not None:
+            default_min_sweeps = max(max(self.chi_list.keys()), default_min_sweeps)
+        self.options.setdefault('min_sweeps', default_min_sweeps)
+        mixer_options = self.options.subconfig('mixer_params')
+        mixer_options.setdefault('amplitude', 1.e-5)
+        mixer_options.setdefault('decay', 2)
+        mixer_options.setdefault('disable_after', 5)
+    
+    @property
+    def S_inv_cutoff(self):
+        # high cutoff for regular inverse of S, higher cutoff if we need to (pseudo-) invert
+        # a matrix (S can be 2D while the mixer is on)
+        return 1.e-8 if not self.psi.diagonal_gauge else 1.e-15
+
+
+    def run_iteration(self):
+        """Perform a single iteration, consisting of ``N_sweeps_check`` sweeps.
+
+        Options
+        -------
+        .. cfg:configoptions :: VUMPSEngine
+        
+            diagonal_gauge_frequency : int
+                Number of sweeps how often we restore the UniformMPS to the diagonal gauge
+            cutoff : float
+                During DMRG with a mixer, `S` may be a matrix for which we need the inverse.
+                This is calculated as the Penrose pseudo-inverse, which uses a cutoff for the
+                singular values.
+
+        Returns
+        -------
+        E : float
+            The energy of the current ground state approximation.
+        psi : :class:`~tenpy.networks.uniform_mps.UniformMPS`
+            The current ground state approximation, i.e. just a reference to :attr:`psi`.
+        """
+        options = self.options
+        cutoff = options.get('cutoff', 0.)
+        diagonal_gauge_frequency = options.get('diagonal_gauge_frequency', 0)
+        
+        # energy and entropy before the iteration:
+        if len(self.sweep_stats['E']) < 1:  # first iteration
+            E_old = np.nan
+            S_old = np.mean(self.psi.entanglement_entropy())
+        else:
+            E_old = self.sweep_stats['E'][-1]
+            S_old = self.sweep_stats['S'][-1]
+
+        # VUMPS specific convergence criteria
+        diagonal_gauge_frequency = options.get('diagonal_gauge_frequency', 0)
+
+        # perform sweeps
+        logger.info('Running sweep with optimization')
+        for i in range(self.N_sweeps_check):
             self.sweep()
-            self.psi.diagonal_gauge = False
-            if diagonal_gauge_frequency > 0 and self.sweeps % diagonal_gauge_frequency == 0:
-                self.psi.to_diagonal_gauge(SV_cutoff=SV_cutoff)
-            max_split_error = np.max(self.update_stats['split_err_L'][-self.psi.L:] + self.update_stats['split_err_R'][-self.psi.L:])
-            max_N_lanczos = [np.max([self.update_stats['N_lanczos'][-i-1][j] for i in range(self.psi.L)]) for j in range(3)]
-            # --------------------------------------
-            # update values for checking the convergence
-            entropy_bonds = self._entropy_approx
-            max_S = max(entropy_bonds)
-            S = np.mean(entropy_bonds)
-            Delta_S = (S - S_old)
-            S_old = S
-            E = np.mean(self.update_stats['e_L'][-self.psi.L:] + self.update_stats['e_R'][-self.psi.L:])
-            Delta_E = (E - E_old)
-            E_old = E
-            norm_err = np.linalg.norm(self.psi.norm_test(force=True))
+        self.psi.diagonal_gauge = False
+        if diagonal_gauge_frequency > 0 and self.sweeps % diagonal_gauge_frequency == 0:
+            self.psi.to_diagonal_gauge(cutoff=cutoff)
 
-            # update statistics
-            self.sweep_stats['sweep'].append(self.sweeps)
-            self.sweep_stats['N_updates'].append(len(self.update_stats['i0']))
-            self.sweep_stats['E_theta'].append(np.mean(self.update_stats['e_theta'][-self.psi.L:]))
-            self.sweep_stats['E_L'].append(np.mean(self.update_stats['e_L'][-self.psi.L:]))
-            self.sweep_stats['E_R'].append(np.mean(self.update_stats['e_R'][-self.psi.L:]))
-            self.sweep_stats['E_C1'].append(np.mean(self.update_stats['e_C1'][-self.psi.L:]))
-            self.sweep_stats['E_C2'].append(np.mean(self.update_stats['e_C2'][-self.psi.L:]))
-            self.sweep_stats['S'].append(S)
-            self.sweep_stats['max_S'].append(max_S)
-            self.sweep_stats['total_time'].append(time.time() - start_time)
-            self.sweep_stats['sweep_time'].append(self.sweep_stats['total_time'][-1] - self.sweep_stats['total_time'][-2])
-            self.sweep_stats['max_chi'].append(np.max(self.psi.chi))
-            self.sweep_stats['norm_err'].append(norm_err)
-            self.sweep_stats['max_split_err'].append(max_split_error)
-            self.sweep_stats['max_N_lanczos'].append(max_N_lanczos)
-            # status update
-            logger.info(
-                f"checkpoint after sweep {self.sweeps:d}\n"
-                f"energy={E:.16f}, max S={max_S:.16f}, norm_err={norm_err:.1e}\n"
-                f"Current memory usage {memory_usage():.1f}MB, wall time: {time.time() - loop_start_time:.1f}s\n"
-                f"Delta E = {Delta_E:.4e}, Delta S = {Delta_S:.4e} (per sweep)\n"
-                f"max split_err = {max_split_error:.4e}, max Lanczos iter: {max_N_lanczos}\n"
-                f"chi: {self.psi.chi if self.psi.L < 40 else max(self.psi.chi)}\n"
-                f"{'=' * 80}")
-            is_first_sweep = False
+        # update statistics
+        entropy_bonds = self._entropy_approx
+        max_S = max(entropy_bonds)
+        S = np.mean(entropy_bonds)
+        E = np.mean(self.update_stats['e_L'][-self.psi.L:] + self.update_stats['e_R'][-self.psi.L:])
+        norm_err = np.linalg.norm(self.psi.norm_test())
+        max_split_error = np.max(self.update_stats['split_err_L'][-self.psi.L:] + self.update_stats['split_err_R'][-self.psi.L:])
+        max_N_lanczos = [np.max([self.update_stats['N_lanczos'][-i-1][j] for i in range(self.psi.L)]) for j in range(3)]
 
+        self.sweep_stats['sweep'].append(self.sweeps)
+        self.sweep_stats['N_updates'].append(len(self.update_stats['i0']))
+        self.sweep_stats['E'].append(E)
+        self.sweep_stats['Delta_E'].append((E - E_old) / self.N_sweeps_check)
+        self.sweep_stats['S'].append(S)
+        self.sweep_stats['Delta_S'].append((S - S_old) / self.N_sweeps_check)
+        self.sweep_stats['max_S'].append(max_S)
+        self.sweep_stats['time'].append(time.time() - self.time0)
+        self.sweep_stats['max_chi'].append(np.max(self.psi.chi))
+        self.sweep_stats['norm_err'].append(norm_err)
+        self.sweep_stats['max_split_err'].append(max_split_error)
+        self.sweep_stats['max_N_lanczos'].append(max_N_lanczos)
+
+        return E, self.psi
+
+
+        # self.psi.test_validity()
+        # logger.info(f"VUMPS finished after {self.sweeps} sweeps, max chi={max(self.psi.chi)}")
+
+        # # psi.norm_test() is sometimes > 1.e-10 for paramagnetic TFI. More VUMPS (>10) fixes this even though the energy is already saturated for 10 sweeps.
+        # self.guess_init_env_data, Es, _ = MPOTransferMatrix.find_init_LP_RP(self.model.H_MPO, self.psi, calc_E=True, guess_init_env_data=self.guess_init_env_data)
+        # self.tangent_projector_test(self.guess_init_env_data)
+        # return (Es[0] + Es[1])/2, self.psi.to_MPS(check_overlap=check_overlap)
+
+    def status_update(self, iteration_start_time: float):
+        logger.info(
+            "checkpoint after sweep %(sweeps)d\n"
+            "energy=%(E).16f, max S=%(max_S).16f, norm_err=%(norm_err).1e\n"
+            "Current memory usage %(mem).1fMB, wall time: %(wall_time).1fs\n"
+            "Delta E = %(dE).4e, Delta S = %(dS).4e (per sweep)\n"
+            "max split_err = %(split_err).4e\n"
+            "chi: %(chi)s\n"
+            "%(sep)s", {
+                'sweeps': self.sweeps,
+                'E': self.sweep_stats['E'][-1],
+                'max_S': self.sweep_stats['max_S'][-1],
+                'norm_err': self.sweep_stats['norm_err'][-1],
+                'mem': memory_usage(),
+                'wall_time': time.time() - iteration_start_time,
+                'dE': self.sweep_stats['Delta_E'][-1],
+                'dS': self.sweep_stats['Delta_S'][-1],
+                'split_err': self.sweep_stats['max_split_err'][-1],
+                'chi': self.psi.chi if self.psi.L < 40 else max(self.psi.chi),
+                'sep': "=" * 80,
+            })
+
+    def is_converged(self):
+        """Determines if the algorithm is converged.
+
+        Does not cover any other reasons to abort, such as reaching a time limit.
+        Such checks are covered by :meth:`stopping_condition`.
+
+        Options
+        -------
+        .. cfg:configoptions :: VUMPSEngine
+        
+            max_E_err : float
+                Convergence if the change of the energy in each step
+                satisfies ``|Delta E / max(E, 1)| < max_E_err``. Note that
+                this might be satisfied even if ``Delta E > 0``,
+                i.e., if the energy increases (due to truncation).
+            max_S_err : float
+                Convergence if the relative change of the entropy in each step
+                satisfies ``|Delta S|/S < max_S_err``
+            max_split_err : float
+                Convergence if the norm error between AC=AL-C and AC=C_AR is
+                smaller than max_split_err.
+        """
+        max_E_err = self.options.get('max_E_err', 1.e-8)
+        max_S_err = self.options.get('max_S_err', 1.e-5)
+        max_split_error = self.options.get('max_split_err', 1.e-8)
+        E = self.sweep_stats['E'][-1]
+        Delta_E = self.sweep_stats['Delta_E'][-1]
+        Delta_S = self.sweep_stats['Delta_S'][-1]
+        split_error = self.sweep_stats['max_split_err'][-1]
+
+        return abs(Delta_E / max(E, 1.)) < max_E_err and abs(Delta_S) < max_S_err and split_error < max_split_error
+    
+    def post_run_cleanup(self):
+        """
+        Perform any final steps or clean up after the main loop has terminated.
+        Try to convert uniform MPS back to iMPS.
+
+        Options
+        -------
+        .. cfg:configoptions :: VUMPSEngine
+        
+            check_overlap : bool
+                Since AL C = C AR is not identically true, the MPS defined by AL and AR are not exactly the same.
+                We can compute the overlap of the two to check.
+        
+        """
+        super().post_run_cleanup()
+        check_overlap = self.options.get('check_overlap', True)
+        
         self.psi.test_validity()
-        logger.info(f"VUMPS finished after {self.sweeps} sweeps, max chi={max(self.psi.chi)}")
+        logger.info(f'{self.__class__.__name__} finished after {self.sweeps} sweeps, '
+                    f'max chi={max(self.psi.chi)}')
 
         # psi.norm_test() is sometimes > 1.e-10 for paramagnetic TFI. More VUMPS (>10) fixes this even though the energy is already saturated for 10 sweeps.
         self.guess_init_env_data, Es, _ = MPOTransferMatrix.find_init_LP_RP(self.model.H_MPO, self.psi, calc_E=True, guess_init_env_data=self.guess_init_env_data)
         self.tangent_projector_test(self.guess_init_env_data)
-        return (Es[0] + Es[1])/2, self.psi.to_MPS(check_overlap=check_overlap)      # E_MPO is first returned value
+        return (Es[0] + Es[1])/2, self.psi.to_MPS(check_overlap=check_overlap)
+    
+    def run(self):
+        """Run the VUMPS simulation to find the ground state.
+
+        Returns
+        -------
+        E : float
+            The energy of the resulting ground state MPS.
+        psi : :class:`~tenpy.networks.mps.MPS`
+            The MPS representing the ground state after the simulation,
+            i.e. just a reference to :attr:`psi`.
+        """
+        self.shelve = False
+        result = self.pre_run_initialize()
+        is_first_sweep = True
+        while True:
+            iteration_start_time = time.time()
+            if self.stopping_criterion(iteration_start_time=iteration_start_time):
+                break
+            if not is_first_sweep:
+                self.checkpoint.emit(self)
+            result = self.run_iteration()
+            self.status_update(iteration_start_time=iteration_start_time)
+            is_first_sweep = False
+        return self.post_run_cleanup()
 
     def environment_sweeps(self, N_sweeps):
-        # In VUMPS we don't want to do this as we regenerate the environment each time we do an update.
+        """
+        In VUMPS we don't want to do this as we regenerate the environment each time we do an update.
+        """
         pass
 
     def reset_stats(self, resume_data=None):
+        """Reset the statistics, useful if you want to start a new sweep run.
+
+        .. cfg:configoptions :: VUMPSEngine
+
+            chi_list : dict | None
+                A dictionary to gradually increase the `chi_max` parameter of
+                `trunc_params`. The key defines starting from which sweep
+                `chi_max` is set to the value, e.g. ``{0: 50, 20: 100}`` uses
+                ``chi_max=50`` for the first 20 sweeps and ``chi_max=100``
+                afterwards. Overwrites `trunc_params['chi_list']``.
+                By default (``None``) this feature is disabled.
+            sweep_0 : int
+                The number of sweeps already performed. (Useful for re-start).
+        """
+  
         super().reset_stats(resume_data)
         self.update_stats = {
             'i0': [],
@@ -193,33 +415,31 @@ class VUMPSEngine(Sweep):
         self.sweep_stats = {
             'sweep': [],
             'N_updates': [],
-            'E_L': [],
-            'E_R': [],
-            'E_C1': [],
-            'E_C2': [],
-            'E_theta': [],
+            'E': [],
+            'Delta_E': [],
             'S': [],
             'max_S': [],
-            'total_time': [0],
-            'sweep_time': [],
+            'Delta_S': [],
+            'time': [0],
             'max_chi': [],
             'norm_err': [],
             'max_split_err': [],
             'max_N_lanczos': [],
         }
 
-
     def get_sweep_schedule(self):
         """Sweep from site 0 to L-1"""
         L = self.psi.L
 
         i0s = list(range(0, L))
-        move_right = [True] * L                     # Should we also sweep left? I don't think this is necessary but maybe it increases convergence.
-        update_LP_RP = [[False, False]] * L         # Never update the envs since we replace them each time
+        move_right = [True] * L  # Should we also sweep left? not necessary but may increase convergence
+        update_LP_RP = [[False, False]] * L  # Never update the envs since we replace them each time
         return zip(i0s, move_right, update_LP_RP)
 
     def prepare_update_local(self):
-        # For each update, we need to rebuild the environments from scratch using the most recent tensors
+        """
+        For each update, we need to rebuild the environments from scratch using the most recent tensors
+        """
         i0 = self.i0
         H = self.model.H_MPO
         psi = self.psi
@@ -238,7 +458,10 @@ class VUMPSEngine(Sweep):
         return (theta, C1, C2)
 
     def make_eff_H(self):
-
+        """
+        Create new instance of `self.EffectiveH` at `self.i0`.
+        Also creat zero-site Hamiltonians left of `self.i0` and right of `self.i0+self.n_optimize`.
+        """
         self.eff_H0_1 = ZeroSiteH(self.env, self.i0) # This saves more envs than optimal.
         self.eff_H0_2 = ZeroSiteH(self.env, self.i0 + self.n_optimize) # This saves more envs than optimal.
         self.eff_H = self.EffectiveH(self.env, self.i0, self.combine, self.move_right)
@@ -254,6 +477,15 @@ class VUMPSEngine(Sweep):
         raise NotImplementedError("Do we want this for VUMPS?")
 
     def post_update_local(self, e_L, e_R, eps_L, eps_R, e_C1, e_C2, e_theta, N0_L, N0_R, N1, **update_data):
+        """Perform post-update actions.
+
+        Collect statistics.
+
+        Parameters
+        ----------
+        **update_data : dict
+            What was returned by :meth:`update_local`.
+        """
         self.update_stats['i0'].append(self.i0)
         self.update_stats['e_L'].append(e_L)
         self.update_stats['e_R'].append(e_R)
@@ -263,6 +495,7 @@ class VUMPSEngine(Sweep):
         self.update_stats['N_lanczos'].append([N0_L,N0_R, N1])
         self.update_stats['split_err_L'].append(eps_L)
         self.update_stats['split_err_R'].append(eps_R)
+        self.update_stats['time'].append(time.time() - self.time0)
 
     def free_no_longer_needed_envs(self):
         for env in self._all_envs:
@@ -299,16 +532,28 @@ class VUMPSEngine(Sweep):
             strange_left.append(npc.norm(temp_VL))
             strange_right.append(npc.norm(temp_VR))
         logger.info(f'Strange cancellation left: {strange_left}, right: {strange_right}.')
-        #print('Strange Cancellation left:', strange_left, "right:", strange_right)
 
         return strange_left, strange_right
 
 
 class SingleSiteVUMPSEngine(VUMPSEngine):
-    EffectiveH = OneSiteH
+    """Engine for the single-site VUMPS algorithm.
 
-    #  def __init__(self, psi, model, options, **kwargs):
-    #      super().__init__(psi, model, options, **kwargs)
+    Parameters
+    ----------
+    psi : :class:`~tenpy.networks.mps.MPS`
+        Initial guess for the ground state, which is to be optimized in-place.
+    model : :class:`~tenpy.models.MPOModel`
+        The model representing the Hamiltonian for which we want to find the ground state.
+    options : dict
+        Further optional parameters.
+
+    Options
+    -------
+    .. cfg:config :: SingleSiteDMRGEngine
+        :include: DMRGEngine
+    """
+    EffectiveH = OneSiteH
 
     def update_env(self, **update_data):
         # Get guesses for the next LP and RP
@@ -331,8 +576,18 @@ class SingleSiteVUMPSEngine(VUMPSEngine):
         self.psi.left_U, self.psi.right_U = None, None
 
     def update_local(self, theta, **kwargs):
+        """Perform single-site update on the site ``i0``.
 
-        # Update on site
+        Parameters
+        ----------
+        theta : 3-tuple of :class:`~tenpy.linalg.np_conserved.Array`
+            Initial guesses for the ground state of the effective Hamiltonian and zero-site Hamiltonians.
+
+        Returns
+        -------
+        update_data : dict
+            Data computed during the local update.
+        """
         psi = self.psi
         i0 = self.i0
         H0_1, H0_2, H1 = self.eff_H0_1, self.eff_H0_2, self.eff_H
@@ -376,8 +631,33 @@ class SingleSiteVUMPSEngine(VUMPSEngine):
         return update_data
 
     def polar_max(self, AC, C1, C2):
-        # Given AC and C, find AL such that AL C = AC
+        """
+        Polar decompositions: Given AC and C, find AL and AR such that AL C = AC = C AR
 
+        Parameters
+        ----------
+        AC : :class:`~tenpy.linalg.np_conserved.Array`
+            Center-site tensor at site ``i0``
+        C1: :class:`~tenpy.linalg.np_conserved.Array`
+            Center matrix left of site ``i0``
+        C2: :class:`~tenpy.linalg.np_conserved.Array`
+            Center matrix right of site ``i0``
+        
+        Returns
+        -------
+        AL : :class:`~tenpy.linalg.np_conserved.Array`
+            Left-orthonormal tensor such that AL C2 = AC
+        AR : :class:`~tenpy.linalg.np_conserved.Array`
+            Right-orthonormal tensor such that C1 AR = AC
+        eps_L : float
+            Norm error, |AC - AL C2|
+        eps_R : float
+            Norm error, |AC - C1 AR|
+        entropy_left : float
+            entanglement entropy left of site ``i0``
+        entropy_right : float
+            entanglement entropy right of site ``i0``
+        """
         U_ACL, _, _ = npc.polar(AC.combine_legs(['vL', 'p'], qconj=[+1]), left=False)
         U_CL, _, s1 = npc.polar(C2, left=False)
         AL = npc.tensordot(U_ACL.split_legs(), U_CL.conj(), axes=(['vR'], ['vR*'])).replace_label('vL*', 'vR')
@@ -396,10 +676,25 @@ class SingleSiteVUMPSEngine(VUMPSEngine):
 
 
 class TwoSiteVUMPSEngine(VUMPSEngine):
+    """Engine for the two-site VUMPS algorithm.
+
+    Parameters
+    ----------
+    psi : :class:`~tenpy.networks.mps.MPS`
+        Initial guess for the ground state, which is to be optimized in-place.
+    model : :class:`~tenpy.models.MPOModel`
+        The model representing the Hamiltonian for which we want to find the ground state.
+    options : dict
+        Further optional parameters.
+
+    Options
+    -------
+    .. cfg:config :: TwoSiteDMRGEngine
+        :include: DMRGEngine
+    """
     EffectiveH = TwoSiteH
 
     def __init__(self, psi, model, options, **kwargs):
-        #options = asConfig(options, self.__class__.__name__)
         super().__init__(psi, model, options, **kwargs)
         if not self.psi.L > 1:
             raise ValueError("Two-site methods require a two-site unit cell.")
@@ -410,7 +705,18 @@ class TwoSiteVUMPSEngine(VUMPSEngine):
         self.guess_init_env_data = None
 
     def update_local(self, theta, **kwargs):
-        # Update on site
+        """Perform two-site update on the site ``i0`` and ``i0+1``.
+
+        Parameters
+        ----------
+        theta : 3-tuple of :class:`~tenpy.linalg.np_conserved.Array`
+            Initial guesses for the ground state of the effective Hamiltonian and zero-site Hamiltonians.
+
+        Returns
+        -------
+        update_data : dict
+            Data computed during the local update.
+        """
         psi = self.psi
         i0 = self.i0
         H0_1, H0_2, H2 = self.eff_H0_1, self.eff_H0_2, self.eff_H
@@ -466,7 +772,37 @@ class TwoSiteVUMPSEngine(VUMPSEngine):
         return update_data
 
     def polar_max(self, AC1, AC2, C1, C3):
-        # Given AC and C, find AL such that AL C = AC
+        """
+        Polar decompositions on two sites:
+        Given AC1 and C1, find AR1 such that AC1 = C1 AR1
+        and from AC2 and C3, find AL2 such that AC2 = AC2 C3
+
+        Parameters
+        ----------
+        AC1 : :class:`~tenpy.linalg.np_conserved.Array`
+            Center-site tensor at site ``i0``
+        AC2 : :class:`~tenpy.linalg.np_conserved.Array`
+            Center-site tensor at site ``i0+1``
+        C1: :class:`~tenpy.linalg.np_conserved.Array`
+            Center matrix left of site ``i0``
+        C3: :class:`~tenpy.linalg.np_conserved.Array`
+            Center matrix right of site ``i0+1``
+        
+        Returns
+        -------
+        AL2 : :class:`~tenpy.linalg.np_conserved.Array`
+            Left-orthonormal tensor such that AL2 C3 = AC2
+        AR1 : :class:`~tenpy.linalg.np_conserved.Array`
+            Right-orthonormal tensor such that C1 AR1 = AC1
+        eps_L : float
+            Norm error, |AC1 - AL2 C3|
+        eps_R : float
+            Norm error, |AC2 - C1 AR1|
+        entropy_left : float
+            entanglement entropy left of site ``i0``
+        entropy_right : float
+            entanglement entropy right of site ``i0+1``
+        """
 
         U_ACL, _, _ = npc.polar(AC2.combine_legs(['vL', 'p'], qconj=[+1]), left=False)
         U_CL, _, s1 = npc.polar(C3, left=False)
