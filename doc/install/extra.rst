@@ -1,7 +1,7 @@
 Extra requirements
 ==================
 
-We have some extra requirements that you don't need to install to use TeNPy, but that you might find usefull to work with.
+We have some extra requirements that you don't need to install to use TeNPy, but that you might find useful to work with.
 TeNPy does not import the following libraries (at least not globally), but some functions might expect arguments
 behaving like objects from these libraries.
 
@@ -28,7 +28,7 @@ we recommend using [conda]_ or directly `intelpython <https://software.intel.com
 Conda has the advantage that it allows to use different environments for different projects.
 Both are available for Linux, Mac and Windows; note that you don't even need administrator rights to install it on linux.
 Simply follow the (straight-forward) instructions of the web page for the installation.
-After a successfull installation, if you run ``python`` interactively, the first output line should 
+After a successful installation, if you run ``python`` interactively, the first output line should 
 state the python version and contain ``Anaconda`` or ``Intel Corporation``, respectively.
 
 If you have a working conda package manager, you can install the numpy build against MKL with::
@@ -52,15 +52,15 @@ As outlined in :doc:`/install/conda`, on Linux/Mac you also need to pin blas to 
 
 .. _linkingMKL:
 
-Compile linking agains MKL
---------------------------
-When you compile the Cython files of TeNPy, you have the option to explicilty link against MKL, such
+Compile linking against MKL
+---------------------------
+When you compile the Cython files of TeNPy, you have the option to explicitly link against MKL, such
 that e.g. :func:`tenpy.linalg.np_conserved.tensordot` is guaranteed to call the corresponding `dgemm` or `zgemm`
 function in the BLAS from MKL.
 To link against MKL, the MKL library *including the headers* must be available during the compilation of TeNPy's Cython
-files. If you have the MKL library installed, you can export the environemnt variable `MKLROOT` to point to the
+files. If you have the MKL library installed, you can export the environment variable `MKLROOT` to point to the
 root folder.
-Alternatively, TeNPy will recognise if you are in an active conda environment and have the `mkl` *and* `mkl-devel` conda
+Alternatively, TeNPy will recognize if you are in an active conda environment and have the `mkl` *and* `mkl-devel` conda
 packages installed during compilation. In this case, it will link against the MKL provided as conda package.
 
 :func:`tenpy.show_config` indicates whether you linked successfully against MKL::

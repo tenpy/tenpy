@@ -12,7 +12,7 @@ running it.
 
 .. note ::
     For variational ground state searches, e.g. DMRG, the situation is better: we're not
-    interested in how we got to the ground state, but only properties of the ground state itselft.
+    interested in how we got to the ground state, but only properties of the ground state itself.
     In this case, we can first run DMRG, save the state, and then perform additional
     measurements and analysis *after* finishing the simulation, so it is not crucial to
     define all the measurements before the simulation.
@@ -43,14 +43,14 @@ Measurement functions
 In the simplest case, a measurement function is just a function, which can take the keyword arguments
 ``results, psi, model, simulation`` and saves the measurement results in the dictionary `results`.
 The other arguments `psi` and `model` are the current MPS and model that can be used for measurements, 
-and `simulation` gives access to the full simulation class, in case other addiontal data is needed.
+and `simulation` gives access to the full simulation class, in case other additional data is needed.
 
 Within TeNPy, we use the convention that measurement functions (taking these arguments and saving to `results` instead
 of simply returning values) start with an ``m_`` in their name.
 A few generic measurement functions are defined in :mod:`~tenpy.simulations.measurement`.
 
 As a first, somewhat trivial example, let us look at the source code of
-:func:`tenpy.simulations.measurement.m_entropy`::
+:func:`~tenpy.simulations.measurement.m_entropy`::
 
     def m_entropy(results, psi, model, simulation, results_key='entropy'):
         results[results_key] = psi.entanglement_entropy()
@@ -61,7 +61,7 @@ Note that usually the `psi` and `model` arguments are the same as the simulation
 In most cases, you should directly use the passed `psi` and `model`.
 
 Of course, you can also do some actual calculations in the measurement functions.
-A good example of this is the :func:`tenpy.simulations.measurement.m_onsite_expectation_value` - take a look at it's
+A good example of this is the :func:`~tenpy.simulations.measurement.m_onsite_expectation_value` - take a look at it's
 source code. Another example could be the `m_pollmann_turner_inversion` measurement function defined in the
 :doc:`/examples/model_custom` example from the :doc:`/intro/simulations` guide.
 
@@ -69,14 +69,14 @@ source code. Another example could be the `m_pollmann_turner_inversion` measurem
 The connect_measurements parameter
 ----------------------------------
 
-The :cfg:option:`Simulation.connect_measurements` parameter is a list with one entry for each measurment function to be
+The :cfg:option:`Simulation.connect_measurements` parameter is a list with one entry for each measurement function to be
 used. Each function is specified by a tuple ``module, func_name, extra_kwargs, priority``.
-Here, `module` and `func` specfiy the module and name of the function, `extra_kwargs` are (optional) additional keyword
+Here, `module` and `func` specify the module and name of the function, `extra_kwargs` are (optional) additional keyword
 arguments to be given to the function, and `priority` allows to control the order in which the measurement functions get
-called. The latter is usefull if you want to "post-process" results of another measurement function.
+called. The latter is useful if you want to "post-process" results of another measurement function.
 
 For example, say you want to measure local expectation values of both `Sz` and `Sx` with
-:func:`tenpy.simulations.measurment.m_onsite_expectation_value`, then you could use
+:func:`~tenpy.simulations.measurement.m_onsite_expectation_value`, then you could use
 
 .. code :: yaml
 
@@ -117,12 +117,12 @@ As for global measurement functions, we pass the corresponding ``results, psi, m
 e.g. `psi_method` measurement functions need to accept ``results, model, simulation`` as arguments, and
 `simulation_method` measurement functions should accept ``results, psi, model``.
 
-This is already very usefull to call measurement functions defined inside (custom) models or simulation classes, 
+This is already very useful to call measurement functions defined inside (custom) models or simulation classes,
 yet methods of `psi` don't follow the measurement function call structure, but simply return values.
 For those cases, you can use another special syntax, namely to **simply add `wrap` before the function name**.
 In this case, we don't pass ``results, psi, model, simulation``, but simply save the return values of the function
 in the results, under the `results_key` that gets passed as extra keyword argument,
-see (the source code of) :func:`~tenpy.simulations.measurment.measurement_wrapper`.
+see (the source code of) :func:`~tenpy.simulations.measurement.measurement_wrapper`.
 The `results_key` defaults to the function name.
 
 To make this clearer, let's extend the example above with more measurements:

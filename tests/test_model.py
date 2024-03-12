@@ -1,5 +1,5 @@
 """A collection of tests for (classes in) :mod:`tenpy.models.model`."""
-# Copyright 2018-2023 TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, GNU GPLv3
 
 import warnings
 import itertools
@@ -78,7 +78,7 @@ def test_CouplingModel():
         M.test_sanity()
         M.calc_H_MPO()
         if bc == 'periodic':
-            with pytest.raises(ValueError, match="nearest neighbor"):
+            with pytest.raises(ValueError, match="initialize H_bond for a NearestNeighborModel"):
                 M.calc_H_bond()  # should raise a ValueError
                 # periodic bc but finite bc_MPS leads to a long-range coupling
         else:
@@ -417,7 +417,10 @@ def test_model_plus_hc(L=6):
             m.H_MPO = m.calc_H_MPO()
         assert m1.H_MPO.is_hermitian()
         assert m2.H_MPO.is_hermitian()
-        assert not m3.H_MPO.is_hermitian()
+        m3_explicit_MPO = m3.H_MPO.copy()
+        m3_explicit_MPO.explicit_plus_hc = False  # now this is an MPO without the +hc part
+        assert not m3_explicit_MPO.is_hermitian()
+        assert m3.H_MPO.is_hermitian()
         assert m3.H_MPO.chi[3] < m2.H_MPO.chi[3]   # check for smaller MPO bond dimension
         ED1 = ExactDiag(m1)
         ED2 = ExactDiag(m2)

@@ -3,7 +3,7 @@
 The example functions in this class do the same as the ones in `toycodes/c_tebd.py`, but make use
 of the classes defined in tenpy.
 """
-# Copyright 2018-2023 TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, GNU GPLv3
 
 import numpy as np
 
@@ -42,7 +42,7 @@ def example_TEBD_gs_tf_ising_finite(L, g):
     print("magnetization in X = {mag_x:.5f}".format(mag_x=mag_x))
     print("magnetization in Z = {mag_z:.5f}".format(mag_z=mag_z))
     if L < 20:  # compare to exact result
-        from .tfi_exact import finite_gs_energy
+        from tfi_exact import finite_gs_energy
         E_exact = finite_gs_energy(L, 1., g)
         print("Exact diagonalization: E = {E:.13f}".format(E=E_exact))
         print("relative error: ", abs((E - E_exact) / E_exact))
@@ -78,7 +78,7 @@ def example_TEBD_gs_tf_ising_infinite(g):
     print("<sigma_z> = {mag_z:.5f}".format(mag_z=mag_z))
     print("correlation length:", psi.correlation_length())
     # compare to exact result
-    from .tfi_exact import infinite_gs_energy
+    from tfi_exact import infinite_gs_energy
     E_exact = infinite_gs_energy(1., g)
     print("Analytic result: E (per site) = {E:.13f}".format(E=E_exact))
     print("relative error: ", abs((E - E_exact) / E_exact))

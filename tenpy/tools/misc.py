@@ -1,5 +1,5 @@
 """Miscellaneous tools, somewhat random mix yet often helpful."""
-# Copyright 2018-2023 TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, GNU GPLv3
 
 import logging
 import numpy as np
@@ -18,9 +18,11 @@ __all__ = [
     'inverse_permutation', 'list_to_dict_list', 'atleast_2d_pad', 'transpose_list_list',
     'zero_if_close', 'pad', 'any_nonzero', 'add_with_None_0', 'chi_list', 'group_by_degeneracy',
     'get_close', 'find_subclass', 'get_recursive', 'set_recursive', 'update_recursive',
-    'merge_recursive', 'flatten', 'setup_logging', 'build_initial_state', 'setup_executable'
+    'merge_recursive', 'flatten', 'setup_logging', 'build_initial_state', 'setup_executable',
+    'convert_memory_units'
 ]
 
+_not_set = object()  # sentinel
 
 def to_iterable(a):
     """If `a` is a not iterable or a string, return ``[a]``, else return ``a``."""
@@ -97,7 +99,7 @@ def to_array(a, shape=(None, ), dtype=None, allow_incommensurate=False):
                 crop[i] = slice(None, shape[i])
                 need_crop = True
             else:
-                raise ValueError("incomensurate len for tiling from {0:d} to {1:d}".format(
+                raise ValueError("incommensurate len for tiling from {0:d} to {1:d}".format(
                     a.shape[i], shape[i]))
     a = np.tile(a, reps)
     if need_crop:
@@ -106,7 +108,10 @@ def to_array(a, shape=(None, ), dtype=None, allow_incommensurate=False):
 
 
 if bottleneck is not None:
-    anynan = bottleneck.anynan
+    
+    def anynan(a):
+        """check whether any entry of a ndarray `a` is 'NaN'."""
+        return bottleneck.anynan(a)
 else:
 
     def anynan(a):
@@ -208,7 +213,7 @@ def list_to_dict_list(l):
 
     Parameters
     ----------
-    l: iterable of iterabele of immutable
+    l: iterable of iterable of immutable
         A list of objects that can be converted to tuples to be used as keys for a dictionary.
 
     Returns
@@ -366,7 +371,7 @@ def any_nonzero(params, keys, verbose_msg=None):
 
     .. deprecated :: 0.8.0
         This method will be removed in version 1.0.0.
-        Use :meth:`tenpy.toosl.params.Config.any_nonzero` instead.
+        Use :meth:`tenpy.tools.params.Config.any_nonzero` instead.
 
     Parameters
     ----------
@@ -465,7 +470,7 @@ def group_by_degeneracy(E, *args, subset=None, cutoff=1.e-12):
     idx_groups : list of tuple of int
         Each tuple `group` contains indices ``i, j, k, ...`` for which the values are closer than
         `cutoff`, i.e., ``|E[j, k, ...] - E[i]| <= cutoff``.
-        Each index appears exactly once (if it is containted in `subset`).
+        Each index appears exactly once (if it is contained in `subset`).
 
     .. testsetup ::
 
@@ -503,7 +508,7 @@ def get_close(values, target, default=None, eps=1.e-13):
 
     Parameters
     ----------
-    values : interable of float
+    values : iterable of float
         Values to compare to.
     target : float
         Value to find.
@@ -561,6 +566,9 @@ def find_subclass(base_class, subclass_name):
     elif len(found) == 1:
         return found.pop()
     else:
+        found_not_deprecated = [c for c in found if not getattr(c, 'deprecated', False)]
+        if len(found_not_deprecated) == 1:
+            return found_not_deprecated[0]
         msg = f"There exist multiple subclasses of {base_class!r} with name {subclass_name!r}:"
         raise ValueError('\n'.join([msg] + [repr(c) for c in found]))
 
@@ -597,7 +605,7 @@ def get_recursive(nested_data, recursive_key, separator=".", default=_UNSET):
     Returns
     -------
     entry :
-        For example, ``recursive_key="some.sub.key"`` will result in extracing
+        For example, ``recursive_key="some.sub.key"`` will result in extracting
         ``nested_data["some"]["sub"]["key"]``.
 
     See also
@@ -753,7 +761,7 @@ skip_logging_setup = False
 def setup_logging(options=None,
                   output_filename=None,
                   *,
-                  filename=None,
+                  filename=_not_set,
                   to_stdout="INFO",
                   to_file="INFO",
                   format="%(levelname)-8s: %(message)s",
@@ -801,7 +809,7 @@ def setup_logging(options=None,
         classes sequentially (e.g., :func:`~tenpy.simulations.simulation.run_seq_simulations`).
 
     .. deprecated :: 0.9.0
-        The arguments were previously collected in a dicitonary `options`.
+        The arguments were previously collected in a dictionary `options`.
         Now they should be given directly as keyword arguments.
 
     Parameters
@@ -818,7 +826,7 @@ def setup_logging(options=None,
 
         skip_setup: bool
             If True, don't change anything in the logging setup; just return.
-            This is usefull for testing purposes, where `pytest` handles the logging setup.
+            This is useful for testing purposes, where `pytest` handles the logging setup.
             All other options are ignored in this case.
         to_stdout : None | ``"DEBUG" | "INFO" | "WARNING" | "ERROR" | "CRITICAL"``
             If not None, print log with (at least) the given level to stdout.
@@ -827,7 +835,7 @@ def setup_logging(options=None,
             The filename is given by `filename`.
         filename : str
             Filename for the logfile.
-            It defaults  to `output_filename` with the extension replaced to ".log".
+            If not set, it defaults  to `output_filename` with the extension replaced to ".log".
             If ``None``, no log-file will be created, even with `to_file` set.
         logger_levels : dict(str, str)
             Set levels for certain loggers, e.g. ``{'tenpy.tools.params': 'WARNING'}`` to suppress
@@ -836,12 +844,12 @@ def setup_logging(options=None,
             tenpy.
             For example, setting the level for `tenpy.simulations` will change the level
             for all loggers in any of those submodules, including the one provided as
-            ``Simluation.logger`` class attribute. Hence, all messages from Simulation class
+            ``Simulation.logger`` class attribute. Hence, all messages from Simulation class
             methods calling ``self.logger.info(...)`` will be affected by that.
         format : str
             Formatting string, `fmt` argument of :class:`logging.Formatter`.
-            You can for example use ``"{levelname:.4s} {asctime} {message}"`` to include the time
-            stamp of each message into the log - this is usefull to get an idea where code hangs.
+            You can for example use ``"{loglevel:.4s} {asctime} {message}"`` to include the time
+            stamp of each message into the log - this is useful to get an idea where code hangs.
             Find
             `allowed keys <https://docs.python.org/3/library/logging.html#logrecord-attributes>`_
             here. The style of the formatter is chosen depending on whether the format string
@@ -859,11 +867,13 @@ def setup_logging(options=None,
     if options is not None:
         warnings.warn("Give logging parameters directly as keyword arguments!", FutureWarning, 2)
         locals().update(**options)
-    if filename is None:
+    if filename is _not_set:
         if output_filename is not None:
             root, ext = os.path.splitext(output_filename)
             assert ext != '.log'
             filename = root + '.log'
+        else:
+            filename = None
     if capture_warnings is None:
         capture_warnings = dict_config is not None or to_stdout or to_file
     if skip_setup is None:
@@ -943,7 +953,7 @@ def setup_executable(mod, run_defaults, identifier_list=None):
 
         this is a deprecated interface. Use the :class:`~tenpy.simulations.simulation.Simulation`
         interface in combination with :func:`~tenpy.console_main` instead.
-        You can invoce that from the command line as ``python -m tenpy ...``.
+        You can invoke that from the command line as ``python -m tenpy ...``.
 
     Uses default values defined at:
     - model class for model_par
@@ -963,7 +973,7 @@ def setup_executable(mod, run_defaults, identifier_list=None):
         Model class (or instance) OR a dictionary containing model defaults
     run_defaults : dict
         default values for executable file parameters
-    identifier_list : ieterable
+    identifier_list : iterable
         Used only if mod is a dict. Contains the identifier variables
 
     Returns
@@ -984,7 +994,7 @@ def setup_executable(mod, run_defaults, identifier_list=None):
             model_defaults = mod.defaults
             identifier_list = mod.identifier
         except AttributeError as err:
-            print("Cannot get model defaults and identifer list from mod. Is mod a class/instance?")
+            print("Cannot get model defaults and identifier list from mod. Is mod a class/instance?")
             print(err)
             raise AttributeError
     elif type(mod) == dict and hasattr(identifier_list, '__iter__'):
@@ -1098,7 +1108,7 @@ def setup_executable(mod, run_defaults, identifier_list=None):
     # Attempt to shorten the identifier
     identifier = identifier.replace('periodic', 'inf').replace('finite', 'fin').replace('.0_', '_')
     if len(identifier) >= 144:
-        print("Warning: identifier has a lenght longer than max filename on encrypted Ubuntu!")
+        print("Warning: identifier has a length longer than max filename on encrypted Ubuntu!")
 
     run_par.update({
         'ncores': args.ncores,
@@ -1109,3 +1119,35 @@ def setup_executable(mod, run_defaults, identifier_list=None):
     })
 
     return model_par, sim_par, run_par, args
+
+
+def convert_memory_units(value, unit_from='bytes', unit_to=None):
+    """Convert between different memory units.
+
+    Parameters
+    ----------
+    value : float
+        The value to convert.
+    unit_from : ``'bytes'| 'KB'| 'MB'| 'GB'| 'TB'``
+        The unit to convert from.
+    unit_to : ``None | 'bytes'| 'KB'| 'MB'| 'GB'| 'TB'``
+        The unit to convert to.
+        The default ``None`` chooses a human-readable largest unit smaller than `value`.
+
+    Returns
+    -------
+    value : float
+        The value in the unit `unit_to`.
+    unit_to : str
+        The unit to which `value` was converted.
+    """
+    units = ['bytes', 'KB', 'MB', 'GB', 'TB']
+    factors = [1024**i for i in range(len(units))]
+    value = value * factors[units.index(unit_from)]  # first convert to bytes
+    if unit_to is None:
+        for f, unit_to in reversed(list(zip(factors, units))):
+            if value > f:
+                break
+        return value / f, unit_to
+    value = value / factors[units.index(unit_to)]  # now convert back to unit_to
+    return value, unit_to

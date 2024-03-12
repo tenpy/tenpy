@@ -13,7 +13,7 @@ This might be used to obtain the spectrum, the ground state or highly excited st
     but just the ability to diagonalize the defined models for small system sizes
     without additional extra work.
 """
-# Copyright 2018-2023 TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, GNU GPLv3
 
 import numpy as np
 import warnings
@@ -99,6 +99,36 @@ class ExactDiag:
             self.charge_sector = None
             self._mask = None
 
+    def possible_charge_sectors(self):
+        return self._pipe.charge_sectors()
+
+    @classmethod
+    def from_infinite_model(cls, model, first=0, last=None, enlarge=None,
+                                      **kwargs):
+        """Initialize by extracting a finite segment from a ``bc_MPS=infinite'`` model.
+
+        This method calls :meth:`~tenpy.models.model.Model.extract_segment` on the model and sets
+        the boundary conditions to 'finite'. For the ExactDiag, this little hack is equivalent
+        to extracting all the coupling terms fitting within the segment specified by
+        `first`, `last` and `None`, and generating a finite MPOModel from it.
+
+        Note that it drops the `H_bond` if existent, since :meth:`build_full_H_from_bonds` would
+        not include the correct, full onsite-terms at the boundaries if just drop the H_bond going
+        outside the segment. Hence you can only use the :meth:`build_full_H_from_mpo` method
+        when initializing the ExactDiag with this method.
+
+        Parameters
+        ----------
+        model : :class:`tenpy.models.model.Model`
+            Model with infinite bc and MPO.
+        """
+        model_segment = model.extract_segment(first, last, enlarge)
+        model_segment.lat.bc_MPS = 'finite'
+        model_segment.H_MPO.bc = 'finite'
+        if hasattr(model_segment, 'H_bond'):
+            del model_segment.H_bond  # invalid since it wouldn't terminate onsite terms correctly
+        return cls(model_segment, **kwargs)
+
     @classmethod
     def from_H_mpo(cls, H_MPO, *args, **kwargs):
         """Wrapper taking directly an MPO instead of a Model.
@@ -156,7 +186,7 @@ class ExactDiag:
             Ids_R.append(npc.outer(Ids[L - j - 1], Ids_R[-1]))
         full_H = None
         for i in range(1, L):
-            # H_bond[i] lifes on sites (i-1, i)
+            # H_bond[i] lives on sites (i-1, i)
             lL, lLc = self._labels_p[i - 1], self._labels_pconj[i - 1]
             lR, lRc = self._labels_p[i], self._labels_pconj[i]
             Hb = H_bond[i]

@@ -1,4 +1,4 @@
-# Copyright 2018-2023 TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, GNU GPLv3
 import pytest
 from tenpy.models import hubbard
 from test_model import check_general_model

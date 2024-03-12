@@ -9,7 +9,7 @@ Different algorithms require different representations of the Hamiltonian.
 For example for DMRG, the Hamiltonian needs to be given as an MPO,
 while TEBD needs the Hamiltonian to be represented by 'nearest neighbor' bond terms.
 This module contains the base classes defining these possible representations,
-namley the :class:`MPOModel` and :class:`NearestNeighborModel`.
+namely the :class:`MPOModel` and :class:`NearestNeighborModel`.
 
 A particular model like the :class:`~tenpy.models.models.xxz_chain.XXZChain` should then
 yet another class derived from these classes. In it's __init__, it needs to explicitly call
@@ -27,7 +27,7 @@ as base class in (most of) the predefined models in TeNPy.
 
 See also the introduction in :doc:`/intro/model`.
 """
-# Copyright 2018-2023 TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, GNU GPLv3
 
 import numpy as np
 import warnings
@@ -153,8 +153,8 @@ class Model(Hdf5Exportable):
             rng_state = obj._rng_state
             # reconstruct random number generator from pickle state
             # Will fail for custom RNGs, but I hope nobody needs that.
-            # If you do, simpy remove the :attr:`from_hdf5` and :attr:`save_hdf5` methods
-            # alltogether, such that it falls back to pickle protocol (with a warning...)
+            # If you do, simply remove the :attr:`from_hdf5` and :attr:`save_hdf5` methods
+            # altogether, such that it falls back to pickle protocol (with a warning...)
             rng = np.random.Generator(getattr(np.random, rng_state['bit_generator'])())
             rng.__setstate__(rng_state)
             obj._rng = rng #np.random.Generator(bg)
@@ -188,7 +188,7 @@ class Model(Hdf5Exportable):
         factor : int
             The new number of sites in the MPS unit cell will be increased from `N_sites` to
             ``factor*N_sites_per_ring``. Since MPS unit cells are repeated in the `x`-direction
-            in our convetion, the lattice shape goes from
+            in our convention, the lattice shape goes from
             ``(Lx, Ly, ..., Lu)`` to ``(Lx*factor, Ly, ..., Lu)``.
         """
         self.lat.enlarge_mps_unit_cell(factor)
@@ -224,6 +224,24 @@ class Model(Hdf5Exportable):
         self.lat = TrivialLattice(grouped_sites, bc_MPS=self.lat.bc_MPS, bc='periodic')
         return grouped_sites
 
+    def get_extra_default_measurements(self):
+        """Get list of model-dependent extra default measurements.
+
+        Extra measurements for a :class:`~tenpy.simulations.simulation.Simulation`, which depend on the
+        model itself - subclasses should override this method).
+        E.g., a :class:`~tenpy.models.model.MPOModel` should measure the energy w.r.t.
+        the `MPO` (See :func:`~tenpy.simulation.measurement.m_energy_MPO`). However, a
+        :class:`~tenpy.models.model.NearestNeighborModel` should use the function
+        :func:`~tenpy.simulation.measurement.m_bond_energies`. The extra measurements are
+        added to the default measurements in :func:`~tenpy.simulation.Simulation._connect_measurements`.
+
+        Returns
+        -------
+        m_extra_default_list : list
+        """
+        m_extra_default_list = []
+        return m_extra_default_list
+
     def update_time_parameter(self, new_time):
         """Reconstruct Hamiltonian for time-dependent models, potentially (!) in-place.
 
@@ -254,9 +272,41 @@ class Model(Hdf5Exportable):
         model_params['time'] = new_time
         return cls(model_params)
 
+    def estimate_RAM_saving_factor(self):
+        """Returns the expected saving factor for RAM based on charge conservation.
+
+        Returns
+        -------
+        factor : int
+            saving factor, due to conservation
+
+        Options
+        -------
+        .. cfg:configoptions :: Model
+
+            mem_saving_factor :: None | float
+                Quantizes the RAM saving, due to conservation laws, to be used by
+                :func:`~tenpy.simulations.simulation.estimate_simulation_RAM`.
+                By default it is 1/mod, or 1/4 in case of mod=1.
+                However, for some classes this factor might be overwritten,
+                if a better approximation is known.
+                In the best case, the user can adjust this model parameter to enhance the estimate.
+
+        """
+        chinfo = self.lat.unit_cell[0].leg.chinfo
+        savings = 1
+        for mod in chinfo.mod:
+            if mod == 1:
+                savings *= 1/4 # this is what we found empirically
+            else:
+                savings *= 1/mod
+        if hasattr(self, 'options'):
+            savings = self.options.get("mem_saving_factor", savings)
+        return savings
+
 
 class NearestNeighborModel(Model):
-    r"""Base class for a model of nearest neigbor interactions w.r.t. the MPS index.
+    r"""Base class for a model of nearest neighbor interactions w.r.t. the MPS index.
 
     In this class, the Hamiltonian :math:`H = \sum_{i} H_{i,i+1}` is represented by
     "bond terms" :math:`H_{i,i+1}` acting only on two neighboring sites `i` and `i+1`,
@@ -305,7 +355,7 @@ class NearestNeighborModel(Model):
     def from_MPOModel(cls, mpo_model):
         """Initialize a NearestNeighborModel from a model class defining an MPO.
 
-        This is especially usefull in combination with :meth:`MPOModel.group_sites`.
+        This is especially useful in combination with :meth:`MPOModel.group_sites`.
 
         Parameters
         ----------
@@ -397,7 +447,7 @@ class NearestNeighborModel(Model):
         factor : int
             The new number of sites in the MPS unit cell will be increased from `N_sites` to
             ``factor*N_sites_per_ring``. Since MPS unit cells are repeated in the `x`-direction
-            in our convetion, the lattice shape goes from
+            in our convention, the lattice shape goes from
             ``(Lx, Ly, ..., Lu)`` to ``(Lx*factor, Ly, ..., Lu)``.
         """
         super().enlarge_mps_unit_cell(factor)
@@ -585,6 +635,11 @@ class NearestNeighborModel(Model):
         H_MPO = mpo.MPO(sites, Ws, bc, 0, -1, max_range=2)
         return H_MPO
 
+    def get_extra_default_measurements(self):
+        m_extra_default_list = super().get_extra_default_measurements()
+        m_extra_default_list.append(('tenpy.simulations.measurement', 'm_bond_energies'))
+        return m_extra_default_list
+
 
 class MPOModel(Model):
     """Base class for a model with an MPO representation of the Hamiltonian.
@@ -602,7 +657,7 @@ class MPOModel(Model):
     ----------
     H_MPO : :class:`tenpy.networks.mpo.MPO`
         MPO representation of the Hamiltonian. If the `explicit_plus_hc` flag of the MPO is `True`,
-        the represented Hamiltonian is ``H_MPO + hermitian_cojugate(H_MPO)``.
+        the represented Hamiltonian is ``H_MPO + hermitian_conjugate(H_MPO)``.
     """
     def __init__(self, lattice, H_MPO):
         Model.__init__(self, lattice)
@@ -635,7 +690,7 @@ class MPOModel(Model):
         factor : int
             The new number of sites in the MPS unit cell will be increased from `N_sites` to
             ``factor*N_sites_per_ring``. Since MPS unit cells are repeated in the `x`-direction
-            in our convetion, the lattice shape goes from
+            in our convention, the lattice shape goes from
             ``(Lx, Ly, ..., Lu)`` to ``(Lx*factor, Ly, ..., Lu)``.
         """
         super().enlarge_mps_unit_cell(factor)
@@ -750,6 +805,11 @@ class MPOModel(Model):
                     H_bond[i] = Hb + Hb.conj().itranspose(Hb.get_leg_labels())
         return H_bond
 
+    def get_extra_default_measurements(self):
+        m_extra_default_list = super().get_extra_default_measurements()
+        m_extra_default_list.append(('tenpy.simulations.measurement', 'm_energy_MPO'))
+        return m_extra_default_list
+
 
 class CouplingModel(Model):
     """Base class for a general model of a Hamiltonian consisting of two-site couplings.
@@ -759,7 +819,7 @@ class CouplingModel(Model):
 
     .. deprecated:: 0.4.0
         `bc_coupling` will be removed in 1.0.0. To specify the full geometry in the lattice,
-        use the `bc` parameter of the :class:`~tenpy.model.latttice.Lattice`.
+        use the `bc` parameter of the :class:`~tenpy.model.lattice.Lattice`.
 
     Parameters
     ----------
@@ -794,7 +854,7 @@ class CouplingModel(Model):
         ``self.add_coupling(..., plus_hc=True)`` was used.
         Note that :meth:`add_onsite`, :meth:`add_coupling`, :meth:`add_multi_coupling`
         and :meth:`add_exponentially_decaying_coupling` respect this flag, ensuring that the
-        *represented* Hamiltonian is indepentent of the `explicit_plus_hc` flag.
+        *represented* Hamiltonian is independent of the `explicit_plus_hc` flag.
     """
     def __init__(self, lattice, bc_coupling=None, explicit_plus_hc=False):
         Model.__init__(self, lattice)
@@ -822,7 +882,7 @@ class CouplingModel(Model):
     def add_local_term(self, strength, term, category=None, plus_hc=False):
         """Add a single term to `self`.
 
-        The repesented term is `strength` times the product of the operators given in `terms`.
+        The represented term is `strength` times the product of the operators given in `terms`.
         Each operator is specified by the name and the site it acts on; the latter given by
         a lattice index, see :class:`~tenpy.models.lattice.Lattice`.
 
@@ -984,7 +1044,7 @@ class CouplingModel(Model):
                      raise_op2_left=False,
                      category=None,
                      plus_hc=False):
-        r"""Add twosite coupling terms to the Hamiltonian, summing over lattice sites.
+        r"""Add two-site coupling terms to the Hamiltonian, summing over lattice sites.
 
         Represents couplings of the form
         :math:`\sum_{x_0, ..., x_{dim-1}} strength[shift(\vec{x})] * OP0 * OP1`, where
@@ -1013,7 +1073,7 @@ class CouplingModel(Model):
         strength : scalar | array
             Prefactor of the coupling. May vary spatially (see above). If an array of smaller size
             is provided, it gets tiled to the required shape.
-            A single scalar number can be given to indicate a coupling which is uniform accross
+            A single scalar number can be given to indicate a coupling which is uniform across
             the lattice.
         u1 : int
             Picks the site ``lat.unit_cell[u1]`` for OP1.
@@ -1282,7 +1342,7 @@ class CouplingModel(Model):
         .. deprecated:: 0.6.0
             We switched from the three arguments `u0`, `op0` and `other_op` with
             ``other_ops=[(u1, op1, dx1), (op2, u2, dx2), ...]``
-            to a single, equivalent argment `ops` which should now read
+            to a single, equivalent argument `ops` which should now read
             ``ops=[(op0, dx0, u0), (op1, dx1, u1), (op2, dx2, u2), ...]``, where
             ``dx0 = [0]*self.lat.dim``. Note the changed order inside the tuples!
 
@@ -1442,7 +1502,7 @@ class CouplingModel(Model):
             You might want to use :meth:`add_local_term` instead.
 
         .. versionchanged :: 0.10.1
-            Fix a bug that `plus_hc` didn't correcly add the hermitian conjugate terms.
+            Fix a bug that `plus_hc` didn't correctly add the hermitian conjugate terms.
 
         Parameters
         ----------
@@ -1641,7 +1701,17 @@ class CouplingModel(Model):
 
         ct = self.all_coupling_terms()
         ct.remove_zeros(tol_zero)
-        H_bond = ct.to_nn_bond_Arrays(sites)
+        try:
+            H_bond = ct.to_nn_bond_Arrays(sites)
+        except ValueError as e:
+            if e.args[0] == 'not nearest neighbor':
+                raise ValueError("Can't initialize H_bond for a NearestNeighborModel "
+                                 "with non-nearest neighbor couplings added. "
+                                 "If you just need the MPO (for DMRG,TDVP,...), just don't "
+                                 "subclass the NearestNeighborModel, "
+                                 "e.g., don't subclass SpinChain, but SpinModel.") from e
+            else:
+                raise  # original error
 
         ot = self.all_onsite_terms()
         ot.remove_zeros(tol_zero)
@@ -1650,7 +1720,7 @@ class CouplingModel(Model):
         if finite:
             assert H_bond[0] is None
         if self.explicit_plus_hc:
-            # self representes the terms of `ct` and `ot` + their hermitian conjugates
+            # self represents the terms of `ct` and `ot` + their hermitian conjugates
             # so we need to explicitly add the hermitian conjugate terms
             for i, Hb in enumerate(H_bond):
                 if Hb is not None:
@@ -1709,7 +1779,7 @@ class CouplingModel(Model):
         phase : iterable of float
             The phase of the external flux for hopping in each direction of the lattice.
             E.g., if you want flux through the cylinder on which you have an infinite MPS,
-            you should give ``phase=[0, phi]`` souch that particles pick up a phase `phi` when
+            you should give ``phase=[0, phi]`` such that particles pick up a phase `phi` when
             hopping around the cylinder.
 
         Returns
@@ -1757,7 +1827,7 @@ class CouplingModel(Model):
             slices = [slice(None) for _ in range(self.lat.dim)]
             slices[ax] = slice(-abs(dx[ax]), None)
             # the last ``abs(dx[ax])`` entries in the axis `ax` correspond to hopping
-            # accross the periodic b.c.
+            # across the periodic b.c.
             slices = tuple(slices)
             if dx[ax] > 0:
                 strength[slices] *= np.exp(-1.j * phase[ax])  # hopping in *negative* y-direction
@@ -1778,7 +1848,7 @@ class MultiCouplingModel(CouplingModel):
     """
     def __init_subclass__(cls):
         msg = ("The `MultiCouplingModel` class is deprecated and has been merged into "
-               "the `CouplingModel`. No need to subclass the `MultiCouplingModel` andymore!")
+               "the `CouplingModel`. No need to subclass the `MultiCouplingModel` anymore!")
         warnings.warn(msg, DeprecationWarning, 2)
 
 
@@ -1790,7 +1860,7 @@ def _warn_post_init_add(f):
             warnings.warn(
                 "Adding terms to the CouplingMPOModel after initialization. "
                 "Make sure you call `init_H_from_terms` again! "
-                "In that case, you can set `self.manually_call_init_H` to supress this warning.",
+                "In that case, you can set `self.manually_call_init_H` to suppress this warning.",
                 UserWarning, 2)
         return res
 
@@ -1867,7 +1937,7 @@ class CouplingMPOModel(CouplingModel, MPOModel):
         self._called_CouplingMPOModel_init = True
         self.manually_call_init_H = getattr(self, 'manually_call_init_H', False)
         explicit_plus_hc = model_params.get('explicit_plus_hc', False)
-        # 1-4) initalize lattice
+        # 1-4) initialize lattice
         lat = self.init_lattice(model_params)
         # 5) initialize CouplingModel
         CouplingModel.__init__(self, lat, explicit_plus_hc=explicit_plus_hc)
@@ -2062,7 +2132,7 @@ class CouplingMPOModel(CouplingModel, MPOModel):
             The local sites of the lattice, defining the local basis states and operators.
         optional_species_names : not set | list of str | None
             You should usually just return the (tuple of) `sites`.
-            However, you can aditionally return a list `species_names` to indicate that the
+            However, you can additionally return a list `species_names` to indicate that the
             :class:`~tenpy.models.lattice.MultiSpeciesLattice` should be used.
         """
         # example:

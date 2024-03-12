@@ -12,7 +12,7 @@ The classes provided here provide a structure for the whole setup of simulations
     ground_state_search
     time_evolution
 """
-# Copyright 2020-2023 TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, GNU GPLv3
 
 from . import measurement, simulation, ground_state_search, time_evolution
 from .measurement import *

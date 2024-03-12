@@ -1,16 +1,17 @@
 """A collection of tests to check the functionality of algorithms.exact_diagonalization."""
-# Copyright 2018-2023 TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, GNU GPLv3
 
 import tenpy.linalg.np_conserved as npc
 import numpy as np
 from tenpy.models.xxz_chain import XXZChain
 from tenpy.algorithms.exact_diag import ExactDiag
 from tenpy.linalg.krylov_based import LanczosGroundState
+import copy
 
 
 def test_ED():
     # just quickly check that it runs without errors for a small system
-    xxz_pars = dict(L=4, Jxx=1., Jz=1., hz=0.0, bc_MPS='finite', sort_charge=True)
+    xxz_pars = dict(L=4, Jxx=1., Jz=1., hz=0.1, bc_MPS='finite', sort_charge=True)
     M = XXZChain(xxz_pars)
     ED = ExactDiag(M)
     ED.build_full_H_from_mpo()
@@ -31,7 +32,7 @@ def test_ED():
     full_psi2 = psi.zeros_like()
     full_psi2[ED2._mask] = psi2
     ov = npc.inner(psi, full_psi2, 'range', do_conj=True)
-    print("overlab <psi | psi2> = 1. -", 1. - ov)
+    print("overlap <psi | psi2> = 1. -", 1. - ov)
     assert (abs(abs(ov) - 1.) < 1.e-15)
     # starting from a random guess in the correct charge sector,
     # check if we can also do lanczos.
@@ -40,9 +41,17 @@ def test_ED():
     E0, psi3, N = LanczosGroundState(ED2, psi3, {}).run()
     print("Lanczos E0 =", E0)
     ov = npc.inner(psi3, psi2, 'range', do_conj=True)
-    print("overlab <psi2 | psi3> = 1. -", 1. - ov)
+    print("overlap <psi2 | psi3> = 1. -", 1. - ov)
     assert (abs(abs(ov) - 1.) < 1.e-15)
 
     ED3 = ExactDiag.from_H_mpo(M.H_MPO)
     ED3.build_full_H_from_mpo()
     assert npc.norm(ED3.full_H - H, np.inf) < 1.e-14
+
+    xxz_pars_inf = copy.copy(xxz_pars)
+    xxz_pars_inf['bc_MPS'] = 'infinite'
+    xxz_pars_inf['L'] = 2
+    M_inf = XXZChain(xxz_pars_inf)
+    ED4 = ExactDiag.from_infinite_model(M_inf, enlarge=2)
+    ED4.build_full_H_from_mpo()
+    assert npc.norm(ED4.full_H - H, np.inf) < 1.e-14

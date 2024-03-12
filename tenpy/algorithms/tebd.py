@@ -37,7 +37,7 @@ If one chooses imaginary :math:`dt`, the exponential projects
     Yet, imaginary TEBD might be useful for cross-checks and testing.
 
 """
-# Copyright 2018-2023 TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, GNU GPLv3
 
 import numpy as np
 import time
@@ -232,7 +232,7 @@ class TEBDEngine(TimeEvolutionAlgorithm):
             Order ``1`` approximation is simply :math:`e^A a^B`.
             Order ``2`` is the "leapfrog" `e^{A/2} e^B e^{A/2}`.
             Order ``4`` is the fourth-order from :cite:`suzuki1991` (also referenced in
-            :cite:`schollwoeck2011`), and ``'4_opt'`` gives the optmized version of Equ. (30a) in
+            :cite:`schollwoeck2011`), and ``'4_opt'`` gives the optimized version of Equ. (30a) in
             :cite:`barthel2020`.
 
         Returns
@@ -344,7 +344,7 @@ class TEBDEngine(TimeEvolutionAlgorithm):
         -------
         trunc_err : :class:`~tenpy.algorithms.truncation.TruncationError`
             The error of the represented state which is introduced due to the truncation during
-            this sequence of evolvution steps.
+            this sequence of evolution steps.
         """
         if dt is not None:
             assert dt == self._U_param['delta_t']
@@ -354,7 +354,7 @@ class TEBDEngine(TimeEvolutionAlgorithm):
             trunc_err += self.evolve_step(U_idx_dt, odd)
         self.evolved_time = self.evolved_time + N_steps * self._U_param['tau']
         self.trunc_err = self.trunc_err + trunc_err  # not += : make a copy!
-        # (this is done to avoid problems of users storing self.trunc_err after each `evolv`)
+        # (this is done to avoid problems of users storing self.trunc_err after each `evolve`)
         return trunc_err
 
     def evolve_step(self, U_idx_dt, odd):
@@ -715,7 +715,7 @@ class QRBasedTEBDEngine(TEBDEngine):
 
 
 def _qr_tebd_cbe_Y0(B_L: npc.Array, B_R: npc.Array, theta: npc.Array, expand: float, min_block_increase: int):
-    """Generate the initial guess Y0 for the left isometry in QR based TEBD
+    """Generate the initial guess Y0 for the right isometry in QR based TEBD.
 
     Parameters
     ----------
@@ -870,13 +870,13 @@ def _eig_based_svd(A, need_U: bool = True, need_Vd: bool = True, inner_labels=[N
         Vd = None
         A_Ahc = npc.tensordot(A, A.conj(), [1, 1])
         L, U = npc.eigh(A_Ahc, sort='>')
-        S = np.sqrt(np.abs(L))  # abs to avoid `nan` due to accidentially negative values close to zero
+        S = np.sqrt(np.abs(L))  # abs to avoid `nan` due to accidentally negative values close to zero
         U = U.ireplace_label('eig', inner_labels[0])
     elif need_Vd:
         U = None
         Ahc_A = npc.tensordot(A.conj(), A, [0, 0])
         L, V = npc.eigh(Ahc_A, sort='>')
-        S = np.sqrt(np.abs(L))  # abs to avoid `nan` due to accidentially negative values close to zero
+        S = np.sqrt(np.abs(L))  # abs to avoid `nan` due to accidentally negative values close to zero
         Vd = V.iconj().itranspose().ireplace_label('eig*', inner_labels[1])
     else:
         U = None
@@ -887,7 +887,7 @@ def _eig_based_svd(A, need_U: bool = True, need_Vd: bool = True, inner_labels=[N
         else:
             A2 = npc.tensordot(A.conj(), A, [1, 0])
         L = npc.eigvalsh(A2)
-        S = np.sqrt(np.abs(L))  # abs to avoid `nan` due to accidentially negative values close to zero
+        S = np.sqrt(np.abs(L))  # abs to avoid `nan` due to accidentally negative values close to zero
 
     if trunc_params is not None:
         piv, renormalize, trunc_err = truncate(S, trunc_params)

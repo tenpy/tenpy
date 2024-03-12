@@ -15,7 +15,7 @@ For example, let us consider a spin-1/2 Heisenberg model described by the Hamilt
 Note that a few things are defined more or less implicitly.
 
 - The local Hilbert space: it consists of Spin-1/2 degrees of freedom with the usual spin-1/2 operators :math:`S^x, S^y, S^z`.
-- The geometric (lattice) strucuture: above, we spoke of a 1D "chain".
+- The geometric (lattice) structure: above, we spoke of a 1D "chain".
 - The boundary conditions: do we have open or periodic boundary conditions?
   The "chain" suggests open boundaries, which are in most cases preferable for MPS-based methods.
 - The range of `i`: How many sites do we consider (for a 2D system: in each direction)?
@@ -41,7 +41,7 @@ we need a :class:`~tenpy.models.model.NearestNeighborModel`, in which the Hamilt
 two-site bond-terms to allow a Suzuki-Trotter decomposition of the time-evolution operator::
 
     class MyNewModel2(NearestNeighborModel):
-        """General strucutre for a model suitable for TEBD."""
+        """General structure for a model suitable for TEBD."""
         def __init__(self, model_params):
             lattice = somehow_generate_lattice(model_params)
             H_bond = somehow_generate_H_bond(lattice, model_params)
@@ -98,7 +98,7 @@ The geometry : lattice class
 ----------------------------
 
 The geometry is usually given by some kind of **lattice** structure how the sites are arranged,
-e.g. implicitly with the sum over nearest neighbours :math:`\sum_{<i, j>}`.
+e.g. implicitly with the sum over nearest neighbors :math:`\sum_{<i, j>}`.
 In TeNPy, this is specified by a :class:`~tenpy.models.lattice.Lattice` class, which contains a unit cell of
 a few :class:`~tenpy.networks.site.Site` which are shifted periodically by its basis vectors to form a regular lattice.
 Again, we have pre-defined some basic lattices like a :class:`~tenpy.models.lattice.Chain`,
@@ -123,7 +123,7 @@ of couplings on a given lattice.
 Once initialized, its methods :meth:`~tenpy.models.CouplingModel.add_onsite` and
 :meth:`~tenpy.models.model.CouplingModel.add_coupling` allow to add onsite and coupling terms repeated over the different
 unit cells of the lattice.
-In that way, it basically allows a straight-forward translation of the Hamiltonian given as a math forumla
+In that way, it basically allows a straight-forward translation of the Hamiltonian given as a math formula
 :math:`H = \sum_{i} A_i B_{i+dx} + ...` with onsite operators `A`, `B`,... into a model class.
 
 The general structure for a new model based on the :class:`~tenpy.models.model.CouplingModel` is then::
@@ -170,13 +170,13 @@ In the initialization method ``__init__(self, ...)`` of this class you can then 
       :meth:`~tenpy.models.model.CouplingModel.add_coupling` for more details.
 
    Note that the `strength` arguments of these functions can be (numpy) arrays for site-dependent couplings.
-   If you need to add or multipliy some parameters of the model for the `strength` of certain terms,
+   If you need to add or multiply some parameters of the model for the `strength` of certain terms,
    it is recommended use ``np.asarray`` beforehand -- in that way lists will also work fine.
 7. Finally, if you derived from the :class:`~tenpy.models.model.MPOModel`, you can call
    :meth:`~tenpy.models.model.CouplingModel.calc_H_MPO` to build the MPO and use it for the initialization
    as ``MPOModel.__init__(self, lat, self.calc_H_MPO())``.
 8. Similarly, if you derived from the :class:`~tenpy.models.model.NearestNeighborModel`, you can call
-   :meth:`~tenpy.models.model.CouplingModel.calc_H_bond` to initialze it
+   :meth:`~tenpy.models.model.CouplingModel.calc_H_bond` to initialize it
    as ``NearestNeighborModel.__init__(self, lat, self.calc_H_bond())``.
    Calling ``self.calc_H_bond()`` will fail for models which are not nearest-neighbors (with respect to the MPS ordering),
    so you should only subclass the :class:`~tenpy.models.model.NearestNeighborModel` if the lattice is a simple
@@ -227,7 +227,7 @@ The general structure of this class is like this::
             # and then read out the class attribute `default_lattice`,
             # initialize an arbitrary pre-defined lattice
             # using model_params['lattice']
-            # and enure it's the default lattice if the class attribute
+            # and ensure it's the default lattice if the class attribute
             # `force_default_lattice` is True.
 
         def init_terms(self, model_param):
@@ -250,7 +250,7 @@ lattice cylinder - although it's intuitively clear, what the Hamiltonian there s
 coupling on each bond of the 2D lattice.
 
 It's not possible to generalize a :class:`~tenpy.models.model.NearestNeighborModel` to an arbitrary lattice where it's
-no longer nearest Neigbors in the MPS sense, but we can go the other way around:
+no longer nearest Neighbors in the MPS sense, but we can go the other way around:
 first write the model on an arbitrary 2D lattice and then restrict it to a 1D chain to make it a :class:`~tenpy.models.model.NearestNeighborModel`.
 
 Let me illustrate this with another standard example model: the transverse field Ising model, implemented in the module
@@ -306,7 +306,7 @@ Finally, if you wanted a reduction in MPO bond dimension, you would need to set 
 Non-uniform terms and couplings
 -------------------------------
 The CouplingModel-methods :meth:`~tenpy.models.model.CouplingModel.add_onsite`, :meth:`~tenpy.models.model.CouplingModel.add_coupling`, 
-and :meth:`~tenpy.models.model.CouplingModel.add_multi_coupling` add a sum over a "couplig" term shifted by lattice
+and :meth:`~tenpy.models.model.CouplingModel.add_multi_coupling` add a sum over a "coupling" term shifted by lattice
 vectors. However, some models are not that "uniform" over the whole lattice.
 
 First of all, you might have some local term that gets added only at one specific location in the lattice.
@@ -345,7 +345,7 @@ but also on the boundary conditions of the lattice. Given a term, you can call
 To avoid any ambiguity, the shape of the `strength` always has to fit, at least after a tiling performed by :func:`~tenpy.tools.misc.to_array`.
 
 For example, consider the Su-Schrieffer-Heeger model, a spin-less :class:`~tenpy.models.fermions.FermionChain` with hopping strength alternating between two values, say `t1` and `t2`.
-You can generete this model for example like this::
+You can generate this model for example like this::
     
     L = 30 # or whatever you like...
     t1, t2 = 0.5, 1.5

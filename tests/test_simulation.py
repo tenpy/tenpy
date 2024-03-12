@@ -1,5 +1,5 @@
 """A collection of tests to check the functionality of modules in `tenpy.simulations`"""
-# Copyright 2020-2023 TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, GNU GPLv3
 
 import copy
 import numpy as np
@@ -242,6 +242,31 @@ def test_RealTimeEvolution():
     assert np.allclose(meas['evolved_time'], expected_times)
     assert np.all(meas['measurement_index'] == np.arange(N))
     assert np.all(meas['dummy_value'] == [-1] + [expected_dummy_value] * (N - 1))
+
+
+regrouping_params = copy.deepcopy(simulation_params)
+regrouping_params['final_time'] = 4.
+regrouping_params['group_to_NearestNeighborModel'] = True
+regrouping_params['group_sites'] = 2
+
+
+def test_regrouping_and_group_to_NearestNeighborModel():
+    sim_params = copy.deepcopy(regrouping_params)
+    sim = RealTimeEvolution(sim_params)
+    results = sim.run()
+    assert sim.model.lat.bc_MPS == 'infinite'  # check whether model parameters were used
+    assert 'psi' in results  # should be by default
+    meas = results['measurements']
+    # expect two measurements: once in `init_measurements` and in `final_measurement`.
+    alg_params = sim_params['algorithm_params']
+    expected_times = np.arange(0., sim_params['final_time'] + 1.e-10,
+                               alg_params['N_steps'] * alg_params['dt'])
+    N = len(expected_times)
+    assert np.allclose(meas['evolved_time'], expected_times)
+    assert np.all(meas['measurement_index'] == np.arange(N))
+    assert np.all(meas['dummy_value'] == [-1] + [expected_dummy_value] * (N - 1))
+    # after group_to_NearestNeighborModel, we should measure the bond_energies instead of energy_MPO
+    assert 'bond_energies' in meas and 'energy_MPO' not in meas
 
 
 def test_output_filename_from_dict():

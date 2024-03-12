@@ -1,5 +1,5 @@
 """Simulations for ground state searches."""
-# Copyright 2020-2023 TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, GNU GPLv3
 
 import numpy as np
 from pathlib import Path
@@ -33,7 +33,7 @@ __all__ = simulation.__all__ + [
 
 
 class GroundStateSearch(Simulation):
-    """Simutions for variational ground state searches.
+    """Simulation for variational ground state searches.
 
     Parameters
     ----------
@@ -257,13 +257,13 @@ class PlaneWaveExcitations(GroundStateSearch):
 
 
 class OrthogonalExcitations(GroundStateSearch):
-    """Find excitations by another GroundStateSearch orthoganalizing against previous states.
+    """Find excitations by another GroundStateSearch orthogonalizing against previous states.
 
     If the ground state is an infinite MPS, it is converted to `segment` boundary conditions
     at the beginning of this simulation.
 
     For finite systems, the first algorithm (say DMRG) run when switching the charge sector
-    can be replaced by a normal DMRG run with a different intial state (in the desired sector).
+    can be replaced by a normal DMRG run with a different initial state (in the desired sector).
     For infinite systems, the conversion to segment boundary conditions leads to a *different*
     state! Using the 'segment' boundary conditions, this class can e.g. study a single spin flip
     excitation in the background of the ground state, localized by the segment environments.
@@ -401,7 +401,7 @@ class OrthogonalExcitations(GroundStateSearch):
                 Alternatively, use `switch_charge_sector`.
                 `site#` are MPS indices in the *original* ground state, not the segment!
             switch_charge_sector : list of int | None
-                If given, change the charge sector of the exciations compared to the ground state.
+                If given, change the charge sector of the excitations compared to the ground state.
                 Alternative to `apply_local_op` where we run a small zero-site diagonalization on
                 the left-most bond in the desired charge sector to update the state.
             switch_charge_sector_site: int
@@ -473,34 +473,14 @@ class OrthogonalExcitations(GroundStateSearch):
             #      with sim:
             #          sim.run()
         else:
-            gs_fn = self.options['ground_state_filename']
-            self.logger.info("loading ground state data from %s", gs_fn)
-            gs_data = hdf5_io.load(gs_fn)
-        return gs_fn, gs_data
+            # we will switch charge sector
+            self.orthogonal_to = []  # so we don't need to orthogonalize against original g.s.
+            # optimization: delay calculation of the reference ground_state_energy
+            # until self.switch_charge_sector() is called by self.init_algorithm()
+        return data
 
-    def extract_segment(self, psi0_orig, model_orig, resume_data):
-        """Extract a finite segment from the original model and state.
-
-        In case the original state is already finite, we might still extract a sub-segment
-        (if `segment_first` and/or `segment_last` are given) or just use the full system.
-
-        Defines :attr:`ground_state_seg` to be the ground state of the segment.
-        Further :attr:`model` and :attr:`init_env_data` are extracted.
-
-        Options
-        -------
-        .. cfg:configoptions :: OrthogonalExcitations
-
-            segment_enlarge, segment_first, segment_last : int | None
-                Arguments for :meth:`~tenpy.models.lattice.Lattice.extract_segment`.
-                `segment_englarge` is only used for initially infinite ground states.
-            write_back_converged_ground_state_environments : bool
-                Only used for infinite ground states, indicating that we should write converged
-                environments of the ground state back to `ground_state_filename`.
-                This is an optimization if you intend to run another `OrthogonalExcitations`
-                simulation in the future with the same `ground_state_filename`.
-                (However, it is not faster when the simulations run at the same time; instead it
-                might even lead to errors!)
+    def extract_segment_from_infinite(self, psi0_inf, model_inf, resume_data):
+        """Extract a finite segment from the infinite model/state.
 
         Parameters
         ----------
@@ -688,20 +668,15 @@ class OrthogonalExcitations(GroundStateSearch):
         resume_data['init_env_data'] = self.init_env_data
         super().init_algorithm(**kwargs)
 
-    def switch_charge_sector(self, psi0_seg):
-        """Change the charge sector of `psi0_seg` and obtain `initial_state_seg`.
+        if len(self.orthogonal_to) == 0:
+            self.switch_charge_sector()
 
-        Parameters
-        ----------
-        psi0_seg : :class:`~tenpy.networks.msp.MPS`
-            (Unperturbed) ground state MPS on the segment.
-
-        Returns
-        -------
-        initial_state_seg : :class:`~tenpy.networks.mps.MPS`
-            Suitable initial state for first exciation run.  Might also be used for later
-            initial states, see :meth:`ExcitationInitialState.from_orthogonal`.
-        """
+    def switch_charge_sector(self):
+        """Change the charge sector of :attr:`psi` in place."""
+        if self.psi.chinfo.qnumber == 0:
+            raise ValueError("can't switch charge sector with trivial charges!")
+        self.logger.info("switch charge sector of the ground state "
+                         "[contracts environments from right]")
         apply_local_op = self.options.get("apply_local_op", None)
         switch_charge_sector = self.options.get("switch_charge_sector", None)
         if apply_local_op is None and switch_charge_sector is None:
@@ -817,16 +792,6 @@ class OrthogonalExcitations(GroundStateSearch):
             # TODO can we fix all of this by using H -> H + E_shift |ortho><ortho| ?
             # the orthogonal projection does not lead to a different ground state!
             lanczos_params = self.engine.lanczos_params
-            # [TODO] I was having issues where self.engine.diag_method isn't lanczos or E_shift isn't defined.
-            if self.engine.diag_method == 'default': # SAJANT, 09/09/21
-                self.engine.diag_method = 'lanczos'
-            self.logger.info('Lanczos Params in run_algorithm: %r', lanczos_params)
-            # When E_shift isn't specified, we get a None, which throws an error below.
-            E_shift = lanczos_params.get('E_shift', -100) #lanczos_params['E_shift'] if lanczos_params['E_shift'] is not None else 0
-            if E_shift is None:
-                E_shift = -100
-            self.logger.info("Shifted ground state energy: %.14f", ground_state_energy + 0.5 * E_shift)
-
             if self.engine.diag_method != 'lanczos' or \
                     ground_state_energy + 0.5 * E_shift > 0:
                 # the factor of 0.5 is somewhat arbitrary, to ensure that
@@ -854,7 +819,7 @@ class OrthogonalExcitations(GroundStateSearch):
                 break
 
             self.make_measurements()
-            self.logger.info("got %d excitations so far, proceeed to next excitation.\n%s",
+            self.logger.info("got %d excitations so far, proceed to next excitation.\n%s",
                              len(self.excitations), "+" * 80)
             self.init_state()  # initialize a new state to be optimized
             self.init_algorithm()
@@ -1619,6 +1584,16 @@ class ExcitationInitialState(InitialStateBuilder):
     -------
     .. cfg:config :: ExcitationInitialState
         :include: InitialStateBuilder
+
+        randomize_params : dict-like
+            Parameters for the random unitary evolution used to perturb the state a little bit
+            in :meth:`~tenpy.networks.mps.MPS.perturb`.
+        randomize_close_1 : bool
+            Whether to randomize/perturb with unitaries close to the identity.
+        use_highest_excitation : bool
+            If True, start from  the last state in :attr:`orthogonal_to` and perturb it.
+            If False, use the ground state (=the first entry of :attr:`orthogonal_to` and
+            perturb that one a little bit.
 
     Attributes
     ----------

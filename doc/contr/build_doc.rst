@@ -1,5 +1,5 @@
-Bulding the documentation
-=========================
+Building the documentation
+==========================
 
 You can use `Sphinx <https://www.sphinx-doc.org>`_ to generate the full documentation 
 in various formats (including HTML or PDF) yourself, as described in the following.
@@ -24,7 +24,7 @@ Afterwards, simply go to the folder ``doc/`` and run the following command::
     make html
 
 This should generate the html documentation in the folder `doc/sphinx_build/html`.
-Open this folder (or to be precise: the file `index.html` in it) in your webbroser
+Open this folder (or to be precise: the file `index.html` in it) in your webbrowser
 and enjoy this and other documentation beautifully rendered, with cross links, math formulas
 and even a search function.
 Other output formats are available as other make targets, e.g., ``make latexpdf``.
@@ -34,3 +34,15 @@ Other output formats are available as other make targets, e.g., ``make latexpdf`
    Building the documentation with sphinx requires loading the TeNPy modules.
    The `conf.py` adjusts the python `sys.path` to include the `/tenpy` folder from root directory of the git repository.
    It will not use the cython-compiled parts.
+
+Troubleshooting
+---------------
+
+If you get an error along the lines of ::
+
+    Exception occurred:
+    File "/home/runner/work/tenpy/tenpy/doc/sphinx_ext/sphinx_cfg_options.py", line 227, in run
+        assert isinstance(desc_content, addnodes.desc_content)
+
+Make sure that the config directives, such as e.g. ``.. cfg:config ::`` or ``.. cfg:configoptions ::``
+are followed by an empty line.

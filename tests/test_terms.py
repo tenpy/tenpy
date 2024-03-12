@@ -1,5 +1,5 @@
 """A collection of tests for :module:`tenpy.networks.terms`."""
-# Copyright 2019-2023 TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, GNU GPLv3
 
 import numpy as np
 import copy

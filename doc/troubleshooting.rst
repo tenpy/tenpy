@@ -2,7 +2,7 @@ Troubleshooting and FAQ
 =======================
 
 I updated to a new version and now I get an error/warning.
-    Take a look at the section "Backwards incomptatible changes" in the :doc:`/releases` of the corresponding versions
+    Take a look at the section "Backwards incompatible changes" in the :doc:`/releases` of the corresponding versions
     since when you updated.
 
 Where did all the output go?
@@ -33,7 +33,7 @@ How can I double check the installed TeNPy version?
 
 I get an error when ...
 -----------------------
-... I try to measure ``Sx_i Sx_j`` correlations in a state with `Sz` conseration.
+... I try to measure ``Sx_i Sx_j`` correlations in a state with `Sz` conservation.
     Right now this is not possible. See the basic facts in :doc:`/intro/npc`.
 
 

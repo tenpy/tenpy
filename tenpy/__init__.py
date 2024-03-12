@@ -3,17 +3,17 @@
 TeNPy is a library for algorithms working with tensor networks,
 e.g., matrix product states and -operators,
 designed to study the physics of strongly correlated quantum systems.
-The code is intended to be accessible for newcommers
+The code is intended to be accessible for newcomers
 and yet powerful enough for day-to-day research.
 """
-# Copyright 2018-2023 TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, GNU GPLv3
 # This file marks this directory as a python package.
 
 import warnings
 import logging
 logger = logging.getLogger(__name__)  # main logger for tenpy
 
-# load and provide subpackages on first input
+# load and provide sub packages on first input
 # note that the order matters!
 from . import tools
 from . import linalg
@@ -69,7 +69,7 @@ from .networks.mpo import MPO, MPOEnvironment, MPOTransferMatrix
 from .networks.purification_mps import PurificationMPS
 from .simulations.simulation import (Simulation, Skip, init_simulation, run_simulation,
                                      init_simulation_from_checkpoint, resume_from_checkpoint,
-                                     run_seq_simulations)
+                                     run_seq_simulations, estimate_simulation_RAM)
 from .simulations.ground_state_search import (GroundStateSearch, OrthogonalExcitations,
                                               ExcitationInitialState)
 from .simulations.time_evolution import RealTimeEvolution
@@ -192,10 +192,13 @@ def console_main(*command_line_args):
                           FutureWarning)
             del options['simulation_class_name']
         options['simulation_class'] = args.sim_class
+    if args.RAM:
+        # exit immediately
+        return estimate_simulation_RAM(suppress_non_RAM_output=True, unit='MB', **options)
     if 'sequential' not in options:
-        run_simulation(**options)
+        return run_simulation(**options)
     else:
-        run_seq_simulations(**options)
+        return run_seq_simulations(**options)
 
 
 def _setup_arg_parser(width=None):
@@ -247,6 +250,11 @@ def _setup_arg_parser(width=None):
                         default='error',
                         help="Selects how to merge conflicts in case of multiple yaml files. "
                         "Options are 'error', 'first' or 'last'.")
+    parser.add_argument('--RAM',
+                        action="store_true",
+                        help="Estimates the required RAM. "
+                        "This argument does not execute any simulation, but just initializes it "
+                        "to predict the necessary RAM in MB and then exits.")
     parser.add_argument('parameters_file',
                         nargs='*',
                         help="Yaml (*.yml) file with the simulation parameters/options. "

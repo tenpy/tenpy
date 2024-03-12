@@ -2,7 +2,7 @@
 
 .. autodata:: LeviCivita3
 """
-# Copyright 2018-2023 TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, GNU GPLv3
 
 import numpy as np
 import warnings
@@ -230,7 +230,7 @@ def perm_sign(p):
         if i == v:
             continue
         # by the way we loop, i < v, so we find where i is.
-        # p[i] = p[rp[i]] # we don't have to do that becasue we never need p[i] again
+        # p[i] = p[rp[i]] # we don't have to do that because we never need p[i] again
         p[rp[i]] = v
         rp[v] = rp[i]
         s = -s
@@ -240,8 +240,8 @@ def perm_sign(p):
 def qr_li(A, cutoff=1.e-15):
     """QR decomposition with cutoff to discard nearly linear dependent columns in `Q`.
 
-    Perform a QR decomposition with pivoting, discard columns where ``R[i,i] < cuttoff``,
-    reverse the permututation from pivoting and perform another QR decomposition to ensure that
+    Perform a QR decomposition with pivoting, discard columns where ``R[i,i] < cutoff``,
+    reverse the permutation from pivoting and perform another QR decomposition to ensure that
     `R` is upper right.
 
     Parameters
@@ -269,7 +269,7 @@ def qr_li(A, cutoff=1.e-15):
 def rq_li(A, cutoff=1.e-15):
     """RQ decomposition with cutoff to discard nearly linear dependent columns in `Q`.
 
-    Uses :func:`qr_li` on tranpose of `A`.
+    Uses :func:`qr_li` on transpose of `A`.
     Note that `R` is nonzero in the lowest left corner; `R` has entries below the diagonal
     for non-square `R`.
 

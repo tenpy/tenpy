@@ -1,6 +1,6 @@
 """Definitions of tensor networks like MPS and MPO.
 
-Here, 'tensor network' refers just to the (parital) contraction of tensors.
+Here, 'tensor network' refers just to the (partial) contraction of tensors.
 For example an MPS represents the contraction along the 'virtual' legs/bonds of its `B`.
 
 .. rubric:: Submodules
@@ -15,7 +15,7 @@ For example an MPS represents the contraction along the 'virtual' legs/bonds of 
     terms
     purification_mps
 """
-# Copyright 2018-2023 TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, GNU GPLv3
 
 from . import site, mps, mpo, purification_mps, momentum_mps, uniform_mps
 

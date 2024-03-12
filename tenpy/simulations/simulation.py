@@ -7,7 +7,7 @@ running the actual algorithm, possibly performing measurements and saving the re
 See :doc:`/intro/simulations` for an overview and
 :doc:`/examples` for a list of example parameter yaml files.
 """
-# Copyright 2020-2023 TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, GNU GPLv3
 
 import os
 import sys
@@ -28,7 +28,8 @@ from ..tools import hdf5_io
 from ..tools.cache import CacheFile
 from ..tools.params import asConfig
 from ..tools.events import EventHandler
-from ..tools.misc import find_subclass, update_recursive, get_recursive, set_recursive
+from ..tools.misc import find_subclass, convert_memory_units
+from ..tools.misc import update_recursive, get_recursive, set_recursive, merge_recursive
 from ..tools.misc import setup_logging as setup_logging_
 from .. import version
 from .measurement import (measurement_wrapper, _m_psi_method, _m_psi_method_wrapped,
@@ -42,7 +43,7 @@ __all__ = [
     'init_simulation_from_checkpoint',
     'resume_from_checkpoint',
     'run_seq_simulations',
-    'expand_sequential_simulation_params',
+    'estimate_simulation_RAM',
     'output_filename_from_dict',
 ]
 
@@ -50,7 +51,7 @@ __all__ = [
 class Simulation:
     """Base class for simulations.
 
-    The prefered way to run simulations is in a `with` statement, which allows us to redirect
+    The preferred way to run simulations is in a `with` statement, which allows us to redirect
     error messages to the log files, timely warn about unused parameters and to properly close any
     open (cache) files. In other words, use the simulation class like this::
 
@@ -90,7 +91,7 @@ class Simulation:
         log_params : dict
             Log parameters; see :cfg:config:`log`.
         overwrite_output : bool
-            Whether an exisiting file may be overwritten.
+            Whether an existing file may be overwritten.
             Otherwise, if the file already exists we try to replace
             ``filename.ext`` with ``filename_01.ext`` (and further increasing numbers).
         random_seed : int | None
@@ -125,7 +126,7 @@ class Simulation:
             Information of the used library/code versions and simulation class.
             See :meth:`get_version_info`.
         finished_run : bool
-            Usefull to check whether the output file finished or was generated at a checkpoint.
+            Useful to check whether the output file finished or was generated at a checkpoint.
             This flag is set to `True` only right at the end of :meth:`run`
             (or :meth:`resume_run`) before saving.
         measurements : dict
@@ -138,8 +139,8 @@ class Simulation:
             Not part of `self.results`, but only added in :meth:`prepare_results_for_save` with
             the most up-to-date `resume_data` from
             :meth:`~tenpy.algorithms.algorithm.Algorithm.get_resume_data`.
-            Only included if :cfg:option:`Simultion.save_resume_data` is True.
-            Note that this contains anoter (reference or even copy of) `psi`.
+            Only included if :cfg:option:`Simulation.save_resume_data` is True.
+            Note that this contains another (reference or even copy of) `psi`.
 
     cache : :class:`~tenpy.tools.cache.DictCache`
         Cache that can be used by algorithms.
@@ -177,7 +178,6 @@ class Simulation:
     default_measurements = [
         ('tenpy.simulations.measurement', 'm_measurement_index', {}, 1),
         ('tenpy.simulations.measurement', 'm_bond_dimension'),
-        ('tenpy.simulations.measurement', 'm_energy_MPO'),
         ('tenpy.simulations.measurement', 'm_entropy'),
     ]
 
@@ -209,7 +209,7 @@ class Simulation:
         self.options = asConfig(self.options, self.__class__.__name__)
         self.options.touch('directory', 'output_filename', 'output_filename_params',
                            'overwrite_output', 'skip_if_output_exists', 'safe_write', 'log_params',
-                           'logging_params')
+                           'logging_params', 'estimate_RAM_const_offset')
         if cwd is not None:
             self.logger.info("change directory to %s", cwd)  # os.chdir(cwd) above
         self.logger.info("output filename: %s", self.output_filename)
@@ -259,6 +259,21 @@ class Simulation:
             "See https://tenpy.readthedocs.io/en/latest/intro/logging.html", FutureWarning, 2)
         return self.options.get('verbose', 1.)
 
+    def estimate_RAM(self):
+        """Estimates the RAM usage for the simulation, without running it.
+
+        Returns
+        -------
+        RAM : int
+            The expected RAM usage in kB.
+        """
+        self.init_model()       # model, required for algorithm
+        self.init_state()       # psi, required for algorithm
+        self.group_sites_for_algorithm()  # algorithm might only work if grouped
+        self.init_algorithm()   # create engine (subclass of Algorithm)
+
+        return self.engine.estimate_RAM()
+
     def run(self):
         """Run the whole simulation.
 
@@ -290,7 +305,7 @@ class Simulation:
     def from_saved_checkpoint(cls, filename=None, checkpoint_results=None, **kwargs):
         """Re-initialize a given simulation class from checkpoint results.
 
-        You should probably call :meth:`resume_run` after sucessfull initialization.
+        You should probably call :meth:`resume_run` after successful initialization.
 
         Instead of calling this directly, consider using :func:`resume_from_checkpoint`.
 
@@ -301,7 +316,7 @@ class Simulation:
             You can either specify the `filename` or the `checkpoint_results`.
         checkpoint_results : None | dict
             Alternatively to `filename` the results of the simulation so far, i.e. directly the
-            data dicitonary saved at a simulation checkpoint.
+            data dictionary saved at a simulation checkpoint.
         **kwargs :
             Further keyword arguments given to the `Simulation.__init__`.
         """
@@ -431,7 +446,7 @@ class Simulation:
                 Class or name of a subclass of :class:`~tenpy.networks.mps.InitialStateBuilder`.
                 Used to initialize `psi` according to the `initial_state_params`.
             initial_state_params : dict
-                Dictionary with parameters for building `psi`; see the decoumentation of the
+                Dictionary with parameters for building `psi`; see the documentation of the
                 `initial_state_builder_class`, e.g. :cfg:config:`InitialStateBuilder`.
             save_psi : bool
                 Whether the final :attr:`psi` should be included into the output :attr:`results`.
@@ -506,10 +521,10 @@ class Simulation:
                 Class or name of a subclass of :class:`~tenpy.algorithms.algorithm.Algorithm`.
                 The engine of the algorithm to be run.
             algorithm_params : dict
-                Dictionary with parameters for the algortihm; see the decoumentation of the
+                Dictionary with parameters for the algorithm; see the documentation of the
                 `algorithm_class`.
             connect_algorithm_checkpoint : list of tuple
-                Functions to connect to the :attr:`~tenpy.algorithms.Algorith.checkpoint` event
+                Functions to connect to the :attr:`~tenpy.algorithms.Algorithm.checkpoint` event
                 of the algorithm.
                 Each tuple can be of length 2 to 4, with entries
                 ``(module, function, kwargs, priority)``, the last two optionally.
@@ -570,11 +585,11 @@ class Simulation:
         """
         self._connect_measurements()
         if self.options.get('measure_initial', True):
-            self.make_measurements()  # sets up self.results['measurements'] if necesssary
+            self.make_measurements()  # sets up self.results['measurements'] if necessary
 
     def _connect_measurements(self):
         if self.options.get('use_default_measurements', True):
-            def_meas = self.default_measurements
+            def_meas = self.default_measurements + self.model.get_extra_default_measurements()
         else:
             def_meas = []
         con_meas = list(self.options.get('connect_measurements', []))
@@ -746,7 +761,7 @@ class Simulation:
         self.make_measurements()
 
     def get_version_info(self):
-        """Try to save version info which is necessary to allow reproducability."""
+        """Try to save version info which is necessary to allow reproducibility."""
         sim_module = self.__class__.__module__
         # also try to extract git revision of the simulation class
         if sim_module.startswith('tenpy') or sim_module == "__main__":
@@ -898,7 +913,7 @@ class Simulation:
         Parameters
         ----------
         results : dict | None
-            The results to be safed. If not specified, call :meth:`prepare_results_for_save`
+            The results to be saved. If not specified, call :meth:`prepare_results_for_save`
             to allow last-minute adjustments to the saved :attr:`results`.
         """
         if results is None:
@@ -1161,13 +1176,13 @@ def init_simulation_from_checkpoint(*,
         You can either specify the `filename` or the `checkpoint_results`.
     checkpoint_results : None | dict
         Alternatively to `filename` the results of the simulation so far, i.e. directly the data
-        dicitonary saved at a simulation checkpoint.
+        dictionary saved at a simulation checkpoint.
     update_sim_params : None | dict
         Allows to update specific :cfg:config:`Simulation` parameters; ignored if `None`.
         Uses :func:`~tenpy.tools.misc.update_recursive` to update values, such that the keys of
         `update_sim_params` can be recursive, e.g. `algorithm_params/max_sweeps`.
-    simlation_class_kwargs : None | dict
-        Further keyword arguemnts given to the simulation class, ignored if `None`.
+    simulation_class_kwargs : None | dict
+        Further keyword arguments given to the simulation class, ignored if `None`.
 
     Returns
     -------
@@ -1222,13 +1237,13 @@ def resume_from_checkpoint(*,
         You can either specify the `filename` or the `checkpoint_results`.
     checkpoint_results : None | dict
         Alternatively to `filename` the results of the simulation so far, i.e. directly the data
-        dicitonary saved at a simulation checkpoint.
+        dictionary saved at a simulation checkpoint.
     update_sim_params : None | dict
         Allows to update specific :cfg:config:`Simulation` parameters; ignored if `None`.
         Uses :func:`~tenpy.tools.misc.update_recursive` to update values, such that the keys of
         `update_sim_params` can be recursive, e.g. `algorithm_params/max_sweeps`.
-    simlation_class_kwargs : None | dict
-        Further keyword arguemnts given to the simulation class, ignored if `None`.
+    simulation_class_kwargs : None | dict
+        Further keyword arguments given to the simulation class, ignored if `None`.
 
     Returns
     -------
@@ -1281,7 +1296,7 @@ def run_seq_simulations(sequential,
                         **simulation_params):
     """Sequentially run (variational) simulations.
 
-    Uses the results (in particular the state) from one simulation to intialize another one.
+    Uses the results (in particular the state) from one simulation to initialize another one.
     This allows to "adiabatically" or "smoothly" follow the evolution of the ground state as
     certain model (or algorithm) parameters change.
 
@@ -1322,7 +1337,7 @@ def run_seq_simulations(sequential,
     Parameters
     ----------
     sequential : dict
-        Paramters specifying the sequential simulation, see :cfg:config:`sequential` above.
+        Parameters specifying the sequential simulation, see :cfg:config:`sequential` above.
     resume_data : None | dict
         Usually None if you didn't already run a simulation that you want to continue.
         Otherwise the `resume_data` as given to the Simulation class.
@@ -1463,9 +1478,85 @@ def expand_sequential_simulation_params(sequential, simulation_params, chdir=Tru
             val = values[index]
             set_recursive(sim_params, rec_key, val, separator, insert_dicts=True)
 
-        # yield the copy of sim_params such that the next simulation can run
-        yield sim_params
-    # done
+        if resume_data is not None:
+            simulation_class_kwargs['resume_data'] = resume_data
+
+        with SimClass(sim_params, **simulation_class_kwargs) as sim:
+            results = sim.run()
+            if collect_results_in_memory:
+                all_results.append(results)
+            # save results for the next simulation
+            resume_data = sim.engine.get_resume_data(sequential_simulations=True)
+        del sim  # but free memory to avoid too many copies (e.g. the whole environment)
+        if index + 1 < N_sims:
+            del results
+    # all simulations are done!
+    if collect_results_in_memory:
+        return all_results
+    else:
+        return results
+
+
+def estimate_simulation_RAM(*,
+                            suppress_non_RAM_output=True,
+                            RAM_output_unit=None,
+                            estimate_RAM_const_offset=(100, "MB"),
+                            **simulation_params):
+    """Pre-simulation RAM estimate.
+
+    Large-scale simulations need to be submitted to a simulation cluster, which often requires to
+    give an estimate of the required RAM before actually running the simulation.
+
+    See also the model parameter :cfg:option:`Model.mem_saving_factor`.
+
+    Parameters
+    ----------
+    suppress_non_RAM_output : bool
+        If True (default), suppress all other output (except for error messages).
+    RAM_output_unit : None | str
+        Memory unit to be used for the output. ``None`` defaults to human-readable rounding.
+    estimate_RAM_const_offset : ``(int, str)``
+        Defaults to ``(100, "MB")`` which gets added to the scaling estimates.
+        This constant needs to account for loading python libraries etc.
+    **simulation_params :
+        Other simulation parameters as they would be pass to :func:`run_simulation` to run the
+        simulation.
+
+    Returns
+    -------
+    estimate : float
+        Estimated RAM requirements including the `estimate_RAM_const_offset`.
+    unit : str
+        Unit of the estimate
+
+    See also
+    --------
+    Simulation.estimate_RAM : Corresponding simulation method
+    tenpy.algorithms.algorithm.Algorithm.estimate_RAM : corresponding algorithm method.
+    """
+    offset_val, offset_unit = estimate_RAM_const_offset
+    offset_MB, _ = convert_memory_units(offset_val, offset_unit, 'MB')
+    # suppress in this case undesired output
+    if suppress_non_RAM_output:
+        for key in ['output_filename', 'output_filename_params']:  # ignore the output filename
+            if key in simulation_params:
+                del simulation_params[key]
+        overwrite = {'log_params': {'filename': None,
+                                    'to_stdout': 'ERROR'
+                                    # ERROR level suppresses unused parameters warning as well
+                                    }}
+        simulation_params = merge_recursive(simulation_params, overwrite, conflict='last')
+    # get simulation
+    with init_simulation(**simulation_params) as sim:
+        estimate_MB = sim.estimate_RAM()
+    total_MB = estimate_MB + offset_MB
+
+    est, est_unit = convert_memory_units(estimate_MB, 'MB', RAM_output_unit)
+    total, total_unit = convert_memory_units(total_MB, 'MB', RAM_output_unit)
+    print(f"  {est:5.1f} {est_unit} estimated usage for tensors")
+    print(f"+ {offset_val:5.1f} {offset_unit} constant offset for loading python etc")
+    print(f"= {total:5.1f} {total_unit} total estimated RAM")
+    return total, total_unit
 
 
 def output_filename_from_dict(options,

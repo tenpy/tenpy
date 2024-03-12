@@ -1,4 +1,4 @@
-# Copyright 2018-2023 TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, GNU GPLv3
 from setuptools import setup, Extension
 try:
     from Cython.Build import cythonize
