@@ -24,7 +24,6 @@ account for the additional type of tensor structure.
 
 import numpy as np
 import warnings
-import random
 from functools import reduce
 import logging
 logger = logging.getLogger(__name__)
@@ -948,87 +947,14 @@ class UniformMPS(MPS):
         """
         assert not ignore_form, "UniformMPS have both forms. Use one."
         return super().overlap(other, charge_sector=charge_sector, ignore_form=ignore_form, **kwargs)
-
-    def expectation_value(self, ops, sites=None, axes=None):
+    
+    def _contract_with_LP(self, C, i):
         assert self.valid_umps
-        return super().expectation_value(ops, sites=sites, axes=axes)
-
-    def expectation_value_term(self, term, autoJW=True):
+        return super()._contract_with_LP(C, i)
+    
+    def _contract_with_RP(self, C, i):
         assert self.valid_umps
-        return super().expectation_value_term(term, autoJW=autoJW)
-
-    def expectation_value_multi_sites(self, operators, i0):
-        assert self.valid_umps
-        return super().expectation_value_multi_sites(operators, i0)
-
-    def expectation_value_terms_sum(self, term_list, prefactors=None):
-        assert self.valid_umps
-        return super().expectation_value_terms_sum(term_list, prefactors)
-
-    def correlation_function(self,
-                             ops1,
-                             ops2,
-                             sites1=None,
-                             sites2=None,
-                             opstr=None,
-                             str_on_first=True,
-                             hermitian=False,
-                             autoJW=True):
-        assert self.valid_umps
-        return super().correlation_function(ops1,
-                                            ops2,
-                                            sites1=sites1,
-                                            sites2=sites2,
-                                            opstr=opstr,
-                                            str_on_first=str_on_first,
-                                            hermitian=False,
-                                            autoJW=autoJW)
-
-
-    def term_correlation_function_right(self,
-                                        term_L,
-                                        term_R,
-                                        i_L=0,
-                                        j_R=None,
-                                        autoJW=True,
-                                        opstr=None):
-        assert self.valid_umps
-        return super().term_correlation_function_right(term_L,
-                                                       term_R,
-                                                       i_L=i_L,
-                                                       j_R=j_R,
-                                                       autoJW=autoJW,
-                                                       opstr=opstr)
-
-    def term_correlation_function_left(self,
-                                        term_L,
-                                        term_R,
-                                        i_L=0,
-                                        j_R=None,
-                                        autoJW=True,
-                                        opstr=None):
-        assert self.valid_umps
-        return super().term_correlation_function_left(term_L,
-                                                      term_R,
-                                                      i_L=i_L,
-                                                      j_R=j_R,
-                                                      autoJW=autoJW,
-                                                      opstr=opstr)
-
-    def term_list_correlation_function_right(self,
-                                             term_list_L,
-                                             term_list_R,
-                                             i_L=0,
-                                             j_R=None,
-                                             autoJW=True,
-                                             opstr=None):
-        assert self.valid_umps
-        return super().term_list_correlation_function_right(term_list_L,
-                                                            term_list_R,
-                                                            i_L=i_L,
-                                                            j_R=j_R,
-                                                            autoJW=autoJW,
-                                                            opstr=opstr)
+        return super()._contract_with_RP(C, i)
 
     def sample_measurements(self,
                             first_site=0,
