@@ -14,7 +14,7 @@ matrix C is stored. During the algorithm, the canonical form equality AL_i C_{i+
 is not necessarily respected, yet in the ground state, we expect this to be restored. The
 difference in norm of the first two is the ``'max_split_error'`` that is reported at each checkpoint.
 
-There are two derived classes that implement the vumps algorithm, :class:`OneSiteVUMPSEngine` and
+There are two derived classes that implement the vumps algorithm, :class:`SingleSiteVUMPSEngine` and
 :class:`TwoSiteVUMPSEngine`. The first implements the algorithm found in the original paper,
 where the uMPS is updated by 2 zero-site eigenvalue problems and 1 one-site eigenvalue problem.
 This algorithm works at FIXED bond dimension, so the starting uMPS must be prepared with desired
@@ -44,7 +44,7 @@ logger = logging.getLogger(__name__)
 from ..linalg import np_conserved as npc
 from ..networks.mpo import MPOEnvironment, MPOTransferMatrix
 from ..networks.mps import MPS, TransferMatrix
-from ..networks.umps import uMPS
+from ..networks.uniform_mps import UniformMPS
 from ..linalg.sparse import SumNpcLinearOperator
 from ..linalg.krylov_based import LanczosGroundState, lanczos_arpack
 from ..tools.params import asConfig
@@ -57,16 +57,16 @@ from .plane_wave_excitation import LT_general, TR_general, construct_orthogonal
 
 __all__ = [
     'VUMPSEngine',
-    'OneSiteVUMPSEngine',
+    'SingleSiteVUMPSEngine',
     'TwoSiteVUMPSEngine'
 ]
 
 
 class VUMPSEngine(Sweep):
-    """ VUMPS base class with common methods for the TwoSiteVUMPS and OneSiteVUMPS.
+    """ VUMPS base class with common methods for the TwoSiteVUMPS and SingleSiteVUMPS.
 
     This engine is implemented as a subclass of :class:`~tenpy.algorithms.mps_common.Sweep`.
-    It contains all methods that are generic between :class:`OneSiteVUMPSEngine` and
+    It contains all methods that are generic between :class:`SingleSiteVUMPSEngine` and
     :class:`TwoSiteVUMPSEngine`.
     Use the latter two classes for actual VUMPS runs.
 
@@ -75,9 +75,9 @@ class VUMPSEngine(Sweep):
 
     def __init__(self, psi, model, options, **kwargs):
         #options = asConfig(options, self.__class__.__name__)
-        if not isinstance(psi, uMPS):
+        if not isinstance(psi, UniformMPS):
             assert isinstance(psi, MPS)
-            psi = uMPS.from_MPS(psi)  # psi is an MPS, so convert it to a uMPS
+            psi = UniformMPS.from_MPS(psi)  # psi is an MPS, so convert it to a uMPS
         super().__init__(psi, model, options, **kwargs)
         self.guess_init_env_data = self.env.get_initialization_data()
         self.env.clear()
@@ -91,7 +91,7 @@ class VUMPSEngine(Sweep):
         start_time = self.time0
         self.shelve = False
 
-        overlap = options.get('overlap', True)
+        check_overlap = options.get('check_overlap', True)
         min_sweeps = options.get('min_sweeps', 1)
         max_sweeps = options.get('max_sweeps', 1000)
         max_E_err = options.get('max_E_err', 1.e-8)
@@ -154,35 +154,22 @@ class VUMPSEngine(Sweep):
             self.sweep_stats['max_N_lanczos'].append(max_N_lanczos)
             # status update
             logger.info(
-                "checkpoint after sweep %(sweeps)d\n"
-                "energy=%(E).16f, max S=%(S).16f, norm_err=%(norm_err).1e\n"
-                "Current memory usage %(mem).1fMB, wall time: %(wall_time).1fs\n"
-                "Delta E = %(dE).4e, Delta S = %(dS).4e (per sweep)\n"
-                "max split_err = %(max_split_err).4e, max Lanczos iter: %(max_N_lanczos)r\n"
-                "chi: %(chi)s\n"
-                "%(sep)s", {
-                    'sweeps': self.sweeps,
-                    'E': E,
-                    'S': max_S,
-                    'norm_err': norm_err,
-                    'mem': memory_usage(),
-                    'wall_time': time.time() - loop_start_time,
-                    'dE': Delta_E,
-                    'dS': Delta_S,
-                    'max_split_err': max_split_error,
-                    'max_N_lanczos': max_N_lanczos,
-                    'chi': self.psi.chi if self.psi.L < 40 else max(self.psi.chi),
-                    'sep': "=" * 80,
-                })
+                f"checkpoint after sweep {self.sweeps:d}\n"
+                f"energy={E:.16f}, max S={max_S:.16f}, norm_err={norm_err:.1e}\n"
+                f"Current memory usage {memory_usage():.1f}MB, wall time: {time.time() - loop_start_time:.1f}s\n"
+                f"Delta E = {Delta_E:.4e}, Delta S = {Delta_S:.4e} (per sweep)\n"
+                f"max split_err = {max_split_error:.4e}, max Lanczos iter: {max_N_lanczos}\n"
+                f"chi: {self.psi.chi if self.psi.L < 40 else max(self.psi.chi)}\n"
+                f"{'=' * 80}")
             is_first_sweep = False
 
         self.psi.test_validity()
-        logger.info("VUMPS finished after %d sweeps, max chi=%d", self.sweeps, max(self.psi.chi))
+        logger.info(f"VUMPS finished after {self.sweeps} sweeps, max chi={max(self.psi.chi)}")
 
         # psi.norm_test() is sometimes > 1.e-10 for paramagnetic TFI. More VUMPS (>10) fixes this even though the energy is already saturated for 10 sweeps.
         self.guess_init_env_data, Es, _ = MPOTransferMatrix.find_init_LP_RP(self.model.H_MPO, self.psi, calc_E=True, guess_init_env_data=self.guess_init_env_data)
         self.tangent_projector_test(self.guess_init_env_data)
-        return (Es[0] + Es[1])/2, self.psi.to_MPS(overlap=overlap)      # E_MPO is first returned value
+        return (Es[0] + Es[1])/2, self.psi.to_MPS(check_overlap=check_overlap)      # E_MPO is first returned value
 
     def environment_sweeps(self, N_sweeps):
         # In VUMPS we don't want to do this as we regenerate the environment each time we do an update.
@@ -231,7 +218,7 @@ class VUMPSEngine(Sweep):
         update_LP_RP = [[False, False]] * L         # Never update the envs since we replace them each time
         return zip(i0s, move_right, update_LP_RP)
 
-    def prepare_update(self):
+    def prepare_update_local(self):
         # For each update, we need to rebuild the environments from scratch using the most recent tensors
         i0 = self.i0
         H = self.model.H_MPO
@@ -244,8 +231,8 @@ class VUMPSEngine(Sweep):
 
         self.make_eff_H()
         theta = self.psi.get_theta(i0, n=self.n_optimize, cutoff=self.S_inv_cutoff) #n_optimize will be 1
-        assert self.eff_H1.combine == False
-        theta = self.eff_H1.combine_theta(theta) #combine should be false.
+        assert self.eff_H.combine == False
+        theta = self.eff_H.combine_theta(theta) #combine should be false.
         C1, C2 = self.psi.get_C(i0), self.psi.get_C(i0+self.n_optimize)
 
         return (theta, C1, C2)
@@ -254,10 +241,10 @@ class VUMPSEngine(Sweep):
 
         self.eff_H0_1 = ZeroSiteH(self.env, self.i0) # This saves more envs than optimal.
         self.eff_H0_2 = ZeroSiteH(self.env, self.i0 + self.n_optimize) # This saves more envs than optimal.
-        self.eff_H1 = self.EffectiveH(self.env, self.i0, self.combine, self.move_right)
+        self.eff_H = self.EffectiveH(self.env, self.i0, self.combine, self.move_right)
 
         if hasattr(self.env, 'H') and self.env.H.explicit_plus_hc:
-            self.eff_H1 = SumNpcLinearOperator(self.eff_H1, self.eff_H1.adjoint())
+            self.eff_H = SumNpcLinearOperator(self.eff_H, self.eff_H.adjoint())
         if hasattr(self.env, 'H') and self.env.H.explicit_plus_hc:
             self.eff_H0_1 = SumNpcLinearOperator(self.eff_H0_1, self.eff_H0_1.adjoint())
         if hasattr(self.env, 'H') and self.env.H.explicit_plus_hc:
@@ -311,15 +298,13 @@ class VUMPSEngine(Sweep):
 
             strange_left.append(npc.norm(temp_VL))
             strange_right.append(npc.norm(temp_VR))
-        logger.info('Strange cancellation left: %(sL)r, right: %(sR)r.', # [TODO] How do I log this list so that each element is in scientific form?
-                    {'sL': strange_left,
-                     'sR': strange_right})
+        logger.info(f'Strange cancellation left: {strange_left}, right: {strange_right}.')
         #print('Strange Cancellation left:', strange_left, "right:", strange_right)
 
         return strange_left, strange_right
 
 
-class OneSiteVUMPSEngine(VUMPSEngine):
+class SingleSiteVUMPSEngine(VUMPSEngine):
     EffectiveH = OneSiteH
 
     #  def __init__(self, psi, model, options, **kwargs):
@@ -350,7 +335,7 @@ class OneSiteVUMPSEngine(VUMPSEngine):
         # Update on site
         psi = self.psi
         i0 = self.i0
-        H0_1, H0_2, H1 = self.eff_H0_1, self.eff_H0_2, self.eff_H1
+        H0_1, H0_2, H1 = self.eff_H0_1, self.eff_H0_2, self.eff_H
         AC, C1, C2 = theta
         lanczos_options = self.options.subconfig('lanczos_options')
 
@@ -428,7 +413,7 @@ class TwoSiteVUMPSEngine(VUMPSEngine):
         # Update on site
         psi = self.psi
         i0 = self.i0
-        H0_1, H0_2, H2 = self.eff_H0_1, self.eff_H0_2, self.eff_H1
+        H0_1, H0_2, H2 = self.eff_H0_1, self.eff_H0_2, self.eff_H
         AC, C1, C2 = theta
 
         lanczos_options = self.options.subconfig('lanczos_options')

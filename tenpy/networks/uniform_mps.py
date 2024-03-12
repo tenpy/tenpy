@@ -9,7 +9,7 @@ In a canonical MPS, we store a single tensor on each site and diagonal Schmidt
 coefficients on each bond. From these, we can construct any desired form of a tensor
 on each site; e.g. given B_i, we can construct A_i = S_i B_i S_{i+1}^{-1}. On every
 site, we assume that $AS = SB$, which is guaranteed (up to numerical noise) after
-calling canonical form. In a uMPS, however, we are not guaranteed that this
+calling canonical form. In a uniform MPS, however, we are not guaranteed that this
 condition holds. Instead, we store an AL tensor (left canonical, A in MPS notation),
 AR tensor (right canonical, B), and an AC tensor (one-site orthogonality center, Theta)
 on each site. On each bond we store a C tensor that is not guaranteed to be diagonal.
@@ -163,7 +163,7 @@ class UniformMPS(MPS):
         """Check if AL C = AC and C AR = AC
 
         To have a valid MPS and take measurements, we require this to be true. This will be true after VUMPS.
-        No measurements should actually be done on a uMPS; convert back to MPS.
+        No measurements should actually be done on a UniformMPS; convert back to MPS.
         """
         err = np.empty((self.L, 3), dtype=float)
         for i in range(self.L):
@@ -176,7 +176,7 @@ class UniformMPS(MPS):
             err[i, 2] = npc.norm((C1AR / npc.tensordot(C1AR, AC.conj(), axes=(['vL', 'p', 'vR'], ['vL*', 'p*', 'vR*']))) - AC)
 
         self.valid_umps = np.max(err) < cutoff
-        logger.info('uMPS is %s with max error %.5e.', 'valid' if self.valid_umps else 'invalid', np.max(err))
+        logger.info(f'UniformMPS is {"valid" if self.valid_umps else "invalid"} with max error {np.max(err):.5f}.')
         return err
 
     def copy(self):
@@ -264,16 +264,16 @@ class UniformMPS(MPS):
         if check_overlap:
             MPS_A = MPS(self.sites, self._AL, self._S, bc='infinite', form='A', norm=1.)
             MPS_A.canonical_form() # [TODO] should we do this? It might be expensive.
-            overlap_AB = np.abs(MPS_B.overlap(MPS_A))
-            logger.info('Overlap of uMPS constructed from ARs with uMPS constructed with ALs: %.10e.', overlap_AB)
+            overlap_AB = np.abs(MPS_B.overlap(MPS_A, understood_infinite=True))
+            logger.info(f'Overlap of UniformMPS constructed from ARs with UniformMPS constructed with ALs: {overlap_AB:.10f}')
             if not np.isclose(overlap_AB, 1):
-                logger.warn(f"overlap not close to 1: {overlap_AB}, returning uniform MPS instead")
+                logger.warning(f"overlap not close to 1: {overlap_AB:.10f}, returning uniform MPS instead")
                 return self.copy()
         return MPS_B
 
     def to_diagonal_gauge(self, cutoff=1.e-16, check_overlap=False):
         """
-        Convert a uMPS to diagonal gauge, i.e. where all of the bond matrices are diagonal.
+        Convert a UniformMPS to diagonal gauge, i.e. where all of the bond matrices are diagonal.
         
         Parameters
         ----------
@@ -288,7 +288,7 @@ class UniformMPS(MPS):
         self._S = []    # Empty out np.arrays on each bond.
 
         if self.L > 1 and cutoff > 0.0:
-            warnings.warn("'sv_cutoff' cannot be non-zero for multi-site unit cell as this messes with the transfer matrix.")
+            logger.warning("'sv_cutoff' cannot be non-zero for multi-site unit cell as this messes with the transfer matrix.")
             cutoff = 0.0
 
 
@@ -308,8 +308,8 @@ class UniformMPS(MPS):
         self.diagonal_gauge = True
 
         if check_overlap:
-            overlap = self.overlap(old_uMPS)
-            logger.info('Overlap of original uMPS with diagonal uMPS: %.10e.', overlap)
+            overlap = self.overlap(old_uMPS, understood_infinite=True)
+            logger.info(f'Overlap of original UniformMPS with diagonal UniformMPS: {overlap:.10f}')
 
     def _diagonal_gauge_C(self, theta, i0, cutoff):
         """
@@ -686,7 +686,7 @@ class UniformMPS(MPS):
         elif form=='Th' or form==(1., 1.) or form=='AC':
             return self.set_AC(i, B)
         else:
-            raise NotImplementedError("Form {0!r} is not valid for VUMPS.".format(list(form)))
+            raise NotImplementedError(f"Form {list(form)!r} is not valid for UniformMPS.")
 
     def set_AL(self, i, AL):
         """
@@ -776,7 +776,7 @@ class UniformMPS(MPS):
         raise NotImplementedError("Not valid for UniformMPS.")
 
     def enlarge_mps_unit_cell(self, factor=2):
-        """Repeat the unit cell for infinite uMPS boundary conditions; in place.
+        """Repeat the unit cell for infinite uniform MPS boundary conditions; in place.
 
         Parameters
         ----------
@@ -876,7 +876,7 @@ class UniformMPS(MPS):
             The sum of the `qtotal` of the individual `B` tensors.
         """
         assert only_physical_legs == False, "Not possible for UniformMPS"
-        # Assume self.segment_boundaries is None, None for UMPS
+        # Assume self.segment_boundaries is None, None for UniformMPS
         tensors_AL = self._AL
         qtotal_AL = np.sum([AL.qtotal for AL in tensors_AL], axis=0)
         qtotal_AL = self.chinfo.make_valid(qtotal_AL)
