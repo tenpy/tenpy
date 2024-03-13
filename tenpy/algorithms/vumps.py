@@ -54,7 +54,7 @@ from ..tools.misc import find_subclass
 from ..tools.process import memory_usage
 from .mps_common import IterativeSweeps, ZeroSiteH, OneSiteH, TwoSiteH
 from .truncation import truncate, svd_theta
-from .plane_wave_excitation import LT_general, TR_general, construct_orthogonal
+from .plane_wave_excitation import append_right_env, append_left_env, construct_orthogonal
 
 __all__ = [
     'VUMPSEngine',
@@ -521,13 +521,13 @@ class VUMPSEngine(IterativeSweeps):
         strange_left = []
         strange_right = []
         for i in range(self.psi.L):
-            temp_L = LT_general(ALs[:i], ALs[:i], LW, Ws=Ws[:i])
-            temp_R = TR_general(ARs[i+1:], ARs[i+1:], RW, Ws=Ws[i+1:])
+            temp_L = append_left_env(ALs[:i], ALs[:i], LW, Ws=Ws[:i])
+            temp_R = append_right_env(ARs[i+1:], ARs[i+1:], RW, Ws=Ws[i+1:])
 
-            temp_VL = LT_general([VLs[i]], [ACs[i]], temp_L, Ws=[Ws[i]])
+            temp_VL = append_left_env([VLs[i]], [ACs[i]], temp_L, Ws=[Ws[i]])
             temp_VL = npc.tensordot(temp_VL, temp_R, axes=(['wR', 'vR*'], ['wL', 'vL*']))
 
-            temp_VR = TR_general([VRs[i]], [ACs[i]], temp_R, Ws=[Ws[i]])
+            temp_VR = append_right_env([VRs[i]], [ACs[i]], temp_R, Ws=[Ws[i]])
             temp_VR = npc.tensordot(temp_L, temp_VR, axes=(['wR', 'vR*'], ['wL', 'vL*']))
 
             strange_left.append(npc.norm(temp_VL))

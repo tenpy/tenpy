@@ -3,7 +3,8 @@
 The quasiparticle ansatz, utilizing plane wave states, offers a powerful approach for computing low-energy excitations. For finite systems, we could employ DMRG with different charge sectors to find these states.
 For infinite systems, an efficient algorithm was introduced in :cite:`haegeman2012`. By working directly in the tangent space of a uniform MPS (:cite:`vanderstraeten2019`), we can use translational invariance to specify momentum.
 
-The plane wave excitation finds excitation of a :class:`~tenpy.networks.uniform_mps.UniformMPS`. By summing over all states, where one tensor is replaced with an excited tensor B, we get a state with a fixed momentum :class:`~tenpy.networks.momentum_mps.MomentumMPS`. The tensors B are decomposed into -B- = -V-X-, where V is the orthogonal complement of the usual A-tensors of the uniform MPS, and X contains the variational parameters. The algorithm constructs an effective Hamiltonian for X and finds the low-energy states using an iterative eigensolver.
+The plane wave excitation finds excitation of a :class:`~tenpy.networks.uniform_mps.UniformMPS`. By summing over all states, where one tensor is replaced with an excited tensor B, we get a state with a fixed momentum :class:`~tenpy.networks.momentum_mps.MomentumMPS`. The tensors B are decomposed into -B- = -V-X-, where V is the orthogonal complement of the usual A-tensors of the uniform MPS, and X contains the variational parameters. The algorithm constructs an effective Hamiltonian for X and finds the low-energy states using an iterative eigensolver. Since we don't sweep as e.g. in DMRG, more Lanczos steps may be required. Increase those until the energy is converged!
+
 Additionally, we can specify X to be in a given charge sector.
 
 The :class:`PlaneWaveExcitationEngine` optimizes the X for each tensor in the unit cell. The ansatz can be extended to include excitations that span several sites. This is implemented in :class:`MultiSitePlaneWaveExcitationEngine`. Note that with the current implementation, the numerical costs scale exponentially with the number of exciting sites.
@@ -130,9 +131,16 @@ class PlaneWaveExcitationEngine(Algorithm):
     Options
     -------
     .. cfg:config :: PlaneWaveExcitationEngine
+        :include: Algorithm
 
+        lanczos_params : dict
+            Lanczos parameters as described in :cfg:config:`KrylovBased`.
         lambda_C1 : float
             Energy shift from contracting the infinite environments. If `None`, compute it again.
+        init_env_data : dict
+            Dictionary as returned by ``self.env.get_initialization_data()`` from
+            :meth:`~tenpy.networks.mpo.MPOEnvironment.get_initialization_data`.
+
 
     Attributes
     ----------
@@ -173,7 +181,7 @@ class PlaneWaveExcitationEngine(Algorithm):
         self.IdL = self.H.get_IdL(0)
         self.IdR = self.H.get_IdR(-1)
 
-        self.guess_init_env_data = self.options.get('init_data', None)
+        self.guess_init_env_data = self.options.get('init_env_data', None)
 
         # Construct VL, needed to parametrize - B - as - VL - X -
         #                                       |        |
@@ -196,8 +204,7 @@ class PlaneWaveExcitationEngine(Algorithm):
             self.lambda_C1 = npc.tensordot(self.LW, self.lambda_C1, axes=(['wR', 'vR'], ['wL', 'vL']))
             self.lambda_C1 = npc.tensordot(self.lambda_C1, C0_L.conj(), axes=(['vR*', 'vL*'], ['vL*', 'vR*'])) / norm
         
-        self.aligned_H = self.Aligned_Effective_H(self, self.ALs, self.ARs, self.VLs,
-                                                  self.LW, self.RW, self.Ws)
+        self.aligned_H = self.Aligned_Effective_H(self)
 
         strange = []
         for i in range(self.L):
@@ -210,7 +217,7 @@ class PlaneWaveExcitationEngine(Algorithm):
 
 
     def run(self, p, qtotal_change=None, orthogonal_to=[], E_boosts=[], num_ev=1):
-        """ Run the plane-wave algorithm to find the ground state of the given model.
+        """ Run the plane-wave algorithm to find excited states of the given model.
 
         Parameters
         ----------
@@ -237,30 +244,33 @@ class PlaneWaveExcitationEngine(Algorithm):
         -------
         .. cfg:config :: PlaneWaveExcitationEngine
 
+            E_boost : float
+                uniform strength of the energy boosts (instead of specifying a list), default to E_boost=100
+
         """
-        self.unaligned_H = self.Unaligned_Effective_H(self, self.ALs, self.ARs, self.VLs,
-                                                      self.LW, self.RW, self.Ws, p)
+        self.unaligned_H = self.Unaligned_Effective_H(self, p)
         effective_H = SumNpcLinearOperator(self.aligned_H, self.unaligned_H)
         lanczos_params = self.options.subconfig('lanczos_params')
         X_init = self.initial_guess(qtotal_change)
         if len(E_boosts) != len(orthogonal_to):
             E_boost = self.options.get('E_boost', 100)
             E_boosts = [E_boost] * len(orthogonal_to)
-        ortho_H = BoostNpcLinearOperator(effective_H, E_boosts, orthogonal_to)
+        if len(orthogonal_to) > 0:
+            effective_H = BoostNpcLinearOperator(effective_H, E_boosts, orthogonal_to)
 
         if num_ev > 1:
             lanczos_params['which'] = 'SR'
             lanczos_params['num_ev'] = num_ev
-            energies, Xs, N = Arnoldi(ortho_H, X_init, lanczos_params).run()
+            energies, Xs, N = Arnoldi(effective_H, X_init, lanczos_params).run()
             psis = []
             Es = []
             for E, X in zip(energies, Xs):
-                psis.append(MomentumMPS(X, self.psi, p, self.size))
+                psis.append(MomentumMPS(X, self.psi, p))
                 Es.append(E - self.lambda_C1 -self.energy_density * self.L)
         else:
-            energy, X, N = LanczosGroundState(ortho_H, X_init, lanczos_params).run()
+            energy, X, N = LanczosGroundState(effective_H, X_init, lanczos_params).run()
             Es = [energy - self.lambda_C1 -self.energy_density * self.L]
-            psis = [MomentumMPS(X, self.psi, p, self.size)]
+            psis = [MomentumMPS(X, self.psi, p)]
 
         if N == lanczos_params.get('N_max', 20):
             import warnings
@@ -272,15 +282,57 @@ class PlaneWaveExcitationEngine(Algorithm):
         raise NotImplementedError()
 
     def energy(self, p, X):
-        self.unaligned_H = self.Unaligned_Effective_H(self, self.ALs, self.ARs, self.VLs,
-                                                      self.LW, self.RW, self.Ws, p, self.chi, self.d)
+        """
+        Compute the energy of excited states
+
+        Parameters
+        ----------
+        p : float
+            The momentum of the state; for unit cells larger than 1, we already include the
+            factor of the smaller Brillouin zone: p*L. 
+        X : list of :class:`npc.Array`
+            Excitation tensors for each site of the unit cell.
+
+        Returns
+        -------
+        energy : float
+            Energy
+
+        """
+        self.unaligned_H = self.Unaligned_Effective_H(self, p)
         effective_H = SumNpcLinearOperator(self.aligned_H, self.unaligned_H)
         HX = effective_H.matvec(X)
         E = np.real(inner(X, HX)).item()
         return E - self.energy_density * self.L - self.lambda_C1
 
-    def infinite_sum_right(self, X, p):
+    def infinite_sum_right(self, p, X):
+        """
+        Infinite sum to the right, see Eq. (194) in :cite:`vanderstraeten2019`
+
+        p : float
+            The momentum of the state; for unit cells larger than 1, we already include the
+            factor of the smaller Brillouin zone: p*L. 
+        X : list of :class:`npc.Array`
+            Current excitation tensors for each site of the unit cell.
+
+        Returns
+        -------
+        R_sum : :class:`npc.Array`
+            Array representing the right environment including the `B` tensors at each site.
+
+        Options
+        -------
+        .. cfg:config :: PlaneWaveExcitationEngine
+
+            sum_method : ``explicit`` | ``GMRES``
+                Whether to explicitly sum the environment by applying the unit cell tensors until convergence (default) or solving the geometric series with the GMRES method.
+            sum_tol : float
+                Convergence criterion for the explicit summation.
+            sum_iterations : int
+                Maximum number of iterations for the explicit summation (default sum_iterations=100).
+        """
         sum_tol = self.options.get('sum_tol', 1.e-10)
+        sum_iterations = self.options.get('sum_iterations', 100)
         sum_method = self.options.get('sum_method', 'explicit')
 
         B = npc.tensordot(self.VLs[self.L-1], X[self.L-1], axes=(['vR'], ['vL']))
@@ -291,10 +343,11 @@ class PlaneWaveExcitationEngine(Algorithm):
                  append_right_env([self.ALs[i]], [self.ARs[i]], RB, Ws=[self.Ws[i]])
         R = RB
 
-        assert not np.isclose(npc.norm(R), 0)
+        if np.isclose(npc.norm(R), 0):
+            return R
         if sum_method=='explicit':
             R_sum = R.copy()
-            for _ in range(100):
+            for _ in range(sum_iterations):
                 R = np.exp(-1.0j * p * self.L) * append_right_env(self.ALs, self.ARs, R, Ws=self.Ws)
                 R_sum.iadd_prefactor_other(1., R)
                 if npc.norm(R) < sum_tol:
@@ -326,8 +379,34 @@ class PlaneWaveExcitationEngine(Algorithm):
             raise ValueError('Sum method', sum_method, 'not recognized!')
 
 
-    def infinite_sum_left(self, X, p):
+    def infinite_sum_left(self, p, X):
+        """
+        Infinite sum to the left, see Eq. (194) in :cite:`vanderstraeten2019`
+
+        p : float
+            The momentum of the state; for unit cells larger than 1, we already include the
+            factor of the smaller Brillouin zone: p*L. 
+        X : list of :class:`npc.Array`
+            Current excitation tensors for each site of the unit cell.
+
+        Returns
+        -------
+        L_sum : :class:`npc.Array`
+            Array representing the left environment including the `B` tensors at each site.
+
+        Options
+        -------
+        .. cfg:config :: PlaneWaveExcitationEngine
+
+            sum_method : ``explicit`` | ``GMRES``
+                Whether to explicitly sum the environment by applying the unit cell tensors until convergence (default) or solving the geometric series with the GMRES method.
+            sum_tol : float
+                Convergence criterion for the explicit summation.
+            sum_iterations : int
+                Maximum number of iterations for the explicit summation (default sum_iterations=100).
+        """
         sum_tol = self.options.get('sum_tol', 1.e-10)
+        sum_iterations = self.options.get('sum_iterations', 100)
         sum_method = self.options.get('sum_method', 'explicit')
 
         B = npc.tensordot(self.VLs[0], X[0], axes=(['vR'], ['vL']))
@@ -338,10 +417,11 @@ class PlaneWaveExcitationEngine(Algorithm):
                  append_left_env([self.ARs[i]], [self.ALs[i]], LB, Ws=[self.Ws[i]])
         L = LB
 
-        assert not np.isclose(npc.norm(L), 0)
+        if np.isclose(npc.norm(L), 0):
+            return L
         if sum_method=='explicit':
             L_sum = L.copy()
-            for i in range(100):
+            for i in range(sum_iterations):
                 L = np.exp(1.0j * p * self.L) * append_left_env(self.ARs, self.ALs, L, Ws=self.Ws)
                 L_sum.iadd_prefactor_other(1., L)
                 if npc.norm(L) < sum_tol:
@@ -374,13 +454,29 @@ class PlaneWaveExcitationEngine(Algorithm):
             raise ValueError('Sum method', sum_method, 'not recognized!')
 
     class Aligned_Effective_H(NpcLinearOperator):
-        def __init__(self, outer, ALs, ARs, VLs, LW, RW, Ws):
-            self.ALs = ALs
-            self.ARs = ARs
-            self.VLs = VLs
-            self.LW = LW
-            self.RW = RW
-            self.Ws = Ws
+        r"""Class defining the effective Hamiltonian for the excitation tensors `X`, where the `B` tensors are in the same unit cell as the tensors we want to update.
+
+        For a single-site unit cell the effective Hamiltonian looks like this:
+
+                |        .--- B  ---.
+                |        |    |     |
+                |       LW----W0----RW
+                |        |    |     |
+                |        .---VL-  --.
+
+        Parameters
+        ----------
+        outer : :class:`PlaneWaveExcitationEngine`
+            Parent engine for the plane wave excitation ansatz.
+        """
+
+        def __init__(self, outer):
+            self.ALs = outer.ALs
+            self.ARs = outer.ARs
+            self.VLs = outer.VLs
+            self.LW = outer.LW
+            self.RW = outer.RW
+            self.Ws = outer.Ws
             self.outer = outer
 
         def matvec(self, vec):
@@ -419,13 +515,32 @@ class PlaneWaveExcitationEngine(Algorithm):
             return total_vec
 
     class Unaligned_Effective_H(NpcLinearOperator):
-        def __init__(self, outer, ALs, ARs, VLs, LW, RW, Ws, p):
-            self.ALs = ALs
-            self.ARs = ARs
-            self.VLs = VLs
-            self.LW = LW
-            self.RW = RW
-            self.Ws = Ws
+        r"""Class defining the effective Hamiltonian for the excitation tensors `X`, where the `B` tensors are in left (LB) or right (RB) environment.
+
+        For a single-site unit cell the effective Hamiltonian looks like this:
+
+                |         .---  AR ---.            .---  AL ---.
+                |     ip  |     |     |       -ip  |     |     |
+                |   e     LB----W0----RW   + e     LW----W0----RB
+                |         |     |     |            |     |     |
+                |         .---VL-   --.            .---VL-   --.
+
+        Parameters
+        ----------
+        outer : :class:`PlaneWaveExcitationEngine`
+            Parent engine for the plane wave excitation ansatz.
+        p : float
+            The momentum of the state; for unit cells larger than 1, we already include the
+            factor of the smaller Brillouin zone: p*L. 
+        """
+                
+        def __init__(self, outer, p):
+            self.ALs = outer.ALs
+            self.ARs = outer.ARs
+            self.VLs = outer.VLs
+            self.LW = outer.LW
+            self.RW = outer.RW
+            self.Ws = outer.Ws
             self.p = p
             self.outer = outer
 
@@ -433,7 +548,7 @@ class PlaneWaveExcitationEngine(Algorithm):
 
             total = [npc.Array.zeros_like(v) for v in vec]
 
-            inf_sum_TR = self.outer.infinite_sum_right(vec, self.p)
+            inf_sum_TR = self.outer.infinite_sum_right(self.p, vec)
             cached_TR = [inf_sum_TR]
             for i in reversed(range(1, self.outer.L)):
                 cached_TR.insert(0, append_right_env([self.ALs[i]], [self.ARs[i]], cached_TR[0], Ws=[self.Ws[i]]))
@@ -444,7 +559,7 @@ class PlaneWaveExcitationEngine(Algorithm):
                 total[i] += X_out_left
             cached_TR = []
 
-            inf_sum_TL = self.outer.infinite_sum_left(vec, self.p)
+            inf_sum_TL = self.outer.infinite_sum_left(self.p, vec)
             cached_TL = [inf_sum_TL]
             for i in range(0, self.outer.L-1):
                 cached_TL.append(append_left_env([self.ARs[i]], [self.ALs[i]], cached_TL[-1], Ws=[self.Ws[i]]))
@@ -458,6 +573,19 @@ class PlaneWaveExcitationEngine(Algorithm):
             return total
 
     def initial_guess(self, qtotal_change):
+        """
+        Initial guess for the `X` tensors within a fixed charge sector.
+
+        Parameters
+        ----------
+        qtotal_change : list of int
+            For each charge sector specify how `X` should change the charge.
+        
+        Returns
+        -------
+        X_init : list of :class:`npc.Array`
+            Initial guess for excitation tensors for each site of the unit cell.
+        """
         X_init = []
         valid_charge = False
         for i in range(self.L):
@@ -491,6 +619,45 @@ class PlaneWaveExcitationEngine(Algorithm):
     
 
 class MultiSitePlaneWaveExcitationEngine(Algorithm):
+    r""" Engine to compute quasiparticle excitations across multiple sites for uniform MPS. For each site in the unit cell one multi-site excitation tensor is computed.
+
+    Parameters are the same as for :class:`~tenpy.algorithms.algorithm.Algorithm`.
+
+    Options
+    -------
+    .. cfg:config :: MultiSitePlaneWaveExcitationEngine
+        :include: Algorithm
+
+        lanczos_params : dict
+            Lanczos parameters as described in :cfg:config:`KrylovBased`.
+        lambda_C1 : float
+            Energy shift from contracting the infinite environments. If `None`, compute it again.
+        init_env_data : dict
+            Dictionary as returned by ``self.env.get_initialization_data()`` from
+            :meth:`~tenpy.networks.mpo.MPOEnvironment.get_initialization_data`.
+        excitation_size : int
+            Number of sites of the excitation, i.e. how many sites in the uniform MPS are replaced with orthogonal tensors. This can be larger than the unit cell or incommensurate.
+
+    Attributes
+    ----------
+    psi : :class:`~tenpy.networks.uniform_mps.UniformMPS`
+        The uniform MPS for which we compute (orthogonal) excitations.
+    model : :class:`~tenpy.models.MPOModel`
+        The model defining the Hamiltonian.
+    ACs : list of :class:`npc.Array`
+        The 'center-site' tensors of psi.
+    ALs : list of :class:`npc.Array`
+        The 'left-orthonormal' tensors of psi.
+    AR : list of :class:`npc.Array`
+        The 'right-orthonormal' tensors of psi.
+    Cs : list of :class:`npc.Array`
+        The center matrices of psi.
+    Ws : list of :class:`npc.Array`
+        The matices of the MPO.
+    VLs : list of :class:`npc.Array`
+        The orthogonal complements for each AL.
+    """
+
     def __init__(self, psi, model, options, **kwargs):
         super().__init__(psi, model, options, **kwargs)
 
@@ -499,9 +666,6 @@ class MultiSitePlaneWaveExcitationEngine(Algorithm):
 
         self.size = self.options.get('excitation_size', 1)
         assert self.size >= 1
-
-        self.sites = self.options.get('excitation_sites', list(range(self.L)))
-        assert len(self.sites) >= 1
 
         self.ALs = [self.psi.get_AL(i) for i in range(self.L)]
         self.ARs = [self.psi.get_AR(i) for i in range(self.L)]
@@ -516,7 +680,7 @@ class MultiSitePlaneWaveExcitationEngine(Algorithm):
         self.IdL = self.H.get_IdL(0)
         self.IdR = self.H.get_IdR(-1)
 
-        self.guess_init_env_data = self.options.get('init_data',None)
+        self.guess_init_env_data = self.options.get('init_env_data',None)
 
         # Construct VL, needed to parametrize - B - as - VL - X -
         #                                       |        |
@@ -524,8 +688,7 @@ class MultiSitePlaneWaveExcitationEngine(Algorithm):
         self.VLs = [construct_orthogonal(self.ALs[i]) for i in range(self.L)]
 
         # Get left and right generalized eigenvalues
-        self.gauge = self.options.get('gauge', 'trace')
-        self.boundary_env_data, self.energy_density, _ = MPOTransferMatrix.find_init_LP_RP(self.H, self.psi, calc_E=True, _subtraction_gauge=self.gauge, guess_init_env_data=self.guess_init_env_data)
+        self.boundary_env_data, self.energy_density, _ = MPOTransferMatrix.find_init_LP_RP(self.H, self.psi, calc_E=True, guess_init_env_data=self.guess_init_env_data)
         self.energy_density = np.mean(self.energy_density)
         self.LW = self.boundary_env_data['init_LP']
         self.RW = self.boundary_env_data['init_RP']
@@ -551,31 +714,62 @@ class MultiSitePlaneWaveExcitationEngine(Algorithm):
 
 
     def run(self, p, qtotal_change=None, orthogonal_to=[], E_boosts=[], num_ev=1):
-        self.aligned_H = self.Aligned_Effective_H(self, self.ALs, self.ARs, self.VLs,
-                                                  self.LW, self.RW, self.Ws, p)
-        self.unaligned_H = self.Unaligned_Effective_H(self, self.ALs, self.ARs, self.VLs,
-                                                      self.LW, self.RW, self.Ws, p)
+        """ Run the plane-wave algorithm to find excited states of the given model.
+
+        Parameters
+        ----------
+        p : float
+            The momentum of the state; for unit cells larger than 1, we already include the
+            factor of the smaller Brillouin zone: p*L. 
+        qtotal_change : list of int
+            Charge sectors for each of the defined charges.
+        orthogonal_to : list of list of :class:`npc.Array`
+            Find excitations orthogonal to previously found tensors X. 
+        E_boosts: list of float
+            energy boosts for orthogonal states
+        num_ev: int
+            Number of eigenvalues and eigenvectors, that we extract from a single Arnoldi/ Lanczos run
+
+        Returns
+        -------
+        Es : list of float
+            Energies of the lowest-energy excitations. Number equal to `num_ev`.
+        psis : list of :class:`~tenpy.networks.momentum_mps.MomentumMPS`
+            MomentumMPS corresponding to the lowest-energy excitations. Number equal to `num_ev`.
+
+        Options
+        -------
+        .. cfg:config :: PlaneWaveExcitationEngine
+
+            E_boost : float
+                uniform strength of the energy boosts (instead of specifying a list), default to E_boost=100
+
+        """
+        self.aligned_H = self.Aligned_Effective_H(self, p)
+        self.unaligned_H = self.Unaligned_Effective_H(self, p)
         effective_H = SumNpcLinearOperator(self.aligned_H, self.unaligned_H)
         lanczos_params = self.options.subconfig('lanczos_params')
         X_init = self.initial_guess(qtotal_change)
         if len(E_boosts) != len(orthogonal_to):
             E_boost = self.options.get('E_boost', 100)
             E_boosts = [E_boost] * len(orthogonal_to)
-        ortho_H = BoostNpcLinearOperator(effective_H, E_boosts, orthogonal_to)
+        if len(orthogonal_to) > 0:
+            effective_H = BoostNpcLinearOperator(effective_H, E_boosts, orthogonal_to)
 
+        # how many unit cells to include all excitations
         multiple_unit_cell = int(np.ceil((self.L-1+self.size)/self.L))
 
         if num_ev > 1:
             lanczos_params['which'] = 'SR'
             lanczos_params['num_ev'] = num_ev
-            energies, Xs, N = Arnoldi(ortho_H, X_init, lanczos_params).run()
+            energies, Xs, N = Arnoldi(effective_H, X_init, lanczos_params).run()
             psis = []
             Es = []
             for E, X in zip(energies, Xs):
                 psis.append(MomentumMPS(X, self.psi, p, self.size))
                 Es.append(E - self.lambda_C1 -self.energy_density * (self.L *multiple_unit_cell))
         else:
-            energy, X, N = LanczosGroundState(ortho_H, X_init, lanczos_params).run()
+            energy, X, N = LanczosGroundState(effective_H, X_init, lanczos_params).run()
             Es = [energy - self.lambda_C1 -self.energy_density * (self.L *multiple_unit_cell)]
             psis = [MomentumMPS(X, self.psi, p, self.size)]
 
@@ -583,20 +777,41 @@ class MultiSitePlaneWaveExcitationEngine(Algorithm):
             import warnings
             warnings.warn('Maximum Lanczos iterations needed; be wary of results.')
 
-        return Es, psis, N
+        return np.real_if_close(Es), psis, N
 
     def resume_run(self):
         raise NotImplementedError()
 
     def energy(self, p, X):
-        self.unaligned_H = self.Unaligned_Effective_H(self, self.ALs, self.ARs, self.VLs,
-                                                      self.LW, self.RW, self.Ws, p)
+        """
+        Compute the energy of excited states
+
+        Parameters
+        ----------
+        p : float
+            The momentum of the state; for unit cells larger than 1, we already include the
+            factor of the smaller Brillouin zone: p*L. 
+        X : list of :class:`npc.Array`
+            Excitation tensors for each site of the unit cell.
+
+        Returns
+        -------
+        energy : float
+            Energy
+
+        """
+        multiple_unit_cell = int(np.ceil((self.L-1+self.size)/self.L))
+        self.aligned_H = self.Aligned_Effective_H(self, p)
+        self.unaligned_H = self.Unaligned_Effective_H(self, p)
         effective_H = SumNpcLinearOperator(self.aligned_H, self.unaligned_H)
         HX = effective_H.matvec(X)
         E = np.real(inner(X, HX)).item()
-        return E - self.energy_density * self.L - self.lambda_C1
+        return E - self.lambda_C1 -self.energy_density * (self.L *multiple_unit_cell)
 
     def attach_right(self, VL, X, As, R, Ws=None):
+        """
+        attach excitation tensors to a right environment
+        """
         B = npc.tensordot(VL.replace_label('p', 'p0'), X, axes=(['vR'], ['vL']))
         RB = npc.tensordot(B, R, axes=(['vR'], ['vL']))
         
@@ -607,31 +822,59 @@ class MultiSitePlaneWaveExcitationEngine(Algorithm):
             RB = npc.tensordot(RB, As[i].conj(), axes=(['p', 'vL*'], ['p*', 'vR*']))
         return RB
 
-    def starting_right_TR(self, X):
+    def _starting_right_TR(self, X):
+        """
+        Sum up all single-B environments from the right and fill with tensors to complete unit cell
+        """
         i = 0
         RP = self.GS_env_R.get_RP(i+self.size-1)
         RB = self.attach_right(self.VLs[i], X[i], [self.ARs[j % self.L] for j in range(i, i+self.size)], RP, Ws=[self.Ws[j % self.L] for j in range(i, i+self.size)])
         RB = append_right_env(self.ALs[:i], self.ARs[:i], RB, Ws=self.Ws[:i])
         RW = RB
         for i in range(1, self.L):
-            if i not in self.sites:
-                continue
             RP = self.GS_env_R.get_RP(i+self.size-1)
             RB = self.attach_right(self.VLs[i], X[i], [self.ARs[j % self.L] for j in range(i, i+self.size)], RP, Ws=[self.Ws[j % self.L] for j in range(i, i+self.size)])
             RB = append_right_env(self.ALs[:i], self.ARs[:i], RB, Ws=self.Ws[:i])
             RW += RB
         return RW
 
-    def infinite_sum_right(self, X, p):
+    def infinite_sum_right(self, p, X):
+        """
+        Infinite sum to the right, see Eq. (194) in :cite:`vanderstraeten2019`
+
+        p : float
+            The momentum of the state; for unit cells larger than 1, we already include the
+            factor of the smaller Brillouin zone: p*L. 
+        X : list of :class:`npc.Array`
+            Current excitation tensors for each site of the unit cell.
+
+        Returns
+        -------
+        R_sum : :class:`npc.Array`
+            Array representing the right environment including the `B` tensors at each site.
+
+        Options
+        -------
+        .. cfg:config :: PlaneWaveExcitationEngine
+
+            sum_method : ``explicit`` | ``GMRES``
+                Whether to explicitly sum the environment by applying the unit cell tensors until convergence (default) or solving the geometric series with the GMRES method.
+            sum_tol : float
+                Convergence criterion for the explicit summation.
+            sum_iterations : int
+                Maximum number of iterations for the explicit summation (default sum_iterations=100).
+        """
         sum_tol = self.options.get('sum_tol', 1.e-10)
+        sum_iterations = self.options.get('sum_iterations', 100)
         sum_method = self.options.get('sum_method', 'explicit')
 
-        R = self.starting_right_TR(X)
+        R = self._starting_right_TR(X)
 
-        #assert not np.isclose(npc.norm(R), 0)
+        if np.isclose(npc.norm(R), 0):
+            return R
         if sum_method=='explicit':
             R_sum = R.copy()
-            for _ in range(100):
+            for _ in range(sum_iterations):
                 R = np.exp(-1.0j * p * self.L) * append_right_env(self.ALs, self.ARs, R, Ws=self.Ws)
                 R_sum.iadd_prefactor_other(1., R)
                 if npc.norm(R) < sum_tol:
@@ -663,6 +906,9 @@ class MultiSitePlaneWaveExcitationEngine(Algorithm):
             raise ValueError('Sum method', sum_method, 'not recognized!')
 
     def attach_left(self, VL, X, As, L, Ws=None):
+        """
+        attach excitation tensors to a left environment
+        """
         B = npc.tensordot(VL.replace_label('p', 'p0'), X, axes=(['vR'], ['vL']))
         LB = npc.tensordot(L, B, axes=(['vR'], ['vL']))
         for i in range(len(As)):
@@ -672,7 +918,10 @@ class MultiSitePlaneWaveExcitationEngine(Algorithm):
             LB = npc.tensordot(As[i].conj(), LB, axes=(['p*', 'vL*'], ['p', 'vR*']))
         return LB
 
-    def starting_left_TL(self, X):
+    def _starting_left_TL(self, X):
+        """
+        Sum up all single-B environments from the left and fill with tensors to complete unit cell
+        """
         multiple_unit_cell = int(np.ceil((self.L-1+self.size)/self.L))  # number of extension of unit cells
         i = 0
         LP = self.GS_env_L.get_LP(i)
@@ -681,8 +930,6 @@ class MultiSitePlaneWaveExcitationEngine(Algorithm):
             LB = append_left_env([self.ARs[j%self.L]], [self.ALs[j%self.L]], LB, Ws=[self.Ws[j%self.L]])
         LW = LB
         for i in range(1, self.L):
-            if i not in self.sites:
-                continue
             LP = self.GS_env_L.get_LP(i)
             LB = self.attach_left(self.VLs[i], X[i], [self.ALs[j % self.L] for j in range(i, i+self.size)], LP, Ws=[self.Ws[j % self.L] for j in range(i, i+self.size)])
             for j in range(i+self.size, multiple_unit_cell*self.L):
@@ -690,11 +937,37 @@ class MultiSitePlaneWaveExcitationEngine(Algorithm):
             LW += LB
         return LW
 
-    def infinite_sum_left(self, X, p):
+    def infinite_sum_left(self, p, X):
+        """
+        Infinite sum to the left, see Eq. (194) in :cite:`vanderstraeten2019`
+
+        p : float
+            The momentum of the state; for unit cells larger than 1, we already include the
+            factor of the smaller Brillouin zone: p*L. 
+        X : list of :class:`npc.Array`
+            Current excitation tensors for each site of the unit cell.
+
+        Returns
+        -------
+        L_sum : :class:`npc.Array`
+            Array representing the left environment including the `B` tensors at each site.
+
+        Options
+        -------
+        .. cfg:config :: PlaneWaveExcitationEngine
+
+            sum_method : ``explicit`` | ``GMRES``
+                Whether to explicitly sum the environment by applying the unit cell tensors until convergence (default) or solving the geometric series with the GMRES method.
+            sum_tol : float
+                Convergence criterion for the explicit summation.
+            sum_iterations : int
+                Maximum number of iterations for the explicit summation (default sum_iterations=100).
+        """
         sum_tol = self.options.get('sum_tol', 1.e-10)
+        sum_iterations = self.options.get('sum_iterations', 100)
         sum_method = self.options.get('sum_method', 'explicit')
 
-        # maybe some general single-line expression for this?
+        # shift unit cell to the left to include all excitations
         self.shift_unit_cell = None
         if self.size == 1:
             self.shift_unit_cell = 0
@@ -704,12 +977,13 @@ class MultiSitePlaneWaveExcitationEngine(Algorithm):
             self.shift_unit_cell = self.size // self.L
         else:
             self.shift_unit_cell = 1
-        LB = np.exp(1.0j * p * self.L * self.shift_unit_cell) * self.starting_left_TL(X)
+        LB = np.exp(1.0j * p * self.L * self.shift_unit_cell) * self._starting_left_TL(X)
 
-        #assert not np.isclose(npc.norm(LB), 0)
+        if np.isclose(npc.norm(LB), 0):
+            return LB
         if sum_method=='explicit':
             L_sum = LB.copy()
-            for i in range(100):
+            for i in range(sum_iterations):
                 LB = np.exp(1.0j * p * self.L) * append_left_env(self.ARs, self.ALs, LB, Ws=self.Ws)
                 L_sum.iadd_prefactor_other(1., LB)
                 if npc.norm(LB) < sum_tol:
@@ -742,13 +1016,23 @@ class MultiSitePlaneWaveExcitationEngine(Algorithm):
             raise ValueError('Sum method', sum_method, 'not recognized!')
 
     class Aligned_Effective_H(NpcLinearOperator):
-        def __init__(self, outer, ALs, ARs, VLs, LW, RW, Ws, p):
-            self.ALs = ALs
-            self.ARs = ARs
-            self.VLs = VLs
-            self.LW = LW
-            self.RW = RW
-            self.Ws = Ws
+        r"""Class defining the effective Hamiltonian for the multi-site excitation tensors `X`, where there is overlap between `B` tensors and the unit cell we want to update.
+
+        Parameters
+        ----------
+        outer : :class:`PlaneWaveExcitationEngine`
+            Parent engine for the plane wave excitation ansatz.
+        p : float
+            The momentum of the state; for unit cells larger than 1, we already include the
+            factor of the smaller Brillouin zone: p*L. 
+        """
+        def __init__(self, outer, p):
+            self.ALs = outer.ALs
+            self.ARs = outer.ARs
+            self.VLs = outer.VLs
+            self.LW = outer.LW
+            self.RW = outer.RW
+            self.Ws = outer.Ws
             self.p = p
             self.outer = outer
 
@@ -758,11 +1042,9 @@ class MultiSitePlaneWaveExcitationEngine(Algorithm):
 
             total_vec = [npc.Array.zeros_like(v) for v in vec]
             multiple_unit_cell = int(np.ceil((L-1+size)/L))
-            for i in self.outer.sites:
+            for i in range(L):
                 # all contributions from shifting Bs to the right
                 for j in range(size):
-                    if (i+j)%L not in self.outer.sites:
-                        continue
                     LW = self.outer.GS_env_L.get_LP(i)
                     RW = self.outer.GS_env_R.get_RP((i+j+size-1)%L)
                     for _ in range(int(np.ceil((i+j+size)/L)), multiple_unit_cell): # attach complete unit cells if necessary
@@ -796,8 +1078,6 @@ class MultiSitePlaneWaveExcitationEngine(Algorithm):
                 
                 # all contributions from shifting Bs to the left
                 for j in range(i-size+1, i):
-                    if j%L not in self.outer.sites:
-                        continue
                     LW = self.outer.GS_env_L.get_LP(j%L)
                     RW = self.outer.GS_env_R.get_RP((size-1+i)%L)
 
@@ -826,13 +1106,23 @@ class MultiSitePlaneWaveExcitationEngine(Algorithm):
             return total_vec
 
     class Unaligned_Effective_H(NpcLinearOperator):
-        def __init__(self, outer, ALs, ARs, VLs, LW, RW, Ws, p):
-            self.ALs = ALs
-            self.ARs = ARs
-            self.VLs = VLs
-            self.LW = LW
-            self.RW = RW
-            self.Ws = Ws
+        r"""Class defining the effective Hamiltonian for the multi-site excitation tensors `X`, where the `B` tensors are in left (LB) or right (RB) environment.
+
+        Parameters
+        ----------
+        outer : :class:`PlaneWaveExcitationEngine`
+            Parent engine for the plane wave excitation ansatz.
+        p : float
+            The momentum of the state; for unit cells larger than 1, we already include the
+            factor of the smaller Brillouin zone: p*L. 
+        """
+        def __init__(self, outer, p):
+            self.ALs = outer.ALs
+            self.ARs = outer.ARs
+            self.VLs = outer.VLs
+            self.LW = outer.LW
+            self.RW = outer.RW
+            self.Ws = outer.Ws
             self.p = p
             self.outer = outer
 
@@ -843,8 +1133,8 @@ class MultiSitePlaneWaveExcitationEngine(Algorithm):
             total = [npc.Array.zeros_like(v) for v in vec]
 
             # sums where Bs are to the right
-            inf_sum_TR = self.outer.infinite_sum_right(vec, self.p)
-            for i in self.outer.sites:
+            inf_sum_TR = self.outer.infinite_sum_right(self.p, vec)
+            for i in range(L):
                 multiple_unit_cell = int(np.ceil((i+size)/L))  # number of extension of unit cells
                 LP_VL = append_left_env([self.ALs[i]], [self.VLs[i]], self.outer.GS_env_L.get_LP(i), Ws=[self.Ws[i]])
                 for j in range(1, size):
@@ -857,8 +1147,6 @@ class MultiSitePlaneWaveExcitationEngine(Algorithm):
                     RP =  self.outer.GS_env_R.get_RP((j+size-1)%L)
 
                     RB = append_right_env([self.ALs[j%L]], [self.ARs[j%L]], RB, Ws=[self.Ws[j%L]])
-                    if j%L not in self.outer.sites:
-                        continue 
                     RB += self.outer.attach_right(self.VLs[j%L], vec[j%L], [self.ARs[k % L] for k in range(j, j+size)], RP, Ws=[self.Ws[k % L] for k in range(j, j+size)]) * np.exp(-1.0j * self.p * L * (multiple_unit_cell-1))
 
                 X_out_right = npc.tensordot(LP_VL, RB, axes=(['vR', 'wR'], ['vL', 'wL']))
@@ -866,8 +1154,8 @@ class MultiSitePlaneWaveExcitationEngine(Algorithm):
                 total[i] += X_out_right
 
             # sums where Bs are to the left
-            inf_sum_TL = self.outer.infinite_sum_left(vec, self.p)
-            for i in self.outer.sites:
+            inf_sum_TL = self.outer.infinite_sum_left(self.p, vec)
+            for i in range(L):
                 RP = self.outer.GS_env_R.get_RP((i+size-1)%L)
                 for j in reversed(range(0, size)):
                     RP = npc.tensordot(self.ARs[(i+j)%L], RP, axes=(['vR'], ['vL']))
@@ -878,8 +1166,6 @@ class MultiSitePlaneWaveExcitationEngine(Algorithm):
 
                 # all Bs that fit completely to the left, but are not in inf_sum
                 for j in range(-L*self.outer.shift_unit_cell, 0):
-                    if j%L not in self.outer.sites:
-                        continue
                     if j + size <= 0:
                         LP = self.outer.GS_env_L.get_LP(j%L)
                         LP_B = self.outer.attach_left(self.VLs[j%L], vec[j%L], [self.ALs[k % L] for k in range(j, j+size)], LP, Ws=[self.Ws[k % L] for k in range(j, j+size)]) *np.exp(1.0j * self.p * L)
@@ -892,8 +1178,6 @@ class MultiSitePlaneWaveExcitationEngine(Algorithm):
                     LP =  self.outer.GS_env_L.get_LP((j-size+1)%L)
                     phase = (j-size+1)//L
                     LB = append_left_env([self.ARs[j%L]], [self.ALs[j%L]], LB, Ws=[self.Ws[j%L]])
-                    if (j-size+1)%L not in self.outer.sites:
-                        continue
                     LB += self.outer.attach_left(self.VLs[(j-size+1)%L], vec[(j-size+1)%L], [self.ALs[k % L] for k in range(j-size+1, j+1)], LP, Ws=[self.Ws[k % L] for k in range(j-size+1, j+1)]) *np.exp(-1.0j * self.p * L * phase)
 
                 LB = npc.tensordot(LB, self.VLs[i].conj(), axes=(['vR*'], ['vL*']))
@@ -904,10 +1188,23 @@ class MultiSitePlaneWaveExcitationEngine(Algorithm):
             return total
 
     def initial_guess(self, qtotal_change):
+        """
+        Initial guess for the `X` tensors within a fixed charge sector.
+
+        Parameters
+        ----------
+        qtotal_change : list of int
+            For each charge sector specify how `X` should change the charge.
+        
+        Returns
+        -------
+        X_init : list of :class:`npc.Array`
+            Initial guess for excitation tensors for each site of the unit cell.
+        """
         X_init = []
         valid_charge = False
         for i in range(self.L):
-            # start with random state
+            # start with random complex state
             vL = self.VLs[i].get_leg('vR').conj()
             vL_label = 'vL'
             if self.size > 1:
@@ -932,10 +1229,7 @@ class MultiSitePlaneWaveExcitationEngine(Algorithm):
                 valid_charge = True
                 th0 /= npc.norm(th0)
                 
-            if i in self.sites:
-                X_init.append(th0)
-            else:
-                X_init.append(th0.zeros_like())
+            X_init.append(th0)
 
         logger.info("Norms of the initial guess: %r.", [npc.norm(x) for x in X_init])
         assert valid_charge, "No X is non-zero; charge is not valid for gluing."

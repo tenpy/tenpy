@@ -1,4 +1,26 @@
-# Copyright 2022-2023 TeNPy Developers, GNU GPLv3
+r"""This module contains a base class for a Momentum Matrix Product State.
+
+This is an extension of the uniform MPS :class:`~tenpy.networks.uniform_mps.UniformMPS`.
+
+For each unit-cell site of the initial uniform MPS, we define an excitation tensor `B`.
+The momentum state with momentum p is then constructed by the infinite sum, where one of the tensors of
+the uniform MPS is replaced by the excitation tensor:
+
+    |           ipn  ...--AL[i-1] -- B[i] -- AR[i+1] -- ...
+    | \sum_n   e            |         |        |
+
+
+The `B` tensors can possibly act on multiple neighboring sites to include larger excitations. 
+Furthermore, the `B` is decomposed into:
+    |           -B- = - VL -- X -
+    |            |      |
+
+Here, `VL` is the orthogonal complement of the corresponding `AL` tensor, such that the state is
+always orthogonal to the initial uniform MPS. `X` parametrizes the excited states.
+
+"""
+
+# Copyright (C) TeNPy Developers, GNU GPLv3
 
 import numpy as np
 import logging
@@ -7,6 +29,32 @@ logger = logging.getLogger(__name__)
 __all__ = ['MomentumMPS']
 
 class MomentumMPS:
+    r"""A Matrix Product State, finite (MPS) or infinite (iMPS).
+
+    Parameters
+    ----------
+    Xs : list of :class:`npc.Array`
+        Excitation tensors for each site of the unit cell.
+    uMPS : :class:`~tenpy.networks.uniform_mps.UniformMPS`
+        The uniform MPS on which the excitations are based.
+    p : float
+        The momentum of the state.
+    n_sites : int
+        Number of sites for each excitation.
+  
+    Attributes
+    ----------
+    dtype : type
+        The data type of the ``_X``.
+    _X : list of :class:`npc.Array`
+        The excitation matrices of the MPS. Labels are ``vL, p1, ..., p{n_sites-1}, vR``.
+    uMPS_GS : :class:`~tenpy.networks.uniform_mps.UniformMPS`
+        The uniform MPS, representing the ground state.
+    p : float
+        The momentum of the state.
+    n_sites : int
+        Number of sites for each excitation.
+    """
     def __init__(self, Xs, uMPS, p, n_sites=1):
         assert len(Xs) == uMPS.L, "Need as many excitations as sites in unit cell."
         self.dtype = dtype = np.find_common_type([X.dtype for X in Xs], [])
@@ -77,8 +125,8 @@ class MomentumMPS:
         obj.uMPS_GS.test_sanity()
         return obj
 
-    def get_B(self, i, copy=False):
-        """Return (view of) `X` at site `i` in canonical form.
+    def get_X(self, i, copy=False):
+        """Return (view of) `X` at site `i`.
 
         Parameters
         ----------
@@ -96,16 +144,26 @@ class MomentumMPS:
 
         """
         i = self._to_valid_index(i)
-        B = self._B[i]
+        X = self._X[i]
         if copy:
-            B = B.copy()
-        return B
+            X = X.copy()
+        return X
+    
+    def set_X(self, i, X):
+        """Set `X` at site `i`.
 
-    def entanglement_entropy(self, n=1, bonds=None):
-        raise NotImplementedError()
-
-    def expectation_value_term(self, term):
-        raise NotImplementedError()
+        Parameters
+        ----------
+        i : int
+            Index choosing the site.
+        X : :class:`~tenpy.linalg.np_conserved.Array`
+            The 'matrix' at site `i`. No copy is made!
+            Should have leg labels ``'vL', 'p1', ..., 'p{n_sites-1}', 'vR'`` (not necessarily in that order).
+        
+        """
+        i = self._to_valid_index(i)
+        self.dtype = np.promote_types(self.dtype, X.dtype)
+        self._X[i] = X
 
     def _to_valid_index(self, i):
         """Make sure `i` is a valid index."""

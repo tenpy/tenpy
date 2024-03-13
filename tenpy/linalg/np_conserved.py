@@ -3429,6 +3429,8 @@ def inner(a, b, axes=None, do_conj=False):
     inner_product : dtype
         A scalar (of common dtype of `a` and `b`) giving the full contraction of `a` and `b`.
     """
+    if isinstance(a, list) and isinstance(b, list):
+        return np.sum([inner(w, v, axes=axes, do_conj=do_conj) for w, v in zip(a, b)])
     if a.rank != b.rank:
         raise ValueError("different rank!")
     if axes is None or axes == 'range':
@@ -3744,7 +3746,7 @@ def norm(a, ord=None, convert_to_float=True):
             a = np.asarray(a, new_type)  # doesn't copy, if the dtype did not change.
         return np.linalg.norm(a.reshape((-1, )), ord)
     elif isinstance(a, list):
-        np.linalg.norm([norm(p) for p in a] + [0])
+        return np.linalg.norm([norm(p) for p in a] + [0])
     else:
         raise ValueError("unknown type of a")
 

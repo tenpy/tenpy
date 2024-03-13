@@ -12,7 +12,7 @@ from ..linalg import np_conserved as npc
 from ..models.model import Model
 from ..networks.mpo import MPOEnvironment, MPOTransferMatrix
 from ..networks.mps import MPS, InitialStateBuilder
-from ..networks.umps import uMPS
+from ..networks.uniform_mps import UniformMPS
 from ..algorithms.mps_common import ZeroSiteH
 from ..linalg import krylov_based
 from ..linalg.sparse import SumNpcLinearOperator
@@ -81,6 +81,19 @@ class GroundStateSearch(Simulation):
 
 
 class PlaneWaveExcitations(GroundStateSearch):
+    """Simulation for plane-wave excitations.
+
+    Parameters
+    ----------
+    options : dict-like
+        The simulation parameters. Ideally, these options should be enough to fully specify all
+        parameters of a simulation to ensure reproducibility.
+
+    Options
+    -------
+    .. cfg:config :: PlaneWaveExcitations
+        :include: Simulation
+    """
     default_algorithm = 'PlaneWaveExcitationEngine'
 
     def __init__(self, options, *, gs_data=None, **kwargs):
@@ -136,16 +149,16 @@ class PlaneWaveExcitations(GroundStateSearch):
 
         # intialize original state
         self.psi = gs_data['psi']  # no copy!
-        assert isinstance(self.psi, MPS) or isinstance(self.psi, uMPS)
+        assert isinstance(self.psi, MPS) or isinstance(self.psi, UniformMPS)
         if np.linalg.norm(self.psi.norm_test()) > self.options.get('orthogonal_norm_tol', 1.e-12):
             if isinstance(self.psi, MPS):
                 self.logger.info("call psi.canonical_form() on ground state")
-                psi0.canonical_form()
+                self.psi.canonical_form()
             else:
                 raise ValueError('uMPS does not pass norm test. Run VUMPS to get ground state or \n' +
                                  'convert to MPS and canonicalize.')
         if isinstance(self.psi, MPS):
-            self.psi = uMPS.from_MPS(self.psi)
+            self.psi = UniformMPS.from_MPS(self.psi)
 
         resume_data = gs_data.get('resume_data', {})
         if resume_data.get('converged_environments', False):
@@ -477,9 +490,9 @@ class OrthogonalExcitations(GroundStateSearch):
             self.orthogonal_to = []  # so we don't need to orthogonalize against original g.s.
             # optimization: delay calculation of the reference ground_state_energy
             # until self.switch_charge_sector() is called by self.init_algorithm()
-        return data
+        return gs_fn, gs_data
 
-    def extract_segment_from_infinite(self, psi0_inf, model_inf, resume_data):
+    def extract_segment_from_infinite(self, psi0_orig, model_orig, resume_data):
         """Extract a finite segment from the infinite model/state.
 
         Parameters
@@ -671,7 +684,7 @@ class OrthogonalExcitations(GroundStateSearch):
         if len(self.orthogonal_to) == 0:
             self.switch_charge_sector()
 
-    def switch_charge_sector(self):
+    def switch_charge_sector(self, psi0_seg):
         """Change the charge sector of :attr:`psi` in place."""
         if self.psi.chinfo.qnumber == 0:
             raise ValueError("can't switch charge sector with trivial charges!")
@@ -787,6 +800,7 @@ class OrthogonalExcitations(GroundStateSearch):
     def run_algorithm(self):
         N_excitations = self.options.get("N_excitations", 1)
         ground_state_energy = self.results['ground_state_energy']
+        E_shift = lanczos_params['E_shift']
         self.logger.info("reference ground state energy: %.14f", ground_state_energy)
         if ground_state_energy > - 1.e-7:
             # TODO can we fix all of this by using H -> H + E_shift |ortho><ortho| ?
@@ -796,7 +810,7 @@ class OrthogonalExcitations(GroundStateSearch):
                     ground_state_energy + 0.5 * E_shift > 0:
                 # the factor of 0.5 is somewhat arbitrary, to ensure that
                 # also excitations have energy < 0
-                print("lanczos_params['E_shift']:", lanczos_params['E_shift'])
+                print("lanczos_params['E_shift']:", E_shift)
                 raise ValueError("You need to set use diag_method='lanczos' and negative enough "
                                  f"lanczos_params['E_shift'] < {-2.* ground_state_energy:.2f}")
 
@@ -1411,12 +1425,12 @@ class TopologicalExcitations(OrthogonalExcitations):
                                   qtotal=list(self.gluing_charge),
                                   labels=['vL', 'vR'])
         lanczos_params = self.options.get("lanczos_params", {}) # See if lanczos_params is in yaml, if not use empty dictionary
-        _, th0, _ = lanczos.LanczosGroundState(H0, th0, lanczos_params).run()
+        _, th0, _ = krylov_based.LanczosGroundState(H0, th0, lanczos_params).run()
 
         norm = npc.norm(th0)
         self.logger.info("Norm of theta guess: %.8f", norm)
         if np.isclose(norm, 0):
-            raise ValueError(f"Norm of inserted theta with charge {list(qtotal_change)} on site index {site:d} is zero.")
+            raise ValueError(f"Norm of inserted theta with charge {list(self.gluing_charge)} on site index {boundary:d} is zero.")
 
         U, s, Vh = npc.svd(th0, inner_labels=['vR', 'vL'])
         seg_alpha.set_B(seg_alpha.L-1, npc.tensordot(seg_alpha.get_B(seg_alpha.L-1, 'A'), U, axes=['vR', 'vL']), form='A') # Put AU into last site of left segment

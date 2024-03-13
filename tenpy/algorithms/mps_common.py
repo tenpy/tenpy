@@ -82,7 +82,7 @@ class Sweep(Algorithm):
             :meth:`matvec` is formally more expensive,
             :math:`O(2 d^3 \chi^3 D)`.
         lanczos_params : dict
-            Lanczos parameters as described in :cfg:config:`Lanczos`.
+            Lanczos parameters as described in :cfg:config:`KrylovBased`.
 
     Attributes
     ----------
