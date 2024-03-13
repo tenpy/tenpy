@@ -73,8 +73,8 @@ all = ["tenpy[plot, io, test, extra, docbuild]"]
 tenpy-run = "tenpy:console_main"
 
 
-[tool.setuptools]
-packages = ["tenpy"]
+[tool.setuptools.packages.find]
+include = ['tenpy*']
 
 
 [tool.setuptools.dynamic]
