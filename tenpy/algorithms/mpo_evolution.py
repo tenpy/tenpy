@@ -13,6 +13,7 @@ from .algorithm import TimeEvolutionAlgorithm, TimeDependentHAlgorithm
 from ..linalg import np_conserved as npc
 from .truncation import TruncationError
 from ..tools.params import asConfig
+from ..tools.misc import consistency_check
 
 __all__ = ['ExpMPOEvolution', 'TimeDependentExpMPOEvolution']
 
@@ -41,6 +42,11 @@ class ExpMPOEvolution(TimeEvolutionAlgorithm):
         order : int
             Order of the algorithm. The total error up to time `t` scales as ``O(t*dt^order)``.
             Implemented are order = 1 and order = 2.
+        max_dt : float | None
+            Threshold for raising errors on too large time steps. Default ``1.0``.
+            The trotterization in the time evolution operator assumes that the time step is small.
+            We raise an error if it is not.
+            Can be downgraded to a warning by setting this option to ``None``.
 
     Attributes
     ----------
@@ -97,7 +103,8 @@ class ExpMPOEvolution(TimeEvolutionAlgorithm):
             return  # nothing to do: _U is cached
         self._U_param = U_param
         logger.info("Calculate U for %s", U_param)
-
+        consistency_check(dt, self.options, 'max_dt', 1.,
+                          'delta_t > ``max_delta_t`` is unreasonably large for trotterization.')
         H_MPO = self.model.H_MPO
         if order == 1:
             U_MPO = H_MPO.make_U(dt * -1j, approximation=approximation)

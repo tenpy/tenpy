@@ -49,6 +49,7 @@ from .algorithm import TimeEvolutionAlgorithm, TimeDependentHAlgorithm
 from ..linalg import np_conserved as npc
 from .truncation import svd_theta, TruncationError, truncate
 from ..linalg import random_matrix
+from ..tools.misc import consistency_check
 
 __all__ = ['TEBDEngine', 'Engine', 'QRBasedTEBDEngine', 'RandomUnitaryEvolution', 'TimeDependentTEBD']
 
@@ -74,6 +75,11 @@ class TEBDEngine(TimeEvolutionAlgorithm):
         E_offset : None | list of float
             Energy offset to be applied in :meth:`calc_U`, see doc there.
             Only used for real-time evolution!
+        max_delta_t : float | None
+            Threshold for raising errors on too large time steps. Default ``1.0``.
+            The trotterization in the time evolution operator assumes that the time step is small.
+            We raise an error if it is not.
+            Can be downgraded to a warning by setting this option to ``None``.
 
     Attributes
     ----------
@@ -320,7 +326,8 @@ class TEBDEngine(TimeEvolutionAlgorithm):
             return  # nothing to do: U is cached
         self._U_param = U_param
         logger.info("Calculate U for %s", U_param)
-
+        consistency_check(delta_t, self.options, 'max_delta_t', 1.,
+                          'delta_t > ``max_delta_t`` is unreasonably large for trotterization.')
         L = self.psi.L
         self._U = []
         for dt in self.suzuki_trotter_time_steps(order):
@@ -980,8 +987,6 @@ class RandomUnitaryEvolution(TEBDEngine):
 
     def calc_U(self):
         """Draw new random two-site unitaries replacing the usual `U` of TEBD.
-
-        The parameter `dt` is only there for compatibility with parent classes and is ignored.
 
         .. cfg:configoptions :: RandomUnitaryEvolution
 
