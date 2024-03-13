@@ -8,6 +8,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 from .truncation import TruncationError
+from ..tools.misc import consistency_check
 from ..tools.events import EventHandler
 from ..tools.params import asConfig
 from ..tools.cache import DictCache
@@ -44,6 +45,12 @@ class Algorithm:
 
         trunc_params : dict
             Truncation parameters as described in :cfg:config:`truncation`.
+        max_cylinder_width : int | None
+            Threshold for raising errors on too large cylinder circumferences. Default ``18``.
+            The cost of simulations scales very unfavorably with the cylinder circumference.
+            If it is too large, you will not be able to choose a reasonably large bond dimension
+            *and* have enough RAM to do the simulation. We raise an error in that case.
+            Can be downgraded to a warning by setting this option to ``None``.
 
     Attributes
     ----------
@@ -79,6 +86,13 @@ class Algorithm:
         self.cache = cache
         self.checkpoint = EventHandler("algorithm")
         self._resume_psi = None
+        try:
+            is_cylinder = any(bc == 'periodic' for bc in model.lat.boundary_conditions[1:])
+        except AttributeError:  # For VariationalApplyMPO, this is not a Model and just the MPO
+            is_cylinder = False
+        if is_cylinder:
+            consistency_check(model.lat.N_sites_per_ring, self.options, 'max_cylinder_width', 18,
+                              'Maximum cylinder width (``max_cylinder_width``) exceeded.')
 
     @classmethod
     def switch_engine(cls, other_engine, *, options=None, **kwargs):
@@ -436,6 +450,15 @@ class TimeEvolutionAlgorithm(Algorithm):
         dt : float
             Small time step. Might be ignored if already used in :meth:`prepare_update`.
 
+        Options
+        -------
+        .. cfg:config :: TimeEvolutionAlgorithm
+
+            max_trunc_err : float
+                Threshold for raising errors on too large truncation errors. Default ``0.01``.
+                When the total accumulated truncation error (its ``eps``) exceeds this value,
+                we raise. Can be downgraded to a warning by setting this option to ``None``.
+
         Returns
         -------
         trunc_err : :class:`~tenpy.algorithms.truncation.TruncationError`
@@ -445,6 +468,8 @@ class TimeEvolutionAlgorithm(Algorithm):
 
         for _ in range(N_steps):
             trunc_err += self.evolve_step(dt)
+            consistency_check(trunc_err.eps, self.options, 'max_trunc_err', 0.01,
+                              'Maximum truncation error (``max_trunc_err``) exceeded.')
 
         self.evolved_time = self.evolved_time + N_steps * dt
         # (this is done to avoid problems of users storing self.trunc_err after each `update`)

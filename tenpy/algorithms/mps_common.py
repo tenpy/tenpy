@@ -28,7 +28,7 @@ from ..networks.mps import MPSEnvironment, MPS
 from .truncation import truncate, svd_theta, TruncationError
 from ..linalg import np_conserved as npc
 from ..tools.params import asConfig
-from ..tools.misc import find_subclass
+from ..tools.misc import find_subclass, consistency_check
 from ..tools.process import memory_usage
 import numpy as np
 import time
@@ -737,6 +737,12 @@ class IterativeSweeps(Sweep):
     -------
     .. cfg:config :: IterativeSweeps
         :include: Sweep
+
+        max_trunc_err : float
+            Threshold for raising errors on too large truncation errors. Default ``0.0001``.
+            If the any truncation error :attr:`~tenpy.algorithms.truncation.TruncationError.eps`
+            on the final sweep exceeds this value, we raise.
+            Can be downgraded to a warning by setting this option to ``None``.
     
     """
 
@@ -754,6 +760,8 @@ class IterativeSweeps(Sweep):
             self.status_update(iteration_start_time=iteration_start_time)
             is_first_sweep = False
         self.post_run_cleanup()
+        consistency_check(np.max(self.trunc_err_list), self.options, 'max_trunc_err', 1e-4,
+                          'Maximum truncation error (``max_trunc_err``) exceeded.')
         return result
 
     def pre_run_initialize(self):

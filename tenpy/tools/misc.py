@@ -2,6 +2,7 @@
 # Copyright (C) TeNPy Developers, GNU GPLv3
 
 import logging
+import operator
 import numpy as np
 from .optimization import bottleneck
 from .process import omp_set_nthreads
@@ -19,7 +20,8 @@ __all__ = [
     'zero_if_close', 'pad', 'any_nonzero', 'add_with_None_0', 'chi_list', 'group_by_degeneracy',
     'get_close', 'find_subclass', 'get_recursive', 'set_recursive', 'update_recursive',
     'merge_recursive', 'flatten', 'setup_logging', 'build_initial_state', 'setup_executable',
-    'convert_memory_units'
+    'convert_memory_units', 'consistency_check', 'TenpyInconsistencyError',
+    'TenpyInconsistencyWarning'
 ]
 
 _not_set = object()  # sentinel
@@ -1151,3 +1153,75 @@ def convert_memory_units(value, unit_from='bytes', unit_to=None):
         return value / f, unit_to
     value = value / factors[units.index(unit_to)]  # now convert back to unit_to
     return value, unit_to
+
+
+class TenpyInconsistencyError(Exception):
+    """Error class that is raised when a consistency check fails.
+
+    See :meth:`consistency_check`."""
+    pass
+
+
+class TenpyInconsistencyWarning(Warning):
+    """Warning category that is emitted when a consistency check fails.
+
+    See :meth:`consistency_check`."""
+    pass
+
+
+def consistency_check(value, options, threshold_key, threshold_default, msg, compare='<='):
+    """Perform a consistency check, raising an error if it is violated.
+
+    At several points in the library we perform checks that detect if::
+
+        a) Parameters do not permit the simulation to complete on typical cluster hardware,
+           e.g. because it would need to much memory or runtime.
+
+        b) Parameters do not permit useable results, e.g. if the time step is too large to trust
+           a Suzuki-Trotter approximation.
+
+        c) Results are unreliable, e.g. if the truncation errors are too large
+
+    This necessarily requires heuristic threshold values for each of those conditions.
+    We hard code default values, informed by our experience, typically as magic numbers for the
+    `threshold_default` argument of this function.
+    If the threshold is exceeded, a :class:`TenpyInconsistencyError` is raised.
+    To manually adjust the threshold, we provide a config option for each check, such as
+    e.g. :cfg:option:`Algorithm.max_cylinder_width`.
+    It can be set to ``None``, which causes a :class:`TenpyInconsistencyWarning` to be emitted
+    instead of the error.
+
+    Parameters
+    ----------
+    value
+        The value to check. Must support the `compare` operation.
+    options : :class:`~tenpy.tools.params.Config` | dict-like
+        The options that may contain the manually overriding threshold value.
+    threshold_key : str
+        The key of the threshold value in `options`.
+        If present, the value is used as the threshold and takes precedence over `threshold_default`.
+        If the value is ``None``, the `threshold_default` is used for comparison, and if violated,
+        we only issue a warning (``warnings.warn``) instead of raising an error.
+    threshold_default : float
+        The default value for the threshold
+    msg : str
+        The error message, in case the check fails.
+    compare : '<=' | '<' | '>' | '>=' | '!=' | '==' | callable
+        By default, we check if ``value <= threshold`` and raise otherwise.
+        This allows other comparison operations.
+        A callable means we check ``compare(value, threshold)``.
+    """
+    threshold = options.get(threshold_key, threshold_default)
+    warn_instead = False
+    if threshold is None:
+        warn_instead = True
+        threshold = threshold_default
+    warn_instead = True  # TODO for v0.99, we always just warn and never raise.
+                         # will remove this line and unleash errors for v1.0
+    compare_func = {'<=': operator.le, '<': operator.lt, '>': operator.gt, '>=': operator.ge,
+                    '!=': operator.ne, '==': operator.eq}.get(compare, compare)
+    if not compare_func(value, threshold):
+        if warn_instead:
+            warnings.warn(msg, category=TenpyInconsistencyWarning, stacklevel=2)
+        else:
+            raise TenpyInconsistencyError(msg)
