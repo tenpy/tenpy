@@ -2445,9 +2445,8 @@ class MPS(BaseMPSExpectationValue):
         self.sites = [self.sites[i] for i in inds]
         self.form = [self.form[i] for i in inds]
         self._B = [self._B[i] for i in inds]
-        S_new = [self._S[i] for i in inds]
-        S_new.append(self._S[0])
-        self._S = S_new
+        self._S = [self._S[i] for i in inds]
+        self._S.append(self._S[0])
 
     def overlap_translate_finite(self, psi, shift=1):
         r"""Contract ``<self|T^N|psi>`` for translation `T` with finite, periodic boundaries.

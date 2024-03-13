@@ -53,15 +53,12 @@ class Simulation:
 
     The preferred way to run simulations is in a `with` statement, which allows us to redirect
     error messages to the log files, timely warn about unused parameters and to properly close any
-    open (cache) files. In other words, use the simulation class like this::
+    open files. In other words, use the simulation class like this::
 
         with Simulation(options, ...) as sim:
             results = sim.run()
 
     The wrappers :func:`run_simulation` and :func:`run_seq_simulations` do that.
-
-    The other, expected way to run the simulation is "resuming" from a checkpoint of an
-    interrupted simulation run, for which you can use :func:`resume_from_checkpoint`.
 
     Parameters
     ----------
@@ -80,12 +77,6 @@ class Simulation:
     -------
     .. cfg:config :: Simulation
 
-        simulation_class : str | class
-            Name or class of the Simulation Class to be used.
-            Read out before class initialization in :func:`run_simulation` or similar functions.
-        simulation_class_kwargs : dict
-            Keyword arguemnts to be given to the simulation class.
-            Read out before class initialization in :func:`run_simulation` or similar functions.
         directory : str
             If not None (default), switch to that directory at the beginning of the simulation.
         log_params : dict
@@ -170,9 +161,6 @@ class Simulation:
     #: name of the default algorithm `engine` class
     default_algorithm = 'TwoSiteDMRGEngine'
 
-    #: name of the default initial_state_builder class
-    default_initial_state_builder = 'InitialStateBuilder'
-
     #: tuples as for :cfg:option:`Simulation.connect_measurements` that get added if
     #: the :cfg:option:`Simulation.use_default_measurements` is True.
     default_measurements = [
@@ -222,12 +210,11 @@ class Simulation:
                               "this might or might not be what you want!")
             np.random.seed(random_seed)
             self.options.subconfig('model_params').setdefault('random_seed', random_seed + 123456)
-        if not self.loaded_from_checkpoint:
-            self.results = {
-                'simulation_parameters': self.options,
-                'version_info': self.get_version_info(),
-                'finished_run': False,
-            }
+        self.results = {
+            'simulation_parameters': self.options,
+            'version_info': self.get_version_info(),
+            'finished_run': False,
+        }
         self._last_save = time.time()
         self.measurement_event = EventHandler("psi, simulation, model, results")
         if resume_data is not None:
@@ -334,9 +321,8 @@ class Simulation:
         sim.loaded_from_checkpoint = True  # hook to disable parts of the __init__()
         if 'resume_data' in checkpoint_results:
             kwargs.setdefault('resume_data', checkpoint_results['resume_data'])
-        sim.results = checkpoint_results
         sim.__init__(options, **kwargs)
-        # convert measurement arrays back to lists to allow easy appending
+        sim.results = checkpoint_results
         if 'measurements' in checkpoint_results:
             sim.results['measurements'] = {k: list(v)
                                            for k, v in sim.results['measurements'].items()}
@@ -452,8 +438,7 @@ class Simulation:
                 Whether the final :attr:`psi` should be included into the output :attr:`results`.
         """
         if not hasattr(self, 'psi'):
-            builder_class = self.options.get('initial_state_builder_class',
-                                             self.default_initial_state_builder)
+            builder_class = self.options.get('initial_state_builder_class', 'InitialStateBuilder')
             Builder = find_subclass(InitialStateBuilder, builder_class)
             params = self.options.subconfig('initial_state_params')
             initial_state_builder = Builder(self.model.lat, params, self.model.dtype)
@@ -487,8 +472,7 @@ class Simulation:
         if group_sites > 1:
             if not self.loaded_from_checkpoint or self.psi.grouped < group_sites:
                 self.psi.group_sites(group_sites)
-            self.model_ungrouped = self.model
-            self.model = self.model.copy()
+            self.model_ungrouped = self.model.copy()
             self.model.group_sites(group_sites)
             if to_NN:
                 self.model = NearestNeighborModel.from_MPOModel(self.model)
@@ -511,7 +495,7 @@ class Simulation:
         ----------
         **kwargs :
             Extra keyword arguments passed on to the Algorithm.__init__(),
-            for example the `resume_data` when calling :meth:`resume_run`.
+            for example the `resume_data` when calling `resume_run`.
 
         Options
         -------
@@ -535,11 +519,11 @@ class Simulation:
         """
         alg_class_name = self.options.get("algorithm_class", self.default_algorithm)
         AlgorithmClass = find_subclass(Algorithm, alg_class_name)
-        if 'resume_data' in self.results and 'resume_data' not in kwargs:
-            self.logger.info("use results['resume_data'] for initializing the algorithm engine")
+        if 'resume_data' in self.results:
+            self.logger.info("use `resume_data` for initializing the algorithm engine")
             kwargs.setdefault('resume_data', self.results['resume_data'].copy())
             # clean up: they are no longer up to date after algorithm initialization!
-            # up to date resume_data is added again in :meth:`prepare_results_for_save`
+            # up to date resume_data is added in :meth:`prepare_results_for_save`
             self.results['resume_data'].clear()
             del self.results['resume_data']
         kwargs.setdefault('cache', self.cache)
@@ -833,7 +817,7 @@ class Simulation:
             overwrite_output : bool
                 Only makes a difference if `skip_if_output_exists` is False and the file exists.
                 In that case, with `overwrite_output`, just save everything under that name again,
-                or with `overwrite_output` =False, replace
+                or with `overwrite_output`=False, replace
                 ``filename.ext`` with ``filename_01.ext`` (and further increasing numbers)
                 until we get a filename that doesn't exist yet.
             safe_write : bool
@@ -956,7 +940,7 @@ class Simulation:
 
         Options
         -------
-        .. cfg:configoptions :: Simulation
+        :cfg:configoptions :: Simulation
 
             save_resume_data : bool
                 If True, include data from :meth:`~tenpy.algorithms.Algorithm.get_resume_data`
@@ -981,33 +965,8 @@ class Simulation:
                 if v.dtype != np.dtype(object):
                     measurements[k] = v
         if self.options.get('save_resume_data', self.options['save_psi']):
-            results['resume_data'] = self.get_resume_data()
-            # note: we don't add this to self.results, but only once we save.
+            results['resume_data'] = self.engine.get_resume_data()
         return results
-
-    def get_resume_data(self, sequential_simulations=False):
-        """Hook to allow including simulation data into the `resume_data`.
-
-        Often just a call to :meth:`~tenpy.algorithms.Algorithm.get_resume_data`
-        of the algorithm :attr:`engine`, but some simulations might need to include additional
-        data.
-
-        Parameters
-        ----------
-        sequential_simulations : bool
-            If True, return only the data for re-initializing a sequential simulation run,
-            where we "adiabatically" follow the evolution of a ground state (for variational
-            algorithms), or do series of quenches (for time evolution algorithms);
-            see :func:`run_seq_simulations`.
-
-        Returns
-        -------
-        resume_data : dict
-            Dictionary with necessary data (apart from copies of `psi`, `model`, `options`)
-            that allows to continue the simulation and algorithm run from where we are now.
-            It might contain an explicit copy of `psi`.
-        """
-        return self.engine.get_resume_data(sequential_simulations)
 
     def save_at_checkpoint(self, alg_engine):
         """Save the intermediate results at the checkpoint of an algorithm.
@@ -1270,7 +1229,7 @@ def resume_from_checkpoint(*,
         if 'sequential' in options:
             sequential = options['sequential']
             sequential['index'] += 1
-            resume_data = sim.get_resume_data(sequential_simulations=True)
+            resume_data = sim.engine.get_resume_data(sequential_simulations=True)
     if 'sequential' in options:
         # note: it is important to exit the with ... as sim`` statement before continuing
         # to free memory and cache
@@ -1305,8 +1264,9 @@ def run_seq_simulations(sequential,
     .. cfg:config :: sequential
 
         recursive_keys : list of str
-            Mandatory. The list of recursive keys for the `simulation_params` to be changed.
-            For example an entry ``'model_params.Jz'`` indicates that
+            Mandatory.
+            The list of recursive keys for the `simulation_params` to be changed.
+            for example an entry ``'model_params.Jz'`` indicates that
             ``simulation_params['model_params']['Jz']`` should be changed,
             see :func:`~tenpy.tools.misc.get_recursive`.
         value_lists : list of list
@@ -1349,7 +1309,6 @@ def run_seq_simulations(sequential,
     simulation_class_kwargs : dict | None
     **simulation_params :
         Further arguments as in :func:`run_simulation`.
-        For details on the `simulation_params`, see :cfg:config:`Simulation`.
 
     Returns
     -------
@@ -1358,75 +1317,12 @@ def run_seq_simulations(sequential,
         simulation. Otherwise just the results of the last simulation run.
     """
     sequential = asConfig(sequential, 'sequential')
-
-    if simulation_class_name is not _deprecated_not_set:
-        assert simulation_class == 'GroundStateSearch'
-        warnings.warn(
-            "The `simulation_class_name` argument has been renamed to `simulation_class`"
-            " for more consistency with remaining parameters.", FutureWarning)
-        simulation_class = simulation_class_name
-
-    SimClass = find_subclass(Simulation, simulation_class)
-    if simulation_class_kwargs is None:
-        simulation_class_kwargs = {}
-
-    if collect_results_in_memory:
-        all_results = []
-    else:
-        results = None
-
-    # main loop over simulations
-    for sim_params in expand_sequential_simulation_params(sequential, simulation_params):
-        del results  # free memory
-        if resume_data is not None:
-            simulation_class_kwargs['resume_data'] = resume_data
-
-        with SimClass(sim_params, **simulation_class_kwargs) as sim:
-            results = sim.run()
-            if collect_results_in_memory:
-                all_results.append(results)
-            # save results for the next simulation
-            resume_data = sim.get_resume_data(sequential_simulations=True)
-        assert resume_data['sequential_simulations'], \
-            "super().get_resume_data() without sequential_simulations argument"
-        del sim  # but free memory to avoid too many copies (e.g. the whole environment)
-    # all simulations are done!
-    if collect_results_in_memory:
-        return all_results
-    else:
-        return results
-
-
-def expand_sequential_simulation_params(sequential, simulation_params, chdir=True):
-    """Generator for expand sequential simulation parameters used for :func:`run_seq_simulations`.
-
-    The intended call structure is roughly::
-
-        for sim_params in sequential_simulation_params(sequential, simulation_params):
-            run_simulation(**sim_params)
-
-
-    Parameters
-    ----------
-    sequential : dict-like
-        The sequential parameters as specified in :cfg:config:`sequential`.
-    simulation_params : dict
-        The simulation parameters to be expanded.
-    chdir : bool
-        Flag to disable changing the current work directory to back to the
-        :cfg:option:`sequential.base_directory`.
-
-    Yields
-    ------
-    sim_params : dict
-        Deep copy of the `simulation_params`.
-    """
     separator = sequential.get('separator', '.')
     recursive_keys = sequential['recursive_keys']
     N_keys = len(recursive_keys)
     format_strs = [rkey.split(separator)[-1] + '_{0!s}' for rkey in recursive_keys]
     format_strs = sequential.get('format_strs', format_strs)
-    value_lists = [get_recursive(simulation_params, r_key, separator) for r_key in recursive_keys]
+    value_lists = [get_recursive(simulation_params, r_key) for r_key in recursive_keys]
     value_lists = sequential.get('value_lists', value_lists)
     index = sequential.get('index', 0)
     base_directory = sequential.get('base_directory', os.getcwd())
@@ -1442,6 +1338,17 @@ def expand_sequential_simulation_params(sequential, simulation_params, chdir=Tru
                 assert not k.startswith(check), "really?!?"
     else:
         N_sims = 1
+
+    if simulation_class_name is not _deprecated_not_set:
+        assert simulation_class == 'GroundStateSearch'
+        warnings.warn(
+            "The `simulation_class_name` argument has been renamed to `simulation_class`"
+            " for more consistency with remaining parameters.", FutureWarning)
+        simulation_class = simulation_class_name
+
+    SimClass = find_subclass(Simulation, simulation_class)
+    if simulation_class_kwargs is None:
+        simulation_class_kwargs = {}
 
     # try to create varying output filenames
     # do we save to file at all?
@@ -1465,12 +1372,13 @@ def expand_sequential_simulation_params(sequential, simulation_params, chdir=Tru
     else:  # we don't save results to files
         if not collect_results_in_memory:
             raise ValueError("Refuse to run without producing output")
+    if collect_results_in_memory:
+        all_results = []
 
     simulation_params['sequential'] = sequential
 
     for index in range(index, N_sims):
-        if chdir:
-            os.chdir(base_directory)
+        os.chdir(base_directory)
         # update simulation parameters
         sequential['index'] = index
         sim_params = copy.deepcopy(simulation_params)

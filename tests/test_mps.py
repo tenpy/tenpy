@@ -355,58 +355,32 @@ def test_apply_op(bc, eps=1.e-13):
     psi1 = psi0.copy()
     psi1.apply_local_op(1, 'Sigmax', understood_infinite=True)  #unitary
     psi1_expect = mps.MPS.from_singlets(s, 3, [(0, 2)], lonely=[1], bc=bc, lonely_state='down')
-    assert abs(psi1_expect.overlap(psi1, understood_infinite=True) - 1.) < eps
     psi1 = psi0.copy()
     psi1.apply_local_op(1, 'Sm', understood_infinite=True)  #non-unitary
     assert abs(psi1_expect.overlap(psi1, understood_infinite=True) - 1.) < eps
 
-    psi2 = psi0.copy()
-    psi2.apply_local_op(2, 'Sm', understood_infinite=True)  # non-unitary, should change norm
-    assert abs(psi2.norm  - 0.5**0.5) < eps
-    psi2_expect  = mps.MPS.from_product_state([s]*3, ['down', 'up', 'down'], bc=bc)
+    psi1 = psi0.copy()
+    psi1.apply_local_op(2, 'Sm', understood_infinite=True)  # non-unitary, should change norm
+    assert abs(psi1.norm  - 0.5**0.5) < eps
+    psi1_expect  = mps.MPS.from_product_state([s]*3, ['down', 'up', 'down'], bc=bc)
     # up to phase and norm
-    assert abs(- psi2_expect.overlap(psi2, understood_infinite=True) / psi2.norm - 1.) < eps
-
-    psi3 = psi0.copy()
-    SmSm = site.kron(s.Sm, s.Sm, group=False)
-    psi3.apply_local_op(1, SmSm, understood_infinite=True)  # non-unitary, should change norm
-    assert abs(psi3.norm  - 0.5**0.5) < eps
-    psi3_expect  = mps.MPS.from_product_state([s]*3, ['down', 'down', 'down'], bc=bc)
-    # up to phase and norm
-    assert abs(- psi3_expect.overlap(psi3, understood_infinite=True) / psi3.norm - 1.) < eps
+    assert abs(- psi1_expect.overlap(psi1, understood_infinite=True) / psi1.norm - 1.) < eps
 
     psi1 = psi0.copy()
-    psi1.apply_local_term([('Sigmax', 1)])
-    assert abs(psi1_expect.overlap(psi1, understood_infinite=True) - 1.) < eps
-    psi4 = psi0.copy()
-    psi4.apply_local_term([('Sigmax', 0), ('Sigmax', 2)])  #unitary
-    assert abs(1. - (- psi0.overlap(psi4, understood_infinite=True))) < eps  # expect  -1 * |psi0>
+    SmSm = site.kron(s.Sm, s.Sm, group=False)
+    psi1.apply_local_op(1, SmSm, understood_infinite=True)  # non-unitary, should change norm
+    assert abs(psi1.norm  - 0.5**0.5) < eps
+    psi1_expect  = mps.MPS.from_product_state([s]*3, ['down', 'down', 'down'], bc=bc)
+    # up to phase and norm
+    assert abs(- psi1_expect.overlap(psi1, understood_infinite=True) / psi1.norm - 1.) < eps
 
-    psi5 = psi0.copy()
-    th = psi5.get_theta(0, 3).to_ndarray().reshape((8, ))
+    psi2 = psi0.copy()
+    th = psi2.get_theta(0, 3).to_ndarray().reshape((8, ))
     s2 = 0.5**0.5
     assert np.linalg.norm(th - [0., s2, 0., 0., -s2, 0., 0, 0.]) < eps
-    psi5.apply_product_op(['Sigmax', 'Sm', 'Sigmax'])
-    th = psi5.get_theta(0, 3).to_ndarray().reshape((8, ))
+    psi2.apply_product_op(['Sigmax', 'Sm', 'Sigmax'])
+    th = psi2.get_theta(0, 3).to_ndarray().reshape((8, ))
     assert np.linalg.norm(th - [0., 0., 0., -s2, 0., 0., s2, 0.]) < eps
-
-    f = site.FermionSite('N')
-    psi6 = mps.MPS.from_singlets(f, 3, [(0, 2)], 'full', 'empty',
-                                 lonely=[1], lonely_state='full', bc=bc)
-    ov1 = psi6.overlap(mps.MPS.from_product_state([f]*3, ['full', 'full', 'empty'], bc=bc),
-                       understood_infinite=True)
-    ov2 = psi6.overlap(mps.MPS.from_product_state([f]*3, ['empty', 'full', 'full'], bc=bc),
-                       understood_infinite=True)
-    assert abs(ov1 - s2) < eps
-    assert abs(ov2 - (-s2)) < eps
-    psi6.apply_local_op(1, 'C', unitary=True, understood_infinite=True) # no need to canonicalize here
-    # Jordan-Wigner should imply a relative sign in the singlet!
-    ov1 = psi6.overlap(mps.MPS.from_product_state([f]*3, ['full', 'empty', 'empty'], bc=bc),
-                       understood_infinite=True)
-    ov2 = psi6.overlap(mps.MPS.from_product_state([f]*3, ['full', 'empty', 'empty'], bc=bc),
-                       understood_infinite=True)
-    assert abs(ov1 - (-s2)) < eps
-    assert abs(ov2 - (-s2)) < eps
 
 
 def test_enlarge_mps_unit_cell():

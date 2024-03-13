@@ -577,7 +577,7 @@ class Lattice:
             bc = self.boundary_conditions
             bc[0] = 'periodic'
             cp.boundary_conditions = bc
-        cp.segment_first_last = segment_first_last
+        cp.segment_first_last = first, last
         return cp
 
     def enlarge_mps_unit_cell(self, factor=2):

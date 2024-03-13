@@ -25,8 +25,6 @@ __all__ = simulation.__all__ + [
     'GroundStateSearch',
     'PlaneWaveExcitations',
     'OrthogonalExcitations',
-    'expectation_value_outside_segment_left',
-    'expectation_value_outside_segment_right',
     'TopologicalExcitations',
     'ExcitationInitialState',
 ]
@@ -282,16 +280,13 @@ class OrthogonalExcitations(GroundStateSearch):
     excitation in the background of the ground state, localized by the segment environments.
 
     Note that the segment environments are *soft* boundaries: the spin flip can be outside the
-    segment where we vary the MPS tensors, as far as it is contained in the Schmidt states of the
+    segment where we vary the MPS tensors, as far as it contained in the Schmidt states of the
     original ground state.
 
     Parameters
     ----------
-    orthogonal_to : None | list
+    orthogonal_to : None list
         States to orthogonalize against.
-    gs_data : None | dict
-        Data of the ground state which should be used instead of loading the date from
-        :cfg:option:`OrthogonalExcitations.ground_state_filename`
 
     Options
     -------
@@ -300,7 +295,7 @@ class OrthogonalExcitations(GroundStateSearch):
 
         N_excitations : int
             Number of excitations to find.
-            Don't make this too big, it's going to perform that many algorithm runs!
+            Don't make this too big, it's gonna perform that many algorithm runs!
 
     Attributes
     ----------
@@ -311,91 +306,49 @@ class OrthogonalExcitations(GroundStateSearch):
         The ground state in `orthogonal_to` is not included in the `excitations`.
         While being optimized, a state is saved as :attr:`psi` and not yet included in
         `excitations`.
-    model_orig : :class:`~tenpy.models.model.Model`
-        The original model before extracting the segment.
-    ground_state_orig : :class:`~tenpy.networks.mps.MPS`
-        The original ground state before extracting the segment.
-    initial_state_seg :
-        The initial state to be used in the segment: the ground state, but possibly perturbed
-        and switched charge sector. Should be copied before modification.
-    _gs_data : None | dict
-        Only used to pass `gs_data` to :meth:`init_from_groundstate`;
-        reset to `None` by the latter to allow to free memory.
     init_env_data : dict
         Initialization data for the :class:`~tenpy.networks.mpo.MPOEnvironment`.
         Passed to the algorithm class.
-    initial_state_builder : None | :class:`~tenpy.networks.mps.MPS.InitialStateBuilder`
-        Initialized after first call of :meth:`init_psi`,
-        usually an :class:`ExcitationInitialState` instance.
     results : dict
         In addition to :attr:`~tenpy.simulations.simulation.Simulation.results`, it contains
 
             ground_state_energy : float
-                Reference energy on the segment for the ground state up to an overall constant.
-                Note that this is not just ``energy_density * L`` even for an originally
-                translation invariant, infinite system, since terms crossing the boundaries
-                need to be accounted for on both sides of the segment,
-                and there can be an overall additive constant in the environments.
+                Reference energy for the ground state.
             excitations : list
                 Tensor network states representing the excitations.
                 Only defined if :cfg:option:`Simulation.save_psi` is True.
-            excitation_energies : list of float
-                Energies of the excited states *above* the reference `ground_state_energy`.
-                These are well-defined, physical energies!
-            segment_first_last : (int, int)
-                First and last site of the segment extracted from the ground state.
-                For finite MPS, this is usually just ``0, L-1``.
-
     """
-    default_initial_state_builder = 'ExcitationInitialState'
-
-    def __init__(self, options, *, orthogonal_to=None, gs_data=None, **kwargs):
+    def __init__(self, options, *, orthogonal_to=None, **kwargs):
         super().__init__(options, **kwargs)
-        self.init_env_data = {}
-        self._gs_data = gs_data
-        self.initial_state_builder = None
-        # Simulation.__init__() includes resume_data from kwargs into self.results['resume_data']
-        # self.results might contain entries for excitations etc, if resuming from checkpoint
-        resume_data = self.results.get('resume_data', {})
-        if orthogonal_to is None and 'orthogonal_to' in resume_data and \
-                not resume_data.get('sequential_simulations', False):
-            orthogonal_to = resume_data['orthogonal_to']
+        resume_data = kwargs.get('resume_data', {})
+        if orthogonal_to is None and 'orthogonal_to' in resume_data:
+            orthogonal_to = kwargs['resume_data']['orthogonal_to']
+            self.options.touch('groundstate_filename')
         self.orthogonal_to = orthogonal_to
-        if 'excitations' not in self.results:
-            self.excitations = []
-        else:
-            self.excitations = self.results['excitations']
-        self.results.setdefault('excitation_energies', [])
-        self.results.setdefault('excitation_energies_MPO', [])
-        if resume_data.get('sequential_simulations', False):
-            self.logger.info("sequential run: start with empty orthogonal_to")
-            self._previous_ortho = resume_data['orthogonal_to']
-            del resume_data['orthogonal_to']  # sequential: get modified versions of those again
-            self._previous_first_last = resume_data['segment_first_last']
-            self._previous_offset = resume_data['ortho_offset']
-            # need to reset excitations to not have any yet!
-            self.excitations = []
-            self.excitation_energies = []
-            self.excitation_energies_MPO = []
+        self.excitations = resume_data.get('excitations', [])
+        self.results['excitation_energies'] = []
         if self.options.get('save_psi', True):
             self.results['excitations'] = self.excitations
+        self.init_env_data = {}
 
     def run(self):
-        if not hasattr(self, 'ground_state_orig_alpha'):
-            self.init_from_groundstate()
+        if self.orthogonal_to is None:
+            self.init_orthogonal_from_groundstate()
         return super().run()
 
     def resume_run(self):
-        if not hasattr(self, 'ground_state_orig_beta'):
-            self.init_from_groundstate()
+        if self.orthogonal_to is None:
+            self.init_orthogonal_from_groundstate()
         return super().resume_run()
 
-    def init_from_groundstate(self):
-        """Initialize from the ground state data.
+    def init_orthogonal_from_groundstate(self):
+        """Initialize :attr:`orthogonal_to` from the ground state.
 
-        Load the ground state and initialize the model from it.
-        Calls :meth:`extract_segment`, :meth:`get_reference_energy`,
-        and :meth:`switch_charge_sector`, to finally initialize :attr:`orthogonal_to`.
+        Load the ground state.
+        If the ground state is infinite, call :meth:`extract_segment_from_infinite`.
+
+        An empty :attr:`orthogonal_to` indicates that we will :meth:`switch_charge_sector`
+        in the first :meth:`init_algorithm` call.
 
         Options
         -------
@@ -406,126 +359,91 @@ class OrthogonalExcitations(GroundStateSearch):
             orthogonal_norm_tol : float
                 Tolerance how large :meth:`~tenpy.networks.mps.MPS.norm_err` may be for states
                 to be added to :attr:`orthogonal_to`.
-            apply_local_op: list | None
-                If not `None`, use :meth:`~tenpy.networks.mps.MPS.apply_local_op` to change
-                the charge sector compared to the ground state.
-                Should have the form  ``[site1, operator1, site2, operator2, ...]``.
-                with the operators given as strings (to be read out from the site class).
+            segment_enlarge, segment_first, segment_last : int | None
+                Only for initially infinite ground states.
+                Arguments for :meth:`~tenpy.models.lattice.Lattice.extract_segment`.
+            apply_local_op: dict | None
+                If not `None`, apply :meth:`~tenpy.networks.mps.MPS.apply_local_op` with given
+                keyword arguments to change the charge sector compared to the ground state.
                 Alternatively, use `switch_charge_sector`.
-                `site#` are MPS indices in the *original* ground state, not the segment!
             switch_charge_sector : list of int | None
                 If given, change the charge sector of the excitations compared to the ground state.
                 Alternative to `apply_local_op` where we run a small zero-site diagonalization on
                 the left-most bond in the desired charge sector to update the state.
-            switch_charge_sector_site: int
-                To the left of which site we switch charge sector.
-                MPS index in the *original* ground state, not the segment!
+            write_back_converged_ground_state_environments : bool
+                Only used for infinite ground states, indicating that we should write converged
+                environments of the ground state back to `ground_state_filename`.
+                This is an optimization if you intend to run another `OrthogonalExcitations`
+                simulation in the future with the same `ground_state_filename`.
+                (However, it is not faster when the simulations run at the same time; instead it
+                might even lead to errors!)
 
         Returns
         -------
-        gs_data : dict
+        data : dict
             The data loaded from :cfg:option:`OrthogonalExcitations.ground_state_filename`.
         """
-        gs_fn, gs_data = self._load_gs_data()
-        gs_data_options = gs_data['simulation_parameters']
-        for key in gs_data_options.keys():
+        # TODO: allow to pass ground state data as kwargs to sim instead!
+        gs_fn = self.options['ground_state_filename']
+        data = hdf5_io.load(gs_fn)
+        data_options = data['simulation_parameters']
+        # get model from ground_state data
+        for key in data_options.keys():
             if not isinstance(key, str) or not key.startswith('model'):
                 continue
             if key not in self.options:
-                self.options[key] = gs_data_options[key]
-        self.logger.info("initialize original ground state model")
-        # initialize original model with model_class and model_params from ground state data
+                self.options[key] = data_options[key]
         self.init_model()
-        self.model_orig = self.model
 
-        # intialize original state
-        self.ground_state_orig = psi0 = gs_data['psi']  # no copy!
-        self.ground_state_orig_alpha = self.ground_state_orig_beta = psi0
+        self.ground_state = psi0 = data['psi']
+        resume_data = data.get('resume_data', {})
         if np.linalg.norm(psi0.norm_test()) > self.options.get('orthogonal_norm_tol', 1.e-12):
             self.logger.info("call psi.canonical_form() on ground state")
             psi0.canonical_form()
-
-        # extract segments if necessary; get `init_env_data`.
-        resume_data = gs_data.get('resume_data', {})
-        psi0_seg, write_back = self.extract_segment(psi0, self.model, resume_data)
-        if write_back:
-            self.write_back_environments(gs_data, gs_fn)
-        self.results['segment_first_last'] = self.model.lat.segment_first_last
-
-        # here, psi0_seg is the *unperturbed* ground state in the segment!
-        self.get_reference_energy(psi0_seg)
-
-        # switch_charge_sector and perturb if necessary to define self.initial_state_seg
-        self.initial_state_seg, self.qtotal_diff = self.switch_charge_sector(psi0_seg)
-        self.results['qtotal_diff'] = self.qtotal_diff
-
-        if self.orthogonal_to is None:
-            if any(self.qtotal_diff):
-                self.orthogonal_to = []  # different charge sector
-                # so orthogonal to gs due to charge conservation
-            else:
-                self.orthogonal_to = [psi0_seg]
+        if psi0.bc == 'infinite':
+            write_back = self.extract_segment_from_infinite(psi0, self.model, resume_data)
+            if write_back:
+                self.write_converged_environments(data, gs_fn)
         else:
-            # already initialized orthogonal_to from resume_data
-            # check charge consistency
-            assert tuple(self.results['qtotal_diff']) == tuple(self.qtotal_diff)
-        self.logger.info("finished init_form_groundstate()")
-        return gs_data
+            self.init_env_data = resume_data.get('init_env_data', {})
+            self.ground_state_infinite = None
+            self.results['ground_state_energy'] = data['energy']
 
-    def _load_gs_data(self):
-        """Load ground state data from `ground_state_filename` or use simulation kwargs."""
-        if self._gs_data is not None:
-            self.options.touch('ground_state_filename')
-            gs_fn = None
-            self.logger.info("use ground state data of simulation class arguments")
-            gs_data = self._gs_data
-            self._gs_data = None  # reset to None to potentially allow to free the memory
-            # even though this can only work if the call structure is
-            #      sim = OrthogonalExcitations(..., gs_data=gs_data)
-            #      del gs_data
-            #      with sim:
-            #          sim.run()
+        apply_local_op = self.options.get("apply_local_op", None)
+        switch_charge_sector = self.options.get("switch_charge_sector", None)
+        if apply_local_op is None and switch_charge_sector is None:
+            self.orthogonal_to = [self.ground_state]
+            self.results['ground_state_energy'] = data['energy']
         else:
             # we will switch charge sector
             self.orthogonal_to = []  # so we don't need to orthogonalize against original g.s.
             # optimization: delay calculation of the reference ground_state_energy
             # until self.switch_charge_sector() is called by self.init_algorithm()
-        return gs_fn, gs_data
+        return data
 
-    def extract_segment_from_infinite(self, psi0_orig, model_orig, resume_data):
+    def extract_segment_from_infinite(self, psi0_inf, model_inf, resume_data):
         """Extract a finite segment from the infinite model/state.
 
         Parameters
         ----------
-        psi0_orig : :class:`~tenpy.networks.mps.MPS`
-            Original ground state.
-        model_orig : :class:`~tenpy.models.model.MPOModel`
-            Original model.
+        psi0_inf : :class:`~tenpy.networks.mps.MPS`
+            Original ground state with infinite boundary conditions.
+        model_inf : :class:`~tenpy.models.model.MPOModel`
+            Original infinite model.
         resume_data : dict
             Possibly contains `init_env_data` with environments.
 
         Returns
         -------
-        psi0_seg :
-            Unperturbed ground state in the segment, against which to orthogonalize
-            if we don't switch charge sector.
         write_back : bool
-            Whether :meth:`write_back_environments` should be called.
+            Whether we should call :meth:`write_converged_environments`.
         """
-        if psi0_orig.bc == 'infinite':
-            return self._extract_segment_from_infinite(psi0_orig, model_orig, resume_data)
-        else:
-            return self._extract_segment_from_finite(psi0_orig, model_orig)
-
-    def _extract_segment_from_infinite(self, psi0_inf, model_inf, resume_data):
         enlarge = self.options.get('segment_enlarge', None)
         first = self.options.get('segment_first', 0)
         last = self.options.get('segment_last', None)
-        write_back = self.options.get('write_back_converged_ground_state_environments', False)
-
         self.model = model_inf.extract_segment(first, last, enlarge)
         first, last = self.model.lat.segment_first_last
-
+        write_back = self.options.get('write_back_converged_ground_state_environments', False)
         if resume_data.get('converged_environments', False):
             self.logger.info("use converged environments from ground state file")
             env_data = resume_data['init_env_data']
@@ -536,59 +454,24 @@ class OrthogonalExcitations(GroundStateSearch):
             guess_init_env_data = resume_data.get('init_env_data', None)
             H = model_inf.H_MPO
             env_data = MPOTransferMatrix.find_init_LP_RP(H, psi0_inf, first, last,
-                                                         guess_init_env_data=guess_init_env_data)
+                                                         guess_init_env_data)
         self.init_env_data = env_data
-        ground_state_seg = psi0_inf.extract_segment(first, last)
-        return ground_state_seg, write_back
+        self.ground_state_infinite = psi0_inf
+        self.ground_state = psi0_inf.extract_segment(first, last)
+        return write_back
 
-    def _extract_segment_from_finite(self, psi0_fin, model_fin):
-        first = self.options.get('segment_first', 0)
-        last = self.options.get('segment_last', None)
-        if first != 0 or last is not None:
-            self.model = model_fin.extract_segment(first, last)
-            first, last = self.model.lat.segment_first_last
-            ground_state_seg = psi0_fin.extract_segment(first, last)
-            env = MPOEnvironment(psi0_fin, self.model_orig.H_MPO, psi0_fin)
-            self.init_env_data = env.get_initialization_data(first, last)
-        else:
-            last = psi0_fin.L - 1
-            self.model = model_fin
-            # always define `segment_first_last` to simplify measurments etc
-            self.model.lat.segment_first_last = (first, last)
-            ground_state_seg = psi0_fin
-            self.init_env_data = {}
-        return ground_state_seg, False
-
-    def get_reference_energy(self, psi0_seg):
-        """Obtain ground state reference energy.
-
-        Excitation energies are full contractions of the MPOEnvironment with the environments
-        defined in :attr:`init_env_data`.
-        Hence, the reference energy is also the contraction of the `MPOEnvionment` on the segment.
-
-        Parameters
-        ----------
-        psi0_seg : :class:`~tenpy.networks.msp.MPS`
-            Ground state MPS on the segment, matching :attr:`init_env_data`.
-        """
-        # can't just use gs_data['energy'], since this is just energy density for infinite MPS
-        self.logger.info("Calculate reference energy by contracting environments")
-        env = MPOEnvironment(psi0_seg, self.model.H_MPO, psi0_seg, **self.init_env_data)
-        E = env.full_contraction(0).real
-        self.results['ground_state_energy'] = E
-        return E
-
-    def write_back_environments(self, gs_data, gs_fn):
+    def write_converged_environments(self, gs_data, gs_fn):
         """Write converged environments back into the file with the ground state.
 
         Parameters
         ----------
         gs_data : dict
             Data loaded from the ground state file.
-        gs_fn : str | None
-            Filename where to save `gs_data`. Do nothing if `gs_fn` is None.
+        gs_fn : str
+            Filename where to save `gs_data`.
         """
-        assert self.init_env_data, "should have been defined by extract_segment()"
+        if not self.init_env_data:
+            raise ValueError("Didn't converge new environments!")
         orig_fn = self.output_filename
         orig_backup_fn = self._backup_filename
         try:
@@ -601,8 +484,7 @@ class OrthogonalExcitations(GroundStateSearch):
             if resume_data.get('converged_environments', False):
                 raise ValueError(f"{gs_fn!s} already has converged environments!")
             resume_data['converged_environments'] = True
-            resume_data['psi'] = gs_data['psi'] # could have been modified with canonical_form;
-            # in any case that's the reference ground state we use now!
+            resume_data['psi'] = gs_data['psi']
 
             self.logger.info("write converged environments back to ground state file")
             self.save_results(gs_data)  # safely overwrite old file
@@ -620,71 +502,34 @@ class OrthogonalExcitations(GroundStateSearch):
             initial_state_params : dict
                 The initial state parameters, :cfg:config:`ExcitationInitialState` defined below.
         """
-        # re-initialize even if we already have a psi!
-        if self.initial_state_builder is None:
-            builder_class = self.options.get('initial_state_builder_class',
-                                             self.default_initial_state_builder)
-            params = self.options.subconfig('initial_state_params')
-            Builder = find_subclass(InitialStateBuilder, builder_class)
-            if issubclass(Builder, ExcitationInitialState):
-                # incompatible with InitialStateBuilder: need to pass `sim` to __init__
-                self.initial_state_builder = Builder(self, params)
-            else:
-                self.initial_state_builder = Builder(self.model.lat, params, self.model.dtype)
-
-        if not hasattr(self, '_previous_ortho'):
-            self.psi = self.initial_state_builder.run()
+        if len(self.orthogonal_to) == 0 and not self.loaded_from_checkpoint:
+            self.psi = self.ground_state  # will switch charge sector in init_algorithm()
+            if self.options.get('save_psi', True):
+                self.results['psi'] = self.psi
+            return
+        builder_class = self.options.get('initial_state_builder_class', 'ExcitationInitialState')
+        params = self.options.subconfig('initial_state_params')
+        Builder = find_subclass(InitialStateBuilder, builder_class)
+        if issubclass(Builder, ExcitationInitialState):
+            # incompatible with InitialStateBuilder: pass `sim` to __init__
+            initial_state_builder = Builder(self, params)
         else:
-            # sequential run from previous simulation
-            psi = self._previous_ortho[self._previous_offset + len(self.excitations)]
-            self.psi = self._psi_from_previous_ortho(psi,
-                                                     self._previous_first_last,
-                                                     "previous sequential simulation",
-                                                     False)
+            initial_state_builder = Builder(self.model.lat, params, self.model.dtype)
+        self.psi = initial_state_builder.run()
+
         if self.options.get('save_psi', True):
             self.results['psi'] = self.psi
 
-    def perturb_initial_state(self, psi):
-        """(Slightly) perturb an initial state in place.
-
-        This is used to make sure it's not completely orthogonal to previous orthogonal states
-        anymore; otherwise the effective Hamiltonian would be exactly 0 and we get numerical noise
-        as first guess afterwards.
-
-        Parameters
-        ----------
-        psi : :class:`~tenpy.networks.mps.MPS`
-            The state to be perturbed *in place*.
-
-        Options
-        -------
-        .. cfg:configoptions :: OrthogonalExcitations
-
-            initial_state_randomize_params : dict-like
-                Parameters for the random unitary evolution used to perturb the state a little bit
-                in :meth:`~tenpy.networks.mps.MPS.perturb`.
-                In addition, to those parameters, we read out the arguments `close_1` and
-                `canonicalize` for :meth:`~tenpy.networks.mps.MPS.perturb`.
-
-        """
-        randomize_params = self.options.subconfig('initial_state_randomize_params')
-        close_1 = randomize_params.get('close_1', True)
-        canonicalize = randomize_params.get('canonicalize', True)
-        psi.perturb(randomize_params, close_1=close_1, canonicalize=canonicalize)
-
     def init_algorithm(self, **kwargs):
         kwargs.setdefault('orthogonal_to', self.orthogonal_to)
-        if 'resume_data' not in kwargs and 'resume_data' in self.results:
-            resume_data = self.results['resume_data']
-        else:
-            resume_data = kwargs.setdefault('resume_data', {})
+        resume_data = kwargs.setdefault('resume_data', {})
         resume_data['init_env_data'] = self.init_env_data
         super().init_algorithm(**kwargs)
 
         if len(self.orthogonal_to) == 0:
             self.switch_charge_sector()
 
-    def switch_charge_sector(self, psi0_seg):
+    def switch_charge_sector(self):
         """Change the charge sector of :attr:`psi` in place."""
         if self.psi.chinfo.qnumber == 0:
             raise ValueError("can't switch charge sector with trivial charges!")
@@ -692,143 +537,69 @@ class OrthogonalExcitations(GroundStateSearch):
                          "[contracts environments from right]")
         apply_local_op = self.options.get("apply_local_op", None)
         switch_charge_sector = self.options.get("switch_charge_sector", None)
-        if apply_local_op is None and switch_charge_sector is None:
-            # don't switch charge sector
-            # need to perturb psi0_seg to make sure we have some overlap with psi1, psi2
-            # and that H_eff is not exactly zero on the initial state.
-            psi = psi0_seg.copy()  # copy since we perturb it!
-            initial_state_params = self.options.subconfig('initial_state_params')
-            randomize_params = initial_state_params.subconfig('randomize_params')
-            close_1 = initial_state_params.get('randomize_close_1', True)
-            self.perturb_initial_state(psi)
-            return psi, psi.chinfo.make_valid()  # no change in charges
-
-        psi = psi0_seg.copy()  # might be necessary to orthogonalize against psi0_seg in the end
-        qtotal_before = psi.get_total_charge()
-        self.logger.info("Charges of the original segment: %r", list(qtotal_before))
-
-        if apply_local_op is not None and switch_charge_sector is not None:
-            # TODO: we can lift this restricition if we define whether `switch_charge_sector`
-            # is *in addition* to apply_local_op or overall change in qtotal
-            raise ValueError("Give only one of `switch_charge_sector` and `apply_local_op`")
-
-        if apply_local_op:  # also nothing to do if apply_local_op=[]
-            self._apply_local_op(psi, apply_local_op)
-
-        if switch_charge_sector is not None:
-            self._switch_charge_sector_with_glue(psi, switch_charge_sector)
-
-        self.logger.info("call psi.canonical_form()")
-        psi.canonical_form_finite()  # no need to update envs: keep no envs!
-        # psi.segment_boundaries has trafo compared to `init_env_data`.
-
-        qtotal_after = psi.get_total_charge()
-        qtotal_diff = psi.chinfo.make_valid(qtotal_after - qtotal_before)
+        qtotal_before = self.psi.get_total_charge()
+        env = self.engine.env
+        if apply_local_op is not None:
+            if switch_charge_sector is not None:
+                raise ValueError("give only one of `switch_charge_sector` and `apply_local_op`")
+            self.results['ground_state_energy'] = env.full_contraction(0)
+            for i in range(0, apply_local_op['i'] - 1):
+                env.del_RP(i)
+            for i in range(apply_local_op['i'] + 1, env.L):
+                env.del_LP(i)
+            apply_local_op['unitary'] = True  # no need to call psi.canonical_form
+            self.psi.apply_local_op(**apply_local_op)
+        else:
+            assert switch_charge_sector is not None
+            # get the correct environments on site 0
+            LP = env.get_LP(0)
+            RP = env._contract_RP(0, env.get_RP(0, store=True))  # saves the environments!
+            self.results['ground_state_energy'] = env.full_contraction(0)
+            for i in range(1, self.engine.n_optimize):
+                env.del_LP(i)  # but we might have gotten more than we need
+            H0 = ZeroSiteH.from_LP_RP(LP, RP)
+            if self.model.H_MPO.explicit_plus_hc:
+                H0 = SumNpcLinearOperator(H0, H0.adjoint())
+            vL, vR = LP.get_leg('vR').conj(), RP.get_leg('vL').conj()
+            th0 = npc.Array.from_func(np.ones, [vL, vR],
+                                      dtype=self.psi.dtype,
+                                      qtotal=switch_charge_sector,
+                                      labels=['vL', 'vR'])
+            lanczos_params = self.engine.lanczos_params
+            _, th0, _ = krylov_based.LanczosGroundState(H0, th0, lanczos_params).run()
+            th0 = npc.tensordot(th0, self.psi.get_B(0, 'B'), axes=['vR', 'vL'])
+            self.psi.set_B(0, th0, form='Th')
+        qtotal_after = self.psi.get_total_charge()
+        qtotal_diff = self.psi.chinfo.make_valid(qtotal_after - qtotal_before)
         self.logger.info("changed charge by %r compared to previous state", list(qtotal_diff))
-        return psi, qtotal_diff
-
-    def _apply_local_op(self, psi, apply_local_op):
-        #apply_local_op should have the form [site1, op1, site2, op2, ...]
-        assert len(apply_local_op) % 2 == 0
-        self.logger.info("apply local operators (to switch charge sector)")
-        first, last = self.results['segment_first_last']
-        term = list(zip(apply_local_op[-1::-2], apply_local_op[-2::-2]))  # [(op, site), ...]
-        for op, i in term:
-            j = int(i)  # error for apply_local_op=["Sz", i, ...] instead of [i, "Sz", ...]
-            j = j - first  # convert from original MPS index to segment MPS index
-            if not 0 <= j < psi.L:
-                raise ValueError(f"specified site {j:d} in segment = {i:d} in original MPS"
-                                 f"is not in segment [{first:d}, {last:d}]!")
-        psi.apply_local_term(term, i_offset=-first, canonicalize=False)
-
-    def _switch_charge_sector_with_glue(self, psi, qtotal_change):
-        if psi.chinfo.qnumber == 0:
-            raise ValueError("can't switch charge sector with trivial charges!")
-        first, last = self.results['segment_first_last']
-        # switch_charge_sector_site defaults to the center of the segment
-        # indexed by *original* MPS index
-        site = self.options.get("switch_charge_sector_site", psi.L // 2 + first) - first
-        if not 0 <= site < psi.L:
-            raise ValueError(f"specified site index {site + first:d} in original MPS ="
-                             f"{site:d} in segment MPS is *not* in segment")
-        env = MPOEnvironment(psi, self.model.H_MPO, psi, **self.init_env_data)
-        LP = env.get_LP(site, store=False)
-        RP = env._contract_RP(site, env.get_RP(site, store=False))
-        # no need to save the environments: will anyways call `psi.canonical_form_finite()`.
-        H0 = ZeroSiteH.from_LP_RP(LP, RP)
-        if self.model.H_MPO.explicit_plus_hc:
-            H0 = SumNpcLinearOperator(H0, H0.adjoint())
-        vL, vR = LP.get_leg('vR').conj(), RP.get_leg('vL').conj()
-        th0 = npc.Array.from_func(np.ones, [vL, vR],
-                                  dtype=psi.dtype,
-                                  qtotal=qtotal_change,
-                                  labels=['vL', 'vR'])
-        lanczos_params = self.options.subconfig('algorithm_params').subconfig('lanczos_params')
-        _, th0, _ = krylov_based.LanczosGroundState(H0, th0, lanczos_params).run()
-
-        # Check norm after Lanczos so that it is one.
-        # TODO: check this already before lanczos?
-        norm = npc.norm(th0)
-        self.logger.info("Norm of theta guess: %.8f", norm)
-        if np.isclose(norm, 0):
-            raise ValueError(f"Norm of inserted theta with charge {list(qtotal_change)} on site index {site:d} is zero.")
-
-        U, s, Vh = npc.svd(th0, inner_labels=['vR', 'vL'])
-        psi.set_B(site-1, npc.tensordot(psi.get_B(site-1, 'A'), U, axes=['vR', 'vL']), form='A')
-        psi.set_B(site, npc.tensordot(Vh, psi.get_B(site, 'B'), axes=['vR', 'vL']), form='B')
-        psi.set_SL(site, s)
-
-    # TODO grouping sites doesn't work?
-    #  def group_sites_for_algorithm(self):
-    #      super().group_sites_for_algorithm()
-    #      group_sites = self.grouped
-    #      if group_sites > 1:
-    #          for ortho in self.orthogonal_to:
-    #              if ortho.grouped < group_sites:
-    #                  ortho.group_sites(group_sites)
-    #      # done
-
-    #  def group_split(self):
-    #      # TODO: trunc_params should be attribute of MPS
-    #      if self.grouped > 1:
-    #          trunc_params = self.options['algorithm_params']['trunc_params']
-    #          for ortho in self.orthogonal_to:
-    #              if ortho.grouped > 1:
-    #                  orhto.group_split(trunc_params)
-    #      super().group_split()
+        assert not np.all(qtotal_diff == 0)
 
     def run_algorithm(self):
         N_excitations = self.options.get("N_excitations", 1)
         ground_state_energy = self.results['ground_state_energy']
-        E_shift = lanczos_params['E_shift']
         self.logger.info("reference ground state energy: %.14f", ground_state_energy)
         if ground_state_energy > - 1.e-7:
-            # TODO can we fix all of this by using H -> H + E_shift |ortho><ortho| ?
             # the orthogonal projection does not lead to a different ground state!
             lanczos_params = self.engine.lanczos_params
             if self.engine.diag_method != 'lanczos' or \
-                    ground_state_energy + 0.5 * E_shift > 0:
+                    ground_state_energy + 0.5 * lanczos_params.get('E_shift', 0.) > 0:
                 # the factor of 0.5 is somewhat arbitrary, to ensure that
                 # also excitations have energy < 0
-                print("lanczos_params['E_shift']:", E_shift)
-                raise ValueError("You need to set use diag_method='lanczos' and negative enough "
+                raise ValueError("You need to set use diag_method='lanczos' and small enough "
                                  f"lanczos_params['E_shift'] < {-2.* ground_state_energy:.2f}")
 
-        # loop over excitations
         while len(self.excitations) < N_excitations:
 
             E, psi = self.engine.run()
-            E_MPO = self.engine.env.full_contraction(0) # TODO: measure this while envs are still around?
-            self.results['excitation_energies_MPO'].append(E_MPO - ground_state_energy)  # TODO: should be almost the same?!
+
             self.results['excitation_energies'].append(E - ground_state_energy)
             self.logger.info("excitation energy: %.14f", E - ground_state_energy)
             if np.linalg.norm(psi.norm_test()) > self.options.get('orthogonal_norm_tol', 1.e-12):
                 self.logger.info("call psi.canonical_form() on excitation")
-                psi.canonical_form_finite(envs_to_update=[self.engine.env])
-            self.orthogonal_to.append(psi)  # in `orthogonal_to` we need the grouped, segment psi
-            # but in `excitations` we want the "original", ungrouped, measurement psi
-            psi_meas, _ = self.get_measurement_psi_model(psi, self.model)
-            self.excitations.append(psi_meas)  # save in list of excitations
+                psi.canonical_form()
+            self.excitations.append(psi)
+            self.orthogonal_to.append(psi)
+            # save in list of excitations
             if len(self.excitations) >= N_excitations:
                 break
 
@@ -840,223 +611,13 @@ class OrthogonalExcitations(GroundStateSearch):
         # done
 
     def resume_run_algorithm(self):
-        """Not Implemented"""
         raise NotImplementedError("TODO")
 
-    def get_measurement_psi_model(self, psi, model):
-        """Get psi for measurements.
-
-        Sometimes, the `psi` we want to use for measurements is different from the one the
-        algorithm actually acts on.
-        Here, we split sites, if they were grouped in :meth:`group_sites_for_algorithm`.
-
-        Parameters
-        ----------
-        psi :
-            Tensor network; initially just ``self.psi``.
-            The method should make a copy before modification.
-        model :
-            Model matching `psi` (in terms of indexing, MPS order, grouped sites, ...)
-            Initially just ``self.model``.
-
-        Returns
-        -------
-        psi :
-            The psi suitable as argument for generic measurement functions.
-        model :
-            Model matching `psi` (in terms of indexing, MPS order, grouped sites, ...)
-
-        Options
-        -------
-        .. cfg:configoptions :: OrthogonalExcitations
-
-            measure_add_unitcells : int | (int, int) | None
-                It can be a single value (default=0), or two separate values for left/right.
-                For ``bc_MPS='finite'`` in the :attr`model_orig`, only 0 is allowed.
-                `None` disables the feature, but this may cause measurment functions/results to
-                have unexpected (or possibly wrong, if not accounted for) indexing.
-        """
-        psi, model = super().get_measurement_psi_model(psi, model)  # ungroup if necessary
-
-        measure_add_unitcells = self.options.get('measure_add_unitcells', 0)
-        if measure_add_unitcells is not None:
-            first, last = self.results['segment_first_last']
-            psi, meas_first, meas_last = psi.extract_enlarged_segment(self.ground_state_orig_alpha,
-                                                                      self.ground_state_orig_beta,
-                                                                      first,
-                                                                      last,
-                                                                      measure_add_unitcells)
-            key = 'measure_segment_first_last'
-            if key not in self.results:
-                self.results[key] = (meas_first, meas_last)
-            else:
-                assert self.results[key] == (meas_first, meas_last)
-            model  = self.model_orig.extract_segment(meas_first, meas_last)
-        return psi, model
-
-    def get_resume_data(self, sequential_simulations=False):
-        resume_data = super().get_resume_data(sequential_simulations)
-        if self.options['save_psi'] or sequential_simulations:
-            resume_data['ortho_offset'] = len(self.excitations) - len(self.orthogonal_to)
-            resume_data['orthogonal_to'] = self.orthogonal_to
-        if sequential_simulations:
-            resume_data['segment_first_last'] = self.results['segment_first_last']
-        return resume_data
-
-    def _psi_from_previous_ortho(self, psi, previous_first_last, source="?", perturb=False):
-        """Adjust a state from a previous `resume_data['orthogonal_to']` to be used for self.
-
-        """
-        self.logger.info('initializing psi from %s', source)
-        # enlarge segment size if necessary
-        new_first_last = self.results['segment_first_last']
-        if previous_first_last != new_first_last:
-            prev_first, prev_last = previous_first_last
-            psi, _, _ = psi.extract_enlarged_segment(self.sim.ground_state_orig_alpha,
-                                                     self.sim.ground_state_orig_beta,
-                                                     prev_first,
-                                                     prev_last,
-                                                     new_first_last=new_first_last)
-        # double-check that charges are what we want them to be
-        psi_qtotal = psi.get_total_charge()
-        expect_qtotal = self.initial_state_seg.get_total_charge()
-        if np.any(psi_qtotal - expect_qtotal):
-            raise ValueError(f"psi from {source!s} has different charge "
-                             f"{psi_qtotal!r} than expected {expect_qtotal!r}")
-        psi_legs = psi.outer_virtual_legs()
-        expect_legs = self.initial_state_seg.outer_virtual_legs()
-        for leg_previous, leg_expected in zip(psi_legs, expect_legs):
-            try:
-                leg_previous.test_equal(leg_expected)
-            except ValueError as e:
-                raise ValueError("psi from {source!s} has incompatible legs "
-                                 "with current simulation") from e
-        # finally perturb, if desired
-        if perturb:
-            self.perturb_initial_state(psi)
-        return psi
-
-
-def expectation_value_outside_segment_right(psi_segment, psi_R, ops, lat_segment, sites=None, axes=None):
-    """Calculate expectation values outside of the segment to the right.
-
-    Parameters
-    ----------
-    psi_S :
-        Segment MPS.
-    psi_R :
-        Infinite MPS on the right.
-    lat_segment : :class:`~tenpy.models.lattice.Lattice`
-        The lattice of the segment MPS. In particular, it should have `segment_first_last`
-    ops, sites, axes:
-        As for :meth:`~tenpy.networks.mps.MPS.expectation_value`.
-        `sites` should only have values > 0, with 0 being the first site on the right of the
-        segment. If `ops` is non-uniform, it is indexed as for `psi_R`.
-    """
-    # TODO move these functions to a different location in code?
-    # TODO rigorous tests
-    psi_S = psi_segment
-    assert psi_S.bc == 'segment'
-    if hasattr(lat_segment,"segment_first_last"):
-        first, last = lat_segment.segment_first_last
-    else:
-        first, last = 0,lat_segment.N_sites - 1
-    assert psi_S.L == last - first + 1
-    shift = last + 1 # = first + psi_S.L = index in `sites` relative to MPS index of psi_R
-    if sites is None:
-        # one MPS unit cell plus partially filled if non-trivial `last`
-        sites = np.arange(psi_R.L + (psi_R.L - last + 1 % psi_R.L if last % psi_R.L else 0))
-    sites = [i + shift for i in sites]
-    ops, sites, n, (op_ax_p, op_ax_pstar) = psi_R._expectation_value_args(ops, sites, axes)
-    ax_p = ['p' + str(k) for k in range(n)]
-    ax_pstar = ['p' + str(k) + '*' for k in range(n)]
-    UL, VR = psi_S.segment_boundaries
-    S = psi_S.get_SR(psi_S.L - 1)
-    if VR is None:
-        rho = npc.diag(S**2,
-                        psi_S.get_B(psi_S.L - 1, None).get_leg('vR'),
-                        labels=['vR', 'vR*'])
-    else:
-        rho = VR.scale_axis(S, 'vL')
-        rho = npc.tensordot(rho.conj(), rho, axes=['vL*', 'vL'])
-    E = []
-    k = shift  # starting on that site
-    for i in sorted(sites):
-        assert k <= i
-        while k < i:
-            B = psi_R.get_B(k, form='B')
-            rho = npc.tensordot(rho, B, ['vR', 'vL'])
-            rho = npc.tensordot(B.conj(), rho, [['vL*', 'p*'] , ['vR*', 'p']])
-            k += 1
-        op = psi_R.get_op(ops, i)
-        op = op.replace_labels(op_ax_p + op_ax_pstar, ax_p + ax_pstar)
-        Bs = psi_R.get_B(i, form='B', label_p='0')
-        for k in range(1, n):
-            Bs = npc.tensordot(Bs, psi_R.get_B(i+k, 'B', label_p=str(k)), ['vR', 'vL'])
-        C = npc.tensordot(op, Bs, axes=[ax_pstar, ax_p])
-        C = npc.tensordot(rho, C, axes=['vR', 'vL'])
-        E.append(npc.inner(Bs.conj(), C, axes=[['vL*'] + ax_pstar + ['vR*'],
-                                                ['vR*'] + ax_p + ['vR']]))
-    return np.real_if_close(E)
-
-
-def expectation_value_outside_segment_left(psi_segment, psi_L, ops, lat_segment, sites=None, axes=None):
-    """Calculate expectation values outside of the segment to the right.
-
-    Parameters
-    ----------
-    psi_S :
-        Segment MPS.
-    psi_L :
-        Infinite MPS on the left.
-    ops, sites, axes:
-        As for :meth:`~tenpy.networks.mps.MPS.expectation_value`.
-        `sites` should only have values < 0, with -1 being the first site on the left of the
-        segment. If `ops` is non-uniform, it is indexed as for `psi_L`.
-    """
-    psi_S = psi_segment
-    assert psi_S.bc == 'segment'
-    if hasattr(lat_segment,"segment_first_last"):
-        first, last = lat_segment.segment_first_last
-    else:
-        first, last = 0, lat_segment.N_sites - 1
-    assert psi_S.L == last - first + 1
-    shift = first  # = index in `sites` relative to MPS index of psi_R
-    if sites is None:
-        # one MPS unit cell plus partially filled if non-trivial `first`
-        sites = np.arange(-psi_L.L - (first if first % psi_L.L else 0), 0)
-    sites = [i + shift for i in sites]
-    ops, sites, n, (op_ax_p, op_ax_pstar) = psi_L._expectation_value_args(ops, sites, axes)
-    ax_p = ['p' + str(k) for k in range(n)]
-    ax_pstar = ['p' + str(k) + '*' for k in range(n)]
-    UL, VR = psi_S.segment_boundaries
-    S = psi_S.get_SL(0)
-    if UL is None:
-        rho = npc.diag(S**2,
-                       psi_S.get_B(0, None).get_leg('vL'),
-                       labels=['vL', 'vL*'])
-    else:
-        rho = UL.scale_axis(S, 'vR')
-        rho = npc.tensordot(rho, rho.conj(), axes=['vR', 'vR*'])
-    E = []
-    k = shift -1
-    for i in sorted(sites, reverse=True):
-        assert i <= k
-        while k > i:
-            A = psi_L.get_B(k, form='A')
-            rho = npc.tensordot(A, rho, ['vR', 'vL'])
-            rho = npc.tensordot(rho, A.conj(), [['p', 'vL*'] , ['p*', 'vR*']])
-            k -= 1
-        op = psi_L.get_op(ops, i)
-        op = op.replace_labels(op_ax_p + op_ax_pstar, ax_p + ax_pstar)
-        As = psi_L.get_B(i - (n-1), form='A', label_p='0')
-        for k in range(1, n):
-            As = npc.tensordot(As, psi_L.get_B(i - (n - 1) + k, 'A', label_p=str(k)), ['vR', 'vL'])
-        C = npc.tensordot(op, As, axes=[ax_pstar, ax_p])
-        C = npc.tensordot(C, rho, axes=['vR', 'vL'])
-        E.append(npc.inner(As.conj(), C, axes=[['vL*'] + ax_pstar + ['vR*'],
-                                                ['vL'] + ax_p + ['vL*']]))
-    return np.real_if_close(E[::-1])
+    def prepare_results_for_save(self):
+        results = super().prepare_results_for_save()
+        if 'resume_data' in results:
+            results['resume_data']['excitations'] = self.excitations
+        return results
 
 
 class TopologicalExcitations(OrthogonalExcitations):
@@ -1618,79 +1179,20 @@ class ExcitationInitialState(InitialStateBuilder):
         self.sim = sim
         self.options = asConfig(options, self.__class__.__name__)
         self.options.setdefault('method', 'from_orthogonal')
-        model_dtype = getattr(sim.model, 'dtype', np.float64)
-        super().__init__(sim.model.lat, options, model_dtype)
+        super().__init__(sim.model.lat, options, sim.model.dtype)
 
     def from_orthogonal(self):
-        """Default initialization for :class:`OrthogonalExcitations` from previous states.
-
-        We want to orthogonalize against the ground state to find the next excited state.
-        While formally orthogonal, perturbing the ground state a little bit in a random direction
-        should lead to a significant overlap with the first excited state, much better than another
-        random guess.
-        Hence, the strategy of this method is to use either
-        the last excited state we have (for `use_highest_excitation` = True),
-        or the initial ground state segment (`use_highest_excitation` = False),
-        and just perturb it a little bit with :meth:`OrthogonalExcitations.perturb_initial_state`.
-
-        Options
-        -------
-        .. cfg:configoptions :: ExcitationInitialState
-            :include: InitialStateBuilder
-
-            use_highest_excitation : bool
-                If True, start from  the last state in :attr:`orthogonal_to` and perturb it.
-                If False, use :attr:`OrthogonalExcitations.initial_state_seg`,
-                i.e.,  a perturbation of the ground state in the right charge sector.
-        """
-
-        if self.options.get('use_highest_excitation', True) and len(self.sim.orthogonal_to) > 0:
+        if self.options.get('use_highest_excitation', True):
             psi = self.sim.orthogonal_to[-1]
-            perturb = True
         else:
-            psi = self.sim.initial_state_seg
-            perturb = False  # was already perturbed
+            psi = self.sim.ground_state
         if isinstance(psi, dict):
             psi = psi['ket']
-        psi = psi.copy()
-        if perturb:
-            self.sim.perturb_initial_state(psi)
-        return psi
+        psi = psi.copy()  # make a copy!
+        return self._perturb(psi)
 
-    def from_file(self):
-        """Load the initial state from an exisiting file of a previous excitation simulation.
-
-        Options
-        -------
-        .. cfg:configoptions :: InitialStateBuilder
-
-            filename : str
-                The filename from which to load the state.
-            data_key_orthogonal : str
-                Key within the file to be used for loading the orthogonal_to states.
-                Can be recursive (separated by '/'), see :func:`tenpy.tools.misc.get_recursive`.
-            perturb : bool
-                Defaults to False. If True, still perturb the state with
-                :meth:`OrthogonalExcitations.perturb_initial_state` based on the
-                :cfg:option:`OrthogonalExcitations.initial_state_randomize_params`.
-        """
-        previous_ortho = getattr(self, '_previous_ortho', None)
-        if previous_ortho is None:
-            # load data from previous file
-            filename = self.options['filename']
-            key_ortho = self.options.get('data_key_orthogonal_to', "resume_data/orthogonal_to")
-            key_offset = self.options.get('data_key_ortho_offset', "resume_data/ortho_offset")
-            self.logger.info("loading previous states from %r, keys %r and %r",
-                             filename, key_ortho, key_offset)
-            data = hdf5_io.load(filename)
-            self._previous_ortho = previous_ortho = data['resume_data']['orthogonal_to']
-            self._previous_offset = data['resume_data']['ortho_offset']
-            self._previous_first_last = data['segment_first_last']
-        # else: we already loaded the corresponding data
-        psi = previous_ortho[self._previous_offset + len(self.sim.excitations)]
-        perturb = self.options.get('perturb', False)
-        psi = self.sim._psi_from_previous_ortho(psi.copy(),
-                                                self._previous_first_last,
-                                                self.options['filename'],
-                                                perturb)
+    def _perturb(self, psi):
+        randomize_params = self.options.subconfig('randomize_params')
+        close_1 = self.options.get('randomize_close_1', True)
+        psi.perturb(randomize_params, close_1=close_1, canonicalize=False)
         return psi

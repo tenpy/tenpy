@@ -14,7 +14,7 @@ tenpy.tools.misc.skip_logging_setup = True  # skip logging setup
 params = [
     ({}, 1),
     ({'switch_charge_sector': [1]}, 1),
-    ({'apply_local_op': [3, 'Sx']}, 1),
+    ({'apply_local_op': dict(i=3, op='Sx')}, 1),
     ({'switch_charge_sector': [1]}, 2),
 ]
 
