@@ -157,7 +157,7 @@ class UniformMPS(MPS):
             AL.get_leg('vR').test_contractible(self._C[(i + 1) % self.L].get_leg('vL'))
             AL.get_leg('vR').test_contractible(self._AC[(i + 1) % self.L].get_leg('vL'))
 
-        self.test_validity()
+        return self.test_validity()
 
     def test_validity(self, cutoff=1.e-8):
         """Check if AL C = AC and C AR = AC
@@ -424,6 +424,9 @@ class UniformMPS(MPS):
         for i in range(psi.L):
             C = npc.diag(psi.get_SL(i), obj._AL[i].get_leg('vL'), labels=['vL', 'vR']) # center matrix on the left of site `i`
             obj._C.append(C.astype(obj.dtype, copy=True).itranspose(obj._C_labels))
+        
+        # need to define S, since diagonal_gauge = True
+        obj._S = [psi.get_SL(i).astype(obj.dtype, copy=True) for i in range(psi.L)]
 
         obj._transfermatrix_keep = psi._transfermatrix_keep
         obj.test_sanity()

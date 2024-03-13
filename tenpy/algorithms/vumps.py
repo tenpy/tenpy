@@ -338,19 +338,31 @@ class VUMPSEngine(IterativeSweeps):
             check_overlap : bool
                 Since AL C = C AR is not identically true, the MPS defined by AL and AR are not exactly the same.
                 We can compute the overlap of the two to check.
+            norm_tol : float
+                Check if final state is in canonical form.
         
         """
         super().post_run_cleanup()
         check_overlap = self.options.get('check_overlap', True)
+        norm_tol = self.options.get('norm_tol', 1.e-10)
         
         self.psi.test_validity()
         logger.info(f'{self.__class__.__name__} finished after {self.sweeps} sweeps, '
                     f'max chi={max(self.psi.chi)}')
 
-        # psi.norm_test() is sometimes > 1.e-10 for paramagnetic TFI. More VUMPS (>10) fixes this even though the energy is already saturated for 10 sweeps.
-        self.guess_init_env_data, Es, _ = MPOTransferMatrix.find_init_LP_RP(self.model.H_MPO, self.psi, calc_E=True, guess_init_env_data=self.guess_init_env_data)
-        self.tangent_projector_test(self.guess_init_env_data)
-        return (Es[0] + Es[1])/2, self.psi.to_MPS(check_overlap=check_overlap)
+
+        norm_err = np.linalg.norm(self.psi.norm_test())
+        if norm_err > norm_tol:
+            logger.warning(
+                "final VUMPS state not in canonical form up to "
+                "norm_tol=%.2e: norm_err=%.2e", norm_tol, norm_err)
+            E = self.sweep_stats['E'][-1]
+        else:
+            self.guess_init_env_data, Es, _ = MPOTransferMatrix.find_init_LP_RP(self.model.H_MPO, self.psi, calc_E=True, guess_init_env_data=self.guess_init_env_data)
+            self.tangent_projector_test(self.guess_init_env_data)
+            E = (Es[0] + Es[1])/2
+
+        return E, self.psi.to_MPS(check_overlap=check_overlap)
     
     def run(self):
         """Run the VUMPS simulation to find the ground state.
