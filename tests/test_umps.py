@@ -19,7 +19,7 @@ def test_to_and_from_mps():
     psi.test_sanity()
 
     uniform_psi = uniform_mps.UniformMPS.from_MPS(psi)
-    assert uniform_psi.test_validity() < 1e-10
+    assert np.max(uniform_psi.test_sanity()) < 1e-10
     assert np.allclose(uniform_psi.expectation_value("Sz"), [0.5, -0.5, 0.5, -0.5])
 
     psi2 = uniform_psi.to_MPS(check_overlap=True)

@@ -862,7 +862,7 @@ class TwoSiteVUMPSEngine(VUMPSEngine):
         -------
         U : :class:`~tenpy.linalg.np_conserved.Array`
             Left-canonical part of `theta`. Labels ``'(vL.p)', 'vR'``.
-        S : 1D ndarray | 2D :class:`~tenpy.linalg.np_conserved.Array`
+        S : 2D :class:`~tenpy.linalg.np_conserved.Array`
             Without mixer just the singular values of the array; with mixer it might be a general
             matrix with labels ``'vL', 'vR'``; see comment above.
         VH : :class:`~tenpy.linalg.np_conserved.Array`
@@ -874,7 +874,6 @@ class TwoSiteVUMPSEngine(VUMPSEngine):
             truncation) in case `S` is 2D Array.
         """
         i0 = self.i0
-        update_LP, update_RP = False, True
         mixer = self.mixer
         if mixer is None:
             # simple case: real svd, defined elsewhere.
@@ -885,45 +884,15 @@ class TwoSiteVUMPSEngine(VUMPSEngine):
                                         inner_labels=['vR', 'vL'])
             S_a = S
             S = npc.diag(S, U.split_legs().get_leg('vR').conj(), labels=['vL', 'vR'])
-        elif mixer.update_sites == 2:
-            U, S, VH, err, S_a = mixer.perturb_svd(self, theta, self.i0, update_LP, update_RP)
-        elif mixer.update_sites == 1:
-            if update_LP and update_RP:
-                # sub-space expand left site by treating p1 as part of vR leg
-                theta_L = theta.replace_label('(p1.vR)', 'vR')
-                U, _, _, err_L, S_a = mixer.perturb_svd(self, theta_L, self.i0, True)
-                U = U.gauge_total_charge(1, self.psi.get_B(i0, form=None).qtotal)
-                # sub-space expand right site by treating p0 as part of vL leg
-                theta_R = theta.replace_labels(['(vL.p0)', '(p1.vR)'], ['vL', '(p0.vR)'])
-                _, _, VH, err_R, S_a = mixer.perturb_svd(self, theta_R, self.i0 + 1, False)
-                VH = VH.gauge_total_charge(0, self.psi.get_B(i0 + 1, form=None).qtotal)
-                # calculate S = U^H theta V
-                theta = npc.tensordot(U.conj(), theta, axes=['(vL*.p0*)', '(vL.p0)'])
-                theta = npc.tensordot(theta, VH.conj(), axes=['(p1.vR)', '(p0*.vR*)'])
-                theta.ireplace_labels(['vR*', 'vL*'], ['vL', 'vR'])
-                theta /= np.linalg.norm(npc.svd(theta, compute_uv=False))
-                S = theta
-                err = err_L + err_R
-                VH.ireplace_label('(p0.vR)', '(p1.vR)')
-            elif update_LP:
-                # sub-space expand left site by treating p1 as part of vR leg
-                theta.ireplace_label('(p1.vR)', 'vR')
-                U, S, VH, err, S_a = mixer.perturb_svd(self, theta, self.i0, True)
-                S = npc.diag(S, U.get_leg('vR').conj(), labels=['vL', 'vR'])
-                # note: VH is not isometry, but we don't update_RP
-                VH.ireplace_label('vR', '(p1.vR)')
-            elif update_RP:
-                # sub-space expand right site by treating p0 as part of vL leg
-                theta.ireplace_labels(['(vL.p0)', '(p1.vR)'], ['vL', '(p0.vR)'])
-                U, S, VH, err, S_a = mixer.perturb_svd(self, theta, self.i0 + 1, False)
-                S = npc.diag(S, U.get_leg('vR').conj(), labels=['vL', 'vR'])
-                # note: U not isometry, but we don't update_LP
-                U.ireplace_label('vL', '(vL.p0)')
-                VH.ireplace_label('(p0.vR)', '(p1.vR)')
-            else:
-                assert False
         else:
-            assert False, "mixer acting on weird number of sites"
+            qtotal_LR = [self.psi.get_B(i0, form=None).qtotal,
+                            self.psi.get_B(i0 + 1, form=None).qtotal]
+            U, S, VH, err, S_a = mixer.mix_and_decompose_2site(
+                engine=self, theta=theta, i0=self.i0, mix_left=False, mix_right=True,
+                qtotal_LR=qtotal_LR
+            )
+            if not isinstance(S, npc.Array):
+                S = npc.diag(S, U.split_legs().get_leg('vR').conj(), labels=['vL', 'vR'])
         U.ireplace_label('(vL.p0)', '(vL.p)')
         VH.ireplace_label('(p1.vR)', '(p.vR)')
         return U, S, VH, err, S_a
