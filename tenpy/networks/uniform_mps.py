@@ -258,7 +258,7 @@ class UniformMPS(MPS):
         check_overlap: bool
             Since AL C = C AR is not identically true, the MPS defined by AL and AR are not exactly the same.
             We can compute the overlap of the two to check.
-        
+
         Returns
         -------
         psi : :class:`~tenpy.networks.mps.MPS`
@@ -283,13 +283,12 @@ class UniformMPS(MPS):
             if not np.isclose(overlap_AB, 1):
                 logger.warning(
                     f"overlap not close to 1: {overlap_AB:.10f}, returning uniform MPS instead")
-                return self.copy()
         return MPS_B
 
     def to_diagonal_gauge(self, cutoff=1.e-16, check_overlap=False):
         """
         Convert a UniformMPS to diagonal gauge, i.e. where all of the bond matrices are diagonal.
-        
+
         Parameters
         ----------
         cutoff : float
@@ -420,7 +419,7 @@ class UniformMPS(MPS):
         ----------
         psi : :class:`~tenpy.networks.mps.MPS`
             Infinite MPS which we want to change to a uniform one.
-        
+
         Returns
         -------
         psi : :class:`UniformMPS`
