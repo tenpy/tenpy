@@ -33,6 +33,7 @@ from .algorithms.network_contractor import ncon, contract
 from .algorithms.purification import PurificationApplyMPO, PurificationTEBD, PurificationTEBD2
 from .algorithms.tdvp import (SingleSiteTDVPEngine, TwoSiteTDVPEngine, TimeDependentSingleSiteTDVP,
                               TimeDependentTwoSiteTDVP)
+from .algorithms.vumps import SingleSiteVUMPSEngine, TwoSiteVUMPSEngine
 from .algorithms.tebd import TEBDEngine, QRBasedTEBDEngine, RandomUnitaryEvolution, TimeDependentTEBD
 from .algorithms.truncation import TruncationError, truncate, svd_theta
 from .linalg.charges import ChargeInfo, LegCharge, LegPipe
@@ -67,6 +68,8 @@ from .networks.mps import (MPS, MPSEnvironment, TransferMatrix, InitialStateBuil
                            build_initial_state)
 from .networks.mpo import MPO, MPOEnvironment, MPOTransferMatrix
 from .networks.purification_mps import PurificationMPS
+from .networks.uniform_mps import UniformMPS
+from .networks.momentum_mps import MomentumMPS
 from .simulations.simulation import (Simulation, Skip, init_simulation, run_simulation,
                                      init_simulation_from_checkpoint, resume_from_checkpoint,
                                      run_seq_simulations, estimate_simulation_RAM)
@@ -94,7 +97,8 @@ __all__ = [
     'contract', 'PurificationApplyMPO', 'PurificationTEBD', 'PurificationTEBD2',
     'SingleSiteTDVPEngine', 'TwoSiteTDVPEngine', 'TimeDependentSingleSiteTDVP',
     'TimeDependentTwoSiteTDVP', 'TEBDEngine', 'QRBasedTEBDEngine', 'RandomUnitaryEvolution',
-    'TimeDependentTEBD', 'TruncationError', 'truncate', 'svd_theta',
+    'TimeDependentTEBD', 'TruncationError', 'truncate', 'svd_theta', 'SingleSiteVUMPSEngine',
+    'TwoSiteVUMPSEngine',
     # from tenpy.linalg
     'ChargeInfo', 'LegCharge', 'LegPipe', 'Arnoldi', 'LanczosGroundState', 'LanczosEvolution',
     'lanczos_arpack', 'Array', 'zeros', 'ones', 'eye_like', 'diag', 'concatenate', 'grid_concat',
@@ -114,7 +118,7 @@ __all__ = [
     'Site', 'GroupedSite', 'group_sites', 'SpinHalfSite', 'SpinSite', 'FermionSite',
     'SpinHalfFermionSite', 'SpinHalfHoleSite', 'BosonSite', 'ClockSite', 'spin_half_species',
     'kron', 'MPS', 'MPSEnvironment', 'TransferMatrix', 'InitialStateBuilder', 'build_initial_state',
-    'MPO', 'MPOEnvironment', 'MPOTransferMatrix', 'PurificationMPS',
+    'MPO', 'MPOEnvironment', 'MPOTransferMatrix', 'PurificationMPS', 'UniformMPS', 'MomentumMPS',
     # from tenpy.simulations
     'Simulation', 'Skip', 'init_simulation', 'run_simulation', 'init_simulation_from_checkpoint',
     'resume_from_checkpoint', 'run_seq_simulations', 'GroundStateSearch', 'OrthogonalExcitations',

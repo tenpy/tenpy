@@ -5,7 +5,7 @@ limit in a more principled fashion than iDMRG, which essentially is a finite alg
 extrapolated to the thermodynamic limit. VUMPS is a tangent space MPS method, where
 we look for the optimal ground state in the manifold of fixed bond dimension MPS :cite:`vanderstraeten2019`.
 
-The VUMPS algorithm was introduced in 2017 :cite:`zauner-stauber2017`, where it was shown
+The VUMPS algorithm was introduced in 2017 :cite:`zauner-stauber2018`, where it was shown
 that VUMPS outperforms both iTEBD and iDMRG as ground state search algorithms for both
 1D and quasi-1D models. The VUMPS algorithm uses the network :class:`~tenpy.networks.uniform_mps.UniformMPS` to represent
 the current state of the uniform MPS during optimization. On each site, left canonical AL,
@@ -33,12 +33,12 @@ the single-site algorithm, which is the more principled algorithm.
 """
 # Copyright (C) TeNPy Developers, GNU GPLv3
 
-
 import numpy as np
 import time
 import warnings
 import logging
 import copy
+
 logger = logging.getLogger(__name__)
 
 from ..linalg import np_conserved as npc
@@ -56,11 +56,7 @@ from .mps_common import IterativeSweeps, ZeroSiteH, OneSiteH, TwoSiteH
 from .truncation import truncate, svd_theta
 from .plane_wave_excitation import append_right_env, append_left_env, construct_orthogonal
 
-__all__ = [
-    'VUMPSEngine',
-    'SingleSiteVUMPSEngine',
-    'TwoSiteVUMPSEngine'
-]
+__all__ = ['VUMPSEngine', 'SingleSiteVUMPSEngine', 'TwoSiteVUMPSEngine']
 
 
 class VUMPSEngine(IterativeSweeps):
@@ -187,13 +183,12 @@ class VUMPSEngine(IterativeSweeps):
         mixer_options.setdefault('amplitude', 1.e-5)
         mixer_options.setdefault('decay', 2)
         mixer_options.setdefault('disable_after', 5)
-    
+
     @property
     def S_inv_cutoff(self):
         # high cutoff for regular inverse of S, higher cutoff if we need to (pseudo-) invert
         # a matrix (S can be 2D while the mixer is on)
         return 1.e-8 if not self.psi.diagonal_gauge else 1.e-15
-
 
     def run_iteration(self):
         """Perform a single iteration, consisting of ``N_sweeps_check`` sweeps.
@@ -219,7 +214,7 @@ class VUMPSEngine(IterativeSweeps):
         options = self.options
         cutoff = options.get('cutoff', 0.)
         diagonal_gauge_frequency = options.get('diagonal_gauge_frequency', 0)
-        
+
         # energy and entropy before the iteration:
         if len(self.sweep_stats['E']) < 1:  # first iteration
             E_old = np.nan
@@ -243,10 +238,15 @@ class VUMPSEngine(IterativeSweeps):
         entropy_bonds = self._entropy_approx
         max_S = max(entropy_bonds)
         S = np.mean(entropy_bonds)
-        E = np.mean(self.update_stats['e_L'][-self.psi.L:] + self.update_stats['e_R'][-self.psi.L:])
+        E = np.mean(self.update_stats['e_L'][-self.psi.L:] +
+                    self.update_stats['e_R'][-self.psi.L:])
         norm_err = np.linalg.norm(self.psi.norm_test())
-        max_split_error = np.max(self.update_stats['split_err_L'][-self.psi.L:] + self.update_stats['split_err_R'][-self.psi.L:])
-        max_N_lanczos = [np.max([self.update_stats['N_lanczos'][-i-1][j] for i in range(self.psi.L)]) for j in range(3)]
+        max_split_error = np.max(self.update_stats['split_err_L'][-self.psi.L:] +
+                                 self.update_stats['split_err_R'][-self.psi.L:])
+        max_N_lanczos = [
+            np.max([self.update_stats['N_lanczos'][-i - 1][j] for i in range(self.psi.L)])
+            for j in range(3)
+        ]
 
         self.sweep_stats['sweep'].append(self.sweeps)
         self.sweep_stats['N_updates'].append(len(self.update_stats['i0']))
@@ -262,7 +262,6 @@ class VUMPSEngine(IterativeSweeps):
         self.sweep_stats['max_N_lanczos'].append(max_N_lanczos)
 
         return E, self.psi
-
 
         # self.psi.test_validity()
         # logger.info(f"VUMPS finished after {self.sweeps} sweeps, max chi={max(self.psi.chi)}")
@@ -324,8 +323,9 @@ class VUMPSEngine(IterativeSweeps):
         Delta_S = self.sweep_stats['Delta_S'][-1]
         split_error = self.sweep_stats['max_split_err'][-1]
 
-        return abs(Delta_E / max(E, 1.)) < max_E_err and abs(Delta_S) < max_S_err and split_error < max_split_error
-    
+        return abs(Delta_E / max(
+            E, 1.)) < max_E_err and abs(Delta_S) < max_S_err and split_error < max_split_error
+
     def post_run_cleanup(self):
         """
         Perform any final steps or clean up after the main loop has terminated.
@@ -345,11 +345,10 @@ class VUMPSEngine(IterativeSweeps):
         super().post_run_cleanup()
         check_overlap = self.options.get('check_overlap', True)
         norm_tol = self.options.get('norm_tol', 1.e-10)
-        
+
         self.psi.test_validity()
         logger.info(f'{self.__class__.__name__} finished after {self.sweeps} sweeps, '
                     f'max chi={max(self.psi.chi)}')
-
 
         norm_err = np.linalg.norm(self.psi.norm_test())
         if norm_err > norm_tol:
@@ -358,18 +357,21 @@ class VUMPSEngine(IterativeSweeps):
                 "norm_tol=%.2e: norm_err=%.2e", norm_tol, norm_err)
             E = self.sweep_stats['E'][-1]
         else:
-            self.guess_init_env_data, Es, _ = MPOTransferMatrix.find_init_LP_RP(self.model.H_MPO, self.psi, calc_E=True, guess_init_env_data=self.guess_init_env_data)
+            self.guess_init_env_data, Es, _ = MPOTransferMatrix.find_init_LP_RP(
+                self.model.H_MPO,
+                self.psi,
+                calc_E=True,
+                guess_init_env_data=self.guess_init_env_data)
             self.tangent_projector_test(self.guess_init_env_data)
-            E = (Es[0] + Es[1])/2
+            E = (Es[0] + Es[1]) / 2
 
         return E, self.psi.to_MPS(check_overlap=check_overlap)
-    
+
     def mixer_cleanup(self):
         """For uniform MPS there is no need to clean up after the mixer.
         """
         pass
 
-    
     def run(self):
         """Run the VUMPS simulation to find the ground state.
 
@@ -416,7 +418,7 @@ class VUMPSEngine(IterativeSweeps):
             sweep_0 : int
                 The number of sweeps already performed. (Useful for re-start).
         """
-  
+
         super().reset_stats(resume_data)
         self.update_stats = {
             'i0': [],
@@ -451,8 +453,11 @@ class VUMPSEngine(IterativeSweeps):
         L = self.psi.L
 
         i0s = list(range(0, L))
-        move_right = [True] * L  # Should we also sweep left? not necessary but may increase convergence
-        update_LP_RP = [[False, False]] * L  # Never update the envs since we replace them each time
+        move_right = [
+            True
+        ] * L  # Should we also sweep left? not necessary but may increase convergence
+        update_LP_RP = [[False, False]
+                        ] * L  # Never update the envs since we replace them each time
         return zip(i0s, move_right, update_LP_RP)
 
     def prepare_update_local(self):
@@ -463,16 +468,19 @@ class VUMPSEngine(IterativeSweeps):
         H = self.model.H_MPO
         psi = self.psi
 
-        self.update_env(**{})   # Call this here to update the env guess due to diagonal changes.
-        boundary_env_data, Es, _ = MPOTransferMatrix.find_init_LP_RP(H, self.psi, calc_E=True, guess_init_env_data=self.guess_init_env_data) # E is already the energy density.
+        self.update_env(**{})  # Call this here to update the env guess due to diagonal changes.
+        boundary_env_data, Es, _ = MPOTransferMatrix.find_init_LP_RP(
+            H, self.psi, calc_E=True,
+            guess_init_env_data=self.guess_init_env_data)  # E is already the energy density.
         self.env = MPOEnvironment(psi, H, psi, **boundary_env_data)
         self.transfer_matrix_energy = Es
 
         self.make_eff_H()
-        theta = self.psi.get_theta(i0, n=self.n_optimize, cutoff=self.S_inv_cutoff) #n_optimize will be 1
+        theta = self.psi.get_theta(i0, n=self.n_optimize,
+                                   cutoff=self.S_inv_cutoff)  #n_optimize will be 1
         assert self.eff_H.combine == False
-        theta = self.eff_H.combine_theta(theta) #combine should be false.
-        C1, C2 = self.psi.get_C(i0), self.psi.get_C(i0+self.n_optimize)
+        theta = self.eff_H.combine_theta(theta)  #combine should be false.
+        C1, C2 = self.psi.get_C(i0), self.psi.get_C(i0 + self.n_optimize)
 
         return (theta, C1, C2)
 
@@ -481,8 +489,9 @@ class VUMPSEngine(IterativeSweeps):
         Create new instance of `self.EffectiveH` at `self.i0`.
         Also creat zero-site Hamiltonians left of `self.i0` and right of `self.i0+self.n_optimize`.
         """
-        self.eff_H0_1 = ZeroSiteH(self.env, self.i0) # This saves more envs than optimal.
-        self.eff_H0_2 = ZeroSiteH(self.env, self.i0 + self.n_optimize) # This saves more envs than optimal.
+        self.eff_H0_1 = ZeroSiteH(self.env, self.i0)  # This saves more envs than optimal.
+        self.eff_H0_2 = ZeroSiteH(self.env,
+                                  self.i0 + self.n_optimize)  # This saves more envs than optimal.
         self.eff_H = self.EffectiveH(self.env, self.i0, self.combine, self.move_right)
 
         if hasattr(self.env, 'H') and self.env.H.explicit_plus_hc:
@@ -495,7 +504,8 @@ class VUMPSEngine(IterativeSweeps):
     def _wrap_ortho_eff_H(self):
         raise NotImplementedError("Do we want this for VUMPS?")
 
-    def post_update_local(self, e_L, e_R, eps_L, eps_R, e_C1, e_C2, e_theta, N0_L, N0_R, N1, **update_data):
+    def post_update_local(self, e_L, e_R, eps_L, eps_R, e_C1, e_C2, e_theta, N0_L, N0_R, N1,
+                          **update_data):
         """Perform post-update actions.
 
         Collect statistics.
@@ -511,14 +521,14 @@ class VUMPSEngine(IterativeSweeps):
         self.update_stats['e_C1'].append(e_C1)
         self.update_stats['e_C2'].append(e_C2)
         self.update_stats['e_theta'].append(e_theta)
-        self.update_stats['N_lanczos'].append([N0_L,N0_R, N1])
+        self.update_stats['N_lanczos'].append([N0_L, N0_R, N1])
         self.update_stats['split_err_L'].append(eps_L)
         self.update_stats['split_err_R'].append(eps_R)
         self.update_stats['time'].append(time.time() - self.time0)
 
     def free_no_longer_needed_envs(self):
         for env in self._all_envs:
-            env.clear() # TODO: Can we do better? Is this doing anything at all?
+            env.clear()  # TODO: Can we do better? Is this doing anything at all?
 
     def resume_run(self):
         raise NotImplementedError("TODO")
@@ -531,7 +541,10 @@ class VUMPSEngine(IterativeSweeps):
         RW = env_data['init_RP']
 
         VLs = [construct_orthogonal(self.psi.get_B(i, form='AL')) for i in range(self.psi.L)]
-        VRs = [construct_orthogonal(self.psi.get_B(i, form='AR'), left=False) for i in range(self.psi.L)]
+        VRs = [
+            construct_orthogonal(self.psi.get_B(i, form='AR'), left=False)
+            for i in range(self.psi.L)
+        ]
         ALs = self.psi._AL
         ARs = self.psi._AR
         ACs = self.psi._AC
@@ -540,7 +553,7 @@ class VUMPSEngine(IterativeSweeps):
         strange_right = []
         for i in range(self.psi.L):
             temp_L = append_left_env(ALs[:i], ALs[:i], LW, Ws=Ws[:i])
-            temp_R = append_right_env(ARs[i+1:], ARs[i+1:], RW, Ws=Ws[i+1:])
+            temp_R = append_right_env(ARs[i + 1:], ARs[i + 1:], RW, Ws=Ws[i + 1:])
 
             temp_VL = append_left_env([VLs[i]], [ACs[i]], temp_L, Ws=[Ws[i]])
             temp_VL = npc.tensordot(temp_VL, temp_R, axes=(['wR', 'vR*'], ['wL', 'vL*']))
@@ -562,7 +575,7 @@ class SingleSiteVUMPSEngine(VUMPSEngine):
     ----------
     psi : :class:`~tenpy.networks.mps.MPS`
         Initial guess for the ground state, which is to be optimized in-place.
-    model : :class:`~tenpy.models.MPOModel`
+    model : :class:`~tenpy.models.model.MPOModel`
         The model representing the Hamiltonian for which we want to find the ground state.
     options : dict
         Further optional parameters.
@@ -629,13 +642,13 @@ class SingleSiteVUMPSEngine(VUMPSEngine):
 
         theta1.ireplace_label('p0', 'p')
         psi.set_C(i0, theta0_1)
-        psi.set_C(i0+1, theta0_2)
+        psi.set_C(i0 + 1, theta0_2)
         psi.set_B(i0, theta1, form='AC')
         AL, AR, eps_L, eps_R, entropy_1, entropy_2 = self.polar_max(theta1, theta0_1, theta0_2)
         psi.set_B(i0, AL, form='AL')
         psi.set_B(i0, AR, form='AR')
         self._entropy_approx[i0 % self.psi.L] = entropy_1
-        self._entropy_approx[(i0+self.n_optimize) % self.psi.L] = entropy_2
+        self._entropy_approx[(i0 + self.n_optimize) % self.psi.L] = entropy_2
 
         update_data = {
             'e_L': self.transfer_matrix_energy[1],
@@ -674,9 +687,9 @@ class SingleSiteVUMPSEngine(VUMPSEngine):
         AR : :class:`~tenpy.linalg.np_conserved.Array`
             Right-orthonormal tensor such that C1 AR = AC
         eps_L : float
-            Norm error, |AC - AL C2|
+            Norm error, || AC - AL C2 ||
         eps_R : float
-            Norm error, |AC - C1 AR|
+            Norm error, || AC - C1 AR ||
         entropy_left : float
             entanglement entropy left of site ``i0``
         entropy_right : float
@@ -684,11 +697,13 @@ class SingleSiteVUMPSEngine(VUMPSEngine):
         """
         U_ACL, _, _ = npc.polar(AC.combine_legs(['vL', 'p'], qconj=[+1]), left=False)
         U_CL, _, s1 = npc.polar(C2, left=False)
-        AL = npc.tensordot(U_ACL.split_legs(), U_CL.conj(), axes=(['vR'], ['vR*'])).replace_label('vL*', 'vR')
+        AL = npc.tensordot(U_ACL.split_legs(), U_CL.conj(),
+                           axes=(['vR'], ['vR*'])).replace_label('vL*', 'vR')
 
         U_ACR, _, _ = npc.polar(AC.combine_legs(['p', 'vR'], qconj=[+1]), left=True)
         U_CR, _, s2 = npc.polar(C1, left=True)
-        AR = npc.tensordot(U_CR.conj(), U_ACR.split_legs(), axes=(['vL*'], ['vL'])).replace_label('vR*', 'vL')
+        AR = npc.tensordot(U_CR.conj(), U_ACR.split_legs(),
+                           axes=(['vL*'], ['vL'])).replace_label('vR*', 'vL')
 
         eps_L = npc.norm(AC - npc.tensordot(AL, C2, axes=['vR', 'vL']))
         eps_R = npc.norm(AC - npc.tensordot(C1, AR, axes=['vR', 'vL']))
@@ -706,7 +721,7 @@ class TwoSiteVUMPSEngine(VUMPSEngine):
     ----------
     psi : :class:`~tenpy.networks.mps.MPS`
         Initial guess for the ground state, which is to be optimized in-place.
-    model : :class:`~tenpy.models.MPOModel`
+    model : :class:`~tenpy.models.model.MPOModel`
         The model representing the Hamiltonian for which we want to find the ground state.
     options : dict
         Further optional parameters.
@@ -725,7 +740,8 @@ class TwoSiteVUMPSEngine(VUMPSEngine):
         if not self.psi.L > 1:
             raise ValueError("Two-site methods require a two-site unit cell.")
         if not self.psi.L > 2 and isinstance(self.mixer, DensityMatrixMixer):
-            raise NotImplementedError("DensityMatrixMixer currently only works for unit cells larger than 2")
+            raise NotImplementedError(
+                "DensityMatrixMixer currently only works for unit cells larger than 2")
 
     def update_env(self, **update_data):
         # Get guesses for the next LP and RP
@@ -755,7 +771,8 @@ class TwoSiteVUMPSEngine(VUMPSEngine):
         E0_2, theta0_2, N0_2 = LanczosGroundState(H0_2, C2, lanczos_options).run()
         E2, theta2, N2 = LanczosGroundState(H2, AC, lanczos_options).run()
 
-        U, S, VH, err, S_approx = self.mixed_svd(theta2.combine_legs([['vL', 'p0'], ['p1', 'vR']], qconj=[+1, -1]))
+        U, S, VH, err, S_approx = self.mixed_svd(
+            theta2.combine_legs([['vL', 'p0'], ['p1', 'vR']], qconj=[+1, -1]))
         AL1 = U.split_legs()
         AR2 = VH.split_legs()
 
@@ -763,21 +780,20 @@ class TwoSiteVUMPSEngine(VUMPSEngine):
         AC2 = npc.tensordot(S, AR2, axes=['vR', 'vL'])
 
         psi.set_C(i0, theta0_1)
-        psi.set_C(i0+2, theta0_2)
-        psi.set_C(i0+1, S)
+        psi.set_C(i0 + 2, theta0_2)
+        psi.set_C(i0 + 1, S)
         psi.set_B(i0, AL1, form='AL')
-        psi.set_B(i0+1, AR2, form='AR')
+        psi.set_B(i0 + 1, AR2, form='AR')
         psi.set_B(i0, AC1, form='AC')
-        psi.set_B(i0+1, AC2, form='AC')
+        psi.set_B(i0 + 1, AC2, form='AC')
 
         AL2, AR1, eps_L, eps_R, entropy_1, entropy_2 = self.polar_max(AC1, AC2, theta0_1, theta0_2)
         psi.set_B(i0, AR1, form='AR')
-        psi.set_B(i0+1, AL2, form='AL')
-
+        psi.set_B(i0 + 1, AL2, form='AL')
 
         self._entropy_approx[i0 % self.psi.L] = entropy_1
-        self._entropy_approx[(i0+1) % self.psi.L] = entropy(S_approx**2, n=1)
-        self._entropy_approx[(i0+2) % self.psi.L] = entropy_2
+        self._entropy_approx[(i0 + 1) % self.psi.L] = entropy(S_approx**2, n=1)
+        self._entropy_approx[(i0 + 2) % self.psi.L] = entropy_2
         update_data = {
             'e_L': self.transfer_matrix_energy[1],
             'e_R': self.transfer_matrix_energy[0],
@@ -819,9 +835,9 @@ class TwoSiteVUMPSEngine(VUMPSEngine):
         AR1 : :class:`~tenpy.linalg.np_conserved.Array`
             Right-orthonormal tensor such that C1 AR1 = AC1
         eps_L : float
-            Norm error, |AC1 - AL2 C3|
+            Norm error, || AC1 - AL2 C3 ||
         eps_R : float
-            Norm error, |AC2 - C1 AR1|
+            Norm error, || AC2 - C1 AR1 ||
         entropy_left : float
             entanglement entropy left of site ``i0``
         entropy_right : float
@@ -830,11 +846,13 @@ class TwoSiteVUMPSEngine(VUMPSEngine):
 
         U_ACL, _, _ = npc.polar(AC2.combine_legs(['vL', 'p'], qconj=[+1]), left=False)
         U_CL, _, s1 = npc.polar(C3, left=False)
-        AL2 = npc.tensordot(U_ACL.split_legs(), U_CL.conj(), axes=(['vR'], ['vR*'])).replace_label('vL*', 'vR')
+        AL2 = npc.tensordot(U_ACL.split_legs(), U_CL.conj(),
+                            axes=(['vR'], ['vR*'])).replace_label('vL*', 'vR')
 
         U_ACR, _, _ = npc.polar(AC1.combine_legs(['p', 'vR'], qconj=[+1]), left=True)
         U_CR, _, s2 = npc.polar(C1, left=True)
-        AR1 = npc.tensordot(U_CR.conj(), U_ACR.split_legs(), axes=(['vL*'], ['vL'])).replace_label('vR*', 'vL')
+        AR1 = npc.tensordot(U_CR.conj(), U_ACR.split_legs(),
+                            axes=(['vL*'], ['vL'])).replace_label('vR*', 'vL')
 
         eps_L = npc.norm(AC2 - npc.tensordot(AL2, C3, axes=['vR', 'vL']))
         eps_R = npc.norm(AC1 - npc.tensordot(C1, AR1, axes=['vR', 'vL']))
@@ -843,7 +861,7 @@ class TwoSiteVUMPSEngine(VUMPSEngine):
         entropy_right = entropy(s2**2, n=1)
 
         return AL2, AR1, eps_L, eps_R, entropy_left, entropy_right
-    
+
     def mixed_svd(self, theta):
         """Get (truncated) `B` from the new theta (as returned by diag).
 
@@ -885,18 +903,22 @@ class TwoSiteVUMPSEngine(VUMPSEngine):
             # simple case: real svd, defined elsewhere.
             qtotal_i0 = self.env.bra.get_B(i0, form=None).qtotal
             U, S, VH, err, _ = svd_theta(theta,
-                                        self.trunc_params,
-                                        qtotal_LR=[qtotal_i0, None],
-                                        inner_labels=['vR', 'vL'])
+                                         self.trunc_params,
+                                         qtotal_LR=[qtotal_i0, None],
+                                         inner_labels=['vR', 'vL'])
             S_a = S
             S = npc.diag(S, U.split_legs().get_leg('vR').conj(), labels=['vL', 'vR'])
         else:
-            qtotal_LR = [self.psi.get_B(i0, form=None).qtotal,
-                            self.psi.get_B(i0 + 1, form=None).qtotal]
-            U, S, VH, err, S_a = mixer.mix_and_decompose_2site(
-                engine=self, theta=theta, i0=self.i0, mix_left=False, mix_right=True,
-                qtotal_LR=qtotal_LR
-            )
+            qtotal_LR = [
+                self.psi.get_B(i0, form=None).qtotal,
+                self.psi.get_B(i0 + 1, form=None).qtotal
+            ]
+            U, S, VH, err, S_a = mixer.mix_and_decompose_2site(engine=self,
+                                                               theta=theta,
+                                                               i0=self.i0,
+                                                               mix_left=False,
+                                                               mix_right=True,
+                                                               qtotal_LR=qtotal_LR)
             if not isinstance(S, npc.Array):
                 S = npc.diag(S, U.split_legs().get_leg('vR').conj(), labels=['vL', 'vR'])
         U.ireplace_label('(vL.p0)', '(vL.p)')

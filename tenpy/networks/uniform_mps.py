@@ -26,6 +26,7 @@ import numpy as np
 import warnings
 from functools import reduce
 import logging
+
 logger = logging.getLogger(__name__)
 
 from ..linalg import np_conserved as npc
@@ -42,16 +43,14 @@ class UniformMPS(MPS):
     ----------
     sites : list of :class:`~tenpy.networks.site.Site`
         Defines the local Hilbert space for each site.
-    Bs : list of :class:`~tenpy.linalg.np_conserved.Array`
-        The 'matrices' of the MPS. Labels are ``vL, vR, p`` (in any order).
-    SVs : list of 1D array
-        The singular values on *each* bond. Should always have length `L+1`.
-        Entries out of :attr:`nontrivial_bonds` are ignored.
-    bc : ``'finite' | 'segment' | 'infinite'``
-        Boundary conditions as described in the tabel of the module doc-string.
-    form : (list of) {``'B' | 'A' | 'C' | 'G' | 'Th' | None`` | tuple(float, float)}
-        The form of the stored 'matrices', see table in module doc-string.
-        A single choice holds for all of the entries.
+    ALs : list of :class:`~tenpy.linalg.np_conserved.Array`
+        The 'left-orthonormal' tensors of the MPS. Labels are ``vL, vR, p`` (in any order).
+    ARs : list of :class:`~tenpy.linalg.np_conserved.Array`
+        The 'right-orthonormal' tensors of the MPS. Labels are ``vL, vR, p`` (in any order).
+    ACs : list of :class:`~tenpy.linalg.np_conserved.Array`
+        The 'center-site' tensors of the MPS. Labels are ``vL, vR, p`` (in any order).
+    Cs : list of :class:`~tenpy.linalg.np_conserved.Array`
+        The center matrices on the left of site `i`, Labels are ``vL, vR`` (in any order).
 
     Attributes
     ----------
@@ -71,13 +70,13 @@ class UniformMPS(MPS):
     segment_boundaries : tuple of :class:`~tenpy.linalg.np_conserved.Array` | (None, None)
         Only defined for 'segment' `bc` if :meth:`canonical_form_finite` has been called.
         If defined, it contains the `U_L` and `V_R` that would be returned by that function.
-    _AC : list of :class:`npc.Array`
+    _AC : list of :class:`~tenpy.linalg.np_conserved.Array`
         The 'center-site' tensors of the MPS. Labels are ``vL, vR, p`` (in any order).
-    _AL : list of :class:`npc.Array`
+    _AL : list of :class:`~tenpy.linalg.np_conserved.Array`
         The 'left-orthonormal' tensors of the MPS. Labels are ``vL, vR, p`` (in any order).
-    _AR : list of :class:`npc.Array`
+    _AR : list of :class:`~tenpy.linalg.np_conserved.Array`
         The 'right-orthonormal' tensors of the MPS. Labels are ``vL, vR, p`` (in any order).
-    _C : list of :class:`npc.Array`
+    _C : list of :class:`~tenpy.linalg.np_conserved.Array`
         The center matrices on the left of site `i`, Labels are ``vL, vR`` (in any order).
     _valid_forms : dict
         Class attribute.
@@ -100,6 +99,7 @@ class UniformMPS(MPS):
     _valid_bc = ('infinite', )
     # All labels of each tensor in _C (order is used!)
     _C_labels = ['vL', 'vR']
+
     # Labels for other tensors are inhereted from MPS.
 
     def __init__(self, sites, ALs, ARs, ACs, Cs, norm=1.):
@@ -111,8 +111,8 @@ class UniformMPS(MPS):
         self.norm = norm
         self.grouped = 1
         self.segment_boundaries = (None, None)
-        self.valid_umps = False # Need to check that AL[n] C[n+1] = AC[n] and C[n] AR[n] = AC[n]
-        self.diagonal_gauge = False # Are all C matrices diagonal?
+        self.valid_umps = False  # Need to check that AL[n] C[n+1] = AC[n] and C[n] AR[n] = AC[n]
+        self.diagonal_gauge = False  # Are all C matrices diagonal?
 
         # make copies of 4 types of tensors
         self._AR = [AR.astype(dtype, copy=True).itranspose(self._B_labels) for AR in ARs]
@@ -167,16 +167,28 @@ class UniformMPS(MPS):
         """
         err = np.empty((self.L, 3), dtype=float)
         for i in range(self.L):
-            AL, AR, AC, C1, C2 = self.get_AL(i), self.get_AR(i), self.get_AC(i), self.get_C(i), self.get_C(i+1)
+            AL, AR, AC, C1, C2 = self.get_AL(i), self.get_AR(i), self.get_AC(i), self.get_C(
+                i), self.get_C(i + 1)
             ALC2 = npc.tensordot(AL, C2, axes=['vR', 'vL']).itranspose(self._B_labels)
             C1AR = npc.tensordot(C1, AR, axes=['vR', 'vL']).itranspose(self._B_labels)
 
-            err[i, 0] = npc.norm((ALC2 / npc.tensordot(ALC2, C1AR.conj(), axes=(['vL', 'p', 'vR'], ['vL*', 'p*', 'vR*']))) - C1AR)
-            err[i, 1] = npc.norm((ALC2 / npc.tensordot(ALC2, AC.conj(), axes=(['vL', 'p', 'vR'], ['vL*', 'p*', 'vR*']))) - AC)
-            err[i, 2] = npc.norm((C1AR / npc.tensordot(C1AR, AC.conj(), axes=(['vL', 'p', 'vR'], ['vL*', 'p*', 'vR*']))) - AC)
+            err[i, 0] = npc.norm((
+                ALC2 /
+                npc.tensordot(ALC2, C1AR.conj(), axes=(['vL', 'p', 'vR'], ['vL*', 'p*', 'vR*']))) -
+                                 C1AR)
+            err[i, 1] = npc.norm(
+                (ALC2 /
+                 npc.tensordot(ALC2, AC.conj(), axes=(['vL', 'p', 'vR'], ['vL*', 'p*', 'vR*']))) -
+                AC)
+            err[i, 2] = npc.norm(
+                (C1AR /
+                 npc.tensordot(C1AR, AC.conj(), axes=(['vL', 'p', 'vR'], ['vL*', 'p*', 'vR*']))) -
+                AC)
 
         self.valid_umps = np.max(err) < cutoff
-        logger.info(f'UniformMPS is {"valid" if self.valid_umps else "invalid"} with max error {np.max(err):.5f}.')
+        logger.info(
+            f'UniformMPS is {"valid" if self.valid_umps else "invalid"} with max error {np.max(err):.5f}.'
+        )
         return err
 
     def copy(self):
@@ -259,15 +271,18 @@ class UniformMPS(MPS):
         self.test_validity()
 
         MPS_B = MPS(self.sites, self._AR, self._S, bc='infinite', form='B', norm=1.)
-        
+
         MPS_B.canonical_form()
         if check_overlap:
             MPS_A = MPS(self.sites, self._AL, self._S, bc='infinite', form='A', norm=1.)
-            MPS_A.canonical_form() # [TODO] should we do this? It might be expensive.
+            MPS_A.canonical_form()  # [TODO] should we do this? It might be expensive.
             overlap_AB = np.abs(MPS_B.overlap(MPS_A, understood_infinite=True))
-            logger.info(f'Overlap of UniformMPS constructed from ARs with UniformMPS constructed with ALs: {overlap_AB:.10f}')
+            logger.info(
+                f'Overlap of UniformMPS constructed from ARs with UniformMPS constructed with ALs: {overlap_AB:.10f}'
+            )
             if not np.isclose(overlap_AB, 1):
-                logger.warning(f"overlap not close to 1: {overlap_AB:.10f}, returning uniform MPS instead")
+                logger.warning(
+                    f"overlap not close to 1: {overlap_AB:.10f}, returning uniform MPS instead")
                 return self.copy()
         return MPS_B
 
@@ -285,12 +300,13 @@ class UniformMPS(MPS):
         if check_overlap:
             old_uMPS = self.copy()
 
-        self._S = []    # Empty out np.arrays on each bond.
+        self._S = []  # Empty out np.arrays on each bond.
 
         if self.L > 1 and cutoff > 0.0:
-            logger.warning("'sv_cutoff' cannot be non-zero for multi-site unit cell as this messes with the transfer matrix.")
+            logger.warning(
+                "'sv_cutoff' cannot be non-zero for multi-site unit cell as this messes with the transfer matrix."
+            )
             cutoff = 0.0
-
 
         for i in range(self.L):
             # For each bond matrix,
@@ -322,11 +338,17 @@ class UniformMPS(MPS):
 
         theta = npc.diag(S, VH.get_leg('vL'), labels=['vL', 'vR'])
 
-        self.set_B(i0-1, npc.tensordot(self.get_B(i0-1, 'AL'), U, axes=(['vR'], ['vL'])), 'AL')
-        self.set_B(i0, npc.tensordot(U.conj(), self.get_B(i0, 'AL'), axes=(['vL*'], ['vL'])).ireplace_label('vR*', 'vL'), 'AL')
+        self.set_B(i0 - 1, npc.tensordot(self.get_B(i0 - 1, 'AL'), U, axes=(['vR'], ['vL'])), 'AL')
+        self.set_B(
+            i0,
+            npc.tensordot(U.conj(), self.get_B(i0, 'AL'),
+                          axes=(['vL*'], ['vL'])).ireplace_label('vR*', 'vL'), 'AL')
 
         self.set_B(i0, npc.tensordot(VH, self.get_B(i0, 'AR'), axes=(['vR'], ['vL'])), 'AR')
-        self.set_B(i0-1, npc.tensordot(self.get_B(i0-1, 'AR'), VH.conj(), axes=(['vR'], ['vR*'])).ireplace_label('vL*', 'vR'), 'AR')
+        self.set_B(
+            i0 - 1,
+            npc.tensordot(self.get_B(i0 - 1, 'AR'), VH.conj(),
+                          axes=(['vR'], ['vR*'])).ireplace_label('vL*', 'vR'), 'AR')
         self._S.append(S)
         self.set_C(i0, theta)
 
@@ -341,9 +363,9 @@ class UniformMPS(MPS):
         theta = npc.tensordot(U.conj(), theta, axes=(['vL*'], ['vL'])).ireplace_label('vR*', 'vL')
         self.set_B(i0, theta, 'AC')
 
-        theta = self.get_B(i0-1, 'AC')
+        theta = self.get_B(i0 - 1, 'AC')
         theta = npc.tensordot(theta, VH.conj(), axes=(['vR'], ['vR*'])).ireplace_label('vL*', 'vR')
-        self.set_B(i0-1, theta, 'AC')
+        self.set_B(i0 - 1, theta, 'AC')
 
     @classmethod
     def from_hdf5(cls, hdf5_loader, h5gr, subpath):
@@ -414,17 +436,27 @@ class UniformMPS(MPS):
         obj.grouped = psi.grouped
         obj.segment_boundaries = psi.segment_boundaries
         obj.diagonal_gauge = True
-        obj.valid_umps = False # Need to check that AL[n] C[n+1] = AC[n] and C[n] AR[n] = AC[n]
+        obj.valid_umps = False  # Need to check that AL[n] C[n+1] = AC[n] and C[n] AR[n] = AC[n]
 
         # make copies of 4 types of tensors
-        obj._AR = [psi.get_B(i, form='B').astype(obj.dtype, copy=True).itranspose(obj._B_labels) for i in range(psi.L)]
-        obj._AC = [psi.get_B(i, form='Th').astype(obj.dtype, copy=True).itranspose(obj._B_labels) for i in range(psi.L)]
-        obj._AL = [psi.get_B(i, form='A').astype(obj.dtype, copy=True).itranspose(obj._B_labels) for i in range(psi.L)]
+        obj._AR = [
+            psi.get_B(i, form='B').astype(obj.dtype, copy=True).itranspose(obj._B_labels)
+            for i in range(psi.L)
+        ]
+        obj._AC = [
+            psi.get_B(i, form='Th').astype(obj.dtype, copy=True).itranspose(obj._B_labels)
+            for i in range(psi.L)
+        ]
+        obj._AL = [
+            psi.get_B(i, form='A').astype(obj.dtype, copy=True).itranspose(obj._B_labels)
+            for i in range(psi.L)
+        ]
         obj._C = []
         for i in range(psi.L):
-            C = npc.diag(psi.get_SL(i), obj._AL[i].get_leg('vL'), labels=['vL', 'vR']) # center matrix on the left of site `i`
+            C = npc.diag(psi.get_SL(i), obj._AL[i].get_leg('vL'),
+                         labels=['vL', 'vR'])  # center matrix on the left of site `i`
             obj._C.append(C.astype(obj.dtype, copy=True).itranspose(obj._C_labels))
-        
+
         # need to define S, since diagonal_gauge = True
         obj._S = [psi.get_SL(i).astype(obj.dtype, copy=True) for i in range(psi.L)]
 
@@ -448,15 +480,7 @@ class UniformMPS(MPS):
         raise NotImplementedError("Not valid for UniformMPS.")
 
     @classmethod
-    def from_Bflat(cls,
-                   sites,
-                   ALflat,
-                   ARflat,
-                   ACflat,
-                   Cflat,
-                   dtype=None,
-                   permute=True,
-                   legL=None):
+    def from_Bflat(cls, sites, ALflat, ARflat, ACflat, Cflat, dtype=None, permute=True, legL=None):
         """Construct a matrix product state from a set of numpy arrays and singular vals.
 
         Parameters
@@ -522,7 +546,9 @@ class UniformMPS(MPS):
 
             # calculate the LegCharge of the right leg of C
             Clegs = [legL, None]
-            Clegs = npc.detect_legcharge(C, ci, Clegs, None, qconj=-1) # Even though C has no physical leg, it can have charge.
+            Clegs = npc.detect_legcharge(
+                C, ci, Clegs, None,
+                qconj=-1)  # Even though C has no physical leg, it can have charge.
             C = npc.Array.from_ndarray(C, Clegs, dtype)
             C.iset_leg_labels(['vL', 'vR'])
             Cs.append(C)
@@ -617,11 +643,11 @@ class UniformMPS(MPS):
         """
         if form is None:
             return self.get_AR(i, copy=copy, label_p=label_p)
-        elif form=='A' or form==(1., 0.) or form=='AL':
+        elif form == 'A' or form == (1., 0.) or form == 'AL':
             return self.get_AL(i, copy=copy, label_p=label_p)
-        elif form=='B' or form==(0., 1.) or form=='AR':
+        elif form == 'B' or form == (0., 1.) or form == 'AR':
             return self.get_AR(i, copy=copy, label_p=label_p)
-        elif form=='Th' or form==(1., 1.) or form=='AC':
+        elif form == 'Th' or form == (1., 1.) or form == 'AC':
             return self.get_AC(i, copy=copy, label_p=label_p)
         else:
             raise NotImplementedError(f"Form {form!r} is not valid for UniformMPS.")
@@ -683,11 +709,11 @@ class UniformMPS(MPS):
         form : ``'B'/'AR' | 'A'/'AL' | 'Th'/'AC'`` | tuple(float, float)
             The (canonical) form of the `B` to set.
         """
-        if form=='A' or form==(1., 0.) or form=='AL':
+        if form == 'A' or form == (1., 0.) or form == 'AL':
             return self.set_AL(i, B)
-        elif form=='B' or form==(0., 1.) or form=='AR':
+        elif form == 'B' or form == (0., 1.) or form == 'AR':
             return self.set_AR(i, B)
-        elif form=='Th' or form==(1., 1.) or form=='AC':
+        elif form == 'Th' or form == (1., 1.) or form == 'AC':
             return self.set_AC(i, B)
         else:
             raise NotImplementedError(f"Form {list(form)!r} is not valid for UniformMPS.")
@@ -731,13 +757,13 @@ class UniformMPS(MPS):
         return self.get_C(i)
 
     def get_SR(self, i):
-        return self.get_C(i+1)
+        return self.get_C(i + 1)
 
     def set_SL(self, i, S):
         self.set_C(i, S)
 
     def set_SR(self, i, S):
-        self.set_C(i+1, S)
+        self.set_C(i + 1, S)
 
     def get_theta(self, i, n=2, cutoff=1.e-16, formL=1., formR=1.):
         """Calculates the `n`-site wavefunction on ``sites[i:i+n]``.
@@ -950,12 +976,15 @@ class UniformMPS(MPS):
             the largest eigenvalue of the TransferMatrix.
         """
         assert not ignore_form, "UniformMPS have both forms. Use one."
-        return super().overlap(other, charge_sector=charge_sector, ignore_form=ignore_form, **kwargs)
-    
+        return super().overlap(other,
+                               charge_sector=charge_sector,
+                               ignore_form=ignore_form,
+                               **kwargs)
+
     def _contract_with_LP(self, C, i):
         assert self.valid_umps
         return super()._contract_with_LP(C, i)
-    
+
     def _contract_with_RP(self, C, i):
         assert self.valid_umps
         return super()._contract_with_RP(C, i)

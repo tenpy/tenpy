@@ -10,10 +10,11 @@ For example an MPS represents the contraction along the 'virtual' legs/bonds of 
 
     site
     mps
-    umps
     mpo
     terms
     purification_mps
+    uniform_mps
+    momentum_mps
 """
 # Copyright (C) TeNPy Developers, GNU GPLv3
 

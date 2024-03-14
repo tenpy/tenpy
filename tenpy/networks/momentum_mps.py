@@ -4,14 +4,15 @@ This is an extension of the uniform MPS :class:`~tenpy.networks.uniform_mps.Unif
 
 For each unit-cell site of the initial uniform MPS, we define an excitation tensor `B`.
 The momentum state with momentum p is then constructed by the infinite sum, where one of the tensors of
-the uniform MPS is replaced by the excitation tensor:
+the uniform MPS is replaced by the excitation tensor::
 
     |           ipn  ...--AL[i-1] -- B[i] -- AR[i+1] -- ...
     | \sum_n   e            |         |        |
 
 
 The `B` tensors can possibly act on multiple neighboring sites to include larger excitations. 
-Furthermore, the `B` is decomposed into:
+Furthermore, the `B` is decomposed into::
+
     |           -B- = - VL -- X -
     |            |      |
 
@@ -24,16 +25,18 @@ always orthogonal to the initial uniform MPS. `X` parametrizes the excited state
 
 import numpy as np
 import logging
+
 logger = logging.getLogger(__name__)
 
 __all__ = ['MomentumMPS']
+
 
 class MomentumMPS:
     r"""A Matrix Product State, finite (MPS) or infinite (iMPS).
 
     Parameters
     ----------
-    Xs : list of :class:`npc.Array`
+    Xs : list of :class:`~tenpy.linalg.np_conserved.Array`
         Excitation tensors for each site of the unit cell.
     uMPS : :class:`~tenpy.networks.uniform_mps.UniformMPS`
         The uniform MPS on which the excitations are based.
@@ -46,7 +49,7 @@ class MomentumMPS:
     ----------
     dtype : type
         The data type of the ``_X``.
-    _X : list of :class:`npc.Array`
+    _X : list of :class:`~tenpy.linalg.np_conserved.Array`
         The excitation matrices of the MPS. Labels are ``vL, p1, ..., p{n_sites-1}, vR``.
     uMPS_GS : :class:`~tenpy.networks.uniform_mps.UniformMPS`
         The uniform MPS, representing the ground state.
@@ -55,13 +58,14 @@ class MomentumMPS:
     n_sites : int
         Number of sites for each excitation.
     """
+
     def __init__(self, Xs, uMPS, p, n_sites=1):
         assert len(Xs) == uMPS.L, "Need as many excitations as sites in unit cell."
         self.dtype = dtype = np.find_common_type([X.dtype for X in Xs], [])
         self._X = [X.astype(dtype, copy=True) for X in Xs]
         self.uMPS_GS = uMPS
         self.p = p
-        self.n_sites = n_sites # Number of sites of single excitation tensor.
+        self.n_sites = n_sites  # Number of sites of single excitation tensor.
 
     def copy(self):
         """Returns a copy of `self`.
@@ -148,7 +152,7 @@ class MomentumMPS:
         if copy:
             X = X.copy()
         return X
-    
+
     def set_X(self, i, X):
         """Set `X` at site `i`.
 
