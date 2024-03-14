@@ -36,8 +36,8 @@ __all__ = [
 
 
 def append_right_env(As, Bs, R, Ws=None):
-    """
-    Contract all tensors in As and Bs to the right environment R.
+    """Contract all tensors in As and Bs to the right environment R.
+
     If Ws given, contract as a MPO environment.
 
     Parameters
@@ -67,8 +67,8 @@ def append_right_env(As, Bs, R, Ws=None):
 
 
 def append_left_env(As, Bs, L, Ws=None):
-    """
-    Contract all tensors in As and Bs to the left environment L.
+    """Contract all tensors in As and Bs to the left environment L.
+
     If Ws given, contract as a MPO environment.
 
     Parameters
@@ -98,16 +98,17 @@ def append_left_env(As, Bs, L, Ws=None):
 
 
 def construct_orthogonal(M, left=True):
-    """
-    find (left) orthogonal complement of tensor M::
+    """find (left) orthogonal complement of tensor M
 
-    Q --
-    |
-    |    = 0
-    |
-    M --
-    
-    if left==False, find the right complement accordingly
+    It finds Q such that::
+
+      .--Q --
+      |  |
+      |  |    = 0
+      |  |
+      .--M --
+
+    if left==False, find the right complement accordingly.
 
     Parameters
     ----------
@@ -115,7 +116,7 @@ def construct_orthogonal(M, left=True):
         Array for which we want to find the orthogonal complement, labels are ``vL, vR, p`` (in any order).
     left : bool
         Whether we want to compute the left or right complement.
-    
+
     Returns
     -------
     Q : :class:`~tenpy.linalg.np_conserved.Array`
@@ -237,11 +238,11 @@ class PlaneWaveExcitationEngine(Algorithm):
         ----------
         p : float
             The momentum of the state; for unit cells larger than 1, we already include the
-            factor of the smaller Brillouin zone: p*L. 
+            factor of the smaller Brillouin zone: p*L.
         qtotal_change : list of int
             Charge sectors for each of the defined charges.
         orthogonal_to : list of list of :class:`~tenpy.linalg.np_conserved.Array`
-            Find excitations orthogonal to previously found tensors X. 
+            Find excitations orthogonal to previously found tensors X.
         E_boosts: list of float
             energy boosts for orthogonal states
         num_ev: int
@@ -303,7 +304,7 @@ class PlaneWaveExcitationEngine(Algorithm):
         ----------
         p : float
             The momentum of the state; for unit cells larger than 1, we already include the
-            factor of the smaller Brillouin zone: p*L. 
+            factor of the smaller Brillouin zone: p*L.
         X : list of :class:`~tenpy.linalg.np_conserved.Array`
             Excitation tensors for each site of the unit cell.
 
@@ -325,7 +326,7 @@ class PlaneWaveExcitationEngine(Algorithm):
 
         p : float
             The momentum of the state; for unit cells larger than 1, we already include the
-            factor of the smaller Brillouin zone: p*L. 
+            factor of the smaller Brillouin zone: p*L.
         X : list of :class:`~tenpy.linalg.np_conserved.Array`
             Current excitation tensors for each site of the unit cell.
 
@@ -408,7 +409,7 @@ class PlaneWaveExcitationEngine(Algorithm):
 
         p : float
             The momentum of the state; for unit cells larger than 1, we already include the
-            factor of the smaller Brillouin zone: p*L. 
+            factor of the smaller Brillouin zone: p*L.
         X : list of :class:`~tenpy.linalg.np_conserved.Array`
             Current excitation tensors for each site of the unit cell.
 
@@ -485,7 +486,9 @@ class PlaneWaveExcitationEngine(Algorithm):
             raise ValueError('Sum method', sum_method, 'not recognized!')
 
     class Aligned_Effective_H(NpcLinearOperator):
-        r"""Class defining the effective Hamiltonian for the excitation tensors `X`, where the `B` tensors are in the same unit cell as the tensors we want to update.
+        r"""Class defining the effective Hamiltonian for the excitation tensors `X`.
+
+        Where the `B` tensors are in the same unit cell as the tensors we want to update.
 
         For a single-site unit cell the effective Hamiltonian looks like this::
 
@@ -574,7 +577,7 @@ class PlaneWaveExcitationEngine(Algorithm):
             Parent engine for the plane wave excitation ansatz.
         p : float
             The momentum of the state; for unit cells larger than 1, we already include the
-            factor of the smaller Brillouin zone: p*L. 
+            factor of the smaller Brillouin zone: p*L.
         """
 
         def __init__(self, outer, p):
@@ -633,7 +636,7 @@ class PlaneWaveExcitationEngine(Algorithm):
         ----------
         qtotal_change : list of int
             For each charge sector specify how `X` should change the charge.
-        
+
         Returns
         -------
         X_init : list of :class:`~tenpy.linalg.np_conserved.Array`
@@ -778,11 +781,11 @@ class MultiSitePlaneWaveExcitationEngine(Algorithm):
         ----------
         p : float
             The momentum of the state; for unit cells larger than 1, we already include the
-            factor of the smaller Brillouin zone: p*L. 
+            factor of the smaller Brillouin zone: p*L.
         qtotal_change : list of int
             Charge sectors for each of the defined charges.
         orthogonal_to : list of list of :class:`~tenpy.linalg.np_conserved.Array`
-            Find excitations orthogonal to previously found tensors X. 
+            Find excitations orthogonal to previously found tensors X.
         E_boosts: list of float
             energy boosts for orthogonal states
         num_ev: int
@@ -848,7 +851,7 @@ class MultiSitePlaneWaveExcitationEngine(Algorithm):
         ----------
         p : float
             The momentum of the state; for unit cells larger than 1, we already include the
-            factor of the smaller Brillouin zone: p*L. 
+            factor of the smaller Brillouin zone: p*L.
         X : list of :class:`~tenpy.linalg.np_conserved.Array`
             Excitation tensors for each site of the unit cell.
 
@@ -908,7 +911,7 @@ class MultiSitePlaneWaveExcitationEngine(Algorithm):
 
         p : float
             The momentum of the state; for unit cells larger than 1, we already include the
-            factor of the smaller Brillouin zone: p*L. 
+            factor of the smaller Brillouin zone: p*L.
         X : list of :class:`~tenpy.linalg.np_conserved.Array`
             Current excitation tensors for each site of the unit cell.
 
@@ -1028,7 +1031,7 @@ class MultiSitePlaneWaveExcitationEngine(Algorithm):
 
         p : float
             The momentum of the state; for unit cells larger than 1, we already include the
-            factor of the smaller Brillouin zone: p*L. 
+            factor of the smaller Brillouin zone: p*L.
         X : list of :class:`~tenpy.linalg.np_conserved.Array`
             Current excitation tensors for each site of the unit cell.
 
@@ -1118,7 +1121,7 @@ class MultiSitePlaneWaveExcitationEngine(Algorithm):
             Parent engine for the plane wave excitation ansatz.
         p : float
             The momentum of the state; for unit cells larger than 1, we already include the
-            factor of the smaller Brillouin zone: p*L. 
+            factor of the smaller Brillouin zone: p*L.
         """
 
         def __init__(self, outer, p):
@@ -1229,7 +1232,7 @@ class MultiSitePlaneWaveExcitationEngine(Algorithm):
             Parent engine for the plane wave excitation ansatz.
         p : float
             The momentum of the state; for unit cells larger than 1, we already include the
-            factor of the smaller Brillouin zone: p*L. 
+            factor of the smaller Brillouin zone: p*L.
         """
 
         def __init__(self, outer, p):
@@ -1339,7 +1342,7 @@ class MultiSitePlaneWaveExcitationEngine(Algorithm):
         ----------
         qtotal_change : list of int
             For each charge sector specify how `X` should change the charge.
-        
+
         Returns
         -------
         X_init : list of :class:`~tenpy.linalg.np_conserved.Array`
