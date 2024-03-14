@@ -7,7 +7,7 @@ import warnings
 
 from . import simulation
 from .simulation import *
-from ..networks.mps import MPSEnvironment, MPS, MPSEnvironmentJW
+from ..networks.mps import MPSEnvironment, MPS
 from ..tools.misc import to_iterable
 from ..tools import hdf5_io
 
