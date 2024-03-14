@@ -169,7 +169,7 @@ from ..tools import hdf5_io
 from ..algorithms.truncation import TruncationError, svd_theta, _machine_prec_trunc_par
 from ..algorithms.tebd import RandomUnitaryEvolution
 
-__all__ = ['BaseMPSExpectationValue', 'MPS', 'BaseEnvironment', 'MPSEnvironment', 'TransferMatrix',
+__all__ = ['BaseMPSExpectationValue', 'MPS', 'BaseEnvironment', 'MPSEnvironment', 'MPSEnvironmentJW', 'TransferMatrix',
            'InitialStateBuilder', 'build_initial_state']
 
 
@@ -5365,7 +5365,7 @@ class BaseEnvironment(metaclass=ABCMeta):
         """Build initial left part ``LP``.
 
         If `bra` and `ket` are the same and in left canonical form, this is the environment
-        you get contracting he overlaps from the left infinity up to bond left of site `i`.
+        you get contracting the overlaps from the left infinity up to bond left of site `i`.
 
         For segment MPS, the :attr:`~tenpy.networks.mps.MPS.segment_boundaries` are read out
         (if set).
@@ -5884,6 +5884,36 @@ class MPSEnvironment(BaseEnvironment, BaseMPSExpectationValue):
         if update_bra:
             RP = npc.tensordot(RP, V.conj(), axes=['vL*', 'vR*'])
         self.set_RP(i, RP, self.get_RP_age(i))
+
+
+class MPSEnvironmentJW(MPSEnvironment):
+    """MPSEnvironment with Jordan Wigner strings in left LP.
+
+    Class similar to :class:`MPSEnvironment`, but overwriting the method
+    :meth:`_contract_LP` in a way that the Jordan Wigner string is automatically added when
+    contracting the left environment only -> expectation values should only
+    be calculated from left to right with this class. This class only works for finite MPS.
+    """
+    has_JW_in_LP = True
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.ket.bc != 'finite':
+            raise ValueError("The boundary conditions for a MPSEnvironment with Jordan Wigner strings in left LP "
+                             "must be finite")
+
+    def _contract_LP(self, i, LP):
+        i = self.ket._to_valid_index(i)  # redundant?
+        B_without_JW = self.ket.get_B(i, form='A')
+        JW = self.ket.sites[i].get_op('JW')  # JW might be different for different sites
+        # JW is unitary by def. so form should not be affected
+        B_with_JW = npc.tensordot(B_without_JW, JW, axes=(['p'], ['p*']))
+        # B_with_JW has axes ['vL', 'vR', 'p']
+        LP = npc.tensordot(LP, B_with_JW, axes=('vR', 'vL'))
+        axes = (self.ket._get_p_label('*') + ['vL*'], self.ket._p_label + ['vR*'])
+        # for a usual MPS, axes = (['p*', 'vL*'], ['p', 'vR*'])
+        LP = npc.tensordot(self.bra.get_B(i, form='A').conj(), LP, axes=axes)
+        return LP  # labels 'vR*', 'vR'
 
 
 class TransferMatrix(sparse.NpcLinearOperator):

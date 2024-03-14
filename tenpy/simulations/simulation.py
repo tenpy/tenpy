@@ -15,7 +15,7 @@ from pathlib import Path
 import time
 import importlib
 import warnings
-import functools
+import traceback
 import numpy as np
 import logging
 import copy
@@ -32,6 +32,7 @@ from ..tools.misc import find_subclass, convert_memory_units
 from ..tools.misc import update_recursive, get_recursive, set_recursive, merge_recursive
 from ..tools.misc import setup_logging as setup_logging_
 from .. import version
+from .post_processing import DataLoader
 from .measurement import (measurement_wrapper, _m_psi_method, _m_psi_method_wrapped,
                           _m_model_method, _m_model_method_wrapped)
 
@@ -96,6 +97,12 @@ class Simulation:
             Ignored by the simulation itself, but used by :func:`run_seq_simulations` and
             :func:`resume_from_checkpoint` to run a whole sequence of simulations passing on the
             state (and possible more).
+        max_errors_before_abort : int | None
+            We safeguard measurements with a try-except block to avoid loosing results after an expensive
+            simulation. This is the maximum number of errors happening during measurements
+            before we abort the whole simulation.
+            Setting this to None disables raising the error due to failed measurements 
+            (also at the end of the simulation).
 
     Attributes
     ----------
@@ -145,6 +152,9 @@ class Simulation:
     _backup_filename : str
         When writing a file a second time, instead of simply overwriting it, move it to there.
         In that way, we still have a non-corrupt version if something fails during saving.
+    errors_during_run : list of tuples
+        List holding errors that occurred during runtime, i.e. during measurements or post-processing.
+        This is read out (and possibly raises an Exception) at the end of :meth:`run`.
     _init_walltime : float
         Walltime at initialization of the simulation class.
         Used as reference point in :meth:`walltime`.
@@ -157,6 +167,9 @@ class Simulation:
     model_ungrouped :
         Only set if `grouped` > 1. In that case, :attr:`model` is the modified/grouped model,
         and `model_ungrouped` is the original ungrouped model.
+    final_processing : bool
+        Flag that indicates that we're in the final processing and want to avoid raising errors 
+        before saving results.
     """
     #: name of the default algorithm `engine` class
     default_algorithm = 'TwoSiteDMRGEngine'
@@ -168,6 +181,9 @@ class Simulation:
         ('tenpy.simulations.measurement', 'm_bond_dimension'),
         ('tenpy.simulations.measurement', 'm_entropy'),
     ]
+
+    #: tuples as for :cfg:option:`Simulation.run_post_processing`, same structure as for measurements
+    default_post_processing = []
 
     #: logger : An instance of a logger; see :doc:`/intro/logging`. NB: class attribute.
     logger = logging.getLogger(__name__ + ".Simulation")
@@ -216,6 +232,7 @@ class Simulation:
             'finished_run': False,
         }
         self._last_save = time.time()
+        self.errors_during_run = []  # add tuples holding ("name_step", module_name, module_func, err_traceback)
         self.measurement_event = EventHandler("psi, simulation, model, results")
         if resume_data is not None:
             if 'psi' in resume_data:
@@ -226,6 +243,8 @@ class Simulation:
         self.options.touch('sequential')  # added by :func:`run_seq_simulations` for completeness
         self.cache = CacheFile.open()
         self.grouped = 1
+        self.final_processing = False
+        self.max_errors_before_abort = self.options.get('max_errors_before_abort', 10)
 
     def __enter__(self):
         self.init_cache()
@@ -278,14 +297,17 @@ class Simulation:
         self.init_algorithm()
         self.init_measurements()
 
-        self.run_algorithm()
+        self.run_algorithm()  # here we spent most of the time
 
+        self.final_processing = True
         self.group_split()
         self.final_measurements()
+        self.run_post_processing()
         self.results['finished_run'] = True
         results = self.save_results()
         self.logger.info('finished simulation run\n' + "=" * 80)
         self.options.warn_unused(True)
+        self._display_errors_during_run()
         return results
 
     @classmethod
@@ -355,12 +377,17 @@ class Simulation:
         self.options.touch('measure_initial')
 
         self.resume_run_algorithm()  # continue with the actual algorithm
+        # here we spent most of the time
+
+        self.final_processing = True
         self.group_split()
         self.final_measurements()
+        self.run_post_processing()
         self.results['finished_run'] = True
         results = self.save_results()
         self.logger.info('finished simulation (resume_)run\n' + "=" * 80)
         self.options.warn_unused(True)
+        self._display_errors_during_run()
         return results
 
     def init_cache(self):
@@ -687,16 +714,30 @@ class Simulation:
         results : dict
             The results from calling the measurement functions.
         """
-        # TODO: safe-guard measurements with try-except?
         # in case of a failed measurement, we should raise the exception at the end of the
         # simulation?
         results = {}
         psi, model = self.get_measurement_psi_model(self.psi, self.model)
 
-        returned = self.measurement_event.emit(results=results,
-                                               psi=psi,
-                                               model=model,
-                                               simulation=self)
+        try: 
+            #
+            returned = self.measurement_event.emit(results=results,
+                                                   psi=psi,
+                                                   model=model,
+                                                   simulation=self)
+            # we safe-guard the measurements with try-except 
+            # to avoid that mistakes in the measurement cause us to loose all our data, 
+            # e.g. if we were running DMRG for days, and just have a stupid typo in a measurement function
+        except Exception as e:
+            err_traceback = traceback.format_exc()
+            self.errors_during_run.append(("measurement", "?", "?", err_traceback))
+            max_errs = self.max_errors_before_abort
+            if max_errs is not None and len(self.errors_during_run) >= max_errs and not self.final_processing:
+                tracebacks = [f"Error during {step} of {module_name} {module_func}\n{err_traceback}"
+                        for (step, module_name, module_func, err_traceback) in self.errors_during_run]
+                raise RuntimeError('\n'.join(["Too many failed measurements \n"] + tracebacks))
+                
+            
         # check for returned values, although there shouldn't be any
         returned = [entry for entry in returned if entry is not None]
         if len(returned) > 0:
@@ -743,6 +784,84 @@ class Simulation:
     def final_measurements(self):
         """Perform a last set of measurements."""
         self.make_measurements()
+
+    def run_post_processing(self):
+        """Apply (several) post-processing steps.
+
+        .. cfg:configoptions :: Simulation
+
+        post_processing : list of tuple
+            Functions to perform post-processing with the :class:`DataLoader`.
+            This uses a similar syntax to the attr:`connect_measurements` in meth:`init_measurements`.
+            Each tuple can be of length 2 to 3, with entries ``(module, function, kwargs)``.
+            The kwargs can contain a ``results_key`` under which the results (unless None is returned)
+            are saved. All other kwargs are passed on to the function.
+
+            .. note ::
+
+                All post-processing functions should follow the syntax:
+                ``def pp_function(DL, *, kwarg1, kwarg_2=default_2):``
+                where ``DL`` is an instance of the :class:`DataLoader`, ``kwarg_1`` is a necessary
+                keyword argument (no default value), while ``kwarg_2`` is an optional keyword argument (with
+                default value)
+
+        """
+        def_pp = self.default_post_processing
+
+        man_pp = list(self.options.get('post_processing', []))
+
+        all_pp = def_pp + man_pp
+
+        if len(all_pp) > 0:
+            DL = DataLoader(simulation=self)
+            for pp_step in all_pp:
+                # pp_step : module_name, func_name, extra_kwargs=None
+                # use try, except, so we don't abort a Simulation if post-processing is not working
+                try:
+                    self._post_processing(DL, *pp_step)
+                except Exception:
+                    err_traceback = traceback.format_exc()
+                    self.errors_during_run.append(("post_process", pp_step[0], pp_step[1], err_traceback))
+
+    def _post_processing(self, DL: DataLoader, module_name: str, func_name: str, extra_kwargs: dict = None):
+        """Apply one post-processing step."""
+        # get function / from module_name namespace
+        if extra_kwargs is None:
+            extra_kwargs = {}
+        function = hdf5_io.find_global(module_name, func_name)
+        # check if results_key is supplied
+        if 'results_key' in extra_kwargs:
+            results_key = extra_kwargs['results_key']
+            del extra_kwargs['results_key']
+        else:
+            results_key = func_name
+        # perform post-processing
+        self.logger.info(f"calling post-processing function {func_name}")
+        pp_result = function(DL, **extra_kwargs)
+        # pp_result might be None, skip saving
+        if pp_result is not None:
+            # make sure we don't override any results
+            all_results_keys = self.results.keys()
+            if results_key in all_results_keys:
+                for i in range(1, 1000):
+                    new_results_key = f"{results_key}_{i:d}"
+                    if new_results_key not in all_results_keys:
+                        results_key = new_results_key
+                        break
+                    else:
+                        raise ValueError("specify different results_key, there are already too many of them!")
+
+            self.logger.info(f"Saving post-processing result under {results_key}")
+            self.results[results_key] = pp_result
+
+    def _display_errors_during_run(self):
+        if len(self.errors_during_run) > 0:
+            for (step, module_name, module_func, err_traceback) in self.errors_during_run:
+                msg = f"Error during {step} of {module_name} {module_func}\n{err_traceback}"
+                warnings.warn(msg)
+            if self.output_filename is not None and self.max_errors_before_abort is not None:
+                raise Exception("Error(s) occurred during the Simulation, see warning of error messages above -"
+                                f"but we saved results anyways in {self.output_filename}.")
 
     def get_version_info(self):
         """Try to save version info which is necessary to allow reproducibility."""
@@ -943,8 +1062,7 @@ class Simulation:
         :cfg:configoptions :: Simulation
 
             save_resume_data : bool
-                If True, include data from :meth:`~tenpy.algorithms.Algorithm.get_resume_data`
-                into the output as `resume_data`.
+                If True, include data returned by :meth:`get_resume_data` into the output as `resume_data`.
 
         Returns
         -------
@@ -953,6 +1071,8 @@ class Simulation:
             Measurement results are converted into a numpy array (if possible).
         """
         results = self.results.copy()
+        if len(self.errors_during_run) > 0:
+            results['errors_during_run'] = self.errors_during_run
         results['simulation_parameters'] = self.options.as_dict()
         if 'measurements' in results:
             # try to convert measurements into numpy arrays to store more compactly
@@ -965,8 +1085,18 @@ class Simulation:
                 if v.dtype != np.dtype(object):
                     measurements[k] = v
         if self.options.get('save_resume_data', self.options['save_psi']):
-            results['resume_data'] = self.engine.get_resume_data()
+            results['resume_data'] = self.get_resume_data()
         return results
+
+    def get_resume_data(self) -> dict:
+        """Get resume data for a Simulation.
+
+        Return data from :meth:`~tenpy.algorithms.Algorithm.get_resume_data` in base :class:`Simulation`.
+        Subclasses should override this with ``resume_data = super().get_resume_data()``, s.t.
+        :class:`Simulation` specific data can easily be returned for ``resume_data``.
+        """
+        resume_data = self.engine.get_resume_data()
+        return resume_data
 
     def save_at_checkpoint(self, alg_engine):
         """Save the intermediate results at the checkpoint of an algorithm.
@@ -975,7 +1105,7 @@ class Simulation:
         ----------
         alg_engine : :class:`~tenpy.algorithms.Algorithm`
             The engine of the algorithm. Not used in this function, mostly there for compatibility
-            with the :attr:`tenpy.algorithms.Algorithm.checkpoint` event.
+            with the :attr:`~tenpy.algorithms.Algorithm.checkpoint` event.
 
         Options
         -------
@@ -984,7 +1114,7 @@ class Simulation:
             save_every_x_seconds : float | None
                 By default (``None``), this feature is disabled.
                 If given, save the :attr:`results` obtained so far at each
-                :attr:`tenpy.algorithm.Algorithm.checkpoint` when at least `save_every_x_seconds`
+                :attr:`~tenpy.algorithm.Algorithm.checkpoint` when at least `save_every_x_seconds`
                 seconds evolved since the last save (or since starting the algorithm).
                 To avoid unnecessary, slow disk input/output, the value will be increased if
                 saving takes longer than 10% of `save_every_x_seconds`.
@@ -1065,7 +1195,7 @@ def init_simulation(simulation_class='GroundStateSearch',
     -------
     results : dict
         The results of the Simulation, i.e., what
-        :meth:`tenpy.simulations.simulation.Simulation.run()` returned.
+        :meth:`~tenpy.simulations.simulation.Simulation.run()` returned.
     """
     SimClass = find_subclass(Simulation, simulation_class)
     if simulation_class_kwargs is None:
@@ -1099,7 +1229,7 @@ def run_simulation(simulation_class='GroundStateSearch',
     -------
     results : dict
         The results of the Simulation, i.e., what
-        :meth:`tenpy.simulations.simulation.Simulation.run()` returned.
+        :meth:`~tenpy.simulations.simulation.Simulation.run()` returned.
     """
     if simulation_class_name is not _deprecated_not_set:
         assert simulation_class == 'GroundStateSearch'
@@ -1147,7 +1277,7 @@ def init_simulation_from_checkpoint(*,
     -------
     results :
         The results from running the simulation, i.e.,
-        what :meth:`tenpy.simulations.Simulation.resume_run()` returned.
+        what :meth:`~tenpy.simulations.Simulation.resume_run()` returned.
 
     Notes
     -----
@@ -1208,7 +1338,7 @@ def resume_from_checkpoint(*,
     -------
     results :
         The results from running the simulation, i.e.,
-        what :meth:`tenpy.simulations.Simulation.resume_run()` returned.
+        what :meth:`~tenpy.simulations.Simulation.resume_run()` returned.
 
     Notes
     -----
