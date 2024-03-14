@@ -280,7 +280,12 @@ def test_SpectralSimulation():
         # building with initial state passed in sim params
         sim_params = copy.deepcopy(spectral_sim_params)
         sim = SpectralSimulationClass(sim_params)
-        results = sim.run()
+        with warnings.catch_warnings(record=True) as caught:
+            results = sim.run()
+        for w in caught:
+            if "No ground state data is supplied" not in str(w.message):
+                warnings.showwarning(w.message, w.category, w.filename, w.lineno, w.file, w.line)
+
         assert sim.model.lat.bc_MPS == 'finite'  # check whether model parameters were used
         assert 'psi' and 'psi_ground_state' in results  # should be by default
         assert 'spectral_function_Sz_Sz' in results  # output of SpectralSimulation for sim_params
