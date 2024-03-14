@@ -892,6 +892,20 @@ class Hdf5Loader:
         """
         self.memo_load.setdefault(h5gr.id, obj)  # don't overwrite existing entries!
 
+    def get_all_hdf5_keys(self, h5_group=None):
+        if h5_group is None:
+            h5_group = self.h5group
+        results = dict()
+        for key in h5_group.keys():
+            if isinstance(h5_group[key], h5py.Group):
+                results[key] = self.get_all_hdf5_keys(h5_group[key])
+            else:
+                results[key] = h5_group[key]
+        # if we are on the lowest recursion level, we only return the keys as sets
+        if not any([isinstance(h5_group[key], h5py.Group) for key in h5_group.keys()]):
+            results = set(results)
+        return results
+
     @staticmethod
     def get_attr(h5gr, attr_name):
         """Return attribute ``h5gr.attrs[attr_name]``, if existent.

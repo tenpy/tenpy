@@ -24,6 +24,8 @@ tests/benchmark/*.txt
 tests/benchmark/*.png
 hdf5_io/
 examples/yaml/results
+.ipynb_checkpoints
+.idea
 .coverage
 htmlcov
 coverage.*
