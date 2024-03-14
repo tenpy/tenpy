@@ -85,15 +85,14 @@ class RealTimeEvolution(Simulation):
 
 
 class TimeDependentCorrelation(RealTimeEvolution):
-    r"""A subclass of :class:`RealTimeEvolution` to specifically calculate the
-    time dependent correlation function.
+    r"""Specialized :class:`RealTimeEvolution` to calculate a time dependent correlation function of a ground state.
 
-    In general this subclass calculates an overlap
-    of the form :math:`C(r, t) = <\psi_0| B_r(t) A_{r_0} |\psi_0>` where :math:`A_{r_0}` can be
-    passed as a simple on-site operator (on site `r0`) or as a product operator acting on
-    several sites. The operator B is currently restricted to a single-site operator.
-    However, passing `B` as a list ``[B_1, B_2, B_3]`` to calculate several overlaps
-    is possible.
+    In general this calculates an overlap of the form :math:`C(r, t) = <\psi_0| B_r(t) A_{r_0} |\psi_0>`
+    where :math:`A_{r_0}` can be passed as a simple on-site operator (on site `r0`) or as a product
+    operator acting on several sites. The operator B is currently restricted to a single-site operator.
+    However, passing `B` as a list ``[B_1, B_2, B_3]`` to calculate several overlaps is possible.
+    This class assumes that :math:`|\psi_0>` is a ground-state. In order to evolve arbitrary initial states,
+    the :class:`TimeDependentCorrelationEvolveBraKet` should be used.
 
     Parameters
     ----------
@@ -102,9 +101,12 @@ class TimeDependentCorrelation(RealTimeEvolution):
         parameters of a simulation to ensure reproducibility.
         These parameters are converted to a (dict-like) :class:`~tenpy.tools.params.Config`.
         For command line use, a ``.yml`` file should hold the information.
-    **kwargs : dict
-        ground_state_data: dict
-        ground_state_filename: str
+    ground_state_filename: str
+        the filename as in :cfg:option:`Simulation.output_filename` from a finished
+        :class:`tenpy.simulations.ground_state_search.GroundStateSearch`
+    ground_state_data: dict
+        the ground-state data as a dictionary, i.e. the `gs_results` when running a
+        :class:`tenpy.simulations.ground_state_search.GroundStateSearch`
 
     Options
     -------
@@ -117,6 +119,9 @@ class TimeDependentCorrelation(RealTimeEvolution):
             a filename of a given ground state search (ideally a hdf5 file coming from a finished
             run of a :class:`~tenpy.simulations.ground_state_search.GroundStateSearch`)
     """
+    default_measurements = RealTimeEvolution.default_measurements + [
+        ('simulation_method', 'm_correlation_function'),
+    ]
 
     def __init__(self, options, *, ground_state_data=None, ground_state_filename=None, **kwargs):
         super().__init__(options, **kwargs)
@@ -170,10 +175,12 @@ class TimeDependentCorrelation(RealTimeEvolution):
         resume_data['gs_energy'] = self.gs_energy
         return resume_data
 
-    def _connect_measurements(self):
-        """Connect :func:`m_correlation_function` to measurements."""
-        self._connect_measurements_fct('simulation_method', 'm_correlation_function', priority=1)
-        super()._connect_measurements()
+    def init_measurements(self):
+        use_default_meas = self.options.silent_get('use_default_measurements', True)
+        connect_any_meas = self.options.silent_get('connect_measurements', None)
+        if use_default_meas is False and connect_any_meas is None:
+            warnings.warn(f"No measurements are being made, this might not make sense for {self.__class__}")
+        super().init_measurements()
 
     def init_state(self):
         # make sure state is not reinitialized if psi and psi_ground_state are given
@@ -337,14 +344,15 @@ class TimeDependentCorrelation(RealTimeEvolution):
 class TimeDependentCorrelationEvolveBraKet(TimeDependentCorrelation):
     r"""Evolving the bra and ket state in :class:`TimeDependentCorrelation`.
 
-    This class allows the calculation of a time-dependent correlation function for a state that is not the ground-state.
-    Which is :math:`C(r, t) = <\psi| e^{i H t} A e^{-i H t} B |\psi>` where `A` is an operator out of the list
-    of ``operator_t`` and `B` is the ``operator_t0`` at the given site.
+    This class allows the calculation of a time-dependent correlation function for arbitrary states
+    :math:`|\psi>` (not necessarily ground-states).
+    The time-dependent correlation function is :math:`C(r, t) = <\psi| e^{i H t} A e^{-i H t} B |\psi>`
+    where `A` is an operator out of the list of ``operator_t`` and `B` is the ``operator_t0`` at the given site.
 
     .. note ::
 
         Any (custom) measurement function and default measurement are measuring with respect to the
-        state where the ``opeartor_t0`` was already applied, that is w.r.t. :math:`B |\psi>`
+        state where the ``operator_t0`` was already applied, that is w.r.t. :math:`B |\psi>`
 
 
     Options
@@ -411,8 +419,9 @@ class TimeDependentCorrelationEvolveBraKet(TimeDependentCorrelation):
         """Equivalent to :meth:`TimeDependentCorrelation.m_correlation_function`."""
         self.logger.info("calling m_correlation_function")
         operator_t = to_iterable(self.operator_t)
-        psi_bra = self.engine_bra.psi.copy()  # make copy since algorithm might use grouped bra
+        psi_bra = self.engine_bra.psi
         if self.grouped > 1:
+            psi_bra = psi_bra.copy()  # make copy since algorithm might use grouped bra
             psi_bra.group_split(self.options['algorithm_params']['trunc_params'])
         env = MPSEnvironmentJW(psi_bra, psi) if self.addJW else MPSEnvironment(psi_bra, psi)
         for op in operator_t:
@@ -466,7 +475,6 @@ class SpectralSimulation(TimeDependentCorrelation):
             linear prediction or gaussian windowing. The keys correspond to the kwargs of
             :func:`~tenpy.tools.spectral_function_tools.spectral_function`.
     """
-    default_post_processing = []
 
     def __init__(self, options, *, ground_state_data=None, ground_state_filename=None, **kwargs):
         super().__init__(options,

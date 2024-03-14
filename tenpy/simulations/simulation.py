@@ -146,6 +146,9 @@ class Simulation:
     _backup_filename : str
         When writing a file a second time, instead of simply overwriting it, move it to there.
         In that way, we still have a non-corrupt version if something fails during saving.
+    errors_during_run : list of tuples
+        List holding errors that occurred during runtime, i.e. during post-processing.
+        This is read out (and possibly raises an Exception) at the end of :meth:`run`
     _init_walltime : float
         Walltime at initialization of the simulation class.
         Used as reference point in :meth:`walltime`.
@@ -170,6 +173,9 @@ class Simulation:
         ('tenpy.simulations.measurement', 'm_energy_MPO'),
         ('tenpy.simulations.measurement', 'm_entropy'),
     ]
+
+    #: tuples as for :cfg:option:`Simulation.run_post_processing`, same structure as for measurements
+    default_post_processing = []
 
     #: logger : An instance of a logger; see :doc:`/intro/logging`. NB: class attribute.
     logger = logging.getLogger(__name__ + ".Simulation")
@@ -218,6 +224,7 @@ class Simulation:
             'finished_run': False,
         }
         self._last_save = time.time()
+        self.errors_during_run = []  # add tuples holding ("name_step", module_name, module_func, err_traceback)
         self.measurement_event = EventHandler("psi, simulation, model, results")
         if resume_data is not None:
             if 'psi' in resume_data:
@@ -289,6 +296,7 @@ class Simulation:
         results = self.save_results()
         self.logger.info('finished simulation run\n' + "=" * 80)
         self.options.warn_unused(True)
+        self._display_errors_during_run()
         return results
 
     @classmethod
@@ -769,10 +777,8 @@ class Simulation:
                 default value)
 
         """
-        if hasattr(self, 'default_post_processing'):
-            def_pp = self.default_post_processing
-        else:
-            def_pp = []
+        def_pp = self.default_post_processing
+
         man_pp = list(self.options.get('post_processing', []))
 
         all_pp = def_pp + man_pp
@@ -785,9 +791,8 @@ class Simulation:
                 try:
                     self._post_processing(DL, *pp_step)
                 except Exception:
-                    self.logger.info("Could not post-process the results because of the following exception:")
-                    self.logger.warning(traceback.format_exc())
-                    self.logger.info("continuing saving results without post-processing")
+                    err_traceback = traceback.format_exc()
+                    self.errors_during_run.append(("post_process", pp_step[0], pp_step[1], err_traceback))
 
     def _post_processing(self, DL: DataLoader, module_name: str, func_name: str, extra_kwargs: dict = None):
         """Apply one post-processing step."""
@@ -807,18 +812,28 @@ class Simulation:
         # pp_result might be None, skip saving
         if pp_result is not None:
             # make sure we don't override any results
-            all_result_keys = self.results.keys()
-            if results_key in all_result_keys:
-                key_to_save = results_key + '_1'
-                while results_key in all_result_keys:
-                    old_idx = key_to_save[-1]
-                    new_idx = str(int(old_idx) + 1)  # increase by one
-                    results_key = results_key[:-1] + new_idx
-            else:
-                key_to_save = results_key
+            all_results_keys = self.results.keys()
+            if results_key in all_results_keys:
+                for i in range(1, 1000):
+                    new_results_key = f"{results_key}_{i:d}"
+                    if new_results_key not in all_results_keys:
+                        results_key = new_results_key
+                        break
+                    else:
+                        raise ValueError("specify different results_key, there are already too many of them!")
 
-            self.logger.info(f"Saving post-processing result under {key_to_save}")
-            self.results[key_to_save] = pp_result
+            self.logger.info(f"Saving post-processing result under {results_key}")
+            self.results[results_key] = pp_result
+
+    def _display_errors_during_run(self):
+        if len(self.errors_during_run) > 0:
+            for error in self.errors_during_run:
+                msg = '\n'.join([f"Error during {error[0]} of {error[1]} {error[2]}",
+                                 error[3],  # -> traceback of error
+                                 "-> saved results anyways"])
+                warnings.warn(msg)
+            if self.output_filename is not None:
+                raise Exception("Error(s) occurred during the Simulation")
 
     def get_version_info(self):
         """Try to save version info which is necessary to allow reproducibility."""

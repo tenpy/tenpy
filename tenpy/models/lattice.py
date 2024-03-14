@@ -3286,7 +3286,7 @@ class SimpleBZ:
             # express points again in the standard basis
             points = np.tensordot(points, A, (-1, -1))
             #  get all points lying still outside the BZ
-            outside_bz = np.invert(self.contains_points(points))  # -> boolean array
+            outside_bz = np.logical_not(self.contains_points(points))  # -> boolean array
             points_outside_bz = points[outside_bz]  # -> shape (N_outside, 2)
             # all possible translation vectors to reduced points from parallelogram to
             # 1st BZ as matrix

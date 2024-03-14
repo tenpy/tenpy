@@ -202,15 +202,22 @@ def plot_correlations_on_lattice(ax,
     ax :
         `matplotlib.axes.Axes`
     lat :
-        a (TeNPy) lattice to plot the correlations on
+        a (TeNPy) lattice :class:`~tenpy.lattice.Lattice` to plot the correlations on
     correlations : array-like
         an array of correlations (in mps_form)
     pairs: str
+        Pairs as in :attr:`~tenpy.lattice.Lattice.pairs`
     scale: float
+        scale of the lines defining the correlations
     color_pos: str
+        color for positive correlations
     color_neg: str
+        color for negative correlations
     color: str
+        one color for both positive and negative correlations
     zorder: float
+        zorder of lines defining the correlations (set a higher order to display them above
+        the couplings)
     """
     from matplotlib.collections import LineCollection
 

@@ -36,8 +36,7 @@ __all__ = [
 
 
 class DataLoader:
-    r"""Post-processing class to handle IO more easily and to directly
-    instantiating a model/mps from a Simulation.
+    r"""Post-processing class to handle IO and get Model and MPS from saved simulation data.
 
     Parameters
     ----------
@@ -158,7 +157,7 @@ class DataLoader:
         Returns
         -------
         res :
-            data corresponding to path`
+            data corresponding to path
         """
         key = prefix + path
         try:
@@ -233,8 +232,7 @@ def pp_spectral_function(DL: DataLoader,
                          correlation_key,
                          conjugate_correlation=False,
                          **kwargs):
-    r"""Given a time dependent correlation function C(t, r), calculate its
-    Spectral Function.
+    r"""Given a time dependent correlation function C(t, r), calculate its Spectral Function.
 
     After a run of :class:`~tenpy.simulations.time_evolution.TimeDependentCorrelation`, a :class:`DataLoader` instance
     should be passed, from which the underlying lattice and additional parameters (e.g. ``dt``) can be extracted.
@@ -282,8 +280,8 @@ def pp_plot_correlations_on_lattice(DL: DataLoader,
     t_step: int
         time step to plot correlations on
     keys : str or list
-        either a single string, or a list specifying which pairs to plot,
-        default is 'nearest_neighbors', other options are ['next_nearest_neighbors', 'next_next_nearest_neighbors']
+        Valid keys are the ones defined in the corresponding lattice :attr:`~tenpy.models.lattice.Lattice.pairs`,
+        e.g. `'nearest_neighbors'`
     markers : str or list
           a str for a single or a list of symbols for different sites within a unit cell given to plot sites
     figsize : tuple
