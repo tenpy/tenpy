@@ -9,7 +9,7 @@ Only functions in this module are valid "actions", but you can add new functions
 if necessary; from outside tenpy just
 ``tenpy.mpi_parallel.actions.my_new_action = my_new_function``.
 """
-# Copyright 2021-2023 TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, GNU GPLv3
 
 import numpy as np
 import copy

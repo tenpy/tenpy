@@ -1,5 +1,5 @@
 """Extension of other tenpy classes to employ MPI parallelization."""
-# Copyright 2021-2023 TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, GNU GPLv3
 
 #: flag to select contraction method for attaching W to LP/RP, which requires much communication
 CONTRACT_W = "sparse"  # you can't change this dynamically....

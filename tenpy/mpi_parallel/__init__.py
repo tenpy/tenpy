@@ -19,7 +19,7 @@ which needs to be installed when you want to use classes in this module.
     :toctree: .
 
 """
-# Copyright 2021-2023 TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, GNU GPLv3
 
 from . import helpers, actions, distributed, simulation
 

@@ -1,5 +1,5 @@
 """Helper functions and classes for MPI parallelziation."""
-# Copyright 2021-2023 TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, GNU GPLv3
 
 
 import numpy as np

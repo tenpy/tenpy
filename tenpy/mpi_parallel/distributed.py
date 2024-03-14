@@ -1,5 +1,5 @@
 """Classes/functions for memory management on the different nodes."""
-# Copyright 2021-2023 TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, GNU GPLv3
 
 import os
 from . import actions

@@ -1,4 +1,4 @@
-# Copyright 2022-2023 TeNPy Developers, GNU GPLv3
+# Copyright (C) TeNPy Developers, GNU GPLv3
 
 import tenpy
 from tenpy.mpi_parallel import helpers
