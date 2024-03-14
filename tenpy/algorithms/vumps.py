@@ -364,6 +364,12 @@ class VUMPSEngine(IterativeSweeps):
 
         return E, self.psi.to_MPS(check_overlap=check_overlap)
     
+    def mixer_cleanup(self):
+        """For uniform MPS there is no need to clean up after the mixer.
+        """
+        pass
+
+    
     def run(self):
         """Run the VUMPS simulation to find the ground state.
 
