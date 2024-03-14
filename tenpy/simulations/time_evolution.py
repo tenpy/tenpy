@@ -113,8 +113,6 @@ class TimeDependentCorrelation(RealTimeEvolution):
     .. cfg:config :: TimeDependentCorrelation
         :include: TimeEvolution
 
-        addJW : bool
-            boolean flag whether to add the Jordan Wigner String or not
         ground_state_filename : str
             a filename of a given ground state search (ideally a hdf5 file coming from a finished
             run of a :class:`~tenpy.simulations.ground_state_search.GroundStateSearch`)
@@ -160,7 +158,6 @@ class TimeDependentCorrelation(RealTimeEvolution):
         self.operator_t0_config = self.options.subconfig('operator_t0')
         self.operator_t0_name = self._get_operator_t0_name()
         self.operator_t0 = None  # read out config later, since defaults depend on model parameters
-        self.addJW = self.options.get('addJW', False)
 
     def resume_run(self):
         if not hasattr(self, 'psi_ground_state'):
@@ -306,9 +303,6 @@ class TimeDependentCorrelation(RealTimeEvolution):
         ops = self.operator_t0
         if len(ops) == 1:
             op, i = ops[0]
-            if self.model.lat.site(i).op_needs_JW(op):
-                for j in range(i):
-                    self.psi.apply_local_op(j, 'JW')
             self.psi.apply_local_op(i, op)
         else:
             ops, i_min, _ = self.psi._term_to_ops_list(ops, True)  # applies JW string automatically
@@ -334,7 +328,7 @@ class TimeDependentCorrelation(RealTimeEvolution):
         self.logger.info("calling m_correlation_function")
         operator_t = to_iterable(self.operator_t)
         psi_gs = self.psi_ground_state
-        env = MPSEnvironmentJW(psi_gs, psi) if self.addJW else MPSEnvironment(psi_gs, psi)
+        env = MPSEnvironment(psi_gs, psi)
         phase = np.exp(1j * self.gs_energy * self.engine.evolved_time)
         for op in operator_t:
             results_key = f"correlation_function_t_{op}_{self.operator_t0_name}"  # as op is a str
@@ -423,7 +417,7 @@ class TimeDependentCorrelationEvolveBraKet(TimeDependentCorrelation):
         if self.grouped > 1:
             psi_bra = psi_bra.copy()  # make copy since algorithm might use grouped bra
             psi_bra.group_split(self.options['algorithm_params']['trunc_params'])
-        env = MPSEnvironmentJW(psi_bra, psi) if self.addJW else MPSEnvironment(psi_bra, psi)
+        env = MPSEnvironment(psi_bra, psi)
         for op in operator_t:
             results_key = f"correlation_function_t_{op}_{self.operator_t0_name}"  # as op is a str
             results[results_key] = env.expectation_value(op)
