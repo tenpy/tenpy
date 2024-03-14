@@ -75,6 +75,7 @@ def test_Simulation_with_post_processing():
     sim_params = copy.deepcopy(simulation_params)
     sim = Simulation(sim_params)
     results = sim.run()  # should do exactly two measurements: one before and one after eng.run()
+    assert 'errors_during_run' in results, "we called broken_pp_dummy_function, so there should be an error"
     assert 'pp_result' in results
     assert 'pp_result_1' in results  # make sure pp_result was not overwritten
 
@@ -87,8 +88,10 @@ def test_init_of_DataLoader(tmp_path):
     sim_params = copy.deepcopy(simulation_params)
     sim_params['directory'] = tmp_path.as_posix()
     sim_params['output_filename'] = '_test.pkl'
+    sim_params['max_errors_before_abort'] = None
     sim = Simulation(sim_params)
     results = sim.run()
+    assert 'errors_during_run' in results, "we called broken_pp_dummy_function, so there should be an error"
     DL_1 = DataLoader(data=results)
     DL_2 = DataLoader(simulation=sim)
     DL_3 = DataLoader(filename=tmp_path / '_test.pkl')

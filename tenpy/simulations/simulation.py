@@ -97,6 +97,12 @@ class Simulation:
             Ignored by the simulation itself, but used by :func:`run_seq_simulations` and
             :func:`resume_from_checkpoint` to run a whole sequence of simulations passing on the
             state (and possible more).
+        max_errors_before_abort : int | None
+            We safeguard measurements with a try-except block to avoid loosing results after an expensive
+            simulation. This is the maximum number of errors happening during measurements
+            before we abort the whole simulation.
+            Setting this to None disables raising the error due to failed measurements 
+            (also at the end of the simulation).
 
     Attributes
     ----------
@@ -147,8 +153,8 @@ class Simulation:
         When writing a file a second time, instead of simply overwriting it, move it to there.
         In that way, we still have a non-corrupt version if something fails during saving.
     errors_during_run : list of tuples
-        List holding errors that occurred during runtime, i.e. during post-processing.
-        This is read out (and possibly raises an Exception) at the end of :meth:`run`
+        List holding errors that occurred during runtime, i.e. during measurements or post-processing.
+        This is read out (and possibly raises an Exception) at the end of :meth:`run`.
     _init_walltime : float
         Walltime at initialization of the simulation class.
         Used as reference point in :meth:`walltime`.
@@ -161,6 +167,9 @@ class Simulation:
     model_ungrouped :
         Only set if `grouped` > 1. In that case, :attr:`model` is the modified/grouped model,
         and `model_ungrouped` is the original ungrouped model.
+    final_processing : bool
+        Flag that indicates that we're in the final processing and want to avoid raising errors 
+        before saving results.
     """
     #: name of the default algorithm `engine` class
     default_algorithm = 'TwoSiteDMRGEngine'
@@ -235,6 +244,8 @@ class Simulation:
         self.options.touch('sequential')  # added by :func:`run_seq_simulations` for completeness
         self.cache = CacheFile.open()
         self.grouped = 1
+        self.final_processing = False
+        self.max_errors_before_abort = self.options.get('max_errors_before_abort', 10)
 
     def __enter__(self):
         self.init_cache()
@@ -287,8 +298,9 @@ class Simulation:
         self.init_algorithm()
         self.init_measurements()
 
-        self.run_algorithm()
+        self.run_algorithm()  # here we spent most of the time
 
+        self.final_processing = True
         self.group_split()
         self.final_measurements()
         self.run_post_processing()
@@ -366,6 +378,9 @@ class Simulation:
         self.options.touch('measure_initial')
 
         self.resume_run_algorithm()  # continue with the actual algorithm
+        # here we spent most of the time
+
+        self.final_processing = True
         self.group_split()
         self.final_measurements()
         self.run_post_processing()
@@ -373,6 +388,7 @@ class Simulation:
         results = self.save_results()
         self.logger.info('finished simulation (resume_)run\n' + "=" * 80)
         self.options.warn_unused(True)
+        self._display_errors_during_run()
         return results
 
     def init_cache(self):
@@ -699,16 +715,30 @@ class Simulation:
         results : dict
             The results from calling the measurement functions.
         """
-        # TODO: safe-guard measurements with try-except?
         # in case of a failed measurement, we should raise the exception at the end of the
         # simulation?
         results = {}
         psi, model = self.get_measurement_psi_model(self.psi, self.model)
 
-        returned = self.measurement_event.emit(results=results,
-                                               psi=psi,
-                                               model=model,
-                                               simulation=self)
+        try: 
+            #
+            returned = self.measurement_event.emit(results=results,
+                                                   psi=psi,
+                                                   model=model,
+                                                   simulation=self)
+            # we safe-guard the measurements with try-except 
+            # to avoid that mistakes in the measurement cause us to loose all our data, 
+            # e.g. if we were running DMRG for days, and just have a stupid typo in a measurement function
+        except Exception as e:
+            err_traceback = traceback.format_exc()
+            self.errors_during_run.append(("measurement", "?", "?", err_traceback))
+            max_errs = self.max_errors_before_abort
+            if max_errs is not None and len(self.errors_during_run) >= max_errs and not self.final_processing:
+                tracebacks = [f"Error during {step} of {module_name} {module_func}\n{err_traceback}"
+                        for (step, module_name, module_func, err_traceback) in self.errors_during_run]
+                raise RuntimeError('\n'.join(["Too many failed measurements \n"] + tracebacks))
+                
+            
         # check for returned values, although there shouldn't be any
         returned = [entry for entry in returned if entry is not None]
         if len(returned) > 0:
@@ -827,13 +857,12 @@ class Simulation:
 
     def _display_errors_during_run(self):
         if len(self.errors_during_run) > 0:
-            for error in self.errors_during_run:
-                msg = '\n'.join([f"Error during {error[0]} of {error[1]} {error[2]}",
-                                 error[3],  # -> traceback of error
-                                 "-> saved results anyways"])
+            for (step, module_name, module_func, err_traceback) in self.errors_during_run:
+                msg = f"Error during {step} of {module_name} {module_func}\n{err_traceback}"
                 warnings.warn(msg)
-            if self.output_filename is not None:
-                raise Exception("Error(s) occurred during the Simulation")
+            if self.output_filename is not None and self.max_errors_before_abort is not None:
+                raise Exception("Error(s) occurred during the Simulation, see warning of error messages above -"
+                                f"but we saved results anyways in {self.output_filename}.")
 
     def get_version_info(self):
         """Try to save version info which is necessary to allow reproducibility."""
@@ -1043,6 +1072,8 @@ class Simulation:
             Measurement results are converted into a numpy array (if possible).
         """
         results = self.results.copy()
+        if len(self.errors_during_run) > 0:
+            results['errors_during_run'] = self.errors_during_run
         results['simulation_parameters'] = self.options.as_dict()
         if 'measurements' in results:
             # try to convert measurements into numpy arrays to store more compactly
