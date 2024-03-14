@@ -64,15 +64,15 @@ def test_vumps(L, engine, mixer, g=1.2):
     if not mixer:
         del vumps_pars['mixer_params']  # avoid warning of unused parameter
     eng = engine(psi, M, vumps_pars)
-    Edmrg, psi = eng.run()
+    Evumps, psi = eng.run()
     
     # compare exact solution for transverse field Ising model
     Eexact = e0_tranverse_ising(g)
-    print("E_DMRG={Edmrg:.12f} vs E_exact={Eex:.12f}".format(Edmrg=Edmrg, Eex=Eexact))
-    print("relative energy error: {err:.2e}".format(err=abs((Edmrg - Eexact) / Eexact)))
+    print(f"E_DMRG={Evumps:.12f} vs E_exact={Eexact:.12f}")
+    print(f"relative energy error: {abs((Evumps - Eexact) / Eexact):.2e}")
     print("norm err:", psi.norm_test())
-    Edmrg2 = np.mean(psi.expectation_value(M.H_bond))
-    Edmrg3 = M.H_MPO.expectation_value(psi)
-    assert abs((Edmrg - Eexact) / Eexact) < 1.e-10
-    assert abs((Edmrg - Edmrg2) / Edmrg2) < max(1.e-10, np.max(psi.norm_test()))
-    assert abs((Edmrg - Edmrg3) / Edmrg3) < max(1.e-10, np.max(psi.norm_test()))
+    Evumps2 = np.mean(psi.expectation_value(M.H_bond))
+    Evumps3 = M.H_MPO.expectation_value(psi)
+    assert abs((Evumps - Eexact) / Eexact) < 1.e-10
+    assert abs((Evumps - Evumps2) / Evumps2) < max(1.e-10, np.max(psi.norm_test()))
+    assert abs((Evumps - Evumps3) / Evumps3) < max(1.e-10, np.max(psi.norm_test()))
