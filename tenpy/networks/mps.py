@@ -293,7 +293,6 @@ class BaseMPSExpectationValue(metaclass=ABCMeta):
             >>> print(Sz)
             [0.0625 0.0625 0.0625 0.0625 0.0625 0.0625]
 
-
         """
         ops, sites, n, (op_ax_p, op_ax_pstar) = self._expectation_value_args(ops, sites, axes)
         ax_p = ['p' + str(k) for k in range(n)]
@@ -302,11 +301,14 @@ class BaseMPSExpectationValue(metaclass=ABCMeta):
         E = []
         for i in sites:
             op, needs_JW = self.get_op(ops, i)
-            if needs_JW:
-                msg = 'Expectation value of operator that needs JW string is not (yet?) supported.'
-                raise NotImplementedError(msg)
             op = op.replace_labels(op_ax_p + op_ax_pstar, ax_p + ax_pstar)
             theta_ket = ket.get_theta(i, n)
+            if needs_JW:
+                if isinstance(self, MPSEnvironment):
+                    self.apply_JW_string_left_of_virt_leg(theta_ket, 'vL', i)
+                else:
+                    msg = "Expectation value of operator that needs JW string can't work"
+                    raise ValueError(msg)
             C = npc.tensordot(op, theta_ket, axes=[ax_pstar, ax_p])  # C has same labels as theta
             C = self._contract_with_LP(C, i)  # axes_p + (vR*, vR)
             C = self._contract_with_RP(C, i + n - 1)  # axes_p + (vR*, vL*)
@@ -314,6 +316,35 @@ class BaseMPSExpectationValue(metaclass=ABCMeta):
             theta_bra = bra.get_theta(i, n)
             E.append(npc.inner(theta_bra, C, axes='labels', do_conj=True))
         return self._normalize_exp_val(E)
+
+    def apply_JW_string_left_of_virt_leg(self, theta, virt_leg_index, i):
+        """Apply signs on a virtual MPS leg equivalent to a Jordan-Wigner string on the left.
+
+        If we conserve the (parity of the) total fermion particle number, each Schmidt state
+        ``|alpha>`` on a given bond (here left of site `i`) has a well-defined fermion parity
+        number, so we can simply transform ``|alpha> --> (-1)**parity[alpha] |alpha>``.
+        The corresponding signs ``(-1)**parity[alpha]`` are extracted by
+        :meth:`~tenpy.networks.site.Site.charge_to_JW_signs`.
+
+        .. warning ::
+
+            We may loose an overall, global minus sign in the case that some `B` tensors have
+            non-trivial `qtotal`!
+
+        Parameters
+        ----------
+        theta : :class:`~tenpy.linalg.np_conserved.Array`
+            Tensor with virtual leg
+        virtual_leg_index : int | str
+            Index of the virtual leg on the left of which we want to apply the JW string.
+        i : int
+            Site index of `theta`.
+        """
+        # theta can be any form A / B / theta
+        leg = theta.get_leg(virt_leg_index)
+        charges = leg.to_qflat() #  note: sign doesn't matter since -x % 2 == x % 2
+        JW_signs = self.sites[self._to_valid_index(i)].charge_to_JW_signs(charges)
+        theta.iscale_axis(JW_signs, virt_leg_index)
 
     def expectation_value_multi_sites(self, operators, i0):
         r"""Expectation value  ``<bra|op0_{i0}op1_{i0+1}...opN_{i0+N}|ket>``.
@@ -1161,7 +1192,7 @@ class BaseMPSExpectationValue(metaclass=ABCMeta):
 
         Parameters
         ----------
-        op_list : (list of) {str | npc.array}
+        op_list : list of {str | npc.array}
             List of operators from which we choose. We assume that ``op_list[j]`` acts on site
             ``j``. If the length is shorter than `L`, we repeat it periodically.
             Strings are translated using :meth:`~tenpy.networks.site.Site.get_op` of site `i`.
@@ -4372,19 +4403,21 @@ class MPS(BaseMPSExpectationValue):
 
         i = self._to_valid_index(i)
         if isinstance(op, str):
-            if self.sites[i].op_needs_JW(op):
-                msg = 'Applying operators that need JW strings is not supported yet'
-                raise NotImplementedError(msg)
-            if self.sites[i].op_needs_JW(op):
+            op, need_JW = self.get_op([op], i)
+            if need_JW:
+                if self.bc == 'infinite':
+                    raise ValueError("open JW string ending in each unit cell"
+                                     "breaks translation invariance!")
                 try:
-                    self.apply_JW_string_to_left(i)
+                    i0 = self._to_valid_index(i)
+                    JW_sign = self.apply_JW_string_left_of_virt_leg(self._B[i0], 'vL', i0)
                 except ValueError as e:
                     raise ValueError(f"Would need JW string for operator {op!r}, "
                                      "but can't extract JW signs from the charges") from e
             opname = op
-            op = self.sites[i].get_op(op)
         else:
             opname = op
+            need_JW = False
         n = op.rank // 2  # same as int(rank/2)
         if n == 1:
             pstar, p = 'p*', 'p'
@@ -4417,27 +4450,6 @@ class MPS(BaseMPSExpectationValue):
                 self.set_SR(i + j, split_th._S[j + 1])
         if not unitary:
             self.canonical_form(renormalize=renormalize)
-
-    def apply_JW_string_to_left(self, i):
-        """Apply a Jordan-Wigner string to left of site `i` on the virtual MPS level. In place.
-
-        If we conserve the (parity of the) total fermion particle number, each Schmidt state
-        ``|alpha>`` on a given bond (here left of site `i`) has a well-defined parity number,
-        so we can simply transform ``|alpha> --> (-1)**parity[alpha] |alpha>``.
-        The corresponding signs ``(-1)**parity[alpha]`` are extracted by
-        :meth:`~tenpy.networks.site.Site.charge_to_JW_signs`.
-
-        .. warning ::
-
-            We may loose an overall, global minus sign in the case that some `B` tensors have
-            non-trivial `qtotal`!
-        """
-        i = self._to_valid_index(i)
-        B = self._B[i]
-        leg = B.get_leg('vL')
-        charges = leg.to_qflat() #  note: sign doesn't matter since -x % 2 == x % 2
-        JW_signs = self.sites[i].charge_to_JW_signs(charges)
-        B.iscale_axis(JW_signs, 'vL')
 
     def apply_product_op(self, ops, unitary=None, renormalize=False):
         """Apply a (global) product of local onsite operators to `self`. In place.
@@ -4520,8 +4532,11 @@ class MPS(BaseMPSExpectationValue):
         """
         ops, i_min, has_extra_JW = self._term_to_ops_list(term, autoJW, i_offset, False)
         if has_extra_JW:
+            if self.bc == 'infinite':
+                raise ValueError("open JW string ending in each unit cell"
+                                 "breaks translation invariance!")
             try:
-                self.apply_JW_string_to_left(i_min)
+                self.apply_JW_string_left_of_virt_leg(self._B[i], 'vL', i_min)
             except ValueError as e:
                 raise ValueError(f"Would need JW string for term {term!r}, "
                                  "but can't extract JW signs from the charges") from e
