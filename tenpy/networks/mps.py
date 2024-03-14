@@ -4220,7 +4220,7 @@ class MPS(BaseMPSExpectationValue):
             if return_charges:
                 V_charges = [None] + V_charges
         if tol_ev0 is not None and abs(E[0] - 1.) > tol_ev0:
-            logger.warning(f"Correlation length: largest eigenvalue not one, but {E[0]:%.12f}. "
+            logger.warning(f"Correlation length: largest eigenvalue not one, but {E[0]:.12f}. "
                             "Not in canonical form/normalized?")
         assert len(E) >= 2
         E = np.array(E)

@@ -7,7 +7,7 @@ from tenpy.models.tf_ising import TFIChain
 from tenpy.models.spins import SpinChain
 from tenpy.algorithms import dmrg, dmrg_parallel
 from tenpy.algorithms.exact_diag import ExactDiag
-from tenpy.networks import mps
+from tenpy.networks import mps, mpo
 import pytest
 import numpy as np
 from scipy import integrate
@@ -286,3 +286,60 @@ def test_dmrg_explicit_plus_hc(N, bc_MPS, tol=1.e-13, bc='finite'):
     ov = abs(psi1.overlap(psi3, understood_infinite=True))
     print("ov =", ov)
     assert abs(ov - 1) < tol
+
+
+@pytest.mark.parametrize("L, bc_MPS", [(12, 'finite'), (4, 'infinite')])
+def test_dmrg_mixer_cleanup(L, bc_MPS):
+    model_params = dict(L=L, Jx=1., Jy=1., Jz=2.5, hz=5.125, bc_MPS=bc_MPS, conserve='parity')
+    dmrg_params = dict(N_sweeps_check=2, mixer=True, trunc_params={'chi_max': 50})
+    model = SpinChain(model_params)
+    psi = mps.MPS.from_lat_product_state(model.lat, [['up'], ['down']])
+    engine = dmrg.TwoSiteDMRGEngine(psi, model, dmrg_params)
+    # do a few steps of engine.run()
+    engine.shelve = False
+    engine.pre_run_initialize()
+    for _ in range(3):
+        engine.run_iteration()
+    assert engine.mixer is not None
+    old_psi = engine.psi.copy()
+    old_LP = [engine.env.get_LP(i) for i in range(psi.L)]
+    old_RP = [engine.env.get_RP(i) for i in range(psi.L)]
+    
+    print(f'Checking consistency of old environments...')
+    old_contractions = [engine.env.full_contraction(i) for i in range(L)]
+    
+    print('Calling mixer_cleanup()...')
+    engine.mixer_deactivate()
+    engine.mixer_cleanup()
+
+    print('Checking sanity...')
+    engine.psi.test_sanity()
+
+    print('Make sure envs were updated...')
+    new_LP = [engine.env.get_LP(i) for i in range(psi.L)]
+    new_RP = [engine.env.get_RP(i) for i in range(psi.L)]
+    for i in range(L):
+        if not (bc_MPS == 'finite' and i == 0):
+            assert new_LP[i] is not old_LP[i]
+            try:
+                change = new_LP[i] - old_LP[i]
+            except ValueError:
+                change = None  # legs might be different -> LP has changed for sure, so nothing to do
+            if change is not None:
+                assert npc.norm(change) > 1e-8
+        if not (bc_MPS == 'finite' and i == L - 1):
+            assert new_RP[i] is not old_RP[i]
+            try:
+                change = new_RP[i] - old_RP[i]
+            except ValueError:
+                change = None  # legs might be different -> LP has changed for sure, so nothing to do
+            if change is not None:
+                assert npc.norm(change) > 1e-8
+    
+    print(f'Checking consistency of new environments...')
+    for i in range(L):
+        assert np.allclose(engine.env.full_contraction(i), old_contractions[i])
+    
+    print(f'Check that expectation values have not changed...')
+    for op in ['Sx', 'Sz']:
+        assert np.allclose(engine.psi.expectation_value(op), old_psi.expectation_value(op))
