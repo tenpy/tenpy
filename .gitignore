@@ -27,3 +27,6 @@ examples/yaml/results
 .coverage
 htmlcov
 coverage.*
+.ipynb_checkpoints
+*.ipynb
+*.pkl

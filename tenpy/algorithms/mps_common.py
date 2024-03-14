@@ -82,7 +82,7 @@ class Sweep(Algorithm):
             :meth:`matvec` is formally more expensive,
             :math:`O(2 d^3 \chi^3 D)`.
         lanczos_params : dict
-            Lanczos parameters as described in :cfg:config:`Lanczos`.
+            Lanczos parameters as described in :cfg:config:`KrylovBased`.
 
     Attributes
     ----------
@@ -271,12 +271,7 @@ class Sweep(Algorithm):
                     init_env_data[key_new] = self.options[key_old]
 
         # actually initialize the environment
-        if self.env is None:
-            cache = self.cache.create_subcache('env')
-        else:
-            cache = self.env.cache  # re-initialize and reuse the cache!
-            cache.clear()  # remove old entries which might no longer be valid
-        self.env = MPOEnvironment(self.psi, H, self.psi, cache=cache, **init_env_data)
+        self._init_mpo_env(H, init_env_data)
         self._init_ortho_to_envs(orthogonal_to, resume_data)
 
         self.reset_stats(resume_data)
@@ -285,6 +280,14 @@ class Sweep(Algorithm):
         if not self.finite:
             start_env = self.options.get('start_env', 1)
             self.environment_sweeps(start_env)
+
+    def _init_mpo_env(self, H, init_env_data):
+        if self.env is None:
+            cache = self.cache.create_subcache('env')
+        else:
+            cache = self.env.cache  # re-initialize and reuse the cache!
+            cache.clear()  # remove old entries which might no longer be valid
+        self.env = MPOEnvironment(self.psi, H, self.psi, cache=cache, **init_env_data)
 
     def _init_ortho_to_envs(self, orthogonal_to, resume_data):
         # (re)initialize ortho_to_envs
@@ -1090,6 +1093,22 @@ class OneSiteH(EffectiveH):
                   self.RP.get_leg('vL').ind_len)
         if combine:
             self.combine_Heff(env)
+
+    @classmethod
+    def from_LP_W0_RP(cls, LP, W0, RP, i0=0, combine=False, move_right=True):
+        self = cls.__new__(cls)
+        if combine:
+            raise NotImplementedError("Shouldn't need this for vumps")
+        self.i0 = i0
+        self.LP = LP.itranspose(['vR*', 'wR', 'vR'])
+        self.RP = RP.itranspose(['wL', 'vL', 'vL*'])
+        self.W0 = W0.replace_labels(['p', 'p*'], ['p0', 'p0*'])
+        self.dtype = LP.dtype
+        self.combine = combine
+        self.move_right = move_right
+        self.N = (self.LP.get_leg('vR').ind_len * self.W0.get_leg('p0').ind_len *
+                  self.RP.get_leg('vL').ind_len)
+        return self
 
     def matvec(self, theta):
         """Apply the effective Hamiltonian to `theta`.

@@ -770,6 +770,20 @@ def test_mps_compress(method, eps=1.e-13):
     assert (np.abs(psiSum2.overlap(psiOrth) - .5) < 1e-13)
 
 
+def test_extract_segment():
+    psi = random_MPS(12, 2, 8, bc='finite', form='B')
+    psi.canonical_form()
+    orig_vals = psi.expectation_value('h')
+    first, last = 6, 8
+    psi_seg = psi.extract_segment(first, last)
+    seg_vals = psi_seg.expectation_value('h')
+    assert np.allclose(seg_vals, orig_vals[first:last+1])
+    first2, last2 = 3, 10
+    psi_seg2, _, _ = psi_seg.extract_enlarged_segment(psi, psi, first, last,
+                                                      new_first_last=(first2, last2))
+    seg2_vals = psi_seg2.expectation_value('h')
+    assert np.allclose(seg2_vals, orig_vals[first2:last2+1])
+
 def test_InitialStateBuilder():
     s0 = site.SpinHalfSite('Sz', sort_charge=True)
     lat = Chain(10, s0, bc_MPS='finite')

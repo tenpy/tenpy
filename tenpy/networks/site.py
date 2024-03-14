@@ -106,10 +106,18 @@ class Site(Hdf5Exportable):
     hc_ops : dict(str->str)
         Mapping from operator names to their hermitian conjugates.
         Use :meth:`get_hc_op_name` to obtain entries.
+    charge_to_JW_parity : None | 1D array
+        If set, it is a list of factors, one per charge, such that
+        ``(-1)**np.mod(np.sum(charges * charge_to_JW_parity, axis=-1), 2)`` is the
+        Jordan-Wigner sign associated to a given set of `charges`.
+        See :meth:`charge_to_JW_signs` for more details.
+        Often not defined at all or `None`, which indicates that charge information is not enough
+        to extract the Jordan-Wigner signs, i.e., we might not have total fermion number as
+        well-defined charge.
     used_sort_charge : bool
         Whether :meth:`sort_charge` was called.
-        Note that the default argument for `sort_dense` in :meth:`add_op` changes to True in that
-        case, to ensure a consistent use.
+        Note that the default argument for `permute_dense` in :meth:`add_op` changes to True in
+        that case, to ensure a consistent use.
 
     Examples
     --------
@@ -199,6 +207,9 @@ class Site(Hdf5Exportable):
                 op = op[np.ix_(permute, permute)]
             # need_JW and hc_ops are still set
             self.add_op(opname, op, need_JW=False, hc=False, permute_dense=False)
+        if hasattr(self, 'charge_to_JW_parity'):
+            # might no longer be valid (unclear!), so better delete.
+            del self.charge_to_JW_parity
         # done
 
     def sort_charge(self, bunch=True):
@@ -218,9 +229,13 @@ class Site(Hdf5Exportable):
             return np.arange(self.dim, dtype=np.intp)  # nothing to do
         perm_qind, leg_sorted = self.leg.sort(bunch)
         perm_flat = self.leg.perm_flat_from_perm_qind(perm_qind)
+        charge_to_JW_parity = getattr(self, 'charge_to_JW_parity', None)
         self.change_charge(leg_sorted, perm_flat)
         # change_charge updates self.state_label and self.perm
         self.used_sort_charge = True
+        if charge_to_JW_parity is not None:
+            # preserve charge_to_JW_parity
+            self.charge_to_JW_parity = charge_to_JW_parity
         return perm_flat
 
     def test_sanity(self):
@@ -249,6 +264,10 @@ class Site(Hdf5Exportable):
                 op1 = self.get_op(op1)
                 op2 = self.get_op(op2)
                 assert op1.conj().transpose() == op2
+        if getattr(self, 'charge_to_JW_parity', None) is not None:
+           JW_diag = np.diag(self.JW.to_ndarray())
+           JW_signs = self.charge_to_JW_signs(self.leg.to_qflat())
+           np.testing.assert_array_almost_equal(JW_diag, JW_signs, 14)
 
     @property
     def dim(self):
@@ -560,6 +579,37 @@ class Site(Hdf5Exportable):
         """Debug representation of self."""
         return "<Site, d={dim:d}, ops={ops!r}>".format(dim=self.dim, ops=self.opnames)
 
+    def charge_to_JW_signs(self, charges):
+        """Convert charge values to Jordan-Wigner parity.
+
+        Often, charge conservation contains the (parity of) the total fermion number.
+        This information is enough to lift a Jordan-Wigner string applied on the left of a given
+        bond to the virtual leg of an MPS: given the total parity number of fermions
+        ``parity[alpha] = N_fermions[alpha] % 2`` in each Schmidt state ``|alpha>``,
+        simply send ``|alpha> --> (-1)**parity[alpha] |alpha>``.
+        Given the charges values of the Schmidt states ``|alpha>``, this function returns the
+        corresponding ``(-1)**parity`` Jordan-Wigner signs.
+
+        Parameters
+        ----------
+        charges : 2D or 1D array
+            Charge values, last dimension is len ``chinfo.qnumber``.
+            We choose the convention that these charge values correspond to an "incoming" leg
+            with ``qconj=+1``.
+
+        Returns
+        -------
+        JW_signs :
+            Should only have values +1 or -1.
+        """
+        charge_to_JW_parity = getattr(self, 'charge_to_JW_parity', None)
+        if charge_to_JW_parity is not None:
+            charges = self.leg.chinfo.make_valid(charges)
+            parity = np.mod(np.sum(charges * charge_to_JW_parity, axis=-1), 2)
+            # parity has values in [0, 1]
+            return 1. - 2. * parity  # values +/- 1, same as (-1)**parity
+        raise ValueError("`charge_to_JW_parity` not defined!")
+
 
 class GroupedSite(Site):
     """Group two or more :class:`Site` into a larger one.
@@ -634,6 +684,7 @@ class GroupedSite(Site):
                 legs.append(leg)
         else:
             raise ValueError("Unknown option for `charges`: " + repr(charges))
+        c2JWps = [getattr(s, 'charge_to_JW_parity', None) for s in sites]  # maybe keep it below
         if charges != 'same':
             sites = [copy.copy(s) for s in sites]  # avoid modifying the existing sites.
             # sort legs
@@ -658,6 +709,7 @@ class GroupedSite(Site):
             ind_pipe = pipe.map_incoming_flat(inds)
             label = ' '.join([st + '_' + lbl for (st, idx), lbl in zip(states_labels, labels)])
             self.state_labels[label] = ind_pipe
+
         # add remaining operators
         Ids = [s.Id for s in sites]
         JW_Ids = Ids[:]  # in the following loop equivalent to [JW, JW, ... , Id, Id, ...]
@@ -677,7 +729,17 @@ class GroupedSite(Site):
                 self.add_op(opname + labels[i], self.kroneckerproduct(ops), need_JW, hc_opname)
                 Ids[i] = site.Id
                 JW_Ids[i] = site.JW
-        # done
+
+        # propagate `charge_to_JW_parity` if safe/clear what it should be
+        # read it into c2JWps for each site before calling Site.change_charge() deleting it
+        if charges == 'same':
+            # already same charges, so could/should have same `charge_to_JW_parity`
+            if all(p is not None and all(p == c2JWps[0]) for p in c2JWps):
+                self.charge_to_JW_parity = c2JWps[0]
+        elif charges == 'independent':
+            if all(p is not None for p in c2JWps):
+                self.charge_to_JW_parity = np.concatenate(c2JWps)
+        # other cases: not immediately clear what charge_to_JW_parity should be / is still valid
 
     def kroneckerproduct(self, ops):
         r"""Return the Kronecker product :math:`op0 \otimes op1` of local operators.
@@ -858,12 +920,12 @@ def set_common_charges(sites, new_charges='same', new_names=None, new_mod=None, 
         >>> set_common_charges([ferm, spin], new_charges='independent',
         ...                    new_names=['N_ferm', '2*Sz_ferm', '2*Sz_spin'])
         [array([0, 1, 2, 3]), array([0, 1, 2])]
-        >>> print(ferm.leg.to_qflat())  # didn't change (except making a copy)
+        >>> print(ferm.leg.to_qflat())  # additional columns of zeros
         [[ 1 -1  0]
          [ 0  0  0]
          [ 2  0  0]
          [ 1  1  0]]
-        >>> print(spin.leg.to_qflat())  # additional column of zeros for the 'N' charge
+        >>> print(spin.leg.to_qflat())  # two additional columns of zeros
         [[ 0  0 -2]
          [ 0  0  0]
          [ 0  0  2]]
@@ -981,6 +1043,9 @@ def set_common_charges(sites, new_charges='same', new_names=None, new_mod=None, 
     assert len(new_mod) == qnumber
     new_chinfo = npc.ChargeInfo(new_mod, new_names)
 
+    # get new charge_to_JW_parity if possible
+    new_charge_to_JW_parity = _set_common_charges_charge_to_JW_parity(sites, new_charges, new_mod)
+
     # define the new leg charges and update the sites
     perms = []
     for new_s, site in enumerate(sites):
@@ -1006,8 +1071,64 @@ def set_common_charges(sites, new_charges='same', new_names=None, new_mod=None, 
         else:
             perm_flat = None
         site.change_charge(leg, perm_flat)
+        if new_charge_to_JW_parity is not None:
+            site.charge_to_JW_parity = new_charge_to_JW_parity
     if sort_charge:
         return perms
+
+
+def _set_common_charges_charge_to_JW_parity(sites, new_charges, new_mod):
+    """Try to be clever and guess a new `charge_to_JW_parity` for `set_common_charges`.
+
+    This will work for some cases, including an originally `new_charges='same'` or
+    `new_charges='independent'`, but not in any case.
+
+    If the user really needs `charge_to_JW_parity` and this function doesn't find it,
+    they should just define it by hand...
+    """
+    # get new `charge_to_JW_parity` if possible
+    c2JWps = [getattr(s, 'charge_to_JW_parity', None) for s in sites]
+    if not all(p is not None for p in c2JWps):
+        return None
+
+    need = []
+    for s, parities in enumerate(c2JWps):
+        for old_i, p in enumerate(parities):
+            if p != 0:
+                need.append((1, s, old_i))
+    if len(need) == 0:
+        # no fermions at all, so trivial `charge_to_JW_parity`
+        return np.array([0] * len(new_charges))
+
+    need = set(need)   # can't have duplicates anyways; convert to set to compare without order
+    new_charge_sets = []
+    new_is = []
+    for new_i, new_charge in enumerate(new_charges):
+        m = new_mod[new_i]
+        if m == 1 or m % 2 == 0:
+            new_charge_set = set(new_charge)
+            if new_charge_set == need:
+                # got it: this new charge is just the total number of fermions
+                charge_to_JW_parity = [0] * len(new_charges)
+                charge_to_JW_parity[new_i] = 1
+                return charge_to_JW_parity
+            if new_charge_set <= need:
+                new_charge_sets.append(new_charge_set)
+                new_is.append(new_i)
+            # else: has other quantum numbers
+    # we don't have a single charge as the total fermion number
+    # but maybe the charges are "independent" so we can just sum them up?
+    charge_to_JW_parity = [0] * len(new_charges)
+    # try to find partitioning of `need` with (subset of) new_charge_sets
+    for new_i, new_charge_set in zip(new_is, new_charge_sets):
+        if not new_charge_set <= need:
+            continue
+        charge_to_JW_parity[new_i] = 1
+        need = need - new_charge_set
+    if len(need) == 0:
+        return np.array(charge_to_JW_parity, int)
+    # else: couldn't partition at least with the greedy algorithm.
+    return None
 
 
 def multi_sites_combine_charges(sites, same_charges=[]):
@@ -1233,6 +1354,7 @@ class SpinHalfSite(Site):
             self.add_op('Sigmax', 2. * self.Sx)
             self.add_op('Sigmay', 2. * self.Sy)
         self.add_op('Sigmaz', 2. * self.Sz)
+        self.charge_to_JW_parity = np.array([0] * leg.chinfo.qnumber, int)  # trivial
 
     def __repr__(self):
         """Debug representation of self."""
@@ -1328,6 +1450,7 @@ class SpinSite(Site):
         Site.__init__(self, leg, names, sort_charge=sort_charge, **ops)
         self.state_labels['down'] = self.state_labels[names[0]]
         self.state_labels['up'] = self.state_labels[names[-1]]
+        self.charge_to_JW_parity = np.array([0] * leg.chinfo.qnumber, int)  # trivial
 
     def __repr__(self):
         """Debug representation of self."""
@@ -1394,11 +1517,14 @@ class FermionSite(Site):
         if conserve == 'N':
             chinfo = npc.ChargeInfo([1], ['N'])
             leg = npc.LegCharge.from_qflat(chinfo, [0, 1])
+            self.charge_to_JW_parity = np.array([1])
         elif conserve == 'parity':
             chinfo = npc.ChargeInfo([2], ['parity_N'])
             leg = npc.LegCharge.from_qflat(chinfo, [0, 1])
+            self.charge_to_JW_parity = np.array([1])
         else:
             leg = npc.LegCharge.from_trivial(2)
+            # no charge_to_JW_parity possible
         self.conserve = conserve
         self.filling = filling
         Site.__init__(self, leg, ['empty', 'full'], sort_charge=True, **ops)
@@ -1576,6 +1702,9 @@ class SpinHalfFermionSite(Site):
         Site.__init__(self, leg, states, sort_charge=True, **ops)
         # specify fermionic operators
         self.need_JW_string |= set(['Cu', 'Cdu', 'Cd', 'Cdd', 'JWu', 'JWd', 'JW'])
+        if cons_N == 'N' or cons_N == 'parity':
+            self.charge_to_JW_parity = np.array([1] + [0]*(len(qnames) - 1))
+        # else: can't define charge_to_JW_parity
 
     def __repr__(self):
         """Debug representation of self."""
@@ -1748,6 +1877,11 @@ class SpinHalfHoleSite(Site):
         # specify fermionic operators
         self.need_JW_string |= set(['Cu', 'Cdu', 'Cd', 'Cdd', 'JWu', 'JWd', 'JW'])
 
+        if cons_N == 'N' or cons_N == 'parity':
+            self.charge_to_JW_parity = np.array([1] + [0]*(len(qnames) - 1))
+        # else: can't define charge_to_JW_parity
+
+
     def __repr__(self):
         """Debug representation of self."""
         return "SpinHalfHoleSite({cN!r}, {cS!r}, {f:f})".format(cN=self.cons_N,
@@ -1834,6 +1968,7 @@ class BosonSite(Site):
         self.filling = filling
         Site.__init__(self, leg, states, sort_charge=True, **ops)
         self.state_labels['vac'] = self.state_labels['0']  # alias
+        self.charge_to_JW_parity = np.array([0] * leg.chinfo.qnumber, int)  # trivial
 
     def __repr__(self):
         """Debug representation of self."""

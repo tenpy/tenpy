@@ -60,6 +60,7 @@ def m_measurement_index(results, psi, model, simulation, results_key='measuremen
 
     See :doc:`/intro/measurements` for the general setup using measurements.
 
+
     .. versionchanged:: 0.10.0
 
         The `model` parameter is new! Any measurement function for simulations now has to accept
@@ -77,6 +78,9 @@ def m_measurement_index(results, psi, model, simulation, results_key='measuremen
         Usually shorthand for ``simulation.psi`` and ``simulation.model``, respectively,
         but can be different, e.g., when grouping sites.
         See :meth:`~tenpy.simulations.simulation.Simulation.get_measurement_psi_model`.
+        Note that ``psi`` is compatible with ``model``,
+        and ``simulation.psi`` should be compatible with ``simulation.model``,
+        but you should not mix them.
     simulation : :class:`~tenpy.simulations.simulation.Simulation`
         The simulation class. This gives also access to the `model`, algorithm `engine`, etc.
     results_key : str

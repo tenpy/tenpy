@@ -15,6 +15,7 @@ import scipy.sparse.linalg
 from scipy.sparse.linalg import LinearOperator as ScipyLinearOperator
 from ..tools.math import speigs, speigsh
 from ..tools.misc import argsort, group_by_degeneracy
+from . import krylov_based
 import warnings
 
 __all__ = [
@@ -25,6 +26,7 @@ __all__ = [
     'OrthogonalNpcLinearOperator',
     'FlatLinearOperator',
     'FlatHermitianOperator',
+    'BoostNpcLinearOperator'
 ]
 
 
@@ -139,7 +141,11 @@ class SumNpcLinearOperator(NpcLinearOperatorWrapper):
         self.other_operator = other_operator
 
     def matvec(self, vec):
-        return self.orig_operator.matvec(vec) + self.other_operator.matvec(vec)
+        if isinstance(vec, npc.Array):
+            return self.orig_operator.matvec(vec) + self.other_operator.matvec(vec)
+        else:
+            assert isinstance(vec, list)
+            return [a + b for a,b in zip(self.orig_operator.matvec(vec), self.other_operator.matvec(vec))]
 
     def to_matrix(self):
         return self.orig_operator.to_matrix() + self.other_operator.to_matrix()
@@ -160,7 +166,10 @@ class ShiftNpcLinearOperator(NpcLinearOperatorWrapper):
         self.shift = shift
 
     def matvec(self, vec):
-        return self.orig_operator.matvec(vec) + self.shift * vec
+        temp = self.orig_operator.matvec(vec)
+        krylov_based.iadd_prefactor_other(temp, self.shift, vec)
+        return temp
+        # return self.orig_operator.matvec(vec) + self.shift * vec
 
     def to_matrix(self):
         mat = self.orig_operator.to_matrix()
@@ -168,6 +177,34 @@ class ShiftNpcLinearOperator(NpcLinearOperatorWrapper):
 
     def adjoint(self):
         return ShiftNpcLinearOperator(self.orig_operator.adjoint(), np.conj(self.shift))
+
+
+class BoostNpcLinearOperator(NpcLinearOperatorWrapper):
+    """Representes ``original_operator + shift_i * |vec_i><vec_i|``.
+
+    This can be useful e.g. for better Lanczos convergence.
+    """
+    def __init__(self, orig_operator, boosts, boost_vecs):
+        assert len(boosts) == len(boost_vecs)
+        if len(boosts) == 0.:
+            warnings.warn("boost_vecs=[]: no need for BoostNpcLinearOperator", stacklevel=2)
+        super().__init__(orig_operator)
+        self.boosts = boosts
+        self.boost_vecs = boost_vecs
+
+    def matvec(self, vec):
+        temp = self.orig_operator.matvec(vec)
+        for b, bv in zip(self.boosts, self.boost_vecs):
+            krylov_based.iadd_prefactor_other(temp, b * npc.inner(bv, vec, axes='range', do_conj=True), bv)
+        return temp
+        # return self.orig_operator.matvec(vec) + self.shift * vec
+
+    def to_matrix(self):
+        mat = self.orig_operator.to_matrix()
+        return mat + self.shift * npc.eye_like(mat)
+
+    def adjoint(self):
+        return BoostNpcLinearOperator(self.orig_operator.adjoint(), np.conj(self.boosts), self.boost_vecs)
 
 
 class OrthogonalNpcLinearOperator(NpcLinearOperatorWrapper):
@@ -195,10 +232,14 @@ class OrthogonalNpcLinearOperator(NpcLinearOperatorWrapper):
         # equivalent to using H' = P H P where P is the projector (1-sum_o |o><o|)
         vec = vec.copy()
         for o in self.ortho_vecs:  # Project out
-            vec.iadd_prefactor_other(-npc.inner(o, vec, 'range', do_conj=True), o)
+            #for a, b in zip(vec, o):
+            #    a.iadd_prefactor_other(-npc.inner(b, a, axes='range', do_conj=True), b)
+            krylov_based.iadd_prefactor_other(vec, -npc.inner(o, vec, axes='range', do_conj=True), o)
         vec = self.orig_operator.matvec(vec)
         for o in self.ortho_vecs[::-1]:  # reverse: more obviously Hermitian.
-            vec.iadd_prefactor_other(-npc.inner(o, vec, 'range', do_conj=True), o)
+            #for a, b in zip(vec, o):
+            #    a.iadd_prefactor_other(-npc.inner(b, a, axes='range', do_conj=True), b)
+            krylov_based.iadd_prefactor_other(vec, -npc.inner(o, vec, axes='range', do_conj=True), o)
         return vec
 
     def to_matrix(self):

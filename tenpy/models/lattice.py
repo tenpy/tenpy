@@ -548,8 +548,8 @@ class Lattice:
             A copy of `self` with "segment" :attr:`bc_MPS` and :attr:`segment_first_last` set.
         """
         cp = self.copy()
-        L = cp.N_sites
-        assert first >= 0
+        L = cp.N_sites # Size of finite MPS or unit cell
+        #assert first >= 0
         if enlarge is not None:
             if cp.bc_MPS != 'infinite':
                 raise ValueError("enlarge only possible for infinite MPS")
@@ -557,6 +557,7 @@ class Lattice:
                 raise ValueError("specify either `first`+`last` or `enlarge`!")
             assert enlarge > 0
             last = enlarge * L - 1
+            # first = 0, not needed since first == 0 from above.
         elif last is None:
             last = L - 1
             enlarge = 1
@@ -565,8 +566,6 @@ class Lattice:
         assert enlarge > 0
         if enlarge > 1:
             cp.enlarge_mps_unit_cell(enlarge)
-        if first >= last:
-            raise ValueError(f"need first < last, got {first:d}, {last:d}")
         if first > 0 or last < cp.N_sites - 1:
             # take out some parts of the lattice
             remove = list(range(0, first)) + list(range(last + 1, cp.N_sites))
