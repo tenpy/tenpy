@@ -195,7 +195,7 @@ class BoostNpcLinearOperator(NpcLinearOperatorWrapper):
     def matvec(self, vec):
         temp = self.orig_operator.matvec(vec)
         for b, bv in zip(self.boosts, self.boost_vecs):
-            krylov_based.iadd_prefactor_other(temp, b * krylov_based.inner(bv, vec), bv)
+            krylov_based.iadd_prefactor_other(temp, b * npc.inner(bv, vec, axes='range', do_conj=True), bv)
         return temp
         # return self.orig_operator.matvec(vec) + self.shift * vec
 
@@ -234,12 +234,12 @@ class OrthogonalNpcLinearOperator(NpcLinearOperatorWrapper):
         for o in self.ortho_vecs:  # Project out
             #for a, b in zip(vec, o):
             #    a.iadd_prefactor_other(-npc.inner(b, a, axes='range', do_conj=True), b)
-            krylov_based.iadd_prefactor_other(vec, -krylov_based.inner(o, vec), o)
+            krylov_based.iadd_prefactor_other(vec, -npc.inner(o, vec, axes='range', do_conj=True), o)
         vec = self.orig_operator.matvec(vec)
         for o in self.ortho_vecs[::-1]:  # reverse: more obviously Hermitian.
             #for a, b in zip(vec, o):
             #    a.iadd_prefactor_other(-npc.inner(b, a, axes='range', do_conj=True), b)
-            krylov_based.iadd_prefactor_other(vec, -krylov_based.inner(o, vec), o)
+            krylov_based.iadd_prefactor_other(vec, -npc.inner(o, vec, axes='range', do_conj=True), o)
         return vec
 
     def to_matrix(self):

@@ -16,7 +16,7 @@ from ..tools.misc import argsort
 
 __all__ = [
     'KrylovBased', 'Arnoldi', 'LanczosGroundState', 'LanczosEvolution', 'GMRES', 'lanczos_arpack',
-    'gram_schmidt', 'iadd_prefactor_other', 'inner', 'iscale_prefactor', 'plot_stats'
+    'gram_schmidt', 'iadd_prefactor_other', 'iscale_prefactor', 'plot_stats'
 ]
 
 
@@ -186,9 +186,6 @@ class KrylovBased:
 
     def iscale_prefactor(self, w, scale):
         iscale_prefactor(w, scale)
-
-    def inner(self, w, v):
-        return inner(w, v)
 
     def iadd_prefactor_other(self, w, alpha, v):
         iadd_prefactor_other(w, alpha, v)
@@ -361,7 +358,7 @@ class Arnoldi(KrylovBased):
             self._to_cache(w)
             w = self.H.matvec(w)
             for i, v_i in enumerate(self._cache):
-                h[i, k] = ov = self.inner(v_i, w)
+                h[i, k] = ov = npc.inner(v_i, w, axes='range', do_conj=True)
                 self.iadd_prefactor_other(w, -ov, v_i)
             h[k + 1, k] = norm = npc.norm(w)
             self._calc_result_krylov(k)
@@ -535,7 +532,7 @@ class LanczosGroundState(KrylovBased):
             self.iadd_prefactor_other(w, -alpha, self._cache[-1])
             if self.reortho:
                 for c in self._cache[:-1]:
-                    self.iadd_prefactor_other(w, -self.inner(c, w), c)
+                    self.iadd_prefactor_other(w, -npc.inner(c, w, axes='range', do_conj=True), c)
             elif k > 0:
                 self.iadd_prefactor_other(w, -beta, self._cache[-2])
             beta = npc.norm(w)
@@ -564,7 +561,7 @@ class LanczosGroundState(KrylovBased):
             self.iadd_prefactor_other(w, -alpha, self._cache[-1])
             if self.reortho:
                 for c in self._cache[:-1]:
-                    self.iadd_prefactor_other(w, -self.inner(c, w), c)
+                    self.iadd_prefactor_other(w, -npc.inner(c, w, axes='range', do_conj=True), c)
             elif k > 0:
                 self.iadd_prefactor_other(w, -beta, self._cache[-2])  # noqa: F821
             beta = h[k, k + 1]  # = norm(w)
@@ -760,7 +757,7 @@ def gram_schmidt(vecs, rcond=1.e-14, verbose=None):
     res = []
     for vec in vecs:
         for other in res:
-            ov = inner(other, vec, 'range', do_conj=True)
+            ov = npc.inner(other, vec, 'range', do_conj=True)
             iadd_prefactor_other(vec, -ov, other)
         n = npc.norm(vec)
         if n > rcond:
@@ -775,13 +772,6 @@ def iscale_prefactor(w, scale):
     else:
         for a in w:
             a.iscale_prefactor(scale)
-
-def inner(w, v, axes='range', do_conj=True):
-    if not isinstance(w, list) and not isinstance(v, list):
-        return npc.inner(w, v, axes=axes, do_conj=do_conj)
-    else:
-        assert isinstance(w, list) and isinstance(v, list)
-        return np.sum([npc.inner(a, b, axes=axes, do_conj=do_conj) for a, b in zip(w, v)])
 
 def iadd_prefactor_other(w, alpha, v):
     if not isinstance(w, list):

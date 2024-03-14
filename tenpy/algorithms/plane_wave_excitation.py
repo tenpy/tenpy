@@ -22,7 +22,7 @@ from ..linalg import np_conserved as npc
 from ..linalg.charges import LegPipe
 from ..networks.momentum_mps import MomentumMPS
 from ..networks.mpo import MPOEnvironment, MPOTransferMatrix
-from ..linalg.krylov_based import GMRES, LanczosGroundState, inner, Arnoldi
+from ..linalg.krylov_based import GMRES, LanczosGroundState, Arnoldi
 from ..linalg.sparse import NpcLinearOperator, SumNpcLinearOperator, BoostNpcLinearOperator, ShiftNpcLinearOperator
 from ..tools.params import asConfig
 from ..tools.math import entropy
@@ -316,7 +316,7 @@ class PlaneWaveExcitationEngine(Algorithm):
         self.unaligned_H = self.Unaligned_Effective_H(self, p)
         effective_H = SumNpcLinearOperator(self.aligned_H, self.unaligned_H)
         HX = effective_H.matvec(X)
-        E = np.real(inner(X, HX)).item()
+        E = np.real(npc.inner(X, HX)).item()
         return E - self.energy_density * self.L - self.lambda_C1
 
     def infinite_sum_right(self, p, X):
@@ -863,7 +863,7 @@ class MultiSitePlaneWaveExcitationEngine(Algorithm):
         self.unaligned_H = self.Unaligned_Effective_H(self, p)
         effective_H = SumNpcLinearOperator(self.aligned_H, self.unaligned_H)
         HX = effective_H.matvec(X)
-        E = np.real(inner(X, HX)).item()
+        E = np.real(npc.inner(X, HX)).item()
         return E - self.lambda_C1 - self.energy_density * (self.L * multiple_unit_cell)
 
     def attach_right(self, VL, X, As, R, Ws=None):
