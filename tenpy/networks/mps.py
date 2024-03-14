@@ -4409,8 +4409,7 @@ class MPS(BaseMPSExpectationValue):
                     raise ValueError("open JW string ending in each unit cell"
                                      "breaks translation invariance!")
                 try:
-                    i0 = self._to_valid_index(i)
-                    JW_sign = self.apply_JW_string_left_of_virt_leg(self._B[i0], 'vL', i0)
+                    JW_sign = self.apply_JW_string_left_of_virt_leg(self._B[i], 'vL', i)
                 except ValueError as e:
                     raise ValueError(f"Would need JW string for operator {op!r}, "
                                      "but can't extract JW signs from the charges") from e
@@ -4536,7 +4535,8 @@ class MPS(BaseMPSExpectationValue):
                 raise ValueError("open JW string ending in each unit cell"
                                  "breaks translation invariance!")
             try:
-                self.apply_JW_string_left_of_virt_leg(self._B[i], 'vL', i_min)
+                i = self._to_valid_index(i_min)
+                self.apply_JW_string_left_of_virt_leg(self._B[i], 'vL', i)
             except ValueError as e:
                 raise ValueError(f"Would need JW string for term {term!r}, "
                                  "but can't extract JW signs from the charges") from e
