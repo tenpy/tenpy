@@ -42,6 +42,7 @@ from .linalg.np_conserved import (Array, zeros, ones, eye_like, diag,
                                   concatenate, grid_concat, grid_outer, detect_grid_outer_legcharge,
                                   detect_qtotal, detect_legcharge, trace, outer, inner, tensordot,
                                   svd, pinv, norm, eigh, eig, eigvalsh, eigvals, speigs, expm, qr)
+# don't import mpi_parallel: it imports mpi4py, which has side effects!
 from .models.lattice import (Lattice, TrivialLattice, SimpleLattice, MultiSpeciesLattice,
                              IrregularLattice, HelicalLattice, Chain, Ladder, NLegLadder, Square,
                              Triangular, Honeycomb, Kagome, get_lattice)
