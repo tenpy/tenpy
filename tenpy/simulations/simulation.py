@@ -719,8 +719,8 @@ class Simulation:
         results = {}
         psi, model = self.get_measurement_psi_model(self.psi, self.model)
 
-        try: 
-            #
+        returned = []  # make sure list exists if try-clause fails
+        try:
             returned = self.measurement_event.emit(results=results,
                                                    psi=psi,
                                                    model=model,
@@ -728,7 +728,7 @@ class Simulation:
             # we safe-guard the measurements with try-except 
             # to avoid that mistakes in the measurement cause us to loose all our data, 
             # e.g. if we were running DMRG for days, and just have a stupid typo in a measurement function
-        except Exception as e:
+        except Exception:
             err_traceback = traceback.format_exc()
             self.errors_during_run.append(("measurement", "?", "?", err_traceback))
             max_errs = self.max_errors_before_abort
@@ -736,8 +736,7 @@ class Simulation:
                 tracebacks = [f"Error during {step} of {module_name} {module_func}\n{err_traceback}"
                         for (step, module_name, module_func, err_traceback) in self.errors_during_run]
                 raise RuntimeError('\n'.join(["Too many failed measurements \n"] + tracebacks))
-                
-            
+
         # check for returned values, although there shouldn't be any
         returned = [entry for entry in returned if entry is not None]
         if len(returned) > 0:
