@@ -781,12 +781,14 @@ class Sweep(Algorithm):
                 LP = npc.tensordot(LP, U.conj(), ['vR*', 'vL*'])
                 if update_env_ket_leg:
                     LP = npc.tensordot(LP, U, ['vR', 'vL'])
+                LP.itranspose(['vR*', 'wR', 'vR'])
                 self.env.set_LP(i, LP, age=self.env.get_LP_age(i))
             if self.env.has_RP(i - 1):
                 RP = self.env.get_RP(i - 1)
                 RP = npc.tensordot(V.conj(), RP, ['vR*', 'vL*'])
                 if update_env_ket_leg:
                     RP = npc.tensordot(V, RP, ['vR', 'vL'])
+                RP.itranspose(['vL', 'wL', 'vL*'])
                 self.env.set_RP(i - 1, RP, age=self.env.get_RP_age(i - 1))
 
 
