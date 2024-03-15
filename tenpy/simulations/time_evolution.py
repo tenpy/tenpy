@@ -8,7 +8,7 @@ import warnings
 from . import simulation
 from .simulation import *
 from ..networks.mps import MPSEnvironment, MPS
-from ..tools.misc import to_iterable
+from ..tools.misc import to_iterable, consistency_check
 from ..tools import hdf5_io
 
 __all__ = simulation.__all__ + [
@@ -332,7 +332,7 @@ class TimeDependentCorrelation(RealTimeEvolution):
         phase = np.exp(1j * self.gs_energy * self.engine.evolved_time)
         for op in operator_t:
             results_key = f"correlation_function_t_{op}_{self.operator_t0_name}"  # as op is a str
-            results[results_key] = env.expectation_value(op)*phase
+            results[results_key] = env.expectation_value(op) * phase
 
 
 class TimeDependentCorrelationEvolveBraKet(TimeDependentCorrelation):
@@ -477,14 +477,20 @@ class SpectralSimulation(TimeDependentCorrelation):
                          **kwargs)
 
     def run_post_processing(self):
-        extra_kwargs = self.options.get('spectral_function_params', {})
+        spectral_function_params = self.options.get('spectral_function_params', {})
+        # add consistency check for linear prediction
+        key_to_check = 'rel_prediction_time'
+        value = spectral_function_params.get('key_to_check', 1)
+        consistency_check(value, spectral_function_params, key_to_check, 3,
+                          "Excessive use of linear prediction. Consider increasing "
+                          f"'final_time' for {self.__class__} in order to get better results.")
+
         for key in self.results['measurements'].keys():
             if 'correlation_function_t' in key:
                 results_key = key.replace('correlation_function_t', 'spectral_function')
                 kwargs_dict = {'results_key': results_key, 'correlation_key': key}
-                kwargs_dict.update(extra_kwargs)  # add parameters for linear prediction etc.
-                pp_entry = ('tenpy.simulations.post_processing', 'pp_spectral_function',
-                            kwargs_dict)
+                kwargs_dict.update(spectral_function_params)  # add parameters spectral function
+                pp_entry = ('tenpy.simulations.post_processing', 'pp_spectral_function', kwargs_dict)
                 # create a new list here! (otherwise this is added to all instances within that session)
                 self.default_post_processing = self.default_post_processing + [pp_entry]
         return super().run_post_processing()
