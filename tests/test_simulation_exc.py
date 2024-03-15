@@ -21,6 +21,7 @@ params = [
 
 @pytest.mark.slow
 @pytest.mark.parametrize("switch, group", params)
+@pytest.mark.filterwarnings('ignore:divide by zero encountered in scalar divide:RuntimeWarning')
 def test_OrthogonalExcitations(tmp_path, switch, group, eps=1.e-10, N_exc=3):
     # checks ground state and 2 excited states (in same symmetry sector) for a small system
     # (without truncation)

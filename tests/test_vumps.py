@@ -62,10 +62,11 @@ def test_vumps(L, engine, mixer, g=1.2):
         },
         'max_sweeps': 20,
     }
-    if not mixer:
-        del vumps_pars['mixer_params']  # avoid warning of unused parameter
     eng = engine(psi, M, vumps_pars)
     E_vumps, psi = eng.run()
+    eng.options.touch('mixer_params')  # not used if no mixer
+    eng.options.touch('trunc_params')
+    eng.options['trunc_params'].touch('svd_min', 'chi_max')  # not used for single-site VUMPS
     
     # compare exact solution for transverse field Ising model
     Eexact = e0_transverse_ising(g)
