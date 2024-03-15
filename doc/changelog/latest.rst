@@ -33,7 +33,7 @@ Added
 
 - Added consistency checks, see :func:`~tenpy.tools.misc.consistency_check`, as well as
 
-  * :cfg:option:`Algorithm.max_cylinder_width`
+  * :cfg:option:`Algorithm.max_N_sites_per_ring`
   * :cfg:option:`TimeEvolutionAlgorithm.max_trunc_err`
   * :cfg:option:`IterativeSweeps.max_trunc_err`
   * :cfg:option:`ExpMPOEvolution.max_dt`
