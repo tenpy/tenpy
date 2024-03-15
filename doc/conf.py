@@ -280,6 +280,7 @@ extlinks = {
     'arxiv': ('https://arxiv.org/abs/%s', 'arXiv:%s'),
     'doi': ('https://dx.doi.org/%s', 'doi:%s'),
     'issue': (GITHUBBASE + '/issues/%s', 'issue #%s'),
+    'pull': (GITHUBBASE + '/pulls/%s', 'PR #%s'),
     'forum': ('https://tenpy.johannes-hauschild.de/viewtopic.php?t=%s',
               'community forum (topic %s)')
 }
