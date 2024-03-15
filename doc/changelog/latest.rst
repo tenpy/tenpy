@@ -14,6 +14,22 @@ Backwards incompatible changes
 
 Added
 ^^^^^
+- :pull:`266` combining several new features:
+  * Variational Uniform MPS (VUMPS) algorithm :class:`~tenpy.algorithms.vumps.SingleSiteVUMPSEngine` 
+    and :class:`~tenpy.algorithms.vumps.TwoSiteVUMPSEngine` for the optimization of the new MPS subclass 
+    :class:`~tenpy.networks.mps.UniformMPS`, 
+  * the :class:`~tenpy.networks.mps.MomentumMPS` for the quasi-particle excitation ansatz,
+    which can be optimized by :class:`~tenpy.algorithms.plane_wave_excitation.PlaneWaveExcitationEngine`
+  * MPS initialization methods :meth:`~tenpy.networks.mps.MPS.from_random_unitary_evolution` and 
+    :meth:`~tenpy.networks.mps.MPS.from_desired_bond_dimension`
+  * Overhaul of simulation :class:`~tenpy.simulations.ground_state.OrthogonalExcitations` and generalization to new
+    :class:`~tenpy.simulations.ground_state.TopologicalExcitations`,
+    with enhanced handling of segment boundary conditions, e.g. MPS :meth:`~tenpy.networks.mps.MPS.extract_enlarged_segment`.
+  * :class:`~tenpy.linalg.krylov_based.GMRES`
+  * :func:`~tenpy.linalg.np_conserved.polar` decomposition (based on SVD).
+  * :class:`~tenpy.linalg.sparse.BoostNpcLinearOperator` that can boost (i.e. add constants) to a linear operator,
+    providing an alterantive to the :class:`~tenpy.linalg.sparse.OrthogonalNpcLinearOperator`
+
 - Added consistency checks, see :func:`~tenpy.tools.misc.consistency_check`, as well as
   * :cfg:option:`Algorithm.max_cylinder_width`
   * :cfg:option:`TimeEvolutionAlgorithm.max_trunc_err`
@@ -42,5 +58,6 @@ Fixed
 - MPO methods :meth:`~tenpy.networks.mpo.MPO.dagger`, :meth:`~tenpy.networks.mpo.MPO.is_hermitian`,
   and :meth:`~tenpy.networks.mpo.MPO.__add__` now respect
   the :attr:`:~tenpy.networks.mpo.MPO.explicit_plus_hc` flag.
-- Handle Jordan wigner strings better, see :issue:`355`.
+- Handle Jordan wigner strings better, see :pull:`355`. This includes a new way to add JW signs on a virutal MPS leg 
+  via the site's :meth:`~tenpy.networks.site.Site.charge_to_JW_signs`
 
