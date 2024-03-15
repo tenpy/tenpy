@@ -4041,7 +4041,8 @@ class MPS(BaseMPSExpectationValue):
         self._B[-1] = npc.tensordot(self._B[-1], U, axes=['vR', 'vL'])
 
     def _canonical_form_left_orthogonalize(self, L, tol, arnoldi_params):
-        while True:
+        max_iters = 10_000
+        for _ in range(max_iters):
             L /= npc.norm(L)
             L_old = L
             new_As, L = self._canonical_form_qr_L2R(L)
@@ -4050,7 +4051,7 @@ class MPS(BaseMPSExpectationValue):
             L.itranspose(L_old.get_leg_labels())
             err = npc.norm(L - L_old)
             if err <= tol:
-                break
+                return new_As, L, norm
             # get better guess for L with Arnoldi
             arnoldi_params['E_tol'] = err / 10.
             TM = TransferMatrix.from_Ns_Ms(new_As, self._B, transpose=True)
@@ -4063,10 +4064,14 @@ class MPS(BaseMPSExpectationValue):
                           inner_labels=['vR', 'vL'],
                           pos_diag_R=True,
                           inner_qconj=+1)
-        return new_As, L, norm
+        msg = (f'canonical_form did not converge up to tol={tol}. '
+               f'Final error after {max_iters} iterations: {err}. '
+               f'Consider increasing the tolerance, but proceed with care.')
+        raise RuntimeError(msg)
 
     def _canonical_form_right_orthogonalize(self, R, tol, arnoldi_params):
-        while True:
+        max_iters = 10_000
+        for _ in range(max_iters):
             R /= npc.norm(R)
             R_old = R
             new_Bs, R = self._canonical_form_qr_R2L(R)
@@ -4075,7 +4080,7 @@ class MPS(BaseMPSExpectationValue):
             R.itranspose(R_old.get_leg_labels())
             err = npc.norm(R - R_old)
             if err <= tol:
-                break
+                return new_Bs, R, norm
             #  _, R = self._canonical_form_arnoldi(new_Bs, R, err/10.)
             TM = TransferMatrix.from_Ns_Ms(new_Bs, self._B, transpose=False)
             R.ireplace_label('vR', 'vL*')
@@ -4088,7 +4093,10 @@ class MPS(BaseMPSExpectationValue):
                           inner_labels=['vL', 'vR'],
                           pos_diag_R=True,
                           inner_qconj=-1)
-        return new_Bs, R, norm
+        msg = (f'canonical_form did not converge up to tol={tol}. '
+               f'Final error after {max_iters} iterations: {err}. '
+               f'Consider increasing the tolerance, but proceed with care.')
+        raise RuntimeError(msg)
 
     def _canonical_form_qr_L2R(self, L):
         """QR-decompose ``L B[0] B[1] ... B[-1] -> Qs[0]... Qs[-1] L`` for Bs in ``self._B``."""
