@@ -676,6 +676,55 @@ class BaseMPSExpectationValue(metaclass=ABCMeta):
             raise ValueError("Odd number of operators which need a Jordan Wigner string")
         return self.expectation_value_multi_sites(ops, i_min)
 
+    def expectation_value_terms_sum(self, term_list):
+        """Calculate expectation values for a bunch of terms and sum them up.
+
+        This is equivalent to the following expression::
+
+            sum([self.expectation_value_term(term)*strength for term, strength in term_list])
+
+        However, for efficiency, the term_list is converted to an MPO and the expectation value
+        of the MPO is evaluated.
+
+         .. warning ::
+
+             This function works only for finite bra and ket and does not include normalization factors.
+
+        Parameters
+        ----------
+        term_list : :class:`~tenpy.networks.terms.TermList`
+            The terms and prefactors (`strength`) to be summed up.
+
+        Returns
+        -------
+        terms_sum : list of (complex) float
+            Equivalent to the expression
+            ``sum([self.expectation_value_term(term)*strength for term, strength in term_list])``.
+        _mpo :
+            Intermediate results: the generated MPO.
+            For a finite MPS, ``terms_sum = _mpo.expectation_value(self)``, for an infinite MPS
+            ``terms_sum = _mpo.expectation_value(self) * self.L``
+
+        See also
+        --------
+        expectation_value_term : evaluates a single `term`.
+        tenpy.networks.mpo.MPO.expectation_value : expectation value density of an MPO.
+        """
+        # this implementation assumes that bra and ket are different. the implementation in MPS
+        # overrides this.
+        from . import mpo
+        if not self.finite:
+            raise ValueError("MPO expectation values only works for a finite MPSEnvironment")
+        # conversion
+        ot, ct = term_list.to_OnsiteTerms_CouplingTerms(self.sites)
+        bc = 'finite' if self.finite else 'infinite'
+        mpo_graph = mpo.MPOGraph.from_terms((ot, ct), self.sites, bc)
+        mpo_ = mpo_graph.build_MPO()
+
+        env = mpo.MPOEnvironment(self.bra, mpo_, self.ket)
+        terms_sum = env.full_contraction(0)  # handles explicit_plus_hc
+        return np.real_if_close(terms_sum), mpo_
+
     def term_correlation_function_right(self,
                                         term_L,
                                         term_R,
@@ -5727,55 +5776,6 @@ class BaseEnvironment(metaclass=ABCMeta):
             LP = LP.scale_axis(S_ket, 'vR')
         RP = self.get_RP(i0, store=False)
         return LP, RP
-
-    def expectation_value_terms_sum(self, term_list):
-        """Calculate expectation values for a bunch of terms and sum them up.
-
-        This is equivalent to the following expression::
-
-            sum([self.expectation_value_term(term)*strength for term, strength in term_list])
-
-        However, for efficiency, the term_list is converted to an MPO and the expectation value
-        of the MPO is evaluated.
-
-         .. warning ::
-
-             This function works only for finite bra and ket and does not include normalization factors.
-
-        Parameters
-        ----------
-        term_list : :class:`~tenpy.networks.terms.TermList`
-            The terms and prefactors (`strength`) to be summed up.
-
-        Returns
-        -------
-        terms_sum : list of (complex) float
-            Equivalent to the expression
-            ``sum([self.expectation_value_term(term)*strength for term, strength in term_list])``.
-        _mpo :
-            Intermediate results: the generated MPO.
-            For a finite MPS, ``terms_sum = _mpo.expectation_value(self)``, for an infinite MPS
-            ``terms_sum = _mpo.expectation_value(self) * self.L``
-
-        See also
-        --------
-        expectation_value_term : evaluates a single `term`.
-        tenpy.networks.mpo.MPO.expectation_value : expectation value density of an MPO.
-        """
-        from . import mpo, terms
-
-        L = self.L
-        if not self.finite:
-            raise ValueError("MPO expectation values only works for a finite MPSEnvironment")
-        # conversion
-        ot, ct = term_list.to_OnsiteTerms_CouplingTerms(self.sites)
-        bc = 'finite' if self.finite else 'infinite'
-        mpo_graph = mpo.MPOGraph.from_terms((ot, ct), self.sites, bc)
-        mpo_ = mpo_graph.build_MPO()
-
-        env = mpo.MPOEnvironment(self.bra, mpo_, self.ket)
-        terms_sum = env.full_contraction(0)  # handles explicit_plus_hc
-        return np.real_if_close(terms_sum), mpo_
 
     @abstractmethod
     def _contract_LP(self, i, LP):
