@@ -44,6 +44,7 @@ class ExpMPOEvolution(TimeEvolutionAlgorithm):
             Implemented are order = 1 and order = 2.
         max_dt : float | None
             Threshold for raising errors on too large time steps. Default ``1.0``.
+            See :meth:`~tenpy.tools.misc.consistency_check`.
             The trotterization in the time evolution operator assumes that the time step is small.
             We raise an error if it is not.
             Can be downgraded to a warning by setting this option to ``None``.

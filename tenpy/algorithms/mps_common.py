@@ -806,6 +806,7 @@ class IterativeSweeps(Sweep):
 
         max_trunc_err : float
             Threshold for raising errors on too large truncation errors. Default ``0.0001``.
+            See :meth:`~tenpy.tools.misc.consistency_check`.
             If the any truncation error :attr:`~tenpy.algorithms.truncation.TruncationError.eps`
             on the final sweep exceeds this value, we raise.
             Can be downgraded to a warning by setting this option to ``None``.
