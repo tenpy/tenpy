@@ -369,7 +369,8 @@ class OrthogonalExcitations(GroundStateSearch):
             switch_charge_sector : list of int | None
                 If given, change the charge sector of the excitations compared to the ground state.
                 Alternative to `apply_local_op` where we run a small zero-site diagonalization on
-                the left-most bond in the desired charge sector to update the state.
+                the (left-most/center for infinte/finite) bond
+                in the desired charge sector to update the state.
             write_back_converged_ground_state_environments : bool
                 Only used for infinite ground states, indicating that we should write converged
                 environments of the ground state back to `ground_state_filename`.
@@ -550,13 +551,17 @@ class OrthogonalExcitations(GroundStateSearch):
             apply_local_op['unitary'] = True  # no need to call psi.canonical_form
             self.psi.apply_local_op(**apply_local_op)
         else:
+            i = self.psi.L // 2 if self.psi.finite else 0
             assert switch_charge_sector is not None
             # get the correct environments on site 0
-            LP = env.get_LP(0)
-            RP = env._contract_RP(0, env.get_RP(0, store=True))  # saves the environments!
-            self.results['ground_state_energy'] = env.full_contraction(0)
-            for i in range(1, self.engine.n_optimize):
-                env.del_LP(i)  # but we might have gotten more than we need
+            LP = env.get_LP(i)
+            if i == 0:
+                RP = env._contract_RP(0, env.get_RP(0, store=True))  # saves the environments!
+            else:
+                RP = env.get_RP(i - 1)
+            self.results['ground_state_energy'] = env.full_contraction(i)
+            for j in range(i + 1, self.engine.n_optimize):
+                env.del_LP(j)  # but we might have gotten more than we need
             H0 = ZeroSiteH.from_LP_RP(LP, RP)
             if self.model.H_MPO.explicit_plus_hc:
                 H0 = SumNpcLinearOperator(H0, H0.adjoint())
@@ -565,10 +570,16 @@ class OrthogonalExcitations(GroundStateSearch):
                                       dtype=self.psi.dtype,
                                       qtotal=switch_charge_sector,
                                       labels=['vL', 'vR'])
+            if th0.norm() == 0:
+                raise ValueError(f"Can't switch to desired charge sector at bond lef of site {i:d}"
+                                 f" with vL leg {vL:d} and vR {vR!r}")
             lanczos_params = self.engine.lanczos_params
             _, th0, _ = krylov_based.LanczosGroundState(H0, th0, lanczos_params).run()
-            th0 = npc.tensordot(th0, self.psi.get_B(0, 'B'), axes=['vR', 'vL'])
-            self.psi.set_B(0, th0, form='Th')
+            th0 = npc.tensordot(th0, self.psi.get_B(i, 'B'), axes=['vR', 'vL'])
+            self.psi.set_B(i, th0, form='Th')
+            if self.psi.finite:
+                self.psi.canonical_form()
+                env.clear()
         qtotal_after = self.psi.get_total_charge()
         qtotal_diff = self.psi.chinfo.make_valid(qtotal_after - qtotal_before)
         self.logger.info("changed charge by %r compared to previous state", list(qtotal_diff))
