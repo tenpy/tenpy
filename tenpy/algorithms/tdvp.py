@@ -37,6 +37,7 @@ from .mps_common import Sweep, ZeroSiteH, OneSiteH, TwoSiteH
 from .algorithm import TimeEvolutionAlgorithm, TimeDependentHAlgorithm
 from ..networks.mpo import MPOEnvironment
 from ..linalg import np_conserved as npc
+from ..tools.misc import consistency_check
 import numpy as np
 import time
 import warnings
@@ -73,6 +74,11 @@ class TDVPEngine(TimeEvolutionAlgorithm, Sweep):
             Truncation parameters as described in :func:`~tenpy.algorithms.truncation.truncate`
         lanczos_options : dict
             Lanczos options as described in :cfg:config:`Lanczos`.
+        max_dt : float | None
+            Threshold for raising errors on too large time steps. Default ``1.0``.
+            For large time steps, the projection to the MPS manifold that is the main building block
+            of TDVP, can not be a good approximation anymore. We raise in that case.
+            Can be downgraded to a warning by setting this option to ``None``.
 
     Attributes
     ----------
@@ -117,6 +123,8 @@ class TDVPEngine(TimeEvolutionAlgorithm, Sweep):
         N_steps : int
             The number of steps to evolve.
         """
+        consistency_check(dt, self.options, 'max_dt', 1.,
+                          'dt > ``max_delta_t`` is unreasonably large for TDVP.')
         self.dt = dt
         trunc_err = TruncationError()
         for _ in range(N_steps):
