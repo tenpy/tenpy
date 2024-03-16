@@ -66,7 +66,6 @@ The Jordan-Wigner strings follow the *final* DMRG snake.
 
 import numpy as np
 import itertools as it
-import warnings
 
 from .lattice import Lattice
 from .model import CouplingMPOModel

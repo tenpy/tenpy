@@ -2,13 +2,7 @@
 # Copyright (C) TeNPy Developers, GNU GPLv3
 
 import numpy as np
-import numpy.testing as npt
-
 from tenpy.networks import mps, site, uniform_mps
-
-import tenpy.linalg.np_conserved as npc
-
-import pytest
 
 
 def test_to_and_from_mps():

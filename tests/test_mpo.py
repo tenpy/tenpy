@@ -2,7 +2,6 @@
 # Copyright (C) TeNPy Developers, GNU GPLv3
 
 import numpy as np
-import numpy.testing as npt
 import pytest
 from tenpy.models.xxz_chain import XXZChain
 from tenpy.models.spins import SpinChain
@@ -177,7 +176,6 @@ def test_MPO_conversion():
         assert npc.norm(w1 - w2, np.inf) == 0.
     assert H2.is_equal(H1)
     back_to_terms = H1.to_TermList([["Id", f"X_{i:d}", f"Y_{i:d}", f"Z_{i:d}"] for i in range(L)], max_range=8)
-    from pprint import pprint
     assert len(back_to_terms.terms) == len(terms)
     for term, pref in zip(back_to_terms.terms, back_to_terms.strength):
         assert term in terms

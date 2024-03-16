@@ -16,12 +16,9 @@ An example for such a case is given in the file ``examples/c_tebd.py``.
 """
 # Copyright (C) TeNPy Developers, GNU GPLv3
 
-import numpy as np
-
 from .lattice import Chain
 from ..networks.site import SpinSite, GroupedSite
 from .model import CouplingMPOModel, NearestNeighborModel
-from ..tools.params import asConfig
 
 __all__ = ['SpinChainNNN', 'SpinChainNNN2']
 

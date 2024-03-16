@@ -120,7 +120,6 @@ see :cite:`hauschild2018`.
 
 import copy
 import numpy as np
-import itertools
 
 from .mps import MPS
 from ..linalg import np_conserved as npc

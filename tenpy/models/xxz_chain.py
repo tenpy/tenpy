@@ -5,8 +5,6 @@ this module is more to serve as a pedagogical example for a model.
 """
 # Copyright (C) TeNPy Developers, GNU GPLv3
 
-import numpy as np
-
 from .lattice import Site, Chain
 from .model import CouplingModel, NearestNeighborModel, MPOModel, CouplingMPOModel
 from ..linalg import np_conserved as npc

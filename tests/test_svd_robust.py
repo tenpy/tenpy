@@ -7,7 +7,7 @@ from scipy.linalg import diagsvd
 
 from tenpy.linalg import svd_robust
 
-import random_test  # fix the random seed.
+import random_test  # fix the random seed.  # noqa F401
 from tenpy.linalg.random_matrix import standard_normal_complex
 
 import pytest

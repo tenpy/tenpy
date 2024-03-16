@@ -11,8 +11,6 @@ from tenpy.simulations.simulation import *
 from tenpy.simulations.ground_state_search import GroundStateSearch
 from tenpy.simulations.time_evolution import RealTimeEvolution, SpectralSimulation, SpectralSimulationEvolveBraKet
 
-import pytest
-
 tenpy.tools.misc.skip_logging_setup = True  # skip logging setup
 
 

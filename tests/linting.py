@@ -9,8 +9,6 @@ We therefore consider them part of a linting routine and do *not* call them from
 import tenpy
 import types
 import os
-import re
-from datetime import date
 
 
 def main():

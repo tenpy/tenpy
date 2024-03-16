@@ -2,11 +2,9 @@
 
 import io_test
 import os
-import pickle
 import pytest
 import warnings
 from tenpy.tools import hdf5_io
-import numpy as np
 
 h5py = pytest.importorskip('h5py')
 

@@ -8,7 +8,6 @@ Examples are given in the class doc-string.
 
 from collections import namedtuple
 import warnings
-import functools
 
 from .hdf5_io import find_global
 

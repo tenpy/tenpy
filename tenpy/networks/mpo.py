@@ -39,7 +39,6 @@ i.e. between sites ``i-1`` and ``i``.
 import numpy as np
 from scipy.linalg import expm
 import warnings
-import sys
 import copy
 import logging
 
@@ -47,11 +46,11 @@ logger = logging.getLogger(__name__)
 
 from ..linalg import np_conserved as npc
 from ..linalg.sparse import NpcLinearOperator, FlatLinearOperator
-from .site import group_sites, Site
+from .site import group_sites
 from ..tools.string import vert_join
 from .mps import MPS as _MPS  # only for MPS._valid_bc
 from .mps import BaseEnvironment
-from .terms import TermList, OnsiteTerms, CouplingTerms, MultiCouplingTerms
+from .terms import TermList
 from ..tools.misc import to_iterable, add_with_None_0
 from ..tools.math import lcm
 from ..tools.params import asConfig

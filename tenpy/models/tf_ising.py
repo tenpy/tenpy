@@ -12,7 +12,6 @@ import numpy as np
 
 from .model import CouplingMPOModel, NearestNeighborModel
 from .lattice import Chain
-from ..tools.params import asConfig
 from ..networks.site import SpinHalfSite
 
 __all__ = ['TFIModel', 'TFIChain']

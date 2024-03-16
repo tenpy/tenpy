@@ -39,10 +39,8 @@ import logging
 logger = logging.getLogger(__name__)
 
 from ..linalg import np_conserved as npc
-from ..networks.mps import MPSEnvironment
-from ..linalg.sparse import OrthogonalNpcLinearOperator
 from ..linalg.krylov_based import lanczos_arpack, LanczosGroundState
-from .truncation import truncate, svd_theta
+from .truncation import svd_theta
 from ..tools.params import asConfig
 from ..tools.math import entropy
 from ..tools.process import memory_usage

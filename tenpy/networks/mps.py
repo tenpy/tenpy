@@ -150,7 +150,6 @@ from abc import ABCMeta, abstractmethod
 import numpy as np
 import warnings
 import random
-from functools import reduce
 import copy
 from collections.abc import Iterable
 import logging
@@ -160,9 +159,9 @@ logger = logging.getLogger(__name__)
 from ..linalg import np_conserved as npc
 from ..linalg import sparse
 from ..linalg.krylov_based import Arnoldi
-from .site import GroupedSite, group_sites
+from .site import group_sites
 from ..tools.misc import argsort, to_iterable, to_array, get_recursive, inverse_permutation
-from ..tools.math import lcm, speigs, entropy
+from ..tools.math import lcm, entropy
 from ..tools.params import asConfig
 from ..tools.cache import DictCache
 from ..tools import hdf5_io

@@ -27,8 +27,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 from ..networks.site import Site
-from ..tools.misc import (to_iterable, to_array, to_iterable_of_len, inverse_permutation,
-                          get_close, find_subclass)
+from ..tools.misc import to_iterable, to_array, inverse_permutation, get_close, find_subclass
 from ..networks.mps import MPS  # only to check boundary conditions
 
 __all__ = [

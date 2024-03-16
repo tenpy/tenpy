@@ -2,17 +2,12 @@
 
 # Copyright (C) TeNPy Developers, GNU GPLv3
 
-import numpy as np
-import time
-from scipy.linalg import expm
 import logging
 
 logger = logging.getLogger(__name__)
 
 from .algorithm import TimeEvolutionAlgorithm, TimeDependentHAlgorithm
-from ..linalg import np_conserved as npc
 from .truncation import TruncationError
-from ..tools.params import asConfig
 from ..tools.misc import consistency_check
 
 __all__ = ['ExpMPOEvolution', 'TimeDependentExpMPOEvolution']

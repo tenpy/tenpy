@@ -1,9 +1,6 @@
-import itertools as it
 import tenpy.linalg.np_conserved as npc
 from tenpy.models.tf_ising import TFIChain
-from tenpy.algorithms import dmrg
 from tenpy.algorithms.exact_diag import ExactDiag
-from tenpy.networks import mps
 import tenpy
 import pytest
 import numpy as np

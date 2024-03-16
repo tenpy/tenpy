@@ -3,23 +3,19 @@
 
 import numpy as np
 from pathlib import Path
-import warnings
 
 from . import simulation
 from ..tools import hdf5_io, string
 from .simulation import *
 from ..linalg import np_conserved as npc
-from ..models.model import Model
 from ..networks.mpo import MPOEnvironment, MPOTransferMatrix
 from ..networks.mps import MPS, InitialStateBuilder
 from ..networks.uniform_mps import UniformMPS
 from ..algorithms.mps_common import ZeroSiteH
 from ..linalg import krylov_based
 from ..linalg.sparse import SumNpcLinearOperator
-from ..tools.misc import find_subclass, to_iterable, get_recursive
+from ..tools.misc import find_subclass
 from ..tools.params import asConfig
-
-import copy
 
 __all__ = simulation.__all__ + [
     'GroundStateSearch',

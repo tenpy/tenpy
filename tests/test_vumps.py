@@ -1,7 +1,6 @@
 """A collection of tests to check the functionality of `tenpy.vumps`"""
 # Copyright (C) TeNPy Developers, GNU GPLv3
 
-import tenpy.linalg.np_conserved as npc
 from tenpy.models.tf_ising import TFIChain
 from tenpy.algorithms import vumps
 from tenpy.networks import mps

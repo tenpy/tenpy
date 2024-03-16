@@ -25,8 +25,6 @@ numerical costs scale exponentially with the number of exciting sites.
 # Copyright (C) TeNPy Developers, GNU GPLv3
 
 import numpy as np
-import time
-import warnings
 import logging
 
 logger = logging.getLogger(__name__)
@@ -36,9 +34,7 @@ from ..linalg.charges import LegPipe
 from ..networks.momentum_mps import MomentumMPS
 from ..networks.mpo import MPOEnvironment, MPOTransferMatrix
 from ..linalg.krylov_based import GMRES, LanczosGroundState, Arnoldi
-from ..linalg.sparse import NpcLinearOperator, SumNpcLinearOperator, BoostNpcLinearOperator, ShiftNpcLinearOperator
-from ..tools.params import asConfig
-from ..tools.math import entropy
+from ..linalg.sparse import NpcLinearOperator, SumNpcLinearOperator, BoostNpcLinearOperator
 from ..algorithms.algorithm import Algorithm
 from ..algorithms.mps_common import ZeroSiteH
 

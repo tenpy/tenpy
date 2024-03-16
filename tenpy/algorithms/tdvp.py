@@ -39,7 +39,6 @@ from ..networks.mpo import MPOEnvironment
 from ..linalg import np_conserved as npc
 from ..tools.misc import consistency_check
 import numpy as np
-import time
 import warnings
 import logging
 

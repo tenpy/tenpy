@@ -15,8 +15,6 @@ by Robert N. C. Pfeifer, Glen Evenbly, Sukhwinder Singh, Guifre Vidal, see :arxi
 # Copyright (C) TeNPy Developers, GNU GPLv3
 
 import numpy as np
-import warnings
-import collections
 from ..linalg import np_conserved as npc
 
 __all__ = ['outer_product', 'contract', 'ncon']

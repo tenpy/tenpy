@@ -4,7 +4,6 @@
 import numpy as np
 
 from .model import CouplingMPOModel
-from ..tools.params import asConfig
 from ..networks.site import BosonSite, FermionSite
 from .lattice import Honeycomb
 
