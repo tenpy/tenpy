@@ -82,6 +82,7 @@ version = {attr = "tenpy.__version__"}
 
 [tool.pytest.ini_options]
 filterwarnings = [
+    "error",  # consider all unfiltered warnings error. they should be handled or filtered.
     "ignore:Couldn't load compiled cython code. Code will run a bit slower.:UserWarning"
 ]
 markers = [
