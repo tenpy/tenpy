@@ -14,7 +14,8 @@ Backwards incompatible changes
 
 Added
 ^^^^^
-- :pull:`266` combining several new features:
+- :pull:`266` combining several new features
+
   * Variational Uniform MPS (VUMPS) algorithm :class:`~tenpy.algorithms.vumps.SingleSiteVUMPSEngine` 
     and :class:`~tenpy.algorithms.vumps.TwoSiteVUMPSEngine` for the optimization of the new MPS subclass 
     :class:`~tenpy.networks.mps.UniformMPS`, 
@@ -31,11 +32,13 @@ Added
     providing an alterantive to the :class:`~tenpy.linalg.sparse.OrthogonalNpcLinearOperator`
 
 - Added consistency checks, see :func:`~tenpy.tools.misc.consistency_check`, as well as
+
   * :cfg:option:`Algorithm.max_cylinder_width`
   * :cfg:option:`TimeEvolutionAlgorithm.max_trunc_err`
   * :cfg:option:`IterativeSweeps.max_trunc_err`
   * :cfg:option:`ExpMPOEvolution.max_dt`
   * :cfg:option:`TEBDEngine.max_delta_t`
+
 - Added class :class:`~tenpy.models.lattice.SimpleBZ` for the Brillouin zone of a Lattice and convenience functions for
   plotting it.
 - Add simulation classes 
