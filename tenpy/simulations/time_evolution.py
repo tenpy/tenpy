@@ -8,7 +8,7 @@ import warnings
 from . import simulation
 from .simulation import *
 from ..networks.mps import MPSEnvironment, MPS
-from ..tools.misc import to_iterable
+from ..tools.misc import to_iterable, consistency_check
 from ..tools import hdf5_io
 
 __all__ = simulation.__all__ + [
@@ -464,10 +464,14 @@ class SpectralSimulation(TimeDependentCorrelation):
     .. cfg:config :: SpectralSimulation
         :include: TimeDependentCorrelation
 
-        spectral_function_params: dict
+        spectral_function_params : dict
             Additional parameters for post-processing of the spectral function (i.e. applying
             linear prediction or gaussian windowing. The keys correspond to the kwargs of
             :func:`~tenpy.tools.spectral_function_tools.spectral_function`.
+        max_rel_prediction_time : float | None
+            Threshold for raising errors on using too much linear prediction. Default ``3``.
+            See :meth:`~tenpy.tools.misc.consistency_check`.
+            Can be downgraded to a warning by setting this option to ``None``.
     """
 
     def __init__(self, options, *, ground_state_data=None, ground_state_filename=None, **kwargs):
@@ -478,6 +482,10 @@ class SpectralSimulation(TimeDependentCorrelation):
 
     def run_post_processing(self):
         extra_kwargs = self.options.get('spectral_function_params', {})
+        consistency_check(value=extra_kwargs.get('rel_prediction_time', 1),
+                          options=self.options, threshold_key='max_rel_prediction_time',
+                          threshold_default=3,
+                          msg="Excessive use of linear prediction; ``max_rel_prediction_time`` exceeded")
         for key in self.results['measurements'].keys():
             if 'correlation_function_t' in key:
                 results_key = key.replace('correlation_function_t', 'spectral_function')
