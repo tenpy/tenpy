@@ -3,7 +3,6 @@
 
 import numpy as np
 import numpy.testing as npt
-import warnings
 
 from tenpy.networks import mps, site, uniform_mps
 

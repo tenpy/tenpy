@@ -5,7 +5,7 @@
 import tenpy
 import copy
 import numpy as np
-import warnings
+import pytest
 
 from tenpy.algorithms import Algorithm
 from tenpy.simulations.simulation import Simulation
@@ -75,12 +75,10 @@ simulation_params = {
 def test_Simulation_with_post_processing():
     sim_params = copy.deepcopy(simulation_params)
     sim = Simulation(sim_params)
-    with warnings.catch_warnings(record=True) as caught:
-        results = sim.run()  # should do exactly two measurements: one before and one after eng.run()
-    for w in caught:
-        msg = "Error during post_process of test_post_processing broken_pp_dummy_function"
-        if msg not in str(w.message):
-            warnings.showwarning(w.message, w.category, w.filename, w.lineno, w.file, w.line)
+    msg = "Error during post_process of test_post_processing broken_pp_dummy_function"
+    with pytest.warns(UserWarning, match=msg):
+        # should do exactly two measurements: one before and one after eng.run()
+        results = sim.run()
     assert 'errors_during_run' in results, "we called broken_pp_dummy_function, so there should be an error"
     assert 'pp_result' in results
     assert 'pp_result_1' in results  # make sure pp_result was not overwritten
@@ -96,12 +94,9 @@ def test_init_of_DataLoader(tmp_path):
     sim_params['output_filename'] = '_test.pkl'
     sim_params['max_errors_before_abort'] = None
     sim = Simulation(sim_params)
-    with warnings.catch_warnings(record=True) as caught:
+    msg = "Error during post_process of test_post_processing broken_pp_dummy_function"
+    with pytest.warns(UserWarning, match=msg):
         results = sim.run()
-    for w in caught:
-        msg = "Error during post_process of test_post_processing broken_pp_dummy_function"
-        if msg not in str(w.message):
-            warnings.showwarning(w.message, w.category, w.filename, w.lineno, w.file, w.line)
     assert 'errors_during_run' in results, "we called broken_pp_dummy_function, so there should be an error"
     DL_1 = DataLoader(data=results)
     DL_2 = DataLoader(simulation=sim)

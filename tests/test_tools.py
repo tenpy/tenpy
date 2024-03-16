@@ -7,7 +7,6 @@ import numpy.testing as npt
 import itertools as it
 import tenpy
 from tenpy import tools
-import warnings
 import pytest
 import os.path
 import sys
@@ -39,8 +38,8 @@ def test_speigs():
     x_LM = x[tools.misc.argsort(x, 'm>')]
     x_SM = x[tools.misc.argsort(x, 'SM')]
     A = np.diag(x)
-    with warnings.catch_warnings():
-        warnings.simplefilter('ignore')  # disable warngings temporarily
+
+    with pytest.warns(UserWarning, match='trimming speigs k to smaller matrix dimension d'):
         for k in range(4, 9):
             print(k)
             W, V = tools.math.speigs(A, k, which='LM')
@@ -97,26 +96,24 @@ def test_memory_usage():
     tools.process.memory_usage()
 
 
+@pytest.mark.filterwarnings('ignore')
 def test_omp(n=2):
-    with warnings.catch_warnings():
-        warnings.simplefilter('ignore')  # disable warngings temporarily
-        if tools.process.omp_set_nthreads(n):
-            nthreads = tools.process.omp_get_nthreads()
-            print(nthreads)
-            assert (nthreads == n)
-        else:
-            print("test_omp failed to import the OpenMP libaray.")
+    if tools.process.omp_set_nthreads(n):
+        nthreads = tools.process.omp_get_nthreads()
+        print(nthreads)
+        assert (nthreads == n)
+    else:
+        print("test_omp failed to import the OpenMP libaray.")
 
 
+@pytest.mark.filterwarnings('ignore')
 def test_mkl(n=2):
-    with warnings.catch_warnings():
-        warnings.simplefilter('ignore')  # disable warngings temporarily
-        if tools.process.mkl_set_nthreads(n):
-            nthreads = tools.process.mkl_get_nthreads()
-            print(nthreads)
-            assert (nthreads == n)
-        else:
-            print("test_mkl failed to import the shared MKL libaray.")
+    if tools.process.mkl_set_nthreads(n):
+        nthreads = tools.process.mkl_get_nthreads()
+        print(nthreads)
+        assert (nthreads == n)
+    else:
+        print("test_mkl failed to import the shared MKL libaray.")
 
 
 def test_group_by_degeneracy():

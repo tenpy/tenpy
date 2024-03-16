@@ -4,7 +4,6 @@ import io_test
 import os
 import pickle
 import pytest
-import warnings
 import time
 
 import tenpy
@@ -48,13 +47,12 @@ def test_pickle(tmp_path):
 
 
 @pytest.mark.parametrize('fn', datadir_pkl)
+@pytest.mark.filterwarnings('ignore::FutureWarning')
 def test_import_from_datadir(fn):
     print("import ", fn)
     filename = os.path.join(io_test.datadir, fn)
-    with warnings.catch_warnings():
-        warnings.filterwarnings("ignore", category=FutureWarning)
-        with open(filename, 'rb') as f:
-            data = pickle.load(f)
+    with open(filename, 'rb') as f:
+        data = pickle.load(f)
     if 'version' in data:
         data_expected = io_test.gen_example_data(data['version'])
     else:

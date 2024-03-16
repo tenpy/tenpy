@@ -3,7 +3,6 @@
 
 import copy
 import numpy as np
-import warnings
 import sys
 
 import tenpy
@@ -126,15 +125,12 @@ def test_bad_measurements():
     sim_params['connect_measurements'].append((__name__, 'bad_dummy_measurement', {}, -1))
     sim = Simulation(sim_params)
 
-    with warnings.catch_warnings(record=True) as caught:
+    expect_warning1 = ("measurement gave new keys {'changing_key_[0-9]'} fill up with `None` for "
+                       "previous measurements.")
+    expect_warning2 = ("measurement didn't give keys {'changing_key_[0-9]'} we have from previous "
+                       "measurements, fill up with `None`")
+    with pytest.warns(UserWarning, match=f'({expect_warning1}|{expect_warning2})'):
         results = sim.run()
-    for w in caught:
-        msg = str(w.message)
-        expected = any((part in msg) for part in ["measurement gave new keys {'changing_key",
-                                                  "measurement didn't give keys {'changing_key"])
-        if not expected:
-            warnings.showwarning(w.message, w.category, w.filename, w.lineno, w.file, w.line)
-    assert len(caught) >= 2, "expected to get warnings about changing keys"
 
     meas = results['measurements']
     assert np.all(meas['measurement_index'] == np.arange(2))
@@ -280,11 +276,8 @@ def test_SpectralSimulation():
         # building with initial state passed in sim params
         sim_params = copy.deepcopy(spectral_sim_params)
         sim = SpectralSimulationClass(sim_params)
-        with warnings.catch_warnings(record=True) as caught:
+        with pytest.warns(UserWarning, match='No ground state data is supplied'):
             results = sim.run()
-        for w in caught:
-            if "No ground state data is supplied" not in str(w.message):
-                warnings.showwarning(w.message, w.category, w.filename, w.lineno, w.file, w.line)
 
         assert sim.model.lat.bc_MPS == 'finite'  # check whether model parameters were used
         assert 'psi' and 'psi_ground_state' in results  # should be by default

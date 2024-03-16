@@ -47,13 +47,12 @@ def test_hdf5_export_import(tmp_path):
 
 
 @pytest.mark.parametrize('fn', datadir_hdf5)
+@pytest.mark.filterwarnings('ignore::FutureWarning')
 def test_import_from_datadir(fn):
     print("import ", fn)
     filename = os.path.join(io_test.datadir, fn)
-    with warnings.catch_warnings():
-        warnings.filterwarnings("ignore", category=FutureWarning)
-        with h5py.File(filename, 'r') as f:
-            data = hdf5_io.load_from_hdf5(f)
+    with h5py.File(filename, 'r') as f:
+        data = hdf5_io.load_from_hdf5(f)
     if 'version' in data:
         data_expected = io_test.gen_example_data(data['version'])
     else:

@@ -6,7 +6,6 @@ import numpy as np
 import numpy.testing as npt
 import itertools as it
 from tenpy.tools.misc import inverse_permutation
-import warnings
 import pytest
 
 from random_test import gen_random_legcharge, random_Array
@@ -273,8 +272,7 @@ def test_npc_Array_reshape():
                                  ([[0], [1], [2]], [0, 1, 2]), ([[2, 0]], [1, 2, 0]),
                                  ([[2, 0, 1]], [2, 0, 1])]:
         print('combine legs', comb_legs)
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore", FutureWarning)
+        with pytest.warns(FutureWarning):
             acomb = a.combine_legs(comb_legs)  # just sorts second leg
         print("=> labels: ", acomb.get_leg_labels())
         acomb.test_sanity()
@@ -326,8 +324,7 @@ def test_npc_Array_reshape_2():
     shape = (2, 5, 2)
     a = random_Array(shape, chinfo3, sort=True)
     aflat = a.to_ndarray()
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore", FutureWarning)
+    with pytest.warns(FutureWarning):
         acomb = a.combine_legs([[0, 1]])
     acombflat = acomb.to_ndarray()
     pipe = acomb.legs[0]
