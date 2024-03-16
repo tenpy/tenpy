@@ -1191,6 +1191,12 @@ def consistency_check(value, options, threshold_key, threshold_default, msg, com
     It can be set to ``None``, which causes a :class:`TenpyInconsistencyWarning` to be emitted
     instead of the error.
 
+    .. warning ::
+        Obviously, the fact that we do consistency checks like ``dt < 1.`` does not mean that
+        that your results are converged for any ``dt < 1.``!
+        You will likely have to choose a value much smaller than the threshold, and it is *your*
+        responsibility as a user to ensure that you are in fact converged in each of the parameters.
+
     Parameters
     ----------
     value

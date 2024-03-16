@@ -76,6 +76,7 @@ class TDVPEngine(TimeEvolutionAlgorithm, Sweep):
             Lanczos options as described in :cfg:config:`Lanczos`.
         max_dt : float | None
             Threshold for raising errors on too large time steps. Default ``1.0``.
+            See :meth:`~tenpy.tools.misc.consistency_check`.
             For large time steps, the projection to the MPS manifold that is the main building block
             of TDVP, can not be a good approximation anymore. We raise in that case.
             Can be downgraded to a warning by setting this option to ``None``.

@@ -47,6 +47,7 @@ class Algorithm:
             Truncation parameters as described in :cfg:config:`truncation`.
         max_cylinder_width : int | None
             Threshold for raising errors on too large cylinder circumferences. Default ``18``.
+            See :meth:`~tenpy.tools.misc.consistency_check`.
             The cost of simulations scales very unfavorably with the cylinder circumference.
             If it is too large, you will not be able to choose a reasonably large bond dimension
             *and* have enough RAM to do the simulation. We raise an error in that case.
@@ -456,6 +457,7 @@ class TimeEvolutionAlgorithm(Algorithm):
 
             max_trunc_err : float
                 Threshold for raising errors on too large truncation errors. Default ``0.01``.
+                See :meth:`~tenpy.tools.misc.consistency_check`.
                 When the total accumulated truncation error (its ``eps``) exceeds this value,
                 we raise. Can be downgraded to a warning by setting this option to ``None``.
 
