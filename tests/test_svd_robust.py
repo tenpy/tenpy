@@ -16,7 +16,7 @@ import pytest
 def test_CLAPACK_import():
     """just try to import the lapack library on the local system."""
     if not svd_robust._old_scipy:
-        return  # scip test: no need to import that.
+        return  # scipy test: no need to import that.
     try:
         svd_robust._load_lapack(warn=False)
     except EnvironmentError as e:
@@ -41,9 +41,9 @@ def check_svd_function(svd_function):
             A = np.asarray(A, dtype)
             Sonly = svd_function(A, compute_uv=False)
 
-            Ufull, Sfull, VTfull = svd_function(A, full_matrices=True, compute_uv=True)
-            npt.assert_array_almost_equal_nulp(Sonly, Sfull, tol_NULP)
-            recalc = Ufull.dot(diagsvd(Sfull, m, n)).dot(VTfull)
+            U_full, S_full, VTfull = svd_function(A, full_matrices=True, compute_uv=True)
+            npt.assert_array_almost_equal_nulp(Sonly, S_full, tol_NULP)
+            recalc = U_full.dot(diagsvd(S_full, m, n)).dot(VTfull)
             npt.assert_array_almost_equal_nulp(recalc, A, tol_NULP)
 
             U, S, VT = svd_function(A, full_matrices=False, compute_uv=True)

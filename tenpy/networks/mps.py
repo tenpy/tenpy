@@ -2874,7 +2874,7 @@ class MPS(BaseMPSExpectationValue):
 
         Given `self` as the segment MPS and the original background MPS containing the information
         about the Schmidt states, this function allows to define an MPS on an enlarged segment.
-        This is particularaly usefull to evaluate expectation values outside of the original
+        This is particularly useful to evaluate expectation values outside of the original
         segment.
 
         Parameters
@@ -2893,7 +2893,7 @@ class MPS(BaseMPSExpectationValue):
             `add_unitcells` = 0. For initially finite MPS with non-trivial `first, last`, this
             yields the state on the full finite system.
         new_first_last : (int, int)
-            Alternatively, instead of specifying `add_unit_cells`, directly sepcify
+            Alternatively, instead of specifying `add_unit_cells`, directly specify
             the ``(new_first, new_last)`` to be returned.
         cutoff : float
             Cutoff used for QR/SVDs in :meth:`canonical_form_finite`.
@@ -3518,7 +3518,7 @@ class MPS(BaseMPSExpectationValue):
             the largest eigenvalue of the TransferMatrix.
         """
         if self.bc != other.bc:
-            raise ValueError("can't take overlap between MPS with differen bc")
+            raise ValueError("can't take overlap between MPS with different bc")
         if self.finite:
             if ignore_form:
                 # Use TransferMatrix with option to ignore the form
@@ -4372,7 +4372,7 @@ class MPS(BaseMPSExpectationValue):
 
     def apply_local_op(self, i, op, unitary=None, renormalize=False, cutoff=1.e-13,
                        understood_infinite=False):
-        """Apply a local (one or multi-site) operator to `self`. In place.
+        r"""Apply a local (one or multi-site) operator to `self`. In place.
 
         Note that this destroys the canonical form if the local operator is non-unitary.
         Therefore, this function calls :meth:`canonical_form` if necessary.
@@ -5170,7 +5170,7 @@ class MPS(BaseMPSExpectationValue):
         return other
 
     def outer_virtual_legs(self):
-        """Return the virutal legs on the left and right of the MPS.
+        """Return the virtual legs on the left and right of the MPS.
 
         Returns
         -------

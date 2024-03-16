@@ -11,7 +11,7 @@ from tenpy.networks.site import SpinHalfSite
 from tenpy.algorithms.exact_diag import ExactDiag
 import pytest
 
-from test_dmrg import e0_tranverse_ising
+from test_dmrg import e0_transverse_ising
 
 
 def test_trotter_decomposition():
@@ -97,7 +97,7 @@ def test_tebd(bc_MPS, which_engine, compute_err, g=0.5):
 
     if bc_MPS == 'infinite':
         Etebd = np.average(M.bond_energies(psi))
-        Eexact = e0_tranverse_ising(g)
+        Eexact = e0_transverse_ising(g)
         print("E_TEBD={Etebd:.14f} vs E_exact={Eex:.14f}".format(Etebd=Etebd, Eex=Eexact))
 
         Sold = np.average(psi.entanglement_entropy())

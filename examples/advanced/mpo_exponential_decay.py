@@ -44,7 +44,7 @@ class ExponentiallyDecayingHeisenberg(MPOModel):
         Length of the chain.
     Jxx, Jz, hz, xi: float
         Coupling parameters as defined for the Hamiltonian above.
-    bc_MPS : {'finite' | 'infinte'}
+    bc_MPS : {'finite' | 'infinite'}
         MPS boundary conditions.
     conserve : 'Sz' | 'parity' | None
         What should be conserved. See :class:`~tenpy.networks.Site.SpinHalfSite`.

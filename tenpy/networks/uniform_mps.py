@@ -100,7 +100,7 @@ class UniformMPS(MPS):
     # All labels of each tensor in _C (order is used!)
     _C_labels = ['vL', 'vR']
 
-    # Labels for other tensors are inhereted from MPS.
+    # Labels for other tensors are inherited from MPS.
 
     def __init__(self, sites, ALs, ARs, ACs, Cs, norm=1.):
         self.sites = list(sites)
@@ -240,7 +240,7 @@ class UniformMPS(MPS):
         h5gr.attrs["norm"] = self.norm
         h5gr.attrs["grouped"] = self.grouped
         h5gr.attrs["transfermatrix_keep"] = self._transfermatrix_keep
-        h5gr.attrs["L"] = self.L  # not needed for loading, but still usefull metadata
+        h5gr.attrs["L"] = self.L  # not needed for loading, but still useful metadata
         h5gr.attrs["max_bond_dimension"] = np.max(self.chi)  # same
 
     def to_MPS(self, cutoff=1.e-16, check_overlap=False):
@@ -355,7 +355,7 @@ class UniformMPS(MPS):
 
     def _diagonal_gauge_AC(self, U, VH, i0):
         """
-        Given U and VH from diagoanlizing the center matrix C compute the corresponding AC.
+        Given U and VH from diagonalizing the center matrix C compute the corresponding AC.
         """
 
         theta = self.get_B(i0, 'AC')
@@ -826,7 +826,7 @@ class UniformMPS(MPS):
         self.test_sanity()
 
     def roll_mps_unit_cell(self, shift=1):
-        """Shift the section we define as unit cellof an infinite MPS; in place.
+        """Shift the section we define as unit cell of an infinite MPS; in place.
 
         Suppose we have a unit cell with tensors ``[A, B, C, D]`` (repeated on both sites).
         With ``shift = 1``, the new unit cell will be ``[D, A, B, C]``,
@@ -932,7 +932,7 @@ class UniformMPS(MPS):
         raise NotImplementedError("Convert UniformMPS to MPS for calculations involving S.")
 
     def entanglement_spectrum(self, by_charge=False):
-        raise NotImplementedError("Convert uMUniformMPSPS to MPS for calculations involving S.")
+        raise NotImplementedError("Convert UniformMPS to MPS for calculations involving S.")
 
     def get_rho_segment(self, segment):
         raise NotImplementedError("Convert UniformMPS to MPS for calculations involving S.")

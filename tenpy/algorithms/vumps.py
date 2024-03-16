@@ -1,9 +1,9 @@
 """Variational Uniform Matrix Product State (VUMPS)
 
-The VUMPS algorithm was developed to find gound states directly in the thermodynamic
+The VUMPS algorithm was developed to find ground states directly in the thermodynamic
 limit in a more principled fashion than iDMRG, which essentially is a finite algorithm
 extrapolated to the thermodynamic limit. VUMPS is a tangent space MPS method, where
-we look for the optimal ground state in the manifold of fixed bond dimension MPS :cite:`vanderstraeten2019`.
+we look for the optimal ground state in the manifold of fixed bond dimensionMPS :cite:`vanderstraeten2019`.
 
 The VUMPS algorithm was introduced in 2017 :cite:`zauner-stauber2018`, where it was shown
 that VUMPS outperforms both iTEBD and iDMRG as ground state search algorithms for both
@@ -487,7 +487,7 @@ class VUMPSEngine(IterativeSweeps):
     def make_eff_H(self):
         """
         Create new instance of `self.EffectiveH` at `self.i0`.
-        Also creat zero-site Hamiltonians left of `self.i0` and right of `self.i0+self.n_optimize`.
+        Also create zero-site Hamiltonians left of `self.i0` and right of `self.i0+self.n_optimize`.
         """
         self.eff_H0_1 = ZeroSiteH(self.env, self.i0)  # This saves more envs than optimal.
         self.eff_H0_2 = ZeroSiteH(self.env,

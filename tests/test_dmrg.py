@@ -13,7 +13,7 @@ import numpy as np
 from scipy import integrate
 
 
-def e0_tranverse_ising(g=0.5):
+def e0_transverse_ising(g=0.5):
     """Exact groundstate energy of transverse field Ising.
 
     H = - J sigma_z sigma_z + g sigma_x
@@ -96,7 +96,7 @@ def test_dmrg(bc_MPS, combine, mixer, n, g=1.2):
     else:
         # compare exact solution for transverse field Ising model
         Edmrg = res['E']
-        Eexact = e0_tranverse_ising(g)
+        Eexact = e0_transverse_ising(g)
         print("E_DMRG={Edmrg:.12f} vs E_exact={Eex:.12f}".format(Edmrg=Edmrg, Eex=Eexact))
         print("relative energy error: {err:.2e}".format(err=abs((Edmrg - Eexact) / Eexact)))
         print("norm err:", psi.norm_test())
@@ -183,9 +183,9 @@ def test_dmrg_excited(eps=1.e-12):
     ED = ExactDiag(M)
     ED.build_full_H_from_mpo()
     ED.full_diagonalization()
-    # Note: energies sorted by chargesector (first 0), then ascending -> perfect for comparison
+    # Note: energies sorted by charge sector (first 0), then ascending -> perfect for comparison
     print("Exact diag: E[:5] = ", ED.E[:5])
-    print("Exact diag: (smalles E)[:10] = ", np.sort(ED.E)[:10])
+    print("Exact diag: (smallest E)[:10] = ", np.sort(ED.E)[:10])
 
     psi_ED = [ED.V.take_slice(i, 'ps*') for i in range(5)]
     print("charges : ", [psi.qtotal for psi in psi_ED])
@@ -213,7 +213,7 @@ def test_dmrg_excited(eps=1.e-12):
     ov = npc.inner(psi_ED[1], ED.mps_to_full(psi1), 'range', do_conj=True)
     assert abs(abs(ov) - 1.) < eps  # unique groundstate: finite size gap!
     # and a third one to check with 2 eigenstates
-    # note: different intitial state necessary, otherwise H is 0
+    # note: different initial state necessary, otherwise H is 0
     psi2 = mps.MPS.from_singlets(psi0.sites[0], L, [(0, 1), (2, 3), (4, 5), (6, 7)], bc=bc)
     eng2 = dmrg.TwoSiteDMRGEngine(psi2, M, dmrg_pars, orthogonal_to=[psi0, psi1])
     E2, psi2 = eng2.run()

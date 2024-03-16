@@ -42,7 +42,7 @@ IndexEntry = namedtuple('IndexEntry', "name, subtype, docname, anchor, extra, qu
 option_header_re = re.compile(r"([\w.]+)\s*(?::\s*([^=]*))?(?:=\s*(\S+.*)\s*)?$")
 option_header_re_comma_sep = re.compile(
     r"([\w.]+(?:\s*,\s*[\w.]+)*)\s*(?::\s*([^=]*))?(?:=\s*(\S+.*)\s*)?$")
-directive_re = re.compile("^..\s*\w+\s*::")
+directive_re = re.compile(r"^..\s*\w+\s*::")
 
 
 class cfgconfig(nodes.General, nodes.Element):

@@ -180,7 +180,7 @@ class ShiftNpcLinearOperator(NpcLinearOperatorWrapper):
 
 
 class BoostNpcLinearOperator(NpcLinearOperatorWrapper):
-    """Representes ``original_operator + shift_i * |vec_i><vec_i|``.
+    """Represents ``original_operator + shift_i * |vec_i><vec_i|``.
 
     This can be useful e.g. for better Lanczos convergence.
     """
