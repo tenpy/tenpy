@@ -1187,7 +1187,7 @@ def consistency_check(value, options, threshold_key, threshold_default, msg, com
     `threshold_default` argument of this function.
     If the threshold is exceeded, a :class:`TenpyInconsistencyError` is raised.
     To manually adjust the threshold, we provide a config option for each check, such as
-    e.g. :cfg:option:`Algorithm.max_cylinder_width`.
+    e.g. :cfg:option:`Algorithm.max_N_sites_per_ring`.
     It can be set to ``None``, which causes a :class:`TenpyInconsistencyWarning` to be emitted
     instead of the error.
 

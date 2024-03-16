@@ -105,7 +105,7 @@ class UniformMPS(MPS):
     def __init__(self, sites, ALs, ARs, ACs, Cs, norm=1.):
         self.sites = list(sites)
         self.chinfo = self.sites[0].leg.chinfo
-        self.dtype = dtype = np.find_common_type([AL.dtype for AL in ALs], [])
+        self.dtype = dtype = np.result_type(*ALs)
         self.form = [None] * len(ARs)
         self.bc = 'infinite'  # one of ``'finite', 'infinite', 'segment'``.
         self.norm = norm
@@ -722,7 +722,7 @@ class UniformMPS(MPS):
         Set `AL` at site `i`
         """
         i = self._to_valid_index(i)
-        self.dtype = np.find_common_type([self.dtype, AL.dtype], [])
+        self.dtype = np.promote_types(self.dtype, AL.dtype)
         self._AL[i] = AL.itranspose(self._B_labels)
 
     def set_AR(self, i, AR):
@@ -730,7 +730,7 @@ class UniformMPS(MPS):
         Set `AR` at site `i`
         """
         i = self._to_valid_index(i)
-        self.dtype = np.find_common_type([self.dtype, AR.dtype], [])
+        self.dtype = np.promote_types(self.dtype, AR.dtype)
         self._AR[i] = AR.itranspose(self._B_labels)
 
     def set_AC(self, i, AC):
@@ -738,7 +738,7 @@ class UniformMPS(MPS):
         Set `AC` at site `i`
         """
         i = self._to_valid_index(i)
-        self.dtype = np.find_common_type([self.dtype, AC.dtype], [])
+        self.dtype = np.promote_types(self.dtype, AC.dtype)
         self._AC[i] = AC.itranspose(self._B_labels)
 
     def set_C(self, i, C):
@@ -746,7 +746,7 @@ class UniformMPS(MPS):
         Set `C` left of site `i`
         """
         i = self._to_valid_index(i)
-        self.dtype = np.find_common_type([self.dtype, C.dtype], [])
+        self.dtype = np.promote_types(self.dtype, C.dtype)
         self._C[i] = C.itranspose(self._C_labels)
 
     def set_svd_theta(self, i, theta, trunc_par=None, update_norm=False):

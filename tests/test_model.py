@@ -1,7 +1,6 @@
 """A collection of tests for (classes in) :mod:`tenpy.models.model`."""
 # Copyright (C) TeNPy Developers, GNU GPLv3
 
-import warnings
 import itertools
 
 from tenpy.models import model, lattice

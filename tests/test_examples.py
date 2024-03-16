@@ -10,7 +10,6 @@ import sys
 import os
 import importlib
 import pytest
-import warnings
 
 # get directory where the examples can be found
 examples_dir = os.path.join(os.path.dirname(__file__), '..', 'examples')
@@ -23,6 +22,7 @@ examples = [fn for fn in os.listdir(examples_dir) if fn[-3:] == '.py' and fn not
 @pytest.mark.example  # allow to skip the examples with ``$> pytest -m "not example"``
 @pytest.mark.slow
 @pytest.mark.parametrize('filename', examples)
+@pytest.mark.filterwarnings('ignore')
 def test_examples_import(filename):
     assert filename[-3:] == '.py'
     old_sys_path = sys.path[:]
@@ -31,9 +31,7 @@ def test_examples_import(filename):
     try:
         with open(os.path.join(examples_dir, filename)) as f:
             script = f.read()
-        with warnings.catch_warnings():
-            warnings.simplefilter('ignore')  # disable warnings temporarily
-            scope = {}
-            exec(script, scope, scope)
+        scope = {}
+        exec(script, scope, scope)
     finally:
         sys.path[:] = old_sys_path

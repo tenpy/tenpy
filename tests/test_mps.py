@@ -3,7 +3,6 @@
 
 import numpy as np
 import numpy.testing as npt
-import warnings
 from tenpy.models.xxz_chain import XXZChain
 from tenpy.models.aklt import AKLTChain
 from tenpy.models.lattice import Square, Chain, Honeycomb, MultiSpeciesLattice
@@ -141,8 +140,8 @@ def test_singlet_mps():
     npt.assert_array_almost_equal_nulp(ent_segm, [2, 3, 1, 3, 2], 5)
     ent_segm = psi.entanglement_entropy_segment([0, 1, 3, 4]) / np.log(2)
     npt.assert_array_almost_equal_nulp(ent_segm, [1, 1, 2, 2], 5)
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore", UserWarning)
+
+    with pytest.warns(UserWarning, match='inefficient: use `entanglement_entropy_segment` instead!'):
         ent_segm2 = psi.entanglement_entropy_segment2([1, 2, 3, 4]) / np.log(2)
         assert abs(ent_segm2 - 3) < 1.e-12
         ent_segm2 = psi.entanglement_entropy_segment2([1, 2, 4, 5]) / np.log(2)
@@ -383,14 +382,13 @@ def test_apply_op(bc, eps=1.e-13):
     assert np.linalg.norm(th - [0., 0., 0., -s2, 0., 0., s2, 0.]) < eps
 
 
+@pytest.mark.filterwarnings('ignore::FutureWarning')
 def test_enlarge_mps_unit_cell():
     s = site.SpinHalfSite(conserve='Sz', sort_charge=True)
     psi = mps.MPS.from_product_state([s] * 3, ['up', 'down', 'up'], bc='infinite')
     psi0 = psi.copy()
     psi1 = psi.copy()
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore", FutureWarning)
-        psi0.increase_L(9)
+    psi0.increase_L(9)
     psi1.enlarge_mps_unit_cell(3)
     for psi in [psi0, psi1]:
         psi.test_sanity()
@@ -657,14 +655,16 @@ def test_correlation_length():
     assert np.all(np.abs(xi - xi_AKLT) < 1.e-13 )
     charges = np.asarray(charges)
     npt.assert_array_equal(charges[np.argsort(charges[:, 0])], [[-2], [0], [2]])
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore", UserWarning)
+
+    with pytest.warns(UserWarning, match='trimming speigs k to smaller matrix dimension d'):
         xi_m2, charges = psi_AKLT.correlation_length(target=1, charge_sector=[-2], return_charges=True)
-        npt.assert_array_equal(charges, [-2])
-        assert abs(xi_m2 - xi_AKLT) < 1.e-13
-        # note: sectors have only one entry, so target only changes resulting
+    npt.assert_array_equal(charges, [-2])
+    assert abs(xi_m2 - xi_AKLT) < 1.e-13
+    # note: sectors have only one entry, so target only changes resulting
+    with pytest.warns(UserWarning, match='trimming speigs k to smaller matrix dimension d'):
         xi_p2 = psi_AKLT.correlation_length(target=2, charge_sector=np.array([+2]), tol_ev0=None)
-        assert abs(xi_p2[0] - xi_AKLT) < 1.e-13
+    assert abs(xi_p2[0] - xi_AKLT) < 1.e-13
+    
     assert abs(xi - xi_AKLT) < 1.e-13
 
 

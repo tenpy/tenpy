@@ -45,10 +45,12 @@ class Algorithm:
 
         trunc_params : dict
             Truncation parameters as described in :cfg:config:`truncation`.
-        max_cylinder_width : int | None
-            Threshold for raising errors on too large cylinder circumferences. Default ``18``.
+        max_N_sites_per_ring : int | None
+            Threshold for raising errors on too many sites per ring. Default ``18``.
             See :meth:`~tenpy.tools.misc.consistency_check`.
-            The cost of simulations scales very unfavorably with the cylinder circumference.
+            In a higher-dimensional geometry, the area law implies that the entropy of a bipartition
+            is linear in ``N_sites_per_ring`` and thus the required bond dimension is exponential
+            in it. This makes MPS simulations with large ``N_sites_per_ring`` unfeasible.
             If it is too large, you will not be able to choose a reasonably large bond dimension
             *and* have enough RAM to do the simulation. We raise an error in that case.
             Can be downgraded to a warning by setting this option to ``None``.
@@ -88,12 +90,11 @@ class Algorithm:
         self.checkpoint = EventHandler("algorithm")
         self._resume_psi = None
         try:
-            is_cylinder = any(bc == 'periodic' for bc in model.lat.boundary_conditions[1:])
-        except AttributeError:  # For VariationalApplyMPO, this is not a Model and just the MPO
-            is_cylinder = False
-        if is_cylinder:
-            consistency_check(model.lat.N_sites_per_ring, self.options, 'max_cylinder_width', 18,
-                              'Maximum cylinder width (``max_cylinder_width``) exceeded.')
+            N_sites_per_ring = model.lat.N_sites_per_ring
+        except AttributeError:  # for e.g. VariationalApplyMPO, model is just the MPO and has no lat
+            N_sites_per_ring = 1
+        consistency_check(N_sites_per_ring, self.options, 'max_N_sites_per_ring', 18,
+                          'Maximum number of sites per ring (``max_N_sites_per_ring``) exceeded.')
 
     @classmethod
     def switch_engine(cls, other_engine, *, options=None, **kwargs):

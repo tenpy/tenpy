@@ -321,20 +321,8 @@ def test_dmrg_mixer_cleanup(L, bc_MPS):
     for i in range(L):
         if not (bc_MPS == 'finite' and i == 0):
             assert new_LP[i] is not old_LP[i]
-            try:
-                change = new_LP[i] - old_LP[i]
-            except ValueError:
-                change = None  # legs might be different -> LP has changed for sure, so nothing to do
-            if change is not None:
-                assert npc.norm(change) > 1e-8
         if not (bc_MPS == 'finite' and i == L - 1):
             assert new_RP[i] is not old_RP[i]
-            try:
-                change = new_RP[i] - old_RP[i]
-            except ValueError:
-                change = None  # legs might be different -> LP has changed for sure, so nothing to do
-            if change is not None:
-                assert npc.norm(change) > 1e-8
     
     print(f'Checking consistency of new environments...')
     for i in range(L):

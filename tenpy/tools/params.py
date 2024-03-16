@@ -233,7 +233,7 @@ class Config(MutableMapping):
             if len(unused) > 1:
                 msg = "unused options for config {name!s}:\n{keys!s}"
             else:
-                msg = "unused option {keys!s} for config {name!s}\n"
+                msg = "unused option {keys!s} for config {name!s}"
             warnings.warn(msg.format(keys=sorted(unused), name=self.name))
             self.unused.clear()  # don't warn twice about the same parameters
         if recursive:
