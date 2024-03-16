@@ -6,7 +6,7 @@ import numpy as np
 import warnings
 
 from . import simulation
-from .simulation import *
+from .simulation import *  # noqa F403
 from ..networks.mps import MPSEnvironment, MPS
 from ..tools.misc import to_iterable, consistency_check
 from ..tools import hdf5_io
