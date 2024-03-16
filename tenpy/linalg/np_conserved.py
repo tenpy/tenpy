@@ -97,7 +97,7 @@ from .svd_robust import svd as svd_flat
 
 from ..tools.misc import to_iterable, anynan, argsort, inverse_permutation, list_to_dict_list
 from ..tools.math import speigs as _sp_speigs
-from ..tools.math import qr_li, rq_li
+from ..tools.math import qr_li
 from ..tools.string import vert_join, is_non_string_iterable
 from ..tools.optimization import optimize, OptimizationFlag, use_cython
 

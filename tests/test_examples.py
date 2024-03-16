@@ -8,7 +8,6 @@ should not be executed as part of the tests.
 
 import sys
 import os
-import importlib
 import pytest
 
 # get directory where the examples can be found

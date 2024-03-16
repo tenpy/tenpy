@@ -1,7 +1,7 @@
 """Lanczos algorithm for np_conserved arrays."""
 # Copyright (C) TeNPy Developers, GNU GPLv3
 import warnings
-from .krylov_based import *
+from .krylov_based import *  # noqa F403
 from . import krylov_based
 
 __all__ = ['lanczos', *krylov_based.__all__]

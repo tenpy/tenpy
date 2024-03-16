@@ -13,4 +13,4 @@ warnings.warn(
     "The module `tenpy.algorithms.mps_sweeps` is deprecated;\n"
     "all content is in `tenpy.algorithms.mps_common`", FutureWarning)
 
-from .mps_common import *
+from .mps_common import *  # noqa F401

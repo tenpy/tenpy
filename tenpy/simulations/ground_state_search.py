@@ -3,23 +3,19 @@
 
 import numpy as np
 from pathlib import Path
-import warnings
 
 from . import simulation
 from ..tools import hdf5_io, string
-from .simulation import *
+from .simulation import *  # noqa F403
 from ..linalg import np_conserved as npc
-from ..models.model import Model
 from ..networks.mpo import MPOEnvironment, MPOTransferMatrix
 from ..networks.mps import MPS, InitialStateBuilder
 from ..networks.uniform_mps import UniformMPS
 from ..algorithms.mps_common import ZeroSiteH
 from ..linalg import krylov_based
 from ..linalg.sparse import SumNpcLinearOperator
-from ..tools.misc import find_subclass, to_iterable, get_recursive
+from ..tools.misc import find_subclass
 from ..tools.params import asConfig
-
-import copy
 
 __all__ = simulation.__all__ + [
     'GroundStateSearch',
@@ -369,7 +365,7 @@ class OrthogonalExcitations(GroundStateSearch):
             switch_charge_sector : list of int | None
                 If given, change the charge sector of the excitations compared to the ground state.
                 Alternative to `apply_local_op` where we run a small zero-site diagonalization on
-                the (left-most/center for infinte/finite) bond
+                the (left-most/center for infinite/finite) bond
                 in the desired charge sector to update the state.
             write_back_converged_ground_state_environments : bool
                 Only used for infinite ground states, indicating that we should write converged

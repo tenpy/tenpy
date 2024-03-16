@@ -5,7 +5,7 @@ import numpy as np
 import numpy.testing as npt
 from tenpy.models.xxz_chain import XXZChain
 from tenpy.models.aklt import AKLTChain
-from tenpy.models.lattice import Square, Chain, Honeycomb, MultiSpeciesLattice
+from tenpy.models.lattice import Square, Chain, MultiSpeciesLattice
 
 from tenpy.tools import misc
 from tenpy.algorithms import tebd

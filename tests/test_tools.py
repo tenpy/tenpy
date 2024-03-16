@@ -1,7 +1,6 @@
 """A collection of tests for tenpy.tools submodules."""
 # Copyright (C) TeNPy Developers, GNU GPLv3
 
-import logging
 import numpy as np
 import numpy.testing as npt
 import itertools as it
@@ -9,7 +8,6 @@ import tenpy
 from tenpy import tools
 import pytest
 import os.path
-import sys
 
 
 def test_inverse_permutation(N=10):

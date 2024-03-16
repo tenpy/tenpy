@@ -22,7 +22,6 @@ For further details, see the definition of :func:`~tenpy.tools.optimization.use_
 # Copyright (C) TeNPy Developers, GNU GPLv3
 
 import numpy as np
-import copy
 import bisect
 import warnings
 

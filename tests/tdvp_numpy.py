@@ -5,9 +5,7 @@
 # Copyright (C) TeNPy Developers, GNU GPLv3
 
 from scipy.linalg import expm
-from scipy.sparse.linalg import expm_multiply
 import numpy as np
-from scipy.sparse.linalg import onenormest
 
 
 def tdvp(Psi, W, dt, Rp_list=None, k=5, O=None):

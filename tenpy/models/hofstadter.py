@@ -7,11 +7,10 @@
 # Copyright (C) TeNPy Developers, GNU GPLv3
 
 import numpy as np
-import warnings
 
 from .lattice import Square
 from ..networks.site import BosonSite, FermionSite
-from .model import CouplingModel, MPOModel, CouplingMPOModel
+from .model import CouplingMPOModel
 
 __all__ = ['HofstadterBosons', 'HofstadterFermions', 'gauge_hopping']
 

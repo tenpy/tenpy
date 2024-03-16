@@ -1,16 +1,13 @@
 """Miscellaneous tools, somewhat random mix yet often helpful."""
 # Copyright (C) TeNPy Developers, GNU GPLv3
 
-import logging
 import operator
 import numpy as np
 from .optimization import bottleneck
 from .process import omp_set_nthreads
 from .params import Config
 from collections.abc import Mapping
-import random
 import os.path
-import itertools
 import argparse
 import warnings
 

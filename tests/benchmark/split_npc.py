@@ -1,12 +1,6 @@
 """To be used in the `-m` argument of benchmark.py."""
 # Copyright (C) TeNPy Developers, GNU GPLv3
 
-import numpy as np
-import tenpy.linalg.np_conserved as npc
-
-import tenpy.tools.optimization as optimization
-import itertools as it
-
 import tensordot_npc
 
 

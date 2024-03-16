@@ -40,14 +40,14 @@ logger = logging.getLogger(__name__)
 from .lattice import (get_lattice, Lattice, MultiSpeciesLattice, TrivialLattice, HelicalLattice,
                       IrregularLattice)
 from ..linalg import np_conserved as npc
-from ..linalg.charges import QTYPE, LegCharge
+from ..linalg.charges import LegCharge
 from ..tools.misc import to_array, add_with_None_0
 from ..tools.params import asConfig
 from ..networks import mpo  # used to construct the Hamiltonian as MPO
 from ..networks.terms import OnsiteTerms, CouplingTerms, MultiCouplingTerms
 from ..networks.terms import ExponentiallyDecayingTerms, order_combine_term
 from ..networks.site import Site, group_sites
-from ..tools.hdf5_io import Hdf5Exportable, ATTR_FORMAT
+from ..tools.hdf5_io import Hdf5Exportable
 
 __all__ = [
     'Model', 'NearestNeighborModel', 'MPOModel', 'CouplingModel', 'MultiCouplingModel',

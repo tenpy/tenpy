@@ -23,8 +23,6 @@ account for the additional type of tensor structure.
 # Copyright (C) TeNPy Developers, GNU GPLv3
 
 import numpy as np
-import warnings
-from functools import reduce
 import logging
 
 logger = logging.getLogger(__name__)

@@ -7,8 +7,6 @@ Call this file with arguments, e.g:     python singlerun.py -m tensordot_npc ten
 # Copyright (C) TeNPy Developers, GNU GPLv3
 
 import numpy as np
-import cProfile
-import pstats
 import time
 
 

@@ -7,7 +7,6 @@ from tenpy.models import model, lattice
 from tenpy.models.xxz_chain import XXZChain
 import tenpy.networks.site
 import tenpy.linalg.np_conserved as npc
-from tenpy.tools.params import Config
 from tenpy.algorithms.exact_diag import ExactDiag
 import numpy as np
 import numpy.testing as npt

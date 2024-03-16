@@ -92,7 +92,6 @@ def _get_version_summary():
     from .tools.optimization import have_cython_functions, compiled_with_MKL
     import numpy
     import scipy
-    import warnings
 
     if have_cython_functions:
         cython_info = "compiled"

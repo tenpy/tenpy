@@ -5,7 +5,6 @@
 import tenpy.algorithms as algo
 import tenpy.models as mods
 import tenpy.networks.mps as mps
-from tenpy.algorithms import dmrg
 import numpy as np
 
 

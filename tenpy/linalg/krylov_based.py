@@ -3,15 +3,12 @@
 
 import warnings
 import numpy as np
-from scipy.linalg import expm
-import scipy.sparse
 from .sparse import FlatHermitianOperator, OrthogonalNpcLinearOperator, ShiftNpcLinearOperator
 import logging
 logger = logging.getLogger(__name__)
 
 from . import np_conserved as npc
 from ..tools.params import asConfig
-from ..tools.math import speigsh
 from ..tools.misc import argsort
 
 __all__ = [
