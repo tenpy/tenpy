@@ -1,13 +1,26 @@
 """Plane wave excitations ansatz
 
-The quasiparticle ansatz, utilizing plane wave states, offers a powerful approach for computing low-energy excitations. For finite systems, we could employ DMRG with different charge sectors to find these states.
-For infinite systems, an efficient algorithm was introduced in :cite:`haegeman2012`. By working directly in the tangent space of a uniform MPS :cite:`vanderstraeten2019`, we can use translational invariance to specify momentum.
+The quasiparticle ansatz, utilizing plane wave states, offers a powerful approach for computing
+low-energy excitations. For finite systems, we could employ DMRG with different charge sectors to
+find these states. For infinite systems, an efficient algorithm was introduced
+in :cite:`haegeman2012`. By working directly in the tangent space of a uniform
+MPS :cite:`vanderstraeten2019`, we can use translational invariance to specify momentum.
 
-The plane wave excitation finds excitation of a :class:`~tenpy.networks.uniform_mps.UniformMPS`. By summing over all states, where one tensor is replaced with an excited tensor B, we get a state with a fixed momentum :class:`~tenpy.networks.momentum_mps.MomentumMPS`. The tensors B are decomposed into -B- = -V-X-, where V is the orthogonal complement of the usual A-tensors of the uniform MPS, and X contains the variational parameters. The algorithm constructs an effective Hamiltonian for X and finds the low-energy states using an iterative eigensolver. Since we don't sweep as e.g. in DMRG, more Lanczos steps may be required. Increase those until the energy is converged!
+The plane wave excitation finds excitation of a :class:`~tenpy.networks.uniform_mps.UniformMPS`.
+By summing over all states, where one tensor is replaced with an excited tensor B, we get a state
+with a fixed momentum :class:`~tenpy.networks.momentum_mps.MomentumMPS`. The tensors B are
+decomposed into -B- = -V-X-, where V is the orthogonal complement of the usual A-tensors of the
+uniform MPS, and X contains the variational parameters. The algorithm constructs an effective
+Hamiltonian for X and finds the low-energy states using an iterative eigensolver. Since we don't
+sweep as e.g. in DMRG, more Lanczos steps may be required. Increase those until the energy is
+converged!
 
 Additionally, we can specify X to be in a given charge sector.
 
-The :class:`PlaneWaveExcitationEngine` optimizes the X for each tensor in the unit cell. The ansatz can be extended to include excitations that span several sites. This is implemented in :class:`MultiSitePlaneWaveExcitationEngine`. Note that with the current implementation, the numerical costs scale exponentially with the number of exciting sites.
+The :class:`PlaneWaveExcitationEngine` optimizes the X for each tensor in the unit cell. The ansatz
+can be extended to include excitations that span several sites. This is implemented
+in :class:`MultiSitePlaneWaveExcitationEngine`. Note that with the current implementation, the
+numerical costs scale exponentially with the number of exciting sites.
 """
 # Copyright (C) TeNPy Developers, GNU GPLv3
 
@@ -168,7 +181,7 @@ class PlaneWaveExcitationEngine(Algorithm):
     Cs : list of :class:`~tenpy.linalg.np_conserved.Array`
         The center matrices of psi.
     Ws : list of :class:`~tenpy.linalg.np_conserved.Array`
-        The matices of the MPO.
+        The matrices of the MPO.
     VLs : list of :class:`~tenpy.linalg.np_conserved.Array`
         The orthogonal complements for each AL.
     """
@@ -710,7 +723,7 @@ class MultiSitePlaneWaveExcitationEngine(Algorithm):
     Cs : list of :class:`~tenpy.linalg.np_conserved.Array`
         The center matrices of psi.
     Ws : list of :class:`~tenpy.linalg.np_conserved.Array`
-        The matices of the MPO.
+        The matrices of the MPO.
     VLs : list of :class:`~tenpy.linalg.np_conserved.Array`
         The orthogonal complements for each AL.
     """

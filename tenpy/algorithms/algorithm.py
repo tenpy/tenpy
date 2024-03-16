@@ -319,7 +319,7 @@ class Algorithm:
         if mem_saving_factor is None:
             mem_saving_factor = self.model.estimate_RAM_saving_factor()
 
-        logger.debug("We get a total of %.3e = %d entries for the RAM esitmate", entry_size, entry_size)
+        logger.debug("We get a total of %.3e = %d entries for the RAM estimate", entry_size, entry_size)
         logger.debug("Each entry uses %d byte", entry_size)
         RAM = total_entries * entry_size
         logger.debug("We have a saving factor of %.5f ~= 1/%d",

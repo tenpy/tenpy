@@ -3643,9 +3643,9 @@ def polar(a, cutoff=1.e-16, left=False, inner_labels=[None, None]):
     ----------
     a : (M, N) :class:`Array`
         Matrix to be pseudo-inverted.
-    cuttof : float
+    cutoff : float
         Cutoff for small singular values, as given to :func:`svd`.
-        (Note: different convetion than numpy.)
+        (Note: different convention than numpy.)
 
     Returns
     -------

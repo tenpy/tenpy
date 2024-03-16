@@ -9,7 +9,8 @@ import pytest
 import numpy as np
 from scipy import integrate
 
-def e0_tranverse_ising(g=0.5):
+
+def e0_transverse_ising(g=0.5):
     """Exact groundstate energy of transverse field Ising.
 
     H = - J sigma_z sigma_z + g sigma_x
@@ -64,15 +65,15 @@ def test_vumps(L, engine, mixer, g=1.2):
     if not mixer:
         del vumps_pars['mixer_params']  # avoid warning of unused parameter
     eng = engine(psi, M, vumps_pars)
-    Evumps, psi = eng.run()
+    E_vumps, psi = eng.run()
     
     # compare exact solution for transverse field Ising model
-    Eexact = e0_tranverse_ising(g)
-    print(f"E_DMRG={Evumps:.12f} vs E_exact={Eexact:.12f}")
-    print(f"relative energy error: {abs((Evumps - Eexact) / Eexact):.2e}")
+    Eexact = e0_transverse_ising(g)
+    print(f"E_DMRG={E_vumps:.12f} vs E_exact={Eexact:.12f}")
+    print(f"relative energy error: {abs((E_vumps - Eexact) / Eexact):.2e}")
     print("norm err:", psi.norm_test())
-    Evumps2 = np.mean(psi.expectation_value(M.H_bond))
-    Evumps3 = M.H_MPO.expectation_value(psi)
-    assert abs((Evumps - Eexact) / Eexact) < 1.e-10
-    assert abs((Evumps - Evumps2) / Evumps2) < max(1.e-10, np.max(psi.norm_test()))
-    assert abs((Evumps - Evumps3) / Evumps3) < max(1.e-10, np.max(psi.norm_test()))
+    E_vumps2 = np.mean(psi.expectation_value(M.H_bond))
+    E_vumps3 = M.H_MPO.expectation_value(psi)
+    assert abs((E_vumps - Eexact) / Eexact) < 1.e-10
+    assert abs((E_vumps - E_vumps2) / E_vumps2) < max(1.e-10, np.max(psi.norm_test()))
+    assert abs((E_vumps - E_vumps3) / E_vumps3) < max(1.e-10, np.max(psi.norm_test()))

@@ -1020,7 +1020,7 @@ class MPO:
             infinite systems.
         cutoff : float
             Drop terms with prefactors (roughly) smaller than that.
-            Stricktly speaking, it might also drop larger terms if the term has larger weight on
+            Strictly speaking, it might also drop larger terms if the term has larger weight on
             the right (in the MPO) than on the left.
         ignore : list of str
             Filter terms to not contain these operator names when they're not the left/rightmost

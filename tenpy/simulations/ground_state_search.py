@@ -145,7 +145,7 @@ class PlaneWaveExcitations(GroundStateSearch):
                 self.options[key] = gs_data_options[key]
         self.init_model()
 
-        # intialize original state
+        # initialize original state
         self.psi = gs_data['psi']  # no copy!
         assert isinstance(self.psi, MPS) or isinstance(self.psi, UniformMPS)
         if np.linalg.norm(self.psi.norm_test()) > self.options.get('orthogonal_norm_tol', 1.e-12):
@@ -250,10 +250,10 @@ class PlaneWaveExcitations(GroundStateSearch):
                 break
 
             self.make_measurements()
-            self.logger.info("got %d excitations so far, proceeed to next excitation.\n%s",
+            self.logger.info("got %d excitations so far, proceed to next excitation.\n%s",
                              len(self.excitations), "+" * 80)
             self.init_state()  # initialize a new state to be optimized
-            self.init_algorithm()  # initialize new environemnts for the state!
+            self.init_algorithm()  # initialize new environments for the state!
         # done
 
     def resume_run_algorithm(self):
@@ -675,7 +675,7 @@ class TopologicalExcitations(OrthogonalExcitations):
                 Alternatively, use `switch_charge_sector`.
                 `site#` are MPS indices in the *original* ground state, not the segment!
             switch_charge_sector : list of int | None
-                If given, change the charge sector of the exciations compared to the ground state.
+                If given, change the charge sector of the excitations compared to the ground state.
                 Alternative to `apply_local_op` where we run a small zero-site diagonalization on
                 the left-most bond in the desired charge sector to update the state.
             switch_charge_sector_site: int
@@ -699,7 +699,7 @@ class TopologicalExcitations(OrthogonalExcitations):
         self.init_model() # FOR NOW, WE ASSUME LEFT AND RIGHT MODELS ARE THE SAME
         self.model_orig = self.model
 
-        # intialize original state
+        # initialize original state
         self.ground_state_orig_alpha = psi0_alpha = gs_data_alpha['psi']  # no copy!
         self.ground_state_orig_beta = psi0_beta = gs_data_beta['psi']  # no copy!
         assert self.ground_state_orig_alpha.L == self.ground_state_orig_beta.L
@@ -776,7 +776,7 @@ class TopologicalExcitations(OrthogonalExcitations):
 
             segment_enlarge, segment_first, segment_last : int | None
                 Arguments for :meth:`~tenpy.models.lattice.Lattice.extract_segment`.
-                `segment_englarge` is only used for initially infinite ground states.
+                `segment_enlarge` is only used for initially infinite ground states.
             write_back_converged_ground_state_environments : bool
                 Only used for infinite ground states, indicating that we should write converged
                 environments of the ground state back to `ground_state_filename`.
@@ -1101,7 +1101,7 @@ class TopologicalExcitations(OrthogonalExcitations):
 
         Excitation energies are full contractions of the MPOEnvironment with the environments
         defined in :attr:`init_env_data`.
-        Hence, the reference energy is also the contraction of the `MPOEnvionment` on the segment.
+        Hence, the reference energy is also the contraction of the `MPOEnvironment` on the segment.
 
         Parameters
         ----------
