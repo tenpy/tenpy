@@ -5858,6 +5858,9 @@ class TransferMatrix(sparse.NpcLinearOperator):
 
     Note that we keep all M and N as copies.
 
+    .. versionchanged :: 1.0
+        shift_bra defaults to 0 rather than `shift_ket`.
+
     Parameters
     ----------
     bra : MPS

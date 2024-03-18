@@ -13,19 +13,6 @@ Our workaround is as follows: we provide a function :func:`svd` with call signat
 This function is basically just a wrapper around scipy's svd, i.e., we keep calling the faster
 `dgesdd`. But if that fails, we can still use `dgesvd` as a backup.
 
-Sadly, `dgesvd` and `zgesvd` were not included into scipy until version '0.18.0' (nor in numpy),
-which is as the time of this writing the latest stable scipy version.
-For scipy version newer than '0.18.0', we make use of the new keyword 'lapack_driver' for svd,
-otherwise we (try to) load `dgesvd` and `zgesvd` from shared LAPACK libraries.
-
-The tribute for the dgesvd wrapper code goes to 'jgarcke', originally posted at
-``http://projects.scipy.org/numpy/ticket/990``, which is now hosted
-at https://github.com/numpy/numpy/issues/1588
-He explains a bit more in detail what fails.
-
-The include of `dgesvd` to scipy was done in https://github.com/scipy/scipy/pull/5994.
-
-
 Examples
 --------
 The idea is that you just import the `svd` from this module and use it as replacement for
@@ -53,7 +40,7 @@ def svd(a,
         warn=True):
     """Wrapper around :func:`scipy.linalg.svd` with `gesvd` backup plan.
 
-    Tries to avoid raising an LinAlgError by using using the lapack_driver `gesvd`,
+    Tries to avoid raising an LinAlgError by using the lapack_driver `gesvd`,
     if `gesdd` failed.
 
     Parameters not described below are as in :func:`scipy.linalg.svd`

@@ -45,6 +45,12 @@ class Site(Hdf5Exportable):
         This is a *necessary* feature since we need to sort the basis by charges for efficiency.
         We use the :attr:`state_labels` and :attr:`perm` to keep track of these permutations.
 
+    .. versionchanged :: 0.10
+        Added `sort_charge` defaulting to `False`.
+
+    .. versionchanged :: 1.0
+        Make `sort_charge` default to `True`.
+
     Parameters
     ----------
     leg : :class:`~tenpy.linalg.charges.LegCharge`
@@ -110,7 +116,7 @@ class Site(Hdf5Exportable):
     .. testsetup :: Site
         from tenpy.linalg import np_conserved as npc
         from tenpy.networks.site import Site
-        
+
     .. doctest :: Site
         >>> chinfo = npc.ChargeInfo([1], ['2 * Sz'])
         >>> ch = npc.LegCharge.from_qflat(chinfo, [1, -1])
@@ -134,9 +140,9 @@ class Site(Hdf5Exportable):
 
     We get the unchanged order by setting ``sort_charges=False``. This is discouraged though,
     as it can introduce overhead.
-    
-    .. testsetup :: Site[sort_charge=False]
-    
+
+    .. testsetup :: Site_sort_charge_False
+
         from tenpy.linalg import np_conserved as npc
         from tenpy.networks.site import Site
         chinfo = npc.ChargeInfo([1], ['Sz'])
@@ -144,9 +150,9 @@ class Site(Hdf5Exportable):
         Sp = [[0, 1.], [0, 0]]
         Sm = [[0, 0], [1., 0]]
         Sz = [[0.5, 0], [0, -0.5]]
-        
-    .. doctest :: Site[sort_charge=False]
-    
+
+    .. doctest :: Site_sort_charge_False
+
         >>> site = Site(ch, ['up', 'down'], Splus=Sp, Sminus=Sm, Sz=Sz, sort_charge=False)
         >>> print(site.Splus.to_ndarray())
         [[0. 1.]
@@ -157,7 +163,7 @@ class Site(Hdf5Exportable):
         >>> print(site.get_op('Splus Sminus').to_ndarray())
         [[1. 0.]
         [0. 0.]]
-    
+
     """
 
     def __init__(self, leg, state_labels=None, sort_charge=True, **site_ops):

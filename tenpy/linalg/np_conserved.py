@@ -1418,6 +1418,10 @@ class Array:
     def combine_legs(self, combine_legs, new_axes=None, pipes=None, qconj=None):
         """Reshape: combine multiple legs into multiple pipes. If necessary, transpose before.
 
+        .. versionchanged :: 1.0
+            Make `qconj` default to the `qconj` of the first leg to be combine rather than just +1.
+
+
         Parameters
         ----------
         combine_legs : (iterable of) iterable of {str|int}
@@ -1433,7 +1437,7 @@ class Array:
             computing new leg pipes for the same legs multiple times.
             The LegPipes are conjugated, if that is necessary for compatibility with the legs.
         qconj : (iterable of) {+1, -1}
-            Specify whether new created pipes point inward or outward. 
+            Specify whether new created pipes point inward or outward.
             Defaults to the same value as the first of the legs to be combined.
             E.g. for a single combine, the default `qconj` is `self.get_leg(combine_legs[0]).qconj`.
             Ignored for given `pipes`, which are not newly calculated.
@@ -3372,6 +3376,9 @@ def outer(a, b):
 def inner(a, b, axes='labels', do_conj=False):
     """Contract all legs in `a` and `b`, return scalar.
 
+    .. versionchanged :: 1.0
+        Change default behaviour of `axes` from ``'range'`` to ``'labels'``.
+
     Parameters
     ----------
     a, b : class:`Array`
@@ -3624,7 +3631,7 @@ def polar(a, cutoff=1.e-16, left=False, inner_labels=[None, None]):
     # follow exactly the procedure lined out.
     # however, use inplace methods and don't construct the diagonal matrix explicitly.
     W, s, VH = svd(a, cutoff=cutoff, inner_labels=inner_labels) # w s vh
-    
+
     u = tensordot(W, VH, axes=([1, 0]))
     if not left:
         labels = VH.conj().get_leg_labels()[1], VH.get_leg_labels()[1]
