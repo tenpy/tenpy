@@ -6,7 +6,6 @@ import numpy as np
 import numpy.testing as npt
 import itertools as it
 from tenpy.tools.misc import inverse_permutation
-import pytest
 
 from random_test import gen_random_legcharge, random_Array
 

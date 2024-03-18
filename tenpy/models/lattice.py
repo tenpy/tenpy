@@ -21,7 +21,6 @@ Further, an overview with plots of the predefined models is given in
 import numpy as np
 from scipy.spatial import ConvexHull, Voronoi
 import itertools
-import warnings
 import copy
 import logging
 logger = logging.getLogger(__name__)
