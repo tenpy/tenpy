@@ -13,6 +13,7 @@ source) TeNPy version.
 
 .. toctree ::
     changelog/latest
+    changelog/v1.0.0.rst
     changelog/v0.99.0.rst
     changelog/v0.11.0.rst
     changelog/v0.10.0.rst

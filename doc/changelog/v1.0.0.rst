@@ -1,0 +1,27 @@
+[v1.0.0] - 2024-03-19
+=====================
+
+Release Notes
+-------------
+This is the first official release of TeNPy.
+Compare to the v0.99 release, it only introduces necessary backwards-incompatible changes
+and removes deprecated features.
+
+Changelog
+---------
+
+Backwards incompatible changes
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+- nothing yet
+
+Added
+^^^^^
+- nothing yet
+
+Changed
+^^^^^^^
+- nothing yet
+
+Fixed
+^^^^^
+- nothing yet
