@@ -34,6 +34,8 @@ params = [
 
 @pytest.mark.parametrize("L, engine, mixer", params)
 @pytest.mark.slow
+@pytest.mark.filterwarnings('ignore:UniformMPS is a new experimental feature and not as '
+                            'well-tested as the rest of the library:UserWarning')
 def test_vumps(L, engine, mixer, g=1.2):
     model_params = dict(L=L, J=1., g=g, bc_MPS='infinite', conserve=None)
     M = TFIChain(model_params)

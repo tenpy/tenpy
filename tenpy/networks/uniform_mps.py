@@ -24,6 +24,7 @@ account for the additional type of tensor structure.
 
 import numpy as np
 import logging
+import warnings
 
 logger = logging.getLogger(__name__)
 
@@ -101,6 +102,8 @@ class UniformMPS(MPS):
     # Labels for other tensors are inherited from MPS.
 
     def __init__(self, sites, ALs, ARs, ACs, Cs, norm=1.):
+        warnings.warn('UniformMPS is a new experimental feature and not as well-tested as the '
+                      'rest of the library', stacklevel=2)
         self.sites = list(sites)
         self.chinfo = self.sites[0].leg.chinfo
         self.dtype = dtype = np.result_type(*ALs)
