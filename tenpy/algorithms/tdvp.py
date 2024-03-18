@@ -35,11 +35,8 @@ from ..linalg.krylov_based import LanczosEvolution
 from .truncation import svd_theta, TruncationError
 from .mps_common import Sweep, ZeroSiteH, OneSiteH, TwoSiteH
 from .algorithm import TimeEvolutionAlgorithm, TimeDependentHAlgorithm
-from ..networks.mpo import MPOEnvironment
 from ..linalg import np_conserved as npc
 from ..tools.misc import consistency_check
-import numpy as np
-import warnings
 import logging
 
 logger = logging.getLogger(__name__)

@@ -4,11 +4,9 @@
 import operator
 import numpy as np
 from .optimization import bottleneck
-from .process import omp_set_nthreads
 from .params import Config
 from collections.abc import Mapping
 import os.path
-import argparse
 import warnings
 
 __all__ = [
