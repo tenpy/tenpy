@@ -3,7 +3,7 @@
 
 Release Notes
 -------------
-The v0.99 release is the Backwards-compatible version of the v1.0 release.
+The v0.99 release is the Backwards-compatible version of the :mod:`v1.0 release</changelog/v1.0.0>` release.
 It has all of the same features, but should raise informative warnings for those features
 that are not compatible with v1.0.
 
