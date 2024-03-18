@@ -516,6 +516,8 @@ class LanczosGroundState(KrylovBased):
         h = self._h_krylov
         w = self.psi0  # initialize
         beta = npc.norm(w)
+        if beta < self._cutoff:
+            raise ValueError(f'Norm of self.psi0 too small: {beta}')
         if self._psi0_norm is None:
             # this is only needed for normalization in LanczosEvolution
             self._psi0_norm = beta
