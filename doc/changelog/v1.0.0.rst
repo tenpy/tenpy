@@ -56,7 +56,7 @@ Backwards incompatible changes
   - ``truncation`` : `symmetry_tol`
   - ``Sweep`` : `LP`, `LP_age`, `RP`, `RP_age`, `init_env_data`, `orthogonal_to`, `sweep_0`
   - ``Simulation`` : `logging_params`
-  - ``VariationalCompression` : `N_sweeps`
+  - ``VariationalCompression`` : `N_sweeps`
 
 - Remove deprecated / legacy attributes:
 
