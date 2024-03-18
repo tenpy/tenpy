@@ -106,18 +106,12 @@ class Site(Hdf5Exportable):
     The following generates a site for spin-1/2 with Sz conservation.
     Note that ``Sx = (Sp + Sm)/2`` violates Sz conservation and is thus not a valid
     on-site operator.
-    
-    Note that sorting the charges may lead to unintuitive
-    matrix representations of the operators, because physicists are typically not used to
-    writing them in the sorted basis (in this case ``['down', 'up']``);
-    
-    .. testsetup :: Site
 
+    .. testsetup :: Site
         from tenpy.linalg import np_conserved as npc
         from tenpy.networks.site import Site
-
+        
     .. doctest :: Site
-
         >>> chinfo = npc.ChargeInfo([1], ['2 * Sz'])
         >>> ch = npc.LegCharge.from_qflat(chinfo, [1, -1])
         >>> Sp = [[0, 1.], [0, 0]]
@@ -134,6 +128,36 @@ class Site(Hdf5Exportable):
         [[0. 0.]
          [0. 1.]]
      
+    Note that sorting the charges (which happens by default!) may lead to unintuitive
+    matrix representations of the operators, because physicists are typically not used to
+    writing them in the sorted basis (in this case ``['down', 'up']``);
+
+    We get the unchanged order by setting ``sort_charges=False``. This is discouraged though,
+    as it can introduce overhead.
+    
+    .. testsetup :: Site[sort_charge=False]
+    
+        from tenpy.linalg import np_conserved as npc
+        from tenpy.networks.site import Site
+        chinfo = npc.ChargeInfo([1], ['Sz'])
+        ch = npc.LegCharge.from_qflat(chinfo, [1, -1])
+        Sp = [[0, 1.], [0, 0]]
+        Sm = [[0, 0], [1., 0]]
+        Sz = [[0.5, 0], [0, -0.5]]
+        
+    .. doctest :: Site[sort_charge=False]
+    
+        >>> site = Site(ch, ['up', 'down'], Splus=Sp, Sminus=Sm, Sz=Sz, sort_charge=False)
+        >>> print(site.Splus.to_ndarray())
+        [[0. 1.]
+        [0. 0.]]
+        >>> print(site.get_op('Sminus').to_ndarray())
+        [[0. 0.]
+        [1. 0.]]
+        >>> print(site.get_op('Splus Sminus').to_ndarray())
+        [[1. 0.]
+        [0. 0.]]
+    
     """
 
     def __init__(self, leg, state_labels=None, sort_charge=True, **site_ops):
