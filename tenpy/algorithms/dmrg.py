@@ -54,9 +54,6 @@ __all__ = [
     'TwoSiteDMRGEngine',
     'chi_list',
     'full_diag_effH',
-    'Mixer',
-    'DensityMatrixMixer',
-    'SubspaceExpansion',
 ]
 
 
@@ -107,52 +104,6 @@ def run(psi, model, options, **kwargs):
         'bond_statistics': engine.update_stats,
         'sweep_statistics': engine.sweep_stats
     }
-
-
-class Mixer(mps_common.Mixer):
-    """Deprecated.
-
-    .. deprecated :: 1.0.0
-        Use :class:`~tenpy.algorithms.mps_common.Mixer` instead.
-        Note the changed function names and signatures
-    """
-    deprecated = True # disable class in find_subclass()
-    update_sites = 2
-
-    def __init__(self, options, sweep_activated):
-        msg = ('The `Mixer`, `SubspaceExpansion` and `DensityMatrixMixer` have been moved '
-               'to tenpy.algorithms.mps_common. Note the changed function names and signatures.')
-        warnings.warn(msg, category=FutureWarning, stacklevel=2)
-        super().__init__(options, sweep_activated)
-
-
-class SubspaceExpansion(Mixer, mps_common.SubspaceExpansion):
-    """Deprecated.
-
-    .. deprecated :: 1.0.0
-        Use :class:`~tenpy.algorithms.mps_common.SubspaceExpansion` instead.
-        Note the changed function names and signatures
-    """
-    update_sites = 1
-
-    def perturb_svd(self, engine, theta, i0, move_right):
-        U, S, VH, err = self.mix_and_decompose_1site(engine, theta, i0, move_right)
-        return U, S, VH, err, S
-
-
-class DensityMatrixMixer(Mixer, mps_common.DensityMatrixMixer):
-    """Deprecated.
-
-    .. deprecated :: 1.0.0
-        Use :class:`~tenpy.algorithms.mps_common.DensityMatrixMixer` instead.
-        Note the changed function names and signatures
-    """
-    update_sites = 2
-
-    def perturb_svd(self, engine, theta, i0, update_LP, update_RP):
-        qtotal_LR = [engine.psi.get_B(i0, form=None).qtotal,
-                     engine.psi.get_B(i0 + 1, form=None).qtotal]
-        return self.mixed_svd_2site(engine, theta, i0, update_LP, update_RP, qtotal_LR)
 
 
 class DMRGEngine(IterativeSweeps):
