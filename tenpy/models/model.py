@@ -1022,8 +1022,6 @@ class CouplingModel(Model):
                      op2,
                      dx,
                      op_string=None,
-                     str_on_first=True,
-                     raise_op2_left=False,
                      category=None,
                      plus_hc=False):
         r"""Add two-site coupling terms to the Hamiltonian, summing over lattice sites.
@@ -1046,9 +1044,6 @@ class CouplingModel(Model):
 
         The necessary terms are just added to :attr:`coupling_terms`;
         this function does not rebuild the MPO.
-
-        .. deprecated:: 0.4.0
-            The arguments `str_on_first` and `raise_op2_left` will be removed in version 1.0.0.
 
         Parameters
         ----------
@@ -1074,19 +1069,6 @@ class CouplingModel(Model):
             The operator should be defined on all sites in the unit cell.
             If ``None``, auto-determine whether a Jordan-Wigner string is needed, using
             :meth:`~tenpy.networks.site.Site.op_needs_JW`.
-        str_on_first : bool
-            Whether the provided `op_string` should also act on the first site.
-            This option should be chosen as ``True`` for Jordan-Wigner strings.
-            When handling Jordan-Wigner strings we need to extend the `op_string` to also act on
-            the 'left', first site (in the sense of the MPS ordering of the sites given by the
-            lattice). In this case, there is a well-defined ordering of the operators in the
-            physical sense (i.e. which of `op1` or `op2` acts first on a given state).
-            We follow the convention that `op2` acts first (in the physical sense),
-            independent of the MPS ordering.
-            Deprecated.
-        raise_op2_left : bool
-            Raise an error when `op2` appears left of `op1`
-            (in the sense of the MPS ordering given by the lattice). Deprecated.
         category : str
             Descriptive name used as key for :attr:`coupling_terms`.
             Defaults to a string of the form ``"{op1}_i {op2}_j"``.
@@ -1172,7 +1154,6 @@ class CouplingModel(Model):
             need_JW2 = site2.op_needs_JW(op2)
             if need_JW1 and need_JW2:
                 op_string = 'JW'
-                str_on_first = True
             elif need_JW1 or need_JW2:
                 raise ValueError("Only one of the operators needs a Jordan-Wigner string?!")
             else:
@@ -1181,8 +1162,7 @@ class CouplingModel(Model):
             if not self.lat.unit_cell[u].valid_opname(op_string):
                 raise ValueError("unknown onsite operator {0!r} for u={1:d}\n"
                                  "{2!r}".format(op_string, u, self.lat.unit_cell[u]))
-        if op_string == "JW" and not str_on_first:
-            raise ValueError("Jordan Wigner string without `str_on_first`")
+        str_on_first = (op_string == 'JW')
         if np.all(dx == 0) and u1 == u2:
             raise ValueError("Coupling shouldn't be onsite!")
         mps_i, mps_j, strength_vals = self.lat.possible_couplings(u1, u2, dx, strength)
@@ -1207,8 +1187,6 @@ class CouplingModel(Model):
                     o1 = site1.multiply_op_names([op1, op_string])  # op2 acts first!
             else:  # i > j
                 # swap operators to ensure i <= j
-                if raise_op2_left:
-                    raise ValueError("Op2 is left")
                 i, j = j, i
                 o1, o2 = op2, op1
                 if str_on_first and op_string != 'Id':
@@ -1223,8 +1201,7 @@ class CouplingModel(Model):
             hc_op2 = site2.get_hc_op_name(op2)
             hc_opstr = site2.get_hc_op_name(op_string)
             self.add_coupling(np.conj(strength), u2, hc_op2, u1, hc_op1, -dx,
-                              hc_opstr, str_on_first, raise_op2_left,
-                              category, plus_hc=False)  # yapf: disable
+                              hc_opstr, category, plus_hc=False)  # yapf: disable
         # done
 
     def add_coupling_term(self,
