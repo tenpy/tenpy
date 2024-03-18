@@ -6,8 +6,8 @@ For each unit-cell site of the initial uniform MPS, we define an excitation tens
 The momentum state with momentum p is then constructed by the infinite sum, where one of the tensors of
 the uniform MPS is replaced by the excitation tensor::
 
-    |           ipn  ...--AL[i-1] -- B[i] -- AR[i+1] -- ...
-    | \sum_n   e            |         |        |
+    |                        ...--AL[n-1] -- B[n] -- AR[n+1] -- ...
+    | \sum_n  \exp{i p n}          |         |        |
 
 
 The `B` tensors can possibly act on multiple neighboring sites to include larger excitations. 
@@ -18,13 +18,13 @@ Furthermore, the `B` is decomposed into::
 
 Here, `VL` is the orthogonal complement of the corresponding `AL` tensor, such that the state is
 always orthogonal to the initial uniform MPS. `X` parametrizes the excited states.
-
 """
 
 # Copyright (C) TeNPy Developers, GNU GPLv3
 
 import numpy as np
 import logging
+import warnings
 
 logger = logging.getLogger(__name__)
 
@@ -60,6 +60,8 @@ class MomentumMPS:
     """
 
     def __init__(self, Xs, uMPS, p, n_sites=1):
+        warnings.warn('MomentumMPS is a new experimental feature and not as well-tested as the '
+                      'rest of the library', stacklevel=2)
         assert len(Xs) == uMPS.L, "Need as many excitations as sites in unit cell."
         self.dtype = dtype = np.find_common_type([X.dtype for X in Xs], [])
         self._X = [X.astype(dtype, copy=True) for X in Xs]
