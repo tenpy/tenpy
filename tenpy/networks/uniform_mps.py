@@ -242,8 +242,9 @@ class UniformMPS(MPS):
         h5gr.attrs["max_bond_dimension"] = np.max(self.chi)  # same
 
     def to_MPS(self, cutoff=1.e-16, check_overlap=False):
-        """
-        Convert UniformMPS to MPS. We return the AR matrix for each site and the DIAGONAL S
+        """Convert UniformMPS to MPS.
+
+        We return the AR matrix for each site and the DIAGONAL S
         matrix to the right of each site. Thus we must make sure that the C matrices
         are converted to diagonal matrices first.
 
@@ -260,7 +261,7 @@ class UniformMPS(MPS):
         Returns
         -------
         psi : :class:`~tenpy.networks.mps.MPS`
-            The right-canonical form converted from the uniform MPS. If the check_overlap fails, return the uniform MPS instead.
+            The right-canonical form converted from the uniform MPS.
         """
 
         if self.diagonal_gauge == False:
@@ -280,7 +281,7 @@ class UniformMPS(MPS):
             )
             if not np.isclose(overlap_AB, 1):
                 logger.warning(
-                    f"overlap not close to 1: {overlap_AB:.10f}, returning uniform MPS instead")
+                    f"overlap not close to 1: {overlap_AB:.10f}.")
         return MPS_B
 
     def to_diagonal_gauge(self, cutoff=1.e-16, check_overlap=False):

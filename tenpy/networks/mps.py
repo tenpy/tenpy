@@ -696,7 +696,7 @@ class BaseMPSExpectationValue(metaclass=ABCMeta):
 
         Returns
         -------
-        terms_sum : list of (complex) float
+        terms_sum : (complex) float
             Equivalent to the expression
             ``sum([self.expectation_value_term(term)*strength for term, strength in term_list])``.
         _mpo :

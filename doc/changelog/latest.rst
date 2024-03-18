@@ -29,7 +29,7 @@ Added
   * :class:`~tenpy.linalg.krylov_based.GMRES`
   * :func:`~tenpy.linalg.np_conserved.polar` decomposition (based on SVD).
   * :class:`~tenpy.linalg.sparse.BoostNpcLinearOperator` that can boost (i.e. add constants) to a linear operator,
-    providing an alterantive to the :class:`~tenpy.linalg.sparse.OrthogonalNpcLinearOperator`
+    providing an alternative to the :class:`~tenpy.linalg.sparse.OrthogonalNpcLinearOperator`
 
 - Added consistency checks, see :func:`~tenpy.tools.misc.consistency_check`, as well as
 
@@ -47,20 +47,20 @@ Added
   :class:`~tenpy.simulations.time_evolution.TimeDependentCorrelationEvolveBraKet`,
   :class:`~tenpy.simulations.time_evolution.SpectralSimulationEvolveBraKet`.
 - Add module :mod:`tenpy.simulations.post_processing` with a :class:`~tenpy.simulations.post_processing.DataLoader` class,
-  which can be used at the end of a simulation (or in a separate script) to calculate additional results from measurment data or plot something.
+  which can be used at the end of a simulation (or in a separate script) to calculate additional results from measurement data or plot something.
 - Functions to perform a linear prediction in :mod:`tenpy.tools.prediction`.
 - Functions for fourier transform and plotting of spectral functions in :mod:`tenpy.tools.spectral_function_tools`.
 
 
 Changed
 ^^^^^^^
-- safeguard measurments with try-except.
+- safeguard measurements with try-except.
 
 Fixed
 ^^^^^
 - MPO methods :meth:`~tenpy.networks.mpo.MPO.dagger`, :meth:`~tenpy.networks.mpo.MPO.is_hermitian`,
   and :meth:`~tenpy.networks.mpo.MPO.__add__` now respect
   the :attr:`:~tenpy.networks.mpo.MPO.explicit_plus_hc` flag.
-- Handle Jordan wigner strings better, see :pull:`355`. This includes a new way to add JW signs on a virutal MPS leg 
+- Handle Jordan wigner strings better, see :pull:`355`. This includes a new way to add JW signs on a virtual MPS leg 
   via the site's :meth:`~tenpy.networks.site.Site.charge_to_JW_signs`
 
