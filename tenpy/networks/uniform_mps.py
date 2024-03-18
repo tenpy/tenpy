@@ -998,11 +998,11 @@ class UniformMPS(MPS):
                             norm_tol=1.e-12):
         assert self.valid_umps
         return super().sample_measurements(self,
-                                           first_site=0,
-                                           last_site=None,
-                                           ops=None,
-                                           rng=None,
-                                           norm_tol=1.e-12)
+                                           first_site=first_site,
+                                           last_site=last_site,
+                                           ops=ops,
+                                           rng=rng,
+                                           norm_tol=norm_tol)
 
     def norm_test(self, force=False):
         if not force and not self.valid_umps:
@@ -1021,7 +1021,8 @@ class UniformMPS(MPS):
 
     def correlation_length(self, target=1, tol_ev0=1.e-8, charge_sector=0):
         assert self.valid_umps
-        return super().correlation_length(self, target=1, tol_ev0=1.e-8, charge_sector=0)
+        return super().correlation_length(self, target=target, tol_ev0=tol_ev0,
+                                          charge_sector=charge_sector)
 
     def add(self, other, alpha, beta, cutoff=1.e-15):
         raise NotImplementedError("Not valid for UniformMPS.")
