@@ -61,7 +61,10 @@ jobs:
   build-sdist-and-upload:
     runs-on: ubuntu-latest
     needs: 'build-native-wheels'
-
+    permissions:
+      # allow trusted publishing / OIDC authentication for PyPI
+      # corresponding authentication settings on {test.}pypi.org
+      id-token: write
     steps:
     - name: Checkout
       uses: actions/checkout@v4
@@ -96,14 +99,12 @@ jobs:
       if: github.event_name != 'release'
       uses: pypa/gh-action-pypi-publish@release/v1
       with:
-        password: ${{ secrets.test_pypi_password }}
         repository-url: https://test.pypi.org/legacy/
         packages-dir: dist-wheels/
     - name: Publish sdist to TestPyPI
       if: github.event_name != 'release'
       uses: pypa/gh-action-pypi-publish@release/v1
       with:
-        password: ${{ secrets.test_pypi_password }}
         repository-url: https://test.pypi.org/legacy/
 
     # Publish to live PyPI *only on release*
@@ -111,10 +112,7 @@ jobs:
       if: github.event_name == 'release'
       uses: pypa/gh-action-pypi-publish@release/v1
       with:
-        password: ${{ secrets.pypi_password }}
         packages-dir: dist-wheels/
     - name: Publish sdist to PyPI
       if: github.event_name == 'release'
       uses: pypa/gh-action-pypi-publish@release/v1
-      with:
-        password: ${{ secrets.pypi_password }}
