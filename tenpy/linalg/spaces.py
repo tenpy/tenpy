@@ -1050,6 +1050,33 @@ class ProductSpace(VectorSpace):
                            basis_perm=None,
                            _is_dual=self.is_dual,)
 
+    def get_flat_spaces(self) -> list[VectorSpace]:
+        """Flatten the potential nesting of product structures.
+
+        Returns
+        -------
+        factor_spaces : list of :class:`VectorSpace`
+            A list of spaces which are not :class:`ProductSpace`.
+            Those are all the spaces that appear in ``self.spaces``, either directly or nested,
+            e.g. either as ``self.spaces[i]`` or ``self.spaces[j].spaces[k]`` etc.
+        """
+        factors_spaces = []
+        for space in self.spaces:
+            if isinstance(space, ProductSpace):
+                factors_spaces.extend(space.get_flat_spaces())
+            else:
+                factors_spaces.append(space)
+        return factors_spaces
+        
+    def as_flat_product(self) -> ProductSpace:
+        """Create a flat ProductSpace from potentially nested ProductSpace.
+
+        Transform a tree-like structure, where the :attr:`spaces` may themselves be ProductSpaces
+        to a flat structure where they are not.
+        """
+        return ProductSpace(self.get_flat_spaces(), _is_dual=self.is_dual,
+                            _sectors=self._non_dual_sectors, _multiplicities=self.multiplicities)
+    
     def get_basis_transformation(self) -> np.ndarray:
         r"""Get the basis transformation from uncoupled to coupled basis.
 

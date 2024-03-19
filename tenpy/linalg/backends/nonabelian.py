@@ -19,18 +19,6 @@ __all__ = ['NonabelianBackend', 'NonAbelianData', 'FusionTree', 'fusion_trees',
            'all_fusion_trees', 'coupled_sectors']
 
 
-def _unpack_flat_spaces(spaces: list[VectorSpace]) -> list[VectorSpace]:
-    """In a list of spaces, unpack any ProductSpaces by inserting their .spaces into the list.
-    The result is a "flat" list of spaces, which are not ProductSpaces"""
-    res = []
-    for s in spaces:
-        if isinstance(s, ProductSpace):
-            res.extend(_unpack_flat_spaces(s.spaces))
-        else:
-            res.append(s)
-    return res
-
-
 @dataclass
 class NonAbelianData:
     r"""Data for a tensor
@@ -147,7 +135,7 @@ class NonabelianBackend(Backend, BlockBackend, ABC):
 
     def from_block_func(self, func, legs: list[VectorSpace], func_kwargs={}) -> NonAbelianData:
         # TODO add arg to specify (co-)domain?
-        codomain = ProductSpace(spaces=_unpack_flat_spaces(legs), backend=self)
+        codomain = ProductSpace(legs, backend=self).as_flat_product()
         domain = ProductSpace([], backend=self)
         blocks = {c: func((codomain.block_size(c), domain.block_size(c)), **func_kwargs)
                   for c in coupled_sectors(codomain, domain)}
@@ -161,7 +149,7 @@ class NonabelianBackend(Backend, BlockBackend, ABC):
 
     def zero_data(self, legs: list[VectorSpace], dtype: Dtype) -> NonAbelianData:
         # TODO add arg to specify (co-)domain?
-        codomain = ProductSpace(spaces=_unpack_flat_spaces(legs), backend=self)
+        codomain = ProductSpace(legs, backend=self).as_flat_product()
         domain = ProductSpace([], backend=self)
         blocks = {c: self.zero_block((codomain.block_size(c), domain.block_size(c)), dtype=dtype)
                   for c in coupled_sectors(codomain, domain)}
@@ -171,7 +159,7 @@ class NonabelianBackend(Backend, BlockBackend, ABC):
 
     def eye_data(self, legs: list[VectorSpace], dtype: Dtype) -> NonAbelianData:
         # TODO add arg to specify (co-)domain?
-        codomain = ProductSpace(spaces=_unpack_flat_spaces(legs), backend=self)
+        codomain = ProductSpace(legs, backend=self).as_flat_product()
         domain = ProductSpace([], backend=self)
         blocks = {c: self.eye_block((codomain.block_size(c), domain.block_size(c)), dtype=dtype)
                   for c in coupled_sectors(codomain, domain)}
