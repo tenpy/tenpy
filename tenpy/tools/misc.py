@@ -15,7 +15,7 @@ __all__ = [
     'zero_if_close', 'pad', 'add_with_None_0', 'group_by_degeneracy', 'get_close',
     'find_subclass', 'get_recursive', 'set_recursive', 'update_recursive', 'merge_recursive',
     'flatten', 'setup_logging', 'convert_memory_units', 'consistency_check',
-    'TenpyInconsistencyError', 'TenpyInconsistencyWarning'
+    'TenpyInconsistencyError', 'TenpyInconsistencyWarning', 'BetaWarning'
 ]
 
 _not_set = object()  # sentinel
@@ -104,7 +104,7 @@ def to_array(a, shape=(None, ), dtype=None, allow_incommensurate=False):
 
 
 if bottleneck is not None:
-    
+
     def anynan(a):
         """check whether any entry of a ndarray `a` is 'NaN'."""
         return bottleneck.anynan(a)
@@ -900,10 +900,23 @@ class TenpyInconsistencyError(Exception):
     pass
 
 
-class TenpyInconsistencyWarning(Warning):
+class TenpyInconsistencyWarning(UserWarning):
     """Warning category that is emitted when a consistency check fails.
 
     See :meth:`consistency_check`."""
+    pass
+
+
+class BetaWarning(UserWarning):
+    """Warning category that we emit in new code that still needs to be tested better.
+
+    When adding new features like algorithms, we might raise a Warning of this category
+    to indicate that the featers are not yet super well tested. Thus, this warning gives a hint
+    that the user needs to be cautious and should not jump to conclusion
+    if the results are unexpected.
+    Rather, it's appropriate to test robustness, ideally by cross-checking with another
+    well-tested algorithm.
+    """
     pass
 
 

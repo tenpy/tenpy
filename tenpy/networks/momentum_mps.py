@@ -10,7 +10,7 @@ the uniform MPS is replaced by the excitation tensor::
     | \sum_n  \exp{i p n}          |         |        |
 
 
-The `B` tensors can possibly act on multiple neighboring sites to include larger excitations. 
+The `B` tensors can possibly act on multiple neighboring sites to include larger excitations.
 Furthermore, the `B` is decomposed into::
 
     |           -B- = - VL -- X -
@@ -25,6 +25,7 @@ always orthogonal to the initial uniform MPS. `X` parametrizes the excited state
 import numpy as np
 import logging
 import warnings
+from ..tools.misc import BetaWarning
 
 logger = logging.getLogger(__name__)
 
@@ -44,7 +45,7 @@ class MomentumMPS:
         The momentum of the state.
     n_sites : int
         Number of sites for each excitation.
-  
+
     Attributes
     ----------
     dtype : type
@@ -60,8 +61,8 @@ class MomentumMPS:
     """
 
     def __init__(self, Xs, uMPS, p, n_sites=1):
-        warnings.warn('MomentumMPS is a new experimental feature and not as well-tested as the '
-                      'rest of the library', stacklevel=2)
+        warnings.warn('MomentumMPS is a new feature and not as well-tested as the '
+                      'rest of the library', BetaWarning, stacklevel=2)
         assert len(Xs) == uMPS.L, "Need as many excitations as sites in unit cell."
         self.dtype = dtype = np.find_common_type([X.dtype for X in Xs], [])
         self._X = [X.astype(dtype, copy=True) for X in Xs]
@@ -165,7 +166,7 @@ class MomentumMPS:
         X : :class:`~tenpy.linalg.np_conserved.Array`
             The 'matrix' at site `i`. No copy is made!
             Should have leg labels ``'vL', 'p1', ..., 'p{n_sites-1}', 'vR'`` (not necessarily in that order).
-        
+
         """
         i = self._to_valid_index(i)
         self.dtype = np.promote_types(self.dtype, X.dtype)
