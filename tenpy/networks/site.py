@@ -114,10 +114,12 @@ class Site(Hdf5Exportable):
     on-site operator.
 
     .. testsetup :: Site
+
         from tenpy.linalg import np_conserved as npc
         from tenpy.networks.site import Site
 
     .. doctest :: Site
+    
         >>> chinfo = npc.ChargeInfo([1], ['2 * Sz'])
         >>> ch = npc.LegCharge.from_qflat(chinfo, [1, -1])
         >>> Sp = [[0, 1.], [0, 0]]
@@ -156,13 +158,13 @@ class Site(Hdf5Exportable):
         >>> site = Site(ch, ['up', 'down'], Splus=Sp, Sminus=Sm, Sz=Sz, sort_charge=False)
         >>> print(site.Splus.to_ndarray())
         [[0. 1.]
-        [0. 0.]]
+         [0. 0.]]
         >>> print(site.get_op('Sminus').to_ndarray())
         [[0. 0.]
-        [1. 0.]]
+         [1. 0.]]
         >>> print(site.get_op('Splus Sminus').to_ndarray())
         [[1. 0.]
-        [0. 0.]]
+         [0. 0.]]
 
     """
 
