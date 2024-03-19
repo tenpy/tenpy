@@ -12,7 +12,10 @@ released.
 source) TeNPy version.
 
 .. toctree ::
+    :maxdepth: 1
+
     changelog/latest
+    changelog/v0.99.0.rst
     changelog/v0.11.0.rst
     changelog/v0.10.0.rst
     changelog/v0.9.0.rst

@@ -25,7 +25,7 @@ def _f_tfi(k, g):
 params = [
     # L     engine  mixer
     (1, vumps.SingleSiteVUMPSEngine, False),
-    (2, vumps.SingleSiteVUMPSEngine, False), 
+    (2, vumps.SingleSiteVUMPSEngine, False),
     (2, vumps.TwoSiteVUMPSEngine, False),
     (2, vumps.TwoSiteVUMPSEngine, "SubspaceExpansion"),
     (3, vumps.TwoSiteVUMPSEngine, "DensityMatrixMixer"),
@@ -34,8 +34,6 @@ params = [
 
 @pytest.mark.parametrize("L, engine, mixer", params)
 @pytest.mark.slow
-@pytest.mark.filterwarnings('ignore:UniformMPS is a new experimental feature and not as '
-                            'well-tested as the rest of the library:UserWarning')
 def test_vumps(L, engine, mixer, g=1.2):
     model_params = dict(L=L, J=1., g=g, bc_MPS='infinite', conserve=None)
     M = TFIChain(model_params)
@@ -68,7 +66,7 @@ def test_vumps(L, engine, mixer, g=1.2):
     eng.options.touch('mixer_params')  # not used if no mixer
     eng.options.touch('trunc_params')
     eng.options['trunc_params'].touch('svd_min', 'chi_max')  # not used for single-site VUMPS
-    
+
     # compare exact solution for transverse field Ising model
     Eexact = e0_transverse_ising(g)
     print(f"E_DMRG={E_vumps:.12f} vs E_exact={Eexact:.12f}")

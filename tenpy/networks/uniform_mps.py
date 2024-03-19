@@ -25,6 +25,7 @@ account for the additional type of tensor structure.
 import numpy as np
 import logging
 import warnings
+from ..tools.misc import BetaWarning
 
 logger = logging.getLogger(__name__)
 
@@ -103,7 +104,7 @@ class UniformMPS(MPS):
 
     def __init__(self, sites, ALs, ARs, ACs, Cs, norm=1.):
         warnings.warn('UniformMPS is a new experimental feature and not as well-tested as the '
-                      'rest of the library', stacklevel=2)
+                      'rest of the library', BetaWarning, stacklevel=2)
         self.sites = list(sites)
         self.chinfo = self.sites[0].leg.chinfo
         self.dtype = dtype = np.result_type(*ALs)
@@ -427,39 +428,34 @@ class UniformMPS(MPS):
         psi : :class:`UniformMPS`
             The resulting uniform MPS.
         """
-        obj = cls.__new__(cls)
-        obj.sites = list(psi.sites)
-        obj.chinfo = psi.sites[0].leg.chinfo
-        obj.dtype = psi.dtype
-        obj.form = [None] * len(psi._B)
+        # make copies of 4 types of tensors
+        dtype = psi.dtype
+        AR = [
+            psi.get_B(i, form='B').astype(dtype, copy=True).itranspose(cls._B_labels)
+            for i in range(psi.L)
+        ]
+        AC = [
+            psi.get_B(i, form='Th').astype(dtype, copy=True).itranspose(cls._B_labels)
+            for i in range(psi.L)
+        ]
+        AL = [
+            psi.get_B(i, form='A').astype(dtype, copy=True).itranspose(cls._B_labels)
+            for i in range(psi.L)
+        ]
+        C = []
+        for i in range(psi.L):
+            C_ = npc.diag(psi.get_SL(i), AL[i].get_leg('vL'),
+                          labels=['vL', 'vR'])  # center matrix on the left of site `i`
+            C.append(C_.astype(dtype, copy=True).itranspose(cls._C_labels))
+        obj = cls(psi.sites, AL, AR, AC, C, psi.norm)
         obj.bc = psi.bc
-        obj.norm = psi.norm
         obj.grouped = psi.grouped
         obj.segment_boundaries = psi.segment_boundaries
         obj.diagonal_gauge = True
         obj.valid_umps = False  # Need to check that AL[n] C[n+1] = AC[n] and C[n] AR[n] = AC[n]
 
-        # make copies of 4 types of tensors
-        obj._AR = [
-            psi.get_B(i, form='B').astype(obj.dtype, copy=True).itranspose(obj._B_labels)
-            for i in range(psi.L)
-        ]
-        obj._AC = [
-            psi.get_B(i, form='Th').astype(obj.dtype, copy=True).itranspose(obj._B_labels)
-            for i in range(psi.L)
-        ]
-        obj._AL = [
-            psi.get_B(i, form='A').astype(obj.dtype, copy=True).itranspose(obj._B_labels)
-            for i in range(psi.L)
-        ]
-        obj._C = []
-        for i in range(psi.L):
-            C = npc.diag(psi.get_SL(i), obj._AL[i].get_leg('vL'),
-                         labels=['vL', 'vR'])  # center matrix on the left of site `i`
-            obj._C.append(C.astype(obj.dtype, copy=True).itranspose(obj._C_labels))
-
         # need to define S, since diagonal_gauge = True
-        obj._S = [psi.get_SL(i).astype(obj.dtype, copy=True) for i in range(psi.L)]
+        obj._S = [psi.get_SL(i).astype(dtype, copy=True) for i in range(psi.L)]
 
         obj._transfermatrix_keep = psi._transfermatrix_keep
         obj.test_sanity()
