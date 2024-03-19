@@ -65,6 +65,11 @@ def common_checks(sym: groups.Symmetry, example_sectors):
     #   - hexagon equation
     #   - unitarity
     #   - consistency with twist (twist not implemented yet...)
+    # - braiding_style
+    #   - if trivial, explicitly check the fusion_tensor / CG coefficients
+    #   - if symmetric, test the R and C symbols
+    # - fusion_style
+    #   - check fusion outcomes, N symbol, shape of the other symbols
 
 
 def test_generic_symmetry(symmetry, symmetry_sectors_rng):
