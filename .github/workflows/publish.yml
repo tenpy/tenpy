@@ -46,7 +46,7 @@ jobs:
           # Include latest Python beta.
           CIBW_PRERELEASE_PYTHONS: True
           # Run the test suite after each build.
-          CIBW_TEST_REQUIRES: pytest>=0.6 numpy>=1.13 scipy>=0.18 bottleneck h5py pyyaml
+          CIBW_TEST_REQUIRES: pytest>=0.6 numpy>=1.13 scipy>=0.18 bottleneck h5py pyyaml psutil
           CIBW_TEST_COMMAND: pytest {project}/tests
           # silence warning that arm wheels can not be tested.
           # Jakob has a M2 MacBook that can test them, e.g. from testPyPI, if needed.
