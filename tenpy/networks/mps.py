@@ -161,7 +161,7 @@ from ..linalg import np_conserved as npc
 from ..linalg import sparse
 from ..linalg.krylov_based import Arnoldi
 from .site import GroupedSite, group_sites
-from ..tools.misc import argsort, to_iterable, to_array, get_recursive, inverse_permutation, lexsort
+from ..tools.misc import argsort, to_iterable, to_array, get_recursive, inverse_permutation
 from ..tools.math import lcm, speigs, entropy
 from ..tools.params import asConfig
 from ..tools.cache import DictCache
@@ -2037,16 +2037,16 @@ class MPS(BaseMPSExpectationValue):
         sites : list of :class:`~tenpy.networks.site.Site`
             The sites defining the local Hilbert space. The sites should conserve *some* charge,
             otherwise projecting onto a charge sector is meaningless.
-        p_state_list : list
+        p_state_list : list | np.ndarray
             list defining the product state out of which to project
         charge_sector : tuple of int
+            The charge sector corresponding to the conserved charge of the ``sites``
         dtype : type
 
         Returns
         -------
         projected_MPS : :class:`~tenpy.networks.mps.MPS`
         """
-        # TODO: possibly change sites here, so that they are compatible with charge conservation
         charge_tree = cls.get_charge_tree_for_given_charge_sector(sites, charge_sector)
         return cls._project_onto_sector_from_charge_tree(sites, p_state_list, charge_tree, dtype)
 
@@ -2059,12 +2059,12 @@ class MPS(BaseMPSExpectationValue):
         sites : list of :class:`~tenpy.networks.site.Site`
             The sites defining the local Hilbert space. The sites should conserve *some* charge,
             otherwise projecting onto a charge sector is meaningless.
-        p_state_list : list
+        p_state_list : list | np.ndarray
             list defining the product state out of which to project
         charge_tree : list
             a list containing a set of possible charges at each site
         dtype : type
-
+            The data type of the ``B``-tensors, defaults to float
         Returns
         -------
         projected_state : :class:`~tenpy.networks.mps.MPS`
@@ -2107,6 +2107,7 @@ class MPS(BaseMPSExpectationValue):
                         B[vL, vR, j] = value  # add an entry in the tensor
 
             Bs.append(B)
+            # ignore S values as they will be obtained below from :meth:`MPS.canonical_form_finite`
             Ss.append(np.ones(B.shape[1], np.float64))
 
         projected_state = cls(sites, Bs, Ss, 'finite', form='B')
@@ -3203,7 +3204,7 @@ class MPS(BaseMPSExpectationValue):
     def get_charge_tree_for_given_charge_sector(sites: list, charge_sector: tuple):
         """Construct the charge-tree for a given charge sector.
 
-        This is a tree of possible charges for each site s.t. the MPS lies in the given `charge_sector`.
+        This is a tree of possible charges for each site s.t. the MPS lies in the given ``charge_sector``.
 
         Parameters
         ----------
@@ -3211,12 +3212,12 @@ class MPS(BaseMPSExpectationValue):
             The sites defining the local Hilbert space. The sites should conserve *some* charge,
             otherwise projecting onto a charge sector is meaningless.
         charge_sector : tuple of int
+            The charge sector corresponding to the conserved charge of the ``sites``
 
         Returns
         -------
         charge_tree : list
         """
-        # TODO: should we accept an integer as charge sector? charge_sector = tuple([charge_sector]) ?
         L = len(sites)
         assert L > 0, "sites must contain a :class:`Site` with conserved charges"
         # check that all have same chiinfo
@@ -3245,7 +3246,6 @@ class MPS(BaseMPSExpectationValue):
         Q_from_left = [set([tuple(charge_sector_left)])] + [None] * L
         for i in range(L):
             Q_L = np.array(list(Q_from_left[i]))
-            Q_L = Q_L[lexsort(Q_L.T), :]
             Q_R = set()
             for Q_p in sites[i].leg.charges:
                 Q_R_add = chinfo.make_valid(Q_L + Q_p[:, np.newaxis])
