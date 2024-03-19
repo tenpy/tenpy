@@ -54,13 +54,6 @@ __all__ = [
     'TwoSiteDMRGEngine',
     'chi_list',
     'full_diag_effH',
-    'Mixer',
-    'DensityMatrixMixer',
-    'SubspaceExpansion',
-    'SingleSiteMixer',
-    'TwoSiteMixer',
-    'EngineCombine',
-    'EngineFracture',
 ]
 
 
@@ -113,72 +106,6 @@ def run(psi, model, options, **kwargs):
     }
 
 
-class Mixer(mps_common.Mixer):
-    """Deprecated.
-
-    .. deprecated :: 1.0.0
-        Use :class:`~tenpy.algorithms.mps_common.Mixer` instead.
-        Note the changed function names and signatures
-    """
-    deprecated = True # disable class in find_subclass()
-    update_sites = 2
-
-    def __init__(self, options, sweep_activated):
-        msg = ('The `Mixer`, `SubspaceExpansion` and `DensityMatrixMixer` have been moved '
-               'to tenpy.algorithms.mps_common. Note the changed function names and signatures.')
-        warnings.warn(msg, category=FutureWarning, stacklevel=2)
-        super().__init__(options, sweep_activated)
-
-
-class SubspaceExpansion(Mixer, mps_common.SubspaceExpansion):
-    """Deprecated.
-
-    .. deprecated :: 1.0.0
-        Use :class:`~tenpy.algorithms.mps_common.SubspaceExpansion` instead.
-        Note the changed function names and signatures
-    """
-    update_sites = 1
-
-    def perturb_svd(self, engine, theta, i0, move_right):
-        U, S, VH, err = self.mix_and_decompose_1site(engine, theta, i0, move_right)
-        return U, S, VH, err, S
-
-
-class SingleSiteMixer(SubspaceExpansion):
-    r"""Deprecated name for the :class:`SubspaceExpansion` class.
-
-    .. deprecated :: 0.5.0
-       Instead of `SingleSiteMixer` and `TwoSiteMixer`, directly use :class:`SubspaceExpansion`
-       which is compatible with both single-site and two-site DMRG.
-    """
-    def __init__(self, *args, **kwargs):
-        msg = ("The `SingleSiteMixer` and `TwoSiteMixer` have been replaced by the unified "
-               "`SubspaceExpansion` class, and\n"
-               "all mixers are compatible with both SingleSiteDMRGEngine and TwoSiteDMRGEngine.")
-        warnings.warn(msg, category=FutureWarning, stacklevel=2)
-        super().__init__(*args, **kwargs)
-
-
-class TwoSiteMixer(SingleSiteMixer):
-    # Both DMRG engines have code in mixed_svd to support both single-site and two-site mixers
-    pass
-
-
-class DensityMatrixMixer(Mixer, mps_common.DensityMatrixMixer):
-    """Deprecated.
-
-    .. deprecated :: 1.0.0
-        Use :class:`~tenpy.algorithms.mps_common.DensityMatrixMixer` instead.
-        Note the changed function names and signatures
-    """
-    update_sites = 2
-
-    def perturb_svd(self, engine, theta, i0, update_LP, update_RP):
-        qtotal_LR = [engine.psi.get_B(i0, form=None).qtotal,
-                     engine.psi.get_B(i0 + 1, form=None).qtotal]
-        return self.mixed_svd_2site(engine, theta, i0, update_LP, update_RP, qtotal_LR)
-
-
 class DMRGEngine(IterativeSweeps):
     """DMRG base class with common methods for the TwoSiteDMRG and SingleSiteDMRG.
 
@@ -189,9 +116,6 @@ class DMRGEngine(IterativeSweeps):
 
     A generic protocol for approaching a physics question using DMRG is given in
     :doc:`/intro/dmrg-protocol`.
-
-    .. deprecated :: 0.5.0
-        Renamed parameter/attribute `DMRG_params` to :attr:`options`.
 
     Options
     -------
@@ -297,11 +221,6 @@ class DMRGEngine(IterativeSweeps):
         decay_infinite = decay_finite ** (disable_finite / disable_infinite)
         mixer_options.setdefault('decay', decay_finite if self.finite else decay_infinite)
         mixer_options.setdefault('disable_after', disable_finite if self.finite else disable_infinite)
-
-    @property
-    def DMRG_params(self):
-        warnings.warn("renamed self.DMRG_params -> self.options", FutureWarning, stacklevel=2)
-        return self.options
 
     def pre_run_initialize(self):
         super().pre_run_initialize()
@@ -1356,44 +1275,6 @@ class SingleSiteDMRGEngine(DMRGEngine):
             msg = (f'Using {self.mixer.__class__.__name__} with single-site DMRG is inefficient. '
                    f'The resulting algorithm has two-site costs!')
             warnings.warn(msg)
-
-
-class EngineCombine(TwoSiteDMRGEngine):
-    r"""Engine which combines legs into pipes as far as possible.
-
-    This engine combines the virtual and physical leg for the left site and right site into pipes.
-    This reduces the overhead of calculating charge combinations in the contractions,
-    but one :meth:`matvec` is formally more expensive, :math:`O(2 d^3 \chi^3 D)`.
-
-    .. deprecated :: 0.5.0
-       Directly use the :class:`TwoSiteDMRGEngine` with the DMRG parameter ``combine=True``.
-    """
-    def __init__(self, psi, model, DMRG_params):
-        msg = ("Old-style engines are deprecated in favor of `Sweep` subclasses.\n"
-               "Use `TwoSiteDMRGEngine` with parameter `combine=True` "
-               "instead of `EngineCombine`.")
-        warnings.warn(msg, category=FutureWarning, stacklevel=2)
-        DMRG_params['combine'] = True  # to reproduces old-style engine
-        super().__init__(psi, model, DMRG_params)
-
-
-class EngineFracture(TwoSiteDMRGEngine):
-    r"""Engine which keeps the legs separate.
-
-    Due to a different contraction order in :meth:`matvec`, this engine might be faster than
-    :class:`EngineCombine`, at least for large physical dimensions and if the MPO is sparse.
-    One :meth:`matvec` is :math:`O(2 \chi^3 d^2 W + 2 \chi^2 d^3 W^2 )`.
-
-    .. deprecated :: 0.5.0
-       Directly use the :class:`TwoSiteDMRGEngine` with the DMRG parameter ``combine=False``.
-    """
-    def __init__(self, psi, model, DMRG_params):
-        msg = ("Old-style engines are deprecated in favor of `Sweep` subclasses.\n"
-               "Use `TwoSiteDMRGEngine` with parameter `combine=False` "
-               "instead of `EngineFracture`.")
-        warnings.warn(msg, category=FutureWarning, stacklevel=2)
-        DMRG_params['combine'] = False  # to reproduces old-style engine
-        super().__init__(psi, model, DMRG_params)
 
 
 def chi_list(chi_max, dchi=20, nsweeps=20):

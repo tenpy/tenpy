@@ -51,16 +51,13 @@ from .truncation import svd_theta, TruncationError, truncate
 from ..linalg import random_matrix
 from ..tools.misc import consistency_check
 
-__all__ = ['TEBDEngine', 'Engine', 'QRBasedTEBDEngine', 'RandomUnitaryEvolution', 'TimeDependentTEBD']
+__all__ = ['TEBDEngine', 'QRBasedTEBDEngine', 'RandomUnitaryEvolution', 'TimeDependentTEBD']
 
 
 class TEBDEngine(TimeEvolutionAlgorithm):
     """Time Evolving Block Decimation (TEBD) algorithm.
 
     Parameters are the same as for :class:`~tenpy.algorithms.algorithm.Algorithm`.
-
-    .. deprecated :: 0.6.0
-        Renamed parameter/attribute `TEBD_params` to :attr:`options`.
 
     Options
     -------
@@ -109,11 +106,6 @@ class TEBDEngine(TimeEvolutionAlgorithm):
         self._U = None
         self._U_param = {}
         self._update_index = None
-
-    @property
-    def TEBD_params(self):
-        warnings.warn("renamed self.TEBD_params -> self.options", FutureWarning, stacklevel=2)
-        return self.options
 
     @property
     def trunc_err_bonds(self):
@@ -585,18 +577,6 @@ class TEBDEngine(TimeEvolutionAlgorithm):
         U = npc.expm(H2)
         assert (tuple(U.get_leg_labels()) == ('(p0.p1)', '(p0*.p1*)'))
         return U.split_legs()
-
-
-class Engine(TEBDEngine):
-    """Deprecated old name of :class:`TEBDEngine`.
-
-    .. deprecated : v0.8.0
-        Renamed the `Engine` to `TEBDEngine` to have unique algorithm class names.
-    """
-    def __init__(self, psi, model, options):
-        msg = "Renamed `Engine` class to `TEBDEngine`."
-        warnings.warn(msg, category=FutureWarning, stacklevel=2)
-        TEBDEngine.__init__(self, psi, model, options)
 
 
 class QRBasedTEBDEngine(TEBDEngine):

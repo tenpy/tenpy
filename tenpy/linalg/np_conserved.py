@@ -640,29 +640,6 @@ class Array:
         """Alias for :attr:`rank` or ``len(self.shape)``."""
         return self.rank
 
-    @property
-    def labels(self):
-        warnings.warn("Deprecated access of Array.labels as dictionary.",
-                      category=FutureWarning,
-                      stacklevel=2)
-        dict_lab = {}
-        for i, l in enumerate(self._labels):
-            if l is not None:
-                dict_lab[l] = i
-        return dict_lab
-
-    @labels.setter
-    def labels(self, dict_lab):
-        warnings.warn("Deprecated setting of Array.labels with dictionary.",
-                      category=FutureWarning,
-                      stacklevel=2)
-        list_lab = [None] * self.rank
-        for k, v in dict_lab.items():
-            if list_lab[v] is not None:
-                raise ValueError("Two labels point to the same index " + repr(dict_lab))
-            list_lab[v] = str(k)
-        self._labels = list_lab
-
     # labels ==================================================================
 
     def get_leg_index(self, label):
@@ -1441,6 +1418,10 @@ class Array:
     def combine_legs(self, combine_legs, new_axes=None, pipes=None, qconj=None):
         """Reshape: combine multiple legs into multiple pipes. If necessary, transpose before.
 
+        .. versionchanged :: 1.0
+            Make `qconj` default to the `qconj` of the first leg to be combine rather than just +1.
+
+
         Parameters
         ----------
         combine_legs : (iterable of) iterable of {str|int}
@@ -1456,7 +1437,9 @@ class Array:
             computing new leg pipes for the same legs multiple times.
             The LegPipes are conjugated, if that is necessary for compatibility with the legs.
         qconj : (iterable of) {+1, -1}
-            Specify whether new created pipes point inward or outward. Defaults to +1.
+            Specify whether new created pipes point inward or outward.
+            Defaults to the same value as the first of the legs to be combined.
+            E.g. for a single combine, the default `qconj` is `self.get_leg(combine_legs[0]).qconj`.
             Ignored for given `pipes`, which are not newly calculated.
 
         Returns
@@ -2673,12 +2656,7 @@ class Array:
             if pipe is None:
                 qconj_i = qconj[i]
                 if qconj_i is None:
-                    qconj_i = +1  # will change in future to
-                    qconj_i_new = self.get_leg(combine_legs[i][0]).qconj
-                    if qconj_i != qconj_i_new:
-                        warnings.warn(
-                            "combine_legs default value for `qconj` will change "
-                            "from +1 to `qconj` of the first leg, here `-1`", FutureWarning, 3)
+                    qconj_i = self.get_leg(combine_legs[i][0]).qconj
                 pipes[i] = self.make_pipe(axes=combine_legs[i], qconj=qconj_i)
             else:
                 # test for compatibility
@@ -2808,18 +2786,11 @@ class Array:
                 warnings.warn("Not all legs labeled, so no transpose for Array addition. "
                               "Did you intend to transpose?")
             return self  # not all legs labeled
-        if set(self_labels) != set(other_labels):
-            return self  # different labels
-        # now: same labels, different order.
-        # TODO to keep backwards compatibility, just warn for now
-        warnings.warn(
-            "Arrays with same labels in different order. Transpose intended?"
-            " We will transpose in the future!",
-            category=FutureWarning,
-            stacklevel=2)
+        if set(self_labels) == set(other_labels):
+            # same labels, different order.
+            return self.transpose(other_labels)
+        # else: different labels
         return self
-        # TODO: do this for the next release
-        return self.transpose(other_labels)
 
 
 # ##################################
@@ -3402,8 +3373,11 @@ def outer(a, b):
     return res
 
 
-def inner(a, b, axes=None, do_conj=False):
+def inner(a, b, axes='labels', do_conj=False):
     """Contract all legs in `a` and `b`, return scalar.
+
+    .. versionchanged :: 1.0
+        Change default behaviour of `axes` from ``'range'`` to ``'labels'``.
 
     Parameters
     ----------
@@ -3414,8 +3388,8 @@ def inner(a, b, axes=None, do_conj=False):
         `axes_a` and `axes_b` specify the legs of `a` and `b`, respectively,
         which should be contracted. Legs can be specified with leg labels or indices.
         We contract leg ``axes_a[i]`` of `a` with leg ``axes_b[i]`` of `b`.
-        The default ``axes='range'`` is equivalent to ``(range(rank), range(rank))``.
-        ``axes='labels'`` is equivalent to either ``(a.get_leg_labels(), a.get_leg_labels())``
+        ``axes='range'`` is equivalent to ``(range(rank), range(rank))``.
+        The default ``axes='labels'`` is equivalent to either ``(a.get_leg_labels(), a.get_leg_labels())``
         for ``do_conj=True``,
         or to ``(a.get_leg_labels(), conj_labels(a.get_leg_labels()))`` for ``do_conj=False``.
         In other words, ``axes='labels'`` requires `a` and `b` to have the same/conjugated labels
@@ -3433,10 +3407,7 @@ def inner(a, b, axes=None, do_conj=False):
         return np.sum([inner(w, v, axes=axes, do_conj=do_conj) for w, v in zip(a, b)])
     if a.rank != b.rank:
         raise ValueError("different rank!")
-    if axes is None or axes == 'range':
-        if axes is None:
-            msg = "inner(): `axes` currently defaults to 'range', will change to 'labels'"
-            warnings.warn(msg, FutureWarning, stacklevel=2)
+    if axes == 'range':
         transp = False
     else:
         if axes == 'labels':
@@ -3660,7 +3631,7 @@ def polar(a, cutoff=1.e-16, left=False, inner_labels=[None, None]):
     # follow exactly the procedure lined out.
     # however, use inplace methods and don't construct the diagonal matrix explicitly.
     W, s, VH = svd(a, cutoff=cutoff, inner_labels=inner_labels) # w s vh
-    
+
     u = tensordot(W, VH, axes=([1, 0]))
     if not left:
         labels = VH.conj().get_leg_labels()[1], VH.get_leg_labels()[1]

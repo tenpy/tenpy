@@ -25,8 +25,7 @@ The matrices and singular values always represent a normalized state
 but (for finite MPS) we keep track of the norm in :attr:`~tenpy.networks.mps.MPS.norm`
 (which is respected by :meth:`~tenpy.networks.mps.MPS.overlap`, ...).
 
-Valid MPS boundary conditions (not to confuse with `bc_coupling` of
-:class:`tenpy.models.model.CouplingModel`)  are the following:
+Valid MPS boundary conditions are the following:
 
 ==========  ===================================================================================
 `bc`        description
@@ -2461,31 +2460,6 @@ class MPS(BaseMPSExpectationValue):
             new_B = self.get_B(i, form=new_form, copy=False)  # calculates the desired form.
             self.set_B(i, new_B, form=new_form)
 
-    def increase_L(self, new_L=None):
-        """Modify `self` inplace to enlarge the MPS unit cell.
-
-        .. deprecated :: 0.5.1
-            This method will be removed in version 1.0.0.
-            Use the equivalent ``psi.enlarge_mps_unit_cell(new_L//psi.L)`` instead of
-            ``psi.increase_L(new_L)``.
-
-        Parameters
-        ----------
-        new_L : int
-            New number of sites. Needs to be an integer multiple of :attr:`L`.
-            Defaults to ``2*self.L``.
-        """
-        old_L = self.L
-        if new_L is None:
-            new_L = 2 * old_L
-        if new_L % old_L:
-            raise ValueError("new_L = {0:d} not a multiple of old L={1:d}".format(new_L, old_L))
-        factor = new_L // old_L
-        warnings.warn(
-            "use `psi.enlarge_mps_unit_cell(factor=new_L//psi.L)` "
-            "instead of `psi.increase_L(new_L)`.", FutureWarning, 2)
-        self.enlarge_mps_unit_cell(factor)
-
     def enlarge_mps_unit_cell(self, factor=2):
         """Repeat the unit cell for infinite MPS boundary conditions; in place.
 
@@ -3589,7 +3563,7 @@ class MPS(BaseMPSExpectationValue):
             ov, _ = TM.eigenvectors(**kwargs)
             return ov[0] * self.norm * other.norm
 
-    def expectation_value_terms_sum(self, term_list, prefactors=None):
+    def expectation_value_terms_sum(self, term_list):
         """Calculate expectation values for a bunch of terms and sum them up.
 
         This is equivalent to the following expression::
@@ -3599,18 +3573,10 @@ class MPS(BaseMPSExpectationValue):
         However, for efficiency, the term_list is converted to an MPO and the expectation value
         of the MPO is evaluated.
 
-        .. deprecated:: 0.4.0
-            `prefactor` will be removed in version 1.0.0.
-            Instead, directly give just ``TermList(term_list, prefactors)`` as argument.
-
         Parameters
         ----------
         term_list : :class:`~tenpy.networks.terms.TermList`
             The terms and prefactors (`strength`) to be summed up.
-        prefactors :
-            Instead of specifying a :class:`~tenpy.networks.terms.TermList`,
-            one can also specify the term_list and strength separately.
-            This is deprecated.
 
         Returns
         -------
@@ -3628,11 +3594,6 @@ class MPS(BaseMPSExpectationValue):
         tenpy.networks.mpo.MPO.expectation_value : expectation value density of an MPO.
         """
         from . import mpo, terms
-        if prefactors is not None:
-            warnings.warn(
-                "Deprecated argument prefactors: replace arguments with "
-                "``TermList(term_list, prefactors)``.", FutureWarning, 2)
-            term_list = terms.TermList(term_list, prefactors)
         L = self.L
         if not self.finite:
             copy = None
@@ -3922,15 +3883,6 @@ class MPS(BaseMPSExpectationValue):
             else:
                 self.segment_boundaries = (U, VR_segment)
             return U, VR_segment
-
-    def canonical_form_infinite(self, **kwargs):
-        """Deprecated wrapper around :meth:`canonical_form_infinite1`."""
-        warnings.warn(
-            "There are different implementations of `canonical_form_infinite` now. "
-            "Select one explicitly!",
-            FutureWarning,
-            stacklevel=2)
-        self.canonical_form_infinite1(**kwargs)
 
     def canonical_form_infinite1(self, renormalize=True, tol_xi=1.e6):
         """Bring an infinite MPS into canonical form; in place.
@@ -4781,11 +4733,8 @@ class MPS(BaseMPSExpectationValue):
         self.sites[self._to_valid_index(i + 1)] = siteL
         return err
 
-    def permute_sites(self, perm, swap_op='auto', trunc_par=None, verbose=None):
+    def permute_sites(self, perm, swap_op='auto', trunc_par=None):
         """Applies the permutation perm to the state; in place.
-
-        .. deprecated :: 0.8.0
-            Drop / ignore `verbose` argument, never print something.
 
         Parameters
         ----------
@@ -4803,8 +4752,6 @@ class MPS(BaseMPSExpectationValue):
         trunc_err : :class:`~tenpy.algorithms.truncation.TruncationError`
             The error of the represented state introduced by the truncation after the swaps.
         """
-        if verbose is not None:
-            warnings.warn("Dropped verbose argument", category=FutureWarning, stacklevel=2)
         perm = list(perm)  # gets modified, so we should copy
         # In order to keep sites close together, we always scan from the left,
         # keeping everything up to `i` in strictly ascending order.
@@ -4835,7 +4782,6 @@ class MPS(BaseMPSExpectationValue):
                   swap_op='auto',
                   trunc_par=None,
                   canonicalize=1.e-6,
-                  verbose=None,
                   expected_mean_k=0.):
         r"""Compute the momentum quantum numbers of the entanglement spectrum for 2D states.
 
@@ -4847,9 +4793,6 @@ class MPS(BaseMPSExpectationValue):
         finds the dominant eigenvector of the mixed transfer matrix to get the quantum numbers,
         along the lines of :cite:`pollmann2012`, see also (the appendix and Fig. 11 in the arXiv
         version of) :cite:`cincio2013`.
-
-        .. deprecated :: 0.8.0
-            Drop / ignore `verbose` argument, never print something.
 
         Parameters
         ----------
@@ -5915,8 +5858,8 @@ class TransferMatrix(sparse.NpcLinearOperator):
 
     Note that we keep all M and N as copies.
 
-    .. deprecated :: 0.6.0
-        The default for `shift_ket` was the value of `shift_bra`, this will be changed to 0.
+    .. versionchanged :: 1.0
+        shift_bra defaults to 0 rather than `shift_ket`.
 
     Parameters
     ----------
@@ -5926,9 +5869,8 @@ class TransferMatrix(sparse.NpcLinearOperator):
         The MPS which is not (complex) conjugated.
     shift_bra : int
         We start the `N` of the bra at site `shift_bra` (i.e. the `j` in the above network).
-    shift_ket : int | None
+    shift_ket : int
         We start the `M` of the ket at site `shift_ket` (i.e. the `i` in the above network).
-        ``None`` is deprecated, default will be changed to 0 in the future.
     transpose : bool
         Whether `self.matvec` acts on `RP` (``False``) or `LP` (``True``).
     charge_sector : None | charges | ``0``
@@ -5948,8 +5890,8 @@ class TransferMatrix(sparse.NpcLinearOperator):
         of `bra.L` and `ket.L`.
     shift_bra : int
         We start the `N` of the bra at site `shift_bra`.
-    shift_ket : int | None
-        We start the `M` of the ket at site `shift_ket`. ``None`` defaults to `shift_bra`.
+    shift_ket : int
+        We start the `M` of the ket at site `shift_ket`.
     transpose : bool
         Whether `self.matvec` acts on `RP` (``True``) or `LP` (``False``).
     qtotal : charges
@@ -5973,18 +5915,13 @@ class TransferMatrix(sparse.NpcLinearOperator):
                  bra,
                  ket,
                  shift_bra=0,
-                 shift_ket=None,
+                 shift_ket=0,
                  transpose=False,
                  charge_sector=0,
                  form='B'):
         L = lcm(bra.L, ket.L)
         if ket.chinfo != bra.chinfo:
             raise ValueError("incompatible charges")
-        if shift_ket is None:
-            if shift_bra != 0:
-                warnings.warn("default for shift_ket will change to 0. Specify both explicitly!",
-                              FutureWarning, 2)
-            shift_ket = shift_bra
         self.shift_bra = shift_bra
         self.shift_ket = shift_ket
         assert ket._p_label == bra._p_label

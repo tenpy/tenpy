@@ -8,7 +8,6 @@ The :class:`Site` is the prototype, read it's docstring.
 import numpy as np
 import itertools
 import copy
-import warnings
 
 from ..linalg import np_conserved as npc
 from ..tools.misc import inverse_permutation, find_subclass
@@ -19,7 +18,6 @@ __all__ = [
     'GroupedSite',
     'group_sites',
     'set_common_charges',
-    'multi_sites_combine_charges',
     'kron',
     'SpinHalfSite',
     'SpinSite',
@@ -48,17 +46,10 @@ class Site(Hdf5Exportable):
         We use the :attr:`state_labels` and :attr:`perm` to keep track of these permutations.
 
     .. versionchanged :: 0.10
+        Added `sort_charge` defaulting to `False`.
 
-        Add the option `sort_charge`. Right now the default behavior is ``False`` for
-        backwards compatibility, but we will change it for Version 1.0 to ``True``.
-        For now, we raise a warning in cases where it can lead to changes.
-        If you see this warning, just set the value explicitly to avoid breaking compatibility of
-        existing data with future releases.
-        Set it to `False`, if you already have data (for your particular model),
-        that you want to be able to load/compare to.
-        If you start a new project and don't have data yet, set it to `True`.
-        See also the `breaking changes` section in the release notes.
-
+    .. versionchanged :: 1.0
+        Make `sort_charge` default to `True`.
 
     Parameters
     ----------
@@ -71,13 +62,10 @@ class Site(Hdf5Exportable):
         The identity operator ``'Id'`` is automatically included.
         If no ``'JW'`` for the Jordan-Wigner string is given,
         ``'JW'`` is set as an alias to ``'Id'``.
-    sort_charge : bool | None
+    sort_charge : bool
         Whether :meth:`sort_charge` should be called at the end of initialization.
         This is usually a good idea to reduce potential overhead when using charge conservation.
         Note that this might permute the order of the local basis states!
-        For backwards compatibility with existing data, it is not (yet) enabled by default,
-        but we started to warn about the behavior.
-        Explicitly set `sort_charge=False` to disable the warning.
 
     Attributes
     ----------
@@ -125,24 +113,62 @@ class Site(Hdf5Exportable):
     Note that ``Sx = (Sp + Sm)/2`` violates Sz conservation and is thus not a valid
     on-site operator.
 
-    >>> chinfo = npc.ChargeInfo([1], ['2*Sz'])
-    >>> ch = npc.LegCharge.from_qflat(chinfo, [1, -1])
-    >>> Sp = [[0, 1.], [0, 0]]
-    >>> Sm = [[0, 0], [1., 0]]
-    >>> Sz = [[0.5, 0], [0, -0.5]]
-    >>> site = tenpy.networks.site.Site(ch, ['up', 'down'], Splus=Sp, Sminus=Sm, Sz=Sz)
-    >>> print(site.Splus.to_ndarray())
-    [[0. 1.]
-     [0. 0.]]
-    >>> print(site.get_op('Sminus').to_ndarray())
-    [[0. 0.]
-     [1. 0.]]
-    >>> print(site.get_op('Splus Sminus').to_ndarray())
-    [[1. 0.]
-     [0. 0.]]
+    .. testsetup :: Site
+
+        from tenpy.linalg import np_conserved as npc
+        from tenpy.networks.site import Site
+
+    .. doctest :: Site
+    
+        >>> chinfo = npc.ChargeInfo([1], ['2 * Sz'])
+        >>> ch = npc.LegCharge.from_qflat(chinfo, [1, -1])
+        >>> Sp = [[0, 1.], [0, 0]]
+        >>> Sm = [[0, 0], [1., 0]]
+        >>> Sz = [[0.5, 0], [0, -0.5]]
+        >>> site = Site(ch, ['up', 'down'], Splus=Sp, Sminus=Sm, Sz=Sz)
+        >>> print(site.Splus.to_ndarray())
+        [[0. 0.]
+         [1. 0.]]
+        >>> print(site.get_op('Sminus').to_ndarray())
+        [[0. 1.]
+         [0. 0.]]
+        >>> print(site.get_op('Splus Sminus').to_ndarray())
+        [[0. 0.]
+         [0. 1.]]
+     
+    Note that sorting the charges (which happens by default!) may lead to unintuitive
+    matrix representations of the operators, because physicists are typically not used to
+    writing them in the sorted basis (in this case ``['down', 'up']``);
+
+    We get the unchanged order by setting ``sort_charges=False``. This is discouraged though,
+    as it can introduce overhead.
+
+    .. testsetup :: Site_sort_charge_False
+
+        from tenpy.linalg import np_conserved as npc
+        from tenpy.networks.site import Site
+        chinfo = npc.ChargeInfo([1], ['Sz'])
+        ch = npc.LegCharge.from_qflat(chinfo, [1, -1])
+        Sp = [[0, 1.], [0, 0]]
+        Sm = [[0, 0], [1., 0]]
+        Sz = [[0.5, 0], [0, -0.5]]
+
+    .. doctest :: Site_sort_charge_False
+
+        >>> site = Site(ch, ['up', 'down'], Splus=Sp, Sminus=Sm, Sz=Sz, sort_charge=False)
+        >>> print(site.Splus.to_ndarray())
+        [[0. 1.]
+         [0. 0.]]
+        >>> print(site.get_op('Sminus').to_ndarray())
+        [[0. 0.]
+         [1. 0.]]
+        >>> print(site.get_op('Splus Sminus').to_ndarray())
+        [[1. 0.]
+         [0. 0.]]
+
     """
 
-    def __init__(self, leg, state_labels=None, sort_charge=False, **site_ops):
+    def __init__(self, leg, state_labels=None, sort_charge=True, **site_ops):
         self.used_sort_charge = False
         self.leg = leg
         self.state_labels = dict()
@@ -164,17 +190,6 @@ class Site(Hdf5Exportable):
             self.add_op('JW', self.Id, hc='JW')
         if sort_charge:
             self.sort_charge()
-        elif sort_charge is None:
-            if not (leg.sorted and leg.bunched):
-                msg = (f"LegCharge of physical leg in site {self!s} is not sorted. "
-                       "You should explicitly set `sort_charge`. "
-                       "Set it to False, if you already have saved data for your model and want "
-                       "to be able to load it/keep backwards compatibility. "
-                       "For new projects, if you don't have data yet, set it to `True`. "
-                       "We will switch the default from False to True in version 1.0, "
-                       "which breaks compatibility of existing data with "
-                       "code/models that don't explicitly set sort_legcharge.")
-                warnings.warn(msg, FutureWarning, 2)
         self.test_sanity()
 
     def change_charge(self, new_leg_charge=None, permute=None):
@@ -809,8 +824,6 @@ def set_common_charges(sites, new_charges='same', new_names=None, new_mod=None, 
 
     A typical place to do this would be in :meth:`tenpy.models.model.CouplingMPOModel.init_sites`.
 
-    (This function replaces the now deprecated :func:`multi_sites_combine_charges`.)
-
     Parameters
     ----------
     sites : list of :class:`Site`
@@ -1131,123 +1144,6 @@ def _set_common_charges_charge_to_JW_parity(sites, new_charges, new_mod):
     return None
 
 
-def multi_sites_combine_charges(sites, same_charges=[]):
-    """Adjust the charges of the given sites (in place) such that they can be used together.
-
-    When we want to contract tensors corresponding to different :class:`Site` instances,
-    these sites need to share a single :class:`~tenpy.linalg.charges.ChargeInfo`.
-    This function adjusts the charges of these sites such that they can be used together.
-
-    .. deprecated :: 0.7.3
-        Deprecated in favor of the new, more powerful
-        :func:`~tenpy.networks.site.set_common_charges`.
-        Be aware of the slightly different argument structure though, namely that
-        this function keeps charges not included in `same_charges`, whereas you need
-        to include them explicitly into the `new_charges` argument of `set_common_charges`.
-
-
-    Parameters
-    ----------
-    sites : list of :class:`Site`
-        The sites to be combined. Modified **in place**.
-    same_charges : ``[[(int, int|str), (int, int|str), ...], ...]``
-        Defines which charges actually are the same, i.e. their quantum numbers are added up.
-        Each charge is specified by a tuple ``(s, i)= (int, int|str)``, where `s` gives the index
-        of the site within ``sites`` and `i` the index or name of the charge in the
-        :class:`~tenpy.linalg.charges.ChargeInfo` of this site.
-
-    Returns
-    -------
-    perms : list of ndarray
-        For each site the permutation performed on the physical leg to sort by charges.
-
-    Examples
-    --------
-    .. doctest :: multi_sites_combine_charges
-        :options: +NORMALIZE_WHITESPACE
-
-        >>> from tenpy.networks.site import *
-        >>> ferm = SpinHalfFermionSite(cons_N='N', cons_Sz='Sz')
-        >>> spin = SpinSite(1.0, 'Sz')
-        >>> ferm.leg.chinfo is spin.leg.chinfo
-        False
-        >>> print(spin.leg)
-         +1
-        0 [[-2]
-        1  [ 0]
-        2  [ 2]]
-        3
-        >>> multi_sites_combine_charges([ferm, spin], same_charges=[[(0, 1), (1, 0)]])
-        [array([0, 1, 2, 3]), array([0, 1, 2])]
-        >>> # no permutations where needed
-        >>> ferm.leg.chinfo is spin.leg.chinfo
-        True
-        >>> ferm.leg.chinfo.names
-        ['N', '2*Sz']
-        >>> print(spin.leg)
-         +1
-        0 [[ 0 -2]
-        1  [ 0  0]
-        2  [ 0  2]]
-        3
-    """
-    warnings.warn(
-        "multi_sites_combine_charges is deprecated! \n"
-        "Use `set_common_charges` instead, but watch out: "
-        "the argument structure is not equivalent!",
-        FutureWarning,
-        stacklevel=2)
-    # parse same_charges argument
-    same_charges = list(same_charges)  # need to modify elements...
-    same_charges_flat = []
-    for j in range(len(same_charges)):
-        same_charges_j = []
-        for s, i in same_charges[j]:
-            if isinstance(i, str):  # map string to ints
-                i = sites[s].leg.chinfo.names.index(i)
-            i = int(i)  # should be integer now...
-            same_charges_j.append((s, i))
-            same_charges_flat.append((s, i))
-        same_charges[j] = same_charges_j
-    if len(same_charges_flat) != len(set(same_charges_flat)):
-        raise ValueError("Can't have duplicates in same_charges!")
-    # find out which charges we keep
-    keep_charges = []  # list of (s, i) which appear in the new ChargeInfo
-    map_charges = {}  # dict (s, i)->(s,i): those not appearing in keep_charges to the one in it
-    for s, site in enumerate(sites):
-        for i in range(site.leg.chinfo.qnumber):
-            keep_charges.append((s, i))  # first all, remove some below
-    for same_charges_j in same_charges:
-        s0, i0 = same_charges_j[0]
-        for s, i in same_charges_j[1:]:
-            idx = keep_charges.index((s, i))
-            del keep_charges[idx]
-            map_charges[(s, i)] = (s0, i0)
-    # define common ChargeInfo class
-    qnumber = len(keep_charges)
-    names = [sites[s].leg.chinfo.names[i] for (s, i) in keep_charges]
-    mod = [sites[s].leg.chinfo.mod[i] for (s, i) in keep_charges]
-    chinfo = npc.ChargeInfo(mod, names)
-    # now define the new legs and update the charges of the sites
-    perms = []
-    for s, site in enumerate(sites):
-        old_qflat = site.leg.to_qflat()
-        new_qflat = np.zeros((site.leg.ind_len, qnumber), old_qflat.dtype)
-        for old_i in range(site.leg.chinfo.qnumber):
-            if (s, old_i) in map_charges:
-                new_i = keep_charges.index(map_charges[(s, old_i)])
-            else:
-                new_i = keep_charges.index((s, old_i))
-            new_qflat[:, new_i] = old_qflat[:, old_i]
-        # other charges are 0 = trivial
-        leg_unsorted = npc.LegCharge.from_qflat(chinfo, new_qflat, site.leg.qconj)
-        perm_qind, leg = leg_unsorted.sort()
-        perm_flat = leg_unsorted.perm_flat_from_perm_qind(perm_qind)
-        perms.append(perm_flat)
-        site.change_charge(leg, perm_flat)
-    return perms
-
-
 def kron(*ops, group=True):
     """Kronecker product of two or more local operators.
 
@@ -1314,7 +1210,6 @@ class SpinHalfSite(Site):
         Whether :meth:`sort_charge` should be called at the end of initialization.
         This is usually a good idea to reduce potential overhead when using charge conservation.
         Note that this permutes the order of the local basis states!
-        For backwards compatibility with existing data, it is not (yet) enabled by default.
 
     Attributes
     ----------
@@ -1322,7 +1217,7 @@ class SpinHalfSite(Site):
         Defines what is conserved, see table above.
     """
 
-    def __init__(self, conserve='Sz', sort_charge=None):
+    def __init__(self, conserve='Sz', sort_charge=True):
         if not conserve:
             conserve = 'None'
         if conserve not in ['Sz', 'parity', 'None']:
@@ -1395,7 +1290,6 @@ class SpinSite(Site):
         Whether :meth:`sort_charge` should be called at the end of initialization.
         This is usually a good idea to reduce potential overhead when using charge conservation.
         Note that this permutes the order of the local basis states for ``conserve='parity'``!
-        For backwards compatibility with existing data, it is not (yet) enabled by default.
 
     Attributes
     ----------
@@ -1405,7 +1299,7 @@ class SpinSite(Site):
         Defines what is conserved, see table above.
     """
 
-    def __init__(self, S=0.5, conserve='Sz', sort_charge=None):
+    def __init__(self, S=0.5, conserve='Sz', sort_charge=True):
         if not conserve:
             conserve = 'None'
         if conserve not in ['Sz', 'parity', 'None']:
@@ -2078,7 +1972,6 @@ class ClockSite(Site):
         Whether :meth:`sort_charge` should be called at the end of initialization.
         This is usually a good idea to reduce potential overhead when using charge conservation.
         Note that this permutes the order of the local basis states!
-        For backwards compatibility with existing data, it is not (yet) enabled by default.
 
     Attributes
     ----------
@@ -2087,7 +1980,7 @@ class ClockSite(Site):
     conserve : str
         Defines what is conserved, see table above.
     """
-    def __init__(self, q, conserve='Z', sort_charge=None):
+    def __init__(self, q, conserve='Z', sort_charge=True):
         if not (isinstance(q, int) and q > 1):
             raise ValueError(f'invalid q: {q}')
         self.q = q

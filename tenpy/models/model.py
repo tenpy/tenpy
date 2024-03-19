@@ -50,11 +50,8 @@ from ..networks.site import Site, group_sites
 from ..tools.hdf5_io import Hdf5Exportable
 
 __all__ = [
-    'Model', 'NearestNeighborModel', 'MPOModel', 'CouplingModel', 'MultiCouplingModel',
-    'CouplingMPOModel'
+    'Model', 'NearestNeighborModel', 'MPOModel', 'CouplingModel', 'CouplingMPOModel'
 ]
-
-_DEPRECATED_ARG_NOT_SET = "DEPRECATED"
 
 
 class Model(Hdf5Exportable):
@@ -817,20 +814,10 @@ class CouplingModel(Model):
     In this class, the terms of the Hamiltonian are specified explicitly as
     :class:`~tenpy.networks.terms.OnsiteTerms` or :class:`~tenpy.networks.terms.CouplingTerms`.
 
-    .. deprecated:: 0.4.0
-        `bc_coupling` will be removed in 1.0.0. To specify the full geometry in the lattice,
-        use the `bc` parameter of the :class:`~tenpy.model.lattice.Lattice`.
-
     Parameters
     ----------
     lattice : :class:`~tenpy.model.lattice.Lattice`
         The lattice defining the geometry and the local Hilbert space(s).
-    bc_coupling : (iterable of) {``'open'`` | ``'periodic'`` | ``int``}
-        Boundary conditions of the couplings in each direction of the lattice. Defines how the
-        couplings are added in :meth:`add_coupling`. A single string holds for all directions.
-        An integer `shift` means that we have periodic boundary conditions along this direction,
-        but shift/tilt by ``-shift*lattice.basis[0]`` (~cylinder axis for ``bc_MPS='infinite'``)
-        when going around the boundary along this direction.
     explicit_plus_hc : bool
         If True, the Hermitian conjugate of the MPO is computed at runtime,
         rather than saved in the MPO.
@@ -856,13 +843,8 @@ class CouplingModel(Model):
         and :meth:`add_exponentially_decaying_coupling` respect this flag, ensuring that the
         *represented* Hamiltonian is independent of the `explicit_plus_hc` flag.
     """
-    def __init__(self, lattice, bc_coupling=None, explicit_plus_hc=False):
+    def __init__(self, lattice, explicit_plus_hc=False):
         Model.__init__(self, lattice)
-        if bc_coupling is not None:
-            warnings.warn("`bc_coupling` in CouplingModel: use `bc` in Lattice instead",
-                          FutureWarning,
-                          stacklevel=2)
-            lattice._set_bc(bc_coupling)
         L = self.lat.N_sites
         self.onsite_terms = {}
         self.coupling_terms = {}
@@ -1040,8 +1022,6 @@ class CouplingModel(Model):
                      op2,
                      dx,
                      op_string=None,
-                     str_on_first=True,
-                     raise_op2_left=False,
                      category=None,
                      plus_hc=False):
         r"""Add two-site coupling terms to the Hamiltonian, summing over lattice sites.
@@ -1064,9 +1044,6 @@ class CouplingModel(Model):
 
         The necessary terms are just added to :attr:`coupling_terms`;
         this function does not rebuild the MPO.
-
-        .. deprecated:: 0.4.0
-            The arguments `str_on_first` and `raise_op2_left` will be removed in version 1.0.0.
 
         Parameters
         ----------
@@ -1092,19 +1069,6 @@ class CouplingModel(Model):
             The operator should be defined on all sites in the unit cell.
             If ``None``, auto-determine whether a Jordan-Wigner string is needed, using
             :meth:`~tenpy.networks.site.Site.op_needs_JW`.
-        str_on_first : bool
-            Whether the provided `op_string` should also act on the first site.
-            This option should be chosen as ``True`` for Jordan-Wigner strings.
-            When handling Jordan-Wigner strings we need to extend the `op_string` to also act on
-            the 'left', first site (in the sense of the MPS ordering of the sites given by the
-            lattice). In this case, there is a well-defined ordering of the operators in the
-            physical sense (i.e. which of `op1` or `op2` acts first on a given state).
-            We follow the convention that `op2` acts first (in the physical sense),
-            independent of the MPS ordering.
-            Deprecated.
-        raise_op2_left : bool
-            Raise an error when `op2` appears left of `op1`
-            (in the sense of the MPS ordering given by the lattice). Deprecated.
         category : str
             Descriptive name used as key for :attr:`coupling_terms`.
             Defaults to a string of the form ``"{op1}_i {op2}_j"``.
@@ -1190,7 +1154,6 @@ class CouplingModel(Model):
             need_JW2 = site2.op_needs_JW(op2)
             if need_JW1 and need_JW2:
                 op_string = 'JW'
-                str_on_first = True
             elif need_JW1 or need_JW2:
                 raise ValueError("Only one of the operators needs a Jordan-Wigner string?!")
             else:
@@ -1199,8 +1162,7 @@ class CouplingModel(Model):
             if not self.lat.unit_cell[u].valid_opname(op_string):
                 raise ValueError("unknown onsite operator {0!r} for u={1:d}\n"
                                  "{2!r}".format(op_string, u, self.lat.unit_cell[u]))
-        if op_string == "JW" and not str_on_first:
-            raise ValueError("Jordan Wigner string without `str_on_first`")
+        str_on_first = (op_string == 'JW')
         if np.all(dx == 0) and u1 == u2:
             raise ValueError("Coupling shouldn't be onsite!")
         mps_i, mps_j, strength_vals = self.lat.possible_couplings(u1, u2, dx, strength)
@@ -1225,8 +1187,6 @@ class CouplingModel(Model):
                     o1 = site1.multiply_op_names([op1, op_string])  # op2 acts first!
             else:  # i > j
                 # swap operators to ensure i <= j
-                if raise_op2_left:
-                    raise ValueError("Op2 is left")
                 i, j = j, i
                 o1, o2 = op2, op1
                 if str_on_first and op_string != 'Id':
@@ -1241,8 +1201,7 @@ class CouplingModel(Model):
             hc_op2 = site2.get_hc_op_name(op2)
             hc_opstr = site2.get_hc_op_name(op_string)
             self.add_coupling(np.conj(strength), u2, hc_op2, u1, hc_op1, -dx,
-                              hc_opstr, str_on_first, raise_op2_left,
-                              category, plus_hc=False)  # yapf: disable
+                              hc_opstr, category, plus_hc=False)  # yapf: disable
         # done
 
     def add_coupling_term(self,
@@ -1312,8 +1271,6 @@ class CouplingModel(Model):
     def add_multi_coupling(self,
                            strength,
                            ops,
-                           _deprecate_1=_DEPRECATED_ARG_NOT_SET,
-                           _deprecate_2=_DEPRECATED_ARG_NOT_SET,
                            op_string=None,
                            category=None,
                            plus_hc=False,
@@ -1338,13 +1295,6 @@ class CouplingModel(Model):
 
         The necessary terms are just added to :attr:`coupling_terms`;
         this function does not rebuild the MPO.
-
-        .. deprecated:: 0.6.0
-            We switched from the three arguments `u0`, `op0` and `other_op` with
-            ``other_ops=[(u1, op1, dx1), (op2, u2, dx2), ...]``
-            to a single, equivalent argument `ops` which should now read
-            ``ops=[(op0, dx0, u0), (op1, dx1, u1), (op2, dx2, u2), ...]``, where
-            ``dx0 = [0]*self.lat.dim``. Note the changed order inside the tuples!
 
         Parameters
         ----------
@@ -1403,23 +1353,6 @@ class CouplingModel(Model):
         add_coupling : Add terms acting on two sites.
         add_multi_coupling_term : Add a single term, not summing over the possible :math:`\vec{x}`.
         """
-        if _deprecate_1 is not _DEPRECATED_ARG_NOT_SET or \
-                _deprecate_2 is not _DEPRECATED_ARG_NOT_SET:
-            msg = ("Deprecated arguments of CouplingModel.add_multi_coupling:\n"
-                   "switch to using a single argument \n"
-                   "     ops=[(op0, [0]*self.lat.dim, u0), (op1, dx1, u1), (op2, dx2, u2), ...]\n"
-                   "instead of the three arguments \n"
-                   "     u0\n"
-                   "     op0\n"
-                   "     other_ops=[(u1, op1, dx1), (op2, u2, dx2), ...]\n"
-                   "Note the reordering ``(u, op, dx) -> (op, dx, u)`` in the tuples!")
-            warnings.warn(msg, FutureWarning, stacklevel=2)
-            u0 = ops
-            op0 = _deprecate_1
-            dx0 = [0] * self.lat.dim
-            other_ops = _deprecate_2
-            # new argument:
-            ops = [(op0, dx0, u0)] + [(op, dx, u) for (u, op, dx) in other_ops]
         # split `ops` into separate groups
         all_ops = [t[0] for t in ops]
         all_us = np.array([t[2] for t in ops], np.intp)
@@ -1645,36 +1578,6 @@ class CouplingModel(Model):
             self.exp_decaying_terms.add_exponentially_decaying_coupling(
                 np.conj(strength), np.conj(lambda_), hc_op_i, hc_op_j, subsites, op_string)
 
-    def calc_H_onsite(self, tol_zero=1.e-15):
-        """Calculate `H_onsite` from `self.onsite_terms`.
-
-        .. deprecated:: 0.4.0
-            This function will be removed in 1.0.0.
-            Replace calls to this function by
-            ``self.all_onsite_terms().remove_zeros(tol_zero).to_Arrays(self.lat.mps_sites())``.
-            You might also want to take :attr:`explicit_plus_hc` into account.
-
-        Parameters
-        ----------
-        tol_zero : float
-            prefactors with ``abs(strength) < tol_zero`` are considered to be zero.
-
-        Returns
-        -------
-        H_onsite : list of npc.Array
-        onsite terms of the Hamiltonian. If :attr:`explicit_plus_hc` is True,
-            Hermitian conjugates of the onsite terms will be included.
-        """
-        warnings.warn("Deprecated `calc_H_onsite` in CouplingModel", FutureWarning, stacklevel=2)
-        ot = self.all_onsite_terms()
-        ot.remove_zeros(tol_zero)
-        ot_arrays = ot.to_Arrays(self.lat.mps_sites())
-        if self.explicit_plus_hc:
-            for i, op in enumerate(ot_arrays):
-                if op is not None:
-                    ot_arrays[i] = op + op.conj().itranspose(op.get_leg_labels())
-        return ot_arrays
-
     def calc_H_bond(self, tol_zero=1.e-15):
         """calculate `H_bond` from :attr:`coupling_terms` and :attr:`onsite_terms`.
 
@@ -1836,22 +1739,6 @@ class CouplingModel(Model):
         return strength
 
 
-class MultiCouplingModel(CouplingModel):
-    """Deprecated class which was a generalization of the `CouplingModel`.
-
-    .. deprecated:: 0.7.2
-        In earlier versions of TeNPy, this class contained the methods
-        :meth:`add_multi_coupling` and :meth:`add_multi_coupling_term`.
-        However, since we introduced the :class:`~tenpy.networks.terms.MultiCouplingTerms`,
-        this separation within the Model class is no longer necessary.
-        We hence merged the `MultiCouplingModel` with the `CouplingModel`.
-    """
-    def __init_subclass__(cls):
-        msg = ("The `MultiCouplingModel` class is deprecated and has been merged into "
-               "the `CouplingModel`. No need to subclass the `MultiCouplingModel` anymore!")
-        warnings.warn(msg, DeprecationWarning, 2)
-
-
 def _warn_post_init_add(f):
     @wraps(f)
     def add_term_function(self, *args, **kwargs):
@@ -1947,13 +1834,6 @@ class CouplingMPOModel(CouplingModel, MPOModel):
         self.init_H_from_terms()
         # finally checks for misspelled parameter names
         model_params.warn_unused()
-
-    @property
-    def verbose(self):
-        warnings.warn(
-            "verbose is deprecated, we're using logging now! \n"
-            "See https://tenpy.readthedocs.io/en/latest/intro/logging.html", FutureWarning, 2)
-        return self.options.get('verbose', 1.)
 
     def init_H_from_terms(self):
         """Initialize `H_MPO` (and `H_bond`) from the terms of the `CouplingModel`.

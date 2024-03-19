@@ -43,9 +43,8 @@ class XXZChain(CouplingModel, NearestNeighborModel, MPOModel):
             Coupling as defined for the Hamiltonian above.
         bc_MPS : {'finite' | 'infinite'}
             MPS boundary conditions. Coupling boundary conditions are chosen appropriately.
-        sort_charge : bool | None
-            Whether to sort by charges of physical legs.
-            See change comment in :class:`~tenpy.networks.site.Site`.
+        sort_charge : bool
+            Whether to sort by charges of physical legs. `True` by default.
 
     """
     def __init__(self, model_params):
@@ -56,7 +55,7 @@ class XXZChain(CouplingModel, NearestNeighborModel, MPOModel):
         Jz = model_params.get('Jz', 1.)
         hz = model_params.get('hz', 0.)
         bc_MPS = model_params.get('bc_MPS', 'finite')
-        sort_charge = model_params.get('sort_charge', None)
+        sort_charge = model_params.get('sort_charge', True)
         # 1-3):
         USE_PREDEFINED_SITE = False
         if not USE_PREDEFINED_SITE:
@@ -106,7 +105,7 @@ class XXZChain2(CouplingMPOModel, NearestNeighborModel):
     force_default_lattice = True
 
     def init_sites(self, model_params):
-        sort_charge = model_params.get('sort_charge', None)
+        sort_charge = model_params.get('sort_charge', True)
         return SpinHalfSite(conserve='Sz', sort_charge=sort_charge)  # use predefined Site
 
     def init_terms(self, model_params):

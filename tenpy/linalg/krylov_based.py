@@ -1,7 +1,6 @@
 """Lanczos algorithm for np_conserved arrays."""
 # Copyright (C) TeNPy Developers, GNU GPLv3
 
-import warnings
 import numpy as np
 from .sparse import FlatHermitianOperator, OrthogonalNpcLinearOperator, ShiftNpcLinearOperator
 import logging
@@ -109,7 +108,7 @@ class KrylovBased:
     _dtype_h_krylov = np.complex128
     _dtype_E = np.complex128
 
-    def __init__(self, H, psi0, options, orthogonal_to=[]):
+    def __init__(self, H, psi0, options):
         self.H = H
         self.psi0 = psi0.copy()
         self._psi0_norm = None
@@ -434,16 +433,7 @@ class LanczosGroundState(KrylovBased):
     """Lanczos algorithm to find the ground state.
 
     **Assumes** that `H` is hermitian.
-
-    .. deprecated :: 0.6.0
-        Renamed attribute `params` to :attr:`options`.
-
-    .. deprecated :: 0.6.0
-        Going to remove the `orthogonal_to` argument.
-        Instead, replace H with ``OrthogonalNpcLinearOperator(H, orthogonal_to)``
-        using the :class:`~tenpy.linalg.sparse.OrthogonalNpcLinearOperator`.
-
-
+    
     Options
     -------
     .. cfg:config :: LanczosGroundState
@@ -469,17 +459,12 @@ class LanczosGroundState(KrylovBased):
     _dtype_h_krylov = np.float64
     _dtype_E = np.float64
 
-    def __init__(self, H, psi0, options, orthogonal_to=[]):
+    def __init__(self, H, psi0, options):
         super().__init__(H, psi0, options)
         self.E_tol = self.options.get('E_tol', np.inf)
         self.N_cache = self.options.get('N_cache', self.N_max)
         if self.N_cache < 2:
             raise ValueError("Need to cache at least two vectors.")
-        if len(orthogonal_to) > 0:
-            msg = ("Lanczos argument `orthogonal_to` is deprecated and will be removed.\n"
-                   "Instead, replace `H` with  `OrthogonalNpcLinearOperator(H, orthogonal_to)`.")
-            warnings.warn(msg, category=FutureWarning, stacklevel=2)
-            self.H = OrthogonalNpcLinearOperator(self.H, orthogonal_to)
 
     def run(self):
         """Find the ground state of H.
@@ -687,7 +672,7 @@ class LanczosEvolution(LanczosGroundState):
         return np.abs(self._result_krylov[k]) < self.P_tol
 
 
-def lanczos_arpack(H, psi, options={}, orthogonal_to=[]):
+def lanczos_arpack(H, psi, options={}):
     """Use :func:`scipy.sparse.linalg.eigsh` to find the ground state of `H`.
 
     This function has the same call/return structure as :func:`lanczos`, but uses
@@ -697,14 +682,9 @@ def lanczos_arpack(H, psi, options={}, orthogonal_to=[]):
     from np_conserved :class:`~tenpy.linalg.np_conserved.Array` into a flat numpy array
     and back during *each* `matvec`-operation!
 
-    .. deprecated :: 0.6.0
-        Going to remove the `orthogonal_to` argument.
-        Instead, replace H with `OrthogonalNpcLinearOperator(H, orthogonal_to)`
-        using the :class:`~tenpy.linalg.sparse.OrthogonalNpcLinearOperator`.
-
     Parameters
     ----------
-    H, psi, options, orthogonal_to :
+    H, psi, options :
         See :class:`LanczosGroundState`.
         `H` and `psi` should have/use labels.
 
@@ -715,11 +695,6 @@ def lanczos_arpack(H, psi, options={}, orthogonal_to=[]):
     psi0 : :class:`~tenpy.linalg.np_conserved.Array`
         Ground state vector.
     """
-    if len(orthogonal_to) > 0:
-        msg = ("Lanczos argument `orthogonal_to` is deprecated and will be removed.\n"
-               "Instead, replace `H` with  `OrthogonalNpcLinearOperator(H, orthogonal_to)`.")
-        warnings.warn(msg, category=FutureWarning, stacklevel=2)
-        H = OrthogonalNpcLinearOperator(H, orthogonal_to)
     options = asConfig(options, "Lanczos")
     H_flat, psi_flat = FlatHermitianOperator.from_guess_with_pipe(H.matvec, psi, dtype=H.dtype)
     tol = options.get('P_tol', 1.e-14)
@@ -729,13 +704,8 @@ def lanczos_arpack(H, psi, options={}, orthogonal_to=[]):
     return Es[0], psi0
 
 
-def gram_schmidt(vecs, rcond=1.e-14, verbose=None):
+def gram_schmidt(vecs, rcond=1.e-14):
     """In place Gram-Schmidt Orthogonalization and normalization for npc Arrays.
-
-    .. deprecated :: 0.9.1
-        Previously, this function return `vecs, ov` with `ov` being the overlaps
-        ``<vecs[i]|vecs[j]>``. The return value `ov` has been dropped now,
-        since it wasn't used anyways.
 
     Parameters
     ----------
@@ -751,8 +721,6 @@ def gram_schmidt(vecs, rcond=1.e-14, verbose=None):
     vecs : list of Array
         The ortho-normalized vectors (without any ``None``).
     """
-    if verbose is not None:
-        warnings.warn("Dropped verbose argument", category=FutureWarning, stacklevel=2)
     res = []
     for vec in vecs:
         for other in res:

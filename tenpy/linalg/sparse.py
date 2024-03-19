@@ -553,30 +553,6 @@ class FlatLinearOperator(ScipyLinearOperator):
                 res[leg.get_slice(qi)] = data.reshape((-1, ))
             return res
 
-    def flat_to_npc_all_sectors(self, vec):
-        """Convert flat vector of *all* charge sectors into npc Array with extra "charge" leg.
-
-        .. deprecated :: 0.7.3
-            This is merged into :meth:`flat_to_npc` with ``self.charge_sector = None``.
-
-        Parameters
-        ----------
-        vec : 1D ndarray
-            Numpy vector to be converted.
-
-        Returns
-        -------
-        npc_vec : :class:`~tenpy.linalg.np_conserved.Array`
-            Same as `vec`, but converted into a npc array.
-        """
-        assert self._charge_sector is None
-        warnings.warn(
-            "Deprecated access of FlatLinearOperator.flat_to_npc_all_sectors.\n"
-            "directly use flat_to_npc instead!",
-            category=FutureWarning,
-            stacklevel=2)
-        return self.flat_to_npc(vec)
-
     def flat_to_npc_None_sector(self, vec, cutoff=1.e-10):
         """Convert flat vector of undetermined charge sectors into npc Array.
 
@@ -595,30 +571,6 @@ class FlatLinearOperator(ScipyLinearOperator):
         """
         assert self._charge_sector is None
         return npc.Array.from_ndarray(vec, [self.leg], cutoff=cutoff, labels=[self.vec_label])
-
-    def npc_to_flat_all_sectors(self, npc_vec):
-        """Convert npc Array with qtotal = self.charge_sector into ndarray.
-
-        .. deprecated :: 0.7.3
-            This is merged into :meth:`npc_to_flat` with ``self.charge_sector = None``.
-
-        Parameters
-        ----------
-        npc_vec : :class:`~tenpy.linalg.np_conserved.Array`
-            Npc Array to be converted. Should only have entries in `self.charge_sector`.
-
-        Returns
-        -------
-        vec : 1D ndarray
-            Same as `npc_vec`, but converted into a flat Numpy array.
-        """
-        assert self._charge_sector is None
-        warnings.warn(
-            "Deprecated access of FlatLinearOperator.npc_to_flat_all_sectors.\n"
-            "directly use npc_to_flat instead!",
-            category=FutureWarning,
-            stacklevel=2)
-        return self.npc_to_flat(npc_vec)
 
     def _npc_matvec_wrapper(self, vec):
         """Wrapper around ``self._npc_matvec_multileg`` acting on a LegPipe.

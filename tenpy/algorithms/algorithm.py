@@ -1,7 +1,6 @@
 """This module contains some base classes for algorithms."""
 # Copyright (C) TeNPy Developers, GNU GPLv3
 
-import warnings
 import time
 import numpy as np
 import logging
@@ -136,13 +135,6 @@ class Algorithm:
         obj = cls(other_engine.psi, other_engine.model, options, **kwargs)
         obj.checkpoint = other_engine.checkpoint  # TODO: do this?
         return obj
-
-    @property
-    def verbose(self):
-        warnings.warn(
-            "verbose is deprecated, we're using logging now! \n"
-            "See https://tenpy.readthedocs.io/en/latest/intro/logging.html", FutureWarning, 2)
-        return self.options.get('verbose', 1.)
 
     def run(self):
         """Actually run the algorithm.

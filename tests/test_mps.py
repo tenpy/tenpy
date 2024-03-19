@@ -382,18 +382,13 @@ def test_apply_op(bc, eps=1.e-13):
     assert np.linalg.norm(th - [0., 0., 0., -s2, 0., 0., s2, 0.]) < eps
 
 
-@pytest.mark.filterwarnings('ignore::FutureWarning')
 def test_enlarge_mps_unit_cell():
     s = site.SpinHalfSite(conserve='Sz', sort_charge=True)
     psi = mps.MPS.from_product_state([s] * 3, ['up', 'down', 'up'], bc='infinite')
-    psi0 = psi.copy()
-    psi1 = psi.copy()
-    psi0.increase_L(9)
-    psi1.enlarge_mps_unit_cell(3)
-    for psi in [psi0, psi1]:
-        psi.test_sanity()
-        expval = psi.expectation_value('Sigmaz')
-        npt.assert_equal(expval, [1., -1., 1.] * 3)
+    psi.enlarge_mps_unit_cell(3)
+    psi.test_sanity()
+    expval = psi.expectation_value('Sigmaz')
+    npt.assert_equal(expval, [1., -1., 1.] * 3)
     # done
 
 

@@ -39,7 +39,7 @@ def test_site():
     op2 = npc.Array.from_func(np.random.random, [leg, leg.conj()], shape_kw='size')
     op3_dense = np.diag(np.arange(10, 18))
     labels = [f'x{i:d}' for i in range(10, 18)]
-    s = site.Site(leg, labels, silly_op=op1)
+    s = site.Site(leg, labels, silly_op=op1, sort_charge=False)
     assert s.state_index('x10') == 0
     assert s.state_index('x17') == leg.ind_len - 1
     assert s.opnames == set(['silly_op', 'Id', 'JW'])
