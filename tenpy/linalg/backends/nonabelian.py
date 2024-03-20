@@ -114,30 +114,42 @@ class NonAbelianData:
 # TODO eventually remove BlockBackend inheritance, it is not needed,
 #  jakob only keeps it around to make his IDE happy
 class NonabelianBackend(Backend, BlockBackend, ABC):
+    
     DataCls = NonAbelianData
 
     def test_data_sanity(self, a: BlockDiagonalTensor | DiagonalTensor | Mask, is_diagonal: bool):
-        if is_diagonal:
-            raise NotImplementedError  # TODO
         super().test_data_sanity(a, is_diagonal=is_diagonal)
-        for c, block in a.data.blocks.items():
+        # check domain and codomain
+        assert all(not isinstance(s, ProductSpace) for s in a.data.codomain.spaces)
+        assert all(not isinstance(s, ProductSpace) for s in a.data.domain.spaces)
+        # TODO still need to decide how the a.legs correspond to domain and codomain, and what to do
+        #      if a has combined legs.
+        #      when that is implemented, check its consistency here
+        # coupled sectors must be lexsorted
+        perm = np.lexsort(a.data.coupled_sectors.T)
+        assert np.all(perm == np.arange(len(perm)))
+        # blocks
+        for c, block in zip(a.data.coupled_sectors, a.data.blocks):
             assert a.symmetry.is_valid_sector(c)
-            assert self.block_shape(block) == (a.data.codomain.block_size(c), a.data.domain.block_size(c))
-        assert set(a.data.codomain_legs + a.data.domain_legs) == set(range(a.num_legs))
-        for idx, leg in zip(a.data.codomain_legs, a.data.codomain.spaces):
-            assert a.legs[idx] == leg
-        for idx, leg in zip(a.data.domain_legs, a.data.domain.spaces):
-            assert a.legs[idx] == leg.dual
+            # shape correct?
+            expect_shape = (block_size(a.data.codomain, c), block_size(a.data.domain, c))
+            if is_diagonal:
+                assert expect_shape[0] == expect_shape[1]
+                expect_shape = (expect_shape[0],)
+            assert all(dim > 0 for dim in expect_shape), 'should skip forbidden block'
+            assert self.block_shape(block) == expect_shape
+            # check matching dtype
+            assert self.block_dtype(block) == a.data.dtype
 
     def get_dtype_from_data(self, a: NonAbelianData) -> Dtype:
         return a.dtype
 
     def to_dtype(self, a: BlockDiagonalTensor, dtype: Dtype) -> NonAbelianData:
-        blocks = {sector: self.block_to_dtype(block, dtype)
-                  for sector, block in a.data.blocks.items()}
-        return NonAbelianData(blocks=blocks, codomain=a.data.codomain, domain=a.data.domain, dtype=dtype)
+        blocks = [self.block_to_dtype(block, dtype) for block in a.data.blocks]
+        return NonAbelianData(a.data.coupled_sectors, blocks, a.data.domain, a.data.codomain, dtype)
 
     def supports_symmetry(self, symmetry: Symmetry) -> bool:
+        # supports all symmetries
         return isinstance(symmetry, Symmetry)
 
     def is_real(self, a: BlockDiagonalTensor) -> bool:
@@ -149,8 +161,7 @@ class NonabelianBackend(Backend, BlockBackend, ABC):
     def data_item(self, a: NonAbelianData) -> float | complex:
         if len(a.blocks) > 1:
             raise ValueError('Not a scalar.')
-        block = next(iter(a.blocks.values()))
-        return self.block_item(block)
+        return self.block_item(a.blocks[0])
 
     def to_dense_block(self, a: BlockDiagonalTensor) -> Block:
         raise NotImplementedError  # TODO use self.apply_basis_perm
@@ -179,10 +190,7 @@ class NonabelianBackend(Backend, BlockBackend, ABC):
 
     def fusion_tree_to_block(self, tree: FusionTree) -> Block:
         """convert a FusionTree to a block, containing its "matrix" representation."""
-        if tree.num_vertices == 0:
-            # tree ist just c <- c for a single sector c == tree.coupled
-            if tree.are_dual[0]:
-                ...  # TODO: stopped here. should probably write down clear definitions...
+        raise NotImplementedError  # TODO
 
     def from_dense_block(self, a: Block, legs: list[VectorSpace], atol: float = 1e-8,
                          rtol: float = 0.00001) -> NonAbelianData:
@@ -193,150 +201,45 @@ class NonabelianBackend(Backend, BlockBackend, ABC):
         # TODO add arg to specify (co-)domain?
         codomain = ProductSpace(legs, backend=self).as_flat_product()
         domain = ProductSpace([], backend=self)
-        blocks = {c: func((codomain.block_size(c), domain.block_size(c)), **func_kwargs)
-                  for c in coupled_sectors(codomain, domain)}
-        try:
-            sample_block = next(iter(blocks.keys()))
-        except StopIteration:
+        coupled = coupled_sectors(codomain, domain)
+        blocks = [func((block_size(codomain, c), block_size(domain, c)), **func_kwargs)
+                  for c in coupled]
+        if len(blocks) > 0:
+            sample_block = blocks[0]
+        else:
             sample_block = func((1,) * len(legs), **func_kwargs)
-        return NonAbelianData(blocks=blocks, codomain=codomain, domain=domain,
-                              codomain_idcs=list(range(codomain.spaces)), domain_idcs=[],
-                              dtype = self.block_dtype(sample_block))
+        dtype = self.block_dtype(sample_block)
+        return NonAbelianData(coupled, blocks, domain, codomain, dtype)
 
     def zero_data(self, legs: list[VectorSpace], dtype: Dtype) -> NonAbelianData:
         # TODO add arg to specify (co-)domain?
         codomain = ProductSpace(legs, backend=self).as_flat_product()
         domain = ProductSpace([], backend=self)
-        blocks = {c: self.zero_block((codomain.block_size(c), domain.block_size(c)), dtype=dtype)
-                  for c in coupled_sectors(codomain, domain)}
-        return NonAbelianData(blocks=blocks, codomain=codomain, domain=domain,
-                              codomain_idcs=list(range(codomain.spaces)), domain_idcs=[], 
-                              dtype=dtype)
+        return NonAbelianData(coupled_sectors=codomain.symmetry.empty_sector_array, blocks=[],
+                              domain=domain, codomain=codomain, dtype=dtype)
 
     def eye_data(self, legs: list[VectorSpace], dtype: Dtype) -> NonAbelianData:
         # TODO add arg to specify (co-)domain?
         codomain = ProductSpace(legs, backend=self).as_flat_product()
         domain = ProductSpace([], backend=self)
-        blocks = {c: self.eye_block((codomain.block_size(c), domain.block_size(c)), dtype=dtype)
-                  for c in coupled_sectors(codomain, domain)}
-        return NonAbelianData(blocks=blocks, codomain=codomain, domain=domain,
-                              codomain_idcs=list(range(codomain.spaces)), domain_idcs=[],
-                              dtype=dtype)
+        coupled = coupled_sectors(codomain, domain)
+        blocks = [self.eye_block((block_size(codomain, c), block_size(domain, c)), dtype=dtype)
+                  for c in coupled]
+        return NonAbelianData(coupled_sectors=coupled, blocks=blocks, domain=domain,
+                              codomain=codomain, dtype=dtype)
 
     def copy_data(self, a: BlockDiagonalTensor) -> NonAbelianData:
         return NonAbelianData(
-            blocks={sector: self.block_copy(block) for sector, block in a.data.blocks.values()},
-            codomain=a.data.codomain, domain=a.data.domain, codomain_idcs=a.data.codomain_idcs,
-            domain_idcs=a.data.domain_idcs
+            coupled_sectors=a.data.coupled_sectors.copy(),  # OPTIMIZE do we need to copy these?
+            blocks=[self.block_copy(block) for block in a.data.blocks],
+            codomain=a.data.codomain, domain=a.data.domain
         )
 
     def _data_repr_lines(self, a: BlockDiagonalTensor, indent: str, max_width: int,
                          max_lines: int) -> list[str]:
         raise NotImplementedError  # TODO
 
-    def tdot(self, a: BlockDiagonalTensor, b: BlockDiagonalTensor, axs_a: list[int], axs_b: list[int]
-             ) -> NonAbelianData:
-        raise NotImplementedError  # TODO
-
-    def svd(self, a: BlockDiagonalTensor, new_vh_leg_dual: bool, algorithm: str | None
-            ) -> tuple[NonAbelianData, NonAbelianData, NonAbelianData, VectorSpace]:
-        # can use self.matrix_svd
-        raise NotImplementedError  # TODO
-
-    def qr(self, a: BlockDiagonalTensor, new_r_leg_dual: bool, full: bool) -> tuple[NonAbelianData, NonAbelianData, VectorSpace]:
-        raise NotImplementedError  # TODO
-
-    def outer(self, a: BlockDiagonalTensor, b: BlockDiagonalTensor) -> NonAbelianData:
-        raise NotImplementedError  # TODO
-
-    def inner(self, a: BlockDiagonalTensor, b: BlockDiagonalTensor, do_conj: bool, axs2: list[int] | None) -> complex:
-        raise NotImplementedError  # TODO
-
-    def permute_legs(self, a: BlockDiagonalTensor, permutation: list[int]) -> NonAbelianData:
-        raise NotImplementedError  # TODO
-
-    def trace_full(self, a: BlockDiagonalTensor, idcs1: list[int], idcs2: list[int]) -> float | complex:
-        raise NotImplementedError  # TODO
-
-    def trace_partial(self, a: BlockDiagonalTensor, idcs1: list[int], idcs2: list[int], remaining_idcs: list[int]) -> NonAbelianData:
-        raise NotImplementedError  # TODO
-
-    def conj(self, a: BlockDiagonalTensor) -> NonAbelianData:
-        raise NotImplementedError  # TODO
-
-    def combine_legs(self, a: BlockDiagonalTensor, combine_slices: list[int, int], product_spaces: list[ProductSpace],
-                     new_axes: list[int], final_legs: list[VectorSpace]) -> NonAbelianData:
-        raise NotImplementedError  # TODO
-
-    def split_legs(self, a: BlockDiagonalTensor, leg_idcs: list[int], final_legs: list[VectorSpace]) -> NonAbelianData:
-        raise NotImplementedError  # TODO
-
-    def almost_equal(self, a: BlockDiagonalTensor, b: BlockDiagonalTensor, rtol: float, atol: float) -> bool:
-        raise NotImplementedError  # TODO
-
-    def squeeze_legs(self, a: BlockDiagonalTensor, idcs: list[int]) -> NonAbelianData:
-        raise NotImplementedError  # TODO
-
-    def norm(self, a: BlockDiagonalTensor, order: int | float = None) -> float:
-        raise NotImplementedError  # TODO
-
-    def act_block_diagonal_square_matrix(self, a: BlockDiagonalTensor, block_method: Callable[[Block], Block]
-                                         ) -> NonAbelianData:
-        raise NotImplementedError  # TODO
-
-    def add(self, a: BlockDiagonalTensor, b: BlockDiagonalTensor) -> NonAbelianData:
-        # TODO: not checking leg compatibility. ok?
-        blocks = {coupled: block_a + block_b
-                  for coupled, block_a, block_b in _block_pairs(a.data, b.data)}
-        return NonAbelianData(blocks, codomain=a.data.codomain, domain=a.data.domain, dtype=a.dtype)
-
-    def mul(self, a: float | complex, b: BlockDiagonalTensor) -> NonAbelianData:
-        blocks = {coupled: a * block for coupled, block in b.data.blocks.items()}
-        return NonAbelianData(blocks, codomain=b.data.codomain, domain=b.data.domain, dtype=b.dtype)
-
-    def infer_leg(self, block: Block, legs: list[VectorSpace | None], is_dual: bool = False,
-                  is_real: bool = False) -> VectorSpace:
-        raise NotImplementedError  # TODO
-
-    def full_data_from_diagonal_tensor(self, a: DiagonalTensor) -> Data:
-        raise NotImplementedError  # TODO
-
-    def scale_axis(self, a: BlockDiagonalTensor, b: DiagonalTensor, leg: int) -> Data:
-        raise NotImplementedError  # TODO
-    
-    def diagonal_elementwise_unary(self, a: DiagonalTensor, func, func_kwargs, maps_zero_to_zero: bool
-                                   ) -> DiagonalData:
-        raise NotImplementedError  # TODO
-
-    def diagonal_elementwise_binary(self, a: DiagonalTensor, b: DiagonalTensor, func,
-                                    func_kwargs, partial_zero_is_zero: bool
-                                    ) -> DiagonalData:
-        raise NotImplementedError  # TODO
-
-    def apply_mask_to_Tensor(self, tensor: BlockDiagonalTensor, mask: Mask, leg_idx: int) -> Data:
-        raise NotImplementedError  # TODO
-
-
-def _block_pairs(a: NonAbelianData, b: NonAbelianData) -> Iterator[tuple[Sector, Block, Block]]:
-    """yield all block pairs, if a coupled sector appears as a key in the blocks dictionary
-    of one, but not both inputs, the corresponding other block defaults to zeros like the existing block
-    """
-    assert a.codomain == b.codomain
-    assert a.domain == b.domain
-
-    for coupled, block_a in a.blocks.items():
-        block_b = b.blocks.get(coupled, None)
-        if block_b is None:
-            block_b = 0 * block_a
-        yield coupled, block_a, block_b
-
-    for coupled, block_b in b.blocks.items():
-        if coupled in a.blocks:
-            continue  # have already yielded for that coupled sector
-        block_a = a.blocks.get(coupled, None)
-        if block_a is None:
-            block_a = 0 * block_b
-        yield coupled, block_a, block_b
+    # TODO implement all backend methods
 
 
 # TODO dedicated fusion_trees module?

@@ -276,6 +276,7 @@ class AbelianBackend(Backend, BlockBackend, ABC):
         assert all(self.block_dtype(block) == a.data.dtype for block in a.data.blocks)
         assert not np.any(a.data.block_inds < 0)
         assert not np.any(a.data.block_inds >= np.array([[leg.num_sectors for leg in a.legs]]))
+        # TODO check lexsorted?
         
     def test_mask_sanity(self, a: Mask):
         super().test_mask_sanity(a)

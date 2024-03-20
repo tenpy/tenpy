@@ -36,7 +36,19 @@ class BraidingStyle(Enum):
 
 
 class Symmetry(metaclass=ABCMeta):
-    """Base class for symmetries that impose a block-structure on tensors"""
+    """Base class for symmetries that impose a block-structure on tensors
+
+    Attributes
+    ----------
+    fusion_style, braiding_style, trivial_sector, group_name, num_sectors, descriptive_name
+        TODO
+    sector_ind_len : int
+        Valid sectors are numpy arrays with shape ``(sector_ind_len,)``.
+    empty_sector_array : 2D ndarray
+        A SectorArray with no sectors, shape ``(0, sector_ind_len)``.
+    is_abelian : bool
+        If the symmetry is abelian.
+    """
     def __init__(self, fusion_style: FusionStyle, braiding_style: BraidingStyle, trivial_sector: Sector,
                  group_name: str, num_sectors: int | float, descriptive_name: str | None = None):
         self.fusion_style = fusion_style
@@ -45,7 +57,8 @@ class Symmetry(metaclass=ABCMeta):
         self.group_name = group_name
         self.num_sectors = num_sectors
         self.descriptive_name = descriptive_name
-        self.sector_ind_len = len(trivial_sector)  # how many entries are needed to describe a Sector
+        self.sector_ind_len = sector_ind_len = len(trivial_sector)
+        self.empty_sector_array = np.zeros((0, sector_ind_len), dtype=int)
         self.is_abelian = (fusion_style == FusionStyle.single)  # TODO doc that this does not imply group!
 
     @abstractmethod
