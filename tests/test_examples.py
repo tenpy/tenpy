@@ -15,7 +15,12 @@ examples_dir = os.path.join(os.path.dirname(__file__), '..', 'examples')
 
 exclude = ["__pycache__"]
 
-examples = [fn for fn in os.listdir(examples_dir) if fn[-3:] == '.py' and fn not in exclude]
+try:
+    examples = [fn for fn in os.listdir(examples_dir) if fn[-3:] == '.py' and fn not in exclude]
+except FileNotFoundError:
+    # examples are not contained in source distro, so they may not be accessible,
+    # e.g. when conda tests its build
+    examples = []
 
 
 @pytest.mark.example  # allow to skip the examples with ``$> pytest -m "not example"``
