@@ -3,6 +3,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Iterable, Iterator, TYPE_CHECKING
+from math import prod
 import numpy as np
 
 from .abstract_backend import Backend, BlockBackend, Block, Dtype, Data, DiagonalData
@@ -15,44 +16,99 @@ if TYPE_CHECKING:
     from ..tensors import BlockDiagonalTensor, DiagonalTensor, Mask
 
 
-__all__ = ['NonabelianBackend', 'NonAbelianData', 'FusionTree', 'fusion_trees',
-           'all_fusion_trees', 'coupled_sectors']
+__all__ = ['block_size', 'subblock_size', 'subblock_slice', 'NonabelianBackend', 'NonAbelianData',
+           'FusionTree', 'fusion_trees', 'all_fusion_trees', 'coupled_sectors']
 
 
-@dataclass
+def block_size(space: ProductSpace, coupled: Sector) -> int:
+    """The size of a block"""
+    # OPTIMIZE : this is not super efficient. Make sure its not used in tdot / svd etc
+    return sum(
+        len(fusion_trees(space.symmetry, uncoupled, coupled)) * subblock_size(space, uncoupled)
+        for uncoupled in space.iter_uncoupled_sectors()
+    )
+
+
+def subblock_size(space: ProductSpace, uncoupled: tuple[Sector]) -> int:
+    """The size of a subblock"""
+    # OPTIMIZE : this is not super efficient. Make sure its not used in tdot / svd etc
+    return prod(s.sector_multiplicity(a) for s, a in zip(space.spaces, uncoupled))
+
+
+def subblock_slice(space: ProductSpace, tree: FusionTree) -> slice:
+    """The range of indices of a subblock within its block, as a slice."""
+    # OPTIMIZE : this is not super efficient. Make sure its not used in tdot / svd etc
+    offset = 0
+    for uncoupled in space.iter_uncoupled_sectors():
+        if all(np.all(a_unc == a_tree) for a_unc, a_tree in zip(uncoupled, tree.uncoupled)):
+            break
+        num_trees = len(fusion_trees(space.symmetry, uncoupled, tree.coupled))
+        offset += num_trees * subblock_size(space, uncoupled)
+    else:
+        # no break ocurred
+        raise ValueError('Uncoupled sectors of `tree` incompatible with `space`')
+    offset += fusion_trees(space.symmetry, tree.uncoupled, tree.coupled).index(tree)
+    size = subblock_size(space, uncoupled)
+    return slice(offset, offset + size)
+
+
 class NonAbelianData:
-    r"""Data for a tensor
+    r"""Data stored in a Tensor for :class:`NonabelianBackend`.
 
-    We store tensors as linear maps
+    TODO describe/define what blocks are
 
-        T : domain -> codomain
-
-    where domain = NonabelianBackendProductSpace([V_1, V_2, ..., V_M])
-    and codomain = NonabelianBackendProductSpace([W_1, W_2, ..., W_N])
-    along with codomain_idcs and domain_idcs which tell us how they are embedded in the tensor.legs
-
-    There is an additional freedom, how the legs are divided between domain and codomain.
-    Instead of having a space ``A`` in the codomain, we can instead have ``A.dual`` in the domain.
-    For example, a tensor with ``T.legs = [A, B, C]`` can be represented by
-    ``NonAbelianData(..., codomain=[A, B, C], domain=[], codomain_idcs=[0, 1, 2], domain_idcs=[])``
-    or ``NonAbelianData(..., codomain=[A, B], domain=[C.dual], codomain_idcs=[0, 1], domain_idcs=[2])``.
-    Note that an empty (co)domain ``NonabelianBackendProductSpace([])`` represents the underlying
-    field, i.e. :math:`\Rbb` or :math:`\Cbb`.
+    Attributes
+    ----------
+    coupled_sectors : 2D array
+        The coupled sectors :math:`c_n` for which there are non-zero blocks.
+        Must be ``lexsort( .T)``-ed (this is not checked!).
+    blocks : list of 2D Block
+        The nonzero blocks, ``blocks[n]`` corresponding to ``coupled_sectors[n]``.
+    domain, codomain : ProductSpace
+        The domain and codomain of the tensor ``T : domain -> codomain``.
+        Must not be nested, i.e. their :attr:`ProductSpace.spaces` can not themselves be
+        ProductSpaces.
+        TODO can we support nesting or do they *need* to be flat??
+        TODO how to encode Tensor.legs -> [domain, codomain] ?? allow a perm here?
     """
-    blocks: dict[Sector, Block]
-    codomain: ProductSpace
-    domain: ProductSpace
-    codomain_idcs: list[int]
-    domain_idcs: list[int]
-    # TODO this does not work if tensor.legs contains ProductSpaces!
-    dtype: Dtype
+    def __init__(self, coupled_sectors: SectorArray, blocks: list[Block], domain: ProductSpace,
+                 codomain: ProductSpace, dtype: Dtype):
+        self.coupled_sectors = coupled_sectors
+        self.blocks = blocks
+        self.domain = domain
+        self.codomain = codomain
+        self.domain_num_legs = K = len(domain.spaces)
+        self.codomain_num_legs = J = len(codomain.spaces)
+        self.num_legs = K + J
+        self.dtype = dtype
 
-    def get_sub_block(self, splitting_tree: FusionTree, fusion_tree: FusionTree):
-        block = self.blocks[fusion_tree.coupled]
-        idx = (self.codomain.subblock_slice(splitting_tree),
-               self.domain.subblock_slice(fusion_tree))
-        # TODO do we assume that blocks can be indexed like that?
-        return block[idx]
+    @classmethod
+    def from_unsorted(cls, coupled_sectors: SectorArray, blocks: list[Block], domain: ProductSpace,
+                      codomain: ProductSpace, dtype: Dtype):
+        """Like __init__, but coupled_sectors does not need to be sorted"""
+        perm = np.lexsort(coupled_sectors.T)
+        coupled_sectors = coupled_sectors[perm, :]
+        blocks = [blocks[n] for n in perm]
+        return cls(coupled_sectors, blocks, domain, codomain, dtype)
+
+    def get_block(self, coupled_sector: Sector) -> Block | None:
+        """Get the block for a given coupled sector.
+
+        Returns ``None`` if the block is not set, even if the coupled sector is not allowed.
+        """
+        match = np.argwhere(np.all(self.coupled_sectors == coupled_sector[None, :], axis=1))[:, 0]
+        if len(match) == 0:
+            return None
+        return self.blocks[match[0]]
+        
+    def get_subblock(self, splitting_tree: FusionTree, fusion_tree: FusionTree):
+        assert np.all(splitting_tree.coupled == fusion_tree.coupled)
+        block = self.get_block(fusion_tree.coupled)
+        if block is None:
+            return None
+        idx1 = subblock_slice(self.codomain, splitting_tree)
+        idx2 = subblock_slice(self.domain, fusion_tree)
+        return block[idx1, idx2]
 
 
 # TODO eventually remove BlockBackend inheritance, it is not needed,

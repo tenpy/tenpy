@@ -5,7 +5,8 @@ import numpy as np
 from numpy import ndarray
 import copy
 import bisect
-from typing import TYPE_CHECKING, Sequence
+import itertools as it
+from typing import TYPE_CHECKING, Sequence, Iterator
 
 from tenpy.linalg.dummy_config import printoptions
 
@@ -1398,6 +1399,11 @@ class ProductSpace(VectorSpace):
         if len(self.spaces) != len(other.spaces):
             return False
         return all(s1.can_contract_with(s2) for s1, s2 in zip(self.spaces, other.spaces))
+
+    def iter_uncoupled(self) -> Iterator[tuple[Sector]]:
+        """Iterate over all combinations of sectors"""
+        return it.product(*(s.sectors for s in self.spaces))
+        
 
 
 def _fuse_spaces(symmetry: Symmetry, spaces: list[VectorSpace], _is_dual: bool
