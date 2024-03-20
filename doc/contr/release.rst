@@ -40,7 +40,7 @@ Follow this checklist when creating a new release, i.e. updating the version num
      git push origin v0.42.1  # also push the tag
 
 #. Pushing a tag should cause a github action to publish to test.pypi.org.
-   It executes ``.github/workflows/publish-test-pypi.yml``.
+   It executes ``.github/workflows/publish.yml``.
    Double check that everything looks ok there.
 
 #. Perform a test installation.
@@ -74,7 +74,7 @@ Follow this checklist when creating a new release, i.e. updating the version num
 
 #. Create a release with release notes on github.
    The release triggers the github action for uploading the package to PyPI.
-   It executes ``.github/workflows/publish-pypi.yml``.
+   It executes ``.github/workflows/publish.yml``.
 
 #. Wait for conda-forge bot to create a pull request in the `feedstock repo <https://github.com/conda-forge/physics-tenpy-feedstock>`_
    and merge it.
