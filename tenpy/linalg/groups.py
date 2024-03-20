@@ -66,6 +66,9 @@ class Symmetry(metaclass=ABCMeta):
         """Whether `a` is a valid sector of this symmetry"""
         ...
 
+    def are_valid_sectors(self, sectors: SectorArray) -> bool:
+        return all(self.is_valid_sector(a) for a in sectors)
+
     @abstractmethod
     def fusion_outcomes(self, a: Sector, b: Sector) -> SectorArray:
         """Returns all outcomes for the fusion of sectors
@@ -404,6 +407,16 @@ class ProductSymmetry(Symmetry):
                 return False
         return True
 
+    def are_valid_sectors(self, sectors: SectorArray) -> bool:
+        shape = getattr(sectors, 'shape', ())
+        if len(shape) != 2 or shape[1] != self.sector_ind_len:
+            return False
+        for i, f_i in enumerate(self.factors):
+            sectors_i = sectors[:, self.sector_slices[i]:self.sector_slices[i + 1]]
+            if not f_i.are_valid_sectors(sectors_i):
+                return False
+        return True
+
     def fusion_outcomes(self, a: Sector, b: Sector) -> SectorArray:
         colon = slice(None, None, None)
         all_outcomes = []
@@ -685,7 +698,11 @@ class NoSymmetry(AbelianGroup):
                               group_name='no_symmetry', num_sectors=1, descriptive_name=None)
 
     def is_valid_sector(self, a: Sector) -> bool:
-        return getattr(a, 'shape', ()) == (1,) and a[0] == 0
+        return getattr(a, 'shape', ()) == (1,) and a == 0
+
+    def are_valid_sectors(self, sectors) -> bool:
+        shape = getattr(sectors, 'shape', ())
+        return len(shape) == 2 and shape[1] == 1 and np.all(sectors == 0)
 
     def fusion_outcomes(self, a: Sector, b: Sector) -> SectorArray:
         return a[np.newaxis, :]
@@ -727,6 +744,10 @@ class U1Symmetry(AbelianGroup):
 
     def is_valid_sector(self, a: Sector) -> bool:
         return getattr(a, 'shape', ()) == (1,)
+
+    def are_valid_sectors(self, sectors) -> bool:
+        shape = getattr(sectors, 'shape', ())
+        return len(shape) == 2 and shape[1] == 1
 
     def fusion_outcomes(self, a: Sector, b: Sector) -> SectorArray:
         return self.fusion_outcomes_broadcast(a[np.newaxis, :], b[np.newaxis, :])
@@ -777,7 +798,11 @@ class ZNSymmetry(AbelianGroup):
         return isinstance(other, ZNSymmetry) and other.N == self.N
 
     def is_valid_sector(self, a: Sector) -> bool:
-        return (getattr(a, 'shape', ()) == (1,)) and (0 <= a[0] < self.N)
+        return getattr(a, 'shape', ()) == (1,) and 0 <= a < self.N
+
+    def are_valid_sectors(self, sectors) -> bool:
+        shape = getattr(sectors, 'shape', ())
+        return len(shape) == 2 and shape[1] == 1 and np.all(0 <= sectors) and np.all(0 < self.N)
 
     def fusion_outcomes(self, a: Sector, b: Sector) -> SectorArray:
         return self.fusion_outcomes_broadcast(a[np.newaxis, :], b[np.newaxis, :])
@@ -812,7 +837,11 @@ class SU2Symmetry(GroupSymmetry):
                        group_name='SU(2)', num_sectors=np.inf, descriptive_name=descriptive_name)
 
     def is_valid_sector(self, a: Sector) -> bool:
-        return getattr(a, 'shape', ()) == (1,) and a[0] >= 0
+        return getattr(a, 'shape', ()) == (1,) and (a >= 0)
+
+    def are_valid_sectors(self, sectors) -> bool:
+        shape = getattr(sectors, 'shape', ())
+        return len(shape) == 2 and shape[1] == 1 and np.all(sectors >= 0)
 
     def fusion_outcomes(self, a: Sector, b: Sector) -> SectorArray:
         # J_tot = |J1 - J2|, ..., J1 + J2
@@ -870,7 +899,11 @@ class FermionParity(Symmetry):
                           num_sectors=2, descriptive_name=None)
 
     def is_valid_sector(self, a: Sector) -> bool:
-        return getattr(a, 'shape', ()) == (1,) and (a[0] in [0, 1])
+        return getattr(a, 'shape', ()) == (1,) and 0 <= a < 2
+
+    def are_valid_sectors(self, sectors) -> bool:
+        shape = getattr(sectors, 'shape', ())
+        return len(shape) == 2 and shape[1] == 1 and np.all(0 <= sectors) and np.all(sectors < 2)
 
     def fusion_outcomes(self, a: Sector, b: Sector) -> SectorArray:
         return self.fusion_outcomes_broadcast(a[np.newaxis, :], b[np.newaxis, :])
@@ -970,7 +1003,11 @@ class ZNAnyonModel(Symmetry):
                           num_sectors=N, descriptive_name=None)
 
     def is_valid_sector(self, a: Sector) -> bool:
-        return getattr(a, 'shape', ()) == (1,) and (0 <= a[0] < self.N)
+        return getattr(a, 'shape', ()) == (1,) and 0 <= a[0] < self.N
+
+    def are_valid_sectors(self, sectors) -> bool:
+        shape = getattr(sectors, 'shape', ())
+        return len(shape) == 2 and shape[1] == 1 and np.all(0 <= sectors) and np.all(sectors < self.N)
 
     def fusion_outcomes(self, a: Sector, b: Sector) -> SectorArray:
         return self.fusion_outcomes_broadcast(a[np.newaxis, :], b[np.newaxis, :])
@@ -1054,7 +1091,11 @@ class ZNAnyonModel2(Symmetry):
                           num_sectors=N, descriptive_name=None)
 
     def is_valid_sector(self, a: Sector) -> bool:
-        return getattr(a, 'shape', ()) == (1,) and (0 <= a[0] < self.N)
+        return getattr(a, 'shape', ()) == (1,) and 0 <= a < self.N
+
+    def are_valid_sectors(self, sectors) -> bool:
+        shape = getattr(sectors, 'shape', ())
+        return len(shape) == 2 and shape[1] == 1 and np.all(0 <= sectors) and np.all(sectors < self.N)
 
     def fusion_outcomes(self, a: Sector, b: Sector) -> SectorArray:
         return self.fusion_outcomes_broadcast(a[np.newaxis, :], b[np.newaxis, :])
@@ -1128,7 +1169,11 @@ class QuantumDoubleZNAnyonModel(Symmetry):
                           num_sectors=N**2, descriptive_name=None)
 
     def is_valid_sector(self, a: Sector) -> bool:
-        return getattr(a, 'shape', ()) == (2,) and (0 <= a[0] < self.N) and (0 <= a[1] < self.N)
+        return getattr(a, 'shape', ()) == (2,) and np.all(0 <= a) and np.all(a < self.N)
+
+    def are_valid_sectors(self, sectors) -> bool:
+        shape = getattr(sectors, 'shape', ())
+        return len(shape) == 2 and shape[1] == 2 and np.all(0 <= sectors) and np.all(sectors < self.N)
 
     def fusion_outcomes(self, a: Sector, b: Sector) -> SectorArray:
         return self.fusion_outcomes_broadcast(a[np.newaxis, :], b[np.newaxis, :])
@@ -1224,7 +1269,11 @@ class FibonacciGrading(Symmetry):
                           num_sectors=2, descriptive_name=None)
 
     def is_valid_sector(self, a: Sector) -> bool:
-        return getattr(a, 'shape', ()) == (1,) and (a[0] in [0, 1])
+        return getattr(a, 'shape', ()) == (1,) and 0 <= a < 2
+    
+    def are_valid_sectors(self, sectors) -> bool:
+        shape = getattr(sectors, 'shape', ())
+        return len(shape) == 2 and shape[1] == 1 and np.all(0 <= sectors) and np.all(sectors < 2)
 
     def fusion_outcomes(self, a: Sector, b: Sector) -> SectorArray:
         return self._fusion_map[a[0] + b[0]]
@@ -1327,7 +1376,11 @@ class IsingGrading(Symmetry):
                           num_sectors=3, descriptive_name=None)
 
     def is_valid_sector(self, a: Sector) -> bool:
-        return getattr(a, 'shape', ()) == (1,) and (a[0] in [0, 1, 2])
+        return getattr(a, 'shape', ()) == (1,) and 0 <= a < 3
+
+    def are_valid_sectors(self, sectors) -> bool:
+        shape = getattr(sectors, 'shape', ())
+        return len(shape) == 2 and shape[1] == 1 and np.all(0 <= sectors) and np.all(sectors < 3)
 
     def fusion_outcomes(self, a: Sector, b: Sector) -> SectorArray:
         return self._fusion_map[a[0]**2 + b[0]**2]
@@ -1484,7 +1537,11 @@ class SU2_kGrading(Symmetry):
                       * self._delta(jj2, jj3, jj23) * self._delta(jj1, jj23, jj))
 
     def is_valid_sector(self, a: Sector) -> bool:
-        return getattr(a, 'shape', ()) == (1,) and a[0] >= 0 and a[0] <= self.k
+        return getattr(a, 'shape', ()) == (1,) and 0 <= a <= self.k
+
+    def are_valid_sectors(self, sectors) -> bool:
+        shape = getattr(sectors, 'shape', ())
+        return len(shape) == 2 and shape[1] == 1 and np.all(0 <= sectors) and np.all(sectors <= self.k)
 
     def fusion_outcomes(self, a: Sector, b: Sector) -> SectorArray:
         upper_limit = min(a[0] + b[0], 2 * self.k - a[0] - b[0])
