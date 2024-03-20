@@ -1769,23 +1769,56 @@ class MPS(BaseMPSExpectationValue):
                                       permute=True,
                                       form='B',
                                       chargeL=None):
-        psi = MPS.from_product_state(sites,
-                                     p_state,
-                                     bc,
-                                     dtype,
-                                     permute,
-                                     form,
-                                     chargeL)
+        """Construct a matrix product state by evolving a product state with random unitaries.
+
+        Parameters
+        ----------
+        sites : list of :class:`~tenpy.networks.site.Site`
+            The sites defining the local Hilbert space.
+        chi : int
+            The target bond dimension. For finite systems, we evolve until the *maximum* bond
+            dimension reaches this value. For infinite systems, we evolve until *all* bond
+            dimensions have reached this value.
+        p_state : list of {int | str | 1D array}
+            Defines the product state to start from; one entry for each `site` of the MPS.
+            An entry of `str` type is translated to an `int` with the help of
+            :meth:`~tenpy.networks.site.Site.state_labels`.
+            An entry of `int` type represents the physical index of the state to be used.
+            An entry which is a 1D array defines the complete wavefunction on that site; this
+            allows to make a (local) superposition.
+        bc : {'infinite', 'finite', 'segment'}
+            MPS boundary conditions. See docstring of :class:`MPS`.
+        dtype : type or string
+            The data type of the array entries.
+        permute : bool
+            The :class:`~tenpy.networks.Site` might permute the local basis states if charge
+            conservation gets enabled.
+            If `permute` is True (default), we permute the given `p_state` locally according to
+            each site's :attr:`~tenpy.networks.Site.perm`.
+            The `p_state` entries should then always be given as if `conserve=None` in the Site.
+        form : (list of) {``'B' | 'A' | 'C' | 'G' | None`` | tuple(float, float)}
+            Defines the canonical form. See module doc-string.
+            A single choice holds for all of the entries.
+        chargeL : charges
+            Leg charges at bond 0, which are purely conventional.
+        """
+        if bc == 'segment':
+            msg = "MPS.from_random_unitary_evolution not implemented for segment BC."
+            raise NotImplementedError(msg)
+        psi = MPS.from_product_state(sites, p_state, bc, dtype, permute, form, chargeL)
         tebd_options = dict(N_steps = 10, trunc_params={'chi_max': chi})
         eng = RandomUnitaryEvolution(psi, tebd_options)
-        if bc == 'finite':
-            while max(psi.chi) < chi:
-                eng.run()
-        elif bc == 'infinite':
-            while np.any(np.array(psi.chi) < chi):
-                eng.run()
-        else:
-            raise NotImplementedError("MPS.from_random_unitary_evolution not implemented for segment BC.")
+        _max_iter = 1000
+        for _ in range(_max_iter):
+            if psi.finite and (max(psi.chi) >= chi):
+                break
+            if (not psi.finite) and (min(psi.chi) >= chi):
+                break
+            eng.run()
+        else:  # no break ocurred
+            warnings.warn(f'Did not reach desired chi after {_max_iter} iterations of random '
+                          f'unitary evolution. Is chi too large for the given system?',
+                          stacklevel=2)
         logger.info("Generated MPS of bond dimension %r via random evolution.", list(psi.chi))
         psi.canonical_form()
         return psi
