@@ -91,7 +91,27 @@ def test_qr_li():
 
 
 def test_memory_usage():
-    tools.process.memory_usage()
+    base_usage = tools.process.memory_usage()
+    assert 0 < base_usage < 1000
+    L = 20
+    model = tenpy.SpinChain(dict(L=20))
+    # generate "small" MPS and check memory
+    psi1 = tenpy.networks.mps.MPS.from_random_unitary_evolution(
+        model.lat.mps_sites(), chi=100, p_state=['up', 'down'] * (L // 2)
+    )
+    usage = tools.process.memory_usage()
+    assert 10 <= (usage - base_usage) <= 30
+    # use psi1 after so it cant be GC'ed before
+    psi1.test_sanity()
+    # generate "larger" MPS and check memory again
+    psi2 = tenpy.networks.mps.MPS.from_random_unitary_evolution(
+        model.lat.mps_sites(), chi=500, p_state=['up', 'down'] * (L // 2)
+    )
+    usage = tools.process.memory_usage()
+    assert 100 <= (usage - base_usage) <= 200
+    # use psi2 after so it cant be GC'ed before
+    psi2.test_sanity()
+    
 
 
 @pytest.mark.filterwarnings('ignore')
