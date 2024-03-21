@@ -33,6 +33,7 @@ def export_to_datadir():
             warnings.showwarning(w.message, w.category, w.filename, w.lineno, w.file, w.line)
 
 
+@pytest.mark.xfail('Example data missing')  # TODO
 @pytest.mark.filterwarnings(r'ignore:Hdf5Saver.* object of type.*:UserWarning')
 def test_hdf5_export_import(tmp_path):
     """Try subsequent export and import to pickle."""
