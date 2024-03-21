@@ -15,7 +15,7 @@ def common_checks(sym: groups.Symmetry, example_sectors):
     for invalid_sector in [0, 1, 42., None, False, 'foo', [0], ['foo'], [None], (), [],
                            np.zeros((1, 1), dtype=int)]:
         assert not sym.is_valid_sector(invalid_sector)
-    assert sym.sector_dim(sym.trivial_sector) == 1
+    assert sym.qdim(sym.trivial_sector) in [1, 1.]
     assert sym.num_sectors == np.inf or (isinstance(sym.num_sectors, int) and sym.num_sectors > 0)
 
     # check all_symmetries

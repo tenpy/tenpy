@@ -8,6 +8,7 @@ from itertools import product, count
 from functools import reduce
 from numpy import typing as npt
 import numpy as np
+from numpy._typing import NDArray
 
 
 __all__ = ['Sector', 'SectorArray', 'FusionStyle', 'BraidingStyle', 'Symmetry', 'ProductSymmetry',
@@ -100,12 +101,19 @@ class Symmetry(metaclass=ABCMeta):
         """Whether c is a valid fusion outcome, i.e. if it appears in ``self.fusion_outcomes(a, b)``"""
         return np.any(np.all(self.fusion_outcomes(a, b) == c[None, :], axis=1))
 
-    @abstractmethod
     def sector_dim(self, a: Sector) -> int:
-        """The dimension of a sector as a subspace of the hilbert space."""
-        ...
+        """The dimension of a sector, as an unstructured space (i.e. if we drop the symmetry).
 
-    def batch_sector_dim(self, a: SectorArray) -> npt.NDArray[np.int_]:
+        For group symmetries, this coincides with the quantum dimension computed by :meth:`qdim`.
+
+        Note that this concept does not make sense for some anyonic symmetries.
+        TODO actually, does it make sense for *any* anyonic symmetry ...?
+        We raise in that case.
+        """
+        # TODO should we have some custom error class for "you cant do this because of symmetry stuff"
+        raise ValueError(f'sector_dim is not supported for {self.__class__.__name__}')
+
+    def batch_sector_dim(self, a: SectorArray) -> np.ndarray:
         """sector_dim of every sector (row) in a"""
         if self.is_abelian:
             return np.ones([a.shape[0]], dtype=int)
@@ -219,7 +227,7 @@ class Symmetry(metaclass=ABCMeta):
     def frobenius_schur(self, a: Sector) -> int:
         """The Frobenius Schur indicator of a sector."""
         F = self._f_symbol(a, self.dual_sector(a), a, a, self.trivial_sector, self.trivial_sector)
-        return np.sign(F[0, 0, 0, 0])
+        return np.sign(np.real(F[0, 0, 0, 0]))
 
     def qdim(self, a: Sector) -> float:
         """The quantum dimension ``Tr(id_a)`` of a sector"""
@@ -617,6 +625,9 @@ class GroupSymmetry(Symmetry, metaclass=_ABCFactorSymmetryMeta):
                           trivial_sector=trivial_sector, group_name=group_name, num_sectors=num_sectors,
                           descriptive_name=descriptive_name)
 
+    def qdim(self, a: Sector) -> float:
+        return self.sector_dim(a)
+
     def _r_symbol(self, a: Sector, b: Sector, c: Sector) -> np.ndarray:
         # TODO could we return np.ones((1, 1)) and rely on broadcasting?
         return np.eye(self._n_symbol(a, b, c))
@@ -655,6 +666,9 @@ class AbelianGroup(GroupSymmetry, metaclass=_ABCFactorSymmetryMeta):
     
     def sector_dim(self, a: Sector) -> int:
         return 1
+
+    def batch_sector_dim(self, a: SectorArray) -> np.ndarray:
+        return np.ones((len(a),), int)
 
     def _n_symbol(self, a: Sector, b: Sector, c: Sector) -> int:
         return 1
@@ -919,6 +933,9 @@ class FermionParity(Symmetry):
     def sector_dim(self, a: Sector) -> int:
         return 1
 
+    def batch_sector_dim(self, a: SectorArray) -> np.ndarray:
+        return np.ones((len(a),), int)
+
     def sector_str(self, a: Sector) -> str:
         return 'even' if a[0] == 0 else 'odd'
 
@@ -1021,6 +1038,9 @@ class ZNAnyonModel(Symmetry):
     def sector_dim(self, a: Sector) -> int:
         return 1
 
+    def batch_sector_dim(self, a: SectorArray) -> np.ndarray:
+        return np.ones((len(a),), int)
+
     def __repr__(self):
         return f'ZNAnyonModel(N={self.N}, n={self.n})'
 
@@ -1109,6 +1129,9 @@ class ZNAnyonModel2(Symmetry):
     def sector_dim(self, a: Sector) -> int:
         return 1
 
+    def batch_sector_dim(self, a: SectorArray) -> np.ndarray:
+        return np.ones((len(a),), int)
+
     def __repr__(self):
         return f'ZNAnyonModel2(N={self.N}, n={self.n})'
 
@@ -1186,6 +1209,9 @@ class QuantumDoubleZNAnyonModel(Symmetry):
 
     def sector_dim(self, a: Sector) -> int:
         return 1
+
+    def batch_sector_dim(self, a: SectorArray) -> np.ndarray:
+        return np.ones((len(a),), int)
 
     def __repr__(self):
         return f'QuantumDoubleZNAnyonModel(N={self.N})'
@@ -1277,9 +1303,6 @@ class FibonacciGrading(Symmetry):
 
     def fusion_outcomes(self, a: Sector, b: Sector) -> SectorArray:
         return self._fusion_map[a[0] + b[0]]
-
-    def sector_dim(self, a: Sector) -> int:
-        return 1
 
     def sector_str(self, a: Sector) -> str:
         return 'vac' if a[0] == 0 else 'tau'
@@ -1384,9 +1407,6 @@ class IsingGrading(Symmetry):
 
     def fusion_outcomes(self, a: Sector, b: Sector) -> SectorArray:
         return self._fusion_map[a[0]**2 + b[0]**2]
-
-    def sector_dim(self, a: Sector) -> int:
-        return 1
 
     def sector_str(self, a: Sector) -> str:
         if a[0] == 1:
@@ -1546,9 +1566,6 @@ class SU2_kGrading(Symmetry):
     def fusion_outcomes(self, a: Sector, b: Sector) -> SectorArray:
         upper_limit = min(a[0] + b[0], 2 * self.k - a[0] - b[0])
         return np.arange(abs(a[0] - b[0]), upper_limit + 2, 2)[:, np.newaxis]
-
-    def sector_dim(self, a: Sector) -> int:
-        return 1
 
     def sector_str(self, a: Sector) -> str:
         jj = a[0]
