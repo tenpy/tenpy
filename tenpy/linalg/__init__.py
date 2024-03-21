@@ -19,9 +19,10 @@ which provides the :class:`~tenpy.linalg.tensors.Tensor` class used by the rest 
 """
 # Copyright 2018-2023 TeNPy Developers, GNU GPLv3
 
-from . import (groups, spaces, backends, tensors, random_matrix, sparse, matrix_operations,
-               krylov_based)
+from . import (groups, spaces, backends, tensors, random_matrix, sparse,
+               matrix_operations, krylov_based, trees)
 from .groups import *
+from .trees import *
 from .spaces import *
 from .backends import *
 from .tensors import *
@@ -30,9 +31,10 @@ from .sparse import *
 from .matrix_operations import *
 from .krylov_based import *
 
-__all__ = ['groups', 'spaces', 'backends', 'tensors', 'random_matrix', 'sparse',
+__all__ = ['groups', 'spaces', 'trees', 'backends', 'tensors', 'random_matrix', 'sparse',
            'matrix_operations', 'krylov_based',
            *groups.__all__,
+           *trees.__all__,
            *spaces.__all__,
            *backends.__all__,
            *tensors.__all__,

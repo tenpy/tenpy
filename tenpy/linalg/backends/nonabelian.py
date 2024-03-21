@@ -1,15 +1,14 @@
 # Copyright 2023-2023 TeNPy Developers, GNU GPLv3
 from __future__ import annotations
-from abc import ABC, abstractmethod
-from dataclasses import dataclass
-from typing import Iterable, Iterator, TYPE_CHECKING
+from abc import ABC
+from typing import TYPE_CHECKING
 from math import prod
 import numpy as np
 
 from .abstract_backend import Backend, BlockBackend, Block, Dtype, Data, DiagonalData
 from ..groups import Sector, SectorArray, Symmetry
 from ..spaces import VectorSpace, ProductSpace
-from ..fusion_trees import FusionTree, fusion_trees, allowed_coupled_sectors
+from ..trees import FusionTree, fusion_trees, allowed_coupled_sectors
 
 if TYPE_CHECKING:
     # can not import Tensor at runtime, since it would be a circular import
@@ -17,8 +16,7 @@ if TYPE_CHECKING:
     from ..tensors import BlockDiagonalTensor, DiagonalTensor, Mask
 
 
-__all__ = ['block_size', 'subblock_size', 'subblock_slice', 'NonabelianBackend', 'NonAbelianData',
-           'FusionTree', 'fusion_trees', 'all_fusion_trees', 'coupled_sectors']
+__all__ = ['block_size', 'subblock_size', 'subblock_slice', 'NonabelianBackend', 'NonAbelianData']
 
 
 def block_size(space: ProductSpace, coupled: Sector) -> int:
@@ -112,6 +110,7 @@ class NonAbelianData:
         return block[idx1, idx2]
 
 
+# TODO do we need to inherit from ABC again??
 # TODO eventually remove BlockBackend inheritance, it is not needed,
 #  jakob only keeps it around to make his IDE happy
 class NonabelianBackend(Backend, BlockBackend, ABC):
