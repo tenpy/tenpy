@@ -63,7 +63,7 @@ def check_dunder_all_recursive(check_module, error_lines: list[str] = None):
 
     if missing_objects:
         error_lines.append(f'Objects missing from {_name_}.__all__:')
-        error_lines.extend(['\n'.join(f'  {n}' for n in missing_objects)])
+        error_lines.extend([', '.join(f"'{n}'" for n in missing_objects)])
 
     # recurse into submodules
     for n in _all_:

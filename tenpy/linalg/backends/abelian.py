@@ -30,7 +30,7 @@ import warnings
 
 from .abstract_backend import Backend, BlockBackend, Data, DiagonalData, Block, Dtype
 from ..misc import make_stride, find_row_differences
-from ..groups import FusionStyle, BraidingStyle, Symmetry, Sector, SectorArray, AbelianGroup
+from ..symmetries import FusionStyle, BraidingStyle, Symmetry, Sector, SectorArray, AbelianGroup
 from numpy import ndarray
 from ..spaces import VectorSpace, ProductSpace
 from ...tools.misc import inverse_permutation, list_to_dict_list

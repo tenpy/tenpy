@@ -41,7 +41,7 @@ from . import version  # needs to be after linalg! (TODO this still true?)
 # from .algorithms.truncation import TruncationError, truncate, svd_theta
 from .linalg.backends.abstract_backend import Dtype
 from .linalg.backends.backend_factory import get_backend
-from .linalg.groups import *
+from .linalg.symmetries import *
 from .linalg.spaces import *
 from .linalg.tensors import *
 from .linalg import random_matrix
@@ -103,7 +103,7 @@ __all__ = [
     # 'TimeDependentTwoSiteTDVP', 'TEBDEngine', 'QRBasedTEBDEngine', 'RandomUnitaryEvolution',
     # 'TimeDependentTEBD', 'TruncationError', 'truncate', 'svd_theta',
     # # from tenpy.linalg
-    'Dtype', 'get_backend', *linalg.groups.__all__, *linalg.spaces.__all__, *linalg.tensors.__all__,
+    'Dtype', 'get_backend', *linalg.symmetries.__all__, *linalg.spaces.__all__, *linalg.tensors.__all__,
      *linalg.sparse.__all__,  *linalg.matrix_operations.__all__,
     # # from tenpy.models
     # 'Lattice', 'TrivialLattice', 'SimpleLattice', 'MultiSpeciesLattice', 'IrregularLattice',

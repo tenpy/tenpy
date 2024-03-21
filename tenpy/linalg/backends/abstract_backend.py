@@ -6,7 +6,7 @@ from typing import TypeVar, Any, TYPE_CHECKING, Type, Callable
 from numbers import Number
 import numpy as np
 
-from ..groups import Symmetry
+from ..symmetries import Symmetry
 from ..spaces import VectorSpace, ProductSpace, _fuse_spaces
 
 __all__ = ['Data', 'DiagonalData', 'Block', 'Dtype', 'Backend', 'BlockBackend']

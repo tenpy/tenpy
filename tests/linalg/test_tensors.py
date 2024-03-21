@@ -297,7 +297,7 @@ def test_ChargedTensor_tofrom_flat_block_single_sector(vector_space_rng, symmetr
 
 
 def test_from_block(block_backend):
-    from tenpy.linalg.groups import z4_symmetry
+    from tenpy.linalg.symmetries import z4_symmetry
     from tenpy.linalg.backends.backend_factory import get_backend
     backend = get_backend(symmetry=z4_symmetry, block_backend=block_backend)
 

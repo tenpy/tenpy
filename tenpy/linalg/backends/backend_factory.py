@@ -6,7 +6,7 @@ import logging
 from .abstract_backend import Backend
 from .numpy import NoSymmetryNumpyBackend, AbelianNumpyBackend
 from .torch import NoSymmetryTorchBackend, AbelianTorchBackend
-from ..groups import Symmetry, no_symmetry, AbelianGroup
+from ..symmetries import Symmetry, no_symmetry, AbelianGroup
 
 __all__ = ['get_backend', 'todo_get_backend']
 

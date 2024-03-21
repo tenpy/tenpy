@@ -15,7 +15,9 @@ __all__ = ['Sector', 'SectorArray', 'FusionStyle', 'BraidingStyle', 'Symmetry', 
            'GroupSymmetry', 'AbelianGroup', 'NoSymmetry', 'U1Symmetry', 'ZNSymmetry', 'SU2Symmetry',
            'FermionParity', 'FibonacciGrading', 'no_symmetry', 'z2_symmetry', 'z3_symmetry',
            'z4_symmetry', 'z5_symmetry', 'z6_symmetry', 'z7_symmetry', 'z8_symmetry', 'z9_symmetry',
-           'u1_symmetry', 'su2_symmetry', 'fermion_parity',
+           'u1_symmetry', 'su2_symmetry', 'fermion_parity', 'IsingGrading',
+           'QuantumDoubleZNAnyonModel', 'SU2_kGrading', 'ZNAnyonModel', 'ZNAnyonModel2',
+           'double_semion_model', 'fibonacci_grading', 'ising_grading', 'semion_model', 'toric_code'
            ]
 
 
@@ -580,6 +582,16 @@ class ProductSymmetry(Symmetry):
             if factor.descriptive_name == descriptive_name:
                 return i
         raise ValueError(f'Name not found: {descriptive_name}')
+
+    def qdim(self, a: Sector) -> int:
+        if self.is_abelian:
+            return 1
+
+        dims = []
+        for i, f_i in enumerate(self.factors):
+            a_i = a[self.sector_slices[i]:self.sector_slices[i + 1]]
+            dims.append(f_i.qdim(a_i))
+        return np.prod(dims)
 
     def _f_symbol(self, a: Sector, b: Sector, c: Sector, d: Sector, e: Sector, f: Sector
                   ) -> np.ndarray:

@@ -2,7 +2,7 @@
 from __future__ import annotations
 from typing import Iterator
 import numpy as np
-from .groups import Symmetry, Sector, SectorArray, FusionStyle
+from .symmetries import Symmetry, Sector, SectorArray, FusionStyle
 from .spaces import ProductSpace, VectorSpace
 
 __all__ = ['FusionTree', 'fusion_trees', 'all_fusion_trees', 'allowed_coupled_sectors']

@@ -6,7 +6,7 @@ from math import prod
 import numpy as np
 
 from .abstract_backend import Backend, BlockBackend, Block, Dtype, Data, DiagonalData
-from ..groups import Sector, SectorArray, Symmetry
+from ..symmetries import Sector, SectorArray, Symmetry
 from ..spaces import VectorSpace, ProductSpace
 from ..trees import FusionTree, fusion_trees, allowed_coupled_sectors
 

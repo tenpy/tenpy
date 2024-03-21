@@ -29,7 +29,7 @@ from ..linalg.tensors import (Tensor, BlockDiagonalTensor, SymmetricTensor, Char
                               real_if_close)
 from ..linalg.backends import Backend, Block
 from ..linalg.matrix_operations import exp
-from ..linalg.groups import (ProductSymmetry, Symmetry, SU2Symmetry, U1Symmetry, ZNSymmetry,
+from ..linalg.symmetries import (ProductSymmetry, Symmetry, SU2Symmetry, U1Symmetry, ZNSymmetry,
                              no_symmetry, SectorArray)
 from ..linalg.spaces import VectorSpace, ProductSpace
 from ..linalg.misc import make_stride

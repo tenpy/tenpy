@@ -3,22 +3,22 @@ import pytest
 import numpy as np
 from numpy import testing as npt
 
-from tenpy.linalg import spaces, groups, backends
+from tenpy.linalg import spaces, backends, symmetries
 
 
-symmetries = dict(
-    no_symmetry=groups.no_symmetry,
-    z4=groups.z4_symmetry,
-    z4_named=groups.ZNSymmetry(4, 'foo'),
-    z4_z5=groups.z4_symmetry * groups.z5_symmetry,
-    z4_z5_named=groups.ZNSymmetry(4, 'foo') * groups.ZNSymmetry(5, 'bar'),
+some_symmetries = dict(
+    no_symmetry=symmetries.no_symmetry,
+    z4=symmetries.z4_symmetry,
+    z4_named=symmetries.ZNSymmetry(4, 'foo'),
+    z4_z5=symmetries.z4_symmetry * symmetries.z5_symmetry,
+    z4_z5_named=symmetries.ZNSymmetry(4, 'foo') * symmetries.ZNSymmetry(5, 'bar'),
     # su2=groups.su2_symmetry,  # TODO (JU) : reintroduce once n symbol is implemented
 )
 
 
 # TODO (JU) unsused?
-def _get_four_sectors(symm: groups.Symmetry) -> groups.SectorArray:
-    if isinstance(symm, groups.SU2Symmetry):
+def _get_four_sectors(symm: symmetries.Symmetry) -> symmetries.SectorArray:
+    if isinstance(symm, symmetries.SU2Symmetry):
         res = np.arange(0, 8, 2, dtype=int)[:, None]
     elif symm.num_sectors >= 8:
         res = symm.all_sectors()[:8:2]
@@ -41,7 +41,7 @@ def test_vector_space(symmetry, symmetry_sectors_rng, np_random):
     s2 = spaces.VectorSpace.from_trivial_sector(dim=8)
 
     print('checking VectorSpace.sectors')
-    npt.assert_array_equal(s2.sectors, groups.no_symmetry.trivial_sector[None, :])
+    npt.assert_array_equal(s2.sectors, symmetries.no_symmetry.trivial_sector[None, :])
     npt.assert_array_equal(s1.dual.sectors, symmetry.dual_sectors(s1.sectors))
 
     print('checking str and repr')
@@ -210,7 +210,7 @@ def test_product_space(symmetry, symmetry_sectors_rng, np_random):
 def test_get_basis_transformation(default_backend):
     # TODO expand this
     even, odd = [0], [1]
-    spin1 = spaces.VectorSpace.from_basis(groups.z2_symmetry, [even, odd, even])
+    spin1 = spaces.VectorSpace.from_basis(symmetries.z2_symmetry, [even, odd, even])
     assert np.array_equal(spin1.sectors, [even, odd])
     assert np.array_equal(spin1.basis_perm, [0, 2, 1])
     backend = backends.get_backend(block_backend='numpy', symmetry='abelian')

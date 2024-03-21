@@ -33,10 +33,10 @@ def export_to_datadir():
             warnings.showwarning(w.message, w.category, w.filename, w.lineno, w.file, w.line)
 
 
-@pytest.mark.xfail('Example data missing')  # TODO
 @pytest.mark.filterwarnings(r'ignore:Hdf5Saver.* object of type.*:UserWarning')
 def test_hdf5_export_import(tmp_path):
     """Try subsequent export and import to pickle."""
+    pytest.xfail('Example data missing')  # TODO
     data = io_test.gen_example_data()
     io_test.assert_event_handler_example_works(data)  #if this fails, it's not import/export
     filename = tmp_path / 'test.hdf5'

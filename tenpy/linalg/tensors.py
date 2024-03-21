@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 from .dummy_config import printoptions
 from .misc import duplicate_entries, force_str_len, join_as_many_as_possible
 from .dummy_config import config
-from .groups import AbelianGroup, Symmetry
+from .symmetries import AbelianGroup, Symmetry
 from .spaces import VectorSpace, ProductSpace, Sector, SectorArray
 from .backends.backend_factory import get_backend
 from .backends.abstract_backend import Dtype, Block, Backend

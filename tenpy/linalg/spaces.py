@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, Sequence, Iterator
 
 from tenpy.linalg.dummy_config import printoptions
 
-from .groups import Sector, SectorArray, Symmetry, ProductSymmetry, NoSymmetry, no_symmetry
+from .symmetries import Sector, SectorArray, Symmetry, ProductSymmetry, NoSymmetry, no_symmetry
 from .misc import make_stride, find_row_differences, unstridify
 from ..tools.misc import inverse_permutation, rank_data, to_iterable
 from ..tools.string import format_like_list

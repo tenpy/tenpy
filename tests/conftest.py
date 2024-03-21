@@ -20,7 +20,7 @@ tensor_rng : function (legs: list[VectorSpace] = None, num_legs: int = 2, labels
 import numpy as np
 import pytest
 
-from tenpy.linalg import backends, groups, spaces, tensors
+from tenpy.linalg import backends, spaces, symmetries, tensors
 
 
 @pytest.fixture
@@ -50,11 +50,11 @@ def default_backend():
     return backends.backend_factory.get_backend()
 
 
-@pytest.fixture(params=[groups.no_symmetry,
-                        groups.u1_symmetry,
-                        groups.z2_symmetry,
-                        groups.ZNSymmetry(4, "My_Z4_symmetry"),
-                        groups.ProductSymmetry([groups.u1_symmetry, groups.z3_symmetry]),
+@pytest.fixture(params=[symmetries.no_symmetry,
+                        symmetries.u1_symmetry,
+                        symmetries.z2_symmetry,
+                        symmetries.ZNSymmetry(4, "My_Z4_symmetry"),
+                        symmetries.ProductSymmetry([symmetries.u1_symmetry, symmetries.z3_symmetry]),
                         # groups.su2_symmetry,  # TODO reintroduce once SU2 is implemented
                         ],
                 ids=['NoSymm', 'U(1)', 'Z2', 'Z4', 'U(1)xZ3'])
@@ -71,14 +71,14 @@ def symmetry(request, backend):
     return symm
 
 
-def random_symmetry_sectors(symmetry: groups.Symmetry, np_random: np.random.Generator, len_=None,
-                            sort: bool = False) -> groups.SectorArray:
+def random_symmetry_sectors(symmetry: symmetries.Symmetry, np_random: np.random.Generator, len_=None,
+                            sort: bool = False) -> symmetries.SectorArray:
     """random unique symmetry sectors, optionally sorted"""
     if len_ is None:
         len_ = np_random.integers(3,7)
-    if isinstance(symmetry, groups.SU2Symmetry):
+    if isinstance(symmetry, symmetries.SU2Symmetry):
         res = np.arange(0, 2*len_, 2, dtype=int)[:, np.newaxis]
-    elif isinstance(symmetry, groups.U1Symmetry):
+    elif isinstance(symmetry, symmetries.U1Symmetry):
         vals = list(range(-len_, len_)) + [123]
         res = np_random.choice(vals, replace=False, size=(len_, 1))
     elif symmetry.num_sectors < np.inf:
@@ -87,7 +87,7 @@ def random_symmetry_sectors(symmetry: groups.Symmetry, np_random: np.random.Gene
         else:
             which = np_random.choice(symmetry.num_sectors, replace=False, size=len_)
             res = symmetry.all_sectors()[which, :]
-    elif isinstance(symmetry, groups.ProductSymmetry):
+    elif isinstance(symmetry, symmetries.ProductSymmetry):
         factor_len = max(3, len_ // len(symmetry.factors))
         factor_sectors = [random_symmetry_sectors(factor, np_random, factor_len)
                           for factor in symmetry.factors]

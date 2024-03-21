@@ -2,7 +2,7 @@
 # Copyright 2023 TeNPy Developers, GNU GPLv3
 from __future__ import annotations
 import numpy as np
-from tenpy.linalg import groups, spaces
+from tenpy.linalg import spaces, symmetries
 from tenpy.linalg.backends.abstract_backend import Backend
 from tenpy.linalg.backends.numpy import NumpyBlockBackend
 from tenpy.linalg.backends.no_symmetry import NoSymmetryBackend
@@ -10,14 +10,14 @@ from tenpy.linalg.backends.abelian import AbelianBackend
 from tenpy.linalg.tensors import BlockDiagonalTensor
 
 
-def random_symmetry_sectors(symmetry: groups.Symmetry, np_random: np.random.Generator, len_=None
-                            ) -> groups.SectorArray:
+def random_symmetry_sectors(symmetry: symmetries.Symmetry, np_random: np.random.Generator, len_=None
+                            ) -> symmetries.SectorArray:
     """random non-sorted, but unique symmetry sectors"""
     if len_ is None:
         len_ = np_random.integers(3,7)
-    if isinstance(symmetry, groups.SU2Symmetry):
+    if isinstance(symmetry, symmetries.SU2Symmetry):
         return np.arange(0, 2*len_, 2, dtype=int)[:, np.newaxis]
-    elif isinstance(symmetry, groups.U1Symmetry):
+    elif isinstance(symmetry, symmetries.U1Symmetry):
         vals = list(range(-len_, len_)) + [123]
         return np_random.choice(vals, replace=False, size=(len_, 1))
     elif symmetry.num_sectors < np.inf:
@@ -25,7 +25,7 @@ def random_symmetry_sectors(symmetry: groups.Symmetry, np_random: np.random.Gene
             return np_random.permutation(symmetry.all_sectors())
         which = np_random.choice(symmetry.num_sectors, replace=False, size=len_)
         return symmetry.all_sectors()[which, :]
-    elif isinstance(symmetry, groups.ProductSymmetry):
+    elif isinstance(symmetry, symmetries.ProductSymmetry):
         factor_len = max(3, len_ // len(symmetry.factors))
         factor_sectors = [random_symmetry_sectors(factor, np_random, factor_len)
                           for factor in symmetry.factors]
@@ -37,16 +37,16 @@ def random_symmetry_sectors(symmetry: groups.Symmetry, np_random: np.random.Gene
         return res
 
 
-def parse_symmetry(symmetry: list[str]) -> groups.Symmetry:
+def parse_symmetry(symmetry: list[str]) -> symmetries.Symmetry:
     """Translate --symmetry argparse argument"""
-    symmetry = [getattr(groups, s) for s in symmetry]
+    symmetry = [getattr(symmetries, s) for s in symmetry]
     symmetry = [s() if isinstance(s, type) else s for s in symmetry]
-    assert all(isinstance(s, groups.Symmetry) for s in symmetry)
+    assert all(isinstance(s, symmetries.Symmetry) for s in symmetry)
     if len(symmetry) == 0:
-        return groups.no_symmetry
+        return symmetries.no_symmetry
     if len(symmetry) == 1:
         return symmetry[0]
-    return groups.ProductSymmetry(symmetry)
+    return symmetries.ProductSymmetry(symmetry)
 
 
 symmetry_short_names = dict(
@@ -109,7 +109,7 @@ def get_random_multiplicities(dim: int, num_sectors: int):
     return slices[1:] - slices[:-1]
 
 
-def get_random_leg(symmetry: groups.Symmetry, dim: int, num_sectors: int):
+def get_random_leg(symmetry: symmetries.Symmetry, dim: int, num_sectors: int):
     assert num_sectors <= dim
     multiplicities = get_random_multiplicities(dim=dim, num_sectors=num_sectors)
     assert len(multiplicities) == num_sectors
@@ -151,7 +151,7 @@ def get_compatible_leg(legs: list[spaces.VectorSpace]) -> spaces.VectorSpace:
     return res
 
 
-def get_random_tensor(symmetry: groups.Symmetry, backend: Backend,
+def get_random_tensor(symmetry: symmetries.Symmetry, backend: Backend,
                       legs: list[spaces.VectorSpace | None], leg_dim: int, sectors_per_leg: int,
                       real: bool = False):
     assert sectors_per_leg <= leg_dim
@@ -177,16 +177,16 @@ def get_random_tensor(symmetry: groups.Symmetry, backend: Backend,
 
 def get_qmod(sym):
     """Get the (v0.x convention) qmod from a v2.0 symmetry"""
-    if isinstance(sym, groups.ProductSymmetry):
+    if isinstance(sym, symmetries.ProductSymmetry):
         qmod = []
         for s in sym.factors:
             qmod.extend(get_qmod(s))
         return qmod
-    if isinstance(sym, groups.U1Symmetry):
+    if isinstance(sym, symmetries.U1Symmetry):
         return [1]
-    if isinstance(sym, groups.ZNSymmetry):
+    if isinstance(sym, symmetries.ZNSymmetry):
         return [sym.N]
-    if isinstance(sym, groups.NoSymmetry):
+    if isinstance(sym, symmetries.NoSymmetry):
         return []
     raise NotImplementedError
 
