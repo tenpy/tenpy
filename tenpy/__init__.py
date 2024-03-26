@@ -9,9 +9,11 @@ and yet powerful enough for day-to-day research.
 # Copyright (C) TeNPy Developers, GNU GPLv3
 # This file marks this directory as a python package.
 
-import warnings
+# Note: all external packages that are imported should be `del`-ed at the end of the file!
 import logging
-logger = logging.getLogger(__name__)  # main logger for tenpy
+
+# main logger for tenpy
+logger = logging.getLogger(__name__)
 
 # load and provide sub packages on first input
 # note that the order matters!
@@ -79,6 +81,11 @@ from .simulations.measurement import (m_measurement_index, m_bond_dimension, m_b
                                       m_simulation_parameter, m_energy_MPO, m_entropy,
                                       m_onsite_expectation_value, m_correlation_length,
                                       m_evolved_time)
+from .tools.hdf5_io import save, load, save_to_hdf5, load_from_hdf5
+from .tools.misc import (setup_logging, consistency_check, TenpyInconsistencyError,
+                         TenpyInconsistencyWarning, BetaWarning)
+from .tools.params import Config, asConfig
+
 
 
 #: hard-coded version string
@@ -124,6 +131,9 @@ __all__ = [
     'ExcitationInitialState', 'RealTimeEvolution', 'm_measurement_index', 'm_bond_dimension',
     'm_bond_energies', 'm_simulation_parameter', 'm_energy_MPO', 'm_entropy',
     'm_onsite_expectation_value', 'm_correlation_length', 'm_evolved_time',
+    # from tenpy.tools
+    'save', 'load', 'save_to_hdf5', 'load_from_hdf5', 'setup_logging', 'consistency_check',
+    'TenpyInconsistencyError', 'TenpyInconsistencyWarning', 'BetaWarning', 'Config', 'asConfig'
     # from tenpy.__init__, i.e. defined below
     'show_config', 'console_main',
 ]
@@ -274,3 +284,7 @@ def _setup_arg_parser(width=None):
                         help=opt_help)
     parser.add_argument('--version', '-v', action='version', version=__full_version__)
     return parser
+
+
+# remove the imported libraries again. we do not want to expose them e.g. as tenpy.logging
+del logging
