@@ -133,7 +133,7 @@ __all__ = [
     'm_onsite_expectation_value', 'm_correlation_length', 'm_evolved_time',
     # from tenpy.tools
     'save', 'load', 'save_to_hdf5', 'load_from_hdf5', 'setup_logging', 'consistency_check',
-    'TenpyInconsistencyError', 'TenpyInconsistencyWarning', 'BetaWarning', 'Config', 'asConfig'
+    'TenpyInconsistencyError', 'TenpyInconsistencyWarning', 'BetaWarning', 'Config', 'asConfig',
     # from tenpy.__init__, i.e. defined below
     'show_config', 'console_main',
 ]
