@@ -84,7 +84,7 @@ version = {attr = "tenpy.__version__"}
 filterwarnings = [
     "error",  # consider all unfiltered warnings error. they should be handled or filtered.
     "ignore:Couldn't load compiled cython code. Code will run a bit slower.:UserWarning",
-    "ignore::tenpy.tools.misc.BetaWarning"
+    "ignore::tenpy.BetaWarning"
 ]
 markers = [
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",
