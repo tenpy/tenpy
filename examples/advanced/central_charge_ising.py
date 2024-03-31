@@ -1,6 +1,6 @@
-"""Example to extract the central charge from the entranglement scaling.
+"""Example to extract the central charge from the entanglement scaling.
 
-This example code evaluate the central charge of the transverse field Ising model using IDMRG.
+This example code evaluate the central charge of the transverse field Ising model using iDMRG.
 The expected value for the central charge c = 1/2. The code always recycle the environment from
 the previous simulation, which can be seen at the "age".
 
@@ -43,10 +43,10 @@ def example_DMRG_tf_ising_infinite_S_xi_scaling(g):
 
         t0 = time.time()
         eng.reset_stats(
-        )  # necessary if you for example have a fixed numer of sweeps, if you don't set this you option your simulation stops after initial number of sweeps!
+        )  # necessary if you for example have a fixed number of sweeps, if you don't set this you option your simulation stops after initial number of sweeps!
         eng.trunc_params['chi_max'] = chi
         ##   DMRG Calculation    ##
-        print("Start IDMRG CALCULATION")
+        print("Start iDMRG CALCULATION")
         eng.run()
         eng.options['mixer'] = None
         psi.canonical_form()
