@@ -153,7 +153,6 @@ class FusionTree:
             multiplicities=np.concatenate([t2.multiplicities, self.multiplicities])
         )
         
-
     def insert_at(self, n: int, t2: FusionTree) -> dict[FusionTree, complex]:
         r"""Insert a tree `t2` below the `n`-th uncoupled sector.
 
@@ -193,9 +192,10 @@ class FusionTree:
         if t2.num_vertices == 0:
             # t2 has no actual fusion, it is either identity or a Z iso
             if t2.are_dual[0]:
-                self = self.copy()
-                self.are_dual = self.are_dual.copy()
-                self.are_dual[n] = True
+                res = self.copy()
+                res.are_dual = self.are_dual.copy()
+                res.are_dual[n] = True
+                return {res: 1}
             return {self: 1}
 
         if self.num_vertices == 0:
