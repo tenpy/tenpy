@@ -49,7 +49,11 @@ def common_checks(sym: symmetries.Symmetry, example_sectors):
 
     # TODO checks of topological data (decide if checking all combinations of all example_sectors is
     # fast enough, if not pick some randomly):
-    # - if fusion_tensor available: orthonormal, complete, identity when one input is trivial sector
+    # - if fusion_tensor available:
+    #   - orthonormal, complete
+    #   - identity when one input is trivial sector
+    #   - relation to cup and cap if output is trivial sector
+    #   - defining properties of all the other data and symbols
     # - N symbol consistency:
     #    - associativity: \sum_e N(a, b, e) N(e, c, d) == \sum_f N(b, c, d) N(a, f, d)
     #    - left and right unitor : N(a, 1, b) = delta_{a, b} = N(1, a, b)
