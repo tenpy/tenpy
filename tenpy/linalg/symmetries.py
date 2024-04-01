@@ -640,10 +640,6 @@ class GroupSymmetry(Symmetry, metaclass=_ABCFactorSymmetryMeta):
     def qdim(self, a: Sector) -> float:
         return self.sector_dim(a)
 
-    def _r_symbol(self, a: Sector, b: Sector, c: Sector) -> np.ndarray:
-        # TODO could we return np.ones((1, 1)) and rely on broadcasting?
-        return np.eye(self._n_symbol(a, b, c))
-
 
 class AbelianGroup(GroupSymmetry, metaclass=_ABCFactorSymmetryMeta):
     """Base-class for abelian symmetry groups.
@@ -704,6 +700,7 @@ class AbelianGroup(GroupSymmetry, metaclass=_ABCFactorSymmetryMeta):
         return self._one_2D
 
     def _r_symbol(self, a: Sector, b: Sector, c: Sector) -> np.ndarray:
+        # For abelian groups, the R symbol is always 1.
         return self._one_2D
 
     def _c_symbol(self, a: Sector, b: Sector, c: Sector, d: Sector, e: Sector, f: Sector) -> np.ndarray:
@@ -904,6 +901,14 @@ class SU2Symmetry(GroupSymmetry):
     def _n_symbol(self, a: Sector, b: Sector, c: Sector) -> int:
         raise NotImplementedError  # TODO port su2calc
 
+    def _r_symbol(self, a: Sector, b: Sector, c: Sector) -> np.ndarray:
+        # R symbol is +1 if ``j_sum = (j_a + j_b - j_c)`` is even, -1 otherwise.
+        # Note that (j_a + j_b - j_c) is integer by fusion rule and that e.g. ``a == j_a``.
+        # For even (odd) j_sum, we get that ``(a + b - c) % 4`` is 0 (2),
+        # such that ``1 - (a + b - c) % 4`` is 1 (-1). It has shape ``(1,)``.
+        R = 1 - (a + b - c) % 4
+        return R[:, None]
+    
     def _f_symbol(self, a: Sector, b: Sector, c: Sector, d: Sector, e: Sector, f: Sector
                   ) -> np.ndarray:
         raise NotImplementedError  # TODO
