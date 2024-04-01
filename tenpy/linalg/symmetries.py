@@ -281,9 +281,12 @@ class Symmetry(metaclass=ABCMeta):
 
         such that :math:`m_1 = \sum_{\nu} [R^{ab}_c]^\mu_\nu m_2`.
 
-        .. todo ::
-            Nico said (and Jakob agrees) that it should be possible to gauge the fusion tensors
-            such that the R symbols are diagonal in the multiplicity index.
+        We can use the unitary gauge freedom of the fusion tensors
+        .. math ::
+
+            X_μ \mapsto \sum_ν U_{μ,ν} X_ν
+
+        to enforce that the R symbol is diagonal.
 
         Parameters
         ----------
@@ -292,8 +295,8 @@ class Symmetry(metaclass=ABCMeta):
 
         Returns
         -------
-        R : 2D array
-            The R symbol as an array of the multiplicity indices [μ,ν]
+        R : 1D array
+            The diagonal entries of the R symbol as an array of the multiplicity index [μ].
         """
         ...
 
@@ -320,12 +323,8 @@ class Symmetry(metaclass=ABCMeta):
         R1 = self._r_symbol(e, c, d)
         F = self._f_symbol(c, a, b, d, e, f)
         R2 = self._r_symbol(a, c, f)
-        # [nu, (al)] & [mu, (al), bet, lam] -> [nu, mu, bet, lam]
-        res = np.tensordot(R1, F, (1, 1))
-        # [nu, mu, (bet), lam] & [kap, (bet)] -> [nu, mu, lam, kap]
-        res = np.tensordot(res, np.conj(R2), (2, 1))
-        # [nu, mu, lam, kap] -> [mu, nu, kap, lam]
-        return np.transpose(res, [1, 0, 3, 2])
+        # axis [mu, nu, kap, lam] ; R symbols are diagonal
+        return R1[None, :, None, None] * F * np.conj(R2)[None, None, :, None]
 
     def fusion_tensor(self, a: Sector, b: Sector, c: Sector) -> np.ndarray:
         r"""Matrix elements of the fusion tensor :math:`X^{ab}_{c,\mu}` for all :math:`\mu`.
@@ -660,6 +659,7 @@ class AbelianGroup(GroupSymmetry, metaclass=_ABCFactorSymmetryMeta):
         False
     """
 
+    _one_1D = np.ones((1), dtype=int)
     _one_2D = np.ones((1, 1), dtype=int)
     _one_4D = np.ones((1, 1, 1, 1), dtype=int)
 
@@ -701,7 +701,7 @@ class AbelianGroup(GroupSymmetry, metaclass=_ABCFactorSymmetryMeta):
 
     def _r_symbol(self, a: Sector, b: Sector, c: Sector) -> np.ndarray:
         # For abelian groups, the R symbol is always 1.
-        return self._one_2D
+        return self._one_1D
 
     def _c_symbol(self, a: Sector, b: Sector, c: Sector, d: Sector, e: Sector, f: Sector) -> np.ndarray:
         return self._one_4D
@@ -906,8 +906,7 @@ class SU2Symmetry(GroupSymmetry):
         # Note that (j_a + j_b - j_c) is integer by fusion rule and that e.g. ``a == j_a``.
         # For even (odd) j_sum, we get that ``(a + b - c) % 4`` is 0 (2),
         # such that ``1 - (a + b - c) % 4`` is 1 (-1). It has shape ``(1,)``.
-        R = 1 - (a + b - c) % 4
-        return R[:, None]
+        return 1 - (a + b - c) % 4
     
     def _f_symbol(self, a: Sector, b: Sector, c: Sector, d: Sector, e: Sector, f: Sector
                   ) -> np.ndarray:
@@ -992,7 +991,8 @@ class FermionParity(Symmetry):
 
     def _r_symbol(self, a: Sector, b: Sector, c: Sector) -> np.ndarray:
         # if a and b are fermionic -1, otherwise +1
-        return (1 - 2 * a * b)[None, :]
+        # in the first (second) case above, we have ``a * b`` equal to 1 (0).
+        return 1 - 2 * a * b
 
     def _c_symbol(self, a: Sector, b: Sector, c: Sector, d: Sector, e: Sector, f: Sector) -> np.ndarray:
         # R^{ec}_d conj(R)^{ca}_f
@@ -1084,7 +1084,7 @@ class ZNAnyonModel(Symmetry):
         return 1
 
     def _r_symbol(self, a: Sector, b: Sector, c: Sector) -> np.ndarray:
-        return self._phase**(a[0] * b[0]) * self._one_2D
+        return self._phase ** (a * b)
 
     def _c_symbol(self, a: Sector, b: Sector, c: Sector, d: Sector, e: Sector, f: Sector) -> np.ndarray:
         return self._phase**(b[0] * c[0]) * self._one_4D
@@ -1175,7 +1175,7 @@ class ZNAnyonModel2(Symmetry):
         return 1
 
     def _r_symbol(self, a: Sector, b: Sector, c: Sector) -> np.ndarray:
-        return self._phase**(a[0] * b[0]) * self._one_2D
+        return self._phase ** (a * b) * self._one_2D
 
     def _c_symbol(self, a: Sector, b: Sector, c: Sector, d: Sector, e: Sector, f: Sector) -> np.ndarray:
         return (self._phase**(b[0] * c[0])) * self._one_4D
@@ -1256,7 +1256,7 @@ class QuantumDoubleZNAnyonModel(Symmetry):
         return 1
 
     def _r_symbol(self, a: Sector, b: Sector, c: Sector) -> np.ndarray:
-        return self._phase**(a[0] * b[1]) * self._one_2D
+        return self._phase ** (a[0:1] * b[1:2])
 
     def _c_symbol(self, a: Sector, b: Sector, c: Sector, d: Sector, e: Sector, f: Sector) -> np.ndarray:
         return self._phase**(b[0] * c[1]) * self._one_4D
@@ -1289,7 +1289,8 @@ class FibonacciGrading(Symmetry):
     }
     _phi = .5 * (1 + np.sqrt(5))  # the golden ratio
     _f = np.expand_dims([_phi**-1, _phi**-0.5, -_phi**-1], axis=(1,2,3,4))  # nontrivial F-symbols
-    _r = np.expand_dims([np.exp(-4j*np.pi/5), np.exp(3j*np.pi/5)], axis=(1,2))  # nontrivial R-symbols
+    _r = np.expand_dims([np.exp(-4j*np.pi/5), np.exp(3j*np.pi/5)], axis=1)  # nontrivial R-symbols
+    _one_1D = np.ones((1,), dtype=int)
     _one_2D = np.ones((1, 1), dtype=int)
     _one_4D = np.ones((1, 1, 1, 1), dtype=int)
 
@@ -1353,8 +1354,8 @@ class FibonacciGrading(Symmetry):
 
     def _r_symbol(self, a: Sector, b: Sector, c: Sector) -> np.ndarray:
         if np.all(np.concatenate([a, b])):
-            return self._r[c[0], :, :]
-        return self._one_2D
+            return self._r[c[0], :]
+        return self._one_1D
 
     def _c_symbol(self, a: Sector, b: Sector, c: Sector, d: Sector, e: Sector, f: Sector) -> np.ndarray:
         if np.all(np.concatenate([b, c])):
@@ -1389,6 +1390,7 @@ class IsingGrading(Symmetry):
         5: np.array([[1]]),  # σ x ψ = σ = σ x ψ
         8: np.array([[0]])  # ψ x ψ = 1
     }
+    _one_1D = np.ones((1,), dtype=int)
     _one_2D = np.ones((1, 1), dtype=int)
     _one_4D = np.ones((1, 1, 1, 1), dtype=int)
 
@@ -1399,7 +1401,7 @@ class IsingGrading(Symmetry):
         self._f = (np.expand_dims([1, 0, 1, 0, -1], axis=(1,2,3,4))
                             * self.frobenius[1] / np.sqrt(2))  # nontrivial F-symbols
         self._r = np.expand_dims([(-1j)**self.nu, -1, np.exp(3j*self.nu*np.pi/8) * self.frobenius[1],
-                    np.exp(-1j*self.nu*np.pi/8) * self.frobenius[1], 0], axis=(1,2))  # nontrivial R-symbols
+                    np.exp(-1j*self.nu*np.pi/8) * self.frobenius[1], 0], axis=1)  # nontrivial R-symbols
         self._c = [(-1j)**self.nu * self._one_4D, -1 * (-1j)**self.nu * self._one_4D,
                    super()._c_symbol([0], [1], [1], [0], [1], [1]),  # nontrivial C-symbols
                    super()._c_symbol([0], [1], [1], [2], [1], [1]),
@@ -1462,8 +1464,8 @@ class IsingGrading(Symmetry):
 
     def _r_symbol(self, a: Sector, b: Sector, c: Sector) -> np.ndarray:
         if np.all(np.concatenate([a, b])):
-            return self._r[(a[0] + b[0]) * (c[0] - 1), :, :]
-        return self._one_2D
+            return self._r[(a[0] + b[0]) * (c[0] - 1), :]
+        return self._one_1D
 
     def _c_symbol(self, a: Sector, b: Sector, c: Sector, d: Sector, e: Sector, f: Sector) -> np.ndarray:
         if np.all(np.concatenate([b, c])):
@@ -1497,6 +1499,7 @@ class SU2_kGrading(Symmetry):
         e.g., the anyons realized in the Levin-Wen string-net models.
     """
 
+    _one_1D = np.ones((1,), dtype=int)
     _one_2D = np.ones((1, 1), dtype=int)
     _one_4D = np.ones((1, 1, 1, 1), dtype=int)
 
@@ -1516,7 +1519,7 @@ class SU2_kGrading(Symmetry):
                 continue  # do not save trivial R-symbols
             factor = (-1)**((jj - jj1 - jj2) / 2)
             factor *= self._q**(( jj*(jj+2) - jj1*(jj1+2) - jj2*(jj2+2) ) / 8)
-            self._r[i] = factor * self._one_2D
+            self._r[i] = factor * self._one_1D
 
         self._f = {}
         self._convert_to_key = np.array([(self.k + 1)**i for i in range(6)])
@@ -1621,7 +1624,7 @@ class SU2_kGrading(Symmetry):
         try:  # nontrivial R-symbols
             return self._r[np.sum(self._convert_to_key[:3] * np.concatenate([a, b, c]))]
         except KeyError:
-            return self._one_2D
+            return self._one_1D
 
     def _c_symbol(self, a: Sector, b: Sector, c: Sector, d: Sector, e: Sector, f: Sector) -> np.ndarray:
         return super()._c_symbol(a, b, c, d, e, f)
