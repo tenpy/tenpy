@@ -902,6 +902,9 @@ class SU2Symmetry(GroupSymmetry):
         JJ_max = (a + b).item()
         return np.arange(JJ_min, JJ_max + 2, 2)[:, np.newaxis]
 
+    def can_fuse_to(self, a: Sector, b: Sector, c: Sector) -> bool:
+        return (c <= a + b) and (a <= b + c) and (b <= c + a) and ((a + b + c) % 2 == 0)
+
     def sector_dim(self, a: Sector) -> int:
         # dim = 2 * J + 1 = jj + 1
         return a[0] + 1
@@ -923,25 +926,41 @@ class SU2Symmetry(GroupSymmetry):
         return isinstance(other, SU2Symmetry)
 
     def dual_sector(self, a: Sector) -> Sector:
+        # all sectors are self-dual
         return a
 
     def dual_sectors(self, sectors: SectorArray) -> SectorArray:
         return sectors
 
     def _n_symbol(self, a: Sector, b: Sector, c: Sector) -> int:
-        raise NotImplementedError  # TODO port su2calc
-
-    def _r_symbol(self, a: Sector, b: Sector, c: Sector) -> np.ndarray:
-        # R symbol is +1 if ``j_sum = (j_a + j_b - j_c)`` is even, -1 otherwise.
-        # Note that (j_a + j_b - j_c) is integer by fusion rule and that e.g. ``a == j_a``.
-        # For even (odd) j_sum, we get that ``(a + b - c) % 4`` is 0 (2),
-        # such that ``1 - (a + b - c) % 4`` is 1 (-1). It has shape ``(1,)``.
-        return 1 - (a + b - c) % 4
+        return 1
     
     def _f_symbol(self, a: Sector, b: Sector, c: Sector, d: Sector, e: Sector, f: Sector
                   ) -> np.ndarray:
-        raise NotImplementedError  # TODO
+        # OPTIMIZE: jutho has a special case if all sectors are trivial ...?
+        from . import _su2data
+        return _su2data.f_symbol(a[0], b[0], c[0], d[0], e[0], f[0])
 
+    # OPTIMIZE implement frobenius_schur? cache it?
+
+    def qdim(self, a: Sector) -> float:
+        return a[0] + 1
+
+    # OPTIMIZE implement b symbol? cache it?
+
+    def _r_symbol(self, a: Sector, b: Sector, c: Sector) -> np.ndarray:
+        # R symbol is +1 if ``j_sum = (j_a + j_b - j_c)`` is even, -1 otherwise.
+        # Note that (j_a + j_b - j_c) is integer by fusion rule and that e.g. ``a == 2 * j_a``.
+        # For even (odd) j_sum, we get that ``(a + b - c) % 4`` is 0 (2),
+        # such that ``1 - (a + b - c) % 4`` is 1 (-1). It has shape ``(1,)``.
+        return 1 - (a + b - c) % 4
+
+    # OPTIMIZE implement c symbol? cache it?
+
+    def _fusion_tensor(self, a: Sector, b: Sector, c: Sector) -> np.ndarray:
+        from . import _su2data
+        return _su2data.fusion_tensor(a[0], b[0], c[0])
+        
 
 class FermionParity(Symmetry):
     """Fermionic Parity.

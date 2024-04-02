@@ -55,6 +55,7 @@ def check_dunder_all_recursive(check_module, error_lines: list[str] = None):
         is_module = isinstance(obj, types.ModuleType)
         is_from_tenpy = getattr(obj, '__name__', '').startswith('tenpy')
         if is_init_py and is_module and is_from_tenpy:
+            print(getattr(obj, '__name__', ''))
             # in __init__.py files, imported modules should be exposed.
             missing_objects.append(n)
         if getattr(obj, "__module__", None) == _name_:

@@ -311,7 +311,7 @@ def test_no_symmetry(np_random):
     assert_array_equal(sym.dual_sectors(many_s), many_s)
 
 
-@pytest.mark.xfail('Topological data not implemented.')
+@pytest.mark.xfail(reason='Topological data not implemented.')
 def test_product_symmetry(np_random):
     sym = symmetries.ProductSymmetry([
         symmetries.SU2Symmetry(), symmetries.U1Symmetry(), symmetries.FermionParity()
@@ -500,7 +500,7 @@ def test_ZN_symmetry(N, np_random):
     assert_array_equal(sym.dual_sectors(sectors_a), (-sectors_a) % N)
 
 
-@pytest.mark.skip('SU(2) data not yet implemented')
+# TODO is a bit slow... ( ~30s )
 def test_su2_symmetry(np_random):
     sym = symmetries.SU2Symmetry()
     common_checks(sym, example_sectors=np.array([[0], [3], [5], [2], [1], [121]]), np_random=np_random)
@@ -599,7 +599,7 @@ def test_fermion_parity(np_random):
                        np.stack([odd, even, odd]))
 
 
-@pytest.mark.xfail('C symbol seems to fail.')
+@pytest.mark.xfail(reason='C symbol seems to fail.')
 @pytest.mark.parametrize('handedness', ['left', 'right'])
 def test_fibonacci_grading(handedness, np_random):
     sym = symmetries.FibonacciGrading(handedness)
@@ -638,7 +638,7 @@ def test_fibonacci_grading(handedness, np_random):
     assert_array_equal(sym.dual_sector(tau), tau)
 
 
-@pytest.mark.xfail('C symbol seems to fail.')
+@pytest.mark.xfail(reason='C symbol seems to fail.')
 @pytest.mark.parametrize('nu', [*range(1, 16, 2)])
 def test_ising_grading(nu, np_random):
     sym = symmetries.IsingGrading(nu)
