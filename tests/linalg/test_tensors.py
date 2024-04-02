@@ -221,23 +221,16 @@ def test_Tensor_methods(backend, vector_space_rng, backend_data_rng, tensor_rng)
     with pytest.raises(TypeError):
         tens1 == tens2
 
-    print('check converisions, float, complex, array')
+    print('check conversions, float, complex, array')
     tens4.set_labels(['i', 'j', 'i*', 'j*'])
     assert isinstance(float(tens4), float)
     npt.assert_equal(float(tens4), float(tens4_item))
     assert isinstance(complex(tens4 + 2.j * tens4), complex)
     npt.assert_equal(complex(tens4 + 2.j * tens4), complex(tens4_item + 2.j * tens4_item))
 
-    with warnings.catch_warnings(record=True) as caught:
+    with pytest.warns(UserWarning, match='converting complex to real, only return real part!'):
         r = float(tens4 + 2.j * tens4)
-    if abs(tens4_item) > 0.:
-        assert len(caught) == 1
-        assert "converting complex to real" in str(caught[0].message)
-    else:
-        assert len(caught) == 0
     assert r == tens4_item
-
-    # TODO check that float of a complex tensor raises a warning
 
 
 def test_Tensor_tofrom_flat_block_trivial_sector(vector_space_rng, tensor_rng):
