@@ -52,6 +52,10 @@ class Symmetry(metaclass=ABCMeta):
     is_abelian : bool
         If the symmetry is abelian.
     """
+    
+    has_fusion_tensor = False
+    """Whether the symmetry defines :meth:`fusion_tensor`. If not, it raises."""
+    
     def __init__(self, fusion_style: FusionStyle, braiding_style: BraidingStyle, trivial_sector: Sector,
                  group_name: str, num_sectors: int | float, descriptive_name: str | None = None):
         self.fusion_style = fusion_style
@@ -214,6 +218,9 @@ class Symmetry(metaclass=ABCMeta):
         The F symbol is unitary as a matrix from indices :math:`(f\kappa\lambda)`
         to :math:`(e\mu\nu)`.
 
+        .. warning ::
+            Do not perform inplace operations on the output. That may invalidate caches.
+
         Parameters
         ----------
         a, b, c, d, e, f
@@ -257,6 +264,9 @@ class Symmetry(metaclass=ABCMeta):
         The related A-symbol for bending left legs is not needed, since we always
         work with fusion trees in form
 
+        .. warning ::
+            Do not perform inplace operations on the output. That may invalidate caches.
+
         Parameters
         ----------
         a, b, c
@@ -288,6 +298,9 @@ class Symmetry(metaclass=ABCMeta):
 
         to enforce that the R symbol is diagonal.
 
+        .. warning ::
+            Do not perform inplace operations on the output. That may invalidate caches.
+
         Parameters
         ----------
         a, b, c
@@ -310,6 +323,9 @@ class Symmetry(metaclass=ABCMeta):
 
         such that :math:`m_1 = \sum_{f\kappa\lambda} C^{e\mu\nu}_{f\kappa\lambda} m_2`.
 
+        .. warning ::
+            Do not perform inplace operations on the output. That may invalidate caches.
+
         Parameters
         ----------
         a, b, c, d, e, f
@@ -331,6 +347,9 @@ class Symmetry(metaclass=ABCMeta):
 
         May not be well defined for anyons.
 
+        .. warning ::
+            Do not perform inplace operations on the output. That may invalidate caches.
+
         Returns
         -------
         X : 4D ndarray
@@ -347,7 +366,11 @@ class Symmetry(metaclass=ABCMeta):
         raise NotImplementedError(msg)
 
     def all_sectors(self) -> SectorArray:
-        """If there are finitely many sectors, return all of them. Else raise a ValueError."""
+        """If there are finitely many sectors, return all of them. Else raise a ValueError.
+
+        .. warning ::
+            Do not perform inplace operations on the output. That may invalidate caches.
+        """
         if self.num_sectors == np.inf:
             msg = f'{type(self)} has infinitely many sectors.'
             raise ValueError(msg)
@@ -630,11 +653,18 @@ class GroupSymmetry(Symmetry, metaclass=_ABCFactorSymmetryMeta):
     check if a given `ProductSymmetry` *instance* is a group-symmetry.
     See examples in :class:`AbelianGroup`.
     """
+    has_fusion_tensor = True
+    
     def __init__(self, fusion_style: FusionStyle, trivial_sector: Sector, group_name: str,
                  num_sectors: int | float, descriptive_name: str | None = None):
         Symmetry.__init__(self, fusion_style=fusion_style, braiding_style=BraidingStyle.bosonic,
                           trivial_sector=trivial_sector, group_name=group_name, num_sectors=num_sectors,
                           descriptive_name=descriptive_name)
+
+    @abstractmethod
+    def _fusion_tensor(self, a: Sector, b: Sector, c: Sector) -> NDArray:
+        # subclasses must implement. for groups it is always possible.
+        ...
 
     def qdim(self, a: Sector) -> float:
         return self.sector_dim(a)
@@ -919,7 +949,7 @@ class FermionParity(Symmetry):
     Allowed sectors are 1D arrays with a single entry of either `0` (even parity) or `1` (odd parity).
     `[0]`, `[1]`
     """
-
+    has_fusion_tensor = True
     _one_2D = np.ones((1, 1), dtype=int)
     _one_4D = np.ones((1, 1, 1, 1), dtype=int)
 
@@ -1007,7 +1037,7 @@ class FermionParity(Symmetry):
 
 
 class ZNAnyonModel(Symmetry):
-    """Abelian anyon model with fusion rules corresponding to the Z_N group;
+    r"""Abelian anyon model with fusion rules corresponding to the Z_N group;
     also written as :math:`Z_N^{(n)}`.
 
     Allowed sectors are 1D arrays with a single integer entry between `0` and `N-1`.
@@ -1094,7 +1124,7 @@ class ZNAnyonModel(Symmetry):
 
 
 class ZNAnyonModel2(Symmetry):
-    """Abelian anyon model with fusion rules corresponding to the Z_N group;
+    r"""Abelian anyon model with fusion rules corresponding to the Z_N group;
     also written as :math:`Z_N^{(n+1/2)}`. `N` must be even.
 
     .. todo ::
