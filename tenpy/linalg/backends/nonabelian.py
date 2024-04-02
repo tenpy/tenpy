@@ -16,38 +16,52 @@ if TYPE_CHECKING:
     from ..tensors import BlockDiagonalTensor, DiagonalTensor, Mask
 
 
-__all__ = ['block_size', 'subblock_size', 'subblock_slice', 'NonabelianBackend', 'NonAbelianData']
+__all__ = ['block_size', 'forest_block_size', 'tree_block_size', 'forest_block_slice',
+           'tree_block_slice', 'NonabelianBackend', 'NonAbelianData']
 
 
 def block_size(space: ProductSpace, coupled: Sector) -> int:
     """The size of a block"""
-    # OPTIMIZE : this is not super efficient. Make sure its not used in tdot / svd etc
-    return sum(
-        len(fusion_trees(space.symmetry, uncoupled, coupled)) * subblock_size(space, uncoupled)
-        for uncoupled in space.iter_uncoupled_sectors()
-    )
+    return sum(forest_block_size(space, uncoupled, coupled)
+               for uncoupled in space.iter_uncoupled())
 
 
-def subblock_size(space: ProductSpace, uncoupled: tuple[Sector]) -> int:
-    """The size of a subblock"""
-    # OPTIMIZE : this is not super efficient. Make sure its not used in tdot / svd etc
+def forest_block_size(space: ProductSpace, uncoupled: tuple[Sector], coupled: Sector) -> int:
+    """The size of a forest-block"""
+    return len(fusion_trees(space.symmetry, uncoupled, coupled)) * tree_block_size(space, uncoupled)
+
+
+def tree_block_size(space: ProductSpace, uncoupled: tuple[Sector]) -> int:
+    """The size of a tree-block"""
     return prod(s.sector_multiplicity(a) for s, a in zip(space.spaces, uncoupled))
 
 
-def subblock_slice(space: ProductSpace, tree: FusionTree) -> slice:
-    """The range of indices of a subblock within its block, as a slice."""
-    # OPTIMIZE : this is not super efficient. Make sure its not used in tdot / svd etc
+def forest_block_slice(space: ProductSpace, uncoupled: tuple[Sector], coupled: Sector) -> slice:
+    """The range of indices of a forest-block within its block, as a slice."""
+    # OPTIMIZE ?
     offset = 0
-    for uncoupled in space.iter_uncoupled_sectors():
-        if all(np.all(a_unc == a_tree) for a_unc, a_tree in zip(uncoupled, tree.uncoupled)):
+    for _unc in space.iter_uncoupled():
+        if all(np.all(a == b) for a, b in zip(_unc, uncoupled)):
             break
-        num_trees = len(fusion_trees(space.symmetry, uncoupled, tree.coupled))
-        offset += num_trees * subblock_size(space, uncoupled)
-    else:
-        # no break ocurred
-        raise ValueError('Uncoupled sectors of `tree` incompatible with `space`')
+        offset += forest_block_size(space, _unc)
+    else:  # no break ocurred
+        raise ValueError('Uncoupled sectors incompatible with `space`')
+    size = forest_block_size(space, uncoupled, coupled)
+    return slice(offset, offset + size)
+
+
+def tree_block_slice(space: ProductSpace, tree: FusionTree) -> slice:
+    """The range of indices of a tree-block within its block, as a slice."""
+    # OPTIMIZE ?
+    offset = 0
+    for _unc in space.iter_uncoupled():
+        if all(np.all(a == b) for a, b in zip(_unc, tree.uncoupled)):
+            break
+        offset += forest_block_size(space, _unc)
+    else:  # no break ocurred
+        raise ValueError('Uncoupled sectors incompatible with `space`')
     offset += fusion_trees(space.symmetry, tree.uncoupled, tree.coupled).index(tree)
-    size = subblock_size(space, uncoupled)
+    size = tree_block_size(space, tree.uncoupled)
     return slice(offset, offset + size)
 
 
@@ -99,14 +113,31 @@ class NonAbelianData:
         if len(match) == 0:
             return None
         return self.blocks[match[0]]
-        
-    def get_subblock(self, splitting_tree: FusionTree, fusion_tree: FusionTree):
+
+    def get_forest_block(self, coupled: Sector, uncoupled_in: SectorArray,
+                         uncoupled_out: SectorArray) -> Block | None:
+        """Get the slice of :meth:`get_block` that corresponds to fixed coupled sectors.
+
+        Returns ``None`` if the block is not set, even if the coupled sector is not allowed.
+        """
+        block = self.get_block(coupled)
+        if block is None:
+            return None
+        idx1 = forest_block_slice(self.codomain, uncoupled_in)
+        idx2 = forest_block_slice(self.domain, uncoupled_out)
+        return block[idx1, idx2]
+
+    def get_tree_block(self, splitting_tree: FusionTree, fusion_tree: FusionTree):
+        """Get the slice of :meth:`get_block` that corresponds to fixed fusion and splitting trees.
+
+        Returns ``None`` if the block is not set, even if the coupled sector is not allowed.
+        """
         assert np.all(splitting_tree.coupled == fusion_tree.coupled)
         block = self.get_block(fusion_tree.coupled)
         if block is None:
             return None
-        idx1 = subblock_slice(self.codomain, splitting_tree)
-        idx2 = subblock_slice(self.domain, fusion_tree)
+        idx1 = tree_block_slice(self.codomain, splitting_tree)
+        idx2 = tree_block_slice(self.domain, fusion_tree)
         return block[idx1, idx2]
 
 
