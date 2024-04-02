@@ -500,10 +500,9 @@ def test_ZN_symmetry(N, np_random):
     assert_array_equal(sym.dual_sectors(sectors_a), (-sectors_a) % N)
 
 
-# TODO is a bit slow... ( ~30s )
 def test_su2_symmetry(np_random):
     sym = symmetries.SU2Symmetry()
-    common_checks(sym, example_sectors=np.array([[0], [3], [5], [2], [1], [121]]), np_random=np_random)
+    common_checks(sym, example_sectors=np.array([[0], [3], [5], [2], [1], [23]]), np_random=np_random)
     
     spin_1 = np.array([2])
     spin_3_half = np.array([3])
@@ -599,7 +598,6 @@ def test_fermion_parity(np_random):
                        np.stack([odd, even, odd]))
 
 
-@pytest.mark.xfail(reason='C symbol seems to fail.')
 @pytest.mark.parametrize('handedness', ['left', 'right'])
 def test_fibonacci_grading(handedness, np_random):
     sym = symmetries.FibonacciGrading(handedness)
