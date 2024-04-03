@@ -1,3 +1,8 @@
+"""TODO
+Also contains some private utility function used by multiple backend modules.
+
+"""
+
 # Copyright 2023-2023 TeNPy Developers, GNU GPLv3
 from __future__ import annotations
 from abc import ABCMeta, abstractmethod
@@ -1008,4 +1013,116 @@ class BlockBackend(metaclass=ABCMeta):
     def _block_argsort(self, block: Block, axis: int) -> Block:
         """Like :meth:`block_argsort` but can assume real valued block, and sort ascending"""
         ...
-        
+
+
+def _iter_common_sorted(a, b):
+    """Yield indices ``i, j`` for which ``a[i] == b[j]``.
+
+    *Assumes* that `a` and `b` are strictly ascending 1D arrays.
+    Given that, it is equivalent to (but faster than)
+    ``[(i, j) for j, i in itertools.product(range(len(b)), range(len(a)) if a[i] == b[j]]``
+    """
+    # when we call this function, we basically wanted _iter_common_sorted_arrays,
+    # but used strides to merge multiple columns to avoid too much python loops
+    # for C-implementation, this is definitely no longer necessary.
+    l_a = len(a)
+    l_b = len(b)
+    i, j = 0, 0
+    res = []
+    while i < l_a and j < l_b:
+        if a[i] < b[j]:
+            i += 1
+        elif b[j] < a[i]:
+            j += 1
+        else:
+            res.append((i, j))
+            i += 1
+            j += 1
+    return res
+
+
+def _iter_common_sorted_arrays(a, b):
+    """Yield indices ``i, j`` for which ``a[i, :] == b[j, :]``.
+
+    *Assumes* that `a` and `b` are strictly lex-sorted (according to ``np.lexsort(a.T)``).
+    Given that, it is equivalent to (but faster than)
+    ``[(i, j) for j, i in itertools.product(range(len(b)), range(len(a)) if all(a[i,:] == b[j,:]]``
+    """
+    l_a, d_a = a.shape
+    l_b, d_b = b.shape
+    assert d_a == d_b
+    i, j = 0, 0
+    while i < l_a and j < l_b:
+        for k in reversed(range(d_a)):
+            if a[i, k] < b[j, k]:
+                i += 1
+                break
+            elif b[j, k] < a[i, k]:
+                j += 1
+                break
+        else:
+            yield (i, j)
+            i += 1
+            j += 1
+    # done
+
+
+def _iter_common_nonstrict_sorted_arrays(a, b):
+    """Yield indices ``i, j`` for which ``a[i, :] == b[j, :]``.
+
+    Like _iter_common_sorted_arrays, but allows duplicate rows in `a`.
+    I.e. `a.T` is lex-sorted, but not strictly. `b.T` is still assumed to be strictly lexsorted.
+    """
+    l_a, d_a = a.shape
+    l_b, d_b = b.shape
+    assert d_a == d_b
+    i, j = 0, 0
+    while i < l_a and j < l_b:
+        for k in reversed(range(d_a)):
+            if a[i, k] < b[j, k]:
+                i += 1
+                break
+            elif b[j, k] < a[i, k]:
+                j += 1
+                break
+        else:  # (no break)
+            yield (i, j)
+            # difference to _iter_common_sorted_arrays:
+            # dont increase j because a[i + 1] might also match b[j]
+            i += 1
+
+
+def _iter_common_noncommon_sorted_arrays(a, b):
+    """Yield the following pairs ``i, j`` of indices:
+
+    - Matching entries, i.e. ``(i, j)`` such that ``all(a[i, :] == b[j, :])``
+    - Entries only in `a`, i.e. ``(i, None)`` such that ``a[i, :]`` is not in `b`
+    - Entries only in `b`, i.e. ``(None, j)`` such that ``b[j, :]`` is not in `a`
+
+    *Assumes* that `a` and `b` are strictly lex-sorted (according to ``np.lexsort(a.T)``).
+    """
+    l_a, d_a = a.shape
+    l_b, d_b = b.shape
+    assert d_a == d_b
+    i, j = 0, 0
+    both = []  # TODO (JU) @jhauschild : this variable is unused? did something get lost while copying from old tenpy?
+    while i < l_a and j < l_b:
+        for k in reversed(range(d_a)):
+            if a[i, k] < b[j, k]:
+                yield i, None
+                i += 1
+                break
+            elif a[i, k] > b[j, k]:
+                yield None, j
+                j += 1
+                break
+        else:
+            yield i, j
+            i += 1
+            j += 1
+    # can still have i < l_a or j < l_b, but not both
+    for i2 in range(i, l_a):
+        yield i2, None
+    for j2 in range(j, l_b):
+        yield None, j2
+    # done
