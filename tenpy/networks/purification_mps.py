@@ -460,6 +460,73 @@ class PurificationMPS(MPS):
     def swap_sites(self, i, swapOP='auto', trunc_par={}):
         raise NotImplementedError()
 
+    def sample_measurements(self,
+                            first_site=0,
+                            last_site=None,
+                            ops=None,
+                            rng=None,
+                            norm_tol=1.e-12):
+        """Sample measurement results in the computational basis. See
+        MPS.sample_measurements for documentation of the function. The only functional difference
+        between these two functions is that we sample over the physical leg and leave
+        the ancilla leg behind on each site. Also, we return the weight**2 of the measurements
+        rather than the weight as in MPS case.
+
+        Returns (differences from MPS)
+        -------
+        probability : float
+            The probability ``trace(|psi><psi|sigmas...><sigmas...|)``, i.e.,
+            the probability of measuring ``|sigmas...>`` on the physical legs.
+        """
+        if last_site is None:
+            last_site = self.L - 1
+        if rng is None:
+            rng = np.random.default_rng()
+        sigmas = []
+        total_probability = 1.
+        theta = self.get_theta(first_site, n=1).replace_labels(['p0', 'q0'], ['p', 'q'])
+        for i in range(first_site, last_site + 1):
+            # theta = wave function in basis vL [sigmas...] p vR
+            # where the `sigmas` are already fixed to the measurement results
+            i0 = self._to_valid_index(i)
+            site = self.sites[i0]
+            if ops is not None:
+                op_name = ops[(i - first_site) % len(ops)]
+                op = site.get_op(op_name).transpose(['p', 'p*'])
+                if npc.norm(op - op.conj().transpose()) > 1.e-13:
+                    raise ValueError(f"measurement operator {op_name!r} not hermitian")
+                W, V = npc.eigh(op)
+                theta = npc.tensordot(V.conj(), theta, axes=['p*', 'p']).replace_label('eig*', 'p')
+            else:
+                W = np.arange(site.dim)
+            # perform a projective measurement:
+            # trace out rest except site `i`
+            rho = npc.tensordot(theta.conj(), theta, [['vL*', 'vR*', 'q*'], ['vL', 'vR', 'q']])
+            # probabilities p(sigma) = <sigma|rho|sigma>
+            rho_diag = np.abs(np.diag(rho.to_ndarray()))  # abs: real dtype & roundoff err
+            if abs(np.sum(rho_diag) - 1.) > norm_tol:
+                raise ValueError("not normalized to `norm_tol`")
+            rho_diag /= np.sum(rho_diag)
+            sigma = rng.choice(site.dim, p=rho_diag)  # randomly select index from probabilities
+            sigmas.append(W[sigma])
+            theta = theta.take_slice(sigma, 'p')  # project to sigma in theta for remaining rho
+            #weight = npc.norm(theta)
+            probability = rho_diag[sigma] # this squared is probability of seeing sigma conditioned on previous results.
+            # weight**2 should be equal to rho_diag[sigma] which should be the same as
+            # npc.tensordot(theta.conj(), theta, axes=(['vL*', 'vR*', 'q*'], ['vL', 'vR', 'q']))
+            total_probability *= probability
+            if i != last_site:
+                # attach next site to sigma
+                theta = theta / npc.norm(theta)
+                Q, R = npc.qr(theta.combine_legs(['vL', 'q']),
+                              inner_labels=['vR', 'vL'],
+                              pos_diag_R=True,
+                              )
+                B = self.get_B(i + 1)
+                theta = npc.tensordot(R, B, axes=['vR', 'vL'])
+                # B is right-canonical -> theta still normalized
+        return sigmas, total_probability
+
     def _corr_up_diag(self, ops1, ops2, i, j_gtr, opstr, str_on_first, apply_opstr_first):
         """correlation function above the diagonal: for fixed i and all j in j_gtr, j > i."""
         # compared to MPS._corr_up_diag just perform additional contractions of the 'q'

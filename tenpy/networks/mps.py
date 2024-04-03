@@ -3323,7 +3323,7 @@ class MPS(BaseMPSExpectationValue):
             as specified in the corresponding :class:`~tenpy.networks.site.Site` in :attr:`sites`.
             Note that this can change depending on whether/what charges you conserve!
             Explicitly specifying the measurement operator will avoid that issue.
-        weight : float
+        weight : complex
             The weight ``sqrt(trace(|psi><psi|sigmas...><sigmas...|))``, i.e.,
             the probability of measuring ``|sigmas...>`` is ``weight**2``.
             For a finite system where we sample all sites (i.e., the trace over the compliment of
