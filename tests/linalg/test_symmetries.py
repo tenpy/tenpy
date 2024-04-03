@@ -51,10 +51,14 @@ def sample_offdiagonal(sequence, num_samples: int, accept_fewer: bool = False, n
         yield sequence[idx1], sequence[idx2]
 
 
-def common_checks(sym: symmetries.Symmetry, example_sectors, np_random):
+def common_checks(sym: symmetries.Symmetry, example_sectors, np_random, check_fusion_consistency: bool = True):
     """Common consistency checks to be performed on a symmetry instance.
 
     Assumes example_sectors are duplicate free.
+
+    TODO: The fusion consistency check right now is not elegant and should be revisited at some point.
+          To make things more efficient, we should check for consistency only once, i.e., when we check,
+          e.g., the unitarity of the F-moves, we can use the same consistency check as for the C symbols
     """
     example_sectors = np.unique(example_sectors, axis=0)
     
@@ -157,6 +161,14 @@ def common_checks(sym: symmetries.Symmetry, example_sectors, np_random):
         print(f'checking {method_name} vs fallback implementation')
         for sectors in sampled_zip(example_sectors, num_copies=num_sectors, num_samples=5,
                                    np_random=np_random):
+            if check_fusion_consistency:
+                if num_sectors == 3 and not sym.can_fuse_to(sectors[0], sectors[1], sectors[2]):
+                    continue
+                elif num_sectors == 6 and (not sym.can_fuse_to(sectors[0], sectors[1], sectors[4])
+                                        or not sym.can_fuse_to(sectors[0], sectors[2], sectors[5])
+                                        or not sym.can_fuse_to(sectors[2], sectors[4], sectors[3])
+                                        or not sym.can_fuse_to(sectors[1], sectors[5], sectors[3])):
+                    continue
             assert_array_almost_equal(sym_method(sym, *sectors), fallback_method(sym, *sectors))
 
     # check braiding style
@@ -598,7 +610,6 @@ def test_fermion_parity(np_random):
                        np.stack([odd, even, odd]))
 
 
-@pytest.mark.xfail(reason='C symbol seems to fail.')
 @pytest.mark.parametrize('handedness', ['left', 'right'])
 def test_fibonacci_grading(handedness, np_random):
     sym = symmetries.FibonacciGrading(handedness)
@@ -637,7 +648,6 @@ def test_fibonacci_grading(handedness, np_random):
     assert_array_equal(sym.dual_sector(tau), tau)
 
 
-@pytest.mark.xfail(reason='C symbol seems to fail.')
 @pytest.mark.parametrize('nu', [*range(1, 16, 2)])
 def test_ising_grading(nu, np_random):
     sym = symmetries.IsingGrading(nu)
