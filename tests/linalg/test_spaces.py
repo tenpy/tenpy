@@ -195,9 +195,11 @@ def test_product_space(symmetry, symmetry_sectors_rng, np_random):
     for p in [p1, p2, p3]:
         assert p.can_contract_with(p.dual)
     assert p2 == spaces.ProductSpace([s1, s2], _is_dual=True).flip_is_dual()
+    
     assert p2.can_contract_with(spaces.ProductSpace([s1.dual, s2.dual], _is_dual=False).flip_is_dual())
     assert p2.can_contract_with(spaces.ProductSpace([s1.dual, s2.dual]))  # check default _is_dual
     assert p2.can_contract_with(spaces.ProductSpace([s1.dual, s2.dual], _is_dual=True))
+    
     p1_s = p1.as_VectorSpace()
     assert isinstance(p1_s, spaces.VectorSpace)
     assert np.all(p1_s.sectors == p1.sectors)
@@ -205,6 +207,15 @@ def test_product_space(symmetry, symmetry_sectors_rng, np_random):
     assert not p1_s.is_equal_or_dual(p1)
     assert p1_s != p1
     assert p1 != p1_s
+
+    # check empty product
+    empty_product = spaces.ProductSpace([], symmetry=symmetry, is_real=s1.is_real)
+    monoidal_unit = spaces.VectorSpace.from_trivial_sector(1, symmetry)
+    _ = str(empty_product)
+    _ = repr(empty_product)
+    assert empty_product != p1
+    assert empty_product != monoidal_unit
+    assert empty_product.as_VectorSpace() == monoidal_unit
 
 
 def test_get_basis_transformation(default_backend):

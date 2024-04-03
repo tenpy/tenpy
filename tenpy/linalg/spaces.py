@@ -935,10 +935,14 @@ class ProductSpace(VectorSpace):
         The resulting product space can always be split back into these.
     backend : Backend | None
         If a backend is given, the backend-specific metadata will be set via ``backend._fuse_spaces``.
+    symmetry, is_real : optional
+        Like arguments to :meth:`VectorSpace.__init__`.
+        Required if ``len(spaces) == 0``. Ignored otherwise.
     _is_dual : bool | None
         Flag indicating wether the fusion space represents a dual (bra) space or a non-dual (ket) space.
         Per default (``_is_dual=None``), ``spaces[0].is_dual`` is used, i.e. the ``ProductSpace``
         will be a bra space if and only if its first factor is a bra space.
+        An empty product is not dual by default.
         See notes on duality below.
     _sectors, _multiplicities:
         These inputs to VectorSpace.__init__ can optionally be passed to avoid recomputation.
@@ -991,15 +995,26 @@ class ProductSpace(VectorSpace):
     Note that the default behavior of the `_is_dual` argument guarantees that
     `ProductSpace(some_space)` is contractible with `ProductSpace([s.dual for s in some_spaces])`.
     """
-    def __init__(self, spaces: list[VectorSpace], backend: Backend = None, _is_dual: bool = None,
+    def __init__(self, spaces: list[VectorSpace], backend: Backend = None,
+                 symmetry: Symmetry = None, is_real: bool = False, _is_dual: bool = None,
                  _sectors: SectorArray = None, _multiplicities: ndarray = None):
         if _is_dual is None:
-            _is_dual = spaces[0].is_dual
+            if len(spaces) > 0:
+                _is_dual = spaces[0].is_dual
+            else:
+                _is_dual = False  # not dual by default.
         self.spaces = spaces  # spaces can be themselves ProductSpaces
-        symmetry = spaces[0].symmetry
-        assert all(s.symmetry == symmetry for s in spaces)
-        is_real = spaces[0].is_real
-        assert all(space.is_real == is_real for space in spaces)
+        if len(spaces) == 0:
+            assert symmetry is not None, 'symmetry arg is required if spaces is empty'
+            assert is_real is not None, 'is_real arg is requires if spaces is empty'
+            # the empty product is the monoidal unit, i.e. the trivial sector.
+            _sectors = symmetry.trivial_sector[None, :]
+            _multiplicities = np.array([1])
+        else:
+            symmetry = spaces[0].symmetry
+            is_real = spaces[0].is_real
+            assert all(s.symmetry == symmetry for s in spaces)
+            assert all(space.is_real == is_real for space in spaces)
 
         if _sectors is None:
             assert _multiplicities is None
@@ -1404,7 +1419,6 @@ class ProductSpace(VectorSpace):
         """Iterate over all combinations of sectors"""
         return it.product(*(s.sectors for s in self.spaces))
         
-
 
 def _fuse_spaces(symmetry: Symmetry, spaces: list[VectorSpace], _is_dual: bool
                  ) -> tuple[SectorArray, ndarray, ndarray, dict]:
