@@ -65,6 +65,17 @@ def tree_block_slice(space: ProductSpace, tree: FusionTree) -> slice:
     return slice(offset, offset + size)
 
 
+def _make_domain_codomain(legs: list[VectorSpace], num_codomain: int = 0, backend=None
+                          ) -> tuple[ProductSpace, ProductSpace]:
+    assert 0 <= num_codomain < len(legs)
+    # need to pass symmetry and is_real, since codomain or domain might be the empty product.
+    symmetry = legs[0].symmetry
+    is_real = legs[0].is_real
+    codomain = ProductSpace(legs[:num_codomain], backend=backend, symmetry=symmetry, is_real=is_real)
+    domain = ProductSpace(legs[num_codomain:], backend=backend, symmetry=symmetry, is_real=is_real)
+    return domain, codomain
+
+
 class NonAbelianData:
     r"""Data stored in a Tensor for :class:`NonabelianBackend`.
 
@@ -243,9 +254,7 @@ class NonabelianBackend(Backend, BlockBackend, ABC):
         raise NotImplementedError  # TODO
 
     def from_block_func(self, func, legs: list[VectorSpace], func_kwargs={}) -> NonAbelianData:
-        # TODO add arg to specify (co-)domain?
-        codomain = ProductSpace(legs, backend=self).as_flat_product()
-        domain = ProductSpace([], backend=self)
+        domain, codomain = _make_domain_codomain(legs, num_codomain=0, backend=self)  # TODO specify num_codomain
         coupled = allowed_coupled_sectors(codomain, domain)
         blocks = [func((block_size(codomain, c), block_size(domain, c)), **func_kwargs)
                   for c in coupled]
@@ -260,9 +269,7 @@ class NonabelianBackend(Backend, BlockBackend, ABC):
         raise NotImplementedError  # TODO
 
     def zero_data(self, legs: list[VectorSpace], dtype: Dtype) -> NonAbelianData:
-        # TODO add arg to specify (co-)domain?
-        codomain = ProductSpace(legs, backend=self).as_flat_product()
-        domain = ProductSpace([], backend=self)
+        domain, codomain = _make_domain_codomain(legs, num_codomain=0, backend=self)  # TODO specify num_codomain
         return NonAbelianData(coupled_sectors=codomain.symmetry.empty_sector_array, blocks=[],
                               domain=domain, codomain=codomain, dtype=dtype)
 
@@ -270,9 +277,7 @@ class NonabelianBackend(Backend, BlockBackend, ABC):
         raise NotImplementedError  # TODO
 
     def eye_data(self, legs: list[VectorSpace], dtype: Dtype) -> NonAbelianData:
-        # TODO add arg to specify (co-)domain?
-        codomain = ProductSpace(legs, backend=self).as_flat_product()
-        domain = ProductSpace([], backend=self)
+        domain, codomain = _make_domain_codomain(legs, num_codomain=0, backend=self)  # TODO specify num_codomain
         coupled = allowed_coupled_sectors(codomain, domain)
         blocks = [self.eye_block((block_size(codomain, c), block_size(domain, c)), dtype=dtype)
                   for c in coupled]
