@@ -372,7 +372,8 @@ def check_hexagon_equation(sym: symmetries.Symmetry, example_sectors, check_both
         conjugate.append(True)
 
     for charges in example_sectors:
-        a, b, c, d, e, g = charges
+        # this charge labeling should be consistent with sample_sector_sextets
+        a, c, b, d, g, e = charges
 
         for conj in conjugate:
             lhs = _return_r(c, a, e, conj) # [α, λ]
