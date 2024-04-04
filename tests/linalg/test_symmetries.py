@@ -6,7 +6,10 @@ from numpy.testing import assert_array_equal, assert_array_almost_equal
 from tenpy.linalg import symmetries
 
 
-def sampled_zip(sequence, num_copies: int, num_samples: int, np_random=np.random, accept_fewer=True):
+default_rng = np.random.default_rng()
+
+
+def sampled_zip(sequence, num_copies: int, num_samples: int, np_rng=default_rng, accept_fewer=True):
     """Generate a given number of random samples from the zip of multiple sequences"""
     len_sequence = len(sequence)
     num_combinations = len_sequence ** num_copies
@@ -15,7 +18,7 @@ def sampled_zip(sequence, num_copies: int, num_samples: int, np_random=np.random
             num_samples = num_combinations
         else:
             raise ValueError(f'Can not generate {num_samples} samples.')
-    for idx in np_random.choice(num_combinations, size=num_samples, replace=False):
+    for idx in np_rng.choice(num_combinations, size=num_samples, replace=False):
         sample = []
         for _ in range(num_copies):
             sample.append(sequence[idx % len_sequence])
@@ -24,17 +27,17 @@ def sampled_zip(sequence, num_copies: int, num_samples: int, np_random=np.random
         yield tuple(sample)
 
 
-def sample_from(sequence, num_samples: int, accept_fewer: bool = False, np_random=np.random):
+def sample_from(sequence, num_samples: int, accept_fewer: bool = False, np_rng=default_rng):
     if num_samples > len(sequence):
         if accept_fewer:
             num_samples = len(sequence)
         else:
             raise ValueError(f'Can not generate {num_samples} samples from sequence of len {len(sequence)}')
-    for n in np_random.choice(len(sequence), size=num_samples, replace=False):
+    for n in np_rng.choice(len(sequence), size=num_samples, replace=False):
         yield sequence[n]
 
 
-def sample_offdiagonal(sequence, num_samples: int, accept_fewer: bool = False, np_random=np.random):
+def sample_offdiagonal(sequence, num_samples: int, accept_fewer: bool = False, np_rng=default_rng):
     """Sample pairs ``(sequence[n], sequence[m])`` with ``n != m``."""
     len_sequence = len(sequence)
     num_combinations = len_sequence * (len_sequence - 1)
@@ -43,13 +46,78 @@ def sample_offdiagonal(sequence, num_samples: int, accept_fewer: bool = False, n
             num_samples = num_combinations
         else:
             raise ValueError(f'Can not generate {num_samples} samples.')
-    for i in np_random.choice(num_combinations, size=num_samples, replace=False):
+    for i in np_rng.choice(num_combinations, size=num_samples, replace=False):
         idx1, idx2 = divmod(i, len_sequence)
         # now   0 <= idx1 < len-1   and 0 <= idx2 < len
         if idx1 >= idx2:
             idx1 += 1
         yield sequence[idx1], sequence[idx2]
 
+
+def sample_sector_triplets(symmetry: symmetries.Symmetry, sectors, num_samples: int,
+                           accept_fewer: bool = True, np_rng=default_rng
+                           ):
+    """Yield samples ``(a, b, c)`` such that ``a x b -> c`` is an allowed fusion"""
+    a_b_list = list(sampled_zip(sectors, num_copies=2, num_samples=num_samples, np_rng=np_rng,
+                                accept_fewer=True))
+    fusion_outcomes = [symmetry.fusion_outcomes(a, b) for a, b in a_b_list]
+    
+    if len(a_b_list) >= num_samples:  # it is enough to select one fusion outcome c per a_b
+        for (a, b), outcomes in zip(a_b_list, fusion_outcomes):
+            yield a, b, np_rng.choice(outcomes)
+        return
+
+    num_outcomes = [len(outcomes) for outcomes in fusion_outcomes]
+    total_number = sum(num_outcomes)
+    if total_number < num_samples:
+        if not accept_fewer:
+            raise ValueError('Could not generate enough samples')
+        # just yield all of them
+        for (a, b), outcomes in zip(a_b_list, fusion_outcomes):
+            for c in outcomes:
+                yield a, b, c
+        return
+
+    sample_percentage = num_samples / total_number
+    # divide evenly as much as possible
+    num_samples_per_a_b = [int(sample_percentage * num) for num in num_outcomes]
+    # distribute the remaining samples randomly
+    num_missing = num_samples - sum(num_samples_per_a_b)
+    for idx in np_rng.choice(len(a_b_list), size=num_missing, replace=False):
+        num_samples_per_a_b[idx] += 1
+    assert sum(num_samples_per_a_b) == num_samples
+    for (a, b), outcomes, num in zip(a_b_list, fusion_outcomes, num_samples_per_a_b):
+        for c in sample_from(outcomes, num_samples=num, accept_fewer=False, np_rng=np_rng):
+            yield a, b, c
+    
+
+def sample_sector_sextets(symmetry: symmetries.Symmetry, sectors, num_samples: int,
+                          accept_fewer: bool = True, np_rng=default_rng):
+    """Yield samples ``(a, b, c, d, e, f)`` that are valid F/C symbol inputs.
+
+    The constraint is that both ``(a x b) x c -> f x c -> d`` and ``a x (b x c) -> a x e -> d``
+    are allowed.
+    """
+    abc_list = list(sampled_zip(sectors, num_copies=3, num_samples=num_samples, np_rng=np_rng,
+                                accept_fewer=True))
+
+    if len(abc_list) >= num_samples:  # it is enough to select one fusion channel per a, b, c
+        for a, b, c in abc_list:
+            f = np_rng.choice(symmetry.fusion_outcomes(a, b))
+            d = np_rng.choice(symmetry.fusion_outcomes(f, c))
+            # need to find an f from the fusion products of b x c such that a x f -> d is allowed
+            for e in np_rng.permuted(symmetry.fusion_outcomes(b, c), axis=0):
+                if symmetry.can_fuse_to(a, e, d):
+                    yield a, b, c, d, e, f
+                    break
+        return
+
+    # TODO can do something analogous to `sample_sector_triplets` to efficiently sample without
+    #      duplicates. I am lazy now and just return fewer samples...
+    assert accept_fewer
+    yield from sample_sector_sextets(symmetry=symmetry, sectors=sectors, num_samples=len(abc_list),
+                                     np_rng=np_rng)
+    
 
 def common_checks(sym: symmetries.Symmetry, example_sectors, np_random, check_fusion_consistency: bool = True):
     """Common consistency checks to be performed on a symmetry instance.
@@ -61,6 +129,13 @@ def common_checks(sym: symmetries.Symmetry, example_sectors, np_random, check_fu
           e.g., the unitarity of the F-moves, we can use the same consistency check as for the C symbols
     """
     example_sectors = np.unique(example_sectors, axis=0)
+
+    # generate a few samples of sectors that fulfill fusion rules, used to check the symbols
+    sector_triples = list(sample_sector_triplets(sym, example_sectors, num_samples=10,
+                                                 accept_fewer=True, np_rng=np_random))
+    sector_sextets = list(sample_sector_sextets(sym, example_sectors, num_samples=10,
+                                                accept_fewer=True, np_rng=np_random))
+    
     
     assert sym.trivial_sector.shape == (sym.sector_ind_len,)
     assert sym.is_valid_sector(sym.trivial_sector)
@@ -108,7 +183,7 @@ def common_checks(sym: symmetries.Symmetry, example_sectors, np_random, check_fu
         # left and right unitor (diagonal part)
         assert sym.n_symbol(a, sym.trivial_sector, a) == 1
         assert sym.n_symbol(sym.trivial_sector, a, a) == 1
-    for a, b in sample_offdiagonal(example_sectors, num_samples=10, accept_fewer=True, np_random=np_random):
+    for a, b in sample_offdiagonal(example_sectors, num_samples=10, accept_fewer=True, np_rng=np_random):
         # duality (off-diagonal part)
         b_dual = sym.dual_sector(b)
         if not np.all(a == b_dual):
@@ -116,11 +191,12 @@ def common_checks(sym: symmetries.Symmetry, example_sectors, np_random, check_fu
         # left and right unitor (off-diagonal part)
         assert sym.n_symbol(a, sym.trivial_sector, b) == 0
         assert sym.n_symbol(sym.trivial_sector, a, b) == 0
-    for a, b, c in sampled_zip(example_sectors, num_copies=3, num_samples=10, np_random=np_random):
-        #  associativity constraint  :  \sum_e N(a, b, e) N(e, c, d) == \sum_f N(b, c, d) N(a, f, d)
-        pass  # TODO probably want a clever way to sample some d such that fusion is allowed.
-
+    for a, b, c, d, _, _ in sector_sextets:
+        # TODO associativity constraint \sum_e N(a, b, e) N(e, c, d) == \sum_f N(b, c, d) N(a, f, d)
+        pass
+    
     # check F symbol
+    #   Note: can use sector_sextets
     #   TODO:
     #    - correct shape
     #    - unitary
@@ -128,6 +204,7 @@ def common_checks(sym: symmetries.Symmetry, example_sectors, np_random, check_fu
     #    - pentagon equation
 
     # check R symbol
+    #   Note: can use sector_triplets
     #   TODO:
     #    - correct shape
     #    - unitary (i.e. just phases)
@@ -135,41 +212,42 @@ def common_checks(sym: symmetries.Symmetry, example_sectors, np_random, check_fu
     #    - consistency with twist (when implemented)
 
     # check C symbol
+    #   Note: can use sector_sextets, but should ``for c, a, b, d, e, f in sector_sextets``.
     #   TODO:
     #    - correct shape
     #    - unitary
 
     # check B symbol
+    #   Note: can use sector_triplets
     #   TODO:
     #    - correct shape
     #    - normalization
     #    - snake equation
     
-    # check derived topological data vs the fallback implementations
-    methods_to_check = dict(
-        frobenius_schur=1,
-        qdim=1,
-        _b_symbol=3,
-        _c_symbol=6,
-    )  # values: number of sectors that method takes as arguments
-    for method_name, num_sectors in methods_to_check.items():
-        # equivalent too e.g. ``sym.qdim(a) == Symmetry.qdim(sym, a)``.
-        sym_method = getattr(type(sym), method_name)
-        fallback_method = getattr(symmetries.Symmetry, method_name)
-        if sym_method is fallback_method:
-            continue  # not overridden -> nothing to check
-        print(f'checking {method_name} vs fallback implementation')
-        for sectors in sampled_zip(example_sectors, num_copies=num_sectors, num_samples=5,
-                                   np_random=np_random):
-            if check_fusion_consistency:
-                if num_sectors == 3 and not sym.can_fuse_to(sectors[0], sectors[1], sectors[2]):
-                    continue
-                elif num_sectors == 6 and (not sym.can_fuse_to(sectors[0], sectors[1], sectors[4])
-                                        or not sym.can_fuse_to(sectors[0], sectors[2], sectors[5])
-                                        or not sym.can_fuse_to(sectors[2], sectors[4], sectors[3])
-                                        or not sym.can_fuse_to(sectors[1], sectors[5], sectors[3])):
-                    continue
-            assert_array_almost_equal(sym_method(sym, *sectors), fallback_method(sym, *sectors))
+    # check derived topological data vs the fallback implementations.
+    # we always check if the method is actually overridden, to avoid comparing identical implementations.
+    SymCls = type(sym)
+    if SymCls.frobenius_schur is not symmetries.Symmetry.frobenius_schur:
+        for a in example_sectors:
+            msg = 'frobenius_schur does not match fallback'
+            assert sym.frobenius_schur(a) == symmetries.Symmetry.frobenius_schur(sym, a), msg
+    if SymCls.qdim is not symmetries.Symmetry.qdim:
+        for a in example_sectors:
+            assert sym.qdim(a) == symmetries.Symmetry.qdim(sym, a), 'qdim does not match fallback'
+    if SymCls._b_symbol is not symmetries.Symmetry._b_symbol:
+        for a, b, c in sector_triples:
+            assert_array_almost_equal(
+                sym._b_symbol(a, b, c),
+                symmetries.Symmetry._b_symbol(sym, a, b, c),
+                err_msg='B symbol does not match fallback'
+            )
+    if SymCls._c_symbol is not symmetries.Symmetry._c_symbol:
+        for c, a, b, d, e, f in sector_sextets:
+            assert_array_almost_equal(
+                sym._c_symbol(a, b, c, d, e, f),
+                symmetries.Symmetry._c_symbol(sym, a, b, c, d, e, f),
+                err_msg='C symbol does not match fallback'
+            )
 
     # check braiding style
     #   TODO:
@@ -197,7 +275,7 @@ def check_fusion_tensor(sym: symmetries.Symmetry, example_sectors, np_random):
     TODO should check:
     - relationship to cup
     """
-    for a, b in sampled_zip(example_sectors, num_copies=2, num_samples=10, np_random=np_random):
+    for a, b in sampled_zip(example_sectors, num_copies=2, num_samples=10, np_rng=np_random):
         d_a = sym.sector_dim(a)
         d_b = sym.sector_dim(b)
         fusion_outcomes = sym.fusion_outcomes(a, b)
@@ -229,7 +307,7 @@ def check_fusion_tensor(sym: symmetries.Symmetry, example_sectors, np_random):
         assert_array_almost_equal(completeness_res, eye_a * eye_b)
             
         # remains: orthonormality for different sectors
-        for c, d in sample_offdiagonal(fusion_outcomes, num_samples=5, accept_fewer=True, np_random=np_random):
+        for c, d in sample_offdiagonal(fusion_outcomes, num_samples=5, accept_fewer=True, np_rng=np_random):
             d_c = sym.sector_dim(c)
             d_d = sym.sector_dim(d)
             N_abc = sym.n_symbol(a, b, c)
