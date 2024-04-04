@@ -25,6 +25,11 @@ Sector = npt.NDArray[np.int_] # 1D array, axis [q], containing the an integer re
 SectorArray = npt.NDArray[np.int_]  # 2D array, axes [s, q], where s goes over different sectors
 
 
+# TODO eventually decide if we want to do them or not or optionally.
+#      but we should definitely have these checks while developing.
+_DO_FUSION_INPUT_CHECKS = True
+
+
 class FusionStyle(Enum):
     single = 0  # only one resulting sector, a ⊗ b = c, e.g. abelian symmetry groups
     multiple_unique = 10  # every sector appears at most once in pairwise fusion, N^{ab}_c \in {0,1}
@@ -203,9 +208,8 @@ class Symmetry(metaclass=ABCMeta):
         """
         ...
 
-    @abstractmethod
-    def _f_symbol(self, a: Sector, b: Sector, c: Sector, d: Sector, e: Sector, f: Sector
-                  ) -> np.ndarray:
+    def f_symbol(self, a: Sector, b: Sector, c: Sector, d: Sector, e: Sector, f: Sector
+                 ) -> np.ndarray:
         r"""Coefficients :math:`[F^{abc}_d]^e_f` related to recoupling of fusion.
 
         The F symbol relates the following two maps::
@@ -224,13 +228,28 @@ class Symmetry(metaclass=ABCMeta):
         Parameters
         ----------
         a, b, c, d, e, f
-            Sectors. Must be compatible with the fusion described above. This is not checked!
+            Sectors. Must be compatible with the fusion described above.
 
         Returns
         -------
         F : 4D array
             The F symbol as an array of the multiplicity indices [μ,ν,κ,λ]
         """
+        if _DO_FUSION_INPUT_CHECKS:
+            is_correct = all(
+                self.can_fuse_to(b, c, e),
+                self.can_fuse_to(a, e, d),
+                self.can_fuse_to(a, b, f),
+                self.can_fuse_to(f, c, d)
+            )
+            if not is_correct:
+                raise ValueError('Sectors are not consistent with fusion rules.')
+        return self._f_symbol(a, b, c, d, e, f)
+
+    @abstractmethod
+    def _f_symbol(self, a: Sector, b: Sector, c: Sector, d: Sector, e: Sector, f: Sector
+                  ) -> np.ndarray:
+        """Internal implementation of :meth:`f_symbol`. Can assume that inputs are valid."""
         ...
 
     def frobenius_schur(self, a: Sector) -> int:
@@ -251,7 +270,7 @@ class Symmetry(metaclass=ABCMeta):
         """The inverse square root of the quantum dimension."""
         return 1. / self.sqrt_qdim(a)
 
-    def _b_symbol(self, a: Sector, b: Sector, c: Sector) -> np.ndarray:
+    def b_symbol(self, a: Sector, b: Sector, c: Sector) -> np.ndarray:
         r"""Coefficients :math:`B^{ab}_c` related to bending the right leg on a fusion tensor.
 
         The B symbol relates the following two maps::
@@ -270,18 +289,25 @@ class Symmetry(metaclass=ABCMeta):
         Parameters
         ----------
         a, b, c
-            Sectors. Must be compatible with the fusion described above. This is not checked!
+            Sectors. Must be compatible with the fusion described above.
 
         Returns
         -------
         B : 2D array
             The B symbol as an array of the multiplicity indices [μ,ν]
         """
+        if _DO_FUSION_INPUT_CHECKS:
+            is_correct = self.can_fuse_to(a, b, c)
+            if not is_correct:
+                raise ValueError('Sectors are not consistent with fusion rules.')
+        return self._b_symbol(a, b, c)
+
+    def _b_symbol(self, a: Sector, b: Sector, c: Sector) -> np.ndarray:
+        """Internal implementation of :meth:`b_symbol`. Can assume that inputs are valid."""
         F = self._f_symbol(a, b, self.dual_sector(b), a, self.trivial_sector, c)
         return self.sqrt_qdim(a) * F[0, 0, :, :]
 
-    @abstractmethod
-    def _r_symbol(self, a: Sector, b: Sector, c: Sector) -> np.ndarray:
+    def r_symbol(self, a: Sector, b: Sector, c: Sector) -> np.ndarray:
         r"""Coefficients :math:`R^{ab}_c` related to braiding on a single fusion tensor.
 
         The R symbol relates the following two maps::
@@ -304,16 +330,25 @@ class Symmetry(metaclass=ABCMeta):
         Parameters
         ----------
         a, b, c
-            Sectors. Must be compatible with the fusion described above. This is not checked!
+            Sectors. Must be compatible with the fusion described above.
 
         Returns
         -------
         R : 1D array
             The diagonal entries of the R symbol as an array of the multiplicity index [μ].
         """
+        if _DO_FUSION_INPUT_CHECKS:
+            is_correct = self.can_fuse_to(a, b, c)
+            if not is_correct:
+                raise ValueError('Sectors are not consistent with fusion rules.')
+        return self._r_symbol(a, b, c)
+    
+    @abstractmethod
+    def _r_symbol(self, a: Sector, b: Sector, c: Sector) -> np.ndarray:
+        """Internal implementation of :meth:`r_symbol`. Can assume that inputs are valid."""
         ...
 
-    def _c_symbol(self, a: Sector, b: Sector, c: Sector, d: Sector, e: Sector, f: Sector) -> np.ndarray:
+    def c_symbol(self, a: Sector, b: Sector, c: Sector, d: Sector, e: Sector, f: Sector) -> np.ndarray:
         r"""Coefficients :math:`[C^{abc}_d]^e_f` related to braiding on a pair of fusion tensors.
 
         The C symbol relates the following two maps::
@@ -329,13 +364,26 @@ class Symmetry(metaclass=ABCMeta):
         Parameters
         ----------
         a, b, c, d, e, f
-            Sectors. Must be compatible with the fusion described above. This is not checked!
+            Sectors. Must be compatible with the fusion described above.
 
         Returns
         -------
         C : 4D array
             The C symbol as an array of the multiplicity indices [μ,ν,κ,λ]
         """
+        if _DO_FUSION_INPUT_CHECKS:
+            is_correct = all(
+                self.can_fuse_to(a, b, e),
+                self.can_fuse_to(e, c, d),
+                self.can_fuse_to(a, c, f),
+                self.can_fuse_to(f, b, d)
+            )
+            if not is_correct:
+                raise ValueError('Sectors are not consistent with fusion rules.')
+        return self._c_symbol(a, b, c, d, e, f)
+
+    def _c_symbol(self, a: Sector, b: Sector, c: Sector, d: Sector, e: Sector, f: Sector) -> np.ndarray:
+        """Internal implementation of :meth:`c_symbol`. Can assume that inputs are valid."""
         R1 = self._r_symbol(e, c, d)
         F = self._f_symbol(c, a, b, d, e, f)
         R2 = self._r_symbol(a, c, f)
@@ -356,12 +404,14 @@ class Symmetry(metaclass=ABCMeta):
             Axis [μ, m_a, m_b, m_c] where μ is the multiplicity index of the fusion tensor and
             m_a goes over a basis for sector a, etc.
         """
-        if not self.can_fuse_to(a, b, c):
-            raise ValueError('Incompatible sectors')
+        if _DO_FUSION_INPUT_CHECKS:
+            is_correct = self.can_fuse_to(a, b, c)
+            if not is_correct:
+                raise ValueError('Sectors are not consistent with fusion rules.')
         return self._fusion_tensor(a, b, c)
 
     def _fusion_tensor(self, a: Sector, b: Sector, c: Sector) -> np.ndarray:
-        r"""Internal implementation of :meth:`fusion_tensor` without the input checks."""
+        """Internal implementation of :meth:`fusion_tensor`. Can assume that inputs are valid."""
         msg = f'fusion_tensor is not implemented for {self.__class__.__name__}'
         raise NotImplementedError(msg)
 
