@@ -236,12 +236,12 @@ class Symmetry(metaclass=ABCMeta):
             The F symbol as an array of the multiplicity indices [μ,ν,κ,λ]
         """
         if _DO_FUSION_INPUT_CHECKS:
-            is_correct = all(
+            is_correct = all([
                 self.can_fuse_to(b, c, e),
                 self.can_fuse_to(a, e, d),
                 self.can_fuse_to(a, b, f),
                 self.can_fuse_to(f, c, d)
-            )
+            ])
             if not is_correct:
                 raise ValueError('Sectors are not consistent with fusion rules.')
         return self._f_symbol(a, b, c, d, e, f)
@@ -372,12 +372,12 @@ class Symmetry(metaclass=ABCMeta):
             The C symbol as an array of the multiplicity indices [μ,ν,κ,λ]
         """
         if _DO_FUSION_INPUT_CHECKS:
-            is_correct = all(
+            is_correct = all([
                 self.can_fuse_to(a, b, e),
                 self.can_fuse_to(e, c, d),
                 self.can_fuse_to(a, c, f),
                 self.can_fuse_to(f, b, d)
-            )
+            ])
             if not is_correct:
                 raise ValueError('Sectors are not consistent with fusion rules.')
         return self._c_symbol(a, b, c, d, e, f)

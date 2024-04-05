@@ -9,6 +9,7 @@ The following characters have special meaning in labels and should be avoided:
 from __future__ import annotations
 from abc import ABCMeta, abstractmethod
 import operator
+from types import EllipsisType
 from typing import TypeVar, Sequence, NoReturn
 from numbers import Number, Real, Integral
 import numpy as np
@@ -3719,10 +3720,10 @@ def _match_leg_order(t1: Tensor, t2: Tensor) -> list[int] | None:
 T = TypeVar('T')
 
 
-def _parse_idcs(idcs: T | Sequence[T | Ellipsis], length: int, fill: T = slice(None, None, None)
+def _parse_idcs(idcs: T | Sequence[T | EllipsisType], length: int, fill: T = slice(None, None, None)
                 ) -> list[T]:
     """Parse a single index or sequence of indices to a list of given length by replacing Ellipsis
-    and missing entries  at the back with `fill`.
+    (``...``) and missing entries at the back with `fill`.
 
     For invalid input, an IndexError is raised instead of ValueError, since this is a helper
     function for __getitem__ and __setitem__.

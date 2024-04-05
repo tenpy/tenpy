@@ -858,7 +858,23 @@ class BlockBackend(metaclass=ABCMeta):
 
     @abstractmethod
     def block_kron(self, a: Block, b: Block) -> Block:
-        """The kronecker product, like numpy.kron"""
+        """The kronecker product.
+
+        Parameters
+        ----------
+        a, b
+            Twp blocks with the same number of dimensions.
+
+        Notes
+        -----
+        The elements are products of elements from `a` and `b`::
+            kron(a,b)[k0,k1,...,kN] = a[i0,i1,...,iN] * b[j0,j1,...,jN]
+
+        where::
+            kt = it * st + jt,  t = 0,...,N
+
+        (Taken from numpy docs)
+        """
         ...
 
     @abstractmethod

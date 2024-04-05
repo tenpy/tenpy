@@ -352,8 +352,8 @@ def check_symbols_via_fusion_tensors(sym: symmetries.Symmetry, example_sectors, 
     pass
 
 
-def check_hexagon_equation(sym: symmetries.Symmetry, example_sectors, check_both_versions: bool = True):
-    """Check consistency of the R symbols using the hexagon equations.
+def check_hexagon_equation(sym: symmetries.Symmetry, sector_sextets, check_both_versions: bool = True):
+    r"""Check consistency of the R symbols using the hexagon equations.
     There are two versions of the hexagon equation that are both checked by default.
 
     :math:`\sum_{λ,γ} [R^{ca}_e]_{αλ} [F^{acb}_d]^{eλβ}_{gμγ} [R^{cb}_g]_{γν}
@@ -364,27 +364,27 @@ def check_hexagon_equation(sym: symmetries.Symmetry, example_sectors, check_both
     """
     def _return_r(a, b, c, conj=False):
         if conj:
-            return np.diag(sym._r_symbol(a, b, c)).conj()
-        return np.diag(sym._r_symbol(a, b, c))
+            return np.diag(sym.r_symbol(a, b, c)).conj()
+        return np.diag(sym.r_symbol(a, b, c))
 
     conjugate = [False]
     if check_both_versions:
         conjugate.append(True)
 
-    for charges in example_sectors:
+    for charges in sector_sextets:
         # this charge labeling should be consistent with sample_sector_sextets
         a, c, b, d, g, e = charges
 
         for conj in conjugate:
             lhs = _return_r(c, a, e, conj) # [α, λ]
-            lhs = np.tensordot(lhs, sym._f_symbol(a, c, b, d, e, g), axes=[1,0]) # [α, β, μ, γ]
+            lhs = np.tensordot(lhs, sym.f_symbol(a, c, b, d, e, g), axes=[1,0]) # [α, β, μ, γ]
             lhs = np.tensordot(lhs, _return_r(c, b, g, conj), axes=[3,0]) # [α, β, μ, ν]
 
             rhs = np.zeros_like(lhs)
             for f in sym.fusion_outcomes(a, b):
-                _rhs = sym._f_symbol(c, a, b, d, e, f) # [α, β, σ, δ]
+                _rhs = sym.f_symbol(c, a, b, d, e, f) # [α, β, σ, δ]
                 _rhs = np.tensordot(_rhs, _return_r(c, f, d, conj), axes=[2,0]) # [α, β, δ, ψ]
-                _rhs = np.tensordot(_rhs, sym._f_symbol(a, b, c, d, f, g), axes=([2,0], [3,1])) # [α, β, μ, ν]
+                _rhs = np.tensordot(_rhs, sym.f_symbol(a, b, c, d, f, g), axes=([2,0], [3,1])) # [α, β, μ, ν]
                 rhs += _rhs
 
             assert_array_almost_equal(lhs, rhs)

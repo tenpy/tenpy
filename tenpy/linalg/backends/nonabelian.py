@@ -8,7 +8,7 @@ import numpy as np
 from .abstract_backend import Backend, BlockBackend, Block, Dtype, Data, DiagonalData
 from ..symmetries import Sector, SectorArray, Symmetry
 from ..spaces import VectorSpace, ProductSpace
-from ..trees import FusionTree, fusion_trees, allowed_coupled_sectors
+from ..trees import FusionTree, fusion_trees
 
 if TYPE_CHECKING:
     # can not import Tensor at runtime, since it would be a circular import
@@ -255,7 +255,8 @@ class NonabelianBackend(Backend, BlockBackend, ABC):
 
     def from_block_func(self, func, legs: list[VectorSpace], func_kwargs={}) -> NonAbelianData:
         domain, codomain = _make_domain_codomain(legs, num_codomain=0, backend=self)  # TODO specify num_codomain
-        coupled = allowed_coupled_sectors(codomain, domain)
+        raise NotImplementedError  # TODO use _iter_common_... instead of allowed_coupled_sectors
+        coupled = allowed_coupled_sectors(codomain, domain)  #
         blocks = [func((block_size(codomain, c), block_size(domain, c)), **func_kwargs)
                   for c in coupled]
         if len(blocks) > 0:
@@ -278,6 +279,7 @@ class NonabelianBackend(Backend, BlockBackend, ABC):
 
     def eye_data(self, legs: list[VectorSpace], dtype: Dtype) -> NonAbelianData:
         domain, codomain = _make_domain_codomain(legs, num_codomain=0, backend=self)  # TODO specify num_codomain
+        raise NotImplementedError  # TODO use _iter_common_... instead of allowed_coupled_sectors
         coupled = allowed_coupled_sectors(codomain, domain)
         blocks = [self.eye_block((block_size(codomain, c), block_size(domain, c)), dtype=dtype)
                   for c in coupled]

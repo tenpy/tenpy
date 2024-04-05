@@ -5,7 +5,7 @@ import numpy as np
 from .symmetries import Symmetry, Sector, SectorArray, FusionStyle
 from .spaces import ProductSpace, VectorSpace
 
-__all__ = ['FusionTree', 'fusion_trees', 'all_fusion_trees', 'allowed_coupled_sectors']
+__all__ = ['FusionTree', 'fusion_trees', 'all_fusion_trees']
 # TODO write tests!
 
 
@@ -266,6 +266,8 @@ class fusion_trees:
 
     This custom iterator has efficient implementations of ``len`` and :meth:`index`, which
     avoid generating all intermediate trees.
+
+    TODO elaborate on canonical order of trees -> reference in module level docstring.
     """
     def __init__(self, symmetry: Symmetry, uncoupled: SectorArray | list[Sector], coupled: Sector,
                  are_dual=None):
@@ -331,29 +333,24 @@ class fusion_trees:
         for n, t in enumerate(self):
             if t == tree:
                 return n
-        raise ValueError(f'tree not in {self}: {tree}')
+        raise ValueError(f'Tree not found.')
 
 
-def all_fusion_trees(space: VectorSpace, coupled: Sector = None) -> Iterator[FusionTree]:
+def all_fusion_trees(space: ProductSpace, coupled: Sector = None) -> Iterator[FusionTree]:
     """Yield all fusion trees from the uncoupled sectors of space to the given coupled sector
     (if not None) or to all possible coupled sectors (default)"""
-    raise NotImplementedError  # TODO consider duality!
-    if coupled is None:
-        for coupled in allowed_coupled_sectors(space):
-            yield from all_fusion_trees(space, coupled=coupled)
-    else:
-        for uncoupled in space.sectors:
-            yield from fusion_trees(uncoupled, coupled)
+    raise NotImplementedError
+    # TODO does iter_uncoupled() handle the duality flags correctly?
+    are_dual = [sp.is_dual for sp in space.spaces]
+    
+    if coupled is not None:
+        # TODO should we check that space has this coupled sector? lookup here would be faster
+        #      than checking fusion rules in the generated tree
+        for uncoupled in space.iter_uncoupled():
+            yield from fusion_trees(space.symmetry, uncoupled, coupled, are_dual)
+        return
 
-
-def allowed_coupled_sectors(codomain: ProductSpace, domain: ProductSpace) -> SectorArray:
-    """The coupled sectors which are admitted by both codomain and domain"""
-    raise NotImplementedError  # TODO think about duality!
-    codomain_coupled = codomain._non_dual_sectors
-    domain_coupled = domain._non_dual_sectors
-    # OPTIMIZE: find the sectors which appear in both codomain_coupled and domain_coupled
-    #  can probably be done much more efficiently, in particular since they are sorted.
-    #  look at np.intersect1d for inspiration?
-    are_equal = codomain_coupled[:, None, :] == domain_coupled[None, :, :]  # [c_codom, c_dom, q]
-    mask = np.any(np.all(are_equal, axis=2), axis=0)  # [c_dom]
-    return domain_coupled[mask]
+    for coupled in space._non_dual_sectors:  # space should not be dual -> sectors==_non_dual_sectors.
+        for uncoupled in space.iter_uncoupled():
+            yield from fusion_trees(space.symmetry, uncoupled, coupled, are_dual)
+    return
