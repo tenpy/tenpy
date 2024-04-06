@@ -352,12 +352,42 @@ def check_symbols_via_fusion_tensors(sym: symmetries.Symmetry, example_sectors, 
     pass
 
 
+def check_pentagon_equation(sym: symmetries.Symmetry, sector_nonets):
+    r"""Check consistency of the F symbols using the pentagon equation.
+
+    :math:`\sum_{δ} [F^{fcd}_e]^{gβγ}_{lδν} [F^{abl}_e]^{fαδ}_{kλμ}
+    = \sum_{h,σ,ψ,ρ} [F^{abc}_g]^{fαβ}_{hσψ} [F^{ahd}_e]^{gσγ}_{kλρ} [F^{bcd}_k]^{hψρ}_{lμν}`
+
+    TODO: labeling difference between our convention and Bonderson; check again
+    """
+    for charges in sector_nonets:
+        a, b, c, d, e, f, g, l, k = charges
+
+        lhs = sym.f_symbol(f, c, d, e, l, g) # [δ, ν, β, γ]
+        lhs = np.tensordot(lhs, sym.f_symbol(a, b, l, e, k, f), axes=[0,3]) # [ν, β, γ, λ, μ, α]
+        lhs = lhs.transpose([5, 1, 3, 2, 4, 0]) # [α, β, λ, γ, μ, ν]
+
+        rhs = np.zeros_like(lhs)
+        for h in sym.fusion_outcomes(b, c):
+            if sym.can_fuse_to(h, a, g):
+                rhs_ = sym.f_symbol(a, b, c, g, h, f) # [σ, ψ, α, β]
+                rhs_ = np.tensordot(rhs_, sym.f_symbol(a, h, d, e, k, g), axes=[0,2]) # [ψ, α, β, λ, ρ, γ]
+                rhs_ = np.tensordot(rhs_, sym.f_symbol(b, c, d, k, l, h), axes=([0,4], [2,3])) # [α, β, λ, γ, μ, ν]
+                rhs += rhs_
+
+        assert_array_almost_equal(lhs, rhs)
+
+
 def check_hexagon_equation(sym: symmetries.Symmetry, sector_sextets, check_both_versions: bool = True):
     r"""Check consistency of the R symbols using the hexagon equations.
     There are two versions of the hexagon equation that are both checked by default.
 
     :math:`\sum_{λ,γ} [R^{ca}_e]_{αλ} [F^{acb}_d]^{eλβ}_{gμγ} [R^{cb}_g]_{γν}
     = \sum_{f,σ,δ,ψ} [F^{cab}_d]^{eαβ}_{fσδ} [R^{cf}_d]_{σψ} [F^{abc}_d]^{fδψ}_{gμν}`
+
+    TODO: check statement below
+    In our convention, we have to exchange the outer indices of the F symbols
+    compared to Bonderson's (https://thesis.library.caltech.edu/2447/2/thesis.pdf) convention.
 
     The second hexagon equation is obtained by letting all R symbols
     :math:`[R^{ab}_c]_{αβ} -> [(R^{ba}_c)^{-1}]_{αβ} = [R^{ab}_c]_{βα}*`
@@ -377,15 +407,17 @@ def check_hexagon_equation(sym: symmetries.Symmetry, sector_sextets, check_both_
 
         for conj in conjugate:
             lhs = _return_r(c, a, e, conj) # [α, λ]
-            lhs = np.tensordot(lhs, sym.f_symbol(a, c, b, d, e, g), axes=[1,0]) # [α, β, μ, γ]
-            lhs = np.tensordot(lhs, _return_r(c, b, g, conj), axes=[3,0]) # [α, β, μ, ν]
+            lhs = np.tensordot(lhs, sym.f_symbol(a, c, b, d, g, e), axes=[1,2]) # [α, μ, γ, β]
+            lhs = np.tensordot(lhs, _return_r(c, b, g, conj), axes=[2,0]) # [α, μ, β, ν]
+            lhs = lhs.transpose([0,2,1,3]) # [α, β, μ, ν]
 
             rhs = np.zeros_like(lhs)
             for f in sym.fusion_outcomes(a, b):
-                _rhs = sym.f_symbol(c, a, b, d, e, f) # [α, β, σ, δ]
-                _rhs = np.tensordot(_rhs, _return_r(c, f, d, conj), axes=[2,0]) # [α, β, δ, ψ]
-                _rhs = np.tensordot(_rhs, sym.f_symbol(a, b, c, d, f, g), axes=([2,0], [3,1])) # [α, β, μ, ν]
-                rhs += _rhs
+                if sym.can_fuse_to(c, f, d): # this is not given
+                    _rhs = sym.f_symbol(c, a, b, d, f, e) # [σ, δ, α, β]
+                    _rhs = np.tensordot(_rhs, _return_r(c, f, d, conj), axes=[0,0]) # [δ, α, β, ψ]
+                    _rhs = np.tensordot(_rhs, sym.f_symbol(a, b, c, d, g, f), axes=([0,3], [2,3])) # [α, β, μ, ν]
+                    rhs += _rhs
 
             assert_array_almost_equal(lhs, rhs)
 
