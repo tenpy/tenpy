@@ -270,6 +270,11 @@ class Symmetry(metaclass=ABCMeta):
         """The inverse square root of the quantum dimension."""
         return 1. / self.sqrt_qdim(a)
 
+    def total_qdim(self) -> float:
+        """Total quantum dimension, :math:`D = \sqrt{\sum_a d_a^2}`."""
+        D = np.sum([self.qdim(a)**2 for a in self.all_sectors()])
+        return np.sqrt(D)
+
     def b_symbol(self, a: Sector, b: Sector, c: Sector) -> np.ndarray:
         r"""Coefficients :math:`B^{ab}_c` related to bending the right leg on a fusion tensor.
 
@@ -389,6 +394,30 @@ class Symmetry(metaclass=ABCMeta):
         R2 = self._r_symbol(a, c, f)
         # axis [mu, nu, kap, lam] ; R symbols are diagonal
         return R1[None, :, None, None] * F * np.conj(R2)[None, None, :, None]
+
+    def topological_twist(self, a: Sector) -> complex:
+        """Phase acquired when charges fully rotate around their own axis once."""
+        return self.frobenius_schur(a) * self._r_symbol(self.dual_sector(a), a, self.trivial_sector)[0].conj()
+
+    def s_matrix_element(self, a: Sector, b: Sector) -> complex:
+        """Element of the S-matrix for anyon categories. The S-matrix is unitary for modular anyon categories."""
+        S = 0
+        for c in self.fusion_outcomes(a, b):
+            S += self._n_symbol(a, b, c) * self.qdim(c) * self.topological_twist(c)
+        S /= self.topological_twist(a) * self.topological_twist(b) * self.total_qdim()
+        return np.real_if_close(S)
+
+    def s_matrix(self) -> np.ndarray:
+        """S-matrix for anyon categories. The S-matrix is unitary for modular anyon categories."""
+        sectors = self.all_sectors()
+        S = np.zeros((self.num_sectors, self.num_sectors), dtype=complex)
+        normalization = np.array([1/self.topological_twist(a) for a in sectors])
+        normalization = np.outer(normalization, normalization) / self.total_qdim()
+        for a in range(sectors.shape[0]):
+            for b in range(sectors.shape[0]):
+                for c in self.fusion_outcomes(sectors[a], sectors[b]):
+                    S[a,b] += self._n_symbol(sectors[a], sectors[b], c) * self.qdim(c) * self.topological_twist(c)
+        return np.real_if_close(S * normalization)
 
     def fusion_tensor(self, a: Sector, b: Sector, c: Sector) -> np.ndarray:
         r"""Matrix elements of the fusion tensor :math:`X^{ab}_{c,\mu}` for all :math:`\mu`.
@@ -1119,7 +1148,7 @@ class ZNAnyonCategory(Symmetry):
     The anyon category corresponding to opposite handedness is obtained for `N` and `N-n` (or `-n`).
     """
 
-    _one_2D = np.ones((1, 1), dtype=int)
+    _one_1D = np.ones((1,), dtype=int)
     _one_4D = np.ones((1, 1, 1, 1), dtype=int)
 
     def __init__(self, N: int, n: int):
@@ -1209,7 +1238,7 @@ class ZNAnyonCategory2(Symmetry):
     The anyon category corresponding to opposite handedness is obtained for `N` and `N-n` (or `-n`).
     """
 
-    _one_2D = np.ones((1, 1), dtype=int)
+    _one_1D = np.ones((1,), dtype=int)
     _one_4D = np.ones((1, 1, 1, 1), dtype=int)
 
     def __init__(self, N: int, n: int):
@@ -1274,7 +1303,7 @@ class ZNAnyonCategory2(Symmetry):
         return 1
 
     def _r_symbol(self, a: Sector, b: Sector, c: Sector) -> np.ndarray:
-        return self._phase ** (a * b) * self._one_2D
+        return self._phase ** (a * b) * self._one_1D
 
     def _c_symbol(self, a: Sector, b: Sector, c: Sector, d: Sector, e: Sector, f: Sector) -> np.ndarray:
         return (self._phase**(b[0] * c[0])) * self._one_4D
@@ -1387,7 +1416,6 @@ class FibonacciAnyonCategory(Symmetry):
     _f = np.expand_dims([_phi**-1, _phi**-0.5, -_phi**-1], axis=(1,2,3,4))  # nontrivial F-symbols
     _r = np.expand_dims([np.exp(-4j*np.pi/5), np.exp(3j*np.pi/5)], axis=1)  # nontrivial R-symbols
     _one_1D = np.ones((1,), dtype=int)
-    _one_2D = np.ones((1, 1), dtype=int)
     _one_4D = np.ones((1, 1, 1, 1), dtype=int)
 
     def __init__(self, handedness = 'left'):
@@ -1484,7 +1512,6 @@ class IsingAnyonCategory(Symmetry):
         8: np.array([[0]])  # ψ x ψ = 1
     }
     _one_1D = np.ones((1,), dtype=int)
-    _one_2D = np.ones((1, 1), dtype=int)
     _one_4D = np.ones((1, 1, 1, 1), dtype=int)
 
     def __init__(self, nu: int = 1):
@@ -1593,7 +1620,6 @@ class SU2_kAnyonCategory(Symmetry):
     """
 
     _one_1D = np.ones((1,), dtype=int)
-    _one_2D = np.ones((1, 1), dtype=int)
     _one_4D = np.ones((1, 1, 1, 1), dtype=int)
 
     def __init__(self, k: int, handedness = 'left'):
