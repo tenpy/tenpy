@@ -13,10 +13,10 @@ from numpy._typing import NDArray
 
 __all__ = ['Sector', 'SectorArray', 'FusionStyle', 'BraidingStyle', 'Symmetry', 'ProductSymmetry',
            'GroupSymmetry', 'AbelianGroup', 'NoSymmetry', 'U1Symmetry', 'ZNSymmetry', 'SU2Symmetry',
-           'FermionParity', 'FibonacciGrading', 'no_symmetry', 'z2_symmetry', 'z3_symmetry',
+           'FermionParity', 'FibonacciAnyonCategory', 'no_symmetry', 'z2_symmetry', 'z3_symmetry',
            'z4_symmetry', 'z5_symmetry', 'z6_symmetry', 'z7_symmetry', 'z8_symmetry', 'z9_symmetry',
-           'u1_symmetry', 'su2_symmetry', 'fermion_parity', 'IsingGrading',
-           'QuantumDoubleZNAnyonModel', 'SU2_kGrading', 'ZNAnyonModel', 'ZNAnyonModel2',
+           'u1_symmetry', 'su2_symmetry', 'fermion_parity', 'IsingAnyonCategory',
+           'QuantumDoubleZNAnyonCategory', 'SU2_kAnyonCategory', 'ZNAnyonCategory', 'ZNAnyonCategory2',
            'double_semion_model', 'fibonacci_grading', 'ising_grading', 'semion_model', 'toric_code'
            ]
 
@@ -1105,8 +1105,8 @@ class FermionParity(Symmetry):
         return self._one_4D
 
 
-class ZNAnyonModel(Symmetry):
-    r"""Abelian anyon model with fusion rules corresponding to the Z_N group;
+class ZNAnyonCategory(Symmetry):
+    r"""Abelian anyon category with fusion rules corresponding to the Z_N group;
     also written as :math:`Z_N^{(n)}`.
 
     Allowed sectors are 1D arrays with a single integer entry between `0` and `N-1`.
@@ -1116,7 +1116,7 @@ class ZNAnyonModel(Symmetry):
     statistics. Since `n` and `n+N` describe the same statistics, :math:`n \in Z_N`.
     Reduces to the Z_N abelian group symmetry for `n = 0`. Use `ZNSymmetry` for this case!
 
-    The anyon model corresponding to opposite handedness is obtained for `N` and `N-n` (or `-n`).
+    The anyon category corresponding to opposite handedness is obtained for `N` and `N-n` (or `-n`).
     """
 
     _one_2D = np.ones((1, 1), dtype=int)
@@ -1132,7 +1132,7 @@ class ZNAnyonModel(Symmetry):
                           fusion_style=FusionStyle.single,
                           braiding_style=BraidingStyle.anyonic,
                           trivial_sector=np.array([0], dtype=int),
-                          group_name='ZNAnyonModel',
+                          group_name='ZNAnyonCategory',
                           num_sectors=N, descriptive_name=None)
 
     def is_valid_sector(self, a: Sector) -> bool:
@@ -1158,10 +1158,10 @@ class ZNAnyonModel(Symmetry):
         return np.ones((len(a),), int)
 
     def __repr__(self):
-        return f'ZNAnyonModel(N={self.N}, n={self.n})'
+        return f'ZNAnyonCategory(N={self.N}, n={self.n})'
 
     def is_same_symmetry(self, other) -> bool:
-        return isinstance(other, ZNAnyonModel) and other.N == self.N and other.n == self.n
+        return isinstance(other, ZNAnyonCategory) and other.N == self.N and other.n == self.n
 
     def dual_sector(self, a: Sector) -> Sector:
         return (-a) % self.N
@@ -1192,12 +1192,12 @@ class ZNAnyonModel(Symmetry):
         return np.arange(self.N, dtype=int)[:, None]
 
 
-class ZNAnyonModel2(Symmetry):
-    r"""Abelian anyon model with fusion rules corresponding to the Z_N group;
+class ZNAnyonCategory2(Symmetry):
+    r"""Abelian anyon category with fusion rules corresponding to the Z_N group;
     also written as :math:`Z_N^{(n+1/2)}`. `N` must be even.
 
     .. todo ::
-        find better name or include in `ZNAnyonModel`?
+        include in `ZNAnyonCategory`?
 
     Allowed sectors are 1D arrays with a single integer entry between `0` and `N-1`.
     `[0]`, `[1]`, ..., `[N-1]`
@@ -1206,7 +1206,7 @@ class ZNAnyonModel2(Symmetry):
     statistics. Since `n` and `n+N` describe the same statistics, :math:`n \in Z_N`.
     Reduces to the Z_N abelian group symmetry for `n = 0`. Use `ZNSymmetry` for this case!
 
-    The anyon model corresponding to opposite handedness is obtained for `N` and `N-n` (or `-n`).
+    The anyon category corresponding to opposite handedness is obtained for `N` and `N-n` (or `-n`).
     """
 
     _one_2D = np.ones((1, 1), dtype=int)
@@ -1223,7 +1223,7 @@ class ZNAnyonModel2(Symmetry):
                           fusion_style=FusionStyle.single,
                           braiding_style=BraidingStyle.anyonic,
                           trivial_sector=np.array([0], dtype=int),
-                          group_name='ZNAnyonModel2',
+                          group_name='ZNAnyonCategory2',
                           num_sectors=N, descriptive_name=None)
 
     def is_valid_sector(self, a: Sector) -> bool:
@@ -1249,10 +1249,10 @@ class ZNAnyonModel2(Symmetry):
         return np.ones((len(a),), int)
 
     def __repr__(self):
-        return f'ZNAnyonModel2(N={self.N}, n={self.n})'
+        return f'ZNAnyonCategory2(N={self.N}, n={self.n})'
 
     def is_same_symmetry(self, other) -> bool:
-        return isinstance(other, ZNAnyonModel2) and other.N == self.N and other.n == self.n
+        return isinstance(other, ZNAnyonCategory2) and other.N == self.N and other.n == self.n
 
     def dual_sector(self, a: Sector) -> Sector:
         return (-a) % self.N
@@ -1283,14 +1283,14 @@ class ZNAnyonModel2(Symmetry):
         return np.arange(self.N, dtype=int)[:, None]
 
 
-class QuantumDoubleZNAnyonModel(Symmetry):
-    """Doubled abelian anyon model with fusion rules corresponding to the Z_N group;
+class QuantumDoubleZNAnyonCategory(Symmetry):
+    """Doubled abelian anyon category with fusion rules corresponding to the Z_N group;
     also written as :math:`D(Z_N)`.
 
     Allowed sectors are 1D arrays with two integers between `0` and `N-1`.
     `[0, 0]`, `[0, 1]`, ..., `[N-1, N-1]`
 
-    This is not a simple product for two `ZNAnyonModel`s; there are nontrivial R-symbols.
+    This is not a simple product for two `ZNAnyonCategory`s; there are nontrivial R-symbols.
     """
 
     _one_2D = np.ones((1, 1), dtype=int)
@@ -1304,7 +1304,7 @@ class QuantumDoubleZNAnyonModel(Symmetry):
                           fusion_style=FusionStyle.single,
                           braiding_style=BraidingStyle.anyonic,
                           trivial_sector=np.array([0], dtype=int),
-                          group_name='QuantumDoubleZNAnyonModel',
+                          group_name='QuantumDoubleZNAnyonCategory',
                           num_sectors=N**2, descriptive_name=None)
 
     def is_valid_sector(self, a: Sector) -> bool:
@@ -1330,10 +1330,10 @@ class QuantumDoubleZNAnyonModel(Symmetry):
         return np.ones((len(a),), int)
 
     def __repr__(self):
-        return f'QuantumDoubleZNAnyonModel(N={self.N})'
+        return f'QuantumDoubleZNAnyonCategory(N={self.N})'
 
     def is_same_symmetry(self, other) -> bool:
-        return isinstance(other, QuantumDoubleZNAnyonModel) and other.N == self.N
+        return isinstance(other, QuantumDoubleZNAnyonCategory) and other.N == self.N
 
     def dual_sector(self, a: Sector) -> Sector:
         return (-a) % self.N
@@ -1365,11 +1365,8 @@ class QuantumDoubleZNAnyonModel(Symmetry):
         return np.dstack(np.meshgrid(x, x)).reshape(-1, 2)
 
 
-class FibonacciGrading(Symmetry):
-    """Grading of Fibonacci anyons
-
-    .. todo ::
-        Is "grading" a sensible name here?
+class FibonacciAnyonCategory(Symmetry):
+    """Category describing Fibonacci anyons.
 
     Allowed sectors are 1D arrays with a single entry of either `0` ("vacuum") or `1` ("tau anyon").
     `[0]`, `[1]`
@@ -1408,7 +1405,7 @@ class FibonacciGrading(Symmetry):
                           fusion_style=FusionStyle.multiple_unique,
                           braiding_style=BraidingStyle.anyonic,
                           trivial_sector=np.array([0], dtype=int),
-                          group_name='FibonacciGrading',
+                          group_name='FibonacciAnyonCategory',
                           num_sectors=2, descriptive_name=None)
 
     def is_valid_sector(self, a: Sector) -> bool:
@@ -1425,10 +1422,10 @@ class FibonacciGrading(Symmetry):
         return 'vac' if a[0] == 0 else 'tau'
 
     def __repr__(self):
-        return f'FibonacciGrading(handedness={self.handedness})'
+        return f'FibonacciAnyonCategory(handedness={self.handedness})'
 
     def is_same_symmetry(self, other) -> bool:
-        return isinstance(other, FibonacciGrading) and other.handedness == self.handedness
+        return isinstance(other, FibonacciAnyonCategory) and other.handedness == self.handedness
 
     def dual_sector(self, a: Sector) -> Sector:
         return a
@@ -1465,11 +1462,8 @@ class FibonacciGrading(Symmetry):
         return np.arange(2, dtype=int)[:, None]
 
 
-class IsingGrading(Symmetry):
-    """Grading of Ising anyons
-
-    .. todo ::
-        Is "grading" a sensible name here?
+class IsingAnyonCategory(Symmetry):
+    """Category describing Ising anyons.
 
     Allowed sectors are 1D arrays with a single entry of either `0` ("vacuum"), `1` ("Ising anyon")
     or `2` ("fermion").
@@ -1513,7 +1507,7 @@ class IsingGrading(Symmetry):
                           fusion_style=FusionStyle.multiple_unique,
                           braiding_style=BraidingStyle.anyonic,
                           trivial_sector=np.array([0], dtype=int),
-                          group_name='IsingGrading',
+                          group_name='IsingAnyonCategory',
                           num_sectors=3, descriptive_name=None)
 
     def is_valid_sector(self, a: Sector) -> bool:
@@ -1532,10 +1526,10 @@ class IsingGrading(Symmetry):
         return 'vac' if a[0] == 0 else 'psi'
 
     def __repr__(self):
-        return f'IsingGrading(nu={self.nu})'
+        return f'IsingAnyonCategory(nu={self.nu})'
 
     def is_same_symmetry(self, other) -> bool:
-        return isinstance(other, IsingGrading) and other.nu == self.nu
+        return isinstance(other, IsingAnyonCategory) and other.nu == self.nu
 
     def dual_sector(self, a: Sector) -> Sector:
         return a
@@ -1577,8 +1571,8 @@ class IsingGrading(Symmetry):
         return np.arange(3, dtype=int)[:, None]
 
 
-class SU2_kGrading(Symmetry):
-    """:math:`SU(2)_k` anyons.
+class SU2_kAnyonCategory(Symmetry):
+    """:math:`SU(2)_k` anyon category.
 
     .. todo ::
         Implement C-symbols without fallback? -> need to save them
@@ -1641,7 +1635,7 @@ class SU2_kGrading(Symmetry):
                           fusion_style=FusionStyle.multiple_unique,
                           braiding_style=BraidingStyle.anyonic,
                           trivial_sector=np.array([0], dtype=int),
-                          group_name='SU2_kGrading',
+                          group_name='SU2_kAnyonCategory',
                           num_sectors=self.k+1, descriptive_name=None)
 
     def _n_q(self, n: int) -> float:
@@ -1692,10 +1686,10 @@ class SU2_kGrading(Symmetry):
         return f'{jj} (j={j_str})'
 
     def __repr__(self):
-        return f'SU2_kGrading({self.k}, {self.handedness})'
+        return f'SU2_kAnyonCategory({self.k}, {self.handedness})'
 
     def is_same_symmetry(self, other) -> bool:
-        return isinstance(other, SU2_kGrading) and other.k == self.k and other.handedness == self.handedness
+        return isinstance(other, SU2_kAnyonCategory) and other.k == self.k and other.handedness == self.handedness
 
     def dual_sector(self, a: Sector) -> Sector:
         return a
@@ -1744,8 +1738,8 @@ z9_symmetry = ZNSymmetry(N=9)
 u1_symmetry = U1Symmetry()
 su2_symmetry = SU2Symmetry()
 fermion_parity = FermionParity()
-semion_model = ZNAnyonModel2(2, 0)
-toric_code = QuantumDoubleZNAnyonModel(2)
-double_semion_model = ProductSymmetry([ZNAnyonModel2(2, 0), ZNAnyonModel2(2, 1)])
-fibonacci_grading = FibonacciGrading(handedness='left')
-ising_grading = IsingGrading(nu=1)
+semion_model = ZNAnyonCategory2(2, 0)
+toric_code = QuantumDoubleZNAnyonCategory(2)
+double_semion_model = ProductSymmetry([ZNAnyonCategory2(2, 0), ZNAnyonCategory2(2, 1)])
+fibonacci_grading = FibonacciAnyonCategory(handedness='left')
+ising_grading = IsingAnyonCategory(nu=1)
