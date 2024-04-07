@@ -760,7 +760,7 @@ def test_fermion_parity(np_random):
 
 @pytest.mark.parametrize('handedness', ['left', 'right'])
 def test_fibonacci_grading(handedness, np_random):
-    sym = symmetries.FibonacciGrading(handedness)
+    sym = symmetries.FibonacciAnyonCategory(handedness)
     vac = np.array([0])
     tau = np.array([1])
     common_checks(sym, example_sectors=sym.all_sectors(), np_random=np_random)
@@ -798,7 +798,7 @@ def test_fibonacci_grading(handedness, np_random):
 
 @pytest.mark.parametrize('nu', [*range(1, 16, 2)])
 def test_ising_grading(nu, np_random):
-    sym = symmetries.IsingGrading(nu)
+    sym = symmetries.IsingAnyonCategory(nu)
     vac = np.array([0])
     anyon = np.array([1])
     fermion = np.array([2])

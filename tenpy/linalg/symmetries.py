@@ -271,7 +271,7 @@ class Symmetry(metaclass=ABCMeta):
         return 1. / self.sqrt_qdim(a)
 
     def total_qdim(self) -> float:
-        """Total quantum dimension, :math:`D = \sqrt{\sum_a d_a^2}`."""
+        r"""Total quantum dimension, :math:`D = \sqrt{\sum_a d_a^2}`."""
         D = np.sum([self.qdim(a)**2 for a in self.all_sectors()])
         return np.sqrt(D)
 
@@ -508,6 +508,7 @@ class ProductSymmetry(Symmetry):
             num_sectors=np.prod([symm.num_sectors for symm in flat_factors]),
             descriptive_name=descriptive_name
         )
+        self.has_fusion_tensor = all(f.has_fusion_tensor for f in flat_factors)
 
     def is_valid_sector(self, a: Sector) -> bool:
         if getattr(a, 'shape', ()) != (self.sector_ind_len,):

@@ -45,10 +45,10 @@ def f_symbol(a: int, b: int, c: int, d: int, e: int, f: int) -> np.ndarray:
     # The conjugation drops out, since the Racah W symbols are real.
     # j1, j2, j3 = a, b, c
     # J = d
-    # J12 = e ; J23 = f
+    # J12 = f ; J23 = e
     sqrt_dim_e = np.sqrt(e + 1)  # dim = 2 * j_e + 1 = e + 1
     sqrt_dim_f = np.sqrt(f + 1)
-    return sqrt_dim_e * sqrt_dim_f * racah_W(a, b, d, c, e, f) * np.ones((1, 1, 1, 1))
+    return sqrt_dim_e * sqrt_dim_f * racah_W(a, b, d, c, f, e) * np.ones((1, 1, 1, 1))
 
 
 @lru_cache(maxsize=CACHE_SIZE)
