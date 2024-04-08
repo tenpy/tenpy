@@ -108,24 +108,48 @@ class FusionTree:
             np.all(self.uncoupled == other.uncoupled),
             np.all(self.inner_sectors == other.inner_sectors),
             np.all(self.multiplicities == other.multiplicities),
-        )
+
+    @staticmethod
+    def _str_uncoupled_coupled(symmetry, uncoupled, coupled, are_dual) -> str:
+        """Helper function for string representation.
+
+        Generates a string that represents the uncoupled sectors before the Z isos,
+        the uncoupled sectors after and the coupled sector.
+
+        Is also used by ``fusion_trees.__str__``.
+        """
+        uncoupled_1 = []  # before Zs
+        uncoupled_2 = []  # after Zs
+        for a, is_dual in zip(uncoupled, are_dual):
+            a_str = symmetry.sector_str(a)
+            uncoupled_2.append(a_str)
+            if is_dual:
+                uncoupled_1.append(f'dual({symmetry.sector_str(symmetry.dual_sector(a))})')
+            else:
+                uncoupled_1.append(a_str)
+
+        before_Z = f'({", ".join(uncoupled_1)})'
+        after_Z = f'({", ".join(uncoupled_2)})'
+        final = symmetry.sector_str(coupled)
+        return f'{before_Z} -> {after_Z} -> {final}'
 
     def __str__(self) -> str:
-        raise NotImplementedError  # TODO review, include are_dual!
-        uncoupled_str = '(' + ', '.join(self.symmetry.sector_str(a) for a in self.uncoupled) + ')'
-        entries = [f'{self.symmetry.sector_str(self.coupled)} ⟵ {uncoupled_str}']
-        if self.fusion_style in [FusionStyle.multiple_unique, FusionStyle.general] and self.num_inner_edges > 0:
+        signature = self._str_uncoupled_coupled(
+            self.symmetry, self.uncoupled, self.coupled, self.are_dual
+        )
+        entries = [signature]
+        if self.fusion_style in [FusionStyle.multiple_unique, FusionStyle.general]:
             inner_sectors_str = ', '.join(self.symmetry.sector_str(x) for x in self.inner_sectors)
             entries.append(f'({inner_sectors_str})')
-        if self.fusion_style == FusionStyle.general and self.num_vertices > 0:
-            mults_str = ', '.join(self.multiplicities)
-            entries.append(f'({mults_str})')
-        entries = ', '.join(entries)
-        return f'FusionTree[{str(self.symmetry)}]({entries})'
+        if self.fusion_style == FusionStyle.general:
+            entries.append(str(self.multiplicities))
+        return f'FusionTree[{str(self.symmetry)}]({", ".join(entries)})'
 
     def __repr__(self) -> str:
-        return (f'FusionTree({self.symmetry}, {self.uncoupled}, {self.coupled}, {self.are_dual}, '
-                f'{self.inner_sectors}, {self.multiplicities})')
+        inner = str(self.inner_sectors).replace('\n', ',')
+        uncoupled = str(self.uncoupled).replace('\n', ',')
+        return (f'FusionTree({self.symmetry}, {uncoupled}, {self.coupled}, {self.are_dual}, '
+                f'{inner}, {self.multiplicities})')
 
     def copy(self, deep=False) -> FusionTree:
         """Return a shallow (or deep) copy."""
@@ -325,6 +349,16 @@ class fusion_trees:
             num_subtrees = len(fusion_trees(self.symmetry, uncoupled, self.coupled))
             count += self.symmetry._n_symbol(a1, a2, b) * num_subtrees
         return count
+
+    def __str__(self):
+        signature = FusionTree._str_uncoupled_coupled(
+            self.symmetry, self.uncoupled, self.coupled, self.are_dual
+        )
+        return f'fusion_trees[{str(self.symmetry)}]({signature})'
+
+    def __repr__(self):
+        uncoupled = str(self.uncoupled).replace('\n', ',')
+        return f'fusion_trees({self.symmetry}, {uncoupled}, {self.coupled}, {self.are_dual})'
 
     def index(self, tree: FusionTree) -> int:
         # TODO check compatibility first (same symmetry, same uncoupled, same coupled)

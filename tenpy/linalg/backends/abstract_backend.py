@@ -84,6 +84,9 @@ class Dtype(Enum):
             return 2 ** -23
         raise NotImplementedError(f'Dtype.eps not implemented for n_bits={n_bits}')
 
+    def __repr__(self) -> str:
+        return f'Dtype.{self.name}'
+
     def common(*dtypes):
         res = Dtype(max(t.value for t in dtypes))
         if res.is_real:
