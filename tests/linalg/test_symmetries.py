@@ -119,6 +119,37 @@ def sample_sector_sextets(symmetry: symmetries.Symmetry, sectors, num_samples: i
                                      np_rng=np_rng)
     
 
+def sample_sector_nonets(symmetry: symmetries.Symmetry, sectors, num_samples: int,
+                         accept_fewer: bool = True, np_rng=default_rng):
+    """Yield samples ``(a, b, c, d, e, f, g, l, k)`` that are valid inputs to test the pentagon equation.
+
+    The constraint is that both ``((a x b) x c) x d -> (f x c) x d -> g x d -> e``
+    and ``a x (b x (c x d)) -> a x (b x l) -> a x k -> e`` are allowed.
+    """
+    abcd_list = list(sampled_zip(sectors, num_copies=4, num_samples=num_samples, np_rng=np_rng,
+                                 accept_fewer=True))
+
+    if len(abcd_list) >= num_samples:  # it is enough to select one fusion channel per a, b, c, d
+        for a, b, c, d in abcd_list:
+            f = np_rng.choice(symmetry.fusion_outcomes(a, b))
+            g = np_rng.choice(symmetry.fusion_outcomes(f, c))
+            e = np_rng.choice(symmetry.fusion_outcomes(g, d))
+            # need to find l, k such that a x k -> e is allowed;
+            # there may be choices for l such that all possible k are inconsistent
+            for l in np_rng.permuted(symmetry.fusion_outcomes(c, d), axis=0):
+                if symmetry.can_fuse_to(f, l, e):
+                    for k in np_rng.permuted(symmetry.fusion_outcomes(b, l), axis=0):
+                        if symmetry.can_fuse_to(a, k, e):
+                            yield a, b, c, d, e, f, g, l, k
+                            break
+        return
+
+    # TODO do something analoguous to `sample_sector_triplets`?
+    assert accept_fewer
+    yield from sample_sector_nonets(symmetry=symmetry, sectors=sectors, num_samples=len(abcd_list),
+                                     np_rng=np_rng)
+
+
 def common_checks(sym: symmetries.Symmetry, example_sectors, np_random):
     """Common consistency checks to be performed on a symmetry instance.
 
@@ -135,6 +166,8 @@ def common_checks(sym: symmetries.Symmetry, example_sectors, np_random):
                                                  accept_fewer=True, np_rng=np_random))
     sector_sextets = list(sample_sector_sextets(sym, example_sectors, num_samples=10,
                                                 accept_fewer=True, np_rng=np_random))
+    sector_nonets = list(sample_sector_nonets(sym, example_sectors, num_samples=10,
+                                              accept_fewer=True, np_rng=np_random))
     
     
     assert sym.trivial_sector.shape == (sym.sector_ind_len,)
@@ -201,7 +234,7 @@ def common_checks(sym: symmetries.Symmetry, example_sectors, np_random):
     #    - correct shape
     #    - unitary
     #    - triangle equation
-    #    - pentagon equation
+    check_pentagon_equation(sym, sector_nonets)
 
     # check R symbol
     #   Note: can use sector_triplets
@@ -367,9 +400,9 @@ def check_pentagon_equation(sym: symmetries.Symmetry, sector_nonets):
         lhs = np.tensordot(lhs, sym.f_symbol(a, b, l, e, k, f), axes=[0,3]) # [ν, β, γ, λ, μ, α]
         lhs = lhs.transpose([5, 1, 3, 2, 4, 0]) # [α, β, λ, γ, μ, ν]
 
-        rhs = np.zeros_like(lhs)
+        rhs = np.zeros_like(lhs, dtype=complex)
         for h in sym.fusion_outcomes(b, c):
-            if sym.can_fuse_to(h, a, g):
+            if sym.can_fuse_to(h, a, g) and sym.can_fuse_to(h, d, k):
                 rhs_ = sym.f_symbol(a, b, c, g, h, f) # [σ, ψ, α, β]
                 rhs_ = np.tensordot(rhs_, sym.f_symbol(a, h, d, e, k, g), axes=[0,2]) # [ψ, α, β, λ, ρ, γ]
                 rhs_ = np.tensordot(rhs_, sym.f_symbol(b, c, d, k, l, h), axes=([0,4], [2,3])) # [α, β, λ, γ, μ, ν]
@@ -411,7 +444,7 @@ def check_hexagon_equation(sym: symmetries.Symmetry, sector_sextets, check_both_
             lhs = np.tensordot(lhs, _return_r(c, b, g, conj), axes=[2,0]) # [α, μ, β, ν]
             lhs = lhs.transpose([0,2,1,3]) # [α, β, μ, ν]
 
-            rhs = np.zeros_like(lhs)
+            rhs = np.zeros_like(lhs, dtype=complex)
             for f in sym.fusion_outcomes(a, b):
                 if sym.can_fuse_to(c, f, d): # this is not given
                     _rhs = sym.f_symbol(c, a, b, d, f, e) # [σ, δ, α, β]
