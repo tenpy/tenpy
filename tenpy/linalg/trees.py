@@ -42,6 +42,16 @@ class FusionTree:
     |    |   |   |   |
     |    |   Z   Z   |
     |    |   |   |   |
+
+
+    Notes
+    -----
+    Consider the ``n``-th vertex (counting 0-based from bottom to top).
+    It fuses :math:`a \otimes b \to c` with multiplicity label ``multiplicities[n]``.
+
+        - ``a = uncoupled[0] if n == 0 else inner_sectors[n - 1]``
+        - ``b = uncoupled[n + 1]``
+        - ``c = coupled if (n == num_vertices - 1) else inner_sectors[n]``
     
 
     """
@@ -61,6 +71,8 @@ class FusionTree:
         self.num_inner_edges = max(len(uncoupled) - 2, 0)
         self.coupled = coupled
         self.are_dual = np.asarray(are_dual)
+        if len(inner_sectors) == 0:
+            inner_sectors = symmetry.empty_sector_array
         self.inner_sectors = np.asarray(inner_sectors)
         if multiplicities is None:
             multiplicities = np.zeros((num_vertices,), dtype=int)
@@ -77,16 +89,21 @@ class FusionTree:
         assert self.symmetry.are_valid_sectors(self.inner_sectors)
         assert len(self.multiplicities) == self.num_vertices
 
-        # check that inner_sectors and multiplicities are consistent with the fusion rules
+        # special cases: no vertices
+        if self.num_uncoupled == 0:
+            assert np.all(self.coupled == self.symmetry.trivial_sector)
+        if self.num_uncoupled == 1:
+            assert np.all(self.uncoupled[0] == self.coupled)
+        # otherwise, check fusion rules at every vertex
         for vertex in range(self.num_vertices):
             # the two sectors below this vertex
             a = self.uncoupled[0] if vertex == 0 else self.inner_sectors[vertex - 1]
             b = self.uncoupled[vertex + 1]
             # the sector above this vertex
-            c = self.inner_sectors[vertex] if vertex < self.num_inner_edges else self.uncoupled
+            c = self.inner_sectors[vertex] if vertex < self.num_inner_edges else self.coupled
             N = self.symmetry.n_symbol(a, b, c)
-            # this also checks if a and b can fuse to c. If they can not, we have N == 0.
-            assert 0 <= self.multiplicities[vertex] < N
+            assert N > 0, 'inconsistent fusion'
+            assert 0 <= self.multiplicities[vertex] < N, 'invalid multiplicity label'
 
     def __hash__(self) -> int:
         if self.fusion_style == FusionStyle.single:
@@ -103,11 +120,12 @@ class FusionTree:
     def __eq__(self, other) -> bool:
         if not isinstance(other, FusionTree):
             return False
-        return all(
+        return all([
             np.all(self.coupled == other.coupled),
             np.all(self.uncoupled == other.uncoupled),
             np.all(self.inner_sectors == other.inner_sectors),
             np.all(self.multiplicities == other.multiplicities),
+        ])
 
     @staticmethod
     def _str_uncoupled_coupled(symmetry, uncoupled, coupled, are_dual) -> str:
@@ -297,6 +315,8 @@ class fusion_trees:
                  are_dual=None):
         # DOC: coupled = None means trivial sector
         self.symmetry = symmetry
+        if len(uncoupled) == 0:
+            uncoupled = symmetry.empty_sector_array
         self.uncoupled = np.asarray(uncoupled)  # OPTIMIZE demand SectorArray (not list) and skip?
         self.num_uncoupled = num_uncoupled = len(uncoupled)
         self.coupled = coupled
@@ -307,39 +327,54 @@ class fusion_trees:
         self.are_dual = are_dual
 
     def __iter__(self) -> Iterator[FusionTree]:
-        if len(self.uncoupled) < 1:
-            raise RuntimeError
+        if len(self.uncoupled) == 0:
+            if np.all(self.coupled == self.symmetry.trivial_sector):
+                yield FusionTree(self.symmetry, self.uncoupled, self.coupled, [], [], [])
+            return
+        
         if len(self.uncoupled) == 1:
-            yield FusionTree(self.symmetry, self.uncoupled, self.coupled, self.are_dual, [], [])
-        elif len(self.uncoupled) == 2:
+            if np.all(self.uncoupled[0] == self.coupled):
+                yield FusionTree(self.symmetry, self.uncoupled, self.coupled, self.are_dual, [], [])
+            return
+        
+        if len(self.uncoupled) == 2:
             # OPTIMIZE does handling of multiplicities introduce significant overhead?
             #          could do a specialized version for multiplicity-free fusion
-            for mu in range(self.symmetry._n_symbol(*self.uncoupled, self.coupled)):
+            for mu in range(self.symmetry.n_symbol(*self.uncoupled, self.coupled)):
                 yield FusionTree(self.symmetry, self.uncoupled, self.coupled, self.are_dual, [], [mu])
-        else:
-            a1 = self.uncoupled[0]
-            a2 = self.uncoupled[1]
-            for b in self.symmetry.fusion_outcomes(a1, a2):
-                uncoupled = np.concatenate([b[None, :], self.uncoupled[2:]])
-                # set multiplicity index to 0 for now. will adjust it later.
-                left_tree = FusionTree(self.symmetry, self.uncoupled[:2], b, self.are_dual[:2],
-                                       [], [0])
-                for rest_tree in fusion_trees(self.symmetry, uncoupled, self.coupled):
-                    tree = rest_tree.insert(left_tree)
-                    for mu in range(self.symmetry._n_symbol(a1, a2, b)):
-                        res = tree.copy()
-                        res.multiplicities = res.multiplicities.copy()
-                        res.multiplicities[0] = mu
-                        yield res
+            return
+            
+        a1 = self.uncoupled[0]
+        a2 = self.uncoupled[1]
+        for b in self.symmetry.fusion_outcomes(a1, a2):
+            uncoupled = np.concatenate([b[None, :], self.uncoupled[2:]])
+            are_dual = np.concatenate([[False], self.are_dual[2:]])
+            # set multiplicity index to 0 for now. will adjust it later.
+            left_tree = FusionTree(self.symmetry, self.uncoupled[:2], b, self.are_dual[:2],
+                                    [], [0])
+            for rest_tree in fusion_trees(self.symmetry, uncoupled, self.coupled, are_dual):
+                tree = rest_tree.insert(left_tree)
+                for mu in range(self.symmetry._n_symbol(a1, a2, b)):
+                    res = tree.copy()
+                    res.multiplicities = res.multiplicities.copy()
+                    res.multiplicities[0] = mu
+                    yield res
 
     def __len__(self) -> int:
         # OPTIMIZE caching ?
-        
+
+        if len(self.uncoupled) == 0:
+            if np.all(self.coupled == self.symmetry.trivial_sector):
+                return 1
+            return 0
+
         if len(self.uncoupled) == 1:
-            return 1
+            if np.all(self.uncoupled[0] == self.coupled):
+                return 1
+            return 0
 
         if len(self.uncoupled) == 2:
-            return self.symmetry._n_symbol(*self.uncoupled, self.coupled)
+            return self.symmetry.n_symbol(*self.uncoupled, self.coupled)
 
         a1 = self.uncoupled[0]
         a2 = self.uncoupled[1]
@@ -347,7 +382,7 @@ class fusion_trees:
         for b in self.symmetry.fusion_outcomes(a1, a2):
             uncoupled = np.concatenate([b[None, :], self.uncoupled[2:]])
             num_subtrees = len(fusion_trees(self.symmetry, uncoupled, self.coupled))
-            count += self.symmetry._n_symbol(a1, a2, b) * num_subtrees
+            count += self.symmetry.n_symbol(a1, a2, b) * num_subtrees
         return count
 
     def __str__(self):
@@ -368,23 +403,3 @@ class fusion_trees:
             if t == tree:
                 return n
         raise ValueError(f'Tree not found.')
-
-
-def all_fusion_trees(space: ProductSpace, coupled: Sector = None) -> Iterator[FusionTree]:
-    """Yield all fusion trees from the uncoupled sectors of space to the given coupled sector
-    (if not None) or to all possible coupled sectors (default)"""
-    raise NotImplementedError
-    # TODO does iter_uncoupled() handle the duality flags correctly?
-    are_dual = [sp.is_dual for sp in space.spaces]
-    
-    if coupled is not None:
-        # TODO should we check that space has this coupled sector? lookup here would be faster
-        #      than checking fusion rules in the generated tree
-        for uncoupled in space.iter_uncoupled():
-            yield from fusion_trees(space.symmetry, uncoupled, coupled, are_dual)
-        return
-
-    for coupled in space._non_dual_sectors:  # space should not be dual -> sectors==_non_dual_sectors.
-        for uncoupled in space.iter_uncoupled():
-            yield from fusion_trees(space.symmetry, uncoupled, coupled, are_dual)
-    return
