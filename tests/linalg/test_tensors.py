@@ -10,9 +10,11 @@ from tenpy.linalg import tensors
 from tenpy.linalg.backends.abstract_backend import Dtype
 from tenpy.linalg.backends.no_symmetry import NoSymmetryBackend
 from tenpy.linalg.backends.abelian import AbelianBackend
+from tenpy.linalg.backends.nonabelian import NonabelianBackend
 from tenpy.linalg.backends.torch import TorchBlockBackend
 from tenpy.linalg.backends.numpy import NumpyBlockBackend, NoSymmetryNumpyBackend
 from tenpy.linalg.spaces import VectorSpace, ProductSpace, _fuse_spaces
+from tenpy.linalg.symmetries import ProductSymmetry
 
 
 
@@ -58,7 +60,11 @@ def check_shape(shape: tensors.Shape, dims: tuple[int, ...], labels: list[str]):
 
 
 def test_Tensor_classmethods(backend, vector_space_rng, backend_data_rng, tensor_rng, np_random):
-    T = tensor_rng(num_legs=3)  # compatible legs where we can have blocks
+    T: tensors.Tensor = tensor_rng(num_legs=3)  # compatible legs where we can have blocks
+
+    if (isinstance(backend, NonabelianBackend)) and (isinstance(T.symmetry, ProductSymmetry)):
+        pytest.xfail(reason='Topo data for ProductSymmetry is missing')
+    
     legs = T.legs
     dims = tuple(T.shape)
 
@@ -73,7 +79,7 @@ def test_Tensor_classmethods(backend, vector_space_rng, backend_data_rng, tensor
     #
     if T.num_parameters < T.parent_space.dim:  # otherwise all blocks are symmetric
         non_symmetric_block = dense_block + tens.backend.block_random_uniform(dims, dtype=T.dtype)
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError, match='Block is not symmetric'):
             _ = tensors.BlockDiagonalTensor.from_dense_block(non_symmetric_block, legs=legs, backend=backend)
 
     print('checking from numpy')

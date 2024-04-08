@@ -35,7 +35,13 @@ def block_backend(request):
     return request.param
 
 
-@pytest.fixture(params=['no_symmetry', 'abelian'])  # TODO include nonabelian
+# TODO when nonabelian is "finished", let the marked tests run by default again
+_nonabelian_mark = [
+    pytest.mark.nonabelian,
+    pytest.mark.skip,  # comment out to run the nonabelian tests.
+]
+_nonabelian_param = pytest.param('nonabelian', marks=_nonabelian_mark)
+@pytest.fixture(params=['no_symmetry', 'abelian', _nonabelian_param])
 def symmetry_backend(request):
     return request.param
 

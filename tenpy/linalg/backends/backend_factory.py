@@ -4,8 +4,8 @@ from __future__ import annotations
 import logging
 
 from .abstract_backend import Backend
-from .numpy import NoSymmetryNumpyBackend, AbelianNumpyBackend
-from .torch import NoSymmetryTorchBackend, AbelianTorchBackend
+from .numpy import NoSymmetryNumpyBackend, AbelianNumpyBackend, NonabelianNumpyBackend
+from .torch import NoSymmetryTorchBackend, AbelianTorchBackend, NonabelianTorchBackend
 from ..symmetries import Symmetry, no_symmetry, AbelianGroup
 
 __all__ = ['get_backend', 'todo_get_backend']
@@ -21,6 +21,7 @@ _backend_lookup = dict(
         jax=None,  # TODO
         cpu=(NoSymmetryNumpyBackend, {}),
         gpu=(NoSymmetryTorchBackend, dict(device='cuda')),
+        apple_silicon=(NoSymmetryTorchBackend, dict(device='mps')),
         tpu=None,  # TODO
     ),
     #
@@ -31,16 +32,18 @@ _backend_lookup = dict(
         jax=None,  # FUTURE
         cpu=(AbelianNumpyBackend, {}),
         gpu=(AbelianTorchBackend, dict(device='cuda')),
+        apple_silicon=(AbelianTorchBackend, dict(device='mps')),
         tpu=None,  # FUTURE
     ),
     #
-    non_abelian=dict(
-        numpy=None,  # FUTURE
-        torch=None,  # FUTURE
+    nonabelian=dict(
+        numpy=(NonabelianNumpyBackend, {}),
+        torch=(NonabelianTorchBackend, {}),
         tensorflow=None,  # FUTURE
         jax=None,  # FUTURE
-        cpu=None,  # FUTURE
-        gpu=None,  # FUTURE
+        cpu=(NonabelianNumpyBackend, {}),
+        gpu=(NonabelianTorchBackend, dict(device='cuda')),
+        apple_silicon=(NonabelianTorchBackend, dict(device='mps')),
         tpu=None,  # FUTURE
     ),
 )
