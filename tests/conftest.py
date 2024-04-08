@@ -23,6 +23,22 @@ import pytest
 from tenpy.linalg import backends, spaces, symmetries, tensors
 
 
+def pytest_addoption(parser):
+    parser.addoption(
+        "--run-nonabelian", action="store_true", default=False, help="run nonabelian tests"
+    )
+
+
+def pytest_collection_modifyitems(config, items):
+    if not config.getoption("--run-nonabelian"):
+        skip_nonabelian = pytest.mark.skip(reason='need --run-nonabelian to run.')
+        for item in items:
+            if 'nonabelian' in item.keywords:
+                item.add_marker(skip_nonabelian)
+
+# FIXTURES:
+
+
 @pytest.fixture
 def np_random() -> np.random.Generator:
     return np.random.default_rng(seed=12345)
@@ -35,12 +51,8 @@ def block_backend(request):
     return request.param
 
 
-# TODO when nonabelian is "finished", let the marked tests run by default again
-_nonabelian_mark = [
-    pytest.mark.nonabelian,
-    pytest.mark.skip,  # comment out to run the nonabelian tests.
-]
-_nonabelian_param = pytest.param('nonabelian', marks=_nonabelian_mark)
+# Note: nonabelian backend is disabled by default. Use ``--run-nonabelian`` CL option to run them.
+_nonabelian_param = pytest.param('nonabelian', marks=pytest.mark.nonabelian)
 @pytest.fixture(params=['no_symmetry', 'abelian', _nonabelian_param])
 def symmetry_backend(request):
     return request.param
