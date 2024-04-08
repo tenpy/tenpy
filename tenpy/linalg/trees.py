@@ -3,10 +3,8 @@ from __future__ import annotations
 from typing import Iterator
 import numpy as np
 from .symmetries import Symmetry, Sector, SectorArray, FusionStyle
-from .spaces import ProductSpace, VectorSpace
 
-__all__ = ['FusionTree', 'fusion_trees', 'all_fusion_trees']
-# TODO write tests!
+__all__ = ['FusionTree', 'fusion_trees']
 
 
 class FusionTree:
