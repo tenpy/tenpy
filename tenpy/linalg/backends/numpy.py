@@ -37,6 +37,7 @@ class NumpyBlockBackend(BlockBackend):
         np.dtype('complex64'): Dtype.complex64,
         np.dtype('complex128'): Dtype.complex128,
         np.dtype('bool'): Dtype.bool,
+        None: None,
     }
     backend_dtype_map = {
         Dtype.float32: np.float32,
@@ -44,6 +45,7 @@ class NumpyBlockBackend(BlockBackend):
         Dtype.complex64: np.complex64,
         Dtype.complex128: np.complex128,
         Dtype.bool: np.bool_,
+        None: None,
     }
     
     def as_block(self, a) -> Block:
@@ -196,9 +198,11 @@ class NumpyBlockBackend(BlockBackend):
             res = res + 1.j * np.random.normal(loc=0, scale=sigma, size=dims)
         return res
 
-    def block_from_numpy(self, a: np.ndarray) -> Block:
-        return a
-
+    def block_from_numpy(self, a: np.ndarray, dtype: Dtype = None) -> Block:
+        if dtype is None:
+            return a
+        return np.asarray(a, self.backend_dtype_map[dtype])
+    
     def zero_block(self, shape: list[int], dtype: Dtype) -> Block:
         return np.zeros(shape, dtype=self.backend_dtype_map[dtype])
 

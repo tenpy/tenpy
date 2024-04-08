@@ -602,7 +602,7 @@ class BlockBackend(metaclass=ABCMeta):
         ...
     
     @abstractmethod
-    def block_from_numpy(self, a: np.ndarray) -> Block:
+    def block_from_numpy(self, a: np.ndarray, dtype: Dtype = None) -> Block:
         ...
 
     def block_is_real(self, a: Block) -> bool:

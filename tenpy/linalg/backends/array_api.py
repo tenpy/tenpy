@@ -33,14 +33,16 @@ class ArrayApiBlockBackend(BlockBackend):
             api_namespace.float64: Dtype.float64,
             api_namespace.complex64: Dtype.complex64,
             api_namespace.complex128: Dtype.complex128,
-            api_namespace.bool: Dtype.bool
+            api_namespace.bool: Dtype.bool,
+            None: None,
         }
         self.backend_dtype_map = {
             Dtype.float32: api_namespace.float32,
             Dtype.float64: api_namespace.float64,
             Dtype.complex64: api_namespace.complex64,
             Dtype.complex128: api_namespace.complex128,
-            Dtype.bool:api_namespace.bool,
+            Dtype.bool: api_namespace.bool,
+            None: None,
         }
         
     def as_block(self, a) -> Block:
@@ -185,8 +187,8 @@ class ArrayApiBlockBackend(BlockBackend):
             res += 1.j * np.random.normal(loc=0, scale=sigma, size=dims)
         return self._api.asarray(res)
 
-    def block_from_numpy(self, a: np.ndarray) -> Block:
-        return self._api.asarray(a)
+    def block_from_numpy(self, a: np.ndarray, dtype: Dtype = None) -> Block:
+        return self._api.asarray(a, dtype=self.backend_dtype_map[dtype])
 
     def zero_block(self, shape: list[int], dtype: Dtype) -> Block:
         return self._api.zeros(shape, dtype=self.backend_dtype_map[dtype])

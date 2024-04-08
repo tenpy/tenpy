@@ -39,6 +39,7 @@ class TorchBlockBackend(BlockBackend):
             torch.complex64: Dtype.complex64,
             torch.complex128: Dtype.complex128,
             torch.bool: Dtype.bool,
+            None: None,
         }
         self.backend_dtype_map = {
             Dtype.float32: torch.float32,
@@ -46,6 +47,7 @@ class TorchBlockBackend(BlockBackend):
             Dtype.complex64: torch.complex64,
             Dtype.complex128: torch.complex128,
             Dtype.bool: torch.bool,
+            None: None,
         }
         self.BlockCls = torch.Tensor
         super().__init__(**kwargs)
@@ -181,8 +183,8 @@ class TorchBlockBackend(BlockBackend):
         std = sigma * torch_module.ones_like(mean, device=self.device)
         return torch_module.normal(mean, std)
 
-    def block_from_numpy(self, a: numpy.ndarray) -> Block:
-        return torch_module.tensor(a, device=self.device)
+    def block_from_numpy(self, a: numpy.ndarray, dtype: Dtype = None) -> Block:
+        return torch_module.tensor(a, device=self.device, dtype=self.backend_dtype_map[dtype])
 
     def zero_block(self, shape: list[int], dtype: Dtype) -> Block:
         return torch_module.zeros(list(shape), dtype=self.backend_dtype_map[dtype], device=self.device)

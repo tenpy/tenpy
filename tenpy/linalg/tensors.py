@@ -987,16 +987,12 @@ class BlockDiagonalTensor(SymmetricTensor):
         if shape_kw is not None:
             def block_func(shape):
                 arr = func(**{shape_kw: shape}, **func_kwargs)
-                block = backend.block_from_numpy(arr)
-                if dtype is not None:
-                    block = backend.block_to_dtype(block, dtype)
+                block = backend.block_from_numpy(arr, dtype)
                 return block
         else:
             def block_func(shape):
                 arr = func(shape, **func_kwargs)
-                block = backend.block_from_numpy(arr)
-                if dtype is not None:
-                    block = backend.block_to_dtype(block, dtype)
+                block = backend.block_from_numpy(arr, dtype)
                 return block
 
         data = backend.from_block_func(block_func, legs)
@@ -1750,10 +1746,8 @@ class ChargedTensor(Tensor):
             arr = func(**{shape_kw: shape}, **func_kwargs)
         else:
             arr = func(shape, **func_kwargs)
-        block = inv.backend.block_from_numpy(arr)
+        block = inv.backend.block_from_numpy(arr, dtype)
         # TODO allow to specify dummy_leg_state?
-        if dtype is not None:
-            block = inv.backend.block_to_dtype(block, dtype)
         return ChargedTensor(invariant_part=inv, dummy_leg_state=block)
 
     @classmethod
@@ -2346,17 +2340,13 @@ class DiagonalTensor(SymmetricTensor):
         if shape_kw is not None:
             def block_func(shape):
                 arr = func(**{shape_kw: shape}, **func_kwargs)
-                block = backend.block_from_numpy(arr)
-                if dtype is not None:
-                    block = backend.block_to_dtype(block, dtype)
+                block = backend.block_from_numpy(arr, dtype)
                 return block
 
         else:
             def block_func(shape):
                 arr = func(shape, **func_kwargs)
-                block = backend.block_from_numpy(arr)
-                if dtype is not None:
-                    block = backend.block_to_dtype(block, dtype)
+                block = backend.block_from_numpy(arr, dtype)
                 return block
 
         data = backend.diagonal_from_block_func(block_func, leg=first_leg)
