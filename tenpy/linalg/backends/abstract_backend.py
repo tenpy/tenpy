@@ -235,8 +235,7 @@ class Backend(metaclass=ABCMeta):
         ...
 
     @abstractmethod
-    def from_dense_block(self, a: Block, legs: list[VectorSpace], atol: float = 1e-8, rtol: float = 1e-5
-                         ) -> Data:
+    def from_dense_block(self, a: Block, legs: list[VectorSpace], tol: float = 1e-8) -> Data:
         """Convert a dense block to the data for a symmetric tensor.
         If the block is not symmetric, measured by ``allclose(a, projected, atol, rtol)``,
         where ``projected`` is `a` projected to the space of symmetric tensors, raise a ``ValueError``.

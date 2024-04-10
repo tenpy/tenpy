@@ -885,8 +885,7 @@ class BlockDiagonalTensor(SymmetricTensor):
 
     @classmethod
     def from_dense_block(cls, block, legs: list[VectorSpace], backend=None, dtype: Dtype=None,
-                         labels: list[str | None] = None, atol: float = 1e-8, rtol: float = 1e-5
-                         ) -> BlockDiagonalTensor:
+                         labels: list[str | None] = None, tol: float = 1e-8) -> BlockDiagonalTensor:
         """Convert a dense block of the backend to a Tensor.
 
         If the block is not symmetric under the symmetry (specified by the legs), i.e. if
@@ -906,8 +905,11 @@ class BlockDiagonalTensor(SymmetricTensor):
             The data type of the Tensor entries. Defaults to dtype of `block`
         labels : list of {str | None}, optional
             Labels associated with each leg, ``None`` for unnamed legs.
-        atol, rtol : float
-            Absolute and relative tolerance for checking if the block is symmetric.
+        tol : float or None
+            By default, we check if the block is symmetric according to
+            ``norm(block - symmetric_components) < tol * norm(block)``.
+            This can be disabled by setting ``tol=None``, such that we always just return the
+            symmetric components of ``block``.
 
         See Also
         --------
@@ -918,7 +920,7 @@ class BlockDiagonalTensor(SymmetricTensor):
         block = backend.as_block(block)
         if dtype is not None:
             block = backend.block_to_dtype(block, dtype)
-        data = backend.from_dense_block(block, legs=legs, atol=atol, rtol=rtol)
+        data = backend.from_dense_block(block, legs=legs, tol=tol)
         return cls(data=data, backend=backend, legs=legs, labels=labels)
 
     @classmethod
@@ -1643,9 +1645,8 @@ class ChargedTensor(Tensor):
 
     @classmethod
     def from_dense_block(cls, block, legs: list[VectorSpace], backend=None, dtype: Dtype=None,
-                         labels: list[str | None] = None, atol: float = 1e-8, rtol: float = 1e-5,
-                         charge: VectorSpace | Sector = None, dummy_leg_state=None
-                         ) -> ChargedTensor:
+                         labels: list[str | None] = None, tol: float = 1e-8,
+                         charge: VectorSpace | Sector = None, dummy_leg_state=None) -> ChargedTensor:
         """Convert a dense block of the backend to a ChargedTensor, if possible.
 
         TODO doc how and when it could fail
@@ -1666,8 +1667,9 @@ class ChargedTensor(Tensor):
         labels : list of {str | None}, optional
             Labels associated with each leg, ``None`` for unnamed legs.
             Does not contain a label for the dummy leg.
-        atol, rtol : float
-            Absolute and relative tolerance for checking if the block is actually symmetric.
+        tol : float
+            Tolerance for checking if a block is symmetric. We check if
+            ``norm(block - symmetric_components) < tol * norm(block)``.
         charge : VectorSpace or Sector, optional
             The charge, specified either via the dummy leg of the :class:`ChargedTensor` or
             via the sector that the tensor should live in.
@@ -1691,9 +1693,10 @@ class ChargedTensor(Tensor):
             dummy_leg = backend.infer_leg(block, legs + [None])
         else:
             dummy_leg = cls._dummy_leg_from_charge(charge, symmetry=legs[0].symmetry)
-        invariant_part = BlockDiagonalTensor.from_dense_block(block, legs=legs + [dummy_leg], backend=backend,
-                                                 dtype=dtype, labels=labels + [cls._DUMMY_LABEL],
-                                                 atol=atol, rtol=rtol)
+        invariant_part = BlockDiagonalTensor.from_dense_block(
+            block, legs=legs + [dummy_leg], backend=backend, dtype=dtype,
+            labels=labels + [cls._DUMMY_LABEL], tol=tol
+        )
         return cls(invariant_part, dummy_leg_state=dummy_leg_state)
 
     @classmethod

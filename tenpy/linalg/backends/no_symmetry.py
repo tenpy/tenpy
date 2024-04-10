@@ -75,8 +75,7 @@ class NoSymmetryBackend(Backend, BlockBackend, ABC):
     def diagonal_to_block(self, a: DiagonalTensor) -> Block:
         return self.apply_basis_perm(a.data, [a.legs[0]], inv=True)
 
-    def from_dense_block(self, a: Block, legs: list[VectorSpace], atol: float = 1e-8, rtol: float = 1e-5
-                         ) -> Data:
+    def from_dense_block(self, a: Block, legs: list[VectorSpace], tol: float = 1e-8) -> Data:
         assert all(leg.symmetry == no_symmetry for leg in legs)
         return self.apply_basis_perm(a, legs)
 
