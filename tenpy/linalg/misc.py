@@ -53,13 +53,18 @@ def duplicate_entries(seq: Sequence[_T], ignore: Sequence[_T] = []) -> set[_T]:
 
 def join_as_many_as_possible(msgs: Sequence[str], separator: str, priorities: Sequence[int] = None,
                              max_len: int = None, fill: str = '...') -> str:
-    """Like ``separator.join(msgs)`` but if the result is too long, only some of the `msgs`
-    will be included. Higher values in `priorities` are prioritized
-    (default: prioritize what appears earlier in `msgs`).
+    """Like ``separator.join(msgs)`` but truncated if the result is too long.
+
+    We append the ``fill`` value to indicate that entries were omitted.
+    By default, the first entries in ``msgs`` are kept.
+    If ``priorities`` are specified, the messages are sorted according to their priority first
+    (from high to low).
     """
     if len(msgs) == 0:
         return ''
-    if sum(len(m) for m in msgs) + len(separator) * (len(msgs) - 1) <= max_len:
+    if max_len is None or sum(len(m) for m in msgs) + len(separator) * (len(msgs) - 1) <= max_len:
+        if priorities:
+            return separator.join(msgs[n] for n in np.argsort(-np.array(priorities)))
         return separator.join(msgs)
 
     if priorities is None:
