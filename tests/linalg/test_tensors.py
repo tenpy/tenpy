@@ -115,17 +115,17 @@ def test_Tensor_methods(backend, vector_space_rng, backend_data_rng, tensor_rng)
     data2 = backend_data_rng(legs)
 
     print('checking __init__ with labels=None')
-    tens1 = tensors.BlockDiagonalTensor(data1, legs=legs, backend=backend, labels=None)
+    tens1 = tensors.BlockDiagonalTensor(data1, legs=legs, domain_num_legs=0, backend=backend, labels=None)
     tens1.test_sanity()
 
     print('checking __init__, partially labelled')
     labels2 = [None, 'a', 'b']
-    tens2 = tensors.BlockDiagonalTensor(data2, legs=legs, backend=backend, labels=labels2)
+    tens2 = tensors.BlockDiagonalTensor(data2, legs=legs, domain_num_legs=0, backend=backend, labels=labels2)
     tens2.test_sanity()
 
     print('checking __init__, fully labelled')
     labels3 = ['foo', 'a', 'b']
-    tens3 = tensors.BlockDiagonalTensor(data1, legs=legs, backend=backend, labels=labels3)
+    tens3 = tensors.BlockDiagonalTensor(data1, legs=legs, domain_num_legs=0, backend=backend, labels=labels3)
     tens3.test_sanity()
 
     check_shape(tens1.shape, dims=dims, labels=[None, None, None])
@@ -192,7 +192,7 @@ def test_Tensor_methods(backend, vector_space_rng, backend_data_rng, tensor_rng)
         triv_legs.append(leg.dual)
     assert all(leg.dim == 1 for leg in triv_legs)
     data4 = backend_data_rng(triv_legs)
-    tens4 = tensors.BlockDiagonalTensor(data4, backend=backend, legs=triv_legs)
+    tens4 = tensors.BlockDiagonalTensor(data4, domain_num_legs=0, backend=backend, legs=triv_legs)
     tens4_item = backend.data_item(data4)
     # not a good test, but the best we can do backend independent:
     assert tens4.item() == tens4_item
@@ -350,7 +350,7 @@ def test_tdot(backend, vector_space_rng, backend_data_rng, tensor_rng):
                ['a', 'b']
                ]
     data_ = [backend_data_rng(l) for l in legs_]
-    tensors_ = [tensors.BlockDiagonalTensor(data, legs, backend, labels) for data, legs, labels in
+    tensors_ = [tensors.BlockDiagonalTensor(data, legs, 0, backend, labels) for data, legs, labels in
                 zip(data_, legs_, labels_)]
     for n, t in enumerate(tensors_):
         # make sure we are defining tensors which actually contain blocks and are not just zero by

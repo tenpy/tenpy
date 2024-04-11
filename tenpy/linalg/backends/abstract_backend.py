@@ -235,7 +235,8 @@ class Backend(metaclass=ABCMeta):
         ...
 
     @abstractmethod
-    def from_dense_block(self, a: Block, legs: list[VectorSpace], tol: float = 1e-8) -> Data:
+    def from_dense_block(self, a: Block, legs: list[VectorSpace], domain_num_legs: int,
+                         tol: float = 1e-8) -> Data:
         """Convert a dense block to the data for a symmetric tensor.
         If the block is not symmetric, measured by ``allclose(a, projected, atol, rtol)``,
         where ``projected`` is `a` projected to the space of symmetric tensors, raise a ``ValueError``.
@@ -263,7 +264,8 @@ class Backend(metaclass=ABCMeta):
         ...
 
     @abstractmethod
-    def from_block_func(self, func, legs: list[VectorSpace], func_kwargs={}) -> Data:
+    def from_block_func(self, func, legs: list[VectorSpace], domain_num_legs: int, func_kwargs={}
+                        ) -> Data:
         """Generate tensor data from a function ``func(shape: tuple[int]) -> Block``."""
         ...
 
@@ -272,7 +274,7 @@ class Backend(metaclass=ABCMeta):
         ...
 
     @abstractmethod
-    def zero_data(self, legs: list[VectorSpace], dtype: Dtype) -> Data:
+    def zero_data(self, legs: list[VectorSpace], dtype: Dtype, domain_num_legs: int) -> Data:
         """Data for a zero tensor"""
         ...
 
@@ -281,7 +283,7 @@ class Backend(metaclass=ABCMeta):
         ...
 
     @abstractmethod
-    def eye_data(self, legs: list[VectorSpace], dtype: Dtype) -> Data:
+    def eye_data(self, legs: list[VectorSpace], dtype: Dtype, domain_num_legs: int) -> Data:
         """Data for an identity map from legs to their duals. In particular, the resulting tensor
         has twice as many legs"""
         ...
@@ -357,7 +359,8 @@ class Backend(metaclass=ABCMeta):
         ...
 
     @abstractmethod
-    def permute_legs(self, a: BlockDiagonalTensor, permutation: list[int]) -> Data:
+    def permute_legs(self, a: BlockDiagonalTensor, permutation: list[int] | None,
+                     domain_num_legs: int) -> Data:
         ...
 
     @abstractmethod
@@ -389,6 +392,10 @@ class Backend(metaclass=ABCMeta):
     @abstractmethod
     def split_legs(self, a: BlockDiagonalTensor, leg_idcs: list[int], final_legs: list[VectorSpace]) -> Data:
         """split multiple product space legs."""
+        ...
+
+    @abstractmethod
+    def add_trivial_leg(self, a: BlockDiagonalTensor, pos: int, to_domain: bool) -> Data:
         ...
 
     @abstractmethod

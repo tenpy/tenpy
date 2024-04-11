@@ -16,6 +16,12 @@ __all__ = ['svd', 'svd_apply_mask', 'eig_based_svd', 'truncated_svd', 'truncated
            'exp', 'log']
 
 
+# TODO revise decompositions and domain/codomain cleanly!
+#      for now have put them all to 0, to work with standard cases
+
+# TODO for nonabelian backend, we do not need to combine legs first!
+
+
 def _svd(a: Tensor, u_legs: list[int | str], vh_legs: list[int | str],
          new_labels: tuple[str, ...], new_vh_leg_dual: bool, U_inherits_charge: bool,
          compute_u: bool, compute_vh: bool, algorithm: str):
@@ -81,7 +87,8 @@ def _svd(a: Tensor, u_legs: list[int | str], vh_legs: list[int | str],
                                                          algorithm=algorithm, compute_u=compute_u,
                                                          compute_vh=compute_vh)
         if compute_u:
-            U = BlockDiagonalTensor(u_data, backend=a.backend, legs=[a.legs[0], new_leg.dual])
+            U = BlockDiagonalTensor(u_data, legs=[a.legs[0], new_leg.dual], domain_num_legs=0,
+                                    backend=a.backend)
             if need_combine:
                 U = U.split_legs(0)
             U.set_labels([original_labels[n] for n in u_idcs] + [l_u])
@@ -89,7 +96,8 @@ def _svd(a: Tensor, u_legs: list[int | str], vh_legs: list[int | str],
             U = None
         S = DiagonalTensor(s_data, first_leg=new_leg, second_leg_dual=True, backend=a.backend, labels=[l_su, l_sv])
         if compute_vh:
-            Vh = BlockDiagonalTensor(vh_data, backend=a.backend, legs=[new_leg, a.legs[1]])
+            Vh = BlockDiagonalTensor(vh_data, legs=[new_leg, a.legs[1]], domain_num_legs=0,
+                                     backend=a.backend)
             if need_combine:
                 Vh = Vh.split_legs(1)
             Vh.set_labels([l_vh] + [original_labels[n] for n in vh_idcs])
@@ -478,8 +486,8 @@ def qr(a: Tensor, q_legs: list[int | str] = None, r_legs: list[int | str] = None
 
     q_data, r_data, new_leg = a.backend.qr(a, new_r_leg_dual, full=full)
 
-    Q = BlockDiagonalTensor(q_data, legs=[a.legs[0], new_leg.dual], backend=a.backend)
-    R = BlockDiagonalTensor(r_data, legs=[new_leg, a.legs[1]], backend=a.backend)
+    Q = BlockDiagonalTensor(q_data, legs=[a.legs[0], new_leg.dual], domain_num_legs=1, backend=a.backend)
+    R = BlockDiagonalTensor(r_data, legs=[new_leg, a.legs[1]], domain_num_legs=1, backend=a.backend)
     if need_combine:
         R = R.split_legs(1)
         Q = Q.split_legs(0)
@@ -527,8 +535,12 @@ def lq(a: Tensor, l_legs: list[int | str] = None, q_legs: list[int | str] = None
 
     q_data, r_data, new_leg = a.backend.qr(a, new_r_leg_dual=new_l_leg_dual, full=full)
     # transpose back, since we build the LQ from RQ of a.T
-    Q = BlockDiagonalTensor(q_data, legs=[a.legs[0], new_leg.dual], backend=a.backend).permute_legs([1, 0])
-    L = BlockDiagonalTensor(r_data, legs=[new_leg, a.legs[1]], backend=a.backend).permute_legs([1, 0])
+    Q = BlockDiagonalTensor(
+        q_data, legs=[a.legs[0], new_leg.dual], domain_num_legs=1, backend=a.backend
+    ).permute_legs([1, 0])
+    L = BlockDiagonalTensor(
+        r_data, legs=[new_leg, a.legs[1]], domain_num_legs=1, backend=a.backend
+    ).permute_legs([1, 0])
     if need_combine:
         Q = Q.split_legs(1)
         L = L.split_legs(0)
@@ -638,7 +650,8 @@ def eigh(a: Tensor, legs1: list[int | str] = None, legs2: list[int | str] = None
         raise ValueError(msg)
     D = DiagonalTensor(d_data, first_leg=D_leg_0, second_leg_dual=True, backend=backend,
                        labels=[lb, lc])
-    U = BlockDiagonalTensor(u_data, legs=[U_leg_0, U_leg_1], backend=backend, labels=[a.labels[0], la])
+    U = BlockDiagonalTensor(u_data, legs=[U_leg_0, U_leg_1], domain_num_legs=1, backend=backend,
+                            labels=[a.labels[0], la])
 
     if U_leg_1.is_dual != new_leg_dual:
         # OPTIMIZE is it better to do this directly in the backend.eigh? like for svd?
@@ -799,7 +812,8 @@ def _act_block_diagonal_square_matrix(t: Tensor,
         pipe = t.make_ProductSpace(idcs1)
         t = t.combine_legs(idcs1, idcs2, product_spaces=[pipe, pipe.dual], new_axes=[0, 1])
     res_data = t.backend.act_block_diagonal_square_matrix(t, block_method)
-    res = BlockDiagonalTensor(res_data, backend=t.backend, legs=t.legs, labels=t.labels)
+    res = BlockDiagonalTensor(res_data, backend=t.backend, legs=t.legs,
+                              domain_num_legs=t.domain_num_legs, labels=t.labels)
     if len(idcs1) > 1:
         res = res.split_legs()
         transposed = idcs1 + idcs2

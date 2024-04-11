@@ -39,7 +39,8 @@ class TensorDummyOperator(sparse.LinearOperator):
     def __init__(self, tensor: BlockDiagonalTensor):
         assert tensor.labels == ['a', 'b*', 'a*', 'b']
         acts_on = ['a', 'b']
-        vector_shape = Shape(legs=tensor.get_legs(acts_on), labels=acts_on)
+        # TODO should we be strict about domain_num_legs here?
+        vector_shape = Shape(legs=tensor.get_legs(acts_on), domain_num_legs=0, labels=acts_on)
         super().__init__(vector_shape=vector_shape, dtype=tensor.dtype)
         self.tensor = tensor
         self.some_weird_attribute = 42
