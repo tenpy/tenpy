@@ -1169,6 +1169,11 @@ class BlockDiagonalTensor(SymmetricTensor):
         idcs : list of int
             One index per leg, each in the range ``0 <= idx < leg.dim``.
         """
+        if not self.symmetry.has_fusion_tensor:
+            msg = f'Tensors with {self.symmetry} do not allow access to individual tensor entries'
+            # TODO other error class? SymmetryError or something?
+            raise ValueError(msg)
+
         sectors = [leg.idx_to_sector(idx) for idx, leg in zip(idcs, self.legs)]
         if len(idcs) == 0:
             return True
