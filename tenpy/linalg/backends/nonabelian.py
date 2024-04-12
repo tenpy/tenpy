@@ -22,8 +22,7 @@ __all__ = ['block_size', 'forest_block_size', 'tree_block_size', 'forest_block_s
 
 def block_size(space: ProductSpace, coupled: Sector) -> int:
     """The size of a block"""
-    return sum(forest_block_size(space, uncoupled, coupled)
-               for uncoupled in space.iter_uncoupled())
+    return space.sector_multiplicity(coupled)
 
 
 def forest_block_size(space: ProductSpace, uncoupled: tuple[Sector], coupled: Sector) -> int:
