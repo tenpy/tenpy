@@ -4,10 +4,11 @@ https://data-apis.org/array-api/latest/purpose_and_scope.html
 # Copyright 2023-2023 TeNPy Developers, GNU GPLv3
 from __future__ import annotations
 
-from .abstract_backend import BlockBackend, Block, Data, Dtype
+from .abstract_backend import BlockBackend, Block, Data
 from .no_symmetry import NoSymmetryBackend
 from .nonabelian import NonabelianBackend
 from .abelian import AbelianBackend
+from ..dtypes import Dtype
 
 import numpy as np
 

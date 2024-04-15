@@ -2,14 +2,13 @@
 from __future__ import annotations
 from numpy import prod
 import numpy
-from typing import Any, TYPE_CHECKING
+from typing import TYPE_CHECKING
 
 from .abelian import AbelianBackend
-from .abstract_backend import BlockBackend, Block, Data, Dtype
+from .abstract_backend import BlockBackend, Block, Data
 from .no_symmetry import NoSymmetryBackend
 from .nonabelian import NonabelianBackend
-from ..misc import inverse_permutation
-from ..spaces import VectorSpace
+from ..dtypes import Dtype
 
 __all__ = ['TorchBlockBackend', 'NoSymmetryTorchBackend', 'AbelianTorchBackend',
            'NonabelianTorchBackend']

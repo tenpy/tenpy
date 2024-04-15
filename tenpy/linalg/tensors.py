@@ -29,7 +29,7 @@ from abc import ABCMeta, abstractmethod
 import operator
 from types import EllipsisType
 from typing import TypeVar, Sequence, NoReturn
-from numbers import Number, Real, Integral
+from numbers import Number, Integral
 import numpy as np
 import warnings
 import functools
@@ -37,15 +37,15 @@ import logging
 logger = logging.getLogger(__name__)
 
 from .dummy_config import printoptions
-from .misc import duplicate_entries, force_str_len, join_as_many_as_possible
+from .misc import duplicate_entries, join_as_many_as_possible
 from .dummy_config import config
 from .symmetries import AbelianGroup, Symmetry
 from .spaces import VectorSpace, ProductSpace, Sector, SectorArray
 from .backends.backend_factory import get_backend
-from .backends.abstract_backend import Dtype, Block, Backend
+from .backends.abstract_backend import Block, Backend
+from .dtypes import Dtype
 from ..tools.misc import to_iterable, to_iterable_of_len
 from ..tools.docs import amend_parent_docstring
-from ..tools.string import vert_join
 
 __all__ = ['Shape', 'Tensor', 'SymmetricTensor', 'BlockDiagonalTensor', 'ChargedTensor',
            'DiagonalTensor', 'Mask', 'add_trivial_leg', 'almost_equal', 'combine_legs', 'conj',

@@ -7,12 +7,12 @@ import warnings
 import operator
 
 from tenpy.linalg import tensors
-from tenpy.linalg.backends.abstract_backend import Dtype
 from tenpy.linalg.backends.no_symmetry import NoSymmetryBackend
 from tenpy.linalg.backends.abelian import AbelianBackend
 from tenpy.linalg.backends.nonabelian import NonabelianBackend
 from tenpy.linalg.backends.torch import TorchBlockBackend
 from tenpy.linalg.backends.numpy import NumpyBlockBackend, NoSymmetryNumpyBackend
+from tenpy.linalg.dtypes import Dtype
 from tenpy.linalg.spaces import VectorSpace, ProductSpace, _fuse_spaces
 from tenpy.linalg.symmetries import ProductSymmetry
 

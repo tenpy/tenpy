@@ -3,13 +3,12 @@
 from __future__ import annotations
 from abc import abstractmethod, ABCMeta
 from enum import Enum
-from typing import TypeVar, Iterator
-from itertools import product, count
 from functools import reduce
+
 from numpy import typing as npt
 import numpy as np
-from numpy._typing import NDArray
 
+from .dtypes import Dtype
 
 __all__ = ['Sector', 'SectorArray', 'FusionStyle', 'BraidingStyle', 'Symmetry', 'ProductSymmetry',
            'GroupSymmetry', 'AbelianGroup', 'NoSymmetry', 'U1Symmetry', 'ZNSymmetry', 'SU2Symmetry',
@@ -60,6 +59,9 @@ class Symmetry(metaclass=ABCMeta):
     
     has_fusion_tensor = False
     """Whether the symmetry defines :meth:`fusion_tensor`. If not, it raises."""
+
+    fusion_tensor_dtype = None
+    """The dtype of fusion tensors, if available. Set to ``None`` otherwise."""
     
     def __init__(self, fusion_style: FusionStyle, braiding_style: BraidingStyle, trivial_sector: Sector,
                  group_name: str, num_sectors: int | float, descriptive_name: str | None = None):
@@ -509,6 +511,11 @@ class ProductSymmetry(Symmetry):
             descriptive_name=descriptive_name
         )
         self.has_fusion_tensor = all(f.has_fusion_tensor for f in flat_factors)
+        dtypes = [f.fusion_tensor_dtype for f in flat_factors]
+        if None in dtypes:
+            self.fusion_tensor_dtype = None
+        else:
+            self.fusion_tensor_dtype = Dtype.common(*dtypes)
 
     def is_valid_sector(self, a: Sector) -> bool:
         if getattr(a, 'shape', ()) != (self.sector_ind_len,):
@@ -742,7 +749,7 @@ class GroupSymmetry(Symmetry, metaclass=_ABCFactorSymmetryMeta):
                           descriptive_name=descriptive_name)
 
     @abstractmethod
-    def _fusion_tensor(self, a: Sector, b: Sector, c: Sector) -> NDArray:
+    def _fusion_tensor(self, a: Sector, b: Sector, c: Sector) -> npt.NDArray:
         # subclasses must implement. for groups it is always possible.
         ...
 
@@ -769,9 +776,12 @@ class AbelianGroup(GroupSymmetry, metaclass=_ABCFactorSymmetryMeta):
         False
     """
 
+    fusion_tensor_dtype = Dtype.float64
+
     _one_1D = np.ones((1), dtype=int)
     _one_2D = np.ones((1, 1), dtype=int)
     _one_4D = np.ones((1, 1, 1, 1), dtype=int)
+    _one_4D_float = np.ones((1, 1, 1, 1), dtype=float)
 
     def __init__(self, trivial_sector: Sector, group_name: str, num_sectors: int | float,
                  descriptive_name: str | None = None):
@@ -817,7 +827,7 @@ class AbelianGroup(GroupSymmetry, metaclass=_ABCFactorSymmetryMeta):
         return self._one_4D
 
     def _fusion_tensor(self, a: Sector, b: Sector, c: Sector) -> np.ndarray:
-        return self._one_4D
+        return self._one_4D_float
 
 
 class NoSymmetry(AbelianGroup):
@@ -965,6 +975,8 @@ class SU2Symmetry(GroupSymmetry):
     E.g. a spin-1/2 degree of freedom is represented by the sector `[1]`.
     """
 
+    fusion_tensor_dtype = Dtype.float64
+
     def __init__(self, descriptive_name: str | None = None):
         GroupSymmetry.__init__(self, fusion_style=FusionStyle.multiple_unique, trivial_sector=np.array([0], dtype=int),
                        group_name='SU(2)', num_sectors=np.inf, descriptive_name=descriptive_name)
@@ -1049,8 +1061,10 @@ class FermionParity(Symmetry):
     `[0]`, `[1]`
     """
     has_fusion_tensor = True
+    fusion_tensor_dtype = Dtype.float64
     _one_2D = np.ones((1, 1), dtype=int)
     _one_4D = np.ones((1, 1, 1, 1), dtype=int)
+    _one_4D_float = np.ones((1, 1, 1, 1), dtype=float)
 
     def __init__(self):
         Symmetry.__init__(self, fusion_style=FusionStyle.single, braiding_style=BraidingStyle.fermionic,
@@ -1132,7 +1146,7 @@ class FermionParity(Symmetry):
         return np.arange(2, dtype=int)[:, None]
 
     def _fusion_tensor(self, a: Sector, b: Sector, c: Sector) -> np.ndarray:
-        return self._one_4D
+        return self._one_4D_float
 
 
 class ZNAnyonCategory(Symmetry):

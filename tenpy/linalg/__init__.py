@@ -30,9 +30,10 @@ from .random_matrix import *
 from .sparse import *
 from .matrix_operations import *
 from .krylov_based import *
+from .dtypes import *
 
 __all__ = ['symmetries', 'spaces', 'trees', 'backends', 'tensors', 'random_matrix', 'sparse',
-           'matrix_operations', 'krylov_based',
+           'matrix_operations', 'krylov_based', 'dtypes',
            *symmetries.__all__,
            *trees.__all__,
            *spaces.__all__,
@@ -42,4 +43,5 @@ __all__ = ['symmetries', 'spaces', 'trees', 'backends', 'tensors', 'random_matri
            *sparse.__all__,
            *matrix_operations.__all__,
            *krylov_based.__all__,
+           *dtypes.__all__,
            ]

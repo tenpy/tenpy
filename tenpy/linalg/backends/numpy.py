@@ -1,52 +1,25 @@
 # Copyright 2023-2023 TeNPy Developers, GNU GPLv3
 from __future__ import annotations
 
-from typing import Any, TYPE_CHECKING
 import numpy as np
 import scipy
 
 from .abelian import AbelianBackend
-from .abstract_backend import BlockBackend, Block, Data, Dtype
+from .abstract_backend import BlockBackend, Block, Data
 from .no_symmetry import NoSymmetryBackend
 from .nonabelian import NonabelianBackend
-from ..misc import inverse_permutation
-from ..spaces import VectorSpace
+from ..dtypes import Dtype, _numpy_dtype_to_tenpy, _tenpy_dtype_to_numpy
 
 __all__ = ['NumpyBlockBackend', 'NoSymmetryNumpyBackend', 'AbelianNumpyBackend',
            'NonabelianNumpyBackend']
-
-
-if TYPE_CHECKING:
-    # can not import Tensor at runtime, since it would be a circular import
-    # this clause allows mypy etc to evaluate the type-hints anyway
-    from ..tensors import BlockDiagonalTensor
 
 
 class NumpyBlockBackend(BlockBackend):
     BlockCls = np.ndarray
     svd_algorithms = ['gesdd', 'gesvd', 'robust', 'robust_silent']
 
-    tenpy_dtype_map = {
-        np.float32: Dtype.float32,
-        np.float64: Dtype.float64,
-        np.complex64: Dtype.complex64,
-        np.complex128: Dtype.complex128,
-        np.bool_: Dtype.bool,
-        np.dtype('float32'): Dtype.float32,
-        np.dtype('float64'): Dtype.float64,
-        np.dtype('complex64'): Dtype.complex64,
-        np.dtype('complex128'): Dtype.complex128,
-        np.dtype('bool'): Dtype.bool,
-        None: None,
-    }
-    backend_dtype_map = {
-        Dtype.float32: np.float32,
-        Dtype.float64: np.float64,
-        Dtype.complex64: np.complex64,
-        Dtype.complex128: np.complex128,
-        Dtype.bool: np.bool_,
-        None: None,
-    }
+    tenpy_dtype_map = _numpy_dtype_to_tenpy
+    backend_dtype_map = _tenpy_dtype_to_numpy
     
     def as_block(self, a) -> Block:
         block = np.asarray(a)

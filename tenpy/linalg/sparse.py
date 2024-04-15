@@ -19,8 +19,8 @@ from scipy.sparse.linalg import LinearOperator as ScipyLinearOperator, ArpackNoC
 
 from .spaces import VectorSpace, ProductSpace, Sector
 from .tensors import Tensor, Shape, BlockDiagonalTensor, ChargedTensor, tdot, eye_like, zero_like
-from .backends.abstract_backend import Dtype, Backend
-from .backends.numpy import NumpyBlockBackend
+from .backends.abstract_backend import Backend
+from .dtypes import Dtype
 from ..tools.math import speigs, speigsh
 from ..tools.misc import argsort
 

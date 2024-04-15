@@ -1,12 +1,12 @@
 # Copyright 2023-2023 TeNPy Developers, GNU GPLv3
 from __future__ import annotations
-from abc import ABC, abstractmethod
+from abc import ABC
 from typing import TYPE_CHECKING, Callable
 import numpy as np
-from numpy import prod
 
-from .abstract_backend import Backend, BlockBackend, Data, DiagonalData, Block, Dtype
-from ..symmetries import no_symmetry, Symmetry, NoSymmetry
+from .abstract_backend import Backend, BlockBackend, Data, DiagonalData, Block
+from ..dtypes import Dtype
+from ..symmetries import no_symmetry, Symmetry
 from ..spaces import VectorSpace, ProductSpace
 
 __all__ = ['NoSymmetryBackend']

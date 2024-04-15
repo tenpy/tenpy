@@ -39,7 +39,7 @@ from . import version  # needs to be after linalg! (TODO this still true?)
 #                               TimeDependentTwoSiteTDVP)
 # from .algorithms.tebd import TEBDEngine, QRBasedTEBDEngine, RandomUnitaryEvolution, TimeDependentTEBD
 # from .algorithms.truncation import TruncationError, truncate, svd_theta
-from .linalg.backends.abstract_backend import Dtype
+from .linalg.dtypes import Dtype
 from .linalg.backends.backend_factory import get_backend
 from .linalg.symmetries import *
 from .linalg.spaces import *

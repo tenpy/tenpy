@@ -6,15 +6,14 @@ Also contains some private utility function used by multiple backend modules.
 # Copyright 2023-2023 TeNPy Developers, GNU GPLv3
 from __future__ import annotations
 from abc import ABCMeta, abstractmethod
-from enum import Enum, auto
-from typing import TypeVar, Any, TYPE_CHECKING, Type, Callable
-from numbers import Number
+from typing import TypeVar, TYPE_CHECKING, Callable
 import numpy as np
 
 from ..symmetries import Symmetry
 from ..spaces import VectorSpace, ProductSpace, _fuse_spaces
+from ..dtypes import Dtype
 
-__all__ = ['Data', 'DiagonalData', 'Block', 'Dtype', 'Backend', 'BlockBackend']
+__all__ = ['Data', 'DiagonalData', 'Block', 'Backend', 'BlockBackend']
 
 
 if TYPE_CHECKING:
@@ -29,92 +28,6 @@ DiagonalData = TypeVar('DiagonalData')
 
 # placeholder for a backend-specific type that represents the blocks of symmetric tensors
 Block = TypeVar('Block')
-
-
-class Dtype(Enum):
-    # TODO expose those in some high-level init, maybe even as tenpy.float32 ?
-    # value = num_bytes * 2 + int(not is_real)
-    bool = 2
-    float32 = 8
-    complex64 = 9
-    float64 = 16
-    complex128 = 17
-
-    @property
-    def is_real(dtype):
-        return dtype.value % 2 == 0
-
-    @property
-    def to_complex(dtype):
-        if dtype.value == 2:
-            raise ValueError('Dtype.bool can not be converted to complex')
-        if dtype.value % 2 == 1:
-            return dtype
-        return Dtype(dtype.value + 1)
-
-    @property
-    def to_real(dtype):
-        if dtype.value == 2:
-            raise ValueError('Dtype.bool can not be converted to real')
-        if dtype.value % 2 == 0:
-            return dtype
-        return Dtype(dtype.value - 1)
-
-    @property
-    def python_type(dtype):
-        if dtype.value == 2:
-            return bool
-        if dtype.is_real:
-            return float
-        return complex
-
-    @property
-    def zero_scalar(dtype):
-        return dtype.python_type(0)
-
-    @property
-    def eps(dtype):
-        # difference between 1.0 and the next representable floating point number at the given precision
-        if dtype.value == 2:
-            raise ValueError(f'{dtype} is not inexact')
-        n_bits = 8 * (dtype.value // 2)
-        if n_bits == 32:
-            return 2 ** -52
-        if n_bits == 64:
-            return 2 ** -23
-        raise NotImplementedError(f'Dtype.eps not implemented for n_bits={n_bits}')
-
-    def __repr__(self) -> str:
-        return f'Dtype.{self.name}'
-
-    def common(*dtypes):
-        res = Dtype(max(t.value for t in dtypes))
-        if res.is_real:
-            if not all(t.is_real for t in dtypes):
-                return Dtype(res.value + 1)  # = res.to_complex
-        return res
-
-    def convert_python_scalar(dtype, value) -> complex | float | bool:
-        if dtype.value == 2:  # Dtype.bool
-            if value in [True, False, 0, 1]:
-                return bool(value)
-        elif dtype.is_real:
-            if isinstance(value, (int, float)):
-                return float(value)
-            # TODO what should we do for complex values?
-        else:
-            if isinstance(value, Number):
-                return complex(value)
-        raise TypeError(f'Type {type(value)} is incompatible with dtype {dtype}')
-
-    def to_numpy_dtype(dtype):
-        from .numpy import NumpyBlockBackend
-        return NumpyBlockBackend.backend_dtype_map[dtype]
-
-    @classmethod
-    def from_numpy_dtype(cls, dtype):
-        from .numpy import NumpyBlockBackend
-        return NumpyBlockBackend.tenpy_dtype_map[dtype]
 
 
 class Backend(metaclass=ABCMeta):
@@ -238,6 +151,7 @@ class Backend(metaclass=ABCMeta):
     def from_dense_block(self, a: Block, legs: list[VectorSpace], domain_num_legs: int,
                          tol: float = 1e-8) -> Data:
         """Convert a dense block to the data for a symmetric tensor.
+        
         If the block is not symmetric, measured by ``allclose(a, projected, atol, rtol)``,
         where ``projected`` is `a` projected to the space of symmetric tensors, raise a ``ValueError``.
         This includes a permutation of the basis, specified by the legs of `a`.

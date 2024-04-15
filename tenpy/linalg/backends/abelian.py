@@ -21,20 +21,18 @@ Changes compared to old np_conserved:
 # Copyright 2023-2023 TeNPy Developers, GNU GPLv3
 from __future__ import annotations
 
-from abc import ABC, abstractmethod
-from dataclasses import dataclass
+from abc import ABC
 from typing import TYPE_CHECKING, Callable
 import numpy as np
-import copy
-import warnings
+from numpy import ndarray
 
 from .abstract_backend import (
-    Backend, BlockBackend, Data, DiagonalData, Block, Dtype, _iter_common_noncommon_sorted_arrays,
+    Backend, BlockBackend, Data, DiagonalData, Block, _iter_common_noncommon_sorted_arrays,
     _iter_common_nonstrict_sorted_arrays, _iter_common_sorted, _iter_common_sorted_arrays
 )
 from ..misc import make_stride, find_row_differences
-from ..symmetries import FusionStyle, BraidingStyle, Symmetry, Sector, SectorArray, AbelianGroup
-from numpy import ndarray
+from ..dtypes import Dtype
+from ..symmetries import BraidingStyle, Symmetry, SectorArray
 from ..spaces import VectorSpace, ProductSpace
 from ...tools.misc import inverse_permutation, list_to_dict_list
 

@@ -5,7 +5,8 @@ from typing import TYPE_CHECKING, Callable
 from math import prod
 import numpy as np
 
-from .abstract_backend import Backend, BlockBackend, Block, Dtype, Data, DiagonalData
+from .abstract_backend import Backend, BlockBackend, Block, Data, DiagonalData
+from ..dtypes import Dtype
 from ..symmetries import Sector, SectorArray, Symmetry
 from ..spaces import VectorSpace, ProductSpace
 from ..trees import FusionTree, fusion_trees
