@@ -7,11 +7,11 @@ import scipy
 from .abelian import AbelianBackend
 from .abstract_backend import BlockBackend, Block, Data
 from .no_symmetry import NoSymmetryBackend
-from .nonabelian import NonabelianBackend
+from .fusion_tree_backend import FusionTreeBackend
 from ..dtypes import Dtype, _numpy_dtype_to_tenpy, _tenpy_dtype_to_numpy
 
 __all__ = ['NumpyBlockBackend', 'NoSymmetryNumpyBackend', 'AbelianNumpyBackend',
-           'NonabelianNumpyBackend']
+           'FusionTreeNumpyBackend']
 
 
 class NumpyBlockBackend(BlockBackend):
@@ -252,7 +252,7 @@ class AbelianNumpyBackend(NumpyBlockBackend, AbelianBackend):
     pass
 
 
-class NonabelianNumpyBackend(NumpyBlockBackend, NonabelianBackend):
+class FusionTreeNumpyBackend(NumpyBlockBackend, FusionTreeBackend):
     pass
 
 

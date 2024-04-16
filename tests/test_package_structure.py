@@ -11,7 +11,7 @@ import tenpy
 dunder_all_exceptions = {
     'tenpy.linalg': ['dummy_config', 'misc'],  # TODO these are temporary, remove exception when they are gone
     'tenpy.linalg.backends': ['abelian', 'abstract_backend', 'array_api', 'backend_factory',
-                              'no_symmetry', 'nonabelian', 'numpy', 'torch'],
+                              'no_symmetry', 'fusion_tree_backend', 'numpy', 'torch'],
     'tenpy.linalg.tensors': ['T', 'ElementwiseData', 'elementwise_function'],
 }
 

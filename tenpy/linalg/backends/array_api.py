@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from .abstract_backend import BlockBackend, Block, Data
 from .no_symmetry import NoSymmetryBackend
-from .nonabelian import NonabelianBackend
+from .fusion_tree_backend import FusionTreeBackend
 from .abelian import AbelianBackend
 from ..dtypes import Dtype
 
@@ -14,7 +14,7 @@ import numpy as np
 
 
 __all__ = ['ArrayApiBlockBackend', 'NoSymmetryArrayApiBackend', 'AbelianArrayApiBackend',
-           'NonabelianArrayApiBackend']
+           'FusionTreeArrayApiBackend']
 
 
 # TODO carry through device args?
@@ -270,6 +270,6 @@ class AbelianArrayApiBackend(ArrayApiBlockBackend, AbelianBackend):
         ArrayApiBlockBackend.__init__(self, api_namespace=api_namespace)
 
 
-class NonabelianArrayApiBackend(ArrayApiBlockBackend, NonabelianBackend):
+class FusionTreeArrayApiBackend(ArrayApiBlockBackend, FusionTreeBackend):
     def __init__(self, api_namespace):
         ArrayApiBlockBackend.__init__(self, api_namespace=api_namespace)

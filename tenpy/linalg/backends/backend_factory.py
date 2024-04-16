@@ -4,8 +4,8 @@ from __future__ import annotations
 import logging
 
 from .abstract_backend import Backend
-from .numpy import NoSymmetryNumpyBackend, AbelianNumpyBackend, NonabelianNumpyBackend
-from .torch import NoSymmetryTorchBackend, AbelianTorchBackend, NonabelianTorchBackend
+from .numpy import NoSymmetryNumpyBackend, AbelianNumpyBackend, FusionTreeNumpyBackend
+from .torch import NoSymmetryTorchBackend, AbelianTorchBackend, FusionTreeTorchBackend
 from ..symmetries import Symmetry, no_symmetry, AbelianGroup
 
 __all__ = ['get_backend', 'todo_get_backend']
@@ -36,14 +36,14 @@ _backend_lookup = dict(
         tpu=None,  # FUTURE
     ),
     #
-    nonabelian=dict(
-        numpy=(NonabelianNumpyBackend, {}),
-        torch=(NonabelianTorchBackend, {}),
+    fusion_tree=dict(
+        numpy=(FusionTreeNumpyBackend, {}),
+        torch=(FusionTreeTorchBackend, {}),
         tensorflow=None,  # FUTURE
         jax=None,  # FUTURE
-        cpu=(NonabelianNumpyBackend, {}),
-        gpu=(NonabelianTorchBackend, dict(device='cuda')),
-        apple_silicon=(NonabelianTorchBackend, dict(device='mps')),
+        cpu=(FusionTreeNumpyBackend, {}),
+        gpu=(FusionTreeTorchBackend, dict(device='cuda')),
+        apple_silicon=(FusionTreeTorchBackend, dict(device='mps')),
         tpu=None,  # FUTURE
     ),
 )
@@ -55,7 +55,7 @@ def get_backend(symmetry: Symmetry | str = None, block_backend: str = None) -> B
     """
     Parameters
     ----------
-    symmetry : {'no_symmetry', 'abelian', 'nonabelian'} | Symmetry
+    symmetry : {'no_symmetry', 'abelian', 'fusion_tree'} | Symmetry
     block_backend : {None, 'numpy', 'torch', 'tensorflow', 'jax', 'cpu', 'gpu', 'tpu'}
     """
     # TODO these are a dummies, in the future we should have some mechanism to store the default
@@ -72,12 +72,12 @@ def get_backend(symmetry: Symmetry | str = None, block_backend: str = None) -> B
         elif isinstance(symmetry, AbelianGroup):
             symmetry_backend = 'abelian'
         else:
-            symmetry_backend = 'nonabelian'
+            symmetry_backend = 'fusion_tree'
     else:
         symmetry_backend = symmetry
 
     assert block_backend in ['numpy', 'torch', 'tensorflow', 'jax', 'cpu', 'gpu', 'tpu']
-    assert symmetry_backend in ['no_symmetry', 'abelian', 'nonabelian']
+    assert symmetry_backend in ['no_symmetry', 'abelian', 'fusion_tree']
 
     res = _backend_lookup[symmetry_backend][block_backend]
     if res is None:

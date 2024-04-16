@@ -9,7 +9,7 @@ import operator
 from tenpy.linalg import tensors
 from tenpy.linalg.backends.no_symmetry import NoSymmetryBackend
 from tenpy.linalg.backends.abelian import AbelianBackend
-from tenpy.linalg.backends.nonabelian import NonabelianBackend
+from tenpy.linalg.backends.fusion_tree_backend import FusionTreeBackend
 from tenpy.linalg.backends.torch import TorchBlockBackend
 from tenpy.linalg.backends.numpy import NumpyBlockBackend, NoSymmetryNumpyBackend
 from tenpy.linalg.dtypes import Dtype
@@ -62,7 +62,7 @@ def check_shape(shape: tensors.Shape, dims: tuple[int, ...], labels: list[str]):
 def test_Tensor_classmethods(backend, vector_space_rng, backend_data_rng, tensor_rng, np_random):
     T: tensors.Tensor = tensor_rng(num_legs=3)  # compatible legs where we can have blocks
 
-    if (isinstance(backend, NonabelianBackend)) and (isinstance(T.symmetry, ProductSymmetry)):
+    if (isinstance(backend, FusionTreeBackend)) and (isinstance(T.symmetry, ProductSymmetry)):
         pytest.xfail(reason='Topo data for ProductSymmetry is missing')
     
     legs = T.legs

@@ -18,7 +18,7 @@ if TYPE_CHECKING:
 
 
 __all__ = ['block_size', 'forest_block_size', 'tree_block_size', 'forest_block_slice',
-           'tree_block_slice', 'NonabelianBackend', 'NonAbelianData']
+           'tree_block_slice', 'FusionTreeBackend', 'FusionTreeData']
 
 
 def block_size(space: ProductSpace, coupled: Sector) -> int:
@@ -77,8 +77,8 @@ def _make_domain_codomain(legs: list[VectorSpace], domain_num_legs: int = 0, bac
     return domain, codomain
 
 
-class NonAbelianData:
-    r"""Data stored in a Tensor for :class:`NonabelianBackend`.
+class FusionTreeData:
+    r"""Data stored in a Tensor for :class:`FusionTreeBackend`.
 
     TODO describe/define what blocks are
 
@@ -156,9 +156,9 @@ class NonAbelianData:
 # TODO do we need to inherit from ABC again?? (same in abelian and no_symmetry)
 # TODO eventually remove BlockBackend inheritance, it is not needed,
 #      jakob only keeps it around to make his IDE happy  (same in abelian and no_symmetry)
-class NonabelianBackend(Backend, BlockBackend, ABC):
+class FusionTreeBackend(Backend, BlockBackend, ABC):
     
-    DataCls = NonAbelianData
+    DataCls = FusionTreeData
 
     def test_data_sanity(self, a: BlockDiagonalTensor | DiagonalTensor | Mask, is_diagonal: bool):
         super().test_data_sanity(a, is_diagonal=is_diagonal)
@@ -199,18 +199,18 @@ class NonabelianBackend(Backend, BlockBackend, ABC):
     #   - _fuse_spaces
     #   - add_leg_metadata
 
-    def get_dtype_from_data(self, a: NonAbelianData) -> Dtype:
+    def get_dtype_from_data(self, a: FusionTreeData) -> Dtype:
         return a.dtype
 
-    def to_dtype(self, a: BlockDiagonalTensor, dtype: Dtype) -> NonAbelianData:
+    def to_dtype(self, a: BlockDiagonalTensor, dtype: Dtype) -> FusionTreeData:
         blocks = [self.block_to_dtype(block, dtype) for block in a.data.blocks]
-        return NonAbelianData(a.data.coupled_sectors, blocks, a.data.domain, a.data.codomain, dtype)
+        return FusionTreeData(a.data.coupled_sectors, blocks, a.data.domain, a.data.codomain, dtype)
 
     def supports_symmetry(self, symmetry: Symmetry) -> bool:
         # supports all symmetries
         return isinstance(symmetry, Symmetry)
 
-    def data_item(self, a: NonAbelianData) -> float | complex:
+    def data_item(self, a: FusionTreeData) -> float | complex:
         if len(a.blocks) > 1:
             raise ValueError("More than 1 block!")
         if len(a.blocks) == 0:
@@ -234,7 +234,7 @@ class NonabelianBackend(Backend, BlockBackend, ABC):
                     contribution = self.block_kron(symmetry_data, degeneracy_data)
 
                     # TODO: get_slice implementation?
-                    # TODO: nonabelian (at least) want a map from sector to its index, so we dont have to sort always
+                    # TODO: want a map from sector to its index, so we dont have to sort always
                     # TODO: would be better to iterate over uncoupled sectors, together with their slices, then we dont need to look them up.
                     idcs = (*(leg.get_slice(sector) for leg, sector in zip(a.data.codomain, splitting_tree.uncoupled)),
                             *(leg.get_slice(sector) for leg, sector in zip(a.data.domain, fusion_tree.uncoupled)))
@@ -250,7 +250,7 @@ class NonabelianBackend(Backend, BlockBackend, ABC):
         raise NotImplementedError  # TODO
 
     def from_dense_block(self, a: Block, legs: list[VectorSpace], domain_num_legs: int,
-                         tol: float = 1e-8) -> NonAbelianData:
+                         tol: float = 1e-8) -> FusionTreeData:
         raise NotImplementedError  # TODO
 
     def diagonal_from_block(self, a: Block, leg: VectorSpace) -> DiagonalData:
@@ -260,7 +260,7 @@ class NonabelianBackend(Backend, BlockBackend, ABC):
         raise NotImplementedError  # TODO
 
     def from_block_func(self, func, legs: list[VectorSpace], domain_num_legs: int, func_kwargs={}
-                        ) -> NonAbelianData:
+                        ) -> FusionTreeData:
         domain, codomain = _make_domain_codomain(legs, domain_num_legs=domain_num_legs, backend=self)
         raise NotImplementedError  # TODO use _iter_common_... instead of allowed_coupled_sectors
         coupled = allowed_coupled_sectors(codomain, domain)  #
@@ -271,30 +271,30 @@ class NonabelianBackend(Backend, BlockBackend, ABC):
         else:
             sample_block = func((1,) * len(legs), **func_kwargs)
         dtype = self.block_dtype(sample_block)
-        return NonAbelianData(coupled, blocks, domain, codomain, dtype)
+        return FusionTreeData(coupled, blocks, domain, codomain, dtype)
 
     def diagonal_from_block_func(self, func, leg: VectorSpace, func_kwargs={}) -> DiagonalData:
         raise NotImplementedError  # TODO
 
-    def zero_data(self, legs: list[VectorSpace], dtype: Dtype, domain_num_legs: int) -> NonAbelianData:
+    def zero_data(self, legs: list[VectorSpace], dtype: Dtype, domain_num_legs: int) -> FusionTreeData:
         domain, codomain = _make_domain_codomain(legs, domain_num_legs=domain_num_legs, backend=self)
-        return NonAbelianData(coupled_sectors=codomain.symmetry.empty_sector_array, blocks=[],
+        return FusionTreeData(coupled_sectors=codomain.symmetry.empty_sector_array, blocks=[],
                               domain=domain, codomain=codomain, dtype=dtype)
 
     def zero_diagonal_data(self, leg: VectorSpace, dtype: Dtype) -> DiagonalData:
         raise NotImplementedError  # TODO
 
-    def eye_data(self, legs: list[VectorSpace], dtype: Dtype, domain_num_legs: int) -> NonAbelianData:
+    def eye_data(self, legs: list[VectorSpace], dtype: Dtype, domain_num_legs: int) -> FusionTreeData:
         domain, codomain = _make_domain_codomain(legs, num_codomain=domain_num_legs, backend=self)
         raise NotImplementedError  # TODO use _iter_common_... instead of allowed_coupled_sectors
         coupled = allowed_coupled_sectors(codomain, domain)
         blocks = [self.eye_block((block_size(codomain, c), block_size(domain, c)), dtype=dtype)
                   for c in coupled]
-        return NonAbelianData(coupled_sectors=coupled, blocks=blocks, domain=domain,
+        return FusionTreeData(coupled_sectors=coupled, blocks=blocks, domain=domain,
                               codomain=codomain, dtype=dtype)
 
-    def copy_data(self, a: BlockDiagonalTensor) -> NonAbelianData:
-        return NonAbelianData(
+    def copy_data(self, a: BlockDiagonalTensor) -> FusionTreeData:
+        return FusionTreeData(
             coupled_sectors=a.data.coupled_sectors.copy(),  # OPTIMIZE do we need to copy these?
             blocks=[self.block_copy(block) for block in a.data.blocks],
             codomain=a.data.codomain, domain=a.data.domain

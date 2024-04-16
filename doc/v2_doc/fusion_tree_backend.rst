@@ -1,9 +1,8 @@
-Implementation details of the nonabelian backend
+Implementation details of the FusionTree backend
 ================================================
 
 It turns out that the machinery we choose to represent tensors that are symmetric under
 general non-abelian symmetries, can be extended to represent fermionic or anyonic grading.
-
 
 
 Definition of topological data of the symmetry

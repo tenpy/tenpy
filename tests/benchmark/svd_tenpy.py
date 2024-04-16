@@ -7,7 +7,7 @@ from tenpy.tools.misc import to_iterable
 from tdot_tenpy import parse_symmetry, get_backend, get_random_tensor
 
 
-def setup_benchmark(symmetry_backend='abelian',  # no_symmetry, abelian, nonabelian
+def setup_benchmark(symmetry_backend='abelian',  # no_symmetry, abelian, fusion_tree
                     block_backend='numpy',  # numpy, torch
                     symmetry='u1_symmetry',
                     legs=2,

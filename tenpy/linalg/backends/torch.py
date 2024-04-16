@@ -7,11 +7,11 @@ from typing import TYPE_CHECKING
 from .abelian import AbelianBackend
 from .abstract_backend import BlockBackend, Block, Data
 from .no_symmetry import NoSymmetryBackend
-from .nonabelian import NonabelianBackend
+from .fusion_tree_backend import FusionTreeBackend
 from ..dtypes import Dtype
 
 __all__ = ['TorchBlockBackend', 'NoSymmetryTorchBackend', 'AbelianTorchBackend',
-           'NonabelianTorchBackend']
+           'FusionTreeTorchBackend']
 
 
 if TYPE_CHECKING:
@@ -272,7 +272,7 @@ class AbelianTorchBackend(TorchBlockBackend, AbelianBackend):
         AbelianBackend.__init__(self)
 
 
-class NonabelianTorchBackend(TorchBlockBackend, NonabelianBackend):
+class FusionTreeTorchBackend(TorchBlockBackend, FusionTreeBackend):
     def __init__(self, device: str = 'cpu'):
         TorchBlockBackend.__init__(self, device=device)
-        NonabelianBackend.__init__(self)
+        FusionTreeBackend.__init__(self)

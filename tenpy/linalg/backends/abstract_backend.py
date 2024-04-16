@@ -54,7 +54,7 @@ class Backend(metaclass=ABCMeta):
         |                            |
         |                      XxxYyyBackend
 
-    Where Xxx describes the symmetry, e.g. NoSymmetry, Abelian, Nonabelian
+    Where Xxx describes the symmetry backend, e.g. NoSymmetry, Abelian, FusionTree
     and Yyy describes the numerical routines that handle the blocks, e.g. numpy, torch, ...
 
     However, the ``XxxYyyBackend`` class may also override any of the methods, if needed.
@@ -113,7 +113,7 @@ class Backend(metaclass=ABCMeta):
     def is_real(self, a: BlockDiagonalTensor) -> bool:
         """If the Tensor is comprised of real numbers.
         Complex numbers with small or zero imaginary part still cause a `False` return."""
-        # NonAbelian backend might implement this differently.
+        # FusionTree backend might implement this differently.
         return a.dtype.is_real
 
     def item(self, a: BlockDiagonalTensor | DiagonalTensor) -> float | complex:

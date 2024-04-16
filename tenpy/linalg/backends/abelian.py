@@ -125,7 +125,7 @@ class AbelianBackendData:
         block_num = self.get_block_num(block_inds)
         return None if block_num is None else self.block[block_num]
 
-    # TODO (JU) implement __iter__ like in NonAbelianData to yield from zip(block, block_inds)?
+    # TODO (JU) implement __iter__ like in FusionTreeData to yield from zip(block, block_inds)?
         
 
 class AbelianBackend(Backend, BlockBackend, ABC):

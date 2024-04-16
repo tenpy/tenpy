@@ -77,7 +77,7 @@ def test_double_site(block_backend, symmetry_backend):
     if symmetry_backend == 'no_symmetry':
         all_conserve = ['None']
         fs_conserve = 'None'
-    elif symmetry_backend in ['abelian', 'nonabelian']:
+    elif symmetry_backend in ['abelian', 'fusion_tree']:
         all_conserve = ['Sz', 'None']
         fs_conserve = 'N'
     else:
@@ -194,9 +194,9 @@ def test_spin_half_site(block_backend, symmetry_backend):
         all_conserve = ['None']
     elif symmetry_backend == 'abelian':
         all_conserve = ['Sz', 'parity', 'None']
-    elif symmetry_backend == 'nonabelian':
+    elif symmetry_backend == 'fusion_tree':
         all_conserve = ['Stot', 'Sz', 'parity', 'None']
-        pytest.xfail('Nonabelian backend not ready')
+        pytest.xfail('FusionTree backend not ready')
     else:
         raise ValueError
     
@@ -236,9 +236,9 @@ def test_spin_site(block_backend, symmetry_backend, S):
         all_conserve = ['None']
     elif symmetry_backend == 'abelian':
         all_conserve = ['Sz', 'parity', 'None']
-    elif symmetry_backend == 'nonabelian':
+    elif symmetry_backend == 'fusion_tree':
         all_conserve = ['SU(2)', 'Sz', 'parity', 'None']
-        pytest.xfail('Nonabelian backend not ready')
+        pytest.xfail('FusionTree backend not ready')
     else:
         raise ValueError
     sites = []
@@ -273,9 +273,9 @@ def test_fermion_site(block_backend, symmetry_backend):
         all_conserve = ['None']
     elif symmetry_backend == 'abelian':
         all_conserve = ['N', 'parity', 'None']
-    elif symmetry_backend == 'nonabelian':
+    elif symmetry_backend == 'fusion_tree':
         # TODO check JW-free fermions when ready?
-        pytest.xfail('Nonabelian backend not ready')
+        pytest.xfail('FusionTree backend not ready')
     else:
         raise ValueError
     sites = []
@@ -319,10 +319,10 @@ def test_spin_half_fermion_site(block_backend, symmetry_backend):
     elif symmetry_backend == 'abelian':
         all_conserve_N = ['N', 'parity', 'None']
         all_conserve_S = ['Sz', 'parity', 'None']
-    elif symmetry_backend == 'nonabelian':
+    elif symmetry_backend == 'fusion_tree':
         all_conserve_N = ['N', 'parity', 'None']
         all_conserve_S = ['Stot', 'Sz', 'parity', 'None']
-        pytest.xfail('Nonabelian backend not ready')
+        pytest.xfail('FusionTree backend not ready')
     else:
         raise ValueError
     sites = []
@@ -385,10 +385,10 @@ def test_spin_half_hole_site(block_backend, symmetry_backend):
     elif symmetry_backend == 'abelian':
         all_conserve_N = ['N', 'parity', 'None']
         all_conserve_S = ['Sz', 'parity', 'None']
-    elif symmetry_backend == 'nonabelian':
+    elif symmetry_backend == 'fusion_tree':
         all_conserve_N = ['N', 'parity', 'None']
         all_conserve_S = ['Stot', 'Sz', 'parity', 'None']
-        pytest.xfail('Nonabelian backend not ready')
+        pytest.xfail('FusionTree backend not ready')
     else:
         raise ValueError
     sites = []
@@ -440,7 +440,7 @@ def test_boson_site(block_backend, symmetry_backend, Nmax):
     backend = la.get_backend(block_backend=block_backend, symmetry=symmetry_backend)
     if symmetry_backend == 'no_symmetry':
         all_conserve = ['None']
-    elif symmetry_backend in ['abelian', 'nonabelian']:
+    elif symmetry_backend in ['abelian', 'fusion_tree']:
         all_conserve = ['N', 'parity', 'None']
     else:
         raise ValueError
@@ -474,7 +474,7 @@ def test_clock_site(block_backend, symmetry_backend, q):
     backend = la.get_backend(block_backend=block_backend, symmetry=symmetry_backend)
     if symmetry_backend == 'no_symmetry':
         all_conserve = ['None']
-    elif symmetry_backend in ['abelian', 'nonabelian']:
+    elif symmetry_backend in ['abelian', 'fusion_tree']:
         all_conserve = ['Z', 'None']
     else:
         raise ValueError

@@ -70,7 +70,7 @@ symmetry_short_names = dict(
 def parse_backend(backend: list[str]) -> tuple[str, str]:
     """Translate --backend argparse argument to symmetry_backend and block_backend"""
     # default first:
-    VALID_SYMMETRY_BACKENDS = ['abelian', 'no_symmetry', 'nonabelian']
+    VALID_SYMMETRY_BACKENDS = ['abelian', 'no_symmetry', 'fusion_tree']
     VALID_BLOCK_BACKENDS = ['numpy', 'torch', 'gpu']
     
     if len(backend) == 1:

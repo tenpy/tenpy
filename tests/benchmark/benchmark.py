@@ -210,7 +210,7 @@ if __name__ == "__main__":
         nargs='*',
         type=str,
         default=['abelian', 'numpy'],
-        help=("The backend to use. Can specify the symmetry backend {no_symmetry | abelian | nonabelian}, "
+        help=("The backend to use. Can specify the symmetry backend {no_symmetry | abelian | fusion_tree}, "
               "the block backend {numpy | torch}, or both"))
     parser.add_argument('-l',
                         '--legs',

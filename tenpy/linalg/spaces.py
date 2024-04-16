@@ -924,7 +924,7 @@ class ProductSpace(VectorSpace):
     _fusion_outcomes_sort : 1D array
         The permutation that ``np.lexsort( .T)``s the list of all possible fusion outcomes.
         Note that that list contains duplicates.
-        Shape is ``(np.prod([sp.num_sectors for sp in self.spaces]))``.  (TODO this true for nonabelian?)
+        Shape is ``(np.prod([sp.num_sectors for sp in self.spaces]))``.  (TODO this true for FusionTree?)
     _fusion_outcomes_inverse_sort : 1D ndarray
         Inverse permutation of :attr:`_fusion_outcomes_sort`.
 
@@ -1175,7 +1175,7 @@ class ProductSpace(VectorSpace):
             perm = self.get_basis_transformation_perm()
             transform[np.ix_(perm, range(self.dim))] = 1.
             return np.reshape(transform, (*(s.dim for s in self.spaces), self.dim))
-        raise NotImplementedError  # TODO for nonabelian this is just fusion_tree.__array__, right?
+        raise NotImplementedError  # TODO for FusionTree this is just fusion_tree.__array__, right?
 
     def get_basis_transformation_perm(self):
         r"""Get the permutation equivalent to :meth:`get_basis_transformation`.
@@ -1239,7 +1239,7 @@ class ProductSpace(VectorSpace):
         For each of the :attr:`spaces` consider all sectors by order of appearance in the internal
         order, i.e. in :attr:`VectorSpace.sectors``. Take all combinations of sectors from all the
         spaces in C-style order, i.e. varying those from the last space the fastest.
-        For each combination, take all of its fusion outcomes (TODO define order for nonabelian).
+        For each combination, take all of its fusion outcomes (TODO define order for FusionTree).
         The target permutation np.lexsort( .T)s the resulting list of sectors.
         """
         # OPTIMIZE this probably not the most efficient way to do this, but it hurts my brain

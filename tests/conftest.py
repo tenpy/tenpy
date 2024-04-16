@@ -25,16 +25,16 @@ from tenpy.linalg import backends, spaces, symmetries, tensors
 
 def pytest_addoption(parser):
     parser.addoption(
-        "--run-nonabelian", action="store_true", default=False, help="run nonabelian tests"
+        "--run-FusionTree", action="store_true", default=False, help="activate tests for FusionTree backend"
     )
 
 
 def pytest_collection_modifyitems(config, items):
-    if not config.getoption("--run-nonabelian"):
-        skip_nonabelian = pytest.mark.skip(reason='need --run-nonabelian to run.')
+    if not config.getoption("--run-FusionTree"):
+        skip_FusionTree = pytest.mark.skip(reason='need --run-FusionTree to run.')
         for item in items:
-            if 'nonabelian' in item.keywords:
-                item.add_marker(skip_nonabelian)
+            if 'FusionTree' in item.keywords:
+                item.add_marker(skip_FusionTree)
 
 # FIXTURES:
 
@@ -51,9 +51,9 @@ def block_backend(request):
     return request.param
 
 
-# Note: nonabelian backend is disabled by default. Use ``--run-nonabelian`` CL option to run them.
-_nonabelian_param = pytest.param('nonabelian', marks=pytest.mark.nonabelian)
-@pytest.fixture(params=['no_symmetry', 'abelian', _nonabelian_param])
+# Note: FusionTree backend is skipped by default. Use ``--run-FusionTree`` CL option to run them.
+@pytest.fixture(params=['no_symmetry', 'abelian',
+                        pytest.param('FusionTree', marks=pytest.mark.FusionTree)])
 def symmetry_backend(request):
     return request.param
 

@@ -10,7 +10,7 @@ The following characters have special meaning in labels and should be avoided:
 Tensors as Maps
 ---------------
 
-The nonabelian backend partitions the legs into domain and codomain.
+The FusionTree backend partitions the legs into domain and codomain.
 At the level of tensors, we need to allow optional control over how the legs are partitioned,
 for optimization purposes.
 For the other backends, it has no effect, but we still keep track of it.
@@ -1812,7 +1812,7 @@ class ChargedTensor(Tensor):
         dummy_leg_state : block
             The state on the dummy leg. May be ``None`` ("unspecified").
         num_domain_legs : int
-            Only meaningful for nonabelian backend.
+            Only meaningful for FusionTree backend.
         """
         assert 0 <= num_domain_legs <= len(legs)
         if backend is None:

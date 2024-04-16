@@ -19,7 +19,7 @@ __all__ = ['svd', 'svd_apply_mask', 'eig_based_svd', 'truncated_svd', 'truncated
 # TODO revise decompositions and domain/codomain cleanly!
 #      for now have put them all to 0, to work with standard cases
 
-# TODO for nonabelian backend, we do not need to combine legs first!
+# TODO for FusionTree backend, we do not need to combine legs first!
 
 
 def _svd(a: Tensor, u_legs: list[int | str], vh_legs: list[int | str],
