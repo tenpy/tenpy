@@ -19,7 +19,7 @@ DiagonalTensors and Masks always have one of their legs in the domain, one in th
 ChargedTensors always have their dummy leg in the codomain.
 
 TODO elaborate, this is a stub explanation.
-TODO domain_num_legs more in tests
+TODO num_domain_legs more in tests
 
 """
 # Copyright 2023-2023 TeNPy Developers, GNU GPLv3
@@ -68,7 +68,7 @@ class Shape:
     Can be indexed by integer (leg position) or string (leg label).
     """
 
-    def __init__(self, legs: list[VectorSpace], domain_num_legs: int, labels: list[str | None] = None):
+    def __init__(self, legs: list[VectorSpace], num_domain_legs: int, labels: list[str | None] = None):
         self.legs = legs
         if labels is None:
             labels = [None] * len(legs)
@@ -78,11 +78,11 @@ class Shape:
         self._labelmap = {label: leg_num for leg_num, label in enumerate(self.labels) if label is not None}
         self.num_legs = len(legs)
         self.dims = [l.dim for l in legs]
-        self.domain_num_legs = domain_num_legs
+        self.num_domain_legs = num_domain_legs
 
     def test_sanity(self):
         assert not duplicate_entries(self._labels, ignore=[None])
-        assert 0 <= self.domain_num_legs <= self.num_legs
+        assert 0 <= self.num_domain_legs <= self.num_legs
 
     def __iter__(self):
         return iter(self.dims)
@@ -131,13 +131,13 @@ class Shape:
     def __str__(self):
         entries = [str(dim) if label is None else f'{label}:{dim:d}'
                    for label, dim in zip(self._labels, self.dims)]
-        return '(' + ', '.join(entries[:self.domain_num_legs]) + ' ; ' \
-            + ', '.join(entries[self.domain_num_legs:]) + ')'
+        return '(' + ', '.join(entries[:self.num_domain_legs]) + ' ; ' \
+            + ', '.join(entries[self.num_domain_legs:]) + ')'
 
     def __repr__(self) -> str:
         dims = ', '.join((f"{lbl}:{d:d}" if lbl is not None else str(d))
                          for lbl, d in zip(self._labels, self.dims))
-        return f'Shape({dims}, domain_num_legs={self.domain_num_legs})'
+        return f'Shape({dims}, num_domain_legs={self.num_domain_legs})'
 
 
 # ##################################
@@ -161,13 +161,13 @@ class Tensor(metaclass=ABCMeta):
         Labels for the legs. If None, translates to ``[None, None, ...]`` of appropriate length
     """
     def __init__(self, legs: list[VectorSpace], backend: Backend, labels: list[str | None] | None,
-                 dtype: Dtype, domain_num_legs: int):
+                 dtype: Dtype, num_domain_legs: int):
         if backend is None:
             self.backend = backend = get_backend(legs[0].symmetry)
         else:
             self.backend = backend
         self.legs = legs = [backend.add_leg_metadata(l) for l in legs]
-        self.shape = Shape(legs=legs, domain_num_legs=domain_num_legs, labels=labels)
+        self.shape = Shape(legs=legs, num_domain_legs=num_domain_legs, labels=labels)
         self.num_legs = len(legs)
         self.symmetry = legs[0].symmetry
         self.dtype = dtype
@@ -197,14 +197,14 @@ class Tensor(metaclass=ABCMeta):
         self.shape.set_labels(value)
 
     @property
-    def domain_num_legs(self) -> int:
+    def num_domain_legs(self) -> int:
         """How many of the legs are in the domain. See :ref:`tensors_as_maps`."""
-        return self.shape.domain_num_legs
+        return self.shape.num_domain_legs
 
     @property
-    def codomain_num_legs(self) -> int:
+    def num_codomain_legs(self) -> int:
         """How many of the legs are in the codomain. See :ref:`tensors_as_maps`."""
-        return self.num_legs - self.domain_num_legs
+        return self.num_legs - self.num_domain_legs
 
     @property
     def num_parameters(self) -> int:
@@ -379,14 +379,14 @@ class Tensor(metaclass=ABCMeta):
         col_widths = [max(len(l), len(d), len(n)) for l, d, n in zip(labels, dims, sector_nums)]
 
         # put '|' between legs and '||' between domain and codomain
-        n = self.domain_num_legs + 1  # +1 since there is a first header column
+        n = self.num_domain_legs + 1  # +1 since there is a first header column
         labels_row = ' | '.join(x.rjust(w) for x, w in zip(labels[:n], col_widths[:n]))
         labels_row += ' || ' + ' | '.join(x.rjust(w) for x, w in zip(labels[n:], col_widths[n:]))
         dims_row = ' | '.join(x.rjust(w) for x, w in zip(dims[:n], col_widths[:n]))
         dims_row += ' || ' + ' | '.join(x.rjust(w) for x, w in zip(dims[n:], col_widths[n:]))
         sectors_nums_row = ' | '.join(x.rjust(w) for x, w in zip(sector_nums[:n], col_widths[:n]))
         sectors_nums_row += ' || ' + ' | '.join(x.rjust(w) for x, w in zip(sector_nums[n:], col_widths[n:]))
-        if self.domain_num_legs == self.num_legs:
+        if self.num_domain_legs == self.num_legs:
             labels_row += ' ||'
             dims_row += ' ||'
             sectors_nums_row += ' ||'
@@ -695,7 +695,7 @@ class Tensor(metaclass=ABCMeta):
         ...
 
     @abstractmethod
-    def permute_legs(self, permutation: list[int] = None, domain_num_legs: int = None) -> Tensor:
+    def permute_legs(self, permutation: list[int] = None, num_domain_legs: int = None) -> Tensor:
         """See tensors.permute_legs"""
         ...
 
@@ -805,7 +805,7 @@ class BlockDiagonalTensor(SymmetricTensor):
     labels : list of {``None``, str}
     """
 
-    def __init__(self, data, legs: list[VectorSpace], domain_num_legs: int, backend=None,
+    def __init__(self, data, legs: list[VectorSpace], num_domain_legs: int, backend=None,
                  labels: list[str | None] | None = None):
         """
         This constructor is not user-friendly.
@@ -818,7 +818,7 @@ class BlockDiagonalTensor(SymmetricTensor):
             The numerical data ("free parameters") comprising the tensor. type is backend-specific
         legs : list[VectorSpace]
             The legs of the Tensor
-        domain_num_legs : int
+        num_domain_legs : int
             How many of the legs are in the domain. See :ref:`tensors_as_maps`.
         backend: :class:`~tenpy.linalg.backends.abstract_backend.Backend`, optional
             The backend for the Tensor
@@ -829,7 +829,7 @@ class BlockDiagonalTensor(SymmetricTensor):
             backend = get_backend(legs[0].symmetry)
         dtype = backend.get_dtype_from_data(data)
         Tensor.__init__(self, backend=backend, legs=legs, labels=labels, dtype=dtype,
-                        domain_num_legs=domain_num_legs)
+                        num_domain_legs=num_domain_legs)
         self.data = data
         assert isinstance(data, self.backend.DataCls)
 
@@ -845,7 +845,7 @@ class BlockDiagonalTensor(SymmetricTensor):
     @classmethod
     def eye(cls, legs: VectorSpace | list[VectorSpace], backend=None,
             labels: list[str | None] = None, dtype: Dtype = Dtype.float64,
-            domain_num_legs: int = 0) -> BlockDiagonalTensor:
+            num_domain_legs: int = 0) -> BlockDiagonalTensor:
         """The identity map from one group of legs to their duals.
 
         Parameters
@@ -860,7 +860,7 @@ class BlockDiagonalTensor(SymmetricTensor):
             dual labels, or give twice as many and specify them all.
         dtype : Dtype, optional
             The data type of the Tensor entries.
-        domain_num_legs : int
+        num_domain_legs : int
             How many of the legs should be in the domain. See :ref:`tensors_as_maps`.
         """
         if backend is None:
@@ -868,7 +868,7 @@ class BlockDiagonalTensor(SymmetricTensor):
         legs = to_iterable(legs)
         half_leg_num = len(legs)
         legs = [backend.add_leg_metadata(leg) for leg in legs]
-        data = backend.eye_data(legs=legs, dtype=dtype, domain_num_legs=domain_num_legs)
+        data = backend.eye_data(legs=legs, dtype=dtype, num_domain_legs=num_domain_legs)
         legs = legs + [leg.dual for leg in legs]
         if labels is not None:
             if len(labels) == half_leg_num:
@@ -876,13 +876,13 @@ class BlockDiagonalTensor(SymmetricTensor):
             elif len(labels) != 2 * half_leg_num:
                 msg = f'Wrong number of labels. Expected {len(legs)} or {2 * len(legs)}. Got {len(labels)}.'
                 raise ValueError(msg)
-        return cls(data=data, backend=backend, legs=legs, domain_num_legs=domain_num_legs,
+        return cls(data=data, backend=backend, legs=legs, num_domain_legs=num_domain_legs,
                    labels=labels)
 
     @classmethod
     def from_block_func(cls, func, legs: list[VectorSpace], backend=None,
                         labels: list[str | None] = None, func_kwargs={},
-                        shape_kw: str = None, dtype: Dtype = None, domain_num_legs: int = 0
+                        shape_kw: str = None, dtype: Dtype = None, num_domain_legs: int = 0
                         ) -> BlockDiagonalTensor:
         """Create a Tensor from a block function.
 
@@ -909,7 +909,7 @@ class BlockDiagonalTensor(SymmetricTensor):
             If given, the keyword with which shape is given to `func`.
         dtype : None | Dtype
             If given, the results of `func` are converted to this dtype
-        domain_num_legs : int
+        num_domain_legs : int
             How many of the legs should be in the domain. See :ref:`tensors_as_maps`.
 
         See Also
@@ -933,26 +933,25 @@ class BlockDiagonalTensor(SymmetricTensor):
                     block = backend.block_to_dtype(block, dtype)
                 return block
 
-        data = backend.from_block_func(block_func, legs, domain_num_legs)
-        res = cls(data=data, backend=backend, legs=legs, domain_num_legs=domain_num_legs, labels=labels)
+        data = backend.from_block_func(block_func, legs, num_domain_legs)
+        res = cls(data=data, backend=backend, legs=legs, num_domain_legs=num_domain_legs, labels=labels)
         res.test_sanity()  # this catches e.g. errors where the block_func returns blocks of wrong shape
         return res
 
     @classmethod
     def from_dense_block(cls, block, legs: list[VectorSpace], backend=None, dtype: Dtype=None,
                          labels: list[str | None] = None, tol: float = 1e-8,
-                         domain_num_legs: int = 0) -> BlockDiagonalTensor:
+                         num_domain_legs: int = 0) -> BlockDiagonalTensor:
         """Convert a dense block of the backend to a Tensor.
-
-        If the block is not symmetric under the symmetry (specified by the legs), i.e. if
-        ``not allclose(block, projected, atol, rtol)``, a ValueError is raised.
 
         Parameters
         ----------
         block : Block-like
             The data to be converted to a Tensor as a backend-specific block or some data that
-            can be converted using :meth:`BlockBackend.as_block`. This includes e.g. nested python iterables
-            or numpy arrays.
+            can be converted using :meth:`BlockBackend.as_block`.
+            This includes e.g. nested python iterables or numpy arrays.
+            The block should be given in the "public" basis order of the `legs`, e.g.
+            according to :attr:`VectorSpace.sectors_of_basis`.
         legs : list of :class:`~tenpy.linalg.spaces.VectorSpace`, optional
             The vectorspaces associated with legs of the tensors. This specifies the symmetry.
         backend : :class:`~tenpy.linalg.backends.abstract_backend.Backend`, optional
@@ -966,20 +965,16 @@ class BlockDiagonalTensor(SymmetricTensor):
             ``norm(block - symmetric_components) < tol * norm(block)``.
             This can be disabled by setting ``tol=None``, such that we always just return the
             symmetric components of ``block``.
-        domain_num_legs : int
+        num_domain_legs : int
             How many of the legs should be in the domain. See :ref:`tensors_as_maps`.
-
-        See Also
-        --------
-        from_numpy
         """
         if backend is None:
             backend = get_backend(legs[0].symmetry)
         block = backend.as_block(block)
         if dtype is not None:
             block = backend.block_to_dtype(block, dtype)
-        data = backend.from_dense_block(block, legs=legs, tol=tol, domain_num_legs=domain_num_legs)
-        return cls(data=data, backend=backend, legs=legs, domain_num_legs=domain_num_legs, labels=labels)
+        data = backend.from_dense_block(block, legs=legs, tol=tol, num_domain_legs=num_domain_legs)
+        return cls(data=data, backend=backend, legs=legs, num_domain_legs=num_domain_legs, labels=labels)
 
     @classmethod
     def from_flat_block_trivial_sector(cls, leg: VectorSpace, block: Block, backend: Backend,
@@ -1003,12 +998,12 @@ class BlockDiagonalTensor(SymmetricTensor):
         to_flat_block_trivial_sector
         """
         return cls(data=backend.from_flat_block_trivial_sector(block, leg=leg), backend=backend,
-                   legs=[leg], domain_num_legs=0, labels=[label])
+                   legs=[leg], num_domain_legs=0, labels=[label])
 
     @classmethod
     def from_numpy_func(cls, func, legs: list[VectorSpace], backend=None,
                         labels: list[str | None] = None, func_kwargs={},
-                        shape_kw: str = None, dtype: Dtype = None, domain_num_legs: int = 0
+                        shape_kw: str = None, dtype: Dtype = None, num_domain_legs: int = 0
                         ) -> BlockDiagonalTensor:
         """Create a Tensor from a numpy function.
 
@@ -1036,7 +1031,7 @@ class BlockDiagonalTensor(SymmetricTensor):
             If given, the keyword with which shape is given to `func`.
         dtype : None | Dtype
             If given, the results of `func` are converted to this dtype
-        domain_num_legs : int
+        num_domain_legs : int
             How many of the legs should be in the domain. See :ref:`tensors_as_maps`.
 
         See Also
@@ -1058,15 +1053,15 @@ class BlockDiagonalTensor(SymmetricTensor):
                 block = backend.block_from_numpy(arr, dtype)
                 return block
 
-        data = backend.from_block_func(block_func, legs, domain_num_legs)
-        return cls(data=data, backend=backend, legs=legs, domain_num_legs=domain_num_legs,
+        data = backend.from_block_func(block_func, legs, num_domain_legs)
+        return cls(data=data, backend=backend, legs=legs, num_domain_legs=num_domain_legs,
                    labels=labels)
 
     @classmethod
     def random_normal(cls, legs: VectorSpace | list[VectorSpace] = None,
                       mean: BlockDiagonalTensor | None = None, sigma: float = 1.,
                       backend=None, labels: list[str | None] = None, dtype: Dtype = None,
-                      domain_num_legs: int = 0) -> BlockDiagonalTensor:
+                      num_domain_legs: int = 0) -> BlockDiagonalTensor:
         r"""Generate a tensor from the normal distribution.
 
         The probability density is
@@ -1097,9 +1092,9 @@ class BlockDiagonalTensor(SymmetricTensor):
         dtype : Dtype
             The dtype for the tensor. If not given, use the dtype of `mean`. If `mean` is not given,
             default to `Dtype.float64`.
-        domain_num_legs : int
+        num_domain_legs : int
             How many of the legs should be in the domain. See :ref:`tensors_as_maps`.
-            If `mean` is given, use its :attr:`Tensor.domain_num_legs` attribute instead.
+            If `mean` is given, use its :attr:`Tensor.num_domain_legs` attribute instead.
         """
         if mean is not None:
             for name, val in zip(['legs', 'backend', 'labels'], [legs, backend, labels]):
@@ -1109,7 +1104,7 @@ class BlockDiagonalTensor(SymmetricTensor):
             if dtype is None:
                 dtype = mean.dtype
             return mean + cls.random_normal(legs=mean.legs, mean=None, sigma=sigma, backend=mean.backend,
-                                            labels=mean.labels, dtype=dtype, domain_num_legs=mean.domain_num_legs)
+                                            labels=mean.labels, dtype=dtype, num_domain_legs=mean.num_domain_legs)
 
         if backend is None:
             backend = get_backend(legs[0].symmetry)
@@ -1117,14 +1112,14 @@ class BlockDiagonalTensor(SymmetricTensor):
             dtype = Dtype.float64
         legs = [backend.add_leg_metadata(leg) for leg in legs]
         kwargs = dict(dtype=dtype, sigma=sigma)
-        data = backend.from_block_func(backend.block_random_normal, legs, domain_num_legs, kwargs)
-        return cls(data=data, backend=backend, legs=legs, domain_num_legs=domain_num_legs,
+        data = backend.from_block_func(backend.block_random_normal, legs, num_domain_legs, kwargs)
+        return cls(data=data, backend=backend, legs=legs, num_domain_legs=num_domain_legs,
                    labels=labels)
 
     @classmethod
     def random_uniform(cls, legs: VectorSpace | list[VectorSpace], backend=None,
                        labels: list[str | None] = None, dtype: Dtype = Dtype.float64,
-                       domain_num_legs: int = 0) -> BlockDiagonalTensor:
+                       num_domain_legs: int = 0) -> BlockDiagonalTensor:
         """Generate a tensor whose block-entries (i.e. the free parameters of tensors compatible with
         the symmetry) are drawn independently and uniformly.
         If dtype is a real type, they are drawn from [-1, 1], if it is complex, real and imaginary part
@@ -1145,15 +1140,15 @@ class BlockDiagonalTensor(SymmetricTensor):
             Labels associated with each leg, ``None`` for unnamed legs.
         dtype : Dtype
             The dtype for the tensor
-        domain_num_legs : int
+        num_domain_legs : int
             How many of the legs should be in the domain. See :ref:`tensors_as_maps`.
         """
         if backend is None:
             backend = get_backend(legs[0].symmetry)
         legs = [backend.add_leg_metadata(leg) for leg in legs]
-        data = backend.from_block_func(backend.block_random_uniform, legs, domain_num_legs,
+        data = backend.from_block_func(backend.block_random_uniform, legs, num_domain_legs,
                                        func_kwargs=dict(dtype=dtype))
-        return cls(data=data, backend=backend, legs=legs, domain_num_legs=domain_num_legs, labels=labels)
+        return cls(data=data, backend=backend, legs=legs, num_domain_legs=num_domain_legs, labels=labels)
 
     def diagonal(self) -> DiagonalTensor:
         return DiagonalTensor.from_tensor(self, check_offdiagonal=False)
@@ -1213,7 +1208,7 @@ class BlockDiagonalTensor(SymmetricTensor):
     @classmethod
     def zero(cls, legs: VectorSpace | list[VectorSpace],
              backend=None, labels: list[str | None] = None,
-             dtype: Dtype = Dtype.float64, domain_num_legs: int = 0) -> BlockDiagonalTensor:
+             dtype: Dtype = Dtype.float64, num_domain_legs: int = 0) -> BlockDiagonalTensor:
         """Empty Tensor with zero entries (not stored explicitly in most backends).
 
         Parameters
@@ -1226,15 +1221,15 @@ class BlockDiagonalTensor(SymmetricTensor):
             Labels associated with each leg, ``None`` for unnamed legs.
         dtype : Dtype, optional
             The data type of the Tensor entries.
-        domain_num_legs : int
+        num_domain_legs : int
             How many of the legs should be in the domain. See :ref:`tensors_as_maps`.
 
         """
         legs = [backend.add_leg_metadata(leg) for leg in legs]
         if backend is None:
             backend = get_backend(legs[0].symmetry)
-        data = backend.zero_data(legs=legs, dtype=dtype, domain_num_legs=domain_num_legs)
-        return cls(data=data, backend=backend, legs=legs, domain_num_legs=domain_num_legs, labels=labels)
+        data = backend.zero_data(legs=legs, dtype=dtype, num_domain_legs=num_domain_legs)
+        return cls(data=data, backend=backend, legs=legs, num_domain_legs=num_domain_legs, labels=labels)
 
 
     def add_trivial_leg(self, label: str = None, is_dual: bool = False, pos: int = -1,
@@ -1243,12 +1238,12 @@ class BlockDiagonalTensor(SymmetricTensor):
         if pos < 0:
             pos = pos + res_num_legs
         assert 0 <= pos < res_num_legs
-        if pos < self.domain_num_legs:
+        if pos < self.num_domain_legs:
             assert to_domain is not False
             to_domain = True
-        if pos == self.domain_num_legs and to_domain is None:
+        if pos == self.num_domain_legs and to_domain is None:
             to_domain = False  # add to codomain by default
-        if pos > self.domain_num_legs:
+        if pos > self.num_domain_legs:
             assert to_domain is not True
             to_domain = False
         data = self.backend.add_trivial_leg(self, pos=pos, to_domain=to_domain)
@@ -1256,7 +1251,7 @@ class BlockDiagonalTensor(SymmetricTensor):
         legs = self.legs[:pos] + [new_leg] + self.legs[pos:]
         labels = self.labels[:pos] + [label] + self.labels[pos:]
         res = BlockDiagonalTensor(
-            data=data, legs=legs, domain_num_legs=self.domain_num_legs + int(to_domain),
+            data=data, legs=legs, num_domain_legs=self.num_domain_legs + int(to_domain),
             backend=self.backend, labels=labels
         )
         return res
@@ -1274,7 +1269,7 @@ class BlockDiagonalTensor(SymmetricTensor):
             labels[leg_idx] = new_label
         return BlockDiagonalTensor(
             data=self.backend.apply_mask_to_Tensor(self, mask, leg_idx),
-            legs=legs, domain_num_legs=self.domain_num_legs, backend=self.backend, labels=labels
+            legs=legs, num_domain_legs=self.num_domain_legs, backend=self.backend, labels=labels
         )
 
     def as_Tensor(self) -> BlockDiagonalTensor:
@@ -1310,15 +1305,15 @@ class BlockDiagonalTensor(SymmetricTensor):
                 res_labels[b:e] = [new_labels[n]]
             res_legs[b:e] = [product_spaces[n]]
         res_data = self.backend.combine_legs(res, combine_slices, product_spaces, new_axes, res_legs)
-        # TODO domain_num_legs is a dummy!
+        # TODO num_domain_legs is a dummy!
         return BlockDiagonalTensor(res_data, backend=self.backend, legs=res_legs, 
-                                   domain_num_legs=0, labels=res_labels)
+                                   num_domain_legs=0, labels=res_labels)
 
     def conj(self) -> BlockDiagonalTensor:
         """See tensors.conj"""
         return BlockDiagonalTensor(
             self.backend.conj(self),
-            legs=[l.dual for l in self.legs], domain_num_legs=self.domain_num_legs,
+            legs=[l.dual for l in self.legs], num_domain_legs=self.num_domain_legs,
             backend=self.backend, labels=[_dual_leg_label(l) for l in self.shape._labels]
         )
 
@@ -1327,12 +1322,12 @@ class BlockDiagonalTensor(SymmetricTensor):
             return BlockDiagonalTensor(data=self.backend.copy_data(self.data),
                                        backend=self.backend,
                                        legs=self.legs[:],
-                                       domain_num_legs=self.domain_num_legs,
+                                       num_domain_legs=self.num_domain_legs,
                                        labels=self.labels[:])
         return BlockDiagonalTensor(data=self.data,
                                    backend=self.backend,
                                    legs=self.legs,
-                                   domain_num_legs=self.domain_num_legs,
+                                   num_domain_legs=self.num_domain_legs,
                                    labels=self.labels)
 
     def item(self) -> float | complex:
@@ -1345,7 +1340,7 @@ class BlockDiagonalTensor(SymmetricTensor):
         """See tensors.norm"""
         return self.backend.norm(self, order=order)
 
-    def permute_legs(self, permutation: list[int | str] = None, domain_num_legs: int = None
+    def permute_legs(self, permutation: list[int | str] = None, num_domain_legs: int = None
                      ) -> BlockDiagonalTensor:
         if permutation is None:
             legs = self.legs[:]
@@ -1356,10 +1351,10 @@ class BlockDiagonalTensor(SymmetricTensor):
             assert set(permutation) == set(range(self.num_legs))
             legs = [self.legs[n] for n in permutation]
             labels = [self.shape._labels[n] for n in permutation]
-        res_data = self.backend.permute_legs(self, permutation, domain_num_legs)
-        if domain_num_legs is None:
-            domain_num_legs = self.domain_num_legs
-        return BlockDiagonalTensor(res_data, legs=legs, domain_num_legs=domain_num_legs,
+        res_data = self.backend.permute_legs(self, permutation, num_domain_legs)
+        if num_domain_legs is None:
+            num_domain_legs = self.num_domain_legs
+        return BlockDiagonalTensor(res_data, legs=legs, num_domain_legs=num_domain_legs,
                                    backend=self.backend, labels=labels)
 
     def split_legs(self, *legs: int | str) -> BlockDiagonalTensor:
@@ -1376,11 +1371,11 @@ class BlockDiagonalTensor(SymmetricTensor):
         new_legs = []
         new_labels = []
         start = 0
-        domain_num_legs = self.domain_num_legs
+        num_domain_legs = self.num_domain_legs
         for i in leg_idcs:
-            if i < self.domain_num_legs:
+            if i < self.num_domain_legs:
                 # -1, since the old productspace was counted already
-                domain_num_legs += len(old_legs[i].spaces) - 1
+                num_domain_legs += len(old_legs[i].spaces) - 1
             new_legs.extend(old_legs[start:i])
             new_legs.extend(old_legs[i].spaces)
             new_labels.extend(old_labels[start:i])
@@ -1390,7 +1385,7 @@ class BlockDiagonalTensor(SymmetricTensor):
         new_labels.extend(old_labels[start:])
         res_data = self.backend.split_legs(self, leg_idcs, new_legs)
         return BlockDiagonalTensor(res_data, backend=self.backend, legs=new_legs,
-                                   domain_num_legs=domain_num_legs, labels=new_labels)
+                                   num_domain_legs=num_domain_legs, labels=new_labels)
 
     def squeeze_legs(self, legs: int | str | list[int | str] = None) -> BlockDiagonalTensor:
         """See tensors.squeeze_legs"""
@@ -1405,9 +1400,9 @@ class BlockDiagonalTensor(SymmetricTensor):
             raise ValueError("squeeze_legs() with no leg left. Use item instead.")
         res_labels = [label for idx, label in enumerate(self.labels) if idx not in leg_idcs]
         res_data = self.backend.squeeze_legs(self, leg_idcs)
-        domain_num_legs = self.domain_num_legs - sum(squeezed < self.domain_num_legs for squeezed in leg_idcs)
+        num_domain_legs = self.num_domain_legs - sum(squeezed < self.num_domain_legs for squeezed in leg_idcs)
         return BlockDiagonalTensor(res_data, backend=self.backend, legs=res_legs,
-                                   domain_num_legs=domain_num_legs, labels=res_labels)
+                                   num_domain_legs=num_domain_legs, labels=res_labels)
 
     def to_dense_block(self, leg_order: list[int | str] = None) -> Block:
         block = self.backend.to_dense_block(self)
@@ -1428,7 +1423,7 @@ class BlockDiagonalTensor(SymmetricTensor):
             return BlockDiagonalTensor(
                 self.backend.trace_partial(self, leg_idcs1, leg_idcs2, remaining_leg_idcs),
                 legs=[self.legs[n] for n in remaining_leg_idcs],
-                domain_num_legs=sum(n < self.domain_num_legs for n in remaining_leg_idcs),
+                num_domain_legs=sum(n < self.num_domain_legs for n in remaining_leg_idcs),
                 backend=self.backend,
                 labels=[self.labels[n] for n in remaining_leg_idcs]
             )
@@ -1440,7 +1435,7 @@ class BlockDiagonalTensor(SymmetricTensor):
 
     def _mul_scalar(self, other: complex) -> BlockDiagonalTensor:
         return BlockDiagonalTensor(
-            self.backend.mul(other, self), legs=self.legs, domain_num_legs=self.domain_num_legs,
+            self.backend.mul(other, self), legs=self.legs, num_domain_legs=self.num_domain_legs,
             backend=self.backend, labels=self.labels
         )
 
@@ -1509,7 +1504,7 @@ class BlockDiagonalTensor(SymmetricTensor):
             return BlockDiagonalTensor(
                 backend.outer(self, other),
                 legs=self.legs + other.legs,
-                domain_num_legs=self.domain_num_legs + other.domain_num_legs,
+                num_domain_legs=self.num_domain_legs + other.num_domain_legs,
                 backend=backend,
                 labels=_get_result_labels(self.labels, other.labels, relabel1, relabel2)
             )
@@ -1570,7 +1565,7 @@ class BlockDiagonalTensor(SymmetricTensor):
             res = BlockDiagonalTensor(
                 data=backend.scale_axis(self, other, leg=leg_idcs1[0]),
                 legs=self.legs[:leg_idcs1[0]] + [other.legs[1 - leg_idcs2[0]]] + self.legs[leg_idcs1[0] + 1:],
-                domain_num_legs=self.domain_num_legs,  # TODO this correct?
+                num_domain_legs=self.num_domain_legs,  # TODO this correct?
                 backend=backend,
                 labels=self.labels[:leg_idcs1[0]] + [other.labels[1 - leg_idcs2[0]]] + self.labels[leg_idcs1[0] + 1:]
             )
@@ -1589,13 +1584,13 @@ class BlockDiagonalTensor(SymmetricTensor):
             if len(res_legs) == 0:
                 return backend.data_item(res_data)
             else:
-                domain_num_legs = \
-                    self.domain_num_legs \
-                    + other.domain_num_legs \
-                    - sum(contr < self.domain_num_legs for contr in leg_idcs1) \
-                    - sum(contr < other.domain_num_legs for contr in leg_idcs2)  # TODO this correct?
+                num_domain_legs = \
+                    self.num_domain_legs \
+                    + other.num_domain_legs \
+                    - sum(contr < self.num_domain_legs for contr in leg_idcs1) \
+                    - sum(contr < other.num_domain_legs for contr in leg_idcs2)  # TODO this correct?
                 return BlockDiagonalTensor(res_data, backend=backend, legs=res_legs,
-                                           domain_num_legs=domain_num_legs, labels=res_labels)
+                                           num_domain_legs=num_domain_legs, labels=res_labels)
         raise TypeError(f'tdot not supported for {type(self)} and {type(other)}')
 
     def _add_tensor(self, other: Tensor) -> Tensor:
@@ -1609,7 +1604,7 @@ class BlockDiagonalTensor(SymmetricTensor):
                 other = permute_legs(other, other_order)
             res_data = backend.add(self, other)
             return BlockDiagonalTensor(res_data, backend=backend, legs=self.legs,
-                                       domain_num_legs=self.domain_num_legs, labels=self.labels)
+                                       num_domain_legs=self.num_domain_legs, labels=self.labels)
         raise TypeError(f"unsupported operand type(s) for +: 'Tensor' and '{type(other)}'")
 
     # --------------------------------------------
@@ -1730,7 +1725,7 @@ class ChargedTensor(Tensor):
     _DUMMY_LABEL = '!'  # canonical label for the dummy leg
 
     def __init__(self, invariant_part: BlockDiagonalTensor, dummy_leg_state=None):
-        assert invariant_part.codomain_num_legs > 0  # dummy leg must be in codomain
+        assert invariant_part.num_codomain_legs > 0  # dummy leg must be in codomain
         if dummy_leg_state is None:
             dtype = invariant_part.dtype
         else:
@@ -1743,7 +1738,7 @@ class ChargedTensor(Tensor):
             assert invariant_part.labels[-1] == self._DUMMY_LABEL
         Tensor.__init__(self, backend=invariant_part.backend, legs=invariant_part.legs[:-1],
                         labels=invariant_part.labels[:-1], dtype=dtype,
-                        domain_num_legs=invariant_part.domain_num_legs)
+                        num_domain_legs=invariant_part.num_domain_legs)
         self.invariant_part = invariant_part
         self.dummy_leg = invariant_part.legs[-1]
         self.dummy_leg_state = dummy_leg_state
@@ -1762,13 +1757,13 @@ class ChargedTensor(Tensor):
     @classmethod
     def from_block_func(cls, func, legs: VectorSpace | list[VectorSpace], charge: VectorSpace | Sector,
                         backend=None, labels: list[str | None] = None, func_kwargs={},
-                        shape_kw: str = None, dtype: Dtype = None, domain_num_legs: int = 0
+                        shape_kw: str = None, dtype: Dtype = None, num_domain_legs: int = 0
                         ) -> ChargedTensor:
-        assert 0 <= domain_num_legs <= len(legs)
+        assert 0 <= num_domain_legs <= len(legs)
         dummy_leg = cls._dummy_leg_from_charge(charge, symmetry=legs[0].symmetry)
         inv = BlockDiagonalTensor.from_block_func(func=func, legs=legs + [dummy_leg], backend=backend,
                                      labels=labels + [cls._DUMMY_LABEL], func_kwargs=func_kwargs,
-                                     shape_kw=shape_kw, dtype=dtype, domain_num_legs=domain_num_legs)
+                                     shape_kw=shape_kw, dtype=dtype, num_domain_legs=num_domain_legs)
         shape = (dummy_leg.dim,)
         if shape_kw is not None:
             block = func(**{shape_kw: shape}, **func_kwargs)
@@ -1783,7 +1778,7 @@ class ChargedTensor(Tensor):
     def from_dense_block(cls, block, legs: list[VectorSpace], backend=None, dtype: Dtype=None,
                          labels: list[str | None] = None, tol: float = 1e-8,
                          charge: VectorSpace | Sector = None, dummy_leg_state=None,
-                         domain_num_legs: int = 0) -> ChargedTensor:
+                         num_domain_legs: int = 0) -> ChargedTensor:
         """Convert a dense block of the backend to a ChargedTensor, if possible.
 
         TODO doc how and when it could fail
@@ -1816,10 +1811,10 @@ class ChargedTensor(Tensor):
             If not given, it is inferred from the largest (by magnitude) entry of the block.
         dummy_leg_state : block
             The state on the dummy leg. May be ``None`` ("unspecified").
-        domain_num_legs : int
+        num_domain_legs : int
             Only meaningful for nonabelian backend.
         """
-        assert 0 <= domain_num_legs <= len(legs)
+        assert 0 <= num_domain_legs <= len(legs)
         if backend is None:
             backend = get_backend(legs[0].symmetry)
         if labels is None:
@@ -1835,7 +1830,7 @@ class ChargedTensor(Tensor):
             dummy_leg = cls._dummy_leg_from_charge(charge, symmetry=legs[0].symmetry)
         invariant_part = BlockDiagonalTensor.from_dense_block(
             block, legs=legs + [dummy_leg], backend=backend, dtype=dtype,
-            labels=labels + [cls._DUMMY_LABEL], tol=tol, domain_num_legs=domain_num_legs
+            labels=labels + [cls._DUMMY_LABEL], tol=tol, num_domain_legs=num_domain_legs
         )
         return cls(invariant_part, dummy_leg_state=dummy_leg_state)
 
@@ -1872,21 +1867,21 @@ class ChargedTensor(Tensor):
         dummy_leg = cls._dummy_leg_from_charge(sector, symmetry=leg.symmetry)
         inv_part = BlockDiagonalTensor(
             data=backend.inv_part_from_flat_block_single_sector(block=block, leg=leg, dummy_leg=dummy_leg),
-            legs=[leg, dummy_leg], domain_num_legs=0, backend=backend, labels=[label, cls._DUMMY_LABEL]
+            legs=[leg, dummy_leg], num_domain_legs=0, backend=backend, labels=[label, cls._DUMMY_LABEL]
         )
         return cls(inv_part, dummy_leg_state=None)
 
     @classmethod
     def from_numpy_func(cls, func, legs: VectorSpace | list[VectorSpace], charge: VectorSpace | Sector,
                         backend=None, labels: list[str | None] = None, func_kwargs={},
-                        shape_kw: str = None, dtype: Dtype = None, domain_num_legs: int = 0
+                        shape_kw: str = None, dtype: Dtype = None, num_domain_legs: int = 0
                         ) -> ChargedTensor:
-        assert 0 <= domain_num_legs <= len(legs)
+        assert 0 <= num_domain_legs <= len(legs)
         legs = to_iterable(legs)
         dummy_leg = cls._dummy_leg_from_charge(charge, symmetry=legs[0].symmetry)
         inv = BlockDiagonalTensor.from_numpy_func(func=func, legs=legs + [dummy_leg], backend=backend,
                                      labels=labels + [cls._DUMMY_LABEL], func_kwargs=func_kwargs,
-                                     shape_kw=shape_kw, dtype=dtype, domain_num_legs=domain_num_legs)
+                                     shape_kw=shape_kw, dtype=dtype, num_domain_legs=num_domain_legs)
         shape = (dummy_leg.dim,)
         if shape_kw is not None:
             arr = func(**{shape_kw: shape}, **func_kwargs)
@@ -1935,14 +1930,14 @@ class ChargedTensor(Tensor):
     @classmethod
     def random_uniform(cls, legs: VectorSpace | list[VectorSpace], charge: VectorSpace | Sector,
                        backend=None, labels: list[str | None] = None, dtype: Dtype = Dtype.float64,
-                       dummy_leg_state=None, domain_num_legs: int = 0) -> ChargedTensor:
+                       dummy_leg_state=None, num_domain_legs: int = 0) -> ChargedTensor:
         legs = to_iterable(legs)
         dummy_leg = cls._dummy_leg_from_charge(charge, symmetry=legs[0].symmetry)
         if labels is None:
             labels = [None] * len(legs)
         inv = BlockDiagonalTensor.random_uniform(
             legs=legs + [dummy_leg], backend=backend, labels=labels + [cls._DUMMY_LABEL],
-            dtype=dtype, domain_num_legs=domain_num_legs
+            dtype=dtype, num_domain_legs=num_domain_legs
         )
         return ChargedTensor(invariant_part=inv, dummy_leg_state=dummy_leg_state)
 
@@ -2055,14 +2050,14 @@ class ChargedTensor(Tensor):
     @classmethod
     def zero(cls, legs: VectorSpace | list[VectorSpace], dummy_leg: VectorSpace,
              backend=None, labels: list[str | None] = None, dtype: Dtype = Dtype.float64,
-             dummy_leg_state=None, domain_num_legs: int = 0) -> ChargedTensor:
+             dummy_leg_state=None, num_domain_legs: int = 0) -> ChargedTensor:
         if isinstance(legs, VectorSpace):
             legs = [legs]
         if labels is None:
             labels = [None] * len(legs)
         invariant_part = BlockDiagonalTensor.zero(
             legs=legs + [dummy_leg], backend=backend, labels=labels + [cls._DUMMY_LABEL],
-            dtype=dtype, domain_num_legs=domain_num_legs
+            dtype=dtype, num_domain_legs=num_domain_legs
         )
         return cls(invariant_part=invariant_part, dummy_leg_state=dummy_leg_state)
 
@@ -2140,11 +2135,11 @@ class ChargedTensor(Tensor):
             warnings.warn('Converting ChargedTensor to dense block for `norm`', stacklevel=2)
             return self.backend.block_norm(self.to_dense_block(), order=order)
 
-    def permute_legs(self, permutation: list[int | str] = None, domain_num_legs: int = None
+    def permute_legs(self, permutation: list[int | str] = None, num_domain_legs: int = None
                      ) -> ChargedTensor:
         permutation = self.get_leg_idcs(permutation)  # needed, since invariant_part does not have the same legs
         permutation = permutation + [-1]  # keep dummy leg at its position
-        inv_part = self.invariant_part.permute_legs(permutation, domain_num_legs)
+        inv_part = self.invariant_part.permute_legs(permutation, num_domain_legs)
         return ChargedTensor(inv_part, self.dummy_leg_state)
 
     def split_legs(self, *legs: int | str) -> ChargedTensor:
@@ -2402,7 +2397,7 @@ class DiagonalTensor(SymmetricTensor):
             backend = get_backend(first_leg.symmetry)
         dtype = backend.get_dtype_from_data(data)
         Tensor.__init__(self, legs=[first_leg, second_leg], backend=backend, labels=labels,
-                        dtype=dtype, domain_num_legs=1)
+                        dtype=dtype, num_domain_legs=1)
 
     def test_sanity(self) -> None:
         super().test_sanity()
@@ -2752,7 +2747,7 @@ class DiagonalTensor(SymmetricTensor):
         """Forget about diagonal structure and convert to a Tensor"""
         return BlockDiagonalTensor(
             data=self.backend.full_data_from_diagonal_tensor(self),
-            legs=self.legs, domain_num_legs=1, backend=self.backend, labels=self.labels
+            legs=self.legs, num_domain_legs=1, backend=self.backend, labels=self.labels
         )
 
     def combine_legs(self,
@@ -2795,9 +2790,9 @@ class DiagonalTensor(SymmetricTensor):
     def norm(self, order=None) -> float:
         return self.backend.norm(self, order=order)
 
-    def permute_legs(self, permutation: list[int | str] = None, domain_num_legs: int = None
+    def permute_legs(self, permutation: list[int | str] = None, num_domain_legs: int = None
                      ) -> DiagonalTensor:
-        assert domain_num_legs in [None, 1], 'DiagonalTensor must have one leg in the domain.'
+        assert num_domain_legs in [None, 1], 'DiagonalTensor must have one leg in the domain.'
         permutation = self.get_leg_idcs(permutation)
         return DiagonalTensor(data=self.data, first_leg=self.legs[permutation[0]],
                               second_leg_dual=self.second_leg_dual, backend=self.backend,
@@ -2922,7 +2917,7 @@ class DiagonalTensor(SymmetricTensor):
             res = BlockDiagonalTensor(
                 data=backend.scale_axis(other, self, leg=legs2[0]),
                 legs=other.legs[:legs2[0]] + [self.legs[1 - legs1[0]]] + other.legs[legs2[0] + 1:],
-                domain_num_legs=other.domain_num_legs,  # TODO this correct?
+                num_domain_legs=other.num_domain_legs,  # TODO this correct?
                 backend=backend,
                 labels=other.labels[:legs2[0]] + [self.labels[1 - legs1[0]]] + other.labels[legs2[0] + 1:]
             )
@@ -2976,7 +2971,7 @@ class Mask(Tensor):
         if backend is None:
             backend = get_backend(large_leg.symmetry)
         Tensor.__init__(self, legs=[large_leg.dual, small_leg], backend=backend, labels=labels,
-                        dtype=Dtype.bool, domain_num_legs=1)
+                        dtype=Dtype.bool, num_domain_legs=1)
 
     def test_sanity(self) -> None:
         super().test_sanity()
@@ -3075,7 +3070,7 @@ class Mask(Tensor):
     def as_Tensor(self, dtype=Dtype.float64) -> BlockDiagonalTensor:
         return BlockDiagonalTensor(
             data=self.backend.full_data_from_mask(self, dtype=dtype),
-            legs=self.legs, domain_num_legs=1, backend=self.backend, labels=self.labels
+            legs=self.legs, num_domain_legs=1, backend=self.backend, labels=self.labels
         )
 
     def same_mask(self, other: Mask) -> bool:
@@ -3234,11 +3229,11 @@ class Mask(Tensor):
             return num_true_entries
         return num_true_entries ** (1. / order)
 
-    def permute_legs(self, permutation: list[int] = None, domain_num_legs: int = None) -> BlockDiagonalTensor:
+    def permute_legs(self, permutation: list[int] = None, num_domain_legs: int = None) -> BlockDiagonalTensor:
         msg = 'Converting Mask to full Tensor for `permute_legs`. If this is what you wanted, ' \
               'explicitly convert via Mask.as_Tensor() first to suppress the warning.'
         warnings.warn(msg, stacklevel=2)
-        return self.as_Tensor().permute_legs(permutation, domain_num_legs=domain_num_legs)
+        return self.as_Tensor().permute_legs(permutation, num_domain_legs=num_domain_legs)
 
     def split_legs(self, legs: list[int | str] = None) -> NoReturn:
         msg = 'Converting Mask to full Tensor for `split_legs`. If this is what you wanted, ' \
@@ -3350,10 +3345,10 @@ def add_trivial_leg(tens: Tensor, label: str = None, is_dual: bool = False, pos:
         The result has the new trivial leg at ``result.legs[pos]``.
     to_domain : int
         If the new leg should be added to domain or codomain. See :ref:`tensors_as_maps`.
-        If ``pos < tens.domain_num_legs`` we always add to the domain (or raise) and
-        if ``pos > tens.domain_num_legs`` we always add to the codomain (or raise).
-        There is only a choice if ``pos == tens.domain_num_legs``.
-        Then, we get ``result.domain_num_legs == tens.domain_num_legs + int(to_domain)``.
+        If ``pos < tens.num_domain_legs`` we always add to the domain (or raise) and
+        if ``pos > tens.num_domain_legs`` we always add to the codomain (or raise).
+        There is only a choice if ``pos == tens.num_domain_legs``.
+        Then, we get ``result.num_domain_legs == tens.num_domain_legs + int(to_domain)``.
         Per default, we add to the codomain.
     """
     return tens.add_trivial_leg(label=label, is_dual=is_dual, pos=pos, to_domain=to_domain)
@@ -3593,7 +3588,7 @@ def outer(t1: Tensor, t2: Tensor, relabel1: dict[str, str] = None,
     return t1.outer(t2, relabel1=relabel1, relabel2=relabel2)
 
 
-def permute_legs(t: Tensor, permutation: list[int] = None, domain_num_legs: int = None) -> Tensor:
+def permute_legs(t: Tensor, permutation: list[int] = None, num_domain_legs: int = None) -> Tensor:
     """Change the order of legs of a Tensor.
 
     TODO elaborate what this does to the underlying data for the respective backends.
@@ -3604,7 +3599,7 @@ def permute_legs(t: Tensor, permutation: list[int] = None, domain_num_legs: int 
         The tensor to permute
     permutation : list of int, optional
         The permutation. The new legs will be ``[T.legs[n] for n in permutation]``.
-    domain_num_legs : int or None
+    num_domain_legs : int or None
         The number of legs that should be in the domain. Per default (``None``), it is not changed.
 
     Returns
@@ -3613,7 +3608,7 @@ def permute_legs(t: Tensor, permutation: list[int] = None, domain_num_legs: int 
         A copy with modified leg order.
     """
     # TODO: also have an inplace version?
-    return t.permute_legs(permutation, domain_num_legs=domain_num_legs)
+    return t.permute_legs(permutation, num_domain_legs=num_domain_legs)
 
 
 def split_legs(t: Tensor, *legs: int | str) -> BlockDiagonalTensor:
@@ -3692,7 +3687,7 @@ def trace(t: Tensor, legs1: int | str | list[int | str] = -2, legs2: int | str |
 def zero_like(tens: Tensor) -> Tensor:
     if isinstance(tens, BlockDiagonalTensor):
         return BlockDiagonalTensor.zero(legs=tens.legs, backend=tens.backend, labels=tens.labels,
-                                        dtype=tens.dtype, domain_num_legs=tens.domain_num_legs)
+                                        dtype=tens.dtype, num_domain_legs=tens.num_domain_legs)
     if isinstance(tens, DiagonalTensor):
         return DiagonalTensor.zero(first_leg=tens.first_leg, second_leg_dual=tens.second_leg_dual,
                                    backend=tens.backend, labels=tens.labels, dtype=tens.dtype)
@@ -3716,7 +3711,7 @@ def eye_like(tens: Tensor) -> BlockDiagonalTensor | DiagonalTensor:
                     msg = 'Second half of legs must be the dual of the first half'
                 raise ValueError(msg)
         return BlockDiagonalTensor.eye(legs=legs_1, backend=tens.backend, labels=tens.labels,
-                                       dtype=tens.dtype, domain_num_legs=tens.domain_num_legs)
+                                       dtype=tens.dtype, num_domain_legs=tens.num_domain_legs)
     if isinstance(tens, DiagonalTensor):
         if tens.legs[0].is_dual == tens.legs[1].is_dual:
             raise ValueError('Second leg must be the dual of the first leg')
@@ -3845,7 +3840,7 @@ def get_same_backend(*tensors: Tensor, error_msg: str = 'Incompatible backends.'
 
 
 def tensor_from_block(block: Block, legs: list[VectorSpace], backend: Backend,
-                      labels: list[str] = None, domain_num_legs: int = 0
+                      labels: list[str] = None, num_domain_legs: int = 0
                       ) -> ChargedTensor | BlockDiagonalTensor:
     """Assume the block lives in a single symmetry sector and convert to tensor.
 
@@ -3859,7 +3854,7 @@ def tensor_from_block(block: Block, legs: list[VectorSpace], backend: Backend,
         The backend for the resulting tensor.
     labels : list of str, optional
         The labels for the resulting tensor.
-    domain_num_legs : int
+    num_domain_legs : int
         How many of the legs should be in the domain. See :ref:`tensors_as_maps`.
 
     Returns
@@ -3884,10 +3879,10 @@ def tensor_from_block(block: Block, legs: list[VectorSpace], backend: Backend,
     dummy_leg = ProductSpace([VectorSpace(symmetry, [s]) for s in sectors]).dual.as_VectorSpace()
     if np.all(dummy_leg.sectors == symmetry.trivial_sector[None, :]):
         return BlockDiagonalTensor.from_dense_block(block, legs=legs, backend=backend, labels=labels,
-                                                    domain_num_legs=domain_num_legs)
+                                                    num_domain_legs=num_domain_legs)
     else:
         return ChargedTensor.from_dense_block(block, legs=legs, backend=backend, labels=labels,
-                                              charge=dummy_leg, domain_num_legs=domain_num_legs)
+                                              charge=dummy_leg, num_domain_legs=num_domain_legs)
 
 
 # ##################################

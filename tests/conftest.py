@@ -186,8 +186,8 @@ def abelian_data_drop_some_blocks(data, np_random, empty_ok=False, all_blocks=Fa
 @pytest.fixture
 def backend_data_rng(backend, block_rng, np_random):
     """Generate random data for a Tensor"""
-    def generator(legs, real=True, empty_ok=False, all_blocks=False, domain_num_legs=0):
-        data = backend.from_block_func(block_rng, legs, domain_num_legs=domain_num_legs,
+    def generator(legs, real=True, empty_ok=False, all_blocks=False, num_domain_legs=0):
+        data = backend.from_block_func(block_rng, legs, num_domain_legs=num_domain_legs,
                                        func_kwargs=dict(real=real))
         if isinstance(backend, backends.abelian.AbelianBackend):
             data = abelian_data_drop_some_blocks(data, np_random=np_random, empty_ok=empty_ok,
@@ -204,7 +204,7 @@ def tensor_rng(backend, symmetry, np_random, block_rng, vector_space_rng, symmet
     """
     def generator(legs=None, num_legs=None, labels=None, max_num_blocks=5, max_block_size=5,
                   real=True, empty_ok=False, all_blocks=False, cls=tensors.BlockDiagonalTensor,
-                  domain_num_legs=0):
+                  num_domain_legs=0):
         # parse legs
         if num_legs is None:
             if legs is not None:
@@ -317,12 +317,12 @@ def tensor_rng(backend, symmetry, np_random, block_rng, vector_space_rng, symmet
                 )
             legs[last_missing] = compatible_leg
         
-        data = backend.from_block_func(block_rng, legs, domain_num_legs=domain_num_legs,
+        data = backend.from_block_func(block_rng, legs, num_domain_legs=num_domain_legs,
                                        func_kwargs=dict(real=real))
         if isinstance(backend, backends.abelian.AbelianBackend):
             data = abelian_data_drop_some_blocks(data, np_random=np_random, empty_ok=empty_ok,
                                                  all_blocks=all_blocks)
 
         return tensors.BlockDiagonalTensor(data, backend=backend, legs=legs,
-                                           domain_num_legs=domain_num_legs, labels=labels)
+                                           num_domain_legs=num_domain_legs, labels=labels)
     return generator

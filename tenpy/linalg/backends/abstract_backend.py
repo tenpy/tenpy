@@ -148,7 +148,7 @@ class Backend(metaclass=ABCMeta):
         ...
 
     @abstractmethod
-    def from_dense_block(self, a: Block, legs: list[VectorSpace], domain_num_legs: int,
+    def from_dense_block(self, a: Block, legs: list[VectorSpace], num_domain_legs: int,
                          tol: float = 1e-8) -> Data:
         """Convert a dense block to the data for a symmetric tensor.
         
@@ -178,7 +178,7 @@ class Backend(metaclass=ABCMeta):
         ...
 
     @abstractmethod
-    def from_block_func(self, func, legs: list[VectorSpace], domain_num_legs: int, func_kwargs={}
+    def from_block_func(self, func, legs: list[VectorSpace], num_domain_legs: int, func_kwargs={}
                         ) -> Data:
         """Generate tensor data from a function ``func(shape: tuple[int]) -> Block``."""
         ...
@@ -188,7 +188,7 @@ class Backend(metaclass=ABCMeta):
         ...
 
     @abstractmethod
-    def zero_data(self, legs: list[VectorSpace], dtype: Dtype, domain_num_legs: int) -> Data:
+    def zero_data(self, legs: list[VectorSpace], dtype: Dtype, num_domain_legs: int) -> Data:
         """Data for a zero tensor"""
         ...
 
@@ -197,7 +197,7 @@ class Backend(metaclass=ABCMeta):
         ...
 
     @abstractmethod
-    def eye_data(self, legs: list[VectorSpace], dtype: Dtype, domain_num_legs: int) -> Data:
+    def eye_data(self, legs: list[VectorSpace], dtype: Dtype, num_domain_legs: int) -> Data:
         """Data for an identity map from legs to their duals. In particular, the resulting tensor
         has twice as many legs"""
         ...
@@ -274,7 +274,7 @@ class Backend(metaclass=ABCMeta):
 
     @abstractmethod
     def permute_legs(self, a: BlockDiagonalTensor, permutation: list[int] | None,
-                     domain_num_legs: int) -> Data:
+                     num_domain_legs: int) -> Data:
         ...
 
     @abstractmethod

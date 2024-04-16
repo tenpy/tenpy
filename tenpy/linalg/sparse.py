@@ -106,7 +106,7 @@ class TensorLinearOperator(LinearOperator):
         self.which_leg = which_leg = tensor.get_leg_idx(which_leg)
         self.other_leg = other_leg = 1 - which_leg
         self.tensor = tensor
-        vector_shape = Shape(legs=[tensor.legs[other_leg]], domain_num_legs=0, labels=tensor.labels[other_leg])
+        vector_shape = Shape(legs=[tensor.legs[other_leg]], num_domain_legs=0, labels=tensor.labels[other_leg])
         super().__init__(vector_shape=vector_shape, dtype=tensor.dtype)
 
     def matvec(self, vec: Tensor) -> Tensor:

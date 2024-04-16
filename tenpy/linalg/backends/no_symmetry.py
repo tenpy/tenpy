@@ -75,7 +75,7 @@ class NoSymmetryBackend(Backend, BlockBackend, ABC):
     def diagonal_to_block(self, a: DiagonalTensor) -> Block:
         return self.apply_basis_perm(a.data, [a.legs[0]], inv=True)
 
-    def from_dense_block(self, a: Block, legs: list[VectorSpace], domain_num_legs: int,
+    def from_dense_block(self, a: Block, legs: list[VectorSpace], num_domain_legs: int,
                          tol: float = 1e-8) -> Data:
         assert all(leg.symmetry == no_symmetry for leg in legs)
         return self.apply_basis_perm(a, legs)
@@ -89,19 +89,19 @@ class NoSymmetryBackend(Backend, BlockBackend, ABC):
         data = self.apply_basis_perm(data, [large_leg])
         return data
 
-    def from_block_func(self, func, legs: list[VectorSpace], domain_num_legs: int, func_kwargs={}):
+    def from_block_func(self, func, legs: list[VectorSpace], num_domain_legs: int, func_kwargs={}):
         return func(tuple(l.dim for l in legs), **func_kwargs)
 
     def diagonal_from_block_func(self, func, leg: VectorSpace, func_kwargs={}) -> DiagonalData:
         return func((leg.dim,), **func_kwargs)
 
-    def zero_data(self, legs: list[VectorSpace], dtype: Dtype, domain_num_legs: int):
+    def zero_data(self, legs: list[VectorSpace], dtype: Dtype, num_domain_legs: int):
         return self.zero_block(shape=[l.dim for l in legs], dtype=dtype)
 
     def zero_diagonal_data(self, leg: VectorSpace, dtype: Dtype) -> DiagonalData:
         return self.zero_block(shape=[leg.dim], dtype=dtype)
 
-    def eye_data(self, legs: list[VectorSpace], dtype: Dtype, domain_num_legs: int) -> Data:
+    def eye_data(self, legs: list[VectorSpace], dtype: Dtype, num_domain_legs: int) -> Data:
         return self.eye_block(legs=[l.dim for l in legs], dtype=dtype)
 
     def copy_data(self, a: BlockDiagonalTensor | DiagonalTensor) -> Data | DiagonalData:
@@ -132,7 +132,7 @@ class NoSymmetryBackend(Backend, BlockBackend, ABC):
     def inner(self, a: BlockDiagonalTensor, b: BlockDiagonalTensor, do_conj: bool, axs2: list[int] | None) -> complex:
         return self.block_inner(a.data, b.data, do_conj=do_conj, axs2=axs2)
 
-    def permute_legs(self, a: BlockDiagonalTensor, permutation: list[int] | None, domain_num_legs: int) -> Data:
+    def permute_legs(self, a: BlockDiagonalTensor, permutation: list[int] | None, num_domain_legs: int) -> Data:
         if permutation is None:
             return a.data
         return self.block_permute_axes(a.data, permutation)

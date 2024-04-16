@@ -87,7 +87,7 @@ def _svd(a: Tensor, u_legs: list[int | str], vh_legs: list[int | str],
                                                          algorithm=algorithm, compute_u=compute_u,
                                                          compute_vh=compute_vh)
         if compute_u:
-            U = BlockDiagonalTensor(u_data, legs=[a.legs[0], new_leg.dual], domain_num_legs=0,
+            U = BlockDiagonalTensor(u_data, legs=[a.legs[0], new_leg.dual], num_domain_legs=0,
                                     backend=a.backend)
             if need_combine:
                 U = U.split_legs(0)
@@ -96,7 +96,7 @@ def _svd(a: Tensor, u_legs: list[int | str], vh_legs: list[int | str],
             U = None
         S = DiagonalTensor(s_data, first_leg=new_leg, second_leg_dual=True, backend=a.backend, labels=[l_su, l_sv])
         if compute_vh:
-            Vh = BlockDiagonalTensor(vh_data, legs=[new_leg, a.legs[1]], domain_num_legs=0,
+            Vh = BlockDiagonalTensor(vh_data, legs=[new_leg, a.legs[1]], num_domain_legs=0,
                                      backend=a.backend)
             if need_combine:
                 Vh = Vh.split_legs(1)
@@ -486,8 +486,8 @@ def qr(a: Tensor, q_legs: list[int | str] = None, r_legs: list[int | str] = None
 
     q_data, r_data, new_leg = a.backend.qr(a, new_r_leg_dual, full=full)
 
-    Q = BlockDiagonalTensor(q_data, legs=[a.legs[0], new_leg.dual], domain_num_legs=1, backend=a.backend)
-    R = BlockDiagonalTensor(r_data, legs=[new_leg, a.legs[1]], domain_num_legs=1, backend=a.backend)
+    Q = BlockDiagonalTensor(q_data, legs=[a.legs[0], new_leg.dual], num_domain_legs=1, backend=a.backend)
+    R = BlockDiagonalTensor(r_data, legs=[new_leg, a.legs[1]], num_domain_legs=1, backend=a.backend)
     if need_combine:
         R = R.split_legs(1)
         Q = Q.split_legs(0)
@@ -536,10 +536,10 @@ def lq(a: Tensor, l_legs: list[int | str] = None, q_legs: list[int | str] = None
     q_data, r_data, new_leg = a.backend.qr(a, new_r_leg_dual=new_l_leg_dual, full=full)
     # transpose back, since we build the LQ from RQ of a.T
     Q = BlockDiagonalTensor(
-        q_data, legs=[a.legs[0], new_leg.dual], domain_num_legs=1, backend=a.backend
+        q_data, legs=[a.legs[0], new_leg.dual], num_domain_legs=1, backend=a.backend
     ).permute_legs([1, 0])
     L = BlockDiagonalTensor(
-        r_data, legs=[new_leg, a.legs[1]], domain_num_legs=1, backend=a.backend
+        r_data, legs=[new_leg, a.legs[1]], num_domain_legs=1, backend=a.backend
     ).permute_legs([1, 0])
     if need_combine:
         Q = Q.split_legs(1)
@@ -650,7 +650,7 @@ def eigh(a: Tensor, legs1: list[int | str] = None, legs2: list[int | str] = None
         raise ValueError(msg)
     D = DiagonalTensor(d_data, first_leg=D_leg_0, second_leg_dual=True, backend=backend,
                        labels=[lb, lc])
-    U = BlockDiagonalTensor(u_data, legs=[U_leg_0, U_leg_1], domain_num_legs=1, backend=backend,
+    U = BlockDiagonalTensor(u_data, legs=[U_leg_0, U_leg_1], num_domain_legs=1, backend=backend,
                             labels=[a.labels[0], la])
 
     if U_leg_1.is_dual != new_leg_dual:
@@ -813,7 +813,7 @@ def _act_block_diagonal_square_matrix(t: Tensor,
         t = t.combine_legs(idcs1, idcs2, product_spaces=[pipe, pipe.dual], new_axes=[0, 1])
     res_data = t.backend.act_block_diagonal_square_matrix(t, block_method)
     res = BlockDiagonalTensor(res_data, backend=t.backend, legs=t.legs,
-                              domain_num_legs=t.domain_num_legs, labels=t.labels)
+                              num_domain_legs=t.num_domain_legs, labels=t.labels)
     if len(idcs1) > 1:
         res = res.split_legs()
         transposed = idcs1 + idcs2
