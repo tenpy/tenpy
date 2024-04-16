@@ -14,7 +14,7 @@ __all__ = ['Sector', 'SectorArray', 'FusionStyle', 'BraidingStyle', 'Symmetry', 
            'GroupSymmetry', 'AbelianGroup', 'NoSymmetry', 'U1Symmetry', 'ZNSymmetry', 'SU2Symmetry',
            'FermionParity', 'FibonacciAnyonCategory', 'no_symmetry', 'z2_symmetry', 'z3_symmetry',
            'z4_symmetry', 'z5_symmetry', 'z6_symmetry', 'z7_symmetry', 'z8_symmetry', 'z9_symmetry',
-           'u1_symmetry', 'su2_symmetry', 'fermion_parity', 'IsingAnyonCategory',
+           'u1_symmetry', 'fermion_parity', 'IsingAnyonCategory',
            'QuantumDoubleZNAnyonCategory', 'SU2_kAnyonCategory', 'ZNAnyonCategory', 'ZNAnyonCategory2',
            'double_semion_model', 'fibonacci_grading', 'ising_grading', 'semion_model', 'toric_code'
            ]
@@ -1767,6 +1767,7 @@ class SU2_kAnyonCategory(Symmetry):
         return np.arange(self.k + 1, dtype=int)[:, None]
 
 
+# Note : some symmetries have expensive __init__ ! Do not initialize those.
 no_symmetry = NoSymmetry()
 z2_symmetry = ZNSymmetry(N=2)
 z3_symmetry = ZNSymmetry(N=3)
@@ -1777,7 +1778,6 @@ z7_symmetry = ZNSymmetry(N=7)
 z8_symmetry = ZNSymmetry(N=8)
 z9_symmetry = ZNSymmetry(N=9)
 u1_symmetry = U1Symmetry()
-su2_symmetry = SU2Symmetry()
 fermion_parity = FermionParity()
 semion_model = ZNAnyonCategory2(2, 0)
 toric_code = QuantumDoubleZNAnyonCategory(2)
