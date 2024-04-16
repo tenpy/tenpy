@@ -53,7 +53,7 @@ def block_backend(request):
 
 # Note: FusionTree backend is skipped by default. Use ``--run-FusionTree`` CL option to run them.
 @pytest.fixture(params=['no_symmetry', 'abelian',
-                        pytest.param('FusionTree', marks=pytest.mark.FusionTree)])
+                        pytest.param('fusion_tree', marks=pytest.mark.FusionTree)])
 def symmetry_backend(request):
     return request.param
 

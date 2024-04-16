@@ -5,7 +5,9 @@ from typing import TYPE_CHECKING, Callable
 from math import prod
 import numpy as np
 
-from .abstract_backend import Backend, BlockBackend, Block, Data, DiagonalData
+from .abstract_backend import (
+    Backend, BlockBackend, Block, Data, DiagonalData, _iter_common_sorted_arrays
+)
 from ..dtypes import Dtype
 from ..symmetries import Sector, SectorArray, Symmetry
 from ..spaces import VectorSpace, ProductSpace
@@ -259,19 +261,23 @@ class FusionTreeBackend(Backend, BlockBackend, ABC):
     def mask_from_block(self, a: Block, large_leg: VectorSpace, small_leg: VectorSpace) -> DiagonalData:
         raise NotImplementedError  # TODO
 
-    def from_block_func(self, func, legs: list[VectorSpace], domain_num_legs: int, func_kwargs={}
+    def from_block_func(self, func, legs: list[VectorSpace], num_domain_legs: int, func_kwargs={}
                         ) -> FusionTreeData:
-        domain, codomain = _make_domain_codomain(legs, domain_num_legs=domain_num_legs, backend=self)
-        raise NotImplementedError  # TODO use _iter_common_... instead of allowed_coupled_sectors
-        coupled = allowed_coupled_sectors(codomain, domain)  #
-        blocks = [func((block_size(codomain, c), block_size(domain, c)), **func_kwargs)
-                  for c in coupled]
+        domain, codomain = _make_domain_codomain(legs, num_domain_legs=num_domain_legs, backend=self)
+        coupled_sectors = []
+        blocks = []
+        for i, _ in _iter_common_sorted_arrays(domain._non_dual_sectors, codomain._non_dual_sectors):
+            coupled = domain._non_dual_sectors[i]
+            shape = (block_size(codomain, coupled), block_size(domain, coupled))
+            coupled_sectors.append(coupled)
+            blocks.append(func(shape, **func_kwargs))
         if len(blocks) > 0:
             sample_block = blocks[0]
         else:
             sample_block = func((1,) * len(legs), **func_kwargs)
         dtype = self.block_dtype(sample_block)
-        return FusionTreeData(coupled, blocks, domain, codomain, dtype)
+        coupled_sectors = np.asarray(coupled_sectors, int)
+        return FusionTreeData(coupled_sectors, blocks, domain, codomain, dtype)
 
     def diagonal_from_block_func(self, func, leg: VectorSpace, func_kwargs={}) -> DiagonalData:
         raise NotImplementedError  # TODO
