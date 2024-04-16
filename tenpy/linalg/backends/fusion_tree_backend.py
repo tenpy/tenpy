@@ -66,15 +66,16 @@ def tree_block_slice(space: ProductSpace, tree: FusionTree) -> slice:
     size = tree_block_size(space, tree.uncoupled)
     return slice(offset, offset + size)
 
-def _make_domain_codomain(legs: list[VectorSpace], domain_num_legs: int = 0, backend=None
+
+def _make_domain_codomain(legs: list[VectorSpace], num_domain_legs: int = 0, backend=None
                           ) -> tuple[ProductSpace, ProductSpace]:
-    assert 0 <= domain_num_legs < len(legs)
+    assert 0 <= num_domain_legs < len(legs)
     # need to pass symmetry and is_real, since codomain or domain might be the empty product.
     symmetry = legs[0].symmetry
     is_real = legs[0].is_real
-    domain = ProductSpace([l.dual for l in legs[:domain_num_legs]], backend=backend,
+    domain = ProductSpace([l.dual for l in legs[:num_domain_legs]], backend=backend,
                           symmetry=symmetry, is_real=is_real)
-    codomain = ProductSpace(reversed(legs[domain_num_legs:]), backend=backend, symmetry=symmetry,
+    codomain = ProductSpace(legs[num_domain_legs:][::-1], backend=backend, symmetry=symmetry,
                             is_real=is_real)
     return domain, codomain
 
@@ -89,23 +90,34 @@ class FusionTreeData:
     coupled_sectors : 2D array
         The coupled sectors :math:`c_n` for which there are non-zero blocks.
         Must be ``lexsort( .T)``-ed (this is not checked!).
+        OPTIMIZE force 2D array or allow list of 1D array?
     blocks : list of 2D Block
         The nonzero blocks, ``blocks[n]`` corresponding to ``coupled_sectors[n]``.
     domain, codomain : ProductSpace
         The domain and codomain of the tensor ``T : domain -> codomain``.
+        Their "outer" :attr:`ProductSpace.is_dual` must be ``False``.
         Must not be nested, i.e. their :attr:`ProductSpace.spaces` can not themselves be
         ProductSpaces.
-        TODO can we support nesting or do they *need* to be flat??
-        TODO how to encode Tensor.legs -> [domain, codomain] ?? allow a perm here?
+        TODO can we support nesting or do they *need* to be flat?? -> adjust test_data_sanity
+        They comprise the legs of the tensor as::
+
+            T.legs == [W.dual for W in domain.spaces] + codomain.spaces[::-1]
+        
+        OPTIMIZE Should we use list[VectorSpace] instead of ProductSpace to save some
+                 potential overhead from ProductSpace.__init__ computing its sectors?
+                 Having these coupled sectors is *sometimes* useful.
+                 Not clear right now if it always is.
     """
     def __init__(self, coupled_sectors: SectorArray, blocks: list[Block], domain: ProductSpace,
                  codomain: ProductSpace, dtype: Dtype):
+        assert coupled_sectors.ndim == 2
         self.coupled_sectors = coupled_sectors
+        self.coupled_dims = domain.symmetry.batch_sector_dim(coupled_sectors)  # TODO is this used?
         self.blocks = blocks
         self.domain = domain
         self.codomain = codomain
-        self.domain_num_legs = K = len(domain.spaces)
-        self.codomain_num_legs = J = len(codomain.spaces)
+        self.num_domain_legs = K = len(domain.spaces)
+        self.num_codomain_legs = J = len(codomain.spaces)
         self.num_legs = K + J
         self.dtype = dtype
 
@@ -165,13 +177,13 @@ class FusionTreeBackend(Backend, BlockBackend, ABC):
     def test_data_sanity(self, a: BlockDiagonalTensor | DiagonalTensor | Mask, is_diagonal: bool):
         super().test_data_sanity(a, is_diagonal=is_diagonal)
         # check domain and codomain
-        assert a.data.domain_num_legs == a.domain_num_legs
-        for n in range(a.domain_num_legs):
+        assert a.data.num_domain_legs == a.num_domain_legs
+        for n in range(a.num_domain_legs):
             # domain: duals of legs[:K]
             assert a.legs[n].can_contract_with(a.data.domain.spaces[n])
-        for n in range(a.codomain_num_legs):
+        for n in range(a.num_codomain_legs):
             # codomain: legs[K:] in reverse order
-            assert a.legs[a.domain_num_legs + n] == a.data.codomain.spaces[-n]
+            assert a.legs[a.num_domain_legs + n] == a.data.codomain.spaces[-n]
         assert a.data.domain.is_dual is False
         assert a.data.codomain.is_dual is False
         assert all(not isinstance(s, ProductSpace) for s in a.data.codomain.spaces)
@@ -180,6 +192,7 @@ class FusionTreeBackend(Backend, BlockBackend, ABC):
         perm = np.lexsort(a.data.coupled_sectors.T)
         assert np.all(perm == np.arange(len(perm)))
         # blocks
+        assert len(a.data.coupled_sectors) == len(a.data.blocks)
         for c, block in zip(a.data.coupled_sectors, a.data.blocks):
             assert a.symmetry.is_valid_sector(c)
             # shape correct?
@@ -282,8 +295,8 @@ class FusionTreeBackend(Backend, BlockBackend, ABC):
     def diagonal_from_block_func(self, func, leg: VectorSpace, func_kwargs={}) -> DiagonalData:
         raise NotImplementedError  # TODO
 
-    def zero_data(self, legs: list[VectorSpace], dtype: Dtype, domain_num_legs: int) -> FusionTreeData:
-        domain, codomain = _make_domain_codomain(legs, domain_num_legs=domain_num_legs, backend=self)
+    def zero_data(self, legs: list[VectorSpace], dtype: Dtype, num_domain_legs: int) -> FusionTreeData:
+        domain, codomain = _make_domain_codomain(legs, num_domain_legs=num_domain_legs, backend=self)
         return FusionTreeData(coupled_sectors=codomain.symmetry.empty_sector_array, blocks=[],
                               domain=domain, codomain=codomain, dtype=dtype)
 
@@ -335,7 +348,7 @@ class FusionTreeBackend(Backend, BlockBackend, ABC):
               axs2: list[int] | None) -> complex:
         raise NotImplementedError  # TODO
     
-    def permute_legs(self, a: BlockDiagonalTensor, permutation: list[int] | None, domain_num_legs: int
+    def permute_legs(self, a: BlockDiagonalTensor, permutation: list[int] | None, num_domain_legs: int
                      ) -> Data:
         # TODO need to specify levels for braiding and partitioning into domain / codomain
         raise NotImplementedError  # TODO
