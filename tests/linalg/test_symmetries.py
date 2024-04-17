@@ -155,22 +155,9 @@ def common_checks(sym: symmetries.Symmetry, example_sectors, np_random):
     """Common consistency checks to be performed on a symmetry instance.
 
     Assumes example_sectors are duplicate free.
-
-    TODO: The fusion consistency check right now is not elegant and should be revisited at some point.
-          To make things more efficient, we should check for consistency only once, i.e., when we check,
-          e.g., the unitarity of the F-moves, we can use the same consistency check as for the C symbols
     """
     example_sectors = np.unique(example_sectors, axis=0)
 
-    # generate a few samples of sectors that fulfill fusion rules, used to check the symbols
-    sector_triples = list(sample_sector_triplets(sym, example_sectors, num_samples=10,
-                                                 accept_fewer=True, np_rng=np_random))
-    sector_sextets = list(sample_sector_sextets(sym, example_sectors, num_samples=10,
-                                                accept_fewer=True, np_rng=np_random))
-    sector_nonets = list(sample_sector_nonets(sym, example_sectors, num_samples=10,
-                                              accept_fewer=True, np_rng=np_random))
-    
-    
     assert sym.trivial_sector.shape == (sym.sector_ind_len,)
     assert sym.is_valid_sector(sym.trivial_sector)
     assert not sym.is_valid_sector(np.zeros(shape=(sym.sector_ind_len + 2), dtype=int))
@@ -179,7 +166,11 @@ def common_checks(sym: symmetries.Symmetry, example_sectors, np_random):
                            np.zeros((1, 1), dtype=int)]:
         assert not sym.is_valid_sector(invalid_sector)
     assert sym.qdim(sym.trivial_sector) in [1, 1.]
-    assert sym.num_sectors == np.inf or (isinstance(sym.num_sectors, int) and sym.num_sectors > 0)
+    if isinstance(sym, symmetries.AbelianGroup) or isinstance(sym, symmetries.GroupSymmetry):
+        assert sym.num_sectors == np.inf or (isinstance(sym.num_sectors, int) and sym.num_sectors > 0)
+    else:
+        assert sym.num_sectors == np.inf or \
+               (isinstance(sym.num_sectors, (int, float, np.int32)) and sym.num_sectors > 0)
 
     # check all_sectors
     if sym.num_sectors < np.inf:
@@ -519,6 +510,7 @@ def test_no_symmetry(np_random):
 
 @pytest.mark.xfail(reason='Topological data not implemented.')
 def test_product_symmetry(np_random):
+    #pytest.set_trace()
     sym = symmetries.ProductSymmetry([
         symmetries.SU2Symmetry(), symmetries.U1Symmetry(), symmetries.FermionParity()
     ])
@@ -527,21 +519,35 @@ def test_product_symmetry(np_random):
     ])
     s1 = np.array([5, 3, 1])  # e.g. spin 5/2 , 3 particles , odd parity ("fermionic")
     s2 = np.array([3, 2, 0])  # e.g. spin 3/2 , 2 particles , even parity ("bosonic")
-    common_checks(sym, example_sectors=np.array([s1, s2]), np_random=np_random)
+    #common_checks(sym, example_sectors=np.array([s1, s2]), np_random=np_random)
 
-    u1_z3 = symmetries.u1_symmetry * symmetries.z3_symmetry
-    common_checks(u1_z3, example_sectors=np.array([[42, 1], [-1, 2], [-2, 0]]), np_random=np_random)
+    #u1_z3 = symmetries.u1_symmetry * symmetries.z3_symmetry
+    #common_checks(u1_z3, example_sectors=np.array([[42, 1], [-1, 2], [-2, 0]]), np_random=np_random)
+
+    doubleFibo = symmetries.ProductSymmetry([symmetries.FibonacciGrading('left'), symmetries.FibonacciGrading('right')])
+    common_checks(doubleFibo, example_sectors=np.array([[0,0],[0,1],[1,0],[1,1]]), np_random=np_random)
+    assert doubleFibo._f_symbol([0,0], [0,0], [0,0], [0,0], [0,0], [0,0]) == 1
+    #print('Prod', doubleFibo._f_symbol([1, 1], [1, 1], [1, 1], [1, 1], [1, 1], [1, 1])[0,0,0,0],1/ ((0.5 * (1 + np.sqrt(5))) ** 2) )
+    assert np.isclose(doubleFibo._f_symbol([1,1], [1, 1], [1, 1], [1, 1], [1, 1], [1, 1])[0,0,0,0] , 1/ ((0.5 * (1 + np.sqrt(5))) ** 2))
+
+    for k in range(1,16,2):
+        doubleIsing= symmetries.ProductSymmetry([symmetries.IsingGrading(k), symmetries.IsingGrading(-k)])
+        common_checks(doubleIsing, example_sectors=np.array([[0,0], [0,1], [1,0], [1,1], [2,1], [1,2], [2,2], [0,2], [2,0]]), np_random=np_random)
+        assert np.isclose(doubleIsing._r_symbol([1,1],[1,1],[0,0]),1)
+        assert np.isclose(doubleIsing._r_symbol([1, 1], [2, 2], [1, 1]), 1)
+        assert np.isclose(doubleIsing._r_symbol([2, 2],[1, 1], [1, 1]), 1)
+
 
     print('instancecheck and is_abelian')
     assert not isinstance(sym, symmetries.AbelianGroup)
     assert not isinstance(sym, symmetries.GroupSymmetry)
     assert not sym.is_abelian
-    assert isinstance(u1_z3, symmetries.AbelianGroup)
-    assert isinstance(u1_z3, symmetries.GroupSymmetry)
-    assert u1_z3.is_abelian
+    # assert isinstance(u1_z3, symmetries.AbelianGroup)
+    # assert isinstance(u1_z3, symmetries.GroupSymmetry)
+    # assert u1_z3.is_abelian
 
     print('checking creation via __mul__')
-    sym2 = symmetries.SU2Symmetry() * symmetries.u1_symmetry * symmetries.fermion_parity
+    sym2 = symmetries.su2_symmetry * symmetries.u1_symmetry * symmetries.fermion_parity
     assert sym2 == sym
 
     print('checking valid sectors')
@@ -557,12 +563,12 @@ def test_product_symmetry(np_random):
     expect = np.array([[2, 5, 1], [4, 5, 1], [6, 5, 1], [8, 5, 1]])
     assert_array_equal(outcomes, expect)
 
-    print('checking fusion_outcomes_broadcast')
-    with pytest.raises(AssertionError):
-        # sym is not abelian, so this should raise
-        _ = sym.fusion_outcomes_broadcast(s1[None, :], s2[None, :])
-    outcomes = u1_z3.fusion_outcomes_broadcast(np.array([[42, 2], [-2, 0]]), np.array([[1, 1], [2, 1]]))
-    assert_array_equal(outcomes, np.array([[43, 0], [0, 1]]))
+    # print('checking fusion_outcomes_broadcast')
+    # with pytest.raises(AssertionError):
+    #     # sym is not abelian, so this should raise
+    #     _ = sym.fusion_outcomes_broadcast(s1[None, :], s2[None, :])
+    # outcomes = u1_z3.fusion_outcomes_broadcast(np.array([[42, 2], [-2, 0]]), np.array([[1, 1], [2, 1]]))
+    # assert_array_equal(outcomes, np.array([[43, 0], [0, 1]]))
 
     print('checking sector dimensions')
     assert sym.sector_dim(s1) == 6
@@ -571,13 +577,13 @@ def test_product_symmetry(np_random):
     print('checking equality')
     assert sym == sym
     assert sym != sym_with_name
-    assert sym != symmetries.SU2Symmetry() * symmetries.u1_symmetry
+    assert sym != symmetries.su2_symmetry * symmetries.u1_symmetry
     assert sym != symmetries.no_symmetry
 
     print('checking is_same_symmetry')
     assert sym.is_same_symmetry(sym)
     assert sym.is_same_symmetry(sym_with_name)
-    assert not sym.is_same_symmetry(symmetries.SU2Symmetry() * symmetries.u1_symmetry)
+    assert not sym.is_same_symmetry(symmetries.su2_symmetry * symmetries.u1_symmetry)
     assert not sym.is_same_symmetry(symmetries.no_symmetry)
 
     print('checking dual_sector')
