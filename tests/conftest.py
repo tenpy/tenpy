@@ -312,8 +312,9 @@ def make_compatible_tensor(compatible_backend, compatible_symmetry, make_compati
                 if new_leg.sector_multiplicity(compatible_symmetry.trivial_sector) == 0:
                     sectors = new_leg._non_dual_sectors
                     sectors[np_random.choice(len(sectors))] = compatible_symmetry.trivial_sector
-                    new_leg = spaces.VectorSpace(new_leg.symmetry, sectors, new_leg.multiplicities,
-                                                 new_leg.basis_perm)
+                    new_leg = spaces.VectorSpace.from_sectors(
+                        new_leg.symmetry, sectors, new_leg.multiplicities, new_leg.basis_perm
+                    )
             else:
                 new_leg = find_compatible_leg(legs[:which] + legs[which + 1:],
                                               max_sectors=max_blocks, max_mult=max_block_size)
@@ -478,5 +479,6 @@ def find_compatible_leg(others, max_sectors: int, max_mult: int, extra_sectors=N
 
     # check that it actually worked
     assert spaces.ProductSpace([*others, res]).sector_multiplicity(prod.symmetry.trivial_sector) > 0
+    res.test_sanity()
 
     return res

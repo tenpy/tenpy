@@ -512,7 +512,7 @@ def check_B_symbols(sym: symmetries.Symmetry, sector_triplets):
         assert_array_almost_equal(np.tensordot(B, B.conj(), axes=[1,1]), norm)  # normalization
 
         snake = np.tensordot(B, sym.b_symbol(c, sym.dual_sector(b), a), axes=[1,1])  # snake eq.
-        assert_array_almost_equal(snake, sym.frobenius_schur(b), np.diag(np.ones(shape[0])))
+        assert_array_almost_equal(snake, sym.frobenius_schur(b) * np.diag(np.ones(shape[0])))
 
 
 def check_pentagon_equation(sym: symmetries.Symmetry, sector_nonets):
