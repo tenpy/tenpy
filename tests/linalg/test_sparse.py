@@ -58,19 +58,19 @@ class TensorDummyOperator(sparse.LinearOperator):
         return TensorDummyOperator(self.tensor.conj())
 
 
-def check_to_tensor(op: sparse.LinearOperator, vec: Tensor, backend):
+def check_to_tensor(op: sparse.LinearOperator, vec: Tensor):
     """perform common checks of the LinearOperator.to_tensor method"""
     res_matvec = op.matvec(vec)
-    tensor = op.to_tensor(backend=backend)
-    _ = op.to_matrix(backend=backend)  # just check if it runs...
+    tensor = op.to_tensor(backend=vec.backend)
+    _ = op.to_matrix(backend=vec.backend)  # just check if it runs...
     res_tensor = tensor.tdot(vec, range(vec.num_legs, 2 * vec.num_legs), range(vec.num_legs))
     assert almost_equal(res_matvec, res_tensor)
 
 
-def test_SumLinearOperator(backend, tensor_rng):
-    vec = tensor_rng(labels=['a', 'b'])
+def test_SumLinearOperator(make_compatible_tensor):
+    vec = make_compatible_tensor(labels=['a', 'b'])
     a, b = vec.legs
-    T = tensor_rng(legs=[a, b.dual, a.dual, b], real=False, labels=['a', 'b*', 'a*', 'b'])
+    T = make_compatible_tensor(legs=[a, b.dual, a.dual, b], labels=['a', 'b*', 'a*', 'b'])
 
     factor1 = 2.4
     factor3 = 3.1 - 42.j
@@ -85,25 +85,25 @@ def test_SumLinearOperator(backend, tensor_rng):
     # check access to attributes of original_operator
     assert op.some_weird_attribute == 'arbitrary value'
     assert op.some_unrelated_function(2) == 4
-    check_to_tensor(op, vec, backend)
+    check_to_tensor(op, vec)
 
     print('two operators')
     op = sparse.SumLinearOperator(op2, op1)
     assert almost_equal(op.matvec(vec), factor1 *  vec + T.tdot(vec, ['a*', 'b*'], ['a', 'b']))
     assert op.some_weird_attribute == 42
     assert op.some_unrelated_function(2) == 'buzz'
-    check_to_tensor(op, vec, backend)
+    check_to_tensor(op, vec)
 
     print('three operators')
     op = sparse.SumLinearOperator(op1, op2, op3)
     assert almost_equal(op.matvec(vec), (factor1 + factor3) * vec + T.tdot(vec, ['a*', 'b*'], ['a', 'b']))
     assert op.some_weird_attribute == 'arbitrary value'
     assert op.some_unrelated_function(2) == 4
-    check_to_tensor(op, vec, backend)
+    check_to_tensor(op, vec)
 
 
-def test_ShiftedLinearOperator(backend, tensor_rng):
-    vec = tensor_rng(labels=['a', 'b'])
+def test_ShiftedLinearOperator(make_compatible_tensor):
+    vec = make_compatible_tensor(labels=['a', 'b'])
     factor = 3.2
     op1 = ScalingDummyOperator(factor=factor, vector_shape=vec.shape)
     shift = 5.j
@@ -112,17 +112,17 @@ def test_ShiftedLinearOperator(backend, tensor_rng):
     assert almost_equal(op.matvec(vec), (factor + shift) * vec)
     assert op.some_weird_attribute == 'arbitrary value'
     assert op.some_unrelated_function(2) == 4
-    check_to_tensor(op, vec, backend)
+    check_to_tensor(op, vec)
 
 
 @pytest.mark.parametrize(['penalty', 'project_operator'], [(None, True), (2.-.3j, True), (-4, False)])
-def test_ProjectedLinearOperator(tensor_rng, penalty, project_operator):
-    vec = tensor_rng(num_legs=2, labels=['a', 'b'])
+def test_ProjectedLinearOperator(make_compatible_tensor, penalty, project_operator):
+    vec = make_compatible_tensor(labels=['a', 'b'])
     a, b = vec.legs
-    o1 = tensor_rng(legs=[a, b], labels=['a', 'b'])
+    o1 = make_compatible_tensor(legs=[a, b], labels=['a', 'b'])
     assert (o1_norm := o1.norm()) > 0
     o1 = o1 / o1_norm
-    o2 = tensor_rng(legs=[a, b], labels=['a', 'b'])
+    o2 = make_compatible_tensor(legs=[a, b], labels=['a', 'b'])
     o2 = o2 - o1.inner(o2) * o1
     assert (o2_norm := o2.norm()) > 0
     o2 = o2 / o2_norm
@@ -151,10 +151,11 @@ def test_ProjectedLinearOperator(tensor_rng, penalty, project_operator):
 
 
 @pytest.mark.parametrize('use_hermitian', [True, False])
-def test_NumpyArrayLinearOperator_sector(vector_space_rng, tensor_rng, use_hermitian, k=5, tol=1e-14):
-    a = vector_space_rng()
-    b = vector_space_rng()
-    H = tensor_rng(legs=[a, b.dual, a.dual, b], labels=['a', 'b*', 'a*', 'b'])
+def test_NumpyArrayLinearOperator_sector(make_compatible_space, make_compatible_tensor,
+                                         use_hermitian, k=5, tol=1e-14):
+    a = make_compatible_space()
+    b = make_compatible_space()
+    H = make_compatible_tensor(legs=[a, b.dual, a.dual, b], labels=['a', 'b*', 'a*', 'b'])
     H = H + H.conj()
     #
     H_np = H.to_numpy_ndarray(leg_order=['a', 'b*', 'a*', 'b'])
@@ -188,9 +189,9 @@ def test_NumpyArrayLinearOperator_sector(vector_space_rng, tensor_rng, use_hermi
 
 
 @pytest.mark.parametrize('num_legs', [1, 2])
-def test_gram_schmidt(tensor_rng, vector_space_rng, num_legs, num_vecs=5, tol=1e-15):
-    first = tensor_rng(num_legs=num_legs, real=False)
-    vecs_old = [first] + [tensor_rng(first.legs, real=False) for _ in range(num_vecs - 1)]
+def test_gram_schmidt(make_compatible_tensor, num_legs, num_vecs=5, tol=1e-15):
+    first = make_compatible_tensor(num_legs=num_legs)
+    vecs_old = [first] + [make_compatible_tensor(first.legs) for _ in range(num_vecs - 1)]
     # note: depending on the dimension of `legs` (which is random),
     # some of those can be linearly dependent!
     vecs_new = sparse.gram_schmidt(vecs_old)  # rtol=tol is too small for some random spaces

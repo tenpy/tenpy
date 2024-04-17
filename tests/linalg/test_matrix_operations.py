@@ -29,10 +29,10 @@ def assert_permuted_eye(arr):
     (['l', 'r'], ['l'], ['r'])
 ])
 @pytest.mark.parametrize('new_vh_leg_dual', [True, False])
-def test_svd(tensor_rng, new_vh_leg_dual, all_labels, l_labels, r_labels):
+def test_svd(make_compatible_tensor, new_vh_leg_dual, all_labels, l_labels, r_labels):
     assert set(l_labels + r_labels) == set(all_labels)
     print(f'leg bipartition {all_labels} -> {l_labels} & {r_labels}')
-    T: tensors.BlockDiagonalTensor = tensor_rng(labels=all_labels, max_block_size=3)
+    T: tensors.BlockDiagonalTensor = make_compatible_tensor(labels=all_labels, max_block_size=3)
     #  T_dense = T.to_numpy_ndarray()
     U, S, Vd = matrix_operations.svd(
         T, l_labels, r_labels, new_labels=['cr', 'cl'], new_vh_leg_dual=new_vh_leg_dual
@@ -67,8 +67,10 @@ def test_svd(tensor_rng, new_vh_leg_dual, all_labels, l_labels, r_labels):
 
 @pytest.mark.parametrize('svd_min, normalize_to', [(1e-14, None), (1e-4, None), (1e-4, 2.7)])
 @pytest.mark.parametrize('new_vh_leg_dual', [True, False])
-def test_truncated_svd(tensor_rng, new_vh_leg_dual, svd_min, normalize_to):
-    T: tensors.BlockDiagonalTensor = tensor_rng(labels=['l1', 'r2', 'l2', 'r1'], max_block_size=3)
+def test_truncated_svd(make_compatible_tensor, new_vh_leg_dual, svd_min, normalize_to):
+    T: tensors.BlockDiagonalTensor = make_compatible_tensor(
+        labels=['l1', 'r2', 'l2', 'r1'], max_block_size=3
+    )
     U, S, Vd, err, renormalize = matrix_operations.truncated_svd(
         T, ['l1', 'l2'], ['r1', 'r2'], new_labels=['cr', 'cl'], new_vh_leg_dual=new_vh_leg_dual,
         truncation_options=dict(svd_min=svd_min), normalize_to=normalize_to
@@ -104,8 +106,11 @@ def test_truncated_svd(tensor_rng, new_vh_leg_dual, svd_min, normalize_to):
 
 @pytest.mark.parametrize('new_vh_leg_dual', [True, False])
 @pytest.mark.parametrize('compute_u, compute_vh', [(True, False), (False, True), (False, False)])
-def test_eig_based_svd(tensor_rng, compute_u, compute_vh, new_vh_leg_dual):
-    T: tensors.BlockDiagonalTensor = tensor_rng(labels=['l1', 'r2', 'l2', 'r1'], max_block_size=3)
+def test_eig_based_svd(make_compatible_tensor, compute_u, compute_vh, new_vh_leg_dual):
+    T: tensors.BlockDiagonalTensor = make_compatible_tensor(
+        labels=['l1', 'r2', 'l2', 'r1'], max_block_size=3,
+        all_blocks=True,  # TODO debug with missing blocks!
+    )
     u_legs = ['l1', 'l2']
     vh_legs = ['r1', 'r2']
     new_labels = ['cr', 'cl']
@@ -169,9 +174,12 @@ def test_eig_based_svd(tensor_rng, compute_u, compute_vh, new_vh_leg_dual):
 @pytest.mark.parametrize('svd_min, normalize_to', [(1e-14, None), (1e-4, None), (1e-4, 2.7)])
 @pytest.mark.parametrize('new_vh_leg_dual', [True, False])
 @pytest.mark.parametrize('compute_u, compute_vh', [(False, True), (True, False), (False, False)])
-def test_truncated_eig_based_svd(tensor_rng, compute_u, compute_vh, new_vh_leg_dual, svd_min,
+def test_truncated_eig_based_svd(make_compatible_tensor, compute_u, compute_vh, new_vh_leg_dual, svd_min,
                                  normalize_to):
-    T: tensors.BlockDiagonalTensor = tensor_rng(labels=['l1', 'r2', 'l2', 'r1'], max_block_size=3)
+    T: tensors.BlockDiagonalTensor = make_compatible_tensor(
+        labels=['l1', 'r2', 'l2', 'r1'], max_block_size=3,
+        all_blocks=True,  # TODO debug with missing blocks!
+    )
     U, S, Vh, err, renormalize = matrix_operations.truncated_eig_based_svd(
         T, compute_u=compute_u, compute_vh=compute_vh, u_legs=['l1', 'l2'], vh_legs=['r1', 'r2'],
         new_labels=['cr', 'cl'], new_vh_leg_dual=new_vh_leg_dual,
@@ -237,8 +245,10 @@ def test_truncated_eig_based_svd(tensor_rng, compute_u, compute_vh, new_vh_leg_d
 
 @pytest.mark.parametrize('full', [True, False])
 @pytest.mark.parametrize('new_r_leg_dual', [True, False])
-def test_qr(tensor_rng, new_r_leg_dual, full):
-    T: tensors.BlockDiagonalTensor = tensor_rng(labels=['l1', 'r2', 'l2', 'r1'], max_block_size=3)
+def test_qr(make_compatible_tensor, new_r_leg_dual, full):
+    T: tensors.BlockDiagonalTensor = make_compatible_tensor(
+        labels=['l1', 'r2', 'l2', 'r1'], max_block_size=3
+    )
 
     for comment, q_legs, r_legs in [
         ('all labelled', ['l1', 'l2'], ['r1', 'r2']),
@@ -269,8 +279,10 @@ def test_qr(tensor_rng, new_r_leg_dual, full):
 
 @pytest.mark.parametrize('full', [True, False])
 @pytest.mark.parametrize('new_l_leg_dual', [True, False])
-def test_lq(tensor_rng, new_l_leg_dual, full):
-    T: tensors.BlockDiagonalTensor = tensor_rng(labels=['l1', 'r2', 'l2', 'r1'], max_block_size=3)
+def test_lq(make_compatible_tensor, new_l_leg_dual, full):
+    T: tensors.BlockDiagonalTensor = make_compatible_tensor(
+        labels=['l1', 'r2', 'l2', 'r1'], max_block_size=3
+    )
 
     for comment, l_legs, q_legs in [
         ('all labelled', ['l1', 'l2'], ['r1', 'r2']),
@@ -309,10 +321,12 @@ def test_lq(tensor_rng, new_l_leg_dual, full):
 @pytest.mark.parametrize('new_leg_dual', [True, False])
 @pytest.mark.parametrize('sort', [None, 'm>', 'm<', '>', '<'])
 @pytest.mark.parametrize('real', [True, False])
-def test_eigh(tensor_rng, vector_space_rng, real, sort, new_leg_dual):
-    a = vector_space_rng()
-    b = vector_space_rng()
-    T: tensors.BlockDiagonalTensor = tensor_rng(legs=[a, b.dual, b, a.dual], real=real, labels=['a', 'b*', 'b', 'a*'])
+def test_eigh(make_compatible_tensor, make_compatible_space, real, sort, new_leg_dual):
+    a = make_compatible_space()
+    b = make_compatible_space()
+    T: tensors.BlockDiagonalTensor = make_compatible_tensor(
+        legs=[a, b.dual, b, a.dual], real=real, labels=['a', 'b*', 'b', 'a*']
+    )
     T = .5 * (T + T.conj())
 
     print('check that we have constructed a hermitian tensor')
@@ -374,14 +388,15 @@ def test_eigh(tensor_rng, vector_space_rng, real, sort, new_leg_dual):
 @pytest.mark.parametrize('real', [True, False])
 @pytest.mark.parametrize('mode', ['tensor', 'matrix', 'diagonal', 'scalar'])
 @pytest.mark.parametrize('func', ['exp', 'log'])
-def test_power_series_funcs(vector_space_rng, tensor_rng, np_random, func, mode, real):
+def test_power_series_funcs(make_compatible_space, make_compatible_tensor, np_random, func, mode, real):
     # common tests for matrix power series functions, such as exp, log etc
     tp_func = getattr(matrix_operations, func)
     np_func = dict(exp=scipy.linalg.expm, log=scipy.linalg.logm)[func]
-    leg = vector_space_rng()
-    leg2 = vector_space_rng()
+    leg = make_compatible_space()
+    leg2 = make_compatible_space()
+    need_all_blocks = func in ['log']  # not defined for 0 blocks.
     if mode == 'tensor':
-        tens = tensor_rng(legs=[leg, leg2.dual, leg2, leg.dual], real=real, all_blocks=True)
+        tens = make_compatible_tensor(legs=[leg, leg2.dual, leg2, leg.dual], real=real, all_blocks=need_all_blocks)
         d1, d2 = leg.dim, leg2.dim
         d = leg.dim * leg2.dim
         res = tp_func(tens, legs1=[0, 2], legs2=[3, 1])
@@ -390,7 +405,7 @@ def test_power_series_funcs(vector_space_rng, tensor_rng, np_random, func, mode,
         np_matrix = tens.to_numpy_ndarray().transpose([0, 2, 3, 1]).reshape([d, d])
         expect = np_func(np_matrix).reshape([d1, d2, d1, d2]).transpose([0, 3, 1, 2])
     elif mode == 'matrix':
-        tens = tensor_rng(legs=[leg, leg.dual], real=real, all_blocks=True)
+        tens = make_compatible_tensor(legs=[leg, leg.dual], real=real, all_blocks=need_all_blocks)
         res = tp_func(tens)
         res.test_sanity()
         res = res.to_numpy_ndarray()

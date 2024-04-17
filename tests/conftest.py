@@ -2,18 +2,76 @@
 
 TODO format this summary of fixtures:
 
-np_random : np.random.Generator
-symmetry : Symmetry
-symmetry_sectors_rng : function (size: int, sort: bool = False) -> SectorArray
-vector_space_rng : function (max_num_blocks: int = 4, max_block_size: int = 8) -> VectorSpace
-default_backend : Backend
-block_backend : str
-backend : Backend
-block_rng : function (size: list[int], real: bool = True) -> Block
-backend_data_rng : function (legs: list[VectorSpace], real: bool = True) -> BackendData
-tensor_rng : function (legs: list[VectorSpace] = None, num_legs: int = 2, labels: list[str] = None,
-                       max_num_block: int = 5, max_block_size: int = 5, real: bool = True,
-                       cls: Type[T] = Tensor) -> T
+The following table summarizes the available fixtures.
+There are three groups; miscellaneous independent fixtures, unconstrained fixtures
+(with ``any`` in their name) and constrained fixtures (with ``compatible`` in their name).
+The latter two groups are similar in terms of signature.
+The unconstrained fixtures are intended if a test should be parametrized over possible
+symmetry backends *or* over possible symmetries, but not both.
+The constrained ("compatible") fixtures are intended if a test should be parametrized over
+possible combinations of a symmetry backend *and* a symmetry it is compatible with.
+They should not be mixed in any single test, as that would generate unnecessarily many tests.
+Whenever applicable, the unconstrained fixtures should be preferred, since e.g. most symmetries
+appear multiple times as values of ``compatible_symmetry`` (same argument for ``compatible_backend``).
+
+
+=============================  ======================  ===========================================
+Fixture                        Depends on / # cases    Description
+=============================  ======================  ===========================================
+np_random                      -                       A numpy random Generator. Use this for
+                                                       reproducibility.
+-----------------------------  ----------------------  -------------------------------------------
+block_backend                  Generates ~2 cases      Goes over all block backends, as str
+                                                       descriptions, valid for ``get_backend``.
+=============================  ======================  ===========================================
+any_symmetry_backend           Generates 3 cases       Goes over all symmetry backends, as str
+                                                       descriptions, valid for ``get_backend``.
+-----------------------------  ----------------------  -------------------------------------------
+any_backend                    block_backend           Goes over all backends.
+                               any_symmetry_backend
+-----------------------------  ----------------------  -------------------------------------------
+any_symmetry                   Generates ~10 cases     Goes over some representative symmetries.
+-----------------------------  ----------------------  -------------------------------------------
+make_any_sectors               any_symmetry            RNG for sectors with ``any_symmetry``.
+                                                       Note that fewer than ``num`` may result.
+                                                       ``make(num, sort=False)``
+-----------------------------  ----------------------  -------------------------------------------
+make_any_space                 any_symmetry            RNG for spaces with ``any_symmetry``.
+                                                       ``make(max_sectors=5, max_mult=5, is_dual=None)``
+-----------------------------  ----------------------  -------------------------------------------
+make_any_block                 any_backend             RNG for blocks of ``any_backend``.
+                                                       ``make(size, real=False)``
+=============================  ======================  ===========================================
+compatible_pairs               Generates ~20 cases     Not an public fixture, only generates
+                                                       the cases. Compatible pairs are built like
+                                                       combinations of ``any_symmetry_backend``
+                                                       and ``any_symmetry``, constrained by
+                                                       compatibility.
+-----------------------------  ----------------------  -------------------------------------------
+compatible_symmetry_backend    compatible_pairs        The symmetry backend of a compatible pair.
+-----------------------------  ----------------------  -------------------------------------------
+compatible_symmetry            compatible_pairs        The symmetry of a compatible pair.
+-----------------------------  ----------------------  -------------------------------------------
+compatible_backend             compatible_pairs        A backend that is compatible with
+                               block_backend           ``compatible_symmetry``.
+-----------------------------  ----------------------  -------------------------------------------
+make_compatible_sectors        compatible_pairs        RNG for sectors with ``compatible_symmetry``.
+                                                       Note that fewer than ``num`` may result.
+                                                       ``make(num, sort=False)``
+-----------------------------  ----------------------  -------------------------------------------
+make_compatible_space          compatible_pairs        RNG for spaces with ``compatible_symmetry``.
+                                                       ``make(max_sectors=5, max_mult=5, is_dual=None)``
+-----------------------------  ----------------------  -------------------------------------------
+make_compatible_block          compatible_backend      RNG for blocks with ``compatible_backend``.
+                                                       ``make(size, real=False)``
+-----------------------------  ----------------------  -------------------------------------------
+make_compatible_tensor         compatible_backend      RNG for tensors with ``compatible_backend``.
+=============================  ======================  ===========================================
+
+The signature for ``make_compatible_tensor`` is
+``make(legs=None, num_legs=None, labels=None, max_blocks=5, max_block_size=5, real=False,
+       empty_ok=False, all_blocks=False, cls=tensors.BlockDiagonalTensor, num_domain_legs=0)``
+
 """
 # Copyright 2023-2023 TeNPy Developers, GNU GPLv3
 
@@ -21,6 +79,22 @@ import numpy as np
 import pytest
 
 from tenpy.linalg import backends, spaces, symmetries, tensors
+
+
+# QUICK CONFIGURATION
+
+_block_backends = ['numpy']  # TODO reactivate 'torch'
+# Note: FusionTree backend is skipped by default. Use ``--run-FusionTree`` CL option to run them.
+_symmetries = {
+    'NoSymm': symmetries.no_symmetry,
+    'U(1)': symmetries.u1_symmetry,
+    'Z2': symmetries.z2_symmetry,
+    'Z4_named': symmetries.ZNSymmetry(4, "My_Z4_symmetry"),
+    'U(1)xZ3': symmetries.ProductSymmetry([symmetries.u1_symmetry, symmetries.z3_symmetry]),
+}
+
+
+# SETUP: command line options etc:
 
 
 def pytest_addoption(parser):
@@ -36,82 +110,269 @@ def pytest_collection_modifyitems(config, items):
             if 'FusionTree' in item.keywords:
                 item.add_marker(skip_FusionTree)
 
-# FIXTURES:
 
+# "UNCONSTRAINED" FIXTURES  ->  independent (mostly) of the other features. no compatibility guarantees.
 
 @pytest.fixture
 def np_random() -> np.random.Generator:
     return np.random.default_rng(seed=12345)
 
 
-@pytest.fixture(params=['numpy']) # TODO: reintroduce 'torch'])
+@pytest.fixture(params=_block_backends)
 def block_backend(request):
     if request.param == 'torch':
         torch = pytest.importorskip('torch', reason='torch not installed')
     return request.param
 
 
-# Note: FusionTree backend is skipped by default. Use ``--run-FusionTree`` CL option to run them.
-@pytest.fixture(params=['no_symmetry', 'abelian',
-                        pytest.param('fusion_tree', marks=pytest.mark.FusionTree)])
-def symmetry_backend(request):
+@pytest.fixture(params=['no_symmetry', 'abelian', pytest.param('fusion_tree', marks=pytest.mark.FusionTree)])
+def any_symmetry_backend(request):
     return request.param
 
 
 @pytest.fixture
-def backend(symmetry_backend, block_backend):
-    return backends.backend_factory.get_backend(symmetry_backend, block_backend)
+def any_backend(block_backend, any_symmetry_backend):
+    return backends.backend_factory.get_backend(any_symmetry_backend, block_backend)
+
+
+@pytest.fixture(params=list(_symmetries.values()), ids=list(_symmetries.keys()))
+def any_symmetry(request):
+    return request.param
 
 
 @pytest.fixture
-def default_backend():
-    return backends.backend_factory.get_backend()
+def make_any_sectors(any_symmetry, np_random):
+    # if the symmetry does not have enough sectors, we return fewer!
+    def make(num: int, sort: bool = False):
+        # return SectorArray
+        return random_symmetry_sectors(any_symmetry, num, sort, np_random=np_random)
+    return make
 
 
-@pytest.fixture(params=[symmetries.no_symmetry,
-                        symmetries.u1_symmetry,
-                        symmetries.z2_symmetry,
-                        symmetries.ZNSymmetry(4, "My_Z4_symmetry"),
-                        symmetries.ProductSymmetry([symmetries.u1_symmetry, symmetries.z3_symmetry]),
-                        # groups.su2_symmetry,  # TODO reintroduce once SU2 is implemented
-                        ],
-                ids=['NoSymm', 'U(1)', 'Z2', 'Z4', 'U(1)xZ3'])
-def symmetry(request, backend):
-    symm = request.param
-    if not backend.supports_symmetry(symm):
-        # TODO find a way to hide this in the report, i.e. to not show it as skipped.
-        #      hope and pray that pytest merges https://github.com/pytest-dev/pytest/issues/3730
-        #      i guess?
-        #
-        #      I also found approaches that use the pytest_collection_modifyitems hook
-        #      but it looks impossible to get the fixture values at collect time
-        pytest.skip('Backend does not support symmetry')
-    return symm
+@pytest.fixture
+def make_any_space(any_symmetry, np_random):
+    def make(max_sectors=5, max_mult=5, is_dual=None):
+        # return VectorSpace
+        return random_vector_space(any_symmetry, max_sectors, max_mult, is_dual, np_random=np_random)
+    return make
 
 
-def random_symmetry_sectors(symmetry: symmetries.Symmetry, np_random: np.random.Generator, len_=None,
-                            sort: bool = False) -> symmetries.SectorArray:
+@pytest.fixture
+def make_any_block(any_backend, np_random):
+    def make(size, real=False):
+        # return Block
+        return random_block(any_backend, size, real=real, np_random=np_random)
+    return make
+
+
+# "COMPATIBLE" FIXTURES  ->  only go over those pairings of backend and symmetry that are compatible
+
+# build the compatible pairs
+_compatible_pairs = {'NoSymmetry': ('no_symmetry', symmetries.no_symmetry)}  # {id: param}
+for _sym_name, _sym in _symmetries.items():
+    if isinstance(_sym, symmetries.AbelianGroup):
+        _compatible_pairs[f'AbelianBackend-{_sym_name}'] = ('abelian', _sym)
+    _compatible_pairs[f'FusionTreeBackend-{_sym_name}'] = pytest.param(
+        ('fusion_tree', _sym), marks=pytest.mark.FusionTree
+    )
+
+@pytest.fixture(params=list(_compatible_pairs.values()), ids=list(_compatible_pairs.keys()))
+def _compatible_backend_symm_pairs(request):
+    """Helper fixture that allows us to generate the *compatible* fixtures.
+
+    Values are pairs (symmetry_backend: str, symmetry: Symmetry)
+    """
+    return request.param
+
+
+@pytest.fixture
+def compatible_symmetry_backend(_compatible_backend_symm_pairs):
+    symmetry_backend, symmetry = _compatible_backend_symm_pairs
+    return symmetry_backend
+
+
+@pytest.fixture
+def compatible_backend(compatible_symmetry_backend, block_backend):
+    return backends.backend_factory.get_backend(compatible_symmetry_backend, block_backend)
+
+
+@pytest.fixture
+def compatible_symmetry(_compatible_backend_symm_pairs):
+    symmetry_backend, symmetry = _compatible_backend_symm_pairs
+    return symmetry
+
+
+@pytest.fixture
+def make_compatible_sectors(compatible_symmetry, np_random):
+    # if the symmetry does not have enough sectors, we return fewer!
+    def make(num: int, sort: bool = False):
+        # returns SectorArray
+        return random_symmetry_sectors(compatible_symmetry, num, sort, np_random=np_random)
+    return make
+
+
+@pytest.fixture
+def make_compatible_space(compatible_symmetry, np_random):
+    def make(max_sectors=5, max_mult=5, is_dual=None):
+        # returns VectorSpace
+        return random_vector_space(compatible_symmetry, max_sectors, max_mult, is_dual, np_random=np_random)
+    return make
+
+
+@pytest.fixture
+def make_compatible_block(compatible_backend, np_random):
+    def make(size, real=False):
+        # returns Block
+        return random_block(compatible_backend, size, real=real, np_random=np_random)
+    return make
+
+
+@pytest.fixture
+def make_compatible_tensor(compatible_backend, compatible_symmetry, make_compatible_block,
+                           make_compatible_space, np_random):
+    """Tensor RNG.
+
+    legs may contain any or all ``None`` entries.
+    Those will be filled randomly, but tuned such that the result can have free parameters.
+    """
+    def make(legs=None, num_legs=None, labels=None,
+             max_blocks=5, max_block_size=5, real=False, empty_ok=False, all_blocks=False,
+             cls=tensors.BlockDiagonalTensor, num_domain_legs=0):
+        # return tensor of type cls
+        
+        # deal with tensor classes with constrained legs first
+        if cls is tensors.DiagonalTensor:
+            if legs is None:
+                legs = [None, None]
+            assert len(legs) == 2
+            if legs[0] is not None:
+                leg = legs[0]
+                assert legs[1] is None or legs[0].can_contract_with(legs[1])
+            elif legs[1] is not None:
+                leg = legs[1].dual
+            else:
+                leg = make_compatible_space(max_sectors=max_blocks, max_mult=max_block_size)
+            res = tensors.DiagonalTensor.from_block_func(
+                make_compatible_block, leg, backend=compatible_backend, func_kwargs=dict(real=real)
+            )
+            if not all_blocks:
+                res = randomly_drop_blocks(res, max_blocks=max_blocks, empty_ok=empty_ok,
+                                        np_random=np_random)
+            res.test_sanity()
+            return res
+        
+        if cls is tensors.Mask:
+            if legs is None:
+                legs = [None, None]
+            assert len(legs) == 2
+            if legs[0] is None and legs[1] is None:
+                large_leg = make_compatible_space(max_sectors=max_blocks, max_mult=max_block_size)
+                small_leg = None
+            elif legs[1] is None:
+                large_leg = legs[0].dual
+                small_leg = None
+            elif legs[0] is None:
+                raise NotImplementedError  # TODO need to generate a larger leg that "contains" legs[1]
+            else:
+                raise NotImplementedError  # TODO need to generate random mask that *fits* legs[1]
+            blockmask = np_random.choice([True, False], large_leg.dim)
+            res = tensors.Mask.from_blockmask(blockmask, large_leg, compatible_backend, labels)
+            res.test_sanity()
+            return res
+
+        # parse legs
+        if legs is None:
+            if num_legs is None and labels is None:
+                raise ValueError('Need to specify number of legs via ``legs``, ``num_legs`` or ``labels``')
+            elif num_legs is None:
+                num_legs = len(labels)
+            elif labels is None:
+                labels = [None] * num_legs
+            else:
+                assert num_legs == len(labels)
+            legs = [None] * num_legs
+        else:
+            if num_legs is None:
+                num_legs = len(legs)
+            assert num_legs == len(legs)
+            if labels is None:
+                labels = [None] * num_legs
+            assert len(labels) == num_legs
+        
+        # fill in missing legs
+        missing_leg_pos = list(np_random.permuted([i for i, l in enumerate(legs) if l is None]))
+        while len(missing_leg_pos) > 1:
+            which = missing_leg_pos.pop()
+            legs[which] = make_compatible_space(max_sectors=max_blocks, max_mult=max_block_size)
+        if len(missing_leg_pos) > 0:
+            which, = missing_leg_pos
+            if len(legs) == 1:
+                new_leg = make_compatible_space(max_sectors=max_blocks, max_mult=max_block_size)
+                # make sure leg has the trivial space, so we can allow some blocks
+                if new_leg.sector_multiplicity(compatible_symmetry.trivial_sector) == 0:
+                    sectors = new_leg._non_dual_sectors
+                    sectors[np_random.choice(len(sectors))] = compatible_symmetry.trivial_sector
+                    new_leg = spaces.VectorSpace(new_leg.symmetry, sectors, new_leg.multiplicities,
+                                                 new_leg.basis_perm)
+            else:
+                new_leg = find_compatible_leg(legs[:which] + legs[which + 1:],
+                                              max_sectors=max_blocks, max_mult=max_block_size)
+            legs[which] = new_leg
+        
+        if cls is tensors.BlockDiagonalTensor:
+            res = tensors.BlockDiagonalTensor.from_block_func(
+                make_compatible_block, legs, compatible_backend, labels,
+                func_kwargs=dict(real=real), num_domain_legs=num_domain_legs
+            )
+            if not all_blocks:
+                res = randomly_drop_blocks(res, max_blocks, empty_ok=empty_ok, np_random=np_random)
+            res.test_sanity()
+            return res
+        
+        if cls is tensors.ChargedTensor:
+            dummy_leg = make_compatible_space(max_sectors=1, max_mult=1, is_dual=False)
+            res = tensors.ChargedTensor.from_block_func(
+                make_compatible_block, legs, dummy_leg, compatible_backend, labels,
+                func_kwargs=dict(real=real), num_domain_legs=num_domain_legs
+            )
+            if not all_blocks:
+                res.invariant_part = randomly_drop_blocks(res.invariant_part, max_blocks,
+                                                          empty_ok=empty_ok, np_random=np_random)
+            res.test_sanity()
+            return res
+        raise ValueError(f'Invalid tensor cls: {cls}')
+    return make
+
+# RANDOM GENERATION
+
+def random_block(backend, size, real=False, np_random=np.random.default_rng(0)):
+    block = np_random.normal(size=size)
+    if not real:
+        block = block + 1.j * np_random.normal(size=size)
+    return backend.block_from_numpy(block)
+
+
+def random_symmetry_sectors(symmetry: symmetries.Symmetry, num: int, sort: bool = False,
+                            np_random=np.random.default_rng()) -> symmetries.SectorArray:
     """random unique symmetry sectors, optionally sorted"""
-    if len_ is None:
-        len_ = np_random.integers(3,7)
     if isinstance(symmetry, symmetries.SU2Symmetry):
-        res = np.arange(0, 2*len_, 2, dtype=int)[:, np.newaxis]
+        res = np.arange(0, 2*num, 2, dtype=int)[:, np.newaxis]
     elif isinstance(symmetry, symmetries.U1Symmetry):
-        vals = list(range(-len_, len_)) + [123]
-        res = np_random.choice(vals, replace=False, size=(len_, 1))
+        vals = list(range(-num, num)) + [123]
+        res = np_random.choice(vals, replace=False, size=(num, 1))
     elif symmetry.num_sectors < np.inf:
-        if symmetry.num_sectors <= len_:
+        if symmetry.num_sectors <= num:
             res = np_random.permutation(symmetry.all_sectors())
         else:
-            which = np_random.choice(symmetry.num_sectors, replace=False, size=len_)
+            which = np_random.choice(symmetry.num_sectors, replace=False, size=num)
             res = symmetry.all_sectors()[which, :]
     elif isinstance(symmetry, symmetries.ProductSymmetry):
-        factor_len = max(3, len_ // len(symmetry.factors))
-        factor_sectors = [random_symmetry_sectors(factor, np_random, factor_len)
+        factor_len = max(3, num // len(symmetry.factors))
+        factor_sectors = [random_symmetry_sectors(factor, factor_len, np_random=np_random)
                           for factor in symmetry.factors]
         combs = np.indices([len(s) for s in factor_sectors]).T.reshape((-1, len(factor_sectors)))
-        if len(combs) > len_:
-            combs = np_random.choice(combs, replace=False, size=len_)
+        if len(combs) > num:
+            combs = np_random.choice(combs, replace=False, size=num)
         res = np.hstack([fs[i] for fs, i in zip(factor_sectors, combs.T)])
     else:
         pytest.skip("don't know how to get symmetry sectors")  # raises Skipped
@@ -121,19 +382,11 @@ def random_symmetry_sectors(symmetry: symmetries.Symmetry, np_random: np.random.
     return res
 
 
-@pytest.fixture
-def symmetry_sectors_rng(symmetry, np_random):
-    def generator(size: int, sort: bool = False):
-        """generate random symmetry sectors"""
-        return random_symmetry_sectors(symmetry, np_random, len_=size, sort=sort)
-    return generator
-
-
 def random_vector_space(symmetry, max_num_blocks=5, max_block_size=5, is_dual=None, np_random=None):
     if np_random is None:
         np_random = np.random.default_rng()
-    len_ = np_random.integers(1, max_num_blocks, endpoint=True)
-    sectors = random_symmetry_sectors(symmetry, np_random, len_, sort=True)
+    num_sectors = np_random.integers(1, max_num_blocks, endpoint=True)
+    sectors = random_symmetry_sectors(symmetry, num_sectors, sort=True, np_random=np_random)
     # if there are very few sectors, e.g. for symmetry==NoSymmetry(), dont let them be one-dimensional
     min_mult = min(max_block_size, max(4 - len(sectors), 1))
     mults = np_random.integers(min_mult, max_block_size, size=(len(sectors),), endpoint=True)
@@ -148,181 +401,82 @@ def random_vector_space(symmetry, max_num_blocks=5, max_block_size=5, is_dual=No
     return res
 
 
-@pytest.fixture
-def vector_space_rng(symmetry, np_random):
-    def generator(max_num_blocks: int = 4, max_block_size=8, is_dual=None):
-        """generate random spaces.VectorSpace instances."""
-        return random_vector_space(symmetry, max_num_blocks, max_block_size, is_dual=is_dual,
-                                   np_random=np_random)
-    return generator
+def randomly_drop_blocks(res: tensors.BlockDiagonalTensor | tensors.DiagonalTensor,
+                         max_blocks: int | None, empty_ok: bool, np_random=np.random.default_rng()):
+    
+    if isinstance(res.backend, backends.NoSymmetryBackend):
+        # nothing to do
+        return res
+
+    num_blocks = len(res.data.blocks)
+    min_blocks = 0 if empty_ok else 1
+    if max_blocks is None:
+        max_blocks = num_blocks
+    else:
+        max_blocks = min(num_blocks, max_blocks)
+    if max_blocks < min_blocks:
+        return res
+    
+    if np_random.uniform() < 0.5:
+        # with 50% chance, keep maximum number
+        num_keep = max_blocks
+    else:
+        num_keep = np_random.integers(min_blocks, max_blocks, endpoint=True)
+    if num_keep == num_blocks:
+        return res
+    which = np_random.choice(num_blocks, size=num_keep, replace=False, shuffle=False)
+    which = np.sort(which)
+
+    if isinstance(res.backend, backends.AbelianBackend):
+        res.data = backends.AbelianBackendData(
+            dtype=res.dtype,
+            blocks=[res.data.blocks[n] for n in which],
+            block_inds=res.data.block_inds[which],
+            is_sorted=True
+        )
+        return res
+
+    if isinstance(res.backend, backends.FusionTreeBackend):
+        res.data = backends.FusionTreeData(
+            coupled_sectors=res.data.coupled_sectors[which, :],
+            blocks=[res.data.blocks[n] for n in which],
+            domain=res.data.domain, codomain=res.data.codomain, dtype=res.data.dtype
+        )
+        return res
+
+    raise ValueError('Backend not recognized')
 
 
-@pytest.fixture
-def block_rng(backend, np_random):
-    def generator(size, real=True):
-        block = np_random.normal(size=size)
-        if not real:
-            block = block + 1.j * np_random.normal(size=size)
-        return backend.block_from_numpy(block)
-    return generator
+def find_compatible_leg(others, max_sectors: int, max_mult: int, extra_sectors=None,
+                        np_random=np.random.default_rng()):
+    """Find a leg such that ``[*others, new_leg]`` allows non-zero tensors."""
+    prod = spaces.ProductSpace(others).as_VectorSpace()
+    sectors = prod.symmetry.dual_sectors(prod.sectors)
+    mults = prod.multiplicities
+    if len(sectors) > max_sectors:
+        which = np_random.choice(len(sectors), size=max_sectors, replace=False, shuffle=False)
+        sectors = sectors[which, :]
+        mults = mults[which]
+    mults = np.maximum(mults, max_mult)
+    if extra_sectors is not None:
+        # replace some sectors by extra_sectors
+        duplicates = np.any(np.all(extra_sectors[None, :, :] == sectors[:, None, :], axis=2), axis=0)
+        extra_sectors = extra_sectors[np.logical_not(duplicates)]
+        # replace some sectors
+        min_replace = max(1, int(.2 * len(sectors)))
+        max_replace = min(int(.5 * len(sectors)), len(extra_sectors))
+        if max_replace >= min_replace:
+            num_replace = np_random.integers(min_replace, max_replace, endpoint=True)
+            which = np_random.choice(len(sectors), size=num_replace, replace=False)
+            sectors[which, :] = extra_sectors[:num_replace, :]
+    # guarantee sorting
+    order = np.lexsort(sectors.T)
+    sectors = sectors[order]
+    mults = mults[order]
+    
+    res = spaces.VectorSpace(prod.symmetry, sectors, mults)
 
+    # check that it actually worked
+    assert spaces.ProductSpace([*others, res]).sector_multiplicity(prod.symmetry.trivial_sector) > 0
 
-def abelian_data_drop_some_blocks(data, np_random, empty_ok=False, all_blocks=False):
-    """Randomly drop some blocks, in-place"""
-    # unless all_blocks=True, drop some blocks with 50% probability
-    if (not all_blocks) and (np_random.random() < .5):
-        keep = (np_random.random(len(data.blocks)) < 0.5)
-        if not np.any(keep):
-            # keep at least one
-            # note that using [0:1] instead of [0] is robust in case ``keep.shape == (0,)``
-            keep[0:1] = True
-        data.blocks = [block for block, k in zip(data.blocks, keep) if k]
-        data.block_inds = data.block_inds[keep]
-    if (not empty_ok) and (len(data.blocks) == 0):
-        raise ValueError('Empty data was generated. If thats ok, suppress with `empty_ok=True`')
-    return data
-
-
-@pytest.fixture
-def backend_data_rng(backend, block_rng, np_random):
-    """Generate random data for a Tensor"""
-    def generator(legs, real=True, empty_ok=False, all_blocks=False, num_domain_legs=0):
-        data = backend.from_block_func(block_rng, legs, num_domain_legs=num_domain_legs,
-                                       func_kwargs=dict(real=real))
-        if isinstance(backend, backends.abelian.AbelianBackend):
-            data = abelian_data_drop_some_blocks(data, np_random=np_random, empty_ok=empty_ok,
-                                                 all_blocks=all_blocks)
-        return data
-    return generator
-
-
-@pytest.fixture
-def tensor_rng(backend, symmetry, np_random, block_rng, vector_space_rng, symmetry_sectors_rng):
-    """TODO proper documentation
-
-    ChargedTensor: only creates one-dimensional dummy legs
-    """
-    def generator(legs=None, num_legs=None, labels=None, max_num_blocks=5, max_block_size=5,
-                  real=True, empty_ok=False, all_blocks=False, cls=tensors.BlockDiagonalTensor,
-                  num_domain_legs=0):
-        # parse legs
-        if num_legs is None:
-            if legs is not None:
-                num_legs = len(legs)
-            elif labels is not None:
-                num_legs = len(labels)
-            else:
-                num_legs = 2
-        if labels is None:
-            labels = [None] * num_legs
-        else:
-            assert len(labels) == num_legs
-        if legs is None:
-            legs = [None] * num_legs
-        else:
-            assert len(legs) == num_legs
-        legs = list(legs)
-
-        # deal with other classes
-        if cls is tensors.DiagonalTensor:
-            second_leg_dual = True
-            if len(legs) == 1:
-                leg = legs[0]
-            elif len(legs) == 2:
-                if legs[0] is None:
-                    leg = legs[1]
-                elif legs[1] is None:
-                    leg = legs[0]
-                else:
-                    leg = legs[0]
-                    assert leg.is_equal_or_dual(legs[1])
-                    second_leg_dual = (leg.is_dual != legs[1].is_dual)
-            else:
-                raise ValueError('Invalid legs. Expected none, one or two')
-            if leg is None:
-                leg = vector_space_rng(max_num_blocks, max_block_size)
-            assert num_legs in [None, 2]
-            data = backend.diagonal_from_block_func(block_rng, leg=leg, func_kwargs=dict(real=real))
-            if isinstance(backend, backends.abelian.AbelianBackend):
-                data = abelian_data_drop_some_blocks(data, np_random=np_random, empty_ok=empty_ok,
-                                                     all_blocks=all_blocks)
-            return tensors.DiagonalTensor(data, first_leg=leg, second_leg_dual=second_leg_dual,
-                                          backend=backend, labels=labels)
-        elif cls is tensors.ChargedTensor:
-            sectors = symmetry_sectors_rng(1)
-            dummy_leg = spaces.VectorSpace(symmetry=symmetry, sectors=sectors, multiplicities=[1])
-            inv_part = generator(legs=legs + [dummy_leg], labels=labels + ['!'],
-                                 max_num_blocks=max_num_blocks, max_block_size=max_block_size,
-                                 real=real, empty_ok=empty_ok, all_blocks=all_blocks,
-                                 cls=tensors.BlockDiagonalTensor)
-            return tensors.ChargedTensor(inv_part)
-        elif cls is tensors.Mask:
-            assert len(legs) == 1
-            if legs[0] is None:
-                leg = vector_space_rng(max_num_blocks, max_block_size)
-            else:
-                leg = legs[0]
-            leg: spaces.VectorSpace
-            blockmask = np_random.choice([True, False], size=leg.dim)
-            if np.all(blockmask):
-                blockmask[len(blockmask) // 2] = False
-            if not np.any(blockmask):
-                blockmask[len(blockmask) // 2] = True
-            if isinstance(backend, backends.abelian.AbelianBackend):
-                # "drop" some blocks, i.e. set them to False
-                if (not all_blocks) and (np_random.random() < .5):
-                    drop = (np_random.random(leg.num_sectors) < 0.5)
-                    if np.all(drop):  # keep at least one
-                        drop[0:1] = False
-                    for slc in leg.slices[drop]:
-                        blockmask[leg.basis_perm[slice(*slc)]] = False
-                if (not empty_ok) and (not np.any(blockmask)):
-                    msg = 'Empty data was generated. If thats ok, suppress with `empty_ok=True`'
-                    raise ValueError(msg)
-            return tensors.Mask.from_blockmask(blockmask, large_leg=leg, backend=backend)
-        elif cls is not tensors.BlockDiagonalTensor:
-            raise ValueError(f'Illegal tensor cls: {cls}')
-
-        # fill in missing legs
-        missing_legs = [i for i, leg in enumerate(legs) if leg is None]
-        last_missing = missing_legs[-1] if len(missing_legs) > 0 and len(legs) > 1 else -1
-        for i, leg in enumerate(legs):
-            if leg is None:
-                if i != last_missing:
-                    legs[i] = vector_space_rng(max_num_blocks, max_block_size)
-            else:
-                legs[i] = backend.add_leg_metadata(leg)
-        if len(legs) == len(missing_legs) == 1:
-            # the recipe below assumes that there are some non-missing legs.
-            # so we need to deal with this special case first.
-            compatible_leg = vector_space_rng(max_num_blocks, max_block_size)
-            # ensure that the leg has the trivial sector, so we can have blocks
-            if not np.any(np.all(compatible_leg.sectors == symmetry.trivial_sector[None, :], axis=1)):
-                compatible_leg._non_dual_sectors[0, :] = symmetry.trivial_sector
-            legs[last_missing] = compatible_leg
-        elif last_missing != -1:
-            # generate compatible leg such that tensor can have non-zero blocks given the charges
-            compatible = legs[:]
-            compatible.pop(last_missing)
-            compatible_leg = spaces.ProductSpace(compatible, backend=backend).as_VectorSpace().dual
-            if compatible_leg.num_sectors > max_num_blocks:
-                keep = np_random.choice(compatible_leg.num_sectors, max_num_blocks, replace=False)
-                keep = np.sort(keep)
-                compatible_leg = spaces.VectorSpace(
-                    symmetry=compatible_leg.symmetry,
-                    sectors=compatible_leg._non_dual_sectors[keep, :],
-                    multiplicities=np.maximum(compatible_leg.multiplicities[keep], max_block_size),
-                    is_real=compatible_leg.is_real,
-                    _is_dual=compatible_leg.is_dual
-                )
-            legs[last_missing] = compatible_leg
-        
-        data = backend.from_block_func(block_rng, legs, num_domain_legs=num_domain_legs,
-                                       func_kwargs=dict(real=real))
-        if isinstance(backend, backends.abelian.AbelianBackend):
-            data = abelian_data_drop_some_blocks(data, np_random=np_random, empty_ok=empty_ok,
-                                                 all_blocks=all_blocks)
-
-        return tensors.BlockDiagonalTensor(data, backend=backend, legs=legs,
-                                           num_domain_legs=num_domain_legs, labels=labels)
-    return generator
+    return res

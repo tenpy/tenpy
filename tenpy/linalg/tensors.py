@@ -1730,7 +1730,7 @@ class ChargedTensor(Tensor):
             dtype = invariant_part.dtype
         else:
             dtype = Dtype.common(invariant_part.dtype,
-                                 invariant_part.backend.get_dtype_from_data(dummy_leg_state))
+                                 invariant_part.backend.block_dtype(dummy_leg_state))
         if invariant_part.labels[-1] is None:
             invariant_part = invariant_part.copy(deep=False)
             invariant_part.set_labels(invariant_part.labels[:-1] + [self._DUMMY_LABEL])

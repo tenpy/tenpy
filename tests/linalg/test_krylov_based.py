@@ -9,9 +9,10 @@ from tenpy.linalg import krylov_based, sparse, tensors, random_matrix, spaces
 
 
 @pytest.mark.parametrize(['N_cache', 'tol'], [(10, 5.e-13), (20, 5.e-14)])
-def test_lanczos_gs(backend, vector_space_rng, N_cache, tol):
+def test_lanczos_gs(compatible_backend, make_compatible_space, N_cache, tol):
     # generate hermitian test array
-    leg = vector_space_rng()
+    leg = make_compatible_space()
+    backend = compatible_backend
     H = tensors.BlockDiagonalTensor.from_numpy_func(random_matrix.GUE, legs=[leg, leg.dual], backend=backend)
     H_np = H.to_numpy_ndarray()
     H_op = sparse.TensorLinearOperator(H, which_leg=1)
@@ -85,8 +86,9 @@ def test_lanczos_arpack():
 
 
 @pytest.mark.parametrize(['N_cache', 'tol'], [(10, 5.e-13), (20, 5.e-14)])
-def test_lanczos_evolve(backend, vector_space_rng, N_cache, tol):
-    leg = vector_space_rng()
+def test_lanczos_evolve(compatible_backend, make_compatible_space, N_cache, tol):
+    backend = compatible_backend
+    leg = make_compatible_space()
     H = tensors.BlockDiagonalTensor.from_numpy_func(random_matrix.GUE, legs=[leg, leg.dual], backend=backend)
     H_op = sparse.TensorLinearOperator(H, which_leg=1)
     H_np = H.to_numpy_ndarray()
@@ -110,8 +112,9 @@ def test_lanczos_evolve(backend, vector_space_rng, N_cache, tol):
 
 
 @pytest.mark.parametrize('which', ['LM', 'SR', 'LR'])
-def test_arnoldi(backend, vector_space_rng, which, N_max=20):
-    leg = vector_space_rng()
+def test_arnoldi(compatible_backend, make_compatible_space, which, N_max=20):
+    backend = compatible_backend
+    leg = make_compatible_space()
     tol = 5.e-14 if leg.dim <= N_max else 1.e-10
     # if looking for small/large real part, ensure hermitian H
     func = random_matrix.GUE if which[-1] == 'R' else random_matrix.standard_normal_complex

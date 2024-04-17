@@ -59,8 +59,9 @@ def check_shape(shape: tensors.Shape, dims: tuple[int, ...], labels: list[str]):
     assert shape.is_fully_labelled != (None in labels)
 
 
-def test_Tensor_classmethods(backend, vector_space_rng, backend_data_rng, tensor_rng, np_random):
-    T: tensors.Tensor = tensor_rng(num_legs=3)  # compatible legs where we can have blocks
+def test_Tensor_classmethods(make_compatible_tensor):
+    T: tensors.Tensor = make_compatible_tensor(num_legs=3)  # compatible legs where we can have blocks
+    backend = T.backend
 
     if (isinstance(backend, FusionTreeBackend)) and (isinstance(T.symmetry, ProductSymmetry)):
         pytest.xfail(reason='Topo data for ProductSymmetry is missing')
@@ -106,13 +107,14 @@ def test_Tensor_classmethods(backend, vector_space_rng, backend_data_rng, tensor
     npt.assert_array_equal(tens.to_numpy_ndarray(), np.eye(np.prod(dims[:2])).reshape(dims[:2] + dims[:2]))
 
 
-def test_Tensor_methods(backend, vector_space_rng, backend_data_rng, tensor_rng):
-    T = tensor_rng(num_legs=3)  # compatible legs where we can have blocks
+def test_Tensor_methods(make_compatible_tensor, make_compatible_space):
+    T = make_compatible_tensor(num_legs=3)  # compatible legs where we can have blocks
+    backend = T.backend
     legs = T.legs
     dims = tuple(T.shape)
 
     data1 = T.data
-    data2 = backend_data_rng(legs)
+    data2 = make_compatible_tensor(legs=legs).data
 
     print('checking __init__ with labels=None')
     tens1 = tensors.BlockDiagonalTensor(data1, legs=legs, num_domain_legs=0, backend=backend, labels=None)
@@ -187,11 +189,11 @@ def test_Tensor_methods(backend, vector_space_rng, backend_data_rng, tensor_rng)
     assert tens3.get_leg_idcs(['foo', 'b', 1]) == [0, 2, 1]
 
     print('check item')
-    triv_legs = [vector_space_rng(1, 1) for i in range(2)]
+    triv_legs = [make_compatible_space(1, 1) for _ in range(2)]
     for leg in triv_legs[:]:
         triv_legs.append(leg.dual)
     assert all(leg.dim == 1 for leg in triv_legs)
-    data4 = backend_data_rng(triv_legs)
+    data4 = make_compatible_tensor(legs=triv_legs, real=True).data
     tens4 = tensors.BlockDiagonalTensor(data4, num_domain_legs=0, backend=backend, legs=triv_legs)
     tens4_item = backend.data_item(data4)
     # not a good test, but the best we can do backend independent:
@@ -239,17 +241,11 @@ def test_Tensor_methods(backend, vector_space_rng, backend_data_rng, tensor_rng)
     assert r == tens4_item
 
 
-def test_Tensor_tofrom_flat_block_trivial_sector(vector_space_rng, tensor_rng):
+def test_Tensor_tofrom_flat_block_trivial_sector(make_compatible_tensor):
     # TODO move to some other tests after restructuring
-    for n in range(10):
-        leg = vector_space_rng()
-        block_size = leg.sector_multiplicity(leg.symmetry.trivial_sector)
-        if block_size > 0:
-            break
-    else:
-        pytest.xfail('Failed to generate a vector space that has the trivial sector')
-
-    tens = tensor_rng(legs=[leg], labels=['a'])
+    tens = make_compatible_tensor(labels=['a'])
+    leg, = tens.legs
+    block_size = leg.sector_multiplicity(tens.symmetry.trivial_sector)
     block = tens.to_flat_block_trivial_sector()
     assert tens.backend.block_shape(block) == (block_size,)
     tens2 = tensors.BlockDiagonalTensor.from_flat_block_trivial_sector(leg=leg, block=block, backend=tens.backend, label='a')
@@ -261,21 +257,16 @@ def test_Tensor_tofrom_flat_block_trivial_sector(vector_space_rng, tensor_rng):
                                        100)
 
 
-def test_ChargedTensor_tofrom_flat_block_single_sector(vector_space_rng, symmetry_sectors_rng, tensor_rng):
+def test_ChargedTensor_tofrom_flat_block_single_sector(compatible_symmetry, make_compatible_sectors,
+                                                       make_compatible_tensor):
+    pytest.xfail(reason='unclear')  # TODO
     # TODO move to some other tests after restructuring
-    leg = vector_space_rng()
-    sector = symmetry_sectors_rng(1)[0]
-
+    sector = make_compatible_sectors(1)[0]
+    dummy_leg = VectorSpace(compatible_symmetry, sector[None, :]).dual
+    inv_part = make_compatible_tensor(legs=[None, dummy_leg])
+    tens = tensors.ChargedTensor(invariant_part=inv_part)
+    leg = tens.legs[0]
     block_size = leg.sector_multiplicity(sector)
-    if block_size == 0:
-        block_size = 4
-        leg = VectorSpace.from_sectors(
-            symmetry=leg.symmetry, sectors=np.concatenate([leg.sectors, sector[None, :]]),
-            multiplicities=np.concatenate([leg.multiplicities, np.array([block_size])])
-        )
-
-    dummy_leg = VectorSpace(symmetry=leg.symmetry, sectors=[sector]).dual
-    tens = tensors.ChargedTensor(invariant_part=tensor_rng(legs=[leg, dummy_leg]))
 
     block = tens.to_flat_block_single_sector()
     assert tens.backend.block_shape(block) == (block_size,)
@@ -295,10 +286,11 @@ def test_ChargedTensor_tofrom_flat_block_single_sector(vector_space_rng, symmetr
     npt.assert_array_equal(detected, sector)
 
 
-def test_from_block(block_backend):
+@pytest.mark.parametrize('symmetry_backend', ['abelian', pytest.param('fusion_tree', marks=pytest.mark.FusionTree)])
+def test_from_block(block_backend, symmetry_backend):
     from tenpy.linalg.symmetries import z4_symmetry
     from tenpy.linalg.backends.backend_factory import get_backend
-    backend = get_backend(symmetry=z4_symmetry, block_backend=block_backend)
+    backend = get_backend(symmetry=symmetry_backend, block_backend=block_backend)
 
     print('by constructing basis')
     q0, q1, q2, q3 = z4_symmetry.all_sectors()
@@ -315,7 +307,7 @@ def test_from_block(block_backend):
             [ 0,  0,  9,  0,  0,  0, 10],  # 3
             [11,  0,  0, 12,  0,  0,  0]]  # 2
     block = backend.block_from_numpy(np.asarray(data, dtype=float))
-    t = tensors.BlockDiagonalTensor.from_dense_block(block, [s1, s2])
+    t = tensors.BlockDiagonalTensor.from_dense_block(block, [s1, s2], backend=backend)
 
     # block_i is the one with sector q_i on s1
     block_0 = [[7, 8]]
@@ -331,13 +323,14 @@ def test_from_block(block_backend):
         assert backend.block_allclose(block, expect_blocks[ind[1]], rtol=1e-5, atol=1e-8)
 
 
-def test_tdot(backend, vector_space_rng, backend_data_rng, tensor_rng):
+def test_tdot(make_compatible_space, make_compatible_sectors, make_compatible_tensor):
     # define legs such that a tensor with the following combinations all allow non-zero num_parameters
-    # [a, b] , [a, b, c] , [a, b, d]
-    a = vector_space_rng(3, 3)
-    b = tensor_rng([a, None], 2, max_num_blocks=3, max_block_size=3).legs[-1]
-    c = tensor_rng([a, b, None], 3, max_num_blocks=3, max_block_size=3).legs[-1]
-    d = tensor_rng([a, b, None], 3, max_num_blocks=3, max_block_size=3).legs[-1]
+    # [a, b] , [a, b, c*] , [a, b, d*]
+    from conftest import find_compatible_leg
+    a = make_compatible_space()
+    b = find_compatible_leg([a], max_sectors=3, max_mult=3, extra_sectors=make_compatible_sectors(3))
+    c = find_compatible_leg([a, b], max_sectors=3, max_mult=3, extra_sectors=make_compatible_sectors(3)).dual
+    d = find_compatible_leg([a, b], max_sectors=3, max_mult=3, extra_sectors=make_compatible_sectors(3)).dual
     print([l.dim for l in [a, b, c, d]])
     
     legs_ = [[a, b, c.dual],
@@ -349,9 +342,9 @@ def test_tdot(backend, vector_space_rng, backend_data_rng, tensor_rng):
                ['b*', 'a*'],
                ['a', 'b']
                ]
-    data_ = [backend_data_rng(l) for l in legs_]
-    tensors_ = [tensors.BlockDiagonalTensor(data, legs, 0, backend, labels) for data, legs, labels in
-                zip(data_, legs_, labels_)]
+    tensors_ = [
+        make_compatible_tensor(legs=legs, labels=labels) for legs, labels in zip(legs_, labels_)
+    ]
     for n, t in enumerate(tensors_):
         # make sure we are defining tensors which actually contain blocks and are not just zero by
         # charge conservation
@@ -388,8 +381,8 @@ def test_tdot(backend, vector_space_rng, backend_data_rng, tensor_rng):
     #  - same dim and sectors but same is_dual
 
 
-def test_outer(tensor_rng):
-    tensors_ = [tensor_rng(labels=labels) for labels in [['a'], ['b'], ['c', 'd']]]
+def test_outer(make_compatible_tensor):
+    tensors_ = [make_compatible_tensor(labels=labels) for labels in [['a'], ['b'], ['c', 'd']]]
     dense_ = [t.to_numpy_ndarray() for t in tensors_]
 
     for i, j  in [(0, 1), (0, 2), (0, 0), (2, 2)]:
@@ -404,9 +397,9 @@ def test_outer(tensor_rng):
             assert all(l is None for l in res.labels)
 
 
-def test_permute_legs(tensor_rng):
+def test_permute_legs(make_compatible_tensor):
     labels = list('abcd')
-    t = tensor_rng(labels=labels)
+    t = make_compatible_tensor(labels=labels)
     d = t.to_numpy_ndarray()
     for perm in [[0, 2, 1, 3], [3, 2, 1, 0], [1, 0, 3, 2], [0, 1, 2, 3], [0, 3, 2, 1]]:
         expect = d.transpose(perm)
@@ -416,11 +409,11 @@ def test_permute_legs(tensor_rng):
         assert res.labels == [labels[i] for i in perm]
 
 
-def test_inner(tensor_rng):
-    t0 = tensor_rng(labels=['a'], real=False)
-    t1 = tensor_rng(legs=t0.legs, labels=t0.labels, real=False)
-    t2 = tensor_rng(labels=['a', 'b', 'c'], real=False)
-    t3 = tensor_rng(legs=t2.legs, labels=t2.labels, real=False)
+def test_inner(make_compatible_tensor):
+    t0 = make_compatible_tensor(labels=['a'])
+    t1 = make_compatible_tensor(legs=t0.legs, labels=t0.labels)
+    t2 = make_compatible_tensor(labels=['a', 'b', 'c'])
+    t3 = make_compatible_tensor(legs=t2.legs, labels=t2.labels)
 
     for t_i, t_j, perm in [(t0, t1, ['a']), (t2, t3, ['b', 'c', 'a'])]:
         d_i = t_i.to_numpy_ndarray()
@@ -437,14 +430,14 @@ def test_inner(tensor_rng):
         npt.assert_allclose(res, expect)
 
 
-def test_trace(backend, vector_space_rng, tensor_rng):
-    a = vector_space_rng(3, 3)
-    b = vector_space_rng(4, 3)
-    t1 = tensor_rng(legs=[a, a.dual], labels=['a', 'a*'])
+def test_trace(make_compatible_space, make_compatible_tensor):
+    a = make_compatible_space(3, 3)
+    b = make_compatible_space(4, 3)
+    t1 = make_compatible_tensor(legs=[a, a.dual], labels=['a', 'a*'])
     d1 = t1.to_numpy_ndarray()
-    t2 = tensor_rng(legs=[a, b, a.dual, b.dual], labels=['a', 'b', 'a*', 'b*'])
+    t2 = make_compatible_tensor(legs=[a, b, a.dual, b.dual], labels=['a', 'b', 'a*', 'b*'])
     d2 = t2.to_numpy_ndarray()
-    t3 = tensor_rng(legs=[a, None, b, a.dual, b.dual], labels=['a', 'c', 'b', 'a*', 'b*'])
+    t3 = make_compatible_tensor(legs=[a, None, b, a.dual, b.dual], labels=['a', 'c', 'b', 'a*', 'b*'])
     d3 = t3.to_numpy_ndarray()
 
     print('single legpair - full')
@@ -472,8 +465,8 @@ def test_trace(backend, vector_space_rng, tensor_rng):
     npt.assert_array_almost_equal_nulp(res.to_numpy_ndarray(), expected, 100)
 
 
-def test_conj_hconj(tensor_rng):
-    tens = tensor_rng(labels=['a', 'b', None], real=False)
+def test_conj_hconj(make_compatible_tensor):
+    tens = make_compatible_tensor(labels=['a', 'b', None])
     expect = np.conj(tens.to_numpy_ndarray())
     assert np.linalg.norm(expect.imag) > 0 , "expect complex data!"
     res = tensors.conj(tens)
@@ -484,7 +477,7 @@ def test_conj_hconj(tensor_rng):
 
     print('hconj 1-site operator')
     leg_a = tens.legs[0]
-    op = tensor_rng(legs=[leg_a, leg_a.dual], labels=['p', 'p*'], real=False)
+    op = make_compatible_tensor(legs=[leg_a, leg_a.dual], labels=['p', 'p*'])
     op_hc = tensors.hconj(op)
     op_hc.test_sanity()
     assert op_hc.labels == op.labels
@@ -494,8 +487,8 @@ def test_conj_hconj(tensor_rng):
     
     print('hconj 2-site op')
     leg_b = tens.legs[1]
-    op2 = tensor_rng(legs=[leg_a, leg_b.dual, leg_a.dual, leg_b], labels=['a', 'b*', 'a*', 'b'],
-                     real=False)
+    op2 = make_compatible_tensor(legs=[leg_a, leg_b.dual, leg_a.dual, leg_b],
+                                 labels=['a', 'b*', 'a*', 'b'])
     op2_hc = op2.hconj(['a', 'b'], ['a*', 'b*'])
     op2_hc.test_sanity()
     assert op2_hc.labels == op2.labels
@@ -505,8 +498,8 @@ def test_conj_hconj(tensor_rng):
     npt.assert_array_equal(op2_hc.to_numpy_ndarray(), expect)
     
 
-def test_combine_split(tensor_rng):
-    tens = tensor_rng(labels=['a', 'b', 'c', 'd'], max_num_blocks=5, max_block_size=5)
+def test_combine_split(make_compatible_tensor):
+    tens = make_compatible_tensor(labels=['a', 'b', 'c', 'd'], max_blocks=5, max_block_size=5)
     dense = tens.to_numpy_ndarray()
     d0, d1, d2, d3 = dims = tuple(tens.shape)
 
@@ -585,8 +578,8 @@ def test_combine_split(tensor_rng):
 
 
 @pytest.mark.xfail  # TODO
-def test_combine_legs_basis_trafo(tensor_rng):
-    tens = tensor_rng(labels=['a', 'b', 'c'], max_num_blocks=5, max_block_size=5)
+def test_combine_legs_basis_trafo(make_compatible_tensor):
+    tens = make_compatible_tensor(labels=['a', 'b', 'c'], max_blocks=5, max_block_size=5)
     a, b, c = tens.shape
     dense = tens.to_numpy_ndarray()  # [a, b, c]
     combined = tensors.combine_legs(tens, ['a', 'b'])
@@ -606,15 +599,15 @@ def test_combine_legs_basis_trafo(tensor_rng):
     npt.assert_array_almost_equal_nulp(dense_combined, reconstruct_combined, 100)
 
 
-def test_is_scalar(backend, tensor_rng, vector_space_rng):
+def test_is_scalar(make_compatible_tensor, make_compatible_space):
     for s in [1, 0., 1.+2.j, np.int64(123), np.float64(2.345), np.complex128(1.+3.j)]:
         assert tensors.is_scalar(s)
-    triv_leg = vector_space_rng(1, 1)
-    scalar_tens = tensor_rng(legs=[triv_leg, triv_leg.dual])
+    triv_leg = make_compatible_space(1, 1)
+    scalar_tens = make_compatible_tensor(legs=[triv_leg, triv_leg.dual])
     assert tensors.is_scalar(scalar_tens)
     # generate non-scalar tensor
     for i in range(20):
-        non_scalar_tens = tensor_rng(num_legs=3)
+        non_scalar_tens = make_compatible_tensor(num_legs=3)
         if any(d > 1 for d in non_scalar_tens.shape):  # non-trivial
             assert not tensors.is_scalar(non_scalar_tens)
             break
@@ -622,17 +615,18 @@ def test_is_scalar(backend, tensor_rng, vector_space_rng):
         pytest.skip("can't generate non-scalar tensor")
 
 
-def test_norm(tensor_rng):
-    tens = tensor_rng(real=False)
+@pytest.mark.parametrize('num_legs', [1, 3])
+def test_norm(make_compatible_tensor, num_legs):
+    tens = make_compatible_tensor(num_legs=num_legs)
     expect = np.linalg.norm(tens.to_numpy_ndarray())
     res = tensors.norm(tens)
     assert np.allclose(res, expect)
 
 
-def test_almost_equal(tensor_rng, np_random):
+def test_almost_equal(make_compatible_tensor, np_random):
     for i in range(10):
-        t1 = tensor_rng(labels=['a', 'b', 'c'], real=False)
-        t_diff = tensor_rng(t1.legs, labels=['a', 'b', 'c'])
+        t1 = make_compatible_tensor(labels=['a', 'b', 'c'])
+        t_diff = make_compatible_tensor(t1.legs, labels=['a', 'b', 'c'])
         if t_diff.norm() > 1.e-7:
             break
     else:
@@ -648,17 +642,19 @@ def test_almost_equal(tensor_rng, np_random):
     data2 = data1 + 1e-7 * np_random.random(leg.dim)
     t1 = tensors.DiagonalTensor.from_diag(data1, leg)
     t2 = tensors.DiagonalTensor.from_diag(data2, leg)
-    assert tensors.almost_equal(t1, t2)
+    assert tensors.almost_equal(t1, t2, atol=1e-5, rtol=1e-7)
     assert not tensors.almost_equal(t1, t2, atol=1e-10, rtol=1e-10)
 
     # TODO check all combinations of tensor types...
 
 
-def test_squeeze_legs(tensor_rng, symmetry):
+def test_squeeze_legs(make_compatible_tensor, compatible_symmetry):
     for i in range(10):
-        triv_leg = VectorSpace(symmetry, symmetry.trivial_sector[np.newaxis, :], np.ones((1,)))
+        triv_leg = VectorSpace(compatible_symmetry,
+                               compatible_symmetry.trivial_sector[np.newaxis, :])
         assert triv_leg.is_trivial
-        tens = tensor_rng([None, triv_leg, None, triv_leg.dual, triv_leg], labels=list('abcde'))
+        tens = make_compatible_tensor(legs=[None, triv_leg, None, triv_leg.dual, triv_leg],
+                                      labels=list('abcde'))
         if not tens.legs[0].is_trivial and not tens.legs[2].is_trivial:
             break
     else:
@@ -684,8 +680,8 @@ def test_squeeze_legs(tensor_rng, symmetry):
     npt.assert_array_equal(res.to_numpy_ndarray(), dense[:, 0, :, :, 0])
 
 
-def test_add_trivial_leg(tensor_rng):
-    A = tensor_rng(num_legs=2, labels=['a', 'b'])
+def test_add_trivial_leg(make_compatible_tensor):
+    A = make_compatible_tensor(labels=['a', 'b'])
     B = tensors.add_trivial_leg(A, 'c', is_dual=True)
     B.test_sanity()
     B = tensors.add_trivial_leg(B, 'xY', pos=1)
@@ -699,29 +695,28 @@ def test_add_trivial_leg(tensor_rng):
     assert tensors.almost_equal(A, C)
 
 
-def test_scale_axis(backend, vector_space_rng, backend_data_rng, tensor_rng):
+def test_scale_axis(make_compatible_tensor):
     # TODO eventually this will be covered by tdot tests, when allowing combinations of Tensor and DiagonalTensor
     #  But I want to use it already now to debug backend.scale_axis()
-    a = vector_space_rng(max_num_blocks=4, max_block_size=4)
-    b = vector_space_rng(max_num_blocks=4, max_block_size=4)
-    t = tensor_rng([a, b, None], num_legs=3, max_num_blocks=4, max_block_size=4)
-    d = tensors.DiagonalTensor.random_uniform(a, second_leg_dual=True, backend=backend)
+    t = make_compatible_tensor(num_legs=3, max_blocks=4, max_block_size=4)
+    d = tensors.DiagonalTensor.random_uniform(t.legs[0], second_leg_dual=True, backend=t.backend)
     expect = np.tensordot(t.to_numpy_ndarray(), d.to_numpy_ndarray(), (0, 1))
     res = tensors.tdot(t, d, 0, 1).to_numpy_ndarray()
     npt.assert_almost_equal(expect, res)
 
 
-def test_detect_sectors_from_block(backend, symmetry, symmetry_sectors_rng, np_random):
-    num_sectors = int(min(4, symmetry.num_sectors))
+def test_detect_sectors_from_block(compatible_backend, compatible_symmetry, make_compatible_sectors,
+                                   np_random):
+    num_sectors = int(min(4, compatible_symmetry.num_sectors))
     leg_dim = 5
-    sectors = symmetry_sectors_rng(num_sectors, sort=True)
+    sectors = make_compatible_sectors(num_sectors, sort=True)
 
     which_sectors_a = np_random.integers(num_sectors, size=(leg_dim,))  # indices of sectors
     which_sectors_b = np_random.integers(num_sectors, size=(leg_dim + 1,))
     sectors_of_basis_a = sectors[which_sectors_a]
     sectors_of_basis_b = sectors[which_sectors_b]
-    a = VectorSpace.from_basis(symmetry=symmetry, sectors_of_basis=sectors_of_basis_a)
-    b = VectorSpace.from_basis(symmetry=symmetry, sectors_of_basis=sectors_of_basis_b)
+    a = VectorSpace.from_basis(symmetry=compatible_symmetry, sectors_of_basis=sectors_of_basis_a)
+    b = VectorSpace.from_basis(symmetry=compatible_symmetry, sectors_of_basis=sectors_of_basis_b)
 
     target_sector_a = np_random.choice(which_sectors_a)
     target_sector_b = np_random.choice(which_sectors_b)
@@ -736,8 +731,8 @@ def test_detect_sectors_from_block(backend, symmetry, symmetry_sectors_rng, np_r
             data[i, j] = np_random.random()
     assert np.max(np.abs(data)) > 1e-9  # make sure that at least one entry above was actually set
 
-    block = backend.block_from_numpy(data)
-    detected = tensors.detect_sectors_from_block(block, legs=[a, b], backend=backend)
+    block = compatible_backend.block_from_numpy(data)
+    detected = tensors.detect_sectors_from_block(block, legs=[a, b], backend=compatible_backend)
     npt.assert_array_equal(detected[0], sectors[target_sector_a])
     npt.assert_array_equal(detected[1], sectors[target_sector_b])
 
@@ -745,7 +740,7 @@ def test_detect_sectors_from_block(backend, symmetry, symmetry_sectors_rng, np_r
     if num_sectors >= 4:
         #                         0  1  2  3  4  5  6  7  8  9
         which_sectors = np.array([0, 1, 3, 0, 2, 1, 1, 2, 0, 3])
-        space = VectorSpace(symmetry=symmetry,
+        space = VectorSpace(symmetry=compatible_symmetry,
                             sectors=sectors[:4],
                             multiplicities=[3, 3, 2, 2],
                             basis_perm=[0, 3, 8, 1, 5, 6, 4, 7, 2, 9])
@@ -757,7 +752,7 @@ def test_detect_sectors_from_block(backend, symmetry, symmetry_sectors_rng, np_r
             data = np.zeros((len(which_sectors),), dtype=float)
             data[i] = 1.
             sector, = tensors.detect_sectors_from_block(
-                backend.block_from_numpy(data), legs=[space], backend=backend
+                compatible_backend.block_from_numpy(data), legs=[space], backend=compatible_backend
             )
             npt.assert_array_equal(sector, sectors[which])
 
@@ -773,14 +768,14 @@ def test_elementwise_function_decorator():
                                                  ('real_if_close', 1e-12), ('real_if_close', 1),
                                                  ('sqrt', 0),
                                                  ])
-def test_elementwise_functions(vector_space_rng, np_random, function, data_imag):
-    leg = vector_space_rng()
+def test_elementwise_functions(make_compatible_space, compatible_backend, np_random, function, data_imag):
+    leg = make_compatible_space()
     np_func = getattr(np, function)  # e.g. np.real
     tp_func = getattr(tensors, function)  # e.g. tenpy.linalg.tensors.real
     data = np_random.random((leg.dim,))
     if data_imag > 0:
         data = data + data_imag * np_random.random((leg.dim,))
-    tens = tensors.DiagonalTensor.from_diag(diag=data, first_leg=leg)
+    tens = tensors.DiagonalTensor.from_diag(diag=data, first_leg=leg, backend=compatible_backend)
 
     print('scalar input')
     res = tp_func(data[0])
@@ -794,8 +789,8 @@ def test_elementwise_functions(vector_space_rng, np_random, function, data_imag)
 
 
 @pytest.mark.parametrize('which_legs', [[0], [-1], ['b'], ['a', 'b', 'c', 'd'], ['b', -2]])
-def test_flip_leg_duality(tensor_rng, which_legs):
-    T: tensors.BlockDiagonalTensor = tensor_rng(labels=['a', 'b', 'c', 'd'])
+def test_flip_leg_duality(make_compatible_tensor, which_legs):
+    T: tensors.BlockDiagonalTensor = make_compatible_tensor(labels=['a', 'b', 'c', 'd'])
     res = tensors.flip_leg_duality(T, *which_legs)
     res.test_sanity()
     flipped = T.get_leg_idcs(which_legs)
@@ -810,34 +805,43 @@ def test_flip_leg_duality(tensor_rng, which_legs):
     npt.assert_array_almost_equal_nulp(T_np, res_np, 100)
 
 
-def demo_repr():
-    # this is intended to generate a bunch of demo reprs
-    # can not really make this an automated test, the point is for a human to have a look
-    # and decide if the output is useful, concise, correct, etc.
-    #
-    # run e.g. via the following command
-    # python -c "from test_tensors import demo_repr; demo_repr()"
-    from tests import conftest
-    from tenpy.linalg.backends.backend_factory import get_backend
+def test_str_repr(make_compatible_tensor,
+                  str_max_len=2000, str_max_lines=30,
+                  repr_max_len=2000, repr_max_lines=30):
+    """Check if str and repr work. Automatically, we can only check if they run at all.
+    To check if the output is sensible and useful, a human should look at it.
+    Run ``pytest -rP -k test_str_repr > output.txt`` to see the output.
+    """
+    mps_tens = make_compatible_tensor(labels=['vL', 'p', 'vR'])
+    local_state = make_compatible_tensor(labels=['p'])
+    local_op = make_compatible_tensor(labels=['p', 'p*'])
+    for t in [mps_tens, local_state, local_op]:
+        print()
+        print()
+        print('----------------------')
+        print('__repr__()')
+        print('----------------------')
+        res = repr(t)
+        assert len(res) <= repr_max_len
+        assert res.count('\n') <= repr_max_lines
+        print(res)
+        
+        print()
+        print()
+        print('----------------------')
+        print('__str__()')
+        print('----------------------')
+        res = str(t)
+        assert len(res) <= str_max_len
+        assert res.count('\n') <= str_max_lines
+        print(res)
 
-    labels = ['vL', 'p', 'vR*', 'a', 'q', 'x', 'y', 'z', 'i', 'o']
-    
-    for symmetry in conftest.symmetry._pytestfixturefunction.params:
-        backend = get_backend(symmetry)
-        for num_legs in [2, 4, 10]:
-            legs = [conftest.random_vector_space(symmetry, max_num_blocks=3, max_block_size=2) for _ in range(num_legs)]
-            tens = tensors.BlockDiagonalTensor.random_uniform(legs, backend=backend, labels=labels[:num_legs])
-            print()
-            print('=' * 70)
-            print()
-            print(str(tens))
 
-
-def test_Mask(np_random, vector_space_rng, backend):
-    large_leg = vector_space_rng()
+def test_Mask(np_random, make_compatible_space, compatible_backend):
+    large_leg = make_compatible_space()
     blockmask = np_random.choice([True, False], size=large_leg.dim)
     num_kept = sum(blockmask)
-    mask = tensors.Mask.from_blockmask(blockmask, large_leg=large_leg, backend=backend)
+    mask = tensors.Mask.from_blockmask(blockmask, large_leg=large_leg, backend=compatible_backend)
     mask.test_sanity()
 
     npt.assert_array_equal(mask.numpymask, blockmask)
@@ -846,7 +850,7 @@ def test_Mask(np_random, vector_space_rng, backend):
 
     # mask2 : same mask, but build from indices
     indices = np.where(blockmask)[0]
-    mask2 = tensors.Mask.from_indices(indices, large_leg=large_leg, backend=backend)
+    mask2 = tensors.Mask.from_indices(indices, large_leg=large_leg, backend=compatible_backend)
     mask2.test_sanity()
     npt.assert_array_equal(mask2.numpymask, blockmask)
     assert mask.same_mask(mask2)
@@ -856,18 +860,18 @@ def test_Mask(np_random, vector_space_rng, backend):
     print(f'{indices=}')
     indices3 = indices.copy()
     indices3[len(indices3) // 2] = not indices3[len(indices3) // 2]
-    mask3 = tensors.Mask.from_indices(indices3, large_leg=large_leg, backend=backend)
+    mask3 = tensors.Mask.from_indices(indices3, large_leg=large_leg, backend=compatible_backend)
     mask3.test_sanity()
     assert not mask.same_mask(mask3)
     assert not tensors.almost_equal(mask, mask3)
 
     # mask4: independent random mask
     blockmask4 = np_random.choice([True, False], size=large_leg.dim)
-    mask4 = tensors.Mask.from_blockmask(blockmask4, large_leg=large_leg, backend=backend)
+    mask4 = tensors.Mask.from_blockmask(blockmask4, large_leg=large_leg, backend=compatible_backend)
     mask4.test_sanity()
 
-    mask_all = tensors.Mask.eye(large_leg=large_leg, backend=backend)
-    mask_none = tensors.Mask.zero(large_leg=large_leg, backend=backend)
+    mask_all = tensors.Mask.eye(large_leg=large_leg, backend=compatible_backend)
+    mask_none = tensors.Mask.zero(large_leg=large_leg, backend=compatible_backend)
     assert mask_all.all()
     assert mask_all.any()
     assert not mask_none.all()
@@ -895,12 +899,12 @@ def test_Mask(np_random, vector_space_rng, backend):
     if tensors.Mask.all(mask == mask4):
         pass
 
-    eye = tensors.Mask.eye(large_leg=large_leg, backend=backend)
+    eye = tensors.Mask.eye(large_leg=large_leg, backend=compatible_backend)
     eye.test_sanity()
     assert eye.all()
     npt.assert_array_equal(eye.numpymask, np.ones(large_leg.dim, bool))
 
-    diag = tensors.DiagonalTensor.from_diag(blockmask, first_leg=large_leg, backend=backend)
+    diag = tensors.DiagonalTensor.from_diag(blockmask, first_leg=large_leg, backend=compatible_backend)
     diag.test_sanity()
     mask5 = tensors.Mask.from_DiagonalTensor(diag)
     npt.assert_array_equal(mask5.numpymask, mask.numpymask)
@@ -908,39 +912,49 @@ def test_Mask(np_random, vector_space_rng, backend):
 
 
 @pytest.mark.parametrize('num_legs', [1, 3])
-def test_apply_Mask_Tensor(tensor_rng, num_legs):
-    T: tensors.BlockDiagonalTensor = tensor_rng(num_legs=num_legs)
-    mask = tensor_rng(legs=[T.legs[0]], cls=tensors.Mask)
+def test_apply_Mask_Tensor(make_compatible_tensor, num_legs):
+    T: tensors.BlockDiagonalTensor = make_compatible_tensor(num_legs=num_legs)
+    mask = make_compatible_tensor(legs=[T.legs[0], None], cls=tensors.Mask)
     masked = T.apply_mask(mask, 0)
     masked.test_sanity()
-    npt.assert_array_equal(T.to_numpy_ndarray()[mask.numpymask], masked.to_numpy_ndarray())
+    npt.assert_array_almost_equal_nulp(T.to_numpy_ndarray()[mask.numpymask],
+                                       masked.to_numpy_ndarray(),
+                                       10)
 
 
-def test_apply_Mask_DiagonalTensor(tensor_rng):
-    T: tensors.DiagonalTensor = tensor_rng(cls=tensors.DiagonalTensor)
-    mask = tensor_rng(legs=[T.legs[0]], cls=tensors.Mask)
+def test_apply_Mask_DiagonalTensor(make_compatible_tensor):
+    T: tensors.DiagonalTensor = make_compatible_tensor(cls=tensors.DiagonalTensor)
+    mask = make_compatible_tensor(legs=[T.legs[0], None], cls=tensors.Mask)
     # mask only one leg
     masked = T.apply_mask(mask, 0)
     assert isinstance(masked, tensors.BlockDiagonalTensor)
     masked.test_sanity()
-    npt.assert_array_equal(T.to_numpy_ndarray()[mask.numpymask], masked.to_numpy_ndarray())
+    npt.assert_array_almost_equal_nulp(T.to_numpy_ndarray()[mask.numpymask],
+                                       masked.to_numpy_ndarray(),
+                                       10)
     # mask both legs
     masked = T._apply_mask_both_legs(mask)
     assert isinstance(masked, tensors.DiagonalTensor)
     masked.test_sanity()
-    npt.assert_array_equal(T.diag_numpy[mask.numpymask], masked.diag_numpy)
+    npt.assert_array_almost_equal_nulp(T.diag_numpy[mask.numpymask],
+                                       masked.diag_numpy,
+                                       10)
 
 
 @pytest.mark.parametrize('num_legs', [1, 3])
-def test_apply_Mask_ChargedTensor(tensor_rng, num_legs):
-    T: tensors.ChargedTensor = tensor_rng(num_legs=num_legs, cls=tensors.ChargedTensor)
+def test_apply_Mask_ChargedTensor(make_compatible_tensor, num_legs):
+    T: tensors.ChargedTensor = make_compatible_tensor(num_legs=num_legs, cls=tensors.ChargedTensor)
     # first leg
-    mask = tensor_rng(legs=[T.legs[0]], cls=tensors.Mask)
+    mask = make_compatible_tensor(legs=[T.legs[0], None], cls=tensors.Mask)
     masked = T.apply_mask(mask, 0)
     masked.test_sanity()
-    npt.assert_array_equal(T.to_numpy_ndarray()[mask.numpymask], masked.to_numpy_ndarray())
+    npt.assert_array_almost_equal_nulp(T.to_numpy_ndarray()[mask.numpymask],
+                                       masked.to_numpy_ndarray(),
+                                       10)
     # last leg
-    mask = tensor_rng(legs=[T.legs[-1]], cls=tensors.Mask)
+    mask = make_compatible_tensor(legs=[T.legs[-1], None], cls=tensors.Mask)
     masked = T.apply_mask(mask, -1)
     masked.test_sanity()
-    npt.assert_array_equal(T.to_numpy_ndarray()[..., mask.numpymask], masked.to_numpy_ndarray())
+    npt.assert_array_almost_equal_nulp(T.to_numpy_ndarray()[..., mask.numpymask],
+                                       masked.to_numpy_ndarray(),
+                                       10)

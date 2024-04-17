@@ -30,7 +30,7 @@ def test_site(np_random, block_backend, symmetry_backend, use_sym):
     else:
         sym = la.no_symmetry
     dim = 8
-    some_sectors = random_symmetry_sectors(sym, np_random, len_=dim, sort=False)
+    some_sectors = random_symmetry_sectors(sym, num=dim, sort=False, np_random=np_random)
     leg = la.VectorSpace.from_basis(sym, np_random.choice(some_sectors, size=dim, replace=True))
     assert leg.dim == dim
     op1 = la.BlockDiagonalTensor.random_uniform([leg, leg.dual], backend, labels=['p', 'p*'])
@@ -72,12 +72,11 @@ def test_site(np_random, block_backend, symmetry_backend, use_sym):
         npt.assert_equal(s_op, s2_op)
 
 
-def test_double_site(block_backend, symmetry_backend):
-    backend = la.get_backend(block_backend=block_backend, symmetry=symmetry_backend)
-    if symmetry_backend == 'no_symmetry':
+def test_double_site(any_backend):
+    if isinstance(any_backend, la.NoSymmetryBackend):
         all_conserve = ['None']
         fs_conserve = 'None'
-    elif symmetry_backend in ['abelian', 'fusion_tree']:
+    elif isinstance(any_backend, (la.AbelianBackend, la.FusionTreeBackend)):
         all_conserve = ['Sz', 'None']
         fs_conserve = 'N'
     else:
@@ -102,7 +101,7 @@ def test_double_site(block_backend, symmetry_backend):
         else:
             raise NotImplementedError
         
-        site0 = site1 = site.SpinHalfSite(conserve, backend=backend)
+        site0 = site1 = site.SpinHalfSite(conserve, backend=any_backend)
         for symmetry_combine in ['same', 'drop', 'independent']:
             print(f'  {symmetry_combine=}')
             ds = site.GroupedSite([site0, site1], symmetry_combine=symmetry_combine)
@@ -111,7 +110,7 @@ def test_double_site(block_backend, symmetry_backend):
             for idx, label in enumerate(expect_labels):
                 assert ds.state_labels[label] == idx
         
-    fs = site.FermionSite(fs_conserve, backend=backend)
+    fs = site.FermionSite(fs_conserve, backend=any_backend)
     ds = site.GroupedSite([fs, fs], ['a', 'b'], symmetry_combine='same')
     assert ds.need_JW_string == set([op + 'a' for op in fs.need_JW_string] +
                                     [op + 'b' for op in fs.need_JW_string] + ['JW'])
@@ -186,15 +185,14 @@ def check_operator_availability(s: site.Site, expect_symmetric_ops: dict[str, bo
         assert op.op_R.dummy_leg.dim == dim
 
 
-def test_spin_half_site(block_backend, symmetry_backend):
-    backend = la.get_backend(block_backend=block_backend, symmetry=symmetry_backend)
+def test_spin_half_site(any_backend):
     hcs = dict(Id='Id', JW='JW', Sx='Sx', Sy='Sy', Sz='Sz', Sp='Sm', Sm='Sp', Sigmax='Sigmax',
                Sigmay='Sigmay', Sigmaz='Sigmaz')
-    if symmetry_backend == 'no_symmetry':
+    if isinstance(any_backend, la.NoSymmetryBackend):
         all_conserve = ['None']
-    elif symmetry_backend == 'abelian':
+    elif isinstance(any_backend, la.AbelianBackend):
         all_conserve = ['Sz', 'parity', 'None']
-    elif symmetry_backend == 'fusion_tree':
+    elif isinstance(any_backend, la.FusionTreeBackend):
         all_conserve = ['Stot', 'Sz', 'parity', 'None']
         pytest.xfail('FusionTree backend not ready')
     else:
@@ -203,7 +201,7 @@ def test_spin_half_site(block_backend, symmetry_backend):
     sites = []
     for conserve in all_conserve:
         print(f'checking {conserve=}')
-        s = site.SpinHalfSite(conserve, backend=backend)
+        s = site.SpinHalfSite(conserve, backend=any_backend)
         assert la.almost_equal(s['Sp'], s['Sm'].hconj())
         s.test_sanity()
         for op in s.all_op_names:
@@ -229,14 +227,13 @@ def test_spin_half_site(block_backend, symmetry_backend):
 
 
 @pytest.mark.parametrize('S', [0.5, 1, 1.5, 2, 5])
-def test_spin_site(block_backend, symmetry_backend, S):
-    backend = la.get_backend(block_backend=block_backend, symmetry=symmetry_backend)
+def test_spin_site(any_backend, S):
     hcs = dict(Id='Id', JW='JW', Sx='Sx', Sy='Sy', Sz='Sz', Sp='Sm', Sm='Sp')
-    if symmetry_backend == 'no_symmetry':
+    if isinstance(any_backend, la.NoSymmetryBackend):
         all_conserve = ['None']
-    elif symmetry_backend == 'abelian':
+    elif isinstance(any_backend, la.AbelianBackend):
         all_conserve = ['Sz', 'parity', 'None']
-    elif symmetry_backend == 'fusion_tree':
+    elif isinstance(any_backend, la.FusionTreeBackend):
         all_conserve = ['SU(2)', 'Sz', 'parity', 'None']
         pytest.xfail('FusionTree backend not ready')
     else:
@@ -244,7 +241,7 @@ def test_spin_site(block_backend, symmetry_backend, S):
     sites = []
     for conserve in all_conserve:
         print("conserve = ", conserve)
-        s = site.SpinSite(S, conserve, backend=backend)
+        s = site.SpinSite(S, conserve, backend=any_backend)
         s.test_sanity()
         for op in s.all_op_names:
             assert s.hc_ops[op] == hcs[op]
@@ -266,21 +263,20 @@ def test_spin_site(block_backend, symmetry_backend, S):
     check_same_operators(sites)
 
 
-def test_fermion_site(block_backend, symmetry_backend):
-    backend = la.get_backend(block_backend=block_backend, symmetry=symmetry_backend)
+def test_fermion_site(any_backend):
     hcs = dict(Id='Id', JW='JW', C='Cd', Cd='C', N='N', dN='dN', dNdN='dNdN')
-    if symmetry_backend == 'no_symmetry':
+    if isinstance(any_backend, la.NoSymmetryBackend):
         all_conserve = ['None']
-    elif symmetry_backend == 'abelian':
+    elif isinstance(any_backend, la.AbelianBackend):
         all_conserve = ['N', 'parity', 'None']
-    elif symmetry_backend == 'fusion_tree':
+    elif isinstance(any_backend, la.FusionTreeBackend):
         # TODO check JW-free fermions when ready?
         pytest.xfail('FusionTree backend not ready')
     else:
         raise ValueError
     sites = []
     for conserve in all_conserve:
-        s = site.FermionSite(conserve, backend=backend)
+        s = site.FermionSite(conserve, backend=any_backend)
         s.test_sanity()
         for op in s.all_op_names:
             assert s.hc_ops[op] == hcs[op]
@@ -308,18 +304,17 @@ def test_fermion_site(block_backend, symmetry_backend):
     check_same_operators(sites)
 
 
-def test_spin_half_fermion_site(block_backend, symmetry_backend):
-    backend = la.get_backend(block_backend=block_backend, symmetry=symmetry_backend)
+def test_spin_half_fermion_site(any_backend):
     hcs = dict(Id='Id', JW='JW', JWu='JWu', JWd='JWd',
                Cu='Cdu', Cdu='Cu', Cd='Cdd', Cdd='Cd',
                Nu='Nu', Nd='Nd', NuNd='NuNd', Ntot='Ntot', dN='dN',
                Sx='Sx', Sy='Sy', Sz='Sz', Sp='Sm', Sm='Sp')  # yapf: disable
-    if symmetry_backend == 'no_symmetry':
+    if isinstance(any_backend, la.NoSymmetryBackend):
         all_conserve_N = all_conserve_S = ['None']
-    elif symmetry_backend == 'abelian':
+    elif isinstance(any_backend, la.AbelianBackend):
         all_conserve_N = ['N', 'parity', 'None']
         all_conserve_S = ['Sz', 'parity', 'None']
-    elif symmetry_backend == 'fusion_tree':
+    elif isinstance(any_backend, la.FusionTreeBackend):
         all_conserve_N = ['N', 'parity', 'None']
         all_conserve_S = ['Stot', 'Sz', 'parity', 'None']
         pytest.xfail('FusionTree backend not ready')
@@ -328,7 +323,7 @@ def test_spin_half_fermion_site(block_backend, symmetry_backend):
     sites = []
     for conserve_N, conserve_S in it.product(all_conserve_N, all_conserve_S):
         print(f'{conserve_N=}, {conserve_S=}')
-        s = site.SpinHalfFermionSite(conserve_N, conserve_S, backend=backend)
+        s = site.SpinHalfFermionSite(conserve_N, conserve_S, backend=any_backend)
         s.test_sanity()
         for op in s.all_op_names:
             assert s.hc_ops[op] == hcs[op]
@@ -374,18 +369,17 @@ def test_spin_half_fermion_site(block_backend, symmetry_backend):
     check_same_operators(sites)
 
 
-def test_spin_half_hole_site(block_backend, symmetry_backend):
-    backend = la.get_backend(block_backend=block_backend, symmetry=symmetry_backend)
+def test_spin_half_hole_site(any_backend):
     hcs = dict(Id='Id', JW='JW', JWu='JWu', JWd='JWd',
                Cu='Cdu', Cdu='Cu', Cd='Cdd', Cdd='Cd',
                Nu='Nu', Nd='Nd', Ntot='Ntot', dN='dN',
                Sx='Sx', Sy='Sy', Sz='Sz', Sp='Sm', Sm='Sp')  # yapf: disable
-    if symmetry_backend == 'no_symmetry':
+    if isinstance(any_backend, la.NoSymmetryBackend):
         all_conserve_N = all_conserve_S = ['None']
-    elif symmetry_backend == 'abelian':
+    elif isinstance(any_backend, la.AbelianBackend):
         all_conserve_N = ['N', 'parity', 'None']
         all_conserve_S = ['Sz', 'parity', 'None']
-    elif symmetry_backend == 'fusion_tree':
+    elif isinstance(any_backend, la.FusionTreeBackend):
         all_conserve_N = ['N', 'parity', 'None']
         all_conserve_S = ['Stot', 'Sz', 'parity', 'None']
         pytest.xfail('FusionTree backend not ready')
@@ -394,7 +388,7 @@ def test_spin_half_hole_site(block_backend, symmetry_backend):
     sites = []
     for conserve_N, conserve_S in it.product(all_conserve_N, all_conserve_S):
         print(f'{conserve_N=}, {conserve_S=}')
-        s = site.SpinHalfHoleSite(conserve_N, conserve_S, backend=backend)
+        s = site.SpinHalfHoleSite(conserve_N, conserve_S, backend=any_backend)
         s.test_sanity()
         for op in s.all_op_names:
             assert s.hc_ops[op] == hcs[op]
@@ -436,18 +430,17 @@ def test_spin_half_hole_site(block_backend, symmetry_backend):
 
 
 @pytest.mark.parametrize('Nmax', [1, 2, 5, 10])
-def test_boson_site(block_backend, symmetry_backend, Nmax):
-    backend = la.get_backend(block_backend=block_backend, symmetry=symmetry_backend)
-    if symmetry_backend == 'no_symmetry':
+def test_boson_site(any_backend, Nmax):
+    if isinstance(any_backend, la.NoSymmetryBackend):
         all_conserve = ['None']
-    elif symmetry_backend in ['abelian', 'fusion_tree']:
+    elif isinstance(any_backend, (la.AbelianBackend, la.FusionTreeBackend)):
         all_conserve = ['N', 'parity', 'None']
     else:
         raise ValueError
     hcs = dict(Id='Id', JW='JW', B='Bd', Bd='B', N='N', NN='NN', dN='dN', dNdN='dNdN', P='P')
     sites = []
     for conserve in all_conserve:
-        s = site.BosonSite(Nmax, conserve=conserve, backend=backend)
+        s = site.BosonSite(Nmax, conserve=conserve, backend=any_backend)
         s.test_sanity()
         for op in s.all_op_names:
             assert s.hc_ops[op] == hcs[op]
@@ -470,11 +463,10 @@ def test_boson_site(block_backend, symmetry_backend, Nmax):
 
 
 @pytest.mark.parametrize('q', [2, 3, 5, 10])
-def test_clock_site(block_backend, symmetry_backend, q):
-    backend = la.get_backend(block_backend=block_backend, symmetry=symmetry_backend)
-    if symmetry_backend == 'no_symmetry':
+def test_clock_site(any_backend, q):
+    if isinstance(any_backend, la.NoSymmetryBackend):
         all_conserve = ['None']
-    elif symmetry_backend in ['abelian', 'fusion_tree']:
+    elif isinstance(any_backend, (la.AbelianBackend, la.FusionTreeBackend)):
         all_conserve = ['Z', 'None']
     else:
         raise ValueError
@@ -486,7 +478,7 @@ def test_clock_site(block_backend, symmetry_backend, q):
         hcs.update(X='Xhc', Z='Zhc', Xhc='X', Zhc='Z')
     sites = []
     for conserve in all_conserve:
-        s = site.ClockSite(q=q, conserve=conserve, backend=backend)
+        s = site.ClockSite(q=q, conserve=conserve, backend=any_backend)
         s.test_sanity()
         for op in s.all_op_names:
             assert s.hc_ops[op] == hcs[op]
@@ -514,9 +506,8 @@ def test_clock_site(block_backend, symmetry_backend, q):
     check_same_operators(sites)
 
 
-def test_set_common_symmetry(block_backend, symmetry_backend):
-    backend = la.get_backend(block_backend=block_backend, symmetry=symmetry_backend)
-    if symmetry_backend == 'no_symmetry':
+def test_set_common_symmetry(any_backend):
+    if isinstance(any_backend, la.NoSymmetryBackend):
         conserve_S = conserve_N = 'None'
         expect_symm_Sz = expect_symm_Sz_N = expect_symm_Sz_N_Sz = la.no_symmetry
     else:
@@ -526,13 +517,13 @@ def test_set_common_symmetry(block_backend, symmetry_backend):
         expect_symm_Sz_N = la.U1Symmetry('2*Sz') * la.U1Symmetry('N')
         expect_symm_Sz_N_Sz = la.U1Symmetry('2*Sz') * la.U1Symmetry('N') * la.U1Symmetry('2*Sz')
     
-    conserve_S = 'None' if symmetry_backend == 'no_symmetry' else 'Sz'
-    conserve_N = 'None' if symmetry_backend == 'no_symmetry' else 'N'
+    conserve_S = 'None' if isinstance(any_backend, la.NoSymmetryBackend) else 'Sz'
+    conserve_N = 'None' if isinstance(any_backend, la.NoSymmetryBackend) else 'N'
     
-    spin = site.SpinSite(S=0.5, conserve=conserve_S, backend=backend)
-    spin1 = site.SpinSite(S=1, conserve=conserve_S, backend=backend)
+    spin = site.SpinSite(S=0.5, conserve=conserve_S, backend=any_backend)
+    spin1 = site.SpinSite(S=1, conserve=conserve_S, backend=any_backend)
     ferm = site.SpinHalfFermionSite(conserve_N=conserve_N, conserve_S=conserve_S)
-    boson = site.BosonSite(Nmax=2, conserve=conserve_N, backend=backend)
+    boson = site.BosonSite(Nmax=2, conserve=conserve_N, backend=any_backend)
     spin_ops = {name: op.to_numpy_ndarray() for name, op in spin.symmetric_ops.items()}
     spin1_ops = {name: op.to_numpy_ndarray() for name, op in spin1.symmetric_ops.items()}
     ferm_ops = {name: op.to_numpy_ndarray() for name, op in ferm.symmetric_ops.items()}
@@ -556,7 +547,7 @@ def test_set_common_symmetry(block_backend, symmetry_backend):
             npt.assert_equal(op_np, op_np2)
 
         # reset the modified sites
-        spin = site.SpinSite(S=0.5, conserve=conserve_S, backend=backend)
+        spin = site.SpinSite(S=0.5, conserve=conserve_S, backend=any_backend)
         ferm = site.SpinHalfFermionSite(conserve_N=conserve_N, conserve_S=conserve_S)
 
     print('symmetry_combine: function')
@@ -575,10 +566,10 @@ def test_set_common_symmetry(block_backend, symmetry_backend):
         npt.assert_equal(op_np, op_np2, err_msg=f'{op_name=}')
 
     # reset the modified sites
-    spin = site.SpinSite(S=0.5, conserve=conserve_S, backend=backend)
+    spin = site.SpinSite(S=0.5, conserve=conserve_S, backend=any_backend)
     ferm = site.SpinHalfFermionSite(conserve_N=conserve_N, conserve_S=conserve_S)
 
-    if symmetry_backend == 'no_symmetry':
+    if isinstance(any_backend, la.NoSymmetryBackend):
         return  # the last test really only makes sense with non-trivial symmetries
     
     print('symmetry_combine: list[list[tuple]]')
