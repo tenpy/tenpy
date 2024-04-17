@@ -312,7 +312,7 @@ class Symmetry(metaclass=ABCMeta):
     def _b_symbol(self, a: Sector, b: Sector, c: Sector) -> np.ndarray:
         """Internal implementation of :meth:`b_symbol`. Can assume that inputs are valid."""
         F = self._f_symbol(a, b, self.dual_sector(b), a, self.trivial_sector, c)
-        return self.sqrt_qdim(a) * F[0, 0, :, :]
+        return self.sqrt_qdim(b) * F[0, 0, :, :]
 
     def r_symbol(self, a: Sector, b: Sector, c: Sector) -> np.ndarray:
         r"""Coefficients :math:`R^{ab}_c` related to braiding on a single fusion tensor.
@@ -1190,8 +1190,8 @@ class FermionParity(Symmetry):
         return 1
 
     def _b_symbol(self, a: Sector, b: Sector, c: Sector) -> np.ndarray:
-        # sqrt(d_a) [F^{a b dual(b)}_a]^{111}_{c,mu,nu} = sqrt(1) * 1 = 1
-        return 1
+        # sqrt(d_b) [F^{a b dual(b)}_a]^{111}_{c,mu,nu} = sqrt(1) * 1 = 1
+        return self._one_2D
 
     def _r_symbol(self, a: Sector, b: Sector, c: Sector) -> np.ndarray:
         # if a and b are fermionic -1, otherwise +1

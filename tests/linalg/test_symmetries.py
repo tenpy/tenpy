@@ -148,19 +148,50 @@ def sample_sector_nonets(symmetry: symmetries.Symmetry, sectors, num_samples: in
     # TODO do something analoguous to `sample_sector_triplets`?
     assert accept_fewer
     yield from sample_sector_nonets(symmetry=symmetry, sectors=sectors, num_samples=len(abcd_list),
-                                     np_rng=np_rng)
+                                    np_rng=np_rng)
 
 
-def common_checks(sym: symmetries.Symmetry, example_sectors, np_random):
+def sample_sector_unitarity_test(symmetry: symmetries.Symmetry, sectors_low_qdim, num_samples: int,
+                                         accept_fewer: bool = True, np_rng=default_rng):
+    """Yield samples ``(a, b, c, d, e, g)`` that can be used for the F/C symbol unitarity tests.
+
+    The constraint is that both ``a x (b x c) -> a x e -> d`` and ``a x (b x c) -> a x g -> d``
+    are allowed. The appropriate charges `f` for which ``(a x b) x c -> f x c -> d`` are summed
+    over in the unitarity test.
+    """
+    abc_list = list(sampled_zip(sectors_low_qdim, num_copies=3, num_samples=num_samples, np_rng=np_rng,
+                                accept_fewer=True))
+
+    if len(abc_list) >= num_samples:  # it is enough to select one fusion channel per a, b, c
+        for a, b, c in abc_list:
+            e = np_rng.choice(symmetry.fusion_outcomes(b, c))
+            d = np_rng.choice(symmetry.fusion_outcomes(a, e))
+            # need to find an g from the fusion products of b x c such that a x g -> d is allowed
+            for g in np_rng.permuted(symmetry.fusion_outcomes(b, c), axis=0):
+                if symmetry.can_fuse_to(a, g, d):
+                    yield a, b, c, d, e, g
+                    break
+        return
+
+    # TODO do something analoguous to `sample_sector_triplets`?
+    assert accept_fewer
+    yield from sample_sector_unitarity_test(symmetry=symmetry, sectors_low_qdim=sectors_low_qdim,
+                                            num_samples=len(abc_list), np_rng=np_rng)
+
+
+def common_checks(sym: symmetries.Symmetry, example_sectors, example_sectors_low_qdim, np_random):
     """Common consistency checks to be performed on a symmetry instance.
 
     Assumes example_sectors are duplicate free.
+    example_sectors_low_qdim is like example_sectors but for charges with small quantum dimension such
+    that we do not need to sum over many charges when verifying the unitarity of the F and C symbols.
 
     TODO: The fusion consistency check right now is not elegant and should be revisited at some point.
           To make things more efficient, we should check for consistency only once, i.e., when we check,
           e.g., the unitarity of the F-moves, we can use the same consistency check as for the C symbols
     """
     example_sectors = np.unique(example_sectors, axis=0)
+    example_sectors_low_qdim = np.unique(example_sectors_low_qdim, axis=0)
 
     # generate a few samples of sectors that fulfill fusion rules, used to check the symbols
     sector_triples = list(sample_sector_triplets(sym, example_sectors, num_samples=10,
@@ -169,6 +200,9 @@ def common_checks(sym: symmetries.Symmetry, example_sectors, np_random):
                                                 accept_fewer=True, np_rng=np_random))
     sector_nonets = list(sample_sector_nonets(sym, example_sectors, num_samples=10,
                                               accept_fewer=True, np_rng=np_random))
+    sector_unitarity_test = list(sample_sector_unitarity_test(sym, example_sectors_low_qdim,
+                                                              num_samples=10, accept_fewer=True,
+                                                              np_rng=np_random))
     
     
     assert sym.trivial_sector.shape == (sym.sector_ind_len,)
@@ -230,33 +264,18 @@ def common_checks(sym: symmetries.Symmetry, example_sectors, np_random):
         pass
     
     # check F symbol
-    #   Note: can use sector_sextets
-    #   TODO:
-    #    - correct shape
-    #    - unitary
-    #    - triangle equation
+    check_F_symbols(sym, sector_sextets, sector_unitarity_test)
     check_pentagon_equation(sym, sector_nonets)
 
     # check R symbol
-    #   Note: can use sector_triplets
-    #   TODO:
-    #    - correct shape
-    #    - unitary (i.e. just phases)
-    #    - consistency with twist (when implemented)
+    check_R_symbols(sym, sector_triples, example_sectors_low_qdim)
     check_hexagon_equation(sym, sector_sextets, True)
 
     # check C symbol
-    #   Note: can use sector_sextets, but should ``for c, a, b, d, e, f in sector_sextets``.
-    #   TODO:
-    #    - correct shape
-    #    - unitary
+    check_C_symbols(sym, sector_sextets, sector_unitarity_test)
 
     # check B symbol
-    #   Note: can use sector_triplets
-    #   TODO:
-    #    - correct shape
-    #    - normalization
-    #    - snake equation
+    check_B_symbols(sym, sector_triples)
     
     # check derived topological data vs the fallback implementations.
     # we always check if the method is actually overridden, to avoid comparing identical implementations.
@@ -398,6 +417,104 @@ def check_symbols_via_fusion_tensors(sym: symmetries.Symmetry, example_sectors, 
     pass
 
 
+def check_F_symbols(sym: symmetries.Symmetry, sector_sextets, sector_unitarity_test):
+    """Check correct shape and unitarity of F symbols."""
+    for charges in sector_sextets:
+        a, b, c, d, e, f = charges
+        shape = (sym.n_symbol(b, c, e), sym.n_symbol(a, e, d),
+                 sym.n_symbol(a, b, f), sym.n_symbol(f, c, d))
+        F = sym.f_symbol(a, b, c, d, e, f)
+
+        assert F.shape == shape  # shape
+        if np.any([charge == sym.trivial_sector for charge in [a, b, c]]):
+            assert_array_almost_equal(F, np.ones(shape))  # for trivial sector
+
+    for charges in sector_unitarity_test: # unitarity
+        a, b, c, d, e, g = charges
+        shape = (sym.n_symbol(b, c, e), sym.n_symbol(a, e, d),
+                 sym.n_symbol(b, c, g), sym.n_symbol(a, g, d))
+
+        res = np.zeros(shape, dtype=complex)
+        for f in sym.fusion_outcomes(a, b):
+            if sym.can_fuse_to(f, c, d):
+                F1 = sym.f_symbol(a, b, c, d, e, f)
+                F2 = sym.f_symbol(a, b, c, d, g, f).conj()
+                res += np.tensordot(F1, F2, axes=[[2,3], [2,3]])
+        if e == g:
+            id = np.diag(np.ones(shape[0] * shape[1]))
+            assert_array_almost_equal(res, id.reshape(shape))
+        else:
+            assert_array_almost_equal(res, np.zeros(shape))
+            
+
+def check_R_symbols(sym: symmetries.Symmetry, sector_triplets, example_sectors_low_qdim):
+    """Check correct shape and unitarity of R symbols."""
+    for charges in sector_triplets:
+        a, b, c = charges
+        shape = (sym.n_symbol(a, b, c),)
+        R = sym.r_symbol(a, b, c)
+
+        assert R.shape == shape  # shape
+        assert_array_almost_equal(np.abs(R), np.ones(shape))  # unitarity
+        assert_array_almost_equal(sym.topological_twist(a), sym.frobenius_schur(a) *  # TODO is this general ???
+                                  sym.r_symbol(sym.dual_sector(a), a, sym.trivial_sector)[0].conj())
+
+        if np.any([charge == sym.trivial_sector for charge in [a, b]]):
+            assert_array_almost_equal(R, np.ones_like(R))  # exchange with trivial sector
+
+    for a in example_sectors_low_qdim:  # consistency with topological twist
+        twist = 0
+        for c in sym.fusion_outcomes(a, a):
+            twist += sym.qdim(c) / sym.qdim(a) * np.sum(sym.r_symbol(a, a, c))
+        assert_array_almost_equal(twist, sym.topological_twist(a))
+
+
+def check_C_symbols(sym: symmetries.Symmetry, sector_sextets, sector_unitarity_test):
+    """Check correct shape and unitarity of C symbols."""
+    for charges in sector_sextets:
+        c, a, b, d, e, f = charges
+        shape = (sym.n_symbol(a, b, e), sym.n_symbol(e, c, d),
+                 sym.n_symbol(a, c, f), sym.n_symbol(f, b, d))
+        C = sym.c_symbol(a, b, c, d, e, f)
+
+        assert C.shape == shape  # shape
+        if np.any([charge == sym.trivial_sector for charge in [b, c]]):
+            assert_array_almost_equal(C, np.ones(shape))  # for trivial sector
+
+    for charges in sector_unitarity_test: # unitarity
+        c, a, b, d, e, g = charges
+        shape = (sym.n_symbol(a, b, e), sym.n_symbol(e, c, d),
+                 sym.n_symbol(a, b, g), sym.n_symbol(g, c, d))
+
+        res = np.zeros(shape, dtype=complex)
+        for f in sym.fusion_outcomes(a, c):
+            if sym.can_fuse_to(f, b, d):
+                C1 = sym.c_symbol(a, b, c, d, e, f)
+                C2 = sym.c_symbol(a, b, c, d, g, f).conj()
+                res += np.tensordot(C1, C2, axes=[[2,3], [2,3]])
+        if e == g:
+            id = np.diag(np.ones(shape[0] * shape[1]))
+            assert_array_almost_equal(res, id.reshape(shape))
+        else:
+            assert_array_almost_equal(res, np.zeros(shape))
+
+
+def check_B_symbols(sym: symmetries.Symmetry, sector_triplets):
+    """Check correct shape, normalization and snake equation of B symbols."""
+    for charges in sector_triplets:
+        a, b, c = charges
+        shape = (sym.n_symbol(a, b, c), sym.n_symbol(a, b, c))
+        B = sym.b_symbol(a, b, c)
+
+        assert B.shape == shape  # shape
+
+        norm = np.diag(np.ones(shape[0])) * sym.qdim(c) / sym.qdim(a)
+        assert_array_almost_equal(np.tensordot(B, B.conj(), axes=[1,1]), norm)  # normalization
+
+        snake = np.tensordot(B, sym.b_symbol(c, sym.dual_sector(b), a), axes=[1,1])  # snake eq.
+        assert_array_almost_equal(snake, sym.frobenius_schur(b), np.diag(np.ones(shape[0])))
+
+
 def check_pentagon_equation(sym: symmetries.Symmetry, sector_nonets):
     r"""Check consistency of the F symbols using the pentagon equation.
 
@@ -471,7 +588,8 @@ def check_hexagon_equation(sym: symmetries.Symmetry, sector_sextets, check_both_
 def test_no_symmetry(np_random):
     sym = symmetries.NoSymmetry()
     s = np.array([0])
-    common_checks(sym, example_sectors=s[np.newaxis, :], np_random=np_random)
+    common_checks(sym, example_sectors=s[np.newaxis, :],
+                  example_sectors_low_qdim=s[np.newaxis, :], np_random=np_random)
 
     print('instancecheck and is_abelian')
     assert isinstance(sym, symmetries.AbelianGroup)
@@ -527,10 +645,12 @@ def test_product_symmetry(np_random):
     ])
     s1 = np.array([5, 3, 1])  # e.g. spin 5/2 , 3 particles , odd parity ("fermionic")
     s2 = np.array([3, 2, 0])  # e.g. spin 3/2 , 2 particles , even parity ("bosonic")
-    common_checks(sym, example_sectors=np.array([s1, s2]), np_random=np_random)
+    sectors = np.array([s1, s2])
+    common_checks(sym, example_sectors=sectors, example_sectors_low_qdim=sectors, np_random=np_random)
 
     u1_z3 = symmetries.u1_symmetry * symmetries.z3_symmetry
-    common_checks(u1_z3, example_sectors=np.array([[42, 1], [-1, 2], [-2, 0]]), np_random=np_random)
+    common_checks(u1_z3, example_sectors=np.array([[42, 1], [-1, 2], [-2, 0]]),
+                  example_sectors_low_qdim=np.array([[42, 1], [-1, 2], [-2, 0]]), np_random=np_random)
 
     print('instancecheck and is_abelian')
     assert not isinstance(sym, symmetries.AbelianGroup)
@@ -596,7 +716,8 @@ def test_u1_symmetry(np_random):
     s_neg1 = np.array([-1])
     s_2 = np.array([2])
     s_42 = np.array([42])
-    common_checks(sym, example_sectors=np.array([s_0, s_1, s_neg1, s_2, s_42]), np_random=np_random)
+    sectors = np.array([s_0, s_1, s_neg1, s_2, s_42])
+    common_checks(sym, example_sectors=sectors, example_sectors_low_qdim=sectors, np_random=np_random)
 
     print('instancecheck and is_abelian')
     assert isinstance(sym, symmetries.AbelianGroup)
@@ -648,7 +769,8 @@ def test_ZN_symmetry(N, np_random):
     sym_with_name = symmetries.ZNSymmetry(N, descriptive_name='foo')
     sectors_a = np.array([0, 1, 2, 10])[:, None] % N
     sectors_b = np.array([0, 1, 3, 11])[:, None] % N
-    common_checks(sym, example_sectors=sectors_a, np_random=np_random)
+    common_checks(sym, example_sectors=sectors_a,
+                  example_sectors_low_qdim=sectors_a, np_random=np_random)
 
     print('instancecheck and is_abelian')
     assert isinstance(sym, symmetries.AbelianGroup)
@@ -708,7 +830,8 @@ def test_ZN_symmetry(N, np_random):
 
 def test_su2_symmetry(np_random):
     sym = symmetries.SU2Symmetry()
-    common_checks(sym, example_sectors=np.array([[0], [3], [5], [2], [1], [23]]), np_random=np_random)
+    common_checks(sym, example_sectors=np.array([[0], [3], [5], [2], [1], [23]]),
+                  example_sectors_low_qdim=np.array([[0], [2], [5], [3], [4]]), np_random=np_random)
     
     spin_1 = np.array([2])
     spin_3_half = np.array([3])
@@ -762,7 +885,8 @@ def test_fermion_parity(np_random):
     sym = symmetries.FermionParity()
     even = np.array([0])
     odd = np.array([1])
-    common_checks(sym, example_sectors=np.array([even, odd]), np_random=np_random)
+    common_checks(sym, example_sectors=np.array([even, odd]),
+                  example_sectors_low_qdim=np.array([even, odd]), np_random=np_random)
 
     print('instancecheck and is_abelian')
     assert not isinstance(sym, symmetries.AbelianGroup)
@@ -809,7 +933,8 @@ def test_fibonacci_grading(handedness, np_random):
     sym = symmetries.FibonacciAnyonCategory(handedness)
     vac = np.array([0])
     tau = np.array([1])
-    common_checks(sym, example_sectors=sym.all_sectors(), np_random=np_random)
+    common_checks(sym, example_sectors=sym.all_sectors(),
+                  example_sectors_low_qdim=sym.all_sectors(), np_random=np_random)
 
     print('instancecheck and is_abelian')
     assert not isinstance(sym, symmetries.AbelianGroup)
@@ -848,7 +973,8 @@ def test_ising_grading(nu, np_random):
     vac = np.array([0])
     anyon = np.array([1])
     fermion = np.array([2])
-    common_checks(sym, example_sectors=sym.all_sectors(), np_random=np_random)
+    common_checks(sym, example_sectors=sym.all_sectors(),
+                  example_sectors_low_qdim=sym.all_sectors(), np_random=np_random)
 
     print('instancecheck and is_abelian')
     assert not isinstance(sym, symmetries.AbelianGroup)
