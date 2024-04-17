@@ -355,6 +355,16 @@ def check_fusion_tensor(sym: symmetries.Symmetry, example_sectors, np_random):
 
     for a in example_sectors:
         d_a = sym.sector_dim(a)
+        a_bar = sym.dual_sector(a)
+        Z_a = sym.Z_iso(a_bar)
+        Z_a_hc = Z_a.conj().T
+
+        # Z iso unitary?
+        assert_array_almost_equal(Z_a @ Z_a_hc, np.eye(d_a))
+        assert_array_almost_equal(Z_a_hc @ Z_a, np.eye(d_a))
+
+        # defining property of frobenius schur?
+        assert_array_almost_equal(Z_a.T, sym.frobenius_schur(a) * Z_a)
     
         # reduces to left/right unitor if one input is trivial?
         X_aua = sym.fusion_tensor(a, sym.trivial_sector, a)
@@ -362,12 +372,13 @@ def check_fusion_tensor(sym: symmetries.Symmetry, example_sectors, np_random):
         X_uaa = sym.fusion_tensor(sym.trivial_sector, a, a)
         assert_array_almost_equal(X_uaa, np.eye(d_a, dtype=X_uaa.dtype)[None, None, :, :])
 
-        # relationship to cup
-        # TODO unclear how to construct the correct cup. np.eye(d_a) is probably wrong...?
-        # cup = np.eye(d_a)
-        # assert_array_almost_equal(np.tensordot(cup, cup, 2), d_a)  # check normalization of cup
-        # X_a_abar_u = sym.fusion_tensor(a, sym.dual_sector(a), sym.trivial_sector)
-        # assert_array_almost_equal(X_a_abar_u, cup[None, :, :, None] / np.sqrt(d_a))
+        # relationship to cap
+        X_a_abar_u = sym.fusion_tensor(a, a_bar, sym.trivial_sector)[0, :, :, 0]  # set mu=0, m_c=0
+        cup = np.eye(d_a)
+        expect_1 = np.tensordot(cup, Z_a_hc, (1, 1)) / np.sqrt(d_a)
+        expect_2 = sym.frobenius_schur(a) * np.tensordot(Z_a_hc, cup, (1, 0)) / np.sqrt(d_a)
+        assert_array_almost_equal(X_a_abar_u, expect_1)
+        assert_array_almost_equal(X_a_abar_u, expect_2)
 
 
 def check_symbols_via_fusion_tensors(sym: symmetries.Symmetry, example_sectors, np_random):

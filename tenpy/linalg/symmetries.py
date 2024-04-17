@@ -3,7 +3,7 @@
 from __future__ import annotations
 from abc import abstractmethod, ABCMeta
 from enum import Enum
-from functools import reduce
+from functools import reduce, lru_cache
 
 from numpy import typing as npt
 import numpy as np
@@ -421,13 +421,22 @@ class Symmetry(metaclass=ABCMeta):
                     S[a,b] += self._n_symbol(sectors[a], sectors[b], c) * self.qdim(c) * self.topological_twist(c)
         return np.real_if_close(S * normalization)
 
-    def fusion_tensor(self, a: Sector, b: Sector, c: Sector) -> np.ndarray:
+    def fusion_tensor(self, a: Sector, b: Sector, c: Sector, Z_a: bool = False, Z_b: bool = False
+                      ) -> np.ndarray:
         r"""Matrix elements of the fusion tensor :math:`X^{ab}_{c,\mu}` for all :math:`\mu`.
 
         May not be well defined for anyons.
 
         .. warning ::
             Do not perform inplace operations on the output. That may invalidate caches.
+
+        Parameters
+        ----------
+        a, b, c
+            Sectors. Must be compatible with the fusion described above.
+        Z_a, Z_b : bool
+            If we should include a Z isomorphism below the sector a.
+            If so, the composite is a map from :math:`\bar{a}^* \otimes b \to c`.
 
         Returns
         -------
@@ -439,11 +448,38 @@ class Symmetry(metaclass=ABCMeta):
             is_correct = self.can_fuse_to(a, b, c)
             if not is_correct:
                 raise ValueError('Sectors are not consistent with fusion rules.')
-        return self._fusion_tensor(a, b, c)
+        return self._fusion_tensor(a, b, c, Z_a, Z_b)
 
-    def _fusion_tensor(self, a: Sector, b: Sector, c: Sector) -> np.ndarray:
+    def _fusion_tensor(self, a: Sector, b: Sector, c: Sector, Z_a: bool, Z_b: bool) -> np.ndarray:
         """Internal implementation of :meth:`fusion_tensor`. Can assume that inputs are valid."""
         msg = f'fusion_tensor is not implemented for {self.__class__.__name__}'
+        raise NotImplementedError(msg)
+
+    def Z_iso(self, a: Sector) -> np.ndarray:
+        r"""The Z isomorphism :math:`Z_{\bar{a}} : \bar{a}^* \to a`.
+
+        The dual :math:`a^*` of a sector :math:`a` is another irreducible space.
+        However, it may not be itself a sector. It must be isomorphic to one of the sector
+        representatives though, which we call :math:`\bar{a}`.
+        The Z isomorphism :math:`Z_a : a^* \to \bar{a}` is that isomorphism.
+        
+        We return the matrix elements
+        .. math ::
+            (Z_{\bar{a}})_{mn} = \langle m \vert Z_{\bar{a}}(\langle n \vert)
+        
+        where :math:`m` goes over a (dual) basis of :math:`\bar{a}` and :math:`n` over a basis of
+        :math:`a`.
+
+        Parameters
+        ----------
+        a : Sector
+            Note that this is the target sector of the map, not its subscript!
+
+        Returns
+        -------
+        The matrix elements as a [d_a, d_a] numpy array.
+        """
+        msg = f'Z_iso is not implemented for {self.__class__.__name__}'
         raise NotImplementedError(msg)
 
     def all_sectors(self) -> SectorArray:
@@ -749,7 +785,12 @@ class GroupSymmetry(Symmetry, metaclass=_ABCFactorSymmetryMeta):
                           descriptive_name=descriptive_name)
 
     @abstractmethod
-    def _fusion_tensor(self, a: Sector, b: Sector, c: Sector) -> npt.NDArray:
+    def _fusion_tensor(self, a: Sector, b: Sector, c: Sector, Z_a: bool, Z_b: bool) -> npt.NDArray:
+        # subclasses must implement. for groups it is always possible.
+        ...
+
+    @abstractmethod
+    def Z_iso(self, a: Sector) -> npt.NDArray:
         # subclasses must implement. for groups it is always possible.
         ...
 
@@ -778,8 +819,10 @@ class AbelianGroup(GroupSymmetry, metaclass=_ABCFactorSymmetryMeta):
 
     fusion_tensor_dtype = Dtype.float64
 
+    # TODO should we just have this in the module?
     _one_1D = np.ones((1), dtype=int)
     _one_2D = np.ones((1, 1), dtype=int)
+    _one_2D_float = np.ones((1, 1), dtype=float)
     _one_4D = np.ones((1, 1, 1, 1), dtype=int)
     _one_4D_float = np.ones((1, 1, 1, 1), dtype=float)
 
@@ -826,8 +869,11 @@ class AbelianGroup(GroupSymmetry, metaclass=_ABCFactorSymmetryMeta):
     def _c_symbol(self, a: Sector, b: Sector, c: Sector, d: Sector, e: Sector, f: Sector) -> np.ndarray:
         return self._one_4D
 
-    def _fusion_tensor(self, a: Sector, b: Sector, c: Sector) -> np.ndarray:
+    def _fusion_tensor(self, a: Sector, b: Sector, c: Sector, Z_a: bool, Z_b: bool) -> np.ndarray:
         return self._one_4D_float
+
+    def Z_iso(self, a: Sector) -> np.ndarray:
+        return self._one_2D_float
 
 
 class NoSymmetry(AbelianGroup):
@@ -1049,10 +1095,24 @@ class SU2Symmetry(GroupSymmetry):
 
     # OPTIMIZE implement c symbol? cache it?
 
-    def _fusion_tensor(self, a: Sector, b: Sector, c: Sector) -> np.ndarray:
+    def _fusion_tensor(self, a: Sector, b: Sector, c: Sector, Z_a: bool, Z_b: bool) -> np.ndarray:
         from . import _su2data
-        return _su2data.fusion_tensor(a[0], b[0], c[0])
+        X = _su2data.fusion_tensor(a[0], b[0], c[0])
+        if Z_a:
+            X = np.tensordot(self.Z_iso(a), X, (1, 0))
+        if Z_b:
+            X = np.tensordot(self.Z_iso(b), X, (2, 0))  # [mb, ma, mc]
+            X = np.transpose(X, [1, 0, 2])
+        return X
+
+    def Z_iso(self, a: Sector) -> np.ndarray:
+        # TODO double check that the formula is correct!
+        # Claim : Z_a : <m| \mapsto (-1)^(j + m) |-m>
+        # Note to extend *linearly*, not anti-linearly.
+        from . import _su2data
+        return _su2data.Z_iso(a[0])
         
+
 
 class FermionParity(Symmetry):
     """Fermionic Parity.
@@ -1063,6 +1123,7 @@ class FermionParity(Symmetry):
     has_fusion_tensor = True
     fusion_tensor_dtype = Dtype.float64
     _one_2D = np.ones((1, 1), dtype=int)
+    _one_2D_float = np.ones((1, 1), dtype=float)
     _one_4D = np.ones((1, 1, 1, 1), dtype=int)
     _one_4D_float = np.ones((1, 1, 1, 1), dtype=float)
 
@@ -1145,8 +1206,11 @@ class FermionParity(Symmetry):
     def all_sectors(self) -> SectorArray:
         return np.arange(2, dtype=int)[:, None]
 
-    def _fusion_tensor(self, a: Sector, b: Sector, c: Sector) -> np.ndarray:
+    def _fusion_tensor(self, a: Sector, b: Sector, c: Sector, Z_a: bool, Z_b: bool) -> np.ndarray:
         return self._one_4D_float
+
+    def Z_iso(self, a: Sector) -> np.ndarray:
+        return self._one_2D_float
 
 
 class ZNAnyonCategory(Symmetry):

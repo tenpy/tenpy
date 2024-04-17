@@ -64,6 +64,18 @@ def fusion_tensor(a: int, b: int, c: int) -> np.ndarray:
     return X
 
 
+@lru_cache
+def Z_iso(a: int) -> np.ndarray:
+    d_a = a + 1  # 2 j_a + 1
+    Z = np.zeros((d_a, d_a), dtype=float)
+    for k in range(d_a):  # m == -j + k == -a/2 + k
+        # OPTIMIZE can probably do this with pure numpy, no python loop...
+        # Z[k, -k] = Z_{m,-m} = (-1) ** (j - m) / sqrt(2j + 1), do factor later
+        # (-1) ** (j - m) == 1 - 2 * (j - m) % 2 = 1 - 2 * (a - k) % 2
+        Z[k, d_a - 1 - k] = 1 - 2 * np.mod(a - k, 2)
+    return Z
+
+
 def clebsch_gordan(a: int, k_a: int, b: int, k_b: int, c: int, k_c: int):
     """The sectors are ``a == 2 * j_a``, and ``k_a = m_a + j_a = 0, 1, ..., 2 * j_a + 1``"""
     j_a = as_j(a)
