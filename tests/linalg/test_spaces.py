@@ -194,6 +194,69 @@ def test_product_space(any_symmetry, make_any_sectors, np_random):
     assert empty_product.as_VectorSpace() == monoidal_unit
 
 
+def test_ProductSpace_SU2():
+    sym = symmetries.SU2Symmetry()
+    a = spaces.VectorSpace(sym, [[0], [3], [2]], [2, 3, 4])
+    b = spaces.VectorSpace(sym, [[1], [4]], [5, 6])
+    c = spaces.VectorSpace(sym, [[0], [3], [1]], [3, 1, 2])
+
+    ab = spaces.ProductSpace([a, b])
+    # a     b           fusion
+    #                   0 1/2   1 3/2   2 5/2   3 7/2
+    # 0     1/2            10
+    # 0     2                          12
+    # 3/2   1/2                15      15
+    # 3/2   2              18      18      18      18
+    # 1     1/2            20      20
+    # 1     2                  24      24      24
+    # COUNTS
+    npt.assert_array_equal(ab.sectors, np.array([1, 2, 3, 4, 5, 6, 7])[:, None])
+    npt.assert_array_equal(ab.multiplicities, np.array([48, 39, 38, 51, 18, 24, 18]))
+
+    bc = spaces.ProductSpace([b, c])
+    # c     b      mult     fusion
+    #                       0 1/2   1 3/2   2 5/2   3 7/2
+    # 0     1/2    3*5         15
+    # 0     2      3*6                     18
+    # 3/2   1/2    1*5              5       5
+    # 3/2   2      1*6          6       6       6       6
+    # 1/2   1/2    2*5     10      10
+    # 1/2   2      2*6                 12      12
+    # COUNTS
+    npt.assert_array_equal(bc.sectors, np.array([0, 1, 2, 3, 4, 5, 7])[:, None])
+    npt.assert_array_equal(bc.multiplicities, np.array([10, 21, 15, 18, 23, 18, 6]))
+
+    abc = spaces.ProductSpace([a, b, c])
+    # ab    c   mult    fusion
+    #                   0   1/2   1   3/2   2   5/2   3   7/2   4   9/2   5
+    # 1/2   0   48*3        144
+    # 1/2 3/2   48*1             48        48
+    # 1/2 1/2   48*2   96        96
+    # 1     0   39*3            117
+    # 1   3/2   39*1         39        39        39
+    # 1   1/2   39*2         78        78
+    # 3/2   0   38*3                  114 
+    # 3/2 3/2   38*1   38        38        38        38
+    # 3/2 1/2   38*2             76        76
+    # 2     0   51*3                      153
+    # 2   3/2   51*1         51        51        51        51
+    # 2   1/2   51*2                  102       102
+    # 5/2   0   18*3                             54
+    # 5/2 3/2   18*1             18        18        18        18
+    # 5/2 1/2   18*2                       36        36
+    # 3     0   24*3                                 72
+    # 3   3/2   24*1                   24        24        24       24
+    # 3   1/2   24*2                             48        48
+    # 7/2   0   18*3                                       54
+    # 7/2 3/2   18*1                       18        18        18        18
+    # 7/2 1/2   18*2                                 36        36
+    expect_mults = [96+38, 144+39+78+51, 48+96+117+38+76+18, 39+78+114+51+102+24,
+                    48+38+76+153+18+36+18, 39+51+102+54+24+48, 38+18+36+72+18+36, 51+24+48+54,
+                    18+18+36, 24, 18]
+    npt.assert_array_equal(abc.sectors, np.arange(11)[:, None])
+    npt.assert_array_equal(abc.multiplicities, np.array(expect_mults))
+
+
 def test_get_basis_transformation():
     # TODO expand this
     even, odd = [0], [1]

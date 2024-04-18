@@ -123,7 +123,7 @@ def find_row_differences(sectors, include_len: bool=False):
     -------
     diffs: 1D array
         The indices where rows change, including the first and last. Equivalent to:
-        ``[0] + [i for i in range(1, len(sectors)) if np.any(qflat[i-1] != qflat[i])]``
+        ``[0] + [i for i in range(1, len(sectors)) if np.any(sectors[i-1] != sectors[i])]``
     """
     # note: by default remove last entry [len(sectors)] compared to old.charges
     len_sectors = len(sectors)

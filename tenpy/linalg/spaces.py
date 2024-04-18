@@ -10,7 +10,8 @@ from typing import TYPE_CHECKING, Sequence, Iterator
 
 from tenpy.linalg.dummy_config import printoptions
 
-from .symmetries import Sector, SectorArray, Symmetry, ProductSymmetry, NoSymmetry, no_symmetry
+from .symmetries import (Sector, SectorArray, Symmetry, ProductSymmetry, NoSymmetry, no_symmetry,
+                         FusionStyle)
 from .misc import make_stride, find_row_differences, unstridify, join_as_many_as_possible
 from ..tools.misc import inverse_permutation, rank_data, to_iterable
 from ..tools.string import format_like_list
@@ -929,11 +930,13 @@ class ProductSpace(VectorSpace):
     ----------
     basis_perm : ndarray
         For `ProductSpace`s, this is always the trivial permutation ``[0, 1, 2, 3, ...]``.
-    _fusion_outcomes_sort : 1D array
+    _fusion_outcomes_sort : 1D array | None
+        Only available for abelian symmetries.
         The permutation that ``np.lexsort( .T)``s the list of all possible fusion outcomes.
         Note that that list contains duplicates.
         Shape is ``(np.prod([sp.num_sectors for sp in self.spaces]))``.  (TODO this true for FusionTree?)
-    _fusion_outcomes_inverse_sort : 1D ndarray
+    _fusion_outcomes_inverse_sort : 1D ndarray | None
+        Only available for abelian symmetries.
         Inverse permutation of :attr:`_fusion_outcomes_sort`.
 
     Parameters
@@ -1035,7 +1038,10 @@ class ProductSpace(VectorSpace):
                     symmetry=spaces[0].symmetry, spaces=spaces, _is_dual=_is_dual
                 )
             self._fusion_outcomes_sort = fusion_outcomes_sort
-            self._fusion_outcomes_inverse_sort = inverse_permutation(fusion_outcomes_sort)
+            if fusion_outcomes_sort is None:
+                self._fusion_outcomes_inverse_sort = None
+            else:
+                self._fusion_outcomes_inverse_sort = inverse_permutation(fusion_outcomes_sort)
             for key, val in metadata.items():
                 setattr(self, key, val)
         else:
@@ -1471,36 +1477,70 @@ def _fuse_spaces(symmetry: Symmetry, spaces: list[VectorSpace], _is_dual: bool
         )
         multiplicities = np.prod([space.multiplicities[gr] for space, gr in zip(spaces, grid.T)],
                                   axis=0)
-        fusion_outcomes_sort = np.lexsort(sectors.T)
-        multiplicities = multiplicities[fusion_outcomes_sort]
-        sectors = sectors[fusion_outcomes_sort]
-        slices = np.concatenate([[0], np.cumsum(multiplicities)], axis=0)
-        diffs = find_row_differences(sectors, include_len=True)
-        slices = slices[diffs]
-        multiplicities = slices[1:] - slices[:-1]
-        sectors = sectors[diffs[:-1]]
-        
-    else:
-        fusion = {tuple(s): m for s, m in zip(spaces[0].sectors, spaces[0].multiplicities)}
-        all_coupled_sectors = spaces[0].sectors
-        for space in spaces[1:]:
-            new_fusion = {}
-            for t_a, m_a in fusion.items():
-                s_a = np.array(t_a)
-                for s_b, m_b in zip(space.sectors, space.multiplicities):
-                    for s_c in symmetry.fusion_outcomes(s_a, s_b):
-                        all_coupled_sectors.append(s_c)
-                        t_c = tuple(s_c)
-                        n = symmetry._n_symbol(s_a, s_b, s_c)
-                        new_fusion[t_c] = new_fusion.get(t_c, 0) + m_a * m_b * n
-            fusion = new_fusion
-            # by convention fuse spaces left to right, i.e. (...((0,1), 2), ..., N)
-        non_dual_sectors = np.asarray(list(fusion.keys()))
-        multiplicities = np.asarray(list(fusion.values()))
-        sort = np.lexsort(non_dual_sectors.T)
-        sectors = non_dual_sectors[sort]
-        multiplicities = multiplicities[sort]
-        fusion_outcomes_sort = None  # TODO
-        raise NotImplementedError  # TODO sectors, multiplicities from above is ok, need to define fusion_outcomes_sort well
+        sectors, multiplicities, fusion_outcomes_sort = _unique_sorted_sectors(sectors, multiplicities)
+        return sectors, multiplicities, fusion_outcomes_sort, {}
 
-    return sectors, multiplicities, fusion_outcomes_sort, {}
+    # define recursively. base cases:
+    if len(spaces) == 0:
+        return symmetry.empty_sector_array, [], None, {}
+
+    if len(spaces) == 1:
+        sectors = spaces[0].sectors
+        mults = spaces[0].multiplicities
+        order = np.lexsort(sectors.T)
+        return sectors[order, :], mults[order], None, {}
+
+    # _is_dual is already accounted for.
+    sectors_1, mults_1, _, _ = _fuse_spaces(symmetry, spaces[:-1], _is_dual=False)
+    sectors_2 = spaces[-1].sectors
+    mults_2 = spaces[-1].multiplicities
+
+    sector_contributions = []
+    mult_contributions = []
+    for s2, m2 in zip(sectors_2, mults_2):
+        for s1, m1 in zip(sectors_1, mults_1):
+            sects = symmetry.fusion_outcomes(s1, s2)
+            sector_contributions.append(sects)
+            if symmetry.fusion_style is FusionStyle.general:
+                mult_contributions.append(
+                    m1 * m2 * np.array([symmetry._n_symbol(s1, s2, c) for c in sects], dtype=int)
+                )
+            else:
+                mult_contributions.append(m1 * m2 * np.ones((len(sects),), dtype=int))
+                
+    sectors, multiplicities, _ = _unique_sorted_sectors(
+        np.concatenate(sector_contributions, axis=0),
+        np.concatenate(mult_contributions, axis=0)
+    )
+    return sectors, multiplicities, None, {}
+
+
+def _unique_sorted_sectors(unsorted_sectors: SectorArray, unsorted_multiplicities: np.ndarray):
+    """Helper function for _fuse_spaces
+
+    Given unsorted sectors which may contain duplicates,
+    return a sorted list of unique sectors and corresponding *aggregate* multiplicities
+
+    Returns
+    -------
+    sectors
+        The unique entries of the `unsorted_sectors`, sorted according to ``np.lexsort( .T)``.
+    multiplicities
+        The corresponding aggregate multiplicities, i.e. the sum of all entries in
+        `unsorted_multiplicities` which correspond to the given sector
+    perm
+        The permutation that sorts the input, i.e. ``np.lexsort(unsorted_sectors.T)``.
+    """
+    perm = np.lexsort(unsorted_sectors.T)
+    sectors = unsorted_sectors[perm]
+    multiplicities = unsorted_multiplicities[perm]
+    slices = np.concatenate([[0], np.cumsum(multiplicities)], axis=0)
+    diffs = find_row_differences(sectors, include_len=True)
+    slices = slices[diffs]
+    multiplicities = slices[1:] - slices[:-1]
+    sectors = sectors[diffs[:-1]]
+    return sectors, multiplicities, perm
+     
+    
+    
+    
