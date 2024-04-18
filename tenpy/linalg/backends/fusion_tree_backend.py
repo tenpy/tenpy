@@ -73,10 +73,10 @@ def _make_domain_codomain(legs: list[VectorSpace], num_domain_legs: int = 0, bac
     # need to pass symmetry and is_real, since codomain or domain might be the empty product.
     symmetry = legs[0].symmetry
     is_real = legs[0].is_real
-    domain = ProductSpace([l.dual for l in legs[:num_domain_legs]], backend=backend,
-                          symmetry=symmetry, is_real=is_real)
-    codomain = ProductSpace(legs[num_domain_legs:][::-1], backend=backend, symmetry=symmetry,
-                            is_real=is_real)
+    domain = ProductSpace([l.dual for l in reversed(legs[-num_domain_legs:])], backend=backend,
+                          symmetry=symmetry, is_real=is_real, _is_dual=False)
+    codomain = ProductSpace(legs[:-num_domain_legs], backend=backend, symmetry=symmetry,
+                            is_real=is_real, _is_dual=False)
     return domain, codomain
 
 
@@ -179,11 +179,11 @@ class FusionTreeBackend(Backend, BlockBackend, ABC):
         # check domain and codomain
         assert a.data.num_domain_legs == a.num_domain_legs
         for n in range(a.num_domain_legs):
-            # domain: duals of legs[:K]
-            assert a.legs[n].can_contract_with(a.data.domain.spaces[n])
+            # domain: duals of second part, in reverse order
+            assert a.legs[-n] == a.data.domain.spaces[n].dual
         for n in range(a.num_codomain_legs):
-            # codomain: legs[K:] in reverse order
-            assert a.legs[a.num_domain_legs + n] == a.data.codomain.spaces[-n]
+            # codomain: first part of legs
+            assert a.legs[n] == a.data.codomain.spaces[n]
         assert a.data.domain.is_dual is False
         assert a.data.codomain.is_dual is False
         assert all(not isinstance(s, ProductSpace) for s in a.data.codomain.spaces)
