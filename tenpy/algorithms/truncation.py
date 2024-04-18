@@ -307,6 +307,135 @@ def svd_theta(theta, trunc_par, qtotal_LR=[None, None], inner_labels=['vR', 'vL'
     return U, S, VH, err, renormalization
 
 
+def qr_theta_Y0(B_L: npc.Array, B_R: npc.Array, theta: npc.Array, expand: float, min_block_increase: int):
+    """Generate the initial guess Y0 for the right isometry in QR based TEBD.
+
+    Parameters
+    ----------
+    B_L : Array with legs [vL, p, vR]
+    B_R : Array with legs [vL, p, vR]
+    theta : Array with legs [(vL.p0), (p1.vR)]
+    expand : float or None
+
+    Returns
+    -------
+    Y0 : Array with legs [vL, (p1.vR)]
+    """
+    if expand is None or expand == 0:
+        return B_R.combine_legs(['p', 'vR']).ireplace_labels('(p.vR)', '(p1.vR)')
+
+    assert min_block_increase >= 0
+
+    Y0 = theta.copy(deep=False)
+    Y0.legs[0] = Y0.legs[0].to_LegCharge()
+    Y0.ireplace_label('(vL.p0)', 'vL')
+    if any(B_L.qtotal != 0):
+        Y0.gauge_total_charge('vL', new_qtotal=B_R.qtotal)
+    vL_old = B_R.get_leg('vL')
+    if not vL_old.is_blocked():
+        vL_old = vL_old.sort()[1]
+    vL_new = Y0.get_leg('vL')  # is blocked, since created from pipe
+
+    # vL_old is guaranteed to be a slice of vL_new by charge rule in B_L
+    piv = np.zeros(vL_new.ind_len, dtype=bool)  # indices to keep in vL_new
+    increase_per_block = max(min_block_increase, int(vL_old.ind_len * expand // vL_new.block_number))
+    sizes_old = vL_old.get_block_sizes()
+    sizes_new = vL_new.get_block_sizes()
+    # iterate over charge blocks in vL_new and vL_old at the same time
+    j_old = 0
+    q_old = vL_old.charges[j_old, :]
+    qdata_order = np.argsort(Y0._qdata[:, 0])
+    qdata_idx = 0
+    for j_new, q_new in enumerate(vL_new.charges):
+        if all(q_new == q_old):  # have charge block in both vL_new and vL_old
+            s_new = sizes_old[j_old] + increase_per_block
+            # move to next charge block in next loop iteration
+            j_old += 1
+            if j_old < len(vL_old.charges):
+                q_old = vL_old.charges[j_old, :]
+        else:  # charge block only in vL_new
+            s_new = increase_per_block
+        s_new = min(s_new, sizes_new[j_new])  # don't go beyond block
+
+        if Y0._qdata[qdata_order[qdata_idx], 0] != j_new:
+            # block does not exist
+            # while we could set corresponding piv entries to True, it would not help, since
+            # the corresponding "entries" of Y0 are zero anyway
+            continue
+
+        # block has axis [vL, (p1.vR)]. want to keep the s_new slices of the vL axis
+        #  that have the largest norm
+        norms = np.linalg.norm(Y0._data[qdata_order[qdata_idx]], axis=1)
+        kept_slices = np.argsort(-norms)[:s_new]  # negative sign so we sort large to small
+        start = vL_new.slices[j_new]
+        piv[start + kept_slices] = True
+
+        qdata_idx += 1
+        if qdata_idx >= Y0._qdata.shape[0]:
+            break
+
+    Y0.iproject(piv, 'vL')
+    return Y0
+
+
+def qr_theta(theta: npc.Array, Y0: npc.Array, use_eig_based_svd: bool, trunc_params,
+                            need_A_L: bool, compute_err: bool):
+    """Perform the decomposition step of QR based TEBD
+
+    Parameters
+    ----------
+    theta : Array with legs [(vL.p0), (p1.vR)]
+    Y0 : Array with legs [vL, (p1.vR)]
+    ...
+
+    Returns
+    -------
+    A_L : array with legs [(vL.p), vR] or None
+    S : 1D numpy array
+    B_R : array with legs [vL, (p.vR)]
+    trunc_err : TruncationError
+    renormalize : float
+    """
+
+    if compute_err:
+        need_A_L = True
+
+    # QR based updates
+    theta_i0 = npc.tensordot(theta, Y0.conj(), ['(p1.vR)', '(p1*.vR*)']).ireplace_label('vL*', 'vR')
+    A_L, _ = npc.qr(theta_i0, inner_labels=['vR', 'vL'])
+    # A_L: [(vL.p0), vR]
+    theta_i1 = npc.tensordot(A_L.conj(), theta, ['(vL*.p0*)', '(vL.p0)']).ireplace_label('vR*', 'vL')
+    theta_i1.itranspose(['(p1.vR)', 'vL'])
+    B_R, Xi = npc.qr(theta_i1, inner_labels=['vL', 'vR'], inner_qconj=-1)
+    B_R.itranspose(['vL', '(p1.vR)'])
+    Xi.itranspose(['vL', 'vR'])
+
+    # SVD of bond matrix Xi
+    if use_eig_based_svd:
+        U, S, Vd, trunc_err, renormalize = _eig_based_svd(
+            Xi, inner_labels=['vR', 'vL'], need_U=need_A_L, trunc_params=trunc_params
+        )
+    else:
+        U, S, Vd, _, renormalize = svd_theta(Xi, trunc_params)
+    B_R = npc.tensordot(Vd, B_R, ['vR', 'vL'])
+    if need_A_L:
+        A_L = npc.tensordot(A_L, U, ['vR', 'vL'])
+    else:
+        A_L = None
+
+    if compute_err:
+        theta_approx = npc.tensordot(A_L.scale_axis(S, axis='vR'), B_R, ['vR', 'vL'])
+        eps = npc.norm(theta - theta_approx) ** 2
+        trunc_err = TruncationError(eps, 1. - 2. * eps)
+    else:
+        trunc_err = TruncationError(np.nan, np.nan)
+
+    B_R = B_R.ireplace_label('(p1.vR)', '(p.vR)')
+    if need_A_L:
+        A_L = A_L.ireplace_label('(vL.p0)', '(vL.p)')
+
+    return A_L, S, B_R, trunc_err, renormalize
+
 def _combine_constraints(good1, good2, warn):
     """return logical_and(good1, good2) if there remains at least one `True` entry.
 
