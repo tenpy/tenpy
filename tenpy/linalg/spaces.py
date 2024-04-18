@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING, Sequence, Iterator
 from tenpy.linalg.dummy_config import printoptions
 
 from .symmetries import Sector, SectorArray, Symmetry, ProductSymmetry, NoSymmetry, no_symmetry
-from .misc import make_stride, find_row_differences, unstridify
+from .misc import make_stride, find_row_differences, unstridify, join_as_many_as_possible
 from ..tools.misc import inverse_permutation, rank_data, to_iterable
 from ..tools.string import format_like_list
 
@@ -645,13 +645,21 @@ class VectorSpace:
             sectors = self.sectors
             mults = self.multiplicities
         indent = printoptions.indent * ' '
+
+        basis_perm_header = 'basis_perm: '
+        basis_perm_str = join_as_many_as_possible(
+            [str(x) for x in self.basis_perm],
+            separator=' ',
+            max_len=printoptions.linewidth - len(basis_perm_header) - len(indent) - 2,  # -2 for the brackets
+        )
+        basis_perm_str = '[' + basis_perm_str + ']'
         lines = [
             'VectorSpace(',
             *([f'{indent}is_real=True'] if self.is_real else []),
             f'{indent}symmetry: {self.symmetry!s}',
             f'{indent}dim: {self.dim}',
             f'{indent}is_dual: {self.is_dual}',
-            f'{indent}basis_perm: {self.basis_perm}',
+            f'{indent}{basis_perm_header}{basis_perm_str}',
             f'{indent}num sectors: {self.num_sectors}',
         ]
         # determine sectors: list[str] and mults: list[str]

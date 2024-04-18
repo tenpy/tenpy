@@ -233,13 +233,14 @@ def test_direct_sum(make_any_space, max_mult=5, max_sectors=5):
     npt.assert_array_equal(d.sectors_of_basis, expect)
 
 
-def test_str_repr(make_any_space,
-                  str_max_len=1000, str_max_lines=20,
-                  repr_max_len=1000, repr_max_lines=20):
+def test_str_repr(make_any_space, str_max_lines=20, repr_max_lines=20):
     """Check if str and repr work. Automatically, we can only check if they run at all.
     To check if the output is sensible and useful, a human should look at it.
     Run ``pytest -rP -k test_str_repr`` to see the output.
     """
+    terminal_width = 80
+    str_max_len = terminal_width * str_max_lines
+    repr_max_len = terminal_width * str_max_lines
     # TODO output is a bit long, should we force shorter? -> consider config.printoptions!
     
     space = make_any_space(max_sectors=20)

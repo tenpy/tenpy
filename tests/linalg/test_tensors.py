@@ -805,13 +805,14 @@ def test_flip_leg_duality(make_compatible_tensor, which_legs):
     npt.assert_array_almost_equal_nulp(T_np, res_np, 100)
 
 
-def test_str_repr(make_compatible_tensor,
-                  str_max_len=2000, str_max_lines=30,
-                  repr_max_len=2000, repr_max_lines=30):
+def test_str_repr(make_compatible_tensor, str_max_lines=30, repr_max_lines=30):
     """Check if str and repr work. Automatically, we can only check if they run at all.
     To check if the output is sensible and useful, a human should look at it.
     Run ``pytest -rP -k test_str_repr > output.txt`` to see the output.
     """
+    terminal_width = 80
+    str_max_len = terminal_width * str_max_lines
+    repr_max_len = terminal_width * str_max_lines
     mps_tens = make_compatible_tensor(labels=['vL', 'p', 'vR'])
     local_state = make_compatible_tensor(labels=['p'])
     local_op = make_compatible_tensor(labels=['p', 'p*'])
