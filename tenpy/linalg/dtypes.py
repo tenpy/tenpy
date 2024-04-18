@@ -24,6 +24,10 @@ class Dtype(Enum):
         return dtype.value % 2 == 0
 
     @property
+    def is_complex(dtype):
+        return dtype.value % 2 == 1
+
+    @property
     def to_complex(dtype):
         if dtype.value == 2:
             raise ValueError('Dtype.bool can not be converted to complex')

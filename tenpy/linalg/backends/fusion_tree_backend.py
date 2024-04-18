@@ -240,9 +240,9 @@ class FusionTreeBackend(Backend, BlockBackend, ABC):
         for coupled in a.data.blocks.keys():
             for splitting_tree in all_fusion_trees(codomain, coupled):
                 for fusion_tree in all_fusion_trees(domain, coupled):
-                    X = self.fusion_tree_to_block(fusion_tree)  # [b1,...,bN,c]
+                    X = fusion_tree.as_block(backend=self)  # [b1,...,bN,c]
                     degeneracy_data = a.data.get_sub_block(fusion_tree, splitting_tree)  # [j1,...,jM, k1,...,kN]
-                    Y = self.block_conj(self.fusion_tree_to_block(splitting_tree))  # [a1,...,aM,c]
+                    Y = self.block_conj(splitting_tree.as_block(backend=self))  # [a1,...,aM,c]
                     # symmetric tensors are the identity on the coupled sectors; so we can contract
                     symmetry_data = self.block_tdot(Y, X, [-1], [-1])  # [a1,...,aM , b1,...,bN]
                     # kron into combined indices [(a1,j1), ..., (aM,jM) , (b1,k1),...,(bN,kN)]
@@ -258,10 +258,6 @@ class FusionTreeBackend(Backend, BlockBackend, ABC):
         return res
 
     def diagonal_to_block(self, a: DiagonalTensor) -> Block:
-        raise NotImplementedError  # TODO
-
-    def fusion_tree_to_block(self, tree: FusionTree) -> Block:
-        """convert a FusionTree to a block, containing its "matrix" representation."""
         raise NotImplementedError  # TODO
 
     def from_dense_block(self, a: Block, legs: list[VectorSpace], domain_num_legs: int,
