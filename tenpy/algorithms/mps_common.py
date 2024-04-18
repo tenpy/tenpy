@@ -2392,3 +2392,33 @@ class VariationalApplyMPO(VariationalCompression):
         if not self.eff_H.combine:
             th = th.combine_legs([['vL', 'p0'], ['p1', 'vR']], qconj=[+1, -1])
         return self.update_new_psi(th)
+
+class QRBasedVariationalApplyMPO(VariationalApplyMPO):
+
+    def update_new_psi(self, theta):
+        """Given a new two-site wave function `theta`, split it and save it in :attr:`psi`."""
+        i0 = self.i0
+        new_psi = self.psi
+        old_A0 = new_psi.get_B(i0, form='A')
+        U, S, VH, err, renormalize = svd_theta(theta,
+                                               self.trunc_params,
+                                               qtotal_LR=[old_A0.qtotal, None],
+                                               inner_labels=['vR', 'vL'])
+        U.ireplace_label('(vL.p0)', '(vL.p)')
+        VH.ireplace_label('(p1.vR)', '(p.vR)')
+        A0 = U.split_legs(['(vL.p)'])
+        B1 = VH.split_legs(['(p.vR)'])
+        self.renormalize.append(renormalize)
+        # first compare to old best guess to check convergence of the sweeps
+        if self._tol_theta_diff is not None and self.update_LP_RP[0] == False:
+            theta_old = new_psi.get_theta(i0)
+            theta_new_trunc = npc.tensordot(A0.scale_axis(S, 'vR'), B1, ['vR', 'vL'])
+            theta_new_trunc.iset_leg_labels(['vL', 'p0', 'p1', 'vR'])
+            ov = npc.inner(theta_new_trunc, theta_old, do_conj=True, axes='labels')
+            theta_diff = 1. - abs(ov)
+            self._theta_diff.append(theta_diff)
+        # now set the new tensors to the MPS
+        new_psi.set_B(i0, A0, form='A')  # left-canonical
+        new_psi.set_B(i0 + 1, B1, form='B')  # right-canonical
+        new_psi.set_SR(i0, S)
+        return {'U': U, 'VH': VH, 'err': err}
