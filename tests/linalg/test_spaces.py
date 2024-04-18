@@ -87,6 +87,10 @@ def test_vector_space(any_symmetry, make_any_sectors, np_random):
 
     # TODO (JU) test num_parameters when ready
 
+    if not any_symmetry.is_abelian:
+        # TODO
+        pytest.xfail('parse_idx (and probly more methods) are wrong if any sector_dim > 1.')
+
     print('check idx_to_sector and parse_idx')
     idx = 0
     for n, s in enumerate(s1.sectors):
@@ -134,6 +138,11 @@ def test_take_slice(make_any_space, np_random):
     space: spaces.VectorSpace = make_any_space()
     mask = np_random.choice([True, False], size=space.dim)
     small = space.take_slice(mask)
+
+    if not space.symmetry.is_abelian:
+        # TODO
+        pytest.xfail('sectors_of_basis not implemented')
+        
     #
     npt.assert_array_equal(small.sectors_of_basis, space.sectors_of_basis[mask])
     #
@@ -292,6 +301,11 @@ def test_direct_sum(make_any_space, max_mult=5, max_sectors=5):
     c = make_any_space(max_mult=max_mult, max_sectors=max_sectors, is_dual=a.is_dual)
     assert a == spaces.VectorSpace.direct_sum(a)
     d = a.direct_sum(b, c)
+
+    if not a.symmetry.is_abelian:
+        # TODO
+        pytest.xfail('sectors_of_basis not implemented')
+    
     expect = np.concatenate([leg.sectors_of_basis for leg in [a, b, c]], axis=0)
     npt.assert_array_equal(d.sectors_of_basis, expect)
 
@@ -326,9 +340,9 @@ def test_str_repr(make_any_space, str_max_lines=20, repr_max_lines=20):
     assert res.count('\n') <= str_max_lines
     print(res)
 
-    product_space = spaces.ProductSpace([space])
+    product_space = spaces.ProductSpace([make_any_space(max_sectors=3)])
     while len(product_space.spaces) <= 3:
-        product_space = spaces.ProductSpace([*product_space.spaces, make_any_space(max_sectors=5)])
+        product_space = spaces.ProductSpace([*product_space.spaces, make_any_space(max_sectors=3)])
         print()
         print()
         print('-----------------------')

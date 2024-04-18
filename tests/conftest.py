@@ -91,6 +91,7 @@ _symmetries = {
     'Z2': symmetries.z2_symmetry,
     'Z4_named': symmetries.ZNSymmetry(4, "My_Z4_symmetry"),
     'U(1)xZ3': symmetries.ProductSymmetry([symmetries.u1_symmetry, symmetries.z3_symmetry]),
+    'SU(2)': symmetries.SU2Symmetry(),
 }
 
 
@@ -357,7 +358,7 @@ def random_symmetry_sectors(symmetry: symmetries.Symmetry, num: int, sort: bool 
                             np_random=np.random.default_rng()) -> symmetries.SectorArray:
     """random unique symmetry sectors, optionally sorted"""
     if isinstance(symmetry, symmetries.SU2Symmetry):
-        res = np.arange(0, 2*num, 2, dtype=int)[:, np.newaxis]
+        res = np_random.choice(int(1.3 * num), replace=False, size=(num, 1))
     elif isinstance(symmetry, symmetries.U1Symmetry):
         vals = list(range(-num, num)) + [123]
         res = np_random.choice(vals, replace=False, size=(num, 1))
