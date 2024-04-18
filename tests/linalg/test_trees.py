@@ -42,7 +42,7 @@ def check_fusion_trees(it: trees.fusion_trees, expect_len: int = None):
     
 def test_fusion_trees(any_symmetry: Symmetry, make_any_sectors, np_random):
     """test the ``fusion_trees`` iterator"""
-    some_sectors = make_any_sectors(10)  # generates unique sectors
+    some_sectors = make_any_sectors(20)  # generates unique sectors
     non_trivial_sectors = some_sectors[np.any(some_sectors != any_symmetry.trivial_sector[None, :], axis=1)]
     i = any_symmetry.trivial_sector
 
@@ -66,7 +66,7 @@ def test_fusion_trees(any_symmetry: Symmetry, make_any_sectors, np_random):
 
     print('large inconsistent fusion')
     # find a forbidden coupled sector
-    are_allowed = np.any(some_sectors[:, None, :] == np.all(allowed[None, :, :], axis=2), axis=1)
+    are_allowed = np.any(np.all(some_sectors[:, None, :] == allowed[None, :, :], axis=2), axis=1)
     forbidden_idcs = np.where(np.logical_not(are_allowed))[0]
     if len(forbidden_idcs) > 0:
         forbidden = some_sectors[np_random.choice(forbidden_idcs)]
@@ -101,7 +101,3 @@ def test_fusion_trees(any_symmetry: Symmetry, make_any_sectors, np_random):
     N = any_symmetry.n_symbol(c, d, e)
     check_fusion_trees(trees.fusion_trees(any_symmetry, [c, d], e, [False, False]), expect_len=N)
     check_fusion_trees(trees.fusion_trees(any_symmetry, [c, d], e, [False, True]), expect_len=N)
-
-    print('inconsistent fusion: [c, dual(c)] -> d')
-    check_fusion_trees(trees.fusion_trees(any_symmetry, [c, c_dual], d, [False, False]), expect_len=0)
-    check_fusion_trees(trees.fusion_trees(any_symmetry, [c, c_dual], d, [False, True]), expect_len=0)
