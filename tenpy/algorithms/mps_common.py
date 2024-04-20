@@ -25,7 +25,7 @@ from .algorithm import Algorithm
 from ..linalg.sparse import NpcLinearOperator, SumNpcLinearOperator, OrthogonalNpcLinearOperator
 from ..networks.mpo import MPOEnvironment
 from ..networks.mps import MPSEnvironment
-from .truncation import truncate, svd_theta, TruncationError
+from .truncation import truncate, svd_theta, qr_theta, TruncationError
 from ..linalg import np_conserved as npc
 from ..tools.params import asConfig
 from ..tools.misc import find_subclass, consistency_check
@@ -2394,18 +2394,74 @@ class VariationalApplyMPO(VariationalCompression):
         return self.update_new_psi(th)
 
 class QRBasedVariationalApplyMPO(VariationalApplyMPO):
+    r"""Version of variational apply MPO that relies on QR decompositions rather than SVD.
 
-    def update_new_psi(self, theta):
+    Analog to the QR based TEBD introduced in :arxiv:`2212.09782`.
+
+    .. todo ::
+        To use `use_eig_based_svd == True`, which makes sense on GPU only, we need to implement
+        the `_eig_based_svd` for "non-square" matrices.
+        This means that :math:`M^{\dagger} M` and :math:`M M^{\dagger}` dont have the same size,
+        and we need to disregard those eigenvectors of the larger one, that have eigenvalue zero,
+        since we dont have corresponding eigenvalues of the smaller one.
+
+    Options
+    -------
+    .. cfg:config :: QRBasedVariationalApplyMPO
+        :include: VariationalApplyMPO
+
+        cbe_expand : float
+            Expansion rate. The QR-based decomposition is carried out at an expanded bond dimension
+            ``eta = (1 + cbe_expand) * chi``, where ``chi`` is the bond dimension before the time step.
+            Default is `0.1`.
+        cbe_expand_0 : float
+            Expansion rate at low ``chi``.
+            If given, the expansion rate decreases linearly from ``cbe_expand_0`` at ``chi == 1``
+            to ``cbe_expand`` at ``chi == trunc_params['chi_max']``, then remains constant.
+            If not given, the expansion rate is ``cbe_expand`` at all ``chi``.
+        cbe_min_block_increase : int
+            Minimum bond dimension increase for each block. Default is `1`.
+        use_eig_based_svd : bool
+            Whether the SVD of the bond matrix :math:`\Xi` should be carried out numerically via
+            the eigensystem. This is faster on GPUs, but less accurate.
+            It makes no sense to do this on CPU. It is currently not supported for update_imag.
+            Default is `False`.
+        compute_err : bool
+            Whether the truncation error should be computed exactly.
+            Compared to SVD-based TEBD, computing the truncation error is significantly more expensive.
+            If `True` (default), the full error is computed.
+            Otherwise, the truncation error is set to NaN.
+    """
+
+    def _expansion_rate(self, i):
+        """get expansion rate for updating bond i"""
+        expand = self.options.get('cbe_expand', 0.1)
+        expand_0 = self.options.get('cbe_expand_0', None)
+
+        if expand_0 is None or expand_0 == expand:
+            return expand
+
+        chi_max = self.trunc_params.get('chi_max', None)
+        if chi_max is None:
+            raise ValueError('Need to specify trunc_params["chi_max"] in order to use cbe_expand_0.')
+
+        chi = min(self.psi.get_SL(i).shape)
+        return max(expand_0 - chi / chi_max * (expand_0 - expand), expand)
+
+    def update_new_psi(self, theta: npc.Array):
         """Given a new two-site wave function `theta`, split it and save it in :attr:`psi`."""
         i0 = self.i0
         new_psi = self.psi
-        old_A0 = new_psi.get_B(i0, form='A')
-        U, S, VH, err, renormalize = svd_theta(theta,
-                                               self.trunc_params,
-                                               qtotal_LR=[old_A0.qtotal, None],
-                                               inner_labels=['vR', 'vL'])
-        U.ireplace_label('(vL.p0)', '(vL.p)')
-        VH.ireplace_label('(p1.vR)', '(p.vR)')
+        # old_A0 = new_psi.get_B(i0, form='A')
+        expand = self._expansion_rate(i0)
+        U, S, VH, err, renormalize = qr_theta(self.psi.get_B(i0, 'B'), self.psi.get_B(i0+1, 'B'), theta,
+                                              self.trunc_params, 
+                                              expand=expand, 
+                                              use_eig_based_svd=self.options.get('use_eig_based_svd', False),
+                                              need_A_L=False, 
+                                              compute_err=self.options.get('compute_err', True),
+                                              min_block_increase = self.options.get('cbe_min_block_increase', 1)) 
+                                            # qtotal_LR=[old_A0.qtotal, None] <- what about this?
         A0 = U.split_legs(['(vL.p)'])
         B1 = VH.split_legs(['(p.vR)'])
         self.renormalize.append(renormalize)

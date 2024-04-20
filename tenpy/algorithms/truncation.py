@@ -307,8 +307,8 @@ def svd_theta(theta, trunc_par, qtotal_LR=[None, None], inner_labels=['vR', 'vL'
     return U, S, VH, err, renormalization
 
 
-def qr_theta_Y0(B_L: npc.Array, B_R: npc.Array, theta: npc.Array, expand: float, min_block_increase: int):
-    """Generate the initial guess Y0 for the right isometry in QR based TEBD.
+def _qr_theta_Y0(B_L: npc.Array, B_R: npc.Array, theta: npc.Array, expand: float, min_block_increase: int):
+    """Generate the initial guess Y0 for the right isometry for the QR based theta decomposition qr_theta().
 
     Parameters
     ----------
@@ -377,15 +377,18 @@ def qr_theta_Y0(B_L: npc.Array, B_R: npc.Array, theta: npc.Array, expand: float,
     Y0.iproject(piv, 'vL')
     return Y0
 
-
-def qr_theta(theta: npc.Array, Y0: npc.Array, use_eig_based_svd: bool, trunc_params,
-                            need_A_L: bool, compute_err: bool):
-    """Perform the decomposition step of QR based TEBD
+def qr_theta(B_L: npc.Array, B_R: npc.Array, theta: npc.Array, trunc_params: dict, 
+             expand: float, use_eig_based_svd: bool, need_A_L: bool, 
+             compute_err: bool, min_block_increase: int):
+    """Performs a QR based decomposition of a matrix `theta` (= the wavefunction) and truncates it
 
     Parameters
     ----------
+    B_L : Array with legs [vL, p, vR]
+    B_R : Array with legs [vL, p, vR]
     theta : Array with legs [(vL.p0), (p1.vR)]
-    Y0 : Array with legs [vL, (p1.vR)]
+    trunc_par : dict
+        truncation parameters as described in :func:`truncate`.
     ...
 
     Returns
@@ -396,14 +399,18 @@ def qr_theta(theta: npc.Array, Y0: npc.Array, use_eig_based_svd: bool, trunc_par
     trunc_err : TruncationError
     renormalize : float
     """
+    # TODO: Do we need to implement a parameter inner_labels as for the svd method?
 
     if compute_err:
         need_A_L = True
 
+    # Get inital guess for the right isometry
+    Y0 = _qr_theta_Y0(B_L, B_R, theta, expand, min_block_increase) # Y0: [vL, (p1.vR)]
+
     # QR based updates
     theta_i0 = npc.tensordot(theta, Y0.conj(), ['(p1.vR)', '(p1*.vR*)']).ireplace_label('vL*', 'vR')
-    A_L, _ = npc.qr(theta_i0, inner_labels=['vR', 'vL'])
-    # A_L: [(vL.p0), vR]
+    A_L, _ = npc.qr(theta_i0, inner_labels=['vR', 'vL']) # A_L: [(vL.p0), vR]
+
     theta_i1 = npc.tensordot(A_L.conj(), theta, ['(vL*.p0*)', '(vL.p0)']).ireplace_label('vR*', 'vL')
     theta_i1.itranspose(['(p1.vR)', 'vL'])
     B_R, Xi = npc.qr(theta_i1, inner_labels=['vL', 'vR'], inner_qconj=-1)
@@ -412,9 +419,9 @@ def qr_theta(theta: npc.Array, Y0: npc.Array, use_eig_based_svd: bool, trunc_par
 
     # SVD of bond matrix Xi
     if use_eig_based_svd:
-        U, S, Vd, trunc_err, renormalize = _eig_based_svd(
-            Xi, inner_labels=['vR', 'vL'], need_U=need_A_L, trunc_params=trunc_params
-        )
+        # TODO: Implement eigendecomposition based svd (could be copied from tebd.py but leave it for now)
+        msg = "qr_theta() is not implemented with eigendecomposition based svd. Please use implemente method by setting parameteruse_eig_based_svd=False"
+        raise NotImplementedError(msg)
     else:
         U, S, Vd, _, renormalize = svd_theta(Xi, trunc_params)
     B_R = npc.tensordot(Vd, B_R, ['vR', 'vL'])
