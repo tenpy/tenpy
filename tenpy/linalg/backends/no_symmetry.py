@@ -164,7 +164,7 @@ class NoSymmetryBackend(Backend, BlockBackend, ABC):
     def squeeze_legs(self, a: BlockDiagonalTensor, idcs: list[int]) -> Data:
         return self.block_squeeze_legs(a.data, idcs)
 
-    def norm(self, a: BlockDiagonalTensor | DiagonalTensor, order: int | float = None) -> float:
+    def norm(self, a: BlockDiagonalTensor | DiagonalTensor, order: int | float = 2) -> float:
         return self.block_norm(a.data, order=order)
 
     def act_block_diagonal_square_matrix(self, a: BlockDiagonalTensor, block_method: Callable[[Block], Block]

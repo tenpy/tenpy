@@ -178,9 +178,6 @@ def test_arnoldi(compatible_backend, make_compatible_space, which, N_max=20):
             _ = H.to_numpy_ndarray()
         return
     
-    if isinstance(H.backend, tp.linalg.backends.FusionTreeBackend):
-        pytest.xfail(reason='to_dense_block seems bugged')  # TODO
-    
     H_np = H.to_numpy_ndarray()
     E_np, psi_np = np.linalg.eig(H_np)
     if which == 'LM':

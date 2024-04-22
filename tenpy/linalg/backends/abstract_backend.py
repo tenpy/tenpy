@@ -327,7 +327,7 @@ class Backend(metaclass=ABCMeta):
         ...
 
     @abstractmethod
-    def norm(self, a: BlockDiagonalTensor | DiagonalTensor, order: int | float = None) -> float:
+    def norm(self, a: BlockDiagonalTensor | DiagonalTensor, order: int | float = 2) -> float:
         """Norm of a tensor. order has already been parsed and is a number"""
         ...
 
@@ -566,6 +566,10 @@ class BlockBackend(metaclass=ABCMeta):
 
     @abstractmethod
     def block_outer(self, a: Block, b: Block) -> Block:
+        """Outer product of blocks.
+
+        ``res[i1,...,iN,j1,...,jM] = a[i1,...,iN] * b[j1,...,jM]``
+        """
         ...
 
     @abstractmethod

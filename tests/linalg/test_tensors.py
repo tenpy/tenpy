@@ -59,15 +59,14 @@ def check_shape(shape: tensors.Shape, dims: tuple[int, ...], labels: list[str]):
     assert shape.is_fully_labelled != (None in labels)
 
 
-def test_Tensor_classmethods(make_compatible_tensor):
-    T: tensors.Tensor = make_compatible_tensor(num_legs=3)  # compatible legs where we can have blocks
+@pytest.mark.parametrize('num_domain_legs', [0, 1, 2, 3])
+def test_Tensor_classmethods(make_compatible_tensor, num_domain_legs):
+    T: tensors.Tensor = make_compatible_tensor(num_legs=3, num_domain_legs=num_domain_legs)
+    assert T.num_domain_legs == num_domain_legs
     backend = T.backend
 
     if (isinstance(backend, FusionTreeBackend)) and (isinstance(T.symmetry, ProductSymmetry)):
         pytest.xfail(reason='Topo data for ProductSymmetry is missing')
-
-    if isinstance(backend, FusionTreeBackend):
-        pytest.xfail(reason='to_dense_block is buggy')  # TODO
     
     legs = T.legs
     dims = tuple(T.shape)
@@ -76,10 +75,10 @@ def test_Tensor_classmethods(make_compatible_tensor):
     dense_block = backend.block_from_numpy(numpy_block)
 
     print('checking from_dense_block')
-    tens = tensors.BlockDiagonalTensor.from_dense_block(dense_block, legs=legs, backend=backend)
+    tens = tensors.BlockDiagonalTensor.from_dense_block(dense_block, legs=legs, backend=backend, tol=1e-7)
     tens.test_sanity()
     data = backend.block_to_numpy(tens.to_dense_block())
-    npt.assert_array_equal(data, numpy_block)
+    npt.assert_array_almost_equal_nulp(data, numpy_block, 100)
     #
     if T.num_parameters < T.parent_space.dim:  # otherwise all blocks are symmetric
         non_symmetric_block = dense_block + tens.backend.block_random_uniform(dims, dtype=T.dtype)
@@ -87,10 +86,10 @@ def test_Tensor_classmethods(make_compatible_tensor):
             _ = tensors.BlockDiagonalTensor.from_dense_block(non_symmetric_block, legs=legs, backend=backend)
 
     print('checking from numpy')
-    tens = tensors.BlockDiagonalTensor.from_dense_block(numpy_block, legs=legs, backend=backend)
+    tens = tensors.BlockDiagonalTensor.from_dense_block(numpy_block, legs=legs, backend=backend, tol=1e-7)
     tens.test_sanity()
     data = tens.to_numpy_ndarray()
-    npt.assert_array_equal(data, numpy_block)
+    npt.assert_array_almost_equal_nulp(data, numpy_block, 100)
 
     # TODO from_block_func, from_numpy_func
 
@@ -99,9 +98,14 @@ def test_Tensor_classmethods(make_compatible_tensor):
     print('checking zero')
     tens = tensors.BlockDiagonalTensor.zero(legs, backend=backend)
     tens.test_sanity()
-    npt.assert_array_equal(tens.to_numpy_ndarray(), np.zeros(dims))
+    npt.assert_array_almost_equal_nulp(tens.to_numpy_ndarray(), np.zeros(dims), 10)
 
     print('checking eye')
+    if isinstance(tens.backend, FusionTreeBackend):
+        with pytest.raises(NotImplementedError, match='eye_data not implemented'):
+            tens = tensors.BlockDiagonalTensor.eye(legs[0], backend=backend)
+        return  # TODO
+    
     tens = tensors.BlockDiagonalTensor.eye(legs[0], backend=backend)
     tens.test_sanity()
     npt.assert_array_equal(tens.to_numpy_ndarray(), np.eye(legs[0].dim))
@@ -382,6 +386,10 @@ def test_from_block_z4symm_2legs(symmetry_backend, num_domain_legs, block_backen
     else:
         raise RuntimeError('should have covered all cases above.')
 
+    # check conversion back
+    data_reconstructed = t.to_dense_block()
+    assert backend.block_allclose(data_reconstructed, data)
+
 
 @pytest.mark.parametrize('symmetry_backend', [pytest.param('fusion_tree', marks=pytest.mark.FusionTree)])
 def test_from_block_su2_symm(symmetry_backend, block_backend):
@@ -395,6 +403,7 @@ def test_from_block_su2_symm(symmetry_backend, block_backend):
     sy = .5 * np.array([[0., 1.j], [-1.j, 0]], dtype=complex)
     sz = .5 * np.array([[-1., 0.], [0., +1.]], dtype=complex)
     heisenberg_4 = sum(si[:, :, None, None] * si[None, None, :, :] for si in [sx, sy, sz])  # [p1, p1*, p2, p2*]
+    print(heisenberg_4.transpose([0, 2, 1, 3]).reshape((4, 4)))
     # construct in a specific leg-order where we know what the blocks should be.
     heisenberg_4 = np.transpose(heisenberg_4, [0, 2, 3, 1])  # [p1, p2, p2*, p1*]
 
@@ -415,12 +424,14 @@ def test_from_block_su2_symm(symmetry_backend, block_backend):
     assert backend.block_allclose(tens_4.data.blocks[1], expect_spin_1)
 
     recovered_block = tens_4.to_dense_block()
-    print(heisenberg_4.reshape((4, 4)))
     print()
+    print('got:')
     print(recovered_block.reshape((4, 4)))
+    print()
+    print('expect:')
+    print(heisenberg_4.reshape((4, 4)))
 
-    # TODO this currently fails!
-    # assert backend.block_allclose(recovered_block, heisenberg_4)
+    assert backend.block_allclose(recovered_block, heisenberg_4)
 
 
 def test_tdot(make_compatible_space, make_compatible_sectors, make_compatible_tensor):
@@ -792,7 +803,7 @@ def test_is_scalar(make_compatible_tensor, make_compatible_space):
         pytest.skip("can't generate non-scalar tensor")
 
 
-@pytest.mark.parametrize('num_legs', [1, 3])
+@pytest.mark.parametrize('num_legs,', [1, 3])
 def test_norm(make_compatible_tensor, num_legs):
     tens = make_compatible_tensor(num_legs=num_legs)
 

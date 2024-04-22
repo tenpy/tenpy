@@ -295,35 +295,105 @@ class FusionTreeBackend(Backend, BlockBackend, ABC):
         return self.block_item(a.blocks[0])
 
     def to_dense_block(self, a: BlockDiagonalTensor) -> Block:
-        raise NotImplementedError  # TODO use self.apply_basis_perm
-        res = self.zero_block(a.shape, a.dtype)
-        codomain = [a.legs[n] for n in a.data.codomain_legs]
-        domain = [a.legs[n] for n in a.data.domain_legs]
-        for coupled in a.data.blocks.keys():
-            for splitting_tree in all_fusion_trees(codomain, coupled):
-                for fusion_tree in all_fusion_trees(domain, coupled):
-                    X = fusion_tree.as_block(backend=self)  # [b1,...,bN,c]
-                    degeneracy_data = a.data.get_sub_block(fusion_tree, splitting_tree)  # [j1,...,jM, k1,...,kN]
-                    Y = self.block_conj(splitting_tree.as_block(backend=self))  # [a1,...,aM,c]
-                    # symmetric tensors are the identity on the coupled sectors; so we can contract
-                    symmetry_data = self.block_tdot(Y, X, [-1], [-1])  # [a1,...,aM , b1,...,bN]
-                    # kron into combined indices [(a1,j1), ..., (aM,jM) , (b1,k1),...,(bN,kN)]
-                    contribution = self.block_kron(symmetry_data, degeneracy_data)
-
-                    # TODO: get_slice implementation?
-                    # TODO: want a map from sector to its index, so we dont have to sort always
-                    # TODO: would be better to iterate over uncoupled sectors, together with their slices, then we dont need to look them up.
-                    idcs = (*(leg.get_slice(sector) for leg, sector in zip(a.data.codomain, splitting_tree.uncoupled)),
-                            *(leg.get_slice(sector) for leg, sector in zip(a.data.domain, fusion_tree.uncoupled)))
-
-                    res[idcs] += contribution
+        assert a.symmetry.has_fusion_tensor
+        J = len(a.data.codomain.spaces)
+        K = len(a.data.domain.spaces)
+        num_legs = J + K
+        dtype = Dtype.common(a.data.dtype, a.symmetry.fusion_tensor_dtype)
+        sym = a.symmetry
+        # build in internal basis order first, then apply permutations in the end
+        # build in codomain/domain leg order first, then permute legs in the end
+        # [i1,...,iJ,j1,...,jK]
+        shape = [leg.dim for leg in a.data.codomain.spaces] + [leg.dim for leg in a.data.domain]
+        res = self.zero_block(shape, dtype)
+        for coupled, block in zip(a.data.coupled_sectors, a.data.blocks):
+            i1 = 0  # start row index of the current forest block
+            i2 = 0  # start column index of the current forest block
+            for b_sectors, n_dims, j2 in _iter_sectors_mults_slices(a.data.domain.spaces, sym):
+                b_dims = sym.batch_sector_dim(b_sectors)
+                tree_block_width = tree_block_size(a.data.domain, b_sectors)
+                for a_sectors, m_dims, j1 in _iter_sectors_mults_slices(a.data.codomain.spaces, sym):
+                    a_dims = sym.batch_sector_dim(a_sectors)
+                    tree_block_height = tree_block_size(a.data.codomain, a_sectors)
+                    entries, forest_b_height, forest_b_width = self._get_forest_block_contribution(
+                        block, sym, a.data.codomain, a.data.domain, coupled, a_sectors, b_sectors,
+                        a_dims, b_dims, tree_block_width, tree_block_height, i1, i2, m_dims, n_dims,
+                        dtype
+                    )
+                    # entries : [a1,...,aJ, b1,...,bK, m1,...,mJ, n1,...,nK]
+                    # permute to [a1,m1,...,aJ,mJ, b1,n1,...,bK,nK]
+                    perm = [i + offset for i in range(num_legs) for offset in [0, num_legs]]
+                    entries = self.block_permute_axes(entries, perm)
+                    # reshape to [(a1,m1),...,(aJ,mJ), (b1,n1),...,(bK,nK)]
+                    shape = [d_a * m for d_a, m in zip(a_dims, m_dims)] \
+                            + [d_b * n for d_b, n in zip(b_dims, n_dims)]
+                    entries = self.block_reshape(entries, shape)
+                    res[*j1, *j2] += entries
+                    i1 += forest_b_height  # move down by one forest-block
+                i1 = 0  # reset to the top of the block
+                i2 += forest_b_width  # move right by one forest-block
+        # permute leg order [i1,...,iJ,j1,...,jK] -> [i1,...,iJ,jK,...,j1]
+        res = self.block_permute_axes(res, [*range(J), *reversed(range(J, J + K))])
+        # apply permutation to public basis order
+        res = self.apply_basis_perm(res, a.legs, inv=True)
         return res
+
+    def _get_forest_block_contribution(self, block, sym: Symmetry, codomain, domain, coupled,
+                                       a_sectors, b_sectors, a_dims, b_dims, tree_block_width,
+                                       tree_block_height, i1_init, i2_init, m_dims, n_dims,
+                                       dtype):
+        """Helper function for :meth:`to_dense_block`.
+
+        Obtain the contributions from a given forest block
+
+        Parameters:
+            block: The current block
+            sym: The symmetry
+            codomain, domain: The codomain and domain of the new tensor
+            coupled, dim_c: The coupled sector of the current block and its quantum dimension
+            a_sectors: The codomain uncoupled sectors [a1, a2, ..., aJ]
+            b_sectors: The domain uncoupled sectors [b1, b2, ..., bK]
+            tree_block_width: Equal to ``tree_block_size(domain, b_sectors)``
+            tree_block_height: Equal to ``tree_block_size(codomain, a_sectors)``
+            i1_init, i2_init: The start indices of the current forest block within the block
+
+        Returns:
+            entries: The entries of the dense block corresponding to the given uncoupled sectors.
+                     Legs [a1,...,aJ, b1,...,bK, m1,...,mJ, n1,...,nK]
+            forest_block_height: height of the current forest block
+            forest_block_width: width of the current forest block
+        """
+        # OPTIMIZE do one loop per vertex in the tree instead.
+        i1 = i1_init  # i1: start row index of the current tree block within the block
+        i2 = i2_init  # i2: start column index of the current tree block within the block
+        alpha_tree_iter = fusion_trees(sym, a_sectors, coupled, [sp.is_dual for sp in codomain.spaces])
+        beta_tree_iter = fusion_trees(sym, b_sectors, coupled, [sp.is_dual for sp in domain.spaces])
+        entries = self.zero_block([*a_dims, *b_dims, *m_dims, *n_dims], dtype)
+        for alpha_tree in alpha_tree_iter:
+            i2 = i2_init  # reset to the left of the current forest-block
+            Y = self.block_conj(alpha_tree.as_block(backend=self))  # [a1,...,aJ,c]
+            for beta_tree in beta_tree_iter:
+                X = beta_tree.as_block(backend=self)  # [b1,...,bK,c]
+                symmetry_data = self.block_tdot(Y, X, -1, -1)  # [a1,...,aJ,b1,...,bK]
+                idx1 = slice(i1, i1 + tree_block_height)
+                idx2 = slice(i2, i2 + tree_block_width)
+                degeneracy_data = block[idx1, idx2]  # [M, N]
+                # [M, N] -> [m1,...,mJ,n1,...,nK]
+                degeneracy_data = self.block_reshape(degeneracy_data, m_dims + n_dims)
+                entries += self.block_outer(symmetry_data, degeneracy_data)  # [{aj} {bk} {mj} {nk}]
+                i2 += tree_block_width
+            i1 += tree_block_height
+        forest_block_height = i1 - i1_init
+        forest_block_width = i2 - i2_init
+        return entries, forest_block_height, forest_block_width
 
     def diagonal_to_block(self, a: DiagonalTensor) -> Block:
         raise NotImplementedError  # TODO
 
     def from_dense_block(self, a: Block, legs: list[VectorSpace], num_domain_legs: int,
                          tol: float = 1e-8) -> FusionTreeData:
+        sym = legs[0].symmetry
+        assert sym.has_fusion_tensor
         # convert to internal basis order, where the sectors are sorted and contiguous
         a = self.apply_basis_perm(a, legs)
         domain, codomain = _make_domain_codomain(legs, num_domain_legs=num_domain_legs, backend=self)
@@ -331,7 +401,6 @@ class FusionTreeBackend(Backend, BlockBackend, ABC):
         K = len(domain.spaces)
         # [i1,...,iJ,jK,...,j1] -> [i1,...,iJ,j1,...,jK]
         a = self.block_permute_axes(a, [*range(J), *reversed(range(J, J + K))])
-        sym = domain.symmetry
         dtype = Dtype.common(self.block_dtype(a), sym.fusion_tensor_dtype)
         num_legs = len(legs)
         # main loop: iterate over coupled sectors and construct the respective block.
@@ -401,7 +470,7 @@ class FusionTreeBackend(Backend, BlockBackend, ABC):
         Parameters:
             block: The block to modify
             entries: The entries of the dense block corresponding to the given uncoupled sectors.
-                    Legs [a1,...,aJ, b1,...,bK, m1,...,mJ, n1,...,nK]
+                     Legs [a1,...,aJ, b1,...,bK, m1,...,mJ, n1,...,nK]
             sym: The symmetry
             codomain, domain: The codomain and domain of the new tensor
             coupled, dim_c: The coupled sector of the current block and its quantum dimension
@@ -626,9 +695,14 @@ class FusionTreeBackend(Backend, BlockBackend, ABC):
     def squeeze_legs(self, a: BlockDiagonalTensor, idcs: list[int]) -> Data:
         raise NotImplementedError('squeeze_legs not implemented')  # TODO
 
-    def norm(self, a: BlockDiagonalTensor | DiagonalTensor, order: int | float = None) -> float:
-        # TODO be careful about weight with quantum dimensions! probably only support 2 norm.
-        raise NotImplementedError  # TODO
+    def norm(self, a: BlockDiagonalTensor | DiagonalTensor, order: int | float = 2) -> float:
+        # OPTIMIZE should we offer the square-norm instead?
+        if order != 2:
+            raise ValueError(f'{self} only supports 2-norm.')
+        norm_sq = 0
+        for coupled, block in zip(a.data.coupled_sectors, a.data.blocks):
+            norm_sq += a.symmetry.sector_dim(coupled) * (self.block_norm(block) ** 2)
+        return self.block_sqrt(norm_sq)
 
     def act_block_diagonal_square_matrix(self, a: BlockDiagonalTensor,
                                          block_method: Callable[[Block], Block]) -> Data:

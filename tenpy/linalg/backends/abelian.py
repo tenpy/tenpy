@@ -1155,7 +1155,7 @@ class AbelianBackend(Backend, BlockBackend, ABC):
         block_inds = block_inds[:, keep]
         return AbelianBackendData(a.data.dtype, blocks, block_inds, is_sorted=True)
 
-    def norm(self, a: BlockDiagonalTensor | DiagonalTensor, order: int | float = None) -> float:
+    def norm(self, a: BlockDiagonalTensor | DiagonalTensor, order: int | float = 2) -> float:
         block_norms = [self.block_norm(b, order=order) for b in a.data.blocks]
         return np.linalg.norm(block_norms, ord=order)
 

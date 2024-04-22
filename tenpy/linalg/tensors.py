@@ -1340,6 +1340,8 @@ class BlockDiagonalTensor(SymmetricTensor):
 
     def norm(self, order=None) -> float:
         """See tensors.norm"""
+        if order is None:
+            order = 2
         return self.backend.norm(self, order=order)
 
     def permute_legs(self, permutation: list[int | str] = None, num_domain_legs: int = None
@@ -2131,6 +2133,8 @@ class ChargedTensor(Tensor):
         return self.backend.block_item(self.to_dense_block())
 
     def norm(self, order=None) -> float:
+        if order is None:
+            order = 2
         if self.dummy_leg.dim == 1:
             return self._dummy_leg_state_item() * self.invariant_part.norm(order=order)
         else:
@@ -2790,6 +2794,8 @@ class DiagonalTensor(SymmetricTensor):
             raise ValueError('Not a scalar')
         
     def norm(self, order=None) -> float:
+        if order is None:
+            order = 2
         return self.backend.norm(self, order=order)
 
     def permute_legs(self, permutation: list[int | str] = None, num_domain_legs: int = None
