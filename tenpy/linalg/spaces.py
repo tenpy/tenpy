@@ -29,19 +29,29 @@ class VectorSpace:
     A vector space is characterized by a basis, and in particular a defined order of basis elements.
     Each basis vector lies in one of the sectors of the :attr:`symmetry`.
 
-    For efficiency we want to use a modified order of the basis, such that::
+    For efficiency of the internal data manipulations, we want to use an internal basis,
+    which is ordered such that::
 
         - The basis elements that belong to the same sector appear contiguously.
           This allows us to directly read-off the blocks that contain the free parameters.
 
         - The sectors are sorted. This makes look-ups more efficient.
           For a ket-space (``is_dual is False``), we sort according to ``np.lexsort(sectors.T)``.
-          For a bra-space (``is_dual is True``), we sort according
-          to ``np.lexsort(symmetry.dual_sectors(sectors).T)``.
-          This means that a space and its dual have compatible sector orders.
-     
+          Regarding bra-spaces, see the notes on duality below.
+    
     A VectorSpace instance captures this information, i.e. the permutation of the basis that
     achieves the above properties, which sectors appear and how often.
+
+    We give special treatment to the dual ``V.dual`` of a given space ``V`` (with ``V.is_dual is False``).
+    It is most convenient to facilitate contractions etc. to only switch a single boolean flag when
+    going to the dual space and keeping all other attributes the same. Thus, both ``V.dual`` and
+    ``V`` have the same :attr:`_non_dual_sectors`, :attr:`multiplicities` etc. and in particular
+    the same basis order. As a consequence, the actual :attr:`sectors`, which are a property,
+    computed from the :attr:`_non_dual_sectors` only when needed, that `V.dual` decomposes into
+    are not sorted.
+
+    The notion of a basis and its associated attributes and functions may not be defined for
+    anyonic symmetries.
 
     .. note ::
         It is best to think of ``VectorSpace``s as immutable objects.
@@ -93,8 +103,7 @@ class VectorSpace:
                  basis_perm: ndarray = None, is_real: bool = False, _is_dual: bool = False):
         """Initialize a VectorSpace
 
-        `VectorSpace.__init__` is not very user-friendly.
-        Consider using :meth:`from_sectors` or :meth:`from_basis` instead.
+        `VectorSpace.__init__` is not very user-friendly. Use :meth:`from_sectors` instead.
         
         Parameters
         ----------
@@ -149,9 +158,9 @@ class VectorSpace:
         # sectors
         assert all(self.symmetry.is_valid_sector(s) for s in self._non_dual_sectors)
         assert len(self._non_dual_sectors) == self.num_sectors
-        assert len(np.unique(self._non_dual_sectors, axis=0)) == self.num_sectors
+        assert len(np.unique(self._non_dual_sectors, axis=0)) == self.num_sectors, 'duplicate sectors'
         assert self._non_dual_sectors.shape == (self.num_sectors, self.symmetry.sector_ind_len)
-        assert np.all(np.lexsort(self._non_dual_sectors.T) == np.arange(self.num_sectors))
+        assert np.all(np.lexsort(self._non_dual_sectors.T) == np.arange(self.num_sectors)), 'wrong order'
         # multiplicities
         assert np.all(self.multiplicities > 0)
         assert self.multiplicities.shape == (self.num_sectors,)
@@ -359,6 +368,8 @@ class VectorSpace:
         return res
 
     def as_VectorSpace(self):
+        """Convert to a :class:`VectorSpace` which is *not* a :class:`ProductSpace`."""
+        # already a VectorSpace. nothing to do.
         return self
 
     def change_symmetry(self, symmetry: Symmetry, sector_map: callable,
@@ -385,6 +396,7 @@ class VectorSpace:
             A space with the new symmetry. The order of the basis is preserved, but every
             basis element lives in a new sector, according to `sector_map`.
         """
+        # OPTIMIZE could we directly map the _non_dual sectors ?
         res = VectorSpace.from_sectors(
             symmetry=symmetry, sectors=sector_map(self.sectors), multiplicities=self.multiplicities,
             basis_perm=self._basis_perm, is_real=self.is_real
@@ -613,7 +625,7 @@ class VectorSpace:
         res = f'VectorSpace({self.symmetry!r}, ...)'
         if len(res) > printoptions.linewidth:
             return 'VectorSpace(...)'
-        prio = self._sector_print_priorities(use_private_sectors=False)
+        prio = self._sector_print_priorities()
         lines = [
             f'VectorSpace({self.symmetry!r},{" is_real=True," if self.is_real else ""}',
             f'{indent}sectors=[...],',
@@ -684,7 +696,7 @@ class VectorSpace:
         else:
             # not all sectors are shown. add how many there are
             lines[4:4]= []
-            prio = self._sector_print_priorities(use_private_sectors=use_private_sectors)
+            prio = self._sector_print_priorities()
             which = []
             jumps = []
             for n in range(len(prio)):
@@ -801,7 +813,7 @@ class VectorSpace:
         TODO name is maybe not ideal... the VectorSpace.null_space could also be called "trivial"
              this space is the unit of fusion
         """
-        if self._non_dual_sectors.shape[0] != 1:
+        if len(self._non_dual_sectors) != 1:
             return False
         # have already checked if there is more than 1 sector, so can assume self.multiplicities.shape == (1,)
         if self.multiplicities[0] != 1:
@@ -814,12 +826,9 @@ class VectorSpace:
     def num_parameters(self) -> int:
         """The number of free parameters, i.e. the number of linearly independent symmetric tensors in this space."""
         # the trivial sector is by definition self-dual, so we can search self._non_dual_sectors,
-        # even if self.is_dual is True.
-        # OPTIMIZE use that _non_dual_sectors are lexsorted to shorten the loop.
-        for s, m in zip(self._non_dual_sectors, self.multiplicities):
-            if np.all(s == self.symmetry.trivial_sector):
-                return m
-        return 0
+        # even if self.is_dual is True. Also, its dimension must be 1.
+        # OPTIMIZE cache?
+        return self.sector_multiplicity(self.symmetry.trivial_sector)
 
     def is_subspace_of(self, other: VectorSpace) -> bool:
         """Whether self is a subspace of other.
@@ -849,7 +858,7 @@ class VectorSpace:
         # reaching this line means self has sectors which other does not have
         return False
 
-    def _sector_print_priorities(self, use_private_sectors: bool):
+    def _sector_print_priorities(self):
         """How to prioritize sectors if not all can be printed.
 
         Used in `__repr__` and `__str__`.
@@ -869,7 +878,7 @@ class VectorSpace:
     def direct_sum(self, *others: VectorSpace) -> VectorSpace:
         """Form the direct sum (i.e. stacking).
 
-        TODO elaborate on the basis: just the bases of the summand spaces "concatenated".
+        The basis of the new space results from concatenating the individual bases.
         
         Spaces must have the same symmetry, is_dual and is_real.
         The result is a space with the same symmetry, is_dual and is_real, whose sectors are those
@@ -902,7 +911,6 @@ class VectorSpace:
 def _calc_slices(symmetry: Symmetry, sectors: SectorArray, multiplicities: ndarray) -> ndarray:
     """Calculate the slices given sectors and multiplicities *in the dense order*, i.e. not sorted."""
     slices = np.zeros((len(sectors), 2), dtype=np.intp)
-    # OPTIMIZE should we special case abelian symmetries to skip some multiplications by 1?
     slices[:, 1] = slice_ends = np.cumsum(multiplicities * symmetry.batch_sector_dim(sectors))
     slices[1:, 0] = slice_ends[:-1]  # slices[0, 0] remains 0, which is correct
     return slices
