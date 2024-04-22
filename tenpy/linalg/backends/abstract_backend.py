@@ -665,9 +665,17 @@ class BlockBackend(metaclass=ABCMeta):
 
     @abstractmethod
     def block_norm(self, a: Block, order: int | float = 2, axis: int | None = None) -> float:
-        """
-        axis=None means "all axes", i.e. norm of the flattened block.
-        axis: int means to broadcast the norm over all other axes.
+        r"""The p-norm vector-norm of a block.
+
+        Parameters
+        ----------
+        order : float
+            The order :math:`p` of the norm.
+            Unlike numpy, we always compute vector norms, never matrix norms.
+            We only support p-norms :math:`\Vert x \Vert = \sqrt[p]{\sum_i \abs{x_i}^p}`.
+        axis : int | None
+            ``axis=None`` means "all axes", i.e. norm of the flattened block.
+            An integer means to broadcast the norm over all other axes.
         """
         ...
 

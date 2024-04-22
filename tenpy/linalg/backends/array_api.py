@@ -145,7 +145,9 @@ class ArrayApiBlockBackend(BlockBackend):
 
     def block_norm(self, a: Block, order: int | float = 2, axis: int | None = None) -> float:
         res = self._api.linalg.vector_norm(a, axis=axis, ord=order)
-        return self.block_item(res)
+        if axis is None:
+            res = self.block_item(res)
+        return res
 
     def block_max_abs(self, a: Block) -> float:
         return self._api.max(self._api.abs(a))

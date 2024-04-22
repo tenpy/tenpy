@@ -114,7 +114,7 @@ class NumpyBlockBackend(BlockBackend):
 
     def block_norm(self, a: Block, order: int | float = 2, axis: int | None = None) -> float:
         if axis is None:
-            a = a.ravel()
+            return np.linalg.norm(a.ravel(), ord=order)
         return np.linalg.norm(a, ord=order, axis=axis)
 
     def block_max_abs(self, a: Block) -> float:
