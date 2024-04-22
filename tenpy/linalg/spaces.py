@@ -571,7 +571,7 @@ class VectorSpace:
             The index of the corresponding sector,
             indicating that the `idx`-th basis element lives in ``self.sectors[sector_idx]``.
         multiplicity_idx : int
-            The index "within the sector", in ``range(self.multiplicities[sector_index])``.
+            The index "within the sector", in ``range(sector_dim * self.multiplicities[sector_index])``.
         """
         if self._inverse_basis_perm is not None:
             idx = self._inverse_basis_perm[idx]
@@ -588,12 +588,12 @@ class VectorSpace:
 
     def sectors_where(self, sector: Sector) -> int | None:
         """Find the index `i` s.t. ``self.sectors[i] == sector``, or ``None`` if no such ``i`` exists."""
-        where = np.where(np.all(self.sectors == sector, axis=1))[0]
-        if len(where) == 0:
-            return None
-        if len(where) == 1:
-            return where[0]
-        raise RuntimeError  # sectors should have unique entries, so this should not happen
+        if self.is_dual:
+            # lookup dual(sector) in _non_dual_sectors instead.
+            # that lookup is (or will be?) optimized, since the _non_dual_sectors are sorted.
+            # plus, we do not need to form the self.sectors (taking *all* duals).
+            sector = self.symmetry.dual_sector(sector)
+        return self._non_dual_sectors_where(sector)
 
     def _non_dual_sectors_where(self, sector: Sector) -> int | None:
         """Find the index `i` s.t. ``self._non_dual_sectors[i] == sector``.
