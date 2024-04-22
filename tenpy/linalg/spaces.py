@@ -147,8 +147,12 @@ class VectorSpace:
             self.multiplicities = multiplicities = np.ones((num_sectors,), dtype=int)
         else:
             self.multiplicities = multiplicities = np.asarray(multiplicities, dtype=int)
-        self.slices = _calc_slices(symmetry=symmetry, sectors=sectors, multiplicities=multiplicities)
-        self.dim = dim = np.sum(symmetry.batch_sector_dim(sectors) * multiplicities)
+        self.sector_dims = sector_dims = symmetry.batch_sector_dim(sectors)
+        slices = np.zeros((len(sectors), 2), dtype=np.intp)
+        slices[:, 1] = slice_ends = np.cumsum(multiplicities * sector_dims)
+        slices[1:, 0] = slice_ends[:-1]  # slices[0, 0] remains 0, which is correct
+        self.slices = slices
+        self.dim = np.sum(sector_dims * multiplicities)
         if basis_perm is None:
             self._basis_perm = None
             self._inverse_basis_perm = None
@@ -170,7 +174,8 @@ class VectorSpace:
         # slices
         assert self.slices.shape == (self.num_sectors, 2)
         slice_diffs = self.slices[:, 1] - self.slices[:, 0]
-        expect_diffs = self.symmetry.batch_sector_dim(self._non_dual_sectors) * self.multiplicities
+        assert np.all(self.sector_dims == self.symmetry.batch_sector_dim(self._non_dual_sectors))
+        expect_diffs = self.sector_dims * self.multiplicities
         assert np.all(slice_diffs == expect_diffs)
         # slices should be consecutive
         if len(self.slices) > 0:
@@ -935,14 +940,6 @@ class VectorSpace:
                                        is_real=is_real)
         res.is_dual = is_dual
         return res
-
-
-def _calc_slices(symmetry: Symmetry, sectors: SectorArray, multiplicities: ndarray) -> ndarray:
-    """Calculate the slices given sectors and multiplicities *in the dense order*, i.e. not sorted."""
-    slices = np.zeros((len(sectors), 2), dtype=np.intp)
-    slices[:, 1] = slice_ends = np.cumsum(multiplicities * symmetry.batch_sector_dim(sectors))
-    slices[1:, 0] = slice_ends[:-1]  # slices[0, 0] remains 0, which is correct
-    return slices
 
 
 class ProductSpace(VectorSpace):
