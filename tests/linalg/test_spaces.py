@@ -145,15 +145,31 @@ def test_vector_space(any_symmetry, make_any_sectors, np_random):
     npt.assert_array_equal(space.sectors_of_basis, sectors_of_basis)
 
 
-def test_take_slice(make_any_space, np_random):
-    space: spaces.VectorSpace = make_any_space()
-    mask = np_random.choice([True, False], size=space.dim)
+def test_take_slice(make_any_space, any_symmetry, np_random):
+    if isinstance(any_symmetry, symmetries.SU2Symmetry):
+        sectors = np.array([0, 1, 2, 4])[:, None]
+        mults = np.array([3, 1, 2, 2])
+        basis_perm = np.array([19, 20, 17, 2, 9, 16, 8, 3, 0, 4, 11, 13, 5, 15, 12, 14, 10, 7, 1, 18, 6])
+        space = spaces.VectorSpace(any_symmetry, sectors, mults, basis_perm)
 
-    if not space.symmetry.is_abelian:
-        # not yet implemented for non-abelian symmetries
-        with pytest.raises(NotImplementedError):
-            _ = space.take_slice(mask)
-        return
+        # build an allowed and an illegal mask in the internal basis order
+        keep_states = []
+        illegal_keep_states = []
+        for sect, mult in zip(sectors, mults):
+            dim = (sect + 1).item()
+            for keep in np_random.choice([True, False], size=mult):
+                keep_states.extend([keep] * dim)
+                print(f'{keep=} {keep_states=}')
+                illegal_keep_states.extend([keep] * (dim // 2) + [not keep] * (dim - dim // 2))
+        mask = np.array(keep_states)[space.inverse_basis_perm]
+        illegal_mask = np.array(illegal_keep_states)[space.inverse_basis_perm]
+
+        with pytest.raises(ValueError, match='Multiplets need to be kept or discarded as a whole.'):
+            _ = space.take_slice(illegal_mask)
+    else:
+        assert any_symmetry.is_abelian, 'Need to design test differently for non-abelian symm'
+        space: spaces.VectorSpace = make_any_space()
+        mask = np_random.choice([True, False], size=space.dim)
 
     small = space.take_slice(mask)
     npt.assert_array_equal(small.sectors_of_basis, space.sectors_of_basis[mask])

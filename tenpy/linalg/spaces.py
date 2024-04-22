@@ -514,19 +514,24 @@ class VectorSpace:
         blockmask : 1D array-like of bool
             For every basis state of self, if it should be kept (``True``) or discarded (``False``).
         """
-        if not self.symmetry.is_abelian:
-            # TODO when implemented, activate test for nonabelian symmetries!
-            raise NotImplementedError
         blockmask = np.asarray(blockmask, dtype=bool)
         if self._basis_perm is not None:
             blockmask = blockmask[self._basis_perm]
         sectors = []
         mults = []
-        for n, s in enumerate(self._non_dual_sectors):
-            m = np.sum(blockmask[self.slices[n, 0]:self.slices[n, 1]])
-            if m > 0:
-                sectors.append(s)
-                mults.append(m)
+        dims = self.symmetry.batch_sector_dim
+        for a, d_a, slc in zip(self._non_dual_sectors, self.sector_dims, self.slices):
+            sector_mask = blockmask[slice(*slc)]
+            per_basis_state = np.reshape(sector_mask, (-1, d_a))
+            if not np.all(per_basis_state == per_basis_state[:, 0, None]):
+                msg = 'Multiplets need to be kept or discarded as a whole.'
+                raise ValueError(msg)
+            num_kept = np.sum(sector_mask)
+            assert num_kept % d_a == 0  # should be guaranteed by check above already, but to be sure...
+            mult = num_kept // d_a
+            if mult > 0:
+                sectors.append(a)
+                mults.append(mult)
         if len(sectors) == 0:
             sectors = np.zeros(shape=(0, self.symmetry.sector_ind_len),
                                dtype=self.symmetry.trivial_sector.dtype)
