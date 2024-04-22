@@ -260,28 +260,22 @@ class VectorSpace:
         :class:`VectorSpace`
             A space with the overall `symmetry`.
         """
-        dims = [s.dim for s in independent_descriptions]
-        dim = dims[0]
-        assert all(d == dim for d in dims[1:])
-        # ignore independent_descriptions with no_symmetry
+        assert len(independent_descriptions) > 0
+        dim = independent_descriptions[0].dim
+        assert all(s.dim == dim for s in independent_descriptions)
+        # ignore those with np_symmetry
         independent_descriptions = [s for s in independent_descriptions if s.symmetry != no_symmetry]
         if len(independent_descriptions) == 0:
-            return cls.from_trivial_sector(dim)
+            # all descriptions had no_symmetry
+            return cls.from_trivial_sector(dim=dim)
         if symmetry is None:
             symmetry = ProductSymmetry.from_nested_factors(
                 [s.symmetry for s in independent_descriptions]
             )
-        # OPTIMIZE could do this more efficiently in special cases if basis_perm and slices are equal
-        #  but we probably dont need to worry about optimizing this too much, should only be called
-        #  for physical legs of sites, which should not get very large.
-        basis = np.concatenate([s.sectors_of_basis for s in independent_descriptions], axis=1)
-        if np.any(symmetry.batch_sector_dim(basis) > 1):
-            # TODO I accidentally assumed abelian symmetries when implementing this...
-            raise NotImplementedError
-        is_real = any(s.is_real for s in independent_descriptions)
-        if is_real:
+        sectors_of_basis = np.concatenate([s.sectors_of_basis for s in independent_descriptions], axis=1)
+        if (is_real := any(s.is_real for s in independent_descriptions)):
             assert all(s.is_real for s in independent_descriptions)
-        return cls.from_basis(symmetry=symmetry, sectors_of_basis=basis, is_real=is_real)
+        return cls.from_basis(symmetry=symmetry, sectors_of_basis=sectors_of_basis, is_real=is_real)
 
     @classmethod
     def from_trivial_sector(cls, dim: int, symmetry: Symmetry = no_symmetry, is_real: bool = False,
