@@ -94,6 +94,9 @@ class VectorSpace:
         Inverse of :attr:`basis_perm`. ``_inverse_basis_perm`` is the internal version.
     sectors_of_basis : 2D numpy array of int
         The sectors of every element of the "public" computational basis.
+        Multi-dimensional sectors (such as e.g. the spin-1/2 sector of SU(2)) are listed multiple
+        times (once for each basis state in the multiplet), such that the length is the total
+        dimension.
     _non_dual_sectors : 2D numpy array of int
         Internally stored version of :attr:`sectors`. For ket spaces (``is_dual=True``),
         these are the same as :attr:`sectors`, for bra spaces these are their duals.
@@ -190,30 +193,47 @@ class VectorSpace:
         This classmethod always creates a ket-space (i.e. ``res.is_dual is False``).
         Use ``VectorSpace.from_basis(...).dual`` for a bra-space.
 
+        .. note ::
+            Unlike :meth:`from_sectors`, this method expects the same sector to be listed
+            multiple times, if the sector is multi-dimensional. The Hilbert Space of a spin-one-half
+            D.O.F. can e.g. be created as ``VectorSpace.from_basis(su2, [[spin_half], [spin_half]])``
+            or as ``VectorSpace.from_sectors(su2, [[1]])``. In the former case we need to list the
+            same sector both for the spin up and spin down state.
+
         Parameters
         ----------
         symmetry: Symmetry
             The symmetry associated with this space.
         sectors_of_basis : iterable of iterable of int
             Specifies the basis. ``sectors_of_basis[n]`` is the sector of the ``n``-th basis element.
+            In particular, for a ``d`` dimensional sector, we expect an integer multiple of ``d``
+            occurrences. They need not be contiguous though. They will be grouped by order of
+            appearance, such that they ``m``-th time a sector appears, that basis state is interpreted
+            as the ``(m % d)``-th state of the multiplet.
         is_real : bool
             If the space is over the real or complex (default) numbers.
+
+        See Also
+        --------
+        :attr:`sectors_of_basis`
+            Reproduces the `sectors_of_basis` parameter.
         """
         sectors_of_basis = np.asarray(sectors_of_basis, dtype=int)
-        if np.any(symmetry.batch_sector_dim(sectors_of_basis) > 1):
-            # TODO the basis_perm calculation below assumes that every basis element has its own sector
-            #  need to work harder if multiple basis elements combine to a sectors.
-            raise NotImplementedError
         assert sectors_of_basis.shape[1] == symmetry.sector_ind_len
-        # unfortunately, np.unique(x, axis=0) has the opposite sorting convention
-        # ("first entry varies slowest") from np.lexsort(x.T) ("last entry slowest").
-        # We thus reverse the order of every sector before calling unique.
-        unique, inv_idcs, mults = np.unique(sectors_of_basis[:, ::-1], axis=0, return_inverse=True,
-                                            return_counts=True)
-        sectors = unique[:, ::-1]  # undo reverse from above
-        basis_perm = np.argsort(inv_idcs)
-        return cls(symmetry=symmetry, sectors=sectors, multiplicities=mults, basis_perm=basis_perm,
-                   is_real=is_real, _is_dual=False)
+        # note: numpy.lexsort is stable, i.e. it preserves the order of equal keys.
+        basis_perm = np.lexsort(sectors_of_basis.T)
+        sectors = sectors_of_basis[basis_perm]
+        diffs = find_row_differences(sectors, include_len=True)
+        sectors = sectors[diffs[:-1]]  # [:-1] to exclude len
+        dims = symmetry.batch_sector_dim(sectors)
+        num_occurrences = diffs[1:] - diffs[:-1]  # how often each appears in the input sectors_of_basis
+        multiplicities, remainders = np.divmod(num_occurrences, dims)
+        if np.any(remainders > 0):
+            msg = ('Sectors must appear in whole multiplets, i.e. a number of times that is an '
+                   'integer multiple of their dimension.')
+            raise ValueError(msg)
+        return cls(symmetry=symmetry, sectors=sectors, multiplicities=multiplicities,
+                   basis_perm=basis_perm, is_real=is_real, _is_dual=False)
 
     @classmethod
     def from_independent_symmetries(cls, independent_descriptions: list[VectorSpace],
@@ -280,6 +300,13 @@ class VectorSpace:
                      basis_perm: ndarray = None, is_real: bool = False, return_perm: bool = False,
                      _is_dual: bool = False):
         """Like constructor, but fewer requirements on `sectors`.
+
+        .. note ::
+            Unlike :meth:`from_basis`, this method expects a multi-dimensional sector to be listed
+            only once to mean its entire multiplet of basis states. The Hilbert Space of a spin-one-half
+            D.O.F. can e.g. be created as ``VectorSpace.from_basis(su2, [[spin_half], [spin_half]])``
+            or as ``VectorSpace.from_sectors(su2, [[1]])``. In the former case we need to list the
+            same sector both for the spin up and spin down state.
 
         Parameters
         ----------
@@ -356,13 +383,12 @@ class VectorSpace:
 
     @property
     def sectors_of_basis(self):
+        """The sector for each basis vector, like the input of :meth:`from_basis`."""
         # build in internal basis, then permute
-        if np.any(self.symmetry.batch_sector_dim(self.sectors) > 1):
-            # TODO I accidentally assumed abelian symmetries when implementing this...
-            raise NotImplementedError
         res = np.zeros((self.dim, self.symmetry.sector_ind_len), dtype=int)
+        # multi-dimensional sectors are captured by compatible slices.
         for sect, slc in zip(self.sectors, self.slices):
-            res[slice(*slc)] = sect[None, :]
+            res[slice(*slc), :] = sect[None, :]
         if self._inverse_basis_perm is not None:
             res = res[self.inverse_basis_perm]
         return res
@@ -483,6 +509,9 @@ class VectorSpace:
         blockmask : 1D array-like of bool
             For every basis state of self, if it should be kept (``True``) or discarded (``False``).
         """
+        if not self.symmetry.is_abelian:
+            # TODO when implemented, activate test for nonabelian symmetries!
+            raise NotImplementedError
         blockmask = np.asarray(blockmask, dtype=bool)
         if self._basis_perm is not None:
             blockmask = blockmask[self._basis_perm]

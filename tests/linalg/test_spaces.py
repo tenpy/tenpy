@@ -87,19 +87,17 @@ def test_vector_space(any_symmetry, make_any_sectors, np_random):
 
     # TODO (JU) test num_parameters when ready
 
-    if not any_symmetry.is_abelian:
-        # TODO
-        pytest.xfail('parse_idx (and probly more methods) are wrong if any sector_dim > 1.')
-
     print('check idx_to_sector and parse_idx')
-    idx = 0
-    for n, s in enumerate(s1.sectors):
-        for m in range(s1.multiplicities[n]):
-            sector_idx, mult_idx = s1.parse_index(idx)
-            assert sector_idx == n
-            assert mult_idx == m
-            assert np.all(s1.idx_to_sector(idx) == s)
-            idx += 1
+    idx = 0  # will step this up during the loop
+    for n_sector, sector in enumerate(s1.sectors):
+        d = any_symmetry.sector_dim(sector)
+        for m in range(s1.multiplicities[n_sector]):
+            for mu in range(d):
+                sector_idx, mult_idx = s1.parse_index(idx)
+                assert sector_idx == n_sector
+                assert mult_idx == m * d + mu
+                assert np.all(s1.idx_to_sector(idx) == sector)
+                idx += 1
 
     print('check sector lookup')
     for expect in [2, 3, 4]:
@@ -109,23 +107,36 @@ def test_vector_space(any_symmetry, make_any_sectors, np_random):
         assert s1.sector_multiplicity(s1.sectors[expect]) == s1.multiplicities[expect]
 
     print('check from_basis')
-    if any_symmetry.num_sectors == 1:
-        which_sectors = np.array([0] * 9)
-        expect_basis_perm = np.arange(9)
-        expect_sectors = sectors[:1]
-    elif any_symmetry.num_sectors == 2:
-        #                         0  1  2  3  4  5  6  7  8
-        which_sectors = np.array([1, 0, 0, 1, 1, 0, 1, 1, 1])
-        expect_basis_perm = np.array([1, 2, 5, 0, 3, 4, 6, 7, 8])
-        expect_sectors = sectors[:2]
+    if isinstance(any_symmetry, symmetries.SU2Symmetry):
+        with pytest.raises(ValueError, match='Sectors must appear in whole multiplets'):
+            bad_sectors = np.array([0, 1, 1, 1, 2, 2, 2])[:, None]
+            # have three basis vectors for 2-dimensional spin-1/2
+            _ = spaces.VectorSpace.from_basis(symmetry=any_symmetry, sectors_of_basis=bad_sectors)
+        
+        # spins 0, 1/2 and 1, each two times
+        #                         0  1  2  3  4  5  6  7  8  9  10 11
+        sectors_of_basis = np.array([0, 2, 2, 1, 2, 1, 2, 2, 0, 2, 1, 1])[:, None]
+        expect_basis_perm = np.array([0, 8, 3, 5, 10, 11, 1, 2, 4, 6, 7, 9])
+        expect_sectors = np.array([0, 1, 2])[:, None]
+        expect_mults = np.array([2, 2, 2])
     else:
-        assert len(np.unique(sectors[:3], axis=0)) == 3
-        #                         0  1  2  3  4  5  6  7  8  9
-        which_sectors = np.array([2, 0, 1, 2, 2, 2, 0, 0, 1, 2])
-        expect_basis_perm = np.array([1, 6, 7, 2, 8, 0, 3, 4, 5, 9])
-        expect_sectors = sectors[:3]
-    expect_mults = np.sum(which_sectors[:, None] == np.arange(len(expect_sectors))[None, :], axis=0)
-    sectors_of_basis = sectors[which_sectors]
+        if any_symmetry.num_sectors == 1:
+            which_sectors = np.array([0] * 9)
+            expect_basis_perm = np.arange(9)
+            expect_sectors = sectors[:1]
+        elif any_symmetry.num_sectors == 2:
+            #                         0  1  2  3  4  5  6  7  8
+            which_sectors = np.array([1, 0, 0, 1, 1, 0, 1, 1, 1])
+            expect_basis_perm = np.array([1, 2, 5, 0, 3, 4, 6, 7, 8])
+            expect_sectors = sectors[:2]
+        else:
+            assert len(np.unique(sectors[:3], axis=0)) == 3
+            #                         0  1  2  3  4  5  6  7  8  9
+            which_sectors = np.array([2, 0, 1, 2, 2, 2, 0, 0, 1, 2])
+            expect_basis_perm = np.array([1, 6, 7, 2, 8, 0, 3, 4, 5, 9])
+            expect_sectors = sectors[:3]
+        expect_mults = np.sum(which_sectors[:, None] == np.arange(len(expect_sectors))[None, :], axis=0)
+        sectors_of_basis = sectors[which_sectors]
     space = spaces.VectorSpace.from_basis(symmetry=any_symmetry, sectors_of_basis=sectors_of_basis)
     npt.assert_array_equal(space.sectors, expect_sectors)
     npt.assert_array_equal(space.multiplicities, expect_mults)
@@ -137,13 +148,14 @@ def test_vector_space(any_symmetry, make_any_sectors, np_random):
 def test_take_slice(make_any_space, np_random):
     space: spaces.VectorSpace = make_any_space()
     mask = np_random.choice([True, False], size=space.dim)
-    small = space.take_slice(mask)
 
     if not space.symmetry.is_abelian:
-        # TODO
-        pytest.xfail('sectors_of_basis not implemented')
-        
-    #
+        # not yet implemented for non-abelian symmetries
+        with pytest.raises(NotImplementedError):
+            _ = space.take_slice(mask)
+        return
+
+    small = space.take_slice(mask)
     npt.assert_array_equal(small.sectors_of_basis, space.sectors_of_basis[mask])
     #
     internal_mask = mask[space.basis_perm]
@@ -301,11 +313,6 @@ def test_direct_sum(make_any_space, max_mult=5, max_sectors=5):
     c = make_any_space(max_mult=max_mult, max_sectors=max_sectors, is_dual=a.is_dual)
     assert a == spaces.VectorSpace.direct_sum(a)
     d = a.direct_sum(b, c)
-
-    if not a.symmetry.is_abelian:
-        # TODO
-        pytest.xfail('sectors_of_basis not implemented')
-    
     expect = np.concatenate([leg.sectors_of_basis for leg in [a, b, c]], axis=0)
     npt.assert_array_equal(d.sectors_of_basis, expect)
 
