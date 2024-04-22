@@ -893,7 +893,7 @@ class BlockBackend(metaclass=ABCMeta):
         """Apply basis_perm of a VectorSpace (or its inverse) on every axis of a dense block"""
         # OPTIMIZE should we special-case None for "no permutation to do"?
         if inv:
-            perms = [leg._inverse_basis_perm for leg in legs]
+            perms = [leg.inverse_basis_perm for leg in legs]
         else:
             perms = [leg.basis_perm for leg in legs]
         return self.apply_leg_permutations(block, perms)

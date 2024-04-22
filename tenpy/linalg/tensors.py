@@ -506,6 +506,23 @@ class Tensor(metaclass=ABCMeta):
         return self.backend._data_repr_lines(
             self, indent=indent, max_width=printoptions.linewidth, max_lines=max_lines
         )
+
+    def _parse_integer_indices(self, idcs):
+        if not all(isinstance(idx, int) for idx in idcs[1:]):
+            msg = 'Invalid index type. If tensors are indexed by integer, all legs need to be indexed by an integer.'
+            raise IndexError(msg)
+        for leg_num, idx in enumerate(idcs):
+            leg = self.legs[leg_num]
+            if not -leg.dim <= idx < leg.dim:
+                msg = f'Index {idx} is out of bounds for leg {leg_num} with label {self.labels[leg_num]} ' \
+                        f'and dimension {leg.dim}'
+                raise IndexError(msg)
+            if idx < 0:
+                idx = idx + leg.dim
+            if leg._inverse_basis_perm is not None:
+                idx = leg._inverse_basis_perm[idx]
+            idcs[leg_num] = idx
+        return idcs
         
     def __getitem__(self, idcs):
         """
@@ -525,17 +542,8 @@ class Tensor(metaclass=ABCMeta):
         """
         idcs = _parse_idcs(idcs, length=self.num_legs)
         if isinstance(idcs[0], int):
-            if not all(isinstance(idx, int) for idx in idcs[1:]):
-                msg = 'Invalid index type. If tensors are indexed by integer, all legs need to be indexed by an integer.'
-                raise IndexError(msg)
-            for leg_num, idx in enumerate(idcs):
-                if not -self.legs[leg_num].dim <= idx < self.legs[leg_num].dim:
-                    msg = f'Index {idx} is out of bounds for leg {leg_num} with label {self.labels[leg_num]} ' \
-                          f'and dimension {self.legs[leg_num].dim}'
-                    raise IndexError(msg)
-                if idx < 0:
-                    idcs[leg_num] = idx + self.legs[leg_num].dim
-            return self._get_element([leg._inverse_basis_perm[i] for i, leg in zip(idcs, self.legs)])
+            idcs = self._parse_integer_indices(idcs)
+            return self._get_element(idcs)
         else:
             mask_legs = []
             masks = []
@@ -552,17 +560,11 @@ class Tensor(metaclass=ABCMeta):
 
     def __setitem__(self, idcs, value):
         idcs = _parse_idcs(idcs, length=self.num_legs)
-        for leg_num, idx in enumerate(idcs):
-            if not isinstance(idx, int):
-                raise IndexError('Can only set single entries')
-            if not -self.legs[leg_num].dim <= idx < self.legs[leg_num].dim:
-                msg = f'Index {idx} is out of bounds for leg {leg_num} with label {self.labels[leg_num]} ' \
-                        f'and dimension {self.legs[leg_num].dim}'
-                raise IndexError(msg)
-            if idx < 0:
-                idcs[leg_num] = idx + self.legs[leg_num].dim
+        if not isinstance(idcs[0], int):
+            raise IndexError('Can only set single entries')
+        idcs = self._parse_integer_indices(idcs)
         value = self.dtype.convert_python_scalar(value)
-        self._set_element([leg._inverse_basis_perm[i] for i, leg in zip(idcs, self.legs)], value)
+        self._set_element(idcs, value)
 
     def __neg__(self):
         return self._mul_scalar(-1)

@@ -79,7 +79,9 @@ class VectorSpace:
         We store the inverse as `_inverse_basis_perm`.
         For `ProductSpace`s we always set a trivial permutation.
         We can translate indices as ``public_idx == basis_perm[internal_idx]``.
-        TODO expand explanation?
+        ``_basis_perm`` is the internal version which may be ``None`` if the permutation is trivial.
+    inverse_basis_perm : ndarray
+        Inverse of :attr:`basis_perm`. ``_inverse_basis_perm`` is the internal version.
     sectors_of_basis : 2D numpy array of int
         The sectors of every element of the "public" computational basis.
     _non_dual_sectors : 2D numpy array of int
@@ -136,10 +138,12 @@ class VectorSpace:
         self.slices = _calc_slices(symmetry=symmetry, sectors=sectors, multiplicities=multiplicities)
         self.dim = dim = np.sum(symmetry.batch_sector_dim(sectors) * multiplicities)
         if basis_perm is None:
-            # OPTIMIZE special case this, where no permutation is needed?
-            self.basis_perm = basis_perm = np.arange(dim)
+            self._basis_perm = None
+            self._inverse_basis_perm = None
         else:
-            self.basis_perm = basis_perm = np.asarray(basis_perm, dtype=int)
+            # OPTIMIZE set to None if trivial but explicit?
+            self._basis_perm = basis_perm = np.asarray(basis_perm, dtype=int)
+            self._inverse_basis_perm = inverse_permutation(basis_perm)
 
     def test_sanity(self):
         # sectors
@@ -162,9 +166,12 @@ class VectorSpace:
             assert np.all(self.slices[1:, 0] == self.slices[:-1, 1])
             assert self.slices[-1, 1] == self.dim
         # basis_perm
-        assert self.basis_perm.shape == (self.dim,)
-        assert len(np.unique(self.basis_perm)) == self.dim
-        assert np.all(self.basis_perm[self._inverse_basis_perm] == np.arange(self.dim))
+        if self._basis_perm is None:
+            assert self._inverse_basis_perm is None
+        else:
+            assert self._basis_perm.shape == (self.dim,)
+            assert len(np.unique(self._basis_perm)) == self.dim
+            assert np.all(self._basis_perm[self._inverse_basis_perm] == np.arange(self.dim))
 
     @classmethod
     def from_basis(cls, symmetry: Symmetry, sectors_of_basis: Sequence[Sequence[int]],
@@ -347,7 +354,9 @@ class VectorSpace:
         res = np.zeros((self.dim, self.symmetry.sector_ind_len), dtype=int)
         for sect, slc in zip(self.sectors, self.slices):
             res[slice(*slc)] = sect[None, :]
-        return res[self._inverse_basis_perm]
+        if self._inverse_basis_perm is not None:
+            res = res[self.inverse_basis_perm]
+        return res
 
     def as_VectorSpace(self):
         return self
@@ -378,7 +387,7 @@ class VectorSpace:
         """
         res = VectorSpace.from_sectors(
             symmetry=symmetry, sectors=sector_map(self.sectors), multiplicities=self.multiplicities,
-            basis_perm=self.basis_perm, is_real=self.is_real
+            basis_perm=self._basis_perm, is_real=self.is_real
         )
         if self.is_dual:
             res = res.dual
@@ -426,7 +435,7 @@ class VectorSpace:
         
         if which is None:
             return VectorSpace(no_symmetry, sectors=[no_symmetry.trivial_sector],
-                               multiplicities=[self.dim], basis_perm=self.basis_perm,
+                               multiplicities=[self.dim], basis_perm=self._basis_perm,
                                is_real=self.is_real, _is_dual=self.is_dual)
 
         if remaining_symmetry is None:
@@ -463,7 +472,8 @@ class VectorSpace:
             For every basis state of self, if it should be kept (``True``) or discarded (``False``).
         """
         blockmask = np.asarray(blockmask, dtype=bool)
-        blockmask = blockmask[self.basis_perm]
+        if self._basis_perm is not None:
+            blockmask = blockmask[self._basis_perm]
         sectors = []
         mults = []
         for n, s in enumerate(self._non_dual_sectors):
@@ -512,7 +522,8 @@ class VectorSpace:
         multiplicity_idx : int
             The index "within the sector", in ``range(self.multiplicities[sector_index])``.
         """
-        idx = self._inverse_basis_perm[idx]
+        if self._inverse_basis_perm is not None:
+            idx = self._inverse_basis_perm[idx]
         sector_idx = bisect.bisect(self.slices[:, 0], idx) - 1
         multiplicity_idx = idx - self.slices[sector_idx, 0]
         return sector_idx, multiplicity_idx
@@ -648,12 +659,15 @@ class VectorSpace:
         indent = printoptions.indent * ' '
 
         basis_perm_header = 'basis_perm: '
-        basis_perm_str = join_as_many_as_possible(
-            [str(x) for x in self.basis_perm],
-            separator=' ',
-            max_len=printoptions.linewidth - len(basis_perm_header) - len(indent) - 2,  # -2 for the brackets
-        )
-        basis_perm_str = '[' + basis_perm_str + ']'
+        if self._basis_perm is None:
+            basis_perm_str = 'None (no permutation)'
+        else:
+            basis_perm_str = join_as_many_as_possible(
+                [str(x) for x in self.basis_perm],
+                separator=' ',
+                max_len=printoptions.linewidth - len(basis_perm_header) - len(indent) - 2,  # -2 for the brackets
+            )
+            basis_perm_str = '[' + basis_perm_str + ']'
         lines = [
             'VectorSpace(',
             *([f'{indent}is_real=True'] if self.is_real else []),
@@ -728,7 +742,7 @@ class VectorSpace:
         """
         return VectorSpace.from_sectors(
             symmetry=self.symmetry, sectors=self.symmetry.dual_sectors(self._non_dual_sectors),
-            multiplicities=self.multiplicities, basis_perm=self.basis_perm, is_real=self.is_real,
+            multiplicities=self.multiplicities, basis_perm=self._basis_perm, is_real=self.is_real,
             return_perm=return_perm, _is_dual=not self.is_dual
         )
 
@@ -766,11 +780,16 @@ class VectorSpace:
         return self.is_dual != other.is_dual and self.is_equal_or_dual(other)
 
     @property
-    def _inverse_basis_perm(self):
-        # OPTIMIZE cache?
-        # TODO alternatively, make basis_perm a property with a setter that also sets
-        #      _inverse_basis_perm
-        return inverse_permutation(self.basis_perm)
+    def basis_perm(self):
+        if self._basis_perm is None:
+            return np.arange(self.dim)
+        return self._basis_perm
+
+    @property
+    def inverse_basis_perm(self):
+        if self._inverse_basis_perm is None:
+            return np.arange(self.dim)
+        return self._inverse_basis_perm
 
     @property
     def is_trivial(self) -> bool:
@@ -808,8 +827,7 @@ class VectorSpace:
         This function considers both spaces purely as `VectorSpace`s and ignores a possible
         `ProductSpace` structure.
         Per convention, self is never a subspace of other, if the :attr:`is_dual` are different
-
-        TODO what about basis_perms ?
+        The :attr:`basis_perm`s are not considered.
         """
         if self.is_dual != other.is_dual:
             return False
@@ -1047,13 +1065,13 @@ class ProductSpace(VectorSpace):
         else:
             assert _multiplicities is not None
         VectorSpace.__init__(self, symmetry=symmetry, sectors=_sectors, multiplicities=_multiplicities,
-                             is_real=is_real, _is_dual=_is_dual)
+                             is_real=is_real, _is_dual=_is_dual, basis_perm=None)
 
     def test_sanity(self):
         for s in self.spaces:
             assert s.symmetry == self.symmetry
             s.test_sanity()
-        assert np.all(self.basis_perm == np.arange(self.dim))
+        assert self._basis_perm is None
         return super().test_sanity()
 
     @classmethod
@@ -1243,7 +1261,7 @@ class ProductSpace(VectorSpace):
         # C-style for compatibility with e.g. numpy.reshape
         strides = make_stride(shape=[space.dim for space in self.spaces], cstyle=True)
         order = unstridify(self._get_fusion_outcomes_perm(), strides).T  # indices of the internal bases
-        return sum(stride * space._inverse_basis_perm[p]
+        return sum(stride * space.inverse_basis_perm[p]
                    for stride, space, p in zip(strides, self.spaces, order))
 
     def _get_fusion_outcomes_perm(self):
